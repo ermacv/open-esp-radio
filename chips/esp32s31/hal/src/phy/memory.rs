@@ -5,6 +5,7 @@ pub use crate::types::{
 };
 #[cfg(target_arch = "riscv32")]
 use crate::{owner::SharedPhyAccess, phy_pac, phy_pac_mut};
+pub use oer_esp32s31_pac::{pbus_memory_parameter_002_data, pbus_memory_parameter_014_data};
 
 /// Publish one entry of the PBUS-memory table.
 ///

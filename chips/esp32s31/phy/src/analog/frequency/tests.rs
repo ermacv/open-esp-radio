@@ -662,3 +662,96 @@ fn warm_channel_frequency_init_skips_calibration_but_refreshes_i2c_graph() {
         }
     }
 }
+
+#[test]
+fn modeled_frequency_records_match_the_old_packing() {
+    for (low, high) in [(0, 0), (0, 511), (511, 0), (200, 280)] {
+        for upper in [0, 7, 8, 0x55, 0xf8, 0xff] {
+            let request = PhyFrequencyTableRequest {
+                low_frequency_cap: low,
+                high_frequency_cap: high,
+                parameters: PhyFrequencyTableParameters {
+                    sdm_register_six_upper: upper,
+                    ..REQUEST.parameters
+                },
+            };
+            for index in [0, 1, 42, 64, 84] {
+                let frequency = super::PHY_FREQUENCY_TABLE_FIRST_CODE + u16::from(index);
+                let cap = super::interpolated_cap(low, high, index);
+                let sdm = crate::analog::rfpll::calculate_rfpll_sdm(
+                    frequency,
+                    request.parameters.crystal_selector,
+                    0,
+                )
+                .bytes();
+                let cap_high = 0xbf | (((cap >> 8) as u8 & 1) << 6);
+                let sdm_low = sdm[0] | (upper & 0xf8);
+                let old = [
+                    u32::from(cap as u8) | (u32::from(cap_high) << 8) | (u32::from(sdm_low) << 16),
+                    u32::from(sdm[1]) | (u32::from(sdm[2]) << 8) | (u32::from(sdm[3]) << 16),
+                    u32::from(phy_frequency_xtal_duty(
+                        frequency,
+                        request.parameters.middle_xtal_duty,
+                        request.parameters.outer_xtal_duty,
+                    )),
+                ];
+                assert_eq!(phy_frequency_memory_record(request, index).words(), old);
+            }
+        }
+    }
+}
+
+#[test]
+fn modeled_cap_correction_preserves_signed_spill_and_publication_mode() {
+    for raw in [0, 1, 0x00aa_bf00, 0x00aa_bfff, 0x00aa_ffff, u32::MAX] {
+        for delta in [i16::MIN, -512, -5, -1, 0, 1, 512, i16::MAX] {
+            let correction = PhyFrequencyCapCorrection::from_delta(delta);
+            let cap = ((raw & 0xff) | ((raw >> 6) & 0x100)) as u16;
+            let adjusted = cap.wrapping_add(delta as u16);
+            let old = (raw & 0xbf00)
+                | u32::from(adjusted as u8)
+                | (((adjusted as i16 as i32) >> 8) as u32).wrapping_shl(14);
+            let word = phy_frequency_cap_adjusted_word(raw, correction);
+            assert_eq!(word, old);
+            assert_eq!(super::cap_memory_write_mode(word), 3 | (old >> 24) as u8);
+            assert_eq!(
+                super::PhyFrequencyMemoryWordWord::from_bits(word).payload(),
+                old & 0xff_ffff
+            );
+        }
+    }
+}
+
+#[test]
+fn modeled_frequency_i2c_commands_match_old_bytes_and_field_updates() {
+    for byte in 0..=u8::MAX {
+        for enabled in [false, true] {
+            for index in 0..11 {
+                let descriptor = super::frequency_i2c_descriptor(index, byte, byte, byte, enabled);
+                let old_data = match index {
+                    2 => [byte & 0xf7, 0, 0],
+                    7 => [byte | 8, 0, 0],
+                    8 => [byte, 0, 0],
+                    10 => [
+                        byte | if enabled { 4 } else { 0 },
+                        byte & !4,
+                        byte | if enabled { 4 } else { 0 },
+                    ],
+                    _ => [0; 3],
+                };
+                assert_eq!(descriptor.data, old_data);
+                for copy in 0..descriptor.memory_write_count() {
+                    let (_, word, _) = descriptor.memory_write(copy);
+                    let register_block =
+                        u32::from(descriptor.block) | (u32::from(descriptor.register) << 8);
+                    let old = if descriptor.kind() >= 2 {
+                        register_block
+                    } else {
+                        register_block | (u32::from(old_data[usize::from(copy)]) << 16)
+                    };
+                    assert_eq!(word, old);
+                }
+            }
+        }
+    }
+}

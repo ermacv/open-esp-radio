@@ -30212,6 +30212,10 @@ pub mod wifi_mac_rx_csi_control {
                 self.variant(Bits8_15Opaque::Initialized)
             }
         }
+        #[doc = "Field `CSI_APPEND_ENABLE` reader - Project-assigned name. hal_mac_set_csi sets or clears bit 23 of the RX/CSI control word."]
+        pub type CsiAppendEnableR = crate::BitReader;
+        #[doc = "Field `CSI_APPEND_ENABLE` writer - Project-assigned name. hal_mac_set_csi sets or clears bit 23 of the RX/CSI control word."]
+        pub type CsiAppendEnableW<'a, REG> = crate::BitWriter<'a, REG>;
         #[doc = "Field `BIT_27_OPAQUE` reader - Opaque: meaning not established. Final set edge of mac_last_rxbuf_init; its narrower interaction with CSI is unknown."]
         pub type Bit27OpaqueR = crate::BitReader;
         #[doc = "Field `BIT_27_OPAQUE` writer - Opaque: meaning not established. Final set edge of mac_last_rxbuf_init; its narrower interaction with CSI is unknown."]
@@ -30226,6 +30230,11 @@ pub mod wifi_mac_rx_csi_control {
             #[inline(always)]
             pub fn bits_8_15_opaque(&self) -> Bits8_15OpaqueR {
                 Bits8_15OpaqueR::new(((self.bits >> 8) & 0xff) as u8)
+            }
+            #[doc = "Bit 23 - Project-assigned name. hal_mac_set_csi sets or clears bit 23 of the RX/CSI control word."]
+            #[inline(always)]
+            pub fn csi_append_enable(&self) -> CsiAppendEnableR {
+                CsiAppendEnableR::new(((self.bits >> 23) & 1) != 0)
             }
             #[doc = "Bit 27 - Opaque: meaning not established. Final set edge of mac_last_rxbuf_init; its narrower interaction with CSI is unknown."]
             #[inline(always)]
@@ -30243,6 +30252,11 @@ pub mod wifi_mac_rx_csi_control {
             #[inline(always)]
             pub fn bits_8_15_opaque(&mut self) -> Bits8_15OpaqueW<'_, ControlSpec> {
                 Bits8_15OpaqueW::new(self, 8)
+            }
+            #[doc = "Bit 23 - Project-assigned name. hal_mac_set_csi sets or clears bit 23 of the RX/CSI control word."]
+            #[inline(always)]
+            pub fn csi_append_enable(&mut self) -> CsiAppendEnableW<'_, ControlSpec> {
+                CsiAppendEnableW::new(self, 23)
             }
             #[doc = "Bit 27 - Opaque: meaning not established. Final set edge of mac_last_rxbuf_init; its narrower interaction with CSI is unknown."]
             #[inline(always)]

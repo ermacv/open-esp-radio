@@ -52,6 +52,12 @@ description = "Final set edge of mac_last_rxbuf_init; its narrower interaction w
 bitOffset = 27
 bitWidth = 1
 
+[[peripherals.registers.register.fields]]
+name = "CSI_APPEND_ENABLE"
+description = "hal_mac_set_csi sets or clears bit 23 of the RX/CSI control word."
+bitOffset = 23
+bitWidth = 1
+
 [[review]]
 entity = "WIFI_MAC_RX_CSI_CONTROL"
 sources = [
@@ -93,6 +99,14 @@ completeness = "unknown"
 entity = "WIFI_MAC_RX_CSI_CONTROL.CONTROL.BIT_27_OPAQUE"
 naming = "opaque"
 sources = ["BLOB_LIBPP_MAC_LAST_RXBUF_INIT"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_RX_CSI_CONTROL.CONTROL.CSI_APPEND_ENABLE"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_HAL_MAC_SET_CSI"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"

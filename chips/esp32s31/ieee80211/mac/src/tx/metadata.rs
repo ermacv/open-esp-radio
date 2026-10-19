@@ -4,6 +4,7 @@
 //! belong to the chip representation. IEEE 802.11 framing retains typed WMM
 //! categories without depending on this encoding.
 
+use oer_esp32s31_hal::layouts::WifiTxDescriptorPrefixPriority;
 use oer_ieee80211_mac::{
     data::{DataEncapPlan, DataInterfaceRole, IEEE80211_QOS_DATA_HEADER_LEN},
     qos::{WmmAccessCategory, WmmUserPriority},
@@ -56,7 +57,16 @@ pub const fn queue_class(priority: u8) -> Option<u8> {
 
 pub const fn descriptor_priority_byte(priority: u8) -> Option<u8> {
     match queue_class(priority) {
-        Some(class) => Some((class << 4) | priority),
+        Some(class) => {
+            let value = match WifiTxDescriptorPrefixPriority::from_bits(0).with_queue_class(class) {
+                Some(value) => value,
+                None => panic!("ordinary hardware queue class is at most three"),
+            };
+            match value.with_user_priority(priority) {
+                Some(value) => Some(value.bits()),
+                None => None,
+            }
+        }
         None => None,
     }
 }

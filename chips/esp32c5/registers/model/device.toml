@@ -23,6 +23,8 @@ fragments = [
     "peripherals/wifi-mac-tx-common.toml",
 ]
 
+layouts = ["layouts/phy-i2c-command.toml"]
+
 [[shared-fragments]]
 library = "../../../espressif/registers/ieee80211/model/library.toml"
 fragment = "peripherals/wifi-mac-interface-address.toml"

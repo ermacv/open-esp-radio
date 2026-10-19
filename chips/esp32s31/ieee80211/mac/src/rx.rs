@@ -51,8 +51,6 @@ pub const FCS_SIZE: usize = 4;
 pub const CCMP_HEADER_SIZE: usize = 8;
 pub const CCMP_MIC_SIZE: usize = 8;
 
-const CSI_APPEND_ENABLE: u32 = 0x0080_0000;
-
 const MLME_HEADER_SIZE: usize = 24;
 const MLME_AUTH_BODY_SIZE: usize = 6;
 const CONTROL_HEADER_MIN_SIZE: usize = 10;

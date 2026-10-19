@@ -204,7 +204,7 @@ impl PhyTemperatureTransition {
                     value,
                 },
             ) => {
-                let dac = value & 0x0f;
+                let dac = analog_registers::TEMPERATURE_SENSOR_DAC_STATUS.extract(value);
                 if dac == RESET_DAC {
                     // SOURCE[HIL_OPEN_PHY_COLD_2026_07_28]: rev0 cold start
                     // reaches the first baseband temperature pass with DAC 0.

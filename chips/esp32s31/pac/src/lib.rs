@@ -37,10 +37,14 @@ pub(crate) use phy::table_memory;
 /// ```
 pub use generated::MacInterruptMask;
 
+pub use generated::WifiRxCsiControlMask;
 /// Memory layouts the radio hardware reads and writes in RAM: the Wi-Fi DMA
 /// descriptors and the RX-control metadata, generated from the register
 /// model's `layouts/` (`docs/hardware-memory.md`).
 pub use generated::layouts;
+
+pub use phy::frequency::{frequency_cap_and_sdm_word, frequency_cap_correction_word};
+pub use phy::table_memory::{pbus_memory_parameter_002_data, pbus_memory_parameter_014_data};
 
 pub use baseband::{RxDcoControlField, TxDcPwdetFields, TxIqToneControlFields};
 

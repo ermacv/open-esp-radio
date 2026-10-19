@@ -244,7 +244,7 @@ pub mod coex_external {
     }
 
     fn priority(value: u32) -> Option<ExternalCoexPriority> {
-        ExternalCoexPriority::new((value & 0xf) as u8)
+        ExternalCoexPriority::new((value & u32::from(ExternalCoexPriority::MAX)) as u8)
     }
 
     /// `hal_set_extern_pti_mode(mode)` with the stored wire type.

@@ -20,7 +20,16 @@ use crate::analog::{
     },
 };
 
-use oer_esp32s31_hal::phy::frequency::PhyFrequencyI2cNumberAddresses;
+use oer_esp32s31_hal::{
+    layouts::{
+        PhyFrequencyI2cCommandCommand, PhyFrequencyMemoryRecordCapAndSdm,
+        PhyFrequencyMemoryRecordSdmHigh, PhyFrequencyMemoryRecordXtalDuty,
+        PhyFrequencyMemoryWordWord,
+    },
+    phy::frequency::{
+        PhyFrequencyI2cNumberAddresses, frequency_cap_and_sdm_word, frequency_cap_correction_word,
+    },
+};
 
 pub const PHY_FREQUENCY_TABLE_ENTRY_COUNT: u8 = 85;
 pub const PHY_FREQUENCY_TABLE_FIRST_CODE: u16 = 0x960;
@@ -132,8 +141,6 @@ pub const fn phy_frequency_memory_record(
     let frequency_code = PHY_FREQUENCY_TABLE_FIRST_CODE.wrapping_add(index as u16);
     let sdm = calculate_rfpll_sdm(frequency_code, request.parameters.crystal_selector, 0).bytes();
     let cap = interpolated_cap(request.low_frequency_cap, request.high_frequency_cap, index);
-    let cap_high = 0xbf | (((cap >> 8) as u8 & 1) << 6);
-    let sdm_low = sdm[0] | (request.parameters.sdm_register_six_upper & 0xf8);
     let xtal_duty = phy_frequency_xtal_duty(
         frequency_code,
         request.parameters.middle_xtal_duty,
@@ -142,9 +149,15 @@ pub const fn phy_frequency_memory_record(
 
     PhyFrequencyMemoryRecord {
         words: [
-            cap as u8 as u32 | ((cap_high as u32) << 8) | ((sdm_low as u32) << 16),
-            sdm[1] as u32 | ((sdm[2] as u32) << 8) | ((sdm[3] as u32) << 16),
-            xtal_duty as u32,
+            frequency_cap_and_sdm_word(cap, sdm[0], request.parameters.sdm_register_six_upper),
+            PhyFrequencyMemoryRecordSdmHigh::from_bits(0)
+                .with_lower_middle(sdm[1])
+                .with_upper_middle(sdm[2])
+                .with_most_significant(sdm[3])
+                .bits(),
+            PhyFrequencyMemoryRecordXtalDuty::from_bits(0)
+                .with_value(xtal_duty)
+                .bits(),
         ],
     }
 }
@@ -326,14 +339,14 @@ pub const fn phy_frequency_cap_adjusted_word(
     raw: u32,
     correction: PhyFrequencyCapCorrection,
 ) -> u32 {
-    let cap = ((raw & 0xff) | ((raw >> 6) & 0x100)) as u16;
+    let record = PhyFrequencyMemoryRecordCapAndSdm::from_bits(raw);
+    let cap = u16::from_le_bytes([record.cap_low(), record.cap_high() as u8]);
     let adjusted = cap.wrapping_add(correction.delta() as u16);
-    let signed_high = ((adjusted as i16 as i32) >> 8) as u32;
-    (raw & 0x0000_bf00) | (adjusted as u8 as u32) | signed_high.wrapping_shl(14)
+    frequency_cap_correction_word(raw, adjusted)
 }
 
 const fn cap_memory_write_mode(value: u32) -> u8 {
-    PHY_RF_FREQUENCY_MEMORY_WRITE_MODE | (value >> 24) as u8
+    PHY_RF_FREQUENCY_MEMORY_WRITE_MODE | PhyFrequencyMemoryWordWord::from_bits(value).mode()
 }
 
 /// Exact low-byte channel image restored by `phy_pll_cap_mem_update`.
@@ -379,7 +392,7 @@ impl PhyFrequencyCapMemoryTransition {
                 PhyFrequencyCapMemoryAction::WriteMemory {
                     entry_index,
                     address: Self::address(entry_index),
-                    value: value & 0x00ff_ffff,
+                    value: PhyFrequencyMemoryWordWord::from_bits(value).payload(),
                     mode: cap_memory_write_mode(value),
                 }
             }
@@ -643,8 +656,12 @@ impl PhyFrequencyI2cDescriptor {
         // `phy_freq_i2c_write_set` stores the register byte before the block
         // byte in frequency command memory: `[block, register, data]` as the
         // little-endian word `data << 16 | register << 8 | block`.
-        let register_block = ((self.register as u32) << 8) | self.block as u32;
-        let data_word = ((self.data[copy_index as usize] as u32) << 16) | register_block;
+        let register_block = PhyFrequencyI2cCommandCommand::from_bits(0)
+            .with_register(self.register)
+            .with_block(self.block);
+        let data_word = register_block
+            .with_data(self.data[copy_index as usize])
+            .bits();
         match self.kind() {
             0 => match copy_index {
                 0 => (
@@ -665,12 +682,12 @@ impl PhyFrequencyI2cDescriptor {
             },
             1 => (
                 self.index() as u16 * 3 + 9,
-                ((self.data[0] as u32) << 16) | register_block,
+                register_block.with_data(self.data[0]).bits(),
                 PHY_FREQUENCY_MEMORY_MODE,
             ),
             _ => (
                 self.index() as u16 * 2 + PHY_FREQUENCY_I2C_MEMORY_BASE,
-                register_block,
+                register_block.bits(),
                 3,
             ),
         }
@@ -701,7 +718,11 @@ const fn frequency_i2c_descriptor(
             block: 0x63,
             register: 0,
             encoded_index: 0x10,
-            data: [sdm_register_0 & 0xf7, 0, 0],
+            data: [
+                analog_registers::RFPLL_SDM_UPDATE_ENABLE.replace(sdm_register_0, 0),
+                0,
+                0,
+            ],
         },
         3 => PhyFrequencyI2cDescriptor {
             block: 0x63,
@@ -731,7 +752,11 @@ const fn frequency_i2c_descriptor(
             block: 0x63,
             register: 0,
             encoded_index: 0x11,
-            data: [sdm_register_0 | 8, 0, 0],
+            data: [
+                analog_registers::RFPLL_SDM_UPDATE_ENABLE.replace(sdm_register_0, 1),
+                0,
+                0,
+            ],
         },
         8 => PhyFrequencyI2cDescriptor {
             block: 0x62,
@@ -746,12 +771,21 @@ const fn frequency_i2c_descriptor(
             data: [0; 3],
         },
         _ => {
-            let selected = front_end_register_3 | if front_end_parameter_bit { 4 } else { 0 };
+            let selected = if front_end_parameter_bit {
+                analog_registers::SHARED_RX_GAIN_CALIBRATION_ENABLE.replace(front_end_register_3, 1)
+            } else {
+                front_end_register_3
+            };
             PhyFrequencyI2cDescriptor {
                 block: 0x67,
                 register: 3,
                 encoded_index: 0,
-                data: [selected, front_end_register_3 & !4, selected],
+                data: [
+                    selected,
+                    analog_registers::SHARED_RX_GAIN_CALIBRATION_ENABLE
+                        .replace(front_end_register_3, 0),
+                    selected,
+                ],
             }
         }
     }
@@ -1430,7 +1464,7 @@ impl PhyChannelFrequencyInitTransition {
                         crystal_selector: self.request.crystal_selector,
                         middle_xtal_duty: self.request.middle_xtal_duty,
                         outer_xtal_duty: self.request.outer_xtal_duty,
-                        sdm_register_six_upper: value & 0xf8,
+                        sdm_register_six_upper: analog_registers::RFPLL_SDM_LOW.replace(value, 0),
                     },
                     // The pinned archive redundantly reads each cap immediately
                     // after the corresponding complete RFPLL call. The child

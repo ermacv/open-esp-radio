@@ -13,7 +13,10 @@
 #![forbid(unsafe_code)]
 
 use crate::generated::PhyI2cReadMask;
-use crate::svd;
+use crate::{
+    generated::{PhyI2cField, phy_i2c_fields as fields},
+    svd,
+};
 
 /// One of the two analog-register command hosts.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -202,7 +205,17 @@ impl PhyI2cInitializationInputs {
             11 => ((0x6b, 0x8, 0xfd), (0x67, 0xc, self.parameter_f7)),
             12 => ((0x6b, 0x4, 0xac), (0x67, 0x7, self.parameter_f6)),
             13 => (
-                (0x6e, 0x5, ((self.parameter_416 >> 2) as u8) | 0x40),
+                (
+                    0x6e,
+                    0x5,
+                    crate::generated::layouts::PhyI2cCommandWord::from_bits(
+                        crate::generated::PhyI2cInitializationHighCommand::compose(
+                            self.parameter_416,
+                        )
+                        .get(),
+                    )
+                    .data(),
+                ),
                 (0x67, 0x9, clamp(self.parameter_f8, 10, 60)),
             ),
             14 => ((0x6e, 0x7, 0x63), (0x67, 0xb, self.parameter_f6)),
@@ -214,7 +227,17 @@ impl PhyI2cInitializationInputs {
             20 => ((0x6e, 0x11, 0x73), (0x67, 0xf, self.parameter_fc)),
             21 => ((0x6e, 0x4, 0x47), (0x67, 0x11, self.parameter_fc)),
             22 => (
-                (0x6e, 0xc, ((self.parameter_416 << 4) as u8) & 0x30),
+                (
+                    0x6e,
+                    0xc,
+                    crate::generated::layouts::PhyI2cCommandWord::from_bits(
+                        crate::generated::PhyI2cInitializationLowCommand::compose(
+                            self.parameter_416,
+                        )
+                        .get(),
+                    )
+                    .data(),
+                ),
                 (0x67, 0x13, self.parameter_fa),
             ),
             23 => ((0x6e, 0xf, 0x47), (0x67, 0x15, self.parameter_fa)),
@@ -335,17 +358,12 @@ impl PhyI2cSar2Code {
 impl PhyI2cConfiguration {
     /// Command `index`, or `None` after the last.
     pub const fn command(self, index: usize) -> Option<PhyI2cConfigurationCommand> {
-        const fn modify(
-            block: u8,
-            register: u8,
-            msb: u8,
-            lsb: u8,
-            value: u8,
-        ) -> PhyI2cConfigurationCommand {
+        const fn modify(field: PhyI2cField, value: u8) -> PhyI2cConfigurationCommand {
+            let mask = field.replace(0, u8::MAX);
             PhyI2cConfigurationCommand::Modify {
-                address: PhyI2cAddress::new(PhyI2cBlock { code: block }, register),
-                msb,
-                lsb,
+                address: PhyI2cAddress::new(PhyI2cBlock { code: field.bank() }, field.register()),
+                msb: 7 - mask.leading_zeros() as u8,
+                lsb: mask.trailing_zeros() as u8,
                 value,
             }
         }
@@ -354,21 +372,27 @@ impl PhyI2cConfiguration {
                 PhyI2cAddress::new(PhyI2cBlock { code: 0x6a }, 1),
                 0x7f,
             ),
-            (Self::CrystalRegisters, 0) => modify(0x61, 8, 4, 4, 0),
-            (Self::CrystalRegisters, 1) => modify(0x61, 7, 5, 5, 1),
-            (Self::DacRate, 0) => modify(0x66, 4, 4, 4, 0),
-            (Self::AdcRate(rate), 0) => modify(0x66, 4, 2, 2, if rate { 0 } else { 1 }),
-            (Self::BiasRegisters, 0) => modify(0x6a, 0, 3, 0, 0xf),
-            (Self::BiasRegisters, 1) => modify(0x6a, 1, 7, 4, 7),
-            (Self::BiasRegisters, 2) => modify(0x6a, 0, 7, 4, 9),
-            (Self::BiasRegisters, 3) => modify(0x6a, 1, 3, 0, 0xf),
-            (Self::RcCalibration(arguments), 0) => modify(0x6b, 0x11, 5, 4, arguments.first),
-            (Self::RcCalibration(arguments), 1) => modify(0x6b, 0x0f, 7, 3, arguments.second),
-            (Self::RcCalibration(arguments), 2) => modify(0x6b, 0x13, 5, 2, arguments.third),
-            (Self::FilterCapacitors(_), 0) => modify(0x67, 0x1d, 3, 2, 0),
-            (Self::FilterCapacitors(_), 1) => modify(0x67, 5, 6, 6, 1),
-            (Self::FilterCapacitors(_), 2) => modify(0x67, 5, 3, 3, 1),
-            (Self::FilterCapacitors(_), 3) => modify(0x67, 5, 5, 5, 1),
+            (Self::CrystalRegisters, 0) => modify(fields::XTAL_REGISTER_8_CONTROL, 0),
+            (Self::CrystalRegisters, 1) => modify(fields::XTAL_REGISTER_7_CONTROL, 1),
+            (Self::DacRate, 0) => modify(fields::DAC_RATE, 0),
+            (Self::AdcRate(rate), 0) => modify(fields::ADC_RATE, if rate { 0 } else { 1 }),
+            (Self::BiasRegisters, 0) => modify(fields::BIAS_REGISTER_0_LOW, 0xf),
+            (Self::BiasRegisters, 1) => modify(fields::BIAS_REGISTER_1_HIGH, 7),
+            (Self::BiasRegisters, 2) => modify(fields::BIAS_REGISTER_0_HIGH, 9),
+            (Self::BiasRegisters, 3) => modify(fields::BIAS_REGISTER_1_LOW, 0xf),
+            (Self::RcCalibration(arguments), 0) => {
+                modify(fields::RC_CALIBRATION_FIRST, arguments.first)
+            }
+            (Self::RcCalibration(arguments), 1) => {
+                modify(fields::RC_CALIBRATION_SECOND, arguments.second)
+            }
+            (Self::RcCalibration(arguments), 2) => {
+                modify(fields::RC_CALIBRATION_THIRD, arguments.third)
+            }
+            (Self::FilterCapacitors(_), 0) => modify(fields::FILTER_REGISTER_1D_CONTROL, 0),
+            (Self::FilterCapacitors(_), 1) => modify(fields::FILTER_REGISTER_5_BIT_6, 1),
+            (Self::FilterCapacitors(_), 2) => modify(fields::FILTER_REGISTER_5_BIT_3, 1),
+            (Self::FilterCapacitors(_), 3) => modify(fields::FILTER_REGISTER_5_BIT_5, 1),
             (Self::FilterCapacitors(inputs), 4..=19) => {
                 let (register, value) = match index {
                     4 => (6, inputs.parameter_f5),
@@ -393,10 +417,12 @@ impl PhyI2cConfiguration {
                     value,
                 )
             }
-            (Self::PeakDetector, 0) => modify(0x67, 0x1d, 7, 7, 1),
-            (Self::PeakDetector, 1) => modify(0x67, 0x1d, 6, 4, 4),
-            (Self::PeakDetector, 2) => modify(0x67, 3, 6, 4, 4),
-            (Self::Sar2InitializationCode(code), 0) => modify(0x69, 4, 3, 0, (code.0 >> 8) as u8),
+            (Self::PeakDetector, 0) => modify(fields::PEAK_DETECTOR_ENABLE, 1),
+            (Self::PeakDetector, 1) => modify(fields::PEAK_DETECTOR_REFERENCE, 4),
+            (Self::PeakDetector, 2) => modify(fields::PEAK_DETECTOR_REGISTER_3_CONTROL, 4),
+            (Self::Sar2InitializationCode(code), 0) => {
+                modify(fields::SAR2_CODE_HIGH, code.0.to_le_bytes()[1])
+            }
             (Self::Sar2InitializationCode(code), 1) => PhyI2cConfigurationCommand::Write(
                 PhyI2cAddress::new(PhyI2cBlock { code: 0x69 }, 3),
                 code.0 as u8,
@@ -663,6 +689,31 @@ impl PhyI2cRegisters {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn modeled_initialization_payloads_match_the_old_packing() {
+        for parameter in 0..=u16::MAX {
+            let inputs = PhyI2cInitializationInputs {
+                parameter_416: parameter,
+                ..Default::default()
+            };
+            assert_eq!(
+                inputs.pair(13).expect("pair").first(),
+                (0x6e, 5, ((parameter >> 2) as u8) | 0x40)
+            );
+            assert_eq!(
+                inputs.pair(22).expect("pair").first(),
+                (0x6e, 12, ((parameter << 4) as u8) & 0x30)
+            );
+        }
+        for raw in 0..=0xfff {
+            let code = PhyI2cSar2Code::new(raw).expect("12-bit SAR code");
+            assert!(
+                matches!(PhyI2cConfiguration::Sar2InitializationCode(code).command(0),
+                Some(PhyI2cConfigurationCommand::Modify { value, .. }) if value == (raw >> 8) as u8)
+            );
+        }
+    }
 
     /// The blocks ESP-IDF's `regi2c_impl.c` names agree with the libphy
     /// tables: the same one-hot read-mask bit and the same host.

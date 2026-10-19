@@ -33,7 +33,7 @@ use super::{
 use crate::ieee80211::dma::descriptor::{DESCRIPTOR_BYTES, rx_completed_word};
 
 /// The walker's cursor registers report the low 20 address bits.
-const CURSOR_LOW_MASK: u32 = 0x000f_ffff;
+const CURSOR_LOW_MASK: u32 = oer_esp32s31_pac::WifiDescriptorAddressLow::MAX;
 
 /// Operations the log can hold before [`RxWalkerModel::overflowed`] is set.
 pub const RX_WALKER_LOG_CAPACITY: usize = 512;

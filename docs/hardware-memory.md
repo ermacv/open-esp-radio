@@ -18,10 +18,15 @@ describes how the register model, the PAC and the HAL describe them.
 | BLE controller exchange memory (buffer headers, packet prefixes, scheduler items, link states, the device table, the direction-finding workspace) | CPU and controller both, by protocol |
 | IEEE 802.15.4 frame buffers (length byte, PSDU) | CPU and engine |
 
-The Wi-Fi DMA descriptor and the RX control prefix are generated from the
-register model; the TX descriptor words, the A-MPDU descriptors, BLE exchange
-memory and the 802.15.4 frame buffers are still described by hand, with
-fields named by offset where their meaning is unknown.
+The Wi-Fi DMA descriptor, RX control prefix, TX metadata head and the known
+flags, priority and security fields of the ordinary TX descriptor prefix are
+generated from the register model. The unassigned TX fields, A-MPDU
+descriptors, BLE exchange memory and 802.15.4 frame buffers retain their
+existing descriptions, with fields named by offset where their meaning is
+unknown. The PHY's RFPLL codes, frequency-memory records and analog-I2C
+command words also have generated value accessors. Register-specific
+composed domains preserve overlapping ROM publications, including the
+signed capacitor correction's spill into the frequency-memory mode byte.
 
 ## How it differs from MMIO
 

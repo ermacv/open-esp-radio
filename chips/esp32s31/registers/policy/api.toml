@@ -11270,3 +11270,66 @@ fields = [{ field = "RX_ACK_STOP", source-bit-offset = 0 }, { field = "RX_ACK_SF
 value = 0x01868000
 exposure = "facade"
 sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]
+
+[[bitwise-composed-domains]]
+name = "PhyFrequencyCapAndSdmInput"
+description = "The first RF-frequency record word, including the fixed capacitor configuration and the saved upper SDM-register bits."
+peripheral = "PHY_FREQUENCY_CHANNEL_ORACLE"
+register = "FREQUENCY_MEMORY_DATA"
+arguments = [
+    { name = "cap_low", value-type = "u16", retain-mask = 0xff, left-shift = 0x0 },
+    { name = "cap_high", value-type = "u16", right-shift = 0x8, retain-mask = 0x1, left-shift = 0xe },
+    { name = "sdm_low", value-type = "u8", left-shift = 0x10 },
+    { name = "sdm_upper", value-type = "u8", retain-mask = 0xf8, left-shift = 0x10 },
+]
+fixed-value = 0xbf00
+output-mask = 0xffffffff
+sources = ["BLOB_LIBPHY_PHY_RF_FREQUENCY_PACKING"]
+
+[[bitwise-composed-domains]]
+name = "PhyFrequencyCapCorrectionInput"
+description = "Exact capacitor correction publication, including signed high-byte spill. signed_code is the adjusted i16 sign-extended to u32; the final left shift makes a logical right shift equivalent to the ROM arithmetic one."
+peripheral = "PHY_FREQUENCY_CHANNEL_ORACLE"
+register = "FREQUENCY_MEMORY_DATA"
+arguments = [
+    { name = "raw", value-type = "u32", retain-mask = 0xbf00, left-shift = 0x0 },
+    { name = "low", value-type = "u8", left-shift = 0x0 },
+    { name = "signed_code", value-type = "u32", right-shift = 0x8, left-shift = 0xe },
+]
+fixed-value = 0x0
+output-mask = 0xffffffff
+sources = ["ROM_REV0_PHY_FREQUENCY_PACKING"]
+
+[[bitwise-composed-domains]]
+name = "PhyPbusParameter002Data"
+description = "PBUS table data composed from phy_param byte 0x002 and the complete ROM fixed image. The parameter bits are ORed without independently narrowing them."
+peripheral = "PHY_MEMORY"
+register = "DATA_0"
+arguments = [
+    { name = "parameter", value-type = "u8", left-shift = 0x9 },
+]
+fixed-value = 0x801ff
+output-mask = 0xffffffff
+sources = ["ROM_REV0_PHY_SET_PBUS_MEM"]
+
+[[bitwise-composed-domains]]
+name = "PhyPbusParameter014Data"
+description = "PBUS table data composed from phy_param byte 0x014 and the complete ROM fixed image. The parameter bits are ORed without independently narrowing them."
+peripheral = "PHY_MEMORY"
+register = "DATA_0"
+arguments = [
+    { name = "parameter", value-type = "u8", left-shift = 0xc },
+]
+fixed-value = 0x48001ff
+output-mask = 0xffffffff
+sources = ["ROM_REV0_PHY_SET_PBUS_MEM"]
+
+[[flag-domains]]
+name = "WifiRxCsiControlMask"
+description = "Reviewed CSI append selector in a captured RX/CSI control image."
+
+[[flag-domains.values]]
+name = "APPEND"
+value = 0x00800000
+description = "CSI appending enabled by hal_mac_set_csi."
+sources = ["BLOB_LIBPP_HAL_MAC_SET_CSI"]

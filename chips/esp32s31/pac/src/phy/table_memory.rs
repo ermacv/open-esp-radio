@@ -12,6 +12,16 @@ use crate::generated::{
 #[cfg(oer_probe)]
 use crate::{PhyForcedPowerIndex, generated::PhyForcedPowerState};
 
+/// Parameter-dependent first PBUS table word (`phy_set_pbus_mem`).
+pub const fn pbus_memory_parameter_002_data(parameter: u8) -> u32 {
+    crate::generated::PhyPbusParameter002Data::compose(parameter).get()
+}
+
+/// Parameter-dependent group-eight PBUS table word (`phy_set_pbus_mem`).
+pub const fn pbus_memory_parameter_014_data(parameter: u8) -> u32 {
+    crate::generated::PhyPbusParameter014Data::compose(parameter).get()
+}
+
 /// One packed PBUS-memory group boundary.
 ///
 /// Complete rev0 ROM `phy_write_pbus_mem` packs groups 0..11 into six

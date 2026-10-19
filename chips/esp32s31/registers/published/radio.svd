@@ -13778,6 +13778,12 @@
               <bitOffset>27</bitOffset>
               <bitWidth>1</bitWidth>
             </field>
+            <field>
+              <name>CSI_APPEND_ENABLE</name>
+              <description>Project-assigned name. hal_mac_set_csi sets or clears bit 23 of the RX/CSI control word.</description>
+              <bitOffset>23</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
           </fields>
         </register>
       </registers>

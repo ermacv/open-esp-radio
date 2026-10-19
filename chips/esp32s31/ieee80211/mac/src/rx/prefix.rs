@@ -17,9 +17,9 @@ use oer_esp32s31_hal::layouts::{WifiRxControlPrefix, WifiRxControlTail};
 use oer_ieee80211_softmac::{MacRxEvidence, MacRxMetadata};
 
 use super::{
-    CSI_APPEND_ENABLE, DYNAMIC_TAIL_SIZE, FCS_SIZE, FIXED_PREFIX_SIZE, INGRESS_STRICT_DUMP,
-    INGRESS_STRICT_RXEND, INGRESS_VALID_FLAGS, NormalizedRxFrame, RxError, RxFirstSegmentLayout,
-    RxIngressConfig, RxPhyInfo, RxSegment,
+    DYNAMIC_TAIL_SIZE, FCS_SIZE, FIXED_PREFIX_SIZE, INGRESS_STRICT_DUMP, INGRESS_STRICT_RXEND,
+    INGRESS_VALID_FLAGS, NormalizedRxFrame, RxError, RxFirstSegmentLayout, RxIngressConfig,
+    RxPhyInfo, RxSegment,
 };
 
 /// The shortest MPDU `sig_len` may describe: its two-byte frame control.
@@ -174,7 +174,7 @@ fn dynamic_tail_offset(prefix: WifiRxControlPrefix<'_>, csi_config: u32) -> Opti
             usize::from(sig_b.length_bytes()).checked_add(usize::from(sig_b.length_bits() != 0))?;
         offset = offset.checked_add(option_length.checked_add(3)? & !3)?;
     }
-    if csi_config & CSI_APPEND_ENABLE != 0 {
+    if csi_config & oer_esp32s31_hal::types::WifiRxCsiControlMask::APPEND.bits() != 0 {
         let channel_estimate = prefix.channel_estimate();
         let csi_length = usize::from(channel_estimate.length());
         if channel_estimate.valid() || csi_length != 0 {

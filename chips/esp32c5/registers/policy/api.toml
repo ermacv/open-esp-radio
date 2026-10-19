@@ -1705,3 +1705,199 @@ fields = [{ field = "RX_ACK_STOP", source-bit-offset = 0 }, { field = "RX_ACK_SF
 value = 0x01868000
 exposure = "facade"
 sources = ["esp-idf-4d59230d-ieee802154-common-ll"]
+
+[[bitwise-composed-domains]]
+name = "PhyI2cInitializationHighCommand"
+description = "DATA field for block 0x6e register 5 in phy_i2c_init1: parameter bits 9:2 with data bit 6 set. Other command fields are zero."
+peripheral = "I2C_ANA_MST"
+register = "I2C0_CTRL"
+arguments = [{ name = "parameter", value-type = "u16", right-shift = 2, retain-mask = 0xff, left-shift = 16 }]
+fixed-value = 0x00400000
+output-mask = 0x00ff0000
+sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
+
+[[bitwise-composed-domains]]
+name = "PhyI2cInitializationLowCommand"
+description = "DATA field for block 0x6e register 12 in phy_i2c_init1: parameter bits 1:0 in data bits 5:4. Other command fields are zero."
+peripheral = "I2C_ANA_MST"
+register = "I2C0_CTRL"
+arguments = [{ name = "parameter", value-type = "u16", retain-mask = 3, left-shift = 20 }]
+output-mask = 0x00300000
+sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
+
+[[indirect-register-field-domains]]
+name = "PhyI2cField"
+module = "phy_i2c_fields"
+description = "Reviewed fields of the C5 analog I2C configuration leaves."
+value-bits = 8
+
+[[indirect-register-field-domains.fields]]
+name = "XTAL_REGISTER_8_CONTROL"
+description = "Analog field used by the reviewed C5 configuration leaf."
+bank = 0x61
+register = 0x8
+bit-offset = 4
+bit-width = 1
+sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES"]
+
+[[indirect-register-field-domains.fields]]
+name = "XTAL_REGISTER_7_CONTROL"
+description = "Analog field used by the reviewed C5 configuration leaf."
+bank = 0x61
+register = 0x7
+bit-offset = 5
+bit-width = 1
+sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES"]
+
+[[indirect-register-field-domains.fields]]
+name = "DAC_RATE"
+description = "Analog field used by the reviewed C5 configuration leaf."
+bank = 0x66
+register = 0x4
+bit-offset = 4
+bit-width = 1
+sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES"]
+
+[[indirect-register-field-domains.fields]]
+name = "ADC_RATE"
+description = "Analog field used by the reviewed C5 configuration leaf."
+bank = 0x66
+register = 0x4
+bit-offset = 2
+bit-width = 1
+sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES"]
+
+[[indirect-register-field-domains.fields]]
+name = "BIAS_REGISTER_0_LOW"
+description = "Analog field used by the reviewed C5 configuration leaf."
+bank = 0x6a
+register = 0x0
+bit-offset = 0
+bit-width = 4
+sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES"]
+
+[[indirect-register-field-domains.fields]]
+name = "BIAS_REGISTER_1_HIGH"
+description = "Analog field used by the reviewed C5 configuration leaf."
+bank = 0x6a
+register = 0x1
+bit-offset = 4
+bit-width = 4
+sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES"]
+
+[[indirect-register-field-domains.fields]]
+name = "BIAS_REGISTER_0_HIGH"
+description = "Analog field used by the reviewed C5 configuration leaf."
+bank = 0x6a
+register = 0x0
+bit-offset = 4
+bit-width = 4
+sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES"]
+
+[[indirect-register-field-domains.fields]]
+name = "BIAS_REGISTER_1_LOW"
+description = "Analog field used by the reviewed C5 configuration leaf."
+bank = 0x6a
+register = 0x1
+bit-offset = 0
+bit-width = 4
+sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES"]
+
+[[indirect-register-field-domains.fields]]
+name = "RC_CALIBRATION_FIRST"
+description = "Analog field used by the reviewed C5 configuration leaf."
+bank = 0x6b
+register = 0x11
+bit-offset = 4
+bit-width = 2
+sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES_3"]
+
+[[indirect-register-field-domains.fields]]
+name = "RC_CALIBRATION_SECOND"
+description = "Analog field used by the reviewed C5 configuration leaf."
+bank = 0x6b
+register = 0xf
+bit-offset = 3
+bit-width = 5
+sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES_3"]
+
+[[indirect-register-field-domains.fields]]
+name = "RC_CALIBRATION_THIRD"
+description = "Analog field used by the reviewed C5 configuration leaf."
+bank = 0x6b
+register = 0x13
+bit-offset = 2
+bit-width = 4
+sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES_3"]
+
+[[indirect-register-field-domains.fields]]
+name = "FILTER_REGISTER_1D_CONTROL"
+description = "Analog field used by the reviewed C5 configuration leaf."
+bank = 0x67
+register = 0x1d
+bit-offset = 2
+bit-width = 2
+sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES_3"]
+
+[[indirect-register-field-domains.fields]]
+name = "FILTER_REGISTER_5_BIT_6"
+description = "Analog field used by the reviewed C5 configuration leaf."
+bank = 0x67
+register = 0x5
+bit-offset = 6
+bit-width = 1
+sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES_3"]
+
+[[indirect-register-field-domains.fields]]
+name = "FILTER_REGISTER_5_BIT_3"
+description = "Analog field used by the reviewed C5 configuration leaf."
+bank = 0x67
+register = 0x5
+bit-offset = 3
+bit-width = 1
+sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES_3"]
+
+[[indirect-register-field-domains.fields]]
+name = "FILTER_REGISTER_5_BIT_5"
+description = "Analog field used by the reviewed C5 configuration leaf."
+bank = 0x67
+register = 0x5
+bit-offset = 5
+bit-width = 1
+sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES_3"]
+
+[[indirect-register-field-domains.fields]]
+name = "PEAK_DETECTOR_ENABLE"
+description = "Analog field used by the reviewed C5 configuration leaf."
+bank = 0x67
+register = 0x1d
+bit-offset = 7
+bit-width = 1
+sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES_3"]
+
+[[indirect-register-field-domains.fields]]
+name = "PEAK_DETECTOR_REFERENCE"
+description = "Analog field used by the reviewed C5 configuration leaf."
+bank = 0x67
+register = 0x1d
+bit-offset = 4
+bit-width = 3
+sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES_3"]
+
+[[indirect-register-field-domains.fields]]
+name = "PEAK_DETECTOR_REGISTER_3_CONTROL"
+description = "Analog field used by the reviewed C5 configuration leaf."
+bank = 0x67
+register = 0x3
+bit-offset = 4
+bit-width = 3
+sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES_3"]
+
+[[indirect-register-field-domains.fields]]
+name = "SAR2_CODE_HIGH"
+description = "Analog field used by the reviewed C5 configuration leaf."
+bank = 0x69
+register = 0x4
+bit-offset = 0
+bit-width = 4
+sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES_3"]

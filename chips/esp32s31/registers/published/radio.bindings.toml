@@ -12503,6 +12503,13 @@ bit-width = 8
 access = "read-write"
 
 [[registers.fields]]
+svd-name = "CSI_APPEND_ENABLE"
+method = "csi_append_enable"
+bit-offset = 23
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
 svd-name = "BIT_27_OPAQUE"
 method = "bit_27_opaque"
 bit-offset = 27

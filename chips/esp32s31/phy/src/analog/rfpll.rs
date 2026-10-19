@@ -22,6 +22,7 @@ pub const fn phy_get_rf_cal_version() -> u32 {
 }
 
 use crate::analog::i2c::{PhyI2cAddress, PhyI2cField, analog_registers};
+use oer_esp32s31_hal::layouts::{PhyRfpllCapacitorCodeCode, PhyRfpllSdmCodeEncoded};
 
 const LOCK_ATTEMPTS: u8 = 100;
 /// Capacitor-status samples one search direction permits.
@@ -92,12 +93,12 @@ impl RfpllCapacitorCode {
 
     /// The low byte, for `RFPLL_CAPACITOR_LOW`.
     pub const fn low_byte(self) -> u8 {
-        self.0 as u8
+        PhyRfpllCapacitorCodeCode::from_bits(self.0).low()
     }
 
     /// Bit 8, for the one-bit `RFPLL_CAPACITOR_HIGH`.
     pub const fn high_bit(self) -> u8 {
-        (self.0 >> 8) as u8
+        PhyRfpllCapacitorCodeCode::from_bits(self.0).high() as u8
     }
 }
 
@@ -140,12 +141,13 @@ pub const fn calculate_rfpll_sdm(
     let encoded =
         ((((scaled as u64) << shift) / first_divisor / divisor) as u32).wrapping_add(0xff00_0000);
 
+    let image = PhyRfpllSdmCodeEncoded::from_bits(encoded);
     RfpllSdmImage {
         bytes: [
-            (encoded & 0x7) as u8,
-            (encoded >> 3) as u8,
-            (encoded >> 11) as u8,
-            (encoded >> 19) as u8,
+            image.low(),
+            image.lower_middle(),
+            image.upper_middle(),
+            image.most_significant(),
         ],
     }
 }
@@ -679,7 +681,7 @@ impl RfpllFrequencyTransition {
                     value,
                 },
             ) => RfpllFrequencyStep::EnableCapSearch {
-                initial: u16::from(low) | (u16::from(value) << 8),
+                initial: u16::from_le_bytes([low, value]),
                 lock_observed,
             },
             (

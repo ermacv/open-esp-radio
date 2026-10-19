@@ -122,3 +122,21 @@ fn mmio_binding_accepts_program_but_not_terminal_state() {
         Err(PhyPbusMemoryBindingError::UnsupportedAction)
     );
 }
+
+#[test]
+fn modeled_pbus_parameter_words_match_the_old_unmasked_or() {
+    for parameter in 0..=u8::MAX {
+        let parameters = PhyPbusMemoryParameters {
+            parameter_002: parameter,
+            parameter_014: parameter,
+        };
+        assert_eq!(
+            data_word(parameters, 0, 0),
+            (u32::from(parameter) << 9) | 0x0008_01ff
+        );
+        assert_eq!(
+            data_word(parameters, 8, 2),
+            (u32::from(parameter) << 12) | 0x0480_01ff
+        );
+    }
+}

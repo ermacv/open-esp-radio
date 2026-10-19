@@ -173,7 +173,7 @@ const fn word_at(words: [u32; 8], index: u8) -> u32 {
 
 const fn first_table(parameter_002: u8) -> [u32; 8] {
     [
-        ((parameter_002 as u32) << 9) | 0x0008_01ff,
+        oer_esp32s31_hal::phy::memory::pbus_memory_parameter_002_data(parameter_002),
         0x0044_01ff,
         0x0017_13ff,
         0x0048_03ff,
@@ -201,7 +201,9 @@ const fn data_word(parameters: PhyPbusMemoryParameters, group: u8, index: u8) ->
         }
         8 => match index {
             1 => 0x0014_fdff,
-            2 => ((parameters.parameter_014 as u32) << 12) | 0x0480_01ff,
+            2 => oer_esp32s31_hal::phy::memory::pbus_memory_parameter_014_data(
+                parameters.parameter_014,
+            ),
             _ => word_at(TABLE_B, index),
         },
         10 => word_at(TABLE_E, index),

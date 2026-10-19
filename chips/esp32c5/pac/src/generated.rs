@@ -467,6 +467,121 @@ impl Ieee802154RxDmaAddress {
     }
 }
 
+/// DATA field for block 0x6e register 5 in phy_i2c_init1: parameter bits 9:2 with data bit 6 set. Other command fields are zero.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct PhyI2cInitializationHighCommand(u32);
+
+impl PhyI2cInitializationHighCommand {
+    /// Compose one register-specific image from typed logical arguments.
+    pub(crate) const fn compose(parameter: u16) -> Self {
+        Self((0x00400000 | ((((parameter as u32) >> 2) & 0x000000ff) << 16)) & 0x00ff0000)
+    }
+
+    /// Return the generated numeric image to its private raw-PAC bridge.
+    pub(crate) const fn get(self) -> u32 {
+        self.0
+    }
+}
+
+/// DATA field for block 0x6e register 12 in phy_i2c_init1: parameter bits 1:0 in data bits 5:4. Other command fields are zero.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct PhyI2cInitializationLowCommand(u32);
+
+impl PhyI2cInitializationLowCommand {
+    /// Compose one register-specific image from typed logical arguments.
+    pub(crate) const fn compose(parameter: u16) -> Self {
+        Self((((parameter as u32) & 0x00000003) << 20) & 0x00300000)
+    }
+
+    /// Return the generated numeric image to its private raw-PAC bridge.
+    pub(crate) const fn get(self) -> u32 {
+        self.0
+    }
+}
+
+/// Reviewed fields of the C5 analog I2C configuration leaves.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct PhyI2cField {
+    bank: u8,
+    register: u8,
+    mask: u8,
+    bit_offset: u8,
+}
+
+impl PhyI2cField {
+    const fn generated(bank: u8, register: u8, mask: u8, bit_offset: u8) -> Self {
+        Self {
+            bank,
+            register,
+            mask,
+            bit_offset,
+        }
+    }
+
+    pub(crate) const fn bank(self) -> u8 {
+        self.bank
+    }
+
+    pub(crate) const fn register(self) -> u8 {
+        self.register
+    }
+
+    /// Extract the named field from one sampled indirect-register value.
+    pub const fn extract(self, register_value: u8) -> u8 {
+        (register_value & self.mask) >> self.bit_offset
+    }
+
+    /// Replace the named field while preserving every other register bit.
+    pub const fn replace(self, register_value: u8, field_value: u8) -> u8 {
+        (register_value & !self.mask) | ((field_value << self.bit_offset) & self.mask)
+    }
+}
+
+/// Reviewed named fields in the `PhyI2cField` indirect-register space.
+pub mod phy_i2c_fields {
+    use super::PhyI2cField;
+
+    /// Analog field used by the reviewed C5 configuration leaf.
+    pub const XTAL_REGISTER_8_CONTROL: PhyI2cField = PhyI2cField::generated(0x61, 0x08, 0x10, 4);
+    /// Analog field used by the reviewed C5 configuration leaf.
+    pub const XTAL_REGISTER_7_CONTROL: PhyI2cField = PhyI2cField::generated(0x61, 0x07, 0x20, 5);
+    /// Analog field used by the reviewed C5 configuration leaf.
+    pub const DAC_RATE: PhyI2cField = PhyI2cField::generated(0x66, 0x04, 0x10, 4);
+    /// Analog field used by the reviewed C5 configuration leaf.
+    pub const ADC_RATE: PhyI2cField = PhyI2cField::generated(0x66, 0x04, 0x04, 2);
+    /// Analog field used by the reviewed C5 configuration leaf.
+    pub const BIAS_REGISTER_0_LOW: PhyI2cField = PhyI2cField::generated(0x6a, 0x00, 0x0f, 0);
+    /// Analog field used by the reviewed C5 configuration leaf.
+    pub const BIAS_REGISTER_1_HIGH: PhyI2cField = PhyI2cField::generated(0x6a, 0x01, 0xf0, 4);
+    /// Analog field used by the reviewed C5 configuration leaf.
+    pub const BIAS_REGISTER_0_HIGH: PhyI2cField = PhyI2cField::generated(0x6a, 0x00, 0xf0, 4);
+    /// Analog field used by the reviewed C5 configuration leaf.
+    pub const BIAS_REGISTER_1_LOW: PhyI2cField = PhyI2cField::generated(0x6a, 0x01, 0x0f, 0);
+    /// Analog field used by the reviewed C5 configuration leaf.
+    pub const RC_CALIBRATION_FIRST: PhyI2cField = PhyI2cField::generated(0x6b, 0x11, 0x30, 4);
+    /// Analog field used by the reviewed C5 configuration leaf.
+    pub const RC_CALIBRATION_SECOND: PhyI2cField = PhyI2cField::generated(0x6b, 0x0f, 0xf8, 3);
+    /// Analog field used by the reviewed C5 configuration leaf.
+    pub const RC_CALIBRATION_THIRD: PhyI2cField = PhyI2cField::generated(0x6b, 0x13, 0x3c, 2);
+    /// Analog field used by the reviewed C5 configuration leaf.
+    pub const FILTER_REGISTER_1D_CONTROL: PhyI2cField = PhyI2cField::generated(0x67, 0x1d, 0x0c, 2);
+    /// Analog field used by the reviewed C5 configuration leaf.
+    pub const FILTER_REGISTER_5_BIT_6: PhyI2cField = PhyI2cField::generated(0x67, 0x05, 0x40, 6);
+    /// Analog field used by the reviewed C5 configuration leaf.
+    pub const FILTER_REGISTER_5_BIT_3: PhyI2cField = PhyI2cField::generated(0x67, 0x05, 0x08, 3);
+    /// Analog field used by the reviewed C5 configuration leaf.
+    pub const FILTER_REGISTER_5_BIT_5: PhyI2cField = PhyI2cField::generated(0x67, 0x05, 0x20, 5);
+    /// Analog field used by the reviewed C5 configuration leaf.
+    pub const PEAK_DETECTOR_ENABLE: PhyI2cField = PhyI2cField::generated(0x67, 0x1d, 0x80, 7);
+    /// Analog field used by the reviewed C5 configuration leaf.
+    pub const PEAK_DETECTOR_REFERENCE: PhyI2cField = PhyI2cField::generated(0x67, 0x1d, 0x70, 4);
+    /// Analog field used by the reviewed C5 configuration leaf.
+    pub const PEAK_DETECTOR_REGISTER_3_CONTROL: PhyI2cField =
+        PhyI2cField::generated(0x67, 0x03, 0x70, 4);
+    /// Analog field used by the reviewed C5 configuration leaf.
+    pub const SAR2_CODE_HIGH: PhyI2cField = PhyI2cField::generated(0x69, 0x04, 0x0f, 0);
+}
+
 /// Typed bridge for the reviewed `publish_ieee802154_tx_dma_address` complete-register transaction.
 #[inline]
 pub(crate) fn publish_ieee802154_tx_dma_address(
@@ -1131,4 +1246,135 @@ pub(crate) fn replace_ieee802154_rx_abort_ed_operation(registers: &crate::svd::I
 #[inline]
 pub(crate) fn replace_ieee802154_tx_abort_baseline(registers: &crate::svd::Ieee802154Mac) {
     crate::svd::field_replace_modify::replace_ieee802154_tx_abort_baseline(registers);
+}
+
+/// Memory layouts: structures in RAM whose format the hardware defines,
+/// generated from the register model's `layouts/`. They carry no protocol:
+/// no ordering, fences or ownership.
+pub mod layouts {
+    /// The command word the analog I2C master consumes, including the register-data payload.
+    ///
+    /// A decoder over the 4 bytes the hardware wrote, read only after the
+    /// handover that gives them to the CPU.
+    /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub struct PhyI2cCommand<'a> {
+        bytes: &'a [u8; 4],
+    }
+
+    impl<'a> PhyI2cCommand<'a> {
+        /// The structure's size in bytes.
+        pub const SIZE: usize = 4;
+
+        /// Decode the structure from its bytes.
+        pub const fn new(bytes: &'a [u8; 4]) -> Self {
+            Self { bytes }
+        }
+
+        /// The bytes this decoder reads.
+        pub const fn bytes(self) -> &'a [u8; 4] {
+            self.bytes
+        }
+
+        /// The `WORD` range: bytes 0x0..0x4, little-endian.
+        pub const fn word(self) -> PhyI2cCommandWord {
+            PhyI2cCommandWord(u32::from_le_bytes([
+                self.bytes[0],
+                self.bytes[1],
+                self.bytes[2],
+                self.bytes[3],
+            ]))
+        }
+    }
+
+    /// Project-assigned name.
+    ///
+    /// The `PHY_I2C_COMMAND.WORD` range.
+    /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C.
+    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+    pub struct PhyI2cCommandWord(u32);
+
+    impl PhyI2cCommandWord {
+        /// The range's little-endian value.
+        pub const fn bits(self) -> u32 {
+            self.0
+        }
+
+        /// The value of a range image; every bit pattern is one.
+        pub const fn from_bits(bits: u32) -> Self {
+            Self(bits)
+        }
+
+        /// Project-assigned name. Analog I2C block.
+        ///
+        /// `BLOCK`, bits 7:0; written by the CPU.
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C.
+        pub const fn block(self) -> u8 {
+            (self.0 & 0xff) as u8
+        }
+
+        /// This value with `BLOCK` set to `value`.
+        pub const fn with_block(self, value: u8) -> Self {
+            Self((self.0 & 0xffffff00) | value as u32)
+        }
+
+        /// Project-assigned name. Analog register address.
+        ///
+        /// `REGISTER`, bits 15:8; written by the CPU.
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C.
+        pub const fn register(self) -> u8 {
+            ((self.0 >> 8) & 0xff) as u8
+        }
+
+        /// This value with `REGISTER` set to `value`.
+        pub const fn with_register(self, value: u8) -> Self {
+            Self((self.0 & 0xffff00ff) | (value as u32) << 8)
+        }
+
+        /// Project-assigned name. Analog register data byte.
+        ///
+        /// `DATA`, bits 23:16; written by the CPU.
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C.
+        pub const fn data(self) -> u8 {
+            ((self.0 >> 16) & 0xff) as u8
+        }
+
+        /// This value with `DATA` set to `value`.
+        pub const fn with_data(self, value: u8) -> Self {
+            Self((self.0 & 0xff00ffff) | (value as u32) << 16)
+        }
+    }
+
+    /// A writer over the 4 bytes the CPU fills in: typed ranges, no raw
+    /// byte access outside this generated code.
+    #[derive(Debug, Eq, PartialEq)]
+    pub struct PhyI2cCommandMut<'a> {
+        bytes: &'a mut [u8; 4],
+    }
+
+    impl<'a> PhyI2cCommandMut<'a> {
+        /// Write through the structure's bytes.
+        pub const fn new(bytes: &'a mut [u8; 4]) -> Self {
+            Self { bytes }
+        }
+
+        /// A read-only decoder over the bytes written so far.
+        pub const fn view(&self) -> PhyI2cCommand<'_> {
+            PhyI2cCommand::new(self.bytes)
+        }
+
+        /// Store the `WORD` range, little-endian.
+        pub fn set_word(&mut self, value: PhyI2cCommandWord) {
+            let bytes = value.bits().to_le_bytes();
+            self.bytes[0] = bytes[0];
+            self.bytes[1] = bytes[1];
+            self.bytes[2] = bytes[2];
+            self.bytes[3] = bytes[3];
+        }
+
+        /// The `WORD` range as last stored.
+        pub const fn word(&self) -> PhyI2cCommandWord {
+            self.view().word()
+        }
+    }
 }

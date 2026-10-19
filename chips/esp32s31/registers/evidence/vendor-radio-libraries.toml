@@ -555,3 +555,7 @@ description = "espressif/esp-phy-lib commit 20f1db053a0e6cb9f1c09d255c43bf424830
 [[sources]]
 id = "BLOB_LIBRFTEST_PHY_TEST_FILTER_BAND_SET"
 description = "espressif/esp-phy-lib commit 20f1db053a0e6cb9f1c09d255c43bf42483041d0, esp32s31/librftest.a, sha256 c76dfc7e80bdbe29dbdafe68f1a09eb18db66ca392a2d66f1c5ddb169d9a2c5a; complete phy_test.o phy_test_filter_band_set(select), size 0x58. A nonzero select writes phy_param byte 0xef, and zero writes byte 0xf0, to both PHY-I2C block 0x67 host 1 registers 0x1c and 0x1d."
+
+[[sources]]
+id = "BLOB_LIBPHY_PHY_RF_FREQUENCY_PACKING"
+description = "espressif/esp-phy-lib 20f1db053a0e6cb9f1c09d255c43bf42483041d0 esp32s31/libphy.a sha256 116c7c3a55e2ddfd7937edad2667b5d64717f1967519a0201ca6354246f0b1a2. Complete phy_hw_freq.o phy_get_rf_freq_init, size 0x1d8, builds the three-word phy_wr_rf_freq_mem input: capacitor low byte, high byte 0xbf | ((cap >> 8 & 1) << 6), SDM low byte combined with saved register-6 bits 7:3; then SDM middle/middle/high bytes; then crystal duty."

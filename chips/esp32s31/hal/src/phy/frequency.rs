@@ -11,7 +11,9 @@ use crate::{
     phy_pac_mut,
 };
 
-pub use oer_esp32s31_pac::PhyFrequencyI2cNumberAddresses;
+pub use oer_esp32s31_pac::{
+    PhyFrequencyI2cNumberAddresses, frequency_cap_and_sdm_word, frequency_cap_correction_word,
+};
 
 /// Clear the shared Wi-Fi control state at the start of common PHY init.
 ///

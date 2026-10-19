@@ -49,3 +49,4 @@ pub use crate::phy::restore::{
 };
 
 pub use crate::ieee80211::station_wake::StaTbttScheduleError;
+pub use oer_esp32s31_pac::WifiRxCsiControlMask;
