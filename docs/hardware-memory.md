@@ -115,6 +115,18 @@ Byte-oriented layouts (the RX control prefix) declare `[[layout.bytes]]`
 ranges instead of words, with `access = "owned"`: the CPU reads them only
 after a handover.
 
+A field written by both participants at different phases declares
+`writer = "phased"` and an ordered, nonempty `phases` list. Each phase has a
+unique name and one writer (`cpu` or `hardware`), for example:
+
+```toml
+writer = "phased"
+phases = [{ name = "arm", writer = "cpu" }, { name = "complete", writer = "hardware" }]
+```
+
+The generated documentation records these phases; the HAL enforces their
+order and handover. A single-writer field does not declare phases.
+
 Every field gets a `[[review]]` like a register field: naming, sources,
 provenance, accuracy, completeness. A fact measured on the stand is evidence
 of a new class, `stand`, citing the chip's `notes/` and the runs; vendor
