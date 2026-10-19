@@ -10,11 +10,6 @@ use crate::{
 };
 
 impl WifiRadioRegisters {
-    /// The production cold-init CTS reset of every ordinary queue.
-    pub fn validation_initialize_mac_software_cts(&mut self) {
-        self.initialize_mac_software_cts();
-    }
-
     /// The recovered RTS control edge, without publishing a queue.
     pub fn validation_configure_mac_tx_rts(
         &mut self,

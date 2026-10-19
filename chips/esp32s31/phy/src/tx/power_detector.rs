@@ -1122,21 +1122,6 @@ impl PhyPwdetExternalBinding {
 #[cfg(test)]
 mod tests;
 
-/// Required pinned `libphy.a` vendor-ABI no-op leaf.
-///
-/// The ESP32-S31 archive body is exactly one `ret` instruction; power-detector
-/// ownership is instead expressed by the surrounding Rust state machine.
-#[inline]
-#[cfg(oer_probe)]
-pub const fn phy_pwdet_always_en() {}
-
-/// Required pinned `libphy.a` vendor-ABI no-op leaf.
-///
-/// Like [`phy_pwdet_always_en`], the vendor body has no observable operation.
-#[inline]
-#[cfg(oer_probe)]
-pub const fn phy_pwdet_onetime_en() {}
-
 /// Reproduce the separate ROM `phy_get_power_db` transform.
 ///
 /// This transform is consumed by later TX calibration code. Complete rev0

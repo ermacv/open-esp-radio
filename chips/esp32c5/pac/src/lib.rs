@@ -58,10 +58,11 @@ pub use ownership::{
     Ieee802154InterruptRegisters, Ieee802154InterruptSetup, Ieee802154Partition,
     Ieee802154TaskRegisters, RadioPartitions, WifiInterruptPartition, WifiMacPartition,
 };
+pub use phy::i2c::PhyI2cRegisters;
+#[cfg(any(test, feature = "test-support", oer_probe))]
 pub use phy::i2c::{
     PHY_I2C_INITIALIZATION_PAIR_COUNT, PhyI2cAccessError, PhyI2cAddress, PhyI2cBlock,
     PhyI2cClockSelection, PhyI2cConfiguration, PhyI2cConfigurationCommand, PhyI2cHost,
-    PhyI2cInitializationInputs, PhyI2cParallelWrite, PhyI2cRcCalibration, PhyI2cRegisters,
-    PhyI2cSar2Code,
+    PhyI2cInitializationInputs, PhyI2cParallelWrite, PhyI2cRcCalibration, PhyI2cSar2Code,
 };
 pub use phy::radio::PhyRadioRegisters;

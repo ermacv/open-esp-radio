@@ -715,6 +715,7 @@ impl BluetoothTxPowerControlI2cAccess for BluetoothTxPowerPort<'_> {
 }
 
 /// Configure the PAC-owned host map and return its typed selection.
+#[cfg(oer_probe)]
 pub fn configure_and_select_host(
     registers: &mut impl SharedPhyAccess,
     block: PhyI2cBlock,

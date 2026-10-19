@@ -14,6 +14,9 @@ oer-espressif-ieee802154-engine = { path = "../../espressif/ieee802154-engine" }
 oer-espressif-analog = { path = "../../espressif/analog" }
 oer-espressif-modem-clock = { path = "../../espressif/modem-clock" }
 
+[dev-dependencies]
+oer-esp32c5-pac = { path = "../pac", features = ["test-support"] }
+
 [lints]
 workspace = true
 

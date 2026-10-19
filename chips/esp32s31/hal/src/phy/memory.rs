@@ -64,6 +64,7 @@ pub fn configure_table_memory_base_index(registers: &mut impl SharedPhyAccess, i
 
 /// Apply complete rev0 ROM `phy_force_pwr_index`.
 #[cfg(target_arch = "riscv32")]
+#[cfg(oer_probe)]
 pub fn configure_forced_power_index(
     registers: &mut impl SharedPhyAccess,
     enabled: bool,

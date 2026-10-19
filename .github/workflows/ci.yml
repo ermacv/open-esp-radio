@@ -181,3 +181,14 @@ jobs:
           # Unconfigured: only `run w1` builds it for the stand router; this
           # one reports `fail w1 unconfigured` when run, same layout.
           cargo fw build w1
+      - name: Probe images
+        # Compile every probe, including board self-checks, without vendor pins.
+        # Discover packages from the workspace so new probes join this check.
+        run: |
+          meta=$(cargo metadata --format-version 1 --no-deps --locked)
+          packages=$(jq -r '.packages[]
+            | select(.manifest_path | contains("/firmware/probes/"))
+            | .name' <<<"$meta")
+          while read -r package; do
+            cargo fw probe "$package"
+          done <<<"$packages"

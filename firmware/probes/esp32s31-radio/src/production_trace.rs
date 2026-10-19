@@ -36,7 +36,7 @@ impl TraceTimer {
     fn register_preserving() -> Self {
         Self {
             now: Cell::new(Instant::EPOCH),
-            deliver: |micros| super::open_phy_trace_preserving_delay(micros),
+            deliver: |micros| super::preserving_delay(micros),
         }
     }
 }
@@ -67,7 +67,7 @@ impl oer_esp32s31_phy::PhyShortDelay for RfpllTraceDelay {
         if micros == 0 || micros > Self::MAX_MICROS {
             return false;
         }
-        super::open_phy_trace_preserving_delay(micros);
+        super::preserving_delay(micros);
         true
     }
 }
@@ -190,16 +190,6 @@ oer_probe_macros::probe! {
             _ => i32::MIN,
         }
     }
-}
-
-oer_probe_macros::probe! {
-    /// Exact compiled production channel entry used by vendor comparison.
-    ///
-    /// The wrapper owns only the isolated probe image's peripheral tokens and ABI
-    /// conversion. Channel sequencing remains entirely in the production PHY;
-    /// platform MMIO is provided by the same ESP-HAL adapter used by firmware.
-    pub fn open_phy_production_trace_phy_chip_set_chan(channel_or_frequency: u32, cbw: u32) -> u32 =>
-        trace_channel(channel_or_frequency, cbw, [0, 0]).map_or(1, |_| 0);
 }
 
 oer_probe_macros::probe! {

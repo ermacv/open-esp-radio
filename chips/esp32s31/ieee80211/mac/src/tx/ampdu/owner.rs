@@ -17,6 +17,7 @@ use oer_esp32s31_hal::ieee80211::dma::tx_ampdu_storage::{
 use oer_esp32s31_hal::types::{
     MacHeTxProgram, MacHtTxProgram, MacTxDetachOutcome, MacTxDetachReason,
 };
+#[cfg(any(test, feature = "test-support", oer_probe))]
 use oer_ieee80211_upper_mac::ampdu::set_retry_bit;
 
 use crate::tx::{
@@ -24,9 +25,14 @@ use crate::tx::{
 };
 
 use super::{
-    AmpduRepublication, HeAmpduFrameRequest, HtAmpduFrameRequest, HtAmpduHardware, HtAmpduLength,
-    HtAmpduTxCompletion, HtAmpduTxError, HtAmpduTxFormat, HtAmpduTxStorage,
-    RetainedAmpduRetryCompletion, RetainedAmpduRetryCompletionError, TX_AMPDU_METADATA_SIZE,
+    HeAmpduFrameRequest, HtAmpduFrameRequest, HtAmpduHardware, HtAmpduTxCompletion, HtAmpduTxError,
+    HtAmpduTxFormat, HtAmpduTxStorage, TX_AMPDU_METADATA_SIZE,
+};
+
+#[cfg(any(test, feature = "test-support", oer_probe))]
+use super::{
+    AmpduRepublication, HtAmpduLength, RetainedAmpduRetryCompletion,
+    RetainedAmpduRetryCompletionError,
 };
 
 /// Idle resources required by the safe external-buffer A-MPDU path.
@@ -273,6 +279,7 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
     /// AP and STA supply different publication policy, but neither role may
     /// reorder these ownership edges or calculate BlockAck against a stale
     /// descriptor count.
+    #[cfg(any(test, feature = "test-support", oer_probe))]
     pub fn observe_retry_completion<H: HtAmpduHardware, const CAPACITY: usize>(
         &mut self,
         hardware: &mut H,
@@ -332,6 +339,7 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
     /// Retain selected MPDUs for another publication. A retransmission sets
     /// their Retry bit through the allocation owner rather than by
     /// reconstructing slices from descriptor addresses.
+    #[cfg(any(test, feature = "test-support", oer_probe))]
     pub fn retain_for_ampdu_retry(
         &mut self,
         cookie: TxCookie,

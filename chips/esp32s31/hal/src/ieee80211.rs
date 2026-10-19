@@ -16,6 +16,7 @@ pub mod mac;
 
 #[cfg(oer_probe)]
 #[doc(hidden)]
+#[cfg(oer_probe)]
 pub mod phy_rate;
 
 pub mod station_wake;

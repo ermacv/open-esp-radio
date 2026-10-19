@@ -310,6 +310,7 @@ impl WifiTxRuntimePolicy {
         }
     }
 
+    #[cfg(any(test, feature = "test-support", oer_probe))]
     pub fn contention_exponent(&self, role: VifRole, queue: LegacyTxQueue) -> u8 {
         self.edca(role).queue(queue).current_exponent()
     }

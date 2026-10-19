@@ -969,6 +969,7 @@ impl WifiRadioRegisters {
 
     /// Apply complete rev0 ROM `phy_enable_cca` or `phy_disable_cca` to the
     /// two Wi-Fi MAC CCA fields through separate fresh-read updates.
+    #[cfg(oer_probe)]
     pub fn set_phy_wifi_cca_enabled(&mut self, enabled: bool) {
         let image = if enabled { 0 } else { 2 };
         let control = self.peripherals.wifi_mac.wifi_mac_tx_common.cca_control();

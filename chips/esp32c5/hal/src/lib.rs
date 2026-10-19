@@ -12,6 +12,7 @@
 #[cfg(test)]
 extern crate std;
 
+#[cfg(any(test, oer_probe))]
 pub mod analog;
 pub mod coex;
 pub mod ieee802154;

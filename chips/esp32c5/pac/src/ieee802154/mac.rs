@@ -964,6 +964,7 @@ impl Ieee802154PolledRegisterLease<'_> {
 
     /// Classify the IRQ-owned RX-abort reason field without exporting the
     /// containing register image.
+    #[cfg(oer_probe)]
     pub fn rx_abort_reason_observation(&self) -> Ieee802154RxAbortReasonObservation {
         Ieee802154RxAbortReasonObservation::from_field(
             self.interrupt.rx_status_readback().abort_reason_code(),

@@ -22,6 +22,7 @@ impl MacDelaySlot {
 impl WifiRadioRegisters {
     /// Apply all three ordered fresh-read updates of complete rev0 ROM
     /// `phy_sifs_reg_init`.
+    #[cfg(oer_probe)]
     pub fn initialize_phy_wifi_sifs(&mut self) {
         let callbacks = &self.peripherals.wifi_mac.wifi_mac_txrx_callbacks;
         callbacks

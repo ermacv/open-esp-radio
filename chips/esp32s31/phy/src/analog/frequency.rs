@@ -1508,13 +1508,3 @@ impl PhyChannelFrequencyInitTransition {
 
 #[cfg(test)]
 mod tests;
-
-/// Required pinned `libphy.a` vendor-ABI no-op leaf; the body is one `ret`.
-#[inline]
-#[cfg(oer_probe)]
-pub const fn phy_freq_mem_backup() {}
-
-/// Required pinned `libphy.a` vendor-ABI no-op leaf; the body is one `ret`.
-#[inline]
-#[cfg(oer_probe)]
-pub const fn phy_freq_offset_set() {}

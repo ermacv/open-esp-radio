@@ -8,6 +8,7 @@
 
 use crate::{RadioPhyRegisters, generated::PhyTxPowerTrackingState};
 
+#[cfg(oer_probe)]
 fn vendor_register_argument(input: u32) -> crate::generated::PhyVendorRegisterArgument {
     crate::generated::PhyVendorRegisterArgument::new(input)
         .expect("every u32 fits the complete generated vendor-argument domain")
@@ -204,6 +205,7 @@ impl RadioPhyRegisters {
     }
 
     /// Apply complete rev0 ROM `phy_btbb_wifi_bb_cfg2`.
+    #[cfg(oer_probe)]
     pub fn configure_bt_wifi_baseband(&mut self) {
         crate::generated::configure_bt_wifi_baseband_fields(
             &self.peripherals.phy_baseband_config_oracle,
@@ -211,6 +213,7 @@ impl RadioPhyRegisters {
     }
 
     /// Apply complete rev0 ROM `phy_chan_dump_cfg`.
+    #[cfg(oer_probe)]
     pub fn configure_channel_dump(&mut self, value: u32, enabled: u32, mode: u32) {
         let bb = &self.peripherals.phy_baseband_config_oracle;
         crate::generated::configure_phy_channel_dump_value(bb, vendor_register_argument(value));
@@ -219,6 +222,7 @@ impl RadioPhyRegisters {
     }
 
     /// Apply complete rev0 ROM `phy_dac_rate_set`.
+    #[cfg(oer_probe)]
     pub fn configure_dac_rate(&mut self, rate: crate::PhyAdcRate) {
         self.configure_adc_rate(rate);
     }
@@ -239,6 +243,7 @@ impl RadioPhyRegisters {
     }
 
     /// Replace the standalone PHY VHT-support bit through one fresh RMW.
+    #[cfg(oer_probe)]
     pub fn set_vht_support(&mut self, input: u32) {
         crate::generated::configure_phy_vht_support(
             &self.peripherals.phy_frequency_channel_oracle,
@@ -247,6 +252,7 @@ impl RadioPhyRegisters {
     }
 
     /// Replace the PHY CSI-dump force-LLTF bit through one fresh RMW.
+    #[cfg(oer_probe)]
     pub fn set_csi_dump_force_lltf(&mut self, input: u32) {
         crate::generated::configure_phy_csi_dump_force_lltf(
             &self.peripherals.phy_agc_oracle,
@@ -255,6 +261,7 @@ impl RadioPhyRegisters {
     }
 
     /// Apply complete ROM `phy_hemu_ru26_good_res`.
+    #[cfg(oer_probe)]
     pub fn configure_he_ru26_good_response(&mut self) {
         let bb = &self.peripherals.phy_baseband_config_oracle;
         crate::generated::enable_phy_he_ru26_good_response(bb);
@@ -262,6 +269,7 @@ impl RadioPhyRegisters {
     }
 
     /// Apply complete ROM `phy_freq_band_reg_set` and its VHT tail.
+    #[cfg(oer_probe)]
     pub fn set_frequency_band(&mut self, input: u32) {
         crate::generated::configure_phy_frequency_band_inverse(
             &self.peripherals.phy_agc_oracle,
@@ -271,6 +279,7 @@ impl RadioPhyRegisters {
     }
 
     /// Apply the three fresh RMWs of complete ROM `phy_bbtx_outfilter`.
+    #[cfg(oer_probe)]
     pub fn configure_tx_output_filter(&mut self, input_0: u32, input_1: u32, input_2: u32) {
         let bb = &self.peripherals.phy_baseband_config_oracle;
         crate::generated::configure_phy_tx_output_filter_0(bb, vendor_register_argument(input_0));
@@ -279,6 +288,7 @@ impl RadioPhyRegisters {
     }
 
     /// Replace the baseband watchdog reset-enable bit.
+    #[cfg(oer_probe)]
     pub fn set_baseband_watchdog_reset_enabled(&mut self, input: u32) {
         crate::generated::configure_phy_baseband_watchdog_reset(
             &self.peripherals.phy_baseband_config_oracle,
@@ -287,6 +297,7 @@ impl RadioPhyRegisters {
     }
 
     /// Replace the baseband watchdog interrupt-enable bit.
+    #[cfg(oer_probe)]
     pub fn set_baseband_watchdog_interrupt_enabled(&mut self, input: u32) {
         crate::generated::configure_phy_baseband_watchdog_interrupt(
             &self.peripherals.phy_baseband_config_oracle,
@@ -295,6 +306,7 @@ impl RadioPhyRegisters {
     }
 
     /// Set the baseband watchdog timeout-clear bit through one fresh RMW.
+    #[cfg(oer_probe)]
     pub fn clear_baseband_watchdog_timeout(&mut self) {
         crate::generated::clear_phy_baseband_watchdog_timeout(
             &self.peripherals.phy_baseband_config_oracle,
@@ -302,6 +314,7 @@ impl RadioPhyRegisters {
     }
 
     /// Return the complete standalone baseband watchdog status word.
+    #[cfg(oer_probe)]
     pub fn baseband_watchdog_status(&mut self) -> u32 {
         crate::svd::field_read::observe_phy_baseband_watchdog_status(
             &self.peripherals.phy_baseband_config_oracle,
@@ -309,6 +322,7 @@ impl RadioPhyRegisters {
     }
 
     /// Apply both fresh RMWs of complete ROM `phy_lltf_mask_en`.
+    #[cfg(oer_probe)]
     pub fn configure_lltf_mask(&mut self, input_0: u32, input_1: u32) {
         let bb = &self.peripherals.phy_baseband_config_oracle;
         crate::generated::configure_phy_lltf_mask_0(bb, vendor_register_argument(input_0));
