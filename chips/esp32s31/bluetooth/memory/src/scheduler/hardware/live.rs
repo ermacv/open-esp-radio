@@ -3,15 +3,15 @@
 
 use crate::ControllerSramLinkAddress;
 use oer_esp32s31_hal::bluetooth::{
-    BluetoothDiagnosticSettle, BluetoothSchedulerCancellationIndexed,
-    BluetoothSchedulerCancellationRequested, BluetoothSchedulerCancellationSourceAcknowledged,
-    BluetoothSchedulerExecutionLock, BluetoothSchedulerExecutionLockRequest,
-    BluetoothSchedulerExecutionModify, BluetoothSchedulerHardwareListHead,
-    BluetoothSchedulerHardwareListIndex, BluetoothSchedulerHardwareRunCommandPublished,
-    BluetoothSchedulerLockModifyObservation, BluetoothSchedulerLockModifyPublished,
-    BluetoothSchedulerLockModifyRequest, BluetoothSchedulerSkipPublished,
-    BluetoothSchedulerSkipRequest, ControllerHal,
+    BluetoothSchedulerCancellationIndexed, BluetoothSchedulerCancellationRequested,
+    BluetoothSchedulerCancellationSourceAcknowledged, BluetoothSchedulerExecutionLock,
+    BluetoothSchedulerExecutionLockRequest, BluetoothSchedulerExecutionModify,
+    BluetoothSchedulerHardwareListHead, BluetoothSchedulerHardwareListIndex,
+    BluetoothSchedulerHardwareRunCommandPublished, BluetoothSchedulerLockModifyObservation,
+    BluetoothSchedulerLockModifyPublished, BluetoothSchedulerLockModifyRequest,
+    BluetoothSchedulerSkipPublished, BluetoothSchedulerSkipRequest, ControllerHal,
 };
+use oer_esp32s31_hal::settle::Settle;
 
 use super::{
     SchedulerHardware, SchedulerHardwareBackend, SchedulerHardwareError, SchedulerPublications,
@@ -170,7 +170,7 @@ impl<S: SchedulerRunInterruptStorage> SchedulerHardwareBackend for LiveScheduler
     fn observe(
         &mut self,
         wait: SchedulerWait,
-        settle: BluetoothDiagnosticSettle<'_>,
+        settle: Settle<'_>,
         lock: Option<&mut BluetoothSchedulerExecutionLock>,
         modify: Option<&mut BluetoothSchedulerExecutionModify>,
         cancellation: Option<&mut BluetoothSchedulerCancellationRequested>,
@@ -303,7 +303,7 @@ impl SchedulerHardware<HalPublications> {
         controller: &mut ControllerHal<'_>,
         storage: &impl SchedulerRunInterruptStorage,
         wait: SchedulerWait,
-        settle: BluetoothDiagnosticSettle<'_>,
+        settle: Settle<'_>,
     ) -> Result<SchedulerObservation, SchedulerHardwareError> {
         let mut backend = LiveSchedulerBackend {
             controller,

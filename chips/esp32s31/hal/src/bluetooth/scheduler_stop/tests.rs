@@ -1,6 +1,6 @@
 use std::{collections::VecDeque, vec, vec::Vec};
 
-use super::{BluetoothDiagnosticUnsettled, BluetoothSchedulerStop, Control, Progress, step};
+use super::{BluetoothSchedulerStop, Control, Progress, Unsettled, step};
 
 struct Model {
     /// `None` is a sample whose attempt budget ran out.
@@ -11,19 +11,16 @@ struct Model {
 }
 
 impl Model {
-    fn read_busy(&mut self) -> Result<bool, BluetoothDiagnosticUnsettled> {
+    fn read_busy(&mut self) -> Result<bool, Unsettled> {
         self.trace.push("busy");
-        self.busy
-            .pop_front()
-            .unwrap()
-            .ok_or(BluetoothDiagnosticUnsettled)
+        self.busy.pop_front().unwrap().ok_or(Unsettled)
     }
 }
 
 impl Control for Model {
     type Stopped = ();
 
-    fn busy(&mut self) -> Result<bool, BluetoothDiagnosticUnsettled> {
+    fn busy(&mut self) -> Result<bool, Unsettled> {
         self.read_busy()
     }
     fn preamble(&mut self) {
@@ -40,7 +37,7 @@ impl Control for Model {
     fn request(&mut self) {
         self.trace.extend(["request", "fence"]);
     }
-    fn confirm_stopped(&mut self) -> Result<Option<()>, BluetoothDiagnosticUnsettled> {
+    fn confirm_stopped(&mut self) -> Result<Option<()>, Unsettled> {
         if self.read_busy()? {
             return Ok(None);
         }
@@ -137,7 +134,7 @@ fn unsettled_busy_sample_fails_the_step_before_any_request() {
     hw.busy.push_back(None);
     assert!(matches!(
         step(BluetoothSchedulerStop::default(), &mut hw),
-        Err(BluetoothDiagnosticUnsettled)
+        Err(Unsettled)
     ));
     assert_eq!(hw.trace, ["busy", "mask", "disable-run", "fence", "busy"]);
 }

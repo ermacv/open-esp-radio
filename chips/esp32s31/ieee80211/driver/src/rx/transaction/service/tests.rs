@@ -130,7 +130,7 @@ fn a_chain_longer_than_the_length_field_is_a_counted_oversized_drop() {
         },
         &mut hardware,
         &mut crate::rx::test_ring::NoBufferFullCounter,
-        RxReloadSettle::new(
+        Settle::new(
             crate::rx::receive::RELOAD_SETTLE_LIMIT,
             &oer_time_virtual::VirtualClock::<1>::default(),
         ),
@@ -251,7 +251,7 @@ fn a_staged_frame_is_published_only_after_its_descriptor_owner_bit_is_clear() {
         },
         &mut hardware,
         &mut crate::rx::test_ring::NoBufferFullCounter,
-        RxReloadSettle::new(
+        Settle::new(
             crate::rx::receive::RELOAD_SETTLE_LIMIT,
             &oer_time_virtual::VirtualClock::<1>::default(),
         ),

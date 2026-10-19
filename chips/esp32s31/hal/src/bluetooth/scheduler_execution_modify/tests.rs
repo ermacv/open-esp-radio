@@ -5,7 +5,7 @@ use oer_esp32s31_pac::{
     BluetoothSchedulerHardwareListIndex,
 };
 
-use super::{BluetoothDiagnosticUnsettled, Control, Phase, State, step};
+use super::{Control, Phase, State, Unsettled, step};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Op {
@@ -35,12 +35,9 @@ struct Model {
 }
 
 impl Model {
-    fn sample(
-        &mut self,
-        value: impl FnOnce(&mut Self) -> bool,
-    ) -> Result<bool, BluetoothDiagnosticUnsettled> {
+    fn sample(&mut self, value: impl FnOnce(&mut Self) -> bool) -> Result<bool, Unsettled> {
         if self.unsettled {
-            Err(BluetoothDiagnosticUnsettled)
+            Err(Unsettled)
         } else {
             Ok(value(self))
         }
@@ -50,7 +47,7 @@ impl Model {
 impl Control for Model {
     type Published = ();
 
-    fn busy(&mut self) -> Result<bool, BluetoothDiagnosticUnsettled> {
+    fn busy(&mut self) -> Result<bool, Unsettled> {
         self.ops.push(Op::Busy);
         self.sample(|model| model.busy.pop_front().unwrap_or(false))
     }
@@ -64,7 +61,7 @@ impl Control for Model {
     fn publish(&mut self, _: BluetoothSchedulerHardwareListIndex, list_deletion: bool) {
         self.ops.push(Op::Publish(list_deletion));
     }
-    fn repeats(&mut self) -> Result<bool, BluetoothDiagnosticUnsettled> {
+    fn repeats(&mut self) -> Result<bool, Unsettled> {
         self.ops.push(Op::Repeats);
         self.sample(|model| model.repeats.pop_front().unwrap_or(false))
     }
@@ -75,7 +72,7 @@ impl Control for Model {
     fn select_settle(&mut self) {
         self.ops.push(Op::SelectSettle);
     }
-    fn settled(&mut self) -> Result<bool, BluetoothDiagnosticUnsettled> {
+    fn settled(&mut self) -> Result<bool, Unsettled> {
         self.ops.push(Op::Settled);
         self.sample(|model| model.settled.pop_front().unwrap_or(true))
     }
@@ -111,7 +108,7 @@ impl Request {
         &mut self,
         model: &mut Model,
         list_deletion: bool,
-    ) -> Result<Disposition, BluetoothDiagnosticUnsettled> {
+    ) -> Result<Disposition, Unsettled> {
         step(
             State {
                 index: BluetoothSchedulerHardwareListIndex::ZERO,
@@ -247,10 +244,7 @@ fn an_unsettled_diagnostic_sample_fails_the_step_without_publishing() {
         ..Model::default()
     };
     let mut request = Request::new();
-    assert_eq!(
-        request.try_step(&mut model, false),
-        Err(BluetoothDiagnosticUnsettled)
-    );
+    assert_eq!(request.try_step(&mut model, false), Err(Unsettled));
     assert_eq!(model.ops, [Op::Busy]);
     assert!(request.published.is_none());
 }

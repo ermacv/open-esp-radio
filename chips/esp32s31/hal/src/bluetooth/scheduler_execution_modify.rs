@@ -17,7 +17,7 @@ use oer_esp32s31_pac::{
     BluetoothSchedulerInsertionCommand, BluetoothTaskRegisters,
 };
 
-use super::diagnostic::{self, BluetoothDiagnosticSettle, BluetoothDiagnosticUnsettled};
+use crate::settle::{self, Settle, Unsettled};
 
 #[derive(Debug)]
 enum Phase {
@@ -65,7 +65,7 @@ impl BluetoothSchedulerExecutionModify {
 trait Control {
     type Published;
 
-    fn busy(&mut self) -> Result<bool, BluetoothDiagnosticUnsettled>;
+    fn busy(&mut self) -> Result<bool, Unsettled>;
     /// Command-zero status 26 then, only if set, command-one status 18.
     fn engines_idle(&mut self) -> bool;
     fn select_progress(&mut self);
@@ -74,10 +74,10 @@ trait Control {
         index: BluetoothSchedulerHardwareListIndex,
         list_deletion: bool,
     ) -> Self::Published;
-    fn repeats(&mut self) -> Result<bool, BluetoothDiagnosticUnsettled>;
+    fn repeats(&mut self) -> Result<bool, Unsettled>;
     fn ready(&mut self) -> bool;
     fn select_settle(&mut self);
-    fn settled(&mut self) -> Result<bool, BluetoothDiagnosticUnsettled>;
+    fn settled(&mut self) -> Result<bool, Unsettled>;
     fn clear_start(&mut self, published: Self::Published);
     fn rejected(&mut self) -> bool;
 }
@@ -93,7 +93,7 @@ struct State<'a, P> {
 fn step<C: Control>(
     state: State<'_, C::Published>,
     hw: &mut C,
-) -> Result<BluetoothSchedulerExecutionModifyDisposition, BluetoothDiagnosticUnsettled> {
+) -> Result<BluetoothSchedulerExecutionModifyDisposition, Unsettled> {
     use BluetoothSchedulerExecutionModifyDisposition::{HardwareRejected, Pending, Ready};
     loop {
         match *state.phase {
@@ -152,7 +152,7 @@ fn step<C: Control>(
 struct Hardware<'a> {
     task: &'a mut BluetoothTaskRegisters,
     interrupts: &'a mut BluetoothInterruptRegisters,
-    settle: BluetoothDiagnosticSettle<'a>,
+    settle: Settle<'a>,
 }
 
 #[allow(
@@ -162,8 +162,8 @@ struct Hardware<'a> {
 impl Control for Hardware<'_> {
     type Published = BluetoothSchedulerExecutionModifyPublished;
 
-    fn busy(&mut self) -> Result<bool, BluetoothDiagnosticUnsettled> {
-        diagnostic::settle(self.settle, || self.interrupts.capture_scheduler_busy())
+    fn busy(&mut self) -> Result<bool, Unsettled> {
+        settle::settle(self.settle, || self.interrupts.capture_scheduler_busy())
             .map(|busy| busy.is_busy())
     }
     fn engines_idle(&mut self) -> bool {
@@ -189,8 +189,8 @@ impl Control for Hardware<'_> {
             }
         }
     }
-    fn repeats(&mut self) -> Result<bool, BluetoothDiagnosticUnsettled> {
-        diagnostic::settle(self.settle, || {
+    fn repeats(&mut self) -> Result<bool, Unsettled> {
+        settle::settle(self.settle, || {
             self.task
                 .scheduler_execution_modify_repeats(self.interrupts)
         })
@@ -202,8 +202,8 @@ impl Control for Hardware<'_> {
         self.task
             .select_scheduler_execution_modify_settle(self.interrupts);
     }
-    fn settled(&mut self) -> Result<bool, BluetoothDiagnosticUnsettled> {
-        diagnostic::settle(self.settle, || {
+    fn settled(&mut self) -> Result<bool, Unsettled> {
+        settle::settle(self.settle, || {
             self.task
                 .scheduler_execution_modify_settled(self.interrupts)
         })
@@ -226,8 +226,8 @@ pub(crate) fn step_hardware(
     task: &mut BluetoothTaskRegisters,
     interrupts: &mut BluetoothInterruptRegisters,
     modify: &mut BluetoothSchedulerExecutionModify,
-    settle: BluetoothDiagnosticSettle<'_>,
-) -> Result<BluetoothSchedulerExecutionModifyDisposition, BluetoothDiagnosticUnsettled> {
+    settle: Settle<'_>,
+) -> Result<BluetoothSchedulerExecutionModifyDisposition, Unsettled> {
     step(
         State {
             index: modify.index,

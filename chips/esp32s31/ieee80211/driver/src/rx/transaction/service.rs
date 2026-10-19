@@ -1,6 +1,6 @@
 use super::*;
 use crate::datapath::DatapathRxProgress;
-use oer_esp32s31_hal::ieee80211::dma::{rx_ring::RxReloadSettle, rx_storage::RxDmaStorage};
+use oer_esp32s31_hal::{ieee80211::dma::rx_storage::RxDmaStorage, settle::Settle};
 use oer_esp32s31_ieee80211_mac::{
     rx::pool::{RxDmaDeferredStageUnitOutcome, RxStagePool, RxStageTransactionError},
     rx::{PUBLIC_HEADER_SIZE, RxBufferFullCounter, RxDma, RxRingError, RxRingLive},
@@ -41,7 +41,7 @@ pub fn service<
     counters: Counters<'_>,
     hardware: &mut H,
     buffer_full: &mut C,
-    reload_settle: RxReloadSettle<'_>,
+    reload_settle: Settle<'_>,
     mut hooks: O,
 ) -> Result<DatapathRxProgress, RxStageTransactionError>
 where

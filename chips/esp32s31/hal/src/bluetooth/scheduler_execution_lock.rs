@@ -15,7 +15,7 @@ use oer_esp32s31_pac::{
     BluetoothSchedulerInsertionCommand, BluetoothTaskRegisters,
 };
 
-use super::diagnostic::{self, BluetoothDiagnosticSettle, BluetoothDiagnosticUnsettled};
+use crate::settle::{self, Settle, Unsettled};
 
 /// One execution-lock request and its progress.
 #[derive(Debug)]
@@ -42,21 +42,19 @@ impl BluetoothSchedulerExecutionLock {
 trait Control {
     type Published;
 
-    fn busy(&mut self) -> Result<bool, BluetoothDiagnosticUnsettled>;
+    fn busy(&mut self) -> Result<bool, Unsettled>;
     /// Command-zero status 26 then, only if set, command-one status 18.
     fn engines_idle(&mut self) -> bool;
     fn publish(&mut self, request: BluetoothSchedulerExecutionLockRequest) -> Self::Published;
     /// One observation of the published command after a fresh BUSY sample.
-    fn observe(
-        &mut self,
-    ) -> Result<BluetoothSchedulerExecutionLockDisposition, BluetoothDiagnosticUnsettled>;
+    fn observe(&mut self) -> Result<BluetoothSchedulerExecutionLockDisposition, Unsettled>;
 }
 
 fn step<C: Control>(
     request: BluetoothSchedulerExecutionLockRequest,
     published: &mut Option<C::Published>,
     hw: &mut C,
-) -> Result<BluetoothSchedulerExecutionLockDisposition, BluetoothDiagnosticUnsettled> {
+) -> Result<BluetoothSchedulerExecutionLockDisposition, Unsettled> {
     if published.is_none() {
         if hw.busy()? && !hw.engines_idle() {
             return Ok(BluetoothSchedulerExecutionLockDisposition::Pending);
@@ -69,7 +67,7 @@ fn step<C: Control>(
 struct Hardware<'a> {
     task: &'a mut BluetoothTaskRegisters,
     interrupts: &'a mut BluetoothInterruptRegisters,
-    settle: BluetoothDiagnosticSettle<'a>,
+    settle: Settle<'a>,
 }
 
 #[allow(
@@ -79,8 +77,8 @@ struct Hardware<'a> {
 impl Control for Hardware<'_> {
     type Published = BluetoothSchedulerExecutionLockPublished;
 
-    fn busy(&mut self) -> Result<bool, BluetoothDiagnosticUnsettled> {
-        diagnostic::settle(self.settle, || self.interrupts.capture_scheduler_busy())
+    fn busy(&mut self) -> Result<bool, Unsettled> {
+        settle::settle(self.settle, || self.interrupts.capture_scheduler_busy())
             .map(|busy| busy.is_busy())
     }
     fn engines_idle(&mut self) -> bool {
@@ -94,10 +92,8 @@ impl Control for Hardware<'_> {
         // list serialization contract for this exact request.
         unsafe { self.task.publish_scheduler_execution_lock(request) }
     }
-    fn observe(
-        &mut self,
-    ) -> Result<BluetoothSchedulerExecutionLockDisposition, BluetoothDiagnosticUnsettled> {
-        let busy = diagnostic::settle(self.settle, || self.interrupts.capture_scheduler_busy())?;
+    fn observe(&mut self) -> Result<BluetoothSchedulerExecutionLockDisposition, Unsettled> {
+        let busy = settle::settle(self.settle, || self.interrupts.capture_scheduler_busy())?;
         Ok(self.task.observe_scheduler_execution_lock(busy))
     }
 }
@@ -108,8 +104,8 @@ pub(crate) fn step_hardware(
     task: &mut BluetoothTaskRegisters,
     interrupts: &mut BluetoothInterruptRegisters,
     lock: &mut BluetoothSchedulerExecutionLock,
-    settle: BluetoothDiagnosticSettle<'_>,
-) -> Result<BluetoothSchedulerExecutionLockDisposition, BluetoothDiagnosticUnsettled> {
+    settle: Settle<'_>,
+) -> Result<BluetoothSchedulerExecutionLockDisposition, Unsettled> {
     step(
         lock.request,
         &mut lock.published,

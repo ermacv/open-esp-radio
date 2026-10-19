@@ -9,7 +9,7 @@ use oer_esp32s31_pac::{
     BluetoothTaskRegisters,
 };
 
-use super::diagnostic::{self, BluetoothDiagnosticSettle, BluetoothDiagnosticUnsettled};
+use crate::settle::{self, Settle, Unsettled};
 
 #[derive(Debug)]
 enum Phase {
@@ -49,7 +49,7 @@ enum Progress<Stopped> {
 trait Control {
     type Stopped;
 
-    fn busy(&mut self) -> Result<bool, BluetoothDiagnosticUnsettled>;
+    fn busy(&mut self) -> Result<bool, Unsettled>;
     /// Mask dynamic run interrupts, disable RUN, then fence.
     fn preamble(&mut self);
     /// Command-zero then, only if ready, command-one status.
@@ -57,13 +57,13 @@ trait Control {
     /// Publish the lifecycle request, then fence.
     fn request(&mut self);
     /// Observe BUSY once; when clear, fence and return the receipt.
-    fn confirm_stopped(&mut self) -> Result<Option<Self::Stopped>, BluetoothDiagnosticUnsettled>;
+    fn confirm_stopped(&mut self) -> Result<Option<Self::Stopped>, Unsettled>;
 }
 
 fn step<C: Control>(
     mut stop: BluetoothSchedulerStop,
     hw: &mut C,
-) -> Result<Progress<C::Stopped>, BluetoothDiagnosticUnsettled> {
+) -> Result<Progress<C::Stopped>, Unsettled> {
     if matches!(stop.phase, Phase::Initial) {
         if let Some(stopped) = hw.confirm_stopped()? {
             return Ok(Progress::Stopped(stopped));
@@ -89,21 +89,19 @@ fn step<C: Control>(
 struct Hardware<'a> {
     task: &'a mut BluetoothTaskRegisters,
     interrupts: &'a mut BluetoothInterruptRegisters,
-    settle: BluetoothDiagnosticSettle<'a>,
+    settle: Settle<'a>,
 }
 
 impl Hardware<'_> {
-    fn sample_busy(
-        &mut self,
-    ) -> Result<BluetoothSchedulerBusyObservation, BluetoothDiagnosticUnsettled> {
-        diagnostic::settle(self.settle, || self.interrupts.capture_scheduler_busy())
+    fn sample_busy(&mut self) -> Result<BluetoothSchedulerBusyObservation, Unsettled> {
+        settle::settle(self.settle, || self.interrupts.capture_scheduler_busy())
     }
 }
 
 impl Control for Hardware<'_> {
     type Stopped = BluetoothSchedulerStopped;
 
-    fn busy(&mut self) -> Result<bool, BluetoothDiagnosticUnsettled> {
+    fn busy(&mut self) -> Result<bool, Unsettled> {
         Ok(self.sample_busy()?.is_busy())
     }
     fn preamble(&mut self) {
@@ -115,9 +113,7 @@ impl Control for Hardware<'_> {
     fn request(&mut self) {
         self.task.publish_scheduler_lifecycle_request();
     }
-    fn confirm_stopped(
-        &mut self,
-    ) -> Result<Option<BluetoothSchedulerStopped>, BluetoothDiagnosticUnsettled> {
+    fn confirm_stopped(&mut self) -> Result<Option<BluetoothSchedulerStopped>, Unsettled> {
         let busy = self.sample_busy()?;
         Ok(self.task.confirm_scheduler_stopped(busy))
     }
@@ -128,8 +124,8 @@ pub(crate) fn step_hardware(
     task: &mut BluetoothTaskRegisters,
     interrupts: &mut BluetoothInterruptRegisters,
     stop: BluetoothSchedulerStop,
-    settle: BluetoothDiagnosticSettle<'_>,
-) -> Result<BluetoothSchedulerStopStep, BluetoothDiagnosticUnsettled> {
+    settle: Settle<'_>,
+) -> Result<BluetoothSchedulerStopStep, Unsettled> {
     Ok(
         match step(
             stop,

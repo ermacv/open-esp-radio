@@ -17,7 +17,7 @@ pub mod window;
 
 pub use config::SchedulerSoftwareConfig;
 
-use oer_esp32s31_hal::bluetooth::BluetoothDiagnosticSettleLimit;
+use oer_esp32s31_hal::settle::SettleLimit;
 
 /// The named settle of one scheduler diagnostic-pair sample.
 ///
@@ -27,9 +27,8 @@ use oer_esp32s31_hal::bluetooth::BluetoothDiagnosticSettleLimit;
 /// after the longest settle a driver may busy-wait, the Controller stops on
 /// a scheduler fault instead of spinning, in the interrupt handler as in the
 /// task.
-pub const DIAGNOSTIC_SETTLE: BluetoothDiagnosticSettleLimit =
-    BluetoothDiagnosticSettleLimit::new(BluetoothDiagnosticSettleLimit::MAX)
-        .expect("the longest settle is a valid limit");
+pub const DIAGNOSTIC_SETTLE: SettleLimit =
+    SettleLimit::new(SettleLimit::MAX).expect("the longest settle is a valid limit");
 
 /// Stable task-side access to the shared interrupt owner.
 ///

@@ -2,10 +2,11 @@ use std::vec::Vec;
 
 use crate::ControllerSramLinkAddress;
 use oer_esp32s31_hal::bluetooth::{
-    BluetoothDiagnosticSettle, BluetoothSchedulerCancellationDisposition,
-    BluetoothSchedulerExecutionLockDisposition, BluetoothSchedulerLockModifyObservation,
-    BluetoothSchedulerSkipDisposition, BluetoothSchedulerSkipResult,
+    BluetoothSchedulerCancellationDisposition, BluetoothSchedulerExecutionLockDisposition,
+    BluetoothSchedulerLockModifyObservation, BluetoothSchedulerSkipDisposition,
+    BluetoothSchedulerSkipResult,
 };
+use oer_esp32s31_hal::settle::Settle;
 
 use super::{
     SchedulerHardware, SchedulerHardwareBackend, SchedulerHardwareError, SchedulerPublications,
@@ -25,8 +26,8 @@ impl oer_time::Clock for Unread {
     }
 }
 
-fn settle() -> BluetoothDiagnosticSettle<'static> {
-    BluetoothDiagnosticSettle::new(crate::scheduler::DIAGNOSTIC_SETTLE, &Unread)
+fn settle() -> Settle<'static> {
+    Settle::new(crate::scheduler::DIAGNOSTIC_SETTLE, &Unread)
 }
 
 enum Units {}
@@ -110,7 +111,7 @@ impl SchedulerHardwareBackend for Recorder {
     fn observe(
         &mut self,
         wait: SchedulerWait,
-        _settle: BluetoothDiagnosticSettle<'_>,
+        _settle: Settle<'_>,
         _lock: Option<&mut ()>,
         _modify: Option<&mut ()>,
         _cancellation: Option<&mut ()>,
