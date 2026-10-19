@@ -3793,6 +3793,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-radio-regulatory"
+version = "0.1.0"
+
+[[package]]
 name = "oer-registers-bindings"
 version = "0.1.0"
 dependencies = [
@@ -4064,6 +4068,10 @@ dependencies = [
  "oer-registers-model",
  "tempfile",
 ]
+
+[[package]]
+name = "oer-tool-regulatory-generate"
+version = "0.1.0"
 
 [[package]]
 name = "oer-tool-vendor-cli"

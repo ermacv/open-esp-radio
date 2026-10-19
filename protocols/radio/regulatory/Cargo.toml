@@ -1,0 +1,16 @@
+[package]
+name = "oer-radio-regulatory"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Regulatory domains: which channels a country permits, and at what power"
+readme = "README.md"
+
+[lints]
+workspace = true
+
+[package.metadata.open-radio]
+layer = "contract"
+platform = "portable"

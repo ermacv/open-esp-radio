@@ -8,6 +8,9 @@ fw = "run --quiet --profile tools -p oer-tool-image-cli --"
 # Fetch and verify a chip's pinned vendor artifacts into the host-wide store
 # (tools/pins).
 pins = "run --quiet --profile tools -p oer-tool-pins --"
+# Regenerate the regulatory tables from a wireless-regdb db.txt
+# (tools/regulatory/generate).
+regdb = "run --quiet --profile tools -p oer-tool-regulatory-generate --"
 # The stand: boards, leases, power, fixtures (tools/lab/cli).
 stand = "run --quiet --profile tools -p oer-tool-lab-cli --"
 # HIL runs (tools/hil/run/HIL.md).
