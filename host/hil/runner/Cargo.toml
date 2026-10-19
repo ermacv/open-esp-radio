@@ -9,7 +9,7 @@ publish = false
 description = "Host build, placement-audit and HIL runner for open ESP radio"
 
 [dependencies]
-oer-image-check-interrupts = { path = "../../image/check-interrupts" }
+oer-image-checks = { path = "../../image/checks" }
 oer-lab-devices = { path = "../../lab/devices", features = ["image"] }
 oer-hil-run-bundle-format = { path = "../run-bundle-format" }
 oer-hil-schema = { path = "../schema" }
@@ -20,7 +20,7 @@ oer-hil-lab = { path = "../lab" }
 oer-hil-link = { path = "../link" }
 oer-hil-image = { path = "../image" }
 oer-image-build = { path = "../../image/build" }
-oer-image-chip-profile = { path = "../../image/chip-profile" }
+oer-image-profile = { path = "../../image/profile" }
 oer-hil-run-bundle = { path = "../run-bundle" }
 oer-hil-analysis = { path = "../analysis" }
 oer-hil-scenario = { path = "../scenario" }

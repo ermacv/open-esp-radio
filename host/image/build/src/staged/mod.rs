@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 use oer_image_bundle::{ImageBundle, Lock, Staged, files};
 use oer_image_encode as encode;
 use oer_image_encode::Encoding;
-use oer_image_policy::StackPolicy;
+use oer_image_profile::policy::StackPolicy;
 
 use crate::{
     ImageSpec, Result,
@@ -29,10 +29,7 @@ use oer_image_encode::stage_two::pack_runtime;
 /// pages and stage two starts on one.
 const MMU_PAGE_SIZE: u32 = 0x1_0000;
 
-pub(crate) fn build(
-    spec: &ImageSpec,
-    profile: &oer_image_chip_profile::Profile,
-) -> Result<ImageBundle> {
+pub(crate) fn build(spec: &ImageSpec, profile: &oer_image_profile::Profile) -> Result<ImageBundle> {
     let root = spec.root.as_path();
     let target = profile.rust_target.as_str();
     let bootstrap_package = profile.bootstrap_package();
@@ -248,7 +245,7 @@ pub(crate) fn build(
 /// at the flash map's application offset, audited against that partition.
 fn encode_application(
     root: &Path,
-    profile: &oer_image_chip_profile::Profile,
+    profile: &oer_image_profile::Profile,
     elf: &[u8],
     bundle: &ImageBundle,
 ) -> Result<Vec<u8>> {
@@ -279,7 +276,7 @@ fn encode_application(
 /// selection of the first slot into `bundle`.
 pub(crate) fn encode_boot_files(
     root: &Path,
-    profile: &oer_image_chip_profile::Profile,
+    profile: &oer_image_profile::Profile,
     elf: &[u8],
     bundle: &mut ImageBundle,
 ) -> Result<()> {

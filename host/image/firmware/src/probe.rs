@@ -111,12 +111,12 @@ pub fn image(root: &Path, package: &str, rust_target: &str) -> PathBuf {
 /// `package` is not a verification package of a supported chip, or the
 /// build failed.
 pub fn build(root: &Path, package: &str, jobs: Option<usize>) -> Result<PathBuf> {
-    let chips: Vec<String> = oer_image_chip_profile::Profile::all(root)?
+    let chips: Vec<String> = oer_image_profile::Profile::all(root)?
         .into_iter()
         .map(|profile| profile.id)
         .collect();
     let chip = chip_of(package, &chips)?;
-    let profile = oer_image_chip_profile::Profile::load(root, chip)?;
+    let profile = oer_image_profile::Profile::load(root, chip)?;
     let policy = crate::gates::policy(root, &profile)?;
     let target = profile.rust_target.as_str();
     // The image compiler of the chip, as every image build of it applies it.

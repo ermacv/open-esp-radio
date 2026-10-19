@@ -53,19 +53,15 @@ mod tests {
     #[test]
     fn the_builder_is_the_dependency_closure_of_the_image_pipeline_and_its_linker() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-        let files = closure(
-            &root,
-            &["oer-image-build", "oer-image-linker", "oer-image-checks"],
-        )
-        .unwrap();
+        let files = closure(&root, &["oer-image-build", "oer-image-checks"]).unwrap();
         for file in [
             "host/image/build/Cargo.toml",
             "host/image/build/src/lib.rs",
-            "host/image/linker/src/main.rs",
+            "host/image/checks/src/bin/oer-image-linker.rs",
             "host/analysis/elf/src/lib.rs",
             "host/analysis/riscv-stack/src/lib.rs",
             "host/analysis/riscv-decode/src/lib.rs",
-            "host/image/chip-profile/src/lib.rs",
+            "host/image/profile/src/lib.rs",
             "host/os/process/src/lib.rs",
             "host/image/toolchain/src/lib.rs",
             "host/vendor/artifacts/src/lib.rs",

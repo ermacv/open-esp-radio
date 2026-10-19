@@ -7,10 +7,10 @@
 
 use std::path::Path;
 
-use oer_image_check_interrupts::{INTERRUPT_REPORT, Required, interrupt_stacks_of};
-use oer_image_check_stack as stack;
-use oer_image_chip_profile::Profile;
-use oer_image_policy::StackPolicy;
+use oer_image_checks::interrupts::{INTERRUPT_REPORT, Required, interrupt_stacks_of};
+use oer_image_checks::stack;
+use oer_image_profile::Profile;
+use oer_image_profile::policy::StackPolicy;
 
 use crate::Result;
 

@@ -11,7 +11,7 @@ description = "Image encoding with the espflash library: application, bootloader
 [dependencies]
 espflash = { version = "=4.5.0", default-features = false }
 esp-idf-part = "=0.6.0"
-oer-image-chip-profile = { path = "../chip-profile" }
+oer-image-profile = { path = "../profile" }
 oer-analysis-elf = { path = "../../analysis/elf" }
 sha2 = "0.10"
 

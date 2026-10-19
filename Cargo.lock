@@ -3307,7 +3307,7 @@ version = "0.1.0"
 dependencies = [
  "oer-image-build",
  "oer-image-bundle",
- "oer-image-chip-profile",
+ "oer-image-profile",
  "oer-lab-device-lock",
  "oer-lab-devices",
  "oer-lab-stand-board",
@@ -3329,10 +3329,9 @@ dependencies = [
  "oer-hil-source-snapshot",
  "oer-image-build",
  "oer-image-bundle",
- "oer-image-check-interrupts",
  "oer-image-checks",
- "oer-image-chip-profile",
  "oer-image-compare",
+ "oer-image-profile",
  "oer-image-toolchain",
  "oer-os-durable",
  "oer-os-process",
@@ -3349,7 +3348,7 @@ dependencies = [
  "oer-hil-image-keys",
  "oer-hil-protocol",
  "oer-hil-schema",
- "oer-image-chip-profile",
+ "oer-image-profile",
  "toml",
 ]
 
@@ -3371,7 +3370,7 @@ dependencies = [
  "oer-hil-protocol",
  "oer-hil-run-bundle-format",
  "oer-hil-scenario-catalog",
- "oer-image-chip-profile",
+ "oer-image-profile",
  "oer-lab-device-lock",
  "oer-lab-devices",
  "oer-lab-model",
@@ -3519,8 +3518,8 @@ dependencies = [
  "oer-hil-workload",
  "oer-image-build",
  "oer-image-bundle",
- "oer-image-check-interrupts",
- "oer-image-chip-profile",
+ "oer-image-checks",
+ "oer-image-profile",
  "oer-image-toolchain",
  "oer-lab-device-lock",
  "oer-lab-devices",
@@ -3574,7 +3573,7 @@ name = "oer-hil-source-snapshot"
 version = "0.1.0"
 dependencies = [
  "oer-hil-schema",
- "oer-image-chip-profile",
+ "oer-image-profile",
  "oer-image-toolchain",
  "oer-os-durable",
  "oer-os-process",
@@ -3777,10 +3776,9 @@ name = "oer-image-build"
 version = "0.1.0"
 dependencies = [
  "oer-image-bundle",
- "oer-image-chip-profile",
  "oer-image-encode",
  "oer-image-esp-idf",
- "oer-image-policy",
+ "oer-image-profile",
  "oer-image-toolchain",
  "oer-os-durable",
  "oer-os-process",
@@ -3794,7 +3792,7 @@ dependencies = [
 name = "oer-image-bundle"
 version = "0.1.0"
 dependencies = [
- "oer-image-chip-profile",
+ "oer-image-profile",
  "oer-os-durable",
  "serde",
  "serde_json",
@@ -3802,59 +3800,20 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-image-check-interrupts"
-version = "0.1.0"
-dependencies = [
- "oer-analysis-elf",
- "oer-analysis-riscv-model",
- "oer-analysis-riscv-program",
- "oer-analysis-riscv-stack",
- "oer-image-check-stack",
- "oer-image-chip-profile",
-]
-
-[[package]]
-name = "oer-image-check-placement"
+name = "oer-image-checks"
 version = "0.1.0"
 dependencies = [
  "object 0.39.1",
  "oer-analysis-elf",
  "oer-analysis-riscv-decode",
- "oer-image-chip-profile",
-]
-
-[[package]]
-name = "oer-image-check-stack"
-version = "0.1.0"
-dependencies = [
- "oer-analysis-elf",
  "oer-analysis-riscv-model",
  "oer-analysis-riscv-program",
  "oer-analysis-riscv-stack",
- "oer-image-chip-profile",
- "oer-image-policy",
+ "oer-image-build",
+ "oer-image-profile",
+ "oer-os-process",
  "oer-vendor-artifacts",
  "rustc-demangle",
- "serde",
- "tempfile",
- "toml",
-]
-
-[[package]]
-name = "oer-image-checks"
-version = "0.1.0"
-dependencies = [
- "oer-analysis-elf",
- "oer-image-build",
- "oer-image-check-interrupts",
- "oer-image-check-placement",
- "oer-image-check-stack",
-]
-
-[[package]]
-name = "oer-image-chip-profile"
-version = "0.1.0"
-dependencies = [
  "serde",
  "tempfile",
  "toml",
@@ -3876,7 +3835,7 @@ dependencies = [
  "espflash",
  "object 0.39.1",
  "oer-analysis-elf",
- "oer-image-chip-profile",
+ "oer-image-profile",
  "sha2 0.10.9",
  "tempfile",
 ]
@@ -3900,10 +3859,8 @@ version = "0.1.0"
 dependencies = [
  "espflash",
  "object 0.37.3",
- "oer-image-check-interrupts",
- "oer-image-check-stack",
- "oer-image-chip-profile",
- "oer-image-policy",
+ "oer-image-checks",
+ "oer-image-profile",
  "oer-image-toolchain",
  "oer-lab-device-lock",
  "oer-lab-model",
@@ -3919,21 +3876,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-image-linker"
-version = "0.1.0"
-dependencies = [
- "object 0.39.1",
- "oer-analysis-elf",
- "oer-os-process",
- "tempfile",
-]
-
-[[package]]
-name = "oer-image-policy"
+name = "oer-image-profile"
 version = "0.1.0"
 dependencies = [
  "oer-image-toolchain",
  "serde",
+ "tempfile",
  "toml",
 ]
 
@@ -3976,7 +3924,7 @@ version = "0.1.0"
 dependencies = [
  "espflash",
  "oer-image-bundle",
- "oer-image-chip-profile",
+ "oer-image-profile",
  "oer-lab-device-lock",
  "oer-lab-device-mac",
  "oer-os-durable",
@@ -4011,7 +3959,7 @@ dependencies = [
 name = "oer-lab-model"
 version = "0.1.0"
 dependencies = [
- "oer-image-chip-profile",
+ "oer-image-profile",
  "oer-lab-device-mac",
  "oer-os-durable",
  "serde",
@@ -4053,7 +4001,7 @@ name = "oer-lab-stand-board"
 version = "0.1.0"
 dependencies = [
  "oer-image-bundle",
- "oer-image-chip-profile",
+ "oer-image-profile",
  "oer-lab-device-lock",
  "oer-lab-devices",
  "oer-lab-model",
@@ -4081,7 +4029,7 @@ dependencies = [
 name = "oer-lab-stand-doctor"
 version = "0.1.0"
 dependencies = [
- "oer-image-chip-profile",
+ "oer-image-profile",
  "oer-lab-model",
  "oer-lab-stand-power",
  "oer-os-process",
@@ -4154,7 +4102,7 @@ dependencies = [
 name = "oer-lab-stand-power"
 version = "0.1.0"
 dependencies = [
- "oer-image-chip-profile",
+ "oer-image-profile",
  "oer-lab-device-mac",
  "oer-lab-devices",
  "oer-lab-model",
@@ -4439,10 +4387,10 @@ dependencies = [
  "oer-hil-schema",
  "oer-hil-source-snapshot",
  "oer-image-build",
- "oer-image-check-interrupts",
- "oer-image-chip-profile",
+ "oer-image-checks",
  "oer-image-compare",
  "oer-image-esp-idf",
+ "oer-image-profile",
  "oer-image-toolchain",
  "oer-lab-device-peer-line",
  "oer-lab-stand-arbiter",
@@ -4488,7 +4436,7 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "libc",
- "oer-image-chip-profile",
+ "oer-image-profile",
  "oer-image-toolchain",
  "oer-lab-device-lock",
  "oer-lab-device-peer-line",
@@ -4540,7 +4488,7 @@ dependencies = [
  "oer-analysis-elf",
  "oer-analysis-riscv-lift",
  "oer-analysis-riscv-model",
- "oer-image-chip-profile",
+ "oer-image-profile",
  "oer-image-toolchain",
  "oer-os-command-tree",
  "oer-os-process",
@@ -4556,7 +4504,7 @@ dependencies = [
 name = "oer-vendor-artifacts"
 version = "0.1.0"
 dependencies = [
- "oer-image-chip-profile",
+ "oer-image-profile",
  "oer-os-durable",
  "oer-os-process",
  "oer-vendor-pins",
@@ -4570,8 +4518,8 @@ name = "oer-vendor-evidence"
 version = "0.1.0"
 dependencies = [
  "oer-image-build",
- "oer-image-chip-profile",
  "oer-image-firmware",
+ "oer-image-profile",
  "oer-image-toolchain",
  "oer-os-process",
  "oer-probe-codegen",
@@ -4663,7 +4611,7 @@ dependencies = [
 name = "oer-vendor-pins"
 version = "0.1.0"
 dependencies = [
- "oer-image-chip-profile",
+ "oer-image-profile",
  "serde",
  "toml",
 ]

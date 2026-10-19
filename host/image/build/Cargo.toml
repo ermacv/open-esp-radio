@@ -11,8 +11,7 @@ description = "The one image pipeline: build(ImageSpec) -> ImageBundle, with the
 [dependencies]
 oer-image-esp-idf = { path = "../esp-idf" }
 oer-image-encode = { path = "../encode" }
-oer-image-policy = { path = "../policy" }
-oer-image-chip-profile = { path = "../chip-profile" }
+oer-image-profile = { path = "../profile" }
 oer-os-durable = { path = "../../os/durable" }
 oer-image-bundle = { path = "../bundle" }
 oer-os-process = { path = "../../os/process" }

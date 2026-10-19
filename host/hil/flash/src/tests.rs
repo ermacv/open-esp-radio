@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 
-use oer_image_chip_profile::Start;
+use oer_image_profile::Start;
 
 use super::*;
 
@@ -67,7 +67,7 @@ impl Target for Fake<'_> {
 fn bundle(directory: &Path) -> ImageBundle {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
     // A chip whose written image starts by power-on reset.
-    let profile = oer_image_chip_profile::Profile::all(&root)
+    let profile = oer_image_profile::Profile::all(&root)
         .unwrap()
         .into_iter()
         .find(|profile| {

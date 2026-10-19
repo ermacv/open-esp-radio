@@ -173,7 +173,7 @@ pub(crate) fn execute_workload(
 /// an analysis that cannot run; a `partial + ?` hart is only observed. A
 /// chip whose profile names no interrupt contract has no bound to hold.
 fn check_interrupt_stacks(chip: &str, elf: Option<&Path>, evidence: &mut ExecutionEvidence) {
-    let bounded = oer_image_chip_profile::Profile::load(&oer_os_process::built_root(), chip)
+    let bounded = oer_image_profile::Profile::load(&oer_os_process::built_root(), chip)
         .is_ok_and(|profile| profile.interrupts.is_some());
     if !bounded {
         return;

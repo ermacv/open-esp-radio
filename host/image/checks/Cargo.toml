@@ -6,15 +6,29 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 publish = false
-description = "The checks an image build runs on request, assembled from the stack, interrupt-stack and placement checks"
+description = "The checks of an image: the stack, interrupt-stack and placement checks, the post-link input check, and the image linker that runs it"
+
+[[bin]]
+name = "oer-image-linker"
+path = "src/bin/oer-image-linker.rs"
 
 [dependencies]
 oer-analysis-elf = { path = "../../analysis/elf" }
+oer-analysis-riscv-decode = { path = "../../analysis/riscv-decode" }
+oer-analysis-riscv-model = { path = "../../analysis/riscv-model" }
+oer-analysis-riscv-program = { path = "../../analysis/riscv-program" }
+oer-analysis-riscv-stack = { path = "../../analysis/riscv-stack" }
 oer-image-build = { path = "../build" }
-oer-image-check-interrupts = { path = "../check-interrupts" }
-oer-image-check-placement = { path = "../check-placement" }
-oer-image-check-stack = { path = "../check-stack" }
+oer-image-profile = { path = "../profile" }
+oer-os-process = { path = "../../os/process" }
+oer-vendor-artifacts = { path = "../../vendor/artifacts" }
+rustc-demangle = "=0.1.28"
+serde = { version = "=1.0.229", features = ["derive"] }
+toml = "1.1"
+
+[dev-dependencies]
+object = { version = "=0.39.1", default-features = false, features = ["elf", "read", "std", "write"] }
+tempfile = "=3.27.0"
 
 [lints]
 workspace = true
-

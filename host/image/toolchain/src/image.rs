@@ -7,7 +7,7 @@
 //! `move-size-limit`, `share-generics`) on the exact stable toolchain that
 //! `rust-toolchain.toml` pins.
 //!
-//! Every image links through the image linker (`host/image/linker`), which
+//! Every image links through the image linker (`oer-image-linker` of `host/image/checks`), which
 //! refuses an input section named as zero-initialized that carries bytes and
 //! otherwise runs the target's `rust-lld` with the same arguments. The linker
 //! is built from the sources being built, the checkout or source snapshot at
@@ -72,7 +72,8 @@ pub fn lock_compile_cache(cache: &Path) -> Result<oer_os_process::lock::FileLock
 /// What an image's compiler setup depends on.
 #[derive(Clone, Debug)]
 pub struct ImageCompiler<'a> {
-    /// The tree being built: its `oer-image-linker` becomes the linker.
+    /// The tree being built: its `oer-image-checks` builds the linker
+    /// (`oer-image-linker`).
     pub root: &'a Path,
     /// The Cargo target directory of the linker's host build.
     pub linker_target: &'a Path,
@@ -120,7 +121,7 @@ pub fn build_linker(root: &Path, target_dir: &Path) -> Result<PathBuf> {
             "build",
             "--quiet",
             "-p",
-            "oer-image-linker",
+            "oer-image-checks",
             "--bin",
             "oer-image-linker",
         ])
@@ -240,7 +241,8 @@ mod tests {
         assert!(rustflags(None, 4096, Path::new("/a b/linker")).is_err());
     }
 
-    /// A tree whose `oer-image-linker` is a stand-in that announces its tree.
+    /// A tree whose `oer-image-checks` builds an `oer-image-linker` stand-in
+    /// that announces its tree.
     fn tree_with_linker(marker: &str) -> tempfile::TempDir {
         let tree = tempfile::tempdir().unwrap();
         let package = tree.path().join("linker");
@@ -252,7 +254,7 @@ mod tests {
         .unwrap();
         std::fs::write(
             package.join("Cargo.toml"),
-            "[package]\nname = \"oer-image-linker\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+            "[package]\nname = \"oer-image-checks\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[[bin]]\nname = \"oer-image-linker\"\npath = \"src/main.rs\"\n",
         )
         .unwrap();
         std::fs::write(

@@ -14,7 +14,7 @@ path = "src/main.rs"
 
 [dependencies]
 clap = { version = "=4.5.48", features = ["derive"] }
-oer-image-chip-profile = { path = "../../host/image/chip-profile" }
+oer-image-profile = { path = "../../host/image/profile" }
 oer-os-command-tree = { path = "../../host/os/command-tree", features = ["clap"] }
 oer-lab-devices = { path = "../../host/lab/devices", features = ["image"] }
 oer-lab-device-lock = { path = "../../host/lab/device-lock" }

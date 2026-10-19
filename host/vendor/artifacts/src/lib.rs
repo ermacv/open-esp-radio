@@ -417,7 +417,7 @@ mod tests {
     #[test]
     fn tracked_manifests_parse_with_complete_sources() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-        for chip in oer_image_chip_profile::supported(&root).unwrap() {
+        for chip in oer_image_profile::supported(&root).unwrap() {
             let Ok(manifest) = Manifest::load(&root, &chip) else {
                 continue;
             };
@@ -435,7 +435,7 @@ mod tests {
     fn the_rom_pin_resolves_into_the_vendor_store() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
         // Every chip's ROM ELF as its profile's `[rom]` names it.
-        for profile in oer_image_chip_profile::Profile::all(&root).unwrap() {
+        for profile in oer_image_profile::Profile::all(&root).unwrap() {
             let Some(rom) = profile.rom else {
                 continue;
             };
@@ -452,7 +452,7 @@ mod tests {
                 ),
             }
         }
-        let chip = oer_image_chip_profile::supported(&root).unwrap().remove(0);
+        let chip = oer_image_profile::supported(&root).unwrap().remove(0);
         let error = fetched(&root, &chip, "absent").unwrap_err();
         assert!(error.to_string().contains("pins no `absent` artifact"));
     }

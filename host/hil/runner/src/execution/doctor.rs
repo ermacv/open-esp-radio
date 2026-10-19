@@ -47,7 +47,7 @@ pub(crate) fn run(root: &Path, lab: &LabConfig, scenarios: &[&Scenario]) -> Resu
     let required = requirements(scenarios);
     let mut checks = Checks::default();
     checks.run("firmware-workspace", || {
-        let profile = oer_image_chip_profile::Profile::load(root, lab.chip())?;
+        let profile = oer_image_profile::Profile::load(root, lab.chip())?;
         let workspace = profile.hil_agent_workspace(root).join("Cargo.toml");
         workspace
             .is_file()

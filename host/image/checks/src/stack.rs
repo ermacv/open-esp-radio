@@ -2,7 +2,7 @@
 //! (`oer-analysis-riscv-stack`, with the pinned ROM ELF and its reviewed summaries)
 //! bounds every stack the image runs on:
 //!
-//! - the runtime's interrupt stacks (`oer-image-check-interrupts`);
+//! - the runtime's interrupt stacks ([`crate::interrupts`]);
 //! - each task stack the policy names, from the function that runs on it
 //!   (its root, by symbol): the root's worst-case call chain must leave the
 //!   stack's storage the policy's minimum free bytes;
@@ -33,14 +33,14 @@ use oer_analysis_riscv_stack::{
     task_poll_resolutions, waker_resolutions, waker_vtables,
 };
 
-use crate::budget::{Budget, MEMORY_LIMIT, TIMEOUT, Usage, WORK_UNITS};
+use crate::stack::budget::{Budget, MEMORY_LIMIT, TIMEOUT, Usage, WORK_UNITS};
 
 pub use coverage::{Coverage, CoverageCategory, CoveragePolicy, CoverageReview};
-use oer_image_policy::{StackPolicy, Storage, TaskStack};
+use oer_image_profile::policy::{StackPolicy, Storage, TaskStack};
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
-use crate::contract::Contract;
+use crate::stack::contract::Contract;
 
 /// The assumptions a check admits in a bound, each by name: a bound resting
 /// on one is conditional and passes with a warning; any other fails. Each
@@ -71,7 +71,7 @@ pub fn audit_runtime_stacks(
 /// with; `None` when the policy names no bootstrap stack.
 pub fn audit_bootstrap_stack(
     root: &Path,
-    profile: &oer_image_chip_profile::Profile,
+    profile: &oer_image_profile::Profile,
     elf: &Path,
     policy: &StackPolicy,
     output: &Path,
@@ -107,11 +107,7 @@ pub struct Image {
 impl Image {
     /// The analysis of `elf` with the chip's pinned ROM ELF and its
     /// reviewed summaries (`[rom]` of the chip profile).
-    pub fn read(
-        root: &Path,
-        profile: &oer_image_chip_profile::Profile,
-        elf: &Path,
-    ) -> Result<Self> {
+    pub fn read(root: &Path, profile: &oer_image_profile::Profile, elf: &Path) -> Result<Self> {
         let elf = std::fs::read(elf)
             .map_err(|error| format!("cannot read {}: {error}", elf.display()))?;
         Self::of_bytes(root, profile, elf)
@@ -120,7 +116,7 @@ impl Image {
     /// [`Self::read`] of the ELF bytes `elf`.
     pub fn of_bytes(
         root: &Path,
-        profile: &oer_image_chip_profile::Profile,
+        profile: &oer_image_profile::Profile,
         elf: Vec<u8>,
     ) -> Result<Self> {
         let rom = profile

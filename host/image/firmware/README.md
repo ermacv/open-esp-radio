@@ -42,7 +42,7 @@ outside internal SRAM (`placement.txt`).
 Every image builds with the compiler's frame records (`-Z emit-stack-sizes`),
 moves above the stack policy's `max_move_bytes` warned (`-W
 large-assignments`), and through the image linker
-(`host/image/linker`), which refuses bytes in an input section
+(`oer-image-linker` of `host/image/checks`), which refuses bytes in an input section
 the boot zeroes. The stack checks then bound the runtime's task and
 interrupt stacks and the bootstrap's stack under
 `firmware/platform/esp32s31/stack.toml` (`runtime-stack.txt`,

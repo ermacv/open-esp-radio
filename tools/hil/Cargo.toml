@@ -15,7 +15,7 @@ path = "src/main.rs"
 [dependencies]
 oer-image-esp-idf = { path = "../../host/image/esp-idf" }
 oer-hil-run-bundle-format = { path = "../../host/hil/run-bundle-format" }
-oer-image-chip-profile = { path = "../../host/image/chip-profile" }
+oer-image-profile = { path = "../../host/image/profile" }
 oer-os-command-tree = { path = "../../host/os/command-tree", features = ["clap"] }
 oer-lab-stand-arbiter = { path = "../../host/lab/stand-arbiter" }
 oer-lab-stand-board = { path = "../../host/lab/stand-board" }
@@ -23,7 +23,7 @@ oer-hil-run-bundle = { path = "../../host/hil/run-bundle" }
 oer-hil-analysis = { path = "../../host/hil/analysis" }
 oer-hil-experiment = { path = "../../host/hil/experiment" }
 oer-image-build = { path = "../../host/image/build" }
-oer-image-check-interrupts = { path = "../../host/image/check-interrupts" }
+oer-image-checks = { path = "../../host/image/checks" }
 oer-image-compare = { path = "../../host/image/compare" }
 oer-hil-image = { path = "../../host/hil/image" }
 oer-hil-image-class = { path = "../../host/hil/image-class" }

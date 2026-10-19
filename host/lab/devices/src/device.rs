@@ -13,7 +13,7 @@ use std::{
 };
 
 use oer_image_bundle::ImageBundle;
-use oer_image_chip_profile::{Profile, Start};
+use oer_image_profile::{Profile, Start};
 use serde::Serialize;
 
 use crate::discovery as ports;

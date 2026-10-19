@@ -42,7 +42,7 @@ const HIL_HOST_INPUTS: [&str; 3] = ["tools/hil", "host", "portable/hil"];
 /// bootstrap, with every repository package they reach.
 pub fn image_packages(root: &Path) -> Result<Vec<PathBuf>> {
     let mut directories = BTreeSet::new();
-    for profile in oer_image_chip_profile::Profile::all(root)? {
+    for profile in oer_image_profile::Profile::all(root)? {
         if !root.join(profile.hil_agent_directory()).is_dir() {
             continue;
         }

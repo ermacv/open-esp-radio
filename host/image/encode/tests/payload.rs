@@ -1,8 +1,8 @@
 use oer_image_encode::stage_two::{pack_runtime, payload_crc32};
 
 /// A stage-two contract shaped like a staged chip's profile.
-fn contract() -> oer_image_chip_profile::StageTwo {
-    oer_image_chip_profile::StageTwo {
+fn contract() -> oer_image_profile::StageTwo {
+    oer_image_profile::StageTwo {
         magic: 0x3247_5453,
         abi_version: 1,
         header_bytes: 44,
@@ -78,15 +78,15 @@ fn a_field_outside_the_header_is_a_contract_error_not_a_panic() {
     let path = directory.path().join("runtime.bin");
     std::fs::write(&path, image()).unwrap();
     for broken in [
-        oer_image_chip_profile::StageTwo {
+        oer_image_profile::StageTwo {
             crc_offset: 42,
             ..contract()
         },
-        oer_image_chip_profile::StageTwo {
+        oer_image_profile::StageTwo {
             crc_offset: u32::MAX,
             ..contract()
         },
-        oer_image_chip_profile::StageTwo {
+        oer_image_profile::StageTwo {
             magic_offset: 1 << 20,
             ..contract()
         },
@@ -117,7 +117,7 @@ fn every_staged_chip_packs_the_shared_fixture_as_the_bootstrap_checks_it() {
         .map(|at| u8::from_str_radix(&hex[at..at + 2], 16).unwrap())
         .collect::<Vec<_>>();
     let crc = u32::from_str_radix(&fixture("crc32"), 16).unwrap();
-    let staged = oer_image_chip_profile::Profile::all(&root)
+    let staged = oer_image_profile::Profile::all(&root)
         .unwrap()
         .into_iter()
         .filter_map(|profile| profile.staged)

@@ -15,7 +15,7 @@ path = "src/main.rs"
 [dependencies]
 oer-analysis-blobray-application = { path = "../../host/analysis/blobray-application" }
 oer-analysis-blobray-domain = { path = "../../host/analysis/blobray-domain" }
-oer-image-chip-profile = { path = "../../host/image/chip-profile" }
+oer-image-profile = { path = "../../host/image/profile" }
 oer-analysis-elf = { path = "../../host/analysis/elf" }
 oer-registers-model = { path = "../../host/registers/model" }
 oer-analysis-riscv-lift = { path = "../../host/analysis/riscv-lift" }

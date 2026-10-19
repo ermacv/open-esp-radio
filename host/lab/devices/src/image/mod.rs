@@ -54,7 +54,7 @@ use crate::Result;
 
 use crate::flash::After;
 use oer_image_bundle::{ImageBundle, Snapshot};
-pub use oer_image_chip_profile::Start;
+pub use oer_image_profile::Start;
 pub use oer_lab_device_lock::{DeviceAccess, DeviceId};
 use serde::{Deserialize, Serialize};
 

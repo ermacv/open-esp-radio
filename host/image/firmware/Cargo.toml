@@ -14,11 +14,9 @@ oer-os-durable = { path = "../../os/durable" }
 oer-lab-device-lock = { path = "../../lab/device-lock" }
 oer-lab-router = { path = "../../lab/router" }
 oer-lab-model = { path = "../../lab/model" }
-oer-image-chip-profile = { path = "../chip-profile" }
-oer-image-policy = { path = "../policy" }
+oer-image-profile = { path = "../profile" }
 oer-image-toolchain = { path = "../toolchain" }
-oer-image-check-stack = { path = "../check-stack" }
-oer-image-check-interrupts = { path = "../check-interrupts" }
+oer-image-checks = { path = "../checks" }
 oer-platform-staged-layout = { path = "../../../portable/platform/staged-layout" }
 oer-platform-esp32s31-layout = { path = "../../../portable/platform/esp32s31-layout" }
 espflash = { version = "=4.5.0", default-features = false, features = ["serialport"] }

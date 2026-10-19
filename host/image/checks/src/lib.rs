@@ -1,7 +1,10 @@
-//! The checks an image build runs when its caller requests them, assembled
-//! from the check crates: the stack check (`oer-image-check-stack`), the
-//! interrupt-stack check (`oer-image-check-interrupts`) and the placement
-//! check (`oer-image-check-placement`).
+//! The checks of an image: the stack check ([`stack`]), the
+//! interrupt-stack check ([`interrupts`]), the placement check
+//! ([`placement`]), and the post-link input check ([`linker`]) the image
+//! linker (`oer-image-linker`) runs in place of `rust-lld`.
+//!
+//! The checks an image build runs when its caller requests them are
+//! assembled here.
 //!
 //! [`Gates`] is the [`oer_image_build::Checks`] of an image build: the dev kit
 //! passes the checks a developer asks for, HIL images always pass them all.
@@ -10,8 +13,13 @@
 //! absent is a [`CheckResult::MissingContract`], which fails the build: a
 //! missing table never proves that a property does not apply.
 
+pub mod interrupts;
+pub mod linker;
+pub mod placement;
+pub mod stack;
+
+use crate::interrupts::Required;
 use oer_image_build::{CheckInput, CheckOutcome, CheckResult, CheckedElf};
-use oer_image_check_interrupts::Required;
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
@@ -141,23 +149,21 @@ impl oer_image_build::Checks for Gates {
         }
         if stack_runs || interrupts_run {
             // One analysis of the image serves both stack checks.
-            match oer_image_check_stack::Image::read(input.root, profile, input.elf) {
+            match crate::stack::Image::read(input.root, profile, input.elf) {
                 Ok(image) => {
                     outcome
                         .rom_summaries
                         .extend(image.analysis.summaries.iter().cloned());
                     if let Some(required) = self.interrupts.filter(|_| interrupts_run) {
                         let result = ran((|| -> Result<()> {
-                            let stacks = oer_image_check_interrupts::interrupt_stacks_of(&image)?;
+                            let stacks = crate::interrupts::interrupt_stacks_of(&image)?;
                             std::fs::write(
-                                input
-                                    .output
-                                    .join(oer_image_check_interrupts::INTERRUPT_REPORT),
+                                input.output.join(crate::interrupts::INTERRUPT_REPORT),
                                 stacks.render(),
                             )?;
                             outcome
                                 .reports
-                                .push(oer_image_check_interrupts::INTERRUPT_REPORT.to_owned());
+                                .push(crate::interrupts::INTERRUPT_REPORT.to_owned());
                             outcome.warnings.extend(stacks.check(required)?);
                             Ok(())
                         })());
@@ -165,14 +171,14 @@ impl oer_image_build::Checks for Gates {
                     }
                     if stack_runs {
                         let result = ran((|| -> Result<()> {
-                            let warnings = oer_image_check_stack::audit_runtime_stacks(
+                            let warnings = crate::stack::audit_runtime_stacks(
                                 &image,
                                 input.policy,
                                 input.output,
                             );
                             outcome
                                 .reports
-                                .push(oer_image_check_stack::RUNTIME_REPORT.to_owned());
+                                .push(crate::stack::RUNTIME_REPORT.to_owned());
                             outcome.warnings.extend(warnings?);
                             Ok(())
                         })());
@@ -194,8 +200,7 @@ impl oer_image_build::Checks for Gates {
         if self.placement {
             let result = match (&profile.memory, &profile.placement) {
                 (Some(memory), Some(placement)) => ran((|| -> Result<()> {
-                    let report =
-                        oer_image_check_placement::audit(memory, placement, input.elf, input.flat)?;
+                    let report = crate::placement::audit(memory, placement, input.elf, input.flat)?;
                     std::fs::write(input.output.join(PLACEMENT_REPORT), report)?;
                     outcome.reports.push(PLACEMENT_REPORT.to_owned());
                     Ok(())
@@ -226,7 +231,7 @@ impl oer_image_build::Checks for Gates {
         } else if input.policy.stacks().is_err() {
             CheckResult::MissingContract("the image's stack policy names no stacks".to_owned())
         } else {
-            match oer_image_check_stack::audit_bootstrap_stack(
+            match crate::stack::audit_bootstrap_stack(
                 input.root,
                 input.profile,
                 input.elf,
@@ -237,7 +242,7 @@ impl oer_image_build::Checks for Gates {
                     outcome.warnings = warnings;
                     outcome
                         .reports
-                        .push(oer_image_check_stack::BOOTSTRAP_REPORT.to_owned());
+                        .push(crate::stack::BOOTSTRAP_REPORT.to_owned());
                     CheckResult::Passed
                 }
                 Ok(None) => CheckResult::MissingContract(
