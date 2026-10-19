@@ -1175,6 +1175,18 @@ fn on_an_open_network_the_join_goes_on_the_default_record_and_then_the_associati
                     channel: 6,
                 })
                 .await;
+            // A BSS without WMM: the station's interface contends by the
+            // DCF, the access point's interface keeps none of its own.
+            assert_eq!(
+                world.air.edca(oer_ieee80211_lower_mac::VifRole::Station),
+                Some(oer_ieee80211_mac::extensions::wmm::WmmParameterSet::DCF)
+            );
+            assert_eq!(
+                world
+                    .air
+                    .edca(oer_ieee80211_lower_mac::VifRole::AccessPoint),
+                None
+            );
             // Connected at once on an open network: data at the rate control's
             // rate, the next control frame on the association's record.
             world.send_msdu([0x02, 0, 0, 0, 0, 0x07]);

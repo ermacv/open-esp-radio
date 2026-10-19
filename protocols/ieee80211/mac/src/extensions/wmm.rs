@@ -66,6 +66,43 @@ impl WmmParameterSet {
     pub const fn access_category(self, category: WmmAccessCategory) -> WmmAcParameters {
         *category.select(&self.access_categories)
     }
+
+    /// The EDCA parameters of a QoS station whose access point advertises
+    /// none: the default dot11EDCATable of IEEE 802.11-2020 Table 9-155
+    /// for an OFDM, ERP, HT or HE PHY (aCWmin 15, aCWmax 1023), records in
+    /// ACI order.
+    pub const STANDARD_DEFAULT: Self = Self::new(
+        0,
+        false,
+        [
+            // AC_BE: aCWmin, aCWmax, AIFSN 3.
+            WmmAcParameters::contention(3, 4, 10, 0),
+            // AC_BK: aCWmin, aCWmax, AIFSN 7.
+            WmmAcParameters::contention(7, 4, 10, 0),
+            // AC_VI: (aCWmin+1)/2-1, aCWmin, AIFSN 2, TXOP 3.008 ms.
+            WmmAcParameters::contention(2, 3, 4, 94),
+            // AC_VO: (aCWmin+1)/4-1, (aCWmin+1)/2-1, AIFSN 2, TXOP 1.504 ms.
+            WmmAcParameters::contention(2, 2, 3, 47),
+        ],
+    );
+
+    /// The contention of a QoS station in a non-QoS BSS, which uses the
+    /// DCF (IEEE 802.11-2020 10.3): every access category waits DIFS
+    /// (AIFSN 2) with aCWmin 15 and aCWmax 1023 and holds no TXOP.
+    pub const DCF: Self = Self::new(0, false, [WmmAcParameters::contention(2, 4, 10, 0); 4]);
+}
+
+impl WmmAcParameters {
+    /// A record without admission control.
+    const fn contention(aifsn: u8, ecw_min: u8, ecw_max: u8, txop_limit_units_32_us: u16) -> Self {
+        Self {
+            admission_control_mandatory: false,
+            aifsn,
+            ecw_min,
+            ecw_max,
+            txop_limit_units_32_us,
+        }
+    }
 }
 
 /// Encode the four records already validated by the AP advertisement.

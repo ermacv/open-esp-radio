@@ -475,11 +475,34 @@ impl<K: Ieee80211Capabilities> SupportedBlockAck<K> {
 /// An EDCA parameter set whose every record lies within `K`'s limits: an
 /// AIFSN and contention-window exponents it applies, `ECWmin` no larger
 /// than `ECWmax`.
-#[derive(Debug)]
 pub struct SupportedEdca<K> {
     parameters: WmmParameterSet,
     brand: PhantomData<fn() -> K>,
 }
+
+impl<K> core::fmt::Debug for SupportedEdca<K> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_tuple("SupportedEdca")
+            .field(&self.parameters)
+            .finish()
+    }
+}
+
+impl<K> Clone for SupportedEdca<K> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<K> Copy for SupportedEdca<K> {}
+
+impl<K> PartialEq for SupportedEdca<K> {
+    fn eq(&self, other: &Self) -> bool {
+        self.parameters == other.parameters
+    }
+}
+
+impl<K> Eq for SupportedEdca<K> {}
 
 impl<K: Ieee80211Capabilities> SupportedEdca<K> {
     /// `parameters`, when `K` applies every record of it.

@@ -934,7 +934,10 @@ where
     #[cfg(test)]
     fn draw_backoff(&mut self, access_category: WmmAccessCategory) -> u16 {
         self.tx
-            .contention_publication(LegacyTxQueue::from_access_category(access_category))
+            .contention_publication(
+                VifRole::Station,
+                LegacyTxQueue::from_access_category(access_category),
+            )
             .1
     }
 
@@ -1349,7 +1352,7 @@ where
         let txop_limit = self
             .tx
             .policy()
-            .access_policy(queue)
+            .access_policy(common.role, queue)
             .txop_limit_units_32_us();
         let density = HtAmpduDensity::from_ampdu_parameters((min_mpdu_start_spacing & 0x07) << 2);
         let mic_and_fcs = common.hardware_mic_length + TX_FCS_SIZE;
@@ -1400,7 +1403,11 @@ where
                 common.single.protection,
                 ceiling,
             ),
-            aifsn: self.tx.policy().contention_parameters(queue).aifsn(),
+            aifsn: self
+                .tx
+                .policy()
+                .contention_parameters(common.role, queue)
+                .aifsn(),
             contention_window: common.single.backoff_slots,
             // `CoexPriority::Normal`, as for an MPDU.
             scheduler_priority: queue.vendor_data_scheduler_priority(),
@@ -1654,18 +1661,26 @@ where
         }
     }
 
-    /// The EDCA parameters every queue's attempts contend with, whose
-    /// records lie within the capabilities' limits: a set the policy
-    /// refuses leaves the installed one.
+    /// The EDCA parameters the attempts of the interface of `role`
+    /// contend with, whose records lie within the capabilities' limits: a
+    /// set the policy refuses leaves the installed one. Every publication
+    /// writes its queue's AIFSN and backoff from its own interface's set,
+    /// so each interface contends with exactly the set it asked for, which
+    /// this returns.
     ///
     /// # Errors
     ///
     /// The record the policy refused.
-    pub fn set_checked_edca(
+    pub fn set_checked_edca<K: oer_ieee80211_lower_mac::Ieee80211Capabilities>(
         &mut self,
-        parameters: oer_ieee80211_mac::extensions::wmm::WmmParameterSet,
-    ) -> Result<(), oer_esp32s31_ieee80211_mac::edca::EdcaParametersError> {
-        self.tx.policy_mut().install_wmm(parameters)
+        role: VifRole,
+        parameters: oer_ieee80211_lower_mac::SupportedEdca<K>,
+    ) -> Result<
+        oer_ieee80211_lower_mac::SupportedEdca<K>,
+        oer_esp32s31_ieee80211_mac::edca::EdcaParametersError,
+    > {
+        self.tx.policy_mut().install_wmm(role, parameters.get())?;
+        Ok(parameters)
     }
 
     /// Tune the next `Enable` to `channel`, on a disabled port.

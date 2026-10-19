@@ -21,6 +21,7 @@ const TIM_ELEMENT_ID: u8 = 5;
 const ERP_ELEMENT_ID: u8 = 42;
 const HT_OPERATION_ELEMENT_ID: u8 = 61;
 const EXTENSION_ELEMENT_ID: u8 = 255;
+const VENDOR_ELEMENT_ID: u8 = 221;
 const HE_OPERATION_EXTENSION_ID: u8 = 36;
 
 use crate::protection::{ErpProtection, HtProtectionMode};
@@ -53,6 +54,9 @@ pub struct StaBeaconObservation {
     pub capability_information: u16,
     pub tim: Option<StaTimObservation>,
     pub protection: StaBeaconProtection,
+    /// The EDCA parameters of the beacon's WMM Parameter element, if it
+    /// carries one that parses.
+    pub edca: Option<crate::extensions::wmm::WmmParameterSet>,
     /// The BSS's announced move to another channel, if the beacon carries
     /// one. A malformed announcement is reported here and leaves the rest of
     /// the beacon valid: the station decides what it does without one.
@@ -144,8 +148,10 @@ pub fn parse_sta_beacon(
 
     let mut tim = None;
     let mut protection = StaBeaconProtection::default();
+    let mut edca = None;
     let mut remaining = elements;
     while !remaining.is_empty() {
+        let element = remaining;
         let (&[id, length], rest) = remaining
             .split_first_chunk::<2>()
             .ok_or(StaBeaconError::MalformedInformationElement)?;
@@ -153,6 +159,14 @@ pub fn parse_sta_beacon(
             .split_at_checked(usize::from(length))
             .ok_or(StaBeaconError::MalformedInformationElement)?;
         remaining = rest;
+        if id == VENDOR_ELEMENT_ID
+            && let Some((element, _)) = usize::from(length)
+                .checked_add(2)
+                .and_then(|whole| element.split_at_checked(whole))
+            && let Some(parameters) = crate::extensions::wmm::parse_wmm_parameter_element(element)
+        {
+            edca = Some(parameters);
+        }
         if id == TIM_ELEMENT_ID {
             let &[dtim_count, dtim_period, bitmap_control, ref bitmap @ ..] = body else {
                 return Err(StaBeaconError::MalformedTim);
@@ -205,6 +219,7 @@ pub fn parse_sta_beacon(
         capability_information: u16::from_le_bytes([c0, c1]),
         tim,
         protection,
+        edca,
         channel_switch,
     })
 }

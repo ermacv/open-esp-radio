@@ -4,6 +4,7 @@ use crate::{
     tx::ampdu::{HtAmpduTxCompletion, HtBlockAckObservation},
     tx::{HtGuardInterval, HtMcs, HtRate, LegacyRate, TxCompletion, TxCookie},
 };
+use oer_ieee80211_lower_mac::VifRole;
 use oer_ieee80211_mac::extensions::wmm::parse_wmm_parameter_element;
 
 const STANDARD_WMM: [u8; 26] = [
@@ -24,10 +25,13 @@ fn sta_runtime_policy_owns_peer_and_vendor_edca_state() {
     let mut policy = WifiTxRuntimePolicy::vendor_defaults();
     assert_eq!(policy.he_bss_color(), 0);
     assert_eq!(
-        policy.contention_parameters(LegacyTxQueue::BestEffort),
+        policy.contention_parameters(VifRole::Station, LegacyTxQueue::BestEffort),
         EdcaContentionParameters::new(3, 4, 10).unwrap()
     );
-    assert_eq!(policy.contention_exponent(LegacyTxQueue::BestEffort), 4);
+    assert_eq!(
+        policy.contention_exponent(VifRole::Station, LegacyTxQueue::BestEffort),
+        4
+    );
 
     policy.install_he_bss_color(0xff);
     policy.install_ht_ampdu(HtPeerAmpduParameters::from_capability_byte(0x17));
@@ -37,8 +41,44 @@ fn sta_runtime_policy_owns_peer_and_vendor_edca_state() {
         HtPeerAmpduParameters::from_capability_byte(0x17)
     );
     assert_eq!(
-        policy.select_backoff(LegacyTxQueue::BestEffort, u32::MAX),
+        policy.select_backoff(VifRole::Station, LegacyTxQueue::BestEffort, u32::MAX),
         15
+    );
+}
+
+#[test]
+fn each_interface_keeps_its_own_edca_set_and_contention() {
+    let mut policy = WifiTxRuntimePolicy::vendor_defaults();
+    policy
+        .install_wmm(
+            VifRole::AccessPoint,
+            parse_wmm_parameter_element(&STANDARD_WMM).unwrap(),
+        )
+        .unwrap();
+    let queue = LegacyTxQueue::Voice;
+    // The access point's set, whose Voice record requires admission,
+    // leaves the station's vendor defaults.
+    assert!(
+        policy
+            .access_policy(VifRole::AccessPoint, queue)
+            .admission_control_mandatory()
+    );
+    assert!(
+        !policy
+            .access_policy(VifRole::Station, queue)
+            .admission_control_mandatory()
+    );
+    // A failed attempt of one interface widens only its own window.
+    let station = policy.contention_exponent(VifRole::Station, LegacyTxQueue::BestEffort);
+    let access_point = policy.contention_exponent(VifRole::AccessPoint, LegacyTxQueue::BestEffort);
+    policy.record_retry_failure(VifRole::Station, LegacyTxQueue::BestEffort);
+    assert_eq!(
+        policy.contention_exponent(VifRole::Station, LegacyTxQueue::BestEffort),
+        station + 1
+    );
+    assert_eq!(
+        policy.contention_exponent(VifRole::AccessPoint, LegacyTxQueue::BestEffort),
+        access_point
     );
 }
 
@@ -46,11 +86,14 @@ fn sta_runtime_policy_owns_peer_and_vendor_edca_state() {
 fn negotiated_acm_downgrades_tid_and_queue_without_claiming_admission() {
     let mut policy = WifiTxRuntimePolicy::vendor_defaults();
     policy
-        .install_wmm(parse_wmm_parameter_element(&STANDARD_WMM).unwrap())
+        .install_wmm(
+            VifRole::Station,
+            parse_wmm_parameter_element(&STANDARD_WMM).unwrap(),
+        )
         .unwrap();
 
     let voice = policy
-        .select_network_traffic(&ipv4_with_dscp(46), true)
+        .select_network_traffic(VifRole::Station, &ipv4_with_dscp(46), true)
         .unwrap();
     assert_eq!(voice.requested.access_category, WmmAccessCategory::Voice);
     assert_eq!(voice.access_category, WmmAccessCategory::Video);
@@ -65,7 +108,7 @@ fn negotiated_acm_downgrades_tid_and_queue_without_claiming_admission() {
     assert_eq!(voice.txop_limit_units_32_us(), 94);
 
     let non_qos = policy
-        .select_network_traffic(&ipv4_with_dscp(46), false)
+        .select_network_traffic(VifRole::Station, &ipv4_with_dscp(46), false)
         .unwrap();
     assert_eq!(non_qos.tid(), 0);
     assert_eq!(non_qos.queue(), LegacyTxQueue::BestEffort);
@@ -80,10 +123,13 @@ fn all_mandatory_access_categories_fail_closed() {
     }
     let mut policy = WifiTxRuntimePolicy::vendor_defaults();
     policy
-        .install_wmm(parse_wmm_parameter_element(&element).unwrap())
+        .install_wmm(
+            VifRole::Station,
+            parse_wmm_parameter_element(&element).unwrap(),
+        )
         .unwrap();
     assert_eq!(
-        policy.select_network_traffic(&ipv4_with_dscp(0), true),
+        policy.select_network_traffic(VifRole::Station, &ipv4_with_dscp(0), true),
         Err(WifiTxTrafficError::AdmissionControlRequired {
             requested: WmmAccessCategory::BestEffort
         })
@@ -94,10 +140,13 @@ fn all_mandatory_access_categories_fail_closed() {
 fn negotiated_txop_is_bounded_and_medium_ownership_stays_unsupported() {
     let mut policy = WifiTxRuntimePolicy::vendor_defaults();
     policy
-        .install_wmm(parse_wmm_parameter_element(&STANDARD_WMM).unwrap())
+        .install_wmm(
+            VifRole::Station,
+            parse_wmm_parameter_element(&STANDARD_WMM).unwrap(),
+        )
         .unwrap();
     let video = policy
-        .select_network_traffic(&ipv4_with_dscp(40), true)
+        .select_network_traffic(VifRole::Station, &ipv4_with_dscp(40), true)
         .unwrap();
     assert_eq!(
         video.he_txop_limit(HeEdcaTxopLimit::DEFAULT),
@@ -123,10 +172,13 @@ fn negotiated_txop_is_bounded_and_medium_ownership_stays_unsupported() {
     let mut wide = STANDARD_WMM;
     wide[21] = 1;
     policy
-        .install_wmm(parse_wmm_parameter_element(&wide).unwrap())
+        .install_wmm(
+            VifRole::Station,
+            parse_wmm_parameter_element(&wide).unwrap(),
+        )
         .unwrap();
     let video = policy
-        .select_network_traffic(&ipv4_with_dscp(40), true)
+        .select_network_traffic(VifRole::Station, &ipv4_with_dscp(40), true)
         .unwrap();
     assert_eq!(
         video.he_txop_limit(HeEdcaTxopLimit::DEFAULT),
@@ -139,6 +191,7 @@ fn ordinary_retry_owns_rate_ladder_and_edca_transitions() {
     let mut policy = WifiTxRuntimePolicy::vendor_defaults();
     let queue = LegacyTxQueue::BestEffort;
     let mut retry = OrdinaryMpduRetryState::new(
+        VifRole::Station,
         queue,
         TxPhyRate::Legacy(LegacyRate::Ofdm54M),
         4,
@@ -165,7 +218,7 @@ fn ordinary_retry_owns_rate_ladder_and_edca_transitions() {
             long: 0
         }
     );
-    assert_eq!(policy.contention_exponent(queue), 5);
+    assert_eq!(policy.contention_exponent(VifRole::Station, queue), 5);
     assert_eq!(
         retry.current_rate(),
         Ok(TxPhyRate::Legacy(LegacyRate::Ofdm54M))
@@ -186,7 +239,7 @@ fn ordinary_retry_owns_rate_ladder_and_edca_transitions() {
             long: 0
         }
     );
-    assert_eq!(policy.contention_exponent(queue), 6);
+    assert_eq!(policy.contention_exponent(VifRole::Station, queue), 6);
     assert_eq!(
         retry.current_rate(),
         Ok(TxPhyRate::Legacy(LegacyRate::Ofdm48M))
@@ -196,7 +249,7 @@ fn ordinary_retry_owns_rate_ladder_and_edca_transitions() {
         retry.observe_completion(&mut policy, oer_ieee80211_lower_mac::TxStatus::Success),
         OrdinaryRetryDecision::Complete
     );
-    assert_eq!(policy.contention_exponent(queue), 4);
+    assert_eq!(policy.contention_exponent(VifRole::Station, queue), 4);
 }
 
 #[test]
@@ -205,6 +258,7 @@ fn cts_failures_continue_the_rate_series_beyond_the_mpdu_retry_limit() {
         let queue = LegacyTxQueue::BestEffort;
         let mut policy = WifiTxRuntimePolicy::vendor_defaults();
         let mut retry = OrdinaryMpduRetryState::new(
+            VifRole::Station,
             queue,
             TxPhyRate::Legacy(LegacyRate::Ofdm54M),
             1,
@@ -232,7 +286,7 @@ fn cts_failures_continue_the_rate_series_beyond_the_mpdu_retry_limit() {
             assert_eq!(retry.counters().mpdu, 0);
             assert_eq!(retry.counters().long, 0);
         }
-        assert_eq!(policy.contention_exponent(queue), 4);
+        assert_eq!(policy.contention_exponent(VifRole::Station, queue), 4);
     }
 }
 
@@ -241,6 +295,7 @@ fn ordinary_retry_limit_collision_and_abort_restore_the_minimum_cw() {
     let queue = LegacyTxQueue::Voice;
     let mut policy = WifiTxRuntimePolicy::vendor_defaults();
     let mut retry = OrdinaryMpduRetryState::new(
+        VifRole::Station,
         queue,
         TxPhyRate::Legacy(LegacyRate::Ofdm6M),
         2,
@@ -259,7 +314,7 @@ fn ordinary_retry_limit_collision_and_abort_restore_the_minimum_cw() {
         retry.current_rate(),
         Ok(TxPhyRate::Legacy(LegacyRate::Ofdm6M))
     );
-    assert_eq!(policy.contention_exponent(queue), 3);
+    assert_eq!(policy.contention_exponent(VifRole::Station, queue), 3);
     assert_eq!(
         retry.observe_completion(&mut policy, oer_ieee80211_lower_mac::TxStatus::AckTimeout),
         OrdinaryRetryDecision::Retry {
@@ -272,9 +327,10 @@ fn ordinary_retry_limit_collision_and_abort_restore_the_minimum_cw() {
     assert_eq!(retry.counters().long, 1);
 
     retry.abort(&mut policy);
-    assert_eq!(policy.contention_exponent(queue), 2);
+    assert_eq!(policy.contention_exponent(VifRole::Station, queue), 2);
     assert_eq!(
         OrdinaryMpduRetryState::new(
+            VifRole::Station,
             queue,
             TxPhyRate::Legacy(LegacyRate::Ofdm6M),
             0,
@@ -331,6 +387,7 @@ fn p2p_ht20_sgi_mcs0_through_mcs6_enter_same_mcs_lgi_retry_records() {
         .unwrap();
         let schedule = P2pRetryRateSchedule::new(schedule).unwrap();
         let mut retry = OrdinaryMpduRetryState::new_with_rate_policy(
+            VifRole::Station,
             LegacyTxQueue::Voice,
             initial,
             OrdinaryRetryRatePolicy::P2pHtSgiFallback(schedule),
@@ -370,6 +427,7 @@ fn p2p_ht_sgi_bridge_rejects_a_different_mcs_retry_record() {
             .unwrap();
     assert_eq!(
         OrdinaryMpduRetryState::new_with_rate_policy(
+            VifRole::Station,
             LegacyTxQueue::Voice,
             initial,
             OrdinaryRetryRatePolicy::P2pHtSgiFallback(wrong),
