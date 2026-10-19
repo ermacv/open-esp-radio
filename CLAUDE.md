@@ -61,7 +61,7 @@ tree is migrating to it, and new packages go to their target root now.
   an OS (protocol cores, the HIL protocol, chip knowledge such as tables and
   pure functions); `chips/` accesses a chip's registers (PAC, HAL, PHY,
   drivers, platform); `host/` needs an OS. A domain may split across roots
-  (`portable/hil/protocol`, `host/hil/runner`).
+  (`portable/hil/protocol`, `host/hil/run`).
 - **Executables:** `firmware/` holds chip images, `tools/<tool>/` one host
   program each (`main.rs` and its own modules).
 - **Dependencies:** `portable` → `portable`; `chips` → `portable`, `chips`;
