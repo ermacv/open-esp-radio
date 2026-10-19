@@ -1,11 +1,12 @@
 //! Direct hardware observation: a named settle bounded in time, and the
-//! finite attempt bound of the observations not yet measured.
+//! the time bounds of measured direct observations.
 
 use oer_esp32s31_hal::settle::{self, Settle, SettleLimit, Unsettled};
 use oer_time::{Clock, Duration};
 
 /// The longest a direct observation of a measured site may wait: the worst
-/// measured wait was 6 reads, 1698 cycles (about 10.6 µs at 160 MHz).
+/// measured direct wait was 87 reads, 2976 cycles (18.6 µs at 160 MHz)
+/// in the W2 calibration/wake measurements on s31-a.
 const OBSERVATION_SETTLE_LIMIT: SettleLimit = match SettleLimit::new(Duration::from_micros(20)) {
     Some(limit) => limit,
     None => panic!("the observation settle limit is within the settle bound"),
@@ -21,17 +22,22 @@ pub(crate) fn settled<T>(
     settle::settle(Settle::new(OBSERVATION_SETTLE_LIMIT, clock), attempt)
 }
 
-/// Read immediately and retry directly, as in the rev0 PBus completion loop.
-/// The bound counts observations; it does not promise a minimum elapsed time.
-/// Returns false on exhaustion, preserving the caller's typed timeout handling.
+/// Complete one measured direct edge within the named 20 µs settle on the
+/// caller's clock. W2 on s31-a measured a worst direct edge of 2,976 cycles
+/// at 160 MHz (18.6 µs); status sampling has no minimum delay.
 #[inline]
-pub(crate) fn bounded<E>(mut observe: impl FnMut() -> Result<bool, E>) -> Result<bool, E> {
-    for _ in 0..crate::HARDWARE_EDGE_LIMIT {
-        if observe()? {
-            return Ok(true);
-        }
+pub(crate) fn bounded<E>(
+    clock: &dyn Clock,
+    mut observe: impl FnMut() -> Result<bool, E>,
+) -> Result<bool, E> {
+    match settled(clock, || match observe() {
+        Ok(true) => Some(Ok(true)),
+        Ok(false) => None,
+        Err(error) => Some(Err(error)),
+    }) {
+        Ok(result) => result,
+        Err(_) => Ok(false),
     }
-    Ok(false)
 }
 
 #[cfg(test)]
@@ -72,43 +78,19 @@ mod tests {
     }
 
     #[test]
-    fn completion_stops_at_first_or_last_allowed_read() {
-        for ready_at in [1, 2, crate::HARDWARE_EDGE_LIMIT] {
-            let mut reads = 0;
-            let result = bounded::<()>(|| {
-                reads += 1;
-                Ok(reads == ready_at)
-            });
-            assert_eq!(result, Ok(true));
-            assert_eq!(reads, ready_at);
-        }
-    }
-
-    #[test]
-    fn stuck_hardware_exhausts_the_finite_read_budget() {
+    fn direct_completion_uses_elapsed_time_and_keeps_the_first_ready_or_error() {
+        let clock = VirtualClock::default();
         let mut reads = 0;
         assert_eq!(
-            bounded::<()>(|| {
+            bounded::<()>(&clock, || {
                 reads += 1;
+                read_step(&clock, 6);
                 Ok(false)
             }),
             Ok(false)
         );
-        assert_eq!(reads, crate::HARDWARE_EDGE_LIMIT);
-    }
-
-    #[test]
-    fn observation_error_stops_without_further_access() {
-        let mut reads = 0;
-        let result = bounded(|| {
-            reads += 1;
-            if reads == 3 {
-                Err("invalid edge")
-            } else {
-                Ok(false)
-            }
-        });
-        assert_eq!(result, Err("invalid edge"));
-        assert_eq!(reads, 3);
+        assert_eq!(reads, 4);
+        assert_eq!(bounded::<()>(&clock, || Ok(true)), Ok(true));
+        assert_eq!(bounded(&clock, || Err("hardware")), Err("hardware"));
     }
 }

@@ -1812,7 +1812,8 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
                 });
                 return Ok(completion);
             }
-            let completion = rfpll::complete_thermal::<D>(registers, grant, action).await?;
+            let completion =
+                rfpll::complete_thermal::<D>(self.timer, registers, grant, action).await?;
             if let Some((operation, event)) = crate::tracking::observation::rfpll_hold_edge(action)
             {
                 observer.tracking_operation(operation, event);
@@ -1999,6 +2000,7 @@ impl<
             }
             PhyCalibrationTrackingAction::ClearPbus => {
                 let completed = calibration::clear_pbus::<D, _>(
+                    self.timer,
                     transition
                         .begin_pbus_clear()
                         .map_err(|_| PhyTargetPortError::UnexpectedBinding)?,
@@ -2012,6 +2014,7 @@ impl<
                 self.observer
                     .tracking_operation(Operation::Dcode, Event::PollStarted);
                 let result = calibration::dcode::<D, _>(
+                    self.timer,
                     transition
                         .begin_dcode()
                         .map_err(|_| PhyTargetPortError::UnexpectedBinding)?,
@@ -2030,6 +2033,7 @@ impl<
                     .borrow_mut()
                     .tracking_operation(Operation::RxGain, Event::PollStarted);
                 let result = calibration::rx_gain::<D, _>(
+                    self.timer,
                     transition
                         .begin_rx_gain_recalibration()
                         .map_err(|_| PhyTargetPortError::UnexpectedBinding)?,
@@ -2049,6 +2053,7 @@ impl<
             }
             PhyCalibrationTrackingAction::RestoreChipChannel { .. } => {
                 calibration::channel::<D, _, _>(
+                    self.timer,
                     transition
                         .begin_channel_restore()
                         .map_err(|_| PhyTargetPortError::UnexpectedBinding)?,

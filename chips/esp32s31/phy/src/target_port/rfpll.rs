@@ -28,21 +28,24 @@ use crate::{
 };
 
 fn i2c(
+    clock: &dyn oer_time::Clock,
     registers: &mut impl SharedPhyAccess,
     action: I2cAction,
 ) -> Result<I2cCompletion, PhyTargetPortError> {
     let binding =
         RfpllFrequencyI2cBinding::new(action).map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
-    complete_rfpll_i2c_direct(binding, registers)
+    complete_rfpll_i2c_direct(clock, binding, registers)
 }
 
 fn complete<D: PhyShortDelay>(
+    clock: &dyn oer_time::Clock,
     registers: &mut impl SharedPhyAccess,
     action: Action,
 ) -> Result<Completion, PhyTargetPortError> {
     match action {
         Action::ReadInitialCap => {
             let I2cCompletion::ByteRead { value: low, .. } = i2c(
+                clock,
                 registers,
                 I2cAction::ReadByte {
                     address: analog_registers::RFPLL_CALIBRATED_CAPACITOR_LOW,
@@ -52,6 +55,7 @@ fn complete<D: PhyShortDelay>(
                 return Err(PhyTargetPortError::UnexpectedBinding);
             };
             let I2cCompletion::MaskedRead { value: high, .. } = i2c(
+                clock,
                 registers,
                 I2cAction::ReadMasked {
                     field: analog_registers::RFPLL_CALIBRATED_CAPACITOR_HIGH,
@@ -66,6 +70,7 @@ fn complete<D: PhyShortDelay>(
         }
         Action::EnableSearch => {
             i2c(
+                clock,
                 registers,
                 I2cAction::WriteMasked {
                     field: analog_registers::RFPLL_CAPACITOR_SEARCH_ENABLE,
@@ -80,6 +85,7 @@ fn complete<D: PhyShortDelay>(
             let programmed = crate::analog::rfpll::RfpllCapacitorCode::from_request(requested)
                 .ok_or(PhyTargetPortError::HardwareInvariant)?;
             i2c(
+                clock,
                 registers,
                 I2cAction::WriteByte {
                     address: analog_registers::RFPLL_CAPACITOR_LOW,
@@ -87,6 +93,7 @@ fn complete<D: PhyShortDelay>(
                 },
             )?;
             i2c(
+                clock,
                 registers,
                 I2cAction::WriteMasked {
                     field: analog_registers::RFPLL_CAPACITOR_HIGH,
@@ -103,6 +110,7 @@ fn complete<D: PhyShortDelay>(
         }
         Action::ReadStatus => {
             let I2cCompletion::MaskedRead { value, .. } = i2c(
+                clock,
                 registers,
                 I2cAction::ReadMasked {
                     field: analog_registers::RFPLL_CAPACITOR_SEARCH_STATUS,
@@ -129,6 +137,7 @@ fn complete<D: PhyShortDelay>(
 /// this entry does not imply that normal RF operation may resume.
 #[cfg(any(test, oer_probe))]
 pub async fn search<D: PhyShortDelay>(
+    clock: &dyn oer_time::Clock,
     registers: &mut impl SharedPhyAccess,
 ) -> Result<rfpll::search::Outcome, PhyTargetPortError> {
     let mut search = rfpll::search::Search::new();
@@ -138,7 +147,7 @@ pub async fn search<D: PhyShortDelay>(
             return Ok(outcome);
         }
         search
-            .advance(complete::<D>(registers, action)?)
+            .advance(complete::<D>(clock, registers, action)?)
             .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
     }
 }
@@ -147,6 +156,7 @@ pub async fn search<D: PhyShortDelay>(
 /// nonzero, and restore the current channel index before returning success.
 #[cfg(any(test, oer_probe))]
 pub async fn correct<D: PhyShortDelay>(
+    clock: &dyn oer_time::Clock,
     registers: &mut impl SharedPhyAccess,
     current_channel: u16,
 ) -> Result<rfpll::Outcome, PhyTargetPortError> {
@@ -155,7 +165,7 @@ pub async fn correct<D: PhyShortDelay>(
         if let rfpll::Action::Complete(outcome) = correction.action() {
             return Ok(outcome);
         }
-        let completion = complete_correction::<D>(registers, correction.action())?;
+        let completion = complete_correction::<D>(clock, registers, correction.action())?;
         correction
             .advance(completion)
             .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
@@ -177,10 +187,12 @@ pub async fn correct<D: PhyShortDelay>(
 /// operations without duplicating the physical register's identity.
 #[cfg(any(test, oer_probe))]
 pub async fn maintain<D: PhyShortDelay>(
+    clock: &dyn oer_time::Clock,
     registers: &mut impl SharedPhyAccess,
     current_channel: u16,
 ) -> Result<rfpll::Outcome, PhyTargetPortError> {
     let outcome = track::<D>(
+        clock,
         registers,
         rfpll::thermal::Request {
             current_temperature: 0,
@@ -196,13 +208,14 @@ pub async fn maintain<D: PhyShortDelay>(
 }
 
 fn complete_correction<D: PhyShortDelay>(
+    clock: &dyn oer_time::Clock,
     registers: &mut impl SharedPhyAccess,
     action: rfpll::Action,
 ) -> Result<rfpll::Completion, PhyTargetPortError> {
     match action {
-        rfpll::Action::Search(action) => {
-            Ok(rfpll::Completion::Search(complete::<D>(registers, action)?))
-        }
+        rfpll::Action::Search(action) => Ok(rfpll::Completion::Search(complete::<D>(
+            clock, registers, action,
+        )?)),
         rfpll::Action::Memory(action) => {
             let binding = PhyFrequencyCapMemoryExternalBinding::lower(action)
                 .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
@@ -213,6 +226,7 @@ fn complete_correction<D: PhyShortDelay>(
 }
 
 pub(super) async fn complete_thermal<D: PhyShortDelay>(
+    clock: &dyn oer_time::Clock,
     registers: &mut impl SharedPhyAccess,
     grant: &mut impl super::PhyGrantProtectPort,
     action: rfpll::thermal::Action,
@@ -239,7 +253,7 @@ pub(super) async fn complete_thermal<D: PhyShortDelay>(
             Completion::BoundaryObserved
         }
         Action::Correct(action) => {
-            Completion::Correction(complete_correction::<D>(registers, action)?)
+            Completion::Correction(complete_correction::<D>(clock, registers, action)?)
         }
         Action::RestoreHardwareControl => {
             frequency::set_baseband_mode(registers, 0);
@@ -254,6 +268,7 @@ pub(super) async fn complete_thermal<D: PhyShortDelay>(
 /// skip). Error or cancellation requires the caller to contain the failed epoch.
 #[cfg(any(test, oer_probe))]
 pub async fn track<D: PhyShortDelay>(
+    clock: &dyn oer_time::Clock,
     registers: &mut impl SharedPhyAccess,
     request: rfpll::thermal::Request,
 ) -> Result<rfpll::thermal::Outcome, PhyTargetPortError> {
@@ -264,8 +279,13 @@ pub async fn track<D: PhyShortDelay>(
         }
         child
             .advance(
-                complete_thermal::<D>(registers, &mut super::WeakPhyGrantProtect, child.action())
-                    .await?,
+                complete_thermal::<D>(
+                    clock,
+                    registers,
+                    &mut super::WeakPhyGrantProtect,
+                    child.action(),
+                )
+                .await?,
             )
             .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
     }

@@ -17,16 +17,29 @@ use oer_time::{Clock, Instant, Timer};
 /// requested interval to the harness `deliver` edge at once, and time then
 /// stands at the deadline. Hardware time itself is outside this software
 /// comparison.
-struct TraceTimer {
+pub(crate) struct TraceTimer {
     now: Cell<Instant>,
     deliver: fn(u32),
+    observation_tick: bool,
 }
 
 impl TraceTimer {
+    /// Compiled comparisons have no advancing hardware timer. Direct readiness
+    /// samples advance this virtual observation clock by 1 µs so a stuck edge
+    /// exhausts its elapsed deadline while ordinary timer-delivered traces keep
+    /// their requested-time clock.
+    pub(crate) fn observations() -> Self {
+        Self {
+            observation_tick: true,
+            ..Self::production()
+        }
+    }
+
     /// Waits delivered through the plain harness delay edge.
     fn production() -> Self {
         Self {
             now: Cell::new(Instant::EPOCH),
+            observation_tick: false,
             deliver: |micros| super::ets_delay_us(micros),
         }
     }
@@ -36,6 +49,7 @@ impl TraceTimer {
     fn register_preserving() -> Self {
         Self {
             now: Cell::new(Instant::EPOCH),
+            observation_tick: false,
             deliver: |micros| super::preserving_delay(micros),
         }
     }
@@ -43,7 +57,14 @@ impl TraceTimer {
 
 impl Clock for TraceTimer {
     fn now(&self) -> Instant {
-        self.now.get()
+        let now = self.now.get();
+        if self.observation_tick {
+            self.now.set(
+                now.checked_add(oer_time::Duration::from_micros(1))
+                    .expect("bounded trace time"),
+            );
+        }
+        now
     }
 }
 
@@ -82,7 +103,7 @@ oer_probe_macros::probe! {
         let mut phy = lease.phy_hal();
         embassy_futures::block_on(oer_esp32s31_phy::target_port::rfpll::search::<
             RfpllTraceDelay,
-        >(&mut phy))
+        >(&TraceTimer::observations(), &mut phy))
         .map_or(i32::MIN, |outcome| i32::from(outcome.delta()))
     }
 }
@@ -125,7 +146,7 @@ oer_probe_macros::probe! {
         let mut phy = lease.phy_hal();
         embassy_futures::block_on(oer_esp32s31_phy::target_port::rfpll::maintain::<
             RfpllTraceDelay,
-        >(&mut phy, channel))
+        >(&TraceTimer::observations(), &mut phy, channel))
         .map_or(i32::MIN, |outcome| i32::from(outcome.search.delta()))
     }
 }
@@ -157,7 +178,7 @@ oer_probe_macros::probe! {
         };
         embassy_futures::block_on(oer_esp32s31_phy::target_port::rfpll::track::<
             RfpllTraceDelay,
-        >(&mut crate::shared_phy(registers), request))
+        >(&TraceTimer::observations(), &mut crate::shared_phy(registers), request))
         .map_or(i32::MIN, |outcome| {
             let performed = outcome.correction.is_some();
             *output = [
@@ -388,7 +409,7 @@ oer_probe_macros::probe! {
             &mut child,
             &mut phy,
             &core::cell::RefCell::new(&mut observer),
-            &TraceTimer::production(),
+            &TraceTimer::observations(),
         ) {
             Ok(()) => {}
             Err(oer_esp32s31_phy::PhyTargetPortError::HardwareEdgeTimedOut) => return 2,
@@ -447,7 +468,7 @@ oer_probe_macros::probe! {
         let result = oer_esp32s31_phy::target_port::calibration::clear_pbus::<
             RfpllTraceDelay,
             _,
-        >(child, registers, &mut observer);
+        >(&TraceTimer::observations(), child, registers, &mut observer);
         // Distinguish an actual bounded hardware timeout from a binding or
         // executor failure, so the fault scenario cannot accept either by mistake.
         let completion = match result {
@@ -497,14 +518,14 @@ oer_probe_macros::probe! {
             let completion = calibration::clear_pbus::<
                 RfpllTraceDelay,
                 _,
-            >(child, registers, &mut observer)
+            >(&TraceTimer::observations(), child, registers, &mut observer)
             .map_err(|_| 2u32)?;
             parent.advance(completion).map_err(|_| 3u32)?;
             let child = parent.begin_dcode().map_err(|_| 4u32)?;
             let completion = calibration::dcode::<
                 RfpllTraceDelay,
                 _,
-            >(child, &mut (), registers, |_| {})
+            >(&TraceTimer::observations(), child, &mut (), registers, |_| {})
             .map_err(|error| match error {
                 oer_esp32s31_phy::PhyTargetPortError::HardwareEdgeTimedOut => 5u32,
                 _ => 9u32,
@@ -577,7 +598,7 @@ oer_probe_macros::probe! {
         match oer_esp32s31_phy::target_port::calibration::rx_gain_init::<
             oer_esp32s31_phy::RomShortDelay,
             _,
-        >(&mut child, &mut (), &mut phy, |_, _| {}, |_| {})
+        >(&TraceTimer::observations(), &mut child, &mut (), &mut phy, |_, _| {}, |_| {})
         {
             Ok(()) => {}
             Err(oer_esp32s31_phy::PhyTargetPortError::HardwareEdgeTimedOut) => return 2,
