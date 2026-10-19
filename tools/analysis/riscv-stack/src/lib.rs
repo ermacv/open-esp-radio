@@ -41,7 +41,8 @@ mod trap;
 mod wakers;
 
 use oer_analysis_riscv_model::{
-    CodeRange, Error, ErrorCode, FunctionRecord, Ledger, Result, RunControl, WorkingMemory,
+    CallBehavior, CodeRange, Error, ErrorCode, FunctionRecord, Ledger, Result, RunControl,
+    WorkingMemory,
 };
 use oer_analysis_riscv_program::facts::ImageFacts;
 use std::collections::{BTreeMap, BTreeSet};
@@ -233,10 +234,14 @@ pub struct Analysis {
 /// admitted in the same working memory and released with its function. It
 /// charges `control`; running out of either fails the analysis with
 /// [`ErrorCode::ResourceLimited`].
+/// `call_behavior` supplies explicit proofs, such as the [`Dwarf`] facts
+/// from [`read_debug`]; pass [`oer_analysis_riscv_model::UnknownCallBehavior`]
+/// when no such facts are available.
 pub fn analyze(
     image: &ImageFacts<'_>,
     companions: &[&ImageFacts<'_>],
     summaries: &[Summary],
+    call_behavior: &dyn CallBehavior,
     keep: &mut Ledger<'_>,
     control: &mut dyn RunControl,
 ) -> Result<Analysis> {
@@ -252,7 +257,7 @@ pub fn analyze(
     for elf in std::iter::once(image).chain(companions.iter().copied()) {
         let Analysis {
             functions, code, ..
-        } = analyze_one(elf, memory, keep, control)?;
+        } = analyze_one(elf, call_behavior, memory, keep, control)?;
         for &(start, end) in &code {
             if analysis
                 .code
@@ -290,13 +295,14 @@ pub fn analyze(
 /// The facts and executable ranges of one ELF.
 fn analyze_one(
     elf: &ImageFacts<'_>,
+    call_behavior: &dyn CallBehavior,
     memory: &WorkingMemory,
     keep: &mut Ledger<'_>,
     control: &mut dyn RunControl,
 ) -> Result<Analysis> {
     let mut sized = Ledger::new(memory, control)?;
     let sizes = image::stack_sizes(elf, &mut sized, control)?;
-    let functions = image::observing(elf, memory, control, |observe, control| {
+    let functions = image::observing(elf, call_behavior, memory, control, |observe, control| {
         let mut facts = BTreeMap::new();
         for function in elf.functions() {
             // What one function's analysis builds, released once its

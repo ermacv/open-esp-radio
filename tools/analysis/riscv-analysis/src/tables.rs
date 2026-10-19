@@ -63,7 +63,7 @@ pub trait JumpTableSource {
 }
 
 /// Collects one pass's records into admitted memory.
-struct Buffer<'a, 'm>(&'a mut RecordBuffer<'m>);
+pub(crate) struct Buffer<'a, 'm>(pub(crate) &'a mut RecordBuffer<'m>);
 
 impl FunctionSink for Buffer<'_, '_> {
     fn record(&mut self, record: &FunctionRecord, control: &mut dyn RunControl) -> Result<()> {

@@ -30,3 +30,20 @@ impl CallReturns for NoReturns {
         None
     }
 }
+
+/// Proof of a callee's control-flow behavior, independent of the values
+/// it might return. Unknown results ([`NoReturns`]) do not prove noreturn.
+pub trait CallBehavior {
+    /// True only when `callee` is proven never to return. Missing or
+    /// ambiguous facts must answer false and retain the continuation.
+    fn noreturn(&self, callee: Callee<'_>) -> bool;
+}
+
+/// No return-behavior proofs: every call may continue.
+pub struct UnknownCallBehavior;
+
+impl CallBehavior for UnknownCallBehavior {
+    fn noreturn(&self, _: Callee<'_>) -> bool {
+        false
+    }
+}

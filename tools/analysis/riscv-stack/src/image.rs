@@ -312,6 +312,7 @@ pub(crate) type Observe<'a> = dyn FnMut(
 /// `ledger`.
 pub(crate) fn observing<R>(
     image: &ImageFacts<'_>,
+    call_behavior: &dyn CallBehavior,
     memory: &WorkingMemory,
     control: &mut dyn RunControl,
     body: impl FnOnce(&mut Observe<'_>, &mut dyn RunControl) -> Result<R>,
@@ -351,6 +352,7 @@ pub(crate) fn observing<R>(
                 data_ranges: &[],
                 jumps,
                 returns: &NoReturns,
+                call_behavior,
             },
             tables,
             &RiscvDecoder,

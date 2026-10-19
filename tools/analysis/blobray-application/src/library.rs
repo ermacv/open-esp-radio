@@ -456,6 +456,7 @@ fn research_function<'m>(
                 data_ranges: view.data_ranges,
                 jumps: &[],
                 returns,
+                call_behavior: &UnknownCallBehavior,
             },
             &oer_analysis_riscv_analysis::RecognizedTables {
                 entries: tables,

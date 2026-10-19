@@ -50,7 +50,14 @@ fn a_pointer_parameter_names_its_function_field_at_the_load() {
     let (_, types) = debug(&elf);
     with_facts(&elf, |image| {
         let mut keep = ledger();
-        let mut analysis = crate::analyze(image, &[], &[], &mut keep, &mut || Ok(()))?;
+        let mut analysis = crate::analyze(
+            image,
+            &[],
+            &[],
+            &UnknownCallBehavior,
+            &mut keep,
+            &mut || Ok(()),
+        )?;
         let locations = Locations::read(image, &mut keep, &mut || Ok(()))?;
         let start = named(&analysis, "_start");
         let transfer = analysis.functions[&start]
@@ -102,7 +109,14 @@ fn one_erased_address_use_keeps_an_incompatible_declaration_a_candidate() {
     let (_, types) = debug(&elf);
     with_facts(&elf, |image| {
         let mut keep = ledger();
-        let analysis = crate::analyze(image, &[], &[], &mut keep, &mut || Ok(()))?;
+        let analysis = crate::analyze(
+            image,
+            &[],
+            &[],
+            &UnknownCallBehavior,
+            &mut keep,
+            &mut || Ok(()),
+        )?;
         let resolutions = typed_function_pointer_resolutions(
             image,
             &analysis,
@@ -139,7 +153,7 @@ fn a_function_stored_after_a_signature_cast_has_its_storage_type() {
     let (_, types) = debug(&elf);
     with_facts(&elf, |image| {
         let mut keep = ledger();
-        let analysis = crate::analyze(image, &[], &[], &mut keep, &mut || Ok(()))?;
+        let analysis = crate::analyze(image, &[], &[], &UnknownCallBehavior, &mut keep, &mut || Ok(()))?;
         let resolutions = typed_function_pointer_resolutions(image, &analysis, &types, &mut keep, &mut || Ok(()))?;
         let start = named(&analysis, "_start");
         let transfer = analysis.functions[&start].transfers.iter().find(|transfer| transfer.target.is_none()).unwrap();
