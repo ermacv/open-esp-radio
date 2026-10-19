@@ -21,7 +21,9 @@ bounds) live in the code that applies them.
   vendor algorithm may sit behind a seam as one policy but never shapes an
   interface.
 - **Licensing.** MIT OR Apache-2.0; ESP-IDF ports Apache-2.0 only, with their
-  modification notices.
+  modification notices. Code written from the vendor libraries and ROMs
+  (libphy, libpp, the ROM: PHY, the chips' PAC and HAL, station, Wi-Fi policy,
+  coexistence) records facts, not a port, and stays MIT OR Apache-2.0.
 - **Sources** ([source policy](source-policy.md)). From a source without a
   license only facts. The exception is the Bluetooth LE hardware engine (the
   S31 driver, the controller memory and its HAL engine, the PAC's Bluetooth
