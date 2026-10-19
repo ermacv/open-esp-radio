@@ -43690,8 +43690,8 @@ access = "read-write"
 [[registers.fields]]
 svd-name = "GRANT_DELAY"
 method = "grant_delay"
-bit-offset = 1
-bit-width = 8
+bit-offset = 5
+bit-width = 4
 access = "read-write"
 
 [[registers.fields]]

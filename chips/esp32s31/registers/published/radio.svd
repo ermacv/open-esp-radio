@@ -14226,9 +14226,9 @@
             </field>
             <field>
               <name>GRANT_DELAY</name>
-              <description>Project-assigned name. hal_set_extern_coex_delay replaces bits 8:1 with its argument; ic_set_extern_coex_params passes the grant delay in microseconds shifted left by four and masked to 0xf0.</description>
-              <bitOffset>1</bitOffset>
-              <bitWidth>8</bitWidth>
+              <description>Project-assigned name. Grant delay in microseconds. hal_set_extern_coex_delay replaces bits 8:1 with its argument and ic_set_extern_coex_params passes the delay shifted left by four and masked to 0xf0, so the delay is the upper nibble of that byte and bits 4:1 are written zero.</description>
+              <bitOffset>5</bitOffset>
+              <bitWidth>4</bitWidth>
             </field>
             <field>
               <name>ENABLE</name>

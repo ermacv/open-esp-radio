@@ -727,17 +727,17 @@ impl ExternalCoexWorkMode {
     }
 }
 
-/// The eight-bit grant delay image hal_set_extern_coex_delay publishes.
+/// The grant delay in microseconds: the upper nibble of the byte hal_set_extern_coex_delay publishes.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct ExternalCoexGrantDelay(u32);
 
 impl ExternalCoexGrantDelay {
     pub const MIN: u32 = 0x00000000;
-    pub const MAX: u32 = 0x000000ff;
+    pub const MAX: u32 = 0x0000000f;
 
     /// Construct a value only when it lies in the reviewed inclusive range.
     pub const fn new(value: u32) -> Option<Self> {
-        if value <= 0x000000ff {
+        if value <= 0x0000000f {
             Some(Self(value))
         } else {
             None

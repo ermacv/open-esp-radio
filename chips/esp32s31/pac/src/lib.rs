@@ -119,6 +119,7 @@ pub use bluetooth::{
 pub use cfr::CfrValue;
 
 pub use coex::{COEX_TIMER_COUNT, CoexTimerBankRegisters, CoexTimerRegister};
+pub use generated::ExternalCoexGrantDelay;
 pub use modem::coex_external::{ExternalCoexPriority, ExternalCoexRole, ExternalCoexWires};
 
 pub use frequency::PhyFrequencyI2cNumberAddresses;

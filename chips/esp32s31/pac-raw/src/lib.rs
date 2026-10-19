@@ -31201,10 +31201,10 @@ pub mod coex_external {
         pub type ValidateHighR = crate::BitReader;
         #[doc = "Field `VALIDATE_HIGH` writer - Project-assigned name. hal_set_extern_coex_validity: set when the external grant is valid high."]
         pub type ValidateHighW<'a, REG> = crate::BitWriter<'a, REG>;
-        #[doc = "Field `GRANT_DELAY` reader - Project-assigned name. hal_set_extern_coex_delay replaces bits 8:1 with its argument; ic_set_extern_coex_params passes the grant delay in microseconds shifted left by four and masked to 0xf0."]
+        #[doc = "Field `GRANT_DELAY` reader - Project-assigned name. Grant delay in microseconds. hal_set_extern_coex_delay replaces bits 8:1 with its argument and ic_set_extern_coex_params passes the delay shifted left by four and masked to 0xf0, so the delay is the upper nibble of that byte and bits 4:1 are written zero."]
         pub type GrantDelayR = crate::FieldReader;
-        #[doc = "Field `GRANT_DELAY` writer - Project-assigned name. hal_set_extern_coex_delay replaces bits 8:1 with its argument; ic_set_extern_coex_params passes the grant delay in microseconds shifted left by four and masked to 0xf0."]
-        pub type GrantDelayW<'a, REG> = crate::FieldWriter<'a, REG, 8>;
+        #[doc = "Field `GRANT_DELAY` writer - Project-assigned name. Grant delay in microseconds. hal_set_extern_coex_delay replaces bits 8:1 with its argument and ic_set_extern_coex_params passes the delay shifted left by four and masked to 0xf0, so the delay is the upper nibble of that byte and bits 4:1 are written zero."]
+        pub type GrantDelayW<'a, REG> = crate::FieldWriter<'a, REG, 4>;
         #[doc = "Field `ENABLE` reader - Project-assigned name. Set by hal_enable_extern_coex and cleared by hal_disable_extern_coex, after the other enable fields."]
         pub type EnableR = crate::BitReader;
         #[doc = "Field `ENABLE` writer - Project-assigned name. Set by hal_enable_extern_coex and cleared by hal_disable_extern_coex, after the other enable fields."]
@@ -31223,10 +31223,10 @@ pub mod coex_external {
             pub fn validate_high(&self) -> ValidateHighR {
                 ValidateHighR::new((self.bits & 1) != 0)
             }
-            #[doc = "Bits 1:8 - Project-assigned name. hal_set_extern_coex_delay replaces bits 8:1 with its argument; ic_set_extern_coex_params passes the grant delay in microseconds shifted left by four and masked to 0xf0."]
+            #[doc = "Bits 5:8 - Project-assigned name. Grant delay in microseconds. hal_set_extern_coex_delay replaces bits 8:1 with its argument and ic_set_extern_coex_params passes the delay shifted left by four and masked to 0xf0, so the delay is the upper nibble of that byte and bits 4:1 are written zero."]
             #[inline(always)]
             pub fn grant_delay(&self) -> GrantDelayR {
-                GrantDelayR::new(((self.bits >> 1) & 0xff) as u8)
+                GrantDelayR::new(((self.bits >> 5) & 0x0f) as u8)
             }
             #[doc = "Bit 9 - Project-assigned name. Set by hal_enable_extern_coex and cleared by hal_disable_extern_coex, after the other enable fields."]
             #[inline(always)]
@@ -31250,10 +31250,10 @@ pub mod coex_external {
             pub fn validate_high(&mut self) -> ValidateHighW<'_, ControlSpec> {
                 ValidateHighW::new(self, 0)
             }
-            #[doc = "Bits 1:8 - Project-assigned name. hal_set_extern_coex_delay replaces bits 8:1 with its argument; ic_set_extern_coex_params passes the grant delay in microseconds shifted left by four and masked to 0xf0."]
+            #[doc = "Bits 5:8 - Project-assigned name. Grant delay in microseconds. hal_set_extern_coex_delay replaces bits 8:1 with its argument and ic_set_extern_coex_params passes the delay shifted left by four and masked to 0xf0, so the delay is the upper nibble of that byte and bits 4:1 are written zero."]
             #[inline(always)]
             pub fn grant_delay(&mut self) -> GrantDelayW<'_, ControlSpec> {
-                GrantDelayW::new(self, 1)
+                GrantDelayW::new(self, 5)
             }
             #[doc = "Bit 9 - Project-assigned name. Set by hal_enable_extern_coex and cleared by hal_disable_extern_coex, after the other enable fields."]
             #[inline(always)]
@@ -66703,7 +66703,7 @@ pub mod field_replace_modify {
         registers.control().modify(|_, writer| {
             // SAFETY: generator validation proves every logical input projection
             // fits its named SVD field; no whole-register image crosses this API.
-            unsafe { writer.grant_delay().bits((input & 0x000000ff) as u8) }
+            unsafe { writer.grant_delay().bits((input & 0x0000000f) as u8) }
         });
     }
 

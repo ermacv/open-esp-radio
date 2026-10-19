@@ -350,9 +350,9 @@ sources = ["BLOB_LIBCOEX_EXTERNAL"]
 
 [[bounded-domains]]
 name = "ExternalCoexGrantDelay"
-description = "The eight-bit grant delay image hal_set_extern_coex_delay publishes."
+description = "The grant delay in microseconds: the upper nibble of the byte hal_set_extern_coex_delay publishes."
 min = 0
-max = 255
+max = 15
 sources = ["BLOB_LIBCOEX_EXTERNAL"]
 
 [[bounded-domains]]

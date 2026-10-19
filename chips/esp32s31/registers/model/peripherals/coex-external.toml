@@ -85,9 +85,9 @@ bitWidth = 1
 
 [[peripherals.registers.register.fields]]
 name = "GRANT_DELAY"
-description = "hal_set_extern_coex_delay replaces bits 8:1 with its argument; ic_set_extern_coex_params passes the grant delay in microseconds shifted left by four and masked to 0xf0."
-bitOffset = 1
-bitWidth = 8
+description = "Grant delay in microseconds. hal_set_extern_coex_delay replaces bits 8:1 with its argument and ic_set_extern_coex_params passes the delay shifted left by four and masked to 0xf0, so the delay is the upper nibble of that byte and bits 4:1 are written zero."
+bitOffset = 5
+bitWidth = 4
 
 [[peripherals.registers.register.fields]]
 name = "ENABLE"

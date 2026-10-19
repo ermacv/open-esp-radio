@@ -90,16 +90,16 @@ impl SharedRadioRegisters {
         }
     }
 
-    /// `hal_set_extern_coex_delay((delay_us << 4) & 0xf0)` followed by
-    /// `hal_set_extern_coex_validity(validate_high)`, as
+    /// `hal_set_extern_coex_delay` with the delay as the upper nibble of its
+    /// byte, followed by `hal_set_extern_coex_validity(validate_high)`, as
     /// `ic_set_extern_coex_params` applies them.
-    pub fn configure_external_coex_grant(&mut self, delay_us: u8, validate_high: bool) {
+    pub fn configure_external_coex_grant(
+        &mut self,
+        delay: ExternalCoexGrantDelay,
+        validate_high: bool,
+    ) {
         let block = &self.coexistence.coex_external;
-        generated::set_coex_external_grant_delay(
-            block,
-            ExternalCoexGrantDelay::new(u32::from(delay_us << 4) & 0xf0)
-                .expect("the delay image fits eight bits"),
-        );
+        generated::set_coex_external_grant_delay(block, delay);
         generated::set_coex_external_validate_high(block, flag(validate_high));
     }
 

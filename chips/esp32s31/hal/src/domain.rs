@@ -858,12 +858,15 @@ impl<T> RadioDomain<T> {
         if self.state().external_coex.is_some() {
             return Err(crate::coex::ExternalCoexError::AlreadyActive);
         }
+        let grant_delay = config
+            .grant_delay()
+            .ok_or(crate::coex::ExternalCoexError::GrantDelayOutOfRange)?;
         self.enable_slot(EXTERNAL_COEX_SLOT, ModemClockModule::Coexistence, platform)
             .map_err(crate::coex::ExternalCoexError::Clock)?;
         let state = self.state_mut();
         let registers = &mut state.registers;
         registers.configure_external_coex_mode(config.role, config.wires);
-        registers.configure_external_coex_grant(config.grant_delay_us, config.validate_high);
+        registers.configure_external_coex_grant(grant_delay, config.validate_high);
         registers.publish_external_coex_priorities(config.role, config.wires, config.priorities());
         registers.set_external_coex_enabled(true);
         state.external_coex = Some(config);
