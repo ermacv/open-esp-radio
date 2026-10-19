@@ -10,8 +10,9 @@
 //! identified by a bare number.
 //!
 //! The image places one [`Retained`] in memory that survives the resets it
-//! cares about and builds one [`Trace`] over it; with the `record` feature it
-//! names, with [`clock!`], the function that reads its monotonic time in
+//! cares about and builds one [`Trace`] over it; under `cfg(oer_trace)`
+//! (the trace class, which `cargo fw` sets for an image that declares it)
+//! it names, with [`clock!`], the function that reads its monotonic time in
 //! microseconds:
 //!
 //! ```ignore
@@ -33,7 +34,7 @@
 //! retained entries comes back from their 16-bit sequence tags, and an entry
 //! a reset interrupted fails its commit word and is dropped.
 //!
-//! With the `record` feature disabled, [`emit`], [`freeze`] and [`capture`]
+//! Without `cfg(oer_trace)`, [`emit`], [`freeze`] and [`capture`]
 //! compile to nothing. With it, a disabled channel costs one relaxed load
 //! and a branch at the call site; everything on the emit path is inlined
 //! into the caller, so it runs from wherever the caller runs.
@@ -118,15 +119,15 @@ pub fn enabled(channel: Channel) -> bool {
 /// Record `event` if its channel is enabled.
 #[inline(always)]
 pub fn emit<E: Event>(event: &E) {
-    #[cfg(feature = "record")]
+    #[cfg(oer_trace)]
     if enabled(E::CHANNEL) {
         record(E::KIND, event.encode());
     }
-    #[cfg(not(feature = "record"))]
+    #[cfg(not(oer_trace))]
     let _ = event;
 }
 
-#[cfg(feature = "record")]
+#[cfg(oer_trace)]
 #[inline(always)]
 fn record(kind: Kind, words: [u32; 2]) {
     if let Some(trace) = installed()
@@ -141,13 +142,13 @@ fn record(kind: Kind, words: [u32; 2]) {
 /// counts. Safe to call from any interrupt: it takes no lock.
 #[inline(always)]
 pub fn freeze(trigger: Kind, post: u32) {
-    #[cfg(feature = "record")]
+    #[cfg(oer_trace)]
     if let Some(trace) = installed()
         && trace.freeze(trigger, post)
     {
         disable();
     }
-    #[cfg(not(feature = "record"))]
+    #[cfg(not(oer_trace))]
     let _ = (trigger, post);
 }
 
@@ -156,11 +157,11 @@ pub fn freeze(trigger: Kind, post: u32) {
 /// records that the rest were truncated.
 #[inline(always)]
 pub fn capture(point: Kind, fill: impl FnOnce(&mut SnapshotWriter<'_>)) {
-    #[cfg(feature = "record")]
+    #[cfg(oer_trace)]
     if let Some(trace) = installed() {
         trace.capture(point, trace.now_us(), fill);
     }
-    #[cfg(not(feature = "record"))]
+    #[cfg(not(oer_trace))]
     let _ = (point, fill);
 }
 

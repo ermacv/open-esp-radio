@@ -176,7 +176,7 @@ pub struct Trace {
     snapshot_sequence: AtomicU32,
 }
 
-#[cfg(feature = "record")]
+#[cfg(oer_trace)]
 oer_memory::link_fn! {
     declare
     /// The image's monotonic time in microseconds, which stamps records:
@@ -206,7 +206,7 @@ impl Trace {
     /// The record timestamp now: the low 32 bits of the clock's
     /// microseconds, which wrap every 71 minutes; the host unwraps them along
     /// the sequence order.
-    #[cfg(feature = "record")]
+    #[cfg(oer_trace)]
     #[inline(always)]
     pub(crate) fn now_us(&self) -> u32 {
         __oer_trace_now_micros() as u32
@@ -288,7 +288,7 @@ impl Trace {
     }
 
     #[cfg_attr(
-        not(any(feature = "record", test)),
+        not(any(oer_trace, test)),
         allow(dead_code, reason = "only recording images write")
     )]
     /// Returns whether this entry was the last one of a freeze window.
@@ -318,7 +318,7 @@ impl Trace {
     }
 
     #[cfg_attr(
-        not(any(feature = "record", test)),
+        not(any(oer_trace, test)),
         allow(dead_code, reason = "only recording images write")
     )]
     /// Returns whether recording must stop now.
@@ -343,7 +343,7 @@ impl Trace {
     }
 
     #[cfg_attr(
-        not(any(feature = "record", test)),
+        not(any(oer_trace, test)),
         allow(dead_code, reason = "only recording images write")
     )]
     #[inline(always)]

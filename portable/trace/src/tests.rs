@@ -14,11 +14,11 @@ fn trace<const E: usize, const S: usize, const W: usize>() -> (&'static Retained
 }
 
 /// The test binary's clock; records these tests write carry explicit stamps.
-#[cfg(feature = "record")]
+#[cfg(oer_trace)]
 fn no_clock() -> u64 {
     0
 }
-#[cfg(feature = "record")]
+#[cfg(oer_trace)]
 crate::clock!(no_clock);
 
 fn record(trace: &Trace, step: u32) -> bool {
@@ -159,7 +159,7 @@ fn a_snapshot_keeps_what_fits_and_detects_being_overwritten() {
     assert_eq!(trace.snapshot(0).unwrap().point(), Some(LOSS));
 }
 
-#[cfg(feature = "record")]
+#[cfg(oer_trace)]
 mod recording {
     use crate::{Channel, Domain, Event, Kind, Retained, Trace};
 
