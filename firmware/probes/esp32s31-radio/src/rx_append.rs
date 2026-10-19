@@ -13,9 +13,9 @@
 use oer_esp32s31_hal::ieee80211::dma::{
     descriptor::rx_completed_word,
     rx_dma::model::RxWalkerModel,
-    rx_ring::{Settle, SettleLimit},
     rx_storage::{PlacedRxDma, RxDmaStorage},
 };
+use oer_esp32s31_hal::settle::{Settle, SettleLimit};
 use oer_time::{Clock, Duration, Instant};
 
 /// Descriptors of the compared ring.
