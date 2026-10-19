@@ -9,6 +9,7 @@
 //! the generic exchange, a repetition's measurements observe a capture
 //! through [`CaptureObserver`], and network traffic sessions live in
 //! `oer-hil-net-traffic`.
+#![forbid(unsafe_code)]
 
 use std::{
     fs,

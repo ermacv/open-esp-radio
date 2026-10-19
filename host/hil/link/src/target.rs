@@ -9,15 +9,15 @@ use std::path::Path;
 /// descriptor over for its nonblocking reader.
 pub trait SerialLine: std::io::Read + std::io::Write + std::os::fd::AsRawFd + Send {
     /// Hand the open descriptor over.
-    fn into_raw_descriptor(self: Box<Self>) -> std::os::fd::RawFd;
+    fn into_owned_descriptor(self: Box<Self>) -> std::os::fd::OwnedFd;
 }
 
 impl<T> SerialLine for T
 where
-    T: std::io::Read + std::io::Write + std::os::fd::AsRawFd + std::os::fd::IntoRawFd + Send,
+    T: std::io::Read + std::io::Write + std::os::fd::AsRawFd + Into<std::os::fd::OwnedFd> + Send,
 {
-    fn into_raw_descriptor(self: Box<Self>) -> std::os::fd::RawFd {
-        (*self).into_raw_fd()
+    fn into_owned_descriptor(self: Box<Self>) -> std::os::fd::OwnedFd {
+        (*self).into()
     }
 }
 

@@ -3688,6 +3688,7 @@ dependencies = [
  "oer-lab-router",
  "oer-os-durable",
  "oer-os-process",
+ "oer-os-serial",
  "oer-registers-bindings",
  "serde",
  "serde_json",
@@ -3764,6 +3765,13 @@ dependencies = [
  "serde_json",
  "signal-hook",
  "tempfile",
+]
+
+[[package]]
+name = "oer-os-serial"
+version = "0.1.0"
+dependencies = [
+ "serialport",
 ]
 
 [[package]]

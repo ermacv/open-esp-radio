@@ -18,6 +18,7 @@ oer-os-process = { path = "../../os/process" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0" }
 serialport = { version = "4.8.1", default-features = false }
+oer-os-serial = { path = "../../os/serial" }
 tempfile = { version = "3" }
 oer-lab-router = { path = "../router" }
 oer-registers-bindings = { path = "../../registers/bindings" }

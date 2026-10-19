@@ -3,10 +3,7 @@
 use super::protocol::decode_counters_are_clean;
 use super::*;
 use crate::transport::events::EventPoll;
-use std::{
-    collections::VecDeque,
-    os::fd::{AsRawFd, FromRawFd as _, OwnedFd},
-};
+use std::{collections::VecDeque, os::fd::AsRawFd};
 
 impl SerialCapture {
     /// Retain an admitted operation until this capture's serial worker closes.
@@ -330,13 +327,7 @@ impl SerialCapture {
 }
 
 fn nonblocking_serial(serial: Box<dyn SerialLine>) -> std::result::Result<fs::File, LinkError> {
-    #[allow(
-        unsafe_code,
-        reason = "a serial port hands its descriptor over only as a raw fd"
-    )]
-    // SAFETY: `into_raw_descriptor` releases sole ownership of the open descriptor,
-    // which this `OwnedFd` takes exactly once.
-    let file = fs::File::from(unsafe { OwnedFd::from_raw_fd(serial.into_raw_descriptor()) });
+    let file = fs::File::from(serial.into_owned_descriptor());
     let flags = rustix::fs::fcntl_getfl(&file);
     flags
         .and_then(|flags| rustix::fs::fcntl_setfl(&file, flags | rustix::fs::OFlags::NONBLOCK))
