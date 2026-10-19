@@ -111,7 +111,7 @@ pub(crate) static TEST: Chip = Chip {
     state: &[],
     phy: Some(&TEST_PHY),
     isa: Isa::Rv32imac,
-    registers: "registers/test/published/radio.bindings.toml",
+    registers: "chips/test/registers/published/radio.bindings.toml",
 };
 
 /// The test chip's PHY layout: distinct transport and scratch addresses.

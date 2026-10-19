@@ -3,11 +3,11 @@
 //! The radio PAC and esp-hal each own registers of one chip. A word that
 //! both can store to is a race: a read-modify-write on one side can undo the
 //! other's store. This check lists every word a write transaction of the
-//! closed radio PAC stores to (`registers/<chip>/policy/api.toml`, located
-//! through `registers/<chip>/published/radio.svd`) that pinned esp-hal also
+//! closed radio PAC stores to (`chips/<chip>/registers/policy/api.toml`, located
+//! through `chips/<chip>/registers/published/radio.svd`) that pinned esp-hal also
 //! writes (a `PERIPHERAL::regs().register().write/modify` in its sources,
 //! resolved to an address through the pinned platform PAC), and requires each
-//! to have a reviewed entry in `registers/<chip>/shared-words.toml` saying how
+//! to have a reviewed entry in `chips/<chip>/registers/shared-words.toml` saying how
 //! the two writers are coordinated. A reviewed word that is no longer shared
 //! is rejected too, so the list stays exact. There is no pending list: a new
 //! shared word is fixed or reviewed in the change that introduces it.
@@ -404,7 +404,7 @@ fn esp_hal_words(
 /// Checks `chip`'s shared words against its review file.
 pub fn check(root: &Path, chip: &str, esp_hal_src: &Path, pac_src: &Path) -> Result<usize> {
     let publication = crate::ChipSources::load(
-        &root.join(format!("registers/{chip}/publication/registers.toml")),
+        &root.join(format!("chips/{chip}/registers/publication/registers.toml")),
     )?;
     let radio = radio_written(
         &fs::read_to_string(&publication.svd)?,
@@ -416,7 +416,7 @@ pub fn check(root: &Path, chip: &str, esp_hal_src: &Path, pac_src: &Path) -> Res
         .filter(|address| esp_hal.contains_key(address))
         .copied()
         .collect();
-    let review_path = root.join(format!("registers/{chip}/shared-words.toml"));
+    let review_path = root.join(format!("chips/{chip}/registers/shared-words.toml"));
     let review: Review = toml_edit::de::from_str(
         &fs::read_to_string(&review_path).unwrap_or_else(|_| "schema = 1".into()),
     )?;

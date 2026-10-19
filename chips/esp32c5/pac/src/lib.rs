@@ -1,7 +1,7 @@
 //! Closed typed ESP32-C5 radio peripheral access crate.
 //!
 //! The generated capability catalog comes from the reviewed
-//! [register publication](../../../../registers/esp32c5/README.md). Owners
+//! [register publication](../../registers/README.md). Owners
 //! that expose its transactions are added per domain.
 
 #![no_std]

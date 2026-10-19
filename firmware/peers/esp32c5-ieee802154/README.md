@@ -10,7 +10,7 @@ exchanges with the device under test run against the vendor implementation.
 The peer is a [firmware catalog](../../host/stand.md#esp-idf-firmware-catalog) entry
 (`firmware.toml`). It builds against the ESP-IDF revision and ESP32-C5 archives
 pinned in
-[`knowledge/esp32c5/vendor/artifacts.toml`](../../../knowledge/esp32c5/vendor/artifacts.toml),
+[`chips/esp32c5/vendor/artifacts.toml`](../../../chips/esp32c5/vendor/artifacts.toml),
 installed below `target/` apart from any user installation:
 
 ```console

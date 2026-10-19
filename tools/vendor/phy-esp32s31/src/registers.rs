@@ -15,8 +15,8 @@ use oer_vendor_phy::calibration_capture::space::{Register, analog_address};
 use std::path::Path;
 
 /// Published SVD and PAC API policy, relative to the repository root.
-const SVD: &str = "registers/esp32s31/published/radio.svd";
-const API_POLICY: &str = "registers/esp32s31/policy/api.toml";
+const SVD: &str = "chips/esp32s31/registers/published/radio.svd";
+const API_POLICY: &str = "chips/esp32s31/registers/policy/api.toml";
 /// The ownership partition of the role-neutral RF and PHY registers.
 pub const PARTITION: &str = "RadioPhyPeripherals";
 /// The indirect-register domain of the reviewed analog-I2C fields.

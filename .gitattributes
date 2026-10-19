@@ -3,9 +3,9 @@
 # diffable; `git diff --text` shows them when needed.
 chips/*/*pac-raw/src/lib.rs linguist-generated=true -diff
 chips/*/*pac/src/generated.rs linguist-generated=true
-registers/*/published/*.svd linguist-generated=true
-registers/*/published/*.bindings.toml linguist-generated=true -diff
+chips/*/registers/published/*.svd linguist-generated=true
+chips/*/registers/published/*.bindings.toml linguist-generated=true -diff
 # Machine-written vendor fact registries: function fingerprints and recovered
 # name maps.
-knowledge/*/vendor/facts/provenance.toml linguist-generated=true
-knowledge/*/vendor/facts/names/*.toml linguist-generated=true
+chips/*/vendor/facts/provenance.toml linguist-generated=true
+chips/*/vendor/facts/names/*.toml linguist-generated=true

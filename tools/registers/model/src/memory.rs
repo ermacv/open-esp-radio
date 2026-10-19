@@ -1,4 +1,4 @@
-//! A chip register model's memory map (`registers/<chip>/model/memory.toml`):
+//! A chip register model's memory map (`chips/<chip>/registers/model/memory.toml`):
 //! its address spaces and named regions, among them the MMIO windows.
 use crate::{Error, RegisterEvidenceSet, RegisterModel, Result};
 use serde::Deserialize;

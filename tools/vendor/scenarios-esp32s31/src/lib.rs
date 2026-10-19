@@ -30,19 +30,19 @@ pub use wifi::{ampdu_resort, low_power_clock, mac, retry, rx_append};
 /// The ESP32-S31 facts the scenario engine runs with.
 pub static CHIP: oer_vendor_scenario::Chip = oer_vendor_scenario::Chip {
     name: "esp32s31",
-    manifest: "knowledge/esp32s31/vendor/artifacts.toml",
-    manifest_text: include_str!("../../../../knowledge/esp32s31/vendor/artifacts.toml"),
+    manifest: "chips/esp32s31/vendor/artifacts.toml",
+    manifest_text: include_str!("../../../../chips/esp32s31/vendor/artifacts.toml"),
     hardware_scope: "chips/esp32s31",
     shared_scopes: &["protocols/ieee80211", "chips/espressif/coex"],
     rom_input: layout::ROM_INPUT,
     rom_symbols: &layout::ROM_SYMBOLS,
     stack: (layout::STACK_ADDRESS, layout::STACK_BYTES),
-    coverage: "knowledge/esp32s31/vendor/coverage.toml",
+    coverage: "chips/esp32s31/vendor/coverage.toml",
     observation: decisions::observation::DECISIONS,
     state: decisions::state::DECISIONS,
     phy: Some(&layout::PHY_LAYOUT),
     isa: oer_vendor_scenario::Isa::Rv32imafcZbaZbbZbsZcbZcmp,
-    registers: "registers/esp32s31/published/radio.bindings.toml",
+    registers: "chips/esp32s31/registers/published/radio.bindings.toml",
 };
 
 /// Run the scenario engine for the ESP32-S31.
@@ -156,7 +156,7 @@ mod tests {
         let pins = oer_tool_pins::Manifest::parse(
             &std::fs::read_to_string(
                 Path::new(env!("CARGO_MANIFEST_DIR"))
-                    .join("../../../knowledge/esp32s31/vendor/artifacts.toml"),
+                    .join("../../../chips/esp32s31/vendor/artifacts.toml"),
             )
             .unwrap(),
         )

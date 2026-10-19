@@ -367,7 +367,7 @@ The production semantic state does not import this vendor calibration image.
 
 A known producer is `librftest.a::set_rate_power_index`, in the optional
 `CONFIG_ESP_PHY_ENABLE_CERT_TEST` composition. The authenticated S31 RF-test
-archive is the `librftest` pin of `knowledge/esp32s31/vendor/artifacts.toml`.
+archive is the `librftest` pin of `chips/esp32s31/vendor/artifacts.toml`.
 The function subtracts signed attenuation from the selected target power,
 narrows to a signed byte, and selects a MAC power index. Above its code ceiling
 of 84 it stores the excess as the additive adjustment and regenerates Wi-Fi gain

@@ -240,7 +240,9 @@ impl ResetCauseField {
         chip: &str,
         profile: &oer_chip_profile::ResetCause,
     ) -> crate::power::Result<Self> {
-        let path = root.join(format!("registers/{chip}/published/platform.bindings.toml"));
+        let path = root.join(format!(
+            "chips/{chip}/registers/published/platform.bindings.toml"
+        ));
         let index = oer_registers_bindings::BindingIndex::load(&path)?;
         Self::of(&index, profile).map_err(|error| format!("{}: {error}", path.display()).into())
     }

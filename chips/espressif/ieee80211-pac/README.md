@@ -3,7 +3,7 @@
 `oer-espressif-ieee80211-pac` composes reviewed transactions over the Wi-Fi MAC register
 blocks that several chips share; `raw/` is `oer-espressif-ieee80211-pac-raw`, the
 generated blocks and transactions of the
-[register library](../../../registers/ieee80211/README.md). Neither crate
+[register library](../registers/ieee80211/README.md). Neither crate
 contains an address.
 
 Each function takes a register block by reference. A chip PAC passes its

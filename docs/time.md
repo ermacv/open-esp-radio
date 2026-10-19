@@ -3,7 +3,7 @@
 How time is represented across the stack. The vocabulary is in `oer-time`
 (`portable/time`) and `oer-radio-port` (`protocols/radio/port`); measured
 facts about the Wi-Fi stamp are in
-[rx-stamp](../knowledge/esp32s31/wifi/rx-stamp.md).
+[rx-stamp](../chips/esp32s31/notes/wifi/rx-stamp.md).
 
 ## Three kinds of time object
 

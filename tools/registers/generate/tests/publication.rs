@@ -1,14 +1,22 @@
 //! Repository publication checks exercise reviewed inputs, not generated addresses.
 use std::{fs, path::PathBuf};
-/// Every chip's publication directory, in name order.
+/// Every publication directory, each chip's and the shared blocks', in name
+/// order.
 fn publications() -> Vec<PathBuf> {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../..")
         .canonicalize()
         .unwrap();
-    let mut bases: Vec<_> = std::fs::read_dir(root.join("registers"))
+    let mut bases: Vec<_> = std::fs::read_dir(root.join("chips"))
         .unwrap()
-        .map(|chip| chip.unwrap().path().join("publication"))
+        .map(|chip| chip.unwrap().path().join("registers"))
+        .flat_map(|registers| {
+            let shared = std::fs::read_dir(&registers)
+                .into_iter()
+                .flatten()
+                .map(|entry| entry.unwrap().path().join("publication"));
+            std::iter::once(registers.join("publication")).chain(shared)
+        })
         .filter(|base| base.join("registers.toml").is_file())
         .collect();
     bases.sort();
@@ -29,7 +37,7 @@ fn manifest() -> (tempfile::TempDir, PathBuf, String) {
                 .is_ok_and(|document| document.contains_key("api"))
         })
         .unwrap();
-    // All relative inputs/outputs in this concrete composition start with ../.
+    // All relative inputs/outputs in this concrete composition start with ..
     let source = source.replace("\"../", &format!("\"{}/../", base.display()));
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("registers.toml");

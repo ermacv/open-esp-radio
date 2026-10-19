@@ -44,7 +44,7 @@ Source:    https://github.com/esp-rs/esp-pacs, esp32s31/svd/esp32s31.base.svd
 Copyright: Espressif Systems (Shanghai) PTE LTD
 License:   Apache-2.0
 
-- registers/esp32s31/upstream/platform-radio-deps.svd: a subset with review
+- chips/esp32s31/registers/upstream/platform-radio-deps.svd: a subset with review
   annotations, modified by Vladislav Ermachenkov; its licenseText carries the
   original notice.
 
@@ -71,8 +71,8 @@ License:   none; facts only
 
 The library has no license. The repository records only facts from it:
 values, layouts, addresses, order of operations and names (the HAL and PAC,
-knowledge/esp32s31/bluetooth, knowledge/esp32s31/notes and the name maps
-under knowledge/esp32s31/vendor/facts/names). It records neither code nor
+chips/esp32s31/notes/bluetooth, chips/esp32s31/notes and the name maps
+under chips/esp32s31/vendor/facts/names). It records neither code nor
 verbatim data blocks.
 
 

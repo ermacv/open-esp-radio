@@ -40,14 +40,14 @@ fn registry_path(root: &Path, chip: &str) -> Result<String> {
 
 /// Sources scanned for `SOURCE:` blocks: Rust files, with `#` comments TOML
 /// files such as the platform's ROM function summaries, and Markdown, such as
-/// the recovered facts of `knowledge/`.
-const PRODUCTION: [&str; 5] = ["protocols", "portable", "chips", "firmware", "knowledge"];
+/// the recovered facts of each chip's `notes/`.
+const PRODUCTION: [&str; 4] = ["protocols", "portable", "chips", "firmware"];
 
 /// Whether `file` is generated data, which holds no recovered fact of its
-/// own: the fact files below `knowledge/<chip>/vendor/facts/`.
+/// own: the fact files below `chips/<chip>/vendor/facts/`.
 fn generated(file: &str) -> bool {
     let mut parts = file.split('/');
-    parts.next() == Some("knowledge")
+    parts.next() == Some("chips")
         && parts.next().is_some()
         && parts.next() == Some("vendor")
         && parts.next() == Some("facts")

@@ -29,7 +29,7 @@ jobs:
         # sources in its build script; fetch exactly those pins.
         run: |
           cargo pins fetch --chip esp32s31 $(sed -n 's/^id = "\(esp-idf\/[^"]*\)"/\1/p' \
-            knowledge/esp32s31/vendor/artifacts.toml)
+            chips/esp32s31/vendor/artifacts.toml)
       - name: Clippy
         run: |
           # One JSON run: its errors fail the step, its warnings are only
@@ -119,7 +119,7 @@ jobs:
           cargo check --locked --target riscv32imac-unknown-none-elf $(firmware true)
       - name: Shared words with esp-hal
         # Every MMIO word the radio PAC and the pinned esp-hal both write has a
-        # reviewed entry (registers/esp32s31/shared-words.toml). Cargo resolves
+        # reviewed entry (chips/esp32s31/registers/shared-words.toml). Cargo resolves
         # the pinned esp-hal and PAC sources of the workspace.
         run: |
           meta="$RUNNER_TEMP/firmware-metadata.json"

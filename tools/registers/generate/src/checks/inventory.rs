@@ -390,9 +390,9 @@ pub fn rank(words: &mut [WordReport]) {
 }
 
 /// The chip's register model and owned MMIO ranges, through its
-/// publication manifest `registers/<chip>/publication/registers.toml`.
+/// publication manifest `chips/<chip>/registers/publication/registers.toml`.
 pub fn model(root: &Path, chip: &str) -> Result<(Vec<DeclaredRegister>, Vec<Region>)> {
-    let manifest = root.join(format!("registers/{chip}/publication/registers.toml"));
+    let manifest = root.join(format!("chips/{chip}/registers/publication/registers.toml"));
     let publication = crate::ChipSources::load(&manifest)?;
     let regions = publication
         .owned_mmio()?

@@ -465,7 +465,7 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
     ///
     /// It does not yet carry the MSDU length or the hardware HE-Control bit,
     /// so a Trigger-based HE A-MPDU fails with `TriggerMsduLengthUnavailable`:
-    /// see `knowledge/esp32s31/wifi/he-tb-ampdu.md`.
+    /// see `chips/esp32s31/notes/wifi/he-tb-ampdu.md`.
     pub fn commit_he(
         &mut self,
         cookie: TxCookie,

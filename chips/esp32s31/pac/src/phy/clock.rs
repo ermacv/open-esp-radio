@@ -1,6 +1,6 @@
 //! Safe, ownership-bound access to the recovered modem clock/reset registers.
 //!
-//! Register layout and field positions come from `registers/esp32s31/published/radio.svd`.
+//! Register layout and field positions come from `chips/esp32s31/registers/published/radio.svd`.
 //! Operation values are independently evidenced by the qualified ESP32-S31
 //! `esp-hal` clock implementation. The complete cold-boot
 //! ordering intentionally remains in the HAL crate.

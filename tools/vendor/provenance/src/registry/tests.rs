@@ -214,11 +214,11 @@ fn every_decision_file_of_this_checkout_is_read_and_a_missing_one_fails() {
 }
 
 #[test]
-fn knowledge_is_scanned_but_its_generated_facts_are_not() {
-    assert!(PRODUCTION.contains(&"knowledge"));
-    assert!(generated("knowledge/esp32s31/vendor/facts/provenance.toml"));
-    assert!(!generated("knowledge/esp32s31/wifi/rx-walker.md"));
-    assert!(!generated("knowledge/esp32s31/vendor/coverage.toml"));
+fn notes_are_scanned_but_the_generated_facts_are_not() {
+    assert!(PRODUCTION.contains(&"chips"));
+    assert!(generated("chips/esp32s31/vendor/facts/provenance.toml"));
+    assert!(!generated("chips/esp32s31/notes/wifi/rx-walker.md"));
+    assert!(!generated("chips/esp32s31/vendor/coverage.toml"));
 }
 
 #[test]

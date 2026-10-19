@@ -17,7 +17,7 @@
   applied register, field, access, description and write-semantics claim;
 - generic physical-layout and write-semantics invariants;
 - reviewed PAC transaction, binding-index and evidence-catalog schemas;
-- the chip memory map (`memory::Memory`, `registers/<chip>/model/memory.toml`):
+- the chip memory map (`memory::Memory`, `chips/<chip>/registers/model/memory.toml`):
   its address spaces and regions, validated against the model and its owned
   ranges, and its MMIO windows, which the register tool reads.
 

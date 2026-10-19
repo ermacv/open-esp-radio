@@ -1,7 +1,7 @@
 # ESP32-C5 register probe
 
 A standalone image that checks the published
-[ESP32-C5 register model](../../../registers/esp32c5/README.md) on the
+[ESP32-C5 register model](../../../chips/esp32c5/registers/README.md) on the
 board. It opens the IEEE 802.15.4 MAC clocks as esp-radio does, writes all
 ones to selected read-write MAC registers through the generated raw PAC and
 reads each word back. The bits that stay set are the implemented ones, so

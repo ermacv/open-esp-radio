@@ -11,8 +11,8 @@ use crate::{Error, Result};
 /// the model's peripherals, registers and fields.
 pub fn description_directories(chip: &str) -> [PathBuf; 2] {
     [
-        PathBuf::from(format!("registers/{chip}/evidence")),
-        PathBuf::from(format!("registers/{chip}/model")),
+        PathBuf::from(format!("chips/{chip}/registers/evidence")),
+        PathBuf::from(format!("chips/{chip}/registers/model")),
     ]
 }
 
@@ -102,9 +102,9 @@ mod tests {
     #[test]
     fn descriptions_are_found_at_any_depth_and_names_are_not() {
         let root = tempfile::tempdir().unwrap();
-        let model = root.path().join("registers/chip/model/peripherals");
+        let model = root.path().join("chips/chip/registers/model/peripherals");
         std::fs::create_dir_all(&model).unwrap();
-        std::fs::create_dir_all(root.path().join("registers/chip/evidence")).unwrap();
+        std::fs::create_dir_all(root.path().join("chips/chip/registers/evidence")).unwrap();
         std::fs::write(
             model.join("a.toml"),
             "[[sources]]\ndescription = \"complete bt_bb_v2_init_cmplx\"\n\
@@ -116,12 +116,12 @@ mod tests {
         )
         .unwrap();
         std::fs::write(
-            root.path().join("registers/chip/evidence/e.toml"),
+            root.path().join("chips/chip/registers/evidence/e.toml"),
             "[[source]]\nid = \"x\"\ndescription = \"libpp[pm.o]::pm_on\"\n",
         )
         .unwrap();
-        let model = PathBuf::from("registers/chip/model/peripherals/a.toml");
-        let evidence = PathBuf::from("registers/chip/evidence/e.toml");
+        let model = PathBuf::from("chips/chip/registers/model/peripherals/a.toml");
+        let evidence = PathBuf::from("chips/chip/registers/evidence/e.toml");
         assert_eq!(
             descriptions(root.path(), "chip").unwrap(),
             [

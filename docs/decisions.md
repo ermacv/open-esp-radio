@@ -96,7 +96,7 @@ bounds) live in the code that applies them.
   `MODEM_SYSCON`, `MODEM_LPCON`, `WIFI`, `BT`, `IEEE802154`, `LP_TSENS`) and
   requiring the adopted PSRAM.
 - **Shared words.** Each word that both esp-hal and our PAC write has one
-  runtime writer (`registers/esp32s31/shared-words.toml`):
+  runtime writer (`chips/esp32s31/registers/shared-words.toml`):
   `MODEM_LPCON.CLK_CONF` belongs to esp-hal and our HAL requests its gates
   through `clock::ll`; the other shared words belong to our HAL. The review is
   rechecked at every fork merge with `cargo registers check shared-words`.
@@ -124,7 +124,7 @@ bounds) live in the code that applies them.
   policy, by board and country, covers all three radios.
 - **RX descriptor walker.** Detached RX descriptors carry owner bit 31 clear:
   the walker stops on one instead of writing it. Execution-level DMA rules are
-  facts in `knowledge/esp32s31/wifi/dma-execution.md`.
+  facts in `chips/esp32s31/notes/wifi/dma-execution.md`.
 - **Portable time** starts at 2^31 µs: clocks offset their epoch so code at
   the boundary with 32-bit hardware counters meets the wrap at once.
 

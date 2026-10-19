@@ -40,7 +40,7 @@ Each radio publishes status bits (`set_status_bits`, `clear_status_bits`);
 the status words select one of the 107 recovered schemes of
 `coexist_scheme.o`, exactly as `coex_schm_status_change` does. The compiled
 schedule was compared with the entries of the pinned `libcoexist.a`
-([vendor pins](../../../knowledge/esp32s31/vendor/artifacts.toml)). A scheme
+([vendor pins](../../esp32s31/vendor/artifacts.toml)). A scheme
 divides a period into phases; a phase lasts period × interval × share
 microseconds and notifies Wi-Fi, Bluetooth or both. The schedule programs no
 priority itself: a notified radio requests its own events through

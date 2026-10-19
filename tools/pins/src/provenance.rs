@@ -1,5 +1,5 @@
 //! The registry of reviewed vendor-function fingerprints,
-//! `knowledge/<chip>/vendor/facts/provenance.toml`: its format and its
+//! `chips/<chip>/vendor/facts/provenance.toml`: its format and its
 //! reader. `oer-vendor-provenance` maintains and checks it; the register
 //! inventory reads which functions it registers.
 use crate::Result;
