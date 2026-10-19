@@ -8,8 +8,14 @@
 //! republishes the unchanged aggregate after a failed protection exchange,
 //! hands the missing subframes over to individual transmission when the
 //! Block Ack agreement ended or one subframe remains, or ends the exchange
-//! when every subframe is acknowledged, a retry limit is reached or the MSDU
-//! lifetime has run out.
+//! when every subframe is acknowledged or a retry limit is reached.
+//!
+//! Every subframe keeps its own age, from its MSDU's admission into
+//! software on the monotonic clock, through the aggregate's formation and
+//! every retry: a missing subframe whose MSDU outlived its lifetime is
+//! discarded instead of retried. Under an operational Block Ack agreement
+//! a BlockAckReq then moves the recipient's window past the discarded
+//! subframes ([`AmpduRetryDecision::DiscardAged`]).
 //!
 //! Subframes are named by their position in the first aggregate (bit `i`
 //! of a mask is subframe `i`); a retry compacts the aggregate to the
@@ -18,8 +24,8 @@
 //! MPDUs.
 
 use oer_ieee80211_lower_mac::BlockAckReport;
-use oer_ieee80211_lower_mac::{Ieee80211Duration, Ieee80211Instant};
 use oer_ieee80211_mac::sequence::SequenceNumber;
+use oer_time::{Duration, Instant};
 
 /// Subframes one A-MPDU exchange tracks: the width of a 64-bit BlockAck
 /// bitmap.
@@ -87,11 +93,11 @@ pub fn compact<T: Copy, const N: usize>(items: &mut [T; N], mask: u64) -> usize 
 /// The limits of one aggregate's retries.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct AmpduRetryPolicy {
-    /// Time from the aggregate's commit after which its MSDUs are aged and
+    /// Time from an MSDU's admission after which its subframe is aged and
     /// discarded instead of retried.
-    pub lifetime: Ieee80211Duration,
+    pub lifetime: Duration,
     /// An MSDU with less than this much lifetime left is already aged.
-    pub aged_margin: Ieee80211Duration,
+    pub aged_margin: Duration,
     /// Attempts that end without any BlockAck, and failed protection
     /// exchanges in a row, that the aggregate survives.
     pub retry_limit: u8,
@@ -135,6 +141,18 @@ pub enum AmpduRetryDecision {
     /// End the aggregate and send the selected subframes individually, in
     /// order, each with its Retry bit set.
     Unaggregate { retry_mask: u64 },
+    /// Missing subframes aged under an operational Block Ack agreement:
+    /// compact the aggregate to the selected subframes (positions in the
+    /// aggregate just sent), discard those of `aged_mask`, and send a
+    /// BlockAckReq starting at `starting_sequence`, the first selected
+    /// subframe, or the one after the last discarded when none remains. The
+    /// BlockAck that answers it goes to
+    /// [`AmpduRetryState::observe_block_ack_request`].
+    DiscardAged {
+        retry_mask: u64,
+        aged_mask: u64,
+        starting_sequence: SequenceNumber,
+    },
     /// End the exchange; the selected subframes were not acknowledged and are
     /// discarded.
     Finish { retry_mask: u64 },
@@ -149,6 +167,7 @@ impl AmpduRetryDecision {
             Self::RetainAggregate { retry_mask }
             | Self::RepublishUnchanged { retry_mask }
             | Self::RequestBlockAck { retry_mask, .. }
+            | Self::DiscardAged { retry_mask, .. }
             | Self::Unaggregate { retry_mask }
             | Self::Finish { retry_mask } => retry_mask,
             Self::FinishTriggerFlow => 0,
@@ -164,8 +183,10 @@ impl AmpduRetryDecision {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AmpduRetryError {
     ZeroLifetime,
-    /// The strict aging threshold lies outside this radio epoch.
-    AgingThresholdOutsideEpoch,
+    /// The caller has no admission instant for this original subframe.
+    UnknownSubframe {
+        index: u8,
+    },
     EmptyAggregate,
     TooManySubframes {
         subframes: u8,
@@ -192,8 +213,13 @@ pub struct AmpduRetryState {
     current_subframes: u8,
     retry_limit: u8,
     retain_single_mpdu: bool,
-    /// From this instant on the aggregate's MSDUs are aged.
-    aged_from: Ieee80211Instant,
+    lifetime: Duration,
+    aged_margin: Duration,
+    /// Original positions discarded as aged.
+    discarded_original_indices: u64,
+    /// Where the BlockAckReq of the last `RequestBlockAck` or `DiscardAged`
+    /// starts.
+    block_ack_request_start: SequenceNumber,
     aggregate_attempts: u8,
     acknowledged: u8,
     block_ack_mpdu_attempts: u16,
@@ -205,13 +231,13 @@ pub struct AmpduRetryState {
 
 impl AmpduRetryState {
     /// The state of an aggregate of `subframes` consecutive sequence numbers
-    /// from `first_sequence`, whose MSDUs were committed at
-    /// `committed_at` on the backend's radio clock, before its first attempt.
+    /// from `first_sequence`, before its first attempt. Each subframe ages
+    /// from its own MSDU's admission, which the caller gives each time a
+    /// completion is observed.
     pub fn new(
         first_sequence: SequenceNumber,
         subframes: u8,
         policy: AmpduRetryPolicy,
-        committed_at: Ieee80211Instant,
     ) -> Result<Self, AmpduRetryError> {
         if policy.lifetime.as_micros() == 0 {
             return Err(AmpduRetryError::ZeroLifetime);
@@ -222,22 +248,6 @@ impl AmpduRetryState {
         if subframes > MAX_AMPDU_SUBFRAMES {
             return Err(AmpduRetryError::TooManySubframes { subframes });
         }
-        // Aging is strictly after committed + lifetime - margin. Form the
-        // relative offset first so a representable threshold is not rejected
-        // because an unnecessary intermediate endpoint would overflow.
-        let one = Ieee80211Duration::from_micros(1);
-        let aged_from = if let Some(delay) = policy.lifetime.checked_sub(policy.aged_margin) {
-            delay
-                .checked_add(one)
-                .and_then(|delay| committed_at.checked_add(delay))
-        } else {
-            policy
-                .aged_margin
-                .checked_sub(policy.lifetime)
-                .and_then(|advance| advance.checked_sub(one))
-                .and_then(|advance| committed_at.checked_sub(advance))
-        }
-        .ok_or(AmpduRetryError::AgingThresholdOutsideEpoch)?;
         Ok(Self {
             first_sequence,
             pending_original_indices: all_subframes(subframes),
@@ -245,7 +255,10 @@ impl AmpduRetryState {
             current_subframes: subframes,
             retry_limit: policy.retry_limit,
             retain_single_mpdu: policy.retain_single_mpdu,
-            aged_from,
+            lifetime: policy.lifetime,
+            aged_margin: policy.aged_margin,
+            discarded_original_indices: 0,
+            block_ack_request_start: first_sequence,
             aggregate_attempts: 1,
             acknowledged: 0,
             block_ack_mpdu_attempts: 0,
@@ -256,15 +269,22 @@ impl AmpduRetryState {
     }
 
     /// Apply how the attempt carrying `observed_subframes` ended at
-    /// `now`. While the Block Ack agreement is not
+    /// `now`. `admitted` gives the admission instant of an original
+    /// subframe's MSDU. While the Block Ack agreement is not
     /// `block_ack_operational`, missing subframes leave the aggregate for
     /// individual retries.
+    ///
+    /// # Errors
+    ///
+    /// Another subframe count than the state kept, or an original
+    /// subframe without an admission instant.
     pub fn observe(
         &mut self,
         result: AmpduAttemptResult,
         observed_subframes: u8,
-        now: Ieee80211Instant,
+        now: Instant,
         block_ack_operational: bool,
+        admitted: impl Fn(u8) -> Option<Instant>,
     ) -> Result<AmpduRetryDecision, AmpduRetryError> {
         if observed_subframes != self.current_subframes {
             return Err(AmpduRetryError::FrameCountChanged {
@@ -283,8 +303,9 @@ impl AmpduRetryState {
                 self.protection_failures = self.protection_failures.saturating_add(1);
                 // No subframe reached the recipient.
                 self.missing_original_indices = self.pending_original_indices;
-                if self.aged(now) {
-                    return Ok(AmpduRetryDecision::Finish { retry_mask: every });
+                let aged = self.aged_mask(every, now, &admitted)?;
+                if aged != 0 {
+                    return Ok(self.discard(every, aged, block_ack_operational));
                 }
                 if self.protection_failures < self.retry_limit {
                     return Ok(AmpduRetryDecision::RepublishUnchanged { retry_mask: every });
@@ -292,23 +313,28 @@ impl AmpduRetryState {
                 // The exhausted exchange keeps the aggregate and asks for
                 // its BlockAck.
                 self.protection_failures = 0;
+                self.block_ack_request_start = self.current_first_sequence();
                 Ok(AmpduRetryDecision::RequestBlockAck {
                     retry_mask: every,
-                    starting_sequence: self.current_first_sequence(),
+                    starting_sequence: self.block_ack_request_start,
                 })
             }
             AmpduAttemptResult::NoResponse => {
                 self.count_mpdu_attempts(observed_subframes);
                 self.ack_timeouts = self.ack_timeouts.saturating_add(1);
                 self.missing_original_indices = self.pending_original_indices;
-                if self.ack_timeouts >= self.retry_limit || self.aged(now) {
+                if self.ack_timeouts >= self.retry_limit {
                     return Ok(AmpduRetryDecision::Finish { retry_mask: every });
+                }
+                let aged = self.aged_mask(every, now, &admitted)?;
+                if aged != 0 {
+                    return Ok(self.discard(every, aged, block_ack_operational));
                 }
                 Ok(self.retain_or_unaggregate(every, observed_subframes, block_ack_operational))
             }
             AmpduAttemptResult::Answered(report) => {
                 self.count_mpdu_attempts(observed_subframes);
-                Ok(self.resort(report, now, block_ack_operational))
+                self.resort(report, now, block_ack_operational, &admitted)
             }
         }
     }
@@ -316,13 +342,18 @@ impl AmpduRetryState {
     /// Resort the kept aggregate by the BlockAck answering its BlockAckReq;
     /// `None` when the request went unanswered and every subframe stays
     /// missing.
+    ///
+    /// # Errors
+    ///
+    /// An original subframe without an admission instant.
     pub fn observe_block_ack_request(
         &mut self,
         block_ack: Option<BlockAckReport>,
-        now: Ieee80211Instant,
+        now: Instant,
         block_ack_operational: bool,
-    ) -> AmpduRetryDecision {
-        self.resort(block_ack, now, block_ack_operational)
+        admitted: impl Fn(u8) -> Option<Instant>,
+    ) -> Result<AmpduRetryDecision, AmpduRetryError> {
+        self.resort(block_ack, now, block_ack_operational, &admitted)
     }
 
     fn count_mpdu_attempts(&mut self, subframes: u8) {
@@ -335,9 +366,10 @@ impl AmpduRetryState {
     fn resort(
         &mut self,
         report: Option<BlockAckReport>,
-        now: Ieee80211Instant,
+        now: Instant,
         block_ack_operational: bool,
-    ) -> AmpduRetryDecision {
+        admitted: &impl Fn(u8) -> Option<Instant>,
+    ) -> Result<AmpduRetryDecision, AmpduRetryError> {
         let mut retry_mask = 0_u64;
         let mut retry_original_indices = 0_u64;
         let mut index = 0_u8;
@@ -354,15 +386,93 @@ impl AmpduRetryState {
         }
         self.missing_original_indices = retry_original_indices;
         let missing = retry_mask.count_ones() as u8;
-        if missing == 0 || self.aged(now) {
-            return AmpduRetryDecision::Finish { retry_mask };
+        if missing == 0 {
+            return Ok(AmpduRetryDecision::Finish { retry_mask });
+        }
+        let aged = self.aged_mask(retry_mask, now, admitted)?;
+        if aged != 0 {
+            return Ok(self.discard(retry_mask, aged, block_ack_operational));
         }
         let decision = self.retain_or_unaggregate(retry_mask, missing, block_ack_operational);
         if matches!(decision, AmpduRetryDecision::RetainAggregate { .. }) {
             self.pending_original_indices = retry_original_indices;
             self.current_subframes = missing;
         }
-        decision
+        Ok(decision)
+    }
+
+    /// The subframes of `mask` (positions in the current aggregate) whose
+    /// MSDUs are aged at `now`.
+    fn aged_mask(
+        &self,
+        mask: u64,
+        now: Instant,
+        admitted: &impl Fn(u8) -> Option<Instant>,
+    ) -> Result<u64, AmpduRetryError> {
+        let mut aged = 0_u64;
+        let mut index = 0_u8;
+        while index < self.current_subframes {
+            if mask & (1_u64 << index) != 0 {
+                let original = self.original_index(index);
+                let admission = admitted(original)
+                    .ok_or(AmpduRetryError::UnknownSubframe { index: original })?;
+                if self.aged(admission, now) {
+                    aged |= 1_u64 << index;
+                }
+            }
+            index = index.saturating_add(1);
+        }
+        Ok(aged)
+    }
+
+    /// Discard the `aged` subframes of the `missing` ones (positions in the
+    /// current aggregate). Under an operational agreement the rest stay in
+    /// the aggregate behind a BlockAckReq that moves the recipient's window;
+    /// otherwise they leave the aggregate, or the exchange ends.
+    fn discard(
+        &mut self,
+        missing: u64,
+        aged: u64,
+        block_ack_operational: bool,
+    ) -> AmpduRetryDecision {
+        let remaining = missing & !aged;
+        let mut remaining_original = 0_u64;
+        let mut last_aged = 0_u8;
+        let mut index = 0_u8;
+        while index < self.current_subframes {
+            let original = self.original_index(index);
+            if aged & (1_u64 << index) != 0 {
+                self.discarded_original_indices |= 1_u64 << original;
+                last_aged = original;
+            } else if remaining & (1_u64 << index) != 0 {
+                remaining_original |= 1_u64 << original;
+            }
+            index = index.saturating_add(1);
+        }
+        if !block_ack_operational {
+            return if remaining == 0 {
+                AmpduRetryDecision::Finish { retry_mask: aged }
+            } else {
+                AmpduRetryDecision::Unaggregate {
+                    retry_mask: remaining,
+                }
+            };
+        }
+        let starting_sequence = if remaining_original == 0 {
+            self.first_sequence
+                .wrapping_add(u16::from(last_aged).wrapping_add(1))
+        } else {
+            self.first_sequence
+                .wrapping_add(remaining_original.trailing_zeros() as u16)
+        };
+        self.pending_original_indices = remaining_original;
+        self.current_subframes = remaining.count_ones() as u8;
+        self.block_ack_request_start = starting_sequence;
+        AmpduRetryDecision::DiscardAged {
+            retry_mask: remaining,
+            aged_mask: aged,
+            starting_sequence,
+        }
     }
 
     fn retain_or_unaggregate(
@@ -383,9 +493,30 @@ impl AmpduRetryState {
         self.current_subframes
     }
 
-    /// Whether the aggregate's MSDUs are aged at `now`.
-    pub fn aged(&self, now: Ieee80211Instant) -> bool {
-        now >= self.aged_from
+    /// Whether an MSDU admitted at `admitted` is aged at `now`: less than
+    /// the aged margin of its lifetime remains.
+    pub fn aged(&self, admitted: Instant, now: Instant) -> bool {
+        // An admission after `now` has its whole lifetime left.
+        now.checked_duration_since(admitted).is_some_and(|age| {
+            age.as_micros().saturating_add(self.aged_margin.as_micros()) > self.lifetime.as_micros()
+        })
+    }
+
+    /// Where the BlockAckReq of the last `RequestBlockAck` or `DiscardAged`
+    /// decision starts.
+    pub const fn block_ack_request_start(&self) -> SequenceNumber {
+        self.block_ack_request_start
+    }
+
+    /// Original positions discarded as aged.
+    pub const fn discarded_original_indices(&self) -> u64 {
+        self.discarded_original_indices
+    }
+
+    /// Record the original positions of `mask`, which went alone, as
+    /// discarded aged.
+    pub fn mark_discarded(&mut self, mask: u64) {
+        self.discarded_original_indices |= mask;
     }
 
     /// The sequence number of the current aggregate's first subframe.

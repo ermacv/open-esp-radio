@@ -1,8 +1,15 @@
 use super::*;
 
+fn at(micros: u64) -> Instant {
+    Instant::from_micros(micros)
+}
+
+/// Every subframe admitted at zero.
+const FRESH: fn(u8) -> Option<Instant> = |_| Some(Instant::from_micros(0));
+
 const POLICY: AmpduRetryPolicy = AmpduRetryPolicy {
-    lifetime: oer_time::RadioDuration::from_micros(10_000),
-    aged_margin: oer_time::RadioDuration::from_micros(1_000),
+    lifetime: oer_time::Duration::from_micros(10_000),
+    aged_margin: oer_time::Duration::from_micros(1_000),
     retry_limit: 3,
     retain_single_mpdu: false,
 };
@@ -20,21 +27,10 @@ fn answered(start: u16, bitmap: u64) -> AmpduAttemptResult {
 
 #[test]
 fn a_partial_block_ack_keeps_only_the_missing_subframes_in_order() {
-    let mut state = AmpduRetryState::new(
-        seq(100),
-        4,
-        POLICY,
-        oer_ieee80211_lower_mac::Ieee80211Instant::from_micros(0),
-    )
-    .unwrap();
+    let mut state = AmpduRetryState::new(seq(100), 4, POLICY).unwrap();
     // 100 and 102 acknowledged; 101 and 103 missing.
     assert_eq!(
-        state.observe(
-            answered(100, 0b0101),
-            4,
-            oer_ieee80211_lower_mac::Ieee80211Instant::from_micros(10),
-            true
-        ),
+        state.observe(answered(100, 0b0101), 4, at(10), true, FRESH),
         Ok(AmpduRetryDecision::RetainAggregate { retry_mask: 0b1010 })
     );
     assert_eq!(state.current_subframes(), 2);
@@ -46,12 +42,7 @@ fn a_partial_block_ack_keeps_only_the_missing_subframes_in_order() {
 
     // The compacted aggregate: position 0 is 101, position 1 is 103.
     assert_eq!(
-        state.observe(
-            answered(101, 0b100),
-            2,
-            oer_ieee80211_lower_mac::Ieee80211Instant::from_micros(20),
-            true
-        ),
+        state.observe(answered(101, 0b100), 2, at(20), true, FRESH),
         Ok(AmpduRetryDecision::Unaggregate { retry_mask: 0b01 })
     );
     assert_eq!(state.missing_original_indices(), 0b0010);
@@ -59,20 +50,9 @@ fn a_partial_block_ack_keeps_only_the_missing_subframes_in_order() {
 
 #[test]
 fn a_complete_block_ack_finishes_without_a_retry() {
-    let mut state = AmpduRetryState::new(
-        seq(4095),
-        3,
-        POLICY,
-        oer_ieee80211_lower_mac::Ieee80211Instant::from_micros(0),
-    )
-    .unwrap();
+    let mut state = AmpduRetryState::new(seq(4095), 3, POLICY).unwrap();
     assert_eq!(
-        state.observe(
-            answered(4095, 0b111),
-            3,
-            oer_ieee80211_lower_mac::Ieee80211Instant::from_micros(10),
-            true
-        ),
+        state.observe(answered(4095, 0b111), 3, at(10), true, FRESH),
         Ok(AmpduRetryDecision::Finish { retry_mask: 0 })
     );
     assert_eq!(state.acknowledged(), 3);
@@ -81,20 +61,15 @@ fn a_complete_block_ack_finishes_without_a_retry() {
 
 #[test]
 fn a_failed_protection_republishes_unchanged_then_requests_the_block_ack() {
-    let mut state = AmpduRetryState::new(
-        seq(10),
-        3,
-        POLICY,
-        oer_ieee80211_lower_mac::Ieee80211Instant::from_micros(0),
-    )
-    .unwrap();
+    let mut state = AmpduRetryState::new(seq(10), 3, POLICY).unwrap();
     for _ in 0..2 {
         assert_eq!(
             state.observe(
                 AmpduAttemptResult::ProtectionFailure,
                 3,
-                oer_ieee80211_lower_mac::Ieee80211Instant::from_micros(10),
-                true
+                at(10),
+                true,
+                FRESH
             ),
             Ok(AmpduRetryDecision::RepublishUnchanged { retry_mask: 0b111 })
         );
@@ -103,8 +78,9 @@ fn a_failed_protection_republishes_unchanged_then_requests_the_block_ack() {
         state.observe(
             AmpduAttemptResult::ProtectionFailure,
             3,
-            oer_ieee80211_lower_mac::Ieee80211Instant::from_micros(10),
-            true
+            at(10),
+            true,
+            FRESH
         ),
         Ok(AmpduRetryDecision::RequestBlockAck {
             retry_mask: 0b111,
@@ -119,101 +95,40 @@ fn a_failed_protection_republishes_unchanged_then_requests_the_block_ack() {
                 start_sequence: seq(10),
                 bitmap: 0b001,
             }),
-            oer_ieee80211_lower_mac::Ieee80211Instant::from_micros(20),
+            at(20),
             true,
+            FRESH
         ),
-        AmpduRetryDecision::RetainAggregate { retry_mask: 0b110 }
+        Ok(AmpduRetryDecision::RetainAggregate { retry_mask: 0b110 })
     );
     // An unanswered request keeps every subframe missing.
     assert_eq!(
-        state.observe_block_ack_request(
-            None,
-            oer_ieee80211_lower_mac::Ieee80211Instant::from_micros(30),
-            true
-        ),
-        AmpduRetryDecision::RetainAggregate { retry_mask: 0b11 }
+        state.observe_block_ack_request(None, at(30), true, FRESH),
+        Ok(AmpduRetryDecision::RetainAggregate { retry_mask: 0b11 })
     );
 }
 
 #[test]
 fn an_aggregate_without_any_block_ack_ends_on_the_retry_limit() {
-    let mut state = AmpduRetryState::new(
-        seq(0),
-        2,
-        POLICY,
-        oer_ieee80211_lower_mac::Ieee80211Instant::from_micros(0),
-    )
-    .unwrap();
+    let mut state = AmpduRetryState::new(seq(0), 2, POLICY).unwrap();
     for _ in 0..2 {
         assert_eq!(
-            state.observe(
-                AmpduAttemptResult::NoResponse,
-                2,
-                oer_ieee80211_lower_mac::Ieee80211Instant::from_micros(10),
-                true
-            ),
+            state.observe(AmpduAttemptResult::NoResponse, 2, at(10), true, FRESH),
             Ok(AmpduRetryDecision::RetainAggregate { retry_mask: 0b11 })
         );
     }
     assert_eq!(
-        state.observe(
-            AmpduAttemptResult::NoResponse,
-            2,
-            oer_ieee80211_lower_mac::Ieee80211Instant::from_micros(10),
-            true
-        ),
+        state.observe(AmpduAttemptResult::NoResponse, 2, at(10), true, FRESH),
         Ok(AmpduRetryDecision::Finish { retry_mask: 0b11 })
     );
     assert_eq!(state.block_ack_mpdu_attempts(), 6);
 }
 
 #[test]
-fn aged_subframes_are_discarded_instead_of_retried() {
-    let mut state = AmpduRetryState::new(
-        seq(0),
-        2,
-        POLICY,
-        oer_ieee80211_lower_mac::Ieee80211Instant::from_micros(1_000),
-    )
-    .unwrap();
-    // Aged from 1_000 + 10_000 - 1_000 + 1.
-    assert!(
-        !state.aged(oer_ieee80211_lower_mac::Ieee80211Instant::from_micros(
-            10_000
-        ))
-    );
-    assert!(
-        state.aged(oer_ieee80211_lower_mac::Ieee80211Instant::from_micros(
-            10_001
-        ))
-    );
-    assert_eq!(
-        state.observe(
-            answered(0, 0b01),
-            2,
-            oer_ieee80211_lower_mac::Ieee80211Instant::from_micros(10_001),
-            true
-        ),
-        Ok(AmpduRetryDecision::Finish { retry_mask: 0b10 })
-    );
-}
-
-#[test]
 fn an_ended_agreement_or_one_missing_subframe_leaves_the_aggregate() {
-    let mut state = AmpduRetryState::new(
-        seq(0),
-        3,
-        POLICY,
-        oer_ieee80211_lower_mac::Ieee80211Instant::from_micros(0),
-    )
-    .unwrap();
+    let mut state = AmpduRetryState::new(seq(0), 3, POLICY).unwrap();
     assert_eq!(
-        state.observe(
-            answered(0, 0b001),
-            3,
-            oer_ieee80211_lower_mac::Ieee80211Instant::from_micros(10),
-            false
-        ),
+        state.observe(answered(0, 0b001), 3, at(10), false, FRESH),
         Ok(AmpduRetryDecision::Unaggregate { retry_mask: 0b110 })
     );
 
@@ -221,71 +136,34 @@ fn an_ended_agreement_or_one_missing_subframe_leaves_the_aggregate() {
         retain_single_mpdu: true,
         ..POLICY
     };
-    let mut state = AmpduRetryState::new(
-        seq(0),
-        2,
-        retain,
-        oer_ieee80211_lower_mac::Ieee80211Instant::from_micros(0),
-    )
-    .unwrap();
+    let mut state = AmpduRetryState::new(seq(0), 2, retain).unwrap();
     assert_eq!(
-        state.observe(
-            answered(0, 0b01),
-            2,
-            oer_ieee80211_lower_mac::Ieee80211Instant::from_micros(10),
-            true
-        ),
+        state.observe(answered(0, 0b01), 2, at(10), true, FRESH),
         Ok(AmpduRetryDecision::RetainAggregate { retry_mask: 0b10 })
     );
 }
 
 #[test]
 fn a_trigger_flow_end_and_a_changed_count_are_distinct() {
-    let mut state = AmpduRetryState::new(
-        seq(0),
-        2,
-        POLICY,
-        oer_ieee80211_lower_mac::Ieee80211Instant::from_micros(0),
-    )
-    .unwrap();
+    let mut state = AmpduRetryState::new(seq(0), 2, POLICY).unwrap();
     assert_eq!(
-        state.observe(
-            AmpduAttemptResult::TriggerFlowEnd,
-            3,
-            oer_ieee80211_lower_mac::Ieee80211Instant::from_micros(10),
-            true
-        ),
+        state.observe(AmpduAttemptResult::TriggerFlowEnd, 3, at(10), true, FRESH),
         Err(AmpduRetryError::FrameCountChanged {
             expected: 2,
             observed: 3
         })
     );
     assert_eq!(
-        state.observe(
-            AmpduAttemptResult::TriggerFlowEnd,
-            2,
-            oer_ieee80211_lower_mac::Ieee80211Instant::from_micros(10),
-            true
-        ),
+        state.observe(AmpduAttemptResult::TriggerFlowEnd, 2, at(10), true, FRESH),
         Ok(AmpduRetryDecision::FinishTriggerFlow)
     );
     assert_eq!(state.trigger_flow_completions(), 1);
     assert_eq!(
-        AmpduRetryState::new(
-            seq(0),
-            0,
-            POLICY,
-            oer_ieee80211_lower_mac::Ieee80211Instant::from_micros(0)
-        ),
+        AmpduRetryState::new(seq(0), 0, POLICY),
         Err(AmpduRetryError::EmptyAggregate)
     );
     assert_eq!(
-        AmpduRetryState::new(
-            seq(0),
-            65,
-            POLICY,
-            oer_ieee80211_lower_mac::Ieee80211Instant::from_micros(0)
-        ),
+        AmpduRetryState::new(seq(0), 65, POLICY),
         Err(AmpduRetryError::TooManySubframes { subframes: 65 })
     );
     assert_eq!(
@@ -293,21 +171,14 @@ fn a_trigger_flow_end_and_a_changed_count_are_distinct() {
             seq(0),
             1,
             AmpduRetryPolicy {
-                lifetime: oer_time::RadioDuration::from_micros(0),
+                lifetime: oer_time::Duration::from_micros(0),
                 ..POLICY
-            },
-            oer_ieee80211_lower_mac::Ieee80211Instant::from_micros(0)
+            }
         ),
         Err(AmpduRetryError::ZeroLifetime)
     );
     // Sixty-four subframes fill the mask.
-    let full = AmpduRetryState::new(
-        seq(0),
-        64,
-        POLICY,
-        oer_ieee80211_lower_mac::Ieee80211Instant::from_micros(0),
-    )
-    .unwrap();
+    let full = AmpduRetryState::new(seq(0), 64, POLICY).unwrap();
     assert_eq!(full.pending_original_indices(), u64::MAX);
 }
 
@@ -368,102 +239,140 @@ fn compaction_respects_empty_arrays_and_the_last_mask_bit() {
     }
 }
 
-#[test]
-fn aging_threshold_is_exact_at_radio_epoch_boundaries() {
-    use oer_time::RadioDuration;
-    let policy = AmpduRetryPolicy {
-        lifetime: RadioDuration::from_micros(10),
-        aged_margin: RadioDuration::from_micros(3),
-        ..POLICY
-    };
-    let first = Ieee80211Instant::from_micros(0);
-    let state = AmpduRetryState::new(SequenceNumber::new(0).unwrap(), 2, policy, first).unwrap();
-    assert!(!state.aged(Ieee80211Instant::from_micros(7)));
-    assert!(state.aged(Ieee80211Instant::from_micros(8)));
-    let near_end = Ieee80211Instant::from_micros(u64::MAX - 8);
-    let state = AmpduRetryState::new(SequenceNumber::new(0).unwrap(), 2, policy, near_end).unwrap();
-    assert!(!state.aged(Ieee80211Instant::from_micros(u64::MAX - 1)));
-    assert!(state.aged(Ieee80211Instant::from_micros(u64::MAX)));
-    assert!(matches!(
-        AmpduRetryState::new(
-            SequenceNumber::new(0).unwrap(),
-            2,
-            policy,
-            Ieee80211Instant::from_micros(u64::MAX - 7)
-        ),
-        Err(AmpduRetryError::AgingThresholdOutsideEpoch)
-    ));
-    let early_policy = AmpduRetryPolicy {
-        lifetime: RadioDuration::from_micros(10),
-        aged_margin: RadioDuration::from_micros(11),
-        ..POLICY
-    };
-    assert!(
-        AmpduRetryState::new(SequenceNumber::new(0).unwrap(), 2, early_policy, first)
-            .unwrap()
-            .aged(first)
-    );
-    let before_epoch = AmpduRetryPolicy {
-        aged_margin: RadioDuration::from_micros(12),
-        ..early_policy
-    };
-    assert!(matches!(
-        AmpduRetryState::new(SequenceNumber::new(0).unwrap(), 2, before_epoch, first),
-        Err(AmpduRetryError::AgingThresholdOutsideEpoch)
-    ));
+/// Subframe 0 admitted long ago, the others at zero.
+fn head_old(index: u8) -> Option<Instant> {
+    Some(if index == 0 {
+        Instant::from_micros(0)
+    } else {
+        Instant::from_micros(5_000)
+    })
 }
 
 #[test]
-fn every_retry_outcome_finishes_at_the_first_aged_instant() {
-    for prior_protection_failures in 0..POLICY.retry_limit {
-        for result in [
-            AmpduAttemptResult::ProtectionFailure,
-            AmpduAttemptResult::NoResponse,
-            AmpduAttemptResult::Answered(None),
-            answered(100, 0b0101),
-            answered(100, 0b1111),
-            AmpduAttemptResult::TriggerFlowEnd,
-        ] {
-            for now in [9_000, 9_001] {
-                let mut state =
-                    AmpduRetryState::new(seq(100), 4, POLICY, Ieee80211Instant::from_micros(0))
-                        .unwrap();
-                for _ in 0..prior_protection_failures {
-                    assert_eq!(
-                        state.observe(
-                            AmpduAttemptResult::ProtectionFailure,
-                            4,
-                            Ieee80211Instant::from_micros(1),
-                            true,
-                        ),
-                        Ok(AmpduRetryDecision::RepublishUnchanged { retry_mask: 0b1111 })
-                    );
-                }
-                let decision = state
-                    .observe(result, 4, Ieee80211Instant::from_micros(now), true)
-                    .unwrap();
-                if result == AmpduAttemptResult::TriggerFlowEnd {
-                    assert_eq!(decision, AmpduRetryDecision::FinishTriggerFlow);
-                } else if now == 9_001 {
-                    let retry_mask = match result {
-                        AmpduAttemptResult::Answered(Some(report)) => !report.bitmap & 0b1111,
-                        _ => 0b1111,
-                    };
-                    assert_eq!(
-                        decision,
-                        AmpduRetryDecision::Finish { retry_mask },
-                        "{result:?}"
-                    );
-                    assert_eq!(state.missing_original_indices(), retry_mask);
-                } else if result == answered(100, 0b1111) {
-                    assert_eq!(decision, AmpduRetryDecision::Finish { retry_mask: 0 });
-                } else {
-                    assert!(
-                        !matches!(decision, AmpduRetryDecision::Finish { .. }),
-                        "{result:?}: {decision:?}"
-                    );
-                }
-            }
-        }
+fn an_msdu_ages_from_its_admission_within_the_margin() {
+    let state = AmpduRetryState::new(seq(0), 2, POLICY).unwrap();
+    // Aged once less than the 1 ms margin of its 10 ms lifetime is left.
+    assert!(!state.aged(at(1_000), at(10_000)));
+    assert!(state.aged(at(1_000), at(10_001)));
+    // An admission after now keeps its whole lifetime.
+    assert!(!state.aged(at(20_000), at(10_000)));
+    // A margin beyond the lifetime ages at once.
+    let early = AmpduRetryState::new(
+        seq(0),
+        2,
+        AmpduRetryPolicy {
+            aged_margin: oer_time::Duration::from_micros(11_000),
+            ..POLICY
+        },
+    )
+    .unwrap();
+    assert!(early.aged(at(7), at(7)));
+}
+
+#[test]
+fn an_aged_head_under_the_agreement_is_discarded_behind_a_block_ack_request() {
+    let mut state = AmpduRetryState::new(seq(100), 4, POLICY).unwrap();
+    // 100, 101 and 103 missing at 13 ms: 100 is aged, the rest is not.
+    assert_eq!(
+        state.observe(answered(100, 0b0100), 4, at(13_000), true, head_old),
+        Ok(AmpduRetryDecision::DiscardAged {
+            retry_mask: 0b1010,
+            aged_mask: 0b0001,
+            starting_sequence: seq(101),
+        })
+    );
+    assert_eq!(state.discarded_original_indices(), 0b0001);
+    assert_eq!(state.block_ack_request_start(), seq(101));
+    assert_eq!(state.current_subframes(), 2);
+    assert_eq!(state.pending_original_indices(), 0b1010);
+    // The BlockAck answering the request resorts what remains.
+    assert_eq!(
+        state.observe_block_ack_request(
+            Some(BlockAckReport {
+                start_sequence: seq(101),
+                bitmap: 0b001,
+            }),
+            at(13_100),
+            true,
+            head_old,
+        ),
+        Ok(AmpduRetryDecision::Unaggregate { retry_mask: 0b10 })
+    );
+}
+
+#[test]
+fn a_whole_aged_window_is_discarded_and_the_request_starts_after_it() {
+    let mut state = AmpduRetryState::new(seq(4094), 3, POLICY).unwrap();
+    // 4094 acknowledged; 4095 and 0 missing and aged.
+    assert_eq!(
+        state.observe(answered(4094, 0b001), 3, at(9_001), true, FRESH),
+        Ok(AmpduRetryDecision::DiscardAged {
+            retry_mask: 0,
+            aged_mask: 0b110,
+            starting_sequence: seq(1),
+        })
+    );
+    assert_eq!(state.current_subframes(), 0);
+    // Whatever answers the request, nothing is left to send.
+    assert_eq!(
+        state.observe_block_ack_request(None, at(9_100), true, FRESH),
+        Ok(AmpduRetryDecision::Finish { retry_mask: 0 })
+    );
+}
+
+#[test]
+fn without_the_agreement_aged_subframes_go_without_a_block_ack_request() {
+    let mut state = AmpduRetryState::new(seq(100), 4, POLICY).unwrap();
+    assert_eq!(
+        state.observe(answered(100, 0b0100), 4, at(13_000), false, head_old),
+        Ok(AmpduRetryDecision::Unaggregate { retry_mask: 0b1010 })
+    );
+    assert_eq!(state.discarded_original_indices(), 0b0001);
+    let mut state = AmpduRetryState::new(seq(100), 2, POLICY).unwrap();
+    assert_eq!(
+        state.observe(AmpduAttemptResult::NoResponse, 2, at(9_001), false, FRESH),
+        Ok(AmpduRetryDecision::Finish { retry_mask: 0b11 })
+    );
+    assert_eq!(state.discarded_original_indices(), 0b11);
+}
+
+#[test]
+fn aging_applies_after_a_failed_protection_and_an_unanswered_aggregate() {
+    for result in [
+        AmpduAttemptResult::ProtectionFailure,
+        AmpduAttemptResult::NoResponse,
+    ] {
+        let mut state = AmpduRetryState::new(seq(100), 2, POLICY).unwrap();
+        // At 8 ms nothing is aged and the aggregate goes again.
+        assert!(matches!(
+            state.observe(result, 2, at(8_000), true, FRESH),
+            Ok(AmpduRetryDecision::RepublishUnchanged { .. }
+                | AmpduRetryDecision::RetainAggregate { .. })
+        ));
+        assert_eq!(
+            state.observe(result, 2, at(13_000), true, head_old),
+            Ok(AmpduRetryDecision::DiscardAged {
+                retry_mask: 0b10,
+                aged_mask: 0b01,
+                starting_sequence: seq(101),
+            }),
+            "{result:?}"
+        );
     }
+}
+
+#[test]
+fn a_subframe_without_an_admission_instant_is_a_handled_error() {
+    let mut state = AmpduRetryState::new(seq(100), 3, POLICY).unwrap();
+    let unknown = |index: u8| (index != 2).then(|| Instant::from_micros(0));
+    assert_eq!(
+        state.observe(answered(100, 0b001), 3, at(10), true, unknown),
+        Err(AmpduRetryError::UnknownSubframe { index: 2 })
+    );
+    // An acknowledged subframe needs no instant.
+    let mut state = AmpduRetryState::new(seq(100), 3, POLICY).unwrap();
+    assert_eq!(
+        state.observe(answered(100, 0b100), 3, at(10), true, unknown),
+        Ok(AmpduRetryDecision::RetainAggregate { retry_mask: 0b011 })
+    );
 }

@@ -68,17 +68,18 @@ checked head; its selection fold always has a candidate. It then chooses the
 fastest candidate no faster than the data rate, or the slowest candidate when
 all are faster, applying the BSS preamble rule afterward.
 
-A-MPDU lifetime and aging margin are spans of the port's radio clock
-(`Ieee80211Duration`). Aging uses the
-same radio epoch as the commit instant and starts strictly after
-`commit + lifetime - margin`; the exact first aged instant is checked before
-admission. An unrepresentable threshold is `AgingThresholdOutsideEpoch`.
-Every retry outcome observes that boundary, including a protection failure
-before any subframe reached the peer: an aged aggregate issues neither another
-publication nor a BlockAckReq. Its terminal retains the missing-subframe mask.
-Backend adapters retain the commit stamp's generation and reject a sample
-from another generation before consuming a completion or changing retry state.
-Monotonic timers remain the source for waiting and transmit watchdogs.
+Every subframe ages from its MSDU's admission into software, on the
+monotonic clock (`oer_time::Instant`, `docs/decisions.md`, MSDU age): the
+caller gives each original subframe's admission instant with every
+completion, and a subframe without one ends the exchange as incomplete
+(`UnknownSubframe`), never a panic. A subframe is aged once less than the
+aging margin of its lifetime is left. Every retry outcome observes it,
+including a protection failure before any subframe reached the peer, and
+the individual retries of a subframe that left the aggregate. An aged
+subframe is discarded instead of retried; under an operational Block Ack
+agreement a BlockAckReq then moves the recipient's window past it
+(`DiscardAged`), starting at the first remaining subframe or after the last
+discarded one. Without the agreement no BlockAckReq goes.
 
 `AmpduRequest` owns its bounded lengths; asking for a subframe outside that
 request gives `None`, and the planner reports `SubframeOutsideAggregate`
