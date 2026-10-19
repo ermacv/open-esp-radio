@@ -5989,39 +5989,22 @@ pub mod i2c_ana_mst {
         pub type R = crate::R<AnaConf1Spec>;
         #[doc = "Register `ANA_CONF1` writer"]
         pub type W = crate::W<AnaConf1Spec>;
-        #[doc = "Field `READ_MASK_COMPLEMENT_LOW` reader - Project-assigned name. Low 24 bits of the complemented one-hot read mask of the block being read."]
-        pub type ReadMaskComplementLowR = crate::FieldReader<u32>;
-        #[doc = "Field `READ_MASK_COMPLEMENT_LOW` writer - Project-assigned name. Low 24 bits of the complemented one-hot read mask of the block being read."]
-        pub type ReadMaskComplementLowW<'a, REG> =
-            crate::FieldWriter<'a, REG, 24, u32, crate::Safe>;
-        #[doc = "Field `READ_MASK_COMPLEMENT_HIGH` reader - Project-assigned name. High byte of the complemented read mask; the libphy publication sets it to 0xFF."]
-        pub type ReadMaskComplementHighR = crate::FieldReader;
-        #[doc = "Field `READ_MASK_COMPLEMENT_HIGH` writer - Project-assigned name. High byte of the complemented read mask; the libphy publication sets it to 0xFF."]
-        pub type ReadMaskComplementHighW<'a, REG> = crate::FieldWriter<'a, REG, 8, u8, crate::Safe>;
+        #[doc = "Field `READ_MASK_COMPLEMENT` reader - Project-assigned name. Complemented one-hot read mask of the block being read; the libphy publication sets the high byte to 0xFF."]
+        pub type ReadMaskComplementR = crate::FieldReader<u32>;
+        #[doc = "Field `READ_MASK_COMPLEMENT` writer - Project-assigned name. Complemented one-hot read mask of the block being read; the libphy publication sets the high byte to 0xFF."]
+        pub type ReadMaskComplementW<'a, REG> = crate::FieldWriter<'a, REG, 32, u32, crate::Safe>;
         impl R {
-            #[doc = "Bits 0:23 - Project-assigned name. Low 24 bits of the complemented one-hot read mask of the block being read."]
+            #[doc = "Bits 0:31 - Project-assigned name. Complemented one-hot read mask of the block being read; the libphy publication sets the high byte to 0xFF."]
             #[inline(always)]
-            pub fn read_mask_complement_low(&self) -> ReadMaskComplementLowR {
-                ReadMaskComplementLowR::new(self.bits & 0x00ff_ffff)
-            }
-            #[doc = "Bits 24:31 - Project-assigned name. High byte of the complemented read mask; the libphy publication sets it to 0xFF."]
-            #[inline(always)]
-            pub fn read_mask_complement_high(&self) -> ReadMaskComplementHighR {
-                ReadMaskComplementHighR::new(((self.bits >> 24) & 0xff) as u8)
+            pub fn read_mask_complement(&self) -> ReadMaskComplementR {
+                ReadMaskComplementR::new(self.bits)
             }
         }
         impl W {
-            #[doc = "Bits 0:23 - Project-assigned name. Low 24 bits of the complemented one-hot read mask of the block being read."]
+            #[doc = "Bits 0:31 - Project-assigned name. Complemented one-hot read mask of the block being read; the libphy publication sets the high byte to 0xFF."]
             #[inline(always)]
-            pub fn read_mask_complement_low(&mut self) -> ReadMaskComplementLowW<'_, AnaConf1Spec> {
-                ReadMaskComplementLowW::new(self, 0)
-            }
-            #[doc = "Bits 24:31 - Project-assigned name. High byte of the complemented read mask; the libphy publication sets it to 0xFF."]
-            #[inline(always)]
-            pub fn read_mask_complement_high(
-                &mut self,
-            ) -> ReadMaskComplementHighW<'_, AnaConf1Spec> {
-                ReadMaskComplementHighW::new(self, 24)
+            pub fn read_mask_complement(&mut self) -> ReadMaskComplementW<'_, AnaConf1Spec> {
+                ReadMaskComplementW::new(self, 0)
             }
         }
         #[doc = "Analog block read-mask word, published complete before every read.\n\nYou can [`read`](crate::Reg::read) this register and get [`ana_conf1::R`](R). You can [`reset`](crate::Reg::reset), [`write`](crate::Reg::write), [`write_with_zero`](crate::Reg::write_with_zero) this register using [`ana_conf1::W`](W). You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api)."]
@@ -6033,7 +6016,7 @@ pub mod i2c_ana_mst {
         impl crate::Readable for AnaConf1Spec {}
         #[doc = "`write(|w| ..)` method takes [`ana_conf1::W`](W) writer structure"]
         impl crate::Writable for AnaConf1Spec {
-            type Safety = crate::Unsafe;
+            type Safety = crate::Safe;
         }
         #[doc = "`reset()` method sets ANA_CONF1 to value 0x2d"]
         impl crate::Resettable for AnaConf1Spec {
@@ -11860,6 +11843,19 @@ pub mod full_register_write {
                 .write_with_zero(|writer| writer.threshold().set(value));
         }
     }
+
+    /// Write every bit of `I2C_ANA_MST`.`ANA_CONF1` through its full-width field.
+    #[inline]
+    pub fn publish_phy_i2c_read_mask(registers: &crate::I2cAnaMst, value: u32) {
+        // SAFETY: generator validation proves that this is the only field,
+        // it covers all 32 bits and accepts every `u32`; no zero-filled
+        // reserved or partially described bits remain.
+        unsafe {
+            registers
+                .ana_conf1()
+                .write_with_zero(|writer| writer.read_mask_complement().set(value));
+        }
+    }
 }
 
 /// Safe, SVD-declared observations which cover a complete register.
@@ -12385,27 +12381,6 @@ pub mod zero_based_field_write {
             registers
                 .security_key(index)
                 .write_with_zero(|writer| writer.key_word().set(value));
-        }
-    }
-
-    /// Write `READ_MASK_COMPLEMENT_LOW`, `READ_MASK_COMPLEMENT_HIGH` in `I2C_ANA_MST`.`ANA_CONF1` while publishing zero to every other register bit.
-    #[inline]
-    pub fn publish_phy_i2c_read_mask(
-        registers: &crate::I2cAnaMst,
-        read_mask_complement_low_value: u32,
-        read_mask_complement_high_value: u8,
-    ) {
-        // SAFETY: the SVD extension explicitly qualifies the zero-based
-        // transaction, and generator validation proves every selected field
-        // accepts every value representable by its public argument type.
-        unsafe {
-            registers.ana_conf1().write_with_zero(|writer| {
-                writer
-                    .read_mask_complement_low()
-                    .set(read_mask_complement_low_value)
-                    .read_mask_complement_high()
-                    .set(read_mask_complement_high_value)
-            });
         }
     }
 

@@ -135,24 +135,14 @@ access = "read-write"
 resetValue = 0x0000002D
 
 [[peripherals.registers.register.fields]]
-name = "READ_MASK_COMPLEMENT_LOW"
-description = "Low 24 bits of the complemented one-hot read mask of the block being read."
+name = "READ_MASK_COMPLEMENT"
+description = "Complemented one-hot read mask of the block being read; the libphy publication sets the high byte to 0xFF."
 bitOffset = 0
-bitWidth = 24
+bitWidth = 32
 
 [peripherals.registers.register.fields.writeConstraint.range]
 minimum = 0
-maximum = 0xFFFFFF
-
-[[peripherals.registers.register.fields]]
-name = "READ_MASK_COMPLEMENT_HIGH"
-description = "High byte of the complemented read mask; the libphy publication sets it to 0xFF."
-bitOffset = 24
-bitWidth = 8
-
-[peripherals.registers.register.fields.writeConstraint.range]
-minimum = 0
-maximum = 0xFF
+maximum = 0xFFFFFFFF
 
 [[peripherals.registers]]
 [peripherals.registers.register]
@@ -357,12 +347,9 @@ naming = "vendor"
 sources = ["ESP_IDF_4D59230D_C5_I2C_ANA_MST"]
 
 [[review]]
-entity = "I2C_ANA_MST.ANA_CONF1.READ_MASK_COMPLEMENT_LOW"
+entity = "I2C_ANA_MST.ANA_CONF1.READ_MASK_COMPLEMENT"
 naming = "descriptive"
 
-[[review]]
-entity = "I2C_ANA_MST.ANA_CONF1.READ_MASK_COMPLEMENT_HIGH"
-naming = "descriptive"
 
 [[review]]
 entity = "I2C_ANA_MST.ANA_CONF2"

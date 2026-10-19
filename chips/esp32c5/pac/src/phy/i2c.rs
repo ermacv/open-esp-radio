@@ -12,6 +12,7 @@
 
 #![forbid(unsafe_code)]
 
+use crate::generated::PhyI2cReadMask;
 use crate::svd;
 
 /// One of the two analog-register command hosts.
@@ -30,12 +31,6 @@ pub struct PhyI2cBlock {
 /// First and last block with a read-mask entry in `phy_get_i2c_read_mask_`.
 const FIRST_BLOCK: u8 = 0x61;
 const LAST_BLOCK: u8 = 0x6f;
-
-/// `CSWTCH.81`: the one-hot read-mask quarter of blocks 0x61 to 0x6F.
-const READ_MASK_QUARTERS: [u16; 15] = [
-    0x0040, 0x0000, 0x0004, 0x0000, 0x0400, 0x0020, 0x0001, 0x0008, 0x0080, 0x0010, 0x0002, 0x0800,
-    0x0100, 0x0200, 0x1000,
-];
 
 /// Blocks 0x63 to 0x6E that `phy_get_i2c_hostid_` assigns to host 1, as bit
 /// `block - 0x63`.
@@ -65,11 +60,25 @@ impl PhyI2cBlock {
         }
     }
 
-    /// Low 24 bits of the complemented read mask `phy_chip_i2c_readReg_org`
-    /// publishes for the block as called; the high byte is 0xFF.
-    pub const fn read_mask_complement_low(self) -> u32 {
-        let mask = (READ_MASK_QUARTERS[(self.code - FIRST_BLOCK) as usize] as u32) << 2;
-        !mask & 0x00ff_ffff
+    /// The complemented one-hot read mask `phy_chip_i2c_readReg_org`
+    /// publishes for the block as called.
+    pub const fn read_mask(self) -> PhyI2cReadMask {
+        match self.code {
+            0x61 => PhyI2cReadMask::Block61,
+            0x63 => PhyI2cReadMask::Block63,
+            0x65 => PhyI2cReadMask::Block65,
+            0x66 => PhyI2cReadMask::Block66,
+            0x67 => PhyI2cReadMask::Block67,
+            0x68 => PhyI2cReadMask::Block68,
+            0x69 => PhyI2cReadMask::Block69,
+            0x6a => PhyI2cReadMask::Block6A,
+            0x6b => PhyI2cReadMask::Block6B,
+            0x6c => PhyI2cReadMask::Block6C,
+            0x6d => PhyI2cReadMask::Block6D,
+            0x6e => PhyI2cReadMask::Block6E,
+            0x6f => PhyI2cReadMask::Block6F,
+            _ => PhyI2cReadMask::Unselected,
+        }
     }
 
     /// The block code the command carries: both leaves address block 0x65
@@ -560,11 +569,7 @@ impl PhyI2cRegisters {
         if self.is_busy(host) {
             return Err(PhyI2cAccessError::Busy);
         }
-        svd::zero_based_field_write::publish_phy_i2c_read_mask(
-            self.master(),
-            address.block.read_mask_complement_low(),
-            0xff,
-        );
+        crate::generated::publish_phy_i2c_read_mask(self.master(), address.block.read_mask());
         self.publish(host, address, 0, false);
         Ok(())
     }
@@ -626,7 +631,7 @@ mod tests {
     /// tables: the same one-hot read-mask bit and the same host.
     #[test]
     fn the_public_regi2c_blocks_agree_with_the_libphy_tables() {
-        // (block, ANA_CONF1 read-mask bit, ANA_CONF2 selection bit set)
+        // (block, ANA_CONF1 read-mask bit, host 0 selected)
         for (code, mask_bit, selects_host0) in [
             (0x6a, 6, false),
             (0x66, 7, false),
@@ -635,28 +640,13 @@ mod tests {
             (0x6d, 10, true),
         ] {
             let block = PhyI2cBlock::from_vendor_abi(code).expect("reviewed block");
-            assert_eq!(
-                block.read_mask_complement_low(),
-                !(1 << mask_bit) & 0x00ff_ffff,
-                "{code:#x}"
-            );
+            assert_eq!(block.read_mask() as u32, !(1_u32 << mask_bit), "{code:#x}");
             let host = if selects_host0 {
                 PhyI2cHost::Host0
             } else {
                 PhyI2cHost::Host1
             };
             assert_eq!(block.host(), host, "{code:#x}");
-            // The reviewed host map sets exactly the selection bits of the
-            // host-0 blocks (bits 8..=12 of ANA_CONF2, field offset 4).
-            let selection = 0x19c1_u32 << 4;
-            let bit = match code {
-                0x6a => 8,
-                0x66 => 9,
-                0x61 => 10,
-                0x69 => 11,
-                _ => 12,
-            };
-            assert_eq!(selection & (1 << bit) != 0, selects_host0, "{code:#x}");
         }
     }
 
@@ -665,7 +655,7 @@ mod tests {
         let block = PhyI2cBlock::from_vendor_abi(0x62).expect("block");
         assert_eq!(block.command_code(), 0x65);
         assert_eq!(block.host(), PhyI2cHost::Host0);
-        assert_eq!(block.read_mask_complement_low(), 0x00ff_ffff);
+        assert_eq!(block.read_mask(), PhyI2cReadMask::Unselected);
         let target = PhyI2cBlock::from_vendor_abi(0x65).expect("block");
         assert_eq!(target.command_code(), 0x65);
         assert_eq!(target.host(), PhyI2cHost::Host1);
