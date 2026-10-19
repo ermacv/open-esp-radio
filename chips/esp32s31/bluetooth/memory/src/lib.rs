@@ -40,6 +40,7 @@ mod le_rx_packet;
 mod le_tx_packet;
 mod le_tx_power;
 pub use le_tx_power::LeTxPower;
+mod layout_reference;
 mod legacy_advertising;
 mod legacy_advertising_event_image;
 mod legacy_advertising_tx_packet;

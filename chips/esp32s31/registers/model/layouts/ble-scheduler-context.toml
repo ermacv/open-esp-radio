@@ -1,0 +1,519 @@
+schema = 1
+
+[layout]
+name = "BLE_SCHEDULER_CONTEXT"
+description = "Opaque separate scheduler context retained by every role graph and referenced by item CONTEXT. Only allocation, zero initialization and the positional link are established."
+size = 72
+align = 4
+placement = ["dma-window"]
+
+[[layout.words]]
+name = "WORD_0000_OPAQUE"
+offset = 0x00
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words]]
+name = "WORD_0004_OPAQUE"
+offset = 0x04
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words]]
+name = "WORD_0008_OPAQUE"
+offset = 0x08
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words]]
+name = "WORD_000C_OPAQUE"
+offset = 0x0c
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words]]
+name = "WORD_0010_OPAQUE"
+offset = 0x10
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words]]
+name = "WORD_0014_OPAQUE"
+offset = 0x14
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words]]
+name = "WORD_0018_OPAQUE"
+offset = 0x18
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words]]
+name = "WORD_001C_OPAQUE"
+offset = 0x1c
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words]]
+name = "WORD_0020_OPAQUE"
+offset = 0x20
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words]]
+name = "WORD_0024_OPAQUE"
+offset = 0x24
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words]]
+name = "WORD_0028_OPAQUE"
+offset = 0x28
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words]]
+name = "WORD_002C_OPAQUE"
+offset = 0x2c
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words]]
+name = "WORD_0030_OPAQUE"
+offset = 0x30
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words]]
+name = "WORD_0034_OPAQUE"
+offset = 0x34
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words]]
+name = "WORD_0038_OPAQUE"
+offset = 0x38
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words]]
+name = "WORD_003C_OPAQUE"
+offset = 0x3c
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words]]
+name = "WORD_0040_OPAQUE"
+offset = 0x40
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words]]
+name = "WORD_0044_OPAQUE"
+offset = 0x44
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[review]]
+entity = "BLE_SCHEDULER_CONTEXT"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_CONTEXT"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLE_SCHEDULER_CONTEXT.WORD_0000_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_CONTEXT"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_SCHEDULER_CONTEXT.WORD_0000_OPAQUE.BITS_0_31_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_CONTEXT"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_SCHEDULER_CONTEXT.WORD_0004_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_CONTEXT"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_SCHEDULER_CONTEXT.WORD_0004_OPAQUE.BITS_0_31_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_CONTEXT"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_SCHEDULER_CONTEXT.WORD_0008_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_CONTEXT"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_SCHEDULER_CONTEXT.WORD_0008_OPAQUE.BITS_0_31_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_CONTEXT"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_SCHEDULER_CONTEXT.WORD_000C_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_CONTEXT"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_SCHEDULER_CONTEXT.WORD_000C_OPAQUE.BITS_0_31_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_CONTEXT"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_SCHEDULER_CONTEXT.WORD_0010_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_CONTEXT"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_SCHEDULER_CONTEXT.WORD_0010_OPAQUE.BITS_0_31_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_CONTEXT"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_SCHEDULER_CONTEXT.WORD_0014_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_CONTEXT"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_SCHEDULER_CONTEXT.WORD_0014_OPAQUE.BITS_0_31_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_CONTEXT"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_SCHEDULER_CONTEXT.WORD_0018_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_CONTEXT"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_SCHEDULER_CONTEXT.WORD_0018_OPAQUE.BITS_0_31_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_CONTEXT"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_SCHEDULER_CONTEXT.WORD_001C_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_CONTEXT"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_SCHEDULER_CONTEXT.WORD_001C_OPAQUE.BITS_0_31_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_CONTEXT"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_SCHEDULER_CONTEXT.WORD_0020_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_CONTEXT"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_SCHEDULER_CONTEXT.WORD_0020_OPAQUE.BITS_0_31_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_CONTEXT"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_SCHEDULER_CONTEXT.WORD_0024_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_CONTEXT"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_SCHEDULER_CONTEXT.WORD_0024_OPAQUE.BITS_0_31_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_CONTEXT"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_SCHEDULER_CONTEXT.WORD_0028_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_CONTEXT"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_SCHEDULER_CONTEXT.WORD_0028_OPAQUE.BITS_0_31_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_CONTEXT"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_SCHEDULER_CONTEXT.WORD_002C_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_CONTEXT"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_SCHEDULER_CONTEXT.WORD_002C_OPAQUE.BITS_0_31_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_CONTEXT"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_SCHEDULER_CONTEXT.WORD_0030_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_CONTEXT"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_SCHEDULER_CONTEXT.WORD_0030_OPAQUE.BITS_0_31_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_CONTEXT"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_SCHEDULER_CONTEXT.WORD_0034_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_CONTEXT"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_SCHEDULER_CONTEXT.WORD_0034_OPAQUE.BITS_0_31_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_CONTEXT"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_SCHEDULER_CONTEXT.WORD_0038_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_CONTEXT"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_SCHEDULER_CONTEXT.WORD_0038_OPAQUE.BITS_0_31_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_CONTEXT"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_SCHEDULER_CONTEXT.WORD_003C_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_CONTEXT"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_SCHEDULER_CONTEXT.WORD_003C_OPAQUE.BITS_0_31_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_CONTEXT"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_SCHEDULER_CONTEXT.WORD_0040_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_CONTEXT"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_SCHEDULER_CONTEXT.WORD_0040_OPAQUE.BITS_0_31_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_CONTEXT"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_SCHEDULER_CONTEXT.WORD_0044_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_CONTEXT"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_SCHEDULER_CONTEXT.WORD_0044_OPAQUE.BITS_0_31_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_CONTEXT"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"

@@ -128,6 +128,23 @@ fn render_fixture(node: &str, array: &str) -> Result<String, String> {
 }
 
 fn render_fixture_with_prefix(node: &str, array: &str, prefix: &str) -> Result<String, String> {
+    let (model, memory) = load_fixture(node, array, prefix)?;
+    model
+        .render_layouts_rust(&memory)
+        .map_err(|error| error.to_string())
+}
+
+fn load_fixture(
+    node: &str,
+    array: &str,
+    prefix: &str,
+) -> Result<
+    (
+        oer_registers_model::RegisterModel,
+        oer_registers_model::memory::Memory,
+    ),
+    String,
+> {
     let directory = tempfile::tempdir().expect("valid generated-layout fixture");
     let path = |name: &str| directory.path().join(name);
     let device = DEVICE.replace(
@@ -148,9 +165,7 @@ fn render_fixture_with_prefix(node: &str, array: &str, prefix: &str) -> Result<S
         .map_err(|error| error.to_string())?;
     let memory = oer_registers_model::memory::Memory::load(&path("memory.toml"))
         .expect("valid generated-layout fixture");
-    model
-        .render_layouts_rust(&memory)
-        .map_err(|error| error.to_string())
+    Ok((model, memory))
 }
 
 const ARRAY: &str = r#"schema = 1
@@ -254,11 +269,126 @@ fn ble_links_round_trip_preserve_other_fields_and_reject_invalid_references() {
 }
 
 #[test]
+fn ble_buffer_pointers_check_encoding_without_requiring_a_layout_reference() {
+    let node = ble_node().replace("points-to = \"NODE\"", "placement = [\"dma-window\"]");
+    let rust = render_fixture(&node, ARRAY).expect("valid compressed buffer fixture");
+    run_generated(
+        &rust,
+        r#"
+        use layouts::*;
+        // Synthetic buffer addresses never access memory.
+        let address = |value| unsafe { DmaWindowAddress::new_unchecked(value) };
+        let original = NodeBuffer::from_bits(u32::MAX);
+        for buffer in [0x2f00_0004, 0x2f00_1380, 0x2f07_fffc] {
+            let value = original.with_address(address(buffer)).expect("encodable buffer");
+            assert_eq!(value.address_address(), Some(buffer));
+            assert_eq!(value.without_address(), original.without_address());
+        }
+        let empty = original.without_address();
+        assert_eq!(empty.address_address(), None);
+        assert_ne!(empty.bits(), 0, "clearing a buffer preserves neighboring fields");
+        for buffer in [0x2f00_0000, 0x2f00_0001, 0x3000_0100, 0x2f40_0004] {
+            assert!(original.with_address(address(buffer)).is_none());
+        }
+    "#,
+    );
+}
+
+fn pointer_policy(text: &str) -> Result<oer_registers_model::PacApiPack, String> {
+    let directory = tempfile::tempdir().expect("policy fixture directory");
+    let path = directory.path().join("api.toml");
+    fs::write(&path, text).expect("write pointer policy");
+    oer_registers_model::PacApiPack::load(&path).map_err(|error| error.to_string())
+}
+
+const POINTER_POLICY: &str = r#"schema = 5
+[[pointer-fields]]
+name = "node_pointer"
+peripheral = "RADIO"
+register = "NEXT"
+field = "ADDRESS_LOW"
+points-to = "NODE"
+encoding = "ble-compressed"
+sources = ["fixture"]
+"#;
+
+#[test]
+fn mmio_pointer_fields_encode_layout_references_and_validate_targets() {
+    let (model, memory) = load_fixture(NODE, ARRAY, PREFIX).expect("valid layouts");
+    let policy = pointer_policy(POINTER_POLICY).expect("valid pointer policy");
+    let (svd, _) = model.render_svd().expect("fixture SVD");
+    policy
+        .validate_against_svd(&svd)
+        .expect("pointer field fits its register");
+    oer_registers_model::validate_pointer_writes(model.layouts(), &policy)
+        .expect("known DMA target");
+    assert!(policy.source_ids().contains("fixture"));
+    let rust = model.render_layouts_rust(&memory).expect("layouts")
+        + &policy.render_facade_rust().expect("typed pointer encoder");
+    run_generated(
+        &rust,
+        r#"
+        let reference = |address| unsafe {
+            layouts::DmaRef::<layouts::Node>::new_unchecked(layouts::DmaWindowAddress::new_unchecked(address))
+        };
+        assert_eq!(node_pointer(None), Some(0));
+        let target = reference(0x2f00_0100);
+        assert_eq!(node_pointer(Some(target)).map(|index| 0x2f00_0000 | (index << 2)), Some(target.bits()));
+        assert_eq!(node_pointer(Some(reference(0x2f00_0000))), None);
+        assert_eq!(node_pointer(Some(reference(0x2f00_0001))), None);
+        assert_eq!(node_pointer(Some(reference(0x3000_0100))), None);
+    "#,
+    );
+    for target in ["PREFIX", "MISSING"] {
+        let invalid = pointer_policy(
+            &POINTER_POLICY.replace("points-to = \"NODE\"", &format!("points-to = \"{target}\"")),
+        )
+        .expect("policy syntax");
+        assert!(oer_registers_model::validate_pointer_writes(model.layouts(), &invalid).is_err());
+    }
+    for source in [
+        POINTER_POLICY.replace("field = \"ADDRESS_LOW\"", "field = \"FLAG\""),
+        POINTER_POLICY.replace("encoding = \"ble-compressed\"", ""),
+    ] {
+        let invalid = pointer_policy(&source).expect("policy syntax");
+        assert!(invalid.validate_against_svd(&svd).is_err());
+    }
+}
+
+#[test]
+fn mmio_member_pointers_stay_inside_the_layout_and_handle_address_overflow() {
+    let (model, memory) = load_fixture(NODE, ARRAY, PREFIX).expect("valid layouts");
+    let source = POINTER_POLICY.replace("encoding = \"ble-compressed\"", "member-offset = 5");
+    let policy = pointer_policy(&source).expect("member policy");
+    oer_registers_model::validate_pointer_writes(model.layouts(), &policy)
+        .expect("member lies in the layout");
+    let rust = model.render_layouts_rust(&memory).expect("layouts")
+        + &policy.render_facade_rust().expect("member pointer encoder");
+    run_generated(
+        &rust,
+        r#"
+        let reference = |address| unsafe {
+            layouts::DmaRef::<layouts::Node>::new_unchecked(layouts::DmaWindowAddress::new_unchecked(address))
+        };
+        assert_eq!(node_pointer(Some(reference(0x2f00_0100))), Some(0x2f00_0105));
+        assert_eq!(node_pointer(Some(reference(u32::MAX - 3))), None);
+    "#,
+    );
+    for source in [
+        source.replace("member-offset = 5", "member-offset = 8"),
+        POINTER_POLICY.to_owned() + "member-offset = 1\n",
+    ] {
+        let invalid = pointer_policy(&source).expect("policy syntax");
+        assert!(oer_registers_model::validate_pointer_writes(model.layouts(), &invalid).is_err());
+    }
+}
+
+#[test]
 fn invalid_pointer_encodings_and_phase_declarations_are_rejected() {
     let node = ble_node();
     for (input, reason) in [
         (node.replace("bits = \"23:4\"", "bits = \"22:4\""), "20-bit ble-compressed"),
-        (node.replace("points-to = \"NODE\", ", ""), "encoding requires points-to"),
+        (node.replace("points-to = \"NODE\", ", ""), "encoding requires placement or points-to"),
         (node.replace("ble-compressed", "unknown"), "unknown variant"),
         (node.replace("writer = \"phased\", phases", "writer = \"cpu\", phases"), "only a phased writer"),
         (node.replace("{ name = \"complete\", writer = \"hardware\" }", "{ name = \"arm\", writer = \"hardware\" }"), "unique"),

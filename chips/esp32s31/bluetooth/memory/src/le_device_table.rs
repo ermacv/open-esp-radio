@@ -154,7 +154,10 @@ impl LeDeviceTable {
         // exceeds its capacity, and its words are `VolatileCell`s the CPU
         // reaches only through volatile accesses.
         unsafe {
-            DeviceTablePublication::new(self.first_entry, count)
+            DeviceTablePublication::new(
+                crate::layout_reference::controller_reference(self.first_entry.address()),
+                count,
+            )
         }
     }
 

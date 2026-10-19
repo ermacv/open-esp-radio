@@ -38,6 +38,23 @@ impl PacApiPack {
         let device = svd_parser::parse(svd).map_err(|error| Error::message(error.to_string()))?;
         self.validate_ownership_partitions_against_svd(&device)?;
 
+        for pointer in &self.pointer_fields {
+            let binding = register(
+                &device,
+                &pointer.name,
+                &pointer.peripheral,
+                &pointer.register,
+            )?;
+            let field = field(&pointer.name, binding.info, &pointer.field)?;
+            let width = if pointer.encoding.is_some() { 20 } else { 32 };
+            if binding.properties.size != Some(32) || field.bit_width() != width {
+                return Err(Error::message(format!(
+                    "PAC pointer field {:?} requires a {width}-bit field of a 32-bit register",
+                    pointer.name
+                )));
+            }
+        }
+
         for operation in &self.interrupt_snapshots {
             let status = register(
                 &device,

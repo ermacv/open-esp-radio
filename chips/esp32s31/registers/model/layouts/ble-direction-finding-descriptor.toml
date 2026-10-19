@@ -1,0 +1,127 @@
+schema = 1
+
+[layout]
+name = "BLE_DIRECTION_FINDING_DESCRIPTOR"
+description = "Disabled-CTE descriptor beginning at workspace +0x0c. The first word is one in the initialized baseline; the remaining three words retain unknown meaning."
+size = 16
+align = 4
+placement = ["dma-window"]
+
+[[layout.words]]
+name = "WORD_0000_OPAQUE"
+offset = 0x00
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words]]
+name = "WORD_0004_OPAQUE"
+offset = 0x04
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words]]
+name = "WORD_0008_OPAQUE"
+offset = 0x08
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words]]
+name = "WORD_000C_OPAQUE"
+offset = 0x0c
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[review]]
+entity = "BLE_DIRECTION_FINDING_DESCRIPTOR"
+sources = ["BLOB_LIBBLE_MEMORY_DF_WORKSPACE"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLE_DIRECTION_FINDING_DESCRIPTOR.WORD_0000_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_DF_WORKSPACE"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_DIRECTION_FINDING_DESCRIPTOR.WORD_0000_OPAQUE.BITS_0_31_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_DF_WORKSPACE"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_DIRECTION_FINDING_DESCRIPTOR.WORD_0004_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_DF_WORKSPACE"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_DIRECTION_FINDING_DESCRIPTOR.WORD_0004_OPAQUE.BITS_0_31_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_DF_WORKSPACE"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_DIRECTION_FINDING_DESCRIPTOR.WORD_0008_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_DF_WORKSPACE"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_DIRECTION_FINDING_DESCRIPTOR.WORD_0008_OPAQUE.BITS_0_31_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_DF_WORKSPACE"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_DIRECTION_FINDING_DESCRIPTOR.WORD_000C_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_DF_WORKSPACE"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_DIRECTION_FINDING_DESCRIPTOR.WORD_000C_OPAQUE.BITS_0_31_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_DF_WORKSPACE"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"

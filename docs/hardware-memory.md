@@ -24,7 +24,10 @@ generated from the register model. Both internally buffered and externally
 backed A-MPDUs use the same generated TX DMA descriptor; their HAL entry
 types describe software inputs, not separate hardware layouts. Per-queue
 PLCP1, length-control, power and PTI words use generated register fields.
-The unassigned TX fields, BLE exchange memory and 802.15.4 frame buffers
+BLE buffer headers, RX/TX packet prefixes, scheduler items and contexts,
+link states, PHY environment, resolving list, device table and DF workspace
+also have generated layouts; unassigned fields are positional and opaque.
+The unassigned TX fields and 802.15.4 frame buffers
 retain their existing descriptions, with fields named by offset where their
 meaning is unknown. The PHY's RFPLL codes, frequency-memory records and analog-I2C
 command words also have generated value accessors. Register-specific
@@ -143,7 +146,9 @@ bits. A getter decodes an address without creating a
 reference; hardware-written links still need validation against their arena.
 
 Every field gets a `[[review]]` like a register field: naming, sources,
-provenance, accuracy, completeness. A fact measured on the stand is evidence
+provenance, accuracy, completeness. An offset or bit position whose physical
+meaning is unknown uses `accuracy = "positional"` and an opaque name.
+A fact measured on the stand is evidence
 of a new class, `stand`, citing the chip's `notes/` and the runs; vendor
 facts keep their `BLOB_*` ids.
 

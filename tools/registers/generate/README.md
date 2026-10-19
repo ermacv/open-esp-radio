@@ -99,6 +99,12 @@ A 20-bit pointer field can name `points-to` with
 fields of the word. Its decoded-address getter grants no reference to
 hardware-written memory.
 
+A compressed pointer to a byte buffer names `placement = ["dma-window"]`
+instead of `points-to`. Its builder takes `DmaWindowAddress`, checks the
+same nonzero word-index encoding and preserves other fields. The buffer
+may begin with an owned RX/TX prefix; that decoder is not the pointer's
+target type. `without_<field>` clears this nullable buffer address.
+
 Instead of words or byte ranges, a fixed array declares `[layout.array]`
 with `element = "<LAYOUT>"` and `count`. The element must be a shared word
 layout, with the same alignment and placement as the array, whose size is
@@ -139,6 +145,17 @@ bit 0), which the runtime linker script includes.
 A complete-register write in the API policy takes either a `domain` or, for
 a register the hardware reads as a pointer, `points-to = "<LAYOUT>"`: its
 bridge then takes a `DmaRef` to that layout of the model.
+
+For a pointer field inside a composed transaction, `[[pointer-fields]]`
+declares `name`, `peripheral`, `register`, `field`, `points-to`, optional
+`encoding = "ble-compressed"` and `sources`. The generator validates the
+field width against the SVD and the target against DMA layouts, then emits
+a typed `Option<DmaRef<L>> -> Option<u32>` image encoder; the existing
+transaction retains its write/RMW and fence order. A `member-offset` names
+a byte position inside the referenced layout, for a register that consumes
+a member address. It must fit the layout and, for BLE compression, be word
+aligned. Null stays zero; invalid encodings and address overflow return
+`None`. No observed hardware address creates a `DmaRef`.
 
 The schema-1 manifest selects model, sparse reviewed assertions, applicability,
 memory map, ownership policy, API/lint packs, evidence catalogs and output paths.

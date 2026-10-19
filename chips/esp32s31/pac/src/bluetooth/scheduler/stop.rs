@@ -192,11 +192,11 @@ mod tests {
     fn stop_detaches_only_its_exact_head_and_verifies_retirement() {
         use super::super::BluetoothSchedulerHardwareListHeadRetirementDisposition as D;
         let expected = crate::BluetoothSchedulerHardwareListHead::from_address(
-            crate::BluetoothControllerSramAddress::new(0x2f00_0400).unwrap(),
+            crate::test_memory::reference(0x2f00_0400),
         )
         .unwrap();
         let foreign = crate::BluetoothSchedulerHardwareListHead::from_address(
-            crate::BluetoothControllerSramAddress::new(0x2f00_0800).unwrap(),
+            crate::test_memory::reference(0x2f00_0800),
         )
         .unwrap();
         let empty = crate::BluetoothSchedulerHardwareListHead::empty();

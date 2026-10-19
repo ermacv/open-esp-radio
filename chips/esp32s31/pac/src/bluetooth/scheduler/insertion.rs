@@ -7,22 +7,24 @@
 
 #![deny(unsafe_code)]
 
+use crate::layouts::{BleSchedulerItem, DmaRef};
+
 use crate::{
-    BluetoothControllerSramAddress, BluetoothSchedulerBusyObservation,
-    BluetoothSchedulerHardwareListIndex, BluetoothTaskRegisters, device_fence,
+    BluetoothSchedulerBusyObservation, BluetoothSchedulerHardwareListIndex, BluetoothTaskRegisters,
+    device_fence,
 };
 
 /// Validated item and list selected for one insertion execution-lock attempt.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct BluetoothSchedulerExecutionLockRequest {
-    address: BluetoothControllerSramAddress,
+    address: DmaRef<BleSchedulerItem>,
     hardware_list_index: BluetoothSchedulerHardwareListIndex,
 }
 
 impl BluetoothSchedulerExecutionLockRequest {
     /// Bind the merge-selected item to its scheduler hardware list.
     pub const fn new(
-        address: BluetoothControllerSramAddress,
+        address: DmaRef<BleSchedulerItem>,
         hardware_list_index: BluetoothSchedulerHardwareListIndex,
     ) -> Self {
         Self {
@@ -32,7 +34,7 @@ impl BluetoothSchedulerExecutionLockRequest {
     }
 
     /// Selected item address without dereference authority.
-    pub const fn address(self) -> BluetoothControllerSramAddress {
+    pub const fn address(self) -> DmaRef<BleSchedulerItem> {
         self.address
     }
 
@@ -113,7 +115,8 @@ impl BluetoothSchedulerInsertionExecutionControl
     fn publish_execution_lock(&mut self, request: BluetoothSchedulerExecutionLockRequest) {
         crate::svd::zero_based_field_write::publish_bluetooth_scheduler_execution_lock_request(
             self.registers,
-            request.address().compressed_image(),
+            crate::generated::bluetooth_scheduler_lock_pointer_image(Some(request.address()))
+                .expect("the placed layout has a nonzero BLE encoding"),
             request.hardware_list_index().get(),
             true,
         );

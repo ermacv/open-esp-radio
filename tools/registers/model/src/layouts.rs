@@ -1298,9 +1298,11 @@ fn render_field(
                     }}\n"
                 );
                 if field.points_to.is_none() {
-                    let _ = writeln!(output,
+                    let _ = writeln!(
+                        output,
                         "    /// Clear the buffer pointer, preserving the other fields.\n\
-                        pub const fn without_{name}(self) -> Self {{ Self(self.0 & 0x{keep:x}) }}\n");
+                        pub const fn without_{name}(self) -> Self {{ Self(self.0 & 0x{keep:x}) }}\n"
+                    );
                 }
             }
             return;

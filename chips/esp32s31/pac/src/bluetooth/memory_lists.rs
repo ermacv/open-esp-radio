@@ -2,6 +2,7 @@
 
 #![deny(unsafe_code)]
 
+use crate::layouts::{BleBufferHeader, DmaRef};
 use crate::{BluetoothTaskRegisters, device_fence};
 
 const CONTROLLER_SRAM_ADDRESS_MASK: u32 = 0xffc0_0003;
@@ -93,19 +94,31 @@ impl BluetoothControllerSramAddress {
 /// `Zero` is intentionally not named empty, null, or disabled: the reviewed
 /// RX-link reset supplies literal zero for `NextRx`, but the hardware's
 /// rotation and empty-chain semantics are not yet established.
+///
+/// A scheduler item cannot substitute for a receive buffer header:
+///
+/// ```compile_fail
+/// use oer_esp32s31_pac::{BluetoothMemoryListPointerImage, layouts::{BleSchedulerItem, DmaRef}};
+/// fn wrong_layout(item: DmaRef<BleSchedulerItem>) {
+///     let _ = BluetoothMemoryListPointerImage::Address(item);
+/// }
+/// ```
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum BluetoothMemoryListPointerImage {
     /// Publish the finite low-twenty-bit zero image.
     Zero,
-    /// Publish one validated compressed SRAM address.
-    Address(BluetoothControllerSramAddress),
+    /// Publish the typed reference to one placed buffer header.
+    Address(DmaRef<BleBufferHeader>),
 }
 
 impl BluetoothMemoryListPointerImage {
+    #[cfg(test)]
     const fn compressed(self) -> u32 {
         match self {
             Self::Zero => 0,
-            Self::Address(address) => address.compressed_image(),
+            Self::Address(address) => address
+                .ble_compressed()
+                .expect("a placed buffer header has a nonzero BLE encoding"),
         }
     }
 }
@@ -180,11 +193,17 @@ impl BluetoothTaskRegisters {
         slot: BluetoothMemoryListSlot,
         image: BluetoothMemoryListPointerImage,
     ) {
-        let compressed = crate::generated::BluetoothMemoryListPointerBits::new(image.compressed())
-            .expect("BluetoothMemoryListPointerImage is always a low-twenty-bit value");
+        let address = match image {
+            BluetoothMemoryListPointerImage::Zero => None,
+            BluetoothMemoryListPointerImage::Address(reference) => Some(reference),
+        };
 
         macro_rules! program {
-            ($controller:expr, $clear:path, $publish:path) => {{
+            ($controller:expr, $clear:path, $publish:path, $encode:path) => {{
+                let compressed = crate::generated::BluetoothMemoryListPointerBits::new(
+                    $encode(address).expect("the placed RX header is encodable"),
+                )
+                .expect("the generated pointer image fits its domain");
                 $clear($controller);
                 $publish($controller, compressed);
             }};
@@ -196,42 +215,48 @@ impl BluetoothTaskRegisters {
                 program!(
                     controller,
                     crate::generated::clear_bluetooth_memory_list_1_pointer_a,
-                    crate::generated::or_bluetooth_memory_list_1_pointer_a
+                    crate::generated::or_bluetooth_memory_list_1_pointer_a,
+                    crate::generated::bluetooth_rxlink_1_current_pointer_image
                 );
             }
             (BluetoothMemoryListSelector::One, BluetoothMemoryListSlot::NextRx) => {
                 program!(
                     controller,
                     crate::generated::clear_bluetooth_memory_list_1_pointer_b,
-                    crate::generated::or_bluetooth_memory_list_1_pointer_b
+                    crate::generated::or_bluetooth_memory_list_1_pointer_b,
+                    crate::generated::bluetooth_rxlink_1_next_pointer_image
                 );
             }
             (BluetoothMemoryListSelector::Two, BluetoothMemoryListSlot::CurrentRx) => {
                 program!(
                     controller,
                     crate::generated::clear_bluetooth_memory_list_2_pointer_a,
-                    crate::generated::or_bluetooth_memory_list_2_pointer_a
+                    crate::generated::or_bluetooth_memory_list_2_pointer_a,
+                    crate::generated::bluetooth_rxlink_2_current_pointer_image
                 );
             }
             (BluetoothMemoryListSelector::Two, BluetoothMemoryListSlot::NextRx) => {
                 program!(
                     controller,
                     crate::generated::clear_bluetooth_memory_list_2_pointer_b,
-                    crate::generated::or_bluetooth_memory_list_2_pointer_b
+                    crate::generated::or_bluetooth_memory_list_2_pointer_b,
+                    crate::generated::bluetooth_rxlink_2_next_pointer_image
                 );
             }
             (BluetoothMemoryListSelector::Three, BluetoothMemoryListSlot::CurrentRx) => {
                 program!(
                     controller,
                     crate::generated::clear_bluetooth_memory_list_3_pointer_a,
-                    crate::generated::or_bluetooth_memory_list_3_pointer_a
+                    crate::generated::or_bluetooth_memory_list_3_pointer_a,
+                    crate::generated::bluetooth_rxlink_3_current_pointer_image
                 );
             }
             (BluetoothMemoryListSelector::Three, BluetoothMemoryListSlot::NextRx) => {
                 program!(
                     controller,
                     crate::generated::clear_bluetooth_memory_list_3_pointer_b,
-                    crate::generated::or_bluetooth_memory_list_3_pointer_b
+                    crate::generated::or_bluetooth_memory_list_3_pointer_b,
+                    crate::generated::bluetooth_rxlink_3_next_pointer_image
                 );
             }
         }

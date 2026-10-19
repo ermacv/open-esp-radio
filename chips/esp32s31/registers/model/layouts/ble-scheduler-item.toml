@@ -1,0 +1,1145 @@
+schema = 1
+
+[layout]
+name = "BLE_SCHEDULER_ITEM"
+description = "Common scheduler item shared by all five BLE role graphs. Hardware and software list links use different encodings. Role-private values retain their positional opaque fields."
+size = 96
+align = 4
+placement = ["dma-window"]
+
+[[layout.words]]
+name = "HARDWARE_NEXT"
+offset = 0x00
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "ADDRESS"
+bits = "19:0"
+writer = "cpu"
+description = "A graph link; zero denotes no link."
+points-to = "BLE_SCHEDULER_ITEM"
+encoding = "ble-compressed"
+
+[[layout.words.fields]]
+name = "BITS_20_21_OPAQUE"
+bits = "21:20"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words.fields]]
+name = "FLEXIBLE_START"
+bits = "22"
+writer = "cpu"
+description = "Allow an ordinary scheduler item to start after its predecessor ends. The DTM role selection also writes this positional lane."
+
+[[layout.words.fields]]
+name = "BIT_23_OPAQUE"
+bits = "23"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words.fields]]
+name = "MERGE_MARKED"
+bits = "24"
+writer = "cpu"
+description = "Item reported through the merge first-marked output."
+
+[[layout.words.fields]]
+name = "SKIP"
+bits = "25"
+writer = "cpu"
+description = "Skip marker set for deletion and preemption."
+
+[[layout.words.fields]]
+name = "BITS_26_31_OPAQUE"
+bits = "31:26"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words]]
+name = "CONTEXT"
+offset = 0x04
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "ADDRESS"
+bits = "19:0"
+writer = "cpu"
+description = "A graph link; zero denotes no link."
+points-to = "BLE_SCHEDULER_CONTEXT"
+encoding = "ble-compressed"
+
+[[layout.words.fields]]
+name = "BITS_20_30_OPAQUE"
+bits = "30:20"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words.fields]]
+name = "EVENT_READY"
+bits = "31"
+writer = "cpu"
+description = "Set when the role prepares an event."
+
+[[layout.words]]
+name = "LINK_STATE"
+offset = 0x08
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "ADDRESS"
+bits = "19:0"
+writer = "cpu"
+description = "A graph link; zero denotes no link."
+points-to = "BLE_LINK_STATE"
+encoding = "ble-compressed"
+
+[[layout.words.fields]]
+name = "BITS_20_23_OPAQUE"
+bits = "23:20"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words.fields]]
+name = "BITS_24_31_OPAQUE"
+bits = "31:24"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words]]
+name = "SEQUENCE_START"
+offset = 0x0c
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "VALUE"
+bits = "31:0"
+writer = "cpu"
+description = "Scheduler sequence start in raw controller ticks."
+
+[[layout.words]]
+name = "SEQUENCE_DURATION"
+offset = 0x10
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "VALUE"
+bits = "31:0"
+writer = "cpu"
+description = "Reserved window duration in controller ticks; DTM event producers leave its allocation value unchanged."
+
+[[layout.words]]
+name = "RATE_AND_POWER"
+offset = 0x14
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "BITS_0_19_OPAQUE"
+bits = "19:0"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words.fields]]
+name = "POWER_INDEX"
+bits = "27:20"
+writer = "cpu"
+description = "Index copied from the link-state transmit-power byte."
+
+[[layout.words.fields]]
+name = "BITS_28_29_OPAQUE"
+bits = "29:28"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words.fields]]
+name = "BITS_30_31_OPAQUE"
+bits = "31:30"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words]]
+name = "CHANNEL_AND_PRIORITY"
+offset = 0x18
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "ARBITRATION_PRIORITY"
+bits = "3:0"
+writer = "cpu"
+description = "Ordinary scheduler arbitration priority nibble."
+
+[[layout.words.fields]]
+name = "BITS_4_7_OPAQUE"
+bits = "7:4"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words.fields]]
+name = "FREQUENCY"
+bits = "14:8"
+writer = "cpu"
+description = "Controller frequency image, relative to the BLE channel mapping."
+
+[[layout.words.fields]]
+name = "BITS_15_31_OPAQUE"
+bits = "31:15"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words]]
+name = "WORD_001C_OPAQUE"
+offset = 0x1c
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words]]
+name = "ALLOCATION_NUMBER"
+offset = 0x20
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "VALUE"
+bits = "11:0"
+writer = "cpu"
+description = "Number identifying the role allocation."
+
+[[layout.words.fields]]
+name = "BITS_12_31_OPAQUE"
+bits = "31:12"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words]]
+name = "COEXISTENCE_PRIORITY"
+offset = 0x24
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "LANE_0"
+bits = "4:0"
+writer = "cpu"
+description = "Five-bit coexistence priority lane 0; lane use is selected by the role."
+
+[[layout.words.fields]]
+name = "LANE_1"
+bits = "9:5"
+writer = "cpu"
+description = "Five-bit coexistence priority lane 1; lane use is selected by the role."
+
+[[layout.words.fields]]
+name = "LANE_2"
+bits = "14:10"
+writer = "cpu"
+description = "Five-bit coexistence priority lane 2; lane use is selected by the role."
+
+[[layout.words.fields]]
+name = "LANE_3"
+bits = "19:15"
+writer = "cpu"
+description = "Five-bit coexistence priority lane 3; lane use is selected by the role."
+
+[[layout.words.fields]]
+name = "BITS_20_31_OPAQUE"
+bits = "31:20"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words]]
+name = "WORD_0028_OPAQUE"
+offset = 0x28
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words]]
+name = "RECEIVE_WAIT"
+offset = 0x2c
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "VALUE"
+bits = "15:0"
+writer = "cpu"
+description = "Role receive-wait image; zero-duration ordinary modes still use the source-owned nonzero baseline."
+
+[[layout.words.fields]]
+name = "BITS_16_20_OPAQUE"
+bits = "20:16"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words.fields]]
+name = "BITS_21_31_OPAQUE"
+bits = "31:21"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words]]
+name = "LIST_POLICY"
+offset = 0x30
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "BITS_0_30_OPAQUE"
+bits = "30:0"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words.fields]]
+name = "DEVICE_LIST"
+bits = "31"
+writer = "cpu"
+description = "Select the device-list overlap policy."
+
+[[layout.words]]
+name = "CAPTURED_ANCHOR"
+offset = 0x34
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "VALUE"
+bits = "31:0"
+writer = "phased"
+phases = [{ name = "arm", writer = "cpu" }, { name = "complete", writer = "hardware" }]
+description = "Controller-captured receive anchor, consumed only when the role completion status makes it available."
+
+[[layout.words]]
+name = "STATUS"
+offset = 0x38
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "VALUE"
+bits = "31:0"
+writer = "phased"
+phases = [{ name = "arm", writer = "cpu" }, { name = "complete", writer = "hardware" }]
+description = "CPU arms with 0xffffffff; hardware records an execution result. CPU preemption may write zero."
+
+[[layout.words]]
+name = "WORD_003C_OPAQUE"
+offset = 0x3c
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words]]
+name = "WORD_0040_OPAQUE"
+offset = 0x40
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words]]
+name = "RAW_START"
+offset = 0x44
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "VALUE"
+bits = "31:0"
+writer = "cpu"
+description = "Raw controller start time."
+
+[[layout.words]]
+name = "RAW_END"
+offset = 0x48
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "VALUE"
+bits = "31:0"
+writer = "cpu"
+description = "Raw controller end time."
+
+[[layout.words]]
+name = "CONTROL"
+offset = 0x4c
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "EVENT"
+bits = "7:0"
+writer = "cpu"
+description = "Role event byte, cleared when preparing a new item."
+
+[[layout.words.fields]]
+name = "KIND"
+bits = "15:8"
+writer = "cpu"
+description = "Role allocation kind: advertising, scanning, connection or DTM."
+
+[[layout.words.fields]]
+name = "BIT_16_OPAQUE"
+bits = "16"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words.fields]]
+name = "BITS_17_23_OPAQUE"
+bits = "23:17"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words.fields]]
+name = "BIT_24_OPAQUE"
+bits = "24"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words.fields]]
+name = "DELETED"
+bits = "25"
+writer = "cpu"
+description = "Software list entry has been deleted."
+
+[[layout.words.fields]]
+name = "PREEMPTED"
+bits = "26"
+writer = "cpu"
+description = "Software preemption flag, set alongside DELETED."
+
+[[layout.words.fields]]
+name = "OVERLAP_RESOLVED"
+bits = "27"
+writer = "cpu"
+description = "Insert by time without removing overlapping entries."
+
+[[layout.words.fields]]
+name = "BITS_28_31_OPAQUE"
+bits = "31:28"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words]]
+name = "PREVIOUS"
+offset = 0x50
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "ADDRESS"
+bits = "31:0"
+writer = "cpu"
+description = "Full CPU address of the previous item; zero at the head."
+points-to = "BLE_SCHEDULER_ITEM"
+
+[[layout.words]]
+name = "COMPLETION_NEXT"
+offset = 0x54
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "ADDRESS"
+bits = "31:0"
+writer = "cpu"
+description = "Full CPU link in the software completion/new-item queue, distinct from the compressed execution chain."
+points-to = "BLE_SCHEDULER_ITEM"
+
+[[layout.words]]
+name = "RECYCLE_CALLBACK"
+offset = 0x58
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "VALUE"
+bits = "31:0"
+writer = "cpu"
+description = "CPU callback identity retained by the role allocation; it is not a controller-SRAM data pointer."
+
+[[layout.words]]
+name = "WORD_005C_OPAQUE"
+offset = 0x5c
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.HARDWARE_NEXT"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.HARDWARE_NEXT.ADDRESS"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.HARDWARE_NEXT.BITS_20_21_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.HARDWARE_NEXT.FLEXIBLE_START"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.HARDWARE_NEXT.BIT_23_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.HARDWARE_NEXT.MERGE_MARKED"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.HARDWARE_NEXT.SKIP"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.HARDWARE_NEXT.BITS_26_31_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.CONTEXT"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.CONTEXT.ADDRESS"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.CONTEXT.BITS_20_30_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.CONTEXT.EVENT_READY"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.LINK_STATE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.LINK_STATE.ADDRESS"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.LINK_STATE.BITS_20_23_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.LINK_STATE.BITS_24_31_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.SEQUENCE_START"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.SEQUENCE_START.VALUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.SEQUENCE_DURATION"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.SEQUENCE_DURATION.VALUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.RATE_AND_POWER"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.RATE_AND_POWER.BITS_0_19_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.RATE_AND_POWER.POWER_INDEX"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.RATE_AND_POWER.BITS_28_29_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.RATE_AND_POWER.BITS_30_31_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.CHANNEL_AND_PRIORITY"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.CHANNEL_AND_PRIORITY.ARBITRATION_PRIORITY"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.CHANNEL_AND_PRIORITY.BITS_4_7_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.CHANNEL_AND_PRIORITY.FREQUENCY"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.CHANNEL_AND_PRIORITY.BITS_15_31_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.WORD_001C_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.WORD_001C_OPAQUE.BITS_0_31_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.ALLOCATION_NUMBER"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.ALLOCATION_NUMBER.VALUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.ALLOCATION_NUMBER.BITS_12_31_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.COEXISTENCE_PRIORITY"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.COEXISTENCE_PRIORITY.LANE_0"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.COEXISTENCE_PRIORITY.LANE_1"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.COEXISTENCE_PRIORITY.LANE_2"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.COEXISTENCE_PRIORITY.LANE_3"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.COEXISTENCE_PRIORITY.BITS_20_31_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.WORD_0028_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.WORD_0028_OPAQUE.BITS_0_31_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.RECEIVE_WAIT"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.RECEIVE_WAIT.VALUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.RECEIVE_WAIT.BITS_16_20_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.RECEIVE_WAIT.BITS_21_31_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.LIST_POLICY"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.LIST_POLICY.BITS_0_30_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.LIST_POLICY.DEVICE_LIST"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.CAPTURED_ANCHOR"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.CAPTURED_ANCHOR.VALUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.STATUS"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.STATUS.VALUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.WORD_003C_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.WORD_003C_OPAQUE.BITS_0_31_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.WORD_0040_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.WORD_0040_OPAQUE.BITS_0_31_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.RAW_START"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.RAW_START.VALUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.RAW_END"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.RAW_END.VALUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.CONTROL"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.CONTROL.EVENT"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.CONTROL.KIND"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.CONTROL.BIT_16_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.CONTROL.BITS_17_23_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.CONTROL.BIT_24_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.CONTROL.DELETED"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.CONTROL.PREEMPTED"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.CONTROL.OVERLAP_RESOLVED"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.CONTROL.BITS_28_31_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.PREVIOUS"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.PREVIOUS.ADDRESS"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.COMPLETION_NEXT"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.COMPLETION_NEXT.ADDRESS"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.RECYCLE_CALLBACK"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.RECYCLE_CALLBACK.VALUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.WORD_005C_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.WORD_005C_OPAQUE.BITS_0_31_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"

@@ -6,10 +6,10 @@ use oer_esp32s31_hal::bluetooth::{
     BluetoothSchedulerCancellationIndexed, BluetoothSchedulerCancellationRequested,
     BluetoothSchedulerCancellationSourceAcknowledged, BluetoothSchedulerExecutionLock,
     BluetoothSchedulerExecutionLockRequest, BluetoothSchedulerExecutionModify,
-    BluetoothSchedulerHardwareListHead, BluetoothSchedulerHardwareListIndex,
-    BluetoothSchedulerHardwareRunCommandPublished, BluetoothSchedulerLockModifyObservation,
-    BluetoothSchedulerLockModifyPublished, BluetoothSchedulerLockModifyRequest,
-    BluetoothSchedulerSkipPublished, BluetoothSchedulerSkipRequest, ControllerHal,
+    BluetoothSchedulerHardwareListIndex, BluetoothSchedulerHardwareRunCommandPublished,
+    BluetoothSchedulerLockModifyObservation, BluetoothSchedulerLockModifyPublished,
+    BluetoothSchedulerLockModifyRequest, BluetoothSchedulerSkipPublished,
+    BluetoothSchedulerSkipRequest, ControllerHal,
 };
 use oer_esp32s31_hal::settle::Settle;
 
@@ -49,11 +49,6 @@ struct LiveSchedulerBackend<'call, 'registers, S> {
     storage: &'call S,
 }
 
-fn head(at: ControllerSramLinkAddress) -> BluetoothSchedulerHardwareListHead {
-    BluetoothSchedulerHardwareListHead::from_address(at.controller_address())
-        .expect("a controller link never encodes the empty head")
-}
-
 #[allow(
     unsafe_code,
     reason = "the powered task runtime resolved every address to 'static pool storage and serializes list zero"
@@ -70,7 +65,12 @@ impl<S: SchedulerRunInterruptStorage> SchedulerHardwareBackend for LiveScheduler
         // the executor keeps it listed until the lock is released.
         unsafe {
             self.controller.admit_scheduler_execution_lock(
-                BluetoothSchedulerExecutionLockRequest::new(at.controller_address(), LIST),
+                BluetoothSchedulerExecutionLockRequest::new(
+                    crate::layout_reference::controller_reference(
+                        at.controller_address().address(),
+                    ),
+                    LIST,
+                ),
             )
         }
     }
@@ -105,19 +105,24 @@ impl<S: SchedulerRunInterruptStorage> SchedulerHardwareBackend for LiveScheduler
         unsafe {
             self.controller
                 .publish_scheduler_lock_modify(BluetoothSchedulerLockModifyRequest::new(
-                    at.controller_address(),
+                    crate::layout_reference::controller_reference(
+                        at.controller_address().address(),
+                    ),
                     LIST,
                 ))
         }
     }
 
     fn publish_head(&mut self, at: Option<ControllerSramLinkAddress>) {
-        let head = at.map_or(BluetoothSchedulerHardwareListHead::empty(), head);
         // SAFETY: the executor finished every descriptor write of the list it
         // publishes; each item lives in 'static pool storage.
         let _published = unsafe {
-            self.controller
-                .publish_scheduler_hardware_list_head(LIST, head)
+            self.controller.publish_scheduler_hardware_list_head(
+                LIST,
+                at.map(|at| {
+                    crate::layout_reference::controller_reference(at.controller_address().address())
+                }),
+            )
         };
     }
 
@@ -157,7 +162,9 @@ impl<S: SchedulerRunInterruptStorage> SchedulerHardwareBackend for LiveScheduler
         unsafe {
             self.controller
                 .publish_scheduler_skip(BluetoothSchedulerSkipRequest::new(
-                    at.controller_address(),
+                    crate::layout_reference::controller_reference(
+                        at.controller_address().address(),
+                    ),
                     LIST,
                 ))
         }
@@ -245,8 +252,12 @@ impl<S: SchedulerRunInterruptStorage> SchedulerHardwareBackend for LiveScheduler
         // SAFETY: the executor linked every listed item before returning the
         // head; each lives in 'static pool storage, and the scheduler is idle.
         let published = unsafe {
-            self.controller
-                .publish_scheduler_hardware_list_head(LIST, head(at))
+            self.controller.publish_scheduler_hardware_list_head(
+                LIST,
+                Some(crate::layout_reference::controller_reference(
+                    at.controller_address().address(),
+                )),
+            )
         };
         let interrupts = self
             .storage

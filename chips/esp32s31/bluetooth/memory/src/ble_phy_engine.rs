@@ -372,17 +372,21 @@ impl BlePhyEngineCpuOwned {
     /// enable points the hardware at them under the normal Controller
     /// profile.
     pub fn hardware_objects(&self) -> oer_esp32s31_hal::bluetooth::BlePhyHardwareObjects {
-        let inputs =
-            oer_esp32s31_hal::types::BluetoothPhyRegisterInitInputs::normal_controller_profile(
-                self.binding.environment_address(),
-                self.binding.resolving_list_address(),
-            );
         #[allow(unsafe_code, reason = "the owner of the storage vouches for it")]
         // SAFETY: this owner holds the storage `Pin<&'static mut>` for as long
         // as it lives, its binding names that storage's environment and
         // resolving list, and both are `VolatileCell` arrays the CPU reaches
         // only through volatile accesses.
         unsafe {
+            let inputs =
+                oer_esp32s31_hal::types::BluetoothPhyRegisterInitInputs::normal_controller_profile(
+                    crate::layout_reference::controller_reference(
+                        self.binding.environment_address().address(),
+                    ),
+                    crate::layout_reference::controller_reference(
+                        self.binding.resolving_list_address().address(),
+                    ),
+                );
             oer_esp32s31_hal::bluetooth::BlePhyHardwareObjects::bind(inputs)
         }
     }

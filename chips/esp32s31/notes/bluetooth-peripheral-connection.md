@@ -230,11 +230,14 @@ transmit window fits its short descriptor form, whose encoding is private
 to `PeripheralConnectionReceiveWait`. No upper layer accepts the
 duration/configuration word.
 
-The event remains deliberately CPU-owned. The direction-finding bodies of the
-earlier `7f20740` archive and the named same-chip archive, not yet
-re-established on the pinned body, show that ordinary advertising, sync and
-connection link states all retain one controller-global `0x20`-byte
-environment even when IQ sampling is disabled. The open driver claims and
+The event remains deliberately CPU-owned. The current pinned direction-finding
+initializer `ble_4.o::r_sym_ble_mIskG2GvbtwJXrhsY5EZ` requests a controller-global
+`0x1c`-byte environment. The open owner retains `0x20` bytes, including one
+padding word. Complete `ble_4.o::r_sym_ble_FZU452JXpwl3LtErzDPJ` installs its
+`+8` link-state endpoint and publishes its `+0x0c` disabled descriptor through
+hardware slot zero even without IQ sampling; see the
+[controller-memory facts](bluetooth/controller-memory.md#direction-finding-workspace-on-the-current-pin).
+The open driver claims and
 initializes that separate static workspace before MMIO, publishes its disabled
 descriptor through CTE buffer zero, clears software ownership through generated
 PAC accessors and retains the joined SRAM/HAL owner for the complete powered

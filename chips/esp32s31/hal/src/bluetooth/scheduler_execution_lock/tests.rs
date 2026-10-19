@@ -1,7 +1,7 @@
 use std::{collections::VecDeque, vec::Vec};
 
 use oer_esp32s31_pac::{
-    BluetoothControllerSramAddress, BluetoothSchedulerExecutionLockDisposition as Disposition,
+    BluetoothSchedulerExecutionLockDisposition as Disposition,
     BluetoothSchedulerExecutionLockRequest, BluetoothSchedulerHardwareListIndex,
 };
 
@@ -52,7 +52,7 @@ impl Control for Model {
 
 fn request() -> BluetoothSchedulerExecutionLockRequest {
     BluetoothSchedulerExecutionLockRequest::new(
-        BluetoothControllerSramAddress::new(0x2f00_1000).expect("controller SRAM"),
+        crate::dma_address::model_reference(0x2f00_1000),
         BluetoothSchedulerHardwareListIndex::new(0).expect("list zero"),
     )
 }

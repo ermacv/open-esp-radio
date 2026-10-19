@@ -31,6 +31,8 @@ pub enum FactProvenance {
 #[serde(rename_all = "kebab-case")]
 pub enum FactAccuracy {
     Exact,
+    /// The position or encoding is established; its physical meaning is not.
+    Positional,
     Bounded,
     Approximate,
     Unknown,

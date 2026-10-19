@@ -1229,7 +1229,7 @@ impl ControllerRandomAddress {
 #[must_use = "the published receive list remains owned by the controller"]
 pub struct RxMemoryListPublished {
     selector: BluetoothMemoryListSelector,
-    head: BluetoothControllerSramAddress,
+    head: crate::layouts::DmaRef<crate::layouts::BleBufferHeader>,
     scanning: bool,
     epoch: ControllerEpoch,
 }
@@ -1268,7 +1268,7 @@ impl BlePhyHardwareObjects {
 /// The disabled-CTE descriptor the direction-finding baseline points the
 /// hardware at.
 pub struct DirectionFindingDescriptor {
-    address: BluetoothControllerSramAddress,
+    address: crate::layouts::DmaRef<crate::layouts::BleDirectionFindingDescriptor>,
 }
 
 impl DirectionFindingDescriptor {
@@ -1282,7 +1282,9 @@ impl DirectionFindingDescriptor {
         unsafe_code,
         reason = "the memory crate's codec vouches for the storage"
     )]
-    pub const unsafe fn bind(address: BluetoothControllerSramAddress) -> Self {
+    pub const unsafe fn bind(
+        address: crate::layouts::DmaRef<crate::layouts::BleDirectionFindingDescriptor>,
+    ) -> Self {
         Self { address }
     }
 }
@@ -1290,7 +1292,7 @@ impl DirectionFindingDescriptor {
 /// The device table hardware filters against: its first entry and count.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct DeviceTablePublication {
-    first_entry: BluetoothControllerSramAddress,
+    first_entry: crate::layouts::DmaRef<crate::layouts::BleDeviceTable>,
     count: BluetoothDeviceTableEntryCount,
 }
 
@@ -1305,14 +1307,14 @@ impl DeviceTablePublication {
         reason = "the memory crate's codec vouches for the storage"
     )]
     pub const unsafe fn new(
-        first_entry: BluetoothControllerSramAddress,
+        first_entry: crate::layouts::DmaRef<crate::layouts::BleDeviceTable>,
         count: BluetoothDeviceTableEntryCount,
     ) -> Self {
         Self { first_entry, count }
     }
 
     /// Address of the first entry.
-    pub const fn first_entry(&self) -> BluetoothControllerSramAddress {
+    pub const fn first_entry(&self) -> crate::layouts::DmaRef<crate::layouts::BleDeviceTable> {
         self.first_entry
     }
 
@@ -1326,7 +1328,7 @@ impl DeviceTablePublication {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RxChainHead {
     selector: BluetoothMemoryListSelector,
-    head: BluetoothControllerSramAddress,
+    head: crate::layouts::DmaRef<crate::layouts::BleBufferHeader>,
     scanning: bool,
 }
 
@@ -1344,7 +1346,7 @@ impl RxChainHead {
     )]
     pub const unsafe fn new(
         selector: BluetoothMemoryListSelector,
-        head: BluetoothControllerSramAddress,
+        head: crate::layouts::DmaRef<crate::layouts::BleBufferHeader>,
         scanning: bool,
     ) -> Self {
         Self {
@@ -1373,7 +1375,7 @@ impl RxMemoryListPublished {
 
     /// Return the validated first-node address without granting dereference
     /// access.
-    pub const fn head(&self) -> BluetoothControllerSramAddress {
+    pub const fn head(&self) -> crate::layouts::DmaRef<crate::layouts::BleBufferHeader> {
         self.head
     }
 }
@@ -1404,7 +1406,7 @@ fn execute_rx_memory_list_initial_publication(
 struct PacBluetoothRxMemoryListInitialPublication<'registers> {
     registers: &'registers mut BluetoothTaskRegisters,
     selector: BluetoothMemoryListSelector,
-    head: BluetoothControllerSramAddress,
+    head: crate::layouts::DmaRef<crate::layouts::BleBufferHeader>,
 }
 
 impl RxMemoryListInitialPublication for PacBluetoothRxMemoryListInitialPublication<'_> {
@@ -1710,7 +1712,7 @@ impl ControllerHal<'_> {
     pub unsafe fn publish_scheduler_hardware_list_head(
         &mut self,
         index: BluetoothSchedulerHardwareListIndex,
-        head: BluetoothSchedulerHardwareListHead,
+        head: Option<crate::layouts::DmaRef<crate::layouts::BleSchedulerItem>>,
     ) -> BluetoothSchedulerHardwareListHeadPublished {
         // SAFETY: forwarded unchanged from this function's `# Safety` contract,
         // which states the PAC transaction's prerequisites.

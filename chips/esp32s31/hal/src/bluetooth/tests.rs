@@ -292,7 +292,7 @@ fn an_unselected_low_power_clock_cannot_be_deselected() {
 #[test]
 fn a_scanner_starts_only_on_the_scanning_list_of_its_own_epoch() {
     use super::{RxMemoryListPublished, ScanStartError};
-    use oer_esp32s31_pac::{BluetoothControllerSramAddress, BluetoothMemoryListSelector};
+    use oer_esp32s31_pac::BluetoothMemoryListSelector;
 
     let (_shared, _partitions, clocked) = clocked();
     let (task, interrupts) = clocked.separate_interrupt_owner();
@@ -304,7 +304,7 @@ fn a_scanner_starts_only_on_the_scanning_list_of_its_own_epoch() {
     let (mut task, _interrupts) = clocked.separate_interrupt_owner();
     let current = task.epoch;
     assert_ne!(ended, current, "a new task owner starts a new epoch");
-    let head = BluetoothControllerSramAddress::new(0x2f00_1000).unwrap();
+    let head = crate::dma_address::model_reference(0x2f00_1000);
     let published = |scanning, epoch| RxMemoryListPublished {
         selector: BluetoothMemoryListSelector::One,
         head,

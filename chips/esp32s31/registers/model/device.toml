@@ -128,6 +128,19 @@ layouts = [
     "layouts/wifi-rx-control-prefix.toml",
     "layouts/wifi-rx-control-tail.toml",
     "layouts/wifi-tx-metadata-head.toml",
+    "layouts/ble-buffer-header.toml",
+    "layouts/ble-rx-packet-prefix.toml",
+    "layouts/ble-tx-packet-prefix.toml",
+    "layouts/ble-scheduler-item.toml",
+    "layouts/ble-link-state.toml",
+    "layouts/ble-scheduler-context.toml",
+    "layouts/ble-phy-environment.toml",
+    "layouts/ble-resolving-list.toml",
+    "layouts/ble-device-table-entry.toml",
+    "layouts/ble-device-table.toml",
+    "layouts/ble-direction-finding-configuration.toml",
+    "layouts/ble-direction-finding-descriptor.toml",
+    "layouts/ble-direction-finding-workspace.toml",
 ]
 
 [[shared-fragments]]

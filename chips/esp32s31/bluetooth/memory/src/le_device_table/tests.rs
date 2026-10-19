@@ -32,7 +32,7 @@ fn entries_use_the_vendor_layout() {
     assert_eq!(entry(&table, 0), [0x5566_8002, 0x1122_3344]);
     assert_eq!(entry(&table, 1), [0xa5a6_c002, 0xc1a2_a3a4]);
     let publication = table.publication();
-    assert_eq!(publication.first_entry().address(), 0x2f07_e508);
+    assert_eq!(publication.first_entry().bits(), 0x2f07_e508);
     assert_eq!(publication.count().get(), 2);
 }
 

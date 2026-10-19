@@ -18,14 +18,14 @@ impl BluetoothDeviceTableTransaction for Recorder {
         self.writes.push(Write::Count(count.get()));
     }
 
-    fn publish_first_entry(&mut self, first_entry: BluetoothControllerSramAddress) {
-        self.writes.push(Write::FirstEntry(first_entry.address()));
+    fn publish_first_entry(&mut self, first_entry: DmaRef<BleDeviceTable>) {
+        self.writes.push(Write::FirstEntry(first_entry.bits()));
     }
 }
 
 #[test]
 fn the_count_is_published_before_the_first_entry() {
-    let first = BluetoothControllerSramAddress::new(0x2f07_e508).unwrap();
+    let first = crate::test_memory::reference(0x2f07_e508);
     let mut recorder = Recorder::default();
     execute_device_table_publication(
         &mut recorder,

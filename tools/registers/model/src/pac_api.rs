@@ -30,6 +30,9 @@ pub struct PacApiPack {
     pub interrupt_snapshots: Vec<InterruptSnapshot>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub full_register_writes: Vec<FullRegisterWrite>,
+    /// Layout targets of pointer fields used by composed register transactions.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pointer_fields: Vec<PointerField>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub full_register_reads: Vec<FullRegisterRead>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -295,6 +298,28 @@ common_operation!(InterruptSnapshot {
     status_register: String,
     clear_register: String,
 });
+
+/// A register field's layout target and its generated typed image encoder.
+/// The existing register transaction owns its write/RMW ordering.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct PointerField {
+    pub name: String,
+    pub peripheral: String,
+    pub register: String,
+    pub field: String,
+    pub points_to: String,
+    /// A byte position inside the target layout, for a published member.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub member_offset: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub encoding: Option<crate::PointerEncoding>,
+    pub sources: Vec<String>,
+}
+
+fn is_zero(value: &u32) -> bool {
+    *value == 0
+}
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct FullRegisterWrite {
@@ -597,6 +622,15 @@ impl PacApiPack {
         self.validate_indirect_register_field_domains(&domain_names)?;
         validate_operations("interrupt-snapshot", &self.interrupt_snapshots)?;
         validate_operations("full-register-write", &self.full_register_writes)?;
+        validate_operations("pointer-field", &self.pointer_fields)?;
+        let mut pointer_fields = BTreeSet::new();
+        for pointer in &self.pointer_fields {
+            validate_component("field", &pointer.name, &pointer.field)?;
+            validate_component("points-to", &pointer.name, &pointer.points_to)?;
+            if !pointer_fields.insert((&pointer.peripheral, &pointer.register, &pointer.field)) {
+                return Err(Error::message("duplicate PAC pointer field"));
+            }
+        }
         validate_operations("full-register-read", &self.full_register_reads)?;
         validate_operations("field-read", &self.field_reads)?;
         validate_operations("field-snapshot-read", &self.field_snapshot_reads)?;
@@ -1181,6 +1215,7 @@ impl PacApiPack {
     pub fn operation_count(&self) -> usize {
         self.interrupt_snapshots.len()
             + self.full_register_writes.len()
+            + self.pointer_fields.len()
             + self.full_register_reads.len()
             + self.field_reads.len()
             + self.field_snapshot_reads.len()
@@ -1258,6 +1293,7 @@ impl PacApiPack {
                     .iter()
                     .map(Operation::sources)
                     .chain(self.full_register_writes.iter().map(Operation::sources))
+                    .chain(self.pointer_fields.iter().map(Operation::sources))
                     .chain(self.full_register_reads.iter().map(Operation::sources))
                     .chain(self.field_reads.iter().map(Operation::sources))
                     .chain(self.field_snapshot_reads.iter().map(Operation::sources))
@@ -1681,6 +1717,7 @@ impl Operation for InterruptSnapshot {
 }
 
 impl_register_operation!(FullRegisterWrite);
+impl_register_operation!(PointerField);
 impl_register_operation!(FullRegisterRead);
 impl_register_operation!(FieldRead);
 impl_register_operation!(FieldSnapshotRead);
@@ -1862,6 +1899,7 @@ pub(crate) mod tests {
             indirect_register_field_domains: Vec::new(),
             interrupt_snapshots: Vec::new(),
             full_register_writes: Vec::new(),
+            pointer_fields: Vec::new(),
             full_register_reads: Vec::new(),
             field_reads: Vec::new(),
             field_snapshot_reads: Vec::new(),

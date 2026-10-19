@@ -611,7 +611,7 @@ impl<const PACKETS: usize> LeRxChain<PACKETS> {
         unsafe {
             oer_esp32s31_hal::bluetooth::RxChainHead::new(
                 self.class.selector(),
-                self.initial_cursor(),
+                crate::layout_reference::controller_reference(self.initial_cursor().address()),
                 matches!(self.class, RxMemoryListClass::Scanning),
             )
         }
