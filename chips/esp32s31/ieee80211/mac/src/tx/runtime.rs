@@ -16,7 +16,7 @@ use oer_espressif_ieee80211_policy::lmac;
 use oer_ieee80211_upper_mac::{
     AmpduAttemptResult, AmpduRetryDecision as UpperAmpduRetryDecision,
     AmpduRetryError as UpperAmpduRetryError, AmpduRetryState as UpperAmpduRetryState,
-    MpduRetryState, RetryDecision, RetryOutcome, retry::RetryStateError,
+    MpduRetryState, RetryDecision, RetryLimits, RetryOutcome, retry::RetryStateError,
 };
 
 use crate::{
@@ -397,6 +397,9 @@ pub enum OrdinaryRetryRatePolicy {
     /// the initial hardware rate.
     #[default]
     Normal,
+    /// Keep the caller-derived management rate for every publication,
+    /// within the standard short retry limit and the supplied budget.
+    Management,
     /// Walk one explicitly selected rate-control record, such as the
     /// association's non-data schedule.
     Schedule(RateScheduleRef),
@@ -439,7 +442,8 @@ pub use oer_ieee80211_upper_mac::{FrameClass, RetryCounters};
 /// The caller retains the encoded MPDU and its DMA storage. The retry
 /// counters, publication count and the retry decision are the portable
 /// `oer_ieee80211_upper_mac::MpduRetryState` under the Espressif LMAC limits
-/// (`oer_espressif_ieee80211_policy::lmac::RETRY_LIMITS`); this adapter adds
+/// (`oer_espressif_ieee80211_policy::lmac::RETRY_LIMITS`) or the management
+/// plan's standard short budget; this adapter adds
 /// the chip's rate ladders over [`TxPhyRate`] and applies the contention
 /// changes to the queue's EDCA state.
 pub struct OrdinaryMpduRetryState {
@@ -473,10 +477,10 @@ impl OrdinaryMpduRetryState {
         })
     }
 
-    /// Construct an ordinary retry owner with an explicit standard P2P
-    /// ladder. The first record rate must exactly match the published initial
-    /// rate, preventing a caller from changing PHY only after the first ACK
-    /// timeout.
+    /// Construct an ordinary retry owner with an explicit rate policy.
+    /// A management plan keeps its initial rate and standard short budget.
+    /// A vendor record's first rate must match the published initial rate,
+    /// preventing a caller from changing PHY only after the first ACK timeout.
     pub fn new_with_rate_policy(
         role: VifRole,
         queue: LegacyTxQueue,
@@ -488,6 +492,21 @@ impl OrdinaryMpduRetryState {
         let mut state = Self::new(role, queue, initial_rate, mpdu_retry_limit, frame_class)?;
         match rate_policy {
             OrdinaryRetryRatePolicy::Normal => {}
+            OrdinaryRetryRatePolicy::Management => {
+                let limit = mpdu_retry_limit.min(RetryLimits::IEEE_DEFAULT.short);
+                // Count every failed publication against one short budget,
+                // including CTS failures and collisions. Broadcast's budget
+                // is one; a mixture of failures cannot extend either plan.
+                state.retry = MpduRetryState::new(
+                    RetryLimits {
+                        short: limit,
+                        ..RetryLimits::IEEE_DEFAULT
+                    },
+                    limit,
+                    FrameClass::Short,
+                )
+                .map_err(|_| OrdinaryRetryError::ZeroMpduRetryLimit)?;
+            }
             OrdinaryRetryRatePolicy::Schedule(schedule) => {
                 let scheduled = select_schedule_retry_rate(schedule, 0)?;
                 if scheduled != initial_rate {
@@ -556,6 +575,7 @@ impl OrdinaryMpduRetryState {
         failed_attempts: u8,
     ) -> Result<TxPhyRate, OrdinaryRetryError> {
         match self.rate_policy {
+            OrdinaryRetryRatePolicy::Management => Ok(self.initial_rate),
             OrdinaryRetryRatePolicy::Normal => select_ordinary_retry_rate(
                 self.initial_rate,
                 RetryCounters {

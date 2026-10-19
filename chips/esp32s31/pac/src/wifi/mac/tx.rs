@@ -212,6 +212,11 @@ pub struct MacLegacyTxProgram {
 }
 
 impl MacLegacyTxProgram {
+    /// Legacy rate of the data PPDU bound to this publication.
+    pub const fn rate(self) -> MacLegacyRate {
+        self.parameters.rate
+    }
+
     /// Control frame retained with this descriptor-bound program.
     pub const fn control(self) -> MacTxControlFrame {
         self.parameters.control

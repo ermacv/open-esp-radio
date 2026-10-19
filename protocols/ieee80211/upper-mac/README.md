@@ -42,6 +42,14 @@ including non-basic rates. This set bounds legacy data, control and retry
 fallback on every PHY. An association with no recognized legacy rate is
 refused; `PhyMode::Legacy` alone does not imply OFDM support.
 
+`rate_selection::management_rate(band, Option<&BasicRates>)` derives the
+management/group rate above the driver: the lowest advertised basic rate
+the band admits. Without a known BSS it selects DSSS 1 Mb/s in 2.4 GHz or
+OFDM 6 Mb/s in 5 GHz. A supplied empty or incompatible set refuses TX;
+6 Mb/s is selected before 11 Mb/s CCK when both are basic. The caller wraps
+the result in lower-MAC's `ManagementTxPlan::unicast` (at most seven
+attempts) or `broadcast` (one), keeping that rate for every attempt.
+
 ## Parameters and profiles
 
 What differs between implementations is a parameter, never a branch on a

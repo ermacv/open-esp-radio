@@ -3167,8 +3167,7 @@ impl AmpduTxConfig {
 }
 
 impl LegacyTxConfig {
-    /// Conservative 1-Mbit/s management-frame profile used by the first
-    /// hardware run.
+    /// Direct-MPDU queue profile at the caller-selected legacy rate.
     ///
     /// The timeout is the exact q0 image observed while the pinned vendor
     /// driver submitted an open-authentication MPDU on ESP32-S31 rev0. The
@@ -3178,10 +3177,10 @@ impl LegacyTxConfig {
     /// SOURCE: a live station authentication run on hardware plus complete
     /// `libpp.a[hal_mac_tx.o,hal_mac.o,hal_coex.o]` and
     /// `libcoexist.a[coexist_core.o]`.
-    pub const fn management_1m(signal: u16) -> Self {
+    pub const fn management(rate: LegacyRate, signal: u16) -> Self {
         Self {
             control: TxControlFrame::UNPROTECTED,
-            rate: LegacyRate::Dsss1MLong,
+            rate,
             signal,
             data_power: 8,
             aifsn: 2,
@@ -3204,14 +3203,14 @@ impl LegacyTxConfig {
     /// authentication MPDU requires PLCP1 `0x22`. S31 hardware proved that
     /// replaying the vendor-context value `0x00b6` instead produces TX status
     /// four and no authentication response.
-    pub const fn management_1m_from_mpdu_length(mpdu_length: u16) -> Option<Self> {
+    pub const fn management_from_mpdu_length(rate: LegacyRate, mpdu_length: u16) -> Option<Self> {
         let Some(signal) = mpdu_length.checked_add(LEGACY_FCS_LENGTH) else {
             return None;
         };
         if signal > 0x0fff {
             return None;
         }
-        Some(Self::management_1m(signal))
+        Some(Self::management(rate, signal))
     }
 }
 

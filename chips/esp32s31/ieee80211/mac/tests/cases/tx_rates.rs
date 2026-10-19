@@ -572,7 +572,7 @@ fn data_queue_priorities_match_the_complete_blob_event_mapping() {
 
 #[test]
 fn management_profile_derives_plcp1_from_mpdu_plus_fcs() {
-    let config = LegacyTxConfig::management_1m_from_mpdu_length(30).unwrap();
+    let config = LegacyTxConfig::management_from_mpdu_length(LegacyRate::Ofdm6M, 30).unwrap();
     assert_eq!(config.signal, 0x22);
-    assert!(LegacyTxConfig::management_1m_from_mpdu_length(0x0ffc).is_none());
+    assert!(LegacyTxConfig::management_from_mpdu_length(LegacyRate::Ofdm6M, 0x0ffc).is_none());
 }
