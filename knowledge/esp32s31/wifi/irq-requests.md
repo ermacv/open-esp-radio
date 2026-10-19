@@ -44,8 +44,8 @@ cold path step 2 leaves the published mask unchanged.
 SOURCE: the guarded TSF-timer leaves of `libpp[hal_tsf.o]` (evidence
 `BLOB_LIBPP_HAL_TSF_TIMER`) and its station TBTT leaves (evidence
 `BLOB_LIBPP_HAL_TSF_TBTT_20260927`) identify the CLEAR bits; complete
-`libpp[hal_pwr.o]::hal_pwr_interrupt_get_event` reads the masked STATUS at
-`0x2010_d8bc` and `libpp[hal_pwr.o]::hal_pwr_interrupt_clr_event` stores its
+`libpp[hal_tsf.o]::hal_pwr_interrupt_get_event` reads the masked STATUS at
+`0x2010_d8bc` and `libpp[hal_tsf.o]::hal_pwr_interrupt_clr_event` stores its
 full argument to CLEAR at `0x2010_d8c0` (evidence
 `BLOB_LIBPP_HAL_PWR_INTERRUPT`). The step order below is the transaction the
 removed `mask_and_acknowledge_wake_cause` applied.

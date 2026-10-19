@@ -63,18 +63,18 @@ than 7000 frames. SOURCE: HIL_OPEN_RX_LIVE_APPEND_2026_07_27.
 
 - BASE is written in three places: the cold `mac_rxbuf_init`
   (SOURCE: BLOB_LIBPP_MAC_RXBUF_INIT_PREFIX); the empty-software-list branch
-  of `wDev_AppendRxBlocks`, which publishes the returned chain's head; and
+  of `rom[]::wDev_AppendRxBlocks`, which publishes the returned chain's head; and
   the reload suffix of the same function: after the bounded wait
   (`0x186a1` observations) for `RX_CONTROL` bit 0 to clear, a whole-word
   NEXT of zero makes it read LAST, and when LAST is not the new tail it
   writes BASE = `LAST->next`. SOURCE: ROM_REV0_WDEV_APPEND_RX_BLOCKS.
 - Order: the new head is stored through the old tail's `next` word before
-  the doorbell (`hal_mac_rx_set_dscr_reload`) is rung; hardware clears the
+  the doorbell (`rom[]::hal_mac_rx_set_dscr_reload`) is rung; hardware clears the
   doorbell after accepting it. SOURCE: ROM_REV0_WDEV_APPEND_RX_BLOCKS.
 - On rearm the vendor writes `0xdeadbeef` at the buffer and at
   `buffer + capacity`. SOURCE: ROM_REV0_WDEV_APPEND_RX_BLOCKS.
 - A walk is delimited by terminal bit 30 through the saved LAST, which
-  `hal_mac_rx_get_last_dscr` reads. SOURCE: ROM_REV0_HAL_MAC_RX_LAST_DESCRIPTOR.
+  `rom[]::hal_mac_rx_get_last_dscr` reads. SOURCE: ROM_REV0_HAL_MAC_RX_LAST_DESCRIPTOR.
 - `RX_CONTROL` bit 27 is set once, by
   `hal_mac_set_rxbuf_reload_use_hw_beacon_enable` in the `hal_init` tail,
   and never cleared by any known writer. Its meaning is not established

@@ -226,6 +226,14 @@ fn every_decision_file_of_this_checkout_is_read_and_a_missing_one_fails() {
 }
 
 #[test]
+fn knowledge_is_scanned_but_its_generated_facts_are_not() {
+    assert!(PRODUCTION.contains(&"knowledge"));
+    assert!(generated("knowledge/esp32s31/vendor/facts/provenance.toml"));
+    assert!(!generated("knowledge/esp32s31/wifi/rx-walker.md"));
+    assert!(!generated("knowledge/esp32s31/vendor/coverage.toml"));
+}
+
+#[test]
 fn a_changed_decision_function_names_the_exclusions_to_review() {
     let files: BTreeSet<String> = ["coverage.toml".to_owned()].into();
     assert_eq!(
