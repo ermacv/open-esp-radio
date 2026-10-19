@@ -1,5 +1,5 @@
 //! `cargo stand init [--force]`: write the user's stand file from the boards
-//! attached to this host (`oer-lab-devices`): one `[[board]]` per board with its
+//! attached to this host (`oer-lab-board`): one `[[board]]` per board with its
 //! chip and MAC, its radios from the chip profile, no hubs. The file is
 //! private (mode 0600); an existing one is kept unless `--force`.
 
@@ -33,7 +33,7 @@ pub(crate) fn init(root: &Path, args: &[OsString]) -> Result<std::process::ExitC
     }
     let chips = Profile::all(root)?;
     let mut boards = Vec::new();
-    for device in oer_lab_devices::devices() {
+    for device in oer_lab_board::devices() {
         let chip = match device.chip.clone() {
             Some(chip) => chip,
             // The ROM names the chip: probing takes the device lock and

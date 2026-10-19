@@ -32,7 +32,7 @@ const PAGE: &str = include_str!("dashboard.html");
 const FIXTURE_REFRESH: std::time::Duration = std::time::Duration::from_secs(60);
 
 /// The host fixtures as last probed, refreshed by a background thread.
-static FIXTURES: std::sync::Mutex<Vec<oer_lab_stand_fixtures::Fixture>> =
+static FIXTURES: std::sync::Mutex<Vec<oer_lab_router::fixtures::Fixture>> =
     std::sync::Mutex::new(Vec::new());
 
 /// Probe the host fixtures now and every [`FIXTURE_REFRESH`] after.
@@ -42,7 +42,7 @@ fn watch_fixtures() {
     };
     std::thread::spawn(move || {
         loop {
-            let fixtures = oer_lab_stand_fixtures::probe(&lab);
+            let fixtures = oer_lab_router::fixtures::probe(&lab);
             *FIXTURES
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner) = fixtures;
@@ -60,7 +60,7 @@ pub fn serve(store: &RunStore, args: &[std::ffi::OsString]) -> Result<std::proce
             .ok_or("--port takes a port number")?,
         _ => return Err("usage: cargo hil dashboard [--port PORT]".into()),
     };
-    let arbiter = oer_lab_stand_arbiter::Arbiter::open()?;
+    let arbiter = oer_lab_arbiter::Arbiter::open()?;
     let record = arbiter.directory().join("dashboard.json");
     let me = Instance::current(port)?;
     if let Some(running) = Instance::read(&record).filter(Instance::alive) {
@@ -294,7 +294,7 @@ fn job_log(rest: &str) -> Option<String> {
     if !plain_id(id) {
         return None;
     }
-    let log = oer_lab_stand_arbiter::Arbiter::open()
+    let log = oer_lab_arbiter::Arbiter::open()
         .ok()?
         .jobs()
         .read(id)
@@ -307,7 +307,7 @@ fn job_log(rest: &str) -> Option<String> {
 
 /// The stand and its newest runs.
 fn snapshot(store: &RunStore) -> Result<Value> {
-    let arbiter = oer_lab_stand_arbiter::Arbiter::open()?;
+    let arbiter = oer_lab_arbiter::Arbiter::open()?;
     let status = arbiter.status()?;
     let jobs = arbiter.jobs().unfinished();
     let mut history = arbiter.history()?;
@@ -317,7 +317,7 @@ fn snapshot(store: &RunStore) -> Result<Value> {
     history.truncate(RECENT_LEASES);
     Ok(json!({
         "generated_unix": oer_os_durable::unix_seconds(),
-        "hard_limit_secs": oer_lab_stand_arbiter::HARD_LIMIT.as_secs(),
+        "hard_limit_secs": oer_lab_arbiter::HARD_LIMIT.as_secs(),
         "holders": status.holders,
         "queue": status.queue,
         "balances": status.balances,
@@ -326,7 +326,7 @@ fn snapshot(store: &RunStore) -> Result<Value> {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner),
         "maintenance": status.maintenance,
-        "jobs": oer_lab_stand_arbiter::jobs::views(&jobs, &status),
+        "jobs": oer_lab_arbiter::jobs::views(&jobs, &status),
         "leases": history,
         "runs": runs,
     }))
@@ -337,8 +337,8 @@ fn snapshot(store: &RunStore) -> Result<Value> {
 /// it holds now). A run no lease names keeps a null owner.
 fn link_runs(
     runs: &mut [Value],
-    holders: &[oer_lab_stand_arbiter::HolderStatus],
-    history: &[oer_lab_stand_arbiter::LeaseRecord],
+    holders: &[oer_lab_arbiter::HolderStatus],
+    history: &[oer_lab_arbiter::LeaseRecord],
 ) {
     for run in runs {
         let Some(id) = run["id"].as_str().map(str::to_owned) else {
@@ -458,13 +458,13 @@ mod tests {
 
     #[test]
     fn a_run_is_linked_to_the_leases_that_name_it() {
-        let record = |id: u64, owner: &str, run: Option<&str>| oer_lab_stand_arbiter::LeaseRecord {
+        let record = |id: u64, owner: &str, run: Option<&str>| oer_lab_arbiter::LeaseRecord {
             id,
             owner: owner.to_owned(),
             work: String::from("run a"),
             granted_unix: 1,
             released_unix: 2,
-            outcome: oer_lab_stand_arbiter::LeaseOutcome::Released,
+            outcome: oer_lab_arbiter::LeaseOutcome::Released,
             charged_ms: 0,
             balance_after_ms: 0,
             reason: None,
@@ -478,7 +478,7 @@ mod tests {
             record(2, "wifi", None),
             record(3, "ble", Some("1-done")),
         ];
-        let holders = [oer_lab_stand_arbiter::HolderStatus {
+        let holders = [oer_lab_arbiter::HolderStatus {
             id: 4,
             owner: String::from("ble"),
             work: String::from("run a"),

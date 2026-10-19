@@ -13,7 +13,7 @@ use crate::Result;
 use oer_os_process::Checkout;
 
 fn parse_duration(text: &str) -> std::result::Result<Duration, String> {
-    oer_lab_stand_arbiter::parse_duration(text).map_err(|error| error.to_string())
+    oer_lab_arbiter::parse_duration(text).map_err(|error| error.to_string())
 }
 
 /// `cargo hil peer send BOARD LINE`.
@@ -48,18 +48,18 @@ pub(crate) fn peer(
     if line.is_empty() {
         return Err("cargo hil peer send needs a command line".into());
     }
-    let arbiter = oer_lab_stand_arbiter::Arbiter::open()?;
-    let target = oer_lab_stand_board::Board::attached(&ctx.root, &arbiter.stand()?, &board)?;
+    let arbiter = oer_lab_arbiter::Arbiter::open()?;
+    let target = oer_lab_board::stand::Board::attached(&ctx.root, &arbiter.stand()?, &board)?;
     // The grant holds the board's device access until it is dropped; the
     // leased board and its console keep it while they live.
-    let grant = arbiter.acquire(&oer_lab_stand_arbiter::Request {
+    let grant = arbiter.acquire(&oer_lab_arbiter::Request {
         owner,
         work: format!("peer send {board} {line}"),
         scenarios: Vec::new(),
         run: None,
         claims: vec![
-            oer_lab_stand_claims::Claim::board(target.mac()),
-            oer_lab_stand_claims::Claim::shared(oer_lab_stand_claims::AIR),
+            oer_lab_arbiter::claims::Claim::board(target.mac()),
+            oer_lab_arbiter::claims::Claim::shared(oer_lab_arbiter::claims::AIR),
         ],
     })?;
     let access = grant
@@ -78,7 +78,7 @@ pub(crate) fn peer(
 }
 
 /// Print `lines` until the `@OK` (true) or `@ERR` (false) answer to
-/// `command` in the peers' one grammar (`oer-lab-device-peer-line`), or `None`
+/// `command` in the peers' one grammar (`oer-lab-board`), or `None`
 /// after `duration`. An answer naming another command, such as noise a peer
 /// read while it booted, is only printed.
 fn answer(
@@ -94,13 +94,13 @@ fn answer(
             Ok(line) => {
                 let text = String::from_utf8_lossy(&line);
                 print(&text);
-                match oer_lab_device_peer_line::parse(text.trim()) {
-                    Some(oer_lab_device_peer_line::Line::Ok { command: about })
+                match oer_lab_board::peer_line::parse(text.trim()) {
+                    Some(oer_lab_board::peer_line::Line::Ok { command: about })
                         if about.eq_ignore_ascii_case(command) =>
                     {
                         return Some(true);
                     }
-                    Some(oer_lab_device_peer_line::Line::Err { command: about, .. })
+                    Some(oer_lab_board::peer_line::Line::Err { command: about, .. })
                         if about.eq_ignore_ascii_case(command) =>
                     {
                         return Some(false);

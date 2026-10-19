@@ -56,7 +56,7 @@ fn configuration() -> String {
 
 /// One console session with the reference firmware.
 pub(crate) struct Peer {
-    serial: oer_lab_devices::port::Port,
+    serial: oer_lab_board::port::Port,
     /// Everything the firmware printed.
     pub(crate) console: String,
     /// Whether the radio is taken through one disable and enable before
@@ -67,7 +67,7 @@ pub(crate) struct Peer {
 impl Peer {
     /// The firmware of a board just reset through `serial`, once ready.
     pub(crate) fn boot(
-        serial: oer_lab_devices::port::Port,
+        serial: oer_lab_board::port::Port,
         restart: bool,
     ) -> Result<Self> {
         let mut peer = Self {
@@ -195,7 +195,7 @@ impl Peer {
                 if started.elapsed() > REPLY_TIMEOUT {
                     // A read that stalls the bus hangs the chip instead of
                     // resetting it: reset the board and treat it alike.
-                    oer_lab_devices::reset::reset_usb_serial_jtag(&mut self.serial)?;
+                    oer_lab_board::reset::reset_usb_serial_jtag(&mut self.serial)?;
                     self.wait(|console| ready_lines(console) > boots, "the ready line")?;
                     lines.push_str(
                         &oer_vendor_phy_calibration_capture::vendor::unreadable_line(

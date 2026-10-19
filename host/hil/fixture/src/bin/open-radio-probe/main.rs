@@ -8,15 +8,14 @@ use oer_hil_fixture::probe::model;
 
 fn main() {
     #[cfg(target_os = "linux")]
-    let _software = match oer_lab_stand_fixture_install::launcher::enter(
-        oer_lab_stand_fixture_install::launcher::LaunchTarget::Probe,
-    ) {
-        Ok(lease) => lease,
-        Err(error) => {
-            eprintln!("probe software lease: {error}");
-            std::process::exit(1);
-        }
-    };
+    let _software =
+        match oer_lab_fixtures::launcher::enter(oer_lab_fixtures::launcher::LaunchTarget::Probe) {
+            Ok(lease) => lease,
+            Err(error) => {
+                eprintln!("probe software lease: {error}");
+                std::process::exit(1);
+            }
+        };
     #[cfg(target_os = "linux")]
     let result = linux::run();
     #[cfg(not(target_os = "linux"))]

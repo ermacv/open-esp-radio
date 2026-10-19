@@ -29,12 +29,12 @@ Separate Cargo packages bound the privilege and radio-family scopes:
 | `family/ieee80211-fixture/` (`oer-hil-family-ieee80211-fixture`) | none | The Wi-Fi fixtures (local Linux and OpenWrt access points, hostapd, host network routes, air monitors), their `FixtureProvider`, and the air-capture and BSS-protection analyses |
 | `net-traffic/` (`oer-hil-net-traffic`) | none | Host traffic against the target's network sessions: session start and evidence, readiness, paced UDP and TCP, offered load and the one ICMP method (datagram sockets) |
 | `../../stand/file/` (`oer-lab-model`) | none | The stand file, the one resolver of a board name (id, chip or MAC) and the XDG paths of the stand's state |
-| `../../stand/board/` (`oer-lab-stand-board`) | none | A stand board: its leased device (the device lock of `oer-lab-device-lock`), the receipted image write of `oer_lab_devices::image`, starts, the reset ladder, hub power and consoles |
-| `../../stand/arbiter/` (`oer-lab-stand-arbiter`) | none | Claims, the queue and its job tickets, balances, preemption, maintenance; a board whose device lock a foreign process holds is busy |
+| `../../stand/board/` (`oer-lab-board`) | none | A stand board: its leased device (the device lock of `oer-lab-board`), the receipted image write of `oer_lab_devices::image`, starts, the reset ladder, hub power and consoles |
+| `../../stand/arbiter/` (`oer-lab-arbiter`) | none | Claims, the queue and its job tickets, balances, preemption, maintenance; a board whose device lock a foreign process holds is busy |
 | `flash/` (`oer-hil-flash`) | none | The flash operation of HIL: lease, write, journal, start; and the ESP-IDF catalog flash |
 | `../../stand/discover/`, `../../stand/doctor/`, `../../stand/ssh/` | none | The stand's host: discovery of its boards, the host doctor, fixture reachability and the one SSH helper to its OpenWrt hosts |
 | `fixture/` (`oer-hil-fixture`) | `open-radio-probe` | Finite Linux helper; the library is its versioned request/report contract with the runner |
-| `../../stand/fixture-install/` (`oer-lab-stand-fixture-install`) | `open-radio-fixture-install` and the two fixed launchers | Root-executed installation and admission; the runner uses the same library to plan and prepare |
+| `../../stand/fixture-install/` (`oer-lab-fixtures`) | `open-radio-fixture-install` and the two fixed launchers | Root-executed installation and admission; the runner uses the same library to plan and prepare |
 
 The installer package depends on no radio or HIL execution crate, so
 its dependency graph is the whole root-executed installation surface.
@@ -296,7 +296,7 @@ packet captures use their configured duration plus shutdown allowance. Remote
 process lifetimes additionally depend on the OpenWrt scripts' timeouts and traps.
 
 Serial-device and fixture leases live in the user's host cache, outside
-individual checkouts. A board itself is held through the device lock (`oer-lab-device-lock`, keyed by
+individual checkouts. A board itself is held through the device lock (`oer-lab-board`, keyed by
 its MAC), which `cargo fw`, `cargo stand`, the runner and the verification
 captures share.
 A run additionally leases every required local wiphy and the managed OpenWrt

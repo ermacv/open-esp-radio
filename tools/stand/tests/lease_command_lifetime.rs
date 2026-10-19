@@ -12,7 +12,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use oer_lab_device_lock::{Busy, DeviceAccess, DeviceId, Holder};
+use oer_lab_board::lock::{Busy, DeviceAccess, DeviceId, Holder};
 use oer_os_process::lock::LockBroker;
 
 const TEST: &str = "lease_shutdown_stops_escaped_writers_before_releasing_every_board";

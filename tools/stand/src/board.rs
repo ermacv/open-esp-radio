@@ -13,8 +13,8 @@ use std::{
 };
 
 use crate::Result;
-use oer_lab_devices::console;
-use oer_lab_devices::reset::ResetPath;
+use oer_lab_board::console;
+use oer_lab_board::reset::ResetPath;
 use oer_os_process::Checkout;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
@@ -92,18 +92,18 @@ impl Via {
 }
 
 fn parse_duration(text: &str) -> std::result::Result<Duration, String> {
-    oer_lab_stand_arbiter::parse_duration(text).map_err(|error| error.to_string())
+    oer_lab_arbiter::parse_duration(text).map_err(|error| error.to_string())
 }
 
 struct Target {
-    board: oer_lab_stand_board::Board,
-    arbiter: oer_lab_stand_arbiter::Arbiter,
+    board: oer_lab_board::stand::Board,
+    arbiter: oer_lab_arbiter::Arbiter,
 }
 
 fn target(ctx: &Checkout, board: &str) -> Result<Target> {
-    let arbiter = oer_lab_stand_arbiter::Arbiter::open()?;
+    let arbiter = oer_lab_arbiter::Arbiter::open()?;
     Ok(Target {
-        board: oer_lab_stand_board::Board::attached(&ctx.root, &arbiter.stand()?, board)?,
+        board: oer_lab_board::stand::Board::attached(&ctx.root, &arbiter.stand()?, board)?,
         arbiter,
     })
 }
@@ -115,16 +115,13 @@ fn lease(
     target: &Target,
     owner: String,
     work: String,
-) -> Result<(
-    oer_lab_stand_arbiter::Grant,
-    oer_lab_stand_board::LeasedBoard,
-)> {
-    let grant = target.arbiter.acquire(&oer_lab_stand_arbiter::Request {
+) -> Result<(oer_lab_arbiter::Grant, oer_lab_board::stand::LeasedBoard)> {
+    let grant = target.arbiter.acquire(&oer_lab_arbiter::Request {
         owner,
         work,
         scenarios: Vec::new(),
         run: None,
-        claims: vec![oer_lab_stand_claims::Claim::board(target.board.mac())],
+        claims: vec![oer_lab_arbiter::claims::Claim::board(target.board.mac())],
     })?;
     let access = grant
         .device(target.board.mac())
@@ -261,7 +258,7 @@ fn soak(
     target.arbiter.journal().record_by(
         owner,
         Some(target.board.mac().to_string()),
-        oer_lab_stand_journal::BoardEventKind::Soaked {
+        oer_lab_arbiter::journal::BoardEventKind::Soaked {
             paths: via.iter().map(|via| via.path()).collect(),
             cycles: cycle,
             resets,
@@ -280,7 +277,7 @@ fn soak(
 }
 
 /// Print `lines` until the `@OK` (true) or `@ERR` (false) answer to
-/// `command` in the peers' one grammar ([`oer_lab_device_peer_line::parse`]), or
+/// `command` in the peers' one grammar ([`oer_lab_board::peer_line::parse`]), or
 /// `None` after `duration`. An answer naming another command, such as noise
 /// a peer read while it booted, is only printed.
 fn answer(
@@ -296,13 +293,13 @@ fn answer(
             Ok(line) => {
                 let text = String::from_utf8_lossy(&line);
                 print(&text);
-                match oer_lab_device_peer_line::parse(text.trim()) {
-                    Some(oer_lab_device_peer_line::Line::Ok { command: about })
+                match oer_lab_board::peer_line::parse(text.trim()) {
+                    Some(oer_lab_board::peer_line::Line::Ok { command: about })
                         if about.eq_ignore_ascii_case(command) =>
                     {
                         return Some(true);
                     }
-                    Some(oer_lab_device_peer_line::Line::Err { command: about, .. })
+                    Some(oer_lab_board::peer_line::Line::Err { command: about, .. })
                         if about.eq_ignore_ascii_case(command) =>
                     {
                         return Some(false);
@@ -322,7 +319,7 @@ fn answer(
 pub(crate) fn boots(ctx: &Checkout, board: &str) -> Result<String> {
     let target = target(ctx, board)?;
     let access =
-        oer_lab_device_lock::DeviceAccess::acquire(target.board.mac(), "stand: release check")?;
+        oer_lab_board::lock::DeviceAccess::acquire(target.board.mac(), "stand: release check")?;
     let line = target
         .board
         .clone()
@@ -335,7 +332,7 @@ pub(crate) fn boots(ctx: &Checkout, board: &str) -> Result<String> {
     Ok(line)
 }
 
-fn check(target: &Target, leased: &oer_lab_stand_board::LeasedBoard, board: &str) -> Result<()> {
+fn check(target: &Target, leased: &oer_lab_board::stand::LeasedBoard, board: &str) -> Result<()> {
     let mac = target.board.mac();
     println!(
         "{board} ({mac}): attached at {}, chip {}",
@@ -343,18 +340,18 @@ fn check(target: &Target, leased: &oer_lab_stand_board::LeasedBoard, board: &str
         target.board.chip()
     );
     // What the board runs is its receipt's; the journal is history.
-    match oer_lab_devices::image::Store::open()?.state(mac)? {
-        Some(oer_lab_devices::image::State::Started { receipt }) => println!(
+    match oer_lab_board::image::Store::open()?.state(mac)? {
+        Some(oer_lab_board::image::State::Started { receipt }) => println!(
             "  image: {} (bundle {}), written by {}",
             receipt.image,
             receipt.digest.get(..12).unwrap_or(&receipt.digest),
             receipt.by
         ),
-        Some(oer_lab_devices::image::State::Written { receipt }) => println!(
+        Some(oer_lab_board::image::State::Written { receipt }) => println!(
             "  image: {} written by {}, its start unconfirmed",
             receipt.image, receipt.by
         ),
-        Some(oer_lab_devices::image::State::Writing { by, .. }) => {
+        Some(oer_lab_board::image::State::Writing { by, .. }) => {
             println!("  image: unknown, a write by {by} did not finish")
         }
         None => println!("  image: unknown"),

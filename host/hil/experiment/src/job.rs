@@ -1,5 +1,5 @@
 //! The job a launch runs as: the arbiter's ticket model
-//! ([`oer_lab_stand_arbiter::jobs`]). Every run is a job, so `cargo stand queue`
+//! ([`oer_lab_arbiter::jobs`]). Every run is a job, so `cargo stand queue`
 //! shows it while it builds, and every stand request its runner makes
 //! carries the job's id.
 
@@ -8,7 +8,7 @@ use std::{ffi::OsString, path::Path};
 use oer_hil_run_bundle::RunId;
 use oer_hil_run_bundle::RunStore;
 use oer_hil_schema::run::Outcome;
-use oer_lab_stand_arbiter::jobs::{After, Job, JobOutcome, JobState};
+use oer_lab_arbiter::jobs::{After, Job, JobOutcome, JobState};
 
 use crate::Result;
 
@@ -38,13 +38,13 @@ pub fn outcome_of_runs(outcomes: &[Option<Outcome>]) -> JobOutcome {
 /// The job a launch runs as: recorded and started when it begins, finished
 /// with its runs' outcomes, and finished without a run when dropped first.
 pub struct Running {
-    jobs: oer_lab_stand_arbiter::jobs::Jobs,
+    jobs: oer_lab_arbiter::jobs::Jobs,
     id: String,
     finished: bool,
 }
 
 impl Running {
-    /// The job of this process: the one [`oer_lab_stand_arbiter::jobs::JOB_KEY`]
+    /// The job of this process: the one [`oer_lab_arbiter::jobs::JOB_KEY`]
     /// names (a detached job already has its record) or a new one for
     /// `args`; waits for `after` (a job id from `--after`) and marks the job
     /// started.
@@ -54,8 +54,8 @@ impl Running {
         args: &[OsString],
         after: Option<&After>,
     ) -> Result<Self> {
-        let jobs = oer_lab_stand_arbiter::Arbiter::open()?.jobs();
-        let id = match oer_lab_stand_arbiter::jobs::current()? {
+        let jobs = oer_lab_arbiter::Arbiter::open()?.jobs();
+        let id = match oer_lab_arbiter::jobs::current()? {
             Some(id) => id,
             None => record(&jobs, checkout, owner, args, after)?,
         };
@@ -65,16 +65,12 @@ impl Running {
     /// A new job of its own for `args`, started at once: a launch on behalf
     /// of another job, such as an A/B arm's run.
     pub fn new(checkout: &Path, owner: &str, args: &[OsString]) -> Result<Self> {
-        let jobs = oer_lab_stand_arbiter::Arbiter::open()?.jobs();
+        let jobs = oer_lab_arbiter::Arbiter::open()?.jobs();
         let id = record(&jobs, checkout, owner, args, None)?;
         Self::start(jobs, id, None)
     }
 
-    fn start(
-        jobs: oer_lab_stand_arbiter::jobs::Jobs,
-        id: String,
-        after: Option<&After>,
-    ) -> Result<Self> {
+    fn start(jobs: oer_lab_arbiter::jobs::Jobs, id: String, after: Option<&After>) -> Result<Self> {
         let running = Self {
             jobs,
             id,
@@ -99,7 +95,7 @@ impl Running {
     }
 
     /// The job's id, which the runner a launch starts carries in
-    /// [`oer_lab_stand_arbiter::jobs::JOB_KEY`], so its requests are the job's
+    /// [`oer_lab_arbiter::jobs::JOB_KEY`], so its requests are the job's
     /// tickets.
     pub fn id(&self) -> &str {
         &self.id
@@ -135,7 +131,7 @@ impl Drop for Running {
 
 /// Record a pending job for `args`, run by this process.
 fn record(
-    jobs: &oer_lab_stand_arbiter::jobs::Jobs,
+    jobs: &oer_lab_arbiter::jobs::Jobs,
     checkout: &Path,
     owner: &str,
     args: &[OsString],

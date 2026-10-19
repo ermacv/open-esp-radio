@@ -102,8 +102,8 @@ fn main() {
         return;
     }
     #[cfg(target_os = "linux")]
-    let _software = match oer_lab_stand_fixture_install::launcher::enter(
-        oer_lab_stand_fixture_install::launcher::LaunchTarget::Bluetooth,
+    let _software = match oer_lab_fixtures::launcher::enter(
+        oer_lab_fixtures::launcher::LaunchTarget::Bluetooth,
     ) {
         Ok(lease) => lease,
         Err(error) => {

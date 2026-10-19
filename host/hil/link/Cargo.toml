@@ -14,7 +14,7 @@ description = "HIL host/target link: one session with the board under test (UART
 test-support = ["dep:oer-hil-image-class"]
 
 [dependencies]
-oer-lab-device-peer-line = { path = "../../lab/device-peer-line" }
+oer-lab-board = { path = "../../lab/board" }
 oer-hil-schema = { path = "../schema" }
 oer-os-durable = { path = "../../os/durable" }
 oer-hil-image-class = { path = "../image-class", optional = true }

@@ -3200,7 +3200,7 @@ dependencies = [
  "oer-hil-executor",
  "oer-hil-model",
  "oer-hil-trace-header",
- "oer-lab-stand-arbiter",
+ "oer-lab-arbiter",
  "postcard",
  "postcard-schema",
  "serde",
@@ -3217,10 +3217,8 @@ dependencies = [
  "oer-hil-run-bundle-format",
  "oer-hil-schema",
  "oer-hil-stats",
+ "oer-lab-arbiter",
  "oer-lab-model",
- "oer-lab-stand-arbiter",
- "oer-lab-stand-claims",
- "oer-lab-stand-owners",
  "oer-os-durable",
  "oer-os-process",
  "serde",
@@ -3233,7 +3231,7 @@ name = "oer-hil-family-phy"
 version = "0.1.0"
 dependencies = [
  "oer-hil-workload",
- "oer-lab-devices",
+ "oer-lab-board",
  "oer-vendor-phy-calibration-capture",
  "serde_json",
 ]
@@ -3256,7 +3254,7 @@ dependencies = [
  "oer-hil-scenario",
  "oer-hil-schema",
  "oer-hil-workload",
- "oer-lab-devices",
+ "oer-lab-board",
  "oer-os-process",
  "serde",
  "serde_json",
@@ -3276,11 +3274,31 @@ dependencies = [
  "oer-bluetooth-le-ll",
  "oer-hil-protocol",
  "oer-ieee80211-mac",
- "oer-lab-stand-fixture-install",
+ "oer-lab-fixtures",
  "oer-os-process",
  "rustix",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "oer-hil-fixtures-bluetooth"
+version = "0.1.0"
+dependencies = [
+ "async-channel",
+ "async-io",
+ "futures-lite",
+ "oer-hil-fixture",
+ "oer-hil-lab",
+ "oer-hil-protocol",
+ "oer-hil-run-bundle-format",
+ "oer-os-durable",
+ "oer-os-process",
+ "rustix",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "zbus",
 ]
 
 [[package]]
@@ -3289,10 +3307,8 @@ version = "0.1.0"
 dependencies = [
  "oer-image-build",
  "oer-image-profile",
- "oer-lab-device-lock",
- "oer-lab-devices",
- "oer-lab-stand-board",
- "oer-lab-stand-journal",
+ "oer-lab-arbiter",
+ "oer-lab-board",
  "oer-os-durable",
  "oer-os-process",
  "tempfile",
@@ -3350,17 +3366,11 @@ dependencies = [
  "oer-hil-run-bundle-format",
  "oer-hil-scenario-catalog",
  "oer-image-profile",
- "oer-lab-device-lock",
- "oer-lab-devices",
+ "oer-lab-arbiter",
+ "oer-lab-board",
+ "oer-lab-fixtures",
  "oer-lab-model",
  "oer-lab-router",
- "oer-lab-stand-arbiter",
- "oer-lab-stand-board",
- "oer-lab-stand-claims",
- "oer-lab-stand-fixture-install",
- "oer-lab-stand-journal",
- "oer-lab-stand-resource-lock",
- "oer-lab-stand-ssh",
  "oer-os-durable",
  "oer-os-process",
  "serde",
@@ -3378,7 +3388,7 @@ dependencies = [
  "oer-hil-image-class",
  "oer-hil-protocol",
  "oer-hil-schema",
- "oer-lab-device-peer-line",
+ "oer-lab-board",
  "oer-os-durable",
  "oer-os-process",
  "postcard",
@@ -3497,11 +3507,8 @@ dependencies = [
  "oer-image-checks",
  "oer-image-profile",
  "oer-image-toolchain",
- "oer-lab-device-lock",
- "oer-lab-devices",
- "oer-lab-stand-board",
- "oer-lab-stand-journal",
- "oer-lab-stand-owners",
+ "oer-lab-arbiter",
+ "oer-lab-board",
  "oer-os-command-tree",
  "oer-os-durable",
  "oer-os-process",
@@ -3576,8 +3583,7 @@ dependencies = [
  "oer-hil-scenario-catalog",
  "oer-hil-schema",
  "oer-image-build",
- "oer-lab-device-lock",
- "oer-lab-stand-board",
+ "oer-lab-board",
  "oer-os-durable",
  "oer-os-process",
  "rustix",
@@ -3744,14 +3750,10 @@ dependencies = [
  "oer-image-esp-idf",
  "oer-image-profile",
  "oer-image-toolchain",
- "oer-lab-device-lock",
- "oer-lab-model",
- "oer-lab-router",
  "oer-os-durable",
  "oer-os-process",
  "serde",
  "serde_json",
- "serialport",
  "sha2 0.10.9",
  "tempfile",
  "toml",
@@ -3817,40 +3819,32 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-lab-device-lock"
+name = "oer-lab-arbiter"
 version = "0.1.0"
 dependencies = [
- "oer-lab-device-mac",
+ "libc",
+ "oer-lab-board",
+ "oer-lab-model",
  "oer-os-durable",
  "oer-os-process",
+ "rustix",
  "serde",
  "serde_json",
  "tempfile",
 ]
 
 [[package]]
-name = "oer-lab-device-mac"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "oer-lab-device-peer-line"
-version = "0.1.0"
-
-[[package]]
-name = "oer-lab-devices"
+name = "oer-lab-board"
 version = "0.1.0"
 dependencies = [
  "espflash",
  "oer-image-build",
  "oer-image-profile",
- "oer-lab-device-lock",
- "oer-lab-device-mac",
+ "oer-lab-model",
+ "oer-lab-router",
  "oer-os-durable",
  "oer-os-process",
+ "oer-registers-bindings",
  "serde",
  "serde_json",
  "serialport",
@@ -3858,108 +3852,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-lab-fixtures-bluetooth"
-version = "0.1.0"
-dependencies = [
- "async-channel",
- "async-io",
- "futures-lite",
- "oer-hil-fixture",
- "oer-hil-lab",
- "oer-hil-protocol",
- "oer-hil-run-bundle-format",
- "oer-os-durable",
- "oer-os-process",
- "rustix",
- "serde",
- "serde_json",
- "tempfile",
- "zbus",
-]
-
-[[package]]
-name = "oer-lab-model"
-version = "0.1.0"
-dependencies = [
- "oer-image-profile",
- "oer-lab-device-mac",
- "oer-os-durable",
- "serde",
- "tempfile",
- "toml",
-]
-
-[[package]]
-name = "oer-lab-router"
-version = "0.1.0"
-dependencies = [
- "oer-lab-model",
- "oer-os-process",
- "sha2 0.10.9",
- "tempfile",
-]
-
-[[package]]
-name = "oer-lab-stand-arbiter"
-version = "0.1.0"
-dependencies = [
- "oer-lab-device-lock",
- "oer-lab-devices",
- "oer-lab-model",
- "oer-lab-stand-claims",
- "oer-lab-stand-journal",
- "oer-lab-stand-owners",
- "oer-lab-stand-power",
- "oer-os-durable",
- "oer-os-process",
- "rustix",
- "serde",
- "serde_json",
- "tempfile",
-]
-
-[[package]]
-name = "oer-lab-stand-board"
-version = "0.1.0"
-dependencies = [
- "oer-image-build",
- "oer-image-profile",
- "oer-lab-device-lock",
- "oer-lab-devices",
- "oer-lab-model",
- "oer-lab-stand-power",
- "oer-os-process",
- "tempfile",
-]
-
-[[package]]
-name = "oer-lab-stand-claims"
-version = "0.1.0"
-dependencies = [
- "serde",
-]
-
-[[package]]
-name = "oer-lab-stand-discover"
-version = "0.1.0"
-dependencies = [
- "oer-lab-model",
- "oer-lab-stand-power",
-]
-
-[[package]]
-name = "oer-lab-stand-doctor"
-version = "0.1.0"
-dependencies = [
- "oer-image-profile",
- "oer-lab-model",
- "oer-lab-stand-power",
- "oer-os-process",
- "tempfile",
-]
-
-[[package]]
-name = "oer-lab-stand-fixture-install"
+name = "oer-lab-fixtures"
 version = "0.1.0"
 dependencies = [
  "clap",
@@ -3974,42 +3867,19 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-lab-stand-fixtures"
+name = "oer-lab-model"
 version = "0.1.0"
 dependencies = [
- "oer-lab-stand-ssh",
- "oer-os-process",
+ "oer-image-profile",
+ "oer-os-durable",
  "serde",
+ "serde_json",
+ "tempfile",
  "toml",
 ]
 
 [[package]]
-name = "oer-lab-stand-hostapd"
-version = "0.1.0"
-dependencies = [
- "oer-os-durable",
- "oer-os-process",
- "serde_json",
- "tempfile",
-]
-
-[[package]]
-name = "oer-lab-stand-journal"
-version = "0.1.0"
-dependencies = [
- "oer-lab-device-mac",
- "oer-lab-devices",
- "oer-lab-model",
- "oer-lab-stand-owners",
- "oer-os-durable",
- "oer-os-process",
- "serde",
- "serde_json",
- "tempfile",
-]
-
-[[package]]
-name = "oer-lab-stand-owners"
+name = "oer-lab-router"
 version = "0.1.0"
 dependencies = [
  "oer-lab-model",
@@ -4017,40 +3887,9 @@ dependencies = [
  "oer-os-process",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "tempfile",
-]
-
-[[package]]
-name = "oer-lab-stand-power"
-version = "0.1.0"
-dependencies = [
- "oer-image-profile",
- "oer-lab-device-mac",
- "oer-lab-devices",
- "oer-lab-model",
- "oer-lab-router",
- "oer-os-process",
- "oer-registers-bindings",
- "serde",
-]
-
-[[package]]
-name = "oer-lab-stand-resource-lock"
-version = "0.1.0"
-dependencies = [
- "libc",
- "oer-lab-model",
- "oer-os-durable",
- "oer-os-process",
- "rustix",
- "tempfile",
-]
-
-[[package]]
-name = "oer-lab-stand-ssh"
-version = "0.1.0"
-dependencies = [
- "oer-os-process",
+ "toml",
 ]
 
 [[package]]
@@ -4290,7 +4129,16 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "oer-image-build",
+ "oer-image-checks",
+ "oer-image-profile",
+ "oer-lab-board",
+ "oer-lab-model",
+ "oer-lab-router",
  "oer-os-command-tree",
+ "oer-os-durable",
+ "serde",
+ "tempfile",
+ "toml",
 ]
 
 [[package]]
@@ -4313,12 +4161,9 @@ dependencies = [
  "oer-image-esp-idf",
  "oer-image-profile",
  "oer-image-toolchain",
- "oer-lab-device-peer-line",
- "oer-lab-stand-arbiter",
- "oer-lab-stand-board",
- "oer-lab-stand-claims",
- "oer-lab-stand-fixtures",
- "oer-lab-stand-owners",
+ "oer-lab-arbiter",
+ "oer-lab-board",
+ "oer-lab-router",
  "oer-os-command-tree",
  "oer-os-durable",
  "oer-os-process",
@@ -4359,21 +4204,11 @@ dependencies = [
  "libc",
  "oer-image-profile",
  "oer-image-toolchain",
- "oer-lab-device-lock",
- "oer-lab-device-peer-line",
- "oer-lab-devices",
+ "oer-lab-arbiter",
+ "oer-lab-board",
+ "oer-lab-fixtures",
  "oer-lab-model",
- "oer-lab-stand-arbiter",
- "oer-lab-stand-board",
- "oer-lab-stand-claims",
- "oer-lab-stand-discover",
- "oer-lab-stand-doctor",
- "oer-lab-stand-fixture-install",
- "oer-lab-stand-fixtures",
- "oer-lab-stand-hostapd",
- "oer-lab-stand-journal",
- "oer-lab-stand-owners",
- "oer-lab-stand-power",
+ "oer-lab-router",
  "oer-os-command-tree",
  "oer-os-durable",
  "oer-os-process",

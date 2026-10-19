@@ -22,8 +22,7 @@ oer-hil-schema = { path = "../schema" }
 oer-hil-scenario-catalog = { path = "../scenario-catalog" }
 oer-image-build = { path = "../../image/build" }
 oer-hil-lab = { path = "../lab" }
-oer-lab-device-lock = { path = "../../lab/device-lock" }
-oer-lab-stand-board = { path = "../../lab/stand-board" }
+oer-lab-board = { path = "../../lab/board" }
 oer-hil-link = { path = "../link" }
 oer-hil-scenario = { path = "../scenario" }
 oer-os-durable = { path = "../../os/durable" }

@@ -48,20 +48,20 @@ pub const JTAG_POST_MORTEM_FILE: &str = "post-mortem/jtag.json";
 /// hold one.
 pub fn jtag_snapshot_through_stand_openocd(
     chip: &str,
-    access: &oer_lab_device_lock::DeviceAccess,
+    access: &oer_lab_board::lock::DeviceAccess,
     output: &Path,
     elf: Option<&[u8]>,
 ) {
-    match oer_lab_devices::openocd::Openocd::locate() {
+    match oer_lab_board::openocd::Openocd::locate() {
         Ok(openocd) => jtag_snapshot(&openocd, chip, access, output, elf),
         Err(error) => eprintln!("hil: no JTAG post-mortem of the silent target: {error}"),
     }
 }
 
 pub fn jtag_snapshot(
-    openocd: &oer_lab_devices::openocd::Openocd,
+    openocd: &oer_lab_board::openocd::Openocd,
     chip: &str,
-    access: &oer_lab_device_lock::DeviceAccess,
+    access: &oer_lab_board::lock::DeviceAccess,
     output: &Path,
     elf: Option<&[u8]>,
 ) {
@@ -122,7 +122,7 @@ pub fn jtag_snapshot(
 /// reports; `None` when it does not answer.
 pub fn inspect(
     port: &Path,
-    access: &oer_lab_device_lock::DeviceAccess,
+    access: &oer_lab_board::lock::DeviceAccess,
     output: &Path,
     elf: Option<&[u8]>,
 ) -> Option<Finding> {
@@ -133,7 +133,7 @@ pub fn inspect(
     let port = if port.exists() {
         port.to_owned()
     } else {
-        oer_lab_devices::discovery::wait_for(mac, ANSWER_WITHIN)?
+        oer_lab_board::discovery::wait_for(mac, ANSWER_WITHIN)?
     };
     let capture =
         SerialCapture::attach(crate::attach_console(&port), &output.join("post-mortem")).ok()?;
@@ -346,13 +346,13 @@ mod tests {
         .unwrap();
         use std::os::unix::fs::PermissionsExt as _;
         std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
-        let openocd = oer_lab_devices::openocd::Openocd {
+        let openocd = oer_lab_board::openocd::Openocd {
             program: script,
             scripts: directory.path().to_owned(),
         };
-        let access = oer_lab_device_lock::DeviceAccess::try_acquire_in(
+        let access = oer_lab_board::lock::DeviceAccess::try_acquire_in(
             directory.path(),
-            &oer_lab_device_lock::DeviceId::parse("02:00:00:00:25:64").unwrap(),
+            &oer_lab_board::lock::DeviceId::parse("02:00:00:00:25:64").unwrap(),
             "test",
         )
         .unwrap()
@@ -383,7 +383,7 @@ exit 1
         std::fs::set_permissions(&silent, std::fs::Permissions::from_mode(0o755)).unwrap();
         let quiet = directory.path().join("quiet");
         jtag_snapshot(
-            &oer_lab_devices::openocd::Openocd {
+            &oer_lab_board::openocd::Openocd {
                 program: silent,
                 scripts: directory.path().to_owned(),
             },

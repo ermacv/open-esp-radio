@@ -5,9 +5,7 @@ pub mod security_failure;
 use oer_hil_protocol::bluetooth::BluetoothPeripheralTermination;
 use serde::{Deserialize, Serialize};
 
-pub use oer_lab_stand_fixture_install::bluetooth_contract::{
-    CONNECTION_RESET_SCHEMA, HELPER_CAPABILITIES,
-};
+pub use oer_lab_fixtures::bluetooth_contract::{CONNECTION_RESET_SCHEMA, HELPER_CAPABILITIES};
 
 /// The target's LE features as the central's Controller reports them:
 /// Encryption, Peripheral Feature Exchange, Ping, LE Data Packet Length

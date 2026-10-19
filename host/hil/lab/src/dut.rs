@@ -1,11 +1,11 @@
 //! The leased board and the station network as the link reaches them, and
 //! the consoles the link reads, opened through the board I/O's one port
-//! opener ([`oer_lab_devices::port::Port`]).
+//! opener ([`oer_lab_board::port::Port`]).
 
 use std::{path::Path, time::Duration};
 
 use oer_hil_link::{ConsoleOpener, Dut, SerialLine, peer::SerialLink};
-use oer_lab_devices::port::{Lines, Port, Settings};
+use oer_lab_board::port::{Lines, Port, Settings};
 
 use super::config::LabConfig;
 
@@ -19,7 +19,7 @@ impl Dut for LabConfig {
         Box::new(move || {
             let mut serial = Port::open(&port, DUT_CONSOLE)?;
             // Every supported chip restarts through its USB-Serial-JTAG console.
-            oer_lab_devices::reset::reset_usb_serial_jtag(&mut serial)?;
+            oer_lab_board::reset::reset_usb_serial_jtag(&mut serial)?;
             Ok(Box::new(serial) as Box<dyn SerialLine>)
         })
     }

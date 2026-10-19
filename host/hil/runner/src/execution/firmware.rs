@@ -13,7 +13,7 @@ use oer_hil_run_bundle_format::run::FailureKind;
 use oer_hil_run_bundle_format::run::Outcome;
 use oer_hil_run_bundle_format::run::PlannedFirmware;
 use oer_hil_schema::image::ImageClass;
-use oer_lab_device_lock::DeviceAccess;
+use oer_lab_board::lock::DeviceAccess;
 
 pub(crate) enum RunFirmware {
     BuildCurrent(CurrentBuild),

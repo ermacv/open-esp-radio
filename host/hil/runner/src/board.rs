@@ -7,7 +7,7 @@ use std::path::Path;
 use oer_hil_schema::image::ImageClass;
 use oer_image_build::bundle::BootFiles;
 use oer_image_build::bundle::ImageBundle;
-use oer_lab_device_lock::DeviceAccess;
+use oer_lab_board::lock::DeviceAccess;
 
 use crate::Result;
 
@@ -30,9 +30,9 @@ pub(crate) fn flash_dut(
     flash: Flash<'_>,
 ) -> Result<()> {
     oer_hil_flash::flash(
-        &oer_lab_stand_journal::Journal::open()?,
-        &oer_lab_devices::image::Store::open()?,
-        oer_lab_stand_owners::from_environment()?.as_str(),
+        &oer_lab_arbiter::journal::Journal::open()?,
+        &oer_lab_board::image::Store::open()?,
+        oer_lab_arbiter::owner::from_environment()?.as_str(),
         &lab.dut_board()?.lease(lock)?,
         &oer_hil_flash::Image {
             bundle,
@@ -40,7 +40,7 @@ pub(crate) fn flash_dut(
             revision: flash.revision,
             origin: flash.origin,
         },
-        oer_lab_stand_board::Via::Usb,
+        oer_lab_board::stand::Via::Usb,
     )
     .map(drop)
 }

@@ -15,7 +15,7 @@ test-support = []
 
 [dependencies]
 oer-hil-model = { path = "../model" }
-oer-lab-stand-arbiter = { path = "../../lab/stand-arbiter" }
+oer-lab-arbiter = { path = "../../lab/arbiter" }
 serde = { version = "1.0", features = ["derive"] }
 
 [dev-dependencies]

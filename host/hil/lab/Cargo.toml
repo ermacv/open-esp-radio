@@ -14,18 +14,16 @@ test-support = []
 
 [dependencies]
 oer-lab-router = { path = "../../lab/router" }
-oer-lab-devices = { path = "../../lab/devices" }
+oer-lab-board = { path = "../../lab/board" }
 oer-hil-run-bundle-format = { path = "../run-bundle-format" }
 oer-hil-scenario-catalog = { path = "../scenario-catalog" }
 oer-analysis-elf = { path = "../../analysis/elf" }
 oer-image-profile = { path = "../../image/profile" }
-oer-lab-stand-arbiter = { path = "../../lab/stand-arbiter" }
+oer-lab-arbiter = { path = "../../lab/arbiter" }
 oer-hil-fixture = { path = "../fixture" }
 oer-lab-model = { path = "../../lab/model" }
-oer-lab-stand-board = { path = "../../lab/stand-board" }
-oer-lab-stand-ssh = { path = "../../lab/stand-ssh" }
 oer-os-durable = { path = "../../os/durable" }
-oer-lab-stand-fixture-install = { path = "../../lab/stand-fixture-install" }
+oer-lab-fixtures = { path = "../../lab/fixtures" }
 oer-hil-link = { path = "../link" }
 oer-hil-protocol = { path = "../../../portable/hil/protocol", features = ["registry"] }
 oer-os-process = { path = "../../os/process" }
@@ -35,10 +33,6 @@ tempfile = "3"
 toml = "1.1"
 zeroize = "1.8.1"
 
-oer-lab-device-lock = { path = "../../lab/device-lock" }
-oer-lab-stand-claims = { path = "../../lab/stand-claims" }
-oer-lab-stand-journal = { path = "../../lab/stand-journal" }
-oer-lab-stand-resource-lock = { path = "../../lab/stand-resource-lock" }
 [lints]
 workspace = true
 

@@ -719,7 +719,7 @@ impl LiveSuite<'_> {
     }
 
     /// The run's access to its device under test.
-    fn device_lock(&self) -> Result<&oer_lab_device_lock::DeviceAccess> {
+    fn device_lock(&self) -> Result<&oer_lab_board::lock::DeviceAccess> {
         self.lease
             .as_ref()
             .and_then(oer_hil_lab::lock::FixtureLock::device)
@@ -747,18 +747,18 @@ impl LiveSuite<'_> {
             .and_then(oer_hil_lab::lock::FixtureLock::peer)
             .ok_or("the run holds no lease of its peer board")?;
         let board = self.lab.peer_board()?.lease(lock)?;
-        let journal = oer_lab_stand_journal::Journal::open()?;
+        let journal = oer_lab_arbiter::journal::Journal::open()?;
         let flashed = oer_hil_flash::catalog::flash(
             self.root,
             &journal,
-            &oer_lab_devices::image::Store::open()?,
-            oer_lab_stand_owners::from_environment()?.as_str(),
+            &oer_lab_board::image::Store::open()?,
+            oer_lab_arbiter::owner::from_environment()?.as_str(),
             &board,
             &oer_hil_flash::catalog::Request {
                 image,
                 chip: board.chip(),
                 if_changed: true,
-                via: oer_lab_stand_board::Via::Usb,
+                via: oer_lab_board::stand::Via::Usb,
                 origin: "HIL run",
             },
         )?;
@@ -794,7 +794,7 @@ impl LiveSuite<'_> {
 /// under the run's lock of the board, like any flash of the run.
 struct RunImages<'a> {
     lab: &'a LabConfig,
-    lock: &'a oer_lab_device_lock::DeviceAccess,
+    lock: &'a oer_lab_board::lock::DeviceAccess,
     class: ImageClass,
     bundle: &'a oer_image_build::bundle::ImageBundle,
     revision: oer_hil_flash::Revision,
@@ -846,9 +846,9 @@ pub(crate) struct PeerImageRecord {
 
 /// The record of `receipt` on the board with `mac`.
 fn peer_image_record(
-    journal: &oer_lab_stand_journal::Journal,
-    mac: &oer_lab_device_lock::DeviceId,
-    receipt: &oer_lab_devices::image::Receipt,
+    journal: &oer_lab_arbiter::journal::Journal,
+    mac: &oer_lab_board::lock::DeviceId,
+    receipt: &oer_lab_board::image::Receipt,
 ) -> Result<PeerImageRecord> {
     let application = receipt
         .segment("application")
@@ -856,7 +856,7 @@ fn peer_image_record(
         .sha256
         .clone();
     let (commit, dirty) = match journal.latest_flash(mac)?.map(|event| event.kind) {
-        Some(oer_lab_stand_journal::BoardEventKind::Flashed {
+        Some(oer_lab_arbiter::journal::BoardEventKind::Flashed {
             application_sha256,
             commit,
             dirty,
@@ -1163,7 +1163,7 @@ fn run_scenario(
     selected: &Scenario,
     session: &RunSession,
     images: Option<&dyn oer_hil_workload::context::BoardImages>,
-    device: Option<&oer_lab_device_lock::DeviceAccess>,
+    device: Option<&oer_lab_board::lock::DeviceAccess>,
 ) -> Result<ScenarioResult> {
     let scenario_output = session.scenario_directory(selected.id());
     fs::create_dir_all(&scenario_output)?;
@@ -1211,7 +1211,7 @@ fn run_scenario_repetition(
     artifacts: &Path,
     output: &Path,
     images: Option<&dyn oer_hil_workload::context::BoardImages>,
-    device: Option<&oer_lab_device_lock::DeviceAccess>,
+    device: Option<&oer_lab_board::lock::DeviceAccess>,
 ) -> Result<RepetitionResult> {
     let plan = selected.plan();
     let resolved = lab.resolve(plan.wifi);

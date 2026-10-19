@@ -3,7 +3,7 @@
 # bindings (host/registers/generate/README.md).
 registers = "run --quiet --profile tools -p oer-tool-registers --"
 # The firmware tool: build, flash and run staged images on the stand's
-# boards (host/image/build/FW.md).
+# boards (tools/fw/README.md).
 fw = "run --quiet --profile tools -p oer-tool-fw --"
 # Fetch and verify a chip's pinned vendor artifacts into the host-wide store
 # (host/vendor/artifacts).

@@ -7,6 +7,10 @@
 
 #![forbid(unsafe_code)]
 
+pub mod fixtures;
+
+pub mod hostapd;
+
 pub mod boards;
 pub mod credentials;
 pub mod hub;

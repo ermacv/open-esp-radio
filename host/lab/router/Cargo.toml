@@ -12,6 +12,11 @@ description = "The stand: its file, its OpenWrt lab router and the SSH that reac
 oer-lab-model = { path = "../model" }
 oer-os-process = { path = "../../os/process" }
 sha2 = "=0.10.9"
+oer-os-durable = { path = "../../os/durable" }
+serde_json = "1.0"
+tempfile = "3"
+serde = { version = "1.0", features = ["derive"] }
+toml = "1.1"
 
 [dev-dependencies]
 tempfile = "=3.27.0"

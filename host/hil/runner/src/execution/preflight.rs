@@ -24,7 +24,7 @@ pub(crate) fn validate_flashed_image(
     selected: &Scenario,
     features: &FeatureDelta,
     output: &Path,
-    device: Option<&oer_lab_device_lock::DeviceAccess>,
+    device: Option<&oer_lab_board::lock::DeviceAccess>,
 ) -> Result<()> {
     if selected.image() == ImageClass::BootSmoke {
         return Ok(());
@@ -78,7 +78,7 @@ pub(crate) fn validate_flashed_image(
                 .collect::<Vec<_>>()
                 .join(", "),
             match escalation.ladder.end {
-                oer_lab_devices::reset::LadderEnd::Loadable { .. } => {
+                oer_lab_board::reset::LadderEnd::Loadable { .. } => {
                     "its ROM answers, so firmware can be loaded again"
                 }
                 _ => "the board is quarantined for a person",

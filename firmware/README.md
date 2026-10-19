@@ -16,7 +16,7 @@ PSRAM_RUNTIME_BIN=/path/to/empty.bin \
 ```
 
 Images live in `apps/`; `boot-smoke` is the smallest. Building, packing,
-flashing and running them is the job of [`cargo fw`](../host/image/build/FW.md):
+flashing and running them is the job of [`cargo fw`](../tools/fw/README.md):
 
 ```console
 cargo fw run boot-smoke --board s31-a

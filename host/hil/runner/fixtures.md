@@ -129,7 +129,7 @@ cargo stand fixture install --provider linux-bluetooth --dry-run
 The helper `capabilities` and sudoers validation subprocesses each have a
 five-second execution deadline; timeout is an installation/preparation failure.
 Bluetooth preparation and execution share the versioned contract in
-[`bluetooth_contract.rs`](../../lab/stand-fixture-install/src/bluetooth_contract.rs).
+[`bluetooth_contract.rs`](../../lab/fixtures/src/bluetooth_contract.rs).
 Synchronous HCI command receive failures report the command identity, elapsed
 time, packet count and last event identity in the helper's existing error
 report. They do not record event payloads or keys, retry commands, or extend

@@ -10,8 +10,8 @@
 //!    the image again.
 use crate::Result;
 use oer_hil_workload::context::Context;
-use oer_lab_devices::reset;
-use oer_lab_devices::reset::{Ladder, LadderEnd, RecoveryStep};
+use oer_lab_board::reset;
+use oer_lab_board::reset::{Ladder, LadderEnd, RecoveryStep};
 use serde::Serialize;
 use std::{
     path::Path,
@@ -160,7 +160,7 @@ fn cleared_by_power(ladder: &Ladder) -> Result<()> {
 
 /// Whether the ROM's reset line shows it waiting for a download.
 fn waits_for_download(line: &str) -> Result<()> {
-    if oer_lab_devices::console::is_reset_line(line) && line.contains("DOWNLOAD") {
+    if oer_lab_board::console::is_reset_line(line) && line.contains("DOWNLOAD") {
         Ok(())
     } else {
         Err(format!("the ROM does not wait for a download after the entry: `{line}`").into())
@@ -174,7 +174,7 @@ fn millis(duration: Duration) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oer_lab_devices::reset::LadderStep;
+    use oer_lab_board::reset::LadderStep;
 
     fn step(step: RecoveryStep, cleared: bool) -> LadderStep {
         LadderStep {

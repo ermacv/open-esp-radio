@@ -146,7 +146,9 @@ from the S31 HAL and PHY today (the TX power levels and the coexistence
 priority tables, and the PHY calibration relation) moves to
 `portable/esp32s31/`. Duplicates close inside their domains: one image
 pipeline (`host/image/build`), one board path (`host/lab/board`), one chip
-profile, ELF through `host/analysis/elf`.
+profile. ELF is read through `object` and no package parses it itself:
+convenient reads through `host/analysis/elf`, bounded reads of untrusted
+vendor inputs through `host/analysis/blobray-artifacts`.
 
 | Today | Target | Level |
 |---|---|---|
@@ -255,10 +257,10 @@ profile, ELF through `host/analysis/elf`.
 | `host/hil/run-bundle` | `host/hil/runs` | host |
 | `host/hil/scenario` | `host/hil/scenario` | host |
 | `host/hil/workload` | `host/hil/scenario` | host |
+| `host/image/firmware` | `tools/fw` | host |
 | `host/image/build` | `host/image/build` | host |
-| `host/image/build` | `host/image/build` | host |
-| `host/image/build` | `host/image/build` | host |
-| `host/image/build` | `host/image/build` | host |
+| `host/image/bundle` | `host/image/build` | host |
+| `host/image/encode` | `host/image/build` | host |
 | `host/image/check-interrupts` | `host/image/checks` | host |
 | `host/image/check-placement` | `host/image/checks` | host |
 | `host/image/check-stack` | `host/image/checks` | host |
@@ -274,15 +276,15 @@ profile, ELF through `host/analysis/elf`.
 | `host/lab/stand-journal` | `host/lab/arbiter` | host |
 | `host/lab/stand-owners` | `host/lab/arbiter` | host |
 | `host/lab/stand-resource-lock` | `host/lab/arbiter` | host |
-| `host/lab/device-mac` | `host/lab/board` | host |
+| `host/lab/device-mac` | `host/lab/model` | host |
 | `host/lab/device-lock` | `host/lab/board` | host |
 | `host/lab/device-peer-line` | `host/lab/board` | host |
 | `host/lab/devices` | `host/lab/board` | host |
 | `host/lab/stand-board` | `host/lab/board` | host |
 | `host/lab/stand-power` | `host/lab/board` | host |
 | `host/lab/stand-fixture-install` | `host/lab/fixtures` | host |
-| `host/lab/stand-fixtures` | `host/lab/fixtures` | host |
-| `host/lab/fixtures-bluetooth` | `host/lab/fixtures-bluetooth` | host |
+| `host/lab/stand-fixtures` | `host/lab/router` | host |
+| `host/lab/fixtures-bluetooth` | `host/hil/fixtures-bluetooth` | host |
 | `host/lab/model` | `host/lab/model` | host |
 | `host/lab/router` | `host/lab/router` | host |
 | `host/lab/stand-hostapd` | `host/lab/router` | host |
