@@ -32,8 +32,8 @@ use oer_esp32s31_phy::{
 use oer_esp32s31_radio_client::{
     DomainHealth, Failed, Failure, LpClock, PhyPreparation, RcSlow,
     wifi::{
-        TrackReport, Wifi, WifiJoin, WifiJoined, WifiLeave, WifiLeft, WifiReturned, WifiTrack,
-        WifiTracked,
+        RetuneReport, TrackReport, Wifi, WifiJoin, WifiJoined, WifiLeave, WifiLeft, WifiRetune,
+        WifiRetuned, WifiReturned, WifiTrack, WifiTracked,
     },
 };
 
@@ -505,6 +505,58 @@ where
                 })
             }
         }
+    }
+
+    async fn retune(&mut self, retune: WifiRetune) -> Result<WifiRetuned, Failed<WifiClocked>> {
+        let WifiRetune {
+            mut wifi,
+            channel,
+            tx_ceiling,
+        } = retune;
+        if self.wifi.membership.is_none() {
+            return Err(Failed {
+                returned: wifi,
+                cause: Failure::Poisoned,
+            });
+        }
+        let start = self.timer.now();
+        let mut observer = self.observer.clone();
+        if let Err(error) = retune::select_wifi_channel(
+            &self.timer,
+            &mut self.radio,
+            &mut wifi,
+            channel,
+            &mut observer,
+        )
+        .await
+        {
+            return Err(Failed {
+                returned: wifi,
+                cause: match error {
+                    ConcurrentWifiChannelError::Rejected(_) => Failure::Refused,
+                    ConcurrentWifiChannelError::Failed(_) => Failure::Poisoned,
+                },
+            });
+        }
+        let state = match self.radio.attachment().phy_state() {
+            Ok(state) => state,
+            Err(_) => {
+                return Err(Failed {
+                    returned: wifi,
+                    cause: Failure::Poisoned,
+                });
+            }
+        };
+        Ok(WifiRetuned {
+            wifi,
+            report: RetuneReport {
+                micros: self.micros_since(start),
+                tx_power: state
+                    .tx_target_power_profile()
+                    .with_maximum_quarter_dbm(tx_ceiling.quarter_dbm()),
+                temperature: state.temperature_observation(),
+            },
+        })
     }
 
     async fn exit(&mut self, leave: WifiLeave) -> (WifiLeft, Exit) {
