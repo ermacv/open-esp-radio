@@ -14,6 +14,9 @@ tools/
   stand/           `cargo stand` (oer-tool-stand): boards, leases, power, fixtures
   hil/             `cargo hil` (oer-tool-hil): HIL runs, the run store and its analyses
   hil-runner/      the HIL runner the observer builds (oer-tool-hil-runner)
+  hil-fixture/     the Linux Bluetooth and probe helpers of HIL (oer-tool-hil-fixture)
+  fixture-install/ the privileged fixture installer and fixed launchers (oer-tool-fixture-install)
+  image-linker/    the image linker rustc runs for every image (oer-tool-image-linker)
   vendor/          `cargo vendor-check` (oer-tool-vendor): the vendor comparison, lineage and the PHY archive audit
   vendor-scenarios-<chip>/  each chip's typed vendor scenarios, one chip per program
   vendor-ieee802154-esp32s31/  the IEEE 802.15.4 host stand's program
@@ -22,7 +25,10 @@ tools/
 ## Rules
 
 A program depends on `host/` and `portable/` only, never on another program
-or on `chips/`. `host/test/layers` reads the path dependencies of every
+or on `chips/`. Executables live only here and in `firmware/`: no package of
+`portable/`, `chips/` or `host/` has a binary target. A program that is
+called by name (a privileged helper, the linker) keeps that name with
+`[[bin]] name`. `host/test/layers` reads the path dependencies of every
 package manifest and checks the root rules of the layout by folder; manifests
 carry no layer metadata. `cargo test -p oer-test-layers` runs it.
 

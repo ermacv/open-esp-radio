@@ -36,10 +36,10 @@ pub fn build_plan(root: &Path, provider: Provider, adapters: &[String]) -> Resul
     let build_steps = match provider {
         Provider::LinuxNet => vec![
             "cargo stand fixture build-hostapd".to_owned(),
-            "cargo build --locked -p oer-lab-fixtures -p oer-hil-fixture --bin open-radio-net-launcher --bin open-radio-probe-launcher --bin open-radio-probe --bin open-radio-fixture-install".to_owned(),
+            "cargo build --locked -p oer-tool-fixture-install -p oer-tool-hil-fixture --bin open-radio-net-launcher --bin open-radio-probe-launcher --bin open-radio-probe --bin open-radio-fixture-install".to_owned(),
         ],
         Provider::LinuxBluetooth => vec![
-            "cargo build --locked -p oer-lab-fixtures -p oer-hil-fixture --bin open-radio-bluetooth-launcher --bin open-radio-bluetooth --bin open-radio-fixture-install".to_owned(),
+            "cargo build --locked -p oer-tool-fixture-install -p oer-tool-hil-fixture --bin open-radio-bluetooth-launcher --bin open-radio-bluetooth --bin open-radio-fixture-install".to_owned(),
         ],
     };
     Ok(InstallPlan {

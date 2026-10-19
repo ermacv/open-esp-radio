@@ -105,11 +105,10 @@ pub fn run(ctx: &Checkout, chip: &str, output: Option<PathBuf>) -> Result<()> {
     let accesses = accesses(ctx, &directory, &host, chip, &inputs, &regions)?;
     let ids: Vec<String> = inputs.iter().map(|input| input.id.clone()).collect();
     let observations = inventory::observations(&fs::read_to_string(&accesses)?, &ids)?;
-    let cited: BTreeSet<inventory::Function> =
-        oer_vendor_provenance::registry::registered(&ctx.root, chip)?
-            .into_iter()
-            .map(|e| (e.artifact, e.symbol))
-            .collect();
+    let cited: BTreeSet<inventory::Function> = oer_pins::provenance::registered(&ctx.root, chip)?
+        .into_iter()
+        .map(|e| (e.artifact, e.symbol))
+        .collect();
     let mut words = inventory::classify(
         &regions,
         &inventory::declared_words(&registers),

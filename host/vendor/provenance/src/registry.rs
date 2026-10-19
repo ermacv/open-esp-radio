@@ -29,6 +29,7 @@
 use crate::Result;
 use crate::fingerprint::Function;
 use oer_pins::artifacts::project::{self, Project};
+use oer_pins::provenance::Entry;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
@@ -56,81 +57,6 @@ fn generated(file: &str) -> bool {
 const FILE_EXTENSIONS: [char; 3] = ['o', 'c', 'h'];
 /// Shortest identifier taken as a reference; shorter words are prose.
 const MINIMUM_NAME: usize = 4;
-
-/// One registered function definition.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Entry {
-    pub artifact: String,
-    pub member: String,
-    pub symbol: String,
-    pub code: String,
-    /// The verification decision files that name the function: their
-    /// exclusions describe its code at `code`.
-    pub decisions: Vec<String>,
-}
-
-fn parse_registry(text: &str) -> Result<Vec<Entry>> {
-    let table: toml::Table = toml::from_str(text)?;
-    if table.get("schema").and_then(|v| v.as_integer()) != Some(1) {
-        return Err("unsupported provenance registry schema".into());
-    }
-    let mut entries = vec![];
-    for value in table
-        .get("function")
-        .and_then(|v| v.as_array())
-        .into_iter()
-        .flatten()
-    {
-        let field = |key: &str| -> Result<String> {
-            value
-                .get(key)
-                .and_then(|v| v.as_str())
-                .map(str::to_owned)
-                .ok_or_else(|| format!("registry function lacks `{key}`").into())
-        };
-        let decisions = value
-            .get("decisions")
-            .and_then(|v| v.as_array())
-            .into_iter()
-            .flatten()
-            .map(|v| {
-                v.as_str()
-                    .map(str::to_owned)
-                    .ok_or_else(|| "registry decision is not a file name".into())
-            })
-            .collect::<Result<Vec<String>>>()?;
-        entries.push(Entry {
-            artifact: field("artifact")?,
-            member: field("member")?,
-            symbol: field("symbol")?,
-            code: field("code")?,
-            decisions,
-        });
-    }
-    Ok(entries)
-}
-
-fn render_registry(entries: &[Entry]) -> String {
-    let mut text = String::from(
-        "# Code fingerprints of the vendor functions production `SOURCE:` blocks\n\
-         # and the register model cite, and those the verification decisions\n\
-         # exclude code of, as reviewed. Maintained by\n\
-         # `cargo vendor-check provenance`; checked by `cargo vendor-check\n\
-         # check provenance`.\n\
-         schema = 1\n",
-    );
-    for entry in entries {
-        text.push_str(&format!(
-            "\n[[function]]\nartifact = \"{}\"\nmember = \"{}\"\nsymbol = \"{}\"\ncode = \"{}\"\n",
-            entry.artifact, entry.member, entry.symbol, entry.code
-        ));
-        if !entry.decisions.is_empty() {
-            let files: Vec<String> = entry.decisions.iter().map(|f| format!("\"{f}\"")).collect();
-            text.push_str(&format!("decisions = [{}]\n", files.join(", ")));
-        }
-    }
-    text
-}
 
 /// Code-shaped identifiers of `text`. A word directly followed by `.o`,
 /// `.c` or `.h` is a file name, such as the archive member `phy_init.o` or
@@ -483,7 +409,7 @@ struct Survey {
 
 fn survey(root: &Path, chip: &str) -> Result<Survey> {
     let registry = match std::fs::read_to_string(root.join(registry_path(root, chip)?)) {
-        Ok(text) => parse_registry(&text)?,
+        Ok(text) => oer_pins::provenance::parse(&text)?,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => vec![],
         Err(error) => return Err(error.into()),
     };
@@ -803,15 +729,7 @@ pub fn check(root: &Path, chip: &str) -> Result<()> {
 }
 
 fn survey_count(root: &Path, chip: &str) -> Result<usize> {
-    Ok(registered(root, chip)?.len())
-}
-
-/// The registered functions of `chip`: every vendor function production,
-/// the register model or a verification decision cites.
-pub fn registered(root: &Path, chip: &str) -> Result<Vec<Entry>> {
-    parse_registry(&std::fs::read_to_string(
-        root.join(registry_path(root, chip)?),
-    )?)
+    Ok(oer_pins::provenance::registered(root, chip)?.len())
 }
 
 /// Prints the annotated pinned code of a cited function.
@@ -966,7 +884,7 @@ pub fn update(
     let entries: Vec<Entry> = entries.into_iter().collect();
     std::fs::write(
         root.join(registry_path(root, chip)?),
-        render_registry(&entries),
+        oer_pins::provenance::render(&entries),
     )?;
     println!("{} registered functions", entries.len());
     Ok(())

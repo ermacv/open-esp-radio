@@ -1,8 +1,8 @@
 //! Versioned Linux fixture provisioning shared by the runner and root apply owner.
 //!
 //! The privileged `open-radio-fixture-install` binary and the fixed launchers
-//! link only this package, so its dependency closure is the root-executed
-//! surface. The runner uses the same library for planning and preparation.
+//! (`tools/fixture-install`) link only this package, so its dependency
+//! closure is the root-executed surface. The runner uses the same library for planning and preparation.
 #![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
 
 mod admission;

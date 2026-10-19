@@ -1,0 +1,31 @@
+[package]
+name = "oer-tool-hil-fixture"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "The finite Linux Bluetooth and probe helpers of open ESP radio HIL, which the fixed launchers start"
+
+[dependencies]
+bt-hci = "=0.10.1"
+clap = { version = "4.5", features = ["derive"] }
+# bt-hci's `cmd!` expansion names these crates from the caller.
+bt-hci-transport = "=0.1.0"
+embedded-io = "0.7.1"
+embedded-io-async = "0.7.0"
+libc = "0.2"
+rustix = { version = "1.1.4", features = ["event", "fs", "net", "process"] }
+oer-os-process = { path = "../../host/os/process" }
+oer-lab-fixtures = { path = "../../host/lab/fixtures" }
+oer-hil-fixture = { path = "../../host/hil/fixture" }
+oer-hil-protocol = { path = "../../portable/hil/protocol" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[dev-dependencies]
+oer-bluetooth-le-ll = { path = "../../portable/bluetooth/le/ll" }
+
+[lints]
+workspace = true
