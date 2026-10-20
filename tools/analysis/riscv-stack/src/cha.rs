@@ -28,10 +28,11 @@ struct Type {
     target: Option<usize>,
 }
 
-/// A subprogram's or subroutine type's parameter types and result type.
+/// A subroutine type's parameter types and result type.
 #[derive(Debug, Default, Clone)]
 struct Signature {
-    parameters: Vec<usize>,
+    /// One slot per formal parameter, including a missing DW_AT_type.
+    parameters: Vec<Option<usize>>,
     result: Option<usize>,
 }
 
@@ -240,9 +241,9 @@ impl TypeWalk {
             }
             gimli::DW_TAG_formal_parameter => {
                 if let Some(&(_, owner, gimli::DW_TAG_subroutine_type)) = state.owners.last()
-                    && let (Some(signature), Some(ty)) = (facts.signatures.get_mut(&owner), type_of)
+                    && let Some(signature) = facts.signatures.get_mut(&owner)
                 {
-                    keep.push(&mut signature.parameters, ty, control)?;
+                    keep.push(&mut signature.parameters, type_of, control)?;
                 }
             }
             _ => {}
@@ -596,7 +597,11 @@ impl TypeFacts {
             let name = self.resolve(ty).and_then(|(_, ty)| ty.name.clone());
             (self.size(ty), name)
         };
-        let parameters = signature.parameters.iter().map(|&ty| slot(ty)).collect();
+        let parameters = signature
+            .parameters
+            .iter()
+            .map(|&ty| ty.map_or((None, None), &slot))
+            .collect();
         let result = match signature.result {
             Some(result) => slot(result),
             None => (Some(0), Some("()".into())),
@@ -670,6 +675,42 @@ mod tests {
         assert!(shape_matches(&renamed, &field, false));
         assert!(!shape_matches(&resized, &field, false));
         assert!(!shape_matches(&arity, &field, false));
+    }
+
+    #[test]
+    fn unknown_parameter_types_preserve_arity_and_position() {
+        let mut facts = TypeFacts::default();
+        facts.types.insert(
+            1,
+            Type {
+                tag: gimli::DW_TAG_base_type,
+                name: Some("u32".into()),
+                size: Some(4),
+                members: Vec::new(),
+                named_members: BTreeMap::new(),
+                target: None,
+            },
+        );
+        let known = Signature {
+            parameters: vec![Some(1); 3],
+            result: Some(1),
+        };
+        let known_shape = facts.shape(&known);
+        for missing in 0..3 {
+            let mut signature = known.clone();
+            signature.parameters[missing] = None;
+            let mut expected = known_shape.clone();
+            expected.0[missing] = (None, None);
+            let shape = facts.shape(&signature);
+            assert_eq!(shape, expected);
+            let mut shorter = signature.clone();
+            shorter.parameters.remove(missing);
+            for names in [true, false] {
+                assert!(shape_matches(&shape, &known_shape, names));
+                assert!(shape_matches(&known_shape, &shape, names));
+                assert!(!shape_matches(&facts.shape(&shorter), &known_shape, names));
+            }
+        }
     }
 
     #[test]
