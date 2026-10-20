@@ -1117,6 +1117,8 @@ pub enum PhyRxGainInitBindingError {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyRxGainInitRestoreInvariant {
+    /// The physical temperature/SAR-I2C owner is unavailable.
+    TemperatureUnavailable,
     OwnedByOtherCalibration,
     NestingExceeded,
     NotPending,
@@ -1172,6 +1174,9 @@ impl PhyRxGainInitMmioBinding {
             InitMmio::PrepareDcControlRestore => {
                 oer_esp32s31_hal::phy::rx_dco::prepare_control_restore(registers).map_err(
                     |error| match error {
+                        oer_esp32s31_hal::types::RxDcoControlPrepareError::TemperatureUnavailable => {
+                            PhyRxGainInitRestoreInvariant::TemperatureUnavailable
+                        }
                         oer_esp32s31_hal::types::RxDcoControlPrepareError::RestorePending => {
                             PhyRxGainInitRestoreInvariant::OwnedByOtherCalibration
                         }

@@ -812,6 +812,8 @@ pub enum PhyRxDcoBindingError {
 /// An RX-DCO restore-stack invariant was violated by target execution.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyRxDcoRestoreInvariant {
+    /// The physical temperature/SAR-I2C owner is unavailable.
+    TemperatureUnavailable,
     /// Another calibration owns the shared route restore slot.
     OwnedByOtherCalibration,
     /// More than the reviewed outer-plus-inner nesting was attempted.
@@ -844,6 +846,9 @@ impl PhyRxDcoMmioBinding {
             PhyRxDcoAction::PrepareRxDcoControlRestore => {
                 oer_esp32s31_hal::phy::rx_dco::prepare_control_restore(registers).map_err(
                     |error| match error {
+                        oer_esp32s31_hal::types::RxDcoControlPrepareError::TemperatureUnavailable => {
+                            PhyRxDcoRestoreInvariant::TemperatureUnavailable
+                        }
                         oer_esp32s31_hal::types::RxDcoControlPrepareError::RestorePending => {
                             PhyRxDcoRestoreInvariant::OwnedByOtherCalibration
                         }

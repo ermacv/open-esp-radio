@@ -5,18 +5,12 @@
 //! `regi2c_ctrl_ll.h`. The linked override, rather than the MMIO-only
 //! libphy/ROM leaf, owns the last-release/first-acquire power/reset edges.
 
+use super::restore::Restore;
 use crate::owner::{SharedPhyAccess, phy_parts_mut};
 use oer_esp32s31_pac::RadioPhyRegisters;
 
 /// Named minimum settle between asserting SAR-I2C reset and enabling power.
 pub const SAR_I2C_RESET_SETTLE_MICROS: u32 = 1;
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum State {
-    Idle,
-    Active,
-    Poisoned,
-}
 
 /// Why the physical temperature/SAR-I2C owner could not change epoch.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -27,14 +21,8 @@ pub enum TemperaturePowerError {
     /// the route cannot be reused or returned to the neutral root.
     ResetSettleFailed,
     Poisoned,
-}
-
-/// The sole temperature consumer of SAR-I2C, retained in the HAL radio owner.
-/// PHY reads/calibrations borrow that same physical owner; they do not mint
-/// independent references. There is no consumer outside the HAL after handoff.
-#[derive(Debug)]
-pub(crate) struct TemperatureResources {
-    state: State,
+    /// A calibration must restore its fields before the resource is released.
+    RestorePending,
 }
 
 trait TemperaturePort {
@@ -76,13 +64,12 @@ impl TemperaturePort for RadioPhyRegisters {
     }
 }
 
-impl TemperatureResources {
-    pub(crate) const fn new() -> Self {
-        Self { state: State::Idle }
-    }
-
+// Cold RF init acquires TSENS before calibration can own a restore slot.
+// Keeping the restore payload inside the acquired state expresses that
+// lifetime without a second field or an independent SAR-I2C reference count.
+impl Restore {
     pub(crate) const fn blocks_release(&self) -> bool {
-        !matches!(self.state, State::Idle)
+        !matches!(self, Self::TemperatureIdle)
     }
 
     fn acquire_with(
@@ -91,12 +78,12 @@ impl TemperatureResources {
         settle_reset: impl FnOnce() -> bool,
         cold: bool,
     ) -> Result<(), TemperaturePowerError> {
-        match self.state {
-            State::Active => return Err(TemperaturePowerError::AlreadyAcquired),
-            State::Poisoned => return Err(TemperaturePowerError::Poisoned),
-            State::Idle => {}
+        match self {
+            Self::TemperaturePoisoned => return Err(TemperaturePowerError::Poisoned),
+            Self::TemperatureIdle => {}
+            _ => return Err(TemperaturePowerError::AlreadyAcquired),
         }
-        self.state = State::Poisoned;
+        *self = Self::TemperaturePoisoned;
         if cold {
             port.cold_readout_prefix();
         }
@@ -110,7 +97,7 @@ impl TemperatureResources {
         port.sensor_reset(true);
         port.sensor_reset(false);
         port.sensor_power(true);
-        self.state = State::Active;
+        *self = Self::Empty;
         Ok(())
     }
 
@@ -118,15 +105,16 @@ impl TemperatureResources {
         &mut self,
         port: &mut impl TemperaturePort,
     ) -> Result<(), TemperaturePowerError> {
-        match self.state {
-            State::Idle => return Err(TemperaturePowerError::NotAcquired),
-            State::Poisoned => return Err(TemperaturePowerError::Poisoned),
-            State::Active => {}
+        match self {
+            Self::TemperatureIdle => return Err(TemperaturePowerError::NotAcquired),
+            Self::TemperaturePoisoned => return Err(TemperaturePowerError::Poisoned),
+            Self::Empty => {}
+            _ => return Err(TemperaturePowerError::RestorePending),
         }
         port.sensor_power(false);
         port.sensor_clock(false);
         port.sar_power(false);
-        self.state = State::Idle;
+        *self = Self::TemperatureIdle;
         Ok(())
     }
 }
@@ -138,7 +126,7 @@ pub fn initialize(
     settle_reset: impl FnOnce() -> bool,
 ) -> Result<(), TemperaturePowerError> {
     let (phy, state) = phy_parts_mut(registers);
-    state.temperature.acquire_with(phy, settle_reset, true)
+    state.resources_mut().acquire_with(phy, settle_reset, true)
 }
 
 /// First acquire after RF close: reset SAR-I2C, then clock/reset/enable TSENS.
@@ -147,13 +135,13 @@ pub fn acquire(
     settle_reset: impl FnOnce() -> bool,
 ) -> Result<(), TemperaturePowerError> {
     let (phy, state) = phy_parts_mut(registers);
-    state.temperature.acquire_with(phy, settle_reset, false)
+    state.resources_mut().acquire_with(phy, settle_reset, false)
 }
 
 /// Last release after RF close: disable TSENS, its clock, then SAR-I2C power.
 pub fn release(registers: &mut impl SharedPhyAccess) -> Result<(), TemperaturePowerError> {
     let (phy, state) = phy_parts_mut(registers);
-    state.temperature.release_with(phy)
+    state.resources_mut().release_with(phy)
 }
 
 /// Sample one unsigned sensor code through the owner-bound PAC read.

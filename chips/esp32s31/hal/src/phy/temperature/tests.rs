@@ -77,7 +77,7 @@ fn expected_acquire(start: Instant) -> Vec<(Instant, Edge)> {
 fn cold_prefix_precedes_the_linked_override_resource_acquire() {
     let clock = VirtualClock::new();
     let mut port = Port::new(&clock);
-    let mut resources = TemperatureResources::new();
+    let mut resources = Restore::TemperatureIdle;
     let start = clock.now();
     assert_eq!(
         resources.acquire_with(&mut port, || settle(&clock), true),
@@ -93,7 +93,7 @@ fn cold_prefix_precedes_the_linked_override_resource_acquire() {
 fn close_releases_sensor_then_clock_then_the_last_sar_i2c_reference() {
     let clock = VirtualClock::new();
     let mut port = Port::new(&clock);
-    let mut resources = TemperatureResources::new();
+    let mut resources = Restore::TemperatureIdle;
     resources
         .acquire_with(&mut port, || settle(&clock), false)
         .expect("first acquire");
@@ -115,7 +115,7 @@ fn close_releases_sensor_then_clock_then_the_last_sar_i2c_reference() {
 fn wake_reacquires_in_source_order_after_the_full_named_reset_settle() {
     let clock = VirtualClock::new();
     let mut port = Port::new(&clock);
-    let mut resources = TemperatureResources::new();
+    let mut resources = Restore::TemperatureIdle;
     resources
         .acquire_with(&mut port, || settle(&clock), true)
         .expect("cold acquire");
@@ -132,7 +132,7 @@ fn wake_reacquires_in_source_order_after_the_full_named_reset_settle() {
 fn repeated_close_and_wake_cycles_do_not_retain_an_unreleased_power_reference() {
     let clock = VirtualClock::new();
     let mut port = Port::new(&clock);
-    let mut resources = TemperatureResources::new();
+    let mut resources = Restore::TemperatureIdle;
     for _ in 0..3 {
         let start = clock.now();
         resources
@@ -158,18 +158,20 @@ fn failed_reset_settle_never_enables_power_and_prevents_reuse_or_root_release() 
     let mut route = crate::phy::restore::PhyRouteState::for_host_test();
     let start = clock.now();
     assert_eq!(
-        route.temperature.acquire_with(&mut port, || false, false),
+        route
+            .resources_mut()
+            .acquire_with(&mut port, || false, false),
         Err(TemperaturePowerError::ResetSettleFailed)
     );
     assert_eq!(port.edges, [(start, Edge::SarResetReleased(false))]);
     assert_eq!(
         route
-            .temperature
+            .resources_mut()
             .acquire_with(&mut port, || settle(&clock), false),
         Err(TemperaturePowerError::Poisoned)
     );
     assert_eq!(
-        route.temperature.release_with(&mut port),
+        route.resources_mut().release_with(&mut port),
         Err(TemperaturePowerError::Poisoned)
     );
     assert_eq!(
@@ -184,7 +186,7 @@ fn failed_reset_settle_never_enables_power_and_prevents_reuse_or_root_release() 
 fn duplicate_acquire_and_unowned_release_do_not_write_hardware() {
     let clock = VirtualClock::new();
     let mut port = Port::new(&clock);
-    let mut resources = TemperatureResources::new();
+    let mut resources = Restore::TemperatureIdle;
     assert_eq!(
         resources.release_with(&mut port),
         Err(TemperaturePowerError::NotAcquired)
@@ -209,13 +211,97 @@ fn root_release_requires_the_temperature_resources_to_have_been_released() {
     let mut port = Port::new(&clock);
     let mut route = crate::phy::restore::PhyRouteState::for_host_test();
     route
-        .temperature
+        .resources_mut()
         .acquire_with(&mut port, || settle(&clock), false)
         .expect("acquire");
     assert_eq!(
         crate::root::check_phy_restore_complete(&route),
         Err(crate::root::RadioPhyReleaseError::TemperatureResourcesHeld)
     );
-    route.temperature.release_with(&mut port).expect("release");
+    route
+        .resources_mut()
+        .release_with(&mut port)
+        .expect("release");
     assert_eq!(crate::root::check_phy_restore_complete(&route), Ok(()));
+}
+
+#[test]
+fn a_pending_calibration_cannot_lose_its_resource_or_saved_restore_fields() {
+    let clock = VirtualClock::new();
+    let mut port = Port::new(&clock);
+    let mut route = crate::phy::restore::PhyRouteState::for_host_test();
+    route
+        .resources_mut()
+        .acquire_with(&mut port, || settle(&clock), false)
+        .expect("acquire");
+    let fields = oer_esp32s31_pac::RxDcoControlField::for_host_test(2);
+    route.prepare_rx_dco_with(|| fields).expect("prepare");
+    port.edges.clear();
+    assert_eq!(
+        route.resources_mut().release_with(&mut port),
+        Err(TemperaturePowerError::RestorePending)
+    );
+    assert_eq!(
+        route
+            .resources_mut()
+            .acquire_with(&mut port, || false, false),
+        Err(TemperaturePowerError::AlreadyAcquired)
+    );
+    assert_eq!(
+        crate::root::check_phy_restore_complete(&route),
+        Err(crate::root::RadioPhyReleaseError::RxDcoControlRestorePending)
+    );
+    assert!(port.edges.is_empty());
+    route
+        .restore_rx_dco_with(|saved| assert_eq!(saved, fields))
+        .expect("restore");
+    assert!(route.temperature_blocks_release());
+    route
+        .resources_mut()
+        .release_with(&mut port)
+        .expect("release after restore");
+    assert_eq!(crate::root::check_phy_restore_complete(&route), Ok(()));
+}
+
+#[test]
+fn idle_and_poisoned_resources_reject_calibration_before_capturing_fields() {
+    use crate::phy::restore::{
+        BluetoothTxPowerControlPrepareError, PhyRouteState, RxDcoControlPrepareError,
+        TxDcPwdetPrepareError, TxIqToneControlPrepareError,
+    };
+    let clock = VirtualClock::new();
+    let mut port = Port::new(&clock);
+    let mut route = PhyRouteState::for_host_test();
+    for poisoned in [false, true] {
+        if poisoned {
+            assert_eq!(
+                route
+                    .resources_mut()
+                    .acquire_with(&mut port, || false, false),
+                Err(TemperaturePowerError::ResetSettleFailed)
+            );
+        }
+        let before = port.edges.clone();
+        assert_eq!(
+            route.prepare_txdc_with(
+                &mut (),
+                |_| panic!("unavailable owner must not capture"),
+                |_| panic!("unavailable owner must not write")
+            ),
+            Err(TxDcPwdetPrepareError::TemperatureUnavailable)
+        );
+        assert_eq!(
+            route.prepare_txiq_with(|| panic!("unavailable owner must not capture")),
+            Err(TxIqToneControlPrepareError::TemperatureUnavailable)
+        );
+        assert_eq!(
+            route.prepare_rx_dco_with(|| panic!("unavailable owner must not capture")),
+            Err(RxDcoControlPrepareError::TemperatureUnavailable)
+        );
+        assert_eq!(
+            route.prepare_bluetooth_tx_power_control(),
+            Err(BluetoothTxPowerControlPrepareError::TemperatureUnavailable)
+        );
+        assert_eq!(port.edges, before);
+    }
 }

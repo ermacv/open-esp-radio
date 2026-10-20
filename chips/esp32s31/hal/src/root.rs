@@ -397,9 +397,6 @@ pub enum WifiPowerRestoreCheckpoint {
 pub(crate) fn check_phy_restore_complete(
     restore: &PhyRouteState,
 ) -> Result<(), RadioPhyReleaseError> {
-    if restore.temperature.blocks_release() {
-        return Err(RadioPhyReleaseError::TemperatureResourcesHeld);
-    }
     if restore.txdc_pending() {
         return Err(RadioPhyReleaseError::TxDcPwdetRestorePending);
     }
@@ -411,6 +408,9 @@ pub(crate) fn check_phy_restore_complete(
     }
     if restore.bluetooth_tx_power_control_pending() {
         return Err(RadioPhyReleaseError::BluetoothTxPowerControlRestorePending);
+    }
+    if restore.temperature_blocks_release() {
+        return Err(RadioPhyReleaseError::TemperatureResourcesHeld);
     }
     Ok(())
 }
