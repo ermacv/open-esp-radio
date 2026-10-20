@@ -310,6 +310,7 @@ pub enum BluetoothTxPowerControlObservation {
 /// A Bluetooth TX-power control transaction could not advance.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum BluetoothTxPowerControlError {
+    TemperatureUnavailable,
     BusyAtStart,
     RestorePending,
     RestoreNotPending,
@@ -447,6 +448,9 @@ impl BluetoothTxPowerControlTransaction {
     ) -> Result<Result<(), ()>, BluetoothTxPowerControlError> {
         if self.step == 0 && !self.restore_reserved {
             access.reserve_restore().map_err(|error| match error {
+                BluetoothTxPowerControlPrepareError::TemperatureUnavailable => {
+                    BluetoothTxPowerControlError::TemperatureUnavailable
+                }
                 BluetoothTxPowerControlPrepareError::RestorePending => {
                     BluetoothTxPowerControlError::RestorePending
                 }

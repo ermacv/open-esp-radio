@@ -6658,7 +6658,7 @@
             </field>
             <field>
               <name>LP_TSENS_RST_EN</name>
-              <description>Temperature-sensor peripheral reset enable; modeled for exact register geometry but not written by this slice.</description>
+              <description>Temperature-sensor peripheral reset enable, pulsed by its first resource owner.</description>
               <bitOffset>31</bitOffset>
               <bitWidth>1</bitWidth>
             </field>

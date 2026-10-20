@@ -1668,7 +1668,9 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
                     observer.rf_boundary(boundary);
                 }
                 binding
-                    .execute_target(registers)
+                    .execute_target(registers, || D::settle_micros(
+                        oer_esp32s31_hal::phy::temperature::SAR_I2C_RESET_SETTLE_MICROS,
+                    ))
                     .map_err(|error| match error {
                         crate::calibration::cold::PhyColdLoweringError::HardwareRestoreInvariant => {
                             PhyTargetPortError::HardwareInvariant

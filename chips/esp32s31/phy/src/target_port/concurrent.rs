@@ -236,12 +236,11 @@ where
     .await
     {
         Ok(()) => radio_lifecycle::execute_rf_close_with_hal::<D, _>(timer, &mut registers)
-            .map(|()| {
-                // `esp_phy_disable` powers the temperature sensor down after
-                // `phy_close_rf` (`phy_xpd_tsens`); the retained wake powers it
-                // up again. Its SAR2 analog block is then reset like every
-                // other powered-down analog block.
-                oer_esp32s31_hal::phy::temperature::power_down(&mut registers);
+            .and_then(|()| {
+                // SOURCE: linked IDF override releases TSENS and the last
+                // peripheral SAR-I2C reference after phy_close_rf.
+                oer_esp32s31_hal::phy::temperature::release(&mut registers)
+                    .map_err(|_| PhyTargetPortError::HardwareInvariant)
             })
             .map_err(PhyRfCloseTemperatureFailure::HardwareAmbiguous),
         Err(failure) => Err(failure),

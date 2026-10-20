@@ -42,11 +42,24 @@ impl RadioPhyRegisters {
     }
 
     /// Enable the LP temperature-sensor peripheral clock.
-    pub fn enable_temperature_sensor_clock(&mut self) {
+    pub fn set_temperature_sensor_clock(&mut self, enabled: bool) {
         crate::generated::enable_lp_tsens_peripheral_clock(
             &self.peripherals.lp_periclkrst,
-            LpTsensPeripheralClockEnable::Enabled,
+            if enabled {
+                LpTsensPeripheralClockEnable::Enabled
+            } else {
+                LpTsensPeripheralClockEnable::Disabled
+            },
         );
+    }
+
+    /// Assert or release the first-owner TSENS peripheral reset.
+    pub fn set_temperature_sensor_reset(&mut self, asserted: bool) {
+        if asserted {
+            crate::generated::assert_lp_tsens_reset(&self.peripherals.lp_periclkrst);
+        } else {
+            crate::generated::release_lp_tsens_reset(&self.peripherals.lp_periclkrst);
+        }
     }
 
     /// Enable the blob-evidenced PHY readout path.

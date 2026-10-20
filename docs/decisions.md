@@ -134,6 +134,11 @@ bounds) live in the code that applies them.
   `MODEM_LPCON.CLK_CONF` belongs to esp-hal and our HAL requests its gates
   through `clock::ll`; the other shared words belong to our HAL. The review is
   rechecked at every fork merge with `cargo registers check shared-words`.
+- **Temperature resources.** After `take_radio`, the HAL alone owns TSENS and
+  peripheral SAR-I2C. Last release at RF close powers the peripheral bus down;
+  first acquire asserts its reset, settles 1 µs, enables power and releases
+  reset before TSENS clock/reset/enable. Initial esp-hal PMU setup precedes
+  this owner and remains a disjoint lifecycle.
 - **Radio system.** One actor on the P2 executor owns the shared RF front-end:
   ownership split, actor with per-client cells, PHY membership typestate,
   retune transaction, `LpClock`, named bounds.

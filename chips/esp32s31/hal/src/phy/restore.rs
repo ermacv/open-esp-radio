@@ -14,6 +14,8 @@ use oer_esp32s31_pac::{RxDcoControlField, TxDcPwdetFields, TxIqToneControlFields
 /// Preparing TX-DC PWDET was rejected before any register access.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TxDcPwdetPrepareError {
+    /// The physical temperature/SAR-I2C owner is idle or poisoned.
+    TemperatureUnavailable,
     /// Another calibration still owns the one pending restore operation.
     RestorePending,
 }
@@ -34,6 +36,8 @@ pub enum TxDcPwdetLifecycleError {
 /// Preparing a TX-IQ tone-control restore was rejected before register access.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TxIqToneControlPrepareError {
+    /// The physical temperature/SAR-I2C owner is idle or poisoned.
+    TemperatureUnavailable,
     /// Another calibration still owns the pending restore operation.
     RestorePending,
 }
@@ -48,6 +52,8 @@ pub enum TxIqToneControlRestoreError {
 /// Preparing an RX-DCO control restore was rejected before register access.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RxDcoControlPrepareError {
+    /// The physical temperature/SAR-I2C owner is idle or poisoned.
+    TemperatureUnavailable,
     /// A different calibration owns the shared restore slot.
     RestorePending,
     /// Both reviewed RX-DCO nesting levels already own saved fields.
@@ -64,6 +70,8 @@ pub enum RxDcoControlRestoreError {
 /// Preparing the Bluetooth TX-power analog-control restore was rejected.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum BluetoothTxPowerControlPrepareError {
+    /// The physical temperature/SAR-I2C owner is idle or poisoned.
+    TemperatureUnavailable,
     /// Another calibration still owns the shared restore slot.
     RestorePending,
 }
@@ -77,8 +85,12 @@ pub enum BluetoothTxPowerControlRestoreError {
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 #[cfg_attr(not(target_arch = "riscv32"), allow(dead_code))]
-enum Restore {
+pub(super) enum Restore {
     #[default]
+    TemperatureIdle,
+    TemperaturePoisoned,
+    /// Acquired TSENS/SAR-I2C with no pending calibration restore. The other
+    /// payload variants retain that acquisition while a calibration borrows it.
     Empty,
     TxDcPwdet(TxDcPwdetFields),
     TxIqToneControl(TxIqToneControlFields),
@@ -102,7 +114,7 @@ impl PhyRouteState {
     /// Enter a route with the root's registration counter and no restore.
     pub(crate) const fn new(registration: PhyRegistration) -> Self {
         Self {
-            restore: Restore::Empty,
+            restore: Restore::TemperatureIdle,
             registration,
         }
     }
@@ -117,8 +129,31 @@ impl PhyRouteState {
     /// counter to the neutral root. The caller has checked that no restore
     /// obligation remains.
     pub(crate) fn into_registration(self) -> PhyRegistration {
-        debug_assert_eq!(self.restore, Restore::Empty);
+        debug_assert_eq!(self.restore, Restore::TemperatureIdle);
         self.registration.retired()
+    }
+
+    pub(super) fn resources_mut(&mut self) -> &mut Restore {
+        &mut self.restore
+    }
+
+    pub(crate) const fn temperature_blocks_release(&self) -> bool {
+        self.restore.blocks_release()
+    }
+
+    const fn temperature_unavailable(&self) -> bool {
+        matches!(
+            self.restore,
+            Restore::TemperatureIdle | Restore::TemperaturePoisoned
+        )
+    }
+
+    /// A powered route fixture; no MMIO is performed by this test owner.
+    #[cfg(test)]
+    fn powered_for_test() -> Self {
+        let mut route = Self::for_host_test();
+        route.restore = Restore::Empty;
+        route
     }
 
     /// The registration that currently describes the route's PHY, if any.
@@ -162,6 +197,9 @@ impl PhyRouteState {
         capture: impl FnOnce(&Port) -> TxDcPwdetFields,
         apply: impl FnOnce(&mut Port),
     ) -> Result<(), TxDcPwdetPrepareError> {
+        if self.temperature_unavailable() {
+            return Err(TxDcPwdetPrepareError::TemperatureUnavailable);
+        }
         if self.restore != Restore::Empty {
             return Err(TxDcPwdetPrepareError::RestorePending);
         }
@@ -188,6 +226,9 @@ impl PhyRouteState {
         &mut self,
         capture: impl FnOnce() -> TxIqToneControlFields,
     ) -> Result<(), TxIqToneControlPrepareError> {
+        if self.temperature_unavailable() {
+            return Err(TxIqToneControlPrepareError::TemperatureUnavailable);
+        }
         if self.restore != Restore::Empty {
             return Err(TxIqToneControlPrepareError::RestorePending);
         }
@@ -216,6 +257,9 @@ impl PhyRouteState {
         &mut self,
         capture: impl FnOnce() -> RxDcoControlField,
     ) -> Result<(), RxDcoControlPrepareError> {
+        if self.temperature_unavailable() {
+            return Err(RxDcoControlPrepareError::TemperatureUnavailable);
+        }
         self.restore = match self.restore {
             Restore::Empty => Restore::RxDcoControlOne(capture()),
             Restore::RxDcoControlOne(first) => Restore::RxDcoControlTwo(first, capture()),
@@ -244,6 +288,9 @@ impl PhyRouteState {
     pub(crate) fn prepare_bluetooth_tx_power_control(
         &mut self,
     ) -> Result<(), BluetoothTxPowerControlPrepareError> {
+        if self.temperature_unavailable() {
+            return Err(BluetoothTxPowerControlPrepareError::TemperatureUnavailable);
+        }
         if self.restore != Restore::Empty {
             return Err(BluetoothTxPowerControlPrepareError::RestorePending);
         }
