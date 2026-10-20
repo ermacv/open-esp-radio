@@ -21,7 +21,11 @@ pub(super) const TRACES: &[(&str, u64, u64)] = &[
         0x85bd_6bad_e867_d7b7,
     ),
     ("enable", 0x2d23_ee8d_7d1f_3705, 0xf6a5_a489_b99c_23f3),
-    ("enable-disable", 0x664d_bbfb_f086_6401, 0x0455_5417_3006_935c),
+    (
+        "enable-disable",
+        0x664d_bbfb_f086_6401,
+        0x0455_5417_3006_935c,
+    ),
     ("recent-rssi", 0x7789_1d17_95f2_62df, 0x19af_0651_a0bf_0d4b),
     (
         "receive-abort-reasons",
@@ -53,7 +57,11 @@ pub(super) const TRACES: &[(&str, u64, u64)] = &[
         0x2d76_5430_1f1e_a68a,
         0x778f_0a7d_6da6_1909,
     ),
-    ("transmit-with-ack", 0x8ec5_1aed_704b_425c, 0x70d4_16ec_9faa_13b0),
+    (
+        "transmit-with-ack",
+        0x8ec5_1aed_704b_425c,
+        0x70d4_16ec_9faa_13b0,
+    ),
     (
         "transmit-with-cca-busy",
         0xe52b_f5f4_5e50_e267,
@@ -69,7 +77,11 @@ pub(super) const TRACES: &[(&str, u64, u64)] = &[
         0x2063_519f_2d40_eda7,
         0xe250_388f_5411_ea6a,
     ),
-    ("energy-detect", 0xd561_4fd3_a620_5c02, 0x9608_08fd_1722_7a79),
+    (
+        "energy-detect",
+        0xd561_4fd3_a620_5c02,
+        0x9608_08fd_1722_7a79,
+    ),
     ("cca-busy", 0xcb33_6825_17b1_3934, 0x698e_a84e_1123_c437),
     (
         "transmit-ack-timer-expires",
@@ -132,7 +144,11 @@ pub(super) const TRACES: &[(&str, u64, u64)] = &[
         0xf35f_aa1f_3476_2746,
         0x1026_5430_774f_5c8f,
     ),
-    ("configure-identity", 0xfd24_4579_09eb_889f, 0x0116_d161_fce8_cf39),
+    (
+        "configure-identity",
+        0xfd24_4579_09eb_889f,
+        0x0116_d161_fce8_cf39,
+    ),
     (
         "transmit-with-security",
         0xf386_b599_36c7_4b18,
@@ -163,7 +179,11 @@ pub(super) const TRACES: &[(&str, u64, u64)] = &[
         0x47fe_64ee_2509_8baa,
     ),
     ("enable", 0x2d23_ee8d_7d1f_3705, 0x9dd2_b650_32e1_ff29),
-    ("enable-disable", 0x664d_bbfb_f086_6401, 0x6489_d191_344a_6db2),
+    (
+        "enable-disable",
+        0x664d_bbfb_f086_6401,
+        0x6489_d191_344a_6db2,
+    ),
     ("recent-rssi", 0x7789_1d17_95f2_62df, 0x5c2d_6cd5_9463_29d5),
     (
         "receive-abort-reasons",
@@ -195,7 +215,11 @@ pub(super) const TRACES: &[(&str, u64, u64)] = &[
         0x2d76_5430_1f1e_a68a,
         0xaed2_8286_396b_0743,
     ),
-    ("transmit-with-ack", 0x7861_4376_c6d4_bd90, 0xa175_d420_0e39_18fe),
+    (
+        "transmit-with-ack",
+        0x7861_4376_c6d4_bd90,
+        0xa175_d420_0e39_18fe,
+    ),
     (
         "transmit-with-cca-busy",
         0xe52b_f5f4_5e50_e267,
@@ -211,7 +235,11 @@ pub(super) const TRACES: &[(&str, u64, u64)] = &[
         0x2063_519f_2d40_eda7,
         0x45d4_5de6_d214_2694,
     ),
-    ("energy-detect", 0xd561_4fd3_a620_5c02, 0xd0f2_9b97_cfae_c13f),
+    (
+        "energy-detect",
+        0xd561_4fd3_a620_5c02,
+        0xd0f2_9b97_cfae_c13f,
+    ),
     ("cca-busy", 0xcb33_6825_17b1_3934, 0x550b_5459_bd85_6cf1),
     (
         "transmit-ack-timer-expires",
@@ -274,7 +302,11 @@ pub(super) const TRACES: &[(&str, u64, u64)] = &[
         0x085d_0586_c60e_72aa,
         0xa482_917c_4e77_974d,
     ),
-    ("configure-identity", 0xfd24_4579_09eb_889f, 0xc0a2_c5c7_838c_c7f3),
+    (
+        "configure-identity",
+        0xfd24_4579_09eb_889f,
+        0xc0a2_c5c7_838c_c7f3,
+    ),
     (
         "transmit-with-security",
         0xf386_b599_36c7_4b18,
@@ -320,7 +352,11 @@ pub(super) const TRACES: &[(&str, u64, u64)] = &[
         0x0b26_dca4_c281_69ed,
     ),
     ("enable", 0xf9b1_ae81_05c5_900d, 0xf0fb_ddd4_23df_0e5b),
-    ("enable-disable", 0x59e9_ef4e_54df_95c5, 0xa31e_53ee_3791_39f2),
+    (
+        "enable-disable",
+        0x59e9_ef4e_54df_95c5,
+        0xa31e_53ee_3791_39f2,
+    ),
     ("recent-rssi", 0x3d56_e755_bb20_e325, 0x548e_c551_72e5_9901),
     (
         "receive-abort-reasons",
@@ -352,7 +388,11 @@ pub(super) const TRACES: &[(&str, u64, u64)] = &[
         0x3229_6207_c074_c774,
         0xc8d2_97f9_6a84_ff35,
     ),
-    ("transmit-with-ack", 0x21ee_533f_d85d_2808, 0x8f43_3901_12ef_bfcc),
+    (
+        "transmit-with-ack",
+        0x21ee_533f_d85d_2808,
+        0x8f43_3901_12ef_bfcc,
+    ),
     (
         "transmit-with-cca-busy",
         0x26f8_37aa_9b54_45fd,
@@ -368,7 +408,11 @@ pub(super) const TRACES: &[(&str, u64, u64)] = &[
         0xfeb3_67fa_36b2_6c27,
         0x22b8_ad21_0c10_d382,
     ),
-    ("energy-detect", 0x96b6_9d6a_132c_f41e, 0xc8d8_b53f_4612_99f7),
+    (
+        "energy-detect",
+        0x96b6_9d6a_132c_f41e,
+        0xc8d8_b53f_4612_99f7,
+    ),
     ("cca-busy", 0xeb9d_e0ed_cdb6_85f0, 0xcfbc_e9ef_3f08_1bb9),
     (
         "transmit-ack-timer-expires",
@@ -431,7 +475,11 @@ pub(super) const TRACES: &[(&str, u64, u64)] = &[
         0x4497_42da_e806_4fdb,
         0x69d0_1895_9d0a_8c60,
     ),
-    ("configure-identity", 0x0af8_5d0c_17d2_8797, 0x2676_ee01_655b_e5b1),
+    (
+        "configure-identity",
+        0x0af8_5d0c_17d2_8797,
+        0x2676_ee01_655b_e5b1,
+    ),
     (
         "transmit-with-security",
         0xcff9_c16d_32c4_df94,
@@ -462,7 +510,11 @@ pub(super) const TRACES: &[(&str, u64, u64)] = &[
         0xab94_4580_b43d_3c12,
     ),
     ("enable", 0xf9b1_ae81_05c5_900d, 0xe358_5518_a1e0_3e11),
-    ("enable-disable", 0x59e9_ef4e_54df_95c5, 0x5c11_511a_c68f_6e98),
+    (
+        "enable-disable",
+        0x59e9_ef4e_54df_95c5,
+        0x5c11_511a_c68f_6e98,
+    ),
     ("recent-rssi", 0x3d56_e755_bb20_e325, 0xd221_7742_bd52_c6bb),
     (
         "receive-abort-reasons",
@@ -494,7 +546,11 @@ pub(super) const TRACES: &[(&str, u64, u64)] = &[
         0x3229_6207_c074_c774,
         0x34d4_6ae3_2518_0e57,
     ),
-    ("transmit-with-ack", 0xe60f_c0b1_e118_67f4, 0x5e28_bddf_aeea_6c0a),
+    (
+        "transmit-with-ack",
+        0xe60f_c0b1_e118_67f4,
+        0x5e28_bddf_aeea_6c0a,
+    ),
     (
         "transmit-with-cca-busy",
         0x26f8_37aa_9b54_45fd,
@@ -510,7 +566,11 @@ pub(super) const TRACES: &[(&str, u64, u64)] = &[
         0xfeb3_67fa_36b2_6c27,
         0x46b8_8354_df41_42ec,
     ),
-    ("energy-detect", 0x96b6_9d6a_132c_f41e, 0xa560_ffb1_1e1c_cf85),
+    (
+        "energy-detect",
+        0x96b6_9d6a_132c_f41e,
+        0xa560_ffb1_1e1c_cf85,
+    ),
     ("cca-busy", 0xeb9d_e0ed_cdb6_85f0, 0xfa20_ed6d_b4b4_c5a3),
     (
         "transmit-ack-timer-expires",
@@ -573,7 +633,11 @@ pub(super) const TRACES: &[(&str, u64, u64)] = &[
         0x3e0d_9587_0b28_04a7,
         0x5da4_5983_8673_e0be,
     ),
-    ("configure-identity", 0x0af8_5d0c_17d2_8797, 0x20c1_e44a_c3e4_7deb),
+    (
+        "configure-identity",
+        0x0af8_5d0c_17d2_8797,
+        0x20c1_e44a_c3e4_7deb,
+    ),
     (
         "transmit-with-security",
         0xcff9_c16d_32c4_df94,
