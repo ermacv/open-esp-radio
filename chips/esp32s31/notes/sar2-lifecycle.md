@@ -40,14 +40,15 @@ IEEE restart5 `1792535209115-00090c8d` and Wi-Fi restart10
 `1792535406587-0009653a` retain `0x65`/init5 before first close, then read
 `0x60`/init0 after wake and before final close. Every final pair equals vendor.
 Existing same-point vendor references give IEEE N10 MATCH193/193 MMIO,39/39 analog
-and Wi-Fi N20 MATCH19/19 groups,163/163 MMIO,38/38 analog. Original raw N5/N10
-DIFF summaries remain archived and reproduce exactly under the unchanged comparator.
+and Wi-Fi N20 MATCH19/19 groups,163/163 MMIO,39/39 analog with69.04 compared
+at both restart points. The original raw N5/N10 DIFF summaries remain archived;
+the capture-time reviews reproduce them exactly before reevaluation.
 
 Wi-Fi cold control `1792535709069-00098258` retains the existing0x65/0x60 point
 difference: production is cold registration, vendor follows its Wi-Fi-start RF
 wake. Its separate cold lifecycle exclusion is unchanged; N11 cold references
-give MATCH162/162,35/35. The unchanged Wi-Fi restart exclusion also remains;
-restart raw-pair equality above is checked independently of it.
+give MATCH162/162,35/35. Restart compares69.04 normally: the observed0x60/0x60
+after the HAL resource-lifecycle correction disproves the PSRAM/MPLL exclusion.
 IEEE cold control `1792536001039-0009f671` has0x65/0x65 at69.04 and retained
 I2C TX rate; N41 same-point references give MATCH193/193,39/39. Both cold
 controls retain their raw N1 DIFF summaries; no calibration/rule change is used.

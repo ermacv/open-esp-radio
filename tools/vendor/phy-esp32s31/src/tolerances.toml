@@ -201,8 +201,3 @@ reason = "lifecycle: cold phy_rf_init runs rc_cal_set(3, 1, 9), phy_rc_cal and s
 [registers."PhyI2cField.6b.02"]
 excluded = true
 reason = "live state: the I2C command memory holds both TX capacitor-bank images (0xc2 and 0x73), and the hardware sequencer publishes one on each RF event, so the byte shows the last event"
-
-[[registers."PhyI2cField.69.04"]]
-excluded = true
-lifecycle = "restart"
-reason = "platform (PHY owner review, not confirmed on hardware): after an RF close and wake the vendor block reads its power-on default 0x60, while production keeps its cold SAR2 initialization 0x65; production runs from PSRAM and esp-hal keeps the MPLL and its analog-I2C power up (PMU_RADIO.HP_ACTIVE_HP_CK_POWER bits 26 and 30), under which the block keeps its state. Production powers the temperature sensor down on close as the vendor does (76006deb0), which did not change the byte. A vendor build with PSRAM enabled did not boot on the HIL console, so the cause is not reproduced on the vendor side"
