@@ -87,6 +87,7 @@
 //! #         rx_block_ack_max_window: 64,
 //! #         edca_max_aifsn: 15,
 //! #         edca_max_cw_exponent: 10,
+//! #         edca_max_txop_limit_units_32_us: u16::MAX,
 //! #     };
 //! # }
 //! let permitted = oer_radio_regulatory::TEST_DOMAIN
@@ -128,6 +129,7 @@
 //! #         rx_block_ack_max_window: 64,
 //! #         edca_max_aifsn: 15,
 //! #         edca_max_cw_exponent: 10,
+//! #         edca_max_txop_limit_units_32_us: u16::MAX,
 //! #     };
 //! # }
 //! let permitted = oer_radio_regulatory::TEST_DOMAIN
@@ -167,7 +169,8 @@ use core::marker::PhantomData;
 use oer_ieee80211_wire::address::IndividualAddress;
 use oer_ieee80211_wire::frame::FrameControl;
 
-use oer_ieee80211_wire::{extensions::wmm::WmmParameterSet, sequence::SequenceNumber};
+use crate::EdcaParameterSet;
+use oer_ieee80211_wire::sequence::SequenceNumber;
 use oer_radio_port::PortBackend;
 use oer_radio_regulatory::Permitted;
 
@@ -434,11 +437,11 @@ impl<K: Ieee80211Capabilities> SupportedBlockAck<K> {
     }
 }
 
-/// An EDCA parameter set whose every record lies within `K`'s limits: an
-/// AIFSN and contention-window exponents it applies, `ECWmin` no larger
-/// than `ECWmax`.
+/// A VIF's EDCA table whose AIFSN, contention exponents and TXOP limits
+/// fit `K`, with `ECWmin <= ECWmax` and each MSDU lifetime in 0..=500 TU.
+/// Validation refuses the complete table without changing any record.
 pub struct SupportedEdca<K> {
-    parameters: WmmParameterSet,
+    parameters: EdcaParameterSet,
     brand: PhantomData<fn() -> K>,
 }
 
@@ -468,16 +471,20 @@ impl<K> Eq for SupportedEdca<K> {}
 
 impl<K: Ieee80211Capabilities> SupportedEdca<K> {
     /// `parameters`, when `K` applies every record of it.
-    pub const fn new(parameters: WmmParameterSet) -> Option<Self> {
+    pub const fn new(parameters: EdcaParameterSet) -> Option<Self> {
         use oer_ieee80211_wire::qos::WmmAccessCategory;
         const fn valid<K: Ieee80211Capabilities>(
-            parameters: WmmParameterSet,
+            parameters: EdcaParameterSet,
             category: WmmAccessCategory,
         ) -> bool {
             let record = parameters.access_category(category);
-            record.aifsn <= K::CAPS.edca_max_aifsn
-                && record.ecw_max <= K::CAPS.edca_max_cw_exponent
-                && record.ecw_min <= record.ecw_max
+            record.wmm.aifsn <= K::CAPS.edca_max_aifsn
+                && record.wmm.aifsn <= 15
+                && record.wmm.ecw_max <= K::CAPS.edca_max_cw_exponent
+                && record.wmm.ecw_max <= crate::edca::MAX_CW_EXPONENT
+                && record.wmm.txop_limit_units_32_us <= K::CAPS.edca_max_txop_limit_units_32_us
+                && record.msdu_lifetime_tu <= EdcaParameterSet::DEFAULT_MSDU_LIFETIME_TU
+                && record.wmm.ecw_min <= record.wmm.ecw_max
         }
         if !(valid::<K>(parameters, WmmAccessCategory::BestEffort)
             && valid::<K>(parameters, WmmAccessCategory::Background)
@@ -493,7 +500,7 @@ impl<K: Ieee80211Capabilities> SupportedEdca<K> {
     }
 
     /// The parameter set.
-    pub const fn get(&self) -> WmmParameterSet {
+    pub const fn get(&self) -> EdcaParameterSet {
         self.parameters
     }
 }

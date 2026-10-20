@@ -212,7 +212,12 @@ bounds) live in the code that applies them.
   the REGDMA link select; TBTT events from the power interrupt are lossy, so
   the driver times its own TBTT wakes; coexistence values reach the driver by
   message.
-- **EDCA** belongs to a VIF, not to the port.
+- **EDCA** belongs to a VIF, not to the port. Each AC record carries AIFSN,
+  ECWmin, ECWmax, TXOP limit and MSDU lifetime, defaulting to 500 TU;
+  unsupported records are refused. One contention state per AC queue uses
+  its head frame's VIF parameters. Before a BSS is known, a non-AP station
+  uses the standard default EDCA set. TXOP limits are retained and validated;
+  each access sends one frame.
 - **MSDU age** starts at software admission, and every subframe keeps its own
   age through A-MPDU formation and retry; removing an aged head under an
   active Block Ack agreement sends a BlockAckReq.

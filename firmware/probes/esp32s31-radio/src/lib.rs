@@ -1293,7 +1293,7 @@ oer_probe_macros::probe! {
             .expect("the retry sequence starts with its reset entry");
         let decision = state.observe_completion(policy, disposition);
         let counters = state.counters();
-        let exponent = policy.contention_exponent(oer_ieee80211_port::VifRole::Station, *queue);
+        let exponent = policy.contention_exponent(*queue);
         // SAFETY: every retry case supplies writable descriptor, context and
         // frame objects covering these bytes.
         unsafe {

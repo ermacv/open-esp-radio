@@ -344,6 +344,7 @@ pub const fn esp32s31_lower_mac_capabilities(buffer_size: usize) -> LowerMacCapa
         // The bounds `EdcaContentionParameters::new` checks.
         edca_max_aifsn: 0x0f,
         edca_max_cw_exponent: oer_esp32s31_ieee80211_mac::edca::MAX_HARDWARE_ECW_EXPONENT,
+        edca_max_txop_limit_units_32_us: u16::MAX,
     }
 }
 
@@ -945,17 +946,12 @@ where
             .min()
     }
 
-    /// A backoff for an attempt of `access_category`, drawn by the vendor's
-    /// policy from the category's contention window: the phase contract
-    /// leaves the backoff to the backend, and the S31 draws it in
-    /// software.
-    #[cfg(test)]
-    fn draw_backoff(&mut self, access_category: WmmAccessCategory) -> u16 {
+    /// Draw for the head frame of `access_category`, using its VIF's record
+    /// and the AC queue's single contention state. The backend calls this
+    /// at publication and carries the draw into the single-attempt values.
+    pub fn draw_backoff(&mut self, role: VifRole, access_category: WmmAccessCategory) -> u16 {
         self.tx
-            .contention_publication(
-                VifRole::Station,
-                LegacyTxQueue::from_access_category(access_category),
-            )
+            .contention_publication(role, LegacyTxQueue::from_access_category(access_category))
             .1
     }
 
@@ -1680,7 +1676,7 @@ where
         oer_ieee80211_port::SupportedEdca<K>,
         oer_esp32s31_ieee80211_mac::edca::EdcaParametersError,
     > {
-        self.tx.policy_mut().install_wmm(role, parameters.get())?;
+        self.tx.policy_mut().install_edca(role, parameters.get())?;
         Ok(parameters)
     }
 

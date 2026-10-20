@@ -1132,8 +1132,10 @@ pub trait InterfacePhase<'p, 'id: 'p> {
 
     /// The EDCA parameters this interface's attempts contend with, from
     /// their next publication on. Each interface keeps its own set; the
-    /// backend reconciles the sets of all interfaces into its queues and
-    /// returns the set this interface's attempts contend with from then on.
+    /// head frame's VIF selects the parameters of its AC queue's single
+    /// contention state. The returned set is applied exactly; unsupported
+    /// records are refused by SupportedEdca, never clamped. Before a BSS
+    /// is known, the interface uses the standard non-AP EDCA defaults.
     fn set_edca(&mut self, parameters: SupportedEdca<Self::Caps>) -> SupportedEdca<Self::Caps>;
 
     /// Install `key` for frames with `peer` in `slot`.

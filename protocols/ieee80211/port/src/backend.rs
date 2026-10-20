@@ -295,8 +295,6 @@ pub trait BackendTxProfile: Copy + core::fmt::Debug + Eq {
     const LONG_RETRY_LIMIT: u8;
     /// Default RTS length threshold in octets.
     const RTS_THRESHOLD_BYTES: u16;
-    /// Cold contention in standard ACI order (BE, BK, VI, VO).
-    const DEFAULT_CONTENTION: [DefaultContention; 4];
     /// Look up an exact profile-owned rate record.
     fn rate_schedule(kind: RateScheduleKind, index: u8) -> Option<RateScheduleRef>;
     /// Decode the state of a profile-owned record.

@@ -2,10 +2,7 @@
 use oer_ieee80211_port::backend::*;
 use oer_ieee80211_port::backend_protection::*;
 use oer_ieee80211_upper_mac::protection::{ProtectEveryHeTxop, ProtectionPolicy};
-use oer_ieee80211_wire::{
-    phy::{HeGiLtf, LegacyRate, PhyRate, PpduBandwidth},
-    qos::WmmAccessCategory,
-};
+use oer_ieee80211_wire::phy::{HeGiLtf, LegacyRate, PhyRate, PpduBandwidth};
 
 /// The recovered Espressif rate, retry and protection profile; it stores no state.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -17,12 +14,6 @@ impl BackendTxProfile for EspressifBackendTxProfile {
     const SHORT_RETRY_LIMIT: u8 = crate::lmac::SHORT_RETRY_LIMIT;
     const LONG_RETRY_LIMIT: u8 = crate::lmac::LONG_RETRY_LIMIT;
     const RTS_THRESHOLD_BYTES: u16 = crate::lmac::RTS_THRESHOLD_BYTES;
-    const DEFAULT_CONTENTION: [DefaultContention; 4] = [
-        crate::lmac::default_contention(WmmAccessCategory::BestEffort),
-        crate::lmac::default_contention(WmmAccessCategory::Background),
-        crate::lmac::default_contention(WmmAccessCategory::Video),
-        crate::lmac::default_contention(WmmAccessCategory::Voice),
-    ];
     fn rate_schedule(kind: RateScheduleKind, index: u8) -> Option<RateScheduleRef> {
         crate::rate_schedule::rate_schedule(kind, index)
     }

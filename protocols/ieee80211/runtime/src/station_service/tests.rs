@@ -1364,14 +1364,16 @@ fn on_an_open_network_the_join_goes_on_the_default_record_and_then_the_associati
                 })
                 .await;
             // A BSS without WMM: the station's interface contends by the
-            // DCF, the access point's interface keeps none of its own.
+            // DCF, the access point's interface keeps the standard defaults.
             assert_eq!(
                 world.air.edca(oer_ieee80211_port::VifRole::Station),
-                Some(oer_ieee80211_wire::extensions::wmm::WmmParameterSet::DCF)
+                oer_ieee80211_port::EdcaParameterSet::from_wmm(
+                    oer_ieee80211_wire::extensions::wmm::WmmParameterSet::DCF
+                )
             );
             assert_eq!(
                 world.air.edca(oer_ieee80211_port::VifRole::AccessPoint),
-                None
+                oer_ieee80211_port::EdcaParameterSet::STANDARD_DEFAULT
             );
             // Connected at once on an open network: data at the rate control's
             // rate, the next control frame on the association's record.

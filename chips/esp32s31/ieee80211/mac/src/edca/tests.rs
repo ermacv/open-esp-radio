@@ -8,10 +8,8 @@ const STANDARD_WMM: [u8; 26] = [
 ];
 
 #[test]
-fn vendor_defaults_match_all_four_lmac_init_records() {
-    let queues = EdcaQueues::vendor_defaults::<
-        oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile,
-    >();
+fn standard_defaults_initialize_all_four_queues() {
+    let queues = EdcaQueues::standard_defaults();
     assert_eq!(
         queues.queue(LegacyTxQueue::Voice).parameters(),
         EdcaContentionParameters::new(2, 2, 3).unwrap()
@@ -59,21 +57,21 @@ fn reconfigure_clamps_current_to_both_new_bounds() {
 
 #[test]
 fn wmm_update_is_validated_before_any_queue_changes() {
-    let mut queues = EdcaQueues::vendor_defaults::<
-        oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile,
-    >();
+    let mut queues = EdcaQueues::standard_defaults();
     let before = queues;
     let mut invalid = STANDARD_WMM;
     invalid[11] = (11 << 4) | 4;
     let parameters = parse_wmm_parameter_element(&invalid).unwrap();
     assert_eq!(
-        queues.configure_from_wmm(parameters),
+        queues.configure_from_edca(oer_ieee80211_port::EdcaParameterSet::from_wmm(parameters)),
         Err(EdcaParametersError::MaximumExponentOutOfRange(11))
     );
     assert_eq!(queues, before);
 
     queues
-        .configure_from_wmm(parse_wmm_parameter_element(&STANDARD_WMM).unwrap())
+        .configure_from_edca(oer_ieee80211_port::EdcaParameterSet::from_wmm(
+            parse_wmm_parameter_element(&STANDARD_WMM).unwrap(),
+        ))
         .unwrap();
     assert_eq!(
         queues.queue(LegacyTxQueue::BestEffort).parameters(),
@@ -88,10 +86,8 @@ fn wmm_update_is_validated_before_any_queue_changes() {
 }
 
 #[test]
-fn vendor_defaults_grant_no_implicit_admission_or_txop_ownership() {
-    let queues = EdcaQueues::vendor_defaults::<
-        oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile,
-    >();
+fn standard_defaults_retain_txop_policy_without_granting_admission() {
+    let queues = EdcaQueues::standard_defaults();
     for queue in [
         LegacyTxQueue::Voice,
         LegacyTxQueue::Video,
@@ -100,7 +96,13 @@ fn vendor_defaults_grant_no_implicit_admission_or_txop_ownership() {
     ] {
         let policy = queues.access_policy(queue);
         assert!(!policy.admission_control_mandatory());
-        assert_eq!(policy.txop_limit_units_32_us(), 0);
+        assert_eq!(
+            policy.txop_limit_units_32_us(),
+            oer_ieee80211_port::EdcaParameterSet::STANDARD_DEFAULT
+                .access_category(queue.access_category())
+                .wmm
+                .txop_limit_units_32_us
+        );
     }
 }
 

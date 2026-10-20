@@ -239,6 +239,9 @@ pub struct LowerMacCapabilities {
     /// Largest contention-window exponent (`ECWmin`, `ECWmax`) an EDCA
     /// record may carry.
     pub edca_max_cw_exponent: u8,
+    /// Largest TXOP limit retained by the backend, in 32-us units.
+    /// An access sends a single frame.
+    pub edca_max_txop_limit_units_32_us: u16,
 }
 
 impl LowerMacCapabilities {

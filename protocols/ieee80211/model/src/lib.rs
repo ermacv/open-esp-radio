@@ -155,6 +155,7 @@ use core::{
     num::NonZeroU16,
     task::{Poll, Waker},
 };
+use oer_ieee80211_port::{EdcaAcParameters, EdcaContention, EdcaParameterSet};
 use oer_ieee80211_port::{
     association,
     association::{
@@ -164,7 +165,6 @@ use oer_ieee80211_port::{
 };
 use oer_ieee80211_wire::ccmp::Ccmp128Key;
 use oer_ieee80211_wire::ccmp::GroupKeyId;
-use oer_ieee80211_wire::extensions::wmm::WmmParameterSet;
 
 use oer_ieee80211_wire::phy::{HeMcs, HtMcs, PhyRate};
 use oer_radio_port::{
@@ -233,6 +233,7 @@ pub const MODEL_CAPABILITIES: LowerMacCapabilities = LowerMacCapabilities {
     rx_block_ack_max_window: 64,
     edca_max_aifsn: 15,
     edca_max_cw_exponent: 10,
+    edca_max_txop_limit_units_32_us: u16::MAX,
 };
 
 /// The model's capabilities marker.
@@ -1441,6 +1442,75 @@ enum ModelStream {
     Ended(EventEnd<ModelFault>),
 }
 
+/// One actual AC-queue draw from the VIF of its head frame.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ModelContention {
+    pub role: VifRole,
+    pub access_category: WmmAccessCategory,
+    pub parameters: EdcaAcParameters,
+    pub window_slots: u16,
+    pub backoff_slots: u16,
+}
+
+struct ModelEdca {
+    parameters: [EdcaParameterSet; 2],
+    queues: [EdcaContention; 4],
+    heads: [Option<VifRole>; 4],
+    entropy: u32,
+    draws: Vec<ModelContention>,
+}
+impl Default for ModelEdca {
+    fn default() -> Self {
+        Self {
+            parameters: [EdcaParameterSet::STANDARD_DEFAULT; 2],
+            queues: WmmAccessCategory::ALL.map(|ac| {
+                EdcaContention::from_wmm(EdcaParameterSet::STANDARD_DEFAULT.access_category(ac).wmm)
+            }),
+            heads: [None; 4],
+            entropy: 0,
+            draws: Vec::new(),
+        }
+    }
+}
+impl ModelEdca {
+    fn parameters(&self, role: VifRole) -> EdcaParameterSet {
+        *match role {
+            VifRole::Station => &self.parameters[0],
+            VifRole::AccessPoint => &self.parameters[1],
+        }
+    }
+    fn parameters_mut(&mut self, role: VifRole) -> &mut EdcaParameterSet {
+        match role {
+            VifRole::Station => &mut self.parameters[0],
+            VifRole::AccessPoint => &mut self.parameters[1],
+        }
+    }
+    fn draw(&mut self, role: VifRole, access_category: WmmAccessCategory) {
+        let parameters = self.parameters(role).access_category(access_category);
+        let queue = access_category.select_mut(&mut self.queues);
+        queue.reconfigure(parameters.wmm.ecw_min, parameters.wmm.ecw_max);
+        let head = access_category.select_mut(&mut self.heads);
+        if *head != Some(role) {
+            queue.reset();
+            *head = Some(role);
+        }
+        self.draws.push(ModelContention {
+            role,
+            access_category,
+            parameters,
+            window_slots: queue.cw(),
+            backoff_slots: queue.draw(&mut || self.entropy),
+        });
+    }
+    fn failure(&mut self, ac: WmmAccessCategory) {
+        ac.select_mut(&mut self.queues).record_failure();
+    }
+    fn reset(&mut self, ac: WmmAccessCategory) {
+        ac.select_mut(&mut self.queues).reset();
+        *ac.select_mut(&mut self.heads) = None;
+    }
+}
+
 /// The air and the world of a model: shared by the backend's driver and
 /// the test.
 #[derive(Default)]
@@ -1471,7 +1541,7 @@ pub struct ModelAir {
     /// The settings the driver applied.
     settings: Cell<u32>,
     /// The EDCA set each interface's attempts contend with, by role.
-    edca: Cell<[Option<WmmParameterSet>; 2]>,
+    edca: RefCell<ModelEdca>,
     /// The queues the air keeps busy: their attempts wait unpublished.
     held: Cell<[bool; WmmAccessCategory::ALL.len()]>,
     /// Keep a published PPDU's result pending, independently of prepublication CCA.
@@ -1831,13 +1901,19 @@ impl ModelAir {
         self.settings.get()
     }
 
-    /// The EDCA set the interface of `role` last set, if any.
-    pub fn edca(&self, role: VifRole) -> Option<WmmParameterSet> {
-        let [station, access_point] = self.edca.get();
-        match role {
-            VifRole::Station => station,
-            VifRole::AccessPoint => access_point,
-        }
+    /// The complete EDCA set currently installed for this interface.
+    pub fn edca(&self, role: VifRole) -> EdcaParameterSet {
+        self.edca.borrow().parameters(role)
+    }
+
+    /// Actual contention draws, one per PPDU publication attempt.
+    pub fn contentions(&self) -> Vec<ModelContention> {
+        self.edca.borrow().draws.clone()
+    }
+
+    /// Inject a deterministic entropy word for subsequent backoff draws.
+    pub fn set_backoff_entropy(&self, entropy: u32) {
+        self.edca.borrow_mut().entropy = entropy;
     }
 
     /// The frames the air holds for the driver yet.
@@ -3173,9 +3249,11 @@ impl<'id, X: ModelContext> Published<'id, X> {
                     TxOutcome::Ended(SingleEnd::AckTimeout(_) | SingleEnd::ContentionLimit(_))
                 ) && let Some(rate) = plan.remaining.pop_front()
                 {
+                    held.air.edca.borrow_mut().failure(plan.prepared.queue);
                     plan.rate = rate;
                     return publish_single(held, keys, plan);
                 }
+                held.air.edca.borrow_mut().reset(plan.prepared.queue);
                 terminal(held, *plan.prepared, outcome);
             }
             Self::Aggregate {
@@ -3184,6 +3262,7 @@ impl<'id, X: ModelContext> Published<'id, X> {
                 answer,
             } => {
                 let outcome = aggregate_outcome(answer, prepared.rate, report, cause);
+                held.air.edca.borrow_mut().reset(prepared.queue);
                 terminal_aggregate(held, prepared, outcome);
             }
         }
@@ -3360,6 +3439,10 @@ fn publish_single<'id, X: ModelContext>(
             return None;
         }
     };
+    held.air
+        .edca
+        .borrow_mut()
+        .draw(plan.prepared.role, plan.prepared.queue);
     // A denied PPDU never reached the air the journal records.
     if !matches!(answer, SingleAnswer::AirDenied) {
         held.air.sent.borrow_mut().push(frame);
@@ -3435,6 +3518,10 @@ fn publish_aggregate<'id, X: ModelContext>(
             bitmap |= subframe.acknowledgement_bit;
         }
     }
+    held.air
+        .edca
+        .borrow_mut()
+        .draw(aggregate.role, aggregate.queue);
     if !matches!(answer, AggregateAnswer::AirDenied) {
         held.air.sent.borrow_mut().extend(frames);
     }
@@ -3893,13 +3980,7 @@ where
 
     /// The model applies each interface's set exactly.
     fn set_edca(&mut self, parameters: SupportedEdca<K>) -> SupportedEdca<K> {
-        let mut edca = self.held.air.edca.get();
-        let [station, access_point] = &mut edca;
-        *match R::ROLE {
-            VifRole::Station => station,
-            VifRole::AccessPoint => access_point,
-        } = Some(parameters.get());
-        self.held.air.edca.set(edca);
+        *self.held.air.edca.borrow_mut().parameters_mut(R::ROLE) = parameters.get();
         self.held.settings.borrow_mut().other = true;
         self.held.air.wake_driver();
         parameters

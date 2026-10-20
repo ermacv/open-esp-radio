@@ -101,3 +101,57 @@ fn poison_verification_rejects_destruction_of_an_unreturned_owner() {
         assert_eq!(verify(Scenario::Poison, trace), Err(Violation::Lifetime));
     }
 }
+
+#[test]
+fn edca_verifier_rejects_tail_parameters_wrong_draws_and_queue_reordering() {
+    use super::edca::{self, Case, Draw, Scenario};
+    use crate::VifRole::{AccessPoint, Station};
+    let case = Case {
+        scenario: Scenario::AlternatingVifs,
+        category: WmmAccessCategory::BestEffort,
+    };
+    let trace = || {
+        let station = edca::parameters(Station, false);
+        let ap = edca::parameters(AccessPoint, false);
+        let draw = |role, table: crate::EdcaParameterSet, slots| Draw {
+            role,
+            category: case.category,
+            parameters: table.access_category(case.category),
+            window_slots: slots,
+            backoff_slots: slots,
+        };
+        edca::Trace {
+            draws: [
+                draw(Station, station, 15),
+                draw(AccessPoint, ap, 3),
+                draw(Station, station, 15),
+            ],
+            installed: [station, ap],
+            admitted: [1, 2, 3],
+            completed: [1, 2, 3],
+            held_draws: None,
+        }
+    };
+    assert_eq!(edca::verify(case, trace()), Ok(()));
+    let mut wrong = trace();
+    wrong.draws[0].parameters = wrong.draws[1].parameters;
+    assert_eq!(
+        edca::verify(case, wrong),
+        Err(edca::Violation::VifParameters)
+    );
+    let mut wrong = trace();
+    wrong.draws[1].window_slots = 15;
+    assert_eq!(edca::verify(case, wrong), Err(edca::Violation::Contention));
+    let mut wrong = trace();
+    wrong.draws[2].backoff_slots = 0;
+    assert_eq!(edca::verify(case, wrong), Err(edca::Violation::Contention));
+    let mut wrong = trace();
+    wrong.completed.swap(0, 2);
+    assert_eq!(edca::verify(case, wrong), Err(edca::Violation::Fifo));
+    let mut wrong = trace();
+    wrong.installed[1] = wrong.installed[0];
+    assert_eq!(
+        edca::verify(case, wrong),
+        Err(edca::Violation::VifParameters)
+    );
+}

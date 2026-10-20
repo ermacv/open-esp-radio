@@ -72,6 +72,7 @@ use crate::{
 /// #         access_point_receive_filters: ReceiveFilter::BSS_MEMBER,
 /// #         rx_block_ack_max_tid: 0, rx_block_ack_max_window: 0,
 /// #         edca_max_aifsn: 15, edca_max_cw_exponent: 10,
+/// #         edca_max_txop_limit_units_32_us: u16::MAX,
 /// #     }
 /// # }
 /// struct DualBand;
@@ -102,6 +103,7 @@ use crate::{
 /// #         access_point_receive_filters: ReceiveFilter::BSS_MEMBER,
 /// #         rx_block_ack_max_tid: 0, rx_block_ack_max_window: 0,
 /// #         edca_max_aifsn: 15, edca_max_cw_exponent: 10,
+/// #         edca_max_txop_limit_units_32_us: u16::MAX,
 /// #     }
 /// # }
 /// struct SingleBand;
@@ -257,6 +259,7 @@ fn control_plan(
 /// #     access_point_receive_filters: ReceiveFilter::BSS_MEMBER,
 /// #     rx_block_ack_max_tid: 0, rx_block_ack_max_window: 0,
 /// #     edca_max_aifsn: 15, edca_max_cw_exponent: 10,
+/// #     edca_max_txop_limit_units_32_us: u16::MAX,
 /// # };
 /// # #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 /// # struct Snr(i8);
@@ -287,6 +290,7 @@ fn control_plan(
 /// #     access_point_receive_filters: ReceiveFilter::BSS_MEMBER,
 /// #     rx_block_ack_max_tid: 0, rx_block_ack_max_window: 0,
 /// #     edca_max_aifsn: 15, edca_max_cw_exponent: 10,
+/// #     edca_max_txop_limit_units_32_us: u16::MAX,
 /// # };
 /// #[derive(Clone, Copy)]
 /// struct Measured {

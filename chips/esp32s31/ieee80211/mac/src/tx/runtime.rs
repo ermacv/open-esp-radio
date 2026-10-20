@@ -4,8 +4,7 @@
 //! retains queue contention and installed BSS facts; detached completions apply
 //! the core's requested contention effects through the port.
 
-use oer_ieee80211_port::VifRole;
-use oer_ieee80211_wire::extensions::wmm::WmmParameterSet;
+use oer_ieee80211_port::{EdcaParameterSet, VifRole};
 use oer_ieee80211_wire::qos::{
     WmmAccessCategory, WmmTrafficClass, WmmUserPriority, classify_ethernet_wmm,
 };
@@ -133,26 +132,29 @@ pub enum WmmHardwareMediumRequest {
 pub struct WifiTxRuntimePolicy<X: BackendTxProfile> {
     ht_ampdu: HtPeerAmpduParameters,
     he_bss_color: u8,
-    /// Each interface's contention for the four queues: the station's,
-    /// then the access point's.
-    edca: [EdcaQueues; 2],
+    /// Parameter tables by VIF; contention belongs to the four AC queues.
+    edca: [EdcaParameterSet; 2],
+    queues: EdcaQueues,
+    heads: [Option<VifRole>; 4],
     protection: WifiTxProtectionPolicy<X>,
 }
 
 impl<X: BackendTxProfile> WifiTxRuntimePolicy<X> {
-    /// Start with the same cold values as the complete vendor LMAC init.
+    /// Standard non-AP EDCA defaults with the profile's BSS protection.
     pub const fn vendor_defaults() -> Self {
         Self {
             ht_ampdu: HtPeerAmpduParameters::from_capability_byte(0),
             he_bss_color: 0,
-            edca: [EdcaQueues::vendor_defaults::<X>(); 2],
+            edca: [EdcaParameterSet::STANDARD_DEFAULT; 2],
+            queues: EdcaQueues::standard_defaults(),
+            heads: [None; 4],
             protection: WifiTxProtectionPolicy::new(Some(
                 crate::tx::protection::RtsLengthThreshold::new(X::RTS_THRESHOLD_BYTES),
             )),
         }
     }
 
-    const fn edca(&self, role: VifRole) -> &EdcaQueues {
+    const fn edca(&self, role: VifRole) -> &EdcaParameterSet {
         let [station, access_point] = &self.edca;
         match role {
             VifRole::Station => station,
@@ -160,7 +162,7 @@ impl<X: BackendTxProfile> WifiTxRuntimePolicy<X> {
         }
     }
 
-    const fn edca_mut(&mut self, role: VifRole) -> &mut EdcaQueues {
+    const fn edca_mut(&mut self, role: VifRole) -> &mut EdcaParameterSet {
         let [station, access_point] = &mut self.edca;
         match role {
             VifRole::Station => station,
@@ -208,12 +210,16 @@ impl<X: BackendTxProfile> WifiTxRuntimePolicy<X> {
 
     /// Atomically validate and install all four WMM access categories of
     /// the interface of `role`; the other interface keeps its own.
-    pub fn install_wmm(
+    pub fn install_edca(
         &mut self,
         role: VifRole,
-        parameters: WmmParameterSet,
+        parameters: EdcaParameterSet,
     ) -> Result<(), EdcaParametersError> {
-        self.edca_mut(role).configure_from_wmm(parameters)
+        for category in WmmAccessCategory::ALL {
+            EdcaAccessPolicy::from_edca(parameters.access_category(category))?;
+        }
+        *self.edca_mut(role) = parameters;
+        Ok(())
     }
 
     pub fn contention_parameters(
@@ -221,11 +227,15 @@ impl<X: BackendTxProfile> WifiTxRuntimePolicy<X> {
         role: VifRole,
         queue: LegacyTxQueue,
     ) -> EdcaContentionParameters {
-        self.edca(role).queue(queue).parameters()
+        self.access_policy(role, queue).contention()
     }
 
     pub const fn access_policy(&self, role: VifRole, queue: LegacyTxQueue) -> EdcaAccessPolicy {
-        self.edca(role).access_policy(queue)
+        match EdcaAccessPolicy::from_edca(self.edca(role).access_category(queue.access_category()))
+        {
+            Ok(policy) => policy,
+            Err(_) => panic!("installed EDCA was validated"),
+        }
     }
 
     /// Classify and admit one network frame under the active peer WMM policy.
@@ -242,7 +252,7 @@ impl<X: BackendTxProfile> WifiTxRuntimePolicy<X> {
     ) -> Result<WifiTxTraffic, WifiTxTrafficError> {
         let requested = classify_ethernet_wmm(ethernet);
         if !peer_qos {
-            let selected = self.edca(role).access_policy(LegacyTxQueue::BestEffort);
+            let selected = self.access_policy(role, LegacyTxQueue::BestEffort);
             return Ok(WifiTxTraffic {
                 requested,
                 user_priority: WmmUserPriority::UP0,
@@ -254,9 +264,7 @@ impl<X: BackendTxProfile> WifiTxRuntimePolicy<X> {
 
         let mut category = requested.access_category;
         loop {
-            let selected = self
-                .edca(role)
-                .access_policy(LegacyTxQueue::from_access_category(category));
+            let selected = self.access_policy(role, LegacyTxQueue::from_access_category(category));
             if !selected.admission_control_mandatory() {
                 let downgraded = category != requested.access_category;
                 return Ok(WifiTxTraffic {
@@ -301,25 +309,38 @@ impl<X: BackendTxProfile> WifiTxRuntimePolicy<X> {
     }
 
     #[cfg(any(test, feature = "test-support", oer_probe))]
-    pub fn contention_exponent(&self, role: VifRole, queue: LegacyTxQueue) -> u8 {
-        self.edca(role).queue(queue).current_exponent()
+    pub fn contention_exponent(&self, queue: LegacyTxQueue) -> u8 {
+        self.queues.queue(queue).current_exponent()
     }
 
     /// Select one hardware backoff slot from platform-provided entropy.
-    pub fn select_backoff(&self, role: VifRole, queue: LegacyTxQueue, entropy: u32) -> u16 {
-        self.edca(role).select_slot(queue, entropy)
+    pub fn select_backoff(&mut self, role: VifRole, queue: LegacyTxQueue, entropy: u32) -> u16 {
+        self.select_head(role, queue);
+        self.queues.select_slot(queue, entropy)
+    }
+
+    fn select_head(&mut self, role: VifRole, queue: LegacyTxQueue) {
+        self.queues
+            .select_policy(queue, self.access_policy(role, queue));
+        if self.heads[queue as usize] != Some(role) {
+            self.queues.reset_terminal_exchange(queue);
+            self.heads[queue as usize] = Some(role);
+        }
     }
 
     pub fn record_retry_failure(&mut self, role: VifRole, queue: LegacyTxQueue) {
-        self.edca_mut(role).record_retry_failure(queue);
+        self.select_head(role, queue);
+        self.queues.record_retry_failure(queue);
     }
 
-    pub fn record_success(&mut self, role: VifRole, queue: LegacyTxQueue) {
-        self.edca_mut(role).record_success(queue);
+    pub fn record_success(&mut self, _role: VifRole, queue: LegacyTxQueue) {
+        self.queues.record_success(queue);
+        self.heads[queue as usize] = None;
     }
 
-    pub fn reset_terminal_exchange(&mut self, role: VifRole, queue: LegacyTxQueue) {
-        self.edca_mut(role).reset_terminal_exchange(queue);
+    pub fn reset_terminal_exchange(&mut self, _role: VifRole, queue: LegacyTxQueue) {
+        self.queues.reset_terminal_exchange(queue);
+        self.heads[queue as usize] = None;
     }
 }
 
