@@ -1,18 +1,8 @@
 //! Inspect the common engine's records for one linked function, independently
 //! of callback policy. Numerical addresses only select diagnostic input.
-use oer_analysis_riscv_analysis::{
-    FunctionInput, PreparedReferences, RecognizedTables, research_following_tables,
-};
-use oer_analysis_riscv_lift::RiscvDecoder;
+mod support;
 use oer_analysis_riscv_model::*;
-use oer_analysis_riscv_program::{ProgramView, facts::ImageFacts, tables::ImageTables};
-
-struct Saved<'a>(RecordBuffer<'a>);
-impl FunctionSink for Saved<'_> {
-    fn record(&mut self, record: &FunctionRecord, control: &mut dyn RunControl) -> Result<()> {
-        self.0.push(record.clone(), control.position())
-    }
-}
+use oer_analysis_riscv_program::facts::ImageFacts;
 
 fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let mut args = std::env::args().skip(1);
@@ -35,47 +25,15 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         "function\t{address:#010x}\t{}",
         oer_analysis_elf::demangle(&function.label())
     );
-    let section = image.file().section(function.section)?;
-    let start = (u64::from(address) - section.address) as usize;
-    let code = section
-        .data
-        .get(start..start + function.size as usize)
-        .ok_or("function exceeds section")?;
-    let references = PreparedReferences::new(
-        &[],
-        function.section as u32,
-        &RiscvDecoder,
+    let records = support::capture(
+        &image,
+        function,
         &memory,
+        &UnknownCallBehavior,
+        false,
         &mut control,
     )?;
-    let view = ProgramView::new(&bytes, image.file(), &[], &memory, &mut control)?;
-    let mut saved = Saved(RecordBuffer::new(&memory));
-    research_following_tables(
-        FunctionInput {
-            image: Some(&view),
-            section: function.section as u32,
-            extent: CodeRange {
-                start: address.into(),
-                length: function.size.into(),
-            },
-            bytes: code,
-            relocations: &references,
-            data_ranges: &[],
-            jumps: &[],
-            returns: &NoReturns,
-            call_behavior: &UnknownCallBehavior,
-        },
-        &RecognizedTables {
-            entries: &ImageTables { image: &image },
-            section: function.section as u32,
-        },
-        &RiscvDecoder,
-        &memory,
-        &mut control,
-        &mut saved,
-        Some(CallAbi::RiscvInteger),
-    )?;
-    let index = FunctionIndex::new(&saved.0, RecordPolicy::Canonical, &memory, &mut control)?;
+    let index = FunctionIndex::new(&records, RecordPolicy::Canonical, &memory, &mut control)?;
     for record in index.records() {
         match record {
             FunctionRecord::Transfer { offset, .. } => {

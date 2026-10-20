@@ -1,6 +1,6 @@
 //! Finite-height lattice: unreachable -> bounded exact alternatives -> unknown.
 //! Queue membership is bounded by the graph; no expression trees. The only
-//! memory state is a bounded set of entry-stack slots holding exact words: a
+//! memory state is a bounded set of entry-stack slots holding words: a
 //! word stored to an exact entry-stack address and loaded back unchanged, as
 //! `core::hint::black_box` spills a function pointer.
 use super::value_sets::Sets;
@@ -74,6 +74,17 @@ impl State {
         }
         self.canonical();
     }
+    fn capture(&mut self, offset: i64, value: Value) {
+        self.clobber(offset, 4);
+        if let Some(last) = self.slots.last_mut()
+            && last.is_some_and(|(at, _)| offset < at)
+        {
+            // Keep a fixed projection onto the lowest stack addresses, so
+            // entry register saves cannot occupy every word indefinitely.
+            *last = None;
+        }
+        self.remember(offset, value);
+    }
     fn canonical(&mut self) {
         self.slots
             .sort_unstable_by_key(|slot| slot.map_or((1, 0), |(at, _)| (0, at)));
@@ -120,7 +131,7 @@ fn join(
             Some(other) => sets.join(value, other, control)?,
             None => Value::Unknown,
         };
-        let next = exact(joined).then_some((at, joined));
+        let next = (exact(joined) || matches!(joined, Value::Expr(_))).then_some((at, joined));
         changed |= old.slots[i] != next;
         old.slots[i] = next;
     }
@@ -816,6 +827,7 @@ pub(super) fn analyze(
         sink,
         false,
         None,
+        false,
         &mut AdmittedVec::new(memory),
     )
 }
@@ -830,6 +842,7 @@ pub(super) fn analyze_with(
     sink: &mut dyn FunctionSink,
     symbolic: bool,
     abi: Option<CallAbi>,
+    symbolic_spills: bool,
     noreturn: &mut AdmittedVec<'_, u64>,
 ) -> Result<SemanticSummary> {
     control.phase(RunPhase::AnalyzeValues)?;
@@ -854,6 +867,7 @@ pub(super) fn analyze_with(
         control.position(),
     )?;
     let mut symbols = Symbols::new(if symbolic { nodes.len() } else { 0 }, memory, control)?;
+    symbols.symbolic_spills = symbolic_spills;
     let mut states = reserve_vec::<Option<State>>(nodes.len())?;
     states.resize(nodes.len(), None);
     let mut queued = reserve_vec::<bool>(nodes.len())?;
@@ -1237,6 +1251,7 @@ pub(super) fn analyze_with(
 }
 
 struct Symbols<'a> {
+    symbolic_spills: bool,
     sets: Sets<'a>,
     records: AdmittedVec<'a, (u64, Expression)>,
     slots: AdmittedVec<'a, Option<u32>>,
@@ -1257,6 +1272,7 @@ impl<'a> Symbols<'a> {
                 })?
         };
         Ok(Self {
+            symbolic_spills: false,
             sets: Sets::new(memory),
             records: AdmittedVec::new(memory),
             slots: AdmittedVec::new(memory),
@@ -1452,6 +1468,16 @@ fn evaluate(
                 _ => effects.memory.and_then(|m| m.3),
             };
             effects.memory = Some((kind, width, address, value));
+            if symbols.symbolic_spills
+                && kind == MemoryKind::Store
+                && width == 4
+                && let Value::Stack(at) = address
+                && let Some(v @ Value::Expr(_)) = value
+            {
+                // A captured value, not a reread of its source field. Reuse
+                // the stack lattice's overlap, alias, call and join rules.
+                state.capture(at, v);
+            }
             if kind == MemoryKind::Load
                 && let Some(dest) = dest
                 && dest != 0
@@ -2011,6 +2037,7 @@ mod tests {
                 &mut sink,
                 true,
                 None,
+                false,
                 &mut AdmittedVec::new(&memory),
             )
             .unwrap();
@@ -2516,6 +2543,7 @@ mod tests {
             &mut sink,
             true,
             None,
+            false,
             &mut AdmittedVec::new(&memory),
         )
         .unwrap();

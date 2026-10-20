@@ -9,9 +9,13 @@ mod references;
 mod tables;
 mod value_sets;
 mod values;
+pub mod writes;
 pub use dispatch::{JumpTable, RecognizedTables, jump_tables};
 pub use references::PreparedReferences;
-pub use tables::{JumpTableSource, ProvenTables, research_following_tables};
+pub use tables::{
+    JumpTableSource, ProvenTables, research_following_tables,
+    research_following_tables_with_options,
+};
 pub use values::fold_integer;
 
 pub struct FunctionInput<'a> {
@@ -92,7 +96,7 @@ pub fn analyze(
     control: &mut dyn RunControl,
     sink: &mut dyn FunctionSink,
 ) -> Result<AnalysisSummary> {
-    analyze_with(input, decoder, memory, control, sink, false, None)
+    analyze_with(input, decoder, memory, control, sink, false, None, false)
 }
 /// The same CFG/value engine with a bounded expression DAG and explicit ABI assumption.
 pub fn research(
@@ -103,7 +107,45 @@ pub fn research(
     sink: &mut dyn FunctionSink,
     abi: Option<CallAbi>,
 ) -> Result<AnalysisSummary> {
-    analyze_with(input, decoder, memory, control, sink, true, abi)
+    research_with_options(
+        input,
+        decoder,
+        memory,
+        control,
+        sink,
+        ResearchOptions {
+            abi,
+            symbolic_spills: false,
+        },
+    )
+}
+
+/// Explicit value-proof profile. Existing callback and publication consumers
+/// keep exact stack words; write summaries additionally capture symbolic words.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct ResearchOptions {
+    pub abi: Option<CallAbi>,
+    pub symbolic_spills: bool,
+}
+
+pub fn research_with_options(
+    input: FunctionInput<'_>,
+    decoder: &dyn FunctionSemantics,
+    memory: &WorkingMemory,
+    control: &mut dyn RunControl,
+    sink: &mut dyn FunctionSink,
+    options: ResearchOptions,
+) -> Result<AnalysisSummary> {
+    analyze_with(
+        input,
+        decoder,
+        memory,
+        control,
+        sink,
+        true,
+        options.abi,
+        options.symbolic_spills,
+    )
 }
 #[allow(clippy::too_many_arguments)]
 fn analyze_with(
@@ -114,6 +156,7 @@ fn analyze_with(
     sink: &mut dyn FunctionSink,
     symbolic: bool,
     abi: Option<CallAbi>,
+    symbolic_spills: bool,
 ) -> Result<AnalysisSummary> {
     // Prove call targets on the graph with every possible continuation.
     // In particular, AUIPC/JALR needs the value analysis, including all
@@ -127,6 +170,7 @@ fn analyze_with(
         &mut tables::Buffer(&mut records),
         symbolic,
         abi,
+        symbolic_spills,
         &[],
     )?;
     if noreturn.is_empty() {
@@ -140,7 +184,15 @@ fn analyze_with(
     // relying on any pruned edge. Rebuild so unreachable decode gaps and
     // their outgoing paths contribute neither records nor coverage holes.
     analyze_pass(
-        &input, decoder, memory, control, sink, symbolic, abi, &noreturn,
+        &input,
+        decoder,
+        memory,
+        control,
+        sink,
+        symbolic,
+        abi,
+        symbolic_spills,
+        &noreturn,
     )
     .map(|(summary, _)| summary)
 }
@@ -154,6 +206,7 @@ fn analyze_pass<'m>(
     sink: &mut dyn FunctionSink,
     symbolic: bool,
     abi: Option<CallAbi>,
+    symbolic_spills: bool,
     noreturn: &[u64],
 ) -> Result<(AnalysisSummary, AdmittedVec<'m, u64>)> {
     control.phase(RunPhase::AnalyzeFunction)?;
@@ -527,6 +580,7 @@ fn analyze_pass<'m>(
         sink,
         symbolic,
         abi,
+        symbolic_spills,
         &mut found_noreturn,
     )?;
     summary.semantics.complete &= summary.coverage.decoding && summary.coverage.control_flow;

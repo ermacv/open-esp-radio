@@ -4,8 +4,11 @@
 //! the task available to every executor.
 use crate::{Analysis, FunctionFacts, TypeFacts};
 use oer_analysis_elf::rv32::Role;
+use oer_analysis_riscv_analysis::writes::closes_local_graph as closes_graph;
 use oer_analysis_riscv_analysis::{FunctionInput, PreparedReferences, research};
-use oer_analysis_riscv_lift::{RiscvDecoder, is_base_instruction};
+use oer_analysis_riscv_lift::{
+    RiscvDecoder, StructuralRiscvDecoder as ProofDecoder, is_base_instruction,
+};
 use oer_analysis_riscv_model::*;
 use oer_analysis_riscv_program::{ProgramView, facts::ImageFacts};
 use std::collections::{BTreeMap, BTreeSet};
@@ -27,83 +30,11 @@ pub(super) fn poll_executor(name: &str) -> Option<u8> {
     })
 }
 
-/// The structural decoder can identify a non-control instruction even when
-/// its integer effects are unsupported. Visit its continuation, with every
-/// value killed by `Unsupported`, rather than silently losing an incoming
-/// edge (for example the executor loop's `wfi`).
-struct ProofDecoder;
-impl FunctionDecoder for ProofDecoder {
-    fn identity(&self) -> &'static str {
-        "rv32-task-spawn-proof/structural-1"
-    }
-    fn decode(&self, bytes: &[u8]) -> Option<DecodedOp> {
-        RiscvDecoder.decode(bytes).or_else(|| {
-            let half = u16::from_le_bytes(bytes.get(..2)?.try_into().ok()?);
-            let length = if half & 3 != 3 {
-                2
-            } else if half & 0x1f != 0x1f {
-                4
-            } else {
-                return None;
-            };
-            (RiscvDecoder.unsupported_flow(bytes.get(..length)?) == UnsupportedFlow::NonControl)
-                .then_some(DecodedOp {
-                    length: length as u8,
-                    text: String::new(),
-                    flow: InstructionFlow::Next,
-                })
-        })
-    }
-    fn reference(
-        &self,
-        relocation: &FunctionRelocation,
-        all: &[FunctionRelocation],
-        section: u32,
-        control: &mut dyn RunControl,
-    ) -> Result<NormalizedReference> {
-        RiscvDecoder.reference(relocation, all, section, control)
-    }
-}
-
-fn closes_graph(record: &FunctionRecord) -> bool {
-    match record {
-        FunctionRecord::Gap { reason, .. } => *reason == GapReason::Unvisited,
-        FunctionRecord::Edge {
-            target, relation, ..
-        } => {
-            // An unknown call has its ABI continuation. An unknown
-            // non-call can enter any local block, invalidating values
-            // obtained from the graph's known predecessors alone.
-            !matches!(relation, EdgeKind::Conflict | EdgeKind::Stop)
-                && (target.is_some() || matches!(relation, EdgeKind::Call | EdgeKind::Return))
-        }
-        _ => true,
-    }
-}
-
 struct Closed(bool);
 impl FunctionSink for Closed {
     fn record(&mut self, record: &FunctionRecord, _: &mut dyn RunControl) -> Result<()> {
         self.0 &= closes_graph(record);
         Ok(())
-    }
-}
-impl FunctionSemantics for ProofDecoder {
-    fn semantic_identity(&self) -> &'static str {
-        "rv32-task-spawn-proof/conservative-1"
-    }
-    fn branch(&self, bytes: &[u8]) -> Option<(BranchTest, Operand, Operand)> {
-        RiscvDecoder.branch(bytes)
-    }
-    fn lift(&self, bytes: &[u8]) -> SemanticOp {
-        RiscvDecoder.lift(bytes)
-    }
-    fn value_relocation(
-        &self,
-        relocation: &FunctionRelocation,
-        operation: SemanticOp,
-    ) -> ValueRelocation {
-        RiscvDecoder.value_relocation(relocation, operation)
     }
 }
 

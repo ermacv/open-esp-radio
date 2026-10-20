@@ -13,7 +13,7 @@
 //! function is reported from a pass that follows none, its dispatches
 //! indirect gaps. Passes end within the function's dispatch count, every
 //! pass charged to the same control.
-use crate::{AnalysisSummary, FunctionInput, KnownJump, research};
+use crate::{AnalysisSummary, FunctionInput, KnownJump, ResearchOptions, research_with_options};
 use oer_analysis_riscv_model::*;
 
 /// The tables one pass over a function proves, with the working memory
@@ -72,7 +72,7 @@ impl FunctionSink for Buffer<'_, '_> {
     }
 }
 
-/// [`research`] of `input` following the jump tables `source` proves, as
+/// [`crate::research`] of `input` following the jump tables `source` proves, as
 /// the module describes. `input.jumps` are followed on every pass, such as
 /// the dispatches a caller located otherwise; the source proves the rest.
 /// Returns the summary of the reported pass and the tables it followed.
@@ -86,15 +86,40 @@ pub fn research_following_tables<'m, S: JumpTableSource + ?Sized>(
     sink: &mut dyn FunctionSink,
     abi: Option<CallAbi>,
 ) -> Result<(AnalysisSummary, ProvenTables<'m, S::Table>)> {
+    research_following_tables_with_options(
+        input,
+        source,
+        decoder,
+        memory,
+        control,
+        sink,
+        ResearchOptions {
+            abi,
+            symbolic_spills: false,
+        },
+    )
+}
+
+/// The same table-following driver with an explicit value-proof profile.
+#[allow(clippy::too_many_arguments)]
+pub fn research_following_tables_with_options<'m, S: JumpTableSource + ?Sized>(
+    input: FunctionInput<'_>,
+    source: &S,
+    decoder: &dyn FunctionSemantics,
+    memory: &'m WorkingMemory,
+    control: &mut dyn RunControl,
+    sink: &mut dyn FunctionSink,
+    options: ResearchOptions,
+) -> Result<(AnalysisSummary, ProvenTables<'m, S::Table>)> {
     let known = input.jumps;
     let pass = |jumps: &[KnownJump], control: &mut dyn RunControl, sink: &mut dyn FunctionSink| {
-        research(
+        research_with_options(
             FunctionInput { jumps, ..input },
             decoder,
             memory,
             control,
             sink,
-            abi,
+            options,
         )
     };
     let mut followed = ProvenTables::none(memory);

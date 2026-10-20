@@ -312,3 +312,60 @@ pub fn is_base_instruction(bytes: &[u8]) -> bool {
 }
 
 mod semantics;
+
+/// The structural decoder can identify a non-control instruction even when
+/// its integer effects are unsupported. Visit its continuation, with every
+/// value killed by `Unsupported`, rather than silently losing an incoming
+/// edge (for example the executor loop's `wfi`).
+pub struct StructuralRiscvDecoder;
+impl FunctionDecoder for StructuralRiscvDecoder {
+    fn identity(&self) -> &'static str {
+        "rv32/structural-proof-1"
+    }
+    fn decode(&self, bytes: &[u8]) -> Option<DecodedOp> {
+        RiscvDecoder.decode(bytes).or_else(|| {
+            let half = u16::from_le_bytes(bytes.get(..2)?.try_into().ok()?);
+            let length = if half & 3 != 3 {
+                2
+            } else if half & 0x1f != 0x1f {
+                4
+            } else {
+                return None;
+            };
+            (RiscvDecoder.unsupported_flow(bytes.get(..length)?) == UnsupportedFlow::NonControl)
+                .then_some(DecodedOp {
+                    length: length as u8,
+                    text: String::new(),
+                    flow: InstructionFlow::Next,
+                })
+        })
+    }
+    fn reference(
+        &self,
+        relocation: &FunctionRelocation,
+        all: &[FunctionRelocation],
+        section: u32,
+        control: &mut dyn RunControl,
+    ) -> Result<NormalizedReference> {
+        RiscvDecoder.reference(relocation, all, section, control)
+    }
+}
+
+impl FunctionSemantics for StructuralRiscvDecoder {
+    fn semantic_identity(&self) -> &'static str {
+        "rv32/conservative-proof-1"
+    }
+    fn branch(&self, bytes: &[u8]) -> Option<(BranchTest, Operand, Operand)> {
+        RiscvDecoder.branch(bytes)
+    }
+    fn lift(&self, bytes: &[u8]) -> SemanticOp {
+        RiscvDecoder.lift(bytes)
+    }
+    fn value_relocation(
+        &self,
+        relocation: &FunctionRelocation,
+        operation: SemanticOp,
+    ) -> ValueRelocation {
+        RiscvDecoder.value_relocation(relocation, operation)
+    }
+}
