@@ -1,0 +1,12 @@
+schema = 5
+id = "phy-vendor-calibration-ieee802154-vendor-spread"
+description = "Expand the pinned vendor IEEE 802.15.4 cold reference spread without production boots"
+role = "investigation"
+repetitions = 1
+tags = ["phy", "calibration", "air-strict"]
+
+[phy]
+kind = "vendor-calibration"
+lifecycle = "ieee802154"
+boots = 30
+vendor_only = true
