@@ -55,6 +55,10 @@ without vendor radio binaries. Decisions are in
   facts, never code or verbatim tables
   ([docs/source-policy.md](docs/source-policy.md)); the Bluetooth LE hardware
   engine is the one exception and keeps what it takes from `esp32s31-bt-lib`.
+  To find something in vendor libraries, ROM or a vendor image (register
+  accesses, callers including indirect ones, data), try Blobray
+  (`cargo blobray`, [tools/analysis/blobray-README.md](tools/analysis/blobray-README.md))
+  before symbol and relocation searches; report what it cannot answer.
 - **GitHub.** Act only in the owner's repositories; never write to upstream
   projects (fixes to esp-hal go to the owner's fork).
 - **Decisions.** Only the owner decides. Add or change a line in
