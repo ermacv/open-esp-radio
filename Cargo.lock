@@ -4378,6 +4378,7 @@ dependencies = [
 name = "oer-vendor-phy"
 version = "0.1.0"
 dependencies = [
+ "heapless 0.9.3",
  "hex",
  "oer-analysis-elf",
  "oer-hil-lab",
@@ -4390,6 +4391,8 @@ dependencies = [
  "oer-os-durable",
  "oer-os-process",
  "oer-os-toolchain",
+ "oer-time",
+ "oer-time-virtual",
  "serde",
  "serde_json",
  "tempfile",

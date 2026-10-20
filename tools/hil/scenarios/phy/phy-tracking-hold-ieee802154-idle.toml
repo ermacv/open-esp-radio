@@ -1,0 +1,10 @@
+schema = 5
+id = "phy-tracking-hold-ieee802154-idle"
+description = "Measure forced production tracking brackets with IEEE 802.15.4 receiving in idle"
+role = "investigation"
+repetitions = 3
+tags = ["phy", "tracking-hold", "air-strict"]
+
+[phy]
+kind = "tracking-hold"
+ticks = 5

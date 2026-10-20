@@ -5,6 +5,7 @@
 #[cfg(not(feature = "diagnostic-phy"))]
 compile_error!("build the diagnostic-phy image class through cargo hil");
 
+mod hold;
 mod ieee802154;
 mod projection;
 mod radio;
@@ -42,11 +43,15 @@ static SLOT: RequestSlot<Request, Answer> = RequestSlot::new(&DOORBELL, 1);
 oer_hil_agent::requests! {
     enum Request(sessions = false) {
         Prepare(PrepareCapture), Restart(RestartCaptureRadio), Stop(StopCapture),
+        HoldStart(StartTrackingHold), HoldGet(GetTrackingHold), HoldStop(StopTrackingHold),
         Calibration(ReadCalibrationProjection), Registers(ReadRegisterImage), Analog(ReadAnalogImage),
     }
 }
 
 enum Answer {
+    HoldStarted(HoldStarted),
+    HoldPage(TrackingHold),
+    HoldStopped(HoldStopped),
     Ready(CaptureReady),
     Restarted(CaptureRestarted),
     Stopped(CaptureStopped),
@@ -181,6 +186,15 @@ async fn dispatch(mut poster: Poster<Request, Answer>) {
             };
         }
         match answer {
+            Answer::HoldStarted(value) => {
+                send!(value);
+            }
+            Answer::HoldPage(value) => {
+                send!(value);
+            }
+            Answer::HoldStopped(value) => {
+                send!(value);
+            }
             Answer::Ready(value) => {
                 send!(value);
             }
@@ -209,7 +223,23 @@ async fn dispatch(mut poster: Poster<Request, Answer>) {
 #[embassy_executor::task]
 async fn serve_radio(mut radio: radio::Radio) {
     loop {
-        poll_fn(|cx| DOORBELL.poll_rung(cx)).await;
+        if let Some(deadline) = radio.hold_deadline() {
+            use core::future::Future;
+            use oer_time::Timer;
+            let mut timer = core::pin::pin!(oer_embassy_time::EmbassyClock.wait_until(deadline));
+            poll_fn(|cx| {
+                if DOORBELL.poll_rung(cx).is_ready() {
+                    core::task::Poll::Ready(())
+                } else {
+                    timer.as_mut().poll(cx)
+                }
+            })
+            .await;
+        } else {
+            poll_fn(|cx| DOORBELL.poll_rung(cx)).await;
+        }
+        // A started PHY future always reaches its terminal result before a command.
+        radio.service_hold().await;
         if let Some((request, response)) = SLOT.take_request() {
             let answer = radio
                 .request(request)

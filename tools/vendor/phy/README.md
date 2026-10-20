@@ -9,7 +9,7 @@ compares are the chip-neutral
 [`oer-vendor-phy`](../../hil/link/src/capture).
 
 Its `scenario` and `workload` modules run the manually selected `[phy]`
-calibration investigation. The S31 comparison crate composes the family into
+calibration and tracking-hold investigations. The S31 comparison crate composes the family into
 `cargo hil`; every flash and restore uses the run's leased board image port.
 `phy-vendor-calibration-cold` and `phy-vendor-calibration-restart` use ten
 alternating boots per side. `phy-vendor-calibration-smoke` uses one pair with an RF restart and exercises
@@ -25,3 +25,10 @@ production comparison.
 ```console
 cargo test -p oer-vendor-phy
 ```
+
+The `tracking-hold` kind requests 1–16 forced due ticks of an active diagnostic
+154 RX session. `phy-tracking-hold-ieee802154-idle` uses five ticks per boot and
+three repetitions. It preserves coarse raw intervals, validates committed
+branches, reports per-repetition maxima and requires policy restoration plus
+RF closure. Invalid pages or failed cleanup remain INCOMPLETE; no Wi-Fi traffic
+or idle hold is served by this workload.

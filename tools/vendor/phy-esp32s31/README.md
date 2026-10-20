@@ -60,3 +60,12 @@ Each run retains per-boot captures, console evidence, image digests, reference
 ESP-IDF revision, readable/unreadable registers and the complete comparison
 ranges. Calibration fields outside the committed relation remain uncovered.
 These captures compare state; they do not qualify RF quality or timing.
+
+`cargo hil run phy-tracking-hold-ieee802154-idle --chip esp32s31 --board s31-a`
+uses three repetitions of five forced due ticks on the diagnostic image, with
+154 RX active in idle. Observations retain boot/session-correlated raw intervals,
+branch completion, per-repetition maxima (microseconds in Tracking, RFPLL,
+common, transmit, baseband-off order), debug restoration and final RF closure.
+Incomplete evidence fails. These are observed request intervals, not a measured
+RF exclusion guarantee; nested intervals are not additive. No Wi-Fi hold workload
+is exposed by this family.

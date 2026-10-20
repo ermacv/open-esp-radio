@@ -40,6 +40,8 @@ pub struct Radio {
     projection: [u16; projection::WORDS],
     registered: bool,
     poisoned: bool,
+    hold: Option<crate::hold::Hold>,
+    hold_id: u32,
 }
 
 impl Radio {
@@ -73,11 +75,13 @@ impl Radio {
             projection: [0; projection::WORDS],
             registered: false,
             poisoned: false,
+            hold: None,
+            hold_id: 0,
         }
     }
 
     pub async fn request(&mut self, request: Request) -> Result<Answer> {
-        if self.poisoned {
+        if self.poisoned && !matches!(request, Request::HoldGet(_) | Request::HoldStop(_)) {
             return Err(RejectReason::InvalidState);
         }
         let result = self.execute(request).await;
@@ -89,7 +93,69 @@ impl Radio {
     }
 
     async fn execute(&mut self, request: Request) -> Result<Answer> {
+        if self.hold.is_some() && !matches!(request, Request::HoldGet(_) | Request::HoldStop(_)) {
+            return Err(RejectReason::InvalidState);
+        }
         match request {
+            Request::HoldStart(config) => {
+                if !config.valid() {
+                    return Err(RejectReason::InvalidConfiguration);
+                }
+                let current = self.current(config.epoch)?;
+                if !matches!(current.radio, CaptureRadio::Ieee802154 { .. }) {
+                    return Err(RejectReason::InvalidConfiguration);
+                }
+                let saved = self
+                    .domain
+                    .attachment()
+                    .phy_state()
+                    .map_err(|_| RejectReason::InvalidState)?
+                    .temperature_tracking_debug();
+                let id = self
+                    .hold_id
+                    .checked_add(1)
+                    .ok_or(RejectReason::InvalidState)?;
+                self.domain
+                    .attachment_mut()
+                    .set_temperature_tracking_debug(3, 0)
+                    .map_err(|_| RejectReason::InvalidState)?;
+                self.hold_id = id;
+                let started = HoldStarted {
+                    id,
+                    epoch: current.epoch,
+                    ticks: config.ticks,
+                    channel: current.channel,
+                    radio: current.radio,
+                    force: [3, 0],
+                    period_micros: oer_esp32s31_phy::state::client::DEFAULT_PLL_TRACK_PERIOD_MICROS,
+                };
+                self.hold = Some(crate::hold::Hold::new(started, [saved.first, saved.second]));
+                Ok(Answer::HoldStarted(started))
+            }
+            Request::HoldGet(config) => {
+                let hold = self.hold.as_ref().ok_or(RejectReason::InvalidState)?;
+                Ok(Answer::HoldPage(hold.page(config)?))
+            }
+            Request::HoldStop(config) => {
+                let hold = self.hold.as_ref().ok_or(RejectReason::InvalidState)?;
+                if config.id != hold.started.id {
+                    return Err(RejectReason::InvalidState);
+                }
+                let mut hold = self.hold.take().ok_or(RejectReason::InvalidState)?;
+                hold.running = false;
+                let restored = self
+                    .domain
+                    .attachment_mut()
+                    .set_temperature_tracking_debug(hold.saved_debug[0], hold.saved_debug[1])
+                    .is_ok();
+                Ok(Answer::HoldStopped(HoldStopped {
+                    id: config.id,
+                    samples: hold.samples.len() as u8,
+                    complete: !hold.invalid
+                        && hold.samples.len() == usize::from(hold.started.ticks),
+                    debug_restored: restored,
+                }))
+            }
             Request::Prepare(config) => {
                 if !config.valid() {
                     return Err(RejectReason::InvalidConfiguration);
@@ -234,6 +300,65 @@ impl Radio {
                 }))
             }
         }
+    }
+
+    pub fn hold_deadline(&self) -> Option<oer_time::Instant> {
+        self.hold
+            .as_ref()
+            .filter(|hold| hold.running)
+            .map(|hold| hold.deadline)
+    }
+
+    pub async fn service_hold(&mut self) {
+        let Some(hold) = self.hold.as_mut().filter(|hold| hold.running) else {
+            return;
+        };
+        if EmbassyClock.now() < hold.deadline {
+            return;
+        }
+        hold.deadline = EmbassyClock
+            .now()
+            .saturating_add(oer_time::Duration::from_micros(
+                oer_esp32s31_phy::state::client::DEFAULT_PLL_TRACK_PERIOD_MICROS,
+            ));
+        let mut observer = crate::hold::Observer::new(hold.samples.len() as u8 + 1);
+        let tracked = track_concurrent_phy::<(), RomShortDelay, _>(
+            &mut self.domain,
+            &mut (),
+            &EmbassyClock,
+            &mut observer,
+        )
+        .await;
+        let (committed, failed) = match tracked {
+            Ok(ConcurrentTrackingTick::NotDue) => return,
+            Ok(ConcurrentTrackingTick::Tracked(outcome)) => {
+                let committed = u8::from(outcome.rfpll_corrected)
+                    | (u8::from(outcome.calibration.common) << 1)
+                    | (u8::from(outcome.calibration.transmit) << 2);
+                (
+                    committed,
+                    outcome.tracking_inhibited
+                        || outcome.clients.wifi()
+                        || !outcome.clients.bluetooth_ieee802154()
+                        || committed != 7,
+                )
+            }
+            failure => {
+                // Terminal diagnostic evidence only, outside every measured interval.
+                oer_esp32s31_board::rom::print_fmt(format_args!(
+                    "OPEN_RADIO_HIL hold=FAIL tick={} result={failure:?}\n",
+                    hold.samples.len() + 1,
+                ));
+                self.poisoned = true;
+                (0, true)
+            }
+        };
+        let sample = observer.0.finish(committed, failed);
+        hold.invalid |= sample.invalid;
+        if hold.samples.push(sample).is_err() {
+            hold.invalid = true;
+        }
+        hold.running = !hold.invalid && hold.samples.len() < usize::from(hold.started.ticks);
     }
 
     fn current(&self, epoch: u32) -> Result<CaptureReady> {

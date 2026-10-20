@@ -6,7 +6,18 @@ mod capture;
 pub use capture::*;
 
 #[cfg(feature = "phy")]
+mod hold;
+#[cfg(feature = "phy")]
+pub use hold::*;
+
+#[cfg(feature = "phy")]
 crate::messages! {
+    endpoint StartTrackingHold = "phy/hold/start" => HoldStarted;
+    topic HoldStarted = "phy/hold/started";
+    endpoint GetTrackingHold = "phy/hold/get" => TrackingHold;
+    topic TrackingHold = "phy/hold/samples";
+    endpoint StopTrackingHold = "phy/hold/stop" => HoldStopped;
+    topic HoldStopped = "phy/hold/stopped";
     endpoint PrepareCapture = "phy/capture/prepare" => CaptureReady;
     topic CaptureReady = "phy/capture/ready";
     endpoint RestartCaptureRadio = "phy/capture/restart" => CaptureRestarted;
