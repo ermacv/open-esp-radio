@@ -46,7 +46,8 @@ without vendor radio binaries. Decisions are in
   each with a static message. Panic lints warn; a crate moves to `deny` when
   its contract freezes ([docs/decisions.md](docs/decisions.md)).
 - **Generated files** (`*/pac-raw/src/lib.rs`, `*/pac/src/generated.rs`,
-  `registers/**/published/*`, `vendor/facts/**`, all below `chips/`) are
+  `registers/**/published/*`, `vendor/facts/**`, `vendor/phy-baselines/*/*.json`,
+  all below `chips/`) are
   never read whole or edited by hand: grep them by path, regenerate them.
   `chips/*/layout/linker/dma-window.x` is small and may be read, but it is
   regenerated, never edited.
