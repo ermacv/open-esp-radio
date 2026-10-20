@@ -35,7 +35,7 @@ def check(streams):
     assert ['cfg-closed', 'true'] in main
     assert one(r for r in main if r[0] == 'write-summary')[1] == 'closed=true'
     assert one(r for r in main if r[0] == 'dispatch' and r[1] == SITE)[2:] == [
-        f'Constant {{ value: {0x5009f3a0} }}', 'Unknown', '2']
+        f'Constant {{ value: {0x5009f3a0} }}', 'Unknown', '2', '0']
     assert f'Constant {{ value: {0x5009f3a0} }}' in one(
         r for r in main if r[:2] == ['dispatch-inputs', SITE])[2]
     # Every followed target is exactly a word of the existing relocated,

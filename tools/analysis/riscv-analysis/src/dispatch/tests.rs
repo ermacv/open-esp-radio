@@ -25,7 +25,11 @@ impl TableEntries for TwoTables {
             _ => return Ok(None),
         };
         let reserved = memory.reserve(24, c.position())?;
-        Ok(Some(TableWords { entries, reserved }))
+        Ok(Some(TableWords {
+            source: TableSource::Bound,
+            entries,
+            reserved,
+        }))
     }
 }
 
@@ -190,6 +194,7 @@ fn records(bounded: bool) -> Vec<FunctionRecord> {
             },
             index: AbstractValue::Expression { id: 0 },
             scale: 2,
+            displacement: 0,
         },
         FunctionRecord::Instruction {
             offset: 0x14,
@@ -247,7 +252,11 @@ impl TableEntries for Facts {
             control.checkpoint(1)?;
             entries.push(word);
         }
-        Ok(Some(TableWords { entries, reserved }))
+        Ok(Some(TableWords {
+            source: TableSource::Bound,
+            entries,
+            reserved,
+        }))
     }
 }
 
@@ -444,6 +453,7 @@ fn an_unknown_index_proves_only_a_delimited_table_and_claims_no_case() {
             assert_eq!(count, None);
             control.checkpoint(3)?;
             Ok(Some(TableWords {
+                source: TableSource::Labelled,
                 entries: vec![0x20, 0x30, 0x38],
                 reserved: memory.reserve(24, control.position())?,
             }))
@@ -488,4 +498,245 @@ fn a_table_is_the_same_whatever_case_value_a_pass_shows() {
         entries: vec![0x20, 0x30],
     };
     assert!(!source.same(&known, &other));
+}
+
+/// Exact starts supplied by the build, with distinguishable proof sources.
+struct AddressTables(Vec<(u32, TableSource, Vec<u64>)>);
+
+impl TableEntries for AddressTables {
+    fn entries<'m>(
+        &self,
+        base: &AbstractValue,
+        count: Option<u32>,
+        _: u32,
+        memory: &'m WorkingMemory,
+        control: &mut dyn RunControl,
+    ) -> Result<Option<TableWords<'m>>> {
+        let (AbstractValue::Constant { value: address } | AbstractValue::ImageAddress { address }) =
+            base
+        else {
+            return Ok(None);
+        };
+        let Some((_, source, words)) = self.0.iter().find(|(start, _, _)| start == address) else {
+            return Ok(None);
+        };
+        if *source == TableSource::Bound && count.is_none() {
+            return Ok(None);
+        }
+        let count = count
+            .map_or(words.len(), |count| count as usize)
+            .min(words.len());
+        control.checkpoint(count as u64)?;
+        Ok(Some(TableWords {
+            source: *source,
+            entries: words[..count].to_vec(),
+            reserved: memory.reserve(count as u64 * 8, control.position())?,
+        }))
+    }
+}
+
+fn at(value: u32) -> AbstractValue {
+    AbstractValue::Constant { value }
+}
+
+fn displaced_records(base: AbstractValue, d: i32, bounded: bool) -> Vec<FunctionRecord> {
+    let mut records = records(bounded);
+    for record in &mut records {
+        if let FunctionRecord::Dispatch {
+            base: table,
+            displacement,
+            ..
+        } = record
+        {
+            *table = base.clone();
+            *displacement = d;
+        }
+    }
+    records
+}
+
+fn prove(records: &[FunctionRecord], facts: &dyn TableEntries) -> Vec<JumpDispatch> {
+    jump_tables(records, TEXT, EXTENT, facts, memory(), &mut || Ok(()))
+        .unwrap()
+        .tables
+}
+
+fn table(first_case: Option<i64>) -> Vec<JumpDispatch> {
+    vec![JumpDispatch::Table {
+        site: 0x14,
+        first_case,
+        entries: vec![0x30, 0x20, 0x30],
+    }]
+}
+
+#[test]
+fn a_label_at_the_base_proves_the_whole_displaced_chain_and_rebases_cases() {
+    let facts = AddressTables(vec![(
+        0x5000,
+        TableSource::Labelled,
+        vec![0x30, 0x20, 0x30],
+    )]);
+    let mut records = displaced_records(at(0x5000), -8, false);
+    assert_eq!(prove(&records, &facts), table(Some(2)));
+    records.push(FunctionRecord::Expression {
+        id: 4,
+        offset: 0,
+        expression: Expression::Integer {
+            op: IntegerOp::Mul,
+            left: AbstractValue::Expression { id: 0 },
+            right: at(3),
+        },
+    });
+    // A genuinely unknown index or an unrecognized expression makes no case claim.
+    for index in [AbstractValue::Unknown, AbstractValue::Expression { id: 4 }] {
+        for record in &mut records {
+            if let FunctionRecord::Dispatch { index: value, .. } = record {
+                *value = index.clone();
+            }
+        }
+        assert_eq!(prove(&records, &facts), table(None));
+    }
+    // The load bias also composes with an index already rebased by eight.
+    if let Some(FunctionRecord::Expression { expression, .. }) = records.last_mut() {
+        *expression = Expression::Integer {
+            op: IntegerOp::Add,
+            left: AbstractValue::Expression { id: 0 },
+            right: at((-8_i32) as u32),
+        };
+    }
+    assert_eq!(prove(&records, &facts), table(Some(10)));
+}
+
+#[test]
+fn a_label_at_the_effective_start_keeps_the_original_case_mapping() {
+    let facts = AddressTables(vec![(
+        0x5000,
+        TableSource::Labelled,
+        vec![0x30, 0x20, 0x30],
+    )]);
+    for (base, d) in [(0x5008, -8), (0x4ff8, 8)] {
+        assert_eq!(
+            prove(&displaced_records(at(base), d, false), &facts),
+            table(Some(0))
+        );
+    }
+}
+
+#[test]
+fn ambiguous_labels_and_invalid_label_biases_prove_nothing() {
+    let both = AddressTables(vec![
+        (0x5000, TableSource::Labelled, vec![0x30, 0x20, 0x30]),
+        (0x4ff8, TableSource::Labelled, vec![0x30, 0x20, 0x30]),
+    ]);
+    assert!(prove(&displaced_records(at(0x5000), -8, false), &both).is_empty());
+    let facts = AddressTables(vec![(
+        0x5000,
+        TableSource::Labelled,
+        vec![0x30, 0x20, 0x30],
+    )]);
+    for d in [-6, 4, -((MAX_ENTRIES as i32 + 1) * 4), i32::MIN] {
+        assert!(
+            prove(&displaced_records(at(0x5000), d, false), &facts).is_empty(),
+            "d={d}"
+        );
+    }
+    assert!(
+        prove(
+            &displaced_records(AbstractValue::Unknown, -8, false),
+            &facts
+        )
+        .is_empty()
+    );
+    // Bias validation uses the entry step, including scales other than two.
+    assert_eq!(displaced_cases(-6, 1), Some(3));
+    assert_eq!(displaced_cases(-4, 3), None);
+    assert_eq!(displaced_cases(-8, 3), Some(1));
+    assert_eq!(displaced_cases(-4, 32), None);
+    assert_eq!(
+        displaced_cases(-(MAX_ENTRIES as i32 * 4), 2),
+        Some(MAX_ENTRIES)
+    );
+}
+
+#[test]
+fn an_object_or_bound_proves_only_the_effective_start() {
+    for source in [TableSource::DataObject, TableSource::Bound] {
+        let facts = AddressTables(vec![(0x5000, source, vec![0x30, 0x20, 0x30, 0x80])]);
+        let bounded = source == TableSource::Bound;
+        // A bound reads exactly three words, excluding the out-of-function fourth word.
+        let objects = AddressTables(vec![(0x5000, source, vec![0x30, 0x20, 0x30])]);
+        assert_eq!(
+            prove(
+                &displaced_records(at(0x5008), -8, bounded),
+                if bounded { &facts } else { &objects }
+            ),
+            table(Some(0))
+        );
+        // A label-style interpretation is never available to these sources.
+        assert!(prove(&displaced_records(at(0x5000), -8, bounded), &objects).is_empty());
+        // A non-start inside a sized object is not a table start without a bound.
+        assert!(prove(&displaced_records(at(0x5000), 4, false), &objects).is_empty());
+    }
+}
+
+#[test]
+fn effective_addresses_wrap_at_rv32_width() {
+    let facts = AddressTables(vec![(0, TableSource::DataObject, vec![0x30, 0x20, 0x30])]);
+    for base in [
+        at(u32::MAX - 3),
+        AbstractValue::ImageAddress {
+            address: u32::MAX - 3,
+        },
+    ] {
+        assert_eq!(
+            prove(&displaced_records(base, 4, false), &facts),
+            table(Some(0))
+        );
+    }
+    assert!(
+        displaced(
+            &AbstractValue::Symbol {
+                symbol: table_symbol(),
+                addend: i64::MAX
+            },
+            1
+        )
+        .is_none()
+    );
+    // Object relocations use the shifted symbol addend with the same count.
+    let records = displaced_records(
+        AbstractValue::Symbol {
+            symbol: table_symbol(),
+            addend: 8,
+        },
+        -8,
+        true,
+    );
+    assert_eq!(prove(&records, &TwoTables), table(Some(0)));
+}
+
+#[test]
+fn every_base_must_prove_its_own_candidate_before_forming_a_target_set() {
+    let facts = AddressTables(vec![
+        (0x5000, TableSource::Labelled, vec![0x30, 0x20, 0x30]),
+        (0x6000, TableSource::Labelled, vec![0x38, 0x30, 0x20]),
+    ]);
+    let bases = |second| AbstractValue::Alternatives {
+        values: ValueAlternatives::new(
+            [0x5008, second]
+                .map(|value| ValueAlternative::Constant { value })
+                .to_vec(),
+        )
+        .unwrap(),
+    };
+    assert_eq!(
+        prove(&displaced_records(bases(0x6000), -8, false), &facts),
+        [JumpDispatch::TargetSet {
+            site: 0x14,
+            targets: vec![0x20, 0x30, 0x38],
+        }]
+    );
+    assert!(prove(&displaced_records(bases(0x7000), -8, false), &facts).is_empty());
+    let outside = AddressTables(vec![(0x6000, TableSource::Labelled, vec![0x20, 0x80])]);
+    assert!(prove(&displaced_records(at(0x6000), -8, false), &outside).is_empty());
 }

@@ -164,7 +164,11 @@ impl TableEntries for ObjectTables<'_> {
                 _ => break,
             }
         }
-        Ok(Some(TableWords { entries, reserved }))
+        Ok(Some(TableWords {
+            source: TableSource::Bound,
+            entries,
+            reserved,
+        }))
     }
 }
 
@@ -211,13 +215,14 @@ impl TableEntries for ImageTables<'_, '_> {
             entries.push(u64::from(entry));
             Ok(())
         };
-        if let Some(words) = image.jump_table(base) {
+        let source = if let Some(words) = image.jump_table(base) {
             for (i, word) in words.enumerate() {
                 if limit.is_some_and(|limit| i as u64 == limit) {
                     break;
                 }
                 push(word, control)?;
             }
+            TableSource::Labelled
         } else {
             let words = match (limit, image.data_object(base)) {
                 (Some(limit), _) => limit,
@@ -230,8 +235,17 @@ impl TableEntries for ImageTables<'_, '_> {
                 };
                 push(word, control)?;
             }
-        }
-        Ok(Some(TableWords { entries, reserved }))
+            if limit.is_some() {
+                TableSource::Bound
+            } else {
+                TableSource::DataObject
+            }
+        };
+        Ok(Some(TableWords {
+            source,
+            entries,
+            reserved,
+        }))
     }
 }
 
@@ -328,7 +342,10 @@ mod tests {
         tables
             .entries(&base, count, text, &memory, &mut || Ok(()))
             .unwrap()
-            .map(|words| words.entries)
+            .map(|words| {
+                assert_eq!(words.source, TableSource::Bound);
+                words.entries
+            })
     }
 
     #[test]

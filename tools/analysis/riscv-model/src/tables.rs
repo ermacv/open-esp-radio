@@ -45,10 +45,20 @@ impl JumpDispatch {
 /// A table's entries, admitted in the working memory of the operation that
 /// asked for them.
 pub struct TableWords<'m> {
+    /// The build fact that establishes this table's start and extent.
+    pub source: TableSource,
     /// The entries in index order: code offsets of the dispatching function's
     /// section in an object, code addresses in an image.
     pub entries: Vec<u64>,
     pub reserved: MemoryReservation<'m>,
+}
+
+/// How the build's facts delimit a table.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TableSource {
+    Labelled,
+    DataObject,
+    Bound,
 }
 
 /// A build whose facts hold no table: every dispatch stays a gap.

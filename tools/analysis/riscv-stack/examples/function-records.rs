@@ -172,8 +172,11 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
                 base,
                 index: table_index,
                 scale,
+                displacement,
             } => {
-                println!("dispatch\t{offset:#010x}\t{base:?}\t{table_index:?}\t{scale}");
+                println!(
+                    "dispatch\t{offset:#010x}\t{base:?}\t{table_index:?}\t{scale}\t{displacement}"
+                );
                 println!(
                     "dispatch-inputs\t{offset:#010x}\t{:?}",
                     index

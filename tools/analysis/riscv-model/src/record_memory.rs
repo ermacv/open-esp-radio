@@ -124,6 +124,38 @@ impl std::ops::Deref for RecordBuffer<'_> {
 mod tests {
     use super::*;
     #[test]
+    fn displaced_dispatch_accounts_values_and_round_trips_its_inline_displacement() {
+        let memory = WorkingMemory::new(64 * 1024).unwrap();
+        let base = AbstractValue::Alternatives {
+            values: ValueAlternatives::new(vec![
+                ValueAlternative::Constant { value: 0x5000 },
+                ValueAlternative::Constant { value: 0x6000 },
+            ])
+            .unwrap(),
+        };
+        let payload = base.allocated_bytes();
+        let record = FunctionRecord::Dispatch {
+            offset: 0x14,
+            base,
+            index: AbstractValue::Unknown,
+            scale: 2,
+            displacement: -8,
+        };
+        // The displacement is inline, covered by the retained enum's size.
+        assert_eq!(record.allocated_bytes(), payload);
+        assert_eq!(
+            serde_json::from_slice::<FunctionRecord>(&serde_json::to_vec(&record).unwrap())
+                .unwrap(),
+            record
+        );
+        let mut saved = RecordBuffer::new(&memory);
+        saved.push(record, RunPosition::default()).unwrap();
+        assert!(memory.used() >= payload + size_of::<FunctionRecord>() as u64);
+        drop(saved);
+        assert_eq!(memory.used(), 0);
+    }
+
+    #[test]
     fn aligned_value_round_trips_and_accounts_its_boxed_payload() {
         let memory = WorkingMemory::new(64 * 1024).unwrap();
         let record = FunctionRecord::AlignedValue {

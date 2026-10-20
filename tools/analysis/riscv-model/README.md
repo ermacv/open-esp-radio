@@ -65,12 +65,13 @@ bounded reads of captured content; `hash_source` identifies it.
 The [table-entries port](src/tables.rs) `TableEntries` answers what a jump
 table holds, given its base (an object's symbol or an image address) and,
 when a bounds check states it, its entry count: the entries in index order,
-admitted in the caller's `WorkingMemory` (`TableWords`) and charged to its
+admitted in the caller's `WorkingMemory` (`TableWords`, with a `TableSource`
+of `Labelled`, `DataObject` or `Bound`) and charged to its
 `RunControl`. A build's facts implement it, as `ImageMemory` answers
 constants; `NoTables` is a build whose facts hold no table. The value
 analysis locates tables for it with `FunctionRecord::Dispatch`: a jump
-through `load4[base + (index << scale)]` whose load, addition and scaling
-its own block computes, from a constant, image-address or symbol base.
+through `load4[base + (index << scale) + displacement]` whose load, addition and scaling
+its unique predecessor chain computes, from a constant, image-address or symbol base.
 
 [Record navigation](src/navigation.rs) `FunctionIndex` borrows one function's
 records and admits expression, symbol-reference, call-input and transfer indexes

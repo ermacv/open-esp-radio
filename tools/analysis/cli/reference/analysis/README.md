@@ -52,7 +52,7 @@ the operation, and a completed analysis is never discarded for them. A
 relocation to a `.L` local label in a read-only string section
 (`SHF_STRINGS`) shows the escaped text there in quotes; labels of other data,
 such as jump tables, get no text. The JSON document is
-`{"schema":8,"inputs":[...],"abi":...,"call_returns":...,"read_only":[...],"functions":[...],"missing":[...]}`:
+`{"schema":9,"inputs":[...],"abi":...,"call_returns":...,"read_only":[...],"functions":[...],"missing":[...]}`:
 an `analyzed` function carries its coverage, its value-semantics summary,
 `complete` and every record (instructions, blocks, edges, references,
 expressions, values, memory accesses, conditions and return values); a
@@ -315,9 +315,10 @@ with one exception the build's facts prove: a compiler jump table.
 A compiler dispatches an RV32 `switch` through a read-only table:
 `lui`/`addi` of the table, `slli index, 2`, `add` (or `sh2add`), `lw`,
 `jalr zero, 0(target)`. The value analysis records each such jump as a
-`dispatch` (`{offset, base, index, scale}`): the target is the word loaded
-from `base + (index << scale)`, the load, addition and scaling in the jump's
-own block; `base` is the constant, image address or object symbol the
+`dispatch` (`{offset, base, index, scale, displacement}`): the target is the
+word loaded from `base + (index << scale) + displacement`, with the load,
+addition and scaling on the jump's unique predecessor chain; `base` is the
+constant, image address or object symbol the
 addition reads, so a base the block or a loop's preheader forms gives the
 same record on every pass even when the index merges to an unknown value.
 A dispatch's table is proven by the build's facts (`oer-analysis-riscv-model`'s
@@ -341,6 +342,17 @@ A dispatch's table is proven by the build's facts (`oer-analysis-riscv-model`'s
   object is its words; with a bound, the bound's count of read-only words.
   These need no relocations: an image linked without them proves every
   such table but a labelled one no check bounds.
+
+The dispatch records the load's immediate byte `displacement`. Unlabelled
+tables are read from `base + displacement`, wrapping at RV32 width; a sized
+data object must start at that effective address. A labelled table has two
+candidate starts: `L1 = base + displacement` and, for a negative displacement,
+`L2 = base`. Exactly one must start a labelled table; two labels are ambiguous
+and prove nothing. L1 uses the ordinary length rules. L2 requires
+`(-displacement) % (1 << scale) == 0` and at most 4096 skipped indices, uses
+the whole labelled chain, and adds `(-displacement) >> scale` to a known
+`first_case`; an unknown `first_case` remains unknown. A data object or a bound
+cannot justify L2. Each possible base must prove its own complete table.
 
 Every entry must land inside the function. The function is then analyzed
 again with those targets as jumps; passes repeat while each proves again
