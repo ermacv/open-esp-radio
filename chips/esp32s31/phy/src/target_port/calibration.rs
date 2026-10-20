@@ -691,9 +691,9 @@ fn terminal_event<T, E>(result: &Result<T, E>) -> crate::tracking::observation::
     }
 }
 
-/// Execute the complete TX-DC/PWDET root as one vendor-shaped blocking
-/// transaction, including measurement and restoration. The caller retains
-/// physical access until terminal completion. Returning a target error or a
+/// Execute the complete TX-DC/PWDET root as one admitted transaction,
+/// including measurement and restoration. The caller retains physical access
+/// across SAR timer waits until terminal completion. Returning a target error or a
 /// typed failed action does not establish a safe RF state.
 #[inline(never)]
 pub async fn tx_dc_pwdet_init<D: PhyShortDelay, O: PhyTargetObserver>(

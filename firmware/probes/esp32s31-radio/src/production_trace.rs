@@ -428,6 +428,11 @@ oer_probe_macros::probe! {
                     },
                 ),
             )) => 5,
+            PhyTxDcPwdetAction::Failed(PhyTxDcPwdetFailure::Search(
+                PhyTxDcPwdetSearchFailure::ToneSar(
+                    oer_esp32s31_phy::tx::calibration::PhyToneSarFailure::ReadyDeadlineExceeded { .. },
+                ),
+            )) => 8,
             PhyTxDcPwdetAction::Failed(_) => 4,
             _ => 7,
         }

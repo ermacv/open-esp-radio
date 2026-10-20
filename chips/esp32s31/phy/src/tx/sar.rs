@@ -1,8 +1,10 @@
 //! Timer-woken TX detector readiness while the caller retains its PHY owner.
 use oer_time::{Duration, Timer};
 
-// Acquisition watchdog only; replace with the production bound after the tail measurement.
-pub(crate) const READY_LIMIT: Duration = Duration::from_micros(100_000);
+// MEASUREMENT: s31-a run 1792521908966-002e2465, 21,512 conversions,
+// 100 forced tracking ticks, post-2-us-settle ready observations <= 20 us;
+// none censored by the 100-ms acquisition watchdog. Keep twice that maximum.
+pub(crate) const READY_LIMIT: Duration = Duration::from_micros(40);
 const SAMPLE_INTERVAL: Duration = Duration::from_micros(1);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

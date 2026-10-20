@@ -332,6 +332,9 @@ pub struct PhyToneSarOutcome {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyToneSarFailure {
+    /// The timer-woken direct TX path did not observe readiness by its
+    /// measured elapsed-time deadline. No SAR result was consumed.
+    ReadyDeadlineExceeded { measurement: u8, sample: u8 },
     /// Readiness was not observed within the bounded sample budget. This is
     /// independent of elapsed time and must not be reported as a timer expiry.
     ReadyObservationLimit {

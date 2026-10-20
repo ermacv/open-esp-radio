@@ -151,11 +151,10 @@ impl PhyTxDcPwdetSearchTransition {
         }
     }
 
-    /// Execute the current archive's blocking search shape directly while the
-    /// caller retains exclusive physical PHY access. The semantic transition
-    /// remains available for host verification, but production does not
-    /// materialize an action/completion enum for every PBus write, settle or
-    /// SAR status sample.
+    /// Execute the current archive's search while retaining exclusive physical
+    /// PHY access, including across the timer-woken SAR readiness phase.
+    /// PBus writes and minimum settles stay direct; the semantic transition
+    /// remains available for host verification.
     #[cfg(target_arch = "riscv32")]
     pub(crate) async fn execute_target_direct(
         &mut self,
@@ -216,10 +215,9 @@ impl PhyTxDcPwdetSearchTransition {
                         if !waited.ready {
                             observe_wait(waited.elapsed_micros, waited.observations, false);
                             return Ok(Err(PhyTxDcPwdetSearchFailure::ToneSar(
-                                PhyToneSarFailure::ReadyObservationLimit {
+                                PhyToneSarFailure::ReadyDeadlineExceeded {
                                     measurement,
                                     sample,
-                                    observations: waited.observations,
                                 },
                             )));
                         }
@@ -795,11 +793,10 @@ impl PhyTxDcPwdetTransition {
         }
     }
 
-    /// Execute current `phy_txdc_cal_pwdet_init` as one blocking RF
-    /// transaction after the supervisor has granted exclusive physical PHY
-    /// access. This is the production target path: the semantic transition is
-    /// retained for host verification, while per-edge action, binding and
-    /// completion values stay out of the calibration hot loop.
+    /// Execute current `phy_txdc_cal_pwdet_init` as one admitted RF transaction.
+    /// Exclusive physical access remains borrowed across SAR timer waits.
+    /// The semantic transition is retained for host verification; other direct
+    /// hardware edges do not materialize per-edge action/completion values.
     #[cfg(target_arch = "riscv32")]
     pub(crate) async fn execute_target_direct(
         &mut self,
