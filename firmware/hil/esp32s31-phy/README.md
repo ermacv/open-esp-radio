@@ -29,6 +29,7 @@ the capture epoch. The frozen cold-calibration projection remains immutable.
 Stop closes RF; a stopped, stale or failed epoch cannot serve pages. A failed
 hardware operation poisons the diagnostic service until reset.
 
+The compared Wi-Fi capture keeps the MAC RX gate closed after cold MAC init.
 For Wi-Fi, StopCapture first runs a separate CCA experiment after the host's
 calibration, MMIO and analog reads. Four placed RX descriptors with 1664-byte
 buffers use the same promiscuous activation, walker-enable settle and MAC
