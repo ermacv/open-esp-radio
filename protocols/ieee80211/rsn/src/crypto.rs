@@ -14,8 +14,6 @@ pub const PSK_PBKDF2_ITERATIONS: u32 = 4096;
 pub const RSN_PTK_LEN: usize = 48;
 pub const RSN_KCK_LEN: usize = 16;
 pub const RSN_KEK_LEN: usize = 16;
-pub const RSN_KEY_DATA_CAPACITY: usize = 512;
-pub const RSN_UNWRAPPED_KEY_DATA_CAPACITY: usize = RSN_KEY_DATA_CAPACITY - 8;
 
 const RSN_ASSOCIATION_SECURITY_BINDING_LABEL: &[u8] = b"open-esp-radio AP association security IEs";
 

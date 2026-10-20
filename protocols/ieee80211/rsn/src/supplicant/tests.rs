@@ -2,12 +2,12 @@ use hmac::Mac;
 
 use super::*;
 use crate::{
-    aes::{
-        RsnUnwrappedKeyData, SoftwareAesKeyUnwrapError, software_aes128_key_unwrap,
-        software_aes128_key_wrap,
-    },
     frames::{RsnGtk, RsnPlainKeyData},
     keys::RsnKeyKind,
+};
+use oer_ieee80211_cipher::aes::{
+    RsnUnwrappedKeyData, SoftwareAesKeyUnwrapError, software_aes128_key_unwrap,
+    software_aes128_key_wrap,
 };
 
 const LOCAL: [u8; 6] = [1; 6];

@@ -8,7 +8,7 @@ use oer_ieee80211_wire::{
     address::IndividualAddress, frame::FrameControl, phy::LegacyRate, qos::WmmAccessCategory,
 };
 use oer_radio_port::{Disabled, Enabled, Ended, Owner, PortBody, run_port};
-use oer_ieee80211_runtime::lower_mac_owner::model::{
+use oer_ieee80211_model::{
     ModelBackend, ModelCaps, ModelResources, ModelSmall, ModelTypes,
 };
 

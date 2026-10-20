@@ -5,9 +5,9 @@ mod storage;
 mod transmit;
 
 use super::*;
+use oer_ieee80211_cipher::aes::software_aes128_key_unwrap;
 use oer_ieee80211_rsn::{
     EapolKeyMessage, OwnedEapolFrame, PtkContext, RsnInterface,
-    aes::software_aes128_key_unwrap,
     frames::{OwnedAssociationSecurityIes, OwnedRsnIe, RsnGtk, RsnTxFrame, parse_gtk_key_data},
     state::{RsnApAction, RsnTicket},
 };
@@ -1928,7 +1928,7 @@ fn the_bss_owns_one_monotonic_bip_frontier_and_refuses_invalid_group_frames() {
     let mut new_peer = BipReceiver::new(&delivered);
     assert_eq!(
         new_peer.verify(&second[..protected]),
-        Err(oer_ieee80211_rsn::bip::BipError::Replay)
+        Err(oer_ieee80211_cipher::bip::BipError::Replay)
     );
     service
         .observe_wpa2_transmit(message3_context, true, oer_time::Instant::from_micros(10))

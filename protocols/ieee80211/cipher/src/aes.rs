@@ -18,7 +18,8 @@ use ::aes::{
 };
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
-use crate::{RSN_KEY_DATA_CAPACITY, RSN_UNWRAPPED_KEY_DATA_CAPACITY};
+pub const RSN_KEY_DATA_CAPACITY: usize = 512;
+pub const RSN_UNWRAPPED_KEY_DATA_CAPACITY: usize = RSN_KEY_DATA_CAPACITY - 8;
 
 const RFC3394_IV: [u8; 8] = [0xa6; 8];
 

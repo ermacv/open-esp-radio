@@ -32,7 +32,7 @@ error[E0599]: the method `into_iter` exists for struct `ModelSubframesExecution<
 18 |         aggregate.into_iter(); // ui-error: E0599
    |                   ^^^^^^^^^ method cannot be called on `ModelSubframesExecution<'_, 'id>` due to unsatisfied trait bounds
    |
-  ::: src/lower_mac_owner/model.rs
+  ::: $WORKSPACE/protocols/ieee80211/model/src/lib.rs
    |
    | pub struct ModelSubframesExecution<'a, 'id, D = ModelBody> {
    | ---------------------------------------------------------- doesn't satisfy `ModelSubframesExecution<'_, 'id>: IntoIterator` or `ModelSubframesExecution<'_, 'id>: Iterator`

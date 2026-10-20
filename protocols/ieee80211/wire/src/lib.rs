@@ -69,3 +69,7 @@ pub mod vif;
 
 /// Checked management/data headers and receive admission.
 pub mod frame;
+
+/// Independent protected-management wire fixture for host tests.
+#[cfg(any(test, feature = "test-support"))]
+pub mod management_ccmp_vector;

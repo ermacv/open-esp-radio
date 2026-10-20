@@ -1,3 +1,35 @@
+#![no_std]
+#![forbid(unsafe_code)]
+#![deny(
+    clippy::let_underscore_must_use,
+    clippy::let_underscore_untyped,
+    clippy::arithmetic_side_effects,
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::unreachable,
+    clippy::todo,
+    clippy::unimplemented,
+    clippy::disallowed_macros
+)]
+#![cfg_attr(
+    test,
+    allow(
+        clippy::let_underscore_must_use,
+        clippy::let_underscore_untyped,
+        clippy::arithmetic_side_effects,
+        clippy::indexing_slicing,
+        clippy::panic,
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::unreachable,
+        clippy::todo,
+        clippy::unimplemented,
+        clippy::disallowed_macros,
+    )
+)]
+
 //! An in-memory lower-MAC backend on the phase shape
 //! (`oer_ieee80211_port::phase`), for host tests of the shape and of
 //! the code that drives it.
@@ -101,10 +133,14 @@
 //! feeds the test's virtual clock. Hardware backends
 //! must declare their own PPDU plus response/timeout bound.
 //!
-//! Unit tests and the `test-support` library use the same implementation,
+//! Unit tests and library consumers use the same implementation,
 //! including continuous RX and immediate recycling of its bounded slots. Only the unit-test module is under `cfg(test)`.
-//! `tests/model_feature.rs` exercises these paths through the public port
+//! Runtime's `tests/model_feature.rs` exercises these paths through the public port
 //! from a separate test crate, so the model itself is compiled without that cfg.
+
+extern crate alloc;
+#[cfg(test)]
+extern crate std;
 
 use alloc::{
     boxed::Box,
@@ -888,7 +924,7 @@ fn ccmp_header(number: u64, key_id: u8) -> [u8; 8] {
 /// ```compile_fail,E0597
 /// use oer_ieee80211_port::PhaseTypes;
 /// use oer_radio_port::{Disabled, Ended, Owner, PortBody};
-/// use oer_ieee80211_runtime::lower_mac_owner::model::{
+/// use oer_ieee80211_model::{
 ///     ModelBackend, ModelCaps, ModelContext, ModelResources, ModelTypes,
 /// };
 /// struct Machine;
@@ -908,16 +944,17 @@ fn ccmp_header(number: u64, key_id: u8) -> [u8; 8] {
 /// }
 /// ```
 ///
-/// A context can instead own the install-branded connection epoch. `None`
-/// covers operations before Connect, when Station has issued no epoch yet.
+/// A context can instead own an install-branded value. This example uses
+/// a local epoch brand; runtime consumers can choose their core's epoch type.
 /// The `Rc` also demonstrates that the portable contract imposes no `Send`:
 ///
 /// ```
 /// use std::rc::Rc;
 /// use oer_ieee80211_port::PhaseTypes;
 /// use oer_radio_port::{Disabled, Ended, Owner, PortBody};
-/// use oer_ieee80211_sta::epoch::LinkEpoch;
-/// use oer_ieee80211_runtime::lower_mac_owner::model::{
+/// use core::marker::PhantomData;
+/// struct LinkEpoch<'id>(PhantomData<fn(&'id ()) -> &'id ()>);
+/// use oer_ieee80211_model::{
 ///     ModelBackend, ModelCaps, ModelContext, ModelResources, ModelTypes,
 /// };
 /// struct Context<'id> { epoch: Option<LinkEpoch<'id>>, owner: Rc<()> }
@@ -1260,7 +1297,7 @@ pub struct ModelResources<'id> {
     /// The receive Block Ack slots both roles share.
     pub block_acks: [ModelBlockAckSlot<'id>; MODEL_BLOCK_ACK_SLOTS],
     /// The sole authority to construct this installation's arbiter.
-    pub arbiter_authority: oer_ieee80211_arbiter::ArbiterAuthority<'id, ModelPool<0>>,
+    pub arbiter_authority: oer_ieee80211_port::ArbiterAuthority<'id, ModelPool<0>>,
     /// The open transmit gate.
     pub gate: GateOpen<'id, ModelPool<0>>,
 }
@@ -1461,7 +1498,7 @@ pub enum ModelCryptoOperation {
 pub enum ModelCcmpError {
     MalformedHeader,
     MissingKey,
-    Authentication(oer_ieee80211_rsn::ccmp_mpdu::CcmpMpduError),
+    Authentication(oer_ieee80211_cipher::ccmp_mpdu::CcmpMpduError),
 }
 
 // ModelCaps declares Interface scope. These are hardware policy records,
@@ -1471,12 +1508,12 @@ pub enum ModelCcmpError {
 // Like key-table hardware, vacant interfaces retain their last mode; changing
 // it requires a new owner obtained through the complete returned slot bank.
 struct InterfaceAssociations {
-    station: oer_ieee80211_rsn::ccmp_mpdu::CcmpAssociation,
-    access_point: oer_ieee80211_rsn::ccmp_mpdu::CcmpAssociation,
+    station: oer_ieee80211_cipher::ccmp_mpdu::CcmpAssociation,
+    access_point: oer_ieee80211_cipher::ccmp_mpdu::CcmpAssociation,
 }
 impl Default for InterfaceAssociations {
     fn default() -> Self {
-        use oer_ieee80211_rsn::ccmp_mpdu::CcmpAssociation;
+        use oer_ieee80211_cipher::ccmp_mpdu::CcmpAssociation;
         use oer_ieee80211_wire::security::Spp;
         Self {
             station: CcmpAssociation::new(Spp::NotNegotiated),
@@ -1485,7 +1522,7 @@ impl Default for InterfaceAssociations {
     }
 }
 impl InterfaceAssociations {
-    fn get(&self, role: VifRole) -> &oer_ieee80211_rsn::ccmp_mpdu::CcmpAssociation {
+    fn get(&self, role: VifRole) -> &oer_ieee80211_cipher::ccmp_mpdu::CcmpAssociation {
         match role {
             VifRole::Station => &self.station,
             VifRole::AccessPoint => &self.access_point,
@@ -1496,7 +1533,7 @@ impl InterfaceAssociations {
             VifRole::Station => &mut self.station,
             VifRole::AccessPoint => &mut self.access_point,
         };
-        *record = oer_ieee80211_rsn::ccmp_mpdu::CcmpAssociation::new(spp);
+        *record = oer_ieee80211_cipher::ccmp_mpdu::CcmpAssociation::new(spp);
     }
 }
 
@@ -1757,8 +1794,8 @@ impl ModelAir {
         }
     }
 
-    #[cfg(test)]
-    pub(crate) fn falsely_claim_drained(&self) {
+    /// Inject a false drain claim for a consumer's contract regression.
+    pub fn falsely_claim_drained(&self) {
         // Fault injection retains real queued owners, but lies about their
         // return. The service must reject this claim and fail-stop.
         self.stream
@@ -2288,7 +2325,7 @@ impl<C: Ieee80211Capabilities, X: ModelContext> PortBackend for ModelBackend<C, 
         Self: 'a,
         'id: 'a;
     type Pools = (
-        oer_ieee80211_arbiter::ArbiterPool,
+        oer_ieee80211_port::ArbiterPool,
         oer_ieee80211_port::TransmitPool<ModelTickets, MODEL_TICKETS>,
         oer_radio_port::Slots<ModelSmall, MODEL_SMALL_BUFFERS>,
         oer_radio_port::Slots<ModelLarge, MODEL_LARGE_BUFFERS>,
@@ -3433,11 +3470,10 @@ pub struct ModelPhase<'a, 'id, C = ModelCaps, X: ModelContext = ()> {
     held: &'a ModelHeld<'id, X>,
 }
 
-#[cfg(test)]
 impl<'id, C, X: ModelContext> ModelPhase<'_, 'id, C, X> {
     /// Deliberately violate the backend contract while retaining actual minted
-    /// owners. Only in-crate contract regressions can inject such a terminal.
-    pub(crate) fn inject_terminal(&mut self, terminal: LowerMacTerminal<'id, ModelTypes<X>>) {
+    /// owners, for consumer contract regressions outside the conformance suite.
+    pub fn inject_terminal(&mut self, terminal: LowerMacTerminal<'id, ModelTypes<X>>) {
         self.held.post(LowerMacEvent::Terminal(terminal));
     }
 }
@@ -4002,25 +4038,25 @@ pub const MODEL_AMPDU_SUBFRAMES: usize = 8;
 /// Role, phase and install stay in the builder through submission:
 ///
 /// ```compile_fail,E0308
-/// use oer_ieee80211_runtime::lower_mac_owner::model::ModelAggregate;
+/// use oer_ieee80211_model::ModelAggregate;
 /// use oer_ieee80211_port::{Station, AccessPoint};
 /// fn role<'k, 'p, 'id>(a: ModelAggregate<'k, 'p, 'id, Station>) -> ModelAggregate<'k, 'p, 'id, AccessPoint> { a }
 /// ```
 ///
 /// ```compile_fail
-/// use oer_ieee80211_runtime::lower_mac_owner::model::ModelAggregate;
+/// use oer_ieee80211_model::ModelAggregate;
 /// use oer_ieee80211_port::Station;
 /// fn phase<'k, 'p, 'q, 'id>(a: ModelAggregate<'k, 'p, 'id, Station>) -> ModelAggregate<'k, 'q, 'id, Station> { a }
 /// ```
 ///
 /// ```compile_fail
-/// use oer_ieee80211_runtime::lower_mac_owner::model::ModelAggregate;
+/// use oer_ieee80211_model::ModelAggregate;
 /// use oer_ieee80211_port::Station;
 /// fn install<'k, 'p, 'id, 'other>(a: ModelAggregate<'k, 'p, 'id, Station>) -> ModelAggregate<'k, 'p, 'other, Station> { a }
 /// ```
 ///
 /// ```
-/// use oer_ieee80211_runtime::lower_mac_owner::model::ModelAggregate;
+/// use oer_ieee80211_model::ModelAggregate;
 /// fn same<'k, 'p, 'id, R>(a: ModelAggregate<'k, 'p, 'id, R>) -> ModelAggregate<'k, 'p, 'id, R> { a }
 /// ```
 pub struct ModelAggregate<

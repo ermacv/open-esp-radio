@@ -9,16 +9,17 @@ crates execute its typed key-data unwrap, transmit and key-install requests.
 | --- | --- |
 | `akm` | Key descriptor version, PTK expansion and EAPOL-Key MIC of each `oer_ieee80211_wire::security::rsn::Akm` |
 | `sae` | SAE commit/confirm, hunting-and-pecking and hash-to-element password elements, anti-clogging tokens |
-| `bip`, `management_ccmp` | BIP-CMAC-128 for group-addressed and CCMP for individually addressed robust management frames |
-| `ccmp_mpdu` | Software CCMP for wire data and management MPDUs, using one immutable association SPP decision |
+| `bip`, `management_ccmp` | Management IPN allocation and replay owners over the stateless transforms in `oer-ieee80211-cipher` |
 | `element` | Association RSN element policy and selection of its first supported suite; wire syntax is `oer_ieee80211_wire::security::rsn` |
 | `crypto` | Zeroizing PMK/PTK owners, PSK passphrase derivation and the association security binding |
 | `eapol` | Validated borrowed/owned EAPOL-Key packets and MIC verification |
 | `frames` | EAPOL-Key/Ethernet construction, GTK key data and owned security elements |
-| `aes` | RFC 3394 key wrap and unwrap and the asynchronous unwrap port |
 | `state` | Station and authenticator four-way-handshake transitions |
 | `supplicant` | Station orchestration: typed key-data unwrap and key-install requests and their completions, response deadlines |
 | `keys`, `retry` | Owned CCMP key installs and event-driven EAPOL retransmission |
+
+`oer-ieee80211-cipher` owns software CCMP, BIP-CMAC-128 and bounded RFC 3394
+AES key wrap/unwrap. It has no handshake state, replay frontier or clock.
 
 A `Ptk` records the suite that derived it, so MIC generation and verification
 cannot mix suites. The authenticator takes its suite from the station's
@@ -35,7 +36,7 @@ into a zeroizing GTK. Pending actions, PMF reception and retained station
 records use the common owner; adapters and comparisons borrow its bytes.
 This covers those owners, not arbitrary compiler temporaries.
 
-`CcmpAssociation` authenticates the QoS A-MSDU-present bit in both AAD and
+`oer_ieee80211_cipher::ccmp_mpdu::CcmpAssociation` authenticates the QoS A-MSDU-present bit in both AAD and
 nonce flags when SPP was negotiated. Without SPP it masks that bit according
 to ordinary CCMP. Management MPDUs retain their subtype in AAD and use the
 management nonce flag, independently of SPP. The model applies this transform

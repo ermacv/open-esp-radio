@@ -1789,7 +1789,7 @@ mod event_end;
 /// The protocol test owns numbering independently of the backend key token.
 struct CoreKey<K> {
     backend: K,
-    packet_numbers: core::cell::RefCell<oer_ieee80211_upper_mac::ccmp::CcmpTxPacketNumber>,
+    packet_numbers: core::cell::RefCell<TestPacketNumbers>,
 }
 impl<K> core::ops::Deref for CoreKey<K> {
     type Target = K;
@@ -1801,11 +1801,9 @@ trait IntoCoreKey: Sized {
     fn into_core_key(self) -> CoreKey<Self> {
         CoreKey {
             backend: self,
-            packet_numbers: core::cell::RefCell::new(
-                oer_ieee80211_upper_mac::ccmp::CcmpTxPacketNumber::new(
-                    oer_ieee80211_wire::ccmp::CcmpPacketNumberStep::ONE,
-                ),
-            ),
+            packet_numbers: core::cell::RefCell::new(TestPacketNumbers::new(
+                oer_ieee80211_wire::ccmp::CcmpPacketNumberStep::ONE,
+            )),
         }
     }
 }
@@ -1833,13 +1831,43 @@ impl<K> CoreKey<K> {
         self.packet_numbers.borrow().last().value()
     }
     fn set_last(&self, last: u64) {
-        *self.packet_numbers.borrow_mut() =
-            oer_ieee80211_upper_mac::ccmp::CcmpTxPacketNumber::continuing_after(
-                oer_ieee80211_wire::ccmp::CcmpPacketNumberStep::ONE,
-                oer_ieee80211_wire::ccmp::CcmpPacketNumber::new(last).unwrap(),
-            );
+        *self.packet_numbers.borrow_mut() = TestPacketNumbers::continuing_after(
+            oer_ieee80211_wire::ccmp::CcmpPacketNumberStep::ONE,
+            oer_ieee80211_wire::ccmp::CcmpPacketNumber::new(last).unwrap(),
+        );
     }
     fn into_backend(self) -> K {
         self.backend
+    }
+}
+
+/// Scripted packet-number inputs for backend tests, independent of core policy.
+struct TestPacketNumbers {
+    last: Cell<oer_ieee80211_wire::ccmp::CcmpPacketNumber>,
+    step: oer_ieee80211_wire::ccmp::CcmpPacketNumberStep,
+}
+impl TestPacketNumbers {
+    fn new(step: oer_ieee80211_wire::ccmp::CcmpPacketNumberStep) -> Self {
+        Self::continuing_after(step, oer_ieee80211_wire::ccmp::CcmpPacketNumber::ZERO)
+    }
+    fn continuing_after(
+        step: oer_ieee80211_wire::ccmp::CcmpPacketNumberStep,
+        last: oer_ieee80211_wire::ccmp::CcmpPacketNumber,
+    ) -> Self {
+        Self {
+            last: Cell::new(last),
+            step,
+        }
+    }
+    fn last(&self) -> oer_ieee80211_wire::ccmp::CcmpPacketNumber {
+        self.last.get()
+    }
+    fn allocate(&self) -> Result<oer_ieee80211_wire::ccmp::CcmpPacketNumber, ()> {
+        let number = oer_ieee80211_wire::ccmp::CcmpPacketNumber::new(
+            self.last.get().value() + u64::from(self.step.get()),
+        )
+        .ok_or(())?;
+        self.last.set(number);
+        Ok(number)
     }
 }

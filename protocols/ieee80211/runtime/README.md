@@ -3,11 +3,9 @@
 `oer-ieee80211-runtime`: portable Wi-Fi execution primitives — monitor
 handoffs, task shutdown, station network ownership and poll boundaries.
 
-The `test-support` feature exposes `lower_mac_owner::model`, an allocating
-in-memory backend for host tests. Its fixtures implement the shared conformance
-harnesses in `oer-ieee80211-port` and run every case with virtual time, including
-injected faults. The conformance vocabulary and verifiers live in port; chip
-tests can use them without depending on runtime.
+Host tests use the allocating in-memory backend from `oer-ieee80211-model`
+as a dev-dependency. The model's fixtures run the shared conformance cases in
+`oer-ieee80211-port`; runtime tests cover its station service over that model.
 
 ## Known defects
 

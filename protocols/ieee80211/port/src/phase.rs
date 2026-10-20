@@ -1686,3 +1686,37 @@ impl<R> RetryPlan<R> {
 
 #[cfg(test)]
 mod tests;
+
+/// One gate and its arbiter's unique construction authority.
+///
+/// The installation's mint builds this component once. Returning a gate
+/// after a cycle does not mint another arbiter or another pair of lease places.
+pub struct ArbiterPool;
+
+impl oer_radio_port::PoolSet for ArbiterPool {
+    type Pools<'id, Path: PoolPath> = (
+        GateOpen<'id, Path>,
+        GateIssuer<'id, Path>,
+        ArbiterAuthority<'id, Path>,
+    );
+
+    fn build<'id, Path: PoolPath>(
+        builder: oer_radio_port::PoolBuilder<'id, Path>,
+    ) -> Self::Pools<'id, Path> {
+        let (open, issuer) = builder.into_pools::<GatePool>();
+        (
+            open,
+            issuer,
+            ArbiterAuthority {
+                brand: core::marker::PhantomData,
+            },
+        )
+    }
+}
+
+/// The sole right to construct the arbiter of this installation's gate.
+#[derive(Debug)]
+#[must_use = "construct the arbiter exactly once with its initial gate"]
+pub struct ArbiterAuthority<'id, Path: PoolPath = Root> {
+    brand: core::marker::PhantomData<fn(&'id (), Path) -> (&'id (), Path)>,
+}

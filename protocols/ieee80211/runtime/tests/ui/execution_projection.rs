@@ -2,7 +2,7 @@
 use oer_ieee80211_port::InFlight;
 #[cfg(ui_reject)]
 use oer_ieee80211_port::TxMpdu;
-use oer_ieee80211_runtime::lower_mac_owner::model::{ModelMpdu, ModelSubframes};
+use oer_ieee80211_model::{ModelMpdu, ModelSubframes};
 
 pub fn lend<'id, C, T>(
     single: &mut InFlight<C, T, ModelMpdu<'id>>,

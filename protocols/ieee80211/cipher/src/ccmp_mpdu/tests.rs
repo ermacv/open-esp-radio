@@ -112,20 +112,6 @@ fn oversized_data_is_refused_before_encryption_or_decryption() {
 }
 
 #[test]
-fn management_wire_vector_matches_the_replay_receiver_in_both_spp_modes() {
-    use super::test_vector::{MANAGEMENT_BODY, management_wire};
-    for spp in [false, true] {
-        let wire = management_wire();
-        let mut mpdu = wire.clone();
-        assert_eq!(mode(spp).open(&key(), &mut mpdu).unwrap(), MANAGEMENT_BODY);
-        mode(spp).seal(&key(), &mut mpdu).unwrap();
-        assert_eq!(mpdu, wire);
-        let mut receiver = crate::management_ccmp::ManagementCcmpReceiver::new(&key());
-        assert_eq!(receiver.open(&mut mpdu).unwrap(), MANAGEMENT_BODY);
-    }
-}
-
-#[test]
 fn four_address_wire_vectors_cover_the_28_and_30_byte_aad_shapes() {
     // Independent Python AESCCM peer; the second header also authenticates SPP.
     for wire in [

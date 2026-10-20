@@ -1,6 +1,11 @@
 use super::*;
 use oer_ieee80211_port::{AggregateAttempt, LayoutError, MpduStartSpacing, PoolSource};
-use oer_ieee80211_sta::machine::TxRefusal;
+// The fixture classifies port refusals; no station transition is involved.
+#[derive(Debug, Eq, PartialEq)]
+enum TxRefusal {
+    Layout(LayoutError),
+    Preparation(PreparationError),
+}
 
 fn frame<'p, 'id: 'p>(
     phase: &ModelPhase<'p, 'id>,

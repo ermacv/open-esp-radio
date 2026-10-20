@@ -4,7 +4,7 @@
 //! those transitions to PMK/PTK derivation, MIC verification, exact
 //! Association security IEs and typed key-data unwrap and key-install
 //! requests. It never waits: the caller performs each requested AES key
-//! unwrap (synchronously or through [`crate::aes::AsyncRsnKeyUnwrap`]) and
+//! unwrap (synchronously or through [`oer_ieee80211_cipher::aes::AsyncRsnKeyUnwrap`]) and
 //! completes the request, so a target handles only complete EAPOL RX/TX frames,
 //! the unwrap and the platform-specific key-slot transaction.
 
@@ -12,7 +12,6 @@ use crate::AkmKeys;
 use crate::{
     Akm, EapolKeyFrame, Pmk, Ptk, PtkContext, RSN_KEK_LEN, RsnInterface, RsnKeyConfirmationKey,
     RsnKeyEncryptionKey,
-    aes::RsnUnwrappedKeyData,
     element::{RsnElementError, validate_rsn_element},
     frames::{
         OwnedAssociationSecurityIes, OwnedRsnIe, RsnFrameError, RsnGroupKeys, RsnIgtk, RsnTxFrame,
@@ -21,6 +20,7 @@ use crate::{
     keys::RsnKeyInstall,
     state::{RsnStaAction, RsnStaPhase, RsnStaState, RsnStateError, RsnTransmit},
 };
+use oer_ieee80211_cipher::aes::RsnUnwrappedKeyData;
 use oer_time::{Duration, Instant};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 

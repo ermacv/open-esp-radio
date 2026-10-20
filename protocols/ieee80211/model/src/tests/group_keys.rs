@@ -13,32 +13,22 @@ fn meta() -> ModelRxMeta {
     ModelRxMeta::new(Channel::ghz2_4(6, ChannelWidth::Mhz20).unwrap(), -50, -90)
 }
 #[derive(Default)]
-struct CoreGroupNumbers(
-    Vec<(
-        KeyIdentity,
-        oer_ieee80211_upper_mac::ccmp::CcmpTxPacketNumber,
-    )>,
-);
+struct CoreGroupNumbers(Vec<(KeyIdentity, TestPacketNumbers)>);
 impl CoreGroupNumbers {
-    fn counter(
-        &mut self,
-        key: &ModelGroupKey<'_, Station>,
-    ) -> &oer_ieee80211_upper_mac::ccmp::CcmpTxPacketNumber {
+    fn counter(&mut self, key: &ModelGroupKey<'_, Station>) -> &TestPacketNumbers {
         let i = if let Some(i) = self.0.iter().position(|(id, _)| *id == key.identity) {
             i
         } else {
             self.0.push((
                 key.identity.clone(),
-                oer_ieee80211_upper_mac::ccmp::CcmpTxPacketNumber::new(
-                    oer_ieee80211_wire::ccmp::CcmpPacketNumberStep::ONE,
-                ),
+                TestPacketNumbers::new(oer_ieee80211_wire::ccmp::CcmpPacketNumberStep::ONE),
             ));
             self.0.len() - 1
         };
         &self.0[i].1
     }
     fn set_last(&mut self, key: &ModelGroupKey<'_, Station>, last: u64) {
-        let counter = oer_ieee80211_upper_mac::ccmp::CcmpTxPacketNumber::continuing_after(
+        let counter = TestPacketNumbers::continuing_after(
             oer_ieee80211_wire::ccmp::CcmpPacketNumberStep::ONE,
             oer_ieee80211_wire::ccmp::CcmpPacketNumber::new(last).unwrap(),
         );

@@ -4,7 +4,7 @@ use oer_ieee80211_port::{
 };
 use oer_ieee80211_wire::phy::LegacyRate;
 use oer_radio_port::{Disabled, Ended, Owner, PortBody};
-use oer_ieee80211_runtime::lower_mac_owner::model::{ModelBackend, ModelResources};
+use oer_ieee80211_model::{ModelBackend, ModelResources};
 
 pub struct Retune;
 impl PortBody<ModelBackend> for Retune {

@@ -23,7 +23,7 @@ pub trait ExecutorKind: sealed::Sealed {
     const VALUE: Executed;
 }
 
-/// The host model (`ModelAir`, a port's model backend).
+/// The host model (`oer_ieee80211_model::ModelAir`, a port's model backend).
 pub enum OnModel {}
 
 /// The stand: the target, real peers and the air.

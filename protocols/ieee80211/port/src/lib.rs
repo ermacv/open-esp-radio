@@ -152,14 +152,14 @@ pub use interface_commands::{
     SampledTsfPermission, TsfPermission,
 };
 pub use phase::{
-    AccessPointPhase, AdmittedAttempt, AggregateCompleted, Attempt, AttemptKey, CheckedPoolSource,
-    ClassFrame, ClassSizedFrame, GateClosed, GateIssuer, GateOpen, GatePool, InstalledGroup,
-    InterfaceAttempt, InterfaceKeys, InterfacePhase, InterfaceSubmission, KeyTypes, LowerMacEvent,
-    LowerMacPhase, LowerMacTerminal, PhaseAggregateOutcome, PhaseBlockAckSlot, PhaseSingleOutcome,
-    PhaseTypes, PoolMpdu, PoolPreparation, PoolSource, PreparationError, PreparationRefused,
-    PreparedTx, RETRY_STAGES, Removed, RemovedKey, RetransmissionPlan, RetryPlan, RetryStage,
-    ReturnedMpdu, RoleKeys, SingleCompleted, StationPhase, TxBufferClass, TxBufferMemory,
-    TxBufferPool, TxCompleted, TxProtection, TxSource,
+    AccessPointPhase, AdmittedAttempt, AggregateCompleted, ArbiterAuthority, ArbiterPool, Attempt,
+    AttemptKey, CheckedPoolSource, ClassFrame, ClassSizedFrame, GateClosed, GateIssuer, GateOpen,
+    GatePool, InstalledGroup, InterfaceAttempt, InterfaceKeys, InterfacePhase, InterfaceSubmission,
+    KeyTypes, LowerMacEvent, LowerMacPhase, LowerMacTerminal, PhaseAggregateOutcome,
+    PhaseBlockAckSlot, PhaseSingleOutcome, PhaseTypes, PoolMpdu, PoolPreparation, PoolSource,
+    PreparationError, PreparationRefused, PreparedTx, RETRY_STAGES, Removed, RemovedKey,
+    RetransmissionPlan, RetryPlan, RetryStage, ReturnedMpdu, RoleKeys, SingleCompleted,
+    StationPhase, TxBufferClass, TxBufferMemory, TxBufferPool, TxCompleted, TxProtection, TxSource,
 };
 pub use rx::{
     LinkMetric, RxBuffer, RxCryptoStatus, RxEvidence, RxMeta, RxMetadata, SignalMetadata,

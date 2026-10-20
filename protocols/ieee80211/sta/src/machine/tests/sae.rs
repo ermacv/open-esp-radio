@@ -166,7 +166,7 @@ fn finish_handshake(
             plain.push(0);
         }
     }
-    let wrapped = oer_ieee80211_rsn::aes::software_aes128_key_wrap(ptk.kek(), &plain).unwrap();
+    let wrapped = oer_ieee80211_cipher::aes::software_aes128_key_wrap(ptk.kek(), &plain).unwrap();
     let message3 = RsnTxFrame::<512>::message3(akm, LOCAL, 2, ANONCE, [0; 8], wrapped.as_bytes())
         .unwrap()
         .authenticate(&ptk);

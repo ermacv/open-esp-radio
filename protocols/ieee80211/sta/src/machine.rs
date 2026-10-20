@@ -69,6 +69,7 @@
 //! awaits its end: there is no queue of actions to overflow.
 
 use core::marker::PhantomData;
+use oer_ieee80211_cipher::aes::software_aes128_key_unwrap;
 use oer_ieee80211_port::association::KEY_BANK_CAPACITY;
 use oer_ieee80211_wire::ccmp::GroupKeyId;
 
@@ -85,7 +86,6 @@ use oer_ieee80211_port::{
 };
 use oer_ieee80211_rsn::{
     DEFAULT_EAPOL_FRAME_CAPACITY, OwnedEapolFrame, Pmk, RsnInterface,
-    aes::software_aes128_key_unwrap,
     frames::RsnTxFrame,
     keys::{RsnKeyInstall, RsnKeyKind},
     sae::{SaeCommit, SaePassword, SaePasswordElement, SaePasswordToken},
@@ -623,7 +623,7 @@ pub enum StaRatePlan {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum StaRxError {
     Frame(oer_ieee80211_upper_mac::receive::RxDropReason),
-    Security(RsnConnectedProcessError<oer_ieee80211_rsn::aes::SoftwareAesKeyUnwrapError>),
+    Security(RsnConnectedProcessError<oer_ieee80211_cipher::aes::SoftwareAesKeyUnwrapError>),
 }
 
 impl From<oer_ieee80211_upper_mac::receive::RxDropReason> for StaRxError {
@@ -638,11 +638,11 @@ impl From<RsnConnectedSupplicantError> for StaRxError {
     }
 }
 
-impl From<RsnConnectedProcessError<oer_ieee80211_rsn::aes::SoftwareAesKeyUnwrapError>>
+impl From<RsnConnectedProcessError<oer_ieee80211_cipher::aes::SoftwareAesKeyUnwrapError>>
     for StaRxError
 {
     fn from(
-        reason: RsnConnectedProcessError<oer_ieee80211_rsn::aes::SoftwareAesKeyUnwrapError>,
+        reason: RsnConnectedProcessError<oer_ieee80211_cipher::aes::SoftwareAesKeyUnwrapError>,
     ) -> Self {
         Self::Security(reason)
     }

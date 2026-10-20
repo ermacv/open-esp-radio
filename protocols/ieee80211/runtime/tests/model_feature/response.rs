@@ -1,14 +1,14 @@
 //! Public-port response policy, independent of the model's private classifiers.
 use super::*;
 use embassy_futures::yield_now;
+use oer_ieee80211_model::{
+    AirAnswer, ModelAggregateOutcome, ModelCaps, ModelPhase, ModelSingleOutcome,
+};
 use oer_ieee80211_port::PhaseTypes;
 use oer_ieee80211_port::{
     AggregateAttempt, AggregateEnd, Air, AmpduPhase, BlockAckReport, CheckedAggregate,
     ClassSubframe, GroupAddress, IndeterminateCause, MpduStartSpacing, NoAckHeader, QosControl,
     SingleEnd, SingleResponse, SubframeSource, Tid, TxMpdu, TxOutcome, WithdrawCause,
-};
-use oer_ieee80211_runtime::lower_mac_owner::model::{
-    AirAnswer, ModelAggregateOutcome, ModelCaps, ModelPhase, ModelSingleOutcome,
 };
 use oer_ieee80211_wire::{
     phy::{HtMcs, HtRate, PpduBandwidth},
