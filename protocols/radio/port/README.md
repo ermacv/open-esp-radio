@@ -63,6 +63,17 @@ driver's scoped borrow, including on cancellation. An ordinary static spawn
 does not satisfy this rule. The backend separately establishes its queue
 ownership and any bounds needed for transfer between contexts.
 
+The current borrowed `PortDriver` does not provide permanent backing for
+deferred destruction on another executor. Cancelling `run_port` ends its
+loan of the driver's owner and `Held`; `Quarantined` suppresses destructors
+but cannot extend those borrows or preserve the containing future's storage.
+Before the first poll, `PortExecution::start` has not run at all. The
+current cancellation guard calls the backend directly, so this API alone
+does not implement the driver-context abandonment rule in
+[the decisions](../../../docs/decisions.md#radio-ports). The
+`driver_task_static_escape` UI pair rejects retaining the borrowed task for
+later destruction and permits a join that ends within its original scope.
+
 `Installed::new(backend, driver)` is the sole constructor. `run_port` consumes
 it, keeps `backend` by value, and lends `&mut B` to `Owner<'p, 'id, B, State>`.
 The core keeps the driver by value beside the backend. Static
