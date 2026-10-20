@@ -133,6 +133,7 @@ const SOURCES: &[(&str, &str)] = &[
         include_str!("../src/network/udp_probe.rs"),
     ),
     ("phy/capture.rs", include_str!("../src/phy/capture.rs")),
+    ("phy/hold.rs", include_str!("../src/phy/hold.rs")),
     ("phy/mod.rs", include_str!("../src/phy/mod.rs")),
     ("system/mod.rs", include_str!("../src/system/mod.rs")),
     (
