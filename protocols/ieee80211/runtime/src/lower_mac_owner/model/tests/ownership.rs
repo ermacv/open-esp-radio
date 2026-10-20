@@ -1,5 +1,5 @@
 use super::*;
-use crate::lower_mac_owner::conformance::{
+use oer_ieee80211_port::conformance::{
     self, Class, End, Harness, Operation, Resources, Scenario, Trace,
 };
 
@@ -94,7 +94,7 @@ fn returned<'id>(
                             ..
                         },
                     ..
-                }) => End::Completed,
+                }) => End::Ended,
                 TxOutcome::Withdrawn(_) => End::Withdrawn,
                 other => panic!("unexpected outcome {other:?}"),
             };
@@ -282,7 +282,8 @@ impl PortBody<Backend> for Operations {
 
 struct ModelHarness;
 impl Harness for ModelHarness {
-    async fn exercise(&mut self, scenario: Scenario) -> Trace {
+    type Returns = Vec<conformance::Returned>;
+    async fn exercise(&mut self, scenario: Scenario) -> Trace<Self::Returns> {
         let (backend, air) = Backend::new(
             Channel::ghz2_4(6, ChannelWidth::Mhz20).unwrap(),
             [
@@ -316,7 +317,9 @@ impl Harness for ModelHarness {
 #[test]
 fn common_backend_tx_ownership_suite() {
     block_on(async {
-        conformance::check(&mut ModelHarness).await.unwrap();
+        conformance::check(&mut ModelHarness, conformance::Environment::Model)
+            .await
+            .unwrap();
     });
 }
 

@@ -9,7 +9,7 @@ description = "Portable IEEE 802.11 lower-MAC radio port: one hardware transmiss
 readme = "README.md"
 
 [features]
-# The shared port's host testing support, used by model consumers.
+# Shared allocator-free conformance cases and backend testing support.
 test-support = ["oer-radio-port/test-support"]
 
 [dependencies]
@@ -21,8 +21,9 @@ oer-radio-regulatory = { path = "../../radio/regulatory" }
 oer-time = { path = "../../../portable/time" }
 
 [dev-dependencies]
+oer-time-virtual = { path = "../../../portable/time-virtual" }
 oer-radio-regulatory = { path = "../../radio/regulatory", features = ["test-support"] }
-# The crate's own tests run the shared conformance suite on the model.
+# The crate's own tests exercise the generic radio-port conformance rules.
 oer-radio-port = { path = "../../radio/port", features = ["test-support"] }
 oer-test-ui-cases = { path = "../../../tools/test/ui-cases" }
 
@@ -32,3 +33,4 @@ workspace = true
 [package.metadata.open-radio]
 layer = "protocol"
 platform = "portable"
+test-feature-sets = ["test-support"]

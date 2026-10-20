@@ -1,7 +1,9 @@
 use super::*;
-use alloc::vec;
+use alloc::{vec, vec::Vec};
 
-fn retry_trace() -> BarrierTrace<(), ()> {
+type TestBarrierTrace = BarrierTrace<Vec<BarrierEvent<(), ()>>, Vec<u8>, Vec<Vec<u8>>>;
+
+fn retry_trace() -> TestBarrierTrace {
     let mut original = vec![0x5a; 40];
     original[0] = 0x08;
     original[1] = 0x41;
@@ -64,7 +66,7 @@ fn changed_ticket_identity_is_an_owner_violation() {
     );
 }
 
-fn poisoned_trace() -> Trace {
+fn poisoned_trace() -> Trace<Vec<Returned>> {
     Trace {
         returned: OPERATIONS
             .into_iter()
@@ -80,7 +82,7 @@ fn poisoned_trace() -> Trace {
                     operation,
                     expected: resources,
                     actual: resources,
-                    end: End::Completed,
+                    end: End::Ended,
                 }
             })
             .collect(),

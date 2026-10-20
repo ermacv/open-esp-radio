@@ -1,5 +1,5 @@
 //! Structural rules read from package manifests: names, the unsafe boundary
-//! and production dependency direction for the Wi-Fi chip backends.
+//! and dependency direction for the Wi-Fi chip backends.
 
 use std::path::{Path, PathBuf};
 
@@ -298,6 +298,43 @@ fn ieee80211_chip_backends_do_not_link_core_or_profile_implementations() {
                     !forbidden.contains(&name),
                     "{package} links {name}: compose a static port profile in the runtime/image"
                 );
+            }
+        }
+    }
+}
+
+#[test]
+fn ieee80211_chip_backend_tests_use_port_conformance_without_runtime() {
+    let root = root();
+    for package in [
+        "chips/esp32s31/ieee80211/driver",
+        "chips/esp32s31/ieee80211/mac",
+    ] {
+        let source = std::fs::read_to_string(root.join(package).join("Cargo.toml"))
+            .expect("backend package manifest exists");
+        let manifest: toml::Table =
+            toml::from_str(&source).expect("backend manifest is valid TOML");
+        let targets = manifest
+            .get("target")
+            .and_then(toml::Value::as_table)
+            .into_iter()
+            .flat_map(|targets| targets.values())
+            .filter_map(toml::Value::as_table);
+        for scope in core::iter::once(&manifest).chain(targets) {
+            for kind in ["dependencies", "dev-dependencies", "build-dependencies"] {
+                let Some(dependencies) = scope.get(kind).and_then(toml::Value::as_table) else {
+                    continue;
+                };
+                for (alias, dependency) in dependencies {
+                    let name = dependency
+                        .get("package")
+                        .and_then(toml::Value::as_str)
+                        .unwrap_or(alias);
+                    assert_ne!(
+                        name, "oer-ieee80211-runtime",
+                        "{package} {kind}: backend tests consume the shared port harness directly"
+                    );
+                }
             }
         }
     }

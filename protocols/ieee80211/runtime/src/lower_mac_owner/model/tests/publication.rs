@@ -1,5 +1,5 @@
 use super::*;
-use crate::lower_mac_owner::conformance::{
+use oer_ieee80211_port::conformance::{
     self, BarrierCase, BarrierEvent, BarrierTrace, HeldSnapshot, MpduState,
 };
 
@@ -10,7 +10,8 @@ enum Barrier {
     GateTimeout,
     RemoveKey,
 }
-type ModelBarrierTrace = BarrierTrace<ModelAck, ModelAirDenied>;
+type ModelBarrierTrace =
+    BarrierTrace<Vec<BarrierEvent<ModelAck, ModelAirDenied>>, Vec<u8>, Vec<Vec<u8>>>;
 type RecordedBarrier = Rc<RefCell<Option<ModelBarrierTrace>>>;
 struct DuringPublication(Barrier, Option<RecordedBarrier>);
 
@@ -287,6 +288,9 @@ struct ModelBarrierHarness;
 impl conformance::BarrierHarness for ModelBarrierHarness {
     type Ack = ModelAck;
     type AirDenied = ModelAirDenied;
+    type Events = Vec<BarrierEvent<ModelAck, ModelAirDenied>>;
+    type Frame = Vec<u8>;
+    type Retries = Vec<Vec<u8>>;
     async fn exercise_barrier(&mut self, case: BarrierCase) -> ModelBarrierTrace {
         let barrier = match case {
             BarrierCase::GateAck => Barrier::GateAck,
@@ -309,7 +313,7 @@ impl conformance::BarrierHarness for ModelBarrierHarness {
 #[test]
 fn common_backend_publication_barrier_and_sent_retry_suite() {
     block_on(async {
-        conformance::check_barriers(&mut ModelBarrierHarness)
+        conformance::check_barriers(&mut ModelBarrierHarness, conformance::Environment::Model)
             .await
             .unwrap();
     });

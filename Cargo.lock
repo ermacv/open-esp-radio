@@ -2731,9 +2731,7 @@ dependencies = [
  "oer-esp32s31-radio-coex",
  "oer-espressif-ieee80211-policy",
  "oer-ieee80211-port",
- "oer-ieee80211-runtime",
  "oer-ieee80211-softmac",
- "oer-ieee80211-sta",
  "oer-ieee80211-wire",
  "oer-interrupt-table",
  "oer-memory",
@@ -3529,6 +3527,7 @@ dependencies = [
  "oer-radio-regulatory",
  "oer-test-ui-cases",
  "oer-time",
+ "oer-time-virtual",
 ]
 
 [[package]]
