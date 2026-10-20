@@ -218,6 +218,7 @@ impl PhyShortDelay for oer_esp32s31_hal::phy::delay::RomShortDelay {
 /// Failure while completing a finite target PHY hardware operation.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyTargetPortError {
+    DeadlineOverflow,
     HardwareEdgeTimedOut,
     HardwareCapabilityUnavailable,
     HardwareInvariant,

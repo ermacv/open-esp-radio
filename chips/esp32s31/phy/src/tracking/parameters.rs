@@ -979,6 +979,12 @@ impl fmt::Debug for PhyParamTrackingTemperatureTransition<'_> {
 }
 
 impl<'state> PhyParamTrackingTemperatureTransition<'state> {
+    pub(crate) fn transition_mut(
+        &mut self,
+    ) -> &mut crate::analog::temperature::PhyTemperatureTransition {
+        &mut self.child
+    }
+
     fn lower(
         parent_action: PhyParamTrackingAction,
         state: &'state mut crate::state::PhyState,

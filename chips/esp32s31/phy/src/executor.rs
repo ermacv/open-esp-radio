@@ -9,6 +9,8 @@
 
 pub mod wait;
 
+pub(crate) mod step;
+
 // The graph drivers and their port traits are model-level API. Ordinary builds
 // reach them only through the crate's target ports and registered owners.
 mod run;

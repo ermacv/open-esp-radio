@@ -7,6 +7,78 @@
 
 use crate::executor::wait;
 
+/// Actual engine poll boundaries and requested timer deadlines. These events
+/// carry no UART work and borrow no hardware state.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum EngineEvent {
+    Poll {
+        started: u64,
+        finished: u64,
+        ready: bool,
+    },
+    TimerResumed {
+        deadline: u64,
+        resumed: u64,
+    },
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct EngineTiming {
+    pub polls: u32,
+    pub pending: u32,
+    pub total_micros: u32,
+    pub maximum_micros: u32,
+    pub resumes: u32,
+    pub lateness_micros: u32,
+    pub maximum_lateness_micros: u32,
+    pub invalid: bool,
+}
+
+impl EngineTiming {
+    pub fn observe(&mut self, event: EngineEvent) {
+        let (start, end) = match event {
+            EngineEvent::Poll {
+                started, finished, ..
+            } => (started, finished),
+            EngineEvent::TimerResumed { deadline, resumed } => (deadline, resumed),
+        };
+        let Some(elapsed) = end.checked_sub(start).and_then(|v| u32::try_from(v).ok()) else {
+            self.invalid = true;
+            return;
+        };
+        let (count, total, maximum) = match event {
+            EngineEvent::Poll { ready, .. } => {
+                if !ready {
+                    let Some(pending) = self.pending.checked_add(1) else {
+                        self.invalid = true;
+                        return;
+                    };
+                    self.pending = pending;
+                }
+                (
+                    &mut self.polls,
+                    &mut self.total_micros,
+                    &mut self.maximum_micros,
+                )
+            }
+            EngineEvent::TimerResumed { .. } => (
+                &mut self.resumes,
+                &mut self.lateness_micros,
+                &mut self.maximum_lateness_micros,
+            ),
+        };
+        let (Some(next_count), Some(next_total)) =
+            (count.checked_add(1), total.checked_add(elapsed))
+        else {
+            self.invalid = true;
+            return;
+        };
+        *count = next_count;
+        *total = next_total;
+        *maximum = (*maximum).max(elapsed);
+    }
+}
+
 use super::{
     calibration::PhyCalibrationTrackingAction as Calibration,
     parameters::PhyParamTrackingAction as Parameter,
@@ -214,6 +286,7 @@ pub struct RxGainExecution {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Report {
+    pub engine: EngineTiming,
     pub rfpll: Option<super::rfpll::Observation>,
     pub temperature: Option<crate::analog::temperature::PhyTemperatureOutcome>,
     pub timings: [Timing; OPERATION_COUNT],
@@ -228,6 +301,7 @@ pub struct Report {
 impl Default for Report {
     fn default() -> Self {
         Self {
+            engine: EngineTiming::default(),
             rfpll: None,
             temperature: None,
             timings: [Timing::default(); OPERATION_COUNT],
@@ -256,6 +330,7 @@ impl Report {
 /// One serialized tracking invocation; different operation kinds may nest.
 /// The caller owns the monotonic clock and decides where this storage lives.
 pub struct Recorder {
+    engine: EngineTiming,
     rfpll: Option<super::rfpll::Observation>,
     temperature: Option<crate::analog::temperature::PhyTemperatureOutcome>,
     timings: [Timing; OPERATION_COUNT],
@@ -274,6 +349,7 @@ pub struct Recorder {
 impl Default for Recorder {
     fn default() -> Self {
         Self {
+            engine: EngineTiming::default(),
             rfpll: None,
             temperature: None,
             timings: [Timing::default(); OPERATION_COUNT],
@@ -292,6 +368,9 @@ impl Default for Recorder {
 }
 
 impl Recorder {
+    pub fn observe_engine(&mut self, event: EngineEvent) {
+        self.engine.observe(event);
+    }
     pub fn observe_temperature(
         &mut self,
         outcome: crate::analog::temperature::PhyTemperatureOutcome,
@@ -490,12 +569,16 @@ impl Recorder {
         Report {
             rfpll: self.rfpll,
             temperature: self.temperature,
+            engine: self.engine,
             timings: self.timings,
             polls: self.polls,
             rx_gain_execution: self.rx_gain_execution,
             dcode_waits: self.wait.report(),
             tx_waits: self.tx_wait.report(),
-            invalid: self.invalid || !self.wait.is_complete() || !self.tx_wait.is_complete(),
+            invalid: self.invalid
+                || self.engine.invalid
+                || !self.wait.is_complete()
+                || !self.tx_wait.is_complete(),
         }
     }
 }

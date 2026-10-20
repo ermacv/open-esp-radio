@@ -349,19 +349,20 @@ where
 {
     admit_maintenance(radio).map_err(ConcurrentPhyTrackingError::Rejected)?;
 
-    let (mut registered, pending) = match core::mem::take(radio.attachment_mut().slot_mut()) {
-        Slot::Pending {
-            registered,
-            pending,
-        } => (registered, pending),
-        other => {
-            // Admission accepted only a pending slot.
-            *radio.attachment_mut().slot_mut() = other;
-            return Err(ConcurrentPhyTrackingError::Rejected(
-                ConcurrentPhyError::NoTrackingPending,
-            ));
-        }
-    };
+    let (mut registered, pending) =
+        match core::mem::replace(radio.attachment_mut().slot_mut(), Slot::Poisoned) {
+            Slot::Pending {
+                registered,
+                pending,
+            } => (registered, pending),
+            other => {
+                // Admission accepted only a pending slot.
+                *radio.attachment_mut().slot_mut() = other;
+                return Err(ConcurrentPhyTrackingError::Rejected(
+                    ConcurrentPhyError::NoTrackingPending,
+                ));
+            }
+        };
     let mut tracking = pending.begin_tracking(registered.tracking_policy());
 
     let (mut registers, phy, mut grant) = radio.phy_hal_with_attachment_and_grant();

@@ -14,6 +14,7 @@ use core::marker::PhantomData;
 
 pub mod calibration;
 pub mod rfpll;
+mod step;
 
 use crate::{
     HARDWARE_EDGE_LIMIT, PhyParamTrackingRunError, PhyRegisterRunError,
@@ -213,6 +214,8 @@ pub enum PhyRfBoundary {
 /// code can implement this trait to compare a completed Rust result with ROM or to
 /// capture diagnostic MMIO without placing either dependency in this crate.
 pub trait PhyTargetObserver {
+    const OBSERVE_ENGINE_POLLS: bool = false;
+    fn engine_event(&mut self, _event: crate::tracking::observation::EngineEvent) {}
     const OBSERVE_DELAYS: bool = false;
     /// Include sensor age at RFPLL entry; disabled observers add no clock read.
     const OBSERVE_RFPLL_AGE: bool = false;
@@ -1884,32 +1887,27 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
     async fn run_param_temperature<P, O: PhyTargetObserver>(
         &self,
         mut child: PhyParamTrackingTemperatureTransition<'_>,
-        platform: &mut P,
-        registers: &mut impl SharedPhyAccess,
+        _platform: &mut P,
+        registers: &mut impl SharedPhyContext,
         observer: &mut O,
     ) -> Result<PhyParamTrackingCompletion, PhyTargetPortError> {
         let started = Some(self.timer.now().as_micros());
-        for _ in 0..RF_OPERATION_LIMIT {
-            if let crate::analog::temperature::PhyTemperatureAction::Complete(outcome) =
-                child.action()
-            {
-                let completion = child
-                    .commit_observed(started, Some(self.timer.now().as_micros()))
-                    .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
-                observer.temperature_completed(outcome);
-                return Ok(completion);
-            }
-            let binding = child
-                .lower_external()
-                .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
-            let completion = self
-                .complete_temperature(binding, platform, registers)
-                .await?;
-            child
-                .advance(completion)
-                .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
-        }
-        Err(PhyTargetPortError::RfOperationLimit)
+        let outcome = {
+            let mut job = crate::executor::step::Job::temperature(child.transition_mut());
+            let mut io = step::TargetIo::<_, D>::new(registers);
+            let mut sink = step::ObserverSink(observer);
+            crate::executor::step::drive(&mut job, &mut io, self.timer, &mut sink)
+                .await
+                .map_err(step::port_error)?
+        };
+        let crate::executor::step::Outcome::Temperature(outcome) = outcome else {
+            return Err(PhyTargetPortError::UnexpectedBinding);
+        };
+        let completion = child
+            .commit_observed(started, Some(self.timer.now().as_micros()))
+            .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
+        observer.temperature_completed(outcome);
+        Ok(completion)
     }
 }
 
