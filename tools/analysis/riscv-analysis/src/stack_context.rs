@@ -34,6 +34,15 @@ pub struct StackOrigin {
     pub interval: (u32, u32),
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum StackBasis {
+    Entry,
+    // The evaluator still names the pre-installation EntryStack. Only sp,
+    // with no subsequent writes, denotes the newly installed pointer. Other
+    // registers and spilled pointers may retain the original entry value.
+    Installed { previous_coordinate: i64 },
+}
+
 /// An invocation, never an unconditional property of a function. Consumers
 /// must supply the current context again during evaluation; a prepared call
 /// cannot install its old context into a new run.
@@ -41,7 +50,7 @@ pub struct StackContext<'m> {
     capture_id: u64,
     owner: u64,
     start: u64,
-    coordinate: i64,
+    basis: StackBasis,
     interval: (u32, u32),
     residues: u8,
     id: u64,
@@ -53,6 +62,7 @@ impl std::fmt::Debug for StackContext<'_> {
         f.debug_struct("StackContext")
             .field("owner", &self.owner)
             .field("start", &self.start)
+            .field("basis", &self.basis)
             .field("interval", &self.interval)
             .field("origins", &&*self.origins)
             .field("assumptions", &self.assumptions())
@@ -121,7 +131,7 @@ impl StackContext<'_> {
             .is_some_and(|delta| rotate_residues(self.residues, delta) == 1)
     }
     fn displacement(&self, entry: u64, site: u64, value: WriteValue) -> Option<i64> {
-        if entry != self.owner || site < self.start {
+        if entry != self.owner || site < self.start || self.basis != StackBasis::Entry {
             return None;
         }
         let WriteValue::Base {
@@ -134,10 +144,7 @@ impl StackContext<'_> {
         if function != entry {
             return None;
         }
-        let delta = offset
-            .checked_add(i64::from(delta as i32))?
-            .checked_sub(self.coordinate)?;
-        Some(delta)
+        offset.checked_add(i64::from(delta as i32))
     }
 }
 
@@ -236,7 +243,10 @@ fn resolve(value: &AbstractValue, parent: Option<&StackContext<'_>>) -> Option<(
     match value {
         AbstractValue::EntryStack { offset } => {
             let parent = parent?;
-            shift(parent.interval, offset.checked_sub(parent.coordinate)?)
+            if parent.basis != StackBasis::Entry {
+                return None;
+            }
+            shift(parent.interval, *offset)
         }
         AbstractValue::Alternatives { values } => {
             let mut interval: Option<(u32, u32)> = None;
@@ -263,10 +273,7 @@ fn residues(value: &AbstractValue, parent: Option<&StackContext<'_>>) -> Option<
     match value {
         AbstractValue::EntryStack { offset } => {
             let parent = parent?;
-            Some(rotate_residues(
-                parent.residues,
-                offset.checked_sub(parent.coordinate)?,
-            ))
+            (parent.basis == StackBasis::Entry).then(|| rotate_residues(parent.residues, *offset))
         }
         AbstractValue::Alternatives { values } => {
             values.values().iter().try_fold(0, |mask, value| {
@@ -340,11 +347,27 @@ pub fn call_stack_context_with_targets<'m>(
     let Some(inputs) = caller.call_inputs(site, c)? else {
         return Ok(None);
     };
-    let Some(interval) = inputs.registers.get(2).and_then(|v| resolve(v, parent)) else {
+    let Some(stack) = inputs.registers.get(2) else {
         return Ok(None);
     };
-    let Some(residues) = inputs.registers.get(2).and_then(|v| residues(v, parent)) else {
-        return Ok(None);
+    let (interval, residues) = match parent {
+        Some(parent)
+            if matches!(parent.basis, StackBasis::Installed { previous_coordinate }
+                if *stack == AbstractValue::EntryStack { offset: previous_coordinate }) =>
+        {
+            // This exception is for the live sp input only. The continuation
+            // below must contain no sp writes; it cannot rebase any other
+            // EntryStack value, even one equal to this old coordinate.
+            (parent.interval, parent.residues)
+        }
+        _ => {
+            let (Some(interval), Some(residues)) =
+                (resolve(stack, parent), residues(stack, parent))
+            else {
+                return Ok(None);
+            };
+            (interval, residues)
+        }
     };
     // A wrapping intermediate sp cannot lend a nonwrapping coordinate to
     // the final inputs, even when later arithmetic cancels its displacement.
@@ -357,7 +380,8 @@ pub fn call_stack_context_with_targets<'m>(
             ..
         } = record
             && parent.is_none_or(|p| *offset >= p.start)
-            && resolve(value, parent).is_none()
+            && (parent.is_some_and(|p| matches!(p.basis, StackBasis::Installed { .. }))
+                || resolve(value, parent).is_none())
         {
             return Ok(None);
         }
@@ -387,7 +411,7 @@ pub fn call_stack_context_with_targets<'m>(
         capture_id,
         owner: target.into(),
         start: target.into(),
-        coordinate: 0,
+        basis: StackBasis::Entry,
         interval,
         residues,
         id: identity()?,
@@ -419,8 +443,8 @@ pub fn merge_stack_contexts<'m>(
             context.capture_id,
             context.owner,
             context.start,
-            context.coordinate,
-        ) != (first.capture_id, first.owner, first.start, first.coordinate)
+            context.basis,
+        ) != (first.capture_id, first.owner, first.start, first.basis)
         {
             return Ok(None);
         }
@@ -439,7 +463,7 @@ pub fn merge_stack_contexts<'m>(
         capture_id: first.capture_id,
         owner: first.owner,
         start: first.start,
-        coordinate: first.coordinate,
+        basis: first.basis,
         interval,
         residues,
         id: identity()?,
@@ -571,6 +595,8 @@ pub fn stack_setup(
 /// Bind a checked installer to its actual call and straight-line startup
 /// continuation. Calls in the continuation use the explicitly selected ABI.
 /// An entry bypass, another stack adjustment or an unknown jump is refused.
+/// This proves the live sp only: without stack epochs in the evaluator,
+/// EntryStack-derived pointers in this function cannot use the new interval.
 pub fn resume_stack_context<'m>(
     setup: &StackSetup,
     caller: &FunctionIndex<'_, '_>,
@@ -648,7 +674,9 @@ pub fn resume_stack_context<'m>(
         capture_id: setup.capture_id,
         owner: entry,
         start,
-        coordinate: *coordinate,
+        basis: StackBasis::Installed {
+            previous_coordinate: *coordinate,
+        },
         interval,
         residues: 1 << (setup.pointer % 4),
         id: identity()?,

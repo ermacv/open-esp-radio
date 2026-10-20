@@ -9,22 +9,22 @@
     "chips/esp32s31/platform/stack.toml": "c56d3be39f7484c5bf726f2cc420a1b6a2d2d64242627e4e11b57efb43e0f511"
   },
   "checked_stack_sources": {
-    "tools/analysis/riscv-analysis/src/stack_context.rs": "138e9e6e0996d7985ba155e43a6d5065220fa8f88058325b000b3eef2d38b7ac",
+    "tools/analysis/riscv-analysis/src/stack_context.rs": "a447cf401309f1da39be376da5ff56d7b9a22f55cb6efbc1d5eecb73dd1039a1",
     "tools/analysis/riscv-analysis/src/writes/word.rs": "21521de706c48903f0337f17f5b764e990f982a10107e772ccc9af21a6d739a0",
     "tools/analysis/riscv-analysis/src/values.rs": "3f1c4fb53a9d6897ba25f41c2f53f9d6e37318305efd12f20d4f5b3b7f8ee66c",
-    "tools/analysis/riscv-stack/examples/support/stack_context.rs": "9e08e2fbba5fb0ab4a0733989131a264e6abaf91bf55befb5e60cab16c6ea2b7",
+    "tools/analysis/riscv-stack/examples/support/stack_context.rs": "1d3ad850ce42ee2ff84d93dfe6959e7fed6786b284f656405463afc701de2353",
     "tools/analysis/riscv-stack/examples/support/mod.rs": "ba8e2b0863cc9e824f44a6e83b15391eca135ed6c66d90b9c7cc82bc3340c4c5",
     "tools/analysis/riscv-stack/examples/stack-call-writes.rs": "36be264660949db9989d3edf71b0309ecd3a3ba37edbca85fb6e48e410d4fc73",
     "tools/analysis/elf/src/lib.rs": "6fabe822e0a08c4311318253c145e048ee3c7bf74cd58781c9bd20d74f741c49"
   },
   "validation_sources": {
-    "current_chain.py": "260e304ea424cd5b7d144fcb98572c22d747b4cc64ba498b4c022c031c798ee7",
+    "current_chain.py": "66812ab8f57348977a0150cc4cd7e30acc887309331a301af0caf0ff6f990f05",
     "explain.py": "218886d8caf44068b529107aca0833aabd327f8b522a18c1f15393a508f5f69c"
   },
   "diagnostic_binaries": {
-    "function-records": "57654ac905b3c7b255d15c10975e7d1541d9f9a75f9896d98fb24eb0bde21029",
-    "callback-audit": "7be5c567b53de2caa149f4b35833e71d0887a69063e5fb76296a32d660e7b045",
-    "stack-call-writes": "aaf25b47d0dd669582990c8ddf07843d1c4df4aa6dde0bd0f6f4b82aceb90620"
+    "function-records": "a7820557fbbd147eebdae6275790690ab3f9871c96a8ba56a99d52d19b6c6f33",
+    "callback-audit": "6d82e3a6462a6f9933df0b041be79e94f3aeb31c18d4fd95d821adde6fbe8f7c",
+    "stack-call-writes": "c11a400b27fa56a1e66eee1f2dae8aabfc85ab205861333d876887fab9e279bb"
   },
   "streams": {
     "callbacks.tsv": "cd41d14ea5c1a2e706084e2e0387f1dbc736cc5317bb6791703e8d3e2afc7263",
@@ -33,7 +33,7 @@
     "rx-poll.tsv": "40e7fd773aa80f602750a458aae80d13d2e7419936c4157c31fccbd8c1a1bc19",
     "run.tsv": "d6d92ab921147b4fff782f3409763f5011474121691f3b35e660131f104eff99",
     "pend-initializer-target.tsv": "7266324e9ba8243f42d0abbd711d54a04f35717335976e4d282a35b761faf3c7",
-    "first-constructor-copy.tsv": "799b4dc37a0db3aa3d1e9e11c462a66f693927055942fdc0d77ddb42c835e86c",
+    "first-constructor-copy.tsv": "daa45dd07c3674226c224a3aa6feddbc1fdb93e7ad6ae36aed7233bf81f4f415",
     "short-copy.tsv": "e01c8db7e0f4775e9a4d561947e5f777fc5531dbcde8192aa1c1e7163f104aef"
   },
   "checked_stack_context": {
@@ -41,7 +41,7 @@
     "root": [
       "stack-root",
       "runtime_main",
-      "Some(StackContext { owner: 1342655978, start: 1342655978, interval: (1343076800, 1343076800), origins: [StackOrigin { kind: SetupReturn, caller: 1342272768, site: 1342273054, callee: 788531264, interval: (1343076800, 1343076800) }, StackOrigin { kind: Tail, caller: 1342272768, site: 1342273102, callee: 1342655978, interval: (1343076800, 1343076800) }], assumptions: [] })"
+      "Some(StackContext { owner: 1342655978, start: 1342655978, basis: Entry, interval: (1343076800, 1343076800), origins: [StackOrigin { kind: SetupReturn, caller: 1342272768, site: 1342273054, callee: 788531264, interval: (1343076800, 1343076800) }, StackOrigin { kind: Tail, caller: 1342272768, site: 1342273102, callee: 1342655978, interval: (1343076800, 1343076800) }], assumptions: [] })"
     ],
     "incoming_contexts": [
       [
@@ -75,9 +75,13 @@
         "StorageBounds { start: 788559040, end: 788591808, capacity: 32768 }"
       ],
       [
+        "stack-resumed",
+        "Some(StackContext { owner: 1342272768, start: 1342273058, basis: Installed { previous_coordinate: 0 }, interval: (1343076800, 1343076800), origins: [StackOrigin { kind: SetupReturn, caller: 1342272768, site: 1342273054, callee: 788531264, interval: (1343076800, 1343076800) }], assumptions: [] })"
+      ],
+      [
         "stack-root",
         "runtime_main",
-        "Some(StackContext { owner: 1342655978, start: 1342655978, interval: (1343076800, 1343076800), origins: [StackOrigin { kind: SetupReturn, caller: 1342272768, site: 1342273054, callee: 788531264, interval: (1343076800, 1343076800) }, StackOrigin { kind: Tail, caller: 1342272768, site: 1342273102, callee: 1342655978, interval: (1343076800, 1343076800) }], assumptions: [] })"
+        "Some(StackContext { owner: 1342655978, start: 1342655978, basis: Entry, interval: (1343076800, 1343076800), origins: [StackOrigin { kind: SetupReturn, caller: 1342272768, site: 1342273054, callee: 788531264, interval: (1343076800, 1343076800) }, StackOrigin { kind: Tail, caller: 1342272768, site: 1342273102, callee: 1342655978, interval: (1343076800, 1343076800) }], assumptions: [] })"
       ],
       [
         "stack-trap-entries",
@@ -213,7 +217,7 @@
         "0x50074dee",
         "closed=true",
         "sp=Some(EntryStack { offset: 0 })",
-        "Some(StackContext { owner: 1342592246, start: 1342592246, interval: (1343076800, 1343076800), origins: [StackOrigin { kind: SetupReturn, caller: 1342272768, site: 1342273054, callee: 788531264, interval: (1343076800, 1343076800) }, StackOrigin { kind: Tail, caller: 1342272768, site: 1342273102, callee: 1342655978, interval: (1343076800, 1343076800) }, StackOrigin { kind: Call, caller: 1342655978, site: 1342655982, callee: 1342592246, interval: (1343076800, 1343076800) }], assumptions: [] })"
+        "Some(StackContext { owner: 1342592246, start: 1342592246, basis: Entry, interval: (1343076800, 1343076800), origins: [StackOrigin { kind: SetupReturn, caller: 1342272768, site: 1342273054, callee: 788531264, interval: (1343076800, 1343076800) }, StackOrigin { kind: Tail, caller: 1342272768, site: 1342273102, callee: 1342655978, interval: (1343076800, 1343076800) }, StackOrigin { kind: Call, caller: 1342655978, site: 1342655982, callee: 1342592246, interval: (1343076800, 1343076800) }], assumptions: [] })"
       ],
       [
         "stack-context-open",

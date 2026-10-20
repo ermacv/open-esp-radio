@@ -211,8 +211,13 @@ def validate(args):
     stack_rows = [r for r in first_copy_rows if r[0].startswith('stack-') and r[0] != 'stack-facts']
     setup = one(r[1] for r in stack_rows if r[0] == 'stack-setup')
     assert 'pointer: 1343076800, scratch: 788591808' in setup
+    resumed = one(r[1] for r in stack_rows if r[0] == 'stack-resumed')
+    assert resumed.startswith('Some(StackContext')
+    assert 'basis: Installed { previous_coordinate: 0 }' in resumed
+    assert 'interval: (1343076800, 1343076800)' in resumed
     checked_root = one(r for r in stack_rows if r[0] == 'stack-root')
     assert checked_root[1] == 'runtime_main' and checked_root[2].startswith('Some(StackContext')
+    assert 'basis: Entry' in checked_root[2]
     assert 'interval: (1343076800, 1343076800)' in checked_root[2]
     incoming = [r for r in stack_rows if r[0] == 'stack-incoming' and r[3] == constructor.owner[0]]
     assert {(r[1], r[2]) for r in incoming} == {('0x2f00337e', '0x2f003490'), ('0x50019a18', '0x50019c1c')}

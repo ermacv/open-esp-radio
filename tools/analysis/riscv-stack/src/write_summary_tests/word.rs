@@ -689,6 +689,256 @@ fn resolved_contexts_keep_the_existing_executor_assumption() {
     ));
 }
 
+#[test]
+fn review_stack_setup_does_not_rebase_a_pointer_saved_before_the_switch() {
+    let memory = WorkingMemory::new(64 * 1024 * 1024).unwrap();
+    let setup_records = facts(
+        &[addi(2, 0, 1024), addi(5, 0, 512), 0x34029073, RET],
+        0x4000,
+        &memory,
+    );
+    let setup = stack_setup(
+        &index(&setup_records, &memory),
+        0x4000,
+        &RiscvDecoder,
+        &mut || Ok(()),
+    )
+    .unwrap()
+    .unwrap();
+    let (_, tail) = bounded_copy(&memory);
+    let startup = facts(
+        &[
+            addi(8, 2, 0), // s0 retains the OLD sp across the installer.
+            jal(1, 0x4000 - 0x1004),
+            addi(10, 8, -16), // destination is old-sp - 16.
+            addi(11, 2, 8),
+            addi(12, 0, 68),
+            jal(1, 0x2000 - 0x1014),
+            lw(6, 8, 28),
+            RET,
+        ],
+        0x1000,
+        &memory,
+    );
+    let idx = index(&startup, &memory);
+    let resumed =
+        resume_stack_context(&setup, &idx, 0x1000, 0x1004, &memory, &mut || Ok(())).unwrap();
+    let result = call_word_with_stack(
+        &idx,
+        0x1000,
+        0x1014,
+        ABI,
+        &tail,
+        resumed.as_ref(),
+        &memory,
+        &mut || Ok(()),
+    )
+    .unwrap();
+    // Entry sp can be 0xffffffd0, so the actual destination is 0xffffffc0.
+    // Installing sp=1024 does not bound the saved old pointer. The unsigned
+    // copy can return before destination+44 and cannot satisfy this word fact.
+    assert_eq!(result.unwrap_err(), WordBarrier::DestinationBounds);
+}
+
+#[test]
+fn installed_stack_context_refuses_ambiguous_pointer_epochs_and_prepared_words() {
+    let memory = WorkingMemory::new(64 * 1024 * 1024).unwrap();
+    let setup_records = facts(
+        &[addi(2, 0, 1024), addi(5, 0, 512), 0x34029073, RET],
+        0x4000,
+        &memory,
+    );
+    let setup = stack_setup(
+        &index(&setup_records, &memory),
+        0x4000,
+        &RiscvDecoder,
+        &mut || Ok(()),
+    )
+    .unwrap()
+    .unwrap();
+    let (_, tail) = bounded_copy(&memory);
+    for (save, reload, destination, barrier) in [
+        // A saved register retains the old sp.
+        (
+            addi(8, 2, 0),
+            addi(0, 0, 0),
+            addi(10, 8, -16),
+            WordBarrier::DestinationBounds,
+        ),
+        // The evaluator already discards spilled contents across the call.
+        (
+            store(2, 2, 0, 2),
+            lw(8, 2, 0),
+            addi(10, 8, -16),
+            WordBarrier::Alignment,
+        ),
+        // Even new-sp-derived pointers remain ambiguous in EntryStack facts.
+        (
+            addi(8, 2, 0),
+            addi(8, 2, 0),
+            addi(10, 8, -16),
+            WordBarrier::DestinationBounds,
+        ),
+        (
+            addi(8, 2, 0),
+            addi(0, 0, 0),
+            addi(10, 2, -16),
+            WordBarrier::DestinationBounds,
+        ),
+    ] {
+        let code = [
+            save,
+            jal(1, 0x4000 - 0x1004),
+            reload,
+            destination,
+            addi(11, 2, 8),
+            addi(12, 0, 68),
+            jal(1, 0x2000 - 0x1018),
+            lw(6, 8, 28),
+            RET,
+        ];
+        let records = facts(&code, 0x1000, &memory);
+        let idx = index(&records, &memory);
+        let resumed = resume_stack_context(&setup, &idx, 0x1000, 0x1004, &memory, &mut || Ok(()))
+            .unwrap()
+            .unwrap();
+        let application = call_word_with_stack(
+            &idx,
+            0x1000,
+            0x1018,
+            ABI,
+            &tail,
+            Some(&resumed),
+            &memory,
+            &mut || Ok(()),
+        )
+        .unwrap();
+        assert_eq!(application.unwrap_err(), barrier);
+        let calls = stack_calls_with_stack(
+            &idx,
+            0x1000,
+            ABI,
+            &[&tail],
+            Some(&resumed),
+            &memory,
+            &mut || Ok(()),
+        )
+        .unwrap();
+        assert!(!is_call_word(
+            &facts_in_context(&code, &calls, Some(&resumed), &memory),
+            &memory
+        ));
+        // A pre-switch prepared proof cannot be reused after installation,
+        // even when the same instructions/arguments have canonical aliases.
+        let before = numerical_root(1024, 0x800, &memory);
+        let calls = stack_calls_with_stack(
+            &idx,
+            0x1000,
+            ABI,
+            &[&tail],
+            Some(&before),
+            &memory,
+            &mut || Ok(()),
+        )
+        .unwrap();
+        if barrier == WordBarrier::DestinationBounds {
+            assert!(is_call_word(
+                &facts_in_context(&code, &calls, Some(&before), &memory),
+                &memory
+            ));
+        }
+        assert!(!is_call_word(
+            &facts_in_context(&code, &calls, Some(&resumed), &memory),
+            &memory
+        ));
+    }
+}
+
+#[test]
+fn installed_sp_becomes_a_callee_entry_fact_without_rebasing_the_callers_pointers() {
+    let memory = WorkingMemory::new(64 * 1024 * 1024).unwrap();
+    let setup_records = facts(
+        &[addi(2, 0, 1024), addi(5, 0, 512), 0x34029073, RET],
+        0x4000,
+        &memory,
+    );
+    let setup = stack_setup(
+        &index(&setup_records, &memory),
+        0x4000,
+        &RiscvDecoder,
+        &mut || Ok(()),
+    )
+    .unwrap()
+    .unwrap();
+    let (code, tail) = bounded_copy(&memory);
+    let caller = facts(&code, 0x1000, &memory);
+    for transfer in [0, 1] {
+        // Pre-installation frame adjustments must not shift the installed sp.
+        let startup = [
+            addi(2, 2, -32),
+            addi(8, 2, 0),
+            jal(1, 0x4000 - 0x5008),
+            addi(10, 8, -16),
+            jal(transfer, 0x1000 - 0x5010),
+            RET,
+        ];
+        let records = facts(&startup, 0x5000, &memory);
+        let idx = index(&records, &memory);
+        let resumed = resume_stack_context(&setup, &idx, 0x5000, 0x5008, &memory, &mut || Ok(()))
+            .unwrap()
+            .unwrap();
+        let child =
+            call_stack_context(
+                &idx,
+                0x5000,
+                0x5010,
+                Some(&resumed),
+                &memory,
+                &mut || Ok(()),
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(child.interval(), (1024, 1024));
+        assert!(
+            call_word_with_stack(
+                &index(&caller, &memory),
+                0x1000,
+                0x1018,
+                ABI,
+                &tail,
+                Some(&child),
+                &memory,
+                &mut || Ok(()),
+            )
+            .unwrap()
+            .is_ok()
+        );
+        // Restoring old sp (also at the same canonical coordinate) revokes
+        // the live-sp-only propagation, including for an already made context.
+        let mut restored = startup;
+        restored[3] = addi(2, 8, 0);
+        let records = facts(&restored, 0x5000, &memory);
+        let idx = index(&records, &memory);
+        assert!(
+            resume_stack_context(&setup, &idx, 0x5000, 0x5008, &memory, &mut || Ok(()))
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            call_stack_context(
+                &idx,
+                0x5000,
+                0x5010,
+                Some(&resumed),
+                &memory,
+                &mut || Ok(()),
+            )
+            .unwrap()
+            .is_none()
+        );
+    }
+}
+
 fn caller_code() -> Vec<u32> {
     vec![
         addi(2, 2, -32),

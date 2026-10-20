@@ -113,6 +113,7 @@ pub fn derive<'m>(
             memory,
             c,
         )?;
+        println!("stack-resumed\t{resumed:?}");
         for tail in &analysis.functions[&startup.address].transfers {
             if tail.target == Some(symbol(&task.root)?.address) {
                 root = match resumed.as_ref() {

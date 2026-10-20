@@ -6,6 +6,7 @@
   "later_overlapping_store": "rejected",
   "forged_application": "rejected",
   "changed_setup_pointer": "rejected",
+  "rebased_entry_pointers": "rejected",
   "omitted_cpu0_context": "rejected",
   "omitted_open_cfg_edge": "rejected",
   "forged_interval": "rejected",

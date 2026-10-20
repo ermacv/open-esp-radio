@@ -49,6 +49,7 @@ def main():
         'later_overlapping_store': ('first-constructor-copy.tsv', later_store),
         'forged_application': ('first-constructor-copy.tsv', lambda s: replace(s, 'word-application\tErr(DestinationBounds)', 'word-application\tOk(forged)')),
         'changed_setup_pointer': ('first-constructor-copy.tsv', lambda s: replace(s, 'pointer: 1343076800, scratch:', 'pointer: 1343076816, scratch:')),
+        'rebased_entry_pointers': ('first-constructor-copy.tsv', lambda s: replace(s, 'basis: Installed { previous_coordinate: 0 }', 'basis: Entry')),
         'omitted_cpu0_context': ('first-constructor-copy.tsv', lambda s: replace(s, 'stack-incoming\t0x50019a18\t0x50019c1c\t0x5006bb46\tSome({TaskPolls})\n', '')),
         'omitted_open_cfg_edge': ('first-constructor-copy.tsv', lambda s: '\n'.join(l for l in s.splitlines() if not l.startswith('stack-context-open\t0x500654f6\t')) + '\n'),
         'forged_interval': ('first-constructor-copy.tsv', lambda s: replace(s, 'stack-context-result\tNone', 'stack-context-result\tSome((0, 1343076800))')),

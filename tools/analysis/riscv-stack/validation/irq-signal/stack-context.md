@@ -35,6 +35,14 @@ result says where the current sp is. Canonical return-register facts and the
 actual final `csrw mscratch` prove the stack installer's two pointer values
 on every normal return. An entry bypass of that CSR is rejected. The checked
 continuation binds the installer to its actual startup call and root transfer.
+The continuation context is explicitly `Installed`: it proves only the live
+sp, provided there are no subsequent sp writes. It cannot bound any
+`EntryStack`-derived pointer in the installing function. The evaluator does
+not distinguish pointers saved before and after a call that changes sp, so
+both are conservatively refused there. At a checked call/tail, the live sp
+becomes the callee's `Entry` context; saved registers and arguments are not
+rebased. The diagnostic prints both bases and their machine origins.
+
 The opt-in stack decoder uses the common evaluator and models `fence.i` as preserving integer
 registers and data words. It models `wfi` as preserving integer registers
 while discarding remembered memory words and retaining a `WaitMemory` gap;
@@ -83,6 +91,16 @@ unknown jumps, overflow, alignment, stale code/context/image, explicit
 executor assumptions, cancellation and refused admission. The model input
 `D = 0xffffffc0` remains rejected.
 
+The review regression saves old sp in s0, installs sp = 1024, then copies to
+s0 minus 16. With old sp = `0xffffffd0`, that destination is `0xffffffc0`.
+It failed on `fc11a598`, which incorrectly returned `CallWord`; it now returns
+`DestinationBounds`. Additional cases exercise saved registers, discarded
+spills, post-installation aliases, cached proof reuse, pre-installation frame
+offsets, call/tail entry propagation and restoring old sp. Restoring sp after
+installation rejects propagation even when the canonical old coordinate is
+unchanged. A freshly established callee entry still admits its own stack
+destination proof.
+
 Reproduction uses the existing image capture and typed DWARF; no additional
 ELF/DWARF walk supplies analysis facts:
 
@@ -107,7 +125,7 @@ all four full audits, retaining complete audit diffs. The opt-in profile leaves 
 individual unknown reasons, proof stopping PCs and candidate sets.
 
 Validation on that base: tests for all 50 affected host packages/consumers,
-including 225 stack tests, all-target clippy under the workspace warning
+including 228 stack tests, all-target clippy under the workspace warning
 policy, formatting and diff checks pass. Both w0/w1 builds pass. All 14
 machine files and four full audits are byte-identical. All eight reports
 have identical semantics; only the `analysis:` resource row changes in the
@@ -118,6 +136,7 @@ review, unresolved site or assumption changes. See the full
 
 Two independent current-chain captures have identical eight streams and
 JSON. The [bad-fact replay](check-stack-context.py) passes the positive replay
-and rejects all nine injected changes, including omitted contexts, omitted
-CFG evidence, forged intervals and forged successful applications; its
+and rejects all ten injected changes, including rebased entry pointers,
+omitted contexts, omitted CFG evidence, forged intervals and forged successful
+applications; its
 [results](current-chain-checks.json) supplement the Rust factory regressions.
