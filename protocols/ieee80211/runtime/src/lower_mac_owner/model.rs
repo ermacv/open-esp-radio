@@ -119,9 +119,12 @@ use core::{
     num::NonZeroU16,
     task::{Poll, Waker},
 };
-use oer_ieee80211_port::association::{
-    self, Association, AssociationPool, AssociationStart, BlockAckSlot, BlockAckSlots,
-    GroupKeySlot, KeyBankParts, PairwiseKeySlot, VacantAssociation, VacantKeyBank,
+use oer_ieee80211_port::{
+    association,
+    association::{
+        Association, AssociationPool, AssociationStart, BlockAckSlot, BlockAckSlots, GroupKeySlot,
+        KeyBankParts, PairwiseKeySlot, VacantAssociation, VacantKeyBank,
+    },
 };
 use oer_ieee80211_wire::ccmp::Ccmp128Key;
 use oer_ieee80211_wire::ccmp::GroupKeyId;
@@ -1498,8 +1501,8 @@ struct InterfaceAssociations {
 }
 impl Default for InterfaceAssociations {
     fn default() -> Self {
-        use oer_ieee80211_wire::security::Spp;
         use oer_ieee80211_rsn::ccmp_mpdu::CcmpAssociation;
+        use oer_ieee80211_wire::security::Spp;
         Self {
             station: CcmpAssociation::new(Spp::NotNegotiated),
             access_point: CcmpAssociation::new(Spp::NotNegotiated),
@@ -1737,7 +1740,11 @@ impl ModelAir {
 
     /// Delay the current publication's result until released or its bound
     /// expires. A queued successor cannot pass this publication.
-    pub fn hold_completion(&self, category: oer_ieee80211_wire::qos::WmmAccessCategory, held: bool) {
+    pub fn hold_completion(
+        &self,
+        category: oer_ieee80211_wire::qos::WmmAccessCategory,
+        held: bool,
+    ) {
         let mut results = self.held_results.get();
         *category.select_mut(&mut results) = held;
         self.held_results.set(results);

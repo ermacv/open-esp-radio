@@ -18,6 +18,42 @@ pub const ADDBA_RESPONSE_ACTION: u8 = 1;
 pub const DELBA_ACTION: u8 = 2;
 pub const ADDBA_ACTION_BODY_LEN: usize = 9;
 
+/// A field that cannot be represented by an immediate ADDBA request.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AddbaRequestError {
+    InvalidTid(u8),
+    InvalidWindow(u16),
+}
+
+/// Encode an immediate-policy ADDBA Request action body.
+///
+/// The session owner supplies the dialog token, timeout and starting sequence;
+/// the wire encoder owns the BA Parameter Set and field order.
+pub fn encode_addba_request(
+    dialog_token: u8,
+    tid: u8,
+    window: u16,
+    timeout_tu: u16,
+    amsdu: bool,
+    starting_sequence: SequenceNumber,
+) -> Result<[u8; ADDBA_ACTION_BODY_LEN], AddbaRequestError> {
+    if tid > 15 {
+        return Err(AddbaRequestError::InvalidTid(tid));
+    }
+    if window == 0 || window > 0x03ff {
+        return Err(AddbaRequestError::InvalidWindow(window));
+    }
+    let parameters = u16::from(amsdu) | 1 << 1 | u16::from(tid) << 2 | window << 6;
+    let mut body = [0; ADDBA_ACTION_BODY_LEN];
+    body[0] = BLOCK_ACK_CATEGORY;
+    body[1] = ADDBA_REQUEST_ACTION;
+    body[2] = dialog_token;
+    body[3..5].copy_from_slice(&parameters.to_le_bytes());
+    body[5..7].copy_from_slice(&timeout_tu.to_le_bytes());
+    body[7..9].copy_from_slice(&starting_sequence.sequence_control().to_le_bytes());
+    Ok(body)
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum BlockAckAction {
     AddbaRequest {

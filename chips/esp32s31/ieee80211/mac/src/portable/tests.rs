@@ -1,6 +1,5 @@
 use oer_ieee80211_port::RxEvidence;
 use oer_ieee80211_wire::channel::ChannelWidth;
-use oer_ieee80211_softmac::MacRxEvidence;
 
 use super::*;
 
@@ -217,10 +216,10 @@ fn he_su_receptions_decode_he_sig_a() {
 fn receive_metadata_keeps_provenance_and_takes_the_configured_channel() {
     let channel = Channel::ghz2_4(11, ChannelWidth::Mhz20).unwrap();
     let chip = MacRxMetadata {
-        rate: MacRxEvidence::HardwareObserved(prefix(OFDM, LegacyRate::Ofdm6M.code(), 0, 0)),
-        rssi_dbm: MacRxEvidence::HardwareObserved(-61),
-        s_mpdu: MacRxEvidence::HardwareObserved(false),
-        ampdu: MacRxEvidence::ProtocolValidated(false),
+        rate: RxEvidence::HardwareObserved(prefix(OFDM, LegacyRate::Ofdm6M.code(), 0, 0)),
+        rssi_dbm: RxEvidence::HardwareObserved(-61),
+        s_mpdu: RxEvidence::HardwareObserved(false),
+        ampdu: RxEvidence::ProtocolValidated(false),
         ..MacRxMetadata::unavailable()
     };
     let meta = rx_meta(chip, channel);
@@ -235,7 +234,7 @@ fn receive_metadata_keeps_provenance_and_takes_the_configured_channel() {
     assert_eq!(meta.timestamp, RxEvidence::Unavailable);
 
     let mu = MacRxMetadata {
-        rate: MacRxEvidence::HardwareObserved(prefix(HE_MU, 0, 0, 0)),
+        rate: RxEvidence::HardwareObserved(prefix(HE_MU, 0, 0, 0)),
         ..chip
     };
     assert_eq!(rx_meta(mu, channel).rate, RxEvidence::Unavailable);

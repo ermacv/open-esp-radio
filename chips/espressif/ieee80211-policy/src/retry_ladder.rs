@@ -10,10 +10,10 @@
 //! (`oer-ieee80211-upper-mac::retry`) consumes it through
 //! [`RateLadder`].
 
+use oer_ieee80211_upper_mac::RateLadder;
 use oer_ieee80211_wire::phy::{
     FecCoding, HeGiLtf, HeRate, HtRate, LegacyRate, PhyRate, PpduBandwidth,
 };
-use oer_ieee80211_upper_mac::RateLadder;
 
 use crate::{
     rate_code::{legacy_code, legacy_rate, phy_rate},

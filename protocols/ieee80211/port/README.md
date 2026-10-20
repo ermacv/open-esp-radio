@@ -306,13 +306,14 @@ vendor knowledge not recovered, policy decision pending) is recorded in its
 documentation, not in code.
 
 The PHY and channel values come from
-[`oer-ieee80211-wire`](../mac/src/phy.rs): `Channel` (2.4 GHz and 5 GHz with
+[`oer-ieee80211-wire`](../wire/src/phy.rs): `Channel` (2.4 GHz and 5 GHz with
 20 MHz and 40 MHz geometry) and `PhyRate` (non-HT, HT and HE SU).
-`RxEvidence` and `RxCryptoStatus` are the receive provenance values
-`oer-ieee80211-softmac` re-exports as `MacRxEvidence` and
-`MacRxCryptoStatus`, and softmac's `MacTxResult::HardwareFailure` carries a
-`TxStatus`. `MacOperationOwnership::hardware_services` turns a softmac
-service description into `HardwareServices`.
+`RxEvidence` and `RxCryptoStatus` describe receive provenance. Backend-facing
+service values, including `MacTxResult`, `MacRxMetadata`, `MacResourceLimits`,
+configuration, monitor admission and `EdcaContention`, live in this port.
+`MacOperationOwnership::hardware_services` turns a service description into
+`HardwareServices`. Association `PhyMode` and `Preference` also belong here;
+wire encoding obtains selected capability elements through `AssociationPhy`.
 
 ## Above the port
 
@@ -326,8 +327,8 @@ the contention draw of its queues and the numbering of protected MPDUs.
 | The retry plan of an MPDU and the rate control that chooses it | `oer-ieee80211-upper-mac` |
 | Which A-MPDU subframes the next aggregate resends after a `BlockAckReport` (`BlockAckReport::acknowledges`), the BlockAckReq, aging | `oer-ieee80211-upper-mac` `ampdu` |
 | RTS/CTS or CTS-to-self and the control-frame rate | `oer-ieee80211-upper-mac` `protection` |
-| Receive replay (transmit packet numbers are the backend's, below the port, with `ccmp::CcmpTxPacketNumber`) | `oer-ieee80211-wire` `ccmp` |
-| Receive Block Ack reordering | `oer-ieee80211-wire` `block_ack::reorder` |
+| Receive replay (transmit packet numbers are the backend's, below the port, with `ccmp::CcmpTxPacketNumber`) | `oer-ieee80211-upper-mac` `ccmp` |
+| Receive Block Ack reordering | `oer-ieee80211-upper-mac` `block_ack::reorder` |
 | The station's lifecycle, from its scan to its disconnect | `oer-ieee80211-sta` `machine` |
 
 Limits, rate ladders and duration estimates in which implementations differ

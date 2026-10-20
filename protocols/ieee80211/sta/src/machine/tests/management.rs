@@ -1,7 +1,7 @@
 //! Full negotiated PMF exchanges with independent AESCCM/CMAC wire vectors.
 use super::*;
-use oer_ieee80211_wire::security::rsn::Akm;
 use oer_ieee80211_rsn::{Ptk, frames::RsnTxFrame};
+use oer_ieee80211_wire::security::rsn::Akm;
 
 // Generated with Python cryptography AESCCM(tag_length=8) and AES-CMAC.
 // PTK = WPA2 PRF(PMK=[7;32], LOCAL/BSSID, SNonce=[3;32], ANonce=[4;32]);

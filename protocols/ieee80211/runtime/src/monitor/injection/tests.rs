@@ -1,6 +1,6 @@
 use super::*;
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
-use oer_ieee80211_softmac::WifiChannel;
+use oer_ieee80211_wire::channel::WifiChannel;
 
 fn binding() -> MonitorInjectionChannelBinding {
     MonitorInjectionChannelBinding::new(1, 1, WifiChannel::mhz20(1).unwrap()).unwrap()

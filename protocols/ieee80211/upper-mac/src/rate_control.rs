@@ -11,13 +11,15 @@
 use core::num::NonZeroU16;
 
 use oer_ieee80211_port::{BlockAckSnr, LinkMetric};
-use oer_ieee80211_wire::{
-    he::{He20Capabilities, He20PeerState},
-    ht::HtPeerCapabilities,
-    phy::PhyRate,
-    station::association::PhyMode,
-};
 use oer_time::Instant;
+use {
+    oer_ieee80211_port::PhyMode,
+    oer_ieee80211_wire::{
+        he::{He20Capabilities, He20PeerState},
+        ht::HtPeerCapabilities,
+        phy::PhyRate,
+    },
+};
 
 mod legacy;
 pub use legacy::NegotiatedLegacyRates;

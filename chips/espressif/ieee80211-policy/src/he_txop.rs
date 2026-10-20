@@ -1,8 +1,8 @@
 //! The Espressif estimate of the HE SU APEP length that fits below a TXOP
 //! duration RTS threshold.
 
-use oer_ieee80211_wire::phy::{HeGiLtf, HeRate};
 use oer_ieee80211_upper_mac::{HePacketPadding, HeTxopDurationRtsThreshold, HeTxopRtsBudget};
+use oer_ieee80211_wire::phy::{HeGiLtf, HeRate};
 
 /// The nominal packet padding code the vendor stores from the peer's HE
 /// Capabilities.

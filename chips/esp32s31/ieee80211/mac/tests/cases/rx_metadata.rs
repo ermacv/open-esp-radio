@@ -43,18 +43,18 @@ fn staged_rx_metadata_decodes_only_instruction_proved_s31_fields() {
     assert_eq!(
         decode_normalized_rx_metadata(&metadata),
         Some(MacRxMetadata {
-            channel: MacRxEvidence::Unavailable,
-            rate: MacRxEvidence::HardwareObserved(RxPhyInfo {
+            channel: RxEvidence::Unavailable,
+            rate: RxEvidence::HardwareObserved(RxPhyInfo {
                 rate: 11,
                 bb_format: 4,
                 he_siga1: 0x0040_5b4b,
                 he_siga2: 0x1234,
             }),
-            rssi_dbm: MacRxEvidence::HardwareObserved(-47),
-            crypto: MacRxEvidence::Unavailable,
-            s_mpdu: MacRxEvidence::HardwareObserved(false),
-            ampdu: MacRxEvidence::ProtocolValidated(true),
-            amsdu: MacRxEvidence::Unavailable,
+            rssi_dbm: RxEvidence::HardwareObserved(-47),
+            crypto: RxEvidence::Unavailable,
+            s_mpdu: RxEvidence::HardwareObserved(false),
+            ampdu: RxEvidence::ProtocolValidated(true),
+            amsdu: RxEvidence::Unavailable,
         })
     );
     assert_eq!(decode_normalized_rx_metadata(&metadata[..0x1c]), None);
@@ -65,7 +65,7 @@ fn staged_rx_metadata_decodes_only_instruction_proved_s31_fields() {
         decode_normalized_rx_metadata(&metadata)
             .expect("complete metadata")
             .channel,
-        MacRxEvidence::Unavailable,
+        RxEvidence::Unavailable,
     );
 }
 
@@ -78,9 +78,9 @@ fn normalized_ht_rx_metadata_uses_the_direct_ht_sig_aggregation_bit() {
     metadata[0x25] = 2 << 4;
 
     let decoded = decode_normalized_rx_metadata(&metadata).unwrap();
-    assert_eq!(decoded.s_mpdu, MacRxEvidence::HardwareObserved(false));
-    assert_eq!(decoded.ampdu, MacRxEvidence::HardwareObserved(true));
-    let MacRxEvidence::HardwareObserved(phy) = decoded.rate else {
+    assert_eq!(decoded.s_mpdu, RxEvidence::HardwareObserved(false));
+    assert_eq!(decoded.ampdu, RxEvidence::HardwareObserved(true));
+    let RxEvidence::HardwareObserved(phy) = decoded.rate else {
         panic!("HT PHY metadata must remain hardware-observed");
     };
     let signal = phy.ht_signal().unwrap();
@@ -92,7 +92,7 @@ fn normalized_ht_rx_metadata_uses_the_direct_ht_sig_aggregation_bit() {
     metadata[4..8].fill(0);
     assert_eq!(
         decode_normalized_rx_metadata(&metadata).unwrap().ampdu,
-        MacRxEvidence::HardwareObserved(false)
+        RxEvidence::HardwareObserved(false)
     );
 }
 
@@ -107,7 +107,7 @@ fn normalized_ht_rx_metadata_separates_mcs32_from_the_five_bit_rate_summary() {
     metadata[0x25] = 2 << 4;
 
     let decoded = decode_normalized_rx_metadata(&metadata).unwrap();
-    let MacRxEvidence::HardwareObserved(phy) = decoded.rate else {
+    let RxEvidence::HardwareObserved(phy) = decoded.rate else {
         panic!("HT PHY metadata must remain hardware-observed");
     };
     assert_eq!(phy.rate, 0);
@@ -119,8 +119,7 @@ fn normalized_ht_rx_metadata_separates_mcs32_from_the_five_bit_rate_summary() {
     assert!(signal.ht_duplicate_mcs32().is_some());
 
     metadata[4..8].copy_from_slice(&32_u32.to_le_bytes());
-    let MacRxEvidence::HardwareObserved(phy) =
-        decode_normalized_rx_metadata(&metadata).unwrap().rate
+    let RxEvidence::HardwareObserved(phy) = decode_normalized_rx_metadata(&metadata).unwrap().rate
     else {
         panic!("HT PHY metadata must remain hardware-observed");
     };
@@ -140,19 +139,19 @@ fn normalized_rx_metadata_separates_format_validated_ampdu_from_ht_hardware_stat
     metadata[0x25] = 4 << 4;
     assert_eq!(
         decode_normalized_rx_metadata(&metadata).unwrap().ampdu,
-        MacRxEvidence::ProtocolValidated(true)
+        RxEvidence::ProtocolValidated(true)
     );
 
     metadata[0x25] = 1 << 4;
     assert_eq!(
         decode_normalized_rx_metadata(&metadata).unwrap().ampdu,
-        MacRxEvidence::ProtocolValidated(false)
+        RxEvidence::ProtocolValidated(false)
     );
 
     metadata[0x25] = 9 << 4;
     assert_eq!(
         decode_normalized_rx_metadata(&metadata).unwrap().ampdu,
-        MacRxEvidence::Unavailable
+        RxEvidence::Unavailable
     );
 }
 
@@ -188,10 +187,7 @@ fn normalized_monitor_view_excludes_the_vendor_prefix_and_stripped_fcs() {
     .unwrap();
     assert_eq!(frame.mpdu, &storage[0x40..]);
     assert_eq!(frame.logical_length, MPDU_LENGTH);
-    assert_eq!(
-        frame.metadata.rssi_dbm,
-        MacRxEvidence::HardwareObserved(-42)
-    );
+    assert_eq!(frame.metadata.rssi_dbm, RxEvidence::HardwareObserved(-42));
 }
 
 #[test]

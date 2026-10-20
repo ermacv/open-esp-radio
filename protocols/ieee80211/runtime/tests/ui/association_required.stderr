@@ -12,4 +12,4 @@ note: method defined here
 help: provide the argument
    |
 15 |         .install_pairwise_key(/* &ModelAssociation<'id, oer_ieee80211_port::Station> */, slot, peer, Ccmp128Key::new(&[1; 16])); // ui-error: E0061
-   |                               +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+   |                               ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++

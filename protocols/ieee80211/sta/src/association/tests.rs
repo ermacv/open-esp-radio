@@ -27,12 +27,13 @@ fn a_peer_without_ht_is_legacy_whatever_the_preference() {
 }
 
 mod associated_peer {
+    use oer_ieee80211_upper_mac::{BasicRates, HePacketPadding};
     use oer_ieee80211_wire::{
+        ht::{HT_CAPABILITY_IE_LEN, HT_OPERATION_IE_LEN},
         protection::{ErpProtection, HtProtectionMode},
-        scan::{HT_CAPABILITY_IE_LEN, HT_OPERATION_IE_LEN, ScanRecord},
+        scan::ScanRecord,
         station::AssociationResponse,
     };
-    use oer_ieee80211_upper_mac::{BasicRates, HePacketPadding};
 
     use super::super::{PhyMode, StaAssociatedPeer, StaAssociatedPeerError};
 

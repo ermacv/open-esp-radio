@@ -2,11 +2,13 @@
 
 use oer_ieee80211_wire::address::{Bssid, OwnAddress};
 use oer_ieee80211_wire::sequence::SequenceNumber;
-use oer_ieee80211_wire::{
-    security::LinkProtection,
-    station::{
-        AssociationResponse, StaDisconnect, StaSequenceCounter, parse_association_response,
-        parse_sta_disconnect,
+use {
+    crate::sequence::StaSequenceCounter,
+    oer_ieee80211_wire::{
+        security::LinkProtection,
+        station::{
+            AssociationResponse, StaDisconnect, parse_association_response, parse_sta_disconnect,
+        },
     },
 };
 

@@ -30,7 +30,7 @@
     )
 )]
 
-//! Portable IEEE 802.11 transmit policy above the lower-MAC port.
+//! Portable IEEE 802.11 frame-exchange state above the lower-MAC port.
 //!
 //! One lower-MAC submission is one hardware transmission attempt
 //! (`oer-ieee80211-port`). Everything a backend does not do on its own
@@ -49,12 +49,20 @@
 //!   statistics. It draws no backoff: the lower-MAC port carries none, and
 //!   a backend draws its queues' contention below the port.
 //!
+//! Receive owners retain duplicate history, fragment reassembly, CCMP replay
+//! and Block Ack reordering. Transmit owners retain PN allocation and Block
+//! Ack negotiation/originator windows. Wire formats remain in
+//! `oer-ieee80211-wire`.
+//!
 //! The package is sans-IO: completions and the radio time enter as values,
 //! attempt plans and reports leave as values, and nothing waits. The station
 //! service in `oer-ieee80211-runtime` submits to the port and feeds its
 //! terminals into rate selection. Vendor retry schedules, limits and
 //! duration estimates are parameters a profile supplies, such as
 //! `oer-espressif-ieee80211-policy`.
+
+#[cfg(test)]
+extern crate std;
 
 pub mod aggregate;
 pub mod ampdu;
@@ -80,3 +88,87 @@ pub use tx::{
     AmpduRequest, AttemptContent, MpduRequest, TxAttemptPlan, TxBody, TxExchange, TxPlanError,
     TxPlanner, TxReport, TxRequest, TxStep,
 };
+
+#[warn(
+    clippy::let_underscore_must_use,
+    clippy::let_underscore_untyped,
+    clippy::arithmetic_side_effects,
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::unreachable,
+    clippy::todo,
+    clippy::unimplemented,
+    clippy::disallowed_macros
+)]
+pub mod block_ack;
+
+#[warn(
+    clippy::let_underscore_must_use,
+    clippy::let_underscore_untyped,
+    clippy::arithmetic_side_effects,
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::unreachable,
+    clippy::todo,
+    clippy::unimplemented,
+    clippy::disallowed_macros
+)]
+pub mod ccmp;
+
+#[warn(
+    clippy::let_underscore_must_use,
+    clippy::let_underscore_untyped,
+    clippy::arithmetic_side_effects,
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::unreachable,
+    clippy::todo,
+    clippy::unimplemented,
+    clippy::disallowed_macros
+)]
+pub mod duplicate;
+
+#[warn(
+    clippy::let_underscore_must_use,
+    clippy::let_underscore_untyped,
+    clippy::arithmetic_side_effects,
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::unreachable,
+    clippy::todo,
+    clippy::unimplemented,
+    clippy::disallowed_macros
+)]
+pub mod fragmentation;
+
+#[warn(
+    clippy::let_underscore_must_use,
+    clippy::let_underscore_untyped,
+    clippy::arithmetic_side_effects,
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::unreachable,
+    clippy::todo,
+    clippy::unimplemented,
+    clippy::disallowed_macros
+)]
+pub mod receive;
+
+/// A literal test sequence number; panics outside twelve bits.
+#[cfg(test)]
+pub(crate) const fn seq(value: u16) -> oer_ieee80211_wire::sequence::SequenceNumber {
+    match oer_ieee80211_wire::sequence::SequenceNumber::new(value) {
+        Some(sequence) => sequence,
+        None => panic!("test sequence number exceeds twelve bits"),
+    }
+}

@@ -571,13 +571,15 @@ mod seam {
             }
         }
     }
-    use oer_ieee80211_wire::{
-        ht::ht_peer_capabilities,
-        phy::{HtMcs, HtRate, PhyRate, PpduBandwidth},
-        station::association::PhyMode,
-    };
     use oer_ieee80211_upper_mac::rate_control::{
         AmpduUnavailable, MpduOutcome, RateControl, RatePeer,
+    };
+    use {
+        oer_ieee80211_port::PhyMode,
+        oer_ieee80211_wire::{
+            ht::ht_peer_capabilities,
+            phy::{HtMcs, HtRate, PhyRate, PpduBandwidth},
+        },
     };
 
     use super::{NonZeroU16, tally};

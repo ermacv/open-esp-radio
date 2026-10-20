@@ -102,45 +102,6 @@ impl StaPowerCapability {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum PhyMode {
-    Legacy,
-    Ht20,
-    Ht40,
-    He20,
-}
-
-impl PhyMode {
-    pub const fn bandwidth_mhz(self) -> u8 {
-        match self {
-            Self::Ht40 => 40,
-            Self::Legacy | Self::Ht20 | Self::He20 => 20,
-        }
-    }
-
-    pub const fn name(self) -> &'static str {
-        match self {
-            Self::Legacy => "legacy",
-            Self::Ht20 => "ht20",
-            Self::Ht40 => "ht40",
-            Self::He20 => "he20",
-        }
-    }
-}
-
-/// Caller policy applied before constructing one STA association request.
-///
-/// These are preferences rather than unchecked PHY claims. `PreferHe20`
-/// still falls back when the peer does not advertise the complete HE20 MCS9
-/// contract; `ForceHt20` is retained as the diagnostic negative-control mode
-/// and may subsequently be rejected by [`AssociationRequest::encode`].
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum Preference {
-    Automatic,
-    PreferHe20,
-    ForceHt20,
-}
-
 /// Complete local capability elements supplied by the hardware/role profile.
 ///
 /// The portable encoder owns peer admission, security selection and IE order.
@@ -156,13 +117,38 @@ pub struct AssociationCapabilities {
     pub wmm: [u8; 9],
 }
 
+/// The capability elements selected by the caller's association policy.
+pub struct AssociationElements<'a> {
+    /// The complete local HT Capability element when selected.
+    pub ht_capability: Option<&'a [u8; 28]>,
+    /// The complete local HE Capability element when selected.
+    pub he_capability: Option<&'a [u8; 24]>,
+    /// The local HE transmit-power capability when required.
+    pub power_capability: Option<StaPowerCapability>,
+    /// The local HE UL-MU capability when required.
+    pub he_ul_mu_power: Option<HeUlMuPowerCapability>,
+}
+
+/// Stateless selection of the capability elements a request serializes.
+/// The port supplies its negotiated mode without an upward wire dependency.
+pub trait AssociationPhy {
+    /// Select the admitted local elements after fixed request validation.
+    fn elements<'a>(
+        &self,
+        access_point: &ScanRecord,
+        capabilities: &'a AssociationCapabilities,
+        power_capability: Option<StaPowerCapability>,
+        he_ul_mu_power: Option<HeUlMuPowerCapability>,
+    ) -> Result<AssociationElements<'a>, AssociationRequestError>;
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct AssociationRequest<'a> {
+pub struct AssociationRequest<'a, P> {
     pub source: OwnAddress,
     pub access_point: &'a ScanRecord,
     pub sequence_number: SequenceNumber,
     pub listen_interval: u16,
-    pub phy: PhyMode,
+    pub phy: P,
     /// The security elements this station selected for the access point.
     pub security: &'a SelectedRsn,
     /// HE Power Capability derived from the same calibrated rate-16 power
@@ -173,7 +159,7 @@ pub struct AssociationRequest<'a> {
     pub he_ul_mu_power: Option<HeUlMuPowerCapability>,
 }
 
-impl AssociationRequest<'_> {
+impl<P: AssociationPhy> AssociationRequest<'_, P> {
     pub fn encode(
         self,
         output: &mut [u8],
@@ -202,51 +188,17 @@ impl AssociationRequest<'_> {
         let first_rates_len = rates_len.min(SUPPORTED_RATES_ELEMENT_CAPACITY);
         let extended_rates_len = rates_len - first_rates_len;
         let selected_rsn = self.security;
-        let (ht_capability, he_capability, power_capability, he_ul_mu_power) = match self.phy {
-            PhyMode::Legacy => (None, None, None, None),
-            PhyMode::Ht20 if self.access_point.ht_capability_ie_bytes().is_some() => {
-                (Some(&capabilities.ht20), None, None, None)
-            }
-            PhyMode::Ht20 => {
-                return Err(AssociationRequestError::HtUnsupportedByAccessPoint);
-            }
-            PhyMode::Ht40 if self.access_point.ht40_secondary_channel().is_some() => {
-                (Some(&capabilities.ht40), None, None, None)
-            }
-            PhyMode::Ht40 => {
-                return Err(AssociationRequestError::Ht40UnsupportedByAccessPoint);
-            }
-            PhyMode::He20
-                if self.access_point.ht_capability_ie_bytes().is_some()
-                    && parse_he20_capabilities(self.access_point.he_capability_ie_bytes())
-                        .is_ok_and(|capability| capability.supports_bidirectional_mcs9())
-                    && parse_he20_operation(self.access_point.he_operation_ie_bytes()).is_ok() =>
-            {
-                (
-                    Some(&capabilities.he20_ht),
-                    Some(&capabilities.he20),
-                    Some(
-                        self.power_capability
-                            .ok_or(AssociationRequestError::MissingPowerCapability)?,
-                    ),
-                    Some(
-                        self.he_ul_mu_power
-                            .ok_or(AssociationRequestError::MissingHeUlMuPowerCapability)?,
-                    ),
-                )
-            }
-            PhyMode::He20 => {
-                return Err(AssociationRequestError::He20UnsupportedByAccessPoint);
-            }
-        };
-        if self.phy != PhyMode::He20 {
-            if self.power_capability.is_some() {
-                return Err(AssociationRequestError::UnexpectedPowerCapability);
-            }
-            if self.he_ul_mu_power.is_some() {
-                return Err(AssociationRequestError::UnexpectedHeUlMuPowerCapability);
-            }
-        }
+        let AssociationElements {
+            ht_capability,
+            he_capability,
+            power_capability,
+            he_ul_mu_power,
+        } = self.phy.elements(
+            self.access_point,
+            capabilities,
+            self.power_capability,
+            self.he_ul_mu_power,
+        )?;
         let mut fixed = [0; MANAGEMENT_HEADER_LEN + ASSOCIATION_FIXED_BODY_LEN];
         write_management_header(
             &mut fixed,

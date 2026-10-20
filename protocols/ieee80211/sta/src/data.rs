@@ -12,7 +12,7 @@
 //!
 //! A received data MPDU of the station's BSS gives its MSDUs only once the
 //! replay check of the association's keys passed it
-//! ([`CcmpRxReplayEpoch`](oer_ieee80211_wire::ccmp::CcmpRxReplayEpoch)); the reorder, when it comes, runs before it.
+//! ([`CcmpRxReplayEpoch`](oer_ieee80211_upper_mac::ccmp::CcmpRxReplayEpoch)); the reorder, when it comes, runs before it.
 //!
 //! The station's link ([`LinkView`]) is only there while data may go: it
 //! lends the BSS, the pairwise key (an action carries no key: the service
@@ -790,8 +790,8 @@ impl<'id, D: StaDataTokens, K: oer_ieee80211_port::Ieee80211Capabilities, const 
     }
 }
 
-pub(crate) fn integrity(meta: &RxMeta) -> oer_ieee80211_wire::receive::Integrity {
-    use oer_ieee80211_wire::receive::Integrity;
+pub(crate) fn integrity(meta: &RxMeta) -> oer_ieee80211_upper_mac::receive::Integrity {
+    use oer_ieee80211_upper_mac::receive::Integrity;
     match meta.crypto {
         RxEvidence::HardwareObserved(RxCryptoStatus::DecryptedAndIntegrityVerified)
         | RxEvidence::ProtocolValidated(RxCryptoStatus::DecryptedAndIntegrityVerified) => {
@@ -901,10 +901,7 @@ fn encode_frame<
     sized(output.split_at_checked(len)?.0)
 }
 
-fn sized<
-    K: oer_ieee80211_port::Ieee80211Capabilities,
-    C: oer_ieee80211_port::TxBufferClass,
->(
+fn sized<K: oer_ieee80211_port::Ieee80211Capabilities, C: oer_ieee80211_port::TxBufferClass>(
     frame: &[u8],
 ) -> Option<oer_ieee80211_port::ClassSizedFrame<C, AckHeader, K>> {
     let header = HeaderSpec::decode(frame, IndividualAddress::new)?;

@@ -8,6 +8,7 @@ use oer_esp32s31_ieee80211_mac::rx::{
     RxCcmpDataView, RxError, RxIngressConfig, RxPhyInfo, RxSegment, decode_normalized_rx_metadata,
     view_ccmp_data, view_ccmp_data_fragment, view_normalized_rx_frame,
 };
+use oer_ieee80211_port::{MacRxMetadata, RxCryptoStatus, RxEvidence};
 use oer_ieee80211_wire::ccmp::CcmpHeader;
 use oer_ieee80211_wire::data::{
     DataDecapError, DataDecapsulation, DataInterfaceRole, decapsulate_data_frames,
@@ -15,7 +16,6 @@ use oer_ieee80211_wire::data::{
 use oer_ieee80211_wire::fragmentation::{
     OpenDataFragment, OpenDataFragmentError, parse_ccmp_data_fragment, parse_open_data_fragment,
 };
-use oer_ieee80211_softmac::{MacRxCryptoStatus, MacRxEvidence, MacRxMetadata};
 
 const RETRY: u16 = 0x0800;
 const QOS_SUBTYPE: u16 = 0x0080;
@@ -35,7 +35,7 @@ macro_rules! protected_data_view_body {
         // `view_ccmp_data` admits only the successful S31 RX state and rejects
         // the dedicated MIC-failure state before exposing plaintext.
         metadata.crypto =
-            MacRxEvidence::HardwareObserved(MacRxCryptoStatus::DecryptedAndIntegrityVerified);
+            RxEvidence::HardwareObserved(RxCryptoStatus::DecryptedAndIntegrityVerified);
         let frame_control = u16::from_le_bytes([mpdu[0], mpdu[1]]);
         let sequence_control = u16::from_le_bytes([mpdu[22], mpdu[23]]);
         let tid = if frame_control & QOS_SUBTYPE != 0 && mpdu.len() >= 26 {
@@ -147,7 +147,7 @@ pub fn view_protected_data_fragment(
     let fragment = parse_ccmp_data_fragment(role, view.mpdu, payload, view.ccmp_header)
         .map_err(ProtectedDataFragmentRxError::Fragment)?;
     let mut metadata = view.metadata;
-    metadata.amsdu = MacRxEvidence::ProtocolValidated(false);
+    metadata.amsdu = RxEvidence::ProtocolValidated(false);
     Ok(ProtectedDataFragmentRxView {
         raw: view.raw,
         mpdu: view.mpdu,
@@ -175,7 +175,7 @@ impl<'frame> ProtectedDataRxView<'frame> {
             decapsulate_data_frames(role, self.mpdu, self.payload_offset, self.payload_length)?;
         let amsdu = frames.is_amsdu();
         let mut metadata = self.metadata;
-        metadata.amsdu = MacRxEvidence::ProtocolValidated(amsdu);
+        metadata.amsdu = RxEvidence::ProtocolValidated(amsdu);
         Ok(ProtectedDataDecapsulation {
             frames,
             raw: self.raw,
@@ -231,7 +231,7 @@ pub fn view_unprotected_data(
     }
     let tid = qos.then(|| mpdu[payload_offset - 2] & 0x0f);
     let mut metadata = normalized.metadata;
-    metadata.crypto = MacRxEvidence::ProtocolValidated(MacRxCryptoStatus::Unprotected);
+    metadata.crypto = RxEvidence::ProtocolValidated(RxCryptoStatus::Unprotected);
     Ok(UnprotectedDataRxView {
         raw: segment.buffer,
         mpdu,
@@ -255,7 +255,7 @@ impl<'frame> UnprotectedDataRxView<'frame> {
             decapsulate_data_frames(role, self.mpdu, self.payload_offset, self.payload_length)?;
         let amsdu = frames.is_amsdu();
         let mut metadata = self.metadata;
-        metadata.amsdu = MacRxEvidence::ProtocolValidated(amsdu);
+        metadata.amsdu = RxEvidence::ProtocolValidated(amsdu);
         Ok(ProtectedDataDecapsulation {
             frames,
             raw: self.raw,
@@ -301,8 +301,8 @@ pub fn view_unprotected_data_fragment(
     let fragment =
         parse_open_data_fragment(role, mpdu).map_err(UnprotectedDataFragmentRxError::Fragment)?;
     let mut metadata = normalized.metadata;
-    metadata.crypto = MacRxEvidence::ProtocolValidated(MacRxCryptoStatus::Unprotected);
-    metadata.amsdu = MacRxEvidence::ProtocolValidated(false);
+    metadata.crypto = RxEvidence::ProtocolValidated(RxCryptoStatus::Unprotected);
+    metadata.amsdu = RxEvidence::ProtocolValidated(false);
     Ok(UnprotectedDataFragmentRxView {
         raw: segment.buffer,
         mpdu,

@@ -26,20 +26,20 @@ use oer_esp32s31_ieee80211_driver::{
         upper::{FrameReceiver, QueueSink, RxFrameEnds},
     },
 };
-use oer_esp32s31_ieee80211_mac::{
-    init::MAC_STATION_INTERRUPT_MASK,
-    irq::epoch::{ActiveEpoch, InactiveEpoch, Moderated},
-};
 use oer_espressif_executor::{
     Doorbell, DoorbellAcknowledger, InterruptExecutor, SameLevel,
     poll_timing::{CycleSource, Mcycle},
 };
 use oer_interrupt_table::signal::IrqSignal;
 use oer_memory::{AffineSpscSender, HandlerCell, zeroed::ZeroedStatic};
+use {
+    oer_esp32s31_hal::ieee80211::init::MAC_STATION_INTERRUPT_MASK,
+    oer_esp32s31_ieee80211_mac::irq::epoch::{ActiveEpoch, InactiveEpoch, Moderated},
+};
 
 use crate::{
-    DoorbellToken, WifiMacToken, WifiPwrToken,
-    measure::{self, MAC_LATCH, RING_AT, RING_TO_DOORBELL_MAX},
+    DoorbellToken, WifiMacToken, WifiPwrToken, measure,
+    measure::{MAC_LATCH, RING_AT, RING_TO_DOORBELL_MAX},
 };
 
 /// RX descriptors.

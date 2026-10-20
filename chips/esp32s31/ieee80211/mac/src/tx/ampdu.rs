@@ -7,8 +7,8 @@
 
 #![forbid(unsafe_code)]
 
+use oer_ieee80211_port::MacTxWork;
 use oer_ieee80211_wire::sequence::SequenceNumber;
-use oer_ieee80211_softmac::MacTxWork;
 
 use core::{marker::PhantomPinned, pin::Pin};
 

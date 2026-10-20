@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Allocation-free IEEE 802.11 protocol types and state machines"
+description = "Allocation-free IEEE 802.11 wire formats and value vocabulary"
 
 [features]
 default = []

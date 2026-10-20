@@ -1,21 +1,9 @@
-use super::association::PhyMode;
 use super::*;
 use crate::security::{
     AssociationAkm, Pmkid, SaePwe, StaSecurityPolicy,
     rsn::{RSN_CAPABILITY_MFPC, RSN_CAPABILITY_MFPR},
 };
 use crate::sequence::seq;
-
-// A synthetic profile keeps framing/admission tests independent of any chip.
-// Neither test below emits a local HT/HE element.
-const TEST_ASSOCIATION_CAPABILITIES: AssociationCapabilities = AssociationCapabilities {
-    ht20: [0; 28],
-    ht40: [0; 28],
-    he20_ht: [0; 28],
-    he20: [0; 24],
-    he20_extended: [0; 14],
-    wmm: [0; 9],
-};
 
 const LOCAL: [u8; 6] = [0x02, 0, 0, 0x12, 0x34, 0x56];
 const BSSID: [u8; 6] = [0x30, 0x05, 0x5c, 0x11, 0x22, 0x33];
@@ -29,11 +17,6 @@ fn authentication_response(status_code: u16) -> [u8; 30] {
     frame[26..28].copy_from_slice(&OPEN_SYSTEM_RESPONSE_SEQUENCE.to_le_bytes());
     frame[28..30].copy_from_slice(&status_code.to_le_bytes());
     frame
-}
-
-/// The WPA2-Personal security elements selected for `record`.
-fn wpa2_rsn(record: &ScanRecord) -> SelectedRsn {
-    select_association_rsn(record, StaSecurityPolicy::Wpa2Personal).unwrap()
 }
 
 fn access_point_with_rsn(akms: &[[u8; 4]], capabilities: u16) -> ScanRecord {
@@ -515,84 +498,6 @@ fn truncated_or_trailing_rsn_optional_fields_are_rejected() {
 }
 
 #[test]
-fn association_request_contains_selected_rsn() {
-    let record = access_point_with_rsn(&[[0, 0x0f, 0xac, 2]], 0);
-    let mut output = [0; 96];
-    let length = AssociationRequest {
-        source: crate::address::OwnAddress::new(
-            crate::address::IndividualAddress::new(LOCAL).unwrap(),
-        ),
-        access_point: &record,
-        sequence_number: seq(2),
-        listen_interval: 1,
-        phy: PhyMode::Legacy,
-        security: &wpa2_rsn(&record),
-        power_capability: None,
-        he_ul_mu_power: None,
-    }
-    .encode(&mut output, &TEST_ASSOCIATION_CAPABILITIES)
-    .unwrap();
-    assert_eq!(&output[0..2], &[0, 0]);
-    assert_eq!(&output[4..10], &BSSID);
-    assert_eq!(&output[28..34], &[0, 4, b't', b'e', b's', b't']);
-    assert_eq!(
-        &output[length - SELECTED_RSN_IE_LEN..length],
-        &[
-            48, 20, 1, 0, 0, 0x0f, 0xac, 4, 1, 0, 0, 0x0f, 0xac, 4, 1, 0, 0, 0x0f, 0xac, 2, 0, 4,
-        ]
-    );
-}
-
-#[test]
-fn ht20_request_fails_closed_when_the_ap_did_not_advertise_ht() {
-    let record = access_point_with_rsn(&[[0, 0x0f, 0xac, 2]], 0);
-    assert_eq!(
-        AssociationRequest {
-            source: crate::address::OwnAddress::new(
-                crate::address::IndividualAddress::new(LOCAL).unwrap()
-            ),
-            access_point: &record,
-            sequence_number: seq(2),
-            listen_interval: 1,
-            phy: PhyMode::Ht20,
-            security: &wpa2_rsn(&record),
-            power_capability: None,
-            he_ul_mu_power: None,
-        }
-        .encode(&mut [0; 160], &TEST_ASSOCIATION_CAPABILITIES),
-        Err(AssociationRequestError::HtUnsupportedByAccessPoint)
-    );
-}
-
-#[test]
-fn association_encoder_uses_the_explicit_local_profile() {
-    let mut record = access_point_with_rsn(&[[0, 0x0f, 0xac, 2]], 0);
-    record.set_ht_capability_ie(Some([0; crate::scan::HT_CAPABILITY_IE_LEN]));
-    let mut capabilities = TEST_ASSOCIATION_CAPABILITIES;
-    capabilities.ht20[..6].copy_from_slice(&[45, 26, 0, 0, 0, 1]);
-    capabilities.wmm = [221, 7, 0, 0x50, 0xf2, 2, 0, 1, 0];
-    let mut output = [0; 160];
-    let length = AssociationRequest {
-        source: crate::address::OwnAddress::new(
-            crate::address::IndividualAddress::new(LOCAL).unwrap(),
-        ),
-        access_point: &record,
-        sequence_number: seq(2),
-        listen_interval: 1,
-        phy: PhyMode::Ht20,
-        security: &wpa2_rsn(&record),
-        power_capability: None,
-        he_ul_mu_power: None,
-    }
-    .encode(&mut output, &capabilities)
-    .unwrap();
-
-    let elements = &output[length - 37..length];
-    assert_eq!(&elements[..6], &[45, 26, 0, 0, 0, 1]);
-    assert_eq!(&elements[28..], &[221, 7, 0, 0x50, 0xf2, 2, 0, 1, 0]);
-}
-
-#[test]
 fn he_ul_mu_power_rejects_a_rate_above_the_reference() {
     assert_eq!(
         HeUlMuPowerCapability::from_rate_power_indices([20, 20, 20, 19, 19, 21, 18, 16, 15, 20,]),
@@ -1065,19 +970,6 @@ fn open_ap_needs_no_security_ie() {
         select_association_rsn(&record, StaSecurityPolicy::Wpa2Personal),
         Err(StaSecurityError::SecurityModeMismatch)
     );
-}
-
-#[test]
-fn sta_rx_duplicate_filter_requires_retry_and_matching_sequence_space() {
-    let mut filter = crate::data::RxDuplicateFilter::new();
-    assert!(!filter.is_duplicate(false, 0x1230, None));
-    assert!(filter.is_duplicate(true, 0x1230, None));
-    assert!(!filter.is_duplicate(false, 0x1230, None));
-    assert!(!filter.is_duplicate(true, 0x1240, None));
-
-    assert!(!filter.is_duplicate(false, 0x2000, Some(3)));
-    assert!(!filter.is_duplicate(true, 0x2000, Some(4)));
-    assert!(filter.is_duplicate(true, 0x2000, Some(3)));
 }
 
 /// The authentication a personal selection negotiated.

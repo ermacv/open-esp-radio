@@ -49,13 +49,6 @@ use oer_esp32s31_ieee80211_driver::{
         WifiMacStartConfig, start_esp32s31_radio,
     },
 };
-use oer_esp32s31_ieee80211_mac::{
-    init::{
-        MAC_COLD_HANDSHAKE_DEADLINE, MAC_STATION_INTERRUPT_MASK, MacDelayEntropy,
-        MacSlowClockCalibration, MacSlowClockCalibrationSource,
-    },
-    portable::rx_meta,
-};
 use oer_esp32s31_phy::{
     NoopPhyTargetObserver, PhyCalibrationIdentity, PhyConfig, PhyRegisterConfig,
     PhyTxTargetPowerProfile, concurrent::ConcurrentPhy, phy_get_rf_cal_version,
@@ -65,16 +58,22 @@ use oer_esp32s31_radio_system::{Esp32s31Radio, RadioSystem};
 use oer_espressif_esp_hal_radio::{PlatformClocks, RadioSingletons, take_radio};
 use oer_espressif_executor::{Executor, InterruptExecutor, LevelOrder, timer_observation::Window};
 use oer_espressif_staged_runtime::{panic, stacks};
+use oer_ieee80211_runtime::survey::Survey;
 use oer_ieee80211_wire::{
     address::{Bssid, IndividualAddress},
     channel::{Channel, WifiChannel, WifiChannelWidth},
 };
-use oer_ieee80211_runtime::survey::Survey;
-use oer_ieee80211_softmac::WifiMacAddress;
 use oer_memory::{AffineSpscQueue, AffineSpscReceiver};
 use oer_radio_regulatory::{Country, RegulatoryDomain};
 use oer_time::{Clock, Duration, Instant};
 use static_cell::StaticCell;
+use {
+    oer_esp32s31_hal::ieee80211::init::{
+        MAC_COLD_HANDSHAKE_DEADLINE, MAC_STATION_INTERRUPT_MASK, MacDelayEntropy,
+        MacSlowClockCalibration, MacSlowClockCalibrationSource,
+    },
+    oer_esp32s31_ieee80211_mac::portable::rx_meta,
+};
 
 use crate::{
     irq::{BUFFER, Bound, ImageDoorbell, ImageRoutes, P1Ends, SLOTS},
@@ -595,8 +594,8 @@ async fn run(
         timer_lines,
     } = parts;
     let (Ok(station), Ok(access_point)) = (
-        WifiMacAddress::new(station),
-        WifiMacAddress::new(access_point),
+        IndividualAddress::for_interface(station),
+        IndividualAddress::for_interface(access_point),
     ) else {
         return Err("efuse-mac");
     };
@@ -615,7 +614,8 @@ async fn run(
     ));
     let start = RadioStartConfig::new(
         WifiColdStartConfig::new(channel, ceiling),
-        WifiMacStartConfig::new(MAC_COLD_HANDSHAKE_DEADLINE, station, access_point),
+        WifiMacStartConfig::new(MAC_COLD_HANDSHAKE_DEADLINE, station, access_point)
+            .map_err(|_| "mac-address")?,
     );
     let (_cell, started) = start_esp32s31_radio(
         cell,

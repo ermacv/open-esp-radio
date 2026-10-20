@@ -8,12 +8,12 @@ use embassy_futures::{
     select::{Either, select},
     yield_now,
 };
+use oer_esp32s31_hal::ieee80211::init::{
+    MacColdStartConfig, MacColdStartOutcome, MacSlowClockCalibration,
+};
 use oer_esp32s31_hal::{
     ieee80211::client::{WifiClocked, WifiCold},
     root::RadioHardware,
-};
-use oer_esp32s31_ieee80211_mac::init::{
-    MacColdStartConfig, MacColdStartOutcome, MacSlowClockCalibration,
 };
 use oer_esp32s31_phy::{PhyCalibrationPath, PhyState};
 use oer_esp32s31_radio_client::{

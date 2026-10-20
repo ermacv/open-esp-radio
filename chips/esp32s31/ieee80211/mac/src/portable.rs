@@ -7,12 +7,13 @@
 //! meaning, such as an HE MU reception or a rate the S31 formatter cannot
 //! send, fails closed instead of approximating.
 
+use oer_ieee80211_port::MacRxMetadata;
 use oer_ieee80211_port::RxMeta;
 use oer_ieee80211_wire::{
     channel::Channel,
-    phy::{self, DsssPreamble, FecCoding, HeGiLtf, PhyRate, PpduBandwidth, SpatialStreams},
+    phy,
+    phy::{DsssPreamble, FecCoding, HeGiLtf, PhyRate, PpduBandwidth, SpatialStreams},
 };
-use oer_ieee80211_softmac::MacRxMetadata;
 
 use crate::{
     rx::{HeBandwidth, HeGuardIntervalAndLtf, RxBasebandFormat, RxPhyInfo},

@@ -5,7 +5,7 @@ extern crate alloc;
 
 #[cfg(any(test, feature = "test-support"))]
 use alloc::boxed::Box;
-use oer_ieee80211_softmac::tx_cost::TxContention;
+use oer_ieee80211_port::tx_cost::TxContention;
 
 use core::{ops::Deref, pin::Pin};
 

@@ -23,12 +23,10 @@ pub mod ap_tsf;
 pub mod capabilities;
 pub mod channel_state;
 pub mod coex_runtime;
-mod cold;
 pub mod crypto;
 pub mod edca;
 pub mod he;
 pub mod init;
-mod interface_address;
 pub mod irq;
 /// The 32-bit MAC local time on a 64-bit timeline.
 pub mod local_time;

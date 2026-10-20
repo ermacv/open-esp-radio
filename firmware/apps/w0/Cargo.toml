@@ -10,6 +10,7 @@ description = "W0: the radio system registers the PHY, joins, tracks and leaves 
 build = "build.rs"
 
 [dependencies]
+oer-ieee80211-port = { path = "../../../protocols/ieee80211/port" }
 embassy-executor = { version = "0.10.0", default-features = false }
 esp-hal = { workspace = true, features = ["esp32s31", "static-interrupts", "rt", "unstable"] }
 static_cell = { workspace = true }

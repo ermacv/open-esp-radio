@@ -108,10 +108,10 @@ use oer_ieee80211_port::{
     StationPhase, SupportedChannel, SupportedPower, TxBufferClass, TxBufferPool, TxCompleted,
     TxMpdu, TxPower, TxProtection, TxSource,
 };
-use oer_ieee80211_wire::qos::{WmmAccessCategory, WmmUserPriority};
 use oer_ieee80211_sta::{
+    data,
     data::{
-        self, DataInput, DataProtection, DataRefusal, DataReturn, DataTxContext, Msdu, StaData,
+        DataInput, DataProtection, DataRefusal, DataReturn, DataTxContext, Msdu, StaData,
         StaDataTokens,
     },
     machine::{
@@ -121,6 +121,7 @@ use oer_ieee80211_sta::{
     power_save::NULL_TRANSMISSIONS,
 };
 use oer_ieee80211_upper_mac::rate_selection::{FrameRates, RateSelection};
+use oer_ieee80211_wire::qos::{WmmAccessCategory, WmmUserPriority};
 use oer_radio_port::Slot;
 use oer_radio_port::{
     Disabled, Enabled, Ended, EventEnd, FailStopped, Failed, Owner, PoisonedOwner, PortBackend,
@@ -1830,9 +1831,7 @@ impl<
                 ));
             }
             LowerMacTerminal::GateClosed(closed) => arbiter.gate_closed(closed),
-            LowerMacTerminal::Configured(oer_ieee80211_port::Configured::Station(
-                permission,
-            )) => {
+            LowerMacTerminal::Configured(oer_ieee80211_port::Configured::Station(permission)) => {
                 self.station.input(now, StaInput::Configured(permission));
             }
             LowerMacTerminal::KeyRemoved(Removed::Station(RemovedKey::Pairwise {

@@ -2,7 +2,8 @@
 
 /// The receiver of an individual frame: its address has the group bit
 /// clear.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[repr(transparent)]
 pub struct IndividualAddress([u8; 6]);
 
 impl IndividualAddress {
@@ -12,6 +13,18 @@ impl IndividualAddress {
             Some(Self(address))
         } else {
             None
+        }
+    }
+
+    /// Validate the nonzero individual address required by an interface.
+    /// The general individual-address constructor still admits zero octets.
+    pub const fn for_interface(address: [u8; 6]) -> Result<Self, IndividualAddressError> {
+        if matches!(address, [0, 0, 0, 0, 0, 0]) {
+            return Err(IndividualAddressError::Unspecified);
+        }
+        match Self::new(address) {
+            Some(address) => Ok(address),
+            None => Err(IndividualAddressError::Multicast),
         }
     }
 
@@ -86,3 +99,21 @@ mod tests {
         }
     }
 }
+
+/// Why an individual address cannot identify a protocol interface.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum IndividualAddressError {
+    /// All octets are zero.
+    Unspecified,
+    /// The group bit is set.
+    Multicast,
+}
+impl core::fmt::Display for IndividualAddressError {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        formatter.write_str(match self {
+            Self::Unspecified => "a Wi-Fi interface address cannot be all zero",
+            Self::Multicast => "a Wi-Fi interface address must be unicast",
+        })
+    }
+}
+impl core::error::Error for IndividualAddressError {}

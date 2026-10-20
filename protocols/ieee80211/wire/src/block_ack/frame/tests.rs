@@ -126,3 +126,31 @@ fn block_ack_action_parser_never_panics() {
 fn block_ack_action_parser_never_panics_full() {
     actions(crate::fuzz::FULL);
 }
+
+#[test]
+fn immediate_request_round_trips_and_refuses_unrepresentable_fields() {
+    let sequence = crate::sequence::seq(0xabc);
+    let body = encode_addba_request(7, 15, 1023, 12, true, sequence).unwrap();
+    assert_eq!(
+        parse_block_ack_action(&body),
+        Some(BlockAckAction::AddbaRequest {
+            dialog_token: 7,
+            tid: 15,
+            immediate: true,
+            amsdu: true,
+            window: 1023,
+            timeout_tu: 12,
+            starting_sequence: sequence,
+        })
+    );
+    assert_eq!(
+        encode_addba_request(7, 16, 32, 0, false, sequence),
+        Err(AddbaRequestError::InvalidTid(16))
+    );
+    for window in [0, 1024, u16::MAX] {
+        assert_eq!(
+            encode_addba_request(7, 0, window, 0, false, sequence),
+            Err(AddbaRequestError::InvalidWindow(window))
+        );
+    }
+}

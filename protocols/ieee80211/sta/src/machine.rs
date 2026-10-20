@@ -82,21 +82,6 @@ use oer_ieee80211_port::{
     Station as StationRole, StationReceive, SupportedChannel, SupportedEdca, SupportedFilter,
     TxBufferMemory, TxOutcome,
 };
-use oer_ieee80211_wire::address::{Bssid, IndividualAddress, OwnAddress};
-use oer_ieee80211_wire::ccmp::{Ccmp128Key, CcmpRxReplayEpoch};
-use oer_ieee80211_wire::{
-    management::{MAX_SSID_LEN, ProbeRequest},
-    scan::{ScanRecord, ScanTable},
-    security::{AssociationAkm, AssociationSecurity, RsnAssociation, StaSecurityPolicy},
-    sequence::SequenceNumber,
-    station::{
-        AssociationCapabilities, AssociationRequest, OpenAuthenticationRequest, SelectedRsn,
-        StaManagementFrame, StaManagementSubtype, StaSequenceCounter, association::PhyMode,
-        select_association_rsn,
-    },
-    station_beacon::parse_sta_beacon,
-    station_power_save::{StaNullDataFrame, StaPowerManagement},
-};
 use oer_ieee80211_rsn::{
     DEFAULT_EAPOL_FRAME_CAPACITY, OwnedEapolFrame, Pmk, RsnInterface,
     aes::software_aes128_key_unwrap,
@@ -111,6 +96,24 @@ use oer_ieee80211_rsn::{
     },
 };
 use oer_ieee80211_upper_mac::HePacketPadding;
+use oer_ieee80211_wire::address::{Bssid, IndividualAddress, OwnAddress};
+use {
+    crate::{scan::ScanTable, sequence::StaSequenceCounter},
+    oer_ieee80211_port::PhyMode,
+    oer_ieee80211_wire::{
+        management::{MAX_SSID_LEN, ProbeRequest},
+        scan::ScanRecord,
+        security::{AssociationAkm, AssociationSecurity, RsnAssociation, StaSecurityPolicy},
+        sequence::SequenceNumber,
+        station::{
+            AssociationCapabilities, AssociationRequest, OpenAuthenticationRequest, SelectedRsn,
+            StaManagementFrame, StaManagementSubtype, select_association_rsn,
+        },
+        station_beacon::parse_sta_beacon,
+        station_power_save::{StaNullDataFrame, StaPowerManagement},
+    },
+};
+use {oer_ieee80211_upper_mac::ccmp::CcmpRxReplayEpoch, oer_ieee80211_wire::ccmp::Ccmp128Key};
 
 use crate::association::StaAssociatedPeer;
 use crate::receive::{Management, Received, observe_scan};
@@ -617,12 +620,12 @@ pub enum StaRatePlan {
 /// A frame refused by admission or by the authenticated RSN protocol.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum StaRxError {
-    Frame(oer_ieee80211_wire::receive::RxDropReason),
+    Frame(oer_ieee80211_upper_mac::receive::RxDropReason),
     Security(RsnConnectedProcessError<oer_ieee80211_rsn::aes::SoftwareAesKeyUnwrapError>),
 }
 
-impl From<oer_ieee80211_wire::receive::RxDropReason> for StaRxError {
-    fn from(reason: oer_ieee80211_wire::receive::RxDropReason) -> Self {
+impl From<oer_ieee80211_upper_mac::receive::RxDropReason> for StaRxError {
+    fn from(reason: oer_ieee80211_upper_mac::receive::RxDropReason) -> Self {
         Self::Frame(reason)
     }
 }
@@ -3539,7 +3542,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
         meta: T::RxMeta,
         mut deliver: impl FnMut(oer_ieee80211_wire::data::EthernetFrameParts<'frame>),
     ) -> Result<(), StaRxError> {
-        use oer_ieee80211_wire::receive::{AdmittedData, RxDropReason};
+        use oer_ieee80211_upper_mac::receive::{AdmittedData, RxDropReason};
         let header = match crate::receive::classify(frame)? {
             Received::Management(management) => {
                 self.received_management(now, management, meta);
@@ -3844,7 +3847,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
         let Some(rsn) = connected.rsn else {
             return (
                 State::Connected(connected),
-                Err(oer_ieee80211_wire::receive::RxDropReason::Protection.into()),
+                Err(oer_ieee80211_upper_mac::receive::RxDropReason::Protection.into()),
             );
         };
         let (rsn, result) = rsn.receive(eapol, protection);
@@ -4584,7 +4587,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
                 permission,
             }));
         }
-        let replay = match oer_ieee80211_wire::ccmp::CcmpRxReplayState::from_receive_sequence(
+        let replay = match oer_ieee80211_upper_mac::ccmp::CcmpRxReplayState::from_receive_sequence(
             *request.receive_sequence(),
         ) {
             Ok(replay) => GroupReplay::Retained(replay),

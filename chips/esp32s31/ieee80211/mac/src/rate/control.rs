@@ -23,7 +23,7 @@ use oer_esp32s31_hal::{
     },
 };
 
-use {oer_ieee80211_wire::he::HeDcmConstellation, oer_ieee80211_wire::station::association::PhyMode};
+use {oer_ieee80211_port::PhyMode, oer_ieee80211_wire::he::HeDcmConstellation};
 
 use oer_espressif_ieee80211_policy::rate_control::{
     BeamformingReportRate, StaRateControlAssociation,

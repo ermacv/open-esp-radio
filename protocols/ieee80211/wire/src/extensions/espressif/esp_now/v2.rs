@@ -10,9 +10,6 @@ use core::fmt;
 
 use crate::sequence::SequenceNumber;
 
-mod reassembly;
-pub use reassembly::EspNowV2Reassembly;
-
 use super::{
     ACTION_FRAME_CONTROL, BROADCAST_ADDRESS, ESP_NOW_ACTION_CATEGORY,
     ESP_NOW_MANAGEMENT_HEADER_LEN, ESP_NOW_ORGANIZATION_IDENTIFIER, ESP_NOW_VENDOR_ELEMENT_ID,

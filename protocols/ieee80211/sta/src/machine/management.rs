@@ -1,14 +1,14 @@
 //! PMF state owned by one association, separate from data replay frontiers.
 
-use oer_ieee80211_wire::{
-    address::{Bssid, OwnAddress},
-    frame::DecodedHeader,
-    management_protection::SaQuery,
-};
 use oer_ieee80211_rsn::{
     bip::{BipReceiver, MANAGEMENT_MIC_ELEMENT_LEN},
     frames::RsnIgtk,
     management_ccmp::ManagementCcmpReceiver,
+};
+use oer_ieee80211_wire::{
+    address::{Bssid, OwnAddress},
+    frame::DecodedHeader,
+    management_protection::SaQuery,
 };
 use oer_time::Instant;
 

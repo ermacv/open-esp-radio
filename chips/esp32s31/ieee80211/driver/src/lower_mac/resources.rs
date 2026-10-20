@@ -56,11 +56,7 @@ impl<const TICKETS: usize> PoolSet for CorePools<TICKETS> {
             .into_pools::<(
                 Slots<CorePlace, 5>,
                 Slots<TicketPlace, TICKETS>,
-                oer_ieee80211_port::association::AssociationPool<
-                    oer_ieee80211_port::Station,
-                    1,
-                    1,
-                >,
+                oer_ieee80211_port::association::AssociationPool<oer_ieee80211_port::Station, 1, 1>,
                 oer_ieee80211_port::association::AssociationPool<
                     oer_ieee80211_port::AccessPoint,
                     15,

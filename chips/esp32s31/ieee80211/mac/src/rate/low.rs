@@ -1,20 +1,6 @@
 //! Cross-layer ownership boundary for the PHY low-rate path.
 
-use oer_esp32s31_hal::ieee80211::mac::{WifiMacColdHal, WifiMacHal};
-
-/// Narrow PHY capability needed by the MAC cold-start policy.
-///
-/// The MAC chooses whether low-rate operation is wanted, while the generated
-/// PAC owns the PHY register identities and the ordered hardware edges.
-pub trait MacLowRateHardware {
-    fn disable_phy_low_rate(&mut self);
-}
-
-impl MacLowRateHardware for WifiMacColdHal<'_> {
-    fn disable_phy_low_rate(&mut self) {
-        WifiMacColdHal::disable_phy_low_rate(self);
-    }
-}
+use oer_esp32s31_hal::ieee80211::mac::WifiMacHal;
 
 /// Runtime authority for the complete reviewed PHY low-rate gate.
 ///

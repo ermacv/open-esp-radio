@@ -1827,8 +1827,8 @@ fn a_const_group_capacity_builds_a_personal_station() {
 #[test]
 fn a_station_joins_a_wpa2_network_through_the_four_way_handshake() {
     installed(|mint| {
-        use oer_ieee80211_wire::security::rsn::Akm;
         use oer_ieee80211_rsn::{PtkContext, frames::RsnTxFrame};
+        use oer_ieee80211_wire::security::rsn::Akm;
 
         let mut world = World::with_security(
             mint,
@@ -1934,8 +1934,8 @@ fn wpa2_associated_by<'id, const G: usize>(
     mint: Mint<'id, TestPools>,
     beacon: &[u8],
 ) -> (World<'id, G>, oer_ieee80211_rsn::Ptk) {
-    use oer_ieee80211_wire::security::rsn::Akm;
     use oer_ieee80211_rsn::{PtkContext, frames::RsnTxFrame};
+    use oer_ieee80211_wire::security::rsn::Akm;
 
     let mut world = World::with_groups(
         mint,
@@ -1980,8 +1980,8 @@ fn wpa2_connected_by<'id, const G: usize>(
     mint: Mint<'id, TestPools>,
     beacon: &[u8],
 ) -> (World<'id, G>, oer_ieee80211_rsn::Ptk) {
-    use oer_ieee80211_wire::security::rsn::Akm;
     use oer_ieee80211_rsn::frames::RsnTxFrame;
+    use oer_ieee80211_wire::security::rsn::Akm;
 
     let (mut world, ptk) = wpa2_associated_by::<G>(mint, beacon);
     let mut plain = std::vec::Vec::new();
@@ -2003,8 +2003,8 @@ fn wpa2_connected_by<'id, const G: usize>(
 #[test]
 fn m4_refused_before_admission_never_completes_the_handshake() {
     installed(|mint| {
-        use oer_ieee80211_wire::security::rsn::Akm;
         use oer_ieee80211_rsn::frames::RsnTxFrame;
+        use oer_ieee80211_wire::security::rsn::Akm;
 
         let (mut world, ptk) = wpa2_associated::<2>(mint);
         let mut plain = Vec::new();
@@ -2050,8 +2050,8 @@ fn m4_refused_before_admission_never_completes_the_handshake() {
 #[test]
 fn a_wpa2_gtk_kde_with_id_zero_uses_a_group_slot() {
     installed(|mint| {
-        use oer_ieee80211_wire::security::rsn::Akm;
         use oer_ieee80211_rsn::frames::RsnTxFrame;
+        use oer_ieee80211_wire::security::rsn::Akm;
 
         let (mut world, ptk) = wpa2_associated::<1>(mint);
         let mut plain = Vec::from(RSN);
@@ -2091,8 +2091,8 @@ fn a_wpa2_gtk_kde_with_id_zero_uses_a_group_slot() {
 
 /// Group Message 1 of key `key_id` with replay counter `replay`.
 fn group_message1(ptk: &oer_ieee80211_rsn::Ptk, replay: u64, key_id: u8) -> std::vec::Vec<u8> {
-    use oer_ieee80211_wire::security::rsn::Akm;
     use oer_ieee80211_rsn::frames::RsnTxFrame;
+    use oer_ieee80211_wire::security::rsn::Akm;
 
     let mut plain = std::vec::Vec::new();
     plain.extend_from_slice(&[0xdd, 22, 0x00, 0x0f, 0xac, 0x01, key_id, 0x00]);
@@ -2287,7 +2287,7 @@ fn identical_gtk_material_keeps_its_installation_and_replay_frontier() {
         );
         replay
             .check(
-                oer_ieee80211_wire::ccmp::CcmpRxProtection::Group,
+                oer_ieee80211_upper_mac::ccmp::CcmpRxProtection::Group,
                 None,
                 header,
             )
@@ -2305,7 +2305,7 @@ fn identical_gtk_material_keeps_its_installation_and_replay_frontier() {
         assert!(
             replay
                 .check(
-                    oer_ieee80211_wire::ccmp::CcmpRxProtection::Group,
+                    oer_ieee80211_upper_mac::ccmp::CcmpRxProtection::Group,
                     None,
                     header
                 )
@@ -2334,7 +2334,7 @@ fn old_rx_between_replacement_and_its_terminal_cannot_advance_the_successor_epoc
         };
         replay
             .check(
-                oer_ieee80211_wire::ccmp::CcmpRxProtection::Group,
+                oer_ieee80211_upper_mac::ccmp::CcmpRxProtection::Group,
                 None,
                 header(900),
             )
@@ -2348,7 +2348,7 @@ fn old_rx_between_replacement_and_its_terminal_cannot_advance_the_successor_epoc
         };
         replay
             .check(
-                oer_ieee80211_wire::ccmp::CcmpRxProtection::Group,
+                oer_ieee80211_upper_mac::ccmp::CcmpRxProtection::Group,
                 None,
                 header(1),
             )
@@ -2356,7 +2356,7 @@ fn old_rx_between_replacement_and_its_terminal_cannot_advance_the_successor_epoc
         assert!(
             replay
                 .check(
-                    oer_ieee80211_wire::ccmp::CcmpRxProtection::Group,
+                    oer_ieee80211_upper_mac::ccmp::CcmpRxProtection::Group,
                     None,
                     header(1)
                 )
@@ -2383,8 +2383,8 @@ fn a_handshake_that_times_out_deauthenticates_with_its_reason() {
 #[test]
 fn a_message_3_whose_key_data_does_not_unwrap_deauthenticates() {
     installed(|mint| {
-        use oer_ieee80211_wire::security::rsn::Akm;
         use oer_ieee80211_rsn::frames::RsnTxFrame;
+        use oer_ieee80211_wire::security::rsn::Akm;
 
         let (mut world, ptk) = wpa2_associated::<2>(mint);
         let message3 = RsnTxFrame::<512>::message3(Akm::Psk, LOCAL, 2, ANONCE, [0; 8], &[0x55; 24])
@@ -2567,8 +2567,8 @@ fn a_candidate_on_the_access_points_channel_wins_within_the_margin() {
 
 #[test]
 fn stale_handshake_installations_return_the_association_only_after_all_keys() {
-    use oer_ieee80211_wire::security::rsn::Akm;
     use oer_ieee80211_rsn::frames::RsnTxFrame;
+    use oer_ieee80211_wire::security::rsn::Akm;
 
     for group_pending in [false, true] {
         installed(|mint| {
@@ -2700,7 +2700,7 @@ fn group_removal_returns_permission_before_another_owner_can_leave() {
                 material: Ccmp128Key::new(&[id; 16]),
                 key: Key(Slot(slot)),
                 replay: GroupReplay::Retained(
-                    oer_ieee80211_wire::ccmp::CcmpRxReplayState::from_receive_sequence([0; 8])
+                    oer_ieee80211_upper_mac::ccmp::CcmpRxReplayState::from_receive_sequence([0; 8])
                         .unwrap(),
                 ),
             },
@@ -2835,9 +2835,7 @@ fn deauthentication_waits_for_the_ticket_and_buffer_of_an_accepted_transmission(
                 context: transmit.context,
                 ticket: transmit.ticket,
                 buffer: ReturnedMpdu::Fresh(transmit.buffer),
-                completion: TxOutcome::Withdrawn(
-                    oer_ieee80211_port::WithdrawCause::GateClosed,
-                ),
+                completion: TxOutcome::Withdrawn(oer_ieee80211_port::WithdrawCause::GateClosed),
             },
         );
         let Some(StaAction::Transmit(transmit)) = world.station.poll_action(at(51)) else {
@@ -3075,9 +3073,7 @@ fn association_waits_for_credit_without_consuming_a_request_and_still_expires() 
                 context: transmit.context,
                 ticket: transmit.ticket,
                 buffer: ReturnedMpdu::Fresh(transmit.buffer),
-                completion: TxOutcome::Withdrawn(
-                    oer_ieee80211_port::WithdrawCause::GateClosed,
-                ),
+                completion: TxOutcome::Withdrawn(oer_ieee80211_port::WithdrawCause::GateClosed),
             },
         );
         for ticket in held {
@@ -3106,8 +3102,8 @@ fn association_waits_for_credit_without_consuming_a_request_and_still_expires() 
 
 #[test]
 fn handshake_deadline_covers_every_message_key_and_tx_wait() {
-    use oer_ieee80211_wire::security::rsn::Akm;
     use oer_ieee80211_rsn::{PtkContext, frames::RsnTxFrame};
+    use oer_ieee80211_wire::security::rsn::Akm;
     for point in 0..8 {
         installed(|mint| {
             let mut world = World::with_security(
@@ -3533,8 +3529,8 @@ fn ended(status: End) -> Outcome {
 }
 
 fn retry_message3(ptk: &oer_ieee80211_rsn::Ptk, counter: u64, material: u8) -> Vec<u8> {
-    use oer_ieee80211_wire::security::rsn::Akm;
     use oer_ieee80211_rsn::frames::RsnTxFrame;
+    use oer_ieee80211_wire::security::rsn::Akm;
     let mut plain = Vec::from(RSN);
     plain.extend_from_slice(&[0xdd, 22, 0x00, 0x0f, 0xac, 0x01, 0x01, 0x00]);
     plain.extend_from_slice(&[material; 16]);
@@ -3549,7 +3545,10 @@ fn retry_message3(ptk: &oer_ieee80211_rsn::Ptk, counter: u64, material: u8) -> V
 
 #[test]
 fn connected_duplicate_m3_answers_without_reinstalling_or_resetting_replay() {
-    use oer_ieee80211_wire::ccmp::{CcmpHeader, CcmpPacketNumber, CcmpRxProtection};
+    use {
+        oer_ieee80211_upper_mac::ccmp::CcmpRxProtection,
+        oer_ieee80211_wire::ccmp::{CcmpHeader, CcmpPacketNumber},
+    };
     installed(|mint| {
         let (mut world, ptk) = wpa2_connected::<2>(mint);
         let header = CcmpHeader::new(
@@ -3921,7 +3920,8 @@ fn pending_group_material_is_redacted_and_moves_into_the_installed_record() {
             material: Ccmp128Key::new(material.as_bytes()),
             place: keys.groups.reserve().unwrap(),
             replay: GroupReplay::Retained(
-                oer_ieee80211_wire::ccmp::CcmpRxReplayState::from_receive_sequence([0; 8]).unwrap(),
+                oer_ieee80211_upper_mac::ccmp::CcmpRxReplayState::from_receive_sequence([0; 8])
+                    .unwrap(),
             ),
         };
         let printed = std::format!("{pending:?}");
@@ -3939,7 +3939,10 @@ fn pending_group_material_is_redacted_and_moves_into_the_installed_record() {
 
 #[test]
 fn repeated_m3_selects_retained_material_and_restores_each_live_replay_frontier() {
-    use oer_ieee80211_wire::ccmp::{CcmpHeader, CcmpPacketNumber, CcmpRxProtection};
+    use {
+        oer_ieee80211_upper_mac::ccmp::CcmpRxProtection,
+        oer_ieee80211_wire::ccmp::{CcmpHeader, CcmpPacketNumber},
+    };
     installed(|mint| {
         let (mut world, ptk) = wpa2_associated::<2>(mint);
         let id = GroupKeyId::new(1).unwrap();
@@ -4177,8 +4180,8 @@ fn a_removal_issued_before_leave_returns_its_record_and_permission_after_leave()
 #[test]
 fn delivered_m4_retains_all_installed_groups_until_leave() {
     fn exercise<const G: usize>(leave: bool) {
-        use oer_ieee80211_wire::security::rsn::Akm;
         use oer_ieee80211_rsn::{PtkContext, frames::RsnTxFrame};
+        use oer_ieee80211_wire::security::rsn::Akm;
         installed(|mint| {
             let mut world = World::with_groups(
                 mint,
@@ -4381,8 +4384,8 @@ fn previous_auth_terminal_cannot_finish_new_attempt() {
 
 #[test]
 fn review_negotiated_pmf_rejects_unprotected_deauthentication() {
-    use oer_ieee80211_wire::security::rsn::Akm;
     use oer_ieee80211_rsn::frames::RsnTxFrame;
+    use oer_ieee80211_wire::security::rsn::Akm;
     installed(|mint| {
         let mut advertised_rsn = RSN;
         advertised_rsn[20] |= 0x80;
@@ -4431,11 +4434,11 @@ mod management;
 
 #[test]
 fn negotiated_spp_from_the_association_is_retained_by_the_ptk_owner() {
+    use oer_ieee80211_rsn::frames::RsnTxFrame;
     use oer_ieee80211_wire::security::{
         Spp,
         rsn::{Akm, RSN_CAPABILITY_SPP_AMSDU_CAPABLE, RSN_CAPABILITY_SPP_AMSDU_REQUIRED},
     };
-    use oer_ieee80211_rsn::frames::RsnTxFrame;
     for (capabilities, expected) in [
         (0, Spp::NotNegotiated),
         (RSN_CAPABILITY_SPP_AMSDU_CAPABLE, Spp::Negotiated),

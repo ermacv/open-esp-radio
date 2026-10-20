@@ -1,8 +1,8 @@
 use super::{Management, Received, classify, observe_scan};
+use crate::scan::{ScanObservation, ScanTable};
 use oer_ieee80211_port::{Channel, ChannelWidth, RxEvidence, RxMeta};
+use oer_ieee80211_upper_mac::receive::RxDropReason;
 use oer_ieee80211_wire::fuzz::{FULL, QUICK, inputs};
-use oer_ieee80211_wire::receive::RxDropReason;
-use oer_ieee80211_wire::scan::{ScanObservation, ScanTable};
 use oer_time::Instant;
 use std::vec::Vec;
 

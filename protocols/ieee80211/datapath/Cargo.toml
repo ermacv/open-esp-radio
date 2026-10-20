@@ -8,6 +8,7 @@ repository.workspace = true
 description = "Radio-native packet ownership and materialization contracts"
 
 [dependencies]
+oer-ieee80211-port = { path = "../port" }
 oer-memory = { path = "../../../portable/memory" }
 oer-network = { path = "../../network" }
 

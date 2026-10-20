@@ -33,11 +33,11 @@ use oer_ieee80211_port::{
     AckSnr, Band, Ieee80211Capabilities, Protection, RateSample, RetryPlan, RetryStage,
     SignalMetadata, SingleOutcome,
 };
-use oer_ieee80211_wire::phy::{LegacyRate, PhyRate};
 use oer_ieee80211_upper_mac::{
     rate_control::{MpduOutcome, RateControl, RatePeer},
     rate_selection::{FrameRates, RateSelection},
 };
+use oer_ieee80211_wire::phy::{LegacyRate, PhyRate};
 use oer_time::Instant;
 
 use crate::{

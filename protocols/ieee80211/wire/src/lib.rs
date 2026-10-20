@@ -1,15 +1,15 @@
 #![no_std]
 #![forbid(unsafe_code)]
 
-//! Hardware-independent IEEE 802.11 protocol building blocks.
+//! IEEE 802.11 frame formats and shared value vocabulary.
 //!
-//! This crate owns bounded frame parsing and protocol state only. It has no
+//! This crate owns bounded frame parsing, encoding and protocol values. It has no
 //! MMIO, DMA, interrupt, executor, allocator, ESP32-S31, vendor archive, or
 //! ROM ABI dependency.
 //!
 //! [`address::Bssid`] proves a nonzero individual address. Scan storage keeps
-//! vacant cells as `None`; [`scan::ScanRecord::new`] requires the actual BSSID,
-//! channel and RSSI, and [`scan::ScanTable::records`] iterates present records.
+//! [`scan::ScanRecord::new`] requires the actual BSSID,
+//! channel and RSSI. The station core owns the BSS observation table.
 //!
 //! Management and A-MSDU construction retain immutable frame parts through
 //! capacity admission and writing. Those same parts determine the output
@@ -68,4 +68,3 @@ pub mod vif;
 
 /// Checked management/data headers and receive admission.
 pub mod frame;
-pub mod receive;

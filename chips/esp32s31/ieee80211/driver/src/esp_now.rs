@@ -33,10 +33,12 @@ use oer_ieee80211_wire::{channel::WifiChannel, qos::WmmAccessCategory};
 
 use oer_ieee80211_softmac::EspressifLongRangeRate;
 
-use oer_ieee80211_softmac::{
-    EspNowEncryptedPeerId, EspNowHtGuardInterval, EspNowHtMcs, EspNowLmk, EspNowOfdmRate,
-    EspNowPhyMode, EspNowPreparedEncryptedV1Tx, EspNowPreparedV1Tx, EspNowPreparedV2Tx,
-    MacRxEvidence, MacRxMetadata, MacTxPlan, interface::BoundVirtualInterface,
+use {
+    oer_ieee80211_port::{MacRxMetadata, MacTxPlan, RxEvidence, interface::BoundVirtualInterface},
+    oer_ieee80211_softmac::{
+        EspNowEncryptedPeerId, EspNowHtGuardInterval, EspNowHtMcs, EspNowLmk, EspNowOfdmRate,
+        EspNowPhyMode, EspNowPreparedEncryptedV1Tx, EspNowPreparedV1Tx, EspNowPreparedV2Tx,
+    },
 };
 
 /// Deepest completed part of one ESP-NOW Long Range TX attempt.
@@ -99,12 +101,12 @@ pub enum EspNowRxRateNormalization {
     /// No decoded standard baseband-format evidence accompanies this sample.
     /// Preserve the observation in the diagnostic, but do not publish it as
     /// a normalized standard rate.
-    StandardUnavailable { observed: MacRxEvidence<RxPhyInfo> },
+    StandardUnavailable { observed: RxEvidence<RxPhyInfo> },
     /// LR descriptor codes are wider than the public five-bit RX `rate`
     /// field. Preserve the raw observation here, but do not expose it as a
     /// normalized rate where it could alias an ordinary standard code.
     LongRangeUnavailable {
-        observed: MacRxEvidence<RxPhyInfo>,
+        observed: RxEvidence<RxPhyInfo>,
         missing: EspNowLongRangeMissing,
     },
 }
@@ -128,7 +130,7 @@ pub fn normalize_esp_now_rx_metadata(
 ) -> EspNowRxMetadata {
     let observed = metadata.rate;
     let rate_normalization = if matches!(phy_mode, EspNowPhyMode::LongRange(_)) {
-        metadata.rate = MacRxEvidence::Unavailable;
+        metadata.rate = RxEvidence::Unavailable;
         EspNowRxRateNormalization::LongRangeUnavailable {
             observed,
             missing: EspNowLongRangeMissing::RxRateNormalization,
@@ -136,7 +138,7 @@ pub fn normalize_esp_now_rx_metadata(
     } else if let Some(format) = decoded_standard_format(observed) {
         EspNowRxRateNormalization::DecodedStandard { format }
     } else {
-        metadata.rate = MacRxEvidence::Unavailable;
+        metadata.rate = RxEvidence::Unavailable;
         EspNowRxRateNormalization::StandardUnavailable { observed }
     };
     EspNowRxMetadata {
@@ -145,12 +147,12 @@ pub fn normalize_esp_now_rx_metadata(
     }
 }
 
-const fn decoded_standard_format(evidence: MacRxEvidence<RxPhyInfo>) -> Option<RxBasebandFormat> {
+const fn decoded_standard_format(evidence: RxEvidence<RxPhyInfo>) -> Option<RxBasebandFormat> {
     let format = match evidence {
-        MacRxEvidence::HardwareObserved(info) | MacRxEvidence::ProtocolValidated(info) => {
+        RxEvidence::HardwareObserved(info) | RxEvidence::ProtocolValidated(info) => {
             info.baseband_format()
         }
-        MacRxEvidence::Unavailable => return None,
+        RxEvidence::Unavailable => return None,
     };
     match format {
         RxBasebandFormat::Dot11b | RxBasebandFormat::Ofdm | RxBasebandFormat::Ht => Some(format),

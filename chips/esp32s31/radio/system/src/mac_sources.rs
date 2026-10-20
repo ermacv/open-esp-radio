@@ -1,9 +1,12 @@
 //! The platform values the Wi-Fi MAC cold start reads, answered by the radio
 //! system.
 
-use oer_esp32s31_ieee80211_mac::init::{
-    MacCoexEvent, MacCoexPti, MacCoexPtiSource, MacDelayEntropy, MacSlowClockCalibration,
-    MacSlowClockCalibrationSource, MacTxPowerPair, MacTxPowerSource,
+use oer_esp32s31_hal::{
+    ieee80211::init::{
+        MacCoexEvent, MacCoexPti, MacCoexPtiSource, MacDelayEntropy, MacSlowClockCalibration,
+        MacSlowClockCalibrationSource, MacTxPowerSource,
+    },
+    types::MacTxPowerPair,
 };
 use oer_esp32s31_phy::PhyTxTargetPowerProfile;
 

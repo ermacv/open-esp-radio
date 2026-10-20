@@ -108,7 +108,7 @@ pub type Ieee80211ClockSample = oer_radio_port::ClockSample<Ieee80211Radio>;
 pub use capabilities::{
     BandSet, HardwareServices, LowerMacCapabilities, PhyFormatSet, RateSupport, WidthSet,
 };
-pub use control::{MacAddress, ReceiveFilter, VifRole, VifRoleSet};
+pub use control::{ReceiveFilter, VifRole, VifRoleSet};
 pub use extensions::{
     AmpduCapabilities, BeaconTimingCapabilities, MonitorCapabilities, TSF_DRIFT_PPM, TSF_RELATION,
     TbttEvent, TsfArithmeticError, TsfGeneration, TsfProjectionError, TsfRelation, TsfSample,
@@ -161,3 +161,162 @@ pub use tx::{
 extern crate std;
 
 pub use owner::CheckedPoolAggregate;
+
+#[allow(
+    missing_docs,
+    reason = "preserve the carried service vocabulary's documentation coverage"
+)]
+#[warn(
+    clippy::let_underscore_must_use,
+    clippy::let_underscore_untyped,
+    clippy::arithmetic_side_effects,
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::unreachable,
+    clippy::todo,
+    clippy::unimplemented,
+    clippy::disallowed_macros
+)]
+pub mod configuration;
+#[allow(
+    missing_docs,
+    reason = "preserve the carried service vocabulary's documentation coverage"
+)]
+#[warn(
+    clippy::let_underscore_must_use,
+    clippy::let_underscore_untyped,
+    clippy::arithmetic_side_effects,
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::unreachable,
+    clippy::todo,
+    clippy::unimplemented,
+    clippy::disallowed_macros
+)]
+pub mod contract;
+#[allow(
+    missing_docs,
+    reason = "preserve the carried service vocabulary's documentation coverage"
+)]
+#[warn(
+    clippy::let_underscore_must_use,
+    clippy::let_underscore_untyped,
+    clippy::arithmetic_side_effects,
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::unreachable,
+    clippy::todo,
+    clippy::unimplemented,
+    clippy::disallowed_macros
+)]
+pub mod edca;
+#[allow(
+    missing_docs,
+    reason = "preserve the carried service vocabulary's documentation coverage"
+)]
+#[warn(
+    clippy::let_underscore_must_use,
+    clippy::let_underscore_untyped,
+    clippy::arithmetic_side_effects,
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::unreachable,
+    clippy::todo,
+    clippy::unimplemented,
+    clippy::disallowed_macros
+)]
+pub mod interface;
+#[allow(
+    missing_docs,
+    reason = "preserve the carried service vocabulary's documentation coverage"
+)]
+#[warn(
+    clippy::let_underscore_must_use,
+    clippy::let_underscore_untyped,
+    clippy::arithmetic_side_effects,
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::unreachable,
+    clippy::todo,
+    clippy::unimplemented,
+    clippy::disallowed_macros
+)]
+pub mod monitor;
+#[allow(
+    missing_docs,
+    reason = "preserve the carried service vocabulary's documentation coverage"
+)]
+#[warn(
+    clippy::let_underscore_must_use,
+    clippy::let_underscore_untyped,
+    clippy::arithmetic_side_effects,
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::unreachable,
+    clippy::todo,
+    clippy::unimplemented,
+    clippy::disallowed_macros
+)]
+pub mod tx_cost;
+#[allow(
+    missing_docs,
+    reason = "preserve the carried service vocabulary's documentation coverage"
+)]
+#[warn(
+    clippy::let_underscore_must_use,
+    clippy::let_underscore_untyped,
+    clippy::arithmetic_side_effects,
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::unreachable,
+    clippy::todo,
+    clippy::unimplemented,
+    clippy::disallowed_macros
+)]
+pub mod tx_work;
+
+pub use configuration::{
+    WifiAccessPointConfig, WifiConfig, WifiConfigError, WifiMonitorConfig, WifiPlan,
+    WifiStandaloneEspNowPlan, WifiStandaloneMonitorPlan, WifiStationConfig,
+};
+pub use contract::{
+    MacAmpduTxResult, MacAmpduTxStatus, MacIndividualRetries, MacInterfaceCapabilities,
+    MacOperationOwner, MacOperationOwnership, MacResourceLimits, MacRxMetadata,
+    MacServiceCapabilities, MacTxPlan, MacTxQueueState, MacTxResult, MacTxStatus,
+};
+pub use edca::{BackoffEntropy, EdcaContention, draw_backoff};
+pub use monitor::{
+    MONITOR_CHANNEL_SEQUENCE_CAPACITY, MonitorChannelPolicy, MonitorChannelSequence,
+    MonitorChannelSequenceError, MonitorDropReason, MonitorFilter, MonitorFrame, MonitorFrameType,
+    MonitorFrameTypeMask, MonitorInjectionBindingError, MonitorInjectionChannelBinding,
+    MonitorInjectionFrameError, MonitorInjectionFrameType, MonitorInjectionMpdu,
+    MonitorInjectionRate, MonitorInjectionRequest, MonitorPublishOutcome, MonitorSink,
+};
+pub use tx_work::MacTxWork;
+
+/// Association PHY mode and caller preference.
+pub mod phy;
+pub use phy::{PhyMode, Preference};
+
+/// A literal test sequence number; panics outside twelve bits.
+#[cfg(test)]
+pub(crate) const fn seq(value: u16) -> oer_ieee80211_wire::sequence::SequenceNumber {
+    match oer_ieee80211_wire::sequence::SequenceNumber::new(value) {
+        Some(sequence) => sequence,
+        None => panic!("test sequence number exceeds twelve bits"),
+    }
+}

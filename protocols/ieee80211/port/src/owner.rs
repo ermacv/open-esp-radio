@@ -171,7 +171,7 @@ use oer_ieee80211_wire::{extensions::wmm::WmmParameterSet, sequence::SequenceNum
 use oer_radio_port::PortBackend;
 use oer_radio_regulatory::Permitted;
 
-use crate::{Channel, LowerMacCapabilities, MacAddress, PhyRate, ReceiveFilter, TxPower, VifRole};
+use crate::{Channel, LowerMacCapabilities, PhyRate, ReceiveFilter, TxPower, VifRole};
 
 /// What a lower-MAC backend type supports, the same for every instance: the
 /// brand of its validated values.
@@ -578,11 +578,11 @@ impl<'p, 'id, K> PhaseRate<'p, 'id, K> {
 
 /// The receiver of a group frame: its address has the group bit set.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct GroupAddress(MacAddress);
+pub struct GroupAddress([u8; 6]);
 
 impl GroupAddress {
     /// `address`, when its group bit is set.
-    pub const fn new(address: MacAddress) -> Option<Self> {
+    pub const fn new(address: [u8; 6]) -> Option<Self> {
         if address[0] & 1 == 1 {
             Some(Self(address))
         } else {
@@ -591,7 +591,7 @@ impl GroupAddress {
     }
 
     /// The address.
-    pub const fn get(self) -> MacAddress {
+    pub const fn get(self) -> [u8; 6] {
         self.0
     }
 }
@@ -693,10 +693,10 @@ pub struct HeaderSpec<A> {
     frame_control: FrameControl,
     duration: u16,
     receiver: A,
-    transmitter: MacAddress,
-    address3: MacAddress,
+    transmitter: [u8; 6],
+    address3: [u8; 6],
     sequence_control: u16,
-    address4: Option<MacAddress>,
+    address4: Option<[u8; 6]>,
     qos: Option<QosControl>,
     ht_control: Option<[u8; 4]>,
 }
@@ -705,17 +705,17 @@ pub struct HeaderSpec<A> {
 /// [`GroupAddress`].
 pub trait ReceiverAddress: Copy {
     /// The address.
-    fn address(self) -> MacAddress;
+    fn address(self) -> [u8; 6];
 }
 
 impl ReceiverAddress for IndividualAddress {
-    fn address(self) -> MacAddress {
+    fn address(self) -> [u8; 6] {
         self.get()
     }
 }
 
 impl ReceiverAddress for GroupAddress {
-    fn address(self) -> MacAddress {
+    fn address(self) -> [u8; 6] {
         self.0
     }
 }
@@ -749,10 +749,10 @@ impl<A: ReceiverAddress> HeaderSpec<A> {
         frame_control: FrameControl,
         duration: u16,
         receiver: A,
-        transmitter: MacAddress,
-        address3: MacAddress,
+        transmitter: [u8; 6],
+        address3: [u8; 6],
         sequence_control: u16,
-        address4: Option<MacAddress>,
+        address4: Option<[u8; 6]>,
         qos: Option<QosControl>,
         ht_control: Option<[u8; 4]>,
     ) -> Option<Self> {
@@ -773,7 +773,7 @@ impl<A: ReceiverAddress> HeaderSpec<A> {
     }
 
     /// Decode a data or management header, checking its receiver's kind.
-    pub fn decode(frame: &[u8], receiver: impl FnOnce(MacAddress) -> Option<A>) -> Option<Self> {
+    pub fn decode(frame: &[u8], receiver: impl FnOnce([u8; 6]) -> Option<A>) -> Option<Self> {
         let header = oer_ieee80211_wire::frame::DecodedHeader::decode(frame)?;
         let qos = header.qos().map(|field| QosControl {
             tid: Tid((field & 15) as u8),
@@ -1061,7 +1061,7 @@ pub enum TxFrame<'p, 'id, K> {
         /// The peer asked to return its Block Ack state.
         receiver: IndividualAddress,
         /// The address of the requesting transmitter.
-        transmitter: MacAddress,
+        transmitter: [u8; 6],
         /// The traffic identifier of the Block Ack agreement.
         tid: Tid,
         /// The first sequence number requested in the Block Ack window.

@@ -18,7 +18,7 @@ pub use v2::{
     ESP_NOW_V2_ACTION_PREFIX_LEN, ESP_NOW_V2_MAX_ACTION_LEN, ESP_NOW_V2_MAX_ELEMENT_COUNT,
     ESP_NOW_V2_MAX_ELEMENT_PAYLOAD_LEN, ESP_NOW_V2_MAX_MPDU_LEN, ESP_NOW_V2_MAX_PAYLOAD_LEN,
     ESP_NOW_V2_MAX_VENDOR_CONTENT_LEN, ESP_NOW_V2_VERSION, EspNowV2Action, EspNowV2Element,
-    EspNowV2Elements, EspNowV2Frame, EspNowV2Payload, EspNowV2Reassembly, EspNowV2WireError,
+    EspNowV2Elements, EspNowV2Frame, EspNowV2Payload, EspNowV2WireError,
 };
 
 pub const ESP_NOW_ACTION_CATEGORY: u8 = 127;

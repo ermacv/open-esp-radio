@@ -1,7 +1,8 @@
-# IEEE 802.11 MAC types
+# IEEE 802.11 wire formats
 
-`oer-ieee80211-wire`: allocation-free IEEE 802.11 protocol types and state
-machines.
+`oer-ieee80211-wire`: allocation-free IEEE 802.11 frame formats, parsers, encoders
+and shared values. Mutable exchange state belongs to upper-mac, station
+and SoftMAC cores.
 
 ## Known defects
 
@@ -11,17 +12,6 @@ machines.
   gets a channel the radio cannot tune and that most countries forbid.
   Channel 14 is legal only where the regulatory domain allows it and the PHY
   supports it.
-- **Fragment PNs only have to increase.**
-  `fragmentation/reassembly.rs::append_fragment` refuses only
-  `observed <= previous`; IEEE 802.11-2020 §12.5.3.4.4 and Linux require
-  `previous + 1` (the FragAttacks mixed-key defence). The fragment identity
-  (`fragmentation.rs::OpenDataFragmentIdentity`) is bound to the wire KeyID,
-  not to the key-installation epoch (`ingest` passes epoch 0).
-- **Public PN and replay hazards** (`ccmp.rs`, `ccmp/replay.rs`):
-  `CcmpTxPacketNumber::continuing_after` is public with only test callers;
-  `CcmpTxPacketNumber::new` is not tied to a key; `CcmpRxReplayEpoch::install_group`
-  and `install_group_epoch` are public and overwrite an active replay
-  frontier (a KRACK-class reinstall). Production uses `exchange_group`.
 - **A-MSDU subframes are parsed lazily** (`data.rs::AmsduSubframes`): a
   malformed later subframe surfaces only after earlier ones were yielded.
 - **Raw header bits instead of types:** `ap.rs` encoders and
@@ -29,13 +19,8 @@ machines.
   and `header[24] |= 0x80` although `FrameControl::with_protected` exists;
   `station/management.rs::StaProtectedManagementFrame::encode` ORs a raw
   `u16` and takes an unvalidated `pub ccmp_header: [u8; 8]`.
-- **Untyped TID:** `ccmp.rs::CcmpReplayError::InvalidTid` exists because the
-  TID is a raw value.
 - **`ccmp.rs::ccmp_header`** is a public, unvalidated header builder with
   only test callers.
-- **Low:** `fragmentation/reassembly.rs::preflight_in_epoch` checks
-  `CONTEXTS == 0` at run time (`NoReassemblyContexts`) instead of a const
-  assert; `ccmp.rs` has `impl Default for CcmpRxReplayState`.
 - **AP side** (`ap.rs::parse_ap_management_request`): Reassociation Request
   is not parsed, and the Listen Interval is read and dropped (see the AP
   crate's known defects).

@@ -19,15 +19,16 @@ use oer_esp32s31_ieee80211_mac::{
         runtime::WifiTxRuntimePolicy,
     },
 };
+use oer_ieee80211_port::MacRxMetadata;
 use oer_ieee80211_port::{HardwareServices, PhyRate, RxEvidence};
 use oer_ieee80211_wire::tsf::TsfInstant;
 use oer_ieee80211_wire::{
     channel::ChannelWidth,
-    phy::{self, FecCoding, HeGiLtf, LegacyRate, PpduBandwidth, SpatialStreams},
+    phy,
+    phy::{FecCoding, HeGiLtf, LegacyRate, PpduBandwidth, SpatialStreams},
     qos::WmmAccessCategory,
     sequence::SequenceNumber,
 };
-use oer_ieee80211_softmac::{MacRxEvidence, MacRxMetadata};
 
 use oer_esp32s31_hal::dma_static::{Placed, PlacedTxLease, PlacedTxPool};
 use oer_memory::{
@@ -40,17 +41,17 @@ use crate::station_tsf::StationTsfWrite;
 use crate::tx::WifiTxProgress;
 use oer_ieee80211_port::TSF_DRIFT_PPM;
 
-const STATION: MacAddress = [0x02, 0x03, 0x04, 0x05, 0x06, 0x07];
-const ACCESS_POINT: MacAddress = [0x02, 0x11, 0x12, 0x13, 0x14, 0x15];
-const BSSID: MacAddress = [0x20, 0x21, 0x22, 0x23, 0x24, 0x25];
-const PEER: MacAddress = [0x30, 0x31, 0x32, 0x33, 0x34, 0x35];
-const OTHER_BSS: MacAddress = [0x40, 0x41, 0x42, 0x43, 0x44, 0x45];
+const STATION: [u8; 6] = [0x02, 0x03, 0x04, 0x05, 0x06, 0x07];
+const ACCESS_POINT: [u8; 6] = [0x02, 0x11, 0x12, 0x13, 0x14, 0x15];
+const BSSID: [u8; 6] = [0x20, 0x21, 0x22, 0x23, 0x24, 0x25];
+const PEER: [u8; 6] = [0x30, 0x31, 0x32, 0x33, 0x34, 0x35];
+const OTHER_BSS: [u8; 6] = [0x40, 0x41, 0x42, 0x43, 0x44, 0x45];
 const TIMEOUT: u64 = 250_000;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum StationPolicy {
-    Link(MacAddress),
-    OtherBss(MacAddress),
+    Link([u8; 6]),
+    OtherBss([u8; 6]),
 }
 
 /// The hardware index of the best-effort queue, where the helpers' attempts
@@ -85,7 +86,7 @@ struct Hardware {
     cleared_rx_block_acks: Vec<u8>,
     station_policy: Option<StationPolicy>,
     station_disabled: usize,
-    access_point_policy: Option<MacAddress>,
+    access_point_policy: Option<[u8; 6]>,
     access_point_disabled: usize,
     access_point_tsf_resets: usize,
     promiscuous: bool,
@@ -906,7 +907,7 @@ fn enabled<'core>(hardware: &mut Hardware, resources: CoreResources<'core>) -> C
 }
 
 /// A QoS Data MPDU from the station to the BSS.
-fn data_frame(receiver: MacAddress) -> [u8; 26] {
+fn data_frame(receiver: [u8; 6]) -> [u8; 26] {
     let mut frame = [0; 26];
     frame[0] = 0x88;
     frame[1] = 0x01;
@@ -1013,7 +1014,7 @@ fn reserved_descriptor_never_lends_classic_idle_authority() {
 /// Drive the production management owner through modeled completions,
 /// inspecting semantic HAL publications rather than register images.
 fn check_management_transmissions(
-    receiver: MacAddress,
+    receiver: [u8; 6],
     management: oer_ieee80211_port::ManagementTxPlan,
     completions: &[(u8, u8)],
 ) {
@@ -1967,13 +1968,13 @@ fn normalized(mpdu: &[u8]) -> NormalizedRxFrame<'_> {
         mpdu_offset: 0,
         mpdu,
         metadata: MacRxMetadata {
-            channel: MacRxEvidence::Unavailable,
-            rate: MacRxEvidence::<RxPhyInfo>::Unavailable,
-            rssi_dbm: MacRxEvidence::HardwareObserved(-42),
-            crypto: MacRxEvidence::Unavailable,
-            s_mpdu: MacRxEvidence::HardwareObserved(false),
-            ampdu: MacRxEvidence::Unavailable,
-            amsdu: MacRxEvidence::Unavailable,
+            channel: RxEvidence::Unavailable,
+            rate: RxEvidence::<RxPhyInfo>::Unavailable,
+            rssi_dbm: RxEvidence::HardwareObserved(-42),
+            crypto: RxEvidence::Unavailable,
+            s_mpdu: RxEvidence::HardwareObserved(false),
+            ampdu: RxEvidence::Unavailable,
+            amsdu: RxEvidence::Unavailable,
         },
         rssi_dbm: -42,
         logical_length: mpdu.len(),
@@ -1982,7 +1983,7 @@ fn normalized(mpdu: &[u8]) -> NormalizedRxFrame<'_> {
 }
 
 /// A management frame of `subtype` in `bssid` to `receiver`.
-fn management(subtype: u8, receiver: MacAddress, bssid: MacAddress) -> [u8; 24] {
+fn management(subtype: u8, receiver: [u8; 6], bssid: [u8; 6]) -> [u8; 24] {
     let mut frame = [0; 24];
     frame[0] = subtype << 4;
     frame[4..10].copy_from_slice(&receiver);
@@ -2587,9 +2588,7 @@ fn edca(
     oer_ieee80211_port::SupportedEdca::new(parameters).unwrap()
 }
 
-fn wmm_with_best_effort_txop(
-    txop_units_32_us: u16,
-) -> oer_ieee80211_port::SupportedEdca<WideEdca> {
+fn wmm_with_best_effort_txop(txop_units_32_us: u16) -> oer_ieee80211_port::SupportedEdca<WideEdca> {
     edca(wmm_set_with_best_effort_txop(txop_units_32_us))
 }
 

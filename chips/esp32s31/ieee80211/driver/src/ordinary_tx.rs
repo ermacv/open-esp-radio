@@ -18,22 +18,22 @@ pub use crate::tx::{WifiTxEntropy, WifiTxPowerPair, WifiTxPowerProfile, WifiTxRe
 use oer_esp32s31_ieee80211_mac::{
     MacInterface,
     edca::EdcaContentionParameters,
-    tx::ampdu::HtBlockAckObservation,
-    tx::protection::{ProtectedPpdu, TxProtection, TxProtectionDecision, TxPsdu, TxReceiver},
-    tx::runtime::{
-        FrameClass, OrdinaryCollisionDecision, OrdinaryMpduRetryState, OrdinaryRetryDecision,
-        OrdinaryRetryError, OrdinaryRetryRatePolicy, RetryCounters, VENDOR_RTS_THRESHOLD_BYTES,
-        WifiTxRuntimePolicy,
-    },
     tx::{
         CompletionObservation, HeSmpduTxConfig, HtTxConfig, LegacyTxConfig, LegacyTxQueue,
         MacLegacyTxResponse, TxCompletion, TxControlFrame, TxCookie, TxDmaState, TxError,
         TxHardware, TxPhyRate, TxSlot, TxSlotAccess, TxSlotFree,
+        ampdu::HtBlockAckObservation,
+        protection::{ProtectedPpdu, TxProtection, TxProtectionDecision, TxPsdu, TxReceiver},
+        runtime::{
+            FrameClass, OrdinaryCollisionDecision, OrdinaryMpduRetryState, OrdinaryRetryDecision,
+            OrdinaryRetryError, OrdinaryRetryRatePolicy, RetryCounters, VENDOR_RTS_THRESHOLD_BYTES,
+            WifiTxRuntimePolicy,
+        },
     },
 };
+use oer_ieee80211_port::{MacTxPlan, MacTxQueueState, MacTxResult, MacTxStatus};
 use oer_ieee80211_port::{ManagementTxPlan, VifRole};
 use oer_ieee80211_wire::frame::FrameControl;
-use oer_ieee80211_softmac::{MacTxPlan, MacTxQueueState, MacTxResult, MacTxStatus};
 
 use crate::tx::{WifiTxProgress, WifiTxWake, capped_power};
 
@@ -861,7 +861,7 @@ where
 
     /// Submitted work for the current/last exchange, retained through retries
     /// and timeout detach; independent of terminal delivery status.
-    pub fn work(&self) -> oer_ieee80211_softmac::MacTxWork {
+    pub fn work(&self) -> oer_ieee80211_port::MacTxWork {
         self.slot.as_ref().get_ref().work()
     }
 

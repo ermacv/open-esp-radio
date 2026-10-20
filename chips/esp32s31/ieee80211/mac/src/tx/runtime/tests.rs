@@ -1,8 +1,8 @@
 use super::*;
 use crate::tx::test_support::model_completion;
-use crate::{
-    tx::ampdu::{HtAmpduTxCompletion, HtBlockAckObservation},
-    tx::{HtGuardInterval, HtMcs, HtRate, LegacyRate, TxCompletion, TxCookie},
+use crate::tx::{
+    HtGuardInterval, HtMcs, HtRate, LegacyRate, TxCompletion, TxCookie,
+    ampdu::{HtAmpduTxCompletion, HtBlockAckObservation},
 };
 use oer_ieee80211_port::VifRole;
 use oer_ieee80211_wire::extensions::wmm::parse_wmm_parameter_element;
@@ -271,8 +271,8 @@ fn cts_failures_continue_the_rate_series_beyond_the_mpdu_retry_limit() {
                 retry.rate_after_failed_attempts(index as u8)
             );
             assert_eq!(usize::from(retry.publications()), index + 1);
-            let decision = retry
-                .observe_completion(&mut policy, oer_ieee80211_port::TxStatus::CtsTimeout);
+            let decision =
+                retry.observe_completion(&mut policy, oer_ieee80211_port::TxStatus::CtsTimeout);
             if index + 1 == usize::from(VENDOR_SHORT_RETRY_LIMIT) {
                 assert_eq!(decision, OrdinaryRetryDecision::Complete);
             } else {

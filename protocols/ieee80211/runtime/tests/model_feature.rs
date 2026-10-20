@@ -42,14 +42,14 @@ use oer_ieee80211_port::{
     RxBuffer, SizedFrame, Station, SupportedPower, TxBufferPool, TxCompleted, TxFrame, TxOperation,
     TxPower, TxProtection, TxSource,
 };
+use oer_ieee80211_runtime::lower_mac_owner::model::{
+    MODEL_RX_EVENTS, ModelAir, ModelAnyBuffer, ModelBackend, ModelLarge, ModelResources,
+    ModelRxMeta, ModelSmall, ModelTypes,
+};
 use oer_ieee80211_wire::{
     address::IndividualAddress,
     phy::{LegacyRate, PhyRate},
     qos::WmmAccessCategory,
-};
-use oer_ieee80211_runtime::lower_mac_owner::model::{
-    MODEL_RX_EVENTS, ModelAir, ModelAnyBuffer, ModelBackend, ModelLarge, ModelResources,
-    ModelRxMeta, ModelSmall, ModelTypes,
 };
 use oer_radio_port::{Disabled, Ended, Owner, PortBody, PortPhase, run_port};
 

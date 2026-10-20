@@ -3,8 +3,7 @@
 //! The hardware profile decides eligibility, including supported MCS and width.
 //! This policy neither advertises capabilities nor encodes a PHY channel command.
 
-/// Shared with the wire encoder; no duplicate policy enum or upward dependency.
-pub use oer_ieee80211_wire::station::association::{PhyMode, Preference};
+use oer_ieee80211_port::{PhyMode, Preference};
 
 /// Choose a mode after the caller has intersected local and peer capabilities.
 /// A peer without HT is legacy; HT20 is the baseline of one with HT; a later
@@ -118,13 +117,13 @@ impl StaAssociatedPeer {
         phy: PhyMode,
         he_packet_padding: fn(&[u8]) -> oer_ieee80211_upper_mac::HePacketPadding,
     ) -> Result<Self, StaAssociatedPeerError> {
+        use oer_ieee80211_upper_mac::{
+            BasicRates, BssProtection, HePacketPadding, HeTxopDurationRtsThreshold,
+        };
         use oer_ieee80211_wire::{
             extensions::wmm::WmmParameterSet,
             he::{parse_he20_capabilities, parse_he20_operation, parse_he20_peer_state},
             protection::{ErpProtection, HtProtectionMode},
-        };
-        use oer_ieee80211_upper_mac::{
-            BasicRates, BssProtection, HePacketPadding, HeTxopDurationRtsThreshold,
         };
         if response.status_code != 0 {
             return Err(StaAssociatedPeerError::Rejected(response.status_code));

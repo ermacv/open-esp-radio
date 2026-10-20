@@ -12,7 +12,7 @@
 use oer_esp32s31_hal::ieee80211::client::{
     ClockPoisoned, StoppedInstallation, WifiClocked, WifiCold, WifiPowered,
 };
-use oer_esp32s31_ieee80211_mac::init::{
+use oer_esp32s31_hal::ieee80211::init::{
     MacCoexPti, MacColdStartConfig, MacColdStartOutcome, MacSlowClockCalibration,
 };
 use oer_esp32s31_phy::{PhyTxTargetPowerProfile, tracking::TemperatureObservation};

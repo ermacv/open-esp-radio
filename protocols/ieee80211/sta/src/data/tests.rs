@@ -1,6 +1,7 @@
 //! The data machine's encapsulation, tokens and admission.
 
 use super::*;
+use crate::sequence::StaSequenceCounter;
 use core::num::NonZeroU16;
 use oer_ieee80211_port::association::KEY_BANK_CAPACITY;
 use oer_ieee80211_port::{
@@ -8,12 +9,11 @@ use oer_ieee80211_port::{
     PhyFormatSet, RateSupport, ReceiveFilter, RxEvidence, WidthSet,
 };
 use oer_ieee80211_port::{IndeterminateCause, WithdrawCause};
-use oer_ieee80211_wire::ccmp::{CcmpRxReplayEpoch, GroupKeyId};
 use oer_ieee80211_wire::data::EthernetFrameParts;
 use oer_ieee80211_wire::phy::{HeMcs, HtMcs, LegacyRate, PhyRate};
 use oer_ieee80211_wire::sequence::SequenceNumber;
-use oer_ieee80211_wire::station::StaSequenceCounter;
 use std::vec::Vec;
+use {oer_ieee80211_upper_mac::ccmp::CcmpRxReplayEpoch, oer_ieee80211_wire::ccmp::GroupKeyId};
 
 struct Caps;
 
@@ -91,8 +91,7 @@ struct Station;
 impl StaTokens for Station {
     type AssociationStart = ();
     type Association = ();
-    type VacantKeyBank =
-        oer_ieee80211_port::association::KeyBankParts<(), (), KEY_BANK_CAPACITY>;
+    type VacantKeyBank = oer_ieee80211_port::association::KeyBankParts<(), (), KEY_BANK_CAPACITY>;
     type VacantAssociation = [(); 0];
     fn begin_association(_: (), _: oer_ieee80211_wire::security::Spp) {}
     fn association(key: &()) -> &() {
@@ -517,9 +516,7 @@ fn preparation_refusal_ends_only_its_msdu_without_a_radio_terminal_or_retry() {
         context: rejected.context,
         ticket: rejected.ticket,
         buffer: rejected.buffer,
-        reason: crate::machine::TxRefusal::Layout(
-            oer_ieee80211_port::LayoutError::BodyOverlap,
-        ),
+        reason: crate::machine::TxRefusal::Layout(oer_ieee80211_port::LayoutError::BodyOverlap),
     });
     assert_eq!(data.available(WmmAccessCategory::Voice), capacity);
     assert_eq!(data.available(WmmAccessCategory::Video), capacity - 1);
@@ -1076,10 +1073,11 @@ fn received<'f, T: StaTokens>(
     frame: &'f [u8],
     meta: &RxMeta,
 ) -> Result<
-    impl Iterator<Item = Result<EthernetFrameParts<'f>, oer_ieee80211_wire::receive::RxDropReason>> + 'f,
-    oer_ieee80211_wire::receive::RxDropReason,
+    impl Iterator<Item = Result<EthernetFrameParts<'f>, oer_ieee80211_upper_mac::receive::RxDropReason>>
+    + 'f,
+    oer_ieee80211_upper_mac::receive::RxDropReason,
 > {
-    use oer_ieee80211_wire::receive::{AdmittedData, RxDropReason};
+    use oer_ieee80211_upper_mac::receive::{AdmittedData, RxDropReason};
     let protected_link = matches!(link.protection, LinkProtection::Ccmp { .. });
     let replay = match &mut link.protection {
         LinkProtection::Ccmp { replay, .. } => Some(&mut **replay),

@@ -249,8 +249,8 @@ fn malformed_prefix_refusals_are_counted_by_reason() {
 mod survey {
     use oer_esp32s31_ieee80211_mac::portable::rx_meta;
     use oer_ieee80211_port::{Channel, ChannelWidth};
-    use oer_ieee80211_wire::address::{Bssid, IndividualAddress};
     use oer_ieee80211_runtime::survey::{Gap, MinMax, Survey, SurveyCounters};
+    use oer_ieee80211_wire::address::{Bssid, IndividualAddress};
     use oer_time::Instant;
 
     use super::*;

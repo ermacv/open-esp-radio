@@ -1,7 +1,7 @@
 use super::*;
 
-const A: MacAddress = [2, 0, 0, 0, 0, 1];
-const B: MacAddress = [2, 0, 0, 0, 0, 2];
+const A: [u8; 6] = [2, 0, 0, 0, 0, 1];
+const B: [u8; 6] = [2, 0, 0, 0, 0, 2];
 
 fn qos(tid: u8) -> QosControl {
     QosControl {
@@ -14,7 +14,7 @@ fn qos(tid: u8) -> QosControl {
 
 fn header(
     frame_control: u16,
-    address4: Option<MacAddress>,
+    address4: Option<[u8; 6]>,
     qos: Option<QosControl>,
     ht_control: Option<[u8; 4]>,
 ) -> Option<HeaderSpec<IndividualAddress>> {

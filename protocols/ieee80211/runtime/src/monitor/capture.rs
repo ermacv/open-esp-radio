@@ -13,12 +13,15 @@ use embassy_sync::{
     blocking_mutex::raw::RawMutex,
     channel::{Channel, Receiver, Sender, TrySendError},
 };
-use oer_ieee80211_softmac::{
-    MacRxMetadata, MonitorDropReason, MonitorFrame, MonitorInjectionChannelBinding,
-    MonitorPublishOutcome, MonitorSink, WifiChannel,
-    interface::{ChannelContextId, MonitorTapPoint},
-};
 use oer_memory::{RxHandoffPool, RxNetworkLease};
+use {
+    oer_ieee80211_port::{
+        MacRxMetadata, MonitorDropReason, MonitorFrame, MonitorInjectionChannelBinding,
+        MonitorPublishOutcome, MonitorSink,
+        interface::{ChannelContextId, MonitorTapPoint},
+    },
+    oer_ieee80211_wire::channel::WifiChannel,
+};
 
 /// Metadata copied alongside one independently retained monitor frame.
 #[derive(Clone, Copy, Debug)]

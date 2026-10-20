@@ -5,9 +5,10 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Executor-independent Wi-Fi SoftMAC service contract"
+description = "Portable ESP-NOW and Espressif long-range protocol owners"
 
 [dependencies]
+oer-ieee80211-sta = { path = "../sta" }
 oer-ieee80211-port = { path = "../port" }
 oer-ieee80211-wire = { path = "../wire" }
 oer-time = { path = "../../../portable/time" }

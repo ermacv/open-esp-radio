@@ -44,7 +44,7 @@ fn filtering_every_stage_subset_keeps_order_budget_and_protection() {
                     expected
                         .iter()
                         .map(|(_, count, _)| u16::from(count.get()))
-                        .sum()
+                        .sum::<u16>()
                 );
             }
         }

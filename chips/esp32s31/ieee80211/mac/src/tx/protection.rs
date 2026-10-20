@@ -37,11 +37,11 @@ use core::num::NonZeroU16;
 use oer_espressif_ieee80211_policy::he_txop::{
     EspressifHeTxopRtsBudget, maximum_unprotected_apep_bytes,
 };
+use oer_ieee80211_upper_mac::protection as portable;
 use oer_ieee80211_wire::{
     phy::PhyRate,
     protection::{ErpProtection, HtProtectionMode},
 };
-use oer_ieee80211_upper_mac::protection as portable;
 
 #[cfg(test)]
 use crate::tx::HtChannelWidth;

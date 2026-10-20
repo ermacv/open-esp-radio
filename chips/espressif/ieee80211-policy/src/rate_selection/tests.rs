@@ -9,10 +9,12 @@ use oer_ieee80211_port::{
     BandSet, HardwareServices, LowerMacCapabilities, PhyFormatSet, RETRY_STAGES, RateSupport,
     ReceiveFilter, WidthSet,
 };
-use oer_ieee80211_wire::{
-    ht::ht_peer_capabilities,
-    phy::{HeMcs, HtMcs},
-    station::association::PhyMode,
+use {
+    oer_ieee80211_port::PhyMode,
+    oer_ieee80211_wire::{
+        ht::ht_peer_capabilities,
+        phy::{HeMcs, HtMcs},
+    },
 };
 
 use super::*;

@@ -1,9 +1,8 @@
-//! Allocation-free STA authentication and association protocol.
+//! Allocation-free STA authentication, association and data frame formats.
 //!
 //! Frame construction, response parsing and WPA2-Personal RSN selection use
-//! caller-owned output buffers. The separate [`sequence`] module retains the
-//! transmit sequence spaces. The caller decides when to submit a frame to
-//! hardware, arm a deadline, or retry.
+//! caller-owned output buffers. Sequence counters, deadlines and retry
+//! decisions belong to the cores that drive these codecs.
 
 use crate::{
     ccmp::CCMP_HEADER_LEN,
@@ -12,7 +11,6 @@ use crate::{
         plan_data_encapsulation, plan_data_encapsulation_with_he_control,
     },
     extensions::wmm::{WmmParameterSet, parse_wmm_parameter_element},
-    he::{parse_he20_capabilities, parse_he20_operation},
     management::{MANAGEMENT_HEADER_LEN, MAX_SSID_LEN, MAX_SUPPORTED_RATES_LEN},
     qos::WmmUserPriority,
     scan::ScanRecord,
@@ -62,9 +60,6 @@ pub const STA_PROTECTED_QOS_ETHERNET_OVERHEAD: usize =
 /// begins at the final `QoS header + CCMP header + LLC/SNAP` boundary. The
 /// encoder only has to preserve DA/SA/EtherType and overwrite the prefix.
 pub const STA_PROTECTED_QOS_ETHERNET_HEADROOM: usize = STA_PROTECTED_QOS_ETHERNET_OVERHEAD;
-
-pub mod sequence;
-pub use sequence::{StaSequenceCounter, StaTxSequenceCounters};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum StationFrameError {

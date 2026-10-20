@@ -10,12 +10,12 @@
 //! frontier; startup therefore cannot accidentally lock the radio into the
 //! first role an application happens to use.
 
+use oer_esp32s31_hal::ieee80211::init::{
+    MacColdStartConfig, MacDelayEntropy, MacSlowClockCalibrationSource,
+};
 use oer_esp32s31_hal::{
     ieee80211::client::{WifiClocked, WifiCold},
     root::WifiPartition,
-};
-use oer_esp32s31_ieee80211_mac::init::{
-    MacColdStartConfig, MacDelayEntropy, MacSlowClockCalibrationSource,
 };
 use oer_esp32s31_phy::PhyTxTargetPowerProfile;
 use oer_esp32s31_radio_client::{
@@ -23,8 +23,8 @@ use oer_esp32s31_radio_client::{
     Untracked,
     wifi::{TrackReport, Wifi, WifiJoin, WifiJoined, WifiReturned, WifiTrack, WifiTracked},
 };
+use oer_ieee80211_wire::address::IndividualAddress;
 use oer_ieee80211_wire::channel::WifiChannel;
-use oer_ieee80211_softmac::WifiMacAddress;
 use oer_time::Duration;
 
 use crate::runtime::{WifiStopped, enter_esp32s31_wifi_runtime};
@@ -62,32 +62,38 @@ impl WifiColdStartConfig {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct WifiMacStartConfig {
     handshake_deadline: Duration,
-    station_address: WifiMacAddress,
-    access_point_address: WifiMacAddress,
+    station_address: IndividualAddress,
+    access_point_address: IndividualAddress,
 }
 
 impl WifiMacStartConfig {
+    /// Retain two nonzero interface addresses before starting the hardware.
     pub const fn new(
         handshake_deadline: Duration,
-        station_address: WifiMacAddress,
-        access_point_address: WifiMacAddress,
-    ) -> Self {
-        Self {
+        station_address: IndividualAddress,
+        access_point_address: IndividualAddress,
+    ) -> Result<Self, oer_ieee80211_wire::address::IndividualAddressError> {
+        if matches!(station_address.get(), [0, 0, 0, 0, 0, 0])
+            || matches!(access_point_address.get(), [0, 0, 0, 0, 0, 0])
+        {
+            return Err(oer_ieee80211_wire::address::IndividualAddressError::Unspecified);
+        }
+        Ok(Self {
             handshake_deadline,
             station_address,
             access_point_address,
-        }
+        })
     }
 
     pub const fn handshake_deadline(self) -> Duration {
         self.handshake_deadline
     }
 
-    pub const fn station_address(self) -> WifiMacAddress {
+    pub const fn station_address(self) -> IndividualAddress {
         self.station_address
     }
 
-    pub const fn access_point_address(self) -> WifiMacAddress {
+    pub const fn access_point_address(self) -> IndividualAddress {
         self.access_point_address
     }
 }
@@ -184,8 +190,8 @@ pub async fn start_esp32s31_radio<W: WifiMacPlatform>(
         tx_ceiling: config.wifi.tx_ceiling,
         mac: MacColdStartConfig {
             handshake_deadline: config.mac.handshake_deadline,
-            station_address: config.mac.station_address.bytes(),
-            access_point_address: config.mac.access_point_address.bytes(),
+            station_address: config.mac.station_address.get(),
+            access_point_address: config.mac.access_point_address.get(),
         },
         slow_clock: platform.mac_slow_clock_calibration(),
         delay_random: platform.mac_delay_random(),

@@ -7,21 +7,22 @@
 //! printed only as their length and, per BSS, whether the stored SSID is the
 //! stand's (`ssid_ok=`).
 
-use core::fmt::{self, Write};
+use core::{fmt, fmt::Write};
 
+use oer_esp32s31_hal::ieee80211::init::MAC_STATION_INTERRUPT_MASK;
 use oer_esp32s31_ieee80211_driver::rx::{
     control::{WifiRxCause, WifiRxEnd, WifiRxExit, WifiRxQuarantine},
     counters::{WifiRxExhaustion, WifiRxReport},
     receive::RELOAD_SETTLE_LIMIT,
 };
-use oer_esp32s31_ieee80211_mac::init::MAC_STATION_INTERRUPT_MASK;
 use oer_espressif_executor::poll_timing::CycleHistogram;
-use oer_ieee80211_wire::address::Bssid;
 use oer_ieee80211_runtime::survey::{BssTally, Survey};
+use oer_ieee80211_wire::address::Bssid;
 
 use crate::{
     irq::{BUFFER, COUNT, SLOTS},
-    measure::{self, CLOCKS, ClockOp, Phase, TIMED_PHASES, Tick, TimerLine},
+    measure,
+    measure::{CLOCKS, ClockOp, Phase, TIMED_PHASES, Tick, TimerLine},
     own::{CYCLES, Cycle, DISCARDS},
 };
 

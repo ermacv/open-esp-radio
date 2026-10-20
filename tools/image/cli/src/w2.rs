@@ -43,8 +43,8 @@ mod tests {
 
 use oer_hil_lab::air::{Frame, acknowledged_probes};
 use oer_ieee80211_port::Band;
-use oer_ieee80211_wire::channel::{WifiChannel, WifiChannelWidth};
 use oer_ieee80211_upper_mac::{BasicRates, rate_selection::management_rate};
+use oer_ieee80211_wire::channel::{WifiChannel, WifiChannelWidth};
 use oer_lab_router::mac::Mac;
 use oer_radio_regulatory::{Country, Initiate, PowerLimits, RegulatoryDomain};
 use std::collections::{BTreeMap, BTreeSet};

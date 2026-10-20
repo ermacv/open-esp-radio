@@ -5,16 +5,16 @@ mod storage;
 mod transmit;
 
 use super::*;
-use oer_ieee80211_wire::{
-    channel::WifiChannel,
-    ht::{ht_capability_ie, ht_peer_capabilities},
-    security::AP_WPA2_PERSONAL_RSN_ELEMENT,
-};
 use oer_ieee80211_rsn::{
     EapolKeyMessage, OwnedEapolFrame, PtkContext, RsnInterface,
     aes::software_aes128_key_unwrap,
     frames::{OwnedAssociationSecurityIes, OwnedRsnIe, RsnGtk, RsnTxFrame, parse_gtk_key_data},
     state::{RsnApAction, RsnTicket},
+};
+use oer_ieee80211_wire::{
+    channel::WifiChannel,
+    ht::{ht_capability_ie, ht_peer_capabilities},
+    security::AP_WPA2_PERSONAL_RSN_ELEMENT,
 };
 
 const AP: [u8; 6] = [0x02, 0, 0, 0, 0, 1];
@@ -204,12 +204,13 @@ fn peer_binding_rejects_a_reused_slot_generation() {
 #[test]
 fn buffered_downlink_identity_cannot_cross_same_address_reassociation() {
     let mut storage = AccessPointPeerStorage::new();
-    let mut service = AccessPointService::<oer_ieee80211_wire::security::spp::Association>::new_open(
-        AP,
-        AccessPointClientLimit::new(1).unwrap(),
-        AccessPointInactiveTimeout::default(),
-        storage.lend(),
-    );
+    let mut service =
+        AccessPointService::<oer_ieee80211_wire::security::spp::Association>::new_open(
+            AP,
+            AccessPointClientLimit::new(1).unwrap(),
+            AccessPointInactiveTimeout::default(),
+            storage.lend(),
+        );
     let open_security = ApAssociationSecurityObservation {
         privacy: false,
         rsn_ie: None,
@@ -281,12 +282,13 @@ fn buffered_downlink_identity_cannot_cross_same_address_reassociation() {
 #[test]
 fn bound_power_state_matches_general_semantics_and_rejects_slot_reuse() {
     let mut storage = AccessPointPeerStorage::new();
-    let mut service = AccessPointService::<oer_ieee80211_wire::security::spp::Association>::new_open(
-        AP,
-        AccessPointClientLimit::new(2).unwrap(),
-        AccessPointInactiveTimeout::new(10).unwrap(),
-        storage.lend(),
-    );
+    let mut service =
+        AccessPointService::<oer_ieee80211_wire::security::spp::Association>::new_open(
+            AP,
+            AccessPointClientLimit::new(2).unwrap(),
+            AccessPointInactiveTimeout::new(10).unwrap(),
+            storage.lend(),
+        );
     service.authenticate_open(PEER, oer_time::Instant::from_micros(0));
     service
         .associate_open(
@@ -359,12 +361,13 @@ fn bound_power_state_matches_general_semantics_and_rejects_slot_reuse() {
 #[test]
 fn admitted_data_activity_is_coalesced_but_pm_edges_are_immediate() {
     let mut storage = AccessPointPeerStorage::new();
-    let mut service = AccessPointService::<oer_ieee80211_wire::security::spp::Association>::new_open(
-        AP,
-        AccessPointClientLimit::new(2).unwrap(),
-        AccessPointInactiveTimeout::new(10).unwrap(),
-        storage.lend(),
-    );
+    let mut service =
+        AccessPointService::<oer_ieee80211_wire::security::spp::Association>::new_open(
+            AP,
+            AccessPointClientLimit::new(2).unwrap(),
+            AccessPointInactiveTimeout::new(10).unwrap(),
+            storage.lend(),
+        );
     service.authenticate_open(PEER, oer_time::Instant::from_micros(0));
     service
         .associate_open(
@@ -1410,12 +1413,13 @@ fn bss_protection_follows_associated_erp_ht_and_preamble_membership() {
     };
 
     let mut storage = AccessPointPeerStorage::new();
-    let mut service = AccessPointService::<oer_ieee80211_wire::security::spp::Association>::new_open(
-        AP,
-        AccessPointClientLimit::new(2).unwrap(),
-        AccessPointInactiveTimeout::default(),
-        storage.lend(),
-    );
+    let mut service =
+        AccessPointService::<oer_ieee80211_wire::security::spp::Association>::new_open(
+            AP,
+            AccessPointClientLimit::new(2).unwrap(),
+            AccessPointInactiveTimeout::default(),
+            storage.lend(),
+        );
     let open = ApAssociationSecurityObservation {
         privacy: false,
         rsn_ie: None,
@@ -1880,8 +1884,8 @@ fn management_replay_and_policy_rejections_leave_activity_unchanged() {
 
 #[test]
 fn the_bss_owns_one_monotonic_bip_frontier_and_refuses_invalid_group_frames() {
-    use oer_ieee80211_wire::ap::{ApManagementFrame, ApManagementSubtype};
     use oer_ieee80211_rsn::bip::BipReceiver;
+    use oer_ieee80211_wire::ap::{ApManagementFrame, ApManagementSubtype};
     let mut storage = AccessPointPeerStorage::new();
     let mut service = wpa3_service(&mut storage);
     let mut receiver = BipReceiver::new(service.igtk().unwrap());

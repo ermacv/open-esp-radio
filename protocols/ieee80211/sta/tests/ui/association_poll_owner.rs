@@ -1,5 +1,5 @@
 #![no_std]
-use oer_ieee80211_wire::station::StaSequenceCounter;
+use oer_ieee80211_sta::sequence::StaSequenceCounter;
 use oer_ieee80211_sta::join::association::StaAssociationRuntime;
 use oer_time::Instant;
 

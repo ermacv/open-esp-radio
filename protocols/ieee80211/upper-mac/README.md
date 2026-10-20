@@ -1,7 +1,7 @@
-# IEEE 802.11 upper-MAC transmit policy
+# IEEE 802.11 upper-MAC state and policy
 
 `oer-ieee80211-upper-mac` holds the transmit decisions that lie above the
-[lower-MAC port](../lower-mac/README.md): one port submission is one hardware
+[lower-MAC port](../port/README.md): one port submission is one hardware
 transmission attempt, and everything a backend does not report as a
 `HardwareServices` offload is decided here, once for every backend, except
 the contention draw of its queues and the numbering of protected MPDUs,
@@ -20,9 +20,9 @@ plans and reports leave as values, and nothing waits.
 | `tx` | `TxPlanner`: the next `TxAttemptPlan` (rate, protection, power, coexistence, content and Retry bits) of an MPDU or A-MPDU exchange, and its `TxReport` | `TxRequest`, `PublicationReport`, `RadioInstant` |
 
 The planner draws no backoff: the lower-MAC port carries none, and a backend
-draws its queues' contention below the port with `oer-ieee80211-softmac`'s
+draws its queues' contention below the port with `oer-ieee80211-port`'s
 `EdcaContention`, resetting the window when `MpduRetryState` ends a frame and
-doubling it when it retries one. Reports are the softmac contract's
+doubling it when it retries one. Reports are the port's service contract's
 `MacTxStatus` and `MacAmpduTxStatus`. The checked `WmmAccessCategory` of a
 request passes through to each `TxAttemptPlan::access_category`.
 
@@ -104,14 +104,22 @@ temporary. Only the first 64 entries are addressable by its mask; callers
 consume the returned prefix length and do not inspect the remaining suffix.
 The crate uses the canonical strict lint block.
 
+## Protocol state
+
+`block_ack` owns session negotiation, the originator window and receive
+reordering. `ccmp` owns transmit PN allocation and receive replay frontiers;
+key material, headers and PN values are wire vocabulary. `duplicate` owns
+receive duplicate history, `fragmentation` bounded MSDU reassembly, and
+`receive` the replay commit boundary. These owners accept decoded wire
+values and retain no executor, HAL or chip dependency.
+
 ## What stays outside
 
 The planner holds no frame bytes. The caller encodes each MPDU's sequence
 number; the backend writes its CCMP packet number below the port at the first
-protected transmission, with an `oer-ieee80211-wire::ccmp::CcmpTxPacketNumber`
+protected transmission, with an `oer-ieee80211-upper-mac::ccmp::CcmpTxPacketNumber`
 of its key, and a retransmission sends the same MPDU, so it keeps both. The
-receive reorder buffer (`oer-ieee80211-wire::block_ack::reorder`) is its
-owner's in `oer-ieee80211-wire`. Adaptive rate control, which chooses a
+receive reorder buffer is `block_ack::reorder::RxReorderBuffer`. Adaptive rate control, which chooses a
 frame's first rate from the reports, is the caller's.
 
 The ESP32-S31 MAC (`oer-esp32s31-ieee80211-mac`) runs its ordinary retry,
@@ -122,3 +130,19 @@ from its chip rate and completion types.
 
 - `protection.rs` asserts a constant with the `[(); bool as usize]` array hack instead of
   `const { assert!(..) }`.
+- **Fragment PNs only have to increase.**
+  `fragmentation/reassembly.rs::append_fragment` refuses only
+  `observed <= previous`; IEEE 802.11-2020 §12.5.3.4.4 and Linux require
+  `previous + 1` (the FragAttacks mixed-key defence). The fragment identity
+  (`fragmentation.rs::OpenDataFragmentIdentity`) is bound to the wire KeyID,
+  not to the key-installation epoch (`ingest` passes epoch 0).
+- **Public PN and replay hazards** (`ccmp.rs`, `ccmp/replay.rs`):
+  `CcmpTxPacketNumber::continuing_after` is public with only test callers;
+  `CcmpTxPacketNumber::new` is not tied to a key; `CcmpRxReplayEpoch::install_group`
+  and `install_group_epoch` are public and overwrite an active replay
+  frontier (a KRACK-class reinstall). Production uses `exchange_group`.
+- **Untyped TID:** `ccmp.rs::CcmpReplayError::InvalidTid` exists because the
+  TID is a raw value.
+- **Low:** `fragmentation/reassembly.rs::preflight_in_epoch` checks
+  `CONTEXTS == 0` at run time (`NoReassemblyContexts`) instead of a const
+  assert; `ccmp.rs` has `impl Default for CcmpRxReplayState`.

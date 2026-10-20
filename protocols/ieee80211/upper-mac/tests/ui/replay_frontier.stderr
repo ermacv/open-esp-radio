@@ -1,0 +1,19 @@
+warning: unused variable: `state`
+ --> tests/ui/replay_frontier.rs:5:5
+  |
+5 |     state: &mut CcmpRxReplayState,
+  |     ^^^^^ help: if this is intentional, prefix it with an underscore: `_state`
+  |
+  = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+error[E0451]: fields `frontier`, `lane` and `packet_number` of struct `CcmpRxReplayCandidate` are private
+  --> tests/ui/replay_frontier.rs:12:9
+   |
+11 |     let candidate = CcmpRxReplayCandidate {
+   |                     --------------------- in this type
+12 |         frontier: foreign, // ui-error: E0451
+   |         ^^^^^^^^ private field
+13 |         lane,
+   |         ^^^^ private field
+14 |         packet_number,
+   |         ^^^^^^^^^^^^^ private field

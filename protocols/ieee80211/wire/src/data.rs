@@ -42,9 +42,6 @@ pub enum DataInterfaceRole {
     AccessPoint,
 }
 
-pub mod duplicate;
-pub use duplicate::RxDuplicateFilter;
-
 /// HE-Control policy for an ordinary QoS data MPDU.
 ///
 /// A backend that explicitly supports hardware insertion keeps CCMP
@@ -176,7 +173,7 @@ fn write_ethernet(
 
 /// The EtherType after an RFC 1042 LLC/SNAP header, or `None` for another
 /// header.
-pub(crate) const fn rfc1042_ether_type(llc: [u8; LLC_SNAP_HEADER_LEN]) -> Option<u16> {
+pub const fn rfc1042_ether_type(llc: [u8; LLC_SNAP_HEADER_LEN]) -> Option<u16> {
     let [p0, p1, p2, p3, p4, p5, e0, e1] = llc;
     let [r0, r1, r2, r3, r4, r5] = RFC1042_LLC_SNAP_PREFIX;
     if p0 == r0 && p1 == r1 && p2 == r2 && p3 == r3 && p4 == r4 && p5 == r5 {
@@ -654,7 +651,7 @@ pub fn decapsulate_data_frames<'a>(
 
 /// The receive admission owner has already checked this header and located
 /// the decrypted payload. Do not parse header geometry or commit replay again.
-pub(crate) fn decapsulate_payload<'a>(
+pub fn decapsulate_payload<'a>(
     header: crate::frame::DecodedHeader<'_>,
     payload: &'a [u8],
 ) -> Result<DataDecapsulation<'a>, DataDecapError> {

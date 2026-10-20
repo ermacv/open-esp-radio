@@ -155,11 +155,12 @@ use oer_esp32s31_ieee80211_mac::{
         runtime::he_txop_limit,
     },
 };
+use oer_ieee80211_port::MacTxPlan;
 use oer_ieee80211_port::{
     BandSet, BeaconTimingCapabilities, BlockAckReport, Channel, ConnectionFrame, LinkMetric,
-    LowerMacCapabilities, MacAddress, PhyFormatSet, PhyRate, Protection, RateSupport,
-    ReceiveFilter, RxEvidence, RxMeta, RxMetadata, SignalMetadata, TbttEvent, TsfTimingError,
-    TxOperation, TxStatus, VifRole, VifRoleSet, VifTsf, WidthSet,
+    LowerMacCapabilities, PhyFormatSet, PhyRate, Protection, RateSupport, ReceiveFilter,
+    RxEvidence, RxMeta, RxMetadata, SignalMetadata, TbttEvent, TsfTimingError, TxOperation,
+    TxStatus, VifRole, VifRoleSet, VifTsf, WidthSet,
 };
 use oer_ieee80211_wire::{
     ccmp::CCMP_HEADER_LEN,
@@ -169,7 +170,6 @@ use oer_ieee80211_wire::{
     qos::WmmAccessCategory,
     sequence::SequenceNumber,
 };
-use oer_ieee80211_softmac::MacTxPlan;
 
 pub mod ampdu;
 pub mod association;
@@ -215,7 +215,7 @@ pub const LOWER_MAC_TX_QUEUES: usize = 4;
 /// interface zero) and the access-point context (interface one).
 pub const LOWER_MAC_VIFS: u8 = 2;
 
-const RESOURCES: oer_ieee80211_softmac::MacResourceLimits =
+const RESOURCES: oer_ieee80211_port::MacResourceLimits =
     ESP32S31_MAC_SERVICE_CAPABILITIES.resources;
 
 /// Keys installed at once: the station's pairwise and group slots and the
@@ -523,14 +523,14 @@ pub enum PublicationEnd {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct CoreVif {
     pub role: VifRole,
-    pub address: MacAddress,
-    pub bssid: Option<MacAddress>,
+    pub address: [u8; 6],
+    pub bssid: Option<[u8; 6]>,
     pub receive: ReceiveFilter,
 }
 
 impl CoreVif {
     /// The interface's BSS: its BSSID, or an access point's address.
-    fn bss(&self) -> Option<MacAddress> {
+    fn bss(&self) -> Option<[u8; 6]> {
         match self.role {
             VifRole::Station => self.bssid,
             VifRole::AccessPoint => Some(self.address),
@@ -586,12 +586,12 @@ const SUBTYPE_PROBE_REQUEST: u8 = 4;
 const SUBTYPE_PROBE_RESPONSE: u8 = 5;
 const SUBTYPE_BEACON: u8 = 8;
 
-fn frame_address(frame: &[u8], offset: usize) -> Option<MacAddress> {
+fn frame_address(frame: &[u8], offset: usize) -> Option<[u8; 6]> {
     frame.get(offset..offset + 6)?.try_into().ok()
 }
 
 /// The BSSID a management or data frame carries.
-fn frame_bssid(frame: &[u8]) -> Option<MacAddress> {
+fn frame_bssid(frame: &[u8]) -> Option<[u8; 6]> {
     match (frame.first()? >> 2) & 0b11 {
         FRAME_TYPE_MANAGEMENT => frame_address(frame, 16),
         FRAME_TYPE_DATA => match frame.get(1)? & 0b11 {
@@ -622,7 +622,7 @@ pub enum CcmpNumberingError {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RxBlockAckValues {
     pub role: VifRole,
-    pub peer: MacAddress,
+    pub peer: [u8; 6],
     pub tid: u8,
     pub start_sequence: SequenceNumber,
     pub window: u8,
@@ -644,7 +644,7 @@ pub enum RxBeaconPriority {
 pub struct LowerMacConfig {
     /// The station address the cold start published; the station seams have
     /// no transaction that changes it.
-    pub station_address: MacAddress,
+    pub station_address: [u8; 6],
     /// The channel the radio is tuned to.
     pub channel: WifiChannel,
     /// Executor watchdog of one publication.
@@ -710,7 +710,7 @@ impl<Path: PoolPath, const TICKETS: usize> KeyBank<'_, Path, TICKETS> {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct RxBlockAckEntry {
     role: VifRole,
-    peer: MacAddress,
+    peer: [u8; 6],
     tid: u8,
 }
 
@@ -1683,7 +1683,7 @@ where
     }
 
     /// The station address the cold start published.
-    pub const fn station_address(&self) -> MacAddress {
+    pub const fn station_address(&self) -> [u8; 6] {
         self.config.station_address
     }
 
@@ -1961,7 +1961,7 @@ where
         &mut self,
         hardware: &mut H,
         role: VifRole,
-        peer: MacAddress,
+        peer: [u8; 6],
         tid: u8,
     ) -> Result<bool, LowerMacFault> {
         let Some(bank) = self.rx_block_ack_bank(role, peer, tid) else {
@@ -1974,7 +1974,7 @@ where
         Ok(true)
     }
 
-    fn rx_block_ack_bank(&self, role: VifRole, peer: MacAddress, tid: u8) -> Option<usize> {
+    fn rx_block_ack_bank(&self, role: VifRole, peer: [u8; 6], tid: u8) -> Option<usize> {
         self.rx_block_acks
             .iter()
             .position(|entry| *entry == Some(RxBlockAckEntry { role, peer, tid }))
@@ -2162,13 +2162,13 @@ struct CommonAdmission {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CheckedKeyScope {
     StationPairwise {
-        peer: MacAddress,
+        peer: [u8; 6],
     },
     StationGroup {
         key_id: oer_ieee80211_wire::ccmp::GroupKeyId,
     },
     AccessPointPairwise {
-        peer: MacAddress,
+        peer: [u8; 6],
         association_id: u16,
     },
     AccessPointGroup {
@@ -2379,18 +2379,18 @@ enum ReceivePolicy {
     StationDisabled,
     /// Station policy six: the BSS-member rules.
     Station {
-        bssid: MacAddress,
+        bssid: [u8; 6],
     },
     /// Station policy six, mode two: the BSS-member rules and management
     /// frames of every BSS.
     StationOtherBss {
-        bssid: MacAddress,
+        bssid: [u8; 6],
     },
     AccessPointDisabled,
     /// Access-point policy eight: the BSS-member rules and the Probe
     /// Requests the access point answers, wildcard ones included.
     AccessPoint {
-        address: MacAddress,
+        address: [u8; 6],
     },
 }
 

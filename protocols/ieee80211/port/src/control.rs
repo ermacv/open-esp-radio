@@ -1,8 +1,5 @@
 //! Settings, keys and lifecycle of the lower-MAC port.
 
-/// A 48-bit IEEE MAC address in transmission order.
-pub type MacAddress = [u8; 6];
-
 /// The role of a virtual interface, which decides the frames its address
 /// filter admits and the TSF it keeps.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]

@@ -4,7 +4,7 @@ use core::marker::PhantomData;
 use oer_radio_port::{PoolPath, Root};
 
 use super::{
-    ApGroupCcmpSlot, ApPairwiseCcmpSlot, CheckedKeyScope, KeyToken, MacAddress, StaGroupCcmpSlot,
+    ApGroupCcmpSlot, ApPairwiseCcmpSlot, CheckedKeyScope, KeyToken, StaGroupCcmpSlot,
     StaPairwiseCcmpSlot, TxTicket,
 };
 
@@ -28,10 +28,10 @@ pub struct KeyHandle<'core, Path: PoolPath = Root> {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TransmitKeyScope {
     StationPairwise {
-        peer: MacAddress,
+        peer: [u8; 6],
     },
     AccessPointPairwise {
-        peer: MacAddress,
+        peer: [u8; 6],
         association_id: u16,
     },
     AccessPointGroup {

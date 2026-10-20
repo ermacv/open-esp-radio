@@ -7,12 +7,12 @@ use oer_ieee80211_port::{
     ClassSubframe, GroupAddress, IndeterminateCause, MpduStartSpacing, NoAckHeader, QosControl,
     SingleEnd, SingleResponse, SubframeSource, Tid, TxMpdu, TxOutcome, WithdrawCause,
 };
+use oer_ieee80211_runtime::lower_mac_owner::model::{
+    AirAnswer, ModelAggregateOutcome, ModelCaps, ModelPhase, ModelSingleOutcome,
+};
 use oer_ieee80211_wire::{
     phy::{HtMcs, HtRate, PpduBandwidth},
     sequence::SequenceNumber,
-};
-use oer_ieee80211_runtime::lower_mac_owner::model::{
-    AirAnswer, ModelAggregateOutcome, ModelCaps, ModelPhase, ModelSingleOutcome,
 };
 
 /// What a terminal reported, for single MPDUs and aggregates alike.

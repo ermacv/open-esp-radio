@@ -1,15 +1,15 @@
 //! Owned EDCA contention state for the four ordinary TX queues.
 //!
 //! The contention window of each queue is the portable
-//! `oer_ieee80211_softmac::EdcaContention`; its cold values are the
+//! `oer_ieee80211_port::EdcaContention`; its cold values are the
 //! Espressif LMAC defaults of `oer_espressif_ieee80211_policy::lmac`. This
 //! module adds what the S31 queue imposes: a ten-bit slot field and the
 //! validated AIFSN, ACM and TXOP policy of each queue.
 
 use oer_espressif_ieee80211_policy::lmac;
+use oer_ieee80211_port::EdcaContention;
 use oer_ieee80211_wire::extensions::wmm::{WmmAcParameters, WmmParameterSet};
 use oer_ieee80211_wire::qos::WmmAccessCategory;
-use oer_ieee80211_softmac::EdcaContention;
 
 use crate::tx::LegacyTxQueue;
 

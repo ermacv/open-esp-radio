@@ -27,14 +27,14 @@ use esp_hal::{
 };
 use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_board as board;
+use oer_esp32s31_hal::ieee80211::init::{
+    MAC_COLD_HANDSHAKE_DEADLINE, MacDelayEntropy, MacSlowClockCalibration,
+    MacSlowClockCalibrationSource,
+};
 use oer_esp32s31_hal::root::ProtocolPartitions;
 use oer_esp32s31_ieee80211_driver::startup::{
     RadioStartConfig, RadioStartFailure, WifiColdStartConfig, WifiMacPlatform, WifiMacStartConfig,
     start_esp32s31_radio,
-};
-use oer_esp32s31_ieee80211_mac::init::{
-    MAC_COLD_HANDSHAKE_DEADLINE, MacDelayEntropy, MacSlowClockCalibration,
-    MacSlowClockCalibrationSource,
 };
 use oer_esp32s31_phy::{
     NoopPhyTargetObserver, PhyCalibrationIdentity, PhyConfig, PhyRegisterConfig,
@@ -45,8 +45,8 @@ use oer_esp32s31_radio_system::{Esp32s31Radio, RadioSystem};
 use oer_espressif_esp_hal_radio::{EspHalClocks, RadioSingletons, take_radio};
 use oer_espressif_executor::{Executor, InterruptExecutor, LevelOrder};
 use oer_espressif_staged_runtime::panic;
+use oer_ieee80211_wire::address::IndividualAddress;
 use oer_ieee80211_wire::channel::{WifiChannel, WifiChannelWidth};
-use oer_ieee80211_softmac::WifiMacAddress;
 use oer_radio_regulatory::{Country, RegulatoryDomain};
 use static_cell::StaticCell;
 
@@ -228,8 +228,8 @@ async fn run(
     access_point: [u8; 6],
 ) -> Result<(), &'static str> {
     let (Ok(station), Ok(access_point)) = (
-        WifiMacAddress::new(station),
-        WifiMacAddress::new(access_point),
+        IndividualAddress::for_interface(station),
+        IndividualAddress::for_interface(access_point),
     ) else {
         return Err("efuse-mac");
     };
@@ -248,7 +248,8 @@ async fn run(
     ));
     let config = RadioStartConfig::new(
         WifiColdStartConfig::new(channel, ceiling),
-        WifiMacStartConfig::new(MAC_COLD_HANDSHAKE_DEADLINE, station, access_point),
+        WifiMacStartConfig::new(MAC_COLD_HANDSHAKE_DEADLINE, station, access_point)
+            .map_err(|_| "mac-address")?,
     );
     let (cell, started) = start_esp32s31_radio(
         cell,

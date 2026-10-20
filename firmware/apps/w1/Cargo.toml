@@ -10,6 +10,7 @@ description = "W1: a passive scan on the product receive path, which measures th
 build = "build.rs"
 
 [dependencies]
+oer-ieee80211-port = { path = "../../../protocols/ieee80211/port" }
 atomic-waker = "1.1.2"
 embassy-executor = { version = "0.10.0", default-features = false }
 embassy-futures = "0.1.2"

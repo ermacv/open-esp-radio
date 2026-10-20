@@ -1,9 +1,9 @@
 use oer_ieee80211_arbiter::{AbsencePlace, LeasePlace};
 use oer_ieee80211_port::association::KEY_BANK_CAPACITY;
 use oer_ieee80211_port::*;
-use oer_ieee80211_wire::phy::{HeMcs, HtMcs};
 use oer_ieee80211_sta::epoch::LinkEpochSource;
 use oer_ieee80211_sta::machine::{StaConfig, StaTokens, Station, StationResources};
+use oer_ieee80211_wire::phy::{HeMcs, HtMcs};
 struct Caps;
 impl Ieee80211Capabilities for Caps {
     type SppScope = oer_ieee80211_wire::security::spp::Association;
@@ -48,8 +48,7 @@ impl oer_ieee80211_port::TxBufferClass for Buffer {
 impl<const GROUPS: usize> StaTokens for Tokens<GROUPS> {
     type AssociationStart = ();
     type Association = ();
-    type VacantKeyBank =
-        oer_ieee80211_port::association::KeyBankParts<(), (), KEY_BANK_CAPACITY>;
+    type VacantKeyBank = oer_ieee80211_port::association::KeyBankParts<(), (), KEY_BANK_CAPACITY>;
     type VacantAssociation = [(); GROUPS];
     fn begin_association(_: (), _: oer_ieee80211_wire::security::Spp) {}
     fn association(key: &()) -> &() {

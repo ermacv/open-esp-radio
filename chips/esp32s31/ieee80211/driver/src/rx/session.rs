@@ -17,16 +17,19 @@ use oer_esp32s31_hal::{
     ieee80211::dma::{rx_storage::RxDmaStorage, space::ChipDma},
     owner::{MacInterruptSetup, RadioAccess},
 };
-use oer_esp32s31_ieee80211_mac::{
-    init::{MAC_STATION_INTERRUPT_MASK, MacRuntimeStopHardware, activate_promiscuous_receive},
-    irq::{
-        consumer::{IrqBatch, IrqConsumer, PowerIrqConsumer},
-        epoch::{ActiveEpoch, InactiveEpoch, Moderated},
-    },
-    rx::pool::RxStagePool,
-};
 use oer_memory::HandlerCell;
 use oer_time::{Instant, Timer};
+use {
+    oer_esp32s31_hal::ieee80211::init::MAC_STATION_INTERRUPT_MASK,
+    oer_esp32s31_ieee80211_mac::{
+        init::{MacRuntimeStopHardware, activate_promiscuous_receive},
+        irq::{
+            consumer::{IrqBatch, IrqConsumer, PowerIrqConsumer},
+            epoch::{ActiveEpoch, InactiveEpoch, Moderated},
+        },
+        rx::pool::RxStagePool,
+    },
+};
 
 type Epoch = ActiveEpoch<Moderated>;
 

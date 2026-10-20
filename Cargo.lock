@@ -2725,10 +2725,10 @@ dependencies = [
  "oer-esp32s31-radio-client",
  "oer-esp32s31-radio-coex",
  "oer-ieee80211-port",
- "oer-ieee80211-wire",
  "oer-ieee80211-runtime",
  "oer-ieee80211-softmac",
  "oer-ieee80211-sta",
+ "oer-ieee80211-wire",
  "oer-interrupt-table",
  "oer-memory",
  "oer-radio-port",
@@ -2746,9 +2746,9 @@ dependencies = [
  "oer-esp32s31-hal",
  "oer-espressif-ieee80211-policy",
  "oer-ieee80211-port",
- "oer-ieee80211-wire",
  "oer-ieee80211-softmac",
  "oer-ieee80211-upper-mac",
+ "oer-ieee80211-wire",
  "oer-interrupt-table",
  "oer-memory",
  "oer-test-ui-cases",
@@ -2811,7 +2811,6 @@ version = "0.1.0"
 dependencies = [
  "embassy-futures",
  "oer-esp32s31-hal",
- "oer-esp32s31-ieee80211-mac",
  "oer-esp32s31-phy",
  "oer-ieee80211-wire",
  "oer-memory",
@@ -2833,7 +2832,6 @@ version = "0.1.0"
 dependencies = [
  "embassy-futures",
  "oer-esp32s31-hal",
- "oer-esp32s31-ieee80211-mac",
  "oer-esp32s31-phy",
  "oer-esp32s31-radio-client",
  "oer-espressif-coex",
@@ -2925,8 +2923,8 @@ name = "oer-espressif-ieee80211-policy"
 version = "0.1.0"
 dependencies = [
  "oer-ieee80211-port",
- "oer-ieee80211-wire",
  "oer-ieee80211-upper-mac",
+ "oer-ieee80211-wire",
  "oer-test-ui-cases",
  "oer-time",
 ]
@@ -3013,8 +3011,9 @@ dependencies = [
  "oer-espressif-esp-hal-radio",
  "oer-espressif-executor",
  "oer-espressif-staged-runtime",
- "oer-ieee80211-wire",
+ "oer-ieee80211-port",
  "oer-ieee80211-softmac",
+ "oer-ieee80211-wire",
  "oer-radio-regulatory",
  "oer-time",
  "static_cell",
@@ -3042,9 +3041,10 @@ dependencies = [
  "oer-espressif-esp-hal-radio",
  "oer-espressif-executor",
  "oer-espressif-staged-runtime",
- "oer-ieee80211-wire",
+ "oer-ieee80211-port",
  "oer-ieee80211-runtime",
  "oer-ieee80211-softmac",
+ "oer-ieee80211-wire",
  "oer-interrupt-table",
  "oer-memory",
  "oer-radio-regulatory",
@@ -3075,10 +3075,10 @@ dependencies = [
  "oer-espressif-executor",
  "oer-espressif-staged-runtime",
  "oer-ieee80211-port",
- "oer-ieee80211-wire",
  "oer-ieee80211-runtime",
  "oer-ieee80211-softmac",
  "oer-ieee80211-upper-mac",
+ "oer-ieee80211-wire",
  "oer-interrupt-table",
  "oer-memory",
  "oer-radio-regulatory",
@@ -3478,8 +3478,9 @@ dependencies = [
 name = "oer-ieee80211-ap"
 version = "0.1.0"
 dependencies = [
- "oer-ieee80211-wire",
  "oer-ieee80211-rsn",
+ "oer-ieee80211-upper-mac",
+ "oer-ieee80211-wire",
  "oer-time",
 ]
 
@@ -3499,6 +3500,7 @@ dependencies = [
 name = "oer-ieee80211-datapath"
 version = "0.1.0"
 dependencies = [
+ "oer-ieee80211-port",
  "oer-ieee80211-softmac",
  "oer-memory",
  "oer-network",
@@ -3515,16 +3517,6 @@ dependencies = [
  "oer-radio-regulatory",
  "oer-test-ui-cases",
  "oer-time",
-]
-
-[[package]]
-name = "oer-ieee80211-wire"
-version = "0.1.0"
-dependencies = [
- "oer-radio-regulatory",
- "oer-test-ui-cases",
- "oer-time",
- "zeroize",
 ]
 
 [[package]]
@@ -3556,11 +3548,11 @@ dependencies = [
  "oer-espressif-ieee80211-policy",
  "oer-ieee80211-arbiter",
  "oer-ieee80211-port",
- "oer-ieee80211-wire",
  "oer-ieee80211-rsn",
  "oer-ieee80211-softmac",
  "oer-ieee80211-sta",
  "oer-ieee80211-upper-mac",
+ "oer-ieee80211-wire",
  "oer-memory",
  "oer-radio-port",
  "oer-radio-regulatory",
@@ -3574,6 +3566,7 @@ name = "oer-ieee80211-softmac"
 version = "0.1.0"
 dependencies = [
  "oer-ieee80211-port",
+ "oer-ieee80211-sta",
  "oer-ieee80211-wire",
  "oer-time",
  "zeroize",
@@ -3586,9 +3579,9 @@ dependencies = [
  "heapless 0.9.3",
  "oer-ieee80211-arbiter",
  "oer-ieee80211-port",
- "oer-ieee80211-wire",
  "oer-ieee80211-rsn",
  "oer-ieee80211-upper-mac",
+ "oer-ieee80211-wire",
  "oer-radio-port",
  "oer-radio-regulatory",
  "oer-test-ui-cases",
@@ -3602,8 +3595,18 @@ version = "0.1.0"
 dependencies = [
  "oer-ieee80211-port",
  "oer-ieee80211-wire",
- "oer-ieee80211-softmac",
+ "oer-test-ui-cases",
  "oer-time",
+]
+
+[[package]]
+name = "oer-ieee80211-wire"
+version = "0.1.0"
+dependencies = [
+ "oer-radio-regulatory",
+ "oer-test-ui-cases",
+ "oer-time",
+ "zeroize",
 ]
 
 [[package]]
@@ -4047,8 +4050,8 @@ dependencies = [
  "oer-chip-profile",
  "oer-hil-lab",
  "oer-ieee80211-port",
- "oer-ieee80211-wire",
  "oer-ieee80211-upper-mac",
+ "oer-ieee80211-wire",
  "oer-image-build",
  "oer-image-checks",
  "oer-lab-board",

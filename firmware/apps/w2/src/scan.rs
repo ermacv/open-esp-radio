@@ -1,8 +1,8 @@
 //! One radio-executor task consumes every RX/TX interrupt batch and keeps
 //! both DMA owners until their stopped boundaries, before posting a retune.
 use crate::{
-    W2Config,
-    irq::{self, B, N, Q, S, TX},
+    W2Config, irq,
+    irq::{B, N, Q, S, TX},
     report::Report,
 };
 use core::{future::poll_fn, pin::Pin, sync::atomic::Ordering};
@@ -31,20 +31,13 @@ use oer_esp32s31_ieee80211_driver::{
     },
     tx::{CappedTxPowerProfile, WifiTxEntropy, WifiTxResources, WifiTxWake},
 };
-use oer_esp32s31_ieee80211_mac::{
-    init::{
-        MAC_COLD_HANDSHAKE_DEADLINE, MacDelayEntropy, MacSlowClockCalibration,
-        MacSlowClockCalibrationSource,
-    },
-    irq::{EVENT_TX_COMPLETE, EVENT_TX_TIMEOUT, IrqWork},
-    tx::{LegacyRate, TxPhyRate, TxSlot, runtime::WifiTxRuntimePolicy},
-};
 use oer_esp32s31_phy::{PhyConfig, PhyTxTargetPowerProfile};
 use oer_esp32s31_radio_client::{
     MembershipCell,
     wifi::{ProbePriority, Wifi},
 };
 use oer_ieee80211_port::{Band, ManagementTxPlan};
+use oer_ieee80211_upper_mac::{BasicRates, rate_selection::management_rate};
 use oer_ieee80211_wire::{
     channel::{WifiChannel, WifiChannelWidth},
     management::{BROADCAST_ADDRESS, ProbeRequest},
@@ -52,11 +45,20 @@ use oer_ieee80211_wire::{
     scan::parse_management,
     sequence::SequenceNumber,
 };
-use oer_ieee80211_softmac::{MacTxPlan, WifiMacAddress};
-use oer_ieee80211_upper_mac::{BasicRates, rate_selection::management_rate};
 use oer_memory::AffineSpscSender;
 use oer_radio_regulatory::{Country, Initiate, RegulatoryDomain, TxCeiling};
 use oer_time::{Clock, Duration, Instant, Timer};
+use {
+    oer_esp32s31_hal::ieee80211::init::{
+        MAC_COLD_HANDSHAKE_DEADLINE, MacDelayEntropy, MacSlowClockCalibration,
+        MacSlowClockCalibrationSource,
+    },
+    oer_esp32s31_ieee80211_mac::{
+        irq::{EVENT_TX_COMPLETE, EVENT_TX_TIMEOUT, IrqWork},
+        tx::{LegacyRate, TxPhyRate, TxSlot, runtime::WifiTxRuntimePolicy},
+    },
+};
+use {oer_ieee80211_port::MacTxPlan, oer_ieee80211_wire::address::IndividualAddress};
 
 type Rx = ReceiveSession<N, B, S, Q>;
 type Frames = FrameReceiver<'static, Q, B>;
@@ -169,9 +171,10 @@ async fn run(
         WifiColdStartConfig::new(initial, ceiling(initial, config)),
         WifiMacStartConfig::new(
             MAC_COLD_HANDSHAKE_DEADLINE,
-            WifiMacAddress::new(station).map_err(|_| "station-mac")?,
-            WifiMacAddress::new(ap).map_err(|_| "ap-mac")?,
-        ),
+            IndividualAddress::for_interface(station).map_err(|_| "station-mac")?,
+            IndividualAddress::for_interface(ap).map_err(|_| "ap-mac")?,
+        )
+        .map_err(|_| "mac-address")?,
     );
     let (returned, started) = start_esp32s31_radio(
         cell,

@@ -18,22 +18,24 @@ use oer_espressif_ieee80211_policy::{
 };
 use oer_ieee80211_arbiter::ArbiterPolicy;
 use oer_ieee80211_port::{Channel, ChannelWidth, LowerMacSetup, SignalMetadata};
-use oer_ieee80211_wire::address::IndividualAddress;
-use oer_ieee80211_wire::{
-    phy::LegacyRate,
-    phy::PhyRate,
-    security::rsn::Akm,
-    station::{AssociationCapabilities, association::PhyMode},
-};
 use oer_ieee80211_rsn::{Pmk, PtkContext, frames::RsnTxFrame};
 use oer_ieee80211_sta::machine::{GroupCapacity, StaConfig, StaSecurity, StationResources};
 use oer_ieee80211_upper_mac::rate_control::RateControl;
+use oer_ieee80211_wire::address::IndividualAddress;
 use oer_radio_port::{Ended, PortBody, run_port};
 use oer_time::Duration;
 use oer_time_virtual::VirtualClock;
 use std::boxed::Box;
 use std::rc::Rc;
 use std::vec::Vec;
+use {
+    oer_ieee80211_port::PhyMode,
+    oer_ieee80211_wire::{
+        phy::{LegacyRate, PhyRate},
+        security::rsn::Akm,
+        station::AssociationCapabilities,
+    },
+};
 
 use super::*;
 
@@ -1367,9 +1369,7 @@ fn on_an_open_network_the_join_goes_on_the_default_record_and_then_the_associati
                 Some(oer_ieee80211_wire::extensions::wmm::WmmParameterSet::DCF)
             );
             assert_eq!(
-                world
-                    .air
-                    .edca(oer_ieee80211_port::VifRole::AccessPoint),
+                world.air.edca(oer_ieee80211_port::VifRole::AccessPoint),
                 None
             );
             // Connected at once on an open network: data at the rate control's
@@ -2224,9 +2224,9 @@ fn application_requests_return_correlated_refusals_and_unique_completions() {
 
 #[test]
 fn protected_qos_ht_group_message_rekeys_once_after_integrity_and_replay_admission() {
-    use oer_ieee80211_wire::{
-        ccmp::{CcmpHeader, CcmpKeyId, CcmpPacketNumber},
-        receive::RxDropReason,
+    use {
+        oer_ieee80211_upper_mac::receive::RxDropReason,
+        oer_ieee80211_wire::ccmp::{CcmpHeader, CcmpKeyId, CcmpPacketNumber},
     };
     let counters = run_with(
         config(StaSecurity::Personal {
