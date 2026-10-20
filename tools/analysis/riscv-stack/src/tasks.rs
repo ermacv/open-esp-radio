@@ -59,7 +59,11 @@ pub fn task_poll_resolutions<'a>(
     } else {
         Fact::TaskPolls
     };
-    let owners = crate::task_spawns::owners(image, analysis, types, &polls, &mut scratch, control)?;
+    let owners = if polls.is_empty() {
+        Default::default()
+    } else {
+        crate::task_spawns::owners(image, analysis, types, &polls, &mut scratch, control)?
+    };
     for facts in analysis.functions.values() {
         for transfer in &facts.transfers {
             if transfer.target.is_some()
