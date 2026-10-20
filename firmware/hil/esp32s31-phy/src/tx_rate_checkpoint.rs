@@ -1,5 +1,6 @@
 //! Read-only observations through the ownership-bound typed PAC image.
 use oer_esp32s31_hal::domain::RadioDomain;
+use oer_esp32s31_hal::power::PlatformClockBackend;
 use oer_hil_protocol::base::RejectReason;
 
 // The register image index and the two field decoders come from the published
@@ -19,7 +20,10 @@ pub enum Point {
     AfterWifiCommonPower,
 }
 
-pub fn observe<T>(domain: &RadioDomain<T>, point: Point) -> Result<(), RejectReason> {
+pub fn observe<B: PlatformClockBackend, T>(
+    domain: &RadioDomain<B, T>,
+    point: Point,
+) -> Result<(), RejectReason> {
     let value = decode(
         domain
             .phy_register_image(IMAGE_INDEX)
