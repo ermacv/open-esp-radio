@@ -81,7 +81,9 @@ jobs:
               fi
             done <<<"$members")
             echo "cfg($cfg):" $packages
-            RUSTFLAGS="--cfg $cfg" CARGO_TARGET_DIR="target/cfg/$cfg" \
+            # UI tests run nested Cargo from the package directory. Keep its
+            # target directory identical to the outer workspace invocation.
+            RUSTFLAGS="--cfg $cfg" CARGO_TARGET_DIR="$PWD/target/cfg/$cfg" \
               cargo test --locked $packages
           done
 
