@@ -153,6 +153,9 @@ fn a_relocated_call_reports_each_argument_kind() {
         CallSite {
             offset: 0x44,
             target: b"phy_i2c_writeReg".to_vec(),
+            kind: crate::references::Kind::Relocation,
+            destination: None,
+            alternatives: None,
             arguments: Vec::new(),
         },
         "a call without retained register state says so instead of guessing; \
@@ -211,6 +214,9 @@ fn a_jump_without_its_own_register_state_never_borrows_the_next_call() {
         [CallSite {
             offset: 0x40,
             target: b"phy_i2c_writeReg".to_vec(),
+            kind: crate::references::Kind::Relocation,
+            destination: None,
+            alternatives: None,
             arguments: Vec::new(),
         }],
         "`j phy_i2c_writeReg` at 0x40 has no state; 0x44 and 0x48 belong to other transfers"
@@ -333,7 +339,17 @@ fn call_sites(
         &mut || Ok(()),
     )
     .expect("navigation fixture should succeed");
-    super::call_sites(&facts, targets, image, &mut || Ok(()))
+    let entries = image
+        .map(|image| image.starts_named(targets))
+        .unwrap_or_default()
+        .into_iter()
+        .map(|(address, name)| crate::references::Target {
+            address,
+            input: 0,
+            name: name.as_bytes().to_vec(),
+        });
+    let targets_index = crate::references::Targets::new(entries, &memory, &mut || Ok(())).unwrap();
+    super::call_sites(&facts, targets, &targets_index, &mut || Ok(()))
         .expect("navigation fixture should succeed")
 }
 
@@ -358,9 +374,10 @@ fn call_argument_lookup_errors_reach_the_caller_after_any_checkpoint() {
     let facts = FunctionIndex::new(&records, RecordPolicy::Dictionary, &memory, &mut || Ok(()))
         .expect("navigation fixture should succeed");
     let targets = ["callee".into()];
+    let targets_index = crate::references::Targets::new([], &memory, &mut || Ok(())).unwrap();
     let mut checkpoints = 0;
     assert_eq!(
-        super::call_sites(&facts, &targets, None, &mut || {
+        super::call_sites(&facts, &targets, &targets_index, &mut || {
             checkpoints += 1;
             Ok(())
         })
@@ -376,7 +393,7 @@ fn call_argument_lookup_errors_reach_the_caller_after_any_checkpoint() {
             ErrorCode::Integrity,
         ] {
             let mut remaining = fail_at;
-            let error = super::call_sites(&facts, &targets, None, &mut || {
+            let error = super::call_sites(&facts, &targets, &targets_index, &mut || {
                 if remaining == 0 {
                     return Err(Error::new(code, "stop"));
                 }

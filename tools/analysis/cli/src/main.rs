@@ -141,8 +141,8 @@ enum Command {
         limits: InProcessOptions,
     },
     /// Analyze every function of captured libraries in this process and report
-    /// every reference to the named symbols: calls, jumps and addresses taken,
-    /// each a relocation in a relocatable object.
+    /// references through relocations, resolved transfers and stored-address
+    /// candidates for the named functions.
     Callers {
         /// Repeat ROLE=PATH or ROLE=pin:CHIP/ID; a function names its input by position.
         #[arg(long = "input", required = true, value_name = "ROLE=PATH")]
@@ -1418,10 +1418,12 @@ fn call_arguments(
         .collect::<Result<Vec<_>>>()?;
     let memory = limits.memory()?;
     let mut control = limits.control();
-    let images = executables
-        .iter()
-        .map(|executable| image_symbols(executable, &memory, &mut control))
-        .collect::<Result<Vec<_>>>()?;
+    let targets = oer_tool_analysis_cli::references::Targets::capture(
+        &executables,
+        &symbols,
+        &memory,
+        &mut control,
+    )?;
     let mut callers = Vec::new();
     let mut blocked = Vec::new();
     let (mut partial, mut gaps) = (0_u64, 0_u64);
@@ -1437,13 +1439,10 @@ fn call_arguments(
                 app::library::LibraryOutcome::Analyzed(analyzed) => {
                     partial += u64::from(!analyzed.complete());
                     partial_causes.add(analyzed.partial_causes(c)?);
-                    let image = images
-                        .get(analyzed.function.input as usize)
-                        .and_then(Option::as_ref);
                     let facts =
                         FunctionIndex::new(analyzed.records, RecordPolicy::Dictionary, &memory, c)?;
                     let sites = oer_tool_analysis_cli::call_arguments::call_sites(
-                        &facts, &symbols, image, c,
+                        &facts, &symbols, &targets, c,
                     )?;
                     if !sites.is_empty() {
                         callers.push(oer_tool_analysis_cli::wire::CallingFunction {
@@ -1511,10 +1510,13 @@ fn call_arguments(
                     };
                     writeln!(
                         out,
-                        "{name} (input {}) +{:x}: {}({arguments})",
+                        "{name} (input {}) +{:x}: {} {}({arguments}){}{}",
                         caller.function.input,
                         site.offset,
+                        site.kind.human(),
                         String::from_utf8_lossy(&site.target),
+                        destination_human(site.destination.as_ref()),
+                        alternatives_human(site.alternatives),
                     )
                     .map_err(io_error)?;
                 }
@@ -1556,6 +1558,17 @@ fn callers(
         .collect::<Result<Vec<_>>>()?;
     let memory = limits.memory()?;
     let mut control = limits.control();
+    let targets = oer_tool_analysis_cli::references::Targets::capture(
+        &executables,
+        &symbols,
+        &memory,
+        &mut control,
+    )?;
+    let mut stored = oer_tool_analysis_cli::references::StoredScan::new(&memory, &mut control)?;
+    stored.scan_data(&executables, &targets, &memory, &mut control)?;
+    let mut functions = 0_u64;
+    let mut partial = 0_u64;
+    let mut partial_causes = oer_analysis_blobray_domain::PartialCauses::default();
     let mut callers = Vec::new();
     let mut blocked = Vec::new();
     let mut gaps = 0_u64;
@@ -1565,11 +1578,19 @@ fn callers(
         &oer_analysis_riscv_lift::RiscvDecoder,
         &memory,
         &mut control,
-        &mut |outcome, _| {
+        &mut |outcome, c| {
             match outcome {
                 app::library::LibraryOutcome::Analyzed(analyzed) => {
-                    let references =
-                        oer_tool_analysis_cli::listing::references_to(analyzed.records, &symbols);
+                    functions += 1;
+                    partial += u64::from(!analyzed.complete());
+                    partial_causes.add(analyzed.partial_causes(c)?);
+                    let references = oer_tool_analysis_cli::references::call_sites(
+                        analyzed.records,
+                        &symbols,
+                        &targets,
+                        c,
+                    )?;
+                    stored.materialized(analyzed.function, analyzed.records, &targets, c)?;
                     if !references.is_empty() {
                         callers.push(oer_tool_analysis_cli::wire::Caller {
                             function: analyzed.function.clone(),
@@ -1605,6 +1626,11 @@ fn callers(
                 read_only: assumptions.read_only.to_vec(),
                 symbols,
                 callers,
+                stored: stored.references,
+                scan: stored.summary,
+                functions,
+                partial,
+                partial_causes,
                 blocked,
                 gaps,
             };
@@ -1622,19 +1648,48 @@ fn callers(
                 for reference in &caller.references {
                     writeln!(
                         out,
-                        "{name} (input {}) +{:x}: {:?} {}",
+                        "{name} (input {}) +{:x}: {}{} {}{}{}",
                         caller.function.input,
                         reference.offset,
-                        reference.kind,
+                        reference.kind.human(),
+                        reference
+                            .relocation_kind
+                            .map(|kind| format!(" {kind:?}"))
+                            .unwrap_or_default(),
                         String::from_utf8_lossy(&reference.target),
+                        destination_human(reference.destination.as_ref()),
+                        alternatives_human(reference.alternatives),
                     )
                     .map_err(io_error)?;
                 }
             }
             writeln!(
                 out,
-                "{} functions reference the symbols; {} functions blocked; {gaps} gaps",
+                "stored: candidates for indirect calls, not proven calls"
+            )
+            .map_err(io_error)?;
+            for reference in &stored.references {
+                use oer_tool_analysis_cli::references::Stored;
+                match reference {
+                    Stored::StoredWord { input, section, section_name, address, owners, destination } => {
+                        let owners = owners.iter().map(|owner| String::from_utf8_lossy(owner.name.as_deref().unwrap_or_default())).collect::<Vec<_>>().join(", ");
+                        writeln!(out, "stored-word (input {input}) section {section} {} {address:#x} owner [{}]: {}{}",
+                            String::from_utf8_lossy(section_name.as_deref().unwrap_or_default()), owners,
+                            String::from_utf8_lossy(&destination.name), destination_human(Some(destination)))
+                    }
+                    Stored::Materialized { function, offset, register, destination } => {
+                        writeln!(out, "materialized {} (input {}) +{offset:x} x{register}: {}{}",
+                            String::from_utf8_lossy(function.name.as_deref().unwrap_or_default()), function.input,
+                            String::from_utf8_lossy(&destination.name), destination_human(Some(destination)))
+                    }
+                }.map_err(io_error)?;
+            }
+            writeln!(out, "scanned {} sections, {} words; {} NOBITS sections without captured words; {} incomplete inventories", stored.summary.sections, stored.summary.words, stored.summary.nobits_sections, stored.summary.incomplete_inventories).map_err(io_error)?;
+            writeln!(
+                out,
+                "{} functions reference the symbols; {functions} analyzed, {partial} partial{}, {} blocked; {gaps} gaps",
                 callers.len(),
+                oer_tool_analysis_cli::partial::human(&partial_causes),
                 blocked.len()
             )
             .map_err(io_error)?;
@@ -1642,6 +1697,18 @@ fn callers(
     }
     out.flush().map_err(io_error)?;
     Ok(ExitCode::SUCCESS)
+}
+
+fn destination_human(target: Option<&oer_tool_analysis_cli::references::Target>) -> String {
+    target
+        .map(|target| format!(" (target input {}, {:#x})", target.input, target.address))
+        .unwrap_or_default()
+}
+
+fn alternatives_human(count: Option<usize>) -> String {
+    count
+        .map(|count| format!(" (one of {count} targets)"))
+        .unwrap_or_default()
 }
 
 #[cfg(test)]

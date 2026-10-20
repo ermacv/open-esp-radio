@@ -7,13 +7,12 @@
 //!
 //! The values are may-values of one call site, without interprocedural
 //! expansion: a value does not prove that the path reaching the call runs.
-use crate::listing::{ImageSymbols, signed_hex};
+use crate::listing::signed_hex;
+use crate::references::{self, Kind, Target, Targets};
 use oer_analysis_riscv_model::{
-    AbstractValue, Expression, FunctionIndex, FunctionRecord, ReferenceKind, Result, RunControl,
-    ValueAlternative,
+    AbstractValue, Expression, FunctionIndex, Result, RunControl, ValueAlternative,
 };
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
 
 /// The integer argument registers `a0`..`a7`, `x10`..`x17`.
 const ARGUMENTS: std::ops::Range<usize> = 10..18;
@@ -26,6 +25,9 @@ pub struct CallSite {
     pub offset: u64,
     #[serde(with = "oer_analysis_riscv_model::symbol_name")]
     pub target: Vec<u8>,
+    pub kind: Kind,
+    pub destination: Option<Target>,
+    pub alternatives: Option<usize>,
     /// `a0`..`a7` before the transfer; empty when the analysis kept no
     /// register state at this site.
     pub arguments: Vec<ArgumentValue>,
@@ -99,65 +101,37 @@ impl ArgumentValue {
     }
 }
 
-/// Every call site among the indexed records whose target `targets` names.
-///
-/// In a relocatable object a call is a `Call` relocation to the name, whose
-/// register state is at the `jalr` four bytes after its `auipc`, or a
-/// `Branch` (JAL or branch) relocation, whose state is at its own offset. Without relocations, `image` supplies the addresses of the named
-/// functions and a transfer to one of them is a call site.
+/// Arguments at the same relocation, exact-transfer and may-transfer sites
+/// selected by `callers`. Input state always belongs to this transfer.
 pub fn call_sites(
     facts: &FunctionIndex<'_, '_>,
-    targets: &[String],
-    image: Option<&ImageSymbols>,
+    names: &[String],
+    targets: &Targets<'_>,
     c: &mut dyn RunControl,
 ) -> Result<Vec<CallSite>> {
-    let wanted = |name: &[u8]| targets.iter().any(|target| target.as_bytes() == name);
-    let image_targets: BTreeMap<u64, &str> = image
-        .map(|image| image.starts_named(targets))
-        .unwrap_or_default();
-    let mut sites = Vec::new();
-    for record in facts.records() {
-        c.checkpoint(1)?;
-        match record {
-            FunctionRecord::Reference {
-                raw,
-                reference_kind: kind @ (ReferenceKind::Call | ReferenceKind::Branch),
-                target,
-                ..
-            } if wanted(&target.name) => {
-                // A CALL pair relocates its `auipc` and transfers at the
-                // `jalr` four bytes on; a JAL or branch relocation is its
-                // own transfer. Never borrow another transfer's state.
-                let site = match kind {
-                    ReferenceKind::Call => raw.offset + 4,
-                    _ => raw.offset,
-                };
-                sites.push(CallSite {
-                    offset: site,
-                    target: target.name.clone(),
-                    arguments: arguments(facts, site, c)?,
-                });
-            }
-            FunctionRecord::Transfer {
-                offset,
-                target: AbstractValue::ImageAddress { address },
-                ..
-            } => {
-                if let Some(name) = image_targets.get(&u64::from(*address)) {
-                    sites.push(CallSite {
-                        offset: *offset,
-                        target: name.as_bytes().to_vec(),
-                        arguments: arguments(facts, *offset, c)?,
-                    });
-                }
-            }
-            _ => {}
-        }
-    }
-    c.checkpoint(sites.len() as u64 * (sites.len().max(1).ilog2() as u64 + 1))?;
-    sites.sort_by_key(|site| site.offset);
-    sites.dedup();
-    Ok(sites)
+    references::call_sites(facts.records(), names, targets, c)?
+        .into_iter()
+        .filter(|site| {
+            site.kind != Kind::Relocation
+                || matches!(
+                    site.relocation_kind,
+                    Some(
+                        oer_analysis_riscv_model::ReferenceKind::Call
+                            | oer_analysis_riscv_model::ReferenceKind::Branch
+                    )
+                )
+        })
+        .map(|site| {
+            Ok(CallSite {
+                offset: site.site,
+                target: site.target,
+                kind: site.kind,
+                destination: site.destination,
+                alternatives: site.alternatives,
+                arguments: arguments(facts, site.site, c)?,
+            })
+        })
+        .collect()
 }
 
 fn arguments(
