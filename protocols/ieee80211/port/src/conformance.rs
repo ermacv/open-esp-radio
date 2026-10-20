@@ -659,7 +659,7 @@ where
         return Err(Violation::Missing);
     }
     let mut closed = false;
-    let mut publications = 0;
+    let mut publications = 0_usize;
     for event in events {
         match event {
             PublicationEvent::GateClosed if !closed => closed = true,
@@ -671,7 +671,7 @@ where
                 if !rows.iter().any(|row| row.actual.ticket == *ticket) {
                     return Err(Violation::Owners);
                 }
-                publications += 1;
+                publications = publications.checked_add(1).ok_or(Violation::Publication)?;
             }
         }
     }
