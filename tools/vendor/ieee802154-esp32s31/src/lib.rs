@@ -26,7 +26,7 @@ pub mod scenario;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
-pub use compare::{Verdict, compare};
+pub use compare::{Verdict, compare, compare_scenario};
 pub use record::{Argument, Inputs, Record};
 pub use scenario::{Scenario, Step};
 

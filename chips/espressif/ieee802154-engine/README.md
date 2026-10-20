@@ -33,6 +33,50 @@ caller serializes entries and the interrupt handler in one critical section.
 Its accessor sequence was compared on the host with the compiled vendor
 driver.
 
+## Configuration
+
+Configuration is admitted in any radio state. `pib()` inspects the retained
+values; `update_pib(env, |pib| ...)` completes a synchronous engine entry. It
+replaces values without queuing. The caller uses the raw engine's LL and
+environment arguments or the owner's stored MAC.
+
+RX values (promiscuous, coordinator, ACK flags and pending mode) publish at
+once while the receiver listens without a frame in progress: stop RX,
+publish the RX part of `pib.update`, restart RX. The hardware's
+`is_current_rx_frame` after-SFD observation and latched frame events keep an
+ongoing frame and its ACK intact. Changes during a frame, ACK transmission
+or ACK wait publish at its terminal boundary, including automatic RX resumes.
+An armed receive retains its timer and never starts early for a setting.
+Channel, power and CCA publish at explicit operation start, including receive,
+transmit, ED and CCA; automatic RX resumes publish only the RX part. Channel
+is supplied with receive/transmit by the portable MAC.
+
+Promiscuous reception acknowledges nothing: hardware ACK flags are the
+configured flag AND NOT promiscuous. Disabling promiscuous restores each
+configured flag, including changes made while promiscuous was enabled.
+
+Addresses, ACK timeout and source-match edits take effect when their calls
+return. The engine keeps PIB, all configured PAN identities and enable mask,
+ACK timeout, source-match tables, receive-when-idle wishes and coexistence
+across disable/enable. `mac_init()` republishes them after the MAC reset; PIB
+defaults are chosen only at construction. Unset identity/timeout/mask fields
+are captured from the first accessible hardware epoch (including a cold
+policy); later epochs restore their shadow. The restore assumes every MAC
+register was lost, so it also covers power-domain loss. The reset pulse
+already precedes initialization in the S31 lifecycle. `ll::mac_init_registers`
+sets event/abort enables, ED averaging and coexistence PTIs, leaving PIB and
+identity restoration to the engine.
+
+The host vendor catalog records three intentional differences: bounded RX
+publication, promiscuous masking and retained settings. Each expectation belongs
+to its scenario and the fingerprints of both complete boundary traces, including
+every record after the first mismatch. A matching expectation reports `EXPECTED`
+with that scenario's reason and succeeds; any other `DIFF` fails without expected
+reasons. `compare all` succeeds when every scenario is `MATCH` or `EXPECTED`.
+Tests also compare the remaining radio commands, aborts, buffers and callbacks,
+and check the three differences independently against C and engine traces
+(`port <scenario>` prints the latter).
+
 ## Bring-up and teardown order
 
 No runtime in this repository holds the engine; a runtime that does brings

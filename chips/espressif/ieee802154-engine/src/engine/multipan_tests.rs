@@ -105,7 +105,10 @@ impl Bench {
         };
         let mut hw = Ieee802154LlModel::default();
         engine.enable();
-        engine.mac_init(&mut hw, defaults);
+        engine.mac_init(&mut hw);
+        engine.update_pib(&mut hw, &mut Received::default(), |pib| {
+            pib.set_promiscuous(false)
+        });
         Self {
             engine,
             hw,
@@ -128,7 +131,9 @@ impl Bench {
     }
 
     fn receive(&mut self, image: &[u8]) -> Ieee802154FrameInfo {
-        self.engine.pib().set_rx_when_idle(true);
+        self.engine.update_pib(&mut self.hw, &mut self.env, |pib| {
+            pib.set_rx_when_idle(true)
+        });
         self.engine.receive(&mut self.hw, &mut self.env);
         let address = self.hw.rx_address.unwrap();
         assert!(self.engine.model_dma_write(address, image));
@@ -175,13 +180,21 @@ fn broadcast_frames_belong_to_no_interface() {
 #[test]
 fn the_pending_bit_follows_the_addressed_interface() {
     let mut bench = Bench::with_identities(Some(2));
-    bench.engine.set_pending_mode(IF1, AutoPendingMode::Enable);
+    bench
+        .engine
+        .update_pib(&mut bench.hw, &mut bench.env, |pib| {
+            pib.set_pending_mode(IF1, AutoPendingMode::Enable)
+        });
     bench
         .engine
         .pending_table_for(IF1)
         .add(FrameAddress::Short([0x78, 0x56]))
         .unwrap();
-    bench.engine.set_pending_mode(IF0, AutoPendingMode::Enable);
+    bench
+        .engine
+        .update_pib(&mut bench.hw, &mut bench.env, |pib| {
+            pib.set_pending_mode(IF0, AutoPendingMode::Enable)
+        });
     assert!(bench.receive(&data_to(0xabcd, [0x11, 0x11])).pending);
     assert!(bench.hw.pending_bit);
     assert!(!bench.receive(&data_to(0x1234, [0x01, 0x00])).pending);
@@ -243,11 +256,92 @@ fn an_interface_beyond_the_configuration_is_rejected() {
         .set_multipan_panid(&mut bench.hw, Ieee802154MultipanIndex::CONTEXT2, 1);
 }
 
+/// Every backend-owned setting is restored even if the MAC register model
+/// loses all its fields between epochs. Source match remains engine RAM.
+#[test]
+fn settings_survive_disable_enable_and_complete_register_loss() {
+    let mut bench = Bench::with_identities(Some(2));
+    let (engine, hw, env) = (&mut bench.engine, &mut bench.hw, &mut bench.env);
+    engine.set_multipan_extended_address(hw, IF0, [1; 8]);
+    engine.set_multipan_extended_address(hw, IF1, [2; 8]);
+    engine.set_multipan_enable(hw, Ieee802154MultipanEnableState::NONE.with(IF1));
+    engine.set_ack_timeout(
+        hw,
+        crate::types::AckTimeout::new(200).expect("bounded timeout"),
+    );
+    let priorities = crate::engine::tests::vendor_priorities();
+    engine.set_coexistence(crate::coex::Ieee802154Coexistence::Software(priorities));
+    let permit = crate::pib::test_permit(20, engine.levels);
+    engine.update_pib(hw, env, |pib| {
+        pib.set_channel(permit);
+        pib.set_power(-3);
+        pib.set_cca_mode(Ieee802154CcaMode::Carrier);
+        pib.set_cca_threshold(-90);
+        pib.set_coordinator(true);
+        pib.set_auto_ack_tx(false);
+        pib.set_auto_ack_rx(true);
+        pib.set_enhanced_ack_tx(false);
+        pib.set_pending_mode(IF1, AutoPendingMode::Enhanced);
+    });
+    engine.multipan_set_rx_when_idle(IF1, true);
+    engine
+        .pending_table_for(IF1)
+        .add(FrameAddress::Short([0x78, 0x56]))
+        .expect("room");
+    engine.receive(hw, env);
+    let saved = hw.clone();
+    let saved_pib = engine.pib().clone();
+    engine.mac_deinit(hw);
+    engine.disable();
+    *hw = Ieee802154LlModel::default();
+    engine.enable();
+    engine.mac_init(hw);
+    assert_eq!(engine.pib(), &saved_pib);
+    assert_eq!(hw.panid, saved.panid);
+    assert_eq!(hw.short_address, saved.short_address);
+    assert_eq!(hw.extended_address, saved.extended_address);
+    assert_eq!(hw.multipan_enable, saved.multipan_enable);
+    assert_eq!(hw.ack_timeout, saved.ack_timeout);
+    assert_eq!(hw.frequency_code, saved.frequency_code);
+    assert_eq!(hw.tx_power_code, saved.tx_power_code);
+    assert_eq!(hw.cca_mode, saved.cca_mode);
+    assert_eq!(hw.cca_threshold_dbm, -90);
+    assert_eq!(hw.coordinator, saved.coordinator);
+    assert_eq!(hw.promiscuous, saved.promiscuous);
+    assert_eq!(
+        (hw.tx_auto_ack, hw.rx_auto_ack, hw.tx_enhanced_ack),
+        (false, true, false)
+    );
+    assert_eq!(hw.pending_mode, saved.pending_mode);
+    assert_eq!(
+        hw.ack_pti,
+        priorities
+            .operation(crate::coex::RadioOperation::Ack)
+            .value()
+    );
+    assert_eq!(
+        hw.txrx_pti,
+        priorities
+            .operation(crate::coex::RadioOperation::Idle)
+            .value()
+    );
+    engine.multipan_set_rx_when_idle(IF1, false);
+    assert!(!engine.pib().rx_when_idle());
+    assert!(
+        engine
+            .pending_table_for(IF1)
+            .contains(FrameAddress::Short([0x78, 0x56]))
+    );
+}
+
 #[test]
 #[should_panic(expected = "IEEE802154_ASSERT")]
 fn pending_mode_checks_the_configured_interface_count() {
     let mut bench = Bench::new(Some(2));
-    bench
-        .engine
-        .set_pending_mode(Ieee802154MultipanIndex::CONTEXT2, AutoPendingMode::Enable);
+    bench.engine.set_pending_mode(
+        &mut bench.hw,
+        &mut bench.env,
+        Ieee802154MultipanIndex::CONTEXT2,
+        AutoPendingMode::Enable,
+    );
 }

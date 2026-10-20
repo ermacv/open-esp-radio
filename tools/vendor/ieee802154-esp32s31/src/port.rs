@@ -861,31 +861,43 @@ pub fn run(scenario: &Scenario) -> Result<Vec<Record>, String> {
         match step {
             Step::Enable => {
                 engine.enable();
-                engine.mac_init(&mut ll, defaults);
+                engine.mac_init(&mut ll);
             }
             Step::Disable => engine.disable(),
             Step::SetChannel(channel) => {
                 if let Some(permit) = permit(channel, levels) {
-                    engine.pib().set_channel(permit);
+                    engine.update_pib(&mut ll, &mut env, |pib| pib.set_channel(permit));
                 }
             }
-            Step::SetPromiscuous(enable) => engine.pib().set_promiscuous(enable),
-            Step::SetCoordinator(enable) => engine.pib().set_coordinator(enable),
-            Step::SetRxWhenIdle(enable) => engine.pib().set_rx_when_idle(enable),
+            Step::SetPromiscuous(enable) => {
+                engine.update_pib(&mut ll, &mut env, |pib| pib.set_promiscuous(enable))
+            }
+            Step::SetCoordinator(enable) => {
+                engine.update_pib(&mut ll, &mut env, |pib| pib.set_coordinator(enable))
+            }
+            Step::SetRxWhenIdle(enable) => {
+                engine.update_pib(&mut ll, &mut env, |pib| pib.set_rx_when_idle(enable))
+            }
             Step::SetCcaMode(mode) => {
                 let mode = cca_mode_of(mode).ok_or("CCA mode outside the vendor enum")?;
-                engine.pib().set_cca_mode(mode);
+                engine.update_pib(&mut ll, &mut env, |pib| pib.set_cca_mode(mode));
             }
-            Step::SetCcaThreshold(threshold) => engine.pib().set_cca_threshold(threshold),
-            Step::SetTxPower(power) => engine.pib().set_power(power),
+            Step::SetCcaThreshold(threshold) => {
+                engine.update_pib(&mut ll, &mut env, |pib| pib.set_cca_threshold(threshold))
+            }
+            Step::SetTxPower(power) => {
+                engine.update_pib(&mut ll, &mut env, |pib| pib.set_power(power))
+            }
             Step::SetPowerWithChannel { channel, power } => {
                 if let Ok(channel) = Ieee802154Channel::new(channel) {
-                    engine.pib().set_power_for_channel(channel, power);
+                    engine.update_pib(&mut ll, &mut env, |pib| {
+                        pib.set_power_for_channel(channel, power)
+                    });
                 }
             }
             Step::SetPendingMode(mode) => {
                 let mode = pending_mode_of(mode).ok_or("pending mode outside the vendor enum")?;
-                engine.set_pending_mode(Ieee802154MultipanIndex::CONTEXT0, mode);
+                engine.set_pending_mode(&mut ll, &mut env, Ieee802154MultipanIndex::CONTEXT0, mode);
             }
             Step::AddPendingAddress { address, short } => {
                 let address = if short {
@@ -898,6 +910,9 @@ pub fn run(scenario: &Scenario) -> Result<Vec<Record>, String> {
             Step::SetPanId(panid) => engine.set_panid(&mut ll, panid),
             Step::SetShortAddress(address) => engine.set_short_address(&mut ll, address),
             Step::SetExtendedAddress(address) => engine.set_extended_address(&mut ll, address),
+            Step::SetAutoAckTx(enable) => {
+                engine.update_pib(&mut ll, &mut env, |pib| pib.set_auto_ack_tx(enable))
+            }
             Step::SetAckTimeout(timeout) => engine.set_ack_timeout(
                 &mut ll,
                 oer_espressif_ieee802154_engine::types::AckTimeout::new(timeout)
@@ -978,7 +993,8 @@ pub fn run(scenario: &Scenario) -> Result<Vec<Record>, String> {
             #[cfg(feature = "multipan")]
             Step::MultipanSetPendingMode { index, mode } => {
                 let mode = pending_mode_of(mode).ok_or("pending mode outside the vendor enum")?;
-                engine.set_pending_mode(interface(index)?, mode);
+                let index = interface(index)?;
+                engine.set_pending_mode(&mut ll, &mut env, index, mode);
             }
             #[cfg(feature = "multipan")]
             Step::MultipanAddPendingAddress {

@@ -12,7 +12,9 @@
 //! watchdog and the next operation — is taken here in [`Ieee802154Engine::isr`].
 //! Register accesses go through the HAL [`Ieee802154LowLevel`] backend and
 //! upper-layer notifications through [`Ieee802154Environment`], so a
-//! recording backend observes the vendor accessor sequence.
+//! recording backend observes the accessor sequence. Configuration publication,
+//! promiscuous ACK masking and retained settings follow the contract in the
+//! crate README; these intentionally differ from the vendor.
 //!
 //! The caller serializes every entry point in one critical section, as the
 //! vendor does with `ieee802154_enter_critical`. The build matches the
@@ -40,6 +42,7 @@ use oer_ieee802154_mac::{
 };
 
 mod buffers;
+mod settings;
 mod statistics;
 
 pub use buffers::{
@@ -317,9 +320,8 @@ pub struct Ieee802154Engine<'storage, Address: Copy + Eq> {
     buffers: &'storage mut Ieee802154EngineBuffers,
     levels: Ieee802154TxPowerLevels<'static>,
     pib: Ieee802154Pib,
-    /// The channel and ceiling every PIB initialization restores.
-    start: Ieee802154Permit,
-    /// The defaults the last PIB initialization restored.
+    settings: settings::RetainedSettings,
+    /// The defaults used at construction.
     defaults: Ieee802154PibDefaults,
     pending_tables: [PendingTable<PENDING_TABLE_SIZE>; Ieee802154MultipanIndex::COUNT as usize],
     multipan: Option<Ieee802154Interfaces>,
@@ -331,6 +333,7 @@ pub struct Ieee802154Engine<'storage, Address: Copy + Eq> {
     recent_rx_info_index: u8,
     needs_next_operation: bool,
     pending_rx_stop: bool,
+    rx_armed: bool,
     /// TX/RX statistics while collected (`CONFIG_IEEE802154_TXRX_STATISTIC`).
     statistics: Option<Ieee802154TxRxStatistics>,
     timer0: Option<TimerAction>,
@@ -342,7 +345,7 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
     /// A disabled engine over exclusively borrowed buffers. `levels` is the
     /// transmit-power provider the vendor reads through
     /// `bt_bb_get_tx_pwr_table`; `start` is the permitted channel and power
-    /// ceiling every PIB initialization restores.
+    /// ceiling used at construction.
     pub fn new(
         buffers: &'storage mut Ieee802154EngineBuffers,
         addresses: Ieee802154DmaAddresses<Address>,
@@ -355,7 +358,7 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
             buffers,
             levels,
             pib: Ieee802154Pib::new(defaults, levels, start),
-            start,
+            settings: settings::RetainedSettings::new(),
             defaults,
             pending_tables: [const { PendingTable::new() };
                 Ieee802154MultipanIndex::COUNT as usize],
@@ -368,6 +371,7 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
             recent_rx_info_index: 0,
             needs_next_operation: false,
             pending_rx_stop: false,
+            rx_armed: false,
             statistics: None,
             timer0: None,
             timer1: None,
@@ -398,7 +402,7 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         self.coexistence = coexistence;
     }
 
-    /// The defaults the last PIB initialization restored.
+    /// The defaults used at construction.
     pub const fn pib_defaults(&self) -> Ieee802154PibDefaults {
         self.defaults
     }
@@ -430,20 +434,83 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         self.state
     }
 
-    /// The PAN information base; changes are published before the next
-    /// operation.
-    pub fn pib(&mut self) -> &mut Ieee802154Pib {
-        &mut self.pib
+    /// The retained PAN information base, for inspection.
+    pub const fn pib(&self) -> &Ieee802154Pib {
+        &self.pib
     }
 
-    /// Set an interface's pending mode, checking the configured interface count.
-    pub fn set_pending_mode(
+    /// Replace PIB settings in this engine entry. Receive-side changes apply
+    /// at once while listening without a frame in progress, otherwise at
+    /// the frame/ACK boundary. Channel, power and CCA wait for operation start.
+    pub fn update_pib<L, E>(
         &mut self,
+        ll: &mut L,
+        env: &mut E,
+        update: impl FnOnce(&mut Ieee802154Pib),
+    ) where
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
+        E: Ieee802154Environment + ?Sized,
+    {
+        update(&mut self.pib);
+        self.publish_rx_when_safe(&mut Cx { ll, env });
+    }
+
+    fn publish_rx_when_safe<L, E>(&mut self, cx: &mut Cx<'_, L, E>)
+    where
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
+        E: Ieee802154Environment + ?Sized,
+    {
+        if !self.pib.is_rx_pending() {
+            return;
+        }
+        match self.state {
+            Ieee802154State::Idle | Ieee802154State::Sleep => self.pib.update_rx(cx.ll),
+            Ieee802154State::Rx => {
+                // This is the same hardware after-SFD test used by transmit
+                // admission and the receive-window end. A latched event still
+                // belongs to its frame even if the hardware already left RX.
+                if cx.ll.is_current_rx_frame() {
+                    return;
+                }
+                let events = cx.ll.events();
+                if [
+                    Ieee802154Event::RxSfdDone,
+                    Ieee802154Event::RxDone,
+                    Ieee802154Event::AckTxDone,
+                    Ieee802154Event::RxAbort,
+                    Ieee802154Event::Timer1Overflow,
+                ]
+                .iter()
+                .any(|event| events.contains(*event))
+                {
+                    return;
+                }
+                if self.rx_armed {
+                    // No RX_START before a scheduled window's timer fires.
+                    self.pib.update_rx(cx.ll);
+                } else {
+                    self.stop_rx(cx);
+                    self.enable_rx(cx);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Set one configured interface's pending mode and publish it at the
+    /// same safe RX point as the other receive-side PIB values.
+    pub fn set_pending_mode<L, E>(
+        &mut self,
+        ll: &mut L,
+        env: &mut E,
         index: Ieee802154MultipanIndex,
         mode: oer_ieee802154_mac::AutoPendingMode,
-    ) {
+    ) where
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
+        E: Ieee802154Environment + ?Sized,
+    {
         self.assert_interface(index);
-        self.pib.set_pending_mode(index, mode);
+        self.update_pib(ll, env, |pib| pib.set_pending_mode(index, mode));
     }
 
     /// The frame-pending table of interface zero.
@@ -469,6 +536,7 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         panid: u16,
     ) {
         self.assert_interface(index);
+        self.settings.identity(ll, index).panid = panid;
         ll.set_multipan_panid(index, panid);
     }
 
@@ -490,6 +558,7 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         address: u16,
     ) {
         self.assert_interface(index);
+        self.settings.identity(ll, index).short_address = address;
         ll.set_multipan_short_address(index, address);
     }
 
@@ -511,6 +580,7 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         address: [u8; 8],
     ) {
         self.assert_interface(index);
+        self.settings.identity(ll, index).extended_address = address;
         ll.set_multipan_extended_address(index, address);
     }
 
@@ -532,6 +602,7 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         enable: Ieee802154MultipanEnableState,
     ) {
         self.assert_enable(enable);
+        self.settings.enable = Some(enable);
         ll.set_multipan_enable(enable);
     }
 
@@ -566,6 +637,7 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         self.assert_interface(index);
         let enable = ll.multipan_enable().with(index);
         self.assert_enable(enable);
+        self.settings.enable = Some(enable);
         ll.set_multipan_enable(enable);
         self.receive(ll, env);
     }
@@ -580,6 +652,7 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         self.assert_interface(index);
         let enable = ll.multipan_enable().without(index);
         self.assert_enable(enable);
+        self.settings.enable = Some(enable);
         ll.set_multipan_enable(enable);
         if enable == Ieee802154MultipanEnableState::NONE {
             self.sleep(ll, env);
@@ -607,7 +680,7 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         ll: &mut L,
         panid: u16,
     ) {
-        ll.set_multipan_panid(Ieee802154MultipanIndex::CONTEXT0, panid);
+        self.set_multipan_panid(ll, Ieee802154MultipanIndex::CONTEXT0, panid);
     }
 
     /// `esp_ieee802154_get_panid`.
@@ -621,7 +694,7 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         ll: &mut L,
         address: u16,
     ) {
-        ll.set_multipan_short_address(Ieee802154MultipanIndex::CONTEXT0, address);
+        self.set_multipan_short_address(ll, Ieee802154MultipanIndex::CONTEXT0, address);
     }
 
     /// `esp_ieee802154_get_short_address`.
@@ -639,7 +712,7 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         ll: &mut L,
         address: [u8; 8],
     ) {
-        ll.set_multipan_extended_address(Ieee802154MultipanIndex::CONTEXT0, address);
+        self.set_multipan_extended_address(ll, Ieee802154MultipanIndex::CONTEXT0, address);
     }
 
     /// `esp_ieee802154_get_extended_address`.
@@ -657,7 +730,9 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         ll: &mut L,
         timeout: crate::types::AckTimeout,
     ) {
-        ll.set_ack_timeout(timeout.units());
+        let units = timeout.units();
+        self.settings.ack_timeout = Some(units);
+        ll.set_ack_timeout(units);
     }
 
     /// `esp_ieee802154_get_ack_timeout` in microseconds.
@@ -753,19 +828,17 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         self.set_state(Ieee802154State::Disable);
     }
 
-    /// `ieee802154_mac_init` after the MAC reset: reinitialize the PIB,
-    /// publish the register baseline and clear the receive ring. The caller
-    /// then applies the TX-on delay and routes the interrupt.
-    pub fn mac_init<L: Ieee802154LowLevel<Address = Address> + ?Sized>(
-        &mut self,
-        ll: &mut L,
-        defaults: Ieee802154PibDefaults,
-    ) {
-        self.pib = Ieee802154Pib::new(defaults, self.levels, self.start);
-        self.defaults = defaults;
+    /// Initialize the MAC after reset, restoring retained configuration and
+    /// clearing the receive ring. Defaults are chosen only at construction.
+    pub fn mac_init<L: Ieee802154LowLevel<Address = Address> + ?Sized>(&mut self, ll: &mut L) {
         self.clear_txrx_statistics();
         ll::mac_init_registers(ll, &self.coexistence);
+        self.settings
+            .restore(ll, self.multipan.map_or(1, Ieee802154Interfaces::count));
+        self.pib.invalidate();
+        self.pib.update(ll, self.levels);
         self.rx_buffer_clear();
+        self.rx_armed = false;
         self.set_state(Ieee802154State::Idle);
     }
 
@@ -948,6 +1021,7 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         ll::set_txrx_pti(cx.ll, &self.coexistence, RadioOperation::RxAt);
         self.set_next_rx_buffer(&mut cx);
         self.set_state(Ieee802154State::Rx);
+        self.rx_armed = true;
         ll::etm_set_event_task(cx.ll, Ieee802154EtmRoute::Timer1ToRxStart);
         if duration != 0 {
             self.timer1 = Some(TimerAction::StartReceiveAt {
@@ -1119,6 +1193,7 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
             events = events.difference(Ieee802154Event::Timer0Overflow.mask());
         }
         if events.contains(Ieee802154Event::Timer1Overflow) {
+            self.rx_armed = false;
             let action = self.timer1.take();
             if let Some(action) = action {
                 self.run_timer_action(&mut cx, action);
@@ -1130,6 +1205,7 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
             self.needs_next_operation = false;
         }
         vendor_assert!(events.is_empty());
+        self.publish_rx_when_safe(&mut cx);
     }
 
     // ---- buffers and notifications -------------------------------------
@@ -1417,6 +1493,7 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         L: Ieee802154LowLevel<Address = Address> + ?Sized,
         E: Ieee802154Environment + ?Sized,
     {
+        self.pib.update_rx(cx.ll);
         self.set_next_rx_buffer(cx);
         ll::set_txrx_pti(cx.ll, &self.coexistence, RadioOperation::Rx);
         cx.ll.set_command(Ieee802154LlCommand::RxStart);
@@ -1449,6 +1526,7 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         L: Ieee802154LowLevel<Address = Address> + ?Sized,
         E: Ieee802154Environment + ?Sized,
     {
+        self.pib.update_rx(cx.ll);
         if self.pending_rx_stop {
             cx.ll.disable_rx_aborts(Ieee802154RxAbortEnableSet::All);
             cx.ll
@@ -1471,6 +1549,7 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         L: Ieee802154LowLevel<Address = Address> + ?Sized,
         E: Ieee802154Environment + ?Sized,
     {
+        self.rx_armed = false;
         self.event_end_process(cx);
         match self.state {
             Ieee802154State::Disable | Ieee802154State::Sleep => {}
@@ -1683,7 +1762,7 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
             Ieee802154MultipanIndex::CONTEXT0
         };
         let enhanced_lookup = cx.ll.pending_mode();
-        let mode = self.pib.pending_mode(interface);
+        let mode = self.pib.active_pending_mode(interface);
         let table = &self.pending_tables[usize::from(interface.value())];
         let decision = ack_pending(frame, enhanced_lookup, mode, table);
         if decision.set_to_hardware {

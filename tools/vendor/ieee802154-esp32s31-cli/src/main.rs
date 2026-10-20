@@ -9,7 +9,7 @@ use std::process::ExitCode;
 
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
-use oer_vendor_ieee802154_esp32s31::{Verdict, catalog, claim, compare, port};
+use oer_vendor_ieee802154_esp32s31::{catalog, claim, compare_scenario, port};
 
 fn main() -> ExitCode {
     let mut arguments = std::env::args().skip(1);
@@ -28,7 +28,7 @@ fn main() -> ExitCode {
             }
             ExitCode::SUCCESS
         }
-        (Some(command @ ("run" | "compare")), Some(name)) => {
+        (Some(command @ ("run" | "port" | "compare")), Some(name)) => {
             let Some(scenario) = catalog::SCENARIOS
                 .iter()
                 .find(|scenario| scenario.name == name)
@@ -36,6 +36,20 @@ fn main() -> ExitCode {
                 eprintln!("unknown scenario: {name}");
                 return ExitCode::FAILURE;
             };
+            if command == "port" {
+                match port::run(scenario) {
+                    Ok(records) => {
+                        for record in records {
+                            println!("{record}");
+                        }
+                        return ExitCode::SUCCESS;
+                    }
+                    Err(reason) => {
+                        eprintln!("{reason}");
+                        return ExitCode::FAILURE;
+                    }
+                }
+            }
             let vendor = claim(scenario);
             if command == "run" {
                 for record in vendor {
@@ -43,17 +57,12 @@ fn main() -> ExitCode {
                 }
                 return ExitCode::SUCCESS;
             }
-            // A port panic is a vendor assertion the port adds; the panic
-            // message goes to stderr and the empty trace fails the comparison.
+            // A panic cannot be accepted as a catalogued difference.
             let port = catch_unwind(AssertUnwindSafe(|| port::run(scenario)))
-                .unwrap_or_else(|_| Ok(Vec::new()));
-            let verdict = compare(&vendor, port);
+                .unwrap_or_else(|_| Err("the engine panicked".to_owned()));
+            let verdict = compare_scenario(scenario, &vendor, port);
             println!("{verdict}");
-            match verdict {
-                Verdict::Match => ExitCode::SUCCESS,
-                Verdict::Diff { .. } => ExitCode::from(1),
-                Verdict::Incomplete(_) => ExitCode::from(2),
-            }
+            ExitCode::from(verdict.exit_code())
         }
         _ => usage(),
     }
@@ -61,7 +70,7 @@ fn main() -> ExitCode {
 
 fn usage() -> ExitCode {
     eprintln!(
-        "usage: oer-tool-vendor-ieee802154-esp32s31-cli list | run <scenario> | compare <scenario> | compare all"
+        "usage: oer-tool-vendor-ieee802154-esp32s31-cli list | run <scenario> | port <scenario> | compare <scenario> | compare all"
     );
     ExitCode::FAILURE
 }
@@ -76,7 +85,7 @@ fn compare_all() -> Result<()> {
             .args(["compare", name])
             .status()?;
         if !status.success() {
-            return Err(format!("{name} did not compare MATCH ({status})").into());
+            return Err(format!("{name} did not compare MATCH or EXPECTED ({status})").into());
         }
         Ok(())
     })?;

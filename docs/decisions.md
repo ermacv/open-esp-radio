@@ -280,6 +280,13 @@ bounds) live in the code that applies them.
   interface's settings while its client lives and its operation runs. The frame
   counter only moves forward, except when it is replaced together with the
   keys.
+- A setting is in force once the call returns for addresses, keys, the
+  source-match table and the ACK timeout; transmit power and CCA at the next
+  transmission; receive-side values (promiscuous, coordinator, acknowledgement
+  flags, pending mode) within one frame, at once while the radio listens with
+  no frame in progress. Promiscuous reception acknowledges nothing and masks
+  the acknowledgement settings without changing them. The backend keeps its
+  settings across disable and enable.
 - **Port boundary** follows the OpenThread radio platform: the backend
   executes, as advertised capabilities, the acknowledgement (frame pending
   from the source-match table, enhanced ACK from the CSL and Link Metrics

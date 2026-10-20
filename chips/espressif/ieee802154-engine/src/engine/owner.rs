@@ -58,17 +58,27 @@ impl<'storage, Ll: Ieee802154LowLevel> Ieee802154EngineOwner<'storage, Ll> {
     }
 
     /// [`Ieee802154Engine::pib`], using this owner's MAC.
-    pub fn pib(&mut self) -> &mut Ieee802154Pib {
+    pub fn pib(&self) -> &Ieee802154Pib {
         self.engine.pib()
     }
 
-    /// [`Ieee802154Engine::set_pending_mode`], with the configured-count check.
-    pub fn set_pending_mode(
+    /// [`Ieee802154Engine::update_pib`], applying RX changes in this entry.
+    pub fn update_pib<E: Ieee802154Environment + ?Sized>(
         &mut self,
+        env: &mut E,
+        update: impl FnOnce(&mut Ieee802154Pib),
+    ) {
+        self.engine.update_pib(&mut self.ll, env, update)
+    }
+
+    /// [`Ieee802154Engine::set_pending_mode`], applying at the safe RX point.
+    pub fn set_pending_mode<E: Ieee802154Environment + ?Sized>(
+        &mut self,
+        env: &mut E,
         index: Ieee802154MultipanIndex,
         mode: oer_ieee802154_mac::AutoPendingMode,
     ) {
-        self.engine.set_pending_mode(index, mode)
+        self.engine.set_pending_mode(&mut self.ll, env, index, mode)
     }
 
     /// [`Ieee802154Engine::pending_table`], using this owner's MAC.
@@ -242,8 +252,8 @@ impl<'storage, Ll: Ieee802154LowLevel> Ieee802154EngineOwner<'storage, Ll> {
     }
 
     /// [`Ieee802154Engine::mac_init`], using this owner's MAC.
-    pub fn mac_init(&mut self, defaults: Ieee802154PibDefaults) {
-        self.engine.mac_init(&mut self.ll, defaults)
+    pub fn mac_init(&mut self) {
+        self.engine.mac_init(&mut self.ll)
     }
 
     /// [`Ieee802154Engine::set_txrx_statistics`], using this owner's MAC.

@@ -3,12 +3,20 @@
 use std::fmt;
 
 use crate::record::Record;
+use crate::scenario::Scenario;
 
 /// Outcome of one scenario comparison.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Verdict {
     /// Both traces agree record for record.
     Match,
+    /// This scenario has the catalogued pair of complete trace fingerprints.
+    Expected {
+        /// The scenario that owns this expectation.
+        scenario: &'static str,
+        /// Why this scenario intentionally differs from the C driver.
+        reason: &'static str,
+    },
     /// The first differing position; `None` marks a shorter trace.
     Diff {
         index: usize,
@@ -17,6 +25,18 @@ pub enum Verdict {
     },
     /// The scenario cannot be compared, with the reason.
     Incomplete(String),
+}
+
+impl Verdict {
+    /// CLI status: matching or expected traces succeed; other differences
+    /// and incomplete comparisons fail.
+    pub const fn exit_code(&self) -> u8 {
+        match self {
+            Self::Match | Self::Expected { .. } => 0,
+            Self::Diff { .. } => 1,
+            Self::Incomplete(_) => 2,
+        }
+    }
 }
 
 impl fmt::Display for Verdict {
@@ -28,6 +48,9 @@ impl fmt::Display for Verdict {
         };
         match self {
             Self::Match => write!(formatter, "MATCH"),
+            Self::Expected { scenario, reason } => {
+                write!(formatter, "EXPECTED {scenario}: {reason}")
+            }
             Self::Diff {
                 index,
                 vendor,
@@ -52,6 +75,45 @@ fn compared(record: &Record) -> bool {
 
 fn vendor_asserted(record: &Record) -> bool {
     matches!(record, Record::Event { name, .. } if name == "assert_failed")
+}
+
+/// Stable FNV-1a fingerprint of the complete compared boundary trace.
+/// Record display labels buffer identities, excluding host pointer values.
+/// Include the separator after every record, including the final one.
+fn fingerprint(records: &[Record]) -> u64 {
+    let mut hash = 0xcbf2_9ce4_8422_2325_u64;
+    for record in records.iter().filter(|record| compared(record)) {
+        for byte in record.to_string().bytes().chain(core::iter::once(b'\n')) {
+            hash = (hash ^ u64::from(byte)).wrapping_mul(0x0000_0100_0000_01b3);
+        }
+    }
+    hash
+}
+
+/// Compare a catalog scenario, accepting only its recorded full trace pair
+/// and its own reason. A later difference anywhere in either trace remains
+/// `Diff`; the scenario name or its first difference alone admits nothing.
+pub fn compare_scenario(
+    scenario: &Scenario,
+    vendor: &[Record],
+    port: Result<Vec<Record>, String>,
+) -> Verdict {
+    let expected = scenario.expected_difference.filter(|_| {
+        port.as_ref().is_ok_and(|port| {
+            crate::catalog::matches_expected(scenario.name, fingerprint(vendor), fingerprint(port))
+        })
+    });
+    let verdict = compare(vendor, port);
+    if let Some(reason) = expected
+        && matches!(verdict, Verdict::Diff { .. })
+    {
+        Verdict::Expected {
+            scenario: scenario.name,
+            reason,
+        }
+    } else {
+        verdict
+    }
 }
 
 /// Compare the vendor trace with the port's outcome.

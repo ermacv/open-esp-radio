@@ -10,6 +10,60 @@ use crate::{
     scenario::{Scenario, Step},
 };
 
+mod expected;
+
+const RX_SAFE_POINT: &str =
+    "RX settings publish at a safe point; C waits for the next explicit operation";
+const PROMISCUOUS_MASK: &str = "Promiscuous masks configured ACK flags; C overwrites them";
+const RETENTION: &str =
+    "mac_init snapshots and republishes retained settings; C restores PIB defaults";
+
+/// An expectation belongs to one scenario and its complete pair of traces,
+/// never to a first mismatch or a list of broadly allowed configuration calls.
+pub(crate) fn matches_expected(name: &str, vendor: u64, port: u64) -> bool {
+    expected::TRACES
+        .iter()
+        .any(|&(scenario, left, right)| scenario == name && left == vendor && right == port)
+}
+
+fn configuration_rx_safe_point() -> Vec<Step> {
+    vec![
+        Step::Enable,
+        Step::SetPromiscuous(false),
+        Step::SetRxWhenIdle(true),
+        Step::Receive,
+        Step::SetCoordinator(true),
+    ]
+}
+
+fn configuration_promiscuous_mask() -> Vec<Step> {
+    vec![
+        Step::Enable,
+        Step::SetAutoAckTx(false),
+        Step::SetPromiscuous(true),
+        Step::Receive,
+        Step::SetPromiscuous(false),
+        Step::Receive,
+    ]
+}
+
+fn configuration_retention() -> Vec<Step> {
+    vec![
+        Step::Enable,
+        Step::SetPanId(0x1234),
+        Step::SetShortAddress(0x5678),
+        Step::SetExtendedAddress([9; 8]),
+        Step::SetAckTimeout(200),
+        Step::SetCcaThreshold(-90),
+        Step::Receive,
+        Step::Sleep,
+        Step::Disable,
+        Step::Enable,
+        Step::Receive,
+        Step::GetIdentity,
+    ]
+}
+
 /// `IEEE802154_EVENT_*` bits.
 pub mod event {
     pub const TX_DONE: u16 = 1 << 0;
@@ -116,6 +170,7 @@ fn interrupt(events: u16) -> Step {
 fn transmit_ack_timer_expires() -> Vec<Step> {
     vec![
         Step::Enable,
+        Step::SetPromiscuous(false),
         Step::Input("esp_timer_get_time", 1_000),
         Step::Transmit {
             frame: data_frame(true),
@@ -129,6 +184,7 @@ fn transmit_ack_timer_expires() -> Vec<Step> {
 fn transmit_ack_abort_timeout() -> Vec<Step> {
     vec![
         Step::Enable,
+        Step::SetPromiscuous(false),
         Step::Transmit {
             frame: data_frame(true),
             cca: false,
@@ -145,6 +201,7 @@ fn transmit_ack_abort_timeout() -> Vec<Step> {
 fn receive_with_enhanced_ack() -> Vec<Step> {
     vec![
         Step::Enable,
+        Step::SetPromiscuous(false),
         Step::SetRxWhenIdle(true),
         Step::Receive,
         Step::DeliverFrame(received_2015_frame()),
@@ -170,6 +227,7 @@ fn secured_enhanced_ack_inputs() -> Inputs {
 fn receive_2015_without_enhanced_ack() -> Vec<Step> {
     vec![
         Step::Enable,
+        Step::SetPromiscuous(false),
         Step::SetRxWhenIdle(true),
         Step::Receive,
         Step::DeliverFrame(received_2015_frame()),
@@ -180,6 +238,7 @@ fn receive_2015_without_enhanced_ack() -> Vec<Step> {
 fn transmit_during_ack_fails() -> Vec<Step> {
     vec![
         Step::Enable,
+        Step::SetPromiscuous(false),
         Step::Receive,
         Step::DeliverFrame(received_data_frame()),
         interrupt(event::RX_DONE),
@@ -326,6 +385,7 @@ fn transmit_with_security() -> Vec<Step> {
 fn multipan_identities() -> Vec<Step> {
     vec![
         Step::Enable,
+        Step::SetPromiscuous(false),
         Step::SetMultipanPanId {
             index: 0,
             panid: 0x1234,
@@ -556,7 +616,7 @@ fn ack_transmit_abort_reasons() -> Vec<Step> {
 /// channel first.
 fn transmit_abort_reasons() -> Vec<Step> {
     use tx_abort::*;
-    let mut steps = vec![Step::Enable];
+    let mut steps = vec![Step::Enable, Step::SetPromiscuous(false)];
     for reason in [
         RX_ACK_STOP,
         RX_ACK_SFD_TIMEOUT,
@@ -634,6 +694,7 @@ fn recent_rssi() -> Vec<Step> {
     let mut steps = Vec::new();
     reads(&mut steps);
     steps.push(Step::Enable);
+    steps.push(Step::SetPromiscuous(false));
     reads(&mut steps);
     steps.push(Step::Receive);
     reads(&mut steps);
@@ -670,6 +731,7 @@ fn transmit_without_ack() -> Vec<Step> {
 fn transmit_with_ack() -> Vec<Step> {
     vec![
         Step::Enable,
+        Step::SetPromiscuous(false),
         Step::Transmit {
             frame: data_frame(true),
             cca: false,
@@ -766,176 +828,328 @@ fn cca_busy() -> Vec<Step> {
 /// Every catalog scenario.
 pub const SCENARIOS: &[Scenario] = &[
     Scenario {
+        name: "configuration-rx-safe-point",
+        inputs: no_inputs,
+        steps: configuration_rx_safe_point,
+        expected_difference: Some(RX_SAFE_POINT),
+    },
+    Scenario {
+        name: "configuration-promiscuous-mask",
+        inputs: no_inputs,
+        steps: configuration_promiscuous_mask,
+        expected_difference: Some(PROMISCUOUS_MASK),
+    },
+    Scenario {
+        name: "configuration-retention",
+        inputs: no_inputs,
+        steps: configuration_retention,
+        expected_difference: Some(RETENTION),
+    },
+    Scenario {
         name: "enable",
         inputs: no_inputs,
         steps: enable,
+        expected_difference: Some(RETENTION),
     },
     Scenario {
         name: "enable-disable",
         inputs: no_inputs,
         steps: enable_disable,
+        expected_difference: Some(RETENTION),
     },
     Scenario {
         name: "recent-rssi",
         inputs: no_inputs,
         steps: recent_rssi,
+        expected_difference: Some(RETENTION),
     },
     Scenario {
         name: "receive-abort-reasons",
         inputs: no_inputs,
         steps: receive_abort_reasons,
+        expected_difference: Some(RETENTION),
     },
     Scenario {
         name: "ack-transmit-abort-reasons",
         inputs: no_inputs,
         steps: ack_transmit_abort_reasons,
+        expected_difference: Some(RETENTION),
     },
     Scenario {
         name: "transmit-abort-reasons",
         inputs: no_inputs,
         steps: transmit_abort_reasons,
+        expected_difference: Some(RETENTION),
     },
     Scenario {
         name: "energy-detection-abort-reasons",
         inputs: no_inputs,
         steps: energy_detection_abort_reasons,
+        expected_difference: Some(RETENTION),
     },
     Scenario {
         name: "transmit-power-levels",
         inputs: no_inputs,
         steps: transmit_power_levels,
+        expected_difference: Some(RETENTION),
     },
     Scenario {
         name: "transmit-without-ack",
         inputs: no_inputs,
         steps: transmit_without_ack,
+        expected_difference: Some(RETENTION),
     },
     Scenario {
         name: "transmit-with-ack",
         inputs: no_inputs,
         steps: transmit_with_ack,
+        expected_difference: Some(RETENTION),
     },
     Scenario {
         name: "transmit-with-cca-busy",
         inputs: no_inputs,
         steps: transmit_with_cca_busy,
+        expected_difference: Some(RETENTION),
     },
     Scenario {
         name: "receive-with-auto-ack",
         inputs: no_inputs,
         steps: receive_with_auto_ack,
+        expected_difference: Some(RETENTION),
     },
     Scenario {
         name: "receive-crc-error-restarts",
         inputs: no_inputs,
         steps: receive_crc_error_restarts,
+        expected_difference: Some(RETENTION),
     },
     Scenario {
         name: "energy-detect",
         inputs: no_inputs,
         steps: energy_detect,
+        expected_difference: Some(RETENTION),
     },
     Scenario {
         name: "cca-busy",
         inputs: no_inputs,
         steps: cca_busy,
+        expected_difference: Some(RETENTION),
     },
     Scenario {
         name: "transmit-ack-timer-expires",
         inputs: no_inputs,
         steps: transmit_ack_timer_expires,
+        expected_difference: Some(RETENTION),
     },
     Scenario {
         name: "transmit-ack-abort-timeout",
         inputs: no_inputs,
         steps: transmit_ack_abort_timeout,
+        expected_difference: Some(RETENTION),
     },
     Scenario {
         name: "receive-with-enhanced-ack",
         inputs: enhanced_ack_inputs,
         steps: receive_with_enhanced_ack,
+        expected_difference: Some(RETENTION),
     },
     Scenario {
         name: "receive-with-secured-enhanced-ack",
         inputs: secured_enhanced_ack_inputs,
         steps: receive_with_enhanced_ack,
+        expected_difference: Some(RETENTION),
     },
     Scenario {
         name: "receive-2015-without-enhanced-ack",
         inputs: no_inputs,
         steps: receive_2015_without_enhanced_ack,
+        expected_difference: Some(RETENTION),
     },
     Scenario {
         name: "transmit-during-ack-fails",
         inputs: no_inputs,
         steps: transmit_during_ack_fails,
+        expected_difference: Some(RETENTION),
     },
     Scenario {
         name: "transmit-stops-receive",
         inputs: no_inputs,
         steps: transmit_stops_receive,
+        expected_difference: Some(RETENTION),
     },
     Scenario {
         name: "transmit-restarts-transmit",
         inputs: no_inputs,
         steps: transmit_restarts_transmit,
+        expected_difference: Some(RETENTION),
     },
     Scenario {
         name: "full-receive-ring-uses-the-stub",
         inputs: no_inputs,
         steps: full_receive_ring_uses_the_stub,
+        expected_difference: Some(RETENTION),
     },
     Scenario {
         name: "energy-detect-abort",
         inputs: no_inputs,
         steps: energy_detect_abort,
+        expected_difference: Some(RETENTION),
     },
     Scenario {
         name: "transmit-at",
         inputs: no_inputs,
         steps: transmit_at,
+        expected_difference: Some(RETENTION),
     },
     Scenario {
         name: "receive-at-window-closes",
         inputs: no_inputs,
         steps: receive_at_window_closes,
+        expected_difference: Some(RETENTION),
     },
     Scenario {
         name: "receive-at-window-closes-mid-frame",
         inputs: no_inputs,
         steps: receive_at_window_closes_mid_frame,
+        expected_difference: Some(RETENTION),
     },
     Scenario {
         name: "configure-identity",
         inputs: no_inputs,
         steps: configure_identity,
+        expected_difference: Some(RETENTION),
     },
     Scenario {
         name: "transmit-with-security",
         inputs: no_inputs,
         steps: transmit_with_security,
+        expected_difference: Some(RETENTION),
     },
     Scenario {
         name: "sleep-after-receive",
         inputs: no_inputs,
         steps: sleep_after_receive,
+        expected_difference: Some(RETENTION),
     },
     #[cfg(feature = "multipan")]
     Scenario {
         name: "multipan-receive-routes-to-interface",
         inputs: no_inputs,
         steps: multipan_receive_routes_to_interface,
+        expected_difference: Some(RETENTION),
     },
     #[cfg(feature = "multipan")]
     Scenario {
         name: "multipan-unmatched-and-broadcast",
         inputs: no_inputs,
         steps: multipan_unmatched_and_broadcast,
+        expected_difference: Some(RETENTION),
     },
     #[cfg(feature = "multipan")]
     Scenario {
         name: "multipan-last-interface-sleeps",
         inputs: no_inputs,
         steps: multipan_last_interface_sleeps,
+        expected_difference: Some(RETENTION),
     },
 ];
+
+#[cfg(test)]
+mod tests {
+    use super::SCENARIOS;
+    use crate::{Verdict, claim, compare_scenario, port, record::Record, scenario::Scenario};
+
+    /// Exercise the actual catalogued traces, then add a regression after
+    /// the known first difference. A scenario's expectation must not hide it.
+    #[test]
+    fn a_catalogued_difference_succeeds_and_an_additional_difference_fails() {
+        let scenario = SCENARIOS
+            .iter()
+            .find(|scenario| scenario.name == "configuration-promiscuous-mask")
+            .expect("the catalog includes promiscuous masking");
+        let vendor = claim(scenario);
+        let port = port::run(scenario).expect("the engine runs the scenario");
+        let expected = compare_scenario(scenario, &vendor, Ok(port.clone()));
+        assert_eq!(expected.exit_code(), 0);
+        assert_eq!(
+            expected,
+            Verdict::Expected {
+                scenario: scenario.name,
+                reason: scenario
+                    .expected_difference
+                    .expect("a reason belongs to the scenario"),
+            }
+        );
+        assert_eq!(
+            expected.to_string(),
+            format!(
+                "EXPECTED {}: {}",
+                scenario.name,
+                scenario
+                    .expected_difference
+                    .expect("a reason belongs to the scenario")
+            )
+        );
+        let regression = Record::Event {
+            name: "unexpected_callback".to_owned(),
+            arguments: Vec::new(),
+            first: Vec::new(),
+            second: Vec::new(),
+        };
+        let mut changed_port = port.clone();
+        changed_port.push(regression.clone());
+        let unexpected = compare_scenario(scenario, &vendor, Ok(changed_port));
+        assert!(matches!(unexpected, Verdict::Diff { .. }));
+        assert_eq!(unexpected.exit_code(), 1);
+        assert!(!unexpected.to_string().contains("EXPECTED"));
+        assert!(
+            !unexpected
+                .to_string()
+                .contains(scenario.expected_difference.expect("reason"))
+        );
+        let mut changed_vendor = vendor.clone();
+        changed_vendor.push(regression);
+        assert_eq!(
+            compare_scenario(scenario, &changed_vendor, Ok(port.clone())).exit_code(),
+            1
+        );
+        // Another scenario cannot borrow this expectation, even with its reason.
+        let other = Scenario {
+            name: "uncatalogued",
+            inputs: scenario.inputs,
+            steps: scenario.steps,
+            expected_difference: scenario.expected_difference,
+        };
+        assert_eq!(
+            compare_scenario(&other, &vendor, Ok(port.clone())).exit_code(),
+            1
+        );
+        let no_expectation = Scenario {
+            expected_difference: None,
+            ..other
+        };
+        assert_eq!(
+            compare_scenario(&no_expectation, &vendor, Ok(port.clone())).exit_code(),
+            1
+        );
+        assert_eq!(
+            compare_scenario(scenario, &vendor, Err("engine failed".to_owned())).exit_code(),
+            2
+        );
+        assert_eq!(
+            compare_scenario(
+                scenario,
+                &vendor,
+                Ok(vendor
+                    .iter()
+                    .filter(|record| !matches!(
+                        record,
+                        Record::External { .. } | Record::Return { .. }
+                    ))
+                    .cloned()
+                    .collect())
+            ),
+            Verdict::Match
+        );
+    }
+}
