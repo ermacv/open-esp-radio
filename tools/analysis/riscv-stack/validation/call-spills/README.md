@@ -100,6 +100,15 @@ all twelve transported store PCs, the tail proof and the retained uncertainty.
 [comparison.json](comparison.json) records the w0/w1 machine, report and callback
 candidate comparisons.
 
+Tests and all-target clippy pass for 43 host packages, including reverse
+consumers and dependency-layer checks, with `oer-hil-lab/test-support` and serial
+tests. Final focused checks pass **179 stack tests and 35 common-analysis
+tests**, all-target clippy, formatting and diff checks. Both final firmware
+builds and the pinned-ROM reproduction pass. All **14 machine files**, **eight
+full reports** (including resource counters) and **four full callback audits**
+are byte-identical; every candidate set is unchanged. No manifests, lockfile,
+dependency edges or reviewed ROM contracts change.
+
 Regressions cover transparency, argument/sp writes, nonzero architectural link
 destinations, conditional paths, missing/unknown targets and summaries, cycles,
 unsupported chains, ABI mismatch, incomplete proof facts, stack-coordinate

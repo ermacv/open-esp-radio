@@ -76,14 +76,13 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             true,
             &mut control,
         )?;
-        let facts = FunctionIndex::new(&records, RecordPolicy::Canonical, &memory, &mut control)?;
         if let Some(facts) = analysis.functions.get(&target) {
             println!(
                 "stack-facts\t{target:#010x}\tframe={:?}\tsource={:?}\ttransfers={:?}",
                 facts.frame, facts.source, facts.transfers
             );
         }
-        for record in facts.records() {
+        for record in records.iter() {
             match record {
                 FunctionRecord::Instruction {
                     offset,

@@ -206,6 +206,8 @@ pub struct FunctionWrites<'m> {
 pub struct StackReload {
     pub origin: WriteOrigin,
     pub site: u64,
+    /// Offset in the containing summary's entry-stack coordinates; `origin`
+    /// retains the function that owns the original load instruction.
     pub slot: i64,
     pub width: u8,
     pub value: WriteValue,

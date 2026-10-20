@@ -1,6 +1,65 @@
 use super::*;
 
 #[test]
+fn field_stack_rebasing_preserves_the_original_load_and_expression_owner() {
+    let value = WriteValue::Field {
+        function: 0x3000,
+        read: 0x3004,
+        base: WriteBase::Stack {
+            function: 0x3000,
+            offset: -8,
+        },
+        displacement: 4,
+        width: 2,
+        signed: true,
+        offset: 3,
+    };
+    let arguments = [WriteValue::UNKNOWN; 8];
+    let tail = substitute(
+        value,
+        &arguments,
+        0x3000,
+        WriteValue::base(WriteBase::Stack {
+            function: 0x2000,
+            offset: 0,
+        }),
+    );
+    let caller = substitute(
+        tail,
+        &arguments,
+        0x2000,
+        WriteValue::base(WriteBase::Stack {
+            function: 0x1000,
+            offset: -16,
+        }),
+    );
+    assert_eq!(
+        caller,
+        WriteValue::Field {
+            function: 0x3000,
+            read: 0x3004,
+            base: WriteBase::Stack {
+                function: 0x1000,
+                offset: -24
+            },
+            displacement: 4,
+            width: 2,
+            signed: true,
+            offset: 3,
+        }
+    );
+    assert!(matches!(
+        substitute(value, &arguments, 0x3000, WriteValue::UNKNOWN),
+        WriteValue::Field {
+            base: WriteBase::Unknown,
+            function: 0x3000,
+            read: 0x3004,
+            ..
+        }
+    ));
+}
+
+#[test]
 fn cancellation_and_allocation_failure_release_summary_scratch() {
     let memory = WorkingMemory::new(1024 * 1024).unwrap();
     let records = [FunctionRecord::Expression {

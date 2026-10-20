@@ -701,14 +701,16 @@ fn normalized_symbolic_stack_arguments_cannot_bypass_live_input_revalidation() {
 fn transparent_tail_keeps_store_load_and_expression_owners_and_occurrence() {
     let memory = WorkingMemory::new(8 * 1024 * 1024).unwrap();
     let trampoline = facts(&[jal(0, 0x1000)], 0x2000, &memory);
-    for prefix in [vec![], vec![0x00060a63]] {
-        // optional beq a2,zero,+20
+    for prefix in [vec![], vec![0x00060e63]] {
+        // optional beq a2,zero,+28
         let mut code = prefix;
         code.extend([
             lw(11, 10, 4),
             store(11, 10, 8, 2),
             lw(12, 11, 0),
             store(12, 10, 12, 2),
+            store(0, 10, 16, 0),
+            store(0, 10, 18, 1),
             RET,
         ]);
         let records = facts(&code, 0x3000, &memory);
@@ -899,7 +901,10 @@ fn complete_tail_effects_preserve_spills_and_body_unknowns_still_kill_them() {
     let code = spilled(&[addi(10, 2, 8), jal(1, 0x2000 - 0x1010)], 2);
     for (body, preserved) in [
         (vec![store(0, 10, 0, 2), RET], true),
-        (vec![lw(11, 12, 0), store(11, 10, 0, 2), RET], true), // unknown contents
+        (
+            vec![lw(11, 12, 0), lw(11, 11, 0), store(11, 10, 0, 2), RET],
+            true,
+        ), // unknown contents
         (vec![store(0, 2, 0, 2), RET], true),
         (vec![store(0, 2, 4, 2), RET], false),
         (vec![store(0, 10, -1, 0), RET], false),
@@ -1025,7 +1030,13 @@ fn tail_proof_requires_closed_facts_exact_inputs_and_architectural_destination()
 fn tail_composition_charges_work_and_releases_memory_on_every_cancelled_step() {
     let memory = WorkingMemory::new(1024 * 1024).unwrap();
     let records = facts(
-        &[lw(11, 12, 0), store(11, 2, 0, 2), lw(12, 2, 0), RET],
+        &[
+            lw(11, 12, 0),
+            lw(11, 11, 0),
+            store(11, 2, 0, 2),
+            lw(12, 2, 0),
+            RET,
+        ],
         0x3000,
         &memory,
     );
@@ -1040,7 +1051,12 @@ fn tail_composition_charges_work_and_releases_memory_on_every_cancelled_step() {
         Ok(())
     })
     .unwrap();
-    assert!(out.tail.is_some() && !out.writes.is_empty() && !out.reloads.is_empty());
+    assert!(
+        out.tail.is_some()
+            && !out.writes.is_empty()
+            && !out.reloads.is_empty()
+            && !out.barriers.is_empty()
+    );
     drop(out);
     for stop in 1..=steps {
         let mut visited = 0;

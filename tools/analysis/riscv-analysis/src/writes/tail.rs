@@ -54,10 +54,7 @@ fn transparent(
                 reason: SemanticGapReason::OpaqueCall,
             } if *offset == entry => (),
             FunctionRecord::Transfer { offset, .. } | FunctionRecord::CallInputs { offset, .. }
-                if *offset == entry =>
-            {
-                ()
-            }
+                if *offset == entry => {}
             FunctionRecord::Expression { .. }
             | FunctionRecord::Block { .. }
             | FunctionRecord::Reference { .. } => (),
@@ -135,7 +132,12 @@ pub(super) fn compose<'m>(
         )?;
         return Ok(());
     }
-    let summary = summary.expect("unblocked composition has a target summary");
+    let summary = summary.ok_or_else(|| {
+        Error::new(
+            ErrorCode::Integrity,
+            "unblocked tail composition has no target summary",
+        )
+    })?;
     let arguments = std::array::from_fn(|word| WriteValue::base(WriteBase::Argument(word as u8)));
     let stack = WriteValue::base(WriteBase::Stack {
         function: out.entry,
