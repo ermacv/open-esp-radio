@@ -653,6 +653,22 @@ fn every_required_constant_and_each_target_alternative_keeps_its_own_scope() {
         .unwrap()
         .is_none()
     );
+    let mut foreign_coordinate = summary(&facts(&f.words, 0x3000, &memory), 0x3000, &memory);
+    foreign_coordinate.entry += 1u64 << 32;
+    let actual = caller(Some(20), None, 0x3000, &memory);
+    assert!(
+        call_context(
+            &index(&actual, &memory),
+            0x1000,
+            call_site(&actual),
+            ABI,
+            &foreign_coordinate,
+            &memory,
+            &mut || Ok(())
+        )
+        .unwrap()
+        .is_none()
+    );
     let other_records = facts(&[store(0, 10, 0, 2), RET], 0x4000, &memory);
     let other = summary(&other_records, 0x4000, &memory);
     let caller = caller(Some(20), Some(0xfffffffd), 0x3000, &memory);

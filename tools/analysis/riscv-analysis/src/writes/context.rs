@@ -60,10 +60,7 @@ pub fn call_context(
         return Ok(None);
     };
     if !transfer.call
-        || *transfer.target
-            != (AbstractValue::ImageAddress {
-                address: summary.entry as u32,
-            })
+        || !matches!(transfer.target, AbstractValue::ImageAddress { address } if u64::from(*address) == summary.entry)
     {
         return Ok(None);
     }

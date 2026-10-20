@@ -1,11 +1,12 @@
 # Contextual reachability for the real 20-byte memcpy call
 
-Fresh baseline: main `55e34b96`, including the corrected graph closure from
+Fresh baseline: main `d32c4761`, including the corrected graph closure from
 #191. The ROM pin is SHA-256
 `a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87`.
 [proof.json](proof.json) contains the verified caller context, shared alignment
 witness, finite branch operands, region entrances, and all twelve store sites.
-Full before/after bundles, canonical streams and check logs are retained under
+[comparison.json](comparison.json) records every machine, report and callback
+audit comparison. Full before/after bundles, canonical streams and check logs are retained under
 `/tmp/oer-short-copy/`. Addresses and the pin select this validation fixture;
 production proof rules use no function names, ROM addresses or length literals.
 
@@ -40,7 +41,8 @@ arithmetic, masking distributes over adding Q, and Q cancels in subtraction:
   = ((r + a) & !mask) - ((r + b) & !mask)  (mod 2^32)
 ```
 
-The mask comes from the common expression DAG, the offset 20 from the proven
+The arithmetic is limited to masks 1, 3 and 7 (at most eight residues).
+Unrecognized expressions keep both branch edges. The mask comes from the common expression DAG, the offset 20 from the proven
 call input, the offset 3 from #191's machine witness, and the threshold 32 from
 its actual instruction. There is no premise excluding arithmetic overflow.
 
@@ -129,15 +131,24 @@ complete memcpy memory-effect contract. No trusted ROM contracts are added.
 
 ## Regression coverage and reproduction
 
-Eight end-to-end groups cover the real proof shape, lengths from 0 through
+Nine end-to-end groups cover the real proof shape, lengths from 0 through
 reachable bulk cases (including 36, 64 and 128), signed-boundary lengths,
 every address residue, RV32 and signed-boundary wrap, signed/unsigned machine
 comparisons, an additional region entrance, unproved alignment inputs,
-unknown arguments/ABI/targets, changed contexts, unsupported instructions,
+unknown arguments/ABI/targets, changed contexts and target alternatives, unsupported instructions,
 unvisited bytes, and reapplication through `StackCalls` including normalized
 expression inputs. A common-engine unit test covers all six branch predicates.
 Every checkpoint cancellation and several admission budgets verify release
 of temporary and retained proof allocations.
+
+Tests and all-target clippy pass for 46 affected host packages, including
+reverse dependencies and the dependency-layer gate, with
+`oer-hil-lab/test-support` and serial execution. The focused packages pass
+206 stack tests, 36 common-analysis tests, 21 model tests and six dependency
+checks. Formatting and diff checks pass. Both w0/w1 builds pass. All fourteen
+machine files, all eight complete reports and all four complete callback-audit
+TSVs are byte-identical to the fresh main baseline; candidate sets, unknown-use
+classes, resource counters and accounted peaks are unchanged.
 
 Capture fresh before/after firmware and the four complete callback audits
 using the [shared reproduction](../callback-address-audit.md#reproduction).

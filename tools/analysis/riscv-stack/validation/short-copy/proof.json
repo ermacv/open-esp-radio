@@ -1,0 +1,167 @@
+{
+  "firmware_sha256": "99a340a8f8d240a876df4d72a5a2ea0d1b36c32f55396940a54adb6d77906196",
+  "rom_sha256": "a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87",
+  "call": "0x5004db66",
+  "trampoline": "0x2f8004c4",
+  "body": "0x2f80d260",
+  "entry_a0": "unknown",
+  "entry_a2": 20,
+  "context": "CallContext { entry: 796971616, abi: RiscvInteger, arguments: [None, None, Some(20), None, None, None, None, None] }",
+  "alignment_fact": "AlignedValue { owner: 796971616, point: Entry { offset: 796971660 }, register: 15, initial: Expression { id: 9 }, value: Expression { id: 104 }, proof: AlignmentLoopProof { header: 796971712, guard: 796971724, back_edge: 796971728, step: 796971716, entry_edge: 796971734, pointer: 15, mask: 3 }, origin: AllIncoming }",
+  "expression_definitions": {
+    "e9": "Some(EntryRegister { register: 10 })",
+    "e11": "Some(EntryRegister { register: 12 })",
+    "e31": "Some(Integer { op: Add, left: Expression { id: 9 }, right: Expression { id: 11 } })",
+    "e103": "Some(Integer { op: Add, left: Expression { id: 9 }, right: Constant { value: 3 } })",
+    "e104": "Some(Integer { op: And, left: Expression { id: 103 }, right: Constant { value: 4294967292 } })"
+  },
+  "residues": [
+    {
+      "D_mod_4": 0,
+      "P_minus_D": 0,
+      "R": 20
+    },
+    {
+      "D_mod_4": 1,
+      "P_minus_D": 3,
+      "R": 16
+    },
+    {
+      "D_mod_4": 2,
+      "P_minus_D": 2,
+      "R": 16
+    },
+    {
+      "D_mod_4": 3,
+      "P_minus_D": 1,
+      "R": 16
+    }
+  ],
+  "bulk_guard": {
+    "test": "Lt",
+    "left": [
+      32
+    ],
+    "right": [
+      16,
+      20
+    ],
+    "taken": false
+  },
+  "all_region_boundary_entries": [
+    [
+      "0x2f80d298",
+      "0x2f80d328",
+      "Taken"
+    ]
+  ],
+  "head_entries": [
+    [
+      "0x2f80d32c",
+      "0x2f80d2d8",
+      "Taken"
+    ]
+  ],
+  "unreachable_region_instructions": 23,
+  "generic_effects": 14,
+  "contextual_effects": 5,
+  "store_sites": [
+    {
+      "pc": "0x2f80d27a",
+      "width": 1,
+      "generic_effects": 1,
+      "generic": "UnknownStore",
+      "call_effects": 1,
+      "call": "UnknownStore retained"
+    },
+    {
+      "pc": "0x2f80d2c8",
+      "width": 1,
+      "generic_effects": 3,
+      "generic": "three finite May byte addresses; unknown contents",
+      "call_effects": 3,
+      "call": "three May byte effects; destination unknown at caller"
+    },
+    {
+      "pc": "0x2f80d2f8",
+      "width": 4,
+      "generic_effects": 1,
+      "generic": "UnknownStore",
+      "call_effects": 0,
+      "call": "excluded: unreachable"
+    },
+    {
+      "pc": "0x2f80d2fc",
+      "width": 4,
+      "generic_effects": 1,
+      "generic": "UnknownStore",
+      "call_effects": 0,
+      "call": "excluded: unreachable"
+    },
+    {
+      "pc": "0x2f80d304",
+      "width": 4,
+      "generic_effects": 1,
+      "generic": "UnknownStore",
+      "call_effects": 0,
+      "call": "excluded: unreachable"
+    },
+    {
+      "pc": "0x2f80d308",
+      "width": 4,
+      "generic_effects": 1,
+      "generic": "UnknownStore",
+      "call_effects": 0,
+      "call": "excluded: unreachable"
+    },
+    {
+      "pc": "0x2f80d30c",
+      "width": 4,
+      "generic_effects": 1,
+      "generic": "UnknownStore",
+      "call_effects": 0,
+      "call": "excluded: unreachable"
+    },
+    {
+      "pc": "0x2f80d310",
+      "width": 4,
+      "generic_effects": 1,
+      "generic": "UnknownStore",
+      "call_effects": 0,
+      "call": "excluded: unreachable"
+    },
+    {
+      "pc": "0x2f80d314",
+      "width": 4,
+      "generic_effects": 1,
+      "generic": "UnknownStore",
+      "call_effects": 0,
+      "call": "excluded: unreachable"
+    },
+    {
+      "pc": "0x2f80d318",
+      "width": 4,
+      "generic_effects": 1,
+      "generic": "UnknownStore",
+      "call_effects": 0,
+      "call": "excluded: unreachable"
+    },
+    {
+      "pc": "0x2f80d324",
+      "width": 4,
+      "generic_effects": 1,
+      "generic": "UnknownStore",
+      "call_effects": 0,
+      "call": "excluded: unreachable"
+    },
+    {
+      "pc": "0x2f80d338",
+      "width": 4,
+      "generic_effects": 1,
+      "generic": "UnknownStore",
+      "call_effects": 1,
+      "call": "UnknownStore retained"
+    }
+  ],
+  "complete_preservation": false
+}

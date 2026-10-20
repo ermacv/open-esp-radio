@@ -137,7 +137,7 @@ def main():
               'generic':'three finite May byte addresses; unknown contents' if pc==0x2f80d2c8 else 'UnknownStore',
               'call_effects':applied[pc], 'call':'excluded: unreachable' if pc in bulk else ('three May byte effects; destination unknown at caller' if pc==0x2f80d2c8 else 'UnknownStore retained')}
              for pc,width in sorted(stores.items())]
-    proof = {'rom_sha256':ROM_SHA256,'call':f'{CALL:#x}','trampoline':f'{TRAMPOLINE:#x}','body':f'{BODY:#x}',
+    proof = {'firmware_sha256':hashlib.sha256(args.elf.read_bytes()).hexdigest(),'rom_sha256':ROM_SHA256,'call':f'{CALL:#x}','trampoline':f'{TRAMPOLINE:#x}','body':f'{BODY:#x}',
              'entry_a0':'unknown','entry_a2':20,'context':context,'alignment_fact':aligned[0],'expression_definitions':expression_definitions,
              'residues':residues,'bulk_guard':branches[GUARD],
              'all_region_boundary_entries':[[hex(a),hex(b),k] for a,b,k in boundary],
