@@ -8,23 +8,14 @@
 
 use crate::sram_link::ControllerSramLinkAddress;
 
-use oer_esp32s31_hal::types::{
-    BluetoothControllerSramAddress, BluetoothControllerSramAddressError,
-};
+use oer_esp32s31_hal::types::BluetoothControllerSramAddress;
 
 use crate::rx_packet_bytes::{RxPacketBytes, result_not_produced};
 use crate::shared_layout::BufferHeaderImage;
 use oer_esp32s31_hal::layouts::*;
 
-/// Bytes preceding a received Link Layer PDU in one controller allocation.
-pub const BLUETOOTH_LE_RX_PACKET_PREFIX_BYTES: usize = BleRxPacketPrefix::SIZE;
 /// Maximum Link Layer payload admitted by the shared receive allocation.
 pub const BLUETOOTH_LE_RX_PAYLOAD_CAPACITY: usize = u8::MAX as usize;
-/// Complete logical receive-packet allocation size.
-pub const BLUETOOTH_LE_RX_PACKET_BYTES: usize =
-    BLUETOOTH_LE_RX_PACKET_PREFIX_BYTES + BLUETOOTH_LE_RX_PAYLOAD_CAPACITY;
-
-const RX_PACKET_LAST_ALIGNED_OFFSET: u32 = ((BLUETOOTH_LE_RX_PACKET_BYTES as u32 - 1) / 4) * 4;
 
 /// Opaque raw-controller-time observation attached to one received LE packet.
 ///
@@ -149,26 +140,23 @@ impl From<LeRxPacketError> for LeRxError {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) struct LeRxPacketAddress(BluetoothControllerSramAddress);
+pub(crate) struct LeRxPacketAddress(DmaWindowAddress);
 
 impl LeRxPacketAddress {
-    pub(crate) fn new(address: u32) -> Result<Self, BluetoothControllerSramAddressError> {
-        let address = BluetoothControllerSramAddress::new(address)?;
-        let tail = address
-            .address()
-            .checked_add(RX_PACKET_LAST_ALIGNED_OFFSET)
-            .ok_or(BluetoothControllerSramAddressError::OutsideEncodableWindow)?;
-        BluetoothControllerSramAddress::new(tail)?;
-        Ok(Self(address))
+    pub(crate) const fn from_placed(address: DmaWindowAddress) -> Self {
+        Self(address)
     }
 
     pub(crate) const fn compressed_image(self) -> u32 {
-        self.0.compressed_image()
+        self.0
+            .ble_compressed()
+            .expect("a placed RX packet has a nonzero encodable address")
     }
 }
 
 /// Private controller-shared receive-buffer header.
 #[repr(C, align(4))]
+#[derive(bytemuck::Zeroable)]
 pub(crate) struct LeRxBufferHeaderStorage {
     pub(crate) layout: BleBufferHeader,
 }
@@ -199,7 +187,9 @@ impl LeRxBufferHeaderStorage {
             next: BleBufferHeaderNext::from_bits(
                 successor.map_or(0, ControllerSramLinkAddress::compressed_image),
             ),
-            packet_base: BleBufferHeaderPacketBase::from_bits(packet.compressed_image()),
+            packet_base: BleBufferHeaderPacketBase::ZERO
+                .with_address(packet.0)
+                .expect("the placed RX buffer address is encodable"),
             allocation: BleBufferHeaderAllocation::ZERO.with_terminal(rotates_into_successor),
             previous: BleBufferHeaderPrevious::from_bits(
                 predecessor.map_or(0, BluetoothControllerSramAddress::address),
@@ -276,6 +266,7 @@ impl LeRxBufferHeaderStorage {
 
 /// Private controller-shared receive packet allocation.
 #[repr(C, align(4))]
+#[derive(bytemuck::Zeroable)]
 pub(crate) struct LeRxPacketStorage {
     pub(crate) bytes: RxPacketBytes,
 }
@@ -399,6 +390,7 @@ impl LeRxPacketStorage {
 }
 
 #[repr(C)]
+#[derive(bytemuck::Zeroable)]
 pub(crate) struct LeRxNodeStorage {
     pub(crate) header: LeRxBufferHeaderStorage,
     pub(crate) packet: LeRxPacketStorage,

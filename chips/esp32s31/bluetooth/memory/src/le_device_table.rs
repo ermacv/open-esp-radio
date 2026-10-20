@@ -17,13 +17,9 @@ use core::pin::Pin;
 
 use oer_esp32s31_hal::bluetooth::{BluetoothDeviceTableEntryCount, DeviceTablePublication};
 use oer_esp32s31_hal::layouts::*;
-use oer_esp32s31_hal::types::{
-    BluetoothControllerSramAddress, BluetoothControllerSramAddressError,
-};
 
-use crate::sram_link::{
-    BLUETOOTH_CONTROLLER_PHYSICAL_SRAM_HIGH, BLUETOOTH_CONTROLLER_PHYSICAL_SRAM_LOW,
-};
+use crate::{ControllerDmaSpace, Placement};
+use oer_esp32s31_hal::dma_static::Placed;
 
 /// Filter accept list entries the Controller keeps, as the S31 build's LE
 /// Read Filter Accept List Size reports.
@@ -54,6 +50,7 @@ impl LeFilterAcceptListDevice {
 
 /// Pinned storage of the device table.
 #[repr(C, align(4))]
+#[derive(bytemuck::Zeroable)]
 pub struct LeDeviceTableStorage {
     layout: BleDeviceTable,
 }
@@ -72,19 +69,6 @@ impl Default for LeDeviceTableStorage {
     }
 }
 
-/// Why the table was not bound.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum LeDeviceTableBindError {
-    /// The storage address is not a 32-bit address.
-    AddressWidth,
-    /// The storage is not representable as a Controller-SRAM address.
-    InvalidAddress(BluetoothControllerSramAddressError),
-    /// The table base compresses to zero, which cannot name a placed table.
-    ZeroCompressedImage,
-    /// The storage extends beyond the physical Controller SRAM.
-    ExtentOutsidePhysicalSram,
-}
-
 /// Why a filter accept list change was refused.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum LeDeviceTableError {
@@ -97,52 +81,22 @@ pub enum LeDeviceTableError {
 /// The device table bound at its Controller-SRAM address.
 pub struct LeDeviceTable {
     storage: Pin<&'static mut LeDeviceTableStorage>,
-    first_entry: BluetoothControllerSramAddress,
+    first_entry: DmaRef<BleDeviceTable>,
     members: usize,
 }
 
 impl LeDeviceTable {
-    /// Bind static storage at its linked address.
-    #[cfg(target_arch = "riscv32")]
-    pub fn bind(
-        storage: &'static mut LeDeviceTableStorage,
-    ) -> Result<Self, LeDeviceTableBindError> {
-        let base = u32::try_from(core::ptr::addr_of!(*storage).addr())
-            .map_err(|_| LeDeviceTableBindError::AddressWidth)?;
-        Self::bind_at(storage, base)
-    }
-
-    /// Bind static storage at a synthetic Controller-SRAM address.
-    #[cfg(not(target_arch = "riscv32"))]
-    pub fn bind_model(
-        storage: &'static mut LeDeviceTableStorage,
-        base: u32,
-    ) -> Result<Self, LeDeviceTableBindError> {
-        Self::bind_at(storage, base)
-    }
-
-    fn bind_at(
-        storage: &'static mut LeDeviceTableStorage,
-        base: u32,
-    ) -> Result<Self, LeDeviceTableBindError> {
-        let bytes = core::mem::size_of::<LeDeviceTableStorage>() as u32;
-        if base < BLUETOOTH_CONTROLLER_PHYSICAL_SRAM_LOW
-            || bytes > BLUETOOTH_CONTROLLER_PHYSICAL_SRAM_HIGH.saturating_sub(base)
-        {
-            return Err(LeDeviceTableBindError::ExtentOutsidePhysicalSram);
-        }
-        let first_entry = BluetoothControllerSramAddress::new(base)
-            .map_err(LeDeviceTableBindError::InvalidAddress)?;
-        if first_entry.compressed_image() == 0 {
-            return Err(LeDeviceTableBindError::ZeroCompressedImage);
-        }
+    /// Claim and initialize a linker-proven device-table allocation.
+    pub fn place<S: ControllerDmaSpace>(placed: Placed<LeDeviceTableStorage>) -> Self {
+        let (storage, placement) = Placement::<S>::take(placed);
+        let first_entry = placement.reference(&storage.layout);
         let mut table = Self {
             storage: Pin::static_mut(storage),
             first_entry,
             members: 0,
         };
         table.clear();
-        Ok(table)
+        table
     }
 
     /// Hardware's view of the table after the last change: its first entry
@@ -156,10 +110,7 @@ impl LeDeviceTable {
         // exceeds its capacity, and its words are `VolatileCell`s the CPU
         // reaches only through volatile accesses.
         unsafe {
-            DeviceTablePublication::new(
-                crate::layout_reference::controller_reference(self.first_entry.address()),
-                count,
-            )
+            DeviceTablePublication::new(self.first_entry, count)
         }
     }
 

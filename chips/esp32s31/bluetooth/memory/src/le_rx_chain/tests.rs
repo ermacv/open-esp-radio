@@ -1,8 +1,7 @@
+use bytemuck::Zeroable;
 use std::{boxed::Box, vec::Vec};
 
-use super::{
-    LeRxChain, LeRxChainError, LeRxChainModelAddress, LeRxChainStorage, LeRxSource, LeRxTag,
-};
+use super::{LeRxChain, LeRxChainError, LeRxChainStorage, LeRxSource, LeRxTag};
 use crate::{
     le_rx_packet::{LeRxError, LeRxOutcome},
     rx_memory_list::RxMemoryListClass,
@@ -12,11 +11,10 @@ const A: LeRxTag = LeRxTag(1);
 const B: LeRxTag = LeRxTag(7);
 
 fn chain() -> LeRxChain<3> {
-    let storage = Box::leak(Box::new(LeRxChainStorage::<3>::new()));
-    LeRxChain::bind_model(
-        storage,
+    let storage = Box::leak(Box::new(LeRxChainStorage::<3>::zeroed()));
+    LeRxChain::place::<crate::HostDma<0x2f00_4000>>(
+        oer_esp32s31_hal::dma_static::Placed::host(storage),
         RxMemoryListClass::NonScanning,
-        LeRxChainModelAddress::new(0x2f00_4000).expect("test base is aligned"),
     )
     .expect("test chain binds")
 }
@@ -185,4 +183,16 @@ fn a_successor_linking_back_into_the_chain_ends_the_walk() {
     // for another tag passes both and would circle them forever.
     chain.with_view(|view| view.header(2).link_successor(Some(view.link(1))));
     assert_eq!(chain.take(source(B)), Err(LeRxChainError::Cycle));
+}
+
+#[test]
+fn a_single_packet_cannot_form_a_receive_chain() {
+    let storage = Box::leak(Box::new(LeRxChainStorage::<1>::zeroed()));
+    assert!(matches!(
+        LeRxChain::place::<crate::HostDma<0x2f00_4000>>(
+            oer_esp32s31_hal::dma_static::Placed::host(storage),
+            RxMemoryListClass::Scanning,
+        ),
+        Err(super::LeRxChainPlaceError::TooFewPackets)
+    ));
 }

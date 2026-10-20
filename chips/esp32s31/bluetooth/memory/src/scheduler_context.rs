@@ -13,6 +13,7 @@ pub const BLUETOOTH_SCHEDULER_CONTEXT_BYTES: usize =
 
 /// Opaque, zero-based CPU-owned scheduler context allocation.
 #[repr(C, align(4))]
+#[derive(bytemuck::Zeroable)]
 pub struct SchedulerContextStorage {
     layout: oer_esp32s31_hal::layouts::BleSchedulerContext,
 }

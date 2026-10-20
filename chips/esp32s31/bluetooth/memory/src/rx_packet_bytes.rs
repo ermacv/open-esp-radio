@@ -1,6 +1,6 @@
 //! CPU-owned byte operations on the generated RX packet prefix.
 
-#![forbid(unsafe_code)]
+#![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
 use oer_esp32s31_hal::layouts::*;
 use vcell::VolatileCell;
 
@@ -52,6 +52,14 @@ pub(crate) struct RxPacketBytes {
     prefix: [VolatileCell<u8>; BleRxPacketPrefix::SIZE],
     pub(crate) payload: [VolatileCell<u8>; u8::MAX as usize],
 }
+
+#[allow(
+    unsafe_code,
+    reason = "volatile bytes admit every bit pattern, including zero"
+)]
+// SAFETY: VolatileCell<u8> is a transparent UnsafeCell<u8>; each byte may
+// start at zero. This promises initialization only, without shared access.
+unsafe impl bytemuck::Zeroable for RxPacketBytes {}
 
 impl RxPacketBytes {
     pub(crate) const fn zeroed() -> Self {

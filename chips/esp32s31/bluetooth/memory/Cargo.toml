@@ -12,6 +12,7 @@ oer-esp32s31-knowledge = { path = "../../knowledge" }
 oer-esp32s31-hal = { path = "../../hal" }
 pin-project = "1.1.13"
 vcell = "0.1.3"
+bytemuck = { version = "1.25.2", default-features = false, features = ["derive", "min_const_generics"] }
 
 [dev-dependencies]
 oer-time = { path = "../../../../portable/time" }

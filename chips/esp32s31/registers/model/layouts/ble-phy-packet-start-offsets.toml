@@ -1,0 +1,130 @@
+schema = 1
+
+[layout]
+name = "BLE_PHY_PACKET_START_OFFSETS"
+description = "PHY-mode packet-prefix airtime in microseconds, retained at PHY environment +0x34. Four little-endian halfwords in the controller PHY-mode order."
+size = 8
+align = 1
+
+[[layout.bytes]]
+name = "LE_CODED_S2"
+offset = 0
+size = 2
+access = "owned"
+description = "Packet-prefix airtime for this controller PHY mode, in microseconds."
+
+[[layout.bytes.fields]]
+name = "MICROS"
+bits = "15:0"
+writer = "cpu"
+description = "Packet-prefix airtime for this controller PHY mode, in microseconds."
+
+[[layout.bytes]]
+name = "LE_1M"
+offset = 2
+size = 2
+access = "owned"
+description = "Packet-prefix airtime for this controller PHY mode, in microseconds."
+
+[[layout.bytes.fields]]
+name = "MICROS"
+bits = "15:0"
+writer = "cpu"
+description = "Packet-prefix airtime for this controller PHY mode, in microseconds."
+
+[[layout.bytes]]
+name = "LE_2M"
+offset = 4
+size = 2
+access = "owned"
+description = "Packet-prefix airtime for this controller PHY mode, in microseconds."
+
+[[layout.bytes.fields]]
+name = "MICROS"
+bits = "15:0"
+writer = "cpu"
+description = "Packet-prefix airtime for this controller PHY mode, in microseconds."
+
+[[layout.bytes]]
+name = "LE_CODED_S8"
+offset = 6
+size = 2
+access = "owned"
+description = "Packet-prefix airtime for this controller PHY mode, in microseconds."
+
+[[layout.bytes.fields]]
+name = "MICROS"
+bits = "15:0"
+writer = "cpu"
+description = "Packet-prefix airtime for this controller PHY mode, in microseconds."
+
+[[review]]
+entity = "BLE_PHY_PACKET_START_OFFSETS"
+sources = ["BLOB_LIBBLE_MEMORY_PHY_LOOKUPS"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLE_PHY_PACKET_START_OFFSETS.LE_CODED_S2"
+sources = ["BLOB_LIBBLE_MEMORY_PHY_LOOKUPS"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_PHY_PACKET_START_OFFSETS.LE_CODED_S2.MICROS"
+sources = ["BLOB_LIBBLE_MEMORY_PHY_LOOKUPS"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_PHY_PACKET_START_OFFSETS.LE_1M"
+sources = ["BLOB_LIBBLE_MEMORY_PHY_LOOKUPS"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_PHY_PACKET_START_OFFSETS.LE_1M.MICROS"
+sources = ["BLOB_LIBBLE_MEMORY_PHY_LOOKUPS"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_PHY_PACKET_START_OFFSETS.LE_2M"
+sources = ["BLOB_LIBBLE_MEMORY_PHY_LOOKUPS"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_PHY_PACKET_START_OFFSETS.LE_2M.MICROS"
+sources = ["BLOB_LIBBLE_MEMORY_PHY_LOOKUPS"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_PHY_PACKET_START_OFFSETS.LE_CODED_S8"
+sources = ["BLOB_LIBBLE_MEMORY_PHY_LOOKUPS"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_PHY_PACKET_START_OFFSETS.LE_CODED_S8.MICROS"
+sources = ["BLOB_LIBBLE_MEMORY_PHY_LOOKUPS"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"

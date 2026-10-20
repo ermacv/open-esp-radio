@@ -28,8 +28,8 @@ use crate::{
     scheduler_context::SchedulerContextStorage,
     scheduler_item::SchedulerItemHeader,
     scheduler_pool::{
-        SchedulerPoolBindError, SchedulerPoolError, SchedulerRoleInstance, SchedulerRoleKind,
-        SchedulerRolePool, SchedulerRoleStorage, sealed,
+        SchedulerPoolError, SchedulerRoleInstance, SchedulerRoleKind, SchedulerRolePool,
+        SchedulerRoleStorage, sealed,
     },
     sram_link::ControllerSramLinkAddress,
 };
@@ -61,6 +61,7 @@ const SCHEDULER_ITEM_EVENT_CLASS_IMAGE: BleSchedulerItemReceiveWait =
 
 /// Scanner link state.
 #[repr(C, align(4))]
+#[derive(bytemuck::Zeroable)]
 struct LinkStateStorage {
     layout: BleLinkState,
 }
@@ -117,6 +118,7 @@ impl LinkStateStorage {
 
 /// One scanner scheduler item.
 #[repr(C, align(4))]
+#[derive(bytemuck::Zeroable)]
 struct ItemStorage {
     layout: BleSchedulerItem,
 }
@@ -206,6 +208,7 @@ impl ItemStorage {
 
 /// Controller-SRAM graph of one scanner instance.
 #[repr(C)]
+#[derive(bytemuck::Zeroable)]
 pub struct LegacyScanStorage {
     link_state: LinkStateStorage,
     scheduler_context: SchedulerContextStorage,
@@ -259,24 +262,28 @@ impl SchedulerRoleStorage for LegacyScanStorage {
     type State = LegacyScanState;
     const INITIAL_STATE: LegacyScanState = LegacyScanState::Empty;
 
-    fn bind(base: u32, first_number: u16) -> Result<LegacyScanBinding, SchedulerPoolBindError> {
-        let link = |offset: usize| {
-            ControllerSramLinkAddress::new(base + offset as u32)
-                .map_err(|_| SchedulerPoolBindError::ZeroCompressedLink)
-        };
-        let items = core::mem::offset_of!(Self, items);
-        let item = core::mem::size_of::<ItemStorage>();
-        Ok(LegacyScanBinding {
-            link_state: link(core::mem::offset_of!(Self, link_state))?,
-            scheduler_context: link(core::mem::offset_of!(Self, scheduler_context))?,
-            items: [link(items)?, link(items + item)?, link(items + 2 * item)?],
-            scan_request_header: link(core::mem::offset_of!(Self, scan_request_header))?,
-            scan_request_packet: LeTxPacketAddress::new(
-                base + core::mem::offset_of!(Self, scan_request_packet) as u32,
-            )
-            .map_err(|_| SchedulerPoolBindError::ZeroCompressedLink)?,
+    fn addresses<D: crate::ControllerDmaSpace>(
+        &self,
+        placement: &crate::Placement<D>,
+        first_number: u16,
+    ) -> LegacyScanBinding {
+        LegacyScanBinding {
+            link_state: ControllerSramLinkAddress::from_placed(placement.address(&self.link_state)),
+            scheduler_context: ControllerSramLinkAddress::from_placed(
+                placement.address(&self.scheduler_context),
+            ),
+            scan_request_header: ControllerSramLinkAddress::from_placed(
+                placement.address(&self.scan_request_header),
+            ),
+            items: core::array::from_fn(|index| {
+                ControllerSramLinkAddress::from_placed(placement.address(&self.items[index]))
+            }),
+            scan_request_packet: LeTxPacketAddress::from_placed(
+                placement,
+                &self.scan_request_packet,
+            ),
             first_number,
-        })
+        }
     }
 
     fn item_layout(&self, item: usize) -> &BleSchedulerItem {

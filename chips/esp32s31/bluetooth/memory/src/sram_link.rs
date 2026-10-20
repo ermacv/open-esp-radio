@@ -6,15 +6,6 @@ use oer_esp32s31_hal::types::{
     BluetoothControllerSramAddress, BluetoothControllerSramAddressError,
 };
 
-/// First byte in the physical ESP32-S31 internal SRAM window.
-pub const BLUETOOTH_CONTROLLER_PHYSICAL_SRAM_LOW: u32 = 0x2f00_0000;
-/// First byte after the physical ESP32-S31 internal SRAM window.
-///
-/// This is deliberately narrower than the controller's 20-bit compressed
-/// pointer encoding domain. Linker policy may reserve an additional suffix
-/// below this architectural boundary.
-pub const BLUETOOTH_CONTROLLER_PHYSICAL_SRAM_HIGH: u32 = 0x2f08_0000;
-
 /// Why an address cannot represent a reviewed bound controller-SRAM link.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ControllerSramLinkAddressError {
@@ -34,6 +25,11 @@ pub enum ControllerSramLinkAddressError {
 pub struct ControllerSramLinkAddress(BluetoothControllerSramAddress);
 
 impl ControllerSramLinkAddress {
+    pub(crate) fn from_placed(address: oer_esp32s31_hal::layouts::DmaWindowAddress) -> Self {
+        Self::new(address.get())
+            .expect("the placed layout has an encodable nonzero aligned address")
+    }
+
     /// Validate an aligned address and reject the zero compressed image.
     pub const fn new(address: u32) -> Result<Self, ControllerSramLinkAddressError> {
         let address = match BluetoothControllerSramAddress::new(address) {

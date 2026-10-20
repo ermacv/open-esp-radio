@@ -15,6 +15,7 @@ const MAX_PDU_BYTES: usize = 39;
 // The controller allocation is the first member: graph bindings target its
 // existing allocation extent, not the CPU-only canonical copy following it.
 #[repr(C, align(4))]
+#[derive(bytemuck::Zeroable)]
 pub(crate) struct LegacyAdvertisingTxPacketStorage<const N: usize> {
     controller: LeTxPacketStorage<N>,
     canonical: [u8; MAX_PDU_BYTES],

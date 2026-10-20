@@ -32,8 +32,8 @@ use crate::{
     scheduler_context::SchedulerContextStorage,
     scheduler_item::SchedulerItemHeader,
     scheduler_pool::{
-        SchedulerPoolBindError, SchedulerPoolError, SchedulerRoleInstance, SchedulerRoleKind,
-        SchedulerRolePool, SchedulerRoleStorage, sealed,
+        SchedulerPoolError, SchedulerRoleInstance, SchedulerRoleKind, SchedulerRolePool,
+        SchedulerRoleStorage, sealed,
     },
     sram_link::ControllerSramLinkAddress,
 };
@@ -186,6 +186,7 @@ impl<'a> LegacyConnectableAdvertisingMemoryInput<'a> {
 }
 
 #[repr(C, align(4))]
+#[derive(bytemuck::Zeroable)]
 struct LinkStateStorage {
     layout: BleLinkState,
 }
@@ -310,6 +311,7 @@ impl LinkStateStorage {
 }
 
 #[repr(C, align(4))]
+#[derive(bytemuck::Zeroable)]
 struct ItemStorage {
     layout: BleSchedulerItem,
 }
@@ -377,6 +379,7 @@ impl ItemStorage {
 
 /// Controller-SRAM graph of one response-capable advertising instance.
 #[repr(C)]
+#[derive(bytemuck::Zeroable)]
 pub struct LegacyConnectableAdvertisingStorage {
     link_state: LinkStateStorage,
     scheduler_context: SchedulerContextStorage,
@@ -441,30 +444,35 @@ impl SchedulerRoleStorage for LegacyConnectableAdvertisingStorage {
     const INITIAL_STATE: LegacyConnectableAdvertisingState =
         LegacyConnectableAdvertisingState::Empty;
 
-    fn bind(
-        base: u32,
+    fn addresses<D: crate::ControllerDmaSpace>(
+        &self,
+        placement: &crate::Placement<D>,
         number: u16,
-    ) -> Result<LegacyConnectableAdvertisingBinding, SchedulerPoolBindError> {
-        let link = |offset: usize| {
-            ControllerSramLinkAddress::new(base + offset as u32)
-                .map_err(|_| SchedulerPoolBindError::ZeroCompressedLink)
-        };
-        let packet = |offset: usize| {
-            AdvertisingTxPacketAddress::new(base + offset as u32)
-                .map_err(|_| SchedulerPoolBindError::ZeroCompressedLink)
-        };
-        let items = core::mem::offset_of!(Self, items);
-        let item = core::mem::size_of::<ItemStorage>();
-        Ok(LegacyConnectableAdvertisingBinding {
-            link_state: link(core::mem::offset_of!(Self, link_state))?,
-            scheduler_context: link(core::mem::offset_of!(Self, scheduler_context))?,
-            items: [link(items)?, link(items + item)?, link(items + 2 * item)?],
-            adv_ind_header: link(core::mem::offset_of!(Self, adv_ind_header))?,
-            scan_response_header: link(core::mem::offset_of!(Self, scan_response_header))?,
-            adv_ind_packet: packet(core::mem::offset_of!(Self, adv_ind_packet))?,
-            scan_response_packet: packet(core::mem::offset_of!(Self, scan_response_packet))?,
+    ) -> LegacyConnectableAdvertisingBinding {
+        LegacyConnectableAdvertisingBinding {
+            link_state: ControllerSramLinkAddress::from_placed(placement.address(&self.link_state)),
+            scheduler_context: ControllerSramLinkAddress::from_placed(
+                placement.address(&self.scheduler_context),
+            ),
+            adv_ind_header: ControllerSramLinkAddress::from_placed(
+                placement.address(&self.adv_ind_header),
+            ),
+            scan_response_header: ControllerSramLinkAddress::from_placed(
+                placement.address(&self.scan_response_header),
+            ),
+            items: core::array::from_fn(|index| {
+                ControllerSramLinkAddress::from_placed(placement.address(&self.items[index]))
+            }),
+            adv_ind_packet: AdvertisingTxPacketAddress::from_placed(
+                placement,
+                &self.adv_ind_packet,
+            ),
+            scan_response_packet: AdvertisingTxPacketAddress::from_placed(
+                placement,
+                &self.scan_response_packet,
+            ),
             number,
-        })
+        }
     }
 
     fn item_layout(&self, item: usize) -> &BleSchedulerItem {

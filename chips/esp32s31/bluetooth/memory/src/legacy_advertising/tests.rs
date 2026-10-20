@@ -1,3 +1,4 @@
+use bytemuck::Zeroable;
 use std::boxed::Box;
 
 use super::{LegacyAdvertisingError, LegacyAdvertisingPool, LegacyAdvertisingStorage};
@@ -5,8 +6,8 @@ use crate::{
     AdvertisingCoexistencePriorities, LegacyAdvertisingPduError,
     LegacyAdvertisingPrimaryChannelPlan, SchedulerItemCoexistencePriority,
     scheduler_pool::{
-        SchedulerAllocationConfig, SchedulerItemSpace, SchedulerPoolError,
-        SchedulerPoolModelAddress, SchedulerRoleInstance, SchedulerRolePoolStorage,
+        SchedulerAllocationConfig, SchedulerItemSpace, SchedulerPoolError, SchedulerRoleInstance,
+        SchedulerRolePoolStorage,
     },
 };
 
@@ -16,14 +17,13 @@ fn pool() -> LegacyAdvertisingPool<2> {
     let storage = Box::leak(Box::new(SchedulerRolePoolStorage::<
         LegacyAdvertisingStorage,
         2,
-    >::new()));
+    >::zeroed()));
     let numbers = SchedulerAllocationConfig::new(4, 1, 0)
         .unwrap()
         .advertising(2, 2)
         .unwrap();
-    LegacyAdvertisingPool::bind_model(
-        storage,
-        SchedulerPoolModelAddress::new(0x2f00_0100).expect("test base is aligned"),
+    LegacyAdvertisingPool::place::<crate::HostDma<0x2f00_0100>>(
+        oer_esp32s31_hal::dma_static::Placed::host(storage),
         numbers,
     )
     .expect("the pool fits controller SRAM")

@@ -28,7 +28,7 @@ pub use values::{
 use crate::{
     coexistence::{ConnectionCoexistencePriorities, PeripheralConnectionCoexistenceProtection},
     direction_finding_workspace::DirectionFindingWorkspaceLink,
-    le_rx_chain::{LeRxChainBindError, LeRxNodes, LeRxRing},
+    le_rx_chain::{LeRxNodes, LeRxRing},
     le_rx_packet::LeRxOutcome,
     le_tx_packet::{
         LeTxBufferHeaderStorage, LeTxPacketAddress, LeTxPacketPrepareError, LeTxPacketStorage,
@@ -37,8 +37,8 @@ use crate::{
     scheduler_context::SchedulerContextStorage,
     scheduler_item::{SchedulerItemCompletionStatus, SchedulerItemHeader},
     scheduler_pool::{
-        SchedulerPoolBindError, SchedulerPoolError, SchedulerRoleInstance, SchedulerRoleKind,
-        SchedulerRolePool, SchedulerRoleStorage, sealed,
+        SchedulerPoolError, SchedulerRoleInstance, SchedulerRoleKind, SchedulerRolePool,
+        SchedulerRoleStorage, sealed,
     },
     sram_link::ControllerSramLinkAddress,
 };
@@ -73,6 +73,7 @@ const TX_PACKET_BYTES: usize = crate::BLUETOOTH_LE_TX_PACKET_PREFIX_BYTES + DATA
 /// item `+0x18` bits 3:0 and a fixed 7 into bits 7:4.
 
 #[repr(C, align(4))]
+#[derive(bytemuck::Zeroable)]
 struct LinkStateStorage {
     layout: BleLinkState,
 }
@@ -242,6 +243,7 @@ impl LinkStateStorage {
 }
 
 #[repr(C, align(4))]
+#[derive(bytemuck::Zeroable)]
 struct ItemStorage {
     layout: BleSchedulerItem,
 }
@@ -403,6 +405,7 @@ impl ItemStorage {
 
 /// Controller-SRAM graph of one peripheral connection instance.
 #[repr(C)]
+#[derive(bytemuck::Zeroable)]
 pub struct PeripheralConnectionStorage {
     link_state: LinkStateStorage,
     scheduler_context: SchedulerContextStorage,
@@ -469,33 +472,29 @@ impl SchedulerRoleStorage for PeripheralConnectionStorage {
         tx_pending: false,
     };
 
-    fn bind(base: u32, number: u16) -> Result<PeripheralConnectionBinding, SchedulerPoolBindError> {
-        let link = |offset: usize| {
-            ControllerSramLinkAddress::new(base + offset as u32)
-                .map_err(|_| SchedulerPoolBindError::ZeroCompressedLink)
-        };
-        let items = core::mem::offset_of!(Self, items);
-        let item = core::mem::size_of::<ItemStorage>();
-        let rx =
-            LeRxRing::bind(base + core::mem::offset_of!(Self, rx) as u32).map_err(|error| {
-                match error {
-                    LeRxChainBindError::InvalidAddress(error) => {
-                        SchedulerPoolBindError::InvalidBase(error)
-                    }
-                    _ => SchedulerPoolBindError::ZeroCompressedLink,
-                }
-            })?;
-        Ok(PeripheralConnectionBinding {
-            link_state: link(core::mem::offset_of!(Self, link_state))?,
-            scheduler_context: link(core::mem::offset_of!(Self, scheduler_context))?,
-            items: [link(items)?, link(items + item)?],
-            tx_sentinel: link(core::mem::offset_of!(Self, tx_sentinel))?,
-            tx_successor: link(core::mem::offset_of!(Self, tx_successor))?,
-            tx_packet: LeTxPacketAddress::new(base + core::mem::offset_of!(Self, tx_packet) as u32)
-                .map_err(|_| SchedulerPoolBindError::ZeroCompressedLink)?,
-            rx,
+    fn addresses<D: crate::ControllerDmaSpace>(
+        &self,
+        placement: &crate::Placement<D>,
+        number: u16,
+    ) -> PeripheralConnectionBinding {
+        PeripheralConnectionBinding {
+            link_state: ControllerSramLinkAddress::from_placed(placement.address(&self.link_state)),
+            scheduler_context: ControllerSramLinkAddress::from_placed(
+                placement.address(&self.scheduler_context),
+            ),
+            tx_sentinel: ControllerSramLinkAddress::from_placed(
+                placement.address(&self.tx_sentinel),
+            ),
+            tx_successor: ControllerSramLinkAddress::from_placed(
+                placement.address(&self.tx_successor),
+            ),
+            items: core::array::from_fn(|index| {
+                ControllerSramLinkAddress::from_placed(placement.address(&self.items[index]))
+            }),
+            tx_packet: LeTxPacketAddress::from_placed(placement, &self.tx_packet),
+            rx: LeRxRing::addresses(&self.rx, placement),
             number,
-        })
+        }
     }
 
     fn item_layout(&self, item: usize) -> &BleSchedulerItem {
