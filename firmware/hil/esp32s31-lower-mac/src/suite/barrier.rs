@@ -257,6 +257,7 @@ async fn exercise<'p, 'id: 'p>(
     }
     let publications_at_barrier = publications();
     let mut retried_frames = Frames::new();
+    let mut retry_terminal = None;
     if case == BarrierCase::GateRetry {
         let _open = phase.open_gate(closed.ok_or("closed gate")?);
         let (ticket, mpdu) = head.take().ok_or("Sent barrier head")?;
@@ -292,7 +293,22 @@ async fn exercise<'p, 'id: 'p>(
                 .map_err(|_| "retry poisoned")?
                 .map_err(|_| "retry lost event")?
             {
-                LowerMacEvent::Terminal(LowerMacTerminal::TxCompleted(_)) => break,
+                LowerMacEvent::Terminal(LowerMacTerminal::TxCompleted(TxCompleted::Single(
+                    completed,
+                ))) => {
+                    let parts = completed.into_parts(&mut access);
+                    let (buffer, _) = parts.payload.into_parts();
+                    let state = match buffer {
+                        AnyBuffer::Sent(_) => MpduState::Sent,
+                        AnyBuffer::Fresh(_) => MpduState::Fresh,
+                    };
+                    retry_terminal = Some(BarrierEvent::Tx {
+                        ticket: parts.ticket.index(),
+                        state,
+                        outcome: parts.outcome,
+                    });
+                    break;
+                }
                 LowerMacEvent::Received { frame, .. } => phase.recycle(frame),
                 LowerMacEvent::Tbtt(_) => {}
                 _ => return Err("unexpected retry event"),
@@ -313,6 +329,7 @@ async fn exercise<'p, 'id: 'p>(
         events,
         first_frame,
         retried_frames,
+        retry_terminal,
     };
     barrier_trace(&trace)
         .map(Trace::Barrier)

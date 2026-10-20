@@ -156,7 +156,7 @@ pub enum BarrierEvent<A, D> {
 /// One published head and one queued successor on the same AC. Fixtures
 /// capture counts and frame bytes from their actual publication observer;
 /// terminals come through the port, never from an expected identity.
-pub struct BarrierTrace<E, F, R> {
+pub struct BarrierTrace<E, F, R, T> {
     /// Head and successor identities captured before admission.
     pub tickets: [u8; 2],
     /// Sample with the head published, before requesting its barrier.
@@ -174,6 +174,8 @@ pub struct BarrierTrace<E, F, R> {
     pub first_frame: F,
     /// The same encoded extent for each real Sent republication.
     pub retried_frames: R,
+    /// The actual terminal of the post-barrier Sent submission, if any.
+    pub retry_terminal: Option<T>,
 }
 
 /// The publication/barrier suite shared by model and hardware fixtures.
@@ -192,7 +194,14 @@ pub trait BarrierHarness {
     fn exercise_barrier(
         &mut self,
         case: BarrierCase,
-    ) -> impl core::future::Future<Output = BarrierTrace<Self::Events, Self::Frame, Self::Retries>>;
+    ) -> impl core::future::Future<
+        Output = BarrierTrace<
+            Self::Events,
+            Self::Frame,
+            Self::Retries,
+            BarrierEvent<Self::Ack, Self::AirDenied>,
+        >,
+    >;
 }
 
 /// Run every prescribed publication/barrier case through the harness.
@@ -214,7 +223,7 @@ pub async fn check_barriers(
 /// Verify real observations of a held publication, its barrier and a Sent retry.
 pub fn verify_barrier<A, D, E: AsRef<[BarrierEvent<A, D>]>, F: AsRef<[u8]>, R: AsRef<[F]>>(
     case: BarrierCase,
-    trace: BarrierTrace<E, F, R>,
+    trace: BarrierTrace<E, F, R, BarrierEvent<A, D>>,
 ) -> Result<(), Violation> {
     for snapshot in [trace.before_request, trace.before_result]
         .into_iter()

@@ -1,17 +1,44 @@
 use super::*;
 use oer_ieee80211_port::conformance::{BarrierCase, BarrierEvent, BarrierTrace, HeldSnapshot};
 use oer_ieee80211_wire::qos::WmmAccessCategory;
-pub type Trace = BarrierTrace<Vec<BarrierEvent<ModelAck, ModelAirDenied>>, Vec<u8>, Vec<Vec<u8>>>;
+type Terminal = BarrierEvent<ModelAck, ModelAirDenied>;
+pub type Trace = BarrierTrace<Vec<Terminal>, Vec<u8>, Vec<Vec<u8>>, Terminal>;
 pub async fn barrier(
     case: BarrierCase,
     channel: Channel,
     rate: LegacyRate,
     clock: Rc<dyn Clock>,
 ) -> Result<Trace, &'static str> {
+    with_retry_limit(
+        case,
+        channel,
+        rate,
+        clock,
+        core::num::NonZeroU8::new(2).ok_or("retry budget")?,
+    )
+    .await
+}
+async fn with_retry_limit(
+    case: BarrierCase,
+    channel: Channel,
+    rate: LegacyRate,
+    clock: Rc<dyn Clock>,
+    retry_limit: core::num::NonZeroU8,
+) -> Result<Trace, &'static str> {
     let station = IndividualAddress::new([2, 0, 0, 0, 0, 1]).ok_or("model station")?;
     let ap = IndividualAddress::new([2, 0, 0, 0, 0, 2]).ok_or("model AP")?;
     let (backend, air) = ModelBackend::new(channel, [station, ap], clock);
-    match oer_radio_port::run_port(backend, Body { case, rate, air }).await {
+    match oer_radio_port::run_port(
+        backend,
+        Body {
+            case,
+            rate,
+            air,
+            retry_limit,
+        },
+    )
+    .await
+    {
         PortEnd::Uninstalled { output, .. } => output,
         _ => Err("model barrier uninstall"),
     }
@@ -20,6 +47,7 @@ struct Body {
     case: BarrierCase,
     rate: LegacyRate,
     air: Rc<ModelAir>,
+    retry_limit: core::num::NonZeroU8,
 }
 impl PortBody<ModelBackend> for Body {
     type Output = Result<Trace, &'static str>;
@@ -65,6 +93,7 @@ fn snapshot(phase: &ModelPhase<'_, '_>) -> HeldSnapshot {
 fn frame<'p, 'id: 'p>(
     phase: &ModelPhase<'p, 'id>,
     rate: LegacyRate,
+    transmissions: core::num::NonZeroU8,
 ) -> Result<TxFrame<'p, 'id, ModelCaps>, &'static str> {
     let peer = IndividualAddress::new([2, 0, 0, 0, 0, 9]).ok_or("model peer")?;
     let rate = phase
@@ -88,7 +117,7 @@ fn frame<'p, 'id: 'p>(
             .ok_or("model frame")?,
         plan: RetryPlan::new(RetryStage {
             rate,
-            transmissions: core::num::NonZeroU8::new(2).ok_or("retry budget")?,
+            transmissions,
             protection: Protection::None,
         }),
     })
@@ -113,11 +142,17 @@ async fn exercise<'p, 'id: 'p>(
         IndividualAddress::new([2, 0, 0, 0, 0, 9]).ok_or("model peer")?,
         Ccmp128Key::new(&[7; 16]),
     ));
-    body.air.answer(if body.case == BarrierCase::GateAck {
-        AirAnswer::Ack
+    if body.case == BarrierCase::GateRetry {
+        // This is an environment input, independent of either retry budget.
+        // The absent receiver never turns into an ACK after a finite script.
+        body.air.absent_peer.set(true);
     } else {
-        AirAnswer::NoResponse
-    });
+        body.air.answer(if body.case == BarrierCase::GateAck {
+            AirAnswer::Ack
+        } else {
+            AirAnswer::NoResponse
+        });
+    }
     body.air
         .hold_completion(WmmAccessCategory::BestEffort, true);
     let mut tickets = resources.tickets.into_iter();
@@ -130,7 +165,12 @@ async fn exercise<'p, 'id: 'p>(
         buffer.bytes_mut().fill(0);
         let source = TxSource::Fresh {
             buffer,
-            frame: ClassFrame::new(frame(phase, body.rate)?).map_err(|_| "model class")?,
+            frame: ClassFrame::new(frame(
+                phase,
+                body.rate,
+                core::num::NonZeroU8::new(2).ok_or("retry budget")?,
+            )?)
+            .map_err(|_| "model class")?,
             body: None,
             protection: TxProtection::Ccmp(NumberedKey {
                 key: key.as_ref().ok_or("model key")?,
@@ -231,10 +271,11 @@ async fn exercise<'p, 'id: 'p>(
     }
     let publications_at_barrier = body.air.sent().len();
     let mut retried_frames = Vec::new();
+    let mut retry_terminal = None;
     if body.case == BarrierCase::GateRetry {
         let _open = phase.open_gate(closed.ok_or("model closed gate")?);
         let (ticket, mpdu) = head.take().ok_or("model Sent head")?;
-        let TxFrame::Individual { plan, .. } = frame(phase, body.rate)? else {
+        let TxFrame::Individual { plan, .. } = frame(phase, body.rate, body.retry_limit)? else {
             return Err("model retry frame");
         };
         let source = <ModelTypes as TxBufferPool<ModelSmall>>::prepare::<Station, ModelCaps>(
@@ -266,7 +307,24 @@ async fn exercise<'p, 'id: 'p>(
                 .map_err(|_| "model retry poisoned")?
                 .map_err(|_| "model retry event lost")?
             {
-                LowerMacEvent::Terminal(LowerMacTerminal::TxCompleted(_)) => break,
+                LowerMacEvent::Terminal(LowerMacTerminal::TxCompleted(TxCompleted::Single(
+                    completed,
+                ))) => {
+                    let parts = completed.into_parts(&mut access);
+                    let (buffer, _) = parts.payload.into_parts();
+                    let state = match buffer {
+                        ModelAnyBuffer::SmallSent(_) | ModelAnyBuffer::LargeSent(_) => {
+                            MpduState::Sent
+                        }
+                        _ => MpduState::Fresh,
+                    };
+                    retry_terminal = Some(BarrierEvent::Tx {
+                        ticket: parts.ticket.index(),
+                        state,
+                        outcome: parts.outcome,
+                    });
+                    break;
+                }
                 LowerMacEvent::Received { frame, .. } => phase.recycle(frame),
                 _ => return Err("unexpected model retry event"),
             }
@@ -288,5 +346,57 @@ async fn exercise<'p, 'id: 'p>(
         events,
         first_frame,
         retried_frames,
+        retry_terminal,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use core::{
+        future::Future,
+        pin::pin,
+        task::{Context, Poll, Waker},
+    };
+
+    fn complete<F: Future>(future: F) -> F::Output {
+        let mut future = pin!(future);
+        let mut cx = Context::from_waker(Waker::noop());
+        for _ in 0..1000 {
+            if let Poll::Ready(output) = future.as_mut().poll(&mut cx) {
+                return output;
+            }
+        }
+        panic!("model fixture made no bounded progress")
+    }
+
+    #[test]
+    fn absent_peer_exhausts_the_supplied_plan_and_records_the_actual_retry_terminal() {
+        for budget in [1, 2, 3, 7] {
+            let trace = complete(with_retry_limit(
+                BarrierCase::GateRetry,
+                Channel::ghz2_4(6, ChannelWidth::Mhz20).expect("channel"),
+                LegacyRate::Ofdm6M,
+                Rc::new(oer_time_virtual::VirtualClock::<8>::new()),
+                core::num::NonZeroU8::new(budget).expect("nonzero retry budget"),
+            ))
+            .expect("actual model trace");
+            assert_eq!(trace.retried_frames.len(), usize::from(budget));
+            let Some(BarrierEvent::Tx {
+                ticket,
+                state: MpduState::Sent,
+                outcome: TxOutcome::Ended(SingleEnd::AckTimeout(air)),
+            }) = &trace.retry_terminal
+            else {
+                panic!("an absent receiver never supplies an ACK, including after reopening")
+            };
+            assert_eq!(*ticket, trace.tickets[0]);
+            assert_eq!(air.transmissions.get(), u16::from(budget));
+            assert_eq!(air.rate, PhyRate::Legacy(LegacyRate::Ofdm6M));
+            assert_eq!(
+                oer_ieee80211_port::conformance::verify_barrier(BarrierCase::GateRetry, trace),
+                Ok(())
+            );
+        }
+    }
 }

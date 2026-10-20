@@ -1,7 +1,8 @@
 use super::*;
 use alloc::{vec, vec::Vec};
 
-type TestBarrierTrace = BarrierTrace<Vec<BarrierEvent<(), ()>>, Vec<u8>, Vec<Vec<u8>>>;
+type TestBarrierTrace =
+    BarrierTrace<Vec<BarrierEvent<(), ()>>, Vec<u8>, Vec<Vec<u8>>, BarrierEvent<(), ()>>;
 
 fn retry_trace() -> TestBarrierTrace {
     let mut original = vec![0x5a; 40];
@@ -36,6 +37,7 @@ fn retry_trace() -> TestBarrierTrace {
         ],
         first_frame: original,
         retried_frames: vec![retry],
+        retry_terminal: None,
     }
 }
 

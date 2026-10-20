@@ -112,6 +112,56 @@ pub struct BarrierTrace {
     pub events: [Option<BarrierEvent>; 8],
     pub first_frame: Frame,
     pub retried_frames: [Option<Frame>; 4],
+    pub retry_terminal: Option<BarrierEvent>,
+}
+fn barrier_event<A, D>(event: &conformance::BarrierEvent<A, D>) -> BarrierEvent {
+    match event {
+        conformance::BarrierEvent::GateClosed => BarrierEvent::GateClosed,
+        conformance::BarrierEvent::KeyRemoved => BarrierEvent::KeyRemoved,
+        conformance::BarrierEvent::Tx {
+            ticket,
+            state,
+            outcome,
+        } => {
+            let (end, air, withdraw) = match outcome {
+                TxOutcome::Ended(SingleEnd::Delivered { air, response }) => (
+                    match response {
+                        SingleResponse::Ack(_) => End::Ack,
+                        SingleResponse::Unsolicited => End::Unsolicited,
+                        SingleResponse::BlockAck { .. } => End::BlockAck,
+                    },
+                    Some(*air),
+                    None,
+                ),
+                TxOutcome::Ended(SingleEnd::AckTimeout(air)) => (End::NoResponse, Some(*air), None),
+                TxOutcome::Ended(SingleEnd::CtsTimeout(air)) => (End::CtsTimeout, *air, None),
+                TxOutcome::Ended(SingleEnd::ContentionLimit(air)) => (End::Collision, *air, None),
+                TxOutcome::Ended(SingleEnd::AirDenied { air, .. }) => (End::AirDenied, *air, None),
+                TxOutcome::Withdrawn(cause) => (
+                    End::Withdrawn,
+                    None,
+                    Some(match cause {
+                        WithdrawCause::GateClosed => 0,
+                        WithdrawCause::KeyRemoved => 1,
+                        WithdrawCause::Disabled => 2,
+                    }),
+                ),
+                TxOutcome::Indeterminate(_) => (End::HardwareTimeout, None, None),
+                TxOutcome::Expired { .. } => (End::Expired, None, None),
+            };
+            BarrierEvent::Tx {
+                ticket: *ticket,
+                sent: *state == MpduState::Sent,
+                end,
+                withdraw,
+                transmissions: air.map_or(0, |air| air.transmissions.get()),
+                rate_kbps: air.and_then(|air| match air.rate {
+                    PhyRate::Legacy(rate) => Some(rate.kbps()),
+                    _ => None,
+                }),
+            }
+        }
+    }
 }
 pub fn barrier_trace<
     A,
@@ -120,7 +170,7 @@ pub fn barrier_trace<
     F: AsRef<[u8]>,
     R: AsRef<[F]>,
 >(
-    raw: &conformance::BarrierTrace<E, F, R>,
+    raw: &conformance::BarrierTrace<E, F, R, conformance::BarrierEvent<A, D>>,
 ) -> Option<BarrierTrace> {
     fn snapshot(raw: conformance::HeldSnapshot) -> Option<HeldSnapshot> {
         Some(HeldSnapshot {
@@ -130,59 +180,7 @@ pub fn barrier_trace<
     }
     let mut events = core::array::from_fn(|_| None);
     for (index, event) in raw.events.as_ref().iter().enumerate() {
-        *events.get_mut(index)? = Some(match event {
-            conformance::BarrierEvent::GateClosed => BarrierEvent::GateClosed,
-            conformance::BarrierEvent::KeyRemoved => BarrierEvent::KeyRemoved,
-            conformance::BarrierEvent::Tx {
-                ticket,
-                state,
-                outcome,
-            } => {
-                let (end, air, withdraw) = match outcome {
-                    TxOutcome::Ended(SingleEnd::Delivered { air, response }) => (
-                        match response {
-                            SingleResponse::Ack(_) => End::Ack,
-                            SingleResponse::Unsolicited => End::Unsolicited,
-                            SingleResponse::BlockAck { .. } => End::BlockAck,
-                        },
-                        Some(*air),
-                        None,
-                    ),
-                    TxOutcome::Ended(SingleEnd::AckTimeout(air)) => {
-                        (End::NoResponse, Some(*air), None)
-                    }
-                    TxOutcome::Ended(SingleEnd::CtsTimeout(air)) => (End::CtsTimeout, *air, None),
-                    TxOutcome::Ended(SingleEnd::ContentionLimit(air)) => {
-                        (End::Collision, *air, None)
-                    }
-                    TxOutcome::Ended(SingleEnd::AirDenied { air, .. }) => {
-                        (End::AirDenied, *air, None)
-                    }
-                    TxOutcome::Withdrawn(cause) => (
-                        End::Withdrawn,
-                        None,
-                        Some(match cause {
-                            WithdrawCause::GateClosed => 0,
-                            WithdrawCause::KeyRemoved => 1,
-                            WithdrawCause::Disabled => 2,
-                        }),
-                    ),
-                    TxOutcome::Indeterminate(_) => (End::HardwareTimeout, None, None),
-                    TxOutcome::Expired { .. } => (End::Expired, None, None),
-                };
-                BarrierEvent::Tx {
-                    ticket: *ticket,
-                    sent: *state == MpduState::Sent,
-                    end,
-                    withdraw,
-                    transmissions: air.map_or(0, |air| air.transmissions.get()),
-                    rate_kbps: air.and_then(|air| match air.rate {
-                        PhyRate::Legacy(rate) => Some(rate.kbps()),
-                        _ => None,
-                    }),
-                }
-            }
-        });
+        *events.get_mut(index)? = Some(barrier_event(event));
     }
     let mut retries = core::array::from_fn(|_| None);
     for (index, bytes) in raw.retried_frames.as_ref().iter().enumerate() {
@@ -196,6 +194,7 @@ pub fn barrier_trace<
         events,
         first_frame: frame(raw.first_frame.as_ref())?,
         retried_frames: retries,
+        retry_terminal: raw.retry_terminal.as_ref().map(barrier_event),
     })
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
@@ -346,6 +345,65 @@ mod tests {
         let fresh = outcome_trace(&trace(LegacyRate::Ofdm6M, MpduState::Fresh)).unwrap();
         assert!(!fresh.sent);
         assert_ne!(expected, fresh);
+    }
+
+    #[test]
+    fn barrier_projection_compares_retry_outcomes_even_with_equal_publications() {
+        let air = Air {
+            transmissions: NonZeroU16::new(2).unwrap(),
+            rate: PhyRate::Legacy(LegacyRate::Ofdm6M),
+        };
+        let mut raw = conformance::BarrierTrace {
+            tickets: [0, 1],
+            before_request: conformance::HeldSnapshot {
+                publications: 1,
+                events: 0,
+            },
+            before_result: conformance::HeldSnapshot {
+                publications: 1,
+                events: 0,
+            },
+            just_before_timeout: None,
+            publications_at_barrier: 1,
+            events: [conformance::BarrierEvent::<(), core::convert::Infallible>::GateClosed],
+            first_frame: [0; 40],
+            retried_frames: [[0; 40]; 2],
+            retry_terminal: Some(conformance::BarrierEvent::Tx {
+                ticket: 0,
+                state: MpduState::Sent,
+                outcome: TxOutcome::Ended(SingleEnd::AckTimeout(air)),
+            }),
+        };
+        let expected = barrier_trace(&raw).unwrap();
+        assert_eq!(
+            expected.retry_terminal,
+            Some(BarrierEvent::Tx {
+                ticket: 0,
+                sent: true,
+                end: End::NoResponse,
+                withdraw: None,
+                transmissions: 2,
+                rate_kbps: Some(6000),
+            })
+        );
+        if let Some(conformance::BarrierEvent::Tx { outcome, .. }) = &mut raw.retry_terminal {
+            *outcome = TxOutcome::Ended(SingleEnd::Delivered {
+                air,
+                response: SingleResponse::Ack(()),
+            });
+        }
+        let ack = barrier_trace(&raw).unwrap();
+        assert_eq!(expected.retried_frames, ack.retried_frames);
+        assert_ne!(
+            expected, ack,
+            "an ACK cannot masquerade as exhausted retries"
+        );
+        raw.retry_terminal = None;
+        assert_ne!(
+            expected,
+            barrier_trace(&raw).unwrap(),
+            "a discarded terminal is visible"
+        );
     }
 
     #[test]

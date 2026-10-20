@@ -4,7 +4,15 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use oer_hil_protocol::{FRAMING_VERSION, Key, Kind, MESSAGES_LOCK, MessageInfo, registry};
 
-const MODULES: [&str; 6] = ["base", "system", "network", "bluetooth", "telemetry", "phy"];
+const MODULES: [&str; 7] = [
+    "base",
+    "system",
+    "network",
+    "bluetooth",
+    "telemetry",
+    "phy",
+    "lower-mac",
+];
 
 #[test]
 fn no_two_messages_share_a_key_or_a_path() {
@@ -115,7 +123,10 @@ const SOURCES: &[(&str, &str)] = &[
     ("key.rs", include_str!("../src/key.rs")),
     ("lib.rs", include_str!("../src/lib.rs")),
     ("lower_mac/mod.rs", include_str!("../src/lower_mac/mod.rs")),
-    ("lower_mac/payload.rs", include_str!("../src/lower_mac/payload.rs")),
+    (
+        "lower_mac/payload.rs",
+        include_str!("../src/lower_mac/payload.rs"),
+    ),
     ("network/mod.rs", include_str!("../src/network/mod.rs")),
     (
         "network/session.rs",
@@ -162,7 +173,10 @@ fn referenced(path: &str) -> BTreeSet<&'static str> {
                 .chars()
                 .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
                 .collect();
-            if let Some(module) = MODULES.iter().find(|module| module.replace('-', "_") == name) {
+            if let Some(module) = MODULES
+                .iter()
+                .find(|module| module.replace('-', "_") == name)
+            {
                 modules.insert(*module);
             }
         }
@@ -246,6 +260,8 @@ fn lock() -> String {
 #[test]
 fn the_lock_is_the_registry() {
     let lock = lock();
-    assert_eq!(lock, MESSAGES_LOCK,
-        "review the printed wire change before replacing messages.lock");
+    assert_eq!(
+        lock, MESSAGES_LOCK,
+        "review the printed wire change before replacing messages.lock"
+    );
 }

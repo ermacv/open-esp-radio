@@ -1585,6 +1585,9 @@ pub struct ModelAir {
     /// The answers of the next transmissions, in order; once none is
     /// queued, each is acknowledged.
     answers: RefCell<VecDeque<AirAnswer>>,
+    /// Conformance air input: an absent peer supplies no response to any PPDU.
+    #[cfg(feature = "test-support")]
+    absent_peer: Cell<bool>,
     rx: RefCell<VecDeque<(Vec<u8>, ModelRxMeta)>>,
     rx_stream: RefCell<Option<(Vec<u8>, ModelRxMeta)>>,
     refuse_enable: Cell<bool>,
@@ -1621,6 +1624,8 @@ impl ModelAir {
         Self {
             sent: Default::default(),
             answers: Default::default(),
+            #[cfg(feature = "test-support")]
+            absent_peer: Cell::new(false),
             rx: Default::default(),
             rx_stream: Default::default(),
             refuse_enable: Default::default(),
@@ -2062,6 +2067,10 @@ impl ModelAir {
     }
 
     fn next_answer(&self, default: AirAnswer) -> AirAnswer {
+        #[cfg(feature = "test-support")]
+        if self.absent_peer.get() {
+            return AirAnswer::NoResponse;
+        }
         self.answers.borrow_mut().pop_front().unwrap_or(default)
     }
 
