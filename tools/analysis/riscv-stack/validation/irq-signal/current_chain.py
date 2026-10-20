@@ -110,6 +110,7 @@ def validate(args):
     assert sha(args.rom) == ROM_SHA256
     summaries = Path('chips/esp32s31/platform/rom-functions.toml')
     chip = Path('chips/esp32s31/platform/chip.toml')
+    stack_policy = Path('chips/esp32s31/platform/stack.toml')
     report = args.elf.parent / 'interrupt-stack.txt'
     streams = []
 
@@ -134,8 +135,8 @@ def validate(args):
     assert irq_context and all(c['hart'] == 0 and c['level'] == 3 for c in irq_context)
     handler = records('doorbell', call, '--image-facts', '--interrupt-contract', chip)
     root = records('irq-root', 0x2f00428e)
-    constructor = records('rx-poll', 0x5006bbca, '--symbolic-spills')
-    run = records('run', 0x5004db66, '--symbolic-spills')
+    constructor = records('rx-poll', 0x5006bb46, '--symbolic-spills')
+    run = records('run', 0x5004dae2, '--symbolic-spills')
     pend = records('pend-initializer-target', 0x2f003222)
 
     symbols = {r[4]: (int(r[1], 16), int(r[2])) for r in handler.rows if r[0] == 'symbol'}
@@ -144,10 +145,10 @@ def validate(args):
     arena, _ = symbols['oer_firmware_apps_w1::irq::RX_ARENA']
     assert (signal, signal_size, cell, cell_size, arena) == (0x2f007004, 36, 0x2f0174c0, 8, 0x2f017540)
     entry = one(r for r in handler.rows if r[0] == 'irq-entry' and r[1] == '2')
-    assert entry[2:] == ['0x500a5200', 'TableEntry { source: 68, level: 3, core: 0, handler: Some(788546190) }']
+    assert entry[2:] == ['0x500a5180', 'TableEntry { source: 68, level: 3, core: 0, handler: Some(788546190) }']
     root.instruction(0x2f004292, 'jalr zero, 846(t1)')
     assert root.at('transfer', 0x2f004292) == [[f'Some(ImageAddress {{ address: {int(handler.owner[0], 16)} }})']]
-    assert any(r[:3] == ['image-word', '0x500a5200', '0x2f00428e'] for r in handler.rows)
+    assert any(r[:3] == ['image-word', '0x500a5180', '0x2f00428e'] for r in handler.rows)
 
     # Follow expression identities actually consumed by the indirect call.
     load_specs = [
@@ -182,31 +183,50 @@ def validate(args):
 
     # Exact construction stores are proved computations, not cross-call memory
     # postconditions. The initializer is in writable data as well.
-    constructor.memory(0x5006c590, 'Store', f'Constant {{ value: {arena} }}', f'Some(Constant {{ value: {signal} }})')
-    constructor.memory(0x5006c592, 'Store', f'Constant {{ value: {arena + 4} }}', f'Some(Constant {{ value: {arena} }})')
-    for pc, delta, value in [(0x5006c5ee, 0x580, arena + 4),
-                             (0x5006c602, 0x590, arena + 0x2c0),
-                             (0x5006c606, 0x594, arena + 4),
-                             (0x5006c6f4, 0x15c, cell)]:
+    constructor.memory(0x5006c50c, 'Store', f'Constant {{ value: {arena} }}', f'Some(Constant {{ value: {signal} }})')
+    constructor.memory(0x5006c50e, 'Store', f'Constant {{ value: {arena + 4} }}', f'Some(Constant {{ value: {arena} }})')
+    for pc, delta, value in [(0x5006c56a, 0x580, arena + 4),
+                             (0x5006c57e, 0x590, arena + 0x2c0),
+                             (0x5006c582, 0x594, arena + 4),
+                             (0x5006c670, 0x15c, cell)]:
         access = one(constructor.at('memory', pc))
         assert access[:2] == ['Store', '4'] and access[3] == f'Some(Constant {{ value: {value} }})'
         constructor.add_entry(access[2], 10, delta)
 
     copies = []
-    for pc, length in [(0x5006c6ae, 68), (0x5006c6c0, 284), (0x5006bcc4, 640)]:
+    for pc, length in [(0x5006c62a, 68), (0x5006c63c, 284), (0x5006bc40, 640)]:
         inputs = constructor.inputs(pc)
         assert inputs[12] == f'Constant {{ value: {length} }}'
         assert constructor.at('transfer', pc) == [[f'Some(ImageAddress {{ address: {0x2f8004c4} }})']]
         copies.append(constructor.snapshot(pc))
-    constructor.add_entry(constructor.inputs(0x5006c6ae)[11], 10, 0x554)
-    assert constructor.inputs(0x5006c6ae)[10] == 'EntryStack { offset: -280 }'
-    constructor.add_entry(constructor.inputs(0x5006c6c0)[10], 10, 0x38)
-    assert constructor.inputs(0x5006c6c0)[11] == 'EntryStack { offset: -496 }'
-    constructor.add_entry(constructor.inputs(0x5006bcc4)[10], 10, 0x2b8)
-    constructor.add_entry(constructor.inputs(0x5006bcc4)[11], 10, 0x38)
+    constructor.add_entry(constructor.inputs(0x5006c62a)[11], 10, 0x554)
+    assert constructor.inputs(0x5006c62a)[10] == 'EntryStack { offset: -280 }'
+    constructor.add_entry(constructor.inputs(0x5006c63c)[10], 10, 0x38)
+    assert constructor.inputs(0x5006c63c)[11] == 'EntryStack { offset: -496 }'
+    constructor.add_entry(constructor.inputs(0x5006bc40)[10], 10, 0x2b8)
+    constructor.add_entry(constructor.inputs(0x5006bc40)[11], 10, 0x38)
     first_copy = capture('first-constructor-copy.tsv', 'stack-call-writes', args.elf, args.rom,
-                         summaries, '5006c6ae', '-236', '--word-offset', '44')
+                         summaries, '5006c62a', '-236', '--word-offset', '44', '--checked-stack-context')
     first_copy_rows = [line.split('\t') for line in first_copy.read_text().splitlines()]
+    stack_rows = [r for r in first_copy_rows if r[0].startswith('stack-') and r[0] != 'stack-facts']
+    setup = one(r[1] for r in stack_rows if r[0] == 'stack-setup')
+    assert 'pointer: 1343076800, scratch: 788591808' in setup
+    resumed = one(r[1] for r in stack_rows if r[0] == 'stack-resumed')
+    assert resumed.startswith('Some(StackContext')
+    assert 'basis: Installed { previous_coordinate: 0 }' in resumed
+    assert 'interval: (1343076800, 1343076800)' in resumed
+    checked_root = one(r for r in stack_rows if r[0] == 'stack-root')
+    assert checked_root[1] == 'runtime_main' and checked_root[2].startswith('Some(StackContext')
+    assert 'basis: Entry' in checked_root[2]
+    assert 'interval: (1343076800, 1343076800)' in checked_root[2]
+    incoming = [r for r in stack_rows if r[0] == 'stack-incoming' and r[3] == constructor.owner[0]]
+    assert {(r[1], r[2]) for r in incoming} == {('0x2f00337e', '0x2f003490'), ('0x50019a18', '0x50019c1c')}
+    assert all(r[4] == 'Some({TaskPolls})' for r in incoming)
+    assert any(r[0] == 'stack-context-open' and r[1] == '0x500654f6' and str(0x500659fc) in r[2] for r in stack_rows)
+    assert any(r[0] == 'stack-nesting' and r[1] == 'hart=0' and r[2] == 'bytes=None' for r in stack_rows)
+    assert any(r[:4] == ['stack-nesting-level', 'hart=0', 'level=1', 'bytes=Some(576)'] for r in stack_rows)
+    assert any(r[0] == 'stack-context-step' and r[1:3] == ['0x50019a18', '0x50019c1c'] and r[4] == 'sp=Some(EntryStack { offset: -80 })' for r in stack_rows)
+    assert ['stack-context-result', 'None'] in stack_rows
     assert ['context-preserves', 'false'] in first_copy_rows
     assert len([r for r in first_copy_rows if r[0] == 'context-call-write']) == 14
     word_rows = [r for r in first_copy_rows if r[0] == 'post-word']
@@ -220,8 +240,8 @@ def validate(args):
             assert required in row[2], (required, row)
     assert ['word-application', 'Err(DestinationBounds)'] in first_copy_rows
     instance = one(r for r in first_copy_rows if r[0] == 'word-instance')
-    assert instance[1:3] == ['0x5006bbca', '0x5006c6ae'] and instance[-1] == 'Some(DestinationBounds)'
-    assert f'destination: Base {{ base: Stack {{ function: {0x5006bbca}, offset: -280 }}, offset: 44 }}' in instance[3]
+    assert instance[1:3] == ['0x5006bb46', '0x5006c62a'] and instance[-1] == 'Some(DestinationBounds)'
+    assert f'destination: Base {{ base: Stack {{ function: {0x5006bb46}, offset: -280 }}, offset: 44 }}' in instance[3]
     assert 'source: Base { base: Argument(0), offset: 1408 }' in instance[3]
     event_rows = [r for r in first_copy_rows if r[0] == 'word-event']
     body_events = [r[2] for r in event_rows if r[1] == '0x2f80d260']
@@ -262,9 +282,9 @@ def validate(args):
     # The real initializer's reloads already have unknown values at their
     # definitions. Noninterference cannot create a captured pointer value.
     slots = []
-    for slot, definition, reload in [(-532, 0x5006bd74, 0x5006d1c2),
-                                     (-556, 0x5006c368, 0x5006d1c0),
-                                     (-524, 0x5006bd98, 0x5006d1aa)]:
+    for slot, definition, reload in [(-532, 0x5006bcf0, 0x5006d13e),
+                                     (-556, 0x5006c2e4, 0x5006d13c),
+                                     (-524, 0x5006bd14, 0x5006d126)]:
         address = f'EntryStack {{ offset: {slot} }}'
         constructor.memory(definition, 'Store', address, 'Some(Unknown)')
         constructor.memory(reload, 'Load', address, 'None')
@@ -272,22 +292,22 @@ def validate(args):
                       'reload': constructor.snapshot(reload),
                       'all_same_slot_accesses': [r[1:] for r in constructor.rows if r[0] == 'memory' and r[4] == address],
                       'status': 'unknown: definition contains no captured pointer; same-slot accesses are not an alias or reaching-definition proof'})
-    for pc, instruction in [(0x5006bd20, 'lw s9, 0(a0)'),
-                            (0x5006bd70, 'lw a0, 260(s9)'),
-                            (0x5006bd88, 'lw ra, 276(s9)'),
-                            (0x5006bd94, 'lw a0, 292(s9)')]:
+    for pc, instruction in [(0x5006bc9c, 'lw s9, 0(a0)'),
+                            (0x5006bcec, 'lw a0, 260(s9)'),
+                            (0x5006bd04, 'lw ra, 276(s9)'),
+                            (0x5006bd10, 'lw a0, 292(s9)')]:
         constructor.instruction(pc, instruction)
         constructor.memory(pc, 'Load', 'Unknown', 'None')
-    constructor.instruction(0x5006d1c4, 'sw a2, 0(a5)')
-    constructor.instruction(0x5006d1f6, 'sw a5, 0(s1)')
-    for pc in (0x5006d1c4, 0x5006d1f6):
+    constructor.instruction(0x5006d140, 'sw a2, 0(a5)')
+    constructor.instruction(0x5006d172, 'sw a5, 0(s1)')
+    for pc in (0x5006d140, 0x5006d172):
         write = one(constructor.at('write-event', pc))[0]
         assert 'address: Base { base: Unknown, offset: 0 }' in write
         assert 'value: Base { base: Unknown, offset: 0 }' in write
         assert 'occurrence: May, proof: ClosedGraph' in write
-    constructor.reached(0x5006c590, 0x5006c592, 0x5006d1c4, 0x5006d1f6)
+    constructor.reached(0x5006c50c, 0x5006c50e, 0x5006d140, 0x5006d172)
 
-    historical_call = 0x5004db66
+    historical_call = 0x5004dae2
     run.instruction(int(run.owner[0], 16), 'addi sp, sp, -256')
     assert run.inputs(historical_call)[12] == 'Constant { value: 20 }'
     assert run.at('transfer', historical_call) == [[f'Some(ImageAddress {{ address: {0x2f8004c4} }})']]
@@ -301,11 +321,26 @@ def validate(args):
     assert {r[1] for r in retained} == {'0x2f80d27a', '0x2f80d2c8', '0x2f80d338'}
 
     proof = {
-        'base': 'main ab2d9f96, including #199 through #205',
-        'inputs': {str(p): sha(p) for p in (args.elf, args.rom, report, summaries, chip)},
+        'base': 'main 2966eb81, including #207, #208, #206 and #212',
+        'inputs': {str(p): sha(p) for p in (args.elf, args.rom, report, summaries, chip, stack_policy)},
+        'checked_stack_sources': {str(p): sha(p) for p in map(Path, (
+            'tools/analysis/riscv-analysis/src/stack_context.rs',
+            'tools/analysis/riscv-analysis/src/writes/word.rs',
+            'tools/analysis/riscv-analysis/src/values.rs',
+            'tools/analysis/riscv-stack/examples/support/stack_context.rs',
+            'tools/analysis/riscv-stack/examples/support/mod.rs',
+            'tools/analysis/riscv-stack/examples/stack-call-writes.rs',
+            'tools/analysis/elf/src/lib.rs'))},
         'validation_sources': {p.name: sha(p) for p in (Path(__file__), Path(__file__).with_name('explain.py'))},
         'diagnostic_binaries': {name: sha(args.examples / name) for name in ('function-records', 'callback-audit', 'stack-call-writes')},
         'streams': {p.name: sha(p) for p in streams},
+        'checked_stack_context': {
+            'machine_setup': setup, 'root': checked_root, 'incoming_contexts': incoming,
+            'rows': stack_rows, 'result': 'unknown; no interval is supplied by the validator',
+            'blockers': ['CPU0 main: unknown indirect edge at 0x500659fc prevents an all-path interval; executor relative sp -80 is proved but supplies no numerical root',
+                         'IRQ: trap arrival sp/mscratch numerical context and nested nonwrapping propagation are unproved; partial bounds are not usable as numerical intervals'],
+            'assumption': 'ExecutorInvariant remains explicit on TaskPolls; it does not establish sp bounds',
+        },
         'irq_binding': {'table_entry': entry, 'context': irq_context, 'root': root.snapshot(0x2f004292), 'status': 'proved: immutable IRQ binding and direct tail to doorbell'},
         'handler_load_chain': [handler.snapshot(pc) for pc, *_ in load_specs],
         'indirect_call': handler.snapshot(call),
@@ -314,9 +349,9 @@ def validate(args):
         'callback_status': 'proved: nested load computations, unique reaching pend load and field type; unknown: concrete mutable objects and exact runtime target',
         'static_initializer': {'word': initializer, 'address_use': address_use, 'typed_storage': static_use,
                                'target_owner': pend.owner, 'status': 'proved ELF initializer; unknown runtime equality at this call'},
-        'constructor_stores': [constructor.snapshot(pc) for pc in (0x5006c590, 0x5006c592, 0x5006c5ee, 0x5006c602, 0x5006c606, 0x5006c6f4)],
+        'constructor_stores': [constructor.snapshot(pc) for pc in (0x5006c50c, 0x5006c50e, 0x5006c56a, 0x5006c57e, 0x5006c582, 0x5006c670)],
         'aggregate_copy_calls': copies,
-        'first_copy_effect_check': {'call': '0x5006c6ae', 'destination_word_coordinate': -236,
+        'first_copy_effect_check': {'call': '0x5006c62a', 'destination_word_coordinate': -236,
                                     'coordinate_meaning': 'copy destination + 44; not an existing captured spill',
                                     'context': one(r[1:] for r in first_copy_rows if r[0] == 'context'),
                                     'applied_effects': 14, 'preserves_word': False,
@@ -335,15 +370,15 @@ def validate(args):
             'line_slot': 'E+0x590 -> entry-sp-220 -> E+0x14c -> E+0x3cc = (E+0x2b8)+0x114',
             'cell': 'E+0x15c -> E+0x3dc = (E+0x2b8)+0x124',
             'E': 'rx-poll entry a0, a symbolic object base, not an exact runtime object address'},
-        'future_pointer_stores': [constructor.snapshot(pc) for pc in (0x5006bcd0, 0x5006bcd8)],
-        'constructor_pointer_loads': [constructor.snapshot(pc) for pc in (0x5006bd20, 0x5006bd70, 0x5006bd88, 0x5006bd94)],
+        'future_pointer_stores': [constructor.snapshot(pc) for pc in (0x5006bc4c, 0x5006bc54)],
+        'constructor_pointer_loads': [constructor.snapshot(pc) for pc in (0x5006bc9c, 0x5006bcec, 0x5006bd04, 0x5006bd10)],
         'actual_slots': slots,
-        'line_field_and_publication': [constructor.snapshot(pc) for pc in (0x5006d1c4, 0x5006d1f6)],
+        'line_field_and_publication': [constructor.snapshot(pc) for pc in (0x5006d140, 0x5006d172)],
         'source_only_connection': 'Arena::bind -> WifiIrqLineParts::install -> RX_LINE -> handler; equality of the published objects is not proved by machine analysis',
         'first_barrier': {'pc': '0x2f00369e', 'missing': 'all-path reaching mutable-memory definition equating *(RX_LINE) with the initialized WifiIrqLine object',
                           'existing_mechanisms': 'common values/FunctionIndex and FunctionWrites/CallWrites; target producer and callback field discovery already work',
-                          'constructor_prerequisite': '0x5006d1f6 has neither a proved RX_LINE address nor a concrete line pointer; real spill definitions are already unknown',
-                          'first_copy_prerequisite': '0x5006c6ae: conditional four-byte provenance exists, but the numerical destination bound is not proved for entry-sp-280',
+                          'constructor_prerequisite': '0x5006d172 has neither a proved RX_LINE address nor a concrete line pointer; real spill definitions are already unknown',
+                          'first_copy_prerequisite': '0x5006c62a: conditional four-byte provenance exists, but the numerical destination bound is not proved for entry-sp-280',
                           'next_change': 'derive a numerical stack/address interval from existing checked machine context before applying the conditional word postcondition; source equality, larger copies and publication remain separate obligations'},
         'short_copy_check': {'call': run.snapshot(historical_call), 'frame_bytes': 256, 'historical_slot': -600, 'slot_accesses': [],
                              'contextual_retained_effects': retained,

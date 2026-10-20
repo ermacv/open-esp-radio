@@ -11,6 +11,11 @@ pub enum CodeAddressSpace {
 /// Immutable load bytes in the selected image's virtual address space. The
 /// caller owns the borrowed view. Mutable, unmapped and ambiguous bytes are unknown.
 pub trait ImageMemory {
+    /// Identity of the immutable captured image, when available. This is a
+    /// freshness scope, not a source of address bounds or memory semantics.
+    fn capture_id(&self) -> Option<u64> {
+        None
+    }
     fn read_constant(
         &self,
         address: u32,
@@ -155,6 +160,10 @@ pub trait FunctionDecoder {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
 pub enum FunctionRecord {
+    ImageContext {
+        capture_id: u64,
+        extent: CodeRange,
+    },
     /// Boxed so a supplementary proof does not enlarge every ordinary record.
     AlignedValue {
         fact: Box<AlignedValue>,
@@ -193,6 +202,12 @@ pub enum FunctionRecord {
     /// record. Its architectural write is a separate `Value` fact and must
     /// precede callee-entry substitution.
     CallInputs {
+        offset: u64,
+        registers: Vec<AbstractValue>,
+    },
+    /// Canonical register state at a normal return. In particular, this
+    /// records the machine-established sp of a stack-installation routine.
+    ReturnInputs {
         offset: u64,
         registers: Vec<AbstractValue>,
     },

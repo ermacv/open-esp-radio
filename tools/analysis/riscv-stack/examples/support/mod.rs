@@ -28,6 +28,60 @@ pub fn capture<'m>(
     )
 }
 
+/// Recheck a machine-proved external terminal using the ordinary CFG builder.
+#[allow(dead_code)] // Shared support; only the context diagnostic needs this profile.
+pub fn capture_context<'m>(
+    image: &ImageFacts<'_>,
+    function: &oer_analysis_elf::Function,
+    memory: &'m WorkingMemory,
+    call_behavior: &dyn CallBehavior,
+    control: &mut dyn RunControl,
+) -> Result<RecordBuffer<'m>> {
+    let options = oer_analysis_riscv_analysis::ResearchOptions {
+        abi: Some(CallAbi::RiscvInteger),
+        ..Default::default()
+    };
+    let mut initial = Saved(RecordBuffer::new(memory));
+    oer_analysis_riscv_stack::inspect_stack_context(
+        image,
+        function,
+        call_behavior,
+        options,
+        &[],
+        memory,
+        control,
+        &mut initial,
+    )?;
+    let before = initial.0;
+    let extent = CodeRange {
+        start: function.address.into(),
+        length: function.size.into(),
+    };
+    let Some((site, target)) =
+        oer_analysis_riscv_analysis::stack_context::external_terminal(&before, extent, control)?
+    else {
+        return Ok(before);
+    };
+    let mut saved = Saved(RecordBuffer::new(memory));
+    oer_analysis_riscv_stack::inspect_stack_context(
+        image,
+        function,
+        call_behavior,
+        oer_analysis_riscv_analysis::ResearchOptions {
+            abi: Some(CallAbi::RiscvInteger),
+            ..Default::default()
+        },
+        &[oer_analysis_riscv_analysis::KnownJump {
+            site,
+            targets: vec![target],
+        }],
+        memory,
+        control,
+        &mut saved,
+    )?;
+    Ok(saved.0)
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn capture_with_calls<'m>(
     image: &ImageFacts<'_>,
@@ -47,6 +101,7 @@ pub fn capture_with_calls<'m>(
             abi: Some(CallAbi::RiscvInteger),
             symbolic_spills,
             stack_calls,
+            stack_context: None,
         },
         memory,
         control,

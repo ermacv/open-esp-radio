@@ -14,7 +14,8 @@ pub use context::{
 };
 pub use word::{
     CallWord, WordBarrier, WordContents, WordEvent, WordEventKind, WordInstance, WordPostcondition,
-    WordQuery, call_word, contextual_word_function_writes, instantiate_word,
+    WordQuery, call_word, call_word_with_stack, contextual_word_function_writes, instantiate_word,
+    instantiate_word_with_stack,
 };
 
 /// A machine-proved, state-preserving tail transfer. Composition is bounded
@@ -960,6 +961,8 @@ pub struct StackCalls<'m> {
     entry: u64,
     calls: AdmittedVec<'m, StackCall<'m>>,
     words: AdmittedVec<'m, (u64, CallWord)>,
+    context: Option<u64>,
+    code: AdmittedVec<'m, (u64, u8)>,
 }
 impl std::fmt::Debug for StackCalls<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -977,12 +980,43 @@ struct StackCall<'m> {
     writes: CallWrites<'m>,
 }
 impl StackCalls<'_> {
+    pub(crate) fn current_context(
+        &self,
+        input: &crate::FunctionInput<'_>,
+        context: Option<&crate::stack_context::StackContext<'_>>,
+        c: &mut dyn RunControl,
+    ) -> Result<bool> {
+        let Some(expected) = self.context else {
+            return Ok(true);
+        };
+        if context.map(crate::stack_context::StackContext::id) != Some(expected)
+            || context.is_none_or(|context| !context.matches_image(input.image))
+            || input.extent.start != self.entry
+            || self.code.len() != input.bytes.len()
+        {
+            return Ok(false);
+        }
+        for &(address, byte) in self.code.iter() {
+            c.checkpoint(1)?;
+            let Some(offset) = address
+                .checked_sub(input.extent.start)
+                .and_then(|n| usize::try_from(n).ok())
+            else {
+                return Ok(false);
+            };
+            if input.bytes.get(offset) != Some(&byte) {
+                return Ok(false);
+            }
+        }
+        Ok(true)
+    }
     pub(crate) fn word(
         &self,
         entry: u64,
         site: u64,
         target: &AbstractValue,
         arguments: &[WriteValue; 8],
+        context: Option<&crate::stack_context::StackContext<'_>>,
         c: &mut dyn RunControl,
     ) -> Result<Option<CallWord>> {
         if entry != self.entry {
@@ -991,6 +1025,9 @@ impl StackCalls<'_> {
         for (at, word) in self.words.iter() {
             c.checkpoint(1)?;
             if *at == site
+                && word.stack_context.is_none_or(|id| {
+                    context.is_some_and(|live| live.id() == id && live.owner() == entry)
+                })
                 && matches!(target, AbstractValue::ImageAddress { address } if u64::from(*address) == word.callee)
                 && word
                     .arguments
@@ -1045,11 +1082,37 @@ pub fn stack_calls<'m>(
     memory: &'m WorkingMemory,
     c: &mut dyn RunControl,
 ) -> Result<StackCalls<'m>> {
+    stack_calls_with_stack(caller, entry, abi, summaries, None, memory, c)
+}
+
+pub fn stack_calls_with_stack<'m>(
+    caller: &FunctionIndex<'_, '_>,
+    entry: u64,
+    abi: Option<CallAbi>,
+    summaries: &[&FunctionWrites<'_>],
+    context: Option<&crate::stack_context::StackContext<'_>>,
+    memory: &'m WorkingMemory,
+    c: &mut dyn RunControl,
+) -> Result<StackCalls<'m>> {
     let mut out = StackCalls {
         entry,
         calls: AdmittedVec::new(memory),
         words: AdmittedVec::new(memory),
+        context: context.map(crate::stack_context::StackContext::id),
+        code: AdmittedVec::new(memory),
     };
+    if context.is_some() {
+        for record in caller.records() {
+            c.checkpoint(1)?;
+            if let FunctionRecord::Instruction { offset, bytes, .. } = record {
+                for (delta, byte) in bytes.iter().enumerate() {
+                    c.checkpoint(1)?;
+                    out.code
+                        .push((offset + delta as u64, *byte), c.position())?;
+                }
+            }
+        }
+    }
     for record in caller.records() {
         c.checkpoint(1)?;
         let FunctionRecord::Transfer {
@@ -1062,7 +1125,8 @@ pub fn stack_calls<'m>(
         };
         if let AbstractValue::ImageAddress { address } = target
             && let Some(summary) = find_summary(Some(u64::from(*address)), summaries, c)?
-            && let Ok(word) = call_word(caller, entry, *site, abi, summary, memory, c)?
+            && let Ok(word) =
+                call_word_with_stack(caller, entry, *site, abi, summary, context, memory, c)?
         {
             out.words.push((*site, word), c.position())?;
         }

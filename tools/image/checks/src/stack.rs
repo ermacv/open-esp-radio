@@ -29,8 +29,7 @@ use oer_analysis_riscv_model::{Ledger, RunControl, WorkingMemory};
 use oer_analysis_riscv_program::facts::ImageFacts;
 use oer_analysis_riscv_stack::{
     Analysis, Bound, DebugMetadata, Dwarf, Function, Reason, Resolutions, Summary, analyze,
-    audit_function_addresses, function_pointer_resolutions, parse_summaries, read_debug,
-    stack_sizes, taken_addresses, task_poll_resolutions, waker_resolutions, waker_vtables,
+    image_resolutions, parse_summaries, read_debug, stack_sizes, taken_addresses,
 };
 
 use crate::stack::budget::{Budget, MEMORY_LIMIT, TIMEOUT, Usage, WORK_UNITS};
@@ -193,16 +192,8 @@ impl Image {
                 keep.insert(&mut names, function.address, name, &mut control)?;
             }
         }
-        let vtables = waker_vtables(&facts, &dwarf, &analysis, &mut keep, &mut control)?;
-        let mut resolutions =
-            waker_resolutions(&analysis, &dwarf, &vtables, &mut keep, &mut control)?;
-        // Global callback fields use the common per-address storage audit.
-        // Unknown uses keep candidates despite incompatible declarations.
         let taken = taken_addresses(&facts, &mut keep, &mut control)?;
-        let audit = audit_function_addresses(&facts, &analysis, &types, &mut keep, &mut control)?;
-        let pointers = function_pointer_resolutions(&audit, &mut keep, &mut control)?;
-        // The executor reaches each task's poll through its header.
-        resolutions.extend(task_poll_resolutions(
+        let mut resolutions = image_resolutions(
             &facts,
             &analysis,
             &dwarf,
@@ -212,8 +203,7 @@ impl Image {
                 .map(|(&address, name)| (address, name.as_str())),
             &mut keep,
             &mut control,
-        )?);
-        drop(audit);
+        )?;
         drop(types);
         let stack_sizes = stack_sizes(&facts, &mut keep, &mut control)?;
         drop(companions);
@@ -230,7 +220,6 @@ impl Image {
             usage: Usage::default(),
         };
         resolutions.extend(image.ipc_resolutions(&taken, &mut keep, &mut control)?);
-        resolutions.extend(pointers);
         image.usage = Usage {
             memory_bytes: memory.peak(),
             work_units: control.used(),
@@ -277,30 +266,19 @@ impl Image {
         }
     }
 
-    /// The capacity of `storage` in bytes, or `None` when the image links
+    /// The linked bounds of `storage`, or `None` when the image links
     /// none of its symbols.
-    fn capacity(&self, storage: Storage<'_>) -> Result<Option<u64>> {
+    pub fn storage(&self, storage: Storage<'_>) -> Result<Option<oer_analysis_elf::StorageBounds>> {
         let file = oer_analysis_elf::Elf::parse(&self.elf)?;
-        let defined = |name: &str| file.symbol(name);
-        let address = |name: &str| file.address(name);
-        match storage {
-            Storage::Symbol(name) => match defined(name) {
-                None => Ok(None),
-                Some(symbol) if symbol.size == 0 => {
-                    Err(format!("the stack storage `{name}` has no size").into())
-                }
-                Some(symbol) => Ok(Some(symbol.size)),
-            },
-            Storage::Range { bottom, top } => match (address(bottom), address(top)) {
-                (None, None) => Ok(None),
-                (Some(low), Some(high)) if high > low => Ok(Some(high - low)),
-                (Some(low), Some(high)) => Err(format!(
-                    "the stack `{bottom}`..`{top}` is empty or grows up: {low:#x}..{high:#x}"
-                )
-                .into()),
-                _ => Err(format!("the image links only one of `{bottom}` and `{top}`").into()),
-            },
-        }
+        let bounds = match storage {
+            Storage::Symbol(name) => oer_analysis_elf::StorageBounds::symbol(&file, name)?,
+            Storage::Range { bottom, top } => {
+                oer_analysis_elf::StorageBounds::range(&file, bottom, top)?
+            }
+        };
+        Ok(bounds
+            .map(oer_analysis_elf::StorageBounds::nonempty)
+            .transpose()?)
     }
 
     /// The targets of the IPC dispatch's call of the posted callback: the
@@ -312,38 +290,24 @@ impl Image {
         keep: &mut Ledger<'_>,
         control: &mut dyn RunControl,
     ) -> Result<Resolutions> {
-        let mut resolutions = Resolutions::new();
+        let resolutions = Resolutions::new();
         let Some(contract) = &self.contract else {
             return Ok(resolutions);
         };
         let Some(ipc) = &contract.interrupts.ipc else {
             return Ok(resolutions);
         };
-        let mut targets = BTreeSet::new();
-        for post in self.address_of(&ipc.post) {
-            if taken.contains(&post) {
-                return Err(format!("`{}` is called through a pointer", ipc.post).into());
-            }
-            targets.extend(
-                self.analysis
-                    .constant_arguments(post, ipc.post_handler_argument)?,
-            );
-        }
-        for dispatch in &ipc.dispatch {
-            for function in self.address_of(dispatch) {
-                for transfer in &self.analysis.functions[&function].transfers {
-                    if transfer.target.is_none() {
-                        keep.admit(Resolutions::admission(targets.len()), control)?;
-                        resolutions.add(
-                            transfer.site,
-                            oer_analysis_riscv_stack::Fact::IpcPosts,
-                            targets.iter().copied(),
-                        );
-                    }
-                }
-            }
-        }
-        Ok(resolutions)
+        Ok(oer_analysis_riscv_stack::ipc_resolutions(
+            &self.analysis,
+            taken,
+            self.address_of(&ipc.post),
+            ipc.post_handler_argument,
+            ipc.dispatch
+                .iter()
+                .flat_map(|dispatch| self.address_of(dispatch)),
+            keep,
+            control,
+        )?)
     }
 }
 
@@ -387,7 +351,7 @@ impl StackAudit {
                 Storage::Symbol(symbol) => format!("`{symbol}`"),
                 Storage::Range { bottom, top } => format!("`{bottom}`..`{top}`"),
             };
-            let Some(capacity) = image.capacity(stack.storage())? else {
+            let Some(storage_bounds) = image.storage(stack.storage())? else {
                 return Err(format!("the image links no {name} ({storage})").into());
             };
             let root = image.symbol(&stack.root).ok_or_else(|| {
@@ -413,7 +377,7 @@ impl StackAudit {
                 root: stack.root.clone(),
                 storage,
                 minimum_free_bytes: u64::from(stack.minimum_free_bytes),
-                linked: (capacity, walked),
+                linked: (storage_bounds.capacity, walked),
                 path,
                 unresolved,
             });

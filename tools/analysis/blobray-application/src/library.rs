@@ -39,7 +39,9 @@ impl AnalyzedFunction<'_> {
                 continue;
             };
             let cause = match reason {
-                SemanticGapReason::UnsupportedInstruction => &mut causes.decoding,
+                SemanticGapReason::UnsupportedInstruction | SemanticGapReason::WaitMemory => {
+                    &mut causes.decoding
+                }
                 SemanticGapReason::UnexpandedControlFlow
                 | SemanticGapReason::ConflictingBoundary => &mut causes.control_flow,
                 SemanticGapReason::UnresolvedRelocation => &mut causes.references,

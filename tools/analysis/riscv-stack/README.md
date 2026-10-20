@@ -1,5 +1,10 @@
 # RV32 stack bounds
 
+The opt-in [stack-address context](validation/irq-signal/stack-context.md)
+connects canonical machine setup and call inputs to numerical word-proof
+premises. It is scoped to an image capture and invocation; placement or a
+partial stack budget alone never establishes a current-SP interval.
+
 `oer-analysis-riscv-stack` computes worst-case stack bounds of a static RV32 image from
 its machine code, over the program model of
 [`oer-analysis-riscv-program`](../riscv-program/README.md),

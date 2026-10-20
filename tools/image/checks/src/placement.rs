@@ -73,8 +73,9 @@ pub fn audit(contract: &Contract<'_>, elf: &Path, binary: Option<&Path>) -> Resu
     }
     for rule in &placement.range {
         let [start_name, end_name] = &rule.range;
-        let start = symbol(start_name)?;
-        let end = symbol(end_name)?;
+        let bounds = oer_analysis_elf::StorageBounds::range(&elf, start_name, end_name)?
+            .ok_or_else(|| format!("the ELF lacks `{start_name}`..`{end_name}`"))?;
+        let (start, end) = (bounds.start, bounds.end);
         if !region(&rule.region)?.contains_range(start, end) {
             violations.push(format!(
                 "`{start_name}`..`{end_name}` ({start:#010x}..{end:#010x}) is not in {}",
@@ -82,11 +83,11 @@ pub fn audit(contract: &Contract<'_>, elf: &Path, binary: Option<&Path>) -> Resu
             ));
         }
         if let Some(bytes) = rule.bytes
-            && end.saturating_sub(start) != bytes
+            && bounds.capacity != bytes
         {
             violations.push(format!(
                 "`{start_name}`..`{end_name}` holds {} bytes, not {bytes}",
-                end.saturating_sub(start)
+                bounds.capacity
             ));
         }
         report.push_str(&format!(

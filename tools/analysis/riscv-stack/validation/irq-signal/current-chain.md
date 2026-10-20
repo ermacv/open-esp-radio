@@ -1,5 +1,11 @@
 # Current w1 doorbell to IrqSignal.pend
 
+Current machine evidence is based on main `2966eb81` (#207 and #208).
+See the [stack-context report](stack-context.md): the constructor copy is now
+`0x5006c62a`; its actual application still returns `DestinationBounds`.
+The earlier investigation below is historical; the regenerated JSON carries
+the current PCs, machine setup, both execution contexts and exact gaps.
+
 The machine chain below is the #199 investigation. The subsequent
 [one-word copy report](word-copy.md) documents the new conditional certificate
 and the numerical bound that still prevents its application. The regenerated

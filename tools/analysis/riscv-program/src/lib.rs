@@ -17,6 +17,7 @@ const PF_X: u32 = 1;
 /// (`NOBITS`) is no memory, so it may overlap code.
 pub struct ProgramView<'a> {
     bytes: &'a [u8],
+    capture_id: u64,
     /// Loaded sections, by address; none overlaps another.
     regions: Vec<Region>,
     _capacity: MemoryReservation<'a>,
@@ -207,6 +208,7 @@ impl<'a> ProgramView<'a> {
         }
         Ok(Self {
             bytes,
+            capture_id: file.capture_id(),
             regions,
             _capacity: capacity,
         })
@@ -242,6 +244,9 @@ impl<'a> ProgramView<'a> {
     }
 }
 impl ImageMemory for ProgramView<'_> {
+    fn capture_id(&self) -> Option<u64> {
+        Some(self.capture_id)
+    }
     fn read_constant(
         &self,
         address: u32,

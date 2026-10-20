@@ -189,6 +189,7 @@ struct Relocation {
 #[derive(Clone, Copy)]
 struct Operation {
     op: SemanticOp,
+    interrupt_wait: bool,
     opaque_call: bool,
     /// The function a call reaches, where its instruction or relocation
     /// names it.
@@ -224,6 +225,8 @@ fn prepare(
     validate(op)?;
     let mut result = Operation {
         op,
+        interrupt_wait: isa
+            .interrupt_wait(&input.bytes[start..start + node.decoded.length as usize]),
         opaque_call: matches!(
             node.decoded.flow,
             InstructionFlow::Jump { link: true, .. } | InstructionFlow::Indirect { link: true, .. }
@@ -682,6 +685,10 @@ fn transfer(
             effects.register = Some((0, Value::Constant(0)));
         }
     }
+    if operation.interrupt_wait {
+        state.slots = [None; SLOTS];
+        effects.gap = Some(SemanticGapReason::WaitMemory);
+    }
     if operation.opaque_call {
         state = unknown_state();
         effects.gap = Some(SemanticGapReason::OpaqueCall);
@@ -871,6 +878,7 @@ pub(super) fn analyze(
         None,
         false,
         None,
+        None,
         &mut AdmittedVec::new(memory),
         edges
             .iter()
@@ -891,6 +899,7 @@ pub(super) fn analyze_with<'m>(
     abi: Option<CallAbi>,
     symbolic_spills: bool,
     stack_calls: Option<&writes::StackCalls<'_>>,
+    stack_context: Option<&crate::stack_context::StackContext<'_>>,
     noreturn: &mut AdmittedVec<'_, u64>,
     closed_graph: bool,
     context: Option<&mut writes::context::ContextRun<'_, 'm>>,
@@ -922,7 +931,13 @@ pub(super) fn analyze_with<'m>(
     // Saved call proofs require all incoming paths to be modeled again in
     // this run. Reuse the current graph's shared closure result, including
     // decode gaps, before either fixed-point or emission-time application.
-    symbols.stack_calls = stack_calls.filter(|_| closed_graph);
+    symbols.stack_calls = match stack_calls {
+        Some(calls) if closed_graph && calls.current_context(input, stack_context, control)? => {
+            Some(calls)
+        }
+        _ => None,
+    };
+    symbols.stack_context = stack_context;
     let mut states = reserve_vec::<Option<State>>(nodes.len())?;
     states.resize(nodes.len(), None);
     let mut queued = reserve_vec::<bool>(nodes.len())?;
@@ -1191,6 +1206,16 @@ pub(super) fn analyze_with<'m>(
             }
             if matches!(node.decoded.flow, InstructionFlow::Return { .. }) {
                 sink.record(
+                    &FunctionRecord::ReturnInputs {
+                        offset: node.offset,
+                        registers: state
+                            .iter()
+                            .map(|v| public(*v, input, &symbols.sets))
+                            .collect(),
+                    },
+                    control,
+                )?;
+                sink.record(
                     &FunctionRecord::ReturnValue {
                         offset: node.offset,
                         low: public(state[10], input, &symbols.sets),
@@ -1383,6 +1408,7 @@ pub(super) fn analyze_with<'m>(
 
 struct Symbols<'a> {
     stack_calls: Option<&'a writes::StackCalls<'a>>,
+    stack_context: Option<&'a crate::stack_context::StackContext<'a>>,
     symbolic_spills: bool,
     memory_words: bool,
     word_range: Option<word::Range>,
@@ -1410,6 +1436,7 @@ impl<'a> Symbols<'a> {
             memory_words: false,
             word_range: None,
             stack_calls: None,
+            stack_context: None,
             sets: Sets::new(memory),
             records: AdmittedVec::new(memory),
             slots: AdmittedVec::new(memory),
@@ -1833,9 +1860,14 @@ fn evaluate(
             for (word, argument) in arguments.iter_mut().enumerate() {
                 *argument = symbols.word_value(incoming[word + 10], input.extent.start, c)?;
             }
-            if let Some(word) =
-                calls.word(input.extent.start, node.offset, &target, &arguments, c)?
-            {
+            if let Some(word) = calls.word(
+                input.extent.start,
+                node.offset,
+                &target,
+                &arguments,
+                symbols.stack_context,
+                c,
+            )? {
                 let source = symbols.import_word_value(
                     word.contents.source,
                     input.extent.start,
@@ -1870,6 +1902,7 @@ fn evaluate(
                                 store: word.contents.store,
                                 store_order: word.contents.store_order,
                                 width: word.contents.width,
+                                stack_assumption: word.stack_assumption,
                                 source: public(source, input, &symbols.sets),
                             },
                             c,
@@ -2433,6 +2466,7 @@ mod tests {
                 None,
                 false,
                 None,
+                None,
                 &mut AdmittedVec::new(&memory),
                 edges
                     .iter()
@@ -2553,6 +2587,7 @@ mod tests {
                         swap: false,
                         signed: false,
                     },
+                    interrupt_wait: false,
                     opaque_call: false,
                     callee: None,
                     relocation: None,
@@ -2640,6 +2675,7 @@ mod tests {
         let (out, effects) = transfer(
             Operation {
                 op: SemanticOp::Link { dest: 1 },
+                interrupt_wait: false,
                 opaque_call: true,
                 callee: None,
                 relocation: None,
@@ -2658,6 +2694,7 @@ mod tests {
         let (out, effects) = transfer(
             Operation {
                 op: read(10),
+                interrupt_wait: false,
                 opaque_call: false,
                 callee: None,
                 relocation: None,
@@ -2777,6 +2814,7 @@ mod tests {
         incoming[5] = Value::Constant(42);
         let operation = Operation {
             op: SemanticOp::Link { dest: 1 },
+            interrupt_wait: false,
             opaque_call: true,
             callee: None,
             relocation: None,
@@ -2943,6 +2981,7 @@ mod tests {
             true,
             None,
             false,
+            None,
             None,
             &mut AdmittedVec::new(&memory),
             edges

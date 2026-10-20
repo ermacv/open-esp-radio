@@ -102,7 +102,9 @@ pub struct CallWord {
     pub site: u64,
     pub callee: u64,
     pub contents: WordContents,
+    pub stack_assumption: Option<Assumption>,
     pub(crate) arguments: [Option<WriteValue>; 8],
+    pub(crate) stack_context: Option<u64>,
 }
 
 /// Argument substitution is visible even when a premise is missing. Only
@@ -143,8 +145,22 @@ pub fn call_word(
     memory: &WorkingMemory,
     c: &mut dyn RunControl,
 ) -> Result<std::result::Result<CallWord, WordBarrier>> {
+    call_word_with_stack(caller, entry, site, abi, summary, None, memory, c)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn call_word_with_stack(
+    caller: &FunctionIndex<'_, '_>,
+    entry: u64,
+    site: u64,
+    abi: Option<CallAbi>,
+    summary: &FunctionWrites<'_>,
+    stack: Option<&crate::stack_context::StackContext<'_>>,
+    memory: &WorkingMemory,
+    c: &mut dyn RunControl,
+) -> Result<std::result::Result<CallWord, WordBarrier>> {
     Ok(
-        instantiate_word(caller, entry, site, abi, summary, memory, c)?
+        instantiate_word_with_stack(caller, entry, site, abi, summary, stack, memory, c)?
             .and_then(WordInstance::into_checked),
     )
 }
@@ -156,6 +172,20 @@ pub fn instantiate_word(
     site: u64,
     abi: Option<CallAbi>,
     summary: &FunctionWrites<'_>,
+    memory: &WorkingMemory,
+    c: &mut dyn RunControl,
+) -> Result<std::result::Result<WordInstance, WordBarrier>> {
+    instantiate_word_with_stack(caller, entry, site, abi, summary, None, memory, c)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn instantiate_word_with_stack(
+    caller: &FunctionIndex<'_, '_>,
+    entry: u64,
+    site: u64,
+    abi: Option<CallAbi>,
+    summary: &FunctionWrites<'_>,
+    stack_context: Option<&crate::stack_context::StackContext<'_>>,
     memory: &WorkingMemory,
     c: &mut dyn RunControl,
 ) -> Result<std::result::Result<WordInstance, WordBarrier>> {
@@ -210,13 +240,23 @@ pub fn instantiate_word(
         }
         _ => false,
     };
-    // The selected ABI's stack alignment is 16. No numerical bounds follow.
+    let checked_stack = match stack_context {
+        Some(context) if context.valid_for(caller, entry, site, c)? => {
+            context.bounds(entry, site, destination)
+        }
+        _ => None,
+    };
+    let aligned = aligned
+        && checked_stack.is_none_or(|_| {
+            stack_context.is_some_and(|context| context.aligned(entry, site, destination))
+        });
     let barrier = if !aligned {
         Some(WordBarrier::Alignment)
     } else if proof.needs_bounds
         && !destination
             .constant()
             .is_some_and(|v| v <= u32::MAX - proof.extent)
+        && !checked_stack.is_some_and(|(_, high)| high <= u32::MAX - proof.extent)
     {
         Some(WordBarrier::DestinationBounds)
     } else {
@@ -246,6 +286,14 @@ pub fn instantiate_word(
                 ..proof.contents
             },
             arguments: required,
+            stack_context: (proof.needs_bounds && destination.constant().is_none())
+                .then(|| stack_context.map(crate::stack_context::StackContext::id))
+                .flatten(),
+            stack_assumption: if checked_stack.is_some() {
+                stack_context.and_then(|context| context.assumptions().first().copied())
+            } else {
+                None
+            },
         },
         barrier,
     }))

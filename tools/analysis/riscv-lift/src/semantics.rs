@@ -1,6 +1,20 @@
 //! RV32 instruction lifting. Compressed forms are expanded by the pinned decoder.
 use super::*;
 impl FunctionSemantics for RiscvDecoder {
+    fn scratch_write(&self, bytes: &[u8]) -> Option<Operand> {
+        match decode_instruction(bytes)?.0 {
+            Instruction::Extension(Extension::Csr {
+                csr: 0x340,
+                op: oer_analysis_riscv_decode::CsrOp::Write,
+                dest: 0,
+                source,
+            }) => Some(match source {
+                oer_analysis_riscv_decode::Operand::Register(r) => Operand::Register(r),
+                oer_analysis_riscv_decode::Operand::Immediate(v) => Operand::Immediate(v),
+            }),
+            _ => None,
+        }
+    }
     fn branch(&self, bytes: &[u8]) -> Option<(BranchTest, Operand, Operand)> {
         let (Instruction::Base(inst), _) = decode_instruction(bytes)? else {
             return None;
@@ -18,7 +32,7 @@ impl FunctionSemantics for RiscvDecoder {
     }
 
     fn semantic_identity(&self) -> &'static str {
-        "rv32imafc-zicsr-zba-zbb-zbs-zcb-zcmp/values-10/rv-asm-0.2.1"
+        "rv32imafc-zicsr-zba-zbb-zbs-zcb-zcmp/values-11/rv-asm-0.2.1"
     }
     fn lift(&self, bytes: &[u8]) -> SemanticOp {
         let inst = match decode_instruction(bytes) {

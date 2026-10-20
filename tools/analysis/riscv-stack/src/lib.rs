@@ -65,12 +65,35 @@ use oer_analysis_riscv_analysis::{
 use oer_analysis_riscv_program::tables::ImageTables;
 pub use producers::{BaseBarrier, LoadBase, RegisterWitness};
 pub use relocations::taken_addresses;
-pub use resolutions::{Assumption, Fact, Resolution, Resolutions};
+pub use resolutions::{Assumption, Fact, Resolution, Resolutions, ipc_resolutions};
 pub use summaries::{Summary, parse as parse_summaries};
 pub use sweep::{LevelDrop, Load, TableBase, TargetSource, Transfer, TransferKind};
 pub use tasks::task_poll_resolutions;
 pub use trap::{TrapEntry, trap_entry, vector_table};
 pub use wakers::{waker_resolutions, waker_vtables};
+
+/// The common image-derived resolutions. Reuses the already captured ELF,
+/// analysis and typed DWARF; callers add platform IPC/interrupt routing facts.
+#[allow(clippy::too_many_arguments)]
+pub fn image_resolutions<'a>(
+    image: &ImageFacts<'_>,
+    analysis: &Analysis,
+    dwarf: &Dwarf,
+    types: &TypeFacts,
+    names: impl IntoIterator<Item = (u32, &'a str)>,
+    keep: &mut Ledger<'_>,
+    control: &mut dyn RunControl,
+) -> Result<Resolutions> {
+    let vtables = waker_vtables(image, dwarf, analysis, keep, control)?;
+    let mut resolutions = waker_resolutions(analysis, dwarf, &vtables, keep, control)?;
+    let audit = audit_function_addresses(image, analysis, types, keep, control)?;
+    let pointers = function_pointer_resolutions(&audit, keep, control)?;
+    resolutions.extend(task_poll_resolutions(
+        image, analysis, dwarf, types, names, keep, control,
+    )?);
+    resolutions.extend(pointers);
+    Ok(resolutions)
+}
 
 /// Where a function's frame comes from.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -400,15 +423,69 @@ pub fn inspect_function(
     control: &mut dyn RunControl,
     sink: &mut dyn oer_analysis_riscv_model::FunctionSink,
 ) -> Result<()> {
+    inspect_function_as(
+        image,
+        function,
+        call_behavior,
+        options,
+        &[],
+        &oer_analysis_riscv_lift::StructuralRiscvDecoder,
+        memory,
+        control,
+        sink,
+    )
+}
+
+/// The same pipeline after a checked terminal-transfer refinement.
+#[allow(clippy::too_many_arguments)]
+pub fn inspect_stack_context(
+    image: &ImageFacts<'_>,
+    function: &Function,
+    call_behavior: &dyn CallBehavior,
+    options: oer_analysis_riscv_analysis::ResearchOptions<'_>,
+    extra: &[KnownJump],
+    memory: &WorkingMemory,
+    control: &mut dyn RunControl,
+    sink: &mut dyn oer_analysis_riscv_model::FunctionSink,
+) -> Result<()> {
+    inspect_function_as(
+        image,
+        function,
+        call_behavior,
+        options,
+        extra,
+        &oer_analysis_riscv_lift::StackRiscvDecoder,
+        memory,
+        control,
+        sink,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn inspect_function_as(
+    image: &ImageFacts<'_>,
+    function: &Function,
+    call_behavior: &dyn CallBehavior,
+    options: oer_analysis_riscv_analysis::ResearchOptions<'_>,
+    extra: &[KnownJump],
+    decoder: &dyn oer_analysis_riscv_model::FunctionSemantics,
+    memory: &WorkingMemory,
+    control: &mut dyn RunControl,
+    sink: &mut dyn oer_analysis_riscv_model::FunctionSink,
+) -> Result<()> {
     use oer_analysis_riscv_analysis::{
         FunctionInput, PreparedReferences, research_following_tables_with_options,
     };
-    use oer_analysis_riscv_lift::StructuralRiscvDecoder as RiscvDecoder;
     use oer_analysis_riscv_model::NoReturns;
     use oer_analysis_riscv_program::ProgramView;
     let mut work = Ledger::new(memory, control)?;
     let swept = sweep::transfers(image, function, &mut work, control)?;
     let mut jumps = Vec::new();
+    for jump in extra {
+        control.checkpoint(1 + jump.targets.len() as u64)?;
+        work.admit(jump.targets.len() * size_of::<u64>(), control)?;
+        work.push(&mut jumps, jump.clone(), control)?;
+    }
     for (site, entries) in &swept.jumps {
         work.admit(entries.len() * size_of::<u64>(), control)?;
         work.push(&mut jumps, table_jump(function, *site, entries), control)?;
@@ -437,7 +514,7 @@ pub fn inspect_function(
             },
             known: &jumps,
         },
-        &RiscvDecoder,
+        decoder,
         memory,
         control,
         sink,

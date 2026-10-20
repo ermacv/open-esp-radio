@@ -17,6 +17,9 @@ impl FunctionSink for Saved<'_> {
 }
 struct NoMemory;
 impl ImageMemory for NoMemory {
+    fn capture_id(&self) -> Option<u64> {
+        Some(1)
+    }
     fn read_constant(&self, _: u32, _: &mut [u8], _: &mut dyn RunControl) -> Result<bool> {
         Ok(false)
     }
@@ -82,6 +85,7 @@ fn try_facts_calls<'m>(
             abi: Some(CallAbi::RiscvInteger),
             symbolic_spills,
             stack_calls,
+            stack_context: None,
         },
     )?;
     Ok(saved.0)
