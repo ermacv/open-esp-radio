@@ -1,3 +1,4 @@
+use bytemuck::Zeroable;
 use core::{cell::Cell, convert::Infallible};
 use std::boxed::Box;
 
@@ -10,21 +11,20 @@ use crate::{
     dtm_event_image::{DtmPositionalEventWords, DtmRole},
     le_phy_packet::{LeAccessAddress, LeCrcInit},
     scheduler_pool::{
-        SchedulerAllocationConfig, SchedulerItemSpace, SchedulerPoolError,
-        SchedulerPoolModelAddress, SchedulerRoleInstance, SchedulerRolePoolStorage,
+        SchedulerAllocationConfig, SchedulerItemSpace, SchedulerPoolError, SchedulerRoleInstance,
+        SchedulerRolePoolStorage,
     },
 };
 
 type Pool = DtmPool<1>;
 
 fn pool() -> Pool {
-    let storage = Box::leak(Box::new(SchedulerRolePoolStorage::<DtmStorage, 1>::new()));
+    let storage = Box::leak(Box::new(SchedulerRolePoolStorage::<DtmStorage, 1>::zeroed()));
     let numbers = SchedulerAllocationConfig::new(2, 3, 4)
         .unwrap()
         .direct_test_mode();
-    Pool::bind_model(
-        storage,
-        SchedulerPoolModelAddress::new(0x2f00_0100).expect("test base is aligned"),
+    Pool::place::<crate::HostDma<0x2f00_0100>>(
+        oer_esp32s31_hal::dma_static::Placed::host(storage),
         numbers,
     )
     .expect("the pool fits controller SRAM")
@@ -73,7 +73,7 @@ fn return_packet(pool: &Pool, instance: &SchedulerRoleInstance, result_word: u32
 
 #[test]
 fn the_reset_selects_the_dtm_identity_and_profile() {
-    let storage = DtmStorage::new();
+    let storage = DtmStorage::zeroed();
     let reset = storage.link_state.reviewed_words().apply_reset(
         None,
         None,
@@ -134,7 +134,10 @@ fn a_foreign_rx_packet_is_refused_before_the_builder_runs() {
     let instance = pool.acquire().unwrap();
     {
         let (graph, binding, _) = pool.shared(&instance).unwrap();
-        let foreign = super::codec::DtmBinding::new(0x2f00_4000, 0).unwrap();
+        let (storage, placement) = crate::Placement::<crate::HostDma<0x2f00_4000>>::take(
+            oer_esp32s31_hal::dma_static::Placed::host(Box::leak(Box::new(DtmStorage::zeroed()))),
+        );
+        let foreign = super::codec::DtmBinding::new(storage, &placement, 0);
         let _ = binding;
         graph.rx_header.model_retarget_rx_packet(foreign.rx_packet);
     }

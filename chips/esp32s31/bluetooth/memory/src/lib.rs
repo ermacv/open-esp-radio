@@ -47,6 +47,7 @@ mod legacy_advertising_tx_packet;
 mod legacy_scanning;
 mod legacy_scanning_event_image;
 mod peripheral_connection;
+mod placement;
 mod rx_memory_list;
 mod rx_packet_bytes;
 pub mod scheduler;
@@ -55,6 +56,11 @@ mod scheduler_item;
 mod scheduler_pool;
 mod shared_layout;
 mod sram_link;
+#[cfg(target_arch = "riscv32")]
+pub use placement::ChipDma;
+#[cfg(not(target_arch = "riscv32"))]
+pub use placement::HostDma;
+pub use placement::{ControllerDmaSpace, Placement};
 
 pub use coexistence::{
     AdvertisingCoexistencePriorities, ConnectionCoexistencePriorities,
@@ -63,22 +69,17 @@ pub use coexistence::{
 };
 pub use scheduler_item::{SCHEDULER_ITEM_UNEXECUTED, SchedulerItemCompletionStatus};
 
-#[cfg(not(target_arch = "riscv32"))]
-pub use scheduler_pool::SchedulerPoolModelAddress;
 pub use scheduler_pool::{
     SchedulerAllocationConfig, SchedulerAllocationNumbers, SchedulerItemId, SchedulerItemSource,
-    SchedulerItemSpace, SchedulerPoolBindError, SchedulerPoolError, SchedulerRoleInstance,
+    SchedulerItemSpace, SchedulerPoolError, SchedulerPoolPlaceError, SchedulerRoleInstance,
     SchedulerRoleKind, SchedulerRolePool, SchedulerRolePoolStorage, SchedulerRoleReleaseFailure,
     SchedulerRoleStorage,
 };
 
-#[cfg(not(target_arch = "riscv32"))]
-pub use ble_phy_engine::BlePhyEngineModelAddress;
-
 pub use ble_phy_engine::{
     BLUETOOTH_BLE_PHY_ENVIRONMENT_BYTES, BLUETOOTH_BLE_PHY_RESOLVING_LIST_BYTES,
-    BlePhyEngineBindError, BlePhyEngineBindFailure, BlePhyEngineBinding, BlePhyEngineCpuOwned,
-    BlePhyEngineStorage, BlePhyLe1MPacketStartCalibration,
+    BlePhyEngineBinding, BlePhyEngineCpuOwned, BlePhyEngineStorage,
+    BlePhyLe1MPacketStartCalibration,
 };
 
 pub use connectable_advertising::{
@@ -88,12 +89,8 @@ pub use connectable_advertising::{
     LegacyConnectableAdvertisingStorage, LegacyConnectableScanResponsePacketInput,
 };
 
-#[cfg(not(target_arch = "riscv32"))]
-pub use direction_finding_workspace::DirectionFindingWorkspaceModelAddress;
-
 pub use direction_finding_workspace::{
-    BLUETOOTH_DIRECTION_FINDING_WORKSPACE_BYTES, DirectionFindingWorkspaceBindError,
-    DirectionFindingWorkspaceBindFailure, DirectionFindingWorkspaceBinding,
+    BLUETOOTH_DIRECTION_FINDING_WORKSPACE_BYTES, DirectionFindingWorkspaceBinding,
     DirectionFindingWorkspaceCpuOwned, DirectionFindingWorkspaceLink,
     DirectionFindingWorkspaceStorage,
 };
@@ -115,13 +112,11 @@ pub use dtm::{
 };
 
 pub use le_device_table::{
-    BLUETOOTH_FILTER_ACCEPT_LIST_CAPACITY, LeDeviceTable, LeDeviceTableBindError,
-    LeDeviceTableError, LeDeviceTableStorage, LeFilterAcceptListDevice,
+    BLUETOOTH_FILTER_ACCEPT_LIST_CAPACITY, LeDeviceTable, LeDeviceTableError, LeDeviceTableStorage,
+    LeFilterAcceptListDevice,
 };
-#[cfg(not(target_arch = "riscv32"))]
-pub use le_rx_chain::LeRxChainModelAddress;
 pub use le_rx_chain::{
-    LeRxChain, LeRxChainBindError, LeRxChainError, LeRxChainStorage, LeRxSource, LeRxTag,
+    LeRxChain, LeRxChainError, LeRxChainPlaceError, LeRxChainStorage, LeRxSource, LeRxTag,
 };
 
 pub use le_rx_packet::{
@@ -174,7 +169,4 @@ pub use rx_memory_list::RxMemoryListClass;
 
 pub use scheduler_context::{BLUETOOTH_SCHEDULER_CONTEXT_BYTES, SchedulerContextStorage};
 
-pub use sram_link::{
-    BLUETOOTH_CONTROLLER_PHYSICAL_SRAM_HIGH, BLUETOOTH_CONTROLLER_PHYSICAL_SRAM_LOW,
-    ControllerSramLinkAddress, ControllerSramLinkAddressError,
-};
+pub use sram_link::{ControllerSramLinkAddress, ControllerSramLinkAddressError};

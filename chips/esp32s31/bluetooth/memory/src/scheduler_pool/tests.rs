@@ -1,20 +1,19 @@
+use bytemuck::Zeroable;
 use oer_esp32s31_hal::layouts::*;
 use std::boxed::Box;
 
-use vcell::VolatileCell;
-
 use super::{
-    SchedulerAllocationConfig, SchedulerItemSpace, SchedulerPoolBindError, SchedulerPoolError,
-    SchedulerPoolModelAddress, SchedulerRoleKind, SchedulerRolePool, SchedulerRolePoolStorage,
-    SchedulerRoleStorage, sealed,
+    SchedulerAllocationConfig, SchedulerItemSpace, SchedulerPoolError, SchedulerPoolPlaceError,
+    SchedulerRoleKind, SchedulerRolePool, SchedulerRolePoolStorage, SchedulerRoleStorage, sealed,
 };
 use crate::{scheduler_item::SchedulerItemCompletionStatus, sram_link::ControllerSramLinkAddress};
 
 /// Two items and a marker word that reinitialization writes.
 #[repr(C)]
+#[derive(bytemuck::Zeroable)]
 struct TestStorage {
     items: [BleSchedulerItem; 2],
-    marker: VolatileCell<u32>,
+    marker: u32,
 }
 
 #[derive(Clone, Copy)]
@@ -31,20 +30,23 @@ impl SchedulerRoleStorage for TestStorage {
     const NUMBERS: usize = 1;
     const NEW: Self = Self {
         items: [const { BleSchedulerItem::zeroed() }; 2],
-        marker: VolatileCell::new(0),
+        marker: 0,
     };
     type Binding = TestBinding;
     type State = u8;
     const INITIAL_STATE: u8 = 0;
-    fn bind(base: u32, first_number: u16) -> Result<TestBinding, SchedulerPoolBindError> {
-        let link = |offset: u32| {
-            ControllerSramLinkAddress::new(base + offset)
-                .map_err(|_| SchedulerPoolBindError::ZeroCompressedLink)
-        };
-        Ok(TestBinding {
-            items: [link(0)?, link(BleSchedulerItem::SIZE as u32)?],
+    fn addresses<D: crate::ControllerDmaSpace>(
+        &self,
+        placement: &crate::Placement<D>,
+        first_number: u16,
+    ) -> TestBinding {
+        TestBinding {
+            items: self
+                .items
+                .each_ref()
+                .map(|item| ControllerSramLinkAddress::from_placed(placement.address(item))),
             number: first_number,
-        })
+        }
     }
     fn admits(state: &u8, item: usize) -> bool {
         *state & (1 << item) != 0
@@ -59,7 +61,7 @@ impl SchedulerRoleStorage for TestStorage {
     }
 
     fn reinitialize(&mut self, binding: &TestBinding) -> u8 {
-        self.marker.set(0x100 + u32::from(binding.number));
+        self.marker = 0x100 + u32::from(binding.number);
         for item in &self.items {
             crate::shared_layout::clear_scheduler_item(item);
         }
@@ -79,10 +81,11 @@ fn config() -> SchedulerAllocationConfig {
 }
 
 fn pool() -> Pool {
-    let storage = Box::leak(Box::new(SchedulerRolePoolStorage::<TestStorage, 2>::new()));
-    Pool::bind_model(
-        storage,
-        SchedulerPoolModelAddress::new(0x2f00_1000).expect("test base is aligned"),
+    let storage = Box::leak(Box::new(
+        SchedulerRolePoolStorage::<TestStorage, 2>::zeroed(),
+    ));
+    Pool::place::<crate::HostDma<0x2f00_1000>>(
+        oer_esp32s31_hal::dma_static::Placed::host(storage),
         config().connections(),
     )
     .expect("test pool binds")
@@ -106,7 +109,7 @@ fn instances_are_bound_at_their_offsets_and_reinitialized() {
     ); // Connections are numbered after the advertising instances and one
     // reserved number.
     let (graph, _, _) = pool.shared(&second).unwrap();
-    assert_eq!(graph.marker.get(), 0x100 + 4);
+    assert_eq!(graph.marker, 0x100 + 4);
 }
 
 #[test]
@@ -213,19 +216,6 @@ fn the_space_edits_only_scheduler_fields_of_listed_items() {
 }
 
 #[test]
-fn storage_outside_controller_sram_is_refused() {
-    let storage = Box::leak(Box::new(SchedulerRolePoolStorage::<TestStorage, 2>::new()));
-    assert!(matches!(
-        Pool::bind_model(
-            storage,
-            SchedulerPoolModelAddress::new(0x2f07_ff00).expect("test base is aligned"),
-            config().connections(),
-        ),
-        Err(SchedulerPoolBindError::ExtentOutsidePhysicalSram)
-    ));
-}
-
-#[test]
 fn allocation_numbers_follow_the_vendor_order() {
     let config = config();
     assert_eq!(
@@ -249,17 +239,18 @@ fn allocation_numbers_follow_the_vendor_order() {
 
 #[test]
 fn a_pool_larger_than_its_numbers_is_refused() {
-    let storage = Box::leak(Box::new(SchedulerRolePoolStorage::<TestStorage, 2>::new()));
+    let storage = Box::leak(Box::new(
+        SchedulerRolePoolStorage::<TestStorage, 2>::zeroed(),
+    ));
     let one_connection = SchedulerAllocationConfig::new(2, 1, 0)
         .unwrap()
         .connections();
     assert!(matches!(
-        Pool::bind_model(
-            storage,
-            SchedulerPoolModelAddress::new(0x2f00_1000).expect("test base is aligned"),
-            one_connection,
+        Pool::place::<crate::HostDma<0x2f00_1000>>(
+            oer_esp32s31_hal::dma_static::Placed::host(storage),
+            one_connection
         ),
-        Err(SchedulerPoolBindError::AllocationNumbers)
+        Err(SchedulerPoolPlaceError::AllocationNumbers)
     ));
 }
 

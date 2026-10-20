@@ -25,8 +25,8 @@ use crate::{
     dtm_rx_result::{DtmRxResultProjection, DtmRxResultProjectionError},
     le_tx_packet::LeTxPacketPreparedLength,
     scheduler_pool::{
-        SchedulerPoolBindError, SchedulerPoolError, SchedulerRoleInstance, SchedulerRoleKind,
-        SchedulerRolePool, SchedulerRoleStorage, sealed,
+        SchedulerPoolError, SchedulerRoleInstance, SchedulerRoleKind, SchedulerRolePool,
+        SchedulerRoleStorage, sealed,
     },
     sram_link::ControllerSramLinkAddress,
 };
@@ -189,8 +189,12 @@ impl SchedulerRoleStorage for DtmStorage {
     type State = DtmState;
     const INITIAL_STATE: DtmState = DtmState::Idle;
 
-    fn bind(base: u32, number: u16) -> Result<DtmBinding, SchedulerPoolBindError> {
-        DtmBinding::new(base, number)
+    fn addresses<D: crate::ControllerDmaSpace>(
+        &self,
+        placement: &crate::Placement<D>,
+        number: u16,
+    ) -> DtmBinding {
+        DtmBinding::new(self, placement, number)
     }
 
     fn item_layout(&self, _item: usize) -> &BleSchedulerItem {

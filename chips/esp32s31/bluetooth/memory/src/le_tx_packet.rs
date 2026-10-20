@@ -10,10 +10,6 @@
 
 use crate::sram_link::ControllerSramLinkAddress;
 
-use oer_esp32s31_hal::types::{
-    BluetoothControllerSramAddress, BluetoothControllerSramAddressError,
-};
-
 use crate::shared_layout::BufferHeaderImage;
 use oer_esp32s31_hal::layouts::*;
 
@@ -23,70 +19,47 @@ pub const BLUETOOTH_LE_BUFFER_HEADER_BYTES: usize = BleBufferHeader::SIZE;
 pub const BLUETOOTH_LE_TX_PACKET_PREFIX_BYTES: usize = BleTxPacketPrefix::SIZE;
 
 const CONTROLLER_METADATA_BYTES: usize = BleTxPacketPrefix::SIZE - size_of::<[u8; 2]>();
-const HEADER_PACKET_TARGET_OFFSET: u32 = CONTROLLER_METADATA_BYTES as u32;
-
-/// Why a complete LE TX packet extent cannot inhabit controller SRAM.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(super) enum LeTxPacketAddressError {
-    InvalidBase(BluetoothControllerSramAddressError),
-    ZeroCompressedBase,
-    UnsupportedAllocationSize,
-    ExtentOutsideControllerSram,
-}
 
 /// Validated controller-SRAM geometry for one complete LE TX packet.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) struct LeTxPacketAddress<const ALLOCATION_BYTES: usize> {
-    base: BluetoothControllerSramAddress,
-    header_packet_target: BluetoothControllerSramAddress,
+    base: DmaWindowAddress,
+    header_packet_target: DmaWindowAddress,
 }
 
 impl<const ALLOCATION_BYTES: usize> LeTxPacketAddress<ALLOCATION_BYTES> {
-    pub(super) const fn new(address: u32) -> Result<Self, LeTxPacketAddressError> {
-        if ALLOCATION_BYTES < BLUETOOTH_LE_TX_PACKET_PREFIX_BYTES
-            || ALLOCATION_BYTES - BLUETOOTH_LE_TX_PACKET_PREFIX_BYTES > u8::MAX as usize
-            || ALLOCATION_BYTES > u32::MAX as usize
-        {
-            return Err(LeTxPacketAddressError::UnsupportedAllocationSize);
+    pub(super) fn from_placed<S: crate::ControllerDmaSpace, T>(
+        placement: &crate::Placement<S>,
+        storage: &T,
+    ) -> Self {
+        const {
+            assert!(ALLOCATION_BYTES >= BLUETOOTH_LE_TX_PACKET_PREFIX_BYTES);
+            assert!(ALLOCATION_BYTES - BLUETOOTH_LE_TX_PACKET_PREFIX_BYTES <= u8::MAX as usize);
+            assert!(size_of::<T>() >= ALLOCATION_BYTES);
         }
-        let base = match BluetoothControllerSramAddress::new(address) {
-            Ok(address) => address,
-            Err(error) => return Err(LeTxPacketAddressError::InvalidBase(error)),
-        };
-        if base.compressed_image() == 0 {
-            return Err(LeTxPacketAddressError::ZeroCompressedBase);
-        }
-        let header_packet_target_address = match address.checked_add(HEADER_PACKET_TARGET_OFFSET) {
-            Some(address) => address,
-            None => return Err(LeTxPacketAddressError::ExtentOutsideControllerSram),
-        };
-        let last_aligned_offset = ((ALLOCATION_BYTES as u32 - 1) / 4) * 4;
-        let last_aligned_address = match address.checked_add(last_aligned_offset) {
-            Some(address) => address,
-            None => return Err(LeTxPacketAddressError::ExtentOutsideControllerSram),
-        };
+        let base = placement.address(storage);
         let header_packet_target =
-            match BluetoothControllerSramAddress::new(header_packet_target_address) {
-                Ok(address) => address,
-                Err(_) => {
-                    return Err(LeTxPacketAddressError::ExtentOutsideControllerSram);
-                }
-            };
-        if BluetoothControllerSramAddress::new(last_aligned_address).is_err() {
-            return Err(LeTxPacketAddressError::ExtentOutsideControllerSram);
-        }
-        Ok(Self {
+            placement.offset(base, CONTROLLER_METADATA_BYTES, size_of::<[u8; 2]>());
+        Self {
             base,
             header_packet_target,
-        })
+        }
     }
 
     pub(super) const fn base_link(self) -> LeTxPacketBaseLink {
-        LeTxPacketBaseLink(self.base.compressed_image())
+        LeTxPacketBaseLink(
+            self.base
+                .ble_compressed()
+                .expect("a placed TX buffer has a nonzero encodable address"),
+        )
     }
 
     pub(super) const fn pdu_target_link(self) -> LeTxPduTargetLink {
-        LeTxPduTargetLink(self.header_packet_target.compressed_image())
+        LeTxPduTargetLink(
+            self.header_packet_target
+                .ble_compressed()
+                .expect("the placed TX PDU target is encodable"),
+        )
     }
 
     const fn payload_capacity() -> u8 {
@@ -122,6 +95,7 @@ impl LeTxPduTargetLink {
 
 /// CPU-owned common TX buffer header before graph publication.
 #[repr(C, align(4))]
+#[derive(bytemuck::Zeroable)]
 pub(super) struct LeTxBufferHeaderStorage {
     pub(crate) layout: BleBufferHeader,
 }
@@ -328,7 +302,7 @@ impl<const ALLOCATION_BYTES: usize> LeTxPacketPreparedLength<ALLOCATION_BYTES> {
 /// the smallest capacity it needs; DTM uses all 255 LE payload octets while
 /// legacy advertising needs at most 37.
 #[repr(C, align(4))]
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, bytemuck::Zeroable)]
 pub struct LeTxPacketStorage<const ALLOCATION_BYTES: usize> {
     bytes: [u8; ALLOCATION_BYTES],
 }

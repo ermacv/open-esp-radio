@@ -2677,6 +2677,7 @@ dependencies = [
 name = "oer-esp32s31-bluetooth-memory"
 version = "0.1.0"
 dependencies = [
+ "bytemuck",
  "oer-esp32s31-hal",
  "oer-esp32s31-knowledge",
  "oer-time",

@@ -91,6 +91,11 @@ device table and the receive chain each mint, in one place, the HAL proof of
 the storage the hardware is pointed at (`BlePhyHardwareObjects`,
 `DirectionFindingDescriptor`, `DeviceTablePublication`, `RxChainHead`),
 whose constructor is unsafe; the HAL publications that take them are safe.
+The private placement adapter consumes `Placed`, projects fields within its
+allocation and calls the HAL's typed-address constructors. Its range metadata
+holds no reference that could alias the retained owner. The RX byte storage's
+`Zeroable` implementation only permits zero initialization of transparent
+volatile byte cells; it grants no concurrent access.
 An `unsafe` contract there states only the memory the hardware reaches: the
 Controller's lifecycle order, power and PHY membership are correctness,
 which the driver's typestate holds, and the driver forbids unsafe code. The

@@ -10,14 +10,8 @@
 
 use core::{marker::PhantomPinned, pin::Pin};
 
-use crate::{
-    BLUETOOTH_CONTROLLER_PHYSICAL_SRAM_HIGH, BLUETOOTH_CONTROLLER_PHYSICAL_SRAM_LOW,
-    ControllerSramLinkAddress,
-};
-
-use oer_esp32s31_hal::types::{
-    BluetoothControllerSramAddress, BluetoothControllerSramAddressError,
-};
+use crate::{ControllerDmaSpace, ControllerSramLinkAddress, Placement};
+use oer_esp32s31_hal::dma_static::Placed;
 
 use oer_esp32s31_hal::bluetooth::BluetoothControllerReset;
 use oer_esp32s31_hal::layouts::*;
@@ -30,6 +24,7 @@ pub const BLUETOOTH_DIRECTION_FINDING_WORKSPACE_BYTES: usize = BleDirectionFindi
 /// Volatile cells reflect that the Controller may observe and later mutate the
 /// published descriptor. No public API grants CPU access after publication.
 #[repr(C, align(4))]
+#[derive(bytemuck::Zeroable)]
 pub struct DirectionFindingWorkspaceStorage {
     layout: BleDirectionFindingWorkspace,
     _pin: PhantomPinned,
@@ -39,79 +34,6 @@ const _: () = {
     assert!(size_of::<DirectionFindingWorkspaceStorage>() == 0x20);
     assert!(align_of::<DirectionFindingWorkspaceStorage>() == 4);
 };
-
-/// Why the direction-finding workspace cannot become a bound CPU owner.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum DirectionFindingWorkspaceBindError {
-    /// A target pointer cannot be represented by the 32-bit address space.
-    AddressWidth,
-    /// The base is outside the Controller pointer domain.
-    InvalidBase(BluetoothControllerSramAddressError),
-    /// A reviewed member cannot be represented as a non-null SRAM link.
-    InvalidMember,
-    /// Some byte of the retained allocation lies outside physical SRAM.
-    ExtentOutsidePhysicalSram,
-}
-
-/// Failed binding that returns the exact unchanged static allocation.
-#[must_use = "failed direction-finding storage remains available for inspection"]
-pub struct DirectionFindingWorkspaceBindFailure {
-    storage: &'static mut DirectionFindingWorkspaceStorage,
-    error: DirectionFindingWorkspaceBindError,
-}
-
-impl DirectionFindingWorkspaceBindFailure {
-    fn new(
-        storage: &'static mut DirectionFindingWorkspaceStorage,
-        error: DirectionFindingWorkspaceBindError,
-    ) -> Self {
-        Self { storage, error }
-    }
-
-    /// Inspect the finite binding failure.
-    pub const fn error(&self) -> DirectionFindingWorkspaceBindError {
-        self.error
-    }
-
-    /// Recover the unchanged allocation and failure reason.
-    pub fn into_parts(
-        self,
-    ) -> (
-        &'static mut DirectionFindingWorkspaceStorage,
-        DirectionFindingWorkspaceBindError,
-    ) {
-        (self.storage, self.error)
-    }
-}
-
-impl core::fmt::Debug for DirectionFindingWorkspaceBindFailure {
-    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        formatter
-            .debug_struct("DirectionFindingWorkspaceBindFailure")
-            .field("error", &self.error)
-            .finish_non_exhaustive()
-    }
-}
-
-/// Synthetic base accepted only by native ownership models.
-#[cfg(not(target_arch = "riscv32"))]
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct DirectionFindingWorkspaceModelAddress(BluetoothControllerSramAddress);
-
-#[cfg(not(target_arch = "riscv32"))]
-impl DirectionFindingWorkspaceModelAddress {
-    /// Validate one synthetic Controller-SRAM base.
-    pub const fn new(address: u32) -> Result<Self, BluetoothControllerSramAddressError> {
-        match BluetoothControllerSramAddress::new(address) {
-            Ok(address) => Ok(Self(address)),
-            Err(error) => Err(error),
-        }
-    }
-
-    const fn address(self) -> u32 {
-        self.0.address()
-    }
-}
 
 /// Opaque link from an ordinary BLE link state to the global DF environment.
 ///
@@ -131,59 +53,53 @@ impl DirectionFindingWorkspaceLink {
 
 /// Immutable geometry retained with one workspace allocation.
 pub struct DirectionFindingWorkspaceBinding {
-    base: BluetoothControllerSramAddress,
+    base: DmaWindowAddress,
     link_state_configuration: ControllerSramLinkAddress,
-    disabled_cte_descriptor: BluetoothControllerSramAddress,
+    disabled_cte_descriptor: DmaRef<BleDirectionFindingDescriptor>,
     end_exclusive: u32,
 }
 
 impl DirectionFindingWorkspaceBinding {
-    fn new(
-        base: u32,
+    fn new<S: ControllerDmaSpace>(
         storage: &DirectionFindingWorkspaceStorage,
-    ) -> Result<Self, DirectionFindingWorkspaceBindError> {
-        let root = core::ptr::from_ref(&storage.layout).addr();
-        let configuration_offset =
-            core::ptr::from_ref(storage.layout.word_0008_opaque()).addr() - root;
-        let descriptor_offset =
-            core::ptr::from_ref(storage.layout.word_000c_opaque()).addr() - root;
-        let base_address = BluetoothControllerSramAddress::new(base)
-            .map_err(DirectionFindingWorkspaceBindError::InvalidBase)?;
-        let end_exclusive = base
-            .checked_add(BLUETOOTH_DIRECTION_FINDING_WORKSPACE_BYTES as u32)
-            .ok_or(DirectionFindingWorkspaceBindError::ExtentOutsidePhysicalSram)?;
-        if base < BLUETOOTH_CONTROLLER_PHYSICAL_SRAM_LOW
-            || end_exclusive > BLUETOOTH_CONTROLLER_PHYSICAL_SRAM_HIGH
-        {
-            return Err(DirectionFindingWorkspaceBindError::ExtentOutsidePhysicalSram);
+        placement: &Placement<S>,
+    ) -> Self {
+        let base = placement.address(&storage.layout);
+        let descriptor = placement.address(storage.layout.word_000c_opaque());
+        let descriptor = placement.offset(descriptor, 0, BleDirectionFindingDescriptor::SIZE);
+        const {
+            assert!(
+                align_of::<BleDirectionFindingDescriptor>()
+                    <= align_of::<BleDirectionFindingWorkspace>()
+            );
         }
-
-        let link_state_configuration = ControllerSramLinkAddress::new(
-            base.checked_add(configuration_offset as u32)
-                .ok_or(DirectionFindingWorkspaceBindError::ExtentOutsidePhysicalSram)?,
-        )
-        .map_err(|_| DirectionFindingWorkspaceBindError::InvalidMember)?;
-        let disabled_cte_descriptor = BluetoothControllerSramAddress::new(
-            base.checked_add(descriptor_offset as u32)
-                .ok_or(DirectionFindingWorkspaceBindError::ExtentOutsidePhysicalSram)?,
-        )
-        .map_err(|_| DirectionFindingWorkspaceBindError::InvalidMember)?;
-
-        Ok(Self {
-            base: base_address,
-            link_state_configuration,
+        #[allow(
+            unsafe_code,
+            reason = "the reviewed descriptor occupies words within this placed workspace"
+        )]
+        // SAFETY: the descriptor starts at the reviewed workspace word; the
+        // full generated descriptor extent was checked within this allocation.
+        // Both layouts have word alignment and shared volatile words. Placed
+        // proves placement; the owner retains it for every publication epoch.
+        let disabled_cte_descriptor =
+            unsafe { crate::layout_reference::controller_reference(descriptor.get()) };
+        Self {
+            base,
+            link_state_configuration: ControllerSramLinkAddress::from_placed(
+                placement.address(storage.layout.word_0008_opaque()),
+            ),
             disabled_cte_descriptor,
-            end_exclusive,
-        })
+            end_exclusive: base.get() + BleDirectionFindingWorkspace::SIZE as u32,
+        }
     }
 
     /// Complete physical range retained by this owner.
     pub const fn range(&self) -> (u32, u32) {
-        (self.base.address(), self.end_exclusive)
+        (self.base.get(), self.end_exclusive)
     }
 
     /// Descriptor published into CTE hardware buffer zero.
-    pub const fn disabled_cte_descriptor_address(&self) -> BluetoothControllerSramAddress {
+    pub const fn disabled_cte_descriptor_address(&self) -> DmaRef<BleDirectionFindingDescriptor> {
         self.disabled_cte_descriptor
     }
 
@@ -220,9 +136,7 @@ impl DirectionFindingWorkspaceCpuOwned {
         // reaches only through volatile accesses.
         unsafe {
             oer_esp32s31_hal::bluetooth::DirectionFindingDescriptor::bind(
-                crate::layout_reference::controller_reference(
-                    self.binding.disabled_cte_descriptor_address().address(),
-                ),
+                self.binding.disabled_cte_descriptor_address(),
             )
         }
     }
@@ -261,47 +175,15 @@ impl DirectionFindingWorkspaceStorage {
         }
     }
 
-    /// Bind the real location of one unique static target allocation.
-    #[cfg(target_arch = "riscv32")]
-    pub fn pin_static(
-        storage: &'static mut Self,
-    ) -> Result<DirectionFindingWorkspaceCpuOwned, DirectionFindingWorkspaceBindFailure> {
-        let base = match u32::try_from(core::ptr::addr_of!(*storage).addr()) {
-            Ok(base) => base,
-            Err(_) => {
-                return Err(DirectionFindingWorkspaceBindFailure::new(
-                    storage,
-                    DirectionFindingWorkspaceBindError::AddressWidth,
-                ));
-            }
-        };
-        Self::pin_static_inner(storage, base)
-    }
-
-    /// Bind a deterministic physical-SRAM base to a native ownership model.
-    #[cfg(not(target_arch = "riscv32"))]
-    pub fn pin_static_model(
-        storage: &'static mut Self,
-        base: DirectionFindingWorkspaceModelAddress,
-    ) -> Result<DirectionFindingWorkspaceCpuOwned, DirectionFindingWorkspaceBindFailure> {
-        Self::pin_static_inner(storage, base.address())
-    }
-
-    fn pin_static_inner(
-        storage: &'static mut Self,
-        base: u32,
-    ) -> Result<DirectionFindingWorkspaceCpuOwned, DirectionFindingWorkspaceBindFailure> {
-        let binding = match DirectionFindingWorkspaceBinding::new(base, storage) {
-            Ok(binding) => binding,
-            Err(error) => {
-                return Err(DirectionFindingWorkspaceBindFailure::new(storage, error));
-            }
-        };
+    /// Claim the linker-proven workspace and install its disabled-CTE baseline.
+    pub fn place<S: ControllerDmaSpace>(placed: Placed<Self>) -> DirectionFindingWorkspaceCpuOwned {
+        let (storage, placement) = Placement::<S>::take(placed);
+        let binding = DirectionFindingWorkspaceBinding::new(storage, &placement);
         storage.initialize_disabled_baseline();
-        Ok(DirectionFindingWorkspaceCpuOwned {
+        DirectionFindingWorkspaceCpuOwned {
             storage: Pin::static_mut(storage),
             binding,
-        })
+        }
     }
 }
 

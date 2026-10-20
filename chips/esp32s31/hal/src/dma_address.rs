@@ -20,9 +20,10 @@ use crate::layouts::{DmaLayout, DmaRef, DmaWindowAddress};
 ///
 /// # Safety
 ///
-/// `address` lies in storage the caller holds bound for the DMA epoch, which
-/// stays pinned while the hardware may read the address, and a window check
-/// accepted it.
+/// `address` lies in storage proved by [`crate::dma_static::Placed`] to be
+/// in the DMA window. The caller retains and pins that storage for the
+/// complete epoch in which hardware may follow the address. Native models
+/// use the corresponding synthetic address without dereferencing it.
 #[allow(unsafe_code, reason = "the placed source of typed DMA addresses")]
 pub const unsafe fn placed(address: u32) -> DmaWindowAddress {
     // SAFETY: the caller's promise is the constructor's.

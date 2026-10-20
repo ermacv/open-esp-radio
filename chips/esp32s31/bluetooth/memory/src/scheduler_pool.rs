@@ -21,17 +21,11 @@ use core::{marker::PhantomPinned, pin::Pin};
 
 use oer_esp32s31_hal::bluetooth::BluetoothControllerReset;
 use oer_esp32s31_hal::layouts::BleSchedulerItem;
-use oer_esp32s31_hal::types::{
-    BluetoothControllerSramAddress, BluetoothControllerSramAddressError,
-};
 use pin_project::pin_project;
 
 use crate::{
     scheduler_item::{SchedulerItemCompletionStatus, SchedulerItemHeader},
-    sram_link::{
-        BLUETOOTH_CONTROLLER_PHYSICAL_SRAM_HIGH, BLUETOOTH_CONTROLLER_PHYSICAL_SRAM_LOW,
-        ControllerSramLinkAddress,
-    },
+    sram_link::ControllerSramLinkAddress,
 };
 
 /// Role kinds whose items share scheduler list zero.
@@ -218,7 +212,7 @@ pub(crate) mod sealed {
 /// Controller-SRAM graph of one role instance.
 ///
 /// Implemented only by the role storages of this crate.
-pub trait SchedulerRoleStorage: sealed::Sealed + Sized + 'static {
+pub trait SchedulerRoleStorage: sealed::Sealed + Sized + bytemuck::Zeroable + 'static {
     #[doc(hidden)]
     const KIND: SchedulerRoleKind;
     /// Scheduler items of one instance.
@@ -229,7 +223,7 @@ pub trait SchedulerRoleStorage: sealed::Sealed + Sized + 'static {
     const NUMBERS: usize;
     #[doc(hidden)]
     const NEW: Self;
-    /// Addresses of the graph parts, derived once when the pool binds.
+    /// Addresses of the graph parts, derived once from the placed pool.
     #[doc(hidden)]
     type Binding: Copy;
     /// CPU-side role state kept beside the graph.
@@ -239,7 +233,11 @@ pub trait SchedulerRoleStorage: sealed::Sealed + Sized + 'static {
     const INITIAL_STATE: Self::State;
 
     #[doc(hidden)]
-    fn bind(base: u32, first_number: u16) -> Result<Self::Binding, SchedulerPoolBindError>;
+    fn addresses<D: crate::ControllerDmaSpace>(
+        &self,
+        placement: &crate::Placement<D>,
+        first_number: u16,
+    ) -> Self::Binding;
     #[doc(hidden)]
     fn item_layout(&self, item: usize) -> &BleSchedulerItem;
     #[doc(hidden)]
@@ -253,15 +251,9 @@ pub trait SchedulerRoleStorage: sealed::Sealed + Sized + 'static {
     fn admits(state: &Self::State, item: usize) -> bool;
 }
 
-/// Why a pool cannot bind its static storage.
+/// Why a pool's requested capacities cannot initialize its placed storage.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum SchedulerPoolBindError {
-    /// The storage address does not fit the controller address width.
-    AddressWidth,
-    InvalidBase(BluetoothControllerSramAddressError),
-    ExtentOutsidePhysicalSram,
-    /// A graph part would compress to the empty link.
-    ZeroCompressedLink,
+pub enum SchedulerPoolPlaceError {
     /// The pool holds more instances than an item identity can name.
     TooManyInstances,
     /// The pool holds more instances than its allocation numbers admit.
@@ -271,6 +263,7 @@ pub enum SchedulerPoolBindError {
 /// Pinned storage of every instance of one pool.
 #[pin_project]
 #[repr(C)]
+#[derive(bytemuck::Zeroable)]
 pub struct SchedulerRolePoolStorage<S, const N: usize> {
     instances: [S; N],
     #[pin]
@@ -289,21 +282,6 @@ impl<S: SchedulerRoleStorage, const N: usize> SchedulerRolePoolStorage<S, N> {
 impl<S: SchedulerRoleStorage, const N: usize> Default for SchedulerRolePoolStorage<S, N> {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-/// Synthetic controller-SRAM base used only by native ownership models.
-#[cfg(not(target_arch = "riscv32"))]
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct SchedulerPoolModelAddress(BluetoothControllerSramAddress);
-
-#[cfg(not(target_arch = "riscv32"))]
-impl SchedulerPoolModelAddress {
-    pub const fn new(address: u32) -> Result<Self, BluetoothControllerSramAddressError> {
-        match BluetoothControllerSramAddress::new(address) {
-            Ok(address) => Ok(Self(address)),
-            Err(error) => Err(error),
-        }
     }
 }
 
@@ -346,55 +324,25 @@ pub struct SchedulerRolePool<S: SchedulerRoleStorage, const N: usize> {
 }
 
 impl<S: SchedulerRoleStorage, const N: usize> SchedulerRolePool<S, N> {
-    /// Bind static storage at its linked address.
-    #[cfg(target_arch = "riscv32")]
-    pub fn bind(
-        storage: &'static mut SchedulerRolePoolStorage<S, N>,
+    /// Claim placed storage, validate allocation counts and initialize its graphs.
+    pub fn place<D: crate::ControllerDmaSpace>(
+        placed: oer_esp32s31_hal::dma_static::Placed<SchedulerRolePoolStorage<S, N>>,
         numbers: SchedulerAllocationNumbers,
-    ) -> Result<Self, SchedulerPoolBindError> {
-        let base = u32::try_from(core::ptr::addr_of!(*storage).addr())
-            .map_err(|_| SchedulerPoolBindError::AddressWidth)?;
-        Self::bind_at(storage, base, numbers)
-    }
-
-    /// Bind static storage at a synthetic controller address.
-    #[cfg(not(target_arch = "riscv32"))]
-    pub fn bind_model(
-        storage: &'static mut SchedulerRolePoolStorage<S, N>,
-        base: SchedulerPoolModelAddress,
-        numbers: SchedulerAllocationNumbers,
-    ) -> Result<Self, SchedulerPoolBindError> {
-        Self::bind_at(storage, base.0.address(), numbers)
-    }
-
-    fn bind_at(
-        storage: &'static mut SchedulerRolePoolStorage<S, N>,
-        base: u32,
-        numbers: SchedulerAllocationNumbers,
-    ) -> Result<Self, SchedulerPoolBindError> {
+    ) -> Result<Self, SchedulerPoolPlaceError> {
         if N > usize::from(u8::MAX) || S::ITEMS > 8 {
-            return Err(SchedulerPoolBindError::TooManyInstances);
+            return Err(SchedulerPoolPlaceError::TooManyInstances);
         }
         if N * S::NUMBERS > usize::from(numbers.count) {
-            return Err(SchedulerPoolBindError::AllocationNumbers);
+            return Err(SchedulerPoolPlaceError::AllocationNumbers);
         }
-        BluetoothControllerSramAddress::new(base).map_err(SchedulerPoolBindError::InvalidBase)?;
-        let bytes = u32::try_from(core::mem::size_of::<SchedulerRolePoolStorage<S, N>>())
-            .map_err(|_| SchedulerPoolBindError::ExtentOutsidePhysicalSram)?;
-        if base < BLUETOOTH_CONTROLLER_PHYSICAL_SRAM_LOW
-            || bytes > BLUETOOTH_CONTROLLER_PHYSICAL_SRAM_HIGH.saturating_sub(base)
-        {
-            return Err(SchedulerPoolBindError::ExtentOutsidePhysicalSram);
-        }
-        let stride = core::mem::size_of::<S>() as u32;
-        let mut bindings = [None; N];
-        for (instance, binding) in bindings.iter_mut().enumerate() {
+        let (storage, placement) = crate::Placement::<D>::take(placed);
+        let bindings = core::array::from_fn(|instance| {
             let first_number = numbers.first + (instance * S::NUMBERS) as u16;
-            *binding = Some(S::bind(base + stride * instance as u32, first_number)?);
-        }
+            storage.instances[instance].addresses(&placement, first_number)
+        });
         let mut pool = Self {
             storage: Pin::static_mut(storage),
-            bindings: bindings.map(|binding| binding.expect("every instance is bound")),
+            bindings,
             states: [InstanceState::Free; N],
             role_states: [S::INITIAL_STATE; N],
         };

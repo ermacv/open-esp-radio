@@ -1,3 +1,4 @@
+use bytemuck::Zeroable;
 use std::boxed::Box;
 
 use super::{LegacyScanError, LegacyScanPool, LegacyScanStorage};
@@ -5,34 +6,32 @@ use crate::{
     LegacyScanCoexistencePriorities, LegacyScanPrimaryChannel, LegacyScanResetConfig,
     LegacyScanSchedulerWindow, LegacyScanStartSelection, SchedulerItemCoexistencePriority,
     le_phy_packet::{LeAccessAddress, LeCrcInit},
-    le_rx_chain::{LeRxChain, LeRxChainModelAddress, LeRxChainStorage},
+    le_rx_chain::{LeRxChain, LeRxChainStorage},
     legacy_scanning_event_image::LegacyScanRxHeadProjection,
     rx_memory_list::RxMemoryListClass,
     scheduler_pool::{
-        SchedulerAllocationConfig, SchedulerPoolError, SchedulerPoolModelAddress,
-        SchedulerRoleInstance, SchedulerRolePoolStorage,
+        SchedulerAllocationConfig, SchedulerPoolError, SchedulerRoleInstance,
+        SchedulerRolePoolStorage,
     },
 };
 
 fn pool() -> LegacyScanPool<1> {
     let storage = Box::leak(Box::new(
-        SchedulerRolePoolStorage::<LegacyScanStorage, 1>::new(),
+        SchedulerRolePoolStorage::<LegacyScanStorage, 1>::zeroed(),
     ));
     let numbers = SchedulerAllocationConfig::new(2, 3, 0).unwrap().scanning();
-    LegacyScanPool::bind_model(
-        storage,
-        SchedulerPoolModelAddress::new(0x2f00_0100).expect("test base is aligned"),
+    LegacyScanPool::place::<crate::HostDma<0x2f00_0100>>(
+        oer_esp32s31_hal::dma_static::Placed::host(storage),
         numbers,
     )
     .expect("the pool fits controller SRAM")
 }
 
 fn chain(class: RxMemoryListClass) -> LeRxChain<2> {
-    let storage = Box::leak(Box::new(LeRxChainStorage::<2>::new()));
-    LeRxChain::bind_model(
-        storage,
+    let storage = Box::leak(Box::new(LeRxChainStorage::<2>::zeroed()));
+    LeRxChain::place::<crate::HostDma<0x2f00_8000>>(
+        oer_esp32s31_hal::dma_static::Placed::host(storage),
         class,
-        LeRxChainModelAddress::new(0x2f00_8000).expect("test base is aligned"),
     )
     .unwrap()
 }

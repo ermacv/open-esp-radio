@@ -1,22 +1,12 @@
+use bytemuck::Zeroable;
 use std::boxed::Box;
 
 use super::*;
 
-#[test]
-fn a_null_compressed_base_is_rejected_before_a_table_can_be_published() {
-    let storage = std::boxed::Box::leak(std::boxed::Box::new(LeDeviceTableStorage::new()));
-    assert!(matches!(
-        LeDeviceTable::bind_model(storage, BLUETOOTH_CONTROLLER_PHYSICAL_SRAM_LOW),
-        Err(LeDeviceTableBindError::ZeroCompressedImage)
-    ));
-}
-
 fn table() -> LeDeviceTable {
-    LeDeviceTable::bind_model(
-        Box::leak(Box::new(LeDeviceTableStorage::new())),
-        0x2f07_e508,
-    )
-    .unwrap()
+    LeDeviceTable::place::<crate::HostDma<0x2f07_e508>>(oer_esp32s31_hal::dma_static::Placed::host(
+        Box::leak(Box::new(LeDeviceTableStorage::zeroed())),
+    ))
 }
 
 const PUBLIC: LeFilterAcceptListDevice = LeFilterAcceptListDevice {
@@ -81,16 +71,4 @@ fn removal_keeps_the_members_packed_and_clear_empties_the_table() {
     assert!(table.is_empty());
     assert_eq!(entry(&table, 0), DeviceEntryImage::ZERO);
     assert_eq!(table.publication().count().get(), 0);
-}
-
-#[test]
-fn storage_outside_controller_sram_is_refused() {
-    assert_eq!(
-        LeDeviceTable::bind_model(
-            Box::leak(Box::new(LeDeviceTableStorage::new())),
-            0x2f07_fff0
-        )
-        .err(),
-        Some(LeDeviceTableBindError::ExtentOutsidePhysicalSram)
-    );
 }

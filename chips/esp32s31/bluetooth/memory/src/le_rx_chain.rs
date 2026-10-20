@@ -21,21 +21,17 @@ use core::{marker::PhantomPinned, pin::Pin};
 
 use oer_esp32s31_hal::bluetooth::BluetoothControllerReset;
 
-use oer_esp32s31_hal::types::{
-    BluetoothControllerSramAddress, BluetoothControllerSramAddressError,
-};
+use oer_esp32s31_hal::types::BluetoothControllerSramAddress;
 use pin_project::pin_project;
 
 use crate::{
+    ControllerDmaSpace, Placement,
     le_rx_packet::{
         LeRxBufferHeaderStorage, LeRxError, LeRxNodeStorage, LeRxOutcome, LeRxPacketAddress,
         LeRxPacketStorage,
     },
     rx_memory_list::RxMemoryListClass,
-    sram_link::{
-        BLUETOOTH_CONTROLLER_PHYSICAL_SRAM_HIGH, BLUETOOTH_CONTROLLER_PHYSICAL_SRAM_LOW,
-        ControllerSramLinkAddress,
-    },
+    sram_link::ControllerSramLinkAddress,
 };
 
 /// Allocation number of the scheduler item that received a packet: the low
@@ -85,6 +81,7 @@ impl LeRxSource {
 /// Receive headers and packets of one chain: the initial packetless
 /// cursor and one header per packet.
 #[repr(C)]
+#[derive(bytemuck::Zeroable)]
 pub struct LeRxNodes<const PACKETS: usize> {
     cursor: LeRxBufferHeaderStorage,
     nodes: [LeRxNodeStorage; PACKETS],
@@ -108,6 +105,7 @@ impl<const PACKETS: usize> Default for LeRxNodes<PACKETS> {
 /// Pinned storage of one global receive chain.
 #[pin_project]
 #[repr(C)]
+#[derive(bytemuck::Zeroable)]
 pub struct LeRxChainStorage<const PACKETS: usize> {
     nodes: LeRxNodes<PACKETS>,
     #[pin]
@@ -129,13 +127,9 @@ impl<const PACKETS: usize> Default for LeRxChainStorage<PACKETS> {
     }
 }
 
-/// Why a receive chain cannot bind its storage.
+/// Why a receive chain cannot initialize its placed storage.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum LeRxChainBindError {
-    AddressWidth,
-    InvalidAddress(BluetoothControllerSramAddressError),
-    ExtentOutsidePhysicalSram,
-    ZeroCompressedLink,
+pub enum LeRxChainPlaceError {
     /// A chain needs at least two packet nodes so that one stays writable
     /// while hardware holds the other.
     TooFewPackets,
@@ -159,21 +153,6 @@ pub enum LeRxChainError {
     Cycle,
 }
 
-/// Synthetic controller-SRAM base used only by native ownership models.
-#[cfg(not(target_arch = "riscv32"))]
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct LeRxChainModelAddress(BluetoothControllerSramAddress);
-
-#[cfg(not(target_arch = "riscv32"))]
-impl LeRxChainModelAddress {
-    pub const fn new(address: u32) -> Result<Self, BluetoothControllerSramAddressError> {
-        match BluetoothControllerSramAddress::new(address) {
-            Ok(address) => Ok(Self(address)),
-            Err(error) => Err(error),
-        }
-    }
-}
-
 /// Header positions: zero is the initial cursor, `n + 1` the header of node
 /// `n`.
 type Header = usize;
@@ -193,41 +172,29 @@ pub(crate) struct LeRxRing<const PACKETS: usize> {
 }
 
 impl<const PACKETS: usize> LeRxRing<PACKETS> {
-    /// Addresses of nodes stored at `base`.
-    pub(crate) fn bind(base: u32) -> Result<Self, LeRxChainBindError> {
-        if PACKETS < 2 {
-            return Err(LeRxChainBindError::TooFewPackets);
-        }
-        let link = |offset: usize| {
-            ControllerSramLinkAddress::new(base + offset as u32).map_err(|error| match error {
-                crate::ControllerSramLinkAddressError::InvalidAddress(error) => {
-                    LeRxChainBindError::InvalidAddress(error)
-                }
-                crate::ControllerSramLinkAddressError::ZeroCompressedImage => {
-                    LeRxChainBindError::ZeroCompressedLink
-                }
-            })
-        };
-        let nodes = core::mem::offset_of!(LeRxNodes<PACKETS>, nodes);
-        let node = core::mem::size_of::<LeRxNodeStorage>();
-        let packet = core::mem::offset_of!(LeRxNodeStorage, packet);
-        let mut headers = [None; PACKETS];
-        let mut packets = [None; PACKETS];
-        for index in 0..PACKETS {
-            headers[index] = Some(link(nodes + node * index)?);
-            packets[index] = Some(
-                LeRxPacketAddress::new(base + (nodes + node * index + packet) as u32)
-                    .map_err(LeRxChainBindError::InvalidAddress)?,
-            );
-        }
-        Ok(Self {
-            cursor: link(core::mem::offset_of!(LeRxNodes<PACKETS>, cursor))?,
-            headers: headers.map(|header| header.expect("every header is bound")),
-            packets: packets.map(|packet| packet.expect("every packet is bound")),
+    /// Addresses of the actual header and packet fields in placed storage.
+    pub(crate) fn addresses<S: ControllerDmaSpace>(
+        nodes: &LeRxNodes<PACKETS>,
+        placement: &Placement<S>,
+    ) -> Self {
+        Self {
+            cursor: ControllerSramLinkAddress::from_placed(placement.address(&nodes.cursor)),
+            headers: core::array::from_fn(|i| {
+                ControllerSramLinkAddress::from_placed(placement.address(&nodes.nodes[i].header))
+            }),
+            packets: core::array::from_fn(|i| {
+                LeRxPacketAddress::from_placed(placement.address(&nodes.nodes[i].packet))
+            }),
             head: 0,
             tail: PACKETS,
             spare: None,
-        })
+        }
+    }
+
+    fn reset_endpoints(&mut self) {
+        self.head = 0;
+        self.tail = PACKETS;
+        self.spare = None;
     }
 
     pub(crate) fn view<'ring>(
@@ -523,49 +490,23 @@ impl<const PACKETS: usize> LeRxRingView<'_, PACKETS> {
 pub struct LeRxChain<const PACKETS: usize> {
     storage: Pin<&'static mut LeRxChainStorage<PACKETS>>,
     class: RxMemoryListClass,
-    nodes_base: u32,
     ring: LeRxRing<PACKETS>,
 }
 
 impl<const PACKETS: usize> LeRxChain<PACKETS> {
-    /// Bind static storage at its linked address.
-    #[cfg(target_arch = "riscv32")]
-    pub fn bind(
-        storage: &'static mut LeRxChainStorage<PACKETS>,
+    /// Claim a linker-proven receive arena and initialize its chain.
+    pub fn place<S: ControllerDmaSpace>(
+        placed: oer_esp32s31_hal::dma_static::Placed<LeRxChainStorage<PACKETS>>,
         class: RxMemoryListClass,
-    ) -> Result<Self, LeRxChainBindError> {
-        let base = u32::try_from(core::ptr::addr_of!(*storage).addr())
-            .map_err(|_| LeRxChainBindError::AddressWidth)?;
-        Self::bind_at(storage, class, base)
-    }
-
-    /// Bind static storage at a synthetic controller address.
-    #[cfg(not(target_arch = "riscv32"))]
-    pub fn bind_model(
-        storage: &'static mut LeRxChainStorage<PACKETS>,
-        class: RxMemoryListClass,
-        base: LeRxChainModelAddress,
-    ) -> Result<Self, LeRxChainBindError> {
-        Self::bind_at(storage, class, base.0.address())
-    }
-
-    fn bind_at(
-        storage: &'static mut LeRxChainStorage<PACKETS>,
-        class: RxMemoryListClass,
-        base: u32,
-    ) -> Result<Self, LeRxChainBindError> {
-        let bytes = core::mem::size_of::<LeRxChainStorage<PACKETS>>() as u32;
-        if base < BLUETOOTH_CONTROLLER_PHYSICAL_SRAM_LOW
-            || bytes > BLUETOOTH_CONTROLLER_PHYSICAL_SRAM_HIGH.saturating_sub(base)
-        {
-            return Err(LeRxChainBindError::ExtentOutsidePhysicalSram);
+    ) -> Result<Self, LeRxChainPlaceError> {
+        if PACKETS < 2 {
+            return Err(LeRxChainPlaceError::TooFewPackets);
         }
-        let nodes_base = base + core::mem::offset_of!(LeRxChainStorage<PACKETS>, nodes) as u32;
+        let (storage, placement) = Placement::<S>::take(placed);
         let mut chain = Self {
-            ring: LeRxRing::bind(nodes_base)?,
+            ring: LeRxRing::addresses(&storage.nodes, &placement),
             storage: Pin::static_mut(storage),
             class,
-            nodes_base,
         };
         let storage = chain.storage.as_ref().get_ref();
         chain.ring.view(&storage.nodes).initialize();
@@ -576,7 +517,7 @@ impl<const PACKETS: usize> LeRxChain<PACKETS> {
     /// Controller that received into it was reset. Packets not yet taken
     /// are discarded.
     pub fn reset_after_controller_reset(&mut self, _reset: &BluetoothControllerReset) {
-        self.ring = LeRxRing::bind(self.nodes_base).expect("the chain bound at this base before");
+        self.ring.reset_endpoints();
         let storage = self.storage.as_ref().get_ref();
         self.ring.view(&storage.nodes).initialize();
     }

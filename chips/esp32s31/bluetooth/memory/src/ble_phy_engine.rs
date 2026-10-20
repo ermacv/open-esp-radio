@@ -20,52 +20,37 @@ use core::{marker::PhantomPinned, pin::Pin};
 use oer_esp32s31_hal::bluetooth::BluetoothControllerReset;
 use oer_esp32s31_hal::layouts::*;
 
-use crate::{BLUETOOTH_CONTROLLER_PHYSICAL_SRAM_HIGH, BLUETOOTH_CONTROLLER_PHYSICAL_SRAM_LOW};
-
-use oer_esp32s31_hal::types::{
-    BluetoothControllerSramAddress, BluetoothControllerSramAddressError,
-    BluetoothPhyEnvironmentAddress, BluetoothPhyEnvironmentAddressError,
-};
+use crate::{ControllerDmaSpace, Placement};
+use oer_esp32s31_hal::dma_static::Placed;
 
 /// Bytes in the complete recovered BLE PHY environment allocation.
 pub const BLUETOOTH_BLE_PHY_ENVIRONMENT_BYTES: usize = BlePhyEnvironment::SIZE;
 /// Bytes in one recovered resolving-list hardware allocation.
 pub const BLUETOOTH_BLE_PHY_RESOLVING_LIST_BYTES: usize = BleResolvingList::SIZE;
 
-const CHANNEL_FREQUENCY_OFFSETS_BYTES: usize = 0x28;
-const PACKET_START_OFFSETS_BYTES: usize = 0x08;
-const RX_ADDRESS_DELAYS_BYTES: usize = 0x04;
 const TX_POWER_LEVELS: [i8; 16] = oer_esp32s31_knowledge::tx_power::TX_POWER_LEVELS_DBM;
 const TX_POWER_LEVELS_BYTES: usize = TX_POWER_LEVELS.len();
 /// SOURCE: pinned BLE PHY allocation, resolving-list initial opaque head.
 const RESOLVING_LIST_INITIAL_HEAD: BleResolvingListWord0000Opaque =
     BleResolvingListWord0000Opaque::ZERO.with_bit_31_opaque(true);
 
-const LE_1M_PHY_MODE_INDEX: usize = 1;
-
 #[derive(Clone, Copy)]
 enum BlePhyPacketMode {
-    LeCodedS2 = 0,
-    Le1M = 1,
-    Le2M = 2,
-    LeCodedS8 = 3,
+    LeCodedS2,
+    Le1M,
+    Le2M,
+    LeCodedS8,
 }
 
-const fn channel_frequency_offsets_mhz() -> [u8; 40] {
-    let mut offsets = [0; 40];
-    let mut channel = 0;
-    while channel < offsets.len() {
-        offsets[channel] = match channel {
-            0..=10 => 2 + 2 * channel as u8,
-            11..=36 => 4 + 2 * channel as u8,
-            37 => 0,
-            38 => 24,
-            39 => 78,
-            _ => unreachable!(),
-        };
-        channel += 1;
+const fn channel_frequency_offset_mhz(channel: usize) -> u8 {
+    match channel {
+        0..=10 => 2 + 2 * channel as u8,
+        11..=36 => 4 + 2 * channel as u8,
+        37 => 0,
+        38 => 24,
+        39 => 78,
+        _ => panic!("a generated channel field names one of the forty LE channels"),
     }
-    offsets
 }
 
 const fn preamble_and_access_address_airtime_micros(mode: BlePhyPacketMode) -> u16 {
@@ -83,36 +68,19 @@ const fn rx_address_capture_delay_micros(mode: BlePhyPacketMode) -> u8 {
     }
 }
 
-const fn packet_start_offsets_micros() -> [u16; 4] {
-    [
-        preamble_and_access_address_airtime_micros(BlePhyPacketMode::LeCodedS2),
-        preamble_and_access_address_airtime_micros(BlePhyPacketMode::Le1M),
-        preamble_and_access_address_airtime_micros(BlePhyPacketMode::Le2M),
-        preamble_and_access_address_airtime_micros(BlePhyPacketMode::LeCodedS8),
-    ]
-}
-
-const fn rx_address_delays_micros() -> [u8; 4] {
-    [
-        rx_address_capture_delay_micros(BlePhyPacketMode::LeCodedS2),
-        rx_address_capture_delay_micros(BlePhyPacketMode::Le1M),
-        rx_address_capture_delay_micros(BlePhyPacketMode::Le2M),
-        rx_address_capture_delay_micros(BlePhyPacketMode::LeCodedS8),
-    ]
-}
-
 /// Complete static backing storage required by BLE PHY register publication.
 ///
 /// Unknown environment fields remain opaque until individual controller
-/// consumers establish their semantics. Construction installs the reviewed
+/// consumers establish their semantics. Placing installs the reviewed
 /// immutable PHY lookup data, but does not claim Link Layer, privacy,
 /// advertising, scanning, or connection readiness.
 #[repr(C, align(4))]
+#[derive(bytemuck::Zeroable)]
 pub struct BlePhyEngineStorage {
     environment: BlePhyEnvironment,
-    channel_frequency_offsets_mhz: [u8; CHANNEL_FREQUENCY_OFFSETS_BYTES],
-    packet_start_offsets_micros: [u16; 4],
-    rx_address_delays_micros: [u8; RX_ADDRESS_DELAYS_BYTES],
+    channel_frequency_offsets_mhz: [u8; BlePhyChannelFrequencyOffsets::SIZE],
+    packet_start_offsets_micros: [u8; BlePhyPacketStartOffsets::SIZE],
+    rx_address_delays_micros: [u8; BlePhyRxAddressDelays::SIZE],
     tx_power_levels_dbm: [i8; TX_POWER_LEVELS_BYTES],
     resolving_list: BleResolvingList,
     _pin: PhantomPinned,
@@ -126,27 +94,27 @@ const _: () = {
     );
     assert!(
         core::mem::offset_of!(BlePhyEngineStorage, packet_start_offsets_micros)
-            == BLUETOOTH_BLE_PHY_ENVIRONMENT_BYTES + CHANNEL_FREQUENCY_OFFSETS_BYTES
+            == BLUETOOTH_BLE_PHY_ENVIRONMENT_BYTES + BlePhyChannelFrequencyOffsets::SIZE
     );
     assert!(
         core::mem::offset_of!(BlePhyEngineStorage, rx_address_delays_micros)
             == BLUETOOTH_BLE_PHY_ENVIRONMENT_BYTES
-                + CHANNEL_FREQUENCY_OFFSETS_BYTES
-                + PACKET_START_OFFSETS_BYTES
+                + BlePhyChannelFrequencyOffsets::SIZE
+                + BlePhyPacketStartOffsets::SIZE
     );
     assert!(
         core::mem::offset_of!(BlePhyEngineStorage, tx_power_levels_dbm)
             == BLUETOOTH_BLE_PHY_ENVIRONMENT_BYTES
-                + CHANNEL_FREQUENCY_OFFSETS_BYTES
-                + PACKET_START_OFFSETS_BYTES
-                + RX_ADDRESS_DELAYS_BYTES
+                + BlePhyChannelFrequencyOffsets::SIZE
+                + BlePhyPacketStartOffsets::SIZE
+                + BlePhyRxAddressDelays::SIZE
     );
     assert!(
         core::mem::offset_of!(BlePhyEngineStorage, resolving_list)
             == BLUETOOTH_BLE_PHY_ENVIRONMENT_BYTES
-                + CHANNEL_FREQUENCY_OFFSETS_BYTES
-                + PACKET_START_OFFSETS_BYTES
-                + RX_ADDRESS_DELAYS_BYTES
+                + BlePhyChannelFrequencyOffsets::SIZE
+                + BlePhyPacketStartOffsets::SIZE
+                + BlePhyRxAddressDelays::SIZE
                 + TX_POWER_LEVELS_BYTES
     );
 };
@@ -166,8 +134,10 @@ impl BlePhyLe1MPacketStartCalibration {
     /// The reviewed LE 1M terms that BLE PHY initialization publishes.
     pub const fn le_1m() -> Self {
         Self {
-            packet_start_offset_micros: packet_start_offsets_micros()[LE_1M_PHY_MODE_INDEX],
-            rx_address_delay_micros: rx_address_delays_micros()[LE_1M_PHY_MODE_INDEX],
+            packet_start_offset_micros: preamble_and_access_address_airtime_micros(
+                BlePhyPacketMode::Le1M,
+            ),
+            rx_address_delay_micros: rx_address_capture_delay_micros(BlePhyPacketMode::Le1M),
         }
     }
 
@@ -184,163 +154,40 @@ impl BlePhyLe1MPacketStartCalibration {
     }
 }
 
-/// Why static BLE PHY storage could not acquire a physical address binding.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum BlePhyEngineBindError {
-    /// A target pointer cannot be represented by the 32-bit S31 address space.
-    AddressWidth,
-    /// The environment address cannot represent every published member.
-    InvalidEnvironment(BluetoothPhyEnvironmentAddressError),
-    /// The resolving-list base is outside the controller-pointer domain.
-    InvalidResolvingList(BluetoothControllerSramAddressError),
-    /// An environment-owned auxiliary base is outside the controller domain.
-    InvalidAuxiliary(BluetoothControllerSramAddressError),
-    /// Some byte of either object lies outside physical internal SRAM.
-    ExtentOutsidePhysicalSram,
-}
-
-/// Failed storage binding that returns the exact unchanged allocation.
-#[must_use = "failed BLE PHY storage remains available for corrected placement"]
-pub struct BlePhyEngineBindFailure {
-    storage: &'static mut BlePhyEngineStorage,
-    error: BlePhyEngineBindError,
-}
-
-impl BlePhyEngineBindFailure {
-    fn new(storage: &'static mut BlePhyEngineStorage, error: BlePhyEngineBindError) -> Self {
-        Self { storage, error }
-    }
-
-    /// Inspect the finite binding failure.
-    pub const fn error(&self) -> BlePhyEngineBindError {
-        self.error
-    }
-
-    /// Recover the unchanged allocation and failure reason.
-    pub fn into_parts(self) -> (&'static mut BlePhyEngineStorage, BlePhyEngineBindError) {
-        (self.storage, self.error)
-    }
-}
-
-impl core::fmt::Debug for BlePhyEngineBindFailure {
-    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        formatter
-            .debug_struct("BlePhyEngineBindFailure")
-            .field("error", &self.error)
-            .finish_non_exhaustive()
-    }
-}
-
-/// Synthetic base accepted only by native ownership models.
-#[cfg(not(target_arch = "riscv32"))]
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct BlePhyEngineModelAddress(BluetoothControllerSramAddress);
-
-#[cfg(not(target_arch = "riscv32"))]
-impl BlePhyEngineModelAddress {
-    /// Validate one synthetic base without deriving it from a host pointer.
-    pub const fn new(address: u32) -> Result<Self, BluetoothControllerSramAddressError> {
-        match BluetoothControllerSramAddress::new(address) {
-            Ok(address) => Ok(Self(address)),
-            Err(error) => Err(error),
-        }
-    }
-
-    const fn address(self) -> u32 {
-        self.0.address()
-    }
-}
-
 /// Address proof for the complete contiguous allocation graph.
 pub struct BlePhyEngineBinding {
-    environment: BluetoothPhyEnvironmentAddress,
-    channel_frequency_offsets: BluetoothControllerSramAddress,
-    packet_start_offsets: BluetoothControllerSramAddress,
-    rx_address_delays: BluetoothControllerSramAddress,
-    tx_power_levels: BluetoothControllerSramAddress,
-    resolving_list: BluetoothControllerSramAddress,
+    environment: DmaRef<BlePhyEnvironment>,
+    channel_frequency_offsets: DmaWindowAddress,
+    packet_start_offsets: DmaWindowAddress,
+    rx_address_delays: DmaWindowAddress,
+    tx_power_levels: DmaWindowAddress,
+    resolving_list: DmaRef<BleResolvingList>,
     end_exclusive: u32,
 }
 
 impl BlePhyEngineBinding {
-    fn new(
-        environment: u32,
-        channel_frequency_offsets: u32,
-        packet_start_offsets: u32,
-        rx_address_delays: u32,
-        tx_power_levels: u32,
-        resolving_list: u32,
-    ) -> Result<Self, BlePhyEngineBindError> {
-        let environment = BluetoothPhyEnvironmentAddress::new(environment)
-            .map_err(BlePhyEngineBindError::InvalidEnvironment)?;
-        let channel_frequency_offsets =
-            BluetoothControllerSramAddress::new(channel_frequency_offsets)
-                .map_err(BlePhyEngineBindError::InvalidAuxiliary)?;
-        let packet_start_offsets = BluetoothControllerSramAddress::new(packet_start_offsets)
-            .map_err(BlePhyEngineBindError::InvalidAuxiliary)?;
-        let rx_address_delays = BluetoothControllerSramAddress::new(rx_address_delays)
-            .map_err(BlePhyEngineBindError::InvalidAuxiliary)?;
-        let tx_power_levels = BluetoothControllerSramAddress::new(tx_power_levels)
-            .map_err(BlePhyEngineBindError::InvalidAuxiliary)?;
-        let resolving_list = BluetoothControllerSramAddress::new(resolving_list)
-            .map_err(BlePhyEngineBindError::InvalidResolvingList)?;
-        let end_exclusive = resolving_list
-            .address()
-            .checked_add(BLUETOOTH_BLE_PHY_RESOLVING_LIST_BYTES as u32)
-            .ok_or(BlePhyEngineBindError::ExtentOutsidePhysicalSram)?;
-        let expected_channel_frequency_offsets = environment
-            .address()
-            .checked_add(BLUETOOTH_BLE_PHY_ENVIRONMENT_BYTES as u32)
-            .ok_or(BlePhyEngineBindError::ExtentOutsidePhysicalSram)?;
-        let expected_packet_start_offsets = channel_frequency_offsets
-            .address()
-            .checked_add(CHANNEL_FREQUENCY_OFFSETS_BYTES as u32)
-            .ok_or(BlePhyEngineBindError::ExtentOutsidePhysicalSram)?;
-        let expected_rx_address_delays = packet_start_offsets
-            .address()
-            .checked_add(PACKET_START_OFFSETS_BYTES as u32)
-            .ok_or(BlePhyEngineBindError::ExtentOutsidePhysicalSram)?;
-        let expected_tx_power_levels = rx_address_delays
-            .address()
-            .checked_add(RX_ADDRESS_DELAYS_BYTES as u32)
-            .ok_or(BlePhyEngineBindError::ExtentOutsidePhysicalSram)?;
-        let expected_resolving_list = tx_power_levels
-            .address()
-            .checked_add(TX_POWER_LEVELS_BYTES as u32)
-            .ok_or(BlePhyEngineBindError::ExtentOutsidePhysicalSram)?;
-        if environment.address() < BLUETOOTH_CONTROLLER_PHYSICAL_SRAM_LOW
-            || channel_frequency_offsets.address() != expected_channel_frequency_offsets
-            || packet_start_offsets.address() != expected_packet_start_offsets
-            || rx_address_delays.address() != expected_rx_address_delays
-            || tx_power_levels.address() != expected_tx_power_levels
-            || resolving_list.address() != expected_resolving_list
-            || end_exclusive > BLUETOOTH_CONTROLLER_PHYSICAL_SRAM_HIGH
-        {
-            return Err(BlePhyEngineBindError::ExtentOutsidePhysicalSram);
+    fn new<S: ControllerDmaSpace>(storage: &BlePhyEngineStorage, placement: &Placement<S>) -> Self {
+        Self {
+            environment: placement.reference(&storage.environment),
+            channel_frequency_offsets: placement.address(&storage.channel_frequency_offsets_mhz),
+            packet_start_offsets: placement.address(&storage.packet_start_offsets_micros),
+            rx_address_delays: placement.address(&storage.rx_address_delays_micros),
+            tx_power_levels: placement.address(&storage.tx_power_levels_dbm),
+            resolving_list: placement.reference(&storage.resolving_list),
+            end_exclusive: placement.address(storage).get()
+                + size_of::<BlePhyEngineStorage>() as u32,
         }
-        Ok(Self {
-            environment,
-            channel_frequency_offsets,
-            packet_start_offsets,
-            rx_address_delays,
-            tx_power_levels,
-            resolving_list,
-            end_exclusive,
-        })
     }
-
-    /// Return the complete physical SRAM range retained by this owner.
+    /// Complete DMA range retained by this owner.
     pub const fn range(&self) -> (u32, u32) {
-        (self.environment.address(), self.end_exclusive)
+        (self.environment.bits(), self.end_exclusive)
     }
-
-    /// Return the typed environment base without granting publication.
-    pub const fn environment_address(&self) -> BluetoothPhyEnvironmentAddress {
+    /// The environment layout in this retained placed allocation.
+    pub const fn environment_address(&self) -> DmaRef<BlePhyEnvironment> {
         self.environment
     }
-
-    /// Return the typed resolving-list base without granting publication.
-    pub const fn resolving_list_address(&self) -> BluetoothControllerSramAddress {
+    /// The resolving list in the same allocation.
+    pub const fn resolving_list_address(&self) -> DmaRef<BleResolvingList> {
         self.resolving_list
     }
 }
@@ -375,12 +222,8 @@ impl BlePhyEngineCpuOwned {
         unsafe {
             let inputs =
                 oer_esp32s31_hal::types::BluetoothPhyRegisterInitInputs::normal_controller_profile(
-                    crate::layout_reference::controller_reference(
-                        self.binding.environment_address().address(),
-                    ),
-                    crate::layout_reference::controller_reference(
-                        self.binding.resolving_list_address().address(),
-                    ),
+                    self.binding.environment_address(),
+                    self.binding.resolving_list_address(),
                 );
             oer_esp32s31_hal::bluetooth::BlePhyHardwareObjects::bind(inputs)
         }
@@ -390,8 +233,14 @@ impl BlePhyEngineCpuOwned {
     pub fn le_1m_packet_start_calibration(&self) -> BlePhyLe1MPacketStartCalibration {
         let storage = self.storage.as_ref().get_ref();
         BlePhyLe1MPacketStartCalibration {
-            packet_start_offset_micros: storage.packet_start_offsets_micros[LE_1M_PHY_MODE_INDEX],
-            rx_address_delay_micros: storage.rx_address_delays_micros[LE_1M_PHY_MODE_INDEX],
+            packet_start_offset_micros: BlePhyPacketStartOffsets::new(
+                &storage.packet_start_offsets_micros,
+            )
+            .le_1m()
+            .micros(),
+            rx_address_delay_micros: BlePhyRxAddressDelays::new(&storage.rx_address_delays_micros)
+                .le_1m()
+                .micros(),
         }
     }
 
@@ -999,140 +848,232 @@ impl BlePhyEngineStorage {
     pub const fn new() -> Self {
         Self {
             environment: BlePhyEnvironment::zeroed(),
-            channel_frequency_offsets_mhz: channel_frequency_offsets_mhz(),
-            packet_start_offsets_micros: packet_start_offsets_micros(),
-            rx_address_delays_micros: rx_address_delays_micros(),
+            channel_frequency_offsets_mhz: [0; BlePhyChannelFrequencyOffsets::SIZE],
+            packet_start_offsets_micros: [0; BlePhyPacketStartOffsets::SIZE],
+            rx_address_delays_micros: [0; BlePhyRxAddressDelays::SIZE],
             tx_power_levels_dbm: TX_POWER_LEVELS,
             resolving_list: BleResolvingList::zeroed(),
             _pin: PhantomPinned,
         }
     }
 
-    /// Bind the real locations of one unique static target allocation.
-    #[cfg(target_arch = "riscv32")]
-    pub fn pin_static(
-        storage: &'static mut Self,
-    ) -> Result<BlePhyEngineCpuOwned, BlePhyEngineBindFailure> {
-        let environment = match u32::try_from(core::ptr::addr_of!(storage.environment).addr()) {
-            Ok(address) => address,
-            Err(_) => {
-                return Err(BlePhyEngineBindFailure::new(
-                    storage,
-                    BlePhyEngineBindError::AddressWidth,
-                ));
-            }
-        };
-        let resolving_list = match u32::try_from(core::ptr::addr_of!(storage.resolving_list).addr())
-        {
-            Ok(address) => address,
-            Err(_) => {
-                return Err(BlePhyEngineBindFailure::new(
-                    storage,
-                    BlePhyEngineBindError::AddressWidth,
-                ));
-            }
-        };
-        let channel_frequency_offsets = match u32::try_from(
-            core::ptr::addr_of!(storage.channel_frequency_offsets_mhz).addr(),
-        ) {
-            Ok(address) => address,
-            Err(_) => {
-                return Err(BlePhyEngineBindFailure::new(
-                    storage,
-                    BlePhyEngineBindError::AddressWidth,
-                ));
-            }
-        };
-        let packet_start_offsets =
-            match u32::try_from(core::ptr::addr_of!(storage.packet_start_offsets_micros).addr()) {
-                Ok(address) => address,
-                Err(_) => {
-                    return Err(BlePhyEngineBindFailure::new(
-                        storage,
-                        BlePhyEngineBindError::AddressWidth,
-                    ));
-                }
-            };
-        let rx_address_delays =
-            match u32::try_from(core::ptr::addr_of!(storage.rx_address_delays_micros).addr()) {
-                Ok(address) => address,
-                Err(_) => {
-                    return Err(BlePhyEngineBindFailure::new(
-                        storage,
-                        BlePhyEngineBindError::AddressWidth,
-                    ));
-                }
-            };
-        let tx_power_levels =
-            match u32::try_from(core::ptr::addr_of!(storage.tx_power_levels_dbm).addr()) {
-                Ok(address) => address,
-                Err(_) => {
-                    return Err(BlePhyEngineBindFailure::new(
-                        storage,
-                        BlePhyEngineBindError::AddressWidth,
-                    ));
-                }
-            };
-        Self::pin_static_inner(
-            storage,
-            environment,
-            channel_frequency_offsets,
-            packet_start_offsets,
-            rx_address_delays,
-            tx_power_levels,
-            resolving_list,
-        )
-    }
-
-    /// Bind a deterministic physical-SRAM base to a native ownership model.
-    #[cfg(not(target_arch = "riscv32"))]
-    pub fn pin_static_model(
-        storage: &'static mut Self,
-        base: BlePhyEngineModelAddress,
-    ) -> Result<BlePhyEngineCpuOwned, BlePhyEngineBindFailure> {
-        let environment = base.address();
-        let channel_frequency_offsets = environment + BLUETOOTH_BLE_PHY_ENVIRONMENT_BYTES as u32;
-        let packet_start_offsets =
-            channel_frequency_offsets + CHANNEL_FREQUENCY_OFFSETS_BYTES as u32;
-        let rx_address_delays = packet_start_offsets + PACKET_START_OFFSETS_BYTES as u32;
-        let tx_power_levels = rx_address_delays + RX_ADDRESS_DELAYS_BYTES as u32;
-        let resolving_list = tx_power_levels + TX_POWER_LEVELS_BYTES as u32;
-        Self::pin_static_inner(
-            storage,
-            environment,
-            channel_frequency_offsets,
-            packet_start_offsets,
-            rx_address_delays,
-            tx_power_levels,
-            resolving_list,
-        )
-    }
-
-    fn pin_static_inner(
-        storage: &'static mut Self,
-        environment: u32,
-        channel_frequency_offsets: u32,
-        packet_start_offsets: u32,
-        rx_address_delays: u32,
-        tx_power_levels: u32,
-        resolving_list: u32,
-    ) -> Result<BlePhyEngineCpuOwned, BlePhyEngineBindFailure> {
-        let binding = match BlePhyEngineBinding::new(
-            environment,
-            channel_frequency_offsets,
-            packet_start_offsets,
-            rx_address_delays,
-            tx_power_levels,
-            resolving_list,
-        ) {
-            Ok(binding) => binding,
-            Err(error) => return Err(BlePhyEngineBindFailure::new(storage, error)),
-        };
+    /// Claim the linker-proven allocation and initialize its retained hardware objects.
+    ///
+    /// Raw static storage does not provide placement proof:
+    ///
+    /// ```compile_fail,E0308
+    /// use oer_esp32s31_bluetooth_memory::{BlePhyEngineStorage, ControllerDmaSpace};
+    /// fn from_raw<S: ControllerDmaSpace>(storage: &'static mut BlePhyEngineStorage) {
+    ///     BlePhyEngineStorage::place::<S>(storage);
+    /// }
+    /// ```
+    pub fn place<S: ControllerDmaSpace>(placed: Placed<Self>) -> BlePhyEngineCpuOwned {
+        let (storage, placement) = Placement::<S>::take(placed);
+        storage.initialize_lookup_tables();
+        let binding = BlePhyEngineBinding::new(storage, &placement);
         storage.initialize_reviewed_allocation(&binding);
-        Ok(BlePhyEngineCpuOwned {
+        BlePhyEngineCpuOwned {
             storage: Pin::static_mut(storage),
             binding,
-        })
+        }
+    }
+
+    fn initialize_lookup_tables(&mut self) {
+        // SOURCE: BLOB_LIBBLE_MEMORY_PHY_LOOKUPS, bt-lib pin 10c50778;
+        // generated BLE_PHY_* byte layouts and notes/bluetooth-controller-boundary.md.
+        let mut frequencies =
+            BlePhyChannelFrequencyOffsetsMut::new(&mut self.channel_frequency_offsets_mhz);
+        frequencies.set_channel_00(
+            BlePhyChannelFrequencyOffsetsChannel00::from_bits(0)
+                .with_offset_mhz(channel_frequency_offset_mhz(0)),
+        );
+        frequencies.set_channel_01(
+            BlePhyChannelFrequencyOffsetsChannel01::from_bits(0)
+                .with_offset_mhz(channel_frequency_offset_mhz(1)),
+        );
+        frequencies.set_channel_02(
+            BlePhyChannelFrequencyOffsetsChannel02::from_bits(0)
+                .with_offset_mhz(channel_frequency_offset_mhz(2)),
+        );
+        frequencies.set_channel_03(
+            BlePhyChannelFrequencyOffsetsChannel03::from_bits(0)
+                .with_offset_mhz(channel_frequency_offset_mhz(3)),
+        );
+        frequencies.set_channel_04(
+            BlePhyChannelFrequencyOffsetsChannel04::from_bits(0)
+                .with_offset_mhz(channel_frequency_offset_mhz(4)),
+        );
+        frequencies.set_channel_05(
+            BlePhyChannelFrequencyOffsetsChannel05::from_bits(0)
+                .with_offset_mhz(channel_frequency_offset_mhz(5)),
+        );
+        frequencies.set_channel_06(
+            BlePhyChannelFrequencyOffsetsChannel06::from_bits(0)
+                .with_offset_mhz(channel_frequency_offset_mhz(6)),
+        );
+        frequencies.set_channel_07(
+            BlePhyChannelFrequencyOffsetsChannel07::from_bits(0)
+                .with_offset_mhz(channel_frequency_offset_mhz(7)),
+        );
+        frequencies.set_channel_08(
+            BlePhyChannelFrequencyOffsetsChannel08::from_bits(0)
+                .with_offset_mhz(channel_frequency_offset_mhz(8)),
+        );
+        frequencies.set_channel_09(
+            BlePhyChannelFrequencyOffsetsChannel09::from_bits(0)
+                .with_offset_mhz(channel_frequency_offset_mhz(9)),
+        );
+        frequencies.set_channel_10(
+            BlePhyChannelFrequencyOffsetsChannel10::from_bits(0)
+                .with_offset_mhz(channel_frequency_offset_mhz(10)),
+        );
+        frequencies.set_channel_11(
+            BlePhyChannelFrequencyOffsetsChannel11::from_bits(0)
+                .with_offset_mhz(channel_frequency_offset_mhz(11)),
+        );
+        frequencies.set_channel_12(
+            BlePhyChannelFrequencyOffsetsChannel12::from_bits(0)
+                .with_offset_mhz(channel_frequency_offset_mhz(12)),
+        );
+        frequencies.set_channel_13(
+            BlePhyChannelFrequencyOffsetsChannel13::from_bits(0)
+                .with_offset_mhz(channel_frequency_offset_mhz(13)),
+        );
+        frequencies.set_channel_14(
+            BlePhyChannelFrequencyOffsetsChannel14::from_bits(0)
+                .with_offset_mhz(channel_frequency_offset_mhz(14)),
+        );
+        frequencies.set_channel_15(
+            BlePhyChannelFrequencyOffsetsChannel15::from_bits(0)
+                .with_offset_mhz(channel_frequency_offset_mhz(15)),
+        );
+        frequencies.set_channel_16(
+            BlePhyChannelFrequencyOffsetsChannel16::from_bits(0)
+                .with_offset_mhz(channel_frequency_offset_mhz(16)),
+        );
+        frequencies.set_channel_17(
+            BlePhyChannelFrequencyOffsetsChannel17::from_bits(0)
+                .with_offset_mhz(channel_frequency_offset_mhz(17)),
+        );
+        frequencies.set_channel_18(
+            BlePhyChannelFrequencyOffsetsChannel18::from_bits(0)
+                .with_offset_mhz(channel_frequency_offset_mhz(18)),
+        );
+        frequencies.set_channel_19(
+            BlePhyChannelFrequencyOffsetsChannel19::from_bits(0)
+                .with_offset_mhz(channel_frequency_offset_mhz(19)),
+        );
+        frequencies.set_channel_20(
+            BlePhyChannelFrequencyOffsetsChannel20::from_bits(0)
+                .with_offset_mhz(channel_frequency_offset_mhz(20)),
+        );
+        frequencies.set_channel_21(
+            BlePhyChannelFrequencyOffsetsChannel21::from_bits(0)
+                .with_offset_mhz(channel_frequency_offset_mhz(21)),
+        );
+        frequencies.set_channel_22(
+            BlePhyChannelFrequencyOffsetsChannel22::from_bits(0)
+                .with_offset_mhz(channel_frequency_offset_mhz(22)),
+        );
+        frequencies.set_channel_23(
+            BlePhyChannelFrequencyOffsetsChannel23::from_bits(0)
+                .with_offset_mhz(channel_frequency_offset_mhz(23)),
+        );
+        frequencies.set_channel_24(
+            BlePhyChannelFrequencyOffsetsChannel24::from_bits(0)
+                .with_offset_mhz(channel_frequency_offset_mhz(24)),
+        );
+        frequencies.set_channel_25(
+            BlePhyChannelFrequencyOffsetsChannel25::from_bits(0)
+                .with_offset_mhz(channel_frequency_offset_mhz(25)),
+        );
+        frequencies.set_channel_26(
+            BlePhyChannelFrequencyOffsetsChannel26::from_bits(0)
+                .with_offset_mhz(channel_frequency_offset_mhz(26)),
+        );
+        frequencies.set_channel_27(
+            BlePhyChannelFrequencyOffsetsChannel27::from_bits(0)
+                .with_offset_mhz(channel_frequency_offset_mhz(27)),
+        );
+        frequencies.set_channel_28(
+            BlePhyChannelFrequencyOffsetsChannel28::from_bits(0)
+                .with_offset_mhz(channel_frequency_offset_mhz(28)),
+        );
+        frequencies.set_channel_29(
+            BlePhyChannelFrequencyOffsetsChannel29::from_bits(0)
+                .with_offset_mhz(channel_frequency_offset_mhz(29)),
+        );
+        frequencies.set_channel_30(
+            BlePhyChannelFrequencyOffsetsChannel30::from_bits(0)
+                .with_offset_mhz(channel_frequency_offset_mhz(30)),
+        );
+        frequencies.set_channel_31(
+            BlePhyChannelFrequencyOffsetsChannel31::from_bits(0)
+                .with_offset_mhz(channel_frequency_offset_mhz(31)),
+        );
+        frequencies.set_channel_32(
+            BlePhyChannelFrequencyOffsetsChannel32::from_bits(0)
+                .with_offset_mhz(channel_frequency_offset_mhz(32)),
+        );
+        frequencies.set_channel_33(
+            BlePhyChannelFrequencyOffsetsChannel33::from_bits(0)
+                .with_offset_mhz(channel_frequency_offset_mhz(33)),
+        );
+        frequencies.set_channel_34(
+            BlePhyChannelFrequencyOffsetsChannel34::from_bits(0)
+                .with_offset_mhz(channel_frequency_offset_mhz(34)),
+        );
+        frequencies.set_channel_35(
+            BlePhyChannelFrequencyOffsetsChannel35::from_bits(0)
+                .with_offset_mhz(channel_frequency_offset_mhz(35)),
+        );
+        frequencies.set_channel_36(
+            BlePhyChannelFrequencyOffsetsChannel36::from_bits(0)
+                .with_offset_mhz(channel_frequency_offset_mhz(36)),
+        );
+        frequencies.set_channel_37(
+            BlePhyChannelFrequencyOffsetsChannel37::from_bits(0)
+                .with_offset_mhz(channel_frequency_offset_mhz(37)),
+        );
+        frequencies.set_channel_38(
+            BlePhyChannelFrequencyOffsetsChannel38::from_bits(0)
+                .with_offset_mhz(channel_frequency_offset_mhz(38)),
+        );
+        frequencies.set_channel_39(
+            BlePhyChannelFrequencyOffsetsChannel39::from_bits(0)
+                .with_offset_mhz(channel_frequency_offset_mhz(39)),
+        );
+        let mut airtime = BlePhyPacketStartOffsetsMut::new(&mut self.packet_start_offsets_micros);
+        airtime.set_le_coded_s2(BlePhyPacketStartOffsetsLeCodedS2::from_bits(0).with_micros(
+            preamble_and_access_address_airtime_micros(BlePhyPacketMode::LeCodedS2),
+        ));
+        airtime.set_le_1m(BlePhyPacketStartOffsetsLe1m::from_bits(0).with_micros(
+            preamble_and_access_address_airtime_micros(BlePhyPacketMode::Le1M),
+        ));
+        airtime.set_le_2m(BlePhyPacketStartOffsetsLe2m::from_bits(0).with_micros(
+            preamble_and_access_address_airtime_micros(BlePhyPacketMode::Le2M),
+        ));
+        airtime.set_le_coded_s8(BlePhyPacketStartOffsetsLeCodedS8::from_bits(0).with_micros(
+            preamble_and_access_address_airtime_micros(BlePhyPacketMode::LeCodedS8),
+        ));
+        let mut delays = BlePhyRxAddressDelaysMut::new(&mut self.rx_address_delays_micros);
+        delays.set_le_coded_s2(
+            BlePhyRxAddressDelaysLeCodedS2::from_bits(0)
+                .with_micros(rx_address_capture_delay_micros(BlePhyPacketMode::LeCodedS2)),
+        );
+        delays.set_le_1m(
+            BlePhyRxAddressDelaysLe1m::from_bits(0)
+                .with_micros(rx_address_capture_delay_micros(BlePhyPacketMode::Le1M)),
+        );
+        delays.set_le_2m(
+            BlePhyRxAddressDelaysLe2m::from_bits(0)
+                .with_micros(rx_address_capture_delay_micros(BlePhyPacketMode::Le2M)),
+        );
+        delays.set_le_coded_s8(
+            BlePhyRxAddressDelaysLeCodedS8::from_bits(0)
+                .with_micros(rx_address_capture_delay_micros(BlePhyPacketMode::LeCodedS8)),
+        );
+        self.tx_power_levels_dbm = TX_POWER_LEVELS;
     }
 
     /// Write the allocation-time image: a zeroed environment and resolving
@@ -1142,23 +1083,18 @@ impl BlePhyEngineStorage {
         crate::shared_layout::clear_phy_environment(&self.environment);
         crate::shared_layout::clear_resolving_list(&self.resolving_list);
         self.environment.channel_frequency_offsets().write(
-            BlePhyEnvironmentChannelFrequencyOffsets::from_bits(
-                binding.channel_frequency_offsets.address(),
-            ),
+            BlePhyEnvironmentChannelFrequencyOffsets::ZERO
+                .with_address(binding.channel_frequency_offsets),
         );
         self.environment.packet_start_offsets().write(
-            BlePhyEnvironmentPacketStartOffsets::from_bits(binding.packet_start_offsets.address()),
+            BlePhyEnvironmentPacketStartOffsets::ZERO.with_address(binding.packet_start_offsets),
         );
         self.environment
             .rx_address_delays()
-            .write(BlePhyEnvironmentRxAddressDelays::from_bits(
-                binding.rx_address_delays.address(),
-            ));
+            .write(BlePhyEnvironmentRxAddressDelays::ZERO.with_address(binding.rx_address_delays));
         self.environment
             .tx_power_levels()
-            .write(BlePhyEnvironmentTxPowerLevels::from_bits(
-                binding.tx_power_levels.address(),
-            ));
+            .write(BlePhyEnvironmentTxPowerLevels::ZERO.with_address(binding.tx_power_levels));
         self.environment.tx_power_level_count().write(
             BlePhyEnvironmentTxPowerLevelCount::ZERO.with_value(TX_POWER_LEVELS_BYTES as u8),
         );

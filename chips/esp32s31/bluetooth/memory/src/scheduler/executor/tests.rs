@@ -743,12 +743,12 @@ mod cancel {
 }
 
 mod pools {
+    use bytemuck::Zeroable;
     use std::{boxed::Box, vec::Vec};
 
     use crate::{
         LegacyAdvertisingPool, LegacyAdvertisingPrimaryChannelPlan, LegacyAdvertisingStorage,
-        SchedulerAllocationConfig, SchedulerItemId, SchedulerItemSpace, SchedulerPoolModelAddress,
-        SchedulerRolePoolStorage,
+        SchedulerAllocationConfig, SchedulerItemId, SchedulerItemSpace, SchedulerRolePoolStorage,
     };
 
     use super::idle;
@@ -759,14 +759,13 @@ mod pools {
         let storage = Box::leak(Box::new(SchedulerRolePoolStorage::<
             LegacyAdvertisingStorage,
             1,
-        >::new()));
+        >::zeroed()));
         let numbers = SchedulerAllocationConfig::new(1, 0, 0)
             .unwrap()
             .advertising(0, 1)
             .unwrap();
-        let mut pool = LegacyAdvertisingPool::bind_model(
-            storage,
-            SchedulerPoolModelAddress::new(0x2f00_0100).unwrap(),
+        let mut pool = LegacyAdvertisingPool::place::<crate::HostDma<0x2f00_0100>>(
+            oer_esp32s31_hal::dma_static::Placed::host(storage),
             numbers,
         )
         .unwrap();

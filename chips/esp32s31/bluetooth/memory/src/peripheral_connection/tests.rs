@@ -1,3 +1,4 @@
+use bytemuck::Zeroable;
 use oer_esp32s31_hal::layouts::*;
 use std::{boxed::Box, vec::Vec};
 
@@ -12,12 +13,12 @@ use super::{
 };
 use crate::{
     ConnectionCoexistencePriorities, DirectionFindingWorkspaceLink,
-    DirectionFindingWorkspaceModelAddress, DirectionFindingWorkspaceStorage,
-    PeripheralConnectionCoexistenceProtection, SchedulerItemCoexistencePriority,
+    DirectionFindingWorkspaceStorage, PeripheralConnectionCoexistenceProtection,
+    SchedulerItemCoexistencePriority,
     le_rx_packet::LeRxOutcome,
     scheduler_pool::{
-        SchedulerAllocationConfig, SchedulerPoolError, SchedulerPoolModelAddress,
-        SchedulerRoleInstance, SchedulerRolePoolStorage,
+        SchedulerAllocationConfig, SchedulerPoolError, SchedulerRoleInstance,
+        SchedulerRolePoolStorage,
     },
 };
 
@@ -30,25 +31,22 @@ fn pool() -> Pool {
     let storage = Box::leak(Box::new(SchedulerRolePoolStorage::<
         PeripheralConnectionStorage,
         2,
-    >::new()));
+    >::zeroed()));
     let numbers = SchedulerAllocationConfig::new(2, 2, 0)
         .unwrap()
         .connections();
-    Pool::bind_model(
-        storage,
-        SchedulerPoolModelAddress::new(0x2f00_0100).expect("test base is aligned"),
+    Pool::place::<crate::HostDma<0x2f00_0100>>(
+        oer_esp32s31_hal::dma_static::Placed::host(storage),
         numbers,
     )
     .expect("the pool fits controller SRAM")
 }
 
 fn workspace() -> DirectionFindingWorkspaceLink {
-    let storage = Box::leak(Box::new(DirectionFindingWorkspaceStorage::new()));
-    DirectionFindingWorkspaceStorage::pin_static_model(
-        storage,
-        DirectionFindingWorkspaceModelAddress::new(0x2f02_0000).unwrap(),
+    let storage = Box::leak(Box::new(DirectionFindingWorkspaceStorage::zeroed()));
+    DirectionFindingWorkspaceStorage::place::<crate::HostDma<0x2f02_0000>>(
+        oer_esp32s31_hal::dma_static::Placed::host(storage),
     )
-    .unwrap()
     .binding()
     .link()
 }

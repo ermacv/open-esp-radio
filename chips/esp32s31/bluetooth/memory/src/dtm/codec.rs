@@ -17,15 +17,12 @@ use crate::{
     sram_link::ControllerSramLinkAddress,
 };
 
-use oer_esp32s31_hal::types::{
-    BluetoothControllerSramAddress, BluetoothControllerSramAddressError,
-};
+use oer_esp32s31_hal::types::BluetoothControllerSramAddress;
 
 use super::{
     DtmExecutedWitness, DtmPositionalEventSeed, DtmPrepareError, DtmRxRotationError,
     DtmSchedulerItemCompletionStatus, DtmTxPacketPrepareError,
 };
-use crate::scheduler_pool::SchedulerPoolBindError;
 
 use crate::rx_packet_bytes::{RxPacketBytes, result_not_produced};
 use oer_esp32s31_hal::layouts::*;
@@ -47,7 +44,6 @@ pub const BLUETOOTH_DTM_RX_PACKET_BYTES: usize =
 
 type DtmTxPacketAddress = LeTxPacketAddress<BLUETOOTH_DTM_TX_PACKET_BYTES>;
 
-const RX_PACKET_LAST_ALIGNED_OFFSET: u32 = ((BLUETOOTH_DTM_RX_PACKET_BYTES as u32 - 1) / 4) * 4;
 /// SOURCE: chips/esp32s31/notes/bluetooth-direct-test-mode.md, allocation/reset profile (bt-lib pin 10c50778).
 const LINK_STATE_ALLOCATION_CONFIG_IMAGE: BleLinkStateSequencePolicy =
     BleLinkStateSequencePolicy::ZERO
@@ -77,43 +73,25 @@ const SCHEDULER_ITEM_POSITIONAL_24_IMAGE: BleSchedulerItemCoexistencePriority =
         .expect("reviewed field image fits");
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum DtmRxPacketAddressError {
-    InvalidBase(BluetoothControllerSramAddressError),
-    ZeroCompressedBase,
-    ExtentOutsideControllerSram,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) struct DtmRxPacketAddress {
-    base: BluetoothControllerSramAddress,
+    base: DmaWindowAddress,
 }
 
 impl DtmRxPacketAddress {
-    const fn new(address: u32) -> Result<Self, DtmRxPacketAddressError> {
-        let base = match BluetoothControllerSramAddress::new(address) {
-            Ok(address) => address,
-            Err(error) => return Err(DtmRxPacketAddressError::InvalidBase(error)),
-        };
-        if base.compressed_image() == 0 {
-            return Err(DtmRxPacketAddressError::ZeroCompressedBase);
-        }
-        let last_aligned_address = match address.checked_add(RX_PACKET_LAST_ALIGNED_OFFSET) {
-            Some(address) => address,
-            None => return Err(DtmRxPacketAddressError::ExtentOutsideControllerSram),
-        };
-        if BluetoothControllerSramAddress::new(last_aligned_address).is_err() {
-            return Err(DtmRxPacketAddressError::ExtentOutsideControllerSram);
-        }
-        Ok(Self { base })
+    const fn from_placed(base: DmaWindowAddress) -> Self {
+        Self { base }
     }
 
     const fn compressed_image(self) -> u32 {
-        self.base.compressed_image()
+        self.base
+            .ble_compressed()
+            .expect("a placed DTM RX packet has a nonzero encodable address")
     }
 }
 
 /// Opaque CPU-owned link-state allocation.
 #[repr(C, align(4))]
+#[derive(bytemuck::Zeroable)]
 pub(super) struct DtmLinkStateStorage {
     pub(super) layout: BleLinkState,
 }
@@ -189,6 +167,7 @@ impl DtmLinkStateStorage {
 
 /// Opaque hardware-shared scheduler-item allocation.
 #[repr(C, align(4))]
+#[derive(bytemuck::Zeroable)]
 pub(super) struct DtmSchedulerItemStorage {
     pub(super) layout: BleSchedulerItem,
 }
@@ -252,6 +231,7 @@ impl DtmSchedulerItemStorage {
 }
 
 #[repr(C, align(4))]
+#[derive(bytemuck::Zeroable)]
 pub(super) struct DtmRxBufferHeaderStorage {
     pub(super) layout: BleBufferHeader,
 }
@@ -407,6 +387,7 @@ impl LeTestPduHeader {
 }
 
 #[repr(C, align(4))]
+#[derive(bytemuck::Zeroable)]
 pub(super) struct DtmRxPacketStorage {
     pub(super) bytes: RxPacketBytes,
 }
@@ -460,6 +441,7 @@ enum DtmRxPacketCompletionObservationError {
 
 /// Controller-SRAM graph of one DTM instance.
 #[repr(C)]
+#[derive(bytemuck::Zeroable)]
 pub struct DtmStorage {
     #[cfg_attr(test, allow(dead_code))]
     pub(super) link_state: DtmLinkStateStorage,
@@ -472,23 +454,12 @@ pub struct DtmStorage {
     pub(super) rx_packet: DtmRxPacketStorage,
 }
 
-const LINK_STATE_STORAGE_OFFSET: u32 = core::mem::offset_of!(DtmStorage, link_state) as u32;
-const SCHEDULER_CONTEXT_STORAGE_OFFSET: u32 =
-    core::mem::offset_of!(DtmStorage, scheduler_context) as u32;
-const SCHEDULER_ITEM_STORAGE_OFFSET: u32 = core::mem::offset_of!(DtmStorage, scheduler_item) as u32;
-const RX_HEADER_STORAGE_OFFSET: u32 = core::mem::offset_of!(DtmStorage, rx_header) as u32;
-const RX_SWAP_RESERVE_STORAGE_OFFSET: u32 =
-    core::mem::offset_of!(DtmStorage, rx_swap_reserve) as u32;
-const TX_HEADER_STORAGE_OFFSET: u32 = core::mem::offset_of!(DtmStorage, tx_header) as u32;
-const TX_PACKET_STORAGE_OFFSET: u32 = core::mem::offset_of!(DtmStorage, tx_packet) as u32;
-const RX_PACKET_STORAGE_OFFSET: u32 = core::mem::offset_of!(DtmStorage, rx_packet) as u32;
-
 /// Addresses and DTM number of one instance.
 #[doc(hidden)]
 #[derive(Clone, Copy)]
 pub struct DtmBinding {
     link_state: ControllerSramLinkAddress,
-    scheduler_context: BluetoothControllerSramAddress,
+    scheduler_context: ControllerSramLinkAddress,
     scheduler_item: ControllerSramLinkAddress,
     pub(super) rx_header: ControllerSramLinkAddress,
     pub(super) rx_swap_reserve: ControllerSramLinkAddress,
@@ -499,28 +470,23 @@ pub struct DtmBinding {
 }
 
 impl DtmBinding {
-    pub(super) fn new(base: u32, number: u16) -> Result<Self, SchedulerPoolBindError> {
-        let address = |offset: u32| base + offset;
-        let bound_link = |offset: u32| {
-            ControllerSramLinkAddress::new(address(offset))
-                .map_err(|_| SchedulerPoolBindError::ZeroCompressedLink)
-        };
-        Ok(Self {
-            link_state: bound_link(LINK_STATE_STORAGE_OFFSET)?,
-            scheduler_context: BluetoothControllerSramAddress::new(address(
-                SCHEDULER_CONTEXT_STORAGE_OFFSET,
-            ))
-            .map_err(SchedulerPoolBindError::InvalidBase)?,
-            scheduler_item: bound_link(SCHEDULER_ITEM_STORAGE_OFFSET)?,
-            rx_header: bound_link(RX_HEADER_STORAGE_OFFSET)?,
-            rx_swap_reserve: bound_link(RX_SWAP_RESERVE_STORAGE_OFFSET)?,
-            tx_header: bound_link(TX_HEADER_STORAGE_OFFSET)?,
-            tx_packet: DtmTxPacketAddress::new(address(TX_PACKET_STORAGE_OFFSET))
-                .map_err(|_| SchedulerPoolBindError::ZeroCompressedLink)?,
-            rx_packet: DtmRxPacketAddress::new(address(RX_PACKET_STORAGE_OFFSET))
-                .map_err(|_| SchedulerPoolBindError::ZeroCompressedLink)?,
+    pub(super) fn new<S: crate::ControllerDmaSpace>(
+        storage: &DtmStorage,
+        placement: &crate::Placement<S>,
+        number: u16,
+    ) -> Self {
+        let link = |address| ControllerSramLinkAddress::from_placed(address);
+        Self {
+            link_state: link(placement.address(&storage.link_state)),
+            scheduler_context: link(placement.address(&storage.scheduler_context)),
+            scheduler_item: link(placement.address(&storage.scheduler_item)),
+            rx_header: link(placement.address(&storage.rx_header)),
+            rx_swap_reserve: link(placement.address(&storage.rx_swap_reserve)),
+            tx_header: link(placement.address(&storage.tx_header)),
+            tx_packet: DtmTxPacketAddress::from_placed(placement, &storage.tx_packet),
+            rx_packet: DtmRxPacketAddress::from_placed(placement.address(&storage.rx_packet)),
             number,
-        })
+        }
     }
 
     pub(super) const fn scheduler_item_address(&self) -> ControllerSramLinkAddress {

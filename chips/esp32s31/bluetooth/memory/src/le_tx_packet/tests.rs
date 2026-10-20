@@ -2,10 +2,11 @@ use super::{
     BLUETOOTH_LE_TX_PACKET_PREFIX_BYTES, LeTxBufferHeaderStorage, LeTxPacketAddress,
     LeTxPacketPrepareError, LeTxPacketStorage,
 };
+use bytemuck::Zeroable;
 
 #[test]
 fn encoded_pdu_round_trips_at_the_role_boundary() {
-    let mut packet = LeTxPacketStorage::<32>::new();
+    let mut packet = LeTxPacketStorage::<32>::zeroed();
     let length = packet
         .prepare_encoded_pdu(&[0x42, 3, 1, 2, 3])
         .expect("the encoded PDU fits the controller allocation");
@@ -16,7 +17,7 @@ fn encoded_pdu_round_trips_at_the_role_boundary() {
 
 #[test]
 fn malformed_or_oversized_pdu_is_rejected_before_mutation() {
-    let mut packet = LeTxPacketStorage::<{ BLUETOOTH_LE_TX_PACKET_PREFIX_BYTES + 2 }>::new();
+    let mut packet = LeTxPacketStorage::<{ BLUETOOTH_LE_TX_PACKET_PREFIX_BYTES + 2 }>::zeroed();
     let before = packet.snapshot();
 
     assert_eq!(
@@ -47,11 +48,15 @@ fn buffer_header_retains_the_bound_packet_and_its_role_capacity() {
     const LEGACY_ADVERTISING_ALLOCATION_BYTES: usize = BLUETOOTH_LE_TX_PACKET_PREFIX_BYTES + 37;
     const DTM_ALLOCATION_BYTES: usize = BLUETOOTH_LE_TX_PACKET_PREFIX_BYTES + 255;
 
-    let advertising = LeTxPacketAddress::<LEGACY_ADVERTISING_ALLOCATION_BYTES>::new(0x2f00_0100)
-        .expect("the advertising allocation fits controller SRAM");
-    let dtm = LeTxPacketAddress::<DTM_ALLOCATION_BYTES>::new(0x2f00_0100)
-        .expect("the DTM allocation fits controller SRAM");
-    let header = LeTxBufferHeaderStorage::new();
+    let (storage, placement) = crate::Placement::<crate::HostDma<0x2f00_0100>>::take(
+        oer_esp32s31_hal::dma_static::Placed::host(std::boxed::Box::leak(std::boxed::Box::new(
+            LeTxPacketStorage::<DTM_ALLOCATION_BYTES>::zeroed(),
+        ))),
+    );
+    let advertising =
+        LeTxPacketAddress::<LEGACY_ADVERTISING_ALLOCATION_BYTES>::from_placed(&placement, storage);
+    let dtm = LeTxPacketAddress::<DTM_ALLOCATION_BYTES>::from_placed(&placement, storage);
+    let header = LeTxBufferHeaderStorage::zeroed();
 
     header.initialize_bound_tx(advertising);
 
