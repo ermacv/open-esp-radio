@@ -20,8 +20,17 @@ crate-type = ["rlib", "staticlib"]
 name = "oer-firmware-probes-esp32c5-radio"
 path = "src/main.rs"
 
+[[bin]]
+name = "oer-firmware-probes-esp32c5-radio-dma"
+path = "src/dma.rs"
+
+[target.'cfg(target_arch = "riscv32")'.dependencies]
+esp-hal = { workspace = true, features = ["esp32c5", "static-interrupts", "rt", "unstable"] }
+oer-espressif-staged-runtime = { path = "../../../chips/espressif/staged-runtime", features = ["esp32c5"] }
+
 [build-dependencies]
 oer-probe-codegen = { path = "../../../tools/probe/codegen" }
+oer-esp32c5-layout = { path = "../../../chips/esp32c5/layout", features = ["build"] }
 
 [lints]
 workspace = true

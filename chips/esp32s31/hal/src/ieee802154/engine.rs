@@ -27,6 +27,7 @@ pub fn claim_buffers() -> Option<Placed<Ieee802154EngineBuffers>> {
 ///
 /// Its operations borrow its own MAC; callers see frames and slots, never
 /// DMA addresses or an independently reusable register owner.
+#[must_use = "retain the MAC with its placed storage for the hardware epoch"]
 pub struct Ieee802154Engine<
     Ll: Ieee802154LowLevel<Address = DmaWindowAddress> = Ieee802154MacOwners,
 > {

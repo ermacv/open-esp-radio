@@ -9,7 +9,7 @@ description = "Ownership and async HAL boundaries for the ESP32-S31 radio"
 
 [features]
 # Synthetic Wi-Fi observations and DMA bindings for explicit test builds.
-test-support = ["oer-esp32s31-pac/test-support"]
+test-support = ["oer-esp32s31-pac/test-support", "oer-espressif-ieee802154-engine/test-support"]
 
 [dependencies]
 bytemuck = { version = "1.25.2", default-features = false, features = ["derive", "min_const_generics", "zeroable_atomics", "zeroable_maybe_uninit"] }

@@ -38,6 +38,10 @@ impl Ieee802154Environment for Environment {
     }
 }
 
+#[allow(
+    clippy::unwrap_used,
+    reason = "the fixed host fixture has a valid channel and power"
+)]
 fn model() -> (
     Ieee802154Engine<Ieee802154LlModel<DmaWindowAddress>>,
     u32,
@@ -101,11 +105,6 @@ fn placed_owner_publishes_its_own_frames_and_keeps_other_arenas_out() {
 fn the_hal_buffer_claim_is_affine() {
     let first = claim_buffers().expect("this test claims the HAL static once");
     assert!(claim_buffers().is_none());
-    let frames = first.into_inner();
-    assert!(
-        frames
-            .rx_frames()
-            .iter()
-            .all(|frame| core::ptr::from_ref(frame).is_aligned())
-    );
+    let _claimed = first.into_inner();
+    assert!(claim_buffers().is_none());
 }

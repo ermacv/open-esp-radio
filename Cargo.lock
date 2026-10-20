@@ -2635,6 +2635,7 @@ dependencies = [
  "oer-espressif-modem-clock",
  "oer-memory",
  "oer-radio-regulatory",
+ "oer-test-ui-cases",
 ]
 
 [[package]]
@@ -3162,9 +3163,12 @@ dependencies = [
 name = "oer-firmware-probes-esp32c5-radio"
 version = "0.1.0"
 dependencies = [
+ "esp-hal",
  "oer-esp32c5-hal",
+ "oer-esp32c5-layout",
  "oer-esp32c5-pac",
  "oer-espressif-analog",
+ "oer-espressif-staged-runtime",
  "oer-probe-codegen",
  "oer-probe-macros",
 ]

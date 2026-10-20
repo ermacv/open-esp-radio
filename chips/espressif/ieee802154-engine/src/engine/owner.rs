@@ -9,6 +9,7 @@ use super::*;
 ///
 /// Neither the backend nor the storage can be extracted while the owner is
 /// live. Forgetting or dropping it retains the static storage's claim.
+#[must_use = "retain the MAC with its frame storage for the hardware epoch"]
 pub struct Ieee802154EngineOwner<'storage, Ll: Ieee802154LowLevel> {
     engine: Ieee802154Engine<'storage, Ll::Address>,
     ll: Ll,
