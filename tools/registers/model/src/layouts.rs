@@ -25,6 +25,9 @@ use crate::{
     validate_relative_fragment,
 };
 
+mod review;
+use review::LayoutReviewDefaults;
+
 /// The largest layout the generator accepts, in bytes.
 const MAX_LAYOUT_SIZE: u32 = 4096;
 
@@ -64,6 +67,8 @@ struct LayoutSource {
     bytes: Vec<UnitSource>,
     #[serde(default)]
     array: Option<LayoutArray>,
+    #[serde(default)]
+    review: Option<LayoutReviewDefaults>,
 }
 
 #[derive(Deserialize)]
@@ -77,6 +82,8 @@ struct UnitSource {
     access: LayoutAccess,
     #[serde(default)]
     description: Option<String>,
+    #[serde(default)]
+    opaque: bool,
     fields: Vec<FieldSource>,
 }
 
@@ -88,6 +95,8 @@ struct FieldSource {
     writer: LayoutWriter,
     #[serde(default)]
     description: Option<String>,
+    #[serde(default)]
+    opaque: bool,
     #[serde(default)]
     placement: Vec<String>,
     #[serde(default)]
@@ -278,6 +287,16 @@ fn parse_layout(path: &Path, file: LayoutFile, naming: NamingRequirement) -> Res
         return Err(invalid(path, format!("requires schema = {LAYOUT_SCHEMA}")));
     }
     let source = file.layout;
+    let mut review_entities = BTreeMap::from([(source.name.clone(), false)]);
+    for unit in source.words.iter().chain(&source.bytes) {
+        let entity = format!("{}.{}", source.name, unit.name);
+        review_entities.insert(entity.clone(), unit.opaque);
+        for field in &unit.fields {
+            review_entities.insert(format!("{entity}.{}", field.name), field.opaque);
+        }
+    }
+    let resolved_review = review::resolve(source.review.as_ref(), file.review, &review_entities)
+        .map_err(|error| invalid(path, error))?;
     validate_name(&source.name).map_err(|reason| invalid(path, reason))?;
     if source.description.trim().is_empty() {
         return Err(invalid(path, "a layout needs a description"));
@@ -367,7 +386,7 @@ fn parse_layout(path: &Path, file: LayoutFile, naming: NamingRequirement) -> Res
         kind,
         array: source.array,
         units,
-        review: file.review,
+        review: resolved_review,
     };
     validate_reviews(&layout, naming).map_err(|error| invalid(path, error))?;
     Ok(layout)
@@ -788,9 +807,7 @@ fn validate_reviews(layout: &MemoryLayout, naming: NamingRequirement) -> Result<
         match position {
             None => {
                 if review.is_some_and(|review| review.naming.is_some()) {
-                    return Err(Error::message(format!(
-                        "review entity {entity:?} is a layout; naming applies to its words, byte ranges and fields"
-                    )));
+                    validate_naming(entity, review, entity)?;
                 }
             }
             Some(position) => {

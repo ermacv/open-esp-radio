@@ -456,7 +456,7 @@ fn publication_requires_a_complete_review_and_naming_for_every_entity() {
         "completeness = \"complete\"\n\n[[review]]\nentity = \"NODE.CONTROL\"",
         "completeness = \"complete\"\nnaming = \"descriptive\"\n\n[[review]]\nentity = \"NODE.CONTROL\"",
     );
-    assert!(error(&[("node.toml", &layout_named)]).contains("is a layout"));
+    load(&[("node.toml", &layout_named)]).unwrap();
     assert!(error(&[("prefix.toml", PREFIX)]).contains("PREFIX has no complete review"));
 }
 
@@ -639,4 +639,214 @@ fn a_layout_repeating_another_s_geometry_is_cross_checked() {
         };
         assert!(message.contains(reason), "{reason}: {message}");
     }
+}
+
+const DEFAULT_REVIEW: &str = r#"
+[layout.review]
+sources = ["fixture"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+"#;
+
+const OPAQUE_REVIEW: &str = r#"
+[layout.review.opaque]
+sources = ["stand"]
+provenance = "observed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+"#;
+
+fn default_node() -> String {
+    NODE.split("[[review]]").next().unwrap().replace(
+        "name = \"BIT_29_OPAQUE\"",
+        "name = \"BIT_29_OPAQUE\"\nopaque = true",
+    ) + DEFAULT_REVIEW
+        + OPAQUE_REVIEW
+}
+
+#[test]
+fn local_defaults_cover_layout_words_and_fields() {
+    let model = load(&[("node.toml", &default_node())]).unwrap();
+    let reviews = &model.layouts()[0].review;
+    assert_eq!(reviews.len(), 7);
+    for entity in [
+        "NODE",
+        "NODE.CONTROL",
+        "NODE.CONTROL.LENGTH",
+        "NODE.NEXT.ADDRESS",
+    ] {
+        let review = reviews
+            .iter()
+            .find(|review| review.entity == entity)
+            .unwrap();
+        assert_eq!(review.sources, ["fixture"]);
+        assert_eq!(
+            review.naming,
+            Some(oer_registers_contracts::NameOrigin::Descriptive)
+        );
+    }
+    let opaque = reviews
+        .iter()
+        .find(|review| review.entity == "NODE.CONTROL.BIT_29_OPAQUE")
+        .unwrap();
+    assert_eq!(opaque.sources, ["stand"]);
+    assert_eq!(
+        opaque.completeness,
+        Some(oer_registers_contracts::FactCompleteness::Unknown)
+    );
+}
+
+#[test]
+fn an_explicit_review_replaces_every_default_key() {
+    let text = default_node()
+        + &named_review("NODE.CONTROL.OWNER")
+            .replace("provenance = \"reviewed\"", "provenance = \"observed\"")
+            .replace("sources = [\"fixture\"]", "sources = [\"override\"]");
+    let model = load(&[("node.toml", &text)]).unwrap();
+    let review = model.layouts()[0]
+        .review
+        .iter()
+        .find(|r| r.entity == "NODE.CONTROL.OWNER")
+        .unwrap();
+    assert_eq!(review.sources, ["override"]);
+    assert_eq!(
+        review.provenance,
+        Some(oer_registers_contracts::FactProvenance::Observed)
+    );
+    let omitted = text.replace("sources = [\"override\"]\n", "");
+    assert!(
+        error(&[("node.toml", &omitted)]).contains("NODE.CONTROL.OWNER has no complete review")
+    );
+}
+
+#[test]
+fn opaque_selection_is_explicit_and_local_to_one_entity() {
+    let unmarked = default_node().replace("opaque = true\n", "");
+    assert!(error(&[("node.toml", &unmarked)]).contains("not reviewed with naming = \"opaque\""));
+    let misnamed = default_node().replace("BIT_29_OPAQUE", "STATUS");
+    assert!(error(&[("node.toml", &misnamed)]).contains("does not end in"));
+    let word = default_node().replace(
+        "name = \"CONTROL\"",
+        "name = \"WORD_0000_OPAQUE\"\nopaque = true",
+    );
+    let model = load(&[("node.toml", &word)]).unwrap();
+    let reviews = &model.layouts()[0].review;
+    assert_eq!(
+        reviews
+            .iter()
+            .find(|r| r.entity == "NODE.WORD_0000_OPAQUE")
+            .unwrap()
+            .sources,
+        ["stand"]
+    );
+    assert_eq!(
+        reviews
+            .iter()
+            .find(|r| r.entity == "NODE.WORD_0000_OPAQUE.OWNER")
+            .unwrap()
+            .sources,
+        ["fixture"]
+    );
+}
+
+#[test]
+fn defaults_apply_to_owned_ranges_and_do_not_leak_to_another_layout() {
+    let prefix = PREFIX.to_owned() + DEFAULT_REVIEW;
+    load(&[("prefix.toml", &prefix)]).unwrap();
+    assert!(
+        error(&[("node.toml", &default_node()), ("prefix.toml", PREFIX)])
+            .contains("PREFIX has no complete review")
+    );
+}
+
+#[test]
+fn default_metadata_keeps_complete_review_and_source_validation() {
+    for (from, to, reason) in [
+        (
+            "provenance = \"reviewed\"",
+            "provenance = \"hint\"",
+            "no complete review",
+        ),
+        (
+            "sources = [\"fixture\"]",
+            "sources = [\"fixture\", \"fixture\"]",
+            "duplicate sources",
+        ),
+        (
+            "sources = [\"fixture\"]",
+            "sources = [\"\"]",
+            "empty or duplicate sources",
+        ),
+        (
+            "accuracy = \"exact\"\n",
+            "",
+            "must define provenance, accuracy and completeness together",
+        ),
+    ] {
+        let text = default_node().replacen(from, to, 1);
+        let message = error(&[("node.toml", &text)]);
+        assert!(message.contains(reason), "{message}");
+    }
+}
+
+#[test]
+fn opaque_defaults_do_not_merge_with_ordinary_defaults() {
+    let text = default_node().replace("sources = [\"stand\"]\n", "");
+    assert!(
+        error(&[("node.toml", &text)])
+            .contains("NODE.CONTROL.BIT_29_OPAQUE has no complete review")
+    );
+}
+
+#[test]
+fn defaults_reject_unknown_keys_and_unknown_or_redundant_explicit_entities() {
+    for text in [
+        default_node().replace("[layout.review]\n", "[layout.review]\nsource = []\n"),
+        default_node().replace(
+            "[layout.review.opaque]\n",
+            "[layout.review.opaque]\naccuraccy = \"exact\"\n",
+        ),
+        default_node().replace("opaque = true", "opaquee = true"),
+    ] {
+        assert!(error(&[("node.toml", &text)]).contains("unknown field"));
+    }
+    let unknown = default_node() + &named_review("NODE.MISSING");
+    assert!(error(&[("node.toml", &unknown)]).contains("does not exist"));
+    let redundant = default_node() + &named_review("NODE.CONTROL");
+    assert!(
+        error(&[("node.toml", &redundant)])
+            .contains("repeats its applicable layout review default")
+    );
+    let redundant_opaque = default_node()
+        + &OPAQUE_REVIEW.replace(
+            "[layout.review.opaque]",
+            "[[review]]\nentity = \"NODE.CONTROL.BIT_29_OPAQUE\"",
+        );
+    assert!(
+        error(&[("node.toml", &redundant_opaque)])
+            .contains("repeats its applicable layout review default")
+    );
+}
+
+#[test]
+fn default_resolution_preserves_rendered_layout_output() {
+    let original = load(&[("node.toml", NODE)]).unwrap();
+    let mut compact = default_node()
+        .replace("sources = [\"stand\"]", "sources = [\"fixture\"]")
+        .replace("accuracy = \"positional\"", "accuracy = \"exact\"");
+    compact += NODE
+        .split("[[review]]")
+        .find(|block| block.starts_with("\nentity = \"NODE.CONTROL.OWNER\""))
+        .map(|block| format!("[[review]]{block}"))
+        .unwrap()
+        .as_str();
+    let compact = load(&[("node.toml", &compact)]).unwrap();
+    let regions = BTreeMap::from([("dma-window".to_owned(), (0x2000, 0x4000))]);
+    assert_eq!(
+        super::render(original.layouts(), &regions).unwrap(),
+        super::render(compact.layouts(), &regions).unwrap()
+    );
 }
