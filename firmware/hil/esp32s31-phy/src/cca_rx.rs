@@ -143,7 +143,21 @@ async fn sample<B: PlatformClockBackend, T>(
     let mut received = 0_u32;
     let mut beacons = 0_u32;
     let mut normalized = 0_u32;
-    for sample in 0..5 {
+    let samples = if cfg!(feature = "cca-window") { 10 } else { 5 };
+    for sample in 0..samples {
+        #[cfg(feature = "cca-window")]
+        if sample == 5 {
+            // Original five samples remain unchanged; only arm after frames
+            // have been received, and keep draining the live ring afterwards.
+            if beacons == 0 {
+                return Err(RejectReason::Internal);
+            }
+            crate::cca_window::start();
+            oer_esp32s31_board::rom::print_fmt(format_args!(
+                "OPEN_RADIO_HIL phy=cca-experiment kind=E3 window={:#x} start=1\n",
+                crate::cca_window::WINDOW,
+            ));
+        }
         for _ in 0..100 {
             // Bound each drain as well as the complete observation window.
             for _ in 0..COUNT {
@@ -206,8 +220,16 @@ async fn sample<B: PlatformClockBackend, T>(
                 )
                 .await;
         }
-        observe_running(domain, runtime, Point::RingSample(sample))?;
-        observe_enables(domain, runtime, Point::RingSample(sample))?;
+        #[cfg(feature = "cca-window")]
+        let point = if sample >= 5 {
+            Point::WindowSample(sample - 5)
+        } else {
+            Point::RingSample(sample)
+        };
+        #[cfg(not(feature = "cca-window"))]
+        let point = Point::RingSample(sample);
+        observe_running(domain, runtime, point)?;
+        observe_enables(domain, runtime, point)?;
         if !runtime.receive_dma_snapshot().walker_enabled {
             return Err(RejectReason::Internal);
         }

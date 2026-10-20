@@ -1,12 +1,15 @@
 #![no_main]
 #![no_std]
-#![forbid(unsafe_code)]
+#![deny(unsafe_code)]
 
 #[cfg(not(feature = "diagnostic-phy"))]
 compile_error!("build the diagnostic-phy image class through cargo hil");
 
 mod cca_checkpoint;
 mod cca_rx;
+#[cfg(feature = "cca-window")]
+#[allow(unsafe_code)]
+mod cca_window;
 mod hold;
 mod ieee802154;
 mod projection;

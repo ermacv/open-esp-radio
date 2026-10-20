@@ -20,3 +20,14 @@ name = "memset"
 address = 0x2f8220c6
 frame = 0
 calls = []
+
+# SOURCE(esp32s31): pinned rev0 ROM `phy_set_cca_cnt` at 0x2f8256cc,
+# size 0x2e, ROM ELF SHA-256
+# a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87.
+# Leaf: no `sp` write, no calls, conditional branch stays inside the symbol.
+# Replaces bits 26:0 of 0x20107c58 with arg0; nonzero arg1 sets bits 28:27.
+[[function]]
+name = "phy_set_cca_cnt"
+address = 0x2f8256cc
+frame = 0
+calls = []

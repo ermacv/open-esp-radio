@@ -45,7 +45,27 @@ timeout quarantines the arena until RF teardown/reset. These later samples are
 console evidence only; they do not enter the vendor comparison.
 Only this post-capture experiment also reads the existing MAC CCA force
 projection, PHY clock-force control, CCA selection and threshold alongside the
-counter controls. These are observations, with no counter rearm or enable write.
+counter controls. The original five observations precede every intervention.
+
+The diagnostic manifest selects `cca-window` for the E3 image. After those
+five observations and confirmed beacon reception, it calls ROM
+`phy_set_cca_cnt(0x100000, 1)` once, then takes five `WindowSample` observations
+at intervals of at least 200 ms. The same bounded polling keeps supplying the
+RX ring throughout. The original control word's `0x10000` window was tested
+first on a separate boot and left WORD_0060 at zero. `0x100000` is the next
+tested window (a factor of 16) and the first with a nonzero busy result; +0x5c
+also changes to that new total. No undocumented tick-to-time conversion is
+assumed; this bounded two-value trial does not claim a minimum window. The call has no pointer arguments and its leaf summary is recorded
+in `chips/esp32s31/platform/rom-functions.toml`. SOURCE: complete pinned S31
+rev0 ROM `phy_set_cca_cnt`, address `0x2f8256cc`, size `0x2e`, ELF SHA-256
+`a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87`.
+
+Build each intervention as a separate image and boot. To build the original
+observation-only image, set `diagnostic-phy = []` in this diagnostic manifest;
+E3 uses `diagnostic-phy = ["cca-window"]`. The usual image build, Clippy and
+HIL commands above record and audit the selected source. Counter controls and
+all earlier capture pages retain their existing order. These additional samples
+remain console evidence after StopCapture, outside the comparison.
 
 The image prints typed `TEMPERATURE_SENSOR_SAR2_STATUS` checkpoints after PHY
 registration, immediately before RF close and after retained wake. Each line

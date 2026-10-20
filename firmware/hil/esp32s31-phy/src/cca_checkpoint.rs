@@ -22,6 +22,8 @@ pub enum Point {
     RingOpen,
     RingSample(u8),
     RingClosed,
+    #[cfg(feature = "cca-window")]
+    WindowSample(u8),
 }
 
 pub fn observe<B: PlatformClockBackend, T>(
@@ -45,6 +47,8 @@ pub fn observe_running<B: PlatformClockBackend, T>(
     let dma = runtime.receive_dma_snapshot();
     let sample = match point {
         Point::Settled(sample) | Point::RingSample(sample) => Some(sample),
+        #[cfg(feature = "cca-window")]
+        Point::WindowSample(sample) => Some(sample),
         _ => None,
     };
     oer_esp32s31_board::rom::print_fmt(format_args!(
