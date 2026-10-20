@@ -70,8 +70,18 @@ mod group;
 mod ownership;
 use ownership::{Context, FixtureBody};
 
-type Device =
-    RadioDevice<Fixture, EmbassyClock, Platform, irq::ImageRoutes, irq::ImageDoorbell, N, B, S, Q>;
+type Device = RadioDevice<
+    Fixture,
+    EmbassyClock,
+    Platform,
+    irq::ImageRoutes,
+    irq::ImageDoorbell,
+    N,
+    B,
+    S,
+    Q,
+    irq::RadioExecutor,
+>;
 type Backend = Esp32s31Backend<Device, TX>;
 type Family = Types<Device, TX>;
 type Caps = Esp32s31Caps<TX>;

@@ -42,7 +42,7 @@ fn a_control_from_another_context_never_consumes_task_facts() {
     signal.raise(1);
     signal.debug_hold(1, false);
     assert_eq!(signal.take(), Err(ForeignContext));
-    assert_eq!(signal.pending.load(Ordering::Acquire), 1);
+    assert_eq!(signal.core.pending.load(Ordering::Acquire), 1);
 }
 
 std::thread_local! {

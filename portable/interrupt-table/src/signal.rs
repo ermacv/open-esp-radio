@@ -222,7 +222,9 @@ impl SignalCore {
         #[cfg(oer_debug_control)]
         {
             let pending = self.pending.load(Ordering::Acquire);
-            self.owned(token, |owned| self.deliverable(pending | owned.delivered) != 0)
+            self.owned(token, |owned| {
+                self.deliverable(pending | owned.delivered) != 0
+            })
         }
         #[cfg(not(oer_debug_control))]
         {
@@ -248,7 +250,9 @@ impl SignalCore {
     }
 
     #[cfg(oer_debug_control)]
-    fn deliverable(&self, facts: u32) -> u32 { facts & !self.held.load(Ordering::Acquire) }
+    fn deliverable(&self, facts: u32) -> u32 {
+        facts & !self.held.load(Ordering::Acquire)
+    }
 
     fn poll_take(
         &'static self,
@@ -307,7 +311,11 @@ impl SignalCore {
             let available = self.deliverable(owned.delivered);
             #[cfg(not(oer_debug_control))]
             let available = facts;
-            let wake = if available == 0 { None } else { owned.waker.take() };
+            let wake = if available == 0 {
+                None
+            } else {
+                owned.waker.take()
+            };
             (wake, owned.next)
         });
         // The waker belongs to this executor's task: waking it only marks
