@@ -2,10 +2,6 @@ use std::path::PathBuf;
 
 use super::*;
 
-fn args(values: &[&str]) -> Vec<OsString> {
-    values.iter().map(OsString::from).collect()
-}
-
 fn job(id: &str, state: JobState) -> Job {
     Job {
         id: id.into(),
@@ -44,41 +40,4 @@ fn a_job_names_what_it_was_fixed_with_and_older_records_still_read() {
     older.as_object_mut().unwrap().remove("fixed");
     let older: Job = serde_json::from_value(older).unwrap();
     assert!(older.fixed.is_empty());
-}
-
-#[test]
-fn enqueue_and_after_are_taken_before_a_double_dash() {
-    let (enqueue, after, rest) = take(args(&[
-        "run",
-        "s",
-        "--enqueue",
-        "--after",
-        "12-a",
-        "--",
-        "--enqueue",
-    ]))
-    .unwrap();
-    assert!(enqueue);
-    assert_eq!(
-        after,
-        Some(After {
-            job: String::from("12-a"),
-            any: false
-        })
-    );
-    assert_eq!(rest, args(&["run", "s", "--", "--enqueue"]));
-    let (enqueue, after, _) = take(args(&["run", "--after=7-b"])).unwrap();
-    assert!(!enqueue);
-    assert_eq!(after.map(|after| after.job), Some(String::from("7-b")));
-    let (_, after, _) = take(args(&["run", "--after-any", "8-c"])).unwrap();
-    assert_eq!(
-        after,
-        Some(After {
-            job: String::from("8-c"),
-            any: true
-        })
-    );
-    assert!(take(args(&["run", "--after", "a", "--after-any", "b"])).is_err());
-    assert!(take(args(&["run", "--after"])).is_err());
-    assert!(take(args(&["run", "--after", "a", "--after=b"])).is_err());
 }

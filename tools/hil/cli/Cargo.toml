@@ -29,7 +29,7 @@ oer-hil-observer = { path = "../observer" }
 oer-hil-lab = { path = "../lab" }
 oer-lab-router = { path = "../../lab/router" }
 oer-os-durable = { path = "../../os/durable" }
-oer-os-process = { path = "../../os/process" }
+oer-os-process = { path = "../../os/process", features = ["clap"] }
 oer-os-toolchain = { path = "../../os/toolchain" }
 clap = { version = "=4.5.48", features = ["derive"] }
 rustix = { version = "=1.1.4", features = ["process"] }

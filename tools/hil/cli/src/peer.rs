@@ -3,7 +3,6 @@
 //! command may transmit).
 
 use std::{
-    ffi::OsString,
     io::Write as _,
     sync::mpsc,
     time::{Duration, Instant},
@@ -33,17 +32,12 @@ pub(crate) enum PeerCli {
     },
 }
 
-pub(crate) fn peer(
-    ctx: &Checkout,
-    owner: String,
-    args: &[OsString],
-) -> Result<std::process::ExitCode> {
-    use clap::Parser as _;
+pub(crate) fn peer(ctx: &Checkout, owner: String, cli: PeerCli) -> Result<std::process::ExitCode> {
     let PeerCli::Send {
         board,
         line,
         duration,
-    } = PeerCli::try_parse_from(args)?;
+    } = cli;
     let line = line.join(" ");
     if line.is_empty() {
         return Err("cargo hil peer send needs a command line".into());

@@ -3855,6 +3855,7 @@ dependencies = [
 name = "oer-os-process"
 version = "0.1.0"
 dependencies = [
+ "clap",
  "libc",
  "rustix",
  "serde_json",
@@ -4211,6 +4212,9 @@ dependencies = [
 [[package]]
 name = "oer-tool-regulatory-generate"
 version = "0.1.0"
+dependencies = [
+ "clap",
+]
 
 [[package]]
 name = "oer-tool-vendor-cli"
@@ -4243,6 +4247,7 @@ dependencies = [
 name = "oer-tool-vendor-ieee802154-esp32s31-cli"
 version = "0.1.0"
 dependencies = [
+ "clap",
  "oer-os-process",
  "oer-vendor-ieee802154-esp32s31",
 ]

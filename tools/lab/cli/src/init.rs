@@ -3,7 +3,6 @@
 //! chip and MAC, its radios from the chip profile, no hubs. The file is
 //! private (mode 0600); an existing one is kept unless `--force`.
 
-use std::ffi::OsString;
 use std::fmt::Write as _;
 use std::path::Path;
 
@@ -20,9 +19,7 @@ pub(crate) struct InitCli {
     force: bool,
 }
 
-pub(crate) fn init(root: &Path, args: &[OsString]) -> Result<std::process::ExitCode> {
-    use clap::Parser as _;
-    let cli = InitCli::try_parse_from(args)?;
+pub(crate) fn init(root: &Path, cli: InitCli) -> Result<std::process::ExitCode> {
     let path = oer_lab_model::paths::stand_file()?;
     if path.exists() && !cli.force {
         return Err(format!(

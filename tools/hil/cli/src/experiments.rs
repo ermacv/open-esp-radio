@@ -1,7 +1,7 @@
 //! `cargo hil ab` and `cargo hil bisect`: their
 //! arguments, and calls into `oer-hil-experiment`.
 
-use std::{ffi::OsString, num::NonZeroU32};
+use std::num::NonZeroU32;
 
 use crate::experiment::{ab, bisect, launch::Runner};
 use oer_hil_model::schema::run::Outcome;
@@ -43,12 +43,8 @@ pub(crate) fn ab(
     ctx: &Checkout,
     owner: &str,
     runner: &Runner,
-    args: &[OsString],
+    cli: AbCli,
 ) -> Result<Vec<(RunId, Option<Outcome>)>> {
-    use clap::Parser as _;
-    let cli = AbCli::try_parse_from(
-        std::iter::once(OsString::from("cargo hil ab")).chain(args.iter().cloned()),
-    )?;
     let finished = ab::run(
         &ctx.root,
         owner,
@@ -92,12 +88,8 @@ pub(crate) struct BisectCli {
 pub(crate) fn bisect(
     ctx: &Checkout,
     owner: &str,
-    args: &[OsString],
+    cli: BisectCli,
 ) -> Result<std::process::ExitCode> {
-    use clap::Parser as _;
-    let cli = BisectCli::try_parse_from(
-        std::iter::once(OsString::from("cargo hil bisect")).chain(args.iter().cloned()),
-    )?;
     // The commit names the step in its line, even when the step fails.
     let revision = oer_os_process::git::commit(&ctx.root, &cli.revision).unwrap_or(cli.revision);
     let spec = bisect::Spec {

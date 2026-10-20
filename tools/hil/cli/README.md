@@ -4,31 +4,41 @@
 (`run --quiet -p oer-tool-hil-cli --`); it is not part of xtask, and a stand command builds only the HIL
 host packages it uses.
 
-The binary handles the stand's own commands and forwards every other one to
-the runner (`oer-tool-hil-runner`), which `oer-hil-observer` builds and
-`oer-tool-hil-cli` launches:
+The binary parses one clap tree containing its host commands and the runner's
+`CliCommand` (`oer-hil-run`). It launches runner commands through the observer's
+built `oer-tool-hil-runner`; an unknown command is a clap error.
 
 | Module | Owns |
 | --- | --- |
-| `command` | Dispatch, lease options (`--owner`), `lease`, `queue`, `owner`, `preempt`, `devices`, `wait`, `runs` and `perf` (calls into `oer-hil-analysis`), `profile`, `firmware`, the merged `__command-tree`, and `run`/`run-all`: a job, a launch through `oer-tool-hil-cli`'s `launch_run` and automatic pruning |
-| `jobs` | The command line of jobs, whose records and tickets the arbiter owns (`oer_hil_arbiter::jobs`): `--enqueue` and `--after`, what a job is fixed with below `target/hil/jobs/cli/`, its detached process, `wait JOB` |
-| `pins` | A run's pin: one hand note (`runs pin`, `runs unpin`), each change one locked read-modify-write |
-| `experiments` | The arguments of `ab`, `bisect` and `revision`, run by `oer-tool-hil-cli` |
-| `board`, `flash`, `stand`, `dashboard` | Arguments and calls only: board resets, consoles and soaks and the peer console through board I/O (`oer-hil-board`), manual flashing through the flash operation (`oer-hil-run`), stand discovery, doctor and fixture probes through `oer-hil-stand-host`; the live page |
-| `firmware_catalog` | `cargo hil firmware`: lists and builds the ESP-IDF firmware catalog (`firmware/peers`, `firmware/vendor/<chip>`), which `oer-image-build`'s `esp_idf::catalog` builds against the pinned ESP-IDF, and flashes it through `oer_hil_flash::catalog` |
+| `command` | The complete command tree, owner validation, analyses, firmware catalog, `run`/`run-all` jobs and automatic pruning |
+| `arguments` | Forwarding explicit clap values using the runner's grammar, including fixed images for queued jobs |
+| `jobs` | `--enqueue`, `--after`, `--after-any`, fixed job artifacts, detached processes and `wait JOB` |
+| `pins` | Hand pins and locked read-modify-write operations on their notes |
+| `experiments` | Typed `ab` and `bisect` commands |
+| `peer`, `dashboard`, `images`, `firmware_catalog` | Peer I/O, the local dashboard, image checks and comparisons, and the pinned ESP-IDF catalog |
 
-Every `cargo hil` command exits 130 when Ctrl-C cancels it, a wait for the
-run store's pins included (`main.rs`); `cargo hil archive` also exits 1 for
-a broken archive rule, 2 for a usage error and 3 for a failure of the
-environment.
+`cargo hil --help` lists every command and `cargo hil COMMAND --help` shows
+its arguments. `__command-tree` walks the same clap tree and keeps the JSON
+command-node schema. `cargo stand` owns leases, boards, owners and the queue.
 
-Commands and flags are documented in the [host guide](../../README.md), the
-[stand guide](../run/stand.md) and the [runs guide](../run/runs.md); `cargo hil --help`
-prints them.
+```console
+cargo hil --owner phy run boot-smoke --enqueue --after JOB
+cargo hil run boot-smoke --owner phy --root /path/to/checkout
+cargo stand lease --board dut --owner phy -- sh -c 'cargo hil run boot-smoke'
+```
+
+`--owner` and `--root` are global; the runner's existing `--stand-file`,
+`--board` and `--peer-board` remain global. Job options belong to `run`,
+`run-all` and `ab`, after the command name. A `--` ends option parsing;
+`cargo stand lease` forwards the complete command after it unchanged.
+
+Every `cargo hil` command exits 130 when Ctrl-C cancels it, including waits
+for run-store pins. Host command parser failures keep status 1; runner parser
+failures keep status 2.
 
 ## Processes
 
-- A leading `--root PATH` names the checkout to act on; otherwise the binary
+- `--root PATH` (or `--root=PATH`) names the checkout to act on; otherwise the binary
   acts on the checkout it was built from and refuses to run in another one.
   The installed `oer-tool-lab-cli` (`cargo stand install`) and a job's detached
   process pass it.

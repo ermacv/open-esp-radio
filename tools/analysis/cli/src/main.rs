@@ -274,15 +274,8 @@ fn main() -> ExitCode {
     let cli = match Cli::try_parse_from(&args) {
         Ok(cli) => cli,
         Err(error) => {
-            let json = args.iter().any(|s| s == "--format=json")
-                || args
-                    .windows(2)
-                    .any(|pair| pair[0] == "--format" && pair[1] == "json");
-            if error.use_stderr() && json {
-                eprintln!(
-                    "{}",
-                    serde_json::json!({"schema": 1, "error": invalid(&error.to_string())})
-                );
+            if let Some(json) = parse_error_json(&args, &error) {
+                eprintln!("{json}");
             } else {
                 let _ = error.print();
             }
@@ -299,6 +292,17 @@ fn main() -> ExitCode {
             ExitCode::FAILURE
         }
     }
+}
+
+/// Only an error's presentation examines argv outside clap. Even a flag
+/// after an invalid command or option must select the machine error format.
+fn parse_error_json(args: &[OsString], error: &clap::Error) -> Option<String> {
+    let json = args.iter().any(|argument| argument == "--format=json")
+        || args
+            .windows(2)
+            .any(|pair| pair[0] == "--format" && pair[1] == "json");
+    (error.use_stderr() && json)
+        .then(|| serde_json::json!({"schema": 1, "error": invalid(&error.to_string())}).to_string())
 }
 
 fn run(command: Command, format: Format) -> Result<ExitCode> {
@@ -1665,5 +1669,53 @@ mod input_tests {
             .err()
             .unwrap();
         assert!(error.to_string().contains("no-such-artifact"), "{error}");
+    }
+}
+
+#[cfg(test)]
+mod cli_tests {
+    use super::*;
+    use clap::CommandFactory as _;
+
+    #[test]
+    fn grammar_and_successful_format_are_owned_by_clap() {
+        Cli::command().debug_assert();
+        let cli = Cli::try_parse_from([
+            "blobray",
+            "--format=json",
+            "audit-targets",
+            "--artifact",
+            "a.elf",
+            "--forbid",
+            "flash=0x40000000..0x50000000",
+        ])
+        .unwrap();
+        assert!(matches!(cli.format, Format::Json));
+    }
+
+    #[test]
+    fn parse_errors_keep_json_even_past_the_first_invalid_argument() {
+        for args in [
+            vec!["blobray", "unknown", "--format=json"],
+            vec!["blobray", "--format=json", "unknown"],
+            vec!["blobray", "audit-targets", "--bad", "--format=json"],
+            vec!["blobray", "audit-targets", "--format=json", "--bad"],
+            vec!["blobray", "unknown", "--format", "json"],
+        ] {
+            let args: Vec<OsString> = args.into_iter().map(Into::into).collect();
+            let error = Cli::try_parse_from(&args)
+                .err()
+                .expect("invalid invocation");
+            let json = parse_error_json(&args, &error).expect("JSON error");
+            let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+            assert_eq!(parsed["schema"], 1);
+            assert_eq!(
+                parsed["error"],
+                serde_json::to_value(invalid(&error.to_string())).unwrap()
+            );
+            assert_eq!(error.exit_code(), 2);
+        }
+        let error = Cli::try_parse_from(["blobray", "unknown"]).err().unwrap();
+        assert!(parse_error_json(&["blobray".into(), "unknown".into()], &error).is_none());
     }
 }

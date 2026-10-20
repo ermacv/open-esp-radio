@@ -38,6 +38,8 @@ pub mod owned;
 #[allow(unsafe_code, reason = "pidfd_open and poll through libc")]
 pub mod proc;
 mod repository;
+#[cfg(feature = "clap")]
+pub use repository::CheckoutArgs;
 pub use repository::{Checkout, built_root, checkout_of};
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;

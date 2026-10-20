@@ -18,7 +18,7 @@ oer-chip-profile = { path = "../../chip/profile" }
 oer-os-command-tree = { path = "../../os/command-tree", features = ["clap"] }
 oer-lab-board = { path = "../board" }
 oer-os-durable = { path = "../../os/durable" }
-oer-os-process = { path = "../../os/process" }
+oer-os-process = { path = "../../os/process", features = ["clap"] }
 oer-lab-arbiter = { path = "../arbiter" }
 oer-lab-model = { path = "../model" }
 oer-tool-lab-fixture-install = { path = "../fixture-install" }

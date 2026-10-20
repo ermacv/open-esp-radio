@@ -68,11 +68,8 @@ pub enum ImagesCli {
     },
 }
 
-pub fn command(ctx: &Checkout, args: &[std::ffi::OsString]) -> Result<std::process::ExitCode> {
-    use clap::Parser as _;
-    let mut arguments = vec![std::ffi::OsString::from("images")];
-    arguments.extend(args.iter().cloned());
-    match ImagesCli::try_parse_from(arguments)? {
+pub fn command(ctx: &Checkout, cli: ImagesCli) -> Result<std::process::ExitCode> {
+    match cli {
         ImagesCli::Check { list: true, .. } => print!("{}", check::list()),
         ImagesCli::Check {
             classes,

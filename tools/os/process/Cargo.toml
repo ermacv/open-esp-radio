@@ -7,6 +7,7 @@ license.workspace = true
 publish = false
 
 [features]
+clap = ["dep:clap"]
 # The Linux socket addresses and options rustix does not model
 # (`linux_socket`); the HIL fixtures enable it, the root fixture installer
 # does not.
@@ -15,6 +16,7 @@ linux-socket = ["rustix/net"]
 test-support = ["rustix/thread"]
 
 [dependencies]
+clap = { version = "=4.5.48", features = ["derive"], optional = true }
 serde_json = "=1.0.151"
 
 [target.'cfg(unix)'.dependencies]

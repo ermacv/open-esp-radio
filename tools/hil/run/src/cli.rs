@@ -25,7 +25,7 @@ pub(crate) struct Cli {
 }
 
 #[derive(Debug, Subcommand)]
-pub(crate) enum CliCommand {
+pub enum CliCommand {
     /// Check the selected scenarios' tools and fixture, without resetting hardware.
     Doctor(Selection),
     /// Apply and verify a scenario's fixture, then restore it. Never accesses the DUT.
@@ -145,7 +145,7 @@ pub(crate) enum CliCommand {
 }
 
 #[derive(Debug, Args)]
-pub(crate) struct Selection {
+pub struct Selection {
     /// One scenario; omission selects the catalog, optionally filtered by tags.
     #[arg(conflicts_with = "tag")]
     pub(crate) scenario: Option<String>,
@@ -198,13 +198,13 @@ impl Selection {
 }
 
 #[derive(Debug, Subcommand)]
-pub(crate) enum ScenarioCommand {
+pub enum ScenarioCommand {
     List,
     Validate { scenario: Option<String> },
 }
 
 #[derive(Debug, Subcommand)]
-pub(crate) enum ImageCommand {
+pub enum ImageCommand {
     Build {
         /// Image classes, built one after the other.
         #[arg(required = true, num_args = 1..)]
@@ -225,7 +225,7 @@ pub(crate) enum ImageCommand {
 mod tests;
 
 #[derive(Debug, Subcommand)]
-pub(crate) enum FixtureCommand {
+pub enum FixtureCommand {
     /// Validate prerequisites and exercise AP preparation/restoration without firmware or serial.
     Check {
         scenario: String,
@@ -234,4 +234,9 @@ pub(crate) enum FixtureCommand {
         #[arg(long, value_name = "CHIP")]
         chip: Option<String>,
     },
+}
+
+/// The runner grammar, shared with the host command that launches it.
+pub fn command() -> clap::Command {
+    <Cli as clap::CommandFactory>::command()
 }

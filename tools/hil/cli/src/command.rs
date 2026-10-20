@@ -10,54 +10,223 @@ use std::{
     path::{Path, PathBuf},
 };
 
-pub fn run(ctx: &Checkout, args: &[OsString]) -> Result<std::process::ExitCode> {
-    let (options, args) = LeaseOptions::split(args)?;
-    let args = args.as_slice();
-    use_shared_store(ctx)?;
-    let first = args.first().and_then(|argument| argument.to_str());
-    match first {
-        None | Some("help" | "--help" | "-h") => println!("{HIL_HELP}"),
-        Some("__command-tree") => return command_tree(ctx),
-        _ => {}
+use clap::{CommandFactory as _, FromArgMatches as _};
+
+#[derive(clap::Args)]
+struct HilCli {
+    /// The stand owner; repeated occurrences must agree.
+    #[arg(long, global = true, value_parser = OwnerParser::default(), overrides_with = "owner")]
+    owner: Option<String>,
+    #[command(flatten)]
+    checkout: oer_os_process::CheckoutArgs,
+    #[arg(long, global = true)]
+    stand_file: Option<PathBuf>,
+    #[arg(long, global = true)]
+    board: Option<String>,
+    #[arg(long, global = true)]
+    peer_board: Option<String>,
+    #[command(subcommand)]
+    command: Option<HilCommand>,
+}
+
+#[derive(clap::Subcommand)]
+enum HilCommand {
+    Dashboard(crate::dashboard::DashboardCli),
+    #[command(subcommand)]
+    Peer(crate::peer::PeerCli),
+    #[command(subcommand)]
+    Firmware(FirmwareCli),
+    #[command(subcommand)]
+    Images(crate::images::ImagesCli),
+    Observer,
+    Sweep {
+        #[arg(long)]
+        apply: bool,
+    },
+    #[command(subcommand)]
+    Runs(RunsCli),
+    #[command(subcommand)]
+    Perf(PerfCli),
+    Profile(ProfileCli),
+    Bisect(crate::experiments::BisectCli),
+    Ab(crate::experiments::AbCli),
+    Wait {
+        id: OsString,
+    },
+    #[command(flatten)]
+    Runner(oer_hil_run::cli::CliCommand),
+    #[command(name = "__command-tree", hide = true)]
+    CommandTree,
+}
+
+impl clap::CommandFactory for HilCli {
+    fn command() -> clap::Command {
+        use clap::Args as _;
+        let mut command = Self::augment_args(clap::Command::new("cargo hil").no_binary_name(true));
+        for child in command.get_subcommands_mut() {
+            if matches!(child.get_name(), "run" | "run-all" | "ab") {
+                *child = crate::jobs::JobArgs::augment_args(child.clone());
+            }
+        }
+        command
     }
-    match first.and_then(HilCommand::named) {
-        Some(HilCommand::Dashboard) => {
-            return crate::dashboard::serve(&oer_hil_runs::RunStore::shared()?, &args[1..]);
+    fn command_for_update() -> clap::Command {
+        Self::command()
+    }
+}
+impl clap::Parser for HilCli {}
+
+/// Retain the host's parser status (1) and the runner's clap status (2).
+pub fn usage_status(error: &clap::Error, args: &[OsString]) -> u8 {
+    let partial = HilCli::command()
+        .ignore_errors(true)
+        .try_get_matches_from(args)
+        .ok();
+    match partial.as_ref().and_then(clap::ArgMatches::subcommand_name) {
+        Some(
+            "dashboard" | "peer" | "firmware" | "images" | "observer" | "sweep" | "runs" | "perf"
+            | "profile" | "bisect" | "ab" | "wait",
+        ) => 1,
+        Some(_) => error.exit_code() as u8,
+        None if !error.use_stderr() => 0,
+        None if error.kind() == clap::error::ErrorKind::InvalidSubcommand => 2,
+        None => 1,
+    }
+}
+
+/// Clap propagates a global argument's last occurrence across subcommands.
+/// Validate each occurrence while clap parses it so a late, different owner
+/// cannot erase the earlier owner before agreement is checked.
+#[derive(Clone, Default)]
+struct OwnerParser(std::sync::Arc<std::sync::Mutex<Option<String>>>);
+
+impl clap::builder::TypedValueParser for OwnerParser {
+    type Value = String;
+
+    fn parse_ref(
+        &self,
+        command: &clap::Command,
+        _argument: Option<&clap::Arg>,
+        value: &std::ffi::OsStr,
+    ) -> std::result::Result<String, clap::Error> {
+        let owner = value.to_str().ok_or_else(|| {
+            command
+                .clone()
+                .error(clap::error::ErrorKind::InvalidUtf8, "an owner name is text")
+        })?;
+        let owner = oer_lab_arbiter::owner::Owner::new(owner.trim())
+            .map_err(|error| {
+                command
+                    .clone()
+                    .error(clap::error::ErrorKind::ValueValidation, error.to_string())
+            })?
+            .to_string();
+        let mut previous = self.0.lock().map_err(|_| {
+            command.clone().error(
+                clap::error::ErrorKind::ValueValidation,
+                "owner validation lock poisoned",
+            )
+        })?;
+        if command.get_name() != "cargo hil"
+            && let Some(previous) = previous.as_ref().filter(|previous| **previous != owner)
+        {
+            return Err(command.clone().error(
+                clap::error::ErrorKind::ValueValidation,
+                format!("--owner is given twice, as {previous} and {owner}"),
+            ));
         }
-        Some(HilCommand::Peer) => {
-            return crate::peer::peer(ctx, options.owner(ctx)?, &args[1..]);
+        *previous = Some(owner.clone());
+        Ok(owner)
+    }
+}
+
+pub fn run(args: &[OsString]) -> Result<std::process::ExitCode> {
+    let matches = HilCli::command().try_get_matches_from(args)?;
+    let cli = HilCli::from_arg_matches(&matches)?;
+    let ctx = cli.checkout.checkout("cargo hil")?;
+    let _signals = oer_os_process::install_signal_handlers()?;
+    let options = LeaseOptions { owner: cli.owner };
+    use_shared_store(&ctx)?;
+    let ctx = &ctx;
+    let Some(command) = cli.command else {
+        HilCli::command().print_help()?;
+        println!();
+        return Ok(std::process::ExitCode::SUCCESS);
+    };
+    match command {
+        HilCommand::CommandTree => command_tree(ctx),
+        HilCommand::Dashboard(cli) => {
+            crate::dashboard::serve(&oer_hil_runs::RunStore::shared()?, cli)
         }
-        Some(HilCommand::Firmware) => return firmware(ctx, &args[1..]),
-        Some(HilCommand::Images) => return crate::images::command(ctx, &args[1..]),
-        Some(HilCommand::Observer) => return crate::images::observer(ctx),
-        Some(HilCommand::Sweep) => {
-            let apply = match args[1..] {
-                [] => false,
-                [ref flag] if flag == "--apply" => true,
-                _ => return Err("usage: cargo hil sweep [--apply]".into()),
-            };
+        HilCommand::Peer(cli) => crate::peer::peer(ctx, options.owner(ctx)?, cli),
+        HilCommand::Firmware(cli) => firmware(ctx, cli),
+        HilCommand::Images(cli) => crate::images::command(ctx, cli),
+        HilCommand::Observer => crate::images::observer(ctx),
+        HilCommand::Sweep { apply } => {
             crate::sweep::run(&ctx.root, crate::sweep::Policy::default(), apply)?;
-            return Ok(std::process::ExitCode::SUCCESS);
+            Ok(std::process::ExitCode::SUCCESS)
         }
-        Some(HilCommand::Runs) => return runs(ctx, &options, &args[1..]),
-        Some(HilCommand::Perf) => return perf(ctx, &options, &args[1..]),
-        Some(HilCommand::Profile) => return profile(ctx, &args[1..]),
-        Some(HilCommand::Wait) => return wait(&args[1..]),
-        Some(HilCommand::Ab) => return ab(ctx, &options.owner(ctx)?, args),
-        Some(HilCommand::Bisect) => {
-            return crate::experiments::bisect(ctx, &options.owner(ctx)?, &args[1..]);
+        HilCommand::Runs(cli) => runs(ctx, &options, cli),
+        HilCommand::Perf(cli) => perf(ctx, &options, cli),
+        HilCommand::Profile(cli) => profile(ctx, cli),
+        HilCommand::Wait { id } => wait(&[id]),
+        HilCommand::Ab(cli_ab) => {
+            let (_, submatches) = matches.subcommand().ok_or("missing ab command")?;
+            let mut args = vec![OsString::from("ab")];
+            args.extend(crate::arguments::encode(
+                &crate::experiments::AbCli::command(),
+                submatches,
+                &[],
+            ));
+            ab(
+                ctx,
+                &options.owner(ctx)?,
+                cli_ab,
+                crate::jobs::JobArgs::from_arg_matches(submatches)?,
+                args,
+            )
         }
-        None => {}
+        HilCommand::Bisect(cli) => crate::experiments::bisect(ctx, &options.owner(ctx)?, cli),
+        HilCommand::Runner(command) => {
+            let scheduling = match matches.subcommand() {
+                Some(("run" | "run-all", submatches)) => {
+                    crate::jobs::JobArgs::from_arg_matches(submatches)?
+                }
+                _ => crate::jobs::JobArgs::default(),
+            };
+            runner(ctx, &options, scheduling, command, &matches)
+        }
     }
-    // The runner has no lease options: take them from after the command
-    // too, before the runner is built.
-    let (options, args) = options.with_late(args)?;
-    let (enqueue, after, args) = crate::jobs::take(args)?;
-    if (enqueue || after.is_some()) && !produces_runs(&args) {
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+struct LeaseOptions {
+    owner: Option<String>,
+}
+
+impl LeaseOptions {
+    fn owner(&self, ctx: &Checkout) -> Result<String> {
+        Ok(oer_lab_arbiter::owner::resolve(self.owner.as_deref(), &ctx.root)?.to_string())
+    }
+}
+
+fn runner(
+    ctx: &Checkout,
+    options: &LeaseOptions,
+    scheduling: crate::jobs::JobArgs,
+    command: oer_hil_run::cli::CliCommand,
+    matches: &clap::ArgMatches,
+) -> Result<std::process::ExitCode> {
+    use oer_hil_run::cli::CliCommand;
+    let produces_runs = matches!(command, CliCommand::Run { .. } | CliCommand::RunAll { .. });
+    let after = scheduling.after();
+    if (scheduling.enqueue || after.is_some()) && !produces_runs {
         return Err("--enqueue and --after apply to run and run-all".into());
     }
-    if enqueue {
-        let frozen = freeze_enqueued(ctx, &args)?;
+    let grammar = oer_hil_run::cli::command();
+    let args = crate::arguments::encode(&grammar, matches, &[]);
+    if scheduling.enqueue {
+        let frozen = freeze_enqueued(ctx, &command, &args)?;
         let id = crate::jobs::enqueue(ctx, &options.owner(ctx)?, &args, after, &frozen)?;
         eprintln!("hil: enqueued job {id}; `cargo hil wait {id}` blocks until it ends");
         println!("{id}");
@@ -65,13 +234,10 @@ pub fn run(ctx: &Checkout, args: &[OsString]) -> Result<std::process::ExitCode> 
     }
     let owner = match options.owner(ctx) {
         Ok(owner) => Some(owner),
-        // Read-only runner commands need no registered stand owner. Invalid
-        // overrides and registry/context failures must still reach the caller.
         Err(error) if error.is::<oer_lab_arbiter::owner::NoOwner>() => None,
         Err(error) => return Err(error),
     };
-    // Only a command that produces runs is a job; a read-only one is not.
-    let mut job = if produces_runs(&args) {
+    let mut job = if produces_runs {
         Some(crate::experiment::job::Running::begin(
             &ctx.root,
             owner.as_deref().unwrap_or("unregistered"),
@@ -81,9 +247,6 @@ pub fn run(ctx: &Checkout, args: &[OsString]) -> Result<std::process::ExitCode> 
     } else {
         None
     };
-    let args = args.as_slice();
-    // An enqueued job runs the runner and sources fixed when it was
-    // enqueued.
     let frozen = crate::jobs::Frozen::inherited()?;
     let runner = match &frozen {
         Some(frozen) => crate::experiment::launch::Runner {
@@ -92,12 +255,43 @@ pub fn run(ctx: &Checkout, args: &[OsString]) -> Result<std::process::ExitCode> 
         None => crate::experiment::launch::Runner::prepare(&ctx.root)?,
     };
     let mut runner_args = match frozen.as_ref().and_then(|frozen| frozen.images.as_deref()) {
-        Some(images) => with_images(args, images),
-        None => args.to_vec(),
+        Some(images) => {
+            let mut args =
+                crate::arguments::encode(&grammar, matches, &["source", "layout_seed", "features"]);
+            // Build flags are replaced in parsed arguments, before positional values.
+            let position = args
+                .iter()
+                .position(|arg| arg == "--")
+                .unwrap_or(args.len());
+            args.splice(
+                position..position,
+                [OsString::from("--images"), images.into()],
+            );
+            args
+        }
+        None => args.clone(),
     };
-    apply_quarantine(&mut runner_args)?;
+    let quarantined: oer_hil_runs::store::Notes =
+        oer_hil_runs::RunStore::shared()?.read(oer_hil_runs::store::Sidecar::Quarantine)?;
+    match &command {
+        CliCommand::RunAll { .. } => {
+            for scenario in quarantined.keys() {
+                runner_args.extend([OsString::from("--exclude"), scenario.into()]);
+            }
+        }
+        CliCommand::Run { scenarios, .. } => {
+            for (scenario, entry) in &quarantined {
+                if scenarios.contains(scenario) {
+                    eprintln!(
+                        "hil: `{scenario}` is quarantined ({}); running it as asked",
+                        entry.reason
+                    );
+                }
+            }
+        }
+        _ => {}
+    }
     let mut launch = crate::experiment::launch::Launch::new(&ctx.root, &runner).args(runner_args);
-    // The runner's stand requests are the job's tickets.
     let mut context = oer_os_process::Context::current()?.clone();
     if let Some(owner) = owner {
         launch = launch.env(oer_lab_arbiter::owner::OWNER_ENV, &owner);
@@ -108,15 +302,12 @@ pub fn run(ctx: &Checkout, args: &[OsString]) -> Result<std::process::ExitCode> 
     }
     launch = launch.context(context);
     let launched = crate::experiment::launch::launch_run(&launch)?;
-    if produces_runs(args) {
-        // Name the runs in the receipt of whatever invoked this command.
+    if produces_runs {
         oer_hil_runs::launch_runs::record(&launched.runs)?;
         let store = oer_hil_runs::RunStore::shared()?;
         if let Some(job) = job.as_mut() {
             job.finish_with(&store, &launched.runs)?;
         }
-        // Ctrl-C during the pruning, such as while it waits for the pins,
-        // ends the command (exit 130); any other failure is only reported.
         if let Err(error) = prune_automatically(ctx, &store) {
             if oer_os_process::is_cancelled(&*error) {
                 return Err(error);
@@ -127,271 +318,27 @@ pub fn run(ctx: &Checkout, args: &[OsString]) -> Result<std::process::ExitCode> 
     Ok(oer_os_process::exit_code(launched.status))
 }
 
-/// The commands handled here, printed before the runner's own help; every
-/// other command goes to the runner.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum HilCommand {
-    Dashboard,
-    Peer,
-    Firmware,
-    Images,
-    Observer,
-    Sweep,
-    Runs,
-    Perf,
-    Profile,
-    Bisect,
-    Ab,
-    Wait,
-}
-
-impl HilCommand {
-    const ALL: [Self; 12] = [
-        Self::Dashboard,
-        Self::Peer,
-        Self::Firmware,
-        Self::Images,
-        Self::Observer,
-        Self::Sweep,
-        Self::Runs,
-        Self::Perf,
-        Self::Profile,
-        Self::Bisect,
-        Self::Ab,
-        Self::Wait,
-    ];
-
-    fn name(self) -> &'static str {
-        match self {
-            Self::Dashboard => "dashboard",
-            Self::Peer => "peer",
-            Self::Firmware => "firmware",
-            Self::Images => "images",
-            Self::Observer => "observer",
-            Self::Sweep => "sweep",
-            Self::Runs => "runs",
-            Self::Perf => "perf",
-            Self::Profile => "profile",
-            Self::Bisect => "bisect",
-            Self::Ab => "ab",
-            Self::Wait => "wait",
-        }
-    }
-
-    fn named(name: &str) -> Option<Self> {
-        Self::ALL.into_iter().find(|command| command.name() == name)
-    }
-}
-
-pub(crate) const HIL_HELP: &str = "\
-HIL test commands (the stand's own commands, leases, boards, owners and the
-queue, are `cargo stand`):
-  cargo hil perf report|baseline|check   gated measurements per commit, baselines, regressions
-  cargo hil profile RUN [--scenario S] [--repetition N] [--top N]   symbolized program-counter profiles
-  cargo hil bisect REV --scenario S [--chip C] [--layout-seed N]   one bisection step for `git bisect run`: S on REV
-  cargo hil ab --a VARIANT --b VARIANT --scenario S [--repetitions N] [--layout-seeds K] [--enqueue] [--after JOB]
-                                      A/B comparison with noise-aware verdicts; --enqueue makes it a job
-  cargo hil run ... --enqueue [--after JOB]   start the run detached as a job and print its id
-  cargo hil run S... --repetitions N  each scenario N times instead of its own count
-  cargo hil wait JOB|RUN              block until the job or run ends; exit 0 passed, 1 failed, 2 interrupted, 3 blocked, 4 broken, 5 no run, 6 abandoned
-  cargo hil peer send BOARD LINE... [--for 5s]                   one peer text-protocol command and its answer
-  cargo hil dashboard [--port 8765]   live page of the queue, boards, runs and leases on 127.0.0.1
-  cargo hil runs list [--scenario S] [--outcome O] [--image I] [--since 3d]
-  cargo hil runs why RUN              why a run did not pass: failure, missed criteria, log tail
-  cargo hil runs compare A B [--measurement TEXT]   measurements side by side, judged against their noise
-  cargo hil runs history SCENARIO [--measurement TEXT]
-  cargo hil runs pin RUN --reason TEXT | unpin RUN
-  cargo hil runs prune [--days 30] [--keep-failed 5] [--unreadable] [--apply]
-  cargo hil firmware list             tracked ESP-IDF images (peers, vendor references)
-  cargo hil firmware build IMAGE      build against the one pinned ESP-IDF
-  cargo hil images check --all|--class C|--reaching PKG [--type-check]   image classes with their audits
-  cargo hil images compare --base REV [--class C]   image classes at REV and here, modulo placement
-  cargo hil observer                  prepare the observer configuration without running HIL
-  cargo hil sweep [--apply]           list (or remove) this checkout's unused incremental and image caches
-
-Lease options, before any HIL command, after `lease`, or among a runner command's arguments:
-  --owner NAME     default: enclosing lease owner, else the checkout directory name
-
-Leases on different boards run in parallel. There is no budget to request:
-every lease charges its owner's balance the time it holds, and waiting for a
-lease that blocks you credits your balance the time waited. Among
-conflicting requests the owner with the highest balance goes first, the
-earlier request on a tie; balances halve every 2h and stay within 1h either
-way. A run of several scenarios that has held 10m yields after its current
-scenario to a waiter with a higher balance and queues again; a single
-scenario or lease command runs to its end. Every lease ends at 1h (lease
-exit status 124). `cargo stand queue` shows every balance and who goes next.
-Scenarios tagged `air-exclusive` claim the air exclusively.
-
-Runs never write tracked files; they stay in the local run store.
-
-Runner commands (`cargo hil run A B C` runs several scenarios under one lease):";
-
-/// Stand lease options accepted before the HIL command, or after `lease`,
-/// and after a runner command.
-#[derive(Clone, Debug, Default, PartialEq)]
-struct LeaseOptions {
-    owner: Option<String>,
-}
-
-impl LeaseOptions {
-    /// Split a leading `--owner NAME` from the remaining arguments.
-    fn split(args: &[OsString]) -> Result<(Self, Vec<OsString>)> {
-        let mut options = Self::default();
-        let mut rest = args.iter();
-        let mut remaining = Vec::new();
-        while let Some(argument) = rest.next() {
-            let text = argument.to_str().unwrap_or_default();
-            let (name, inline) = match text.split_once('=') {
-                Some((name, value)) => (name, Some(value.to_owned())),
-                None => (text, None),
-            };
-            let mut value = || -> Result<String> {
-                inline
-                    .clone()
-                    .or_else(|| {
-                        rest.next()
-                            .and_then(|value| value.to_str().map(str::to_owned))
-                    })
-                    .ok_or_else(|| format!("{name} requires a value").into())
-            };
-            match name {
-                "--owner" => {
-                    options.owner =
-                        Some(oer_lab_arbiter::owner::Owner::new(value()?.trim())?.to_string());
-                }
-                _ => {
-                    remaining.push(argument.clone());
-                    remaining.extend(rest.cloned());
-                    break;
-                }
-            }
-        }
-        Ok((options, remaining))
-    }
-
-    /// Take lease options that follow a runner command, up to a `--`, and
-    /// merge them with those before it; different owners are refused.
-    fn with_late(self, args: &[OsString]) -> Result<(Self, Vec<OsString>)> {
-        let mut options = self;
-        let mut remaining = Vec::new();
-        let mut rest = args.iter();
-        while let Some(argument) = rest.next() {
-            let text = argument.to_str().unwrap_or_default();
-            if text == "--" {
-                remaining.push(argument.clone());
-                remaining.extend(rest.by_ref().cloned());
-                break;
-            }
-            let (name, inline) = match text.split_once('=') {
-                Some((name, value)) => (name, Some(value)),
-                None => (text, None),
-            };
-            let owner = match name {
-                "--owner" => match inline {
-                    Some(value) => value.to_owned(),
-                    None => rest
-                        .next()
-                        .and_then(|value| value.to_str())
-                        .ok_or("--owner requires a value")?
-                        .to_owned(),
-                },
-                _ => {
-                    remaining.push(argument.clone());
-                    continue;
-                }
-            };
-            let owner = oer_lab_arbiter::owner::Owner::new(owner.trim())?.to_string();
-            if let Some(earlier) = options.owner.as_ref().filter(|earlier| **earlier != owner) {
-                return Err(format!("--owner is given twice, as {earlier} and {owner}").into());
-            }
-            options.owner = Some(owner);
-        }
-        Ok((options, remaining))
-    }
-
-    /// Explicit options win; otherwise an enclosing lease's owner, otherwise
-    /// the owner registered for this checkout. Nothing is derived from the
-    /// checkout's directory name.
-    fn owner(&self, ctx: &Checkout) -> Result<String> {
-        Ok(oer_lab_arbiter::owner::resolve(self.owner.as_deref(), &ctx.root)?.to_string())
-    }
-}
-
 /// `cargo hil __command-tree`: every `cargo hil` command path with its
 /// subcommands and long flags, as JSON, for checking documentation against
 /// the real command line. The stand's own commands and the runner's are
 /// merged under `hil`.
-fn command_tree(ctx: &Checkout) -> Result<std::process::ExitCode> {
-    use clap::CommandFactory as _;
-    use oer_os_command_tree::{CommandNode, command_tree as walk};
-    let path = |words: &[&str]| {
-        words
-            .iter()
-            .map(|word| word.to_string())
-            .collect::<Vec<_>>()
-    };
-    let node = |words: &[&str], subcommands: &[&str], flags: &[&str]| CommandNode {
-        path: path(words),
-        subcommands: subcommands.iter().map(|word| word.to_string()).collect(),
-        flags: flags.iter().map(|word| word.to_string()).collect(),
-        forwards: false,
-    };
-    let runner = oer_hil_observer::prepare::build(&ctx.root)?;
-    let output = oer_os_process::command(&runner)
-        .arg("__command-tree")
-        .output()?;
-    let mut runner_nodes: Vec<CommandNode> = serde_json::from_slice(&output.stdout)?;
-    let runner_top = runner_nodes
-        .first()
-        .map(|root| root.subcommands.clone())
-        .unwrap_or_default();
-    // The stand adds lease and evidence options to the runner's run commands.
-    for node in &mut runner_nodes {
-        if matches!(node.path.as_slice(), [one] if ["run", "run-all"].contains(&one.as_str())) {
-            node.flags
-                .extend(["--owner", "--enqueue", "--after", "--after-any"].map(String::from));
-        }
-        node.path.insert(0, String::from("hil"));
-    }
-    let stand = HilCommand::ALL.map(HilCommand::name);
-    let mut root = node(&["hil"], &stand, &["--owner"]);
-    root.subcommands.extend(runner_top);
-    let mut nodes = vec![
-        root,
-        node(&["hil", "dashboard"], &[], &["--port"]),
-        node(&["hil", "wait"], &[], &[]),
-    ];
-    for (name, command) in [
-        ("perf", PerfCli::command()),
-        ("runs", RunsCli::command()),
-        ("firmware", FirmwareCli::command()),
-        ("images", crate::images::ImagesCli::command()),
-        ("peer", crate::peer::PeerCli::command()),
-        ("profile", ProfileCli::command()),
-        ("bisect", crate::experiments::BisectCli::command()),
-        ("ab", crate::experiments::AbCli::command()),
-    ] {
-        nodes.extend(walk(&command, &path(&["hil", name])));
-    }
-    // The stand makes `ab` a job as it does a run.
-    if let Some(ab) = nodes
-        .iter_mut()
-        .find(|node| node.path == path(&["hil", "ab"]))
-    {
-        ab.flags
-            .extend(["--enqueue", "--after", "--after-any"].map(String::from));
-    }
-    nodes.extend(runner_nodes.into_iter().skip(1));
-    println!("{}", serde_json::to_string_pretty(&nodes)?);
+fn command_tree(_ctx: &Checkout) -> Result<std::process::ExitCode> {
+    let nodes = oer_os_command_tree::command_tree(&HilCli::command(), &[String::from("hil")]);
+    println!("{}", oer_os_command_tree::json(&nodes));
     Ok(std::process::ExitCode::SUCCESS)
 }
 
 /// `cargo hil ab ...`, a job like a run: `--enqueue` starts it detached and
 /// prints its id for `cargo hil wait`, and `--after JOB` orders it.
-fn ab(ctx: &Checkout, owner: &str, args: &[OsString]) -> Result<std::process::ExitCode> {
-    let (enqueue, after, args) = crate::jobs::take(args.to_vec())?;
-    if enqueue {
+fn ab(
+    ctx: &Checkout,
+    owner: &str,
+    cli: crate::experiments::AbCli,
+    scheduling: crate::jobs::JobArgs,
+    args: Vec<OsString>,
+) -> Result<std::process::ExitCode> {
+    let after = scheduling.after();
+    if scheduling.enqueue {
         let frozen = crate::jobs::Frozen::capture(ctx)?;
         let id = crate::jobs::enqueue(ctx, owner, &args, after, &frozen)?;
         eprintln!("hil: enqueued job {id}; `cargo hil wait {id}` blocks until it ends");
@@ -408,7 +355,7 @@ fn ab(ctx: &Checkout, owner: &str, args: &[OsString]) -> Result<std::process::Ex
     let runner = crate::experiment::launch::Runner {
         executable: frozen.runner,
     };
-    let runs = crate::experiments::ab(ctx, owner, &runner, &args[1..])?;
+    let runs = crate::experiments::ab(ctx, owner, &runner, cli)?;
     let (ids, outcomes): (Vec<_>, Vec<_>) = runs.into_iter().unzip();
     job.finish(&ids, &outcomes)?;
     Ok(std::process::ExitCode::SUCCESS)
@@ -440,12 +387,7 @@ fn parse_budget(text: &str) -> std::result::Result<std::time::Duration, String> 
 /// `cargo hil runs list|why|compare|history|pin|unpin|prune` over the shared
 /// run store.
 /// `cargo hil perf`: gated measurements across commits and their baselines.
-fn perf(
-    ctx: &Checkout,
-    options: &LeaseOptions,
-    args: &[OsString],
-) -> Result<std::process::ExitCode> {
-    use clap::Parser as _;
+fn perf(ctx: &Checkout, options: &LeaseOptions, cli: PerfCli) -> Result<std::process::ExitCode> {
     use oer_hil_analysis::perf;
     let store = oer_hil_runs::RunStore::shared()?;
     let now = oer_os_durable::unix_millis();
@@ -453,7 +395,7 @@ fn perf(
         perf::summary(&oer_hil_analysis::Run::open(&store, id)?)
     };
     let baselines = perf::baselines(&store)?;
-    match PerfCli::try_parse_from(args)? {
+    match cli {
         PerfCli::Report {
             scenarios,
             measurement,
@@ -497,18 +439,12 @@ fn perf(
 
 /// `cargo hil runs list|show|why|compare|history|pin|unpin|flaky|quarantine|release|prune`
 /// over the shared run store.
-fn runs(
-    ctx: &Checkout,
-    options: &LeaseOptions,
-    args: &[OsString],
-) -> Result<std::process::ExitCode> {
-    use clap::Parser as _;
+fn runs(ctx: &Checkout, options: &LeaseOptions, parsed: RunsCli) -> Result<std::process::ExitCode> {
     use oer_hil_analysis::{Run, retention, runs};
     use oer_hil_runs::store::Note;
     use oer_hil_runs::store::Notes;
     use oer_hil_runs::store::Sidecar;
     let store = oer_hil_runs::RunStore::shared()?;
-    let parsed = RunsCli::try_parse_from(args)?;
     // Reading every run takes long; commands about one run read only it.
     let all = || Run::all(&store);
     let find = |id: &str| Run::open(&store, id);
@@ -664,9 +600,8 @@ fn runs(
 }
 
 /// `cargo hil firmware list | build IMAGE`.
-fn firmware(ctx: &Checkout, args: &[OsString]) -> Result<std::process::ExitCode> {
-    use clap::Parser as _;
-    match FirmwareCli::try_parse_from(args)? {
+fn firmware(ctx: &Checkout, cli: FirmwareCli) -> Result<std::process::ExitCode> {
+    match cli {
         FirmwareCli::List => crate::firmware_catalog::list(ctx)?,
         FirmwareCli::Build { image } => {
             crate::firmware_catalog::build(ctx, &image)?;
@@ -783,9 +718,13 @@ fn use_shared_store(ctx: &Checkout) -> Result<()> {
 /// minutes later, and fix what it runs with: this binary, the runner and,
 /// for a `run` that builds, its images, built now into the job's own
 /// directory of images.
-fn freeze_enqueued(ctx: &Checkout, args: &[OsString]) -> Result<crate::jobs::Frozen> {
+fn freeze_enqueued(
+    ctx: &Checkout,
+    command: &oer_hil_run::cli::CliCommand,
+    args: &[OsString],
+) -> Result<crate::jobs::Frozen> {
     let mut frozen = crate::jobs::Frozen::capture(ctx)?;
-    if args.first().and_then(|arg| arg.to_str()) != Some("run") {
+    if !matches!(command, oer_hil_run::cli::CliCommand::Run { .. }) {
         return Ok(frozen);
     }
     let output = oer_os_process::output(
@@ -801,7 +740,16 @@ fn freeze_enqueued(ctx: &Checkout, args: &[OsString]) -> Result<crate::jobs::Fro
         )
         .into());
     }
-    if has_flag(args, "--firmware-from") || has_flag(args, "--images") {
+    if matches!(
+        command,
+        oer_hil_run::cli::CliCommand::Run {
+            firmware_from: Some(_),
+            ..
+        } | oer_hil_run::cli::CliCommand::Run {
+            images: Some(_),
+            ..
+        }
+    ) {
         return Ok(frozen);
     }
     let images = crate::jobs::images_directory(ctx)?;
@@ -830,87 +778,6 @@ fn build_before_queue(
         return Err("not enqueued: the run's images did not build (see above)".into());
     }
     Ok(())
-}
-
-/// Leave quarantined scenarios out of a `run-all`, and warn of a `run` that
-/// names one.
-fn apply_quarantine(args: &mut Vec<OsString>) -> Result<()> {
-    let quarantined: oer_hil_runs::store::Notes =
-        oer_hil_runs::RunStore::shared()?.read(oer_hil_runs::store::Sidecar::Quarantine)?;
-    match args.first().and_then(|arg| arg.to_str()) {
-        Some("run-all") => {
-            for scenario in quarantined.keys() {
-                args.push("--exclude".into());
-                args.push(scenario.into());
-            }
-        }
-        Some("run") => {
-            for (scenario, entry) in &quarantined {
-                if args.iter().any(|arg| arg.to_str() == Some(scenario)) {
-                    eprintln!(
-                        "hil: `{scenario}` is quarantined ({}); running it as asked",
-                        entry.reason
-                    );
-                }
-            }
-        }
-        _ => {}
-    }
-    Ok(())
-}
-
-/// Whether `args` hold the option `name`, alone or as `name=value`.
-fn has_flag(args: &[OsString], name: &str) -> bool {
-    args.iter().any(|arg| {
-        arg.to_str().is_some_and(|arg| {
-            arg == name
-                || arg
-                    .strip_prefix(name)
-                    .is_some_and(|rest| rest.starts_with('='))
-        })
-    })
-}
-
-/// The options of a `run` that say how its images are built; the images
-/// an enqueued run was built with replace them.
-const BUILD_OPTIONS: [(&str, bool); 3] = [
-    ("--source", true),
-    ("--layout-seed", true),
-    ("--features", true),
-];
-
-/// The runner arguments of a run whose images were built into `images`
-/// when it was enqueued: its build options already made them.
-fn with_images(args: &[OsString], images: &Path) -> Vec<OsString> {
-    let mut arguments = Vec::new();
-    let mut rest = args.iter();
-    while let Some(argument) = rest.next() {
-        let text = argument.to_str().unwrap_or_default();
-        match BUILD_OPTIONS.iter().find(|(name, _)| {
-            text == *name
-                || text
-                    .strip_prefix(name)
-                    .is_some_and(|value| value.starts_with('='))
-        }) {
-            Some((name, takes_value)) => {
-                if *takes_value && text == *name {
-                    rest.next();
-                }
-            }
-            None => arguments.push(argument.clone()),
-        }
-    }
-    arguments.push("--images".into());
-    arguments.push(images.into());
-    arguments
-}
-
-/// Commands that execute scenarios and write run bundles.
-fn produces_runs(args: &[OsString]) -> bool {
-    matches!(
-        args.first().and_then(|a| a.to_str()),
-        Some("run" | "run-all")
-    )
 }
 
 #[derive(clap::Parser)]
@@ -973,9 +840,7 @@ fn profile_report_path(root: &Path, run: &str, scenario: &str, relative: &Path) 
 /// Report every `profile.json` a run's repetitions left, symbolized against
 /// the run's own image, and keep each report under this checkout's
 /// `target/hil/profiles/`.
-fn profile(ctx: &Checkout, args: &[OsString]) -> Result<std::process::ExitCode> {
-    use clap::Parser as _;
-    let cli = ProfileCli::try_parse_from(args)?;
+fn profile(ctx: &Checkout, cli: ProfileCli) -> Result<std::process::ExitCode> {
     let run = oer_hil_runs::RunStore::shared()?
         .open(&cli.run)?
         .directory()
@@ -1171,103 +1036,4 @@ enum FirmwareCli {
 }
 
 #[cfg(test)]
-mod tests {
-    #[test]
-    fn every_advertised_stand_command_is_dispatched_by_its_name() {
-        for command in super::HilCommand::ALL {
-            assert_eq!(super::HilCommand::named(command.name()), Some(command));
-        }
-        // `status` was advertised in the command tree without a handler.
-        assert_eq!(super::HilCommand::named("status"), None);
-    }
-
-    use super::{OsString, has_flag, with_images};
-
-    #[test]
-    fn an_enqueued_run_flashes_its_built_images_instead_of_its_build_options() {
-        let args = [
-            "run",
-            "a",
-            "--source",
-            "/tmp/arm-a",
-            "--features=+trace",
-            "--layout-seed",
-            "3",
-            "--repetitions",
-            "2",
-        ]
-        .map(OsString::from);
-        assert_eq!(
-            with_images(&args, Path::new("/jobs/7/images")),
-            [
-                "run",
-                "a",
-                "--repetitions",
-                "2",
-                "--images",
-                "/jobs/7/images"
-            ]
-            .map(OsString::from)
-        );
-        assert!(has_flag(&args, "--layout-seed"));
-        assert!(!has_flag(&args, "--firmware-from"));
-        // A flag that only begins with the name is another flag.
-        assert!(!has_flag(&[OsString::from("--sources")], "--source"));
-    }
-    #[test]
-    fn a_profile_report_stays_outside_the_finished_run() {
-        let root = Path::new("/checkout");
-        let report = profile_report_path(root, "run-1", "udp", Path::new("repetition-001"));
-        assert_eq!(
-            report,
-            Path::new("/checkout/target/hil/profiles/run-1/udp/repetition-001/profile.txt")
-        );
-        assert!(!report.starts_with(root.join("target/hil/runs")));
-    }
-
-    use super::*;
-    #[test]
-    fn only_executing_commands_produce_runs() {
-        let args = |values: &[&str]| values.iter().map(OsString::from).collect::<Vec<_>>();
-        assert!(produces_runs(&args(&["run", "boot-smoke"])));
-        assert!(produces_runs(&args(&["run-all", "--tag", "wifi"])));
-        assert!(!produces_runs(&args(&["plan", "--scenario", "x"])));
-        assert!(!produces_runs(&args(&["doctor"])));
-    }
-
-    #[test]
-    fn lease_options_precede_the_command_and_stop_at_the_first_other_argument() {
-        let args = |values: &[&str]| values.iter().map(OsString::from).collect::<Vec<_>>();
-        let (options, rest) =
-            LeaseOptions::split(&args(&["--owner", "phy", "run", "x", "--owner", "kept"])).unwrap();
-        assert_eq!(
-            options,
-            LeaseOptions {
-                owner: Some("phy".into()),
-            }
-        );
-        assert_eq!(rest, args(&["run", "x", "--owner", "kept"]));
-        // The runner takes no lease options: they may follow its command.
-        let (options, rest) = LeaseOptions::default()
-            .with_late(&args(&["run", "x", "--owner", "phy", "y", "--", "--owner"]))
-            .unwrap();
-        assert_eq!(options.owner.as_deref(), Some("phy"));
-        assert_eq!(rest, args(&["run", "x", "y", "--", "--owner"]));
-        let (options, _) = options.with_late(&args(&["run", "--owner=phy"])).unwrap();
-        assert_eq!(options.owner.as_deref(), Some("phy"));
-        assert!(
-            options
-                .clone()
-                .with_late(&args(&["run", "--owner", "bt"]))
-                .is_err()
-        );
-        assert!(
-            LeaseOptions::default()
-                .with_late(&args(&["run", "--owner"]))
-                .is_err()
-        );
-        let (options, rest) = LeaseOptions::split(&args(&["run", "x"])).unwrap();
-        assert_eq!(options, LeaseOptions::default());
-        assert_eq!(rest.len(), 2);
-    }
-}
+mod tests;
