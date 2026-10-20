@@ -442,6 +442,56 @@ pub struct Returned {
     pub end: End,
 }
 
+/// Compact fixture evidence, sharing the former pointer-check byte. These
+/// ownership fixtures admit at most two transmissions per operation.
+#[derive(Clone, Copy)]
+pub struct ReturnEvidence(u8);
+impl ReturnEvidence {
+    /// Refusal has no terminal or air count.
+    pub const fn refused(pointer_matches: bool) -> Self {
+        Self(pointer_matches as u8)
+    }
+    /// Preserve the actual outcome and its air count, without synthesizing a
+    /// count for a terminal whose outcome carries no air evidence.
+    pub fn terminal<A, D>(
+        pointer_matches: bool,
+        outcome: &crate::SingleOutcome<A, D>,
+    ) -> Option<Self> {
+        use crate::{SingleEnd, TxOutcome};
+        let (kind, air) = match outcome {
+            TxOutcome::Ended(SingleEnd::Delivered { air, .. }) => (1, Some(air)),
+            TxOutcome::Ended(SingleEnd::AckTimeout(air)) => (2, Some(air)),
+            TxOutcome::Ended(SingleEnd::CtsTimeout(air)) => (3, air.as_ref()),
+            TxOutcome::Ended(SingleEnd::ContentionLimit(air)) => (4, air.as_ref()),
+            TxOutcome::Ended(SingleEnd::AirDenied { air, .. }) => (5, air.as_ref()),
+            TxOutcome::Withdrawn(_) => (6, None),
+            _ => (7, None),
+        };
+        let count = u8::try_from(air.map_or(0, |air| air.transmissions.get()))
+            .ok()
+            .filter(|n| *n <= 15)?;
+        Some(Self(u8::from(pointer_matches) | (kind << 1) | (count << 4)))
+    }
+    /// Raw pointer comparison remains independent of outcome and counting.
+    pub const fn pointer_matches(self) -> bool {
+        self.0 & 1 != 0
+    }
+    /// Zero means the public terminal carried no air count.
+    pub const fn transmissions(self) -> Option<u16> {
+        let count = self.0 >> 4;
+        if count == 0 { None } else { Some(count as u16) }
+    }
+    /// Refused, delivered, ACK timeout, CTS timeout, contention limit,
+    /// air denied, withdrawn, or another terminal, respectively.
+    pub const fn outcome(self) -> u8 {
+        (self.0 >> 1) & 7
+    }
+    /// Attach the independent pointer check after recovering the body owner.
+    pub const fn with_pointer(self, matches: bool) -> Self {
+        Self((self.0 & !1) | matches as u8)
+    }
+}
+
 /// Evidence after the install has ended.
 pub struct Trace<R> {
     /// Actual returns in observation order.

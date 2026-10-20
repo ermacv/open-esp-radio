@@ -24,8 +24,15 @@ use std::{
     time::Duration,
 };
 
-pub fn run(output: &Path, context: &Context<'_>) -> Result<()> {
-    context.results.claim("lower-mac-conformance", &[]);
+pub fn run(output: &Path, context: &Context<'_>, selected: Option<Case>) -> Result<()> {
+    context.results.claim(
+        if selected.is_some() {
+            "lower-mac-ownership-close-gate"
+        } else {
+            "lower-mac-conformance"
+        },
+        &[],
+    );
     let StationFixtureConfig::OpenWrt(config) = &context.lab.station_fixture else {
         return Err("managed OpenWrt AP required".into());
     };
@@ -48,7 +55,7 @@ pub fn run(output: &Path, context: &Context<'_>) -> Result<()> {
         let mut passed = 0;
         let mut model_only = 0;
         let unsupported: Vec<_> = Case::all().enumerate().filter(|(_, case)| {
-            case.execution() == Execution::Hardware
+            selected.is_none_or(|wanted| wanted == *case) && case.execution() == Execution::Hardware
                 && case.extension() == Some(Extension::Ampdu) && !prepared.ampdu
         }).map(|(index, case)| {
             let reason = format!("{case:?}: не поддерживается бэкендом: нет AmpduPhase; до W6");
@@ -58,6 +65,7 @@ pub fn run(output: &Path, context: &Context<'_>) -> Result<()> {
             reason
         }).collect();
         for (index,case) in Case::all().enumerate() {
+            if selected.is_some_and(|wanted|wanted != case) {continue;}
             if let Execution::ModelOnly(_) = case.execution() {model_only += 1; continue}
             if case.extension() == Some(Extension::Ampdu) && !prepared.ampdu {
                 continue;
@@ -69,12 +77,12 @@ pub fn run(output: &Path, context: &Context<'_>) -> Result<()> {
             let model = model(case, &prepared, applied.channel)?;
             context.results.observe(format!("case-{index:02}-model"), &model);
             if hardware.trace != model {
-                context.results.observe("gate-e", &serde_json::json!({"pass":false,"case":index,"reason":"trace mismatch"}));
+                context.results.observe(if selected.is_some() {"diagnostic-result"} else {"gate-e"}, &serde_json::json!({"pass":false,"case":index,"reason":"trace mismatch"}));
                 return Err(format!("lower-MAC trace differs from ModelBackend in {case:?}; stop for owner/architect decision").into());
             }
             passed += 1;
         }
-        context.results.observe("gate-e", &serde_json::json!({"pass":true,"passed":passed,"model_only":model_only,
+        context.results.observe(if selected.is_some() {"diagnostic-result"} else {"gate-e"}, &serde_json::json!({"pass":true,"passed":passed,"model_only":model_only,
             "unsupported":unsupported}));
         eprintln!("lower-MAC gate e: {passed} hardware traces equal ModelBackend; {model_only} model-only");
         Ok(())
@@ -133,8 +141,12 @@ fn model(case: Case, prepared: &Prepared, channel: u8) -> Result<Trace> {
             rate,
             Rc::new(oer_time_virtual::VirtualClock::<8>::new()),
         ))??;
-        let trace = ownership_trace(&raw.owners, &raw.body_pointers_match)
-            .ok_or("unrepresentable model ownership")?;
+        let trace = ownership_trace(
+            &raw.owners,
+            &raw.body_pointers_match,
+            raw.publication_tickets.iter().copied(),
+        )
+        .ok_or("unrepresentable model ownership")?;
         oer_ieee80211_port::conformance::verify(scenario, raw.owners)
             .map_err(|why| format!("model ownership conformance violation: {why:?}"))?;
         return Ok(Trace::Ownership(trace));

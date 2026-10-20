@@ -16,7 +16,7 @@ impl TxBody for Body {
 #[derive(Default)]
 struct Capture {
     rows: Vec<conformance::Returned>,
-    pointers: Vec<bool>,
+    pointers: Vec<conformance::ReturnEvidence>,
 }
 impl Capture {
     fn len(&self) -> usize {
@@ -26,7 +26,8 @@ impl Capture {
 /// Actual owner observations, with each original/returned raw pointer check.
 pub struct OwnershipTrace {
     pub owners: conformance::Trace<Vec<conformance::Returned>>,
-    pub body_pointers_match: Vec<bool>,
+    pub publication_tickets: Vec<u8>,
+    pub body_pointers_match: Vec<conformance::ReturnEvidence>,
 }
 
 struct Context {
@@ -78,7 +79,7 @@ fn observe(
     ticket: Slot<'_, ModelTickets, ModelPool<1>>,
     buffer: ModelAnyBuffer<'_, Body>,
     body: Option<Body>,
-    end: End,
+    (end, evidence): (End, conformance::ReturnEvidence),
     seen: &mut Capture,
 ) -> Result<(), &'static str> {
     let (class, index, body) = match buffer {
@@ -102,7 +103,7 @@ fn observe(
         return Err("model changed external body");
     }
     seen.pointers
-        .push(context.pointer == body.bytes().as_ptr() as usize);
+        .push(evidence.with_pointer(context.pointer == body.bytes().as_ptr() as usize));
     seen.rows.push(conformance::Returned {
         operation: context.operation,
         expected: context.resources,
@@ -124,13 +125,22 @@ fn returned<'id>(
     match terminal {
         LowerMacTerminal::TxCompleted(TxCompleted::Single(terminal)) => {
             let parts = terminal.into_parts(access);
+            let evidence = conformance::ReturnEvidence::terminal(false, &parts.outcome)
+                .ok_or("ownership terminal evidence extent")?;
             let end = match parts.outcome {
                 TxOutcome::Ended(_) => End::Ended,
                 TxOutcome::Withdrawn(_) => End::Withdrawn,
                 _ => return Err("unexpected model ownership terminal"),
             };
             let (buffer, body) = parts.payload.into_parts();
-            observe(parts.context, parts.ticket, buffer, body, end, seen)
+            observe(
+                parts.context,
+                parts.ticket,
+                buffer,
+                body,
+                (end, evidence),
+                seen,
+            )
         }
         LowerMacTerminal::GateClosed(_) => Ok(()),
         _ => Err("unexpected model ownership event"),
@@ -269,7 +279,7 @@ impl PortBody<Backend> for Operations {
                         )
                         .map_err(|_| "model ownership submit")?,
                     Err((buffer, body)) => {
-                        observe(context, ticket, buffer, body, End::Refused, &mut seen)?
+                        observe(context, ticket, buffer, body, (End::Refused,conformance::ReturnEvidence::refused(false)), &mut seen)?
                     }
                 }
             }
@@ -330,6 +340,7 @@ impl PortBody<Backend> for Operations {
         let output = match error {
             Some(why) => Err(why),
             None => Ok(OwnershipTrace {
+                publication_tickets: self.air.sent().iter().map(|frame| frame.ticket).collect(),
                 owners: conformance::Trace {
                     returned: seen.rows,
                     contexts_dropped: drops.get(),

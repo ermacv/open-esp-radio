@@ -223,7 +223,7 @@ pool!(Large, 256, 1);
 
 struct Returns {
     rows: heapless::Vec<conformance::Returned, 8>,
-    pointers: heapless::Vec<bool, 8>,
+    pointers: heapless::Vec<conformance::ReturnEvidence, 8>,
 }
 impl Returns {
     fn new() -> Self {
@@ -241,7 +241,7 @@ fn observe<'id>(
     ticket: radio::Slot<'id, Tickets, <Family as PhaseTypes<'id>>::TicketPath>,
     buffer: AnyBuffer<'id, Device, TX>,
     body: Option<FixtureBody>,
-    end: End,
+    (end, evidence): (End, conformance::ReturnEvidence),
     seen: &mut Returns,
 ) -> Result<(), &'static str> {
     let Context::Owner {
@@ -261,7 +261,7 @@ fn observe<'id>(
         return Err("changed external body");
     }
     seen.pointers
-        .push(pointer == body.bytes().as_ptr() as usize)
+        .push(evidence.with_pointer(pointer == body.bytes().as_ptr() as usize))
         .map_err(|_| "too many pointer returns")?;
     seen.rows
         .push(conformance::Returned {
@@ -386,9 +386,14 @@ pub(super) async fn run<'p, 'id>(
                         .admit(),
                     )
                     .map_err(|_| "ownership submit")?,
-                Err((buffer, body)) => {
-                    observe(context, ticket, buffer, body, End::Refused, &mut seen)?
-                }
+                Err((buffer, body)) => observe(
+                    context,
+                    ticket,
+                    buffer,
+                    body,
+                    (End::Refused, conformance::ReturnEvidence::refused(false)),
+                    &mut seen,
+                )?,
             }
         }
         if scenario != Scenario::Refuse {
@@ -437,9 +442,16 @@ pub(super) async fn run<'p, 'id>(
                     .filter(|record| record.decode::<port::trace::Publication>().is_some())
                     .count(),
             };
-            ownership_trace(&trace, &seen.pointers)
-                .map(Trace::Ownership)
-                .ok_or("ownership trace extent")
+            ownership_trace(
+                &trace,
+                &seen.pointers,
+                TRACE
+                    .records()
+                    .filter_map(|record| record.decode::<port::trace::Publication>())
+                    .map(|publication| publication.ticket),
+            )
+            .map(Trace::Ownership)
+            .ok_or("ownership trace extent")
         }
     };
     Ended::uninstall(owner, (), output)
@@ -453,13 +465,22 @@ fn terminal_return<'id>(
     match terminal {
         LowerMacTerminal::TxCompleted(TxCompleted::Single(terminal)) => {
             let parts = terminal.into_parts(access);
+            let evidence = conformance::ReturnEvidence::terminal(false, &parts.outcome)
+                .ok_or("ownership terminal evidence extent")?;
             let end = match parts.outcome {
                 TxOutcome::Ended(_) => End::Ended,
                 TxOutcome::Withdrawn(_) => End::Withdrawn,
                 _ => return Err("ownership terminal outcome"),
             };
             let (buffer, body) = parts.payload.into_parts();
-            observe(parts.context, parts.ticket, buffer, body, end, seen)
+            observe(
+                parts.context,
+                parts.ticket,
+                buffer,
+                body,
+                (end, evidence),
+                seen,
+            )
         }
         LowerMacTerminal::GateClosed(_) => Ok(()),
         _ => Err("ownership terminal kind"),

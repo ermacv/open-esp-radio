@@ -904,6 +904,7 @@ impl<'id, D> ModelMpdu<'id, D> {
     }
     fn on_air(
         &self,
+        ticket: u8,
         role: VifRole,
         keys: &[KeyIdentity],
         key: Option<&KeyIdentity>,
@@ -931,6 +932,7 @@ impl<'id, D> ModelMpdu<'id, D> {
                 .map_err(|_| ModelFault)?;
         }
         Ok(AirFrame {
+            ticket,
             role,
             plaintext: bytes.into(),
             frame: wire,
@@ -1350,6 +1352,8 @@ pub struct ModelResources<'id> {
 /// One transmission the air saw.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AirFrame {
+    /// Ticket of the operation that actually published this MPDU.
+    pub ticket: u8,
     /// The interface that sent it.
     pub role: VifRole,
     /// The MPDU, header and body, without the FCS.
@@ -2335,6 +2339,7 @@ impl<'id, D> ExecutionPayload for ModelSubframes<'id, D> {
 impl<D> ModelSubframesExecution<'_, '_, D> {
     fn publish(
         &mut self,
+        ticket: u8,
         role: VifRole,
         keys: &[KeyIdentity],
         key: Option<&KeyIdentity>,
@@ -2346,7 +2351,7 @@ impl<D> ModelSubframesExecution<'_, '_, D> {
         let mut frames = Vec::with_capacity(self.subframes.len());
         for subframe in &mut *self.subframes {
             subframe.mpdu.execution().publish(role, key)?;
-            frames.push(subframe.mpdu.on_air(role, keys, key, rate)?);
+            frames.push(subframe.mpdu.on_air(ticket, role, keys, key, rate)?);
         }
         Ok(frames)
     }
@@ -3596,6 +3601,7 @@ fn publish_single<'id, X: ModelContext>(
         plan.prepared.operation.execute().retry();
     }
     let frame = match plan.prepared.operation.payload().on_air(
+        plan.prepared.operation.ticket().index(),
         plan.prepared.role,
         keys,
         plan.prepared.key.as_ref().map(|key| &key.identity),
@@ -3697,7 +3703,9 @@ fn publish_aggregate<'id, X: ModelContext>(
         | AggregateAnswer::AirDenied
         | AggregateAnswer::HardwareTimeout => 0,
     };
+    let ticket = aggregate.operation.ticket().index();
     let frames = match aggregate.operation.execute().publish(
+        ticket,
         aggregate.role,
         keys,
         aggregate.key.as_ref().map(|key| &key.identity),

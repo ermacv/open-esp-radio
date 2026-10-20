@@ -319,6 +319,8 @@ pub struct OwnerReturn {
     pub actual: OwnerResources,
     pub end: u8,
     pub body_pointer_matches: bool,
+    pub transmissions: Option<u16>,
+    pub outcome: u8,
 }
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub struct OwnershipTrace {
@@ -326,12 +328,14 @@ pub struct OwnershipTrace {
     pub contexts_dropped: u16,
     pub before_teardown_dropped: u16,
     pub publications: u16,
+    pub publication_tickets: [Option<u8>; 8],
 }
 /// Allocation numbers come from the actual body owners and their frees. Raw
 /// pointer equality is recorded separately for each original/returned pair.
 pub fn ownership_trace<R: AsRef<[conformance::Returned]>>(
     trace: &conformance::Trace<R>,
-    body_pointers_match: &[bool],
+    evidence: &[conformance::ReturnEvidence],
+    publications: impl IntoIterator<Item = u8>,
 ) -> Option<OwnershipTrace> {
     use conformance::{Class, End, Resources};
     fn class(value: Class) -> u8 {
@@ -347,7 +351,7 @@ pub fn ownership_trace<R: AsRef<[conformance::Returned]>>(
         class: class(value.class),
         body: u8::try_from(value.body).ok(),
     };
-    if rows.len() != body_pointers_match.len() {
+    if rows.len() != evidence.len() {
         return None;
     }
     let mut returned = [None; 8];
@@ -356,7 +360,9 @@ pub fn ownership_trace<R: AsRef<[conformance::Returned]>>(
             operation: row.operation.id,
             category: row.operation.category as u8,
             class: class(row.operation.class),
-            body_pointer_matches: *body_pointers_match.get(index)?,
+            body_pointer_matches: evidence.get(index)?.pointer_matches(),
+            transmissions: evidence.get(index)?.transmissions(),
+            outcome: evidence.get(index)?.outcome(),
             expected: resource(row.expected),
             actual: resource(row.actual),
             end: match row.end {
@@ -366,7 +372,17 @@ pub fn ownership_trace<R: AsRef<[conformance::Returned]>>(
             },
         });
     }
+    let mut publication_tickets = [None; 8];
+    let mut count = 0;
+    for (index, ticket) in publications.into_iter().enumerate() {
+        *publication_tickets.get_mut(index)? = Some(ticket);
+        count = index.checked_add(1)?;
+    }
+    if count != trace.publications {
+        return None;
+    }
     Some(OwnershipTrace {
+        publication_tickets,
         returned,
         contexts_dropped: trace.contexts_dropped.try_into().ok()?,
         before_teardown_dropped: trace.before_teardown_dropped.try_into().ok()?,
@@ -530,10 +546,50 @@ mod tests {
             before_teardown_dropped: 1,
             publications: 0,
         };
-        let original = ownership_trace(&raw, &[true]).unwrap();
+        let yes = conformance::ReturnEvidence::refused(true);
+        let no = conformance::ReturnEvidence::refused(false);
+        let original = ownership_trace(&raw, &[yes], []).unwrap();
         assert_eq!(original.returned[0].unwrap().actual.body, Some(0));
-        assert_ne!(original, ownership_trace(&raw, &[false]).unwrap());
+        assert_ne!(original, ownership_trace(&raw, &[no], []).unwrap());
         raw.returned[0].actual.body = 1;
-        assert_ne!(original, ownership_trace(&raw, &[true]).unwrap());
+        assert_ne!(original, ownership_trace(&raw, &[yes], []).unwrap());
+    }
+    #[test]
+    fn ownership_projection_preserves_each_publication_ticket_and_terminal_count() {
+        use conformance::{End, OPERATIONS, Resources, ReturnEvidence, Returned};
+        let resource = Resources {
+            ticket: 2,
+            buffer: 0,
+            class: OPERATIONS[2].class,
+            body: 0,
+        };
+        let raw = conformance::Trace {
+            returned: [Returned {
+                operation: OPERATIONS[2],
+                expected: resource,
+                actual: resource,
+                end: End::Ended,
+            }],
+            contexts_dropped: 1,
+            before_teardown_dropped: 1,
+            publications: 3,
+        };
+        let terminal = |count| -> SingleOutcome<(), ()> {
+            TxOutcome::Ended(SingleEnd::AckTimeout(Air {
+                transmissions: NonZeroU16::new(count).unwrap(),
+                rate: PhyRate::Legacy(LegacyRate::Ofdm6M),
+            }))
+        };
+        let one = ReturnEvidence::terminal(true, &terminal(1)).unwrap();
+        let two = ReturnEvidence::terminal(true, &terminal(2)).unwrap();
+        let first = ownership_trace(&raw, &[one], [2, 3, 2]).unwrap();
+        assert_eq!(
+            first.publication_tickets,
+            [Some(2), Some(3), Some(2), None, None, None, None, None]
+        );
+        assert_eq!(first.returned[0].unwrap().transmissions, Some(1));
+        assert_ne!(first, ownership_trace(&raw, &[two], [2, 3, 2]).unwrap());
+        assert_ne!(first, ownership_trace(&raw, &[one], [2, 3, 0]).unwrap());
+        assert!(ownership_trace(&raw, &[one], [2, 3]).is_none());
     }
 }

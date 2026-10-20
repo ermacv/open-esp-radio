@@ -18,6 +18,7 @@ pub const FAMILY: Kind = Kind::of::<LowerMacScenario>("lower-mac");
 #[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum LowerMacScenario {
     Conformance {},
+    OwnershipCloseGate {},
 }
 impl ScenarioFamily for LowerMacScenario {
     fn validate(&self) -> Result<()> {
@@ -26,7 +27,10 @@ impl ScenarioFamily for LowerMacScenario {
     fn plan(&self) -> Plan {
         let mut plan = Plan::target_only(ImageClass::DiagnosticLowerMac);
         plan.requirements.station_network = true;
-        plan.checks = vec!["lower-mac-conformance"];
+        plan.checks = vec![match self {
+            Self::Conformance {} => "lower-mac-conformance",
+            Self::OwnershipCloseGate {} => "lower-mac-ownership-close-gate",
+        }];
         plan
     }
     fn served_by(&self, keys: &oer_hil_protocol::DeviceImageKeys) -> bool {
@@ -47,7 +51,18 @@ impl Workload for LowerMacScenario {
         }
     }
     fn run(&self, output: &Path, context: &Context<'_>, _: &Fixtures) -> Result<()> {
-        workload::run(output, context)
+        workload::run(
+            output,
+            context,
+            match self {
+                Self::Conformance {} => None,
+                Self::OwnershipCloseGate {} => {
+                    Some(oer_ieee80211_port::conformance::catalog::Case::Ownership(
+                        oer_ieee80211_port::conformance::Scenario::CloseGate,
+                    ))
+                }
+            },
+        )
     }
 }
 #[cfg(test)]
@@ -59,6 +74,13 @@ mod tests {
         scenario.validate().unwrap();
         assert_eq!(scenario.plan().image, ImageClass::DiagnosticLowerMac);
         assert!(scenario.plan().requirements.station_network);
+        let diagnostic: LowerMacScenario = toml::from_str("kind='ownership-close-gate'").unwrap();
+        diagnostic.validate().unwrap();
+        assert_eq!(
+            diagnostic.plan().checks,
+            vec!["lower-mac-ownership-close-gate"]
+        );
+        assert_ne!(diagnostic.plan().checks, scenario.plan().checks);
         assert!(
             toml::from_str::<LowerMacScenario>("kind='conformance'\nimage='boot-smoke'").is_err()
         );
