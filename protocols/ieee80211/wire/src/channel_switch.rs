@@ -193,13 +193,14 @@ pub fn parse_channel_switch(elements: &[u8]) -> Result<Option<ChannelSwitch>, Ch
     let mut secondary = SecondaryChannelOffset::None;
     let mut remaining = elements;
     while !remaining.is_empty() {
-        let (&[id, length], rest) = remaining
-            .split_first_chunk::<2>()
-            .ok_or(ChannelSwitchError::Malformed)?;
-        let (body, rest) = rest
-            .split_at_checked(usize::from(length))
-            .ok_or(ChannelSwitchError::Malformed)?;
-        remaining = rest;
+        let mut reader = oer_wire::Reader::new(remaining);
+        let &[id, length] = reader
+            .array::<2>()
+            .map_err(|_| ChannelSwitchError::Malformed)?;
+        let body = reader
+            .take(usize::from(length))
+            .map_err(|_| ChannelSwitchError::Malformed)?;
+        remaining = reader.remaining();
         match (id, body) {
             (CHANNEL_SWITCH_ELEMENT_ID, &[mode, channel, count]) => {
                 plain = Some((mode_of(mode)?, channel, count));

@@ -18,6 +18,8 @@
     clippy::arithmetic_side_effects
 )]
 
+use crate::frame::QosControl;
+
 use crate::qos::{WmmAccessCategory, WmmUserPriority};
 
 pub const ETHERNET_HEADER_LEN: usize = 14;
@@ -30,9 +32,8 @@ const IEEE80211_DATA: u8 = 0x08;
 const IEEE80211_QOS_DATA: u8 = 0x88;
 const IEEE80211_TO_DS: u8 = 0x01;
 const IEEE80211_FROM_DS: u8 = 0x02;
-const IEEE80211_ORDER: u8 = 0x80;
+#[cfg(test)]
 const IEEE80211_QOS_AMSDU_PRESENT: u8 = 0x80;
-const QOS_NO_ACK_POLICY: u8 = 0x20;
 /// RFC 1042 LLC/SNAP prefix before the EtherType.
 pub const RFC1042_LLC_SNAP_PREFIX: [u8; 6] = [0xaa, 0xaa, 0x03, 0, 0, 0];
 
@@ -88,6 +89,31 @@ pub struct DataEncapPlan {
 }
 
 impl DataEncapPlan {
+    const fn control(&self) -> crate::frame::FrameControlFields {
+        crate::frame::FrameControlFields::from_bytes([self.header[0], self.header[1]])
+    }
+    const fn set_control(&mut self, control: crate::frame::FrameControlFields) {
+        let [low, high] = control.to_bytes();
+        self.header[0] = low;
+        self.header[1] = high;
+    }
+    pub(crate) const fn set_protected(&mut self, protected: bool) {
+        self.set_control(self.control().with_protected(protected));
+    }
+    pub(crate) const fn set_more_data(&mut self, more_data: bool) {
+        self.set_control(self.control().with_more_data(more_data));
+    }
+    pub(crate) const fn set_order(&mut self, order: bool) {
+        self.set_control(self.control().with_order(order));
+    }
+    pub(crate) const fn set_amsdu(&mut self, amsdu: bool) {
+        let [low, high] = QosControl::from_bytes([self.header[24], self.header[25]])
+            .with_amsdu(amsdu)
+            .to_bytes();
+        self.header[24] = low;
+        self.header[25] = high;
+    }
+
     /// Complete DMA prefix before plaintext/CCMP payload.
     pub const fn dma_header_len(self) -> usize {
         self.header_len as usize
@@ -290,10 +316,11 @@ impl<'a> AmsduSubframes<'a> {
     /// Split the next subframe and its padding off `remaining`; on an error
     /// `remaining` is unchanged.
     fn split_subframe(&mut self) -> Result<AmsduSubframe<'a>, DataDecapError> {
-        let (header, body) = self
-            .remaining
-            .split_first_chunk::<ETHERNET_HEADER_LEN>()
-            .ok_or(DataDecapError::Truncated)?;
+        let mut reader = oer_wire::Reader::new(self.remaining);
+        let header = reader
+            .array::<ETHERNET_HEADER_LEN>()
+            .map_err(|_| DataDecapError::Truncated)?;
+        let body = reader.remaining();
         let [
             d0,
             d1,
@@ -311,12 +338,16 @@ impl<'a> AmsduSubframes<'a> {
             length1,
         ] = *header;
         let msdu_length = u16::from_be_bytes([length0, length1]);
-        let (msdu, rest) = body
-            .split_at_checked(usize::from(msdu_length))
-            .ok_or(DataDecapError::Truncated)?;
-        let (llc, payload) = msdu
-            .split_first_chunk::<LLC_SNAP_HEADER_LEN>()
-            .ok_or(DataDecapError::Truncated)?;
+        let mut reader = oer_wire::Reader::new(body);
+        let msdu = reader
+            .take(usize::from(msdu_length))
+            .map_err(|_| DataDecapError::Truncated)?;
+        let rest = reader.remaining();
+        let mut reader = oer_wire::Reader::new(msdu);
+        let llc = reader
+            .array::<LLC_SNAP_HEADER_LEN>()
+            .map_err(|_| DataDecapError::Truncated)?;
+        let payload = reader.remaining();
         let ether_type = rfc1042_ether_type(*llc).ok_or(DataDecapError::InvalidLlcSnap)?;
         let subframe = AmsduSubframe {
             destination: [d0, d1, d2, d3, d4, d5],
@@ -334,10 +365,11 @@ impl<'a> AmsduSubframes<'a> {
                 .wrapping_add(ETHERNET_HEADER_LEN)
                 .wrapping_neg()
                 & 3;
-            let (_, next) = rest
-                .split_at_checked(padding)
-                .ok_or(DataDecapError::Truncated)?;
-            next
+            let mut reader = oer_wire::Reader::new(rest);
+            let _ = reader
+                .take(padding)
+                .map_err(|_| DataDecapError::Truncated)?;
+            reader.remaining()
         };
         Ok(subframe)
     }
@@ -377,7 +409,8 @@ pub const fn plan_data_encapsulation(
     let [d0, d1, d2, d3, d4, d5, s0, s1, s2, s3, s4, s5, e0, e1] = ethernet;
     let destination = [d0, d1, d2, d3, d4, d5];
     let source = [s0, s1, s2, s3, s4, s5];
-    let descriptor_multicast = matches!(role, DataInterfaceRole::AccessPoint) && d0 & 1 != 0;
+    let descriptor_multicast = matches!(role, DataInterfaceRole::AccessPoint)
+        && crate::address::AddressFlags::from_bytes([d0]).group();
     let qos = peer_qos && !descriptor_multicast;
     let (direction, addresses) = match role {
         DataInterfaceRole::Station => (IEEE80211_TO_DS, [bssid, source, destination]),
@@ -392,10 +425,10 @@ pub const fn plan_data_encapsulation(
         direction,
     ];
     let qos_control = if qos {
-        [
-            priority.value() | if no_ack_policy { QOS_NO_ACK_POLICY } else { 0 },
-            0,
-        ]
+        let control =
+            crate::encoding::validated(QosControl::from_bytes([0; 2]).with_tid(priority.value()));
+        crate::encoding::validated(control.with_ack_policy(if no_ack_policy { 1 } else { 0 }))
+            .to_bytes()
     } else {
         [0, 0]
     };
@@ -477,7 +510,7 @@ pub const fn plan_data_encapsulation_with_he_control(
         }
         // The chip-specific DMA owner separately marks the four-byte hardware
         // insertion; the encoded QoS header itself remains 26 bytes.
-        plan.header[1] |= IEEE80211_ORDER;
+        plan.set_order(true);
     }
     plan.he_control = he_control;
     Ok(plan)
@@ -510,7 +543,7 @@ fn single_decapsulation(
     let header = data_header(role, mpdu)?;
     if header
         .qos()
-        .is_some_and(|qos| qos & u16::from(IEEE80211_QOS_AMSDU_PRESENT) != 0)
+        .is_some_and(|qos| QosControl::from_bytes(qos.to_le_bytes()).amsdu())
     {
         return Err(DataDecapError::AmsduUnsupported);
     }
@@ -543,7 +576,11 @@ fn data_header(
     if !control.is_data() {
         return Err(DataDecapError::NotData);
     }
-    if control.more_fragments() || header.sequence_control() & 15 != 0 {
+    if control.more_fragments()
+        || crate::sequence::SequenceControl::from_bytes(header.sequence_control().to_le_bytes())
+            .fragment()
+            != 0
+    {
         return Err(DataDecapError::Fragmented);
     }
     if !matches!(
@@ -585,9 +622,11 @@ fn single_payload<'a>(
     header: crate::frame::DecodedHeader<'_>,
     payload: &'a [u8],
 ) -> Result<EthernetFrameParts<'a>, DataDecapError> {
-    let (llc, payload) = payload
-        .split_first_chunk::<LLC_SNAP_HEADER_LEN>()
-        .ok_or(DataDecapError::Truncated)?;
+    let mut reader = oer_wire::Reader::new(payload);
+    let llc = reader
+        .array::<LLC_SNAP_HEADER_LEN>()
+        .map_err(|_| DataDecapError::Truncated)?;
+    let payload = reader.remaining();
     let ether_type = rfc1042_ether_type(*llc).ok_or(DataDecapError::InvalidLlcSnap)?;
     let (destination, source) = match header.control().ds() {
         2 => (header.receiver(), header.address3()),
@@ -612,7 +651,7 @@ pub fn amsdu_subframes<'a>(
     let header = data_header(role, mpdu)?;
     if !header
         .qos()
-        .is_some_and(|qos| qos & u16::from(IEEE80211_QOS_AMSDU_PRESENT) != 0)
+        .is_some_and(|qos| QosControl::from_bytes(qos.to_le_bytes()).amsdu())
     {
         return Err(DataDecapError::AmsduUnsupported);
     }
@@ -621,9 +660,10 @@ pub fn amsdu_subframes<'a>(
 }
 
 fn aggregate_payload(payload: &[u8]) -> Result<AmsduSubframes<'_>, DataDecapError> {
-    let (first, _) = payload
-        .split_first_chunk::<{ ETHERNET_HEADER_LEN + LLC_SNAP_HEADER_LEN }>()
-        .ok_or(DataDecapError::Truncated)?;
+    let mut reader = oer_wire::Reader::new(payload);
+    let first = reader
+        .array::<{ ETHERNET_HEADER_LEN + LLC_SNAP_HEADER_LEN }>()
+        .map_err(|_| DataDecapError::Truncated)?;
     if first.first_chunk::<6>() == Some(&RFC1042_LLC_SNAP_PREFIX) {
         return Err(DataDecapError::InvalidAmsduDestination);
     }
@@ -657,7 +697,7 @@ pub fn decapsulate_payload<'a>(
 ) -> Result<DataDecapsulation<'a>, DataDecapError> {
     let amsdu = header
         .qos()
-        .is_some_and(|qos| qos & u16::from(IEEE80211_QOS_AMSDU_PRESENT) != 0);
+        .is_some_and(|qos| QosControl::from_bytes(qos.to_le_bytes()).amsdu());
     let frames = if amsdu {
         DataDecapsulationFrames::Aggregate(aggregate_payload(payload)?)
     } else {

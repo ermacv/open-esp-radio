@@ -39,7 +39,7 @@ impl SequenceNumber {
 
     /// The Sequence Number subfield of a Sequence Control field.
     pub const fn from_sequence_control(sequence_control: u16) -> Self {
-        Self(sequence_control >> 4)
+        Self(SequenceControl::from_bytes(sequence_control.to_le_bytes()).sequence())
     }
 
     pub const fn get(self) -> u16 {
@@ -48,12 +48,20 @@ impl SequenceNumber {
 
     /// Sequence Control of an unfragmented MPDU (fragment number zero).
     pub const fn sequence_control(self) -> u16 {
-        self.0 << 4
+        u16::from_le_bytes(
+            crate::encoding::validated(SequenceControl::from_bytes([0; 2]).with_sequence(self.0))
+                .to_bytes(),
+        )
     }
 
     /// Sequence Control with an explicit four-bit fragment number.
     pub const fn sequence_control_with_fragment(self, fragment: u8) -> u16 {
-        (self.0 << 4) | (fragment as u16 & 0x000f)
+        u16::from_le_bytes(
+            crate::encoding::validated(
+                SequenceControl::from_bytes([fragment, 0]).with_sequence(self.0),
+            )
+            .to_bytes(),
+        )
     }
 
     /// The following sequence number.
@@ -85,6 +93,14 @@ impl SequenceNumber {
 impl From<SequenceNumber> for u16 {
     fn from(sequence: SequenceNumber) -> Self {
         sequence.get()
+    }
+}
+
+oer_wire::bitfield! {
+    /// SOURCE: IEEE Std 802.11-2020, 9.2.4.4 (Sequence Control field).
+    pub struct SequenceControl[2] (little) {
+        pub fragment, with_fragment: u8 = 0..4;
+        pub sequence, with_sequence: u16 = 4..16;
     }
 }
 

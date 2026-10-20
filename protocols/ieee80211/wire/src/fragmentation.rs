@@ -15,17 +15,6 @@ use crate::ccmp::{CcmpKeyId, CcmpPacketNumber};
 use crate::data::DataInterfaceRole;
 use crate::sequence::SequenceNumber;
 
-const DATA: u16 = 0x0008;
-const QOS_DATA: u16 = 0x0088;
-const TYPE_AND_SUBTYPE: u16 = 0x00fc;
-const TO_DS: u16 = 0x0100;
-const FROM_DS: u16 = 0x0200;
-const MORE_FRAGMENTS: u16 = 0x0400;
-const RETRY: u16 = 0x0800;
-const PROTECTED: u16 = 0x4000;
-const ORDER: u16 = 0x8000;
-const QOS_AMSDU_PRESENT: u8 = 0x80;
-
 /// Cryptographic class bound to one complete fragment identity.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DataFragmentProtection {
@@ -72,7 +61,9 @@ impl OpenDataFragmentIdentity {
 
     pub const fn tid(self) -> Option<u8> {
         match self.qos_control {
-            Some(control) => Some((control & 0x000f) as u8),
+            Some(control) => {
+                Some(crate::frame::QosControl::from_bytes(control.to_le_bytes()).tid())
+            }
             None => None,
         }
     }

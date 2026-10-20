@@ -4,6 +4,8 @@
 //! supplied timestamp and the beacon's advertised interval. The caller owns
 //! the clock relation; this codec does not read a backend or executor clock.
 
+use crate::frame::FrameControlFields;
+
 use crate::{
     ap::profile::Advertisement,
     channel::{Band, Channel},
@@ -179,7 +181,12 @@ pub fn write_ht_beacon(
             .supported()
             .iter()
             .chain(profile.legacy_rates.extended())
-            .any(|rate| matches!(rate & 0x7f, 2 | 4 | 11 | 22))
+            .any(|rate| {
+                matches!(
+                    crate::phy::SupportedRate::from_bytes([*rate]).rate(),
+                    2 | 4 | 11 | 22
+                )
+            })
     {
         return Err(ApBeaconBuildError::DsssRateIn5Ghz);
     }
@@ -293,7 +300,7 @@ pub fn dtim(bytes: &[u8]) -> Option<(usize, u8, u8)> {
     const FIXED_BEACON_LENGTH: usize = 24 + 8 + 2 + 2;
 
     if bytes.len() < FIXED_BEACON_LENGTH
-        || u16::from_le_bytes([bytes[0], bytes[1]]) & 0x00fc != 0x0080
+        || FrameControlFields::from_bytes([bytes[0], bytes[1]]).type_and_subtype() != 32
     {
         return None;
     }
@@ -394,8 +401,10 @@ pub fn write_tim_partial_virtual_bitmap(
     }
 
     storage[tim_offset + 1] = desired_body_len_u8;
-    let group_indication = storage[tim_offset + 4] & 1;
-    storage[tim_offset + 4] = group_indication | partial.bitmap_offset;
+    let group_indication = TimBitmapControl::from_bytes([storage[tim_offset + 4]]).group();
+    storage[tim_offset + 4] = TimBitmapControl::from_bytes([partial.bitmap_offset])
+        .with_group(group_indication)
+        .to_bytes()[0];
     storage[tim_offset + 5..desired_end].copy_from_slice(partial.octets);
     if new_len < frame_len {
         storage[new_len..frame_len].fill(0);
@@ -425,12 +434,18 @@ pub fn stamp(bytes: &mut [u8], timestamp: u64, group_pending: bool) -> Option<(u
     // only in a DTIM beacon. The queue itself remains Rust-owned and is
     // released by the corresponding TX-done edge.
     let bitmap_control = &mut bytes[tim_offset + 4];
-    if count == 0 && group_pending {
-        *bitmap_control |= 1;
-    } else {
-        *bitmap_control &= !1;
-    }
+    *bitmap_control = TimBitmapControl::from_bytes([*bitmap_control])
+        .with_group(count == 0 && group_pending)
+        .to_bytes()[0];
     Some((count, period))
+}
+
+oer_wire::bitfield! {
+    /// SOURCE: IEEE Std 802.11-2020, 9.4.2.5 (TIM element).
+    pub struct TimBitmapControl[1] (little) {
+        pub group, with_group: bool = 0..1;
+        pub offset, with_offset: u8 = 1..8;
+    }
 }
 
 #[cfg(test)]

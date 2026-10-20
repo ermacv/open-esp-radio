@@ -117,7 +117,7 @@ impl StaProtectedDataFrame<'_> {
         .map_err(|_| StationFrameError::HeControlRequiresQos)?;
         // Exact `net80211_tx::encapsulate_ordinary` mutation after successful
         // CCMP key selection.
-        plan.header[1] |= 0x40;
+        plan.set_protected(true);
         let header_len = usize::from(plan.header_len);
         let dma_header_len = plan.dma_header_len();
         let required = dma_header_len
@@ -241,7 +241,7 @@ impl StaProtectedEthernetFrame {
             he_control,
         )
         .map_err(|_| StationFrameError::HeControlRequiresQos)?;
-        plan.header[1] |= 0x40;
+        plan.set_protected(true);
 
         let header_len = usize::from(plan.header_len);
         let dma_header_len = plan.dma_header_len();
@@ -348,8 +348,8 @@ impl StaProtectedEthernetFrame {
             true,
             false,
         );
-        plan.header[1] |= 0x40;
-        plan.header[24] |= 0x80;
+        plan.set_protected(true);
+        plan.set_amsdu(true);
 
         // A station A-MSDU always owns the complete fixed-size QoS header.
         let mut header = plan.header;
@@ -418,7 +418,7 @@ const fn ethernet_header(
         source[3],
         source[4],
         source[5],
-        (ether_type >> 8) as u8,
+        ether_type.to_be_bytes()[0],
         ether_type as u8,
     ]
 }

@@ -1,5 +1,7 @@
 //! Station association request construction and response admission.
 
+use crate::frame::FrameControlFields;
+
 use super::*;
 use crate::address::OwnAddress;
 
@@ -210,13 +212,18 @@ impl<P: AssociationPhy> AssociationRequest<'_, P> {
         );
         // Privacy comes from the selected security mode, not an untrusted
         // scan record, even if that record bypassed candidate admission.
-        let capability = ((self.access_point.capability_info & ASSOCIATION_CAPABILITY_MASK) | 1)
-            & !0x0010
-            | match self.security.security().link_protection() {
-                LinkProtection::Open => 0,
-                LinkProtection::Ccmp => 0x0010,
-            };
-        fixed[24..26].copy_from_slice(&capability.to_le_bytes());
+        let advertised = crate::management::CapabilityInformation::from_bytes(
+            self.access_point.capability_info.to_le_bytes(),
+        );
+        let capability = crate::management::CapabilityInformation::from_bytes([0; 2])
+            .with_ess(true)
+            .with_short_preamble(advertised.short_preamble())
+            .with_short_slot(advertised.short_slot())
+            .with_privacy(matches!(
+                self.security.security().link_protection(),
+                LinkProtection::Ccmp
+            ));
+        fixed[24..26].copy_from_slice(&capability.to_bytes());
         fixed[26..28].copy_from_slice(&self.listen_interval.to_le_bytes());
         let mut rates = [0; MAX_SUPPORTED_RATES_LEN];
         copy_rates(self.access_point, &mut rates[..rates_len]);
@@ -297,7 +304,10 @@ impl AssociationResponse {
     /// Match the AP's successful response to the exact security mode selected
     /// from scan admission. There is no fallback between Open and WPA2.
     pub const fn matches_security(self, security: LinkProtection) -> bool {
-        let privacy = self.capability_info & 0x0010 != 0;
+        let privacy = crate::management::CapabilityInformation::from_bytes(
+            self.capability_info.to_le_bytes(),
+        )
+        .privacy();
         match security {
             LinkProtection::Open => !privacy,
             LinkProtection::Ccmp => privacy,
@@ -320,7 +330,8 @@ pub fn parse_association_response(
 ) -> Option<AssociationResponse> {
     let (header, [capability_info, status_code, association_id], information_elements) =
         split_received_management(frame)?;
-    if header.frame_control & 0x00fc != ASSOCIATION_RESPONSE_FRAME_CONTROL
+    if FrameControlFields::from_bytes(header.frame_control.to_le_bytes()).type_and_subtype()
+        != FrameControlFields::from_raw(ASSOCIATION_RESPONSE_FRAME_CONTROL).type_and_subtype()
         || header.receiver != local
         || header.transmitter != bssid
         || header.bssid != bssid
@@ -337,7 +348,9 @@ pub fn parse_association_response(
     let mut remaining = information_elements;
     while let [id, length, ..] = *remaining {
         let length = usize::from(length);
-        let (element, tail) = remaining.split_at_checked(length.checked_add(2)?)?;
+        let mut reader = oer_wire::Reader::new(remaining);
+        let element = reader.take(length.checked_add(2)?).ok()?;
+        let tail = reader.remaining();
         ht_capability |= id == 45 && length == 26;
         he_capability |= matches!(element, [255, _, 35, ..]);
         he_operation |= matches!(element, [255, _, 36, ..]);
@@ -366,7 +379,8 @@ pub fn parse_association_response(
     Some(AssociationResponse {
         capability_info,
         status_code,
-        association_id: association_id & 0x3fff,
+        association_id: crate::management::AssociationId::from_bytes(association_id.to_le_bytes())
+            .aid(),
         ht_capability,
         he_capability,
         he_operation,

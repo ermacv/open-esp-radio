@@ -14,14 +14,15 @@
     clippy::arithmetic_side_effects
 )]
 
+use crate::frame::{FrameControlFields, QosControl};
+
 use crate::ccmp::CcmpHeader;
 use crate::data::IEEE80211_LEGACY_DATA_HEADER_LEN;
 use crate::sequence::SequenceNumber;
 
 use super::{
-    CcmpPacketNumber, DATA, DataFragmentProtection, DataInterfaceRole, FROM_DS, MORE_FRAGMENTS,
-    ORDER, OpenDataFragment, OpenDataFragmentError, OpenDataFragmentIdentity, PROTECTED,
-    QOS_AMSDU_PRESENT, QOS_DATA, RETRY, TO_DS, TYPE_AND_SUBTYPE,
+    CcmpPacketNumber, DataFragmentProtection, DataInterfaceRole, OpenDataFragment,
+    OpenDataFragmentError, OpenDataFragmentIdentity,
 };
 
 /// Parse an Open data fragment from one normalized (FCS-free) MPDU.
@@ -72,7 +73,9 @@ fn parse_data_fragment<'frame>(
     if header.qos_amsdu_present {
         return Err(OpenDataFragmentError::AmsduUnsupported);
     }
-    if header.identity.receiver_address == [0; 6] || header.identity.receiver_address[0] & 1 != 0 {
+    if header.identity.receiver_address == [0; 6]
+        || crate::address::AddressFlags::from_bytes([header.identity.receiver_address[0]]).group()
+    {
         // IEEE fragmentation is defined only for an individual Address 1.
         // Ordinary group-addressed MPDUs remain valid and therefore this
         // check belongs to the fragment constructor, not the shared identity
@@ -80,7 +83,7 @@ fn parse_data_fragment<'frame>(
         return Err(OpenDataFragmentError::InvalidReceiver);
     }
     let destination = header.identity.destination();
-    if destination == [0; 6] || destination[0] & 1 != 0 {
+    if destination == [0; 6] || crate::address::AddressFlags::from_bytes([destination[0]]).group() {
         // In To-DS/AP direction Address 1 is the individual BSSID while
         // Address 3 is the MSDU destination. Fragmentation is forbidden for
         // that group-addressed MSDU even though its immediate receiver is
@@ -88,8 +91,10 @@ fn parse_data_fragment<'frame>(
         return Err(OpenDataFragmentError::InvalidDestination);
     }
     let sequence_control = header.sequence_control;
-    let fragment_number = (sequence_control & 0x000f) as u8;
-    let more_fragments = header.frame_control & MORE_FRAGMENTS != 0;
+    let fragment_number =
+        crate::sequence::SequenceControl::from_bytes((sequence_control).to_le_bytes()).fragment();
+    let more_fragments =
+        FrameControlFields::from_bytes(header.frame_control.to_le_bytes()).more_fragments();
     if fragment_number == 0 && !more_fragments {
         return Err(OpenDataFragmentError::NotFragmented);
     }
@@ -101,7 +106,7 @@ fn parse_data_fragment<'frame>(
         sequence_control,
         fragment_number,
         more_fragments,
-        retry: header.frame_control & RETRY != 0,
+        retry: FrameControlFields::from_bytes(header.frame_control.to_le_bytes()).retry(),
         packet_number,
         payload,
     })
@@ -151,9 +156,11 @@ fn parse_data_header(
     mpdu: &[u8],
     protection: DataFragmentProtection,
 ) -> Result<ParsedOpenDataHeader<'_>, OpenDataFragmentError> {
-    let (header, remainder) = mpdu
-        .split_first_chunk::<IEEE80211_LEGACY_DATA_HEADER_LEN>()
-        .ok_or(OpenDataFragmentError::Truncated)?;
+    let mut reader = oer_wire::Reader::new(mpdu);
+    let header = reader
+        .array::<IEEE80211_LEGACY_DATA_HEADER_LEN>()
+        .map_err(|_| OpenDataFragmentError::Truncated)?;
+    let remainder = reader.remaining();
     let [
         fc0,
         fc1,
@@ -184,11 +191,15 @@ fn parse_data_header(
     let transmitter_address = [t0, t1, t2, t3, t4, t5];
     let address3 = [a0, a1, a2, a3, a4, a5];
     let frame_control = u16::from_le_bytes([fc0, fc1]);
-    let subtype = frame_control & TYPE_AND_SUBTYPE;
-    if frame_control & 0x0003 != 0 || (subtype != DATA && subtype != QOS_DATA) {
+    let subtype = FrameControlFields::from_raw(frame_control).type_and_subtype();
+    if FrameControlFields::from_raw(frame_control).version() != 0 || (subtype != 2 && subtype != 34)
+    {
         return Err(OpenDataFragmentError::NotData);
     }
-    match (protection, frame_control & PROTECTED != 0) {
+    match (
+        protection,
+        FrameControlFields::from_raw(frame_control).protected(),
+    ) {
         (DataFragmentProtection::Open, true) => {
             return Err(OpenDataFragmentError::Protected);
         }
@@ -197,27 +208,30 @@ fn parse_data_header(
         }
         _ => {}
     }
-    if frame_control & ORDER != 0 {
+    if FrameControlFields::from_raw(frame_control).order() {
         return Err(OpenDataFragmentError::OrderedUnsupported);
     }
     let role_matches = matches!(
-        (role, frame_control & (TO_DS | FROM_DS)),
-        (DataInterfaceRole::Station, FROM_DS) | (DataInterfaceRole::AccessPoint, TO_DS)
+        (role, FrameControlFields::from_raw(frame_control).ds()),
+        (DataInterfaceRole::Station, 2) | (DataInterfaceRole::AccessPoint, 1)
     );
     if !role_matches {
         return Err(OpenDataFragmentError::RoleMismatch);
     }
 
-    let (qos_control, payload) = if subtype == QOS_DATA {
-        let (qos, payload) = remainder
-            .split_first_chunk()
-            .ok_or(OpenDataFragmentError::Truncated)?;
-        (Some(u16::from_le_bytes(*qos)), payload)
+    let (qos_control, payload) = if subtype == 34 {
+        let mut reader = oer_wire::Reader::new(remainder);
+        let qos = reader
+            .u16_le()
+            .map_err(|_| OpenDataFragmentError::Truncated)?;
+        (Some(qos), reader.remaining())
     } else {
         (None, remainder)
     };
     let sequence_control = u16::from_le_bytes([sc0, sc1]);
-    if transmitter_address == [0; 6] || transmitter_address[0] & 1 != 0 {
+    if transmitter_address == [0; 6]
+        || crate::address::AddressFlags::from_bytes([transmitter_address[0]]).group()
+    {
         return Err(OpenDataFragmentError::InvalidTransmitter);
     }
     Ok(ParsedOpenDataHeader {
@@ -233,7 +247,8 @@ fn parse_data_header(
         frame_control,
         sequence_control,
         payload,
-        qos_amsdu_present: qos_control.is_some_and(|qos| qos & u16::from(QOS_AMSDU_PRESENT) != 0),
+        qos_amsdu_present: qos_control
+            .is_some_and(|qos| QosControl::from_bytes(qos.to_le_bytes()).amsdu()),
     })
 }
 

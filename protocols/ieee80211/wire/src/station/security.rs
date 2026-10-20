@@ -84,7 +84,9 @@ impl SelectedRsn {
 /// RSN Extension element identifier.
 const RSNXE_ELEMENT_ID: u8 = 244;
 /// RSNXE capability bit of SAE hash to element.
-const RSNXE_SAE_H2E: u8 = 1 << 5;
+const RSNXE_SAE_H2E: u8 = crate::security::rsn::RsnExtendedCapabilities::from_bytes([0])
+    .with_sae_h2e(true)
+    .to_bytes()[0];
 
 /// Select the RSN element (and RSNXE) of a personal association.
 ///
@@ -130,10 +132,11 @@ fn select_personal_rsn(
     let spp = SppCapability::Capable
         .negotiate(SppCapability::from_rsn(capabilities).map_err(StaSecurityError::Spp)?)
         .map_err(StaSecurityError::Spp)?;
-    let management_protection =
-        policy.management_protection().capable() && capabilities & RSN_CAPABILITY_MFPC != 0;
+    let management_protection = policy.management_protection().capable()
+        && crate::security::rsn::RsnCapabilities::from_bytes(capabilities.to_le_bytes()).mfpc();
     if !management_protection
-        && (rsn.group_management_cipher().is_some() || capabilities & RSN_CAPABILITY_MFPR != 0)
+        && (rsn.group_management_cipher().is_some()
+            || crate::security::rsn::RsnCapabilities::from_bytes(capabilities.to_le_bytes()).mfpr())
     {
         return Err(StaSecurityError::MalformedRsn);
     }
@@ -150,7 +153,10 @@ fn select_personal_rsn(
             if access_point
                 .rsnxe_bytes()
                 .get(2)
-                .is_some_and(|capabilities| capabilities & RSNXE_SAE_H2E != 0)
+                .is_some_and(|capabilities| {
+                    crate::security::rsn::RsnExtendedCapabilities::from_bytes([*capabilities])
+                        .sae_h2e()
+                })
             {
                 SaePwe::HashToElement
             } else {
@@ -211,7 +217,7 @@ fn select_personal_rsn(
         0xac,
         akm_type,
         station_capabilities as u8,
-        (station_capabilities >> 8) as u8,
+        station_capabilities.to_le_bytes()[1],
     ]);
     selected.length = SELECTED_RSN_IE_LEN as u8;
     if matches!(akm, AssociationAkm::Sae(_)) {

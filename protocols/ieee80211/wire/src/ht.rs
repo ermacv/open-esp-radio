@@ -33,7 +33,9 @@ pub struct HtDuplicateMcs32;
 impl HtDuplicateMcs32 {
     pub const INDEX: u8 = 32;
     pub const CAPABILITY_IE_BYTE: usize = 9;
-    pub const CAPABILITY_IE_MASK: u8 = 1;
+    pub const CAPABILITY_IE_MASK: u8 = HtMcs32Octet::from_bytes([0])
+        .with_supported(true)
+        .to_bytes()[0];
 
     pub const fn new() -> Self {
         Self
@@ -51,8 +53,14 @@ impl HtDuplicateMcs32 {
     /// TX MCS Parameters bit one marks the TX and RX sets as unequal. Without
     /// it, setting the RX MCS32 bit would also claim unimplemented TX support.
     pub const fn advertise_receive_only(self, element: &mut [u8; HT_CAPABILITY_IE_LEN]) {
-        element[Self::CAPABILITY_IE_BYTE] |= Self::CAPABILITY_IE_MASK;
-        element[17] |= 0x03;
+        element[Self::CAPABILITY_IE_BYTE] =
+            HtMcs32Octet::from_bytes([element[Self::CAPABILITY_IE_BYTE]])
+                .with_supported(true)
+                .to_bytes()[0];
+        element[17] = HtTxMcs::from_bytes([element[17]])
+            .with_defined(true)
+            .with_unequal(true)
+            .to_bytes()[0];
     }
 }
 
@@ -106,36 +114,36 @@ pub const fn ht_capability_ie_for_peer(
 ) -> [u8; HT_CAPABILITY_IE_LEN] {
     // Channel geometry owns the width and short-GI bits even when the
     // caller supplies them in the capability base.
-    let capability_info: u16 = (local_ht.capability_info & !((1 << 1) | (1 << 5) | (1 << 6)))
-        | match channel.width() {
-            // Short GI for 20 MHz.
-            WifiChannelWidth::Mhz20 => 1 << 5,
-            // Supported Channel Width plus short GI for both 20 and 40 MHz.
-            WifiChannelWidth::Mhz40Above | WifiChannelWidth::Mhz40Below => {
-                (1 << 1) | (1 << 5) | (1 << 6)
-            }
-        };
+    let width40 = !matches!(channel.width(), WifiChannelWidth::Mhz20);
+    let [c0, c1] = HtCapabilityInfo::from_bytes(local_ht.capability_info.to_le_bytes())
+        .with_width40(width40)
+        .with_short_gi20(true)
+        .with_short_gi40(width40)
+        .to_bytes();
     let mut element = [0_u8; HT_CAPABILITY_IE_LEN];
     element[0] = 45;
     element[1] = 26;
-    element[2] = capability_info as u8;
-    element[3] = (capability_info >> 8) as u8;
+    element[2] = c0;
+    element[3] = c1;
     let local_ampdu_parameters = local_ht.ampdu_parameters;
     element[4] = match peer {
         Some(peer) => {
-            let exponent = if local_ampdu_parameters & 0x03 < peer.ampdu_parameters & 0x03 {
-                local_ampdu_parameters & 0x03
+            let local = HtAmpduParameters::from_bytes([local_ampdu_parameters]);
+            let peer = HtAmpduParameters::from_bytes([peer.ampdu_parameters]);
+            let exponent = if local.exponent() < peer.exponent() {
+                local.exponent()
             } else {
-                peer.ampdu_parameters & 0x03
+                peer.exponent()
             };
-            let local_spacing = local_ampdu_parameters & 0x1c;
-            let peer_spacing = peer.ampdu_parameters & 0x1c;
-            let spacing = if local_spacing > peer_spacing {
-                local_spacing
+            let spacing = if local.spacing() > peer.spacing() {
+                local.spacing()
             } else {
-                peer_spacing
+                peer.spacing()
             };
-            exponent | spacing
+            let fields = crate::encoding::validated(
+                HtAmpduParameters::from_bytes([0]).with_exponent(exponent),
+            );
+            crate::encoding::validated(fields.with_spacing(spacing)).to_bytes()[0]
         }
         None => local_ampdu_parameters,
     };
@@ -178,19 +186,22 @@ pub struct HtPeerCapabilities {
 
 impl HtPeerCapabilities {
     pub const fn supports_40_mhz(self) -> bool {
-        self.capability_info & (1 << 1) != 0
+        HtCapabilityInfo::from_bytes(self.capability_info.to_le_bytes()).width40()
     }
 
     /// HT Capabilities Information HT-Greenfield.
     pub const fn supports_greenfield(self) -> bool {
-        self.capability_info & (1 << 4) != 0
+        HtCapabilityInfo::from_bytes(self.capability_info.to_le_bytes()).greenfield()
     }
 
     pub const fn supports_short_guard_interval(self, width: WifiChannelWidth) -> bool {
         match width {
-            WifiChannelWidth::Mhz20 => self.capability_info & (1 << 5) != 0,
+            WifiChannelWidth::Mhz20 => {
+                HtCapabilityInfo::from_bytes(self.capability_info.to_le_bytes()).short_gi20()
+            }
             WifiChannelWidth::Mhz40Above | WifiChannelWidth::Mhz40Below => {
-                self.supports_40_mhz() && self.capability_info & (1 << 6) != 0
+                self.supports_40_mhz()
+                    && HtCapabilityInfo::from_bytes(self.capability_info.to_le_bytes()).short_gi40()
             }
         }
     }
@@ -233,9 +244,9 @@ impl HtPeerCapabilities {
 
 /// Parse a complete information-element stream into one-stream HT facts.
 pub fn ht_peer_capabilities(bytes: &[u8]) -> Option<HtPeerCapabilities> {
-    let mut remaining = bytes;
-    while let [_, length, ..] = *remaining {
-        let (record, rest) = remaining.split_at_checked(usize::from(length).checked_add(2)?)?;
+    let mut remaining = oer_wire::Reader::new(bytes);
+    while let [_, length, ..] = *remaining.remaining() {
+        let record = remaining.take(usize::from(length).checked_add(2)?).ok()?;
         if let Ok(record) = <&[u8; HT_CAPABILITY_IE_LEN]>::try_from(record)
             && let [45, _, c0, c1, ampdu_parameters, rx_mcs_0_to_7, ..] = *record
             && rx_mcs_0_to_7 != 0
@@ -244,14 +255,52 @@ pub fn ht_peer_capabilities(bytes: &[u8]) -> Option<HtPeerCapabilities> {
                 capability_info: u16::from_le_bytes([c0, c1]),
                 ampdu_parameters,
                 rx_mcs_0_to_7,
-                rx_ht_duplicate_mcs32: record[HtDuplicateMcs32::CAPABILITY_IE_BYTE]
-                    & HtDuplicateMcs32::CAPABILITY_IE_MASK
-                    != 0,
+                rx_ht_duplicate_mcs32: HtMcs32Octet::from_bytes([
+                    record[HtDuplicateMcs32::CAPABILITY_IE_BYTE]
+                ])
+                .supported(),
             });
         }
-        remaining = rest;
     }
     None
+}
+
+oer_wire::bitfield! {
+    /// SOURCE: IEEE Std 802.11-2020, 9.4.2.55.2 (HT Capabilities Info field).
+    pub struct HtCapabilityInfo[2] (little) {
+        pub width40, with_width40: bool = 1..2;
+        pub greenfield, with_greenfield: bool = 4..5;
+        pub short_gi20, with_short_gi20: bool = 5..6;
+        pub short_gi40, with_short_gi40: bool = 6..7;
+    }
+}
+oer_wire::bitfield! {
+    /// SOURCE: IEEE Std 802.11-2020, 9.4.2.55.3 (A-MPDU Parameters field).
+    pub struct HtAmpduParameters[1] (little) {
+        pub exponent, with_exponent: u8 = 0..2;
+        pub spacing, with_spacing: u8 = 2..5;
+    }
+}
+oer_wire::bitfield! {
+    /// SOURCE: IEEE Std 802.11-2020, 9.4.2.56 (HT Operation element).
+    pub struct HtOperationInfo[1] (little) {
+        pub secondary, with_secondary: u8 = 0..2;
+        pub width40, with_width40: bool = 2..3;
+    }
+}
+oer_wire::bitfield! {
+    /// SOURCE: IEEE Std 802.11-2020, 9.4.2.55.4 (Supported MCS Set field).
+    pub struct HtTxMcs[1] (little) {
+        pub defined, with_defined: bool = 0..1;
+        pub unequal, with_unequal: bool = 1..2;
+    }
+}
+
+oer_wire::bitfield! {
+    /// SOURCE: IEEE Std 802.11-2020, 9.4.2.55.4 (Supported MCS Set, RX MCS bitmap octet 4).
+    pub struct HtMcs32Octet[1] (little) {
+        pub supported, with_supported: bool = 0..1;
+    }
 }
 
 #[cfg(test)]

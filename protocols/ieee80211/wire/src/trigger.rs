@@ -10,9 +10,9 @@
 //!   `dbg_dump_trig_mubar_dependent` and `dbg_dump_trig_nfrp_user`;
 //! - `dbg_dump_trs_control` and `dbg_dump_uph_control`.
 //!
-//! Every extraction below reproduces the loads, shifts and masks in those
-//! functions. Derived units such as dBm are exposed separately from their
-//! wire encodings.
+//! Fixed-width fields use standard-clause declarations; the reviewed vendor
+//! decoders remain independent behavior evidence. Derived units such as dBm
+//! are exposed separately from their wire encodings.
 //!
 //! Received bytes reach this module; nothing here panics on them.
 #![deny(
@@ -23,6 +23,8 @@
     clippy::unreachable,
     clippy::arithmetic_side_effects
 )]
+
+use crate::frame::FrameControlFields;
 
 use crate::sequence::SequenceNumber;
 
@@ -63,46 +65,28 @@ pub enum TriggerEncodeError {
     BasicDependentInfoOutOfRange,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum TriggerType {
-    Basic,
-    BeamformingReportPoll,
-    MultiUserBlockAckRequest,
-    MultiUserRequestToSend,
-    BufferStatusReportPoll,
-    GroupcastMultiUserBlockAckRequest,
-    BandwidthQueryReportPoll,
-    NgpaFeedbackReportPoll,
-    Reserved(u8),
+oer_wire::bitfield! {
+    /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.22 (Trigger Type subfield).
+    pub enum TriggerType: u8 (from_raw, raw) {
+        Basic = 0,
+        BeamformingReportPoll = 1,
+        MultiUserBlockAckRequest = 2,
+        MultiUserRequestToSend = 3,
+        BufferStatusReportPoll = 4,
+        GroupcastMultiUserBlockAckRequest = 5,
+        BandwidthQueryReportPoll = 6,
+        NgpaFeedbackReportPoll = 7,
+    }
 }
 
 impl TriggerType {
+    // These public value conversions have always selected the low four bits.
+    // The raw conversions generated above retain unknown encodings verbatim.
     pub const fn from_encoding(value: u8) -> Self {
-        match value & 0x0f {
-            0 => Self::Basic,
-            1 => Self::BeamformingReportPoll,
-            2 => Self::MultiUserBlockAckRequest,
-            3 => Self::MultiUserRequestToSend,
-            4 => Self::BufferStatusReportPoll,
-            5 => Self::GroupcastMultiUserBlockAckRequest,
-            6 => Self::BandwidthQueryReportPoll,
-            7 => Self::NgpaFeedbackReportPoll,
-            value => Self::Reserved(value),
-        }
+        Self::from_raw(TriggerCommonFields::from_bytes([value, 0, 0, 0, 0, 0, 0, 0]).trigger_type())
     }
-
     pub const fn encoding(self) -> u8 {
-        match self {
-            Self::Basic => 0,
-            Self::BeamformingReportPoll => 1,
-            Self::MultiUserBlockAckRequest => 2,
-            Self::MultiUserRequestToSend => 3,
-            Self::BufferStatusReportPoll => 4,
-            Self::GroupcastMultiUserBlockAckRequest => 5,
-            Self::BandwidthQueryReportPoll => 6,
-            Self::NgpaFeedbackReportPoll => 7,
-            Self::Reserved(value) => value & 0x0f,
-        }
+        TriggerCommonFields::from_bytes([self.raw(), 0, 0, 0, 0, 0, 0, 0]).trigger_type()
     }
 }
 
@@ -116,7 +100,7 @@ pub enum TriggerGiLtf {
 
 impl TriggerGiLtf {
     const fn from_encoding(value: u8) -> Self {
-        match value & 0x03 {
+        match GiLtfValue::from_bytes([value]).value() {
             0 => Self::OneLtf1600Ns,
             1 => Self::TwoLtf1600Ns,
             2 => Self::FourLtf3200Ns,
@@ -197,24 +181,48 @@ impl TriggerCommonEncoding {
             return Err(TriggerEncodeError::HeSigA2ReservedOutOfRange);
         }
 
-        let bits = u64::from(trigger_type.encoding())
-            | (u64::from(self.uplink_length) << 4)
-            | (u64::from(self.more_trigger_frames) << 16)
-            | (u64::from(self.carrier_sense_required) << 17)
-            | (u64::from(self.uplink_bandwidth_encoding) << 18)
-            | (u64::from(self.gi_ltf.encoding()) << 20)
-            | (u64::from(self.mu_mimo_ltf_mode) << 22)
-            | (u64::from(self.he_ltf_symbols_and_midamble_periodicity) << 23)
-            | (u64::from(self.uplink_stbc) << 26)
-            | (u64::from(self.ldpc_extra_symbol_segment) << 27)
-            | (u64::from(self.ap_tx_power_encoding) << 28)
-            | (u64::from(self.pre_fec_padding_factor_encoding) << 34)
-            | (u64::from(self.packet_extension_disambiguity) << 36)
-            | (u64::from(self.uplink_spatial_reuse) << 37)
-            | (u64::from(self.doppler) << 53)
-            | (u64::from(self.uplink_he_sig_a2_reserved) << 54)
-            | (u64::from(self.trailing_reserved) << 63);
-        Ok(bits.to_le_bytes())
+        let mut fields = TriggerCommonFields::from_bytes([0; 8]);
+        fields = fields
+            .with_trigger_type(
+                TriggerCommonFields::from_bytes([trigger_type.encoding(), 0, 0, 0, 0, 0, 0, 0])
+                    .trigger_type(),
+            )
+            .map_err(|_| TriggerEncodeError::UplinkLengthOutOfRange)?;
+        fields = fields
+            .with_uplink_length(self.uplink_length)
+            .map_err(|_| TriggerEncodeError::UplinkLengthOutOfRange)?;
+        fields = fields.with_more_trigger_frames(self.more_trigger_frames);
+        fields = fields.with_carrier_sense_required(self.carrier_sense_required);
+        fields = fields
+            .with_uplink_bandwidth_encoding(self.uplink_bandwidth_encoding)
+            .map_err(|_| TriggerEncodeError::UplinkBandwidthOutOfRange)?;
+        fields = fields
+            .with_gi_ltf(self.gi_ltf.encoding())
+            .map_err(|_| TriggerEncodeError::UplinkBandwidthOutOfRange)?;
+        fields = fields.with_mu_mimo_ltf_mode(self.mu_mimo_ltf_mode);
+        fields = fields
+            .with_he_ltf_symbols_and_midamble_periodicity(
+                self.he_ltf_symbols_and_midamble_periodicity,
+            )
+            .map_err(|_| TriggerEncodeError::HeLtfSymbolsOutOfRange)?;
+        fields = fields.with_uplink_stbc(self.uplink_stbc);
+        fields = fields.with_ldpc_extra_symbol_segment(self.ldpc_extra_symbol_segment);
+        fields = fields
+            .with_ap_tx_power_encoding(self.ap_tx_power_encoding)
+            .map_err(|_| TriggerEncodeError::ApTxPowerOutOfRange)?;
+        fields = fields
+            .with_pre_fec_padding_factor_encoding(self.pre_fec_padding_factor_encoding)
+            .map_err(|_| TriggerEncodeError::PreFecPaddingOutOfRange)?;
+        fields = fields.with_packet_extension_disambiguity(self.packet_extension_disambiguity);
+        fields = fields
+            .with_uplink_spatial_reuse(self.uplink_spatial_reuse)
+            .map_err(|_| TriggerEncodeError::HeSigA2ReservedOutOfRange)?;
+        fields = fields.with_doppler(self.doppler);
+        fields = fields
+            .with_uplink_he_sig_a2_reserved(self.uplink_he_sig_a2_reserved)
+            .map_err(|_| TriggerEncodeError::HeSigA2ReservedOutOfRange)?;
+        fields = fields.with_trailing_reserved(self.trailing_reserved);
+        Ok(fields.to_bytes())
     }
 }
 
@@ -258,20 +266,30 @@ impl TriggerScheduledUserEncoding {
             return Err(TriggerEncodeError::TargetRssiOutOfRange);
         }
 
-        Ok([
-            self.association_id as u8,
-            ((self.association_id >> 8) as u8 & 0x0f)
-                | (u8::from(self.ru_allocation_region) << 4)
-                | ((self.ru_allocation & 0x07) << 5),
-            ((self.ru_allocation >> 3) & 0x0f)
-                | (u8::from(self.coding_type) << 4)
-                | ((self.mcs & 0x07) << 5),
-            ((self.mcs >> 3) & 0x01)
-                | (u8::from(self.dcm) << 1)
-                | (self.starting_spatial_stream_encoding << 2)
-                | (self.spatial_stream_count_encoding << 5),
-            self.target_rssi_encoding | (u8::from(self.reserved) << 7),
-        ])
+        let mut fields = TriggerScheduledUserFields::from_bytes([0; 5]);
+        fields = fields
+            .with_aid12(self.association_id)
+            .map_err(|_| TriggerEncodeError::AssociationIdOutOfRange)?;
+        fields = fields.with_ru_allocation_region(self.ru_allocation_region);
+        fields = fields
+            .with_ru_allocation(self.ru_allocation)
+            .map_err(|_| TriggerEncodeError::RuAllocationOutOfRange)?;
+        fields = fields.with_coding_type(self.coding_type);
+        fields = fields
+            .with_mcs(self.mcs)
+            .map_err(|_| TriggerEncodeError::McsOutOfRange)?;
+        fields = fields.with_dcm(self.dcm);
+        fields = fields
+            .with_starting_spatial_stream_encoding(self.starting_spatial_stream_encoding)
+            .map_err(|_| TriggerEncodeError::StartingSpatialStreamOutOfRange)?;
+        fields = fields
+            .with_spatial_stream_count_encoding(self.spatial_stream_count_encoding)
+            .map_err(|_| TriggerEncodeError::SpatialStreamCountOutOfRange)?;
+        fields = fields
+            .with_target_rssi_encoding(self.target_rssi_encoding)
+            .map_err(|_| TriggerEncodeError::TargetRssiOutOfRange)?;
+        fields = fields.with_reserved(self.reserved);
+        Ok(fields.to_bytes())
     }
 }
 
@@ -287,10 +305,18 @@ impl TriggerBasicDependentInfo {
         {
             return Err(TriggerEncodeError::BasicDependentInfoOutOfRange);
         }
-        Ok(self.mpdu_mu_spacing_factor
-            | (self.tid_aggregation_limit << 2)
-            | (u8::from(self.reserved) << 5)
-            | (self.preferred_access_category << 6))
+        let mut fields = TriggerBasicFields::from_bytes([0; 1]);
+        fields = fields
+            .with_mpdu_mu_spacing_factor(self.mpdu_mu_spacing_factor)
+            .map_err(|_| TriggerEncodeError::BasicDependentInfoOutOfRange)?;
+        fields = fields
+            .with_tid_aggregation_limit(self.tid_aggregation_limit)
+            .map_err(|_| TriggerEncodeError::BasicDependentInfoOutOfRange)?;
+        fields = fields.with_reserved(self.reserved);
+        fields = fields
+            .with_preferred_access_category(self.preferred_access_category)
+            .map_err(|_| TriggerEncodeError::BasicDependentInfoOutOfRange)?;
+        Ok(fields.to_bytes()[0])
     }
 }
 
@@ -502,11 +528,11 @@ pub struct TriggerUserField<'a> {
 
 impl TriggerUserField<'_> {
     pub const fn aid12(&self) -> u16 {
-        u16::from_le_bytes([self.user_info[0], self.user_info[1] & 0x0f])
+        trigger_user_prefix(self.user_info).aid12()
     }
 
     pub const fn ru_allocation(&self) -> u8 {
-        (self.user_info[1] >> 5) | ((self.user_info[2] & 0x0f) << 3)
+        trigger_user_prefix(self.user_info).ru_allocation()
     }
 
     pub const fn classified_ru_allocation(&self) -> Option<TriggerRuAllocation> {
@@ -556,14 +582,14 @@ impl<'a> Iterator for TriggerUserIterator<'a> {
         if self.finished || self.remaining.is_empty() {
             return None;
         }
-        let Some((user_info, _)) = self.remaining.split_first_chunk::<TRIGGER_USER_INFO_LEN>()
-        else {
+        let mut reader = oer_wire::Reader::new(self.remaining);
+        let Ok(user_info) = reader.array::<TRIGGER_USER_INFO_LEN>() else {
             return self.fail(TriggerParseError::Truncated {
                 required: TRIGGER_USER_INFO_LEN,
             });
         };
-        let aid12 = u16::from(user_info[0]) | (u16::from(user_info[1] & 0x0f) << 8);
-        let ru_allocation = (user_info[1] >> 5) | ((user_info[2] & 0x0f) << 3);
+        let aid12 = trigger_user_prefix(user_info).aid12();
+        let ru_allocation = trigger_user_prefix(user_info).ru_allocation();
         if aid12 == 0x0fff && ru_allocation == 0x7f {
             self.padding = self.remaining;
             self.remaining = &[];
@@ -586,12 +612,10 @@ impl<'a> Iterator for TriggerUserIterator<'a> {
             }
         };
         let required = TRIGGER_USER_INFO_LEN.saturating_add(dependent_len);
-        let Some((field, rest)) = self.remaining.split_at_checked(required) else {
+        let Ok(dependent_info) = reader.take(dependent_len) else {
             return self.fail(TriggerParseError::Truncated { required });
         };
-        let Some((user_info, dependent_info)) = field.split_first_chunk() else {
-            return self.fail(TriggerParseError::Truncated { required });
-        };
+        let rest = reader.remaining();
         let user = TriggerUserField {
             user_info,
             dependent_info,
@@ -618,25 +642,24 @@ pub fn parse_trigger_frame(frame: &[u8]) -> Result<TriggerFrame<'_>, TriggerPars
     let truncated = TriggerParseError::Truncated {
         required: TRIGGER_FRAME_MIN_LEN,
     };
-    let (header, rest) = frame
-        .split_first_chunk::<TRIGGER_MAC_HEADER_LEN>()
-        .ok_or(truncated)?;
-    let (common, user_info_and_padding) = rest
-        .split_first_chunk::<TRIGGER_COMMON_INFO_LEN>()
-        .ok_or(truncated)?;
-    let (frame_control, header) = header.split_first_chunk::<2>().ok_or(truncated)?;
-    let (duration, header) = header.split_first_chunk::<2>().ok_or(truncated)?;
-    let (receiver_address, header) = header.split_first_chunk::<6>().ok_or(truncated)?;
-    let transmitter_address = header.first_chunk::<6>().ok_or(truncated)?;
-    let frame_control = u16::from_le_bytes(*frame_control);
-    if frame_control & 0x00fc != 0x0024 {
+    let mut reader = oer_wire::Reader::new(frame);
+    let frame_control = reader.read().map_err(|_| truncated)?;
+    let duration = reader.read().map_err(|_| truncated)?;
+    let receiver_address = reader.read().map_err(|_| truncated)?;
+    let transmitter_address = reader.read().map_err(|_| truncated)?;
+    let common = reader
+        .array::<TRIGGER_COMMON_INFO_LEN>()
+        .map_err(|_| truncated)?;
+    let user_info_and_padding = reader.remaining();
+    let frame_control = u16::from_le_bytes(frame_control);
+    if FrameControlFields::from_bytes(frame_control.to_le_bytes()).type_and_subtype() != 9 {
         return Err(TriggerParseError::NotTriggerFrame);
     }
     Ok(TriggerFrame {
         frame_control,
-        duration: u16::from_le_bytes(*duration),
-        receiver_address: *receiver_address,
-        transmitter_address: *transmitter_address,
+        duration: u16::from_le_bytes(duration),
+        receiver_address,
+        transmitter_address,
         common: parse_trigger_common_info(common)?,
         user_info_and_padding,
     })
@@ -650,21 +673,20 @@ pub fn parse_trigger_frame(frame: &[u8]) -> Result<TriggerFrame<'_>, TriggerPars
 /// bit 63 is retained as `trailing_reserved` even though the debug printer
 /// omits it.
 pub fn parse_trigger_common_info(bytes: &[u8]) -> Result<TriggerCommonInfo, TriggerParseError> {
-    let [b0, b1, b2, b3, b4, b5, b6, b7] = *chunk::<TRIGGER_COMMON_INFO_LEN>(bytes)?;
-    let bits = u64::from_le_bytes([b0, b1, b2, b3, b4, b5, b6, b7]);
-    let ap_tx_power_encoding = field(bits, 28, 0x3f) as u8;
-    let pre_fec_padding_factor_encoding = field(bits, 34, 0x03) as u8;
+    let fields = TriggerCommonFields::from_bytes(*chunk(bytes)?);
+    let ap_tx_power_encoding = fields.ap_tx_power_encoding();
+    let pre_fec_padding_factor_encoding = fields.pre_fec_padding_factor_encoding();
     Ok(TriggerCommonInfo {
-        trigger_type: TriggerType::from_encoding(field(bits, 0, 0x0f) as u8),
-        uplink_length: field(bits, 4, 0x0fff) as u16,
-        more_trigger_frames: bit(bits, 16),
-        carrier_sense_required: bit(bits, 17),
-        uplink_bandwidth_encoding: field(bits, 18, 0x03) as u8,
-        gi_ltf: TriggerGiLtf::from_encoding(field(bits, 20, 0x03) as u8),
-        mu_mimo_ltf_mode: bit(bits, 22),
-        he_ltf_symbols_and_midamble_periodicity: field(bits, 23, 0x07) as u8,
-        uplink_stbc: bit(bits, 26),
-        ldpc_extra_symbol_segment: bit(bits, 27),
+        trigger_type: TriggerType::from_encoding(fields.trigger_type()),
+        uplink_length: fields.uplink_length(),
+        more_trigger_frames: fields.more_trigger_frames(),
+        carrier_sense_required: fields.carrier_sense_required(),
+        uplink_bandwidth_encoding: fields.uplink_bandwidth_encoding(),
+        gi_ltf: TriggerGiLtf::from_encoding(fields.gi_ltf()),
+        mu_mimo_ltf_mode: fields.mu_mimo_ltf_mode(),
+        he_ltf_symbols_and_midamble_periodicity: fields.he_ltf_symbols_and_midamble_periodicity(),
+        uplink_stbc: fields.uplink_stbc(),
+        ldpc_extra_symbol_segment: fields.ldpc_extra_symbol_segment(),
         ap_tx_power_encoding,
         ap_tx_power: TriggerApTxPower::from_common_encoding(ap_tx_power_encoding),
         pre_fec_padding_factor_encoding,
@@ -673,11 +695,11 @@ pub fn parse_trigger_common_info(bytes: &[u8]) -> Result<TriggerCommonInfo, Trig
         } else {
             pre_fec_padding_factor_encoding
         },
-        packet_extension_disambiguity: bit(bits, 36),
-        uplink_spatial_reuse: field(bits, 37, 0xffff) as u16,
-        doppler: bit(bits, 53),
-        uplink_he_sig_a2_reserved: field(bits, 54, 0x01ff) as u16,
-        trailing_reserved: bit(bits, 63),
+        packet_extension_disambiguity: fields.packet_extension_disambiguity(),
+        uplink_spatial_reuse: fields.uplink_spatial_reuse(),
+        doppler: fields.doppler(),
+        uplink_he_sig_a2_reserved: fields.uplink_he_sig_a2_reserved(),
+        trailing_reserved: fields.trailing_reserved(),
     })
 }
 
@@ -701,20 +723,20 @@ pub struct TriggerUserRuInfo {
 /// SOURCE(esp32s31)\[BLOB_LIBPP_DBG_DUMP_TRIG_USER_RU]: complete
 /// `libpp.a[hal_debug.o]::dbg_dump_trig_user_ru`.
 pub fn parse_trigger_user_ru(bytes: &[u8]) -> Result<TriggerUserRuInfo, TriggerParseError> {
-    let [b0, b1, b2, b3, b4] = *chunk::<TRIGGER_USER_INFO_LEN>(bytes)?;
-    let target_rssi_encoding = b4 & 0x7f;
+    let fields = TriggerRandomAccessUserFields::from_bytes(*chunk(bytes)?);
+    let target_rssi_encoding = fields.target_rssi_encoding();
     Ok(TriggerUserRuInfo {
-        aid12: u16::from(b0) | (u16::from(b1 & 0x0f) << 8),
-        ru_allocation_region: b1 & 0x10 != 0,
-        ru_allocation: (b1 >> 5) | ((b2 & 0x0f) << 3),
-        coding_type: b2 & 0x10 != 0,
-        mcs: (b2 >> 5) | ((b3 & 0x01) << 3),
-        dcm: b3 & 0x02 != 0,
-        number_of_ra_ru: (b3 >> 2) & 0x1f,
-        more_ra_ru: b3 & 0x80 != 0,
+        aid12: fields.aid12(),
+        ru_allocation_region: fields.ru_allocation_region(),
+        ru_allocation: fields.ru_allocation(),
+        coding_type: fields.coding_type(),
+        mcs: fields.mcs(),
+        dcm: fields.dcm(),
+        number_of_ra_ru: fields.number_of_ra_ru(),
+        more_ra_ru: fields.more_ra_ru(),
         target_rssi_encoding,
         target_rssi: TriggerTargetRssi::from_user_encoding(target_rssi_encoding),
-        reserved: b4 & 0x80 != 0,
+        reserved: fields.reserved(),
     })
 }
 
@@ -744,24 +766,24 @@ pub struct TriggerUserSpatialStreamInfo {
 pub fn parse_trigger_user_spatial_stream(
     bytes: &[u8],
 ) -> Result<TriggerUserSpatialStreamInfo, TriggerParseError> {
-    let [b0, b1, b2, b3, b4] = *chunk::<TRIGGER_USER_INFO_LEN>(bytes)?;
-    let starting_spatial_stream_encoding = (b3 >> 2) & 0x07;
-    let spatial_stream_count_encoding = b3 >> 5;
-    let target_rssi_encoding = b4 & 0x7f;
+    let fields = TriggerScheduledUserFields::from_bytes(*chunk(bytes)?);
+    let starting_spatial_stream_encoding = fields.starting_spatial_stream_encoding();
+    let spatial_stream_count_encoding = fields.spatial_stream_count_encoding();
+    let target_rssi_encoding = fields.target_rssi_encoding();
     Ok(TriggerUserSpatialStreamInfo {
-        aid12: u16::from(b0) | (u16::from(b1 & 0x0f) << 8),
-        ru_allocation_region: b1 & 0x10 != 0,
-        ru_allocation: (b1 >> 5) | ((b2 & 0x0f) << 3),
-        coding_type: b2 & 0x10 != 0,
-        mcs: (b2 >> 5) | ((b3 & 0x01) << 3),
-        dcm: b3 & 0x02 != 0,
+        aid12: fields.aid12(),
+        ru_allocation_region: fields.ru_allocation_region(),
+        ru_allocation: fields.ru_allocation(),
+        coding_type: fields.coding_type(),
+        mcs: fields.mcs(),
+        dcm: fields.dcm(),
         starting_spatial_stream_encoding,
         starting_spatial_stream: starting_spatial_stream_encoding.saturating_add(1),
         spatial_stream_count_encoding,
         spatial_stream_count: spatial_stream_count_encoding.saturating_add(1),
         target_rssi_encoding,
         target_rssi: TriggerTargetRssi::from_user_encoding(target_rssi_encoding),
-        reserved: b4 & 0x80 != 0,
+        reserved: fields.reserved(),
     })
 }
 
@@ -778,12 +800,12 @@ pub struct TriggerBasicDependentInfo {
 pub fn parse_trigger_basic_dependent(
     bytes: &[u8],
 ) -> Result<TriggerBasicDependentInfo, TriggerParseError> {
-    let [b0] = *chunk::<TRIGGER_BASIC_DEPENDENT_LEN>(bytes)?;
+    let fields = TriggerBasicFields::from_bytes(*chunk(bytes)?);
     Ok(TriggerBasicDependentInfo {
-        mpdu_mu_spacing_factor: b0 & 0x03,
-        tid_aggregation_limit: (b0 >> 2) & 0x07,
-        reserved: b0 & 0x20 != 0,
-        preferred_access_category: b0 >> 6,
+        mpdu_mu_spacing_factor: fields.mpdu_mu_spacing_factor(),
+        tid_aggregation_limit: fields.tid_aggregation_limit(),
+        reserved: fields.reserved(),
+        preferred_access_category: fields.preferred_access_category(),
     })
 }
 
@@ -814,9 +836,9 @@ pub fn parse_trigger_mu_bar_dependent(
     let bar_information = u16::from_le_bytes([b2, b3]);
     Ok(TriggerMuBarDependentInfo {
         bar_control,
-        ack_policy: bar_control & 0x0001 != 0,
-        bar_type: ((bar_control >> 1) & 0x0f) as u8,
-        tid: (bar_control >> 12) as u8,
+        ack_policy: BarControlFields::from_bytes(bar_control.to_le_bytes()).ack_policy(),
+        bar_type: BarControlFields::from_bytes(bar_control.to_le_bytes()).bar_type(),
+        tid: BarControlFields::from_bytes(bar_control.to_le_bytes()).tid(),
         bar_information,
         starting_sequence_number: SequenceNumber::from_sequence_control(bar_information),
     })
@@ -835,14 +857,14 @@ pub struct TriggerNfrpUserInfo {
 /// SOURCE(esp32s31)\[BLOB_LIBPP_DBG_DUMP_TRIG_NFRP_USER]: complete
 /// `libpp.a[hal_debug.o]::dbg_dump_trig_nfrp_user`.
 pub fn parse_trigger_nfrp_user(bytes: &[u8]) -> Result<TriggerNfrpUserInfo, TriggerParseError> {
-    let [b0, b1, b2, b3, b4] = *chunk::<TRIGGER_NFRP_USER_INFO_LEN>(bytes)?;
+    let fields = TriggerNfrpFields::from_bytes(*chunk(bytes)?);
     Ok(TriggerNfrpUserInfo {
-        starting_aid: u16::from(b0) | (u16::from(b1 & 0x0f) << 8),
-        reserved_9: u16::from(b1 >> 4) | (u16::from(b2 & 0x1f) << 4),
-        feedback_type: (b2 >> 5) | ((b3 & 0x01) << 3),
-        reserved_7: b3 >> 1,
-        uplink_target_rssi: b4 & 0x7f,
-        multiplexing: b4 & 0x80 != 0,
+        starting_aid: fields.starting_aid(),
+        reserved_9: fields.reserved_9(),
+        feedback_type: fields.feedback_type(),
+        reserved_7: fields.reserved_7(),
+        uplink_target_rssi: fields.uplink_target_rssi(),
+        multiplexing: fields.multiplexing(),
     })
 }
 
@@ -867,20 +889,20 @@ pub struct TriggerResponseSchedulingControl {
 pub fn parse_trigger_response_scheduling_control(
     bytes: &[u8],
 ) -> Result<TriggerResponseSchedulingControl, TriggerParseError> {
-    let bits = parse_he_control_word(bytes)?;
-    let ap_tx_power_encoding = field(u64::from(bits), 19, 0x1f) as u8;
-    let uplink_target_rssi_encoding = field(u64::from(bits), 24, 0x1f) as u8;
+    let fields = TrsFields::from_bytes(*chunk(bytes)?);
+    let ap_tx_power_encoding = fields.ap_tx_power_encoding();
+    let uplink_target_rssi_encoding = fields.uplink_target_rssi_encoding();
     Ok(TriggerResponseSchedulingControl {
-        control_id: field(u64::from(bits), 0, 0x3f) as u8,
-        uplink_data_symbols: field(u64::from(bits), 6, 0x1f) as u8,
-        ru_allocation_region: bit(u64::from(bits), 11),
-        ru_allocation: field(u64::from(bits), 12, 0x7f) as u8,
-        ap_tx_power_encoding,
+        control_id: fields.control_id(),
+        uplink_data_symbols: fields.uplink_data_symbols(),
+        ru_allocation_region: fields.ru_allocation_region(),
+        ru_allocation: fields.ru_allocation(),
+        ap_tx_power_encoding: fields.ap_tx_power_encoding(),
+        uplink_target_rssi_encoding: fields.uplink_target_rssi_encoding(),
+        mcs: fields.mcs(),
+        trailing_reserved: fields.trailing_reserved(),
         ap_tx_power: TriggerApTxPower::from_trs_encoding(ap_tx_power_encoding),
-        uplink_target_rssi_encoding,
         uplink_target_rssi: TriggerTargetRssi::from_trs_encoding(uplink_target_rssi_encoding),
-        mcs: field(u64::from(bits), 29, 0x03) as u8,
-        trailing_reserved: bit(u64::from(bits), 31),
     })
 }
 
@@ -901,33 +923,153 @@ pub struct UplinkPowerHeadroomControl {
 pub fn parse_uplink_power_headroom_control(
     bytes: &[u8],
 ) -> Result<UplinkPowerHeadroomControl, TriggerParseError> {
-    let bits = parse_he_control_word(bytes)?;
+    let fields = UphFields::from_bytes(*chunk(bytes)?);
     Ok(UplinkPowerHeadroomControl {
-        control_id: (bits & 0x3f) as u8,
-        uplink_power_headroom: ((bits >> 6) & 0x1f) as u8,
-        minimum_transmit_power: bits & (1 << 11) != 0,
-        reserved: ((bits >> 12) & 0x03) as u8,
-        unparsed_upper_bits: bits >> 14,
+        control_id: fields.control_id(),
+        uplink_power_headroom: fields.uplink_power_headroom(),
+        minimum_transmit_power: fields.minimum_transmit_power(),
+        reserved: fields.reserved(),
+        unparsed_upper_bits: fields.unparsed_upper_bits(),
     })
 }
 
-fn parse_he_control_word(bytes: &[u8]) -> Result<u32, TriggerParseError> {
-    let [b0, b1, b2, b3] = *chunk::<HE_CONTROL_INFO_LEN>(bytes)?;
-    Ok(u32::from_le_bytes([b0, b1, b2, b3]))
-}
-
 fn chunk<const N: usize>(bytes: &[u8]) -> Result<&[u8; N], TriggerParseError> {
-    bytes
-        .first_chunk::<N>()
-        .ok_or(TriggerParseError::Truncated { required: N })
+    oer_wire::Reader::new(bytes)
+        .array()
+        .map_err(|_| TriggerParseError::Truncated { required: N })
 }
 
-const fn field(bits: u64, shift: u32, mask: u64) -> u64 {
-    (bits >> shift) & mask
+oer_wire::bitfield! {
+    /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.22 (Trigger frame format).
+    pub struct TriggerCommonFields[8] (little) {
+        pub trigger_type, with_trigger_type: u8 = 0..4;
+        pub uplink_length, with_uplink_length: u16 = 4..16;
+        pub more_trigger_frames, with_more_trigger_frames: bool = 16..17;
+        pub carrier_sense_required, with_carrier_sense_required: bool = 17..18;
+        pub uplink_bandwidth_encoding, with_uplink_bandwidth_encoding: u8 = 18..20;
+        pub gi_ltf, with_gi_ltf: u8 = 20..22;
+        pub mu_mimo_ltf_mode, with_mu_mimo_ltf_mode: bool = 22..23;
+        pub he_ltf_symbols_and_midamble_periodicity, with_he_ltf_symbols_and_midamble_periodicity: u8 = 23..26;
+        pub uplink_stbc, with_uplink_stbc: bool = 26..27;
+        pub ldpc_extra_symbol_segment, with_ldpc_extra_symbol_segment: bool = 27..28;
+        pub ap_tx_power_encoding, with_ap_tx_power_encoding: u8 = 28..34;
+        pub pre_fec_padding_factor_encoding, with_pre_fec_padding_factor_encoding: u8 = 34..36;
+        pub packet_extension_disambiguity, with_packet_extension_disambiguity: bool = 36..37;
+        pub uplink_spatial_reuse, with_uplink_spatial_reuse: u16 = 37..53;
+        pub doppler, with_doppler: bool = 53..54;
+        pub uplink_he_sig_a2_reserved, with_uplink_he_sig_a2_reserved: u16 = 54..63;
+        pub trailing_reserved, with_trailing_reserved: bool = 63..64;
+    }
 }
 
-const fn bit(bits: u64, shift: u32) -> bool {
-    field(bits, shift, 1) != 0
+oer_wire::bitfield! {
+    /// Shared prefix of scheduled and random-access Trigger User Info.
+    /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.22 (Trigger frame format).
+    pub struct TriggerUserPrefix[3] (little) {
+        pub aid12, with_aid12: u16 = 0..12;
+        pub ru_allocation_region, with_ru_allocation_region: bool = 12..13;
+        pub ru_allocation, with_ru_allocation: u8 = 13..20;
+    }
+}
+oer_wire::bitfield! {
+    /// Scheduled spatial-stream form of Trigger User Info.
+    /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.22 (Trigger frame format).
+    pub struct TriggerScheduledUserFields[5] (little) {
+        pub aid12, with_aid12: u16 = 0..12;
+        pub ru_allocation_region, with_ru_allocation_region: bool = 12..13;
+        pub ru_allocation, with_ru_allocation: u8 = 13..20;
+        pub coding_type, with_coding_type: bool = 20..21;
+        pub mcs, with_mcs: u8 = 21..25;
+        pub dcm, with_dcm: bool = 25..26;
+        pub starting_spatial_stream_encoding, with_starting_spatial_stream_encoding: u8 = 26..29;
+        pub spatial_stream_count_encoding, with_spatial_stream_count_encoding: u8 = 29..32;
+        pub target_rssi_encoding, with_target_rssi_encoding: u8 = 32..39;
+        pub reserved, with_reserved: bool = 39..40;
+    }
+}
+oer_wire::bitfield! {
+    /// Random-access RU form of Trigger User Info.
+    /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.22 (Trigger frame format).
+    pub struct TriggerRandomAccessUserFields[5] (little) {
+        pub aid12, with_aid12: u16 = 0..12;
+        pub ru_allocation_region, with_ru_allocation_region: bool = 12..13;
+        pub ru_allocation, with_ru_allocation: u8 = 13..20;
+        pub coding_type, with_coding_type: bool = 20..21;
+        pub mcs, with_mcs: u8 = 21..25;
+        pub dcm, with_dcm: bool = 25..26;
+        pub number_of_ra_ru, with_number_of_ra_ru: u8 = 26..31;
+        pub more_ra_ru, with_more_ra_ru: bool = 31..32;
+        pub target_rssi_encoding, with_target_rssi_encoding: u8 = 32..39;
+        pub reserved, with_reserved: bool = 39..40;
+    }
+}
+
+oer_wire::bitfield! {
+    /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.22 (Trigger frame format).
+    pub struct TriggerBasicFields[1] (little) {
+        pub mpdu_mu_spacing_factor, with_mpdu_mu_spacing_factor: u8 = 0..2;
+        pub tid_aggregation_limit, with_tid_aggregation_limit: u8 = 2..5;
+        pub reserved, with_reserved: bool = 5..6;
+        pub preferred_access_category, with_preferred_access_category: u8 = 6..8;
+    }
+}
+
+oer_wire::bitfield! {
+    /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.22 (Trigger frame format).
+    pub struct TriggerNfrpFields[5] (little) {
+        pub starting_aid, with_starting_aid: u16 = 0..12;
+        pub reserved_9, with_reserved_9: u16 = 12..21;
+        pub feedback_type, with_feedback_type: u8 = 21..25;
+        pub reserved_7, with_reserved_7: u8 = 25..32;
+        pub uplink_target_rssi, with_uplink_target_rssi: u8 = 32..39;
+        pub multiplexing, with_multiplexing: bool = 39..40;
+    }
+}
+
+oer_wire::bitfield! {
+    /// SOURCE: IEEE Std 802.11ax-2021, 9.2.4.6 (HE variant HT Control, TRS Control).
+    pub struct TrsFields[4] (little) {
+        pub control_id, with_control_id: u8 = 0..6;
+        pub uplink_data_symbols, with_uplink_data_symbols: u8 = 6..11;
+        pub ru_allocation_region, with_ru_allocation_region: bool = 11..12;
+        pub ru_allocation, with_ru_allocation: u8 = 12..19;
+        pub ap_tx_power_encoding, with_ap_tx_power_encoding: u8 = 19..24;
+        pub uplink_target_rssi_encoding, with_uplink_target_rssi_encoding: u8 = 24..29;
+        pub mcs, with_mcs: u8 = 29..31;
+        pub trailing_reserved, with_trailing_reserved: bool = 31..32;
+    }
+}
+
+oer_wire::bitfield! {
+    /// SOURCE: IEEE Std 802.11ax-2021, 9.2.4.6 (HE variant HT Control, UPH Control).
+    pub struct UphFields[4] (little) {
+        pub control_id, with_control_id: u8 = 0..6;
+        pub uplink_power_headroom, with_uplink_power_headroom: u8 = 6..11;
+        pub minimum_transmit_power, with_minimum_transmit_power: bool = 11..12;
+        pub reserved, with_reserved: u8 = 12..14;
+        pub unparsed_upper_bits, with_unparsed_upper_bits: u32 = 14..32;
+    }
+}
+
+oer_wire::bitfield! {
+    /// SOURCE: IEEE Std 802.11-2020, 9.3.1.8 (BlockAckReq frame).
+    pub struct BarControlFields[2] (little) {
+        pub ack_policy, with_ack_policy: bool = 0..1;
+        pub bar_type, with_bar_type: u8 = 1..5;
+        pub tid, with_tid: u8 = 12..16;
+    }
+}
+
+oer_wire::bitfield! {
+    /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.22 (GI And HE-LTF Type subfield).
+    pub struct GiLtfValue[1] (little) {
+        pub value, with_value: u8 = 0..2;
+    }
+}
+
+const fn trigger_user_prefix(bytes: &[u8; 5]) -> TriggerUserPrefix {
+    let [first, second, third, ..] = *bytes;
+    TriggerUserPrefix::from_bytes([first, second, third])
 }
 
 #[cfg(test)]

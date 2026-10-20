@@ -471,5 +471,13 @@ impl PhyRate {
     }
 }
 
+oer_wire::bitfield! {
+    /// SOURCE: IEEE Std 802.11-2020, 9.4.2.3 (Supported Rates and BSS Membership Selectors element).
+    pub struct SupportedRate[1] (little) {
+        pub rate, with_rate: u8 = 0..7;
+        pub basic, with_basic: bool = 7..8;
+    }
+}
+
 #[cfg(test)]
 mod tests;

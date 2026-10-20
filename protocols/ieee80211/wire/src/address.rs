@@ -9,7 +9,7 @@ pub struct IndividualAddress([u8; 6]);
 impl IndividualAddress {
     /// `address`, when its group bit is clear.
     pub const fn new(address: [u8; 6]) -> Option<Self> {
-        if address[0] & 1 == 0 {
+        if !crate::address::AddressFlags::from_bytes([address[0]]).group() {
             Some(Self(address))
         } else {
             None
@@ -79,6 +79,14 @@ impl Bssid {
     /// The wire octets.
     pub const fn get(self) -> [u8; 6] {
         self.0.get()
+    }
+}
+
+oer_wire::bitfield! {
+    /// SOURCE: IEEE Std 802.11-2020, 9.2.4.3 (Address fields).
+    pub struct AddressFlags[1] (little) {
+        pub group, with_group: bool = 0..1;
+        pub local, with_local: bool = 1..2;
     }
 }
 

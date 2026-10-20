@@ -21,15 +21,17 @@ pub const QOS_DATA_TO_DS: u16 = 0x0188;
 pub struct FrameControl(u16);
 
 impl FrameControl {
+    const fn fields(self) -> FrameControlFields {
+        FrameControlFields::from_bytes(self.0.to_le_bytes())
+    }
     const DATA: u16 = 2;
     const MANAGEMENT: u16 = 0;
-    const TYPE_AND_SUBTYPE: u16 = (0b11 << 2) | (0b1111 << 4);
-    const ACTION_NO_ACK: u16 = 0b1110 << 4;
 
     /// `field`, when it is a data or management frame of version 0.
     pub const fn new(field: u16) -> Option<Self> {
-        let kind = (field >> 2) & 0b11;
-        if field & 0b11 == 0 && (kind == Self::DATA || kind == Self::MANAGEMENT) {
+        let fields = FrameControlFields::from_bytes(field.to_le_bytes());
+        let kind = fields.kind().encoding() as u16;
+        if fields.version() == 0 && (kind == Self::DATA || kind == Self::MANAGEMENT) {
             Some(Self(field))
         } else {
             None
@@ -43,54 +45,63 @@ impl FrameControl {
 
     /// Select the Protected flag while retaining the validated frame kind.
     pub const fn with_protected(self, protected: bool) -> Self {
-        Self((self.0 & !(1 << 14)) | if protected { 1 << 14 } else { 0 })
+        Self(u16::from_le_bytes(
+            FrameControlFields::from_bytes(self.0.to_le_bytes())
+                .with_protected(protected)
+                .to_bytes(),
+        ))
     }
     /// Select Retry without changing the frame's kind, protection or direction.
     pub const fn with_retry(self, retry: bool) -> Self {
-        Self((self.0 & !(1 << 11)) | if retry { 1 << 11 } else { 0 })
+        Self(u16::from_le_bytes(
+            FrameControlFields::from_bytes(self.0.to_le_bytes())
+                .with_retry(retry)
+                .to_bytes(),
+        ))
     }
     /// This MPDU repeats an earlier transmission.
     pub const fn retry(self) -> bool {
-        self.0 & (1 << 11) != 0
+        self.fields().retry()
     }
     /// A data frame.
     pub const fn is_data(self) -> bool {
-        (self.0 >> 2) & 3 == Self::DATA
+        self.fields().kind().encoding() as u16 == Self::DATA
     }
     /// Payload has CCMP protection.
     pub const fn protected(self) -> bool {
-        self.0 & (1 << 14) != 0
+        self.fields().protected()
     }
     /// The DS direction bits, ToDS followed by FromDS.
     pub const fn ds(self) -> u16 {
-        (self.0 >> 8) & 3
+        self.fields().ds()
     }
     /// The subtype within its frame kind.
     pub const fn subtype(self) -> u16 {
-        (self.0 >> 4) & 15
+        self.fields().subtype()
     }
     /// Another fragment follows.
     pub const fn more_fragments(self) -> bool {
-        self.0 & (1 << 10) != 0
+        self.fields().more_fragments()
     }
 
     pub const fn is_action_no_ack(self) -> bool {
-        self.0 & Self::TYPE_AND_SUBTYPE == Self::ACTION_NO_ACK
+        self.fields().type_and_subtype() == 0b11_1000
     }
 
     pub const fn is_qos_data(self) -> bool {
-        (self.0 >> 2) & 0b11 == Self::DATA && self.0 & (1 << 7) != 0
+        self.fields().kind().encoding() as u16 == Self::DATA && self.fields().qos()
     }
 
     pub const fn is_four_address(self) -> bool {
-        (self.0 >> 2) & 0b11 == Self::DATA && self.0 & (0b11 << 8) == 0b11 << 8
+        self.fields().kind().encoding() as u16 == Self::DATA && self.fields().ds() == 3
     }
 
     /// Whether the frame carries an HT Control field: the Order bit of a
     /// QoS data or management frame; in a non-QoS data frame the bit
     /// requests strictly ordered service instead.
     pub const fn has_ht_control(self) -> bool {
-        self.0 & (1 << 15) != 0 && (self.is_qos_data() || (self.0 >> 2) & 0b11 == Self::MANAGEMENT)
+        self.fields().order()
+            && (self.is_qos_data() || self.fields().kind().encoding() as u16 == Self::MANAGEMENT)
     }
 }
 
@@ -111,31 +122,27 @@ pub struct DecodedHeader<'a> {
 }
 impl<'a> DecodedHeader<'a> {
     /// Decode the complete MAC/QoS/HT-Control header.
-    pub fn decode(mut frame: &'a [u8]) -> Option<Self> {
-        fn take<const N: usize>(frame: &mut &[u8]) -> Option<[u8; N]> {
-            let (field, rest) = frame.split_first_chunk()?;
-            *frame = rest;
-            Some(*field)
-        }
+    pub fn decode(frame: &'a [u8]) -> Option<Self> {
         let original = frame;
-        let control = FrameControl::new(u16::from_le_bytes(take(&mut frame)?))?;
-        let duration = u16::from_le_bytes(take(&mut frame)?);
-        let receiver = take(&mut frame)?;
-        let transmitter = take(&mut frame)?;
-        let address3 = take(&mut frame)?;
-        let sequence_control = u16::from_le_bytes(take(&mut frame)?);
+        let mut reader = oer_wire::Reader::new(frame);
+        let control = FrameControl::new(u16::from_le_bytes(reader.read().ok()?))?;
+        let duration = u16::from_le_bytes(reader.read().ok()?);
+        let receiver = reader.read().ok()?;
+        let transmitter = reader.read().ok()?;
+        let address3 = reader.read().ok()?;
+        let sequence_control = u16::from_le_bytes(reader.read().ok()?);
         let address4 = if control.is_four_address() {
-            Some(take(&mut frame)?)
+            Some(reader.read().ok()?)
         } else {
             None
         };
         let qos = if control.is_qos_data() {
-            Some(u16::from_le_bytes(take(&mut frame)?))
+            Some(u16::from_le_bytes(reader.read().ok()?))
         } else {
             None
         };
         let ht_control = if control.has_ht_control() {
-            Some(take(&mut frame)?)
+            Some(reader.read().ok()?)
         } else {
             None
         };
@@ -150,7 +157,7 @@ impl<'a> DecodedHeader<'a> {
             qos,
             ht_control,
             frame: original,
-            body: frame,
+            body: reader.remaining(),
         })
     }
     /// The decoded `control` field.
@@ -199,5 +206,69 @@ impl<'a> DecodedHeader<'a> {
     }
 }
 
+oer_wire::bitfield! {
+    /// SOURCE: IEEE Std 802.11-2020, 9.2.4.1 (Frame Control field).
+    pub struct FrameControlFields[2] (little) {
+        pub version, with_version: u8 = 0..2;
+        pub kind, with_kind: [FrameType] = 2..4;
+        pub subtype, with_subtype: u16 = 4..8;
+        pub type_and_subtype, with_type_and_subtype: u8 = 2..8, view;
+        pub qos, with_qos: bool = 7..8, view;
+        pub ds, with_ds: u16 = 8..10;
+        pub more_fragments, with_more_fragments: bool = 10..11;
+        pub retry, with_retry: bool = 11..12;
+        pub power_management, with_power_management: bool = 12..13;
+        pub more_data, with_more_data: bool = 13..14;
+        pub protected, with_protected: bool = 14..15;
+        pub order, with_order: bool = 15..16;
+    }
+}
+oer_wire::bitfield! {
+    /// SOURCE: IEEE Std 802.11-2020, 9.2.4.5 (QoS Control field).
+    pub struct QosControl[2] (little) {
+        pub tid, with_tid: u8 = 0..4;
+        pub eosp, with_eosp: bool = 4..5;
+        pub ack_policy, with_ack_policy: u8 = 5..7;
+        pub amsdu, with_amsdu: bool = 7..8;
+        pub upper, with_upper: u8 = 8..16;
+    }
+}
+oer_wire::bitfield! {
+    /// SOURCE: IEEE Std 802.11ax-2021, 9.2.4.6 (HT Control field).
+    pub struct HtControl[4] (little) {
+        pub vht, with_vht: bool = 0..1;
+        pub he, with_he: bool = 1..2;
+        pub control, with_control: u32 = 2..32;
+    }
+}
+
+oer_wire::bitfield! {
+    /// SOURCE: IEEE Std 802.11-2020, 9.2.4.1.3 (Type and Subtype subfields).
+    pub enum FrameType: u8 { Management = 0, Control = 1, Data = 2, Extension = 3 }
+}
+
+oer_wire::bitfield! {
+    /// SOURCE: IEEE Std 802.11-2020, 9.2.4.1.4 (To DS and From DS fields).
+    pub struct DsDirection[1] (little) {
+        pub to_ds, with_to_ds: bool = 0..1;
+        pub from_ds, with_from_ds: bool = 1..2;
+    }
+}
+
 #[cfg(test)]
 mod fuzz_tests;
+
+impl FrameControlFields {
+    pub const fn from_raw(raw: u16) -> Self {
+        Self::from_bytes(raw.to_le_bytes())
+    }
+    pub const fn raw(self) -> u16 {
+        u16::from_le_bytes(self.to_bytes())
+    }
+    pub const fn to_ds(self) -> bool {
+        DsDirection::from_bytes([self.ds() as u8]).to_ds()
+    }
+    pub const fn from_ds(self) -> bool {
+        DsDirection::from_bytes([self.ds() as u8]).from_ds()
+    }
+}

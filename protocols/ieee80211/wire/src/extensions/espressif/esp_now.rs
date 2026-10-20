@@ -8,6 +8,8 @@
 //! sender. Fixed headers are borrowed arrays after a single length check;
 //! variable Action data and ciphertext remain borrowed slices.
 
+use crate::frame::FrameControlFields;
+
 use core::fmt;
 
 use crate::sequence::SequenceNumber;
@@ -75,9 +77,10 @@ pub enum EspNowVersionError {
 /// v1/v2 parser; this function is not admission by itself.
 pub fn esp_now_wire_version(body: &[u8]) -> Result<EspNowWireVersion, EspNowVersionError> {
     const MINIMUM: usize = ESP_NOW_V1_ACTION_OVERHEAD;
-    let (body, _) = body
-        .split_first_chunk::<MINIMUM>()
-        .ok_or(EspNowVersionError::ActionTooShort { minimum: MINIMUM })?;
+    let mut reader = oer_wire::Reader::new(body);
+    let body = reader
+        .array::<MINIMUM>()
+        .map_err(|_| EspNowVersionError::ActionTooShort { minimum: MINIMUM })?;
     if body[0] != ESP_NOW_ACTION_CATEGORY {
         return Err(EspNowVersionError::UnsupportedActionCategory(body[0]));
     }
@@ -96,7 +99,7 @@ pub fn esp_now_wire_version(body: &[u8]) -> Result<EspNowWireVersion, EspNowVers
     if body[13] != ESP_NOW_VENDOR_ELEMENT_TYPE {
         return Err(EspNowVersionError::UnsupportedElementType(body[13]));
     }
-    match body[14] & 0x0f {
+    match EspNowVersion::from_bytes([body[14]]).version() {
         ESP_NOW_V1_VERSION => Ok(EspNowWireVersion::V1),
         ESP_NOW_V2_VERSION => Ok(EspNowWireVersion::V2),
         version => Err(EspNowVersionError::UnsupportedVersion(version)),
@@ -139,20 +142,8 @@ impl fmt::Display for EspNowVersionError {
 impl core::error::Error for EspNowVersionError {}
 
 const ACTION_FRAME_CONTROL: u16 = 0x00d0;
-const PROTOCOL_VERSION_MASK: u16 = 0x0003;
-const FRAME_TYPE_AND_SUBTYPE_MASK: u16 = 0x00fc;
-const TO_FROM_DS_MASK: u16 = 0x0300;
-const MORE_FRAGMENTS_FLAG: u16 = 0x0400;
-const RETRY_FLAG: u16 = 0x0800;
-const POWER_MANAGEMENT_FLAG: u16 = 0x1000;
-const MORE_DATA_FLAG: u16 = 0x2000;
-const PROTECTED_FLAG: u16 = 0x4000;
-const ORDER_FLAG: u16 = 0x8000;
 const BROADCAST_ADDRESS: [u8; 6] = [0xff; 6];
 const VENDOR_ELEMENT_FIXED_BODY_LEN: usize = 5;
-const CCMP_EXTENDED_IV_FLAG: u8 = 0x20;
-const CCMP_KEY_ID_MASK: u8 = 0xc0;
-const CCMP_RESERVED_CONTROL_MASK: u8 = 0x1f;
 const CCMP_PACKET_NUMBER_MAX: u64 = (1_u64 << 48) - 1;
 
 /// Valid individual address used as the source of an ESP-NOW frame.
@@ -171,7 +162,7 @@ impl EspNowUnicastAddress {
         {
             return Err(EspNowAddressError::Unspecified);
         }
-        if bytes[0] & 1 != 0 {
+        if crate::address::AddressFlags::from_bytes([bytes[0]]).group() {
             return Err(EspNowAddressError::Multicast);
         }
         Ok(Self(bytes))
@@ -397,7 +388,8 @@ impl<'payload> EspNowV1Action<'payload> {
         clippy::arithmetic_side_effects
     )]
     pub fn parse(input: &'payload [u8]) -> Result<Self, EspNowV1WireError> {
-        let Some((
+        let mut reader = oer_wire::Reader::new(input);
+        let Ok(
             &[
                 category,
                 a0,
@@ -410,11 +402,11 @@ impl<'payload> EspNowV1Action<'payload> {
                 element_id,
                 element_length,
             ],
-            element_body,
-        )) = input.split_first_chunk::<10>()
+        ) = reader.array::<10>()
         else {
             return Err(EspNowV1WireError::FrameTooShort { minimum: 10 });
         };
+        let element_body = reader.remaining();
         if category != ESP_NOW_ACTION_CATEGORY {
             return Err(EspNowV1WireError::UnsupportedActionCategory(category));
         }
@@ -437,24 +429,28 @@ impl<'payload> EspNowV1Action<'payload> {
                 actual: element_body.len(),
             });
         }
-        let Some((&[o0, o1, o2, element_type, version], payload)) =
-            element_body.split_first_chunk::<VENDOR_ELEMENT_FIXED_BODY_LEN>()
+        let mut reader = oer_wire::Reader::new(element_body);
+        let Ok(&[o0, o1, o2, element_type, version]) =
+            reader.array::<VENDOR_ELEMENT_FIXED_BODY_LEN>()
         else {
             return Err(EspNowV1WireError::ElementBodyTooShort {
                 declared: element_length,
             });
         };
+        let payload = reader.remaining();
         if [o0, o1, o2] != ESP_NOW_ORGANIZATION_IDENTIFIER {
             return Err(EspNowV1WireError::InvalidElementOrganizationIdentifier);
         }
         if element_type != ESP_NOW_VENDOR_ELEMENT_TYPE {
             return Err(EspNowV1WireError::UnsupportedElementType(element_type));
         }
-        if version & 0xf0 != 0 {
+        if EspNowV1Control::from_bytes([version]).reserved() != 0 {
             return Err(EspNowV1WireError::ReservedVersionBitsSet(version));
         }
-        if version & 0x0f != ESP_NOW_V1_VERSION {
-            return Err(EspNowV1WireError::UnsupportedVersion(version & 0x0f));
+        if EspNowV1Control::from_bytes([version]).version() != ESP_NOW_V1_VERSION {
+            return Err(EspNowV1WireError::UnsupportedVersion(
+                EspNowV1Control::from_bytes([version]).version(),
+            ));
         }
 
         Ok(Self {
@@ -528,7 +524,9 @@ impl<'payload> EspNowV1Frame<'payload> {
 
         let output = &mut output[..required];
         output[..ESP_NOW_MANAGEMENT_HEADER_LEN].fill(0);
-        let frame_control = ACTION_FRAME_CONTROL | if self.retry { RETRY_FLAG } else { 0 };
+        let frame_control = FrameControlFields::from_raw(ACTION_FRAME_CONTROL)
+            .with_retry(self.retry)
+            .raw();
         output[0..2].copy_from_slice(&frame_control.to_le_bytes());
         output[4..10].copy_from_slice(&self.destination.bytes());
         output[10..16].copy_from_slice(&self.source.bytes());
@@ -541,20 +539,25 @@ impl<'payload> EspNowV1Frame<'payload> {
 
     /// Parse one complete unprotected, unfragmented ESP-NOW v1 Action MPDU.
     pub fn parse(input: &'payload [u8]) -> Result<Self, EspNowV1WireError> {
-        let (header, action) = input
-            .split_first_chunk::<ESP_NOW_MANAGEMENT_HEADER_LEN>()
-            .ok_or(EspNowV1WireError::FrameTooShort {
+        let mut reader = oer_wire::Reader::new(input);
+        let header = reader
+            .array::<ESP_NOW_MANAGEMENT_HEADER_LEN>()
+            .map_err(|_| EspNowV1WireError::FrameTooShort {
                 minimum: ESP_NOW_MANAGEMENT_HEADER_LEN,
             })?;
+        let action = reader.remaining();
         let frame_control = u16::from_le_bytes([header[0], header[1]]);
-        if frame_control & PROTOCOL_VERSION_MASK != 0
-            || frame_control & FRAME_TYPE_AND_SUBTYPE_MASK != ACTION_FRAME_CONTROL
-            || frame_control & TO_FROM_DS_MASK != 0
-            || frame_control & (POWER_MANAGEMENT_FLAG | MORE_DATA_FLAG | ORDER_FLAG) != 0
+        if FrameControlFields::from_raw(frame_control).version() != 0
+            || FrameControlFields::from_raw(frame_control).type_and_subtype()
+                != FrameControlFields::from_raw(ACTION_FRAME_CONTROL).type_and_subtype()
+            || FrameControlFields::from_raw(frame_control).ds() != 0
+            || (FrameControlFields::from_raw(frame_control).power_management()
+                || FrameControlFields::from_raw(frame_control).more_data()
+                || FrameControlFields::from_raw(frame_control).order())
         {
             return Err(EspNowV1WireError::UnsupportedFrameControl(frame_control));
         }
-        if frame_control & PROTECTED_FLAG != 0 {
+        if FrameControlFields::from_raw(frame_control).protected() {
             return Err(EspNowV1WireError::ProtectedFrameUnsupported);
         }
 
@@ -570,9 +573,14 @@ impl<'payload> EspNowV1Frame<'payload> {
             return Err(EspNowV1WireError::InvalidBssid);
         }
         let sequence_control = u16::from_le_bytes([header[22], header[23]]);
-        if frame_control & MORE_FRAGMENTS_FLAG != 0 || sequence_control & 0x000f != 0 {
+        if FrameControlFields::from_raw(frame_control).more_fragments()
+            || crate::sequence::SequenceControl::from_bytes((sequence_control).to_le_bytes())
+                .fragment()
+                != 0
+        {
             return Err(EspNowV1WireError::FragmentedFrame(
-                (sequence_control & 0x000f) as u8,
+                crate::sequence::SequenceControl::from_bytes((sequence_control).to_le_bytes())
+                    .fragment(),
             ));
         }
         let action = EspNowV1Action::parse(action)?;
@@ -580,7 +588,7 @@ impl<'payload> EspNowV1Frame<'payload> {
             destination,
             source,
             sequence_number: SequenceNumber::from_sequence_control(sequence_control),
-            retry: frame_control & RETRY_FLAG != 0,
+            retry: FrameControlFields::from_raw(frame_control).retry(),
             action,
         })
     }
@@ -614,12 +622,14 @@ impl<'frame> EspNowProtectedV1Envelope<'frame> {
         let too_short = || EspNowProtectedV1WireError::FrameTooShort {
             minimum: ESP_NOW_V1_MIN_PROTECTED_MPDU_LEN,
         };
-        let (management_header, protected) = input
-            .split_first_chunk::<ESP_NOW_MANAGEMENT_HEADER_LEN>()
-            .ok_or_else(too_short)?;
-        let (ccmp_header, protected_body) = protected
-            .split_first_chunk::<ESP_NOW_CCMP_HEADER_LEN>()
-            .ok_or_else(too_short)?;
+        let mut reader = oer_wire::Reader::new(input);
+        let management_header = reader
+            .array::<ESP_NOW_MANAGEMENT_HEADER_LEN>()
+            .map_err(|_| too_short())?;
+        let ccmp_header = reader
+            .array::<ESP_NOW_CCMP_HEADER_LEN>()
+            .map_err(|_| too_short())?;
+        let protected_body = reader.remaining();
         let (ciphertext, mic) = protected_body
             .split_last_chunk::<ESP_NOW_CCMP_MIC_LEN>()
             .ok_or_else(too_short)?;
@@ -634,16 +644,19 @@ impl<'frame> EspNowProtectedV1Envelope<'frame> {
         }
 
         let frame_control = u16::from_le_bytes([management_header[0], management_header[1]]);
-        if frame_control & PROTOCOL_VERSION_MASK != 0
-            || frame_control & FRAME_TYPE_AND_SUBTYPE_MASK != ACTION_FRAME_CONTROL
-            || frame_control & TO_FROM_DS_MASK != 0
-            || frame_control & (POWER_MANAGEMENT_FLAG | MORE_DATA_FLAG | ORDER_FLAG) != 0
+        if FrameControlFields::from_raw(frame_control).version() != 0
+            || FrameControlFields::from_raw(frame_control).type_and_subtype()
+                != FrameControlFields::from_raw(ACTION_FRAME_CONTROL).type_and_subtype()
+            || FrameControlFields::from_raw(frame_control).ds() != 0
+            || (FrameControlFields::from_raw(frame_control).power_management()
+                || FrameControlFields::from_raw(frame_control).more_data()
+                || FrameControlFields::from_raw(frame_control).order())
         {
             return Err(EspNowProtectedV1WireError::UnsupportedFrameControl(
                 frame_control,
             ));
         }
-        if frame_control & PROTECTED_FLAG == 0 {
+        if !FrameControlFields::from_raw(frame_control).protected() {
             return Err(EspNowProtectedV1WireError::ProtectionRequired);
         }
 
@@ -674,27 +687,29 @@ impl<'frame> EspNowProtectedV1Envelope<'frame> {
         }
 
         let sequence_control = u16::from_le_bytes([management_header[22], management_header[23]]);
-        if frame_control & MORE_FRAGMENTS_FLAG != 0 || sequence_control & 0x000f != 0 {
+        if FrameControlFields::from_raw(frame_control).more_fragments()
+            || crate::sequence::SequenceControl::from_bytes((sequence_control).to_le_bytes())
+                .fragment()
+                != 0
+        {
             return Err(EspNowProtectedV1WireError::FragmentedFrame(
-                (sequence_control & 0x000f) as u8,
+                crate::sequence::SequenceControl::from_bytes((sequence_control).to_le_bytes())
+                    .fragment(),
             ));
         }
 
-        if ccmp_header[2] != 0 || ccmp_header[3] & CCMP_RESERVED_CONTROL_MASK != 0 {
+        if ccmp_header[2] != 0
+            || crate::ccmp::CcmpKeyControl::from_bytes([ccmp_header[3]]).reserved() != 0
+        {
             return Err(EspNowProtectedV1WireError::ReservedCcmpBitsSet {
                 reserved_byte: ccmp_header[2],
                 control: ccmp_header[3],
             });
         }
-        if ccmp_header[3] & CCMP_EXTENDED_IV_FLAG == 0 {
+        if !crate::ccmp::CcmpKeyControl::from_bytes([ccmp_header[3]]).extended_iv() {
             return Err(EspNowProtectedV1WireError::MissingExtendedIv);
         }
-        let packet_number = u64::from(ccmp_header[0])
-            | (u64::from(ccmp_header[1]) << 8)
-            | (u64::from(ccmp_header[4]) << 16)
-            | (u64::from(ccmp_header[5]) << 24)
-            | (u64::from(ccmp_header[6]) << 32)
-            | (u64::from(ccmp_header[7]) << 40);
+        let packet_number = crate::ccmp::CcmpPacketNumber::from_header_bytes(*ccmp_header).value();
         let packet_number = EspNowCcmpPacketNumber::new(packet_number)
             .map_err(EspNowProtectedV1WireError::InvalidPacketNumber)?;
 
@@ -703,8 +718,8 @@ impl<'frame> EspNowProtectedV1Envelope<'frame> {
             destination,
             source,
             sequence_number: SequenceNumber::from_sequence_control(sequence_control),
-            retry: frame_control & RETRY_FLAG != 0,
-            key_id: (ccmp_header[3] & CCMP_KEY_ID_MASK) >> 6,
+            retry: FrameControlFields::from_raw(frame_control).retry(),
+            key_id: crate::ccmp::CcmpKeyControl::from_bytes([ccmp_header[3]]).key_id(),
             packet_number,
             ccmp_header,
             ciphertext,
@@ -927,6 +942,22 @@ impl fmt::Display for EspNowV1WireError {
 }
 
 impl core::error::Error for EspNowV1WireError {}
+
+oer_wire::bitfield! {
+    /// Common version nibble used before selecting the ESP-NOW format.
+    /// SOURCE: Espressif ESP-NOW specification, Frame Format (vendor-specific content).
+    pub struct EspNowVersion[1] (little) {
+        pub version, with_version: u8 = 0..4;
+    }
+}
+oer_wire::bitfield! {
+    /// ESP-NOW v1 vendor-specific element control octet.
+    /// SOURCE: Espressif ESP-NOW specification, Frame Format (vendor-specific content).
+    pub struct EspNowV1Control[1] (little) {
+        pub version, with_version: u8 = 0..4;
+        pub reserved, with_reserved: u8 = 4..8;
+    }
+}
 
 #[cfg(test)]
 mod tests {

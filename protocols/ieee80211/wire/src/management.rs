@@ -86,5 +86,34 @@ impl ProbeRequest<'_> {
     }
 }
 
+oer_wire::bitfield! {
+    /// SOURCE: IEEE Std 802.11-2020, 9.4.1.4 (Capability Information field).
+    pub struct CapabilityInformation[2] (little) {
+        pub ess, with_ess: bool = 0..1;
+        pub ibss, with_ibss: bool = 1..2;
+        pub cf_pollable, with_cf_pollable: bool = 2..3;
+        pub cf_poll_request, with_cf_poll_request: bool = 3..4;
+        pub privacy, with_privacy: bool = 4..5;
+        pub short_preamble, with_short_preamble: bool = 5..6;
+        pub pbcc, with_pbcc: bool = 6..7;
+        pub channel_agility, with_channel_agility: bool = 7..8;
+        pub spectrum_management, with_spectrum_management: bool = 8..9;
+        pub qos, with_qos: bool = 9..10;
+        pub short_slot, with_short_slot: bool = 10..11;
+        pub apsd, with_apsd: bool = 11..12;
+        pub radio_measurement, with_radio_measurement: bool = 12..13;
+        pub dsss_ofdm, with_dsss_ofdm: bool = 13..14;
+        pub delayed_ba, with_delayed_ba: bool = 14..15;
+        pub immediate_ba, with_immediate_ba: bool = 15..16;
+    }
+}
+oer_wire::bitfield! {
+    /// SOURCE: IEEE Std 802.11-2020, 9.4.1.8 (AID field).
+    pub struct AssociationId[2] (little) {
+        pub aid, with_aid: u16 = 0..14;
+        pub marker, with_marker: u8 = 14..16;
+    }
+}
+
 #[cfg(test)]
 mod tests;

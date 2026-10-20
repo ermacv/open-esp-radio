@@ -106,3 +106,69 @@ fn every_prefix_of_an_ethernet_frame_is_classified() {
         }
     }
 }
+
+#[test]
+fn ip_classification_keeps_ihl_ecn_and_flow_label_out_of_the_dscp() {
+    for (codepoint, priority) in [
+        (0, 0),
+        (1, 1),
+        (8, 1),
+        (18, 3),
+        (24, 4),
+        (34, 4),
+        (40, 5),
+        (44, 6),
+        (46, 6),
+        (48, 0),
+        (56, 0),
+        (63, 0),
+    ] {
+        for ecn in 0..4 {
+            let services = codepoint * 4 + ecn;
+            for ihl in [5, 15] {
+                let mut ipv4 = [0_u8; 16];
+                ipv4[12..].copy_from_slice(&[0x08, 0x00, 0x40 + ihl, services]);
+                let class = classify_ethernet_wmm(&ipv4);
+                assert_eq!(
+                    class.source,
+                    WmmClassificationSource::Dscp(Dscp::new(codepoint).unwrap())
+                );
+                assert_eq!(class.user_priority.value(), priority);
+            }
+            for flow_label_high in [0, 15] {
+                let mut ipv6 = [0_u8; 16];
+                ipv6[12..].copy_from_slice(&[
+                    0x86,
+                    0xdd,
+                    0x60 + services / 16,
+                    services.wrapping_mul(16) + flow_label_high,
+                ]);
+                let class = classify_ethernet_wmm(&ipv6);
+                assert_eq!(
+                    class.source,
+                    WmmClassificationSource::Dscp(Dscp::new(codepoint).unwrap())
+                );
+                assert_eq!(class.user_priority.value(), priority);
+            }
+        }
+    }
+}
+
+#[test]
+fn vlan_classification_keeps_dei_and_vid_out_of_the_pcp() {
+    for pcp in 0..8 {
+        for other_tci in [0, 0x0fff, 0x1000, 0x1fff] {
+            let mut frame = [0_u8; 18];
+            let [high, low] = (pcp as u16 * 8192 + other_tci).to_be_bytes();
+            frame[12..].copy_from_slice(&[0x81, 0x00, high, low, 0x08, 0x00]);
+            let class = classify_ethernet_wmm(&frame);
+            let expected = WmmUserPriority::new(pcp).unwrap();
+            assert_eq!(class.user_priority, expected);
+            assert_eq!(class.source, WmmClassificationSource::Ieee8021d(expected));
+            assert_eq!(
+                classify_ethernet_wmm(&frame[..17]).source,
+                WmmClassificationSource::Unmarked
+            );
+        }
+    }
+}

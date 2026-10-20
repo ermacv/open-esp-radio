@@ -252,7 +252,13 @@ pub const AP_WPA3_PERSONAL_RSN_ELEMENT: [u8; 28] = [
 
 /// RSNXE of an access point offering SAE hash-to-element: a one-octet
 /// field whose length nibble is zero and whose bit 5 is SAE H2E.
-pub const AP_SAE_H2E_RSNX_ELEMENT: [u8; 3] = [244, 1, 1 << 5];
+pub const AP_SAE_H2E_RSNX_ELEMENT: [u8; 3] = [
+    244,
+    1,
+    crate::security::rsn::RsnExtendedCapabilities::from_bytes([0])
+        .with_sae_h2e(true)
+        .to_bytes()[0],
+];
 
 impl ApSecurityPolicy {
     /// The current AP RSN profiles do not advertise SPP. A required peer is

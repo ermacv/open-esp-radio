@@ -6,6 +6,8 @@
 //! 250-byte split; the parser accepts every split allowed by the public format
 //! and validates the complete `More data` chain before exposing any element.
 
+use crate::frame::FrameControlFields;
+
 use core::fmt;
 
 use crate::sequence::SequenceNumber;
@@ -14,9 +16,7 @@ use super::{
     ACTION_FRAME_CONTROL, BROADCAST_ADDRESS, ESP_NOW_ACTION_CATEGORY,
     ESP_NOW_MANAGEMENT_HEADER_LEN, ESP_NOW_ORGANIZATION_IDENTIFIER, ESP_NOW_VENDOR_ELEMENT_ID,
     ESP_NOW_VENDOR_ELEMENT_TYPE, EspNowAddressError, EspNowDestination, EspNowRandomValue,
-    EspNowUnicastAddress, FRAME_TYPE_AND_SUBTYPE_MASK, MORE_DATA_FLAG, MORE_FRAGMENTS_FLAG,
-    ORDER_FLAG, POWER_MANAGEMENT_FLAG, PROTECTED_FLAG, PROTOCOL_VERSION_MASK, RETRY_FLAG,
-    TO_FROM_DS_MASK, VENDOR_ELEMENT_FIXED_BODY_LEN,
+    EspNowUnicastAddress, VENDOR_ELEMENT_FIXED_BODY_LEN,
 };
 
 /// ESP-NOW version encoded in the low nibble of every v2 vendor element.
@@ -40,9 +40,6 @@ pub const ESP_NOW_V2_MAX_MPDU_LEN: usize =
     ESP_NOW_MANAGEMENT_HEADER_LEN + ESP_NOW_V2_MAX_ACTION_LEN;
 
 const VENDOR_ELEMENT_ENCODED_OVERHEAD: usize = 2 + VENDOR_ELEMENT_FIXED_BODY_LEN;
-const V2_MORE_DATA_FLAG: u8 = 0x10;
-const V2_RESERVED_MASK: u8 = 0xe0;
-const VERSION_MASK: u8 = 0x0f;
 const MIN_ACTION_LEN: usize = ESP_NOW_V2_ACTION_PREFIX_LEN + VENDOR_ELEMENT_ENCODED_OVERHEAD;
 
 /// Borrowed v2 payload validated against the public 1470-byte limit.
@@ -136,14 +133,20 @@ impl<'payload> Iterator for EspNowV2Elements<'payload> {
             EspNowV2ElementSource::Encoded(remaining) => {
                 // Construction of this iterator is private and follows a full
                 // validation pass; a body that no longer fits ends the walk.
-                let (&[_, length], body) = remaining.split_first_chunk::<2>()?;
-                let (body, tail) = body.split_at_checked(usize::from(length))?;
-                let (&[_, _, _, _, control], payload) =
-                    body.split_first_chunk::<VENDOR_ELEMENT_FIXED_BODY_LEN>()?;
+                let mut reader = oer_wire::Reader::new(remaining);
+                let &[_, length] = reader.array::<2>().ok()?;
+                let body = reader.remaining();
+                let mut reader = oer_wire::Reader::new(body);
+                let body = reader.take(usize::from(length)).ok()?;
+                let tail = reader.remaining();
+                let mut reader = oer_wire::Reader::new(body);
+                let &[_, _, _, _, control] =
+                    reader.array::<VENDOR_ELEMENT_FIXED_BODY_LEN>().ok()?;
+                let payload = reader.remaining();
                 self.source = EspNowV2ElementSource::Encoded(tail);
                 EspNowV2Element {
                     payload,
-                    more_data: control & V2_MORE_DATA_FLAG != 0,
+                    more_data: EspNowV2Control::from_bytes([control]).more_data(),
                 }
             }
         };
@@ -277,12 +280,9 @@ impl<'payload> EspNowV2Action<'payload> {
             output[offset + 1] = (VENDOR_ELEMENT_FIXED_BODY_LEN + payload.len()) as u8;
             output[offset + 2..offset + 5].copy_from_slice(&ESP_NOW_ORGANIZATION_IDENTIFIER);
             output[offset + 5] = ESP_NOW_VENDOR_ELEMENT_TYPE;
-            output[offset + 6] = ESP_NOW_V2_VERSION
-                | if element.more_data() {
-                    V2_MORE_DATA_FLAG
-                } else {
-                    0
-                };
+            output[offset + 6] = EspNowV2Control::from_bytes([ESP_NOW_V2_VERSION])
+                .with_more_data(element.more_data())
+                .to_bytes()[0];
             output[offset + VENDOR_ELEMENT_ENCODED_OVERHEAD..offset + encoded_length]
                 .copy_from_slice(payload);
             offset += encoded_length;
@@ -307,14 +307,18 @@ impl<'payload> EspNowV2Action<'payload> {
                 actual: input.len(),
             });
         }
-        let Some((&[category, a0, a1, a2, r0, r1, r2, r3], elements)) = input
-            .split_first_chunk::<ESP_NOW_V2_ACTION_PREFIX_LEN>()
-            .filter(|(_, elements)| elements.len() >= VENDOR_ELEMENT_ENCODED_OVERHEAD)
-        else {
+        let mut reader = oer_wire::Reader::new(input);
+        let &[category, a0, a1, a2, r0, r1, r2, r3] = reader
+            .array::<ESP_NOW_V2_ACTION_PREFIX_LEN>()
+            .map_err(|_| EspNowV2WireError::FrameTooShort {
+                minimum: MIN_ACTION_LEN,
+            })?;
+        let elements = reader.remaining();
+        if elements.len() < VENDOR_ELEMENT_ENCODED_OVERHEAD {
             return Err(EspNowV2WireError::FrameTooShort {
                 minimum: MIN_ACTION_LEN,
             });
-        };
+        }
         if category != ESP_NOW_ACTION_CATEGORY {
             return Err(EspNowV2WireError::UnsupportedActionCategory(category));
         }
@@ -331,12 +335,14 @@ impl<'payload> EspNowV2Action<'payload> {
                     maximum: ESP_NOW_V2_MAX_ELEMENT_COUNT,
                 });
             }
-            let Some((&[id, length], after_header)) = rest.split_first_chunk::<2>() else {
+            let mut reader = oer_wire::Reader::new(rest);
+            let Ok(&[id, length]) = reader.array::<2>() else {
                 return Err(EspNowV2WireError::TruncatedElementHeader {
                     element: element_count,
                     remaining: rest.len(),
                 });
             };
+            let after_header = reader.remaining();
             if id != ESP_NOW_VENDOR_ELEMENT_ID {
                 return Err(EspNowV2WireError::UnsupportedElementId {
                     element: element_count,
@@ -350,21 +356,24 @@ impl<'payload> EspNowV2Action<'payload> {
                     declared: length,
                 });
             }
-            let Some((body, after)) = after_header.split_at_checked(declared) else {
+            let Ok(body) = reader.take(declared) else {
                 return Err(EspNowV2WireError::ElementLengthMismatch {
                     element: element_count,
                     declared: length,
                     actual: after_header.len(),
                 });
             };
-            let Some((&[o0, o1, o2, element_type, control], payload)) =
-                body.split_first_chunk::<VENDOR_ELEMENT_FIXED_BODY_LEN>()
+            let after = reader.remaining();
+            let mut reader = oer_wire::Reader::new(body);
+            let Ok(&[o0, o1, o2, element_type, control]) =
+                reader.array::<VENDOR_ELEMENT_FIXED_BODY_LEN>()
             else {
                 return Err(EspNowV2WireError::ElementBodyTooShort {
                     element: element_count,
                     declared: length,
                 });
             };
+            let payload = reader.remaining();
             if [o0, o1, o2] != ESP_NOW_ORGANIZATION_IDENTIFIER {
                 return Err(EspNowV2WireError::InvalidElementOrganizationIdentifier {
                     element: element_count,
@@ -376,13 +385,13 @@ impl<'payload> EspNowV2Action<'payload> {
                     element_type,
                 });
             }
-            if control & V2_RESERVED_MASK != 0 {
+            if EspNowV2Control::from_bytes([control]).reserved() != 0 {
                 return Err(EspNowV2WireError::ReservedControlBitsSet {
                     element: element_count,
                     control,
                 });
             }
-            let version = control & VERSION_MASK;
+            let version = EspNowV2Control::from_bytes([control]).version();
             if version != ESP_NOW_V2_VERSION {
                 return Err(EspNowV2WireError::UnsupportedVersion {
                     element: element_count,
@@ -391,7 +400,7 @@ impl<'payload> EspNowV2Action<'payload> {
             }
 
             let has_following_element = !after.is_empty();
-            let more_data = control & V2_MORE_DATA_FLAG != 0;
+            let more_data = EspNowV2Control::from_bytes([control]).more_data();
             if has_following_element && !more_data {
                 return Err(EspNowV2WireError::MoreDataClearedBeforeFinal {
                     element: element_count,
@@ -495,7 +504,9 @@ impl<'payload> EspNowV2Frame<'payload> {
 
         let output = &mut output[..required];
         output[..ESP_NOW_MANAGEMENT_HEADER_LEN].fill(0);
-        let frame_control = ACTION_FRAME_CONTROL | if self.retry { RETRY_FLAG } else { 0 };
+        let frame_control = FrameControlFields::from_raw(ACTION_FRAME_CONTROL)
+            .with_retry(self.retry)
+            .raw();
         output[0..2].copy_from_slice(&frame_control.to_le_bytes());
         output[4..10].copy_from_slice(&self.destination.bytes());
         output[10..16].copy_from_slice(&self.source.bytes());
@@ -516,20 +527,25 @@ impl<'payload> EspNowV2Frame<'payload> {
         clippy::arithmetic_side_effects
     )]
     pub fn parse(input: &'payload [u8]) -> Result<Self, EspNowV2WireError> {
-        let (header, action) = input
-            .split_first_chunk::<ESP_NOW_MANAGEMENT_HEADER_LEN>()
-            .ok_or(EspNowV2WireError::FrameTooShort {
+        let mut reader = oer_wire::Reader::new(input);
+        let header = reader
+            .array::<ESP_NOW_MANAGEMENT_HEADER_LEN>()
+            .map_err(|_| EspNowV2WireError::FrameTooShort {
                 minimum: ESP_NOW_MANAGEMENT_HEADER_LEN,
             })?;
+        let action = reader.remaining();
         let frame_control = u16::from_le_bytes([header[0], header[1]]);
-        if frame_control & PROTOCOL_VERSION_MASK != 0
-            || frame_control & FRAME_TYPE_AND_SUBTYPE_MASK != ACTION_FRAME_CONTROL
-            || frame_control & TO_FROM_DS_MASK != 0
-            || frame_control & (POWER_MANAGEMENT_FLAG | MORE_DATA_FLAG | ORDER_FLAG) != 0
+        if FrameControlFields::from_raw(frame_control).version() != 0
+            || FrameControlFields::from_raw(frame_control).type_and_subtype()
+                != FrameControlFields::from_raw(ACTION_FRAME_CONTROL).type_and_subtype()
+            || FrameControlFields::from_raw(frame_control).ds() != 0
+            || (FrameControlFields::from_raw(frame_control).power_management()
+                || FrameControlFields::from_raw(frame_control).more_data()
+                || FrameControlFields::from_raw(frame_control).order())
         {
             return Err(EspNowV2WireError::UnsupportedFrameControl(frame_control));
         }
-        if frame_control & PROTECTED_FLAG != 0 {
+        if FrameControlFields::from_raw(frame_control).protected() {
             return Err(EspNowV2WireError::ProtectedFrameUnsupported);
         }
 
@@ -545,9 +561,14 @@ impl<'payload> EspNowV2Frame<'payload> {
             return Err(EspNowV2WireError::InvalidBssid);
         }
         let sequence_control = u16::from_le_bytes([header[22], header[23]]);
-        if frame_control & MORE_FRAGMENTS_FLAG != 0 || sequence_control & 0x000f != 0 {
+        if FrameControlFields::from_raw(frame_control).more_fragments()
+            || crate::sequence::SequenceControl::from_bytes((sequence_control).to_le_bytes())
+                .fragment()
+                != 0
+        {
             return Err(EspNowV2WireError::FragmentedFrame(
-                (sequence_control & 0x000f) as u8,
+                crate::sequence::SequenceControl::from_bytes((sequence_control).to_le_bytes())
+                    .fragment(),
             ));
         }
         let action = EspNowV2Action::parse(action)?;
@@ -555,7 +576,7 @@ impl<'payload> EspNowV2Frame<'payload> {
             destination,
             source,
             sequence_number: SequenceNumber::from_sequence_control(sequence_control),
-            retry: frame_control & RETRY_FLAG != 0,
+            retry: FrameControlFields::from_raw(frame_control).retry(),
             action,
         })
     }
@@ -735,3 +756,13 @@ impl fmt::Display for EspNowV2WireError {
 }
 
 impl core::error::Error for EspNowV2WireError {}
+
+oer_wire::bitfield! {
+    /// ESP-NOW v2 vendor-specific element control octet.
+    /// SOURCE: Espressif ESP-NOW specification, Frame Format (vendor-specific content).
+    pub struct EspNowV2Control[1] (little) {
+        pub version, with_version: u8 = 0..4;
+        pub more_data, with_more_data: bool = 4..5;
+        pub reserved, with_reserved: u8 = 5..8;
+    }
+}
