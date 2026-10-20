@@ -217,7 +217,7 @@ pub enum FunctionRecord {
         high: AbstractValue,
     },
     /// An indirect jump through a table: its target is the word loaded from
-    /// `base + (index << scale)`, the load, the addition and the scaling all
+    /// `base + (index << scale) + displacement`, the load, the addition and the scaling all
     /// in the jump's own block. `base` is the value the addition reads, a
     /// constant, an image address or an object's symbol; `index` the value
     /// the scaling reads, possibly unknown. A base the block or a loop's
@@ -227,6 +227,8 @@ pub enum FunctionRecord {
         base: AbstractValue,
         index: AbstractValue,
         scale: u8,
+        /// Immediate byte displacement of the table load.
+        displacement: i32,
     },
     /// A call or out-of-function jump. A resolved target does not prove returns
     /// or effects; unresolved transfers remain visible.
