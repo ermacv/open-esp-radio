@@ -6,6 +6,8 @@
 //! Management decoding splits the fixed header and each fixed body as arrays
 //! before accessing fields; variable information elements remain borrowed slices.
 
+use crate::frame::{FrameControlFields, FrameType};
+
 use crate::{
     block_ack::{BlockAckAction, parse_block_ack_action},
     ccmp::CCMP_HEADER_LEN,
@@ -81,7 +83,9 @@ pub struct ApDataFrame<'payload> {
 
 impl ApDataFrame<'_> {
     pub fn encode(self, output: &mut [u8]) -> Result<usize, ApDataFrameError> {
-        if self.access_point[0] & 1 != 0 || self.access_point == [0; 6] {
+        if crate::address::AddressFlags::from_bytes([self.access_point[0]]).group()
+            || self.access_point == [0; 6]
+        {
             return Err(ApDataFrameError::InvalidAccessPoint);
         }
         let mut ethernet = [0; ETHERNET_HEADER_LEN];
@@ -133,7 +137,9 @@ pub struct ApUnprotectedDataFrame<'frame> {
 
 impl ApUnprotectedDataFrame<'_> {
     pub fn encode(self, output: &mut [u8]) -> Result<usize, ApDataFrameError> {
-        if self.access_point[0] & 1 != 0 || self.access_point == [0; 6] {
+        if crate::address::AddressFlags::from_bytes([self.access_point[0]]).group()
+            || self.access_point == [0; 6]
+        {
             return Err(ApDataFrameError::InvalidAccessPoint);
         }
         if self.ethernet.len() < ETHERNET_HEADER_LEN {
@@ -154,7 +160,7 @@ impl ApUnprotectedDataFrame<'_> {
             return Err(ApDataFrameError::InvalidPeer);
         }
         if self.more_data {
-            plan.header[1] |= 0x20;
+            plan.set_more_data(true);
         }
         let header_len = usize::from(plan.header_len);
         let required = header_len
@@ -206,7 +212,9 @@ pub struct EncodedApFrame {
 
 impl ApProtectedDataFrame<'_> {
     pub fn encode(self, output: &mut [u8]) -> Result<usize, ApDataFrameError> {
-        if self.access_point[0] & 1 != 0 || self.access_point == [0; 6] {
+        if crate::address::AddressFlags::from_bytes([self.access_point[0]]).group()
+            || self.access_point == [0; 6]
+        {
             return Err(ApDataFrameError::InvalidAccessPoint);
         }
         let priority = WmmUserPriority::new(self.user_priority)
@@ -231,9 +239,9 @@ impl ApProtectedDataFrame<'_> {
         if plan.header[4..10] != self.peer {
             return Err(ApDataFrameError::InvalidPeer);
         }
-        plan.header[1] |= 0x40;
+        plan.set_protected(true);
         if self.more_data {
-            plan.header[1] |= 0x20;
+            plan.set_more_data(true);
         }
         let header_len = usize::from(plan.header_len);
         let required = header_len
@@ -313,10 +321,12 @@ impl ApAmsduFrame<'_> {
     /// This lets a packet-number owner first encode with a placeholder CCMP
     /// header, then consume and patch the real PN only after full admission.
     pub fn encode(self, output: &mut [u8]) -> Result<usize, ApDataFrameError> {
-        if self.access_point[0] & 1 != 0 || self.access_point == [0; 6] {
+        if crate::address::AddressFlags::from_bytes([self.access_point[0]]).group()
+            || self.access_point == [0; 6]
+        {
             return Err(ApDataFrameError::InvalidAccessPoint);
         }
-        if self.peer[0] & 1 != 0 || self.peer == [0; 6] {
+        if crate::address::AddressFlags::from_bytes([self.peer[0]]).group() || self.peer == [0; 6] {
             return Err(ApDataFrameError::InvalidPeer);
         }
         let priority = WmmUserPriority::new(self.user_priority)
@@ -352,12 +362,12 @@ impl ApAmsduFrame<'_> {
             return Err(ApDataFrameError::InvalidPeer);
         }
         if self.ccmp_header.is_some() {
-            plan.header[1] |= 0x40;
+            plan.set_protected(true);
         }
         if self.more_data {
-            plan.header[1] |= 0x20;
+            plan.set_more_data(true);
         }
-        plan.header[24] |= 0x80;
+        plan.set_amsdu(true);
 
         let mut header = plan.header;
         header[22..24].copy_from_slice(&self.sequence_number.sequence_control().to_le_bytes());
@@ -417,9 +427,9 @@ impl ApProtectedDataFrame<'_> {
             true,
             false,
         );
-        plan.header[1] |= 0x40;
+        plan.set_protected(true);
         if self.more_data {
-            plan.header[1] |= 0x20;
+            plan.set_more_data(true);
         }
         let header_len = usize::from(plan.header_len);
         let prefix_len = header_len + CCMP_HEADER_LEN + plan.llc_snap.len();
@@ -525,7 +535,9 @@ pub fn parse_ap_management_request<'a>(
     frame: &'a [u8],
     access_point: [u8; 6],
 ) -> Option<ApManagementRequest<'a>> {
-    let (header, body) = frame.split_first_chunk::<MANAGEMENT_HEADER_LEN>()?;
+    let mut reader = oer_wire::Reader::new(frame);
+    let header = reader.array::<MANAGEMENT_HEADER_LEN>().ok()?;
+    let body = reader.remaining();
     let [
         fc0,
         fc1,
@@ -556,14 +568,19 @@ pub fn parse_ap_management_request<'a>(
     let peer = [p0, p1, p2, p3, p4, p5];
     let bssid = [b0, b1, b2, b3, b4, b5];
     let frame_control = u16::from_le_bytes([fc0, fc1]);
-    if frame_control & 0x000c != 0 {
+    if FrameControlFields::from_raw(frame_control).kind() != FrameType::Management {
         return None;
     }
-    let subtype = (frame_control >> 4) & 0x0f;
+    let subtype = FrameControlFields::from_raw(frame_control).subtype();
     if subtype == 4 {
-        if frame_control & 0x470f != 0
-            || sc0 & 0x0f != 0
-            || peer[0] & 1 != 0
+        if (FrameControlFields::from_raw(frame_control).version() != 0
+            || FrameControlFields::from_raw(frame_control).kind() != FrameType::Management
+            || FrameControlFields::from_raw(frame_control).ds() != 0
+            || FrameControlFields::from_raw(frame_control).more_fragments()
+            || FrameControlFields::from_raw(frame_control).protected())
+            || crate::sequence::SequenceControl::from_bytes((sc0 as u16).to_le_bytes()).fragment()
+                != 0
+            || crate::address::AddressFlags::from_bytes([peer[0]]).group()
             || peer == [0; 6]
             || (destination != access_point && destination != [0xff; 6])
             || (bssid != access_point && bssid != [0xff; 6])
@@ -575,8 +592,10 @@ pub fn parse_ap_management_request<'a>(
             ssid: probe::ssid(body)?,
         });
     }
-    if frame_control & 0x030f != 0
-        || peer[0] & 1 != 0
+    if (FrameControlFields::from_raw(frame_control).version() != 0
+        || FrameControlFields::from_raw(frame_control).kind() != FrameType::Management
+        || FrameControlFields::from_raw(frame_control).ds() != 0)
+        || crate::address::AddressFlags::from_bytes([peer[0]]).group()
         || peer == [0; 6]
         || destination != access_point
         || bssid != access_point
@@ -585,18 +604,24 @@ pub fn parse_ap_management_request<'a>(
     }
     // Parsing is not authentication. The caller must verify the pairwise
     // integrity and replay state before acting on a protected request.
-    let protected = frame_control & 0x4000 != 0;
+    let protected = FrameControlFields::from_raw(frame_control).protected();
     if protected && !matches!(subtype, 10 | 12 | 13) {
         return None;
     }
     let management_body = if protected {
-        body.split_first_chunk::<CCMP_HEADER_LEN>()?.1
+        {
+            let mut reader = oer_wire::Reader::new(body);
+            reader.take(CCMP_HEADER_LEN).ok()?;
+            reader.remaining()
+        }
     } else {
         body
     };
     match subtype {
         11 => {
-            let (&[a0, a1, t0, t1, s0, s1], body) = management_body.split_first_chunk()?;
+            let mut reader = oer_wire::Reader::new(management_body);
+            let &[a0, a1, t0, t1, s0, s1] = reader.array().ok()?;
+            let body = reader.remaining();
             let algorithm = u16::from_le_bytes([a0, a1]);
             let transaction = u16::from_le_bytes([t0, t1]);
             let status = u16::from_le_bytes([s0, s1]);
@@ -613,24 +638,32 @@ pub fn parse_ap_management_request<'a>(
             }
         }
         0 => {
-            let (&[c0, c1, _listen0, _listen1], information_elements) =
-                management_body.split_first_chunk()?;
+            let mut reader = oer_wire::Reader::new(management_body);
+            let &[c0, c1, _listen0, _listen1] = reader.array().ok()?;
+            let information_elements = reader.remaining();
             let capabilities = u16::from_le_bytes([c0, c1]);
             let ht_capabilities = ht_peer_capabilities(information_elements);
             Some(ApManagementRequest::Association {
                 peer,
                 security: association_security_observation(
                     information_elements,
-                    capabilities & 0x0010 != 0,
+                    crate::management::CapabilityInformation::from_bytes(
+                        capabilities.to_le_bytes(),
+                    )
+                    .privacy(),
                 ),
                 maximum_legacy_rate_500kbps: maximum_ap_legacy_rate(profile, information_elements),
                 ht_capabilities,
                 qos_supported: ht_capabilities.is_some() || supports_wmm(information_elements),
-                short_preamble: capabilities & 0x0020 != 0,
+                short_preamble: crate::management::CapabilityInformation::from_bytes(
+                    capabilities.to_le_bytes(),
+                )
+                .short_preamble(),
             })
         }
         10 | 12 => {
-            let (reason, _) = management_body.split_first_chunk()?;
+            let mut reader = oer_wire::Reader::new(management_body);
+            let reason = reader.array().ok()?;
             let reason = u16::from_le_bytes(*reason);
             if subtype == 10 {
                 Some(ApManagementRequest::Disassociation { peer, reason })
@@ -679,15 +712,19 @@ impl ApManagementSubtype {
 
     /// A robust subtype in a management header, without authenticating it.
     pub fn parse(frame: &[u8]) -> Option<Self> {
-        let (control, _) = frame.split_first_chunk()?;
+        let mut reader = oer_wire::Reader::new(frame);
+        let control = reader.array().ok()?;
         let control = u16::from_le_bytes(*control);
-        if control & 0x030f != 0 {
+        if FrameControlFields::from_raw(control).version() != 0
+            || FrameControlFields::from_raw(control).kind() != FrameType::Management
+            || FrameControlFields::from_raw(control).ds() != 0
+        {
             return None;
         }
-        match control & 0x00f0 {
-            0x00d0 => Some(Self::Action),
-            0x00a0 => Some(Self::Disassociation),
-            0x00c0 => Some(Self::Deauthentication),
+        match FrameControlFields::from_raw(control).subtype() {
+            13 => Some(Self::Action),
+            10 => Some(Self::Disassociation),
+            12 => Some(Self::Deauthentication),
             _ => None,
         }
     }
@@ -765,7 +802,9 @@ impl ApProtectedManagementFrame<'_> {
         frame.fill(0);
         write_management_header(
             frame,
-            self.subtype.frame_control() | 0x4000,
+            FrameControlFields::from_raw(self.subtype.frame_control())
+                .with_protected(true)
+                .raw(),
             self.access_point,
             self.peer,
             self.sequence_number,
@@ -785,19 +824,18 @@ impl ApProtectedManagementFrame<'_> {
     clippy::arithmetic_side_effects
 )]
 fn supports_wmm(bytes: &[u8]) -> bool {
-    let mut remaining = bytes;
-    while let [_, length, ..] = *remaining {
+    let mut remaining = oer_wire::Reader::new(bytes);
+    while let [_, length, ..] = *remaining.remaining() {
         let length = usize::from(length);
-        let Some((record, tail)) = length
+        let Some(record) = length
             .checked_add(2)
-            .and_then(|record_len| remaining.split_at_checked(record_len))
+            .and_then(|record_len| remaining.take(record_len).ok())
         else {
             return false;
         };
         if length >= 6 && matches!(record, [221, _, 0x00, 0x50, 0xf2, 0x02, ..]) {
             return true;
         }
-        remaining = tail;
     }
     false
 }
@@ -814,7 +852,7 @@ fn association_security_observation(
     bytes: &[u8],
     privacy: bool,
 ) -> ApAssociationSecurityObservation<'_> {
-    let mut remaining = bytes;
+    let mut remaining = oer_wire::Reader::new(bytes);
     let mut observation = ApAssociationSecurityObservation {
         privacy,
         rsn_ie: None,
@@ -825,14 +863,14 @@ fn association_security_observation(
         malformed_elements: false,
     };
     while !remaining.is_empty() {
-        let [id, length, ..] = *remaining else {
+        let [id, length, ..] = *remaining.remaining() else {
             observation.malformed_elements = true;
             break;
         };
         let length = usize::from(length);
-        let Some((record, tail)) = length
+        let Some(record) = length
             .checked_add(2)
-            .and_then(|record_len| remaining.split_at_checked(record_len))
+            .and_then(|record_len| remaining.take(record_len).ok())
         else {
             observation.malformed_elements = true;
             break;
@@ -848,7 +886,6 @@ fn association_security_observation(
         if id == 221 && length >= 4 && matches!(record, [_, _, 0x00, 0x50, 0xf2, 0x01, ..]) {
             observation.legacy_wpa_present = true;
         }
-        remaining = tail;
     }
     observation
 }
@@ -863,20 +900,19 @@ fn association_security_observation(
 )]
 fn maximum_ap_legacy_rate(profile: &Advertisement, bytes: &[u8]) -> u8 {
     let mut maximum = 0;
-    let mut remaining = bytes;
-    while let Some((&[id, length], payload)) = remaining.split_first_chunk() {
-        let Some((value, tail)) = payload.split_at_checked(usize::from(length)) else {
+    let mut remaining = oer_wire::Reader::new(bytes);
+    while let Ok(&[id, length]) = remaining.array::<2>() {
+        let Ok(value) = remaining.take(usize::from(length)) else {
             break;
         };
         if id == 1 || id == 50 {
             for encoded in value {
-                let rate = encoded & 0x7f;
+                let rate = crate::phy::SupportedRate::from_bytes([*encoded]).rate();
                 if profile.legacy_rates.supports(rate) {
                     maximum = maximum.max(rate);
                 }
             }
         }
-        remaining = tail;
     }
     maximum
 }
@@ -1036,14 +1072,22 @@ pub fn write_ht_association_response(
     peer_ht: Option<HtPeerCapabilities>,
     protection: ApBssProtection,
 ) -> Result<usize, ApAssociationResponseError> {
-    if status == 0 && association_id & 0x3fff == 0 {
+    if status == 0
+        && crate::management::AssociationId::from_bytes(association_id.to_le_bytes()).aid() == 0
+    {
         return Err(ApAssociationResponseError::MissingAssociationId);
     }
     body.fill(0);
     body[..2].copy_from_slice(&profile.capabilities(LinkProtection::Ccmp).to_le_bytes());
     body[2..4].copy_from_slice(&status.to_le_bytes());
     let encoded_association_id = if status == 0 {
-        0xc000 | (association_id & 0x3fff)
+        u16::from_le_bytes(
+            crate::encoding::validated(
+                crate::management::AssociationId::from_bytes(association_id.to_le_bytes())
+                    .with_marker(3),
+            )
+            .to_bytes(),
+        )
     } else {
         0
     };
@@ -1099,20 +1143,27 @@ pub fn observe_ap_power_save(frame: &[u8]) -> Option<ApPowerSaveObservation> {
     clippy::arithmetic_side_effects
 )]
 fn observe_power_save(frame: &[u8]) -> Option<(ApPowerSaveObservation, [u8; 6])> {
-    let (&[fc0, fc1], _) = frame.split_first_chunk()?;
+    let mut reader = oer_wire::Reader::new(frame);
+    let &[fc0, fc1] = reader.array().ok()?;
     let frame_control = u16::from_le_bytes([fc0, fc1]);
-    let frame_type = (frame_control >> 2) & 3;
-    let subtype = (frame_control >> 4) & 0x0f;
+    let frame_type = FrameControlFields::from_raw(frame_control)
+        .kind()
+        .encoding() as u16;
+    let subtype = FrameControlFields::from_raw(frame_control).subtype();
 
     // PS-Poll: Frame Control, AID, Receiver and Transmitter Address.
     if frame_type == 1
         && subtype == 10
-        && let Some((ps_poll, _)) = frame.split_first_chunk::<16>()
+        && let Ok(ps_poll) = oer_wire::Reader::new(frame).array::<16>()
     {
         let [_, _, a0, a1, r0, r1, r2, r3, r4, r5, t0, t1, t2, t3, t4, t5] = *ps_poll;
         let raw_association_id = u16::from_le_bytes([a0, a1]);
-        let association_id = raw_association_id & 0x3fff;
-        if raw_association_id & 0xc000 != 0xc000 || association_id == 0 {
+        let association_id =
+            crate::management::AssociationId::from_bytes(raw_association_id.to_le_bytes()).aid();
+        if crate::management::AssociationId::from_bytes(raw_association_id.to_le_bytes()).marker()
+            != 3
+            || association_id == 0
+        {
             return None;
         }
         return Some((
@@ -1124,7 +1175,8 @@ fn observe_power_save(frame: &[u8]) -> Option<(ApPowerSaveObservation, [u8; 6])>
         ));
     }
 
-    let (header, _) = frame.split_first_chunk::<24>()?;
+    let mut reader = oer_wire::Reader::new(frame);
+    let header = reader.array::<24>().ok()?;
     let [
         _,
         _,
@@ -1144,14 +1196,14 @@ fn observe_power_save(frame: &[u8]) -> Option<(ApPowerSaveObservation, [u8; 6])>
         t5,
         ..,
     ] = *header;
-    let to_ds = frame_control & 0x0100 != 0;
-    let from_ds = frame_control & 0x0200 != 0;
+    let to_ds = FrameControlFields::from_raw(frame_control).to_ds();
+    let from_ds = FrameControlFields::from_raw(frame_control).from_ds();
     if frame_type != 2 || !to_ds || from_ds {
         return None;
     }
     let peer = [t0, t1, t2, t3, t4, t5];
     let receiver = [r0, r1, r2, r3, r4, r5];
-    if frame_control & 0x1000 != 0 {
+    if FrameControlFields::from_raw(frame_control).power_management() {
         Some((ApPowerSaveObservation::Sleeping { peer }, receiver))
     } else {
         Some((ApPowerSaveObservation::Active { peer }, receiver))
@@ -1204,8 +1256,6 @@ pub fn observe_ap_null_data_power_save_for_access_point(
     access_point: [u8; 6],
 ) -> Option<ApPowerSaveObservation> {
     const NULL_DATA_TO_DS_FRAME_CONTROL: u16 = 0x0148;
-    const RETRY: u16 = 0x0800;
-    const POWER_MANAGEMENT: u16 = 0x1000;
 
     let Ok(
         &[
@@ -1239,18 +1289,26 @@ pub fn observe_ap_null_data_power_save_for_access_point(
         return None;
     };
     let frame_control = u16::from_le_bytes([c0, c1]);
-    if frame_control & !(RETRY | POWER_MANAGEMENT) != NULL_DATA_TO_DS_FRAME_CONTROL
+    if FrameControlFields::from_raw(frame_control)
+        .with_retry(false)
+        .with_power_management(false)
+        .raw()
+        != NULL_DATA_TO_DS_FRAME_CONTROL
         || [r0, r1, r2, r3, r4, r5] != access_point
         || [b0, b1, b2, b3, b4, b5] != access_point
-        || sequence0 & 0x0f != 0
+        || crate::sequence::SequenceControl::from_bytes((sequence0 as u16).to_le_bytes()).fragment()
+            != 0
     {
         return None;
     }
     let peer = [t0, t1, t2, t3, t4, t5];
-    if peer == [0; 6] || peer == [0xff; 6] || peer[0] & 1 != 0 {
+    if peer == [0; 6]
+        || peer == [0xff; 6]
+        || crate::address::AddressFlags::from_bytes([peer[0]]).group()
+    {
         return None;
     }
-    if frame_control & POWER_MANAGEMENT != 0 {
+    if FrameControlFields::from_raw(frame_control).power_management() {
         Some(ApPowerSaveObservation::Sleeping { peer })
     } else {
         Some(ApPowerSaveObservation::Active { peer })

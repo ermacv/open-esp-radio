@@ -10,6 +10,7 @@
     clippy::arithmetic_side_effects
 )]
 
+use crate::frame::QosControl;
 use crate::sequence::SequenceNumber;
 
 pub const BLOCK_ACK_CATEGORY: u8 = 3;
@@ -43,12 +44,18 @@ pub fn encode_addba_request(
     if window == 0 || window > 0x03ff {
         return Err(AddbaRequestError::InvalidWindow(window));
     }
-    let parameters = u16::from(amsdu) | 1 << 1 | u16::from(tid) << 2 | window << 6;
+    let parameters = AddbaParameters::from_bytes([0; 2])
+        .with_amsdu(amsdu)
+        .with_immediate(true)
+        .with_tid(tid)
+        .map_err(|_| AddbaRequestError::InvalidTid(tid))?
+        .with_window(window)
+        .map_err(|_| AddbaRequestError::InvalidWindow(window))?;
     let mut body = [0; ADDBA_ACTION_BODY_LEN];
     body[0] = BLOCK_ACK_CATEGORY;
     body[1] = ADDBA_REQUEST_ACTION;
     body[2] = dialog_token;
-    body[3..5].copy_from_slice(&parameters.to_le_bytes());
+    body[3..5].copy_from_slice(&parameters.to_bytes());
     body[5..7].copy_from_slice(&timeout_tu.to_le_bytes());
     body[7..9].copy_from_slice(&starting_sequence.sequence_control().to_le_bytes());
     Ok(body)
@@ -91,14 +98,15 @@ pub fn parse_block_ack_action(body: &[u8]) -> Option<BlockAckAction> {
     };
     match *action {
         ADDBA_REQUEST_ACTION => {
-            let (&[dialog_token, p0, p1, t0, t1, s0, s1], _) = fields.split_first_chunk()?;
-            let parameters = u16::from_le_bytes([p0, p1]);
+            let mut reader = oer_wire::Reader::new(fields);
+            let &[dialog_token, p0, p1, t0, t1, s0, s1] = reader.array().ok()?;
+            let parameters = AddbaParameters::from_bytes([p0, p1]);
             Some(BlockAckAction::AddbaRequest {
                 dialog_token,
-                tid: ((parameters >> 2) & 0x0f) as u8,
-                immediate: parameters & 0x0002 != 0,
-                amsdu: parameters & 0x0001 != 0,
-                window: (parameters >> 6) & 0x03ff,
+                tid: parameters.tid(),
+                immediate: parameters.immediate(),
+                amsdu: parameters.amsdu(),
+                window: parameters.window(),
                 timeout_tu: u16::from_le_bytes([t0, t1]),
                 starting_sequence: SequenceNumber::from_sequence_control(u16::from_le_bytes([
                     s0, s1,
@@ -106,24 +114,26 @@ pub fn parse_block_ack_action(body: &[u8]) -> Option<BlockAckAction> {
             })
         }
         ADDBA_RESPONSE_ACTION => {
-            let (&[dialog_token, s0, s1, p0, p1, t0, t1], _) = fields.split_first_chunk()?;
-            let parameters = u16::from_le_bytes([p0, p1]);
+            let mut reader = oer_wire::Reader::new(fields);
+            let &[dialog_token, s0, s1, p0, p1, t0, t1] = reader.array().ok()?;
+            let parameters = AddbaParameters::from_bytes([p0, p1]);
             Some(BlockAckAction::AddbaResponse {
                 dialog_token,
                 status: u16::from_le_bytes([s0, s1]),
-                tid: ((parameters >> 2) & 0x0f) as u8,
-                immediate: parameters & 0x0002 != 0,
-                amsdu: parameters & 0x0001 != 0,
-                window: (parameters >> 6) & 0x03ff,
+                tid: parameters.tid(),
+                immediate: parameters.immediate(),
+                amsdu: parameters.amsdu(),
+                window: parameters.window(),
                 timeout_tu: u16::from_le_bytes([t0, t1]),
             })
         }
         DELBA_ACTION => {
-            let (&[p0, p1, r0, r1], _) = fields.split_first_chunk()?;
-            let parameters = u16::from_le_bytes([p0, p1]);
+            let mut reader = oer_wire::Reader::new(fields);
+            let &[p0, p1, r0, r1] = reader.array().ok()?;
+            let parameters = DelbaParameters::from_bytes([p0, p1]);
             Some(BlockAckAction::Delba {
-                tid: ((parameters >> 12) & 0x0f) as u8,
-                initiator: parameters & 0x0800 != 0,
+                tid: parameters.tid(),
+                initiator: parameters.initiator(),
                 reason: u16::from_le_bytes([r0, r1]),
             })
         }
@@ -155,8 +165,11 @@ pub fn encode_block_ack_request(
     frame[..2].copy_from_slice(&0x0084_u16.to_le_bytes());
     frame[4..10].copy_from_slice(&receiver);
     frame[10..16].copy_from_slice(&transmitter);
-    let control = (u16::from(tid & 0x0f) << 12) | 0x0004;
-    frame[16..18].copy_from_slice(&control.to_le_bytes());
+    let tid = QosControl::from_bytes([tid, 0]).tid();
+    let control = crate::encoding::validated(
+        crate::trigger::BarControlFields::from_bytes([4, 0]).with_tid(tid),
+    );
+    frame[16..18].copy_from_slice(&control.to_bytes());
     frame[18..20].copy_from_slice(&starting_sequence.sequence_control().to_le_bytes());
     frame
 }
@@ -192,8 +205,14 @@ pub fn write_successful_addba_response(
     body[0] = BLOCK_ACK_CATEGORY;
     body[1] = ADDBA_RESPONSE_ACTION;
     body[2] = dialog_token;
-    let parameters = 1_u16 << 1 | u16::from(tid) << 2 | window << 6;
-    body[5..7].copy_from_slice(&parameters.to_le_bytes());
+    let parameters = AddbaParameters::from_bytes([0; 2])
+        .with_amsdu(false)
+        .with_immediate(true)
+        .with_tid(tid)
+        .map_err(|_| RxAddbaResponseError::InvalidTid(tid))?
+        .with_window(window)
+        .map_err(|_| RxAddbaResponseError::InvalidWindow(window))?;
+    body[5..7].copy_from_slice(&parameters.to_bytes());
     Ok(())
 }
 
@@ -226,9 +245,38 @@ pub fn write_declined_addba_response(
     body[1] = ADDBA_RESPONSE_ACTION;
     body[2] = dialog_token;
     body[3..5].copy_from_slice(&ADDBA_STATUS_REQUEST_DECLINED.to_le_bytes());
-    let parameters = 1_u16 << 1 | u16::from(tid) << 2 | requested_window << 6;
-    body[5..7].copy_from_slice(&parameters.to_le_bytes());
+    let parameters = AddbaParameters::from_bytes([0; 2])
+        .with_amsdu(false)
+        .with_immediate(true)
+        .with_tid(tid)
+        .map_err(|_| RxAddbaResponseError::InvalidTid(tid))?
+        .with_window(requested_window)
+        .map_err(|_| RxAddbaResponseError::InvalidWindow(requested_window))?;
+    body[5..7].copy_from_slice(&parameters.to_bytes());
     Ok(())
+}
+
+oer_wire::bitfield! {
+    /// SOURCE: IEEE Std 802.11-2020, 9.6.5 (Block Ack Action frame details).
+    pub struct AddbaParameters[2] (little) {
+        /// SOURCE: IEEE Std 802.11-2020, 9.6.5 (Block Ack Action frame details).
+        pub amsdu, with_amsdu: bool = 0..1;
+        /// SOURCE: IEEE Std 802.11-2020, 9.6.5 (Block Ack Action frame details).
+        pub immediate, with_immediate: bool = 1..2;
+        /// SOURCE: IEEE Std 802.11-2020, 9.6.5 (Block Ack Action frame details).
+        pub tid, with_tid: u8 = 2..6;
+        /// SOURCE: IEEE Std 802.11-2020, 9.6.5 (Block Ack Action frame details).
+        pub window, with_window: u16 = 6..16;
+    }
+}
+oer_wire::bitfield! {
+    /// SOURCE: IEEE Std 802.11-2020, 9.6.5 (DELBA frame format).
+    pub struct DelbaParameters[2] (little) {
+        /// SOURCE: IEEE Std 802.11-2020, 9.6.5 (DELBA frame format).
+        pub initiator, with_initiator: bool = 11..12;
+        /// SOURCE: IEEE Std 802.11-2020, 9.6.5 (DELBA frame format).
+        pub tid, with_tid: u8 = 12..16;
+    }
 }
 
 #[cfg(test)]

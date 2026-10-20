@@ -1,7 +1,9 @@
 # IEEE 802.11 wire formats
 
 `oer-ieee80211-wire`: allocation-free IEEE 802.11 frame formats, parsers, encoders
-and shared values. Mutable exchange state belongs to upper-mac, station
+and shared values. Fixed-width fields use `oer-wire::bitfield!` declarations
+with standard-clause sources; bounded readers and writers handle byte streams.
+Mutable exchange state belongs to upper-mac, station
 and SoftMAC cores.
 
 ## Known defects
@@ -14,11 +16,6 @@ and SoftMAC cores.
   supports it.
 - **A-MSDU subframes are parsed lazily** (`data.rs::AmsduSubframes`): a
   malformed later subframe surfaces only after earlier ones were yielded.
-- **Raw header bits instead of types:** `ap.rs` encoders and
-  `station/data.rs`, `station/data/amsdu.rs` set `header[1] |= 0x40`/`0x20`
-  and `header[24] |= 0x80` although `FrameControl::with_protected` exists;
-  `station/management.rs::StaProtectedManagementFrame::encode` ORs a raw
-  `u16` and takes an unvalidated `pub ccmp_header: [u8; 8]`.
 - **`ccmp.rs::ccmp_header`** is a public, unvalidated header builder with
   only test callers.
 - **AP side** (`ap.rs::parse_ap_management_request`): Reassociation Request

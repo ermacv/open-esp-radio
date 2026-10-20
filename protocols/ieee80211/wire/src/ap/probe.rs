@@ -27,8 +27,12 @@ pub enum ResponseError {
 pub(super) fn ssid(mut elements: &[u8]) -> Option<&[u8]> {
     let mut found = None;
     while !elements.is_empty() {
-        let (&[id, length], rest) = elements.split_first_chunk::<2>()?;
-        let (value, rest) = rest.split_at_checked(usize::from(length))?;
+        let mut reader = oer_wire::Reader::new(elements);
+        let &[id, length] = reader.array::<2>().ok()?;
+        let rest = reader.remaining();
+        let mut reader = oer_wire::Reader::new(rest);
+        let value = reader.take(usize::from(length)).ok()?;
+        let rest = reader.remaining();
         if id == 0 {
             if found.is_some() || value.len() > 32 {
                 return None;
@@ -51,9 +55,11 @@ pub(super) fn ssid(mut elements: &[u8]) -> Option<&[u8]> {
     clippy::arithmetic_side_effects
 )]
 pub fn matches_ssid(beacon: &[u8], requested: &[u8]) -> bool {
-    beacon
-        .split_first_chunk::<36>()
-        .and_then(|(_, elements)| ssid(elements))
+    let mut reader = oer_wire::Reader::new(beacon);
+    if reader.array::<36>().is_err() {
+        return false;
+    }
+    ssid(reader.remaining())
         .is_some_and(|advertised| requested.is_empty() || requested == advertised)
 }
 

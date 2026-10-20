@@ -14,8 +14,9 @@
     clippy::arithmetic_side_effects
 )]
 
+use crate::frame::FrameControlFields;
+
 const BEACON_FRAME_CONTROL: u16 = 0x0080;
-const FRAME_TYPE_AND_SUBTYPE_MASK: u16 = 0x00fc;
 const FIXED_BEACON_LENGTH: usize = 36;
 const TIM_ELEMENT_ID: u8 = 5;
 const ERP_ELEMENT_ID: u8 = 42;
@@ -92,9 +93,11 @@ pub fn parse_sta_beacon(
     expected_bssid: [u8; 6],
     association_id: u16,
 ) -> Result<StaBeaconObservation, StaBeaconError> {
-    let (header, elements) = mpdu
-        .split_first_chunk::<FIXED_BEACON_LENGTH>()
-        .ok_or(StaBeaconError::Truncated)?;
+    let mut reader = oer_wire::Reader::new(mpdu);
+    let header = reader
+        .array::<FIXED_BEACON_LENGTH>()
+        .map_err(|_| StaBeaconError::Truncated)?;
+    let elements = reader.remaining();
     let [
         fc0,
         fc1,
@@ -135,7 +138,9 @@ pub fn parse_sta_beacon(
         c1,
     ] = *header;
     let frame_control = u16::from_le_bytes([fc0, fc1]);
-    if frame_control & FRAME_TYPE_AND_SUBTYPE_MASK != BEACON_FRAME_CONTROL {
+    if FrameControlFields::from_raw(frame_control).type_and_subtype()
+        != FrameControlFields::from_raw(BEACON_FRAME_CONTROL as u16).type_and_subtype()
+    {
         return Err(StaBeaconError::NotBeacon);
     }
     if [a0, a1, a2, a3, a4, a5] != expected_bssid || [b0, b1, b2, b3, b4, b5] != expected_bssid {
@@ -152,17 +157,18 @@ pub fn parse_sta_beacon(
     let mut remaining = elements;
     while !remaining.is_empty() {
         let element = remaining;
-        let (&[id, length], rest) = remaining
-            .split_first_chunk::<2>()
-            .ok_or(StaBeaconError::MalformedInformationElement)?;
-        let (body, rest) = rest
-            .split_at_checked(usize::from(length))
-            .ok_or(StaBeaconError::MalformedInformationElement)?;
-        remaining = rest;
+        let mut reader = oer_wire::Reader::new(remaining);
+        let &[id, length] = reader
+            .array::<2>()
+            .map_err(|_| StaBeaconError::MalformedInformationElement)?;
+        let body = reader
+            .take(usize::from(length))
+            .map_err(|_| StaBeaconError::MalformedInformationElement)?;
+        remaining = reader.remaining();
         if id == VENDOR_ELEMENT_ID
-            && let Some((element, _)) = usize::from(length)
+            && let Some(element) = usize::from(length)
                 .checked_add(2)
-                .and_then(|whole| element.split_at_checked(whole))
+                .and_then(|whole| oer_wire::Reader::new(element).take(whole).ok())
             && let Some(parameters) = crate::extensions::wmm::parse_wmm_parameter_element(element)
         {
             edca = Some(parameters);
@@ -174,11 +180,15 @@ pub fn parse_sta_beacon(
             if bitmap.is_empty() || dtim_period == 0 || tim.is_some() {
                 return Err(StaBeaconError::MalformedTim);
             }
-            let aid = usize::from(association_id & 0x3fff);
+            let aid = usize::from(
+                crate::management::AssociationId::from_bytes(association_id.to_le_bytes()).aid(),
+            );
             let aid_byte = aid / 8;
             // Bitmap Offset is encoded in units of two octets in bits 7:1;
-            // masking bit zero therefore already yields N1 in octets.
-            let bitmap_offset = usize::from(bitmap_control & 0xfe);
+            // the decoded offset is doubled to obtain N1 in octets.
+            let bitmap_offset =
+                usize::from(crate::beacon::TimBitmapControl::from_bytes([bitmap_control]).offset())
+                    * 2;
             // The AID's bit within its octet is below eight.
             let aid_bit = 1_u8.wrapping_shl(u32::from(association_id & 7));
             let unicast_buffered = aid_byte
@@ -189,7 +199,8 @@ pub fn parse_sta_beacon(
                 dtim_count,
                 dtim_period,
                 unicast_buffered,
-                group_buffered: dtim_count == 0 && bitmap_control & 1 != 0,
+                group_buffered: dtim_count == 0
+                    && crate::beacon::TimBitmapControl::from_bytes([bitmap_control]).group(),
             });
         }
         match (id, body) {
@@ -202,7 +213,8 @@ pub fn parse_sta_beacon(
             // HE Operation Parameters: TXOP Duration RTS Threshold in bits
             // 13:4 of its first two octets.
             (EXTENSION_ELEMENT_ID, [HE_OPERATION_EXTENSION_ID, low, high, ..]) => {
-                let threshold = ((u16::from(*high) & 0x3f) << 4) | (u16::from(*low) >> 4);
+                let threshold = crate::he::HeOperationFields::from_bytes([*low, *high, 0, 0, 0, 0])
+                    .rts_threshold();
                 protection.he_txop_rts_threshold =
                     (!matches!(threshold, 0 | 0x03ff)).then_some(threshold);
             }

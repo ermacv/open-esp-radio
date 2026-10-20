@@ -13,9 +13,6 @@
 pub struct ErpProtection(u8);
 
 impl ErpProtection {
-    const USE_PROTECTION: u8 = 1 << 1;
-    const BARKER_PREAMBLE_MODE: u8 = 1 << 2;
-
     /// No non-ERP station requires protection.
     pub const NONE: Self = Self(0);
 
@@ -23,37 +20,37 @@ impl ErpProtection {
     /// carries no protection requirement.
     pub const fn from_information(information: Option<u8>) -> Self {
         match information {
-            Some(value) => Self(value & (Self::USE_PROTECTION | Self::BARKER_PREAMBLE_MODE)),
+            Some(value) => Self::new(
+                ErpInformation::from_bytes([value]).use_protection(),
+                ErpInformation::from_bytes([value]).barker(),
+            ),
             None => Self::NONE,
         }
     }
 
     pub const fn new(use_protection: bool, long_preamble_required: bool) -> Self {
         Self(
-            if use_protection {
-                Self::USE_PROTECTION
-            } else {
-                0
-            } | if long_preamble_required {
-                Self::BARKER_PREAMBLE_MODE
-            } else {
-                0
-            },
+            ErpInformation::from_bytes([0])
+                .with_use_protection(use_protection)
+                .with_barker(long_preamble_required)
+                .to_bytes()[0],
         )
     }
 
     pub const fn use_protection(self) -> bool {
-        self.0 & Self::USE_PROTECTION != 0
+        ErpInformation::from_bytes([self.0]).use_protection()
     }
 
     /// Barker_Preamble_Mode: DSSS/HR frames use the long preamble.
     pub const fn long_preamble_required(self) -> bool {
-        self.0 & Self::BARKER_PREAMBLE_MODE != 0
+        ErpInformation::from_bytes([self.0]).barker()
     }
 
     /// Encode the ERP Information payload with NonERP_Present.
     pub const fn information(self, non_erp_present: bool) -> u8 {
-        self.0 | non_erp_present as u8
+        ErpInformation::from_bytes([self.0])
+            .with_non_erp(non_erp_present)
+            .to_bytes()[0]
     }
 }
 
@@ -81,7 +78,7 @@ impl HtProtectionMode {
 
     /// Decode the low two bits of HT Operation Information byte one.
     pub const fn from_field(field: u8) -> Self {
-        match field & 0x03 {
+        match HtProtectionInformation::from_bytes([field]).mode() {
             1 => Self::Nonmember,
             2 => Self::TwentyMhz,
             3 => Self::NonHtMixed,
@@ -111,7 +108,9 @@ impl HtOperationProtection {
     /// HT Operation Information byte one: HT Protection in bits 1:0 and
     /// Nongreenfield HT STAs Present in bit 2.
     pub const fn information_byte(self) -> u8 {
-        self.mode.field() | ((self.non_greenfield_present as u8) << 2)
+        HtProtectionInformation::from_bytes([self.mode.field()])
+            .with_non_greenfield(self.non_greenfield_present)
+            .to_bytes()[0]
     }
 }
 
@@ -126,6 +125,27 @@ pub struct ApBssProtection {
 impl ApBssProtection {
     pub const fn erp_information(self) -> u8 {
         self.erp.information(self.non_erp_present)
+    }
+}
+
+oer_wire::bitfield! {
+    /// SOURCE: IEEE Std 802.11-2020, 9.4.2.13 (ERP Information element).
+    pub struct ErpInformation[1] (little) {
+        /// SOURCE: IEEE Std 802.11-2020, 9.4.2.13 (ERP Information element).
+        pub non_erp, with_non_erp: bool = 0..1;
+        /// SOURCE: IEEE Std 802.11-2020, 9.4.2.13 (ERP Information element).
+        pub use_protection, with_use_protection: bool = 1..2;
+        /// SOURCE: IEEE Std 802.11-2020, 9.4.2.13 (ERP Information element).
+        pub barker, with_barker: bool = 2..3;
+    }
+}
+oer_wire::bitfield! {
+    /// SOURCE: IEEE Std 802.11-2020, 9.4.2.56 (HT Operation element).
+    pub struct HtProtectionInformation[1] (little) {
+        /// SOURCE: IEEE Std 802.11-2020, 9.4.2.56 (HT Operation element).
+        pub mode, with_mode: u8 = 0..2;
+        /// SOURCE: IEEE Std 802.11-2020, 9.4.2.56 (HT Operation element).
+        pub non_greenfield, with_non_greenfield: bool = 2..3;
     }
 }
 

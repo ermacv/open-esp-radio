@@ -45,17 +45,17 @@ pub enum HeMuSigBNonMimoUser {
 
 impl HeMuSigBNonMimoUser {
     pub const fn decode(word: u32) -> Self {
-        let station_id = (word & 0x07ff) as u16;
+        let station_id = SigBUserFields::from_bytes(word.to_le_bytes()).station_id();
         if station_id == 0x07fe {
             Self::NonMuMimo
         } else {
             Self::Scheduled {
                 station_id,
-                nsts: ((word >> 11) & 0x07) as u8,
-                beamformed: word & (1 << 14) != 0,
-                mcs: ((word >> 15) & 0x0f) as u8,
-                dcm: word & (1 << 19) != 0,
-                ldpc: word & (1 << 20) != 0,
+                nsts: SigBUserFields::from_bytes(word.to_le_bytes()).nsts(),
+                beamformed: SigBUserFields::from_bytes(word.to_le_bytes()).beamformed(),
+                mcs: SigBUserFields::from_bytes(word.to_le_bytes()).mcs(),
+                dcm: SigBUserFields::from_bytes(word.to_le_bytes()).dcm(),
+                ldpc: SigBUserFields::from_bytes(word.to_le_bytes()).ldpc(),
             }
         }
     }
@@ -79,10 +79,11 @@ pub struct HeMuSigBMimoUser {
 impl HeMuSigBMimoUser {
     pub const fn decode(word: u32) -> Self {
         Self {
-            station_id: (word & 0x07ff) as u16,
-            spatial_configuration: ((word >> 11) & 0x0f) as u8,
-            mcs: ((word >> 15) & 0x0f) as u8,
-            ldpc: word & (1 << 20) != 0,
+            station_id: SigBUserFields::from_bytes(word.to_le_bytes()).station_id(),
+            spatial_configuration: SigBUserFields::from_bytes(word.to_le_bytes())
+                .spatial_configuration(),
+            mcs: SigBUserFields::from_bytes(word.to_le_bytes()).mcs(),
+            ldpc: SigBUserFields::from_bytes(word.to_le_bytes()).ldpc(),
         }
     }
 }
@@ -313,13 +314,17 @@ impl He20MuSigBRuAllocation {
     pub const fn try_new(encoding: u8) -> Result<Self, He20MuSigBRuAllocationError> {
         let user_count = match encoding {
             0..=15 => HE_MU_SIG_B_COMMON_RU_USER_COUNTS[encoding as usize],
-            16..=39 => (encoding & 0x07) + 3,
-            40..=47 | 64..=79 => (encoding & 0x07) + 6,
-            48..=63 | 80..=95 => (encoding & 0x07) + 5,
-            96..=111 => (encoding & 0x07) + 4,
+            16..=39 => RuAllocationCode::from_bytes([encoding]).low3() + 3,
+            40..=47 | 64..=79 => RuAllocationCode::from_bytes([encoding]).low3() + 6,
+            48..=63 | 80..=95 => RuAllocationCode::from_bytes([encoding]).low3() + 5,
+            96..=111 => RuAllocationCode::from_bytes([encoding]).low3() + 4,
             112 => 4,
-            128..=191 => ((encoding >> 2) & 0x03) + (encoding & 0x03) + 2,
-            192..=199 => (encoding & 0x07) + 1,
+            128..=191 => {
+                RuAllocationCode::from_bytes([encoding]).first_group()
+                    + RuAllocationCode::from_bytes([encoding]).second_group()
+                    + 2
+            }
+            192..=199 => RuAllocationCode::from_bytes([encoding]).low3() + 1,
             200..=216 => return Err(He20MuSigBRuAllocationError::UnsupportedRuType),
             _ => return Err(He20MuSigBRuAllocationError::ReservedEncoding),
         };
@@ -426,13 +431,14 @@ impl He20MuSigBRuAllocation {
 
         let multiplexed = match self.encoding {
             0..=15 | 112 => 0,
-            16..=111 | 192..=199 => self.encoding & 0x07,
+            16..=111 | 192..=199 => RuAllocationCode::from_bytes([self.encoding]).low3(),
             128..=191 => {
-                let first_group_users = ((self.encoding >> 2) & 0x03) + 1;
+                let first_group_users =
+                    RuAllocationCode::from_bytes([self.encoding]).first_group() + 1;
                 let users_in_group = if zero_based_position < first_group_users {
                     first_group_users
                 } else {
-                    (self.encoding & 0x03) + 1
+                    RuAllocationCode::from_bytes([self.encoding]).second_group() + 1
                 };
                 if users_in_group >= 2 { 1 } else { 0 }
             }
@@ -469,13 +475,10 @@ pub const HE20_MU_SIG_B_MIMO_MAX_USERS: u8 = 4;
     clippy::arithmetic_side_effects
 )]
 fn read_complete_sig_b_user(complete_bytes: &[u8], bit_offset: u16) -> Option<u32> {
-    let mut raw = 0_u32;
-    for output_bit in 0..HE_MU_SIG_B_USER_BITS {
-        let source_bit = bit_offset.checked_add(output_bit)?;
-        let source_byte = *complete_bytes.get(usize::from(source_bit / 8))?;
-        raw |= u32::from((source_byte >> (source_bit % 8)) & 1) << output_bit;
-    }
-    Some(raw)
+    oer_wire::Reader::new(complete_bytes)
+        .bits::<21>(usize::from(bit_offset))
+        .ok()
+        .map(|word| word as u32)
 }
 
 /// A failure to construct a bounded HE20 non-MU-MIMO complete-SIG-B view.
@@ -826,7 +829,7 @@ impl HeMcsNssSupport {
         clippy::arithmetic_side_effects
     )]
     const fn one_stream_from_map(map: u16) -> Self {
-        match map & 0x03 {
+        match HeMcsMap::from_bytes(map.to_le_bytes()).nss1() {
             0 => Self::Mcs0To7,
             1 => Self::Mcs0To9,
             2 => Self::Mcs0To11,
@@ -864,7 +867,7 @@ impl HeDcmConstellation {
         clippy::arithmetic_side_effects
     )]
     const fn from_encoding(encoding: u8) -> Self {
-        match encoding & 0x03 {
+        match HeMcsMap::from_bytes([encoding, 0]).nss1() {
             0 => Self::NotSupported,
             1 => Self::Bpsk,
             2 => Self::Qpsk,
@@ -1054,9 +1057,11 @@ fn validate_extension<const MINIMUM_LEN: usize>(
     if usize::from(declared_len).checked_add(2) != Some(element.len()) {
         return Err(HeElementError::LengthMismatch);
     }
-    let Some((prefix, tail)) = element.split_first_chunk::<MINIMUM_LEN>() else {
-        return Err(HeElementError::TooShort);
-    };
+    let mut reader = oer_wire::Reader::new(element);
+    let prefix = reader
+        .array::<MINIMUM_LEN>()
+        .map_err(|_| HeElementError::TooShort)?;
+    let tail = reader.remaining();
     if prefix.get(2).copied() != Some(extension) {
         return Err(HeElementError::WrongExtension);
     }
@@ -1074,23 +1079,27 @@ fn validate_extension<const MINIMUM_LEN: usize>(
 pub fn parse_he20_capabilities(element: &[u8]) -> Result<He20Capabilities, HeElementError> {
     let (element, _) =
         validate_extension::<HE_CAPABILITIES_IE_MIN_LEN>(element, HE_CAPABILITIES_EXTENSION_ID)?;
-    let receive_mcs_map = u16::from_le_bytes([element[20], element[21]]);
-    let transmit_mcs_map = u16::from_le_bytes([element[22], element[23]]);
+    let mut reader = oer_wire::Reader::new(element);
+    reader.take(9).map_err(|_| HeElementError::TooShort)?;
+    let phy = HePhyCapabilities::from_bytes(reader.read().map_err(|_| HeElementError::TooShort)?);
+    let receive_mcs_map = reader.u16_le().map_err(|_| HeElementError::TooShort)?;
+    let transmit_mcs_map = reader.u16_le().map_err(|_| HeElementError::TooShort)?;
     Ok(He20Capabilities {
         receive_mcs_map,
         transmit_mcs_map,
         receive_nss1: HeMcsNssSupport::one_stream_from_map(receive_mcs_map),
         transmit_nss1: HeMcsNssSupport::one_stream_from_map(transmit_mcs_map),
-        one_ltf_800ns_gi: element[10] & 0x40 != 0,
-        ldpc_coding_in_payload: element[10] & 0x20 != 0,
-        stbc_transmit_under_80_mhz: element[11] & 0x04 != 0,
-        stbc_receive_under_80_mhz: element[11] & 0x08 != 0,
-        dcm_transmit: HeDcmConstellation::from_encoding(element[12]),
-        dcm_receive: HeDcmConstellation::from_encoding(element[12] >> 3),
-        triggered_su_beamforming_feedback: element[15] & 0x04 != 0,
-        triggered_mu_beamforming_partial_bandwidth_feedback: element[15] & 0x08 != 0,
-        triggered_cqi_feedback: element[15] & 0x10 != 0,
-        non_triggered_cqi_feedback: element[18] & 0x02 != 0,
+        one_ltf_800ns_gi: phy.one_ltf_800ns_gi(),
+        ldpc_coding_in_payload: phy.ldpc_coding_in_payload(),
+        stbc_transmit_under_80_mhz: phy.stbc_transmit_under_80_mhz(),
+        stbc_receive_under_80_mhz: phy.stbc_receive_under_80_mhz(),
+        dcm_transmit: HeDcmConstellation::from_encoding(phy.dcm_transmit()),
+        dcm_receive: HeDcmConstellation::from_encoding(phy.dcm_receive()),
+        triggered_su_beamforming_feedback: phy.triggered_su_beamforming_feedback(),
+        triggered_mu_beamforming_partial_bandwidth_feedback: phy
+            .triggered_mu_beamforming_partial_bandwidth_feedback(),
+        triggered_cqi_feedback: phy.triggered_cqi_feedback(),
+        non_triggered_cqi_feedback: phy.non_triggered_cqi_feedback(),
     })
 }
 
@@ -1105,12 +1114,15 @@ pub fn parse_he20_capabilities(element: &[u8]) -> Result<He20Capabilities, HeEle
 pub fn parse_he20_operation(element: &[u8]) -> Result<He20Operation, HeElementError> {
     let (element, _) =
         validate_extension::<HE_OPERATION_IE_MIN_LEN>(element, HE_OPERATION_EXTENSION_ID)?;
-    let bss_color_information = element[6];
+    let mut reader = oer_wire::Reader::new(element);
+    reader.take(3).map_err(|_| HeElementError::TooShort)?;
+    let fields =
+        HeOperationFields::from_bytes(reader.read().map_err(|_| HeElementError::TooShort)?);
     Ok(He20Operation {
-        bss_color: bss_color_information & 0x3f,
-        bss_color_enabled: bss_color_information & 0x80 == 0,
-        partial_bss_color: bss_color_information & 0x40 != 0,
-        basic_mcs_nss_map: u16::from_le_bytes([element[7], element[8]]),
+        bss_color: fields.bss_color(),
+        bss_color_enabled: !fields.bss_color_disabled(),
+        partial_bss_color: fields.partial_bss_color(),
+        basic_mcs_nss_map: fields.basic_mcs_nss(),
     })
 }
 
@@ -1139,38 +1151,143 @@ pub fn parse_he20_peer_state(
     let (operation, _) =
         validate_extension::<HE_OPERATION_IE_MIN_LEN>(operation, HE_OPERATION_EXTENSION_ID)?;
 
+    let mut reader = oer_wire::Reader::new(capability);
+    reader.take(9).map_err(|_| HeElementError::TooShort)?;
+    let phy = HePhyCapabilities::from_bytes(reader.read().map_err(|_| HeElementError::TooShort)?);
+    let mut reader = oer_wire::Reader::new(operation);
+    reader.take(3).map_err(|_| HeElementError::TooShort)?;
+    let fields =
+        HeOperationFields::from_bytes(reader.read().map_err(|_| HeElementError::TooShort)?);
     let capability_prefix = *capability;
-    let packet_padding_eight_us = if capability[15] & 0x80 == 0 {
-        capability[18] >> 6
+    let packet_padding_eight_us = if !phy.ppe_present() {
+        phy.nominal_padding()
     } else {
         // The PPE Thresholds field follows the fixed prefix.
         let [ppe0, ppe1, ..] = *thresholds else {
             return Err(HeElementError::TooShort);
         };
-        let ppet8 = ((ppe1 & 0x03) << 1) | (ppe0 >> 7);
-        if ppe0 & 0x08 != 0 && ppe1 & 0x1c == 0x1c && ppet8 == 0 {
+        let ppe = PpeFields::from_bytes([ppe0, ppe1]);
+        let ppet8 = ppe.ppet8();
+        if ppe.ru0() && ppe.ppet16() == 7 && ppet8 == 0 {
             2
         } else {
             0
         }
     };
 
-    let encoded_rts_threshold =
-        (u16::from(operation[4] & 0x3f) << 4) | u16::from(operation[3] >> 4);
+    let encoded_rts_threshold = fields.rts_threshold();
     let rts_threshold =
         (!matches!(encoded_rts_threshold, 0 | 0x03ff)).then_some(encoded_rts_threshold);
 
     Ok(He20PeerState {
         capability_prefix,
         packet_padding_eight_us,
-        default_packet_extension_duration: operation[3] & 0x07,
-        bss_color: operation[6] & 0x3f,
-        bss_color_enabled: operation[6] & 0x80 == 0,
-        partial_bss_color: operation[6] & 0x40 != 0,
-        basic_mcs_nss_map: u16::from_le_bytes([operation[7], operation[8]]),
+        default_packet_extension_duration: fields.default_pe(),
+        bss_color: fields.bss_color(),
+        bss_color_enabled: !fields.bss_color_disabled(),
+        partial_bss_color: fields.partial_bss_color(),
+        basic_mcs_nss_map: fields.basic_mcs_nss(),
         rts_threshold,
-        extended_range_single_user_disabled: operation[5] & 0x01 != 0,
+        extended_range_single_user_disabled: fields.er_su_disabled(),
     })
+}
+
+oer_wire::bitfield! {
+    /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.248.3 (HE PHY Capabilities Information field).
+    pub struct HePhyCapabilities[11] (little) {
+        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.248.3 (HE PHY Capabilities Information field).
+        pub one_ltf_800ns_gi, with_one_ltf_800ns_gi: bool = 14..15;
+        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.248.3 (HE PHY Capabilities Information field).
+        pub ldpc_coding_in_payload, with_ldpc_coding_in_payload: bool = 13..14;
+        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.248.3 (HE PHY Capabilities Information field).
+        pub stbc_transmit_under_80_mhz, with_stbc_transmit_under_80_mhz: bool = 18..19;
+        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.248.3 (HE PHY Capabilities Information field).
+        pub stbc_receive_under_80_mhz, with_stbc_receive_under_80_mhz: bool = 19..20;
+        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.248.3 (HE PHY Capabilities Information field).
+        pub dcm_transmit, with_dcm_transmit: u8 = 24..26;
+        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.248.3 (HE PHY Capabilities Information field).
+        pub dcm_receive, with_dcm_receive: u8 = 27..29;
+        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.248.3 (HE PHY Capabilities Information field).
+        pub triggered_su_beamforming_feedback, with_triggered_su_beamforming_feedback: bool = 50..51;
+        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.248.3 (HE PHY Capabilities Information field).
+        pub triggered_mu_beamforming_partial_bandwidth_feedback, with_triggered_mu_beamforming_partial_bandwidth_feedback: bool = 51..52;
+        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.248.3 (HE PHY Capabilities Information field).
+        pub triggered_cqi_feedback, with_triggered_cqi_feedback: bool = 52..53;
+        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.248.3 (HE PHY Capabilities Information field).
+        pub ppe_present, with_ppe_present: bool = 55..56;
+        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.248.3 (HE PHY Capabilities Information field).
+        pub non_triggered_cqi_feedback, with_non_triggered_cqi_feedback: bool = 73..74;
+        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.248.3 (HE PHY Capabilities Information field).
+        pub nominal_padding, with_nominal_padding: u8 = 78..80;
+    }
+}
+oer_wire::bitfield! {
+    /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.249 (HE Operation element).
+    pub struct HeOperationFields[6] (little) {
+        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.249 (HE Operation element).
+        pub default_pe, with_default_pe: u8 = 0..3;
+        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.249 (HE Operation element).
+        pub rts_threshold, with_rts_threshold: u16 = 4..14;
+        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.249 (HE Operation element).
+        pub er_su_disabled, with_er_su_disabled: bool = 16..17;
+        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.249 (HE Operation element).
+        pub bss_color, with_bss_color: u8 = 24..30;
+        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.249 (HE Operation element).
+        pub partial_bss_color, with_partial_bss_color: bool = 30..31;
+        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.249 (HE Operation element).
+        pub bss_color_disabled, with_bss_color_disabled: bool = 31..32;
+        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.249 (HE Operation element).
+        pub basic_mcs_nss, with_basic_mcs_nss: u16 = 32..48;
+    }
+}
+oer_wire::bitfield! {
+    /// SOURCE: IEEE Std 802.11ax-2021, 27.3.11.8 (HE-SIG-B field).
+    pub struct SigBUserFields[4] (little) {
+        /// SOURCE: IEEE Std 802.11ax-2021, 27.3.11.8 (HE-SIG-B field).
+        pub station_id, with_station_id: u16 = 0..11;
+        /// SOURCE: IEEE Std 802.11ax-2021, 27.3.11.8 (HE-SIG-B field).
+        pub nsts, with_nsts: u8 = 11..14;
+        /// SOURCE: IEEE Std 802.11ax-2021, 27.3.11.8 (HE-SIG-B field).
+        pub beamformed, with_beamformed: bool = 14..15;
+        /// SOURCE: IEEE Std 802.11ax-2021, 27.3.11.8 (HE-SIG-B field).
+        pub spatial_configuration, with_spatial_configuration: u8 = 11..15;
+        /// SOURCE: IEEE Std 802.11ax-2021, 27.3.11.8 (HE-SIG-B field).
+        pub mcs, with_mcs: u8 = 15..19;
+        /// SOURCE: IEEE Std 802.11ax-2021, 27.3.11.8 (HE-SIG-B field).
+        pub dcm, with_dcm: bool = 19..20;
+        /// SOURCE: IEEE Std 802.11ax-2021, 27.3.11.8 (HE-SIG-B field).
+        pub ldpc, with_ldpc: bool = 20..21;
+    }
+}
+oer_wire::bitfield! {
+    /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.248.4 (Supported HE-MCS And NSS Set field).
+    pub struct HeMcsMap[2] (little) {
+        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.248.4 (Supported HE-MCS And NSS Set field).
+        pub nss1, with_nss1: u8 = 0..2;
+    }
+}
+oer_wire::bitfield! {
+    /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.248.5 (PPE Thresholds field).
+    pub struct PpeFields[2] (little) {
+        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.248.5 (PPE Thresholds field).
+        pub ru0, with_ru0: bool = 3..4;
+        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.248.5 (PPE Thresholds field).
+        pub ppet8, with_ppet8: u8 = 7..10;
+        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.248.5 (PPE Thresholds field).
+        pub ppet16, with_ppet16: u8 = 10..13;
+    }
+}
+
+oer_wire::bitfield! {
+    /// SOURCE: IEEE Std 802.11ax-2021, 27.3.11.8 (HE-SIG-B RU Allocation subfield).
+    pub struct RuAllocationCode[1] (little) {
+        /// SOURCE: IEEE Std 802.11ax-2021, 27.3.11.8 (HE-SIG-B RU Allocation subfield).
+        pub low3, with_low3: u8 = 0..3;
+        /// SOURCE: IEEE Std 802.11ax-2021, 27.3.11.8 (HE-SIG-B RU Allocation subfield).
+        pub first_group, with_first_group: u8 = 2..4;
+        /// SOURCE: IEEE Std 802.11ax-2021, 27.3.11.8 (HE-SIG-B RU Allocation subfield).
+        pub second_group, with_second_group: u8 = 0..2;
+    }
 }
 
 #[cfg(test)]

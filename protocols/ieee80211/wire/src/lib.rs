@@ -18,7 +18,7 @@
 //! writing a new prefix cannot overwrite the retained Ethernet payload.
 //!
 //! The strict-lint parser contract requires field boundaries established
-//! with `split_first_chunk` and retained as fixed-size arrays through
+//! with the bounded `oer_wire::Reader` and retained as fixed-size arrays through
 //! subsequent processing. Replacing indexing mechanically with `.get()` or
 //! suppressing its lint does not establish the contract.
 

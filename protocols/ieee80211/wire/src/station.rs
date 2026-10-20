@@ -19,18 +19,17 @@ use crate::{
 };
 
 const OPEN_AUTHENTICATION_FRAME_CONTROL: u16 = 0x00b0;
+#[cfg(test)]
 const DISASSOCIATION_FRAME_CONTROL: u16 = 0x00a0;
 const DEAUTHENTICATION_FRAME_CONTROL: u16 = 0x00c0;
 const ACTION_FRAME_CONTROL: u16 = 0x00d0;
 /// Frame Control Protected Frame bit.
-const PROTECTED_FRAME: u16 = 0x4000;
 const ASSOCIATION_REQUEST_FRAME_CONTROL: u16 = 0x0000;
 const ASSOCIATION_RESPONSE_FRAME_CONTROL: u16 = 0x0010;
 const OPEN_SYSTEM_ALGORITHM: u16 = 0;
 const OPEN_SYSTEM_REQUEST_SEQUENCE: u16 = 1;
 const OPEN_SYSTEM_RESPONSE_SEQUENCE: u16 = 2;
 const ASSOCIATION_FIXED_BODY_LEN: usize = 4;
-const ASSOCIATION_CAPABILITY_MASK: u16 = 0x0431;
 const SUPPORTED_RATES_ELEMENT_CAPACITY: usize = 8;
 const SELECTED_RSN_IE_LEN: usize = 22;
 /// The RSN element and, under SAE, an RSNXE of one capability octet.
@@ -102,7 +101,10 @@ pub use management::{
 pub use security::{SelectedRsn, StaSecurityError, select_association_rsn};
 
 pub(crate) fn validate_peer(bssid: [u8; 6]) -> Result<(), StationFrameError> {
-    if bssid == [0; 6] || bssid == [0xff; 6] || bssid[0] & 1 != 0 {
+    if bssid == [0; 6]
+        || bssid == [0xff; 6]
+        || crate::address::AddressFlags::from_bytes([bssid[0]]).group()
+    {
         return Err(StationFrameError::InvalidBssid);
     }
     Ok(())
@@ -144,8 +146,12 @@ struct ReceivedManagementHeader {
     clippy::arithmetic_side_effects
 )]
 fn split_received_management(frame: &[u8]) -> Option<(ReceivedManagementHeader, [u16; 3], &[u8])> {
-    let (header, body) = frame.split_first_chunk::<MANAGEMENT_HEADER_LEN>()?;
-    let (&[f0, f1, f2, f3, f4, f5], rest) = body.split_first_chunk()?;
+    let mut reader = oer_wire::Reader::new(frame);
+    let header = reader.array::<MANAGEMENT_HEADER_LEN>().ok()?;
+    let body = reader.remaining();
+    let mut reader = oer_wire::Reader::new(body);
+    let &[f0, f1, f2, f3, f4, f5] = reader.array().ok()?;
+    let rest = reader.remaining();
     let [
         c0,
         c1,

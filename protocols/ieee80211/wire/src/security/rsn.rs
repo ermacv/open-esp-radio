@@ -34,13 +34,29 @@ pub const RSN_AKM_SAE: u8 = 8;
 /// `00-0F-AC:6`: BIP-CMAC-128, the default group management cipher.
 pub const RSN_CIPHER_BIP_CMAC_128: u8 = 6;
 /// RSN Capabilities: management frame protection required.
-pub const RSN_CAPABILITY_MFPR: u16 = 1 << 6;
+pub const RSN_CAPABILITY_MFPR: u16 = u16::from_le_bytes(
+    RsnCapabilities::from_bytes([0; 2])
+        .with_mfpr(true)
+        .to_bytes(),
+);
 /// RSN Capabilities: management frame protection capable.
-pub const RSN_CAPABILITY_MFPC: u16 = 1 << 7;
+pub const RSN_CAPABILITY_MFPC: u16 = u16::from_le_bytes(
+    RsnCapabilities::from_bytes([0; 2])
+        .with_mfpc(true)
+        .to_bytes(),
+);
 /// RSN Capabilities: signaling-and-payload-protected A-MSDU capable.
-pub const RSN_CAPABILITY_SPP_AMSDU_CAPABLE: u16 = 1 << 10;
+pub const RSN_CAPABILITY_SPP_AMSDU_CAPABLE: u16 = u16::from_le_bytes(
+    RsnCapabilities::from_bytes([0; 2])
+        .with_spp_capable(true)
+        .to_bytes(),
+);
 /// SPP A-MSDU Required; valid only together with SPP A-MSDU Capable.
-pub const RSN_CAPABILITY_SPP_AMSDU_REQUIRED: u16 = 1 << 11;
+pub const RSN_CAPABILITY_SPP_AMSDU_REQUIRED: u16 = u16::from_le_bytes(
+    RsnCapabilities::from_bytes([0; 2])
+        .with_spp_required(true)
+        .to_bytes(),
+);
 /// Length of one PMKID.
 pub const RSN_PMKID_LEN: usize = 16;
 
@@ -146,14 +162,14 @@ impl<'a> RsnElement<'a> {
             return Err(RsnSyntaxError::Malformed);
         }
 
-        let mut reader = Reader { bytes: body };
+        let mut reader = RsnReader(oer_wire::Reader::new(body));
         if reader.u16()? != RSN_VERSION {
             return Err(RsnSyntaxError::UnsupportedVersion);
         }
         let group_data_cipher = reader.suite()?;
         let pairwise_ciphers = reader.suite_list()?;
         let akm_suites = reader.suite_list()?;
-        let capabilities = reader.optional(Reader::u16)?;
+        let capabilities = reader.optional(RsnReader::u16)?;
         let pmkids = reader.optional(|reader| {
             let count = reader.u16()?;
             let length = usize::from(count)
@@ -163,8 +179,8 @@ impl<'a> RsnElement<'a> {
             // this array view is empty by the length calculation above.
             Ok(reader.take(length)?.as_chunks::<RSN_PMKID_LEN>().0)
         })?;
-        let group_management_cipher = reader.optional(Reader::suite)?;
-        if !reader.bytes.is_empty() {
+        let group_management_cipher = reader.optional(RsnReader::suite)?;
+        if !reader.0.is_empty() {
             return Err(RsnSyntaxError::Malformed);
         }
 
@@ -214,35 +230,17 @@ impl<'a> RsnElement<'a> {
     }
 }
 
-struct Reader<'a> {
-    bytes: &'a [u8],
-}
+struct RsnReader<'a>(oer_wire::Reader<'a>);
 
-impl<'a> Reader<'a> {
+impl<'a> RsnReader<'a> {
     fn take(&mut self, length: usize) -> Result<&'a [u8], RsnSyntaxError> {
-        let (taken, rest) = self
-            .bytes
-            .split_at_checked(length)
-            .ok_or(RsnSyntaxError::Malformed)?;
-        self.bytes = rest;
-        Ok(taken)
+        self.0.take(length).map_err(|_| RsnSyntaxError::Malformed)
     }
-
-    fn array<const N: usize>(&mut self) -> Result<&'a [u8; N], RsnSyntaxError> {
-        let (taken, rest) = self
-            .bytes
-            .split_first_chunk::<N>()
-            .ok_or(RsnSyntaxError::Malformed)?;
-        self.bytes = rest;
-        Ok(taken)
-    }
-
     fn u16(&mut self) -> Result<u16, RsnSyntaxError> {
-        Ok(u16::from_le_bytes(*self.array()?))
+        self.0.u16_le().map_err(|_| RsnSyntaxError::Malformed)
     }
-
     fn suite(&mut self) -> Result<[u8; 4], RsnSyntaxError> {
-        Ok(*self.array()?)
+        self.0.read().map_err(|_| RsnSyntaxError::Malformed)
     }
 
     fn suite_list(&mut self) -> Result<RsnSuiteList<'a>, RsnSyntaxError> {
@@ -260,11 +258,32 @@ impl<'a> Reader<'a> {
         &mut self,
         read: impl FnOnce(&mut Self) -> Result<T, RsnSyntaxError>,
     ) -> Result<Option<T>, RsnSyntaxError> {
-        if self.bytes.is_empty() {
+        if self.0.is_empty() {
             Ok(None)
         } else {
             read(self).map(Some)
         }
+    }
+}
+
+oer_wire::bitfield! {
+    /// SOURCE: IEEE Std 802.11-2020, 9.4.2.24 (RSN Capabilities field).
+    pub struct RsnCapabilities[2] (little) {
+        /// SOURCE: IEEE Std 802.11-2020, 9.4.2.24 (RSN Capabilities field).
+        pub mfpr, with_mfpr: bool = 6..7;
+        /// SOURCE: IEEE Std 802.11-2020, 9.4.2.24 (RSN Capabilities field).
+        pub mfpc, with_mfpc: bool = 7..8;
+        /// SOURCE: IEEE Std 802.11-2020, 9.4.2.24 (RSN Capabilities field).
+        pub spp_capable, with_spp_capable: bool = 10..11;
+        /// SOURCE: IEEE Std 802.11-2020, 9.4.2.24 (RSN Capabilities field).
+        pub spp_required, with_spp_required: bool = 11..12;
+    }
+}
+oer_wire::bitfield! {
+    /// SOURCE: IEEE Std 802.11-2020, 9.4.2.241 (RSN Extension element).
+    pub struct RsnExtendedCapabilities[1] (little) {
+        /// SOURCE: IEEE Std 802.11-2020, 9.4.2.241 (RSN Extension element).
+        pub sae_h2e, with_sae_h2e: bool = 5..6;
     }
 }
 

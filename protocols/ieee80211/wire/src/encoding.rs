@@ -54,15 +54,9 @@ impl<'a, I: Clone + Iterator<Item = Fragment<'a>>> FragmentPlan<I> {
     fn write(self, output: &mut [u8]) -> Result<usize, usize> {
         let required = self.length()?;
         let frame = output.get_mut(..required).ok_or(required)?;
-        let mut destination = frame.iter_mut();
+        let mut writer = oer_wire::Writer::new(frame);
         for part in self.0 {
-            for (out, byte) in destination
-                .by_ref()
-                .take(part.bytes().len())
-                .zip(part.bytes())
-            {
-                *out = *byte;
-            }
+            writer.write(part.bytes()).map_err(|_| required)?;
         }
         Ok(frame.len())
     }
@@ -87,9 +81,11 @@ impl<'a> AmsduBody<'a> {
             return Err(AmsduError::Empty);
         }
         for frame in frames {
-            let (_, payload) = frame
-                .split_first_chunk::<ETHERNET_HEADER_LEN>()
-                .ok_or(AmsduError::ShortEthernet)?;
+            let mut reader = oer_wire::Reader::new(frame);
+            let _ = reader
+                .array::<ETHERNET_HEADER_LEN>()
+                .map_err(|_| AmsduError::ShortEthernet)?;
+            let payload = reader.remaining();
             let length = payload
                 .len()
                 .checked_add(LLC_SNAP_HEADER_LEN)
@@ -157,5 +153,18 @@ mod tests {
         assert_eq!(FrameParts(parts).write(&mut output), Ok(10));
         assert_eq!(&output[..10], b"headerbody");
         assert_eq!(&output[10..], &[0xa5; 2]);
+    }
+}
+
+/// Assert an internal encoder invariant after its public boundary has checked
+/// the range. Peer-controlled, unvalidated values must propagate the error.
+#[expect(
+    clippy::panic,
+    reason = "only already-validated encoder values reach this invariant assertion"
+)]
+pub(crate) const fn validated<T: Copy>(result: Result<T, oer_wire::Error>) -> T {
+    match result {
+        Ok(value) => value,
+        Err(_) => panic!("validated wire value must fit its declared field"),
     }
 }

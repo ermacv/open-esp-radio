@@ -22,11 +22,6 @@ const WMM_PARAMETER_SUBTYPE: u8 = 1;
 const WMM_VERSION: u8 = 1;
 pub(crate) const WMM_PARAMETER_ELEMENT_LEN: usize = WMM_PARAMETER_BODY_LEN as usize + 2;
 pub(crate) const WMM_NIBBLE_MAX: u8 = 0x0f;
-const ACI_SHIFT: u32 = 5;
-const ACI_MASK: u8 = 0x03;
-const ADMISSION_CONTROL_MANDATORY: u8 = 0x10;
-const ECW_MAX_SHIFT: u32 = 4;
-const UAPSD: u8 = 0x80;
 const ALL_ACCESS_CATEGORIES: u8 = 0b1111;
 
 /// One four-byte AC Parameter Record from a WMM Parameter Element.
@@ -114,18 +109,12 @@ pub(crate) const fn encode_wmm_parameter_element(
     categories: [WmmAcParameters; 4],
 ) -> [u8; WMM_PARAMETER_ELEMENT_LEN] {
     const fn record(category: WmmAccessCategory, parameters: WmmAcParameters) -> [u8; 4] {
-        let admission = if parameters.admission_control_mandatory {
-            ADMISSION_CONTROL_MANDATORY
-        } else {
-            0
-        };
-        let [low, high] = parameters.txop_limit_units_32_us.to_le_bytes();
-        [
-            ((category as u8) << ACI_SHIFT) | admission | parameters.aifsn,
-            (parameters.ecw_max << ECW_MAX_SHIFT) | parameters.ecw_min,
-            low,
-            high,
-        ]
+        let fields = AcRecord::from_bytes([0; 4]).with_acm(parameters.admission_control_mandatory);
+        let fields = crate::encoding::validated(fields.with_aifsn(parameters.aifsn));
+        let fields = crate::encoding::validated(fields.with_aci(category as u8));
+        let fields = crate::encoding::validated(fields.with_ecw_min(parameters.ecw_min));
+        let fields = crate::encoding::validated(fields.with_ecw_max(parameters.ecw_max));
+        crate::encoding::validated(fields.with_txop(parameters.txop_limit_units_32_us)).to_bytes()
     }
     let [be, bk, vi, vo] = categories;
     let [be0, be1, be2, be3] = record(WmmAccessCategory::BestEffort, be);
@@ -142,7 +131,9 @@ pub(crate) const fn encode_wmm_parameter_element(
         kind,
         WMM_PARAMETER_SUBTYPE,
         WMM_VERSION,
-        parameter_set_count | if uapsd { UAPSD } else { 0 },
+        QosInfo::from_bytes([parameter_set_count])
+            .with_uapsd(uapsd)
+            .to_bytes()[0],
         0, // Reserved octet before the AC records.
         be0,
         be1,
@@ -179,7 +170,8 @@ pub(crate) const fn encode_wmm_parameter_element(
 /// blob's discarded high byte is an implementation limitation, not a
 /// different on-air field.
 pub fn parse_wmm_parameter_element(element: &[u8]) -> Option<WmmParameterSet> {
-    let (fixed, _) = element.split_first_chunk::<WMM_PARAMETER_ELEMENT_LEN>()?;
+    let mut reader = oer_wire::Reader::new(element);
+    let fixed = reader.array::<WMM_PARAMETER_ELEMENT_LEN>().ok()?;
     let &[
         id,
         length,
@@ -206,7 +198,8 @@ pub fn parse_wmm_parameter_element(element: &[u8]) -> Option<WmmParameterSet> {
     let mut access_categories = [WmmAcParameters::default(); 4];
     let mut seen = 0_u8;
     for &[aci_aifsn, ecw, txop_low, txop_high] in records.as_chunks::<4>().0 {
-        let aci = (aci_aifsn >> ACI_SHIFT) & ACI_MASK;
+        let fields = AcRecord::from_bytes([aci_aifsn, ecw, txop_low, txop_high]);
+        let aci = fields.aci();
         let category = WmmAccessCategory::from_aci(aci)?;
         let bit = 1_u8 << aci;
         if seen & bit != 0 {
@@ -214,11 +207,11 @@ pub fn parse_wmm_parameter_element(element: &[u8]) -> Option<WmmParameterSet> {
         }
         seen |= bit;
         *category.select_mut(&mut access_categories) = WmmAcParameters {
-            admission_control_mandatory: aci_aifsn & ADMISSION_CONTROL_MANDATORY != 0,
-            aifsn: aci_aifsn & WMM_NIBBLE_MAX,
-            ecw_min: ecw & WMM_NIBBLE_MAX,
-            ecw_max: ecw >> ECW_MAX_SHIFT,
-            txop_limit_units_32_us: u16::from_le_bytes([txop_low, txop_high]),
+            admission_control_mandatory: fields.acm(),
+            aifsn: fields.aifsn(),
+            ecw_min: fields.ecw_min(),
+            ecw_max: fields.ecw_max(),
+            txop_limit_units_32_us: fields.txop(),
         };
     }
     if seen != ALL_ACCESS_CATEGORIES {
@@ -226,10 +219,37 @@ pub fn parse_wmm_parameter_element(element: &[u8]) -> Option<WmmParameterSet> {
     }
 
     Some(WmmParameterSet {
-        parameter_set_count: qos_info & WMM_NIBBLE_MAX,
-        uapsd: qos_info & UAPSD != 0,
+        parameter_set_count: QosInfo::from_bytes([qos_info]).count(),
+        uapsd: QosInfo::from_bytes([qos_info]).uapsd(),
         access_categories,
     })
+}
+
+oer_wire::bitfield! {
+    /// SOURCE: IEEE Std 802.11-2020, 9.4.2.28 (EDCA Parameter Set element).
+    pub struct AcRecord[4] (little) {
+        /// SOURCE: IEEE Std 802.11-2020, 9.4.2.28 (EDCA Parameter Set element).
+        pub aifsn, with_aifsn: u8 = 0..4;
+        /// SOURCE: IEEE Std 802.11-2020, 9.4.2.28 (EDCA Parameter Set element).
+        pub acm, with_acm: bool = 4..5;
+        /// SOURCE: IEEE Std 802.11-2020, 9.4.2.28 (EDCA Parameter Set element).
+        pub aci, with_aci: u8 = 5..7;
+        /// SOURCE: IEEE Std 802.11-2020, 9.4.2.28 (EDCA Parameter Set element).
+        pub ecw_min, with_ecw_min: u8 = 8..12;
+        /// SOURCE: IEEE Std 802.11-2020, 9.4.2.28 (EDCA Parameter Set element).
+        pub ecw_max, with_ecw_max: u8 = 12..16;
+        /// SOURCE: IEEE Std 802.11-2020, 9.4.2.28 (EDCA Parameter Set element).
+        pub txop, with_txop: u16 = 16..32;
+    }
+}
+oer_wire::bitfield! {
+    /// SOURCE: IEEE Std 802.11-2020, 9.4.1 (QoS Info field).
+    pub struct QosInfo[1] (little) {
+        /// SOURCE: IEEE Std 802.11-2020, 9.4.1 (QoS Info field).
+        pub count, with_count: u8 = 0..4;
+        /// SOURCE: IEEE Std 802.11-2020, 9.4.1 (QoS Info field).
+        pub uapsd, with_uapsd: bool = 7..8;
+    }
 }
 
 #[cfg(test)]

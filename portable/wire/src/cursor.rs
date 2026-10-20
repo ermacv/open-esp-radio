@@ -42,6 +42,36 @@ impl<'a> Reader<'a> {
             Err(error) => Err(error),
         }
     }
+    /// Read a bounded, possibly unaligned little-endian bit span without
+    /// advancing. Variable field placement (for example an HE-SIG-B list) stays
+    /// with the protocol; bit copying belongs to the cursor.
+    #[expect(
+        clippy::indexing_slicing,
+        reason = "the complete bit span is admitted before byte access"
+    )]
+    pub fn bits<const WIDTH: usize>(&self, bit_offset: usize) -> Result<u64, Error> {
+        const {
+            assert!(WIDTH > 0 && WIDTH <= 64);
+        }
+        let required = bit_offset
+            .checked_add(WIDTH)
+            .map(|end| end.div_ceil(8))
+            .ok_or(Error::Truncated {
+                required: usize::MAX,
+                remaining: self.bytes.len(),
+            })?;
+        let complete = self.bytes.get(..required).ok_or(Error::Truncated {
+            required,
+            remaining: self.bytes.len(),
+        })?;
+        let mut result = 0;
+        for bit in 0..WIDTH {
+            let source = bit_offset + bit;
+            result |= u64::from((complete[source / 8] >> (source % 8)) & 1) << bit;
+        }
+        Ok(result)
+    }
+
     pub const fn u8(&mut self) -> Result<u8, Error> {
         match self.read() {
             Ok([value]) => Ok(value),

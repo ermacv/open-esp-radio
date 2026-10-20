@@ -14,9 +14,6 @@ use crate::{
     security::LinkProtection,
 };
 
-const BASIC_RATE_BIT: u8 = 0x80;
-const PRIVACY_CAPABILITY: u16 = 0x0010;
-
 /// The Supported Rates and Extended Supported Rates records of this AP.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct LegacyRates {
@@ -45,7 +42,7 @@ impl LegacyRates {
         self.supported
             .iter()
             .chain(self.extended.iter())
-            .any(|encoded| encoded & !BASIC_RATE_BIT == rate_500kbps)
+            .any(|encoded| crate::phy::SupportedRate::from_bytes([*encoded]).rate() == rate_500kbps)
     }
 }
 
@@ -116,7 +113,11 @@ impl Advertisement {
         capability_information: u16,
     ) -> Option<Self> {
         // Privacy belongs to the security mode: `None` when it is set.
-        if capability_information & PRIVACY_CAPABILITY != 0 {
+        if crate::management::CapabilityInformation::from_bytes(
+            capability_information.to_le_bytes(),
+        )
+        .privacy()
+        {
             return None;
         }
         Some(Self {
@@ -128,11 +129,13 @@ impl Advertisement {
     }
 
     pub const fn capabilities(&self, security: LinkProtection) -> u16 {
-        self.capability_information
-            | match security {
-                LinkProtection::Open => 0,
-                LinkProtection::Ccmp => PRIVACY_CAPABILITY,
-            }
+        u16::from_le_bytes(
+            crate::management::CapabilityInformation::from_bytes(
+                self.capability_information.to_le_bytes(),
+            )
+            .with_privacy(matches!(security, LinkProtection::Ccmp))
+            .to_bytes(),
+        )
     }
 }
 

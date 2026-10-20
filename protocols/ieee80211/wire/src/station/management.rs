@@ -1,6 +1,8 @@
 //! Station authentication, disconnect, deauthentication and action frame
 //! codecs.
 
+use crate::frame::FrameControlFields;
+
 use super::*;
 use crate::address::{Bssid, OwnAddress};
 
@@ -179,7 +181,9 @@ impl StaProtectedManagementFrame<'_> {
         frame.fill(0);
         write_management_header(
             frame,
-            self.subtype.frame_control() | PROTECTED_FRAME,
+            FrameControlFields::from_raw(self.subtype.frame_control())
+                .with_protected(true)
+                .raw(),
             self.bssid.get(),
             self.source.get(),
             self.bssid.get(),
@@ -264,7 +268,8 @@ pub fn parse_sae_authentication(
     bssid: [u8; 6],
 ) -> Option<SaeAuthentication<'_>> {
     let (header, [algorithm, transaction, status_code], body) = split_received_management(frame)?;
-    if header.frame_control & 0x00fc != OPEN_AUTHENTICATION_FRAME_CONTROL
+    if FrameControlFields::from_bytes(header.frame_control.to_le_bytes()).type_and_subtype()
+        != FrameControlFields::from_raw(OPEN_AUTHENTICATION_FRAME_CONTROL as u16).type_and_subtype()
         || header.receiver != local
         || header.transmitter != bssid
         || header.bssid != bssid
@@ -298,7 +303,8 @@ pub fn parse_open_authentication_response(
     bssid: [u8; 6],
 ) -> Option<OpenAuthenticationResponse> {
     let (header, [algorithm, transaction, status_code], _) = split_received_management(frame)?;
-    if header.frame_control & 0x00fc != OPEN_AUTHENTICATION_FRAME_CONTROL
+    if FrameControlFields::from_bytes(header.frame_control.to_le_bytes()).type_and_subtype()
+        != FrameControlFields::from_raw(OPEN_AUTHENTICATION_FRAME_CONTROL as u16).type_and_subtype()
         || header.receiver != local
         || header.transmitter != bssid
         || header.bssid != bssid
@@ -344,7 +350,9 @@ pub fn parse_sta_disconnect(
         || control.ds() != 0
         || control.protected()
         || control.more_fragments()
-        || header.sequence_control() & 15 != 0
+        || crate::sequence::SequenceControl::from_bytes(header.sequence_control().to_le_bytes())
+            .fragment()
+            != 0
         || (header.receiver() != local.get() && header.receiver() != [0xff; 6])
         || header.transmitter() != bssid.get()
         || header.address3() != bssid.get()
@@ -352,12 +360,13 @@ pub fn parse_sta_disconnect(
         return None;
     }
 
-    let kind = match control.get() & 0x00fc {
-        DISASSOCIATION_FRAME_CONTROL => StaDisconnectKind::Disassociation,
-        DEAUTHENTICATION_FRAME_CONTROL => StaDisconnectKind::Deauthentication,
+    let kind = match control.subtype() {
+        10 => StaDisconnectKind::Disassociation,
+        12 => StaDisconnectKind::Deauthentication,
         _ => return None,
     };
-    let (reason_code, _) = header.body().split_first_chunk()?;
+    let mut reader = oer_wire::Reader::new(header.body());
+    let reason_code = reader.array().ok()?;
     Some(StaDisconnect {
         kind,
         reason_code: u16::from_le_bytes(*reason_code),

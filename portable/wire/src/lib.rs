@@ -36,7 +36,8 @@ pub enum Error {
 ///
 /// A field's type is an unsigned integer, `bool` (one bit), or `[EnumName]`.
 /// An enum declaration supplies `from_encoding` and `encoding`; unknown values
-/// retain their complete encoding in `Reserved`. Numeric and enum setters return
+/// retain their complete encoding in `Reserved`. Optional conversion method names
+/// can follow the raw type, as `(from_raw, raw)`. Numeric and enum setters return
 /// `Result<Self, Error>`; a boolean setter is infallible. Invalid declarations
 /// (range, type width, byte order) fail at compile time.
 #[macro_export]
@@ -44,6 +45,16 @@ macro_rules! bitfield {
     ($(#[$meta:meta])* $vis:vis enum $name:ident : $raw:ident {
         $($(#[$variant_meta:meta])* $variant:ident = $value:literal),* $(,)?
     }) => {
+        $crate::bitfield! {
+            $(#[$meta])* $vis enum $name: $raw (from_encoding, encoding) {
+                $($(#[$variant_meta])* $variant = $value,)*
+            }
+        }
+    };
+    ($(#[$meta:meta])* $vis:vis enum $name:ident : $raw:ident ($decode:ident, $encode:ident) {
+        $($(#[$variant_meta:meta])* $variant:ident = $value:literal),* $(,)?
+    }) => {
+        const _: () = { assert!($raw::MIN == 0 && $raw::BITS <= 64); };
         $(#[$meta])*
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         $vis enum $name {
@@ -51,10 +62,11 @@ macro_rules! bitfield {
             Reserved($raw),
         }
         impl $name {
-            pub const fn from_encoding(value: $raw) -> Self {
+            pub const BITS: usize = $raw::BITS as usize;
+            pub const fn $decode(value: $raw) -> Self {
                 match value { $($value => Self::$variant,)* raw => Self::Reserved(raw) }
             }
-            pub const fn encoding(self) -> $raw {
+            pub const fn $encode(self) -> $raw {
                 match self { $(Self::$variant => $value,)* Self::Reserved(raw) => raw }
             }
         }
@@ -64,9 +76,11 @@ macro_rules! bitfield {
     }) => {
         $(#[$meta])*
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        #[repr(transparent)]
         $vis struct $name([u8; $size]);
         const _: () = {
             assert!($size > 0);
+            let _ = $crate::bitfield!(@order $order);
             $(
                 assert!($start < $end && $end <= $size * 8);
                 $crate::bitfield!(@width $ty, $end - $start);
@@ -82,7 +96,7 @@ macro_rules! bitfield {
         }
     };
     (@width bool, $width:expr) => { assert!($width == 1); };
-    (@width [$ty:ident], $width:expr) => { assert!($width <= 64); };
+    (@width [$ty:ident], $width:expr) => { assert!($width <= $ty::BITS); };
     (@width $ty:ident, $width:expr) => {
         assert!($ty::MIN == 0 && $ty::BITS <= 64 && $width <= $ty::BITS as usize);
     };
@@ -93,11 +107,11 @@ macro_rules! bitfield {
         $(#[$meta])*
         $vis const fn $get(self) -> bool {
             const { assert!($start < $end && $end <= $size * 8 && $end - $start == 1); }
-            $crate::__private::get(&self.0, $start, $end, $crate::bitfield!(@order $order)) != 0
+            $crate::__private::get::<$start, $end, {$crate::bitfield!(@order $order)}, $size>(&self.0) != 0
         }
         $vis const fn $set(mut self, value: bool) -> Self {
             const { assert!($start < $end && $end <= $size * 8 && $end - $start == 1); }
-            $crate::__private::set(&mut self.0, $start, $end, value as u64, $crate::bitfield!(@order $order));
+            $crate::__private::set::<$start, $end, {$crate::bitfield!(@order $order)}, $size>(&mut self.0, value as u64);
             self
         }
     };
@@ -106,12 +120,12 @@ macro_rules! bitfield {
         $(#[$meta])*
         $vis const fn $get(self) -> $ty {
             const { assert!($start < $end && $end <= $size * 8 && $end - $start <= 64); }
-            $ty::from_encoding($crate::__private::get(&self.0, $start, $end, $crate::bitfield!(@order $order)) as _)
+            $ty::from_encoding($crate::__private::get::<$start, $end, {$crate::bitfield!(@order $order)}, $size>(&self.0) as _)
         }
         $vis const fn $set(mut self, value: $ty) -> Result<Self, $crate::Error> {
             let raw = value.encoding() as u64;
             if !$crate::__private::fits(raw, $end - $start) { return Err($crate::Error::ValueOutOfRange); }
-            $crate::__private::set(&mut self.0, $start, $end, raw, $crate::bitfield!(@order $order));
+            $crate::__private::set::<$start, $end, {$crate::bitfield!(@order $order)}, $size>(&mut self.0, raw);
             Ok(self)
         }
     };
@@ -120,12 +134,12 @@ macro_rules! bitfield {
         $(#[$meta])*
         $vis const fn $get(self) -> $ty {
             const { assert!($start < $end && $end <= $size * 8 && $end - $start <= $ty::BITS as usize && $ty::MIN == 0); }
-            $crate::__private::get(&self.0, $start, $end, $crate::bitfield!(@order $order)) as $ty
+            $crate::__private::get::<$start, $end, {$crate::bitfield!(@order $order)}, $size>(&self.0) as $ty
         }
         $vis const fn $set(mut self, value: $ty) -> Result<Self, $crate::Error> {
             const { assert!($start < $end && $end <= $size * 8 && $end - $start <= $ty::BITS as usize && $ty::MIN == 0); }
             if !$crate::__private::fits(value as u64, $end - $start) { return Err($crate::Error::ValueOutOfRange); }
-            $crate::__private::set(&mut self.0, $start, $end, value as u64, $crate::bitfield!(@order $order));
+            $crate::__private::set::<$start, $end, {$crate::bitfield!(@order $order)}, $size>(&mut self.0, value as u64);
             Ok(self)
         }
     };
@@ -136,41 +150,90 @@ macro_rules! bitfield {
 #[doc(hidden)]
 pub mod __private {
     pub const fn fits(value: u64, width: usize) -> bool {
-        width == 64 || value < (1_u64 << width)
+        width >= 64 || value < (1_u64 << width)
     }
 
+    #[expect(
+        clippy::indexing_slicing,
+        reason = "const bounds prove START..END belongs to the fixed array"
+    )]
     #[inline(always)]
-    pub const fn get(bytes: &[u8], start: usize, end: usize, little: bool) -> u64 {
+    pub const fn get<const START: usize, const END: usize, const LITTLE: bool, const N: usize>(
+        bytes: &[u8; N],
+    ) -> u64 {
+        const {
+            assert!(START < END && END <= N * 8 && END - START <= 64);
+        }
         let mut result = 0;
-        let mut bit = start;
-        while bit < end {
-            let index = if little {
-                bit / 8
+        let mut bit = START;
+        while bit < END {
+            let index = if LITTLE { bit / 8 } else { N - 1 - bit / 8 };
+            let count = if END - bit < 8 - bit % 8 {
+                END - bit
             } else {
-                bytes.len() - 1 - bit / 8
+                8 - bit % 8
             };
-            result |= (((bytes[index] >> (bit % 8)) & 1) as u64) << (bit - start);
-            bit += 1;
+            let mask = (1_u16 << count) - 1;
+            result |= (((bytes[index] as u16 >> (bit % 8)) & mask) as u64) << (bit - START);
+            bit += count;
         }
         result
     }
 
+    #[expect(
+        clippy::indexing_slicing,
+        reason = "const bounds prove START..END belongs to the fixed array"
+    )]
     #[inline(always)]
-    pub const fn set(bytes: &mut [u8], start: usize, end: usize, value: u64, little: bool) {
-        let mut bit = start;
-        while bit < end {
-            let index = if little {
-                bit / 8
+    pub const fn set<const START: usize, const END: usize, const LITTLE: bool, const N: usize>(
+        bytes: &mut [u8; N],
+        value: u64,
+    ) {
+        const {
+            assert!(START < END && END <= N * 8 && END - START <= 64);
+        }
+        let mut bit = START;
+        while bit < END {
+            let index = if LITTLE { bit / 8 } else { N - 1 - bit / 8 };
+            let count = if END - bit < 8 - bit % 8 {
+                END - bit
             } else {
-                bytes.len() - 1 - bit / 8
+                8 - bit % 8
             };
-            let mask = 1_u8 << (bit % 8);
+            let mask = (((1_u16 << count) - 1) << (bit % 8)) as u8;
             bytes[index] =
-                (bytes[index] & !mask) | ((((value >> (bit - start)) & 1) as u8) << (bit % 8));
-            bit += 1;
+                (bytes[index] & !mask) | (((value >> (bit - START)) as u8) << (bit % 8) & mask);
+            bit += count;
         }
     }
 }
 
 #[cfg(test)]
 mod tests;
+
+/// Invalid wire declarations fail even when no accessor is called.
+///
+/// ```compile_fail
+/// oer_wire::bitfield! { struct Beyond[1] (little) { value, with_value: u16 = 0..9; } }
+/// ```
+/// ```compile_fail
+/// oer_wire::bitfield! { struct TooNarrow[2] (little) { value, with_value: u8 = 0..9; } }
+/// ```
+/// ```compile_fail
+/// oer_wire::bitfield! { struct Boolean[1] (little) { value, with_value: bool = 0..2; } }
+/// ```
+/// ```compile_fail
+/// oer_wire::bitfield! { struct Signed[1] (little) { value, with_value: i8 = 0..7; } }
+/// ```
+/// ```compile_fail
+/// oer_wire::bitfield! { enum Kind: u8 { Data = 1 } }
+/// oer_wire::bitfield! { struct EnumWidth[2] (little) { kind, with_kind: [Kind] = 0..9; } }
+/// ```
+/// ```compile_fail
+/// oer_wire::bitfield! { struct Order[1] (native) { value, with_value: u8 = 0..8; } }
+/// ```
+/// ```compile_fail
+/// oer_wire::bitfield! { struct EmptyField[1] (little) { value, with_value: u8 = 1..1; } }
+/// ```
+#[cfg(doctest)]
+pub struct InvalidDeclarations;

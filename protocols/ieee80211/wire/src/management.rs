@@ -86,5 +86,52 @@ impl ProbeRequest<'_> {
     }
 }
 
+oer_wire::bitfield! {
+    /// SOURCE: IEEE Std 802.11-2020, 9.4.1.4 (Capability Information field).
+    pub struct CapabilityInformation[2] (little) {
+        /// SOURCE: IEEE Std 802.11-2020, 9.4.1.4 (Capability Information field).
+        pub ess, with_ess: bool = 0..1;
+        /// SOURCE: IEEE Std 802.11-2020, 9.4.1.4 (Capability Information field).
+        pub ibss, with_ibss: bool = 1..2;
+        /// SOURCE: IEEE Std 802.11-2020, 9.4.1.4 (Capability Information field).
+        pub cf_pollable, with_cf_pollable: bool = 2..3;
+        /// SOURCE: IEEE Std 802.11-2020, 9.4.1.4 (Capability Information field).
+        pub cf_poll_request, with_cf_poll_request: bool = 3..4;
+        /// SOURCE: IEEE Std 802.11-2020, 9.4.1.4 (Capability Information field).
+        pub privacy, with_privacy: bool = 4..5;
+        /// SOURCE: IEEE Std 802.11-2020, 9.4.1.4 (Capability Information field).
+        pub short_preamble, with_short_preamble: bool = 5..6;
+        /// SOURCE: IEEE Std 802.11-2020, 9.4.1.4 (Capability Information field).
+        pub pbcc, with_pbcc: bool = 6..7;
+        /// SOURCE: IEEE Std 802.11-2020, 9.4.1.4 (Capability Information field).
+        pub channel_agility, with_channel_agility: bool = 7..8;
+        /// SOURCE: IEEE Std 802.11-2020, 9.4.1.4 (Capability Information field).
+        pub spectrum_management, with_spectrum_management: bool = 8..9;
+        /// SOURCE: IEEE Std 802.11-2020, 9.4.1.4 (Capability Information field).
+        pub qos, with_qos: bool = 9..10;
+        /// SOURCE: IEEE Std 802.11-2020, 9.4.1.4 (Capability Information field).
+        pub short_slot, with_short_slot: bool = 10..11;
+        /// SOURCE: IEEE Std 802.11-2020, 9.4.1.4 (Capability Information field).
+        pub apsd, with_apsd: bool = 11..12;
+        /// SOURCE: IEEE Std 802.11-2020, 9.4.1.4 (Capability Information field).
+        pub radio_measurement, with_radio_measurement: bool = 12..13;
+        /// SOURCE: IEEE Std 802.11-2020, 9.4.1.4 (Capability Information field).
+        pub dsss_ofdm, with_dsss_ofdm: bool = 13..14;
+        /// SOURCE: IEEE Std 802.11-2020, 9.4.1.4 (Capability Information field).
+        pub delayed_ba, with_delayed_ba: bool = 14..15;
+        /// SOURCE: IEEE Std 802.11-2020, 9.4.1.4 (Capability Information field).
+        pub immediate_ba, with_immediate_ba: bool = 15..16;
+    }
+}
+oer_wire::bitfield! {
+    /// SOURCE: IEEE Std 802.11-2020, 9.4.1.8 (AID field).
+    pub struct AssociationId[2] (little) {
+        /// SOURCE: IEEE Std 802.11-2020, 9.4.1.8 (AID field).
+        pub aid, with_aid: u16 = 0..14;
+        /// SOURCE: IEEE Std 802.11-2020, 9.4.1.8 (AID field).
+        pub marker, with_marker: u8 = 14..16;
+    }
+}
+
 #[cfg(test)]
 mod tests;

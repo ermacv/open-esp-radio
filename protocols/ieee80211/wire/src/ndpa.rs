@@ -10,12 +10,15 @@
     clippy::arithmetic_side_effects
 )]
 
+use crate::frame::FrameControlFields;
+
 use crate::sequence::SequenceNumber;
 
 const NDPA_FRAME_CONTROL: u16 = 0x0054;
 const NDPA_HEADER_SIZE: usize = 17;
 const HE_STA_INFO_SIZE: usize = 4;
-const HE_MARKER: u8 = 1 << 1;
+#[cfg(test)]
+const HE_MARKER: u8 = NdpaToken::from_bytes([0]).with_he(true).to_bytes()[0];
 const AID11_MASK: u32 = 0x07ff;
 const ACTION_NO_ACK_FRAME_CONTROL: u16 = 0x00e0;
 const MANAGEMENT_HEADER_SIZE: usize = 24;
@@ -67,17 +70,21 @@ pub struct HeNdpa<'a> {
 
 impl<'a> HeNdpa<'a> {
     pub fn parse(mpdu: &'a [u8]) -> Result<Self, HeNdpaError> {
-        let (header, stations) = mpdu
-            .split_first_chunk::<NDPA_HEADER_SIZE>()
-            .ok_or(HeNdpaError::TooShort)?;
+        let mut reader = oer_wire::Reader::new(mpdu);
+        let header = reader
+            .array::<NDPA_HEADER_SIZE>()
+            .map_err(|_| HeNdpaError::TooShort)?;
+        let stations = reader.remaining();
         if stations.len() < HE_STA_INFO_SIZE {
             return Err(HeNdpaError::TooShort);
         }
         let frame_control = u16::from_le_bytes([header[0], header[1]]);
-        if frame_control & 0x00fc != NDPA_FRAME_CONTROL {
+        if FrameControlFields::from_raw(frame_control).type_and_subtype()
+            != FrameControlFields::from_raw(NDPA_FRAME_CONTROL as u16).type_and_subtype()
+        {
             return Err(HeNdpaError::NotNdpa);
         }
-        if header[16] & HE_MARKER == 0 {
+        if !NdpaToken::from_bytes([header[16]]).he() {
             return Err(HeNdpaError::NotHe);
         }
         if !stations.len().is_multiple_of(HE_STA_INFO_SIZE) {
@@ -104,7 +111,7 @@ impl<'a> HeNdpa<'a> {
 
     /// Six-bit sounding-dialog token decoded by the complete blob leaf.
     pub const fn dialog_token(self) -> u8 {
-        (self.header[16] >> 2) & 0x3f
+        NdpaToken::from_bytes([self.header[16]]).token()
     }
 
     pub fn stations(self) -> HeNdpaStationIterator<'a> {
@@ -134,7 +141,7 @@ pub struct HeNdpaStationInfo {
 
 impl HeNdpaStationInfo {
     pub const fn association_id(self) -> u16 {
-        (self.raw & AID11_MASK) as u16
+        NdpaStationFields::from_bytes(self.raw.to_le_bytes()).association_id()
     }
 
     pub const fn raw(self) -> u32 {
@@ -142,27 +149,27 @@ impl HeNdpaStationInfo {
     }
 
     pub const fn resource_unit_start_index(self) -> u8 {
-        ((self.raw >> 11) & 0x7f) as u8
+        NdpaStationFields::from_bytes(self.raw.to_le_bytes()).resource_unit_start_index()
     }
 
     pub const fn resource_unit_end_index(self) -> u8 {
-        ((self.raw >> 18) & 0x7f) as u8
+        NdpaStationFields::from_bytes(self.raw.to_le_bytes()).resource_unit_end_index()
     }
 
     pub const fn feedback_type_and_ng_encoding(self) -> u8 {
-        ((self.raw >> 25) & 0x03) as u8
+        NdpaStationFields::from_bytes(self.raw.to_le_bytes()).feedback_type_and_ng_encoding()
     }
 
     pub const fn disambiguation(self) -> bool {
-        self.raw & (1 << 27) != 0
+        NdpaStationFields::from_bytes(self.raw.to_le_bytes()).disambiguation()
     }
 
     pub const fn codebook_size(self) -> bool {
-        self.raw & (1 << 28) != 0
+        NdpaStationFields::from_bytes(self.raw.to_le_bytes()).codebook_size()
     }
 
     pub const fn nc_encoding(self) -> u8 {
-        ((self.raw >> 29) & 0x07) as u8
+        NdpaStationFields::from_bytes(self.raw.to_le_bytes()).nc_encoding()
     }
 }
 
@@ -201,13 +208,21 @@ impl HeNdpaStationEncoding {
         if self.nc_encoding > 0x07 {
             return Err(HeNdpaEncodingError::NcOutOfRange);
         }
-        Ok(self.association_id as u32
-            | ((self.resource_unit_start_index as u32) << 11)
-            | ((self.resource_unit_end_index as u32) << 18)
-            | ((self.feedback_type_and_ng_encoding as u32) << 25)
-            | ((self.disambiguation as u32) << 27)
-            | ((self.codebook_size as u32) << 28)
-            | ((self.nc_encoding as u32) << 29))
+        let mut fields = NdpaStationFields::from_bytes([0; 4]);
+        fields = crate::encoding::validated(fields.with_association_id(self.association_id));
+        fields = crate::encoding::validated(
+            fields.with_resource_unit_start_index(self.resource_unit_start_index),
+        );
+        fields = crate::encoding::validated(
+            fields.with_resource_unit_end_index(self.resource_unit_end_index),
+        );
+        fields = crate::encoding::validated(
+            fields.with_feedback_type_and_ng_encoding(self.feedback_type_and_ng_encoding),
+        );
+        fields = fields.with_disambiguation(self.disambiguation);
+        fields = fields.with_codebook_size(self.codebook_size);
+        fields = crate::encoding::validated(fields.with_nc_encoding(self.nc_encoding));
+        Ok(u32::from_le_bytes(fields.to_bytes()))
     }
 }
 
@@ -246,7 +261,12 @@ impl HeNdpaEncoding<'_> {
             &self.duration.to_le_bytes(),
             &self.receiver_address,
             &self.transmitter_address,
-            &[(self.dialog_token << 2) | HE_MARKER],
+            &[crate::encoding::validated(
+                NdpaToken::from_bytes([0])
+                    .with_he(true)
+                    .with_token(self.dialog_token),
+            )
+            .to_bytes()[0]],
         ];
         for (out, byte) in head.iter_mut().zip(header.into_iter().flatten()) {
             *out = *byte;
@@ -267,7 +287,9 @@ impl Iterator for HeNdpaStationIterator<'_> {
     type Item = HeNdpaStationInfo;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let (word, rest) = self.remaining.split_first_chunk::<HE_STA_INFO_SIZE>()?;
+        let mut reader = oer_wire::Reader::new(self.remaining);
+        let word = reader.array::<HE_STA_INFO_SIZE>().ok()?;
+        let rest = reader.remaining();
         self.remaining = rest;
         Some(HeNdpaStationInfo {
             raw: u32::from_le_bytes(*word),
@@ -298,20 +320,33 @@ pub struct HeCompressedBeamformingReport<'a> {
 }
 
 impl<'a> HeCompressedBeamformingReport<'a> {
+    const fn control_fields(self) -> MimoControlFields {
+        let [c0, c1, c2, c3, c4, _, _, _] = self.mimo_control.to_le_bytes();
+        MimoControlFields::from_bytes([c0, c1, c2, c3, c4])
+    }
+
     pub fn parse(mpdu: &'a [u8]) -> Result<Self, HeCompressedBeamformingReportError> {
-        let (fixed, rest) = mpdu
-            .split_first_chunk::<REPORT_FIXED_SIZE>()
-            .ok_or(HeCompressedBeamformingReportError::TooShort)?;
-        let (header, action) = fixed
-            .split_first_chunk::<MANAGEMENT_HEADER_SIZE>()
-            .ok_or(HeCompressedBeamformingReportError::TooShort)?;
+        let mut reader = oer_wire::Reader::new(mpdu);
+        let fixed = reader
+            .array::<REPORT_FIXED_SIZE>()
+            .map_err(|_| HeCompressedBeamformingReportError::TooShort)?;
+        let rest = reader.remaining();
+        let mut reader = oer_wire::Reader::new(fixed);
+        let header = reader
+            .array::<MANAGEMENT_HEADER_SIZE>()
+            .map_err(|_| HeCompressedBeamformingReportError::TooShort)?;
+        let action = reader.remaining();
         let frame_control = u16::from_le_bytes([header[0], header[1]]);
-        if frame_control & 0x00fc != ACTION_NO_ACK_FRAME_CONTROL {
+        if FrameControlFields::from_raw(frame_control).type_and_subtype()
+            != FrameControlFields::from_raw(ACTION_NO_ACK_FRAME_CONTROL as u16).type_and_subtype()
+        {
             return Err(HeCompressedBeamformingReportError::NotActionNoAck);
         }
-        let (&[category, action], control) = action
-            .split_first_chunk::<2>()
-            .ok_or(HeCompressedBeamformingReportError::TooShort)?;
+        let mut reader = oer_wire::Reader::new(action);
+        let &[category, action] = reader
+            .array::<2>()
+            .map_err(|_| HeCompressedBeamformingReportError::TooShort)?;
+        let control = reader.remaining();
         let [c0, c1, c2, c3, c4] = *control
             .first_chunk::<HE_MIMO_CONTROL_SIZE>()
             .ok_or(HeCompressedBeamformingReportError::TooShort)?;
@@ -319,10 +354,14 @@ impl<'a> HeCompressedBeamformingReport<'a> {
             return Err(HeCompressedBeamformingReportError::NotHeCompressedBeamformingAndCqi);
         }
         let mimo_control = u64::from_le_bytes([c0, c1, c2, c3, c4, 0, 0, 0]);
-        let average_snr_len = ((mimo_control & 0x07) as usize).saturating_add(1);
-        let (average_snr, feedback_matrices) = rest
-            .split_at_checked(average_snr_len)
-            .ok_or(HeCompressedBeamformingReportError::MissingAverageSnr)?;
+        let average_snr_len = (MimoControlFields::from_bytes([c0, c1, c2, c3, c4]).columns()
+            as usize)
+            .saturating_add(1);
+        let mut reader = oer_wire::Reader::new(rest);
+        let average_snr = reader
+            .take(average_snr_len)
+            .map_err(|_| HeCompressedBeamformingReportError::MissingAverageSnr)?;
+        let feedback_matrices = reader.remaining();
         Ok(Self {
             header,
             mimo_control,
@@ -351,51 +390,51 @@ impl<'a> HeCompressedBeamformingReport<'a> {
     }
 
     pub const fn column_count(self) -> u8 {
-        ((self.mimo_control & 0x07) as u8).saturating_add(1)
+        (self.control_fields().columns()).saturating_add(1)
     }
 
     pub const fn row_count(self) -> u8 {
-        (((self.mimo_control >> 3) & 0x07) as u8).saturating_add(1)
+        (self.control_fields().rows()).saturating_add(1)
     }
 
     pub const fn bandwidth_encoding(self) -> u8 {
-        ((self.mimo_control >> 6) & 0x03) as u8
+        self.control_fields().bandwidth_encoding()
     }
 
     pub const fn grouping(self) -> bool {
-        self.mimo_control & (1 << 8) != 0
+        self.control_fields().grouping()
     }
 
     pub const fn codebook_information(self) -> bool {
-        self.mimo_control & (1 << 9) != 0
+        self.control_fields().codebook_information()
     }
 
     pub const fn feedback_type_encoding(self) -> u8 {
-        ((self.mimo_control >> 10) & 0x03) as u8
+        self.control_fields().feedback_type_encoding()
     }
 
     pub const fn remaining_feedback_segments(self) -> u8 {
-        ((self.mimo_control >> 12) & 0x07) as u8
+        self.control_fields().remaining_feedback_segments()
     }
 
     pub const fn first_feedback_segment(self) -> bool {
-        self.mimo_control & (1 << 15) != 0
+        self.control_fields().first_feedback_segment()
     }
 
     pub const fn resource_unit_start_index(self) -> u8 {
-        ((self.mimo_control >> 16) & 0x7f) as u8
+        self.control_fields().resource_unit_start_index()
     }
 
     pub const fn resource_unit_end_index(self) -> u8 {
-        ((self.mimo_control >> 23) & 0x7f) as u8
+        self.control_fields().resource_unit_end_index()
     }
 
     pub const fn sounding_dialog_token(self) -> u8 {
-        ((self.mimo_control >> 30) & 0x3f) as u8
+        self.control_fields().sounding_dialog_token()
     }
 
     pub const fn reserved(self) -> u8 {
-        ((self.mimo_control >> 36) & 0x0f) as u8
+        self.control_fields().reserved()
     }
 
     pub fn average_snr(self) -> &'a [u8] {
@@ -404,6 +443,64 @@ impl<'a> HeCompressedBeamformingReport<'a> {
 
     pub fn feedback_matrices(self) -> &'a [u8] {
         self.feedback_matrices
+    }
+}
+
+oer_wire::bitfield! {
+    /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.19 (NDP Announcement frame).
+    pub struct NdpaStationFields[4] (little) {
+        /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.19 (NDP Announcement frame).
+        pub association_id, with_association_id: u16 = 0..11;
+        /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.19 (NDP Announcement frame).
+        pub resource_unit_start_index, with_resource_unit_start_index: u8 = 11..18;
+        /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.19 (NDP Announcement frame).
+        pub resource_unit_end_index, with_resource_unit_end_index: u8 = 18..25;
+        /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.19 (NDP Announcement frame).
+        pub feedback_type_and_ng_encoding, with_feedback_type_and_ng_encoding: u8 = 25..27;
+        /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.19 (NDP Announcement frame).
+        pub disambiguation, with_disambiguation: bool = 27..28;
+        /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.19 (NDP Announcement frame).
+        pub codebook_size, with_codebook_size: bool = 28..29;
+        /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.19 (NDP Announcement frame).
+        pub nc_encoding, with_nc_encoding: u8 = 29..32;
+    }
+}
+oer_wire::bitfield! {
+    /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.19 (Sounding Dialog Token field).
+    pub struct NdpaToken[1] (little) {
+        /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.19 (Sounding Dialog Token field).
+        pub he, with_he: bool = 1..2;
+        /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.19 (Sounding Dialog Token field).
+        pub token, with_token: u8 = 2..8;
+    }
+}
+oer_wire::bitfield! {
+    /// SOURCE: IEEE Std 802.11ax-2021, 9.4.1.64 (HE MIMO Control field).
+    pub struct MimoControlFields[5] (little) {
+        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.1.64 (HE MIMO Control field).
+        pub columns, with_columns: u8 = 0..3;
+        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.1.64 (HE MIMO Control field).
+        pub rows, with_rows: u8 = 3..6;
+        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.1.64 (HE MIMO Control field).
+        pub bandwidth_encoding, with_bandwidth_encoding: u8 = 6..8;
+        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.1.64 (HE MIMO Control field).
+        pub grouping, with_grouping: bool = 8..9;
+        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.1.64 (HE MIMO Control field).
+        pub codebook_information, with_codebook_information: bool = 9..10;
+        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.1.64 (HE MIMO Control field).
+        pub feedback_type_encoding, with_feedback_type_encoding: u8 = 10..12;
+        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.1.64 (HE MIMO Control field).
+        pub remaining_feedback_segments, with_remaining_feedback_segments: u8 = 12..15;
+        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.1.64 (HE MIMO Control field).
+        pub first_feedback_segment, with_first_feedback_segment: bool = 15..16;
+        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.1.64 (HE MIMO Control field).
+        pub resource_unit_start_index, with_resource_unit_start_index: u8 = 16..23;
+        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.1.64 (HE MIMO Control field).
+        pub resource_unit_end_index, with_resource_unit_end_index: u8 = 23..30;
+        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.1.64 (HE MIMO Control field).
+        pub sounding_dialog_token, with_sounding_dialog_token: u8 = 30..36;
+        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.1.64 (HE MIMO Control field).
+        pub reserved, with_reserved: u8 = 36..40;
     }
 }
 

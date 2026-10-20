@@ -51,7 +51,7 @@ fn byte_order_boolean_and_full_width_fields_round_trip() {
     assert!(original.flag());
     for value in 0..2048 {
         let changed = original.with_value(value).expect("eleven bits");
-        assert_eq!(changed.value(), value);
+        assert_eq!(Big::from_bytes(changed.to_bytes()).value(), value);
         assert_eq!(changed.prefix(), 10);
         assert!(!changed.with_flag(false).flag());
         assert_eq!(changed.with_prefix(3).expect("prefix").prefix(), 3);
@@ -60,6 +60,7 @@ fn byte_order_boolean_and_full_width_fields_round_trip() {
     assert_eq!(
         Full::from_bytes([0; 8])
             .with_value(u64::MAX)
+            .map(|field| Full::from_bytes(field.to_bytes()))
             .expect("full width")
             .value(),
         u64::MAX
@@ -70,7 +71,12 @@ fn byte_order_boolean_and_full_width_fields_round_trip() {
 fn unknown_enum_values_survive_and_cannot_escape_the_field() {
     for byte in 0..=u8::MAX {
         let original = Control::from_bytes([byte]);
-        assert_eq!(original.with_kind(original.kind()), Ok(original));
+        assert_eq!(
+            original
+                .with_kind(original.kind())
+                .map(|field| field.to_bytes()),
+            Ok(original.to_bytes())
+        );
     }
     assert_eq!(Control::from_bytes([12]).kind(), Kind::Reserved(3));
     assert!(
@@ -101,4 +107,40 @@ fn cursors_do_not_advance_or_write_on_failure() {
     writer.u16_le(0x5678).expect("capacity");
     assert_eq!(writer.written(), 5);
     assert_eq!(bytes, [0x12, 0x34, 9, 0x78, 0x56]);
+}
+
+crate::bitfield! {
+    struct Span[9] (little) {
+        value, with_value: u64 = 7..71;
+    }
+}
+
+#[test]
+fn a_full_width_field_can_cross_nine_octets() {
+    let original = Span::from_bytes([0xa5; 9]);
+    for value in [0, 1, 0x0123_4567_89ab_cdef, u64::MAX] {
+        let changed = original.with_value(value).expect("full width");
+        assert_eq!(changed.value(), value);
+        let bytes = changed.to_bytes();
+        assert_eq!(bytes[0] % 128, original.to_bytes()[0] % 128);
+        assert_eq!(bytes[8] / 128, original.to_bytes()[8] / 128);
+        assert_eq!(Reader::new(&bytes).bits::<64>(7), Ok(value));
+    }
+}
+
+#[test]
+fn bit_spans_reject_truncation_and_overflow_without_moving() {
+    let bytes = [0x96, 0x35, 0xe2, 0x71];
+    let mut reader = Reader::new(&bytes);
+    assert_eq!(reader.bits::<8>(4), Ok(0x59));
+    assert!(reader.bits::<21>(12).is_err());
+    assert!(reader.bits::<1>(usize::MAX).is_err());
+    assert_eq!(reader.read::<4>(), Ok(bytes));
+    assert_eq!(
+        Reader::new(&[]).bits::<1>(0),
+        Err(Error::Truncated {
+            required: 1,
+            remaining: 0
+        })
+    );
 }

@@ -47,7 +47,9 @@ pub enum HtSecondaryChannel {
 /// `libpp.a[hal_mac_ctl.o]::hal_he_set_default_pe`.
 pub fn he_default_packet_extension_duration(he_operation_ie: &[u8]) -> Option<u8> {
     match *he_operation_ie {
-        [255, _, HE_OPERATION_EXTENSION_ID, parameters, ..] => Some(parameters & 0x07),
+        [255, _, HE_OPERATION_EXTENSION_ID, parameters, ..] => {
+            Some(crate::he::HeOperationFields::from_bytes([parameters, 0, 0, 0, 0, 0]).default_pe())
+        }
         _ => None,
     }
 }
@@ -60,7 +62,9 @@ pub fn he_default_packet_extension_duration(he_operation_ie: &[u8]) -> Option<u8
 /// peer-state bit 10 and passes it unchanged to `hal_he_set_ersu`.
 pub fn he_extended_range_single_user_disabled(he_operation_ie: &[u8]) -> Option<bool> {
     match *he_operation_ie {
-        [255, _, HE_OPERATION_EXTENSION_ID, _, _, parameters, ..] => Some(parameters & 0x01 != 0),
+        [255, _, HE_OPERATION_EXTENSION_ID, _, _, parameters, ..] => Some(
+            crate::he::HeOperationFields::from_bytes([0, 0, parameters, 0, 0, 0]).er_su_disabled(),
+        ),
         _ => None,
     }
 }
@@ -235,7 +239,7 @@ impl ScanRecord {
     /// 20 MHz HT channel.
     pub fn supports_ht_short_guard_interval_20mhz(&self) -> bool {
         self.ht_capability_ie_bytes().is_some_and(|capability| {
-            u16::from_le_bytes([capability[2], capability[3]]) & (1 << 5) != 0
+            crate::ht::HtCapabilityInfo::from_bytes([capability[2], capability[3]]).short_gi20()
         })
     }
 
@@ -243,7 +247,7 @@ impl ScanRecord {
     /// 40 MHz HT channel.
     pub fn supports_ht_short_guard_interval_40mhz(&self) -> bool {
         self.ht_capability_ie_bytes().is_some_and(|capability| {
-            u16::from_le_bytes([capability[2], capability[3]]) & (1 << 6) != 0
+            crate::ht::HtCapabilityInfo::from_bytes([capability[2], capability[3]]).short_gi40()
         })
     }
 
@@ -263,13 +267,13 @@ impl ScanRecord {
         let capability = self.ht_capability_ie_bytes()?;
         let operation = self.ht_operation_ie_bytes()?;
         let capability_info = u16::from_le_bytes([capability[2], capability[3]]);
-        if capability_info & (1 << 1) == 0
+        if !crate::ht::HtCapabilityInfo::from_bytes(capability_info.to_le_bytes()).width40()
             || operation[2] != self.channel
-            || operation[3] & (1 << 2) == 0
+            || !crate::ht::HtOperationInfo::from_bytes([operation[3]]).width40()
         {
             return None;
         }
-        match operation[3] & 0x03 {
+        match crate::ht::HtOperationInfo::from_bytes([operation[3]]).secondary() {
             1 if self.channel <= 9 => Some(HtSecondaryChannel::Above),
             3 if self.channel >= 5 => Some(HtSecondaryChannel::Below),
             _ => None,
@@ -379,7 +383,9 @@ pub fn parse_management(frame: &[u8], fallback_channel: u8, rssi: i8) -> Option<
     if control.is_data() || !matches!(control.subtype(), 5 | 8) {
         return None;
     }
-    let (fixed, mut elements) = header.body().split_first_chunk::<12>()?;
+    let mut reader = oer_wire::Reader::new(header.body());
+    let fixed = reader.array::<12>().ok()?;
+    let mut elements = oer_wire::Reader::new(reader.remaining());
     let [t0, t1, t2, t3, t4, t5, t6, t7, i0, i1, c0, c1] = *fixed;
     let [b0, b1, b2, b3, b4, b5] = header.address3();
 
@@ -389,15 +395,16 @@ pub fn parse_management(frame: &[u8], fallback_channel: u8, rssi: i8) -> Option<
         crate::tsf::TsfInstant::from_micros(u64::from_le_bytes([t0, t1, t2, t3, t4, t5, t6, t7]));
     record.beacon_interval_tu = u16::from_le_bytes([i0, i1]);
     record.capability_info = u16::from_le_bytes([c0, c1]);
-    record.privacy = record.capability_info & 0x0010 != 0;
+    record.privacy =
+        crate::management::CapabilityInformation::from_bytes(record.capability_info.to_le_bytes())
+            .privacy();
 
-    while let Some((&element_header, rest)) = elements.split_first_chunk::<2>() {
+    while let Ok(&element_header) = elements.array::<2>() {
         let [id, length] = element_header;
-        let Some((value, rest)) = rest.split_at_checked(usize::from(length)) else {
+        let Ok(value) = elements.take(usize::from(length)) else {
             record.information_elements_truncated = true;
             break;
         };
-        elements = rest;
         match (id, value) {
             (0, _) => {
                 if let Some(length) = store_value(&mut record.ssid, value) {
