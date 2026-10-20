@@ -112,9 +112,6 @@ not enable the policy.
 - **SAE H2E ignores the Rejected Groups salt.** `sae.rs::SaeCommit::process`
   always derives the keyseed with a zero salt; `rejected_groups` is only
   parsed. H2E with a rejected group does not interoperate.
-- **Self-generated CCMP fixtures only** (`ccmp_mpdu/test_vector.rs`): no
-  IEEE 802.11-2020 Annex J CCMP vector, no hostap `wlantest` QoS or
-  4-address vector.
 - **Non-constant-time comparison** of IGTK material in
   `bip.rs::BipReceiver::rekey`; `akm.rs` still builds the KCK MAC with
   `new_from_slice(..).expect`.
