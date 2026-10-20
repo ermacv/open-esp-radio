@@ -26,7 +26,7 @@ impl oer_time::Clock for Unread {
     }
 }
 
-fn settle() -> Settle<'static> {
+fn settle() -> Settle<'static, Unread> {
     Settle::new(crate::scheduler::DIAGNOSTIC_SETTLE, &Unread)
 }
 
@@ -108,10 +108,10 @@ impl SchedulerHardwareBackend for Recorder {
     fn clear_skip(&mut self, (): ()) {
         self.calls.push(Call::Action(Action::ClearSkip));
     }
-    fn observe(
+    fn observe<C: oer_time::Clock + ?Sized>(
         &mut self,
         wait: SchedulerWait,
-        _settle: Settle<'_>,
+        _settle: Settle<'_, C>,
         _lock: Option<&mut ()>,
         _modify: Option<&mut ()>,
         _cancellation: Option<&mut ()>,

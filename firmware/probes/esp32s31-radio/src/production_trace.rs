@@ -105,6 +105,7 @@ oer_probe_macros::probe! {
         let mut phy = lease.phy_hal();
         embassy_futures::block_on(oer_esp32s31_phy::target_port::rfpll::search::<
             RfpllTraceDelay,
+            _,
         >(&TraceTimer::observations(), &mut phy))
         .map_or(i32::MIN, |outcome| i32::from(outcome.delta()))
     }
@@ -148,6 +149,7 @@ oer_probe_macros::probe! {
         let mut phy = lease.phy_hal();
         embassy_futures::block_on(oer_esp32s31_phy::target_port::rfpll::maintain::<
             RfpllTraceDelay,
+            _,
         >(&TraceTimer::observations(), &mut phy, channel))
         .map_or(i32::MIN, |outcome| i32::from(outcome.search.delta()))
     }
@@ -180,6 +182,7 @@ oer_probe_macros::probe! {
         };
         embassy_futures::block_on(oer_esp32s31_phy::target_port::rfpll::track::<
             RfpllTraceDelay,
+            _,
         >(&TraceTimer::observations(), &mut crate::shared_phy(registers), request))
         .map_or(i32::MIN, |outcome| {
             let performed = outcome.correction.is_some();
@@ -475,6 +478,7 @@ oer_probe_macros::probe! {
         let result = oer_esp32s31_phy::target_port::calibration::clear_pbus::<
             RfpllTraceDelay,
             _,
+            _,
         >(&TraceTimer::observations(), child, registers, &mut observer);
         // Distinguish an actual bounded hardware timeout from a binding or
         // executor failure, so the fault scenario cannot accept either by mistake.
@@ -525,12 +529,14 @@ oer_probe_macros::probe! {
             let completion = calibration::clear_pbus::<
                 RfpllTraceDelay,
                 _,
+                _,
             >(&TraceTimer::observations(), child, registers, &mut observer)
             .map_err(|_| 2u32)?;
             parent.advance(completion).map_err(|_| 3u32)?;
             let child = parent.begin_dcode().map_err(|_| 4u32)?;
             let completion = calibration::dcode::<
                 RfpllTraceDelay,
+                _,
                 _,
             >(&TraceTimer::observations(), child, &mut (), registers, |_| {})
             .map_err(|error| match error {
@@ -604,6 +610,7 @@ oer_probe_macros::probe! {
         };
         match oer_esp32s31_phy::target_port::calibration::rx_gain_init::<
             oer_esp32s31_phy::RomShortDelay,
+            _,
             _,
         >(&TraceTimer::observations(), &mut child, &mut (), &mut phy, |_, _| {}, |_| {})
         {

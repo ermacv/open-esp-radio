@@ -816,9 +816,12 @@ impl PhyRxGainInitTransition {
     /// through the action/binding ABI.
     #[cfg(target_arch = "riscv32")]
     #[inline(never)]
-    pub(crate) fn execute_publish_target_direct<D: crate::executor::wait::PhyShortDelay>(
+    pub(crate) fn execute_publish_target_direct<
+        D: crate::executor::wait::PhyShortDelay,
+        C: oer_time::Clock + ?Sized,
+    >(
         &mut self,
-        clock: &dyn oer_time::Clock,
+        clock: &C,
         registers: &mut impl oer_esp32s31_hal::owner::SharedPhyContext,
     ) -> Result<bool, crate::target_executor::PhyTargetPortError> {
         let parameters = match &self.step {

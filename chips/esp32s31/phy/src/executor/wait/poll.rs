@@ -15,8 +15,8 @@ const OBSERVATION_SETTLE_LIMIT: SettleLimit = match SettleLimit::new(Duration::f
 /// Observe until `attempt` yields a value or [`OBSERVATION_SETTLE_LIMIT`] has
 /// passed on `clock`; the first observation always runs.
 #[inline]
-pub(crate) fn settled<T>(
-    clock: &dyn Clock,
+pub(crate) fn settled<T, C: Clock + ?Sized>(
+    clock: &C,
     attempt: impl FnMut() -> Option<T>,
 ) -> Result<T, Unsettled> {
     settle::settle(Settle::new(OBSERVATION_SETTLE_LIMIT, clock), attempt)
@@ -26,8 +26,8 @@ pub(crate) fn settled<T>(
 /// caller's clock. W2 on s31-a measured a worst direct edge of 2,976 cycles
 /// at 160 MHz (18.6 µs); status sampling has no minimum delay.
 #[inline]
-pub(crate) fn bounded<E>(
-    clock: &dyn Clock,
+pub(crate) fn bounded<E, C: Clock + ?Sized>(
+    clock: &C,
     mut observe: impl FnMut() -> Result<bool, E>,
 ) -> Result<bool, E> {
     match settled(clock, || match observe() {
@@ -82,7 +82,7 @@ mod tests {
         let clock = VirtualClock::default();
         let mut reads = 0;
         assert_eq!(
-            bounded::<()>(&clock, || {
+            bounded::<(), _>(&clock, || {
                 reads += 1;
                 read_step(&clock, 6);
                 Ok(false)
@@ -90,7 +90,7 @@ mod tests {
             Ok(false)
         );
         assert_eq!(reads, 4);
-        assert_eq!(bounded::<()>(&clock, || Ok(true)), Ok(true));
+        assert_eq!(bounded::<(), _>(&clock, || Ok(true)), Ok(true));
         assert_eq!(bounded(&clock, || Err("hardware")), Err("hardware"));
     }
 }

@@ -33,15 +33,22 @@ impl SettleLimit {
 
 /// One settle: its limit and the clock that measures it.
 /// The caller's clock type is preserved through the wait.
-#[derive(Clone, Copy)]
-pub struct Settle<'clock> {
+pub struct Settle<'clock, C: Clock + ?Sized> {
     limit: SettleLimit,
-    clock: &'clock dyn Clock,
+    clock: &'clock C,
 }
 
-impl<'clock> Settle<'clock> {
+impl<C: Clock + ?Sized> Clone for Settle<'_, C> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<C: Clock + ?Sized> Copy for Settle<'_, C> {}
+
+impl<'clock, C: Clock + ?Sized> Settle<'clock, C> {
     /// Settle within `limit` as `clock` measures it.
-    pub const fn new(limit: SettleLimit, clock: &'clock dyn Clock) -> Self {
+    pub const fn new(limit: SettleLimit, clock: &'clock C) -> Self {
         Self { limit, clock }
     }
 
@@ -51,7 +58,7 @@ impl<'clock> Settle<'clock> {
     }
 }
 
-impl core::fmt::Debug for Settle<'_> {
+impl<C: Clock + ?Sized> core::fmt::Debug for Settle<'_, C> {
     fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         formatter
             .debug_struct("Settle")
@@ -66,8 +73,8 @@ pub struct Unsettled;
 
 /// Repeat `attempt` until it yields a value or the settle's limit has
 /// passed; the first attempt always runs.
-pub fn settle<T>(
-    settle: Settle<'_>,
+pub fn settle<C: Clock + ?Sized, T>(
+    settle: Settle<'_, C>,
     mut attempt: impl FnMut() -> Option<T>,
 ) -> Result<T, Unsettled> {
     let start = settle.clock.now();

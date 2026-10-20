@@ -7,8 +7,8 @@
 /// Execute the shipping wake-path I2C reset, including its finite completion bound.
 /// The caller retains the shared PHY owner; no hardware state is fabricated here.
 #[cfg(target_arch = "riscv32")]
-pub fn reset_i2c_master(
-    clock: &dyn oer_time::Clock,
+pub fn reset_i2c_master<C: oer_time::Clock + ?Sized>(
+    clock: &C,
     platform: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
 ) -> Result<(), crate::PhyTargetPortError> {
     crate::target_port::reset_wake_i2c_master(clock, platform)

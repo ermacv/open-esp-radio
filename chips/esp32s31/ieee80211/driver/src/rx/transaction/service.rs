@@ -32,6 +32,7 @@ pub fn service<
     const DMA_BUFFER_SIZE: usize,
     const DMA_STORAGE_SIZE: usize,
     S: oer_esp32s31_hal::ieee80211::dma::space::DmaSpace,
+    K: oer_time::Clock + ?Sized,
 >(
     ring: &mut RxRingLive<'storage, COUNT>,
     storage: &'static RxDmaStorage<COUNT, DMA_BUFFER_SIZE, DMA_STORAGE_SIZE, S>,
@@ -41,7 +42,7 @@ pub fn service<
     counters: Counters<'_>,
     hardware: &mut H,
     buffer_full: &mut C,
-    reload_settle: Settle<'_>,
+    reload_settle: Settle<'_, K>,
     mut hooks: O,
 ) -> Result<DatapathRxProgress, RxStageTransactionError>
 where

@@ -2772,6 +2772,7 @@ dependencies = [
  "oer-radio-regulatory",
  "oer-test-ui-cases",
  "oer-time",
+ "oer-time-virtual",
  "pin-project",
  "vcell",
 ]

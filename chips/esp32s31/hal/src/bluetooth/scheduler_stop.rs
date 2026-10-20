@@ -86,19 +86,19 @@ fn step<C: Control>(
     })
 }
 
-struct Hardware<'a> {
+struct Hardware<'a, C: oer_time::Clock + ?Sized> {
     task: &'a mut BluetoothTaskRegisters,
     interrupts: &'a mut BluetoothInterruptRegisters,
-    settle: Settle<'a>,
+    settle: Settle<'a, C>,
 }
 
-impl Hardware<'_> {
+impl<C: oer_time::Clock + ?Sized> Hardware<'_, C> {
     fn sample_busy(&mut self) -> Result<BluetoothSchedulerBusyObservation, Unsettled> {
         settle::settle(self.settle, || self.interrupts.capture_scheduler_busy())
     }
 }
 
-impl Control for Hardware<'_> {
+impl<C: oer_time::Clock + ?Sized> Control for Hardware<'_, C> {
     type Stopped = BluetoothSchedulerStopped;
 
     fn busy(&mut self) -> Result<bool, Unsettled> {
@@ -120,11 +120,11 @@ impl Control for Hardware<'_> {
 }
 
 /// Advance one finite common-stop step while both register owners are held.
-pub(crate) fn step_hardware(
+pub(crate) fn step_hardware<C: oer_time::Clock + ?Sized>(
     task: &mut BluetoothTaskRegisters,
     interrupts: &mut BluetoothInterruptRegisters,
     stop: BluetoothSchedulerStop,
-    settle: Settle<'_>,
+    settle: Settle<'_, C>,
 ) -> Result<BluetoothSchedulerStopStep, Unsettled> {
     Ok(
         match step(

@@ -988,9 +988,9 @@ impl InterruptRegistersOwner {
 
     /// Sample scheduler BUSY through the diagnostic pair for the bank-one
     /// source-3 reference gate, within `settle`.
-    pub fn capture_scheduler_reference_gate(
+    pub fn capture_scheduler_reference_gate<C: oer_time::Clock + ?Sized>(
         &mut self,
-        settle: Settle<'_>,
+        settle: Settle<'_, C>,
     ) -> Result<BluetoothSchedulerReferenceGateObservation, Unsettled> {
         settle::settle(settle, || self.registers.capture_scheduler_reference_gate())
     }
@@ -1012,9 +1012,9 @@ impl InterruptRegistersOwner {
 
     /// Sample scheduler BUSY through the diagnostic pair for one task-side
     /// scheduler decision, within `settle`.
-    pub fn capture_scheduler_busy(
+    pub fn capture_scheduler_busy<C: oer_time::Clock + ?Sized>(
         &mut self,
-        settle: Settle<'_>,
+        settle: Settle<'_, C>,
     ) -> Result<BluetoothSchedulerBusyObservation, Unsettled> {
         settle::settle(settle, || self.registers.capture_scheduler_busy())
     }
@@ -1032,9 +1032,9 @@ impl InterruptRegistersOwner {
     /// Sample scheduler BUSY through the interrupt-owned diagnostic pair for
     /// one lock/modify decision without borrowing task-side controller
     /// registers, within `settle`.
-    pub fn capture_scheduler_lock_modify_interrupt(
+    pub fn capture_scheduler_lock_modify_interrupt<C: oer_time::Clock + ?Sized>(
         &mut self,
-        settle: Settle<'_>,
+        settle: Settle<'_, C>,
     ) -> Result<BluetoothSchedulerLockModifyInterruptObservation, Unsettled> {
         settle::settle(settle, || {
             self.registers.capture_scheduler_lock_modify_interrupt()
@@ -1065,19 +1065,19 @@ pub struct InterruptOutputAfterRoutesOwner {
 
 impl InterruptOutputAfterRoutesOwner {
     /// Sample scheduler BUSY within `settle` for one release step.
-    fn capture_scheduler_busy(
+    fn capture_scheduler_busy<C: oer_time::Clock + ?Sized>(
         &self,
-        settle: Settle<'_>,
+        settle: Settle<'_, C>,
     ) -> Result<BluetoothSchedulerBusyObservation, BluetoothControllerOutputReleaseError> {
         settle::settle(settle, || self._registers.capture_scheduler_busy())
             .map_err(|Unsettled| BluetoothControllerOutputReleaseError::SchedulerBusyUnsettled)
     }
 
     /// Observe quiescence while retaining the prepared, unrouted output bank.
-    pub fn validate_idle_controller(
+    pub fn validate_idle_controller<C: oer_time::Clock + ?Sized>(
         &self,
         task: &mut TaskOwner,
-        settle: Settle<'_>,
+        settle: Settle<'_, C>,
     ) -> Result<(), BluetoothControllerOutputReleaseError> {
         if task.time_latch.in_flight() {
             return Err(BluetoothControllerOutputReleaseError::ControllerTimePending);
@@ -1089,10 +1089,10 @@ impl InterruptOutputAfterRoutesOwner {
 
     /// Revalidate quiescence after maintenance and return the same prepared bank.
     /// This does not enable CPU routes or publish either ISR owner.
-    pub fn try_reactivate_idle_controller_output(
+    pub fn try_reactivate_idle_controller_output<C: oer_time::Clock + ?Sized>(
         self,
         task: &mut TaskOwner,
-        settle: Settle<'_>,
+        settle: Settle<'_, C>,
     ) -> Result<InterruptRegistersOwner, (BluetoothControllerOutputReleaseError, Self)> {
         if let Err(error) = self.validate_idle_controller(task, settle) {
             return Err((error, self));
@@ -1110,10 +1110,10 @@ impl InterruptOutputAfterRoutesOwner {
     ///
     /// BUSY is sampled twice within `settle` each: before the
     /// dynamic sources are masked and after the fence that disables RUN.
-    pub fn try_release_idle_controller_output(
+    pub fn try_release_idle_controller_output<C: oer_time::Clock + ?Sized>(
         self,
         task: &mut TaskOwner,
-        settle: Settle<'_>,
+        settle: Settle<'_, C>,
     ) -> Result<InterruptOutputReleasedOwner, (BluetoothControllerOutputReleaseError, Self)> {
         if task.time_latch.in_flight() {
             return Err((
@@ -1770,11 +1770,11 @@ impl ControllerHal<'_> {
     /// the engine-idle preamble, publication of command zero and one
     /// observation of it. Pending retains the request; the caller owns its
     /// deadline. Each BUSY sample settles within `settle`.
-    pub fn step_scheduler_execution_lock(
+    pub fn step_scheduler_execution_lock<C: oer_time::Clock + ?Sized>(
         &mut self,
         interrupts: &mut InterruptRegistersOwner,
         lock: &mut BluetoothSchedulerExecutionLock,
-        settle: Settle<'_>,
+        settle: Settle<'_, C>,
     ) -> Result<BluetoothSchedulerExecutionLockDisposition, Unsettled> {
         scheduler_execution_lock::step_hardware(
             self.registers,
@@ -1818,11 +1818,11 @@ impl ControllerHal<'_> {
     /// and completion waits, the settle wait and a repeated request after a
     /// conflict. Pending retains the request; the caller owns its deadline.
     /// Each diagnostic sample settles within `settle`.
-    pub fn step_scheduler_execution_modify(
+    pub fn step_scheduler_execution_modify<C: oer_time::Clock + ?Sized>(
         &mut self,
         interrupts: &mut InterruptRegistersOwner,
         modify: &mut BluetoothSchedulerExecutionModify,
-        settle: Settle<'_>,
+        settle: Settle<'_, C>,
     ) -> Result<BluetoothSchedulerExecutionModifyDisposition, Unsettled> {
         scheduler_execution_modify::step_hardware(
             self.registers,
@@ -1980,11 +1980,11 @@ impl ControllerHal<'_> {
     /// Advance the common stop preamble/request/idle sequence under interrupt
     /// serialization. Pending retains the request; the caller owns its deadline.
     /// Each BUSY sample settles within `settle`.
-    pub fn step_scheduler_stop(
+    pub fn step_scheduler_stop<C: oer_time::Clock + ?Sized>(
         &mut self,
         interrupts: &mut InterruptRegistersOwner,
         stop: BluetoothSchedulerStop,
-        settle: Settle<'_>,
+        settle: Settle<'_, C>,
     ) -> Result<BluetoothSchedulerStopStep, Unsettled> {
         scheduler_stop::step_hardware(self.registers, &mut interrupts.registers, stop, settle)
     }

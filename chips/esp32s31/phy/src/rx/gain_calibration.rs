@@ -357,9 +357,12 @@ impl PhyRxDcCalibrationTransition {
     /// actions through an async executor.
     #[cfg(target_arch = "riscv32")]
     #[inline(never)]
-    pub(crate) fn execute_target_direct<D: crate::executor::wait::PhyShortDelay>(
+    pub(crate) fn execute_target_direct<
+        D: crate::executor::wait::PhyShortDelay,
+        C: oer_time::Clock + ?Sized,
+    >(
         &mut self,
-        clock: &dyn oer_time::Clock,
+        clock: &C,
         registers: &mut impl oer_esp32s31_hal::owner::SharedPhyContext,
         budget: &mut crate::target_executor::DirectOperationBudget,
     ) -> Result<PhyRxDcCalibrationTargetStats, crate::target_executor::PhyTargetPortError> {

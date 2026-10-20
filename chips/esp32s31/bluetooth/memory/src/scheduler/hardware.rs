@@ -73,10 +73,10 @@ pub(crate) trait SchedulerHardwareBackend {
     fn publish_skip(&mut self, at: ControllerSramLinkAddress) -> Skip<Self>;
     fn clear_skip(&mut self, skip: Skip<Self>);
 
-    fn observe(
+    fn observe<C: oer_time::Clock + ?Sized>(
         &mut self,
         wait: SchedulerWait,
-        settle: Settle<'_>,
+        settle: Settle<'_, C>,
         lock: Option<&mut Lock<Self>>,
         modify: Option<&mut Modify<Self>>,
         cancellation: Option<&mut Cancellation<Self>>,
@@ -242,11 +242,14 @@ impl<P: SchedulerPublications> SchedulerHardware<P> {
 
     /// Take one fresh observation of the awaited publication; each
     /// diagnostic sample settles within `settle`.
-    pub(crate) fn observe<B: SchedulerHardwareBackend<Publications = P>>(
+    pub(crate) fn observe<
+        B: SchedulerHardwareBackend<Publications = P>,
+        C: oer_time::Clock + ?Sized,
+    >(
         &mut self,
         backend: &mut B,
         wait: SchedulerWait,
-        settle: Settle<'_>,
+        settle: Settle<'_, C>,
     ) -> Result<SchedulerObservation, SchedulerHardwareError> {
         let awaiting = match wait {
             SchedulerWait::ExecutionLock => self.lock.is_some(),
