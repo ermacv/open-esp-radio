@@ -295,6 +295,7 @@ impl outcomes::Harness for ModelOutcomeHarness {
                 result,
                 trace: Some(trace.clone()),
             }),
+            oer_radio_port::LocalExecution,
         )
         .await;
         let captured = trace.borrow_mut().take();
@@ -331,6 +332,7 @@ fn every_result_is_consumed_by_exactly_one_single_or_aggregate_attempt() {
                     result,
                     trace: None,
                 }),
+                oer_radio_port::LocalExecution,
             ));
         }
     }
@@ -346,6 +348,7 @@ fn aggregate_honors_timeout_injection() {
             form: Form::Aggregate,
             result: AirAnswer::HardwareTimeout,
         }),
+        oer_radio_port::LocalExecution,
     ));
 }
 
@@ -359,6 +362,7 @@ fn an_empty_block_ack_is_consumed_before_the_following_single() {
             form: Form::Aggregate,
             result: AirAnswer::BlockAck(0),
         }),
+        oer_radio_port::LocalExecution,
     ));
 }
 
@@ -372,6 +376,7 @@ fn an_aggregate_s_unmeasured_block_ack_still_delivers_it() {
             form: Form::Aggregate,
             result: AirAnswer::BlockAckUnmeasured(1),
         }),
+        oer_radio_port::LocalExecution,
     ));
 }
 
@@ -488,5 +493,9 @@ impl Work for WrongAnswer {
 #[test]
 fn wrong_answer_shape_retains_the_operation_before_publication() {
     let (backend, _) = backend();
-    let _port_end = block_on(run_port(backend, Body(WrongAnswer)));
+    let _port_end = block_on(run_port(
+        backend,
+        Body(WrongAnswer),
+        oer_radio_port::LocalExecution,
+    ));
 }

@@ -48,11 +48,20 @@ cancellation, empty layouts and all 256 indices.
 
 ## Lifecycle and cancellation
 
-The current `run_port` polls its driver and body in the same executor
-context. Its `Held` loan does not establish synchronization between
-different contexts. The S31 conformance image uses this local execution
-on P2; it does not exercise the P2 driver / P1 role-body boundary specified
+`run_port(installed, body, execution)` selects driver execution explicitly.
+The lifecycle gives `PortExecution::start` one `PortDriver`, which retains
+the single driver loan, held-state borrow and retirement receiver. The
+returned future joins the driver's proved exit. The body stays in its
+caller's executor context. `LocalExecution` polls the driver beside it and
+supports non-`Send` host models. It establishes no synchronization between
+contexts: the S31 conformance image currently selects this local execution
+on P2 and does not exercise the P2 driver / P1 role-body boundary specified
 in [the architecture](../../../docs/architecture.md#execution-contexts).
+
+An execution adapter must end every possible poll before releasing the
+driver's scoped borrow, including on cancellation. An ordinary static spawn
+does not satisfy this rule. The backend separately establishes its queue
+ownership and any bounds needed for transfer between contexts.
 
 `Installed::new(backend, driver)` is the sole constructor. `run_port` consumes
 it, keeps `backend` by value, and lends `&mut B` to `Owner<'p, 'id, B, State>`.

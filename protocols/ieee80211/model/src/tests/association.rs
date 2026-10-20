@@ -271,7 +271,11 @@ fn installed_association_controls_wire_amsdu_and_mic_in_both_directions() {
     for &(spp, up, down) in WIRE {
         let (backend, _) = backend();
         assert!(matches!(
-            block_on(run_port(backend, Body(WirePeer(spp, up, down)))),
+            block_on(run_port(
+                backend,
+                Body(WirePeer(spp, up, down)),
+                oer_radio_port::LocalExecution
+            )),
             oer_radio_port::PortEnd::Uninstalled { .. }
         ));
     }

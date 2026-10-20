@@ -398,7 +398,11 @@ impl<'m> PortBody<Backend<'m>> for Configure {
 fn enable_observes_the_installation_state_borrowed_by_setup() {
     let model = Model::new(Mode::Normal);
     assert!(matches!(
-        finish(run_port(model.installed(), Configure)),
+        finish(run_port(
+            model.installed(),
+            Configure,
+            crate::LocalExecution
+        )),
         PortEnd::Uninstalled { .. }
     ));
     assert_eq!(model.configured.get(), 33);
@@ -448,7 +452,11 @@ fn rejecting_first_or_middle_terminal_keeps_every_owner_without_drop() {
             }));
         let PortEnd::Uninstalled {
             output: accepted, ..
-        } = finish(run_port(model.installed(), RejectTerminal(rejected)))
+        } = finish(run_port(
+            model.installed(),
+            RejectTerminal(rejected),
+            crate::LocalExecution,
+        ))
         else {
             panic!("the poisoned owner uninstalls");
         };
@@ -518,7 +526,7 @@ fn both_abnormal_ends_report_the_stop_outcome_and_retain_every_owner() {
                 } else {
                     Body::Drop
                 };
-                let end = finish(run_port(model.installed(), body));
+                let end = finish(run_port(model.installed(), body, crate::LocalExecution));
                 let outcome = match &end {
                     PortEnd::FailStopped { outcome, .. } if fail_stop => outcome,
                     PortEnd::Abandoned { outcome, .. } if !fail_stop => outcome,
@@ -538,17 +546,96 @@ fn both_abnormal_ends_report_the_stop_outcome_and_retain_every_owner() {
 fn ordinary_uninstall_returns_the_driver_and_its_completion_state() {
     let model = Model::new(Mode::Normal);
     assert!(matches!(
-        finish(run_port(model.installed(), Body::Uninstall)),
+        finish(run_port(
+            model.installed(),
+            Body::Uninstall,
+            crate::LocalExecution
+        )),
         PortEnd::Uninstalled { uninstalled: 7, .. }
     ));
     assert_eq!(owner_drops(&model), [1; 3]);
+}
+
+struct DeferredExecution<'a> {
+    ready: &'a Cell<bool>,
+    starts: &'a Cell<usize>,
+}
+
+impl<'a> crate::PortExecution<Backend<'a>> for DeferredExecution<'a> {
+    async fn start<'scope, 'id>(
+        self,
+        driver: crate::PortDriver<'scope, 'id, Backend<'a>>,
+    ) -> DriverExit<Completion<'a>, Fault> {
+        self.starts.set(self.starts.get() + 1);
+        poll_fn(|_| {
+            if self.ready.get() {
+                Poll::Ready(())
+            } else {
+                Poll::Pending
+            }
+        })
+        .await;
+        driver.run().await
+    }
+}
+
+#[test]
+fn uninstall_waits_for_the_compositions_driver_join() {
+    let model = Model::new(Mode::Normal);
+    let ready = Cell::new(false);
+    let starts = Cell::new(0);
+    let mut port = Box::pin(run_port(
+        model.installed(),
+        Body::Uninstall,
+        DeferredExecution {
+            ready: &ready,
+            starts: &starts,
+        },
+    ));
+    assert!(poll(port.as_mut()).is_pending());
+    assert_eq!(starts.get(), 1);
+    assert!(!model.log.borrow().contains(&"drive"));
+    assert!(!model.log.borrow().contains(&"uninstall"));
+    ready.set(true);
+    assert!(matches!(
+        poll(port.as_mut()),
+        Poll::Ready(PortEnd::Uninstalled { uninstalled: 7, .. })
+    ));
+    assert_eq!(starts.get(), 1);
+    assert_eq!(model.loan_ends.get(), 1);
+    assert_eq!(owner_drops(&model), [1; 3]);
+}
+
+#[test]
+fn cancellation_while_execution_defers_the_driver_retains_its_owners() {
+    let model = Model::new(Mode::Normal);
+    let ready = Cell::new(false);
+    let starts = Cell::new(0);
+    let mut port = Box::pin(run_port(
+        model.installed(),
+        Body::Uninstall,
+        DeferredExecution {
+            ready: &ready,
+            starts: &starts,
+        },
+    ));
+    assert!(poll(port.as_mut()).is_pending());
+    drop(port);
+    assert_eq!(starts.get(), 1);
+    assert_eq!(model.abandons.get(), 1);
+    assert_eq!(model.loan_ends.get(), 0);
+    assert_eq!(owner_drops(&model), [0; 3]);
 }
 
 #[test]
 fn cancelling_before_first_poll_poisoned_and_retained_the_installation() {
     let model = Model::new(Mode::Normal);
     model.stopped.set(false);
-    drop(run_port(model.installed(), Body::Foreign));
+    drop(run_port(
+        model.installed(),
+        Body::Foreign,
+        crate::LocalExecution,
+    ));
     assert_eq!(&*model.log.borrow(), &["abandon"]);
     assert_eq!(owner_drops(&model), [0; 3]);
 }
@@ -558,7 +645,11 @@ fn cancellation_retains_running_and_already_faulted_driver_owners() {
     for mode in [Mode::Normal, Mode::FaultBeforeEnable] {
         let model = Model::new(mode);
         model.stopped.set(false);
-        let mut port = Box::pin(run_port(model.installed(), Body::Foreign));
+        let mut port = Box::pin(run_port(
+            model.installed(),
+            Body::Foreign,
+            crate::LocalExecution,
+        ));
         assert!(poll(port.as_mut()).is_pending());
         drop(port);
         assert_eq!(model.loan_ends.get(), 1);
@@ -571,7 +662,11 @@ fn cancellation_retains_running_and_already_faulted_driver_owners() {
 fn cancelling_abandon_retirement_keeps_the_synchronous_safety_net() {
     let model = Model::new(Mode::StallRetire);
     model.stopped.set(false);
-    let mut port = Box::pin(run_port(model.installed(), Body::Drop));
+    let mut port = Box::pin(run_port(
+        model.installed(),
+        Body::Drop,
+        crate::LocalExecution,
+    ));
     assert!(poll(port.as_mut()).is_pending());
     drop(port);
     assert_eq!(&*model.log.borrow(), &["abandon", "drive"]);
@@ -582,7 +677,11 @@ fn cancelling_abandon_retirement_keeps_the_synchronous_safety_net() {
 fn uninstall_retires_detaches_and_returns_owners_in_order() {
     let m = Model::new(Mode::Normal);
     assert!(matches!(
-        finish(run_port(m.installed(), Body::Uninstall)),
+        finish(run_port(
+            m.installed(),
+            Body::Uninstall,
+            crate::LocalExecution
+        )),
         PortEnd::Uninstalled {
             uninstalled: 7,
             output: ()
@@ -597,7 +696,7 @@ fn uninstall_retires_detaches_and_returns_owners_in_order() {
 fn fault_before_enable_retains_state_for_poisoned_uninstall() {
     let m = Model::new(Mode::FaultBeforeEnable);
     assert!(matches!(
-        finish(run_port(m.installed(), Body::Phase)),
+        finish(run_port(m.installed(), Body::Phase, crate::LocalExecution)),
         PortEnd::Uninstalled {
             uninstalled: 7,
             output: ()
@@ -612,7 +711,7 @@ fn fault_before_enable_retains_state_for_poisoned_uninstall() {
 fn fault_after_enable_lets_body_drain_before_uninstall() {
     let m = Model::new(Mode::FaultAfterEnable);
     assert!(matches!(
-        finish(run_port(m.installed(), Body::Phase)),
+        finish(run_port(m.installed(), Body::Phase, crate::LocalExecution)),
         PortEnd::Uninstalled {
             uninstalled: 7,
             output: ()
@@ -635,7 +734,11 @@ fn fault_after_enable_lets_body_drain_before_uninstall() {
 fn missed_retire_bound_fail_stops_without_detach_or_uninstall() {
     let m = Model::new(Mode::MissBound);
     assert!(matches!(
-        finish(run_port(m.installed(), Body::Uninstall)),
+        finish(run_port(
+            m.installed(),
+            Body::Uninstall,
+            crate::LocalExecution
+        )),
         PortEnd::FailStopped { output: (), .. }
     ));
     assert_eq!(&*m.log.borrow(), &["drive", "abandon"]);
@@ -645,7 +748,7 @@ fn dropped_owner_and_cancelled_transition_retire_asynchronously() {
     for body in [Body::Drop, Body::CancelEnable] {
         let m = Model::new(Mode::Normal);
         assert!(matches!(
-            finish(run_port(m.installed(), body)),
+            finish(run_port(m.installed(), body, crate::LocalExecution)),
             PortEnd::Abandoned { .. }
         ));
         assert_eq!(&*m.log.borrow(), &["abandon", "drive", "retire", "detach"]);
@@ -654,7 +757,11 @@ fn dropped_owner_and_cancelled_transition_retire_asynchronously() {
 #[test]
 fn driver_progresses_beside_foreign_wait_and_core_cancellation_abandons_once() {
     let m = Model::new(Mode::Normal);
-    let mut port = Box::pin(run_port(m.installed(), Body::Foreign));
+    let mut port = Box::pin(run_port(
+        m.installed(),
+        Body::Foreign,
+        crate::LocalExecution,
+    ));
     assert!(poll(port.as_mut()).is_pending());
     assert_eq!(&*m.log.borrow(), &["drive"]);
     drop(port);
@@ -663,7 +770,7 @@ fn driver_progresses_beside_foreign_wait_and_core_cancellation_abandons_once() {
 #[test]
 fn forgotten_owner_stays_owned_by_core_until_cancellation() {
     let m = Model::new(Mode::Normal);
-    let mut port = Box::pin(run_port(m.installed(), Body::Forget));
+    let mut port = Box::pin(run_port(m.installed(), Body::Forget, crate::LocalExecution));
     assert!(poll(port.as_mut()).is_pending());
     drop(port);
     assert_eq!(&*m.log.borrow(), &["drive", "abandon"]);
@@ -729,7 +836,7 @@ fn cancellation_while_transition_or_retirement_waits_abandons_once() {
         (Mode::StallEnable, Body::Phase),
     ] {
         let model = Model::new(mode);
-        let mut port = Box::pin(run_port(model.installed(), body));
+        let mut port = Box::pin(run_port(model.installed(), body, crate::LocalExecution));
         assert!(poll(port.as_mut()).is_pending());
         drop(port);
         assert_eq!(&*model.log.borrow(), &["drive", "abandon"]);
@@ -755,7 +862,11 @@ fn fail_stop_masks_irqs_and_retires_while_body_waits_then_detaches_once() {
     let model = Model::new(Mode::Normal);
     let returning = Signal::new();
     model.interrupt();
-    let mut port = Box::pin(run_port(model.installed(), StopThenWait(&returning)));
+    let mut port = Box::pin(run_port(
+        model.installed(),
+        StopThenWait(&returning),
+        crate::LocalExecution,
+    ));
     assert!(poll(port.as_mut()).is_pending());
     model.interrupt();
     assert_eq!(
@@ -794,7 +905,11 @@ fn fail_stop_then_cancellation_abandons_once_while_body_or_retire_waits() {
         let model = Model::new(mode);
         model.stopped.set(false);
         let returning = Signal::new();
-        let mut port = Box::pin(run_port(model.installed(), StopThenWait(&returning)));
+        let mut port = Box::pin(run_port(
+            model.installed(),
+            StopThenWait(&returning),
+            crate::LocalExecution,
+        ));
         assert!(poll(port.as_mut()).is_pending());
         assert_eq!(model.abandons.get(), 1);
         drop(port);
@@ -809,7 +924,11 @@ fn fail_stop_then_cancellation_abandons_once_while_body_or_retire_waits() {
 fn cancellation_after_fail_stopped_body_returns_only_quarantines() {
     let model = Model::new(Mode::StallRetire);
     model.stopped.set(false);
-    let mut port = Box::pin(run_port(model.installed(), Body::FailStop));
+    let mut port = Box::pin(run_port(
+        model.installed(),
+        Body::FailStop,
+        crate::LocalExecution,
+    ));
     assert!(poll(port.as_mut()).is_pending());
     drop(port);
     assert_eq!(model.abandons.get(), 1);
@@ -820,7 +939,11 @@ fn cancellation_after_fail_stopped_body_returns_only_quarantines() {
 fn uninstall_timeout_then_cancellation_abandons_once() {
     let model = Model::new(Mode::MissBound);
     model.stopped.set(false);
-    let mut port = Box::pin(run_port(model.installed(), Body::Uninstall));
+    let mut port = Box::pin(run_port(
+        model.installed(),
+        Body::Uninstall,
+        crate::LocalExecution,
+    ));
     let Poll::Ready(end @ PortEnd::FailStopped { .. }) = poll(port.as_mut()) else {
         panic!("uninstall times out and quarantines in the same poll");
     };
@@ -881,7 +1004,11 @@ fn latch_cause_only_transitions_from_live_and_both_waiters_stay_set() {
 fn retire_timeout_does_not_wait_for_the_fail_stopped_body() {
     let model = Model::new(Mode::MissBound);
     let returning = Signal::new();
-    let mut port = Box::pin(run_port(model.installed(), StopThenWait(&returning)));
+    let mut port = Box::pin(run_port(
+        model.installed(),
+        StopThenWait(&returning),
+        crate::LocalExecution,
+    ));
     assert!(poll(port.as_mut()).is_pending());
     assert!(model.irq_masked.get());
     returning.set();
@@ -900,7 +1027,11 @@ fn forgetting_the_whole_port_cannot_return_owners_or_run_drop_cleanup() {
     // Hardware backing remains durable even if the executor leaks the frame.
     let model = Box::leak(Box::new(Model::new(Mode::Normal)));
     model.stopped.set(false);
-    let mut port = Box::pin(run_port(model.installed(), Body::Foreign));
+    let mut port = Box::pin(run_port(
+        model.installed(),
+        Body::Foreign,
+        crate::LocalExecution,
+    ));
     assert!(poll(port.as_mut()).is_pending());
     core::mem::forget(port);
     assert_eq!(&*model.log.borrow(), &["drive"]);

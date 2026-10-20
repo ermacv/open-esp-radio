@@ -43,7 +43,13 @@ pub async fn outcome(
         _ => return Err("single outcome required"),
     };
     air.answer(answer);
-    match oer_radio_port::run_port(backend, OutcomeBody { rate }).await {
+    match oer_radio_port::run_port(
+        backend,
+        OutcomeBody { rate },
+        oer_radio_port::LocalExecution,
+    )
+    .await
+    {
         PortEnd::Uninstalled { output, .. } => output,
         _ => Err("model failed to uninstall"),
     }

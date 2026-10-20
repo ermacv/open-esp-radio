@@ -53,7 +53,8 @@ fn transmission<'f>(frame: &'f [u8]) -> SupportedTransmit<'f, ModelCaps> {
 fn run<B: PortBody<OwnedModel>>(body: B) -> ModelHandle {
     let (model, handle) = OwnedModel::new();
     HANDLE.with(|slot| *slot.borrow_mut() = Some(handle.clone()));
-    let oer_radio_port::PortEnd::Uninstalled { uninstalled, .. } = ready(run_port(model, body))
+    let oer_radio_port::PortEnd::Uninstalled { uninstalled, .. } =
+        ready(run_port(model, body, oer_radio_port::LocalExecution))
     else {
         panic!("the body uninstalls")
     };
@@ -116,7 +117,11 @@ fn accounting_quarantine_does_not_prevent_a_confirmed_hardware_stop() {
     }
 
     let (installed, handle) = OwnedModel::new();
-    let end = ready(run_port(installed, Body(handle.clone())));
+    let end = ready(run_port(
+        installed,
+        Body(handle.clone()),
+        oer_radio_port::LocalExecution,
+    ));
     assert!(matches!(
         end,
         oer_radio_port::PortEnd::FailStopped {
@@ -1155,7 +1160,11 @@ fn the_operation_pool_serves_takers_in_arrival_order() {
         }
     }
     assert!(matches!(
-        ready(run_port(Installed::new(PoolProbe, ()), Body)),
+        ready(run_port(
+            Installed::new(PoolProbe, ()),
+            Body,
+            oer_radio_port::LocalExecution
+        )),
         oer_radio_port::PortEnd::Uninstalled {
             uninstalled: (),
             output: ()

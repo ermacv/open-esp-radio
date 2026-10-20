@@ -217,7 +217,8 @@ where
     }
     let Poll::Ready(ended) = poll_once(pin!(run_port(
         Installed::new(Probe::<N, S>, ()),
-        Body(check)
+        Body(check),
+        oer_radio_port::LocalExecution
     ))) else {
         panic!("the probe answers at once");
     };

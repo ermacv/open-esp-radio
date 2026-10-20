@@ -138,7 +138,11 @@ impl PortBody<ModelBackend> for Receive {
 fn continuous_receive_has_the_same_capacity_and_recycling_in_feature_builds() {
     let (backend, air) = backend();
     assert!(matches!(
-        run(run_port(backend, Receive(air))),
+        run(run_port(
+            backend,
+            Receive(air),
+            oer_radio_port::LocalExecution
+        )),
         oer_radio_port::PortEnd::Uninstalled { .. }
     ));
 }
@@ -218,7 +222,11 @@ impl PortBody<ModelBackend> for ReceiveLoss {
 fn receive_overflow_is_reported_before_continuous_rx_without_reordering_terminals() {
     let (backend, air) = backend();
     assert!(matches!(
-        run(run_port(backend, ReceiveLoss(air))),
+        run(run_port(
+            backend,
+            ReceiveLoss(air),
+            oer_radio_port::LocalExecution
+        )),
         oer_radio_port::PortEnd::Uninstalled { .. }
     ));
 }
@@ -332,7 +340,7 @@ impl PortBody<ModelBackend> for Owners {
 fn feature_builds_keep_each_accepted_ticket_with_its_original_buffer() {
     let (backend, _) = backend();
     assert!(matches!(
-        run(run_port(backend, Owners)),
+        run(run_port(backend, Owners, oer_radio_port::LocalExecution)),
         oer_radio_port::PortEnd::Uninstalled { .. }
     ));
 }

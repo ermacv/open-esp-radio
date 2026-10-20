@@ -27,12 +27,24 @@ pub async fn group(
     let ap = IndividualAddress::new([2, 0, 0, 0, 0, 2]).ok_or("AP")?;
     let (backend, air) = ModelBackend::new(channel, [station, ap], clock);
     if case == ProgressCase::PublishedRemoval {
-        return match oer_radio_port::run_port(backend, published::Exercise { air, rate }).await {
+        return match oer_radio_port::run_port(
+            backend,
+            published::Exercise { air, rate },
+            oer_radio_port::LocalExecution,
+        )
+        .await
+        {
             PortEnd::Uninstalled { output, .. } => output,
             _ => Err("published GTK failed to uninstall"),
         };
     }
-    match oer_radio_port::run_port(backend, Exercise { case, air }).await {
+    match oer_radio_port::run_port(
+        backend,
+        Exercise { case, air },
+        oer_radio_port::LocalExecution,
+    )
+    .await
+    {
         PortEnd::Uninstalled { output, .. } => output,
         _ => Err("group fixture failed to uninstall"),
     }

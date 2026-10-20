@@ -135,7 +135,8 @@ fn check(configure: bool) {
             Barrier {
                 configure,
                 observed
-            }
+            },
+            oer_radio_port::LocalExecution
         )),
         radio::PortEnd::Uninstalled { .. }
     ));

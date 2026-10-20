@@ -73,6 +73,7 @@ pub async fn ownership(
             scenario,
             rate,
         },
+        oer_radio_port::LocalExecution,
     )
     .await
     {

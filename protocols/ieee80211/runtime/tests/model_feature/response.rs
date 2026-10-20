@@ -411,6 +411,7 @@ fn exercise(frame: Frame, answer: Option<AirAnswer>, expected: Expected, barrier
             expected,
             barrier,
         },
+        oer_radio_port::LocalExecution,
     ));
     assert_eq!(
         matches!(result, oer_radio_port::PortEnd::FailStopped { .. }),

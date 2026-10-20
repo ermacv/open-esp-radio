@@ -176,6 +176,7 @@ impl Harness for ModelConfigurationHarness {
                 drops: Rc::new(Cell::new(0)),
                 trace: trace.clone(),
             },
+            oer_radio_port::LocalExecution,
         )
         .await;
         let captured = trace.borrow_mut().take();
@@ -279,7 +280,11 @@ impl PortBody<ModelBackend> for ReceiveAcrossDisable {
 #[test]
 fn disable_preserves_borrowed_rx_capacity_and_unobserved_loss() {
     let (backend, _) = backend();
-    let _port_end = block_on(run_port(backend, ReceiveAcrossDisable));
+    let _port_end = block_on(run_port(
+        backend,
+        ReceiveAcrossDisable,
+        oer_radio_port::LocalExecution,
+    ));
 }
 
 #[derive(Clone, Copy)]
@@ -417,6 +422,7 @@ fn configure_waits_for_own_publication_preserves_ac_order_and_holds_later_fifo_c
                     ap_first,
                     clock,
                 }),
+                oer_radio_port::LocalExecution,
             ));
         }
     }

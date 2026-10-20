@@ -395,6 +395,7 @@ impl contract::Harness for Harness {
                 clock,
                 trace: trace.clone(),
             }),
+            oer_radio_port::LocalExecution,
         )
         .await;
         trace
@@ -490,5 +491,9 @@ fn port_now_projects_the_supplied_clock_and_renewal_starts_a_new_msdu() {
     }
     let clock = Rc::new(VirtualClock::<8>::new());
     let (backend, air) = backend_on(clock.clone());
-    let _end = block_on(run_port(backend, Probe(clock, air)));
+    let _end = block_on(run_port(
+        backend,
+        Probe(clock, air),
+        oer_radio_port::LocalExecution,
+    ));
 }

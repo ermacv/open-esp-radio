@@ -301,8 +301,13 @@ impl contract::Harness for Harness<'_> {
             trace: &trace,
             clock: self.0,
         };
-        let _port_end =
-            progress::run_timed(run_port(backend, Body(boundary)), &air, self.0, None).await;
+        let _port_end = progress::run_timed(
+            run_port(backend, Body(boundary), oer_radio_port::LocalExecution),
+            &air,
+            self.0,
+            None,
+        )
+        .await;
         assert!(!air.failed());
         trace.into_inner().unwrap()
     }
@@ -525,6 +530,7 @@ fn fault_and_disable_keep_each_gtk_mutations_owner_and_permission() {
                         fault,
                         applied,
                     },
+                    oer_radio_port::LocalExecution,
                 ));
                 assert!(
                     air.key_installations
@@ -588,7 +594,11 @@ fn a_stalled_group_command_has_a_deadline_wake_and_retains_resources_on_expiry()
     let wakes = Arc::new(Wakes(AtomicUsize::new(0)));
     let waker = Waker::from(wakes.clone());
     let mut cx = core::task::Context::from_waker(&waker);
-    let mut running = core::pin::pin!(run_port(backend, Body(Deadline(&air))));
+    let mut running = core::pin::pin!(run_port(
+        backend,
+        Body(Deadline(&air)),
+        oer_radio_port::LocalExecution
+    ));
     for _ in 0..5 {
         assert!(running.as_mut().poll(&mut cx).is_pending());
     }
@@ -684,7 +694,11 @@ impl Work for IndependentIds<'_> {
 #[test]
 fn selection_and_removal_leave_other_wire_key_ids_active() {
     let (backend, air) = backend();
-    let _port_end = block_on(run_port(backend, Body(IndependentIds(&air))));
+    let _port_end = block_on(run_port(
+        backend,
+        Body(IndependentIds(&air)),
+        oer_radio_port::LocalExecution,
+    ));
     assert!(!air.failed());
 }
 
@@ -784,6 +798,7 @@ fn teardown_ends_delayed_group_ingress_and_material_despite_external_identities(
                     stage,
                     end,
                 },
+                oer_radio_port::LocalExecution,
             ));
             let identity = identity.into_inner().unwrap();
             assert!(!identity.0.active.get());
@@ -878,7 +893,11 @@ impl PortBody<ModelBackend> for ReenableGroup<'_> {
 #[test]
 fn disable_and_reenable_preserve_the_same_group_installation_and_counter() {
     let (backend, air) = backend();
-    let _port_end = block_on(run_port(backend, ReenableGroup(&air)));
+    let _port_end = block_on(run_port(
+        backend,
+        ReenableGroup(&air),
+        oer_radio_port::LocalExecution,
+    ));
     assert!(!air.failed());
 }
 
@@ -945,6 +964,10 @@ impl Work for Admission<'_> {
 #[test]
 fn pending_installation_owns_vacant_resources_without_an_installed_identity() {
     let (backend, air) = backend();
-    let _port_end = block_on(run_port(backend, Body(Admission(&air))));
+    let _port_end = block_on(run_port(
+        backend,
+        Body(Admission(&air)),
+        oer_radio_port::LocalExecution,
+    ));
     assert!(!air.failed());
 }

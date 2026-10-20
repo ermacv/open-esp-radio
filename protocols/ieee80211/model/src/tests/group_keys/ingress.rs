@@ -267,7 +267,8 @@ fn ingress_at_a_delivery_wake_cannot_cross_a_group_key_terminal() {
                     role,
                     change,
                     stage
-                })
+                }),
+                oer_radio_port::LocalExecution
             ));
             let mut ended = false;
             for _ in 0..100 {

@@ -45,7 +45,7 @@ impl PortBody<ModelBackend> for Source {
                     source: &mut source,
                     resources
                 }
-            )
+            , oer_radio_port::LocalExecution)
             .await,
             oer_radio_port::PortEnd::FailStopped { .. }
         ));

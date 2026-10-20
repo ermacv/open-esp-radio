@@ -18,7 +18,13 @@ pub async fn edca(
     let station = IndividualAddress::new([2, 0, 0, 0, 0, 1]).ok_or("station")?;
     let ap = IndividualAddress::new([2, 0, 0, 0, 0, 2]).ok_or("AP")?;
     let (backend, air) = ModelBackend::new(channel, [station, ap], clock);
-    match oer_radio_port::run_port(backend, Exercise { air, case, rate }).await {
+    match oer_radio_port::run_port(
+        backend,
+        Exercise { air, case, rate },
+        oer_radio_port::LocalExecution,
+    )
+    .await
+    {
         PortEnd::Uninstalled { output, .. } => output,
         _ => Err("EDCA failed to uninstall"),
     }

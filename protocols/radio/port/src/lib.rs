@@ -6,6 +6,8 @@
 //!
 //! [`run_port`] consumes an [`Installed`] backend and its independent driver.
 //! Its [`Owner`] borrows the backend and consumes each typestate transition.
+//! The composition selects a [`PortExecution`]; [`LocalExecution`] keeps
+//! model drivers and bodies in the same context without requiring `Send`.
 //! [`Mint::into_pools`] issues each installation's complete capacity once.
 //! The driver owns only unbranded state: queues containing branded slots and
 //! in-flight work belong in [`PortBackend::Held`], borrowed by the driver.
@@ -16,11 +18,13 @@ extern crate std;
 
 #[cfg(any(test, feature = "test-support"))]
 pub mod conformance;
+mod execution;
 pub mod lifecycle;
 pub mod pool;
 mod relation;
 mod work;
 
+pub use execution::{LocalExecution, PortDriver, PortExecution};
 pub use lifecycle::*;
 pub use work::*;
 

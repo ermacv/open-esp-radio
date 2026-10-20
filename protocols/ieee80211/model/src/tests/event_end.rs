@@ -177,6 +177,7 @@ fn event_end_returns_every_ordinary_terminal_or_retains_every_quarantined_owner(
                     posted,
                     drops: drops.clone(),
                 },
+                oer_radio_port::LocalExecution,
             ));
             match end {
                 End::Drained | End::SubmissionFailed => {

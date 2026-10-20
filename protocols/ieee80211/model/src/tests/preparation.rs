@@ -202,7 +202,11 @@ impl Work for Boundaries {
 #[test]
 fn body_and_ccmp_boundaries_are_checked_before_admission_or_packet_number_allocation() {
     let (backend, _) = backend();
-    let _port_end = block_on(run_port(backend, Body(Boundaries)));
+    let _port_end = block_on(run_port(
+        backend,
+        Body(Boundaries),
+        oer_radio_port::LocalExecution,
+    ));
 }
 
 /// A legal body provider can select a different immutable slice on a later
@@ -307,13 +311,21 @@ impl Work for BodyView {
 #[test]
 fn a_single_source_copies_exactly_the_body_view_whose_length_it_checked() {
     let (backend, _) = backend();
-    let _port_end = block_on(run_port(backend, Body(BodyView { aggregate: false })));
+    let _port_end = block_on(run_port(
+        backend,
+        Body(BodyView { aggregate: false }),
+        oer_radio_port::LocalExecution,
+    ));
 }
 
 #[test]
 fn an_aggregate_copies_exactly_the_body_view_whose_length_it_checked() {
     let (backend, _) = backend();
-    let _port_end = block_on(run_port(backend, Body(BodyView { aggregate: true })));
+    let _port_end = block_on(run_port(
+        backend,
+        Body(BodyView { aggregate: true }),
+        oer_radio_port::LocalExecution,
+    ));
 }
 
 fn aggregate_rate<'p, 'id: 'p>(phase: &mut ModelPhase<'p, 'id>) -> AmpduRate<'p, 'id, ModelCaps> {
@@ -470,7 +482,11 @@ impl Work for RetryIdentity {
 #[test]
 fn retry_owns_its_mpdu_and_body_allows_a_new_rate_and_refuses_a_reinstalled_key() {
     let (backend, _) = backend();
-    let _port_end = block_on(run_port(backend, Body(RetryIdentity)));
+    let _port_end = block_on(run_port(
+        backend,
+        Body(RetryIdentity),
+        oer_radio_port::LocalExecution,
+    ));
 }
 
 struct AggregateBoundaries;
@@ -622,7 +638,11 @@ impl Work for AggregateBoundaries {
 #[test]
 fn aggregate_builder_checks_ccmp_before_mutating_and_returns_all_owners() {
     let (backend, _) = backend();
-    let _port_end = block_on(run_port(backend, Body(AggregateBoundaries)));
+    let _port_end = block_on(run_port(
+        backend,
+        Body(AggregateBoundaries),
+        oer_radio_port::LocalExecution,
+    ));
 }
 
 struct PreparedRemoval {
@@ -742,7 +762,11 @@ impl Work for PreparedRemoval {
 fn key_removal_waits_for_prepared_retransmission_until_cancellation_or_its_terminal() {
     for cancel in [true, false] {
         let (backend, _) = backend();
-        let _port_end = block_on(run_port(backend, Body(PreparedRemoval { cancel })));
+        let _port_end = block_on(run_port(
+            backend,
+            Body(PreparedRemoval { cancel }),
+            oer_radio_port::LocalExecution,
+        ));
     }
 }
 
@@ -817,5 +841,9 @@ impl Work for RetryRole {
 #[test]
 fn a_sent_mpdu_cannot_change_its_interface_role_during_retransmission() {
     let (backend, _) = backend();
-    let _port_end = block_on(run_port(backend, Body(RetryRole)));
+    let _port_end = block_on(run_port(
+        backend,
+        Body(RetryRole),
+        oer_radio_port::LocalExecution,
+    ));
 }

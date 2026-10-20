@@ -214,14 +214,14 @@ mod futures {
         installed: radio::Installed<Backend>,
         body: Discover,
     ) -> DiscoverFuture {
-        radio::run_port(installed, body)
+        radio::run_port(installed, body, oer_radio_port::LocalExecution)
     }
     #[define_opaque(ExchangeFuture)]
     pub(super) fn exchanging(
         installed: radio::Installed<Backend>,
         body: Exchange,
     ) -> ExchangeFuture {
-        radio::run_port(installed, body)
+        radio::run_port(installed, body, oer_radio_port::LocalExecution)
     }
 }
 use futures::*;

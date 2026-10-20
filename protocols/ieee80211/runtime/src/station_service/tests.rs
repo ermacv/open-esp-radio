@@ -1138,6 +1138,7 @@ where
             script,
             refuse_initial_enable,
         },
+        oer_radio_port::LocalExecution,
     ));
     match uninstalled {
         oer_radio_port::PortEnd::Uninstalled { .. } => {}

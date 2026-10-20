@@ -36,7 +36,7 @@ impl PortBody<ModelBackend> for Source {
                 Target {
                     source: &mut source
                 }
-            )
+            , oer_radio_port::LocalExecution)
             .await,
             oer_radio_port::PortEnd::FailStopped { .. }
         ));

@@ -98,7 +98,7 @@ fn each_installation_and_retuned_phase_checks_its_own_channel() {
                 std::rc::Rc::new(oer_time_virtual::VirtualClock::<8>::new()),
             );
             assert!(matches!(
-                run_port(target, Second(&mut source)).await,
+                run_port(target, Second(&mut source), oer_radio_port::LocalExecution).await,
                 oer_radio_port::PortEnd::FailStopped { .. }
             ));
             let mut source = source
@@ -137,7 +137,11 @@ fn each_installation_and_retuned_phase_checks_its_own_channel() {
         }
     }
     assert!(matches!(
-        block_on(run_port(backend().0, Channels)),
+        block_on(run_port(
+            backend().0,
+            Channels,
+            oer_radio_port::LocalExecution
+        )),
         oer_radio_port::PortEnd::FailStopped { .. }
     ));
 }
@@ -414,7 +418,11 @@ impl Work for Numbering {
 #[test]
 fn a_retransmitted_mpdu_keeps_its_packet_number_and_a_renewed_buffer_takes_a_new_one() {
     let (backend, air) = backend();
-    let _port_end = block_on(run_port(backend, Body(Numbering { protected: true })));
+    let _port_end = block_on(run_port(
+        backend,
+        Body(Numbering { protected: true }),
+        oer_radio_port::LocalExecution,
+    ));
     let numbers: Vec<_> = air.sent().iter().map(|frame| frame.packet_number).collect();
     assert_eq!(numbers, [Some(1), Some(1), Some(2)]);
 }
@@ -422,7 +430,11 @@ fn a_retransmitted_mpdu_keeps_its_packet_number_and_a_renewed_buffer_takes_a_new
 #[test]
 fn an_open_sent_mpdu_retransmits_without_rebuilding_its_sn_or_payload() {
     let (backend, air) = backend();
-    let _port_end = block_on(run_port(backend, Body(Numbering { protected: false })));
+    let _port_end = block_on(run_port(
+        backend,
+        Body(Numbering { protected: false }),
+        oer_radio_port::LocalExecution,
+    ));
     let frames = air.sent();
     assert_eq!(frames.len(), 3);
     assert_eq!(frames[0].packet_number, None);
@@ -573,7 +585,11 @@ impl Work for KeyThenAttempt {
 #[test]
 fn an_attempt_naming_a_key_goes_after_the_keys_install() {
     let (backend, air) = backend();
-    let _port_end = block_on(run_port(backend, Body(KeyThenAttempt)));
+    let _port_end = block_on(run_port(
+        backend,
+        Body(KeyThenAttempt),
+        oer_radio_port::LocalExecution,
+    ));
     let sent = air.sent();
     assert_eq!(sent.len(), 1);
     assert_eq!(sent[0].key, Some((0, true)));
@@ -666,6 +682,7 @@ fn group_replacement_returns_the_same_slot_between_old_and_new_rx() {
             air: &air,
             reject: false,
         }),
+        oer_radio_port::LocalExecution,
     ));
     assert!(!air.failed());
 }
@@ -679,6 +696,7 @@ fn a_rejected_group_replacement_poisons_without_a_success_terminal() {
             air: &air,
             reject: true,
         }),
+        oer_radio_port::LocalExecution,
     ));
     assert!(air.failed());
 }
@@ -742,7 +760,11 @@ impl Work for KeyAttemptRemoval {
 #[test]
 fn an_attempt_between_a_keys_install_and_removal_goes_under_the_key() {
     let (backend, air) = backend();
-    let _port_end = block_on(run_port(backend, Body(KeyAttemptRemoval)));
+    let _port_end = block_on(run_port(
+        backend,
+        Body(KeyAttemptRemoval),
+        oer_radio_port::LocalExecution,
+    ));
     let sent = air.sent();
     assert_eq!(sent.len(), 1);
     assert_eq!(sent[0].key, Some((0, true)));
@@ -785,6 +807,7 @@ fn a_body_that_waits_forever_never_stalls_the_driver() {
             open: &open,
             stream: &stream,
         }),
+        oer_radio_port::LocalExecution,
     ));
     let mut context = core::task::Context::from_waker(Waker::noop());
     for _ in 0..10 {
@@ -947,6 +970,7 @@ fn as_much_work_as_the_tickets_allow_loses_no_completion_unread() {
             stream: &stream,
             settings: false,
         }),
+        oer_radio_port::LocalExecution,
     ));
     assert_eq!(stream.borrow().completions, MODEL_TICKETS);
 }
@@ -962,6 +986,7 @@ fn as_much_work_as_allowed_while_every_setting_changes_loses_no_command() {
             stream: &stream,
             settings: true,
         }),
+        oer_radio_port::LocalExecution,
     ));
     // Every submission, install and the closing arrived; every attempt
     // ended; every kind of setting took its latest value before the next
@@ -1067,6 +1092,7 @@ fn an_attempt_the_closing_gate_aborts_comes_back_fresh_without_a_transmission() 
             air: &air,
             seen: &seen,
         }),
+        oer_radio_port::LocalExecution,
     ));
     let seen = seen.into_inner();
     // Contract: aborted with no transmission, its
@@ -1140,6 +1166,7 @@ fn a_cancelled_next_event_loses_no_event() {
             air: &air,
             received: &received,
         }),
+        oer_radio_port::LocalExecution,
     ));
     assert_eq!(*received.borrow(), [1, 2]);
 }
@@ -1357,6 +1384,7 @@ fn a_lost_subframe_goes_again_with_its_packet_number_beside_new_ones_numbered_an
             air: &air,
             report: &report,
         }),
+        oer_radio_port::LocalExecution,
     ));
     let report = report.get().expect("the A-MPDU's Block Ack");
     assert_eq!(report.start_sequence.get(), 0);
@@ -1462,6 +1490,7 @@ fn a_timeout_is_final_and_does_not_stop_or_withdraw_the_queue_tail() {
             outcomes: &outcomes,
             collision: false,
         }),
+        oer_radio_port::LocalExecution,
     ));
     let outcomes = outcomes.borrow();
     assert_eq!(
@@ -1502,6 +1531,7 @@ fn collisions_retry_the_head_then_end_at_contention_limit_without_air_transmissi
             outcomes: &outcomes,
             collision: true,
         }),
+        oer_radio_port::LocalExecution,
     ));
     assert!(matches!(
         outcomes.borrow()[0],
@@ -1616,7 +1646,11 @@ impl Work for LongRetryPlan<'_> {
 #[test]
 fn ended_preserves_the_full_retry_budget_and_last_transmitted_rate() {
     let (backend, air) = backend();
-    let _port_end = block_on(run_port(backend, Body(LongRetryPlan(&air))));
+    let _port_end = block_on(run_port(
+        backend,
+        Body(LongRetryPlan(&air)),
+        oer_radio_port::LocalExecution,
+    ));
     let sent = air.sent();
     assert_eq!(sent.len(), 1020);
     assert_eq!(sent[0].plaintext[1] & 8, 0);
@@ -1712,7 +1746,11 @@ impl Work for LastRateBeforeCollision<'_> {
 #[test]
 fn a_collision_does_not_overwrite_the_count_or_rate_of_the_last_mpdu_on_air() {
     let (backend, air) = backend();
-    let _port_end = block_on(run_port(backend, Body(LastRateBeforeCollision(&air))));
+    let _port_end = block_on(run_port(
+        backend,
+        Body(LastRateBeforeCollision(&air)),
+        oer_radio_port::LocalExecution,
+    ));
     assert_eq!(air.sent().len(), 2);
 }
 
@@ -1779,7 +1817,11 @@ impl Work for ReceiveAgreementState<'_> {
 #[test]
 fn receive_agreements_apply_latest_state_without_consuming_command_capacity() {
     let (backend, air) = backend();
-    let _port_end = block_on(run_port(backend, Body(ReceiveAgreementState(&air))));
+    let _port_end = block_on(run_port(
+        backend,
+        Body(ReceiveAgreementState(&air)),
+        oer_radio_port::LocalExecution,
+    ));
 }
 
 mod publication;

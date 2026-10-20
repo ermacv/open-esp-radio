@@ -27,7 +27,7 @@ impl PortBody<ModelBackend> for Outer {
         owner: Owner<'p, 'id, ModelBackend, Disabled>,
         resources: ModelResources<'id>,
     ) -> Ended<'id, ModelBackend, ()> {
-        let _ended = run_port(backend(), Inner(resources.station_commands.configure)).await;
+        let _ended = run_port(backend(), Inner(resources.station_commands.configure), oer_radio_port::LocalExecution).await;
         Ended::uninstall(owner, (), ())
     }
 }

@@ -347,6 +347,7 @@ impl Harness for ModelHarness {
                 evidence: evidence.clone(),
                 gate_closed_at: gate_closed_at.clone(),
             },
+            oer_radio_port::LocalExecution,
         )
         .await;
         let mut publication_events: Vec<_> = air
@@ -605,6 +606,7 @@ fn aggregate_terminal_returns_its_context_and_each_subframes_resources_on_air_or
                 withdraw,
                 initial_pn,
             },
+            oer_radio_port::LocalExecution,
         ));
         assert_eq!(dropped.get(), 1);
     }
@@ -809,7 +811,8 @@ fn publication_fault_keeps_the_complete_single_or_aggregate_until_teardown() {
                 PublicationFault {
                     aggregate,
                     dropped: dropped.clone()
-                }
+                },
+                oer_radio_port::LocalExecution
             )),
             oer_radio_port::PortEnd::FailStopped { .. }
         ));

@@ -419,6 +419,7 @@ fn port_returns_actual_operation_after_ack_and_gate_cycle() {
             expected: 1,
             close: true,
         },
+        oer_radio_port::LocalExecution,
     ));
     let radio::PortEnd::Uninstalled { output, .. } = result else {
         panic!("clean uninstall")
@@ -442,6 +443,7 @@ fn port_exhausts_supplied_retry_plan_with_one_terminal() {
             expected: 1,
             close: false,
         },
+        oer_radio_port::LocalExecution,
     ));
     let radio::PortEnd::Uninstalled { output, .. } = result else {
         panic!("clean uninstall")
@@ -624,6 +626,7 @@ fn cancelling_each_device_wait_quarantines_without_dropping_an_admitted_body() {
                 at,
                 dropped: dropped.clone(),
             },
+            oer_radio_port::LocalExecution,
         ));
         let mut cx = Context::from_waker(Waker::noop());
         for _ in 0..12 {
@@ -717,7 +720,11 @@ impl PortBody<Backend> for GroupCycle {
 fn every_group_mutation_has_a_finite_rx_cut_and_returns_its_permission_once() {
     let (backend, observed, _) = installed(Vec::new());
     assert!(matches!(
-        block_on(radio::run_port(backend, GroupCycle)),
+        block_on(radio::run_port(
+            backend,
+            GroupCycle,
+            oer_radio_port::LocalExecution
+        )),
         radio::PortEnd::Uninstalled { .. }
     ));
     assert_eq!(observed.borrow().resumed_cuts, 4);
@@ -777,7 +784,11 @@ impl PortBody<Backend> for Expire {
 fn queued_msdu_expires_from_submit_without_publication_behind_a_closed_gate() {
     let (backend, observed, clock) = installed(Vec::new());
     assert!(matches!(
-        block_on(radio::run_port(backend, Expire { clock })),
+        block_on(radio::run_port(
+            backend,
+            Expire { clock },
+            oer_radio_port::LocalExecution
+        )),
         radio::PortEnd::Uninstalled { .. }
     ));
     assert_eq!(observed.borrow().publications, 0);
@@ -861,7 +872,8 @@ fn received_bss_mpdu_keeps_its_original_owner_until_explicit_recycling() {
                 observed,
                 released: released.clone(),
                 lose: false
-            }
+            },
+            oer_radio_port::LocalExecution
         )),
         radio::PortEnd::Uninstalled { .. }
     ));
@@ -878,6 +890,7 @@ fn dropping_a_received_owner_quarantines_its_allocation_and_poison_is_permanent(
             released: released.clone(),
             lose: true,
         },
+        oer_radio_port::LocalExecution,
     ));
     assert!(matches!(result, radio::PortEnd::FailStopped { .. }));
     drop(result);
@@ -994,7 +1007,8 @@ fn caller_pn_and_external_body_survive_tx_and_a_removed_key_refuses_retransmissi
             backend,
             Protected {
                 dropped: dropped.clone()
-            }
+            },
+            oer_radio_port::LocalExecution
         )),
         radio::PortEnd::Uninstalled { .. }
     ));
@@ -1049,6 +1063,7 @@ fn clean_uninstall_returns_all_dma_and_core_owners_for_a_fresh_installation() {
             expected: 1,
             close: true,
         },
+        oer_radio_port::LocalExecution,
     ));
     let radio::PortEnd::Uninstalled {
         uninstalled: Uninstalled::Stopped(stopped),
@@ -1068,6 +1083,7 @@ fn clean_uninstall_returns_all_dma_and_core_owners_for_a_fresh_installation() {
             expected: 1,
             close: false,
         },
+        oer_radio_port::LocalExecution,
     ));
     assert!(matches!(
         second,

@@ -336,7 +336,11 @@ fn check(kind: Kind) {
         Vec::new()
     });
     assert!(matches!(
-        block_on(radio::run_port(backend, Withdraw { kind, observed })),
+        block_on(radio::run_port(
+            backend,
+            Withdraw { kind, observed },
+            oer_radio_port::LocalExecution
+        )),
         radio::PortEnd::Uninstalled { .. }
     ));
 }

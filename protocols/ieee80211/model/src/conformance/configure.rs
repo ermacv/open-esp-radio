@@ -38,7 +38,7 @@ pub async fn configure(
     let station = IndividualAddress::new([2, 0, 0, 0, 0, 1]).ok_or("station")?;
     let ap = IndividualAddress::new([2, 0, 0, 0, 0, 2]).ok_or("AP")?;
     let (backend, _) = Backend::new(channel, [station, ap], clock);
-    match oer_radio_port::run_port(backend, Exercise(case)).await {
+    match oer_radio_port::run_port(backend, Exercise(case), oer_radio_port::LocalExecution).await {
         PortEnd::Uninstalled { output, .. } => output,
         _ => Err("configuration failed to uninstall"),
     }

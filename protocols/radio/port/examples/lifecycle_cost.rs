@@ -214,7 +214,11 @@ macro_rules! port {
             }
             #[inline(never)]
             pub fn run(probe: &Probe) -> usize {
-                let future = run_port(Installed::new(Backend(probe), probe), Body);
+                let future = run_port(
+                    Installed::new(Backend(probe), probe),
+                    Body,
+                    oer_radio_port::LocalExecution,
+                );
                 let bytes = core::mem::size_of_val(&future);
                 let mut future = pin!(future);
                 let mut cx = Context::from_waker(Waker::noop());

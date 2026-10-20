@@ -164,6 +164,7 @@ fn bitmap_matches_acknowledged_sequence_set_across_wrap_and_reordering() {
                 acknowledged,
                 refused: None,
             }),
+            oer_radio_port::LocalExecution,
         ));
     }
 }
@@ -185,6 +186,7 @@ fn aggregate_does_not_alias_blockack_bit63() {
                 acknowledged: 1,
                 refused: Some(refused),
             }),
+            oer_radio_port::LocalExecution,
         ));
     }
 }
@@ -299,7 +301,11 @@ impl Work for RefusedSent {
 fn a_duplicate_or_out_of_window_sent_subframe_returns_its_owner_and_body() {
     for head in [40, 41] {
         let (backend, _) = backend();
-        let _port_end = block_on(run_port(backend, Body(RefusedSent(head))));
+        let _port_end = block_on(run_port(
+            backend,
+            Body(RefusedSent(head)),
+            oer_radio_port::LocalExecution,
+        ));
     }
 }
 
@@ -351,5 +357,9 @@ impl Work for EverySlotApplied<'_> {
 #[test]
 fn every_minted_block_ack_slot_carries_an_applied_agreement() {
     let (backend, air) = backend();
-    let _port_end = block_on(run_port(backend, Body(EverySlotApplied(&air))));
+    let _port_end = block_on(run_port(
+        backend,
+        Body(EverySlotApplied(&air)),
+        oer_radio_port::LocalExecution,
+    ));
 }

@@ -451,6 +451,7 @@ pub(super) async fn exercise(
                 probe: &probe,
                 trace: &trace,
             },
+            oer_radio_port::LocalExecution,
         ),
         &air,
         clock,

@@ -289,6 +289,7 @@ fn gate_waits_one_publication_and_returns_sent_for_retry_with_original_numbers()
     let _port_end = block_on(run_port(
         backend,
         Body(DuringPublication(Barrier::GateRetry, None, clock.clone())),
+        oer_radio_port::LocalExecution,
     ));
 }
 #[test]
@@ -298,6 +299,7 @@ fn ack_wins_while_gate_closes_and_barrier_follows_the_result() {
     let _port_end = block_on(run_port(
         backend,
         Body(DuringPublication(Barrier::GateAck, None, clock.clone())),
+        oer_radio_port::LocalExecution,
     ));
 }
 #[test]
@@ -307,6 +309,7 @@ fn missing_result_ends_at_publication_bound_without_finishing_the_plan() {
     let _port_end = block_on(run_port(
         backend,
         Body(DuringPublication(Barrier::GateTimeout, None, clock.clone())),
+        oer_radio_port::LocalExecution,
     ));
 }
 #[test]
@@ -316,6 +319,7 @@ fn key_removal_waits_for_the_publication_then_returns_sent_without_retry() {
     let _port_end = block_on(run_port(
         backend,
         Body(DuringPublication(Barrier::RemoveKey, None, clock.clone())),
+        oer_radio_port::LocalExecution,
     ));
 }
 
@@ -343,6 +347,7 @@ impl conformance::BarrierHarness for ModelBarrierHarness {
                 Some(recorded.clone()),
                 clock.clone(),
             )),
+            oer_radio_port::LocalExecution,
         )
         .await;
         let trace = recorded.borrow_mut().take();

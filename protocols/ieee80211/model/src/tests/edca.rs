@@ -152,7 +152,8 @@ impl contract::Harness for Harness {
                 Body(Exercise {
                     case,
                     trace: recorded.clone()
-                })
+                }),
+                oer_radio_port::LocalExecution
             )
             .await,
             oer_radio_port::PortEnd::Uninstalled { .. }

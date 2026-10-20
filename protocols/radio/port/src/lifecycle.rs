@@ -686,9 +686,12 @@ fn prepare_install<'id, B: PortBackend>(
 /// Retirement and its timer then
 /// progress while the body awaits its result; only final detachment and
 /// result delivery depend on that body returning.
-pub fn run_port<B: PortBackend, P: PortBody<B>>(
+/// `execution` consumes the single driver invocation; its returned future
+/// joins the driver without changing where the body is polled.
+pub fn run_port<B: PortBackend, P: PortBody<B>, E: crate::PortExecution<B>>(
     installed: Installed<B>,
     body: P,
+    execution: E,
 ) -> impl Future<Output = PortEnd<B, P::Output>> {
     // Construct the safety net before returning the future: cancellation
     // before its first poll must also poison and retain the installation.
@@ -719,17 +722,18 @@ pub fn run_port<B: PortBackend, P: PortBody<B>>(
         let end = {
             let mut driver = pin!(async {
                 ManuallyDrop::new(
-                    B::drive(
-                        DriverLoan {
-                            driver: &mut *driver_owner,
-                        },
-                        &install.held,
-                        Retire {
-                            request: &install.retiring,
-                            latch: &install.latch,
-                        },
-                    )
-                    .await,
+                    execution
+                        .start(crate::PortDriver {
+                            loan: DriverLoan {
+                                driver: &mut *driver_owner,
+                            },
+                            held: &install.held,
+                            retire: Retire {
+                                request: &install.retiring,
+                                latch: &install.latch,
+                            },
+                        })
+                        .await,
                 )
             });
             let (outcome, driver) = {
