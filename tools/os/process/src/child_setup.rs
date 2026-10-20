@@ -104,4 +104,3 @@ pub(crate) unsafe fn ignore_terminal_signals() {
         let _ = unsafe { kernel_sigaction(signal, Some(action)) };
     }
 }
-
