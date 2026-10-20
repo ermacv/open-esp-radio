@@ -4,7 +4,7 @@
 Reads the hook input JSON on stdin and blocks (exit 2, one line on stderr):
 
 - a Read of a large generated file (raw PAC, PAC API catalog, published SVD
-  or binding index, vendor fact registries), or a Bash command that prints
+  or binding index, vendor fact registries, recorded PHY baselines), or a Bash command that prints
   one whole (cat, head, sed, ...): grep it with an explicit path;
 - an Edit or Write of such a file: regenerate it with its owner's command.
 
@@ -25,6 +25,7 @@ GENERATED = re.compile(
     r"|registers/(?:[^/]+/)?published/[^/]+\.(?:svd|bindings\.toml)"
     r"|vendor/facts/provenance\.toml"
     r"|vendor/facts/names/[^/]+\.toml"
+    r"|vendor/phy-baselines/[^/]+/[^/]+\.json"
     r")$"
 )
 GENERATED_HINT = (
@@ -45,6 +46,8 @@ REGENERATED = [
     (re.compile(r"(?:^|/)vendor/facts/(?:provenance\.toml|names/[^/]+\.toml)$"),
      "no tool in this repository writes it: a machine-written vendor fact registry "
      "changes only by re-deriving it, which the owner decides"),
+    (re.compile(r"(?:^|/)vendor/phy-baselines/[^/]+/[^/]+\.json$"),
+     "`cargo vendor-check phy-baseline generate` from complete vendor capture runs"),
 ]
 
 # Commands that print a file's contents when it is named as an argument.

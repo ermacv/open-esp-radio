@@ -41,6 +41,7 @@ class Edits(unittest.TestCase):
             ("Write", "chips/esp32c5/vendor/facts/names/libpp.toml", "re-deriving"),
             ("Edit", "/w/firmware/platform/esp32s31/linker/dma-window.x", "cargo registers generate"),
             ("Edit", "/w/portable/platform/esp32s31-layout/linker/dma-window.x", "cargo registers generate"),
+            ("Write", "/w/chips/esp32s31/vendor/phy-baselines/4d59230d/wifi-cold.json", "phy-baseline generate"),
         ]:
             self.assert_blocked(tool, path, command)
 
@@ -55,6 +56,7 @@ class Edits(unittest.TestCase):
             "/w/knowledge/esp32s31/vendor/artifacts.toml",
             "/w/.claude/hooks/pre_tool_use.py",
             "/w/firmware/platform/espressif/linker/runtime/sections.x",
+            "/w/chips/esp32s31/vendor/phy-baselines/README.md",
         ]:
             self.assertEqual(run("Edit", file_path=path), (0, ""), path)
 
@@ -68,6 +70,7 @@ class Reads(unittest.TestCase):
             "head -n 50 registers/esp32s31/published/radio.svd",
             "cd x && cat knowledge/esp32s31/vendor/facts/provenance.toml",
             "git show HEAD:chips/esp32s31/pac-raw/src/lib.rs",
+            "cat chips/esp32s31/vendor/phy-baselines/4d59230d/wifi-cold.json",
         ]:
             status, stderr = run("Bash", command=command)
             self.assertEqual(status, 2, command)
