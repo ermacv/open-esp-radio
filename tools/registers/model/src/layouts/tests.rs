@@ -456,7 +456,7 @@ fn publication_requires_a_complete_review_and_naming_for_every_entity() {
         "completeness = \"complete\"\n\n[[review]]\nentity = \"NODE.CONTROL\"",
         "completeness = \"complete\"\nnaming = \"descriptive\"\n\n[[review]]\nentity = \"NODE.CONTROL\"",
     );
-    load(&[("node.toml", &layout_named)]).unwrap();
+    load(&[("node.toml", &layout_named)]).expect("reviewed layout identity naming");
     assert!(error(&[("prefix.toml", PREFIX)]).contains("PREFIX has no complete review"));
 }
 
@@ -660,7 +660,7 @@ naming = "opaque"
 "#;
 
 fn default_node() -> String {
-    NODE.split("[[review]]").next().unwrap().replace(
+    NODE.split("[[review]]").next().expect("a valid layout review fixture").replace(
         "name = \"BIT_29_OPAQUE\"",
         "name = \"BIT_29_OPAQUE\"\nopaque = true",
     ) + DEFAULT_REVIEW
@@ -669,7 +669,7 @@ fn default_node() -> String {
 
 #[test]
 fn local_defaults_cover_layout_words_and_fields() {
-    let model = load(&[("node.toml", &default_node())]).unwrap();
+    let model = load(&[("node.toml", &default_node())]).expect("a valid layout review fixture");
     let reviews = &model.layouts()[0].review;
     assert_eq!(reviews.len(), 7);
     for entity in [
@@ -681,7 +681,7 @@ fn local_defaults_cover_layout_words_and_fields() {
         let review = reviews
             .iter()
             .find(|review| review.entity == entity)
-            .unwrap();
+            .expect("a valid layout review fixture");
         assert_eq!(review.sources, ["fixture"]);
         assert_eq!(
             review.naming,
@@ -691,7 +691,7 @@ fn local_defaults_cover_layout_words_and_fields() {
     let opaque = reviews
         .iter()
         .find(|review| review.entity == "NODE.CONTROL.BIT_29_OPAQUE")
-        .unwrap();
+        .expect("a valid layout review fixture");
     assert_eq!(opaque.sources, ["stand"]);
     assert_eq!(
         opaque.completeness,
@@ -705,12 +705,12 @@ fn an_explicit_review_replaces_every_default_key() {
         + &named_review("NODE.CONTROL.OWNER")
             .replace("provenance = \"reviewed\"", "provenance = \"observed\"")
             .replace("sources = [\"fixture\"]", "sources = [\"override\"]");
-    let model = load(&[("node.toml", &text)]).unwrap();
+    let model = load(&[("node.toml", &text)]).expect("a valid layout review fixture");
     let review = model.layouts()[0]
         .review
         .iter()
         .find(|r| r.entity == "NODE.CONTROL.OWNER")
-        .unwrap();
+        .expect("a valid layout review fixture");
     assert_eq!(review.sources, ["override"]);
     assert_eq!(
         review.provenance,
@@ -732,13 +732,13 @@ fn opaque_selection_is_explicit_and_local_to_one_entity() {
         "name = \"CONTROL\"",
         "name = \"WORD_0000_OPAQUE\"\nopaque = true",
     );
-    let model = load(&[("node.toml", &word)]).unwrap();
+    let model = load(&[("node.toml", &word)]).expect("a valid layout review fixture");
     let reviews = &model.layouts()[0].review;
     assert_eq!(
         reviews
             .iter()
             .find(|r| r.entity == "NODE.WORD_0000_OPAQUE")
-            .unwrap()
+            .expect("a valid layout review fixture")
             .sources,
         ["stand"]
     );
@@ -746,7 +746,7 @@ fn opaque_selection_is_explicit_and_local_to_one_entity() {
         reviews
             .iter()
             .find(|r| r.entity == "NODE.WORD_0000_OPAQUE.OWNER")
-            .unwrap()
+            .expect("a valid layout review fixture")
             .sources,
         ["fixture"]
     );
@@ -755,7 +755,7 @@ fn opaque_selection_is_explicit_and_local_to_one_entity() {
 #[test]
 fn defaults_apply_to_owned_ranges_and_do_not_leak_to_another_layout() {
     let prefix = PREFIX.to_owned() + DEFAULT_REVIEW;
-    load(&[("prefix.toml", &prefix)]).unwrap();
+    load(&[("prefix.toml", &prefix)]).expect("a valid layout review fixture");
     assert!(
         error(&[("node.toml", &default_node()), ("prefix.toml", PREFIX)])
             .contains("PREFIX has no complete review")
@@ -833,7 +833,7 @@ fn defaults_reject_unknown_keys_and_unknown_or_redundant_explicit_entities() {
 
 #[test]
 fn default_resolution_preserves_rendered_layout_output() {
-    let original = load(&[("node.toml", NODE)]).unwrap();
+    let original = load(&[("node.toml", NODE)]).expect("a valid layout review fixture");
     let mut compact = default_node()
         .replace("sources = [\"stand\"]", "sources = [\"fixture\"]")
         .replace("accuracy = \"positional\"", "accuracy = \"exact\"");
@@ -841,12 +841,12 @@ fn default_resolution_preserves_rendered_layout_output() {
         .split("[[review]]")
         .find(|block| block.starts_with("\nentity = \"NODE.CONTROL.OWNER\""))
         .map(|block| format!("[[review]]{block}"))
-        .unwrap()
+        .expect("a valid layout review fixture")
         .as_str();
-    let compact = load(&[("node.toml", &compact)]).unwrap();
+    let compact = load(&[("node.toml", &compact)]).expect("a valid layout review fixture");
     let regions = BTreeMap::from([("dma-window".to_owned(), (0x2000, 0x4000))]);
     assert_eq!(
-        super::render(original.layouts(), &regions).unwrap(),
-        super::render(compact.layouts(), &regions).unwrap()
+        super::render(original.layouts(), &regions).expect("a valid layout review fixture"),
+        super::render(compact.layouts(), &regions).expect("a valid layout review fixture")
     );
 }
