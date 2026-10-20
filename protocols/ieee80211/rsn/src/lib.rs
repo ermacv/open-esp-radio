@@ -55,3 +55,14 @@ pub enum RsnInterface {
     Station,
     AccessPoint,
 }
+
+#[cfg(test)]
+mod key_schedule_tests {
+    #[test]
+    fn aes_key_schedules_zeroize_on_drop() {
+        fn assert_zeroize_on_drop<T: zeroize::ZeroizeOnDrop>() {}
+        assert_zeroize_on_drop::<aes::Aes128>();
+        assert_zeroize_on_drop::<aes::Aes192>();
+        assert_zeroize_on_drop::<aes::Aes256>();
+    }
+}

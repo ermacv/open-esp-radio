@@ -34,7 +34,11 @@ same type without extracting an intermediate array. PTK derivation writes
 directly into the zeroizing PTK, and GTK parsing borrows the key-data buffer
 into a zeroizing GTK. Pending actions, PMF reception and retained station
 records use the common owner; adapters and comparisons borrow its bytes.
-This covers those owners, not arbitrary compiler temporaries.
+This covers those owners, not arbitrary compiler temporaries. AES-128/192/256
+key schedules enable RustCrypto's `zeroize` feature and wipe on drop, including
+when the stateless cipher crate is built independently. HMAC and SHA-1/SHA-2
+internal state derived from KCK/PMK material does not wipe on drop; zeroizing
+the input owners does not erase that state.
 
 `oer_ieee80211_cipher::ccmp_mpdu::CcmpAssociation` authenticates the QoS A-MSDU-present bit in both AAD and
 nonce flags when SPP was negotiated. Without SPP it masks that bit according
@@ -100,9 +104,6 @@ not enable the policy.
   so a lost M4 ends the handshake. Our supplicant hides it:
   `supplicant.rs::RsnConnectedSupplicant::on_message3` and
   `state/supplicant.rs` accept an equal counter as a retransmission.
-- **AES key schedules are not wiped.** `Cargo.toml` enables `aes` without
-  its `zeroize` feature; no test checks `Aes128: ZeroizeOnDrop`. The
-  HMAC/SHA-2 state holding the KCK and PMK has no wipe either.
 - **SAE H2E ignores the Rejected Groups salt.** `sae.rs::SaeCommit::process`
   always derives the keyseed with a zero salt; `rejected_groups` is only
   parsed. H2E with a rejected group does not interoperate.

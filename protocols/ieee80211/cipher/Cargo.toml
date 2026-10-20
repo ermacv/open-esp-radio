@@ -9,7 +9,7 @@ description = "Stateless IEEE 802.11 CCMP, BIP and bounded AES key-wrap transfor
 
 [dependencies]
 oer-ieee80211-wire = { path = "../wire" }
-aes = { version = "0.8.4", default-features = false }
+aes = { version = "0.8.4", default-features = false, features = ["zeroize"] }
 subtle = { version = "2.6.1", default-features = false }
 cmac = { version = "0.7.2", default-features = false }
 zeroize = { version = "1.9.0", default-features = false, features = ["derive"] }
