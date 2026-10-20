@@ -70,7 +70,9 @@ impl Clock for TraceTimer {
 
 impl Timer for TraceTimer {
     fn wait_until(&self, deadline: Instant) -> impl Future<Output = ()> {
-        if let Some(interval) = deadline.checked_duration_since(self.now.get()) {
+        if let Some(interval) = deadline.checked_duration_since(self.now.get())
+            && interval != oer_time::Duration::ZERO
+        {
             (self.deliver)(u32::try_from(interval.as_micros()).unwrap_or(u32::MAX));
             self.now.set(deadline);
         }
@@ -658,7 +660,7 @@ oer_probe_macros::probe! {
         // The PHY archive is compared without the coexistence archive, so its
         // weak grant-protect hooks return without effect.
         let mut grant = oer_esp32s31_phy::WeakPhyGrantProtect;
-        let timer = TraceTimer::production();
+        let timer = TraceTimer::observations();
         let mut port = oer_esp32s31_phy::TargetPhyCalibrationTrackingPort::<
             _,
             _,
@@ -786,7 +788,7 @@ oer_probe_macros::probe! {
         // The PHY archive is compared without the coexistence archive, so its
         // weak grant-protect hooks return without effect.
         let mut grant = oer_esp32s31_phy::WeakPhyGrantProtect;
-        let timer = TraceTimer::production();
+        let timer = TraceTimer::observations();
         let mut port =
             oer_esp32s31_phy::TargetPhyParamTrackingPort::<_, _, _, RfpllTraceDelay, _, _>::new(
                 &mut platform,

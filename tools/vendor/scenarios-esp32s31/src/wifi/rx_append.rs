@@ -4,8 +4,9 @@
 //! call: it rearms every descriptor of the unit and resets its buffer guards,
 //! links the unit after the list's tail, rings the append doorbell and polls
 //! it, then repairs the descriptor base when the walker already stopped at
-//! the old tail. Production does the same through its ring owner's recycle
-//! and reload completion. Both sides hold the ring at the addresses of the
+//! the old tail. Production resumes that exhausted list with a second
+//! doorbell instead. Only that suffix uses a reviewed state refinement;
+//! every other register effect compares exactly. Both sides hold the ring at the addresses of the
 //! production probe's DMA arena, which its layout entry reports; each case
 //! completes the ring's first descriptors as one unit and compares the
 //! doorbell, cursor and base register effects, the descriptors and the
@@ -15,7 +16,8 @@ use crate::mac::{LEAF_FILLS, Mac};
 use oer_analysis_blobray_domain::{
     CallBinding, CallBoundary, CallDeclaration, CallRepetition, CallResponse, ComparisonVerdict,
     DeviceBehavior, DeviceDeclaration, EffectDisposition, EffectPattern, EffectRule,
-    EffectSelector, EffectValue, ExecutionCase, MemoryPair, ReadRun, RegionLifetime, SessionReset,
+    EffectSelector, EffectValue, ExecutionCase, ExecutionEvent, ExecutionEvidence, MemoryPair,
+    ReadRun, RegionLifetime, SessionReset,
 };
 
 /// The vendor function, linked as an extra root.
@@ -108,6 +110,14 @@ struct Cursor {
     /// `wDev_DiscardFrame` detached it, and both sides publish the unit
     /// through the base without a doorbell.
     empty: bool,
+}
+
+impl Cursor {
+    /// Only the nonempty list exhausted short of the appended tail needs
+    /// the measured BASE-write/second-doorbell refinement.
+    fn exhausted_reload(self) -> bool {
+        self.repair && !self.empty
+    }
 }
 
 /// A descriptor the walker names, relative to the unit.
@@ -365,6 +375,14 @@ fn registers(
         if cursor.settled.0.is_none() {
             last.push(ReadRun::once(low(Some(cursor.settled.1))));
         }
+        if production && cursor.exhausted_reload() {
+            // SOURCE: chips/esp32s31/notes/wifi/rx-walker.md,
+            // HIL_W1_RX_WALKER_2026_10_18 H1: the repeated doorbell resumes
+            // at LAST.next, the rearmed head. The second RMW and settled
+            // read are explicit finite responses, followed by that NEXT.
+            control.extend([0, 0]);
+            next.push(ReadRun::once(layout.descriptor(0) & LOW_ADDRESS));
+        }
     }
     let mut models = vec![];
     if !control.is_empty() {
@@ -374,7 +392,13 @@ fn registers(
                 address: RX_CONTROL,
                 width: 4,
                 reads: control,
-                writes: if cursor.empty { vec![] } else { vec![DOORBELL] },
+                writes: if cursor.empty {
+                    vec![]
+                } else if production && cursor.exhausted_reload() {
+                    vec![DOORBELL, DOORBELL]
+                } else {
+                    vec![DOORBELL]
+                },
             },
         ));
     }
@@ -408,7 +432,7 @@ fn registers(
             },
         ));
     }
-    if cursor.repair {
+    if cursor.repair && (!production || cursor.empty) {
         models.push(device(
             "rx-base",
             DeviceBehavior::Fifo {
@@ -449,7 +473,10 @@ fn release_proof(name: &str, address: u32) -> EffectRule {
 /// Effects the two sides reach differently: the vendor completes LAST with
 /// its high-address window, which production's DMA window makes constant,
 /// and production orders its cursor samples with device fences.
-fn contract(ctx: &mut Mac) -> Result<oer_analysis_riscv_model::ArtifactId> {
+fn contract(
+    ctx: &mut Mac,
+    exhausted: Option<(&Layout, Cursor)>,
+) -> Result<oer_analysis_riscv_model::ArtifactId> {
     let image = ctx.image_symbols()?;
     let vendor = ctx.session.image_endpoint(
         &ctx.image_object,
@@ -467,7 +494,7 @@ fn contract(ctx: &mut Mac) -> Result<oer_analysis_riscv_model::ArtifactId> {
         occurrence: None,
         followed_by: None,
     };
-    let rules = vec![
+    let mut rules = vec![
         EffectRule {
             name: "vendor-only-window-read".into(),
             vendor: Some(window),
@@ -559,10 +586,18 @@ fn contract(ctx: &mut Mac) -> Result<oer_analysis_riscv_model::ArtifactId> {
                 .into(),
         },
     ];
+    if let Some((layout, cursor)) = exhausted {
+        rules.extend(exhausted_rules(layout, cursor));
+    }
+    let suffix = if exhausted.is_some() {
+        "-exhausted"
+    } else {
+        ""
+    };
     ctx.session.review_effects(
-        "rx-append-effects",
+        &format!("rx-append{suffix}-effects"),
         &format!(
-            "{}.{}.{VENDOR}.effects",
+            "{}.{}.{VENDOR}{suffix}.effects",
             crate::CHIP.name,
             crate::mac::CONTRACT_ID
         ),
@@ -570,11 +605,196 @@ fn contract(ctx: &mut Mac) -> Result<oer_analysis_riscv_model::ArtifactId> {
             vendor,
             production,
             rules,
-            "one append of a completed unit to a live receive list",
+            if exhausted.is_some() {
+                "only the reload suffix of a nonempty list exhausted short of the appended tail; \
+                 SOURCE: chips/esp32s31/notes/wifi/rx-walker.md, HIL_W1_RX_WALKER_2026_10_18"
+            } else {
+                "one append of a completed unit to a live receive list"
+            },
         ),
         "every doorbell, cursor and base effect compares exactly; production adds fences and \
             omits the window read",
     )
+}
+
+/// One narrow exception: a vendor BASE publication becomes a second
+/// production doorbell, with exactly its RMW, settled read and resumed NEXT.
+/// SOURCE: chips/esp32s31/notes/wifi/rx-walker.md, vendor behaviour and H1/H2
+/// of HIL_W1_RX_WALKER_2026_10_18; rx_ring.rs::settle_reload.
+fn exhausted_rules(layout: &Layout, cursor: Cursor) -> Vec<EffectRule> {
+    assert!(cursor.exhausted_reload(), "only an exhausted nonempty list");
+    let pattern = |selector, value, occurrence| EffectPattern {
+        selector,
+        value: EffectValue::Exact { value },
+        occurrence: Some(occurrence),
+        preceded_by: None,
+        followed_by: None,
+    };
+    let mut rules = vec![EffectRule {
+        name: "exhausted-list-resume".into(),
+        vendor: Some(pattern(
+            EffectSelector::MmioWrite {
+                address: RX_BASE,
+                width: 4,
+            },
+            layout.descriptor(0),
+            1,
+        )),
+        replacement: Some(pattern(
+            EffectSelector::MmioWrite {
+                address: RX_CONTROL,
+                width: 4,
+            },
+            DOORBELL,
+            2,
+        )),
+        disposition: EffectDisposition::Replaced,
+        min_occurrences: 1,
+        max_occurrences: 1,
+        reason: "only an exhausted-list reload resumes at LAST.next through a second doorbell \
+            instead of BASE; final NEXT, published head and descriptor ownership must agree; \
+            SOURCE: chips/esp32s31/notes/wifi/rx-walker.md, HIL_W1_RX_WALKER_2026_10_18"
+            .into(),
+    }];
+    for (name, address, value, occurrence) in [
+        ("rereload-rmw", RX_CONTROL, 0, cursor.pending + 4),
+        ("rereload-settled", RX_CONTROL, 0, cursor.pending + 5),
+        (
+            "rereload-next",
+            RX_NEXT,
+            layout.descriptor(0) & LOW_ADDRESS,
+            3,
+        ),
+    ] {
+        rules.push(EffectRule {
+            name: name.into(),
+            vendor: None,
+            replacement: Some(pattern(
+                EffectSelector::MmioRead { address, width: 4 },
+                value,
+                occurrence,
+            )),
+            disposition: EffectDisposition::Added,
+            min_occurrences: 1,
+            max_occurrences: 1,
+            reason: "the single repeated doorbell's finite RMW/settle observations; \
+                SOURCE: chips/esp32s31/notes/wifi/rx-walker.md, HIL_W1_RX_WALKER_2026_10_18 H1"
+                .into(),
+        });
+    }
+    rules
+}
+
+#[derive(Debug, Eq, PartialEq)]
+struct ResumedRing {
+    next: u32,
+    head: u32,
+    owners: Vec<bool>,
+}
+
+/// Project the two permitted resume transactions to their walker state.
+/// The device responses are explicit assumptions, not a hardware experiment:
+/// SOURCE: chips/esp32s31/notes/wifi/rx-walker.md, H1 (second doorbell follows
+/// LAST.next) and H2 (BASE publishes the head) of HIL_W1_RX_WALKER_2026_10_18.
+fn resumed_ring(
+    layout: &Layout,
+    unit: usize,
+    events: &[ExecutionEvent],
+    descriptors: &[u8],
+    production: bool,
+) -> Result<ResumedRing> {
+    if unit == 0
+        || unit >= layout.buffers.len()
+        || descriptors.len() != layout.buffers.len() * DESCRIPTOR_BYTES as usize
+    {
+        return Err(invalid("exhausted reload needs a proper descriptor prefix"));
+    }
+    let word = |index: usize, offset: usize| {
+        let start = index * DESCRIPTOR_BYTES as usize + offset;
+        u32::from_le_bytes(
+            descriptors[start..start + 4]
+                .try_into()
+                .expect("descriptor word"),
+        )
+    };
+    let head = word(layout.buffers.len() - 1, NEXT_WORD);
+    let writes = |register| {
+        events
+            .iter()
+            .filter_map(move |event| match event {
+                ExecutionEvent::Write {
+                    address,
+                    width: 4,
+                    value,
+                } if *address == register => Some(*value),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+    };
+    let base = writes(RX_BASE);
+    let doorbells = writes(RX_CONTROL);
+    let next = if production {
+        if !base.is_empty() || doorbells != [DOORBELL, DOORBELL] {
+            return Err(invalid(
+                "production exhausted reload must resume with two doorbells",
+            ));
+        }
+        events
+            .iter()
+            .rev()
+            .find_map(|event| match event {
+                ExecutionEvent::Read {
+                    address: RX_NEXT,
+                    width: 4,
+                    value,
+                } => Some(*value),
+                _ => None,
+            })
+            .ok_or_else(|| invalid("production has no resumed NEXT observation"))?
+    } else {
+        if base != [head] || doorbells != [DOORBELL] {
+            return Err(invalid(
+                "vendor exhausted reload must publish LAST.next through BASE",
+            ));
+        }
+        base[0] & LOW_ADDRESS
+    };
+    let owners: Vec<_> = (0..layout.buffers.len())
+        .map(|index| word(index, 0) & OWNED != 0)
+        .collect();
+    if head != layout.descriptor(0)
+        || next != head & LOW_ADDRESS
+        || !owners[..unit].iter().all(|owned| *owned)
+        || (0..unit).any(|index| word(index, 0) & DONE != 0)
+    {
+        return Err(invalid(
+            "exhausted reload did not resume at the rearmed head",
+        ));
+    }
+    Ok(ResumedRing { next, head, owners })
+}
+
+fn check_exhausted(
+    layout: &Layout,
+    unit: usize,
+    records: &[ExecutionEvidence],
+    case: u32,
+) -> Result<()> {
+    let state = |side| {
+        resumed_ring(
+            layout,
+            unit,
+            &crate::evidence::events(records, case, side),
+            &crate::evidence::selection(records, case, side, 0),
+            side,
+        )
+    };
+    if state(false)? != state(true)? {
+        return Err(invalid(
+            "exhausted reload left different ring/walker states",
+        ));
+    }
+    Ok(())
 }
 
 /// The rows of one case: the compared append, whose vendor side preloads
@@ -704,15 +924,25 @@ pub fn exercise(ctx: &mut Mac) -> Result<()> {
     if layout.buffers.len() < 2 || layout.capacity & !SIZE_MASK != 0 {
         return Err(invalid("the RX append layout is not a ring"));
     }
-    let effects = contract(ctx)?;
+    let effects = contract(ctx, None)?;
+    let exhausted_cursor = *CURSORS
+        .iter()
+        .find(|c| c.exhausted_reload())
+        .expect("an exhausted-list case");
+    let exhausted_effects = contract(ctx, Some((&layout, exhausted_cursor)))?;
     let whole = layout.buffers.len() as u32;
     for unit in UNITS.iter().copied().chain([whole]) {
         let mut rows = vec![];
         let mut compared = vec![];
         for &cursor in CURSORS.iter().filter(|c| c.empty == (unit == whole)) {
             for fill in LEAF_FILLS {
-                let added = case_rows(ctx, &layout, unit as usize, cursor, fill, &effects)?;
-                compared.push(rows.len() as u32 + added.len() as u32 - 1);
+                let contract = if cursor.exhausted_reload() {
+                    &exhausted_effects
+                } else {
+                    &effects
+                };
+                let added = case_rows(ctx, &layout, unit as usize, cursor, fill, contract)?;
+                compared.push((rows.len() as u32 + added.len() as u32 - 1, cursor));
                 rows.extend(added);
             }
         }
@@ -726,14 +956,123 @@ pub fn exercise(ctx: &mut Mac) -> Result<()> {
             )?
             .records
             .clone();
-        for case in compared {
+        for (case, cursor) in compared {
             let status = crate::i2c::returned_low(&records, case, true);
             if status != Some(0) {
                 return Err(invalid(format!(
                     "{label} case {case}: production recycle reported {status:?}"
                 )));
             }
+            if cursor.exhausted_reload() {
+                check_exhausted(&layout, unit as usize, &records, case)?;
+            }
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn fixture() -> (Layout, Vec<u8>) {
+        let layout = Layout {
+            capacity: 64,
+            base: 0x2f00_3000,
+            buffers: vec![0x2f00_4000, 0x2f00_4100, 0x2f00_4200, 0x2f00_4300],
+        };
+        let (mut descriptors, _) = ring(&layout, 2, 0);
+        // The completed prefix is rearmed and linked after the old tail.
+        for descriptor in descriptors
+            .chunks_exact_mut(DESCRIPTOR_BYTES as usize)
+            .take(2)
+        {
+            let armed = layout.capacity | (layout.capacity << LENGTH_SHIFT) | OWNED;
+            descriptor[..4].copy_from_slice(&armed.to_le_bytes());
+        }
+        let link = 3 * DESCRIPTOR_BYTES as usize + NEXT_WORD;
+        descriptors[link..link + 4].copy_from_slice(&layout.descriptor(0).to_le_bytes());
+        (layout, descriptors)
+    }
+
+    fn write(address: u32, value: u32) -> ExecutionEvent {
+        ExecutionEvent::Write {
+            address,
+            width: 4,
+            value,
+        }
+    }
+
+    fn resumed_next(layout: &Layout) -> ExecutionEvent {
+        ExecutionEvent::Read {
+            address: RX_NEXT,
+            width: 4,
+            value: layout.descriptor(0) & LOW_ADDRESS,
+        }
+    }
+
+    #[test]
+    fn exhausted_resume_equates_base_and_rering_only_at_the_rearmed_head() {
+        let (layout, descriptors) = fixture();
+        let vendor = [
+            write(RX_CONTROL, DOORBELL),
+            write(RX_BASE, layout.descriptor(0)),
+        ];
+        let production = [
+            write(RX_CONTROL, DOORBELL),
+            write(RX_CONTROL, DOORBELL),
+            resumed_next(&layout),
+        ];
+        let expected = resumed_ring(&layout, 2, &vendor, &descriptors, false).unwrap();
+        assert_eq!(
+            resumed_ring(&layout, 2, &production, &descriptors, true).unwrap(),
+            expected
+        );
+        for wrong in [
+            vec![write(RX_CONTROL, DOORBELL), resumed_next(&layout)],
+            vec![
+                write(RX_CONTROL, DOORBELL),
+                write(RX_CONTROL, DOORBELL),
+                write(RX_CONTROL, DOORBELL),
+                resumed_next(&layout),
+            ],
+            vec![
+                write(RX_CONTROL, DOORBELL),
+                write(RX_CONTROL, DOORBELL),
+                write(RX_BASE, layout.descriptor(0)),
+                resumed_next(&layout),
+            ],
+            vec![
+                write(RX_CONTROL, DOORBELL),
+                write(RX_CONTROL, DOORBELL),
+                ExecutionEvent::Read {
+                    address: RX_NEXT,
+                    width: 4,
+                    value: 0,
+                },
+            ],
+        ] {
+            assert!(resumed_ring(&layout, 2, &wrong, &descriptors, true).is_err());
+        }
+    }
+
+    #[test]
+    fn exhausted_resume_rejects_software_owned_or_completed_heads_and_wrong_links() {
+        let (layout, descriptors) = fixture();
+        let events = [
+            write(RX_CONTROL, DOORBELL),
+            write(RX_CONTROL, DOORBELL),
+            resumed_next(&layout),
+        ];
+        for flag in [0, OWNED | DONE] {
+            let mut wrong = descriptors.clone();
+            wrong[..4].copy_from_slice(&(layout.capacity | flag).to_le_bytes());
+            assert!(resumed_ring(&layout, 2, &events, &wrong, true).is_err());
+        }
+        let mut wrong = descriptors.clone();
+        let link = 3 * DESCRIPTOR_BYTES as usize + NEXT_WORD;
+        wrong[link..link + 4].copy_from_slice(&layout.descriptor(1).to_le_bytes());
+        assert!(resumed_ring(&layout, 2, &events, &wrong, true).is_err());
+        assert!(resumed_ring(&layout, layout.buffers.len(), &events, &descriptors, true).is_err());
+    }
 }

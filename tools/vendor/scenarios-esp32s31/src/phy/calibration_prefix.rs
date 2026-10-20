@@ -449,7 +449,11 @@ pub fn exercise(ctx: &mut I2c) -> Result<()> {
             MAX_EVENTS,
             None,
         )?;
-        assert_eq!(returned_low(&records, 0, false), Some(2));
+        // SOURCE: analog/pbus.rs commits ForceTestTimedOut as a child outcome;
+        // tracking/calibration.rs consumes it into the parent's failure release
+        // path. production_trace.rs::open_phy_calibration_trace_pbus_clear
+        // reports that non-Dcode parent action as 4 (2 is an executor error).
+        assert_eq!(returned_low(&records, 0, false), Some(4));
         let observed = events(&records, 0, false);
         let stuck = observed
             .iter()

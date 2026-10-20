@@ -3,8 +3,7 @@
 //! `wifi-mac` leaf machinery.
 use crate::harness::Result;
 use crate::mac::{
-    Domain, Leaf, Objects, Suite, Vendor, in_archive, leaf, objects, released,
-    released_when_leased, stated, vendor_reads,
+    Domain, Leaf, Objects, Suite, Vendor, in_archive, leaf, objects, stated, vendor_reads,
 };
 use oer_analysis_blobray_domain::{
     CallBinding, CallBoundary, CallDeclaration, CallRepetition, CallResponse, RegionLifetime,
@@ -288,51 +287,39 @@ fn external_params_abi(words: &[u32], vendor: &Vendor<'_>) -> Result<Objects> {
     })
 }
 
-/// Production borrows the timer bank through a validation lease of the
-/// radio arbiter and releases it with one release fence after the leaf's
-/// register transaction.
-const RELEASE_FENCES: u32 = 1;
+// SOURCE: firmware/probes/esp32s31-radio/src/coex.rs::with_domain lends
+// RadioHardware::for_probe().split(()) directly; hal/src/coex.rs::CoexTimerBank
+// borrows those owned registers without a lease or a release fence. These
+// leaves compare all effects exactly, including any unexpected fence.
 
 /// Session input of `libbtbb.a`, the suite's second archive.
 const BTBB_INPUT: u64 = 4;
 
 /// Every compared coexistence leaf.
 pub const LEAVES: &[Leaf] = &[
-    released(
-        leaf(
-            "coex_hw_timer_enable",
-            "open_coex_trace_coex_hw_timer_enable",
-            &[("index", Domain::Words(TIMERS))],
-            false,
-        ),
-        RELEASE_FENCES,
+    leaf(
+        "coex_hw_timer_enable",
+        "open_coex_trace_coex_hw_timer_enable",
+        &[("index", Domain::Words(TIMERS))],
+        false,
     ),
-    released(
-        leaf(
-            "coex_hw_timer_disable",
-            "open_coex_trace_coex_hw_timer_disable",
-            &[("index", Domain::Words(TIMERS))],
-            false,
-        ),
-        RELEASE_FENCES,
+    leaf(
+        "coex_hw_timer_disable",
+        "open_coex_trace_coex_hw_timer_disable",
+        &[("index", Domain::Words(TIMERS))],
+        false,
     ),
-    released(
-        leaf(
-            "coex_hw_timer_force",
-            "open_coex_trace_coex_hw_timer_force",
-            &[("index", Domain::Words(TIMERS))],
-            false,
-        ),
-        RELEASE_FENCES,
+    leaf(
+        "coex_hw_timer_force",
+        "open_coex_trace_coex_hw_timer_force",
+        &[("index", Domain::Words(TIMERS))],
+        false,
     ),
-    released(
-        leaf(
-            "coex_hw_timer_unforce",
-            "open_coex_trace_coex_hw_timer_unforce",
-            &[("index", Domain::Words(TIMERS))],
-            false,
-        ),
-        RELEASE_FENCES,
+    leaf(
+        "coex_hw_timer_unforce",
+        "open_coex_trace_coex_hw_timer_unforce",
+        &[("index", Domain::Words(TIMERS))],
+        false,
     ),
     // The vendor reads its priority table without a bound, so the domain
     // is the admitted events.
@@ -357,88 +344,76 @@ pub const LEAVES: &[Leaf] = &[
         &[("event", Domain::Words(DRIVER_EVENTS_AND_INVALID))],
         true,
     ),
-    // An event without a policy timer is rejected before the lease.
-    released_when_leased(
-        leaf(
-            "coex_core_release",
-            "open_coex_core_trace_release",
-            &[
-                ("_client", Domain::Words(&[0, 1])),
-                ("event", Domain::Words(DRIVER_EVENTS_AND_INVALID)),
-            ],
-            true,
-        ),
-        RELEASE_FENCES,
+    // An event without a policy timer is rejected before accessing registers.
+    leaf(
+        "coex_core_release",
+        "open_coex_core_trace_release",
+        &[
+            ("_client", Domain::Words(&[0, 1])),
+            ("event", Domain::Words(DRIVER_EVENTS_AND_INVALID)),
+        ],
+        true,
     ),
     // The timer clock `coex_core_pre_init` selects (4 over 50 on silicon, 8
     // over 1 otherwise), every selector's lowest accepted and rejected
     // divisor, a non-one-hot selector and a divisor past the twelve-bit field.
-    // A rejected selection is refused before the lease.
-    released_when_leased(
-        stated(
-            objects(
-                leaf(
-                    "coex_hw_timer_freq_set",
-                    "open_coex_trace_timer_freq_set",
-                    &[
-                        ("selector", Domain::Words(&[1, 2, 3, 4, 8])),
-                        ("divisor", Domain::Words(&[1, 2, 3, 39, 40, 49, 50, 4_097])),
-                    ],
-                    true,
-                ),
-                freq_set_abi,
+    // A rejected selection is refused before accessing registers.
+    stated(
+        objects(
+            leaf(
+                "coex_hw_timer_freq_set",
+                "open_coex_trace_timer_freq_set",
+                &[
+                    ("selector", Domain::Words(&[1, 2, 3, 4, 8])),
+                    ("divisor", Domain::Words(&[1, 2, 3, 39, 40, 49, 50, 4_097])),
+                ],
+                true,
             ),
-            CLOCK_SELECTIONS,
+            freq_set_abi,
         ),
-        RELEASE_FENCES,
+        CLOCK_SELECTIONS,
     ),
     // Clients 0 and 1 are the request kinds production admits, as
     // Bluetooth and Wi-Fi.
-    released(
-        stated(
-            objects(
-                leaf(
-                    "coex_hw_timer_set",
-                    "open_coex_set_trace_coex_hw_timer_set",
-                    &[
-                        ("index", Domain::Words(TIMERS)),
-                        ("client", Domain::Words(&[0, 1])),
-                        ("pti", Domain::Words(&[0, 0x0f])),
-                        ("latency", Domain::Words(&[0, 2_000])),
-                        ("duration", Domain::Words(&[3_000, u32::MAX])),
-                        ("is_real_chip", Domain::Words(REAL_CHIP)),
-                    ],
-                    false,
-                ),
-                timer_set_abi,
+    stated(
+        objects(
+            leaf(
+                "coex_hw_timer_set",
+                "open_coex_set_trace_coex_hw_timer_set",
+                &[
+                    ("index", Domain::Words(TIMERS)),
+                    ("client", Domain::Words(&[0, 1])),
+                    ("pti", Domain::Words(&[0, 0x0f])),
+                    ("latency", Domain::Words(&[0, 2_000])),
+                    ("duration", Domain::Words(&[3_000, u32::MAX])),
+                    ("is_real_chip", Domain::Words(REAL_CHIP)),
+                ],
+                false,
             ),
-            CLOCK_SELECTIONS,
+            timer_set_abi,
         ),
-        RELEASE_FENCES,
+        CLOCK_SELECTIONS,
     ),
-    released_when_leased(
-        stated(
-            objects(
-                leaf(
-                    "coex_core_request",
-                    "open_coex_core_trace_request",
-                    &[
-                        ("client", Domain::Words(&[0, 1])),
-                        ("event", Domain::Words(DRIVER_EVENTS_AND_INVALID)),
-                        ("latency", Domain::Words(&[2_000])),
-                        ("duration", Domain::Words(&[3_000])),
-                        ("is_real_chip", Domain::Words(REAL_CHIP)),
-                    ],
-                    true,
-                ),
-                request_abi,
+    stated(
+        objects(
+            leaf(
+                "coex_core_request",
+                "open_coex_core_trace_request",
+                &[
+                    ("client", Domain::Words(&[0, 1])),
+                    ("event", Domain::Words(DRIVER_EVENTS_AND_INVALID)),
+                    ("latency", Domain::Words(&[2_000])),
+                    ("duration", Domain::Words(&[3_000])),
+                    ("is_real_chip", Domain::Words(REAL_CHIP)),
+                ],
+                true,
             ),
-            CLOCK_SELECTIONS,
+            request_abi,
         ),
-        RELEASE_FENCES,
+        CLOCK_SELECTIONS,
     ),
     // The arbiter's PHY grant protect on event 48 and timer 5: production's
-    // `PhyGrantProtect` keeps its validation lease.
+    // `PhyGrantProtect` borrows timer 5 directly from the radio domain.
     vendor_reads(
         stated(
             objects(
