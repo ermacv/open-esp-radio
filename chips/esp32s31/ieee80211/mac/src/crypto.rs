@@ -11,11 +11,7 @@ use oer_esp32s31_hal::{
     types::{MacCcmpKeyIdentity, MacKeyInstallOutcome},
 };
 
-use oer_espressif_ieee80211_policy::ccmp::TX_PACKET_NUMBER_STEP;
-use {
-    oer_ieee80211_upper_mac::ccmp::CcmpTxPacketNumber as PacketNumberAllocator,
-    oer_ieee80211_wire::ccmp::{CcmpKeyId, GroupKeyId},
-};
+use oer_ieee80211_wire::ccmp::GroupKeyId;
 
 use subtle::ConstantTimeEq;
 
@@ -30,33 +26,6 @@ pub const AP_PAIRWISE_HARDWARE_INDEX_BASE: u8 = 8;
 pub const AP_PAIRWISE_SLOT_COUNT: u8 = 15;
 const AP_GROUP_HARDWARE_INDEX_BASE: u8 = 1;
 const CCMP_KEY_BYTES: usize = 16;
-
-/// Exhaustion of one key's finite 48-bit CCMP transmit packet-number space.
-pub use oer_ieee80211_upper_mac::ccmp::CcmpTxPacketNumberError;
-
-/// Unique software owner of one installed key's transmit packet number: the
-/// portable allocator at the Espressif `net80211` step of three
-/// (`oer_espressif_ieee80211_policy::ccmp`).
-struct CcmpTxPacketNumber(PacketNumberAllocator);
-
-impl CcmpTxPacketNumber {
-    const fn new() -> Self {
-        Self(PacketNumberAllocator::new(TX_PACKET_NUMBER_STEP))
-    }
-
-    /// An allocator whose last emitted 48-bit PN is `last`.
-    #[cfg(test)]
-    fn after(last: u64) -> Self {
-        Self(PacketNumberAllocator::continuing_after(
-            TX_PACKET_NUMBER_STEP,
-            oer_ieee80211_wire::ccmp::CcmpPacketNumber::new(last).expect("a 48-bit PN"),
-        ))
-    }
-
-    fn next_header(&mut self, key_id: CcmpKeyId) -> Result<[u8; 8], CcmpTxPacketNumberError> {
-        self.0.next_header(key_id)
-    }
-}
 
 /// Finite hardware authority for the two open STA CCMP slots.
 pub trait CcmpKeyHardware {
@@ -201,7 +170,6 @@ pub enum StaGroupCcmpReplaceError {
 #[must_use = "the installed hardware key must remain owned until it is explicitly cleared"]
 pub struct StaPairwiseCcmpSlot {
     peer: [u8; 6],
-    tx_packet_number: CcmpTxPacketNumber,
 }
 
 /// Authority for the one active STA group CCMP slot recovered from the
@@ -254,7 +222,6 @@ pub struct ApPairwiseCcmpSlot {
     peer: [u8; 6],
     association_id: u16,
     hardware_index: u8,
-    tx_packet_number: CcmpTxPacketNumber,
 }
 
 /// A GTK wire ID supported by the S31 AP layout (1 through 3).
@@ -301,7 +268,6 @@ impl ApGroupKeyId {
 pub struct ApGroupCcmpSlot {
     key_id: ApGroupKeyId,
     hardware_index: u8,
-    tx_packet_number: CcmpTxPacketNumber,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -342,18 +308,6 @@ impl StaPairwiseCcmpSlot {
         &self.peer
     }
 
-    /// Advances the vendor-compatible 48-bit TX packet number and returns the
-    /// eight-byte CCMP header for one pairwise MPDU.
-    ///
-    /// The pinned S31 net80211 implementation advances by three
-    /// (`oer_espressif_ieee80211_policy::ccmp::TX_PACKET_NUMBER_STEP`). A newly
-    /// installed key therefore emits PN 3 first. Pairwise traffic uses key ID
-    /// zero, so only the ExtIV bit is present in byte three. Once PN 2^48 - 1
-    /// has been emitted, later calls fail without wrapping or mutating state.
-    pub fn next_tx_ccmp_header(&mut self) -> Result<[u8; 8], CcmpTxPacketNumberError> {
-        self.tx_packet_number.next_header(CcmpKeyId::PAIRWISE)
-    }
-
     pub fn clear<H: CcmpKeyHardware>(self, hardware: &mut H) {
         hardware.clear_ccmp_entry(STA_PAIRWISE_HARDWARE_INDEX);
     }
@@ -372,10 +326,6 @@ impl ApPairwiseCcmpSlot {
         self.association_id
     }
 
-    pub fn next_tx_ccmp_header(&mut self) -> Result<[u8; 8], CcmpTxPacketNumberError> {
-        self.tx_packet_number.next_header(CcmpKeyId::PAIRWISE)
-    }
-
     pub fn clear<H: CcmpKeyHardware>(self, hardware: &mut H) {
         hardware.clear_ccmp_entry(self.hardware_index);
     }
@@ -388,11 +338,6 @@ impl ApGroupCcmpSlot {
 
     pub const fn key_id(&self) -> ApGroupKeyId {
         self.key_id
-    }
-
-    pub fn next_tx_ccmp_header(&mut self) -> Result<[u8; 8], CcmpTxPacketNumberError> {
-        self.tx_packet_number
-            .next_header(self.key_id.group_key_id().key_id())
     }
 
     pub fn clear<H: CcmpKeyHardware>(self, hardware: &mut H) {
@@ -453,10 +398,7 @@ pub fn install_sta_pairwise_ccmp<H: CcmpKeyHardware>(
         MacKeyInstallOutcome::Occupied => return Err(CryptoKeyError::Occupied),
         MacKeyInstallOutcome::Rejected => return Err(CryptoKeyError::HardwareRejected),
     }
-    Ok(StaPairwiseCcmpSlot {
-        peer,
-        tx_packet_number: CcmpTxPacketNumber::new(),
-    })
+    Ok(StaPairwiseCcmpSlot { peer })
 }
 
 /// Installs the recovered STA GTK into hardware slot 1.
@@ -549,7 +491,6 @@ pub fn install_ap_pairwise_ccmp<H: CcmpKeyHardware>(
         peer,
         association_id,
         hardware_index,
-        tx_packet_number: CcmpTxPacketNumber::new(),
     })
 }
 
@@ -607,7 +548,6 @@ pub fn install_ap_group_ccmp<H: CcmpKeyHardware>(
     Ok(ApGroupCcmpSlot {
         key_id,
         hardware_index,
-        tx_packet_number: CcmpTxPacketNumber::new(),
     })
 }
 

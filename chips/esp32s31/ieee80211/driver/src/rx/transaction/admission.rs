@@ -86,7 +86,13 @@ impl IngressClass {
     /// `frame_control`: protected data is bulk, every other frame critical.
     pub const fn of(frame_control: Option<u16>) -> Self {
         match frame_control {
-            Some(value) if value & 0x000c == 0x0008 && value & 0x4000 != 0 => {
+            Some(value)
+                if matches!(
+                    oer_ieee80211_wire::frame::FrameControlFields::from_raw(value).kind(),
+                    oer_ieee80211_wire::frame::FrameType::Data
+                ) && oer_ieee80211_wire::frame::FrameControlFields::from_raw(value)
+                    .protected() =>
+            {
                 Self::BulkProtectedData
             }
             Some(_) => Self::Critical,

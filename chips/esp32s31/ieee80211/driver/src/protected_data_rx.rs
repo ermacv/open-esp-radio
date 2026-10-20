@@ -17,13 +17,8 @@ use oer_ieee80211_wire::fragmentation::{
     OpenDataFragment, OpenDataFragmentError, parse_ccmp_data_fragment, parse_open_data_fragment,
 };
 
-const RETRY: u16 = 0x0800;
-const QOS_SUBTYPE: u16 = 0x0080;
-const DATA_TYPE: u16 = 0x0008;
-const MORE_FRAGMENTS: u16 = 0x0400;
-const PROTECTED: u16 = 0x4000;
-const ORDERED: u16 = 0x8000;
-const TO_FROM_DS: u16 = 0x0300;
+use oer_ieee80211_wire::frame::{FrameControlFields, FrameType, QosControl};
+use oer_ieee80211_wire::sequence::SequenceControl;
 
 macro_rules! protected_data_view_body {
     ($raw:ident, $data:ident) => {{
@@ -38,8 +33,9 @@ macro_rules! protected_data_view_body {
             RxEvidence::HardwareObserved(RxCryptoStatus::DecryptedAndIntegrityVerified);
         let frame_control = u16::from_le_bytes([mpdu[0], mpdu[1]]);
         let sequence_control = u16::from_le_bytes([mpdu[22], mpdu[23]]);
-        let tid = if frame_control & QOS_SUBTYPE != 0 && mpdu.len() >= 26 {
-            Some(mpdu[24] & 0x0f)
+        let control = FrameControlFields::from_raw(frame_control);
+        let tid = if control.qos() && mpdu.len() >= 26 {
+            Some(QosControl::from_bytes([mpdu[24], mpdu[25]]).tid())
         } else {
             None
         };
@@ -49,7 +45,7 @@ macro_rules! protected_data_view_body {
             frame_control,
             sequence_control,
             tid,
-            retry: frame_control & RETRY != 0,
+            retry: control.retry(),
             ccmp_header: $data.frame.ccmp_header,
             payload_offset: $data.frame.payload_offset,
             payload_length: $data.frame.payload_length,
@@ -212,24 +208,29 @@ pub fn view_unprotected_data(
         return Err(RxError::Bounds);
     }
     let frame_control = u16::from_le_bytes([mpdu[0], mpdu[1]]);
-    let subtype = frame_control & 0x00fc;
-    if subtype != DATA_TYPE && subtype != DATA_TYPE | QOS_SUBTYPE {
+    let control = FrameControlFields::from_raw(frame_control);
+    if control.kind() != FrameType::Data || !matches!(control.subtype(), 0 | 8) {
         return Err(RxError::Ignored);
     }
     let sequence_control = u16::from_le_bytes([mpdu[22], mpdu[23]]);
-    if frame_control & (MORE_FRAGMENTS | PROTECTED | ORDERED) != 0 || sequence_control & 0x000f != 0
+    if control.more_fragments()
+        || control.protected()
+        || control.order()
+        || SequenceControl::from_bytes(sequence_control.to_le_bytes()).fragment() != 0
     {
         return Err(RxError::Unsupported);
     }
-    let qos = frame_control & QOS_SUBTYPE != 0;
-    let mut payload_offset = 24 + usize::from(frame_control & TO_FROM_DS == TO_FROM_DS) * 6;
+    let qos = control.qos();
+    let mut payload_offset = 24 + usize::from(control.ds() == 3) * 6;
     if qos {
         payload_offset += 2;
     }
     if mpdu.len() < payload_offset {
         return Err(RxError::Bounds);
     }
-    let tid = qos.then(|| mpdu[payload_offset - 2] & 0x0f);
+    let tid = qos.then(|| {
+        QosControl::from_bytes([mpdu[payload_offset - 2], mpdu[payload_offset - 1]]).tid()
+    });
     let mut metadata = normalized.metadata;
     metadata.crypto = RxEvidence::ProtocolValidated(RxCryptoStatus::Unprotected);
     Ok(UnprotectedDataRxView {
@@ -238,7 +239,7 @@ pub fn view_unprotected_data(
         frame_control,
         sequence_control,
         tid,
-        retry: frame_control & RETRY != 0,
+        retry: control.retry(),
         payload_offset,
         payload_length: mpdu.len() - payload_offset,
         metadata,

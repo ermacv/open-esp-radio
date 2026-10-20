@@ -294,9 +294,7 @@ pub struct AmpduPublication {
 /// The owner's protection spacing for a recipient's Minimum MPDU Start
 /// Spacing encoding (IEEE 0-7, bits 4:2 of its A-MPDU Parameters).
 pub const fn protection_spacing(min_mpdu_start_spacing: u8) -> HtProtectionSpacing {
-    HtProtectionSpacing::from_density(HtAmpduDensity::from_ampdu_parameters(
-        (min_mpdu_start_spacing & 0x07) << 2,
-    ))
+    HtProtectionSpacing::from_density(HtAmpduDensity::from_spacing_code(min_mpdu_start_spacing))
 }
 
 /// A published aggregate on its queue.

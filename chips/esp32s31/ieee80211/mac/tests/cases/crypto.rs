@@ -6,7 +6,7 @@ fn sta_pairwise_ccmp_install_owns_one_bounded_hardware_slot() {
     let peer = [0xdc, 0x15, 0xc8, 0x54, 0xbc, 0x1e];
     let temporal_key = core::array::from_fn(|index| index as u8);
 
-    let mut slot = install_sta_pairwise_ccmp(&mut mmio, peer, &temporal_key).unwrap();
+    let slot = install_sta_pairwise_ccmp(&mut mmio, peer, &temporal_key).unwrap();
     assert_eq!(slot.hardware_index(), 4);
     assert_eq!(slot.peer(), &peer);
     assert_eq!(
@@ -17,8 +17,6 @@ fn sta_pairwise_ccmp_install_owns_one_bounded_hardware_slot() {
             MacCcmpKeyIdentity::Pairwise { peer },
         )]
     );
-    assert_eq!(slot.next_tx_ccmp_header(), Ok([3, 0, 0, 0x20, 0, 0, 0, 0]));
-    assert_eq!(slot.next_tx_ccmp_header(), Ok([6, 0, 0, 0x20, 0, 0, 0, 0]));
 
     slot.clear(&mut mmio);
     assert!(!mmio.ccmp_valid[4]);

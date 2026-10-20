@@ -919,7 +919,14 @@ pub enum HtAmpduDensity {
 impl HtAmpduDensity {
     /// Decode bits 4:2 of the complete HT A-MPDU Parameters byte.
     pub const fn from_ampdu_parameters(parameters: u8) -> Self {
-        match (parameters >> 2) & 0x07 {
+        Self::from_spacing_code(
+            oer_ieee80211_wire::ht::HtAmpduParameters::from_bytes([parameters]).spacing(),
+        )
+    }
+
+    /// Decode the three-bit Minimum MPDU Start Spacing code.
+    pub const fn from_spacing_code(code: u8) -> Self {
+        match oer_ieee80211_wire::ht::HtAmpduSpacingCode::from_bytes([code]).spacing() {
             0 => Self::NoRestriction,
             1 => Self::QuarterMicrosecond,
             2 => Self::HalfMicrosecond,
@@ -975,12 +982,13 @@ impl HtPeerAmpduParameters {
     /// protection value.
     pub const fn from_capability_byte(parameters: u8) -> Self {
         let density = HtAmpduDensity::from_ampdu_parameters(parameters);
-        let maximum_aggregate_bytes = match parameters & 0x03 {
-            0 => 0x1fff,
-            1 => 0x3fff,
-            2 => 0x7fff,
-            _ => 0xffff,
-        };
+        let maximum_aggregate_bytes =
+            match oer_ieee80211_wire::ht::HtAmpduParameters::from_bytes([parameters]).exponent() {
+                0 => 0x1fff,
+                1 => 0x3fff,
+                2 => 0x7fff,
+                _ => 0xffff,
+            };
         Self {
             density,
             protection_spacing: HtProtectionSpacing::from_density(density),

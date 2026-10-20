@@ -305,3 +305,10 @@ oer_wire::bitfield! {
 
 #[cfg(test)]
 mod tests;
+
+oer_wire::bitfield! {
+    /// SOURCE: IEEE Std 802.11-2020, 9.4.2.55.3 (Minimum MPDU Start Spacing code).
+    pub struct HtAmpduSpacingCode[1] (little) {
+        pub spacing, with_spacing: u8 = 0..3;
+    }
+}

@@ -189,7 +189,8 @@ impl WifiTxRuntimePolicy {
 
     /// Install the six-bit HE BSS color decoded from the peer's BSS Color IE.
     pub fn install_he_bss_color(&mut self, bss_color: u8) {
-        self.he_bss_color = bss_color & 0x3f;
+        self.he_bss_color =
+            oer_ieee80211_wire::signal::BssColorCode::from_bytes([bss_color]).color();
     }
 
     pub const fn he_bss_color(&self) -> u8 {

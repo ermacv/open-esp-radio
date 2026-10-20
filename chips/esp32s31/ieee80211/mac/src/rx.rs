@@ -32,11 +32,16 @@ impl RxBufferFullCounter for oer_esp32s31_hal::ieee80211::mac::WifiMacHal<'_> {
 
 use oer_ieee80211_port::MacRxMetadata;
 use oer_ieee80211_wire::ccmp::CcmpHeader;
+use oer_ieee80211_wire::frame::{FrameControlFields, FrameType};
 use oer_ieee80211_wire::he::{
     He20MuSigBMimoStreamError, He20MuSigBMimoUsers, He20MuSigBNonMimoStreamError,
     He20MuSigBNonMimoUsers, HeMuSigBUser,
 };
 use oer_ieee80211_wire::ht::HtDuplicateMcs32;
+use oer_ieee80211_wire::sequence::SequenceControl;
+use oer_ieee80211_wire::signal::{
+    HeMuSigA1, HeMuSigA2, HeSuSigA1, HeSuSigA2, HeTriggerBasedSigA1, HeTriggerBasedSigA2, HtSig,
+};
 
 pub const INGRESS_STRICT_RXEND: u32 = 0x01;
 pub const INGRESS_STRICT_DUMP: u32 = 0x02;
@@ -54,9 +59,9 @@ pub const CCMP_MIC_SIZE: usize = 8;
 const MLME_HEADER_SIZE: usize = 24;
 const MLME_AUTH_BODY_SIZE: usize = 6;
 const CONTROL_HEADER_MIN_SIZE: usize = 10;
-const SUBTYPE_ASSOC_RESPONSE: u8 = 0x10;
-const SUBTYPE_REASSOC_RESPONSE: u8 = 0x30;
-const SUBTYPE_AUTH: u8 = 0xb0;
+const SUBTYPE_ASSOC_RESPONSE: u16 = 1;
+const SUBTYPE_REASSOC_RESPONSE: u16 = 3;
+const SUBTYPE_AUTH: u16 = 11;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct RxIngressConfig {
     pub ring_entry_limit: usize,
@@ -243,7 +248,7 @@ pub enum HeBandwidth {
 )]
 impl HeBandwidth {
     const fn decode(raw: u8) -> Self {
-        match raw & 0x03 {
+        match raw {
             0 => Self::Mhz20,
             1 => Self::Mhz40,
             2 => Self::Mhz80,
@@ -281,7 +286,7 @@ pub enum HeGuardIntervalAndLtf {
 )]
 impl HeGuardIntervalAndLtf {
     const fn decode(raw: u8) -> Self {
-        match raw & 0x03 {
+        match raw {
             0 => Self::OneLtf800Ns,
             1 => Self::TwoLtf800Ns,
             2 => Self::TwoLtf1600Ns,
@@ -360,25 +365,27 @@ pub struct HeSuSignal {
 )]
 impl HeSuSignal {
     pub const fn decode(siga1: u32, siga2: u16) -> Self {
+        let siga1 = HeSuSigA1::from_bytes(siga1.to_le_bytes());
+        let siga2 = HeSuSigA2::from_bytes(siga2.to_le_bytes());
         Self {
-            format: siga1 & 1 != 0,
-            beam_change: siga1 & (1 << 1) != 0,
-            uplink: siga1 & (1 << 2) != 0,
-            mcs: ((siga1 >> 3) & 0x0f) as u8,
-            dcm: siga1 & (1 << 7) != 0,
-            bss_color: ((siga1 >> 8) & 0x3f) as u8,
-            spatial_reuse: ((siga1 >> 15) & 0x0f) as u8,
-            bandwidth: HeBandwidth::decode(((siga1 >> 19) & 0x03) as u8),
-            guard_interval_and_ltf: HeGuardIntervalAndLtf::decode(((siga1 >> 21) & 0x03) as u8),
-            nsts_and_midamble_periodicity: ((siga1 >> 23) & 0x07) as u8,
-            txop: (siga2 & 0x7f) as u8,
-            ldpc: siga2 & (1 << 7) != 0,
-            ldpc_extra_symbol: siga2 & (1 << 8) != 0,
-            stbc: siga2 & (1 << 9) != 0,
-            beamformed: siga2 & (1 << 10) != 0,
-            pre_fec_padding_factor: ((siga2 >> 11) & 0x03) as u8,
-            packet_extension_disambiguity: siga2 & (1 << 13) != 0,
-            doppler: siga2 & (1 << 15) != 0,
+            format: siga1.format(),
+            beam_change: siga1.beam_change(),
+            uplink: siga1.uplink(),
+            mcs: siga1.mcs(),
+            dcm: siga1.dcm(),
+            bss_color: siga1.bss_color(),
+            spatial_reuse: siga1.spatial_reuse(),
+            bandwidth: HeBandwidth::decode(siga1.bandwidth()),
+            guard_interval_and_ltf: HeGuardIntervalAndLtf::decode(siga1.guard_interval_and_ltf()),
+            nsts_and_midamble_periodicity: siga1.nsts_and_midamble_periodicity(),
+            txop: siga2.txop(),
+            ldpc: siga2.ldpc(),
+            ldpc_extra_symbol: siga2.ldpc_extra_symbol(),
+            stbc: siga2.stbc(),
+            beamformed: siga2.beamformed(),
+            pre_fec_padding_factor: siga2.pre_fec_padding_factor(),
+            packet_extension_disambiguity: siga2.packet_extension_disambiguity(),
+            doppler: siga2.doppler(),
         }
     }
 
@@ -435,7 +442,7 @@ pub enum HeMuBandwidth {
 )]
 impl HeMuBandwidth {
     const fn decode(raw: u8) -> Self {
-        match raw & 0x07 {
+        match raw {
             0 => Self::Mhz20,
             1 => Self::Mhz40,
             2 => Self::Mhz80,
@@ -450,7 +457,9 @@ impl HeMuBandwidth {
             Self::Mhz40 => 1,
             Self::Mhz80 => 2,
             Self::Mhz160Or80Plus80 => 3,
-            Self::Unknown(value) => value & 0x07,
+            Self::Unknown(value) => {
+                oer_ieee80211_wire::signal::HeMuBandwidthCode::from_bytes([value]).code()
+            }
         }
     }
 
@@ -507,23 +516,26 @@ impl HeMuSignal {
         clippy::arithmetic_side_effects
     )]
     pub const fn decode(siga1: u32, siga2: u16) -> Self {
+        let siga1 = HeMuSigA1::from_bytes(siga1.to_le_bytes());
+        let siga2 = HeMuSigA2::from_bytes(siga2.to_le_bytes());
         Self {
-            uplink: siga1 & 1 != 0,
-            sig_b_mcs: ((siga1 >> 1) & 0x07) as u8,
-            sig_b_dcm: siga1 & (1 << 4) != 0,
-            bss_color: ((siga1 >> 5) & 0x3f) as u8,
-            spatial_reuse: ((siga1 >> 11) & 0x0f) as u8,
-            bandwidth: HeMuBandwidth::decode(((siga1 >> 15) & 0x07) as u8),
-            sig_b_symbols_or_mu_mimo_users_minus_one: ((siga1 >> 18) & 0x0f) as u8,
-            sig_b_compression: siga1 & (1 << 22) != 0,
-            guard_interval_and_ltf: HeGuardIntervalAndLtf::decode(((siga1 >> 23) & 0x03) as u8),
-            doppler: siga1 & (1 << 25) != 0,
-            txop: (siga2 & 0x7f) as u8,
-            nltf_and_midamble_periodicity: ((siga2 >> 8) & 0x07) as u8,
-            ldpc_extra_symbol_segment: siga2 & (1 << 11) != 0,
-            stbc: siga2 & (1 << 12) != 0,
-            pre_fec_padding_factor: ((siga2 >> 13) & 0x03) as u8,
-            packet_extension_disambiguity: siga2 & (1 << 15) != 0,
+            uplink: siga1.uplink(),
+            sig_b_mcs: siga1.sig_b_mcs(),
+            sig_b_dcm: siga1.sig_b_dcm(),
+            bss_color: siga1.bss_color(),
+            spatial_reuse: siga1.spatial_reuse(),
+            bandwidth: HeMuBandwidth::decode(siga1.bandwidth()),
+            sig_b_symbols_or_mu_mimo_users_minus_one: siga1
+                .sig_b_symbols_or_mu_mimo_users_minus_one(),
+            sig_b_compression: siga1.sig_b_compression(),
+            guard_interval_and_ltf: HeGuardIntervalAndLtf::decode(siga1.guard_interval_and_ltf()),
+            doppler: siga1.doppler(),
+            txop: siga2.txop(),
+            nltf_and_midamble_periodicity: siga2.nltf_and_midamble_periodicity(),
+            ldpc_extra_symbol_segment: siga2.ldpc_extra_symbol_segment(),
+            stbc: siga2.stbc(),
+            pre_fec_padding_factor: siga2.pre_fec_padding_factor(),
+            packet_extension_disambiguity: siga2.packet_extension_disambiguity(),
         }
     }
 
@@ -570,17 +582,19 @@ pub struct HeTriggerBasedSignal {
 )]
 impl HeTriggerBasedSignal {
     pub const fn decode(siga1: u32, siga2: u16) -> Self {
+        let siga1 = HeTriggerBasedSigA1::from_bytes(siga1.to_le_bytes());
+        let siga2 = HeTriggerBasedSigA2::from_bytes(siga2.to_le_bytes());
         Self {
-            format: siga1 & 1 != 0,
-            bss_color: ((siga1 >> 1) & 0x3f) as u8,
+            format: siga1.format(),
+            bss_color: siga1.bss_color(),
             spatial_reuse: [
-                ((siga1 >> 7) & 0x0f) as u8,
-                ((siga1 >> 11) & 0x0f) as u8,
-                ((siga1 >> 15) & 0x0f) as u8,
-                ((siga1 >> 19) & 0x0f) as u8,
+                siga1.spatial_reuse0(),
+                siga1.spatial_reuse1(),
+                siga1.spatial_reuse2(),
+                siga1.spatial_reuse3(),
             ],
-            bandwidth: HeBandwidth::decode(((siga1 >> 24) & 0x03) as u8),
-            txop: (siga2 & 0x7f) as u8,
+            bandwidth: HeBandwidth::decode(siga1.bandwidth()),
+            txop: siga2.txop(),
         }
     }
 }
@@ -728,16 +742,15 @@ impl RxPhyInfo {
 
     pub const fn ht_signal(self) -> Option<HtSignal> {
         match self.baseband_format() {
-            RxBasebandFormat::Ht => Some(HtSignal {
-                mcs: (self.he_siga1 & 0x7f) as u8,
-                channel_width_mhz: if self.he_siga1 & (1 << 7) != 0 {
-                    40
-                } else {
-                    20
-                },
-                aggregation: self.he_siga1 & (1 << 27) != 0,
-                short_guard_interval: self.he_siga1 & (1 << 31) != 0,
-            }),
+            RxBasebandFormat::Ht => {
+                let signal = HtSig::from_bytes(self.he_siga1.to_le_bytes());
+                Some(HtSignal {
+                    mcs: signal.mcs(),
+                    channel_width_mhz: if signal.width40() { 40 } else { 20 },
+                    aggregation: signal.aggregation(),
+                    short_guard_interval: signal.short_gi(),
+                })
+            }
             _ => None,
         }
     }
@@ -983,7 +996,9 @@ pub fn extract_control(
     if frame.length < CONTROL_HEADER_MIN_SIZE {
         return Err(RxError::Bounds);
     }
-    if output[0] & 0x0f != 0x04 {
+    if FrameControlFields::from_bytes([output[0], output[1]]).version() != 0
+        || FrameControlFields::from_bytes([output[0], output[1]]).kind() != FrameType::Control
+    {
         return Err(RxError::Ignored);
     }
     Ok(frame)
@@ -1004,10 +1019,15 @@ pub fn extract_protected_management(
     if frame.length < MLME_HEADER_SIZE {
         return Err(RxError::Bounds);
     }
-    if output[0] & 0x0f != 0 {
+    if FrameControlFields::from_bytes([output[0], output[1]]).version() != 0
+        || FrameControlFields::from_bytes([output[0], output[1]]).kind() != FrameType::Management
+    {
         return Err(RxError::Ignored);
     }
-    if output[1] & 0x40 == 0 || output[1] & 0x04 != 0 || output[22] & 0x0f != 0 {
+    if !FrameControlFields::from_bytes([output[0], output[1]]).protected()
+        || FrameControlFields::from_bytes([output[0], output[1]]).more_fragments()
+        || SequenceControl::from_bytes([output[22], output[23]]).fragment() != 0
+    {
         return Err(RxError::Unsupported);
     }
     Ok(frame)
@@ -1024,13 +1044,18 @@ pub fn extract_management(
     if frame.length < MLME_HEADER_SIZE {
         return Err(RxError::Bounds);
     }
-    if output[0] & 0x0f != 0 {
+    if FrameControlFields::from_bytes([output[0], output[1]]).version() != 0
+        || FrameControlFields::from_bytes([output[0], output[1]]).kind() != FrameType::Management
+    {
         return Err(RxError::Ignored);
     }
-    if output[1] & (0x04 | 0x40) != 0 || output[22] & 0x0f != 0 {
+    if FrameControlFields::from_bytes([output[0], output[1]]).more_fragments()
+        || FrameControlFields::from_bytes([output[0], output[1]]).protected()
+        || SequenceControl::from_bytes([output[22], output[23]]).fragment() != 0
+    {
         return Err(RxError::Unsupported);
     }
-    let subtype = output[0] & 0xf0;
+    let subtype = FrameControlFields::from_bytes([output[0], output[1]]).subtype();
     if matches!(
         subtype,
         SUBTYPE_AUTH | SUBTYPE_ASSOC_RESPONSE | SUBTYPE_REASSOC_RESPONSE
@@ -1056,18 +1081,20 @@ pub fn extract_data(
     if frame.length < MLME_HEADER_SIZE {
         return Err(RxError::Bounds);
     }
-    let frame_control = u16::from_le_bytes([output[0], output[1]]);
-    if frame_control & 0x0003 != 0 || frame_control & 0x000c != 0x0008 {
+    let frame_control = FrameControlFields::from_bytes([output[0], output[1]]);
+    if frame_control.version() != 0 || frame_control.kind() != FrameType::Data {
         return Err(RxError::Ignored);
     }
-    if frame_control & (1 << 10 | 1 << 14) != 0 || output[22] & 0x0f != 0 {
+    if (frame_control.more_fragments() || frame_control.protected())
+        || SequenceControl::from_bytes([output[22], output[23]]).fragment() != 0
+    {
         return Err(RxError::Unsupported);
     }
 
-    let to_ds = frame_control & (1 << 8) != 0;
-    let from_ds = frame_control & (1 << 9) != 0;
-    let qos = frame_control & 0x0080 != 0;
-    let ordered = frame_control & (1 << 15) != 0;
+    let to_ds = frame_control.to_ds();
+    let from_ds = frame_control.from_ds();
+    let qos = frame_control.qos();
+    let ordered = frame_control.order();
     let mut payload_offset = if to_ds && from_ds {
         MLME_HEADER_SIZE + 6
     } else {
@@ -1211,23 +1238,23 @@ fn validate_ccmp_data(
     if frame.length < MLME_HEADER_SIZE {
         return Err(RxError::Bounds);
     }
-    let frame_control = u16::from_le_bytes([mpdu[0], mpdu[1]]);
-    if frame_control & 0x0003 != 0 || frame_control & 0x000c != 0x0008 {
+    let frame_control = FrameControlFields::from_bytes([mpdu[0], mpdu[1]]);
+    if frame_control.version() != 0 || frame_control.kind() != FrameType::Data {
         return Err(RxError::Ignored);
     }
-    let fragmented = frame_control & (1 << 10) != 0 || mpdu[22] & 0x0f != 0;
+    let fragmented = frame_control.more_fragments() || SequenceControl::from_bytes([mpdu[22], mpdu[23]]).fragment() != 0;
     let fragmentation_matches = matches!(
         (fragment_admission, fragmented),
         (CcmpFragmentAdmission::Unfragmented, false) | (CcmpFragmentAdmission::Fragmented, true)
     );
-    if frame_control & (1 << 14) == 0 || !fragmentation_matches {
+    if !frame_control.protected() || !fragmentation_matches {
         return Err(RxError::Unsupported);
     }
 
-    let to_ds = frame_control & (1 << 8) != 0;
-    let from_ds = frame_control & (1 << 9) != 0;
-    let qos = frame_control & 0x0080 != 0;
-    let ordered = frame_control & (1 << 15) != 0;
+    let to_ds = frame_control.to_ds();
+    let from_ds = frame_control.from_ds();
+    let qos = frame_control.qos();
+    let ordered = frame_control.order();
     let mut ccmp_header_offset = if to_ds && from_ds {
         MLME_HEADER_SIZE + 6
     } else {
