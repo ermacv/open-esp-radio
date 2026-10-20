@@ -1,0 +1,27 @@
+schema = 1
+
+[layout]
+name = "BLE_PHY_CHANNEL_FREQUENCY_OFFSET"
+description = "One channel-frequency offset in MHz from 2402 MHz. The array index selects the LE channel."
+size = 1
+align = 1
+
+[layout.review]
+sources = ["BLOB_LIBBLE_MEMORY_PHY_LOOKUPS"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[layout.bytes]]
+name = "VALUE"
+offset = 0
+size = 1
+access = "owned"
+description = "Channel frequency offset in MHz from 2402 MHz."
+
+[[layout.bytes.fields]]
+name = "OFFSET_MHZ"
+bits = "7:0"
+writer = "cpu"
+description = "Channel frequency offset in MHz from 2402 MHz."

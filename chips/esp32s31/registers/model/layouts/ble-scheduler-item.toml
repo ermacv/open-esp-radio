@@ -7,6 +7,20 @@ size = 96
 align = 4
 placement = ["dma-window"]
 
+[layout.review]
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[layout.review.opaque]
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
 [[layout.words]]
 name = "HARDWARE_NEXT"
 offset = 0x00
@@ -23,6 +37,7 @@ encoding = "ble-compressed"
 
 [[layout.words.fields]]
 name = "BITS_20_21_OPAQUE"
+opaque = true
 bits = "21:20"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
@@ -35,6 +50,7 @@ description = "Allow an ordinary scheduler item to start after its predecessor e
 
 [[layout.words.fields]]
 name = "BIT_23_OPAQUE"
+opaque = true
 bits = "23"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
@@ -53,6 +69,7 @@ description = "Skip marker set for deletion and preemption."
 
 [[layout.words.fields]]
 name = "BITS_26_31_OPAQUE"
+opaque = true
 bits = "31:26"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
@@ -73,6 +90,7 @@ encoding = "ble-compressed"
 
 [[layout.words.fields]]
 name = "BITS_20_30_OPAQUE"
+opaque = true
 bits = "30:20"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
@@ -99,12 +117,14 @@ encoding = "ble-compressed"
 
 [[layout.words.fields]]
 name = "BITS_20_23_OPAQUE"
+opaque = true
 bits = "23:20"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
 
 [[layout.words.fields]]
 name = "BITS_24_31_OPAQUE"
+opaque = true
 bits = "31:24"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
@@ -141,6 +161,7 @@ description = "Observed word position; unassigned bits retain their exact image.
 
 [[layout.words.fields]]
 name = "BITS_0_19_OPAQUE"
+opaque = true
 bits = "19:0"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
@@ -153,12 +174,14 @@ description = "Index copied from the link-state transmit-power byte."
 
 [[layout.words.fields]]
 name = "BITS_28_29_OPAQUE"
+opaque = true
 bits = "29:28"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
 
 [[layout.words.fields]]
 name = "BITS_30_31_OPAQUE"
+opaque = true
 bits = "31:30"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
@@ -177,6 +200,7 @@ description = "Ordinary scheduler arbitration priority nibble."
 
 [[layout.words.fields]]
 name = "BITS_4_7_OPAQUE"
+opaque = true
 bits = "7:4"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
@@ -189,18 +213,21 @@ description = "Controller frequency image, relative to the BLE channel mapping."
 
 [[layout.words.fields]]
 name = "BITS_15_31_OPAQUE"
+opaque = true
 bits = "31:15"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
 
 [[layout.words]]
 name = "WORD_001C_OPAQUE"
+opaque = true
 offset = 0x1c
 access = "shared"
 description = "Observed word position; unassigned bits retain their exact image."
 
 [[layout.words.fields]]
 name = "BITS_0_31_OPAQUE"
+opaque = true
 bits = "31:0"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
@@ -219,6 +246,7 @@ description = "Number identifying the role allocation."
 
 [[layout.words.fields]]
 name = "BITS_12_31_OPAQUE"
+opaque = true
 bits = "31:12"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
@@ -255,18 +283,21 @@ description = "Five-bit coexistence priority lane 3; lane use is selected by the
 
 [[layout.words.fields]]
 name = "BITS_20_31_OPAQUE"
+opaque = true
 bits = "31:20"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
 
 [[layout.words]]
 name = "WORD_0028_OPAQUE"
+opaque = true
 offset = 0x28
 access = "shared"
 description = "Observed word position; unassigned bits retain their exact image."
 
 [[layout.words.fields]]
 name = "BITS_0_31_OPAQUE"
+opaque = true
 bits = "31:0"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
@@ -285,12 +316,14 @@ description = "Role receive-wait image; zero-duration ordinary modes still use t
 
 [[layout.words.fields]]
 name = "BITS_16_20_OPAQUE"
+opaque = true
 bits = "20:16"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
 
 [[layout.words.fields]]
 name = "BITS_21_31_OPAQUE"
+opaque = true
 bits = "31:21"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
@@ -303,6 +336,7 @@ description = "Observed word position; unassigned bits retain their exact image.
 
 [[layout.words.fields]]
 name = "BITS_0_30_OPAQUE"
+opaque = true
 bits = "30:0"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
@@ -334,6 +368,7 @@ description = "Observed word position; unassigned bits retain their exact image.
 
 [[layout.words.fields]]
 name = "BITS_0_10_OPAQUE"
+opaque = true
 bits = "10:0"
 writer = "phased"
 phases = [{ name = "arm", writer = "cpu" }, { name = "complete", writer = "hardware" }]
@@ -348,6 +383,7 @@ description = "Peripheral-connection completion makes the captured anchor availa
 
 [[layout.words.fields]]
 name = "BITS_12_31_OPAQUE"
+opaque = true
 bits = "31:12"
 writer = "phased"
 phases = [{ name = "arm", writer = "cpu" }, { name = "complete", writer = "hardware" }]
@@ -355,24 +391,28 @@ description = "Unassigned execution-result lanes. CPU arms all ones; CPU preempt
 
 [[layout.words]]
 name = "WORD_003C_OPAQUE"
+opaque = true
 offset = 0x3c
 access = "shared"
 description = "Observed word position; unassigned bits retain their exact image."
 
 [[layout.words.fields]]
 name = "BITS_0_31_OPAQUE"
+opaque = true
 bits = "31:0"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
 
 [[layout.words]]
 name = "WORD_0040_OPAQUE"
+opaque = true
 offset = 0x40
 access = "shared"
 description = "Observed word position; unassigned bits retain their exact image."
 
 [[layout.words.fields]]
 name = "BITS_0_31_OPAQUE"
+opaque = true
 bits = "31:0"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
@@ -421,18 +461,21 @@ description = "Role allocation kind: advertising, scanning, connection or DTM."
 
 [[layout.words.fields]]
 name = "BIT_16_OPAQUE"
+opaque = true
 bits = "16"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
 
 [[layout.words.fields]]
 name = "BITS_17_23_OPAQUE"
+opaque = true
 bits = "23:17"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
 
 [[layout.words.fields]]
 name = "BIT_24_OPAQUE"
+opaque = true
 bits = "24"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
@@ -457,6 +500,7 @@ description = "Insert by time without removing overlapping entries."
 
 [[layout.words.fields]]
 name = "BITS_28_31_OPAQUE"
+opaque = true
 bits = "31:28"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
@@ -501,12 +545,14 @@ description = "CPU callback identity retained by the role allocation; it is not 
 
 [[layout.words]]
 name = "WORD_005C_OPAQUE"
+opaque = true
 offset = 0x5c
 access = "shared"
 description = "Observed word position; unassigned bits retain their exact image."
 
 [[layout.words.fields]]
 name = "BITS_0_31_OPAQUE"
+opaque = true
 bits = "31:0"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
@@ -517,659 +563,3 @@ sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
 provenance = "reviewed"
 accuracy = "exact"
 completeness = "complete"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.HARDWARE_NEXT"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.HARDWARE_NEXT.ADDRESS"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.HARDWARE_NEXT.BITS_20_21_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.HARDWARE_NEXT.FLEXIBLE_START"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.HARDWARE_NEXT.BIT_23_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.HARDWARE_NEXT.MERGE_MARKED"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.HARDWARE_NEXT.SKIP"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.HARDWARE_NEXT.BITS_26_31_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.CONTEXT"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.CONTEXT.ADDRESS"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.CONTEXT.BITS_20_30_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.CONTEXT.EVENT_READY"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.LINK_STATE"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.LINK_STATE.ADDRESS"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.LINK_STATE.BITS_20_23_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.LINK_STATE.BITS_24_31_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.SEQUENCE_START"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.SEQUENCE_START.VALUE"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.SEQUENCE_DURATION"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.SEQUENCE_DURATION.VALUE"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.RATE_AND_POWER"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.RATE_AND_POWER.BITS_0_19_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.RATE_AND_POWER.POWER_INDEX"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.RATE_AND_POWER.BITS_28_29_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.RATE_AND_POWER.BITS_30_31_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.CHANNEL_AND_PRIORITY"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.CHANNEL_AND_PRIORITY.ARBITRATION_PRIORITY"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.CHANNEL_AND_PRIORITY.BITS_4_7_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.CHANNEL_AND_PRIORITY.FREQUENCY"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.CHANNEL_AND_PRIORITY.BITS_15_31_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.WORD_001C_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.WORD_001C_OPAQUE.BITS_0_31_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.ALLOCATION_NUMBER"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.ALLOCATION_NUMBER.VALUE"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.ALLOCATION_NUMBER.BITS_12_31_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.COEXISTENCE_PRIORITY"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.COEXISTENCE_PRIORITY.LANE_0"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.COEXISTENCE_PRIORITY.LANE_1"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.COEXISTENCE_PRIORITY.LANE_2"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.COEXISTENCE_PRIORITY.LANE_3"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.COEXISTENCE_PRIORITY.BITS_20_31_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.WORD_0028_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.WORD_0028_OPAQUE.BITS_0_31_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.RECEIVE_WAIT"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.RECEIVE_WAIT.VALUE"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.RECEIVE_WAIT.BITS_16_20_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.RECEIVE_WAIT.BITS_21_31_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.LIST_POLICY"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.LIST_POLICY.BITS_0_30_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.LIST_POLICY.DEVICE_LIST"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.CAPTURED_ANCHOR"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.CAPTURED_ANCHOR.VALUE"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.STATUS"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.STATUS.BITS_0_10_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.STATUS.CAPTURE_AVAILABLE"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.STATUS.BITS_12_31_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.WORD_003C_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.WORD_003C_OPAQUE.BITS_0_31_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.WORD_0040_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.WORD_0040_OPAQUE.BITS_0_31_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.RAW_START"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.RAW_START.VALUE"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.RAW_END"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.RAW_END.VALUE"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.CONTROL"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.CONTROL.EVENT"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.CONTROL.KIND"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.CONTROL.BIT_16_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.CONTROL.BITS_17_23_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.CONTROL.BIT_24_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.CONTROL.DELETED"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.CONTROL.PREEMPTED"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.CONTROL.OVERLAP_RESOLVED"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.CONTROL.BITS_28_31_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.PREVIOUS"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.PREVIOUS.ADDRESS"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.COMPLETION_NEXT"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.COMPLETION_NEXT.ADDRESS"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.RECYCLE_CALLBACK"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.RECYCLE_CALLBACK.VALUE"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.WORD_005C_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_SCHEDULER_ITEM.WORD_005C_OPAQUE.BITS_0_31_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"

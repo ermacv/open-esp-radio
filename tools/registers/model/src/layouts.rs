@@ -25,6 +25,10 @@ use crate::{
     validate_relative_fragment,
 };
 
+mod byte_array;
+mod review;
+use review::LayoutReviewDefaults;
+
 /// The largest layout the generator accepts, in bytes.
 const MAX_LAYOUT_SIZE: u32 = 4096;
 
@@ -64,6 +68,8 @@ struct LayoutSource {
     bytes: Vec<UnitSource>,
     #[serde(default)]
     array: Option<LayoutArray>,
+    #[serde(default)]
+    review: Option<LayoutReviewDefaults>,
 }
 
 #[derive(Deserialize)]
@@ -77,6 +83,8 @@ struct UnitSource {
     access: LayoutAccess,
     #[serde(default)]
     description: Option<String>,
+    #[serde(default)]
+    opaque: bool,
     fields: Vec<FieldSource>,
 }
 
@@ -89,6 +97,8 @@ struct FieldSource {
     #[serde(default)]
     description: Option<String>,
     #[serde(default)]
+    opaque: bool,
+    #[serde(default)]
     placement: Vec<String>,
     #[serde(default)]
     points_to: Option<String>,
@@ -98,7 +108,7 @@ struct FieldSource {
     phases: Vec<LayoutPhase>,
 }
 
-/// A fixed-size array of another shared layout.
+/// A fixed-size array of a shared-word or owned-byte layout.
 #[derive(Clone, Debug, Eq, PartialEq, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct LayoutArray {
@@ -157,7 +167,10 @@ impl LayoutWriter {
 pub enum LayoutKind {
     Words,
     Bytes,
+    /// A fixed array of shared-word layouts.
     Array,
+    /// A borrowed decoder/writer over a fixed array of owned-byte layouts.
+    ByteArray,
 }
 
 /// One validated memory layout.
@@ -268,6 +281,17 @@ pub(crate) fn load_layouts(
         })?;
         layouts.push(parse_layout(&path, file, naming)?);
     }
+    let kinds: BTreeMap<_, _> = layouts
+        .iter()
+        .map(|layout| (layout.name.clone(), layout.kind))
+        .collect();
+    for layout in &mut layouts {
+        if let Some(array) = &layout.array
+            && kinds.get(&array.element) == Some(&LayoutKind::Bytes)
+        {
+            layout.kind = LayoutKind::ByteArray;
+        }
+    }
     validate_layout_set(&layouts)?;
     Ok(layouts)
 }
@@ -278,6 +302,16 @@ fn parse_layout(path: &Path, file: LayoutFile, naming: NamingRequirement) -> Res
         return Err(invalid(path, format!("requires schema = {LAYOUT_SCHEMA}")));
     }
     let source = file.layout;
+    let mut review_entities = BTreeMap::from([(source.name.clone(), false)]);
+    for unit in source.words.iter().chain(&source.bytes) {
+        let entity = format!("{}.{}", source.name, unit.name);
+        review_entities.insert(entity.clone(), unit.opaque);
+        for field in &unit.fields {
+            review_entities.insert(format!("{entity}.{}", field.name), field.opaque);
+        }
+    }
+    let resolved_review = review::resolve(source.review.as_ref(), file.review, &review_entities)
+        .map_err(|error| invalid(path, error))?;
     validate_name(&source.name).map_err(|reason| invalid(path, reason))?;
     if source.description.trim().is_empty() {
         return Err(invalid(path, "a layout needs a description"));
@@ -367,7 +401,7 @@ fn parse_layout(path: &Path, file: LayoutFile, naming: NamingRequirement) -> Res
         kind,
         array: source.array,
         units,
-        review: file.review,
+        review: resolved_review,
     };
     validate_reviews(&layout, naming).map_err(|error| invalid(path, error))?;
     Ok(layout)
@@ -396,12 +430,16 @@ fn parse_unit(kind: LayoutKind, layout_size: u32, source: UnitSource) -> Result<
                 source.name
             )));
         }
-        (LayoutKind::Array, _) => return Err(Error::message("an array has no units")),
+        (LayoutKind::Array | LayoutKind::ByteArray, _) => {
+            return Err(Error::message("an array has no units"));
+        }
     };
     let expected = match kind {
         LayoutKind::Words => LayoutAccess::Shared,
         LayoutKind::Bytes => LayoutAccess::Owned,
-        LayoutKind::Array => return Err(Error::message("an array has no units")),
+        LayoutKind::Array | LayoutKind::ByteArray => {
+            return Err(Error::message("an array has no units"));
+        }
     };
     if source.access != expected {
         return Err(Error::message(format!(
@@ -621,11 +659,12 @@ fn validate_layout_set(layouts: &[MemoryLayout]) -> Result<()> {
             let element = layouts
                 .iter()
                 .find(|candidate| {
-                    candidate.name == array.element && candidate.kind == LayoutKind::Words
+                    candidate.name == array.element
+                        && matches!(candidate.kind, LayoutKind::Words | LayoutKind::Bytes)
                 })
                 .ok_or_else(|| {
                     Error::message(format!(
-                        "{} array element {} is not a word layout",
+                        "{} array element {} is not a word or byte layout",
                         layout.name, array.element
                     ))
                 })?;
@@ -657,7 +696,8 @@ fn validate_layout_set(layouts: &[MemoryLayout]) -> Result<()> {
                     continue;
                 };
                 let target_layout = layouts.iter().find(|candidate| {
-                    &candidate.name == target && candidate.kind != LayoutKind::Bytes
+                    &candidate.name == target
+                        && matches!(candidate.kind, LayoutKind::Words | LayoutKind::Array)
                 });
                 match target_layout {
                     None => {
@@ -732,7 +772,9 @@ fn validate_reviews(layout: &MemoryLayout, naming: NamingRequirement) -> Result<
                 false,
             ),
             LayoutKind::Bytes => format!("BYTE_{:04X}{}", unit.offset, crate::OPAQUE_SUFFIX),
-            LayoutKind::Array => return Err(Error::message("an array has no units")),
+            LayoutKind::Array | LayoutKind::ByteArray => {
+                return Err(Error::message("an array has no units"));
+            }
         };
         entities.insert(path.clone(), Some(position));
         for field in &unit.fields {
@@ -788,9 +830,7 @@ fn validate_reviews(layout: &MemoryLayout, naming: NamingRequirement) -> Result<
         match position {
             None => {
                 if review.is_some_and(|review| review.naming.is_some()) {
-                    return Err(Error::message(format!(
-                        "review entity {entity:?} is a layout; naming applies to its words, byte ranges and fields"
-                    )));
+                    validate_naming(entity, review, entity)?;
                 }
             }
             Some(position) => {
@@ -929,6 +969,14 @@ pub(crate) fn render(
             LayoutKind::Words => render_words(&mut output, layout),
             LayoutKind::Bytes => render_bytes(&mut output, layout),
             LayoutKind::Array => render_array(&mut output, layout),
+            LayoutKind::ByteArray => {
+                let element = layout
+                    .array
+                    .as_ref()
+                    .and_then(|array| layouts.iter().find(|entry| entry.name == array.element))
+                    .ok_or_else(|| Error::message("a byte array needs its element layout"))?;
+                byte_array::render(&mut output, layout, element);
+            }
         }
     }
     output.push_str("}\n");

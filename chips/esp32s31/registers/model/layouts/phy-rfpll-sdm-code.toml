@@ -6,6 +6,13 @@ description = "The encoded RFPLL sigma-delta value split into the four analog-re
 size = 4
 align = 1
 
+[layout.review]
+sources = ["ROM_REV0_PHY_RFPLL_VALUE_PACKING"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+naming = "descriptive"
+
 [[layout.bytes]]
 name = "ENCODED"
 offset = 0
@@ -42,43 +49,3 @@ sources = ["ROM_REV0_PHY_RFPLL_VALUE_PACKING"]
 provenance = "derived"
 accuracy = "exact"
 completeness = "partial"
-
-[[review]]
-entity = "PHY_RFPLL_SDM_CODE.ENCODED"
-sources = ["ROM_REV0_PHY_RFPLL_VALUE_PACKING"]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-naming = "descriptive"
-
-[[review]]
-entity = "PHY_RFPLL_SDM_CODE.ENCODED.LOW"
-sources = ["ROM_REV0_PHY_RFPLL_VALUE_PACKING"]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-naming = "descriptive"
-
-[[review]]
-entity = "PHY_RFPLL_SDM_CODE.ENCODED.LOWER_MIDDLE"
-sources = ["ROM_REV0_PHY_RFPLL_VALUE_PACKING"]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-naming = "descriptive"
-
-[[review]]
-entity = "PHY_RFPLL_SDM_CODE.ENCODED.UPPER_MIDDLE"
-sources = ["ROM_REV0_PHY_RFPLL_VALUE_PACKING"]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-naming = "descriptive"
-
-[[review]]
-entity = "PHY_RFPLL_SDM_CODE.ENCODED.MOST_SIGNIFICANT"
-sources = ["ROM_REV0_PHY_RFPLL_VALUE_PACKING"]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-naming = "descriptive"

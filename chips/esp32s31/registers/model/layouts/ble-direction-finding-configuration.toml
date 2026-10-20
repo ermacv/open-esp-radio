@@ -7,51 +7,36 @@ size = 4
 align = 4
 placement = ["dma-window"]
 
+[layout.review]
+sources = ["BLOB_LIBBLE_MEMORY_DF_WORKSPACE"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+
+[layout.review.opaque]
+sources = ["BLOB_LIBBLE_MEMORY_DF_WORKSPACE"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
 [[layout.words]]
 name = "WORD_0000_OPAQUE"
+opaque = true
 offset = 0x00
 access = "shared"
 description = "Observed word position; unassigned bits retain their exact image."
 
 [[layout.words.fields]]
 name = "BITS_0_7_OPAQUE"
+opaque = true
 bits = "7:0"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
 
 [[layout.words.fields]]
 name = "BITS_8_31_OPAQUE"
+opaque = true
 bits = "31:8"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
-
-[[review]]
-entity = "BLE_DIRECTION_FINDING_CONFIGURATION"
-sources = ["BLOB_LIBBLE_MEMORY_DF_WORKSPACE"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLE_DIRECTION_FINDING_CONFIGURATION.WORD_0000_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_DF_WORKSPACE"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_DIRECTION_FINDING_CONFIGURATION.WORD_0000_OPAQUE.BITS_0_7_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_DF_WORKSPACE"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_DIRECTION_FINDING_CONFIGURATION.WORD_0000_OPAQUE.BITS_8_31_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_DF_WORKSPACE"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"

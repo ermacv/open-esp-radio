@@ -9,6 +9,13 @@ dynamic tail follows it after the optional HE-SIG-B and channel information."""
 size = 56
 align = 1
 
+[layout.review]
+sources = ["BLOB_LIBPP_DBG_DUMP_RX_SIGB"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
 [[layout.bytes]]
 name = "RSSI"
 offset = 0x00
@@ -293,38 +300,6 @@ completeness = "complete"
 naming = "descriptive"
 
 [[review]]
-entity = "WIFI_RX_CONTROL_PREFIX.HE_MU_RU_SIZE"
-sources = ["BLOB_LIBPP_DBG_DUMP_RX_SIGB"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_RX_CONTROL_PREFIX.HE_MU_RU_SIZE.RU_SIZE"
-sources = ["BLOB_LIBPP_DBG_DUMP_RX_SIGB"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_RX_CONTROL_PREFIX.HE_MU_RU_POSITION"
-sources = ["BLOB_LIBPP_DBG_DUMP_RX_SIGB"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_RX_CONTROL_PREFIX.HE_MU_RU_POSITION.RU_POSITION"
-sources = ["BLOB_LIBPP_DBG_DUMP_RX_SIGB"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
 entity = "WIFI_RX_CONTROL_PREFIX.SINGLE_MPDU"
 sources = ["BLOB_LIBPP_DBG_DUMP_RX_PPDU"]
 provenance = "reviewed"
@@ -375,62 +350,6 @@ naming = "descriptive"
 [[review]]
 entity = "WIFI_RX_CONTROL_PREFIX.CHANNEL_ESTIMATE.VALID"
 sources = ["ESP_WIFI_SYS_S31_RXCTRL"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_RX_CONTROL_PREFIX.HE_SIG_B"
-sources = ["BLOB_LIBPP_DBG_DUMP_RX_SIGB"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_RX_CONTROL_PREFIX.HE_SIG_B.SELECTED_USER"
-sources = ["BLOB_LIBPP_DBG_DUMP_RX_SIGB"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_RX_CONTROL_PREFIX.HE_SIG_B.LENGTH_BITS"
-sources = ["BLOB_LIBPP_DBG_DUMP_RX_SIGB"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_RX_CONTROL_PREFIX.HE_SIG_B.LENGTH_BYTES"
-sources = ["BLOB_LIBPP_DBG_DUMP_RX_SIGB"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_RX_CONTROL_PREFIX.HE_SIG_B.PRESENT"
-sources = ["BLOB_LIBPP_DBG_DUMP_RX_SIGB"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_RX_CONTROL_PREFIX.HE_MU_COMMON"
-sources = ["BLOB_LIBPP_DBG_DUMP_RX_SIGB"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_RX_CONTROL_PREFIX.HE_MU_COMMON.COMMON_INFO"
-sources = ["BLOB_LIBPP_DBG_DUMP_RX_SIGB"]
 provenance = "reviewed"
 accuracy = "exact"
 completeness = "complete"

@@ -86,13 +86,62 @@ fn zeroed_phy_tables_are_initialized_before_the_environment_is_published() {
     let owner = BlePhyEngineStorage::place::<crate::HostDma<0x2f00_0100>>(placed);
     let storage = owner.storage.as_ref().get_ref();
     let frequencies = BlePhyChannelFrequencyOffsets::new(&storage.channel_frequency_offsets_mhz);
-    assert_eq!(frequencies.channel_00().offset_mhz(), 2);
-    assert_eq!(frequencies.channel_10().offset_mhz(), 22);
-    assert_eq!(frequencies.channel_11().offset_mhz(), 26);
-    assert_eq!(frequencies.channel_36().offset_mhz(), 76);
-    assert_eq!(frequencies.channel_37().offset_mhz(), 0);
-    assert_eq!(frequencies.channel_38().offset_mhz(), 24);
-    assert_eq!(frequencies.channel_39().offset_mhz(), 78);
+    assert_eq!(
+        frequencies
+            .entry(0)
+            .expect("a reviewed LE channel index")
+            .value()
+            .offset_mhz(),
+        2
+    );
+    assert_eq!(
+        frequencies
+            .entry(10)
+            .expect("a reviewed LE channel index")
+            .value()
+            .offset_mhz(),
+        22
+    );
+    assert_eq!(
+        frequencies
+            .entry(11)
+            .expect("a reviewed LE channel index")
+            .value()
+            .offset_mhz(),
+        26
+    );
+    assert_eq!(
+        frequencies
+            .entry(36)
+            .expect("a reviewed LE channel index")
+            .value()
+            .offset_mhz(),
+        76
+    );
+    assert_eq!(
+        frequencies
+            .entry(37)
+            .expect("a reviewed LE channel index")
+            .value()
+            .offset_mhz(),
+        0
+    );
+    assert_eq!(
+        frequencies
+            .entry(38)
+            .expect("a reviewed LE channel index")
+            .value()
+            .offset_mhz(),
+        24
+    );
+    assert_eq!(
+        frequencies
+            .entry(39)
+            .expect("a reviewed LE channel index")
+            .value()
+            .offset_mhz(),
+        78
+    );
     let starts = BlePhyPacketStartOffsets::new(&storage.packet_start_offsets_micros);
     assert_eq!(
         [

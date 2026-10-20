@@ -7,6 +7,20 @@ size = 8
 align = 4
 placement = ["dma-window"]
 
+[layout.review]
+sources = ["BLOB_LIBBLE_DEVICE_TABLE"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[layout.review.opaque]
+sources = ["BLOB_LIBBLE_DEVICE_TABLE"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
 [[layout.words]]
 name = "FLAGS_AND_ADDRESS"
 offset = 0x00
@@ -27,6 +41,7 @@ description = "Entry belongs to the filter accept list."
 
 [[layout.words.fields]]
 name = "BITS_2_13_OPAQUE"
+opaque = true
 bits = "13:2"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
@@ -67,75 +82,3 @@ sources = ["BLOB_LIBBLE_DEVICE_TABLE"]
 provenance = "reviewed"
 accuracy = "exact"
 completeness = "complete"
-
-[[review]]
-entity = "BLE_DEVICE_TABLE_ENTRY.FLAGS_AND_ADDRESS"
-sources = ["BLOB_LIBBLE_DEVICE_TABLE"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_DEVICE_TABLE_ENTRY.FLAGS_AND_ADDRESS.RESOLVING_LIST_MEMBER"
-sources = ["BLOB_LIBBLE_DEVICE_TABLE"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_DEVICE_TABLE_ENTRY.FLAGS_AND_ADDRESS.ACCEPT_LIST_MEMBER"
-sources = ["BLOB_LIBBLE_DEVICE_TABLE"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_DEVICE_TABLE_ENTRY.FLAGS_AND_ADDRESS.BITS_2_13_OPAQUE"
-sources = ["BLOB_LIBBLE_DEVICE_TABLE"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_DEVICE_TABLE_ENTRY.FLAGS_AND_ADDRESS.RANDOM"
-sources = ["BLOB_LIBBLE_DEVICE_TABLE"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_DEVICE_TABLE_ENTRY.FLAGS_AND_ADDRESS.VALID"
-sources = ["BLOB_LIBBLE_DEVICE_TABLE"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_DEVICE_TABLE_ENTRY.FLAGS_AND_ADDRESS.ADDRESS_LOW"
-sources = ["BLOB_LIBBLE_DEVICE_TABLE"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_DEVICE_TABLE_ENTRY.ADDRESS_HIGH"
-sources = ["BLOB_LIBBLE_DEVICE_TABLE"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_DEVICE_TABLE_ENTRY.ADDRESS_HIGH.VALUE"
-sources = ["BLOB_LIBBLE_DEVICE_TABLE"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"

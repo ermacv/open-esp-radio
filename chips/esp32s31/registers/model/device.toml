@@ -135,6 +135,7 @@ layouts = [
     "layouts/ble-link-state.toml",
     "layouts/ble-scheduler-context.toml",
     "layouts/ble-phy-environment.toml",
+    "layouts/ble-phy-channel-frequency-offset.toml",
     "layouts/ble-phy-channel-frequency-offsets.toml",
     "layouts/ble-phy-packet-start-offsets.toml",
     "layouts/ble-phy-rx-address-delays.toml",

@@ -6,6 +6,13 @@ description = "PHY-mode packet-prefix airtime in microseconds, retained at PHY e
 size = 8
 align = 1
 
+[layout.review]
+sources = ["BLOB_LIBBLE_MEMORY_PHY_LOOKUPS"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
 [[layout.bytes]]
 name = "LE_CODED_S2"
 offset = 0
@@ -64,67 +71,3 @@ sources = ["BLOB_LIBBLE_MEMORY_PHY_LOOKUPS"]
 provenance = "reviewed"
 accuracy = "exact"
 completeness = "complete"
-
-[[review]]
-entity = "BLE_PHY_PACKET_START_OFFSETS.LE_CODED_S2"
-sources = ["BLOB_LIBBLE_MEMORY_PHY_LOOKUPS"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_PHY_PACKET_START_OFFSETS.LE_CODED_S2.MICROS"
-sources = ["BLOB_LIBBLE_MEMORY_PHY_LOOKUPS"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_PHY_PACKET_START_OFFSETS.LE_1M"
-sources = ["BLOB_LIBBLE_MEMORY_PHY_LOOKUPS"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_PHY_PACKET_START_OFFSETS.LE_1M.MICROS"
-sources = ["BLOB_LIBBLE_MEMORY_PHY_LOOKUPS"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_PHY_PACKET_START_OFFSETS.LE_2M"
-sources = ["BLOB_LIBBLE_MEMORY_PHY_LOOKUPS"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_PHY_PACKET_START_OFFSETS.LE_2M.MICROS"
-sources = ["BLOB_LIBBLE_MEMORY_PHY_LOOKUPS"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_PHY_PACKET_START_OFFSETS.LE_CODED_S8"
-sources = ["BLOB_LIBBLE_MEMORY_PHY_LOOKUPS"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_PHY_PACKET_START_OFFSETS.LE_CODED_S8.MICROS"
-sources = ["BLOB_LIBBLE_MEMORY_PHY_LOOKUPS"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"

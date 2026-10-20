@@ -106,10 +106,18 @@ may begin with an owned RX/TX prefix; that decoder is not the pointer's
 target type. `without_<field>` clears this nullable buffer address.
 
 Instead of words or byte ranges, a fixed array declares `[layout.array]`
-with `element = "<LAYOUT>"` and `count`. The element must be a shared word
-layout, with the same alignment and placement as the array, whose size is
-the element size times count. The generated array exposes checked
-`entry(index)` access and is itself a typed pointer target.
+with `element = "<LAYOUT>"` and `count`. Its element is a shared-word or
+owned-byte layout, with the same alignment and placement as the array and a
+size whose product with count is the array size. Nested arrays are rejected.
+A shared-word array exposes checked `entry(index)` references and is itself
+a typed pointer target. An owned-byte array is a borrowed decoder over a
+fixed-size byte image: `SIZE`, `COUNT`, `new`, `bytes` and checked
+`entry(index)` returning an element decoder. When the element has CPU-written
+fields, its array writer exposes `view` and checked `entry(index)` borrowing
+one element writer. Out-of-range indices, including `usize::MAX`, return
+`None`. Byte arrays remain buffers, never `DmaRef` targets.
+The channel-frequency lookup uses the indexed form; the packet-start and
+RX-address-delay lookups keep their named PHY-mode slots.
 
 Its `[[review]]` entries follow the register rules: for publication the
 layout, every word or range and every field carry sources, provenance (not
@@ -117,6 +125,41 @@ a hint), accuracy and completeness, and every word, range and field a
 `naming`. An opaque word is `WORD_<offset>_OPAQUE`, a range
 `BYTE_<offset>_OPAQUE`, a field `BIT_<n>_OPAQUE` or `BITS_<low>_<high>_OPAQUE`.
 Review sources must exist in the evidence catalogs.
+
+
+A layout can declare `[layout.review]` as the default review for its own
+identity, words or byte ranges, and fields. The keys are `sources`,
+`provenance`, `accuracy`, `completeness` and `naming`. A separate
+`[layout.review.opaque]` supplies the complete default for an explicitly
+opaque word, range or field:
+
+```toml
+[layout.review]
+sources = ["REVIEWED_LAYOUT_SOURCE"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[layout.review.opaque]
+sources = ["REVIEWED_LAYOUT_SOURCE"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+```
+
+An entity opts into the opaque default with `opaque = true` on its word,
+byte-range or field declaration. This selects that entity's review only;
+it does not infer opaque status from a name or mark its children. Opaque
+names still have to match their position. The opaque default is independent
+of the ordinary default; its keys are not merged with that table.
+
+An explicit `[[review]]` replaces the applicable default in full, including
+omitted keys. Defaults belong to this layout alone. Publication still
+requires a complete resolved review for every entity. Unknown keys,
+reviews for nonexistent entities, duplicate reviews and an explicit review
+identical to its applicable default are errors.
 
 A layout has no address: it is not in the SVD or the binding index. The PAC
 API output gains a `layouts` module: a constant per named RAM region; per

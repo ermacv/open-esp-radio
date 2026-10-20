@@ -10,6 +10,13 @@ align = 4
 placement = ["dma-window"]
 same-geometry-as = "WIFI_RX_DMA_DESCRIPTOR"
 
+[layout.review]
+sources = ["PROMOTED_LMAC_TX", "PROMOTED_TX_AMPDU", "HIL_OPEN_STA_RATE_CONTROL_2026_07_30"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+naming = "descriptive"
+
 [[layout.words]]
 name = "CONTROL"
 offset = 0x00
@@ -69,75 +76,3 @@ sources = ["PROMOTED_LMAC_TX", "PROMOTED_TX_AMPDU", "HIL_OPEN_STA_RATE_CONTROL_2
 provenance = "reviewed"
 accuracy = "exact"
 completeness = "complete"
-
-[[review]]
-entity = "WIFI_TX_DMA_DESCRIPTOR.CONTROL"
-sources = ["PROMOTED_LMAC_TX", "PROMOTED_TX_AMPDU", "HIL_OPEN_STA_RATE_CONTROL_2026_07_30"]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_TX_DMA_DESCRIPTOR.CONTROL.TX_OWNED"
-sources = ["PROMOTED_LMAC_TX", "PROMOTED_TX_AMPDU", "HIL_OPEN_STA_RATE_CONTROL_2026_07_30"]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_TX_DMA_DESCRIPTOR.CONTROL.TX_LAST"
-sources = ["PROMOTED_LMAC_TX", "PROMOTED_TX_AMPDU", "HIL_OPEN_STA_RATE_CONTROL_2026_07_30"]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_TX_DMA_DESCRIPTOR.CONTROL.LENGTH"
-sources = ["PROMOTED_LMAC_TX", "PROMOTED_TX_AMPDU", "HIL_OPEN_STA_RATE_CONTROL_2026_07_30"]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_TX_DMA_DESCRIPTOR.CONTROL.SIZE"
-sources = ["PROMOTED_LMAC_TX", "PROMOTED_TX_AMPDU", "HIL_OPEN_STA_RATE_CONTROL_2026_07_30"]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_TX_DMA_DESCRIPTOR.BUFFER"
-sources = ["PROMOTED_LMAC_TX", "PROMOTED_TX_AMPDU", "HIL_OPEN_STA_RATE_CONTROL_2026_07_30"]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_TX_DMA_DESCRIPTOR.BUFFER.ADDRESS"
-sources = ["PROMOTED_LMAC_TX", "PROMOTED_TX_AMPDU", "HIL_OPEN_STA_RATE_CONTROL_2026_07_30"]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_TX_DMA_DESCRIPTOR.NEXT"
-sources = ["PROMOTED_LMAC_TX", "PROMOTED_TX_AMPDU", "HIL_OPEN_STA_RATE_CONTROL_2026_07_30"]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_TX_DMA_DESCRIPTOR.NEXT.ADDRESS"
-sources = ["PROMOTED_LMAC_TX", "PROMOTED_TX_AMPDU", "HIL_OPEN_STA_RATE_CONTROL_2026_07_30"]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-naming = "descriptive"

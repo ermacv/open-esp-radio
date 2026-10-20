@@ -9,6 +9,20 @@ size = 12
 align = 4
 placement = ["dma-window"]
 
+[layout.review]
+sources = ["ROM_REV0_WDEV_APPEND_RX_BLOCKS", "ROM_REV0_HAL_MAC_RX_LAST_DESCRIPTOR", "HIL_W1_RX_WALKER_2026_10_18", "HIL_OPEN_RX_LIVE_APPEND_2026_07_27"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[layout.review.opaque]
+sources = ["ROM_REV0_WDEV_APPEND_RX_BLOCKS", "HIL_W1_RX_WALKER_2026_10_18"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "opaque"
+
 [[layout.words]]
 name = "CONTROL"
 offset = 0x00
@@ -28,6 +42,7 @@ description = "Set by the hardware on a receive unit's terminal descriptor when 
 
 [[layout.words.fields]]
 name = "BIT_29_OPAQUE"
+opaque = true
 bits = "29"
 writer = "cpu"
 description = "Cleared when the descriptor is rearmed and clear on every armed descriptor; what the hardware does with it is unknown."
@@ -76,14 +91,6 @@ accuracy = "exact"
 completeness = "complete"
 
 [[review]]
-entity = "WIFI_RX_DMA_DESCRIPTOR.CONTROL"
-sources = ["ROM_REV0_WDEV_APPEND_RX_BLOCKS", "ROM_REV0_HAL_MAC_RX_LAST_DESCRIPTOR", "HIL_W1_RX_WALKER_2026_10_18", "HIL_OPEN_RX_LIVE_APPEND_2026_07_27"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
 entity = "WIFI_RX_DMA_DESCRIPTOR.CONTROL.OWNER"
 sources = ["HIL_W1_OWNER_BIT_2026_10_18"]
 provenance = "observed"
@@ -100,14 +107,6 @@ completeness = "complete"
 naming = "descriptive"
 
 [[review]]
-entity = "WIFI_RX_DMA_DESCRIPTOR.CONTROL.BIT_29_OPAQUE"
-sources = ["ROM_REV0_WDEV_APPEND_RX_BLOCKS", "HIL_W1_RX_WALKER_2026_10_18"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
 entity = "WIFI_RX_DMA_DESCRIPTOR.CONTROL.LENGTH"
 sources = ["ROM_REV0_WDEV_APPEND_RX_BLOCKS", "HIL_W1_RX_WALKER_2026_10_18"]
 provenance = "reviewed"
@@ -118,38 +117,6 @@ naming = "descriptive"
 [[review]]
 entity = "WIFI_RX_DMA_DESCRIPTOR.CONTROL.SIZE"
 sources = ["ROM_REV0_WDEV_APPEND_RX_BLOCKS", "HIL_W1_RX_WALKER_2026_10_18"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_RX_DMA_DESCRIPTOR.BUFFER"
-sources = ["ROM_REV0_WDEV_APPEND_RX_BLOCKS", "ROM_REV0_HAL_MAC_RX_LAST_DESCRIPTOR", "HIL_W1_RX_WALKER_2026_10_18", "HIL_OPEN_RX_LIVE_APPEND_2026_07_27"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_RX_DMA_DESCRIPTOR.BUFFER.ADDRESS"
-sources = ["ROM_REV0_WDEV_APPEND_RX_BLOCKS", "ROM_REV0_HAL_MAC_RX_LAST_DESCRIPTOR", "HIL_W1_RX_WALKER_2026_10_18", "HIL_OPEN_RX_LIVE_APPEND_2026_07_27"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_RX_DMA_DESCRIPTOR.NEXT"
-sources = ["ROM_REV0_WDEV_APPEND_RX_BLOCKS", "ROM_REV0_HAL_MAC_RX_LAST_DESCRIPTOR", "HIL_W1_RX_WALKER_2026_10_18", "HIL_OPEN_RX_LIVE_APPEND_2026_07_27"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_RX_DMA_DESCRIPTOR.NEXT.ADDRESS"
-sources = ["ROM_REV0_WDEV_APPEND_RX_BLOCKS", "ROM_REV0_HAL_MAC_RX_LAST_DESCRIPTOR", "HIL_W1_RX_WALKER_2026_10_18", "HIL_OPEN_RX_LIVE_APPEND_2026_07_27"]
 provenance = "reviewed"
 accuracy = "exact"
 completeness = "complete"

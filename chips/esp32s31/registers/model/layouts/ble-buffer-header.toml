@@ -7,6 +7,20 @@ size = 24
 align = 4
 placement = ["dma-window"]
 
+[layout.review]
+sources = ["BLOB_LIBBLE_MEMORY_BUFFER_HEADER"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[layout.review.opaque]
+sources = ["BLOB_LIBBLE_MEMORY_BUFFER_HEADER"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
 [[layout.words]]
 name = "NEXT"
 offset = 0x00
@@ -23,6 +37,7 @@ encoding = "ble-compressed"
 
 [[layout.words.fields]]
 name = "BITS_20_31_OPAQUE"
+opaque = true
 bits = "31:20"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
@@ -43,6 +58,7 @@ encoding = "ble-compressed"
 
 [[layout.words.fields]]
 name = "BITS_20_31_OPAQUE"
+opaque = true
 bits = "31:20"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
@@ -63,6 +79,7 @@ encoding = "ble-compressed"
 
 [[layout.words.fields]]
 name = "BITS_20_31_OPAQUE"
+opaque = true
 bits = "31:20"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
@@ -75,6 +92,7 @@ description = "Observed word position; unassigned bits retain their exact image.
 
 [[layout.words.fields]]
 name = "BITS_0_30_OPAQUE"
+opaque = true
 bits = "30:0"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
@@ -112,6 +130,7 @@ description = "TX payload allocation capacity, excluding the packet prefix."
 
 [[layout.words.fields]]
 name = "BITS_11_31_OPAQUE"
+opaque = true
 bits = "31:11"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
@@ -135,155 +154,3 @@ sources = ["BLOB_LIBBLE_MEMORY_BUFFER_HEADER"]
 provenance = "reviewed"
 accuracy = "exact"
 completeness = "complete"
-
-[[review]]
-entity = "BLE_BUFFER_HEADER.NEXT"
-sources = ["BLOB_LIBBLE_MEMORY_BUFFER_HEADER"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_BUFFER_HEADER.NEXT.ADDRESS"
-sources = ["BLOB_LIBBLE_MEMORY_BUFFER_HEADER"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_BUFFER_HEADER.NEXT.BITS_20_31_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_BUFFER_HEADER"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_BUFFER_HEADER.PACKET_BASE"
-sources = ["BLOB_LIBBLE_MEMORY_BUFFER_HEADER"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_BUFFER_HEADER.PACKET_BASE.ADDRESS"
-sources = ["BLOB_LIBBLE_MEMORY_BUFFER_HEADER"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_BUFFER_HEADER.PACKET_BASE.BITS_20_31_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_BUFFER_HEADER"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_BUFFER_HEADER.PDU_TARGET"
-sources = ["BLOB_LIBBLE_MEMORY_BUFFER_HEADER"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_BUFFER_HEADER.PDU_TARGET.ADDRESS"
-sources = ["BLOB_LIBBLE_MEMORY_BUFFER_HEADER"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_BUFFER_HEADER.PDU_TARGET.BITS_20_31_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_BUFFER_HEADER"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_BUFFER_HEADER.COMPLETION"
-sources = ["BLOB_LIBBLE_MEMORY_BUFFER_HEADER"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_BUFFER_HEADER.COMPLETION.BITS_0_30_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_BUFFER_HEADER"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_BUFFER_HEADER.COMPLETION.DONE"
-sources = ["BLOB_LIBBLE_MEMORY_BUFFER_HEADER"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_BUFFER_HEADER.ALLOCATION"
-sources = ["BLOB_LIBBLE_MEMORY_BUFFER_HEADER"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_BUFFER_HEADER.ALLOCATION.TERMINAL"
-sources = ["BLOB_LIBBLE_MEMORY_BUFFER_HEADER"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_BUFFER_HEADER.ALLOCATION.LLID"
-sources = ["BLOB_LIBBLE_MEMORY_BUFFER_HEADER"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_BUFFER_HEADER.ALLOCATION.PAYLOAD_CAPACITY"
-sources = ["BLOB_LIBBLE_MEMORY_BUFFER_HEADER"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_BUFFER_HEADER.ALLOCATION.BITS_11_31_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_BUFFER_HEADER"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_BUFFER_HEADER.PREVIOUS"
-sources = ["BLOB_LIBBLE_MEMORY_BUFFER_HEADER"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_BUFFER_HEADER.PREVIOUS.ADDRESS"
-sources = ["BLOB_LIBBLE_MEMORY_BUFFER_HEADER"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
