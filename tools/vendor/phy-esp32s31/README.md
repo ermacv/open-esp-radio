@@ -28,8 +28,9 @@ diagnostic image. SOURCE: `firmware/vendor/esp32s31/calibration/main/main.c`.
 
 The diagnostic image supplies no input cache and requires full registration
 and `FullForCache`. Its immutable registration projection is captured before
-Wi-Fi startup; indexed register reads happen with RX active at the cold point,
-or after one verified RF close/wake and Wi-Fi rejoin at the restart point.
+Wi-Fi startup; indexed register reads sample the selected cold point, or the state after one
+verified RF close/wake and Wi-Fi rejoin at the restart point. The diagnostic
+RX experiment runs after the host has read all capture pages.
 Capture uses public PHY snapshots/getters, without verification hooks.
 
 `registers.rs` derives both images from the published model: the readable
