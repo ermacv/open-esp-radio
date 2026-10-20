@@ -89,7 +89,7 @@ impl Drop for Context {
 // retained marker is needed to compare publications after confirmation.
 struct GateClosed;
 impl oer_trace::Event for GateClosed {
-    const KIND: oer_trace::Kind = oer_trace::Kind::new(oer_trace::Domain::Ieee80211, 103);
+    const KIND: oer_trace::Kind = oer_trace::Kind::new(oer_trace::Domain::Ieee80211, 106);
     const CHANNEL: oer_trace::Channel = port::trace::Publication::CHANNEL;
     fn encode(&self) -> [u32; 2] {
         [0, 0]
@@ -98,6 +98,16 @@ impl oer_trace::Event for GateClosed {
         (words == [0, 0]).then_some(Self)
     }
 }
+const _: () = {
+    use oer_trace::Event;
+    let kind = GateClosed::KIND.raw();
+    assert!(kind != port::trace::Publication::KIND.raw());
+    assert!(kind != port::trace::ENCODED_MPDU.raw());
+    assert!(kind != port::trace::TerminalPosted::KIND.raw());
+    assert!(kind != port::trace::EdcaTable::KIND.raw());
+    assert!(kind != port::trace::EdcaRecord::KIND.raw());
+    assert!(kind != port::trace::EdcaDraw::KIND.raw());
+};
 
 struct Small;
 struct Large;
