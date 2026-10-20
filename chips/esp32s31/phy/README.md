@@ -355,10 +355,11 @@ A grant-protect interval is the time the request was programmed, not an observat
 | | idle | ≤ 0.52 ms | ≤ 7.6 ms | ≤ 7.0 ms | ≤ 7.0 ms | ≤ 14.6 ms |
 | Wi-Fi + Bluetooth LE, HT20 UDP RX and an ATT echo load, 2 runs | traffic | ≤ 0.94 ms | ≤ 16.1 ms | ≤ 13.4 ms | ≤ 15.5 ms | ≤ 30.1 ms |
 | | idle | ≤ 0.94 ms | ≤ 7.1 ms | ≤ 13.6 ms | ≤ 13.5 ms | ≤ 21.4 ms |
-| IEEE 802.15.4 receiving, 3 repetitions × 5 due ticks (2026-10-20) | idle | ≤ 1.467 ms | ≤ 8.350 ms | ≤ 9.234 ms | ≤ 9.090 ms | ≤ 18.849 ms |
-| IEEE 802.15.4 receiving, layout seed 1, 20 repetitions × 5 due ticks (2026-10-20) | idle | ≤ 1.470 ms | ≤ 8.921 ms | ≤ 9.233 ms | ≤ 9.086 ms | ≤ 19.505 ms |
+| IEEE 802.15.4 receiving, source `5cb90527`, 3 repetitions × 5 due ticks (2026-10-20) | idle | ≤ 1.467 ms | ≤ 8.350 ms | ≤ 9.234 ms | ≤ 9.090 ms | ≤ 18.849 ms |
+| IEEE 802.15.4 receiving, source `5cb90527`, layout seed 1, 20 repetitions × 5 due ticks (2026-10-20) | idle | ≤ 1.470 ms | ≤ 8.921 ms | ≤ 9.233 ms | ≤ 9.086 ms | ≤ 19.505 ms |
+| IEEE 802.15.4 receiving, source `c6442ebf`, 3 repetitions × 5 due ticks (2026-10-20) | idle | ≤ 1.457 ms | ≤ 9.088 ms | ≤ 8.789 ms | ≤ 8.643 ms | ≤ 18.670 ms |
 
-The 2026-10-20 IEEE 802.15.4 rows use source `5cb90527`, including the I2C
+The rows marked `5cb90527` include the I2C
 terminal-recognition correction and timer-woken TX SAR readiness. The selected
 readiness deadline is 40 µs after the mandatory 2 µs trigger settle; physical
 PHY ownership and the grant transaction remain held while the timer is pending.
@@ -381,17 +382,28 @@ with no deadline expiry or invalid tick. These runs establish observed maxima,
 not a reliability or worst-case bound. The Wi-Fi rows retain their previously
 recorded values; the reproducible current-source scenario covers 154 only.
 
-The current RX diagnostic assembly also has a repeatable calibration-check difference:
-`I2C_TX_RATE_CONTROL` reads zero, versus `0x01540002` in the pinned vendor
-reference (five pairs, run `1792526108530-00387939`). Its PHY registration
-precedes the first common-power Wi-Fi MAC reset. The timing rows identify this
-assembly; they do not establish vendor-equivalent calibrated register state.
+The `c6442ebf` row uses client-owned Wi-Fi reset, preserving the I2C TX rate
+through common power for 154. Run `1792531108337-003fdf50` completes all 15 ticks,
+restores policy and closes RF. Source `4942344f` changes only the scenario catalog;
+its runtime application is identical:
+`f866a7260252b4fe3917b322a41f854e403618667f35bf32065464e817be5eea`.
+Per-repetition RFPLL/common/transmit/baseband-off/whole maxima (µs):
+1452/7735/8785/8640/17991; 1457/7578/8641/8496/17363;
+1456/9088/8789/8643/18670. It records 3262 SAR conversions, maximum readiness
+21 µs, no deadline expiry or invalid tick. These are observed maxima.
+
+Calibration captures for that assembly match I2C TX rate `0x01540002` through
+both first and repeated power entry. Cold matches all 193 MMIO and 39 analog
+registers against 40 same-point vendor boots. Restart matches all 193 MMIO;
+analog 69.04 remains vendor 96 versus production 101 (5 pairs), a real warm SAR2
+initialization/status difference whose clearing edge is not diagnosed. The hold
+rows identify each assembly and do not establish vendor-equivalent state for it.
 
 What the runs show:
-- **RFPLL.** The current 154 idle correction request reached 1.470 ms; the earlier Wi-Fi rows were below 1 ms.
+- **RFPLL.** The `c6442ebf` 154 idle correction request reached 1.457 ms; the earlier Wi-Fi rows were below 1 ms.
 - **Common bracket.** DCODE and RX gain calibration is the bracket traffic stretches, from ~6 ms idle to observed maxima of 13–18 ms under traffic (the table gives maxima only, no lower bound): interrupts compete with its polled measurements.
-- **Transmit bracket.** The current 154 idle maximum is 9.234 ms; the recorded Wi-Fi figures are ~7 ms per class, ~13 ms with both classes.
-- **Observed maxima.** The current 154 idle transmit/common brackets reach 9.234/8.921 ms (184.68/178.42 times the P2 50 µs step); the whole tick reaches 19.505 ms (390.1 times). These nested brackets do not bound an individual step. The earlier traffic records reach 18.0 ms per bracket and 30.1 ms per whole tick.
+- **Transmit bracket.** The `c6442ebf` 154 idle maximum is 8.789 ms; the recorded Wi-Fi figures are ~7 ms per class, ~13 ms with both classes.
+- **Observed maxima.** The `c6442ebf` 154 idle common/transmit brackets reach 9.088/8.789 ms (181.76/175.78 times the P2 50 µs step); the whole tick reaches 18.670 ms (373.4 times). These nested brackets do not bound an individual step. The earlier traffic records reach 18.0 ms per bracket and 30.1 ms per whole tick.
 - **HT20 rows.** The HT20 30 Mbit/s rows, which set the 18.0 ms bracket, came from a tracking-hold scenario outside this repository in an HT20 configuration; that scenario's other form runs HT40 at 60 Mbit/s, and neither is in this repository, so those rows cannot be re-run as recorded.
 - **Spread.** Run-to-run spread under traffic is larger than the effect of the traffic rate. The figures are observed maxima of these runs, not a guaranteed bound.
 
