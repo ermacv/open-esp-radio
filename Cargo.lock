@@ -3607,6 +3607,7 @@ dependencies = [
  "oer-radio-regulatory",
  "oer-test-ui-cases",
  "oer-time",
+ "oer-wire",
  "zeroize",
 ]
 
@@ -4327,6 +4328,10 @@ dependencies = [
  "serde",
  "toml",
 ]
+
+[[package]]
+name = "oer-wire"
+version = "0.1.0"
 
 [[package]]
 name = "once_cell"
