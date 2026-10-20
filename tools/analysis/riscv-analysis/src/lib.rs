@@ -63,6 +63,20 @@ struct Edge {
     relation: EdgeKind,
     external: bool,
 }
+
+/// Observe the same local-graph contract as record consumers while the CFG
+/// emits decoding gaps. Edges also enter this result when they are built,
+/// before value analysis runs and before their records are emitted.
+struct GraphClosure<'a> {
+    output: &'a mut dyn FunctionSink,
+    closed: bool,
+}
+impl FunctionSink for GraphClosure<'_> {
+    fn record(&mut self, record: &FunctionRecord, c: &mut dyn RunControl) -> Result<()> {
+        self.closed &= writes::closes_local_graph(record);
+        self.output.record(record, c)
+    }
+}
 /// The caller's known jump at `site`, each visited entry charged to
 /// `control`.
 fn known_jump<'j>(
@@ -219,6 +233,11 @@ fn analyze_pass<'m>(
     stack_calls: Option<&writes::StackCalls<'_>>,
     noreturn: &[u64],
 ) -> Result<(AnalysisSummary, AdmittedVec<'m, u64>)> {
+    let mut closure = GraphClosure {
+        output: sink,
+        closed: true,
+    };
+    let sink = &mut closure;
     control.phase(RunPhase::AnalyzeFunction)?;
     let end = input
         .extent
@@ -557,6 +576,7 @@ fn analyze_pass<'m>(
                     }
                 }
             }
+            sink.closed &= writes::closes_local_edge(destination, relation);
             edges.push(Edge {
                 from: offset,
                 target: destination,
@@ -580,6 +600,9 @@ fn analyze_pass<'m>(
     }
     edges.sort_unstable_by_key(|e| (e.from, e.target, e.relation as u8));
     let mut found_noreturn = AdmittedVec::new(memory);
+    // Every rejecting decode gap and every edge contributes to this result.
+    // The later Unvisited records preserve closure under the shared contract.
+    let closed_graph = sink.closed;
     summary.semantics = values::analyze_with(
         input,
         &nodes,
@@ -593,6 +616,7 @@ fn analyze_pass<'m>(
         symbolic_spills,
         stack_calls,
         &mut found_noreturn,
+        closed_graph,
     )?;
     summary.semantics.complete &= summary.coverage.decoding && summary.coverage.control_flow;
     summary.instructions = nodes.len() as u64;

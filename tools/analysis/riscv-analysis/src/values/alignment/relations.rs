@@ -6,6 +6,7 @@ use super::*;
 #[allow(clippy::too_many_arguments)]
 pub(in crate::values) fn analyze<'m>(
     bounds: &[Bound],
+    closed_graph: bool,
     input: &FunctionInput<'_>,
     nodes: &[Node],
     edges: &[Edge],
@@ -18,16 +19,8 @@ pub(in crate::values) fn analyze<'m>(
     c: &mut dyn RunControl,
 ) -> Result<RecordBuffer<'m>> {
     let mut records = RecordBuffer::new(memory);
-    if bounds.is_empty() {
+    if bounds.is_empty() || !closed_graph {
         return Ok(records);
-    }
-    // Same local closure contract as write summaries: an unknown non-call
-    // transfer may enter an unobserved local block. No derived equality then.
-    for edge in edges {
-        c.checkpoint(1)?;
-        if !writes::closes_local_edge(edge.target, edge.relation) {
-            return Ok(records);
-        }
     }
     let Ok(entry) = nodes.binary_search_by_key(&input.extent.start, |n| n.offset) else {
         return Ok(records);

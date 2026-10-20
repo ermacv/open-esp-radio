@@ -819,6 +819,8 @@ pub(super) fn analyze(
     control: &mut dyn RunControl,
     sink: &mut dyn FunctionSink,
 ) -> Result<SemanticSummary> {
+    // Unit fixtures supply decoded nodes directly and have no decode-gap
+    // records. The production caller also accounts for those records.
     analyze_with(
         input,
         nodes,
@@ -832,6 +834,9 @@ pub(super) fn analyze(
         false,
         None,
         &mut AdmittedVec::new(memory),
+        edges
+            .iter()
+            .all(|edge| writes::closes_local_edge(edge.target, edge.relation)),
     )
 }
 #[allow(clippy::too_many_arguments)]
@@ -848,6 +853,7 @@ pub(super) fn analyze_with(
     symbolic_spills: bool,
     stack_calls: Option<&writes::StackCalls<'_>>,
     noreturn: &mut AdmittedVec<'_, u64>,
+    closed_graph: bool,
 ) -> Result<SemanticSummary> {
     control.phase(RunPhase::AnalyzeValues)?;
     let bytes_per_node = std::mem::size_of::<Option<State>>()
@@ -981,6 +987,7 @@ pub(super) fn analyze_with(
     }
     let relations = alignment::relations::analyze(
         &bounds,
+        closed_graph,
         input,
         nodes,
         edges,
@@ -2138,6 +2145,9 @@ mod tests {
                 false,
                 None,
                 &mut AdmittedVec::new(&memory),
+                edges
+                    .iter()
+                    .all(|edge| writes::closes_local_edge(edge.target, edge.relation)),
             )
             .unwrap();
             (summary.complete, sink.0)
@@ -2645,6 +2655,9 @@ mod tests {
             false,
             None,
             &mut AdmittedVec::new(&memory),
+            edges
+                .iter()
+                .all(|edge| writes::closes_local_edge(edge.target, edge.relation)),
         )
         .unwrap();
         sink.0

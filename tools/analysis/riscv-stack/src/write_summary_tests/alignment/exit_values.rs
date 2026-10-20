@@ -278,3 +278,54 @@ fn two_store_footprints_share_one_exit_equality_propagation() {
         1
     );
 }
+
+#[test]
+fn undecoded_reachable_path_cannot_supply_control_point_equalities() {
+    let memory = WorkingMemory::new(8 * 1024 * 1024).unwrap();
+    let mut words = vec![branch(12, 0, 68, 1)];
+    words.extend(joined_code(15, 0));
+    words.push(u32::MAX); // reachable instruction with unknown decoding/control flow
+    let records = facts(&words, 0x1000, &memory);
+    assert!(records.iter().any(|r| matches!(
+        r,
+        FunctionRecord::Gap {
+            reason: GapReason::UnsupportedInstruction,
+            ..
+        }
+    )));
+    assert!(!summary(&records, 0x1000, &memory).closed_graph);
+    assert!(
+        !records
+            .iter()
+            .any(|r| matches!(r, FunctionRecord::AlignedValue { .. }))
+    );
+    let merged = aligned_at(&records, ValuePoint::Entry { offset: 0x1018 }, 15);
+    assert!(
+        merged.is_none(),
+        "unclosed graph supplied an equality: {merged:?}"
+    );
+}
+
+#[test]
+fn unvisited_undecodable_bytes_preserve_the_closed_graph_equality() {
+    let memory = WorkingMemory::new(8 * 1024 * 1024).unwrap();
+    let mut words = joined_code(15, 0);
+    words.push(u32::MAX); // no incoming edge: these bytes are never decoded
+    let records = facts(&words, 0x1000, &memory);
+    assert!(records.iter().any(|r| matches!(
+        r,
+        FunctionRecord::Gap {
+            reason: GapReason::Unvisited,
+            ..
+        }
+    )));
+    assert!(!records.iter().any(|r| matches!(
+        r,
+        FunctionRecord::Gap {
+            reason: GapReason::UnsupportedInstruction,
+            ..
+        }
+    )));
+    assert!(summary(&records, 0x1000, &memory).closed_graph);
+    assert!(aligned_at(&records, ValuePoint::Entry { offset: 0x1014 }, 15).is_some());
+}

@@ -57,8 +57,12 @@ with intersection at every incoming path. Loop exits and matching zero-residue
 conditions seed it. A path without proof contributes no equality. Transfers
 reuse the common `evaluate` with the proved register equalities; copies retain
 them and changed results lose them. Calls, unsupported effects and ambiguous
-relocations clear them. The existing graph-closure predicate rejects unknown
-non-call control flow. Facts are emitted only after this fixed point.
+relocations clear them. The CFG producer accumulates the existing
+`closes_local_graph` contract over decoding records and graph edges, and passes
+that result through the value analysis to the equality component. Reachable
+unsupported/declared-data gaps and boundary conflicts prevent all derived
+equalities, as do unresolved non-call edges. `Unvisited` gaps preserve closure.
+Facts are emitted only after this check and the equality fixed point.
 
 This preserves a relation through copies and jumps to the next merge while
 leaving the conservative scalar `Value` and `MemoryAccess` observations intact.
@@ -147,7 +151,16 @@ propagation. Existing footprint regressions
 remain. The cancellation/admission test now uses the two-path join fixture and
 checks every analysis step; the model additionally tests serde round-trip and
 boxed-payload accounting. Formatting and diff checks pass.
-Final focused checks pass 195 stack tests, 35 common-analysis tests, 21 model
+The reachable-undecodable-word regression fails on `4f856832`: `FunctionWrites`
+reports an open graph but an edge-only closure scan still emits the merged
+equality. The shared closure result now suppresses every `AlignedValue` in that
+case. A companion regression leaves the same bytes unvisited behind an
+unconditional jump and verifies that closure and the equality remain valid.
+The distinction uses the existing record contract rather than coverage flags
+or a count of all gaps. Follow-up check logs and fresh firmware/audit captures
+are retained under `/tmp/oer-pr191-closure-fix/`.
+
+Final focused checks pass 197 stack tests, 35 common-analysis tests, 21 model
 tests and six dependency-layer checks.
 
 All **14 machine files** and **four complete callback-audit TSVs** are byte
@@ -160,10 +173,15 @@ The work-unit increase is approximately 0.51–0.67% across these four analyses.
 
 | Image | Work units before | Work units after | Peak bytes, unchanged |
 | --- | ---: | ---: | ---: |
-| w0 runtime | 78,319,813 | 78,742,157 | 156,646,584 |
-| w1 runtime | 100,788,310 | 101,302,649 | 158,320,039 |
-| w0 bootstrap | 15,728,878 | 15,833,645 | 16,357,378 |
-| w1 bootstrap | 15,728,365 | 15,833,130 | 16,468,560 |
+| w0 runtime | 78,319,813 | 78,742,078 | 156,646,584 |
+| w1 runtime | 100,788,310 | 101,302,570 | 158,320,039 |
+| w0 bootstrap | 15,728,878 | 15,833,566 | 16,357,378 |
+| w1 bootstrap | 15,728,365 | 15,833,051 | 16,468,560 |
+
+Compared with `4f856832`, every machine file, full callback audit and semantic
+report line also remains identical. Each stack analysis uses 79 fewer work
+units because the equality pass no longer rescans only the edges; closure is
+accumulated during the already-metered CFG construction and record emission.
 
 No manifests, dependency edges, lockfile or reviewed ROM contracts change.
 

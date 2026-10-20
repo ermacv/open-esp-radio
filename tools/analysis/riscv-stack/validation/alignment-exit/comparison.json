@@ -44,7 +44,7 @@
           "+++ after/runtime-stack.txt",
           "@@ -1,4 +1,4 @@",
           "-analysis: 78319813 of 1000000000 work units, 156646584 of 536870912 bytes of working memory",
-          "+analysis: 78742157 of 1000000000 work units, 156646584 of 536870912 bytes of working memory",
+          "+analysis: 78742078 of 1000000000 work units, 156646584 of 536870912 bytes of working memory",
           " frame coverage: 409 of 570 functions have a compiler frame record; 165 reviewed, 0 unreviewed",
           "   reviewed VectorData 0x2f000000 _mtvt_table",
           "   reviewed VectorData 0x2f000000 _runtime_mtvt_table"
@@ -63,7 +63,7 @@
           "+++ after/bootstrap-stack.txt",
           "@@ -1,4 +1,4 @@",
           "-analysis: 15728878 of 1000000000 work units, 16357378 of 536870912 bytes of working memory",
-          "+analysis: 15833645 of 1000000000 work units, 16357378 of 536870912 bytes of working memory",
+          "+analysis: 15833566 of 1000000000 work units, 16357378 of 536870912 bytes of working memory",
           " frame coverage: 35 of 144 functions have a compiler frame record; 115 reviewed, 0 unreviewed",
           "   reviewed VectorData 0x2f000000 _mtvt_table",
           "   reviewed LinkerLabel 0x2f000000 _trap_section_origin"
@@ -212,7 +212,7 @@
           "+++ after/runtime-stack.txt",
           "@@ -1,4 +1,4 @@",
           "-analysis: 100788310 of 1000000000 work units, 158320039 of 536870912 bytes of working memory",
-          "+analysis: 101302649 of 1000000000 work units, 158320039 of 536870912 bytes of working memory",
+          "+analysis: 101302570 of 1000000000 work units, 158320039 of 536870912 bytes of working memory",
           " frame coverage: 486 of 647 functions have a compiler frame record; 165 reviewed, 0 unreviewed",
           "   reviewed VectorData 0x2f000000 _mtvt_table",
           "   reviewed VectorData 0x2f000000 _runtime_mtvt_table"
@@ -231,7 +231,7 @@
           "+++ after/bootstrap-stack.txt",
           "@@ -1,4 +1,4 @@",
           "-analysis: 15728365 of 1000000000 work units, 16468560 of 536870912 bytes of working memory",
-          "+analysis: 15833130 of 1000000000 work units, 16468560 of 536870912 bytes of working memory",
+          "+analysis: 15833051 of 1000000000 work units, 16468560 of 536870912 bytes of working memory",
           " frame coverage: 35 of 144 functions have a compiler frame record; 115 reviewed, 0 unreviewed",
           "   reviewed VectorData 0x2f000000 _mtvt_table",
           "   reviewed LinkerLabel 0x2f000000 _trap_section_origin"
