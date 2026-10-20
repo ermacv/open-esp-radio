@@ -1816,7 +1816,7 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
                 return Ok(completion);
             }
             let completion =
-                rfpll::complete_thermal::<D>(self.timer, registers, grant, action).await?;
+                rfpll::complete_thermal::<D, _>(self.timer, registers, grant, action).await?;
             if let Some((operation, event)) = crate::tracking::observation::rfpll_hold_edge(action)
             {
                 observer.tracking_operation(operation, event);
@@ -2002,7 +2002,7 @@ impl<
                 PhyCalibrationTrackingCompletion::GrantProtectSet { enabled }
             }
             PhyCalibrationTrackingAction::ClearPbus => {
-                let completed = calibration::clear_pbus::<D, _>(
+                let completed = calibration::clear_pbus::<D, _, _>(
                     self.timer,
                     transition
                         .begin_pbus_clear()
@@ -2016,7 +2016,7 @@ impl<
                 use crate::tracking::observation::{Event, Operation};
                 self.observer
                     .tracking_operation(Operation::Dcode, Event::PollStarted);
-                let result = calibration::dcode::<D, _>(
+                let result = calibration::dcode::<D, _, _>(
                     self.timer,
                     transition
                         .begin_dcode()
@@ -2035,7 +2035,7 @@ impl<
                 observer
                     .borrow_mut()
                     .tracking_operation(Operation::RxGain, Event::PollStarted);
-                let result = calibration::rx_gain::<D, _>(
+                let result = calibration::rx_gain::<D, _, _>(
                     self.timer,
                     transition
                         .begin_rx_gain_recalibration()
@@ -2055,7 +2055,7 @@ impl<
                 result?
             }
             PhyCalibrationTrackingAction::RestoreChipChannel { .. } => {
-                calibration::channel::<D, _, _>(
+                calibration::channel::<D, _, _, _>(
                     self.timer,
                     transition
                         .begin_channel_restore()

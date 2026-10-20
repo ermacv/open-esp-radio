@@ -68,8 +68,8 @@ pub(super) async fn observe_temperature_with_hal<P, D: PhyShortDelay>(
 ///
 /// The first operation crosses the point of no recovery. Any returned error
 /// means the powered hardware epoch is ambiguous and must remain poisoned.
-pub(super) fn execute_rf_close_with_hal<D: PhyShortDelay>(
-    clock: &dyn oer_time::Clock,
+pub(super) fn execute_rf_close_with_hal<D: PhyShortDelay, C: oer_time::Clock + ?Sized>(
+    clock: &C,
     registers: &mut impl SharedPhyAccess,
 ) -> Result<(), PhyTargetPortError> {
     drive_rf_close(|operation| {
@@ -151,8 +151,8 @@ async fn drive_wake_i2c_configuration<D: PhyShortDelay>(
 }
 
 #[cfg(target_arch = "riscv32")]
-pub(crate) fn reset_wake_i2c_master(
-    clock: &dyn oer_time::Clock,
+pub(crate) fn reset_wake_i2c_master<C: oer_time::Clock + ?Sized>(
+    clock: &C,
     registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
 ) -> Result<(), PhyTargetPortError> {
     use oer_esp32s31_hal::phy::i2c::{PhyI2cHost, pulse_master_reset, sample_master_reset_busy};
@@ -162,10 +162,11 @@ pub(crate) fn reset_wake_i2c_master(
             continue;
         }
         pulse_master_reset(registers, host);
-        let idle = crate::executor::wait::poll::bounded::<core::convert::Infallible>(clock, || {
-            Ok(!sample_master_reset_busy(registers, host))
-        })
-        .unwrap_or_else(|never| match never {});
+        let idle =
+            crate::executor::wait::poll::bounded::<core::convert::Infallible, _>(clock, || {
+                Ok(!sample_master_reset_busy(registers, host))
+            })
+            .unwrap_or_else(|never| match never {});
         if !idle {
             return Err(PhyTargetPortError::HardwareEdgeTimedOut);
         }
@@ -188,8 +189,8 @@ fn force_wake_txrx<D: PhyShortDelay>(
 }
 
 #[cfg(target_arch = "riscv32")]
-fn open_wake_i2c_power(
-    clock: &dyn oer_time::Clock,
+fn open_wake_i2c_power<C: oer_time::Clock + ?Sized>(
+    clock: &C,
     registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
 ) -> Result<(), PhyTargetPortError> {
     use crate::analog::i2c::{
@@ -235,8 +236,8 @@ fn open_wake_i2c_power(
 }
 
 #[cfg(target_arch = "riscv32")]
-fn clear_wake_pbus<D: PhyShortDelay>(
-    clock: &dyn oer_time::Clock,
+fn clear_wake_pbus<D: PhyShortDelay, C: oer_time::Clock + ?Sized>(
+    clock: &C,
     registers: &mut impl oer_esp32s31_hal::owner::SharedPhyContext,
 ) -> Result<(), PhyTargetPortError> {
     use crate::analog::pbus::{
@@ -287,8 +288,8 @@ fn clear_wake_pbus<D: PhyShortDelay>(
 }
 
 #[cfg(target_arch = "riscv32")]
-fn publish_wake_frequency_i2c(
-    clock: &dyn oer_time::Clock,
+fn publish_wake_frequency_i2c<C: oer_time::Clock + ?Sized>(
+    clock: &C,
     registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
     front_end_parameter_bit: bool,
 ) -> Result<(), PhyTargetPortError> {
@@ -364,7 +365,6 @@ pub(super) async fn execute_rf_wake_with_hal<D: PhyShortDelay>(
     registers: &mut impl PhyInitializationAccess,
     state: &PhyState,
 ) -> Result<(), PhyTargetPortError> {
-    let clock: &dyn oer_time::Clock = timer;
     use crate::lifecycle::{PhyRfWakeAction, PhyRfWakeCompletion, PhyRfWakeOperation};
     use oer_esp32s31_hal::phy::i2c::{PhyAdcRate, PhyI2cConfigurationOperation};
 
@@ -394,7 +394,7 @@ pub(super) async fn execute_rf_wake_with_hal<D: PhyShortDelay>(
                 PhyRfWakeOperation::SetHardwareFrequencyControl { enabled } => {
                     oer_esp32s31_hal::phy::frequency::set_hardware_control(registers, enabled);
                 }
-                PhyRfWakeOperation::ResetI2cMaster => reset_wake_i2c_master(clock, registers)?,
+                PhyRfWakeOperation::ResetI2cMaster => reset_wake_i2c_master(timer, registers)?,
                 PhyRfWakeOperation::OpenFrontendBasebandClocks => {
                     registers.open_frontend_baseband_internal_clocks();
                     oer_esp32s31_hal::phy::analog_i2c::enable_frontend_baseband_power(registers);
@@ -416,8 +416,10 @@ pub(super) async fn execute_rf_wake_with_hal<D: PhyShortDelay>(
                 PhyRfWakeOperation::ReadXtalFrequency => {
                     oer_esp32s31_hal::phy::prelude::configure_fixed_xtal_40mhz(registers);
                 }
-                PhyRfWakeOperation::OpenI2cPower => open_wake_i2c_power(clock, registers)?,
-                PhyRfWakeOperation::ClearPbusRegisters => clear_wake_pbus::<D>(clock, registers)?,
+                PhyRfWakeOperation::OpenI2cPower => open_wake_i2c_power(timer, registers)?,
+                PhyRfWakeOperation::ClearPbusRegisters => {
+                    clear_wake_pbus::<D, _>(timer, registers)?
+                }
                 PhyRfWakeOperation::ConfigureI2cClock => {
                     oer_esp32s31_hal::phy::i2c::configure_clock_selection(registers);
                 }
@@ -462,7 +464,7 @@ pub(super) async fn execute_rf_wake_with_hal<D: PhyShortDelay>(
                 }
                 PhyRfWakeOperation::PublishRetainedFrequencyI2c => {
                     publish_wake_frequency_i2c(
-                        clock,
+                        timer,
                         registers,
                         frequency_control.front_end_parameter_bit,
                     )?;
@@ -493,7 +495,7 @@ pub(super) async fn execute_rf_wake_with_hal<D: PhyShortDelay>(
                     oer_esp32s31_hal::phy::frequency::configure_bss_cbw(registers, cbw);
                     oer_esp32s31_hal::phy::agc::configure_rx_compensation(registers);
                     write_i2c_direct(
-                        clock,
+                        timer,
                         registers,
                         crate::analog::i2c::analog_registers::TX_CAPACITOR_BANKS,
                         tx_cap,
@@ -505,7 +507,7 @@ pub(super) async fn execute_rf_wake_with_hal<D: PhyShortDelay>(
                 }
                 PhyRfWakeOperation::RestoreTxCapacitance => {
                     write_i2c_direct(
-                        clock,
+                        timer,
                         registers,
                         crate::analog::i2c::analog_registers::TX_CAPACITOR_BANKS,
                         tx_cap,
@@ -538,7 +540,7 @@ pub(super) async fn execute_rf_wake_with_hal<D: PhyShortDelay>(
                     }
                 }
                 PhyRfWakeOperation::ResetClockGenerator => {
-                    crate::target_executor::reset_clock_generator_direct(clock, registers)?;
+                    crate::target_executor::reset_clock_generator_direct(timer, registers)?;
                 }
             }
         }

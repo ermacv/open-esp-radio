@@ -11,8 +11,8 @@ use oer_time::Clock;
 /// `phy_chip_i2c_writeReg` return the result once the busy observation clears;
 /// there is no further hardware wait after that successful observation.
 #[inline]
-pub(crate) fn complete<S, E>(
-    clock: &dyn Clock,
+pub(crate) fn complete<S, E, C: Clock + ?Sized>(
+    clock: &C,
     state: &mut S,
     action: impl Fn(&S) -> PhyColdI2cAction,
     mut advance: impl FnMut(&mut S, PhyColdI2cAction) -> Result<(), E>,

@@ -174,10 +174,10 @@ impl<S: SchedulerRunInterruptStorage> SchedulerHardwareBackend for LiveScheduler
         let _cleared = self.controller.clear_scheduler_skip(skip);
     }
 
-    fn observe(
+    fn observe<C: oer_time::Clock + ?Sized>(
         &mut self,
         wait: SchedulerWait,
-        settle: Settle<'_>,
+        settle: Settle<'_, C>,
         lock: Option<&mut BluetoothSchedulerExecutionLock>,
         modify: Option<&mut BluetoothSchedulerExecutionModify>,
         cancellation: Option<&mut BluetoothSchedulerCancellationRequested>,
@@ -309,12 +309,12 @@ impl SchedulerHardware<HalPublications> {
 
     /// Take one fresh observation of the awaited publication; each
     /// diagnostic sample settles within `settle`.
-    pub fn observe_live(
+    pub fn observe_live<C: oer_time::Clock + ?Sized>(
         &mut self,
         controller: &mut ControllerHal<'_>,
         storage: &impl SchedulerRunInterruptStorage,
         wait: SchedulerWait,
-        settle: Settle<'_>,
+        settle: Settle<'_, C>,
     ) -> Result<SchedulerObservation, SchedulerHardwareError> {
         let mut backend = LiveSchedulerBackend {
             controller,

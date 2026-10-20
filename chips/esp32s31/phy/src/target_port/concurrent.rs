@@ -231,7 +231,7 @@ where
     )
     .await
     {
-        Ok(()) => radio_lifecycle::execute_rf_close_with_hal::<D>(timer, &mut registers)
+        Ok(()) => radio_lifecycle::execute_rf_close_with_hal::<D, _>(timer, &mut registers)
             .map(|()| {
                 // `esp_phy_disable` powers the temperature sensor down after
                 // `phy_close_rf` (`phy_xpd_tsens`); the retained wake powers it

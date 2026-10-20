@@ -69,8 +69,8 @@ use oer_esp32s31_hal::owner::SharedPhyAccess;
 /// bounds completion; no executor edge exists inside this transaction.
 #[cfg(target_arch = "riscv32")]
 #[inline]
-pub(crate) fn force_pbus_direct(
-    clock: &dyn oer_time::Clock,
+pub(crate) fn force_pbus_direct<C: oer_time::Clock + ?Sized>(
+    clock: &C,
     registers: &mut impl SharedPhyAccess,
     transaction: crate::analog::pbus::PhyPbusForceTest,
 ) -> bool {
@@ -80,7 +80,7 @@ pub(crate) fn force_pbus_direct(
         transaction.path(),
         transaction.value(),
     );
-    crate::executor::wait::poll::bounded::<core::convert::Infallible>(clock, || {
+    crate::executor::wait::poll::bounded::<core::convert::Infallible, _>(clock, || {
         Ok(oer_esp32s31_hal::phy::pbus::try_finish_force_test(registers).is_ok())
     })
     .unwrap_or_else(|never| match never {})
@@ -90,15 +90,16 @@ pub(crate) fn force_pbus_direct(
 /// transition or an async completion for each busy observation.
 #[cfg(target_arch = "riscv32")]
 #[inline]
-pub(crate) fn read_i2c_direct(
-    clock: &dyn oer_time::Clock,
+pub(crate) fn read_i2c_direct<C: oer_time::Clock + ?Sized>(
+    clock: &C,
     registers: &mut impl SharedPhyAccess,
     address: oer_esp32s31_hal::phy::i2c::PhyI2cAddress,
 ) -> Result<u8, PhyTargetPortError> {
-    let started = crate::executor::wait::poll::bounded::<core::convert::Infallible>(clock, || {
-        Ok(crate::analog::i2c::try_start_read(registers, address).is_ok())
-    })
-    .unwrap_or_else(|never| match never {});
+    let started =
+        crate::executor::wait::poll::bounded::<core::convert::Infallible, _>(clock, || {
+            Ok(crate::analog::i2c::try_start_read(registers, address).is_ok())
+        })
+        .unwrap_or_else(|never| match never {});
     if !started {
         return Err(PhyTargetPortError::HardwareEdgeTimedOut);
     }
@@ -112,21 +113,22 @@ pub(crate) fn read_i2c_direct(
 /// direct busy polling as the vendor leaf.
 #[cfg(target_arch = "riscv32")]
 #[inline]
-pub(crate) fn write_i2c_direct(
-    clock: &dyn oer_time::Clock,
+pub(crate) fn write_i2c_direct<C: oer_time::Clock + ?Sized>(
+    clock: &C,
     registers: &mut impl SharedPhyAccess,
     address: oer_esp32s31_hal::phy::i2c::PhyI2cAddress,
     value: u8,
 ) -> Result<(), PhyTargetPortError> {
-    let started = crate::executor::wait::poll::bounded::<core::convert::Infallible>(clock, || {
-        Ok(crate::analog::i2c::try_start_write(registers, address, value).is_ok())
-    })
-    .unwrap_or_else(|never| match never {});
+    let started =
+        crate::executor::wait::poll::bounded::<core::convert::Infallible, _>(clock, || {
+            Ok(crate::analog::i2c::try_start_write(registers, address, value).is_ok())
+        })
+        .unwrap_or_else(|never| match never {});
     if !started {
         return Err(PhyTargetPortError::HardwareEdgeTimedOut);
     }
     let completed =
-        crate::executor::wait::poll::bounded::<core::convert::Infallible>(clock, || {
+        crate::executor::wait::poll::bounded::<core::convert::Infallible, _>(clock, || {
             Ok(crate::analog::i2c::try_finish_write(registers, address).is_ok())
         })
         .unwrap_or_else(|never| match never {});
@@ -141,8 +143,8 @@ pub(crate) fn write_i2c_direct(
 /// vendor-shaped operation.
 #[cfg(target_arch = "riscv32")]
 #[inline]
-pub(crate) fn write_i2c_field_direct(
-    clock: &dyn oer_time::Clock,
+pub(crate) fn write_i2c_field_direct<C: oer_time::Clock + ?Sized>(
+    clock: &C,
     registers: &mut impl SharedPhyAccess,
     field: oer_esp32s31_hal::phy::i2c::PhyI2cField,
     value: u8,
@@ -159,8 +161,8 @@ pub(crate) fn write_i2c_field_direct(
 /// Execute the four masked analog-I²C writes of complete ROM
 /// `phy_reset_ckgen` within named 20 µs completion settles.
 #[cfg(target_arch = "riscv32")]
-pub(crate) fn reset_clock_generator_direct(
-    clock: &dyn oer_time::Clock,
+pub(crate) fn reset_clock_generator_direct<C: oer_time::Clock + ?Sized>(
+    clock: &C,
     registers: &mut impl SharedPhyAccess,
 ) -> Result<(), PhyTargetPortError> {
     use oer_esp32s31_hal::phy::i2c::analog_registers;
@@ -326,10 +328,10 @@ macro_rules! define_i2c_executor {
 /// phy_chip_i2c_readReg_org / phy_chip_i2c_writeReg. No settle is specified
 /// between command publication and status reads. Publication and terminal
 /// recognition share one named settle.
-pub fn complete_rx_gain_i2c(
+pub fn complete_rx_gain_i2c<C: oer_time::Clock + ?Sized>(
     mut binding: MaskedI2cWriteBinding,
     registers: &mut impl SharedPhyAccess,
-    clock: &dyn oer_time::Clock,
+    clock: &C,
 ) -> Result<oer_espressif_analog::Completion<crate::analog::i2c::PhyI2cAddress>, PhyTargetPortError>
 {
     let completed = crate::executor::wait::i2c::complete(
@@ -367,8 +369,8 @@ pub fn complete_rx_gain_i2c(
 /// polling. Publication, retries and terminal recognition share the existing
 /// named 20 µs settle on the caller's clock. Bus status reads have no mandatory settling interval;
 /// analog settling remains an explicit responsibility of the caller.
-pub(crate) fn complete_rfpll_i2c_direct(
-    clock: &dyn oer_time::Clock,
+pub(crate) fn complete_rfpll_i2c_direct<C: oer_time::Clock + ?Sized>(
+    clock: &C,
     mut binding: crate::analog::rfpll::RfpllFrequencyI2cBinding,
     registers: &mut impl SharedPhyAccess,
 ) -> Result<crate::analog::rfpll::RfpllFrequencyCompletion, PhyTargetPortError> {
@@ -451,10 +453,10 @@ macro_rules! define_timeout_pbus_executor {
 // Each phase is a named settle and ends in the parent timeout completion.
 macro_rules! define_direct_timeout_pbus_executor {
     ($function:ident, $binding:ty, $completion:ty) => {
-        pub fn $function(
+        pub fn $function<C: oer_time::Clock + ?Sized>(
             mut binding: $binding,
             registers: &mut impl SharedPhyAccess,
-            clock: &dyn oer_time::Clock,
+            clock: &C,
         ) -> Result<$completion, PhyTargetPortError> {
             use crate::executor::wait::poll::settled;
             if settled(clock, || binding.start_target(registers).ok()).is_err() {

@@ -776,10 +776,10 @@ impl PhyPwdetReadyBinding {
     }
 
     #[cfg(target_arch = "riscv32")]
-    pub fn execute_target(
+    pub fn execute_target<C: oer_time::Clock + ?Sized>(
         self,
         registers: &mut impl oer_esp32s31_hal::owner::SharedPhyContext,
-        clock: &dyn oer_time::Clock,
+        clock: &C,
     ) -> PhyPwdetCompletion {
         // The settle limit is this crate's, not a recovered value.
         let mut reads = 0_u16;

@@ -14,7 +14,7 @@ impl Clock for Frozen {
     }
 }
 
-fn frozen_settle() -> Settle<'static> {
+fn frozen_settle() -> Settle<'static, Frozen> {
     Settle::new(
         SettleLimit::new(Duration::from_micros(20)).unwrap(),
         &Frozen,

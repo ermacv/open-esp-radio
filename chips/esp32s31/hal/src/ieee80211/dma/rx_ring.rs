@@ -2423,10 +2423,10 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     /// records its observation count in [`RxReloadEvidence::max_reload_attempts`].
     /// A settle rings the doorbell at most once more per appended tail, so
     /// this waits for at most two doorbells.
-    pub fn complete_pending_reload<M: RxDma>(
+    pub fn complete_pending_reload<M: RxDma, C: oer_time::Clock + ?Sized>(
         &mut self,
         mmio: &mut M,
-        settle: Settle<'_>,
+        settle: Settle<'_, C>,
     ) -> Result<(), RxRingError> {
         while self.pending_tail().is_some() {
             let mut attempts = 0_u32;

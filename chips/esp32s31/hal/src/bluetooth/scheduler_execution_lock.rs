@@ -64,17 +64,17 @@ fn step<C: Control>(
     hw.observe()
 }
 
-struct Hardware<'a> {
+struct Hardware<'a, C: oer_time::Clock + ?Sized> {
     task: &'a mut BluetoothTaskRegisters,
     interrupts: &'a mut BluetoothInterruptRegisters,
-    settle: Settle<'a>,
+    settle: Settle<'a, C>,
 }
 
 #[allow(
     unsafe_code,
     reason = "the admitted request carries the caller's item and list serialization"
 )]
-impl Control for Hardware<'_> {
+impl<C: oer_time::Clock + ?Sized> Control for Hardware<'_, C> {
     type Published = BluetoothSchedulerExecutionLockPublished;
 
     fn busy(&mut self) -> Result<bool, Unsettled> {
@@ -100,11 +100,11 @@ impl Control for Hardware<'_> {
 
 /// Advance one finite execution-lock step while both register owners are
 /// held.
-pub(crate) fn step_hardware(
+pub(crate) fn step_hardware<C: oer_time::Clock + ?Sized>(
     task: &mut BluetoothTaskRegisters,
     interrupts: &mut BluetoothInterruptRegisters,
     lock: &mut BluetoothSchedulerExecutionLock,
-    settle: Settle<'_>,
+    settle: Settle<'_, C>,
 ) -> Result<BluetoothSchedulerExecutionLockDisposition, Unsettled> {
     step(
         lock.request,
