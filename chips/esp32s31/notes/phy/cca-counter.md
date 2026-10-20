@@ -1,8 +1,8 @@
 # PHY CCA counter: measurement-window ownership
 
 The verdict for `PHY_BB_RECOVERED_GAPS.WORD_0060_OPAQUE`
-(`0x20107c60`) is **not established because of Blobray's caller-analysis
-limits**. The word remains in the vendor comparison without an exclusion.
+(`0x20107c60`) is **not established because Blobray's static coverage is incomplete**.
+The word remains in the vendor comparison without an exclusion.
 Neither a missing vendor-only service nor a production CCA defect is proved.
 
 ## Register facts
@@ -54,13 +54,30 @@ reach the counter words at indices 17/18/19. The observed call in
 `librftest.a[wifi.o]::set_spur_reg` and two resolved ROM calls from
 `phy_spur_coef_cfg` pass index 0; they do not establish counter access.
 
-SOURCE: `tools/analysis/cli/src/main.rs::callers` and
-`tools/analysis/cli/src/listing.rs::references_to`, as analyzed at
-`50970d8d5336e07c2c14bcc728e56ff76158f457`. `callers` selects relocation
-references by target name. It does not build caller chains from resolved
-ET_EXEC/ROM transfers, standalone data-table references or runtime callbacks.
-Concretely, `call-arguments` reports the two ROM spur calls above, while
-`callers` omits them. Neither query reports a selected site for the counter
-leaves or their export names; this does not prove the absence of indirect
-callers. Synthetic linking and ROM address companions do not supply that
-missing traversal. The owner and cadence of the CCA window remain unknown.
+SOURCE: Blobray at `a19eaad5` (including the caller changes in `f0553471`),
+`tools/analysis/cli/src/main.rs::callers` and
+`references.rs::{Targets::capture, call_sites, StoredScan}`. Schema-4
+`callers` selects relocation references and resolved call/tail-transfer
+records, and scans captured data words and exact materialized target addresses.
+It reports both ROM calls from `phy_spur_coef_cfg`, agreeing with schema-5
+`call-arguments`, as well as the archive call above. Those three sites pass
+index 0. The resolved-ROM-transfer omission is absent from this implementation.
+
+SOURCE: the same vendor-calibration ELF's absolute `phy_get_cca_cnt` and
+`phy_set_cca_cnt` symbols are `0x2f8015bc` and `0x2f801658`, the ROM export
+trampolines. The target lookup accepts these absolute symbols as well as the
+ROM's sized function bodies. The query includes both counter names, their
+`__call_` export names and the spur-function names. It reports no selected
+counter caller and no stored-word or materialized-pointer candidate. The scan
+covers seven file-backed sections and 51,482 aligned words, with zero
+incomplete inventories; 23 NOBITS sections have no captured contents.
+
+The 10,434 partial functions and four unknown extents still limit absence
+claims. Captured pointer candidates would not prove execution, and the
+analysis does not expand callees or reconstruct runtime-populated callback
+contents. No captured counter-pointer slot was identified whose readers
+could establish the next owner. Unknown NOBITS contents are a coverage limit,
+not evidence that a callback or the measurement window uses them. Synthetic
+linking and ROM address companions do not provide those runtime contents.
+The start/finish owner, consumer, subsystem and cadence remain unknown;
+neither a vendor-only missing function nor a production defect is established.
