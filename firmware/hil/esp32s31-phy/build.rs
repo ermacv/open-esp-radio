@@ -75,6 +75,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         selectors.push_str(&format!("    (\"{peripheral}.{name}\", {index}),\n"));
     }
     selectors.push_str("];\n");
+    selectors.push_str("const ENABLE_REGISTERS: &[(&str, usize)] = &[\n");
+    for (peripheral, name) in [
+        ("PHY_PBUS", "STATUS_CLOCK_FORCE"),
+        ("PHY_BASEBAND_CONFIG_ORACLE", "NOISE_FLOOR_CONTROL"),
+        ("PHY_AGC_RECOVERED_GAPS", "WORD_001C_OPAQUE"),
+    ] {
+        let index = registers
+            .iter()
+            .position(|r| r.peripheral == peripheral && r.register == name && r.element.is_none())
+            .expect("CCA enable observation belongs to the typed PHY image");
+        selectors.push_str(&format!("    (\"{peripheral}.{name}\", {index}),\n"));
+    }
+    selectors.push_str("];\n");
     fs::write(output.join("cca_checkpoint.rs"), selectors)?;
     Ok(())
 }

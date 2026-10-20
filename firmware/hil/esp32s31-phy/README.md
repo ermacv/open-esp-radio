@@ -42,6 +42,9 @@ rebuilding the halted ring to reclaim all buffers, then closes RF through the
 existing capture teardown. An observation failure still runs cleanup; an idle
 timeout quarantines the arena until RF teardown/reset. These later samples are
 console evidence only; they do not enter the vendor comparison.
+Only this post-capture experiment also reads the existing MAC CCA force
+projection, PHY clock-force control, CCA selection and threshold alongside the
+counter controls. These are observations, with no counter rearm or enable write.
 
 The image prints typed `TEMPERATURE_SENSOR_SAR2_STATUS` checkpoints after PHY
 registration, immediately before RF close and after retained wake. Each line

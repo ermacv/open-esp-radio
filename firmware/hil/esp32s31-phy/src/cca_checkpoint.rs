@@ -66,3 +66,27 @@ pub fn observe_running<B: PlatformClockBackend, T>(
     }
     Ok(())
 }
+
+/// Extra enable reads belong only to the post-capture RX experiment.
+pub fn observe_enables<B: PlatformClockBackend, T>(
+    domain: &RadioDomain<B, T>,
+    runtime: &mut oer_esp32s31_hal::owner::RadioAccess,
+    point: Point,
+) -> Result<(), RejectReason> {
+    // This existing read-only projection samples the shared CCA force fields
+    // without publishing or acknowledging anything on the unused TX queue.
+    let mac = runtime.wifi_mac_hal().ordinary_tx_queue_snapshot(0);
+    oer_esp32s31_board::rom::print_fmt(format_args!(
+        "OPEN_RADIO_HIL phy=cca-enable point={point:?} force={} aux_force={} mac_active={}\n",
+        mac.cca_force, mac.cca_aux_force, mac.mac_active_state,
+    ));
+    for &(name, index) in ENABLE_REGISTERS {
+        let raw = domain
+            .phy_register_image(index)
+            .ok_or(RejectReason::Internal)?;
+        oer_esp32s31_board::rom::print_fmt(format_args!(
+            "OPEN_RADIO_HIL phy=cca-enable-register point={point:?} name={name} raw={raw:#010x}\n",
+        ));
+    }
+    Ok(())
+}

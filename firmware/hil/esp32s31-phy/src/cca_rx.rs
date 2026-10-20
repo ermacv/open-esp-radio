@@ -1,5 +1,5 @@
 //! Bounded, polled RX experiment after the host has read the calibration image.
-use crate::cca_checkpoint::{Point, observe_running};
+use crate::cca_checkpoint::{Point, observe_enables, observe_running};
 use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_hal::{
     domain::RadioDomain,
@@ -68,6 +68,7 @@ async fn experiment<B: PlatformClockBackend, T>(
     channel: u8,
 ) -> Result<()> {
     observe_running(domain, runtime, Point::BeforeRing)?;
+    observe_enables(domain, runtime, Point::BeforeRing)?;
     let placed = Storage::place(STORAGE.take().ok_or(RejectReason::Internal)?)
         .map_err(|_| RejectReason::Internal)?;
     let storage = placed.storage();
@@ -110,7 +111,8 @@ async fn experiment<B: PlatformClockBackend, T>(
     let halted = ring
         .try_stop(runtime.rx_dma())
         .map_err(|(_, error)| failure("stop", error))?;
-    let closed = observe_running(domain, runtime, Point::RingClosed);
+    let closed = observe_running(domain, runtime, Point::RingClosed)
+        .and_then(|()| observe_enables(domain, runtime, Point::RingClosed));
     let stopped = storage
         .prepare_halted(halted, runtime.rx_dma())
         .map_err(|(_, error)| failure("reclaim", error))?;
@@ -137,6 +139,7 @@ async fn sample<B: PlatformClockBackend, T>(
     channel: u8,
 ) -> Result<()> {
     observe_running(domain, runtime, Point::RingOpen)?;
+    observe_enables(domain, runtime, Point::RingOpen)?;
     let mut received = 0_u32;
     let mut beacons = 0_u32;
     let mut normalized = 0_u32;
@@ -204,6 +207,7 @@ async fn sample<B: PlatformClockBackend, T>(
                 .await;
         }
         observe_running(domain, runtime, Point::RingSample(sample))?;
+        observe_enables(domain, runtime, Point::RingSample(sample))?;
         if !runtime.receive_dma_snapshot().walker_enabled {
             return Err(RejectReason::Internal);
         }
