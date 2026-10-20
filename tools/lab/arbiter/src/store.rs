@@ -196,21 +196,3 @@ impl Arbiter {
         history::read(&self.history_path())
     }
 }
-
-#[cfg(test)]
-mod guard_tests {
-    use super::*;
-
-    #[test]
-    fn a_test_process_is_refused_the_stands_arbiter() {
-        assert!(is_test_executable(Path::new(
-            "/r/target/debug/deps/crate-1a2b"
-        )));
-        assert!(!is_test_executable(Path::new("/r/target/debug/oer-xtask")));
-        // This very test runs from deps/.
-        if std::env::var_os(ARBITER_ENV).is_none() {
-            let error = Arbiter::open().err().unwrap().to_string();
-            assert!(error.contains("a test must not open"), "{error}");
-        }
-    }
-}

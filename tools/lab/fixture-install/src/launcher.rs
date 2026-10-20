@@ -65,27 +65,6 @@ impl LaunchTarget {
     }
 }
 
-#[cfg(all(test, target_os = "linux"))]
-pub(crate) mod test_support {
-    use std::path::Path;
-
-    use super::LaunchTarget;
-
-    pub(crate) fn run_at(
-        root: &Path,
-        target: LaunchTarget,
-        arguments: &[&str],
-    ) -> crate::Result<std::process::ExitStatus> {
-        let lease = crate::admission::test_support::admit(root, target.provider())?;
-        let helper = lease.artifact(target.role())?;
-        Ok(oer_os_process::command(helper)
-            .args(arguments)
-            .env(super::handoff::BOUND, target.marker())
-            .env(super::handoff::DIRECTORY, lease.generation())
-            .status()?)
-    }
-}
-
 pub fn main(target: LaunchTarget) -> ExitCode {
     match launch(target) {
         Ok(never) => match never {},

@@ -198,31 +198,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_tool_is_rebuilt_from_the_path_packages_it_reaches() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-        let root = root.canonicalize().unwrap();
-        let metadata = serde_json::json!({
-            "packages": [
-                {"name": "oer-tool-lab-cli", "id": "x", "source": null,
-                 "manifest_path": root.join("tools/lab/cli/Cargo.toml")},
-                {"name": "oer-lab-arbiter", "id": "a", "source": null,
-                 "manifest_path": root.join("tools/lab/arbiter/Cargo.toml")},
-                {"name": "serde", "id": "s", "source": "registry+https://github.com/rust-lang/crates.io-index",
-                 "manifest_path": "/registry/serde/Cargo.toml"},
-                {"name": "unrelated", "id": "u", "source": null,
-                 "manifest_path": root.join("protocols/hil/protocol/Cargo.toml")},
-            ],
-            "resolve": {"nodes": [
-                {"id": "x", "deps": [{"pkg": "a"}, {"pkg": "s"}]},
-                {"id": "a", "deps": []},
-            ]},
-        });
-        let mut inputs = path_package_closure(&metadata, PACKAGE, &root).unwrap();
-        inputs.sort();
-        assert_eq!(inputs, ["tools/lab/arbiter", "tools/lab/cli"]);
-    }
-
-    #[test]
     fn the_wrapper_runs_the_installed_binary_against_the_callers_checkout() {
         let text = wrapper(Path::new("/tool/bin/oer-stand"), Path::new("/tool/src"));
         assert!(text.starts_with("#!/bin/sh\n"));

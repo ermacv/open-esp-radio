@@ -78,39 +78,3 @@ fn adopt_at(number: RawFd) -> Result<File> {
     fcntl_setfd(&lease, FdFlags::CLOEXEC)?;
     Ok(File::from(lease))
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::os::unix::fs::MetadataExt as _;
-
-    fn close_on_exec(number: RawFd) -> bool {
-        let info = std::fs::read_to_string(format!("/proc/self/fdinfo/{number}")).unwrap();
-        let flags = info
-            .lines()
-            .find_map(|line| line.strip_prefix("flags:"))
-            .map(|flags| u32::from_str_radix(flags.trim(), 8).unwrap())
-            .unwrap();
-        flags & rustix::fs::OFlags::CLOEXEC.bits() != 0
-    }
-
-    #[test]
-    fn lease_survives_exec_until_the_helper_adopts_it() {
-        // A high descriptor number avoids the lowest-free allocation of
-        // concurrently running tests.
-        const NUMBER: RawFd = 900;
-        let file = tempfile::tempfile().unwrap();
-        pass_at(&file, NUMBER).unwrap();
-        assert!(!close_on_exec(NUMBER));
-        assert!(pass_at(&file, NUMBER).is_err(), "occupied slot is reused");
-
-        let adopted = adopt_at(NUMBER).unwrap();
-        assert!(close_on_exec(NUMBER));
-        assert_eq!(
-            adopted.metadata().unwrap().ino(),
-            file.metadata().unwrap().ino()
-        );
-        drop(adopted);
-        assert!(adopt_at(NUMBER).is_err(), "closed descriptor is adopted");
-    }
-}

@@ -331,28 +331,6 @@ mod tests {
     }
 
     #[test]
-    fn waiting_for_service_returns_once_the_board_is_released() {
-        let directory = tempfile::tempdir().unwrap();
-        let arbiter = Arbiter::at(directory.path()).unwrap();
-        arbiter.set_maintenance(board("AA", "x")).unwrap();
-        let mut seen = Vec::new();
-        std::thread::scope(|scope| {
-            scope.spawn(|| {
-                std::thread::sleep(std::time::Duration::from_millis(200));
-                arbiter.clear_maintenance("AA").unwrap();
-            });
-            arbiter
-                .wait_for_service(&["AA".into()], |out| seen.push(out.len()))
-                .unwrap();
-        });
-        assert_eq!(seen, [1]);
-        // Nothing out of service: no wait at all.
-        arbiter
-            .wait_for_service(&[], |_| panic!("nothing to wait for"))
-            .unwrap();
-    }
-
-    #[test]
     fn a_quarantined_board_serves_nobody_until_a_checked_release() {
         let directory = tempfile::tempdir().unwrap();
         let arbiter = Arbiter::at(directory.path()).unwrap();

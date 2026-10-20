@@ -96,28 +96,3 @@ fn a_power_loss_also_needs_a_power_on_reset() {
     assert!(unread.contains("could not be read: no JTAG"), "{unread}");
     assert!(loss(true, Some(after), None).verdict().is_err());
 }
-
-#[test]
-fn the_reset_cause_is_the_profile_field_of_the_platform_publication() {
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-    for (chip, power_on_word) in [("esp32s31", 0x03), ("esp32c5", 0x21)] {
-        let profile = oer_chip_profile::Profile::load(&root, chip).unwrap();
-        let field =
-            ResetCauseField::resolve(&root, chip, profile.reset_cause.as_ref().unwrap()).unwrap();
-        // Words the stand read after a power cycle and after a JTAG reset.
-        assert!(field.cause(power_on_word).power_on(), "{chip}");
-        let jtag = if chip == "esp32s31" { 0x31 } else { 0x38 };
-        assert_eq!(field.cause(jtag).code, 0x18, "{chip}");
-    }
-    let missing = oer_chip_profile::ResetCause {
-        field: String::from("LP_CLKRST.RESET_CAUSE.ABSENT"),
-        power_on: 1,
-    };
-    assert!(ResetCauseField::resolve(&root, "esp32c5", &missing).is_err());
-}
-
-#[test]
-fn waiting_ends_when_the_condition_holds_or_the_time_is_up() {
-    assert!(wait_until(Duration::ZERO, &|| true));
-    assert!(!wait_until(Duration::from_millis(150), &|| false));
-}

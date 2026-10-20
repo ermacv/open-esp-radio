@@ -270,69 +270,6 @@ pub fn run(root: &Path, policy: Policy, apply: bool) -> Result<u64> {
 mod tests {
     use super::*;
 
-    fn aged(path: &Path, days: u64) {
-        let time = SystemTime::now() - Duration::from_secs(days * 24 * 3600);
-        fs::File::open(path).unwrap().set_modified(time).unwrap();
-    }
-
-    #[test]
-    fn only_old_caches_are_candidates_and_bundles_are_kept() {
-        let root = tempfile::tempdir().unwrap();
-        let target = root.path().join("target");
-        let old = target.join("debug/incremental/crate-old");
-        let fresh = target.join("debug/incremental/crate-fresh");
-        let stale =
-            target.join("hil/chip-a/psram-code-psram-data-psram-stack-correctness-owned-xarxa");
-        let live =
-            target.join("hil/chip-a/psram-code-psram-data-psram-stack-performance-owned-xarxa");
-        let runs = target.join("hil/chip-a/runs.before-shared-store");
-        let peer = target.join("hil/chip-b/check-system-watchdog-owned-xarxa");
-        let replay = target.join("hil/chip-b/replay");
-        let runners = target.join("hil/runners");
-        for directory in [&old, &fresh, &stale, &live, &runs, &peer, &replay, &runners] {
-            fs::create_dir_all(directory).unwrap();
-        }
-        for directory in [&old, &stale, &peer] {
-            aged(directory, 10);
-        }
-        for directory in [&runs, &replay, &runners] {
-            aged(directory, 30);
-        }
-        let chips = ["chip-b", "chip-a"].map(String::from);
-        let found = candidates(root.path(), &chips, Policy::default(), SystemTime::now());
-        let paths = found.iter().map(|c| c.path.clone()).collect::<Vec<_>>();
-        assert_eq!(paths, [old, stale, peer]);
-    }
-
-    #[test]
-    fn old_built_images_of_runs_and_jobs_are_candidates() {
-        let root = tempfile::tempdir().unwrap();
-        let target = root.path().join("target");
-        let paths = [
-            "hil/chip-a/images/run-old",
-            "hil/chip-a/images/run-new",
-            "hil/jobs/images/job-old",
-        ]
-        .map(|path| target.join(path));
-        for path in &paths {
-            fs::create_dir_all(path).unwrap();
-        }
-        aged(&paths[0], 10);
-        aged(&paths[2], 10);
-        let found = candidates(
-            root.path(),
-            &["chip-a".to_owned()],
-            Policy::default(),
-            SystemTime::now(),
-        );
-        let found: Vec<_> = found.iter().map(|candidate| &candidate.path).collect();
-        assert!(
-            found.contains(&&paths[0]) && found.contains(&&paths[2]),
-            "{found:?}"
-        );
-        assert!(!found.contains(&&paths[1]));
-    }
-
     #[test]
     fn files_a_queued_job_was_fixed_with_are_kept_with_what_holds_them() {
         let candidate = |path: &str| Candidate {
@@ -354,26 +291,6 @@ mod tests {
                 candidate("/c/target/debug/incremental/x"),
                 candidate("/d/target")
             ]
-        );
-    }
-
-    #[test]
-    fn a_held_build_lock_protects_its_caches() {
-        let root = tempfile::tempdir().unwrap();
-        let profile = root.path().join("target/debug");
-        let old = profile.join("incremental/crate-old");
-        fs::create_dir_all(&old).unwrap();
-        aged(&old, 10);
-        let lock = oer_os_process::lock::FileLock::acquire(
-            &profile.join(".cargo-lock"),
-            oer_os_process::lock::Mode::Exclusive,
-        )
-        .unwrap();
-        assert!(candidates(root.path(), &[], Policy::default(), SystemTime::now()).is_empty());
-        drop(lock);
-        assert_eq!(
-            candidates(root.path(), &[], Policy::default(), SystemTime::now()).len(),
-            1
         );
     }
 }

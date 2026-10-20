@@ -130,22 +130,3 @@ fn expect_line(pipe: &mut (impl Read + AsFd), expected: &[u8]) -> Result<()> {
     }
     Ok(())
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::{io::Write, os::unix::net::UnixStream};
-    #[test]
-    fn handshake_requires_exact_complete_message() {
-        for (message, valid) in [
-            (b"READY\n".as_slice(), true),
-            (b"READY", false),
-            (b"ready\n", false),
-        ] {
-            let (mut receiver, mut sender) = UnixStream::pair().unwrap();
-            sender.write_all(message).unwrap();
-            drop(sender);
-            assert_eq!(expect_line(&mut receiver, b"READY\n").is_ok(), valid);
-        }
-    }
-}

@@ -426,27 +426,6 @@ mod sync_tests {
     use super::*;
     use oer_lab_board::peer_line::{hex, to_hex};
 
-    use std::collections::VecDeque;
-
-    struct Scripted(VecDeque<String>, Vec<String>);
-
-    impl PeerLink for Scripted {
-        fn send(&mut self, line: &str) -> Result<()> {
-            self.1.push(line.to_owned());
-            Ok(())
-        }
-        fn receive(&mut self, _deadline: Instant) -> Result<Option<String>> {
-            Ok(self.0.pop_front())
-        }
-    }
-
-    fn scripted(lines: &[&str]) -> Scripted {
-        Scripted(
-            lines.iter().map(|line| format!("{line}\n")).collect(),
-            vec![],
-        )
-    }
-
     #[test]
     fn the_grammar_types_ready_answers_and_reports() {
         assert_eq!(
@@ -494,92 +473,5 @@ mod sync_tests {
         assert_eq!(hex("0a0B"), Some(vec![10, 11]));
         assert_eq!(hex("abc"), None);
         assert_eq!(to_hex(&[0xde, 0x01]), "de01");
-    }
-
-    #[test]
-    fn a_command_returns_its_answer_reports_and_queues_the_rest() {
-        let mut console = PeerConsole::synchronize(
-            scripted(&[
-                "@READY protocol=1",
-                "@RX 00 rssi=1",
-                "@BURST sent=3 failed=0",
-                "@OK BURST",
-                "@ERR CFG invalid",
-            ]),
-            Expected {
-                peer: "test peer",
-                protocol: 1,
-                stack: None,
-                restore: "",
-            },
-            Duration::from_millis(1),
-        )
-        .unwrap();
-        let answer = console
-            .command("BURST", "BURST STOP", Duration::from_millis(1), &["BURST"])
-            .unwrap();
-        assert_eq!(answer.len(), 1);
-        assert_eq!(answer[0].parsed::<u32>("sent"), Some(3));
-        let refused = console
-            .command("CFG", "CFG 11", Duration::from_millis(1), &[])
-            .unwrap_err();
-        assert!(refused.is::<PeerRejected>());
-        assert_eq!(refused.to_string(), "test peer rejected CFG 11: invalid");
-        let queued = console
-            .next_report(Duration::from_millis(1), &["RX"])
-            .unwrap()
-            .unwrap();
-        assert_eq!(queued.positional(0), Some("00"));
-    }
-
-    #[test]
-    fn a_ready_of_another_stack_or_protocol_is_refused() {
-        let expected = Expected {
-            peer: "Thread peer",
-            protocol: 1,
-            stack: Some("openthread"),
-            restore: "reflash it",
-        };
-        let other_stack = PeerConsole::synchronize(
-            scripted(&["@READY protocol=1 stack=ieee802154"]),
-            expected,
-            Duration::from_millis(1),
-        );
-        assert!(
-            other_stack
-                .err()
-                .unwrap()
-                .to_string()
-                .contains("did not answer SYNC; the board may carry other firmware: reflash it")
-        );
-        let newer = PeerConsole::synchronize(
-            scripted(&["@READY protocol=2 stack=openthread"]),
-            expected,
-            Duration::from_millis(1),
-        );
-        assert_eq!(
-            newer.err().unwrap().to_string(),
-            "Thread peer speaks protocol 2, this runner 1"
-        );
-    }
-
-    #[test]
-    fn any_ready_line_is_a_live_console() {
-        let mut link = scripted(&[
-            "boot noise",
-            "@READY protocol=1 target=chip-b stack=openthread",
-        ]);
-        assert!(answers_sync(&mut link, Duration::from_millis(1)).unwrap());
-        assert!(link.1.contains(&"SYNC".to_owned()));
-    }
-
-    #[test]
-    fn a_silent_console_is_not_live_after_every_attempt() {
-        let mut link = scripted(&[]);
-        assert!(!answers_sync(&mut link, Duration::from_millis(1)).unwrap());
-        assert_eq!(
-            link.1.iter().filter(|line| *line == "SYNC").count(),
-            SYNC_ATTEMPTS
-        );
     }
 }

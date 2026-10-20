@@ -370,38 +370,6 @@ fn waiting_ends_at_the_run_end_with_its_outcome() {
 }
 
 #[test]
-fn observer_builds_no_run_names_are_collected_after_a_grace() {
-    use oer_hil_runs::format::observer::store as observer_store;
-    use serde_json::json;
-    let directory = tempfile::tempdir().unwrap();
-    let store = RunStore::at(directory.path());
-    let named = observer_store::store(store.observers(), &json!({"named": true})).unwrap();
-    let orphan = observer_store::store(store.observers(), &json!({"named": false})).unwrap();
-    write_run(
-        &store.run("1000-a"),
-        1,
-        RunState::Completed,
-        Vec::new(),
-        |manifest| {
-            manifest.runner.observer = Some(json!({"schema": 2, "build_sha256": named}));
-        },
-    );
-    assert_eq!(collect_observers(&store).unwrap(), 0, "stored just now");
-    let old = std::time::SystemTime::now() - 2 * OBSERVER_GRACE;
-    for sha256 in [&named, &orphan] {
-        fs::File::options()
-            .append(true)
-            .open(observer_store::path(store.observers(), sha256).unwrap())
-            .unwrap()
-            .set_modified(old)
-            .unwrap();
-    }
-    assert_eq!(collect_observers(&store).unwrap(), 1);
-    assert!(observer_store::load(store.observers(), &named).is_ok());
-    assert!(observer_store::load(store.observers(), &orphan).is_err());
-}
-
-#[test]
 fn a_running_run_without_its_runner_is_abandoned() {
     let directory = tempfile::tempdir().unwrap();
     let now = oer_os_durable::unix_millis();

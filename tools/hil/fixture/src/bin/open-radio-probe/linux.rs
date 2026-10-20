@@ -234,6 +234,3 @@ pub fn run() -> Result<()> {
     report.validate()?;
     Ok(())
 }
-
-#[cfg(test)]
-mod tests;

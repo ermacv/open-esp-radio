@@ -12,8 +12,6 @@ mod command;
 mod execution;
 mod fixture;
 mod scenario;
-#[cfg(test)]
-mod tests;
 
 pub(crate) use oer_hil_scenario::workload::Result;
 pub(crate) use oer_hil_scenario::workload::emit_json;

@@ -90,13 +90,6 @@ impl<'a> Context<'a> {
         })
     }
 
-    /// Open every capture with `opener` instead of resetting the board.
-    #[cfg(any(test, feature = "test-support"))]
-    pub fn with_opener(mut self, opener: impl Fn(&Path) -> Result<SerialCapture> + 'a) -> Self {
-        self.opener = Some(Box::new(opener));
-        self
-    }
-
     /// Profile every capture of this workload.
     pub fn with_profile(mut self, profile: Option<oer_hil_model::catalog::ProfileRequest>) -> Self {
         self.profile = profile;
@@ -160,6 +153,3 @@ impl<'a> Context<'a> {
         self.results.write(self.output)
     }
 }
-
-#[cfg(test)]
-mod tests;

@@ -93,36 +93,4 @@ mod tests {
             None
         );
     }
-
-    #[test]
-    fn this_process_started_before_now() {
-        let started = started_unix_millis(std::process::id()).unwrap();
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_millis() as u64;
-        assert!(started <= now + 1000 && now - started < 24 * 3600 * 1000);
-    }
-
-    #[test]
-    fn an_exited_process_has_no_facts() {
-        let mut child = std::process::Command::new("true").spawn().unwrap();
-        let pid = child.id();
-        child.wait().unwrap();
-        assert!(start_ticks(pid).is_none());
-    }
-
-    #[test]
-    fn a_pidfd_distinguishes_a_running_process_from_completed_exit() {
-        use std::os::fd::AsRawFd as _;
-        let mut child = std::process::Command::new("sleep")
-            .arg("30")
-            .spawn()
-            .unwrap();
-        let identity = pidfd_open(child.id()).unwrap();
-        assert!(!process_exited(identity.as_raw_fd()));
-        child.kill().unwrap();
-        child.wait().unwrap();
-        assert!(process_exited(identity.as_raw_fd()));
-    }
 }

@@ -189,17 +189,6 @@ pub(crate) fn reflash_replayed(
     Ok(None)
 }
 
-#[cfg(test)]
-fn archive_and_flash_built(
-    class: ImageClass,
-    artifacts: Artifacts,
-    session: &mut RunSession,
-    flash: impl FnOnce(&Artifacts) -> Result<()>,
-) -> Result<Option<Failure>> {
-    let artifacts = archive_built(class, artifacts, session)?;
-    flash_archived_build(class, &artifacts, session, flash)
-}
-
 fn archive_built(
     class: ImageClass,
     mut artifacts: Artifacts,

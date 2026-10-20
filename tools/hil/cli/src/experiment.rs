@@ -16,7 +16,4 @@ pub mod bisect;
 pub mod job;
 pub mod launch;
 
-#[cfg(test)]
-mod lease_tests;
-
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;

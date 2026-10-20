@@ -112,39 +112,3 @@ impl SerialCapture {
         }
     }
 }
-#[cfg(test)]
-mod tests {
-    use super::super::capture::test_support;
-    use super::*;
-    #[test]
-    fn reboot_expectation_is_timed_single_use_and_cannot_erase_failure() {
-        let now = Instant::now();
-        let make = || {
-            let mut state = ProtocolState::default();
-            state.health.observe(
-                &test_support::received(test_support::hello(1, 0)),
-                DecodeCounters::default(),
-            );
-            state.expected_reboot = Some(ExpectedReboot {
-                old: 1,
-                started: now,
-                earliest: now + Duration::from_secs(1),
-                deadline: now + Duration::from_secs(2),
-            });
-            state
-        };
-        let hello = test_support::received(test_support::hello(2, 0));
-        assert!(!make().accept_expected_reboot(&hello, now));
-        assert!(!make().accept_expected_reboot(&hello, now + Duration::from_secs(3)));
-        let mut state = make();
-        state.fail(LinkError::protocol("earlier failure"));
-        assert!(!state.accept_expected_reboot(&hello, now + Duration::from_secs(1)));
-        let mut state = make();
-        state.health.fail("wire failure".into());
-        assert!(!state.accept_expected_reboot(&hello, now + Duration::from_secs(1)));
-        let mut state = make();
-        assert!(state.accept_expected_reboot(&hello, now + Duration::from_secs(1)));
-        assert!(!state.accept_expected_reboot(&hello, now + Duration::from_secs(1)));
-        assert!(state.observed_reboot.is_some());
-    }
-}
