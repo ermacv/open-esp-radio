@@ -660,10 +660,14 @@ naming = "opaque"
 "#;
 
 fn default_node() -> String {
-    NODE.split("[[review]]").next().expect("a valid layout review fixture").replace(
-        "name = \"BIT_29_OPAQUE\"",
-        "name = \"BIT_29_OPAQUE\"\nopaque = true",
-    ) + DEFAULT_REVIEW
+    NODE.split("[[review]]")
+        .next()
+        .expect("a valid layout review fixture")
+        .replace(
+            "name = \"BIT_29_OPAQUE\"",
+            "name = \"BIT_29_OPAQUE\"\nopaque = true",
+        )
+        + DEFAULT_REVIEW
         + OPAQUE_REVIEW
 }
 
