@@ -1686,6 +1686,13 @@ where
             .control()
             .with_he_smpdu(matches!(rate, TxPhyRate::He(_)));
         head.set_control(control);
+        #[cfg(all(oer_trace, oer_debug_control))]
+        if let Some(frame) = metadata
+            .get(TX_METADATA_SIZE..)
+            .and_then(|bytes| bytes.get(..active.frame_length))
+        {
+            crate::port::trace::encoded_mpdu(frame);
+        }
         let cookie = self
             .free_slot()
             .reserve(active.descriptor_capacity, active.transfer_length)?;

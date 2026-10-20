@@ -10,8 +10,12 @@ enum Barrier {
     GateTimeout,
     RemoveKey,
 }
-type ModelBarrierTrace =
-    BarrierTrace<Vec<BarrierEvent<ModelAck, ModelAirDenied>>, Vec<u8>, Vec<Vec<u8>>>;
+type ModelBarrierTrace = BarrierTrace<
+    Vec<BarrierEvent<ModelAck, ModelAirDenied>>,
+    Vec<u8>,
+    Vec<Vec<u8>>,
+    BarrierEvent<ModelAck, ModelAirDenied>,
+>;
 type RecordedBarrier = Rc<RefCell<Option<ModelBarrierTrace>>>;
 struct DuringPublication(
     Barrier,
@@ -196,6 +200,7 @@ impl Work for DuringPublication {
         );
         let publications_at_barrier = air.sent().len();
         let mut retried_frames = Vec::new();
+        let mut retry_terminal = None;
         if matches!(self.0, Barrier::RemoveKey) {
             assert!(matches!(
                 phase.next_event().await,
@@ -223,7 +228,26 @@ impl Work for DuringPublication {
                         plan: RetransmissionPlan::Individual(plan),
                     },
                 );
-                let (_, returned) = super::completion(phase, &mut terminal_access).await;
+                let Ok(Ok(LowerMacEvent::Terminal(LowerMacTerminal::TxCompleted(
+                    TxCompleted::Single(completed),
+                )))) = phase.next_event().await
+                else {
+                    panic!("Sent retry terminal");
+                };
+                let parts = completed.into_parts(&mut terminal_access);
+                let (returned, _) = parts.payload.into_parts();
+                retry_terminal = Some(BarrierEvent::Tx {
+                    ticket: parts.ticket.index(),
+                    state: if matches!(
+                        returned,
+                        ModelAnyBuffer::SmallSent(_) | ModelAnyBuffer::LargeSent(_)
+                    ) {
+                        MpduState::Sent
+                    } else {
+                        MpduState::Fresh
+                    },
+                    outcome: parts.outcome,
+                });
                 assert!(matches!(returned, ModelAnyBuffer::SmallSent(_)));
                 let retried = air.sent().pop().unwrap();
                 assert_eq!(retried.packet_number, first.packet_number);
@@ -253,6 +277,7 @@ impl Work for DuringPublication {
                 events,
                 first_frame: first.plaintext,
                 retried_frames,
+                retry_terminal,
             });
         }
     }

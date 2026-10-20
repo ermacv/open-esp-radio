@@ -191,6 +191,7 @@ use core::{future::Future, marker::PhantomData};
 type Brand<'id> = PhantomData<fn(&'id ()) -> &'id ()>;
 
 mod mint;
+pub(crate) use mint::prepare_brand;
 mod path;
 pub use mint::{
     Mint, PermitSupply, PermitTokens, Permits, PoolBuilder, PoolSet, Pools, Slots, branded,

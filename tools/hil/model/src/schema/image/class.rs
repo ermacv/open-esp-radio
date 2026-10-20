@@ -8,6 +8,8 @@ pub enum ImageClass {
     SystemWatchdog,
     /// Public-read calibration diagnostic; no station data service.
     DiagnosticPhy,
+    /// Lower-MAC port contract exercised through real hardware and air.
+    DiagnosticLowerMac,
     /// The radio-free image with the product panic entry alone, without the
     /// HIL panic report: a panic records itself and resets the chip.
     SystemPanicReset,
@@ -29,6 +31,7 @@ impl ImageClass {
                 | Self::SystemPanicReset
                 | Self::DiagnosticUsbJtagOff
                 | Self::DiagnosticPhy
+                | Self::DiagnosticLowerMac
         ) {
             self.runtime_features().to_owned()
         } else {
@@ -36,8 +39,9 @@ impl ImageClass {
         }
     }
 
-    pub const ALL: [Self; 5] = [
+    pub const ALL: [Self; 6] = [
         Self::DiagnosticPhy,
+        Self::DiagnosticLowerMac,
         Self::SystemWatchdog,
         Self::SystemPanicReset,
         Self::BootSmoke,
@@ -47,12 +51,16 @@ impl ImageClass {
     /// Whether the image adds observers or probes that the product does
     /// not carry. Its observations can never qualify a product.
     pub const fn diagnostic(self) -> bool {
-        matches!(self, Self::DiagnosticUsbJtagOff | Self::DiagnosticPhy)
+        matches!(
+            self,
+            Self::DiagnosticUsbJtagOff | Self::DiagnosticPhy | Self::DiagnosticLowerMac
+        )
     }
 
     pub const fn id(self) -> &'static str {
         match self {
             Self::DiagnosticPhy => "diagnostic-phy",
+            Self::DiagnosticLowerMac => "diagnostic-lower-mac",
             Self::SystemWatchdog => "system-watchdog",
             Self::SystemPanicReset => "system-panic-reset",
             Self::BootSmoke => "boot-smoke",
@@ -63,6 +71,7 @@ impl ImageClass {
     pub const fn runtime_features(self) -> &'static str {
         match self {
             Self::DiagnosticPhy => "diagnostic-phy",
+            Self::DiagnosticLowerMac => "diagnostic-lower-mac",
             Self::SystemWatchdog => "system-watchdog",
             Self::SystemPanicReset => "system-panic-reset",
             Self::DiagnosticUsbJtagOff => "system-watchdog,usb-jtag-off",

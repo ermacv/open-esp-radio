@@ -40,6 +40,8 @@ mod driver;
 mod keys;
 mod lifecycle;
 mod phase;
+#[cfg(all(oer_trace, oer_debug_control))]
+pub mod trace;
 pub use buffer::*;
 pub use keys::{GroupKey, PairwiseKey, PortKeys};
 pub use phase::{Esp32s31Interface, Esp32s31Phase, Esp32s31Setup};
@@ -210,6 +212,10 @@ struct Initial<D: Device<B>, const B: usize> {
     coex: &'static dyn RadioCoexPriorities,
 }
 impl<D: Device<B>, const B: usize> Esp32s31Backend<D, B> {
+    /// Optional aggregate admission of this port implementation. Its
+    /// `NoAggregate` owner is uninhabited and it implements no `AmpduPhase`.
+    pub const AMPDU: Option<AmpduCapabilities> = None;
+
     pub fn new(parts: PortParts<D, B>) -> Result<radio::Installed<Self>, PortParts<D, B>> {
         let Ok(station) = IndividualAddress::for_interface(parts.config.station_address) else {
             return Err(parts);
@@ -378,6 +384,10 @@ pub struct Held<'id, D: Device<B>, const B: usize> {
     dirty_ba: Cell<bool>,
     color: Cell<Option<BssColor>>,
     loss: Cell<bool>,
+    #[cfg(oer_debug_control)]
+    publication_hold: Cell<u8>,
+    #[cfg(oer_debug_control)]
+    completion_hold: Cell<bool>,
 }
 impl<'id, D: Device<B>, const B: usize> Held<'id, D, B> {
     fn command(&self, command: driver::Command<'id, D, B>) {
@@ -393,6 +403,9 @@ impl<'id, D: Device<B>, const B: usize> Held<'id, D, B> {
                 *self.failed_terminal.borrow_mut() = Some(terminal);
             }
             self.storage.poison(Fault::Capacity);
+        } else {
+            #[cfg(all(oer_trace, oer_debug_control))]
+            oer_trace::emit(&trace::TerminalPosted);
         }
         self.storage.body.wake();
     }

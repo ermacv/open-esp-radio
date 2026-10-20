@@ -87,7 +87,15 @@ impl<'id, P: PoolSet> Mint<'id, P> {
 /// Nothing branded by `'id` can leave the callback. A nested call has its
 /// own brand, so its pools cannot be substituted for this installation's.
 pub async fn branded<P: PoolSet, R>(install: impl for<'id> AsyncFnOnce(Mint<'id, P>) -> R) -> R {
-    install(Mint::new()).await
+    prepare_brand(install).await
+}
+
+// Construct the callback future before returning it, so run_port's first
+// poll does not construct another installation-sized async state machine.
+pub(crate) fn prepare_brand<P: PoolSet, R>(
+    install: impl for<'id> AsyncFnOnce(Mint<'id, P>) -> R,
+) -> impl core::future::Future<Output = R> {
+    install(Mint::new())
 }
 
 /// Single-use authority supplied only to a [`PoolSet`] factory.

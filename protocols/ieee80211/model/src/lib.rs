@@ -904,6 +904,7 @@ impl<'id, D> ModelMpdu<'id, D> {
     }
     fn on_air(
         &self,
+        ticket: u8,
         role: VifRole,
         keys: &[KeyIdentity],
         key: Option<&KeyIdentity>,
@@ -931,6 +932,7 @@ impl<'id, D> ModelMpdu<'id, D> {
                 .map_err(|_| ModelFault)?;
         }
         Ok(AirFrame {
+            ticket,
             role,
             plaintext: bytes.into(),
             frame: wire,
@@ -1350,6 +1352,8 @@ pub struct ModelResources<'id> {
 /// One transmission the air saw.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AirFrame {
+    /// Ticket of the operation that actually published this MPDU.
+    pub ticket: u8,
     /// The interface that sent it.
     pub role: VifRole,
     /// The MPDU, header and body, without the FCS.
@@ -1585,6 +1589,9 @@ pub struct ModelAir {
     /// The answers of the next transmissions, in order; once none is
     /// queued, each is acknowledged.
     answers: RefCell<VecDeque<AirAnswer>>,
+    /// Conformance air input: an absent peer supplies no response to any PPDU.
+    #[cfg(feature = "test-support")]
+    absent_peer: Cell<bool>,
     rx: RefCell<VecDeque<(Vec<u8>, ModelRxMeta)>>,
     rx_stream: RefCell<Option<(Vec<u8>, ModelRxMeta)>>,
     refuse_enable: Cell<bool>,
@@ -1621,6 +1628,8 @@ impl ModelAir {
         Self {
             sent: Default::default(),
             answers: Default::default(),
+            #[cfg(feature = "test-support")]
+            absent_peer: Cell::new(false),
             rx: Default::default(),
             rx_stream: Default::default(),
             refuse_enable: Default::default(),
@@ -2062,6 +2071,10 @@ impl ModelAir {
     }
 
     fn next_answer(&self, default: AirAnswer) -> AirAnswer {
+        #[cfg(feature = "test-support")]
+        if self.absent_peer.get() {
+            return AirAnswer::NoResponse;
+        }
         self.answers.borrow_mut().pop_front().unwrap_or(default)
     }
 
@@ -2326,6 +2339,7 @@ impl<'id, D> ExecutionPayload for ModelSubframes<'id, D> {
 impl<D> ModelSubframesExecution<'_, '_, D> {
     fn publish(
         &mut self,
+        ticket: u8,
         role: VifRole,
         keys: &[KeyIdentity],
         key: Option<&KeyIdentity>,
@@ -2337,7 +2351,7 @@ impl<D> ModelSubframesExecution<'_, '_, D> {
         let mut frames = Vec::with_capacity(self.subframes.len());
         for subframe in &mut *self.subframes {
             subframe.mpdu.execution().publish(role, key)?;
-            frames.push(subframe.mpdu.on_air(role, keys, key, rate)?);
+            frames.push(subframe.mpdu.on_air(ticket, role, keys, key, rate)?);
         }
         Ok(frames)
     }
@@ -3587,6 +3601,7 @@ fn publish_single<'id, X: ModelContext>(
         plan.prepared.operation.execute().retry();
     }
     let frame = match plan.prepared.operation.payload().on_air(
+        plan.prepared.operation.ticket().index(),
         plan.prepared.role,
         keys,
         plan.prepared.key.as_ref().map(|key| &key.identity),
@@ -3688,7 +3703,9 @@ fn publish_aggregate<'id, X: ModelContext>(
         | AggregateAnswer::AirDenied
         | AggregateAnswer::HardwareTimeout => 0,
     };
+    let ticket = aggregate.operation.ticket().index();
     let frames = match aggregate.operation.execute().publish(
+        ticket,
         aggregate.role,
         keys,
         aggregate.key.as_ref().map(|key| &key.identity),
@@ -4700,3 +4717,7 @@ impl<'p, 'v, 'id: 'p, C: Ieee80211Capabilities, X: ModelContext> AccessPointPhas
 
 #[cfg(test)]
 mod tests;
+
+/// Reusable reference fixtures for the physical conformance runner.
+#[cfg(feature = "test-support")]
+pub mod conformance;

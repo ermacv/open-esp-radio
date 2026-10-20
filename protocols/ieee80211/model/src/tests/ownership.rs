@@ -33,6 +33,8 @@ struct Operations {
     before_teardown: Rc<Cell<usize>>,
     seen: Rc<RefCell<Vec<conformance::Returned>>>,
     scenario: Scenario,
+    evidence: Rc<RefCell<Vec<conformance::ReturnEvidence>>>,
+    gate_closed_at: Rc<Cell<Option<usize>>>,
 }
 
 fn observe(
@@ -77,6 +79,9 @@ fn returned<'id>(
     event: LowerMacEvent<'id, ModelTypes<Contexts>>,
     seen: &RefCell<Vec<conformance::Returned>>,
     terminal_access: &mut oer_ieee80211_port::TerminalAccess<'id, ModelTickets, ModelPool<1>>,
+    evidence: &RefCell<Vec<conformance::ReturnEvidence>>,
+    gate_closed_at: &Cell<Option<usize>>,
+    air: &ModelAir,
 ) {
     match event {
         LowerMacEvent::Terminal(LowerMacTerminal::TxCompleted(TxCompleted::Single(terminal))) => {
@@ -88,6 +93,9 @@ fn returned<'id>(
                 ..
             } = terminal.into_parts(terminal_access);
             let (buffer, body) = payload.into_parts();
+            evidence
+                .borrow_mut()
+                .push(conformance::ReturnEvidence::terminal(true, &completion).unwrap());
 
             let end = match completion {
                 TxOutcome::Ended(SingleEnd::Delivered {
@@ -102,6 +110,9 @@ fn returned<'id>(
                 other => panic!("unexpected outcome {other:?}"),
             };
             observe(context, ticket, buffer, body, end, seen);
+        }
+        LowerMacEvent::Terminal(LowerMacTerminal::GateClosed(_)) => {
+            assert!(gate_closed_at.replace(Some(air.sent().len())).is_none());
         }
         LowerMacEvent::Terminal(LowerMacTerminal::TxCompleted(TxCompleted::Aggregate(_))) => {
             panic!("single submission must return Single")
@@ -227,6 +238,9 @@ impl PortBody<Backend> for Operations {
                     }
                     Err((buffer, body)) => {
                         assert_eq!(self.scenario, Scenario::Refuse);
+                        self.evidence
+                            .borrow_mut()
+                            .push(conformance::ReturnEvidence::refused(true));
                         observe(context, ticket, buffer, body, End::Refused, &self.seen);
                     }
                 }
@@ -236,7 +250,14 @@ impl PortBody<Backend> for Operations {
                     let Ok(Ok(event)) = phase.next_event().await else {
                         panic!("unheld AC completes")
                     };
-                    returned(event, &self.seen, &mut terminal_access);
+                    returned(
+                        event,
+                        &self.seen,
+                        &mut terminal_access,
+                        &self.evidence,
+                        &self.gate_closed_at,
+                        &self.air,
+                    );
                 }
                 assert!(
                     self.seen
@@ -257,7 +278,14 @@ impl PortBody<Backend> for Operations {
                         let Ok(Ok(event)) = phase.next_event().await else {
                             panic!("terminal")
                         };
-                        returned(event, &self.seen, &mut terminal_access);
+                        returned(
+                            event,
+                            &self.seen,
+                            &mut terminal_access,
+                            &self.evidence,
+                            &self.gate_closed_at,
+                            &self.air,
+                        );
                     }
                 }
             }
@@ -267,6 +295,9 @@ impl PortBody<Backend> for Operations {
                 LowerMacEvent::Terminal(event),
                 &self.seen,
                 &mut terminal_access,
+                &self.evidence,
+                &self.gate_closed_at,
+                &self.air,
             );
             core::ops::ControlFlow::Continue(())
         };
@@ -286,7 +317,12 @@ impl PortBody<Backend> for Operations {
 struct ModelHarness;
 impl Harness for ModelHarness {
     type Returns = Vec<conformance::Returned>;
-    async fn exercise(&mut self, scenario: Scenario) -> Trace<Self::Returns> {
+    type Evidence = Vec<conformance::ReturnEvidence>;
+    type Publications = Vec<conformance::PublicationEvent>;
+    async fn exercise(
+        &mut self,
+        scenario: Scenario,
+    ) -> Trace<Self::Returns, Self::Evidence, Self::Publications> {
         let (backend, air) = Backend::new(
             Channel::ghz2_4(6, ChannelWidth::Mhz20).unwrap(),
             [
@@ -298,6 +334,8 @@ impl Harness for ModelHarness {
         let dropped = Rc::new(Cell::new(0));
         let before_teardown = Rc::new(Cell::new(usize::MAX));
         let seen = Rc::new(RefCell::new(Vec::new()));
+        let evidence = Rc::new(RefCell::new(Vec::new()));
+        let gate_closed_at = Rc::new(Cell::new(None));
         let _port_end = run_port(
             backend,
             Operations {
@@ -306,14 +344,26 @@ impl Harness for ModelHarness {
                 before_teardown: before_teardown.clone(),
                 seen: seen.clone(),
                 scenario,
+                evidence: evidence.clone(),
+                gate_closed_at: gate_closed_at.clone(),
             },
         )
         .await;
+        let mut publication_events: Vec<_> = air
+            .sent()
+            .iter()
+            .map(|frame| conformance::PublicationEvent::Tx(frame.ticket))
+            .collect();
+        if let Some(index) = gate_closed_at.get() {
+            publication_events.insert(index, conformance::PublicationEvent::GateClosed);
+        }
         Trace {
             returned: core::mem::take(&mut *seen.borrow_mut()),
             contexts_dropped: dropped.get(),
             before_teardown_dropped: before_teardown.get(),
             publications: air.sent().len(),
+            terminal_evidence: core::mem::take(&mut *evidence.borrow_mut()),
+            publication_events,
         }
     }
 }

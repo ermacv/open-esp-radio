@@ -282,6 +282,7 @@ fn retained_mpdu_verification_accepts_array_and_bounded_observation_storage() {
         ],
         first_frame: first,
         retried_frames,
+        retry_terminal: None,
     };
     assert_eq!(
         conformance::verify_barrier(BarrierCase::GateRetry, trace),

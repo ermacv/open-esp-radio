@@ -11,15 +11,18 @@ description = "Target-neutral wire protocol for open ESP radio HIL sessions"
 default = ["network", "bluetooth"]
 async-io = ["dep:embedded-io-async"]
 # The host's decoder of every message: paths, keys and readable payloads.
-registry = ["dep:serde_json", "network", "bluetooth", "phy"]
+registry = ["dep:serde_json", "network", "bluetooth", "phy", "lower-mac"]
 # The radio families. An image enables the families it serves, so it
 # compiles, and its evidence binds, only their protocol modules; the host
 # enables every family.
 network = []
 bluetooth = []
 phy = []
+lower-mac = ["dep:oer-ieee80211-port", "dep:oer-ieee80211-wire"]
 
 [dependencies]
+oer-ieee80211-port = { path = "../../ieee80211/port", features = ["test-support"], optional = true }
+oer-ieee80211-wire = { path = "../../ieee80211/wire", optional = true }
 embedded-io-async = { version = "0.7.0", optional = true }
 cobs = { version = "0.3.0", default-features = false }
 crc = "3.3.0"
@@ -31,6 +34,7 @@ zeroize = { version = "1.8.1", default-features = false }
 serde_json = { version = "1.0", optional = true }
 
 [dev-dependencies]
+oer-ieee80211-wire = { path = "../../ieee80211/wire" }
 postcard-schema = { version = "0.2.5", features = ["use-std"] }
 
 [[test]]

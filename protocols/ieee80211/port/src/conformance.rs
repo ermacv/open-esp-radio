@@ -9,6 +9,9 @@
 //! Changed MPDU bytes report `MpduChanged`, separately from `Owners` for
 //! a context, ticket or buffer identity mismatch.
 
+/// Allocation lifetime identities used by backend fixtures.
+pub mod allocations;
+pub mod catalog;
 pub mod edca;
 /// GTK installation, replacement and selection RX boundaries.
 pub mod group_keys;
@@ -153,7 +156,7 @@ pub enum BarrierEvent<A, D> {
 /// One published head and one queued successor on the same AC. Fixtures
 /// capture counts and frame bytes from their actual publication observer;
 /// terminals come through the port, never from an expected identity.
-pub struct BarrierTrace<E, F, R> {
+pub struct BarrierTrace<E, F, R, T> {
     /// Head and successor identities captured before admission.
     pub tickets: [u8; 2],
     /// Sample with the head published, before requesting its barrier.
@@ -171,6 +174,8 @@ pub struct BarrierTrace<E, F, R> {
     pub first_frame: F,
     /// The same encoded extent for each real Sent republication.
     pub retried_frames: R,
+    /// The actual terminal of the post-barrier Sent submission, if any.
+    pub retry_terminal: Option<T>,
 }
 
 /// The publication/barrier suite shared by model and hardware fixtures.
@@ -189,7 +194,14 @@ pub trait BarrierHarness {
     fn exercise_barrier(
         &mut self,
         case: BarrierCase,
-    ) -> impl core::future::Future<Output = BarrierTrace<Self::Events, Self::Frame, Self::Retries>>;
+    ) -> impl core::future::Future<
+        Output = BarrierTrace<
+            Self::Events,
+            Self::Frame,
+            Self::Retries,
+            BarrierEvent<Self::Ack, Self::AirDenied>,
+        >,
+    >;
 }
 
 /// Run every prescribed publication/barrier case through the harness.
@@ -211,7 +223,7 @@ pub async fn check_barriers(
 /// Verify real observations of a held publication, its barrier and a Sent retry.
 pub fn verify_barrier<A, D, E: AsRef<[BarrierEvent<A, D>]>, F: AsRef<[u8]>, R: AsRef<[F]>>(
     case: BarrierCase,
-    trace: BarrierTrace<E, F, R>,
+    trace: BarrierTrace<E, F, R, BarrierEvent<A, D>>,
 ) -> Result<(), Violation> {
     for snapshot in [trace.before_request, trace.before_result]
         .into_iter()
@@ -430,8 +442,107 @@ pub struct Returned {
     pub end: End,
 }
 
-/// Evidence after the install has ended.
-pub struct Trace<R> {
+/// Compact fixture evidence, sharing the former pointer-check byte. These
+/// ownership fixtures admit at most two transmissions per operation.
+#[derive(Clone, Copy)]
+pub struct ReturnEvidence(u8);
+impl ReturnEvidence {
+    /// Refusal has no terminal or air count.
+    pub const fn refused(pointer_matches: bool) -> Self {
+        Self(pointer_matches as u8)
+    }
+    /// Preserve the actual outcome and its air count, without synthesizing a
+    /// count for a terminal whose outcome carries no air evidence.
+    pub fn terminal<A, D>(
+        pointer_matches: bool,
+        outcome: &crate::SingleOutcome<A, D>,
+    ) -> Option<Self> {
+        use crate::{SingleEnd, TxOutcome};
+        let (kind, air) = match outcome {
+            TxOutcome::Ended(SingleEnd::Delivered { air, .. }) => (1, Some(air)),
+            TxOutcome::Ended(SingleEnd::AckTimeout(air)) => (2, Some(air)),
+            TxOutcome::Ended(SingleEnd::CtsTimeout(air)) => (3, air.as_ref()),
+            TxOutcome::Ended(SingleEnd::ContentionLimit(air)) => (4, air.as_ref()),
+            TxOutcome::Ended(SingleEnd::AirDenied { air, .. }) => (5, air.as_ref()),
+            TxOutcome::Withdrawn(_) => (6, None),
+            _ => (7, None),
+        };
+        let count = u8::try_from(air.map_or(0, |air| air.transmissions.get()))
+            .ok()
+            .filter(|n| *n <= 15)?;
+        Some(Self(u8::from(pointer_matches) | (kind << 1) | (count << 4)))
+    }
+    /// Raw pointer comparison remains independent of outcome and counting.
+    pub const fn pointer_matches(self) -> bool {
+        self.0 & 1 != 0
+    }
+    /// Zero means the public terminal carried no air count.
+    pub const fn transmissions(self) -> Option<u16> {
+        let count = self.0 >> 4;
+        if count == 0 { None } else { Some(count as u16) }
+    }
+    /// Refused, delivered, ACK timeout, CTS timeout, contention limit,
+    /// air denied, withdrawn, or another terminal, respectively.
+    pub const fn outcome(self) -> u8 {
+        (self.0 >> 1) & 7
+    }
+    /// Attach the independent pointer check after recovering the body owner.
+    pub const fn with_pointer(self, matches: bool) -> Self {
+        Self((self.0 & !1) | matches as u8)
+    }
+}
+
+/// Publication/barrier order observed by a fixture.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PublicationEvent {
+    /// A real publication of this operation ticket.
+    Tx(u8),
+    /// The gate-closing terminal was delivered.
+    GateClosed,
+}
+
+/// Compare the contract's per-AC publication sequences. Ticket identities and
+/// gate confirmation positions stay exact; independent ACs may interleave.
+/// An unclassified ticket is invalid rather than silently omitted.
+pub fn same_publications_by_ac<L, R>(
+    left: L,
+    right: R,
+    category: impl Fn(u8) -> Option<WmmAccessCategory>,
+) -> bool
+where
+    L: Iterator<Item = PublicationEvent> + Clone,
+    R: Iterator<Item = PublicationEvent> + Clone,
+{
+    if left
+        .clone()
+        .chain(right.clone())
+        .any(|event| matches!(event, PublicationEvent::Tx(ticket) if category(ticket).is_none()))
+    {
+        return false;
+    }
+    let gate = |(index, event)| (event == PublicationEvent::GateClosed).then_some(index);
+    if !left
+        .clone()
+        .enumerate()
+        .filter_map(gate)
+        .eq(right.clone().enumerate().filter_map(gate))
+    {
+        return false;
+    }
+    WmmAccessCategory::ALL.into_iter().all(|ac| {
+        let belongs = |event: &PublicationEvent| match event {
+            PublicationEvent::Tx(ticket) => category(*ticket) == Some(ac),
+            PublicationEvent::GateClosed => true,
+        };
+        left.clone()
+            .filter(belongs)
+            .eq(right.clone().filter(belongs))
+    })
+}
+
+/// Evidence after the install has ended. Terminal evidence follows the
+/// returned owners; publication events preserve their observed order.
+pub struct Trace<R, E, P> {
     /// Actual returns in observation order.
     pub returned: R,
     /// Context destructors run. Quarantine retains unreturned contexts even
@@ -442,17 +553,25 @@ pub struct Trace<R> {
     pub before_teardown_dropped: usize,
     /// Publications observed by the backend fixture.
     pub publications: usize,
+    /// Actual terminal outcomes/counts, aligned with `returned`.
+    pub terminal_evidence: E,
+    /// Actual publications and gate confirmation, in order.
+    pub publication_events: P,
 }
 
 /// Backend-specific execution, shared scenarios and checks.
 pub trait Harness {
     /// Storage for actual resource-return observations.
     type Returns: AsRef<[Returned]>;
+    /// Actual terminal evidence storage.
+    type Evidence: AsRef<[ReturnEvidence]>;
+    /// Actual publication/barrier event storage.
+    type Publications: AsRef<[PublicationEvent]>;
     /// Exercise the prescribed operations through the real backend API.
     fn exercise(
         &mut self,
         scenario: Scenario,
-    ) -> impl core::future::Future<Output = Trace<Self::Returns>>;
+    ) -> impl core::future::Future<Output = Trace<Self::Returns, Self::Evidence, Self::Publications>>;
 }
 
 /// The common suite found a contract violation.
@@ -487,14 +606,19 @@ pub async fn check(
         if !report.includes(environment, scenario.execution()) {
             continue;
         }
-        verify(scenario, harness.exercise(scenario).await).map_err(|why| (scenario, why))?;
+        verify(scenario, &harness.exercise(scenario).await).map_err(|why| (scenario, why))?;
         report.passed();
     }
     Ok(report)
 }
 
 /// Check captured ownership, publication, lifetime and FIFO observations.
-pub fn verify<R: AsRef<[Returned]>>(scenario: Scenario, trace: Trace<R>) -> Result<(), Violation> {
+pub fn verify<R, E, P>(scenario: Scenario, trace: &Trace<R, E, P>) -> Result<(), Violation>
+where
+    R: AsRef<[Returned]>,
+    E: AsRef<[ReturnEvidence]>,
+    P: AsRef<[PublicationEvent]>,
+{
     let expected_drops = if scenario == Scenario::Poison {
         2
     } else {
@@ -512,7 +636,9 @@ pub fn verify<R: AsRef<[Returned]>>(scenario: Scenario, trace: Trace<R>) -> Resu
         Scenario::Refuse => 0,
         _ => 2,
     };
-    if trace.publications != expected_publications {
+    if scenario == Scenario::CloseGate {
+        verify_closed_publications(trace)?;
+    } else if trace.publications != expected_publications {
         return Err(Violation::Publication);
     }
     let mut remaining = OPERATIONS.map(Some);
@@ -555,6 +681,52 @@ pub fn verify<R: AsRef<[Returned]>>(scenario: Scenario, trace: Trace<R>) -> Resu
         }
     } else if remaining.iter().any(Option::is_some) {
         return Err(Violation::Missing);
+    }
+    Ok(())
+}
+
+fn verify_closed_publications<R, E, P>(trace: &Trace<R, E, P>) -> Result<(), Violation>
+where
+    R: AsRef<[Returned]>,
+    E: AsRef<[ReturnEvidence]>,
+    P: AsRef<[PublicationEvent]>,
+{
+    let rows = trace.returned.as_ref();
+    let evidence = trace.terminal_evidence.as_ref();
+    let events = trace.publication_events.as_ref();
+    if rows.len() != evidence.len() {
+        return Err(Violation::Missing);
+    }
+    let mut closed = false;
+    let mut publications = 0_usize;
+    for event in events {
+        match event {
+            PublicationEvent::GateClosed if !closed => closed = true,
+            PublicationEvent::GateClosed => return Err(Violation::Order),
+            PublicationEvent::Tx(ticket) => {
+                if closed {
+                    return Err(Violation::Order);
+                }
+                if !rows.iter().any(|row| row.actual.ticket == *ticket) {
+                    return Err(Violation::Owners);
+                }
+                publications = publications.checked_add(1).ok_or(Violation::Publication)?;
+            }
+        }
+    }
+    if !closed || publications != trace.publications {
+        return Err(Violation::Publication);
+    }
+    for (row, terminal) in rows.iter().zip(evidence) {
+        let count = events
+            .iter()
+            .filter(|event| **event == PublicationEvent::Tx(row.actual.ticket))
+            .count();
+        match row.end {
+            End::Ended if terminal.transmissions().map(usize::from) == Some(count) => {}
+            End::Withdrawn | End::Refused if count == 0 && terminal.transmissions().is_none() => {}
+            _ => return Err(Violation::Publication),
+        }
     }
     Ok(())
 }

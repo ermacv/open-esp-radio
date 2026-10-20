@@ -42,6 +42,7 @@ pub use key::{Endpoint, Key, Kind, Message};
 // The modules: each is a path prefix and a directory.
 pub mod base;
 pub mod bluetooth;
+pub mod lower_mac;
 pub mod network;
 pub mod phy;
 pub mod system;
@@ -57,6 +58,7 @@ pub fn registry() -> impl Iterator<Item = &'static MessageInfo> {
         bluetooth::MESSAGES,
         telemetry::MESSAGES,
         phy::MESSAGES,
+        lower_mac::MESSAGES,
     ]
     .into_iter()
     .flatten()

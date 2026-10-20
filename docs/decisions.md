@@ -91,6 +91,11 @@ bounds) live in the code that applies them.
   Main CI runs the host tests once per class cfg, of the packages whose
   sources hold code under it, found by search, each cfg in its own target
   directory. A further mechanism, such as a profiler, is discussed first.
+  The lower-MAC conformance image declares `debug-control` for two holds:
+  before publication and before completion delivery. Completion facts stay
+  in the image's static P2 signal; the driver only prevents deadline service
+  from consuming the held result. TX, DMA and air outcomes remain real.
+  Working images w0–w2 remain byte-identical.
 - **Every package builds**; the workspace has no `exclude` list.
 
 ## Execution
@@ -205,6 +210,14 @@ bounds) live in the code that applies them.
   rate selection ignores samples taken during an absence or a blackout.
 
 ## Wi-Fi
+
+- **Hardware lower-MAC conformance.** Run every Hardware case supported by
+  the backend's declared capabilities. A-MPDU/BlockAck cases remain Hardware;
+  a backend without `AmpduPhase` reports them separately as unsupported until
+  W6, never as model-only. The gate e report lists the skips and their reason.
+  Fixture body numbers are allocated with the body and released when it is
+  freed; reusing an address after free is valid. Each operation also checks
+  its original and returned body pointers independently.
 
 - **Driver core.** The driver owns all four EDCA queues and executes each
   attempt's retry plan; a protected MPDU is numbered at its first launch; DMA

@@ -114,6 +114,9 @@ impl TaskStack {
 #[serde(deny_unknown_fields)]
 pub struct InterruptStacks {
     pub minimum_free_bytes: u32,
+    /// This image's allocation per hart. Absent uses the chip layout.
+    #[serde(default)]
+    pub allocation_bytes: Option<u32>,
 }
 
 /// A policy that reuses a base policy (`extends`, relative to this file)
@@ -201,6 +204,15 @@ impl StackPolicy {
         {
             return Err("the interrupt stacks' reserve must be positive".into());
         }
+        if let Some(interrupts) = stacks.interrupt_stacks
+            && let Some(bytes) = interrupts.allocation_bytes
+            && (bytes % 16 != 0 || bytes <= interrupts.minimum_free_bytes)
+        {
+            return Err(
+                "interrupt stack allocation must be aligned to 16 bytes and exceed its reserve"
+                    .into(),
+            );
+        }
         stacks.cpu0_task_stack.validate("cpu0_task_stack")?;
         if let Some(bootstrap) = stacks.bootstrap_stack {
             bootstrap.validate("bootstrap_stack")?;
@@ -249,11 +261,177 @@ impl StackPolicy {
                 "OPEN_RADIO_IRQ_STACK_MINIMUM_FREE_BYTES",
                 interrupts.minimum_free_bytes.to_string(),
             ));
+            if let Some(bytes) = interrupts.allocation_bytes {
+                variables.push(("OPEN_RADIO_IRQ_STACK_BYTES", bytes.to_string()));
+            }
         }
         variables
+    }
+
+    /// Apply an image's explicit allocation to both its exact placement
+    /// ranges and its interrupt-stack budget. SRAM, guards and margins stay
+    /// those of the chip; the placement gate verifies the linked ranges.
+    pub fn runtime_profile(&self, base: &crate::Profile) -> Result<crate::Profile> {
+        self.validate()?;
+        let mut profile = base.clone();
+        let Some(bytes) = self
+            .interrupt_stacks
+            .as_ref()
+            .and_then(|stacks| stacks.allocation_bytes)
+        else {
+            return Ok(profile);
+        };
+        let memory = profile
+            .memory
+            .as_ref()
+            .ok_or("an interrupt stack allocation requires the chip memory map")?;
+        let interrupts = profile
+            .interrupts
+            .as_mut()
+            .ok_or("an interrupt stack allocation requires the interrupt contract")?;
+        let reserve = self
+            .interrupt_stacks
+            .as_ref()
+            .ok_or("interrupt stack policy missing")?
+            .minimum_free_bytes;
+        if bytes <= interrupts.irq_stack_guard_bytes.saturating_add(reserve)
+            || u64::from(bytes) * interrupts.harts.len() as u64 >= u64::from(memory.sram.length)
+        {
+            return Err(
+                "interrupt stack allocation does not fit the SRAM/guard/reserve contract".into(),
+            );
+        }
+        let placement = profile
+            .placement
+            .as_mut()
+            .ok_or("an interrupt stack allocation requires exact placement rules")?;
+        for hart in &interrupts.harts {
+            let names = [
+                format!("__runtime_cpu{hart}_irq_stack_bottom"),
+                format!("__runtime_cpu{hart}_irq_stack_top"),
+            ];
+            let rule = placement
+                .range
+                .iter_mut()
+                .find(|rule| rule.range == names)
+                .ok_or("the chip has no exact placement rule for an interrupt stack")?;
+            if rule.region != "sram" || rule.bytes != Some(u64::from(interrupts.irq_stack_bytes)) {
+                return Err("interrupt stack placement and budget disagree".into());
+            }
+            rule.bytes = Some(u64::from(bytes));
+        }
+        interrupts.irq_stack_bytes = bytes;
+        Ok(profile)
     }
 }
 
 fn parent(path: &Path) -> &Path {
     path.parent().unwrap_or(Path::new("."))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn profile() -> crate::Profile {
+        toml::from_str(include_str!(
+            "../../../../chips/esp32s31/platform/chip.toml"
+        ))
+        .unwrap()
+    }
+    fn policy(bytes: Option<u32>) -> StackPolicy {
+        StackPolicy {
+            schema: SCHEMA,
+            coverage_policy: Some("own-memory".into()),
+            max_move_bytes: 4096,
+            cpu0_task_stack: Some(TaskStack {
+                root: "runtime_main".into(),
+                storage_symbol: Some("task_stack".into()),
+                bottom_symbol: None,
+                top_symbol: None,
+                minimum_free_bytes: 4096,
+            }),
+            interrupt_stacks: Some(InterruptStacks {
+                minimum_free_bytes: 4096,
+                allocation_bytes: bytes,
+            }),
+            bootstrap_stack: None,
+        }
+    }
+    #[test]
+    fn an_image_allocation_changes_placement_and_budget_together() {
+        let base = profile();
+        let before = base.clone();
+        assert_eq!(policy(None).runtime_profile(&base).unwrap(), base);
+        let requested = base.interrupts.as_ref().unwrap().irq_stack_bytes * 2;
+        let image = policy(Some(requested)).runtime_profile(&base).unwrap();
+        let contract = image.interrupts.as_ref().unwrap();
+        assert_eq!(contract.irq_stack_bytes, requested);
+        assert_eq!(
+            contract.irq_stack_guard_bytes,
+            base.interrupts.as_ref().unwrap().irq_stack_guard_bytes
+        );
+        assert_eq!(
+            contract.irq_stack_margin_percent,
+            base.interrupts.as_ref().unwrap().irq_stack_margin_percent
+        );
+        for hart in &contract.harts {
+            let bottom = format!("__runtime_cpu{hart}_irq_stack_bottom");
+            let range = image
+                .placement
+                .as_ref()
+                .unwrap()
+                .range
+                .iter()
+                .find(|rule| rule.range[0] == bottom)
+                .unwrap();
+            assert_eq!(range.bytes, Some(u64::from(requested)));
+            assert_eq!(range.region, "sram");
+        }
+        assert_eq!(base, before);
+        assert_eq!(
+            policy(Some(requested)).runtime_profile(&image).unwrap(),
+            image
+        );
+        assert!(
+            policy(Some(requested))
+                .runtime_environment()
+                .contains(&("OPEN_RADIO_IRQ_STACK_BYTES", requested.to_string()))
+        );
+        assert!(
+            !policy(None)
+                .runtime_environment()
+                .iter()
+                .any(|(key, _)| *key == "OPEN_RADIO_IRQ_STACK_BYTES")
+        );
+    }
+    #[test]
+    fn a_larger_budget_requires_consistent_exact_sram_placement() {
+        let mut base = profile();
+        let requested = base.interrupts.as_ref().unwrap().irq_stack_bytes * 2;
+        let name = "__runtime_cpu0_irq_stack_bottom";
+        let rule = base
+            .placement
+            .as_mut()
+            .unwrap()
+            .range
+            .iter_mut()
+            .find(|rule| rule.range[0] == name)
+            .unwrap();
+        rule.bytes = Some(1);
+        assert!(policy(Some(requested)).runtime_profile(&base).is_err());
+        base.placement
+            .as_mut()
+            .unwrap()
+            .range
+            .retain(|rule| rule.range[0] != name);
+        assert!(policy(Some(requested)).runtime_profile(&base).is_err());
+    }
+    #[test]
+    fn bad_or_unaffordable_allocations_are_refused() {
+        let base = profile();
+        for bytes in [0, 4096, 65537, u32::MAX - 15] {
+            assert!(policy(Some(bytes)).runtime_profile(&base).is_err());
+        }
+    }
 }

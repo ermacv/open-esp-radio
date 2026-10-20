@@ -1,5 +1,7 @@
 use super::keys::{self, PortKeys, Role};
 use super::*;
+#[cfg(oer_debug_control)]
+use oer_ieee80211_wire::qos::WmmAccessCategory;
 
 pub struct Esp32s31Setup<'a, 'id, D: Device<B>, const B: usize> {
     pub(super) backend: &'a mut Esp32s31Backend<D, B>,
@@ -17,6 +19,25 @@ impl<D: Device<B>, const B: usize> LowerMacSetup for Esp32s31Setup<'_, '_, D, B>
 pub struct Esp32s31Phase<'p, 'id, D: Device<B>, const B: usize> {
     pub(super) held: &'p Held<'id, D, B>,
     pub(super) addresses: [IndividualAddress; 2],
+}
+#[cfg(oer_debug_control)]
+impl<D: Device<B>, const B: usize> Esp32s31Phase<'_, '_, D, B> {
+    /// Hold this AC before it transfers DMA ownership to the real transmitter.
+    pub fn debug_hold_publication(&mut self, category: WmmAccessCategory, hold: bool) {
+        let bit = 1 << LegacyTxQueue::from_access_category(category).hardware_index();
+        let mask = self.held.publication_hold.get();
+        self.held
+            .publication_hold
+            .set(if hold { mask | bit } else { mask & !bit });
+        self.held.storage.driver.wake();
+    }
+
+    /// The image holds the completion facts in its static IRQ signal. Prevent
+    /// the ordinary deadline service from reading the same result meanwhile.
+    pub fn debug_hold_completion(&mut self, hold: bool) {
+        self.held.completion_hold.set(hold);
+        self.held.storage.driver.wake();
+    }
 }
 impl<'id, D: Device<B>, const B: usize> radio::PortPhase for Esp32s31Phase<'_, 'id, D, B> {
     type Event = Event<'id, D, B>;

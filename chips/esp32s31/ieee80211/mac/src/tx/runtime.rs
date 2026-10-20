@@ -161,6 +161,11 @@ impl<X: BackendTxProfile> WifiTxRuntimePolicy<X> {
             VifRole::AccessPoint => access_point,
         }
     }
+    /// The diagnostic composition observes the installed table without a copy.
+    #[cfg(oer_debug_control)]
+    pub const fn debug_edca(&self, role: VifRole) -> &EdcaParameterSet {
+        self.edca(role)
+    }
 
     const fn edca_mut(&mut self, role: VifRole) -> &mut EdcaParameterSet {
         let [station, access_point] = &mut self.edca;
@@ -308,7 +313,7 @@ impl<X: BackendTxProfile> WifiTxRuntimePolicy<X> {
         }
     }
 
-    #[cfg(any(test, feature = "test-support", oer_probe))]
+    #[cfg(any(test, feature = "test-support", oer_probe, oer_debug_control))]
     pub fn contention_exponent(&self, queue: LegacyTxQueue) -> u8 {
         self.queues.queue(queue).current_exponent()
     }
