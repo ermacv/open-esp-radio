@@ -2593,6 +2593,7 @@ dependencies = [
  "oer-analysis-riscv-program",
  "oer-chip-profile",
  "serde",
+ "tempfile",
  "toml",
 ]
 
@@ -4413,6 +4414,7 @@ dependencies = [
  "oer-vendor-phy",
  "serde",
  "serde_json",
+ "tempfile",
  "toml",
 ]
 

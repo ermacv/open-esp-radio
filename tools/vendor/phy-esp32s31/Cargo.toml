@@ -18,6 +18,7 @@ toml = "1.1"
 serde_json = "1.0"
 
 [dev-dependencies]
+tempfile = "=3.27.0"
 oer-os-process = { path = "../../os/process" }
 serde_json = "1.0"
 

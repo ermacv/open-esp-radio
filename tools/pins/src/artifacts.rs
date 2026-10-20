@@ -415,6 +415,24 @@ mod tests {
     }
 
     #[test]
+    fn tracked_manifests_parse_with_complete_sources() {
+        let repository = repository();
+        let root = repository.path();
+        for chip in oer_chip_profile::supported(&root).unwrap() {
+            let Ok(manifest) = Manifest::load(&root, &chip) else {
+                continue;
+            };
+            assert!(manifest.artifact("libphy").is_ok(), "{chip}");
+            for source in &manifest.source {
+                if source.kind != SourceKind::Firmware {
+                    github(source.repository.as_deref().unwrap()).unwrap();
+                    assert!(source.revision.is_some());
+                }
+            }
+        }
+    }
+
+    #[test]
     fn artifacts_must_name_declared_sources() {
         let error = Manifest::parse(
             "schema = 1\nsource = []\n[[artifact]]\nid = \"a\"\nsource = \"b\"\npath = \"c\"\nsha256 = \"d\"\n",
@@ -518,4 +536,71 @@ mod tests {
             b"lib"
         );
     }
+}
+
+#[cfg(test)]
+pub(crate) fn repository() -> tempfile::TempDir {
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path();
+    for (path, text) in [
+        (
+            "chips/esp32c5/platform/chip.toml",
+            include_str!("../../../chips/esp32c5/platform/chip.toml"),
+        ),
+        (
+            "chips/esp32s31/platform/chip.toml",
+            include_str!("../../../chips/esp32s31/platform/chip.toml"),
+        ),
+        (
+            "chips/esp32c5/vendor/artifacts.toml",
+            include_str!("../../../chips/esp32c5/vendor/artifacts.toml"),
+        ),
+        (
+            "chips/esp32s31/vendor/artifacts.toml",
+            include_str!("../../../chips/esp32s31/vendor/artifacts.toml"),
+        ),
+        (
+            "chips/esp32c5/vendor/facts/provenance.toml",
+            include_str!("../../../chips/esp32c5/vendor/facts/provenance.toml"),
+        ),
+        (
+            "chips/esp32s31/vendor/facts/provenance.toml",
+            include_str!("../../../chips/esp32s31/vendor/facts/provenance.toml"),
+        ),
+        (
+            "chips/esp32c5/platform/partitions/applications.csv",
+            include_str!("../../../chips/esp32c5/platform/partitions/applications.csv"),
+        ),
+        (
+            "chips/esp32s31/platform/partitions/applications.csv",
+            include_str!("../../../chips/esp32s31/platform/partitions/applications.csv"),
+        ),
+        (
+            "tools/analysis/cli/tests/riscv_conformance/inputs.toml",
+            include_str!("../../analysis/cli/tests/riscv_conformance/inputs.toml"),
+        ),
+        (
+            "tools/vendor/scenarios-esp32c5/Cargo.toml",
+            include_str!("../../vendor/scenarios-esp32c5/Cargo.toml"),
+        ),
+        (
+            "tools/vendor/scenarios-esp32c5-cli/Cargo.toml",
+            include_str!("../../vendor/scenarios-esp32c5-cli/Cargo.toml"),
+        ),
+        (
+            "tools/vendor/scenarios-esp32s31/Cargo.toml",
+            include_str!("../../vendor/scenarios-esp32s31/Cargo.toml"),
+        ),
+        (
+            "tools/vendor/scenarios-esp32s31-cli/Cargo.toml",
+            include_str!("../../vendor/scenarios-esp32s31-cli/Cargo.toml"),
+        ),
+    ] {
+        let path = root.join(path);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, text).unwrap();
+    }
+    std::fs::create_dir_all(root.join("tools/vendor/scenarios-esp32s31/src/decisions")).unwrap();
+    std::fs::create_dir_all(root.join("tools/vendor/scenarios-esp32c5/src/decisions")).unwrap();
+    directory
 }

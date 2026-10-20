@@ -165,3 +165,6 @@ pub fn typed_function_pointer_resolutions(
     }
     Ok(resolutions)
 }
+
+#[cfg(test)]
+mod tests;

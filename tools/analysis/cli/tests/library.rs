@@ -5,10 +5,31 @@ use object::{
     Architecture, BinaryFormat, Endianness, SectionKind, SymbolFlags, SymbolKind, SymbolScope,
     write::{Object, Symbol, SymbolSection},
 };
-use oer_analysis_blobray_application::in_process::{Executable, Limits};
+use oer_analysis_blobray_application::in_process::Executable;
 use oer_analysis_blobray_application::library::{Assumptions, register_accesses};
 use oer_analysis_blobray_domain::*;
 use oer_analysis_riscv_model::*;
+
+struct WorkBudget {
+    units: u64,
+}
+impl WorkBudget {
+    fn new() -> Self {
+        Self { units: 0 }
+    }
+}
+impl RunControl for WorkBudget {
+    fn checkpoint(&mut self, units: u64) -> Result<()> {
+        self.units = self.units.saturating_add(units);
+        if self.units > DEFAULT_WORK_UNITS {
+            return Err(Error::new(
+                ErrorCode::ResourceLimited,
+                "test work budget exhausted",
+            ));
+        }
+        Ok(())
+    }
+}
 
 /// A relocatable object with one function `entry` of `size` bytes over `code`.
 fn object(code: &[u32], size: u64) -> Vec<u8> {
@@ -49,7 +70,7 @@ fn accesses_with(
     assumptions: Assumptions<'_>,
 ) -> Result<(RegisterAccessSummary, Vec<RegisterAccess>)> {
     let memory = WorkingMemory::new(64 * 1024 * 1024).unwrap();
-    let mut control = Limits::new(DEFAULT_WORK_UNITS, std::time::Duration::from_secs(60));
+    let mut control = WorkBudget::new();
     let mut records = Vec::new();
     let summary = register_accesses(
         inputs,

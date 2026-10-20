@@ -260,6 +260,16 @@ mod tests {
     }
 
     #[test]
+    fn the_tracked_catalog_names_its_projects() {
+        let repository = crate::tests::repository();
+        let root = repository.path();
+        let entries = entries(&root).unwrap();
+        for image in ["ieee802154-peer", "vendor-calibration"] {
+            assert!(entries.iter().any(|entry| entry.image == image), "{image}");
+        }
+    }
+
+    #[test]
     fn a_catalog_build_flashing_more_than_its_boot_files_is_refused() {
         let build = tempfile::tempdir().unwrap();
         let write = |files: &str| {

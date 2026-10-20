@@ -260,3 +260,6 @@ pub fn audit_application_image(bytes: &[u8], capacity: u32) -> Result<()> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests;

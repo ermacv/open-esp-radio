@@ -61,3 +61,50 @@ pub fn analog(root: &Path, domain: &str) -> Result<Vec<Register>> {
         })
         .collect())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_published_partition_image_is_ordered_by_address() {
+        let registers = partition(repository().path(), PARTITION).unwrap();
+        assert!(!registers.is_empty());
+        assert!(registers.windows(2).all(|w| w[0].address < w[1].address));
+    }
+
+    #[test]
+    fn analog_replies_round_trip_through_their_space() {
+        use oer_vendor_phy::calibration_capture::space::Space;
+        let image = analog(repository().path(), ANALOG_DOMAIN).unwrap();
+        assert!(image.windows(2).all(|w| w[0].address < w[1].address));
+        let register = &image[0];
+        let line = Space::Analog.line(register.address, 0xa5);
+        assert_eq!(
+            Space::Analog.replies(&line).unwrap()[&register.address],
+            0xa5
+        );
+        assert!(Space::Analog.request(register.address).starts_with("a "));
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn repository() -> tempfile::TempDir {
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path();
+    for (path, text) in [
+        (
+            "chips/esp32s31/registers/published/radio.svd",
+            include_str!("../../../../chips/esp32s31/registers/published/radio.svd"),
+        ),
+        (
+            "chips/esp32s31/registers/policy/api.toml",
+            include_str!("../../../../chips/esp32s31/registers/policy/api.toml"),
+        ),
+    ] {
+        let path = root.join(path);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, text).unwrap();
+    }
+    directory
+}

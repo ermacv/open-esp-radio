@@ -206,4 +206,33 @@ mod tests {
             .to_string();
         assert!(error.contains("no package missing"), "{error}");
     }
+
+    #[test]
+    fn the_workspace_images_declare_their_classes() {
+        let packages: Vec<_> = [
+            include_str!("../../../../firmware/apps/w0/Cargo.toml"),
+            include_str!("../../../../firmware/apps/w1/Cargo.toml"),
+            include_str!("../../../../firmware/apps/boot-smoke/Cargo.toml"),
+        ]
+        .into_iter()
+        .map(|text| {
+            let manifest: toml::Value = toml::from_str(text).unwrap();
+            let package = &manifest["package"];
+            serde_json::json!({
+                "name": package["name"].as_str().unwrap(),
+                "metadata": package.get("metadata"),
+            })
+        })
+        .collect();
+        let metadata = serde_json::json!({"packages": packages});
+        let classes = |package| {
+            Instrumentation::of_metadata(&metadata, package)
+                .unwrap()
+                .classes()
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(classes("oer-firmware-apps-w0"), [Class::Trace]);
+        assert_eq!(classes("oer-firmware-apps-w1"), [Class::Profile]);
+        assert_eq!(classes("oer-firmware-apps-boot-smoke"), []);
+    }
 }

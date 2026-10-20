@@ -701,6 +701,65 @@ fn profile_path(root: &Path, id: &str) -> PathBuf {
 mod tests {
     use super::*;
 
+    fn repository() -> tempfile::TempDir {
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path();
+        for (path, text) in [
+            (
+                "chips/esp32c5/platform/chip.toml",
+                include_str!("../../../../chips/esp32c5/platform/chip.toml"),
+            ),
+            (
+                "chips/esp32s31/platform/chip.toml",
+                include_str!("../../../../chips/esp32s31/platform/chip.toml"),
+            ),
+            (
+                "chips/esp32c5/platform/partitions/applications.csv",
+                include_str!("../../../../chips/esp32c5/platform/partitions/applications.csv"),
+            ),
+            (
+                "chips/esp32s31/platform/partitions/applications.csv",
+                include_str!("../../../../chips/esp32s31/platform/partitions/applications.csv"),
+            ),
+        ] {
+            let path = root.join(path);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, text).unwrap();
+        }
+        directory
+    }
+
+    #[test]
+    fn the_tracked_profiles_load() {
+        let repository = repository();
+        let root = repository.path();
+        let chips = Profile::all(&root).unwrap();
+        assert!(!chips.is_empty());
+        assert_eq!(families(&root).unwrap().len(), chips.len());
+        for chip in &chips {
+            assert!(valid_identifier(&chip.family), "{}", chip.id);
+            if let Some(flash) = &chip.flash {
+                assert!(flash.bootloader < flash.partition_table, "{}", chip.id);
+                assert!(flash.partition_table < flash.application, "{}", chip.id);
+                // The partition table the platform defines exists.
+                assert!(root.join(&flash.partitions).is_file(), "{}", chip.id);
+            }
+            assert_eq!(
+                chip.directory(&root, "registers"),
+                root.join("chips").join(&chip.id).join("registers")
+            );
+            if let Some(memory) = &chip.memory {
+                assert!(memory.task_stack_region().is_some(), "{}", chip.id);
+            }
+            if let Some(placement) = &chip.placement {
+                let memory = chip.memory.as_ref().unwrap();
+                for rule in &placement.range {
+                    assert!(memory.region(&rule.region).is_some(), "{}", chip.id);
+                }
+            }
+        }
+    }
+
     #[test]
     fn an_unknown_chip_names_the_supported_ones() {
         let root = tempfile::tempdir().unwrap();

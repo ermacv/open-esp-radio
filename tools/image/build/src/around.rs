@@ -69,3 +69,6 @@ pub fn around(
     }
     staging.publish(bundle)
 }
+
+#[cfg(test)]
+mod tests;

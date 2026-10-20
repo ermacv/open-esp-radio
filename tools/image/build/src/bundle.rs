@@ -468,3 +468,6 @@ pub fn remove_directory(path: &Path) -> Result<()> {
 }
 
 pub use crate::around::{BootFiles, around};
+
+#[cfg(test)]
+mod tests;

@@ -113,4 +113,11 @@ mod tests {
         ];
         assert_eq!(parse(&render(&entries)).unwrap(), entries);
     }
+
+    #[test]
+    fn this_checkout_registers_functions() {
+        let repository = crate::artifacts::repository();
+        let root = repository.path();
+        assert!(!registered(&root, "esp32s31").unwrap().is_empty());
+    }
 }

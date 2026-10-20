@@ -760,3 +760,6 @@ mod tests {
         assert!(collect(&nop, true).is_empty());
     }
 }
+
+#[cfg(test)]
+mod pcrel_tests;

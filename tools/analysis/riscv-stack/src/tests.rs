@@ -1005,6 +1005,23 @@ fn a_summary_the_image_does_not_reach_is_unused() {
 }
 
 #[test]
+fn the_platform_rom_summaries_parse() {
+    let sources = [
+        include_str!("../../../../chips/esp32c5/platform/rom-functions.toml"),
+        include_str!("../../../../chips/esp32s31/platform/rom-functions.toml"),
+    ];
+    assert!(!sources.is_empty());
+    for text in sources {
+        assert!(
+            parse_summaries(text)
+                .unwrap()
+                .iter()
+                .any(|s| s.name == "memset")
+        );
+    }
+}
+
+#[test]
 fn only_data_neither_writable_nor_executable_reads_as_constant() {
     let elf = image(
         &[Symbol {
@@ -1326,6 +1343,488 @@ fn a_relocated_data_word_takes_a_function_s_address() {
     assert!(!address_taken(&elf, TEXT + 4).unwrap());
 }
 
+/// `source`, a `no_std` program with an `_start`, compiled and linked for
+/// RV32 by the repository's `rustc` with debug information and the link's
+/// relocations kept, as images are.
+/// A build directory no other call shares: tests compiling one program run
+/// in parallel.
+fn build_directory(kind: &str) -> tempfile::TempDir {
+    tempfile::Builder::new().prefix(kind).tempdir().unwrap()
+}
+
+pub(crate) fn compiled(source: &str) -> Vec<u8> {
+    compiled_linking(source, &[])
+}
+
+/// [`compiled`], with the extra linker arguments `link`.
+fn compiled_linking(source: &str, link: &[&str]) -> Vec<u8> {
+    let build = build_directory("program");
+    let directory = build.path();
+    let input = directory.join("main.rs");
+    let output = directory.join("main.elf");
+    std::fs::write(&input, source).unwrap();
+    let status = std::process::Command::new("rustc")
+        // Frames come from `.stack_sizes`, as for images.
+        .env("RUSTC_BOOTSTRAP", "1")
+        .args(["-Z", "emit-stack-sizes"])
+        .args(["--edition", "2024", "--crate-type", "bin"])
+        .args(["--target", "riscv32imafc-unknown-none-elf"])
+        .args([
+            "-C",
+            "opt-level=s",
+            "-C",
+            "debuginfo=2",
+            "-C",
+            "panic=abort",
+        ])
+        .args(["-C", "link-arg=--emit-relocs", "-C", "link-arg=-e_start"])
+        // `keep`, which a program defines to hold what `_start` does not
+        // reach, survives the link's garbage collection.
+        .args(["-C", "link-arg=--undefined=keep"])
+        .args(
+            link.iter()
+                .flat_map(|argument| ["-C".to_owned(), format!("link-arg={argument}")]),
+        )
+        .arg("-o")
+        .arg(&output)
+        .arg(&input)
+        .status()
+        .unwrap();
+    assert!(status.success());
+    let elf = std::fs::read(&output).unwrap();
+    elf
+}
+
+/// `program` linked against the library crate `shared` built from `library`
+/// at `library_debuginfo`, with several codegen units each, as images are.
+fn compiled_with_library(library: &str, library_debuginfo: &str, program: &str) -> Vec<u8> {
+    compiled_named_library(library, library_debuginfo, program, "shared", "main")
+}
+
+fn compiled_named_library(
+    library: &str,
+    library_debuginfo: &str,
+    program: &str,
+    library_name: &str,
+    program_name: &str,
+) -> Vec<u8> {
+    let build = build_directory("library");
+    let directory = build.path();
+    let rustc = |debuginfo: &str, arguments: &[&std::ffi::OsStr]| {
+        let status = std::process::Command::new("rustc")
+            .env("RUSTC_BOOTSTRAP", "1")
+            .args(["-Z", "emit-stack-sizes"])
+            .args(["--edition", "2024"])
+            .args(["--target", "riscv32imafc-unknown-none-elf"])
+            .args(["-C", "opt-level=s", "-C", "panic=abort"])
+            .arg("-C")
+            .arg(format!("debuginfo={debuginfo}"))
+            .args(["-C", "codegen-units=4"])
+            .args(arguments)
+            .status()
+            .unwrap();
+        assert!(status.success());
+    };
+    let library_source = directory.join("shared.rs");
+    let program_source = directory.join("main.rs");
+    let output = directory.join("main.elf");
+    std::fs::write(&library_source, library).unwrap();
+    std::fs::write(&program_source, program).unwrap();
+    rustc(
+        library_debuginfo,
+        &[
+            "--crate-type".as_ref(),
+            "rlib".as_ref(),
+            "--crate-name".as_ref(),
+            library_name.as_ref(),
+            "--out-dir".as_ref(),
+            directory.as_os_str(),
+            library_source.as_os_str(),
+        ],
+    );
+    let rlib = directory.join(format!("lib{library_name}.rlib"));
+    let mut extern_shared = std::ffi::OsString::from(format!("{library_name}="));
+    extern_shared.push(&rlib);
+    rustc(
+        "2",
+        &[
+            "--crate-type".as_ref(),
+            "bin".as_ref(),
+            "--crate-name".as_ref(),
+            program_name.as_ref(),
+            "--extern".as_ref(),
+            extern_shared.as_os_str(),
+            "-C".as_ref(),
+            "link-arg=--emit-relocs".as_ref(),
+            "-C".as_ref(),
+            "link-arg=-e_start".as_ref(),
+            "-C".as_ref(),
+            "link-arg=--undefined=keep".as_ref(),
+            "-o".as_ref(),
+            output.as_os_str(),
+            program_source.as_os_str(),
+        ],
+    );
+    let elf = std::fs::read(&output).unwrap();
+    elf
+}
+
+const SHARED_LIBRARY: &str = r#"
+#![no_std]
+pub struct Payload<T> {
+    pub value: T,
+    pub tag: u16,
+}
+
+#[inline(never)]
+pub fn consume(payload: &mut Payload<u32>, extra: Option<&u8>) -> u32 {
+    payload.tag = payload.tag.wrapping_add(1);
+    payload.value + extra.map_or(0, |extra| u32::from(*extra))
+}
+"#;
+
+const SHARED_PROGRAM: &str = r#"
+#![no_std]
+#![no_main]
+use shared::Payload;
+
+static mut HOOK: Option<fn(&mut Payload<u32>, Option<&u8>) -> u32> = None;
+
+mod local {
+    #[inline(never)]
+    pub fn replace(payload: &mut shared::Payload<u32>, _: Option<&u8>) -> u32 {
+        payload.value = 0;
+        1
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn keep(on: bool) {
+    unsafe { HOOK = Some(if on { shared::consume } else { local::replace }) };
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn _start() -> ! {
+    let mut payload = Payload { value: 7, tag: 0 };
+    if let Some(hook) = unsafe { HOOK } {
+        core::hint::black_box(hook(&mut payload, None));
+    }
+    loop {}
+}
+
+#[panic_handler]
+fn panic(_: &core::panic::PanicInfo) -> ! {
+    loop {}
+}
+"#;
+
+/// The soundness of matching Rust-ABI fields by type name rests on rustc
+/// naming one type identically in every crate and codegen unit: a field
+/// typed in one crate reaches a function of another crate and one of
+/// another unit.
+#[test]
+fn a_type_named_in_another_crate_or_unit_still_matches() {
+    let elf = compiled_with_library(SHARED_LIBRARY, "2", SHARED_PROGRAM);
+    let analysis = analyze(&elf, &[], &[]).unwrap();
+    let (_, types) = debug(&elf);
+    let named = |name: &str| {
+        functions(&elf)
+            .unwrap()
+            .into_iter()
+            .find(|function| {
+                function
+                    .names
+                    .iter()
+                    .any(|candidate| candidate.contains(name))
+            })
+            .unwrap()
+            .address
+    };
+    let (start, consume, replace) = (named("_start"), named("consume"), named("replace"));
+    let resolutions = with_facts(&elf, |image| {
+        let mut keep = ledger();
+        let audit = audit_function_addresses(image, &analysis, &types, &mut keep, &mut || Ok(()))?;
+        crate::function_pointer_resolutions(&audit, &mut keep, &mut || Ok(()))
+    })
+    .unwrap();
+    let site = analysis.functions[&start]
+        .transfers
+        .iter()
+        .find(|transfer| transfer.target.is_none())
+        .unwrap()
+        .site;
+    let candidates = resolutions
+        .get(site)
+        .map(|resolution| &resolution.targets)
+        .expect("resolved");
+    assert!(
+        candidates.is_superset(&BTreeSet::from([consume, replace])),
+        "{resolutions:x?} consume={consume:#x} replace={replace:#x}"
+    );
+}
+
+const MERGED_PROGRAM: &str = r#"
+#![no_std]
+#![no_main]
+
+static mut UNSIGNED: Option<fn(u32) -> u32> = None;
+static mut SIGNED: Option<fn(i32) -> i32> = None;
+
+#[inline(never)]
+#[unsafe(no_mangle)]
+fn step_unsigned(value: u32) -> u32 {
+    value.wrapping_mul(3).wrapping_add(1)
+}
+
+#[inline(never)]
+#[unsafe(no_mangle)]
+fn step_signed(value: i32) -> i32 {
+    value.wrapping_mul(3).wrapping_add(1)
+}
+
+#[inline(never)]
+fn halve_signed(value: i32) -> i32 {
+    value / 2
+}
+
+#[inline(never)]
+fn halve_unsigned(value: u32) -> u32 {
+    value >> 1
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn keep(on: bool) {
+    unsafe {
+        UNSIGNED = Some(if on { step_unsigned } else { halve_unsigned });
+        SIGNED = Some(if on { step_signed } else { halve_signed });
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn _start() -> ! {
+    if let Some(signed) = unsafe { SIGNED } {
+        core::hint::black_box(signed(1));
+    }
+    if let Some(unsigned) = unsafe { UNSIGNED } {
+        core::hint::black_box(unsigned(1));
+    }
+    loop {}
+}
+
+#[panic_handler]
+fn panic(_: &core::panic::PanicInfo) -> ! {
+    loop {}
+}
+"#;
+
+/// Function merging puts `step_signed` and `step_unsigned` at one address.
+/// Auditing all aliases' storage uses preserves it for either field type.
+#[test]
+fn a_merged_function_of_another_type_stays_a_candidate() {
+    let elf = compiled(MERGED_PROGRAM);
+    let analysis = analyze(&elf, &[], &[]).unwrap();
+    let (_, types) = debug(&elf);
+    let named = |name: &str| {
+        functions(&elf)
+            .unwrap()
+            .into_iter()
+            .find(|function| function.names.iter().any(|candidate| candidate == name))
+            .unwrap()
+    };
+    let (start, signed) = (named("_start").address, named("step_signed"));
+    // The precondition: the two bodies were merged into one address.
+    assert!(
+        signed.names.iter().any(|name| name == "step_unsigned"),
+        "not merged: {:?}",
+        signed.names
+    );
+    let resolutions = with_facts(&elf, |image| {
+        let mut keep = ledger();
+        let audit = audit_function_addresses(image, &analysis, &types, &mut keep, &mut || Ok(()))?;
+        crate::function_pointer_resolutions(&audit, &mut keep, &mut || Ok(()))
+    })
+    .unwrap();
+    let sites: Vec<u32> = analysis.functions[&start]
+        .transfers
+        .iter()
+        .filter(|transfer| transfer.target.is_none())
+        .map(|transfer| transfer.site)
+        .collect();
+    assert_eq!(sites.len(), 2, "{sites:x?}");
+    for site in sites {
+        assert!(
+            resolutions
+                .get(site)
+                .map(|resolution| &resolution.targets)
+                .is_some_and(|targets| targets.contains(&signed.address)),
+            "{site:#x}: {resolutions:x?}"
+        );
+    }
+}
+
+const LIMITED_LIBRARY: &str = r#"
+#![no_std]
+#[inline(never)]
+pub fn limited(value: u32) -> u32 {
+    value.wrapping_mul(5) ^ 0x55
+}
+"#;
+
+const LIMITED_PROGRAM: &str = r#"
+#![no_std]
+#![no_main]
+
+static mut HOOK: Option<fn(u32) -> u32> = None;
+
+#[inline(never)]
+fn local(value: u32) -> u32 {
+    value >> 3
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn keep(on: bool) {
+    unsafe { HOOK = Some(if on { shared::limited } else { local }) };
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn _start() -> ! {
+    if let Some(hook) = unsafe { HOOK } {
+        core::hint::black_box(hook(1));
+    }
+    loop {}
+}
+
+#[panic_handler]
+fn panic(_: &core::panic::PanicInfo) -> ! {
+    loop {}
+}
+"#;
+
+/// Limited DWARF cannot turn an unproven storage use into an exclusion.
+#[test]
+fn a_function_of_a_unit_without_types_stays_a_candidate() {
+    let elf = compiled_with_library(LIMITED_LIBRARY, "limited", LIMITED_PROGRAM);
+    let analysis = analyze(&elf, &[], &[]).unwrap();
+    let (_, types) = debug(&elf);
+    let named = |name: &str| {
+        functions(&elf)
+            .unwrap()
+            .into_iter()
+            .find(|function| {
+                function
+                    .names
+                    .iter()
+                    .any(|candidate| candidate.contains(name))
+            })
+            .unwrap()
+            .address
+    };
+    let (start, limited) = (named("_start"), named("limited"));
+    let resolutions = with_facts(&elf, |image| {
+        let mut keep = ledger();
+        let audit = audit_function_addresses(image, &analysis, &types, &mut keep, &mut || Ok(()))?;
+        crate::function_pointer_resolutions(&audit, &mut keep, &mut || Ok(()))
+    })
+    .unwrap();
+    let site = analysis.functions[&start]
+        .transfers
+        .iter()
+        .find(|transfer| transfer.target.is_none())
+        .unwrap()
+        .site;
+    assert!(
+        resolutions
+            .get(site)
+            .is_some_and(|resolution| resolution.targets.contains(&limited)),
+        "{resolutions:x?} limited={limited:#x}"
+    );
+}
+
+const WAKER_PROGRAM: &str = r#"
+#![no_std]
+#![no_main]
+use core::task::{RawWaker, RawWakerVTable, Waker};
+
+static VTABLE: RawWakerVTable = RawWakerVTable::new(clone, wake, by_ref, drop);
+
+fn mark(value: u32) {
+    unsafe { core::ptr::write_volatile(0x1000 as *mut u32, value) }
+}
+unsafe fn clone(data: *const ()) -> RawWaker {
+    mark(1);
+    RawWaker::new(data, &VTABLE)
+}
+unsafe fn wake(_: *const ()) {
+    let mut buffer = [0_u32; 32];
+    for (i, word) in buffer.iter_mut().enumerate() {
+        unsafe { core::ptr::write_volatile(word, i as u32) };
+    }
+    mark(buffer[3]);
+}
+unsafe fn by_ref(_: *const ()) {
+    mark(3);
+}
+unsafe fn drop(_: *const ()) {
+    mark(4);
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn _start(waker: &Waker) {
+    waker.wake_by_ref();
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn keep() -> *const RawWakerVTable {
+    &VTABLE
+}
+
+#[panic_handler]
+fn panic(_: &core::panic::PanicInfo<'_>) -> ! {
+    loop {}
+}
+"#;
+
+#[test]
+fn a_waker_call_reaches_its_slot_of_every_waker_vtable() {
+    let elf = compiled(WAKER_PROGRAM);
+    let analysis = analyze(&elf, &[], &[]).unwrap();
+    let (dwarf, _) = debug(&elf);
+    let vtables = with_facts(&elf, |facts| {
+        waker_vtables(facts, &dwarf, &analysis, &mut ledger(), &mut || Ok(()))
+    })
+    .unwrap();
+    assert_eq!(vtables.len(), 1, "{vtables:x?}");
+    // Every relocated word it reads is charged to the work budget.
+    let error = with_facts(&elf, |facts| {
+        waker_vtables(facts, &dwarf, &analysis, &mut ledger(), &mut Units(0))
+    })
+    .unwrap_err();
+    assert_eq!(error.code, ErrorCode::ResourceLimited, "{error:?}");
+    let start = functions(&elf)
+        .unwrap()
+        .into_iter()
+        .find(|function| function.names.iter().any(|name| name == "_start"))
+        .unwrap()
+        .address;
+    assert_eq!(analysis.bound(start).unwrap().bytes, None);
+    let resolutions =
+        waker_resolutions(&analysis, &dwarf, &vtables, &mut ledger(), &mut || Ok(())).unwrap();
+    // `_start`'s `wake_by_ref` reaches `by_ref` (slot 2), not `wake`.
+    let site = analysis.functions[&start]
+        .transfers
+        .iter()
+        .find(|transfer| transfer.target.is_none())
+        .unwrap()
+        .site;
+    assert_eq!(
+        resolutions.get(site).unwrap().targets,
+        BTreeSet::from([vtables[0][2]])
+    );
+    let bound = analysis.bound_with(start, &resolutions).unwrap();
+    assert!(bound.unresolved.is_empty(), "{bound:?}");
+    assert!(bound.bytes.is_some());
+}
+
 #[test]
 fn a_hart_stacks_one_interrupt_per_level_and_an_exception() {
     // lui a5, 3 (the source table at 0x3000); add a5, a5, a0; lw a5, 0(a5).
@@ -1406,6 +1905,131 @@ fn a_hart_stacks_one_interrupt_per_level_and_an_exception() {
     // Hart 1 has no level-8 entry; its level 1 reaches the small handler only.
     assert_eq!(levels(&harts[1]), [(1, Some(112))]);
     assert_eq!(harts[1].bytes, Some(112 + 96));
+}
+
+const HOOK_PROGRAM: &str = r#"
+#![no_std]
+#![no_main]
+
+static mut HOOK: Option<fn(u32) -> u32> = None;
+static mut OTHER: Option<fn(u8)> = None;
+static mut NEGATE: Option<fn(i32) -> i32> = None;
+
+#[inline(never)]
+fn shallow(value: u32) -> u32 {
+    value + 1
+}
+
+#[inline(never)]
+fn twice(value: u32) -> u32 {
+    value * 2
+}
+
+#[inline(never)]
+fn negate(value: i32) -> i32 {
+    -value
+}
+
+#[inline(never)]
+fn halve(value: i32) -> i32 {
+    value / 2
+}
+
+#[inline(never)]
+fn deep(value: u8) {
+    let mut buffer = [0u32; 64];
+    for (i, word) in buffer.iter_mut().enumerate() {
+        unsafe { core::ptr::write_volatile(word, i as u32 + u32::from(value)) };
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn keep(on: bool) {
+    unsafe {
+        HOOK = Some(if on { shallow } else { twice });
+        if on {
+            OTHER = Some(deep);
+        }
+        if let Some(other) = OTHER {
+            other(1);
+        }
+        NEGATE = Some(if on { negate } else { halve });
+        if let Some(negate) = NEGATE {
+            core::hint::black_box(negate(1));
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn _start(value: u32) -> u32 {
+    match unsafe { HOOK } {
+        Some(hook) => hook(value),
+        None => 0,
+    }
+}
+
+#[panic_handler]
+fn panic(_: &core::panic::PanicInfo<'_>) -> ! {
+    loop {}
+}
+"#;
+
+#[test]
+fn a_call_through_a_static_preserves_functions_with_unknown_stores() {
+    let elf = compiled(HOOK_PROGRAM);
+    let analysis = analyze(&elf, &[], &[]).unwrap();
+    let (_, types) = debug(&elf);
+    let named = |name: &str| {
+        functions(&elf)
+            .unwrap()
+            .into_iter()
+            .find(|function| {
+                function
+                    .names
+                    .iter()
+                    .any(|candidate| candidate.contains(name))
+            })
+            .unwrap()
+            .address
+    };
+    let (start, shallow, twice, negate, deep) = (
+        named("_start"),
+        named("shallow"),
+        named("twice"),
+        named("negate"),
+        named("deep"),
+    );
+    let taken = taken_addresses(&elf).unwrap();
+    assert!(taken.contains(&shallow) && taken.contains(&deep));
+    assert_eq!(analysis.bound(start).unwrap().bytes, None);
+    let resolutions = with_facts(&elf, |image| {
+        let mut keep = ledger();
+        let audit = audit_function_addresses(image, &analysis, &types, &mut keep, &mut || Ok(()))?;
+        crate::function_pointer_resolutions(&audit, &mut keep, &mut || Ok(()))
+    })
+    .unwrap();
+    let site = analysis.functions[&start]
+        .transfers
+        .iter()
+        .find(|transfer| transfer.target.is_none())
+        .unwrap()
+        .site;
+    // Stores without a proven typed destination retain the function even
+    // when its declaration differs from the call field.
+    let targets = &resolutions.get(site).unwrap().targets;
+    assert_eq!(
+        targets,
+        &BTreeSet::from([shallow, twice, negate, named("halve"), deep]),
+        "{resolutions:x?}"
+    );
+    let bound = analysis.bound_with(start, &resolutions).unwrap();
+    assert!(bound.unresolved.is_empty(), "{bound:?}");
+    assert!(bound.reached.contains(&deep));
+    assert_eq!(
+        bound.bytes,
+        Some(256),
+        "the newly retained deep function contributes its frame"
+    );
 }
 
 const MRET: u32 = 0x3020_0073;
@@ -1506,6 +2130,67 @@ fn a_bound_assumes_what_the_resolutions_it_takes_assume() {
     assert_eq!(
         assumed(Fact::WakerVtables),
         BTreeSet::from([Assumption::ExecutorInvariant])
+    );
+}
+
+const WRITER_PROGRAM: &str = r#"
+#![no_std]
+#![no_main]
+
+static mut LEVEL: u8 = 0;
+
+#[inline(always)]
+fn writer(value: u8) {
+    unsafe { core::ptr::write_volatile(&raw mut LEVEL, value) };
+}
+
+#[inline(never)]
+fn start_up() {
+    writer(1);
+}
+
+#[inline(never)]
+fn elsewhere(value: u8) {
+    writer(value);
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn _start() -> ! {
+    start_up();
+    elsewhere(2);
+    loop {}
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn keep() {}
+
+#[panic_handler]
+fn panic(_: &core::panic::PanicInfo) -> ! {
+    loop {}
+}
+"#;
+
+#[test]
+fn every_inlined_copy_of_a_function_is_found_with_its_callers() {
+    let elf = compiled(WRITER_PROGRAM);
+    let (dwarf, _) = debug(&elf);
+    let found = dwarf.instances(&["main::writer", "main::absent"]);
+    assert!(found["main::absent"].is_empty());
+    let callers: BTreeSet<String> = found["main::writer"]
+        .iter()
+        .map(|&start| {
+            // The chain at a copy's start may begin inside what it inlines.
+            let chain = dwarf.inline_chain(start).unwrap();
+            let at = chain
+                .iter()
+                .position(|f| f == "main::writer")
+                .expect("a copy");
+            chain[at + 1].clone()
+        })
+        .collect();
+    assert_eq!(
+        callers,
+        BTreeSet::from(["main::start_up".to_owned(), "main::elsewhere".to_owned()])
     );
 }
 
@@ -1774,6 +2459,657 @@ fn image_tables_read_a_labelled_table_a_sized_object_or_a_bounded_run() {
 }
 
 #[test]
+fn shared_sections_give_the_inline_chain_copied_ones_give() {
+    // The analysis's symbolizer reads its sections as ranges of the ELF's
+    // bytes; the copying one reads each section's own copy.
+    for program in [WAKER_PROGRAM, WRITER_PROGRAM] {
+        let elf = compiled(program);
+        let (dwarf, _) = debug(&elf);
+        let copied = oer_analysis_elf::dwarf::Symbolizer::new(&elf).unwrap();
+        let mut inlined = 0;
+        for function in functions(&elf).unwrap() {
+            for address in (function.address..function.address + function.size).step_by(2) {
+                let expected: Vec<String> = copied
+                    .frames(u64::from(address))
+                    .unwrap()
+                    .into_iter()
+                    .filter_map(|frame| frame.function)
+                    .map(|name| crate::dwarf::plain(&name))
+                    .collect();
+                assert_eq!(
+                    dwarf.inline_chain(address).unwrap(),
+                    expected,
+                    "{address:#010x}"
+                );
+                inlined += usize::from(expected.len() > 1);
+            }
+        }
+        assert!(inlined > 0, "the program inlines nothing");
+    }
+}
+
+#[test]
+fn the_analyzers_own_structures_fail_on_working_memory() {
+    // A working memory too small for what each step keeps fails it inside
+    // the stack analysis, not only in the facts or the value analysis.
+    let limited = |error: Error| {
+        assert_eq!(error.code, ErrorCode::ResourceLimited, "{error:?}");
+        assert!(error.memory.is_some(), "{error:?}");
+    };
+    let tiny = WorkingMemory::new(1).unwrap();
+    let elf = compiled(WAKER_PROGRAM);
+    let shared = std::rc::Rc::from(&elf[..]);
+    limited(
+        crate::read_debug(
+            &shared,
+            DebugMetadata::Standard,
+            &mut kept(&tiny),
+            &mut || Ok(()),
+        )
+        .err()
+        .unwrap(),
+    );
+    with_facts(&elf, |facts| {
+        limited(crate::stack_sizes(facts, &mut kept(&tiny), &mut || Ok(())).unwrap_err());
+        limited(crate::taken_addresses(facts, &mut kept(&tiny), &mut || Ok(())).unwrap_err());
+        Ok(())
+    })
+    .unwrap();
+    // The sweep's merge points are admitted too: a branch's target alone
+    // does not fit.
+    // `beqz a0, +8; nop; ret; ret`: no call, table or level write, so the
+    // branch's target is the sweep's one allocation.
+    let branching = executable(&[Symbol {
+        name: "branch",
+        words: vec![0x0005_0463, 0x0000_0013, RET, RET],
+        frame: Some(0),
+    }]);
+    with_facts(&branching, |facts| {
+        let swept = sweep::transfers(facts, &facts.functions()[0], &mut ledger(), &mut || Ok(()))?;
+        assert!(swept.transfers.is_empty() && swept.jumps.is_empty());
+        assert!(swept.level_drops.is_empty() && swept.float_sites.is_empty());
+        Ok(())
+    })
+    .unwrap();
+    with_facts(&branching, |facts| {
+        limited(
+            sweep::transfers(facts, &facts.functions()[0], &mut kept(&tiny), &mut || {
+                Ok(())
+            })
+            .err()
+            .unwrap(),
+        );
+        Ok(())
+    })
+    .unwrap();
+    // What the analysis keeps stays admitted while the caller holds it,
+    // beside the image facts; the rest is released with each function.
+    let memory = WorkingMemory::new(TEST_MEMORY).unwrap();
+    let facts = ImageFacts::new(&elf, &[], &memory, &mut || Ok(())).unwrap();
+    let before = memory.used();
+    let mut keep = kept(&memory);
+    crate::analyze(
+        &facts,
+        &[],
+        &[],
+        &UnknownCallBehavior,
+        &mut keep,
+        &mut || Ok(()),
+    )
+    .unwrap();
+    assert!(keep.bytes() > 0);
+    assert_eq!(memory.used(), before + keep.bytes());
+    drop(keep);
+    assert_eq!(memory.used(), before);
+}
+
+#[test]
+fn a_compressed_debug_section_is_an_error_not_a_read() {
+    // `oer-analysis-elf` reads no compressed section; the analysis fails closed.
+    let compressed = compiled_linking(WRITER_PROGRAM, &["--compress-debug-sections=zlib"]);
+    let error = crate::read_debug(
+        &std::rc::Rc::from(&compressed[..]),
+        DebugMetadata::Standard,
+        &mut ledger(),
+        &mut || Ok(()),
+    )
+    .err()
+    .unwrap();
+    assert_eq!(error.code, ErrorCode::Integrity, "{error:?}");
+    assert!(
+        error.message.contains("compressed debug section"),
+        "{error:?}"
+    );
+    // The symbolizer, which reads sections as ranges of the bytes, never
+    // hands addr2line compressed bytes as DWARF.
+    let Err(error) =
+        oer_analysis_elf::dwarf::Symbolizer::shared(std::rc::Rc::from(&compressed[..]))
+    else {
+        panic!("the symbolizer read a compressed section");
+    };
+    assert!(
+        error.to_string().contains("compressed debug section"),
+        "{error}"
+    );
+}
+
+// A linked RV32 image with two independent queues and monomorphized task
+// headers. The API and dequeue closure mirror Embassy's erased poll slot;
+// the executor publishes its identity just as the platform runtime does.
+const EXECUTOR_LIBRARY: &str = r#"
+#![no_std]
+pub mod raw {
+    use core::{cell::UnsafeCell, sync::atomic::{AtomicPtr, Ordering}};
+    pub struct TaskHeader {
+        pub executor: UnsafeCell<*const SyncExecutor>,
+        pub poll_fn: UnsafeCell<Option<unsafe fn(*const TaskHeader)>>,
+    }
+    pub mod util {
+        use core::{cell::UnsafeCell, marker::PhantomData};
+        pub struct UninitCell<F> { data: UnsafeCell<u8>, future: PhantomData<F> }
+        unsafe impl<F> Sync for UninitCell<F> {}
+        impl<F> UninitCell<F> {
+            pub const fn new() -> Self { Self { data: UnsafeCell::new(0), future: PhantomData } }
+            #[inline(never)]
+            pub fn write_in_place(&self) { unsafe { self.data.get().write_volatile(1) }; }
+        }
+    }
+    pub struct TaskStorage<F> { pub raw: TaskHeader, future: util::UninitCell<F> }
+    unsafe impl<F> Sync for TaskStorage<F> {}
+    pub trait Future { fn poll(); }
+    impl<F: Future> TaskStorage<F> {
+        pub const fn new() -> Self { Self { raw: TaskHeader { executor: UnsafeCell::new(core::ptr::null()), poll_fn: UnsafeCell::new(None) }, future: util::UninitCell::new() } }
+        #[inline(always)]
+        pub unsafe fn initialize(&self) -> *const TaskHeader {
+            unsafe { *self.raw.poll_fn.get() = Some(Self::poll); }
+            self.future.write_in_place();
+            &self.raw
+        }
+        #[inline(never)]
+        pub unsafe fn poll(_: *const TaskHeader) { F::poll(); }
+    }
+    pub struct SyncExecutor { queue: AtomicPtr<TaskHeader> }
+    impl SyncExecutor {
+        pub const fn new() -> Self { Self { queue: AtomicPtr::new(core::ptr::null_mut()) } }
+        #[inline(always)]
+        pub unsafe fn spawn(&self, task: *const TaskHeader) {
+            unsafe { *(*task).executor.get() = self; }
+            self.queue.store(task.cast_mut(), Ordering::Relaxed);
+        }
+        #[inline(always)]
+        pub unsafe fn poll(&self) {
+            let visit = |task: *mut TaskHeader| unsafe { (*(*task).poll_fn.get()).unwrap_unchecked()(task) };
+            let task = self.queue.swap(core::ptr::null_mut(), Ordering::Relaxed);
+            if !task.is_null() { visit(task); }
+        }
+    }
+}
+"#;
+const EXECUTOR_PROGRAM: &str = r#"
+#![no_std]
+#![no_main]
+use embassy_executor::raw::{Future, SyncExecutor, TaskStorage};
+pub mod executor {
+    use super::*;
+    use core::sync::atomic::{AtomicPtr, Ordering};
+    pub static EMBASSY_EXECUTORS: [AtomicPtr<SyncExecutor>; 4] = [const { AtomicPtr::new(core::ptr::null_mut()) }; 4];
+    pub struct Executor<const SWI: u8> { inner: SyncExecutor }
+    impl<const SWI: u8> Executor<SWI> {
+        pub const fn new() -> Self { Self { inner: SyncExecutor::new() } }
+        #[inline(never)]
+        pub unsafe fn run<F: Future>(&'static self, task: &'static TaskStorage<F>) {
+            EMBASSY_EXECUTORS[SWI as usize].store((&self.inner as *const SyncExecutor).cast_mut(), Ordering::Relaxed);
+            core::hint::black_box(&EMBASSY_EXECUTORS);
+            let task = unsafe { task.initialize() };
+            unsafe { self.inner.spawn(task); self.inner.poll(); }
+        }
+    }
+}
+struct First;
+struct Second;
+impl Future for First { #[inline(never)] fn poll() { core::hint::black_box([1u8; 256]); } }
+impl Future for Second { #[inline(never)] fn poll() { core::hint::black_box([2u8; 32]); } }
+static FIRST: TaskStorage<First> = TaskStorage::new();
+static SECOND: TaskStorage<Second> = TaskStorage::new();
+static E0: executor::Executor<0> = executor::Executor::new();
+static E1: executor::Executor<1> = executor::Executor::new();
+#[unsafe(no_mangle)] pub unsafe extern "C" fn _start() -> ! {
+    unsafe { E0.run(&FIRST); E1.run(&SECOND); }
+    loop {}
+}
+#[panic_handler] fn panic(_: &core::panic::PanicInfo) -> ! { loop {} }
+"#;
+
+fn executor_image(program: &str) -> Vec<u8> {
+    compiled_named_library(
+        EXECUTOR_LIBRARY,
+        "2",
+        program,
+        "embassy_executor",
+        "oer_espressif_executor",
+    )
+}
+
+#[test]
+fn each_executor_polls_only_its_own_proven_tasks() {
+    let elf = executor_image(EXECUTOR_PROGRAM);
+    let analysis = analyze(&elf, &[], &[]).unwrap();
+    let (dwarf, types) = debug(&elf);
+    with_facts(&elf, |facts| {
+        let names: Vec<_> = facts
+            .functions()
+            .iter()
+            .map(|f| (f.address, oer_analysis_elf::demangle(&f.names[0])))
+            .collect();
+        let resolutions = task_poll_resolutions(
+            facts,
+            &analysis,
+            &dwarf,
+            &types,
+            names.iter().map(|(a, n)| (*a, n.as_str())),
+            &mut ledger(),
+            &mut || Ok(()),
+        )?;
+        assert_eq!(resolutions.len(), 2, "{resolutions:?}");
+        for (site, resolution) in resolutions.iter() {
+            assert_eq!(resolution.targets.len(), 1, "{site:#x}: {resolution:?}");
+            let chain = dwarf.inline_chain(site)?;
+            let line = chain
+                .iter()
+                .find_map(|name| crate::task_spawns::poll_executor(name))
+                .unwrap();
+            let target = *resolution.targets.first().unwrap();
+            let name = names.iter().find(|(a, _)| *a == target).unwrap().1.as_str();
+            assert!(
+                name.contains(if line == 0 { "First" } else { "Second" }),
+                "{name}"
+            );
+        }
+        Ok(())
+    })
+    .unwrap();
+}
+
+#[test]
+fn an_extra_erased_poll_address_keeps_the_task_on_every_executor() {
+    let program = format!(
+        "{EXECUTOR_PROGRAM}\n#[unsafe(no_mangle)] pub static keep: unsafe fn(*const embassy_executor::raw::TaskHeader) = TaskStorage::<First>::poll;\n"
+    );
+    let elf = executor_image(&program);
+    let analysis = analyze(&elf, &[], &[]).unwrap();
+    let (dwarf, types) = debug(&elf);
+    with_facts(&elf, |facts| {
+        let names: Vec<_> = facts
+            .functions()
+            .iter()
+            .map(|f| (f.address, oer_analysis_elf::demangle(&f.names[0])))
+            .collect();
+        let resolutions = task_poll_resolutions(
+            facts,
+            &analysis,
+            &dwarf,
+            &types,
+            names.iter().map(|(a, n)| (*a, n.as_str())),
+            &mut ledger(),
+            &mut || Ok(()),
+        )?;
+        assert_eq!(resolutions.len(), 2);
+        for (site, resolution) in resolutions.iter() {
+            let chain = dwarf.inline_chain(site)?;
+            let line = chain
+                .iter()
+                .find_map(|name| crate::task_spawns::poll_executor(name))
+                .unwrap();
+            assert_eq!(
+                resolution.targets.len(),
+                if line == 0 { 1 } else { 2 },
+                "{resolution:?}"
+            );
+        }
+        Ok(())
+    })
+    .unwrap();
+}
+
+/// The candidate names at each fixture executor's dequeue site.
+fn executor_candidates(elf: &[u8]) -> BTreeMap<u8, BTreeSet<String>> {
+    let analysis = analyze(elf, &[], &[]).unwrap();
+    let (dwarf, types) = debug(elf);
+    with_facts(elf, |facts| {
+        let names: BTreeMap<_, _> = facts
+            .functions()
+            .iter()
+            .map(|f| (f.address, oer_analysis_elf::demangle(&f.names[0])))
+            .collect();
+        let resolutions = task_poll_resolutions(
+            facts,
+            &analysis,
+            &dwarf,
+            &types,
+            names
+                .iter()
+                .map(|(address, name)| (*address, name.as_str())),
+            &mut ledger(),
+            &mut || Ok(()),
+        )?;
+        let mut result = BTreeMap::new();
+        for (site, resolution) in resolutions.iter() {
+            let line = dwarf
+                .inline_chain(site)?
+                .iter()
+                .find_map(|name| crate::task_spawns::poll_executor(name))
+                .unwrap();
+            result.insert(
+                line,
+                resolution
+                    .targets
+                    .iter()
+                    .map(|address| names[address].clone())
+                    .collect(),
+            );
+        }
+        assert_eq!(result.len(), 2);
+        Ok(result)
+    })
+    .unwrap()
+}
+
+#[test]
+fn an_unknown_spawn_receiver_keeps_tasks_on_every_executor() {
+    let program = EXECUTOR_PROGRAM.replace(
+        "self.inner.spawn(task); self.inner.poll();",
+        "core::hint::black_box(&self.inner).spawn(task); self.inner.poll();",
+    );
+    let candidates = executor_candidates(&executor_image(&program));
+    assert!(
+        candidates.values().all(|targets| targets.len() == 2),
+        "{candidates:?}"
+    );
+}
+
+#[test]
+fn an_arithmetic_poll_address_keeps_the_task_on_every_executor() {
+    let program = format!(
+        "{EXECUTOR_PROGRAM}\n#[unsafe(no_mangle)] pub fn keep() {{ core::hint::black_box((TaskStorage::<First>::poll as *const () as usize).wrapping_add(1)); }}"
+    );
+    let candidates = executor_candidates(&executor_image(&program));
+    assert_eq!(candidates[&0].len(), 1, "{candidates:?}");
+    assert_eq!(candidates[&1].len(), 2, "{candidates:?}");
+}
+
+#[test]
+fn erasing_an_initialized_poll_to_an_integer_keeps_it_on_every_executor() {
+    let library = EXECUTOR_LIBRARY.replace(
+        "self.future.write_in_place();",
+        "core::hint::black_box(Self::poll as *const () as usize); self.future.write_in_place();",
+    );
+    let elf = compiled_named_library(
+        &library,
+        "2",
+        EXECUTOR_PROGRAM,
+        "embassy_executor",
+        "oer_espressif_executor",
+    );
+    let candidates = executor_candidates(&elf);
+    assert!(
+        candidates.values().all(|targets| targets.len() == 2),
+        "{candidates:?}"
+    );
+}
+
+#[test]
+fn an_unknown_local_jump_does_not_make_partial_values_a_spawn_proof() {
+    let program = EXECUTOR_PROGRAM.replace(
+        "let task = unsafe { task.initialize() };",
+        r#"if core::hint::black_box(false) {
+            unsafe { core::arch::asm!("jr {target}", target = in(reg) core::hint::black_box(0usize), options(noreturn)); }
+        }
+        let task = unsafe { task.initialize() };"#,
+    );
+    let candidates = executor_candidates(&executor_image(&program));
+    assert!(
+        candidates.values().all(|targets| targets.len() == 2),
+        "{candidates:?}"
+    );
+}
+
+#[test]
+fn an_unsupported_non_control_after_spawn_keeps_the_closed_graph_proof() {
+    let program = EXECUTOR_PROGRAM.replace(
+        "self.inner.spawn(task); self.inner.poll();",
+        r#"self.inner.spawn(task); self.inner.poll(); core::arch::asm!("wfi", options(nomem, nostack));"#,
+    );
+    let candidates = executor_candidates(&executor_image(&program));
+    assert!(
+        candidates.values().all(|targets| targets.len() == 1),
+        "{candidates:?}"
+    );
+}
+
+#[test]
+fn another_initializer_cannot_stand_in_for_the_task_future() {
+    let library = EXECUTOR_LIBRARY
+        .replace(
+            "write_volatile(1)",
+            "write_volatile(core::mem::size_of::<F>() as u8)",
+        )
+        .replace(
+            "self.future.write_in_place();",
+            "util::UninitCell::<[u8; 3]>::new().write_in_place(); self.future.write_in_place();",
+        );
+    let elf = compiled_named_library(
+        &library,
+        "2",
+        EXECUTOR_PROGRAM,
+        "embassy_executor",
+        "oer_espressif_executor",
+    );
+    let candidates = executor_candidates(&elf);
+    assert!(
+        candidates.values().all(|targets| targets.len() == 2),
+        "{candidates:?}"
+    );
+}
+
+#[test]
+fn a_section_symbol_addend_and_low_bit_cannot_hide_an_erased_poll() {
+    use oer_analysis_elf::{Elf, SectionKind, SymbolKind};
+    let program = format!(
+        "{EXECUTOR_PROGRAM}\n#[unsafe(no_mangle)] pub static keep: unsafe fn(*const embassy_executor::raw::TaskHeader) = TaskStorage::<First>::poll;\n"
+    );
+    let mut elf = executor_image(&program);
+    let (at, info, addend, value_at, value) = {
+        let file = Elf::parse(&elf).unwrap();
+        let keep = file.symbols().find(|symbol| symbol.name == "keep").unwrap();
+        let poll = file
+            .symbols()
+            .find(|symbol| {
+                symbol.kind == SymbolKind::Text
+                    && symbol
+                        .demangled()
+                        .contains("TaskStorage<oer_espressif_executor::First>")
+                    && symbol.demangled().ends_with(">::poll")
+            })
+            .unwrap();
+        let section = file
+            .symbols()
+            .find(|symbol| symbol.kind == SymbolKind::Section && symbol.section == poll.section)
+            .unwrap();
+        let relocation_section = file
+            .sections()
+            .find(|section| section.kind == SectionKind::Rela && section.relocates == keep.section)
+            .unwrap();
+        let index = relocation_section
+            .data
+            .chunks_exact(12)
+            .position(|entry| {
+                u32::from_le_bytes(entry[..4].try_into().unwrap()) == keep.address as u32
+            })
+            .unwrap();
+        let keep_section = file
+            .sections()
+            .find(|section| Some(section.index) == keep.section)
+            .unwrap();
+        (
+            relocation_section.file_offset as usize + 12 * index,
+            ((section.index as u32) << 8) | object::elf::R_RISCV_32,
+            (poll.address - section.address + 1) as i32,
+            (keep_section.file_offset + keep.address - keep_section.address) as usize,
+            (poll.address + 1) as u32,
+        )
+    };
+    elf[at + 4..at + 8].copy_from_slice(&info.to_le_bytes());
+    elf[at + 8..at + 12].copy_from_slice(&addend.to_le_bytes());
+    elf[value_at..value_at + 4].copy_from_slice(&value.to_le_bytes());
+    let candidates = executor_candidates(&elf);
+    assert_eq!(candidates[&0].len(), 1, "{candidates:?}");
+    assert_eq!(candidates[&1].len(), 2, "{candidates:?}");
+}
+
+/// A pool whose erased storage has the macro's shape, including a header
+/// that need not start at byte zero of `TaskStorage`.
+fn erased_executor_pool(holder: &str) -> (String, String) {
+    let library = EXECUTOR_LIBRARY
+        .replace(
+            "pub struct TaskStorage<F> { pub raw: TaskHeader",
+            "#[repr(C)] pub struct TaskStorage<F> { prefix: u32, pub raw: TaskHeader",
+        )
+        .replace(
+            "Self { raw: TaskHeader",
+            "Self { prefix: 0, raw: TaskHeader",
+        );
+    let program = EXECUTOR_PROGRAM
+        .replace("static FIRST: TaskStorage<First> = TaskStorage::new();", &format!(r#"
+            #[repr(C, align(4))]
+            struct {holder}<const N: usize> {{ data: core::cell::UnsafeCell<[u8; N]> }}
+            unsafe impl<const N: usize> Sync for {holder}<N> {{}}
+            static FIRST: {holder}<{{ core::mem::size_of::<TaskStorage<First>>() }}> = {holder} {{ data: core::cell::UnsafeCell::new([0; core::mem::size_of::<TaskStorage<First>>()]) }};
+        "#))
+        .replace("static SECOND: TaskStorage<Second> = TaskStorage::new();", &format!("static SECOND: {holder}<{{ core::mem::size_of::<TaskStorage<Second>>() }}> = {holder} {{ data: core::cell::UnsafeCell::new([0; core::mem::size_of::<TaskStorage<Second>>()]) }};"))
+        .replace("E0.run(&FIRST); E1.run(&SECOND);", "E0.run(&*FIRST.data.get().cast::<TaskStorage<First>>()); E1.run(&*SECOND.data.get().cast::<TaskStorage<Second>>());");
+    (library, program)
+}
+
+#[test]
+fn an_erased_pool_uses_the_images_actual_header_offset() {
+    let (library, program) = erased_executor_pool("TaskPoolHolder");
+    let elf = compiled_named_library(
+        &library,
+        "2",
+        &program,
+        "embassy_executor",
+        "oer_espressif_executor",
+    );
+    let candidates = executor_candidates(&elf);
+    assert!(
+        candidates.values().all(|targets| targets.len() == 1),
+        "{candidates:?}"
+    );
+}
+
+#[test]
+fn arbitrary_byte_storage_does_not_prove_a_task_pool_layout() {
+    let (library, program) = erased_executor_pool("ByteStorage");
+    let elf = compiled_named_library(
+        &library,
+        "2",
+        &program,
+        "embassy_executor",
+        "oer_espressif_executor",
+    );
+    let candidates = executor_candidates(&elf);
+    assert!(
+        candidates.values().all(|targets| targets.len() == 2),
+        "{candidates:?}"
+    );
+}
+
+#[test]
+fn task_owner_proofs_obey_work_and_memory_limits() {
+    let limited = |error: Error| assert_eq!(error.code, ErrorCode::ResourceLimited, "{error:?}");
+    let elf = executor_image(EXECUTOR_PROGRAM);
+    let analysis = analyze(&elf, &[], &[]).unwrap();
+    let (dwarf, types) = debug(&elf);
+    with_facts(&elf, |facts| {
+        let names: Vec<_> = facts
+            .functions()
+            .iter()
+            .map(|f| (f.address, oer_analysis_elf::demangle(&f.names[0])))
+            .collect();
+        let tiny = WorkingMemory::new(1).unwrap();
+        limited(
+            task_poll_resolutions(
+                facts,
+                &analysis,
+                &dwarf,
+                &types,
+                names
+                    .iter()
+                    .map(|(address, name)| (*address, name.as_str())),
+                &mut ledger(),
+                &mut Units(0),
+            )
+            .unwrap_err(),
+        );
+        limited(
+            task_poll_resolutions(
+                facts,
+                &analysis,
+                &dwarf,
+                &types,
+                names
+                    .iter()
+                    .map(|(address, name)| (*address, name.as_str())),
+                &mut kept(&tiny),
+                &mut || Ok(()),
+            )
+            .unwrap_err(),
+        );
+        limited(
+            types
+                .member_offset("TaskHeader", "poll_fn", &mut Units(0))
+                .unwrap_err(),
+        );
+        limited(
+            types
+                .task_poll_field(0, "unused", &mut Units(0))
+                .unwrap_err(),
+        );
+        Ok(())
+    })
+    .unwrap();
+}
+
+#[test]
+fn a_bypassed_registry_publication_does_not_identify_the_receiver() {
+    let program = EXECUTOR_PROGRAM.replace(
+        "EMBASSY_EXECUTORS[SWI as usize].store((&self.inner as *const SyncExecutor).cast_mut(), Ordering::Relaxed);",
+        "if core::hint::black_box(true) { EMBASSY_EXECUTORS[SWI as usize].store((&self.inner as *const SyncExecutor).cast_mut(), Ordering::Relaxed); }",
+    );
+    let candidates = executor_candidates(&executor_image(&program));
+    assert!(
+        candidates.values().all(|targets| targets.len() == 2),
+        "{candidates:?}"
+    );
+}
+
+#[test]
+fn an_unknown_caller_path_does_not_supply_constant_spawn_arguments() {
+    let program = EXECUTOR_PROGRAM.replace(
+        "unsafe { E0.run(&FIRST); E1.run(&SECOND); }",
+        r#"if core::hint::black_box(false) {
+            unsafe { core::arch::asm!("jr {target}", target = in(reg) core::hint::black_box(0usize), options(noreturn)); }
+        }
+        unsafe { E0.run(&FIRST); E1.run(&SECOND); }"#,
+    );
+    let candidates = executor_candidates(&executor_image(&program));
+    assert!(
+        candidates.values().all(|targets| targets.len() == 2),
+        "{candidates:?}"
+    );
+}
+
+#[test]
 fn source_symbol_kinds_preserve_the_two_address_audits_distinct_policies() {
     use crate::relocations::{FunctionUsePolicy, function_use};
     use oer_analysis_elf::{Elf, SectionKind};
@@ -1894,4 +3230,62 @@ fn main_and_companion_address_uses_keep_independent_elf_identities() {
         })
     })
     .unwrap();
+}
+
+#[test]
+fn removing_unproven_declaration_exclusion_exposes_an_unresolved_callee() {
+    let source = HOOK_PROGRAM
+        .replace("#[inline(never)]\nfn deep", "#[unsafe(no_mangle)]\n#[inline(never)]\npub fn deep")
+        .replace("fn deep(value: u8) {", "fn deep(value: u8) {\n    let callback: fn() = unsafe { core::mem::transmute(usize::from(value)) };\n    callback();");
+    let elf = compiled(&source);
+    let analysis = analyze(&elf, &[], &[]).unwrap();
+    let (_, types) = debug(&elf);
+    let named = |needle: &str| {
+        analysis
+            .functions
+            .values()
+            .find(|facts| {
+                facts.function.names.iter().any(|name| {
+                    let name = oer_analysis_elf::demangle(name);
+                    name == needle || name.ends_with(&format!("::{needle}"))
+                })
+            })
+            .unwrap()
+            .function
+            .address
+    };
+    let start = named("_start");
+    let site = analysis.functions[&start]
+        .transfers
+        .iter()
+        .find(|t| t.target.is_none())
+        .unwrap()
+        .site;
+    // The former declaration-only subset hid deep's unresolved transfer.
+    let mut former = Resolutions::new();
+    former.add(site, Fact::FieldType, [named("shallow"), named("twice")]);
+    assert!(
+        analysis
+            .bound_with(start, &former)
+            .unwrap()
+            .unresolved
+            .is_empty()
+    );
+    let resolutions = with_facts(&elf, |image| {
+        let mut keep = ledger();
+        let audit = audit_function_addresses(image, &analysis, &types, &mut keep, &mut || Ok(()))?;
+        crate::function_pointer_resolutions(&audit, &mut keep, &mut || Ok(()))
+    })
+    .unwrap();
+    assert!(
+        resolutions
+            .get(site)
+            .unwrap()
+            .targets
+            .contains(&named("deep"))
+    );
+    let bound = analysis.bound_with(start, &resolutions).unwrap();
+    assert!(!bound.unresolved.is_empty(), "{bound:?}");
+    assert_eq!(bound.bytes, None);
+    assert!(bound.reached.contains(&named("deep")));
 }
