@@ -443,6 +443,53 @@ fn merging_wake_and_wake_by_ref_preserves_both_targets() {
 }
 
 #[test]
+fn merged_waker_loads_outside_the_call_scope_use_both_slots_of_every_vtable() {
+    let (analysis, dwarf, first) = fixture_with(
+        vec![
+            0x0005_0663, // beq a0, zero, +12.
+            LOAD_WAKE,
+            0x0080_006f, // j +8 to the shared call.
+            LOAD_BY_REF,
+            CALL_A5,
+            RET,
+        ],
+        &[
+            (TEXT + 4, TEXT + 8, "wake"),
+            (TEXT + 12, TEXT + 16, "wake_by_ref"),
+        ],
+        &[],
+    );
+    let site = TEXT + 16;
+    assert_eq!(dwarf.inline_chain(site).unwrap(), ["root"]);
+    // Reaching loads are admitted only when the local observation is closed.
+    let loads = &analysis.functions[&TEXT].target_loads[&site];
+    assert_eq!(
+        loads
+            .iter()
+            .map(|load| load.offset)
+            .collect::<BTreeSet<_>>(),
+        BTreeSet::from([4, 8])
+    );
+    // Four distinct real functions occupy slots 1/2 across the two tables;
+    // clone (slot 0) is deliberately shared and must never be selected.
+    let second = [first[0], first[3], first[3] + 4, first[0]];
+    let resolutions = waker_resolutions(
+        &analysis,
+        &dwarf,
+        &[first, second],
+        &mut ledger(),
+        &mut || Ok(()),
+    )
+    .unwrap();
+    let resolution = resolutions.get(site).unwrap();
+    assert_eq!(resolution.facts, BTreeSet::from([Fact::WakerVtables]));
+    assert_eq!(
+        resolution.targets,
+        BTreeSet::from([first[1], first[2], second[1], second[2]])
+    );
+}
+
+#[test]
 fn an_unknown_producer_at_a_waker_merge_keeps_the_call_unresolved() {
     let (analysis, dwarf, targets) = fixture_with(
         vec![

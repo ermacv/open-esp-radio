@@ -203,6 +203,55 @@ fn proved_dispatch_does_not_hide_a_decode_gap_or_another_unknown_edge() {
     }
 }
 
+#[test]
+fn a_table_reachable_unimp_separates_stack_observation_from_structural_closure() {
+    let mut code = root(false);
+    code.words[17] = 0; // The table has an independent edge to c.unimp.
+    let elf = fixture(code, &ENTRIES);
+    let structural = capture(&elf);
+    assert!(
+        structural
+            .iter()
+            .all(oer_analysis_riscv_analysis::writes::closes_local_graph)
+    );
+    assert!(structural.iter().any(|record| matches!(record,
+        FunctionRecord::Edge { from, target: Some(target), .. }
+            if *from == u64::from(TEXT + 56) && *target == u64::from(TEXT + 68)
+    )));
+    with_facts(&elf, |facts| {
+        let memory = WorkingMemory::new(TEST_MEMORY)?;
+        let function = &facts.functions()[0];
+        let mut work = kept(&memory);
+        // This split dispatch is discovered by DispatchTables, not the sweep.
+        assert!(
+            sweep::transfers(facts, function, &mut work, &mut || Ok(()))?
+                .jumps
+                .is_empty()
+        );
+        let tables = DispatchTables {
+            recognized: RecognizedTables {
+                entries: &ImageTables { image: facts },
+                section: function.section as u32,
+            },
+            known: &[],
+        };
+        image::observing(
+            facts,
+            &UnknownCallBehavior,
+            &memory,
+            &mut || Ok(()),
+            |observe, control| {
+                let observed = observe(function, &[], &tables, &mut work, control)?;
+                assert!(!observed.closed_graph);
+                assert!(!observed.complete);
+                assert!(observed.predecessors[&(TEXT + 68)].contains(&(TEXT + 56)));
+                Ok(())
+            },
+        )
+    })
+    .unwrap();
+}
+
 /// The w0 state dispatch excludes byte values zero and one, then reads a
 /// table whose label is eight bytes beyond the nominal indexed load start.
 fn displaced_root() -> Symbol {
