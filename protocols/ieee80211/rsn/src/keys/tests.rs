@@ -56,3 +56,18 @@ fn group_transmit_flag_change_reuses_key_id_slot() {
         }
     );
 }
+
+#[test]
+fn zero_capacity_and_hostile_key_slot_indices_return_errors_and_preserve_ownership() {
+    let mut empty = StaticRsnKeys::<0>::new();
+    assert_eq!(empty.insert(key([1; 6], 2)), Err(StaticKeyTableError::Full));
+    let mut keys = StaticRsnKeys::<1>::new();
+    assert_eq!(keys.insert(key([1; 6], 3)), Ok(0));
+    for index in [1, usize::MAX] {
+        let rejected = keys.replace_at(index, key([2; 6], 4)).err().unwrap();
+        assert_eq!(rejected.key().as_bytes(), &[4; 16]);
+        assert!(keys.get(index).is_none());
+        assert!(keys.remove(index).is_none());
+        assert_eq!(keys.get(0).unwrap().key().as_bytes(), &[3; 16]);
+    }
+}

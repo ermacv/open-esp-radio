@@ -46,6 +46,10 @@ impl AkmKeys for Akm {
         }
     }
 
+    #[expect(
+        clippy::expect_used,
+        reason = "HMAC accepts every key length and AES-128 CMAC receives a fixed 16-byte KCK"
+    )]
     fn mic(self, kck: &[u8; RSN_KCK_LEN]) -> EapolMic {
         match self {
             Self::Psk => EapolMic::HmacSha1(
@@ -81,7 +85,9 @@ impl EapolMic {
             Self::HmacSha1(mac) => {
                 let mut digest = mac.finalize().into_bytes();
                 let mut mic = [0; RSN_MIC_LEN];
-                mic.copy_from_slice(&digest[..RSN_MIC_LEN]);
+                for (target, source) in mic.iter_mut().zip(digest.iter()) {
+                    *target = *source;
+                }
                 digest.zeroize();
                 mic
             }
@@ -105,6 +111,10 @@ impl EapolMic {
 }
 
 /// IEEE 802.11 PRF-384 with HMAC-SHA1 and the pairwise expansion label.
+#[expect(
+    clippy::expect_used,
+    reason = "HMAC accepts every key length, including the fixed PMK"
+)]
 fn prf_sha1(pmk: &[u8; 32], context: &[u8; 76], ptk: &mut [u8; RSN_PTK_LEN]) {
     let mut written = 0;
     let mut counter = 0_u8;
@@ -117,7 +127,9 @@ fn prf_sha1(pmk: &[u8; 32], context: &[u8; 76], ptk: &mut [u8; RSN_PTK_LEN]) {
         mac.update(&[counter]);
         let mut block = mac.finalize().into_bytes();
         let count = core::cmp::min(block.len(), ptk.len() - written);
-        ptk[written..written + count].copy_from_slice(&block[..count]);
+        for (target, source) in ptk.iter_mut().skip(written).take(count).zip(block.iter()) {
+            *target = *source;
+        }
         block.zeroize();
         written += count;
         counter = counter.wrapping_add(1);

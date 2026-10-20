@@ -114,7 +114,7 @@ impl<const N: usize> StaticRsnKeys<N> {
 
     pub fn insert(&mut self, key: RsnKeyInstall) -> Result<usize, StaticKeyTableError> {
         let index = self.slot_for(&key)?;
-        self.slots[index] = Some(key);
+        *self.slots.get_mut(index).ok_or(StaticKeyTableError::Full)? = Some(key);
         Ok(index)
     }
 

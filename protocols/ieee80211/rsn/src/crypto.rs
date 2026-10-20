@@ -111,11 +111,17 @@ impl Pmk {
             .finalize()
             .into_bytes();
         let mut binding = [0; 16];
-        binding.copy_from_slice(&digest[..16]);
+        for (target, source) in binding.iter_mut().zip(digest.iter()) {
+            *target = *source;
+        }
         digest.zeroize();
         AssociationSecurityBinding(binding)
     }
 
+    #[expect(
+        clippy::expect_used,
+        reason = "HMAC accepts every key length, including the fixed 32-byte PMK"
+    )]
     fn association_security_binding_mac(&self, association_security_ies: &[u8]) -> Hmac<Sha1> {
         let mut mac = Hmac::<Sha1>::new_from_slice(&self.0)
             .expect("WPA2 PMK length is always accepted by HMAC");
@@ -161,18 +167,30 @@ impl Ptk {
         self.akm
     }
 
+    #[expect(
+        clippy::expect_used,
+        reason = "KCK occupies the first 16 bytes of the fixed 48-byte PTK"
+    )]
     pub fn kck(&self) -> &[u8; RSN_KCK_LEN] {
         self.bytes[..RSN_KCK_LEN]
             .try_into()
             .expect("KCK is the first 16 PTK bytes")
     }
 
+    #[expect(
+        clippy::expect_used,
+        reason = "KEK occupies bytes 16 through 32 of the fixed 48-byte PTK"
+    )]
     pub fn kek(&self) -> &[u8; RSN_KEK_LEN] {
         self.bytes[RSN_KCK_LEN..RSN_KCK_LEN + RSN_KEK_LEN]
             .try_into()
             .expect("KEK is PTK bytes 16..32")
     }
 
+    #[expect(
+        clippy::expect_used,
+        reason = "CCMP TK occupies bytes 32 through 48 of the fixed 48-byte PTK"
+    )]
     pub fn temporal_key(&self) -> &[u8; 16] {
         self.bytes[32..48]
             .try_into()
