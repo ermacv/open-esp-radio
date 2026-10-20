@@ -6,6 +6,7 @@ use oer_ieee80211_rsn::{
 };
 use oer_ieee80211_wire::{
     address::{Bssid, OwnAddress},
+    ccmp::Ccmp128Key,
     frame::DecodedHeader,
     management_protection::SaQuery,
 };
@@ -29,7 +30,7 @@ pub(super) struct ManagementProtection {
 }
 
 impl ManagementProtection {
-    pub(super) fn new(temporal_key: &[u8; 16]) -> Self {
+    pub(super) fn new(temporal_key: Ccmp128Key) -> Self {
         Self {
             individual: ManagementCcmpReceiver::new(temporal_key),
             group: None,

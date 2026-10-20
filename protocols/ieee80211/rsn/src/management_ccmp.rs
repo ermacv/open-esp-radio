@@ -44,11 +44,11 @@ pub struct ManagementCcmpReceiver {
 }
 
 impl ManagementCcmpReceiver {
-    /// Copy from the association's zeroizing key owner directly into this
-    /// zeroizing software receiver, without a by-value array argument.
-    pub fn new(temporal_key: &[u8; 16]) -> Self {
+    /// Move the association's software key owner into its replay receiver.
+    /// Construction neither copies nor extracts temporal-key bytes.
+    pub fn new(temporal_key: Ccmp128Key) -> Self {
         Self {
-            temporal_key: Ccmp128Key::new(temporal_key),
+            temporal_key,
             last_packet_number: oer_ieee80211_wire::ccmp::CcmpPacketNumber::ZERO.value(),
         }
     }
@@ -64,7 +64,7 @@ impl ManagementCcmpReceiver {
             return Err(ManagementCcmpError::Replay);
         }
 
-        let body = frame.open(self.temporal_key.as_bytes())?;
+        let body = frame.open(&self.temporal_key)?;
         self.last_packet_number = packet_number;
         Ok(body)
     }

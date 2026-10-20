@@ -12,7 +12,7 @@
 use crate::ccm::MIC_LEN;
 use crate::ccmp_mpdu::{CcmpAssociation, CcmpMpduError};
 use oer_ieee80211_wire::{
-    ccmp::{CCMP_HEADER_LEN, CcmpHeader, CcmpHeaderError, CcmpKeyId},
+    ccmp::{CCMP_HEADER_LEN, Ccmp128Key, CcmpHeader, CcmpHeaderError, CcmpKeyId},
     frame::DecodedHeader,
     security::Spp,
 };
@@ -89,7 +89,7 @@ impl<'a> ManagementCcmpFrame<'a> {
         self.packet_number
     }
 
-    pub fn open(self, temporal_key: &[u8; 16]) -> Result<&'a [u8], ManagementCcmpError> {
+    pub fn open(self, temporal_key: &Ccmp128Key) -> Result<&'a [u8], ManagementCcmpError> {
         let frame = self.frame;
         // SPP only affects QoS data; management uses the same transform in
         // either association mode. The receiver owns its separate PN frontier.

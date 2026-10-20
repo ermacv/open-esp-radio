@@ -4316,7 +4316,8 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
                         if handshake.supplicant.management_protection()
                             && handshake.management.is_none()
                         {
-                            handshake.management = Some(ManagementProtection::new(key.as_bytes()));
+                            handshake.management =
+                                Some(ManagementProtection::new(Ccmp128Key::new(key.as_bytes())));
                         }
                         (
                             HandshakeStep::InstallGroup(group, replay, protection),

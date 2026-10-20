@@ -1,0 +1,15 @@
+error[E0308]: mismatched types
+ --> tests/ui/ccmp_open_typed_key.rs:6:36
+  |
+6 |     let _result = association.open(&[0; 16], frame); // ui-error: E0308
+  |                               ---- ^^^^^^^^ expected `&Ccmp128Key`, found `&[{integer}; 16]`
+  |                               |
+  |                               arguments to this method are incorrect
+  |
+  = note: expected reference `&Ccmp128Key`
+             found reference `&[{integer}; 16]`
+note: method defined here
+ --> src/ccmp_mpdu.rs
+  |
+  |     pub fn open<'a>(
+  |            ^^^^

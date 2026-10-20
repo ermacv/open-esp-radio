@@ -3516,6 +3516,7 @@ dependencies = [
  "aes",
  "cmac",
  "oer-ieee80211-wire",
+ "oer-test-ui-cases",
  "subtle",
  "zeroize",
 ]

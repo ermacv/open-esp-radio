@@ -8,7 +8,7 @@ const MIC_LEN: usize = 8;
 use oer_ieee80211_wire::management_ccmp_vector::{MANAGEMENT_BODY, management_wire as frame};
 
 fn receiver() -> ManagementCcmpReceiver {
-    ManagementCcmpReceiver::new(&core::array::from_fn(|index| index as u8))
+    ManagementCcmpReceiver::new(key())
 }
 
 #[test]
@@ -102,8 +102,8 @@ fn mode(spp: bool) -> CcmpAssociation {
         Spp::NotNegotiated
     })
 }
-fn key() -> [u8; 16] {
-    core::array::from_fn(|i| i as u8)
+fn key() -> oer_ieee80211_wire::ccmp::Ccmp128Key {
+    oer_ieee80211_wire::ccmp::Ccmp128Key::new(&core::array::from_fn(|i| i as u8))
 }
 
 #[test]
@@ -115,7 +115,7 @@ fn management_wire_vector_matches_the_replay_receiver_in_both_spp_modes() {
         assert_eq!(mode(spp).open(&key(), &mut mpdu).unwrap(), MANAGEMENT_BODY);
         mode(spp).seal(&key(), &mut mpdu).unwrap();
         assert_eq!(mpdu, wire);
-        let mut receiver = crate::management_ccmp::ManagementCcmpReceiver::new(&key());
+        let mut receiver = crate::management_ccmp::ManagementCcmpReceiver::new(key());
         assert_eq!(receiver.open(&mut mpdu).unwrap(), MANAGEMENT_BODY);
     }
 }

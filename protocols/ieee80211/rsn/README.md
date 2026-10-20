@@ -53,7 +53,8 @@ allocation and replay admission remain with their separate installed owners.
 `ManagementCcmpReceiver` starts its management PN frontier at zero, rejects
 PN zero and admits only KeyID zero with an individually addressed A1 around
 that same transform, so a rejected MIC erases the tentative body on the station's PMF
-path too. The CCM authenticator accepts only the closed `Aad` type built from
+path too. Its constructor moves a `Ccmp128Key`; CCMP transforms borrow that
+typed owner instead of accepting raw key arrays. The CCM authenticator accepts only the closed `Aad` type built from
 a decoded MAC header: its four layouts occupy 22, 24, 28 or 30 bytes. It
 cannot accept an arbitrary slice whose suffix would escape authentication.
 
@@ -111,10 +112,6 @@ not enable the policy.
 - **SAE H2E ignores the Rejected Groups salt.** `sae.rs::SaeCommit::process`
   always derives the keyseed with a zero salt; `rejected_groups` is only
   parsed. H2E with a rejected group does not interoperate.
-- **Management CCMP receiver** (`management_ccmp.rs::ManagementCcmpReceiver`):
-  `new` copies the TK from a raw `&[u8; 16]`.
-- **Raw keys in the API:** `ccmp_mpdu.rs::CcmpAssociation::seal`/`open`
-  take `&[u8; 16]` instead of `&Ccmp128Key`.
 - **Self-generated CCMP fixtures only** (`ccmp_mpdu/test_vector.rs`): no
   IEEE 802.11-2020 Annex J CCMP vector, no hostap `wlantest` QoS or
   4-address vector.
