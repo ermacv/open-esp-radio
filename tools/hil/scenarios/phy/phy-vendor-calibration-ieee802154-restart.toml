@@ -1,0 +1,11 @@
+schema = 5
+id = "phy-vendor-calibration-ieee802154-restart"
+description = "Alternate pinned vendor and diagnostic IEEE 802.15.4 RX captures at the ieee802154-restart point"
+role = "investigation"
+repetitions = 1
+tags = ["phy", "calibration", "air-strict"]
+
+[phy]
+kind = "vendor-calibration"
+lifecycle = "ieee802154-restart"
+boots = 5

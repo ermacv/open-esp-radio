@@ -5,6 +5,7 @@
 #[cfg(not(feature = "diagnostic-phy"))]
 compile_error!("build the diagnostic-phy image class through cargo hil");
 
+mod ieee802154;
 mod projection;
 mod radio;
 mod transport;
@@ -26,6 +27,7 @@ use static_cell::StaticCell;
 oer_espressif_staged_runtime::interrupt_table! {
     wake: WakeToken = FROM_CPU_INTR0 => oer_espressif_executor::wake_handler::<0>, Priority1, ProCpu;
     radio: RadioToken = FROM_CPU_INTR2 => oer_espressif_executor::interrupt_handler::<2>, Priority2, ProCpu;
+    mac: MacToken = MODEM_ZB_MAC => ieee802154::interrupt, Priority2, ProCpu;
     radio_alarm: RadioAlarmToken = SYSTIMER_TARGET0 => oer_espressif_executor::alarm_interrupt::<0>, Priority3, ProCpu;
     app_alarm: AppAlarmToken = SYSTIMER_TARGET1 => oer_espressif_executor::alarm_interrupt::<1>, Priority1, ProCpu;
     console_usb: ConsoleUsb = USB_DEVICE => esp_hal::usb::usb_serial_jtag::handle_async_interrupt, Priority1, ProCpu;
@@ -108,6 +110,11 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         domain,
         partitions.wifi,
         partitions.wifi_coex,
+        ieee802154::Rx::new(
+            partitions.ieee802154,
+            partitions.ieee802154_coex,
+            interrupts.mac,
+        ),
         clocks,
         identity,
         station,

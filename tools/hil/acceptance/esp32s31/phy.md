@@ -1,9 +1,10 @@
 # PHY acceptance scenarios: vendor calibration cross-check
 
-The Wi-Fi investigations are in `tools/hil/scenarios/phy/` and run the separate
+The Wi-Fi and IEEE 802.15.4 investigations are in `tools/hil/scenarios/phy/` and run the separate
 `diagnostic-phy` image. The historical hardware results below came from a
-catalog outside this repository. IEEE 802.15.4 points are not served by the
-current diagnostic image.
+catalog outside this repository. Cold/restart Wi-Fi points use ten rounds;
+802.15.4 cold/restart RX points use five, with channel 15 and 21 dBm PIB power.
+One-pair smoke scenarios exercise tooling without estimating vendor spread.
 
 These scenarios alternate two firmwares on the same ESP32-S31 board, in
 rounds: the pinned vendor firmware is flashed and booted, then the production

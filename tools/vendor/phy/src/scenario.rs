@@ -61,9 +61,6 @@ impl<C: Comparison> ScenarioFamily for PhyScenario<C> {
                 return Err("a vendor window must be bounded, aligned and nonempty".into());
             }
         }
-        if lifecycle.ieee802154() {
-            return Err("no diagnostic IEEE 802.15.4 capture image is implemented".into());
-        }
         Ok(())
     }
     fn plan(&self) -> Plan {
@@ -89,9 +86,19 @@ impl<C: Comparison> Workload for PhyScenario<C> {
             lifecycle,
             boots,
             vendor_only,
+            vendor_windows,
+            vendor_transmit,
             ..
         } = self;
-        crate::workload::calibration::run::<C>(*lifecycle, *boots, *vendor_only, output, context)
+        crate::workload::calibration::run::<C>(
+            *lifecycle,
+            *boots,
+            *vendor_only,
+            vendor_windows,
+            *vendor_transmit,
+            output,
+            context,
+        )
     }
 }
 #[cfg(test)]
@@ -125,10 +132,12 @@ mod tests {
         let scenario = parse("kind='vendor-calibration'\nlifecycle='restart'\nboots=10").unwrap();
         scenario.validate().unwrap();
         assert_eq!(scenario.plan().image, ImageClass::DiagnosticPhy);
+        for lifecycle in ["ieee802154", "ieee802154-restart"] {
+            parse(&format!("kind='vendor-calibration'\nlifecycle='{lifecycle}'\nboots=5\nvendor_transmit=true\nvendor_windows=[{{address=4096,words=2}}]")).unwrap().validate().unwrap();
+        }
         assert!(parse("kind='vendor-calibration'\nboots=10").is_err());
         for text in [
             "kind='vendor-calibration'\nboots=0\nlifecycle='cold'",
-            "kind='vendor-calibration'\nboots=1\nlifecycle='ieee802154'",
             "kind='vendor-calibration'\nboots=1\nlifecycle='cold'\nvendor_transmit=true",
         ] {
             assert!(parse(text).unwrap().validate().is_err());

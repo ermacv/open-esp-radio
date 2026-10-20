@@ -1690,3 +1690,29 @@ fn detach_rejects_tx_cca_ed_and_armed_receive_until_stopped() {
         assert!(owner.detach().is_ok());
     }
 }
+
+#[test]
+fn delivered_slot_keeps_epoch_owned_until_returned() {
+    use super::owner::Ieee802154EngineOwner;
+    let mut bench = Bench::enabled();
+    bench.receive();
+    bench.deliver(&DATA_NO_ACK);
+    bench.interrupt(&[Ieee802154Event::RxDone]);
+    let slot = bench
+        .env
+        .notes
+        .iter()
+        .find_map(|note| match note {
+            Note::ReceiveDone { slot, .. } => Some(Ieee802154RxSlot(*slot as u8)),
+            _ => None,
+        })
+        .expect("one delivered slot");
+    let mut owner = Ieee802154EngineOwner::new(bench.engine, bench.hw);
+    owner.sleep(&mut bench.env);
+    let mut owner = match owner.detach() {
+        Err(owner) => owner,
+        Ok(_) => panic!("delivered slot still belongs to the old epoch"),
+    };
+    owner.receive_handle_done(slot).unwrap();
+    assert!(owner.detach().is_ok());
+}

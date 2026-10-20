@@ -72,12 +72,12 @@ phy/capture/analog 0ba9dbc8e27179fb topic
 phy/capture/analog/read 5774a605a42871c0 endpoint
 phy/capture/calibration 95d3b73dc049939d topic
 phy/capture/calibration/read d929b1fefdd84698 endpoint
-phy/capture/prepare 747ce1656463fd3c endpoint
-phy/capture/ready 6ffd9c03a361f13a topic
+phy/capture/prepare 3834c8148b114a19 endpoint
+phy/capture/ready 181b19438d4c41c6 topic
 phy/capture/registers f69234aab9349af3 topic
 phy/capture/registers/read 540674e601e83e72 endpoint
 phy/capture/restart dbbf5f4c42b84170 endpoint
-phy/capture/restarted 22dd1baf20e7b66b topic
+phy/capture/restarted 4bcda85eb52b4661 topic
 phy/capture/stop e6c7bef66d566ea9 endpoint
 phy/capture/stopped 59d750279ee5996a topic
 system/panic/inject 4a8069a58696abc1 endpoint

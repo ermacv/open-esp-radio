@@ -79,7 +79,8 @@ and check the three differences independently against C and engine traces
 
 ## Bring-up and teardown order
 
-No runtime in this repository holds the engine; a runtime that does brings
+The S31 diagnostic PHY image holds an RX-only assembly of the engine; it
+defines no 802.15.4 block runtime contract. An owner brings
 the radio up in the order of ESP-IDF's `esp_ieee802154_enable`:
 
 1. the common radio power and the IEEE 802.15.4 module clocks;
@@ -94,6 +95,15 @@ the radio up in the order of ESP-IDF's `esp_ieee802154_enable`:
 Stop reversed every step. A failure before shared state was touched rolled
 back; a started PHY or clock transaction that failed was fail-stop. The
 runtime was a process singleton: source 132 had one handler.
+
+A consuming `detach` returns the MAC only after a completed stop and the return
+of delivered RX slots, with no active operation, armed RX or pending timers.
+Failure returns the complete owner. Software-only `disable`, `enable` and
+`mac_init` cannot conceal an active operation epoch. The detached engine keeps
+its unique storage and retained settings; `rebind` reuses that same storage with
+no new claim or address construction. The S31 HAL preserves its DMA placement
+proof through this transition. Silence the CPU route before detaching and use
+the existing IRQ deactivation/foundation return path before leaving PHY.
 
 ## Enhanced ACK and transmit security
 
