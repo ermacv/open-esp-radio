@@ -398,21 +398,27 @@ pub struct OwnerReturn {
     pub transmissions: Option<u16>,
     pub outcome: u8,
 }
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub enum OwnerPublication {
+    Tx(u8),
+    GateClosed,
+}
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub struct OwnershipTrace {
     pub returned: [Option<OwnerReturn>; 8],
     pub contexts_dropped: u16,
     pub before_teardown_dropped: u16,
     pub publications: u16,
-    pub publication_tickets: [Option<u8>; 8],
+    pub publication_events: [Option<OwnerPublication>; 8],
 }
 /// Allocation numbers come from the actual body owners and their frees. Raw
 /// pointer equality is recorded separately for each original/returned pair.
-pub fn ownership_trace<R: AsRef<[conformance::Returned]>>(
-    trace: &conformance::Trace<R>,
-    evidence: &[conformance::ReturnEvidence],
-    publications: impl IntoIterator<Item = u8>,
-) -> Option<OwnershipTrace> {
+pub fn ownership_trace<R, E, P>(trace: conformance::Trace<R, E, P>) -> Option<OwnershipTrace>
+where
+    R: AsRef<[conformance::Returned]>,
+    E: AsRef<[conformance::ReturnEvidence]>,
+    P: IntoIterator<Item = conformance::PublicationEvent>,
+{
     use conformance::{Class, End, Resources};
     fn class(value: Class) -> u8 {
         match value {
@@ -421,6 +427,7 @@ pub fn ownership_trace<R: AsRef<[conformance::Returned]>>(
         }
     }
     let rows = trace.returned.as_ref();
+    let evidence = trace.terminal_evidence.as_ref();
     let resource = |value: Resources| OwnerResources {
         ticket: value.ticket,
         buffer: value.buffer,
@@ -448,17 +455,22 @@ pub fn ownership_trace<R: AsRef<[conformance::Returned]>>(
             },
         });
     }
-    let mut publication_tickets = [None; 8];
-    let mut count = 0;
-    for (index, ticket) in publications.into_iter().enumerate() {
-        *publication_tickets.get_mut(index)? = Some(ticket);
-        count = index.checked_add(1)?;
+    let mut publication_events = [None; 8];
+    let mut count = 0_usize;
+    for (index, event) in trace.publication_events.into_iter().enumerate() {
+        *publication_events.get_mut(index)? = Some(match event {
+            conformance::PublicationEvent::Tx(ticket) => {
+                count = count.checked_add(1)?;
+                OwnerPublication::Tx(ticket)
+            }
+            conformance::PublicationEvent::GateClosed => OwnerPublication::GateClosed,
+        });
     }
     if count != trace.publications {
         return None;
     }
     Some(OwnershipTrace {
-        publication_tickets,
+        publication_events,
         returned,
         contexts_dropped: trace.contexts_dropped.try_into().ok()?,
         before_teardown_dropped: trace.before_teardown_dropped.try_into().ok()?,
@@ -604,68 +616,90 @@ mod tests {
 
     #[test]
     fn ownership_projection_preserves_lifetime_numbers_and_pointer_mismatch() {
-        use conformance::{End, OPERATIONS, Resources, Returned};
+        use conformance::{End, OPERATIONS, Resources, ReturnEvidence, Returned};
         let resource = Resources {
             ticket: 0,
             buffer: 0,
             class: OPERATIONS[0].class,
             body: 0,
         };
-        let mut raw = conformance::Trace {
-            returned: [Returned {
-                operation: OPERATIONS[0],
-                expected: resource,
-                actual: resource,
-                end: End::Refused,
-            }],
-            contexts_dropped: 1,
-            before_teardown_dropped: 1,
-            publications: 0,
+        let project = |pointer, body| {
+            ownership_trace(conformance::Trace {
+                returned: [Returned {
+                    operation: OPERATIONS[0],
+                    expected: resource,
+                    actual: Resources { body, ..resource },
+                    end: End::Refused,
+                }],
+                contexts_dropped: 1,
+                before_teardown_dropped: 1,
+                publications: 0,
+                terminal_evidence: [ReturnEvidence::refused(pointer)],
+                publication_events: [],
+            })
+            .unwrap()
         };
-        let yes = conformance::ReturnEvidence::refused(true);
-        let no = conformance::ReturnEvidence::refused(false);
-        let original = ownership_trace(&raw, &[yes], []).unwrap();
+        let original = project(true, 0);
         assert_eq!(original.returned[0].unwrap().actual.body, Some(0));
-        assert_ne!(original, ownership_trace(&raw, &[no], []).unwrap());
-        raw.returned[0].actual.body = 1;
-        assert_ne!(original, ownership_trace(&raw, &[yes], []).unwrap());
+        assert_ne!(original, project(false, 0));
+        assert_ne!(original, project(true, 1));
     }
     #[test]
-    fn ownership_projection_preserves_each_publication_ticket_and_terminal_count() {
-        use conformance::{End, OPERATIONS, Resources, ReturnEvidence, Returned};
+    fn ownership_projection_preserves_publications_gate_and_terminal_count() {
+        use PublicationEvent::{GateClosed, Tx};
+        use conformance::{End, OPERATIONS, PublicationEvent, Resources, ReturnEvidence, Returned};
         let resource = Resources {
             ticket: 2,
             buffer: 0,
             class: OPERATIONS[2].class,
             body: 0,
         };
-        let raw = conformance::Trace {
-            returned: [Returned {
-                operation: OPERATIONS[2],
-                expected: resource,
-                actual: resource,
-                end: End::Ended,
-            }],
-            contexts_dropped: 1,
-            before_teardown_dropped: 1,
-            publications: 3,
-        };
-        let terminal = |count| -> SingleOutcome<(), ()> {
-            TxOutcome::Ended(SingleEnd::AckTimeout(Air {
+        let project = |count, events: &[PublicationEvent]| {
+            let terminal: SingleOutcome<(), ()> = TxOutcome::Ended(SingleEnd::AckTimeout(Air {
                 transmissions: NonZeroU16::new(count).unwrap(),
                 rate: PhyRate::Legacy(LegacyRate::Ofdm6M),
-            }))
+            }));
+            ownership_trace(conformance::Trace {
+                returned: [Returned {
+                    operation: OPERATIONS[2],
+                    expected: resource,
+                    actual: resource,
+                    end: End::Ended,
+                }],
+                contexts_dropped: 1,
+                before_teardown_dropped: 1,
+                publications: 3,
+                terminal_evidence: [ReturnEvidence::terminal(true, &terminal).unwrap()],
+                publication_events: events.iter().copied(),
+            })
         };
-        let one = ReturnEvidence::terminal(true, &terminal(1)).unwrap();
-        let two = ReturnEvidence::terminal(true, &terminal(2)).unwrap();
-        let first = ownership_trace(&raw, &[one], [2, 3, 2]).unwrap();
+        let first = project(1, &[Tx(2), Tx(3), Tx(2), GateClosed]).unwrap();
         assert_eq!(
-            first.publication_tickets,
-            [Some(2), Some(3), Some(2), None, None, None, None, None]
+            first.publication_events,
+            [
+                Some(OwnerPublication::Tx(2)),
+                Some(OwnerPublication::Tx(3)),
+                Some(OwnerPublication::Tx(2)),
+                Some(OwnerPublication::GateClosed),
+                None,
+                None,
+                None,
+                None
+            ]
         );
         assert_eq!(first.returned[0].unwrap().transmissions, Some(1));
-        assert_ne!(first, ownership_trace(&raw, &[two], [2, 3, 2]).unwrap());
-        assert_ne!(first, ownership_trace(&raw, &[one], [2, 3, 0]).unwrap());
-        assert!(ownership_trace(&raw, &[one], [2, 3]).is_none());
+        assert_ne!(
+            first,
+            project(2, &[Tx(2), Tx(3), Tx(2), GateClosed]).unwrap()
+        );
+        assert_ne!(
+            first,
+            project(1, &[Tx(2), Tx(3), Tx(0), GateClosed]).unwrap()
+        );
+        assert_ne!(
+            first,
+            project(1, &[Tx(2), Tx(3), GateClosed, Tx(2)]).unwrap()
+        );
+        assert!(project(1, &[Tx(2), Tx(3), GateClosed]).is_none());
     }
 }

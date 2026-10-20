@@ -17,18 +17,19 @@ impl TxBody for Body {
 struct Capture {
     rows: Vec<conformance::Returned>,
     pointers: Vec<conformance::ReturnEvidence>,
+    gate_closed_at: Option<usize>,
 }
 impl Capture {
     fn len(&self) -> usize {
         self.rows.len()
     }
 }
-/// Actual owner observations, with each original/returned raw pointer check.
-pub struct OwnershipTrace {
-    pub owners: conformance::Trace<Vec<conformance::Returned>>,
-    pub publication_tickets: Vec<u8>,
-    pub body_pointers_match: Vec<conformance::ReturnEvidence>,
-}
+/// Actual ownership, terminal and publication/barrier observations.
+pub type OwnershipTrace = conformance::Trace<
+    Vec<conformance::Returned>,
+    Vec<conformance::ReturnEvidence>,
+    Vec<conformance::PublicationEvent>,
+>;
 
 struct Context {
     operation: Operation,
@@ -60,6 +61,11 @@ pub async fn ownership(
     let station = IndividualAddress::new([2, 0, 0, 0, 0, 1]).ok_or("model station")?;
     let ap = IndividualAddress::new([2, 0, 0, 0, 0, 2]).ok_or("model AP")?;
     let (backend, air) = Backend::new(channel, [station, ap], clock);
+    if scenario == Scenario::CloseGate {
+        // Match the physical fixture's absent receiver on every publication.
+        // Retry exhaustion is determined by the unchanged operation plan.
+        air.absent_peer.set(true);
+    }
     match oer_radio_port::run_port(
         backend,
         Operations {
@@ -121,6 +127,7 @@ fn returned<'id>(
     terminal: LowerMacTerminal<'id, ModelTypes<Contexts>>,
     access: &mut oer_ieee80211_port::TerminalAccess<'id, ModelTickets, ModelPool<1>>,
     seen: &mut Capture,
+    air: &ModelAir,
 ) -> Result<(), &'static str> {
     match terminal {
         LowerMacTerminal::TxCompleted(TxCompleted::Single(terminal)) => {
@@ -142,18 +149,29 @@ fn returned<'id>(
                 seen,
             )
         }
-        LowerMacTerminal::GateClosed(_) => Ok(()),
+        LowerMacTerminal::GateClosed(_) => {
+            if seen.gate_closed_at.replace(air.sent().len()).is_some() {
+                return Err("duplicate model gate confirmation");
+            }
+            Ok(())
+        }
         _ => Err("unexpected model ownership event"),
     }
 }
 fn frame<'p, 'id: 'p>(
     phase: &ModelPhase<'p, 'id, ModelCaps, Contexts>,
     rate: LegacyRate,
+    scenario: Scenario,
 ) -> Result<TxFrame<'p, 'id, ModelCaps>, &'static str> {
     let rate = phase
         .rate(PhyRate::Legacy(rate))
         .ok_or("model ownership rate")?;
-    let peer = IndividualAddress::new([2, 0, 0, 0, 0, 9]).ok_or("model peer")?;
+    let peer = IndividualAddress::new(if scenario == Scenario::CloseGate {
+        [2, 0, 0, 0, 0, 254]
+    } else {
+        [2, 0, 0, 0, 0, 9]
+    })
+    .ok_or("model peer")?;
     let header = HeaderSpec::new(
         FrameControl::new(0x0108).ok_or("model data control")?,
         0,
@@ -218,7 +236,7 @@ impl PortBody<Backend> for Operations {
                         let index = buffer.slot.index();
                         let source = TxSource::Fresh {
                             buffer,
-                            frame: ClassFrame::new(frame(&phase, self.rate)?)
+                            frame: ClassFrame::new(frame(&phase, self.rate, self.scenario)?)
                                 .map_err(|_| "model class")?,
                             body: Some(body),
                             protection: TxProtection::Open,
@@ -292,7 +310,7 @@ impl PortBody<Backend> for Operations {
                         .map_err(|_| "model ownership lost event")?
                     {
                         LowerMacEvent::Terminal(terminal) => {
-                            returned(terminal, &mut access, &mut seen)?
+                            returned(terminal, &mut access, &mut seen, &self.air)?
                         }
                         LowerMacEvent::Received { frame, .. } => phase.recycle(frame),
                         _ => {}
@@ -313,7 +331,7 @@ impl PortBody<Backend> for Operations {
                             .map_err(|_| "model ownership lost event")?
                         {
                             LowerMacEvent::Terminal(terminal) => {
-                                returned(terminal, &mut access, &mut seen)?
+                                returned(terminal, &mut access, &mut seen, &self.air)?
                             }
                             LowerMacEvent::Received { frame, .. } => phase.recycle(frame),
                             _ => {}
@@ -327,7 +345,7 @@ impl PortBody<Backend> for Operations {
         let mut error = result.err();
         let owner = match owner
             .disable(&mut |terminal| {
-                if let Err(why) = returned(terminal, &mut access, &mut seen) {
+                if let Err(why) = returned(terminal, &mut access, &mut seen, &self.air) {
                     error = Some(why);
                 }
                 core::ops::ControlFlow::Continue(())
@@ -339,16 +357,25 @@ impl PortBody<Backend> for Operations {
         };
         let output = match error {
             Some(why) => Err(why),
-            None => Ok(OwnershipTrace {
-                publication_tickets: self.air.sent().iter().map(|frame| frame.ticket).collect(),
-                owners: conformance::Trace {
+            None => {
+                let mut publication_events: Vec<_> = self
+                    .air
+                    .sent()
+                    .iter()
+                    .map(|frame| conformance::PublicationEvent::Tx(frame.ticket))
+                    .collect();
+                if let Some(index) = seen.gate_closed_at {
+                    publication_events.insert(index, conformance::PublicationEvent::GateClosed);
+                }
+                Ok(OwnershipTrace {
                     returned: seen.rows,
                     contexts_dropped: drops.get(),
                     before_teardown_dropped: drops.get(),
                     publications: self.air.sent().len(),
-                },
-                body_pointers_match: seen.pointers,
-            }),
+                    terminal_evidence: seen.pointers,
+                    publication_events,
+                })
+            }
         };
         Ended::uninstall(owner, (), output)
     }

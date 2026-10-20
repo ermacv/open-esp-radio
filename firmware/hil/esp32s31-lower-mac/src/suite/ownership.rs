@@ -85,6 +85,20 @@ impl Drop for Context {
         }
     }
 }
+// The image records delivery in the existing journal; no separate buffer or
+// retained marker is needed to compare publications after confirmation.
+struct GateClosed;
+impl oer_trace::Event for GateClosed {
+    const KIND: oer_trace::Kind = oer_trace::Kind::new(oer_trace::Domain::Ieee80211, 103);
+    const CHANNEL: oer_trace::Channel = port::trace::Publication::CHANNEL;
+    fn encode(&self) -> [u32; 2] {
+        [0, 0]
+    }
+    fn decode(words: [u32; 2]) -> Option<Self> {
+        (words == [0, 0]).then_some(Self)
+    }
+}
+
 struct Small;
 struct Large;
 impl TxBufferClass for Small {
@@ -314,7 +328,11 @@ pub(super) async fn run<'p, 'id>(
             let header = HeaderSpec::new(
                 FrameControl::new(0x0108).ok_or("data control")?,
                 0,
-                peer.address,
+                if scenario == Scenario::CloseGate {
+                    IndividualAddress::new([2, 0, 0, 0, 0, 254]).ok_or("absent peer")?
+                } else {
+                    peer.address
+                },
                 peer.station,
                 peer.address.get(),
                 0,
@@ -432,27 +450,27 @@ pub(super) async fn run<'p, 'id>(
     };
     let output = match error {
         Some(why) => Err(why),
-        None => {
-            let trace = conformance::Trace {
-                returned: seen.rows,
-                contexts_dropped: DROPS.load(Ordering::Relaxed) as usize,
-                before_teardown_dropped: DROPS.load(Ordering::Relaxed) as usize,
-                publications: TRACE
-                    .records()
-                    .filter(|record| record.decode::<port::trace::Publication>().is_some())
-                    .count(),
-            };
-            ownership_trace(
-                &trace,
-                &seen.pointers,
-                TRACE
-                    .records()
-                    .filter_map(|record| record.decode::<port::trace::Publication>())
-                    .map(|publication| publication.ticket),
-            )
-            .map(Trace::Ownership)
-            .ok_or("ownership trace extent")
-        }
+        None => ownership_trace(conformance::Trace {
+            returned: seen.rows,
+            contexts_dropped: DROPS.load(Ordering::Relaxed) as usize,
+            before_teardown_dropped: DROPS.load(Ordering::Relaxed) as usize,
+            publications: TRACE
+                .records()
+                .filter(|record| record.decode::<port::trace::Publication>().is_some())
+                .count(),
+            terminal_evidence: seen.pointers,
+            publication_events: TRACE.records().filter_map(|record| {
+                if let Some(publication) = record.decode::<port::trace::Publication>() {
+                    Some(conformance::PublicationEvent::Tx(publication.ticket))
+                } else {
+                    record
+                        .decode::<GateClosed>()
+                        .map(|_| conformance::PublicationEvent::GateClosed)
+                }
+            }),
+        })
+        .map(Trace::Ownership)
+        .ok_or("ownership trace extent"),
     };
     Ended::uninstall(owner, (), output)
 }
@@ -482,7 +500,10 @@ fn terminal_return<'id>(
                 seen,
             )
         }
-        LowerMacTerminal::GateClosed(_) => Ok(()),
+        LowerMacTerminal::GateClosed(_) => {
+            oer_trace::emit(&GateClosed);
+            Ok(())
+        }
         _ => Err("ownership terminal kind"),
     }
 }

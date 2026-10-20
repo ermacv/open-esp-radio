@@ -492,8 +492,18 @@ impl ReturnEvidence {
     }
 }
 
-/// Evidence after the install has ended.
-pub struct Trace<R> {
+/// Publication/barrier order observed by a fixture.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PublicationEvent {
+    /// A real publication of this operation ticket.
+    Tx(u8),
+    /// The gate-closing terminal was delivered.
+    GateClosed,
+}
+
+/// Evidence after the install has ended. Terminal evidence follows the
+/// returned owners; publication events preserve their observed order.
+pub struct Trace<R, E, P> {
     /// Actual returns in observation order.
     pub returned: R,
     /// Context destructors run. Quarantine retains unreturned contexts even
@@ -504,17 +514,25 @@ pub struct Trace<R> {
     pub before_teardown_dropped: usize,
     /// Publications observed by the backend fixture.
     pub publications: usize,
+    /// Actual terminal outcomes/counts, aligned with `returned`.
+    pub terminal_evidence: E,
+    /// Actual publications and gate confirmation, in order.
+    pub publication_events: P,
 }
 
 /// Backend-specific execution, shared scenarios and checks.
 pub trait Harness {
     /// Storage for actual resource-return observations.
     type Returns: AsRef<[Returned]>;
+    /// Actual terminal evidence storage.
+    type Evidence: AsRef<[ReturnEvidence]>;
+    /// Actual publication/barrier event storage.
+    type Publications: AsRef<[PublicationEvent]>;
     /// Exercise the prescribed operations through the real backend API.
     fn exercise(
         &mut self,
         scenario: Scenario,
-    ) -> impl core::future::Future<Output = Trace<Self::Returns>>;
+    ) -> impl core::future::Future<Output = Trace<Self::Returns, Self::Evidence, Self::Publications>>;
 }
 
 /// The common suite found a contract violation.
@@ -549,14 +567,19 @@ pub async fn check(
         if !report.includes(environment, scenario.execution()) {
             continue;
         }
-        verify(scenario, harness.exercise(scenario).await).map_err(|why| (scenario, why))?;
+        verify(scenario, &harness.exercise(scenario).await).map_err(|why| (scenario, why))?;
         report.passed();
     }
     Ok(report)
 }
 
 /// Check captured ownership, publication, lifetime and FIFO observations.
-pub fn verify<R: AsRef<[Returned]>>(scenario: Scenario, trace: Trace<R>) -> Result<(), Violation> {
+pub fn verify<R, E, P>(scenario: Scenario, trace: &Trace<R, E, P>) -> Result<(), Violation>
+where
+    R: AsRef<[Returned]>,
+    E: AsRef<[ReturnEvidence]>,
+    P: AsRef<[PublicationEvent]>,
+{
     let expected_drops = if scenario == Scenario::Poison {
         2
     } else {
@@ -574,7 +597,9 @@ pub fn verify<R: AsRef<[Returned]>>(scenario: Scenario, trace: Trace<R>) -> Resu
         Scenario::Refuse => 0,
         _ => 2,
     };
-    if trace.publications != expected_publications {
+    if scenario == Scenario::CloseGate {
+        verify_closed_publications(trace)?;
+    } else if trace.publications != expected_publications {
         return Err(Violation::Publication);
     }
     let mut remaining = OPERATIONS.map(Some);
@@ -617,6 +642,52 @@ pub fn verify<R: AsRef<[Returned]>>(scenario: Scenario, trace: Trace<R>) -> Resu
         }
     } else if remaining.iter().any(Option::is_some) {
         return Err(Violation::Missing);
+    }
+    Ok(())
+}
+
+fn verify_closed_publications<R, E, P>(trace: &Trace<R, E, P>) -> Result<(), Violation>
+where
+    R: AsRef<[Returned]>,
+    E: AsRef<[ReturnEvidence]>,
+    P: AsRef<[PublicationEvent]>,
+{
+    let rows = trace.returned.as_ref();
+    let evidence = trace.terminal_evidence.as_ref();
+    let events = trace.publication_events.as_ref();
+    if rows.len() != evidence.len() {
+        return Err(Violation::Missing);
+    }
+    let mut closed = false;
+    let mut publications = 0;
+    for event in events {
+        match event {
+            PublicationEvent::GateClosed if !closed => closed = true,
+            PublicationEvent::GateClosed => return Err(Violation::Order),
+            PublicationEvent::Tx(ticket) => {
+                if closed {
+                    return Err(Violation::Order);
+                }
+                if !rows.iter().any(|row| row.actual.ticket == *ticket) {
+                    return Err(Violation::Owners);
+                }
+                publications += 1;
+            }
+        }
+    }
+    if !closed || publications != trace.publications {
+        return Err(Violation::Publication);
+    }
+    for (row, terminal) in rows.iter().zip(evidence) {
+        let count = events
+            .iter()
+            .filter(|event| **event == PublicationEvent::Tx(row.actual.ticket))
+            .count();
+        match row.end {
+            End::Ended if terminal.transmissions().map(usize::from) == Some(count) => {}
+            End::Withdrawn | End::Refused if count == 0 && terminal.transmissions().is_none() => {}
+            _ => return Err(Violation::Publication),
+        }
     }
     Ok(())
 }

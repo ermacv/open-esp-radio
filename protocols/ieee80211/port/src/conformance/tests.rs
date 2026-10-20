@@ -68,7 +68,7 @@ fn changed_ticket_identity_is_an_owner_violation() {
     );
 }
 
-fn poisoned_trace() -> Trace<Vec<Returned>> {
+fn poisoned_trace() -> Trace<Vec<Returned>, Vec<ReturnEvidence>, Vec<PublicationEvent>> {
     Trace {
         returned: OPERATIONS
             .into_iter()
@@ -91,17 +91,101 @@ fn poisoned_trace() -> Trace<Vec<Returned>> {
         contexts_dropped: 2,
         before_teardown_dropped: 2,
         publications: 2,
+        terminal_evidence: vec![],
+        publication_events: vec![],
     }
 }
 
 #[test]
 fn poison_verification_rejects_destruction_of_an_unreturned_owner() {
-    assert_eq!(verify(Scenario::Poison, poisoned_trace()), Ok(()));
+    assert_eq!(verify(Scenario::Poison, &poisoned_trace()), Ok(()));
     for dropped in [0, 1, 3, 4] {
         let mut trace = poisoned_trace();
         trace.contexts_dropped = dropped;
-        assert_eq!(verify(Scenario::Poison, trace), Err(Violation::Lifetime));
+        assert_eq!(verify(Scenario::Poison, &trace), Err(Violation::Lifetime));
     }
+}
+
+fn closed_trace() -> Trace<Vec<Returned>, Vec<ReturnEvidence>, Vec<PublicationEvent>> {
+    let terminal: crate::SingleOutcome<(), ()> =
+        TxOutcome::Ended(SingleEnd::AckTimeout(crate::Air {
+            transmissions: core::num::NonZeroU16::new(2).expect("two transmissions"),
+            rate: crate::PhyRate::Legacy(oer_ieee80211_wire::phy::LegacyRate::Ofdm6M),
+        }));
+    let air = ReturnEvidence::terminal(true, &terminal).expect("terminal evidence");
+    let withdrawn = ReturnEvidence::terminal(
+        true,
+        &crate::SingleOutcome::<(), ()>::Withdrawn(WithdrawCause::GateClosed),
+    )
+    .expect("withdrawal evidence");
+    Trace {
+        returned: [2, 3, 0, 1]
+            .into_iter()
+            .map(|id| {
+                let operation = OPERATIONS[id];
+                let resources = Resources {
+                    ticket: operation.id,
+                    buffer: operation.id,
+                    class: operation.class,
+                    body: id,
+                };
+                Returned {
+                    operation,
+                    expected: resources,
+                    actual: resources,
+                    end: if id < 2 { End::Withdrawn } else { End::Ended },
+                }
+            })
+            .collect(),
+        contexts_dropped: 4,
+        before_teardown_dropped: 4,
+        publications: 4,
+        terminal_evidence: vec![air, air, withdrawn, withdrawn],
+        publication_events: vec![
+            PublicationEvent::Tx(2),
+            PublicationEvent::Tx(2),
+            PublicationEvent::Tx(3),
+            PublicationEvent::Tx(3),
+            PublicationEvent::GateClosed,
+        ],
+    }
+}
+
+#[test]
+fn close_gate_rejects_a_ticket_count_different_from_its_terminal() {
+    let mut trace = closed_trace();
+    assert_eq!(verify(Scenario::CloseGate, &trace), Ok(()));
+    let terminal: crate::SingleOutcome<(), ()> =
+        TxOutcome::Ended(SingleEnd::AckTimeout(crate::Air {
+            transmissions: core::num::NonZeroU16::MIN,
+            rate: crate::PhyRate::Legacy(oer_ieee80211_wire::phy::LegacyRate::Ofdm6M),
+        }));
+    trace.terminal_evidence[0] =
+        ReturnEvidence::terminal(true, &terminal).expect("terminal evidence");
+    assert_eq!(
+        verify(Scenario::CloseGate, &trace),
+        Err(Violation::Publication)
+    );
+}
+
+#[test]
+fn close_gate_rejects_publication_of_a_fresh_withdrawn_ticket() {
+    let mut trace = closed_trace();
+    assert_eq!(verify(Scenario::CloseGate, &trace), Ok(()));
+    trace.publication_events.insert(4, PublicationEvent::Tx(0));
+    trace.publications += 1;
+    assert_eq!(
+        verify(Scenario::CloseGate, &trace),
+        Err(Violation::Publication)
+    );
+}
+
+#[test]
+fn close_gate_rejects_publication_after_confirmation_with_all_counts_correct() {
+    let mut trace = closed_trace();
+    assert_eq!(verify(Scenario::CloseGate, &trace), Ok(()));
+    trace.publication_events.swap(3, 4);
+    assert_eq!(verify(Scenario::CloseGate, &trace), Err(Violation::Order));
 }
 
 #[test]

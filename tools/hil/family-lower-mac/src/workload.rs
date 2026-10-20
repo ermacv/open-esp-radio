@@ -153,14 +153,9 @@ fn model(case: Case, prepared: &Prepared, channel: u8) -> Result<Trace> {
             rate,
             Rc::new(oer_time_virtual::VirtualClock::<8>::new()),
         ))??;
-        let trace = ownership_trace(
-            &raw.owners,
-            &raw.body_pointers_match,
-            raw.publication_tickets.iter().copied(),
-        )
-        .ok_or("unrepresentable model ownership")?;
-        oer_ieee80211_port::conformance::verify(scenario, raw.owners)
+        oer_ieee80211_port::conformance::verify(scenario, &raw)
             .map_err(|why| format!("model ownership conformance violation: {why:?}"))?;
+        let trace = ownership_trace(raw).ok_or("unrepresentable model ownership")?;
         return Ok(Trace::Ownership(trace));
     }
     let Case::Outcome(case) = case else {
@@ -285,6 +280,45 @@ mod tests {
         assert_eq!(ack.admitted, ack.returned);
         assert_eq!(ack.publications, 1);
         assert_ne!(ack, absent);
+    }
+
+    #[test]
+    fn close_gate_ownership_exhausts_both_published_plans_without_a_default_ack() {
+        let prepared = Prepared {
+            ampdu: false,
+            basic_rates: [0x8c, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            basic_rates_len: 1,
+        };
+        let Trace::Ownership(trace) = model(
+            Case::Ownership(oer_ieee80211_port::conformance::Scenario::CloseGate),
+            &prepared,
+            6,
+        )
+        .expect("absent-peer ownership trace") else {
+            panic!("ownership trace")
+        };
+        assert_eq!(trace.publications, 4);
+        for ticket in [2, 3] {
+            assert_eq!(
+                trace
+                    .publication_events
+                    .iter()
+                    .flatten()
+                    .filter(|&&event| event == OwnerPublication::Tx(ticket))
+                    .count(),
+                2
+            );
+        }
+        for row in trace.returned.iter().flatten() {
+            assert!(row.body_pointer_matches);
+            if row.actual.ticket >= 2 {
+                assert_eq!(row.outcome, 2); // AckTimeout, from the actual terminal.
+                assert_eq!(row.transmissions, Some(2));
+            } else {
+                assert_eq!(row.outcome, 6); // Withdrawn, without any publication.
+                assert_eq!(row.transmissions, None);
+            }
+        }
     }
 
     #[test]
