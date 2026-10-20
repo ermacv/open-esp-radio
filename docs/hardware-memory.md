@@ -156,6 +156,41 @@ A fact measured on the stand is evidence
 of a new class, `stand`, citing the chip's `notes/` and the runs; vendor
 facts keep their `BLOB_*` ids.
 
+
+A layout can declare `[layout.review]` as the default review for its own
+identity, words or byte ranges, and fields. The keys are `sources`,
+`provenance`, `accuracy`, `completeness` and `naming`. A separate
+`[layout.review.opaque]` supplies the complete default for an explicitly
+opaque word, range or field:
+
+```toml
+[layout.review]
+sources = ["REVIEWED_LAYOUT_SOURCE"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[layout.review.opaque]
+sources = ["REVIEWED_LAYOUT_SOURCE"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+```
+
+An entity opts into the opaque default with `opaque = true` on its word,
+byte-range or field declaration. This selects that entity's review only;
+it does not infer opaque status from a name or mark its children. Opaque
+names still have to match their position. The opaque default is independent
+of the ordinary default; its keys are not merged with that table.
+
+An explicit `[[review]]` replaces the applicable default in full, including
+omitted keys. Defaults belong to this layout alone. Publication still
+requires a complete resolved review for every entity. Unknown keys,
+reviews for nonexistent entities, duplicate reviews and an explicit review
+identical to its applicable default are errors.
+
 `memory.toml` gains the RAM regions the layouts name (`dma-window`,
 `internal-sram`), so the DMA window has one source instead of three.
 
