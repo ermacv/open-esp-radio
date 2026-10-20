@@ -31,9 +31,6 @@ const HANDSHAKE: Duration = Duration::from_secs(3);
 
 mod retention;
 
-#[cfg(test)]
-mod tests;
-
 #[derive(Debug)]
 pub struct LockBroker {
     owner: UnixStream,

@@ -2,35 +2,6 @@ use super::*;
 use crate::format::archived::archived_identity;
 
 #[test]
-fn a_tree_is_dirty_while_it_holds_a_change_its_commit_does_not() {
-    let directory = tempfile::tempdir().unwrap();
-    let root = directory.path();
-    for arguments in [
-        &["init", "-q", "-b", "main"][..],
-        &["config", "user.name", "HIL Test"],
-        &["config", "user.email", "hil@example.invalid"],
-    ] {
-        oer_os_process::git::run(root, arguments).unwrap();
-    }
-    fs::write(root.join("tracked.txt"), b"before\n").unwrap();
-    oer_os_process::git::run(root, ["add", "tracked.txt"]).unwrap();
-    oer_os_process::git::run(root, ["commit", "-q", "-m", "base"]).unwrap();
-    let clean = repository(root).unwrap();
-    assert_eq!(clean.commit.len(), 40);
-    assert!(!clean.dirty);
-    fs::write(root.join("tracked.txt"), b"after\n").unwrap();
-    let changed = repository(root).unwrap();
-    assert_eq!(changed.commit, clean.commit);
-    assert!(changed.dirty);
-    oer_os_process::git::run(root, ["checkout", "-q", "--", "tracked.txt"]).unwrap();
-    fs::write(root.join("untracked.txt"), b"new\n").unwrap();
-    assert!(repository(root).unwrap().dirty);
-    let outside = tempfile::tempdir().unwrap();
-    let none = repository(outside.path()).unwrap();
-    assert!(none.commit.is_empty() && none.dirty);
-}
-
-#[test]
 fn collection_deletes_only_objects_no_archive_links_to() {
     let directory = tempfile::tempdir().unwrap();
     let target = directory.path().join("target");

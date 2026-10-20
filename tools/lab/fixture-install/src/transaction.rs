@@ -1548,7 +1548,7 @@ mod linux {
 
     #[cfg(test)]
     pub(crate) mod test_support {
-        pub(crate) use super::{Effects, LINUX_NET_OPERATIONS, Layout, Stage, apply, policy_bytes};
+        pub(crate) use super::{Effects, Layout, Stage, apply, policy_bytes};
     }
 }
 

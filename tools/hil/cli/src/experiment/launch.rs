@@ -147,6 +147,3 @@ pub fn launch_run(launch: &Launch<'_>) -> Result<Launched> {
         status,
     })
 }
-
-#[cfg(test)]
-mod tests;

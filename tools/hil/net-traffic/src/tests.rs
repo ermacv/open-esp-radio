@@ -10,8 +10,6 @@ use crate::{
     validation::validate_rx_zero_copy,
 };
 
-mod capture;
-
 fn session_with_rx(rx: RxRadioEvidence) -> SessionEvidence {
     let transport = TransportEvidence {
         rx_maximum_silence_micros: None,

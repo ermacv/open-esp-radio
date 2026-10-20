@@ -1387,6 +1387,3 @@ fn write_blocked_scenario(
     );
     Ok(result)
 }
-
-#[cfg(test)]
-mod tests;

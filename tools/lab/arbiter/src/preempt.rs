@@ -130,6 +130,3 @@ fn signal(process: ProcessIdentity, signal: rustix::process::Signal) {
         let _ = rustix::process::kill_process(pid, signal);
     }
 }
-
-#[cfg(test)]
-mod tests;

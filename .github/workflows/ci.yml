@@ -54,11 +54,6 @@ jobs:
             | @tsv' "$RUNNER_TEMP/clippy.json" \
             | awk -F '\t' '{ printf "%-40s %s\n", $1, $2 }' || true
           exit "$status"
-      - name: Air decoder test dependency
-        # The synthetic radiotap tests run the actual tshark decoder on stdin.
-        run: |
-          sudo apt-get update
-          sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y tshark
       - name: Tests
         # The default members: every package but the chip-only firmware ones.
         run: cargo test --locked

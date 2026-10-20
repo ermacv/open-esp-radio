@@ -13,7 +13,6 @@ clap = ["dep:clap"]
 # does not.
 linux-socket = ["rustix/net"]
 # Child setup only tests use: the unprivileged user namespace.
-test-support = ["rustix/thread"]
 
 [dependencies]
 clap = { version = "=4.5.48", features = ["derive"], optional = true }

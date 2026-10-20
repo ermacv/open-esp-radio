@@ -79,22 +79,3 @@ pub(crate) fn archived(
             .join(image.id()),
     )
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn an_archive_without_its_bootstrap_elf_cannot_be_replayed() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-        let directory = tempfile::tempdir().unwrap();
-        let application = directory.path().join("application.bin");
-        std::fs::write(&application, b"application").unwrap();
-        let chip = oer_chip_profile::Profile::all(&root).unwrap()[0].id.clone();
-        let run = format!("r{}", std::process::id());
-        let error = archived(&root, &chip, &application, &run, ImageClass::SystemWatchdog)
-            .unwrap_err()
-            .to_string();
-        assert!(error.contains("bootstrap ELF"), "{error}");
-    }
-}

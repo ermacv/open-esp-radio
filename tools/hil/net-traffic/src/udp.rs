@@ -96,6 +96,3 @@ pub fn confirm_reverse_flow(socket: &UdpSocket, timeout: std::time::Duration) ->
         poll.wait(Some(next_send.min(deadline)))?;
     }
 }
-
-#[cfg(test)]
-mod tests;

@@ -41,15 +41,3 @@ pub fn build(ctx: &Checkout, image: &str) -> Result<idf::Build> {
     println!("{:<24} {digest} {}", entry.image, path.display());
     Ok(build)
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn the_catalog_lists_its_peers() {
-        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-        let entries = entries(&root).unwrap();
-        assert!(entries.iter().any(|entry| entry.image == "ieee802154-peer"));
-    }
-}

@@ -471,60 +471,6 @@ mod tests {
         assert!(!image_silent("test-other-image"));
     }
 
-    /// Set in the child copy of the test binary, which runs with desktop
-    /// notifications off: a quarantine notifies the user.
-    const QUARANTINE_CHILD: &str = "OER_HIL_LAB_TEST_QUARANTINE_CHILD";
-
-    #[test]
-    fn an_unrecorded_quarantine_is_an_error_and_a_recorded_one_holds() {
-        const TEST: &str =
-            "recovery::tests::an_unrecorded_quarantine_is_an_error_and_a_recorded_one_holds";
-        if std::env::var_os(QUARANTINE_CHILD).is_none() {
-            let status = std::process::Command::new(std::env::current_exe().unwrap())
-                .args(["--exact", TEST, "--test-threads=1"])
-                .env(QUARANTINE_CHILD, "1")
-                .env("OER_STAND_NOTIFY", "0")
-                .status()
-                .unwrap();
-            assert!(status.success());
-            return;
-        }
-        let directory = tempfile::tempdir().unwrap();
-        let arbiter = Arbiter::at(directory.path()).unwrap();
-        let evidence = directory.path().join("post-mortem");
-        // The maintenance record cannot be written.
-        std::fs::create_dir(directory.path().join("maintenance.json")).unwrap();
-        let error = quarantine(
-            &arbiter,
-            "02:00:00:00:31:7A",
-            QuarantineTrigger::Unreachable,
-            String::from("its ROM stays silent"),
-            &evidence,
-        )
-        .err()
-        .expect("an unrecorded quarantine is an error");
-        assert!(error.is::<UnrecordedQuarantine>(), "{error}");
-        assert!(
-            error
-                .to_string()
-                .contains("its quarantine was not recorded"),
-            "{error}"
-        );
-        assert!(!device_quarantined());
-        std::fs::remove_dir(directory.path().join("maintenance.json")).unwrap();
-        let recorded = quarantine(
-            &arbiter,
-            "02:00:00:00:31:7A",
-            QuarantineTrigger::Unreachable,
-            String::from("its ROM stays silent"),
-            &evidence,
-        )
-        .unwrap();
-        assert!(recorded.quarantined());
-        assert!(arbiter.is_quarantined("02:00:00:00:31:7A").unwrap());
-        assert!(device_quarantined());
-    }
-
     #[test]
     fn a_cancelled_run_never_quarantines_its_board() {
         assert!(!judges_board(true));

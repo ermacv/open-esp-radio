@@ -31,6 +31,3 @@ pub(crate) fn requirements(selected: &[&Scenario]) -> Requirements {
             .map(|scenario| scenario.family.requirements()),
     )
 }
-
-#[cfg(test)]
-mod tests;

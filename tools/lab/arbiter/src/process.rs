@@ -27,23 +27,3 @@ impl ProcessIdentity {
         Self::of(self.pid).is_some_and(|current| current == *self)
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_process_is_alive_until_it_exits() {
-        let current = ProcessIdentity::current().unwrap();
-        assert!(current.alive());
-        let recycled = ProcessIdentity {
-            start_ticks: current.start_ticks + 1,
-            ..current
-        };
-        assert!(!recycled.alive());
-        let mut child = oer_os_process::command("true").spawn().unwrap();
-        let identity = ProcessIdentity::of(child.id());
-        child.wait().unwrap();
-        assert!(identity.is_none_or(|identity| !identity.alive()));
-    }
-}

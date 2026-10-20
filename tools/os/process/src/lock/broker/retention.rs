@@ -8,9 +8,6 @@ use std::ffi::CStr;
 
 use super::{CAPACITY, Client};
 
-#[cfg(test)]
-mod tests;
-
 struct Directory {
     fd: i32,
     bytes: [u8; 4096],

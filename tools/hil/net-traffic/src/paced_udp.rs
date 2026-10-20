@@ -209,11 +209,6 @@ fn send_terminal_markers_with(
     Ok(())
 }
 
-#[cfg(test)]
-fn send_terminal_markers(socket: &UdpSocket) -> Result<()> {
-    send_terminal_markers_with(&mut SystemClock, &mut |packet| socket.send(packet))
-}
-
 fn packet_interval(payload: usize, rate_bps: u64) -> Result<Duration> {
     Ok(Duration::from_nanos(
         u64::try_from((payload as u128 * 8 * 1_000_000_000) / rate_bps as u128)?.max(1),

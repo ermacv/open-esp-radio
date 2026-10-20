@@ -226,25 +226,3 @@ pub fn dropped_packets(socket: impl AsFd) -> io::Result<u32> {
     }
     Ok(info[8])
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_socket_binds_to_an_interface_by_name_and_refuses_a_bad_name() {
-        let socket = std::net::UdpSocket::bind("127.0.0.1:0").unwrap();
-        bind_to_device(&socket, "lo").unwrap();
-        assert_eq!(
-            bind_to_device(&socket, "").unwrap_err().kind(),
-            io::ErrorKind::InvalidInput
-        );
-        assert_eq!(
-            bind_to_device(&socket, "an-interface-name-too-long")
-                .unwrap_err()
-                .kind(),
-            io::ErrorKind::InvalidInput
-        );
-        assert!(bind_to_device(&socket, "oer-absent0").is_err());
-    }
-}

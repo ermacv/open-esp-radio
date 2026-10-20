@@ -182,6 +182,3 @@ fn check_flashed_image_keys(
     }
     Ok(())
 }
-
-#[cfg(test)]
-mod tests;

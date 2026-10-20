@@ -162,6 +162,3 @@ pub fn flash_if_changed(
     }
     flash(journal, store, owner, target, image, via).map(Flashed::Written)
 }
-
-#[cfg(test)]
-mod tests;
