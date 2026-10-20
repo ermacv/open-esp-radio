@@ -151,3 +151,34 @@ fn btbb_is_taken_only_from_a_settled_registered_state() {
     // The settled acquisition writes BTBB registers, which a host test does
     // not reach; `oer-esp32s31-hal` tests the published gain's admission.
 }
+
+#[test]
+fn first_due_join_keeps_membership_and_btbb_through_maintenance() {
+    let (mut radio, partitions) = radio_domain(false);
+    let task = task(partitions);
+    // Seed the other baseband reference; the PHY still has no active client.
+    radio.hold_btbb_for_test(RadioClient::Ieee802154);
+    let clock = VirtualClock::<8>::new();
+    let ready = crate::concurrent::phy_ready(&mut radio).unwrap();
+    let crate::concurrent::PhyClientAccess::Available(ready) =
+        ready.client::<BluetoothPhyMembership>()
+    else {
+        panic!("first client is available");
+    };
+    let joined = join_bluetooth(ready, &task, &clock)
+        .unwrap_or_else(|error| panic!("first due join failed: {error:?}"));
+    assert_eq!(joined.acquired, ConcurrentAcquire::TrackingDue);
+    let radio = joined.radio;
+    assert!(radio.attachment().tracking_pending());
+    assert!(radio.holds_btbb(RadioClient::Bluetooth));
+    let failure =
+        leave_bluetooth(radio, &task, joined.membership).expect_err("maintenance is still pending");
+    assert_eq!(
+        failure.error(),
+        BluetoothPhyClientError::Phy(ConcurrentPhyError::TrackingPending)
+    );
+    assert!(radio.holds_btbb(RadioClient::Bluetooth));
+    assert!(radio.attachment_mut().complete_tracking_for_test());
+    assert!(leave_bluetooth(radio, &task, failure.into_membership()).unwrap());
+    assert!(!radio.holds_btbb(RadioClient::Bluetooth));
+}

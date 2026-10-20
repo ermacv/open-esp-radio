@@ -427,8 +427,12 @@ impl<T> RadioDomain<T> {
         &mut self.state.phy
     }
 
-    #[cfg(test)]
-    pub(crate) fn hold_btbb_for_test(&mut self, client: RadioClient) {
+    /// Seed an already initialized baseband reference in a native radio model.
+    /// Subsequent joins exercise gain admission and ownership without host MMIO;
+    /// cold baseband initialization still requires a target test.
+    #[cfg(any(test, all(feature = "test-support", not(target_arch = "riscv32"))))]
+    #[doc(hidden)]
+    pub fn hold_btbb_for_test(&mut self, client: RadioClient) {
         self.state.btbb_clients |= client_bit(client);
     }
 

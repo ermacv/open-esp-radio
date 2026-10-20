@@ -120,3 +120,35 @@ fn join_ieee802154_prepared(
         .map(|joined| (joined.membership, joined.acquired))
         .map_err(|refused| refused.error)
 }
+
+#[test]
+fn first_due_join_keeps_membership_and_btbb_through_maintenance() {
+    let (mut radio, partitions) = radio_domain(false);
+    let clocked = Ieee802154Clocked::for_host_test(partitions.ieee802154);
+    // Model an initialized baseband, without performing MMIO on the host.
+    // The PHY client set remains empty: this is its first acquisition.
+    radio.hold_btbb_for_test(RadioClient::Bluetooth);
+    let clock = VirtualClock::<8>::new();
+    let ready = crate::concurrent::phy_ready(&mut radio).unwrap();
+    let crate::concurrent::PhyClientAccess::Available(ready) =
+        ready.client::<Ieee802154PhyMembership>()
+    else {
+        panic!("first client is available");
+    };
+    let joined = join_ieee802154(ready, &clocked, &clock)
+        .unwrap_or_else(|error| panic!("first due join failed: {error:?}"));
+    assert_eq!(joined.acquired, ConcurrentAcquire::TrackingDue);
+    let radio = joined.radio;
+    assert!(radio.attachment().tracking_pending());
+    assert!(radio.holds_btbb(RadioClient::Ieee802154));
+    let failure = leave_ieee802154(radio, &clocked, joined.membership)
+        .expect_err("maintenance is still pending");
+    assert_eq!(
+        failure.error(),
+        Ieee802154PhyClientError::Phy(ConcurrentPhyError::TrackingPending)
+    );
+    assert!(radio.holds_btbb(RadioClient::Ieee802154));
+    assert!(radio.attachment_mut().complete_tracking_for_test());
+    assert!(leave_ieee802154(radio, &clocked, failure.into_membership()).unwrap());
+    assert!(!radio.holds_btbb(RadioClient::Ieee802154));
+}
