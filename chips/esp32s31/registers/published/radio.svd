@@ -14557,6 +14557,12 @@
               <bitWidth>1</bitWidth>
             </field>
             <field>
+              <name>GRANT_DELAY_LOW</name>
+              <description>Project-assigned name. Low nibble of the hal_set_extern_coex_delay byte. ic_set_extern_coex_params supplies only the upper nibble, so this complete field is written zero. SOURCE: BLOB_LIBCOEX_EXTERNAL, hal_external_coexist.o::hal_set_extern_coex_delay and ic_set_extern_coex_params.</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>4</bitWidth>
+            </field>
+            <field>
               <name>GRANT_DELAY</name>
               <description>Project-assigned name. Grant delay in microseconds. hal_set_extern_coex_delay replaces bits 8:1 with its argument and ic_set_extern_coex_params passes the delay shifted left by four and masked to 0xf0, so the delay is the upper nibble of that byte and bits 4:1 are written zero.</description>
               <bitOffset>5</bitOffset>

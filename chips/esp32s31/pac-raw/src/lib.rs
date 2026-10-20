@@ -31941,6 +31941,10 @@ pub mod coex_external {
         pub type ValidateHighR = crate::BitReader;
         #[doc = "Field `VALIDATE_HIGH` writer - Project-assigned name. hal_set_extern_coex_validity: set when the external grant is valid high."]
         pub type ValidateHighW<'a, REG> = crate::BitWriter<'a, REG>;
+        #[doc = "Field `GRANT_DELAY_LOW` reader - Project-assigned name. Low nibble of the hal_set_extern_coex_delay byte. ic_set_extern_coex_params supplies only the upper nibble, so this complete field is written zero. SOURCE: BLOB_LIBCOEX_EXTERNAL, hal_external_coexist.o::hal_set_extern_coex_delay and ic_set_extern_coex_params."]
+        pub type GrantDelayLowR = crate::FieldReader;
+        #[doc = "Field `GRANT_DELAY_LOW` writer - Project-assigned name. Low nibble of the hal_set_extern_coex_delay byte. ic_set_extern_coex_params supplies only the upper nibble, so this complete field is written zero. SOURCE: BLOB_LIBCOEX_EXTERNAL, hal_external_coexist.o::hal_set_extern_coex_delay and ic_set_extern_coex_params."]
+        pub type GrantDelayLowW<'a, REG> = crate::FieldWriter<'a, REG, 4>;
         #[doc = "Field `GRANT_DELAY` reader - Project-assigned name. Grant delay in microseconds. hal_set_extern_coex_delay replaces bits 8:1 with its argument and ic_set_extern_coex_params passes the delay shifted left by four and masked to 0xf0, so the delay is the upper nibble of that byte and bits 4:1 are written zero."]
         pub type GrantDelayR = crate::FieldReader;
         #[doc = "Field `GRANT_DELAY` writer - Project-assigned name. Grant delay in microseconds. hal_set_extern_coex_delay replaces bits 8:1 with its argument and ic_set_extern_coex_params passes the delay shifted left by four and masked to 0xf0, so the delay is the upper nibble of that byte and bits 4:1 are written zero."]
@@ -31962,6 +31966,11 @@ pub mod coex_external {
             #[inline(always)]
             pub fn validate_high(&self) -> ValidateHighR {
                 ValidateHighR::new((self.bits & 1) != 0)
+            }
+            #[doc = "Bits 1:4 - Project-assigned name. Low nibble of the hal_set_extern_coex_delay byte. ic_set_extern_coex_params supplies only the upper nibble, so this complete field is written zero. SOURCE: BLOB_LIBCOEX_EXTERNAL, hal_external_coexist.o::hal_set_extern_coex_delay and ic_set_extern_coex_params."]
+            #[inline(always)]
+            pub fn grant_delay_low(&self) -> GrantDelayLowR {
+                GrantDelayLowR::new(((self.bits >> 1) & 0x0f) as u8)
             }
             #[doc = "Bits 5:8 - Project-assigned name. Grant delay in microseconds. hal_set_extern_coex_delay replaces bits 8:1 with its argument and ic_set_extern_coex_params passes the delay shifted left by four and masked to 0xf0, so the delay is the upper nibble of that byte and bits 4:1 are written zero."]
             #[inline(always)]
@@ -31989,6 +31998,11 @@ pub mod coex_external {
             #[inline(always)]
             pub fn validate_high(&mut self) -> ValidateHighW<'_, ControlSpec> {
                 ValidateHighW::new(self, 0)
+            }
+            #[doc = "Bits 1:4 - Project-assigned name. Low nibble of the hal_set_extern_coex_delay byte. ic_set_extern_coex_params supplies only the upper nibble, so this complete field is written zero. SOURCE: BLOB_LIBCOEX_EXTERNAL, hal_external_coexist.o::hal_set_extern_coex_delay and ic_set_extern_coex_params."]
+            #[inline(always)]
+            pub fn grant_delay_low(&mut self) -> GrantDelayLowW<'_, ControlSpec> {
+                GrantDelayLowW::new(self, 1)
             }
             #[doc = "Bits 5:8 - Project-assigned name. Grant delay in microseconds. hal_set_extern_coex_delay replaces bits 8:1 with its argument and ic_set_extern_coex_params passes the delay shifted left by four and masked to 0xf0, so the delay is the upper nibble of that byte and bits 4:1 are written zero."]
             #[inline(always)]
@@ -68264,13 +68278,19 @@ pub mod field_replace_modify {
         });
     }
 
-    /// Replace COEX_EXTERNAL.CONTROL fields `[GRANT_DELAY]` from one reviewed logical image while preserving every other bit.
+    /// Replace COEX_EXTERNAL.CONTROL fields `[GRANT_DELAY, GRANT_DELAY_LOW]` from one reviewed logical image while preserving every other bit.
     #[inline]
     pub fn set_coex_external_grant_delay(registers: &crate::CoexExternal, input: u32) {
         registers.control().modify(|_, writer| {
             // SAFETY: generator validation proves every logical input projection
             // fits its named SVD field; no whole-register image crosses this API.
-            unsafe { writer.grant_delay().bits((input & 0x0000000f) as u8) }
+            unsafe {
+                writer
+                    .grant_delay()
+                    .bits((input & 0x0000000f) as u8)
+                    .grant_delay_low()
+                    .bits(((input >> 4) & 0x0000000f) as u8)
+            }
         });
     }
 
