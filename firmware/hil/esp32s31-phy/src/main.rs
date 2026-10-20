@@ -9,6 +9,7 @@ mod hold;
 mod ieee802154;
 mod projection;
 mod radio;
+mod sar2_checkpoint;
 mod transport;
 mod tx_rate_checkpoint;
 
