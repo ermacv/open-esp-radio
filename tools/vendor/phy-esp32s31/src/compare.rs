@@ -29,7 +29,7 @@ pub const SCHEMA: u16 = 4;
 /// Tolerance file format.
 const TOLERANCE_SCHEMA: u16 = 2;
 /// The reviewed tolerances, compiled in so a run binds the reviews it used.
-const TOLERANCES: &str = include_str!("tolerances.toml");
+pub(crate) const TOLERANCES: &str = include_str!("tolerances.toml");
 
 /// The reviews file: every name carries one review, or several whose
 /// lifecycle points differ.
@@ -53,34 +53,34 @@ enum Reviews {
 }
 
 /// The reviews that apply at one lifecycle point.
-struct Tolerances {
-    fields: BTreeMap<String, Tolerance>,
-    registers: BTreeMap<String, Tolerance>,
+pub(crate) struct Tolerances {
+    pub fields: BTreeMap<String, Tolerance>,
+    pub registers: BTreeMap<String, Tolerance>,
 }
 
 #[derive(Clone, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct Tolerance {
+pub(crate) struct Tolerance {
     /// Whether the field's elements are two's-complement values.
     #[serde(default)]
-    signed: bool,
+    pub signed: bool,
     /// Per element, the bits the relation models; others are not compared.
     #[serde(default)]
-    mask: Option<Vec<u64>>,
+    pub mask: Option<Vec<u64>>,
     /// The field describes the environment rather than calibration.
     #[serde(default)]
-    excluded: bool,
+    pub excluded: bool,
     /// The only lifecycle point the review applies to; every point when
     /// absent.
     #[serde(default)]
     lifecycle: Option<Lifecycle>,
-    reason: String,
+    pub reason: String,
 }
 
 impl ReviewFile {
     /// The reviews that apply at `lifecycle`: a review without a point, or
     /// the one naming it. Two reviews of one name applying at one point fail.
-    fn at(self, lifecycle: Lifecycle) -> Result<Tolerances> {
+    pub(crate) fn at(self, lifecycle: Lifecycle) -> Result<Tolerances> {
         let select = |reviews: BTreeMap<String, Reviews>| -> Result<BTreeMap<String, Tolerance>> {
             let mut applied = BTreeMap::new();
             for (name, reviews) in reviews {
@@ -195,7 +195,7 @@ fn register_values<'a>(boots: impl IntoIterator<Item = &'a Readings>) -> Registe
 /// register passes when every production value lies within the vendor
 /// range widened by the vendor range's own width, the fields' rule applied
 /// to whole registers.
-fn compare_registers<'a>(
+pub(crate) fn compare_registers<'a>(
     image: &[Register],
     vendor: impl IntoIterator<Item = &'a Readings>,
     production: impl IntoIterator<Item = &'a Readings>,
@@ -287,7 +287,7 @@ pub struct FieldSummary {
 /// The fields the cross-check compares: the parent root's relation without
 /// its tracking progress, which counts tracking work rather than
 /// calibration.
-fn fields() -> Vec<OutputField> {
+pub(crate) fn fields() -> Vec<OutputField> {
     CALIBRATION
         .into_iter()
         .chain(PARENT)
@@ -332,6 +332,22 @@ fn compare_field(
     vendor: &[Vec<u8>],
     production: &[Vec<u8>],
 ) -> Result<FieldSummary> {
+    let vendor_ranges = field_ranges(field, tolerance, vendor, field.parameter)?;
+    let production_ranges = field_ranges(field, tolerance, production, field.output)?;
+    Ok(compare_field_ranges(
+        field.name,
+        tolerance,
+        vendor_ranges,
+        production_ranges,
+    ))
+}
+
+pub(crate) fn field_ranges(
+    field: &OutputField,
+    tolerance: Option<&Tolerance>,
+    captures: &[Vec<u8>],
+    offset: u32,
+) -> Result<Vec<[i64; 2]>> {
     let signed = tolerance.is_some_and(|t| t.signed);
     let mask = tolerance.and_then(|t| t.mask.clone());
     if mask
@@ -352,11 +368,19 @@ fn compare_field(
                 .into_iter(),
         ))
     };
-    let (mut vendor_ranges, mut production_ranges) = (vec![], vec![]);
+    let mut ranges = vec![];
     for index in 0..field.count {
-        vendor_ranges.push(values(vendor, field.parameter, index)?);
-        production_ranges.push(values(production, field.output, index)?);
+        ranges.push(values(captures, offset, index)?);
     }
+    Ok(ranges)
+}
+
+pub(crate) fn compare_field_ranges(
+    name: &str,
+    tolerance: Option<&Tolerance>,
+    vendor_ranges: Vec<[i64; 2]>,
+    production_ranges: Vec<[i64; 2]>,
+) -> FieldSummary {
     let margin = vendor_ranges
         .iter()
         .map(|[low, high]| high - low)
@@ -366,23 +390,23 @@ fn compare_field(
         .iter()
         .zip(&production_ranges)
         .all(|(v, p)| v[0] - margin <= p[0] && p[1] <= v[1] + margin);
-    Ok(FieldSummary {
-        name: field.name.to_owned(),
+    FieldSummary {
+        name: name.to_owned(),
         verdict: match (tolerance, within) {
             (None, _) => Verdict::Incomplete,
             (Some(_), true) => Verdict::Match,
             (Some(_), false) => Verdict::Diff,
         },
         margin,
-        mask,
+        mask: tolerance.and_then(|t| t.mask.clone()),
         reason: tolerance.map(|t| t.reason.clone()),
         vendor: vendor_ranges,
         production: production_ranges,
-    })
+    }
 }
 
 /// Vendor byte ranges of an object of `length` bytes that no field covers.
-fn uncovered(length: usize, fields: &[OutputField]) -> Vec<[usize; 2]> {
+pub(crate) fn uncovered(length: usize, fields: &[OutputField]) -> Vec<[usize; 2]> {
     let mut covered = vec![false; length];
     for field in fields {
         let start = field.parameter as usize;
@@ -403,7 +427,7 @@ fn uncovered(length: usize, fields: &[OutputField]) -> Vec<[usize; 2]> {
 }
 
 /// `YYYY-MM-DD` of the UTC day holding `unix_seconds`.
-fn utc_date(unix_seconds: u64) -> String {
+pub(crate) fn utc_date(unix_seconds: u64) -> String {
     let seconds = unix_seconds;
     // Gregorian dates repeat every 400 years. Reduce into jiff's supported
     // range without narrowing the existing u64 timestamp domain.

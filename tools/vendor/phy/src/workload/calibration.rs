@@ -159,6 +159,78 @@ pub(crate) fn run<C: Comparison>(
     }
 }
 
+/// Capture only the scenario's production image. No vendor catalog build,
+/// discovery, image flash or restore operation occurs on this path.
+pub(crate) fn recorded<C: Comparison>(
+    lifecycle: Lifecycle,
+    boots: u16,
+    output: &Path,
+    context: &Context<'_>,
+) -> Result<()> {
+    let root = oer_os_process::built_root();
+    let board = &context.lab.dut.id;
+    let reference = match C::recorded(&root, board, lifecycle) {
+        Ok(reference) => reference,
+        Err(error) => {
+            let summary =
+                serde_json::json!({"verdict":"incomplete", "reasons":[error.to_string()]});
+            context.results.observe("comparison", &summary);
+            std::fs::write(
+                output.join("comparison.json"),
+                serde_json::to_vec_pretty(&summary)?,
+            )?;
+            return Err(format!("recorded calibration INCOMPLETE: {error}").into());
+        }
+    };
+    let identity = Images {
+        started_unix_seconds: oer_os_durable::unix_seconds(),
+        vendor_project: lifecycle.vendor_project().into(),
+        vendor_application_sha256: reference.vendor_application_sha256.clone(),
+        vendor_idf_revision: reference.vendor_idf_revision.clone(),
+        production_image: "diagnostic-phy".into(),
+        production_application_sha256: oer_os_durable::sha256_file(
+            &context.images()?.scenario_image().application(),
+        )?,
+    };
+    context.results.observe("images", &identity);
+    context
+        .results
+        .observe("recorded-reference", &reference.document);
+    let published = C::images(&root)?;
+    let mut captures = vec![];
+    for boot in 1..=boots {
+        oer_os_process::check_cancelled()?;
+        let directory = output.join(format!("production-{boot:03}"));
+        let capture = production_boot(
+            context,
+            lifecycle,
+            reference.channel,
+            &directory,
+            &published.registers,
+            &reference.readable,
+            &published.analog,
+        )?;
+        std::fs::write(
+            directory.join("capture.json"),
+            serde_json::to_vec_pretty(&capture)?,
+        )?;
+        context
+            .results
+            .observe(format!("production-boot-{boot:03}"), &capture);
+        captures.push(capture);
+    }
+    let compared = C::compare_recorded(&root, board, &reference, &identity, &captures, &published)?;
+    context.results.observe("comparison", &compared.summary);
+    std::fs::write(
+        output.join("comparison.json"),
+        serde_json::to_vec_pretty(&compared.summary)?,
+    )?;
+    match compared.mismatch {
+        None => Ok(()),
+        Some(reason) => Err(format!("recorded calibration {reason}").into()),
+    }
+}
+
 fn reference_boot<C: Comparison>(
     context: &Context<'_>,
     lifecycle: Lifecycle,

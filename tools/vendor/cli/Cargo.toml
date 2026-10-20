@@ -24,6 +24,8 @@ oer-os-toolchain = { path = "../../os/toolchain" }
 oer-tool-pins = { path = "../../pins" }
 oer-vendor-lineage = { path = "../lineage" }
 oer-vendor-phy = { path = "../phy" }
+oer-vendor-phy-esp32s31 = { path = "../phy-esp32s31" }
+oer-os-durable = { path = "../../os/durable" }
 oer-vendor-provenance = { path = "../provenance" }
 clap = { version = "=4.5.48", features = ["derive"] }
 serde = { version = "=1.0.229", features = ["derive"] }

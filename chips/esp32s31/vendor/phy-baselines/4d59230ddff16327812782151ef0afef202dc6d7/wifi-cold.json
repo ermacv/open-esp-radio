@@ -1,0 +1,4128 @@
+{
+  "schema": 1,
+  "generated-by": "cargo vendor-check phy-baseline generate",
+  "chip": "esp32s31",
+  "lifecycle": "cold",
+  "scenario": "phy-vendor-calibration-cold",
+  "signature": {
+    "idf-revision": "4d59230ddff16327812782151ef0afef202dc6d7",
+    "scenario-sha256": "d76e60adfd4a483617184b1e0effdbf4264a8a67a6087c336e889f2b99b4c1f4",
+    "model-sha256": "c7d2b0441a8cda2752036f2ba3d717312f04f1cca60c6e066f62c4287c819930",
+    "relation-sha256": "9cfaa367b51c6fecf0bf37a8bffe7a97fb8c2f221bcc4aa5c840437f1ee94dc2",
+    "review-sha256": "41ad439ad15a28bfffa13be1b86077753b1b85440b4e0cf1b620182e5dc51ca4",
+    "recipe-sha256": "cd570c205e62f793f9d736540c1a098a57a61a7d53b78fd34d8a5f46a90acbb6"
+  },
+  "vendor-application-sha256": "e7c115dedfdb1fbf65372ef18655855b2f7d5b415f00de5a2d8347fc0940272a",
+  "channel": 1,
+  "vendor-object-bytes": 492,
+  "boards": {
+    "s31-a": {
+      "revision": 0,
+      "samples": 10,
+      "sources": [
+        {
+          "run-id": "1792529533499-003d8f91",
+          "scenario": "phy-vendor-calibration-cold",
+          "repetition": 1,
+          "repository-commit": "c6442ebf87b363912530c44167aad36879a48b67",
+          "repository-dirty": false,
+          "date": "2026-10-20",
+          "samples": 10,
+          "observations-sha256": "eb6a076e61a501f5d09a36e4b59ebb7e624d8de24ad7a251fa5670cd82810da8"
+        }
+      ]
+    },
+    "s31-b": {
+      "revision": 0,
+      "samples": 40,
+      "sources": [
+        {
+          "run-id": "1792531875774-000104b9",
+          "scenario": "phy-vendor-calibration-cold",
+          "repetition": 1,
+          "repository-commit": "2c94b827b1abb76959c30c7c3c88636bc6f9e00b",
+          "repository-dirty": false,
+          "date": "2026-10-20",
+          "samples": 10,
+          "observations-sha256": "4c04757ddaacff6f47fddb88213a59a26b557ed060be238822e99d159c4ae478"
+        },
+        {
+          "run-id": "1792532583423-00020695",
+          "scenario": "phy-vendor-calibration-cold-vendor-spread",
+          "repetition": 1,
+          "repository-commit": "fa2d3f0716b8a4c9dc0c6e06c6166795f7bd8331",
+          "repository-dirty": true,
+          "date": "2026-10-20",
+          "samples": 30,
+          "observations-sha256": "2f70b7a6b92dbb66e253b305f8c931b2964386ee6f429e0bf65ca1db9915ba9b"
+        }
+      ]
+    }
+  },
+  "entries": {
+    "HP_SYS_CLKRST_RADIO.MODEM_CONF": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 542667232,
+      "signed": false,
+      "excluded": "clock policy: the modem XTAL clock enable follows the active radio modules",
+      "shared": 29,
+      "boards": {}
+    },
+    "HP_SYS_CLKRST_RADIO.MODEM_CTRL0": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 542666816,
+      "signed": false,
+      "shared": 1,
+      "boards": {}
+    },
+    "I2C_ANA_MST.ANA_CONF0": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537983000,
+      "signed": false,
+      "shared": 687924292,
+      "boards": {}
+    },
+    "I2C_ANA_MST.ANA_CONF1": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537983004,
+      "signed": false,
+      "excluded": "live state: the read mask of the analog I2C block last addressed",
+      "shared": 16777183,
+      "boards": {}
+    },
+    "I2C_ANA_MST.ANA_CONF2": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537983008,
+      "signed": false,
+      "shared": 260612,
+      "boards": {}
+    },
+    "I2C_ANA_MST.HW_I2C_CTRL": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537983020,
+      "signed": false,
+      "shared": 132,
+      "boards": {}
+    },
+    "I2C_ANA_MST.I2C0_CTRL": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537982976,
+      "signed": false,
+      "excluded": "live state: the last analog I2C command of its host",
+      "shared": 24117862,
+      "boards": {}
+    },
+    "I2C_ANA_MST.I2C0_CTRL1": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537983012,
+      "signed": false,
+      "shared": 132,
+      "boards": {}
+    },
+    "I2C_ANA_MST.I2C1_CTRL": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537982980,
+      "signed": false,
+      "excluded": "live state: the last analog I2C command of its host",
+      "shared": 27788386,
+      "boards": {}
+    },
+    "I2C_ANA_MST.I2C1_CTRL1": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537983016,
+      "signed": false,
+      "shared": 132,
+      "boards": {}
+    },
+    "LP_AON_CLKRST.ROOT_CLK_CONF": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 544215040,
+      "signed": false,
+      "shared": 0,
+      "boards": {}
+    },
+    "LP_AON_CLKRST.RTC_SAR2_PWDET_CCT": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 544215144,
+      "signed": false,
+      "shared": 4,
+      "boards": {}
+    },
+    "LP_PERICLKRST.TSENS_CTRL": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 544276528,
+      "signed": false,
+      "shared": 1073741824,
+      "boards": {}
+    },
+    "LP_TSENS.CLK_CONF": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 545357848,
+      "signed": false,
+      "excluded": "clock policy: the temperature sensor clock follows the tracking client",
+      "shared": 0,
+      "boards": {}
+    },
+    "LP_TSENS.CTRL": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 545357824,
+      "signed": false,
+      "excluded": "live state: the temperature sensor reading",
+      "boards": {
+        "s31-a": {
+          "status": "read",
+          "ranges": [
+            [
+              4297830,
+              4297834
+            ]
+          ],
+          "margin": 4
+        },
+        "s31-b": {
+          "status": "read",
+          "ranges": [
+            [
+              4297829,
+              4297832
+            ]
+          ],
+          "margin": 3
+        }
+      }
+    },
+    "MODEM_LPCON_PHY_TICK.TICK_CONF": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537980968,
+      "signed": false,
+      "shared": 39,
+      "boards": {}
+    },
+    "MODEM_LPCON_SHARED_CLOCK.CLK_CONF_POWER_ST": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537980960,
+      "signed": false,
+      "shared": 1717960704,
+      "boards": {}
+    },
+    "MODEM_LPCON_SHARED_CLOCK.COEX_LP_CLK_CONF": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537980936,
+      "signed": false,
+      "shared": 0,
+      "boards": {}
+    },
+    "MODEM_LPCON_SHARED_CLOCK.LP_TIMER_CONF": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537980932,
+      "signed": false,
+      "shared": 0,
+      "boards": {}
+    },
+    "MODEM_LPCON_SHARED_CLOCK.MODEM_32K_CLK_CONF": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537980948,
+      "signed": false,
+      "shared": 0,
+      "boards": {}
+    },
+    "MODEM_LPCON_SHARED_CLOCK.WIFI_LP_CLK_CONF": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537980940,
+      "signed": false,
+      "shared": 1,
+      "boards": {}
+    },
+    "MODEM_SYSCON_RADIO.CLK_CONF": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537959428,
+      "signed": false,
+      "shared": 2101250,
+      "boards": {}
+    },
+    "MODEM_SYSCON_RADIO.CLK_CONF1": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537959444,
+      "signed": false,
+      "excluded": "clock policy: modem clock enables follow the active radio clients and leases, not calibration",
+      "shared": 3729407,
+      "boards": {}
+    },
+    "MODEM_SYSCON_RADIO.CLK_CONF_POWER_ST": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537959436,
+      "signed": false,
+      "shared": 1684300800,
+      "boards": {}
+    },
+    "MODEM_SYSCON_RADIO.MODEM_RST_CONF": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537959440,
+      "signed": false,
+      "shared": 0,
+      "boards": {}
+    },
+    "MODEM_SYSCON_RADIO.WIFI_BB_CFG": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537959448,
+      "signed": false,
+      "shared": 268449794,
+      "boards": {}
+    },
+    "PHY_ADC_DUMP_RECOVERED.DUMP_CONFIG": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537956360,
+      "signed": false,
+      "shared": 0,
+      "boards": {}
+    },
+    "PHY_ADC_DUMP_RECOVERED.DUMP_CONTROL": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537956356,
+      "signed": false,
+      "shared": 62914560,
+      "boards": {}
+    },
+    "PHY_ADC_DUMP_RECOVERED.DUMP_LANE_SELECT": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537956376,
+      "signed": false,
+      "shared": 0,
+      "boards": {}
+    },
+    "PHY_ADC_DUMP_RECOVERED.WORD_08CC_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537921740,
+      "signed": false,
+      "shared": 230,
+      "boards": {}
+    },
+    "PHY_ADC_DUMP_RECOVERED.WORD_20B4_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537927860,
+      "signed": false,
+      "boards": {
+        "s31-a": {
+          "status": "unreadable"
+        },
+        "s31-b": {
+          "status": "unreadable"
+        }
+      }
+    },
+    "PHY_ADC_DUMP_RECOVERED.WORD_70B8_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537948344,
+      "signed": false,
+      "shared": 0,
+      "boards": {}
+    },
+    "PHY_AGC_ORACLE.AGC_ANTENNA_CONTROL": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537948208,
+      "signed": false,
+      "shared": 3284510453,
+      "boards": {}
+    },
+    "PHY_AGC_ORACLE.AGC_GAIN_LIMIT_LOW": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537948308,
+      "signed": false,
+      "shared": 3669537051,
+      "boards": {}
+    },
+    "PHY_AGC_ORACLE.AGC_INIT_HIGH_CONTROL": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537948456,
+      "signed": false,
+      "excluded": "live state: varies between production boots with the running AGC",
+      "boards": {
+        "s31-a": {
+          "status": "read",
+          "ranges": [
+            [
+              3523484330,
+              3525188268
+            ]
+          ],
+          "margin": 1703938
+        },
+        "s31-b": {
+          "status": "read",
+          "ranges": [
+            [
+              3523234452,
+              3525180084
+            ]
+          ],
+          "margin": 1945632
+        }
+      }
+    },
+    "PHY_AGC_ORACLE.AGC_PARAMETER_CONTROL": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537921724,
+      "signed": false,
+      "shared": 636016,
+      "boards": {}
+    },
+    "PHY_AGC_ORACLE.AGC_SATURATION_CONTROL": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537948252,
+      "signed": false,
+      "shared": 4118285240,
+      "boards": {}
+    },
+    "PHY_AGC_ORACLE.AGC_SHARED_CONTROL": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537948204,
+      "signed": false,
+      "shared": 843073517,
+      "boards": {}
+    },
+    "PHY_AGC_ORACLE.AGC_UPDATE_8078_CONTROL": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537952376,
+      "signed": false,
+      "shared": 7613890,
+      "boards": {}
+    },
+    "PHY_AGC_ORACLE.ANTENNA_CONTROL_0": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537948444,
+      "signed": false,
+      "shared": 1105920,
+      "boards": {}
+    },
+    "PHY_AGC_ORACLE.ANTENNA_CONTROL_2": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537948448,
+      "signed": false,
+      "shared": 1056284,
+      "boards": {}
+    },
+    "PHY_AGC_ORACLE.CSI_DUMP_FORCE_CONTROL": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537948324,
+      "signed": false,
+      "shared": 7740,
+      "boards": {}
+    },
+    "PHY_AGC_ORACLE.DC_MEMORY_CONTROL": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537948220,
+      "signed": false,
+      "shared": 65551,
+      "boards": {}
+    },
+    "PHY_AGC_ORACLE.FTM_CONTROL": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537951564,
+      "signed": false,
+      "shared": 4,
+      "boards": {}
+    },
+    "PHY_AGC_ORACLE.POST_INIT_RX_CONTROL": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537950408,
+      "signed": false,
+      "shared": 1679412119,
+      "boards": {}
+    },
+    "PHY_AGC_ORACLE.RX_11B_MODE_CONTROL": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537952260,
+      "signed": false,
+      "shared": 20746640,
+      "boards": {}
+    },
+    "PHY_AGC_ORACLE.RX_11B_PATH_CONTROL_0": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537948228,
+      "signed": false,
+      "shared": 4265599486,
+      "boards": {}
+    },
+    "PHY_AGC_ORACLE.RX_11B_PATH_CONTROL_1": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537948452,
+      "signed": false,
+      "shared": 2988475731,
+      "boards": {}
+    },
+    "PHY_AGC_ORACLE.RX_11B_WINDOW_CONTROL": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537948420,
+      "signed": false,
+      "excluded": "lifecycle: the last writer is phy_reg_update_new after cold registration and phy_bb_agc_reg_update after an RF wake or RX table init; the vendor read follows the RF wake of its Wi-Fi start, production's read its cold registration, and production's wake keeps the vendor order",
+      "shared": 111986632,
+      "boards": {}
+    },
+    "PHY_AGC_ORACLE.RX_COMPENSATION_HIGH_CONTROL": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537948320,
+      "signed": false,
+      "shared": 3976251826,
+      "boards": {}
+    },
+    "PHY_AGC_ORACLE.RX_GAIN_LIMIT_CONTROL": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537948476,
+      "signed": false,
+      "shared": 85719548,
+      "boards": {}
+    },
+    "PHY_AGC_RECOVERED_GAPS.WORD_0010_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537948176,
+      "signed": false,
+      "shared": 106037563,
+      "boards": {}
+    },
+    "PHY_AGC_RECOVERED_GAPS.WORD_0014_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537948180,
+      "signed": false,
+      "shared": 22037115,
+      "boards": {}
+    },
+    "PHY_AGC_RECOVERED_GAPS.WORD_001C_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537948188,
+      "signed": false,
+      "shared": 3457289919,
+      "boards": {}
+    },
+    "PHY_AGC_RECOVERED_GAPS.WORD_0050_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537948240,
+      "signed": false,
+      "boards": {
+        "s31-a": {
+          "status": "read",
+          "ranges": [
+            [
+              1084246696,
+              4286574249
+            ]
+          ],
+          "margin": 3202327553
+        },
+        "s31-b": {
+          "status": "read",
+          "ranges": [
+            [
+              2093019808,
+              4282407590
+            ]
+          ],
+          "margin": 2189387782
+        }
+      }
+    },
+    "PHY_AGC_RECOVERED_GAPS.WORD_006C_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537948268,
+      "signed": false,
+      "excluded": "live state: AGC RSSI status",
+      "boards": {
+        "s31-a": {
+          "status": "read",
+          "ranges": [
+            [
+              4261414983,
+              4266069575
+            ]
+          ],
+          "margin": 4654592
+        },
+        "s31-b": {
+          "status": "read",
+          "ranges": [
+            [
+              4261412864,
+              4266070599
+            ]
+          ],
+          "margin": 4657735
+        }
+      }
+    },
+    "PHY_AGC_RECOVERED_GAPS.WORD_0074_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537948276,
+      "signed": false,
+      "shared": 838983809,
+      "boards": {}
+    },
+    "PHY_AGC_RECOVERED_GAPS.WORD_00CC_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537948364,
+      "signed": false,
+      "shared": 713702056,
+      "boards": {}
+    },
+    "PHY_AGC_RECOVERED_GAPS.WORD_00F4_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537948404,
+      "signed": false,
+      "shared": 4189249937,
+      "boards": {}
+    },
+    "PHY_AGC_RECOVERED_GAPS.WORD_0108_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537948424,
+      "signed": false,
+      "shared": 2014862093,
+      "boards": {}
+    },
+    "PHY_AGC_RECOVERED_GAPS.WORD_0430_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537949232,
+      "signed": false,
+      "shared": 127768985,
+      "boards": {}
+    },
+    "PHY_AGC_RECOVERED_GAPS.WORD_0434_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537949236,
+      "signed": false,
+      "shared": 261986713,
+      "boards": {}
+    },
+    "PHY_AGC_RECOVERED_GAPS.WORD_0438_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537949240,
+      "signed": false,
+      "shared": 2151,
+      "boards": {}
+    },
+    "PHY_BASEBAND_CONFIG_ORACLE.ADC_RATE_AND_FRONT_END_CONTROL": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537920584,
+      "signed": false,
+      "shared": 370147331,
+      "boards": {}
+    },
+    "PHY_BASEBAND_CONFIG_ORACLE.BASEBAND_TX_PA_CONTROL": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537951232,
+      "signed": false,
+      "shared": 1205904897,
+      "boards": {}
+    },
+    "PHY_BASEBAND_CONFIG_ORACLE.BASEBAND_TX_PA_TIMING": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537951280,
+      "signed": false,
+      "shared": 1051678,
+      "boards": {}
+    },
+    "PHY_BASEBAND_CONFIG_ORACLE.BASEBAND_WATCHDOG_CONTROL": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537951292,
+      "signed": false,
+      "shared": 1075314858,
+      "boards": {}
+    },
+    "PHY_BASEBAND_CONFIG_ORACLE.BASEBAND_WATCHDOG_ENABLE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537951296,
+      "signed": false,
+      "shared": 2147483648,
+      "boards": {}
+    },
+    "PHY_BASEBAND_CONFIG_ORACLE.BASEBAND_WATCHDOG_STATUS": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537951240,
+      "signed": false,
+      "excluded": "live state: baseband watchdog status",
+      "boards": {
+        "s31-a": {
+          "status": "read",
+          "ranges": [
+            [
+              610277397,
+              612287457
+            ]
+          ],
+          "margin": 2010060
+        },
+        "s31-b": {
+          "status": "read",
+          "ranges": [
+            [
+              602888198,
+              3028256827
+            ]
+          ],
+          "margin": 2425368629
+        }
+      }
+    },
+    "PHY_BASEBAND_CONFIG_ORACLE.DAC_SCALE_CONTROL": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537922564,
+      "signed": false,
+      "shared": 16776960,
+      "boards": {}
+    },
+    "PHY_BASEBAND_CONFIG_ORACLE.FRONT_END_AND_TONE_STOP_CONTROL": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537920524,
+      "signed": false,
+      "shared": 7,
+      "boards": {}
+    },
+    "PHY_BASEBAND_CONFIG_ORACLE.FRONT_END_CLEAR_CONTROL": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537920580,
+      "signed": false,
+      "shared": 0,
+      "boards": {}
+    },
+    "PHY_BASEBAND_CONFIG_ORACLE.HCCFR_CONTROL": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537949288,
+      "signed": false,
+      "shared": 788484,
+      "boards": {}
+    },
+    "PHY_BASEBAND_CONFIG_ORACLE.HCCFR_VALUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537949292,
+      "signed": false,
+      "shared": 4535379,
+      "boards": {}
+    },
+    "PHY_BASEBAND_CONFIG_ORACLE.I2C_TX_RATE_CONTROL": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537937036,
+      "signed": false,
+      "shared": 0,
+      "boards": {}
+    },
+    "PHY_BASEBAND_CONFIG_ORACLE.ICCFR_ENABLE_CONTROL": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537949308,
+      "signed": false,
+      "shared": 1048832,
+      "boards": {}
+    },
+    "PHY_BASEBAND_CONFIG_ORACLE.ICCFR_FORCE_CONTROL": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537949304,
+      "signed": false,
+      "shared": 0,
+      "boards": {}
+    },
+    "PHY_BASEBAND_CONFIG_ORACLE.IQ_CORRECTION_AUX": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537922572,
+      "signed": false,
+      "boards": {
+        "s31-a": {
+          "status": "read",
+          "ranges": [
+            [
+              57474,
+              57666
+            ]
+          ],
+          "margin": 192
+        },
+        "s31-b": {
+          "status": "read",
+          "ranges": [
+            [
+              58114,
+              58242
+            ]
+          ],
+          "margin": 128
+        }
+      }
+    },
+    "PHY_BASEBAND_CONFIG_ORACLE.IQ_CORRECTION_CONTROL": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537920568,
+      "signed": false,
+      "boards": {
+        "s31-a": {
+          "status": "read",
+          "ranges": [
+            [
+              3766681600,
+              3779264512
+            ]
+          ],
+          "margin": 12582912
+        },
+        "s31-b": {
+          "status": "read",
+          "ranges": [
+            [
+              4252958720,
+              4265541632
+            ]
+          ],
+          "margin": 12582912
+        }
+      }
+    },
+    "PHY_BASEBAND_CONFIG_ORACLE.NOISE_FLOOR_CONTROL": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537948184,
+      "signed": false,
+      "shared": 1373720588,
+      "boards": {}
+    },
+    "PHY_BASEBAND_CONFIG_ORACLE.NOISE_FLOOR_ENABLE_0": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537951300,
+      "signed": false,
+      "shared": 1,
+      "boards": {}
+    },
+    "PHY_BASEBAND_CONFIG_ORACLE.NOISE_FLOOR_ENABLE_1": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537951312,
+      "signed": false,
+      "shared": 0,
+      "boards": {}
+    },
+    "PHY_BASEBAND_CONFIG_ORACLE.POWER_DETECTOR_CONTROL": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537921544,
+      "signed": false,
+      "shared": 2704641,
+      "boards": {}
+    },
+    "PHY_BASEBAND_CONFIG_ORACLE.POWER_DETECTOR_SAR_CONTROL_STATUS": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537921548,
+      "signed": false,
+      "shared": 520192,
+      "boards": {}
+    },
+    "PHY_BASEBAND_CONFIG_ORACLE.POWER_DETECTOR_SAR_RESULT": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537921564,
+      "signed": false,
+      "boards": {
+        "s31-a": {
+          "status": "read",
+          "ranges": [
+            [
+              219811054,
+              222301526
+            ]
+          ],
+          "margin": 2490472
+        },
+        "s31-b": {
+          "status": "read",
+          "ranges": [
+            [
+              223481156,
+              226889112
+            ]
+          ],
+          "margin": 3407956
+        }
+      }
+    },
+    "PHY_BASEBAND_CONFIG_ORACLE.POWER_DETECTOR_SAR_RESULT_1": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537921568,
+      "signed": false,
+      "boards": {
+        "s31-a": {
+          "status": "read",
+          "ranges": [
+            [
+              219286802,
+              222170430
+            ]
+          ],
+          "margin": 2883628
+        },
+        "s31-b": {
+          "status": "read",
+          "ranges": [
+            [
+              223612244,
+              227151242
+            ]
+          ],
+          "margin": 3538998
+        }
+      }
+    },
+    "PHY_BASEBAND_CONFIG_ORACLE.POWER_DETECTOR_SAR_RESULT_2": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537921572,
+      "signed": false,
+      "shared": 0,
+      "boards": {}
+    },
+    "PHY_BASEBAND_CONFIG_ORACLE.POWER_DETECTOR_SAR_RESULT_3": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537921576,
+      "signed": false,
+      "shared": 0,
+      "boards": {}
+    },
+    "PHY_BASEBAND_CONFIG_ORACLE.POWER_DETECTOR_TABLE_1": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537921556,
+      "signed": false,
+      "shared": 16715620,
+      "boards": {}
+    },
+    "PHY_BASEBAND_CONFIG_ORACLE.RX_GAIN_DC_CONTROL": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537920548,
+      "signed": false,
+      "shared": 1,
+      "boards": {}
+    },
+    "PHY_BASEBAND_CONFIG_ORACLE.TONE_PATH_0_CONTROL": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537920540,
+      "signed": false,
+      "shared": 213024,
+      "boards": {}
+    },
+    "PHY_BASEBAND_CONFIG_ORACLE.TONE_PATH_1_CONTROL": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537920544,
+      "signed": false,
+      "shared": 0,
+      "boards": {}
+    },
+    "PHY_BASEBAND_CONFIG_ORACLE.TONE_SELECTOR_CONTROL": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537920552,
+      "signed": false,
+      "shared": 0,
+      "boards": {}
+    },
+    "PHY_BASEBAND_CONFIG_ORACLE.TX_DC_MEASUREMENT_CONTROL_STATUS": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537920536,
+      "signed": false,
+      "shared": 4476732,
+      "boards": {}
+    },
+    "PHY_BASEBAND_CONFIG_ORACLE.TX_GAIN_COMPENSATION": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537920528,
+      "signed": false,
+      "shared": 260864,
+      "boards": {}
+    },
+    "PHY_BASEBAND_CONFIG_ORACLE.TX_OUTPUT_FILTER_CONTROL": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537949248,
+      "signed": false,
+      "shared": 22675577,
+      "boards": {}
+    },
+    "PHY_BASEBAND_CONFIG_ORACLE.TX_PA_CONTROL_0": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537921644,
+      "signed": false,
+      "shared": 639924228,
+      "boards": {}
+    },
+    "PHY_BASEBAND_CONFIG_ORACLE.TX_PA_CONTROL_1": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537921648,
+      "signed": false,
+      "shared": 168740872,
+      "boards": {}
+    },
+    "PHY_BASEBAND_CONFIG_ORACLE.TX_POWER_TRACK_CONTROL_0": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537949268,
+      "signed": false,
+      "shared": 1692579809,
+      "boards": {}
+    },
+    "PHY_BASEBAND_CONFIG_ORACLE.TX_POWER_TRACK_CONTROL_1": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537949272,
+      "signed": false,
+      "shared": 1600746256,
+      "boards": {}
+    },
+    "PHY_BASEBAND_CONFIG_ORACLE.TX_POWER_TRACK_CONTROL_2": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537949276,
+      "signed": false,
+      "shared": 2375458993,
+      "boards": {}
+    },
+    "PHY_BASEBAND_CONFIG_ORACLE.TX_POWER_TRACK_CONTROL_3": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537949280,
+      "signed": false,
+      "shared": 1988131203,
+      "boards": {}
+    },
+    "PHY_BASEBAND_CONFIG_ORACLE.WORD_0C08_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537922568,
+      "signed": false,
+      "shared": 234881024,
+      "boards": {}
+    },
+    "PHY_BASEBAND_CONFIG_ORACLE.WORD_0C20_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537922592,
+      "signed": false,
+      "shared": 87,
+      "boards": {}
+    },
+    "PHY_BASEBAND_CONFIG_ORACLE.WORD_7400_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537949184,
+      "signed": false,
+      "shared": 68739328,
+      "boards": {}
+    },
+    "PHY_BASEBAND_CONFIG_ORACLE.WORD_7428_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537949224,
+      "signed": false,
+      "shared": 54528,
+      "boards": {}
+    },
+    "PHY_BASEBAND_CONFIG_ORACLE.WORD_743C_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537949244,
+      "signed": false,
+      "shared": 5,
+      "boards": {}
+    },
+    "PHY_BASEBAND_CONFIG_ORACLE.WORD_7808_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537950216,
+      "signed": false,
+      "shared": 1342730344,
+      "boards": {}
+    },
+    "PHY_BASEBAND_CONFIG_ORACLE.WORD_7890_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537950352,
+      "signed": false,
+      "shared": 23413537,
+      "boards": {}
+    },
+    "PHY_BASEBAND_CONFIG_ORACLE.WORD_78DC_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537950428,
+      "signed": false,
+      "shared": 26591596,
+      "boards": {}
+    },
+    "PHY_BASEBAND_CONFIG_ORACLE.WORD_78E4_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537950436,
+      "signed": false,
+      "shared": 0,
+      "boards": {}
+    },
+    "PHY_BASEBAND_CONFIG_ORACLE.WORD_790C_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537950476,
+      "signed": false,
+      "shared": 1308,
+      "boards": {}
+    },
+    "PHY_BASEBAND_CONFIG_ORACLE.WORD_7980_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537950592,
+      "signed": false,
+      "shared": 524416,
+      "boards": {}
+    },
+    "PHY_BASEBAND_CONFIG_ORACLE.WORD_7A28_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537950760,
+      "signed": false,
+      "shared": 732272,
+      "boards": {}
+    },
+    "PHY_BASEBAND_CONFIG_ORACLE.WORD_7CA8_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537951400,
+      "signed": false,
+      "shared": 3145745,
+      "boards": {}
+    },
+    "PHY_BASEBAND_CONFIG_ORACLE.WORD_7CD0_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537951440,
+      "signed": false,
+      "shared": 983055,
+      "boards": {}
+    },
+    "PHY_BB_RECOVERED_GAPS.WORD_0014_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537951252,
+      "signed": false,
+      "shared": 1837121536,
+      "boards": {}
+    },
+    "PHY_BB_RECOVERED_GAPS.WORD_0058_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537951320,
+      "signed": false,
+      "shared": 2147549184,
+      "boards": {}
+    },
+    "PHY_BB_RECOVERED_GAPS.WORD_005C_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537951324,
+      "signed": false,
+      "shared": 134283264,
+      "boards": {}
+    },
+    "PHY_BB_RECOVERED_GAPS.WORD_0060_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537951328,
+      "signed": false,
+      "boards": {
+        "s31-a": {
+          "status": "read",
+          "ranges": [
+            [
+              4,
+              34949
+            ]
+          ],
+          "margin": 34945
+        },
+        "s31-b": {
+          "status": "read",
+          "ranges": [
+            [
+              4,
+              36035
+            ]
+          ],
+          "margin": 36031
+        }
+      }
+    },
+    "PHY_BB_RECOVERED_GAPS.WORD_00E8_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537951464,
+      "signed": false,
+      "shared": 530422170,
+      "boards": {}
+    },
+    "PHY_BB_RECOVERED_GAPS.WORD_00EC_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537951468,
+      "signed": false,
+      "shared": 2151,
+      "boards": {}
+    },
+    "PHY_BRX_RECOVERED_GAPS.WORD_0050_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537952336,
+      "signed": false,
+      "shared": 16384,
+      "boards": {}
+    },
+    "PHY_BTAGC_RECOVERED.AGC_GAIN_IMAGE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537929812,
+      "signed": false,
+      "boards": {
+        "s31-a": {
+          "status": "unreadable"
+        },
+        "s31-b": {
+          "status": "unreadable"
+        }
+      }
+    },
+    "PHY_BTAGC_RECOVERED.AGC_GAIN_MAX_CONTROL": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537929808,
+      "signed": false,
+      "boards": {
+        "s31-a": {
+          "status": "unreadable"
+        },
+        "s31-b": {
+          "status": "unreadable"
+        }
+      }
+    },
+    "PHY_BTAGC_RECOVERED.CCA_CONFIG": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537929876,
+      "signed": false,
+      "boards": {
+        "s31-a": {
+          "status": "unreadable"
+        },
+        "s31-b": {
+          "status": "unreadable"
+        }
+      }
+    },
+    "PHY_BTAGC_RECOVERED.CTE_AGC_TARGET": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537929880,
+      "signed": false,
+      "boards": {
+        "s31-a": {
+          "status": "unreadable"
+        },
+        "s31-b": {
+          "status": "unreadable"
+        }
+      }
+    },
+    "PHY_BTAGC_RECOVERED.CTE_DC_SHIFT": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537929728,
+      "signed": false,
+      "boards": {
+        "s31-a": {
+          "status": "unreadable"
+        },
+        "s31-b": {
+          "status": "unreadable"
+        }
+      }
+    },
+    "PHY_BTAGC_RECOVERED.CTE_RE_GAIN": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537929760,
+      "signed": false,
+      "boards": {
+        "s31-a": {
+          "status": "unreadable"
+        },
+        "s31-b": {
+          "status": "unreadable"
+        }
+      }
+    },
+    "PHY_BTAGC_RECOVERED.RX_COMP_CONTROL": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537929796,
+      "signed": false,
+      "boards": {
+        "s31-a": {
+          "status": "unreadable"
+        },
+        "s31-b": {
+          "status": "unreadable"
+        }
+      }
+    },
+    "PHY_BTAGC_RECOVERED.RX_GAIN_FORCE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537929792,
+      "signed": false,
+      "boards": {
+        "s31-a": {
+          "status": "unreadable"
+        },
+        "s31-b": {
+          "status": "unreadable"
+        }
+      }
+    },
+    "PHY_BTAGC_RECOVERED.WORD_0048_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537929800,
+      "signed": false,
+      "boards": {
+        "s31-a": {
+          "status": "unreadable"
+        },
+        "s31-b": {
+          "status": "unreadable"
+        }
+      }
+    },
+    "PHY_BTAGC_RECOVERED.WORD_004C_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537929804,
+      "signed": false,
+      "boards": {
+        "s31-a": {
+          "status": "unreadable"
+        },
+        "s31-b": {
+          "status": "unreadable"
+        }
+      }
+    },
+    "PHY_BTAGC_RECOVERED.WORD_0068_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537929832,
+      "signed": false,
+      "boards": {
+        "s31-a": {
+          "status": "unreadable"
+        },
+        "s31-b": {
+          "status": "unreadable"
+        }
+      }
+    },
+    "PHY_BTAGC_RECOVERED.WORD_006C_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537929836,
+      "signed": false,
+      "boards": {
+        "s31-a": {
+          "status": "unreadable"
+        },
+        "s31-b": {
+          "status": "unreadable"
+        }
+      }
+    },
+    "PHY_BTAGC_RECOVERED.WORD_0084_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537929860,
+      "signed": false,
+      "boards": {
+        "s31-a": {
+          "status": "unreadable"
+        },
+        "s31-b": {
+          "status": "unreadable"
+        }
+      }
+    },
+    "PHY_BTAGC_RECOVERED.WORD_0088_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537929864,
+      "signed": false,
+      "boards": {
+        "s31-a": {
+          "status": "unreadable"
+        },
+        "s31-b": {
+          "status": "unreadable"
+        }
+      }
+    },
+    "PHY_BTAGC_RECOVERED.WORD_008C_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537929868,
+      "signed": false,
+      "boards": {
+        "s31-a": {
+          "status": "unreadable"
+        },
+        "s31-b": {
+          "status": "unreadable"
+        }
+      }
+    },
+    "PHY_BTAGC_RECOVERED.WORD_00A0_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537929888,
+      "signed": false,
+      "boards": {
+        "s31-a": {
+          "status": "unreadable"
+        },
+        "s31-b": {
+          "status": "unreadable"
+        }
+      }
+    },
+    "PHY_BTAGC_RECOVERED.WORD_00A8_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537929896,
+      "signed": false,
+      "boards": {
+        "s31-a": {
+          "status": "unreadable"
+        },
+        "s31-b": {
+          "status": "unreadable"
+        }
+      }
+    },
+    "PHY_BTAGC_RECOVERED.WORD_00B0_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537929904,
+      "signed": false,
+      "boards": {
+        "s31-a": {
+          "status": "unreadable"
+        },
+        "s31-b": {
+          "status": "unreadable"
+        }
+      }
+    },
+    "PHY_BTAGC_RECOVERED.WORD_00B4_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537929908,
+      "signed": false,
+      "boards": {
+        "s31-a": {
+          "status": "unreadable"
+        },
+        "s31-b": {
+          "status": "unreadable"
+        }
+      }
+    },
+    "PHY_BTAGC_RECOVERED.WORD_00B8_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537929912,
+      "signed": false,
+      "boards": {
+        "s31-a": {
+          "status": "unreadable"
+        },
+        "s31-b": {
+          "status": "unreadable"
+        }
+      }
+    },
+    "PHY_BTAGC_RECOVERED.WORD_00BC_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537929916,
+      "signed": false,
+      "boards": {
+        "s31-a": {
+          "status": "unreadable"
+        },
+        "s31-b": {
+          "status": "unreadable"
+        }
+      }
+    },
+    "PHY_BTAGC_RECOVERED.WORD_00C0_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537929920,
+      "signed": false,
+      "boards": {
+        "s31-a": {
+          "status": "unreadable"
+        },
+        "s31-b": {
+          "status": "unreadable"
+        }
+      }
+    },
+    "PHY_BTAGC_RECOVERED.WORD_00C4_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537929924,
+      "signed": false,
+      "boards": {
+        "s31-a": {
+          "status": "unreadable"
+        },
+        "s31-b": {
+          "status": "unreadable"
+        }
+      }
+    },
+    "PHY_BTAGC_RECOVERED.WORD_00D0_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537929936,
+      "signed": false,
+      "boards": {
+        "s31-a": {
+          "status": "unreadable"
+        },
+        "s31-b": {
+          "status": "unreadable"
+        }
+      }
+    },
+    "PHY_BTAGC_RECOVERED.WORD_00D4_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537929940,
+      "signed": false,
+      "boards": {
+        "s31-a": {
+          "status": "unreadable"
+        },
+        "s31-b": {
+          "status": "unreadable"
+        }
+      }
+    },
+    "PHY_BTAGC_RECOVERED.WORD_00DC_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537929948,
+      "signed": false,
+      "boards": {
+        "s31-a": {
+          "status": "unreadable"
+        },
+        "s31-b": {
+          "status": "unreadable"
+        }
+      }
+    },
+    "PHY_BTAGC_RECOVERED.WORD_00E0_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537929952,
+      "signed": false,
+      "boards": {
+        "s31-a": {
+          "status": "unreadable"
+        },
+        "s31-b": {
+          "status": "unreadable"
+        }
+      }
+    },
+    "PHY_BTAGC_RECOVERED.WORD_00E4_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537929956,
+      "signed": false,
+      "boards": {
+        "s31-a": {
+          "status": "unreadable"
+        },
+        "s31-b": {
+          "status": "unreadable"
+        }
+      }
+    },
+    "PHY_BTAGC_RECOVERED.WORD_00E8_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537929960,
+      "signed": false,
+      "boards": {
+        "s31-a": {
+          "status": "unreadable"
+        },
+        "s31-b": {
+          "status": "unreadable"
+        }
+      }
+    },
+    "PHY_BTAGC_RECOVERED.WORD_00EC_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537929964,
+      "signed": false,
+      "boards": {
+        "s31-a": {
+          "status": "unreadable"
+        },
+        "s31-b": {
+          "status": "unreadable"
+        }
+      }
+    },
+    "PHY_BTAGC_RECOVERED.WORD_00F0_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537929968,
+      "signed": false,
+      "boards": {
+        "s31-a": {
+          "status": "unreadable"
+        },
+        "s31-b": {
+          "status": "unreadable"
+        }
+      }
+    },
+    "PHY_BTAGC_RECOVERED.WORD_00F8_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537929976,
+      "signed": false,
+      "boards": {
+        "s31-a": {
+          "status": "unreadable"
+        },
+        "s31-b": {
+          "status": "unreadable"
+        }
+      }
+    },
+    "PHY_BTAGC_RECOVERED.WORD_0100_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537929984,
+      "signed": false,
+      "boards": {
+        "s31-a": {
+          "status": "unreadable"
+        },
+        "s31-b": {
+          "status": "unreadable"
+        }
+      }
+    },
+    "PHY_CLOCK_ORACLE.TABLE_MEMORY_INDEX_SOURCE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537920520,
+      "signed": false,
+      "shared": 2684389512,
+      "boards": {}
+    },
+    "PHY_CLOCK_ORACLE.WORD_0800_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537921536,
+      "signed": false,
+      "shared": 3,
+      "boards": {}
+    },
+    "PHY_FECTRL_RECOVERED.WORD_0034_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537921588,
+      "signed": false,
+      "shared": 0,
+      "boards": {}
+    },
+    "PHY_FECTRL_RECOVERED.WORD_0038_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537921592,
+      "signed": false,
+      "shared": 0,
+      "boards": {}
+    },
+    "PHY_FECTRL_RECOVERED.WORD_003C_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537921596,
+      "signed": false,
+      "shared": 0,
+      "boards": {}
+    },
+    "PHY_FECTRL_RECOVERED.WORD_0040_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537921600,
+      "signed": false,
+      "shared": 0,
+      "boards": {}
+    },
+    "PHY_FEDATA_RECOVERED.WORD_0030_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537920560,
+      "signed": false,
+      "shared": 262143,
+      "boards": {}
+    },
+    "PHY_FEDATA_RECOVERED.WORD_0040_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537920576,
+      "signed": false,
+      "shared": 100663296,
+      "boards": {}
+    },
+    "PHY_FEDATA_WIFI_RECOVERED.WORD_0014_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537922580,
+      "signed": false,
+      "shared": 3275620352,
+      "boards": {}
+    },
+    "PHY_FEDATA_WIFI_RECOVERED.WORD_0018_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537922584,
+      "signed": false,
+      "shared": 127768986,
+      "boards": {}
+    },
+    "PHY_FEDATA_WIFI_RECOVERED.WORD_001C_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537922588,
+      "signed": false,
+      "shared": 127768986,
+      "boards": {}
+    },
+    "PHY_FREQUENCY_CHANNEL_ORACLE.CHANNEL_CBW_CONTROL_0": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537951456,
+      "signed": false,
+      "shared": 0,
+      "boards": {}
+    },
+    "PHY_FREQUENCY_CHANNEL_ORACLE.CHANNEL_CBW_CONTROL_1": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537951460,
+      "signed": false,
+      "shared": 458880,
+      "boards": {}
+    },
+    "PHY_FREQUENCY_CHANNEL_ORACLE.CHANNEL_TX_OFFSET_CONTROL": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537936896,
+      "signed": false,
+      "shared": 3251320656,
+      "boards": {}
+    },
+    "PHY_FREQUENCY_CHANNEL_ORACLE.FBW_BT_FILTER_CONTROL": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537921652,
+      "signed": false,
+      "shared": 33555460,
+      "boards": {}
+    },
+    "PHY_FREQUENCY_CHANNEL_ORACLE.FREQUENCY_CONTROL": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537919516,
+      "signed": false,
+      "shared": 1350567436,
+      "boards": {}
+    },
+    "PHY_FREQUENCY_CHANNEL_ORACLE.FREQUENCY_MEMORY_READ_CONTROL": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537919520,
+      "signed": false,
+      "shared": 262144,
+      "boards": {}
+    },
+    "PHY_FREQUENCY_CHANNEL_ORACLE.FREQUENCY_MEMORY_READ_RESULT": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537919552,
+      "signed": false,
+      "shared": 0,
+      "boards": {}
+    },
+    "PHY_FREQUENCY_CHANNEL_ORACLE.FREQUENCY_PARAMETER_1_STATUS": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537919528,
+      "signed": false,
+      "shared": 629296984,
+      "boards": {}
+    },
+    "PHY_FREQUENCY_CHANNEL_ORACLE.I2C_NUMBER_CONTROL": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537919536,
+      "signed": false,
+      "shared": 8430592,
+      "boards": {}
+    },
+    "PHY_FREQUENCY_CHANNEL_ORACLE.NRX_FREQUENCY_CONTROL": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537950280,
+      "signed": false,
+      "shared": 386154197,
+      "boards": {}
+    },
+    "PHY_IQ_ESTIMATOR_ORACLE.DC_I_ACCUMULATOR": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537920612,
+      "signed": false,
+      "shared": 0,
+      "boards": {}
+    },
+    "PHY_IQ_ESTIMATOR_ORACLE.DC_Q_ACCUMULATOR": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537920616,
+      "signed": false,
+      "shared": 0,
+      "boards": {}
+    },
+    "PHY_IQ_ESTIMATOR_ORACLE.ESTIMATOR_ACTIVITY_STATUS": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537921744,
+      "signed": false,
+      "shared": 0,
+      "boards": {}
+    },
+    "PHY_IQ_ESTIMATOR_ORACLE.ESTIMATOR_CONFIG": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537920588,
+      "signed": false,
+      "shared": 67108864,
+      "boards": {}
+    },
+    "PHY_IQ_ESTIMATOR_ORACLE.ESTIMATOR_CONTROL": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537920592,
+      "signed": false,
+      "shared": 1056768,
+      "boards": {}
+    },
+    "PHY_IQ_ESTIMATOR_ORACLE.ESTIMATOR_READY_STATUS": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537920636,
+      "signed": false,
+      "shared": 0,
+      "boards": {}
+    },
+    "PHY_IQ_ESTIMATOR_ORACLE.POWER_ACCUMULATOR": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537920620,
+      "signed": false,
+      "shared": 0,
+      "boards": {}
+    },
+    "PHY_IQ_ESTIMATOR_ORACLE.SIGNAL_POWER_DIFFERENCE_I": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537920600,
+      "signed": false,
+      "shared": 0,
+      "boards": {}
+    },
+    "PHY_IQ_ESTIMATOR_ORACLE.SIGNAL_POWER_DIFFERENCE_Q": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537920604,
+      "signed": false,
+      "shared": 0,
+      "boards": {}
+    },
+    "PHY_IQ_ESTIMATOR_ORACLE.SIGNAL_POWER_SUM_I": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537920596,
+      "signed": false,
+      "shared": 0,
+      "boards": {}
+    },
+    "PHY_IQ_ESTIMATOR_ORACLE.SIGNAL_POWER_SUM_Q": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537920608,
+      "signed": false,
+      "shared": 0,
+      "boards": {}
+    },
+    "PHY_MEMORY.COMMAND": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537921604,
+      "signed": false,
+      "shared": 391168,
+      "boards": {}
+    },
+    "PHY_MEMORY.GROUP_BOUNDARY0": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537921620,
+      "signed": false,
+      "shared": 201852672,
+      "boards": {}
+    },
+    "PHY_MEMORY.GROUP_BOUNDARY1": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537921624,
+      "signed": false,
+      "shared": 420811789,
+      "boards": {}
+    },
+    "PHY_MEMORY.GROUP_BOUNDARY2": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537921628,
+      "signed": false,
+      "shared": 488447002,
+      "boards": {}
+    },
+    "PHY_MEMORY.GROUP_BOUNDARY3": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537921632,
+      "signed": false,
+      "shared": 707142942,
+      "boards": {}
+    },
+    "PHY_MEMORY.GROUP_BOUNDARY4": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537921636,
+      "signed": false,
+      "shared": 926102059,
+      "boards": {}
+    },
+    "PHY_MEMORY.GROUP_BOUNDARY5": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537921640,
+      "signed": false,
+      "shared": 993737272,
+      "boards": {}
+    },
+    "PHY_NRX_RECOVERED_GAPS.WORD_0000_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537950208,
+      "signed": false,
+      "shared": 252158680,
+      "boards": {}
+    },
+    "PHY_NRX_RECOVERED_GAPS.WORD_000C_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537950220,
+      "signed": false,
+      "shared": 17973757,
+      "boards": {}
+    },
+    "PHY_NRX_RECOVERED_GAPS.WORD_0030_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537950256,
+      "signed": false,
+      "shared": 2504523776,
+      "boards": {}
+    },
+    "PHY_NRX_RECOVERED_GAPS.WORD_0098_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537950360,
+      "signed": false,
+      "shared": 469815296,
+      "boards": {}
+    },
+    "PHY_NRX_RECOVERED_GAPS.WORD_00B8_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537950392,
+      "signed": false,
+      "excluded": "live state: carrier frequency offset estimation",
+      "boards": {
+        "s31-a": {
+          "status": "read",
+          "ranges": [
+            [
+              1073741824,
+              1234487754
+            ]
+          ],
+          "margin": 160745930
+        },
+        "s31-b": {
+          "status": "read",
+          "ranges": [
+            [
+              1073741824,
+              1240635129
+            ]
+          ],
+          "margin": 166893305
+        }
+      }
+    },
+    "PHY_NRX_RECOVERED_GAPS.WORD_0104_OPAQUE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537950468,
+      "signed": false,
+      "shared": 2134382,
+      "boards": {}
+    },
+    "PHY_PBUS.COMMAND": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537921668,
+      "signed": false,
+      "excluded": "live state: the last PBus command word",
+      "shared": 1610301452,
+      "boards": {}
+    },
+    "PHY_PBUS.MODE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537921676,
+      "signed": false,
+      "shared": 1073250303,
+      "boards": {}
+    },
+    "PHY_PBUS.READ_RESULT_0": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537921684,
+      "signed": false,
+      "excluded": "live state: the last PBus read result, set by whichever transaction ran last",
+      "boards": {
+        "s31-a": {
+          "status": "read",
+          "ranges": [
+            [
+              1250108,
+              1250172
+            ]
+          ],
+          "margin": 64
+        },
+        "s31-b": {
+          "status": "read",
+          "ranges": [
+            [
+              1249840,
+              1250172
+            ]
+          ],
+          "margin": 332
+        }
+      }
+    },
+    "PHY_PBUS.READ_RESULT_1": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537921688,
+      "signed": false,
+      "excluded": "live state: the last PBus read result, set by whichever transaction ran last",
+      "boards": {
+        "s31-a": {
+          "status": "read",
+          "ranges": [
+            [
+              258,
+              260
+            ]
+          ],
+          "margin": 2
+        },
+        "s31-b": {
+          "status": "read",
+          "ranges": [
+            [
+              272,
+              275
+            ]
+          ],
+          "margin": 3
+        }
+      }
+    },
+    "PHY_PBUS.READ_RESULT_2": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537921692,
+      "signed": false,
+      "excluded": "live state: the last PBus read result, set by whichever transaction ran last",
+      "boards": {
+        "s31-a": {
+          "status": "read",
+          "ranges": [
+            [
+              67526397,
+              71721218
+            ]
+          ],
+          "margin": 4194821
+        },
+        "s31-b": {
+          "status": "read",
+          "ranges": [
+            [
+              63838989,
+              68032784
+            ]
+          ],
+          "margin": 4193795
+        }
+      }
+    },
+    "PHY_PBUS.READ_RESULT_3": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537921696,
+      "signed": false,
+      "excluded": "live state: the last PBus read result, set by whichever transaction ran last",
+      "boards": {
+        "s31-a": {
+          "status": "read",
+          "ranges": [
+            [
+              33390080,
+              33390080
+            ]
+          ],
+          "margin": 0
+        },
+        "s31-b": {
+          "status": "read",
+          "ranges": [
+            [
+              31817216,
+              33390080
+            ]
+          ],
+          "margin": 1572864
+        }
+      }
+    },
+    "PHY_PBUS.READ_RESULT_4": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537921700,
+      "signed": false,
+      "excluded": "live state: the last PBus read result, set by whichever transaction ran last",
+      "shared": 262144,
+      "boards": {}
+    },
+    "PHY_PBUS.STATUS_CLOCK_FORCE": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537921680,
+      "signed": false,
+      "shared": 8388688,
+      "boards": {}
+    },
+    "PHY_RX_DCO_ORACLE.CONTROL": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 537920564,
+      "signed": false,
+      "shared": 1196616,
+      "boards": {}
+    },
+    "PMU_RADIO.ANA_PERI_PWR_CTRL": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 544227848,
+      "signed": false,
+      "shared": 3221225472,
+      "boards": {}
+    },
+    "PMU_RADIO.HP_ACTIVE_HP_CK_POWER": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 544227356,
+      "signed": false,
+      "excluded": "clock policy: active-state clock power follows the active radio clients",
+      "shared": 432013312,
+      "boards": {}
+    },
+    "PMU_RADIO.HP_ACTIVE_ICG_MODEM": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 544227348,
+      "signed": false,
+      "shared": 2147483648,
+      "boards": {}
+    },
+    "PMU_RADIO.IMM_HP_CK_POWER_0": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 544227568,
+      "signed": false,
+      "shared": 0,
+      "boards": {}
+    },
+    "PMU_RADIO.RF_PWC": {
+      "space": "mmio",
+      "width": 4,
+      "count": 1,
+      "address": 544227716,
+      "signed": false,
+      "shared": 4294901760,
+      "boards": {}
+    },
+    "PhyI2cField.61.07": {
+      "space": "analog",
+      "width": 1,
+      "count": 1,
+      "address": 24839,
+      "signed": false,
+      "shared": 15,
+      "boards": {}
+    },
+    "PhyI2cField.61.08": {
+      "space": "analog",
+      "width": 1,
+      "count": 1,
+      "address": 24840,
+      "signed": false,
+      "shared": 51,
+      "boards": {}
+    },
+    "PhyI2cField.61.09": {
+      "space": "analog",
+      "width": 1,
+      "count": 1,
+      "address": 24841,
+      "signed": false,
+      "boards": {
+        "s31-a": {
+          "status": "read",
+          "ranges": [
+            [
+              2,
+              26
+            ]
+          ],
+          "margin": 24
+        },
+        "s31-b": {
+          "status": "read",
+          "ranges": [
+            [
+              0,
+              15
+            ]
+          ],
+          "margin": 15
+        }
+      }
+    },
+    "PhyI2cField.61.0a": {
+      "space": "analog",
+      "width": 1,
+      "count": 1,
+      "address": 24842,
+      "signed": false,
+      "boards": {
+        "s31-a": {
+          "status": "read",
+          "ranges": [
+            [
+              2,
+              26
+            ]
+          ],
+          "margin": 24
+        },
+        "s31-b": {
+          "status": "read",
+          "ranges": [
+            [
+              0,
+              15
+            ]
+          ],
+          "margin": 15
+        }
+      }
+    },
+    "PhyI2cField.62.00": {
+      "space": "analog",
+      "width": 1,
+      "count": 1,
+      "address": 25088,
+      "signed": false,
+      "shared": 104,
+      "boards": {}
+    },
+    "PhyI2cField.62.01": {
+      "space": "analog",
+      "width": 1,
+      "count": 1,
+      "address": 25089,
+      "signed": false,
+      "boards": {
+        "s31-a": {
+          "status": "read",
+          "ranges": [
+            [
+              13,
+              13
+            ]
+          ],
+          "margin": 0
+        },
+        "s31-b": {
+          "status": "read",
+          "ranges": [
+            [
+              16,
+              16
+            ]
+          ],
+          "margin": 0
+        }
+      }
+    },
+    "PhyI2cField.62.02": {
+      "space": "analog",
+      "width": 1,
+      "count": 1,
+      "address": 25090,
+      "signed": false,
+      "shared": 255,
+      "boards": {}
+    },
+    "PhyI2cField.62.04": {
+      "space": "analog",
+      "width": 1,
+      "count": 1,
+      "address": 25092,
+      "signed": false,
+      "shared": 168,
+      "boards": {}
+    },
+    "PhyI2cField.62.05": {
+      "space": "analog",
+      "width": 1,
+      "count": 1,
+      "address": 25093,
+      "signed": false,
+      "boards": {
+        "s31-a": {
+          "status": "read",
+          "ranges": [
+            [
+              13,
+              13
+            ]
+          ],
+          "margin": 0
+        },
+        "s31-b": {
+          "status": "read",
+          "ranges": [
+            [
+              16,
+              16
+            ]
+          ],
+          "margin": 0
+        }
+      }
+    },
+    "PhyI2cField.62.07": {
+      "space": "analog",
+      "width": 1,
+      "count": 1,
+      "address": 25095,
+      "signed": false,
+      "shared": 7,
+      "boards": {}
+    },
+    "PhyI2cField.62.0b": {
+      "space": "analog",
+      "width": 1,
+      "count": 1,
+      "address": 25099,
+      "signed": false,
+      "shared": 68,
+      "boards": {}
+    },
+    "PhyI2cField.62.0c": {
+      "space": "analog",
+      "width": 1,
+      "count": 1,
+      "address": 25100,
+      "signed": false,
+      "shared": 2,
+      "boards": {}
+    },
+    "PhyI2cField.62.0e": {
+      "space": "analog",
+      "width": 1,
+      "count": 1,
+      "address": 25102,
+      "signed": false,
+      "boards": {
+        "s31-a": {
+          "status": "read",
+          "ranges": [
+            [
+              19,
+              19
+            ]
+          ],
+          "margin": 0
+        },
+        "s31-b": {
+          "status": "read",
+          "ranges": [
+            [
+              21,
+              21
+            ]
+          ],
+          "margin": 0
+        }
+      }
+    },
+    "PhyI2cField.62.0f": {
+      "space": "analog",
+      "width": 1,
+      "count": 1,
+      "address": 25103,
+      "signed": false,
+      "boards": {
+        "s31-a": {
+          "status": "read",
+          "ranges": [
+            [
+              115,
+              115
+            ]
+          ],
+          "margin": 0
+        },
+        "s31-b": {
+          "status": "read",
+          "ranges": [
+            [
+              117,
+              117
+            ]
+          ],
+          "margin": 0
+        }
+      }
+    },
+    "PhyI2cField.62.11": {
+      "space": "analog",
+      "width": 1,
+      "count": 1,
+      "address": 25105,
+      "signed": false,
+      "boards": {
+        "s31-a": {
+          "status": "read",
+          "ranges": [
+            [
+              63,
+              63
+            ]
+          ],
+          "margin": 0
+        },
+        "s31-b": {
+          "status": "read",
+          "ranges": [
+            [
+              54,
+              63
+            ]
+          ],
+          "margin": 9
+        }
+      }
+    },
+    "PhyI2cField.62.12": {
+      "space": "analog",
+      "width": 1,
+      "count": 1,
+      "address": 25106,
+      "signed": false,
+      "shared": 64,
+      "boards": {}
+    },
+    "PhyI2cField.62.13": {
+      "space": "analog",
+      "width": 1,
+      "count": 1,
+      "address": 25107,
+      "signed": false,
+      "shared": 31,
+      "boards": {}
+    },
+    "PhyI2cField.62.14": {
+      "space": "analog",
+      "width": 1,
+      "count": 1,
+      "address": 25108,
+      "signed": false,
+      "shared": 31,
+      "boards": {}
+    },
+    "PhyI2cField.63.00": {
+      "space": "analog",
+      "width": 1,
+      "count": 1,
+      "address": 25344,
+      "signed": false,
+      "shared": 91,
+      "boards": {}
+    },
+    "PhyI2cField.63.03": {
+      "space": "analog",
+      "width": 1,
+      "count": 1,
+      "address": 25347,
+      "signed": false,
+      "shared": 48,
+      "boards": {}
+    },
+    "PhyI2cField.63.04": {
+      "space": "analog",
+      "width": 1,
+      "count": 1,
+      "address": 25348,
+      "signed": false,
+      "shared": 102,
+      "boards": {}
+    },
+    "PhyI2cField.63.05": {
+      "space": "analog",
+      "width": 1,
+      "count": 1,
+      "address": 25349,
+      "signed": false,
+      "shared": 102,
+      "boards": {}
+    },
+    "PhyI2cField.63.06": {
+      "space": "analog",
+      "width": 1,
+      "count": 1,
+      "address": 25350,
+      "signed": false,
+      "shared": 3,
+      "boards": {}
+    },
+    "PhyI2cField.66.04": {
+      "space": "analog",
+      "width": 1,
+      "count": 1,
+      "address": 26116,
+      "signed": false,
+      "shared": 99,
+      "boards": {}
+    },
+    "PhyI2cField.67.00": {
+      "space": "analog",
+      "width": 1,
+      "count": 1,
+      "address": 26368,
+      "signed": false,
+      "shared": 0,
+      "boards": {}
+    },
+    "PhyI2cField.67.02": {
+      "space": "analog",
+      "width": 1,
+      "count": 1,
+      "address": 26370,
+      "signed": false,
+      "shared": 39,
+      "boards": {}
+    },
+    "PhyI2cField.67.03": {
+      "space": "analog",
+      "width": 1,
+      "count": 1,
+      "address": 26371,
+      "signed": false,
+      "shared": 244,
+      "boards": {}
+    },
+    "PhyI2cField.67.1e": {
+      "space": "analog",
+      "width": 1,
+      "count": 1,
+      "address": 26398,
+      "signed": false,
+      "boards": {
+        "s31-a": {
+          "status": "read",
+          "ranges": [
+            [
+              78,
+              78
+            ]
+          ],
+          "margin": 0
+        },
+        "s31-b": {
+          "status": "read",
+          "ranges": [
+            [
+              77,
+              77
+            ]
+          ],
+          "margin": 0
+        }
+      }
+    },
+    "PhyI2cField.67.1f": {
+      "space": "analog",
+      "width": 1,
+      "count": 1,
+      "address": 26399,
+      "signed": false,
+      "boards": {
+        "s31-a": {
+          "status": "read",
+          "ranges": [
+            [
+              14,
+              14
+            ]
+          ],
+          "margin": 0
+        },
+        "s31-b": {
+          "status": "read",
+          "ranges": [
+            [
+              13,
+              13
+            ]
+          ],
+          "margin": 0
+        }
+      }
+    },
+    "PhyI2cField.69.04": {
+      "space": "analog",
+      "width": 1,
+      "count": 1,
+      "address": 26884,
+      "signed": false,
+      "excluded": "lifecycle: cold phy_rf_init runs rc_cal_set(3, 1, 9), phy_rc_cal and sar2_init_code(1400); phy_wakeup_init repeats none of them, and the RF close powers the 0x6b and 0x69 blocks down to their defaults. The vendor read follows the RF wake of its Wi-Fi start, production's read its cold registration; after a restart both sides are woken",
+      "shared": 96,
+      "boards": {}
+    },
+    "PhyI2cField.69.06": {
+      "space": "analog",
+      "width": 1,
+      "count": 1,
+      "address": 26886,
+      "signed": false,
+      "shared": 47,
+      "boards": {}
+    },
+    "PhyI2cField.6a.00": {
+      "space": "analog",
+      "width": 1,
+      "count": 1,
+      "address": 27136,
+      "signed": false,
+      "shared": 175,
+      "boards": {}
+    },
+    "PhyI2cField.6a.01": {
+      "space": "analog",
+      "width": 1,
+      "count": 1,
+      "address": 27137,
+      "signed": false,
+      "shared": 127,
+      "boards": {}
+    },
+    "PhyI2cField.6b.02": {
+      "space": "analog",
+      "width": 1,
+      "count": 1,
+      "address": 27394,
+      "signed": false,
+      "excluded": "live state: the I2C command memory holds both TX capacitor-bank images (0xc2 and 0x73), and the hardware sequencer publishes one on each RF event, so the byte shows the last event",
+      "boards": {
+        "s31-a": {
+          "status": "read",
+          "ranges": [
+            [
+              115,
+              115
+            ]
+          ],
+          "margin": 0
+        },
+        "s31-b": {
+          "status": "read",
+          "ranges": [
+            [
+              99,
+              115
+            ]
+          ],
+          "margin": 16
+        }
+      }
+    },
+    "PhyI2cField.6b.03": {
+      "space": "analog",
+      "width": 1,
+      "count": 1,
+      "address": 27395,
+      "signed": false,
+      "shared": 186,
+      "boards": {}
+    },
+    "PhyI2cField.6b.07": {
+      "space": "analog",
+      "width": 1,
+      "count": 1,
+      "address": 27399,
+      "signed": false,
+      "shared": 253,
+      "boards": {}
+    },
+    "PhyI2cField.6b.0f": {
+      "space": "analog",
+      "width": 1,
+      "count": 1,
+      "address": 27407,
+      "signed": false,
+      "shared": 129,
+      "boards": {}
+    },
+    "PhyI2cField.6b.11": {
+      "space": "analog",
+      "width": 1,
+      "count": 1,
+      "address": 27409,
+      "signed": false,
+      "excluded": "lifecycle: cold phy_rf_init runs rc_cal_set(3, 1, 9), phy_rc_cal and sar2_init_code(1400); phy_wakeup_init repeats none of them, and the RF close powers the 0x6b and 0x69 blocks down to their defaults. The vendor read follows the RF wake of its Wi-Fi start, production's read its cold registration; after a restart both sides are woken",
+      "shared": 41,
+      "boards": {}
+    },
+    "PhyI2cField.6b.13": {
+      "space": "analog",
+      "width": 1,
+      "count": 1,
+      "address": 27411,
+      "signed": false,
+      "excluded": "lifecycle: cold phy_rf_init runs rc_cal_set(3, 1, 9), phy_rc_cal and sar2_init_code(1400); phy_wakeup_init repeats none of them, and the RF close powers the 0x6b and 0x69 blocks down to their defaults. The vendor read follows the RF wake of its Wi-Fi start, production's read its cold registration; after a restart both sides are woken",
+      "shared": 6,
+      "boards": {}
+    },
+    "PhyI2cField.6b.14": {
+      "space": "analog",
+      "width": 1,
+      "count": 1,
+      "address": 27412,
+      "signed": false,
+      "excluded": "lifecycle: cold phy_rf_init runs rc_cal_set(3, 1, 9), phy_rc_cal and sar2_init_code(1400); phy_wakeup_init repeats none of them, and the RF close powers the 0x6b and 0x69 blocks down to their defaults. The vendor read follows the RF wake of its Wi-Fi start, production's read its cold registration; after a restart both sides are woken",
+      "boards": {
+        "s31-a": {
+          "status": "read",
+          "ranges": [
+            [
+              53,
+              55
+            ]
+          ],
+          "margin": 2
+        },
+        "s31-b": {
+          "status": "read",
+          "ranges": [
+            [
+              30,
+              30
+            ]
+          ],
+          "margin": 0
+        }
+      }
+    },
+    "bandwidth": {
+      "space": "field",
+      "width": 1,
+      "count": 1,
+      "signed": false,
+      "shared": 0,
+      "boards": {}
+    },
+    "bluetooth-dc-rows": {
+      "space": "field",
+      "width": 2,
+      "count": 12,
+      "signed": false,
+      "boards": {
+        "s31-a": {
+          "status": "read",
+          "ranges": [
+            [
+              260,
+              260
+            ],
+            [
+              258,
+              259
+            ],
+            [
+              255,
+              257
+            ],
+            [
+              252,
+              258
+            ],
+            [
+              259,
+              260
+            ],
+            [
+              258,
+              258
+            ],
+            [
+              251,
+              259
+            ],
+            [
+              253,
+              255
+            ],
+            [
+              259,
+              259
+            ],
+            [
+              257,
+              258
+            ],
+            [
+              253,
+              255
+            ],
+            [
+              248,
+              258
+            ]
+          ],
+          "margin": 10
+        },
+        "s31-b": {
+          "status": "read",
+          "ranges": [
+            [
+              248,
+              250
+            ],
+            [
+              261,
+              262
+            ],
+            [
+              253,
+              262
+            ],
+            [
+              252,
+              260
+            ],
+            [
+              250,
+              251
+            ],
+            [
+              260,
+              261
+            ],
+            [
+              251,
+              262
+            ],
+            [
+              253,
+              260
+            ],
+            [
+              251,
+              252
+            ],
+            [
+              260,
+              261
+            ],
+            [
+              252,
+              261
+            ],
+            [
+              248,
+              260
+            ]
+          ],
+          "margin": 12
+        }
+      }
+    },
+    "bluetooth-gain-base": {
+      "space": "field",
+      "width": 1,
+      "count": 1,
+      "signed": true,
+      "shared": 0,
+      "boards": {}
+    },
+    "calibration-status": {
+      "space": "field",
+      "width": 1,
+      "count": 2,
+      "signed": false,
+      "mask": [
+        128,
+        2
+      ],
+      "boards": {
+        "s31-a": {
+          "status": "read",
+          "ranges": [
+            [
+              128,
+              128
+            ],
+            [
+              2,
+              2
+            ]
+          ],
+          "margin": 0
+        },
+        "s31-b": {
+          "status": "read",
+          "ranges": [
+            [
+              128,
+              128
+            ],
+            [
+              2,
+              2
+            ]
+          ],
+          "margin": 0
+        }
+      }
+    },
+    "channel": {
+      "space": "field",
+      "width": 2,
+      "count": 1,
+      "signed": false,
+      "shared": 11,
+      "boards": {}
+    },
+    "common-reference": {
+      "space": "field",
+      "width": 2,
+      "count": 1,
+      "signed": true,
+      "boards": {
+        "s31-a": {
+          "status": "read",
+          "ranges": [
+            [
+              28,
+              30
+            ]
+          ],
+          "margin": 2
+        },
+        "s31-b": {
+          "status": "read",
+          "ranges": [
+            [
+              28,
+              29
+            ]
+          ],
+          "margin": 1
+        }
+      }
+    },
+    "current-temperature": {
+      "space": "field",
+      "width": 2,
+      "count": 1,
+      "signed": false,
+      "excluded": "the latest sensor sample follows the board temperature at each boot, not a calibration result",
+      "boards": {
+        "s31-a": {
+          "status": "read",
+          "ranges": [
+            [
+              25,
+              27
+            ]
+          ],
+          "margin": 2
+        },
+        "s31-b": {
+          "status": "read",
+          "ranges": [
+            [
+              25,
+              27
+            ]
+          ],
+          "margin": 2
+        }
+      }
+    },
+    "dcode": {
+      "space": "field",
+      "width": 1,
+      "count": 8,
+      "signed": false,
+      "boards": {
+        "s31-a": {
+          "status": "read",
+          "ranges": [
+            [
+              63,
+              63
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              63,
+              63
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              63,
+              63
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              63,
+              63
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "margin": 0
+        },
+        "s31-b": {
+          "status": "read",
+          "ranges": [
+            [
+              63,
+              63
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              63,
+              63
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              63,
+              63
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              63,
+              63
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "margin": 0
+        }
+      }
+    },
+    "gain-adjustment": {
+      "space": "field",
+      "width": 1,
+      "count": 1,
+      "signed": true,
+      "shared": 0,
+      "boards": {}
+    },
+    "i2c-band": {
+      "space": "field",
+      "width": 1,
+      "count": 1,
+      "signed": false,
+      "shared": 0,
+      "boards": {}
+    },
+    "power-temperature": {
+      "space": "field",
+      "width": 2,
+      "count": 1,
+      "signed": true,
+      "boards": {
+        "s31-a": {
+          "status": "read",
+          "ranges": [
+            [
+              25,
+              27
+            ]
+          ],
+          "margin": 2
+        },
+        "s31-b": {
+          "status": "read",
+          "ranges": [
+            [
+              25,
+              27
+            ]
+          ],
+          "margin": 2
+        }
+      }
+    },
+    "rfpll-reference": {
+      "space": "field",
+      "width": 2,
+      "count": 1,
+      "signed": true,
+      "boards": {
+        "s31-a": {
+          "status": "read",
+          "ranges": [
+            [
+              25,
+              27
+            ]
+          ],
+          "margin": 2
+        },
+        "s31-b": {
+          "status": "read",
+          "ranges": [
+            [
+              25,
+              27
+            ]
+          ],
+          "margin": 2
+        }
+      }
+    },
+    "rx-table-last-indices": {
+      "space": "field",
+      "width": 1,
+      "count": 2,
+      "signed": false,
+      "boards": {
+        "s31-a": {
+          "status": "read",
+          "ranges": [
+            [
+              75,
+              75
+            ],
+            [
+              71,
+              71
+            ]
+          ],
+          "margin": 0
+        },
+        "s31-b": {
+          "status": "read",
+          "ranges": [
+            [
+              75,
+              75
+            ],
+            [
+              71,
+              71
+            ]
+          ],
+          "margin": 0
+        }
+      }
+    },
+    "sensor-index": {
+      "space": "field",
+      "width": 1,
+      "count": 1,
+      "signed": false,
+      "shared": 2,
+      "boards": {}
+    },
+    "shared-cache": {
+      "space": "field",
+      "width": 1,
+      "count": 1,
+      "signed": true,
+      "shared": 0,
+      "boards": {}
+    },
+    "shared-rx-dc": {
+      "space": "field",
+      "width": 2,
+      "count": 22,
+      "signed": false,
+      "boards": {
+        "s31-a": {
+          "status": "read",
+          "ranges": [
+            [
+              242,
+              243
+            ],
+            [
+              288,
+              289
+            ],
+            [
+              241,
+              242
+            ],
+            [
+              288,
+              289
+            ],
+            [
+              242,
+              243
+            ],
+            [
+              288,
+              289
+            ],
+            [
+              241,
+              242
+            ],
+            [
+              288,
+              288
+            ],
+            [
+              241,
+              242
+            ],
+            [
+              288,
+              289
+            ],
+            [
+              242,
+              243
+            ],
+            [
+              288,
+              288
+            ],
+            [
+              242,
+              243
+            ],
+            [
+              288,
+              288
+            ],
+            [
+              242,
+              243
+            ],
+            [
+              288,
+              288
+            ],
+            [
+              242,
+              242
+            ],
+            [
+              288,
+              289
+            ],
+            [
+              228,
+              230
+            ],
+            [
+              282,
+              283
+            ],
+            [
+              257,
+              259
+            ],
+            [
+              299,
+              303
+            ]
+          ],
+          "margin": 4
+        },
+        "s31-b": {
+          "status": "read",
+          "ranges": [
+            [
+              236,
+              237
+            ],
+            [
+              230,
+              231
+            ],
+            [
+              236,
+              237
+            ],
+            [
+              230,
+              231
+            ],
+            [
+              236,
+              237
+            ],
+            [
+              230,
+              231
+            ],
+            [
+              236,
+              237
+            ],
+            [
+              230,
+              231
+            ],
+            [
+              236,
+              237
+            ],
+            [
+              230,
+              231
+            ],
+            [
+              236,
+              237
+            ],
+            [
+              230,
+              231
+            ],
+            [
+              236,
+              237
+            ],
+            [
+              230,
+              231
+            ],
+            [
+              236,
+              237
+            ],
+            [
+              230,
+              231
+            ],
+            [
+              236,
+              237
+            ],
+            [
+              230,
+              231
+            ],
+            [
+              257,
+              258
+            ],
+            [
+              259,
+              260
+            ],
+            [
+              271,
+              273
+            ],
+            [
+              267,
+              269
+            ]
+          ],
+          "margin": 2
+        }
+      }
+    },
+    "transmit-reference": {
+      "space": "field",
+      "width": 2,
+      "count": 1,
+      "signed": true,
+      "boards": {
+        "s31-a": {
+          "status": "read",
+          "ranges": [
+            [
+              25,
+              27
+            ]
+          ],
+          "margin": 2
+        },
+        "s31-b": {
+          "status": "read",
+          "ranges": [
+            [
+              25,
+              27
+            ]
+          ],
+          "margin": 2
+        }
+      }
+    },
+    "wifi-dc-rows": {
+      "space": "field",
+      "width": 2,
+      "count": 12,
+      "signed": false,
+      "boards": {
+        "s31-a": {
+          "status": "read",
+          "ranges": [
+            [
+              241,
+              245
+            ],
+            [
+              265,
+              267
+            ],
+            [
+              257,
+              260
+            ],
+            [
+              254,
+              255
+            ],
+            [
+              243,
+              245
+            ],
+            [
+              263,
+              264
+            ],
+            [
+              257,
+              258
+            ],
+            [
+              254,
+              255
+            ],
+            [
+              243,
+              245
+            ],
+            [
+              261,
+              263
+            ],
+            [
+              257,
+              260
+            ],
+            [
+              253,
+              256
+            ]
+          ],
+          "margin": 4
+        },
+        "s31-b": {
+          "status": "read",
+          "ranges": [
+            [
+              234,
+              237
+            ],
+            [
+              240,
+              244
+            ],
+            [
+              256,
+              259
+            ],
+            [
+              256,
+              259
+            ],
+            [
+              240,
+              242
+            ],
+            [
+              244,
+              246
+            ],
+            [
+              257,
+              259
+            ],
+            [
+              256,
+              258
+            ],
+            [
+              244,
+              246
+            ],
+            [
+              246,
+              248
+            ],
+            [
+              256,
+              260
+            ],
+            [
+              256,
+              259
+            ]
+          ],
+          "margin": 4
+        }
+      }
+    },
+    "wifi-gain-base": {
+      "space": "field",
+      "width": 1,
+      "count": 1,
+      "signed": true,
+      "shared": 0,
+      "boards": {}
+    },
+    "wifi-rx-dc": {
+      "space": "field",
+      "width": 2,
+      "count": 26,
+      "signed": false,
+      "boards": {
+        "s31-a": {
+          "status": "read",
+          "ranges": [
+            [
+              258,
+              260
+            ],
+            [
+              302,
+              304
+            ],
+            [
+              258,
+              260
+            ],
+            [
+              303,
+              304
+            ],
+            [
+              256,
+              259
+            ],
+            [
+              302,
+              304
+            ],
+            [
+              256,
+              259
+            ],
+            [
+              303,
+              305
+            ],
+            [
+              257,
+              260
+            ],
+            [
+              303,
+              304
+            ],
+            [
+              259,
+              261
+            ],
+            [
+              302,
+              304
+            ],
+            [
+              259,
+              261
+            ],
+            [
+              300,
+              302
+            ],
+            [
+              258,
+              260
+            ],
+            [
+              303,
+              304
+            ],
+            [
+              276,
+              279
+            ],
+            [
+              246,
+              249
+            ],
+            [
+              276,
+              279
+            ],
+            [
+              246,
+              249
+            ],
+            [
+              276,
+              279
+            ],
+            [
+              246,
+              255
+            ],
+            [
+              263,
+              279
+            ],
+            [
+              246,
+              260
+            ],
+            [
+              257,
+              273
+            ],
+            [
+              250,
+              264
+            ]
+          ],
+          "margin": 16
+        },
+        "s31-b": {
+          "status": "read",
+          "ranges": [
+            [
+              273,
+              275
+            ],
+            [
+              268,
+              271
+            ],
+            [
+              273,
+              275
+            ],
+            [
+              268,
+              271
+            ],
+            [
+              272,
+              274
+            ],
+            [
+              268,
+              269
+            ],
+            [
+              271,
+              273
+            ],
+            [
+              267,
+              270
+            ],
+            [
+              273,
+              275
+            ],
+            [
+              267,
+              270
+            ],
+            [
+              273,
+              275
+            ],
+            [
+              267,
+              269
+            ],
+            [
+              275,
+              277
+            ],
+            [
+              266,
+              267
+            ],
+            [
+              272,
+              275
+            ],
+            [
+              267,
+              269
+            ],
+            [
+              243,
+              247
+            ],
+            [
+              279,
+              282
+            ],
+            [
+              243,
+              247
+            ],
+            [
+              279,
+              282
+            ],
+            [
+              238,
+              247
+            ],
+            [
+              279,
+              282
+            ],
+            [
+              243,
+              254
+            ],
+            [
+              267,
+              282
+            ],
+            [
+              247,
+              259
+            ],
+            [
+              262,
+              276
+            ]
+          ],
+          "margin": 15
+        }
+      }
+    }
+  }
+}

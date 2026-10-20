@@ -27,6 +27,10 @@ pub enum PhyScenario<C: Comparison> {
     TrackingHold {
         ticks: u8,
     },
+    RecordedCalibration {
+        lifecycle: Lifecycle,
+        boots: u16,
+    },
     VendorCalibration {
         lifecycle: Lifecycle,
         boots: u16,
@@ -43,6 +47,13 @@ pub enum PhyScenario<C: Comparison> {
 impl<C: Comparison> ScenarioFamily for PhyScenario<C> {
     fn validate(&self) -> Result<()> {
         let (lifecycle, boots, vendor_windows, vendor_transmit) = match self {
+            Self::RecordedCalibration { lifecycle, boots } => {
+                return if *lifecycle == Lifecycle::Cold && (1..=255).contains(boots) {
+                    Ok(())
+                } else {
+                    Err("recorded calibration requires Wi-Fi cold and 1..=255 boots".into())
+                };
+            }
             Self::TrackingHold { ticks } => {
                 return if (1..=oer_hil_protocol::phy::HOLD_TICKS as u8).contains(ticks) {
                     Ok(())
@@ -100,6 +111,11 @@ impl<C: Comparison> Workload for PhyScenario<C> {
     }
     fn run(&self, output: &Path, context: &Context<'_>, _: &Fixtures) -> Result<()> {
         let (lifecycle, boots, vendor_only, vendor_windows, vendor_transmit) = match self {
+            Self::RecordedCalibration { lifecycle, boots } => {
+                return crate::workload::calibration::recorded::<C>(
+                    *lifecycle, *boots, output, context,
+                );
+            }
             Self::TrackingHold { ticks } => {
                 return crate::workload::hold::run(*ticks, output, context);
             }
@@ -140,6 +156,23 @@ mod tests {
         const CHIP: &'static str = "chip-x";
         const VENDOR_OBJECT: &'static str = "phy_param";
         fn images(_: &Path) -> Result<RegisterImages> {
+            Err("no device".into())
+        }
+        fn recorded(
+            _: &Path,
+            _: &str,
+            _: Lifecycle,
+        ) -> Result<crate::comparison::RecordedReference> {
+            Err("no device".into())
+        }
+        fn compare_recorded(
+            _: &Path,
+            _: &str,
+            _: &crate::comparison::RecordedReference,
+            _: &Images,
+            _: &[ProductionBoot],
+            _: &RegisterImages,
+        ) -> Result<Compared> {
             Err("no device".into())
         }
         fn compare(
@@ -190,5 +223,19 @@ mod tests {
             parse("kind='vendor-calibration'\nboots=10\nlifecycle='cold'\nimage='correctness'")
                 .is_err()
         );
+    }
+
+    #[test]
+    fn recorded_capture_has_its_own_cold_only_mode() {
+        let recorded = parse("kind='recorded-calibration'\nlifecycle='cold'\nboots=1").unwrap();
+        recorded.validate().unwrap();
+        assert_eq!(recorded.plan().image, ImageClass::DiagnosticPhy);
+        for text in [
+            "kind='recorded-calibration'\nlifecycle='cold'\nboots=0",
+            "kind='recorded-calibration'\nlifecycle='restart'\nboots=1",
+            "kind='recorded-calibration'\nlifecycle='ieee802154'\nboots=1",
+        ] {
+            assert!(parse(text).unwrap().validate().is_err());
+        }
     }
 }
