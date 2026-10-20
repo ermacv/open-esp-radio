@@ -197,6 +197,10 @@ set of found facts (waker vtables, field types) is a hole,
   every reaching target load in a closed local control-flow graph must
   identify a method and its matching slot. A merge of methods keeps the
   union of their slots; an unknown producer leaves the call unresolved.
+  An unresolved indirect tail can also use these loads when its own exit
+  is the graph's only open site. The resolution is accepted only when every
+  selected slot of every vtable targets an address outside the containing
+  function; otherwise the tail could add missing local predecessors.
 - `Analysis::constant_arguments` reads an argument register's exact value at
   every direct call of a function, complete when `taken_addresses` holds no
   relocation that takes the function's address other than a transfer: how
