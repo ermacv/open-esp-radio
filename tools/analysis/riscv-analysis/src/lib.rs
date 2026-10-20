@@ -11,7 +11,7 @@ mod tables;
 mod value_sets;
 mod values;
 pub mod writes;
-pub use dispatch::{JumpTable, RecognizedTables, jump_tables};
+pub use dispatch::{RecognizedTables, jump_tables};
 pub use references::PreparedReferences;
 pub use tables::{
     JumpTableSource, ProvenTables, research_following_tables,

@@ -21,19 +21,6 @@ mod tests;
 /// Table lengths beyond this are not taken from a bound.
 const MAX_ENTRIES: u32 = 4096;
 
-/// One proven jump table.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct JumpTable {
-    /// The dispatching `jalr`'s offset.
-    pub site: u64,
-    /// The case value of entry zero: GCC subtracts the smallest case from
-    /// the switch value before indexing. `None` when the index's shape does
-    /// not show that subtraction, so no case value is claimed.
-    pub first_case: Option<i64>,
-    /// The case targets in index order: entry `i` is case `first_case + i`.
-    pub entries: Vec<u64>,
-}
-
 /// The tables the value records of a function of `section` locate and the
 /// build's facts prove.
 pub struct RecognizedTables<'e> {
@@ -42,10 +29,34 @@ pub struct RecognizedTables<'e> {
 }
 
 impl JumpTableSource for RecognizedTables<'_> {
-    type Table = JumpTable;
+    type Table = JumpDispatch;
 
-    fn same(&self, earlier: &JumpTable, later: &JumpTable) -> bool {
-        earlier.site == later.site && earlier.entries == later.entries
+    fn same(&self, earlier: &JumpDispatch, later: &JumpDispatch) -> bool {
+        match (earlier, later) {
+            (
+                JumpDispatch::Table {
+                    site: a,
+                    entries: x,
+                    ..
+                },
+                JumpDispatch::Table {
+                    site: b,
+                    entries: y,
+                    ..
+                },
+            ) => a == b && x == y,
+            (
+                JumpDispatch::TargetSet {
+                    site: a,
+                    targets: x,
+                },
+                JumpDispatch::TargetSet {
+                    site: b,
+                    targets: y,
+                },
+            ) => a == b && x == y,
+            _ => false,
+        }
     }
 
     fn tables<'m>(
@@ -54,24 +65,25 @@ impl JumpTableSource for RecognizedTables<'_> {
         extent: CodeRange,
         memory: &'m WorkingMemory,
         control: &mut dyn RunControl,
-    ) -> Result<ProvenTables<'m, JumpTable>> {
+    ) -> Result<ProvenTables<'m, JumpDispatch>> {
         jump_tables(records, self.section, extent, self.entries, memory, control)
     }
 
-    fn jump(&self, table: &JumpTable) -> KnownJump {
-        let mut targets = table.entries.clone();
+    fn jump(&self, table: &JumpDispatch) -> KnownJump {
+        let mut targets = table.addresses().to_vec();
         targets.sort_unstable();
         targets.dedup();
         KnownJump {
-            site: table.site,
+            site: table.site(),
             targets,
         }
     }
 }
 
-/// The tables of the `Dispatch` records among the `records` of one pass over
-/// a function of `section` spanning `extent`, with their case targets in
-/// index order. The value analysis records no dispatch for a return. The
+/// The proofs of the `Dispatch` records among the `records` of one pass over
+/// a function of `section` spanning `extent`: one table retains its index
+/// order, while multiple possible bases yield only a complete target set.
+/// The value analysis records no dispatch for a return. The
 /// expression and block indexes this builds are admitted in `memory` and
 /// every record it visits is charged to `c`.
 pub fn jump_tables<'r, 'm>(
@@ -81,7 +93,7 @@ pub fn jump_tables<'r, 'm>(
     facts: &dyn TableEntries,
     memory: &'m WorkingMemory,
     c: &mut dyn RunControl,
-) -> Result<ProvenTables<'m, JumpTable>> {
+) -> Result<ProvenTables<'m, JumpDispatch>> {
     let mut expressions: AdmittedVec<'_, &'r Expression> = AdmittedVec::new(memory);
     let mut blocks: AdmittedVec<'_, (u64, u64)> = AdmittedVec::new(memory);
     let mut dispatches: AdmittedVec<'_, (u64, &'r AbstractValue, &'r AbstractValue)> =
@@ -111,11 +123,11 @@ pub fn jump_tables<'r, 'm>(
         }
     }
     let inside = |target: u64| target >= extent.start && target < extent.start + extent.length;
-    // One table per dispatch at most, and the next pass's jump per table:
+    // One proof per dispatch at most, and the next pass's jump per proof:
     // both are reserved before the list is allocated at its exact capacity,
     // so it never grows.
     let mut reserved = AdmittedVec::new(memory);
-    let per_site = (std::mem::size_of::<JumpTable>() + std::mem::size_of::<KnownJump>()) as u64;
+    let per_site = (std::mem::size_of::<JumpDispatch>() + std::mem::size_of::<KnownJump>()) as u64;
     reserved.push(
         memory.reserve(dispatches.len() as u64 * per_site, c.position())?,
         c.position(),
@@ -197,13 +209,14 @@ pub fn jump_tables<'r, 'm>(
                 targets.sort_unstable();
                 targets.dedup();
             }
-            jumps.push(JumpTable {
-                site,
-                first_case: alternatives
-                    .is_none()
-                    .then(|| first_case(index, &expressions))
-                    .flatten(),
-                entries: targets,
+            jumps.push(if alternatives.is_some() {
+                JumpDispatch::TargetSet { site, targets }
+            } else {
+                JumpDispatch::Table {
+                    site,
+                    first_case: first_case(index, &expressions),
+                    entries: targets,
+                }
             });
         }
     }

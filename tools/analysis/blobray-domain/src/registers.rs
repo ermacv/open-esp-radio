@@ -114,21 +114,6 @@ fn inverse(value: u32) -> u32 {
     inverse
 }
 
-/// One compiler jump table a relocatable function dispatches through, as
-/// its relocations prove it.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct JumpTable {
-    /// The dispatching `jalr`'s offset.
-    pub site: u64,
-    /// The case value of entry zero: GCC subtracts the smallest case from
-    /// the switch value before indexing. `None` when the index's shape does
-    /// not show that subtraction, so no case value is claimed.
-    pub first_case: Option<i64>,
-    /// The case targets in index order: entry `i` is case `first_case + i`.
-    pub entries: Vec<u64>,
-}
-
 /// A function one captured library input defines.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

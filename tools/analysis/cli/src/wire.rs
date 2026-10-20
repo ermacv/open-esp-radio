@@ -66,8 +66,8 @@ pub struct RegisterAccessDocument {
 }
 
 /// Schema of the `function-records` document
-/// (`{"schema":7,"inputs":[...],"abi":...,"call_returns":...,"read_only":[...],"functions":[...],"missing":[...]}`).
-pub const FUNCTION_RECORDS_SCHEMA: u32 = 7;
+/// (`{"schema":8,"inputs":[...],"abi":...,"call_returns":...,"read_only":[...],"functions":[...],"missing":[...]}`).
+pub const FUNCTION_RECORDS_SCHEMA: u32 = 8;
 pub const FIELD_ACCESSES_SCHEMA: u32 = 5;
 pub const CALLERS_SCHEMA: u32 = 3;
 
@@ -144,10 +144,10 @@ pub enum NamedFunction {
         coverage: FunctionCoverage,
         semantics: SemanticSummary,
         records: Vec<FunctionRecord>,
-        /// The jump tables the analysis followed, proven by the build's
-        /// facts.
+        /// Ordered tables or complete target sets proven by the build's facts.
+        /// Each payload explicitly distinguishes index mappings from sets.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        jump_tables: Vec<oer_analysis_blobray_domain::JumpTable>,
+        jump_tables: Vec<oer_analysis_riscv_model::JumpDispatch>,
     },
     /// It cannot be analyzed; its behavior is unknown.
     Blocked {

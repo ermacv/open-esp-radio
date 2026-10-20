@@ -1,6 +1,104 @@
 use super::*;
 
 const TEXT: u32 = 1;
+
+/// The review reproducer: neither source's entry zero is the smallest target.
+struct TwoTables;
+impl TableEntries for TwoTables {
+    fn entries<'m>(
+        &self,
+        base: &AbstractValue,
+        count: Option<u32>,
+        section: u32,
+        memory: &'m WorkingMemory,
+        c: &mut dyn RunControl,
+    ) -> Result<Option<TableWords<'m>>> {
+        let AbstractValue::Symbol { symbol, addend } = base else {
+            return Ok(None);
+        };
+        if *symbol != table_symbol() || count != Some(3) || section != TEXT {
+            return Ok(None);
+        }
+        let entries = match *addend {
+            0 => vec![0x30, 0x20, 0x30],
+            12 => vec![0x38, 0x30, 0x20],
+            _ => return Ok(None),
+        };
+        let reserved = memory.reserve(24, c.position())?;
+        Ok(Some(TableWords { entries, reserved }))
+    }
+}
+
+#[test]
+fn a_union_is_a_target_set_without_an_entry_index_mapping() {
+    let mut records = records(true);
+    for record in &mut records {
+        if let FunctionRecord::Dispatch { base, .. } = record {
+            *base = AbstractValue::Alternatives {
+                values: ValueAlternatives::new(
+                    [0, 12]
+                        .map(|addend| ValueAlternative::Symbol {
+                            symbol: table_symbol(),
+                            addend,
+                        })
+                        .to_vec(),
+                )
+                .unwrap(),
+            };
+        }
+    }
+    let found = jump_tables(&records, TEXT, EXTENT, &TwoTables, memory(), &mut || Ok(())).unwrap();
+    assert_eq!(
+        found.tables,
+        [JumpDispatch::TargetSet {
+            site: 0x14,
+            targets: vec![0x20, 0x30, 0x38]
+        }]
+    );
+    let source = RecognizedTables {
+        entries: &TwoTables,
+        section: TEXT,
+    };
+    assert_eq!(
+        source.jump(&found.tables[0]),
+        KnownJump {
+            site: 0x14,
+            targets: vec![0x20, 0x30, 0x38]
+        }
+    );
+    assert!(
+        !source.same(
+            &found.tables[0],
+            &JumpDispatch::Table {
+                site: 0x14,
+                first_case: None,
+                entries: vec![0x20, 0x30, 0x38],
+            }
+        ),
+        "a target set is never an indexed table, even with equal addresses"
+    );
+}
+
+#[test]
+fn a_single_table_keeps_original_order_and_duplicate_entries() {
+    let found = jump_tables(
+        &records(true),
+        TEXT,
+        EXTENT,
+        &TwoTables,
+        memory(),
+        &mut || Ok(()),
+    )
+    .unwrap();
+    assert_eq!(
+        found.tables,
+        [JumpDispatch::Table {
+            site: 0x14,
+            first_case: Some(0),
+            entries: vec![0x30, 0x20, 0x30],
+        }]
+    );
+}
 const SYMTAB: u32 = 10;
 const TABLE: u64 = 7;
 
@@ -169,7 +267,7 @@ fn facts(entries: u64, last: u64) -> Facts {
     }
 }
 
-fn run(records: &[FunctionRecord], facts: &Facts) -> Vec<JumpTable> {
+fn run(records: &[FunctionRecord], facts: &Facts) -> Vec<JumpDispatch> {
     jump_tables(records, TEXT, EXTENT, facts, memory(), &mut || Ok(()))
         .unwrap()
         .tables
@@ -185,7 +283,7 @@ fn a_bounded_relocated_table_yields_its_cases_in_index_order() {
     let tables = run(&records(true), &facts(3, 0x38));
     assert_eq!(
         tables,
-        [JumpTable {
+        [JumpDispatch::Table {
             site: 0x14,
             first_case: Some(0),
             entries: vec![0x20, 0x30, 0x38],
@@ -267,7 +365,13 @@ fn a_rebased_switch_value_reports_its_first_case() {
     }
     let tables = run(&rebased, &facts(3, 0x38));
     assert_eq!(tables.len(), 1);
-    assert_eq!(tables[0].first_case, Some(8));
+    assert!(matches!(
+        &tables[..],
+        [JumpDispatch::Table {
+            first_case: Some(8),
+            ..
+        }]
+    ));
 }
 
 #[test]
@@ -350,7 +454,7 @@ fn an_unknown_index_proves_only_a_delimited_table_and_claims_no_case() {
         .tables;
     assert_eq!(
         tables,
-        [JumpTable {
+        [JumpDispatch::Table {
             site: 0x14,
             first_case: None,
             entries: vec![0x20, 0x30, 0x38],
@@ -366,21 +470,22 @@ fn a_table_is_the_same_whatever_case_value_a_pass_shows() {
         entries: &facts,
         section: TEXT,
     };
-    let known = JumpTable {
+    let known = JumpDispatch::Table {
         site: 0x14,
         first_case: Some(0),
         entries: vec![0x20, 0x30, 0x38],
     };
     // A later pass whose index merged shows no case value: the same table.
-    let merged = JumpTable {
-        first_case: None,
-        ..known.clone()
-    };
+    let mut merged = known.clone();
+    if let JumpDispatch::Table { first_case, .. } = &mut merged {
+        *first_case = None;
+    }
     assert!(source.same(&known, &merged));
     // Other entries are another table.
-    let other = JumpTable {
+    let other = JumpDispatch::Table {
+        site: 0x14,
+        first_case: Some(0),
         entries: vec![0x20, 0x30],
-        ..known.clone()
     };
     assert!(!source.same(&known, &other));
 }

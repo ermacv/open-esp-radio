@@ -67,6 +67,38 @@ for diagnostics and checked stack factories. There is no new ELF traversal,
 relocation index, private CFG, closure exception or address-specific resolver.
 Other unknown edges and decoding gaps still fail the ordinary closure check.
 
+## Ordered tables and target sets
+
+The common model's `JumpDispatch` explicitly distinguishes `Table { site,
+first_case, entries }` from `TargetSet { site, targets }`. A single table keeps
+its original entry order and repetitions, including when `first_case` is
+unknown. The union of several proved tables has no entry or case mapping.
+Only the CFG projection sorts and deduplicates an ordered table's targets.
+Revalidation distinguishes the two proof kinds and retains index order when
+comparing tables.
+
+Blobray visits the common proof directly while its admitted owner is live;
+its duplicate domain schema and allocation/copy step are removed. The CLI
+prints `jump table` with entry/case indexes only for `Table`, and `jump targets`
+with addresses for `TargetSet`. The `function-records` JSON schema is 8:
+`kind: "table"` carries ordered `entries`/`first_case`, while `kind:
+"target-set"` carries `targets` alone. Deserialization rejects mixed payloads.
+
+The review example A = `[0x30, 0x20, 0x30]`, B = `[0x38, 0x30, 0x20]` yields
+`TargetSet([0x20, 0x30, 0x38])` and never assigns an entry number to that union.
+A focused regression checks this exact example, the unchanged single-table
+order, the CFG projection and proof-kind revalidation. An in-memory relocated
+ELF additionally exercises the real analyzer, Blobray visit, human CLI output
+and typed JSON roundtrip for both proof kinds.
+
+[p2-comparison.json](p2-comparison.json) compares this representation against
+reviewed commit `5a2d6c78`. All 14 machine files, eight complete reports
+(including resource rows) and four full callback audits are byte-identical.
+The real-image validator also reproduces the existing proof JSON byte for
+byte. The output change is the explicit Blobray/CLI dispatch kind and the
+`function-records` schema bump; the machine proof and its remaining barriers
+are unchanged.
+
 ## Checked propagation and next barrier
 
 | Transition | Proven callee entry sp |
@@ -104,8 +136,8 @@ regression checks positive and negative RV32 wrap plus JALR bit-zero clearing
 for every finite alternative. The existing Installed/Entry and stale-code,
 context and image tests remain enabled.
 
-Tests pass for 52 affected host packages, foundations and consumers (1390
-tests, including 235 stack tests and 37 common analysis tests). All-target
+Tests pass for 52 affected host packages, foundations and consumers (1393
+tests, including 235 stack tests and 39 common analysis tests). All-target
 clippy under the workspace warning policy and formatting pass; both w0/w1
 builds pass. Two independent captures have identical streams and proof JSON.
 The positive replay passes; all eight injected bad facts are rejected.

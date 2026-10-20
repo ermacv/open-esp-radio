@@ -290,8 +290,7 @@ pub(crate) fn exact_registers(registers: &[AbstractValue]) -> [Option<u32>; 32] 
 }
 
 /// The jump tables of a function's dispatches, from the facts of its image.
-pub(crate) type Tables<'a> =
-    dyn JumpTableSource<Table = oer_analysis_riscv_analysis::JumpTable> + 'a;
+pub(crate) type Tables<'a> = dyn JumpTableSource<Table = JumpDispatch> + 'a;
 
 /// The bounded value analysis of one function, its control-flow graph
 /// following the indirect jumps the given jumps name and the jump tables
@@ -371,7 +370,7 @@ pub(crate) fn observing<R>(
         for table in &followed.tables {
             observer
                 .ledger
-                .push(&mut local_jumps, table.site as u32, control)?;
+                .push(&mut local_jumps, table.site() as u32, control)?;
         }
         Ok(Observation {
             depth,
