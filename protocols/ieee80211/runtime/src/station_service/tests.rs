@@ -177,7 +177,7 @@ fn config(security: StaSecurity) -> TestConfig {
             listen_interval: oer_ieee80211_sta::request::StationListenInterval::new(10).unwrap(),
             phy: PhyMode::Legacy,
             nonce,
-            he_packet_padding: |_| oer_ieee80211_upper_mac::HePacketPadding::None,
+            he_packet_padding: |_| oer_ieee80211_port::backend_protection::HePacketPadding::None,
         },
         security,
     )
@@ -377,6 +377,10 @@ struct RecordingRates<'a> {
 }
 
 impl RateSelection<ModelRxMeta, ModelAck> for RecordingRates<'_> {
+    fn packet_number_step(&self) -> oer_ieee80211_wire::ccmp::CcmpPacketNumberStep {
+        oer_ieee80211_wire::ccmp::CcmpPacketNumberStep::ONE
+    }
+
     fn plan<R>(
         &self,
         frame: FrameRates,

@@ -6,8 +6,8 @@
 //! module adds what the S31 queue imposes: a ten-bit slot field and the
 //! validated AIFSN, ACM and TXOP policy of each queue.
 
-use oer_espressif_ieee80211_policy::lmac;
 use oer_ieee80211_port::EdcaContention;
+use oer_ieee80211_port::backend::BackendTxProfile;
 use oer_ieee80211_wire::extensions::wmm::{WmmAcParameters, WmmParameterSet};
 use oer_ieee80211_wire::qos::WmmAccessCategory;
 
@@ -137,13 +137,8 @@ impl EdcaContentionParameters {
     /// The LMAC's cold contention of a queue: complete
     /// `libpp[lmac.o]::lmacInit, libpp[lmac.o]::lmacInitAc`, kept as the Espressif
     /// family's policy data.
-    const fn vendor_default(queue: LegacyTxQueue) -> Self {
-        let defaults = lmac::default_contention(match queue {
-            LegacyTxQueue::Voice => WmmAccessCategory::Voice,
-            LegacyTxQueue::Video => WmmAccessCategory::Video,
-            LegacyTxQueue::BestEffort => WmmAccessCategory::BestEffort,
-            LegacyTxQueue::Background => WmmAccessCategory::Background,
-        });
+    const fn vendor_default<X: BackendTxProfile>(queue: LegacyTxQueue) -> Self {
+        let defaults = *queue.access_category().select(&X::DEFAULT_CONTENTION);
         Self {
             aifsn: defaults.aifsn,
             minimum_exponent: defaults.ecw_min,
@@ -239,19 +234,19 @@ pub struct EdcaQueues {
 }
 
 impl EdcaQueues {
-    pub const fn vendor_defaults() -> Self {
+    pub const fn vendor_defaults<X: BackendTxProfile>() -> Self {
         Self {
             queues: [
-                EdcaBackoffState::new(EdcaContentionParameters::vendor_default(
+                EdcaBackoffState::new(EdcaContentionParameters::vendor_default::<X>(
                     LegacyTxQueue::Voice,
                 )),
-                EdcaBackoffState::new(EdcaContentionParameters::vendor_default(
+                EdcaBackoffState::new(EdcaContentionParameters::vendor_default::<X>(
                     LegacyTxQueue::Video,
                 )),
-                EdcaBackoffState::new(EdcaContentionParameters::vendor_default(
+                EdcaBackoffState::new(EdcaContentionParameters::vendor_default::<X>(
                     LegacyTxQueue::BestEffort,
                 )),
-                EdcaBackoffState::new(EdcaContentionParameters::vendor_default(
+                EdcaBackoffState::new(EdcaContentionParameters::vendor_default::<X>(
                     LegacyTxQueue::Background,
                 )),
             ],
@@ -301,12 +296,6 @@ impl EdcaQueues {
         self.queues[LegacyTxQueue::BestEffort as usize].reconfigure_access_policy(best_effort);
         self.queues[LegacyTxQueue::Background as usize].reconfigure_access_policy(background);
         Ok(())
-    }
-}
-
-impl Default for EdcaQueues {
-    fn default() -> Self {
-        Self::vendor_defaults()
     }
 }
 

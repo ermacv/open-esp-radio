@@ -1,5 +1,5 @@
-error[E0599]: no method named `submit_checked` found for mutable reference `&mut GateOpenFailed<LowerMacCore<'core, 'slot, P, E, T, 512>>` in the current scope
+error[E0599]: no method named `submit_checked` found for mutable reference `&mut GateOpenFailed<LowerMacCore<'core, 'slot, EspressifBackendTxProfile, P, E, T, 512>>` in the current scope
   --> tests/ui/failed_gate.rs:16:26
    |
 16 |     let _result = failed.submit_checked(hardware, queue, admission, values); // ui-error: E0599
-   |                          ^^^^^^^^^^^^^^ method not found in `&mut GateOpenFailed<LowerMacCore<'core, 'slot, P, E, T, 512>>`
+   |                          ^^^^^^^^^^^^^^ method not found in `&mut GateOpenFailed<LowerMacCore<'core, 'slot, EspressifBackendTxProfile, P, E, T, 512>>`

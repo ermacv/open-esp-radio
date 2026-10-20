@@ -7,7 +7,6 @@
 //! the MAC.
 
 use crate::{
-    rate::schedule::RateScheduleRef,
     rx::HeGuardIntervalAndLtf,
     tx::{
         HeDcmRate, HeMcs, HeRate, HtChannelWidth, HtGuardInterval, HtMcs, HtRate, LegacyRate,
@@ -25,8 +24,8 @@ use oer_esp32s31_hal::{
 
 use {oer_ieee80211_port::PhyMode, oer_ieee80211_wire::he::HeDcmConstellation};
 
-use oer_espressif_ieee80211_policy::rate_control::{
-    BeamformingReportRate, StaRateControlAssociation,
+use oer_ieee80211_port::backend::{
+    BackendStationRateControl, BackendTxProfile, BeamformingReportRate, RateScheduleRef,
 };
 
 /// Ordered PAC leaves used by the association rate-control transition.
@@ -176,7 +175,7 @@ impl StaTxRatePolicy {
 
     /// Decode one complete Rust-owned schedule and apply negotiated format
     /// capabilities without exposing vendor rate bytes to the application.
-    pub fn rate_for_schedule(self, schedule: RateScheduleRef) -> TxPhyRate {
+    pub fn rate_for_schedule<X: BackendTxProfile>(self, schedule: RateScheduleRef) -> TxPhyRate {
         if !self.high_throughput_enabled {
             return TxPhyRate::Legacy(self.fallback_legacy_rate);
         }
@@ -184,7 +183,7 @@ impl StaTxRatePolicy {
             return TxPhyRate::Legacy(self.fallback_legacy_rate);
         };
         let Some(rate) =
-            TxPhyRate::from_rate_control_schedule(schedule, ht_width, self.he_800ns_gi_ltf)
+            TxPhyRate::from_rate_control_schedule::<X>(schedule, ht_width, self.he_800ns_gi_ltf)
         else {
             return self.fallback_rate();
         };
@@ -240,13 +239,13 @@ pub trait StaRateControlTx {
     ) -> Result<(), MacHeBeamformingReportProfileError>;
 }
 
-impl StaRateControlTx for StaRateControlAssociation {
+impl<T: BackendStationRateControl> StaRateControlTx for T {
     fn tx_rate(&self, policy: StaTxRatePolicy) -> TxPhyRate {
-        policy.rate_for_schedule(self.current_schedule())
+        policy.rate_for_schedule::<T::Profile>(self.current_schedule())
     }
 
     fn ampdu_tx_rate(&self, policy: StaTxRatePolicy) -> TxPhyRate {
-        policy.rate_for_schedule(
+        policy.rate_for_schedule::<T::Profile>(
             self.current_ampdu_schedule()
                 .unwrap_or_else(|| self.current_schedule()),
         )

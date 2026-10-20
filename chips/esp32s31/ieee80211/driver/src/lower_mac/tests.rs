@@ -465,7 +465,15 @@ fn entropy() -> u32 {
 mod driver;
 use driver::{TestDriver, TestStart};
 
-type DeviceCore<'core> = LowerMacCore<'core, 'static, Power, fn() -> u32, Timer, 512>;
+type DeviceCore<'core> = LowerMacCore<
+    'core,
+    'static,
+    oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile,
+    Power,
+    fn() -> u32,
+    Timer,
+    512,
+>;
 
 struct TestAssociations<'id> {
     station: association::StationAssociation<'id>,
@@ -557,7 +565,15 @@ impl core::ops::DerefMut for Core<'_> {
 
 struct CoreParts<'core> {
     associations: TestAssociations<'core>,
-    inner: LowerMacCoreParts<'core, 'static, Power, fn() -> u32, Timer, 512>,
+    inner: LowerMacCoreParts<
+        'core,
+        'static,
+        oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile,
+        Power,
+        fn() -> u32,
+        Timer,
+        512,
+    >,
     free: [Option<FreeQueue<'core>>; LOWER_MAC_TX_QUEUES],
     tickets: [Option<TxTicket<'core>>; 4],
 }
@@ -861,7 +877,9 @@ fn core(resources: CoreResources<'_>) -> Core<'_> {
             resources.authority,
             OrdinaryTxOwner::new(WifiTxResources {
                 slot: slot(),
-                policy: WifiTxRuntimePolicy::vendor_defaults(),
+                policy: WifiTxRuntimePolicy::<
+                    oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile,
+                >::vendor_defaults(),
                 power: Power,
                 entropy: entropy as fn() -> u32,
                 timer: Timer::default(),
@@ -925,7 +943,9 @@ fn classic_transmitter_lends_only_its_current_phase_and_returns_idle_after_detac
     use crate::ordinary_tx::{OrdinaryTxAccess, OrdinaryTxInterface};
     let mut owner = OrdinaryTxOwner::new(WifiTxResources {
         slot: slot(),
-        policy: WifiTxRuntimePolicy::vendor_defaults(),
+        policy: WifiTxRuntimePolicy::<
+            oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile,
+        >::vendor_defaults(),
         power: Power,
         entropy: entropy as fn() -> u32,
         timer: Timer::default(),
@@ -995,7 +1015,9 @@ fn reserved_descriptor_never_lends_classic_idle_authority() {
     let cookie = queued_free_slot(slot.as_mut()).reserve(64, 32).unwrap();
     let owner = OrdinaryTxOwner::new(WifiTxResources {
         slot,
-        policy: WifiTxRuntimePolicy::vendor_defaults(),
+        policy: WifiTxRuntimePolicy::<
+            oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile,
+        >::vendor_defaults(),
         power: Power,
         entropy: entropy as fn() -> u32,
         timer: Timer::default(),
@@ -1023,7 +1045,9 @@ fn check_management_transmissions(
 
     let mut owner = OrdinaryTxOwner::new(WifiTxResources {
         slot: slot(),
-        policy: WifiTxRuntimePolicy::vendor_defaults(),
+        policy: WifiTxRuntimePolicy::<
+            oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile,
+        >::vendor_defaults(),
         power: Power,
         entropy: entropy as fn() -> u32,
         timer: Timer::default(),
@@ -1204,7 +1228,14 @@ fn complete_with(
 }
 
 /// The single attempt published on queue `index`.
-fn queued<'a>(core: &'a Core<'_>, index: usize) -> &'a QueuedSingleAttempt<'static, 512> {
+fn queued<'a>(
+    core: &'a Core<'_>,
+    index: usize,
+) -> &'a QueuedSingleAttempt<
+    'static,
+    oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile,
+    512,
+> {
     match core.queues[index].as_ref().map(|attempt| &attempt.work) {
         Some(Work::Published(queued)) => queued,
         _ => panic!("queue {index} holds a published MPDU"),
@@ -2126,7 +2157,7 @@ fn a_fresh_protected_mpdu_is_numbered_and_receive_only_group_removal_has_its_fif
         let mut hardware = Hardware::default();
         let mut core = enabled(&mut hardware, pools);
         static KEY: [u8; 16] = [0x5a; 16];
-        let mut pairwise = core
+        let pairwise = core
             .install_key(
                 &mut hardware,
                 TransmitKeyScope::StationPairwise { peer: BSSID },
@@ -2141,15 +2172,26 @@ fn a_fresh_protected_mpdu_is_numbered_and_receive_only_group_removal_has_its_fif
             )
             .unwrap();
         let mut slot = slot();
-        // The vendor's step of three: a new key emits PN 3, then 6.
-        for expected in [3, 6] {
+        // The backend formats the supplied PN, including all six octets.
+        for expected in [3_u64, 6, 0x1234_5678_9abc] {
             assert_eq!(
-                core.number(&mut pairwise, &mut queued_free_slot(slot.as_mut()), 26),
+                core.write_ccmp_header(
+                    &pairwise,
+                    &mut queued_free_slot(slot.as_mut()),
+                    26,
+                    oer_ieee80211_wire::ccmp::CcmpPacketNumber::new(expected).unwrap()
+                ),
                 Ok(())
             );
             let header =
                 &queued_free_slot(slot.as_mut()).into_buffer()[TX_METADATA_SIZE + 26..][..8];
-            assert_eq!(header, &[expected, 0, 0, 0x20, 0, 0, 0, 0]);
+            let header =
+                oer_ieee80211_wire::ccmp::CcmpHeader::parse(header.try_into().unwrap()).unwrap();
+            assert_eq!(header.packet_number().value(), expected);
+            assert_eq!(
+                header.key_id(),
+                oer_ieee80211_wire::ccmp::CcmpKeyId::PAIRWISE
+            );
         }
         // A receive-only key has no admitted TX rights to delay its removal.
         let mut events = Events::default();
@@ -2168,7 +2210,7 @@ fn reserved_slot_carries_no_numbering_authority_and_retains_the_packet_number() 
         let mut hardware = Hardware::default();
         let mut core = enabled(&mut hardware, pools);
         static KEY: [u8; 16] = [0x5a; 16];
-        let mut key = core
+        let key = core
             .install_key(
                 &mut hardware,
                 TransmitKeyScope::StationPairwise { peer: BSSID },
@@ -2186,7 +2228,12 @@ fn reserved_slot_carries_no_numbering_authority_and_retains_the_packet_number() 
         slot.as_mut().cancel_reservation(cookie).unwrap();
         assert_eq!(queued_free_slot(slot.as_mut()).into_buffer(), &[0xee; 512]);
         assert_eq!(
-            core.number(&mut key, &mut queued_free_slot(slot.as_mut()), 26),
+            core.write_ccmp_header(
+                &key,
+                &mut queued_free_slot(slot.as_mut()),
+                26,
+                oer_ieee80211_wire::ccmp::CcmpPacketNumber::new(3).unwrap()
+            ),
             Ok(())
         );
         assert_eq!(
@@ -2197,12 +2244,12 @@ fn reserved_slot_carries_no_numbering_authority_and_retains_the_packet_number() 
 }
 
 #[test]
-fn numbering_checks_header_space_and_offset_overflow_before_allocating_a_packet_number() {
+fn supplied_packet_number_is_written_only_when_the_complete_header_fits() {
     installed(|pools| {
         let mut hardware = Hardware::default();
         let mut core = enabled(&mut hardware, pools);
         static KEY: [u8; 16] = [0x5a; 16];
-        let mut key = core
+        let key = core
             .install_key(
                 &mut hardware,
                 TransmitKeyScope::StationPairwise { peer: BSSID },
@@ -2220,16 +2267,22 @@ fn numbering_checks_header_space_and_offset_overflow_before_allocating_a_packet_
             usize::MAX,
         ] {
             assert_eq!(
-                core.number(&mut key, &mut queued_free_slot(slot.as_mut()), header_len),
-                Err(CcmpNumberingError::InsufficientSpace)
+                core.write_ccmp_header(
+                    &key,
+                    &mut queued_free_slot(slot.as_mut()),
+                    header_len,
+                    oer_ieee80211_wire::ccmp::CcmpPacketNumber::new(3).unwrap()
+                ),
+                Err(CcmpHeaderWriteError::InsufficientSpace)
             );
             assert_eq!(queued_free_slot(slot.as_mut()).into_buffer(), &[0xee; 512]);
         }
         assert_eq!(
-            core.number(
-                &mut key,
+            core.write_ccmp_header(
+                &key,
                 &mut queued_free_slot(slot.as_mut()),
-                last_header_len
+                last_header_len,
+                oer_ieee80211_wire::ccmp::CcmpPacketNumber::new(3).unwrap(),
             ),
             Ok(())
         );
@@ -2837,7 +2890,10 @@ fn each_interface_contends_with_its_own_edca_set() {
             core.set_checked_edca(VifRole::AccessPoint, access_point),
             Ok(access_point)
         );
-        let txop = |policy: &WifiTxRuntimePolicy, role| {
+        let txop = |policy: &WifiTxRuntimePolicy<
+            oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile,
+        >,
+                    role| {
             policy
                 .access_policy(role, LegacyTxQueue::BestEffort)
                 .txop_limit_units_32_us()
@@ -3916,7 +3972,9 @@ fn maximum_ticket_pool_keeps_key_removal_until_all_256_rights_return() {
             resources.authority,
             OrdinaryTxOwner::new(WifiTxResources {
                 slot: slot(),
-                policy: WifiTxRuntimePolicy::vendor_defaults(),
+                policy: WifiTxRuntimePolicy::<
+                    oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile,
+                >::vendor_defaults(),
                 power: Power,
                 entropy: entropy as fn() -> u32,
                 timer: Timer::default(),
@@ -4190,7 +4248,9 @@ fn an_irq_legacy_transmitter_refuses_ht_before_reserving_or_publishing_dma() {
     use oer_esp32s31_ieee80211_mac::tx::{HtChannelWidth, HtGuardInterval, HtMcs, HtRate};
     let mut owner = OrdinaryTxOwner::new_legacy(WifiTxResources {
         slot: slot(),
-        policy: WifiTxRuntimePolicy::vendor_defaults(),
+        policy: WifiTxRuntimePolicy::<
+            oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile,
+        >::vendor_defaults(),
         power: Power,
         entropy: entropy as fn() -> u32,
         timer: Timer::default(),

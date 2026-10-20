@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 fn dot11g_54m_record_has_the_vendor_retry_ladder() {
-    let schedule = RateScheduleRef::new(RateScheduleKind::Dot11G, 0).unwrap();
+    let schedule = crate::rate_schedule::rate_schedule(RateScheduleKind::Dot11G, 0).unwrap();
     assert_eq!(schedule_publication_limit(schedule), 32);
     assert_eq!(schedule_rate_after_failures(schedule, 0), Some(0x0c));
     assert_eq!(schedule_rate_after_failures(schedule, 1), Some(0x0c));
@@ -19,8 +19,8 @@ fn dot11g_54m_record_has_the_vendor_retry_ladder() {
 fn post_attach_indices_are_materialized_in_every_arena() {
     let mut total = 0;
     for kind in RATE_SCHEDULE_KINDS {
-        for index in 0..kind.record_count() {
-            let schedule = RateScheduleRef::new(kind, index as u8).unwrap();
+        for index in 0..crate::rate_schedule::record_count(kind) {
+            let schedule = crate::rate_schedule::rate_schedule(kind, index as u8).unwrap();
             assert_eq!(schedule_state(schedule).index, index as u8);
             total += 1;
         }
@@ -31,7 +31,7 @@ fn post_attach_indices_are_materialized_in_every_arena() {
 #[test]
 fn recovered_boundary_records_match_the_pinned_tables() {
     assert_eq!(
-        schedule_state(RateScheduleRef::new(RateScheduleKind::Dot11Ax, 0).unwrap()),
+        schedule_state(crate::rate_schedule::rate_schedule(RateScheduleKind::Dot11Ax, 0).unwrap()),
         RateScheduleRecordState {
             rate: 0x23,
             retry_limit: 2,
@@ -40,7 +40,7 @@ fn recovered_boundary_records_match_the_pinned_tables() {
         }
     );
     assert_eq!(
-        schedule_state(RateScheduleRef::new(RateScheduleKind::Dot11N, 13).unwrap()),
+        schedule_state(crate::rate_schedule::rate_schedule(RateScheduleKind::Dot11N, 13).unwrap()),
         RateScheduleRecordState {
             rate: 0x29,
             retry_limit: 2,
@@ -48,7 +48,7 @@ fn recovered_boundary_records_match_the_pinned_tables() {
             adaptive: 0,
         }
     );
-    assert!(RateScheduleRef::new(RateScheduleKind::Lora, 2).is_none());
+    assert!(crate::rate_schedule::rate_schedule(RateScheduleKind::Lora, 2).is_none());
 }
 
 #[test]
@@ -56,11 +56,11 @@ fn legacy_codes_locate_their_dot11g_records() {
     // 54 Mb/s (code 0x0c) is record zero; 1 Mb/s (code 0x00) record ten.
     assert_eq!(
         dot11g_schedule_for_legacy_rate(0x0c),
-        RateScheduleRef::new(RateScheduleKind::Dot11G, 0)
+        crate::rate_schedule::rate_schedule(RateScheduleKind::Dot11G, 0)
     );
     assert_eq!(
         dot11g_schedule_for_legacy_rate(0x00),
-        RateScheduleRef::new(RateScheduleKind::Dot11G, 10)
+        crate::rate_schedule::rate_schedule(RateScheduleKind::Dot11G, 10)
     );
     assert_eq!(dot11g_schedule_for_legacy_rate(0x10), None);
     assert_eq!(rate_to_schedule_index(RateIndexMap::Lora, 0x2a), Some(0));
@@ -78,7 +78,7 @@ fn every_mapped_code_resolves_inside_its_family_arena() {
         for code in 0..=u8::MAX {
             if let Some(index) = rate_to_schedule_index(map, code) {
                 assert!(
-                    RateScheduleRef::new(kind, index).is_some(),
+                    crate::rate_schedule::rate_schedule(kind, index).is_some(),
                     "{map:?} rate {code:#04x} has no record {index}"
                 );
             }

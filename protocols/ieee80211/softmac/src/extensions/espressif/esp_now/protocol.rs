@@ -5,6 +5,7 @@
 //! does not claim receive-filter, key-slot, PHY-low-rate or DMA authority.
 
 use core::fmt;
+use oer_ieee80211_port::espressif::EspNowPhyMode;
 use oer_ieee80211_wire::sequence::SequenceNumber;
 
 use {
@@ -68,99 +69,6 @@ impl EspNowRxPeerSlot {
         self.next_history =
             self.next_history.wrapping_add(1) % ESP_NOW_RX_DUPLICATE_HISTORY_CAPACITY;
     }
-}
-
-/// One standard OFDM rate explicitly selected for an ESP-NOW peer.
-///
-/// The values are kept portable instead of exposing a chip MAC rate byte.
-/// A backend may support only a subset, but must reject an unsupported value
-/// before publishing a frame.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum EspNowOfdmRate {
-    Mbps6,
-    Mbps9,
-    Mbps12,
-    Mbps18,
-    Mbps24,
-    Mbps36,
-    Mbps48,
-    Mbps54,
-}
-
-/// One-spatial-stream MCS for the standard ESP-NOW HT20 profile.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum EspNowHtMcs {
-    Mcs0,
-    Mcs1,
-    Mcs2,
-    Mcs3,
-    Mcs4,
-    Mcs5,
-    Mcs6,
-    Mcs7,
-}
-
-impl EspNowHtMcs {
-    pub const fn index(self) -> u8 {
-        match self {
-            Self::Mcs0 => 0,
-            Self::Mcs1 => 1,
-            Self::Mcs2 => 2,
-            Self::Mcs3 => 3,
-            Self::Mcs4 => 4,
-            Self::Mcs5 => 5,
-            Self::Mcs6 => 6,
-            Self::Mcs7 => 7,
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum EspNowHtGuardInterval {
-    Long800Ns,
-    Short400Ns,
-}
-
-/// A complete standard HT20 rate requested for one ESP-NOW peer.
-///
-/// MCS32 is deliberately absent: duplicate mode has a distinct hardware
-/// certification boundary and cannot be represented as a one-stream MCS.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct EspNowHt20Rate {
-    mcs: EspNowHtMcs,
-    guard_interval: EspNowHtGuardInterval,
-}
-
-impl EspNowHt20Rate {
-    pub const fn new(mcs: EspNowHtMcs, guard_interval: EspNowHtGuardInterval) -> Self {
-        Self {
-            mcs,
-            guard_interval,
-        }
-    }
-
-    pub const fn mcs(self) -> EspNowHtMcs {
-        self.mcs
-    }
-
-    pub const fn guard_interval(self) -> EspNowHtGuardInterval {
-        self.guard_interval
-    }
-}
-
-/// PHY policy requested for one peer.
-///
-/// The two `StandardP2p*` variants use the dedicated P2P retry arenas on
-/// backends which own them. A backend must reject `LongRange` unless it owns
-/// the complete LR enable, PLCP, rate and receive-status contract. Merely
-/// possessing recovered LR rate schedule bytes is not sufficient.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub enum EspNowPhyMode {
-    #[default]
-    LegacyDsss1M,
-    StandardP2pOfdm(EspNowOfdmRate),
-    StandardP2pHt20(EspNowHt20Rate),
-    LongRange(crate::EspressifLongRangeRate),
 }
 
 /// Security profile of one typed ESP-NOW handoff.

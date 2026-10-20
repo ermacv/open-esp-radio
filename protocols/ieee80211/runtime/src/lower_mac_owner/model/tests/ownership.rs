@@ -380,13 +380,15 @@ impl PortBody<ModelBackend<ModelCaps, AggregateContext>> for AggregateOwners {
                 resources.station_association,
                 oer_ieee80211_wire::security::Spp::NotNegotiated,
             );
-            let key = station.install_pairwise_key(
-                &association,
-                slot,
-                IndividualAddress::new(PEER).unwrap(),
-                Ccmp128Key::new(&[7; 16]),
-            );
-            key.identity.0.last.set(self.initial_pn);
+            let key = station
+                .install_pairwise_key(
+                    &association,
+                    slot,
+                    IndividualAddress::new(PEER).unwrap(),
+                    Ccmp128Key::new(&[7; 16]),
+                )
+                .into_core_key();
+            key.set_last(self.initial_pn);
             let rate = station.ampdu_rate(rate).ok().unwrap();
             let aggregate = station.aggregate(
                 IndividualAddress::new(PEER).unwrap(),
@@ -405,7 +407,13 @@ impl PortBody<ModelBackend<ModelCaps, AggregateContext>> for AggregateOwners {
             let body = ModelBody(alloc::vec![0; 4]);
             context.buffers.push(first.slot.index());
             context.bodies.push((0, body.0.as_ptr()));
-            let mut aggregate = push_subframe(aggregate, first, subframe_frame(0), Some(body));
+            let mut aggregate = push_subframe(
+                aggregate,
+                key.numbering(),
+                first,
+                subframe_frame(0),
+                Some(body),
+            );
             for sequence in 1..3 {
                 let buffer = small.remove(0);
                 context.buffers.push(buffer.slot.index());
@@ -414,7 +422,13 @@ impl PortBody<ModelBackend<ModelCaps, AggregateContext>> for AggregateOwners {
                 if let Some(body) = &body {
                     context.bodies.push((sequence as u8, body.0.as_ptr()));
                 }
-                aggregate = push_subframe(aggregate, buffer, subframe_frame(sequence), body);
+                aggregate = push_subframe(
+                    aggregate,
+                    key.numbering(),
+                    buffer,
+                    subframe_frame(sequence),
+                    body,
+                );
             }
             self.air.hold(WmmAccessCategory::Voice, self.withdraw);
             station
@@ -460,10 +474,7 @@ impl PortBody<ModelBackend<ModelCaps, AggregateContext>> for AggregateOwners {
             assert_eq!(ticket.index(), context.ticket);
             assert_eq!(matches!(completion, TxOutcome::Withdrawn(_)), self.withdraw);
             assert_eq!(subframes.len(), 3);
-            assert_eq!(
-                key.identity.0.last.get(),
-                self.initial_pn + if self.withdraw { 0 } else { 3 },
-            );
+            assert_eq!(key.last(), self.initial_pn + 3,);
             for (index, (buffer, _)) in subframes.iter().enumerate() {
                 assert_eq!(
                     buffer.packet_number(),
@@ -555,8 +566,6 @@ impl Drop for FaultContext {
 }
 struct PublicationFault {
     aggregate: bool,
-    remaining: u64,
-    poisoned_before_submit: bool,
     dropped: Rc<Cell<usize>>,
 }
 impl PortBody<ModelBackend<ModelCaps, FaultContext>> for PublicationFault {
@@ -581,14 +590,17 @@ impl PortBody<ModelBackend<ModelCaps, FaultContext>> for PublicationFault {
         } = resources;
         {
             let mut phase = owner.phase();
-            let key = phase.station().install_pairwise_key(
-                &station_association,
-                slot,
-                IndividualAddress::new(PEER).unwrap(),
-                Ccmp128Key::new(&[7; 16]),
-            );
-            let last = oer_ieee80211_wire::ccmp::CCMP_PACKET_NUMBER_MAX - self.remaining;
-            key.identity.0.last.set(last);
+            let key = phase
+                .station()
+                .install_pairwise_key(
+                    &station_association,
+                    slot,
+                    IndividualAddress::new(PEER).unwrap(),
+                    Ccmp128Key::new(&[7; 16]),
+                )
+                .into_core_key();
+            let last = oer_ieee80211_wire::ccmp::CCMP_PACKET_NUMBER_MAX - 10;
+            key.set_last(last);
             let ticket = tickets.remove(0);
             let ticket_index = ticket.index();
             let context = FaultContext(self.dropped.clone());
@@ -612,16 +624,21 @@ impl PortBody<ModelBackend<ModelCaps, FaultContext>> for PublicationFault {
                     rate,
                     TxProtection::Ccmp(&key),
                 );
-                let aggregate = push_subframe(aggregate, first, subframe_frame(0), Some(body));
                 let aggregate = push_subframe(
                     aggregate,
+                    key.numbering(),
+                    first,
+                    subframe_frame(0),
+                    Some(body),
+                );
+                let aggregate = push_subframe(
+                    aggregate,
+                    key.numbering(),
                     small.remove(0),
                     subframe_frame(1),
                     Some(ModelBody(alloc::vec![0x4b; 4])),
                 );
-                if self.poisoned_before_submit {
-                    station.held.poison();
-                }
+                station.held.poison();
                 let submitted = station.submit_ampdu(
                     (AggregateAttempt {
                         context,
@@ -633,13 +650,13 @@ impl PortBody<ModelBackend<ModelCaps, FaultContext>> for PublicationFault {
                     })
                     .admit(),
                 );
-                assert_eq!(submitted.is_err(), self.poisoned_before_submit);
+                assert!(submitted.is_err());
             } else {
                 let source = TxSource::Fresh {
                     buffer: first,
                     frame: ClassFrame::new(data_frame(&phase, true)).ok().unwrap(),
                     body: Some(body),
-                    protection: TxProtection::Ccmp(&key),
+                    protection: TxProtection::Ccmp(key.numbered()),
                 };
                 let source = <ModelTypes<FaultContext> as TxBufferPool<ModelSmall>>::prepare::<
                     Station,
@@ -647,9 +664,7 @@ impl PortBody<ModelBackend<ModelCaps, FaultContext>> for PublicationFault {
                 >(source.check().ok().unwrap())
                 .ok()
                 .unwrap();
-                if self.poisoned_before_submit {
-                    phase.held.poison();
-                }
+                phase.held.poison();
                 let submitted = phase.station().submit(
                     (oer_ieee80211_port::Attempt {
                         context,
@@ -662,7 +677,7 @@ impl PortBody<ModelBackend<ModelCaps, FaultContext>> for PublicationFault {
                     })
                     .admit(),
                 );
-                assert_eq!(submitted.is_err(), self.poisoned_before_submit);
+                assert!(submitted.is_err());
             }
             assert!(phase.next_event().await.is_err());
             assert_eq!(
@@ -673,25 +688,17 @@ impl PortBody<ModelBackend<ModelCaps, FaultContext>> for PublicationFault {
             assert!(phase.held.events.is_empty(), "poison invents no terminal");
             assert!(phase.held.air.sent().is_empty());
             assert_eq!(
-                key.identity.0.last.get(),
-                last,
-                "failed PPDU consumes no PN"
+                key.last(),
+                last + if self.aggregate { 2 } else { 1 },
+                "PN is reserved by the core before backend submission"
             );
             let quarantined = phase.held.quarantined.items.borrow();
             let commands = phase.held.commands.items.borrow();
-            let (single, aggregate) = if self.poisoned_before_submit {
-                assert!(quarantined.is_empty());
-                match commands.back().unwrap() {
-                    super::super::Command::Submit(operation) => (Some(operation), None),
-                    super::super::Command::SubmitAmpdu(operation) => (None, Some(operation)),
-                    _ => panic!("poisoned submission stays owned in the command queue"),
-                }
-            } else {
-                assert_eq!(quarantined.len(), 1);
-                match quarantined.front().unwrap() {
-                    super::super::Work::Single(operation) => (Some(operation), None),
-                    super::super::Work::Aggregate(operation) => (None, Some(operation)),
-                }
+            assert!(quarantined.is_empty());
+            let (single, aggregate) = match commands.back().unwrap() {
+                super::super::Command::Submit(operation) => (Some(operation), None),
+                super::super::Command::SubmitAmpdu(operation) => (None, Some(operation)),
+                _ => panic!("poisoned submission stays owned in the command queue"),
             };
             let mpdu = match (single, aggregate) {
                 (Some(operation), None) => {
@@ -728,13 +735,7 @@ impl PortBody<ModelBackend<ModelCaps, FaultContext>> for PublicationFault {
 
 #[test]
 fn publication_fault_keeps_the_complete_single_or_aggregate_until_teardown() {
-    for (aggregate, remaining, poisoned_before_submit) in [
-        (false, 0, false),
-        (true, 0, false),
-        (true, 1, false),
-        (false, 10, true),
-        (true, 10, true),
-    ] {
+    for aggregate in [false, true] {
         let dropped = Rc::new(Cell::new(0));
         let (backend, _) = ModelBackend::<ModelCaps, FaultContext>::new(
             Channel::ghz2_4(6, ChannelWidth::Mhz20).unwrap(),
@@ -748,8 +749,6 @@ fn publication_fault_keeps_the_complete_single_or_aggregate_until_teardown() {
                 backend,
                 PublicationFault {
                     aggregate,
-                    remaining,
-                    poisoned_before_submit,
                     dropped: dropped.clone()
                 }
             )),

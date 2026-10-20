@@ -87,12 +87,15 @@ impl Work for Boundaries {
             station_pairwise: [slot, _],
             ..
         } = resources;
-        let key = phase.station().install_pairwise_key(
-            &station_association,
-            slot,
-            IndividualAddress::new(PEER).unwrap(),
-            Ccmp128Key::new(&[7; 16]),
-        );
+        let key = phase
+            .station()
+            .install_pairwise_key(
+                &station_association,
+                slot,
+                IndividualAddress::new(PEER).unwrap(),
+                Ccmp128Key::new(&[7; 16]),
+            )
+            .into_core_key();
         let mut ticket = tickets.remove(0);
         let mut buffer = small.remove(0);
         for (len, body_len, protected_bit, keyed, refusal) in [
@@ -131,7 +134,7 @@ impl Work for Boundaries {
             let body = ModelBody(alloc::vec![0x5a; body_len]);
             let body_pointer = body.0.as_ptr();
             let before = phase.held.commands.items.borrow().len();
-            let pn_before = key.identity.0.last.get();
+            let pn_before = key.last();
             let frame = frame(phase, len, protected_bit);
             let result = try_source(
                 phase,
@@ -141,7 +144,7 @@ impl Work for Boundaries {
                     frame,
                     body: Some(body),
                     protection: if keyed {
-                        TxProtection::Ccmp(&key)
+                        TxProtection::Ccmp(key.numbered())
                     } else {
                         TxProtection::Open
                     },
@@ -152,7 +155,11 @@ impl Work for Boundaries {
                     panic!("typed refusal")
                 };
                 assert_eq!(returned_reason, reason);
-                assert_eq!(key.identity.0.last.get(), pn_before);
+                assert_eq!(
+                    key.last(),
+                    pn_before + u64::from(keyed),
+                    "layout refusal never allocates beyond the core-supplied PN"
+                );
                 assert_eq!(phase.held.commands.items.borrow().len(), before);
                 assert!(phase.held.events.is_empty(), "no synthetic terminal");
                 ticket = returned_ticket;
@@ -248,6 +255,7 @@ impl Work for BodyView {
                     TxProtection::Open,
                 );
                 let source: SubframeSource<_, (), _, _> = SubframeSource::Fresh {
+                    numbering: oer_ieee80211_port::TxNumbering::Open,
                     buffer,
                     frame: ClassSubframe::<ModelSmall, _>::new(subframe_frame(0))
                         .ok()
@@ -332,19 +340,22 @@ impl Work for RetryIdentity {
             station_pairwise: [slot, _],
             ..
         } = resources;
-        let key = phase.station().install_pairwise_key(
-            &station_association,
-            slot,
-            IndividualAddress::new(PEER).unwrap(),
-            Ccmp128Key::new(&[7; 16]),
-        );
+        let key = phase
+            .station()
+            .install_pairwise_key(
+                &station_association,
+                slot,
+                IndividualAddress::new(PEER).unwrap(),
+                Ccmp128Key::new(&[7; 16]),
+            )
+            .into_core_key();
         let body = ModelBody(alloc::vec![0x66; 8]);
         let body_pointer = body.0.as_ptr();
         let source = TxSource::Fresh {
             buffer: small.remove(0),
             frame: frame(phase, 40, true),
             body: Some(body),
-            protection: TxProtection::Ccmp(&key),
+            protection: TxProtection::Ccmp(key.numbered()),
         };
         submit_frame::<ModelSmall>(phase, tickets.remove(0), source);
         let (ticket, buffer) = completion(phase, &mut terminal_access).await;
@@ -378,7 +389,7 @@ impl Work for RetryIdentity {
         let index = key.identity.0.index;
         phase
             .station()
-            .remove_pairwise_key(station_association, key);
+            .remove_pairwise_key(station_association, key.into_backend());
         let (slot, station_association) = loop {
             if let Ok(Ok(LowerMacEvent::Terminal(LowerMacTerminal::KeyRemoved(
                 Removed::Station(RemovedKey::Pairwise { slot, association }),
@@ -387,12 +398,15 @@ impl Work for RetryIdentity {
                 break (slot, association);
             }
         };
-        let replacement = phase.station().install_pairwise_key(
-            &station_association,
-            slot,
-            IndividualAddress::new(PEER).unwrap(),
-            Ccmp128Key::new(&[7; 16]),
-        );
+        let replacement = phase
+            .station()
+            .install_pairwise_key(
+                &station_association,
+                slot,
+                IndividualAddress::new(PEER).unwrap(),
+                Ccmp128Key::new(&[7; 16]),
+            )
+            .into_core_key();
         assert_eq!(replacement.identity.0.index, index);
         let TxFrame::Individual { plan, .. } = data_frame(phase, true) else {
             unreachable!()
@@ -417,7 +431,7 @@ impl Work for RetryIdentity {
         };
         assert_eq!(mpdu.packet_number(), pn);
         assert_eq!(mpdu.body().unwrap().0.as_ptr(), body_pointer);
-        assert_eq!(replacement.identity.0.last.get(), 0);
+        assert_eq!(replacement.last(), 0);
         assert!(phase.held.events.is_empty());
         // The builder also refuses the retained installation, even when a slot
         // has been reinstalled with identical material. The whole Sent returns.
@@ -443,7 +457,7 @@ impl Work for RetryIdentity {
         assert_eq!(mpdu.packet_number(), pn);
         assert_eq!(mpdu.body().unwrap().0.as_ptr(), body_pointer);
         assert_eq!(&mpdu.buffer.memory[..40], expected.as_slice());
-        assert_eq!(replacement.identity.0.last.get(), 0);
+        assert_eq!(replacement.last(), 0);
         let _ticket = ticket;
         assert!(phase.held.events.is_empty());
     }
@@ -473,15 +487,55 @@ impl Work for AggregateBoundaries {
             station_pairwise: [slot, _],
             ..
         } = resources;
-        let key = phase.station().install_pairwise_key(
-            &station_association,
-            slot,
-            IndividualAddress::new(PEER).unwrap(),
-            Ccmp128Key::new(&[7; 16]),
-        );
+        let key = phase
+            .station()
+            .install_pairwise_key(
+                &station_association,
+                slot,
+                IndividualAddress::new(PEER).unwrap(),
+                Ccmp128Key::new(&[7; 16]),
+            )
+            .into_core_key();
         let rate = aggregate_rate(phase);
         let receiver = IndividualAddress::new(ACCESS_POINT).unwrap();
         let tid = Tid::new(5).unwrap();
+        for protected in [false, true] {
+            let protection = if protected {
+                TxProtection::Ccmp(&key.backend)
+            } else {
+                TxProtection::Open
+            };
+            let aggregate = phase.station().aggregate(receiver, tid, rate, protection);
+            let mut buffer = small.remove(0);
+            buffer.memory.fill(0xa5);
+            let pointer = buffer.memory.as_ptr();
+            let body = ModelBody(alloc::vec![0x99;16]);
+            let body_pointer = body.0.as_ptr();
+            let numbering = if protected {
+                oer_ieee80211_port::TxNumbering::Open
+            } else {
+                oer_ieee80211_port::TxNumbering::Ccmp(
+                    oer_ieee80211_wire::ccmp::CcmpPacketNumber::new(55).unwrap(),
+                )
+            };
+            let source: ModelSubframe<ModelSmall, ModelCaps, ModelBody> = SubframeSource::Fresh {
+                numbering,
+                buffer,
+                frame: ClassSubframe::new(subframe_frame(0)).ok().unwrap(),
+                body: Some(body),
+            };
+            let refused = CheckedAggregate::new(aggregate, source).err().unwrap();
+            assert_eq!(refused.reason, LayoutError::NumberingProtectionMismatch);
+            let (aggregate, SubframeSource::Fresh { buffer, body, .. }) = refused.operation else {
+                unreachable!()
+            };
+            assert_eq!(aggregate.subframes(), 0);
+            assert_eq!(buffer.memory.as_ptr(), pointer);
+            assert!(buffer.memory.iter().all(|byte| *byte == 0xa5));
+            assert_eq!(body.unwrap().0.as_ptr(), body_pointer);
+            assert_eq!(key.last(), 0);
+            small.push(buffer);
+        }
         let aggregate = phase
             .station()
             .aggregate(receiver, tid, rate, TxProtection::Ccmp(&key));
@@ -491,6 +545,7 @@ impl Work for AggregateBoundaries {
         let body = ModelBody(alloc::vec![0x99; 16]);
         let body_pointer = body.0.as_ptr();
         let source: ModelSubframe<ModelSmall, ModelCaps, ModelBody> = SubframeSource::Fresh {
+            numbering: key.numbering(),
             buffer,
             frame: ClassSubframe::<ModelSmall, _>::new(subframe_frame(0))
                 .ok()
@@ -502,6 +557,7 @@ impl Work for AggregateBoundaries {
         let (aggregate, subframe) = refused.operation;
         assert_eq!(aggregate.subframes(), 0);
         let SubframeSource::Fresh {
+            numbering,
             buffer,
             frame,
             body,
@@ -512,11 +568,11 @@ impl Work for AggregateBoundaries {
         assert_eq!(buffer.memory.as_ptr(), memory);
         assert!(buffer.memory.iter().all(|byte| *byte == 0xa5));
         assert_eq!(body.as_ref().unwrap().0.as_ptr(), body_pointer);
-        assert_eq!(key.identity.0.last.get(), 0);
+        assert_eq!(key.last(), 1);
         assert!(phase.held.events.is_empty());
         // QoS header 26 + CCMP 8 + body 16: exact boundary is 50.
         let frame = SizedFrame::new(*frame.frame().header(), MpduLength::new(50).unwrap()).unwrap();
-        let aggregate = push_subframe(aggregate, buffer, frame, body);
+        let aggregate = push_subframe(aggregate, numbering, buffer, frame, body);
         let mut subframes = aggregate.into_parts();
         let (buffer, body) = subframes.next().unwrap().into_parts();
         assert!(subframes.next().is_none());
@@ -529,7 +585,7 @@ impl Work for AggregateBoundaries {
         let aggregate = phase
             .station()
             .aggregate(receiver, tid, rate, TxProtection::Ccmp(&key));
-        let aggregate = push_subframe(aggregate, buffer, frame, Some(body));
+        let aggregate = push_subframe(aggregate, numbering, buffer, frame, Some(body));
         phase
             .station()
             .submit_ampdu(
@@ -585,12 +641,15 @@ impl Work for PreparedRemoval {
             station_pairwise: [slot, _],
             ..
         } = resources;
-        let key = phase.station().install_pairwise_key(
-            &station_association,
-            slot,
-            IndividualAddress::new(PEER).unwrap(),
-            Ccmp128Key::new(&[7; 16]),
-        );
+        let key = phase
+            .station()
+            .install_pairwise_key(
+                &station_association,
+                slot,
+                IndividualAddress::new(PEER).unwrap(),
+                Ccmp128Key::new(&[7; 16]),
+            )
+            .into_core_key();
         submit(phase, tickets.remove(0), small.remove(0), Some(&key));
         let (ticket, buffer) = completion(phase, &mut terminal_access).await;
         let ModelAnyBuffer::SmallSent(mpdu) = buffer else {
@@ -616,7 +675,7 @@ impl Work for PreparedRemoval {
         let sent_before = air.sent().len();
         phase
             .station()
-            .remove_pairwise_key(station_association, key);
+            .remove_pairwise_key(station_association, key.into_backend());
         yield_now().await;
         assert!(
             phase.held.events.is_empty(),

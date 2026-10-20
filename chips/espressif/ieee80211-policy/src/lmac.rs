@@ -70,13 +70,7 @@ pub const fn ampdu_retry_policy(lifetime: Duration, retain_single_mpdu: bool) ->
     }
 }
 
-/// One access category's default contention: AIFSN and the CW exponents.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct DefaultContention {
-    pub aifsn: u8,
-    pub ecw_min: u8,
-    pub ecw_max: u8,
-}
+use oer_ieee80211_port::backend::DefaultContention;
 
 /// The contention an access category starts with before a BSS advertises
 /// EDCA parameters.

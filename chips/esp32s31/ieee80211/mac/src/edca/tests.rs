@@ -9,7 +9,9 @@ const STANDARD_WMM: [u8; 26] = [
 
 #[test]
 fn vendor_defaults_match_all_four_lmac_init_records() {
-    let queues = EdcaQueues::vendor_defaults();
+    let queues = EdcaQueues::vendor_defaults::<
+        oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile,
+    >();
     assert_eq!(
         queues.queue(LegacyTxQueue::Voice).parameters(),
         EdcaContentionParameters::new(2, 2, 3).unwrap()
@@ -57,7 +59,9 @@ fn reconfigure_clamps_current_to_both_new_bounds() {
 
 #[test]
 fn wmm_update_is_validated_before_any_queue_changes() {
-    let mut queues = EdcaQueues::vendor_defaults();
+    let mut queues = EdcaQueues::vendor_defaults::<
+        oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile,
+    >();
     let before = queues;
     let mut invalid = STANDARD_WMM;
     invalid[11] = (11 << 4) | 4;
@@ -85,7 +89,9 @@ fn wmm_update_is_validated_before_any_queue_changes() {
 
 #[test]
 fn vendor_defaults_grant_no_implicit_admission_or_txop_ownership() {
-    let queues = EdcaQueues::vendor_defaults();
+    let queues = EdcaQueues::vendor_defaults::<
+        oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile,
+    >();
     for queue in [
         LegacyTxQueue::Voice,
         LegacyTxQueue::Video,

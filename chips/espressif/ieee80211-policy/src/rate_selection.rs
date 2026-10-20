@@ -28,6 +28,7 @@
 
 use core::marker::PhantomData;
 use core::num::NonZeroU8;
+use oer_ieee80211_port::backend::RateScheduleRef;
 
 use oer_ieee80211_port::{
     AckSnr, Band, Ieee80211Capabilities, Protection, RateSample, RetryPlan, RetryStage,
@@ -43,7 +44,7 @@ use oer_time::Instant;
 use crate::{
     rate_code::legacy_rate,
     rate_control::{DEFAULT_CONTROL_SCHEDULE, EspressifRateControl},
-    rate_schedule::{RateScheduleRef, schedule_publication_limit, schedule_rate_after_failures},
+    rate_schedule::{schedule_publication_limit, schedule_rate_after_failures},
     retry_ladder::ordinary_retry_rate,
 };
 
@@ -316,6 +317,10 @@ fn control_plan(
 impl<K: Ieee80211Capabilities, M: SignalMetadata, A: AckSnr> RateSelection<M, A>
     for EspressifRateSelection<K>
 {
+    fn packet_number_step(&self) -> oer_ieee80211_wire::ccmp::CcmpPacketNumberStep {
+        crate::ccmp::TX_PACKET_NUMBER_STEP
+    }
+
     fn plan<R>(
         &self,
         frame: FrameRates,

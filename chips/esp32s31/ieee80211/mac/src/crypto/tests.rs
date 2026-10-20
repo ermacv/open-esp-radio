@@ -44,68 +44,6 @@ impl CcmpKeyHardware for Hardware {
 }
 
 #[test]
-fn tx_packet_number_emits_the_48_bit_maximum_once_then_fails_closed() {
-    let mut packet_number =
-        CcmpTxPacketNumber::after(u64::from(u16::MAX) << 32 | u64::from(u32::MAX - 3));
-    let key_id = CcmpKeyId::new(1).unwrap();
-    assert_eq!(
-        packet_number.next_header(key_id),
-        Ok([0xff, 0xff, 0, 0x60, 0xff, 0xff, 0xff, 0xff])
-    );
-    assert_eq!(
-        packet_number.next_header(key_id),
-        Err(CcmpTxPacketNumberError::Exhausted)
-    );
-    assert_eq!(
-        packet_number.next_header(key_id),
-        Err(CcmpTxPacketNumberError::Exhausted)
-    );
-}
-
-#[test]
-fn exhausted_pairwise_slot_retains_hardware_clear_authority() {
-    let mut hardware = Hardware {
-        occupied: true,
-        ..Hardware::default()
-    };
-    let mut slot = StaPairwiseCcmpSlot {
-        peer: [1, 2, 3, 4, 5, 6],
-        tx_packet_number: CcmpTxPacketNumber::after((1 << 48) - 1),
-    };
-    assert_eq!(
-        slot.next_tx_ccmp_header(),
-        Err(CcmpTxPacketNumberError::Exhausted)
-    );
-    slot.clear(&mut hardware);
-    assert_eq!(hardware.clears, 1);
-    assert!(!hardware.occupied);
-}
-
-#[test]
-fn ap_pairwise_and_group_slots_share_the_fail_closed_pn_boundary() {
-    let exhausted = || CcmpTxPacketNumber::after((1 << 48) - 1);
-    let mut pairwise = ApPairwiseCcmpSlot {
-        peer: [1, 2, 3, 4, 5, 6],
-        association_id: 1,
-        hardware_index: AP_PAIRWISE_HARDWARE_INDEX_BASE,
-        tx_packet_number: exhausted(),
-    };
-    let mut group = ApGroupCcmpSlot {
-        key_id: ApGroupKeyId::new(1).unwrap(),
-        hardware_index: AP_GROUP_HARDWARE_INDEX_BASE + 1,
-        tx_packet_number: exhausted(),
-    };
-    assert_eq!(
-        pairwise.next_tx_ccmp_header(),
-        Err(CcmpTxPacketNumberError::Exhausted)
-    );
-    assert_eq!(
-        group.next_tx_ccmp_header(),
-        Err(CcmpTxPacketNumberError::Exhausted)
-    );
-}
-
-#[test]
 fn first_ap_peer_and_gtk_own_the_evidenced_disjoint_slots() {
     let mut hardware = Hardware::default();
     let pairwise =
@@ -259,4 +197,57 @@ fn group_material_comparison_covers_same_and_different_key_id_cases() {
     let changed_same_id = StaGroupCcmpKeyMaterial::new(GroupKeyId::new(1).unwrap(), [0x22; 16]);
     assert!(current.same_temporal_key(&same_key_other_id));
     assert!(!current.same_temporal_key(&changed_same_id));
+}
+
+#[test]
+fn exhausted_pairwise_slot_retains_hardware_clear_authority() {
+    let mut hardware = Hardware {
+        occupied: true,
+        ..Hardware::default()
+    };
+    let packet_numbers = oer_ieee80211_upper_mac::ccmp::CcmpTxPacketNumber::continuing_after(
+        oer_espressif_ieee80211_policy::ccmp::TX_PACKET_NUMBER_STEP,
+        oer_ieee80211_wire::ccmp::CcmpPacketNumber::new((1 << 48) - 1).unwrap(),
+    );
+    let slot = StaPairwiseCcmpSlot {
+        peer: [1, 2, 3, 4, 5, 6],
+    };
+    assert_eq!(
+        packet_numbers.allocate(),
+        Err(oer_ieee80211_upper_mac::ccmp::CcmpTxPacketNumberError::Exhausted)
+    );
+    slot.clear(&mut hardware);
+    assert_eq!(hardware.clears, 1);
+    assert!(!hardware.occupied);
+}
+
+#[test]
+fn ap_pairwise_and_group_slots_share_the_fail_closed_pn_boundary() {
+    let exhausted = || {
+        oer_ieee80211_upper_mac::ccmp::CcmpTxPacketNumber::continuing_after(
+            oer_espressif_ieee80211_policy::ccmp::TX_PACKET_NUMBER_STEP,
+            oer_ieee80211_wire::ccmp::CcmpPacketNumber::new((1 << 48) - 1).unwrap(),
+        )
+    };
+    let pairwise = ApPairwiseCcmpSlot {
+        peer: [1, 2, 3, 4, 5, 6],
+        association_id: 1,
+        hardware_index: AP_PAIRWISE_HARDWARE_INDEX_BASE,
+    };
+    let group = ApGroupCcmpSlot {
+        key_id: ApGroupKeyId::new(1).unwrap(),
+        hardware_index: AP_GROUP_HARDWARE_INDEX_BASE + 1,
+    };
+    assert_eq!(
+        exhausted().allocate(),
+        Err(oer_ieee80211_upper_mac::ccmp::CcmpTxPacketNumberError::Exhausted)
+    );
+    assert_eq!(
+        exhausted().allocate(),
+        Err(oer_ieee80211_upper_mac::ccmp::CcmpTxPacketNumberError::Exhausted)
+    );
+    let mut hardware = Hardware::default();
+    pairwise.clear(&mut hardware);
+    group.clear(&mut hardware);
+    assert_eq!(hardware.clears, 2);
 }

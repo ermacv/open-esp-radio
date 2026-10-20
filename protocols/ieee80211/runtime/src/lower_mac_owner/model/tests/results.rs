@@ -86,7 +86,13 @@ impl Work for Results {
                         checked_rate,
                         TxProtection::Open,
                     );
-                    let aggregate = push_subframe(aggregate, buffer, subframe_frame(0), None);
+                    let aggregate = push_subframe(
+                        aggregate,
+                        oer_ieee80211_port::TxNumbering::Open,
+                        buffer,
+                        subframe_frame(0),
+                        None,
+                    );
                     station
                         .submit_ampdu(
                             (AggregateAttempt {

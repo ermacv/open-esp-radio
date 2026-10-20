@@ -26,7 +26,7 @@ error: lifetime may not live long enough
    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ argument requires that `'foreign` must outlive `'core`
    |
    = help: consider adding the following bound: `'foreign: 'core`
-   = note: requirement occurs because of a mutable reference to `EnabledCore<LowerMacCore<'_, '_, P, E, T, 512>>`
+   = note: requirement occurs because of a mutable reference to `EnabledCore<LowerMacCore<'_, '_, EspressifBackendTxProfile, P, E, T, 512>>`
    = note: mutable references are invariant over their type parameter
    = help: see <https://doc.rust-lang.org/nomicon/subtyping.html> for more information about variance
 

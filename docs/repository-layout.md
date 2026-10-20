@@ -84,6 +84,12 @@ on a backend. Structures both sides share belong to `port` or `wire`. Host
 tools that read frames (monitors, capture analysis, fixtures) take `wire`.
 This is smoltcp's `wire` beside its `iface` and `socket`.
 
+Wi-Fi transmit profiles implement the generic `BackendTxProfile` in port.
+Core algorithms and family tables remain above the hardware backend; the
+runtime/image selects the static implementation. PN allocation, BA originator
+state and reorder state belong to the cores. The backend takes a supplied PN
+and reports decoded completion/RX values.
+
 Only the runtime awaits, and it binds to no executor: it takes time from
 `oer-time`'s `Timer` and interrupt signals from `portable/`, spawns nothing
 and returns futures that the composition in `firmware/` spawns. It does not
@@ -102,8 +108,8 @@ its root: `firmware/apps/w1` is `oer-firmware-apps-w1`, `tools/image/cli` is
 with underscores. A program called by name (the image linker, a privileged
 helper) sets that name with `[[bin]] name`.
 
-`cargo test -p oer-test-layers` checks the names and the unsafe boundary
-([unsafe](unsafe.md)).
+`cargo test -p oer-test-layers` checks the names, the unsafe boundary
+([unsafe](unsafe.md)) and the Wi-Fi chip backends' production dependencies.
 
 ## One workspace
 
@@ -137,9 +143,5 @@ and runs is a thin wrapper over `cargo fw` and the program.
 
 The tree does not yet follow these rules in these places:
 
-- The ESP32-S31 Wi-Fi chip crates depend on cores, not only on `port` and
-  `wire`: `chips/esp32s31/ieee80211/mac` on `oer-ieee80211-upper-mac` and
-  `oer-ieee80211-softmac`, `chips/esp32s31/ieee80211/driver` on
-  `oer-ieee80211-softmac`.
 - `protocols/ieee80211/runtime` has a dev-dependency on
   `chips/espressif/ieee80211-policy`.

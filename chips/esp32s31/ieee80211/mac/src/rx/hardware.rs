@@ -221,7 +221,7 @@ impl S31RxBlockAckAgreement {
                 self.hardware_index,
             ));
         }
-        if self.peer[0] & 1 != 0 {
+        if oer_ieee80211_wire::address::AddressFlags::from_bytes([self.peer[0]]).group() {
             return Err(S31RxBlockAckAgreementError::MulticastPeer);
         }
         if self.tid > S31_RX_BLOCK_ACK_MAX_TID {

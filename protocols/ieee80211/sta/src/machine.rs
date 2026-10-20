@@ -76,6 +76,7 @@ use oer_ieee80211_arbiter::{
     AbsenceAnswer, AbsencePlace, Answer, ChannelRequest, Lease, LeaseId, LeasePlace, LeaveReason,
     Purpose, Refusal, StationNotice, StationPlaceReturns, StationPlaces, UpstreamFact,
 };
+use oer_ieee80211_port::backend_protection::HePacketPadding;
 use oer_ieee80211_port::{
     AckHeader, ConnectionFrame, GroupAddress, HeaderSpec, Ieee80211Capabilities, MpduLength,
     ReceiveFilter, ReturnedMpdu, RxMetadata, SingleEnd, SingleOutcome, SizedFrame,
@@ -95,7 +96,6 @@ use oer_ieee80211_rsn::{
         RsnStaRetryInstall, RsnStaSupplicant, RsnStaSupplicantAction,
     },
 };
-use oer_ieee80211_upper_mac::HePacketPadding;
 use oer_ieee80211_wire::address::{Bssid, IndividualAddress, OwnAddress};
 use {
     crate::{scan::ScanTable, sequence::StaSequenceCounter},
@@ -155,6 +155,8 @@ use crate::join::{
 /// It is not a radio terminal and never updates transmission statistics.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TxRefusal {
+    /// The key's core-owned 48-bit packet-number space is exhausted.
+    PacketNumberExhausted,
     /// A data operation's connection epoch or protection no longer matches
     /// the station's link. Its original resources return without submission.
     LinkChanged,

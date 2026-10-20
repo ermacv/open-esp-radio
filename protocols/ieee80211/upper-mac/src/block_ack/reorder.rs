@@ -478,3 +478,7 @@ impl<const WINDOW_CAPACITY: usize, const SLOT_CAPACITY: usize>
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+#[path = "reorder/slot_tests.rs"]
+mod slot_tests;

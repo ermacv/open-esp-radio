@@ -7,6 +7,7 @@
 //! claims to produce or authenticate encrypted on-air bytes.
 
 use core::{array, fmt};
+use oer_ieee80211_port::espressif::EspNowPhyMode;
 use oer_ieee80211_wire::sequence::SequenceNumber;
 
 use zeroize::{Zeroize, ZeroizeOnDrop};
@@ -24,7 +25,7 @@ use {
 };
 
 use crate::extensions::espressif::esp_now::protocol::{
-    ESP_NOW_DEFAULT_PEER_CAPACITY, EspNowConfig, EspNowPeerSecurity, EspNowPhyMode,
+    ESP_NOW_DEFAULT_PEER_CAPACITY, EspNowConfig, EspNowPeerSecurity,
 };
 use oer_ieee80211_port::interface::{BoundVirtualInterface, ChannelContextId};
 

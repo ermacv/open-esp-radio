@@ -1,4 +1,3 @@
-//! A test-only package: `tests/layers.rs` checks the dependency rules of
-//! `tools/` and `crates/` (`tools/README.md`) from every `Cargo.toml`.
+//! Tests of package naming, the unsafe boundary and Wi-Fi backend dependencies.
 
 #![forbid(unsafe_code)]

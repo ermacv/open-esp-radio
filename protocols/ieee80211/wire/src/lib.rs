@@ -56,6 +56,7 @@ pub mod protection;
 pub mod scan;
 pub mod security;
 pub mod sequence;
+pub mod signal;
 pub mod ssid;
 pub mod station;
 pub mod station_beacon;

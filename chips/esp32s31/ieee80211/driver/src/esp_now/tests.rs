@@ -6,11 +6,11 @@ fn capability_surface_is_live_for_every_standard_phy_and_closed_for_lr() {
         EspNowPhyMode::LegacyDsss1M,
         EspNowPhyMode::StandardP2pOfdm(EspNowOfdmRate::Mbps6),
         EspNowPhyMode::StandardP2pOfdm(EspNowOfdmRate::Mbps54),
-        EspNowPhyMode::StandardP2pHt20(oer_ieee80211_softmac::EspNowHt20Rate::new(
+        EspNowPhyMode::StandardP2pHt20(oer_ieee80211_port::espressif::EspNowHt20Rate::new(
             EspNowHtMcs::Mcs0,
             EspNowHtGuardInterval::Short400Ns,
         )),
-        EspNowPhyMode::StandardP2pHt20(oer_ieee80211_softmac::EspNowHt20Rate::new(
+        EspNowPhyMode::StandardP2pHt20(oer_ieee80211_port::espressif::EspNowHt20Rate::new(
             EspNowHtMcs::Mcs7,
             EspNowHtGuardInterval::Long800Ns,
         )),
@@ -18,8 +18,8 @@ fn capability_surface_is_live_for_every_standard_phy_and_closed_for_lr() {
         assert_eq!(esp32s31_esp_now_phy_support(mode), EspNowPhySupport::Live);
     }
     for rate in [
-        oer_ieee80211_softmac::EspressifLongRangeRate::Kbps250,
-        oer_ieee80211_softmac::EspressifLongRangeRate::Kbps500,
+        oer_ieee80211_port::espressif::EspressifLongRangeRate::Kbps250,
+        oer_ieee80211_port::espressif::EspressifLongRangeRate::Kbps500,
     ] {
         assert_eq!(
             esp32s31_esp_now_phy_support(EspNowPhyMode::LongRange(rate)),
@@ -42,9 +42,9 @@ fn every_ht20_sgi_gap_rate_selects_its_same_mcs_lgi_record() {
         EspNowHtMcs::Mcs5,
         EspNowHtMcs::Mcs6,
     ] {
-        let OrdinaryRetryRatePolicy::P2pHtSgiFallback(schedule) =
-            p2p_ht_sgi_retry_policy(8 - mcs.index())
-        else {
+        let Ok(OrdinaryRetryRatePolicy::P2pHtSgiFallback(schedule)) = p2p_ht_sgi_retry_policy::<
+            oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile,
+        >(8 - mcs.index()) else {
             panic!("SGI gap must use the typed fallback policy")
         };
         assert_eq!(schedule.schedule().index(), 8 - mcs.index());
@@ -63,7 +63,7 @@ fn lr_rx_rate_is_quarantined_from_the_truncated_public_field() {
     metadata.rate = RxEvidence::HardwareObserved(lr_raw);
 
     let lr = normalize_esp_now_rx_metadata(
-        EspNowPhyMode::LongRange(oer_ieee80211_softmac::EspressifLongRangeRate::Kbps500),
+        EspNowPhyMode::LongRange(oer_ieee80211_port::espressif::EspressifLongRangeRate::Kbps500),
         metadata,
     );
     assert_eq!(lr.normalized.rate, RxEvidence::Unavailable);
@@ -104,5 +104,27 @@ fn lr_rx_rate_is_quarantined_from_the_truncated_public_field() {
         EspNowRxRateNormalization::StandardUnavailable {
             observed: RxEvidence::HardwareObserved(non_standard_raw),
         }
+    );
+}
+
+#[test]
+fn a_missing_or_non_p2p_profile_record_is_refused_before_publication() {
+    use oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile as Profile;
+    for (kind, index) in [
+        (RateScheduleKind::P2pDot11G, 255),
+        (RateScheduleKind::P2pDot11N, 255),
+        (RateScheduleKind::Dot11B, 0),
+    ] {
+        assert_eq!(
+            p2p_retry_policy::<Profile>(kind, index),
+            Err(EspNowTxError::P2pRetryScheduleUnavailable { kind, index })
+        );
+    }
+    assert_eq!(
+        p2p_ht_sgi_retry_policy::<Profile>(255),
+        Err(EspNowTxError::P2pRetryScheduleUnavailable {
+            kind: RateScheduleKind::P2pDot11N,
+            index: 255
+        })
     );
 }

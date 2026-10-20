@@ -231,6 +231,7 @@ pub struct PortStaTokens<'id, Ty, S, const GROUPS: usize = 2>(Marker<'id, Ty, S>
 /// The station PTK retains the unique association owner until its removal terminal.
 pub struct StationPairwiseKey<'id, K: KeyTypes<'id>> {
     key: K::PairwiseKey,
+    packet_numbers: oer_ieee80211_upper_mac::ccmp::CcmpTxPacketNumber,
     association: K::Association,
 }
 
@@ -1568,15 +1569,29 @@ impl<
                     });
                     let prepared = match (buffer, plan) {
                         (ReturnedMpdu::Fresh(buffer), Ok((protection, plan))) => {
-                            prepare_source::<B, B::Large>(TxSource::Fresh {
-                                buffer,
-                                frame: ClassFrame::individual(*context.frame(), plan),
-                                body: None,
-                                protection: match protection {
-                                    DataProtection::Open => TxProtection::Open,
-                                    DataProtection::Ccmp(key) => TxProtection::Ccmp(&key.key),
-                                },
-                            })
+                            let protection = match protection {
+                                DataProtection::Open => Ok(TxProtection::Open),
+                                DataProtection::Ccmp(key) => {
+                                    key.packet_numbers.allocate().map(|packet_number| {
+                                        TxProtection::Ccmp(oer_ieee80211_port::NumberedKey {
+                                            key: &key.key,
+                                            packet_number,
+                                        })
+                                    })
+                                }
+                            };
+                            match protection {
+                                Ok(protection) => prepare_source::<B, B::Large>(TxSource::Fresh {
+                                    buffer,
+                                    frame: ClassFrame::individual(*context.frame(), plan),
+                                    body: None,
+                                    protection,
+                                }),
+                                Err(_) => Err((
+                                    TxRefusal::PacketNumberExhausted,
+                                    <B::Types as TxBufferPool<'id, B::Large>>::erase(buffer),
+                                )),
+                            }
                         }
                         (ReturnedMpdu::Sent(mpdu), Ok((_protection, plan))) => {
                             prepare_source::<B, B::Large>(TxSource::Retransmission {
@@ -2109,7 +2124,7 @@ fn submit_station<'p, 'id: 'p, B, P, S, const GROUPS: usize>(
     phase: &mut P,
     rates: &S,
     admissions: &mut Admissions,
-    key: Option<&<<B::Types as PhaseTypes<'id>>::StationKeys as KeyTypes<'id>>::PairwiseKey>,
+    key: Option<&StationPairwiseKey<'id, <B::Types as PhaseTypes<'id>>::StationKeys>>,
     transmit: StaTransmit<'id, PortStaTokens<'id, B::Types, B::Small, GROUPS>, B::Caps>,
 ) -> Result<Follow<'id, B, GROUPS>, ServiceFault<B>>
 where
@@ -2156,11 +2171,28 @@ where
             });
         }
     };
+    let protection = match key {
+        None => TxProtection::Open,
+        Some(key) => match key.packet_numbers.allocate() {
+            Ok(packet_number) => TxProtection::Ccmp(oer_ieee80211_port::NumberedKey {
+                key: &key.key,
+                packet_number,
+            }),
+            Err(_) => {
+                return Ok(Follow::Refused {
+                    context: TxContext::Station(context),
+                    ticket,
+                    buffer: <B::Types as TxBufferPool<'id, B::Small>>::erase(buffer),
+                    reason: TxRefusal::PacketNumberExhausted,
+                });
+            }
+        },
+    };
     let source = match prepare_source::<B, B::Small>(TxSource::Fresh {
         buffer,
         frame,
         body: None,
-        protection: key.map_or(TxProtection::Open, TxProtection::Ccmp),
+        protection,
     }) {
         Ok(source) => source,
         Err((reason, buffer)) => {
@@ -2277,6 +2309,9 @@ where
                     .station()
                     .install_pairwise_key(&association, slot, peer, key),
                 association,
+                packet_numbers: oer_ieee80211_upper_mac::ccmp::CcmpTxPacketNumber::new(
+                    rates.packet_number_step(),
+                ),
             },
         },
         StaAction::InstallGroupKey {
@@ -2376,7 +2411,7 @@ where
                 phase,
                 rates,
                 &mut pending_actions.admissions,
-                Some(&key.key),
+                Some(key),
                 transmit,
             );
         }

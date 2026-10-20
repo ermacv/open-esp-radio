@@ -1,6 +1,5 @@
-//! The repository's two structural rules, read from every package manifest:
-//! a package is named after its directory, and every crate above the unsafe
-//! boundary forbids unsafe code.
+//! Structural rules read from package manifests: names, the unsafe boundary
+//! and production dependency direction for the Wi-Fi chip backends.
 
 use std::path::{Path, PathBuf};
 
@@ -262,5 +261,44 @@ fn the_boundary_is_named_by_package_or_domain() {
         "tools/lab/fixture-install",
     ] {
         assert!(!below_the_boundary(package), "{package}");
+    }
+}
+
+#[test]
+fn ieee80211_chip_backends_do_not_link_core_or_profile_implementations() {
+    let root = root();
+    let forbidden = [
+        "oer-ieee80211-upper-mac",
+        "oer-ieee80211-softmac",
+        "oer-espressif-ieee80211-policy",
+    ];
+    for package in [
+        "chips/esp32s31/ieee80211/driver",
+        "chips/esp32s31/ieee80211/mac",
+    ] {
+        let source = std::fs::read_to_string(root.join(package).join("Cargo.toml")).unwrap();
+        let manifest: toml::Table = toml::from_str(&source).unwrap();
+        let root_deps = manifest
+            .get("dependencies")
+            .and_then(toml::Value::as_table)
+            .into_iter();
+        let target_deps = manifest
+            .get("target")
+            .and_then(toml::Value::as_table)
+            .into_iter()
+            .flat_map(|t| t.values())
+            .filter_map(|t| t.get("dependencies").and_then(toml::Value::as_table));
+        for dependencies in root_deps.chain(target_deps) {
+            for (alias, dependency) in dependencies {
+                let name = dependency
+                    .get("package")
+                    .and_then(toml::Value::as_str)
+                    .unwrap_or(alias);
+                assert!(
+                    !forbidden.contains(&name),
+                    "{package} links {name}: compose a static port profile in the runtime/image"
+                );
+            }
+        }
     }
 }

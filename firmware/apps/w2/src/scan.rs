@@ -36,8 +36,9 @@ use oer_esp32s31_radio_client::{
     MembershipCell,
     wifi::{ProbePriority, Wifi},
 };
+use oer_ieee80211_port::backend_protection::BasicRates;
 use oer_ieee80211_port::{Band, ManagementTxPlan};
-use oer_ieee80211_upper_mac::{BasicRates, rate_selection::management_rate};
+use oer_ieee80211_upper_mac::rate_selection::management_rate;
 use oer_ieee80211_wire::{
     channel::{WifiChannel, WifiChannelWidth},
     management::{BROADCAST_ADDRESS, ProbeRequest},
@@ -65,6 +66,7 @@ type Frames = FrameReceiver<'static, Q, B>;
 type Publisher = QueueSink<'static, EmbassyClock, Q, B>;
 type Tx = OrdinaryTxOwner<
     'static,
+    oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile,
     CappedTxPowerProfile<PhyTxTargetPowerProfile>,
     Entropy,
     EmbassyClock,
@@ -223,7 +225,9 @@ async fn run(
     let slot = irq::TX_SLOT.init(TxSlot::from_dma(dma));
     let mut tx = OrdinaryTxOwner::new_legacy(WifiTxResources {
         slot: Pin::new(slot),
-        policy: WifiTxRuntimePolicy::vendor_defaults(),
+        policy: WifiTxRuntimePolicy::<
+            oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile,
+        >::vendor_defaults(),
         power: CappedTxPowerProfile::new(profile, ceiling(initial, config)),
         entropy: Entropy(rng),
         timer: EmbassyClock,

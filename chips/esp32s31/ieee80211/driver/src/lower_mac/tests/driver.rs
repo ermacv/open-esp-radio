@@ -274,7 +274,18 @@ impl<'id> TestDriver<'id> {
     )]
     pub(super) fn dismantle(
         self,
-    ) -> Result<LowerMacCoreParts<'id, 'static, Power, fn() -> u32, Timer, 512>, Self> {
+    ) -> Result<
+        LowerMacCoreParts<
+            'id,
+            'static,
+            oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile,
+            Power,
+            fn() -> u32,
+            Timer,
+            512,
+        >,
+        Self,
+    > {
         match self.0 {
             Some(State::Disabled(core)) => Ok(core.dismantle()),
             Some(State::DisabledClosing(core)) => Ok(core.dismantle()),

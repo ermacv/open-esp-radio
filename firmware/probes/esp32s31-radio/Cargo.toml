@@ -9,6 +9,8 @@ build = "build.rs"
 description = "Retained ESP32-S31 Rust entry points for compiled vendor verification, and the linked probe image"
 
 [dependencies]
+oer-ieee80211-upper-mac = { path = "../../../protocols/ieee80211/upper-mac" }
+oer-espressif-ieee80211-policy = { path = "../../../chips/espressif/ieee80211-policy" }
 bytemuck = { version = "1.25.2", default-features = false, features = ["derive"] }
 oer-probe-macros = { path = "../../../tools/probe/macros" }
 embassy-futures = { version = "0.1.2" }

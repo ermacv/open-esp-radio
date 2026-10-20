@@ -12,11 +12,50 @@ fn id() -> GroupKeyId {
 fn meta() -> ModelRxMeta {
     ModelRxMeta::new(Channel::ghz2_4(6, ChannelWidth::Mhz20).unwrap(), -50, -90)
 }
-fn snapshot(key: &ModelGroupKey<'_, Station>) -> contract::Installation {
-    contract::Installation {
-        identity: Rc::as_ptr(&key.identity.0).addr(),
-        slot: key.slot.index(),
-        counter: key.identity.0.last.get(),
+#[derive(Default)]
+struct CoreGroupNumbers(
+    Vec<(
+        KeyIdentity,
+        oer_ieee80211_upper_mac::ccmp::CcmpTxPacketNumber,
+    )>,
+);
+impl CoreGroupNumbers {
+    fn counter(
+        &mut self,
+        key: &ModelGroupKey<'_, Station>,
+    ) -> &oer_ieee80211_upper_mac::ccmp::CcmpTxPacketNumber {
+        let i = if let Some(i) = self.0.iter().position(|(id, _)| *id == key.identity) {
+            i
+        } else {
+            self.0.push((
+                key.identity.clone(),
+                oer_ieee80211_upper_mac::ccmp::CcmpTxPacketNumber::new(
+                    oer_ieee80211_wire::ccmp::CcmpPacketNumberStep::ONE,
+                ),
+            ));
+            self.0.len() - 1
+        };
+        &self.0[i].1
+    }
+    fn set_last(&mut self, key: &ModelGroupKey<'_, Station>, last: u64) {
+        let counter = oer_ieee80211_upper_mac::ccmp::CcmpTxPacketNumber::continuing_after(
+            oer_ieee80211_wire::ccmp::CcmpPacketNumberStep::ONE,
+            oer_ieee80211_wire::ccmp::CcmpPacketNumber::new(last).unwrap(),
+        );
+        let _ = self.counter(key);
+        let i = self
+            .0
+            .iter()
+            .position(|(id, _)| *id == key.identity)
+            .unwrap();
+        self.0[i].1 = counter;
+    }
+    fn snapshot(&mut self, key: &ModelGroupKey<'_, Station>) -> contract::Installation {
+        contract::Installation {
+            identity: Rc::as_ptr(&key.identity.0).addr(),
+            slot: key.slot.index(),
+            counter: self.counter(key).last().value(),
+        }
     }
 }
 async fn installed<'p, 'id: 'p>(
@@ -66,8 +105,9 @@ impl Work for Boundary<'_> {
         );
         let (a, mut permission) = installed(phase).await;
         let mut spare = Some(b_slot);
-        a.identity.0.last.set(73);
-        let original = snapshot(&a);
+        let mut numbers = CoreGroupNumbers::default();
+        numbers.set_last(&a, 73);
+        let original = numbers.snapshot(&a);
         let mut retained = None;
         let (old_material, new_material) = if self.case == Case::SelectRetained {
             phase.station().install_group_key(
@@ -79,7 +119,7 @@ impl Work for Boundary<'_> {
             );
             let (b, returned) = installed(phase).await;
             permission = returned;
-            b.identity.0.last.set(81);
+            numbers.set_last(&b, 81);
             retained = Some(b);
             ([2; 16], [1; 16])
         } else {
@@ -126,6 +166,7 @@ impl Work for Boundary<'_> {
             old_material,
             new_material,
             retained,
+            numbers,
         )
         .await;
     }
@@ -140,6 +181,7 @@ impl Boundary<'_> {
         old: [u8; 16],
         new: [u8; 16],
         retained: Option<ModelGroupKey<'id, Station>>,
+        mut numbers: CoreGroupNumbers,
     ) {
         use contract::Event;
         let mut events = Vec::new();
@@ -200,7 +242,7 @@ impl Boundary<'_> {
                 _ => panic!("lost or misrouted boundary"),
             }
         };
-        events.push(Event::Terminal(snapshot(&key)));
+        events.push(Event::Terminal(numbers.snapshot(&key)));
         let completed_at = oer_time::Instant::from_micros(self.air.now_micros.get());
         let continuous_rx_at_terminal = self.air.rx_stream.borrow().is_some();
         self.air.stop_continuous_receive();
@@ -788,8 +830,9 @@ impl PortBody<ModelBackend> for ReenableGroup<'_> {
             );
             installed(&mut phase).await
         };
-        key.identity.0.last.set(41);
-        let before = snapshot(&key);
+        let mut numbers = CoreGroupNumbers::default();
+        numbers.set_last(&key, 41);
+        let before = numbers.snapshot(&key);
         let disabled = owner
             .disable(&mut |_| core::ops::ControlFlow::Continue(()))
             .await
@@ -797,7 +840,7 @@ impl PortBody<ModelBackend> for ReenableGroup<'_> {
             .unwrap();
         assert_eq!(self.0.key_installations.borrow().len(), 1);
         let mut owner = disabled.enable().await.ok().unwrap();
-        assert_eq!(snapshot(&key), before);
+        assert_eq!(numbers.snapshot(&key), before);
         {
             let mut phase = owner.phase();
             assert!(self.0.receive_group(

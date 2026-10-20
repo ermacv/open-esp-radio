@@ -56,10 +56,9 @@
 //! descriptor and source buffer the hardware reads, whose MPDU follows the
 //! TX metadata word. The caller holds the slot, encodes the MPDU into it
 //! and submits it with the attempt; it comes back with the attempt's
-//! completion ([`LowerMacSink::tx_completed`]). The backend numbers a fresh
-//! protected MPDU at its first transmission ([`LowerMacCore::number`]): the
-//! key's software packet-number allocator writes its CCMP header. Only
-//! `Ok(())` confirms that write; a [`CcmpNumberingError`] prevents TX
+//! completion ([`LowerMacSink::tx_completed`]). The caller supplies the PN
+//! allocated above the port; [`LowerMacCore::write_ccmp_header`] only formats
+//! it with the installed key's ID. A [`CcmpHeaderWriteError`] prevents TX
 //! preparation. Receive-only key handles are rejected at compile time.
 //!
 //! # One publication per attempt, one attempt per EDCA queue
@@ -118,6 +117,10 @@
 //! S31 abort path needs the queue's hardware timeout edge. A-MPDU transmission
 //! and access-point TBTT schedules are not implemented yet.
 
+use oer_ieee80211_port::backend::BackendTxProfile;
+use oer_ieee80211_wire::address::AddressFlags;
+use oer_ieee80211_wire::frame::{FrameControlFields, FrameType};
+
 use core::pin::Pin;
 use oer_radio_port::{PoolPath, Root};
 
@@ -135,9 +138,9 @@ use oer_esp32s31_ieee80211_mac::{
     ap_tsf::ApTsfHardware,
     capabilities::ESP32S31_MAC_SERVICE_CAPABILITIES,
     crypto::{
-        ApGroupCcmpSlot, ApPairwiseCcmpSlot, CcmpKeyHardware, CcmpTxPacketNumberError,
-        CryptoKeyError, StaGroupCcmpSlot, StaPairwiseCcmpSlot, install_ap_group_ccmp,
-        install_ap_pairwise_ccmp, install_sta_group_ccmp, install_sta_pairwise_ccmp,
+        ApGroupCcmpSlot, ApPairwiseCcmpSlot, CcmpKeyHardware, CryptoKeyError, StaGroupCcmpSlot,
+        StaPairwiseCcmpSlot, install_ap_group_ccmp, install_ap_pairwise_ccmp,
+        install_sta_group_ccmp, install_sta_pairwise_ccmp,
     },
     init::{
         MacSnifferHardware, StaEspNowRxPolicyHardware, StaLinkRxPolicyHardware,
@@ -545,12 +548,13 @@ impl CoreVif {
         let Some(address1) = frame_address(frame, 4) else {
             return false;
         };
-        let frame_type = (frame[0] >> 2) & 0b11;
-        let subtype = frame[0] >> 4;
-        if frame_type == FRAME_TYPE_CONTROL {
+        let control = FrameControlFields::from_bytes([frame[0], frame[1]]);
+        let frame_type = control.kind();
+        let subtype = control.subtype();
+        if frame_type == FrameType::Control {
             return filter.contains(ReceiveFilter::OWN_CONTROL) && address1 == self.address;
         }
-        let management = frame_type == FRAME_TYPE_MANAGEMENT;
+        let management = frame_type == FrameType::Management;
         if management
             && matches!(subtype, SUBTYPE_BEACON | SUBTYPE_PROBE_RESPONSE)
             && filter.contains(ReceiveFilter::OTHER_BSS_MANAGEMENT)
@@ -575,16 +579,15 @@ impl CoreVif {
         if management && subtype == SUBTYPE_BEACON {
             return in_bss && filter.contains(ReceiveFilter::OWN_BSS_BEACONS);
         }
-        address1[0] & 1 != 0 && in_bss && filter.contains(ReceiveFilter::OWN_BSS_GROUP)
+        AddressFlags::from_bytes([address1[0]]).group()
+            && in_bss
+            && filter.contains(ReceiveFilter::OWN_BSS_GROUP)
     }
 }
 
-const FRAME_TYPE_MANAGEMENT: u8 = 0;
-const FRAME_TYPE_CONTROL: u8 = 1;
-const FRAME_TYPE_DATA: u8 = 2;
-const SUBTYPE_PROBE_REQUEST: u8 = 4;
-const SUBTYPE_PROBE_RESPONSE: u8 = 5;
-const SUBTYPE_BEACON: u8 = 8;
+const SUBTYPE_PROBE_REQUEST: u16 = 4;
+const SUBTYPE_PROBE_RESPONSE: u16 = 5;
+const SUBTYPE_BEACON: u16 = 8;
 
 fn frame_address(frame: &[u8], offset: usize) -> Option<[u8; 6]> {
     frame.get(offset..offset + 6)?.try_into().ok()
@@ -592,9 +595,10 @@ fn frame_address(frame: &[u8], offset: usize) -> Option<[u8; 6]> {
 
 /// The BSSID a management or data frame carries.
 fn frame_bssid(frame: &[u8]) -> Option<[u8; 6]> {
-    match (frame.first()? >> 2) & 0b11 {
-        FRAME_TYPE_MANAGEMENT => frame_address(frame, 16),
-        FRAME_TYPE_DATA => match frame.get(1)? & 0b11 {
+    let control = FrameControlFields::from_bytes([*frame.first()?, *frame.get(1)?]);
+    match control.kind() {
+        FrameType::Management => frame_address(frame, 16),
+        FrameType::Data => match control.ds() {
             0b00 => frame_address(frame, 16),
             // From the DS: Address 2 is the BSSID.
             0b10 => frame_address(frame, 10),
@@ -609,13 +613,11 @@ fn frame_bssid(frame: &[u8]) -> Option<[u8; 6]> {
 /// Why a fresh MPDU has not received a CCMP header and must not be
 /// submitted as numbered protected TX.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum CcmpNumberingError {
+pub enum CcmpHeaderWriteError {
     /// Software cannot currently write the slot's buffer.
     /// The CCMP header does not fit after the metadata and MAC header,
     /// including when the offset overflows.
     InsufficientSpace,
-    /// The key cannot allocate another transmit packet number.
-    PacketNumber(CcmpTxPacketNumberError),
 }
 
 /// A receive Block Ack agreement whose values a caller's types guarantee.
@@ -659,6 +661,7 @@ pub struct LowerMacConfig {
 pub struct LowerMacCoreParts<
     'core,
     'slot,
+    X: BackendTxProfile,
     P,
     E,
     T,
@@ -667,7 +670,7 @@ pub struct LowerMacCoreParts<
     const TICKETS: usize = 4,
 > {
     authority: CoreAuthority<'core, Path, TICKETS>,
-    tx: OrdinaryTxIdleOwner<'slot, P, E, T, BUFFER_SIZE>,
+    tx: OrdinaryTxIdleOwner<'slot, X, P, E, T, BUFFER_SIZE>,
     config: LowerMacConfig,
     coex: &'slot dyn RadioCoexPriorities,
     keys: KeyBank<'core, Path, TICKETS>,
@@ -715,7 +718,7 @@ struct RxBlockAckEntry {
 }
 
 /// What one queue's attempt holds.
-enum Work<'slot, const BUFFER_SIZE: usize> {
+enum Work<'slot, X: BackendTxProfile, const BUFFER_SIZE: usize> {
     /// An MPDU in its slot, not yet published: the transmit gate is
     /// closed.
     Held {
@@ -723,13 +726,13 @@ enum Work<'slot, const BUFFER_SIZE: usize> {
         plan: OrdinaryTxPlan,
         single: SingleAttempt,
     },
-    Published(QueuedSingleAttempt<'slot, BUFFER_SIZE>),
+    Published(QueuedSingleAttempt<'slot, X, BUFFER_SIZE>),
     Quarantined {
         _owner: QuarantinedSingleAttempt<'slot, BUFFER_SIZE>,
     },
 }
 
-impl<const BUFFER_SIZE: usize> Work<'_, BUFFER_SIZE> {
+impl<X: BackendTxProfile, const BUFFER_SIZE: usize> Work<'_, X, BUFFER_SIZE> {
     const fn held(&self) -> bool {
         matches!(self, Self::Held { .. })
     }
@@ -745,13 +748,13 @@ impl<const BUFFER_SIZE: usize> Work<'_, BUFFER_SIZE> {
 }
 
 /// The attempt occupying one queue.
-struct Attempt<'core, 'slot, const BUFFER_SIZE: usize, Path: PoolPath> {
+struct Attempt<'core, 'slot, X: BackendTxProfile, const BUFFER_SIZE: usize, Path: PoolPath> {
     queue: FreeQueue<'core, Path>,
     role: VifRole,
     admission: TxAdmission<'core, Path>,
     /// The rate of its publication, which its completion reports.
     rate: PhyRate,
-    work: Work<'slot, BUFFER_SIZE>,
+    work: Work<'slot, X, BUFFER_SIZE>,
 }
 
 /// The running station TBTT schedule.
@@ -786,7 +789,7 @@ impl StationTbtt {
 /// use oer_esp32s31_ieee80211_driver::lower_mac::LowerMacCore;
 /// use oer_esp32s31_ieee80211_driver::ordinary_tx::{WifiTxEntropy, WifiTxPowerProfile};
 /// fn borrow_tx<P: WifiTxPowerProfile, E: WifiTxEntropy, T: oer_time::Timer, const N: usize>(
-///     core: &LowerMacCore<'_, '_, P, E, T, N>,
+///     core: &LowerMacCore<'_, '_, X, P, E, T, N>,
 /// ) {
 ///     core.tx();
 /// }
@@ -800,8 +803,8 @@ impl StationTbtt {
 /// # fn panic(_: &core::panic::PanicInfo) -> ! { loop {} }
 /// use oer_esp32s31_ieee80211_driver::lower_mac::LowerMacCore;
 /// use oer_esp32s31_ieee80211_driver::ordinary_tx::{WifiTxEntropy, WifiTxPowerProfile};
-/// fn deadline<P: WifiTxPowerProfile, E: WifiTxEntropy, T: oer_time::Timer, const N: usize>(
-///     core: &LowerMacCore<'_, '_, P, E, T, N>,
+/// fn deadline<X: oer_ieee80211_port::backend::BackendTxProfile, P: WifiTxPowerProfile, E: WifiTxEntropy, T: oer_time::Timer, const N: usize>(
+///     core: &LowerMacCore<'_, '_, X, P, E, T, N>,
 /// ) -> Option<oer_time::Instant> {
 ///     core.next_deadline()
 /// }
@@ -809,6 +812,7 @@ impl StationTbtt {
 pub struct LowerMacCore<
     'core,
     'slot,
+    X: BackendTxProfile,
     P,
     E,
     T,
@@ -817,7 +821,7 @@ pub struct LowerMacCore<
     const TICKETS: usize = 4,
 > {
     authority: CoreAuthority<'core, Path, TICKETS>,
-    tx: OrdinaryTxOwner<'slot, P, E, T, BUFFER_SIZE>,
+    tx: OrdinaryTxOwner<'slot, X, P, E, T, BUFFER_SIZE>,
     config: LowerMacConfig,
     fault: Option<LowerMacFault>,
     /// The configured channel; the radio is tuned to it unless a retune is
@@ -835,14 +839,23 @@ pub struct LowerMacCore<
     access_point_tsf: oer_esp32s31_ieee80211_mac::ap_tsf::AccessPointTsf,
     /// The attempt of each ordinary queue, by its hardware index
     /// ([`LegacyTxQueue::hardware_index`]).
-    queues: [Option<Attempt<'core, 'slot, BUFFER_SIZE, Path>>; LOWER_MAC_TX_QUEUES],
+    queues: [Option<Attempt<'core, 'slot, X, BUFFER_SIZE, Path>>; LOWER_MAC_TX_QUEUES],
     /// The coexistence priorities the shared radio's owner sets: the beacon
     /// window's and a connection frame's.
     coex: &'slot dyn RadioCoexPriorities,
 }
 
-impl<'core, 'slot, P, E, T, const BUFFER_SIZE: usize, Path: PoolPath, const TICKETS: usize>
-    LowerMacCore<'core, 'slot, P, E, T, BUFFER_SIZE, Path, TICKETS>
+impl<
+    'core,
+    'slot,
+    X: BackendTxProfile,
+    P,
+    E,
+    T,
+    const BUFFER_SIZE: usize,
+    Path: PoolPath,
+    const TICKETS: usize,
+> LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>
 where
     P: WifiTxPowerProfile,
     E: WifiTxEntropy,
@@ -853,7 +866,7 @@ where
     /// frames ask for the air at its priorities.
     pub fn new(
         authority: CoreAuthority<'core, Path, TICKETS>,
-        tx: OrdinaryTxIdleOwner<'slot, P, E, T, BUFFER_SIZE>,
+        tx: OrdinaryTxIdleOwner<'slot, X, P, E, T, BUFFER_SIZE>,
         config: LowerMacConfig,
         coex: &'slot dyn RadioCoexPriorities,
     ) -> DisabledCore<Self> {
@@ -881,7 +894,7 @@ where
     /// A disabled core over the owners a dismantled core returned: the
     /// state of the core they came from is gone, as at a radio start.
     pub fn from_parts(
-        parts: LowerMacCoreParts<'core, 'slot, P, E, T, BUFFER_SIZE, Path, TICKETS>,
+        parts: LowerMacCoreParts<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>,
     ) -> DisabledCore<Self> {
         let LowerMacCoreParts {
             authority,
@@ -953,7 +966,7 @@ where
         self.queues[usize::from(queue.hardware_index())].is_some()
     }
 
-    fn attempts(&self) -> impl Iterator<Item = &Attempt<'core, 'slot, BUFFER_SIZE, Path>> {
+    fn attempts(&self) -> impl Iterator<Item = &Attempt<'core, 'slot, X, BUFFER_SIZE, Path>> {
         self.queues.iter().flatten()
     }
 
@@ -967,40 +980,38 @@ where
         })
     }
 
-    /// Write the CCMP header of the next packet number of `key` into the
-    /// fresh MPDU in `slot`, after its `header_len` octets of MAC header:
-    /// the backend numbers a fresh MPDU at its first transmission.
-    ///
-    /// `Ok(())` means the complete CCMP header was written. Buffer access
-    /// and header space are checked before a packet number is allocated.
-    /// On any error the buffer and the key's packet number are unchanged;
-    /// the caller must not submit the MPDU as numbered protected TX.
+    /// Write the caller's already allocated packet number into a fresh MPDU.
+    /// The core above the port owns the per-key PN allocator; retries retain
+    /// the original header. This operation owns no counter and cannot exhaust
+    /// or reset the installation's packet-number space.
     ///
     /// # Errors
     ///
-    /// Insufficient header space or packet-number exhaustion is a distinct
-    /// [`CcmpNumberingError`]. Only a free slot and a transmit-capable key
-    /// provide the operation's authority.
-    pub fn number(
-        &mut self,
-        key: &mut KeyHandle<'core, Path>,
+    /// Insufficient header space leaves the buffer unchanged. Only a free
+    /// slot and a transmit-capable installed key authorize this write.
+    pub fn write_ccmp_header(
+        &self,
+        key: &KeyHandle<'core, Path>,
         slot: &mut oer_esp32s31_ieee80211_mac::tx::TxSlotFree<'_, BUFFER_SIZE>,
         header_len: usize,
-    ) -> Result<(), CcmpNumberingError> {
+        packet_number: oer_ieee80211_wire::ccmp::CcmpPacketNumber,
+    ) -> Result<(), CcmpHeaderWriteError> {
         let buffer = slot.buffer_mut();
         let at = TX_METADATA_SIZE
             .checked_add(header_len)
-            .ok_or(CcmpNumberingError::InsufficientSpace)?;
+            .ok_or(CcmpHeaderWriteError::InsufficientSpace)?;
         let place = buffer
             .get_mut(at..)
             .and_then(|remaining| remaining.get_mut(..CCMP_HEADER_LEN))
-            .ok_or(CcmpNumberingError::InsufficientSpace)?;
-        let header = match &mut key.token {
-            TransmitKeyToken::StaPairwise(key) => key.next_tx_ccmp_header(),
-            TransmitKeyToken::ApPairwise(key) => key.next_tx_ccmp_header(),
-            TransmitKeyToken::ApGroup(key) => key.next_tx_ccmp_header(),
-        }
-        .map_err(CcmpNumberingError::PacketNumber)?;
+            .ok_or(CcmpHeaderWriteError::InsufficientSpace)?;
+        let key_id = match key.scope {
+            TransmitKeyScope::StationPairwise { .. }
+            | TransmitKeyScope::AccessPointPairwise { .. } => {
+                oer_ieee80211_wire::ccmp::CcmpKeyId::PAIRWISE
+            }
+            TransmitKeyScope::AccessPointGroup { key_id } => key_id.group_key_id().key_id(),
+        };
+        let header = oer_ieee80211_wire::ccmp::CcmpHeader::new(packet_number, key_id).encode();
         place.copy_from_slice(&header);
         Ok(())
     }

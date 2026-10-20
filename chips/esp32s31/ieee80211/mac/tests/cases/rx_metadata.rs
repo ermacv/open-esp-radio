@@ -370,7 +370,7 @@ fn rx_he_mu_sig_b_borrows_only_the_blob_advertised_complete_bytes() {
     metadata[0x2b] &= 0x7f;
     assert_eq!(
         decode_rx_he_mu_sig_b(&metadata).unwrap().complete_bytes,
-        &[]
+        &[] as &[u8]
     );
     assert_eq!(decode_rx_he_mu_sig_b(&metadata[..0x30]), None);
     metadata[0x25] = 4 << 4;

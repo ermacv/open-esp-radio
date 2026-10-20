@@ -361,7 +361,11 @@ impl Exercise<'_> {
                         buffer,
                         frame,
                         body: None,
-                        protection: TxProtection::Ccmp(AttemptKey::Group(&key)),
+                        protection: TxProtection::Ccmp(oer_ieee80211_port::NumberedKey {
+                            key: AttemptKey::Group(&key),
+                            packet_number: oer_ieee80211_wire::ccmp::CcmpPacketNumber::new(1)
+                                .unwrap(),
+                        }),
                     })
                     .check()
                     .ok()

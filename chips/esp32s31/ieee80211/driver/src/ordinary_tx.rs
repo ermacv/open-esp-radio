@@ -10,6 +10,11 @@
 //! prove either receipt or absence of the solicited response.
 
 use core::pin::Pin;
+use oer_ieee80211_port::backend::{BackendMpduRetry, BackendTxProfile};
+use oer_ieee80211_port::backend::{
+    FrameClass, OrdinaryCollisionDecision, OrdinaryRetryDecision, OrdinaryRetryError,
+    OrdinaryRetryRatePolicy, RetryCounters,
+};
 
 use oer_esp32s31_hal::layouts::{WifiTxMetadataHead, WifiTxMetadataHeadMut};
 use oer_time::{Clock, Instant, Timer};
@@ -24,11 +29,7 @@ use oer_esp32s31_ieee80211_mac::{
         TxHardware, TxPhyRate, TxSlot, TxSlotAccess, TxSlotFree,
         ampdu::HtBlockAckObservation,
         protection::{ProtectedPpdu, TxProtection, TxProtectionDecision, TxPsdu, TxReceiver},
-        runtime::{
-            FrameClass, OrdinaryCollisionDecision, OrdinaryMpduRetryState, OrdinaryRetryDecision,
-            OrdinaryRetryError, OrdinaryRetryRatePolicy, RetryCounters, VENDOR_RTS_THRESHOLD_BYTES,
-            WifiTxRuntimePolicy,
-        },
+        runtime::WifiTxRuntimePolicy,
     },
 };
 use oer_ieee80211_port::{MacTxPlan, MacTxQueueState, MacTxResult, MacTxStatus};
@@ -232,7 +233,7 @@ pub enum OrdinaryTxError {
     UnsupportedPhyRate,
     DeadlineOverflow,
     Tx(TxError),
-    Retry(OrdinaryRetryError),
+    Retry(OrdinaryRetryError<TxPhyRate>),
     RadioResetRequired(TxResetReason),
     /// A BlockAckReq was planned at a non-legacy rate; only the legacy
     /// publication program solicits a BlockAck for a single frame.
@@ -263,8 +264,8 @@ impl From<TxError> for OrdinaryTxError {
     }
 }
 
-impl From<OrdinaryRetryError> for OrdinaryTxError {
-    fn from(error: OrdinaryRetryError) -> Self {
+impl From<OrdinaryRetryError<TxPhyRate>> for OrdinaryTxError {
+    fn from(error: OrdinaryRetryError<TxPhyRate>) -> Self {
         Self::Retry(error)
     }
 }
@@ -372,12 +373,12 @@ pub const MAX_SINGLE_ATTEMPT_BACKOFF_SLOTS: u16 = 0x03ff;
 /// advances it; dropping it forgets a descriptor the hardware may still
 /// own, which only a radio reset recovers.
 #[must_use = "service the published attempt until its slot returns"]
-pub struct QueuedSingleAttempt<'slot, const BUFFER_SIZE: usize> {
+pub struct QueuedSingleAttempt<'slot, X: BackendTxProfile, const BUFFER_SIZE: usize> {
     slot: Pin<&'slot mut TxSlot<BUFFER_SIZE>>,
-    active: ActiveTx,
+    active: ActiveTx<X>,
 }
 
-impl<const BUFFER_SIZE: usize> QueuedSingleAttempt<'_, BUFFER_SIZE> {
+impl<X: BackendTxProfile, const BUFFER_SIZE: usize> QueuedSingleAttempt<'_, X, BUFFER_SIZE> {
     /// The ordinary queue the attempt is published on.
     pub const fn queue(&self) -> LegacyTxQueue {
         self.active.route.queue()
@@ -403,9 +404,9 @@ impl<const BUFFER_SIZE: usize> QueuedSingleAttempt<'_, BUFFER_SIZE> {
 
 /// How a serviced [`QueuedSingleAttempt`] stands.
 #[must_use = "retain the pending attempt or its completed slot"]
-pub enum QueuedSingleAttemptProgress<'slot, const BUFFER_SIZE: usize> {
+pub enum QueuedSingleAttemptProgress<'slot, X: BackendTxProfile, const BUFFER_SIZE: usize> {
     /// The hardware still owns the attempt.
-    Pending(QueuedSingleAttempt<'slot, BUFFER_SIZE>),
+    Pending(QueuedSingleAttempt<'slot, X, BUFFER_SIZE>),
     /// The attempt ended; its slot is idle again.
     Complete {
         outcome: OrdinaryTxOutcome,
@@ -434,13 +435,13 @@ pub struct QueuedSingleAttemptRefused<'slot, const BUFFER_SIZE: usize> {
     pub slot: Pin<&'slot mut TxSlot<BUFFER_SIZE>>,
 }
 
-struct ActiveTx {
+struct ActiveTx<X: BackendTxProfile> {
     cookie: TxCookie,
     /// `Some` for a single-attempt publication: the caller's protection,
     /// backoff and power ceiling, and no re-publication whatever the
     /// completion says.
     single_attempt: Option<SingleAttempt>,
-    retry: OrdinaryMpduRetryState,
+    retry: X::MpduRetry<TxPhyRate, LegacyTxQueue>,
     frame_length: usize,
     descriptor_capacity: u32,
     transfer_length: u32,
@@ -466,17 +467,17 @@ struct ActiveTx {
 type OrdinaryCompletion = CompletionObservation<(TxCompletion, Option<HtBlockAckObservation>)>;
 
 /// A published operation moves into this value only after Observed(status).
-struct FinishedTx {
-    active: ActiveTx,
+struct FinishedTx<X: BackendTxProfile> {
+    active: ActiveTx<X>,
     status: oer_ieee80211_port::TxStatus,
 }
 
-impl ActiveTx {
+impl<X: BackendTxProfile> ActiveTx<X> {
     fn finish(
         self,
         completion: TxCompletion,
         block_ack: Option<HtBlockAckObservation>,
-    ) -> FinishedTx {
+    ) -> FinishedTx<X> {
         use oer_ieee80211_port::TxStatus;
         let status = match (self.response, block_ack, completion.tx_status()) {
             (MacLegacyTxResponse::BlockAck, Some(_), _) => TxStatus::Success,
@@ -498,6 +499,7 @@ enum OrdinaryTxPhase {
 /// Unique ordinary-MPDU descriptor and retry owner shared by protocol phases.
 pub struct OrdinaryTxOwner<
     'slot,
+    X: BackendTxProfile,
     P,
     E,
     T,
@@ -505,38 +507,78 @@ pub struct OrdinaryTxOwner<
     const LEGACY_ONLY: bool = false,
 > {
     slot: Pin<&'slot mut TxSlot<BUFFER_SIZE>>,
-    policy: WifiTxRuntimePolicy,
+    policy: WifiTxRuntimePolicy<X>,
     power: P,
     entropy: E,
     pub timer: T,
-    active: Option<ActiveTx>,
+    active: Option<ActiveTx<X>>,
     last_outcome: Option<OrdinaryTxOutcome>,
 }
 
 /// The methods available during one exclusively borrowed ordinary TX phase.
-pub enum OrdinaryTxAccess<'owner, 'slot, P, E, T, const N: usize, const LEGACY_ONLY: bool = false> {
-    Idle(OrdinaryTxIdle<'owner, 'slot, P, E, T, N, LEGACY_ONLY>),
-    Active(OrdinaryTxActive<'owner, 'slot, P, E, T, N, LEGACY_ONLY>),
+pub enum OrdinaryTxAccess<
+    'owner,
+    'slot,
+    X: BackendTxProfile,
+    P,
+    E,
+    T,
+    const N: usize,
+    const LEGACY_ONLY: bool = false,
+> {
+    Idle(OrdinaryTxIdle<'owner, 'slot, X, P, E, T, N, LEGACY_ONLY>),
+    Active(OrdinaryTxActive<'owner, 'slot, X, P, E, T, N, LEGACY_ONLY>),
     Unavailable(TxDmaState),
 }
 
-pub struct OrdinaryTxIdle<'owner, 'slot, P, E, T, const N: usize, const LEGACY_ONLY: bool = false> {
-    owner: &'owner mut OrdinaryTxOwner<'slot, P, E, T, N, LEGACY_ONLY>,
+pub struct OrdinaryTxIdle<
+    'owner,
+    'slot,
+    X: BackendTxProfile,
+    P,
+    E,
+    T,
+    const N: usize,
+    const LEGACY_ONLY: bool = false,
+> {
+    owner: &'owner mut OrdinaryTxOwner<'slot, X, P, E, T, N, LEGACY_ONLY>,
 }
 
-pub struct OrdinaryTxActive<'owner, 'slot, P, E, T, const N: usize, const LEGACY_ONLY: bool = false>
-{
-    owner: &'owner mut OrdinaryTxOwner<'slot, P, E, T, N, LEGACY_ONLY>,
+pub struct OrdinaryTxActive<
+    'owner,
+    'slot,
+    X: BackendTxProfile,
+    P,
+    E,
+    T,
+    const N: usize,
+    const LEGACY_ONLY: bool = false,
+> {
+    owner: &'owner mut OrdinaryTxOwner<'slot, X, P, E, T, N, LEGACY_ONLY>,
 }
 
 /// An owned idle transmitter. Consuming this owner into the lower MAC fixes
 /// queued mode: that core never exposes its nested classic transmitter.
-pub struct OrdinaryTxIdleOwner<'slot, P, E, T, const N: usize, const LEGACY_ONLY: bool = false> {
-    pub(crate) owner: OrdinaryTxOwner<'slot, P, E, T, N, LEGACY_ONLY>,
+pub struct OrdinaryTxIdleOwner<
+    'slot,
+    X: BackendTxProfile,
+    P,
+    E,
+    T,
+    const N: usize,
+    const LEGACY_ONLY: bool = false,
+> {
+    pub(crate) owner: OrdinaryTxOwner<'slot, X, P, E, T, N, LEGACY_ONLY>,
 }
 
-impl<P: WifiTxPowerProfile, E: WifiTxEntropy, T: Timer, const N: usize, const LEGACY_ONLY: bool>
-    OrdinaryTxIdle<'_, '_, P, E, T, N, LEGACY_ONLY>
+impl<
+    X: BackendTxProfile,
+    P: WifiTxPowerProfile,
+    E: WifiTxEntropy,
+    T: Timer,
+    const N: usize,
+    const LEGACY_ONLY: bool,
+> OrdinaryTxIdle<'_, '_, X, P, E, T, N, LEGACY_ONLY>
 {
     pub fn buffer_mut(&mut self) -> &mut [u8; N] {
         self.owner.free_slot().into_buffer()
@@ -594,8 +636,14 @@ impl<P: WifiTxPowerProfile, E: WifiTxEntropy, T: Timer, const N: usize, const LE
     }
 }
 
-impl<P: WifiTxPowerProfile, E: WifiTxEntropy, T: Timer, const N: usize, const LEGACY_ONLY: bool>
-    OrdinaryTxActive<'_, '_, P, E, T, N, LEGACY_ONLY>
+impl<
+    X: BackendTxProfile,
+    P: WifiTxPowerProfile,
+    E: WifiTxEntropy,
+    T: Timer,
+    const N: usize,
+    const LEGACY_ONLY: bool,
+> OrdinaryTxActive<'_, '_, X, P, E, T, N, LEGACY_ONLY>
 {
     pub fn service<H: TxHardware>(
         self,
@@ -615,16 +663,16 @@ impl<P: WifiTxPowerProfile, E: WifiTxEntropy, T: Timer, const N: usize, const LE
 }
 
 /// The owner's timer, for phases that wait on the owner's clock.
-impl<P, E, T: Clock, const BUFFER_SIZE: usize, const LEGACY_ONLY: bool> Clock
-    for OrdinaryTxOwner<'_, P, E, T, BUFFER_SIZE, LEGACY_ONLY>
+impl<X: BackendTxProfile, P, E, T: Clock, const BUFFER_SIZE: usize, const LEGACY_ONLY: bool> Clock
+    for OrdinaryTxOwner<'_, X, P, E, T, BUFFER_SIZE, LEGACY_ONLY>
 {
     fn now(&self) -> Instant {
         self.timer.now()
     }
 }
 
-impl<P, E, T: Timer, const BUFFER_SIZE: usize, const LEGACY_ONLY: bool> Timer
-    for OrdinaryTxOwner<'_, P, E, T, BUFFER_SIZE, LEGACY_ONLY>
+impl<X: BackendTxProfile, P, E, T: Timer, const BUFFER_SIZE: usize, const LEGACY_ONLY: bool> Timer
+    for OrdinaryTxOwner<'_, X, P, E, T, BUFFER_SIZE, LEGACY_ONLY>
 {
     fn wait_until(&self, deadline: Instant) -> impl Future<Output = ()> {
         self.timer.wait_until(deadline)
@@ -639,14 +687,14 @@ pub struct OrdinaryTxParked {
     last_outcome: Option<OrdinaryTxOutcome>,
 }
 
-impl<'slot, P, E, T, const BUFFER_SIZE: usize, const LEGACY_ONLY: bool>
-    OrdinaryTxOwner<'slot, P, E, T, BUFFER_SIZE, LEGACY_ONLY>
+impl<'slot, X: BackendTxProfile, P, E, T, const BUFFER_SIZE: usize, const LEGACY_ONLY: bool>
+    OrdinaryTxOwner<'slot, X, P, E, T, BUFFER_SIZE, LEGACY_ONLY>
 where
     P: WifiTxPowerProfile,
     E: WifiTxEntropy,
     T: Timer,
 {
-    fn from_resources(resources: WifiTxResources<'slot, P, E, T, BUFFER_SIZE>) -> Self {
+    fn from_resources(resources: WifiTxResources<'slot, X, P, E, T, BUFFER_SIZE>) -> Self {
         let WifiTxResources {
             slot,
             policy,
@@ -668,7 +716,7 @@ where
     /// Rejoin idle physical resources with the exact opaque role-local state
     /// emitted by [`Self::try_park`].
     pub fn resume(
-        resources: WifiTxResources<'slot, P, E, T, BUFFER_SIZE>,
+        resources: WifiTxResources<'slot, X, P, E, T, BUFFER_SIZE>,
         parked: OrdinaryTxParked,
     ) -> Self {
         let mut owner = Self::from_resources(resources);
@@ -681,7 +729,7 @@ where
     }
 
     /// Lend the current software phase for one encoding or service operation.
-    pub fn access(&mut self) -> OrdinaryTxAccess<'_, 'slot, P, E, T, BUFFER_SIZE, LEGACY_ONLY> {
+    pub fn access(&mut self) -> OrdinaryTxAccess<'_, 'slot, X, P, E, T, BUFFER_SIZE, LEGACY_ONLY> {
         if self.active.is_some() {
             OrdinaryTxAccess::Active(OrdinaryTxActive { owner: self })
         } else if self.slot_state() == TxDmaState::Free {
@@ -697,7 +745,7 @@ where
     )]
     pub fn into_idle(
         self,
-    ) -> Result<OrdinaryTxIdleOwner<'slot, P, E, T, BUFFER_SIZE, LEGACY_ONLY>, Self> {
+    ) -> Result<OrdinaryTxIdleOwner<'slot, X, P, E, T, BUFFER_SIZE, LEGACY_ONLY>, Self> {
         if self.active.is_none() && self.slot_state() == TxDmaState::Free {
             Ok(OrdinaryTxIdleOwner { owner: self })
         } else {
@@ -717,7 +765,9 @@ where
     /// `retry_bit_set` follows from a completed ACK-timeout re-publication:
     /// the owner increments that counter, writes the Retry bit and publishes
     /// again before restoring `active`.
-    pub fn active_snapshot(&self) -> Result<Option<OrdinaryTxActiveSnapshot>, OrdinaryRetryError> {
+    pub fn active_snapshot(
+        &self,
+    ) -> Result<Option<OrdinaryTxActiveSnapshot>, OrdinaryRetryError<TxPhyRate>> {
         self.active
             .as_ref()
             .map(|active| {
@@ -756,11 +806,11 @@ where
         }
     }
 
-    pub const fn policy(&self) -> &WifiTxRuntimePolicy {
+    pub const fn policy(&self) -> &WifiTxRuntimePolicy<X> {
         &self.policy
     }
 
-    pub fn policy_mut(&mut self) -> &mut WifiTxRuntimePolicy {
+    pub fn policy_mut(&mut self) -> &mut WifiTxRuntimePolicy<X> {
         &mut self.policy
     }
 
@@ -774,7 +824,9 @@ where
     /// callers must drive it to a terminal outcome or reset the radio before
     /// attempting a station lifecycle transition again.
     #[allow(clippy::result_large_err)]
-    pub fn try_into_resources(self) -> Result<WifiTxResources<'slot, P, E, T, BUFFER_SIZE>, Self> {
+    pub fn try_into_resources(
+        self,
+    ) -> Result<WifiTxResources<'slot, X, P, E, T, BUFFER_SIZE>, Self> {
         self.try_park().map(|(resources, _)| resources)
     }
 
@@ -786,7 +838,7 @@ where
         self,
     ) -> Result<
         (
-            WifiTxResources<'slot, P, E, T, BUFFER_SIZE>,
+            WifiTxResources<'slot, X, P, E, T, BUFFER_SIZE>,
             OrdinaryTxParked,
         ),
         Self,
@@ -926,7 +978,7 @@ where
         hardware: &mut H,
         mut plan: OrdinaryTxPlan,
         attempt: SingleAttempt,
-    ) -> Result<ActiveTx, OrdinaryTxError> {
+    ) -> Result<ActiveTx<X>, OrdinaryTxError> {
         if attempt.backoff_slots > MAX_SINGLE_ATTEMPT_BACKOFF_SLOTS {
             return Err(OrdinaryTxError::Tx(TxError::Invalid));
         }
@@ -960,7 +1012,7 @@ where
         plan: OrdinaryTxPlan,
         attempt: SingleAttempt,
     ) -> Result<
-        QueuedSingleAttempt<'slot, BUFFER_SIZE>,
+        QueuedSingleAttempt<'slot, X, BUFFER_SIZE>,
         QueuedSingleAttemptRefused<'slot, BUFFER_SIZE>,
     > {
         assert!(
@@ -1000,11 +1052,11 @@ where
     pub(crate) fn service_queued_single_attempt<H: TxHardware>(
         &mut self,
         hardware: &mut H,
-        queued: QueuedSingleAttempt<'slot, BUFFER_SIZE>,
+        queued: QueuedSingleAttempt<'slot, X, BUFFER_SIZE>,
         wake: WifiTxWake,
         may_begin_timeout_abort: bool,
     ) -> Result<
-        QueuedSingleAttemptProgress<'slot, BUFFER_SIZE>,
+        QueuedSingleAttemptProgress<'slot, X, BUFFER_SIZE>,
         QueuedSingleAttemptFailed<'slot, BUFFER_SIZE>,
     > {
         assert!(
@@ -1036,10 +1088,10 @@ where
     fn service_shared_edge<H: TxHardware>(
         &mut self,
         hardware: &mut H,
-        active: ActiveTx,
+        active: ActiveTx<X>,
         wake: WifiTxWake,
         may_begin_timeout_abort: bool,
-    ) -> Result<Step, OrdinaryTxError> {
+    ) -> Result<Step<X>, OrdinaryTxError> {
         use oer_esp32s31_ieee80211_mac::irq::EVENT_TX_TIMEOUT;
 
         if matches!(active.phase, OrdinaryTxPhase::AbortSettling) {
@@ -1128,7 +1180,7 @@ where
         plan: OrdinaryTxPlan,
         retry_rate_policy: OrdinaryRetryRatePolicy,
         single_attempt: Option<SingleAttempt>,
-    ) -> Result<ActiveTx, OrdinaryTxError> {
+    ) -> Result<ActiveTx<X>, OrdinaryTxError> {
         if LEGACY_ONLY && !matches!(plan.exchange.initial_rate, TxPhyRate::Legacy(_)) {
             return Err(OrdinaryTxError::UnsupportedPhyRate);
         }
@@ -1188,13 +1240,13 @@ where
         {
             return Err(OrdinaryTxError::Tx(TxError::Invalid));
         }
-        let retry = OrdinaryMpduRetryState::new_with_rate_policy(
+        let retry = X::MpduRetry::new(
             plan.interface.role(),
             LegacyTxQueue::from_access_category(plan.exchange.access_category),
             plan.exchange.initial_rate,
             retry_rate_policy,
             plan.exchange.publication_limit,
-            if hardware_frame_length > VENDOR_RTS_THRESHOLD_BYTES {
+            if hardware_frame_length > u32::from(X::RTS_THRESHOLD_BYTES) {
                 FrameClass::Long
             } else {
                 FrameClass::Short
@@ -1262,9 +1314,9 @@ where
     fn service_step<H: TxHardware>(
         &mut self,
         hardware: &mut H,
-        active: ActiveTx,
+        active: ActiveTx<X>,
         wake: WifiTxWake,
-    ) -> Result<Step, OrdinaryTxError> {
+    ) -> Result<Step<X>, OrdinaryTxError> {
         if matches!(active.phase, OrdinaryTxPhase::AbortSettling) {
             return self.service_abort_settle(hardware, active);
         }
@@ -1368,8 +1420,8 @@ where
     fn poll_step<H: TxHardware>(
         &mut self,
         hardware: &mut H,
-        active: ActiveTx,
-    ) -> Result<Step, OrdinaryTxError> {
+        active: ActiveTx<X>,
+    ) -> Result<Step<X>, OrdinaryTxError> {
         if matches!(active.phase, OrdinaryTxPhase::AbortSettling) {
             return self.service_abort_settle(hardware, active);
         }
@@ -1403,7 +1455,7 @@ where
     fn acknowledge_completion<H: TxHardware>(
         &mut self,
         hardware: &mut H,
-        active: &ActiveTx,
+        active: &ActiveTx<X>,
     ) -> Result<Option<OrdinaryCompletion>, OrdinaryTxError> {
         if active.response != MacLegacyTxResponse::BlockAck {
             return Ok(self
@@ -1426,7 +1478,7 @@ where
             }))
     }
 
-    fn start_abort_settle(&mut self, mut active: ActiveTx) -> Result<Step, OrdinaryTxError> {
+    fn start_abort_settle(&mut self, mut active: ActiveTx<X>) -> Result<Step<X>, OrdinaryTxError> {
         // Start the interval after the hardware abort request has completed.
         let Some(deadline) = self.timer.now().checked_add(TX_ABORT_SETTLE) else {
             self.slot.as_mut().require_reset(active.cookie)?;
@@ -1440,8 +1492,8 @@ where
     fn service_abort_settle<H: TxHardware>(
         &mut self,
         hardware: &mut H,
-        active: ActiveTx,
-    ) -> Result<Step, OrdinaryTxError> {
+        active: ActiveTx<X>,
+    ) -> Result<Step<X>, OrdinaryTxError> {
         // Late completion and repeated IRQs cannot bypass the hardware settle
         // interval. Abort detach, not completion acknowledgement, owns release.
         if self.timer.now() < active.deadline {
@@ -1456,10 +1508,10 @@ where
     fn finish_completion<H: TxHardware>(
         &mut self,
         hardware: &mut H,
-        finished: FinishedTx,
+        finished: FinishedTx<X>,
         completion: TxCompletion,
         block_ack: Option<HtBlockAckObservation>,
-    ) -> Result<Step, OrdinaryTxError> {
+    ) -> Result<Step<X>, OrdinaryTxError> {
         let FinishedTx { mut active, status } = finished;
         let attempts = active.retry.publications();
         let final_rate = active.retry.current_rate()?;
@@ -1540,9 +1592,9 @@ where
     fn finish_aborted_attempt<H: TxHardware>(
         &mut self,
         hardware: &mut H,
-        mut active: ActiveTx,
+        mut active: ActiveTx<X>,
         timeout: bool,
-    ) -> Result<Step, OrdinaryTxError> {
+    ) -> Result<Step<X>, OrdinaryTxError> {
         let attempts = active.retry.publications();
         let final_rate = active.retry.current_rate()?;
         if timeout {
@@ -1603,7 +1655,7 @@ where
     fn publish_attempt<H: TxHardware>(
         &mut self,
         hardware: &mut H,
-        active: &mut ActiveTx,
+        active: &mut ActiveTx<X>,
     ) -> Result<(), OrdinaryTxError> {
         let deadline = self
             .timer
@@ -1644,7 +1696,7 @@ where
         &mut self,
         hardware: &mut H,
         cookie: TxCookie,
-        active: &ActiveTx,
+        active: &ActiveTx<X>,
     ) -> Result<TxProtectionDecision, OrdinaryTxError> {
         let queue = active.route.queue();
         let role = active.route.role();
@@ -1838,7 +1890,7 @@ where
     }
 
     /// Keep a step's result in the owner for the classic, owner-held path.
-    fn settle(&mut self, step: Step) -> WifiTxProgress {
+    fn settle(&mut self, step: Step<X>) -> WifiTxProgress {
         match step {
             Step::Pending(active) => {
                 self.active = Some(active);
@@ -1853,9 +1905,9 @@ where
 
     fn reset_required(
         &mut self,
-        active: ActiveTx,
+        active: ActiveTx<X>,
         reason: TxResetReason,
-    ) -> Result<Step, OrdinaryTxError> {
+    ) -> Result<Step<X>, OrdinaryTxError> {
         self.slot.as_mut().require_reset(active.cookie)?;
         Err(OrdinaryTxError::RadioResetRequired(reason))
     }
@@ -1863,8 +1915,8 @@ where
 
 /// What one step leaves: the attempt still published, or its outcome. The
 /// queued path receives exactly this value, so no state is re-read later.
-enum Step {
-    Pending(ActiveTx),
+enum Step<X: BackendTxProfile> {
+    Pending(ActiveTx<X>),
     Complete(OrdinaryTxOutcome),
 }
 
@@ -1882,19 +1934,19 @@ fn yield_once() -> impl Future<Output = ()> {
     })
 }
 
-impl<'slot, P: WifiTxPowerProfile, E: WifiTxEntropy, T: Timer, const N: usize>
-    OrdinaryTxOwner<'slot, P, E, T, N, false>
+impl<'slot, X: BackendTxProfile, P: WifiTxPowerProfile, E: WifiTxEntropy, T: Timer, const N: usize>
+    OrdinaryTxOwner<'slot, X, P, E, T, N, false>
 {
-    pub fn new(resources: WifiTxResources<'slot, P, E, T, N>) -> Self {
+    pub fn new(resources: WifiTxResources<'slot, X, P, E, T, N>) -> Self {
         Self::from_resources(resources)
     }
 }
-impl<'slot, P: WifiTxPowerProfile, E: WifiTxEntropy, T: Timer, const N: usize>
-    OrdinaryTxOwner<'slot, P, E, T, N, true>
+impl<'slot, X: BackendTxProfile, P: WifiTxPowerProfile, E: WifiTxEntropy, T: Timer, const N: usize>
+    OrdinaryTxOwner<'slot, X, P, E, T, N, true>
 {
     /// An IRQ-context transmitter whose publication path admits legacy rates
     /// only and excludes HE floating-point protection calculations.
-    pub fn new_legacy(resources: WifiTxResources<'slot, P, E, T, N>) -> Self {
+    pub fn new_legacy(resources: WifiTxResources<'slot, X, P, E, T, N>) -> Self {
         Self::from_resources(resources)
     }
 }

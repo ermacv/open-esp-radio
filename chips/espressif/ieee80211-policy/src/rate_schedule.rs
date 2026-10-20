@@ -11,25 +11,6 @@
 //! (`chips/esp32s31/vendor/artifacts.toml`); a chip whose pinned library
 //! carries other arenas needs its own reviewed copy.
 
-pub const RATE_SCHEDULE_RECORD_SIZE: usize = 12;
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-#[repr(u8)]
-pub enum RateScheduleKind {
-    // Deliberately sparse internal tags keep LLVM from materializing a
-    // nine-pointer jump table in internal SRAM.  These values never cross the
-    // source-owned schedule identity.
-    BarOfdm = 0x03,
-    BasicOfdm = 0x19,
-    Dot11Ax = 0x2f,
-    Dot11B = 0x44,
-    Dot11G = 0x62,
-    Dot11N = 0x83,
-    Lora = 0xa1,
-    P2pDot11G = 0xc8,
-    P2pDot11N = 0xf1,
-}
-
 #[cfg(test)]
 const RATE_SCHEDULE_KINDS: [RateScheduleKind; 9] = [
     RateScheduleKind::BarOfdm,
@@ -43,68 +24,9 @@ const RATE_SCHEDULE_KINDS: [RateScheduleKind; 9] = [
     RateScheduleKind::P2pDot11N,
 ];
 
-impl RateScheduleKind {
-    pub const fn record_count(self) -> usize {
-        match self {
-            Self::BarOfdm | Self::BasicOfdm => 1,
-            Self::Dot11Ax => 16,
-            Self::Dot11B => 6,
-            Self::Dot11G => 13,
-            Self::Dot11N => 14,
-            Self::Lora => 2,
-            Self::P2pDot11G => 8,
-            Self::P2pDot11N => 10,
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct RateScheduleRef {
-    kind: RateScheduleKind,
-    record: &'static [u8; RATE_SCHEDULE_RECORD_SIZE],
-}
-
-impl RateScheduleRef {
-    /// Validate the arena position once, retaining the exact record array.
-    pub const fn new(kind: RateScheduleKind, index: u8) -> Option<Self> {
-        let mut records = arena_records(kind);
-        let mut at = 0_u8;
-        while let Some((record, rest)) = records.split_first() {
-            if at == index {
-                return Some(Self { kind, record });
-            }
-            records = rest;
-            // The largest private arena has 16 records, so at never wraps.
-            at = at.wrapping_add(1);
-        }
-        None
-    }
-
-    pub const fn kind(self) -> RateScheduleKind {
-        self.kind
-    }
-    pub const fn index(self) -> u8 {
-        let [_, _, _, _, _, _, _, _, _, _, index, _] = self.record;
-        *index
-    }
-    pub const fn advance(self) -> Option<Self> {
-        self.offset(1)
-    }
-    pub const fn offset(self, records: u8) -> Option<Self> {
-        match self.index().checked_add(records) {
-            Some(index) => Self::new(self.kind, index),
-            None => None,
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct RateScheduleRecordState {
-    pub rate: u8,
-    pub retry_limit: u8,
-    pub index: u8,
-    pub adaptive: u8,
-}
+use oer_ieee80211_port::backend::{
+    RATE_SCHEDULE_RECORD_SIZE, RateScheduleKind, RateScheduleRecordState, RateScheduleRef,
+};
 
 #[repr(C, align(4))]
 struct ScheduleArena<const RECORDS: usize>([[u8; RATE_SCHEDULE_RECORD_SIZE]; RECORDS]);
@@ -361,6 +283,41 @@ static P2P_DOT11_N_SCHEDULE: ScheduleArena<10> = ScheduleArena::indexed([
     ],
 ]);
 
+pub const fn record_count(kind: RateScheduleKind) -> usize {
+    match kind {
+        RateScheduleKind::BarOfdm | RateScheduleKind::BasicOfdm => 1,
+        RateScheduleKind::Dot11Ax => 16,
+        RateScheduleKind::Dot11B => 6,
+        RateScheduleKind::Dot11G => 13,
+        RateScheduleKind::Dot11N => 14,
+        RateScheduleKind::Lora => 2,
+        RateScheduleKind::P2pDot11G => 8,
+        RateScheduleKind::P2pDot11N => 10,
+    }
+}
+
+/// Validate the arena position once, retaining the exact record array.
+pub const fn rate_schedule(kind: RateScheduleKind, index: u8) -> Option<RateScheduleRef> {
+    let mut records = arena_records(kind);
+    let mut at = 0_u8;
+    while let Some((record, rest)) = records.split_first() {
+        if at == index {
+            return Some(RateScheduleRef::from_record(kind, record));
+        }
+        records = rest;
+        // The largest private arena has 16 records, so at never wraps.
+        at = at.wrapping_add(1);
+    }
+    None
+}
+
+pub const fn offset_schedule(schedule: RateScheduleRef, records: u8) -> Option<RateScheduleRef> {
+    match schedule.index().checked_add(records) {
+        Some(index) => rate_schedule(schedule.kind(), index),
+        None => None,
+    }
+}
+
 const fn arena_records(kind: RateScheduleKind) -> &'static [[u8; RATE_SCHEDULE_RECORD_SIZE]] {
     match kind {
         RateScheduleKind::BarOfdm => &BAR_OFDM_SCHEDULE.0,
@@ -376,7 +333,7 @@ const fn arena_records(kind: RateScheduleKind) -> &'static [[u8; RATE_SCHEDULE_R
 }
 
 fn schedule_bytes(schedule: RateScheduleRef) -> &'static [u8; RATE_SCHEDULE_RECORD_SIZE] {
-    schedule.record
+    schedule.record()
 }
 
 pub fn schedule_state(schedule: RateScheduleRef) -> RateScheduleRecordState {
@@ -450,12 +407,12 @@ pub enum RateIndexMap {
 /// Callers must handle absence before using an arena index.
 ///
 /// ```compile_fail,E0308
-/// use oer_espressif_ieee80211_policy::rate_schedule::{RateIndexMap, rate_to_schedule_index};
+/// use oer_espressif_ieee80211_policy::rate_schedule::{RateIndexMap,rate_to_schedule_index};
 /// let index: u8 = rate_to_schedule_index(RateIndexMap::Dot11N, u8::MAX);
 /// ```
 ///
 /// ```
-/// use oer_espressif_ieee80211_policy::rate_schedule::{RateIndexMap, rate_to_schedule_index};
+/// use oer_espressif_ieee80211_policy::rate_schedule::{RateIndexMap,rate_to_schedule_index};
 /// assert_eq!(rate_to_schedule_index(RateIndexMap::Dot11N, u8::MAX), None);
 /// assert_eq!(rate_to_schedule_index(RateIndexMap::Dot11N, 0x21), Some(0));
 /// ```
@@ -530,7 +487,7 @@ pub const fn rate_to_schedule_index(map: RateIndexMap, rate: u8) -> Option<u8> {
         RateIndexMap::Lora => RateScheduleKind::Lora,
     };
     match index {
-        Some(index) if (index as usize) < kind.record_count() => Some(index),
+        Some(index) if (index as usize) < record_count(kind) => Some(index),
         _ => None,
     }
 }
@@ -542,7 +499,7 @@ pub const fn rate_to_schedule_index(map: RateIndexMap, rate: u8) -> Option<u8> {
 /// pointed-to record bytes come from the arenas above.
 pub const fn dot11g_schedule_for_legacy_rate(rate: u8) -> Option<RateScheduleRef> {
     match rate_to_schedule_index(RateIndexMap::Dot11G, rate) {
-        Some(index) => RateScheduleRef::new(RateScheduleKind::Dot11G, index),
+        Some(index) => rate_schedule(RateScheduleKind::Dot11G, index),
         None => None,
     }
 }

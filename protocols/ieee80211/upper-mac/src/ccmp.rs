@@ -31,14 +31,14 @@ pub enum CcmpTxPacketNumberError {
 /// without wrapping or changing state.
 #[derive(Debug, Eq, PartialEq)]
 pub struct CcmpTxPacketNumber {
-    last: CcmpPacketNumber,
+    last: core::cell::Cell<CcmpPacketNumber>,
     step: CcmpPacketNumberStep,
 }
 
 impl CcmpTxPacketNumber {
     pub const fn new(step: CcmpPacketNumberStep) -> Self {
         Self {
-            last: CcmpPacketNumber::ZERO,
+            last: core::cell::Cell::new(CcmpPacketNumber::ZERO),
             step,
         }
     }
@@ -47,12 +47,15 @@ impl CcmpTxPacketNumber {
     /// carries `last + step`. A key whose counter lives on across an owner
     /// change continues from its last PN this way.
     pub const fn continuing_after(step: CcmpPacketNumberStep, last: CcmpPacketNumber) -> Self {
-        Self { last, step }
+        Self {
+            last: core::cell::Cell::new(last),
+            step,
+        }
     }
 
     /// The last PN handed out; zero before the first.
-    pub const fn last(&self) -> CcmpPacketNumber {
-        self.last
+    pub fn last(&self) -> CcmpPacketNumber {
+        self.last.get()
     }
 
     pub const fn step(&self) -> CcmpPacketNumberStep {
@@ -60,20 +63,50 @@ impl CcmpTxPacketNumber {
     }
 
     /// Allocate the PN of the next MPDU.
-    pub fn allocate(&mut self) -> Result<CcmpPacketNumber, CcmpTxPacketNumberError> {
+    pub fn allocate(&self) -> Result<CcmpPacketNumber, CcmpTxPacketNumberError> {
         // `last` is at most CCMP_PACKET_NUMBER_MAX (2^48 - 1) and the step at
         // most 255, so the sum stays far below u64::MAX.
-        let next = self.last.value().saturating_add(u64::from(self.step.get()));
+        let next = self
+            .last
+            .get()
+            .value()
+            .saturating_add(u64::from(self.step.get()));
         let Some(next) = CcmpPacketNumber::new(next) else {
             return Err(CcmpTxPacketNumberError::Exhausted);
         };
-        self.last = next;
+        self.last.set(next);
         Ok(next)
+    }
+
+    /// Reserve all fresh MPDU numbers of a batch before handing it to a backend.
+    /// On exhaustion no number is consumed, including when only a prefix fits.
+    pub fn allocate_batch<const N: usize>(
+        &self,
+    ) -> Result<[CcmpPacketNumber; N], CcmpTxPacketNumberError> {
+        let count = u64::try_from(N).map_err(|_| CcmpTxPacketNumberError::Exhausted)?;
+        let distance = count
+            .checked_mul(u64::from(self.step.get()))
+            .ok_or(CcmpTxPacketNumberError::Exhausted)?;
+        let final_number = self
+            .last
+            .get()
+            .value()
+            .checked_add(distance)
+            .and_then(CcmpPacketNumber::new)
+            .ok_or(CcmpTxPacketNumberError::Exhausted)?;
+        let mut numbers = [CcmpPacketNumber::ZERO; N];
+        let mut current = self.last.get().value();
+        for number in &mut numbers {
+            current = current.saturating_add(u64::from(self.step.get()));
+            *number = CcmpPacketNumber::new(current).ok_or(CcmpTxPacketNumberError::Exhausted)?;
+        }
+        self.last.set(final_number);
+        Ok(numbers)
     }
 
     /// Allocate the PN of the next MPDU and encode its CCMP header.
     pub fn next_header(
-        &mut self,
+        &self,
         key_id: CcmpKeyId,
     ) -> Result<[u8; CCMP_HEADER_LEN], CcmpTxPacketNumberError> {
         let packet_number = self.allocate()?;

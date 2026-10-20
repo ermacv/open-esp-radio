@@ -17,6 +17,15 @@ use oer_esp32s31_pac::RadioPhyRegisters;
 
 use oer_esp32s31_ieee80211_mac::ap_tsf::AccessPointTsf;
 
+use oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile;
+use oer_ieee80211_port::backend::{FrameClass, RateScheduleKind, RetryCounters};
+type OrdinaryMpduRetryState = oer_ieee80211_upper_mac::backend_retry::BackendMpduRetryState<
+    EspressifBackendTxProfile,
+    oer_esp32s31_ieee80211_mac::tx::TxPhyRate,
+    oer_esp32s31_ieee80211_mac::tx::LegacyTxQueue,
+>;
+type WifiTxRuntimePolicy =
+    oer_esp32s31_ieee80211_mac::tx::runtime::WifiTxRuntimePolicy<EspressifBackendTxProfile>;
 mod ampdu_resort;
 mod calibration_leaves;
 mod calibration_projection;
@@ -1131,7 +1140,6 @@ oer_probe_macros::probe! {
     ) {
         use oer_esp32s31_ieee80211_mac::tx::{
             HtChannelWidth, TxPhyRate,
-            runtime::{RetryCounters, select_ordinary_retry_rate},
         };
 
         let descriptor = descriptor_address as *mut u8;
@@ -1148,7 +1156,7 @@ oer_probe_macros::probe! {
         // depend on it.
         let initial = TxPhyRate::from_code(initial_rate as u8, HtChannelWidth::Mhz20)
             .expect("reviewed rcGetRate cases start from a legacy or HT rate");
-        let selected = select_ordinary_retry_rate(initial, counters)
+        let selected = oer_ieee80211_upper_mac::backend_retry::select_ordinary_retry_rate::<EspressifBackendTxProfile,_>(initial, counters)
             .expect("reviewed rcGetRate cases remain inside their schedule");
         // SAFETY: the same case-owned descriptor covers byte 0x0c.
         unsafe { descriptor.add(0x0c).write(selected.code()) };
@@ -1165,12 +1173,10 @@ oer_probe_macros::probe! {
         initial_rate: u32,
     ) {
         use oer_esp32s31_ieee80211_mac::{
-            rate::schedule::RateScheduleKind,
             rx::HeGuardIntervalAndLtf,
             tx::{
                 HtChannelWidth, TxPhyRate,
-                runtime::{RetryCounters, select_ordinary_retry_rate},
-            },
+                },
         };
 
         let descriptor = descriptor_address as *mut u8;
@@ -1192,7 +1198,7 @@ oer_probe_macros::probe! {
             HeGuardIntervalAndLtf::TwoLtf800Ns,
         )
         .expect("reviewed HE rcGetRate cases start from an 802.11ax rate");
-        let selected = select_ordinary_retry_rate(initial, counters)
+        let selected = oer_ieee80211_upper_mac::backend_retry::select_ordinary_retry_rate::<EspressifBackendTxProfile,_>(initial, counters)
             .expect("reviewed rcGetRate cases remain inside their schedule");
         let code = selected
             .rate_control_code()
@@ -1206,8 +1212,8 @@ oer_probe_macros::probe! {
 struct RetryProbeState(
     core::cell::UnsafeCell<
         Option<(
-            oer_esp32s31_ieee80211_mac::tx::runtime::OrdinaryMpduRetryState,
-            oer_esp32s31_ieee80211_mac::tx::runtime::WifiTxRuntimePolicy,
+            OrdinaryMpduRetryState,
+            WifiTxRuntimePolicy,
             oer_esp32s31_ieee80211_mac::tx::LegacyTxQueue,
         )>,
     >,
@@ -1234,7 +1240,6 @@ oer_probe_macros::probe! {
     pub fn open_libpp_tx_retry_trace_reset(queue: u32, mpdu_retry_limit: u32, long_frame: u32) -> u32 {
         use oer_esp32s31_ieee80211_mac::tx::{
             LegacyRate, LegacyTxQueue, TxPhyRate,
-            runtime::{FrameClass, OrdinaryMpduRetryState, WifiTxRuntimePolicy},
         };
         let queue = match queue {
             0 => LegacyTxQueue::Voice,
@@ -1274,7 +1279,7 @@ oer_probe_macros::probe! {
         descriptor: u32,
         buffer: u32,
     ) -> u32 {
-        use oer_esp32s31_ieee80211_mac::tx::runtime::OrdinaryRetryDecision;
+        use oer_ieee80211_port::backend::OrdinaryRetryDecision;
         use oer_ieee80211_port::TxStatus;
         let disposition = match disposition {
             0 => TxStatus::AckTimeout,

@@ -19,7 +19,6 @@ fn host_pool<
     PlacedTxPool::pin(Placed::host(storage))
 }
 mod length_budget;
-use crate::tx::runtime::{AmpduRetryDecision, AmpduRetryPolicy, AmpduRetryState};
 use crate::tx::{
     HeAmpduTxConfig, HeEdcaTxopLimit, HeRate, HtAmpduDensity, HtAmpduTxConfig, HtRate, TxHardware,
 };
@@ -27,6 +26,8 @@ use oer_esp32s31_hal::types::{
     MacHeTbTidLimit, MacHeTid, MacHtAmpduCompletionObservation, MacHtTxProgram, MacLegacyTxProgram,
     MacTxCompletionObservation, MacTxDetachOutcome, MacTxDetachReason, MacTxQueueDetached,
 };
+use oer_espressif_ieee80211_policy::backend::EspressifAmpduRetryState as AmpduRetryState;
+use oer_ieee80211_port::backend_aggregate::{AmpduRetryDecision, AmpduRetryPolicy};
 use oer_memory::{HardwareOwnedTxDma, PinnedDmaTxPool, PinnedDmaTxRadioLease, PreparedTxDma};
 
 struct CompletionHardware {
@@ -586,7 +587,7 @@ fn retained_dma_owner_preserves_backing_identity_through_selective_retry() {
         4,
         AmpduRetryPolicy {
             lifetime: oer_time::Duration::from_micros(
-                crate::tx::runtime::VENDOR_AMPDU_MSDU_LIFETIME_MICROS as u64,
+                oer_espressif_ieee80211_policy::lmac::AMPDU_MSDU_LIFETIME_MICROS as u64,
             ),
             retain_single_mpdu: true,
         },
@@ -1562,129 +1563,6 @@ fn block_ack_bitmap_accepts_only_bounded_sequences_left_of_an_advanced_ssn() {
     let wrapped = TxBlockAckBitmap::new(SequenceNumber::new(0).unwrap(), 0b1);
     assert!(wrapped.acknowledges(SequenceNumber::new(0x0fff).unwrap()));
     assert!(!wrapped.acknowledges(SequenceNumber::new(65).unwrap()));
-}
-
-fn assert_batch_completions<const N: usize>(
-    batch: TxAmpduBatch<block_ack::BatchCompleting>,
-    expected: [TxAmpduCompletion; N],
-) -> TxAmpduBatch {
-    let mut remaining = batch;
-    let mut expected = expected.into_iter();
-    loop {
-        match remaining.next_completion() {
-            TxAmpduBatchStep::More { completion, batch } => {
-                assert_eq!(Some(completion), expected.next());
-                assert!(expected.len() > 0);
-                remaining = batch;
-            }
-            TxAmpduBatchStep::Last { completion, batch } => {
-                assert_eq!(Some(completion), expected.next());
-                assert_eq!(expected.next(), None);
-                assert!(batch.is_empty());
-                return batch;
-            }
-        }
-    }
-}
-
-#[test]
-fn batch_returns_one_block_ack_result_per_step_and_idle_authority_last() {
-    let mut batch = TxAmpduBatch::new()
-        .begin(SequenceNumber::new(0x0ffe).unwrap(), 4)
-        .unwrap();
-    for slot in 3..7 {
-        batch.push(slot).unwrap();
-    }
-    let batch = batch
-        .complete_with_block_ack(TxBlockAckBitmap::new(
-            SequenceNumber::new(0x0ffe).unwrap(),
-            0b1101,
-        ))
-        .unwrap();
-    let idle = assert_batch_completions(
-        batch,
-        [
-            (3, 0x0ffe, TxAmpduDisposition::Acknowledged),
-            (4, 0x0fff, TxAmpduDisposition::Retry),
-            (5, 0, TxAmpduDisposition::Acknowledged),
-            (6, 1, TxAmpduDisposition::Acknowledged),
-        ]
-        .map(|(slot, sequence, disposition)| TxAmpduCompletion {
-            mpdu: TxAmpduMpdu {
-                slot: TxAmpduSlot::new(slot).unwrap(),
-                sequence: SequenceNumber::new(sequence).unwrap(),
-            },
-            disposition,
-        }),
-    );
-    let next = idle.begin(SequenceNumber::new(17).unwrap(), 1).unwrap();
-    assert!(next.is_empty());
-}
-
-#[test]
-fn missing_block_ack_retries_every_mpdu_without_a_drain() {
-    let mut batch = TxAmpduBatch::new()
-        .begin(SequenceNumber::new(9).unwrap(), 2)
-        .unwrap();
-    let first = batch.push(0).unwrap();
-    let last = batch.push(31).unwrap();
-    let batch = batch.complete_without_block_ack().unwrap();
-    assert_batch_completions(
-        batch,
-        [first, last].map(|mpdu| TxAmpduCompletion {
-            mpdu,
-            disposition: TxAmpduDisposition::Retry,
-        }),
-    );
-}
-
-#[test]
-fn batch_rejects_duplicate_static_slot_ownership() {
-    let mut batch = TxAmpduBatch::new().begin(SequenceNumber::ZERO, 32).unwrap();
-    batch.push(17).unwrap();
-    assert_eq!(batch.push(17), Err(TxAmpduBatchError::DuplicateSlot(17)));
-}
-
-#[test]
-fn batch_preserves_nonconsecutive_hardware_sequences() {
-    let mut batch = TxAmpduBatch::new()
-        .begin(SequenceNumber::new(0x120).unwrap(), 4)
-        .unwrap();
-    let first = batch
-        .push_sequence(3, SequenceNumber::new(0x120).unwrap())
-        .unwrap();
-    let last = batch
-        .push_sequence(4, SequenceNumber::new(0x123).unwrap())
-        .unwrap();
-    assert_eq!(
-        batch.push_sequence(5, last.sequence),
-        Err(TxAmpduBatchError::DuplicateSequence(last.sequence))
-    );
-    let batch = batch
-        .complete_with_block_ack(TxBlockAckBitmap::new(first.sequence, 0b1001))
-        .unwrap();
-    assert_batch_completions(
-        batch,
-        [first, last].map(|mpdu| TxAmpduCompletion {
-            mpdu,
-            disposition: TxAmpduDisposition::Acknowledged,
-        }),
-    );
-}
-
-#[test]
-fn batch_never_exceeds_negotiated_or_static_window() {
-    let (idle, error) = TxAmpduBatch::new()
-        .begin(SequenceNumber::ZERO, 0)
-        .unwrap_err();
-    assert_eq!(error, TxAmpduBatchError::InvalidWindow(0));
-    let (idle, error) = idle.begin(SequenceNumber::ZERO, 33).unwrap_err();
-    assert_eq!(error, TxAmpduBatchError::InvalidWindow(33));
-    let batch = idle.begin(SequenceNumber::ZERO, 1).unwrap();
-    let (mut batch, error) = batch.complete_without_block_ack().unwrap_err();
-    assert_eq!(error, TxAmpduBatchError::Empty);
-    batch.push(0).unwrap();
-    assert_eq!(batch.push(1), Err(TxAmpduBatchError::Full));
 }
 
 mod work;

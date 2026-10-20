@@ -3,6 +3,7 @@
 extern crate std;
 
 use core::num::NonZeroU16;
+use oer_ieee80211_port::backend::RateScheduleKind;
 use std::vec::Vec;
 
 use oer_ieee80211_port::{
@@ -18,7 +19,7 @@ use {
 };
 
 use super::*;
-use crate::rate_schedule::{RateScheduleKind, schedule_state};
+use crate::rate_schedule::schedule_state;
 use oer_ieee80211_port::{
     Air, IndeterminateCause, SingleEnd, SingleResponse, TxOutcome, WithdrawCause,
 };
@@ -213,7 +214,7 @@ fn associated_control_frames_walk_the_association_record_and_leaving_restores_th
     // An 802.11g association: the vendor's BasicOFDMSched, from 6 Mb/s.
     assert_eq!(
         schedule,
-        RateScheduleRef::new(RateScheduleKind::BasicOfdm, 0).unwrap()
+        crate::rate_schedule::rate_schedule(RateScheduleKind::BasicOfdm, 0).unwrap()
     );
     let plan = plan_of(&selection, FrameRates::Control);
     assert_eq!(plan_walk(&plan), record_walk(schedule));
@@ -308,7 +309,7 @@ fn data_completions_adapt_the_rate_as_the_vendor_control_does() {
 fn the_control_records_a_station_uses_start_with_a_legacy_rate() {
     for schedule in [
         DEFAULT_CONTROL_SCHEDULE,
-        RateScheduleRef::new(RateScheduleKind::BasicOfdm, 0).unwrap(),
+        crate::rate_schedule::rate_schedule(RateScheduleKind::BasicOfdm, 0).unwrap(),
     ] {
         assert!(
             legacy_rate(schedule_state(schedule).rate).is_some(),

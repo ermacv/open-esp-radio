@@ -1,20 +1,7 @@
-//! Allocation-free receive BlockAck agreements and reorder banks of the
-//! ESP32-S31 MAC.
-//!
-//! The vendor implementation allocates one 40-byte agreement object and a
-//! variable pointer array for every receive TID. This module keeps negotiation
-//! state and the data-plane reorder engine as separate owned values. The
-//! reorder window of one agreement is the portable
-//! `oer_ieee80211_upper_mac::block_ack::RxReorderBuffer`, bound here to the S31
-//! window profile; the eight hardware-bank agreements that own those windows
-//! stay with the chip. The integration layer binds the reorder to its exact
-//! staging-pool capacity, and raw packet pointers stay outside both state
-//! machines.
+//! Hardware-bank ownership and public RX BlockAck classification.
+//! Software sequence reordering belongs to the upper MAC.
 
-use {
-    oer_ieee80211_upper_mac::block_ack::{RxReorderBuffer, RxReorderError, RxReorderRelease},
-    oer_ieee80211_wire::sequence::SequenceNumber,
-};
+use oer_ieee80211_wire::sequence::SequenceNumber;
 
 use crate::{
     MacInterface,
@@ -34,19 +21,11 @@ use crate::{
 // descriptors: descriptors are recycled while this sequence window remains
 // active.
 pub const RX_BLOCK_ACK_MAX_WINDOW: u16 = 64;
-pub const RX_AMPDU_SLOT_CAPACITY: usize = RX_BLOCK_ACK_MAX_WINDOW as usize;
-pub(crate) const RX_ESF_SLOT_ID_CAPACITY: usize = 32;
-// Rare multi-descriptor MPDUs use a separate split SRAM/PSRAM pool. Its
-// IDs participate in reorder ownership, but must not inflate the ordinary
-// zero-copy channel budget computed from `RX_ESF_SLOT_ID_CAPACITY`.
-pub const RX_REORDER_SLOT_ID_CAPACITY: usize = RX_ESF_SLOT_ID_CAPACITY + 2;
-const DATA_TYPE: u16 = 0x0008;
-const DATA_TYPE_MASK: u16 = 0x000c;
-const PROTECTED: u16 = 0x4000;
-const QOS_SUBTYPE: u16 = 0x0080;
-const RETRY: u16 = 0x0800;
-const MORE_FRAGMENTS: u16 = 0x0400;
-const TO_FROM_DS: u16 = 0x0300;
+use oer_ieee80211_wire::{
+    frame::{FrameControlFields, FrameType, QosControl},
+    sequence::SequenceControl,
+    trigger::BarControlFields,
+};
 
 /// Public ordering identity of one protected QoS data MPDU.
 ///
@@ -74,10 +53,12 @@ pub fn rx_block_ack_mpdu_key(
     expected_peer: Option<[u8; 6]>,
 ) -> Option<RxBlockAckMpduKey> {
     let frame_offset = PUBLIC_HEADER_SIZE;
-    let frame_control = u16::from_le_bytes([*raw.get(frame_offset)?, *raw.get(frame_offset + 1)?]);
-    if frame_control & (DATA_TYPE_MASK | PROTECTED | QOS_SUBTYPE)
-        != DATA_TYPE | PROTECTED | QOS_SUBTYPE
-        || frame_control & MORE_FRAGMENTS != 0
+    let frame_control =
+        FrameControlFields::from_bytes([*raw.get(frame_offset)?, *raw.get(frame_offset + 1)?]);
+    if frame_control.kind() != FrameType::Data
+        || !frame_control.protected()
+        || !frame_control.qos()
+        || frame_control.more_fragments()
         || raw.get(frame_offset + 4..frame_offset + 10)? != local_address
     {
         return None;
@@ -91,15 +72,15 @@ pub fn rx_block_ack_mpdu_key(
     }
     let sequence_control =
         u16::from_le_bytes([*raw.get(frame_offset + 22)?, *raw.get(frame_offset + 23)?]);
-    if sequence_control & 0x000f != 0 {
+    if SequenceControl::from_bytes(sequence_control.to_le_bytes()).fragment() != 0 {
         return None;
     }
-    let qos_offset = frame_offset + 24 + usize::from(frame_control & TO_FROM_DS == TO_FROM_DS) * 6;
+    let qos_offset = frame_offset + 24 + usize::from(frame_control.ds() == 3) * 6;
     Some(RxBlockAckMpduKey {
         peer,
-        tid: *raw.get(qos_offset)? & 0x0f,
+        tid: QosControl::from_bytes([*raw.get(qos_offset)?, 0]).tid(),
         sequence: SequenceNumber::from_sequence_control(sequence_control),
-        retry: frame_control & RETRY != 0,
+        retry: frame_control.retry(),
     })
 }
 
@@ -111,7 +92,6 @@ pub struct RxBlockAckRequestKey {
     pub starting_sequence: SequenceNumber,
 }
 
-const BLOCK_ACK_REQUEST_FRAME_CONTROL: u16 = 0x0084;
 const BLOCK_ACK_REQUEST_LENGTH: usize = 20;
 
 /// Extract the receive session a BlockAckReq addresses.
@@ -131,7 +111,10 @@ pub fn rx_block_ack_request_key(
 ) -> Option<RxBlockAckRequestKey> {
     let frame = raw.get(PUBLIC_HEADER_SIZE..PUBLIC_HEADER_SIZE + BLOCK_ACK_REQUEST_LENGTH)?;
     let frame_control = u16::from_le_bytes([frame[0], frame[1]]);
-    if frame_control & 0x00fc != BLOCK_ACK_REQUEST_FRAME_CONTROL || frame[4..10] != local_address {
+    if FrameControlFields::from_raw(frame_control).kind() != FrameType::Control
+        || FrameControlFields::from_raw(frame_control).subtype() != 8
+        || frame[4..10] != local_address
+    {
         return None;
     }
     let peer: [u8; 6] = frame[10..16].try_into().ok()?;
@@ -139,7 +122,7 @@ pub fn rx_block_ack_request_key(
         return None;
     }
     let control = u16::from_le_bytes([frame[16], frame[17]]);
-    let tid = (control >> 12) as u8;
+    let tid = BarControlFields::from_bytes(control.to_le_bytes()).tid();
     if tid > 7 {
         return None;
     }
@@ -248,21 +231,6 @@ impl RxBlockAckSnapshot {
             tid: self.tid,
         }
     }
-}
-
-/// Semantic agreement edge from BlockAck control to the independent reorder
-/// owner. Hardware-bank identity is explicit so an AP can host equal TIDs for
-/// different peers without merging their sequence spaces.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum RxReorderCommand {
-    Start(RxBlockAckSnapshot),
-    Stop(RxBlockAckIdentity),
-    StopInterface(MacInterface),
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum RxReorderCommandError {
-    Full(RxReorderCommand),
 }
 
 #[derive(Clone, Copy)]
@@ -737,127 +705,10 @@ impl<const PEER_CAPACITY: usize> Default for RxBlockAckSessions<PEER_CAPACITY> {
     }
 }
 
-/// Role-neutral owner of the eight software reorder sequence spaces.
-///
-/// Hardware-bank identity and its reorder state cannot be updated separately.
-/// Frame backing and gap timers deliberately remain outside this type because
-/// they belong to the executor/integration memory policy.
-pub struct RxBlockAckReorderBanks<const SLOT_CAPACITY: usize> {
-    identities: [Option<RxBlockAckIdentity>; RX_BLOCK_ACK_BANK_COUNT],
-    states: [Option<RxBlockAckReorderState<SLOT_CAPACITY>>; RX_BLOCK_ACK_BANK_COUNT],
-}
-
-impl<const SLOT_CAPACITY: usize> RxBlockAckReorderBanks<SLOT_CAPACITY> {
-    pub const fn new() -> Self {
-        Self {
-            identities: [None; RX_BLOCK_ACK_BANK_COUNT],
-            states: [const { None }; RX_BLOCK_ACK_BANK_COUNT],
-        }
-    }
-
-    #[inline(always)]
-    pub fn find(&self, interface: MacInterface, peer: [u8; 6], tid: u8) -> Option<usize> {
-        self.identities
-            .iter()
-            .enumerate()
-            .find_map(|(bank, identity)| {
-                identity
-                    .is_some_and(|identity| {
-                        identity.interface == interface
-                            && identity.peer == peer
-                            && identity.tid == tid
-                    })
-                    .then_some(bank)
-            })
-    }
-
-    pub const fn identity(&self, bank: usize) -> Option<RxBlockAckIdentity> {
-        self.identities[bank]
-    }
-
-    pub const fn state(&self, bank: usize) -> Option<&RxBlockAckReorderState<SLOT_CAPACITY>> {
-        self.states[bank].as_ref()
-    }
-
-    pub const fn state_mut(
-        &mut self,
-        bank: usize,
-    ) -> Option<&mut RxBlockAckReorderState<SLOT_CAPACITY>> {
-        self.states[bank].as_mut()
-    }
-
-    /// Replace the sequence space assigned to the negotiated physical bank.
-    /// Any frames retained by the previous generation are returned to their
-    /// integration owner before the new identity becomes observable.
-    pub fn start(
-        &mut self,
-        agreement: RxBlockAckSnapshot,
-    ) -> Result<Option<RxAmpduRelease>, RxReorderError> {
-        let bank = usize::from(agreement.hardware_index);
-        if bank >= RX_BLOCK_ACK_BANK_COUNT {
-            return Err(RxReorderError::InvalidBank(agreement.hardware_index));
-        }
-        let state = RxBlockAckReorderState::new(agreement.starting_sequence, agreement.window)?;
-        let released = self.stop_bank(bank);
-        self.identities[bank] = Some(agreement.identity());
-        self.states[bank] = Some(state);
-        Ok(released)
-    }
-
-    /// Stop only the exact agreement generation identified by control-plane
-    /// state. A stale DELBA/rollback cannot tear down a replacement.
-    pub fn stop(&mut self, identity: RxBlockAckIdentity) -> Option<RxAmpduRelease> {
-        let bank = usize::from(identity.hardware_index);
-        if bank >= RX_BLOCK_ACK_BANK_COUNT || self.identities[bank] != Some(identity) {
-            return None;
-        }
-        self.stop_bank(bank)
-    }
-
-    pub fn stop_bank(&mut self, bank: usize) -> Option<RxAmpduRelease> {
-        self.identities[bank] = None;
-        self.states[bank].take().map(|mut state| state.stop())
-    }
-
-    pub fn occupied(&self) -> u32 {
-        self.states
-            .iter()
-            .flatten()
-            .map(RxBlockAckReorderState::occupied)
-            .sum()
-    }
-}
-
-impl<const SLOT_CAPACITY: usize> Default for RxBlockAckReorderBanks<SLOT_CAPACITY> {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 const fn next_rx_block_ack_generation(current: u32) -> u32 {
     let next = current.wrapping_add(1);
     if next == 0 { 1 } else { next }
 }
-
-/// The MPDUs one reorder operation releases, bound to the S31 window
-/// profile.
-pub type RxAmpduRelease = RxReorderRelease<RX_AMPDU_SLOT_CAPACITY>;
-
-/// One receive BlockAck agreement's reorder window with a fixed maximum
-/// sequence window and an explicit integration-owned frame-token domain: the
-/// portable reorder buffer bound to the S31 window profile.
-///
-/// Every retained packet is represented only by a checked slot index. The
-/// owner maps that index to its independent frame storage and recycles every frame
-/// returned by `ingest`, `expire_gap`, or `stop`.
-pub type RxBlockAckReorderState<const SLOT_CAPACITY: usize> =
-    RxReorderBuffer<RX_AMPDU_SLOT_CAPACITY, SLOT_CAPACITY>;
-
-/// Reorder state bound to the MAC crate's default receive-slot domain.
-///
-/// Integrations whose staging pool has a different compile-time size use
-/// [`RxBlockAckReorderState`] directly.
-pub type RxBlockAckReorder = RxBlockAckReorderState<RX_REORDER_SLOT_ID_CAPACITY>;
 
 #[cfg(test)]
 mod tests;

@@ -9,6 +9,10 @@
 //! descriptor publication at their first unproven contract.
 
 use core::fmt;
+use oer_ieee80211_port::backend::BackendTxProfile;
+use oer_ieee80211_port::backend::{
+    OrdinaryRetryRatePolicy, P2pRetryRateSchedule, RateScheduleKind,
+};
 
 use crate::{
     ordinary_tx::{
@@ -18,28 +22,20 @@ use crate::{
 };
 
 use oer_esp32s31_ieee80211_mac::{
-    rate::{
-        low::{MacLowRateGateProbe, MacLowRateTransitionError},
-        schedule::{RateScheduleKind, RateScheduleRef},
-    },
+    rate::low::{MacLowRateGateProbe, MacLowRateTransitionError},
     rx::{RxBasebandFormat, RxPhyInfo},
-    tx::{
-        HtChannelWidth, HtGuardInterval, HtMcs, HtRate, LegacyRate, TxHardware, TxPhyRate,
-        runtime::{OrdinaryRetryRatePolicy, P2pRetryRateSchedule},
-    },
+    tx::{HtChannelWidth, HtGuardInterval, HtMcs, HtRate, LegacyRate, TxHardware, TxPhyRate},
 };
 
 use oer_ieee80211_wire::{channel::WifiChannel, qos::WmmAccessCategory};
 
-use oer_ieee80211_softmac::EspressifLongRangeRate;
+use oer_ieee80211_port::espressif::EspressifLongRangeRate;
 
-use {
-    oer_ieee80211_port::{MacRxMetadata, MacTxPlan, RxEvidence, interface::BoundVirtualInterface},
-    oer_ieee80211_softmac::{
-        EspNowEncryptedPeerId, EspNowHtGuardInterval, EspNowHtMcs, EspNowLmk, EspNowOfdmRate,
-        EspNowPhyMode, EspNowPreparedEncryptedV1Tx, EspNowPreparedV1Tx, EspNowPreparedV2Tx,
-    },
+use oer_ieee80211_port::espressif::{
+    EspNowEncryptedTx, EspNowHtGuardInterval, EspNowHtMcs, EspNowKeyMaterial, EspNowKeyPeer,
+    EspNowOfdmRate, EspNowPhyMode, EspNowV1Tx, EspNowV2Tx,
 };
+use oer_ieee80211_port::{MacRxMetadata, MacTxPlan, RxEvidence, interface::BoundVirtualInterface};
 
 /// Deepest completed part of one ESP-NOW Long Range TX attempt.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -249,10 +245,10 @@ impl EspNowKeyOwner {
     /// Fail before copying an LMK or touching key-table MMIO. The uninhabited
     /// success token makes it impossible for downstream TX to guess a WPA2 or
     /// AP hardware selector.
-    pub fn install(
+    pub fn install<P: EspNowKeyPeer, L: EspNowKeyMaterial>(
         &mut self,
-        _peer: EspNowEncryptedPeerId,
-        _lmk: &EspNowLmk,
+        _peer: P,
+        _lmk: &L,
     ) -> Result<EspNowKeySlot, EspNowCryptoError> {
         self.diagnostics.key_install_rejections =
             self.diagnostics.key_install_rejections.saturating_add(1);
@@ -323,10 +319,10 @@ impl core::error::Error for EspNowCryptoError {}
 /// Validate the live station/channel binding, then fail before touching the
 /// ordinary TX buffer. Both exact Action AAD and a disjoint S31 key selector
 /// are required before this handoff may become live.
-pub fn start_esp_now_v1_encrypted<P, E, T, const BUFFER_SIZE: usize>(
-    _ordinary: crate::ordinary_tx::OrdinaryTxIdle<'_, '_, P, E, T, BUFFER_SIZE>,
+pub fn start_esp_now_v1_encrypted<X: BackendTxProfile, P, E, T, const BUFFER_SIZE: usize>(
+    _ordinary: crate::ordinary_tx::OrdinaryTxIdle<'_, '_, X, P, E, T, BUFFER_SIZE>,
     keys: &mut EspNowKeyOwner,
-    prepared: EspNowPreparedEncryptedV1Tx<'_>,
+    prepared: impl EspNowEncryptedTx,
     active_channel: WifiChannel,
     active_station: BoundVirtualInterface,
 ) -> Result<WifiTxProgress, EspNowCryptoError>
@@ -356,10 +352,10 @@ where
 /// `active_channel` and `active_station` must be read from the role/channel
 /// owner while it excludes a concurrent retune. A mismatch is reported before
 /// the ordinary TX buffer or descriptor is touched.
-pub fn start_esp_now_v1_plaintext<H, P, E, T, const BUFFER_SIZE: usize>(
-    mut ordinary: crate::ordinary_tx::OrdinaryTxIdle<'_, '_, P, E, T, BUFFER_SIZE>,
+pub fn start_esp_now_v1_plaintext<X: BackendTxProfile, H, P, E, T, const BUFFER_SIZE: usize>(
+    mut ordinary: crate::ordinary_tx::OrdinaryTxIdle<'_, '_, X, P, E, T, BUFFER_SIZE>,
     hardware: &mut H,
-    prepared: EspNowPreparedV1Tx<'_>,
+    prepared: impl EspNowV1Tx,
     active_channel: WifiChannel,
     active_station: BoundVirtualInterface,
     config: EspNowTxConfig,
@@ -382,7 +378,8 @@ where
             active: active_station,
         });
     }
-    let (initial_rate, retry_rate_policy) = plaintext_tx_policy(hardware, prepared.phy_mode())?;
+    let (initial_rate, retry_rate_policy) =
+        plaintext_tx_policy::<X, H>(hardware, prepared.phy_mode())?;
 
     let frame_length = {
         let buffer = ordinary.buffer_mut();
@@ -395,7 +392,7 @@ where
         ordinary,
         hardware,
         frame_length,
-        prepared.destination().is_broadcast(),
+        prepared.is_broadcast(),
         initial_rate,
         retry_rate_policy,
         config,
@@ -407,10 +404,10 @@ where
 ///
 /// A generic buffer smaller than the complete metadata plus MPDU requirement
 /// is rejected before `buffer_mut` can expose or mutate DMA storage.
-pub fn start_esp_now_v2_plaintext<H, P, E, T, const BUFFER_SIZE: usize>(
-    mut ordinary: crate::ordinary_tx::OrdinaryTxIdle<'_, '_, P, E, T, BUFFER_SIZE>,
+pub fn start_esp_now_v2_plaintext<X: BackendTxProfile, H, P, E, T, const BUFFER_SIZE: usize>(
+    mut ordinary: crate::ordinary_tx::OrdinaryTxIdle<'_, '_, X, P, E, T, BUFFER_SIZE>,
     hardware: &mut H,
-    prepared: EspNowPreparedV2Tx<'_>,
+    prepared: impl EspNowV2Tx,
     active_channel: WifiChannel,
     active_station: BoundVirtualInterface,
     config: EspNowTxConfig,
@@ -445,7 +442,8 @@ where
             available: BUFFER_SIZE,
         });
     }
-    let (initial_rate, retry_rate_policy) = plaintext_tx_policy(hardware, prepared.phy_mode())?;
+    let (initial_rate, retry_rate_policy) =
+        plaintext_tx_policy::<X, H>(hardware, prepared.phy_mode())?;
     let frame_length = {
         let buffer = ordinary.buffer_mut();
         let frame_buffer = &mut buffer[TX_METADATA_SIZE..];
@@ -457,14 +455,14 @@ where
         ordinary,
         hardware,
         frame_length,
-        prepared.destination().is_broadcast(),
+        prepared.is_broadcast(),
         initial_rate,
         retry_rate_policy,
         config,
     )
 }
 
-fn plaintext_tx_policy<H: TxHardware>(
+fn plaintext_tx_policy<X: BackendTxProfile, H: TxHardware>(
     hardware: &mut H,
     phy_mode: EspNowPhyMode,
 ) -> Result<(TxPhyRate, OrdinaryRetryRatePolicy), EspNowTxError> {
@@ -477,7 +475,7 @@ fn plaintext_tx_policy<H: TxHardware>(
             let (rate, schedule_index) = p2p_ofdm_rate(rate);
             (
                 TxPhyRate::Legacy(rate),
-                p2p_retry_policy(RateScheduleKind::P2pDot11G, schedule_index),
+                p2p_retry_policy::<X>(RateScheduleKind::P2pDot11G, schedule_index)?,
             )
         }
         EspNowPhyMode::StandardP2pHt20(rate) => {
@@ -485,15 +483,15 @@ fn plaintext_tx_policy<H: TxHardware>(
             let (guard_interval, retry_rate_policy) = match rate.guard_interval() {
                 EspNowHtGuardInterval::Long800Ns => (
                     HtGuardInterval::Long800Ns,
-                    p2p_retry_policy(RateScheduleKind::P2pDot11N, 8 - rate.mcs().index()),
+                    p2p_retry_policy::<X>(RateScheduleKind::P2pDot11N, 8 - rate.mcs().index())?,
                 ),
                 EspNowHtGuardInterval::Short400Ns if rate.mcs() == EspNowHtMcs::Mcs7 => (
                     HtGuardInterval::Short400Ns,
-                    p2p_retry_policy(RateScheduleKind::P2pDot11N, 0),
+                    p2p_retry_policy::<X>(RateScheduleKind::P2pDot11N, 0)?,
                 ),
                 EspNowHtGuardInterval::Short400Ns => (
                     HtGuardInterval::Short400Ns,
-                    p2p_ht_sgi_retry_policy(8 - rate.mcs().index()),
+                    p2p_ht_sgi_retry_policy::<X>(8 - rate.mcs().index())?,
                 ),
             };
             (
@@ -526,8 +524,8 @@ fn plaintext_tx_policy<H: TxHardware>(
     })
 }
 
-fn publish_plaintext<H, P, E, T, const BUFFER_SIZE: usize>(
-    ordinary: crate::ordinary_tx::OrdinaryTxIdle<'_, '_, P, E, T, BUFFER_SIZE>,
+fn publish_plaintext<X: BackendTxProfile, H, P, E, T, const BUFFER_SIZE: usize>(
+    ordinary: crate::ordinary_tx::OrdinaryTxIdle<'_, '_, X, P, E, T, BUFFER_SIZE>,
     hardware: &mut H,
     frame_length: usize,
     broadcast: bool,
@@ -575,20 +573,23 @@ where
         .map_err(EspNowTxError::Tx)
 }
 
-fn p2p_retry_policy(kind: RateScheduleKind, index: u8) -> OrdinaryRetryRatePolicy {
-    let schedule = RateScheduleRef::new(kind, index)
-        .expect("ESP-NOW uses an in-range finite P2P schedule index");
-    let schedule = P2pRetryRateSchedule::new(schedule)
-        .expect("ESP-NOW selects only a standard P2P retry arena");
-    OrdinaryRetryRatePolicy::P2p(schedule)
+fn p2p_retry_policy<X: BackendTxProfile>(
+    kind: RateScheduleKind,
+    index: u8,
+) -> Result<OrdinaryRetryRatePolicy, EspNowTxError> {
+    let schedule = X::rate_schedule(kind, index)
+        .and_then(P2pRetryRateSchedule::new)
+        .ok_or(EspNowTxError::P2pRetryScheduleUnavailable { kind, index })?;
+    Ok(OrdinaryRetryRatePolicy::P2p(schedule))
 }
-
-fn p2p_ht_sgi_retry_policy(index: u8) -> OrdinaryRetryRatePolicy {
-    let schedule = RateScheduleRef::new(RateScheduleKind::P2pDot11N, index)
-        .expect("ESP-NOW HT20 SGI selects an in-range same-MCS LGI record");
-    let schedule = P2pRetryRateSchedule::new(schedule)
-        .expect("ESP-NOW HT20 SGI fallback uses the standard P2P HT arena");
-    OrdinaryRetryRatePolicy::P2pHtSgiFallback(schedule)
+fn p2p_ht_sgi_retry_policy<X: BackendTxProfile>(
+    index: u8,
+) -> Result<OrdinaryRetryRatePolicy, EspNowTxError> {
+    let kind = RateScheduleKind::P2pDot11N;
+    let schedule = X::rate_schedule(kind, index)
+        .and_then(P2pRetryRateSchedule::new)
+        .ok_or(EspNowTxError::P2pRetryScheduleUnavailable { kind, index })?;
+    Ok(OrdinaryRetryRatePolicy::P2pHtSgiFallback(schedule))
 }
 
 const fn p2p_ofdm_rate(rate: EspNowOfdmRate) -> (LegacyRate, u8) {
@@ -627,9 +628,10 @@ pub enum EspNowTxError {
         prepared: BoundVirtualInterface,
         active: BoundVirtualInterface,
     },
-    P2pHtRetryScheduleUnavailable {
-        mcs: EspNowHtMcs,
-        guard_interval: EspNowHtGuardInterval,
+    /// The selected static profile does not supply an admitted P2P record.
+    P2pRetryScheduleUnavailable {
+        kind: RateScheduleKind,
+        index: u8,
     },
     LongRangeLowRateTransition {
         selection: EspressifLongRangeRate,
@@ -659,12 +661,9 @@ impl fmt::Display for EspNowTxError {
                 formatter,
                 "ESP-NOW prepared station binding {prepared:?} differs from active binding {active:?}"
             ),
-            Self::P2pHtRetryScheduleUnavailable {
-                mcs,
-                guard_interval,
-            } => write!(
+            Self::P2pRetryScheduleUnavailable { kind, index } => write!(
                 formatter,
-                "ESP32-S31 has no recovered ESP-NOW P2P retry record for {mcs:?} {guard_interval:?}"
+                "the ESP-NOW transmit profile has no P2P record {kind:?} at index {index}"
             ),
             Self::LongRangeLowRateTransition { selection, error } => write!(
                 formatter,

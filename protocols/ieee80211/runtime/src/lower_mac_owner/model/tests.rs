@@ -233,7 +233,7 @@ fn submit<'p, 'id: 'p, C: ModelClass>(
     phase: &mut ModelPhase<'p, 'id>,
     ticket: Slot<'id, ModelTickets, ModelPool<1>>,
     mut buffer: ModelBuffer<'id, C>,
-    key: Option<&ModelPairwiseKey<'id, Station>>,
+    key: Option<&CoreKey<ModelPairwiseKey<'id, Station>>>,
 ) {
     buffer.bytes_mut()[..40].fill(0x5a);
     let frame = ClassFrame::new(data_frame(phase, key.is_some()))
@@ -246,13 +246,14 @@ fn submit<'p, 'id: 'p, C: ModelClass>(
             buffer,
             frame,
             body: None,
-            protection: key.map_or(TxProtection::Open, TxProtection::Ccmp),
+            protection: key.map_or(TxProtection::Open, |key| TxProtection::Ccmp(key.numbered())),
         },
     );
 }
 
 fn push_subframe<'k, 'p, 'id: 'k + 'p, X: ModelContext<Body = ModelBody>, S: AggregateState>(
     aggregate: ModelAggregate<'k, 'p, 'id, Station, ModelCaps, X, S>,
+    numbering: oer_ieee80211_port::TxNumbering,
     buffer: ModelBuffer<'id, ModelSmall>,
     frame: SizedFrame<AckHeader, ModelCaps>,
     body: Option<ModelBody>,
@@ -261,6 +262,7 @@ fn push_subframe<'k, 'p, 'id: 'k + 'p, X: ModelContext<Body = ModelBody>, S: Agg
         CheckedAggregate::new(
             aggregate,
             SubframeSource::Fresh {
+                numbering,
                 buffer,
                 frame: ClassSubframe::new(frame).ok().unwrap(),
                 body,
@@ -336,12 +338,15 @@ impl Work for Numbering {
             gate,
             ..
         } = resources;
-        let key = phase.station().install_pairwise_key(
-            &station_association,
-            slot,
-            IndividualAddress::new(PEER).unwrap(),
-            Ccmp128Key::new(&[7; 16]),
-        );
+        let key = phase
+            .station()
+            .install_pairwise_key(
+                &station_association,
+                slot,
+                IndividualAddress::new(PEER).unwrap(),
+                Ccmp128Key::new(&[7; 16]),
+            )
+            .into_core_key();
         let key = self.protected.then_some(&key);
         submit(phase, tickets.remove(0), small.remove(0), key);
         let (ticket, buffer) = completion(phase, &mut terminal_access).await;
@@ -537,12 +542,15 @@ impl Work for KeyThenAttempt {
             station_pairwise: [slot, _],
             ..
         } = resources;
-        let key = phase.station().install_pairwise_key(
-            &station_association,
-            slot,
-            IndividualAddress::new(PEER).unwrap(),
-            Ccmp128Key::new(&[7; 16]),
-        );
+        let key = phase
+            .station()
+            .install_pairwise_key(
+                &station_association,
+                slot,
+                IndividualAddress::new(PEER).unwrap(),
+                Ccmp128Key::new(&[7; 16]),
+            )
+            .into_core_key();
         submit(phase, tickets.remove(0), small.remove(0), Some(&key));
         let mut stream = Stream::default();
         while stream.completions == 0 {
@@ -688,16 +696,19 @@ impl Work for KeyAttemptRemoval {
             station_pairwise: [slot, _],
             ..
         } = resources;
-        let key = phase.station().install_pairwise_key(
-            &station_association,
-            slot,
-            IndividualAddress::new(PEER).unwrap(),
-            Ccmp128Key::new(&[7; 16]),
-        );
+        let key = phase
+            .station()
+            .install_pairwise_key(
+                &station_association,
+                slot,
+                IndividualAddress::new(PEER).unwrap(),
+                Ccmp128Key::new(&[7; 16]),
+            )
+            .into_core_key();
         submit(phase, tickets.remove(0), small.remove(0), Some(&key));
         phase
             .station()
-            .remove_pairwise_key(station_association, key);
+            .remove_pairwise_key(station_association, key.into_backend());
         let mut events = Vec::new();
         while events.len() < 2 {
             yield_now().await;
@@ -864,12 +875,15 @@ impl Work for MaxWork<'_> {
             let group = GroupKeyId::new(1).unwrap();
             let mut keys = 0;
             for slot in station_pairwise {
-                let _installed = phase.station().install_pairwise_key(
-                    &station_association,
-                    slot,
-                    peer,
-                    Ccmp128Key::new(&[1; 16]),
-                );
+                let _installed = phase
+                    .station()
+                    .install_pairwise_key(
+                        &station_association,
+                        slot,
+                        peer,
+                        Ccmp128Key::new(&[1; 16]),
+                    )
+                    .into_core_key();
                 keys += 1;
             }
             let [slot, _] = station_group;
@@ -882,12 +896,15 @@ impl Work for MaxWork<'_> {
             );
             keys += 1;
             for slot in access_point_pairwise {
-                let _installed = phase.access_point().install_pairwise_key(
-                    &access_point_association,
-                    slot,
-                    peer,
-                    Ccmp128Key::new(&[3; 16]),
-                );
+                let _installed = phase
+                    .access_point()
+                    .install_pairwise_key(
+                        &access_point_association,
+                        slot,
+                        peer,
+                        Ccmp128Key::new(&[3; 16]),
+                    )
+                    .into_core_key();
                 keys += 1;
             }
             let [slot, _] = access_point_group;
@@ -982,12 +999,15 @@ impl Work for AbortHeld<'_> {
             gate,
             ..
         } = resources;
-        let key = phase.station().install_pairwise_key(
-            &station_association,
-            slot,
-            IndividualAddress::new(PEER).unwrap(),
-            Ccmp128Key::new(&[7; 16]),
-        );
+        let key = phase
+            .station()
+            .install_pairwise_key(
+                &station_association,
+                slot,
+                IndividualAddress::new(PEER).unwrap(),
+                Ccmp128Key::new(&[7; 16]),
+            )
+            .into_core_key();
         self.air.hold(WmmAccessCategory::BestEffort, true);
         submit(phase, tickets.remove(0), large.remove(0), Some(&key));
         for _ in 0..10 {
@@ -1219,12 +1239,15 @@ impl Work for AggregateRetransmission<'_> {
             station_pairwise: [slot, _],
             ..
         } = resources;
-        let key = phase.station().install_pairwise_key(
-            &station_association,
-            slot,
-            IndividualAddress::new(PEER).unwrap(),
-            Ccmp128Key::new(&[7; 16]),
-        );
+        let key = phase
+            .station()
+            .install_pairwise_key(
+                &station_association,
+                slot,
+                IndividualAddress::new(PEER).unwrap(),
+                Ccmp128Key::new(&[7; 16]),
+            )
+            .into_core_key();
         let ht = oer_ieee80211_wire::phy::HtRate::new(
             HtMcs::new(7).unwrap(),
             oer_ieee80211_wire::phy::PpduBandwidth::Mhz20,
@@ -1255,6 +1278,7 @@ impl Work for AggregateRetransmission<'_> {
         let mut body_owners = alloc::vec![first_body.0.as_ptr()];
         let mut aggregate = push_subframe(
             aggregate,
+            key.numbering(),
             small.remove(0),
             subframe_frame(0),
             Some(first_body),
@@ -1263,7 +1287,7 @@ impl Work for AggregateRetransmission<'_> {
             let (buffer, frame) = subframe(small.remove(0), sequence);
             let body = ModelBody(alloc::vec![sequence as u8; 4]);
             body_owners.push(body.0.as_ptr());
-            aggregate = push_subframe(aggregate, buffer, frame, Some(body));
+            aggregate = push_subframe(aggregate, key.numbering(), buffer, frame, Some(body));
         }
         station
             .submit_ampdu((attempt(tickets.remove(0), aggregate)).admit())
@@ -1301,7 +1325,7 @@ impl Work for AggregateRetransmission<'_> {
         );
         let aggregate = push_retry(aggregate, numbered);
         let (buffer, frame) = subframe(small.remove(0), 3);
-        let aggregate = push_subframe(aggregate, buffer, frame, None);
+        let aggregate = push_subframe(aggregate, key.numbering(), buffer, frame, None);
         station
             .submit_ampdu((attempt(ticket, aggregate)).admit())
             .unwrap();
@@ -1368,12 +1392,15 @@ impl Work for TerminalOutcomes<'_> {
             station_pairwise: [slot, _],
             ..
         } = resources;
-        let key = phase.station().install_pairwise_key(
-            &station_association,
-            slot,
-            IndividualAddress::new(PEER).unwrap(),
-            Ccmp128Key::new(&[7; 16]),
-        );
+        let key = phase
+            .station()
+            .install_pairwise_key(
+                &station_association,
+                slot,
+                IndividualAddress::new(PEER).unwrap(),
+                Ccmp128Key::new(&[7; 16]),
+            )
+            .into_core_key();
         if self.collision {
             self.air.answer(AirAnswer::Collision);
             self.air.answer(AirAnswer::Collision);
@@ -1758,3 +1785,61 @@ mod group_keys;
 
 mod association;
 mod event_end;
+
+/// The protocol test owns numbering independently of the backend key token.
+struct CoreKey<K> {
+    backend: K,
+    packet_numbers: core::cell::RefCell<oer_ieee80211_upper_mac::ccmp::CcmpTxPacketNumber>,
+}
+impl<K> core::ops::Deref for CoreKey<K> {
+    type Target = K;
+    fn deref(&self) -> &K {
+        &self.backend
+    }
+}
+trait IntoCoreKey: Sized {
+    fn into_core_key(self) -> CoreKey<Self> {
+        CoreKey {
+            backend: self,
+            packet_numbers: core::cell::RefCell::new(
+                oer_ieee80211_upper_mac::ccmp::CcmpTxPacketNumber::new(
+                    oer_ieee80211_wire::ccmp::CcmpPacketNumberStep::ONE,
+                ),
+            ),
+        }
+    }
+}
+impl<K> IntoCoreKey for K {}
+impl<K> CoreKey<K> {
+    fn numbered(&self) -> oer_ieee80211_port::NumberedKey<&K> {
+        oer_ieee80211_port::NumberedKey {
+            key: &self.backend,
+            packet_number: self
+                .packet_numbers
+                .borrow()
+                .allocate()
+                .expect("the test protocol has PN capacity"),
+        }
+    }
+    fn numbering(&self) -> oer_ieee80211_port::TxNumbering {
+        oer_ieee80211_port::TxNumbering::Ccmp(
+            self.packet_numbers
+                .borrow()
+                .allocate()
+                .expect("the test protocol has PN capacity"),
+        )
+    }
+    fn last(&self) -> u64 {
+        self.packet_numbers.borrow().last().value()
+    }
+    fn set_last(&self, last: u64) {
+        *self.packet_numbers.borrow_mut() =
+            oer_ieee80211_upper_mac::ccmp::CcmpTxPacketNumber::continuing_after(
+                oer_ieee80211_wire::ccmp::CcmpPacketNumberStep::ONE,
+                oer_ieee80211_wire::ccmp::CcmpPacketNumber::new(last).unwrap(),
+            );
+    }
+    fn into_backend(self) -> K {
+        self.backend
+    }
+}

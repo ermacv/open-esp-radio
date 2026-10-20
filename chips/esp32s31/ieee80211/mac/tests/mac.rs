@@ -1,5 +1,6 @@
 use oer_esp32s31_hal::ieee80211::init::MacInterfaceAddressHardware;
 use oer_esp32s31_hal::types::MacDelaySlot;
+use oer_ieee80211_port::backend::RateScheduleKind;
 use std::{cell::RefCell, rc::Rc};
 
 use oer_esp32s31_hal::ieee80211::dma::descriptor::{
@@ -40,7 +41,6 @@ use {
             configure_sta_link_receive_policy,
         },
         irq::{IrqWork, consumer::IrqStorage},
-        rate::schedule::{RateScheduleKind, RateScheduleRef},
         rx::{
             HeBandwidth, HeGuardIntervalAndLtf, HeMuBandwidth, HeMuSignal, HeSuSignal,
             HeTriggerBasedSignal, HtDuplicateRxClassification, INGRESS_STRICT_DUMP,

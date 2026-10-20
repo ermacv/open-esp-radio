@@ -6,6 +6,7 @@
 //! and ClosedGate remain held. No runtime flag duplicates these states.
 use super::*;
 use core::ops::{Deref, DerefMut};
+use oer_ieee80211_port::backend::BackendTxProfile;
 
 /// The disabled, idle hardware bank. Only this owner can retune or dismantle.
 #[must_use]
@@ -164,6 +165,7 @@ impl<C, G> DerefMut for EnabledCore<C, G> {
 impl<
     'core,
     'slot,
+    X: BackendTxProfile,
     P: WifiTxPowerProfile,
     E: WifiTxEntropy,
     T: oer_time::Timer,
@@ -171,10 +173,12 @@ impl<
     Path: PoolPath,
     const TICKETS: usize,
     G: CoreGate,
-> DisabledCore<LowerMacCore<'core, 'slot, P, E, T, BUFFER_SIZE, Path, TICKETS>, G>
+> DisabledCore<LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>, G>
 {
     /// Recover construction resources. This type has no admitted publication.
-    pub fn dismantle(self) -> LowerMacCoreParts<'core, 'slot, P, E, T, BUFFER_SIZE, Path, TICKETS> {
+    pub fn dismantle(
+        self,
+    ) -> LowerMacCoreParts<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS> {
         let core = self.core;
         LowerMacCoreParts {
             authority: core.authority,
@@ -199,7 +203,7 @@ impl<
     /// Consume disabled ownership, retaining it across an asynchronous retune.
     pub fn enable_checked(
         self,
-    ) -> LifecycleStart<LowerMacCore<'core, 'slot, P, E, T, BUFFER_SIZE, Path, TICKETS>, G> {
+    ) -> LifecycleStart<LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>, G> {
         if self.core.channel == self.core.tuned {
             LifecycleStart::Enabled(EnabledCore::new(self.core))
         } else {
@@ -225,6 +229,7 @@ impl<
 impl<
     'core,
     'slot,
+    X: BackendTxProfile,
     P: WifiTxPowerProfile,
     E: WifiTxEntropy,
     T: oer_time::Timer,
@@ -232,7 +237,7 @@ impl<
     Path: PoolPath,
     const TICKETS: usize,
     G: CoreGate,
-> RetuningCore<LowerMacCore<'core, 'slot, P, E, T, BUFFER_SIZE, Path, TICKETS>, G>
+> RetuningCore<LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>, G>
 {
     /// The actual target of this enable's retune.
     pub fn target_channel(&self) -> WifiChannel {
@@ -248,8 +253,8 @@ impl<
         mut self,
         retuned: bool,
     ) -> Result<
-        EnabledCore<LowerMacCore<'core, 'slot, P, E, T, BUFFER_SIZE, Path, TICKETS>, G>,
-        DisabledCore<LowerMacCore<'core, 'slot, P, E, T, BUFFER_SIZE, Path, TICKETS>, G>,
+        EnabledCore<LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>, G>,
+        DisabledCore<LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>, G>,
     > {
         if retuned {
             self.core.tuned = self.core.channel;
@@ -262,6 +267,7 @@ impl<
 impl<
     'core,
     'slot,
+    X: BackendTxProfile,
     P: WifiTxPowerProfile,
     E: WifiTxEntropy,
     T: oer_time::Timer,
@@ -269,7 +275,7 @@ impl<
     Path: PoolPath,
     const TICKETS: usize,
     G: CoreGate,
-> EnabledCore<LowerMacCore<'core, 'slot, P, E, T, BUFFER_SIZE, Path, TICKETS>, G>
+> EnabledCore<LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>, G>
 {
     /// Admit an MPDU only while enabled; the gate's type selects publication.
     #[allow(
@@ -300,7 +306,7 @@ impl<
         mut self,
         hardware: &mut H,
         sink: &mut K,
-    ) -> DisablingCore<LowerMacCore<'core, 'slot, P, E, T, BUFFER_SIZE, Path, TICKETS>, G> {
+    ) -> DisablingCore<LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>, G> {
         if self.core.fault.is_none() {
             self.core.withdraw_held_attempts(hardware, sink);
         }
@@ -326,6 +332,7 @@ impl<
 impl<
     'core,
     'slot,
+    X: BackendTxProfile,
     P: WifiTxPowerProfile,
     E: WifiTxEntropy,
     T: oer_time::Timer,
@@ -333,7 +340,7 @@ impl<
     Path: PoolPath,
     const TICKETS: usize,
     G: CoreGate,
-> DisablingCore<LowerMacCore<'core, 'slot, P, E, T, BUFFER_SIZE, Path, TICKETS>, G>
+> DisablingCore<LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>, G>
 {
     /// Finish after the final TX terminal. Returning disabled ownership emits
     /// exactly one disabled terminal; a waiting or poisoned owner stays whole.
@@ -349,7 +356,7 @@ impl<
         self,
         sink: &mut K,
     ) -> Result<
-        DisabledCore<LowerMacCore<'core, 'slot, P, E, T, BUFFER_SIZE, Path, TICKETS>, G>,
+        DisabledCore<LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>, G>,
         Self,
     > {
         if self.core.fault.is_some() || self.core.attempts().next().is_some() {
@@ -363,18 +370,19 @@ impl<
 impl<
     'core,
     'slot,
+    X: BackendTxProfile,
     P: WifiTxPowerProfile,
     E: WifiTxEntropy,
     T: oer_time::Timer,
     const BUFFER_SIZE: usize,
     Path: PoolPath,
     const TICKETS: usize,
-> EnabledCore<LowerMacCore<'core, 'slot, P, E, T, BUFFER_SIZE, Path, TICKETS>, OpenGate>
+> EnabledCore<LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>, OpenGate>
 {
     /// Stop new publications by transferring ownership to the closing state.
     pub fn hold_new_attempts(
         self,
-    ) -> EnabledCore<LowerMacCore<'core, 'slot, P, E, T, BUFFER_SIZE, Path, TICKETS>, ClosingGate>
+    ) -> EnabledCore<LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>, ClosingGate>
     {
         EnabledCore::new(self.core)
     }
@@ -382,20 +390,21 @@ impl<
 impl<
     'core,
     'slot,
+    X: BackendTxProfile,
     P: WifiTxPowerProfile,
     E: WifiTxEntropy,
     T: oer_time::Timer,
     const BUFFER_SIZE: usize,
     Path: PoolPath,
     const TICKETS: usize,
-> EnabledCore<LowerMacCore<'core, 'slot, P, E, T, BUFFER_SIZE, Path, TICKETS>, ClosingGate>
+> EnabledCore<LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>, ClosingGate>
 {
     /// Advance the barrier after a TX terminal. Hardware blocking can only be
     /// reached with no published attempt and with new attempts already held.
     pub fn close_gate<H: LowerMacHardware>(
         self,
         hardware: &mut H,
-    ) -> GateClosure<LowerMacCore<'core, 'slot, P, E, T, BUFFER_SIZE, Path, TICKETS>> {
+    ) -> GateClosure<LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>> {
         if self.core.fault.is_some() || !self.core.published_idle() {
             GateClosure::Closing(self)
         } else {
@@ -407,13 +416,14 @@ impl<
 impl<
     'core,
     'slot,
+    X: BackendTxProfile,
     P: WifiTxPowerProfile,
     E: WifiTxEntropy,
     T: oer_time::Timer,
     const BUFFER_SIZE: usize,
     Path: PoolPath,
     const TICKETS: usize,
-> EnabledCore<LowerMacCore<'core, 'slot, P, E, T, BUFFER_SIZE, Path, TICKETS>, ClosedGate>
+> EnabledCore<LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>, ClosedGate>
 {
     /// Publish the held prefix. Failure returns every unpublished attempt and
     /// retains the published prefix in an owner exposing only drain operations.
@@ -427,8 +437,8 @@ impl<
         hardware: &mut H,
         sink: &mut K,
     ) -> Result<
-        EnabledCore<LowerMacCore<'core, 'slot, P, E, T, BUFFER_SIZE, Path, TICKETS>>,
-        GateOpenFailed<LowerMacCore<'core, 'slot, P, E, T, BUFFER_SIZE, Path, TICKETS>>,
+        EnabledCore<LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>>,
+        GateOpenFailed<LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>>,
     > {
         if let Some(fault) = self.core.fault {
             return Err(GateOpenFailed {
@@ -496,13 +506,14 @@ impl<
 impl<
     'core,
     'slot,
+    X: BackendTxProfile,
     P: WifiTxPowerProfile,
     E: WifiTxEntropy,
     T: oer_time::Timer,
     const BUFFER_SIZE: usize,
     Path: PoolPath,
     const TICKETS: usize,
-    C: DerefMut<Target = LowerMacCore<'core, 'slot, P, E, T, BUFFER_SIZE, Path, TICKETS>>,
+    C: DerefMut<Target = LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>>,
 > Configuring<C>
 {
     /// A pending publication's deadline bounds this FIFO barrier.
@@ -554,13 +565,14 @@ impl<
 impl<
     'core,
     'slot,
+    X: BackendTxProfile,
     P: WifiTxPowerProfile,
     E: WifiTxEntropy,
     T: oer_time::Timer,
     const BUFFER_SIZE: usize,
     Path: PoolPath,
     const TICKETS: usize,
-> GateOpenFailed<LowerMacCore<'core, 'slot, P, E, T, BUFFER_SIZE, Path, TICKETS>>
+> GateOpenFailed<LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>>
 {
     /// The next deadline of the prefix published before the failure.
     pub fn next_deadline(&self) -> Option<oer_time::Instant> {
@@ -588,7 +600,10 @@ impl<
         self,
         sink: &mut K,
     ) -> Result<
-        DisabledCore<LowerMacCore<'core, 'slot, P, E, T, BUFFER_SIZE, Path, TICKETS>, ClosedGate>,
+        DisabledCore<
+            LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>,
+            ClosedGate,
+        >,
         Self,
     > {
         match self.core.finish(sink) {

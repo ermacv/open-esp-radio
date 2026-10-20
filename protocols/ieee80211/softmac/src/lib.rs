@@ -7,14 +7,13 @@
 //! bounded v2 reassembly above the wire codecs and lower-MAC port.
 
 pub mod extensions;
-pub use extensions::espressif::long_range::EspressifLongRangeRate;
+mod handoff;
 
 pub use extensions::espressif::esp_now::protocol::{
     ESP_NOW_DEFAULT_PEER_CAPACITY, ESP_NOW_RX_DUPLICATE_HISTORY_CAPACITY, EspNowConfig,
-    EspNowConfigError, EspNowHt20Rate, EspNowHtGuardInterval, EspNowHtMcs, EspNowOfdmRate,
-    EspNowOwnedReceivedV1, EspNowOwnedReceivedV2, EspNowPeerCapability, EspNowPeerChannelPolicy,
-    EspNowPeerConfig, EspNowPeerId, EspNowPeerSecurity, EspNowPeerTable, EspNowPeerTableError,
-    EspNowPeers, EspNowPhyMode, EspNowPreparedV1Tx, EspNowPreparedV2Tx, EspNowProtocol,
+    EspNowConfigError, EspNowOwnedReceivedV1, EspNowOwnedReceivedV2, EspNowPeerCapability,
+    EspNowPeerChannelPolicy, EspNowPeerConfig, EspNowPeerId, EspNowPeerSecurity, EspNowPeerTable,
+    EspNowPeerTableError, EspNowPeers, EspNowPreparedV1Tx, EspNowPreparedV2Tx, EspNowProtocol,
     EspNowReceiveError, EspNowReceivedV1, EspNowReceivedV2, EspNowRxEpoch, EspNowRxOutcome,
     EspNowSendError, EspNowV2ReceiveError, EspNowV2RxOutcome, EspNowV2SendError,
 };

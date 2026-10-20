@@ -3,6 +3,9 @@
 //! The hardware profile decides eligibility, including supported MCS and width.
 //! This policy neither advertises capabilities nor encodes a PHY channel command.
 
+use oer_ieee80211_port::backend_protection::{
+    BasicRates, BssProtection, HePacketPadding, HeTxopDurationRtsThreshold,
+};
 use oer_ieee80211_port::{PhyMode, Preference};
 
 /// Choose a mode after the caller has intersected local and peer capabilities.
@@ -71,7 +74,7 @@ pub struct StaAssociatedPeer {
     /// The BSS color of the access point's HE Operation, zero without one.
     pub he_bss_color: u8,
     /// The protection facts of the BSS the transmitter's planner applies.
-    pub protection: oer_ieee80211_upper_mac::BssProtection,
+    pub protection: oer_ieee80211_port::backend_protection::BssProtection,
     /// The EDCA parameters the station's interface contends with: those
     /// of the Association Response's WMM Parameter element, else those the
     /// scan heard, else the standard defaults of a QoS BSS, or the DCF's
@@ -115,11 +118,8 @@ impl StaAssociatedPeer {
         access_point: &oer_ieee80211_wire::scan::ScanRecord,
         response: &oer_ieee80211_wire::station::AssociationResponse,
         phy: PhyMode,
-        he_packet_padding: fn(&[u8]) -> oer_ieee80211_upper_mac::HePacketPadding,
+        he_packet_padding: fn(&[u8]) -> oer_ieee80211_port::backend_protection::HePacketPadding,
     ) -> Result<Self, StaAssociatedPeerError> {
-        use oer_ieee80211_upper_mac::{
-            BasicRates, BssProtection, HePacketPadding, HeTxopDurationRtsThreshold,
-        };
         use oer_ieee80211_wire::{
             extensions::wmm::WmmParameterSet,
             he::{parse_he20_capabilities, parse_he20_operation, parse_he20_peer_state},

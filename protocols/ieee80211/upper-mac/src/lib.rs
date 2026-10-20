@@ -75,14 +75,9 @@ pub mod tx;
 pub use ampdu::{
     AmpduAttemptResult, AmpduRetryDecision, AmpduRetryError, AmpduRetryPolicy, AmpduRetryState,
 };
-pub use protection::{
-    BasicRates, BssProtection, HePacketPadding, HeTxopDurationRtsThreshold, HeTxopRtsBudget,
-    ProtectEveryHeTxop, ProtectedPpdu, ProtectionPolicy, RtsLengthThreshold, TxProtection,
-    TxProtectionDecision, TxProtectionReasons, TxPsdu, TxReceiver,
-};
+pub use protection::{HeTxopRtsBudget, ProtectEveryHeTxop, ProtectionPolicy};
 pub use retry::{
-    AckFailureAccounting, FrameClass, MpduRetryState, RateLadder, RetryCounters, RetryDecision,
-    RetryLimits, RetryOutcome,
+    AckFailureAccounting, MpduRetryState, RateLadder, RetryDecision, RetryLimits, RetryOutcome,
 };
 pub use tx::{
     AmpduRequest, AttemptContent, MpduRequest, TxAttemptPlan, TxBody, TxExchange, TxPlanError,
@@ -172,3 +167,7 @@ pub(crate) const fn seq(value: u16) -> oer_ieee80211_wire::sequence::SequenceNum
         None => panic!("test sequence number exceeds twelve bits"),
     }
 }
+
+pub mod backend_retry;
+
+pub mod backend_aggregate;

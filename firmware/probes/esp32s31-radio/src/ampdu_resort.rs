@@ -10,6 +10,8 @@
 //! side can compare the same bytes.
 
 use oer_esp32s31_hal::layouts::{DmaRef, WifiTxDmaDescriptor};
+use oer_espressif_ieee80211_policy::backend::EspressifAmpduRetryState as AmpduRetryState;
+use oer_ieee80211_port::backend_aggregate::{AmpduRetryDecision, AmpduRetryPolicy};
 
 use oer_esp32s31_hal::ieee80211::dma::tx_ampdu_storage::{
     AmpduDmaStorage, RetainedAmpduDmaStorage,
@@ -23,9 +25,6 @@ use oer_esp32s31_hal::types::{
 use oer_esp32s31_ieee80211_mac::tx::ampdu::{
     AmpduFrameLayout, AmpduFrameSize, AmpduRepublication, HtAmpduFrameRequest, HtAmpduHardware,
     HtAmpduTxResources, HtAmpduTxStorage, RetainedDmaAmpduTx, TX_AMPDU_METADATA_SIZE,
-};
-use oer_esp32s31_ieee80211_mac::tx::runtime::{
-    AmpduRetryDecision, AmpduRetryPolicy, AmpduRetryState,
 };
 use oer_esp32s31_ieee80211_mac::tx::{
     HtAmpduTxConfig, HtChannelWidth, HtGuardInterval, HtMcs, HtRate, LegacyTxQueue, TxHardware,
