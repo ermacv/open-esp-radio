@@ -13,5 +13,11 @@ fn main() {
     let script = directory.join("link.x");
     println!("cargo:rerun-if-changed={}", script.display());
     // The script places the image alone; the library is linked into it.
-    println!("cargo:rustc-link-arg-bins=-T{}", script.display());
+    println!(
+        "cargo:rustc-link-arg-bin=oer-firmware-probes-esp32c5-radio=-T{}",
+        script.display()
+    );
+    // The DMA image uses the actual C5 runtime placement and zeroing rules,
+    // including the generated full-width DMA-window assertions.
+    oer_esp32c5_layout::build::configure_runtime("oer-firmware-probes-esp32c5-radio-dma");
 }

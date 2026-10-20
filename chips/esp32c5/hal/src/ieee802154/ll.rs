@@ -303,6 +303,7 @@ impl Ieee802154MacOwners {
 }
 
 impl Ieee802154LowLevel for Ieee802154MacOwners {
+    type Address = crate::layouts::DmaWindowAddress;
     fn set_command(&mut self, command: Ieee802154LlCommand) {
         self.task
             .lease()
@@ -335,11 +336,11 @@ impl Ieee802154LowLevel for Ieee802154MacOwners {
         self.task.lease().rx_status().frame_in_progress()
     }
 
-    fn set_tx_address(&mut self, address: u32) {
+    fn set_tx_address(&mut self, address: Self::Address) {
         self.task.lease().publish_transmit_dma_address(address);
     }
 
-    fn set_rx_address(&mut self, address: u32) {
+    fn set_rx_address(&mut self, address: Self::Address) {
         self.task.lease().publish_receive_dma_address(address);
     }
 

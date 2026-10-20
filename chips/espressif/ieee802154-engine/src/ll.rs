@@ -66,6 +66,8 @@ pub enum Ieee802154LlCommand {
 /// Each method is one accessor of the pinned public LL; implementations must
 /// not add, merge or reorder register transactions.
 pub trait Ieee802154LowLevel {
+    /// A placed frame-buffer address, opaque to the shared engine.
+    type Address: Copy + Eq;
     /// `ieee802154_ll_set_cmd` of an operation command.
     fn set_command(&mut self, command: Ieee802154LlCommand);
     /// `ieee802154_ll_get_events`.
@@ -81,9 +83,9 @@ pub trait Ieee802154LowLevel {
     /// `ieee802154_ll_is_current_rx_frame`.
     fn is_current_rx_frame(&mut self) -> bool;
     /// `ieee802154_ll_set_tx_addr`.
-    fn set_tx_address(&mut self, address: u32);
+    fn set_tx_address(&mut self, address: Self::Address);
     /// `ieee802154_ll_set_rx_addr`.
-    fn set_rx_address(&mut self, address: u32);
+    fn set_rx_address(&mut self, address: Self::Address);
     /// `ieee802154_ll_get_tx_auto_ack`.
     fn tx_auto_ack(&mut self) -> bool;
     /// `ieee802154_ll_get_rx_auto_ack`.
@@ -306,7 +308,7 @@ pub fn set_txrx_pti<Ll: Ieee802154LowLevel + ?Sized>(
     }
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 pub mod model;
 
 #[cfg(test)]

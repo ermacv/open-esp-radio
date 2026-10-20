@@ -15,28 +15,14 @@ pub const FRAME_SIZE: usize = 128;
 /// Receive buffers the upper layer may hold (`CONFIG_IEEE802154_RX_BUFFER_SIZE`).
 pub const RX_BUFFER_COUNT: usize = 20;
 
-/// Whether the `len` bytes at `start` lie in `window`, the memory a chip's
-/// MAC DMA reaches.
-const fn dma_window_contains(window: &core::ops::Range<usize>, start: usize, len: usize) -> bool {
-    match start.checked_add(len) {
-        Some(end) => start >= window.start && end <= window.end,
-        None => false,
-    }
-}
-
 /// One four-byte-aligned DMA frame image.
 #[derive(bytemuck::Zeroable)]
 #[repr(transparent)]
-pub(crate) struct DmaFrame(DmaBytes<FRAME_SIZE>);
+pub struct DmaFrame(DmaBytes<FRAME_SIZE>);
 
 impl DmaFrame {
     const fn new() -> Self {
         Self(DmaBytes::new())
-    }
-
-    /// The address published to the MAC DMA.
-    pub(crate) fn address(&self) -> u32 {
-        self.0.address() as u32
     }
 
     /// Copy the complete image out.
@@ -93,34 +79,71 @@ impl Ieee802154EngineBuffers {
         }
     }
 
-    /// Whether every frame lies in `window`, the memory the chip's MAC DMA
-    /// reaches. Each chip's HAL names its window.
-    pub fn is_dma_visible(&self, window: &core::ops::Range<usize>) -> bool {
-        dma_window_contains(
-            window,
-            core::ptr::from_ref(self) as usize,
-            core::mem::size_of::<Self>(),
-        )
+    /// The receive ring and its stub, projected without moving storage.
+    pub fn rx_frames(&self) -> &[DmaFrame; RX_BUFFER_COUNT + 1] {
+        &self.rx
     }
 
-    /// The buffer whose published address is `address`.
-    #[cfg(not(target_arch = "riscv32"))]
-    pub(crate) fn frame_at(&self, address: u32) -> Option<&DmaFrame> {
-        self.rx
-            .iter()
-            .chain([&self.tx, &self.enhanced_ack])
-            .find(|frame| frame.address() == address)
+    /// The transmit frame, projected without moving storage.
+    pub fn tx_frame(&self) -> &DmaFrame {
+        &self.tx
     }
 
-    /// The buffer whose published address is `address`, to write.
-    #[cfg(not(target_arch = "riscv32"))]
-    pub(crate) fn frame_at_mut(&mut self, address: u32) -> Option<&mut DmaFrame> {
-        self.rx
-            .iter_mut()
-            .chain([&mut self.tx, &mut self.enhanced_ack])
-            .find(|frame| frame.address() == address)
+    /// The enhanced ACK, projected without moving storage.
+    pub fn enhanced_ack_frame(&self) -> &DmaFrame {
+        &self.enhanced_ack
     }
 }
 
 #[cfg(test)]
 mod tests;
+
+/// Addresses supplied once by the HAL that owns the placed buffers.
+///
+/// The shared engine selects entries by slot; it never derives an address
+/// from a pointer or from another address.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Ieee802154DmaAddresses<Address> {
+    /// One address for each receive slot, followed by the stub.
+    pub rx: [Address; RX_BUFFER_COUNT + 1],
+    /// The transmit frame's address.
+    pub tx: Address,
+    /// The enhanced ACK's address.
+    pub enhanced_ack: Address,
+}
+
+#[cfg(not(target_arch = "riscv32"))]
+impl<Address: Copy + Eq> Ieee802154DmaAddresses<Address> {
+    fn frame_index(&self, address: Address) -> Option<usize> {
+        self.rx
+            .iter()
+            .chain([&self.tx, &self.enhanced_ack])
+            .position(|candidate| *candidate == address)
+    }
+
+    pub(super) fn frame_at<'a>(
+        &self,
+        buffers: &'a Ieee802154EngineBuffers,
+        address: Address,
+    ) -> Option<&'a DmaFrame> {
+        let index = self.frame_index(address)?;
+        buffers
+            .rx
+            .iter()
+            .chain([&buffers.tx, &buffers.enhanced_ack])
+            .nth(index)
+    }
+
+    pub(super) fn frame_at_mut<'a>(
+        &self,
+        buffers: &'a mut Ieee802154EngineBuffers,
+        address: Address,
+    ) -> Option<&'a mut DmaFrame> {
+        let index = self.frame_index(address)?;
+        buffers
+            .rx
+            .iter_mut()
+            .chain([&mut buffers.tx, &mut buffers.enhanced_ack])
+            .nth(index)
+    }
+}

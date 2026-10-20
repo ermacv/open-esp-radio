@@ -117,6 +117,12 @@ whose section is checked to be `.dma.bss.<block>`; the runtime linker
 script's ASSERTs over the DMA range (from the generated `dma-window.x`) are
 the proof.
 
+The 802.15.4 HAL engine consumes its `Placed` buffers and constructs the
+complete address table at one unsafe site. Every projection names a frame
+inside the retained allocation; subsequent register publications take those
+typed addresses. The shared engine and the combined engine/MAC owner contain
+no unsafe code and perform no address arithmetic.
+
 The Wi-Fi DMA storage, `esp32s31-hal`'s `ieee80211::dma` module, has one
 unsafe site that exists only under `test-support`: the host model of the DMA
 engine's memory port, `RxDmaStorage<…, HostDma>::{dma_write, dma_read}` in

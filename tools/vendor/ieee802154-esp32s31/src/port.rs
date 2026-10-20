@@ -329,7 +329,11 @@ impl PortLl {
     }
 }
 
+#[derive(Clone, Copy, Eq, PartialEq)]
+struct PortDmaAddress(u32);
+
 impl Ieee802154LowLevel for PortLl {
+    type Address = PortDmaAddress;
     fn set_command(&mut self, command: Ieee802154LlCommand) {
         self.value("ieee802154_ll_set_cmd", command_code(command));
     }
@@ -383,12 +387,12 @@ impl Ieee802154LowLevel for PortLl {
     fn is_current_rx_frame(&mut self) -> bool {
         self.ll("ieee802154_ll_is_current_rx_frame", &[]) != 0
     }
-    fn set_tx_address(&mut self, address: u32) {
-        self.ll("ieee802154_ll_set_tx_addr", &[Arg::Address(address)]);
+    fn set_tx_address(&mut self, address: Self::Address) {
+        self.ll("ieee802154_ll_set_tx_addr", &[Arg::Address(address.0)]);
     }
-    fn set_rx_address(&mut self, address: u32) {
-        self.0.borrow_mut().rx_address = Some(address);
-        self.ll("ieee802154_ll_set_rx_addr", &[Arg::Address(address)]);
+    fn set_rx_address(&mut self, address: Self::Address) {
+        self.0.borrow_mut().rx_address = Some(address.0);
+        self.ll("ieee802154_ll_set_rx_addr", &[Arg::Address(address.0)]);
     }
     fn tx_auto_ack(&mut self) -> bool {
         self.ll("ieee802154_ll_get_tx_auto_ack", &[]) != 0
@@ -814,12 +818,18 @@ pub fn run(scenario: &Scenario) -> Result<Vec<Record>, String> {
     let levels = oer_esp32s31_knowledge::tx_power::ESP32S31_TX_POWER_LEVELS;
     let defaults = Ieee802154PibDefaults::default();
     let start = permit(11, levels).expect("channel 11 under the open domain");
+    let addresses = oer_espressif_ieee802154_engine::engine::Ieee802154DmaAddresses {
+        rx: core::array::from_fn(|slot| PortDmaAddress(slot as u32 + 1)),
+        tx: PortDmaAddress(100),
+        enhanced_ack: PortDmaAddress(101),
+    };
     #[cfg(not(feature = "multipan"))]
-    let mut engine = Ieee802154Engine::new(buffers, levels, defaults, start);
+    let mut engine = Ieee802154Engine::new(buffers, addresses, levels, defaults, start);
     // The stand's multi-PAN build uses the Kconfig default of two interfaces.
     #[cfg(feature = "multipan")]
     let mut engine = Ieee802154Engine::new_multipan(
         buffers,
+        addresses,
         levels,
         defaults,
         oer_espressif_ieee802154_engine::engine::Ieee802154Interfaces::new(2)
@@ -837,7 +847,7 @@ pub fn run(scenario: &Scenario) -> Result<Vec<Record>, String> {
         records: Vec::new(),
         registers: BTreeMap::new(),
         driver_buffers: Vec::new(),
-        transmit_address: engine.model_transmit_address(),
+        transmit_address: engine.model_transmit_address().0,
         transmits: 0,
         rx_address: None,
         rx_status: 0,
@@ -929,7 +939,7 @@ pub fn run(scenario: &Scenario) -> Result<Vec<Record>, String> {
             Step::Cca => engine.cca(&mut ll, &mut env),
             Step::ReceiveHandleDone => {
                 let slot = last_rx
-                    .and_then(|address| engine.model_rx_slot(address))
+                    .and_then(|address| engine.model_rx_slot(PortDmaAddress(address)))
                     .ok_or("released frame is not in the receive ring")?;
                 engine
                     .receive_handle_done(slot)
@@ -994,7 +1004,7 @@ pub fn run(scenario: &Scenario) -> Result<Vec<Record>, String> {
                     .borrow()
                     .rx_address
                     .ok_or("a frame arrived before an RX buffer was published")?;
-                engine.model_dma_write(address, &frame);
+                engine.model_dma_write(PortDmaAddress(address), &frame);
                 last_rx = Some(address);
             }
             Step::Interrupt {

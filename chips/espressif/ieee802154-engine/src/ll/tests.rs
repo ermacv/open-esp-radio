@@ -55,6 +55,7 @@ macro_rules! unused {
 }
 
 impl Ieee802154LowLevel for Recorder {
+    type Address = crate::ll::model::ModelAddress;
     unused! {
         set_command(Ieee802154LlCommand);
         events() -> Ieee802154EventObservation;
@@ -63,8 +64,8 @@ impl Ieee802154LowLevel for Recorder {
         tx_abort_reason() -> Ieee802154TxAbortReasonObservation;
         rx_status() -> Ieee802154RxStatus;
         is_current_rx_frame() -> bool;
-        set_tx_address(u32);
-        set_rx_address(u32);
+        set_tx_address(Self::Address);
+        set_rx_address(Self::Address);
         tx_auto_ack() -> bool;
         rx_auto_ack() -> bool;
         tx_enhanced_ack() -> bool;

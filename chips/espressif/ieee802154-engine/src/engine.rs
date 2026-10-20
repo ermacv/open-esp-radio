@@ -42,13 +42,15 @@ use oer_ieee802154_mac::{
 mod buffers;
 mod statistics;
 
-pub use buffers::{FRAME_SIZE, Ieee802154EngineBuffers, RX_BUFFER_COUNT};
+pub use buffers::{
+    DmaFrame, FRAME_SIZE, Ieee802154DmaAddresses, Ieee802154EngineBuffers, RX_BUFFER_COUNT,
+};
+
+pub mod owner;
 pub use statistics::{
     Ieee802154RxAbortStatistics, Ieee802154RxStatistics, Ieee802154TxAbortStatistics,
     Ieee802154TxRxStatistics, Ieee802154TxStatistics,
 };
-
-use buffers::DmaFrame;
 
 /// Pending-table entries per address kind (`CONFIG_IEEE802154_PENDING_TABLE_SIZE`).
 pub const PENDING_TABLE_SIZE: usize = 20;
@@ -310,7 +312,8 @@ struct Cx<'a, L: ?Sized, E: ?Sized> {
 }
 
 /// The ported MAC engine.
-pub struct Ieee802154Engine<'storage> {
+pub struct Ieee802154Engine<'storage, Address: Copy + Eq> {
+    addresses: Ieee802154DmaAddresses<Address>,
     buffers: &'storage mut Ieee802154EngineBuffers,
     levels: Ieee802154TxPowerLevels<'static>,
     pib: Ieee802154Pib,
@@ -335,18 +338,20 @@ pub struct Ieee802154Engine<'storage> {
     coexistence: Ieee802154Coexistence,
 }
 
-impl<'storage> Ieee802154Engine<'storage> {
+impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
     /// A disabled engine over exclusively borrowed buffers. `levels` is the
     /// transmit-power provider the vendor reads through
     /// `bt_bb_get_tx_pwr_table`; `start` is the permitted channel and power
     /// ceiling every PIB initialization restores.
     pub fn new(
         buffers: &'storage mut Ieee802154EngineBuffers,
+        addresses: Ieee802154DmaAddresses<Address>,
         levels: Ieee802154TxPowerLevels<'static>,
         defaults: Ieee802154PibDefaults,
         start: Ieee802154Permit,
     ) -> Self {
         Self {
+            addresses,
             buffers,
             levels,
             pib: Ieee802154Pib::new(defaults, levels, start),
@@ -373,12 +378,13 @@ impl<'storage> Ieee802154Engine<'storage> {
     /// A disabled engine built with multi-PAN and `interfaces` interfaces.
     pub fn new_multipan(
         buffers: &'storage mut Ieee802154EngineBuffers,
+        addresses: Ieee802154DmaAddresses<Address>,
         levels: Ieee802154TxPowerLevels<'static>,
         defaults: Ieee802154PibDefaults,
         interfaces: Ieee802154Interfaces,
         start: Ieee802154Permit,
     ) -> Self {
-        let mut engine = Self::new(buffers, levels, defaults, start);
+        let mut engine = Self::new(buffers, addresses, levels, defaults, start);
         engine.multipan = Some(interfaces);
         engine
     }
@@ -405,13 +411,6 @@ impl<'storage> Ieee802154Engine<'storage> {
     /// The coexistence the engine publishes.
     pub const fn coexistence(&self) -> Ieee802154Coexistence {
         self.coexistence
-    }
-
-    /// Whether the engine's DMA frames lie in `window`, the memory the
-    /// chip's MAC DMA reaches; the MAC cannot transmit or receive through
-    /// frames outside it.
-    pub fn buffers_dma_visible(&self, window: &core::ops::Range<usize>) -> bool {
-        self.buffers.is_dma_visible(window)
     }
 
     /// The multi-PAN interfaces, `None` without multi-PAN.
@@ -453,7 +452,7 @@ impl<'storage> Ieee802154Engine<'storage> {
     }
 
     /// `esp_ieee802154_set_multipan_panid`.
-    pub fn set_multipan_panid<L: Ieee802154LowLevel + ?Sized>(
+    pub fn set_multipan_panid<L: Ieee802154LowLevel<Address = Address> + ?Sized>(
         &mut self,
         ll: &mut L,
         index: Ieee802154MultipanIndex,
@@ -464,7 +463,7 @@ impl<'storage> Ieee802154Engine<'storage> {
     }
 
     /// `esp_ieee802154_get_multipan_panid`.
-    pub fn multipan_panid<L: Ieee802154LowLevel + ?Sized>(
+    pub fn multipan_panid<L: Ieee802154LowLevel<Address = Address> + ?Sized>(
         &mut self,
         ll: &mut L,
         index: Ieee802154MultipanIndex,
@@ -474,7 +473,7 @@ impl<'storage> Ieee802154Engine<'storage> {
     }
 
     /// `esp_ieee802154_set_multipan_short_address`.
-    pub fn set_multipan_short_address<L: Ieee802154LowLevel + ?Sized>(
+    pub fn set_multipan_short_address<L: Ieee802154LowLevel<Address = Address> + ?Sized>(
         &mut self,
         ll: &mut L,
         index: Ieee802154MultipanIndex,
@@ -485,7 +484,7 @@ impl<'storage> Ieee802154Engine<'storage> {
     }
 
     /// `esp_ieee802154_get_multipan_short_address`.
-    pub fn multipan_short_address<L: Ieee802154LowLevel + ?Sized>(
+    pub fn multipan_short_address<L: Ieee802154LowLevel<Address = Address> + ?Sized>(
         &mut self,
         ll: &mut L,
         index: Ieee802154MultipanIndex,
@@ -495,7 +494,7 @@ impl<'storage> Ieee802154Engine<'storage> {
     }
 
     /// `esp_ieee802154_set_multipan_extended_address` in frame byte order.
-    pub fn set_multipan_extended_address<L: Ieee802154LowLevel + ?Sized>(
+    pub fn set_multipan_extended_address<L: Ieee802154LowLevel<Address = Address> + ?Sized>(
         &mut self,
         ll: &mut L,
         index: Ieee802154MultipanIndex,
@@ -506,7 +505,7 @@ impl<'storage> Ieee802154Engine<'storage> {
     }
 
     /// `esp_ieee802154_get_multipan_extended_address`.
-    pub fn multipan_extended_address<L: Ieee802154LowLevel + ?Sized>(
+    pub fn multipan_extended_address<L: Ieee802154LowLevel<Address = Address> + ?Sized>(
         &mut self,
         ll: &mut L,
         index: Ieee802154MultipanIndex,
@@ -517,7 +516,7 @@ impl<'storage> Ieee802154Engine<'storage> {
 
     /// `esp_ieee802154_set_multipan_enable`: the enabled interfaces must
     /// exist.
-    pub fn set_multipan_enable<L: Ieee802154LowLevel + ?Sized>(
+    pub fn set_multipan_enable<L: Ieee802154LowLevel<Address = Address> + ?Sized>(
         &mut self,
         ll: &mut L,
         enable: Ieee802154MultipanEnableState,
@@ -527,7 +526,7 @@ impl<'storage> Ieee802154Engine<'storage> {
     }
 
     /// `esp_ieee802154_get_multipan_enable`.
-    pub fn multipan_enable<L: Ieee802154LowLevel + ?Sized>(
+    pub fn multipan_enable<L: Ieee802154LowLevel<Address = Address> + ?Sized>(
         &mut self,
         ll: &mut L,
     ) -> Ieee802154MultipanEnableState {
@@ -551,7 +550,7 @@ impl<'storage> Ieee802154Engine<'storage> {
         env: &mut E,
         index: Ieee802154MultipanIndex,
     ) where
-        L: Ieee802154LowLevel + ?Sized,
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
         E: Ieee802154Environment + ?Sized,
     {
         self.assert_interface(index);
@@ -565,7 +564,7 @@ impl<'storage> Ieee802154Engine<'storage> {
     /// interface puts the radio to sleep.
     pub fn multipan_sleep<L, E>(&mut self, ll: &mut L, env: &mut E, index: Ieee802154MultipanIndex)
     where
-        L: Ieee802154LowLevel + ?Sized,
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
         E: Ieee802154Environment + ?Sized,
     {
         self.assert_interface(index);
@@ -593,28 +592,39 @@ impl<'storage> Ieee802154Engine<'storage> {
     }
 
     /// `esp_ieee802154_set_panid`: PAN ID of interface zero.
-    pub fn set_panid<L: Ieee802154LowLevel + ?Sized>(&mut self, ll: &mut L, panid: u16) {
+    pub fn set_panid<L: Ieee802154LowLevel<Address = Address> + ?Sized>(
+        &mut self,
+        ll: &mut L,
+        panid: u16,
+    ) {
         ll.set_multipan_panid(Ieee802154MultipanIndex::CONTEXT0, panid);
     }
 
     /// `esp_ieee802154_get_panid`.
-    pub fn panid<L: Ieee802154LowLevel + ?Sized>(&mut self, ll: &mut L) -> u16 {
+    pub fn panid<L: Ieee802154LowLevel<Address = Address> + ?Sized>(&mut self, ll: &mut L) -> u16 {
         ll.multipan_panid(Ieee802154MultipanIndex::CONTEXT0)
     }
 
     /// `esp_ieee802154_set_short_address` of interface zero.
-    pub fn set_short_address<L: Ieee802154LowLevel + ?Sized>(&mut self, ll: &mut L, address: u16) {
+    pub fn set_short_address<L: Ieee802154LowLevel<Address = Address> + ?Sized>(
+        &mut self,
+        ll: &mut L,
+        address: u16,
+    ) {
         ll.set_multipan_short_address(Ieee802154MultipanIndex::CONTEXT0, address);
     }
 
     /// `esp_ieee802154_get_short_address`.
-    pub fn short_address<L: Ieee802154LowLevel + ?Sized>(&mut self, ll: &mut L) -> u16 {
+    pub fn short_address<L: Ieee802154LowLevel<Address = Address> + ?Sized>(
+        &mut self,
+        ll: &mut L,
+    ) -> u16 {
         ll.multipan_short_address(Ieee802154MultipanIndex::CONTEXT0)
     }
 
     /// `esp_ieee802154_set_extended_address` of interface zero, in frame
     /// (little-endian) byte order.
-    pub fn set_extended_address<L: Ieee802154LowLevel + ?Sized>(
+    pub fn set_extended_address<L: Ieee802154LowLevel<Address = Address> + ?Sized>(
         &mut self,
         ll: &mut L,
         address: [u8; 8],
@@ -623,13 +633,16 @@ impl<'storage> Ieee802154Engine<'storage> {
     }
 
     /// `esp_ieee802154_get_extended_address`.
-    pub fn extended_address<L: Ieee802154LowLevel + ?Sized>(&mut self, ll: &mut L) -> [u8; 8] {
+    pub fn extended_address<L: Ieee802154LowLevel<Address = Address> + ?Sized>(
+        &mut self,
+        ll: &mut L,
+    ) -> [u8; 8] {
         ll.multipan_extended_address(Ieee802154MultipanIndex::CONTEXT0)
     }
 
     /// `esp_ieee802154_set_ack_timeout`: microseconds rounded up to the
     /// 16-microsecond unit and truncated to the sixteen-bit field.
-    pub fn set_ack_timeout<L: Ieee802154LowLevel + ?Sized>(
+    pub fn set_ack_timeout<L: Ieee802154LowLevel<Address = Address> + ?Sized>(
         &mut self,
         ll: &mut L,
         microseconds: u32,
@@ -638,7 +651,10 @@ impl<'storage> Ieee802154Engine<'storage> {
     }
 
     /// `esp_ieee802154_get_ack_timeout` in microseconds.
-    pub fn ack_timeout<L: Ieee802154LowLevel + ?Sized>(&mut self, ll: &mut L) -> u32 {
+    pub fn ack_timeout<L: Ieee802154LowLevel<Address = Address> + ?Sized>(
+        &mut self,
+        ll: &mut L,
+    ) -> u32 {
         u32::from(ll.ack_timeout()) * 16
     }
 
@@ -646,7 +662,7 @@ impl<'storage> Ieee802154Engine<'storage> {
     /// secured `frame` image the next transmission sends. The vendor asserts
     /// that the frame enables security; an unparseable header programs its
     /// invalid offset `0xff` truncated to the seven-bit field.
-    pub fn set_transmit_security<L: Ieee802154LowLevel + ?Sized>(
+    pub fn set_transmit_security<L: Ieee802154LowLevel<Address = Address> + ?Sized>(
         &mut self,
         ll: &mut L,
         frame: &[u8],
@@ -677,8 +693,8 @@ impl<'storage> Ieee802154Engine<'storage> {
     /// Model a DMA write into the buffer published at `address`; host models
     /// have no MAC to write received frames.
     #[cfg(not(target_arch = "riscv32"))]
-    pub fn model_dma_write(&mut self, address: u32, image: &[u8]) -> bool {
-        match self.buffers.frame_at_mut(address) {
+    pub fn model_dma_write(&mut self, address: Address, image: &[u8]) -> bool {
+        match self.addresses.frame_at_mut(self.buffers, address) {
             Some(frame) => {
                 frame.write(image);
                 true
@@ -690,25 +706,27 @@ impl<'storage> Ieee802154Engine<'storage> {
     /// The receive slot whose buffer is published at `address`, for host
     /// models that release the frame they delivered.
     #[cfg(not(target_arch = "riscv32"))]
-    pub fn model_rx_slot(&self, address: u32) -> Option<Ieee802154RxSlot> {
-        self.buffers.rx[..RX_BUFFER_COUNT]
+    pub fn model_rx_slot(&self, address: Address) -> Option<Ieee802154RxSlot> {
+        self.addresses.rx[..RX_BUFFER_COUNT]
             .iter()
-            .position(|frame| frame.address() == address)
+            .position(|candidate| *candidate == address)
             .map(|index| Ieee802154RxSlot(index as u8))
     }
 
     /// The address the engine publishes for its transmit buffer, for host
     /// models that label DMA addresses.
     #[cfg(not(target_arch = "riscv32"))]
-    pub fn model_transmit_address(&self) -> u32 {
-        self.buffers.tx.address()
+    pub fn model_transmit_address(&self) -> Address {
+        self.addresses.tx
     }
 
     /// The image of the buffer published at `address`, for host models that
     /// read what the MAC would transmit.
     #[cfg(not(target_arch = "riscv32"))]
-    pub fn model_dma_read(&mut self, address: u32) -> Option<[u8; FRAME_SIZE]> {
-        self.buffers.frame_at(address).map(|frame| frame.read())
+    pub fn model_dma_read(&mut self, address: Address) -> Option<[u8; FRAME_SIZE]> {
+        self.addresses
+            .frame_at(self.buffers, address)
+            .map(|frame| frame.read())
     }
 
     fn set_state(&mut self, to: Ieee802154State) {
@@ -728,7 +746,7 @@ impl<'storage> Ieee802154Engine<'storage> {
     /// `ieee802154_mac_init` after the MAC reset: reinitialize the PIB,
     /// publish the register baseline and clear the receive ring. The caller
     /// then applies the TX-on delay and routes the interrupt.
-    pub fn mac_init<L: Ieee802154LowLevel + ?Sized>(
+    pub fn mac_init<L: Ieee802154LowLevel<Address = Address> + ?Sized>(
         &mut self,
         ll: &mut L,
         defaults: Ieee802154PibDefaults,
@@ -765,7 +783,7 @@ impl<'storage> Ieee802154Engine<'storage> {
     /// owners leave the operational epoch, as interrupt teardown returns the
     /// event enables. The vendor leaves them published; the MAC stops
     /// requesting the radio once its clocks are released either way.
-    pub fn mac_deinit<L: Ieee802154LowLevel + ?Sized>(&mut self, ll: &mut L) {
+    pub fn mac_deinit<L: Ieee802154LowLevel<Address = Address> + ?Sized>(&mut self, ll: &mut L) {
         if matches!(self.coexistence, Ieee802154Coexistence::Software(_)) {
             ll.disable_coex();
         }
@@ -805,7 +823,7 @@ impl<'storage> Ieee802154Engine<'storage> {
         cca: bool,
     ) -> Result<(), Ieee802154FrameImageError>
     where
-        L: Ieee802154LowLevel + ?Sized,
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
         E: Ieee802154Environment + ?Sized,
     {
         if frame.is_empty() || frame.len() > FRAME_SIZE {
@@ -854,7 +872,7 @@ impl<'storage> Ieee802154Engine<'storage> {
         time: u32,
     ) -> Result<(), Ieee802154FrameImageError>
     where
-        L: Ieee802154LowLevel + ?Sized,
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
         E: Ieee802154Environment + ?Sized,
     {
         if frame.is_empty() || frame.len() > FRAME_SIZE {
@@ -887,7 +905,7 @@ impl<'storage> Ieee802154Engine<'storage> {
     /// `ieee802154_receive`: keep an ongoing reception unless the PIB changed.
     pub fn receive<L, E>(&mut self, ll: &mut L, env: &mut E)
     where
-        L: Ieee802154LowLevel + ?Sized,
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
         E: Ieee802154Environment + ?Sized,
     {
         if matches!(self.state, Ieee802154State::Rx | Ieee802154State::TxAck)
@@ -906,7 +924,7 @@ impl<'storage> Ieee802154Engine<'storage> {
     /// ended, where the vendor returns `ESP_OK` without starting it.
     pub fn receive_at<L, E>(&mut self, ll: &mut L, env: &mut E, time: u32, duration: u32) -> bool
     where
-        L: Ieee802154LowLevel + ?Sized,
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
         E: Ieee802154Environment + ?Sized,
     {
         let mut cx = Cx { ll, env };
@@ -937,7 +955,7 @@ impl<'storage> Ieee802154Engine<'storage> {
     /// `ieee802154_sleep`.
     pub fn sleep<L, E>(&mut self, ll: &mut L, env: &mut E)
     where
-        L: Ieee802154LowLevel + ?Sized,
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
         E: Ieee802154Environment + ?Sized,
     {
         let mut cx = Cx { ll, env };
@@ -947,7 +965,7 @@ impl<'storage> Ieee802154Engine<'storage> {
     /// `ieee802154_energy_detect` for `duration` 16-microsecond symbols.
     pub fn energy_detect<L, E>(&mut self, ll: &mut L, env: &mut E, duration: u16)
     where
-        L: Ieee802154LowLevel + ?Sized,
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
         E: Ieee802154Environment + ?Sized,
     {
         let mut cx = Cx { ll, env };
@@ -961,7 +979,7 @@ impl<'storage> Ieee802154Engine<'storage> {
     /// `ieee802154_cca`.
     pub fn cca<L, E>(&mut self, ll: &mut L, env: &mut E)
     where
-        L: Ieee802154LowLevel + ?Sized,
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
         E: Ieee802154Environment + ?Sized,
     {
         let mut cx = Cx { ll, env };
@@ -976,7 +994,7 @@ impl<'storage> Ieee802154Engine<'storage> {
     /// vendor order and start the next operation.
     pub fn isr<L, E>(&mut self, ll: &mut L, env: &mut E)
     where
-        L: Ieee802154LowLevel + ?Sized,
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
         E: Ieee802154Environment + ?Sized,
     {
         let mut cx = Cx { ll, env };
@@ -1128,7 +1146,7 @@ impl<'storage> Ieee802154Engine<'storage> {
     /// the frame.
     fn receive_done<L, E>(&mut self, cx: &mut Cx<'_, L, E>)
     where
-        L: Ieee802154LowLevel + ?Sized,
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
         E: Ieee802154Environment + ?Sized,
     {
         if self.rx_index == STUB {
@@ -1149,7 +1167,7 @@ impl<'storage> Ieee802154Engine<'storage> {
     /// the completion into a missing ACK.
     fn transmit_done<L, E>(&mut self, cx: &mut Cx<'_, L, E>, with_ack: bool)
     where
-        L: Ieee802154LowLevel + ?Sized,
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
         E: Ieee802154Environment + ?Sized,
     {
         let frame = self.tx_frame().read();
@@ -1176,7 +1194,7 @@ impl<'storage> Ieee802154Engine<'storage> {
 
     fn transmit_failed<L, E>(&mut self, cx: &mut Cx<'_, L, E>, error: Ieee802154TxError)
     where
-        L: Ieee802154LowLevel + ?Sized,
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
         E: Ieee802154Environment + ?Sized,
     {
         let frame = self.tx_frame().read();
@@ -1186,7 +1204,7 @@ impl<'storage> Ieee802154Engine<'storage> {
     /// `ieee802154_rx_frame_info_update`.
     fn rx_frame_info_update<L, E>(&mut self, cx: &mut Cx<'_, L, E>)
     where
-        L: Ieee802154LowLevel + ?Sized,
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
         E: Ieee802154Environment + ?Sized,
     {
         let index = usize::from(self.rx_index);
@@ -1223,7 +1241,7 @@ impl<'storage> Ieee802154Engine<'storage> {
         interfaces: Ieee802154Interfaces,
     ) -> Option<Ieee802154MultipanIndex>
     where
-        L: Ieee802154LowLevel + ?Sized,
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
         E: Ieee802154Environment + ?Sized,
     {
         let frame = PhrFrame::new(image);
@@ -1268,7 +1286,7 @@ impl<'storage> Ieee802154Engine<'storage> {
     /// first free slot after it, otherwise the stub buffer.
     fn set_next_rx_buffer<L, E>(&mut self, cx: &mut Cx<'_, L, E>)
     where
-        L: Ieee802154LowLevel + ?Sized,
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
         E: Ieee802154Environment + ?Sized,
     {
         let current_free =
@@ -1279,7 +1297,7 @@ impl<'storage> Ieee802154Engine<'storage> {
                 .find(|&index| !self.rx_info[index].process);
             self.rx_index = next.map_or(STUB, |index| index as u8);
         }
-        let address = self.current_rx().address();
+        let address = self.addresses.rx[usize::from(self.rx_index)];
         cx.ll.set_rx_address(address);
     }
 
@@ -1295,7 +1313,7 @@ impl<'storage> Ieee802154Engine<'storage> {
     /// `ieee802154_timer*_stop`: drop the callback, then stop the timer.
     fn timer_stop<L, E>(&mut self, cx: &mut Cx<'_, L, E>, timer: Ieee802154Timer)
     where
-        L: Ieee802154LowLevel + ?Sized,
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
         E: Ieee802154Environment + ?Sized,
     {
         *self.timer_slot(timer) = None;
@@ -1305,7 +1323,7 @@ impl<'storage> Ieee802154Engine<'storage> {
     /// `ieee802154_timer*_fire_at` against a fresh `esp_timer` sample.
     fn timer_fire_at<L, E>(&mut self, cx: &mut Cx<'_, L, E>, timer: Ieee802154Timer, time: u32)
     where
-        L: Ieee802154LowLevel + ?Sized,
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
         E: Ieee802154Environment + ?Sized,
     {
         let now = cx.env.now_micros() as u32;
@@ -1315,7 +1333,7 @@ impl<'storage> Ieee802154Engine<'storage> {
     /// `event_end_process`, including the timer callbacks it drops.
     fn event_end_process<L, E>(&mut self, cx: &mut Cx<'_, L, E>)
     where
-        L: Ieee802154LowLevel + ?Sized,
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
         E: Ieee802154Environment + ?Sized,
     {
         self.timer0 = None;
@@ -1325,7 +1343,7 @@ impl<'storage> Ieee802154Engine<'storage> {
 
     fn run_timer_action<L, E>(&mut self, cx: &mut Cx<'_, L, E>, action: TimerAction)
     where
-        L: Ieee802154LowLevel + ?Sized,
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
         E: Ieee802154Environment + ?Sized,
     {
         match action {
@@ -1357,7 +1375,7 @@ impl<'storage> Ieee802154Engine<'storage> {
 
     fn tx_init<L, E>(&mut self, cx: &mut Cx<'_, L, E>, frame: &[u8])
     where
-        L: Ieee802154LowLevel + ?Sized,
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
         E: Ieee802154Environment + ?Sized,
     {
         if let Some(statistics) = self.statistics.as_mut() {
@@ -1369,7 +1387,7 @@ impl<'storage> Ieee802154Engine<'storage> {
         self.tx = TxSource::Frame;
         self.stop_current_operation(cx);
         self.pib.update(cx.ll, self.levels);
-        cx.ll.set_tx_address(self.buffers.tx.address());
+        cx.ll.set_tx_address(self.addresses.tx);
         if PhrFrame::new(frame).ack_required() {
             self.set_next_rx_buffer(cx);
         }
@@ -1377,7 +1395,7 @@ impl<'storage> Ieee802154Engine<'storage> {
 
     fn rx_init<L, E>(&mut self, cx: &mut Cx<'_, L, E>)
     where
-        L: Ieee802154LowLevel + ?Sized,
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
         E: Ieee802154Environment + ?Sized,
     {
         self.stop_current_operation(cx);
@@ -1386,7 +1404,7 @@ impl<'storage> Ieee802154Engine<'storage> {
 
     fn enable_rx<L, E>(&mut self, cx: &mut Cx<'_, L, E>)
     where
-        L: Ieee802154LowLevel + ?Sized,
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
         E: Ieee802154Environment + ?Sized,
     {
         self.set_next_rx_buffer(cx);
@@ -1397,7 +1415,7 @@ impl<'storage> Ieee802154Engine<'storage> {
 
     fn start_ed<L, E>(cx: &mut Cx<'_, L, E>, duration: u16)
     where
-        L: Ieee802154LowLevel + ?Sized,
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
         E: Ieee802154Environment + ?Sized,
     {
         cx.ll.enable_event(Ieee802154Event::EdDone);
@@ -1407,7 +1425,7 @@ impl<'storage> Ieee802154Engine<'storage> {
 
     fn enter_sleep<L, E>(&mut self, cx: &mut Cx<'_, L, E>)
     where
-        L: Ieee802154LowLevel + ?Sized,
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
         E: Ieee802154Environment + ?Sized,
     {
         if self.state != Ieee802154State::Sleep {
@@ -1418,7 +1436,7 @@ impl<'storage> Ieee802154Engine<'storage> {
 
     fn next_operation<L, E>(&mut self, cx: &mut Cx<'_, L, E>)
     where
-        L: Ieee802154LowLevel + ?Sized,
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
         E: Ieee802154Environment + ?Sized,
     {
         if self.pending_rx_stop {
@@ -1440,7 +1458,7 @@ impl<'storage> Ieee802154Engine<'storage> {
 
     fn stop_current_operation<L, E>(&mut self, cx: &mut Cx<'_, L, E>)
     where
-        L: Ieee802154LowLevel + ?Sized,
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
         E: Ieee802154Environment + ?Sized,
     {
         self.event_end_process(cx);
@@ -1467,7 +1485,7 @@ impl<'storage> Ieee802154Engine<'storage> {
 
     fn stop_rx<L, E>(&mut self, cx: &mut Cx<'_, L, E>)
     where
-        L: Ieee802154LowLevel + ?Sized,
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
         E: Ieee802154Environment + ?Sized,
     {
         cx.ll.set_command(Ieee802154LlCommand::Stop);
@@ -1483,7 +1501,7 @@ impl<'storage> Ieee802154Engine<'storage> {
 
     fn stop_tx_ack<L, E>(&mut self, cx: &mut Cx<'_, L, E>)
     where
-        L: Ieee802154LowLevel + ?Sized,
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
         E: Ieee802154Environment + ?Sized,
     {
         cx.ll.set_command(Ieee802154LlCommand::Stop);
@@ -1498,7 +1516,7 @@ impl<'storage> Ieee802154Engine<'storage> {
 
     fn stop_tx<L, E>(&mut self, cx: &mut Cx<'_, L, E>)
     where
-        L: Ieee802154LowLevel + ?Sized,
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
         E: Ieee802154Environment + ?Sized,
     {
         cx.ll.set_command(Ieee802154LlCommand::Stop);
@@ -1523,7 +1541,7 @@ impl<'storage> Ieee802154Engine<'storage> {
 
     fn stop_rx_ack<L, E>(&mut self, cx: &mut Cx<'_, L, E>)
     where
-        L: Ieee802154LowLevel + ?Sized,
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
         E: Ieee802154Environment + ?Sized,
     {
         cx.ll.set_command(Ieee802154LlCommand::Stop);
@@ -1546,7 +1564,7 @@ impl<'storage> Ieee802154Engine<'storage> {
 
     fn isr_tx_done<L, E>(&mut self, cx: &mut Cx<'_, L, E>)
     where
-        L: Ieee802154LowLevel + ?Sized,
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
         E: Ieee802154Environment + ?Sized,
     {
         ll::sec_clear(cx.ll);
@@ -1581,7 +1599,7 @@ impl<'storage> Ieee802154Engine<'storage> {
 
     fn isr_rx_done<L, E>(&mut self, cx: &mut Cx<'_, L, E>)
     where
-        L: Ieee802154LowLevel + ?Sized,
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
         E: Ieee802154Environment + ?Sized,
     {
         self.event_end_process(cx);
@@ -1622,7 +1640,7 @@ impl<'storage> Ieee802154Engine<'storage> {
             }
             if generated != Ieee802154EnhancedAck::Refused {
                 self.buffers.enhanced_ack.write(&ack);
-                cx.ll.set_tx_address(self.buffers.enhanced_ack.address());
+                cx.ll.set_tx_address(self.addresses.enhanced_ack);
                 self.tx = TxSource::EnhancedAck;
                 cx.ll.notify_enhanced_ack_generated();
                 self.set_state(Ieee802154State::TxEnhAck);
@@ -1641,7 +1659,7 @@ impl<'storage> Ieee802154Engine<'storage> {
     /// `ieee802154_ack_config_pending_bit`.
     fn ack_config_pending_bit<L, E>(&mut self, cx: &mut Cx<'_, L, E>, frame: PhrFrame<'_>) -> bool
     where
-        L: Ieee802154LowLevel + ?Sized,
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
         E: Ieee802154Environment + ?Sized,
     {
         let interface = if self.multipan.is_some() {
@@ -1669,7 +1687,7 @@ impl<'storage> Ieee802154Engine<'storage> {
         cx: &mut Cx<'_, L, E>,
         reason: Ieee802154RxAbortReasonObservation,
     ) where
-        L: Ieee802154LowLevel + ?Sized,
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
         E: Ieee802154Environment + ?Sized,
     {
         use Ieee802154RxAbortReason as Reason;
@@ -1711,7 +1729,7 @@ impl<'storage> Ieee802154Engine<'storage> {
         cx: &mut Cx<'_, L, E>,
         reason: Ieee802154RxAbortReasonObservation,
     ) where
-        L: Ieee802154LowLevel + ?Sized,
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
         E: Ieee802154Environment + ?Sized,
     {
         use Ieee802154RxAbortReason as Reason;
@@ -1746,7 +1764,7 @@ impl<'storage> Ieee802154Engine<'storage> {
         cx: &mut Cx<'_, L, E>,
         reason: Ieee802154TxAbortReasonObservation,
     ) where
-        L: Ieee802154LowLevel + ?Sized,
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
         E: Ieee802154Environment + ?Sized,
     {
         use Ieee802154TxAbortReason as Reason;

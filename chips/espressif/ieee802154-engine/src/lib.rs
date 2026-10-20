@@ -11,7 +11,7 @@
 //! runtime holds it with the chip's MAC owners in one critical section and
 //! calls its operation entries and interrupt handler. What differs between
 //! chips — register geometry, transmit-on delays, the transmit-power level
-//! set, coexistence tables and the DMA-reachable memory — stays with each
+//! set, coexistence tables and placed DMA storage — stays with each
 //! chip's HAL.
 
 #![no_std]
