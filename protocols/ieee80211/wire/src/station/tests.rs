@@ -1087,7 +1087,8 @@ fn station_encoders_admit_complete_capacity_before_writing() {
         status_code: 0,
         body: &[1, 2, 3],
     };
-    let encoders: [&dyn Fn(&mut [u8]) -> Result<usize, StationFrameError>; 6] = [
+    type Encoder<'a> = dyn Fn(&mut [u8]) -> Result<usize, StationFrameError> + 'a;
+    let encoders: [&Encoder<'_>; 6] = [
         &|out| data.encode(out),
         &|out| protected_data.encode(out),
         &|out| open.encode(out),

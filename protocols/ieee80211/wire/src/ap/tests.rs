@@ -779,7 +779,8 @@ fn ap_management_encoders_admit_complete_capacity_before_writing() {
         ccmp_header: [0; CCMP_HEADER_LEN],
         body: &[3, 1, 0],
     };
-    let encoders: [&dyn Fn(&mut [u8]) -> Result<usize, ApAssociationResponseError>; 5] = [
+    type Encoder<'a> = dyn Fn(&mut [u8]) -> Result<usize, ApAssociationResponseError> + 'a;
+    let encoders: [&Encoder<'_>; 5] = [
         &|out| plain.encode(out),
         &|out| protected.encode(out),
         &|out| write_open_authentication_response(out, access_point, peer, 0, sequence_number),
