@@ -19,7 +19,11 @@ port reports it in its capabilities, and the portable owner delegates instead
 of doing it. For IEEE 802.11 one publication is one hardware transmission
 attempt and the caller chooses the retry plan; the contention draw and the
 numbering of protected MPDUs are the two exceptions the backend always does
-below the port.
+below the port. For IEEE 802.15.4 the acknowledgement (frame pending and the
+enhanced ACK's contents), CSMA-CA and the cipher run below the port from
+tables and parameters the core sets through it; frame retries stay above.
+For Bluetooth LE the backend reports its event timing allowances, and the
+link layer above the port decides how long each event may last.
 
 ## Five parts of every port
 

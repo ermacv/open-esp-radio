@@ -261,10 +261,24 @@ bounds) live in the code that applies them.
   registers and its placed arena; role knowledge (images, list routing,
   priorities) lives in the driver; no controller address reaches the driver
   or above.
+- **Connection-event span.** The backend reports its timing allowances
+  (preparation lead, receive guard, widening jitter, minimum event duration)
+  as capabilities; how much of an interval an event may take is the
+  scheduling policy of the portable link layer, above the port. The vendor's
+  span formula is evidence, not the policy.
 
 ## IEEE 802.15.4
 
 - Configuration is admitted in any radio state, as in ESP-IDF.
+- **Port boundary** follows the OpenThread radio platform: the backend
+  executes, as advertised capabilities, the acknowledgement (frame pending
+  from the source-match table, enhanced ACK from the CSL and Link Metrics
+  parameters the core configured beforehand), CSMA-CA (backoff and CCA with
+  the interface's macMinBE, macMaxBE and macMaxCSMABackoffs) and the cipher.
+  Frame retries, the pending-table policy, keys and counters stay in the core;
+  one publication is one transmission attempt. The backend owns the tables
+  and parameters, and the core updates them through port requests, so the
+  turnaround handler shares no state with a task.
 
 ## Stand and acceptance
 
