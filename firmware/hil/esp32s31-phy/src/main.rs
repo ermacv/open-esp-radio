@@ -5,6 +5,7 @@
 #[cfg(not(feature = "diagnostic-phy"))]
 compile_error!("build the diagnostic-phy image class through cargo hil");
 
+mod cca_checkpoint;
 mod hold;
 mod ieee802154;
 mod projection;

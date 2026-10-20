@@ -463,11 +463,15 @@ impl Radio {
             .await
             .map_err(|_| RejectReason::Internal)?;
         }
+        use crate::cca_checkpoint::{Point, observe};
+        wifi = observe(&self.domain, wifi, Point::BeforeRx)?;
         set_wifi_rx(
             &mut self.domain,
             self.member.as_ref().ok_or(RejectReason::Internal)?,
             true,
         );
+        wifi = observe(&self.domain, wifi, Point::AfterRx)?;
+        wifi = observe(&self.domain, wifi, Point::BeforeChannel)?;
         {
             let mut platform = ();
             let (mut port, phy) = wifi.channel_hal_with_attachment(&mut platform, &mut self.domain);
@@ -482,6 +486,7 @@ impl Radio {
             .await
             .map_err(|_| RejectReason::Internal)?;
         }
+        wifi = observe(&self.domain, wifi, Point::AfterChannel)?;
         let tx = self
             .domain
             .attachment()
@@ -502,6 +507,7 @@ impl Radio {
                     .expect("generated coexistence PTI fits")
             }),
         };
+        wifi = observe(&self.domain, wifi, Point::BeforeMac)?;
         initialize_wifi_mac(
             &mut sources,
             &mut wifi.cold_mac_hal(&mut self.domain),
@@ -514,6 +520,19 @@ impl Radio {
         )
         .await
         .map_err(|_| RejectReason::Internal)?;
+        wifi = observe(&self.domain, wifi, Point::AfterMac)?;
+        // Diagnostic observation window only: allow live CCA state time to
+        // evolve without changing the radio, MAC, calibration or DMA setup.
+        for sample in 0..5 {
+            EmbassyClock
+                .wait_until(
+                    EmbassyClock
+                        .now()
+                        .saturating_add(oer_time::Duration::from_micros(200_000)),
+                )
+                .await;
+            wifi = observe(&self.domain, wifi, Point::Settled(sample))?;
+        }
         self.clocked = Some(wifi);
         Ok(())
     }
