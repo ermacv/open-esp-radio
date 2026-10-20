@@ -338,7 +338,7 @@ remain separate measurement scopes.
 
 ## Measured RF hold of a tracking tick
 
-The vendor admission tracks with the protocols live (see [Concurrent clients](#concurrent-clients)). How long one tick takes the air from them was measured on ESP32-S31 hardware:
+The vendor admission tracks with the protocols live (see [Concurrent clients](#concurrent-clients)). Tracking and grant-request intervals were measured on ESP32-S31 hardware:
 - tracking branches forced with the vendor's debug policy and a zero threshold, so every due tick runs them: the worst case, not the ordinary tick;
 - timed on the device by a dedicated tracking-hold probe;
 - each grant-protect bracket and the Wi-Fi baseband-off window are wall-time intervals;
