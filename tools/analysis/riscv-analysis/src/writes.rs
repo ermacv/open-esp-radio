@@ -6,7 +6,11 @@
 //! alias, publication, return-order or later-load proof is inferred here.
 use oer_analysis_riscv_model::*;
 
+pub(crate) mod context;
 mod tail;
+pub use context::{
+    BranchProof, CallContext, ContextProof, call_context, contextual_function_writes,
+};
 
 /// A machine-proved, state-preserving tail transfer. Composition is bounded
 /// to this one hop; the target's local expression identities remain its own.
@@ -203,6 +207,7 @@ pub struct FunctionWrites<'m> {
     pub writes: AdmittedVec<'m, FunctionWrite>,
     pub barriers: AdmittedVec<'m, WriteBarrier>,
     pub reloads: AdmittedVec<'m, StackReload>,
+    context: Option<ContextProof<'m>>,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct StackReload {
@@ -215,6 +220,10 @@ pub struct StackReload {
     pub value: WriteValue,
 }
 impl FunctionWrites<'_> {
+    /// Conditional exclusions; ordinary `writes` and `barriers` stay complete.
+    pub fn specialization(&self) -> Option<&ContextProof<'_>> {
+        self.context.as_ref()
+    }
     pub fn has_unknown_memory_effects(&self) -> bool {
         !self.barriers.is_empty()
     }
@@ -374,6 +383,7 @@ pub fn function_writes<'m>(
         writes: AdmittedVec::new(memory),
         barriers: AdmittedVec::new(memory),
         reloads: AdmittedVec::new(memory),
+        context: None,
     };
     let mut next = entry;
     let mut straight = true;
@@ -804,8 +814,15 @@ pub fn call_writes<'m>(
                 c.position(),
             )?;
         }
+        let context = summary
+            .context
+            .as_ref()
+            .filter(|proof| proof.context.applies(summary.entry, abi, &arguments));
         for write in summary.writes.iter() {
             c.checkpoint(1)?;
+            if context.is_some_and(|proof| proof.excludes(write.origin.function, write.site)) {
+                continue;
+            }
             let source = *write;
             let write = FunctionWrite {
                 address: substitute(write.address, &arguments, summary.entry, stack),
@@ -842,6 +859,9 @@ pub fn call_writes<'m>(
         }
         for barrier in summary.barriers.iter() {
             c.checkpoint(1)?;
+            if context.is_some_and(|proof| proof.excludes(barrier.origin.function, barrier.site)) {
+                continue;
+            }
             out.barriers.push(*barrier, c.position())?;
         }
     }
@@ -1028,6 +1048,39 @@ pub fn stack_calls<'m>(
                     inputs.as_ref().and_then(|i| i.registers.get(register)),
                     Some(AbstractValue::EntryStack { .. })
                 );
+            }
+        }
+        // A conditional exclusion can depend on a length even when it removes
+        // EVERY store. Cache it only if the required arguments are exact live
+        // leaves, so StackCall::preserves rechecks them on each re-analysis.
+        for summary in summaries {
+            c.checkpoint(1)?;
+            let Some(proof) = summary.context.as_ref() else {
+                continue;
+            };
+            let targeted = match target {
+                AbstractValue::ImageAddress { address } => u64::from(*address) == summary.entry,
+                AbstractValue::Alternatives { values } => values.values().iter().any(|value| matches!(value, ValueAlternative::ImageAddress { address } if u64::from(*address) == summary.entry)),
+                _ => false,
+            };
+            if !targeted {
+                continue;
+            }
+            for (required, register) in proof
+                .context
+                .arguments
+                .iter()
+                .zip(proof.context.abi.arguments())
+            {
+                c.checkpoint(1)?;
+                if required.is_some() {
+                    exact_addresses &= matches!(
+                        inputs
+                            .as_ref()
+                            .and_then(|i| i.registers.get(usize::from(register))),
+                        Some(AbstractValue::Constant { .. } | AbstractValue::ImageAddress { .. })
+                    );
+                }
             }
         }
         if !exact_addresses {

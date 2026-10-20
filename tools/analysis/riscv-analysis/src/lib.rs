@@ -111,7 +111,7 @@ pub fn analyze(
     sink: &mut dyn FunctionSink,
 ) -> Result<AnalysisSummary> {
     analyze_with(
-        input, decoder, memory, control, sink, false, None, false, None,
+        input, decoder, memory, control, sink, false, None, false, None, None,
     )
 }
 /// The same CFG/value engine with a bounded expression DAG and explicit ABI assumption.
@@ -165,19 +165,21 @@ pub fn research_with_options(
         options.abi,
         options.symbolic_spills,
         options.stack_calls,
+        None,
     )
 }
 #[allow(clippy::too_many_arguments)]
-fn analyze_with(
+fn analyze_with<'m>(
     input: FunctionInput<'_>,
     decoder: &dyn FunctionSemantics,
-    memory: &WorkingMemory,
+    memory: &'m WorkingMemory,
     control: &mut dyn RunControl,
     sink: &mut dyn FunctionSink,
     symbolic: bool,
     abi: Option<CallAbi>,
     symbolic_spills: bool,
     stack_calls: Option<&writes::StackCalls<'_>>,
+    mut context: Option<&mut writes::context::ContextRun<'_, 'm>>,
 ) -> Result<AnalysisSummary> {
     // Prove call targets on the graph with every possible continuation.
     // In particular, AUIPC/JALR needs the value analysis, including all
@@ -194,6 +196,7 @@ fn analyze_with(
         symbolic_spills,
         stack_calls,
         &[],
+        context.as_deref_mut(),
     )?;
     if noreturn.is_empty() {
         for record in records.iter() {
@@ -216,6 +219,7 @@ fn analyze_with(
         symbolic_spills,
         stack_calls,
         &noreturn,
+        context,
     )
     .map(|(summary, _)| summary)
 }
@@ -232,6 +236,7 @@ fn analyze_pass<'m>(
     symbolic_spills: bool,
     stack_calls: Option<&writes::StackCalls<'_>>,
     noreturn: &[u64],
+    context: Option<&mut writes::context::ContextRun<'_, 'm>>,
 ) -> Result<(AnalysisSummary, AdmittedVec<'m, u64>)> {
     let mut closure = GraphClosure {
         output: sink,
@@ -617,6 +622,7 @@ fn analyze_pass<'m>(
         stack_calls,
         &mut found_noreturn,
         closed_graph,
+        context,
     )?;
     summary.semantics.complete &= summary.coverage.decoding && summary.coverage.control_flow;
     summary.instructions = nodes.len() as u64;

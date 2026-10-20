@@ -206,6 +206,29 @@ pub(super) fn compose<'m>(
             c.position(),
         )?;
     }
+    if let Some(proof) = summary.context.as_ref().filter(|proof| {
+        proof.context.entry == summary.entry && Some(proof.context.abi) == summary.abi
+    }) {
+        let mut branches = AdmittedVec::new(memory);
+        for branch in proof.branches.iter() {
+            c.checkpoint(1)?;
+            branches.push(*branch, c.position())?;
+        }
+        let mut unreachable = AdmittedVec::new(memory);
+        for site in proof.unreachable.iter() {
+            c.checkpoint(1)?;
+            unreachable.push(*site, c.position())?;
+        }
+        out.context = Some(ContextProof {
+            context: CallContext {
+                entry: out.entry,
+                ..proof.context
+            },
+            owner: proof.owner,
+            branches,
+            unreachable,
+        });
+    }
     out.barriers = barriers;
     out.closed_graph &= summary.closed_graph;
     Ok(())

@@ -1,8 +1,10 @@
 //! Reproduce stack-word noninterference, including companion machine facts.
 //! PCs and a slot select diagnostic input; they do not select summary semantics.
 mod support;
-use oer_analysis_riscv_analysis::writes::*;
+use oer_analysis_riscv_analysis::{FunctionInput, PreparedReferences, writes::*};
+use oer_analysis_riscv_lift::StructuralRiscvDecoder;
 use oer_analysis_riscv_model::*;
+use oer_analysis_riscv_program::ProgramView;
 use oer_analysis_riscv_program::facts::ImageFacts;
 use oer_analysis_riscv_stack::{DebugMetadata, analyze, parse_summaries, read_debug};
 use std::{collections::BTreeSet, rc::Rc};
@@ -191,6 +193,97 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     }
     for barrier in applied.barriers.iter() {
         println!("call-barrier\t{:#010x}\t{barrier:?}", barrier.site);
+    }
+    if let Some(transfer) = index.transfer(site.into(), &mut control)?
+        && let AbstractValue::ImageAddress { address } = transfer.target
+        && let Some(generic) = writes.iter().find(|s| s.entry == u64::from(*address))
+        && let Some(context) = call_context(
+            &index,
+            caller.address.into(),
+            site.into(),
+            Some(CallAbi::RiscvInteger),
+            generic,
+            &memory,
+            &mut control,
+        )?
+    {
+        println!("context\t{context:?}");
+        let view = ProgramView::new(rom.bytes(), rom.file(), &[], &memory, &mut control)?;
+        let mut specialized = Vec::new();
+        for (target, function, records) in captures.iter().rev() {
+            let available: Vec<_> = specialized.iter().collect();
+            let summary = if u64::from(*target) == context.entry() {
+                let section = rom.file().section(function.section)?;
+                let start = u64::from(function.address)
+                    .checked_sub(section.address)
+                    .ok_or("function before its section")? as usize;
+                let code = section
+                    .data
+                    .get(start..start + function.size as usize)
+                    .ok_or("function exceeds its section")?;
+                contextual_function_writes(
+                    FunctionInput {
+                        image: Some(&view),
+                        section: function.section as u32,
+                        extent: CodeRange {
+                            start: function.address.into(),
+                            length: function.size.into(),
+                        },
+                        bytes: code,
+                        relocations: &PreparedReferences::empty(),
+                        data_ranges: &[],
+                        jumps: &[],
+                        returns: &NoReturns,
+                        call_behavior: &UnknownCallBehavior,
+                    },
+                    &StructuralRiscvDecoder,
+                    &context,
+                    &available,
+                    &memory,
+                    &mut control,
+                )?
+            } else {
+                let facts =
+                    FunctionIndex::new(records, RecordPolicy::Canonical, &memory, &mut control)?;
+                function_writes(
+                    &facts,
+                    u64::from(*target),
+                    Some(CallAbi::RiscvInteger),
+                    &available,
+                    &memory,
+                    &mut control,
+                )?
+            };
+            if let Some(proof) = summary.specialization() {
+                for branch in proof.branches() {
+                    println!("context-branch\t{target:#010x}\t{branch:?}");
+                }
+                for pc in proof.unreachable() {
+                    println!("context-unreachable\t{target:#010x}\t{pc:#010x}");
+                }
+            }
+            specialized.push(summary);
+        }
+        let available: Vec<_> = specialized.iter().collect();
+        let applied = call_writes(
+            &index,
+            caller.address.into(),
+            site.into(),
+            Some(CallAbi::RiscvInteger),
+            &available,
+            &memory,
+            &mut control,
+        )?;
+        for write in applied.writes.iter() {
+            println!("context-call-write\t{:#010x}\t{write:?}", write.write.site);
+        }
+        for barrier in applied.barriers.iter() {
+            println!("context-call-barrier\t{:#010x}\t{barrier:?}", barrier.site);
+        }
+        println!(
+            "context-preserves\t{}",
+            applied.preserves_stack_word(caller.address.into(), slot, &mut control)?
+        );
     }
     let calls = stack_calls(
         &index,
