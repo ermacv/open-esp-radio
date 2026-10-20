@@ -1,10 +1,8 @@
-//! Readable views of one function's records: its instruction listing with
-//! the symbols its relocations name, and the references it makes to named
-//! symbols.
+//! Instruction listings annotated with the symbols, values and transfers
+//! already present in one function's records.
 use oer_analysis_riscv_model::{
-    AbstractValue, EdgeKind, FunctionRecord, MemoryKind, ReferenceKind, SymbolId, ValueAlternative,
+    AbstractValue, EdgeKind, FunctionRecord, MemoryKind, SymbolId, ValueAlternative,
 };
-use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 const ZERO: u8 = 0;
@@ -244,46 +242,6 @@ pub(crate) fn signed_hex(value: i64) -> String {
         v if v < 0 => format!("-{:#x}", v.unsigned_abs()),
         v => format!("+{v:#x}"),
     }
-}
-
-/// One reference a function makes to a named symbol.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct SymbolReference {
-    /// The referencing instruction's offset in its function.
-    pub offset: u64,
-    pub kind: ReferenceKind,
-    #[serde(with = "oer_analysis_riscv_model::symbol_name")]
-    pub target: Vec<u8>,
-}
-
-/// The references among `records` to a symbol `targets` names, in offset
-/// order. A reference is a relocation: every call or address of another
-/// symbol in a relocatable object carries one.
-pub fn references_to(records: &[FunctionRecord], targets: &[String]) -> Vec<SymbolReference> {
-    let mut found: Vec<_> = records
-        .iter()
-        .filter_map(|record| match record {
-            FunctionRecord::Reference {
-                raw,
-                reference_kind,
-                ..
-            } if targets
-                .iter()
-                .any(|target| target.as_bytes() == raw.target.name.as_slice()) =>
-            {
-                Some(SymbolReference {
-                    offset: raw.offset,
-                    kind: *reference_kind,
-                    target: raw.target.name.clone(),
-                })
-            }
-            _ => None,
-        })
-        .collect();
-    found.sort_by_key(|reference| reference.offset);
-    found.dedup();
-    found
 }
 
 #[cfg(test)]

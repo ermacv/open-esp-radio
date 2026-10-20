@@ -69,7 +69,7 @@ pub struct RegisterAccessDocument {
 /// (`{"schema":9,"inputs":[...],"abi":...,"call_returns":...,"read_only":[...],"functions":[...],"missing":[...]}`).
 pub const FUNCTION_RECORDS_SCHEMA: u32 = 9;
 pub const FIELD_ACCESSES_SCHEMA: u32 = 5;
-pub const CALLERS_SCHEMA: u32 = 3;
+pub const CALLERS_SCHEMA: u32 = 4;
 
 /// Every memory access of the analyzed functions that lands on one field
 /// offset, as a field of its root ([`crate::field`]), and the functions no
@@ -156,9 +156,7 @@ pub enum NamedFunction {
     },
 }
 
-/// Every reference the analyzed functions make to the requested symbols:
-/// each is a relocation, as every call, jump or address of another symbol
-/// is in a relocatable object.
+/// Call/branch references and candidate pointer storage for requested symbols.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CallersDocument {
@@ -174,6 +172,12 @@ pub struct CallersDocument {
     pub symbols: Vec<String>,
     /// The referencing functions, in input, object and symbol order.
     pub callers: Vec<Caller>,
+    /// Candidates for indirect calls, not proven calls.
+    pub stored: Vec<crate::references::Stored>,
+    pub scan: crate::references::ScanSummary,
+    pub functions: u64,
+    pub partial: u64,
+    pub partial_causes: oer_analysis_blobray_domain::PartialCauses,
     /// Functions that cannot be analyzed: their references are unknown.
     pub blocked: Vec<LibraryFunction>,
     /// Code no function covers.
@@ -185,12 +189,12 @@ pub struct CallersDocument {
 #[serde(deny_unknown_fields)]
 pub struct Caller {
     pub function: LibraryFunction,
-    pub references: Vec<crate::listing::SymbolReference>,
+    pub references: Vec<crate::references::Reference>,
 }
 
 /// Schema of the `call-arguments` document
-/// (`{"schema":4,"inputs":[...],"abi":...,"call_returns":...,"read_only":[...],"symbols":[...],"callers":[...],"blocked":[...],"partial":N,"partial_causes":{...},"gaps":N}`).
-pub const CALL_ARGUMENTS_SCHEMA: u32 = 4;
+/// (`{"schema":5,"inputs":[...],"abi":...,"call_returns":...,"read_only":[...],"symbols":[...],"callers":[...],"blocked":[...],"partial":N,"partial_causes":{...},"gaps":N}`).
+pub const CALL_ARGUMENTS_SCHEMA: u32 = 5;
 
 /// The argument registers at every call site of the named functions.
 #[derive(Clone, Debug, Serialize, Deserialize)]

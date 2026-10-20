@@ -7,7 +7,7 @@ use oer_analysis_riscv_model::{
     SymbolDefinition, SymbolId, SymbolTableKind, ValueAlternative, ValueAlternatives,
 };
 
-use super::{ImageSymbols, SymbolReference, is_executable_image, listing, references_to};
+use super::{ImageSymbols, is_executable_image, listing};
 
 fn reference(offset: u64, name: &str, addend: i64, kind: ReferenceKind) -> FunctionRecord {
     let target = Arc::new(ReferenceTarget {
@@ -76,20 +76,6 @@ fn the_listing_names_each_instructions_relocated_symbols() {
             format!("{:6x}  ret", 8),
         ]
     );
-}
-
-#[test]
-fn references_to_select_the_named_targets_with_their_kind() {
-    let found = references_to(&records(), &["pm_scale_listen_interval".into()]);
-    assert_eq!(
-        found,
-        [SymbolReference {
-            offset: 4,
-            kind: ReferenceKind::Call,
-            target: b"pm_scale_listen_interval".to_vec(),
-        }]
-    );
-    assert!(references_to(&records(), &["pm_start".into()]).is_empty());
 }
 
 fn value(offset: u64, register: u8, value: AbstractValue) -> FunctionRecord {

@@ -9,5 +9,6 @@ pub mod jump_table;
 pub mod listing;
 pub mod mmio;
 pub mod partial;
+pub mod references;
 pub mod symbols;
 pub mod wire;

@@ -107,15 +107,23 @@ In a relocatable object a call site is a `call` or `branch` relocation to the
 name, and its register state is the analysis' `CallInputs` record at the
 `jalr` four bytes after a `call` relocation's `auipc`, or at a `branch` (JAL
 or conditional branch) relocation's own offset; a site never takes another
-transfer's state, so a jump the analysis kept no state for has no arguments. An executable image has no relocations:
-a transfer to the start address of a sized function symbol of that name is a
-call site. Each argument is a constant, an image address, a symbol plus
-addend, a section- or entry-stack-relative value, a finite alternative set,
+transfer's state, so a jump the analysis kept no state for has no arguments.
+Both `call-arguments` and `callers` select transfer records against exact
+addresses of named `STT_FUNC` or absolute (`SHN_ABS`, including `PROVIDE`)
+symbols from every executable input, including ROM companions. Function
+symbols need not have a size. A matching image-address transfer is `transfer`;
+a matching address in a finite target set is `transfer-may`, with
+`alternatives` giving the full number of possible targets. Tail transfers are
+included. The `destination` carries the target's input, address and name;
+equal names at different addresses or in different inputs remain distinct.
+A relocation is `relocation` with no numeric `destination`: it does not select
+a linker definition by name across unrelated inputs. Each argument is a
+constant, an image address, a symbol plus addend, a section- or entry-stack-relative value, a finite alternative set,
 the caller's own argument at entry (`arg0`..`arg7`), another entry register,
 or unknown (`?`); a site without retained register state has no arguments.
 These are may-values of one site: there is no interprocedural expansion and
 a value does not prove that its path runs. The JSON document is
-`{"schema":4,"inputs":[...],"abi":...,"call_returns":...,"read_only":[...],"symbols":[...],"callers":[...],"blocked":[...],"partial":N,"partial_causes":{...},"gaps":N}`;
+`{"schema":5,"inputs":[...],"abi":...,"call_returns":...,"read_only":[...],"symbols":[...],"callers":[...],"blocked":[...],"partial":N,"partial_causes":{...},"gaps":N}`;
 `partial` counts analyzed functions whose coverage or semantics is
 incomplete, which can hold further sites or less precise values, and
 `partial_causes` breaks them down by cause.
@@ -178,14 +186,54 @@ symbols:
 blobray callers --input libpp=/path/to/libpp.a --symbol pm_scale_listen_interval
 ```
 
-A reference is a relocation: in a relocatable object every call, jump and
-address of another symbol carries one, so a `call`, a `branch` and an
-`address` (a function pointer stored in a table) are all found with the
-referencing instruction's offset. Repeat `--symbol NAME` for several targets.
+Call and branch relocations and proven call/tail-transfer records use the
+same search as `call-arguments`. Human output labels each reference as
+`relocation`, `transfer` or `transfer-may` (one of N targets). Address and
+other relocation references retain their relocation classification; they do
+not imply a call. Repeat `--symbol NAME` for several exact target names.
+
 The JSON document is
-`{"schema":3,"inputs":[...],"abi":...,"call_returns":...,"read_only":[...],"symbols":[...],"callers":[...],"blocked":[...],"gaps":N}`.
-A call inside one section that the assembler resolved without a relocation
-is not a reference and is not listed.
+`{"schema":4,"inputs":[...],"abi":...,"call_returns":...,"read_only":[...],"symbols":[...],"callers":[...],"stored":[...],"scan":{...},"functions":N,"blocked":[...],"partial":N,"partial_causes":{...},"gaps":N}`.
+Each `callers` entry has a `function` and `references`. A reference carries
+`{offset, site, kind, target, destination, relocation_kind, alternatives}`.
+`offset` retains the relocation's original offset or the transfer instruction's
+address; `site` selects `CallInputs` (CALL pair: `offset + 4`; branch or
+transfer: `offset`). `destination` is `{input, address, name}` for numeric
+transfers, otherwise null. `alternatives` is N for `transfer-may`, otherwise
+null. `relocation_kind` retains `call`, `branch`, `address`, `metadata` or
+`unknown` for relocations, otherwise null. Archive relocations keep their
+original offset, target name and classification.
+
+`stored` is explicitly **candidates for indirect calls, not proven calls**:
+
+- `stored-word`: `{input, section, section_name, address, owners, destination}`
+  for an aligned 32-bit captured word equal to a target address, in any
+  allocated non-executable section of an executable input, including writable
+  `.data`. `owners` contains the sized `STT_OBJECT` symbols in that section
+  covering the whole word; an empty list means no sized owner is known.
+- `materialized`: `{function, offset, register, destination}` for an exact
+  constant/image address in an existing register-write `Value` record. No
+  instruction is decoded by the query. A value used as the base of a proven
+  following indirect transfer in the same straight-line block is excluded;
+  a value also stored before that transfer remains a candidate. Unknown
+  values and alternative register values are not exact materializations.
+
+`scan` reports `{sections, words, nobits_sections, incomplete_inventories}`.
+The first two count scanned file-backed sections and aligned full words;
+`nobits_sections` counts allocated non-executable sections with no captured
+words, whose runtime contents are unknown. The scan uses captured inventory
+and the Blobray data interface under the operation's shared working-memory
+and work budgets. Every word charges `RunControl`. Resource refusal returns
+`ResourceLimited` with a failing exit status and no success document, even
+if earlier words matched. Neither data scanning nor materialization follows
+runtime-populated callbacks. For a stored table word, use `register-accesses`
+with its exact word range to investigate readers one step away.
+
+`functions` counts analyzed functions, `partial` and `partial_causes` describe
+incomplete analyses, `blocked` lists functions of unknown behavior, and `gaps`
+counts uncovered code. These and `incomplete_inventories` limit absence claims.
+An unexpanded or unresolved transfer can hide further callers; a captured
+pointer value alone establishes neither execution nor a callback owner.
 
 Symbol names in every JSON document are strings when their bytes are UTF-8
 and byte arrays otherwise.
