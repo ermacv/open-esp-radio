@@ -46,6 +46,29 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let audit = audit_function_addresses(&image, &analysis, &types, &mut keep, &mut control)?;
     let global = function_pointer_resolutions(&audit, &mut keep, &mut control)?;
     let typed = typed_function_pointer_resolutions(&audit, &mut keep, &mut control)?;
+    for facts in analysis.functions.values() {
+        for transfer in facts.transfers.iter().filter(|t| t.target.is_none()) {
+            println!(
+                "unresolved\t{:#010x}\t{}\t{:?}\t{:?}\t{:?}",
+                transfer.site,
+                facts.function.label(),
+                dwarf.inline_chain(transfer.site)?,
+                transfer.load,
+                facts.target_loads.get(&transfer.site),
+            );
+            if let Some(loads) = facts.target_loads.get(&transfer.site) {
+                for load in loads {
+                    println!(
+                        "load-field\t{:#010x}\t{:#010x}\t{:?}\t{:?}",
+                        transfer.site,
+                        load.site,
+                        audit.load_field(facts.function.address, load.site, &mut control)?,
+                        facts.load_bases.get(&load.site),
+                    );
+                }
+            }
+        }
+    }
     let mut unknown = BTreeMap::<UnknownUse, usize>::new();
     let mut typed_uses = 0;
     let mut no_uses = 0;
