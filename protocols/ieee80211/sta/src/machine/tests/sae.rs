@@ -87,7 +87,7 @@ fn commit(world: &mut World<'_>, h2e: bool, now: u32) -> SaeKeys {
     } else {
         SaePasswordElement::hunting_and_pecking(b"password", BSSID, LOCAL).unwrap()
     };
-    let peer = SaeCommit::new(element, [0x40; 32], [0x41; 32]).unwrap();
+    let peer = SaeCommit::new(&element, [0x40; 32], [0x41; 32]).unwrap();
     let keys = peer.process(station).unwrap();
     let mut body = [0; oer_ieee80211_rsn::sae::SAE_COMMIT_LEN];
     let length = peer.values().encode(None, h2e, &mut body).unwrap();
@@ -205,7 +205,7 @@ fn wire_peer_connects_sae_only_transition_and_resumes_pmksa() {
                 let rsn = RsnElement::parse(&association).unwrap();
                 assert!(rsn.akm_suites().contains([0, 0x0f, 0xac, 8]));
                 assert!(!rsn.akm_suites().contains([0, 0x0f, 0xac, 2]));
-                let pmk = Pmk::from_bytes(keys.pmk);
+                let pmk = Pmk::from_bytes(*keys.pmk());
                 finish_handshake(&mut world, &beacon, Akm::Sae, &pmk, 32);
                 world.command(at(40), 92, StaCommand::Disconnect).unwrap();
                 world.run(at(40));
@@ -215,7 +215,7 @@ fn wire_peer_connects_sae_only_transition_and_resumes_pmksa() {
                 world.answer_authentication(at(130), 0);
                 let association = association_rsn(&world);
                 let rsn = RsnElement::parse(&association).unwrap();
-                assert_eq!(rsn.pmkids().collect::<Vec<_>>(), [keys.pmkid]);
+                assert_eq!(rsn.pmkids().collect::<Vec<_>>(), [*keys.pmkid()]);
                 assert!(rsn.akm_suites().contains([0, 0x0f, 0xac, 8]));
                 finish_handshake(&mut world, &beacon, Akm::Sae, &pmk, 131);
             });

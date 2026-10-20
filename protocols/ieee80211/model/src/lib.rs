@@ -884,7 +884,7 @@ impl<'id, D> ModelMpdu<'id, D> {
             air.associations
                 .borrow()
                 .get(identity.0.role)
-                .seal(material.key.as_bytes(), &mut wire)
+                .seal(&material.key, &mut wire)
                 .map_err(|_| ModelFault)?;
         }
         Ok(AirFrame {
@@ -1677,7 +1677,7 @@ impl ModelAir {
         self.associations
             .borrow()
             .get(identity.role)
-            .open(material.key.as_bytes(), &mut plaintext)
+            .open(&material.key, &mut plaintext)
             .map_err(ModelCcmpError::Authentication)?;
         let (plaintext, _mic) = plaintext
             .split_last_chunk::<8>()

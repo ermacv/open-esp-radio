@@ -12,7 +12,7 @@
 use crate::ccm::MIC_LEN;
 use crate::ccmp_mpdu::{CcmpAssociation, CcmpMpduError};
 use oer_ieee80211_wire::{
-    ccmp::{CCMP_HEADER_LEN, CcmpHeader, CcmpHeaderError},
+    ccmp::{CCMP_HEADER_LEN, Ccmp128Key, CcmpHeader, CcmpHeaderError, CcmpKeyId},
     frame::DecodedHeader,
     security::Spp,
 };
@@ -25,6 +25,10 @@ pub enum ManagementCcmpError {
     MalformedHeader,
     /// The CCMP header has reserved bits or bytes set.
     InvalidCcmpHeader,
+    /// Individually addressed management uses only the pairwise KeyID zero.
+    UnexpectedKeyId,
+    /// Group-addressed robust management uses BIP rather than CCMP.
+    GroupAddressed,
     /// Shorter than a header, CCMP header and MIC.
     Truncated,
     /// Beyond the two-byte CCM length field.
@@ -51,8 +55,12 @@ impl<'a> ManagementCcmpFrame<'a> {
             return Err(ManagementCcmpError::Truncated);
         }
         let header = DecodedHeader::decode(frame).ok_or(ManagementCcmpError::MalformedHeader)?;
-        if header.control().is_data() {
+        if header.control().get() & 0x000c != 0 {
             return Err(ManagementCcmpError::MalformedHeader);
+        }
+        let [first, ..] = header.receiver();
+        if first & 1 != 0 {
+            return Err(ManagementCcmpError::GroupAddressed);
         }
         if !header.control().protected() {
             return Err(ManagementCcmpError::NotProtected);
@@ -61,15 +69,16 @@ impl<'a> ManagementCcmpFrame<'a> {
             .body()
             .first_chunk::<CCMP_HEADER_LEN>()
             .ok_or(ManagementCcmpError::Truncated)?;
-        let packet_number = CcmpHeader::parse(*ccmp)
-            .map_err(|error| match error {
-                CcmpHeaderError::ExtIvMissing => ManagementCcmpError::MissingExtendedIv,
-                CcmpHeaderError::ReservedOctet | CcmpHeaderError::ReservedKeyBits => {
-                    ManagementCcmpError::InvalidCcmpHeader
-                }
-            })?
-            .packet_number()
-            .value();
+        let ccmp = CcmpHeader::parse(*ccmp).map_err(|error| match error {
+            CcmpHeaderError::ExtIvMissing => ManagementCcmpError::MissingExtendedIv,
+            CcmpHeaderError::ReservedOctet | CcmpHeaderError::ReservedKeyBits => {
+                ManagementCcmpError::InvalidCcmpHeader
+            }
+        })?;
+        if ccmp.key_id() != CcmpKeyId::PAIRWISE {
+            return Err(ManagementCcmpError::UnexpectedKeyId);
+        }
+        let packet_number = ccmp.packet_number().value();
         Ok(Self {
             frame,
             packet_number,
@@ -80,7 +89,7 @@ impl<'a> ManagementCcmpFrame<'a> {
         self.packet_number
     }
 
-    pub fn open(self, temporal_key: &[u8; 16]) -> Result<&'a [u8], ManagementCcmpError> {
+    pub fn open(self, temporal_key: &Ccmp128Key) -> Result<&'a [u8], ManagementCcmpError> {
         let frame = self.frame;
         // SPP only affects QoS data; management uses the same transform in
         // either association mode. The receiver owns its separate PN frontier.

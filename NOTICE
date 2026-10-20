@@ -126,7 +126,8 @@ Ported and modified:
 --------------------------------------
 
 Source:    https://w1.fi/hostap, as vendored in ESP-IDF 7b9cc1ac
-           components/wpa_supplicant/src, and hostapd 2.12
+           components/wpa_supplicant/src, hostapd 2.12, and hostap_2_11
+           d945ddd368085f255e68328f2d3b020ceea359af
 License:   BSD-3-Clause (text below)
 
 Partly ported and modified:
@@ -141,6 +142,14 @@ Partly ported and modified:
   src/rsn_supp/wpa.c
 - protocols/ieee80211/sta/src/machine/deferred_eapol.rs: behaviour of
   src/rsn_supp/wpa.c
+
+
+Reference test data (vector facts only; no implementation code ported):
+
+- protocols/ieee80211/cipher/tests/ccmp_vectors.rs: IEEE 802.11-2020
+  Annex J.6.4/J.9.2, also carried in wlantest/test_vectors.c; QoS and
+  4-address ciphertext measured with wlantest/ccmp.c and src/crypto/aes-ccm.c
+  at the hostap_2_11 revision above.
 
 
 8. esp-hal

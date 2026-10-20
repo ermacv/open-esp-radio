@@ -11,6 +11,25 @@ pub use reassembly::{
     OpenDataFragmentPreflight, OpenDataUnfragmentedAdmission, OpenReassembledData,
 };
 
+/// The local lifetime admitted with a fragment train. CCMP callers must use
+/// the installation generation of the authenticated key, including across a
+/// same-KeyID rekey; an association generation or wire KeyID is insufficient.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum FragmentAdmissionEpoch {
+    OpenAssociation(u64),
+    CcmpKeyInstallation(u64),
+}
+
+impl FragmentAdmissionEpoch {
+    fn validate(self, protection: DataFragmentProtection) -> Result<(), OpenDataFragmentError> {
+        match (self, protection) {
+            (Self::OpenAssociation(_), DataFragmentProtection::Open)
+            | (Self::CcmpKeyInstallation(_), DataFragmentProtection::Ccmp) => Ok(()),
+            _ => Err(OpenDataFragmentError::KeyEpochRequired),
+        }
+    }
+}
+
 /// Payload bytes retained for one ordinary 1,500-byte Ethernet payload plus
 /// its LLC/SNAP header. The Ethernet header is reconstructed from the exact
 /// admitted 802.11 address tuple and therefore consumes no retained bytes.

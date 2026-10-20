@@ -10,6 +10,7 @@
     clippy::arithmetic_side_effects
 )]
 
+use super::FragmentAdmissionEpoch;
 use oer_ieee80211_wire::data::{EthernetFrameParts, LLC_SNAP_HEADER_LEN, rfc1042_ether_type};
 
 use super::{
@@ -77,7 +78,7 @@ pub enum OpenDataFragmentPreflight<'owner, 'frame, const CONTEXTS: usize, const 
 pub struct OpenDataFragmentAdmission<'owner, 'frame, const CONTEXTS: usize, const CAPACITY: usize> {
     owner: &'owner mut OpenDataDefragmenter<CONTEXTS, CAPACITY>,
     fragment: OpenDataFragment<'frame>,
-    admission_epoch: u64,
+    admission_epoch: FragmentAdmissionEpoch,
     now: Instant,
     expired: u8,
 }
@@ -103,7 +104,7 @@ impl<'frame, const CONTEXTS: usize, const CAPACITY: usize>
 
 struct ReassemblySlot<const CAPACITY: usize> {
     identity: Option<OpenDataFragmentIdentity>,
-    admission_epoch: u64,
+    admission_epoch: FragmentAdmissionEpoch,
     completed: bool,
     expected_fragment: u8,
     final_fragment: u8,
@@ -134,7 +135,7 @@ impl<const CAPACITY: usize> ReassemblySlot<CAPACITY> {
     const fn new() -> Self {
         Self {
             identity: None,
-            admission_epoch: 0,
+            admission_epoch: FragmentAdmissionEpoch::OpenAssociation(0),
             completed: false,
             expected_fragment: 0,
             final_fragment: 0,
@@ -147,7 +148,7 @@ impl<const CAPACITY: usize> ReassemblySlot<CAPACITY> {
 
     fn clear(&mut self) {
         self.identity = None;
-        self.admission_epoch = 0;
+        self.admission_epoch = FragmentAdmissionEpoch::OpenAssociation(0);
         self.completed = false;
         self.expected_fragment = 0;
         self.final_fragment = 0;
@@ -274,7 +275,11 @@ impl<const CONTEXTS: usize, const CAPACITY: usize> OpenDataDefragmenter<CONTEXTS
     }
 
     /// Discard one exact train after an external replay transaction failed.
-    pub fn discard(&mut self, identity: OpenDataFragmentIdentity, admission_epoch: u64) -> bool {
+    pub fn discard(
+        &mut self,
+        identity: OpenDataFragmentIdentity,
+        admission_epoch: FragmentAdmissionEpoch,
+    ) -> bool {
         let Some(slot) = self.slots.iter_mut().find(|slot| {
             slot.identity == Some(identity) && slot.admission_epoch == admission_epoch
         }) else {
@@ -291,17 +296,23 @@ impl<const CONTEXTS: usize, const CAPACITY: usize> OpenDataDefragmenter<CONTEXTS
         retry: bool,
         now: Option<Instant>,
     ) -> Result<OpenDataUnfragmentedAdmission, OpenDataFragmentError> {
-        self.admit_unfragmented_in_epoch(identity, 0, retry, now)
+        self.admit_unfragmented_in_epoch(
+            identity,
+            FragmentAdmissionEpoch::OpenAssociation(0),
+            retry,
+            now,
+        )
     }
 
     /// Fence an ordinary Open MPDU in the caller's association epoch.
     pub fn admit_unfragmented_in_epoch(
         &mut self,
         identity: OpenDataFragmentIdentity,
-        admission_epoch: u64,
+        admission_epoch: FragmentAdmissionEpoch,
         retry: bool,
         now: Option<Instant>,
     ) -> Result<OpenDataUnfragmentedAdmission, OpenDataFragmentError> {
+        admission_epoch.validate(identity.protection())?;
         let relevant_active = self.slots.iter().any(|slot| {
             slot.is_active()
                 && slot
@@ -348,9 +359,7 @@ impl<const CONTEXTS: usize, const CAPACITY: usize> OpenDataDefragmenter<CONTEXTS
                 DataFragmentProtection::Open => {
                     Ok(OpenDataUnfragmentedAdmission::Duplicate { expired })
                 }
-                DataFragmentProtection::Ccmp { .. } => {
-                    Err(OpenDataFragmentError::MoreFragmentsMismatch)
-                }
+                DataFragmentProtection::Ccmp => Err(OpenDataFragmentError::MoreFragmentsMismatch),
             };
         }
         if retry
@@ -395,19 +404,24 @@ impl<const CONTEXTS: usize, const CAPACITY: usize> OpenDataDefragmenter<CONTEXTS
         now: Instant,
         complete: impl FnOnce(OpenReassembledData<'_>) -> R,
     ) -> Result<OpenDataDefragmentation<R>, OpenDataFragmentError> {
-        self.ingest_in_epoch(fragment, 0, now, complete)
+        self.ingest_in_epoch(
+            fragment,
+            FragmentAdmissionEpoch::OpenAssociation(0),
+            now,
+            complete,
+        )
     }
 
     /// Ingest within an external association/key admission epoch.
     ///
-    /// AP integrations bind this value to the live association generation so
-    /// an AID/address reuse cannot complete bytes retained by its predecessor.
-    /// Single-peer STA epochs can use [`Self::ingest`], because the complete
-    /// defragmenter is already destroyed or cleared on association teardown.
+    /// Open AP traffic uses the live association generation. CCMP traffic
+    /// requires the authenticated key's installation generation, even within
+    /// one association. The implicit [`Self::ingest`] epoch accepts only Open
+    /// traffic; it cannot silently bind protected fragments to epoch zero.
     pub fn ingest_in_epoch<R>(
         &mut self,
         fragment: OpenDataFragment<'_>,
-        admission_epoch: u64,
+        admission_epoch: FragmentAdmissionEpoch,
         now: Instant,
         complete: impl FnOnce(OpenReassembledData<'_>) -> R,
     ) -> Result<OpenDataDefragmentation<R>, OpenDataFragmentError> {
@@ -424,10 +438,11 @@ impl<const CONTEXTS: usize, const CAPACITY: usize> OpenDataDefragmenter<CONTEXTS
     pub fn preflight_in_epoch<'owner, 'frame>(
         &'owner mut self,
         fragment: OpenDataFragment<'frame>,
-        admission_epoch: u64,
+        admission_epoch: FragmentAdmissionEpoch,
         now: Instant,
     ) -> Result<OpenDataFragmentPreflight<'owner, 'frame, CONTEXTS, CAPACITY>, OpenDataFragmentError>
     {
+        admission_epoch.validate(fragment.identity().protection())?;
         if CONTEXTS == 0 {
             return Err(OpenDataFragmentError::NoReassemblyContexts);
         }
@@ -518,7 +533,7 @@ impl<const CONTEXTS: usize, const CAPACITY: usize> OpenDataDefragmenter<CONTEXTS
     fn ingest_admitted<R>(
         &mut self,
         fragment: OpenDataFragment<'_>,
-        admission_epoch: u64,
+        admission_epoch: FragmentAdmissionEpoch,
         now: Instant,
         expired: u8,
         complete: impl FnOnce(OpenReassembledData<'_>) -> R,
@@ -659,9 +674,9 @@ fn append_fragment<const CAPACITY: usize>(
             slot.fragment(previous_number).packet_number,
             fragment.packet_number(),
         )
-        && observed <= previous
+        && previous.value().checked_add(1) != Some(observed.value())
     {
-        return Err(OpenDataFragmentError::PacketNumberNotIncreasing { previous, observed });
+        return Err(OpenDataFragmentError::PacketNumberNotSequential { previous, observed });
     }
     let payload = fragment.payload();
     let start = slot.length;

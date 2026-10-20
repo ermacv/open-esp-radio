@@ -106,7 +106,7 @@ pub const SAE_PASSWORD_MAX_LEN: usize = 63;
 
 /// One SAE password, retained for the password element every attempt
 /// derives and cleared on drop. It cannot be formatted.
-#[derive(Clone, Zeroize, ZeroizeOnDrop)]
+#[derive(Zeroize, ZeroizeOnDrop)]
 pub struct SaePassword {
     bytes: [u8; SAE_PASSWORD_MAX_LEN],
     len: u8,
@@ -138,11 +138,11 @@ impl core::fmt::Debug for SaePassword {
 }
 
 /// A password element: the generator both peers mask their commits with.
-#[derive(Clone, Copy, Debug)]
+#[derive(Zeroize, ZeroizeOnDrop)]
 pub struct SaePasswordElement(ProjectivePoint);
 
 /// The H2E password token of one SSID, password and optional identifier.
-#[derive(Clone, Copy, Debug)]
+#[derive(Zeroize, ZeroizeOnDrop)]
 pub struct SaePasswordToken(ProjectivePoint);
 
 fn hmac_sha256(key: &[u8], parts: &[&[u8]]) -> [u8; 32] {
@@ -562,8 +562,10 @@ const COMEBACK_KEY_LIFETIME: Duration = Duration::from_secs(60);
 /// SOURCE: ESP-IDF `7b9cc1ac79f865983f59bb8ff3ff43eb74ff1dbe`
 /// `components/wpa_supplicant/src/ap/comeback_token.c`
 /// (`auth_build_token_req`, `check_comeback_token`, `comeback_token_hash`).
+#[derive(Zeroize, ZeroizeOnDrop)]
 pub struct SaeComebackTokens {
     key: [u8; 32],
+    #[zeroize(skip)]
     key_drawn: Option<Instant>,
     pending: [u16; 256],
 }
@@ -742,11 +744,11 @@ pub struct SaeCommit {
 }
 
 /// The keys an accepted commit exchange derives.
-#[derive(Clone, Zeroize, ZeroizeOnDrop)]
+#[derive(Zeroize, ZeroizeOnDrop)]
 pub struct SaeKeys {
-    pub kck: [u8; SAE_KEY_LEN],
-    pub pmk: [u8; SAE_KEY_LEN],
-    pub pmkid: [u8; SAE_PMKID_LEN],
+    kck: [u8; SAE_KEY_LEN],
+    pmk: [u8; SAE_KEY_LEN],
+    pmkid: [u8; SAE_PMKID_LEN],
     #[zeroize(skip)]
     own: SaeCommitValues,
     #[zeroize(skip)]
@@ -757,7 +759,7 @@ impl SaeCommit {
     /// Commit with `rand` and `mask`, each drawn uniformly from [2, r - 1]
     /// by the caller; the scalar (rand + mask) mod r must exceed 1.
     pub fn new(
-        pwe: SaePasswordElement,
+        pwe: &SaePasswordElement,
         rand: [u8; SAE_PRIME_LEN],
         mask: [u8; SAE_PRIME_LEN],
     ) -> Result<Self, SaeError> {
@@ -776,7 +778,7 @@ impl SaeCommit {
         }
         let element = (-(pwe.0 * mask_scalar)).to_affine();
         Ok(Self {
-            pwe,
+            pwe: SaePasswordElement(pwe.0),
             rand,
             own: SaeCommitValues {
                 scalar: scalar.to_bytes().into(),
@@ -856,6 +858,16 @@ impl SaeCommit {
 }
 
 impl SaeKeys {
+    pub const fn kck(&self) -> &[u8; SAE_KEY_LEN] {
+        &self.kck
+    }
+    pub const fn pmk(&self) -> &[u8; SAE_KEY_LEN] {
+        &self.pmk
+    }
+    pub const fn pmkid(&self) -> &[u8; SAE_PMKID_LEN] {
+        &self.pmkid
+    }
+
     fn confirm(
         &self,
         send_confirm: u16,
@@ -910,3 +922,27 @@ impl SaeKeys {
 
 #[cfg(test)]
 mod tests;
+
+impl core::fmt::Debug for SaePasswordElement {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        formatter.write_str("SaePasswordElement(<redacted>)")
+    }
+}
+
+impl core::fmt::Debug for SaePasswordToken {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        formatter.write_str("SaePasswordToken(<redacted>)")
+    }
+}
+
+impl core::fmt::Debug for SaeKeys {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        formatter.write_str("SaeKeys(<redacted>)")
+    }
+}
+
+impl core::fmt::Debug for SaeComebackTokens {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        formatter.write_str("SaeComebackTokens(<redacted>)")
+    }
+}

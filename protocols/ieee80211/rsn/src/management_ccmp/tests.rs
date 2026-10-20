@@ -8,7 +8,7 @@ const MIC_LEN: usize = 8;
 use oer_ieee80211_wire::management_ccmp_vector::{MANAGEMENT_BODY, management_wire as frame};
 
 fn receiver() -> ManagementCcmpReceiver {
-    ManagementCcmpReceiver::new(&core::array::from_fn(|index| index as u8))
+    ManagementCcmpReceiver::new(key())
 }
 
 #[test]
@@ -102,8 +102,8 @@ fn mode(spp: bool) -> CcmpAssociation {
         Spp::NotNegotiated
     })
 }
-fn key() -> [u8; 16] {
-    core::array::from_fn(|i| i as u8)
+fn key() -> oer_ieee80211_wire::ccmp::Ccmp128Key {
+    oer_ieee80211_wire::ccmp::Ccmp128Key::new(&core::array::from_fn(|i| i as u8))
 }
 
 #[test]
@@ -115,7 +115,57 @@ fn management_wire_vector_matches_the_replay_receiver_in_both_spp_modes() {
         assert_eq!(mode(spp).open(&key(), &mut mpdu).unwrap(), MANAGEMENT_BODY);
         mode(spp).seal(&key(), &mut mpdu).unwrap();
         assert_eq!(mpdu, wire);
-        let mut receiver = crate::management_ccmp::ManagementCcmpReceiver::new(&key());
+        let mut receiver = crate::management_ccmp::ManagementCcmpReceiver::new(key());
         assert_eq!(receiver.open(&mut mpdu).unwrap(), MANAGEMENT_BODY);
     }
+}
+
+// SOURCE: IEEE 802.11-2020 12.5.3 management CCMP admission rules.
+// Independently encrypted with Python cryptography AESCCM (key 00..0f,
+// body 08011234, management nonce flag 10, AAD FC/A1/A2/A3/fragment).
+fn independent_wire(hex: &str) -> std::vec::Vec<u8> {
+    hex.as_bytes()
+        .chunks_exact(2)
+        .map(|pair| u8::from_str_radix(core::str::from_utf8(pair).unwrap(), 16).unwrap())
+        .collect()
+}
+
+#[test]
+fn management_packet_number_zero_is_never_admitted() {
+    let mut ccmp = receiver();
+    let mut zero = independent_wire(
+        "d040000002000000000102000000000202000000000235120000002000000000ee52738e614e583acdf68edf",
+    );
+    assert_eq!(ccmp.open(&mut zero), Err(ManagementCcmpError::Replay));
+    assert!(ccmp.open(&mut frame()).is_ok());
+}
+
+#[test]
+fn management_group_key_id_is_rejected_before_replay_or_decryption() {
+    let mut ccmp = receiver();
+    let mut group_key = independent_wire(
+        "d04000000200000000010200000000020200000000023512010000600000000033245c7c758b6815c5da9971",
+    );
+    let before = group_key.clone();
+    assert_eq!(
+        ccmp.open(&mut group_key),
+        Err(ManagementCcmpError::UnexpectedKeyId)
+    );
+    assert_eq!(group_key, before);
+    assert!(ccmp.open(&mut frame()).is_ok());
+}
+
+#[test]
+fn management_group_address_is_rejected_before_replay_or_decryption() {
+    let mut ccmp = receiver();
+    let mut group_address = independent_wire(
+        "d04000000300000000010200000000020200000000023512010000200000000033245c7c891ff31ca9453ccf",
+    );
+    let before = group_address.clone();
+    assert_eq!(
+        ccmp.open(&mut group_address),
+        Err(ManagementCcmpError::GroupAddressed)
+    );
+    assert_eq!(group_address, before);
+    assert!(ccmp.open(&mut frame()).is_ok());
 }

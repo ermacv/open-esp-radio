@@ -100,7 +100,7 @@ impl<'a> AdmittedData<'a> {
     pub const fn protected(&self) -> bool {
         self.protected
     }
-    /// Decode each LLC/SNAP or A-MSDU payload; malformed subframes stay errors.
+    /// Decode LLC/SNAP or prevalidate all A-MSDU subframes before exposing any.
     pub fn msdus(
         &self,
     ) -> Result<

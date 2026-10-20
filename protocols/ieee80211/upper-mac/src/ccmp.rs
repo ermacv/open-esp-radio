@@ -22,6 +22,45 @@ pub enum CcmpTxPacketNumberError {
     Exhausted,
 }
 
+/// A backend pairwise key and its unique transmit PN owner. Construction
+/// performs the actual port installation; an existing key cannot be paired
+/// with a fresh counter. Removal consumes this wrapper.
+pub struct InstalledCcmpTxKey<K> {
+    key: K,
+    packet_numbers: CcmpTxPacketNumber,
+}
+
+impl<K> InstalledCcmpTxKey<K> {
+    pub const fn key(&self) -> &K {
+        &self.key
+    }
+    pub const fn packet_numbers(&self) -> &CcmpTxPacketNumber {
+        &self.packet_numbers
+    }
+    pub fn into_key(self) -> K {
+        self.key
+    }
+}
+
+/// Install new key material and create its PN allocator in the same operation.
+/// This does not accept an already installed backend key or an initial PN.
+pub fn install_ccmp_pairwise_key<'p, 'id: 'p, P>(
+    phase: &mut P,
+    association: &<oer_ieee80211_port::InterfaceKeys<'p, 'id, P> as oer_ieee80211_port::KeyTypes<'id>>::Association,
+    slot: <oer_ieee80211_port::InterfaceKeys<'p, 'id, P> as oer_ieee80211_port::KeyTypes<'id>>::PairwiseSlot,
+    peer: oer_ieee80211_wire::address::IndividualAddress,
+    key: oer_ieee80211_wire::ccmp::Ccmp128Key,
+    step: CcmpPacketNumberStep,
+) -> InstalledCcmpTxKey<<oer_ieee80211_port::InterfaceKeys<'p, 'id, P> as oer_ieee80211_port::KeyTypes<'id>>::PairwiseKey>
+where
+    P: oer_ieee80211_port::InterfacePhase<'p, 'id>,
+{
+    InstalledCcmpTxKey {
+        key: phase.install_pairwise_key(association, slot, peer, key),
+        packet_numbers: CcmpTxPacketNumber::new(step),
+    }
+}
+
 /// The unique allocator of one installed key's transmit packet numbers.
 ///
 /// A new key has emitted no PN; its first MPDU carries `step`. Each call
@@ -36,7 +75,7 @@ pub struct CcmpTxPacketNumber {
 }
 
 impl CcmpTxPacketNumber {
-    pub const fn new(step: CcmpPacketNumberStep) -> Self {
+    const fn new(step: CcmpPacketNumberStep) -> Self {
         Self {
             last: core::cell::Cell::new(CcmpPacketNumber::ZERO),
             step,
@@ -46,7 +85,8 @@ impl CcmpTxPacketNumber {
     /// An allocator whose last handed-out PN is `last`: the next MPDU
     /// carries `last + step`. A key whose counter lives on across an owner
     /// change continues from its last PN this way.
-    pub const fn continuing_after(step: CcmpPacketNumberStep, last: CcmpPacketNumber) -> Self {
+    #[cfg(test)]
+    const fn continuing_after(step: CcmpPacketNumberStep, last: CcmpPacketNumber) -> Self {
         Self {
             last: core::cell::Cell::new(last),
             step,

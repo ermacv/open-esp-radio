@@ -10,7 +10,7 @@ const PASSWORD: &[u8] = b"correct horse";
 
 fn commit(local: [u8; 6], peer: [u8; 6], seed: u8) -> SaeCommit {
     SaeCommit::new(
-        SaePasswordElement::hunting_and_pecking(PASSWORD, local, peer).unwrap(),
+        &SaePasswordElement::hunting_and_pecking(PASSWORD, local, peer).unwrap(),
         [seed; 32],
         [seed + 1; 32],
     )
@@ -73,11 +73,11 @@ fn a_full_exchange_yields_the_access_point_pmk() {
     ) else {
         panic!("authenticated");
     };
-    assert_eq!(keys.pmkid, peer.pmkid);
+    assert_eq!(keys.pmkid, *peer.pmkid());
     assert!(
         keys.pmk
             .bind_association_security_ies(b"sae")
-            .matches(&Pmk::from_bytes(peer.pmk), b"sae")
+            .matches(&Pmk::from_bytes(*peer.pmk()), b"sae")
     );
 }
 
@@ -137,7 +137,7 @@ fn the_timer_is_four_seconds_then_two_after_the_confirm() {
 fn a_wrong_password_or_a_refusal_fails() {
     let (station, sent) = start(Instant::EPOCH);
     let impostor = SaeCommit::new(
-        SaePasswordElement::hunting_and_pecking(b"wrong", BSSID, LOCAL).unwrap(),
+        &SaePasswordElement::hunting_and_pecking(b"wrong", BSSID, LOCAL).unwrap(),
         [0x40; 32],
         [0x41; 32],
     )

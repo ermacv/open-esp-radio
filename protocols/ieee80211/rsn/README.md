@@ -34,7 +34,14 @@ same type without extracting an intermediate array. PTK derivation writes
 directly into the zeroizing PTK, and GTK parsing borrows the key-data buffer
 into a zeroizing GTK. Pending actions, PMF reception and retained station
 records use the common owner; adapters and comparisons borrow its bytes.
-This covers those owners, not arbitrary compiler temporaries.
+This covers those owners, not arbitrary compiler temporaries. AES-128/192/256
+key schedules enable RustCrypto's `zeroize` feature and wipe on drop, including
+when the stateless cipher crate is built independently. HMAC and SHA-1/SHA-2
+internal state derived from KCK/PMK material does not wipe on drop; zeroizing
+the input owners does not erase that state. SAE passwords, password elements,
+password tokens, derived keys and comeback-token keys zeroize on drop. Their
+owners do not implement `Copy` or `Clone`, and Debug reveals only a redaction.
+Derived keys expose borrowed bytes through accessors.
 
 `oer_ieee80211_cipher::ccmp_mpdu::CcmpAssociation` authenticates the QoS A-MSDU-present bit in both AAD and
 nonce flags when SPP was negotiated. Without SPP it masks that bit according
@@ -43,9 +50,11 @@ management nonce flag, independently of SPP. The model applies this transform
 to transmitted wire bytes and verifies incoming encrypted fixtures; a failed
 MIC erases the tentative plaintext before returning the error. Packet-number
 allocation and replay admission remain with their separate installed owners.
-`ManagementCcmpReceiver` adds its management PN frontier around that same
-transform, so a rejected MIC erases the tentative body on the station's PMF
-path too. The CCM authenticator accepts only the closed `Aad` type built from
+`ManagementCcmpReceiver` starts its management PN frontier at zero, rejects
+PN zero and admits only KeyID zero with an individually addressed A1 around
+that same transform, so a rejected MIC erases the tentative body on the station's PMF
+path too. Its constructor moves a `Ccmp128Key`; CCMP transforms borrow that
+typed owner instead of accepting raw key arrays. The CCM authenticator accepts only the closed `Aad` type built from
 a decoded MAC header: its four layouts occupy 22, 24, 28 or 30 bytes. It
 cannot accept an arbitrary slice whose suffix would escape authentication.
 
@@ -100,25 +109,9 @@ not enable the policy.
   so a lost M4 ends the handshake. Our supplicant hides it:
   `supplicant.rs::RsnConnectedSupplicant::on_message3` and
   `state/supplicant.rs` accept an equal counter as a retransmission.
-- **AES key schedules are not wiped.** `Cargo.toml` enables `aes` without
-  its `zeroize` feature; no test checks `Aes128: ZeroizeOnDrop`. The
-  HMAC/SHA-2 state holding the KCK and PMK has no wipe either.
 - **SAE H2E ignores the Rejected Groups salt.** `sae.rs::SaeCommit::process`
   always derives the keyseed with a zero salt; `rejected_groups` is only
   parsed. H2E with a rejected group does not interoperate.
-- **SAE secrets are copyable or printable** (`sae.rs`):
-  `SaePasswordElement` and `SaePasswordToken` derive `Clone, Copy, Debug`;
-  `SaeKeys` is `Clone` with `pub kck`, `pmk`, `pmkid`; `SaePassword`
-  is `Clone`; `SaeComebackTokens.key` is never zeroized.
-- **Management CCMP receiver** (`management_ccmp.rs::ManagementCcmpReceiver`):
-  starts at no PN, so PN 0 is accepted; the KeyID is not checked to be 0;
-  A1 is not checked to be individually addressed. `new` copies the TK from
-  a raw `&[u8; 16]`.
-- **Raw keys in the API:** `ccmp_mpdu.rs::CcmpAssociation::seal`/`open`
-  take `&[u8; 16]` instead of `&Ccmp128Key`.
-- **Self-generated CCMP fixtures only** (`ccmp_mpdu/test_vector.rs`): no
-  IEEE 802.11-2020 Annex J CCMP vector, no hostap `wlantest` QoS or
-  4-address vector.
 - **Non-constant-time comparison** of IGTK material in
   `bip.rs::BipReceiver::rekey`; `akm.rs` still builds the KCK MAC with
   `new_from_slice(..).expect`.

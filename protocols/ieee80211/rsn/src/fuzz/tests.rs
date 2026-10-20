@@ -186,7 +186,7 @@ fn bip_never_panics_full() {
 
 fn ccmp(count: usize) {
     let wire = management_wire();
-    let key: [u8; 16] = core::array::from_fn(|index| index as u8);
+    let key = oer_ieee80211_wire::ccmp::Ccmp128Key::new(&core::array::from_fn(|index| index as u8));
     let mut copy = Vec::new();
     inputs(&[&wire], count, 120, |bytes| {
         for spp in [Spp::NotNegotiated, Spp::Negotiated] {
@@ -196,7 +196,9 @@ fn ccmp(count: usize) {
         }
         copy.clear();
         copy.extend_from_slice(bytes);
-        let _ = ManagementCcmpReceiver::new(&key).open(&mut copy);
+        let _ =
+            ManagementCcmpReceiver::new(oer_ieee80211_wire::ccmp::Ccmp128Key::new(key.as_bytes()))
+                .open(&mut copy);
     });
 }
 
@@ -217,8 +219,8 @@ fn sae_peers() -> (SaeCommit, SaeCommit) {
     let b = [2, 0, 0, 0, 0, 2];
     let pwe = SaePasswordElement::hunting_and_pecking(b"password", a, b).unwrap();
     (
-        SaeCommit::new(pwe, [0x11; 32], [0x22; 32]).unwrap(),
-        SaeCommit::new(pwe, [0x33; 32], [0x44; 32]).unwrap(),
+        SaeCommit::new(&pwe, [0x11; 32], [0x22; 32]).unwrap(),
+        SaeCommit::new(&pwe, [0x33; 32], [0x44; 32]).unwrap(),
     )
 }
 
@@ -346,7 +348,7 @@ fn constructors_refuse_what_the_views_rely_on() {
     let one = core::array::from_fn(|index| u8::from(index == 31));
     for rand in [[0; 32], one, [0xff; 32]] {
         assert!(matches!(
-            SaeCommit::new(pwe, rand, [0x22; 32]),
+            SaeCommit::new(&pwe, rand, [0x22; 32]),
             Err(SaeError::UnsuitableRandom)
         ));
     }

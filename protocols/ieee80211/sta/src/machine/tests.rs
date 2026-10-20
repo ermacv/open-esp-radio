@@ -4493,3 +4493,64 @@ fn negotiated_spp_from_the_association_is_retained_by_the_ptk_owner() {
         });
     }
 }
+
+fn downlink_amsdu(subframes: &[([u8; 6], u16, &[u8])]) -> Vec<u8> {
+    let mut frame = eapol_frame(&[]);
+    frame.truncate(24);
+    frame[0] = 0x88;
+    frame.extend_from_slice(&[0x80, 0]);
+    for (index, (destination, ether_type, payload)) in subframes.iter().enumerate() {
+        if index != 0 {
+            while (frame.len() - 26) % 4 != 0 {
+                frame.push(0);
+            }
+        }
+        frame.extend_from_slice(destination);
+        frame.extend_from_slice(&BSSID);
+        frame.extend_from_slice(&u16::try_from(8 + payload.len()).unwrap().to_be_bytes());
+        frame.extend_from_slice(&[0xaa, 0xaa, 3, 0, 0, 0]);
+        frame.extend_from_slice(&ether_type.to_be_bytes());
+        frame.extend_from_slice(payload);
+    }
+    frame
+}
+
+#[test]
+fn plaintext_amsdu_eapol_in_a_protected_bss_requires_own_or_pae_destination() {
+    use oer_ieee80211_rsn::frames::RsnTxFrame;
+    use oer_ieee80211_wire::security::rsn::Akm;
+    // IEEE 802.1X PAE group address; Linux's ieee80211_frame_allowed checks
+    // the decapsulated destination before bypassing the protected-data rule.
+    for (destination, accepted) in [
+        (LOCAL, true),
+        ([1, 0x80, 0xc2, 0, 0, 3], true),
+        ([2, 0, 0, 0, 0, 99], false),
+        ([0xff; 6], false),
+    ] {
+        installed(|mint| {
+            let (mut world, _) = wpa2_associated::<2>(mint);
+            let before = world.eapol.len();
+            let m1 = RsnTxFrame::<512>::message1(Akm::Psk, LOCAL, 1, ANONCE).unwrap();
+            world.receive(
+                at(32),
+                &downlink_amsdu(&[(destination, 0x888e, m1.as_bytes())]),
+            );
+            assert_eq!(world.eapol.len() - before, usize::from(accepted));
+        });
+    }
+}
+
+#[test]
+fn an_amsdu_with_a_malformed_tail_cannot_start_the_handshake() {
+    use oer_ieee80211_rsn::frames::RsnTxFrame;
+    use oer_ieee80211_wire::security::rsn::Akm;
+    installed(|mint| {
+        let (mut world, _) = wpa2_associated::<2>(mint);
+        let before = world.eapol.len();
+        let m1 = RsnTxFrame::<512>::message1(Akm::Psk, LOCAL, 1, ANONCE).unwrap();
+        let mut frame = downlink_amsdu(&[(LOCAL, 0x888e, m1.as_bytes()), (LOCAL, 0x0800, b"data")]);
+        frame.pop();
+        world.receive(at(32), &frame);
+        assert_eq!(world.eapol.len(), before);
+    });
+}

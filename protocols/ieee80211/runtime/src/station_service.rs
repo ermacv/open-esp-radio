@@ -230,8 +230,7 @@ pub struct PortStaTokens<'id, Ty, S, const GROUPS: usize = 2>(Marker<'id, Ty, S>
 
 /// The station PTK retains the unique association owner until its removal terminal.
 pub struct StationPairwiseKey<'id, K: KeyTypes<'id>> {
-    key: K::PairwiseKey,
-    packet_numbers: oer_ieee80211_upper_mac::ccmp::CcmpTxPacketNumber,
+    key: oer_ieee80211_upper_mac::ccmp::InstalledCcmpTxKey<K::PairwiseKey>,
     association: K::Association,
 }
 
@@ -1572,9 +1571,9 @@ impl<
                             let protection = match protection {
                                 DataProtection::Open => Ok(TxProtection::Open),
                                 DataProtection::Ccmp(key) => {
-                                    key.packet_numbers.allocate().map(|packet_number| {
+                                    key.key.packet_numbers().allocate().map(|packet_number| {
                                         TxProtection::Ccmp(oer_ieee80211_port::NumberedKey {
-                                            key: &key.key,
+                                            key: key.key.key(),
                                             packet_number,
                                         })
                                     })
@@ -2173,9 +2172,9 @@ where
     };
     let protection = match key {
         None => TxProtection::Open,
-        Some(key) => match key.packet_numbers.allocate() {
+        Some(key) => match key.key.packet_numbers().allocate() {
             Ok(packet_number) => TxProtection::Ccmp(oer_ieee80211_port::NumberedKey {
-                key: &key.key,
+                key: key.key.key(),
                 packet_number,
             }),
             Err(_) => {
@@ -2305,13 +2304,15 @@ where
         } => StaInput::PairwiseKeyInstalled {
             pending,
             key: StationPairwiseKey {
-                key: phase
-                    .station()
-                    .install_pairwise_key(&association, slot, peer, key),
-                association,
-                packet_numbers: oer_ieee80211_upper_mac::ccmp::CcmpTxPacketNumber::new(
+                key: oer_ieee80211_upper_mac::ccmp::install_ccmp_pairwise_key(
+                    &mut phase.station(),
+                    &association,
+                    slot,
+                    peer,
+                    key,
                     rates.packet_number_step(),
                 ),
+                association,
             },
         },
         StaAction::InstallGroupKey {
@@ -2342,7 +2343,7 @@ where
                 .insert(PendingTerminal::Control(ControlTerminal::PairwiseRemoval));
             phase
                 .station()
-                .remove_pairwise_key(key.association, key.key);
+                .remove_pairwise_key(key.association, key.key.into_key());
             return Ok(Follow::Nothing);
         }
         StaAction::ReplaceGroupKey {

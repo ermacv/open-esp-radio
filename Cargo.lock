@@ -27,6 +27,7 @@ dependencies = [
  "cfg-if",
  "cipher",
  "cpufeatures 0.2.17",
+ "zeroize",
 ]
 
 [[package]]
@@ -2565,6 +2566,7 @@ dependencies = [
  "aes",
  "oer-bluetooth-le-radio",
  "oer-radio-regulatory",
+ "zeroize",
 ]
 
 [[package]]
@@ -3514,6 +3516,7 @@ dependencies = [
  "aes",
  "cmac",
  "oer-ieee80211-wire",
+ "oer-test-ui-cases",
  "subtle",
  "zeroize",
 ]
@@ -3567,6 +3570,7 @@ dependencies = [
  "hmac",
  "oer-ieee80211-cipher",
  "oer-ieee80211-wire",
+ "oer-test-ui-cases",
  "oer-time",
  "p256",
  "pbkdf2",

@@ -70,7 +70,7 @@ fn parse_all(bytes: &[u8]) {
         if let Ok(fragment) = parse_ccmp_data_fragment(role, bytes, plaintext, ccmp) {
             read_fragment(fragment);
         }
-        if let Ok(identity) = parse_ccmp_data_identity(role, bytes, ccmp) {
+        if let Ok(identity) = parse_ccmp_data_identity(role, bytes) {
             read_identity(identity);
         }
     }

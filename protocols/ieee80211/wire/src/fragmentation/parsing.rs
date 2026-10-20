@@ -43,21 +43,16 @@ pub fn parse_open_data_fragment(
 ///
 /// The caller must supply only the plaintext payload slice released by a
 /// successful CCMP MIC-verification result. This codec validates all public
-/// 802.11 identity/AAD fields and binds the parsed Key ID and PN to the
-/// returned fragment; it does not itself own or advance a replay frontier.
+/// 802.11 identity/AAD fields and binds the PN to the returned fragment.
+/// The upper-MAC admission epoch identifies the key installation; its wire
+/// KeyID cannot distinguish a rekey. This codec owns no replay frontier.
 pub fn parse_ccmp_data_fragment<'frame>(
     role: DataInterfaceRole,
     mpdu: &'frame [u8],
     authenticated_payload: &'frame [u8],
     ccmp_header: CcmpHeader,
 ) -> Result<OpenDataFragment<'frame>, OpenDataFragmentError> {
-    let header = parse_data_header(
-        role,
-        mpdu,
-        DataFragmentProtection::Ccmp {
-            key_id: ccmp_header.key_id(),
-        },
-    )?;
+    let header = parse_data_header(role, mpdu, DataFragmentProtection::Ccmp)?;
     parse_data_fragment(
         header,
         authenticated_payload,
@@ -130,16 +125,9 @@ pub fn parse_open_data_identity(
 pub fn parse_ccmp_data_identity(
     role: DataInterfaceRole,
     mpdu: &[u8],
-    ccmp_header: CcmpHeader,
+    // The wire ID does not identify the installation that authenticated it.
 ) -> Result<OpenDataFragmentIdentity, OpenDataFragmentError> {
-    parse_data_header(
-        role,
-        mpdu,
-        DataFragmentProtection::Ccmp {
-            key_id: ccmp_header.key_id(),
-        },
-    )
-    .map(|header| header.identity)
+    parse_data_header(role, mpdu, DataFragmentProtection::Ccmp).map(|header| header.identity)
 }
 
 #[derive(Clone, Copy)]
@@ -203,7 +191,7 @@ fn parse_data_header(
         (DataFragmentProtection::Open, true) => {
             return Err(OpenDataFragmentError::Protected);
         }
-        (DataFragmentProtection::Ccmp { .. }, false) => {
+        (DataFragmentProtection::Ccmp, false) => {
             return Err(OpenDataFragmentError::Unprotected);
         }
         _ => {}

@@ -226,8 +226,8 @@ impl StaSaeAuthentication {
         match self.phase {
             StaSaePhase::Confirmed(keys) => match keys.verify_peer_confirm(body) {
                 Ok(_) => StaSaeEvent::Authenticated(StaSaePmk {
-                    pmk: Pmk::from_bytes(keys.pmk),
-                    pmkid: keys.pmkid,
+                    pmk: Pmk::from_bytes(*keys.pmk()),
+                    pmkid: *keys.pmkid(),
                 }),
                 Err(error) => StaSaeEvent::Failed(StaSaeFailure::Protocol(error)),
             },

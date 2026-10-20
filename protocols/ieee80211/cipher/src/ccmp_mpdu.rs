@@ -24,7 +24,11 @@ use aes::{
     Aes128,
     cipher::{KeyInit, generic_array::GenericArray},
 };
-use oer_ieee80211_wire::{ccmp::CcmpHeader, frame::DecodedHeader, security::Spp};
+use oer_ieee80211_wire::{
+    ccmp::{Ccmp128Key, CcmpHeader},
+    frame::DecodedHeader,
+    security::Spp,
+};
 use subtle::ConstantTimeEq;
 use zeroize::Zeroize;
 
@@ -57,11 +61,11 @@ impl CcmpAssociation {
 
     /// Encrypt an MPDU in place. The caller has already allocated its PN and
     /// encoded the CCMP header, and reserved eight trailing bytes for the MIC.
-    pub fn seal(&self, key: &[u8; 16], frame: &mut [u8]) -> Result<(), CcmpMpduError> {
+    pub fn seal(&self, key: &Ccmp128Key, frame: &mut [u8]) -> Result<(), CcmpMpduError> {
         let blocks = self.blocks(frame)?;
         let (_, body_and_mic) = frame.split_at_mut(blocks.body_start);
         let (body, mic) = body_and_mic.split_at_mut(blocks.body_len);
-        let cipher = Aes128::new(GenericArray::from_slice(key));
+        let cipher = Aes128::new(GenericArray::from_slice(key.as_bytes()));
         mic.copy_from_slice(&ccm::authenticate(
             &cipher,
             &blocks.nonce,
@@ -74,11 +78,15 @@ impl CcmpAssociation {
 
     /// Verify and decrypt. Failed authentication erases the tentative plaintext;
     /// a caller must discard the frame and leave its replay frontier unchanged.
-    pub fn open<'a>(&self, key: &[u8; 16], frame: &'a mut [u8]) -> Result<&'a [u8], CcmpMpduError> {
+    pub fn open<'a>(
+        &self,
+        key: &Ccmp128Key,
+        frame: &'a mut [u8],
+    ) -> Result<&'a [u8], CcmpMpduError> {
         let blocks = self.blocks(frame)?;
         let (_, body_and_mic) = frame.split_at_mut(blocks.body_start);
         let (body, mic) = body_and_mic.split_at_mut(blocks.body_len);
-        let cipher = Aes128::new(GenericArray::from_slice(key));
+        let cipher = Aes128::new(GenericArray::from_slice(key.as_bytes()));
         ccm::crypt(&cipher, &blocks.nonce, body);
         let mut expected = ccm::authenticate(&cipher, &blocks.nonce, &blocks.aad, body);
         let valid = bool::from(expected.ct_eq(mic));

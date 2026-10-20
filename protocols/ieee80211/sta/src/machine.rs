@@ -1846,6 +1846,8 @@ enum LeaveStep {
 
 /// The EAPOL ether type.
 const EAPOL_ETHER_TYPE: u16 = 0x888e;
+/// IEEE 802.1X Port Access Entity group address.
+const PAE_GROUP_ADDRESS: [u8; 6] = [0x01, 0x80, 0xc2, 0x00, 0x00, 0x03];
 
 /// A checked management disconnect from the selected BSS.
 fn peer_disconnect(frame: &[u8], local: OwnAddress, bssid: Bssid) -> Option<u16> {
@@ -3358,10 +3360,10 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
                             }
                         };
                         let commit =
-                            SaeCommit::new(element, (self.config.nonce)(), (self.config.nonce)())
+                            SaeCommit::new(&element, (self.config.nonce)(), (self.config.nonce)())
                                 .map_err(|error| {
-                                StaDisconnectReason::Sae(StaSaeFailure::Protocol(error))
-                            })?;
+                                    StaDisconnectReason::Sae(StaSaeFailure::Protocol(error))
+                                })?;
                         let (authentication, transmission) =
                             StaSaeAuthentication::new(self.config.address, bssid, commit, pwe, now)
                                 .map_err(StaDisconnectReason::Sae)?;
@@ -3577,6 +3579,13 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
         for parts in admitted.msdus()? {
             let parts = parts?;
             if parts.ether_type == EAPOL_ETHER_TYPE {
+                if !matches!(self.security, StaSecurity::Open)
+                    && !admitted.protected()
+                    && parts.destination != self.config.address.get()
+                    && parts.destination != PAE_GROUP_ADDRESS
+                {
+                    continue;
+                }
                 let eapol =
                     OwnedEapolFrame::try_copy(RsnInterface::Station, bssid.get(), parts.payload)
                         .map_err(|_| RxDropReason::Payload)?;
@@ -4307,7 +4316,8 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
                         if handshake.supplicant.management_protection()
                             && handshake.management.is_none()
                         {
-                            handshake.management = Some(ManagementProtection::new(key.as_bytes()));
+                            handshake.management =
+                                Some(ManagementProtection::new(Ccmp128Key::new(key.as_bytes())));
                         }
                         (
                             HandshakeStep::InstallGroup(group, replay, protection),

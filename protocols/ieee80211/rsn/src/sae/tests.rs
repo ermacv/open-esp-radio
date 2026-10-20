@@ -25,7 +25,7 @@ const PMKID: &str = "8747a600eea3f9f22475df58ca1e5498";
 #[test]
 fn hunting_and_pecking_matches_annex_j10() {
     let pwe = SaePasswordElement::hunting_and_pecking(PASSWORD, ADDR1, ADDR2).unwrap();
-    let commit = SaeCommit::new(pwe, hex(LOCAL_RAND), hex(LOCAL_MASK)).unwrap();
+    let commit = SaeCommit::new(&pwe, hex(LOCAL_RAND), hex(LOCAL_MASK)).unwrap();
     let mut body = [0; SAE_COMMIT_LEN];
     assert_eq!(
         commit.values().encode(None, false, &mut body),
@@ -54,8 +54,8 @@ fn hash_to_element_matches_annex_j10() {
 }
 
 fn peers(derive: impl Fn([u8; 6], [u8; 6]) -> SaePasswordElement) -> (SaeKeys, SaeKeys) {
-    let station = SaeCommit::new(derive(ADDR1, ADDR2), [0x11; 32], [0x22; 32]).unwrap();
-    let access_point = SaeCommit::new(derive(ADDR2, ADDR1), [0x33; 32], [0x44; 32]).unwrap();
+    let station = SaeCommit::new(&derive(ADDR1, ADDR2), [0x11; 32], [0x22; 32]).unwrap();
+    let access_point = SaeCommit::new(&derive(ADDR2, ADDR1), [0x33; 32], [0x44; 32]).unwrap();
     (
         station.process(access_point.values()).unwrap(),
         access_point.process(station.values()).unwrap(),
@@ -94,13 +94,13 @@ fn both_peers_derive_one_pmk_and_verify_each_confirm() {
 #[test]
 fn a_wrong_password_fails_the_confirm() {
     let station = SaeCommit::new(
-        SaePasswordElement::hunting_and_pecking(PASSWORD, ADDR1, ADDR2).unwrap(),
+        &SaePasswordElement::hunting_and_pecking(PASSWORD, ADDR1, ADDR2).unwrap(),
         [0x11; 32],
         [0x22; 32],
     )
     .unwrap();
     let access_point = SaeCommit::new(
-        SaePasswordElement::hunting_and_pecking(b"another password", ADDR2, ADDR1).unwrap(),
+        &SaePasswordElement::hunting_and_pecking(b"another password", ADDR2, ADDR1).unwrap(),
         [0x33; 32],
         [0x44; 32],
     )
@@ -116,9 +116,9 @@ fn a_wrong_password_fails_the_confirm() {
 #[test]
 fn invalid_commits_are_refused() {
     let pwe = SaePasswordElement::hunting_and_pecking(PASSWORD, ADDR1, ADDR2).unwrap();
-    assert!(SaeCommit::new(pwe, [0; 32], [0x22; 32]).is_err());
-    assert!(SaeCommit::new(pwe, [0xff; 32], [0x22; 32]).is_err());
-    let commit = SaeCommit::new(pwe, [0x11; 32], [0x22; 32]).unwrap();
+    assert!(SaeCommit::new(&pwe, [0; 32], [0x22; 32]).is_err());
+    assert!(SaeCommit::new(&pwe, [0xff; 32], [0x22; 32]).is_err());
+    let commit = SaeCommit::new(&pwe, [0x11; 32], [0x22; 32]).unwrap();
     assert_eq!(
         commit.process(commit.values()).err(),
         Some(SaeError::Reflection)
@@ -147,7 +147,7 @@ fn invalid_commits_are_refused() {
 #[test]
 fn tokens_sit_where_the_vendor_writes_them() {
     let commit = SaeCommit::new(
-        SaePasswordElement::hunting_and_pecking(PASSWORD, ADDR1, ADDR2).unwrap(),
+        &SaePasswordElement::hunting_and_pecking(PASSWORD, ADDR1, ADDR2).unwrap(),
         [0x11; 32],
         [0x22; 32],
     )
@@ -186,7 +186,7 @@ fn tokens_sit_where_the_vendor_writes_them() {
 #[test]
 fn an_h2e_commit_admits_only_a_rejected_groups_element_without_19() {
     let commit = SaeCommit::new(
-        SaePasswordElement::hunting_and_pecking(PASSWORD, ADDR1, ADDR2).unwrap(),
+        &SaePasswordElement::hunting_and_pecking(PASSWORD, ADDR1, ADDR2).unwrap(),
         [0x11; 32],
         [0x22; 32],
     )
@@ -291,4 +291,49 @@ fn a_comeback_token_is_bound_to_its_station_and_used_once() {
     });
     assert_ne!(reissued, token);
     assert!(tokens.check(station, &reissued));
+}
+
+#[test]
+fn secret_owners_wipe_and_redact_debug() {
+    fn wipes_on_drop<T: ZeroizeOnDrop>() {}
+    wipes_on_drop::<SaePassword>();
+    wipes_on_drop::<SaePasswordElement>();
+    wipes_on_drop::<SaePasswordToken>();
+    wipes_on_drop::<SaeKeys>();
+    wipes_on_drop::<SaeComebackTokens>();
+
+    let mut password = SaePassword::new(PASSWORD).unwrap();
+    assert_eq!(std::format!("{password:?}"), "SaePassword(<redacted>)");
+    password.zeroize();
+    assert!(password.as_bytes().is_empty());
+    assert_eq!(password.bytes, [0; SAE_PASSWORD_MAX_LEN]);
+
+    let mut token = SaePasswordToken::derive(b"byteme", PASSWORD, None);
+    assert_eq!(std::format!("{token:?}"), "SaePasswordToken(<redacted>)");
+    let mut element = token.password_element(ADDR1, ADDR2);
+    assert_eq!(
+        std::format!("{element:?}"),
+        "SaePasswordElement(<redacted>)"
+    );
+    token.zeroize();
+    element.zeroize();
+    assert!(bool::from(token.0.is_identity()));
+    assert!(bool::from(element.0.is_identity()));
+
+    let (mut keys, _) =
+        peers(|a, b| SaePasswordElement::hunting_and_pecking(PASSWORD, a, b).unwrap());
+    assert_eq!(std::format!("{keys:?}"), "SaeKeys(<redacted>)");
+    keys.zeroize();
+    assert_eq!(keys.kck(), &[0; SAE_KEY_LEN]);
+    assert_eq!(keys.pmk(), &[0; SAE_KEY_LEN]);
+    assert_eq!(keys.pmkid(), &[0; SAE_PMKID_LEN]);
+
+    let mut comeback = SaeComebackTokens::new();
+    comeback.issue(ADDR1, Instant::EPOCH, || [0x42; 32]);
+    assert_eq!(
+        std::format!("{comeback:?}"),
+        "SaeComebackTokens(<redacted>)"
+    );
+    comeback.zeroize();
+    assert_eq!(comeback.key, [0; 32]);
 }

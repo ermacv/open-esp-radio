@@ -756,9 +756,14 @@ fn the_old_and_the_new_group_key_are_both_taken_until_the_old_is_removed() {
         );
     }
     // The access point's new group key, index 2, from packet number 1.
-    replay
-        .install_group(GroupKeyId::new(2).unwrap(), [0; 8])
-        .unwrap();
+    assert!(
+        replay
+            .exchange_group(
+                GroupKeyId::new(2).unwrap(),
+                oer_ieee80211_upper_mac::ccmp::CcmpRxReplayState::default(),
+            )
+            .is_none()
+    );
     {
         // Both keys are taken while both are installed.
         let mut link = qos_link(&(), &mut replay);

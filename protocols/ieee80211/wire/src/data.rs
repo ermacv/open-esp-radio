@@ -667,15 +667,21 @@ fn aggregate_payload(payload: &[u8]) -> Result<AmsduSubframes<'_>, DataDecapErro
     if first.first_chunk::<6>() == Some(&RFC1042_LLC_SNAP_PREFIX) {
         return Err(DataDecapError::InvalidAmsduDestination);
     }
-    Ok(AmsduSubframes {
+    let frames = AmsduSubframes {
         remaining: payload,
         failed: false,
-    })
+    };
+    // Validate the entire aggregate before lending any subframe to a consumer.
+    // The second pass borrows the same immutable bytes and needs no queue.
+    for frame in frames.clone() {
+        frame?;
+    }
+    Ok(frames)
 }
 
 /// Validate one role-addressed data MPDU and expose all contained Ethernet
-/// frames without allocation or chip/runtime policy. Malformed later A-MSDU
-/// subframes remain errors at their iterator position.
+/// frames without allocation or chip/runtime policy. All A-MSDU subframes
+/// are validated before this function exposes any of them.
 pub fn decapsulate_data_frames<'a>(
     role: DataInterfaceRole,
     mpdu: &'a [u8],
