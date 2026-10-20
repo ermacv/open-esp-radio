@@ -12,7 +12,7 @@ Its `scenario` and `workload` modules run the manually selected `[phy]`
 calibration investigation. The S31 comparison crate composes the family into
 `cargo hil`; every flash and restore uses the run's leased board image port.
 `phy-vendor-calibration-cold` and `phy-vendor-calibration-restart` use ten
-alternating boots per side. `phy-vendor-calibration-smoke` uses one and exercises
+alternating boots per side. `phy-vendor-calibration-smoke` uses one pair with an RF restart and exercises
 the tool without estimating the vendor's boot spread. DIFF and INCOMPLETE
 remain failures, including in the smoke scenario; captures survive the verdict.
 Vendor-only scenarios capture extra boots without a production comparison.

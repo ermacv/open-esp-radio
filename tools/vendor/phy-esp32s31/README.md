@@ -12,7 +12,7 @@ cargo test -p oer-vendor-phy-esp32s31
 ```
 
 Both Wi-Fi investigations alternate ten vendor and diagnostic boots on one
-leased board. `phy-vendor-calibration-smoke` uses one alternating pair; it
+leased board. `phy-vendor-calibration-smoke` uses one pair including an RF restart; it
 exercises capture, not the vendor's real boot spread. DIFF and INCOMPLETE fail
 in every scenario, with evidence retained. A vendor-only scenario captures
 additional reference boots without claiming production equivalence.
