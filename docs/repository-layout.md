@@ -95,7 +95,7 @@ executor and the firmware composition.
 ## Names
 
 A library's package name is `oer-` and its path below its root:
-`protocols/ieee80211/mac` is `oer-ieee80211-mac`, `chips/esp32s31/hal` is
+`protocols/ieee80211/wire` is `oer-ieee80211-wire`, `chips/esp32s31/hal` is
 `oer-esp32s31-hal`, `tools/hil/run` is `oer-hil-run`. An executable keeps
 its root: `firmware/apps/w1` is `oer-firmware-apps-w1`, `tools/image/cli` is
 `oer-tool-image-cli`. There is no `[lib] name`; code uses the package name
@@ -135,8 +135,11 @@ and runs is a thin wrapper over `cargo fw` and the program.
 
 ## Known deviations
 
-The tree does not yet follow these rules in one place:
+The tree does not yet follow these rules in these places:
 
-- `protocols/ieee80211/mac` holds the Wi-Fi frame formats and protocol state
-  together; chip backends and the radio system depend on it for formats
-  alone (the radio system for the channel type only).
+- The ESP32-S31 Wi-Fi chip crates depend on cores, not only on `port` and
+  `wire`: `chips/esp32s31/ieee80211/mac` on `oer-ieee80211-upper-mac` and
+  `oer-ieee80211-softmac`, `chips/esp32s31/ieee80211/driver` on
+  `oer-ieee80211-softmac`.
+- `protocols/ieee80211/runtime` has a dev-dependency on
+  `chips/espressif/ieee80211-policy`.
