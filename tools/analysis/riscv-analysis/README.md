@@ -98,6 +98,23 @@ proves three possible bytes for one real ROM store and transports them through
 the existing trampoline/argument substitution; the other eleven store sites
 retain their unknown-address barriers.
 
+That same induction witness now supplies the pointer's value on its exit edge:
+`(initial.wrapping_add(mask)) & !mask`, aligned with a forward modular
+displacement in `0..=mask`, including zero iterations. A supplementary equality
+component traverses the existing instruction CFG and intersects all incoming
+paths. A matching zero-residue branch proves the same expression on the
+already-aligned path. Register changes use the existing `evaluate` semantics;
+copies preserve equality, other results lose it. Unknown inputs, calls, gaps
+and open graphs retain uncertainty. No second loop recognizer or decoder is
+used. `AlignedValue` records explicitly name an edge or instruction entry,
+their function owner, original initial value, ordinary Add/And DAG expression
+and the shared `AlignmentLoopProof`. They are conditional control-point facts,
+not architectural `Value` writes or assertions that the point is reachable.
+The scalar and memory observations retain their conservative contracts. The
+[exit-value validation](../riscv-stack/validation/alignment-exit/README.md)
+checks both real ROM paths and the merged pointer value while retaining every
+existing store effect and call barrier.
+
 `ResearchOptions::stack_calls` optionally retains an existing stack word when
 `writes::stack_calls` prepared a complete disjoint call footprint from the
 canonical caller index and callee `FunctionWrites`. Every target is required;

@@ -819,6 +819,8 @@ pub(super) fn analyze(
     control: &mut dyn RunControl,
     sink: &mut dyn FunctionSink,
 ) -> Result<SemanticSummary> {
+    // Unit fixtures supply decoded nodes directly and have no decode-gap
+    // records. The production caller also accounts for those records.
     analyze_with(
         input,
         nodes,
@@ -832,6 +834,9 @@ pub(super) fn analyze(
         false,
         None,
         &mut AdmittedVec::new(memory),
+        edges
+            .iter()
+            .all(|edge| writes::closes_local_edge(edge.target, edge.relation)),
     )
 }
 #[allow(clippy::too_many_arguments)]
@@ -848,6 +853,7 @@ pub(super) fn analyze_with(
     symbolic_spills: bool,
     stack_calls: Option<&writes::StackCalls<'_>>,
     noreturn: &mut AdmittedVec<'_, u64>,
+    closed_graph: bool,
 ) -> Result<SemanticSummary> {
     control.phase(RunPhase::AnalyzeValues)?;
     let bytes_per_node = std::mem::size_of::<Option<State>>()
@@ -959,6 +965,40 @@ pub(super) fn analyze_with(
             }
         }
     }
+    // Prove each candidate once from the conservative fixed point. Both the
+    // footprint and the edge postcondition consume this same witness.
+    let mut bounds = AdmittedVec::new(memory);
+    if symbolic {
+        for (i, operation) in operations.iter().enumerate() {
+            control.checkpoint(1)?;
+            if matches!(
+                operation.op,
+                SemanticOp::Memory {
+                    kind: MemoryKind::Store,
+                    width: 1,
+                    ..
+                }
+            ) && let Some(bound) =
+                alignment::prove(i, input, nodes, edges, &operations, &states, isa, control)?
+            {
+                bounds.push(bound, control.position())?;
+            }
+        }
+    }
+    let relations = alignment::relations::analyze(
+        &bounds,
+        closed_graph,
+        input,
+        nodes,
+        edges,
+        &operations,
+        &states,
+        isa,
+        &mut symbols,
+        abi,
+        memory,
+        control,
+    )?;
     // Emit after convergence. Re-evaluation below only reuses stable DAG nodes.
     let mut emitted = 0;
     let mut summary = SemanticSummary {
@@ -1209,17 +1249,9 @@ pub(super) fn analyze_with(
             )?;
         }
         if let Some((access, width, addr, v)) = effects.memory {
-            if symbolic && access == MemoryKind::Store && width == 1 {
-                alignment::emit(
-                    i,
-                    input,
-                    nodes,
-                    edges,
-                    &operations,
-                    &states,
-                    isa,
-                    &symbols.sets,
-                    sink,
+            if let Ok(at) = bounds.binary_search_by_key(&i, |bound| bound.store) {
+                sink.record(
+                    &bounds[at].store_record(input, nodes, &symbols.sets),
                     control,
                 )?;
             }
@@ -1265,6 +1297,10 @@ pub(super) fn analyze_with(
                 control,
             )?;
         }
+    }
+    for relation in relations.iter() {
+        control.checkpoint(1)?;
+        sink.record(relation, control)?;
     }
     Ok(summary)
 }
@@ -2109,6 +2145,9 @@ mod tests {
                 false,
                 None,
                 &mut AdmittedVec::new(&memory),
+                edges
+                    .iter()
+                    .all(|edge| writes::closes_local_edge(edge.target, edge.relation)),
             )
             .unwrap();
             (summary.complete, sink.0)
@@ -2616,6 +2655,9 @@ mod tests {
             false,
             None,
             &mut AdmittedVec::new(&memory),
+            edges
+                .iter()
+                .all(|edge| writes::closes_local_edge(edge.target, edge.relation)),
         )
         .unwrap();
         sink.0

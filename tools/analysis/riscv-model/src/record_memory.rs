@@ -34,6 +34,11 @@ impl FunctionRecord {
         let value =
             |v: &Option<AbstractValue>| v.as_ref().map_or(0, AbstractValue::allocated_bytes);
         match self {
+            Self::AlignedValue { fact } => {
+                size_of::<AlignedValue>() as u64
+                    + fact.initial.allocated_bytes()
+                    + fact.value.allocated_bytes()
+            }
             Self::Condition { left, right, .. }
             | Self::ReturnValue {
                 low: left,
@@ -114,6 +119,43 @@ impl std::ops::Deref for RecordBuffer<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn aligned_value_round_trips_and_accounts_its_boxed_payload() {
+        let memory = WorkingMemory::new(64 * 1024).unwrap();
+        let record = FunctionRecord::AlignedValue {
+            fact: Box::new(AlignedValue {
+                owner: 0x1000,
+                point: ValuePoint::Edge {
+                    from: 0x1020,
+                    target: 0x1024,
+                },
+                register: 15,
+                initial: AbstractValue::Expression { id: 0 },
+                value: AbstractValue::Expression { id: 2 },
+                proof: AlignmentLoopProof {
+                    header: 0x1010,
+                    guard: 0x101c,
+                    back_edge: 0x1020,
+                    step: 0x1014,
+                    entry_edge: 0x1004,
+                    pointer: 15,
+                    mask: 3,
+                },
+                origin: AlignmentValueOrigin::LoopExit,
+            }),
+        };
+        let json = serde_json::to_vec(&record).unwrap();
+        assert_eq!(
+            serde_json::from_slice::<FunctionRecord>(&json).unwrap(),
+            record
+        );
+        assert_eq!(record.allocated_bytes(), size_of::<AlignedValue>() as u64);
+        let mut saved = RecordBuffer::new(&memory);
+        saved.push(record, RunPosition::default()).unwrap();
+        assert!(memory.used() >= size_of::<AlignedValue>() as u64);
+        drop(saved);
+        assert_eq!(memory.used(), 0);
+    }
     #[test]
     fn failed_record_growth_rolls_back_payload_and_allows_reuse() {
         let position = RunPosition::default();
