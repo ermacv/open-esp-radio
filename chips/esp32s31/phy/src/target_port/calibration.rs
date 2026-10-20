@@ -127,44 +127,49 @@ fn complete_dcode_direct<D: PhyShortDelay>(
         PhyDcodeExternalBinding::I2c(mut binding) => {
             use crate::analog::i2c::PhyI2cError;
             use crate::calibration::cold::PhyColdI2cAction;
-            // One shared transition budget, including the terminal check,
-            // spans read and read/modify/write just as in the cold binding.
-            let completed = crate::executor::wait::poll::bounded(clock, || {
-                match binding.action() {
-                    PhyColdI2cAction::StartRead { address } => {
-                        match crate::analog::i2c::try_start_read(registers, address) {
-                            Ok(()) => binding
-                                .read_started()
-                                .map_err(|_| PhyTargetPortError::UnexpectedBinding)?,
-                            Err(PhyI2cError::Busy) => {}
+            // One shared transition budget spans read and read/modify/write.
+            // The final observed edge also accepts its terminal state.
+            let completed = crate::executor::wait::i2c::complete(
+                clock,
+                &mut binding,
+                crate::analog::dcode::PhyDcodeI2cBinding::action,
+                |binding, action| {
+                    match action {
+                        PhyColdI2cAction::StartRead { address } => {
+                            match crate::analog::i2c::try_start_read(registers, address) {
+                                Ok(()) => binding
+                                    .read_started()
+                                    .map_err(|_| PhyTargetPortError::UnexpectedBinding)?,
+                                Err(PhyI2cError::Busy) => {}
+                            }
                         }
-                    }
-                    PhyColdI2cAction::StartWrite { address, value } => {
-                        match crate::analog::i2c::try_start_write(registers, address, value) {
-                            Ok(()) => binding
-                                .write_started()
-                                .map_err(|_| PhyTargetPortError::UnexpectedBinding)?,
-                            Err(PhyI2cError::Busy) => {}
+                        PhyColdI2cAction::StartWrite { address, value } => {
+                            match crate::analog::i2c::try_start_write(registers, address, value) {
+                                Ok(()) => binding
+                                    .write_started()
+                                    .map_err(|_| PhyTargetPortError::UnexpectedBinding)?,
+                                Err(PhyI2cError::Busy) => {}
+                            }
                         }
+                        PhyColdI2cAction::AwaitReadCompletionEdge { address } => {
+                            binding
+                                .observe_read_result(crate::analog::i2c::try_finish_read(
+                                    registers, address,
+                                ))
+                                .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
+                        }
+                        PhyColdI2cAction::AwaitWriteCompletionEdge { address } => {
+                            binding
+                                .observe_write_result(crate::analog::i2c::try_finish_write(
+                                    registers, address,
+                                ))
+                                .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
+                        }
+                        PhyColdI2cAction::Complete(_) => {}
                     }
-                    PhyColdI2cAction::AwaitReadCompletionEdge { address } => {
-                        binding
-                            .observe_read_result(crate::analog::i2c::try_finish_read(
-                                registers, address,
-                            ))
-                            .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
-                    }
-                    PhyColdI2cAction::AwaitWriteCompletionEdge { address } => {
-                        binding
-                            .observe_write_result(crate::analog::i2c::try_finish_write(
-                                registers, address,
-                            ))
-                            .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
-                    }
-                    PhyColdI2cAction::Complete(_) => return Ok(true),
-                }
-                Ok(false)
-            })?;
+                    Ok(())
+                },
+            )?;
             if !completed {
                 return Err(PhyTargetPortError::HardwareEdgeTimedOut);
             }
@@ -816,24 +821,30 @@ fn complete_temperature_direct(
     match binding {
         PhyTemperatureExternalBinding::I2c(mut binding) => {
             use crate::calibration::cold::{PhyColdI2cAction, PhyColdI2cError};
-            let completed = crate::executor::wait::poll::bounded(clock, || {
-                match binding.action() {
-                    PhyColdI2cAction::StartRead { .. } | PhyColdI2cAction::StartWrite { .. } => {
-                        match binding.start_target(registers) {
-                            Ok(()) | Err(PhyColdI2cError::BusyAtStart) => {}
-                            Err(_) => return Err(PhyTargetPortError::UnexpectedBinding),
+            let completed = crate::executor::wait::i2c::complete(
+                clock,
+                &mut binding,
+                crate::analog::temperature::PhyTemperatureI2cBinding::action,
+                |binding, action| {
+                    match action {
+                        PhyColdI2cAction::StartRead { .. }
+                        | PhyColdI2cAction::StartWrite { .. } => {
+                            match binding.start_target(registers) {
+                                Ok(()) | Err(PhyColdI2cError::BusyAtStart) => {}
+                                Err(_) => return Err(PhyTargetPortError::UnexpectedBinding),
+                            }
                         }
+                        PhyColdI2cAction::AwaitReadCompletionEdge { .. }
+                        | PhyColdI2cAction::AwaitWriteCompletionEdge { .. } => {
+                            binding
+                                .observe_target_edge(registers)
+                                .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
+                        }
+                        PhyColdI2cAction::Complete(_) => {}
                     }
-                    PhyColdI2cAction::AwaitReadCompletionEdge { .. }
-                    | PhyColdI2cAction::AwaitWriteCompletionEdge { .. } => {
-                        binding
-                            .observe_target_edge(registers)
-                            .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
-                    }
-                    PhyColdI2cAction::Complete(_) => return Ok(true),
-                }
-                Ok(false)
-            })?;
+                    Ok(())
+                },
+            )?;
             if !completed {
                 return Err(PhyTargetPortError::HardwareEdgeTimedOut);
             }
@@ -851,24 +862,29 @@ fn complete_channel_i2c_direct(
     registers: &mut impl SharedPhyAccess,
 ) -> Result<crate::channel::PhyChipChannelCompletion, PhyTargetPortError> {
     use crate::calibration::cold::{PhyColdI2cAction, PhyColdI2cError};
-    let completed = crate::executor::wait::poll::bounded(clock, || {
-        match binding.action() {
-            PhyColdI2cAction::StartRead { .. } | PhyColdI2cAction::StartWrite { .. } => {
-                match binding.start_target(registers) {
-                    Ok(()) | Err(PhyColdI2cError::BusyAtStart) => {}
-                    Err(_) => return Err(PhyTargetPortError::UnexpectedBinding),
+    let completed = crate::executor::wait::i2c::complete(
+        clock,
+        &mut binding,
+        crate::channel::PhyChipChannelI2cBinding::action,
+        |binding, action| {
+            match action {
+                PhyColdI2cAction::StartRead { .. } | PhyColdI2cAction::StartWrite { .. } => {
+                    match binding.start_target(registers) {
+                        Ok(()) | Err(PhyColdI2cError::BusyAtStart) => {}
+                        Err(_) => return Err(PhyTargetPortError::UnexpectedBinding),
+                    }
                 }
+                PhyColdI2cAction::AwaitReadCompletionEdge { .. }
+                | PhyColdI2cAction::AwaitWriteCompletionEdge { .. } => {
+                    binding
+                        .observe_target_edge(registers)
+                        .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
+                }
+                PhyColdI2cAction::Complete(_) => {}
             }
-            PhyColdI2cAction::AwaitReadCompletionEdge { .. }
-            | PhyColdI2cAction::AwaitWriteCompletionEdge { .. } => {
-                binding
-                    .observe_target_edge(registers)
-                    .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
-            }
-            PhyColdI2cAction::Complete(_) => return Ok(true),
-        }
-        Ok(false)
-    })?;
+            Ok(())
+        },
+    )?;
     if !completed {
         return Ok(binding.into_timeout_completion());
     }
