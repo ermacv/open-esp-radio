@@ -292,3 +292,9 @@ and requires a review for every function without a record.
 ```console
 cargo test -p oer-analysis-riscv-stack
 ```
+
+The optional [stack-call validation](validation/call-spills/README.md) reuses
+`FunctionWrites` and `call_writes` to preserve a captured entry-stack word only
+through complete disjoint effects. Its companion-ROM diagnostic records why the
+selected real publisher copy call still lacks that proof; reviewed frame/call
+summaries alone do not establish memory noninterference.

@@ -96,6 +96,7 @@ pub fn research_following_tables<'m, S: JumpTableSource + ?Sized>(
         ResearchOptions {
             abi,
             symbolic_spills: false,
+            stack_calls: None,
         },
     )
 }
@@ -109,7 +110,7 @@ pub fn research_following_tables_with_options<'m, S: JumpTableSource + ?Sized>(
     memory: &'m WorkingMemory,
     control: &mut dyn RunControl,
     sink: &mut dyn FunctionSink,
-    options: ResearchOptions,
+    options: ResearchOptions<'_>,
 ) -> Result<(AnalysisSummary, ProvenTables<'m, S::Table>)> {
     let known = input.jumps;
     let pass = |jumps: &[KnownJump], control: &mut dyn RunControl, sink: &mut dyn FunctionSink| {
