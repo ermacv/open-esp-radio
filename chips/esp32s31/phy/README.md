@@ -381,6 +381,12 @@ with no deadline expiry or invalid tick. These runs establish observed maxima,
 not a reliability or worst-case bound. The Wi-Fi rows retain their previously
 recorded values; the reproducible current-source scenario covers 154 only.
 
+The current RX diagnostic assembly also has a repeatable calibration-check difference:
+`I2C_TX_RATE_CONTROL` reads zero, versus `0x01540002` in the pinned vendor
+reference (five pairs, run `1792526108530-00387939`). Its PHY registration
+precedes the first common-power Wi-Fi MAC reset. The timing rows identify this
+assembly; they do not establish vendor-equivalent calibrated register state.
+
 What the runs show:
 - **RFPLL.** The current 154 idle correction request reached 1.470 ms; the earlier Wi-Fi rows were below 1 ms.
 - **Common bracket.** DCODE and RX gain calibration is the bracket traffic stretches, from ~6 ms idle to observed maxima of 13–18 ms under traffic (the table gives maxima only, no lower bound): interrupts compete with its polled measurements.
