@@ -11,7 +11,7 @@ pub use parsing::{
     parse_open_data_identity,
 };
 
-use crate::ccmp::{CcmpKeyId, CcmpPacketNumber};
+use crate::ccmp::CcmpPacketNumber;
 use crate::data::DataInterfaceRole;
 use crate::sequence::SequenceNumber;
 
@@ -19,7 +19,7 @@ use crate::sequence::SequenceNumber;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DataFragmentProtection {
     Open,
-    Ccmp { key_id: CcmpKeyId },
+    Ccmp,
 }
 
 /// Exact identity shared by every fragment of one Open data MSDU.
@@ -148,6 +148,7 @@ pub enum OpenDataFragmentError {
     AmsduUnsupported,
     EmptyPayload,
     ClockUnavailable,
+    KeyEpochRequired,
     NoReassemblyContexts,
     Orphan {
         fragment_number: u8,
@@ -162,7 +163,7 @@ pub enum OpenDataFragmentError {
     RetryPayloadMismatch {
         fragment_number: u8,
     },
-    PacketNumberNotIncreasing {
+    PacketNumberNotSequential {
         previous: CcmpPacketNumber,
         observed: CcmpPacketNumber,
     },

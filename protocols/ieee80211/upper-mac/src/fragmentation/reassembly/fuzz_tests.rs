@@ -127,6 +127,10 @@ fn drive(bytes: &[u8]) {
             parse_ccmp_data_fragment(role, frame, plaintext, ccmp).ok()
         });
         if let Some(fragment) = fragment {
+            let epoch = match fragment.identity().protection() {
+                DataFragmentProtection::Open => FragmentAdmissionEpoch::OpenAssociation(epoch),
+                DataFragmentProtection::Ccmp => FragmentAdmissionEpoch::CcmpKeyInstallation(epoch),
+            };
             let _ = match length % 3 {
                 0 => owner.ingest(fragment, now, read).map(|_| ()),
                 1 => owner
@@ -145,7 +149,12 @@ fn drive(bytes: &[u8]) {
             }
         } else if let Ok(identity) = parse_open_data_identity(role, frame) {
             let clock = (length & 0x40 == 0).then_some(now);
-            let _ = owner.admit_unfragmented_in_epoch(identity, epoch, length & 0x20 != 0, clock);
+            let _ = owner.admit_unfragmented_in_epoch(
+                identity,
+                FragmentAdmissionEpoch::OpenAssociation(epoch),
+                length & 0x20 != 0,
+                clock,
+            );
         } else if length == 0xfe {
             owner.forget_transmitter(STA);
             owner.forget_transmitter(AP);

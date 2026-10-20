@@ -373,3 +373,145 @@ fn clock_wrap_expires_retained_bytes_before_sequence_reuse() {
     );
     assert_eq!(state.active_contexts(), 0);
 }
+
+fn ccmp_parsed<'a>(frame: &'a [u8; 64], payload: &'a [u8], pn: u64) -> OpenDataFragment<'a> {
+    use oer_ieee80211_wire::ccmp::{CcmpHeader, CcmpKeyId};
+    parse_ccmp_data_fragment(
+        DataInterfaceRole::Station,
+        frame,
+        payload,
+        CcmpHeader::new(CcmpPacketNumber::new(pn).unwrap(), CcmpKeyId::PAIRWISE),
+    )
+    .unwrap()
+}
+
+fn protected_fragment(number: u8, more: bool, retry: bool) -> [u8; 64] {
+    let mut frame = fragment(DataInterfaceRole::Station, 0x123, number, more, retry, &[1]);
+    frame[1] |= 0x40;
+    frame
+}
+
+// SOURCE: IEEE 802.11-2020 12.5.3.4.4; independent behavioral reference:
+// Linux v6.12 net/mac80211/rx.c ieee80211_rx_h_defragment compares the
+// successor PN and installation key_color. No Linux code is incorporated.
+#[test]
+fn ccmp_fragments_require_the_immediately_following_packet_number() {
+    let first = protected_fragment(0, true, false);
+    let last = protected_fragment(1, false, false);
+    let llc = [0xaa, 0xaa, 3, 0, 0, 0, 0x08, 0x00, 1];
+    for (previous, observed, valid) in [
+        (10, 10, false),
+        (10, 9, false),
+        (10, 12, false),
+        (255, 256, true),
+        ((1 << 48) - 1, 0, false),
+    ] {
+        let mut state = OpenDataDefragmenter::<2, 32>::new(Duration::from_micros(100));
+        state
+            .ingest_in_epoch(
+                ccmp_parsed(&first, &llc, previous),
+                FragmentAdmissionEpoch::CcmpKeyInstallation(1),
+                at(1),
+                |_| (),
+            )
+            .unwrap();
+        let mut deliveries = 0;
+        let result = state.ingest_in_epoch(
+            ccmp_parsed(&last, &[2], observed),
+            FragmentAdmissionEpoch::CcmpKeyInstallation(1),
+            at(2),
+            |_| deliveries += 1,
+        );
+        assert_eq!(result.is_ok(), valid, "PN {previous} -> {observed}");
+        assert_eq!(deliveries, usize::from(valid));
+    }
+}
+
+#[test]
+fn ccmp_fragments_cannot_use_the_implicit_open_epoch() {
+    let first = protected_fragment(0, true, false);
+    let mut state = OpenDataDefragmenter::<2, 32>::new(Duration::from_micros(100));
+    assert!(
+        state
+            .ingest(ccmp_parsed(&first, &[1], 10), at(1), |_| ())
+            .is_err()
+    );
+}
+
+#[test]
+fn a_same_key_id_reinstallation_cannot_complete_or_retry_an_old_fragment_train() {
+    let first = protected_fragment(0, true, false);
+    let last = protected_fragment(1, false, false);
+    let retry = protected_fragment(0, true, true);
+    let llc = [0xaa, 0xaa, 3, 0, 0, 0, 0x08, 0x00, 1];
+    let mut state = OpenDataDefragmenter::<2, 32>::new(Duration::from_micros(100));
+    state
+        .ingest_in_epoch(
+            ccmp_parsed(&first, &llc, 10),
+            FragmentAdmissionEpoch::CcmpKeyInstallation(1),
+            at(1),
+            |_| (),
+        )
+        .unwrap();
+    assert_eq!(
+        state.ingest_in_epoch(
+            ccmp_parsed(&last, &[2], 11),
+            FragmentAdmissionEpoch::CcmpKeyInstallation(2),
+            at(2),
+            |_| panic!("mixed keys delivered")
+        ),
+        Err(OpenDataFragmentError::IdentityMismatch)
+    );
+    assert_eq!(
+        state.ingest_in_epoch(
+            ccmp_parsed(&retry, &llc, 10),
+            FragmentAdmissionEpoch::CcmpKeyInstallation(2),
+            at(3),
+            |_| panic!("old retry delivered")
+        ),
+        Err(OpenDataFragmentError::IdentityMismatch)
+    );
+    assert!(matches!(
+        state.ingest_in_epoch(
+            ccmp_parsed(&last, &[2], 11),
+            FragmentAdmissionEpoch::CcmpKeyInstallation(1),
+            at(4),
+            |_| ()
+        ),
+        Ok(OpenDataDefragmentation::Complete { .. })
+    ));
+}
+
+#[test]
+fn a_ccmp_fragment_retry_keeps_its_original_pn_and_bytes() {
+    let first = protected_fragment(0, true, false);
+    let retry = protected_fragment(0, true, true);
+    let last = protected_fragment(1, false, false);
+    let llc = [0xaa, 0xaa, 3, 0, 0, 0, 0x08, 0x00, 1];
+    let epoch = FragmentAdmissionEpoch::CcmpKeyInstallation(7);
+    let mut state = OpenDataDefragmenter::<2, 32>::new(Duration::from_micros(100));
+    state
+        .ingest_in_epoch(ccmp_parsed(&first, &llc, 10), epoch, at(1), |_| ())
+        .unwrap();
+    assert!(matches!(
+        state.ingest_in_epoch(ccmp_parsed(&retry, &llc, 10), epoch, at(2), |_| panic!(
+            "retry delivered"
+        )),
+        Ok(OpenDataDefragmentation::Duplicate { .. })
+    ));
+    assert!(matches!(
+        state.ingest_in_epoch(ccmp_parsed(&retry, &llc, 11), epoch, at(3), |_| panic!(
+            "changed retry delivered"
+        )),
+        Err(OpenDataFragmentError::RetryPacketNumberMismatch { .. })
+    ));
+    assert!(matches!(
+        state.ingest_in_epoch(
+            ccmp_parsed(&last, &[2], 11),
+            epoch,
+            at(4),
+            |data| assert_eq!(data.ethernet_frame().payload, &[1, 2])
+        ),
+        Ok(OpenDataDefragmentation::Complete { .. })
+    ));
+}

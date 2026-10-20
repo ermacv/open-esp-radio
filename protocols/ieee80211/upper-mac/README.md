@@ -138,12 +138,6 @@ hardware backend. The chip crates consume only port/wire values.
 
 - `protection.rs` asserts a constant with the `[(); bool as usize]` array hack instead of
   `const { assert!(..) }`.
-- **Fragment PNs only have to increase.**
-  `fragmentation/reassembly.rs::append_fragment` refuses only
-  `observed <= previous`; IEEE 802.11-2020 §12.5.3.4.4 and Linux require
-  `previous + 1` (the FragAttacks mixed-key defence). The fragment identity
-  (`fragmentation.rs::OpenDataFragmentIdentity`) is bound to the wire KeyID,
-  not to the key-installation epoch (`ingest` passes epoch 0).
 - **Untyped TID:** `ccmp.rs::CcmpReplayError::InvalidTid` exists because the
   TID is a raw value.
 - **Low:** `fragmentation/reassembly.rs::preflight_in_epoch` checks
