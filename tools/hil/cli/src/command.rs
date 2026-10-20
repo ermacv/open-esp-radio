@@ -78,6 +78,14 @@ impl clap::Parser for HilCli {}
 
 /// Retain the host's parser status (1) and the runner's clap status (2).
 pub fn usage_status(error: &clap::Error, args: &[OsString]) -> u8 {
+    use clap::error::{ContextKind, ContextValue};
+    if let Some(ContextValue::String(argument)) = error.get(ContextKind::InvalidArg)
+        && ["--owner", "--enqueue", "--after", "--after-any"]
+            .iter()
+            .any(|flag| argument == flag || argument.starts_with(&format!("{flag} ")))
+    {
+        return 1;
+    }
     let partial = HilCli::command()
         .ignore_errors(true)
         .try_get_matches_from(args)
@@ -109,17 +117,22 @@ impl clap::builder::TypedValueParser for OwnerParser {
         _argument: Option<&clap::Arg>,
         value: &std::ffi::OsStr,
     ) -> std::result::Result<String, clap::Error> {
+        let failure = |kind, message: String| {
+            let mut error = command.clone().error(kind, message);
+            error.insert(
+                clap::error::ContextKind::InvalidArg,
+                clap::error::ContextValue::String("--owner".into()),
+            );
+            error
+        };
         let owner = value.to_str().ok_or_else(|| {
-            command
-                .clone()
-                .error(clap::error::ErrorKind::InvalidUtf8, "an owner name is text")
+            failure(
+                clap::error::ErrorKind::InvalidUtf8,
+                "an owner name is text".into(),
+            )
         })?;
         let owner = oer_lab_arbiter::owner::Owner::new(owner.trim())
-            .map_err(|error| {
-                command
-                    .clone()
-                    .error(clap::error::ErrorKind::ValueValidation, error.to_string())
-            })?
+            .map_err(|error| failure(clap::error::ErrorKind::ValueValidation, error.to_string()))?
             .to_string();
         let mut previous = self.0.lock().map_err(|_| {
             command.clone().error(
@@ -130,7 +143,7 @@ impl clap::builder::TypedValueParser for OwnerParser {
         if command.get_name() != "cargo hil"
             && let Some(previous) = previous.as_ref().filter(|previous| **previous != owner)
         {
-            return Err(command.clone().error(
+            return Err(failure(
                 clap::error::ErrorKind::ValueValidation,
                 format!("--owner is given twice, as {previous} and {owner}"),
             ));

@@ -20,14 +20,22 @@ pub(crate) fn encode(
         if let Some(long) = argument.get_long() {
             match argument.get_action() {
                 clap::ArgAction::SetTrue | clap::ArgAction::SetFalse => {
-                    if matches.get_flag(id) {
+                    if matches.get_flag(id)
+                        == matches!(argument.get_action(), clap::ArgAction::SetTrue)
+                    {
                         args.push(format!("--{long}").into());
                     }
                 }
                 _ => {
                     if let Some(values) = matches.get_raw(id) {
                         for value in values {
-                            args.extend([OsString::from(format!("--{long}")), value.into()]);
+                            if value.as_encoded_bytes().starts_with(b"-") {
+                                let mut inline = OsString::from(format!("--{long}="));
+                                inline.push(value);
+                                args.push(inline);
+                            } else {
+                                args.extend([OsString::from(format!("--{long}")), value.into()]);
+                            }
                         }
                     }
                 }

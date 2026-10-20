@@ -104,6 +104,8 @@ fn forwarded_arguments_keep_values_and_exclude_host_options() {
             "echo --owner=x; printf '%s' --enqueue",
         ],
         vec!["run", "--", "--owner"],
+        vec!["run", "a", "--features=-trace", "--then=--owner=kept"],
+        vec!["run-all", "--tag=-tag"],
     ] {
         let matches = HilCli::command().try_get_matches_from(&words).unwrap();
         let cli = HilCli::from_arg_matches(&matches).unwrap();
@@ -221,6 +223,10 @@ fn parser_failures_keep_host_and_runner_exit_statuses() {
         (vec!["run"], 2),
         (vec!["run", "a", "--bad"], 2),
         (vec!["--owner"], 1),
+        (vec!["run", "a", "--owner=Bad Name"], 1),
+        (vec!["--owner=phy", "run", "a", "--owner=bt"], 1),
+        (vec!["run", "a", "--after"], 1),
+        (vec!["run", "a", "--after=a", "--after=b"], 1),
         (vec!["--root"], 1),
         (vec!["unknown"], 2),
         (vec!["firmware", "--help"], 1),
