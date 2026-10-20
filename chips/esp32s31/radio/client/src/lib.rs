@@ -52,6 +52,10 @@ pub const ACTOR_STEP_BOUND: oer_time::Duration = oer_time::Duration::from_micros
 
 mod sealed {
     pub trait Sealed {}
+
+    pub trait AnswerPart<K: super::Client>: Sized {
+        fn extract(answer: super::Answer<K>) -> Self;
+    }
 }
 
 /// A client of the radio system and the payloads of its requests.
@@ -187,6 +191,42 @@ pub struct Left<K: Client> {
     pub domain: DomainHealth,
 }
 
+impl<K: Client> sealed::AnswerPart<K> for JoinAnswer<K> {
+    fn extract(answer: Answer<K>) -> Self {
+        match answer {
+            Answer::Join(answer) => answer,
+            _ => unreachable!("the actor answers a join with a join answer"),
+        }
+    }
+}
+
+impl<K: Client> sealed::AnswerPart<K> for TrackAnswer<K> {
+    fn extract(answer: Answer<K>) -> Self {
+        match answer {
+            Answer::Track(answer) => answer,
+            _ => unreachable!("the actor answers a track with a track answer"),
+        }
+    }
+}
+
+impl<K: Client> sealed::AnswerPart<K> for RetuneAnswer<K> {
+    fn extract(answer: Answer<K>) -> Self {
+        match answer {
+            Answer::Retune(answer) => answer,
+            _ => unreachable!("the actor answers a retune with a retune answer"),
+        }
+    }
+}
+
+impl<K: Client> sealed::AnswerPart<K> for Left<K> {
+    fn extract(answer: Answer<K>) -> Self {
+        match answer {
+            Answer::Leave(answer) => answer,
+            _ => unreachable!("the actor answers a leave with a leave answer"),
+        }
+    }
+}
+
 type ClientSlot<K> = RequestSlot<Request<K>, Answer<K>>;
 
 /// A client's one cell to the actor.
@@ -204,13 +244,7 @@ impl<K: Client> core::fmt::Debug for MembershipCell<K> {
 impl<K: Client> MembershipCell<K> {
     /// Join the PHY domain: register it, or wake closed RF, and enter `K`.
     pub fn join(self, join: K::Join) -> Pending<K, JoinAnswer<K>> {
-        Pending::new(
-            self.poster.post(Request::Join(join)),
-            |answer| match answer {
-                Answer::Join(answer) => answer,
-                _ => unreachable!("the actor answers a join with a join answer"),
-            },
-        )
+        Pending::new(self.poster.post(Request::Join(join)))
     }
 
     /// Run the member's initial tracking.
@@ -219,13 +253,7 @@ impl<K: Client> MembershipCell<K> {
         member: Member<K, Untracked>,
         track: K::Track,
     ) -> Pending<K, TrackAnswer<K>> {
-        Pending::new(
-            self.poster.post(Request::Track(member, track)),
-            |answer| match answer {
-                Answer::Track(answer) => answer,
-                _ => unreachable!("the actor answers a track with a track answer"),
-            },
-        )
+        Pending::new(self.poster.post(Request::Track(member, track)))
     }
 
     /// Retune a tracked client while its DMA and interrupt routes are stopped.
@@ -234,24 +262,12 @@ impl<K: Client> MembershipCell<K> {
         member: Member<K, Tracked>,
         retune: K::Retune,
     ) -> Pending<K, RetuneAnswer<K>> {
-        Pending::new(
-            self.poster.post(Request::Retune(member, retune)),
-            |answer| match answer {
-                Answer::Retune(answer) => answer,
-                _ => unreachable!("the actor answers a retune with a retune answer"),
-            },
-        )
+        Pending::new(self.poster.post(Request::Retune(member, retune)))
     }
 
     /// Leave the PHY domain; the last member's leave closes RF.
     pub fn leave(self, member: Leaving<K>, leave: K::Leave) -> Pending<K, Left<K>> {
-        Pending::new(
-            self.poster.post(Request::Leave(member, leave)),
-            |answer| match answer {
-                Answer::Leave(answer) => answer,
-                _ => unreachable!("the actor answers a leave with a leave answer"),
-            },
-        )
+        Pending::new(self.poster.post(Request::Leave(member, leave)))
     }
 }
 
@@ -260,32 +276,30 @@ impl<K: Client> MembershipCell<K> {
 /// Polling it through `&mut` and dropping that future loses nothing: the
 /// answer stays in the cell. After it gave its answer it stays pending.
 #[must_use = "the cell returns only with the answer"]
-pub struct Pending<K: Client, O> {
+pub struct Pending<K: Client, O: sealed::AnswerPart<K>> {
     awaiting: Awaiting<Request<K>, Answer<K>>,
-    extract: fn(Answer<K>) -> O,
     output: PhantomData<fn() -> O>,
 }
 
-impl<K: Client, O> Pending<K, O> {
-    fn new(awaiting: Awaiting<Request<K>, Answer<K>>, extract: fn(Answer<K>) -> O) -> Self {
+impl<K: Client, O: sealed::AnswerPart<K>> Pending<K, O> {
+    fn new(awaiting: Awaiting<Request<K>, Answer<K>>) -> Self {
         Self {
             awaiting,
-            extract,
             output: PhantomData,
         }
     }
 }
 
-impl<K: Client, O> Future for Pending<K, O> {
+impl<K: Client, O: sealed::AnswerPart<K>> Future for Pending<K, O> {
     type Output = (MembershipCell<K>, O);
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let (poster, answer) = core::task::ready!(self.awaiting.poll_answer(cx));
-        Poll::Ready((MembershipCell { poster }, (self.extract)(answer)))
+        Poll::Ready((MembershipCell { poster }, O::extract(answer)))
     }
 }
 
-impl<K: Client, O> Unpin for Pending<K, O> {}
+impl<K: Client, O: sealed::AnswerPart<K>> Unpin for Pending<K, O> {}
 
 /// A taken request and the duty to answer it.
 pub type Taken<K> = (Request<K>, Responder<'static, Request<K>, Answer<K>>);
