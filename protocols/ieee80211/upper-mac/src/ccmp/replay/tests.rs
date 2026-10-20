@@ -54,7 +54,14 @@ fn the_old_and_the_new_group_key_are_both_taken_until_the_old_is_removed() {
         Ok(())
     );
     // The access point's new group key, index 2, beside the old one.
-    epoch.install_group(group(2), [0; 8]).unwrap();
+    assert!(
+        epoch
+            .exchange_group(
+                group(2),
+                CcmpRxReplayState::from_receive_sequence([0; 8]).unwrap()
+            )
+            .is_none()
+    );
     assert_eq!(
         epoch.check(CcmpRxProtection::Group, None, header(1, 2)),
         Ok(())
@@ -96,7 +103,14 @@ fn cancelled_old_admission_cannot_advance_the_reinstalled_group_key() {
             .unwrap();
     }
     epoch.remove_group(group(1));
-    epoch.install_group(group(1), [0; 8]).unwrap();
+    assert!(
+        epoch
+            .exchange_group(
+                group(1),
+                CcmpRxReplayState::from_receive_sequence([0; 8]).unwrap()
+            )
+            .is_none()
+    );
     assert_eq!(
         epoch.check(CcmpRxProtection::Group, None, header(1, 1)),
         Ok(())
@@ -177,7 +191,14 @@ fn new_group_material_in_the_same_id_starts_from_its_key_rsc() {
         epoch.check(CcmpRxProtection::Group, None, header(900, 1)),
         Ok(())
     );
-    epoch.install_group(group(1), 5u64.to_le_bytes()).unwrap();
+    assert!(
+        epoch
+            .exchange_group(
+                group(1),
+                CcmpRxReplayState::from_receive_sequence(5u64.to_le_bytes()).unwrap()
+            )
+            .is_some()
+    );
     assert!(
         epoch
             .check(CcmpRxProtection::Group, None, header(5, 1))

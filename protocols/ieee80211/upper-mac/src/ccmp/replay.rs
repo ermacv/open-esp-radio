@@ -81,7 +81,10 @@ impl CcmpRxReplayEpoch {
         group_receive_sequence: [u8; 8],
     ) -> Result<Self, CcmpRxReplayError> {
         let mut epoch = Self::pairwise(pairwise_receive_sequence)?;
-        epoch.install_group(group_key_id, group_receive_sequence)?;
+        let group = CcmpRxReplayState::from_receive_sequence(group_receive_sequence)
+            .map_err(|_| CcmpRxReplayError::InvalidGroupReceiveSequence)?;
+        let previous = epoch.exchange_group(group_key_id, group);
+        debug_assert!(previous.is_none());
         Ok(epoch)
     }
 
@@ -111,31 +114,6 @@ impl CcmpRxReplayEpoch {
     /// Whether the group key of `key_id` is installed.
     pub const fn has_group(&self, key_id: GroupKeyId) -> bool {
         key_id.select(&self.groups).is_some()
-    }
-
-    /// The group key `key_id` is installed with its receive sequence: its
-    /// frontiers start there. The key owner must compare material before
-    /// installation: identical material keeps its existing epoch unchanged;
-    /// new material starts from KeyRSC even if it reuses an ID with higher PN.
-    ///
-    /// # Errors
-    ///
-    /// A receive sequence that is no packet number; nothing changed.
-    pub fn install_group(
-        &mut self,
-        key_id: GroupKeyId,
-        receive_sequence: [u8; 8],
-    ) -> Result<(), CcmpRxReplayError> {
-        let group = CcmpRxReplayState::from_receive_sequence(receive_sequence)
-            .map_err(|_| CcmpRxReplayError::InvalidGroupReceiveSequence)?;
-        self.install_group_epoch(key_id, group);
-        Ok(())
-    }
-
-    /// Publish a successor epoch previously checked from its KeyRSC. The
-    /// key owner calls this at the installation boundary in the RX stream.
-    pub fn install_group_epoch(&mut self, key_id: GroupKeyId, epoch: CcmpRxReplayState) {
-        *key_id.select_mut(&mut self.groups) = Some(epoch);
     }
 
     /// The group key `key_id` is removed: its frames are refused from now

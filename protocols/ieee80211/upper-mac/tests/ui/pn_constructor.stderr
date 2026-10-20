@@ -1,0 +1,10 @@
+error[E0624]: associated function `new` is private
+ --> tests/ui/pn_constructor.rs:6:40
+  |
+6 |     let _rewound = CcmpTxPacketNumber::new(CcmpPacketNumberStep::ONE); // ui-error: E0624
+  |                                        ^^^ private associated function
+  |
+ ::: src/ccmp.rs
+  |
+  |     const fn new(step: CcmpPacketNumberStep) -> Self {
+  |     ------------------------------------------------ private associated function defined here

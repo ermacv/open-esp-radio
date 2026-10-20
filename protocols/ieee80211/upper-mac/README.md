@@ -116,6 +116,9 @@ values and retain no executor, HAL or chip dependency.
 
 The planner holds no frame bytes. The caller encodes each MPDU's sequence
 number and reserves its CCMP PN with the key's unique `ccmp::CcmpTxPacketNumber`.
+`ccmp::install_ccmp_pairwise_key` creates it only while installing new material
+through the port and retains it in `InstalledCcmpTxKey` with that backend key.
+The allocator has no public constructor or continuation/reset API.
 The backend formats that supplied PN at the first protected transmission;
 a retransmission sends the same MPDU and keeps both. `allocate_batch`
 reserves all fresh subframe numbers atomically before an aggregate handoff. The
@@ -141,11 +144,6 @@ hardware backend. The chip crates consume only port/wire values.
   `previous + 1` (the FragAttacks mixed-key defence). The fragment identity
   (`fragmentation.rs::OpenDataFragmentIdentity`) is bound to the wire KeyID,
   not to the key-installation epoch (`ingest` passes epoch 0).
-- **Public PN and replay hazards** (`ccmp.rs`, `ccmp/replay.rs`):
-  `CcmpTxPacketNumber::continuing_after` is public with only test callers;
-  `CcmpTxPacketNumber::new` is not tied to a key; `CcmpRxReplayEpoch::install_group`
-  and `install_group_epoch` are public and overwrite an active replay
-  frontier (a KRACK-class reinstall). Production uses `exchange_group`.
 - **Untyped TID:** `ccmp.rs::CcmpReplayError::InvalidTid` exists because the
   TID is a raw value.
 - **Low:** `fragmentation/reassembly.rs::preflight_in_epoch` checks

@@ -200,35 +200,21 @@ fn group_material_comparison_covers_same_and_different_key_id_cases() {
 }
 
 #[test]
-fn exhausted_pairwise_slot_retains_hardware_clear_authority() {
+fn pairwise_slot_retains_hardware_clear_authority() {
     let mut hardware = Hardware {
         occupied: true,
         ..Hardware::default()
     };
-    let packet_numbers = oer_ieee80211_upper_mac::ccmp::CcmpTxPacketNumber::continuing_after(
-        oer_espressif_ieee80211_policy::ccmp::TX_PACKET_NUMBER_STEP,
-        oer_ieee80211_wire::ccmp::CcmpPacketNumber::new((1 << 48) - 1).unwrap(),
-    );
     let slot = StaPairwiseCcmpSlot {
         peer: [1, 2, 3, 4, 5, 6],
     };
-    assert_eq!(
-        packet_numbers.allocate(),
-        Err(oer_ieee80211_upper_mac::ccmp::CcmpTxPacketNumberError::Exhausted)
-    );
     slot.clear(&mut hardware);
     assert_eq!(hardware.clears, 1);
     assert!(!hardware.occupied);
 }
 
 #[test]
-fn ap_pairwise_and_group_slots_share_the_fail_closed_pn_boundary() {
-    let exhausted = || {
-        oer_ieee80211_upper_mac::ccmp::CcmpTxPacketNumber::continuing_after(
-            oer_espressif_ieee80211_policy::ccmp::TX_PACKET_NUMBER_STEP,
-            oer_ieee80211_wire::ccmp::CcmpPacketNumber::new((1 << 48) - 1).unwrap(),
-        )
-    };
+fn ap_pairwise_and_group_slots_retain_clear_authority() {
     let pairwise = ApPairwiseCcmpSlot {
         peer: [1, 2, 3, 4, 5, 6],
         association_id: 1,
@@ -238,14 +224,6 @@ fn ap_pairwise_and_group_slots_share_the_fail_closed_pn_boundary() {
         key_id: ApGroupKeyId::new(1).unwrap(),
         hardware_index: AP_GROUP_HARDWARE_INDEX_BASE + 1,
     };
-    assert_eq!(
-        exhausted().allocate(),
-        Err(oer_ieee80211_upper_mac::ccmp::CcmpTxPacketNumberError::Exhausted)
-    );
-    assert_eq!(
-        exhausted().allocate(),
-        Err(oer_ieee80211_upper_mac::ccmp::CcmpTxPacketNumberError::Exhausted)
-    );
     let mut hardware = Hardware::default();
     pairwise.clear(&mut hardware);
     group.clear(&mut hardware);
