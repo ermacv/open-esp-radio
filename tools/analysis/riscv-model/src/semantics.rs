@@ -482,9 +482,80 @@ pub enum BranchTest {
     Geu,
 }
 
+impl BranchTest {
+    /// The RV32 predicate on two concrete words, with the instruction's signedness.
+    pub fn evaluate(self, left: u32, right: u32) -> bool {
+        match self {
+            Self::Eq => left == right,
+            Self::Ne => left != right,
+            Self::Lt => (left as i32) < (right as i32),
+            Self::Ge => (left as i32) >= (right as i32),
+            Self::Ltu => left < right,
+            Self::Geu => left >= right,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn branch_predicates_cover_equality_and_signed_boundaries() {
+        // Eq, Ne, Lt, Ge, Ltu, Geu, in that order. Reversed operands
+        // exercise both directions at zero, MIN, MAX and the sign boundary.
+        for (left, right, expected) in [
+            (0, 0, [true, false, false, true, false, true]),
+            (u32::MAX, u32::MAX, [true, false, false, true, false, true]),
+            (
+                0x80000000,
+                0x80000000,
+                [true, false, false, true, false, true],
+            ),
+            (0, u32::MAX, [false, true, false, true, true, false]),
+            (u32::MAX, 0, [false, true, true, false, false, true]),
+            (
+                0x7fffffff,
+                0x80000000,
+                [false, true, false, true, true, false],
+            ),
+            (
+                0x80000000,
+                0x7fffffff,
+                [false, true, true, false, false, true],
+            ),
+            (
+                0x80000000,
+                u32::MAX,
+                [false, true, true, false, true, false],
+            ),
+            (
+                u32::MAX,
+                0x80000000,
+                [false, true, false, true, false, true],
+            ),
+            (0, 1, [false, true, true, false, true, false]),
+            (1, 0, [false, true, false, true, false, true]),
+        ] {
+            for (test, expected) in [
+                BranchTest::Eq,
+                BranchTest::Ne,
+                BranchTest::Lt,
+                BranchTest::Ge,
+                BranchTest::Ltu,
+                BranchTest::Geu,
+            ]
+            .into_iter()
+            .zip(expected)
+            {
+                assert_eq!(
+                    test.evaluate(left, right),
+                    expected,
+                    "{test:?} {left:#x} {right:#x}"
+                );
+            }
+        }
+    }
 
     fn assert_registers(op: SemanticOp, inputs: &[u8], destination: Option<u8>) {
         assert_eq!(op.destination_register(), destination, "{op:?}");

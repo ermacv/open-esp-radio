@@ -415,14 +415,7 @@ fn run(
                         stop!(ExecutionGap::UnsupportedInstruction);
                     };
                     let (a, b) = (reg!(a), reg!(b));
-                    let taken = match test {
-                        BranchTest::Eq => a == b,
-                        BranchTest::Ne => a != b,
-                        BranchTest::Lt => (a as i32) < b as i32,
-                        BranchTest::Ge => (a as i32) >= b as i32,
-                        BranchTest::Ltu => a < b,
-                        BranchTest::Geu => a >= b,
-                    };
+                    let taken = test.evaluate(a, b);
                     let target = pc.wrapping_add_signed(offset.as_i32());
                     memory.event(
                         ExecutionEvent::Branch {
