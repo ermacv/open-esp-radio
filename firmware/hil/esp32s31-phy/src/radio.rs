@@ -259,7 +259,20 @@ impl Radio {
             Request::Stop(StopCapture { epoch }) => {
                 let current = self.current(epoch)?;
                 self.ready = None;
-                self.exit_capture(current.radio).await?;
+                // The host has finished reading the calibration/MMIO/analog
+                // pages. This separate RX experiment cannot affect them.
+                let observed = if current.radio == CaptureRadio::Wifi {
+                    let wifi = self.clocked.take().ok_or(RejectReason::Internal)?;
+                    let (wifi, result) =
+                        crate::cca_rx::run(&self.domain, wifi, current.channel).await;
+                    self.clocked = Some(wifi);
+                    result
+                } else {
+                    Ok(())
+                };
+                let closed = self.exit_capture(current.radio).await;
+                closed?;
+                observed?;
                 Ok(Answer::Stopped(CaptureStopped {
                     epoch,
                     rf_closed: self.domain.attachment().rf_closed(),

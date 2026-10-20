@@ -29,6 +29,7 @@ conditions and dates:
 | --- | --- |
 | [Bring-up order](bring-up-order.md) | Wi-Fi PHY and coexistence before common power; the failed orders |
 | [Core 1 sampling](core1-sampling.md) | Reading core 1's PC and SP from the debug-assist record |
+| [CCA counter](phy/cca-counter.md) | Unresolved measurement-window ownership and limits of the caller analysis; no comparison exclusion |
 
 [Registers](../../espressif/registers/README.md) owns reviewed hardware models
 and publication; vendor artifact pins are in

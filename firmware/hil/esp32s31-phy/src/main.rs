@@ -6,6 +6,7 @@
 compile_error!("build the diagnostic-phy image class through cargo hil");
 
 mod cca_checkpoint;
+mod cca_rx;
 mod hold;
 mod ieee802154;
 mod projection;

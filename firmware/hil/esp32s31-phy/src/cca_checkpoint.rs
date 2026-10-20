@@ -18,6 +18,10 @@ pub enum Point {
     BeforeMac,
     AfterMac,
     Settled(u8),
+    BeforeRing,
+    RingOpen,
+    RingSample(u8),
+    RingClosed,
 }
 
 pub fn observe<B: PlatformClockBackend, T>(
@@ -25,13 +29,22 @@ pub fn observe<B: PlatformClockBackend, T>(
     wifi: WifiClocked,
     point: Point,
 ) -> Result<WifiClocked, RejectReason> {
-    // Both ownership transitions perform no MMIO. No DMA storage or interrupt
-    // route is installed; the observation borrows the existing typed RX owner.
+    // Both ownership transitions perform no MMIO.
     let (runtime, interrupts, clocks) = wifi.into_running();
-    let dma = runtime.receive_dma_snapshot();
+    let result = observe_running(domain, &runtime, point);
     let wifi = WifiClocked::from_running(runtime, interrupts, clocks);
+    result?;
+    Ok(wifi)
+}
+
+pub fn observe_running<B: PlatformClockBackend, T>(
+    domain: &RadioDomain<B, T>,
+    runtime: &oer_esp32s31_hal::owner::RadioAccess,
+    point: Point,
+) -> Result<(), RejectReason> {
+    let dma = runtime.receive_dma_snapshot();
     let sample = match point {
-        Point::Settled(sample) => Some(sample),
+        Point::Settled(sample) | Point::RingSample(sample) => Some(sample),
         _ => None,
     };
     oer_esp32s31_board::rom::print_fmt(format_args!(
@@ -51,5 +64,29 @@ pub fn observe<B: PlatformClockBackend, T>(
             "OPEN_RADIO_HIL phy=cca-register point={point:?} name={name} raw={raw:#010x}\n",
         ));
     }
-    Ok(wifi)
+    Ok(())
+}
+
+/// Extra enable reads belong only to the post-capture RX experiment.
+pub fn observe_enables<B: PlatformClockBackend, T>(
+    domain: &RadioDomain<B, T>,
+    runtime: &mut oer_esp32s31_hal::owner::RadioAccess,
+    point: Point,
+) -> Result<(), RejectReason> {
+    // This existing read-only projection samples the shared CCA force fields
+    // without publishing or acknowledging anything on the unused TX queue.
+    let mac = runtime.wifi_mac_hal().ordinary_tx_queue_snapshot(0);
+    oer_esp32s31_board::rom::print_fmt(format_args!(
+        "OPEN_RADIO_HIL phy=cca-enable point={point:?} force={} aux_force={} mac_active={}\n",
+        mac.cca_force, mac.cca_aux_force, mac.mac_active_state,
+    ));
+    for &(name, index) in ENABLE_REGISTERS {
+        let raw = domain
+            .phy_register_image(index)
+            .ok_or(RejectReason::Internal)?;
+        oer_esp32s31_board::rom::print_fmt(format_args!(
+            "OPEN_RADIO_HIL phy=cca-enable-register point={point:?} name={name} raw={raw:#010x}\n",
+        ));
+    }
+    Ok(())
 }

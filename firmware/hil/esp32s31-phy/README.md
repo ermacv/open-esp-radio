@@ -29,6 +29,24 @@ the capture epoch. The frozen cold-calibration projection remains immutable.
 Stop closes RF; a stopped, stale or failed epoch cannot serve pages. A failed
 hardware operation poisons the diagnostic service until reset.
 
+The compared Wi-Fi capture keeps the MAC RX gate closed after cold MAC init.
+For Wi-Fi, StopCapture first runs a separate CCA experiment after the host's
+calibration, MMIO and analog reads. Four placed RX descriptors with 1664-byte
+buffers use the same promiscuous activation, walker-enable settle and MAC
+runtime resume as W1/W2. Bounded timer-driven polling normalizes completed
+single-descriptor frames with W1's ingress decoder, counts parsed beacons on
+the capture channel, and returns every unit through the existing HAL. Five
+observations are spaced by at least 200 ms; zero beacons rejects the experiment.
+No CPU Wi-Fi IRQ route or transmit path is installed. Teardown closes
+promiscuous admission and waits for MAC idle before closing the RX gate and
+rebuilding the halted ring to reclaim all buffers, then closes RF through the
+existing capture teardown. An observation failure still runs cleanup; an idle
+timeout quarantines the arena until RF teardown/reset. These later samples are
+console evidence only; they do not enter the vendor comparison.
+Only this post-capture experiment also reads the existing MAC CCA force
+projection, PHY clock-force control, CCA selection and threshold alongside the
+counter controls. These are observations, with no counter rearm or enable write.
+
 The image prints typed `TEMPERATURE_SENSOR_SAR2_STATUS` checkpoints after PHY
 registration, immediately before RF close and after retained wake. Each line
 contains the sampled byte and the named initialization/status field, decoded by
