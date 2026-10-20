@@ -171,7 +171,7 @@ pub fn read(
             };
             let depth = entry.depth();
             returns.entry(&dwarf, &unit, entry, depth, offset, &mut scratch, control)?;
-            copies.entry(&dwarf, &unit, entry, offset, keep, control)?;
+            copies.entry(&dwarf, &unit, entry, offset, keep, &mut scratch, control)?;
             types.entry(
                 &dwarf,
                 &unit,
@@ -187,6 +187,7 @@ pub fn read(
             }
         }
     }
+    copies.resolve_origins(control)?;
     let mut types = types.finish();
     types.locations = locations;
     types.source = Some(elf.clone());
@@ -321,9 +322,12 @@ impl CallBehavior for Dwarf {
 struct Copies {
     paths: BTreeMap<usize, String>,
     copies: Vec<(u32, usize)>,
+    /// Abstract subprograms can name their declaration through specification.
+    origins: BTreeMap<usize, usize>,
 }
 
 impl Copies {
+    #[allow(clippy::too_many_arguments)]
     fn entry<'d>(
         &mut self,
         dwarf: &gimli::Dwarf<Reader<'d>>,
@@ -331,6 +335,7 @@ impl Copies {
         entry: &Entry<'d>,
         offset: usize,
         keep: &mut Ledger<'_>,
+        scratch: &mut Ledger<'_>,
         control: &mut dyn RunControl,
     ) -> Result<()> {
         let tag = entry.tag();
@@ -344,7 +349,12 @@ impl Copies {
             keep.insert(&mut self.paths, offset, path, control)?;
         }
         // A copy names its subprogram by origin, or is one itself.
-        let origin = origin_reference(unit, entry).unwrap_or(offset);
+        let origin = if let Some(origin) = origin_reference(unit, entry) {
+            scratch.insert(&mut self.origins, offset, origin, control)?;
+            origin
+        } else {
+            offset
+        };
         let start = match entry.attr_value(gimli::DW_AT_low_pc) {
             Some(gimli::AttributeValue::Addr(low)) => Some(low),
             _ => {
@@ -357,6 +367,23 @@ impl Copies {
             && let Ok(start) = u32::try_from(start)
         {
             keep.push(&mut self.copies, (start, origin), control)?;
+        }
+        Ok(())
+    }
+
+    fn resolve_origins(&mut self, control: &mut dyn RunControl) -> Result<()> {
+        for (_, origin) in &mut self.copies {
+            // Stop at a named subprogram, a missing reference or a cycle.
+            for _ in 0..=self.origins.len() {
+                control.checkpoint(1)?;
+                if self.paths.contains_key(origin) {
+                    break;
+                }
+                let Some(next) = self.origins.get(origin) else {
+                    break;
+                };
+                *origin = *next;
+            }
         }
         Ok(())
     }
@@ -404,6 +431,22 @@ impl Dwarf {
             starts.dedup();
         }
         found
+    }
+
+    /// Whether any concrete copy, out-of-line or inlined as in
+    /// [`Self::instances`], has a demangled path matching `matches`.
+    pub(crate) fn has_instance(
+        &self,
+        matches: impl Fn(&str) -> bool,
+        control: &mut dyn RunControl,
+    ) -> Result<bool> {
+        for &(_, origin) in &self.copies {
+            control.checkpoint(1)?;
+            if self.paths.get(&origin).is_some_and(|name| matches(name)) {
+                return Ok(true);
+            }
+        }
+        Ok(false)
     }
 }
 

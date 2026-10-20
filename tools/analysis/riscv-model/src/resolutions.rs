@@ -23,6 +23,9 @@ pub enum Fact {
     /// Every task poll of the image, for the executor's call of a dequeued
     /// task's `poll_fn`.
     TaskPolls,
+    /// Neither the image's functions nor its concrete DWARF instances
+    /// contain a task poll: no task can reach the executor's dequeue call.
+    NoTasks,
 }
 
 /// What a resolution takes for granted that the analysis does not prove: a
@@ -56,18 +59,21 @@ impl Fact {
     pub fn assumption(self) -> Option<Assumption> {
         match self {
             Self::InterruptTable => None,
-            Self::IpcPosts | Self::WakerVtables | Self::FieldType | Self::TaskPolls => {
-                Some(Assumption::ExecutorInvariant)
-            }
+            Self::IpcPosts
+            | Self::WakerVtables
+            | Self::FieldType
+            | Self::TaskPolls
+            | Self::NoTasks => Some(Assumption::ExecutorInvariant),
         }
     }
 
     /// Whether an empty set from this fact proves the site reaches nothing:
     /// the interrupt table lists every handler, and the IPC posts are every
-    /// call of the one function that posts. Waker vtables and field types
-    /// are found, not listed, so their empty set is a hole.
+    /// call of the one function that posts. No tasks proves the executor's
+    /// dequeue call unreachable. Waker vtables and field types are found,
+    /// not listed, so their empty set is a hole.
     pub fn proves_empty(self) -> bool {
-        matches!(self, Self::InterruptTable | Self::IpcPosts)
+        matches!(self, Self::InterruptTable | Self::IpcPosts | Self::NoTasks)
     }
 }
 

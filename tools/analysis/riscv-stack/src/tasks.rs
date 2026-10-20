@@ -9,6 +9,8 @@
 //! another executor's candidates only after every address-taking relocation
 //! proves an immediate spawn on an identified executor. Missing provenance
 //! leaves it in every candidate set.
+//! An image without any task poll in either its functions or its concrete
+//! DWARF instances cannot enqueue a task under the same invariant.
 use crate::dwarf::Dwarf;
 use crate::{Analysis, Fact, Resolutions, TransferKind, TypeFacts};
 use oer_analysis_riscv_model::{Ledger, Result, RunControl};
@@ -38,17 +40,30 @@ pub fn task_poll_resolutions<'a>(
 ) -> Result<Resolutions> {
     let mut scratch = Ledger::new(keep.memory(), control)?;
     let mut polls = BTreeSet::new();
+    let mut named_poll = false;
     for (address, name) in functions {
         control.checkpoint(1)?;
-        if is_task_poll(name) && analysis.functions.contains_key(&address) {
-            scratch.add(&mut polls, address, control)?;
+        if is_task_poll(name) {
+            named_poll = true;
+            if analysis.functions.contains_key(&address) {
+                scratch.add(&mut polls, address, control)?;
+            }
         }
     }
     let mut resolutions = Resolutions::new();
-    if polls.is_empty() {
+    if polls.is_empty() && (named_poll || dwarf.has_instance(is_task_poll, control)?) {
         return Ok(resolutions);
     }
-    let owners = crate::task_spawns::owners(image, analysis, types, &polls, &mut scratch, control)?;
+    let fact = if polls.is_empty() {
+        Fact::NoTasks
+    } else {
+        Fact::TaskPolls
+    };
+    let owners = if polls.is_empty() {
+        Default::default()
+    } else {
+        crate::task_spawns::owners(image, analysis, types, &polls, &mut scratch, control)?
+    };
     for facts in analysis.functions.values() {
         for transfer in &facts.transfers {
             if transfer.target.is_some()
@@ -73,7 +88,7 @@ pub fn task_poll_resolutions<'a>(
                         _ => true,
                     });
             keep.admit(Resolutions::admission(polls.len()), control)?;
-            resolutions.add(transfer.site, Fact::TaskPolls, candidates);
+            resolutions.add(transfer.site, fact, candidates);
         }
     }
     Ok(resolutions)

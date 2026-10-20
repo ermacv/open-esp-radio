@@ -178,7 +178,7 @@ Facts outside the machine code close indirect sites through
 analysis left a target unresolved. Each site's targets carry the `Fact`s that
 gave them; the facts of one site unite, each being a superset of what the
 site reaches. An empty set resolves a site only where its fact is complete
-for it (`Fact::proves_empty`: the interrupt table, the IPC posts); an empty
+for it (`Fact::proves_empty`: the interrupt table, the IPC posts, no tasks); an empty
 set of found facts (waker vtables, field types) is a hole,
 `Reason::NoCandidate`, never a site that reaches nothing:
 
@@ -208,7 +208,14 @@ of a task's poll address prove its storage initialization and executor
 assignment. The executor's publication must dominate the initialization.
 Unknown spawn paths keep the task among every executor's candidates, and
 the completed-task poll remains a candidate for all executors. These facts
-retain the executor invariant assumption described below.
+retain the executor invariant assumption described below. When no image
+function is a `TaskStorage<…>::poll` or `poll_exited`, the analysis also checks
+the concrete DWARF instances, out-of-line and inlined, for either kind of
+poll. Only when both catalogs contain none does `Fact::NoTasks` give each
+unresolved dequeue call a proven empty target set: a task header's `poll_fn`
+is set only by its storage's spawn, so no task can enter the queue. The
+resulting numerical bound is conditional on the same executor invariant.
+A DWARF instance without a recognized function keeps the call unresolved.
 
 A direct recursive function can be unfolded once when path-sensitive
 instruction facts prove that every self-call passes a payload for which
