@@ -8,7 +8,10 @@
 //! Every value here is route-scoped: a route gives back its references and
 //! restores the baseline before the neutral root is reconstructed.
 
-use oer_esp32s31_pac::{RadioPhyRegisters, WifiPowerBaseline, WifiPowerRestoreReadback};
+use oer_esp32s31_pac::{
+    RadioPhyRegisters, RtcSlowClockSource, WifiLowPowerClockSource, WifiPowerBaseline,
+    WifiPowerRestoreReadback,
+};
 
 use crate::power::{
     PlatformClock, PlatformClockBackend, PlatformClockError, PlatformClockGuard,
@@ -18,6 +21,7 @@ use crate::root::WifiPowerRestoreCheckpoint;
 
 /// Register transactions consumed by route clock policy.
 pub(crate) trait ClockPort {
+    fn select_wifi_low_power_clock(&mut self);
     fn capture_power_baseline(&self) -> WifiPowerBaseline;
     fn restore_power_baseline(
         &mut self,
@@ -29,11 +33,21 @@ pub(crate) trait ClockPort {
         &mut self,
         refs: &mut PlatformClockRefs<B>,
         platform: &impl PlatformClockProvider<Backend = B>,
-        entry: crate::power::PowerEntry,
     ) -> Result<(), crate::power::PowerError>;
 }
 
 impl ClockPort for RadioPhyRegisters {
+    fn select_wifi_low_power_clock(&mut self) {
+        // SOURCE: IDF 4d59230d esp_perip_clk_init selects XTAL32K only for
+        // that RTC slow source, otherwise RC_SLOW, including invalid selectors.
+        let source = match self.rtc_slow_clock_source() {
+            RtcSlowClockSource::Crystal32Khz => WifiLowPowerClockSource::Crystal32Khz,
+            RtcSlowClockSource::SlowOscillator | RtcSlowClockSource::Invalid(_) => {
+                WifiLowPowerClockSource::SlowOscillator
+            }
+        };
+        RadioPhyRegisters::select_wifi_low_power_clock(self, source);
+    }
     fn capture_power_baseline(&self) -> WifiPowerBaseline {
         self.capture_wifi_power_baseline()
     }
@@ -47,16 +61,12 @@ impl ClockPort for RadioPhyRegisters {
         &mut self,
         refs: &mut PlatformClockRefs<B>,
         platform: &impl PlatformClockProvider<Backend = B>,
-        entry: crate::power::PowerEntry,
     ) -> Result<(), crate::power::PowerError> {
-        crate::power::execute_owned(
-            &mut crate::power::RoutePower {
-                phy: self,
-                refs,
-                platform,
-            },
-            entry,
-        )
+        crate::power::execute_owned(&mut crate::power::RoutePower {
+            phy: self,
+            refs,
+            platform,
+        })
     }
 }
 
@@ -272,10 +282,8 @@ pub enum CommonRadioPowerError {
 /// Common modem/PHY power shared by concurrently running clients.
 ///
 /// The power sequence runs once, for the first client; a later client must
-/// not repeat it while another protocol runs. Only the first power-up since
-/// boot pulses the Wi-Fi baseband and MAC resets: after every client left,
-/// a new first client runs the sequence without that pulse, so the retained
-/// PHY configuration in the Wi-Fi MAC register window survives. The
+/// not repeat it while another protocol runs. It never resets the Wi-Fi MAC;
+/// the retained PHY configuration in that window survives every entry. The
 /// cold-power clock baseline is captured before the first edge and restored
 /// after the last client leaves; the reset lines are not part of it. Refcounted modem
 /// clock dependencies such as coexistence belong to the shared modem clock
@@ -284,9 +292,14 @@ pub(crate) struct CommonRadioPower<B: PlatformClockBackend> {
     clients: u8,
     refs: PlatformClockRefs<B>,
     power: PowerEpoch,
-    /// The Wi-Fi baseband and MAC resets were pulsed by a successful
-    /// power-up since boot.
-    wifi_resets_pulsed: bool,
+    entered_since_boot: bool,
+}
+
+/// A checked admission whose baseline precedes the client's own entry writes.
+#[must_use]
+pub(crate) struct CommonPowerEntry<K: RadioClientKind> {
+    first_client: bool,
+    _client: core::marker::PhantomData<K>,
 }
 
 impl<B: PlatformClockBackend> Default for CommonRadioPower<B> {
@@ -295,7 +308,7 @@ impl<B: PlatformClockBackend> Default for CommonRadioPower<B> {
             clients: 0,
             refs: PlatformClockRefs::default(),
             power: PowerEpoch::default(),
-            wifi_resets_pulsed: false,
+            entered_since_boot: false,
         }
     }
 }
@@ -348,32 +361,44 @@ impl<B: PlatformClockBackend> CommonRadioPower<B> {
         self.clients |= client_bit(client);
     }
 
-    /// Enter common power; only the first client runs the power sequence.
+    /// Check admission and capture the baseline before any client entry writes.
     ///
     /// A failed sequence admits no client. It keeps the original baseline
     /// and any platform reference already taken, so a retry restarts from
     /// the same cold state without taking a reference twice.
-    pub(crate) fn enter<K: RadioClientKind>(
+    pub(crate) fn prepare_entry<K: RadioClientKind>(
         &mut self,
         port: &mut impl ClockPort,
-        platform: &impl PlatformClockProvider<Backend = B>,
-    ) -> Result<CommonPower<K>, CommonRadioPowerError> {
+    ) -> Result<CommonPowerEntry<K>, CommonRadioPowerError> {
         let client = K::CLIENT;
         if self.holds(client) {
             return Err(CommonRadioPowerError::AlreadyEntered);
         }
         if self.clients == 0 {
             self.power.prepare(port);
-            let entry = if self.wifi_resets_pulsed {
-                crate::power::PowerEntry::Repeated
-            } else {
-                crate::power::PowerEntry::FirstSinceBoot
-            };
-            port.run_common_power_sequence(&mut self.refs, platform, entry)
-                .map_err(CommonRadioPowerError::Power)?;
-            self.wifi_resets_pulsed = true;
+            if !self.entered_since_boot {
+                port.select_wifi_low_power_clock();
+            }
         }
-        self.clients |= client_bit(client);
+        Ok(CommonPowerEntry {
+            first_client: self.clients == 0,
+            _client: core::marker::PhantomData,
+        })
+    }
+
+    /// Complete the checked entry, enabling only the shared power domain.
+    pub(crate) fn finish_entry<K: RadioClientKind>(
+        &mut self,
+        entry: CommonPowerEntry<K>,
+        port: &mut impl ClockPort,
+        platform: &impl PlatformClockProvider<Backend = B>,
+    ) -> Result<CommonPower<K>, CommonRadioPowerError> {
+        if entry.first_client {
+            port.run_common_power_sequence(&mut self.refs, platform)
+                .map_err(CommonRadioPowerError::Power)?;
+            self.entered_since_boot = true;
+        }
+        self.clients |= client_bit(K::CLIENT);
         Ok(CommonPower::entered())
     }
 

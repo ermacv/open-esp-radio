@@ -1,13 +1,12 @@
 //! Finite ESP32-S31 modem/PHY prerequisite sequence.
 //!
-//! The order is the merged cold-boot path immediately preceding
-//! `register_chipv7_phy` in the ESP32-S31 `esp-radio` and `esp-phy` oracle.
-//! Wi-Fi MAC clocks are intentionally excluded: they belong to the later MAC
-//! start transition.
+//! Domain clock prerequisites shared by all radio protocols. Wi-Fi's cold
+//! BB+MAC reset belongs to its client entry after PHY calibration; this port
+//! cannot issue it. Wi-Fi MAC clocks belong to the later MAC start transition.
 
 use oer_esp32s31_pac::{
     ModemSysconPowerObservation, PlatformClockPowerObservation, RadioPhyRegisters,
-    RtcSlowClockSource, SharedModemClockObservation, WifiLowPowerClockSource,
+    SharedModemClockObservation,
 };
 
 use crate::clock::PlatformClockRefs;
@@ -21,16 +20,12 @@ pub(crate) trait PowerSequenceBackend {
     fn acquire_platform_clock(&mut self, clock: PlatformClock) -> Result<(), PlatformClockError>;
     fn configure_modem_source_clocks(&mut self);
     fn platform_clock_power_observation(&self) -> oer_esp32s31_pac::PlatformClockPowerObservation;
-    fn set_wifi_baseband_and_mac_reset(&mut self, asserted: bool);
     fn set_wifi_baseband_reset(&mut self, asserted: bool);
     fn configure_wifi_power_clock_map(&mut self);
     fn enable_phy_calibration_clocks(&mut self);
     fn select_phy_i2c_160mhz_source(&mut self);
     fn modem_syscon_power_observation(&self) -> oer_esp32s31_pac::ModemSysconPowerObservation;
     fn prepare_shared_modem_clock_map(&mut self);
-    /// Select the Wi-Fi power-domain low-power clock from the RTC slow-clock
-    /// source and enable the Wi-Fi power clock.
-    fn select_wifi_low_power_clock(&mut self);
     fn shared_modem_clock_observation(&self) -> oer_esp32s31_pac::SharedModemClockObservation;
 }
 
@@ -64,9 +59,6 @@ impl<P: PlatformClockProvider> PowerSequenceBackend for RoutePower<'_, P> {
     fn platform_clock_power_observation(&self) -> PlatformClockPowerObservation {
         self.phy.platform_clock_power_observation()
     }
-    fn set_wifi_baseband_and_mac_reset(&mut self, asserted: bool) {
-        self.phy.set_wifi_baseband_and_mac_reset(asserted);
-    }
     fn set_wifi_baseband_reset(&mut self, asserted: bool) {
         self.phy.set_wifi_baseband_reset(asserted);
     }
@@ -84,18 +76,6 @@ impl<P: PlatformClockProvider> PowerSequenceBackend for RoutePower<'_, P> {
     }
     fn prepare_shared_modem_clock_map(&mut self) {
         self.phy.prepare_shared_modem_clock_map();
-    }
-    fn select_wifi_low_power_clock(&mut self) {
-        // SOURCE: ESP-IDF 4d59230d `esp_perip_clk_init` selects XTAL32K
-        // only when the RTC slow clock runs from the 32 kHz crystal and
-        // RC_SLOW otherwise, including an invalid selector.
-        let source = match self.phy.rtc_slow_clock_source() {
-            RtcSlowClockSource::Crystal32Khz => WifiLowPowerClockSource::Crystal32Khz,
-            RtcSlowClockSource::SlowOscillator | RtcSlowClockSource::Invalid(_) => {
-                WifiLowPowerClockSource::SlowOscillator
-            }
-        };
-        self.phy.select_wifi_low_power_clock(source);
     }
     fn shared_modem_clock_observation(&self) -> SharedModemClockObservation {
         self.phy.shared_modem_clock_observation()
@@ -157,35 +137,10 @@ pub struct PowerError {
     pub observed: bool,
 }
 
-/// Whether a power-up is the first since boot.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum PowerEntry {
-    /// The first power-up pulses the Wi-Fi baseband and MAC resets.
-    FirstSinceBoot,
-    /// A later power-up after every client left keeps the Wi-Fi MAC
-    /// register window, which holds retained PHY configuration such as the
-    /// analog-I2C TX rate that only cold calibration writes.
-    Repeated,
-}
-
-pub(crate) fn execute_owned(
-    registers: &mut impl PowerSequenceBackend,
-    entry: PowerEntry,
-) -> Result<(), PowerError> {
-    // Keep the operation order here: it is a lifecycle property recovered
-    // from the qualified S31 esp-hal clock implementation, not a
-    // property of the register layout. ESP-IDF resets the Wi-Fi MAC only
-    // when Wi-Fi initializes, and its PHY enable/disable never does, so a
-    // repeated power-up leaves that pulse out. The baseband-only pulse
-    // stays: ESP-IDF's modem clock repeats it on every Wi-Fi baseband clock
-    // enable.
-    if entry == PowerEntry::FirstSinceBoot {
-        // ESP-IDF selects the Wi-Fi low-power clock once, first in
-        // `esp_perip_clk_init` at CPU start, and never deselects it.
-        registers.select_wifi_low_power_clock();
-        registers.set_wifi_baseband_and_mac_reset(true);
-        registers.set_wifi_baseband_and_mac_reset(false);
-    }
+pub(crate) fn execute_owned(registers: &mut impl PowerSequenceBackend) -> Result<(), PowerError> {
+    // Wi-Fi's combined BB+MAC reset belongs to its client entry. The BB-only
+    // pulse below is the PHY clock-enable prerequisite, repeated by the
+    // vendor modem clock manager; it preserves the MAC calibration window.
     // The PHY writes front-end baseband power into the PMU word where the
     // platform powers MPLL; holding MPLL keeps the platform from writing it.
     registers

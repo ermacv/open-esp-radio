@@ -40,6 +40,7 @@ oer-radio-regulatory = { path = "../../../protocols/radio/regulatory" }
 
 [build-dependencies]
 oer-esp32s31-layout = { workspace = true, features = ["build"] }
+oer-registers-model = { path = "../../../tools/registers/model" }
 
 [lints]
 workspace = true
