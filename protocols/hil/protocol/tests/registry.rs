@@ -215,7 +215,7 @@ fn lock() -> String {
     messages.sort_by_key(|message| message.path);
     let mut lock = format!(
         "# The HIL wire of this revision. Regenerate with\n\
-         # `{WRITE_LOCK}=write cargo test -p oer-hil-protocol --features registry --test registry`.\n\
+         # `OER_HIL_PROTOCOL_LOCK=write cargo test -p oer-hil-protocol --features registry --test registry`.\n\
          framing {FRAMING_VERSION}\n\
          [modules]\n"
     );
