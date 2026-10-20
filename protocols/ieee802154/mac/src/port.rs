@@ -3,7 +3,12 @@
 //! ([`RadioSettings`](crate::owner::RadioSettings)): the state the backend
 //! reads from its own interrupt context (MAC keys and frame counters, the CSL
 //! receiver, the enhanced-ACK generator), and the transmit power and
-//! clear-channel assessment the next operation publishes. The port itself
+//! clear-channel assessment the next transmission publishes. Configuration is
+//! admitted in any radio state, while the interface's client lives and its
+//! operation runs. Calls replace latest values without queuing or capacity
+//! failure. Identity, keys, source match and ACK timeout are in force when
+//! the call returns; power and CCA at the next transmission; receive-side
+//! values within one frame, at once while listening with no frame in progress. The port itself
 //! is the owner shape of [`crate::owner`].
 
 pub use oer_radio_port::{CancelError, ClockError};
@@ -49,11 +54,15 @@ pub struct CslCapability {
     pub uncertainty_10us: u8,
 }
 
-/// How a frame counter changes.
+/// A monotonic update of the frame counter. Exact replacement is available
+/// only in the same request as new keys (`Ieee802154Client::set_mac_keys`).
+///
+/// ```compile_fail,E0599
+/// use oer_ieee802154_mac::FrameCounterUpdate;
+/// let rollback = FrameCounterUpdate::Set(0);
+/// ```
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum FrameCounterUpdate {
-    /// Replace the counter (`otPlatRadioSetMacFrameCounter`).
-    Set(u32),
     /// Raise the counter to at least this value
     /// (`otPlatRadioSetMacFrameCounterIfLarger`).
     SetIfLarger(u32),

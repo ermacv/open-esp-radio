@@ -30,7 +30,11 @@ pub enum TxMode {
 /// information of OpenThread's `otRadioFrame` (`mIsSecurityProcessed`,
 /// `mIsARetx`) tells a radio that claims `OT_RADIO_CAPS_TRANSMIT_SEC`.
 ///
-/// A radio without MAC keys transmits every frame as given.
+/// A radio without MAC keys transmits every frame as given. A submitted
+/// request owns its security snapshot: later key or address settings affect
+/// subsequent frames and never change a transmission already submitted.
+/// `Key` carries that explicit material; `Radio` and `Retransmission` are
+/// resolved by the backend at admission.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
 pub enum TxSecurity {
     /// The radio secures the frame with its MAC keys and writes a new frame

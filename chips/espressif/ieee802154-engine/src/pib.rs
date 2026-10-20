@@ -371,7 +371,11 @@ impl Ieee802154Pib {
     }
 
     /// `ieee802154_pib_set_pending_mode`.
-    pub fn set_pending_mode(&mut self, interface: Ieee802154MultipanIndex, mode: AutoPendingMode) {
+    pub(crate) fn set_pending_mode(
+        &mut self,
+        interface: Ieee802154MultipanIndex,
+        mode: AutoPendingMode,
+    ) {
         Self::replace(
             &mut self.pending,
             &mut self.pending_mode[interface.value() as usize],

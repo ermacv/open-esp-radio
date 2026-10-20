@@ -175,19 +175,13 @@ fn broadcast_frames_belong_to_no_interface() {
 #[test]
 fn the_pending_bit_follows_the_addressed_interface() {
     let mut bench = Bench::with_identities(Some(2));
-    bench
-        .engine
-        .pib()
-        .set_pending_mode(IF1, AutoPendingMode::Enable);
+    bench.engine.set_pending_mode(IF1, AutoPendingMode::Enable);
     bench
         .engine
         .pending_table_for(IF1)
         .add(FrameAddress::Short([0x78, 0x56]))
         .unwrap();
-    bench
-        .engine
-        .pib()
-        .set_pending_mode(IF0, AutoPendingMode::Enable);
+    bench.engine.set_pending_mode(IF0, AutoPendingMode::Enable);
     assert!(bench.receive(&data_to(0xabcd, [0x11, 0x11])).pending);
     assert!(bench.hw.pending_bit);
     assert!(!bench.receive(&data_to(0x1234, [0x01, 0x00])).pending);
@@ -247,4 +241,13 @@ fn an_interface_beyond_the_configuration_is_rejected() {
     bench
         .engine
         .set_multipan_panid(&mut bench.hw, Ieee802154MultipanIndex::CONTEXT2, 1);
+}
+
+#[test]
+#[should_panic(expected = "IEEE802154_ASSERT")]
+fn pending_mode_checks_the_configured_interface_count() {
+    let mut bench = Bench::new(Some(2));
+    bench
+        .engine
+        .set_pending_mode(Ieee802154MultipanIndex::CONTEXT2, AutoPendingMode::Enable);
 }

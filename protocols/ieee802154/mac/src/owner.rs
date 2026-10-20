@@ -40,10 +40,16 @@
 //! never lands in another's. As in ESP-IDF, configuration is admitted in
 //! any radio state: the disabled owner's setup and a running phase's control
 //! both configure an interface with its slot
-//! ([`Ieee802154Interfaces::configure`]), change its settings and remove it,
-//! and the caller keeps the [`ConfiguredInterface`] token; each running
+//! ([`Ieee802154Interfaces::configure`]) and remove it. The caller keeps
+//! the [`ConfiguredInterface`] lifecycle token; each running
 //! phase lends that interface's one client to whoever holds the token by
-//! `&mut` ([`Ieee802154Clients::client`]).
+//! `&mut` ([`Ieee802154Clients::client`]). Settings are admitted in any radio
+//! state, while the interface's client lives and its operation runs.
+//! Each setting replaces its latest value without a queue or capacity failure;
+//! the backend reads the newest value at its application point. Identity,
+//! keys, source match and ACK timeout are in force when the call returns;
+//! power and CCA at the next transmission; receive-side values within one
+//! frame, at once while listening with no frame in progress.
 //!
 //! One interface has one client at a time:
 //!
@@ -66,18 +72,29 @@
 //! }
 //! ```
 //!
-//! and neither a setting nor a removal reaches an interface while its
-//! client lives:
+//! A setting reaches the interface while its client lives:
 //!
-//! ```compile_fail,E0499
+//! ```
+//! # use oer_ieee802154_mac::owner::{Ieee802154Clients, Ieee802154Client};
+//! fn set<'id, C: Ieee802154Clients<'id>>(clients: &C, zero: &mut C::Configured<0>) {
+//!     let client = clients.client(zero);
+//!     client.set_pan_id(1);
+//!     drop(client);
+//! }
+//! ```
+//!
+//! Removal needs the lifecycle token back from the client:
+//!
+//! ```compile_fail,E0505
 //! # use oer_ieee802154_mac::owner::{Ieee802154Clients, Ieee802154Interfaces};
-//! fn set<'id, I, C>(control: &mut I, clients: &C, zero: &mut I::Configured<0>)
+//! fn remove<'id, I, C>(control: &mut I, clients: &C, zero: I::Configured<0>)
 //! where
 //!     I: Ieee802154Interfaces<'id>,
 //!     C: Ieee802154Clients<'id, Configured<0> = I::Configured<0>>,
 //! {
-//!     let client = clients.client(zero);
-//!     control.set_pan_id(zero, 1);
+//!     let mut zero = zero;
+//!     let client = clients.client(&mut zero);
+//!     control.remove(zero);
 //!     drop(client);
 //! }
 //! ```
@@ -885,21 +902,13 @@ pub trait RadioSettings {
 
 /// The configuration of an IEEE 802.15.4 port's interfaces, admitted in
 /// any radio state, as in ESP-IDF: the disabled owner's setup and a running
-/// phase's control both configure and remove an interface and change its
-/// settings. A setting names its configured interface by `&mut`, so no
-/// client of that interface is lent meanwhile, and nothing refuses it.
+/// phase's control both configure and remove an interface. Its client
+/// changes settings while it lives and its operation runs.
 pub trait Ieee802154Interfaces<'id>: RadioSettings {
     /// Pool component containing interface I's resources.
     type InterfacePath<const I: u8>: PoolPath;
     /// A configured interface `I`; it holds the interface's slot.
     type Configured<const I: u8>: ConfiguredInterface<'id, I>;
-    /// An installed short-address pending entry of interface `I`; removing
-    /// it gives its slot back.
-    type ShortEntry<const I: u8>;
-    /// An installed extended-address pending entry of interface `I`;
-    /// removing it gives its slot back.
-    type ExtendedEntry<const I: u8>;
-
     /// Configure interface `I`: its client exists in the running phase from
     /// now on, and in every later one. Nothing refuses it: the slot proves
     /// the interface exists and is not configured.
@@ -916,82 +925,6 @@ pub trait Ieee802154Interfaces<'id>: RadioSettings {
         &mut self,
         interface: Self::Configured<I>,
     ) -> Slot<'id, InterfaceKind<I>, Child<Self::InterfacePath<I>, 0>>;
-
-    /// The PAN identifier the interface filters on.
-    fn set_pan_id<const I: u8>(&mut self, interface: &mut Self::Configured<I>, pan_id: u16);
-
-    /// The interface's short address.
-    fn set_short_address<const I: u8>(&mut self, interface: &mut Self::Configured<I>, address: u16);
-
-    /// The interface's extended address in frame byte order.
-    fn set_extended_address<const I: u8>(
-        &mut self,
-        interface: &mut Self::Configured<I>,
-        address: [u8; 8],
-    );
-
-    /// Replace the interface's MAC keys (`otPlatRadioSetMacKey`), keeping
-    /// its frame counter.
-    fn set_mac_keys<const I: u8>(
-        &mut self,
-        interface: &mut Self::Configured<I>,
-        key_id: u8,
-        previous: [u8; 16],
-        current: [u8; 16],
-        next: [u8; 16],
-    );
-
-    /// Forget the interface's MAC keys: its secured frames go out as given.
-    fn remove_mac_keys<const I: u8>(&mut self, interface: &mut Self::Configured<I>);
-
-    /// Change the interface's frame counter.
-    fn update_frame_counter<const I: u8>(
-        &mut self,
-        interface: &mut Self::Configured<I>,
-        update: FrameCounterUpdate,
-    );
-
-    /// The interface's next frame counter, a published snapshot; `None`
-    /// without keys.
-    fn frame_counter<const I: u8>(&self, interface: &Self::Configured<I>) -> Option<u32>;
-
-    /// How the interface's acknowledgements set frame pending.
-    fn set_pending_mode<const I: u8>(
-        &mut self,
-        interface: &mut Self::Configured<I>,
-        has: Has<Self::Caps, SourceMatch>,
-        mode: AutoPendingMode,
-    );
-
-    /// Mark `address` as having pending data, in `slot`.
-    fn add_pending_short<const I: u8>(
-        &mut self,
-        interface: &mut Self::Configured<I>,
-        slot: Slot<'id, ShortPending<I>, Child<Self::InterfacePath<I>, 1>>,
-        address: [u8; 2],
-    ) -> Self::ShortEntry<I>;
-
-    /// Mark `address` as having pending data, in `slot`.
-    fn add_pending_extended<const I: u8>(
-        &mut self,
-        interface: &mut Self::Configured<I>,
-        slot: Slot<'id, ExtendedPending<I>, Child<Self::InterfacePath<I>, 2>>,
-        address: [u8; 8],
-    ) -> Self::ExtendedEntry<I>;
-
-    /// Clear `entry`, giving its slot back.
-    fn remove_pending_short<const I: u8>(
-        &mut self,
-        interface: &mut Self::Configured<I>,
-        entry: Self::ShortEntry<I>,
-    ) -> Slot<'id, ShortPending<I>, Child<Self::InterfacePath<I>, 1>>;
-
-    /// Clear `entry`, giving its slot back.
-    fn remove_pending_extended<const I: u8>(
-        &mut self,
-        interface: &mut Self::Configured<I>,
-        entry: Self::ExtendedEntry<I>,
-    ) -> Slot<'id, ExtendedPending<I>, Child<Self::InterfacePath<I>, 2>>;
 }
 
 /// The disabled owner's settings of an IEEE 802.15.4 port: the radio-wide
@@ -1021,8 +954,7 @@ pub trait Ieee802154Clients<'id> {
         Self: 'c;
 
     /// The client of the configured interface `I`, the only one while it
-    /// lives: it borrows the interface's token, which neither a setting nor
-    /// a removal reaches meanwhile.
+    /// lives: it borrows the lifecycle token, so removal waits for its return.
     fn client<'c, const I: u8>(
         &'c self,
         interface: &'c mut Self::Configured<I>,
@@ -1030,7 +962,11 @@ pub trait Ieee802154Clients<'id> {
 }
 
 /// What the client of interface `I` does in a running phase of the install
-/// `'id`.
+/// `'id`. Configuration is admitted in any radio state, while the interface's
+/// client lives and its operation runs. Each call replaces the latest value
+/// synchronously, without a queue, future or capacity failure. The backend
+/// reads the newest value at its application point; pending entries keep
+/// their owned slots and entry tokens.
 pub trait Ieee802154Client<'id, const I: u8>:
     RadioPortClient<Token: RadioWork<Id = RequestId>, Domain = Ieee802154Radio> + Sized
 {
@@ -1038,6 +974,77 @@ pub trait Ieee802154Client<'id, const I: u8>:
     type Caps: Ieee802154Caps;
     /// Pool component containing the radio's operation permit and waiter line.
     type OperationPath: PoolPath;
+    /// Pool component containing this interface's pending-table slots.
+    type InterfacePath: PoolPath;
+    /// An installed short-address pending entry of interface `I`; removing
+    /// it gives its slot back.
+    type ShortEntry;
+    /// An installed extended-address pending entry of interface `I`;
+    /// removing it gives its slot back.
+    type ExtendedEntry;
+
+    /// The PAN identifier the interface filters on.
+    fn set_pan_id(&self, pan_id: u16);
+
+    /// The interface's short address.
+    fn set_short_address(&self, address: u16);
+
+    /// The interface's extended address in frame byte order.
+    fn set_extended_address(&self, address: [u8; 8]);
+
+    /// Replace the interface's MAC keys (`otPlatRadioSetMacKey`), keeping
+    /// its frame counter unless `frame_counter` replaces it in the same
+    /// request. Only a key replacement can lower the counter. The new keys
+    /// affect subsequent frames; a submitted transmission keeps the security
+    /// snapshot in its request ([`TxSecurity`]).
+    fn set_mac_keys(
+        &self,
+        key_id: u8,
+        previous: [u8; 16],
+        current: [u8; 16],
+        next: [u8; 16],
+        frame_counter: Option<u32>,
+    );
+
+    /// Forget the interface's MAC keys: its secured frames go out as given.
+    fn remove_mac_keys(&self);
+
+    /// Raise the interface's frame counter, never lower it.
+    fn update_frame_counter(&self, update: FrameCounterUpdate);
+
+    /// The interface's next frame counter, a published snapshot; `None`
+    /// without keys.
+    fn frame_counter(&self) -> Option<u32>;
+
+    /// How the interface's acknowledgements set frame pending.
+    fn set_pending_mode(&self, has: Has<Self::Caps, SourceMatch>, mode: AutoPendingMode);
+
+    /// Mark `address` as having pending data, in `slot`.
+    fn add_pending_short(
+        &self,
+        slot: Slot<'id, ShortPending<I>, Child<Self::InterfacePath, 1>>,
+        address: [u8; 2],
+    ) -> Self::ShortEntry;
+
+    /// Mark `address` as having pending data, in `slot`.
+    fn add_pending_extended(
+        &self,
+        slot: Slot<'id, ExtendedPending<I>, Child<Self::InterfacePath, 2>>,
+        address: [u8; 8],
+    ) -> Self::ExtendedEntry;
+
+    /// Clear `entry`, giving its slot back.
+    fn remove_pending_short(
+        &self,
+        entry: Self::ShortEntry,
+    ) -> Slot<'id, ShortPending<I>, Child<Self::InterfacePath, 1>>;
+
+    /// Clear `entry`, giving its slot back.
+    fn remove_pending_extended(
+        &self,
+        entry: Self::ExtendedEntry,
+    ) -> Slot<'id, ExtendedPending<I>, Child<Self::InterfacePath, 2>>;
+
     /// Ask to receive on `channel`: the request replaces the interface's
     /// previous wish at once (a window included), so it no longer receives
     /// elsewhere, and the future ends once the radio receives there for

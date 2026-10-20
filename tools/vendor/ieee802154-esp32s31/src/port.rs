@@ -885,9 +885,7 @@ pub fn run(scenario: &Scenario) -> Result<Vec<Record>, String> {
             }
             Step::SetPendingMode(mode) => {
                 let mode = pending_mode_of(mode).ok_or("pending mode outside the vendor enum")?;
-                engine
-                    .pib()
-                    .set_pending_mode(Ieee802154MultipanIndex::CONTEXT0, mode);
+                engine.set_pending_mode(Ieee802154MultipanIndex::CONTEXT0, mode);
             }
             Step::AddPendingAddress { address, short } => {
                 let address = if short {
@@ -900,7 +898,11 @@ pub fn run(scenario: &Scenario) -> Result<Vec<Record>, String> {
             Step::SetPanId(panid) => engine.set_panid(&mut ll, panid),
             Step::SetShortAddress(address) => engine.set_short_address(&mut ll, address),
             Step::SetExtendedAddress(address) => engine.set_extended_address(&mut ll, address),
-            Step::SetAckTimeout(timeout) => engine.set_ack_timeout(&mut ll, timeout),
+            Step::SetAckTimeout(timeout) => engine.set_ack_timeout(
+                &mut ll,
+                oer_espressif_ieee802154_engine::types::AckTimeout::new(timeout)
+                    .map_err(|_| "ACK timeout exceeds the hardware field")?,
+            ),
             Step::GetIdentity => {
                 engine.panid(&mut ll);
                 engine.short_address(&mut ll);
@@ -976,7 +978,7 @@ pub fn run(scenario: &Scenario) -> Result<Vec<Record>, String> {
             #[cfg(feature = "multipan")]
             Step::MultipanSetPendingMode { index, mode } => {
                 let mode = pending_mode_of(mode).ok_or("pending mode outside the vendor enum")?;
-                engine.pib().set_pending_mode(interface(index)?, mode);
+                engine.set_pending_mode(interface(index)?, mode);
             }
             #[cfg(feature = "multipan")]
             Step::MultipanAddPendingAddress {

@@ -60,17 +60,23 @@ impl MacKeys {
         }
     }
 
-    /// Replace the keys (`otPlatRadioSetMacKey`).
-    pub fn set_keys(&mut self, key_id: u8, previous: [u8; 16], current: [u8; 16], next: [u8; 16]) {
+    /// Replace the keys and optionally their frame counter in one update.
+    /// With `None`, the next frame counter stays unchanged.
+    pub fn set_keys(
+        &mut self,
+        key_id: u8,
+        previous: [u8; 16],
+        current: [u8; 16],
+        next: [u8; 16],
+        frame_counter: Option<u32>,
+    ) {
         self.key_id = key_id;
         self.previous = previous;
         self.current = current;
         self.next = next;
-    }
-
-    /// Replace the frame counter (`otPlatRadioSetMacFrameCounter`).
-    pub fn set_frame_counter(&mut self, frame_counter: u32) {
-        self.frame_counter = frame_counter;
+        if let Some(counter) = frame_counter {
+            self.frame_counter = counter;
+        }
     }
 
     /// Raise the frame counter (`otPlatRadioSetMacFrameCounterIfLarger`).

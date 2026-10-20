@@ -274,7 +274,10 @@ bounds) live in the code that applies them.
 
 ## IEEE 802.15.4
 
-- Configuration is admitted in any radio state, as in ESP-IDF.
+- Configuration is admitted in any radio state, as in ESP-IDF, including an
+  interface's settings while its client lives and its operation runs. The frame
+  counter only moves forward, except when it is replaced together with the
+  keys.
 - **Port boundary** follows the OpenThread radio platform: the backend
   executes, as advertised capabilities, the acknowledgement (frame pending
   from the source-match table, enhanced ACK from the CSL and Link Metrics
