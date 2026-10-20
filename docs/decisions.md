@@ -315,8 +315,13 @@ bounds) live in the code that applies them.
   libraries and its program). Dependency direction is not checked; names and
   the unsafe boundary are. Only `cargo fw` builds images.
 - **Protocol layers.** Each radio protocol has `wire` (over-the-air formats),
-  `port` (the backend contract) and its cores; a backend depends on `port`
-  and `wire` only.
+  `port` (the backend contract), its sans-IO cores and a `runtime`; a backend
+  depends on `port` and `wire` only.
+- **Portable runtime.** Only a protocol's runtime awaits, and it binds no
+  executor: time from `oer-time`, interrupt signals from `portable/`, no
+  `embassy-executor`, `embassy-time`, `embassy-net` or HAL dependency;
+  `embassy-sync` and `embassy-futures` are allowed. The firmware composition
+  spawns its futures.
 - **Names.** A library is `oer-` and its path below its root; an executable
   keeps its root (`oer-firmware-<path>`, `oer-tool-<path>`); no `[lib] name`.
 - **Merge.** A pull request starts as a draft; marking it ready squash-merges

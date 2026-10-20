@@ -19,11 +19,13 @@ application          credentials, network stack (embassy-net), sockets
 platform (firmware/) staged boot, interrupt table, panic record, linker layout
 ```
 
-Protocols are **sans-IO**: frames, completed operations and the current time
-enter as values; actions and the next deadline leave as values. They never
-await, so they run under any executor and in host tests with virtual time
-(`oer-time-virtual`). Drivers own hardware and wait; adapters bind executors
-and `embassy-time`.
+Protocol cores are **sans-IO**: frames, completed operations and the current
+time enter as values; actions and the next deadline leave as values. They
+never await, so they run under any executor and in host tests with virtual
+time (`oer-time-virtual`). The protocol's runtime adds `async`/`await` over
+the port without binding an executor: time comes from `oer-time`, and the
+firmware composition spawns its futures. Drivers own hardware and wait;
+adapters bind executors and `embassy-time`.
 
 ## Execution contexts
 
