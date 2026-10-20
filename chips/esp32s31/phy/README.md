@@ -355,24 +355,34 @@ A grant-protect interval is the time the request was programmed, not an observat
 | | idle | ≤ 0.52 ms | ≤ 7.6 ms | ≤ 7.0 ms | ≤ 7.0 ms | ≤ 14.6 ms |
 | Wi-Fi + Bluetooth LE, HT20 UDP RX and an ATT echo load, 2 runs | traffic | ≤ 0.94 ms | ≤ 16.1 ms | ≤ 13.4 ms | ≤ 15.5 ms | ≤ 30.1 ms |
 | | idle | ≤ 0.94 ms | ≤ 7.1 ms | ≤ 13.6 ms | ≤ 13.5 ms | ≤ 21.4 ms |
-| IEEE 802.15.4 receiving, 3 repetitions × 5 due ticks (2026-10-20) | idle | ≤ 1.427 ms | ≤ 8.347 ms | ≤ 8.140 ms | ≤ 8.000 ms | ≤ 17.571 ms |
+| IEEE 802.15.4 receiving, 3 repetitions × 5 due ticks (2026-10-20) | idle | ≤ 1.473 ms | ≤ 8.585 ms | ≤ 8.489 ms | ≤ 8.347 ms | ≤ 17.338 ms |
+| IEEE 802.15.4 receiving, layout seed 1, 19/20 complete repetitions; valid ticks only | idle | ≤ 1.522 ms | ≤ 9.746 ms | ≤ 8.714 ms | ≤ 9.001 ms | ≤ 19.271 ms |
 
 The 2026-10-20 154 row is reproducible with
 `cargo hil run phy-tracking-hold-ieee802154-idle --chip esp32s31 --board s31-a`.
-Run `1792516969752-0020244b`, main `73042ea1` plus the diagnostic tools,
-tested image source `04292bbd`, completed 15/15 ticks, restored debug policy and
-closed RF in every repetition. Per-repetition maxima (RFPLL/common/transmit/
-baseband-off/whole tick, µs): 1426/7892/7932/7791/16988;
-1427/8275/8004/7862/17571; 1426/8347/8140/8000/17022.
-An earlier diagnostic build/run `1792516851193-001ffe1b` completed two of three
-repetitions (largest complete tick 17.799 ms); the third failed during transmit
-on tick 3, poisoned PHY and could not restore policy or close RF. Its partial
-intervals remain incomplete evidence; the cause did not reproduce in the three
-repetitions above. No reliability or worst-case bound follows from either run.
-The Wi-Fi rows retain their previously recorded values; this run covers 154 only.
+Run `1792520090030-002ab3e6`, PHY correction `587104e6`, diagnostic application
+SHA-256 `0e1279d0d3b2ba25556da4ce7b4e17430a2ba66bee4a747bb8aa94529f3cc501`,
+completed 15/15 ticks, restored debug policy and closed RF in every repetition.
+Per-repetition maxima (RFPLL/common/transmit/baseband-off/whole tick, µs):
+1473/7627/8489/8347/17338; 1473/8181/8210/8069/17028;
+1472/8585/7936/7863/17236. Seed-1 run `1792520025693-002a5efd` also completed 3 × 5.
+
+The extended seed-1 run `1792520732652-002c0b9d`, the same PHY correction with a
+terminal error observer, completed 19/20 repetitions: 96 valid ticks and one
+invalid tick. Repetition 12, tick 2 failed measurement 0, sample 0 with
+`TxDcPwdet(Search(ToneSar(ReadyObservationLimit { observations: 13, .. })))`.
+The direct SAR readiness settle is 20 µs. SOURCE: complete rev0 ROM
+`phy_pwdet_tone_start` waits for readiness after the same 1/2 µs settles;
+`tx/dc_power_detector.rs` adds the finite direct-observation bound.
+The poisoned PHY refused policy restoration and RF closure; the runner reset it
+before the next repetition. Invalid/open intervals are incomplete evidence,
+and successful subsets establish no reliability or worst-case bound.
+This reproduces the short transmit failure seen in `1792516851193-001ffe1b`;
+the separate direct-I2C terminal-recognition correction does not eliminate it.
+The Wi-Fi rows retain their previously recorded values; these runs cover 154 only.
 
 What the runs show:
-- **RFPLL.** The current 154 idle correction request reached 1.427 ms; the earlier Wi-Fi rows were below 1 ms.
+- **RFPLL.** The current 154 idle correction request reached 1.522 ms; the earlier Wi-Fi rows were below 1 ms.
 - **Common bracket.** DCODE and RX gain calibration is the bracket traffic stretches, from ~6 ms idle to observed maxima of 13–18 ms under traffic (the table gives maxima only, no lower bound): interrupts compete with its polled measurements.
 - **Transmit bracket.** Stable at ~7 ms per class, ~13 ms with both classes.
 - **Bound.** The worst single bracket observed is 18.0 ms and the worst whole tick 30.1 ms.
