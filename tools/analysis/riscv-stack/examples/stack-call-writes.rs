@@ -120,6 +120,9 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
                     address,
                     ..
                 } => println!("rom-memory\t{offset:#010x}\t{access:?}\t{width}\t{address:?}"),
+                FunctionRecord::StoreAddressRange { offset, .. } => {
+                    println!("rom-loop-bound\t{offset:#010x}\t{record:?}");
+                }
                 _ => (),
             }
         }
@@ -173,6 +176,18 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     );
     for write in applied.writes.iter() {
         println!("call-write\t{:#010x}\t{write:?}", write.write.site);
+        // Query this event's footprint separately. This cannot establish
+        // preservation through the full call, whose other barriers remain.
+        let mut event = CallWrites {
+            writes: AdmittedVec::new(&memory),
+            barriers: AdmittedVec::new(&memory),
+        };
+        event.writes.push(*write, control.position())?;
+        println!(
+            "call-write-excludes-spill\t{:#010x}\t{}",
+            write.write.site,
+            event.preserves_stack_word(caller.address.into(), slot, &mut control)?
+        );
     }
     for barrier in applied.barriers.iter() {
         println!("call-barrier\t{:#010x}\t{barrier:?}", barrier.site);

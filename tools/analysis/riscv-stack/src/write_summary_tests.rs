@@ -5,6 +5,8 @@ use oer_analysis_riscv_analysis::{
 use oer_analysis_riscv_lift::RiscvDecoder;
 use oer_analysis_riscv_model::*;
 
+mod alignment;
+
 struct Saved<'m>(RecordBuffer<'m>);
 impl FunctionSink for Saved<'_> {
     fn record(&mut self, record: &FunctionRecord, c: &mut dyn RunControl) -> Result<()> {

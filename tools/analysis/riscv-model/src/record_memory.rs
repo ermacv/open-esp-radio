@@ -53,9 +53,11 @@ impl FunctionRecord {
                         .map(AbstractValue::allocated_bytes)
                         .sum::<u64>()
             }
-            Self::Transfer { target, .. } | Self::Value { value: target, .. } => {
-                target.allocated_bytes()
-            }
+            Self::Transfer { target, .. }
+            | Self::Value { value: target, .. }
+            | Self::StoreAddressRange {
+                initial: target, ..
+            } => target.allocated_bytes(),
             Self::MemoryAccess {
                 address, value: v, ..
             } => address.allocated_bytes() + value(v),

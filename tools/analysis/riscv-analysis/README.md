@@ -81,7 +81,22 @@ store/load PCs, expression owners, widths, occurrence and every target barrier
 are retained with the tail proof in `WriteOrigin`. Only this jump's transfer and
 synthetic `OpaqueCall` barriers are removed. The pinned ROM
 [validation](../riscv-stack/validation/call-spills/README.md) checks all twelve
-`memcpy` stores through its trampoline; their loop-carried ranges stay unknown.
+`memcpy` stores through its trampoline.
+
+The common value pass additionally proves a bounded byte-store footprint for a
+straight unit-stride alignment loop. It uses the already prepared semantics,
+CFG and converged all-path entry value, with no separate interpreter. Every
+external entry must reach the shared masked test before the body. Exactly one
+`+1` pointer definition, a power-of-two alignment mask (1, 3 or 7), the matching
+nonzero back edge and all body/exit edges are required. Unsupported forms keep
+the original memory observation. `StoreAddressRange` retains the initial value,
+wrapping displacement, bound and structural proof; `function_writes` expands it
+into ordinary `May` effects with `WriteProof::AlignmentLoop`. An open graph
+discards those addresses. Store contents remain independent and unknown.
+The [alignment validation](../riscv-stack/validation/alignment-writes/README.md)
+proves three possible bytes for one real ROM store and transports them through
+the existing trampoline/argument substitution; the other eleven store sites
+retain their unknown-address barriers.
 
 `ResearchOptions::stack_calls` optionally retains an existing stack word when
 `writes::stack_calls` prepared a complete disjoint call footprint from the
@@ -94,4 +109,4 @@ an explicit `UnknownValue` barrier and do not prevent exclusion of a known
 range. The bounded stack model, original load PCs, register clobbering and
 return/behavior ports keep their existing contracts. No ROM memory contract is
 selected automatically. The [fresh w1 validation](../riscv-stack/validation/call-spills/README.md)
-records the selected ROM call's precise missing loop-footprint proof.
+records the selected ROM call's remaining loop-footprint barriers.

@@ -155,6 +155,16 @@ pub trait FunctionDecoder {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
 pub enum FunctionRecord {
+    /// A finite superset of byte-store addresses, proved by the common value
+    /// pass from instruction semantics and every incoming CFG edge. Offsets
+    /// use RV32 wrapping addition; contents still come from MemoryAccess.
+    StoreAddressRange {
+        offset: u64,
+        initial: AbstractValue,
+        first_offset: u32,
+        count: u8,
+        proof: AlignmentLoopProof,
+    },
     Fence {
         offset: u64,
         fm: u8,
@@ -254,6 +264,20 @@ pub enum FunctionRecord {
         length: u64,
         reason: GapReason,
     },
+}
+
+/// A unit-stride loop entered through its alignment test before any store.
+/// With mask = 2^k - 1, the nonzero residue decreases its distance to the
+/// next alignment on each iteration, including across the RV32 boundary.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct AlignmentLoopProof {
+    pub header: u64,
+    pub guard: u64,
+    pub back_edge: u64,
+    pub step: u64,
+    pub entry_edge: u64,
+    pub pointer: u8,
+    pub mask: u8,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]

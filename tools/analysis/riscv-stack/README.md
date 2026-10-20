@@ -298,3 +298,7 @@ The optional [stack-call validation](validation/call-spills/README.md) reuses
 through complete disjoint effects. Its companion-ROM diagnostic records why the
 selected real publisher copy call still lacks that proof; reviewed frame/call
 summaries alone do not establish memory noninterference.
+The [alignment-loop validation](validation/alignment-writes/README.md) proves a
+finite footprint for one byte-store instruction through the same trampoline and
+actual caller arguments. The other eleven unknown store sites still prevent
+preserving the selected caller spill across the full call.
