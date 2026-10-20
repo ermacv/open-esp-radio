@@ -7,7 +7,8 @@ use oer_ieee80211_wire::block_ack::frame::{
 use oer_ieee80211_wire::sequence::SequenceNumber;
 use oer_time::{Duration, Instant};
 
-const BLOCK_ACK_WINDOW_FIELD_MAX: u16 = 0x03ff;
+/// Largest originator window represented by the delivery/expiry bitmaps.
+pub const MAX_TX_BLOCK_ACK_WINDOW: u16 = 64;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TxBlockAckError {
@@ -36,7 +37,7 @@ impl TxBlockAckConfig {
         if self.tid > 15 {
             return Err(TxBlockAckError::InvalidTid(self.tid));
         }
-        if self.window == 0 || self.window > BLOCK_ACK_WINDOW_FIELD_MAX {
+        if self.window == 0 || self.window > MAX_TX_BLOCK_ACK_WINDOW {
             return Err(TxBlockAckError::InvalidWindow(self.window));
         }
         if self.negotiation_timeout.as_micros() == 0 {
@@ -88,6 +89,7 @@ pub struct OperationalTxBlockAck {
     pub tid: u8,
     pub window: u16,
     pub timeout_tu: u16,
+    /// Current originator-window head, advanced by delivery and expiry.
     pub starting_sequence: SequenceNumber,
     pub amsdu: bool,
 }
@@ -105,12 +107,16 @@ enum TxBlockAckPhase {
         dialog_token: u8,
         starting_sequence: SequenceNumber,
     },
-    Operational(OperationalTxBlockAck),
+    Operational {
+        agreement: OperationalTxBlockAck,
+        delivered: u64,
+        expired: u64,
+    },
 }
 
 /// One statically owned TX BlockAck agreement for one QoS TID.
 ///
-/// Every method performs a fixed number of loads/stores. Timer expiry is an
+/// Progress processes at most 64 sequence positions. Timer expiry is an
 /// externally delivered edge; this type never reads time, sleeps, or retries.
 pub struct TxBlockAckSession {
     config: TxBlockAckConfig,
@@ -270,7 +276,11 @@ impl TxBlockAckSession {
             starting_sequence,
             amsdu: self.config.amsdu && amsdu,
         };
-        self.phase = TxBlockAckPhase::Operational(agreement);
+        self.phase = TxBlockAckPhase::Operational {
+            agreement,
+            delivered: 0,
+            expired: 0,
+        };
         self.generation = next_generation(self.generation);
         Ok(TxBlockAckResponse::Operational(agreement))
     }
@@ -288,19 +298,76 @@ impl TxBlockAckSession {
         true
     }
 
-    /// Retire the expired originator-window head under a live agreement.
-    /// Return the next sequence for the core's BlockAckReq; a non-head
-    /// expiry and an inactive agreement never move the window.
-    pub fn expired_head(&mut self, sequence: SequenceNumber) -> Option<SequenceNumber> {
-        let TxBlockAckPhase::Operational(agreement) = &mut self.phase else {
+    /// Mark delivered MSDUs: bit i names `starting_sequence + i`.
+    /// Return a BAR SSN if advancing over this delivery also passes an
+    /// earlier expiry. Non-head marks remain until the head reaches them.
+    pub fn on_delivered(
+        &mut self,
+        starting_sequence: SequenceNumber,
+        bitmap: u64,
+    ) -> Option<SequenceNumber> {
+        self.progress(starting_sequence, bitmap, false)
+    }
+
+    /// Mark expired MSDUs: bit i names `starting_sequence + i`.
+    /// Apply the whole report before advancing, returning one final BAR
+    /// SSN if the window passes any expired MSDU. Inactive agreements and
+    /// positions outside the current window have no effect.
+    pub fn on_expired(
+        &mut self,
+        starting_sequence: SequenceNumber,
+        bitmap: u64,
+    ) -> Option<SequenceNumber> {
+        self.progress(starting_sequence, bitmap, true)
+    }
+
+    fn progress(
+        &mut self,
+        starting_sequence: SequenceNumber,
+        bitmap: u64,
+        is_expired: bool,
+    ) -> Option<SequenceNumber> {
+        let TxBlockAckPhase::Operational {
+            agreement,
+            delivered,
+            expired,
+        } = &mut self.phase
+        else {
             return None;
         };
-        if agreement.starting_sequence != sequence {
-            return None;
+        for offset in 0..MAX_TX_BLOCK_ACK_WINDOW {
+            if bitmap & (1_u64 << offset) == 0 {
+                continue;
+            }
+            let sequence = starting_sequence.wrapping_add(offset);
+            let distance = agreement.starting_sequence.forward_distance(sequence);
+            if distance >= agreement.window {
+                continue;
+            }
+            // Validation bounds the window by 64, so distance fits the mask.
+            let bit = 1_u64 << distance;
+            // Terminal marks are idempotent; a late report cannot revive one.
+            if (*delivered | *expired) & bit != 0 {
+                continue;
+            }
+            if is_expired {
+                *expired |= bit;
+            } else {
+                *delivered |= bit;
+            }
         }
-        let next = sequence.wrapping_add(1);
-        agreement.starting_sequence = next;
-        Some(next)
+        let advance = (*delivered | *expired).trailing_ones();
+        let needs_bar = expired.trailing_zeros() < advance;
+        if advance == u64::BITS {
+            *delivered = 0;
+            *expired = 0;
+        } else {
+            *delivered >>= advance;
+            *expired >>= advance;
+        }
+        // trailing_ones is at most 64, within the sequence increment type.
+        agreement.starting_sequence = agreement.starting_sequence.wrapping_add(advance as u16);
+        needs_bar.then_some(agreement.starting_sequence)
     }
 
     pub fn stop(&mut self) {
@@ -317,7 +384,7 @@ impl TxBlockAckSession {
 
     pub const fn operational(&self) -> Option<OperationalTxBlockAck> {
         match self.phase {
-            TxBlockAckPhase::Operational(agreement) => Some(agreement),
+            TxBlockAckPhase::Operational { agreement, .. } => Some(agreement),
             _ => None,
         }
     }

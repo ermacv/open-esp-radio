@@ -416,7 +416,7 @@ not prove a hardware implementation.
 | Outcomes (`outcomes::check`) | Single ACK, aggregate BlockAck, single/aggregate NoResponse | Single/aggregate Collision, AirDenied, HardwareTimeout |
 | GTK (`group_keys::check`) | Disable before/after each of four mutations, published-key removal | Four independently delayed-ingress RX cuts, four stalled-command expiries |
 | EDCA (`edca::check`) | Two VIFs with different tables, every AC | None |
-| MSDU age (`msdu_age::check`) | None | Before publication, between retries, re-formation with a core BAR, hardware-owned completion |
+| MSDU age (`msdu_age::check`) | None | Before publication, between retries, re-formation with a core BAR, delivery before head expiry, hardware-owned completion |
 
 Hardware ACK uses a reachable peer and NoResponse an absent address. Collision,
 AirDenied and HardwareTimeout require model injection. The GTK receive-cut

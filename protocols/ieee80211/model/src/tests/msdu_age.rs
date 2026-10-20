@@ -53,6 +53,7 @@ async fn returned_aggregate<'p, 'id: 'p>(
     Slot<'id, ModelTickets, ModelPool<1>>,
     ModelSubframes<'id>,
     End,
+    Option<oer_ieee80211_port::BlockAckReport>,
 ) {
     let Ok(Ok(LowerMacEvent::Terminal(LowerMacTerminal::TxCompleted(TxCompleted::Aggregate(
         done,
@@ -70,7 +71,49 @@ async fn returned_aggregate<'p, 'id: 'p>(
         outcome,
         TxOutcome::Ended(oer_ieee80211_port::AggregateEnd::Delivered { .. })
     );
-    (ticket, payload, classify(outcome, delivered))
+    let report = match outcome {
+        TxOutcome::Ended(oer_ieee80211_port::AggregateEnd::Delivered { report, .. }) => {
+            Some(report)
+        }
+        _ => None,
+    };
+    (ticket, payload, classify(outcome, delivered), report)
+}
+fn active_originator(
+    start: SequenceNumber,
+    now: Instant,
+) -> oer_ieee80211_upper_mac::block_ack::TxBlockAckOriginator<1> {
+    use oer_ieee80211_upper_mac::block_ack::{
+        TxBlockAckOriginator, TxBlockAckOriginatorConfig, TxBlockAckOriginatorPolicy,
+        next_nonzero_dialog_token,
+    };
+    let mut core = TxBlockAckOriginator::new(
+        TxBlockAckOriginatorPolicy {
+            tids: &[0],
+            first_dialog_token: 1,
+            next_dialog_token: next_nonzero_dialog_token,
+        },
+        TxBlockAckOriginatorConfig {
+            window: 32,
+            negotiation_timeout: Duration::from_micros(1000),
+            amsdu_tids: 0,
+        },
+    )
+    .unwrap();
+    let request = core.begin(0, start, now).unwrap();
+    core.on_response_action(
+        oer_ieee80211_wire::block_ack::BlockAckAction::AddbaResponse {
+            dialog_token: request.dialog_token,
+            status: 0,
+            tid: 0,
+            immediate: true,
+            amsdu: false,
+            window: 32,
+            timeout_tu: 0,
+        },
+    )
+    .unwrap();
+    core
 }
 impl Work for Exercise {
     async fn work<'p, 'id: 'p>(
@@ -99,29 +142,97 @@ impl Work for Exercise {
         let returned;
         let mut ends = Vec::new();
         let mut core_bar = None;
-        if self.case == Case::Reformation {
-            macro_rules! empty {
-                () => {{
-                    let rate = phase
-                        .rate(PhyRate::Ht(
-                            oer_ieee80211_wire::phy::HtRate::new(
-                                HtMcs::new(0).unwrap(),
-                                oer_ieee80211_wire::phy::PpduBandwidth::Mhz20,
-                                false,
-                            )
-                            .unwrap(),
-                        ))
-                        .unwrap();
-                    let mut station = phase.station();
-                    let rate = station.ampdu_rate(rate).ok().unwrap();
-                    station.aggregate(
-                        IndividualAddress::new(PEER).unwrap(),
-                        Tid::new(0).unwrap(),
-                        rate,
-                        TxProtection::Open,
-                    )
-                }};
+        macro_rules! empty {
+            () => {{
+                let rate = phase
+                    .rate(PhyRate::Ht(
+                        oer_ieee80211_wire::phy::HtRate::new(
+                            HtMcs::new(0).unwrap(),
+                            oer_ieee80211_wire::phy::PpduBandwidth::Mhz20,
+                            false,
+                        )
+                        .unwrap(),
+                    ))
+                    .unwrap();
+                let mut station = phase.station();
+                let rate = station.ampdu_rate(rate).ok().unwrap();
+                station.aggregate(
+                    IndividualAddress::new(PEER).unwrap(),
+                    Tid::new(0).unwrap(),
+                    rate,
+                    TxProtection::Open,
+                )
+            }};
+        }
+        if self.case == Case::DeliveryBeforeExpiry {
+            let mut originator =
+                active_originator(SequenceNumber::new(6).unwrap(), self.clock.now());
+            let missing = small.remove(0);
+            owners[2] = missing.slot.index();
+            let aggregate = push_subframe(
+                empty!(),
+                oer_ieee80211_port::TxNumbering::Open,
+                buffer,
+                subframe_frame(6),
+                None,
+            );
+            let aggregate = push_subframe(
+                aggregate,
+                oer_ieee80211_port::TxNumbering::Open,
+                missing,
+                subframe_frame(7),
+                None,
+            );
+            air.answer(AirAnswer::BlockAck(1));
+            send_aggregate(phase, ticket, aggregate);
+            let (ticket, subframes, end, report) =
+                returned_aggregate(phase, &mut terminal_access).await;
+            ends.push(end);
+            let mut subframes = subframes.into_iter();
+            let delivered = subframes.next().unwrap();
+            let missing = subframes.next().unwrap();
+            let report = report.expect("the actual BlockAck reports the preceding delivery");
+            assert!(report.acknowledges(delivered.buffer.sequence()));
+            assert!(!report.acknowledges(missing.buffer.sequence()));
+            assert_eq!(
+                originator.on_delivered(0, report.start_sequence, report.bitmap, PEER, STATION),
+                None
+            );
+            let head = missing.buffer.sequence();
+            assert_eq!(originator.operational(0).unwrap().starting_sequence, head);
+            let delivered_at = delivered.admitted_at().unwrap();
+            let delivered_index = index(&delivered.buffer);
+            let (ModelAnyBuffer::SmallSent(missing), _) = missing.into_parts() else {
+                panic!("the missing member was published");
+            };
+            let aggregate = push_retry(empty!(), missing);
+            air.hold(WmmAccessCategory::BestEffort, true);
+            send_aggregate(phase, ticket, aggregate);
+            for _ in 0..4 {
+                yield_now().await;
             }
+            self.clock.advance(Case::LIFETIME).unwrap();
+            air.clock_advanced();
+            air.hold(WmmAccessCategory::BestEffort, false);
+            let (ticket, subframes, end, _) = returned_aggregate(phase, &mut terminal_access).await;
+            ends.push(end);
+            let expired = subframes.into_iter().next().unwrap();
+            let End::Expired(msdus) = end else {
+                panic!("the undelivered head expired");
+            };
+            core_bar = Some(contract::CoreBar {
+                head,
+                tid: 0,
+                addresses: [PEER, STATION],
+                frame: originator
+                    .on_expired(0, expired.buffer.sequence(), msdus, PEER, STATION)
+                    .expect("a head reached by delivery still needs a BAR on expiry"),
+            });
+            returned = [delivered_at, expired.admitted_at().unwrap()];
+            returned_owners = [ticket.index(), delivered_index, index(&expired.buffer)];
+        } else if self.case == Case::Reformation {
+            let mut originator =
+                active_originator(SequenceNumber::new(7).unwrap(), self.clock.now());
             let aggregate = push_subframe(
                 empty!(),
                 oer_ieee80211_port::TxNumbering::Open,
@@ -131,7 +242,7 @@ impl Work for Exercise {
             );
             air.answer(AirAnswer::BlockAck(0));
             send_aggregate(phase, ticket, aggregate);
-            let (ticket, subframes, end) = returned_aggregate(phase, &mut terminal_access).await;
+            let (ticket, subframes, end, _) = returned_aggregate(phase, &mut terminal_access).await;
             ends.push(end);
             let old = subframes.into_iter().next().unwrap();
             assert_eq!(old.admitted_at(), Some(first));
@@ -166,52 +277,21 @@ impl Work for Exercise {
             self.clock.advance(Duration::from_micros(51)).unwrap();
             air.clock_advanced();
             air.hold(WmmAccessCategory::BestEffort, false);
-            let (ticket, subframes, end) = returned_aggregate(phase, &mut terminal_access).await;
+            let (ticket, subframes, end, _) = returned_aggregate(phase, &mut terminal_access).await;
             ends.push(end);
             let mut subframes = subframes.into_iter();
             let old = subframes.next().unwrap();
             let live = subframes.next().unwrap();
             // Compose the port report with the real upper-MAC core. The
             // backend never owns the agreement and never generates a BAR.
-            use oer_ieee80211_upper_mac::block_ack::{
-                TxBlockAckOriginator, TxBlockAckOriginatorConfig, TxBlockAckOriginatorPolicy,
-                next_nonzero_dialog_token,
-            };
             let head = old.buffer.sequence();
-            let mut originator = TxBlockAckOriginator::<1>::new(
-                TxBlockAckOriginatorPolicy {
-                    tids: &[0],
-                    first_dialog_token: 1,
-                    next_dialog_token: next_nonzero_dialog_token,
-                },
-                TxBlockAckOriginatorConfig {
-                    window: 32,
-                    negotiation_timeout: Duration::from_micros(1000),
-                    amsdu_tids: 0,
-                },
-            )
-            .unwrap();
-            let request = originator.begin(0, head, self.clock.now()).unwrap();
-            originator
-                .on_response_action(
-                    oer_ieee80211_wire::block_ack::BlockAckAction::AddbaResponse {
-                        dialog_token: request.dialog_token,
-                        status: 0,
-                        tid: 0,
-                        immediate: true,
-                        amsdu: false,
-                        window: 32,
-                        timeout_tu: 0,
-                    },
-                )
-                .unwrap();
             assert_eq!(end, End::Expired(1));
             core_bar = Some(contract::CoreBar {
                 head,
                 tid: 0,
                 addresses: [PEER, STATION],
                 frame: originator
-                    .expired_head(0, head, PEER, STATION)
+                    .on_expired(0, head, 1, PEER, STATION)
                     .expect("the expired active head needs a BAR"),
             });
             returned = [old.admitted_at().unwrap(), live.admitted_at().unwrap()];
@@ -237,7 +317,7 @@ impl Work for Exercise {
             self.clock.advance(Duration::from_micros(49)).unwrap();
             air.clock_advanced();
             air.hold(WmmAccessCategory::BestEffort, false);
-            let (_, subframes, end) = returned_aggregate(phase, &mut terminal_access).await;
+            let (_, subframes, end, _) = returned_aggregate(phase, &mut terminal_access).await;
             ends.push(end);
             assert_eq!(
                 subframes.into_iter().next().unwrap().admitted_at(),

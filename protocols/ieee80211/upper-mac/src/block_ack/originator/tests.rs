@@ -311,34 +311,102 @@ fn response_routing_never_panics_full() {
     responses(oer_ieee80211_wire::fuzz::FULL);
 }
 
-#[test]
-fn expired_window_head_produces_a_core_bar_and_advances_across_sequence_wrap() {
-    let peer = [2, 0, 0, 0, 0, 2];
-    let local = [2, 0, 0, 0, 0, 1];
-    let mut originator = originator(32, 0);
-    assert_eq!(
-        originator.expired_head(0, sequence(4095), peer, local),
-        None
-    );
-    let request = originator.begin(0, sequence(4095), Instant::EPOCH).unwrap();
-    originator
-        .on_response_action(response(request.dialog_token, 0, 0, 32))
+fn active_originator(start: u16) -> TxBlockAckOriginator<TX_BLOCK_ACK_MAX_TIDS> {
+    let mut core = originator(32, 0);
+    let request = core.begin(0, sequence(start), Instant::EPOCH).unwrap();
+    core.on_response_action(response(request.dialog_token, 0, 0, 32))
         .unwrap();
-    // An expired non-head does not move an active window or request a BAR.
-    assert_eq!(originator.expired_head(0, sequence(0), peer, local), None);
-    let frame = originator
-        .expired_head(0, sequence(4095), peer, local)
-        .expect("an active expired head needs a BAR");
+    core
+}
+
+const PEER: [u8; 6] = [2, 0, 0, 0, 0, 2];
+const LOCAL: [u8; 6] = [2, 0, 0, 0, 0, 1];
+fn bar(start: u16) -> [u8; oer_ieee80211_wire::block_ack::BLOCK_ACK_REQUEST_LEN] {
+    oer_ieee80211_wire::block_ack::encode_block_ack_request(PEER, LOCAL, 0, sequence(start))
+}
+
+#[test]
+fn expiry_after_deliveries_uses_the_current_originator_head() {
+    let mut core = active_originator(100);
+    assert_eq!(core.on_delivered(0, sequence(100), 0b11, PEER, LOCAL), None);
     assert_eq!(
-        frame,
-        oer_ieee80211_wire::block_ack::encode_block_ack_request(peer, local, 0, sequence(0))
+        core.operational(0).unwrap().starting_sequence,
+        sequence(102)
     );
     assert_eq!(
-        originator.operational(0).unwrap().starting_sequence,
-        sequence(0)
+        core.on_expired(0, sequence(102), 1, PEER, LOCAL),
+        Some(bar(103))
     );
     assert_eq!(
-        originator.expired_head(0, sequence(4095), peer, local),
-        None
+        core.operational(0).unwrap().starting_sequence,
+        sequence(103)
+    );
+}
+
+#[test]
+fn a_non_head_expiry_is_remembered_until_delivery_reaches_it() {
+    let mut core = active_originator(100);
+    assert_eq!(core.on_expired(0, sequence(102), 1, PEER, LOCAL), None);
+    assert_eq!(core.on_delivered(0, sequence(103), 1, PEER, LOCAL), None);
+    assert_eq!(core.on_delivered(0, sequence(100), 1, PEER, LOCAL), None);
+    assert_eq!(
+        core.operational(0).unwrap().starting_sequence,
+        sequence(101)
+    );
+    assert_eq!(
+        core.on_delivered(0, sequence(101), 1, PEER, LOCAL),
+        Some(bar(104))
+    );
+    assert_eq!(
+        core.operational(0).unwrap().starting_sequence,
+        sequence(104)
+    );
+    assert_eq!(core.on_expired(0, sequence(102), 1, PEER, LOCAL), None);
+    assert_eq!(core.on_delivered(0, sequence(101), 1, PEER, LOCAL), None);
+}
+
+#[test]
+fn consecutive_expiries_emit_one_bar_at_the_final_window_start() {
+    let mut core = active_originator(100);
+    assert_eq!(core.on_expired(0, sequence(101), 0b111, PEER, LOCAL), None);
+    assert_eq!(
+        core.on_expired(0, sequence(100), 1, PEER, LOCAL),
+        Some(bar(104))
+    );
+    assert_eq!(
+        core.on_expired(0, sequence(104), 0b111, PEER, LOCAL),
+        Some(bar(107))
+    );
+    assert_eq!(core.on_expired(0, sequence(100), 0b1111, PEER, LOCAL), None);
+    assert_eq!(
+        core.operational(0).unwrap().starting_sequence,
+        sequence(107)
+    );
+}
+
+#[test]
+fn delivery_and_deferred_expiry_advance_across_sequence_zero() {
+    let mut core = active_originator(4094);
+    assert_eq!(core.on_expired(0, sequence(4095), 0b11, PEER, LOCAL), None);
+    assert_eq!(core.on_delivered(0, sequence(1), 1, PEER, LOCAL), None);
+    assert_eq!(
+        core.on_delivered(0, sequence(4094), 1, PEER, LOCAL),
+        Some(bar(2))
+    );
+    assert_eq!(core.operational(0).unwrap().starting_sequence, sequence(2));
+    assert_eq!(core.on_expired(0, sequence(4095), 0b11, PEER, LOCAL), None);
+}
+
+#[test]
+fn inactive_or_other_tid_progress_never_emits_a_bar() {
+    let mut core = originator(32, 0);
+    assert_eq!(core.on_expired(0, sequence(0), 1, PEER, LOCAL), None);
+    assert_eq!(core.on_delivered(0, sequence(0), 1, PEER, LOCAL), None);
+    core = active_originator(0);
+    assert_eq!(core.on_expired(1, sequence(0), 1, PEER, LOCAL), None);
+    assert_eq!(core.on_expired(7, sequence(0), 1, PEER, LOCAL), None);
+    assert_eq!(
+        core.on_expired(0, sequence(0), 1, PEER, LOCAL),
+        Some(bar(1))
     );
 }

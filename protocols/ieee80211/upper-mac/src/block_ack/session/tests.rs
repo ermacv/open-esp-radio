@@ -117,6 +117,81 @@ fn response_cannot_expand_the_static_capacity() {
     );
 }
 
+fn active(start: u16, window: u16) -> TxBlockAckSession {
+    let mut session = TxBlockAckSession::new(TxBlockAckConfig { window, ..CONFIG }).unwrap();
+    let request = session.begin(seq(start), at(0)).unwrap();
+    session
+        .on_response_action(BlockAckAction::AddbaResponse {
+            dialog_token: request.dialog_token,
+            status: 0,
+            tid: CONFIG.tid,
+            immediate: true,
+            amsdu: false,
+            window,
+            timeout_tu: 0,
+        })
+        .unwrap();
+    session
+}
+
+#[test]
+fn a_full_64_member_expiry_report_advances_once_without_a_shift_overflow() {
+    let mut session = active(4090, 64);
+    assert_eq!(session.on_expired(seq(4090), u64::MAX), Some(seq(58)));
+    assert_eq!(session.operational().unwrap().starting_sequence, seq(58));
+    assert_eq!(session.on_delivered(seq(58), u64::MAX), None);
+    assert_eq!(session.operational().unwrap().starting_sequence, seq(122));
+    assert_eq!(session.on_expired(seq(122), 1), Some(seq(123)));
+}
+
+#[test]
+fn stale_and_out_of_window_reports_do_not_mark_a_new_head() {
+    let mut session = active(100, 32);
+    for sn in [99, 132, 2048, 4095] {
+        assert_eq!(session.on_delivered(seq(sn), 1), None);
+        assert_eq!(session.on_expired(seq(sn), 1), None);
+    }
+    // The stale bit is ignored, but the next bit still names the head.
+    assert_eq!(session.on_delivered(seq(99), 3), None);
+    assert_eq!(session.operational().unwrap().starting_sequence, seq(101));
+    assert_eq!(session.on_expired(seq(101), 1), Some(seq(102)));
+}
+
+#[test]
+fn terminal_marks_are_idempotent_and_reset_with_the_agreement() {
+    let mut session = active(100, 32);
+    assert_eq!(session.on_expired(seq(101), 1), None);
+    assert_eq!(session.on_delivered(seq(101), 1), None);
+    assert_eq!(session.on_delivered(seq(100), 1), Some(seq(102)));
+    session.stop();
+    let request = session.begin(seq(100), at(0)).unwrap();
+    session
+        .on_response_action(BlockAckAction::AddbaResponse {
+            dialog_token: request.dialog_token,
+            status: 0,
+            tid: CONFIG.tid,
+            immediate: true,
+            amsdu: false,
+            window: 32,
+            timeout_tu: 0,
+        })
+        .unwrap();
+    assert_eq!(session.on_delivered(seq(100), 1), None);
+    assert_eq!(session.operational().unwrap().starting_sequence, seq(101));
+}
+
+#[test]
+fn a_window_larger_than_the_originator_marks_is_refused() {
+    assert_eq!(
+        TxBlockAckConfig {
+            window: 65,
+            ..CONFIG
+        }
+        .validate(),
+        Err(TxBlockAckError::InvalidWindow(65))
+    );
+}
+
 #[test]
 fn rejected_response_returns_to_idle_without_a_timer_retry() {
     let mut session = TxBlockAckSession::new(CONFIG).unwrap();

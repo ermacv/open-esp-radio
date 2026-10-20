@@ -62,6 +62,46 @@ fn age_verification_rejects_reset_age_lost_owners_and_backend_bars() {
     );
 }
 
+#[test]
+fn delivery_before_expiry_requires_the_bar_to_follow_the_new_head() {
+    use conformance::msdu_age::{self, Case, CoreBar, End, Trace, Violation};
+    let trace = |bar_start: u16| Trace {
+        ends: [End::Delivered, End::Expired(1)],
+        publications: 1,
+        expired_msdus: 1,
+        admitted: [oer_ieee80211_port::Ieee80211Instant::from_micros(99); 2],
+        returned: [oer_ieee80211_port::Ieee80211Instant::from_micros(99); 2],
+        owners: [1, 2, 3],
+        returned_owners: [1, 2, 3],
+        backend_bars: 0,
+        core_bar: Some(CoreBar {
+            head: SequenceNumber::new(7).unwrap(),
+            tid: 0,
+            addresses: [[2, 0, 0, 0, 0, 2], [2, 0, 0, 0, 0, 1]],
+            frame: oer_ieee80211_wire::block_ack::encode_block_ack_request(
+                [2, 0, 0, 0, 0, 2],
+                [2, 0, 0, 0, 0, 1],
+                0,
+                SequenceNumber::new(bar_start).unwrap(),
+            ),
+        }),
+    };
+    assert_eq!(
+        msdu_age::verify(Case::DeliveryBeforeExpiry, trace(8)),
+        Ok(())
+    );
+    assert_eq!(
+        msdu_age::verify(Case::DeliveryBeforeExpiry, trace(7)),
+        Err(Violation::Bar)
+    );
+    let mut missing = trace(8);
+    missing.core_bar = None;
+    assert_eq!(
+        msdu_age::verify(Case::DeliveryBeforeExpiry, missing),
+        Err(Violation::Bar)
+    );
+}
+
 fn ready<T>(future: impl Future<Output = T>) -> T {
     let mut future = pin!(future);
     match future
