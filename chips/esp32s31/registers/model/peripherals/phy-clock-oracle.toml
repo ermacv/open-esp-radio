@@ -158,24 +158,39 @@ value = 0
 name = "OPEN"
 value = 4294967295
 
-[[review]]
+[[peripheral-review]]
 entity = "PHY_CLOCK_ORACLE"
-sources = [
-    "ROM_REV0_PHY_OPEN_FE_BB_CLK",
-    "ROM_REV0_PHY_FE_REG_INIT",
-    "BLOB_LIBPHY_PHY_CLOSE_FE_BB_CLK",
+opaque-entities = [
+    "PHY_CLOCK_ORACLE.WORD_0400_OPAQUE",
+    "PHY_CLOCK_ORACLE.WORD_0800_OPAQUE",
+    "PHY_CLOCK_ORACLE.WORD_0800_OPAQUE.BITS_0_1_OPAQUE",
+    "PHY_CLOCK_ORACLE.WORD_0800_OPAQUE.BIT_2_OPAQUE",
+    "PHY_CLOCK_ORACLE.WORD_7C80_OPAQUE",
 ]
+
+[peripheral-review.peripheral]
+sources = ["ROM_REV0_PHY_OPEN_FE_BB_CLK", "ROM_REV0_PHY_FE_REG_INIT", "BLOB_LIBPHY_PHY_CLOSE_FE_BB_CLK"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
 
-[[review]]
-entity = "PHY_CLOCK_ORACLE.WORD_0400_OPAQUE"
+[peripheral-review.register]
+sources = ["ROM_REV0_PHY_FE_REG_INIT", "ROM_REV0_PHY_FORCE_PWR_INDEX", "BLOB_LIBPHY_PHY_SET_TX_CFR_MEM", "BLOB_LIBPHY_PHY_SET_TX_GAIN_MEM_NEW"]
+naming = "descriptive"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[peripheral-review.field]
+sources = ["BLOB_LIBPHY_CALIBRATION_20260907"]
+naming = "descriptive"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[peripheral-review.opaque]
+sources = ["ROM_REV0_PHY_OPEN_FE_BB_CLK", "BLOB_LIBPHY_PHY_CLOSE_FE_BB_CLK"]
 naming = "opaque"
-sources = [
-    "ROM_REV0_PHY_OPEN_FE_BB_CLK",
-    "BLOB_LIBPHY_PHY_CLOSE_FE_BB_CLK",
-]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
@@ -190,19 +205,6 @@ sources = [
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
-
-[[review]]
-entity = "PHY_CLOCK_ORACLE.TABLE_MEMORY_INDEX_SOURCE"
-naming = "descriptive"
-sources = [
-    "ROM_REV0_PHY_FE_REG_INIT",
-    "ROM_REV0_PHY_FORCE_PWR_INDEX",
-    "BLOB_LIBPHY_PHY_SET_TX_CFR_MEM",
-    "BLOB_LIBPHY_PHY_SET_TX_GAIN_MEM_NEW",
-]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
 
 [[review]]
 entity = "PHY_CLOCK_ORACLE.TABLE_MEMORY_INDEX_SOURCE.FORCED_POWER_INDEX"
@@ -233,42 +235,9 @@ accuracy = "exact"
 completeness = "complete"
 
 [[review]]
-entity = "PHY_CLOCK_ORACLE.WORD_0800_OPAQUE"
-naming = "opaque"
-sources = [
-    "ROM_REV0_PHY_OPEN_FE_BB_CLK",
-    "BLOB_LIBPHY_PHY_CLOSE_FE_BB_CLK",
-]
-provenance = "observed"
-accuracy = "exact"
-completeness = "unknown"
-
-[[review]]
-entity = "PHY_CLOCK_ORACLE.WORD_0800_OPAQUE.BITS_0_1_OPAQUE"
-naming = "opaque"
-sources = [
-    "ROM_REV0_PHY_OPEN_FE_BB_CLK",
-    "BLOB_LIBPHY_PHY_CLOSE_FE_BB_CLK",
-]
-provenance = "observed"
-accuracy = "exact"
-completeness = "unknown"
-
-[[review]]
 entity = "PHY_CLOCK_ORACLE.WORD_0800_OPAQUE.BIT_2_OPAQUE"
 naming = "opaque"
 sources = ["BLOB_LIBPHY_PHY_BB_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "unknown"
-
-[[review]]
-entity = "PHY_CLOCK_ORACLE.WORD_7C80_OPAQUE"
-naming = "opaque"
-sources = [
-    "ROM_REV0_PHY_OPEN_FE_BB_CLK",
-    "BLOB_LIBPHY_PHY_CLOSE_FE_BB_CLK",
-]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
@@ -283,27 +252,3 @@ sources = [
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
-
-[[review]]
-entity = "PHY_CLOCK_ORACLE.TABLE_MEMORY_INDEX_SOURCE.FORCED_DIGITAL_GAIN_0"
-naming = "descriptive"
-sources = ["BLOB_LIBPHY_CALIBRATION_20260907"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_CLOCK_ORACLE.TABLE_MEMORY_INDEX_SOURCE.FORCED_DIGITAL_GAIN_1"
-naming = "descriptive"
-sources = ["BLOB_LIBPHY_CALIBRATION_20260907"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_CLOCK_ORACLE.TABLE_MEMORY_INDEX_SOURCE.FORCE_DIGITAL_GAIN_ENABLE"
-naming = "descriptive"
-sources = ["BLOB_LIBPHY_CALIBRATION_20260907"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"

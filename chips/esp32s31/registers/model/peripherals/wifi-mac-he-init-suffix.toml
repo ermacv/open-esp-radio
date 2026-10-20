@@ -677,12 +677,33 @@ name = "BITS_21_31_OPAQUE"
 bitOffset = 21
 bitWidth = 11
 
-[[review]]
+[[peripheral-review]]
 entity = "WIFI_MAC_HE_INIT_SUFFIX"
+opaque-entities = [
+    "WIFI_MAC_HE_INIT_SUFFIX.MULTI_BSSID_HIGH.BITS_16_23_OPAQUE",
+    "WIFI_MAC_HE_INIT_SUFFIX.HE_DEFAULT_CONTROL.BITS_21_25_OPAQUE",
+    "WIFI_MAC_HE_INIT_SUFFIX.SHARED_ENABLE_CONTROL.BIT_31_OPAQUE",
+    "WIFI_MAC_HE_INIT_SUFFIX.HE_SCRATCH%s.BITS_21_31_OPAQUE",
+]
+
+[peripheral-review.peripheral]
 sources = ["BLOB_LIBPP_HAL_HE_INIT_SUFFIX"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
+
+[peripheral-review.register]
+sources = ["BLOB_LIBPP_HAL_HE_INIT_SUFFIX"]
+naming = "descriptive"
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[peripheral-review.field]
+naming = "descriptive"
+
+[peripheral-review.opaque]
+naming = "opaque"
 
 [[review]]
 entity = "WIFI_MAC_HE_INIT_SUFFIX.MULTI_BSSID_CONTROL"
@@ -718,14 +739,6 @@ sources = [
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_SUFFIX.MULTI_BSSID_HIGH"
-naming = "descriptive"
-sources = ["BLOB_LIBPP_HAL_HE_INIT_SUFFIX"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "unknown"
 
 [[review]]
 entity = "WIFI_MAC_HE_INIT_SUFFIX.MULTI_BSSID_CONTROL_INTERFACE_1"
@@ -1071,22 +1084,6 @@ accuracy = "exact"
 completeness = "complete"
 
 [[review]]
-entity = "WIFI_MAC_HE_INIT_SUFFIX.FEATURE_EDGES"
-naming = "descriptive"
-sources = ["BLOB_LIBPP_HAL_HE_INIT_SUFFIX"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "unknown"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_SUFFIX.SHARED_ENABLE_CONTROL"
-naming = "descriptive"
-sources = ["BLOB_LIBPP_HAL_HE_INIT_SUFFIX"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "unknown"
-
-[[review]]
 entity = "WIFI_MAC_HE_INIT_SUFFIX.QOS_NULL_TRANSLATION_CONTROL%s"
 naming = "descriptive"
 sources = ["BLOB_LIBPP_HAL_RUNTIME_MMIO_LEAVES"]
@@ -1139,174 +1136,6 @@ accuracy = "exact"
 completeness = "complete"
 
 [[review]]
-entity = "WIFI_MAC_HE_INIT_SUFFIX.MULTI_BSSID_CONTROL.BSSID_BYTE_5"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_SUFFIX.MULTI_BSSID_CONTROL.MULTI_BSSID_ENABLE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_SUFFIX.MULTI_BSSID_CONTROL.MULTI_BSSID_MASK"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_SUFFIX.MULTI_BSSID_CONTROL.BSS_COLOR"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_SUFFIX.MULTI_BSSID_CONTROL.BSS_COLOR_ENABLE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_SUFFIX.MULTI_BSSID_CONTROL.PARTIAL_BSS_COLOR_ENABLE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_SUFFIX.MULTI_BSSID_HIGH.BITS_16_23_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_SUFFIX.BROADCAST_RU_LOW.VALUE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_SUFFIX.BROADCAST_RU_LOW.ENABLE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_SUFFIX.BROADCAST_RU_HIGH.LOW_VALUE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_SUFFIX.BROADCAST_RU_HIGH.LOW_ENABLE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_SUFFIX.BROADCAST_RU_HIGH.HIGH_VALUE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_SUFFIX.BROADCAST_RU_HIGH.HIGH_ENABLE"
-naming = "descriptive"
-
-[[review]]
 entity = "WIFI_MAC_HE_INIT_SUFFIX.TX_MODE_CONTROL.BEACON_FILTER_FRAME_CRC_STATE"
 naming = "descriptive"
 sources = ["ROM_REV0_RADIO_ACCESSOR_FIELDS"]
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_SUFFIX.DUMP_COMPLETE_HESIGB.ENABLE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_SUFFIX.ERSU_AND_VHT_CONTROL.VHT_BW_SIGNALING_RTS"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_SUFFIX.HE_PACKET_PADDING.BPSK_DURATION"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_SUFFIX.HE_PACKET_PADDING.QPSK_DURATION"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_SUFFIX.HE_PACKET_PADDING.QAM16_DURATION"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_SUFFIX.HE_PACKET_PADDING.QAM64_DURATION"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_SUFFIX.HE_PACKET_PADDING.QAM256_DURATION"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_SUFFIX.HE_DEFAULT_CONTROL.HE_USE_SOFTWARE_TXOP"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_SUFFIX.HE_DEFAULT_CONTROL.NFRP_BUFFER_THRESHOLD"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_SUFFIX.HE_DEFAULT_CONTROL.BITS_21_25_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_SUFFIX.HE_DEFAULT_CONTROL.TB_STOP_OPTION"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_SUFFIX.HE_DEFAULT_CONTROL.HE_TRS_SUPPORT"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_SUFFIX.UORA_CONTROL.HIGH_WINDOW"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_SUFFIX.UORA_CONTROL.LOW_WINDOW"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_SUFFIX.FEATURE_EDGES.ENABLE_0"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_SUFFIX.FEATURE_EDGES.ENABLE_1"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_SUFFIX.SHARED_ENABLE_CONTROL.BIT_31_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_SUFFIX.QOS_NULL_TRANSLATION_CONTROL%s.QOS_NULL_RA_TO_TRANSLATED_BSS"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_SUFFIX.QUEUE_CONTROL%s.LOW_CLEARED_BY_TB_SETUP"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_SUFFIX.QUEUE_CONTROL%s.QOS_NULL_TO_TRANSLATED_BSS"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_SUFFIX.QUEUE_CONTROL%s.TRIGGER_BASED_ENABLE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_SUFFIX.QUEUE_CONTROL%s.MU_EDCA_TIMER_SELECT"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_SUFFIX.QUEUE_CONTROL%s.MPDU_LENGTH_LINK_ADDRESS"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_SUFFIX.QUEUE_CONTROL%s.TID"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_SUFFIX.QUEUE_CONTROL%s.MINIMUM_TX_POWER"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_SUFFIX.QUEUE_CONTROL%s.HIGH_CLEARED_BY_TB_SETUP"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_SUFFIX.HE_SCRATCH%s.MPDU_LENGTH"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_SUFFIX.HE_SCRATCH%s.NEXT_LINK"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_SUFFIX.HE_SCRATCH%s.BITS_21_31_OPAQUE"
-naming = "opaque"

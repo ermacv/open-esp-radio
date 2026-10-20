@@ -97,44 +97,35 @@ bitWidth = 32
 minimum = 0x0
 maximum = 0xFFFFFFFF
 
-[[review]]
+[[peripheral-review]]
 entity = "WIFI_MAC_LAST_RX_BUFFER"
+opaque-entities = [
+    "WIFI_MAC_LAST_RX_BUFFER.CONTROL.BITS_1_6_OPAQUE",
+    "WIFI_MAC_LAST_RX_BUFFER.CONTROL.BITS_8_13_OPAQUE",
+    "WIFI_MAC_LAST_RX_BUFFER.ENTRY_CONTROL%s.BITS_0_31_OPAQUE",
+    "WIFI_MAC_LAST_RX_BUFFER.ENTRY_PARAMETER_A%s.BITS_0_31_OPAQUE",
+    "WIFI_MAC_LAST_RX_BUFFER.ENTRY_PARAMETER_B%s.BITS_0_31_OPAQUE",
+]
+
+[peripheral-review.peripheral]
 sources = ["BLOB_LIBPP_MAC_LAST_RXBUF_INIT"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
 
-[[review]]
-entity = "WIFI_MAC_LAST_RX_BUFFER.CONTROL"
+[peripheral-review.register]
+sources = ["BLOB_LIBPP_MAC_LAST_RXBUF_INIT"]
 naming = "descriptive"
-sources = ["BLOB_LIBPP_MAC_LAST_RXBUF_INIT"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
 
-[[review]]
-entity = "WIFI_MAC_LAST_RX_BUFFER.CONTROL.BITS_1_6_OPAQUE"
-naming = "opaque"
+[peripheral-review.opaque]
 sources = ["BLOB_LIBPP_MAC_LAST_RXBUF_INIT"]
+naming = "opaque"
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
-
-[[review]]
-entity = "WIFI_MAC_LAST_RX_BUFFER.CONTROL.BITS_8_13_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBPP_MAC_LAST_RXBUF_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "WIFI_MAC_LAST_RX_BUFFER.ENTRY_CONTROL%s"
-naming = "descriptive"
-sources = ["BLOB_LIBPP_MAC_LAST_RXBUF_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
 
 [[review]]
 entity = "WIFI_MAC_LAST_RX_BUFFER.ENTRY_PARAMETER_A%s"

@@ -134,10 +134,33 @@ name = "VALUE_3"
 bitOffset = 24
 bitWidth = 8
 
-[[review]]
-entity = "BLUETOOTH_SCHEDULER_INTERRUPT_RUNTIME.SCHEDULER_REFERENCE"
-naming = "descriptive"
+[[peripheral-review]]
+entity = "BLUETOOTH_SCHEDULER_INTERRUPT_RUNTIME"
+opaque-entities = [
+    "BLUETOOTH_SCHEDULER_INTERRUPT_RUNTIME.SCHEDULER_REFERENCE.BITS_20_31_OPAQUE",
+    "BLUETOOTH_SCHEDULER_INTERRUPT_RUNTIME.SCHEDULER_STATE.BITS_24_28_OPAQUE",
+    "BLUETOOTH_SCHEDULER_INTERRUPT_RUNTIME.SCHEDULER_STATE.BIT_30_OPAQUE",
+]
+
+[peripheral-review.peripheral]
+
+[peripheral-review.register]
 sources = ["BLOB_LIBBTDM_SCHEDULER_REGISTERS"]
+naming = "descriptive"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[peripheral-review.field]
+sources = ["BLOB_LIBBTDM_SCHEDULER_STATUS_DIAGNOSTIC", "BLOB_LIBBLE_DIAGNOSTIC_STATUS_DUMP"]
+naming = "descriptive"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[peripheral-review.opaque]
+sources = ["BLOB_LIBBTDM_SCHEDULER_REGISTERS"]
+naming = "opaque"
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
@@ -149,22 +172,6 @@ sources = ["BLOB_LIBBTDM_SCHEDULER_REGISTERS"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_SCHEDULER_INTERRUPT_RUNTIME.SCHEDULER_REFERENCE.BITS_20_31_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTDM_SCHEDULER_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "BLUETOOTH_SCHEDULER_INTERRUPT_RUNTIME.SCHEDULER_STATE"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_SCHEDULER_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
 
 [[review]]
 entity = "BLUETOOTH_SCHEDULER_INTERRUPT_RUNTIME.SCHEDULER_STATE.VALUE_LOW_20"
@@ -183,24 +190,8 @@ accuracy = "exact"
 completeness = "complete"
 
 [[review]]
-entity = "BLUETOOTH_SCHEDULER_INTERRUPT_RUNTIME.SCHEDULER_STATE.BITS_24_28_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTDM_SCHEDULER_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
 entity = "BLUETOOTH_SCHEDULER_INTERRUPT_RUNTIME.SCHEDULER_STATE.STATE_29"
 naming = "descriptive"
-sources = ["BLOB_LIBBTDM_SCHEDULER_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "BLUETOOTH_SCHEDULER_INTERRUPT_RUNTIME.SCHEDULER_STATE.BIT_30_OPAQUE"
-naming = "opaque"
 sources = ["BLOB_LIBBTDM_SCHEDULER_REGISTERS"]
 provenance = "observed"
 accuracy = "exact"
@@ -232,46 +223,6 @@ completeness = "partial"
 
 [[review]]
 entity = "BLUETOOTH_SCHEDULER_INTERRUPT_RUNTIME.DIAGNOSTIC_VALUE"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_SCHEDULER_STATUS_DIAGNOSTIC", "BLOB_LIBBLE_DIAGNOSTIC_STATUS_DUMP"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "BLUETOOTH_SCHEDULER_INTERRUPT_RUNTIME.DIAGNOSTIC_VALUE.VALUE_0_LOW_7"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_SCHEDULER_STATUS_DIAGNOSTIC", "BLOB_LIBBLE_DIAGNOSTIC_STATUS_DUMP"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "BLUETOOTH_SCHEDULER_INTERRUPT_RUNTIME.DIAGNOSTIC_VALUE.VALUE_0_BIT_7"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_SCHEDULER_STATUS_DIAGNOSTIC", "BLOB_LIBBLE_DIAGNOSTIC_STATUS_DUMP"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "BLUETOOTH_SCHEDULER_INTERRUPT_RUNTIME.DIAGNOSTIC_VALUE.VALUE_1"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_SCHEDULER_STATUS_DIAGNOSTIC", "BLOB_LIBBLE_DIAGNOSTIC_STATUS_DUMP"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "BLUETOOTH_SCHEDULER_INTERRUPT_RUNTIME.DIAGNOSTIC_VALUE.VALUE_2"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_SCHEDULER_STATUS_DIAGNOSTIC", "BLOB_LIBBLE_DIAGNOSTIC_STATUS_DUMP"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "BLUETOOTH_SCHEDULER_INTERRUPT_RUNTIME.DIAGNOSTIC_VALUE.VALUE_3"
 naming = "descriptive"
 sources = ["BLOB_LIBBTDM_SCHEDULER_STATUS_DIAGNOSTIC", "BLOB_LIBBLE_DIAGNOSTIC_STATUS_DUMP"]
 provenance = "observed"

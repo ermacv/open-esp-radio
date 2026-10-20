@@ -132,13 +132,25 @@ name = "DEVIATION_SYNC_ENABLE"
 bitOffset = 19
 bitWidth = 1
 
-[[review]]
+[[peripheral-review]]
 entity = "WIFI_MAC_TSF_LOAD"
-sources = [
-    "BLOB_LIBPP_HAL_TSF",
-    "ROM_REV0_HAL_GET_STA_TSF",
-    "BLOB_LIBPP_AP_TSF_SNAPSHOT_20261015",
-]
+
+[peripheral-review.peripheral]
+sources = ["BLOB_LIBPP_HAL_TSF", "ROM_REV0_HAL_GET_STA_TSF", "BLOB_LIBPP_AP_TSF_SNAPSHOT_20261015"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[peripheral-review.register]
+sources = ["BLOB_LIBPP_HAL_TSF"]
+naming = "descriptive"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[peripheral-review.field]
+sources = ["ROM_REV0_WIFI_RUNTIME_MMIO_GAPS"]
+naming = "descriptive"
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -192,22 +204,6 @@ accuracy = "exact"
 completeness = "complete"
 
 [[review]]
-entity = "WIFI_MAC_TSF_LOAD.VALUE_LOW"
-naming = "descriptive"
-sources = ["BLOB_LIBPP_HAL_TSF"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "WIFI_MAC_TSF_LOAD.VALUE_HIGH"
-naming = "descriptive"
-sources = ["BLOB_LIBPP_HAL_TSF"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
 entity = "WIFI_MAC_TSF_LOAD.SNAPSHOT_LOW"
 naming = "descriptive"
 sources = ["ROM_REV0_HAL_GET_STA_TSF", "BLOB_LIBPP_AP_TSF_SNAPSHOT_20261015"]
@@ -230,30 +226,6 @@ sources = ["ROM_REV0_WIFI_RUNTIME_MMIO_GAPS"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
-
-[[review]]
-entity = "WIFI_MAC_TSF_LOAD.TSF_DEVIATION_CONTROL.DEVIATION"
-naming = "descriptive"
-sources = ["ROM_REV0_WIFI_RUNTIME_MMIO_GAPS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "WIFI_MAC_TSF_LOAD.TSF_DEVIATION_CONTROL.RX_BEACON_ABORT_SYNC_ENABLE"
-naming = "descriptive"
-sources = ["ROM_REV0_WIFI_RUNTIME_MMIO_GAPS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "WIFI_MAC_TSF_LOAD.TSF_DEVIATION_CONTROL.DEVIATION_SYNC_ENABLE"
-naming = "descriptive"
-sources = ["ROM_REV0_WIFI_RUNTIME_MMIO_GAPS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
 
 [[review]]
 entity = "WIFI_MAC_TSF_LOAD.CONTROL.LOAD_STATION_TBTT_TARGET"

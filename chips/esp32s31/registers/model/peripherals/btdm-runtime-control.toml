@@ -282,26 +282,72 @@ name = "CONTROL_25"
 bitOffset = 25
 bitWidth = 1
 
-[[review]]
+[[peripheral-review]]
 entity = "BTDM_RUNTIME_CONTROL"
-sources = [
-    "BLOB_LIBBTDM_RUNTIME_CONTROL",
-    "BLOB_LIBBTDM_RUNTIME_OPERATIONAL_GAPS",
+opaque-entities = [
+    "BTDM_RUNTIME_CONTROL.WORD_0004_OPAQUE",
+    "BTDM_RUNTIME_CONTROL.WORD_0004_OPAQUE.BITS_0_31_OPAQUE",
+    "BTDM_RUNTIME_CONTROL.WORD_0008_OPAQUE",
+    "BTDM_RUNTIME_CONTROL.WORD_0008_OPAQUE.BITS_0_31_OPAQUE",
+    "BTDM_RUNTIME_CONTROL.WORD_0010_OPAQUE",
+    "BTDM_RUNTIME_CONTROL.WORD_0010_OPAQUE.BITS_0_31_OPAQUE",
+    "BTDM_RUNTIME_CONTROL.WORD_0014_OPAQUE",
+    "BTDM_RUNTIME_CONTROL.WORD_0014_OPAQUE.BITS_0_31_OPAQUE",
+    "BTDM_RUNTIME_CONTROL.WORD_0020_OPAQUE",
+    "BTDM_RUNTIME_CONTROL.WORD_0020_OPAQUE.BITS_0_31_OPAQUE",
+    "BTDM_RUNTIME_CONTROL.WORD_0024_OPAQUE",
+    "BTDM_RUNTIME_CONTROL.WORD_0024_OPAQUE.BITS_8_31_OPAQUE",
+    "BTDM_RUNTIME_CONTROL.WORD_002C_OPAQUE",
+    "BTDM_RUNTIME_CONTROL.WORD_002C_OPAQUE.BITS_8_31_OPAQUE",
+    "BTDM_RUNTIME_CONTROL.WORD_0034_OPAQUE",
+    "BTDM_RUNTIME_CONTROL.WORD_0034_OPAQUE.BITS_0_31_OPAQUE",
+    "BTDM_RUNTIME_CONTROL.WORD_0038_OPAQUE",
+    "BTDM_RUNTIME_CONTROL.WORD_0038_OPAQUE.BITS_0_31_OPAQUE",
+    "BTDM_RUNTIME_CONTROL.WORD_0040_OPAQUE",
+    "BTDM_RUNTIME_CONTROL.WORD_0040_OPAQUE.BITS_0_31_OPAQUE",
+    "BTDM_RUNTIME_CONTROL.WORD_0044_OPAQUE",
+    "BTDM_RUNTIME_CONTROL.WORD_0044_OPAQUE.BITS_0_31_OPAQUE",
+    "BTDM_RUNTIME_CONTROL.WORD_0048_OPAQUE",
+    "BTDM_RUNTIME_CONTROL.WORD_0048_OPAQUE.BITS_0_31_OPAQUE",
+    "BTDM_RUNTIME_CONTROL.WORD_004C_OPAQUE",
+    "BTDM_RUNTIME_CONTROL.WORD_004C_OPAQUE.BITS_0_31_OPAQUE",
+    "BTDM_RUNTIME_CONTROL.WORD_0058_OPAQUE",
+    "BTDM_RUNTIME_CONTROL.WORD_0068_OPAQUE",
+    "BTDM_RUNTIME_CONTROL.WORD_006C_OPAQUE",
+    "BTDM_RUNTIME_CONTROL.WORD_006C_OPAQUE.BITS_0_31_OPAQUE",
+    "BTDM_RUNTIME_CONTROL.WORD_0078_OPAQUE",
+    "BTDM_RUNTIME_CONTROL.WORD_001C_OPAQUE",
+    "BTDM_RUNTIME_CONTROL.WORD_001C_OPAQUE.BITS_0_31_OPAQUE",
+    "BTDM_RUNTIME_CONTROL.WORD_0064_OPAQUE",
 ]
+
+[peripheral-review.peripheral]
+sources = ["BLOB_LIBBTDM_RUNTIME_CONTROL", "BLOB_LIBBTDM_RUNTIME_OPERATIONAL_GAPS"]
 provenance = "derived"
 accuracy = "exact"
 completeness = "partial"
 
-[[review]]
-entity = "BTDM_RUNTIME_CONTROL.RUNTIME_TIMER_START_COMMAND"
+[peripheral-review.register]
+sources = ["BLOB_LIBBTDM_RUNTIME_CONTROL", "PUBLIC_ESP32S31_BT_RUNTIME_TIMER_ROLE"]
 naming = "descriptive"
-sources = [
-    "BLOB_LIBBTDM_RUNTIME_CONTROL",
-    "PUBLIC_ESP32S31_BT_RUNTIME_TIMER_ROLE",
-]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
+
+[peripheral-review.field]
+sources = ["BLOB_LIBBTDM_RUNTIME_CONTROL"]
+naming = "descriptive"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[peripheral-review.opaque]
+sources = ["BLOB_LIBBTDM_RUNTIME_CONTROL"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
 [[review]]
 entity = "BTDM_RUNTIME_CONTROL.RUNTIME_TIMER_START_COMMAND.COMMAND"
 naming = "descriptive"
@@ -309,215 +355,6 @@ sources = [
     "BLOB_LIBBTDM_RUNTIME_CONTROL",
     "PUBLIC_ESP32S31_BT_RUNTIME_TIMER_ROLE",
 ]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BTDM_RUNTIME_CONTROL.WORD_0004_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTDM_RUNTIME_CONTROL"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-[[review]]
-entity = "BTDM_RUNTIME_CONTROL.WORD_0004_OPAQUE.BITS_0_31_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTDM_RUNTIME_CONTROL"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BTDM_RUNTIME_CONTROL.WORD_0008_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTDM_RUNTIME_CONTROL"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-[[review]]
-entity = "BTDM_RUNTIME_CONTROL.WORD_0008_OPAQUE.BITS_0_31_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTDM_RUNTIME_CONTROL"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BTDM_RUNTIME_CONTROL.WORD_0010_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTDM_RUNTIME_CONTROL"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-[[review]]
-entity = "BTDM_RUNTIME_CONTROL.WORD_0010_OPAQUE.BITS_0_31_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTDM_RUNTIME_CONTROL"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BTDM_RUNTIME_CONTROL.WORD_0014_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTDM_RUNTIME_CONTROL"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-[[review]]
-entity = "BTDM_RUNTIME_CONTROL.WORD_0014_OPAQUE.BITS_0_31_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTDM_RUNTIME_CONTROL"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BTDM_RUNTIME_CONTROL.WORD_0020_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTDM_RUNTIME_CONTROL"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-[[review]]
-entity = "BTDM_RUNTIME_CONTROL.WORD_0020_OPAQUE.BITS_0_31_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTDM_RUNTIME_CONTROL"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BTDM_RUNTIME_CONTROL.WORD_0024_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTDM_RUNTIME_CONTROL"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-[[review]]
-entity = "BTDM_RUNTIME_CONTROL.WORD_0024_OPAQUE.LOW_BYTE"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_RUNTIME_CONTROL"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-[[review]]
-entity = "BTDM_RUNTIME_CONTROL.WORD_0024_OPAQUE.BITS_8_31_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTDM_RUNTIME_CONTROL"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BTDM_RUNTIME_CONTROL.WORD_002C_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTDM_RUNTIME_CONTROL"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-[[review]]
-entity = "BTDM_RUNTIME_CONTROL.WORD_002C_OPAQUE.LOW_BYTE"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_RUNTIME_CONTROL"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-[[review]]
-entity = "BTDM_RUNTIME_CONTROL.WORD_002C_OPAQUE.BITS_8_31_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTDM_RUNTIME_CONTROL"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BTDM_RUNTIME_CONTROL.WORD_0034_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTDM_RUNTIME_CONTROL"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-[[review]]
-entity = "BTDM_RUNTIME_CONTROL.WORD_0034_OPAQUE.BITS_0_31_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTDM_RUNTIME_CONTROL"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BTDM_RUNTIME_CONTROL.WORD_0038_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTDM_RUNTIME_CONTROL"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-[[review]]
-entity = "BTDM_RUNTIME_CONTROL.WORD_0038_OPAQUE.BITS_0_31_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTDM_RUNTIME_CONTROL"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BTDM_RUNTIME_CONTROL.WORD_0040_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTDM_RUNTIME_CONTROL"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-[[review]]
-entity = "BTDM_RUNTIME_CONTROL.WORD_0040_OPAQUE.BITS_0_31_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTDM_RUNTIME_CONTROL"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BTDM_RUNTIME_CONTROL.WORD_0044_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTDM_RUNTIME_CONTROL"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-[[review]]
-entity = "BTDM_RUNTIME_CONTROL.WORD_0044_OPAQUE.BITS_0_31_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTDM_RUNTIME_CONTROL"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BTDM_RUNTIME_CONTROL.WORD_0048_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTDM_RUNTIME_CONTROL"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-[[review]]
-entity = "BTDM_RUNTIME_CONTROL.WORD_0048_OPAQUE.BITS_0_31_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTDM_RUNTIME_CONTROL"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BTDM_RUNTIME_CONTROL.WORD_004C_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTDM_RUNTIME_CONTROL"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-[[review]]
-entity = "BTDM_RUNTIME_CONTROL.WORD_004C_OPAQUE.BITS_0_31_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTDM_RUNTIME_CONTROL"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -533,34 +370,12 @@ provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
 [[review]]
-entity = "BTDM_RUNTIME_CONTROL.WORD_0058_OPAQUE.CONTROL_0"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_RUNTIME_CONTROL"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-[[review]]
-entity = "BTDM_RUNTIME_CONTROL.WORD_0058_OPAQUE.CONTROL_1"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_RUNTIME_CONTROL"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-[[review]]
 entity = "BTDM_RUNTIME_CONTROL.WORD_0058_OPAQUE.CONTROL_2"
 naming = "descriptive"
 sources = ["BLOB_LIBBTDM_MODEM_LP_TIMER_IRQ"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
-[[review]]
-entity = "BTDM_RUNTIME_CONTROL.WORD_0058_OPAQUE.CONTROL_4"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_RUNTIME_CONTROL"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
 [[review]]
 entity = "BTDM_RUNTIME_CONTROL.WORD_0068_OPAQUE"
 naming = "opaque"
@@ -569,43 +384,12 @@ provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
 [[review]]
-entity = "BTDM_RUNTIME_CONTROL.WORD_0068_OPAQUE.VALUE_LOW_24"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_RUNTIME_CONTROL"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BTDM_RUNTIME_CONTROL.WORD_006C_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTDM_RUNTIME_CONTROL"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-[[review]]
-entity = "BTDM_RUNTIME_CONTROL.WORD_006C_OPAQUE.BITS_0_31_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTDM_RUNTIME_CONTROL"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
 entity = "BTDM_RUNTIME_CONTROL.WORD_0078_OPAQUE"
 naming = "opaque"
 sources = ["BLOB_LIBBTDM_RUNTIME_CONTROL"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
-[[review]]
-entity = "BTDM_RUNTIME_CONTROL.WORD_0078_OPAQUE.CONTROL_25"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_RUNTIME_CONTROL"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
 [[review]]
 entity = "BTDM_RUNTIME_CONTROL.WORD_001C_OPAQUE"
 naming = "opaque"

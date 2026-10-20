@@ -43,44 +43,27 @@ name = "QOS_NULL_COUNT"
 bitOffset = 16
 bitWidth = 16
 
-[[review]]
+[[peripheral-review]]
 entity = "WIFI_MAC_HE_TB_STATISTICS"
-sources = [
-    "BLOB_LIBPP_HAL_HE_TB_DIAGNOSTICS",
-    "HIL_OPEN_HE_TB_COUNTER_BASELINE_2026_07_29",
+opaque-entities = [
+    "WIFI_MAC_HE_TB_STATISTICS.RX_TRIGGER.BITS_16_31_OPAQUE",
 ]
+
+[peripheral-review.peripheral]
+sources = ["BLOB_LIBPP_HAL_HE_TB_DIAGNOSTICS", "HIL_OPEN_HE_TB_COUNTER_BASELINE_2026_07_29"]
 provenance = "reviewed"
 accuracy = "exact"
 completeness = "complete"
 
-[[review]]
-entity = "WIFI_MAC_HE_TB_STATISTICS.RX_TRIGGER"
-naming = "descriptive"
+[peripheral-review.register]
 sources = ["BLOB_LIBPP_HAL_HE_TB_DIAGNOSTICS"]
+naming = "descriptive"
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
 
-[[review]]
-entity = "WIFI_MAC_HE_TB_STATISTICS.TB_TRANSMISSION"
-naming = "descriptive"
-sources = ["BLOB_LIBPP_HAL_HE_TB_DIAGNOSTICS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "WIFI_MAC_HE_TB_STATISTICS.RX_TRIGGER.COUNT"
+[peripheral-review.field]
 naming = "descriptive"
 
-[[review]]
-entity = "WIFI_MAC_HE_TB_STATISTICS.RX_TRIGGER.BITS_16_31_OPAQUE"
+[peripheral-review.opaque]
 naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_HE_TB_STATISTICS.TB_TRANSMISSION.COUNT"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_TB_STATISTICS.TB_TRANSMISSION.QOS_NULL_COUNT"
-naming = "descriptive"

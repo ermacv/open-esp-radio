@@ -32,27 +32,25 @@ addressOffset = 0x1C
 size = 32
 access = "read-write"
 
-[[review]]
+[[peripheral-review]]
 entity = "PHY_FEDATA_WIFI_RECOVERED"
-sources = [
-    "ESP_IDF_25FE69F_S31_PHY_RETENTION",
-    "BLOB_LIBPHY_PHY_DEBUG_REG_CHECK",
+opaque-entities = [
+    "PHY_FEDATA_WIFI_RECOVERED.WORD_0014_OPAQUE",
+    "PHY_FEDATA_WIFI_RECOVERED.WORD_0018_OPAQUE",
+    "PHY_FEDATA_WIFI_RECOVERED.WORD_001C_OPAQUE",
 ]
+
+[peripheral-review.peripheral]
+sources = ["ESP_IDF_25FE69F_S31_PHY_RETENTION", "BLOB_LIBPHY_PHY_DEBUG_REG_CHECK"]
 provenance = "derived"
 accuracy = "exact"
 completeness = "unknown"
+
+[peripheral-review.opaque]
+sources = ["ROM_REV0_PHY_BLOBRAY_GAPS"]
+naming = "opaque"
 
 [[review]]
 entity = "PHY_FEDATA_WIFI_RECOVERED.WORD_0014_OPAQUE"
 naming = "opaque"
 sources = ["ROM_REV0_PHY_CFO_SPUR_CONTROLS"]
-
-[[review]]
-entity = "PHY_FEDATA_WIFI_RECOVERED.WORD_0018_OPAQUE"
-naming = "opaque"
-sources = ["ROM_REV0_PHY_BLOBRAY_GAPS"]
-
-[[review]]
-entity = "PHY_FEDATA_WIFI_RECOVERED.WORD_001C_OPAQUE"
-naming = "opaque"
-sources = ["ROM_REV0_PHY_BLOBRAY_GAPS"]

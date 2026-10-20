@@ -119,20 +119,33 @@ name = "BITS_1_31_OPAQUE"
 bitOffset = 1
 bitWidth = 31
 
-[[review]]
+[[peripheral-review]]
 entity = "COEX_HW_TIMER"
+opaque-entities = [
+    "COEX_HW_TIMER.CONFIGURATION%s.BITS_30_31_OPAQUE",
+    "COEX_HW_TIMER.SECONDARY_TARGET%s.BITS_24_31_OPAQUE",
+    "COEX_HW_TIMER.ENABLE_CONTROL%s.BITS_1_31_OPAQUE",
+    "COEX_HW_TIMER.DISABLE_CONTROL%s.BITS_1_31_OPAQUE",
+]
+
+[peripheral-review.peripheral]
 sources = ["BLOB_LIBCOEX_HW_TIMER", "BLOB_LIBCOEX_PHY_GRANT_PROTECT"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
 
-[[review]]
-entity = "COEX_HW_TIMER.CONFIGURATION%s"
-naming = "descriptive"
+[peripheral-review.register]
 sources = ["BLOB_LIBCOEX_HW_TIMER", "BLOB_LIBCOEX_PHY_GRANT_PROTECT"]
+naming = "descriptive"
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
+
+[peripheral-review.field]
+naming = "descriptive"
+
+[peripheral-review.opaque]
+naming = "opaque"
 
 [[review]]
 entity = "COEX_HW_TIMER.SECONDARY_TARGET%s"
@@ -141,59 +154,3 @@ sources = ["BLOB_LIBCOEX_HW_TIMER", "BLOB_LIBCOEX_PHY_GRANT_PROTECT"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
-
-[[review]]
-entity = "COEX_HW_TIMER.ENABLE_CONTROL%s"
-naming = "descriptive"
-sources = ["BLOB_LIBCOEX_HW_TIMER", "BLOB_LIBCOEX_PHY_GRANT_PROTECT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "COEX_HW_TIMER.DISABLE_CONTROL%s"
-naming = "descriptive"
-sources = ["BLOB_LIBCOEX_HW_TIMER", "BLOB_LIBCOEX_PHY_GRANT_PROTECT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "COEX_HW_TIMER.CONFIGURATION%s.PRIMARY_TICK_IMAGE"
-naming = "descriptive"
-
-[[review]]
-entity = "COEX_HW_TIMER.CONFIGURATION%s.PARAMETER_2"
-naming = "descriptive"
-
-[[review]]
-entity = "COEX_HW_TIMER.CONFIGURATION%s.PARAMETER_1"
-naming = "descriptive"
-
-[[review]]
-entity = "COEX_HW_TIMER.CONFIGURATION%s.BITS_30_31_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "COEX_HW_TIMER.SECONDARY_TARGET%s.SECONDARY_TICK_IMAGE"
-naming = "descriptive"
-
-[[review]]
-entity = "COEX_HW_TIMER.SECONDARY_TARGET%s.BITS_24_31_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "COEX_HW_TIMER.ENABLE_CONTROL%s.ENABLE"
-naming = "descriptive"
-
-[[review]]
-entity = "COEX_HW_TIMER.ENABLE_CONTROL%s.BITS_1_31_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "COEX_HW_TIMER.DISABLE_CONTROL%s.DISABLE"
-naming = "descriptive"
-
-[[review]]
-entity = "COEX_HW_TIMER.DISABLE_CONTROL%s.BITS_1_31_OPAQUE"
-naming = "opaque"

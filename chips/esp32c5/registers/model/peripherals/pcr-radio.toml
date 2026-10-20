@@ -67,45 +67,22 @@ description = "Low byte; meaning unknown."
 bitOffset = 0
 bitWidth = 8
 
-[[review]]
-entity = "PCR_RADIO.SARADC_CONF"
-naming = "vendor"
+[[peripheral-review]]
+entity = "PCR_RADIO"
+opaque-entities = [
+    "PCR_RADIO.WORD_014C_OPAQUE",
+    "PCR_RADIO.WORD_014C_OPAQUE.BITS_0_7_OPAQUE",
+]
+
+[peripheral-review.peripheral]
+
+[peripheral-review.register]
 sources = ["ESP_IDF_4D59230D_C5_PCR_TSENS"]
-
-[[review]]
-entity = "PCR_RADIO.SARADC_CONF.SARADC_CLK_EN"
 naming = "vendor"
-sources = ["ESP_IDF_4D59230D_C5_PCR_TSENS"]
 
-[[review]]
-entity = "PCR_RADIO.SARADC_CONF.SARADC_REG_CLK_EN"
+[peripheral-review.field]
+sources = ["ESP_IDF_4D59230D_C5_PCR_TSENS"]
 naming = "vendor"
-sources = ["ESP_IDF_4D59230D_C5_PCR_TSENS"]
 
-[[review]]
-entity = "PCR_RADIO.TSENS_CLK_CONF"
-naming = "vendor"
-sources = ["ESP_IDF_4D59230D_C5_PCR_TSENS"]
-
-[[review]]
-entity = "PCR_RADIO.TSENS_CLK_CONF.TSENS_CLK_SEL"
-naming = "vendor"
-sources = ["ESP_IDF_4D59230D_C5_PCR_TSENS"]
-
-[[review]]
-entity = "PCR_RADIO.TSENS_CLK_CONF.TSENS_CLK_EN"
-naming = "vendor"
-sources = ["ESP_IDF_4D59230D_C5_PCR_TSENS"]
-
-[[review]]
-entity = "PCR_RADIO.TSENS_CLK_CONF.TSENS_RST_EN"
-naming = "vendor"
-sources = ["ESP_IDF_4D59230D_C5_PCR_TSENS"]
-
-[[review]]
-entity = "PCR_RADIO.WORD_014C_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "PCR_RADIO.WORD_014C_OPAQUE.BITS_0_7_OPAQUE"
+[peripheral-review.opaque]
 naming = "opaque"

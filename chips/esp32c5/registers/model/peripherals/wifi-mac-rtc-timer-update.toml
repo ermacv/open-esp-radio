@@ -281,11 +281,35 @@ bitWidth = 18
 minimum = 0x0
 maximum = 0x3FFFF
 
-[[review]]
+[[peripheral-review]]
 entity = "WIFI_MAC_RTC_TIMER_UPDATE"
-sources = [
-    "C5_BLOB_LIBPP_HAL_INIT_TAIL",
+opaque-entities = [
+    "WIFI_MAC_RTC_TIMER_UPDATE.CONTROL.BIT_27_OPAQUE",
 ]
+
+[peripheral-review.peripheral]
+sources = ["C5_BLOB_LIBPP_HAL_INIT_TAIL"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[peripheral-review.register]
+sources = ["C5_BLOB_LIBPP_HAL_TSF", "C5_BLOB_LIBPP_HAL_PWR", "C5_BLOB_LIBPP_HAL_TSF_TBTT_20260927"]
+naming = "descriptive"
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[peripheral-review.field]
+sources = ["C5_BLOB_LIBPP_HAL_PWR"]
+naming = "descriptive"
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[peripheral-review.opaque]
+sources = ["C5_BLOB_LIBPP_HAL_INIT_TAIL"]
+naming = "opaque"
 provenance = "derived"
 accuracy = "exact"
 completeness = "partial"
@@ -312,16 +336,6 @@ accuracy = "exact"
 completeness = "partial"
 
 [[review]]
-entity = "WIFI_MAC_RTC_TIMER_UPDATE.CONTROL.BIT_27_OPAQUE"
-naming = "opaque"
-sources = [
-    "C5_BLOB_LIBPP_HAL_INIT_TAIL",
-]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
 entity = "WIFI_MAC_RTC_TIMER_UPDATE.SOC_WAKEUP_CLEAR"
 naming = "descriptive"
 sources = [
@@ -333,117 +347,7 @@ accuracy = "exact"
 completeness = "partial"
 
 [[review]]
-entity = "WIFI_MAC_RTC_TIMER_UPDATE.SOC_WAKEUP_CLEAR.BEACON_FILTER_FORCE_SYNC_LIMIT"
-naming = "descriptive"
-sources = [
-    "C5_BLOB_LIBPP_HAL_PWR",
-]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "WIFI_MAC_RTC_TIMER_UPDATE.SOC_WAKEUP_CLEAR.BEACON_FILTER_FORCE_SYNC_ENABLE"
-naming = "descriptive"
-sources = [
-    "C5_BLOB_LIBPP_HAL_PWR",
-]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "WIFI_MAC_RTC_TIMER_UPDATE.SOC_WAKEUP_CLEAR.BEACON_FILTER_FORCE_DUMP_LIMIT"
-naming = "descriptive"
-sources = [
-    "C5_BLOB_LIBPP_HAL_PWR",
-]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "WIFI_MAC_RTC_TIMER_UPDATE.SOC_WAKEUP_CLEAR.BEACON_FILTER_FORCE_DUMP_ENABLE"
-naming = "descriptive"
-sources = [
-    "C5_BLOB_LIBPP_HAL_PWR",
-]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "WIFI_MAC_RTC_TIMER_UPDATE.SOC_WAKEUP_CLEAR.CLEAR_BEACON_SLEEP_COUNTER"
-naming = "descriptive"
-sources = [
-    "C5_BLOB_LIBPP_HAL_PWR",
-]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "WIFI_MAC_RTC_TIMER_UPDATE.SOC_WAKEUP_CLEAR.CLEAR_BEACON_MISS_COUNTER"
-naming = "descriptive"
-sources = [
-    "C5_BLOB_LIBPP_HAL_PWR",
-]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "WIFI_MAC_RTC_TIMER_UPDATE.SOC_WAKEUP_CLEAR.CLEAR_BEACON_INFO"
-naming = "descriptive"
-sources = [
-    "C5_BLOB_LIBPP_HAL_PWR",
-]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
 entity = "WIFI_MAC_RTC_TIMER_UPDATE.MODEM_SLEEP_LIMIT_CONTROL"
-naming = "descriptive"
-sources = [
-    "C5_BLOB_LIBPP_HAL_PWR",
-]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "WIFI_MAC_RTC_TIMER_UPDATE.MODEM_SLEEP_LIMIT_CONTROL.BEACON_MISS_LIMIT"
-naming = "descriptive"
-sources = [
-    "C5_BLOB_LIBPP_HAL_PWR",
-]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "WIFI_MAC_RTC_TIMER_UPDATE.MODEM_SLEEP_LIMIT_CONTROL.BEACON_MISS_LIMIT_WAKEUP_ENABLE"
-naming = "descriptive"
-sources = [
-    "C5_BLOB_LIBPP_HAL_PWR",
-]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "WIFI_MAC_RTC_TIMER_UPDATE.MODEM_SLEEP_LIMIT_CONTROL.MODEM_STATE_SLEEP_LIMIT"
-naming = "descriptive"
-sources = [
-    "C5_BLOB_LIBPP_HAL_PWR",
-]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "WIFI_MAC_RTC_TIMER_UPDATE.MODEM_SLEEP_LIMIT_CONTROL.MODEM_STATE_SLEEP_LIMIT_WAKEUP_ENABLE"
 naming = "descriptive"
 sources = [
     "C5_BLOB_LIBPP_HAL_PWR",
@@ -484,32 +388,10 @@ accuracy = "exact"
 completeness = "partial"
 
 [[review]]
-entity = "WIFI_MAC_RTC_TIMER_UPDATE.STA_TSF_CONTROL"
-naming = "descriptive"
-sources = [
-    "C5_BLOB_LIBPP_HAL_TSF",
-    "C5_BLOB_LIBPP_HAL_PWR",
-    "C5_BLOB_LIBPP_HAL_TSF_TBTT_20260927",
-]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
 entity = "WIFI_MAC_RTC_TIMER_UPDATE.STA_TSF_CONTROL.STA_TSF_MODE"
 naming = "descriptive"
 sources = [
     "C5_BLOB_LIBPP_HAL_TSF",
-]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "WIFI_MAC_RTC_TIMER_UPDATE.STA_TSF_CONTROL.MODEM_STATE_WAKEUP_PROTECT_ENABLE"
-naming = "descriptive"
-sources = [
-    "C5_BLOB_LIBPP_HAL_PWR",
 ]
 provenance = "derived"
 accuracy = "exact"

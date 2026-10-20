@@ -74,49 +74,17 @@ name = "TID"
 bitOffset = 16
 bitWidth = 4
 
-[[review]]
+[[peripheral-review]]
 entity = "WIFI_MAC_INTERNAL_TX_BLOCK_ACK"
+
+[peripheral-review.peripheral]
 sources = ["BLOB_LIBPP_DBG_READ_INTERNAL_TXBA"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
 
-[[review]]
-entity = "WIFI_MAC_INTERNAL_TX_BLOCK_ACK.BITMAP_HIGH"
+[peripheral-review.register]
 naming = "descriptive"
 
-[[review]]
-entity = "WIFI_MAC_INTERNAL_TX_BLOCK_ACK.BITMAP_HIGH.BITMAP"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_INTERNAL_TX_BLOCK_ACK.BITMAP_LOW"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_INTERNAL_TX_BLOCK_ACK.BITMAP_LOW.BITMAP"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_INTERNAL_TX_BLOCK_ACK.TRANSMITTER_ADDRESS_WORD_0"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_INTERNAL_TX_BLOCK_ACK.TRANSMITTER_ADDRESS_WORD_1"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_INTERNAL_TX_BLOCK_ACK.CONTROL_SEQUENCE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_INTERNAL_TX_BLOCK_ACK.CONTROL_SEQUENCE.FRAGMENT_NUMBER"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_INTERNAL_TX_BLOCK_ACK.CONTROL_SEQUENCE.STARTING_SEQUENCE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_INTERNAL_TX_BLOCK_ACK.CONTROL_SEQUENCE.TID"
+[peripheral-review.field]
 naming = "descriptive"

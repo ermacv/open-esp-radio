@@ -33,20 +33,24 @@ name = "CLEAR"
 bitOffset = 0
 bitWidth = 1
 
-[[review]]
+[[peripheral-review]]
 entity = "WIFI_MAC_TSF_STATUS"
+
+[peripheral-review.peripheral]
 sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
 
-[[review]]
-entity = "WIFI_MAC_TSF_STATUS.STATUS"
-naming = "descriptive"
+[peripheral-review.register]
 sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME"]
+naming = "descriptive"
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
+
+[peripheral-review.field]
+naming = "descriptive"
 
 [[review]]
 entity = "WIFI_MAC_TSF_STATUS.WAKEUP_SIGNAL_CLEAR"
@@ -55,11 +59,3 @@ sources = ["ROM_REV0_WIFI_RUNTIME_MMIO_GAPS"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
-
-[[review]]
-entity = "WIFI_MAC_TSF_STATUS.STATUS.STATION_ACTIVE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TSF_STATUS.WAKEUP_SIGNAL_CLEAR.CLEAR"
-naming = "descriptive"

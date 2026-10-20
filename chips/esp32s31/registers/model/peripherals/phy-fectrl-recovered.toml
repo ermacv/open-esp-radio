@@ -41,32 +41,21 @@ addressOffset = 0x40
 size = 32
 access = "read-write"
 
-[[review]]
+[[peripheral-review]]
 entity = "PHY_FECTRL_RECOVERED"
-sources = [
-    "ESP_IDF_25FE69F_S31_PHY_RETENTION",
-    "BLOB_LIBPHY_PHY_DEBUG_REG_CHECK",
+opaque-entities = [
+    "PHY_FECTRL_RECOVERED.WORD_0034_OPAQUE",
+    "PHY_FECTRL_RECOVERED.WORD_0038_OPAQUE",
+    "PHY_FECTRL_RECOVERED.WORD_003C_OPAQUE",
+    "PHY_FECTRL_RECOVERED.WORD_0040_OPAQUE",
 ]
+
+[peripheral-review.peripheral]
+sources = ["ESP_IDF_25FE69F_S31_PHY_RETENTION", "BLOB_LIBPHY_PHY_DEBUG_REG_CHECK"]
 provenance = "derived"
 accuracy = "exact"
 completeness = "unknown"
 
-[[review]]
-entity = "PHY_FECTRL_RECOVERED.WORD_0034_OPAQUE"
-naming = "opaque"
+[peripheral-review.opaque]
 sources = ["ROM_REV0_PHY_BLOBRAY_GAPS"]
-
-[[review]]
-entity = "PHY_FECTRL_RECOVERED.WORD_0038_OPAQUE"
 naming = "opaque"
-sources = ["ROM_REV0_PHY_BLOBRAY_GAPS"]
-
-[[review]]
-entity = "PHY_FECTRL_RECOVERED.WORD_003C_OPAQUE"
-naming = "opaque"
-sources = ["ROM_REV0_PHY_BLOBRAY_GAPS"]
-
-[[review]]
-entity = "PHY_FECTRL_RECOVERED.WORD_0040_OPAQUE"
-naming = "opaque"
-sources = ["ROM_REV0_PHY_BLOBRAY_GAPS"]

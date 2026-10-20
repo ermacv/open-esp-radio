@@ -70,16 +70,38 @@ description = "Set by complete phy_enable_low_rate and cleared by complete phy_d
 bitOffset = 11
 bitWidth = 1
 
-[[review]]
+[[peripheral-review]]
 entity = "WIFI_PHY_RATE_ORACLE"
-sources = [
-    "ROM_REV0_PHY_READ_NOISE_FLOOR",
-    "ROM_REV0_PHY_LOW_RATE",
-    "ROM_REV0_PHY_RX11BLR_CFG",
+opaque-entities = [
+    "WIFI_PHY_RATE_ORACLE.NOISE_FLOOR_MEASUREMENT.BITS_12_18_OPAQUE",
 ]
+
+[peripheral-review.peripheral]
+sources = ["ROM_REV0_PHY_READ_NOISE_FLOOR", "ROM_REV0_PHY_LOW_RATE", "ROM_REV0_PHY_RX11BLR_CFG"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
+
+[peripheral-review.register]
+sources = ["ROM_REV0_PHY_LOW_RATE", "ROM_REV0_PHY_RX11BLR_CFG"]
+naming = "descriptive"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[peripheral-review.field]
+sources = ["ROM_REV0_PHY_LOW_RATE"]
+naming = "descriptive"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[peripheral-review.opaque]
+sources = ["BLOB_LIBRFTEST_RF_RX_SATURATION_PROBES"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
 
 [[review]]
 entity = "WIFI_PHY_RATE_ORACLE.NOISE_FLOOR_MEASUREMENT"
@@ -101,59 +123,5 @@ sources = [
     "HIL_OPEN_STA_RATE_CONTROL_2026_07_30",
 ]
 provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "WIFI_PHY_RATE_ORACLE.NOISE_FLOOR_MEASUREMENT.BITS_12_18_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBRFTEST_RF_RX_SATURATION_PROBES"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "unknown"
-
-[[review]]
-entity = "WIFI_PHY_RATE_ORACLE.LOW_RATE_PRIMARY_CONTROL"
-naming = "descriptive"
-sources = [
-    "ROM_REV0_PHY_LOW_RATE",
-    "ROM_REV0_PHY_RX11BLR_CFG",
-]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "WIFI_PHY_RATE_ORACLE.LOW_RATE_PRIMARY_CONTROL.LOW_RATE_ENABLE_FIRST"
-naming = "descriptive"
-sources = ["ROM_REV0_PHY_LOW_RATE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "WIFI_PHY_RATE_ORACLE.LOW_RATE_PRIMARY_CONTROL.LOW_RATE_ENABLE_SECOND"
-naming = "descriptive"
-sources = ["ROM_REV0_PHY_LOW_RATE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "WIFI_PHY_RATE_ORACLE.LOW_RATE_SECONDARY_CONTROL"
-naming = "descriptive"
-sources = [
-    "ROM_REV0_PHY_LOW_RATE",
-    "ROM_REV0_PHY_RX11BLR_CFG",
-]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "WIFI_PHY_RATE_ORACLE.LOW_RATE_SECONDARY_CONTROL.LOW_RATE_ENABLE"
-naming = "descriptive"
-sources = ["ROM_REV0_PHY_LOW_RATE"]
-provenance = "observed"
 accuracy = "exact"
 completeness = "complete"

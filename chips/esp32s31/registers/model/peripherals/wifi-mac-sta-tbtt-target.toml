@@ -19,21 +19,21 @@ name = "TSF_BITS_35_10"
 bitOffset = 0
 bitWidth = 26
 
-[[review]]
+[[peripheral-review]]
 entity = "WIFI_MAC_STA_TBTT_TARGET"
+
+[peripheral-review.peripheral]
 sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
 
-[[review]]
-entity = "WIFI_MAC_STA_TBTT_TARGET.TARGET"
+[peripheral-review.register]
+sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME"]
 naming = "descriptive"
-sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
 
-[[review]]
-entity = "WIFI_MAC_STA_TBTT_TARGET.TARGET.TSF_BITS_35_10"
+[peripheral-review.field]
 naming = "descriptive"

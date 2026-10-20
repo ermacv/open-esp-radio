@@ -28,25 +28,25 @@ bitWidth = 11
 minimum = 0x0
 maximum = 0x7FF
 
-[[review]]
+[[peripheral-review]]
 entity = "SHARED_BASEBAND_TX_TIMING"
+
+[peripheral-review.peripheral]
 sources = ["BLOB_LIBBTBB_SHARED_TX_TIMING_INIT"]
 provenance = "derived"
 accuracy = "exact"
 completeness = "partial"
 
-[[review]]
-entity = "SHARED_BASEBAND_TX_TIMING.AUXILIARY_TX_ON_DELAY"
-naming = "descriptive"
+[peripheral-review.register]
 sources = ["BLOB_LIBBTBB_SHARED_TX_TIMING_INIT"]
+naming = "descriptive"
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
 
-[[review]]
-entity = "SHARED_BASEBAND_TX_TIMING.AUXILIARY_TX_ON_DELAY.ENCODED_IMAGE"
-naming = "descriptive"
+[peripheral-review.field]
 sources = ["BLOB_LIBBTBB_SHARED_TX_TIMING_INIT"]
+naming = "descriptive"
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"

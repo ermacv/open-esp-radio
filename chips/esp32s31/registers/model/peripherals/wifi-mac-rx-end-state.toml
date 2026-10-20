@@ -24,25 +24,21 @@ name = "HIGH_STATE"
 bitOffset = 16
 bitWidth = 16
 
-[[review]]
+[[peripheral-review]]
 entity = "WIFI_MAC_RX_END_STATE"
+
+[peripheral-review.peripheral]
 sources = ["BLOB_LIBPP_HAL_RUNTIME_MMIO_LEAVES"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
 
-[[review]]
-entity = "WIFI_MAC_RX_END_STATE.STATE"
-naming = "descriptive"
+[peripheral-review.register]
 sources = ["BLOB_LIBPP_HAL_RUNTIME_MMIO_LEAVES"]
+naming = "descriptive"
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
 
-[[review]]
-entity = "WIFI_MAC_RX_END_STATE.STATE.LOW_STATE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_RX_END_STATE.STATE.HIGH_STATE"
+[peripheral-review.field]
 naming = "descriptive"

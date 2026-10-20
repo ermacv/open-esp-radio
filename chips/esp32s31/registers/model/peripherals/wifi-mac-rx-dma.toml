@@ -160,39 +160,41 @@ bitWidth = 12
 minimum = 0x0
 maximum = 0xFFF
 
-[[review]]
+[[peripheral-review]]
 entity = "WIFI_MAC_RX_DMA"
-sources = [
-    "BLOB_LIBPP_MAC_RXBUF_INIT_PREFIX",
-    "ROM_REV0_WDEV_APPEND_RX_BLOCKS",
-    "ROM_REV0_HAL_MAC_RX_GATE",
-    "ROM_REV0_HAL_MAC_RX_LAST_DESCRIPTOR",
-    "HIL_OPEN_RX_LIVE_APPEND_2026_07_27",
+opaque-entities = [
+    "WIFI_MAC_RX_DMA.WORD_007C_OPAQUE",
+    "WIFI_MAC_RX_DMA.RX_CONTROL.BIT_27_OPAQUE",
+    "WIFI_MAC_RX_DMA.WORD_0C68_OPAQUE",
+    "WIFI_MAC_RX_DMA.WORD_0C6C_OPAQUE",
+    "WIFI_MAC_RX_DMA.WORD_007C_OPAQUE.BITS_0_7_OPAQUE",
+    "WIFI_MAC_RX_DMA.RX_NEXT_DESCRIPTOR.BITS_20_31_OPAQUE",
+    "WIFI_MAC_RX_DMA.WORD_0C68_OPAQUE.BITS_0_19_OPAQUE",
+    "WIFI_MAC_RX_DMA.WORD_0C6C_OPAQUE.BITS_0_19_OPAQUE",
 ]
+
+[peripheral-review.peripheral]
+sources = ["BLOB_LIBPP_MAC_RXBUF_INIT_PREFIX", "ROM_REV0_WDEV_APPEND_RX_BLOCKS", "ROM_REV0_HAL_MAC_RX_GATE", "ROM_REV0_HAL_MAC_RX_LAST_DESCRIPTOR", "HIL_OPEN_RX_LIVE_APPEND_2026_07_27"]
 provenance = "reviewed"
 accuracy = "exact"
 completeness = "complete"
 
-[[review]]
-entity = "WIFI_MAC_RX_DMA.WORD_007C_OPAQUE"
-naming = "opaque"
+[peripheral-review.register]
+sources = ["ROM_REV0_WDEV_APPEND_RX_BLOCKS", "ROM_REV0_HAL_MAC_RX_GATE", "BLOB_LIBPP_HAL_INIT_TAIL", "HIL_OPEN_RX_LIVE_APPEND_2026_07_27"]
+naming = "descriptive"
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+
+[peripheral-review.field]
+naming = "descriptive"
+
+[peripheral-review.opaque]
 sources = ["BLOB_LIBPP_MAC_RXBUF_INIT_PREFIX"]
+naming = "opaque"
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
-
-[[review]]
-entity = "WIFI_MAC_RX_DMA.RX_CONTROL"
-naming = "descriptive"
-sources = [
-    "ROM_REV0_WDEV_APPEND_RX_BLOCKS",
-    "ROM_REV0_HAL_MAC_RX_GATE",
-    "BLOB_LIBPP_HAL_INIT_TAIL",
-    "HIL_OPEN_RX_LIVE_APPEND_2026_07_27",
-]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
 
 [[review]]
 entity = "WIFI_MAC_RX_DMA.RX_CONTROL.APPEND_DESCRIPTOR_RELOAD"
@@ -259,22 +261,6 @@ accuracy = "exact"
 completeness = "complete"
 
 [[review]]
-entity = "WIFI_MAC_RX_DMA.WORD_0C68_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBPP_MAC_RXBUF_INIT_PREFIX"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "unknown"
-
-[[review]]
-entity = "WIFI_MAC_RX_DMA.WORD_0C6C_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBPP_MAC_RXBUF_INIT_PREFIX"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "unknown"
-
-[[review]]
 entity = "WIFI_MAC_RX_DMA.RX_DESCRIPTOR_HIGH_WINDOW"
 naming = "descriptive"
 sources = [
@@ -291,20 +277,8 @@ entity = "WIFI_MAC_RX_DMA.WORD_007C_OPAQUE.BITS_0_7_OPAQUE"
 naming = "opaque"
 
 [[review]]
-entity = "WIFI_MAC_RX_DMA.RX_DESCRIPTOR_BASE.ADDRESS"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_RX_DMA.RX_NEXT_DESCRIPTOR.ADDRESS_LOW"
-naming = "descriptive"
-
-[[review]]
 entity = "WIFI_MAC_RX_DMA.RX_NEXT_DESCRIPTOR.BITS_20_31_OPAQUE"
 naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_RX_DMA.RX_LAST_DESCRIPTOR.ADDRESS_LOW"
-naming = "descriptive"
 
 [[review]]
 entity = "WIFI_MAC_RX_DMA.WORD_0C68_OPAQUE.BITS_0_19_OPAQUE"
@@ -313,7 +287,3 @@ naming = "opaque"
 [[review]]
 entity = "WIFI_MAC_RX_DMA.WORD_0C6C_OPAQUE.BITS_0_19_OPAQUE"
 naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_RX_DMA.RX_DESCRIPTOR_HIGH_WINDOW.ADDRESS_HIGH"
-naming = "descriptive"

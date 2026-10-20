@@ -35,41 +35,25 @@ name = "IMAGE_LOW_24"
 bitOffset = 0
 bitWidth = 24
 
-[[review]]
+[[peripheral-review]]
 entity = "BLE_SYNC_PUBLICATION"
+
+[peripheral-review.peripheral]
 sources = ["BLOB_LIBBLE_SYNC_PUBLICATION"]
 provenance = "derived"
 accuracy = "exact"
 completeness = "partial"
 
-[[review]]
-entity = "BLE_SYNC_PUBLICATION.VALUE_0"
-naming = "descriptive"
+[peripheral-review.register]
 sources = ["BLOB_LIBBLE_SYNC_PUBLICATION"]
+naming = "descriptive"
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
 
-[[review]]
-entity = "BLE_SYNC_PUBLICATION.VALUE_0.VALUE"
-naming = "descriptive"
+[peripheral-review.field]
 sources = ["BLOB_LIBBLE_SYNC_PUBLICATION"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLE_SYNC_PUBLICATION.VALUE_1"
 naming = "descriptive"
-sources = ["BLOB_LIBBLE_SYNC_PUBLICATION"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "BLE_SYNC_PUBLICATION.VALUE_1.IMAGE_LOW_24"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_SYNC_PUBLICATION"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"

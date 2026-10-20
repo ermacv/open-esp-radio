@@ -47,10 +47,26 @@ name = "VALUE"
 bitOffset = 0
 bitWidth = 9
 
-[[review]]
+[[peripheral-review]]
 entity = "BLE_SCAN_BACKOFF"
+
+[peripheral-review.peripheral]
 sources = ["BLOB_LIBBLE_SCAN_BACKOFF", "BLOB_LIBBLE_SCAN_BACKOFF_READBACK"]
 provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[peripheral-review.register]
+sources = ["BLOB_LIBBLE_SCAN_BACKOFF", "BLOB_LIBBLE_SCAN_BACKOFF_READBACK"]
+naming = "descriptive"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[peripheral-review.field]
+sources = ["BLOB_LIBBLE_SCAN_BACKOFF", "BLOB_LIBBLE_SCAN_BACKOFF_READBACK"]
+naming = "descriptive"
+provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
 
@@ -65,36 +81,6 @@ completeness = "partial"
 entity = "BLE_SCAN_BACKOFF.UPPER_LIMIT_MAX.VALUE"
 naming = "descriptive"
 sources = ["BLOB_LIBBLE_SCAN_BACKOFF"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "BLE_SCAN_BACKOFF.BACKOFF_STATE_0"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_SCAN_BACKOFF", "BLOB_LIBBLE_SCAN_BACKOFF_READBACK"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-[[review]]
-entity = "BLE_SCAN_BACKOFF.BACKOFF_STATE_0.VALUE"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_SCAN_BACKOFF", "BLOB_LIBBLE_SCAN_BACKOFF_READBACK"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "BLE_SCAN_BACKOFF.BACKOFF_STATE_1"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_SCAN_BACKOFF", "BLOB_LIBBLE_SCAN_BACKOFF_READBACK"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-[[review]]
-entity = "BLE_SCAN_BACKOFF.BACKOFF_STATE_1.VALUE"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_SCAN_BACKOFF", "BLOB_LIBBLE_SCAN_BACKOFF_READBACK"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"

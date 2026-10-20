@@ -58,39 +58,37 @@ description = "hal_mac_set_csi sets or clears bit 23 of the RX/CSI control word.
 bitOffset = 23
 bitWidth = 1
 
-[[review]]
+[[peripheral-review]]
 entity = "WIFI_MAC_RX_CSI_CONTROL"
-sources = [
-    "BLOB_LIBPP_MAC_LAST_RXBUF_INIT",
-    "BLOB_LIBPP_HAL_INIT_TAIL",
+opaque-entities = [
+    "WIFI_MAC_RX_CSI_CONTROL.CONTROL.BITS_0_7_OPAQUE",
+    "WIFI_MAC_RX_CSI_CONTROL.CONTROL.BITS_8_15_OPAQUE",
+    "WIFI_MAC_RX_CSI_CONTROL.CONTROL.BIT_27_OPAQUE",
 ]
+
+[peripheral-review.peripheral]
+sources = ["BLOB_LIBPP_MAC_LAST_RXBUF_INIT", "BLOB_LIBPP_HAL_INIT_TAIL"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
 
-[[review]]
-entity = "WIFI_MAC_RX_CSI_CONTROL.CONTROL"
+[peripheral-review.register]
+sources = ["BLOB_LIBPP_MAC_LAST_RXBUF_INIT", "BLOB_LIBPP_HAL_INIT_TAIL"]
 naming = "descriptive"
-sources = [
-    "BLOB_LIBPP_MAC_LAST_RXBUF_INIT",
-    "BLOB_LIBPP_HAL_INIT_TAIL",
-]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
 
-[[review]]
-entity = "WIFI_MAC_RX_CSI_CONTROL.CONTROL.BITS_0_7_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBPP_HAL_INIT_TAIL"]
+[peripheral-review.field]
+sources = ["BLOB_LIBPP_HAL_MAC_SET_CSI"]
+naming = "descriptive"
 provenance = "observed"
 accuracy = "exact"
-completeness = "unknown"
+completeness = "complete"
 
-[[review]]
-entity = "WIFI_MAC_RX_CSI_CONTROL.CONTROL.BITS_8_15_OPAQUE"
-naming = "opaque"
+[peripheral-review.opaque]
 sources = ["BLOB_LIBPP_HAL_INIT_TAIL"]
+naming = "opaque"
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
@@ -99,14 +97,6 @@ completeness = "unknown"
 entity = "WIFI_MAC_RX_CSI_CONTROL.CONTROL.BIT_27_OPAQUE"
 naming = "opaque"
 sources = ["BLOB_LIBPP_MAC_LAST_RXBUF_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "WIFI_MAC_RX_CSI_CONTROL.CONTROL.CSI_APPEND_ENABLE"
-naming = "descriptive"
-sources = ["BLOB_LIBPP_HAL_MAC_SET_CSI"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"

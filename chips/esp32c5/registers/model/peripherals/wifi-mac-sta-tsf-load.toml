@@ -126,12 +126,25 @@ name = "DEVIATION_SYNC_ENABLE"
 bitOffset = 19
 bitWidth = 1
 
-[[review]]
+[[peripheral-review]]
 entity = "WIFI_MAC_STA_TSF_LOAD"
-sources = [
-    "C5_BLOB_LIBPP_HAL_TSF",
-    "C5_ROM_REV100_HAL_GET_STA_TSF",
-]
+
+[peripheral-review.peripheral]
+sources = ["C5_BLOB_LIBPP_HAL_TSF", "C5_ROM_REV100_HAL_GET_STA_TSF"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[peripheral-review.register]
+sources = ["C5_BLOB_LIBPP_HAL_TSF"]
+naming = "descriptive"
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[peripheral-review.field]
+sources = ["C5_ROM_REV100_WIFI_RUNTIME_MMIO_GAPS"]
+naming = "descriptive"
 provenance = "derived"
 accuracy = "exact"
 completeness = "partial"
@@ -179,26 +192,6 @@ accuracy = "exact"
 completeness = "partial"
 
 [[review]]
-entity = "WIFI_MAC_STA_TSF_LOAD.VALUE_LOW"
-naming = "descriptive"
-sources = [
-    "C5_BLOB_LIBPP_HAL_TSF",
-]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "WIFI_MAC_STA_TSF_LOAD.VALUE_HIGH"
-naming = "descriptive"
-sources = [
-    "C5_BLOB_LIBPP_HAL_TSF",
-]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
 entity = "WIFI_MAC_STA_TSF_LOAD.SNAPSHOT_LOW"
 naming = "descriptive"
 sources = [
@@ -220,36 +213,6 @@ completeness = "partial"
 
 [[review]]
 entity = "WIFI_MAC_STA_TSF_LOAD.TSF_DEVIATION_CONTROL"
-naming = "descriptive"
-sources = [
-    "C5_ROM_REV100_WIFI_RUNTIME_MMIO_GAPS",
-]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "WIFI_MAC_STA_TSF_LOAD.TSF_DEVIATION_CONTROL.DEVIATION"
-naming = "descriptive"
-sources = [
-    "C5_ROM_REV100_WIFI_RUNTIME_MMIO_GAPS",
-]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "WIFI_MAC_STA_TSF_LOAD.TSF_DEVIATION_CONTROL.RX_BEACON_ABORT_SYNC_ENABLE"
-naming = "descriptive"
-sources = [
-    "C5_ROM_REV100_WIFI_RUNTIME_MMIO_GAPS",
-]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "WIFI_MAC_STA_TSF_LOAD.TSF_DEVIATION_CONTROL.DEVIATION_SYNC_ENABLE"
 naming = "descriptive"
 sources = [
     "C5_ROM_REV100_WIFI_RUNTIME_MMIO_GAPS",

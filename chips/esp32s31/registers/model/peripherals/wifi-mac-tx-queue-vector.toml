@@ -846,22 +846,41 @@ description = "Use the software HE_CONTROL word instead of the hardware-generate
 bitOffset = 28
 bitWidth = 1
 
-[[review]]
+[[peripheral-review]]
 entity = "WIFI_MAC_TX_QUEUE_VECTOR"
-sources = [
-    "BLOB_LIBPP_HAL_MAC_TX",
-    "BLOB_LIBPP_HAL_HE_TX",
-    "BLOB_LIBPP_MAC_TX_SET_TB",
-    "ROM_REV0_MAC_TX_SET_TB",
-    "PROMOTED_LMAC_TX",
-    "HIL_VENDOR_HE20_MCS9_SU_2026_07_29",
-    "HIL_VENDOR_HE20_MCS0_DCM_RAW_2026_07_29",
-    "HIL_OPEN_HE20_MCS9_AMPDU_2026_07_29",
-    "HIL_OPEN_HE20_MCS0_DCM_SMPDU_2026_07_29",
+opaque-entities = [
+    "WIFI_MAC_TX_QUEUE_VECTOR.PTI%s.BITS_1_3_OPAQUE",
+    "WIFI_MAC_TX_QUEUE_VECTOR.VHT_SIGNAL_1%s.BITS_2_3_OPAQUE",
+    "WIFI_MAC_TX_QUEUE_VECTOR.VHT_SIGNAL_1%s.BITS_22_23_OPAQUE",
+    "WIFI_MAC_TX_QUEUE_VECTOR.VHT_SIGNAL_1%s.BIT_27_OPAQUE",
+    "WIFI_MAC_TX_QUEUE_VECTOR.VHT_MODE%s.BITS_0_1_OPAQUE",
+    "WIFI_MAC_TX_QUEUE_VECTOR.VHT_MODE%s.BITS_19_31_OPAQUE",
+    "WIFI_MAC_TX_QUEUE_VECTOR.HE_SU_SIGNAL_A2_LENGTH%s.BITS_3_7_OPAQUE",
+    "WIFI_MAC_TX_QUEUE_VECTOR.HE_SU_SIGNAL_A2_LENGTH%s.BIT_9_OPAQUE",
+    "WIFI_MAC_TX_QUEUE_VECTOR.HT_DESCRIPTOR_COUNTS%s.BITS_21_31_OPAQUE",
+    "WIFI_MAC_TX_QUEUE_VECTOR.DATA_LENGTH%s.BITS_19_21_OPAQUE",
+    "WIFI_MAC_TX_QUEUE_VECTOR.LENGTH_CONTROL%s.BITS_14_21_OPAQUE",
+    "WIFI_MAC_TX_QUEUE_VECTOR.LENGTH_CONTROL%s.BITS_28_31_OPAQUE",
 ]
+
+[peripheral-review.peripheral]
+sources = ["BLOB_LIBPP_HAL_MAC_TX", "BLOB_LIBPP_HAL_HE_TX", "BLOB_LIBPP_MAC_TX_SET_TB", "ROM_REV0_MAC_TX_SET_TB", "PROMOTED_LMAC_TX", "HIL_VENDOR_HE20_MCS9_SU_2026_07_29", "HIL_VENDOR_HE20_MCS0_DCM_RAW_2026_07_29", "HIL_OPEN_HE20_MCS9_AMPDU_2026_07_29", "HIL_OPEN_HE20_MCS0_DCM_SMPDU_2026_07_29"]
 provenance = "reviewed"
 accuracy = "exact"
 completeness = "complete"
+
+[peripheral-review.register]
+sources = ["BLOB_LIBPP_HAL_MAC_TX", "BLOB_LIBPP_DBG_READ_TX_SIG", "BLOB_LIBPP_HAL_ANTENNA_INIT", "PROMOTED_LMAC_TX", "HIL_VENDOR_HT20_MCS0_SINGLE_PPDU_2026_07_29", "HIL_VENDOR_HT_AMPDU_PPDU", "HIL_OPEN_HT_AMPDU_DIRECT_2026_07_29", "HIL_VENDOR_HE20_MCS0_DCM_RAW_2026_07_29", "HIL_OPEN_HE20_MCS0_DCM_SMPDU_2026_07_29"]
+naming = "descriptive"
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+
+[peripheral-review.field]
+naming = "descriptive"
+
+[peripheral-review.opaque]
+naming = "opaque"
 
 [[review]]
 entity = "WIFI_MAC_TX_QUEUE_VECTOR.PLCP1%s"
@@ -1128,24 +1147,6 @@ accuracy = "exact"
 completeness = "complete"
 
 [[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.LENGTH_CONTROL%s"
-naming = "descriptive"
-sources = [
-    "BLOB_LIBPP_HAL_MAC_TX",
-    "BLOB_LIBPP_DBG_READ_TX_SIG",
-    "BLOB_LIBPP_HAL_ANTENNA_INIT",
-    "PROMOTED_LMAC_TX",
-    "HIL_VENDOR_HT20_MCS0_SINGLE_PPDU_2026_07_29",
-    "HIL_VENDOR_HT_AMPDU_PPDU",
-    "HIL_OPEN_HT_AMPDU_DIRECT_2026_07_29",
-    "HIL_VENDOR_HE20_MCS0_DCM_RAW_2026_07_29",
-    "HIL_OPEN_HE20_MCS0_DCM_SMPDU_2026_07_29",
-]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
 entity = "WIFI_MAC_TX_QUEUE_VECTOR.HE_CONTROL_CONFIG%s"
 naming = "descriptive"
 sources = [
@@ -1157,327 +1158,3 @@ sources = [
 provenance = "reviewed"
 accuracy = "exact"
 completeness = "complete"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.PLCP1%s.LEGACY_SIGNAL"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.PLCP1%s.RATE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.PLCP1%s.KEY_ENTRY_INDEX"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.PLCP1%s.BSSID_SELECT"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.PLCP1%s.VECTOR_FORMAT"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.PLCP1%s.HIGH_CONTROL_28"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.PLCP1%s.CBW40"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.PLCP1%s.HIGH_CONTROL_31_30"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.HE_RTS_CONTROL%s.RTS_THRESHOLD_BYTES"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.HE_RTS_CONTROL%s.RTS_THRESHOLD_VALID"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.HE_RTS_CONTROL%s.HE_RTS_DISABLED"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.PTI%s.TXOP"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.PTI%s.BITS_1_3_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.PTI%s.PTI_0"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.PTI%s.PTI_1"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.PTI%s.PTI_2"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.PTI%s.PTI_3"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.HE_CONTROL%s.VALUE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.HT_SIGNAL%s.MCS"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.HT_SIGNAL%s.CBW40"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.HT_SIGNAL%s.LENGTH"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.HT_SIGNAL%s.SMOOTHING"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.HT_SIGNAL%s.NOT_SOUNDING"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.HT_SIGNAL%s.REQUIRED_ONE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.HT_SIGNAL%s.AGGREGATION"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.HT_SIGNAL%s.STBC"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.HT_SIGNAL%s.FEC_CODING"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.HT_SIGNAL%s.SHORT_GI"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.VHT_SIGNAL_1%s.CHANNEL_WIDTH"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.VHT_SIGNAL_1%s.BITS_2_3_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.VHT_SIGNAL_1%s.GROUP_ID"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.VHT_SIGNAL_1%s.NSTS"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.VHT_SIGNAL_1%s.SU_PARTIAL_AID"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.VHT_SIGNAL_1%s.BITS_22_23_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.VHT_SIGNAL_1%s.SHORT_GI"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.VHT_SIGNAL_1%s.SHORT_GI_SYMBOL_DISAMBIGUATION"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.VHT_SIGNAL_1%s.CODING"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.VHT_SIGNAL_1%s.BIT_27_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.VHT_SIGNAL_1%s.MCS"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.VHT_MODE%s.BITS_0_1_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.VHT_MODE%s.SU_CBW20_PRE_EOFPAD_UNIT4BYTES_LENGTH"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.VHT_MODE%s.BITS_19_31_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.HE_SU_SIGNAL_A1%s.FORMAT"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.HE_SU_SIGNAL_A1%s.BEAM_CHANGE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.HE_SU_SIGNAL_A1%s.UPLINK"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.HE_SU_SIGNAL_A1%s.MCS"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.HE_SU_SIGNAL_A1%s.BSS_COLOR"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.HE_SU_SIGNAL_A1%s.SPATIAL_REUSE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.HE_SU_SIGNAL_A1%s.BANDWIDTH"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.HE_SU_SIGNAL_A1%s.GI_LTF"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.HE_SU_SIGNAL_A2_LENGTH%s.CONTROL_REQUIRED_0"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.HE_SU_SIGNAL_A2_LENGTH%s.CONTROL_REQUIRED_2"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.HE_SU_SIGNAL_A2_LENGTH%s.BITS_3_7_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.HE_SU_SIGNAL_A2_LENGTH%s.CONTROL_REQUIRED_8"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.HE_SU_SIGNAL_A2_LENGTH%s.BIT_9_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.HE_MPDU_LENGTH_TAIL%s.LINK_INDEX"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.POWER%s.DATA_PRIMARY"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.POWER%s.DATA_ALTERNATE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.POWER%s.RTS_PRIMARY"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.POWER%s.RTS_ALTERNATE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.HT_DESCRIPTOR_COUNTS%s.DESCRIPTOR_COUNT_A"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.HT_DESCRIPTOR_COUNTS%s.DESCRIPTOR_COUNT_B"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.HT_DESCRIPTOR_COUNTS%s.DESCRIPTOR_COUNT_A_COPY"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.HT_DESCRIPTOR_COUNTS%s.BITS_21_31_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.DATA_LENGTH%s.HT40_LENGTH"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.DATA_LENGTH%s.BITS_19_21_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.DATA_LENGTH%s.HT40_EOF_COUNT"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.DATA_LENGTH%s.HT40_TXOP_COUNT"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.DATA_LENGTH%s.HT40_MCS"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.LENGTH_CONTROL%s.TXRX_QUEUE_ANTENNA_LAST"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.LENGTH_CONTROL%s.TXRX_QUEUE_ANTENNA_VALUE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.LENGTH_CONTROL%s.TXRX_QUEUE_ANTENNA_ENABLE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.LENGTH_CONTROL%s.TX_QUEUE_ANTENNA_LAST"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.LENGTH_CONTROL%s.TX_QUEUE_ANTENNA_VALUE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.LENGTH_CONTROL%s.TX_QUEUE_ANTENNA_ENABLE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.LENGTH_CONTROL%s.RTS_RATE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.LENGTH_CONTROL%s.BITS_14_21_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.LENGTH_CONTROL%s.HT20_EOF_COUNT"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.LENGTH_CONTROL%s.HT20_TXOP_COUNT"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.LENGTH_CONTROL%s.BITS_28_31_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_VECTOR.HE_CONTROL_CONFIG%s.SOFTWARE_HE_CONTROL_ENABLE"
-naming = "descriptive"

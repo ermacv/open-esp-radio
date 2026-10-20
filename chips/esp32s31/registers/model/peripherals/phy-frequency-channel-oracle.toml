@@ -502,16 +502,65 @@ name = "VHT_SUPPORT"
 bitOffset = 5
 bitWidth = 1
 
-[[review]]
+[[peripheral-review]]
 entity = "PHY_FREQUENCY_CHANNEL_ORACLE"
-sources = [
-    "ROM_REV0_PHY_FREQUENCY_CHANNEL",
-    "BLOB_LIBPHY_PHY_BB_INIT",
-    "BLOB_LIBPHY_REGISTER_CHIPV7_PHY",
+opaque-entities = [
+    "PHY_FREQUENCY_CHANNEL_ORACLE.FREQUENCY_CONTROL.BITS_8_17_OPAQUE",
+    "PHY_FREQUENCY_CHANNEL_ORACLE.FREQUENCY_CONTROL.BIT_18_OPAQUE",
+    "PHY_FREQUENCY_CHANNEL_ORACLE.FREQUENCY_CONTROL.BITS_22_29_OPAQUE",
+    "PHY_FREQUENCY_CHANNEL_ORACLE.FREQUENCY_CONTROL.BIT_30_OPAQUE",
+    "PHY_FREQUENCY_CHANNEL_ORACLE.WORD_0024_OPAQUE",
+    "PHY_FREQUENCY_CHANNEL_ORACLE.FREQUENCY_PARAMETER_1_STATUS.BITS_0_1_OPAQUE",
+    "PHY_FREQUENCY_CHANNEL_ORACLE.FREQUENCY_PARAMETER_1_STATUS.BITS_2_7_OPAQUE",
+    "PHY_FREQUENCY_CHANNEL_ORACLE.FREQUENCY_PARAMETER_1_STATUS.BITS_9_31_OPAQUE",
+    "PHY_FREQUENCY_CHANNEL_ORACLE.I2C_NUMBER_WORD%s.BITS_30_31_OPAQUE",
+    "PHY_FREQUENCY_CHANNEL_ORACLE.CHANNEL_TX_OFFSET_CONTROL.BIT_17_OPAQUE",
+    "PHY_FREQUENCY_CHANNEL_ORACLE.WORD_0024_OPAQUE.BITS_0_31_OPAQUE",
+    "PHY_FREQUENCY_CHANNEL_ORACLE.I2C_NUMBER_CONTROL.BITS_8_12_OPAQUE",
+    "PHY_FREQUENCY_CHANNEL_ORACLE.I2C_NUMBER_CONTROL.BITS_13_17_OPAQUE",
+    "PHY_FREQUENCY_CHANNEL_ORACLE.I2C_NUMBER_WORD%s.BITS_0_4_OPAQUE",
+    "PHY_FREQUENCY_CHANNEL_ORACLE.I2C_NUMBER_WORD%s.BITS_5_9_OPAQUE",
+    "PHY_FREQUENCY_CHANNEL_ORACLE.I2C_NUMBER_WORD%s.BITS_10_14_OPAQUE",
+    "PHY_FREQUENCY_CHANNEL_ORACLE.I2C_NUMBER_WORD%s.BITS_15_19_OPAQUE",
+    "PHY_FREQUENCY_CHANNEL_ORACLE.I2C_NUMBER_WORD%s.BITS_20_24_OPAQUE",
+    "PHY_FREQUENCY_CHANNEL_ORACLE.I2C_NUMBER_WORD%s.BITS_25_29_OPAQUE",
+    "PHY_FREQUENCY_CHANNEL_ORACLE.FBW_BT_FILTER_CONTROL.BIT_16_OPAQUE",
+    "PHY_FREQUENCY_CHANNEL_ORACLE.FBW_BT_FILTER_CONTROL.BITS_17_18_OPAQUE",
+    "PHY_FREQUENCY_CHANNEL_ORACLE.FBW_BT_FILTER_CONTROL.BIT_19_OPAQUE",
+    "PHY_FREQUENCY_CHANNEL_ORACLE.FBW_BT_FILTER_CONTROL.BITS_20_21_OPAQUE",
+    "PHY_FREQUENCY_CHANNEL_ORACLE.FBW_BT_FILTER_CONTROL.BIT_22_OPAQUE",
+    "PHY_FREQUENCY_CHANNEL_ORACLE.FBW_BT_FILTER_CONTROL.BITS_23_24_OPAQUE",
+    "PHY_FREQUENCY_CHANNEL_ORACLE.FBW_BT_FILTER_CONTROL.BIT_25_OPAQUE",
+    "PHY_FREQUENCY_CHANNEL_ORACLE.NRX_FREQUENCY_CONTROL.BITS_0_23_OPAQUE",
+    "PHY_FREQUENCY_CHANNEL_ORACLE.NRX_FREQUENCY_CONTROL.BITS_24_28_OPAQUE",
+    "PHY_FREQUENCY_CHANNEL_ORACLE.NRX_FREQUENCY_CONTROL.BITS_29_31_OPAQUE",
+    "PHY_FREQUENCY_CHANNEL_ORACLE.CHANNEL_CBW_CONTROL_0.BITS_0_1_OPAQUE",
+    "PHY_FREQUENCY_CHANNEL_ORACLE.CHANNEL_CBW_CONTROL_1.BITS_0_1_OPAQUE",
+    "PHY_FREQUENCY_CHANNEL_ORACLE.CHANNEL_CBW_CONTROL_1.BITS_2_4_OPAQUE",
 ]
+
+[peripheral-review.peripheral]
+sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL", "BLOB_LIBPHY_PHY_BB_INIT", "BLOB_LIBPHY_REGISTER_CHIPV7_PHY"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
+
+[peripheral-review.register]
+sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
+naming = "descriptive"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[peripheral-review.field]
+sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
+naming = "descriptive"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[peripheral-review.opaque]
+naming = "opaque"
 
 [[review]]
 entity = "PHY_FREQUENCY_CHANNEL_ORACLE.FREQUENCY_CONTROL"
@@ -523,14 +572,6 @@ sources = [
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
-
-[[review]]
-entity = "PHY_FREQUENCY_CHANNEL_ORACLE.FREQUENCY_CONTROL.CHANNEL_INDEX"
-naming = "descriptive"
-sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
 
 [[review]]
 entity = "PHY_FREQUENCY_CHANNEL_ORACLE.FREQUENCY_CONTROL.BITS_8_17_OPAQUE"
@@ -547,22 +588,6 @@ sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
-
-[[review]]
-entity = "PHY_FREQUENCY_CHANNEL_ORACLE.FREQUENCY_CONTROL.CHANNEL_SWITCH_PULSE"
-naming = "descriptive"
-sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_FREQUENCY_CHANNEL_ORACLE.FREQUENCY_CONTROL.MEMORY_WRITE_PULSE"
-naming = "descriptive"
-sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
 
 [[review]]
 entity = "PHY_FREQUENCY_CHANNEL_ORACLE.FREQUENCY_CONTROL.BITS_22_29_OPAQUE"
@@ -608,14 +633,6 @@ accuracy = "exact"
 completeness = "partial"
 
 [[review]]
-entity = "PHY_FREQUENCY_CHANNEL_ORACLE.FREQUENCY_MEMORY_READ_CONTROL.READ_PULSE"
-naming = "descriptive"
-sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
 entity = "PHY_FREQUENCY_CHANNEL_ORACLE.FREQUENCY_PARAMETER_1_STATUS"
 naming = "descriptive"
 sources = [
@@ -657,38 +674,6 @@ sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
-
-[[review]]
-entity = "PHY_FREQUENCY_CHANNEL_ORACLE.FREQUENCY_MEMORY_DATA"
-naming = "descriptive"
-sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_FREQUENCY_CHANNEL_ORACLE.I2C_NUMBER_CONTROL"
-naming = "descriptive"
-sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_FREQUENCY_CHANNEL_ORACLE.I2C_NUMBER_CONTROL.MEMORY_READ_MODE"
-naming = "descriptive"
-sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_FREQUENCY_CHANNEL_ORACLE.I2C_NUMBER_WORD%s"
-naming = "descriptive"
-sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
 
 [[review]]
 entity = "PHY_FREQUENCY_CHANNEL_ORACLE.I2C_NUMBER_WORD%s.BITS_30_31_OPAQUE"
@@ -742,14 +727,6 @@ accuracy = "exact"
 completeness = "partial"
 
 [[review]]
-entity = "PHY_FREQUENCY_CHANNEL_ORACLE.CHANNEL_CBW_CONTROL_0"
-naming = "descriptive"
-sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
 entity = "PHY_FREQUENCY_CHANNEL_ORACLE.CHANNEL_CBW_CONTROL_1"
 naming = "descriptive"
 sources = [
@@ -761,10 +738,6 @@ accuracy = "exact"
 completeness = "complete"
 
 [[review]]
-entity = "PHY_FREQUENCY_CHANNEL_ORACLE.WORD_0024_OPAQUE.BITS_0_31_OPAQUE"
-naming = "opaque"
-
-[[review]]
 entity = "PHY_FREQUENCY_CHANNEL_ORACLE.FREQUENCY_MEMORY_DATA.DATA"
 naming = "descriptive"
 
@@ -773,68 +746,8 @@ entity = "PHY_FREQUENCY_CHANNEL_ORACLE.FREQUENCY_MEMORY_DATA.MODE"
 naming = "descriptive"
 
 [[review]]
-entity = "PHY_FREQUENCY_CHANNEL_ORACLE.I2C_NUMBER_CONTROL.BITS_8_12_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "PHY_FREQUENCY_CHANNEL_ORACLE.I2C_NUMBER_CONTROL.BITS_13_17_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "PHY_FREQUENCY_CHANNEL_ORACLE.I2C_NUMBER_WORD%s.BITS_0_4_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "PHY_FREQUENCY_CHANNEL_ORACLE.I2C_NUMBER_WORD%s.BITS_5_9_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "PHY_FREQUENCY_CHANNEL_ORACLE.I2C_NUMBER_WORD%s.BITS_10_14_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "PHY_FREQUENCY_CHANNEL_ORACLE.I2C_NUMBER_WORD%s.BITS_15_19_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "PHY_FREQUENCY_CHANNEL_ORACLE.I2C_NUMBER_WORD%s.BITS_20_24_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "PHY_FREQUENCY_CHANNEL_ORACLE.I2C_NUMBER_WORD%s.BITS_25_29_OPAQUE"
-naming = "opaque"
-
-[[review]]
 entity = "PHY_FREQUENCY_CHANNEL_ORACLE.FREQUENCY_MEMORY_READ_RESULT.VALUE"
 naming = "descriptive"
-
-[[review]]
-entity = "PHY_FREQUENCY_CHANNEL_ORACLE.FBW_BT_FILTER_CONTROL.BIT_16_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "PHY_FREQUENCY_CHANNEL_ORACLE.FBW_BT_FILTER_CONTROL.BITS_17_18_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "PHY_FREQUENCY_CHANNEL_ORACLE.FBW_BT_FILTER_CONTROL.BIT_19_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "PHY_FREQUENCY_CHANNEL_ORACLE.FBW_BT_FILTER_CONTROL.BITS_20_21_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "PHY_FREQUENCY_CHANNEL_ORACLE.FBW_BT_FILTER_CONTROL.BIT_22_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "PHY_FREQUENCY_CHANNEL_ORACLE.FBW_BT_FILTER_CONTROL.BITS_23_24_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "PHY_FREQUENCY_CHANNEL_ORACLE.FBW_BT_FILTER_CONTROL.BIT_25_OPAQUE"
-naming = "opaque"
 
 [[review]]
 entity = "PHY_FREQUENCY_CHANNEL_ORACLE.CHANNEL_TX_OFFSET_CONTROL.PRIMARY_20_CHANNEL_OFFSET"
@@ -848,30 +761,6 @@ naming = "descriptive"
 [[review]]
 entity = "PHY_FREQUENCY_CHANNEL_ORACLE.CHANNEL_TX_OFFSET_CONTROL.MINIMUM_POWER_HIGH"
 naming = "descriptive"
-
-[[review]]
-entity = "PHY_FREQUENCY_CHANNEL_ORACLE.NRX_FREQUENCY_CONTROL.BITS_0_23_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "PHY_FREQUENCY_CHANNEL_ORACLE.NRX_FREQUENCY_CONTROL.BITS_24_28_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "PHY_FREQUENCY_CHANNEL_ORACLE.NRX_FREQUENCY_CONTROL.BITS_29_31_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "PHY_FREQUENCY_CHANNEL_ORACLE.CHANNEL_CBW_CONTROL_0.BITS_0_1_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "PHY_FREQUENCY_CHANNEL_ORACLE.CHANNEL_CBW_CONTROL_1.BITS_0_1_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "PHY_FREQUENCY_CHANNEL_ORACLE.CHANNEL_CBW_CONTROL_1.BITS_2_4_OPAQUE"
-naming = "opaque"
 
 [[review]]
 entity = "PHY_FREQUENCY_CHANNEL_ORACLE.CHANNEL_CBW_CONTROL_1.VHT_SUPPORT"

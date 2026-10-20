@@ -33,28 +33,17 @@ name = "VALUE"
 bitOffset = 0
 bitWidth = 32
 
-[[review]]
+[[peripheral-review]]
 entity = "WIFI_MAC_HE_COLOR_COLLISION"
-sources = [
-    "BLOB_LIBPP_HAL_RX_DEBUG_COUNTERS",
-    "HIL_OPEN_RX_STATISTICS_BASELINE_2026_07_29",
-]
+
+[peripheral-review.peripheral]
+sources = ["BLOB_LIBPP_HAL_RX_DEBUG_COUNTERS", "HIL_OPEN_RX_STATISTICS_BASELINE_2026_07_29"]
 provenance = "reviewed"
 accuracy = "exact"
 completeness = "complete"
 
-[[review]]
-entity = "WIFI_MAC_HE_COLOR_COLLISION.BSS_COLOR_BITMAP_LOW"
+[peripheral-review.register]
 naming = "descriptive"
 
-[[review]]
-entity = "WIFI_MAC_HE_COLOR_COLLISION.BSS_COLOR_BITMAP_LOW.VALUE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_COLOR_COLLISION.BSS_COLOR_BITMAP_HIGH"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_COLOR_COLLISION.BSS_COLOR_BITMAP_HIGH.VALUE"
+[peripheral-review.field]
 naming = "descriptive"

@@ -25,27 +25,6 @@ description = "Complete positional image; only the ordered zero-then-one publica
 bitOffset = 0
 bitWidth = 32
 
-[[review]]
-entity = "BLE_HW_POSITIONAL_WORD_1FF0"
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
-provenance = "derived"
-accuracy = "exact"
-completeness = "complete"
-[[review]]
-entity = "BLE_HW_POSITIONAL_WORD_1FF0.VALUE"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-[[review]]
-entity = "BLE_HW_POSITIONAL_WORD_1FF0.VALUE.BITS_0_31_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
 [[peripherals]]
 name = "BLE_HW_POSITIONAL_WORD_891C"
 description = """
@@ -71,23 +50,54 @@ description = "Complete positional image; only the ordered 0x20-then-0x40 public
 bitOffset = 0
 bitWidth = 32
 
-[[review]]
-entity = "BLE_HW_POSITIONAL_WORD_891C"
+[[peripheral-review]]
+entity = "BLE_HW_POSITIONAL_WORD_1FF0"
+opaque-entities = [
+    "BLE_HW_POSITIONAL_WORD_1FF0.VALUE.BITS_0_31_OPAQUE",
+]
+
+[peripheral-review.peripheral]
 sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
 provenance = "derived"
 accuracy = "exact"
 completeness = "complete"
-[[review]]
-entity = "BLE_HW_POSITIONAL_WORD_891C.VALUE"
-naming = "descriptive"
+
+[peripheral-review.register]
 sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
+naming = "descriptive"
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
-[[review]]
-entity = "BLE_HW_POSITIONAL_WORD_891C.VALUE.BITS_0_31_OPAQUE"
-naming = "opaque"
+
+[peripheral-review.opaque]
 sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[peripheral-review]]
+entity = "BLE_HW_POSITIONAL_WORD_891C"
+opaque-entities = [
+    "BLE_HW_POSITIONAL_WORD_891C.VALUE.BITS_0_31_OPAQUE",
+]
+
+[peripheral-review.peripheral]
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "complete"
+
+[peripheral-review.register]
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
+naming = "descriptive"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[peripheral-review.opaque]
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
+naming = "opaque"
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"

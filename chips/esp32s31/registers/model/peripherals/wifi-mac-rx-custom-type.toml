@@ -63,53 +63,23 @@ name = "BITS_30_31_OPAQUE"
 bitOffset = 30
 bitWidth = 2
 
-[[review]]
+[[peripheral-review]]
 entity = "WIFI_MAC_RX_CUSTOM_TYPE"
+opaque-entities = [
+    "WIFI_MAC_RX_CUSTOM_TYPE.CONTROL.BITS_30_31_OPAQUE",
+]
+
+[peripheral-review.peripheral]
 sources = ["BLOB_LIBPP_HAL_RX_MISC_DEBUG"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
 
-[[review]]
-entity = "WIFI_MAC_RX_CUSTOM_TYPE.CONTROL"
+[peripheral-review.register]
 naming = "descriptive"
 
-[[review]]
-entity = "WIFI_MAC_RX_CUSTOM_TYPE.CONTROL.TYPE_2_ACK_INDEX"
+[peripheral-review.field]
 naming = "descriptive"
 
-[[review]]
-entity = "WIFI_MAC_RX_CUSTOM_TYPE.CONTROL.TYPE_2_VALUE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_RX_CUSTOM_TYPE.CONTROL.TYPE_2_ENABLE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_RX_CUSTOM_TYPE.CONTROL.TYPE_1_ACK_INDEX"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_RX_CUSTOM_TYPE.CONTROL.TYPE_1_VALUE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_RX_CUSTOM_TYPE.CONTROL.TYPE_1_ENABLE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_RX_CUSTOM_TYPE.CONTROL.TYPE_0_ACK_INDEX"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_RX_CUSTOM_TYPE.CONTROL.TYPE_0_VALUE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_RX_CUSTOM_TYPE.CONTROL.TYPE_0_ENABLE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_RX_CUSTOM_TYPE.CONTROL.BITS_30_31_OPAQUE"
+[peripheral-review.opaque]
 naming = "opaque"

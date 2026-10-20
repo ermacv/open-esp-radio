@@ -191,32 +191,37 @@ name = "ENABLE"
 bitOffset = 31
 bitWidth = 1
 
-[[review]]
+[[peripheral-review]]
 entity = "WIFI_MAC_TX_QUEUE_CONTROL"
-sources = [
-    "BLOB_LIBPP_HAL_MAC_TX",
-    "PROMOTED_LMAC_TX",
+opaque-entities = [
+    "WIFI_MAC_TX_QUEUE_CONTROL.CONTROL%s.BITS_20_21_OPAQUE",
+    "WIFI_MAC_TX_QUEUE_CONTROL.CONTROL%s.BIT_22_OPAQUE",
+    "WIFI_MAC_TX_QUEUE_CONTROL.CONTROL%s.BIT_23_OPAQUE",
+    "WIFI_MAC_TX_QUEUE_CONTROL.CONTROL%s.BITS_27_29_OPAQUE",
 ]
+
+[peripheral-review.peripheral]
+sources = ["BLOB_LIBPP_HAL_MAC_TX", "PROMOTED_LMAC_TX"]
 provenance = "reviewed"
 accuracy = "exact"
 completeness = "complete"
 
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_CONTROL.PROTECTION%s"
+[peripheral-review.register]
+sources = ["BLOB_LIBPP_HAL_MAC_TX", "BLOB_LIBPP_TRC_AMPDU_PARAM", "BLOB_LIBPP_HE_DELIMITER_SPACING", "BLOB_LIBPP_HAL_HE_MU_EDCA_DEBUG", "BLOB_LIBPP_HAL_HE_INIT_SUFFIX", "BLOB_LIBPP_TX_PROTECTION_ARGUMENTS", "HIL_VENDOR_ACTIVE_HT_VECTOR_2026_07_29", "HIL_OPEN_HE20_MCS9_EMPTY_DELIMITERS_2026_07_29"]
 naming = "descriptive"
-sources = [
-    "BLOB_LIBPP_HAL_MAC_TX",
-    "BLOB_LIBPP_TRC_AMPDU_PARAM",
-    "BLOB_LIBPP_HE_DELIMITER_SPACING",
-    "BLOB_LIBPP_HAL_HE_MU_EDCA_DEBUG",
-    "BLOB_LIBPP_HAL_HE_INIT_SUFFIX",
-    "BLOB_LIBPP_TX_PROTECTION_ARGUMENTS",
-    "HIL_VENDOR_ACTIVE_HT_VECTOR_2026_07_29",
-    "HIL_OPEN_HE20_MCS9_EMPTY_DELIMITERS_2026_07_29",
-]
 provenance = "reviewed"
 accuracy = "exact"
 completeness = "complete"
+
+[peripheral-review.field]
+naming = "descriptive"
+
+[peripheral-review.opaque]
+sources = ["BLOB_LIBPP_HAL_MAC_TX"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
 
 [[review]]
 entity = "WIFI_MAC_TX_QUEUE_CONTROL.PROTECTION%s.SOFTWARE_RTS"
@@ -282,28 +287,12 @@ accuracy = "exact"
 completeness = "complete"
 
 [[review]]
-entity = "WIFI_MAC_TX_QUEUE_CONTROL.CONTROL%s.BITS_20_21_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBPP_HAL_MAC_TX"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "unknown"
-
-[[review]]
 entity = "WIFI_MAC_TX_QUEUE_CONTROL.CONTROL%s.BIT_22_OPAQUE"
 naming = "opaque"
 sources = ["BLOB_LIBPP_HAL_MAC_TX"]
 provenance = "reviewed"
 accuracy = "exact"
 completeness = "complete"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_CONTROL.CONTROL%s.BIT_23_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBPP_HAL_MAC_TX"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "unknown"
 
 [[review]]
 entity = "WIFI_MAC_TX_QUEUE_CONTROL.CONTROL%s.PLCP_FORMAT"
@@ -322,47 +311,3 @@ sources = [
 provenance = "reviewed"
 accuracy = "exact"
 completeness = "complete"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_CONTROL.CONTROL%s.BITS_27_29_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBPP_HAL_MAC_TX"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "unknown"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_CONTROL.PROTECTION%s.MINIMUM_MPDU_LENGTH_CBW20"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_CONTROL.PROTECTION%s.MINIMUM_MPDU_LENGTH_CBW40"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_CONTROL.PROTECTION%s.MINIMUM_MPDU_LENGTH_CBW80"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_CONTROL.CONFIG%s.TIMEOUT"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_CONTROL.CONFIG%s.CONTENTION_WINDOW"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_CONTROL.CONFIG%s.INTERFACE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_CONTROL.CONFIG%s.AIFSN"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_CONTROL.CONTROL%s.VALID"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_QUEUE_CONTROL.CONTROL%s.ENABLE"
-naming = "descriptive"

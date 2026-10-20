@@ -119,21 +119,37 @@ name = "VALUE_LOW_8"
 bitOffset = 0
 bitWidth = 8
 
-[[review]]
+[[peripheral-review]]
 entity = "BLE_HW_RUNTIME_CONTROL"
-sources = [
-    "BLOB_LIBBLE_HW_STATUS_CLEAR",
-    "BLOB_LIBBLE_HW_RUNTIME_CONFIG",
-    "BLOB_LIBBLE_PHY_INIT_REGISTERS",
+opaque-entities = [
+    "BLE_HW_RUNTIME_CONTROL.WORD_0088_OPAQUE",
+    "BLE_HW_RUNTIME_CONTROL.WORD_0090_OPAQUE",
+    "BLE_HW_RUNTIME_CONTROL.WORD_0094_OPAQUE",
 ]
+
+[peripheral-review.peripheral]
+sources = ["BLOB_LIBBLE_HW_STATUS_CLEAR", "BLOB_LIBBLE_HW_RUNTIME_CONFIG", "BLOB_LIBBLE_PHY_INIT_REGISTERS"]
 provenance = "derived"
 accuracy = "exact"
 completeness = "partial"
 
-[[review]]
-entity = "BLE_HW_RUNTIME_CONTROL.PHY_INIT_CONFIGURATION"
-naming = "descriptive"
+[peripheral-review.register]
 sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
+naming = "descriptive"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[peripheral-review.field]
+sources = ["BLOB_LIBBLE_HW_RUNTIME_CONFIG"]
+naming = "descriptive"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[peripheral-review.opaque]
+sources = ["BLOB_LIBBLE_HW_RUNTIME_CONFIG"]
+naming = "opaque"
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
@@ -153,14 +169,6 @@ sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
-
-[[review]]
-entity = "BLE_HW_RUNTIME_CONTROL.PHY_INIT_CONFIGURATION_FOLLOWUP"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
 
 [[review]]
 entity = "BLE_HW_RUNTIME_CONTROL.PHY_INIT_CONFIGURATION_FOLLOWUP.VALUE"
@@ -196,72 +204,6 @@ completeness = "complete"
 entity = "BLE_HW_RUNTIME_CONTROL.CLEAR%s.PENDING_BITS"
 naming = "descriptive"
 sources = ["BLOB_LIBBLE_HW_STATUS_CLEAR"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLE_HW_RUNTIME_CONTROL.WORD_0088_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBLE_HW_RUNTIME_CONFIG"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-[[review]]
-entity = "BLE_HW_RUNTIME_CONTROL.WORD_0088_OPAQUE.VALUE_LOW_5"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_HW_RUNTIME_CONFIG"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLE_HW_RUNTIME_CONTROL.WORD_0090_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBLE_HW_RUNTIME_CONFIG"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-[[review]]
-entity = "BLE_HW_RUNTIME_CONTROL.WORD_0090_OPAQUE.VALUE_0"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_HW_RUNTIME_CONFIG"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-[[review]]
-entity = "BLE_HW_RUNTIME_CONTROL.WORD_0090_OPAQUE.CONFIG_5"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_HW_RUNTIME_CONFIG"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-[[review]]
-entity = "BLE_HW_RUNTIME_CONTROL.WORD_0090_OPAQUE.VALUE_1"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_HW_RUNTIME_CONFIG"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-[[review]]
-entity = "BLE_HW_RUNTIME_CONTROL.WORD_0090_OPAQUE.CONFIG_13"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_HW_RUNTIME_CONFIG"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLE_HW_RUNTIME_CONTROL.WORD_0094_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBLE_HW_RUNTIME_CONFIG"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-[[review]]
-entity = "BLE_HW_RUNTIME_CONTROL.WORD_0094_OPAQUE.VALUE_LOW_8"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_HW_RUNTIME_CONFIG"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"

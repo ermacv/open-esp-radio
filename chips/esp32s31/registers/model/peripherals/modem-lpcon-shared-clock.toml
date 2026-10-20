@@ -203,35 +203,25 @@ description = "Bit two of the low-power APB clock state map, set by the reviewed
 bitOffset = 30
 bitWidth = 1
 
-[[review]]
+[[peripheral-review]]
 entity = "MODEM_LPCON_SHARED_CLOCK"
+
+[peripheral-review.peripheral]
 sources = ["S31_MODEM_LPCON_STRUCT"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
 
-[[review]]
-entity = "MODEM_LPCON_SHARED_CLOCK.LP_TIMER_CONF"
-naming = "vendor"
+[peripheral-review.register]
 sources = ["S31_MODEM_LPCON_STRUCT", "S31_ESP_PACS_SVD"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-[[review]]
-entity = "MODEM_LPCON_SHARED_CLOCK.COEX_LP_CLK_CONF"
 naming = "vendor"
-sources = ["S31_MODEM_LPCON_STRUCT", "S31_ESP_PACS_SVD"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
 
-[[review]]
-entity = "MODEM_LPCON_SHARED_CLOCK.CLK_CONF_POWER_ST"
+[peripheral-review.field]
+sources = ["S31_ESP_PACS_SVD"]
 naming = "vendor"
-sources = ["S31_MODEM_LPCON_STRUCT", "S31_ESP_PACS_SVD"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
 
 [[review]]
 entity = "MODEM_LPCON_SHARED_CLOCK.WIFI_LP_CLK_CONF"
@@ -248,86 +238,6 @@ sources = ["S31_MODEM_LPCON_STRUCT", "ESP_IDF_4D59230D_S31_WIFI_LOW_POWER_CLOCK"
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
-
-[[review]]
-entity = "MODEM_LPCON_SHARED_CLOCK.LP_TIMER_CONF.CLK_LP_TIMER_SEL_OSC_SLOW"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-
-[[review]]
-entity = "MODEM_LPCON_SHARED_CLOCK.LP_TIMER_CONF.CLK_LP_TIMER_SEL_OSC_FAST"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-
-[[review]]
-entity = "MODEM_LPCON_SHARED_CLOCK.LP_TIMER_CONF.CLK_LP_TIMER_SEL_XTAL"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-
-[[review]]
-entity = "MODEM_LPCON_SHARED_CLOCK.LP_TIMER_CONF.CLK_LP_TIMER_SEL_XTAL32K"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-
-[[review]]
-entity = "MODEM_LPCON_SHARED_CLOCK.LP_TIMER_CONF.CLK_LP_TIMER_DIV_NUM"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-
-[[review]]
-entity = "MODEM_LPCON_SHARED_CLOCK.COEX_LP_CLK_CONF.CLK_COEX_LP_SEL_OSC_SLOW"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-
-[[review]]
-entity = "MODEM_LPCON_SHARED_CLOCK.COEX_LP_CLK_CONF.CLK_COEX_LP_SEL_OSC_FAST"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-
-[[review]]
-entity = "MODEM_LPCON_SHARED_CLOCK.COEX_LP_CLK_CONF.CLK_COEX_LP_SEL_XTAL"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-
-[[review]]
-entity = "MODEM_LPCON_SHARED_CLOCK.COEX_LP_CLK_CONF.CLK_COEX_LP_SEL_XTAL32K"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-
-[[review]]
-entity = "MODEM_LPCON_SHARED_CLOCK.COEX_LP_CLK_CONF.CLK_COEX_LP_DIV_NUM"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-
-[[review]]
-entity = "MODEM_LPCON_SHARED_CLOCK.WIFI_LP_CLK_CONF.CLK_WIFIPWR_LP_SEL_OSC_SLOW"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-
-[[review]]
-entity = "MODEM_LPCON_SHARED_CLOCK.WIFI_LP_CLK_CONF.CLK_WIFIPWR_LP_SEL_OSC_FAST"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-
-[[review]]
-entity = "MODEM_LPCON_SHARED_CLOCK.WIFI_LP_CLK_CONF.CLK_WIFIPWR_LP_SEL_XTAL"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-
-[[review]]
-entity = "MODEM_LPCON_SHARED_CLOCK.WIFI_LP_CLK_CONF.CLK_WIFIPWR_LP_SEL_XTAL32K"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-
-[[review]]
-entity = "MODEM_LPCON_SHARED_CLOCK.WIFI_LP_CLK_CONF.CLK_WIFIPWR_LP_DIV_NUM"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-
-[[review]]
-entity = "MODEM_LPCON_SHARED_CLOCK.MODEM_32K_CLK_CONF.CLK_MODEM_32K_SEL"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
 
 [[review]]
 entity = "MODEM_LPCON_SHARED_CLOCK.CLK_CONF_POWER_ST.CLK_WIFIPWR_ST_MAP_BIT_ONE"

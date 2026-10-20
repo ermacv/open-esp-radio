@@ -334,61 +334,41 @@ bitWidth = 10
 minimum = 0x0
 maximum = 0x3FF
 
-[[review]]
+[[peripheral-review]]
 entity = "WIFI_MAC_TXRX_CALLBACKS"
+opaque-entities = [
+    "WIFI_MAC_TXRX_CALLBACKS.ACK_RATE_TABLE.BITS_24_31_OPAQUE",
+    "WIFI_MAC_TXRX_CALLBACKS.ACK_CCK_RATE_TABLE.BITS_24_31_OPAQUE",
+    "WIFI_MAC_TXRX_CALLBACKS.CTS_RATE_TABLE.BITS_24_31_OPAQUE",
+    "WIFI_MAC_TXRX_CALLBACKS.CTS_CCK_RATE_TABLE.BITS_24_31_OPAQUE",
+    "WIFI_MAC_TXRX_CALLBACKS.BB_RX_HANG_CONTROL.BITS_0_11_OPAQUE",
+    "WIFI_MAC_TXRX_CALLBACKS.BB_RX_HANG_CONTROL.BIT_30_OPAQUE",
+    "WIFI_MAC_TXRX_CALLBACKS.BB_RX_HANG_CONTROL.BIT_31_OPAQUE",
+]
+
+[peripheral-review.peripheral]
 sources = ["BLOB_LIBPP_MAC_TXRX_CALLBACKS"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
 
-[[review]]
-entity = "WIFI_MAC_TXRX_CALLBACKS.ACK_RATE_TABLE"
+[peripheral-review.register]
+sources = ["BLOB_LIBPP_MAC_TXRX_CALLBACKS", "BLOB_LIBPP_HAL_RESPONSE_RATE_DEBUG"]
 naming = "descriptive"
-sources = [
-    "BLOB_LIBPP_MAC_TXRX_CALLBACKS",
-    "BLOB_LIBPP_HAL_RESPONSE_RATE_DEBUG",
-]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
 
-[[review]]
-entity = "WIFI_MAC_TXRX_CALLBACKS.ACK_CCK_RATE_TABLE"
+[peripheral-review.field]
 naming = "descriptive"
-sources = [
-    "BLOB_LIBPP_MAC_TXRX_CALLBACKS",
-    "BLOB_LIBPP_HAL_RESPONSE_RATE_DEBUG",
-]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
+
+[peripheral-review.opaque]
+naming = "opaque"
 
 [[review]]
 entity = "WIFI_MAC_TXRX_CALLBACKS.ACK_SCCK_RATE_TABLE"
 naming = "descriptive"
 sources = ["BLOB_LIBPP_HAL_RESPONSE_RATE_DEBUG"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "WIFI_MAC_TXRX_CALLBACKS.CTS_RATE_TABLE"
-naming = "descriptive"
-sources = [
-    "BLOB_LIBPP_MAC_TXRX_CALLBACKS",
-    "BLOB_LIBPP_HAL_RESPONSE_RATE_DEBUG",
-]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "WIFI_MAC_TXRX_CALLBACKS.CTS_CCK_RATE_TABLE"
-naming = "descriptive"
-sources = [
-    "BLOB_LIBPP_MAC_TXRX_CALLBACKS",
-    "BLOB_LIBPP_HAL_RESPONSE_RATE_DEBUG",
-]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -451,114 +431,6 @@ sources = ["BLOB_LIBPP_HAL_WDEV_DELAY_DEBUG"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
-
-[[review]]
-entity = "WIFI_MAC_TXRX_CALLBACKS.ACK_RATE_TABLE.BPSK_RATE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TXRX_CALLBACKS.ACK_RATE_TABLE.QPSK_RATE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TXRX_CALLBACKS.ACK_RATE_TABLE.QAM16_RATE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TXRX_CALLBACKS.ACK_RATE_TABLE.BITS_24_31_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_TXRX_CALLBACKS.ACK_CCK_RATE_TABLE.RATE_1M"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TXRX_CALLBACKS.ACK_CCK_RATE_TABLE.RATE_2M"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TXRX_CALLBACKS.ACK_CCK_RATE_TABLE.RATE_2M_SHORT_PREAMBLE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TXRX_CALLBACKS.ACK_CCK_RATE_TABLE.BITS_24_31_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_TXRX_CALLBACKS.ACK_SCCK_RATE_TABLE.LR0_RATE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TXRX_CALLBACKS.ACK_SCCK_RATE_TABLE.LR1_RATE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TXRX_CALLBACKS.ACK_SCCK_RATE_TABLE.LR2_RATE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TXRX_CALLBACKS.ACK_SCCK_RATE_TABLE.LR3_RATE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TXRX_CALLBACKS.CTS_RATE_TABLE.BPSK_RATE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TXRX_CALLBACKS.CTS_RATE_TABLE.QPSK_RATE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TXRX_CALLBACKS.CTS_RATE_TABLE.QAM16_RATE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TXRX_CALLBACKS.CTS_RATE_TABLE.BITS_24_31_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_TXRX_CALLBACKS.CTS_CCK_RATE_TABLE.RATE_1M"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TXRX_CALLBACKS.CTS_CCK_RATE_TABLE.RATE_2M"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TXRX_CALLBACKS.CTS_CCK_RATE_TABLE.RATE_2M_SHORT_PREAMBLE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TXRX_CALLBACKS.CTS_CCK_RATE_TABLE.BITS_24_31_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_TXRX_CALLBACKS.CTS_SCCK_RATE_TABLE.LR0_RATE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TXRX_CALLBACKS.CTS_SCCK_RATE_TABLE.LR1_RATE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TXRX_CALLBACKS.CTS_SCCK_RATE_TABLE.LR2_RATE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TXRX_CALLBACKS.CTS_SCCK_RATE_TABLE.LR3_RATE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TXRX_CALLBACKS.BB_RX_HANG_CONTROL.BITS_0_11_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_TXRX_CALLBACKS.BB_RX_HANG_CONTROL.BIT_30_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_TXRX_CALLBACKS.BB_RX_HANG_CONTROL.BIT_31_OPAQUE"
-naming = "opaque"
 
 [[review]]
 entity = "WIFI_MAC_TXRX_CALLBACKS.DELAY_SECONDARY.RX_11G_OFDM_DELAY"

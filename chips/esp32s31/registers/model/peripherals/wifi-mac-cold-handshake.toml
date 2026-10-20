@@ -88,12 +88,34 @@ name = "VALUE"
 bitOffset = 0
 bitWidth = 32
 
-[[review]]
+[[peripheral-review]]
 entity = "WIFI_MAC_COLD_HANDSHAKE"
+opaque-entities = [
+    "WIFI_MAC_COLD_HANDSHAKE.CONTROL.BITS_2_31_OPAQUE",
+]
+
+[peripheral-review.peripheral]
 sources = ["BLOB_LIBPP_HAL_INIT_PREFIX"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
+
+[peripheral-review.register]
+sources = ["ROM_REV0_WIFI_RUNTIME_MMIO_GAPS"]
+naming = "descriptive"
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[peripheral-review.field]
+sources = ["BLOB_LIBPP_HAL_INIT_PREFIX"]
+naming = "descriptive"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[peripheral-review.opaque]
+naming = "opaque"
 
 [[review]]
 entity = "WIFI_MAC_COLD_HANDSHAKE.CONTROL"
@@ -102,58 +124,6 @@ sources = ["BLOB_LIBPP_HAL_INIT_PREFIX"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
-
-[[review]]
-entity = "WIFI_MAC_COLD_HANDSHAKE.CONTROL.READY"
-naming = "descriptive"
-sources = ["BLOB_LIBPP_HAL_INIT_PREFIX"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "WIFI_MAC_COLD_HANDSHAKE.CONTROL.REQUEST"
-naming = "descriptive"
-sources = ["BLOB_LIBPP_HAL_INIT_PREFIX"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "WIFI_MAC_COLD_HANDSHAKE.WDEV_TIMER_TARGET_0_CONTROL"
-naming = "descriptive"
-sources = ["ROM_REV0_WIFI_RUNTIME_MMIO_GAPS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "unknown"
-
-[[review]]
-entity = "WIFI_MAC_COLD_HANDSHAKE.WDEV_TIMER_TARGET_0_VALUE"
-naming = "descriptive"
-sources = ["ROM_REV0_WIFI_RUNTIME_MMIO_GAPS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "unknown"
-
-[[review]]
-entity = "WIFI_MAC_COLD_HANDSHAKE.WDEV_TIMER_TARGET_1_CONTROL"
-naming = "descriptive"
-sources = ["ROM_REV0_WIFI_RUNTIME_MMIO_GAPS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "unknown"
-
-[[review]]
-entity = "WIFI_MAC_COLD_HANDSHAKE.WDEV_TIMER_TARGET_1_VALUE"
-naming = "descriptive"
-sources = ["ROM_REV0_WIFI_RUNTIME_MMIO_GAPS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "unknown"
-
-[[review]]
-entity = "WIFI_MAC_COLD_HANDSHAKE.CONTROL.BITS_2_31_OPAQUE"
-naming = "opaque"
 
 [[review]]
 entity = "WIFI_MAC_COLD_HANDSHAKE.WDEV_TIMER_TARGET_0_CONTROL.ENABLE"

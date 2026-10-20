@@ -51,20 +51,30 @@ description = "Second upper reset bit cleared and then asserted by complete phy_
 bitOffset = 26
 bitWidth = 1
 
-[[review]]
+[[peripheral-review]]
 entity = "PHY_FEDATA_RECOVERED"
-sources = [
-    "ESP_IDF_25FE69F_S31_PHY_RETENTION",
-    "BLOB_LIBPHY_PHY_DEBUG_REG_CHECK",
+opaque-entities = [
+    "PHY_FEDATA_RECOVERED.WORD_0030_OPAQUE",
+    "PHY_FEDATA_RECOVERED.WORD_0040_OPAQUE",
+    "PHY_FEDATA_RECOVERED.WORD_0040_OPAQUE.BITS_12_24_OPAQUE",
 ]
+
+[peripheral-review.peripheral]
+sources = ["ESP_IDF_25FE69F_S31_PHY_RETENTION", "BLOB_LIBPHY_PHY_DEBUG_REG_CHECK"]
 provenance = "derived"
 accuracy = "exact"
 completeness = "unknown"
 
-[[review]]
-entity = "PHY_FEDATA_RECOVERED.WORD_0030_OPAQUE"
-naming = "opaque"
+[peripheral-review.field]
 sources = ["ROM_REV0_PHY_BLOBRAY_GAPS"]
+naming = "descriptive"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[peripheral-review.opaque]
+sources = ["ROM_REV0_PHY_BLOBRAY_GAPS"]
+naming = "opaque"
 
 [[review]]
 entity = "PHY_FEDATA_RECOVERED.WORD_0030_OPAQUE.FILTER_MODE"
@@ -75,29 +85,8 @@ accuracy = "exact"
 completeness = "complete"
 
 [[review]]
-entity = "PHY_FEDATA_RECOVERED.WORD_0040_OPAQUE"
-naming = "opaque"
-sources = ["ROM_REV0_PHY_BLOBRAY_GAPS"]
-
-[[review]]
 entity = "PHY_FEDATA_RECOVERED.WORD_0040_OPAQUE.BITS_12_24_OPAQUE"
 naming = "opaque"
-sources = ["ROM_REV0_PHY_BLOBRAY_GAPS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_FEDATA_RECOVERED.WORD_0040_OPAQUE.TX_RX_RESET_BIT_25"
-naming = "descriptive"
-sources = ["ROM_REV0_PHY_BLOBRAY_GAPS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_FEDATA_RECOVERED.WORD_0040_OPAQUE.TX_RX_RESET_BIT_26"
-naming = "descriptive"
 sources = ["ROM_REV0_PHY_BLOBRAY_GAPS"]
 provenance = "observed"
 accuracy = "exact"

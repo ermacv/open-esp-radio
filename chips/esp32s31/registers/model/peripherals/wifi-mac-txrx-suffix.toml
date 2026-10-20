@@ -84,12 +84,34 @@ bitWidth = 4
 minimum = 0x0
 maximum = 0xF
 
-[[review]]
+[[peripheral-review]]
 entity = "WIFI_MAC_TXRX_SUFFIX"
+opaque-entities = [
+    "WIFI_MAC_TXRX_SUFFIX.AUX_ENABLE.BIT_1_OPAQUE",
+    "WIFI_MAC_TXRX_SUFFIX.DEFAULT_IMAGE_A.BITS_0_11_OPAQUE",
+    "WIFI_MAC_TXRX_SUFFIX.GATE_CONTROL.BITS_16_30_OPAQUE",
+    "WIFI_MAC_TXRX_SUFFIX.GATE_CONTROL.BIT_31_OPAQUE",
+    "WIFI_MAC_TXRX_SUFFIX.FIELD_CONTROL.BITS_4_7_OPAQUE",
+]
+
+[peripheral-review.peripheral]
 sources = ["BLOB_LIBPP_MAC_TXRX_INIT_SUFFIX"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
+
+[peripheral-review.register]
+sources = ["BLOB_LIBPP_MAC_TXRX_INIT_SUFFIX"]
+naming = "descriptive"
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[peripheral-review.field]
+naming = "descriptive"
+
+[peripheral-review.opaque]
+naming = "opaque"
 
 [[review]]
 entity = "WIFI_MAC_TXRX_SUFFIX.AUX_ENABLE"
@@ -103,49 +125,9 @@ accuracy = "exact"
 completeness = "partial"
 
 [[review]]
-entity = "WIFI_MAC_TXRX_SUFFIX.DEFAULT_IMAGE_A"
-naming = "descriptive"
-sources = ["BLOB_LIBPP_MAC_TXRX_INIT_SUFFIX"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "unknown"
-
-[[review]]
 entity = "WIFI_MAC_TXRX_SUFFIX.GATE_CONTROL"
 naming = "descriptive"
 sources = ["BLOB_LIBPP_MAC_TXRX_INIT_SUFFIX"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
-
-[[review]]
-entity = "WIFI_MAC_TXRX_SUFFIX.FIELD_CONTROL"
-naming = "descriptive"
-sources = ["BLOB_LIBPP_MAC_TXRX_INIT_SUFFIX"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "unknown"
-
-[[review]]
-entity = "WIFI_MAC_TXRX_SUFFIX.AUX_ENABLE.HARDWARE_STATISTICS_CLEAR_PULSE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TXRX_SUFFIX.AUX_ENABLE.BIT_1_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_TXRX_SUFFIX.DEFAULT_IMAGE_A.BITS_0_11_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_TXRX_SUFFIX.GATE_CONTROL.BITS_16_30_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_TXRX_SUFFIX.GATE_CONTROL.BIT_31_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_TXRX_SUFFIX.FIELD_CONTROL.BITS_4_7_OPAQUE"
-naming = "opaque"

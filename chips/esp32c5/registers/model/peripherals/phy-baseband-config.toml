@@ -462,270 +462,53 @@ description = "Pulsed by phy_rxevm_reset_mem."
 bitOffset = 8
 bitWidth = 1
 
-[[review]]
-entity = "PHY_BASEBAND_CONFIG.ADC_RATE_AND_FRONT_END_CONTROL"
+[[peripheral-review]]
+entity = "PHY_BASEBAND_CONFIG"
+opaque-entities = [
+    "PHY_BASEBAND_CONFIG.ADC_RATE_AND_FRONT_END_CONTROL.BIT_0_OPAQUE",
+    "PHY_BASEBAND_CONFIG.ADC_RATE_AND_FRONT_END_CONTROL.BIT_1_OPAQUE",
+    "PHY_BASEBAND_CONFIG.ADC_RATE_AND_FRONT_END_CONTROL.BIT_2_OPAQUE",
+    "PHY_BASEBAND_CONFIG.ADC_RATE_AND_FRONT_END_CONTROL.BIT_3_OPAQUE",
+    "PHY_BASEBAND_CONFIG.FRONT_END_AND_TONE_STOP_CONTROL.BIT_2_OPAQUE",
+    "PHY_BASEBAND_CONFIG.RX_DCO_CONTROL.BITS_22_23_OPAQUE",
+    "PHY_BASEBAND_CONFIG.IQ_CORRECTION_CONTROL.BIT_31_OPAQUE",
+    "PHY_BASEBAND_CONFIG.RX_IQ_SCALE.BITS_0_7_OPAQUE",
+    "PHY_BASEBAND_CONFIG.RX_IQ_SCALE.BITS_8_15_OPAQUE",
+    "PHY_BASEBAND_CONFIG.FRONT_END_CLEAR_CONTROL.BIT_8_OPAQUE",
+    "PHY_BASEBAND_CONFIG.FE_BB_CLOCK_CONTROL.BITS_0_1_OPAQUE",
+    "PHY_BASEBAND_CONFIG.POWER_DETECTOR_CONTROL.BITS_4_11_OPAQUE",
+    "PHY_BASEBAND_CONFIG.POWER_DETECTOR_CONTROL.BITS_20_22_OPAQUE",
+    "PHY_BASEBAND_CONFIG.POWER_DETECTOR_SAR_CONTROL_STATUS.BIT_9_OPAQUE",
+    "PHY_BASEBAND_CONFIG.POWER_DETECTOR_SAR_CONTROL_STATUS.BITS_12_13_OPAQUE",
+    "PHY_BASEBAND_CONFIG.WORD_0810_OPAQUE",
+    "PHY_BASEBAND_CONFIG.WORD_0814_OPAQUE",
+    "PHY_BASEBAND_CONFIG.WORD_0888_OPAQUE",
+    "PHY_BASEBAND_CONFIG.WORD_0888_OPAQUE.BIT_29_OPAQUE",
+    "PHY_BASEBAND_CONFIG.WORD_0894_OPAQUE",
+    "PHY_BASEBAND_CONFIG.WORD_0894_OPAQUE.BIT_22_OPAQUE",
+    "PHY_BASEBAND_CONFIG.DAC_SCALE.BITS_8_15_OPAQUE",
+    "PHY_BASEBAND_CONFIG.DAC_SCALE.BITS_16_23_OPAQUE",
+    "PHY_BASEBAND_CONFIG.WORD_0C08_OPAQUE",
+    "PHY_BASEBAND_CONFIG.WORD_0C08_OPAQUE.BIT_25_OPAQUE",
+    "PHY_BASEBAND_CONFIG.WORD_0C08_OPAQUE.BIT_26_OPAQUE",
+    "PHY_BASEBAND_CONFIG.WORD_0C20_OPAQUE",
+    "PHY_BASEBAND_CONFIG.WORD_0C20_OPAQUE.BITS_0_7_OPAQUE",
+    "PHY_BASEBAND_CONFIG.WORD_7920_OPAQUE",
+    "PHY_BASEBAND_CONFIG.WORD_7920_OPAQUE.BITS_12_15_OPAQUE",
+    "PHY_BASEBAND_CONFIG.RX_EVM_CONTROL.BIT_0_OPAQUE",
+    "PHY_BASEBAND_CONFIG.RX_EVM_CONTROL.BIT_1_OPAQUE",
+    "PHY_BASEBAND_CONFIG.RX_EVM_CONTROL.BIT_2_OPAQUE",
+    "PHY_BASEBAND_CONFIG.RX_EVM_CONFIG.BITS_2_6_OPAQUE",
+    "PHY_BASEBAND_CONFIG.RX_EVM_MEMORY_RESET.BIT_8_OPAQUE",
+]
+
+[peripheral-review.peripheral]
+
+[peripheral-review.register]
 naming = "descriptive"
 
-[[review]]
-entity = "PHY_BASEBAND_CONFIG.ADC_RATE_AND_FRONT_END_CONTROL.BIT_0_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "PHY_BASEBAND_CONFIG.ADC_RATE_AND_FRONT_END_CONTROL.BIT_1_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "PHY_BASEBAND_CONFIG.ADC_RATE_AND_FRONT_END_CONTROL.BIT_2_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "PHY_BASEBAND_CONFIG.ADC_RATE_AND_FRONT_END_CONTROL.BIT_3_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "PHY_BASEBAND_CONFIG.FE_CLOCK_GATE"
+[peripheral-review.field]
 naming = "descriptive"
 
-[[review]]
-entity = "PHY_BASEBAND_CONFIG.FE_CLOCK_GATE.STATE"
-naming = "descriptive"
-
-[[review]]
-entity = "PHY_BASEBAND_CONFIG.TABLE_MEMORY_INDEX_SOURCE"
-naming = "descriptive"
-
-[[review]]
-entity = "PHY_BASEBAND_CONFIG.TABLE_MEMORY_INDEX_SOURCE.BASE_INDEX"
-naming = "descriptive"
-
-[[review]]
-entity = "PHY_BASEBAND_CONFIG.FRONT_END_AND_TONE_STOP_CONTROL"
-naming = "descriptive"
-
-[[review]]
-entity = "PHY_BASEBAND_CONFIG.FRONT_END_AND_TONE_STOP_CONTROL.BIT_2_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "PHY_BASEBAND_CONFIG.RX_DCO_CONTROL"
-naming = "descriptive"
-
-[[review]]
-entity = "PHY_BASEBAND_CONFIG.RX_DCO_CONTROL.BITS_22_23_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "PHY_BASEBAND_CONFIG.IQ_CORRECTION_CONTROL"
-naming = "descriptive"
-
-[[review]]
-entity = "PHY_BASEBAND_CONFIG.IQ_CORRECTION_CONTROL.RX_IQ_CORRECTION_MODE_LOW"
-naming = "descriptive"
-
-[[review]]
-entity = "PHY_BASEBAND_CONFIG.IQ_CORRECTION_CONTROL.RX_IQ_CORRECTION_MODE_HIGH"
-naming = "descriptive"
-
-[[review]]
-entity = "PHY_BASEBAND_CONFIG.IQ_CORRECTION_CONTROL.BIT_31_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "PHY_BASEBAND_CONFIG.RX_IQ_SCALE"
-naming = "descriptive"
-
-[[review]]
-entity = "PHY_BASEBAND_CONFIG.RX_IQ_SCALE.BITS_0_7_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "PHY_BASEBAND_CONFIG.RX_IQ_SCALE.BITS_8_15_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "PHY_BASEBAND_CONFIG.FRONT_END_CLEAR_CONTROL"
-naming = "descriptive"
-
-[[review]]
-entity = "PHY_BASEBAND_CONFIG.FRONT_END_CLEAR_CONTROL.BIT_8_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "PHY_BASEBAND_CONFIG.FE_BB_CLOCK_CONTROL"
-naming = "descriptive"
-
-[[review]]
-entity = "PHY_BASEBAND_CONFIG.FE_BB_CLOCK_CONTROL.BITS_0_1_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "PHY_BASEBAND_CONFIG.POWER_DETECTOR_CONTROL"
-naming = "descriptive"
-
-[[review]]
-entity = "PHY_BASEBAND_CONFIG.POWER_DETECTOR_CONTROL.BITS_4_11_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "PHY_BASEBAND_CONFIG.POWER_DETECTOR_CONTROL.BITS_20_22_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "PHY_BASEBAND_CONFIG.POWER_DETECTOR_SAR_CONTROL_STATUS"
-naming = "descriptive"
-
-[[review]]
-entity = "PHY_BASEBAND_CONFIG.POWER_DETECTOR_SAR_CONTROL_STATUS.BIT_9_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "PHY_BASEBAND_CONFIG.POWER_DETECTOR_SAR_CONTROL_STATUS.BITS_12_13_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "PHY_BASEBAND_CONFIG.WORD_0810_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "PHY_BASEBAND_CONFIG.WORD_0810_OPAQUE.STATE"
-naming = "descriptive"
-
-[[review]]
-entity = "PHY_BASEBAND_CONFIG.WORD_0814_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "PHY_BASEBAND_CONFIG.WORD_0814_OPAQUE.STATE"
-naming = "descriptive"
-
-[[review]]
-entity = "PHY_BASEBAND_CONFIG.POWER_DETECTOR_REFERENCE"
-naming = "descriptive"
-
-[[review]]
-entity = "PHY_BASEBAND_CONFIG.POWER_DETECTOR_REFERENCE.STATE"
-naming = "descriptive"
-
-[[review]]
-entity = "PHY_BASEBAND_CONFIG.TX_PA_CONTROL_1"
-naming = "descriptive"
-
-[[review]]
-entity = "PHY_BASEBAND_CONFIG.TX_PA_CONTROL_1.PA_ON_BT_DELAY"
-naming = "descriptive"
-
-[[review]]
-entity = "PHY_BASEBAND_CONFIG.WORD_0888_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "PHY_BASEBAND_CONFIG.WORD_0888_OPAQUE.BIT_29_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "PHY_BASEBAND_CONFIG.WORD_0894_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "PHY_BASEBAND_CONFIG.WORD_0894_OPAQUE.BIT_22_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "PHY_BASEBAND_CONFIG.DAC_SCALE"
-naming = "descriptive"
-
-[[review]]
-entity = "PHY_BASEBAND_CONFIG.DAC_SCALE.BITS_8_15_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "PHY_BASEBAND_CONFIG.DAC_SCALE.BITS_16_23_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "PHY_BASEBAND_CONFIG.WORD_0C08_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "PHY_BASEBAND_CONFIG.WORD_0C08_OPAQUE.BIT_25_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "PHY_BASEBAND_CONFIG.WORD_0C08_OPAQUE.BIT_26_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "PHY_BASEBAND_CONFIG.IQ_CORRECTION_AUX"
-naming = "descriptive"
-
-[[review]]
-entity = "PHY_BASEBAND_CONFIG.IQ_CORRECTION_AUX.TX_IQ_CORRECTION_MODE_LOW"
-naming = "descriptive"
-
-[[review]]
-entity = "PHY_BASEBAND_CONFIG.IQ_CORRECTION_AUX.TX_IQ_CORRECTION_MODE_HIGH"
-naming = "descriptive"
-
-[[review]]
-entity = "PHY_BASEBAND_CONFIG.WORD_0C20_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "PHY_BASEBAND_CONFIG.WORD_0C20_OPAQUE.BITS_0_7_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "PHY_BASEBAND_CONFIG.BB_CLOCK_GATE"
-naming = "descriptive"
-
-[[review]]
-entity = "PHY_BASEBAND_CONFIG.BB_CLOCK_GATE.STATE"
-naming = "descriptive"
-
-[[review]]
-entity = "PHY_BASEBAND_CONFIG.WORD_7920_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "PHY_BASEBAND_CONFIG.WORD_7920_OPAQUE.BITS_12_15_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "PHY_BASEBAND_CONFIG.RX_EVM_CONTROL"
-naming = "descriptive"
-
-[[review]]
-entity = "PHY_BASEBAND_CONFIG.RX_EVM_CONTROL.BIT_0_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "PHY_BASEBAND_CONFIG.RX_EVM_CONTROL.BIT_1_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "PHY_BASEBAND_CONFIG.RX_EVM_CONTROL.BIT_2_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "PHY_BASEBAND_CONFIG.RX_EVM_CONFIG"
-naming = "descriptive"
-
-[[review]]
-entity = "PHY_BASEBAND_CONFIG.RX_EVM_CONFIG.BITS_2_6_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "PHY_BASEBAND_CONFIG.RX_EVM_CONFIG.SECOND_PARAMETER"
-naming = "descriptive"
-
-[[review]]
-entity = "PHY_BASEBAND_CONFIG.RX_EVM_CONFIG.THIRD_PARAMETER"
-naming = "descriptive"
-
-[[review]]
-entity = "PHY_BASEBAND_CONFIG.RX_EVM_MEMORY_RESET"
-naming = "descriptive"
-
-[[review]]
-entity = "PHY_BASEBAND_CONFIG.RX_EVM_MEMORY_RESET.BIT_8_OPAQUE"
+[peripheral-review.opaque]
 naming = "opaque"

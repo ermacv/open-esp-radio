@@ -76,35 +76,35 @@ name = "BITS_24_31_OPAQUE"
 bitOffset = 24
 bitWidth = 8
 
-[[review]]
+[[peripheral-review]]
 entity = "WIFI_MAC_CONTROL"
-sources = [
-    "OPEN_DRIVER_PROMISCUOUS_RX_FRONTIER",
-    "BLOB_LIBPP_MAC_CHANNEL_SWITCH",
+opaque-entities = [
+    "WIFI_MAC_CONTROL.CONTROL.BITS_0_11_OPAQUE",
+    "WIFI_MAC_CONTROL.CONTROL.BITS_24_31_OPAQUE",
 ]
+
+[peripheral-review.peripheral]
+sources = ["OPEN_DRIVER_PROMISCUOUS_RX_FRONTIER", "BLOB_LIBPP_MAC_CHANNEL_SWITCH"]
 provenance = "reviewed"
 accuracy = "exact"
 completeness = "complete"
 
-[[review]]
-entity = "WIFI_MAC_CONTROL.CONTROL"
+[peripheral-review.register]
+sources = ["OPEN_DRIVER_PROMISCUOUS_RX_FRONTIER", "BLOB_LIBPP_MAC_CHANNEL_SWITCH", "BLOB_LIBPP_PM_TX_BLOCK_20260927"]
 naming = "descriptive"
-sources = [
-    "OPEN_DRIVER_PROMISCUOUS_RX_FRONTIER",
-    "BLOB_LIBPP_MAC_CHANNEL_SWITCH",
-    "BLOB_LIBPP_PM_TX_BLOCK_20260927",
-]
 provenance = "reviewed"
 accuracy = "exact"
 completeness = "complete"
 
-[[review]]
-entity = "WIFI_MAC_CONTROL.CONTROL.NO_RETENTION_STOP_REQUEST"
-naming = "descriptive"
+[peripheral-review.field]
 sources = ["BLOB_LIBPP_MAC_CHANNEL_SWITCH"]
+naming = "descriptive"
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
+
+[peripheral-review.opaque]
+naming = "opaque"
 
 [[review]]
 entity = "WIFI_MAC_CONTROL.CONTROL.ACTIVE_STATE"
@@ -118,33 +118,9 @@ accuracy = "exact"
 completeness = "partial"
 
 [[review]]
-entity = "WIFI_MAC_CONTROL.CONTROL.TX_BLOCK_STOP_REQUEST_LOW"
-naming = "descriptive"
-sources = ["BLOB_LIBPP_MAC_CHANNEL_SWITCH"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
 entity = "WIFI_MAC_CONTROL.CONTROL.POWER_SAVE_TX_BLOCK"
 naming = "descriptive"
 sources = ["BLOB_LIBPP_MAC_CHANNEL_SWITCH", "BLOB_LIBPP_PM_TX_BLOCK_20260927"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
-
-[[review]]
-entity = "WIFI_MAC_CONTROL.CONTROL.TX_BLOCK_STOP_REQUEST_HIGH"
-naming = "descriptive"
-sources = ["BLOB_LIBPP_MAC_CHANNEL_SWITCH"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "WIFI_MAC_CONTROL.CONTROL.BITS_0_11_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_CONTROL.CONTROL.BITS_24_31_OPAQUE"
-naming = "opaque"

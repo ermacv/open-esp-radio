@@ -47,45 +47,21 @@ name = "VALUE"
 bitOffset = 0
 bitWidth = 32
 
-[[review]]
+[[peripheral-review]]
 entity = "WIFI_MAC_RX_RUNTIME_RESULTS"
+
+[peripheral-review.peripheral]
 sources = ["BLOB_LIBPP_HAL_RUNTIME_MMIO_LEAVES"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
 
-[[review]]
-entity = "WIFI_MAC_RX_RUNTIME_RESULTS.STATISTICS_CLEAR"
-naming = "descriptive"
+[peripheral-review.register]
 sources = ["BLOB_LIBPP_HAL_RUNTIME_MMIO_LEAVES"]
+naming = "descriptive"
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
 
-[[review]]
-entity = "WIFI_MAC_RX_RUNTIME_RESULTS.END_RESULT_LOW"
-naming = "descriptive"
-sources = ["BLOB_LIBPP_HAL_RUNTIME_MMIO_LEAVES"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "unknown"
-
-[[review]]
-entity = "WIFI_MAC_RX_RUNTIME_RESULTS.END_RESULT_HIGH"
-naming = "descriptive"
-sources = ["BLOB_LIBPP_HAL_RUNTIME_MMIO_LEAVES"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "unknown"
-
-[[review]]
-entity = "WIFI_MAC_RX_RUNTIME_RESULTS.STATISTICS_CLEAR.CLEAR_PULSE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_RX_RUNTIME_RESULTS.END_RESULT_LOW.VALUE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_RX_RUNTIME_RESULTS.END_RESULT_HIGH.VALUE"
+[peripheral-review.field]
 naming = "descriptive"

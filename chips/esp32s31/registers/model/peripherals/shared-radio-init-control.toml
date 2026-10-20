@@ -30,31 +30,29 @@ description = "Complete bt_bb_rx_set clears this bit through a fresh-read RMW wh
 bitOffset = 31
 bitWidth = 1
 
-[[review]]
+[[peripheral-review]]
 entity = "SHARED_RADIO_INIT_CONTROL"
-sources = [
-    "BLOB_LIBPP_MAC_TXRX_INIT_SUFFIX",
-    "BLOB_LIBBTBB_BT_RX_SETUP",
+opaque-entities = [
+    "SHARED_RADIO_INIT_CONTROL.CONTROL.BITS_0_11_OPAQUE",
+    "SHARED_RADIO_INIT_CONTROL.CONTROL.BIT_31_OPAQUE",
 ]
+
+[peripheral-review.peripheral]
+sources = ["BLOB_LIBPP_MAC_TXRX_INIT_SUFFIX", "BLOB_LIBBTBB_BT_RX_SETUP"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
 
-[[review]]
-entity = "SHARED_RADIO_INIT_CONTROL.CONTROL"
+[peripheral-review.register]
+sources = ["BLOB_LIBPP_MAC_TXRX_INIT_SUFFIX", "BLOB_LIBBTBB_BT_RX_SETUP"]
 naming = "descriptive"
-sources = [
-    "BLOB_LIBPP_MAC_TXRX_INIT_SUFFIX",
-    "BLOB_LIBBTBB_BT_RX_SETUP",
-]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
 
-[[review]]
-entity = "SHARED_RADIO_INIT_CONTROL.CONTROL.BITS_0_11_OPAQUE"
-naming = "opaque"
+[peripheral-review.opaque]
 sources = ["BLOB_LIBPP_MAC_TXRX_INIT_SUFFIX"]
+naming = "opaque"
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"

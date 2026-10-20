@@ -23,25 +23,28 @@ description = "The reset-idle predicate fails when this exact field is nonzero."
 bitOffset = 0
 bitWidth = 4
 
-[[review]]
+[[peripheral-review]]
 entity = "BLUETOOTH_RESET_IDLE_STATUS_0"
+opaque-entities = [
+    "BLUETOOTH_RESET_IDLE_STATUS_0.STATUS.BITS_0_3_OPAQUE",
+]
+
+[peripheral-review.peripheral]
 sources = ["BLOB_LIBBTBB_BBMAC_IDLE_FOR_SWRST"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
 
-[[review]]
-entity = "BLUETOOTH_RESET_IDLE_STATUS_0.STATUS"
+[peripheral-review.register]
+sources = ["BLOB_LIBBTBB_BBMAC_IDLE_FOR_SWRST"]
 naming = "descriptive"
-sources = ["BLOB_LIBBTBB_BBMAC_IDLE_FOR_SWRST"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
 
-[[review]]
-entity = "BLUETOOTH_RESET_IDLE_STATUS_0.STATUS.BITS_0_3_OPAQUE"
-naming = "opaque"
+[peripheral-review.opaque]
 sources = ["BLOB_LIBBTBB_BBMAC_IDLE_FOR_SWRST"]
+naming = "opaque"
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"

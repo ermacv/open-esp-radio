@@ -169,16 +169,30 @@ bitWidth = 6
 minimum = 0x0
 maximum = 0x3F
 
-[[review]]
+[[peripheral-review]]
 entity = "WIFI_MAC_TX_POWER_INIT"
-sources = [
-    "BLOB_LIBPP_HAL_TX_POWER_INIT",
-    "BLOB_LIBNET80211_PARTIAL_RU_MAX_POWER",
-    "ROM_REV0_PHY_GET_MAX_PWR",
+opaque-entities = [
+    "WIFI_MAC_TX_POWER_INIT.IMMEDIATE_RESPONSE%s.BITS_22_23_OPAQUE",
 ]
+
+[peripheral-review.peripheral]
+sources = ["BLOB_LIBPP_HAL_TX_POWER_INIT", "BLOB_LIBNET80211_PARTIAL_RU_MAX_POWER", "ROM_REV0_PHY_GET_MAX_PWR"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
+
+[peripheral-review.register]
+sources = ["BLOB_LIBPP_HAL_TX_POWER_INIT", "BLOB_LIBNET80211_PARTIAL_RU_MAX_POWER"]
+naming = "descriptive"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[peripheral-review.field]
+naming = "descriptive"
+
+[peripheral-review.opaque]
+naming = "opaque"
 
 [[review]]
 entity = "WIFI_MAC_TX_POWER_INIT.IMMEDIATE_RESPONSE%s"
@@ -195,77 +209,3 @@ sources = ["BLOB_LIBPP_HAL_TX_POWER_INIT"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
-
-[[review]]
-entity = "WIFI_MAC_TX_POWER_INIT.TB_RU_POWER_TAIL"
-naming = "descriptive"
-sources = [
-    "BLOB_LIBPP_HAL_TX_POWER_INIT",
-    "BLOB_LIBNET80211_PARTIAL_RU_MAX_POWER",
-]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "WIFI_MAC_TX_POWER_INIT.TB_RU_POWER%s"
-naming = "descriptive"
-sources = [
-    "BLOB_LIBPP_HAL_TX_POWER_INIT",
-    "BLOB_LIBNET80211_PARTIAL_RU_MAX_POWER",
-]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "WIFI_MAC_TX_POWER_INIT.IMMEDIATE_RESPONSE%s.POWER_INDEX"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_POWER_INIT.IMMEDIATE_RESPONSE%s.RATE_INDEX"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_POWER_INIT.IMMEDIATE_RESPONSE%s.BITS_22_23_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_TX_POWER_INIT.TB_POWER%s.POWER_0"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_POWER_INIT.TB_POWER%s.POWER_1"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_POWER_INIT.TB_POWER%s.POWER_2"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_POWER_INIT.TB_POWER%s.POWER_3"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_POWER_INIT.TB_RU_POWER_TAIL.POWER_INDEX"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_POWER_INIT.TB_RU_POWER%s.POWER_0"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_POWER_INIT.TB_RU_POWER%s.POWER_1"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_POWER_INIT.TB_RU_POWER%s.POWER_2"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_POWER_INIT.TB_RU_POWER%s.POWER_3"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_POWER_INIT.TB_RU_POWER%s.POWER_4"
-naming = "descriptive"

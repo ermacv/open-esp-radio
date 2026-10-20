@@ -270,15 +270,44 @@ name = "BITS_18_26_OPAQUE"
 bitOffset = 18
 bitWidth = 9
 
-[[review]]
+[[peripheral-review]]
 entity = "PHY_PBUS"
-sources = [
-    "ROM_REV0_PHY_PBUS",
-    "BLOB_LIBPHY_PHY_DEBUG_PBUS",
+opaque-entities = [
+    "PHY_PBUS.STATUS_CLOCK_FORCE.BITS_8_11_OPAQUE",
+    "PHY_PBUS.STATUS_CLOCK_FORCE.BIT_14_OPAQUE",
+    "PHY_PBUS.STATUS_CLOCK_FORCE.BIT_15_OPAQUE",
+    "PHY_PBUS.READ_RESULT_0.BIT_20_OPAQUE",
+    "PHY_PBUS.READ_RESULT_0.BITS_9_17_OPAQUE",
+    "PHY_PBUS.READ_RESULT_1.BITS_0_8_OPAQUE",
+    "PHY_PBUS.READ_RESULT_2.BITS_0_8_OPAQUE",
+    "PHY_PBUS.READ_RESULT_2.BITS_9_17_OPAQUE",
+    "PHY_PBUS.READ_RESULT_2.BITS_18_26_OPAQUE",
+    "PHY_PBUS.READ_RESULT_3.BITS_0_8_OPAQUE",
+    "PHY_PBUS.READ_RESULT_3.BITS_9_17_OPAQUE",
+    "PHY_PBUS.READ_RESULT_3.BITS_18_26_OPAQUE",
+    "PHY_PBUS.READ_RESULT_4.BITS_0_8_OPAQUE",
+    "PHY_PBUS.READ_RESULT_4.BITS_9_17_OPAQUE",
+    "PHY_PBUS.READ_RESULT_4.BITS_18_26_OPAQUE",
 ]
+
+[peripheral-review.peripheral]
+sources = ["ROM_REV0_PHY_PBUS", "BLOB_LIBPHY_PHY_DEBUG_PBUS"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
+
+[peripheral-review.register]
+sources = ["ROM_REV0_PHY_PBUS"]
+naming = "descriptive"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[peripheral-review.field]
+naming = "descriptive"
+
+[peripheral-review.opaque]
+naming = "opaque"
 
 [[review]]
 entity = "PHY_PBUS.COMMAND"
@@ -321,14 +350,6 @@ sources = [
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
-
-[[review]]
-entity = "PHY_PBUS.MODE"
-naming = "descriptive"
-sources = ["ROM_REV0_PHY_PBUS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
 
 [[review]]
 entity = "PHY_PBUS.STATUS_CLOCK_FORCE"
@@ -397,99 +418,3 @@ sources = ["ROM_REV0_PHY_FE_REG_INIT"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
-
-[[review]]
-entity = "PHY_PBUS.READ_RESULT_1"
-naming = "descriptive"
-sources = ["ROM_REV0_PHY_PBUS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_PBUS.READ_RESULT_2"
-naming = "descriptive"
-sources = ["ROM_REV0_PHY_PBUS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_PBUS.READ_RESULT_3"
-naming = "descriptive"
-sources = ["ROM_REV0_PHY_PBUS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_PBUS.READ_RESULT_4"
-naming = "descriptive"
-sources = ["ROM_REV0_PHY_PBUS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_PBUS.COMMAND.DEBUG_MODE_ENABLE"
-naming = "descriptive"
-
-[[review]]
-entity = "PHY_PBUS.COMMAND.TRANSACTION_START"
-naming = "descriptive"
-
-[[review]]
-entity = "PHY_PBUS.MODE.WORK_MODE_ENABLE"
-naming = "descriptive"
-
-[[review]]
-entity = "PHY_PBUS.STATUS_CLOCK_FORCE.BUSY"
-naming = "descriptive"
-
-[[review]]
-entity = "PHY_PBUS.READ_RESULT_0.RESULT_WINDOW_0_RX_DCO"
-naming = "descriptive"
-
-[[review]]
-entity = "PHY_PBUS.READ_RESULT_0.BITS_9_17_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "PHY_PBUS.READ_RESULT_1.BITS_0_8_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "PHY_PBUS.READ_RESULT_2.BITS_0_8_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "PHY_PBUS.READ_RESULT_2.BITS_9_17_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "PHY_PBUS.READ_RESULT_2.BITS_18_26_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "PHY_PBUS.READ_RESULT_3.BITS_0_8_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "PHY_PBUS.READ_RESULT_3.BITS_9_17_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "PHY_PBUS.READ_RESULT_3.BITS_18_26_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "PHY_PBUS.READ_RESULT_4.BITS_0_8_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "PHY_PBUS.READ_RESULT_4.BITS_9_17_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "PHY_PBUS.READ_RESULT_4.BITS_18_26_OPAQUE"
-naming = "opaque"

@@ -72,65 +72,27 @@ name = "TSF_ENABLE_HIGH"
 bitOffset = 31
 bitWidth = 1
 
-[[review]]
+[[peripheral-review]]
 entity = "WIFI_MAC_AUX_TSF_CONTROL"
+opaque-entities = [
+    "WIFI_MAC_AUX_TSF_CONTROL.SOFTAP_CONTROL.BIT_30_OPAQUE",
+]
+
+[peripheral-review.peripheral]
 sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
 
-[[review]]
-entity = "WIFI_MAC_AUX_TSF_CONTROL.SOFTAP_CONTROL"
+[peripheral-review.register]
+sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME"]
 naming = "descriptive"
-sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
 
-[[review]]
-entity = "WIFI_MAC_AUX_TSF_CONTROL.NAN_CONTROL"
+[peripheral-review.field]
 naming = "descriptive"
-sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "unknown"
 
-[[review]]
-entity = "WIFI_MAC_AUX_TSF_CONTROL.BTWT_CONTROL"
-naming = "descriptive"
-sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "unknown"
-
-[[review]]
-entity = "WIFI_MAC_AUX_TSF_CONTROL.SOFTAP_CONTROL.BIT_30_OPAQUE"
+[peripheral-review.opaque]
 naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_AUX_TSF_CONTROL.SOFTAP_CONTROL.TSF_ENABLE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_AUX_TSF_CONTROL.NAN_CONTROL.TSF_MODE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_AUX_TSF_CONTROL.NAN_CONTROL.TSF_ENABLE_LOW"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_AUX_TSF_CONTROL.NAN_CONTROL.TSF_ENABLE_HIGH"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_AUX_TSF_CONTROL.BTWT_CONTROL.TSF_MODE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_AUX_TSF_CONTROL.BTWT_CONTROL.TSF_ENABLE_LOW"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_AUX_TSF_CONTROL.BTWT_CONTROL.TSF_ENABLE_HIGH"
-naming = "descriptive"

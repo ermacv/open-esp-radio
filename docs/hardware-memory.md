@@ -197,6 +197,21 @@ requires a complete resolved review for every entity. Unknown keys,
 reviews for nonexistent entities, duplicate reviews and an explicit review
 identical to its applicable default are errors.
 
+MMIO peripheral fragments use the same whole-record resolver with separate
+`[[peripheral-review]]` tables outside SVD declarations. Each table names one
+peripheral in `entity`, with optional `peripheral`, `register`, `field` and
+`opaque` metadata tables. The register level includes clusters and reusable
+`dim` templates. `opaque-entities` lists exact register or field review paths;
+it selects the independent opaque template only for those entities, without
+inferring opacity from names or propagating it to children. Without an opaque
+template, the entity uses its own level. Explicit records replace the selected
+template, including missing keys. Scopes never cross peripherals or files.
+Every peripheral, cluster, register and field in a scope needs a resolved
+record; an empty template makes no evidence claim, and existing publication
+checks still apply. Chip review files for shared peripherals accept the same
+form; shared library geometry does not.
+See the [peripheral format and example](../tools/registers/generate/README.md#peripheral-review-defaults).
+
 `memory.toml` gains the RAM regions the layouts name (`dma-window`,
 `internal-sram`), so the DMA window has one source instead of three.
 

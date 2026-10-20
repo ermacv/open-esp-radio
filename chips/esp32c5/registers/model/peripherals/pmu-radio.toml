@@ -86,62 +86,15 @@ description = "Power the analog I2C of the PLL."
 bitOffset = 31
 bitWidth = 1
 
-[[review]]
-entity = "PMU_RADIO.IMM_HP_CK_POWER"
-naming = "vendor"
-sources = ["ESP_IDF_4D59230D_C5_PMU"]
+[[peripheral-review]]
+entity = "PMU_RADIO"
 
-[[review]]
-entity = "PMU_RADIO.IMM_HP_CK_POWER.TIE_HIGH_XPD_BB_I2C"
-naming = "vendor"
-sources = ["ESP_IDF_4D59230D_C5_PMU"]
+[peripheral-review.peripheral]
 
-[[review]]
-entity = "PMU_RADIO.RF_PWC"
-naming = "vendor"
+[peripheral-review.register]
 sources = ["ESP_IDF_4D59230D_C5_PMU"]
+naming = "vendor"
 
-[[review]]
-entity = "PMU_RADIO.RF_PWC.XPD_CKGEN5G"
-naming = "vendor"
+[peripheral-review.field]
 sources = ["ESP_IDF_4D59230D_C5_PMU"]
-
-[[review]]
-entity = "PMU_RADIO.RF_PWC.XPD_TC5G_I2C"
 naming = "vendor"
-sources = ["ESP_IDF_4D59230D_C5_PMU"]
-
-[[review]]
-entity = "PMU_RADIO.RF_PWC.XPD_RX5G_I2C"
-naming = "vendor"
-sources = ["ESP_IDF_4D59230D_C5_PMU"]
-
-[[review]]
-entity = "PMU_RADIO.RF_PWC.PERIF_I2C_RSTB"
-naming = "vendor"
-sources = ["ESP_IDF_4D59230D_C5_PMU"]
-
-[[review]]
-entity = "PMU_RADIO.RF_PWC.XPD_PERIF_I2C"
-naming = "vendor"
-sources = ["ESP_IDF_4D59230D_C5_PMU"]
-
-[[review]]
-entity = "PMU_RADIO.RF_PWC.XPD_TXRF_I2C"
-naming = "vendor"
-sources = ["ESP_IDF_4D59230D_C5_PMU"]
-
-[[review]]
-entity = "PMU_RADIO.RF_PWC.XPD_RFRX_PBUS"
-naming = "vendor"
-sources = ["ESP_IDF_4D59230D_C5_PMU"]
-
-[[review]]
-entity = "PMU_RADIO.RF_PWC.XPD_CKGEN_I2C"
-naming = "vendor"
-sources = ["ESP_IDF_4D59230D_C5_PMU"]
-
-[[review]]
-entity = "PMU_RADIO.RF_PWC.XPD_PLL_I2C"
-naming = "vendor"
-sources = ["ESP_IDF_4D59230D_C5_PMU"]

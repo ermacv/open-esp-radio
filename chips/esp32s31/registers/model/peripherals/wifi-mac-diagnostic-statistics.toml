@@ -174,113 +174,17 @@ name = "VALUE"
 bitOffset = 0
 bitWidth = 32
 
-[[review]]
+[[peripheral-review]]
 entity = "WIFI_MAC_DIAGNOSTIC_STATISTICS"
+
+[peripheral-review.peripheral]
 sources = ["BLOB_LIBPP_PP_DEBUG_DIAGNOSTIC_STATISTICS"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
 
-[[review]]
-entity = "WIFI_MAC_DIAGNOSTIC_STATISTICS.DIAG4"
+[peripheral-review.register]
 naming = "descriptive"
 
-[[review]]
-entity = "WIFI_MAC_DIAGNOSTIC_STATISTICS.DIAG4.VALUE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_DIAGNOSTIC_STATISTICS.DIAG5"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_DIAGNOSTIC_STATISTICS.DIAG5.VALUE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_DIAGNOSTIC_STATISTICS.DIAG6"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_DIAGNOSTIC_STATISTICS.DIAG6.VALUE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_DIAGNOSTIC_STATISTICS.DIAG7"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_DIAGNOSTIC_STATISTICS.DIAG7.VALUE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_DIAGNOSTIC_STATISTICS.DIAG8"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_DIAGNOSTIC_STATISTICS.DIAG8.VALUE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_DIAGNOSTIC_STATISTICS.DIAG9"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_DIAGNOSTIC_STATISTICS.DIAG9.VALUE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_DIAGNOSTIC_STATISTICS.DIAG10"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_DIAGNOSTIC_STATISTICS.DIAG10.VALUE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_DIAGNOSTIC_STATISTICS.DIAG12"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_DIAGNOSTIC_STATISTICS.DIAG12.VALUE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_DIAGNOSTIC_STATISTICS.DIAG0"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_DIAGNOSTIC_STATISTICS.DIAG0.VALUE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_DIAGNOSTIC_STATISTICS.DIAG1"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_DIAGNOSTIC_STATISTICS.DIAG1.VALUE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_DIAGNOSTIC_STATISTICS.DIAG2"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_DIAGNOSTIC_STATISTICS.DIAG2.VALUE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_DIAGNOSTIC_STATISTICS.DIAG3"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_DIAGNOSTIC_STATISTICS.DIAG3.VALUE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_DIAGNOSTIC_STATISTICS.DIAG_SELECT"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_DIAGNOSTIC_STATISTICS.DIAG_SELECT.VALUE"
+[peripheral-review.field]
 naming = "descriptive"

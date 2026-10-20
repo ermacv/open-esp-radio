@@ -116,7 +116,7 @@ pub(crate) fn resolve(
                 if is_opaque && let Some(metadata) = &scope.opaque {
                     return Some(metadata.clone());
                 }
-                match kinds[entity] {
+                match kinds.get(entity)? {
                     ReviewEntityKind::Peripheral => scope.peripheral.as_ref(),
                     ReviewEntityKind::Cluster | ReviewEntityKind::Register => {
                         scope.register.as_ref()

@@ -23,21 +23,24 @@ bitWidth = 3
 minimum = 0
 maximum = 7
 
-[[review]]
+[[peripheral-review]]
 entity = "WIFI_MAC_STA_BEACON_FILTER"
+opaque-entities = [
+    "WIFI_MAC_STA_BEACON_FILTER.CONTROL.BITS_0_2_OPAQUE",
+]
+
+[peripheral-review.peripheral]
 sources = ["BLOB_LIBPP_HAL_RUNTIME_MMIO_LEAVES"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
 
-[[review]]
-entity = "WIFI_MAC_STA_BEACON_FILTER.CONTROL"
+[peripheral-review.register]
+sources = ["BLOB_LIBPP_HAL_RUNTIME_MMIO_LEAVES"]
 naming = "descriptive"
-sources = ["BLOB_LIBPP_HAL_RUNTIME_MMIO_LEAVES"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
 
-[[review]]
-entity = "WIFI_MAC_STA_BEACON_FILTER.CONTROL.BITS_0_2_OPAQUE"
+[peripheral-review.opaque]
 naming = "opaque"

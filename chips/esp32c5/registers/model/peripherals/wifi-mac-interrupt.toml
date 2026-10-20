@@ -329,38 +329,62 @@ bitWidth = 32
 minimum = 0x0
 maximum = 0xFFFFFFFF
 
-[[review]]
+[[peripheral-review]]
 entity = "WIFI_MAC_INTERRUPT"
-sources = [
-    "C5_BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT",
-    "C5_BLOB_LIBPP_HAL_MAC_INTERRUPT_CLR_EVENT",
-    "C5_BLOB_LIBPP_WDEV_PROCESS_FIQ",
-    "C5_BLOB_LIBPP_HAL_ENABLE_MAC",
-    "C5_BLOB_LIBPP_HAL_INIT_TAIL",
+opaque-entities = [
+    "WIFI_MAC_INTERRUPT.ENABLE.BITS_0_4_OPAQUE",
+    "WIFI_MAC_INTERRUPT.ENABLE.BIT_6_OPAQUE",
+    "WIFI_MAC_INTERRUPT.ENABLE.BITS_9_10_OPAQUE",
+    "WIFI_MAC_INTERRUPT.ENABLE.BIT_12_OPAQUE",
+    "WIFI_MAC_INTERRUPT.ENABLE.BIT_13_OPAQUE",
+    "WIFI_MAC_INTERRUPT.ENABLE.BITS_16_18_OPAQUE",
+    "WIFI_MAC_INTERRUPT.ENABLE.BIT_20_OPAQUE",
+    "WIFI_MAC_INTERRUPT.ENABLE.BIT_21_OPAQUE",
+    "WIFI_MAC_INTERRUPT.ENABLE.BIT_22_OPAQUE",
+    "WIFI_MAC_INTERRUPT.ENABLE.BIT_23_OPAQUE",
+    "WIFI_MAC_INTERRUPT.ENABLE.BITS_25_26_OPAQUE",
+    "WIFI_MAC_INTERRUPT.ENABLE.BIT_27_OPAQUE",
+    "WIFI_MAC_INTERRUPT.ENABLE.BIT_28_OPAQUE",
+    "WIFI_MAC_INTERRUPT.ENABLE.BITS_29_31_OPAQUE",
+    "WIFI_MAC_INTERRUPT.STATUS.BITS_0_4_OPAQUE",
+    "WIFI_MAC_INTERRUPT.STATUS.BIT_6_OPAQUE",
+    "WIFI_MAC_INTERRUPT.STATUS.BITS_9_10_OPAQUE",
+    "WIFI_MAC_INTERRUPT.STATUS.BIT_12_OPAQUE",
+    "WIFI_MAC_INTERRUPT.STATUS.BIT_13_OPAQUE",
+    "WIFI_MAC_INTERRUPT.STATUS.BITS_16_18_OPAQUE",
+    "WIFI_MAC_INTERRUPT.STATUS.BIT_20_OPAQUE",
+    "WIFI_MAC_INTERRUPT.STATUS.BIT_21_OPAQUE",
+    "WIFI_MAC_INTERRUPT.STATUS.BIT_22_OPAQUE",
+    "WIFI_MAC_INTERRUPT.STATUS.BIT_23_OPAQUE",
+    "WIFI_MAC_INTERRUPT.STATUS.BITS_25_26_OPAQUE",
+    "WIFI_MAC_INTERRUPT.STATUS.BIT_27_OPAQUE",
+    "WIFI_MAC_INTERRUPT.STATUS.BIT_28_OPAQUE",
+    "WIFI_MAC_INTERRUPT.STATUS.BITS_29_31_OPAQUE",
 ]
+
+[peripheral-review.peripheral]
+sources = ["C5_BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "C5_BLOB_LIBPP_HAL_MAC_INTERRUPT_CLR_EVENT", "C5_BLOB_LIBPP_WDEV_PROCESS_FIQ", "C5_BLOB_LIBPP_HAL_ENABLE_MAC", "C5_BLOB_LIBPP_HAL_INIT_TAIL"]
 provenance = "derived"
 accuracy = "exact"
 completeness = "partial"
 
-[[review]]
-entity = "WIFI_MAC_INTERRUPT.ENABLE"
+[peripheral-review.register]
+sources = ["C5_BLOB_LIBPP_HAL_ENABLE_MAC", "C5_BLOB_LIBPP_WDEV_PROCESS_FIQ", "C5_BLOB_LIBPP_HAL_INIT_TAIL"]
 naming = "descriptive"
-sources = [
-    "C5_BLOB_LIBPP_HAL_ENABLE_MAC",
-    "C5_BLOB_LIBPP_WDEV_PROCESS_FIQ",
-    "C5_BLOB_LIBPP_HAL_INIT_TAIL",
-]
 provenance = "derived"
 accuracy = "exact"
 completeness = "partial"
 
-[[review]]
-entity = "WIFI_MAC_INTERRUPT.ENABLE.BITS_0_4_OPAQUE"
+[peripheral-review.field]
+sources = ["C5_BLOB_LIBPP_WDEV_PROCESS_FIQ", "C5_BLOB_LIBPP_HAL_INIT_TAIL"]
+naming = "descriptive"
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[peripheral-review.opaque]
+sources = ["C5_BLOB_LIBPP_HAL_ENABLE_MAC", "C5_BLOB_LIBPP_HAL_INIT_TAIL"]
 naming = "opaque"
-sources = [
-    "C5_BLOB_LIBPP_HAL_ENABLE_MAC",
-    "C5_BLOB_LIBPP_HAL_INIT_TAIL",
-]
 provenance = "derived"
 accuracy = "exact"
 completeness = "partial"
@@ -386,32 +410,10 @@ accuracy = "exact"
 completeness = "partial"
 
 [[review]]
-entity = "WIFI_MAC_INTERRUPT.ENABLE.TX_COMPLETE"
-naming = "descriptive"
-sources = [
-    "C5_BLOB_LIBPP_WDEV_PROCESS_FIQ",
-    "C5_BLOB_LIBPP_HAL_INIT_TAIL",
-]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
 entity = "WIFI_MAC_INTERRUPT.ENABLE.BSS_COLOR_COLLISION"
 naming = "descriptive"
 sources = [
     "C5_BLOB_LIBPP_HAL_MAC_COLOR_COLLISION_ISR",
-    "C5_BLOB_LIBPP_HAL_INIT_TAIL",
-]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "WIFI_MAC_INTERRUPT.ENABLE.BITS_9_10_OPAQUE"
-naming = "opaque"
-sources = [
-    "C5_BLOB_LIBPP_HAL_ENABLE_MAC",
     "C5_BLOB_LIBPP_HAL_INIT_TAIL",
 ]
 provenance = "derived"
@@ -450,17 +452,6 @@ accuracy = "exact"
 completeness = "partial"
 
 [[review]]
-entity = "WIFI_MAC_INTERRUPT.ENABLE.RX_SUCCESS"
-naming = "descriptive"
-sources = [
-    "C5_BLOB_LIBPP_WDEV_PROCESS_FIQ",
-    "C5_BLOB_LIBPP_HAL_INIT_TAIL",
-]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
 entity = "WIFI_MAC_INTERRUPT.ENABLE.STA_BEACON_FILTER"
 naming = "descriptive"
 sources = [
@@ -471,53 +462,9 @@ accuracy = "exact"
 completeness = "partial"
 
 [[review]]
-entity = "WIFI_MAC_INTERRUPT.ENABLE.BITS_16_18_OPAQUE"
-naming = "opaque"
-sources = [
-    "C5_BLOB_LIBPP_HAL_ENABLE_MAC",
-    "C5_BLOB_LIBPP_HAL_INIT_TAIL",
-]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "WIFI_MAC_INTERRUPT.ENABLE.TX_TIMEOUT"
-naming = "descriptive"
-sources = [
-    "C5_BLOB_LIBPP_WDEV_PROCESS_FIQ",
-    "C5_BLOB_LIBPP_HAL_INIT_TAIL",
-]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "WIFI_MAC_INTERRUPT.ENABLE.BIT_20_OPAQUE"
-naming = "opaque"
-sources = [
-    "C5_BLOB_LIBPP_HAL_ENABLE_MAC",
-    "C5_BLOB_LIBPP_HAL_INIT_TAIL",
-]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
 entity = "WIFI_MAC_INTERRUPT.ENABLE.BIT_21_OPAQUE"
 naming = "opaque"
 sources = [
-    "C5_BLOB_LIBPP_HAL_INIT_TAIL",
-]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "WIFI_MAC_INTERRUPT.ENABLE.BIT_22_OPAQUE"
-naming = "opaque"
-sources = [
-    "C5_BLOB_LIBPP_HAL_ENABLE_MAC",
     "C5_BLOB_LIBPP_HAL_INIT_TAIL",
 ]
 provenance = "derived"
@@ -545,17 +492,6 @@ accuracy = "exact"
 completeness = "partial"
 
 [[review]]
-entity = "WIFI_MAC_INTERRUPT.ENABLE.BITS_25_26_OPAQUE"
-naming = "opaque"
-sources = [
-    "C5_BLOB_LIBPP_HAL_ENABLE_MAC",
-    "C5_BLOB_LIBPP_HAL_INIT_TAIL",
-]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
 entity = "WIFI_MAC_INTERRUPT.ENABLE.BIT_27_OPAQUE"
 naming = "opaque"
 sources = [
@@ -569,17 +505,6 @@ completeness = "partial"
 entity = "WIFI_MAC_INTERRUPT.ENABLE.BIT_28_OPAQUE"
 naming = "opaque"
 sources = [
-    "C5_BLOB_LIBPP_HAL_INIT_TAIL",
-]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "WIFI_MAC_INTERRUPT.ENABLE.BITS_29_31_OPAQUE"
-naming = "opaque"
-sources = [
-    "C5_BLOB_LIBPP_HAL_ENABLE_MAC",
     "C5_BLOB_LIBPP_HAL_INIT_TAIL",
 ]
 provenance = "derived"
@@ -613,17 +538,6 @@ naming = "opaque"
 sources = [
     "C5_BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT",
     "C5_BLOB_LIBPP_HAL_ENABLE_MAC",
-]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "WIFI_MAC_INTERRUPT.STATUS.RX_ASSOCIATED_AUXILIARY_5"
-naming = "descriptive"
-sources = [
-    "C5_BLOB_LIBPP_WDEV_PROCESS_FIQ",
-    "C5_BLOB_LIBPP_HAL_INIT_TAIL",
 ]
 provenance = "derived"
 accuracy = "exact"
@@ -784,17 +698,6 @@ entity = "WIFI_MAC_INTERRUPT.STATUS.BIT_23_OPAQUE"
 naming = "opaque"
 sources = [
     "C5_BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT",
-    "C5_BLOB_LIBPP_HAL_INIT_TAIL",
-]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "WIFI_MAC_INTERRUPT.STATUS.RX_ASSOCIATED_AUXILIARY_24"
-naming = "descriptive"
-sources = [
-    "C5_BLOB_LIBPP_WDEV_PROCESS_FIQ",
     "C5_BLOB_LIBPP_HAL_INIT_TAIL",
 ]
 provenance = "derived"

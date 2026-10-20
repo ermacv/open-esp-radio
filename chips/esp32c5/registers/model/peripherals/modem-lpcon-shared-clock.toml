@@ -50,27 +50,15 @@ ESP32-C5 rev 1.0 USB Serial/JTAG reset erratum)."""
 bitOffset = 24
 bitWidth = 4
 
-[[review]]
-entity = "MODEM_LPCON_SHARED_CLOCK.CLK_CONF"
-naming = "vendor"
-sources = ["ESP_IDF_4D59230D_C5_MODEM_LPCON_STRUCT"]
+[[peripheral-review]]
+entity = "MODEM_LPCON_SHARED_CLOCK"
 
-[[review]]
-entity = "MODEM_LPCON_SHARED_CLOCK.CLK_CONF.CLK_COEX_EN"
-naming = "vendor"
-sources = ["ESP_IDF_4D59230D_C5_MODEM_LPCON_STRUCT"]
+[peripheral-review.peripheral]
 
-[[review]]
-entity = "MODEM_LPCON_SHARED_CLOCK.CLK_CONF.CLK_I2C_MST_EN"
-naming = "vendor"
+[peripheral-review.register]
 sources = ["ESP_IDF_4D59230D_C5_MODEM_LPCON_STRUCT"]
+naming = "vendor"
 
-[[review]]
-entity = "MODEM_LPCON_SHARED_CLOCK.CLK_CONF_POWER_ST"
-naming = "vendor"
+[peripheral-review.field]
 sources = ["ESP_IDF_4D59230D_C5_MODEM_LPCON_STRUCT"]
-
-[[review]]
-entity = "MODEM_LPCON_SHARED_CLOCK.CLK_CONF_POWER_ST.CLK_I2C_MST_ST_MAP"
 naming = "vendor"
-sources = ["ESP_IDF_4D59230D_C5_MODEM_LPCON_STRUCT"]

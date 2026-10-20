@@ -32,37 +32,25 @@ bitWidth = 20
 minimum = 0
 maximum = 0xF_FFFF
 
-[[review]]
+[[peripheral-review]]
 entity = "BTDM_SCHEDULER_TABLE"
-sources = [
-    "BLOB_LIBBTDM_SCHEDULER_LIFECYCLE",
-    "BLOB_LIBBTDM_SCHEDULER_HEAD_PUBLICATION",
-    "PUBLIC_ESP32S31_BT_SCHEDULER_ROLES",
-]
+
+[peripheral-review.peripheral]
+sources = ["BLOB_LIBBTDM_SCHEDULER_LIFECYCLE", "BLOB_LIBBTDM_SCHEDULER_HEAD_PUBLICATION", "PUBLIC_ESP32S31_BT_SCHEDULER_ROLES"]
 provenance = "derived"
 accuracy = "exact"
 completeness = "partial"
 
-[[review]]
-entity = "BTDM_SCHEDULER_TABLE.ENTRY%s"
+[peripheral-review.register]
+sources = ["BLOB_LIBBTDM_SCHEDULER_LIFECYCLE", "BLOB_LIBBTDM_SCHEDULER_HEAD_PUBLICATION", "PUBLIC_ESP32S31_BT_SCHEDULER_ROLES"]
 naming = "descriptive"
-sources = [
-    "BLOB_LIBBTDM_SCHEDULER_LIFECYCLE",
-    "BLOB_LIBBTDM_SCHEDULER_HEAD_PUBLICATION",
-    "PUBLIC_ESP32S31_BT_SCHEDULER_ROLES",
-]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
 
-[[review]]
-entity = "BTDM_SCHEDULER_TABLE.ENTRY%s.HEAD_POINTER"
+[peripheral-review.field]
+sources = ["BLOB_LIBBTDM_SCHEDULER_LIFECYCLE", "BLOB_LIBBTDM_SCHEDULER_HEAD_PUBLICATION", "PUBLIC_ESP32S31_BT_SCHEDULER_ROLES"]
 naming = "descriptive"
-sources = [
-    "BLOB_LIBBTDM_SCHEDULER_LIFECYCLE",
-    "BLOB_LIBBTDM_SCHEDULER_HEAD_PUBLICATION",
-    "PUBLIC_ESP32S31_BT_SCHEDULER_ROLES",
-]
 provenance = "derived"
 accuracy = "exact"
 completeness = "complete"

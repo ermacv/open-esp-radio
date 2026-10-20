@@ -56,44 +56,23 @@ name = "COUNT"
 bitOffset = 0
 bitWidth = 32
 
-[[review]]
+[[peripheral-review]]
 entity = "WIFI_MAC_RX_HANG_STATISTICS"
-sources = [
-    "BLOB_LIBPP_HAL_RX_DEBUG_COUNTERS",
-    "HIL_OPEN_RX_STATISTICS_BASELINE_2026_07_29",
+opaque-entities = [
+    "WIFI_MAC_RX_HANG_STATISTICS.HANG.BITS_0_15_OPAQUE",
 ]
+
+[peripheral-review.peripheral]
+sources = ["BLOB_LIBPP_HAL_RX_DEBUG_COUNTERS", "HIL_OPEN_RX_STATISTICS_BASELINE_2026_07_29"]
 provenance = "reviewed"
 accuracy = "exact"
 completeness = "complete"
 
-[[review]]
-entity = "WIFI_MAC_RX_HANG_STATISTICS.HANG"
+[peripheral-review.register]
 naming = "descriptive"
 
-[[review]]
-entity = "WIFI_MAC_RX_HANG_STATISTICS.HANG.BITS_0_15_OPAQUE"
+[peripheral-review.field]
+naming = "descriptive"
+
+[peripheral-review.opaque]
 naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_RX_HANG_STATISTICS.HANG.TX_COUNT"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_RX_HANG_STATISTICS.HANG.RX_COUNT"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_RX_HANG_STATISTICS.RX_TX_HANG"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_RX_HANG_STATISTICS.RX_TX_HANG.COUNT"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_RX_HANG_STATISTICS.RX_TX_PANIC"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_RX_HANG_STATISTICS.RX_TX_PANIC.COUNT"
-naming = "descriptive"

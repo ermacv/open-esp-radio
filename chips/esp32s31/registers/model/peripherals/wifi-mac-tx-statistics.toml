@@ -58,41 +58,17 @@ name = "VALUE"
 bitOffset = 0
 bitWidth = 32
 
-[[review]]
+[[peripheral-review]]
 entity = "WIFI_MAC_TX_STATISTICS"
+
+[peripheral-review.peripheral]
 sources = ["BLOB_LIBPP_PP_DEBUG_HW_STATISTICS"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
 
-[[review]]
-entity = "WIFI_MAC_TX_STATISTICS.TX_RTS"
+[peripheral-review.register]
 naming = "descriptive"
 
-[[review]]
-entity = "WIFI_MAC_TX_STATISTICS.TX_RTS.VALUE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_STATISTICS.TX_CTS"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_STATISTICS.TX_CTS.VALUE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_STATISTICS.TRACK"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_STATISTICS.TRACK.VALUE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_STATISTICS.TRCTS"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_STATISTICS.TRCTS.VALUE"
+[peripheral-review.field]
 naming = "descriptive"

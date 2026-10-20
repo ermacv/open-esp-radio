@@ -70,16 +70,26 @@ name = "RX_VHT_TXOP_PS_ENABLE"
 bitOffset = 31
 bitWidth = 1
 
-[[review]]
+[[peripheral-review]]
 entity = "WIFI_MAC_RX_POWER_SAVE"
-sources = [
-    "BLOB_LIBPP_HAL_RX_MISC_DEBUG",
-    "BLOB_LIBPP_HAL_HE_BSSID_LIFECYCLE",
-    "HIL_OPEN_HE_BSSID_LIFECYCLE_2026_07_30",
+opaque-entities = [
+    "WIFI_MAC_RX_POWER_SAVE.CONTROL.BITS_21_22_OPAQUE",
 ]
+
+[peripheral-review.peripheral]
+sources = ["BLOB_LIBPP_HAL_RX_MISC_DEBUG", "BLOB_LIBPP_HAL_HE_BSSID_LIFECYCLE", "HIL_OPEN_HE_BSSID_LIFECYCLE_2026_07_30"]
 provenance = "reviewed"
 accuracy = "exact"
 completeness = "complete"
+
+[peripheral-review.register]
+naming = "descriptive"
+
+[peripheral-review.field]
+naming = "descriptive"
+
+[peripheral-review.opaque]
+naming = "opaque"
 
 [[review]]
 entity = "WIFI_MAC_RX_POWER_SAVE.CONTROL.INTRA_PS_CHECK_BSS_COLOR_ENABLE"
@@ -102,43 +112,3 @@ sources = [
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
-
-[[review]]
-entity = "WIFI_MAC_RX_POWER_SAVE.CONTROL"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_RX_POWER_SAVE.CONTROL.RX_PS_THRESHOLD"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_RX_POWER_SAVE.CONTROL.RX_PS_ENABLE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_RX_POWER_SAVE.CONTROL.STOP_RF"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_RX_POWER_SAVE.CONTROL.PS_READY"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_RX_POWER_SAVE.CONTROL.FE_FREQUENCY_HOP_TIME"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_RX_POWER_SAVE.CONTROL.BITS_21_22_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_RX_POWER_SAVE.CONTROL.RX_PHY_SIGNAL_DELAY"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_RX_POWER_SAVE.CONTROL.RX_VHT_TXOP_PS_CHECK_ADDRESS"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_RX_POWER_SAVE.CONTROL.RX_VHT_TXOP_PS_ENABLE"
-naming = "descriptive"

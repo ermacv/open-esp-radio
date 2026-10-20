@@ -82,12 +82,31 @@ name = "PTI"
 bitOffset = 12
 bitWidth = 4
 
-[[review]]
+[[peripheral-review]]
 entity = "WIFI_MAC_COEX_RUNTIME"
+opaque-entities = [
+    "WIFI_MAC_COEX_RUNTIME.CLEAR_REQUEST.BITS_0_31_OPAQUE",
+    "WIFI_MAC_COEX_RUNTIME.ITWT_CONTROL.BITS_0_7_OPAQUE",
+]
+
+[peripheral-review.peripheral]
 sources = ["BLOB_LIBPP_HAL_COEX_RUNTIME"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
+
+[peripheral-review.register]
+sources = ["BLOB_LIBPP_HAL_COEX_RUNTIME"]
+naming = "descriptive"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[peripheral-review.field]
+naming = "descriptive"
+
+[peripheral-review.opaque]
+naming = "opaque"
 
 [[review]]
 entity = "WIFI_MAC_COEX_RUNTIME.CLEAR_REQUEST"
@@ -98,53 +117,9 @@ accuracy = "exact"
 completeness = "unknown"
 
 [[review]]
-entity = "WIFI_MAC_COEX_RUNTIME.RX_BEACON_TIME_HIGH"
-naming = "descriptive"
-sources = ["BLOB_LIBPP_HAL_COEX_RUNTIME"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
 entity = "WIFI_MAC_COEX_RUNTIME.ITWT_CONTROL"
 naming = "descriptive"
 sources = ["BLOB_LIBPP_HAL_COEX_RUNTIME"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
-
-[[review]]
-entity = "WIFI_MAC_COEX_RUNTIME.SHARED_RX_PTI"
-naming = "descriptive"
-sources = ["BLOB_LIBPP_HAL_COEX_RUNTIME"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "WIFI_MAC_COEX_RUNTIME.RX_BEACON_PTI"
-naming = "descriptive"
-sources = ["BLOB_LIBPP_HAL_COEX_RUNTIME"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "WIFI_MAC_COEX_RUNTIME.CLEAR_REQUEST.BITS_0_31_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_COEX_RUNTIME.RX_BEACON_TIME_HIGH.VALUE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_COEX_RUNTIME.ITWT_CONTROL.BITS_0_7_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_COEX_RUNTIME.SHARED_RX_PTI.PTI"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_COEX_RUNTIME.RX_BEACON_PTI.PTI"
-naming = "descriptive"
