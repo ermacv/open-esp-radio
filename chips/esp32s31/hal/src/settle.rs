@@ -32,6 +32,7 @@ impl SettleLimit {
 }
 
 /// One settle: its limit and the clock that measures it.
+/// The caller's clock type is preserved through the wait.
 #[derive(Clone, Copy)]
 pub struct Settle<'clock> {
     limit: SettleLimit,
