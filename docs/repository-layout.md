@@ -68,13 +68,14 @@ chip fact takes it from a crate that does not touch hardware
 
 ## A protocol: wire, port, cores, backends
 
-Each radio protocol has three layers in `protocols/<protocol>/`:
+Each radio protocol has four layers in `protocols/<protocol>/`:
 
 | Layer | Holds | Depends on |
 |---|---|---|
 | `wire` | the over-the-air formats: parsing and building frames and PDUs, information elements; no state, no time | portable support |
 | `port` | the contract with a backend: commands, events, resources, errors | `wire` |
 | cores | the sans-IO state machines (station, access point, RSN, an LE connection, the 802.15.4 MAC) | `port`, `wire` |
+| `runtime` | the async loop over the port: awaits port events and deadlines, feeds the cores, executes their actions | `port`, `wire`, cores, portable time and signals |
 
 A backend implements the port and depends on `port` and `wire` only, never
 on a core: the chip backend in `chips/<chip>/`, the model backend in
@@ -82,6 +83,14 @@ on a core: the chip backend in `chips/<chip>/`, the model backend in
 on a backend. Structures both sides share belong to `port` or `wire`. Host
 tools that read frames (monitors, capture analysis, fixtures) take `wire`.
 This is smoltcp's `wire` beside its `iface` and `socket`.
+
+Only the runtime awaits, and it binds to no executor: it takes time from
+`oer-time`'s `Timer` and interrupt signals from `portable/`, spawns nothing
+and returns futures that the composition in `firmware/` spawns. It does not
+depend on `embassy-executor`, `embassy-time`, `embassy-net` or a HAL;
+`embassy-sync` and `embassy-futures` are allowed as executor-independent
+utilities. Embassy itself is bound only in `portable/embassy`, the chip's
+executor and the firmware composition.
 
 ## Names
 
