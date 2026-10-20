@@ -10,10 +10,10 @@
 
 #![forbid(unsafe_code)]
 
-use vcell::VolatileCell;
+use oer_esp32s31_hal::layouts::*;
 
 use crate::{
-    coexistence::{AdvertisingCoexistencePriorities, LANES_MASK, lanes_image},
+    coexistence::{AdvertisingCoexistencePriorities, with_priorities},
     le_rx_chain::{LeRxChain, LeRxSource, LeRxTag},
     le_tx_packet::{
         BLUETOOTH_LE_TX_PACKET_PREFIX_BYTES, LeTxBufferHeaderStorage, LeTxPacketAddress,
@@ -47,48 +47,17 @@ type AdvertisingTxPacketLength = LeTxPacketPreparedLength<LEGACY_ADVERTISING_TX_
 type AdvertisingTxPacketInput<'a> = LeTxPacketPreparedInput<'a, LEGACY_ADVERTISING_TX_PACKET_BYTES>;
 
 const ITEMS: usize = BLUETOOTH_LEGACY_ADVERTISING_SCHEDULER_ITEM_CAPACITY;
-const LINK_STATE_WORDS: usize = 0x84 / 4;
-const SCHEDULER_ITEM_WORDS: usize = 0x60 / 4;
-
-const LINK_STATE_SCHEDULER_HEAD: usize = 0x64 / 4;
-const LINK_STATE_RX_HEAD: usize = 0x68 / 4;
-const LINK_STATE_TX_HEAD: usize = 0x6c / 4;
-const LINK_STATE_RX_TAIL: usize = 0x70 / 4;
-const LINK_STATE_TX_TAIL: usize = 0x74 / 4;
-const LINK_STATE_RX_SWAP_RESERVE: usize = 0x78 / 4;
-const LINK_STATE_ALLOCATION_CONFIG: usize = 0x30 / 4;
-const LINK_STATE_ALLOCATION_CONFIG_IMAGE: u32 = 0x0000_1e00;
-const LINK_STATE_RX_LIST_CLASS: usize = 0x20 / 4;
-const COMPRESSED_LINK_MASK: u32 = 0x000f_ffff;
-
-const LINK_STATE_WORD_00: usize = 0;
-const LINK_STATE_WORD_04: usize = 1;
-const LINK_STATE_WORD_08: usize = 2;
-const LINK_STATE_WORD_0C: usize = 3;
-const LINK_STATE_WORD_14: usize = 0x14 / 4;
-const LINK_STATE_WORD_18: usize = 0x18 / 4;
-const LINK_STATE_WORD_24: usize = 0x24 / 4;
-const LINK_STATE_WORD_2C: usize = 0x2c / 4;
-const LINK_STATE_WORD_30: usize = 0x30 / 4;
-const LINK_STATE_WORD_34: usize = 0x34 / 4;
-const LINK_STATE_WORD_38: usize = 0x38 / 4;
-const LINK_STATE_WORD_3C: usize = 0x3c / 4;
-const LINK_STATE_WORD_40: usize = 0x40 / 4;
-const LINK_STATE_WORD_50: usize = 0x50 / 4;
-const LINK_STATE_WORD_60: usize = 0x60 / 4;
-
-const SCHEDULER_ITEM_CONTEXT: usize = 1;
-const SCHEDULER_ITEM_LINK_STATE: usize = 0x08 / 4;
-const SCHEDULER_ITEM_WORD_14: usize = 0x14 / 4;
-const SCHEDULER_ITEM_WORD_18: usize = 0x18 / 4;
-const SCHEDULER_ITEM_ALLOCATION_FLAGS: usize = 0x1c / 4;
-const SCHEDULER_ITEM_ALLOCATION_NUMBER: usize = 0x20 / 4;
-const SCHEDULER_ITEM_COEX_PRIORITIES: usize = 0x24 / 4;
+/// SOURCE: pinned role allocation/reset body in the BLE controller-memory reference.
+const LINK_STATE_ALLOCATION_CONFIG_IMAGE: BleLinkStateSequencePolicy =
+    BleLinkStateSequencePolicy::ZERO
+        .with_bits_9_12_opaque(0xf)
+        .expect("reviewed field image fits");
 // Common scheduler allocation installs both bits before the advertising role.
 const SCHEDULER_ITEM_ALLOCATION_PREFIX: u32 = 0x0030_0000;
-const SCHEDULER_ITEM_LINK_STATE_PREFIX: u32 = 0x0060_0000;
 // Complete common allocator applied to the standalone module default.
-const SCHEDULER_ITEM_ALLOCATION_FLAGS_IMAGE: u32 = 0xffdf_7fff;
+/// SOURCE: pinned role allocation/reset body in the BLE controller-memory reference.
+const SCHEDULER_ITEM_ALLOCATION_FLAGS_IMAGE: BleSchedulerItemWord001cOpaque =
+    BleSchedulerItemWord001cOpaque::ZERO.with_bits_0_31_opaque(0xffdf7fff);
 
 /// Why an encoded advertising PDU cannot fit this S31 allocation.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -214,72 +183,82 @@ impl<'a> LegacyConnectableAdvertisingMemoryInput<'a> {
 
 #[repr(C, align(4))]
 struct LinkStateStorage {
-    words: [VolatileCell<u32>; LINK_STATE_WORDS],
+    layout: BleLinkState,
 }
 
 impl LinkStateStorage {
     const fn new() -> Self {
         Self {
-            words: [const { VolatileCell::new(0) }; LINK_STATE_WORDS],
+            layout: BleLinkState::zeroed(),
         }
     }
 
     fn initialize(&self, binding: &LegacyConnectableAdvertisingBinding) {
-        for word in &self.words {
-            word.set(0);
-        }
+        crate::shared_layout::clear_link_state(&self.layout);
         self.set_scheduler_head(Some(binding.items[0]));
-        self.words[LINK_STATE_TX_HEAD].set(binding.adv_ind_header.controller_address().address());
-        self.words[LINK_STATE_TX_TAIL]
-            .set(binding.scan_response_header.controller_address().address());
-        self.words[LINK_STATE_ALLOCATION_CONFIG].set(LINK_STATE_ALLOCATION_CONFIG_IMAGE);
+        self.layout.tx_head().write(BleLinkStateTxHead::from_bits(
+            binding.adv_ind_header.controller_address().address(),
+        ));
+        self.layout.tx_tail().write(BleLinkStateTxTail::from_bits(
+            binding.scan_response_header.controller_address().address(),
+        ));
+        self.layout
+            .sequence_policy()
+            .write(LINK_STATE_ALLOCATION_CONFIG_IMAGE);
     }
 
     fn reviewed_words(&self) -> LegacyAdvertisingLinkStateWords {
         LegacyAdvertisingLinkStateWords {
-            word_00: self.words[LINK_STATE_WORD_00].get(),
-            word_04: self.words[LINK_STATE_WORD_04].get(),
-            word_08: self.words[LINK_STATE_WORD_08].get(),
-            word_0c: self.words[LINK_STATE_WORD_0C].get(),
-            word_14: self.words[LINK_STATE_WORD_14].get(),
-            word_18: self.words[LINK_STATE_WORD_18].get(),
-            word_24: self.words[LINK_STATE_WORD_24].get(),
-            crc_init_word_2c: self.words[LINK_STATE_WORD_2C].get(),
-            word_30: self.words[LINK_STATE_WORD_30].get(),
-            word_34: self.words[LINK_STATE_WORD_34].get(),
-            access_address_word_38: self.words[LINK_STATE_WORD_38].get(),
-            word_3c: self.words[LINK_STATE_WORD_3C].get(),
-            word_40: self.words[LINK_STATE_WORD_40].get(),
-            word_50: self.words[LINK_STATE_WORD_50].get(),
-            word_60: self.words[LINK_STATE_WORD_60].get(),
+            word_00: self.layout.tx_path().read(),
+            word_04: self.layout.scan_response().read(),
+            word_08: self.layout.rx_path().read(),
+            word_0c: self.layout.control_policy().read(),
+            word_14: self.layout.packet_policy().read(),
+            word_18: self.layout.receive_context().read(),
+            word_24: self.layout.own_address_policy().read(),
+            crc_init_word_2c: self.layout.crc_initialization().read(),
+            word_30: self.layout.sequence_policy().read(),
+            word_34: self.layout.event_span().read(),
+            access_address_word_38: self.layout.access_address().read(),
+            word_3c: self.layout.own_address_low().read(),
+            word_40: self.layout.own_address_high().read(),
+            word_50: self.layout.direction_finding().read(),
+            word_60: self.layout.event().read(),
         }
     }
 
     fn write_reviewed_words(&self, words: LegacyAdvertisingLinkStateWords) {
-        self.words[LINK_STATE_WORD_00].set(words.word_00);
-        self.words[LINK_STATE_WORD_04].set(words.word_04);
-        self.words[LINK_STATE_WORD_08].set(words.word_08);
-        self.words[LINK_STATE_WORD_0C].set(words.word_0c);
-        self.words[LINK_STATE_WORD_14].set(words.word_14);
-        self.words[LINK_STATE_WORD_18].set(words.word_18);
-        self.words[LINK_STATE_WORD_24].set(words.word_24);
-        self.words[LINK_STATE_WORD_2C].set(words.crc_init_word_2c);
-        self.words[LINK_STATE_WORD_30].set(words.word_30);
-        self.words[LINK_STATE_WORD_34].set(words.word_34);
-        self.words[LINK_STATE_WORD_38].set(words.access_address_word_38);
-        self.words[LINK_STATE_WORD_3C].set(words.word_3c);
-        self.words[LINK_STATE_WORD_40].set(words.word_40);
-        self.words[LINK_STATE_WORD_50].set(words.word_50);
-        self.words[LINK_STATE_WORD_60].set(words.word_60);
+        self.layout.tx_path().write(words.word_00);
+        self.layout.scan_response().write(words.word_04);
+        self.layout.rx_path().write(words.word_08);
+        self.layout.control_policy().write(words.word_0c);
+        self.layout.packet_policy().write(words.word_14);
+        self.layout.receive_context().write(words.word_18);
+        self.layout.own_address_policy().write(words.word_24);
+        self.layout
+            .crc_initialization()
+            .write(words.crc_init_word_2c);
+        self.layout.sequence_policy().write(words.word_30);
+        self.layout.event_span().write(words.word_34);
+        self.layout
+            .access_address()
+            .write(words.access_address_word_38);
+        self.layout.own_address_low().write(words.word_3c);
+        self.layout.own_address_high().write(words.word_40);
+        self.layout.direction_finding().write(words.word_50);
+        self.layout.event().write(words.word_60);
     }
 
     fn scheduler_head(&self) -> u32 {
-        self.words[LINK_STATE_SCHEDULER_HEAD].get()
+        self.layout.scheduler_head().read().bits()
     }
 
     fn set_scheduler_head(&self, item: Option<ControllerSramLinkAddress>) {
-        self.words[LINK_STATE_SCHEDULER_HEAD]
-            .set(item.map_or(0, |item| item.controller_address().address()));
+        self.layout
+            .scheduler_head()
+            .write(BleLinkStateSchedulerHead::from_bits(
+                item.map_or(0, |item| item.controller_address().address()),
+            ));
     }
 
     fn prepare_profile(
@@ -296,74 +275,98 @@ impl LinkStateStorage {
         // The common no-response projection clears this consumer. Advertising
         // reset installs the primary TX header's successor for SCAN_RSP; a
         // set without one keeps it empty.
-        words.word_04 &= !COMPRESSED_LINK_MASK;
+        words.word_04 = words.word_04.with_header(None).expect("empty link fits");
         if scan_response {
-            words.word_04 |= binding.scan_response_header.compressed_image();
+            words.word_04 = BleLinkStateScanResponse::from_bits(
+                binding.scan_response_header.compressed_image(),
+            )
+            .with_bits_20_27_opaque(words.word_04.bits_20_27_opaque())
+            .with_bits_28_31_opaque(words.word_04.bits_28_31_opaque())
+            .expect("retained prefix fits");
         }
         // adv_alloc_rxbuf prepares an empty private RX link before reset.
         // The later memory-manager broker selects the global RX class and
         // updates software head/tail, without installing a private consumer.
-        words.word_08 &= !COMPRESSED_LINK_MASK;
+        words.word_08 = words.word_08.with_header(None).expect("empty link fits");
         self.write_reviewed_words(words);
-        let class = &self.words[LINK_STATE_RX_LIST_CLASS];
-        class.set(RxMemoryListClass::NonScanning.select_in_link_state(class.get()));
-        self.words[LINK_STATE_RX_HEAD].set(rx_head);
-        self.words[LINK_STATE_RX_TAIL].set(rx_tail);
-        self.words[LINK_STATE_RX_SWAP_RESERVE].set(rx_spare);
+        let class = self.layout.rx_list();
+        class.write(BleLinkStateRxList::from_bits(
+            RxMemoryListClass::NonScanning.select_in_link_state(class.read().bits()),
+        ));
+        self.layout
+            .rx_head()
+            .write(BleLinkStateRxHead::from_bits(rx_head));
+        self.layout
+            .rx_tail()
+            .write(BleLinkStateRxTail::from_bits(rx_tail));
+        self.layout
+            .rx_reserve()
+            .write(BleLinkStateRxReserve::from_bits(rx_spare));
     }
 }
 
 #[repr(C, align(4))]
 struct ItemStorage {
-    words: [VolatileCell<u32>; SCHEDULER_ITEM_WORDS],
+    layout: BleSchedulerItem,
 }
 
 impl ItemStorage {
     const fn new() -> Self {
         Self {
-            words: [const { VolatileCell::new(0) }; SCHEDULER_ITEM_WORDS],
+            layout: BleSchedulerItem::zeroed(),
         }
     }
 
-    fn header(&self) -> SchedulerItemHeader<'_, [VolatileCell<u32>; SCHEDULER_ITEM_WORDS]> {
-        SchedulerItemHeader::new(&self.words)
+    fn header(&self) -> SchedulerItemHeader<'_> {
+        SchedulerItemHeader::new(&self.layout)
     }
 
     fn initialize(&self, binding: &LegacyConnectableAdvertisingBinding) {
-        for word in &self.words {
-            word.set(0);
-        }
+        crate::shared_layout::clear_scheduler_item(&self.layout);
         self.header()
             .set_hardware_next_word(SCHEDULER_ITEM_ALLOCATION_PREFIX);
-        self.words[SCHEDULER_ITEM_CONTEXT].set(binding.scheduler_context.compressed_image());
-        self.words[SCHEDULER_ITEM_ALLOCATION_FLAGS].set(SCHEDULER_ITEM_ALLOCATION_FLAGS_IMAGE);
-        self.words[SCHEDULER_ITEM_ALLOCATION_NUMBER].set(u32::from(binding.number));
-        self.words[SCHEDULER_ITEM_LINK_STATE]
-            .set(SCHEDULER_ITEM_LINK_STATE_PREFIX | binding.link_state.compressed_image());
+        self.layout
+            .context()
+            .write(BleSchedulerItemContext::from_bits(
+                binding.scheduler_context.compressed_image(),
+            ));
+        self.layout
+            .word_001c_opaque()
+            .write(SCHEDULER_ITEM_ALLOCATION_FLAGS_IMAGE);
+        self.layout
+            .allocation_number()
+            .write(BleSchedulerItemAllocationNumber::from_bits(u32::from(
+                binding.number,
+            )));
+        self.layout.link_state().write(
+            BleSchedulerItemLinkState::from_bits(binding.link_state.compressed_image())
+                .with_bits_20_23_opaque(6)
+                .expect("reviewed role prefix fits"),
+        );
     }
 
     fn reviewed_words(&self) -> LegacyAdvertisingSchedulerItemWords {
         LegacyAdvertisingSchedulerItemWords {
-            word_00: self.header().hardware_next_word(),
-            word_04: self.words[SCHEDULER_ITEM_CONTEXT].get(),
-            word_14: self.words[SCHEDULER_ITEM_WORD_14].get(),
-            word_18: self.words[SCHEDULER_ITEM_WORD_18].get(),
-            word_38: self.header().status(),
-            raw_start_word_44: self.header().raw_start(),
-            raw_end_word_48: self.header().raw_end(),
-            word_4c: self.header().control(),
+            word_00: self.layout.hardware_next().read(),
+            word_04: self.layout.context().read(),
+            word_14: self.layout.rate_and_power().read(),
+            word_18: self.layout.channel_and_priority().read(),
+            word_38: self.layout.status().read(),
+            raw_start_word_44: self.layout.raw_start().read(),
+            raw_end_word_48: self.layout.raw_end().read(),
+            word_4c: self.layout.control().read(),
         }
     }
 
     fn write_reviewed_words(&self, words: LegacyAdvertisingSchedulerItemWords) {
-        self.header().set_hardware_next_word(words.word_00);
-        self.words[SCHEDULER_ITEM_CONTEXT].set(words.word_04);
-        self.words[SCHEDULER_ITEM_WORD_14].set(words.word_14);
-        self.words[SCHEDULER_ITEM_WORD_18].set(words.word_18);
-        self.header().set_status(words.word_38);
-        self.header().set_raw_start(words.raw_start_word_44);
-        self.header().set_raw_end(words.raw_end_word_48);
-        self.header().set_control(words.word_4c);
+        self.header().set_hardware_next_word(words.word_00.bits());
+        self.layout.context().write(words.word_04);
+        self.layout.rate_and_power().write(words.word_14);
+        self.layout.channel_and_priority().write(words.word_18);
+        self.header().set_status(words.word_38.bits());
+        self.header().set_raw_start(words.raw_start_word_44.bits());
+        self.header().set_raw_end(words.raw_end_word_48.bits());
+        self.header().set_control(words.word_4c.bits());
     }
 }
 
@@ -416,9 +419,9 @@ pub enum LegacyConnectableAdvertisingState {
 impl sealed::Sealed for LegacyConnectableAdvertisingStorage {}
 
 impl SchedulerRoleStorage for LegacyConnectableAdvertisingStorage {
+    const NUMBERS: usize = 1;
     const KIND: SchedulerRoleKind = SchedulerRoleKind::ConnectableAdvertising;
     const ITEMS: usize = ITEMS;
-    const NUMBERS: usize = 1;
     const NEW: Self = Self {
         link_state: LinkStateStorage::new(),
         scheduler_context: SchedulerContextStorage::new(),
@@ -459,8 +462,8 @@ impl SchedulerRoleStorage for LegacyConnectableAdvertisingStorage {
         })
     }
 
-    fn item_words(&self, item: usize) -> &[VolatileCell<u32>] {
-        &self.items[item].words
+    fn item_layout(&self, item: usize) -> &BleSchedulerItem {
+        &self.items[item].layout
     }
 
     fn item_link(
@@ -554,8 +557,13 @@ impl<const N: usize> LegacyConnectableAdvertisingPool<N> {
             graph
                 .adv_ind_header
                 .initialize_bound_tx_with_successor(cpu.binding.adv_ind_packet, None);
-            graph.link_state.words[LINK_STATE_TX_TAIL]
-                .set(cpu.binding.adv_ind_header.controller_address().address());
+            graph
+                .link_state
+                .layout
+                .tx_tail()
+                .write(BleLinkStateTxTail::from_bits(
+                    cpu.binding.adv_ind_header.controller_address().address(),
+                ));
         }
         graph.link_state.prepare_profile(
             cpu.binding,
@@ -613,10 +621,10 @@ impl<const N: usize> LegacyConnectableAdvertisingPool<N> {
             ));
             // Common r_btdm_sched_calc_seq_time projection.
             item.header().set_sequence(start, end, raw_sequence_lead);
-            item.words[SCHEDULER_ITEM_COEX_PRIORITIES].set(
-                (item.words[SCHEDULER_ITEM_COEX_PRIORITIES].get() & !LANES_MASK)
-                    | lanes_image(&coexistence.lanes),
-            );
+            item.layout.coexistence_priority().write(with_priorities(
+                item.layout.coexistence_priority().read(),
+                &coexistence.lanes,
+            ));
             event.set_window(index, start, end);
         }
         graph.link_state.set_scheduler_head(None);

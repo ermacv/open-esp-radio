@@ -333,11 +333,25 @@ access = "shared"
 description = "Observed word position; unassigned bits retain their exact image."
 
 [[layout.words.fields]]
-name = "VALUE"
-bits = "31:0"
+name = "BITS_0_10_OPAQUE"
+bits = "10:0"
 writer = "phased"
 phases = [{ name = "arm", writer = "cpu" }, { name = "complete", writer = "hardware" }]
-description = "CPU arms with 0xffffffff; hardware records an execution result. CPU preemption may write zero."
+description = "Unassigned execution-result lanes. CPU arms all ones; hardware writes the result."
+
+[[layout.words.fields]]
+name = "CAPTURE_AVAILABLE"
+bits = "11"
+writer = "phased"
+phases = [{ name = "arm", writer = "cpu" }, { name = "complete", writer = "hardware" }]
+description = "Peripheral-connection completion makes the captured anchor available when this bit is set."
+
+[[layout.words.fields]]
+name = "BITS_12_31_OPAQUE"
+bits = "31:12"
+writer = "phased"
+phases = [{ name = "arm", writer = "cpu" }, { name = "complete", writer = "hardware" }]
+description = "Unassigned execution-result lanes. CPU arms all ones; CPU preemption may write zero."
 
 [[layout.words]]
 name = "WORD_003C_OPAQUE"
@@ -929,12 +943,28 @@ completeness = "complete"
 naming = "descriptive"
 
 [[review]]
-entity = "BLE_SCHEDULER_ITEM.STATUS.VALUE"
+entity = "BLE_SCHEDULER_ITEM.STATUS.BITS_0_10_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.STATUS.CAPTURE_AVAILABLE"
 sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
 provenance = "reviewed"
 accuracy = "exact"
 completeness = "complete"
 naming = "descriptive"
+
+[[review]]
+entity = "BLE_SCHEDULER_ITEM.STATUS.BITS_12_31_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
 
 [[review]]
 entity = "BLE_SCHEDULER_ITEM.WORD_003C_OPAQUE"

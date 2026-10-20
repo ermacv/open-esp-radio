@@ -1,3 +1,4 @@
+use oer_esp32s31_hal::layouts::*;
 use std::boxed::Box;
 
 use vcell::VolatileCell;
@@ -9,12 +10,10 @@ use super::{
 };
 use crate::{scheduler_item::SchedulerItemCompletionStatus, sram_link::ControllerSramLinkAddress};
 
-const ITEM_WORDS: usize = 0x60 / 4;
-
 /// Two items and a marker word that reinitialization writes.
 #[repr(C)]
 struct TestStorage {
-    items: [[VolatileCell<u32>; ITEM_WORDS]; 2],
+    items: [BleSchedulerItem; 2],
     marker: VolatileCell<u32>,
 }
 
@@ -31,7 +30,7 @@ impl SchedulerRoleStorage for TestStorage {
     const ITEMS: usize = 2;
     const NUMBERS: usize = 1;
     const NEW: Self = Self {
-        items: [const { [const { VolatileCell::new(0) }; ITEM_WORDS] }; 2],
+        items: [const { BleSchedulerItem::zeroed() }; 2],
         marker: VolatileCell::new(0),
     };
     type Binding = TestBinding;
@@ -43,7 +42,7 @@ impl SchedulerRoleStorage for TestStorage {
                 .map_err(|_| SchedulerPoolBindError::ZeroCompressedLink)
         };
         Ok(TestBinding {
-            items: [link(0)?, link(0x60)?],
+            items: [link(0)?, link(BleSchedulerItem::SIZE as u32)?],
             number: first_number,
         })
     }
@@ -51,7 +50,7 @@ impl SchedulerRoleStorage for TestStorage {
         *state & (1 << item) != 0
     }
 
-    fn item_words(&self, item: usize) -> &[VolatileCell<u32>] {
+    fn item_layout(&self, item: usize) -> &BleSchedulerItem {
         &self.items[item]
     }
 
@@ -62,9 +61,7 @@ impl SchedulerRoleStorage for TestStorage {
     fn reinitialize(&mut self, binding: &TestBinding) -> u8 {
         self.marker.set(0x100 + u32::from(binding.number));
         for item in &self.items {
-            for word in item {
-                word.set(0);
-            }
+            crate::shared_layout::clear_scheduler_item(item);
         }
         0
     }
@@ -205,10 +202,10 @@ fn the_space_edits_only_scheduler_fields_of_listed_items() {
     space.set_previous(second, None);
 
     let (graph, _, _) = pool.shared(&instance).unwrap();
-    assert_eq!(graph.items[0][0].get(), 1 << 25);
-    assert_eq!(graph.items[0][0x4c / 4].get(), 1 << 25);
-    assert_eq!(graph.items[1][0x50 / 4].get(), 0);
-    graph.items[1][0x38 / 4].set(0);
+    assert!(graph.items[0].hardware_next().read().skip());
+    assert!(graph.items[0].control().read().deleted());
+    assert_eq!(graph.items[1].previous().read().address(), 0);
+    graph.items[1].status().write(BleSchedulerItemStatus::ZERO);
     assert_eq!(
         space.completion_status(second),
         Some(SchedulerItemCompletionStatus::Zero)

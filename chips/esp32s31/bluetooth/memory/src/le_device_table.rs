@@ -16,10 +16,10 @@
 use core::pin::Pin;
 
 use oer_esp32s31_hal::bluetooth::{BluetoothDeviceTableEntryCount, DeviceTablePublication};
+use oer_esp32s31_hal::layouts::*;
 use oer_esp32s31_hal::types::{
     BluetoothControllerSramAddress, BluetoothControllerSramAddressError,
 };
-use vcell::VolatileCell;
 
 use crate::sram_link::{
     BLUETOOTH_CONTROLLER_PHYSICAL_SRAM_HIGH, BLUETOOTH_CONTROLLER_PHYSICAL_SRAM_LOW,
@@ -27,12 +27,8 @@ use crate::sram_link::{
 
 /// Filter accept list entries the Controller keeps, as the S31 build's LE
 /// Read Filter Accept List Size reports.
-pub const BLUETOOTH_FILTER_ACCEPT_LIST_CAPACITY: usize = 12;
-
-const ENTRY_WORDS: usize = 2;
-const ACCEPT_LIST_MEMBER: u32 = 1 << 1;
-const VALID: u32 = 1 << 15;
-const RANDOM: u32 = 1 << 14;
+pub const BLUETOOTH_FILTER_ACCEPT_LIST_CAPACITY: usize =
+    BleDeviceTable::SIZE / BleDeviceTableEntry::SIZE;
 
 /// One filter accept list device: its address type and address.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -44,27 +40,28 @@ pub struct LeFilterAcceptListDevice {
 }
 
 impl LeFilterAcceptListDevice {
-    fn words(self) -> [u32; ENTRY_WORDS] {
+    fn image(self) -> DeviceEntryImage {
         let [a0, a1, a2, a3, a4, a5] = self.address;
-        let flags = ACCEPT_LIST_MEMBER | VALID | if self.random { RANDOM } else { 0 };
-        [
-            flags | u32::from(a0) << 16 | u32::from(a1) << 24,
-            u32::from_le_bytes([a2, a3, a4, a5]),
-        ]
+        DeviceEntryImage {
+            flags_and_address: DEVICE_ENTRY
+                .with_random(self.random)
+                .with_address_low(u16::from_le_bytes([a0, a1])),
+            address_high: BleDeviceTableEntryAddressHigh::ZERO
+                .with_value(u32::from_le_bytes([a2, a3, a4, a5])),
+        }
     }
 }
 
 /// Pinned storage of the device table.
 #[repr(C, align(4))]
 pub struct LeDeviceTableStorage {
-    words: [VolatileCell<u32>; BLUETOOTH_FILTER_ACCEPT_LIST_CAPACITY * ENTRY_WORDS],
+    layout: BleDeviceTable,
 }
 
 impl LeDeviceTableStorage {
     pub const fn new() -> Self {
         Self {
-            words: [const { VolatileCell::new(0) };
-                BLUETOOTH_FILTER_ACCEPT_LIST_CAPACITY * ENTRY_WORDS],
+            layout: BleDeviceTable::zeroed(),
         }
     }
 }
@@ -184,7 +181,7 @@ impl LeDeviceTable {
         if self.members == BLUETOOTH_FILTER_ACCEPT_LIST_CAPACITY {
             return Err(LeDeviceTableError::Full);
         }
-        self.write(self.members, device.words());
+        self.write(self.members, device.image());
         self.members += 1;
         Ok(())
     }
@@ -195,34 +192,61 @@ impl LeDeviceTable {
         let last = self.members - 1;
         let moved = self.read(last);
         self.write(index, moved);
-        self.write(last, [0; ENTRY_WORDS]);
+        self.write(last, DeviceEntryImage::ZERO);
         self.members = last;
         Ok(())
     }
 
     /// Remove every device.
     pub fn clear(&mut self) {
-        for word in &self.storage.words {
-            word.set(0);
+        for index in 0..BLUETOOTH_FILTER_ACCEPT_LIST_CAPACITY {
+            self.write(index, DeviceEntryImage::ZERO);
         }
         self.members = 0;
     }
 
     fn position(&self, device: LeFilterAcceptListDevice) -> Option<usize> {
-        let words = device.words();
+        let words = device.image();
         (0..self.members).find(|&index| self.read(index) == words)
     }
 
-    fn read(&self, index: usize) -> [u32; ENTRY_WORDS] {
-        core::array::from_fn(|word| self.storage.words[index * ENTRY_WORDS + word].get())
-    }
-
-    fn write(&mut self, index: usize, words: [u32; ENTRY_WORDS]) {
-        for (word, value) in words.into_iter().enumerate() {
-            self.storage.words[index * ENTRY_WORDS + word].set(value);
+    fn read(&self, index: usize) -> DeviceEntryImage {
+        let entry = self
+            .storage
+            .layout
+            .entry(index)
+            .expect("member index is inside the table");
+        DeviceEntryImage {
+            flags_and_address: entry.flags_and_address().read(),
+            address_high: entry.address_high().read(),
         }
+    }
+    fn write(&mut self, index: usize, image: DeviceEntryImage) {
+        let entry = self
+            .storage
+            .layout
+            .entry(index)
+            .expect("member index is inside the table");
+        entry.flags_and_address().write(image.flags_and_address);
+        entry.address_high().write(image.address_high);
     }
 }
 
 #[cfg(test)]
 mod tests;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct DeviceEntryImage {
+    flags_and_address: BleDeviceTableEntryFlagsAndAddress,
+    address_high: BleDeviceTableEntryAddressHigh,
+}
+impl DeviceEntryImage {
+    const ZERO: Self = Self {
+        flags_and_address: BleDeviceTableEntryFlagsAndAddress::ZERO,
+        address_high: BleDeviceTableEntryAddressHigh::ZERO,
+    };
+}
+/// SOURCE: pinned device-table writer: an active filter-accept-list entry.
+const DEVICE_ENTRY: BleDeviceTableEntryFlagsAndAddress = BleDeviceTableEntryFlagsAndAddress::ZERO
+    .with_accept_list_member(true)
+    .with_valid(true);

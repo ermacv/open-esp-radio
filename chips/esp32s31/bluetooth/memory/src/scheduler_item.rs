@@ -23,28 +23,9 @@
 
 use core::num::NonZeroU32;
 
-use vcell::VolatileCell;
+use oer_esp32s31_hal::layouts::*;
 
 use crate::sram_link::ControllerSramLinkAddress;
-
-const HARDWARE_NEXT_WORD: usize = 0;
-const SEQUENCE_START_WORD: usize = 0x0c / 4;
-const SEQUENCE_DURATION_WORD: usize = 0x10 / 4;
-const STATUS_WORD: usize = 0x38 / 4;
-const RAW_START_WORD: usize = 0x44 / 4;
-const RAW_END_WORD: usize = 0x48 / 4;
-const CONTROL_WORD: usize = 0x4c / 4;
-const PREVIOUS_WORD: usize = 0x50 / 4;
-const COMPLETION_LINK_WORD: usize = 0x54 / 4;
-
-const COMPRESSED_LINK_MASK: u32 = 0x000f_ffff;
-const SKIP_MARKER: u32 = 1 << 25;
-const EVENT_BYTE_MASK: u32 = 0x0000_00ff;
-const SCHEDULER_BYTE_4E_MASK: u32 = 0x00ff_0000;
-/// `+0x4f` bits 2:0: the deleted and preempted state of a list entry.
-const LIST_STATE_4F_MASK: u32 = 0x0700_0000;
-/// `+0x4f` bit 1.
-const DELETED_4F: u32 = 0x0200_0000;
 
 /// Status of an item that hardware has not executed.
 pub const SCHEDULER_ITEM_UNEXECUTED: u32 = u32::MAX;
@@ -61,88 +42,84 @@ pub enum SchedulerItemCompletionStatus {
     NonZero(NonZeroU32),
 }
 
-/// Volatile word access to one scheduler-item allocation.
-pub(crate) trait SchedulerItemWords {
-    fn word(&self, index: usize) -> u32;
-    fn set_word(&self, index: usize, value: u32);
+/// Scheduler header view of one generated item allocation.
+pub(crate) struct SchedulerItemHeader<'item> {
+    layout: &'item BleSchedulerItem,
 }
 
-impl SchedulerItemWords for [VolatileCell<u32>] {
-    fn word(&self, index: usize) -> u32 {
-        self[index].get()
-    }
-
-    fn set_word(&self, index: usize, value: u32) {
-        self[index].set(value);
-    }
-}
-
-impl<const WORDS: usize> SchedulerItemWords for [VolatileCell<u32>; WORDS] {
-    fn word(&self, index: usize) -> u32 {
-        self[index].get()
-    }
-
-    fn set_word(&self, index: usize, value: u32) {
-        self[index].set(value);
-    }
-}
-
-/// Scheduler header view of one item allocation.
-pub(crate) struct SchedulerItemHeader<'item, W: ?Sized> {
-    words: &'item W,
-}
-
-impl<'item, W: SchedulerItemWords + ?Sized> SchedulerItemHeader<'item, W> {
-    pub(crate) const fn new(words: &'item W) -> Self {
-        Self { words }
+impl<'item> SchedulerItemHeader<'item> {
+    pub(crate) const fn new(layout: &'item BleSchedulerItem) -> Self {
+        Self { layout }
     }
 
     /// Complete word `+0x00`, including the role allocation bits.
     pub(crate) fn hardware_next_word(&self) -> u32 {
-        self.words.word(HARDWARE_NEXT_WORD)
+        self.layout.hardware_next().read().bits()
     }
 
     pub(crate) fn set_hardware_next_word(&self, value: u32) {
-        self.words.set_word(HARDWARE_NEXT_WORD, value);
+        self.layout
+            .hardware_next()
+            .write(BleSchedulerItemHardwareNext::from_bits(value));
     }
 
     /// Compressed hardware next link; zero terminates the list.
     pub(crate) fn hardware_next_image(&self) -> u32 {
-        self.hardware_next_word() & COMPRESSED_LINK_MASK
+        self.layout.hardware_next().read().address()
     }
 
     /// Link `next` while preserving bits 31:20.
     pub(crate) fn link_hardware_next(&self, next: Option<ControllerSramLinkAddress>) {
-        let image = next.map_or(0, ControllerSramLinkAddress::compressed_image);
-        let word = self.hardware_next_word();
-        self.set_hardware_next_word((word & !COMPRESSED_LINK_MASK) | image);
+        let original = self.layout.hardware_next().read();
+        let pointer = BleSchedulerItemHardwareNext::from_bits(
+            next.map_or(0, ControllerSramLinkAddress::compressed_image),
+        );
+        self.layout.hardware_next().write(
+            pointer
+                .with_bits_20_21_opaque(original.bits_20_21_opaque())
+                .expect("retained field fits")
+                .with_flexible_start(original.flexible_start())
+                .with_bit_23_opaque(original.bit_23_opaque())
+                .with_merge_marked(original.merge_marked())
+                .with_skip(original.skip())
+                .with_bits_26_31_opaque(original.bits_26_31_opaque())
+                .expect("retained field fits"),
+        );
     }
 
     #[cfg(test)]
     pub(crate) fn sequence_start(&self) -> u32 {
-        self.words.word(SEQUENCE_START_WORD)
+        self.layout.sequence_start().read().bits()
     }
 
     #[cfg(test)]
     pub(crate) fn sequence_duration(&self) -> u32 {
-        self.words.word(SEQUENCE_DURATION_WORD)
+        self.layout.sequence_duration().read().bits()
     }
 
     /// Store the sequence projection of `[start, end)` with the scheduler
     /// `lead`, as the vendor sequence-time function does.
     pub(crate) fn set_sequence(&self, start: u32, end: u32, lead: u32) {
-        self.words
-            .set_word(SEQUENCE_START_WORD, start.wrapping_add(lead));
-        self.words
-            .set_word(SEQUENCE_DURATION_WORD, end.wrapping_sub(start));
+        self.layout
+            .sequence_start()
+            .write(BleSchedulerItemSequenceStart::from_bits(
+                start.wrapping_add(lead),
+            ));
+        self.layout
+            .sequence_duration()
+            .write(BleSchedulerItemSequenceDuration::from_bits(
+                end.wrapping_sub(start),
+            ));
     }
 
     pub(crate) fn status(&self) -> u32 {
-        self.words.word(STATUS_WORD)
+        self.layout.status().read().bits()
     }
 
     pub(crate) fn set_status(&self, value: u32) {
-        self.words.set_word(STATUS_WORD, value);
+        self.layout
+            .status()
+            .write(BleSchedulerItemStatus::from_bits(value));
     }
 
     /// Mark the item unexecuted before it is linked into a list.
@@ -161,34 +138,45 @@ impl<'item, W: SchedulerItemWords + ?Sized> SchedulerItemHeader<'item, W> {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn raw_start(&self) -> u32 {
-        self.words.word(RAW_START_WORD)
+        self.layout.raw_start().read().bits()
     }
 
     pub(crate) fn set_raw_start(&self, value: u32) {
-        self.words.set_word(RAW_START_WORD, value);
+        self.layout
+            .raw_start()
+            .write(BleSchedulerItemRawStart::from_bits(value));
     }
 
+    #[cfg(test)]
     pub(crate) fn raw_end(&self) -> u32 {
-        self.words.word(RAW_END_WORD)
+        self.layout.raw_end().read().bits()
     }
 
     pub(crate) fn set_raw_end(&self, value: u32) {
-        self.words.set_word(RAW_END_WORD, value);
+        self.layout
+            .raw_end()
+            .write(BleSchedulerItemRawEnd::from_bits(value));
     }
 
     /// Complete control word `+0x4c`.
+    #[cfg(test)]
     pub(crate) fn control(&self) -> u32 {
-        self.words.word(CONTROL_WORD)
+        self.layout.control().read().bits()
     }
 
     pub(crate) fn set_control(&self, value: u32) {
-        self.words.set_word(CONTROL_WORD, value);
+        self.layout
+            .control()
+            .write(BleSchedulerItemControl::from_bits(value));
     }
 
     /// Clear the role event byte `+0x4c`, as a new role event does.
     pub(crate) fn clear_event_byte(&self) {
-        self.set_control(self.control() & !EVENT_BYTE_MASK);
+        self.layout
+            .control()
+            .write(self.layout.control().read().with_event(0));
     }
 
     /// Prepare the item for list insertion as the vendor reset and merge do
@@ -199,11 +187,21 @@ impl<'item, W: SchedulerItemWords + ?Sized> SchedulerItemHeader<'item, W> {
         previous: Option<ControllerSramLinkAddress>,
         next: Option<ControllerSramLinkAddress>,
     ) {
-        let word = self.hardware_next_word() & !(COMPRESSED_LINK_MASK | SKIP_MARKER);
-        self.set_hardware_next_word(
-            word | next.map_or(0, ControllerSramLinkAddress::compressed_image),
+        self.link_hardware_next(next);
+        self.layout
+            .hardware_next()
+            .write(self.layout.hardware_next().read().with_skip(false));
+        self.layout.control().write(
+            self.layout
+                .control()
+                .read()
+                .with_bit_16_opaque(false)
+                .with_bits_17_23_opaque(0)
+                .expect("zero fits")
+                .with_bit_24_opaque(false)
+                .with_deleted(false)
+                .with_preempted(false),
         );
-        self.set_control(self.control() & !(SCHEDULER_BYTE_4E_MASK | LIST_STATE_4F_MASK));
         self.mark_unexecuted();
         self.link_previous(previous);
     }
@@ -211,8 +209,12 @@ impl<'item, W: SchedulerItemWords + ?Sized> SchedulerItemHeader<'item, W> {
     /// Mark the item deleted as vendor cancellation does: set the skip
     /// marker and the deleted flag, keeping the hardware next link.
     pub(crate) fn mark_deleted(&self) {
-        self.set_hardware_next_word(self.hardware_next_word() | SKIP_MARKER);
-        self.set_control(self.control() | DELETED_4F);
+        self.layout
+            .hardware_next()
+            .write(self.layout.hardware_next().read().with_skip(true));
+        self.layout
+            .control()
+            .write(self.layout.control().read().with_deleted(true));
     }
 
     /// Store the full address of the previous item, or zero for the head.
@@ -223,20 +225,24 @@ impl<'item, W: SchedulerItemWords + ?Sized> SchedulerItemHeader<'item, W> {
     /// Full address of the previous item; zero when the item is the head.
     #[cfg(test)]
     pub(crate) fn previous(&self) -> u32 {
-        self.words.word(PREVIOUS_WORD)
+        self.layout.previous().read().bits()
     }
 
     pub(crate) fn set_previous(&self, address: u32) {
-        self.words.set_word(PREVIOUS_WORD, address);
+        self.layout
+            .previous()
+            .write(BleSchedulerItemPrevious::from_bits(address));
     }
 
     #[cfg(test)]
     pub(crate) fn completion_link(&self) -> u32 {
-        self.words.word(COMPLETION_LINK_WORD)
+        self.layout.completion_next().read().bits()
     }
 
     pub(crate) fn set_completion_link(&self, address: u32) {
-        self.words.set_word(COMPLETION_LINK_WORD, address);
+        self.layout
+            .completion_next()
+            .write(BleSchedulerItemCompletionNext::from_bits(address));
     }
 }
 

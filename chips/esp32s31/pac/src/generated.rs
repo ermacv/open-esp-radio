@@ -14639,17 +14639,57 @@ pub mod layouts {
             self.0
         }
 
-        /// Project-assigned name. CPU arms with 0xffffffff; hardware records an execution result. CPU preemption may write zero.
+        /// Opaque: meaning not established. Unassigned execution-result lanes. CPU arms all ones; hardware writes the result.
         ///
-        /// `VALUE`, bits 31:0; written by the participants in the declared phases. Phase `arm`: the CPU. Phase `complete`: the hardware.
+        /// `BITS_0_10_OPAQUE`, bits 10:0; written by the participants in the declared phases. Phase `arm`: the CPU. Phase `complete`: the hardware.
         /// SOURCE: BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM.
-        pub const fn value(self) -> u32 {
-            self.0
+        pub const fn bits_0_10_opaque(self) -> u16 {
+            (self.0 & 0x7ff) as u16
         }
 
-        /// This value with `VALUE` set to `value`.
-        pub const fn with_value(self, value: u32) -> Self {
-            Self(value)
+        /// This value with `BITS_0_10_OPAQUE` set to `value`, or `None` when `value` does not
+        /// fit its 11 bits.
+        pub const fn with_bits_0_10_opaque(self, value: u16) -> Option<Self> {
+            if value > 0x7ff {
+                None
+            } else {
+                Some(Self((self.0 & 0xfffff800) | value as u32))
+            }
+        }
+
+        /// Project-assigned name. Peripheral-connection completion makes the captured anchor available when this bit is set.
+        ///
+        /// `CAPTURE_AVAILABLE`, bit 11; written by the participants in the declared phases. Phase `arm`: the CPU. Phase `complete`: the hardware.
+        /// SOURCE: BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM.
+        pub const fn capture_available(self) -> bool {
+            self.0 & 0x800 != 0
+        }
+
+        /// This value with `CAPTURE_AVAILABLE` set to `value`.
+        pub const fn with_capture_available(self, value: bool) -> Self {
+            if value {
+                Self(self.0 | 0x800)
+            } else {
+                Self(self.0 & 0xfffff7ff)
+            }
+        }
+
+        /// Opaque: meaning not established. Unassigned execution-result lanes. CPU arms all ones; CPU preemption may write zero.
+        ///
+        /// `BITS_12_31_OPAQUE`, bits 31:12; written by the participants in the declared phases. Phase `arm`: the CPU. Phase `complete`: the hardware.
+        /// SOURCE: BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM.
+        pub const fn bits_12_31_opaque(self) -> u32 {
+            self.0 >> 12
+        }
+
+        /// This value with `BITS_12_31_OPAQUE` set to `value`, or `None` when `value` does not
+        /// fit its 20 bits.
+        pub const fn with_bits_12_31_opaque(self, value: u32) -> Option<Self> {
+            if value > 0xfffff {
+                None
+            } else {
+                Some(Self((self.0 & 0xfff) | (value) << 12))
+            }
         }
     }
 

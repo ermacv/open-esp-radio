@@ -10,19 +10,19 @@
 
 #![forbid(unsafe_code)]
 
-use vcell::VolatileCell;
+use oer_esp32s31_hal::layouts::*;
 
 use crate::{
-    coexistence::{LANES_MASK, LegacyScanCoexistencePriorities, lanes_image},
+    coexistence::{LegacyScanCoexistencePriorities, with_priorities},
     le_rx_chain::{LeRxChain, LeRxSource, LeRxTag},
     le_tx_packet::{
         BLUETOOTH_LE_TX_PACKET_PREFIX_BYTES, LeTxBufferHeaderStorage, LeTxPacketAddress,
         LeTxPacketStorage,
     },
     legacy_scanning_event_image::{
-        BLUETOOTH_LEGACY_SCAN_LINK_STATE_WORDS, LegacyScanLinkStateImage, LegacyScanPrimaryChannel,
-        LegacyScanResetConfig, LegacyScanRxHeadProjection, LegacyScanSchedulerItemWords,
-        LegacyScanSchedulerWindow, LegacyScanStartSelection, LegacyScanType, LegacyScanWindowTicks,
+        LegacyScanLinkStateImage, LegacyScanPrimaryChannel, LegacyScanResetConfig,
+        LegacyScanRxHeadProjection, LegacyScanSchedulerItemWords, LegacyScanSchedulerWindow,
+        LegacyScanStartSelection, LegacyScanType, LegacyScanWindowTicks,
     },
     rx_memory_list::RxMemoryListClass,
     scheduler_context::SchedulerContextStorage,
@@ -39,10 +39,6 @@ pub const BLUETOOTH_LEGACY_SCAN_SCHEDULER_ITEM_COUNT: usize = 3;
 
 const ITEMS: usize = BLUETOOTH_LEGACY_SCAN_SCHEDULER_ITEM_COUNT;
 /// The hardware TX link at link-state `+0x00`.
-const LINK_STATE_TX_WORD: usize = 0;
-const LINK_STATE_TX_HEAD_WORD: usize = 0x6c / 4;
-const LINK_STATE_TX_TAIL_WORD: usize = 0x74 / 4;
-const LINK_STATE_RX_CLASS_WORD: usize = 0x20 / 4;
 /// SOURCE: pinned `libble_app.a[ble_6.o]::r_sym_ble_aTsLUeVnygnblNndYYVB`
 /// (`r_ble_lll_scan_alloc_txbuf`) gives an active scanner one TX buffer
 /// whose PDU header halfword is `0x0c03`: `SCAN_REQ` with a 12-octet
@@ -51,91 +47,86 @@ const SCAN_REQUEST_HEADER: u8 = 0x03;
 const SCAN_REQUEST_PAYLOAD_BYTES: usize = 12;
 const SCAN_REQUEST_TX_PACKET_BYTES: usize =
     BLUETOOTH_LE_TX_PACKET_PREFIX_BYTES + SCAN_REQUEST_PAYLOAD_BYTES;
-const COMPRESSED_LINK_MASK: u32 = 0x000f_ffff;
-const LINK_STATE_SCHEDULER_HEAD_WORD: usize = 0x64 / 4;
-const LINK_STATE_RX_HEAD_WORD: usize = 0x68 / 4;
-const LINK_STATE_RX_TAIL_WORD: usize = 0x70 / 4;
-const LINK_STATE_RX_SWAP_RESERVE_WORD: usize = 0x78 / 4;
-const SCHEDULER_ITEM_BYTES: usize = 0x60;
-const SCHEDULER_ITEM_WORDS: usize = SCHEDULER_ITEM_BYTES / 4;
-const SCHEDULER_ITEM_CONTEXT_WORD: usize = 1;
-const SCHEDULER_ITEM_LINK_STATE_WORD: usize = 0x08 / 4;
-const SCHEDULER_ITEM_WORD_14: usize = 0x14 / 4;
-const SCHEDULER_ITEM_WORD_18: usize = 0x18 / 4;
-const SCHEDULER_ITEM_ALLOCATION_FLAGS_WORD: usize = 0x1c / 4;
-const SCHEDULER_ITEM_ALLOCATION_NUMBER_WORD: usize = 0x20 / 4;
-const SCHEDULER_ITEM_COEX_PRIORITIES_WORD: usize = 0x24 / 4;
-const SCHEDULER_ITEM_EVENT_CLASS_WORD: usize = 0x2c / 4;
 const SCHEDULER_ITEM_ALLOCATION_PREFIX: u32 = 0x0030_0000;
 /// Item `+0x08` bits 23:20: the kind of scanner item.
-const SCHEDULER_ITEM_KIND_MASK: u32 = 0x00f0_0000;
-const SCHEDULER_ITEM_ALLOCATION_FLAGS_IMAGE: u32 = 0x0fdf_ffff;
-const SCHEDULER_ITEM_EVENT_CLASS_IMAGE: u32 = 1;
+/// SOURCE: pinned role allocation/reset body in the BLE controller-memory reference.
+const SCHEDULER_ITEM_ALLOCATION_FLAGS_IMAGE: BleSchedulerItemWord001cOpaque =
+    BleSchedulerItemWord001cOpaque::ZERO.with_bits_0_31_opaque(0xfdfffff);
+/// SOURCE: pinned role allocation/reset body in the BLE controller-memory reference.
+const SCHEDULER_ITEM_EVENT_CLASS_IMAGE: BleSchedulerItemReceiveWait =
+    BleSchedulerItemReceiveWait::ZERO.with_value(0x1);
 
 /// Scanner link state.
 #[repr(C, align(4))]
 struct LinkStateStorage {
-    words: [VolatileCell<u32>; BLUETOOTH_LEGACY_SCAN_LINK_STATE_WORDS],
+    layout: BleLinkState,
 }
 
 impl LinkStateStorage {
     const fn new() -> Self {
         Self {
-            words: [const { VolatileCell::new(0) }; BLUETOOTH_LEGACY_SCAN_LINK_STATE_WORDS],
+            layout: BleLinkState::zeroed(),
         }
     }
 
     fn clear(&self) {
-        for word in &self.words {
-            word.set(0);
-        }
+        crate::shared_layout::clear_link_state(&self.layout);
     }
 
     fn install(&self, image: LegacyScanLinkStateImage) {
-        for (cell, word) in self.words.iter().zip(image.words()) {
-            cell.set(word);
-        }
+        image.0.write(&self.layout);
     }
 
     fn image(&self) -> LegacyScanLinkStateImage {
-        LegacyScanLinkStateImage::from_words(core::array::from_fn(|index| self.words[index].get()))
+        LegacyScanLinkStateImage(crate::shared_layout::LinkStateImage::read(&self.layout))
     }
 
     fn free_head(&self) -> u32 {
-        self.words[LINK_STATE_SCHEDULER_HEAD_WORD].get()
+        self.layout.scheduler_head().read().bits()
     }
 
     fn set_free_head(&self, head: Option<ControllerSramLinkAddress>) {
-        self.words[LINK_STATE_SCHEDULER_HEAD_WORD]
-            .set(head.map_or(0, |head| head.controller_address().address()));
+        self.layout
+            .scheduler_head()
+            .write(BleLinkStateSchedulerHead::from_bits(
+                head.map_or(0, |head| head.controller_address().address()),
+            ));
     }
 
     /// Select the scanning class and snapshot the global chain's software
     /// endpoints, as the vendor global RX-link update does.
     fn join_receive_chain(&self, (head, tail, spare): (u32, u32, u32)) {
-        let class = &self.words[LINK_STATE_RX_CLASS_WORD];
-        class.set(RxMemoryListClass::Scanning.select_in_link_state(class.get()));
-        self.words[LINK_STATE_RX_HEAD_WORD].set(head);
-        self.words[LINK_STATE_RX_TAIL_WORD].set(tail);
-        self.words[LINK_STATE_RX_SWAP_RESERVE_WORD].set(spare);
+        let class = self.layout.rx_list();
+        class.write(BleLinkStateRxList::from_bits(
+            RxMemoryListClass::Scanning.select_in_link_state(class.read().bits()),
+        ));
+        self.layout
+            .rx_head()
+            .write(BleLinkStateRxHead::from_bits(head));
+        self.layout
+            .rx_tail()
+            .write(BleLinkStateRxTail::from_bits(tail));
+        self.layout
+            .rx_reserve()
+            .write(BleLinkStateRxReserve::from_bits(spare));
     }
 }
 
 /// One scanner scheduler item.
 #[repr(C, align(4))]
 struct ItemStorage {
-    words: [VolatileCell<u32>; SCHEDULER_ITEM_WORDS],
+    layout: BleSchedulerItem,
 }
 
 impl ItemStorage {
     const fn new() -> Self {
         Self {
-            words: [const { VolatileCell::new(0) }; SCHEDULER_ITEM_WORDS],
+            layout: BleSchedulerItem::zeroed(),
         }
     }
 
-    fn header(&self) -> SchedulerItemHeader<'_, [VolatileCell<u32>; SCHEDULER_ITEM_WORDS]> {
-        SchedulerItemHeader::new(&self.words)
+    fn header(&self) -> SchedulerItemHeader<'_> {
+        SchedulerItemHeader::new(&self.layout)
     }
 
     /// The common and scanner allocators' image, with the item linked to its
@@ -147,48 +138,64 @@ impl ItemStorage {
         scheduler_context: ControllerSramLinkAddress,
         link_state: ControllerSramLinkAddress,
     ) {
-        for word in &self.words {
-            word.set(0);
-        }
+        crate::shared_layout::clear_scheduler_item(&self.layout);
         let header = self.header();
         header.set_hardware_next_word(SCHEDULER_ITEM_ALLOCATION_PREFIX);
         header.link_hardware_next(next_free);
-        self.words[SCHEDULER_ITEM_CONTEXT_WORD].set(scheduler_context.compressed_image());
-        self.words[SCHEDULER_ITEM_LINK_STATE_WORD]
-            .set(LegacyScanType::Passive.item_kind() | link_state.compressed_image());
-        self.words[SCHEDULER_ITEM_ALLOCATION_FLAGS_WORD].set(SCHEDULER_ITEM_ALLOCATION_FLAGS_IMAGE);
-        self.words[SCHEDULER_ITEM_ALLOCATION_NUMBER_WORD].set(u32::from(number));
-        self.words[SCHEDULER_ITEM_EVENT_CLASS_WORD].set(SCHEDULER_ITEM_EVENT_CLASS_IMAGE);
+        self.layout
+            .context()
+            .write(BleSchedulerItemContext::from_bits(
+                scheduler_context.compressed_image(),
+            ));
+        self.layout.link_state().write(
+            BleSchedulerItemLinkState::from_bits(link_state.compressed_image())
+                .with_bits_20_23_opaque(LegacyScanType::Passive.item_kind())
+                .expect("reviewed role kind fits"),
+        );
+        self.layout
+            .word_001c_opaque()
+            .write(SCHEDULER_ITEM_ALLOCATION_FLAGS_IMAGE);
+        self.layout
+            .allocation_number()
+            .write(BleSchedulerItemAllocationNumber::from_bits(u32::from(
+                number,
+            )));
+        self.layout
+            .receive_wait()
+            .write(SCHEDULER_ITEM_EVENT_CLASS_IMAGE);
     }
 
     /// Mark the item as the kind of scanner item `scan_type` runs.
     fn set_kind(&self, scan_type: LegacyScanType) {
-        let word = &self.words[SCHEDULER_ITEM_LINK_STATE_WORD];
-        word.set((word.get() & !SCHEDULER_ITEM_KIND_MASK) | scan_type.item_kind());
+        let word = self.layout.link_state();
+        word.write(
+            word.read()
+                .with_bits_20_23_opaque(scan_type.item_kind())
+                .expect("reviewed role kind fits"),
+        );
     }
 
     fn reviewed_words(&self) -> LegacyScanSchedulerItemWords {
-        let header = self.header();
         LegacyScanSchedulerItemWords {
-            word_00: header.hardware_next_word(),
-            word_04: self.words[SCHEDULER_ITEM_CONTEXT_WORD].get(),
-            word_14: self.words[SCHEDULER_ITEM_WORD_14].get(),
-            word_18: self.words[SCHEDULER_ITEM_WORD_18].get(),
-            word_38: header.status(),
-            raw_start_word_44: header.raw_start(),
-            raw_end_word_48: header.raw_end(),
+            word_00: self.layout.hardware_next().read(),
+            word_04: self.layout.context().read(),
+            word_14: self.layout.rate_and_power().read(),
+            word_18: self.layout.channel_and_priority().read(),
+            word_38: self.layout.status().read(),
+            raw_start_word_44: self.layout.raw_start().read(),
+            raw_end_word_48: self.layout.raw_end().read(),
         }
     }
 
     fn write_reviewed_words(&self, words: LegacyScanSchedulerItemWords) {
         let header = self.header();
-        header.set_hardware_next_word(words.word_00);
-        self.words[SCHEDULER_ITEM_CONTEXT_WORD].set(words.word_04);
-        self.words[SCHEDULER_ITEM_WORD_14].set(words.word_14);
-        self.words[SCHEDULER_ITEM_WORD_18].set(words.word_18);
-        header.set_status(words.word_38);
-        header.set_raw_start(words.raw_start_word_44);
-        header.set_raw_end(words.raw_end_word_48);
+        header.set_hardware_next_word(words.word_00.bits());
+        self.layout.context().write(words.word_04);
+        self.layout.rate_and_power().write(words.word_14);
+        self.layout.channel_and_priority().write(words.word_18);
+        header.set_status(words.word_38.bits());
+        header.set_raw_start(words.raw_start_word_44.bits());
+        header.set_raw_end(words.raw_end_word_48.bits());
     }
 }
 
@@ -233,9 +240,9 @@ pub enum LegacyScanState {
 impl sealed::Sealed for LegacyScanStorage {}
 
 impl SchedulerRoleStorage for LegacyScanStorage {
+    const NUMBERS: usize = ITEMS;
     const KIND: SchedulerRoleKind = SchedulerRoleKind::LegacyScanning;
     const ITEMS: usize = ITEMS;
-    const NUMBERS: usize = ITEMS;
     const NEW: Self = Self {
         link_state: LinkStateStorage::new(),
         scheduler_context: SchedulerContextStorage::new(),
@@ -267,8 +274,8 @@ impl SchedulerRoleStorage for LegacyScanStorage {
         })
     }
 
-    fn item_words(&self, item: usize) -> &[VolatileCell<u32>] {
-        &self.items[item].words
+    fn item_layout(&self, item: usize) -> &BleSchedulerItem {
+        &self.items[item].layout
     }
 
     fn item_link(binding: &LegacyScanBinding, item: usize) -> ControllerSramLinkAddress {
@@ -370,7 +377,11 @@ impl<const N: usize> LegacyScanPool<N> {
             )
             .started(),
         );
-        cpu.graph.link_state.words[LINK_STATE_SCHEDULER_HEAD_WORD].set(free_head);
+        cpu.graph
+            .link_state
+            .layout
+            .scheduler_head()
+            .write(BleLinkStateSchedulerHead::from_bits(free_head));
         cpu.graph.link_state.join_receive_chain(chain.snapshot());
         // The vendor scanner allocator marks every item with the scan type's
         // kind; hardware sends SCAN_REQ only from an active item.
@@ -385,13 +396,21 @@ impl<const N: usize> LegacyScanPool<N> {
                 .prepare_pdu(SCAN_REQUEST_HEADER, &[0; SCAN_REQUEST_PAYLOAD_BYTES])
                 .expect("the allocation holds the SCAN_REQ payload");
             let header = cpu.binding.scan_request_header;
-            let words = &cpu.graph.link_state.words;
-            words[LINK_STATE_TX_WORD].set(
-                (words[LINK_STATE_TX_WORD].get() & !COMPRESSED_LINK_MASK)
-                    | header.compressed_image(),
+            let layout = &cpu.graph.link_state.layout;
+            layout.tx_path().write(
+                BleLinkStateTxPath::from_bits(header.compressed_image())
+                    .with_max_tx_octets(layout.tx_path().read().max_tx_octets())
+                    .with_queue_ready(layout.tx_path().read().queue_ready())
+                    .with_bits_29_30_opaque(layout.tx_path().read().bits_29_30_opaque())
+                    .expect("retained image fits")
+                    .with_valid(layout.tx_path().read().valid()),
             );
-            words[LINK_STATE_TX_HEAD_WORD].set(header.controller_address().address());
-            words[LINK_STATE_TX_TAIL_WORD].set(header.controller_address().address());
+            layout.tx_head().write(BleLinkStateTxHead::from_bits(
+                header.controller_address().address(),
+            ));
+            layout.tx_tail().write(BleLinkStateTxTail::from_bits(
+                header.controller_address().address(),
+            ));
         }
         *cpu.state = LegacyScanState::Reset { event: None };
         Ok(())
@@ -445,8 +464,8 @@ impl<const N: usize> LegacyScanPool<N> {
         // role's item: hardware ends an item without a sequence at once.
         item.header()
             .set_sequence(window.start(), window.end(), raw_sequence_lead);
-        let lanes = &item.words[SCHEDULER_ITEM_COEX_PRIORITIES_WORD];
-        lanes.set((lanes.get() & !LANES_MASK) | lanes_image(&coexistence.lanes));
+        let lanes = item.layout.coexistence_priority();
+        lanes.write(with_priorities(lanes.read(), &coexistence.lanes));
         // Detach the item from the free chain before the executor links it.
         item.header().link_hardware_next(None);
         link_state.set_free_head(next_free);

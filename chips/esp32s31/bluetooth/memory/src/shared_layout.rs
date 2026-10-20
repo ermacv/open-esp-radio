@@ -141,15 +141,6 @@ pub(crate) fn clear_scheduler_item(layout: &BleSchedulerItem) {
         .write(BleSchedulerItemWord005cOpaque::ZERO);
 }
 
-pub(crate) fn clear_buffer_header(layout: &BleBufferHeader) {
-    layout.next().write(BleBufferHeaderNext::ZERO);
-    layout.packet_base().write(BleBufferHeaderPacketBase::ZERO);
-    layout.pdu_target().write(BleBufferHeaderPduTarget::ZERO);
-    layout.completion().write(BleBufferHeaderCompletion::ZERO);
-    layout.allocation().write(BleBufferHeaderAllocation::ZERO);
-    layout.previous().write(BleBufferHeaderPrevious::ZERO);
-}
-
 pub(crate) fn copy_buffer_header(layout: &BleBufferHeader, source: &BleBufferHeader) {
     layout.next().write(source.next().read());
     layout.packet_base().write(source.packet_base().read());
@@ -391,4 +382,254 @@ pub(crate) fn clear_scheduler_context(layout: &BleSchedulerContext) {
     layout
         .word_0044_opaque()
         .write(BleSchedulerContextWord0044Opaque::ZERO);
+}
+/// CPU value of the complete scanner link state, with generated word values.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct LinkStateImage {
+    pub(crate) tx_path: BleLinkStateTxPath,
+    pub(crate) scan_response: BleLinkStateScanResponse,
+    pub(crate) rx_path: BleLinkStateRxPath,
+    pub(crate) control_policy: BleLinkStateControlPolicy,
+    pub(crate) word_0010_opaque: BleLinkStateWord0010Opaque,
+    pub(crate) packet_policy: BleLinkStatePacketPolicy,
+    pub(crate) receive_context: BleLinkStateReceiveContext,
+    pub(crate) word_001c_opaque: BleLinkStateWord001cOpaque,
+    pub(crate) rx_list: BleLinkStateRxList,
+    pub(crate) own_address_policy: BleLinkStateOwnAddressPolicy,
+    pub(crate) word_0028_opaque: BleLinkStateWord0028Opaque,
+    pub(crate) crc_initialization: BleLinkStateCrcInitialization,
+    pub(crate) sequence_policy: BleLinkStateSequencePolicy,
+    pub(crate) event_span: BleLinkStateEventSpan,
+    pub(crate) access_address: BleLinkStateAccessAddress,
+    pub(crate) own_address_low: BleLinkStateOwnAddressLow,
+    pub(crate) own_address_high: BleLinkStateOwnAddressHigh,
+    pub(crate) word_0044_opaque: BleLinkStateWord0044Opaque,
+    pub(crate) word_0048_opaque: BleLinkStateWord0048Opaque,
+    pub(crate) word_004c_opaque: BleLinkStateWord004cOpaque,
+    pub(crate) direction_finding: BleLinkStateDirectionFinding,
+    pub(crate) direction_finding_policy: BleLinkStateDirectionFindingPolicy,
+    pub(crate) word_0058_opaque: BleLinkStateWord0058Opaque,
+    pub(crate) word_005c_opaque: BleLinkStateWord005cOpaque,
+    pub(crate) event: BleLinkStateEvent,
+    pub(crate) scheduler_head: BleLinkStateSchedulerHead,
+    pub(crate) rx_head: BleLinkStateRxHead,
+    pub(crate) tx_head: BleLinkStateTxHead,
+    pub(crate) rx_tail: BleLinkStateRxTail,
+    pub(crate) tx_tail: BleLinkStateTxTail,
+    pub(crate) rx_reserve: BleLinkStateRxReserve,
+    pub(crate) word_007c_opaque: BleLinkStateWord007cOpaque,
+    pub(crate) word_0080_opaque: BleLinkStateWord0080Opaque,
+}
+
+impl LinkStateImage {
+    pub(crate) const ZERO: Self = Self {
+        tx_path: BleLinkStateTxPath::ZERO,
+        scan_response: BleLinkStateScanResponse::ZERO,
+        rx_path: BleLinkStateRxPath::ZERO,
+        control_policy: BleLinkStateControlPolicy::ZERO,
+        word_0010_opaque: BleLinkStateWord0010Opaque::ZERO,
+        packet_policy: BleLinkStatePacketPolicy::ZERO,
+        receive_context: BleLinkStateReceiveContext::ZERO,
+        word_001c_opaque: BleLinkStateWord001cOpaque::ZERO,
+        rx_list: BleLinkStateRxList::ZERO,
+        own_address_policy: BleLinkStateOwnAddressPolicy::ZERO,
+        word_0028_opaque: BleLinkStateWord0028Opaque::ZERO,
+        crc_initialization: BleLinkStateCrcInitialization::ZERO,
+        sequence_policy: BleLinkStateSequencePolicy::ZERO,
+        event_span: BleLinkStateEventSpan::ZERO,
+        access_address: BleLinkStateAccessAddress::ZERO,
+        own_address_low: BleLinkStateOwnAddressLow::ZERO,
+        own_address_high: BleLinkStateOwnAddressHigh::ZERO,
+        word_0044_opaque: BleLinkStateWord0044Opaque::ZERO,
+        word_0048_opaque: BleLinkStateWord0048Opaque::ZERO,
+        word_004c_opaque: BleLinkStateWord004cOpaque::ZERO,
+        direction_finding: BleLinkStateDirectionFinding::ZERO,
+        direction_finding_policy: BleLinkStateDirectionFindingPolicy::ZERO,
+        word_0058_opaque: BleLinkStateWord0058Opaque::ZERO,
+        word_005c_opaque: BleLinkStateWord005cOpaque::ZERO,
+        event: BleLinkStateEvent::ZERO,
+        scheduler_head: BleLinkStateSchedulerHead::ZERO,
+        rx_head: BleLinkStateRxHead::ZERO,
+        tx_head: BleLinkStateTxHead::ZERO,
+        rx_tail: BleLinkStateRxTail::ZERO,
+        tx_tail: BleLinkStateTxTail::ZERO,
+        rx_reserve: BleLinkStateRxReserve::ZERO,
+        word_007c_opaque: BleLinkStateWord007cOpaque::ZERO,
+        word_0080_opaque: BleLinkStateWord0080Opaque::ZERO,
+    };
+
+    pub(crate) fn read(layout: &BleLinkState) -> Self {
+        Self {
+            tx_path: layout.tx_path().read(),
+            scan_response: layout.scan_response().read(),
+            rx_path: layout.rx_path().read(),
+            control_policy: layout.control_policy().read(),
+            word_0010_opaque: layout.word_0010_opaque().read(),
+            packet_policy: layout.packet_policy().read(),
+            receive_context: layout.receive_context().read(),
+            word_001c_opaque: layout.word_001c_opaque().read(),
+            rx_list: layout.rx_list().read(),
+            own_address_policy: layout.own_address_policy().read(),
+            word_0028_opaque: layout.word_0028_opaque().read(),
+            crc_initialization: layout.crc_initialization().read(),
+            sequence_policy: layout.sequence_policy().read(),
+            event_span: layout.event_span().read(),
+            access_address: layout.access_address().read(),
+            own_address_low: layout.own_address_low().read(),
+            own_address_high: layout.own_address_high().read(),
+            word_0044_opaque: layout.word_0044_opaque().read(),
+            word_0048_opaque: layout.word_0048_opaque().read(),
+            word_004c_opaque: layout.word_004c_opaque().read(),
+            direction_finding: layout.direction_finding().read(),
+            direction_finding_policy: layout.direction_finding_policy().read(),
+            word_0058_opaque: layout.word_0058_opaque().read(),
+            word_005c_opaque: layout.word_005c_opaque().read(),
+            event: layout.event().read(),
+            scheduler_head: layout.scheduler_head().read(),
+            rx_head: layout.rx_head().read(),
+            tx_head: layout.tx_head().read(),
+            rx_tail: layout.rx_tail().read(),
+            tx_tail: layout.tx_tail().read(),
+            rx_reserve: layout.rx_reserve().read(),
+            word_007c_opaque: layout.word_007c_opaque().read(),
+            word_0080_opaque: layout.word_0080_opaque().read(),
+        }
+    }
+
+    pub(crate) fn write(self, layout: &BleLinkState) {
+        layout.tx_path().write(self.tx_path);
+        layout.scan_response().write(self.scan_response);
+        layout.rx_path().write(self.rx_path);
+        layout.control_policy().write(self.control_policy);
+        layout.word_0010_opaque().write(self.word_0010_opaque);
+        layout.packet_policy().write(self.packet_policy);
+        layout.receive_context().write(self.receive_context);
+        layout.word_001c_opaque().write(self.word_001c_opaque);
+        layout.rx_list().write(self.rx_list);
+        layout.own_address_policy().write(self.own_address_policy);
+        layout.word_0028_opaque().write(self.word_0028_opaque);
+        layout.crc_initialization().write(self.crc_initialization);
+        layout.sequence_policy().write(self.sequence_policy);
+        layout.event_span().write(self.event_span);
+        layout.access_address().write(self.access_address);
+        layout.own_address_low().write(self.own_address_low);
+        layout.own_address_high().write(self.own_address_high);
+        layout.word_0044_opaque().write(self.word_0044_opaque);
+        layout.word_0048_opaque().write(self.word_0048_opaque);
+        layout.word_004c_opaque().write(self.word_004c_opaque);
+        layout.direction_finding().write(self.direction_finding);
+        layout
+            .direction_finding_policy()
+            .write(self.direction_finding_policy);
+        layout.word_0058_opaque().write(self.word_0058_opaque);
+        layout.word_005c_opaque().write(self.word_005c_opaque);
+        layout.event().write(self.event);
+        layout.scheduler_head().write(self.scheduler_head);
+        layout.rx_head().write(self.rx_head);
+        layout.tx_head().write(self.tx_head);
+        layout.rx_tail().write(self.rx_tail);
+        layout.tx_tail().write(self.tx_tail);
+        layout.rx_reserve().write(self.rx_reserve);
+        layout.word_007c_opaque().write(self.word_007c_opaque);
+        layout.word_0080_opaque().write(self.word_0080_opaque);
+    }
+}
+/// Value of a buffer header while its CPU owner installs or rotates it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct BufferHeaderImage {
+    pub(crate) next: BleBufferHeaderNext,
+    pub(crate) packet_base: BleBufferHeaderPacketBase,
+    pub(crate) pdu_target: BleBufferHeaderPduTarget,
+    pub(crate) completion: BleBufferHeaderCompletion,
+    pub(crate) allocation: BleBufferHeaderAllocation,
+    pub(crate) previous: BleBufferHeaderPrevious,
+}
+impl BufferHeaderImage {
+    pub(crate) const ZERO: Self = Self {
+        next: BleBufferHeaderNext::ZERO,
+        packet_base: BleBufferHeaderPacketBase::ZERO,
+        pdu_target: BleBufferHeaderPduTarget::ZERO,
+        completion: BleBufferHeaderCompletion::ZERO,
+        allocation: BleBufferHeaderAllocation::ZERO,
+        previous: BleBufferHeaderPrevious::ZERO,
+    };
+    #[cfg(test)]
+    pub(crate) fn read(layout: &BleBufferHeader) -> Self {
+        Self {
+            next: layout.next().read(),
+            packet_base: layout.packet_base().read(),
+            pdu_target: layout.pdu_target().read(),
+            completion: layout.completion().read(),
+            allocation: layout.allocation().read(),
+            previous: layout.previous().read(),
+        }
+    }
+    pub(crate) fn write(self, layout: &BleBufferHeader) {
+        layout.next().write(self.next);
+        layout.packet_base().write(self.packet_base);
+        layout.pdu_target().write(self.pdu_target);
+        layout.completion().write(self.completion);
+        layout.allocation().write(self.allocation);
+        layout.previous().write(self.previous);
+    }
+}
+
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct SchedulerItemImage {
+    hardware_next: BleSchedulerItemHardwareNext,
+    context: BleSchedulerItemContext,
+    link_state: BleSchedulerItemLinkState,
+    sequence_start: BleSchedulerItemSequenceStart,
+    sequence_duration: BleSchedulerItemSequenceDuration,
+    rate_and_power: BleSchedulerItemRateAndPower,
+    channel_and_priority: BleSchedulerItemChannelAndPriority,
+    word_001c_opaque: BleSchedulerItemWord001cOpaque,
+    allocation_number: BleSchedulerItemAllocationNumber,
+    coexistence_priority: BleSchedulerItemCoexistencePriority,
+    word_0028_opaque: BleSchedulerItemWord0028Opaque,
+    receive_wait: BleSchedulerItemReceiveWait,
+    list_policy: BleSchedulerItemListPolicy,
+    captured_anchor: BleSchedulerItemCapturedAnchor,
+    status: BleSchedulerItemStatus,
+    word_003c_opaque: BleSchedulerItemWord003cOpaque,
+    word_0040_opaque: BleSchedulerItemWord0040Opaque,
+    raw_start: BleSchedulerItemRawStart,
+    raw_end: BleSchedulerItemRawEnd,
+    control: BleSchedulerItemControl,
+    previous: BleSchedulerItemPrevious,
+    completion_next: BleSchedulerItemCompletionNext,
+    recycle_callback: BleSchedulerItemRecycleCallback,
+    word_005c_opaque: BleSchedulerItemWord005cOpaque,
+}
+#[cfg(test)]
+impl SchedulerItemImage {
+    pub(crate) fn read(layout: &BleSchedulerItem) -> Self {
+        Self {
+            hardware_next: layout.hardware_next().read(),
+            context: layout.context().read(),
+            link_state: layout.link_state().read(),
+            sequence_start: layout.sequence_start().read(),
+            sequence_duration: layout.sequence_duration().read(),
+            rate_and_power: layout.rate_and_power().read(),
+            channel_and_priority: layout.channel_and_priority().read(),
+            word_001c_opaque: layout.word_001c_opaque().read(),
+            allocation_number: layout.allocation_number().read(),
+            coexistence_priority: layout.coexistence_priority().read(),
+            word_0028_opaque: layout.word_0028_opaque().read(),
+            receive_wait: layout.receive_wait().read(),
+            list_policy: layout.list_policy().read(),
+            captured_anchor: layout.captured_anchor().read(),
+            status: layout.status().read(),
+            word_003c_opaque: layout.word_003c_opaque().read(),
+            word_0040_opaque: layout.word_0040_opaque().read(),
+            raw_start: layout.raw_start().read(),
+            raw_end: layout.raw_end().read(),
+            control: layout.control().read(),
+            previous: layout.previous().read(),
+            completion_next: layout.completion_next().read(),
+            recycle_callback: layout.recycle_callback().read(),
+            word_005c_opaque: layout.word_005c_opaque().read(),
+        }
+    }
 }

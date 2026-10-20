@@ -2,39 +2,14 @@
 
 #![forbid(unsafe_code)]
 
-use crate::{
-    le_phy_packet::{LeAccessAddress, LeCrcInit},
-    le_tx_power::LeTxPower,
-    link_state_event::{LinkStateEventWord, item_with_le_1m_power},
-    sram_link::ControllerSramLinkAddress,
-};
+#[cfg(test)]
+use crate::le_phy_packet::LeCrcInit;
+use crate::shared_layout::LinkStateImage;
+use oer_esp32s31_hal::layouts::*;
 
-pub(super) const BLUETOOTH_LEGACY_SCAN_LINK_STATE_WORDS: usize = 0x84 / 4;
-const RX_HEAD_MASK: u32 = 0x000f_ffff;
-const LINK_STATE_18_BIT_20: u32 = 1 << 20;
-const LINK_STATE_18_BIT_31: u32 = 1 << 31;
-const LINK_STATE_18_ACCEPT_LIST_FILTER: u32 = 1 << 25;
-const LINK_STATE_2C_FILTER_POLICY_SHIFT: u32 = 24;
-const WORD_00: usize = 0;
-const WORD_08: usize = 2;
-const WORD_0C: usize = 3;
-const WORD_14: usize = 5;
-const WORD_18: usize = 6;
-const WORD_24: usize = 9;
-const WORD_2C: usize = 11;
-const WORD_30: usize = 12;
-const WORD_34: usize = 13;
-const WORD_38: usize = 14;
-const WORD_48: usize = 18;
-const WORD_50: usize = 20;
-const WORD_60: usize = 24;
-const SCHEDULER_HARDWARE_CHAIN_ADJUSTED_START: u32 = 1 << 22;
-const SCHEDULER_HARDWARE_CHAIN_EVENT_READY: u32 = 1 << 23;
-const SCHEDULER_HARDWARE_CHAIN_TIMING_MASK: u32 =
-    SCHEDULER_HARDWARE_CHAIN_ADJUSTED_START | SCHEDULER_HARDWARE_CHAIN_EVENT_READY;
-const SCHEDULER_CONTEXT_EVENT_READY: u32 = 1 << 31;
-const SCHEDULER_FREQUENCY_AND_KIND_MASK: u32 = 0x0000_7fff;
-const SCHEDULER_SCANNER_EVENT_KIND: u32 = 1;
+use crate::{
+    le_phy_packet::LeAccessAddress, le_tx_power::LeTxPower, sram_link::ControllerSramLinkAddress,
+};
 
 /// Primary advertising channel observed by one passive scan window.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -120,12 +95,17 @@ impl LegacyScanFilterPolicy {
     /// filter policy 1 on the stand (`HIL_VENDOR_ACCEPT_LIST_2026_09_29`):
     /// `+0x18` becomes `0xc200_0000` instead of `0xc000_0000` and `+0x2c`
     /// `0x0155_5555` instead of `0x0055_5555`.
-    const fn apply(self, word_18: u32, word_2c: u32) -> (u32, u32) {
+    const fn apply(
+        self,
+        context: BleLinkStateReceiveContext,
+        crc: BleLinkStateCrcInitialization,
+    ) -> (BleLinkStateReceiveContext, BleLinkStateCrcInitialization) {
         match self {
-            Self::AcceptAll => (word_18, word_2c),
+            Self::AcceptAll => (context, crc),
             Self::AcceptListOnly => (
-                word_18 | LINK_STATE_18_ACCEPT_LIST_FILTER,
-                word_2c | 1 << LINK_STATE_2C_FILTER_POLICY_SHIFT,
+                context.with_scan_accept_list_filter(true),
+                crc.with_scan_filter_policy(1)
+                    .expect("reviewed filter fits"),
             ),
         }
     }
@@ -143,10 +123,10 @@ pub enum LegacyScanType {
 impl LegacyScanType {
     /// Scheduler item `+0x08` bits 23:20 the vendor scanner allocator
     /// (`r_ble_lll_scan_alloc_memory`) writes for this scan type.
-    pub(crate) const fn item_kind(self) -> u32 {
+    pub(crate) const fn item_kind(self) -> u8 {
         match self {
-            Self::Passive => 0x00c0_0000,
-            Self::Active => 0x0040_0000,
+            Self::Passive => 12,
+            Self::Active => 4,
         }
     }
 }
@@ -198,126 +178,123 @@ impl LegacyScanWindowTicks {
 
 /// Opaque projection of the bound scanner RX head into a link-state word.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(super) struct LegacyScanRxHeadProjection(u32);
+pub(super) struct LegacyScanRxHeadProjection(BleLinkStateRxPath);
 
 impl LegacyScanRxHeadProjection {
     pub(super) const fn from_bound(address: ControllerSramLinkAddress) -> Self {
-        Self(address.compressed_image())
-    }
-
-    const fn apply(self, word: u32) -> u32 {
-        (word & !RX_HEAD_MASK) | self.0
+        Self(BleLinkStateRxPath::from_bits(address.compressed_image()))
     }
 }
 
-/// Complete private link-state allocation for the first scanner profile.
-///
-/// Raw words never leave the memory crate. The storage layer may only install
-/// this image after binding the real RX head of the same pinned graph.
+/// SOURCE: pinned `ble_6.o::r_sym_ble_KkAldzIlkQuEkNQp1g6q`
+/// (`r_ble_lll_scan_reset_link_state`), the restricted LE 1M reset image.
+const SCAN_RESET: LinkStateImage = LinkStateImage {
+    tx_path: BleLinkStateTxPath::ZERO
+        .with_max_tx_octets(0xff)
+        .with_queue_ready(true),
+    rx_path: BleLinkStateRxPath::ZERO
+        .with_unconsumed_limit(0xff)
+        .with_bits_28_31_opaque(0x4)
+        .expect("reviewed field image fits"),
+    control_policy: BleLinkStateControlPolicy::ZERO
+        .with_bits_20_23_opaque(0x1)
+        .expect("reviewed field image fits")
+        .with_bit_29_opaque(true)
+        .with_bit_31_opaque(true),
+    packet_policy: BleLinkStatePacketPolicy::ZERO
+        .with_bits_26_27_opaque(0x1)
+        .expect("reviewed field image fits"),
+    receive_context: BleLinkStateReceiveContext::ZERO.with_bit_30_opaque(true),
+    own_address_policy: BleLinkStateOwnAddressPolicy::ZERO
+        .with_bits_16_27_opaque(0x110)
+        .expect("reviewed field image fits"),
+    crc_initialization: BleLinkStateCrcInitialization::ZERO
+        .with_value(0x555555)
+        .expect("reviewed field image fits"),
+    sequence_policy: BleLinkStateSequencePolicy::ZERO
+        .with_bits_9_12_opaque(0xf)
+        .expect("reviewed field image fits"),
+    access_address: BleLinkStateAccessAddress::ZERO
+        .with_value(LeAccessAddress::PRIMARY_ADVERTISING.controller_image()),
+    word_0048_opaque: BleLinkStateWord0048Opaque::ZERO.with_bit_9_opaque(true),
+    direction_finding: BleLinkStateDirectionFinding::ZERO
+        .with_common_radio_policy(0x3)
+        .expect("reviewed field image fits"),
+    ..LinkStateImage::ZERO
+};
+
+/// Complete generated scanner link-state value under CPU ownership.
 #[derive(Clone, Copy)]
-pub(super) struct LegacyScanLinkStateImage {
-    words: [u32; BLUETOOTH_LEGACY_SCAN_LINK_STATE_WORDS],
-}
+pub(super) struct LegacyScanLinkStateImage(pub(super) LinkStateImage);
 
 impl LegacyScanLinkStateImage {
-    /// Build the exact reset result over a zero-based open-driver allocation.
     pub(super) const fn restricted_le_1m(
         rx_head: LegacyScanRxHeadProjection,
         config: LegacyScanResetConfig,
     ) -> Self {
-        let mut words = [0; BLUETOOTH_LEGACY_SCAN_LINK_STATE_WORDS];
-
-        // All masks and positional images remain private to this SRAM codec.
-        words[WORD_00] = 0x1ff0_0000;
-        words[WORD_08] = rx_head.apply(0x4ff0_0000);
-        words[WORD_0C] = 0xa010_0000;
-        words[WORD_14] = 0x0400_0000;
-        let (word_18, word_2c) = config.filter_policy.apply(
-            0x4000_0000,
-            LeCrcInit::LE_PRESET.apply_to_controller_word(0),
-        );
-        words[WORD_18] = word_18;
-        words[WORD_24] = 0x0110_0000;
-        words[WORD_2C] = word_2c;
-        words[WORD_30] = 0x0000_1e00;
-        // SOURCE: pinned `r_sym_ble_KkAldzIlkQuEkNQp1g6q`
-        // (`r_ble_lll_scan_reset_link_state`) stores the zero tick difference
-        // at `+0x34` and the power index in byte `+0x61`, not in `+0x04`.
-        words[WORD_60] = LinkStateEventWord::from_word(0)
-            .with_power(config.default_tx_power())
-            .word();
-        words[WORD_38] = LeAccessAddress::PRIMARY_ADVERTISING.controller_image();
-        words[WORD_48] = 0x0000_0200;
-        words[WORD_50] = 0x0300_0000;
-
-        Self { words }
+        let mut image = SCAN_RESET;
+        image.rx_path = rx_head
+            .0
+            .with_unconsumed_limit(image.rx_path.unconsumed_limit())
+            .with_bits_28_31_opaque(image.rx_path.bits_28_31_opaque())
+            .expect("retained image fits");
+        let (context, crc) = config
+            .filter_policy
+            .apply(image.receive_context, image.crc_initialization);
+        image.receive_context = context;
+        image.crc_initialization = crc;
+        image.event = image
+            .event
+            .with_power_index(config.default_tx_power().index());
+        Self(image)
     }
 
-    pub(super) const fn words(self) -> [u32; BLUETOOTH_LEGACY_SCAN_LINK_STATE_WORDS] {
-        self.words
-    }
-
-    pub(super) const fn from_words(words: [u32; BLUETOOTH_LEGACY_SCAN_LINK_STATE_WORDS]) -> Self {
-        Self { words }
-    }
-
-    /// Apply the start's write after the reset: pinned `r_ble_lll_scan_start`
-    /// (`r_sym_ble_aQLjUHo25zeoHGKf9dby`) sets bit 31 of `+0x18` before it
-    /// publishes the scan backoff and restarts the first window.
     pub(super) const fn started(mut self) -> Self {
-        self.words[WORD_18] |= LINK_STATE_18_BIT_31;
+        self.0.receive_context = self.0.receive_context.with_scan_started(true);
         self
     }
 
-    /// Apply the restart's link-state writes for one finite window: the
-    /// window length at `+0x34` and a clear bit 20 of `+0x18`.
     pub(super) const fn with_window(mut self, window: LegacyScanWindowTicks) -> Self {
-        self.words[WORD_34] = window.0;
-        self.words[WORD_18] &= !LINK_STATE_18_BIT_20;
+        self.0.event_span = self.0.event_span.with_value(window.0);
+        self.0.receive_context = self.0.receive_context.with_bit_20_opaque(false);
         self
     }
 
-    /// The power index the event copies into the item.
     const fn power_index(self) -> u8 {
-        LinkStateEventWord::from_word(self.words[WORD_60]).power_index()
+        self.0.event.power_index()
     }
-
     #[cfg(test)]
     pub(super) const fn retains_rx_head(self, head: LegacyScanRxHeadProjection) -> bool {
-        self.words[WORD_08] & RX_HEAD_MASK == head.0
+        self.0.rx_path.header() == head.0.header()
     }
-
     #[cfg(test)]
     pub(super) const fn crc_init(self) -> LeCrcInit {
-        LeCrcInit::from_controller_word(self.words[WORD_2C])
+        LeCrcInit::from_controller_word(self.0.crc_initialization.value())
     }
-
     #[cfg(test)]
     pub(super) const fn access_address(self) -> LeAccessAddress {
-        LeAccessAddress::from_controller_image(self.words[WORD_38])
+        LeAccessAddress::from_controller_image(self.0.access_address.value())
     }
-
     #[cfg(test)]
     pub(super) const fn started_flag(self) -> bool {
-        self.words[WORD_18] & LINK_STATE_18_BIT_31 != 0
+        self.0.receive_context.scan_started()
     }
-
     #[cfg(test)]
     pub(super) const fn window_ticks(self) -> u32 {
-        self.words[WORD_34]
+        self.0.event_span.value()
     }
 }
 
 /// Complete scanner-item subset changed before common scheduler admission.
 #[derive(Clone, Copy)]
 pub(super) struct LegacyScanSchedulerItemWords {
-    pub(super) word_00: u32,
-    pub(super) word_04: u32,
-    pub(super) word_14: u32,
-    pub(super) word_18: u32,
-    pub(super) word_38: u32,
-    pub(super) raw_start_word_44: u32,
-    pub(super) raw_end_word_48: u32,
+    pub(super) word_00: BleSchedulerItemHardwareNext,
+    pub(super) word_04: BleSchedulerItemContext,
+    pub(super) word_14: BleSchedulerItemRateAndPower,
+    pub(super) word_18: BleSchedulerItemChannelAndPriority,
+    pub(super) word_38: BleSchedulerItemStatus,
+    pub(super) raw_start_word_44: BleSchedulerItemRawStart,
+    pub(super) raw_end_word_48: BleSchedulerItemRawEnd,
 }
 
 impl LegacyScanSchedulerItemWords {
@@ -328,19 +305,32 @@ impl LegacyScanSchedulerItemWords {
         window: LegacyScanSchedulerWindow,
         start_selection: LegacyScanStartSelection,
     ) -> Self {
-        self.word_00 &= !SCHEDULER_HARDWARE_CHAIN_TIMING_MASK;
-        if matches!(start_selection, LegacyScanStartSelection::EarliestAvailable) {
-            self.word_00 |= SCHEDULER_HARDWARE_CHAIN_ADJUSTED_START;
-        }
-        self.word_00 |= SCHEDULER_HARDWARE_CHAIN_EVENT_READY;
-        self.word_04 |= SCHEDULER_CONTEXT_EVENT_READY;
-        self.word_14 = item_with_le_1m_power(self.word_14, link_state.power_index());
-        self.word_18 = (self.word_18 & !SCHEDULER_FREQUENCY_AND_KIND_MASK)
-            | ((channel.frequency_image() as u32) << 8)
-            | SCHEDULER_SCANNER_EVENT_KIND;
-        self.word_38 = 0;
-        self.raw_start_word_44 = window.start();
-        self.raw_end_word_48 = window.end();
+        self.word_00 = self
+            .word_00
+            .with_flexible_start(matches!(
+                start_selection,
+                LegacyScanStartSelection::EarliestAvailable
+            ))
+            .with_bit_23_opaque(true);
+        self.word_04 = self.word_04.with_event_ready(true);
+        self.word_14 = self
+            .word_14
+            .with_power_index(link_state.power_index())
+            .with_bits_28_29_opaque(0)
+            .expect("zero fits")
+            .with_bits_30_31_opaque(0)
+            .expect("zero fits");
+        self.word_18 = self
+            .word_18
+            .with_arbitration_priority(1)
+            .expect("reviewed priority fits")
+            .with_bits_4_7_opaque(0)
+            .expect("zero fits")
+            .with_frequency(channel.frequency_image())
+            .expect("primary channel fits");
+        self.word_38 = BleSchedulerItemStatus::ZERO;
+        self.raw_start_word_44 = self.raw_start_word_44.with_value(window.start());
+        self.raw_end_word_48 = self.raw_end_word_48.with_value(window.end());
         self
     }
 }

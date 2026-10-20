@@ -1,24 +1,19 @@
+use oer_esp32s31_hal::layouts::*;
 use std::{boxed::Box, vec::Vec};
 
 use super::{
-    EVENT_ITEM, LINK_STATE_PACKET_CONTROL, LINK_STATE_RX_HEAD, LINK_STATE_RX_PATH,
-    LINK_STATE_SCHEDULER_HEAD, LINK_STATE_TX_PATH, PeripheralConnectionCapturedAnchorAvailability,
-    PeripheralConnectionDataChannel, PeripheralConnectionError, PeripheralConnectionEventSpan,
-    PeripheralConnectionFirstEvent, PeripheralConnectionIdentity, PeripheralConnectionPool,
-    PeripheralConnectionReceiveTime, PeripheralConnectionReceiveWait,
-    PeripheralConnectionRecurringEvent, PeripheralConnectionRecurringReceiveWait,
-    PeripheralConnectionSchedulerItemCompletionStatus, PeripheralConnectionSchedulerPriority,
-    PeripheralConnectionSchedulerWindow, PeripheralConnectionStorage,
-    PeripheralConnectionTransmitPduKind, SCHEDULER_ITEM_ALLOCATION_NUMBER,
-    SCHEDULER_ITEM_CAPTURE_AVAILABLE, SCHEDULER_ITEM_CAPTURED_ANCHOR,
-    SCHEDULER_ITEM_FREQUENCY_AND_PRIORITY, SCHEDULER_ITEM_RADIO_REQUEST_PRIORITIES,
-    SCHEDULER_ITEM_RECEIVE_WAIT_CONFIGURATION,
+    EVENT_ITEM, PeripheralConnectionCapturedAnchorAvailability, PeripheralConnectionDataChannel,
+    PeripheralConnectionError, PeripheralConnectionEventSpan, PeripheralConnectionFirstEvent,
+    PeripheralConnectionIdentity, PeripheralConnectionPool, PeripheralConnectionReceiveTime,
+    PeripheralConnectionReceiveWait, PeripheralConnectionRecurringEvent,
+    PeripheralConnectionRecurringReceiveWait, PeripheralConnectionSchedulerItemCompletionStatus,
+    PeripheralConnectionSchedulerPriority, PeripheralConnectionSchedulerWindow,
+    PeripheralConnectionStorage, PeripheralConnectionTransmitPduKind,
 };
 use crate::{
     ConnectionCoexistencePriorities, DirectionFindingWorkspaceLink,
     DirectionFindingWorkspaceModelAddress, DirectionFindingWorkspaceStorage,
     PeripheralConnectionCoexistenceProtection, SchedulerItemCoexistencePriority,
-    coexistence::lanes_image,
     le_rx_packet::LeRxOutcome,
     scheduler_pool::{
         SchedulerAllocationConfig, SchedulerPoolError, SchedulerPoolModelAddress,
@@ -105,9 +100,13 @@ fn active(pool: &mut Pool) -> SchedulerRoleInstance {
     instance
 }
 
-fn item_word(pool: &Pool, instance: &SchedulerRoleInstance, word: usize) -> u32 {
+fn item_word(
+    pool: &Pool,
+    instance: &SchedulerRoleInstance,
+    read: impl FnOnce(&BleSchedulerItem) -> u32,
+) -> u32 {
     let (graph, _, _) = pool.shared(instance).unwrap();
-    graph.items[EVENT_ITEM].words[word].get()
+    read(&graph.items[EVENT_ITEM].layout)
 }
 
 /// Hardware receives one PDU into the private chain.
@@ -130,12 +129,12 @@ fn transmit(
         (&graph.tx_sentinel, cpu.binding.tx_sentinel),
         (&graph.tx_successor, cpu.binding.tx_successor),
     ];
-    let path = &graph.link_state.words[LINK_STATE_TX_PATH];
-    let current = path.get() & 0x000f_ffff;
+    let path = graph.link_state.layout.tx_path();
+    let current = path.read().header();
     let (cursor, _) = headers
         .iter()
         .find(|(_, address)| address.compressed_image() == current)?;
-    let next = cursor.snapshot()[0] & 0x000f_ffff;
+    let next = cursor.snapshot().next.address();
     let (header, address) = headers
         .iter()
         .find(|(_, address)| address.compressed_image() == next)?;
@@ -145,7 +144,15 @@ fn transmit(
     let pdu = graph.tx_packet.model_pdu().to_vec();
     if acknowledged {
         header.model_complete_transmission();
-        path.set((path.get() & !0x000f_ffff) | address.compressed_image());
+        let old = path.read();
+        path.write(
+            BleLinkStateTxPath::from_bits(address.compressed_image())
+                .with_max_tx_octets(old.max_tx_octets())
+                .with_queue_ready(old.queue_ready())
+                .with_bits_29_30_opaque(old.bits_29_30_opaque())
+                .expect("retained prefix fits")
+                .with_valid(old.valid()),
+        );
     }
     Some(pdu)
 }
@@ -167,17 +174,17 @@ fn the_first_event_uses_the_private_chain_and_takes_the_free_head() {
     assert_eq!(event.raw_window(), (25_000, 26_000));
 
     let (graph, binding, state) = pool.shared(&instance).unwrap();
-    let words = &graph.link_state.words;
+    let layout = &graph.link_state.layout;
     let rx = state.rx.unwrap();
     // No RX class; the hardware cursor starts at the private software head.
-    assert_eq!(words[LINK_STATE_PACKET_CONTROL].get(), 0);
+    assert_eq!(layout.rx_list().read().bits(), 0);
     assert_eq!(
-        words[LINK_STATE_RX_PATH].get() & 0x000f_ffff,
+        layout.rx_path().read().header(),
         rx.head_link().compressed_image()
     );
-    assert_eq!(words[LINK_STATE_RX_HEAD].get(), rx.snapshot().0);
+    assert_eq!(layout.rx_head().read().bits(), rx.snapshot().0);
     assert_eq!(
-        words[LINK_STATE_SCHEDULER_HEAD].get(),
+        layout.scheduler_head().read().bits(),
         binding.items[0].controller_address().address()
     );
     let header = graph.items[EVENT_ITEM].header();
@@ -198,11 +205,17 @@ fn connections_are_numbered_after_the_advertising_instances() {
     let first = pool.acquire().unwrap();
     let second = pool.acquire().unwrap();
     assert_eq!(
-        item_word(&pool, &first, SCHEDULER_ITEM_ALLOCATION_NUMBER),
+        item_word(&pool, &first, |layout| layout
+            .allocation_number()
+            .read()
+            .bits()),
         3
     );
     assert_eq!(
-        item_word(&pool, &second, SCHEDULER_ITEM_ALLOCATION_NUMBER),
+        item_word(&pool, &second, |layout| layout
+            .allocation_number()
+            .read()
+            .bits()),
         4
     );
 }
@@ -222,8 +235,12 @@ fn finishing_reports_the_capture_and_returns_the_item() {
     {
         let (graph, _, _) = pool.shared(&instance).unwrap();
         let item = &graph.items[EVENT_ITEM];
-        item.words[SCHEDULER_ITEM_CAPTURED_ANCHOR].set(0x1234);
-        item.header().set_status(SCHEDULER_ITEM_CAPTURE_AVAILABLE);
+        item.layout
+            .captured_anchor()
+            .write(BleSchedulerItemCapturedAnchor::from_bits(0x1234));
+        item.layout
+            .status()
+            .write(BleSchedulerItemStatus::ZERO.with_capture_available(true));
     }
     pool.retire(id).unwrap();
     let result = pool.finish_event(&instance).unwrap();
@@ -238,7 +255,7 @@ fn finishing_reports_the_capture_and_returns_the_item() {
 
     let (graph, binding, _) = pool.shared(&instance).unwrap();
     assert_eq!(
-        graph.link_state.words[LINK_STATE_SCHEDULER_HEAD].get(),
+        graph.link_state.layout.scheduler_head().read().bits(),
         binding.items[EVENT_ITEM].controller_address().address()
     );
     assert_eq!(
@@ -277,7 +294,10 @@ fn recurring_events_select_the_receive_wait_form() {
         pool.prepare_recurring_event(&instance, recurring_event(micros))
             .unwrap();
         assert_eq!(
-            item_word(&pool, &instance, SCHEDULER_ITEM_RECEIVE_WAIT_CONFIGURATION),
+            item_word(&pool, &instance, |layout| layout
+                .receive_wait()
+                .read()
+                .bits()),
             image
         );
         assert_eq!(
@@ -307,7 +327,7 @@ fn received_pdus_rotate_through_the_private_chain() {
         assert_eq!(pool.receive(&instance), Ok(None));
         let (graph, _, state) = pool.shared(&instance).unwrap();
         assert_eq!(
-            graph.link_state.words[LINK_STATE_RX_HEAD].get(),
+            graph.link_state.layout.rx_head().read().bits(),
             state.rx.unwrap().snapshot().0
         );
     }
@@ -395,36 +415,31 @@ fn release_returns_a_pristine_instance() {
     );
     let (graph, binding, _) = pool.shared(&instance).unwrap();
     assert_eq!(
-        graph.link_state.words[LINK_STATE_SCHEDULER_HEAD].get(),
+        graph.link_state.layout.scheduler_head().read().bits(),
         binding.items[EVENT_ITEM].controller_address().address()
     );
 }
 
-fn coexistence_lanes(pool: &Pool, instance: &SchedulerRoleInstance) -> u32 {
-    item_word(pool, instance, SCHEDULER_ITEM_RADIO_REQUEST_PRIORITIES) & 0x3ff
+fn coexistence_lanes(pool: &Pool, instance: &SchedulerRoleInstance) -> [u8; 2] {
+    let (graph, _, _) = pool.shared(instance).unwrap();
+    let image = graph.items[EVENT_ITEM].layout.coexistence_priority().read();
+    [image.lane_0(), image.lane_1()]
 }
 
 fn protection(pool: &Pool, instance: &SchedulerRoleInstance) -> Option<u32> {
     let (graph, _, _) = pool.shared(instance).unwrap();
-    let word = graph.link_state.words[super::LINK_STATE_PACKET_SEQUENCE].get();
-    (word & super::LINK_STATE_COEXISTENCE_PROTECTED != 0)
-        .then_some((word >> super::LINK_STATE_COEXISTENCE_PROTECTION_SHIFT) & 0x3f)
+    let word = graph.link_state.layout.sequence_policy().read();
+    (word.bits_20_21_opaque() != 0).then_some(u32::from(word.coexistence_protection()))
 }
 
 #[test]
 fn every_event_carries_its_own_coexistence_lanes() {
     let mut pool = pool();
     let instance = active(&mut pool);
-    assert_eq!(
-        coexistence_lanes(&pool, &instance),
-        lanes_image(&[lanes(9, 4).event, lanes(9, 4).base])
-    );
+    assert_eq!(coexistence_lanes(&pool, &instance), [9, 4]);
     pool.prepare_recurring_event(&instance, recurring_event(1_000))
         .unwrap();
-    assert_eq!(
-        coexistence_lanes(&pool, &instance),
-        lanes_image(&[lanes(4, 4).event, lanes(4, 4).base])
-    );
+    assert_eq!(coexistence_lanes(&pool, &instance), [4, 4]);
 }
 
 #[test]
@@ -466,8 +481,11 @@ fn a_recurring_event_keeps_the_power_the_first_event_stored() {
 fn an_item_carries_the_event_priority_beside_a_fixed_high_nibble() {
     let mut pool = pool();
     let instance = active(&mut pool);
-    let priority_byte =
-        |pool: &Pool| item_word(pool, &instance, SCHEDULER_ITEM_FREQUENCY_AND_PRIORITY) & 0xff;
+    let priority_byte = |pool: &Pool| {
+        item_word(pool, &instance, |layout| {
+            layout.channel_and_priority().read().bits()
+        }) & 0xff
+    };
     let first = priority_byte(&pool);
     pool.prepare_recurring_event(&instance, recurring_event(1_000))
         .unwrap();

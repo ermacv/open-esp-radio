@@ -14,7 +14,7 @@
 
 mod values;
 
-use vcell::VolatileCell;
+use oer_esp32s31_hal::layouts::*;
 
 pub use values::{
     PeripheralConnectionCapturedAnchorAvailability, PeripheralConnectionCapturedAnchorTime,
@@ -26,9 +26,7 @@ pub use values::{
 };
 
 use crate::{
-    coexistence::{
-        ConnectionCoexistencePriorities, PeripheralConnectionCoexistenceProtection, lanes_image,
-    },
+    coexistence::{ConnectionCoexistencePriorities, PeripheralConnectionCoexistenceProtection},
     direction_finding_workspace::DirectionFindingWorkspaceLink,
     le_rx_chain::{LeRxChainBindError, LeRxNodes, LeRxRing},
     le_rx_packet::LeRxOutcome,
@@ -36,7 +34,6 @@ use crate::{
         LeTxBufferHeaderStorage, LeTxPacketAddress, LeTxPacketPrepareError, LeTxPacketStorage,
     },
     le_tx_power::LeTxPower,
-    link_state_event::{LinkStateEventWord, item_with_le_1m_power},
     scheduler_context::SchedulerContextStorage,
     scheduler_item::{SchedulerItemCompletionStatus, SchedulerItemHeader},
     scheduler_pool::{
@@ -47,13 +44,13 @@ use crate::{
 };
 
 /// Bytes retained by one connection link-state allocation.
-pub const BLUETOOTH_PERIPHERAL_CONNECTION_LINK_STATE_BYTES: usize = 0x84;
+pub const BLUETOOTH_PERIPHERAL_CONNECTION_LINK_STATE_BYTES: usize = BleLinkState::SIZE;
 /// Bytes retained by one connection scheduler-item allocation.
-pub const BLUETOOTH_PERIPHERAL_CONNECTION_SCHEDULER_ITEM_BYTES: usize = 0x60;
+pub const BLUETOOTH_PERIPHERAL_CONNECTION_SCHEDULER_ITEM_BYTES: usize = BleSchedulerItem::SIZE;
 /// Scheduler items retained by one connection allocation.
 pub const BLUETOOTH_PERIPHERAL_CONNECTION_SCHEDULER_ITEM_COUNT: usize = 2;
 /// Bytes retained by the initially empty transmit queue sentinel.
-pub const BLUETOOTH_PERIPHERAL_CONNECTION_TX_SENTINEL_BYTES: usize = 0x18;
+pub const BLUETOOTH_PERIPHERAL_CONNECTION_TX_SENTINEL_BYTES: usize = BleBufferHeader::SIZE;
 /// Packets in the private receive chain: two writable successors of the
 /// node that hardware may still hold.
 pub const BLUETOOTH_PERIPHERAL_CONNECTION_RX_PACKETS: usize = 3;
@@ -61,120 +58,76 @@ pub const BLUETOOTH_PERIPHERAL_CONNECTION_RX_PACKETS: usize = 3;
 const ITEMS: usize = BLUETOOTH_PERIPHERAL_CONNECTION_SCHEDULER_ITEM_COUNT;
 const EVENT_ITEM: usize = ITEMS - 1;
 const RX_PACKETS: usize = BLUETOOTH_PERIPHERAL_CONNECTION_RX_PACKETS;
-const LINK_STATE_WORDS: usize = BLUETOOTH_PERIPHERAL_CONNECTION_LINK_STATE_BYTES / 4;
-const SCHEDULER_ITEM_WORDS: usize = BLUETOOTH_PERIPHERAL_CONNECTION_SCHEDULER_ITEM_BYTES / 4;
 /// The longest data PDU payload on air: 251 octets of data plus the MIC.
 const DATA_PDU_PAYLOAD_BYTES: usize = 255;
 const TX_PACKET_BYTES: usize = crate::BLUETOOTH_LE_TX_PACKET_PREFIX_BYTES + DATA_PDU_PAYLOAD_BYTES;
-
-const LINK_STATE_SCHEDULER_HEAD: usize = 0x64 / 4;
-const LINK_STATE_RX_HEAD: usize = 0x68 / 4;
-const LINK_STATE_TX_HEAD: usize = 0x6c / 4;
-const LINK_STATE_RX_TAIL: usize = 0x70 / 4;
-const LINK_STATE_TX_TAIL: usize = 0x74 / 4;
-const LINK_STATE_RX_RESERVE: usize = 0x78 / 4;
-const LINK_STATE_TX_PATH: usize = 0;
-const LINK_STATE_CRC_INITIALIZATION: usize = 0x2c / 4;
-const LINK_STATE_ACCESS_ADDRESS: usize = 0x38 / 4;
-const LINK_STATE_RX_PATH: usize = 2;
-const LINK_STATE_CONTROL_POLICY: usize = 3;
-const LINK_STATE_PACKET_FLAGS: usize = 0x14 / 4;
-const LINK_STATE_RECEIVE_TIME: usize = 0x18 / 4;
-const LINK_STATE_PACKET_HISTORY: usize = 0x1c / 4;
-const LINK_STATE_PACKET_CONTROL: usize = 0x20 / 4;
-const LINK_STATE_PACKET_SEQUENCE: usize = 0x30 / 4;
-const LINK_STATE_EVENT_SPAN: usize = 0x34 / 4;
-const LINK_STATE_COMMON_RADIO_AND_DIRECTION_FINDING_CONFIGURATION: usize = 0x50 / 4;
-const LINK_STATE_DIRECTION_FINDING_POLICY: usize = 0x54 / 4;
-const LINK_STATE_EVENT_PRIORITY: usize = 0x60 / 4;
-const LINK_STATE_TX_PATH_VALID: u32 = 1 << 31;
-const LINK_STATE_TX_QUEUE_READY: u32 = 1 << 28;
-const LINK_STATE_SUPPORTED_MAX_TX_OCTETS: u32 = 251;
-const LINK_STATE_RX_UNCONSUMED_LIMIT: u32 = 0xff;
-const LINK_STATE_CONTROL_POLICY_ACTIVE: u32 = 1 << 31;
-const LINK_STATE_BASELINE_CONTROL_POLICY: u32 = 2;
-const LINK_STATE_CRC_CONTEXT_READY: u32 = 1 << 31;
-const LINK_STATE_PACKET_SEQUENCE_BASELINE: u32 = 0x1e00;
 // Bits 19:14 hold the coexistence protection; the vendor sets bits 21:20
 // with it.
-const LINK_STATE_COEXISTENCE_PROTECTION_SHIFT: u32 = 14;
-const LINK_STATE_COEXISTENCE_PROTECTED: u32 = 0x0030_0000;
 // The two connection lanes of the item priority word.
-const CONNECTION_LANES_MASK: u32 = 0x3ff;
-const LINK_STATE_COMMON_RADIO_POLICY_BASELINE: u32 = 3;
-const LINK_STATE_DIRECTION_FINDING_RETAINED_POLICY: u32 = 0xbf00_0000;
-const LINK_STATE_DIRECTION_FINDING_CONFIGURATION_READY: u32 = 1 << 30;
-const LINK_STATE_DIRECTION_FINDING_POLICY_RETAINED: u32 = 0x8007_ffff;
-const LINK_STATE_DIRECTION_FINDING_DISABLED_BASELINE: u32 = 0x0018_0000;
-
-const SCHEDULER_ITEM_CONTEXT: usize = 1;
-const SCHEDULER_ITEM_LINK_STATE: usize = 2;
-const SCHEDULER_ITEM_CONTEXT_STATE: usize = 1;
-const SCHEDULER_ITEM_RATE_AND_POWER: usize = 0x14 / 4;
-const SCHEDULER_ITEM_FREQUENCY_AND_PRIORITY: usize = 0x18 / 4;
-const SCHEDULER_ITEM_ALLOCATION_FLAGS: usize = 0x1c / 4;
-const SCHEDULER_ITEM_ALLOCATION_NUMBER: usize = 0x20 / 4;
-const SCHEDULER_ITEM_RADIO_REQUEST_PRIORITIES: usize = 0x24 / 4;
-const SCHEDULER_ITEM_RECEIVE_WAIT_CONFIGURATION: usize = 0x2c / 4;
-const SCHEDULER_ITEM_CAPTURED_ANCHOR: usize = 0x34 / 4;
 // Common allocation sets both bits; the connection role retains them.
-const SCHEDULER_ITEM_ALLOCATION_PREFIX: u32 = 0x0030_0000;
 // Standalone module default after common allocation and connection-role masks.
-const SCHEDULER_ITEM_PERIPHERAL_ALLOCATION_FLAGS: u32 = 0xe7df_7fff;
 // Product policy for the dedicated radio, not the vendor coexistence default.
-const SCHEDULER_ITEM_PERIPHERAL_PREFIX: u32 = 0x0020_0000;
-const SCHEDULER_ITEM_CONNECTION_CLASS: u32 = 3 << 8;
-const SCHEDULER_ITEM_CONTEXT_READY: u32 = 1 << 31;
-const SCHEDULER_ITEM_FREQUENCY_AND_PRIORITY_MASK: u32 = 0x0000_7fff;
 /// SOURCE: pinned `libble_app.a` first-event `r_sym_ble_tPr7egUaNHmqfcieCA5O`
 /// (`r_ble_lll_conn_slave_new`) and recurring `r_sym_ble_rsCCyH2B22gdYkN4LOOJ`
 /// (`ble_lll_conn_reschedule_event`) write the link-state priority nibble into
 /// item `+0x18` bits 3:0 and a fixed 7 into bits 7:4.
-const SCHEDULER_ITEM_CONNECTION_PRIORITY_HIGH_NIBBLE: u32 = 0x70;
-const SCHEDULER_ITEM_PRIORITY_NIBBLE_MASK: u32 = 0x0f;
-const SCHEDULER_ITEM_RECEIVE_WAIT_SHORT_MODE: u32 = 0x000f_0000;
-const SCHEDULER_ITEM_RECEIVE_WAIT_LONG_MODE: u32 = 0x001f_0000;
-const SCHEDULER_ITEM_RECEIVE_WAIT_ZERO_IMAGE: u32 = 1;
-const SCHEDULER_ITEM_CAPTURE_AVAILABLE: u32 = 1 << 11;
 
 #[repr(C, align(4))]
 struct LinkStateStorage {
-    words: [VolatileCell<u32>; LINK_STATE_WORDS],
+    layout: BleLinkState,
 }
 
 impl LinkStateStorage {
     const fn new() -> Self {
         Self {
-            words: [const { VolatileCell::new(0) }; LINK_STATE_WORDS],
+            layout: BleLinkState::zeroed(),
         }
     }
 
     fn initialize(&self, binding: &PeripheralConnectionBinding) {
-        for word in &self.words {
-            word.set(0);
-        }
+        crate::shared_layout::clear_link_state(&self.layout);
         self.set_scheduler_head(binding.items[EVENT_ITEM]);
         let sentinel = binding.tx_sentinel.controller_address().address();
-        self.words[LINK_STATE_TX_HEAD].set(sentinel);
-        self.words[LINK_STATE_TX_TAIL].set(sentinel);
+        self.layout
+            .tx_head()
+            .write(BleLinkStateTxHead::from_bits(sentinel));
+        self.layout
+            .tx_tail()
+            .write(BleLinkStateTxTail::from_bits(sentinel));
     }
 
     fn set_scheduler_head(&self, head: ControllerSramLinkAddress) {
-        self.words[LINK_STATE_SCHEDULER_HEAD].set(head.controller_address().address());
+        self.layout
+            .scheduler_head()
+            .write(BleLinkStateSchedulerHead::from_bits(
+                head.controller_address().address(),
+            ));
     }
 
     /// Mirror the private chain's software head, tail and spare header.
     fn install_receive_endpoints(&self, (head, tail, spare): (u32, u32, u32)) {
-        self.words[LINK_STATE_RX_HEAD].set(head);
-        self.words[LINK_STATE_RX_TAIL].set(tail);
-        self.words[LINK_STATE_RX_RESERVE].set(spare);
+        self.layout
+            .rx_head()
+            .write(BleLinkStateRxHead::from_bits(head));
+        self.layout
+            .rx_tail()
+            .write(BleLinkStateRxTail::from_bits(tail));
+        self.layout
+            .rx_reserve()
+            .write(BleLinkStateRxReserve::from_bits(spare));
     }
 
     fn prepare_identity(&self, identity: PeripheralConnectionIdentity) {
-        self.words[LINK_STATE_CRC_INITIALIZATION]
-            .set(u32::from_le_bytes(identity.crc_initialization_word()));
-        self.words[LINK_STATE_ACCESS_ADDRESS]
-            .set(u32::from_le_bytes(identity.access_address_wire_bytes()));
+        self.layout
+            .crc_initialization()
+            .write(BleLinkStateCrcInitialization::from_bits(
+                u32::from_le_bytes(identity.crc_initialization_word()),
+            ));
+        self.layout
+            .access_address()
+            .write(BleLinkStateAccessAddress::from_bits(u32::from_le_bytes(
+                identity.access_address_wire_bytes(),
+            )));
     }
 
     fn prepare_event_profile(
@@ -183,47 +136,55 @@ impl LinkStateStorage {
         transmit_sentinel: ControllerSramLinkAddress,
         event: &PeripheralConnectionFirstEvent,
     ) {
-        self.words[LINK_STATE_TX_PATH].set(
-            LINK_STATE_TX_PATH_VALID
-                | LINK_STATE_TX_QUEUE_READY
-                | (LINK_STATE_SUPPORTED_MAX_TX_OCTETS << 20)
-                | transmit_sentinel.compressed_image(),
+        let tx = CONNECTION_TX_PATH;
+        self.layout.tx_path().write(
+            BleLinkStateTxPath::from_bits(transmit_sentinel.compressed_image())
+                .with_max_tx_octets(tx.max_tx_octets())
+                .with_queue_ready(tx.queue_ready())
+                .with_valid(tx.valid()),
         );
-        // use_rxbuf_from_link_state: the private consumer starts at the
-        // software head.
-        self.words[LINK_STATE_RX_PATH]
-            .set((LINK_STATE_RX_UNCONSUMED_LIMIT << 20) | receive_head.compressed_image());
-        self.words[LINK_STATE_CONTROL_POLICY].set(
-            LINK_STATE_CONTROL_POLICY_ACTIVE
-                | (LINK_STATE_BASELINE_CONTROL_POLICY << 20)
-                | (LINK_STATE_BASELINE_CONTROL_POLICY << 24),
+        self.layout.rx_path().write(
+            BleLinkStateRxPath::from_bits(receive_head.compressed_image())
+                .with_unconsumed_limit(255),
         );
-        self.words[LINK_STATE_PACKET_FLAGS].set(0);
-        self.words[LINK_STATE_PACKET_HISTORY].set(0);
-        // No RX class: the connection receives through its private chain.
-        self.words[LINK_STATE_PACKET_CONTROL].set(0);
-        self.words[LINK_STATE_CRC_INITIALIZATION]
-            .set(self.words[LINK_STATE_CRC_INITIALIZATION].get() | LINK_STATE_CRC_CONTEXT_READY);
-        self.words[LINK_STATE_PACKET_SEQUENCE].set(match event.protection {
-            Some(protection) => {
-                LINK_STATE_PACKET_SEQUENCE_BASELINE
-                    | LINK_STATE_COEXISTENCE_PROTECTED
-                    | (u32::from(protection.value()) << LINK_STATE_COEXISTENCE_PROTECTION_SHIFT)
-            }
-            None => LINK_STATE_PACKET_SEQUENCE_BASELINE,
-        });
-        self.words[LINK_STATE_COMMON_RADIO_AND_DIRECTION_FINDING_CONFIGURATION]
-            .set(LINK_STATE_COMMON_RADIO_POLICY_BASELINE << 24);
-        // SOURCE: pinned `libble_app.a[ble_3.o]::r_sym_ble_bgOSnaHsEjrTC0mkupqH`
-        // (`r_ble_lll_conn_reset_link_state`) stores the transmit-power index
-        // in byte `+0x61`, next to the priority byte `+0x60`, and not
-        // in `+0x04`.
-        let event_word = LinkStateEventWord::from_word(self.words[LINK_STATE_EVENT_PRIORITY].get())
-            .with_power(event.default_tx_power)
-            .with_priority(event.priority.value());
-        self.words[LINK_STATE_EVENT_PRIORITY].set(event_word.word());
-        self.words[LINK_STATE_RECEIVE_TIME].set(event.receive_time.wrapping_controller_ticks());
-        self.words[LINK_STATE_EVENT_SPAN].set(event.event_span.ticks());
+        self.layout.control_policy().write(CONNECTION_CONTROL);
+        self.layout
+            .packet_policy()
+            .write(BleLinkStatePacketPolicy::ZERO);
+        self.layout
+            .word_001c_opaque()
+            .write(BleLinkStateWord001cOpaque::ZERO);
+        self.layout.rx_list().write(BleLinkStateRxList::ZERO);
+        self.layout
+            .crc_initialization()
+            .write(self.layout.crc_initialization().read().with_ready(true));
+        let sequence = match event.protection {
+            Some(protection) => CONNECTION_SEQUENCE
+                .with_coexistence_protection(protection.value())
+                .expect("validated protection fits")
+                .with_bits_20_21_opaque(3)
+                .expect("reviewed image fits"),
+            None => CONNECTION_SEQUENCE,
+        };
+        self.layout.sequence_policy().write(sequence);
+        self.layout
+            .direction_finding()
+            .write(CONNECTION_RADIO_POLICY);
+        self.layout.event().write(
+            self.layout
+                .event()
+                .read()
+                .with_power_index(event.default_tx_power.index())
+                .with_priority(event.priority.value()),
+        );
+        self.layout
+            .receive_context()
+            .write(BleLinkStateReceiveContext::from_bits(
+                event.receive_time.wrapping_controller_ticks(),
+            ));
+        self.layout
+            .event_span()
+            .write(BleLinkStateEventSpan::ZERO.with_value(event.event_span.ticks()));
     }
 
     fn prepare_recurring_event_profile(
@@ -231,43 +192,50 @@ impl LinkStateStorage {
         event_span: PeripheralConnectionEventSpan,
         priority: PeripheralConnectionSchedulerPriority,
     ) {
-        let event_word = LinkStateEventWord::from_word(self.words[LINK_STATE_EVENT_PRIORITY].get())
-            .with_priority(priority.value());
-        self.words[LINK_STATE_EVENT_PRIORITY].set(event_word.word());
-        self.words[LINK_STATE_EVENT_SPAN].set(event_span.ticks());
+        self.layout
+            .event()
+            .write(self.layout.event().read().with_priority(priority.value()));
+        self.layout
+            .event_span()
+            .write(BleLinkStateEventSpan::from_bits(event_span.ticks()));
     }
 
     fn install_direction_finding_workspace(&self, workspace: DirectionFindingWorkspaceLink) {
-        let configuration =
-            self.words[LINK_STATE_COMMON_RADIO_AND_DIRECTION_FINDING_CONFIGURATION].get();
-        self.words[LINK_STATE_COMMON_RADIO_AND_DIRECTION_FINDING_CONFIGURATION].set(
-            (configuration & LINK_STATE_DIRECTION_FINDING_RETAINED_POLICY)
-                | LINK_STATE_DIRECTION_FINDING_CONFIGURATION_READY
-                | workspace.compressed_link_state_configuration(),
+        let original = self.layout.direction_finding().read();
+        self.layout.direction_finding().write(
+            BleLinkStateDirectionFinding::from_bits(
+                workspace.compressed_link_state_configuration(),
+            )
+            .with_common_radio_policy(original.common_radio_policy())
+            .expect("retained radio policy fits")
+            .with_ready(true)
+            .with_bit_31_opaque(original.bit_31_opaque()),
         );
-        let policy = self.words[LINK_STATE_DIRECTION_FINDING_POLICY].get();
-        self.words[LINK_STATE_DIRECTION_FINDING_POLICY].set(
-            (policy & LINK_STATE_DIRECTION_FINDING_POLICY_RETAINED)
-                | LINK_STATE_DIRECTION_FINDING_DISABLED_BASELINE,
+        self.layout.direction_finding_policy().write(
+            self.layout
+                .direction_finding_policy()
+                .read()
+                .with_bits_19_20_opaque(3)
+                .expect("disabled policy fits")
+                .with_bits_21_30_opaque(0)
+                .expect("zero fits"),
         );
     }
 
     fn power_index(&self) -> u8 {
-        LinkStateEventWord::from_word(self.words[LINK_STATE_EVENT_PRIORITY].get()).power_index()
+        self.layout.event().read().power_index()
     }
 
     fn receive_time(&self) -> PeripheralConnectionReceiveTime {
         PeripheralConnectionReceiveTime::from_controller_ticks(
-            self.words[LINK_STATE_RECEIVE_TIME].get(),
+            self.layout.receive_context().read().bits(),
         )
     }
 
     fn identity(&self) -> PeripheralConnectionIdentity {
-        let crc = self.words[LINK_STATE_CRC_INITIALIZATION]
-            .get()
-            .to_le_bytes();
+        let crc = self.layout.crc_initialization().read().bits().to_le_bytes();
         PeripheralConnectionIdentity::new(
-            self.words[LINK_STATE_ACCESS_ADDRESS].get().to_le_bytes(),
+            self.layout.access_address().read().bits().to_le_bytes(),
             [crc[0], crc[1], crc[2]],
         )
     }
@@ -275,18 +243,18 @@ impl LinkStateStorage {
 
 #[repr(C, align(4))]
 struct ItemStorage {
-    words: [VolatileCell<u32>; SCHEDULER_ITEM_WORDS],
+    layout: BleSchedulerItem,
 }
 
 impl ItemStorage {
     const fn new() -> Self {
         Self {
-            words: [const { VolatileCell::new(0) }; SCHEDULER_ITEM_WORDS],
+            layout: BleSchedulerItem::zeroed(),
         }
     }
 
-    fn header(&self) -> SchedulerItemHeader<'_, [VolatileCell<u32>; SCHEDULER_ITEM_WORDS]> {
-        SchedulerItemHeader::new(&self.words)
+    fn header(&self) -> SchedulerItemHeader<'_> {
+        SchedulerItemHeader::new(&self.layout)
     }
 
     /// The vendor connection allocator's image, linked to the next free item.
@@ -295,22 +263,36 @@ impl ItemStorage {
         binding: &PeripheralConnectionBinding,
         next_free: Option<ControllerSramLinkAddress>,
     ) {
-        for word in &self.words {
-            word.set(0);
-        }
+        crate::shared_layout::clear_scheduler_item(&self.layout);
         self.link_free(next_free);
-        self.words[SCHEDULER_ITEM_ALLOCATION_FLAGS].set(SCHEDULER_ITEM_PERIPHERAL_ALLOCATION_FLAGS);
-        self.words[SCHEDULER_ITEM_ALLOCATION_NUMBER].set(u32::from(binding.number));
-        self.words[SCHEDULER_ITEM_CONTEXT].set(binding.scheduler_context.compressed_image());
-        self.words[SCHEDULER_ITEM_LINK_STATE]
-            .set(SCHEDULER_ITEM_PERIPHERAL_PREFIX | binding.link_state.compressed_image());
-        self.header().set_control(SCHEDULER_ITEM_CONNECTION_CLASS);
+        self.layout
+            .word_001c_opaque()
+            .write(CONNECTION_ALLOCATION_FLAGS);
+        self.layout
+            .allocation_number()
+            .write(BleSchedulerItemAllocationNumber::from_bits(u32::from(
+                binding.number,
+            )));
+        self.layout
+            .context()
+            .write(BleSchedulerItemContext::from_bits(
+                binding.scheduler_context.compressed_image(),
+            ));
+        self.layout.link_state().write(
+            BleSchedulerItemLinkState::from_bits(binding.link_state.compressed_image())
+                .with_bits_20_23_opaque(2)
+                .expect("connection prefix fits"),
+        );
+        self.layout.control().write(CONNECTION_ITEM_CONTROL);
     }
 
     fn link_free(&self, next_free: Option<ControllerSramLinkAddress>) {
-        self.header().set_hardware_next_word(
-            SCHEDULER_ITEM_ALLOCATION_PREFIX
-                | next_free.map_or(0, ControllerSramLinkAddress::compressed_image),
+        self.layout.hardware_next().write(
+            BleSchedulerItemHardwareNext::from_bits(
+                next_free.map_or(0, ControllerSramLinkAddress::compressed_image),
+            )
+            .with_bits_20_21_opaque(3)
+            .expect("allocation prefix fits"),
         );
     }
 
@@ -320,19 +302,28 @@ impl ItemStorage {
         priority: PeripheralConnectionSchedulerPriority,
         coexistence: ConnectionCoexistencePriorities,
     ) {
-        self.words[SCHEDULER_ITEM_RADIO_REQUEST_PRIORITIES].set(
-            (self.words[SCHEDULER_ITEM_RADIO_REQUEST_PRIORITIES].get() & !CONNECTION_LANES_MASK)
-                | lanes_image(&[coexistence.event, coexistence.base]),
+        self.layout.coexistence_priority().write(
+            self.layout
+                .coexistence_priority()
+                .read()
+                .with_lane_0(coexistence.event.value())
+                .expect("validated priority fits")
+                .with_lane_1(coexistence.base.value())
+                .expect("validated priority fits"),
         );
-        self.words[SCHEDULER_ITEM_CONTEXT_STATE]
-            .set(self.words[SCHEDULER_ITEM_CONTEXT_STATE].get() | SCHEDULER_ITEM_CONTEXT_READY);
-        let priority = u32::from(priority.value());
-        self.words[SCHEDULER_ITEM_FREQUENCY_AND_PRIORITY].set(
-            (self.words[SCHEDULER_ITEM_FREQUENCY_AND_PRIORITY].get()
-                & !SCHEDULER_ITEM_FREQUENCY_AND_PRIORITY_MASK)
-                | (u32::from(channel.frequency_image()) << 8)
-                | (priority & SCHEDULER_ITEM_PRIORITY_NIBBLE_MASK)
-                | SCHEDULER_ITEM_CONNECTION_PRIORITY_HIGH_NIBBLE,
+        self.layout
+            .context()
+            .write(self.layout.context().read().with_event_ready(true));
+        self.layout.channel_and_priority().write(
+            self.layout
+                .channel_and_priority()
+                .read()
+                .with_frequency(channel.frequency_image())
+                .expect("data channel fits")
+                .with_arbitration_priority(priority.value() % 16)
+                .expect("projected priority fits")
+                .with_bits_4_7_opaque(7)
+                .expect("reviewed image fits"),
         );
     }
 
@@ -349,26 +340,33 @@ impl ItemStorage {
 
     fn prepare_first_event(&self, power_index: u8, event: &PeripheralConnectionFirstEvent) {
         self.prepare_priority_and_channel(event.channel, event.priority, event.coexistence);
-        self.words[SCHEDULER_ITEM_RATE_AND_POWER].set(item_with_le_1m_power(
-            self.words[SCHEDULER_ITEM_RATE_AND_POWER].get(),
-            power_index,
-        ));
-        self.words[SCHEDULER_ITEM_RECEIVE_WAIT_CONFIGURATION]
-            .set(SCHEDULER_ITEM_RECEIVE_WAIT_SHORT_MODE | event.receive_wait.total_micros());
+        self.layout.rate_and_power().write(
+            self.layout
+                .rate_and_power()
+                .read()
+                .with_power_index(power_index)
+                .with_bits_28_29_opaque(0)
+                .expect("zero fits")
+                .with_bits_30_31_opaque(0)
+                .expect("zero fits"),
+        );
+        self.layout
+            .receive_wait()
+            .write(CONNECTION_WAIT_SHORT.with_value(event.receive_wait.total_micros() as u16));
         self.prepare_window(event.window, event.raw_sequence_lead);
     }
 
     fn prepare_recurring_event(&self, event: &PeripheralConnectionRecurringEvent) {
         self.prepare_priority_and_channel(event.channel, event.priority, event.coexistence);
         let total_micros = event.receive_wait.total_micros();
-        let receive_wait_image = if total_micros == 0 {
-            SCHEDULER_ITEM_RECEIVE_WAIT_ZERO_IMAGE
+        let wait = if total_micros == 0 {
+            BleSchedulerItemReceiveWait::ZERO.with_value(1)
         } else if total_micros < u32::from(u16::MAX) {
-            SCHEDULER_ITEM_RECEIVE_WAIT_SHORT_MODE | total_micros
+            CONNECTION_WAIT_SHORT.with_value(total_micros as u16)
         } else {
-            SCHEDULER_ITEM_RECEIVE_WAIT_LONG_MODE | (total_micros >> 1)
+            CONNECTION_WAIT_LONG.with_value((total_micros / 2) as u16)
         };
-        self.words[SCHEDULER_ITEM_RECEIVE_WAIT_CONFIGURATION].set(receive_wait_image);
+        self.layout.receive_wait().write(wait);
         self.prepare_window(event.window, event.raw_sequence_lead);
     }
 
@@ -380,10 +378,10 @@ impl ItemStorage {
                 capture: PeripheralConnectionCapturedAnchorAvailability::Absent,
             };
         };
-        let capture = if header.status() & SCHEDULER_ITEM_CAPTURE_AVAILABLE != 0 {
+        let capture = if self.layout.status().read().capture_available() {
             PeripheralConnectionCapturedAnchorAvailability::Available(
                 PeripheralConnectionCapturedAnchorTime::from_controller_sram_word(
-                    self.words[SCHEDULER_ITEM_CAPTURED_ANCHOR].get(),
+                    self.layout.captured_anchor().read().bits(),
                 ),
             )
         } else {
@@ -450,9 +448,9 @@ pub struct PeripheralConnectionState {
 impl sealed::Sealed for PeripheralConnectionStorage {}
 
 impl SchedulerRoleStorage for PeripheralConnectionStorage {
+    const NUMBERS: usize = 1;
     const KIND: SchedulerRoleKind = SchedulerRoleKind::PeripheralConnection;
     const ITEMS: usize = ITEMS;
-    const NUMBERS: usize = 1;
     const NEW: Self = Self {
         link_state: LinkStateStorage::new(),
         scheduler_context: SchedulerContextStorage::new(),
@@ -500,8 +498,8 @@ impl SchedulerRoleStorage for PeripheralConnectionStorage {
         })
     }
 
-    fn item_words(&self, item: usize) -> &[VolatileCell<u32>] {
-        &self.items[item].words
+    fn item_layout(&self, item: usize) -> &BleSchedulerItem {
+        &self.items[item].layout
     }
 
     fn item_link(binding: &PeripheralConnectionBinding, item: usize) -> ControllerSramLinkAddress {
@@ -789,7 +787,13 @@ impl<const N: usize> PeripheralConnectionPool<N> {
         next.initialize_bound_tx(cpu.binding.tx_packet);
         next.mark_complete_connection_packet(kind.llid());
         current.link_successor(next_address);
-        graph.link_state.words[LINK_STATE_TX_TAIL].set(next_address.controller_address().address());
+        graph
+            .link_state
+            .layout
+            .tx_tail()
+            .write(BleLinkStateTxTail::from_bits(
+                next_address.controller_address().address(),
+            ));
         cpu.state.tx_pending = true;
         Ok(true)
     }
@@ -818,7 +822,13 @@ impl<const N: usize> PeripheralConnectionPool<N> {
         // The completed node remains the hardware current cursor. Only its
         // packet allocation is released, matching get_txed_buffer's tail case.
         header.release_completed_packet();
-        cpu.graph.link_state.words[LINK_STATE_TX_HEAD].set(address.controller_address().address());
+        cpu.graph
+            .link_state
+            .layout
+            .tx_head()
+            .write(BleLinkStateTxHead::from_bits(
+                address.controller_address().address(),
+            ));
         cpu.state.tx_current_second = !cpu.state.tx_current_second;
         cpu.state.tx_pending = false;
         Ok(true)
@@ -835,3 +845,45 @@ fn take_event_item(graph: &PeripheralConnectionStorage, binding: &PeripheralConn
 
 #[cfg(test)]
 mod tests;
+
+/// SOURCE: pinned `ble_3.o` connection allocation/reset and event bodies in the connection reference.
+const CONNECTION_TX_PATH: BleLinkStateTxPath = BleLinkStateTxPath::ZERO
+    .with_max_tx_octets(0xfb)
+    .with_queue_ready(true)
+    .with_valid(true);
+
+/// SOURCE: pinned `ble_3.o` connection allocation/reset and event bodies in the connection reference.
+const CONNECTION_CONTROL: BleLinkStateControlPolicy = BleLinkStateControlPolicy::ZERO
+    .with_bits_20_23_opaque(0x2)
+    .expect("reviewed field image fits")
+    .with_bits_24_27_opaque(0x2)
+    .expect("reviewed field image fits")
+    .with_bit_31_opaque(true);
+
+/// SOURCE: pinned `ble_3.o` connection allocation/reset and event bodies in the connection reference.
+const CONNECTION_SEQUENCE: BleLinkStateSequencePolicy = BleLinkStateSequencePolicy::ZERO
+    .with_bits_9_12_opaque(0xf)
+    .expect("reviewed field image fits");
+
+/// SOURCE: pinned `ble_3.o` connection allocation/reset and event bodies in the connection reference.
+const CONNECTION_RADIO_POLICY: BleLinkStateDirectionFinding = BleLinkStateDirectionFinding::ZERO
+    .with_common_radio_policy(0x3)
+    .expect("reviewed field image fits");
+
+/// SOURCE: pinned `ble_3.o` connection allocation/reset and event bodies in the connection reference.
+const CONNECTION_WAIT_SHORT: BleSchedulerItemReceiveWait = BleSchedulerItemReceiveWait::ZERO
+    .with_bits_16_20_opaque(0xf)
+    .expect("reviewed field image fits");
+
+/// SOURCE: pinned `ble_3.o` connection allocation/reset and event bodies in the connection reference.
+const CONNECTION_WAIT_LONG: BleSchedulerItemReceiveWait = BleSchedulerItemReceiveWait::ZERO
+    .with_bits_16_20_opaque(0x1f)
+    .expect("reviewed field image fits");
+
+/// SOURCE: pinned `ble_3.o` connection allocation/reset and event bodies in the connection reference.
+const CONNECTION_ALLOCATION_FLAGS: BleSchedulerItemWord001cOpaque =
+    BleSchedulerItemWord001cOpaque::ZERO.with_bits_0_31_opaque(0xe7df7fff);
+
+/// SOURCE: pinned `ble_3.o` connection allocation/reset and event bodies in the connection reference.
+const CONNECTION_ITEM_CONTROL: BleSchedulerItemControl =
+    BleSchedulerItemControl::ZERO.with_kind(0x3);

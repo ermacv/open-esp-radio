@@ -12,19 +12,18 @@ use oer_esp32s31_hal::types::{
     BluetoothControllerSramAddress, BluetoothControllerSramAddressError,
 };
 
-use vcell::VolatileCell;
+use crate::rx_packet_bytes::{RxPacketBytes, result_not_produced};
+use crate::shared_layout::BufferHeaderImage;
+use oer_esp32s31_hal::layouts::*;
 
 /// Bytes preceding a received Link Layer PDU in one controller allocation.
-pub const BLUETOOTH_LE_RX_PACKET_PREFIX_BYTES: usize = 0x1e;
+pub const BLUETOOTH_LE_RX_PACKET_PREFIX_BYTES: usize = BleRxPacketPrefix::SIZE;
 /// Maximum Link Layer payload admitted by the shared receive allocation.
 pub const BLUETOOTH_LE_RX_PAYLOAD_CAPACITY: usize = u8::MAX as usize;
 /// Complete logical receive-packet allocation size.
 pub const BLUETOOTH_LE_RX_PACKET_BYTES: usize =
     BLUETOOTH_LE_RX_PACKET_PREFIX_BYTES + BLUETOOTH_LE_RX_PAYLOAD_CAPACITY;
 
-const BUFFER_HEADER_BYTES: usize = 0x18;
-const BUFFER_HEADER_WORDS: usize = BUFFER_HEADER_BYTES / 4;
-const RX_PACKET_WORDS: usize = BLUETOOTH_LE_RX_PACKET_BYTES.div_ceil(4);
 const RX_PACKET_LAST_ALIGNED_OFFSET: u32 = ((BLUETOOTH_LE_RX_PACKET_BYTES as u32 - 1) / 4) * 4;
 
 /// Opaque raw-controller-time observation attached to one received LE packet.
@@ -171,17 +170,21 @@ impl LeRxPacketAddress {
 /// Private controller-shared receive-buffer header.
 #[repr(C, align(4))]
 pub(crate) struct LeRxBufferHeaderStorage {
-    words: [VolatileCell<u32>; BUFFER_HEADER_WORDS],
+    pub(crate) layout: BleBufferHeader,
 }
 
-impl LeRxBufferHeaderStorage {
-    const LINK_MASK: u32 = 0x000f_ffff;
-    const ROTATION_MARKER: u32 = 1;
-    const COMPLETION_GATE: u32 = 1 << 31;
+/// SOURCE: pinned `memMgmt_3.o` RX-header allocator, including its opaque PDU-target prefix.
+const RX_HEADER: BufferHeaderImage = BufferHeaderImage {
+    pdu_target: BleBufferHeaderPduTarget::ZERO
+        .with_bits_20_31_opaque(0x808)
+        .expect("reviewed prefix fits"),
+    ..BufferHeaderImage::ZERO
+};
 
+impl LeRxBufferHeaderStorage {
     pub(crate) const fn new() -> Self {
         Self {
-            words: [const { VolatileCell::new(0) }; BUFFER_HEADER_WORDS],
+            layout: BleBufferHeader::zeroed(),
         }
     }
 
@@ -192,224 +195,193 @@ impl LeRxBufferHeaderStorage {
         predecessor: Option<BluetoothControllerSramAddress>,
         rotates_into_successor: bool,
     ) {
-        let successor = successor.map_or(0, ControllerSramLinkAddress::compressed_image);
-        let predecessor = predecessor.map_or(0, BluetoothControllerSramAddress::address);
-        let rotation = if rotates_into_successor {
-            Self::ROTATION_MARKER
-        } else {
-            0
-        };
-        let image = [
-            successor,
-            packet.compressed_image(),
-            0x8080_0000,
-            0,
-            rotation,
-            predecessor,
-        ];
-        for (cell, word) in self.words.iter().zip(image) {
-            cell.set(word);
+        BufferHeaderImage {
+            next: BleBufferHeaderNext::from_bits(
+                successor.map_or(0, ControllerSramLinkAddress::compressed_image),
+            ),
+            packet_base: BleBufferHeaderPacketBase::from_bits(packet.compressed_image()),
+            allocation: BleBufferHeaderAllocation::ZERO.with_terminal(rotates_into_successor),
+            previous: BleBufferHeaderPrevious::from_bits(
+                predecessor.map_or(0, BluetoothControllerSramAddress::address),
+            ),
+            ..RX_HEADER
         }
+        .write(&self.layout);
     }
-
     pub(crate) fn completion_observed(&self) -> bool {
-        self.words[3].get() & Self::COMPLETION_GATE != 0
+        self.layout.completion().read().done()
     }
-
-    /// Initial global RX cursor: an already completed header without a packet.
-    /// The controller obtains writable storage by following its successor.
     pub(crate) fn install_completed_predecessor(&self, successor: ControllerSramLinkAddress) {
-        let image = [
-            successor.compressed_image(),
-            0,
-            0x8080_0000,
-            Self::COMPLETION_GATE,
-            0,
-            0,
-        ];
-        for (cell, word) in self.words.iter().zip(image) {
-            cell.set(word);
+        BufferHeaderImage {
+            next: BleBufferHeaderNext::from_bits(successor.compressed_image()),
+            completion: BleBufferHeaderCompletion::ZERO.with_done(true),
+            ..RX_HEADER
         }
+        .write(&self.layout);
     }
-
     #[cfg(test)]
     pub(crate) fn emulate_hardware_completion(&self) {
-        self.words[3].set(self.words[3].get() | Self::COMPLETION_GATE);
+        self.layout
+            .completion()
+            .write(self.layout.completion().read().with_done(true));
     }
-
     pub(crate) fn successor(&self) -> Option<u32> {
-        let image = self.words[0].get() & Self::LINK_MASK;
+        let image = self.layout.next().read().address();
         (image != 0).then_some(image)
     }
-
     pub(crate) fn predecessor(&self) -> Option<u32> {
-        let address = self.words[5].get();
+        let address = self.layout.previous().read().address();
         (address != 0).then_some(address)
     }
-
     pub(crate) fn rotates_into_successor(&self) -> bool {
-        self.words[4].get() & Self::ROTATION_MARKER != 0
+        self.layout.allocation().read().terminal()
     }
-
-    /// Set or clear the rotation marker in the `+0x10` halfword.
     pub(crate) fn set_rotation_marker(&self, marked: bool) {
-        let word = self.words[4].get() & !Self::ROTATION_MARKER;
-        self.words[4].set(if marked {
-            word | Self::ROTATION_MARKER
-        } else {
-            word
-        });
+        self.layout
+            .allocation()
+            .write(self.layout.allocation().read().with_terminal(marked));
     }
-
-    /// Replace the successor link while preserving bits 31:20.
     pub(crate) fn link_successor(&self, successor: Option<ControllerSramLinkAddress>) {
-        let image = successor.map_or(0, ControllerSramLinkAddress::compressed_image);
-        self.words[0].set((self.words[0].get() & !Self::LINK_MASK) | image);
+        self.layout.next().write(
+            BleBufferHeaderNext::from_bits(
+                successor.map_or(0, ControllerSramLinkAddress::compressed_image),
+            )
+            .with_bits_20_31_opaque(self.layout.next().read().bits_20_31_opaque())
+            .expect("retained prefix fits"),
+        );
     }
-
-    /// Compressed packet link, or `None` for a packetless header.
     pub(crate) fn packet_image(&self) -> Option<u32> {
-        let image = self.words[1].get() & Self::LINK_MASK;
+        let image = self.layout.packet_base().read().address();
         (image != 0).then_some(image)
     }
-
-    /// Detach the packet while preserving bits 31:20.
     pub(crate) fn clear_packet(&self) {
-        self.words[1].set(self.words[1].get() & !Self::LINK_MASK);
+        self.layout
+            .packet_base()
+            .write(self.layout.packet_base().read().without_address());
     }
-
     pub(crate) fn clear_completion(&self) {
-        self.words[3].set(self.words[3].get() & !Self::COMPLETION_GATE);
+        self.layout
+            .completion()
+            .write(self.layout.completion().read().with_done(false));
     }
-
-    /// Store the full address of the predecessor, or zero.
     pub(crate) fn set_predecessor(&self, predecessor: Option<u32>) {
-        self.words[5].set(predecessor.unwrap_or(0));
+        self.layout
+            .previous()
+            .write(BleBufferHeaderPrevious::from_bits(predecessor.unwrap_or(0)));
     }
-
-    /// Copy the complete header image from `other`.
     pub(crate) fn copy_from(&self, other: &Self) {
-        for (cell, word) in self.words.iter().zip(&other.words) {
-            cell.set(word.get());
-        }
+        crate::shared_layout::copy_buffer_header(&self.layout, &other.layout);
     }
 }
 
 /// Private controller-shared receive packet allocation.
 #[repr(C, align(4))]
 pub(crate) struct LeRxPacketStorage {
-    words: [VolatileCell<u32>; RX_PACKET_WORDS],
+    pub(crate) bytes: RxPacketBytes,
 }
 
 impl LeRxPacketStorage {
-    const CAPACITY_WORD: usize = 1;
-    const RESULT_WORD: usize = 3;
-    const CAPTURED_TIME_WORD: usize = 4;
-    const EPOCH_WORD: usize = 6;
-    const RESULT_REARM_SENTINEL: u32 = 0x00ff_ffff;
-    const EPOCH_REARM_SENTINEL: u32 = 0x0000_ffff;
-    const CAPACITY_IMAGE: u32 = 0x0001_0100;
-    const UPPER_DISPATCH_BLOCKING_FLAGS: u32 = 0x0000_0601;
-
     pub(crate) const fn new() -> Self {
         Self {
-            words: [const { VolatileCell::new(0) }; RX_PACKET_WORDS],
+            bytes: RxPacketBytes::zeroed(),
         }
     }
-
     pub(crate) fn initialize(&self) {
-        for word in &self.words {
-            word.set(0);
-        }
-        self.words[Self::CAPACITY_WORD].set(Self::CAPACITY_IMAGE);
-        self.rearm();
+        self.bytes.initialize();
     }
-
     pub(crate) fn rearm(&self) {
-        self.words[Self::RESULT_WORD]
-            .set(self.words[Self::RESULT_WORD].get() | Self::RESULT_REARM_SENTINEL);
-        self.words[Self::EPOCH_WORD]
-            .set(self.words[Self::EPOCH_WORD].get() | Self::EPOCH_REARM_SENTINEL);
+        self.bytes.rearm();
     }
 
     fn disposition(&self, connection: bool) -> Result<LeRxPacketDisposition, LeRxPacketError> {
-        let result = self.words[Self::RESULT_WORD].get();
-        if result & Self::RESULT_REARM_SENTINEL == Self::RESULT_REARM_SENTINEL {
+        let bytes = self.bytes.prefix();
+        let result = BleRxPacketPrefix::new(&bytes).result();
+        if result_not_produced(result) {
             return Err(LeRxPacketError::ProducerSentinelRetained);
         }
-        // Connection RX has a different acceptance gate from advertising.
-        // Current vendor conn_rx_process rejects result flags 0x17.
-        let blocking = if connection {
-            0x17
+        // SOURCE: pinned connection RX rejects flags 0,1,2,4; ordinary RX rejects 0,9,10.
+        let rejected = if connection {
+            result.bit_0_opaque()
+                || result.bit_1_opaque()
+                || result.bit_2_opaque()
+                || result.bit_4_opaque()
         } else {
-            Self::UPPER_DISPATCH_BLOCKING_FLAGS
+            result.bit_0_opaque() || result.bit_9_opaque() || result.bit_10_opaque()
         };
-        if result & blocking != 0 {
-            return Ok(LeRxPacketDisposition::Discarded);
-        }
-        Ok(LeRxPacketDisposition::Dispatchable)
+        Ok(if rejected {
+            LeRxPacketDisposition::Discarded
+        } else {
+            LeRxPacketDisposition::Dispatchable
+        })
     }
-
     fn copy_dispatchable_pdu(&self) -> Result<LeReceivedPdu, LeRxPacketError> {
-        let epoch = self.words[Self::EPOCH_WORD].get();
-        if epoch & Self::EPOCH_REARM_SENTINEL == Self::EPOCH_REARM_SENTINEL {
+        let prefix_bytes = self.bytes.prefix();
+        let prefix = BleRxPacketPrefix::new(&prefix_bytes);
+        if prefix.auxiliary().bits_0_15_opaque() == u16::MAX {
             return Err(LeRxPacketError::EpochSentinelRetained);
         }
-
-        let payload_length = self.read_byte(BLUETOOTH_LE_RX_PACKET_PREFIX_BYTES - 1);
-        let length = usize::from(payload_length) + 2;
+        let payload_length = usize::from(prefix.payload_length().value());
+        let length = payload_length + 2;
         let mut bytes = [0; BLUETOOTH_LE_RX_PAYLOAD_CAPACITY + 2];
-        let mut index = 0;
-        while index < length {
-            bytes[index] = self.read_byte(BLUETOOTH_LE_RX_PACKET_PREFIX_BYTES - 2 + index);
-            index += 1;
+        bytes[0] = prefix.pdu_header().value();
+        bytes[1] = payload_length as u8;
+        for (target, source) in bytes[2..length].iter_mut().zip(&self.bytes.payload) {
+            *target = source.get();
         }
         Ok(LeReceivedPdu {
             bytes,
             length: length as u16,
-            rssi_dbm: self.read_byte(BLUETOOTH_LE_RX_PACKET_PREFIX_BYTES - 15) as i8,
+            rssi_dbm: prefix.result().rssi() as i8,
             captured_time: LePacketCapturedTime::from_controller_sram_word(
-                self.words[Self::CAPTURED_TIME_WORD].get(),
+                prefix.byte_0010_opaque().bits_0_31_opaque(),
             ),
         })
     }
-
-    fn read_byte(&self, offset: usize) -> u8 {
-        let word = self.words[offset / 4].get();
-        ((word >> ((offset % 4) * 8)) & 0xff) as u8
-    }
-
     #[cfg(test)]
     pub(crate) fn emulate_hardware_receive(&self, pdu: &[u8], rssi_dbm: i8, captured_time: u32) {
         assert!((2..=BLUETOOTH_LE_RX_PAYLOAD_CAPACITY + 2).contains(&pdu.len()));
         assert_eq!(usize::from(pdu[1]) + 2, pdu.len());
-        self.words[Self::RESULT_WORD].set(0);
-        self.words[Self::CAPTURED_TIME_WORD].set(captured_time);
-        self.words[Self::EPOCH_WORD].set(0);
-        for (offset, byte) in pdu.iter().copied().enumerate() {
-            self.write_byte(BLUETOOTH_LE_RX_PACKET_PREFIX_BYTES - 2 + offset, byte);
+        let bytes = self.bytes.prefix();
+        let original = BleRxPacketPrefix::new(&bytes);
+        let produced = [
+            original.byte_0000_opaque().bits().to_le_bytes(),
+            original.byte_0004_opaque().bits().to_le_bytes(),
+            original.byte_0008_opaque().bits().to_le_bytes(),
+            BleRxPacketPrefixResult::from_bits(0)
+                .with_rssi(rssi_dbm as u8)
+                .bits()
+                .to_le_bytes(),
+            captured_time.to_le_bytes(),
+            original.byte_0014_opaque().bits().to_le_bytes(),
+            original
+                .auxiliary()
+                .with_bits_0_15_opaque(0)
+                .bits()
+                .to_le_bytes(),
+        ];
+        self.bytes
+            .model_prefix(produced.into_iter().flatten().chain([pdu[0], pdu[1]]));
+        for (cell, byte) in self.bytes.payload.iter().zip(&pdu[2..]) {
+            cell.set(*byte);
         }
-        self.write_byte(BLUETOOTH_LE_RX_PACKET_PREFIX_BYTES - 15, rssi_dbm as u8);
     }
-
     #[cfg(test)]
     pub(crate) fn emulate_hardware_discard(&self) {
-        self.words[Self::RESULT_WORD].set(Self::UPPER_DISPATCH_BLOCKING_FLAGS);
+        self.bytes.update_prefix(|prefix| {
+            prefix.set_result(
+                prefix
+                    .result()
+                    .with_bit_0_opaque(true)
+                    .with_bit_9_opaque(true)
+                    .with_bit_10_opaque(true),
+            )
+        });
     }
-
-    #[cfg(test)]
-    fn write_byte(&self, offset: usize, value: u8) {
-        let shift = (offset % 4) * 8;
-        let word = self.words[offset / 4].get();
-        self.words[offset / 4].set((word & !(0xff << shift)) | (u32::from(value) << shift));
-    }
-
-    /// Allocation number that hardware recorded in the `+0x18` halfword.
     pub(crate) fn receive_tag(&self) -> u16 {
-        (self.words[Self::EPOCH_WORD].get() & Self::EPOCH_REARM_SENTINEL) as u16
+        BleRxPacketPrefix::new(&self.bytes.prefix())
+            .auxiliary()
+            .bits_0_15_opaque()
     }
-
-    /// Copy the result of a completed packet.
     pub(crate) fn received(&self, connection: bool) -> Result<LeRxOutcome, LeRxError> {
         Ok(match self.disposition(connection)? {
             LeRxPacketDisposition::Dispatchable => {
@@ -418,11 +390,11 @@ impl LeRxPacketStorage {
             LeRxPacketDisposition::Discarded => LeRxOutcome::Discarded,
         })
     }
-
     #[cfg(test)]
     pub(crate) fn emulate_receive_tag(&self, tag: u16) {
-        let word = self.words[Self::EPOCH_WORD].get() & !Self::EPOCH_REARM_SENTINEL;
-        self.words[Self::EPOCH_WORD].set(word | u32::from(tag));
+        self.bytes.update_prefix(|prefix| {
+            prefix.set_auxiliary(prefix.auxiliary().with_bits_0_15_opaque(tag))
+        });
     }
 }
 
@@ -458,7 +430,9 @@ mod tests {
         // Each independently rejected controller outcome. These are
         // packet-result stimuli, not MMIO or generated-layout assertions.
         for rejected_result in [1, 2, 4, 16] {
-            packet.words[LeRxPacketStorage::RESULT_WORD].set(rejected_result);
+            packet.bytes.update_prefix(|prefix| {
+                prefix.set_result(BleRxPacketPrefixResult::from_bits(rejected_result))
+            });
             assert_eq!(packet.received(true), Ok(LeRxOutcome::Discarded));
         }
         packet.rearm();

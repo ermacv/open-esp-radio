@@ -1,19 +1,15 @@
 use std::boxed::Box;
 
 use super::{
-    COMPRESSED_LINK_MASK, LINK_STATE_RX_HEAD, LINK_STATE_RX_LIST_CLASS, LINK_STATE_RX_TAIL,
-    LINK_STATE_TX_HEAD, LINK_STATE_TX_TAIL, LINK_STATE_WORD_04, LINK_STATE_WORD_08,
     LegacyConnectableAdvIndPacketInput, LegacyConnectableAdvertisingError,
     LegacyConnectableAdvertisingMemoryInput, LegacyConnectableAdvertisingOwnAddress,
     LegacyConnectableAdvertisingPduFitError, LegacyConnectableAdvertisingPool,
     LegacyConnectableAdvertisingState, LegacyConnectableAdvertisingStorage,
-    LegacyConnectableScanResponsePacketInput, SCHEDULER_ITEM_ALLOCATION_NUMBER,
-    SCHEDULER_ITEM_COEX_PRIORITIES,
+    LegacyConnectableScanResponsePacketInput,
 };
 use crate::{
     AdvertisingCoexistencePriorities, LegacyAdvertisingPrimaryChannelPlan,
     SchedulerItemCoexistencePriority,
-    coexistence::lanes_image,
     le_rx_chain::{LeRxChain, LeRxChainModelAddress, LeRxChainStorage},
     le_rx_packet::LeRxOutcome,
     rx_memory_list::RxMemoryListClass,
@@ -100,27 +96,27 @@ fn preparation_chains_both_pdus_and_joins_the_non_scanning_chain() {
     );
 
     let (graph, binding, state) = pool.shared(&instance).unwrap();
-    let words = &graph.link_state.words;
-    assert_eq!(words[LINK_STATE_RX_LIST_CLASS].get() >> 28, 2);
+    let layout = &graph.link_state.layout;
+    assert_eq!(layout.rx_list().read().class(), 2);
     assert_eq!(
-        words[LINK_STATE_WORD_04].get() & COMPRESSED_LINK_MASK,
+        layout.scan_response().read().header(),
         binding.scan_response_header.compressed_image()
     );
-    assert_eq!(words[LINK_STATE_WORD_08].get() & COMPRESSED_LINK_MASK, 0);
+    assert_eq!(layout.rx_path().read().header(), 0);
     let (head, tail, _) = chain.snapshot();
     assert_eq!(
         (
-            words[LINK_STATE_RX_HEAD].get(),
-            words[LINK_STATE_RX_TAIL].get()
+            layout.rx_head().read().bits(),
+            layout.rx_tail().read().bits()
         ),
         (head, tail)
     );
     assert_eq!(
-        words[LINK_STATE_TX_HEAD].get(),
+        layout.tx_head().read().bits(),
         binding.adv_ind_header.controller_address().address()
     );
     assert_eq!(
-        words[LINK_STATE_TX_TAIL].get(),
+        layout.tx_tail().read().bits(),
         binding.scan_response_header.controller_address().address()
     );
     let LegacyConnectableAdvertisingState::Prepared(prepared) = *state else {
@@ -157,15 +153,15 @@ fn a_set_without_scan_response_transmits_one_node_and_still_receives() {
     assert_eq!(pool.scan_response_pdu(&instance), None);
     {
         let (graph, binding, _) = pool.shared(&instance).unwrap();
-        let words = &graph.link_state.words;
+        let layout = &graph.link_state.layout;
         assert_eq!(graph.adv_ind_header.successor_image(), 0);
-        assert_eq!(words[LINK_STATE_WORD_04].get() & COMPRESSED_LINK_MASK, 0);
+        assert_eq!(layout.scan_response().read().header(), 0);
         assert_eq!(
-            words[LINK_STATE_TX_TAIL].get(),
+            layout.tx_tail().read().bits(),
             binding.adv_ind_header.controller_address().address()
         );
         // Receptions still join the non-scanning chain.
-        assert_eq!(words[LINK_STATE_RX_LIST_CLASS].get() >> 28, 2);
+        assert_eq!(layout.rx_list().read().class(), 2);
     }
 
     // Clearing restores the two-node chain for the next set.
@@ -177,7 +173,7 @@ fn a_set_without_scan_response_transmits_one_node_and_still_receives() {
         binding.scan_response_header.compressed_image()
     );
     assert_eq!(
-        graph.link_state.words[LINK_STATE_TX_TAIL].get(),
+        graph.link_state.layout.tx_tail().read().bits(),
         binding.scan_response_header.controller_address().address()
     );
 }
@@ -190,7 +186,7 @@ fn the_item_carries_its_number_and_each_event_its_coexistence_lanes() {
     {
         let (graph, _, _) = pool.shared(&instance).unwrap();
         for item in &graph.items {
-            assert_eq!(item.words[SCHEDULER_ITEM_ALLOCATION_NUMBER].get(), 3);
+            assert_eq!(item.layout.allocation_number().read().bits(), 3);
         }
     }
     let plan = LegacyAdvertisingPrimaryChannelPlan::new(true, true, true).unwrap();
@@ -200,8 +196,16 @@ fn the_item_carries_its_number_and_each_event_its_coexistence_lanes() {
     let (graph, _, _) = pool.shared(&instance).unwrap();
     for item in &graph.items {
         assert_eq!(
-            item.words[SCHEDULER_ITEM_COEX_PRIORITIES].get() & 0x000f_ffff,
-            lanes_image(&lanes.lanes)
+            {
+                let image = item.layout.coexistence_priority().read();
+                [
+                    image.lane_0(),
+                    image.lane_1(),
+                    image.lane_2(),
+                    image.lane_3(),
+                ]
+            },
+            lanes.lanes.map(|lane| lane.value())
         );
     }
 }

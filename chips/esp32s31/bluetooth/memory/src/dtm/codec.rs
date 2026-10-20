@@ -9,8 +9,8 @@ use crate::{
     dtm_rx_result::{DtmRxResultProjection, DtmRxResultProjectionError},
     le_phy_packet::{LeAccessAddress, LeCrcInit},
     le_tx_packet::{
-        BLUETOOTH_LE_BUFFER_HEADER_BYTES, BLUETOOTH_LE_TX_PACKET_PREFIX_BYTES,
-        LeTxBufferHeaderStorage, LeTxPacketAddress, LeTxPacketPreparedLength, LeTxPacketStorage,
+        BLUETOOTH_LE_TX_PACKET_PREFIX_BYTES, LeTxBufferHeaderStorage, LeTxPacketAddress,
+        LeTxPacketPreparedLength, LeTxPacketStorage,
     },
     scheduler_context::SchedulerContextStorage,
     scheduler_item::{SchedulerItemCompletionStatus, SchedulerItemHeader},
@@ -27,14 +27,15 @@ use super::{
 };
 use crate::scheduler_pool::SchedulerPoolBindError;
 
-use vcell::VolatileCell;
+use crate::rx_packet_bytes::{RxPacketBytes, result_not_produced};
+use oer_esp32s31_hal::layouts::*;
 
 /// Bytes allocated for one DTM link-state object.
-pub const BLUETOOTH_DTM_LINK_STATE_BYTES: usize = 0x84;
+pub const BLUETOOTH_DTM_LINK_STATE_BYTES: usize = BleLinkState::SIZE;
 /// Bytes allocated for one DTM scheduler item.
-pub const BLUETOOTH_DTM_SCHEDULER_ITEM_BYTES: usize = 0x60;
+pub const BLUETOOTH_DTM_SCHEDULER_ITEM_BYTES: usize = BleSchedulerItem::SIZE;
 /// Bytes preceding the maximum DTM receiver capacity.
-pub const BLUETOOTH_DTM_RX_PACKET_PREFIX_BYTES: usize = 0x1e;
+pub const BLUETOOTH_DTM_RX_PACKET_PREFIX_BYTES: usize = BleRxPacketPrefix::SIZE;
 /// Maximum packet capacity supplied by the complete DTM allocator.
 pub const BLUETOOTH_DTM_MAX_PACKET_CAPACITY: usize = u8::MAX as usize;
 /// Logical bytes in the complete DTM TX packet allocation.
@@ -46,28 +47,34 @@ pub const BLUETOOTH_DTM_RX_PACKET_BYTES: usize =
 
 type DtmTxPacketAddress = LeTxPacketAddress<BLUETOOTH_DTM_TX_PACKET_BYTES>;
 
-const RX_PACKET_LAST_ALIGNED_OFFSET: u32 = 0x11c;
-pub(super) const LINK_STATE_RX_TAIL_OFFSET: usize = 0x70 / 4;
-const LINK_STATE_RX_HEAD_OFFSET: usize = 0x68 / 4;
-const LINK_STATE_TX_HEAD_OFFSET: usize = 0x6c / 4;
-const LINK_STATE_TX_TAIL_OFFSET: usize = 0x74 / 4;
-const LINK_STATE_RX_SWAP_RESERVE_OFFSET: usize = 0x78 / 4;
-const LINK_STATE_ALLOCATION_CONFIG_OFFSET: usize = 0x30 / 4;
-const LINK_STATE_ALLOCATION_CONFIG_IMAGE: u32 = 0x0000_1e00;
-const SCHEDULER_ITEM_ALLOCATION_PREFIX_OFFSET: usize = 0;
-const SCHEDULER_ITEM_ALLOCATION_PREFIX_IMAGE: u32 = 0x0030_0000;
-const SCHEDULER_ITEM_CONTEXT_OFFSET: usize = 1;
-const SCHEDULER_ITEM_LINK_STATE_OFFSET: usize = 0x08 / 4;
-const SCHEDULER_ITEM_ALLOCATION_FLAGS_OFFSET: usize = 0x1c / 4;
-const SCHEDULER_ITEM_ALLOCATION_FLAGS_IMAGE: u32 = 0xffdf_ffff;
-const SCHEDULER_ITEM_ALLOCATION_CONFIG_OFFSET: usize = 0x20 / 4;
-const SCHEDULER_ITEM_POSITIONAL_24_OFFSET: usize = 0x24 / 4;
+const RX_PACKET_LAST_ALIGNED_OFFSET: u32 = ((BLUETOOTH_DTM_RX_PACKET_BYTES as u32 - 1) / 4) * 4;
+/// SOURCE: pinned role allocation/reset body in the BLE controller-memory reference.
+const LINK_STATE_ALLOCATION_CONFIG_IMAGE: BleLinkStateSequencePolicy =
+    BleLinkStateSequencePolicy::ZERO
+        .with_bits_9_12_opaque(0xf)
+        .expect("reviewed field image fits");
+/// SOURCE: pinned role allocation/reset body in the BLE controller-memory reference.
+const SCHEDULER_ITEM_ALLOCATION_PREFIX_IMAGE: BleSchedulerItemHardwareNext =
+    BleSchedulerItemHardwareNext::ZERO
+        .with_bits_20_21_opaque(0x3)
+        .expect("reviewed field image fits");
+/// SOURCE: pinned role allocation/reset body in the BLE controller-memory reference.
+const SCHEDULER_ITEM_ALLOCATION_FLAGS_IMAGE: BleSchedulerItemWord001cOpaque =
+    BleSchedulerItemWord001cOpaque::ZERO.with_bits_0_31_opaque(0xffdfffff);
 /// SOURCE: pinned `libble_app.a[dtm_4.o]::sym_dtm_qzyGhbH1fEoUEmtalnva`
 /// (`r_ble_lll_dtm_alloc_memory`) stores `0x8421` in the low twenty bits,
 /// four five-bit coexistence priority lanes of one each.
-const SCHEDULER_ITEM_POSITIONAL_24_IMAGE: u32 = 0x0000_8421;
-const SCHEDULER_ITEM_WORDS: usize = BLUETOOTH_DTM_SCHEDULER_ITEM_BYTES / 4;
-const RX_PACKET_WORDS: usize = BLUETOOTH_DTM_RX_PACKET_BYTES.div_ceil(4);
+/// SOURCE: pinned role allocation/reset body in the BLE controller-memory reference.
+const SCHEDULER_ITEM_POSITIONAL_24_IMAGE: BleSchedulerItemCoexistencePriority =
+    BleSchedulerItemCoexistencePriority::ZERO
+        .with_lane_0(0x1)
+        .expect("reviewed field image fits")
+        .with_lane_1(0x1)
+        .expect("reviewed field image fits")
+        .with_lane_2(0x1)
+        .expect("reviewed field image fits")
+        .with_lane_3(0x1)
+        .expect("reviewed field image fits");
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum DtmRxPacketAddressError {
@@ -108,106 +115,93 @@ impl DtmRxPacketAddress {
 /// Opaque CPU-owned link-state allocation.
 #[repr(C, align(4))]
 pub(super) struct DtmLinkStateStorage {
-    words: [VolatileCell<u32>; BLUETOOTH_DTM_LINK_STATE_BYTES / 4],
+    pub(super) layout: BleLinkState,
 }
 
 impl DtmLinkStateStorage {
-    const CRC_INIT_WORD: usize = 0x2c / 4;
-    const ACCESS_ADDRESS_WORD: usize = 0x38 / 4;
-
     const fn new() -> Self {
         Self {
-            words: [const { VolatileCell::new(0) }; BLUETOOTH_DTM_LINK_STATE_BYTES / 4],
+            layout: BleLinkState::zeroed(),
         }
-    }
-
-    pub(super) fn read_word(&self, index: usize) -> u32 {
-        self.words[index].get()
-    }
-
-    pub(super) fn write_word(&self, index: usize, value: u32) {
-        self.words[index].set(value);
     }
 
     fn clear(&self) {
-        for word in &self.words {
-            word.set(0);
-        }
+        crate::shared_layout::clear_link_state(&self.layout);
     }
 
     fn access_address(&self) -> LeAccessAddress {
-        LeAccessAddress::from_controller_image(self.read_word(Self::ACCESS_ADDRESS_WORD))
+        LeAccessAddress::from_controller_image(self.layout.access_address().read().bits())
     }
 
     fn write_access_address(&self, access_address: LeAccessAddress) {
-        self.write_word(Self::ACCESS_ADDRESS_WORD, access_address.controller_image());
+        self.layout
+            .access_address()
+            .write(BleLinkStateAccessAddress::from_bits(
+                access_address.controller_image(),
+            ));
     }
 
     fn crc_init(&self) -> LeCrcInit {
-        LeCrcInit::from_controller_word(self.read_word(Self::CRC_INIT_WORD))
+        LeCrcInit::from_controller_word(self.layout.crc_initialization().read().bits())
     }
 
     fn write_crc_init(&self, crc_init: LeCrcInit) {
-        let word = self.read_word(Self::CRC_INIT_WORD);
-        self.write_word(Self::CRC_INIT_WORD, crc_init.apply_to_controller_word(word));
+        let word = self.layout.crc_initialization().read().bits();
+        self.layout
+            .crc_initialization()
+            .write(BleLinkStateCrcInitialization::from_bits(
+                crc_init.apply_to_controller_word(word),
+            ));
     }
 
     pub(super) fn reviewed_words(&self) -> DtmLinkStateReviewedWords {
         DtmLinkStateReviewedWords {
-            word_00: self.read_word(0),
-            word_08: self.read_word(2),
-            profile_word_14: DtmLinkStateProfileWord::from_storage(self.read_word(5)),
+            word_00: self.layout.tx_path().read(),
+            word_08: self.layout.rx_path().read(),
+            profile_word_14: DtmLinkStateProfileWord::from_storage(
+                self.layout.packet_policy().read().bits(),
+            ),
             crc_init: self.crc_init(),
-            word_30: self.read_word(12),
-            word_34: self.read_word(13),
+            word_30: self.layout.sequence_policy().read(),
+            word_34: self.layout.event_span().read(),
             access_address: self.access_address(),
-            word_50: self.read_word(20),
-            word_60: self.read_word(24),
+            word_50: self.layout.direction_finding().read(),
+            word_60: self.layout.event().read(),
         }
     }
 
     pub(super) fn write_reviewed_words(&self, words: DtmLinkStateReviewedWords) {
-        self.write_word(0, words.word_00);
-        self.write_word(2, words.word_08);
-        self.write_word(5, words.profile_word_14.into_storage());
+        self.layout.tx_path().write(words.word_00);
+        self.layout.rx_path().write(words.word_08);
+        self.layout
+            .packet_policy()
+            .write(BleLinkStatePacketPolicy::from_bits(
+                words.profile_word_14.into_storage(),
+            ));
         self.write_crc_init(words.crc_init());
-        self.write_word(12, words.word_30);
-        self.write_word(13, words.word_34);
+        self.layout.sequence_policy().write(words.word_30);
+        self.layout.event_span().write(words.word_34);
         self.write_access_address(words.access_address());
-        self.write_word(20, words.word_50);
-        self.write_word(24, words.word_60);
+        self.layout.direction_finding().write(words.word_50);
+        self.layout.event().write(words.word_60);
     }
 }
 
 /// Opaque hardware-shared scheduler-item allocation.
 #[repr(C, align(4))]
 pub(super) struct DtmSchedulerItemStorage {
-    words: [VolatileCell<u32>; SCHEDULER_ITEM_WORDS],
+    pub(super) layout: BleSchedulerItem,
 }
 
 impl DtmSchedulerItemStorage {
-    pub(super) fn words(&self) -> &[VolatileCell<u32>] {
-        &self.words
-    }
-
     const fn new() -> Self {
         Self {
-            words: [const { VolatileCell::new(0) }; SCHEDULER_ITEM_WORDS],
+            layout: BleSchedulerItem::zeroed(),
         }
     }
 
-    pub(super) fn read_word(&self, index: usize) -> u32 {
-        self.words[index].get()
-    }
-
-    pub(super) fn write_word(&self, index: usize, value: u32) {
-        self.words[index].set(value);
-    }
-
-    pub(super) fn header(
-        &self,
-    ) -> SchedulerItemHeader<'_, [VolatileCell<u32>; SCHEDULER_ITEM_WORDS]> {
-        SchedulerItemHeader::new(&self.words)
+    pub(super) fn header(&self) -> SchedulerItemHeader<'_> {
+        SchedulerItemHeader::new(&self.layout)
     }
 
     fn hardware_chain_word(&self) -> DtmSchedulerHardwareChainWord {
@@ -225,140 +219,122 @@ impl DtmSchedulerItemStorage {
     }
 
     fn clear(&self) {
-        for word in &self.words {
-            word.set(0);
-        }
+        crate::shared_layout::clear_scheduler_item(&self.layout);
     }
 
     fn reviewed_words(&self) -> DtmSchedulerItemReviewedWords {
         DtmSchedulerItemReviewedWords {
-            word_00: self.read_word(0),
-            word_04: self.read_word(1),
-            word_08: self.read_word(2),
-            word_0c: self.read_word(3),
-            word_14: self.read_word(5),
-            word_18: self.read_word(6),
-            word_2c: self.read_word(11),
-            word_44: self.read_word(17),
-            word_48: self.read_word(18),
-            word_4c: self.read_word(19),
+            word_00: self.layout.hardware_next().read(),
+            word_04: self.layout.context().read(),
+            word_08: self.layout.link_state().read(),
+            word_0c: self.layout.sequence_start().read(),
+            word_14: self.layout.rate_and_power().read(),
+            word_18: self.layout.channel_and_priority().read(),
+            word_2c: self.layout.receive_wait().read(),
+            word_44: self.layout.raw_start().read(),
+            word_48: self.layout.raw_end().read(),
+            word_4c: self.layout.control().read(),
         }
     }
 
     fn write_reviewed_words(&self, words: DtmSchedulerItemReviewedWords) {
-        self.write_word(0, words.word_00);
-        self.write_word(1, words.word_04);
-        self.write_word(2, words.word_08);
-        self.write_word(3, words.word_0c);
-        self.write_word(5, words.word_14);
-        self.write_word(6, words.word_18);
-        self.write_word(11, words.word_2c);
-        self.write_word(17, words.word_44);
-        self.write_word(18, words.word_48);
-        self.write_word(19, words.word_4c);
+        self.layout.hardware_next().write(words.word_00);
+        self.layout.context().write(words.word_04);
+        self.layout.link_state().write(words.word_08);
+        self.layout.sequence_start().write(words.word_0c);
+        self.layout.rate_and_power().write(words.word_14);
+        self.layout.channel_and_priority().write(words.word_18);
+        self.layout.receive_wait().write(words.word_2c);
+        self.layout.raw_start().write(words.word_44);
+        self.layout.raw_end().write(words.word_48);
+        self.layout.control().write(words.word_4c);
     }
 }
 
 #[repr(C, align(4))]
 pub(super) struct DtmRxBufferHeaderStorage {
-    words: [VolatileCell<u32>; BLUETOOTH_LE_BUFFER_HEADER_BYTES / 4],
+    pub(super) layout: BleBufferHeader,
 }
 
 impl DtmRxBufferHeaderStorage {
-    const COMPRESSED_LINK_MASK: u32 = 0x000f_ffff;
-    const RX_COMPLETION_OBSERVED_MASK: u32 = 0x8000_0000;
-    const RX_SOFTWARE_TERMINAL_MASK: u32 = 1;
-
     const fn new() -> Self {
         Self {
-            words: [const { VolatileCell::new(0) }; BLUETOOTH_LE_BUFFER_HEADER_BYTES / 4],
+            layout: BleBufferHeader::zeroed(),
         }
     }
-
-    fn read_word(&self, index: usize) -> u32 {
-        self.words[index].get()
-    }
-
-    fn write_word(&self, index: usize, value: u32) {
-        self.words[index].set(value);
-    }
-
-    fn install(&self, words: [u32; BLUETOOTH_LE_BUFFER_HEADER_BYTES / 4]) {
-        for (cell, word) in self.words.iter().zip(words) {
-            cell.set(word);
-        }
-    }
-
     fn initialize_bound_rx(&self, packet: DtmRxPacketAddress) {
-        self.install([0, packet.compressed_image(), 0x8080_0000, 0, 0, 0]);
+        self.initialize_rx_swap_reserve();
+        self.layout
+            .packet_base()
+            .write(BleBufferHeaderPacketBase::from_bits(
+                packet.compressed_image(),
+            ));
     }
-
     fn initialize_rx_swap_reserve(&self) {
-        self.install([0, 0, 0x8080_0000, 0, 0, 0]);
+        crate::shared_layout::BufferHeaderImage {
+            pdu_target: BleBufferHeaderPduTarget::ZERO
+                .with_bits_20_31_opaque(0x808)
+                .expect("reviewed prefix fits"),
+            ..crate::shared_layout::BufferHeaderImage::ZERO
+        }
+        .write(&self.layout);
     }
-
     fn rx_successor_link(&self) -> Option<DtmRxHeaderSuccessorLink> {
-        DtmRxHeaderSuccessorLink::from_image(self.read_word(0) & Self::COMPRESSED_LINK_MASK)
+        DtmRxHeaderSuccessorLink::from_image(self.layout.next().read().address())
     }
-
     fn set_rx_successor_link(&self, link: Option<DtmRxHeaderSuccessorLink>) {
-        let current = self.read_word(0);
-        let image = link.map_or(0, DtmRxHeaderSuccessorLink::image);
-        self.write_word(0, (current & !Self::COMPRESSED_LINK_MASK) | image);
+        self.layout.next().write(
+            BleBufferHeaderNext::from_bits(link.map_or(0, DtmRxHeaderSuccessorLink::image))
+                .with_bits_20_31_opaque(self.layout.next().read().bits_20_31_opaque())
+                .expect("retained prefix fits"),
+        );
     }
-
     fn rx_packet_link(&self) -> Option<DtmRxPacketLink> {
-        DtmRxPacketLink::from_image(self.read_word(1) & Self::COMPRESSED_LINK_MASK)
+        DtmRxPacketLink::from_image(self.layout.packet_base().read().address())
     }
-
     fn clear_rx_packet_link(&self) {
-        let current = self.read_word(1);
-        self.write_word(1, current & !Self::COMPRESSED_LINK_MASK);
+        self.layout
+            .packet_base()
+            .write(self.layout.packet_base().read().without_address());
     }
-
     fn observe_rx_completion_after_fence(&self, _fenced: &DtmExecutedWitness) -> bool {
-        self.read_word(3) & Self::RX_COMPLETION_OBSERVED_MASK != 0
+        self.layout.completion().read().done()
     }
-
     fn clear_rx_completion_observation(&self) {
-        let current = self.read_word(3);
-        self.write_word(3, current & !Self::RX_COMPLETION_OBSERVED_MASK);
+        self.layout
+            .completion()
+            .write(self.layout.completion().read().with_done(false));
     }
-
     #[cfg(test)]
     pub(super) fn model_controller_completion_observed(&self) {
-        let current = self.read_word(3);
-        self.write_word(3, current | Self::RX_COMPLETION_OBSERVED_MASK);
+        self.layout
+            .completion()
+            .write(self.layout.completion().read().with_done(true));
     }
-
     fn set_rx_software_terminal(&self, terminal: bool) {
-        let current = self.read_word(4);
-        let value = if terminal {
-            current | Self::RX_SOFTWARE_TERMINAL_MASK
-        } else {
-            current & !Self::RX_SOFTWARE_TERMINAL_MASK
-        };
-        self.write_word(4, value);
+        self.layout
+            .allocation()
+            .write(self.layout.allocation().read().with_terminal(terminal));
     }
-
     fn rx_backlink(&self) -> Option<DtmRxHeaderBacklink> {
-        DtmRxHeaderBacklink::from_address(self.read_word(5))
+        DtmRxHeaderBacklink::from_address(self.layout.previous().read().address())
     }
-
     fn set_rx_backlink(&self, backlink: Option<DtmRxHeaderBacklink>) {
-        self.write_word(5, backlink.map_or(0, DtmRxHeaderBacklink::address));
+        self.layout
+            .previous()
+            .write(BleBufferHeaderPrevious::from_bits(
+                backlink.map_or(0, DtmRxHeaderBacklink::address),
+            ));
     }
-
     fn copy_complete_rx_image_from(&self, source: &Self) {
-        self.install(core::array::from_fn(|index| source.read_word(index)));
+        crate::shared_layout::copy_buffer_header(&self.layout, &source.layout);
     }
-
     #[cfg(test)]
     pub(super) fn model_retarget_rx_packet(&self, packet: DtmRxPacketAddress) {
-        let current = self.read_word(1);
-        self.write_word(
-            1,
-            (current & !Self::COMPRESSED_LINK_MASK) | packet.compressed_image(),
+        self.layout.packet_base().write(
+            BleBufferHeaderPacketBase::from_bits(packet.compressed_image())
+                .with_bits_20_31_opaque(self.layout.packet_base().read().bits_20_31_opaque())
+                .expect("retained prefix fits"),
         );
     }
 }
@@ -429,57 +405,24 @@ impl LeTestPduHeader {
 
 #[repr(C, align(4))]
 pub(super) struct DtmRxPacketStorage {
-    words: [VolatileCell<u32>; RX_PACKET_WORDS],
+    pub(super) bytes: RxPacketBytes,
 }
 
 impl DtmRxPacketStorage {
-    const CAPACITY_WORD: usize = 1;
-    const RESULT_WORD: usize = 3;
-    const AUXILIARY_REARM_WORD: usize = 6;
-    const RESULT_REARM_SENTINEL: u32 = 0x00ff_ffff;
-    const AUXILIARY_REARM_SENTINEL: u32 = 0x0000_ffff;
-
     const fn new() -> Self {
-        let mut storage = Self {
-            words: [const { VolatileCell::new(0) }; RX_PACKET_WORDS],
-        };
-        storage.words[Self::CAPACITY_WORD] = VolatileCell::new(0x0001_0100);
-        storage.words[Self::RESULT_WORD] = VolatileCell::new(Self::RESULT_REARM_SENTINEL);
-        storage.words[Self::AUXILIARY_REARM_WORD] =
-            VolatileCell::new(Self::AUXILIARY_REARM_SENTINEL);
-        storage
-    }
-
-    fn read_word(&self, index: usize) -> u32 {
-        self.words[index].get()
-    }
-
-    fn write_word(&self, index: usize, value: u32) {
-        self.words[index].set(value);
-    }
-
-    fn clear(&self) {
-        for word in &self.words {
-            word.set(0);
+        Self {
+            bytes: RxPacketBytes::armed(),
         }
     }
-
+    fn clear(&self) {
+        self.bytes.clear();
+    }
     fn rearm_reviewed_packet_fields(&self) {
-        self.write_word(
-            Self::RESULT_WORD,
-            self.read_word(Self::RESULT_WORD) | Self::RESULT_REARM_SENTINEL,
-        );
-        self.write_word(
-            Self::AUXILIARY_REARM_WORD,
-            self.read_word(Self::AUXILIARY_REARM_WORD) | Self::AUXILIARY_REARM_SENTINEL,
-        );
+        self.bytes.rearm();
     }
-
     fn initialize_reviewed_allocation_fields(&self) {
-        self.write_word(Self::CAPACITY_WORD, 0x0001_0100);
-        self.rearm_reviewed_packet_fields();
+        self.bytes.initialize();
     }
-
     fn observe_after_fenced_completion(
         &self,
         _fenced: &DtmExecutedWitness,
@@ -487,22 +430,22 @@ impl DtmRxPacketStorage {
         Result<DtmRxResultProjection, DtmRxResultProjectionError>,
         DtmRxPacketCompletionObservationError,
     > {
-        let result_word = self.read_word(Self::RESULT_WORD);
-        if result_word & Self::RESULT_REARM_SENTINEL == Self::RESULT_REARM_SENTINEL {
+        let bytes = self.bytes.prefix();
+        let prefix = BleRxPacketPrefix::new(&bytes);
+        if result_not_produced(prefix.result()) {
             return Err(DtmRxPacketCompletionObservationError::ResultNotProduced);
         }
-        if self.read_word(Self::AUXILIARY_REARM_WORD) & Self::AUXILIARY_REARM_SENTINEL
-            == Self::AUXILIARY_REARM_SENTINEL
-        {
+        if prefix.auxiliary().bits_0_15_opaque() == u16::MAX {
             return Err(DtmRxPacketCompletionObservationError::AuxiliaryNotProduced);
         }
-        Ok(DtmRxResultProjection::from_word(result_word))
+        Ok(DtmRxResultProjection::from_word(prefix.result().bits()))
     }
-
     #[cfg(test)]
     pub(super) fn model_controller_completion(&self, result_word: u32, auxiliary: u16) {
-        self.write_word(Self::RESULT_WORD, result_word);
-        self.write_word(Self::AUXILIARY_REARM_WORD, u32::from(auxiliary));
+        self.bytes.update_prefix(|prefix| {
+            prefix.set_result(BleRxPacketPrefixResult::from_bits(result_word));
+            prefix.set_auxiliary(prefix.auxiliary().with_bits_0_15_opaque(auxiliary));
+        });
     }
 }
 
@@ -655,45 +598,62 @@ impl DtmStorage {
 
         storage
             .link_state
-            .write_word(LINK_STATE_RX_HEAD_OFFSET, rx_header_address);
+            .layout
+            .rx_head()
+            .write(BleLinkStateRxHead::from_bits(rx_header_address));
         storage
             .link_state
-            .write_word(LINK_STATE_TX_HEAD_OFFSET, tx_header_address);
+            .layout
+            .tx_head()
+            .write(BleLinkStateTxHead::from_bits(tx_header_address));
         storage
             .link_state
-            .write_word(LINK_STATE_RX_TAIL_OFFSET, rx_header_address);
+            .layout
+            .rx_tail()
+            .write(BleLinkStateRxTail::from_bits(rx_header_address));
         storage
             .link_state
-            .write_word(LINK_STATE_TX_TAIL_OFFSET, tx_header_address);
+            .layout
+            .tx_tail()
+            .write(BleLinkStateTxTail::from_bits(tx_header_address));
         storage
             .link_state
-            .write_word(LINK_STATE_RX_SWAP_RESERVE_OFFSET, rx_swap_address);
-        storage.link_state.write_word(
-            LINK_STATE_ALLOCATION_CONFIG_OFFSET,
-            LINK_STATE_ALLOCATION_CONFIG_IMAGE,
-        );
-        storage.scheduler_item.write_word(
-            SCHEDULER_ITEM_ALLOCATION_PREFIX_OFFSET,
-            SCHEDULER_ITEM_ALLOCATION_PREFIX_IMAGE,
+            .layout
+            .rx_reserve()
+            .write(BleLinkStateRxReserve::from_bits(rx_swap_address));
+        storage
+            .link_state
+            .layout
+            .sequence_policy()
+            .write(LINK_STATE_ALLOCATION_CONFIG_IMAGE);
+        storage
+            .scheduler_item
+            .layout
+            .hardware_next()
+            .write(SCHEDULER_ITEM_ALLOCATION_PREFIX_IMAGE);
+        storage
+            .scheduler_item
+            .layout
+            .context()
+            .write(BleSchedulerItemContext::from_bits(scheduler_context));
+        storage
+            .scheduler_item
+            .layout
+            .link_state()
+            .write(BleSchedulerItemLinkState::from_bits(link_state));
+        storage
+            .scheduler_item
+            .layout
+            .word_001c_opaque()
+            .write(SCHEDULER_ITEM_ALLOCATION_FLAGS_IMAGE);
+        storage.scheduler_item.layout.allocation_number().write(
+            BleSchedulerItemAllocationNumber::from_bits(u32::from(binding.number)),
         );
         storage
             .scheduler_item
-            .write_word(SCHEDULER_ITEM_CONTEXT_OFFSET, scheduler_context);
-        storage
-            .scheduler_item
-            .write_word(SCHEDULER_ITEM_LINK_STATE_OFFSET, link_state);
-        storage.scheduler_item.write_word(
-            SCHEDULER_ITEM_ALLOCATION_FLAGS_OFFSET,
-            SCHEDULER_ITEM_ALLOCATION_FLAGS_IMAGE,
-        );
-        storage.scheduler_item.write_word(
-            SCHEDULER_ITEM_ALLOCATION_CONFIG_OFFSET,
-            u32::from(binding.number),
-        );
-        storage.scheduler_item.write_word(
-            SCHEDULER_ITEM_POSITIONAL_24_OFFSET,
-            SCHEDULER_ITEM_POSITIONAL_24_IMAGE,
-        );
+            .layout
+            .coexistence_priority()
+            .write(SCHEDULER_ITEM_POSITIONAL_24_IMAGE);
     }
 
     pub(super) fn reviewed_event_words(&self) -> DtmPositionalEventWords {
@@ -745,8 +705,8 @@ impl DtmStorage {
         binding: &DtmBinding,
     ) -> Result<DtmPositionalEventSeed, DtmPrepareError<BuildError>> {
         let previous = self.reviewed_event_words();
-        let tx_head_address = self.link_state.read_word(LINK_STATE_TX_HEAD_OFFSET);
-        let rx_tail_address = self.link_state.read_word(LINK_STATE_RX_TAIL_OFFSET);
+        let tx_head_address = self.link_state.layout.tx_head().read().bits();
+        let rx_tail_address = self.link_state.layout.rx_tail().read().bits();
         let tx_head = ControllerSramLinkAddress::new(tx_head_address)
             .map_err(|_| DtmPrepareError::CurrentTxHeadUnbound)?;
         if tx_head != binding.tx_header {
@@ -837,11 +797,11 @@ impl DtmStorage {
                 None
             }
         };
-        let head = slot(self.link_state.read_word(LINK_STATE_RX_HEAD_OFFSET))
+        let head = slot(self.link_state.layout.rx_head().read().bits())
             .ok_or(DtmRxRotationError::RxHeadIdentityMismatch)?;
-        let tail = slot(self.link_state.read_word(LINK_STATE_RX_TAIL_OFFSET))
+        let tail = slot(self.link_state.layout.rx_tail().read().bits())
             .ok_or(DtmRxRotationError::RxTailIdentityMismatch)?;
-        let reserve_address = self.link_state.read_word(LINK_STATE_RX_SWAP_RESERVE_OFFSET);
+        let reserve_address = self.link_state.layout.rx_reserve().read().bits();
         let header = |slot| match slot {
             DtmRxHeaderSlot::Primary => &self.rx_header,
             DtmRxHeaderSlot::Swap => &self.rx_swap_reserve,
@@ -981,10 +941,14 @@ impl DtmStorage {
                 if steady {
                     storage
                         .link_state
-                        .write_word(LINK_STATE_RX_SWAP_RESERVE_OFFSET, address(copy_target));
+                        .layout
+                        .rx_reserve()
+                        .write(BleLinkStateRxReserve::from_bits(address(copy_target)));
                     storage
                         .link_state
-                        .write_word(LINK_STATE_RX_HEAD_OFFSET, address(returned));
+                        .layout
+                        .rx_head()
+                        .write(BleLinkStateRxHead::from_bits(address(returned)));
                     returned_header.set_rx_backlink(None);
                 }
                 returned_header.set_rx_software_terminal(false);
@@ -992,7 +956,9 @@ impl DtmStorage {
                 returned_header.clear_rx_packet_link();
                 storage
                     .link_state
-                    .write_word(LINK_STATE_RX_SWAP_RESERVE_OFFSET, 0);
+                    .layout
+                    .rx_reserve()
+                    .write(BleLinkStateRxReserve::from_bits(0));
                 copy_header.set_rx_backlink(None);
                 storage.rx_packet.rearm_reviewed_packet_fields();
                 copy_header.clear_rx_completion_observation();
@@ -1001,7 +967,9 @@ impl DtmStorage {
                 returned_header.set_rx_successor_link(Some(copy_link));
                 storage
                     .link_state
-                    .write_word(LINK_STATE_RX_TAIL_OFFSET, address(copy_target));
+                    .layout
+                    .rx_tail()
+                    .write(BleLinkStateRxTail::from_bits(address(copy_target)));
                 returned_header.set_rx_software_terminal(true);
                 copy_header.set_rx_backlink(Some(returned_backlink));
             }

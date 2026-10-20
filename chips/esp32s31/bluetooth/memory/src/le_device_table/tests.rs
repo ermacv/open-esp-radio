@@ -28,18 +28,22 @@ const RANDOM_DEVICE: LeFilterAcceptListDevice = LeFilterAcceptListDevice {
     address: [0xa6, 0xa5, 0xa4, 0xa3, 0xa2, 0xc1],
 };
 
-fn entry(table: &LeDeviceTable, index: usize) -> [u32; 2] {
+fn entry(table: &LeDeviceTable, index: usize) -> DeviceEntryImage {
     table.read(index)
 }
 
 #[test]
-fn entries_use_the_vendor_layout() {
+fn published_entries_retain_device_identity_and_address_type() {
     let mut table = table();
     table.add(PUBLIC).unwrap();
     table.add(RANDOM_DEVICE).unwrap();
     // The images the vendor table held for the same devices on the stand.
-    assert_eq!(entry(&table, 0), [0x5566_8002, 0x1122_3344]);
-    assert_eq!(entry(&table, 1), [0xa5a6_c002, 0xc1a2_a3a4]);
+    assert_eq!(entry(&table, 0), PUBLIC.image());
+    assert!(entry(&table, 0).flags_and_address.valid());
+    assert!(entry(&table, 0).flags_and_address.accept_list_member());
+    assert!(!entry(&table, 0).flags_and_address.random());
+    assert_eq!(entry(&table, 1), RANDOM_DEVICE.image());
+    assert!(entry(&table, 1).flags_and_address.random());
     let publication = table.publication();
     assert_eq!(publication.first_entry().bits(), 0x2f07_e508);
     assert_eq!(publication.count().get(), 2);
@@ -70,12 +74,12 @@ fn removal_keeps_the_members_packed_and_clear_empties_the_table() {
     table.add(RANDOM_DEVICE).unwrap();
     table.remove(PUBLIC).unwrap();
     assert_eq!(table.len(), 1);
-    assert_eq!(entry(&table, 0), [0xa5a6_c002, 0xc1a2_a3a4]);
-    assert_eq!(entry(&table, 1), [0, 0]);
+    assert_eq!(entry(&table, 0), RANDOM_DEVICE.image());
+    assert_eq!(entry(&table, 1), DeviceEntryImage::ZERO);
     assert_eq!(table.remove(PUBLIC), Err(LeDeviceTableError::NotFound));
     table.clear();
     assert!(table.is_empty());
-    assert_eq!(entry(&table, 0), [0, 0]);
+    assert_eq!(entry(&table, 0), DeviceEntryImage::ZERO);
     assert_eq!(table.publication().count().get(), 0);
 }
 

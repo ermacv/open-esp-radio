@@ -3,33 +3,34 @@ use super::{
     DtmSchedulerItemReviewedWords, DtmSchedulerReceiverPhy, DtmSchedulerTransmitterPhy, LeTxPower,
 };
 use crate::le_phy_packet::{LeAccessAddress, LeCrcInit};
+use oer_esp32s31_hal::layouts::*;
 
 fn link_state() -> DtmLinkStateReviewedWords {
     DtmLinkStateReviewedWords {
-        word_00: 0,
-        word_08: 0,
+        word_00: BleLinkStateTxPath::from_bits(0),
+        word_08: BleLinkStateRxPath::from_bits(0),
         profile_word_14: super::DtmLinkStateProfileWord::from_storage(0),
         crc_init: LeCrcInit::LE_PRESET,
-        word_30: 0,
-        word_34: 0x1234_5678,
+        word_30: BleLinkStateSequencePolicy::from_bits(0),
+        word_34: BleLinkStateEventSpan::from_bits(0x1234_5678),
         access_address: LeAccessAddress::DIRECT_TEST_MODE,
-        word_50: 0,
-        word_60: 0,
+        word_50: BleLinkStateDirectionFinding::from_bits(0),
+        word_60: BleLinkStateEvent::from_bits(0),
     }
 }
 
 fn item() -> DtmSchedulerItemReviewedWords {
     DtmSchedulerItemReviewedWords {
-        word_00: 0,
-        word_04: 0,
-        word_08: 0,
-        word_0c: 0,
-        word_14: 0,
-        word_18: 0,
-        word_2c: 0,
-        word_44: 0,
-        word_48: 0,
-        word_4c: 0,
+        word_00: BleSchedulerItemHardwareNext::from_bits(0),
+        word_04: BleSchedulerItemContext::from_bits(0),
+        word_08: BleSchedulerItemLinkState::from_bits(0),
+        word_0c: BleSchedulerItemSequenceStart::from_bits(0),
+        word_14: BleSchedulerItemRateAndPower::from_bits(0),
+        word_18: BleSchedulerItemChannelAndPriority::from_bits(0),
+        word_2c: BleSchedulerItemReceiveWait::from_bits(0),
+        word_44: BleSchedulerItemRawStart::from_bits(0),
+        word_48: BleSchedulerItemRawEnd::from_bits(0),
+        word_4c: BleSchedulerItemControl::from_bits(0),
     }
 }
 
@@ -58,7 +59,7 @@ fn only_a_recurring_event_copies_the_reset_power_into_the_item() {
 #[test]
 fn a_receiver_reset_stores_the_zero_tick_difference() {
     let receiver = link_state().apply_reset(None, None, power(0), 0, DtmRole::Receiver);
-    assert_eq!(receiver.word_34, 0);
+    assert_eq!(receiver.word_34.value(), 0);
     let transmitter = link_state().apply_reset(None, None, power(0), 0, DtmRole::Transmitter);
     assert_eq!(transmitter.word_34, link_state().word_34);
 }
@@ -76,6 +77,6 @@ fn the_sequence_start_is_stored_as_given() {
             300,
         )
         .apply_sequence_start(101);
-    assert_eq!(event.word_0c, 101);
-    assert_eq!(event.word_44, 100);
+    assert_eq!(event.word_0c.value(), 101);
+    assert_eq!(event.word_44.value(), 100);
 }

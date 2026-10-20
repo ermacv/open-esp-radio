@@ -1,22 +1,28 @@
 use super::{
-    PeripheralConnectionCoexistenceProtection, SchedulerItemCoexistencePriority, lanes_image,
+    PeripheralConnectionCoexistenceProtection, SchedulerItemCoexistencePriority, with_priorities,
 };
-
+use oer_esp32s31_hal::layouts::BleSchedulerItemCoexistencePriority;
 fn lane(value: u8) -> SchedulerItemCoexistencePriority {
-    SchedulerItemCoexistencePriority::new(value).unwrap()
+    SchedulerItemCoexistencePriority::new(value).expect("test priority fits")
 }
-
 #[test]
-fn lanes_fill_five_bits_each_from_lane_zero() {
-    assert_eq!(
-        lanes_image(&[lane(4), lane(0), lane(13), lane(13)]),
-        0x0006_b404
-    );
-    assert_eq!(lanes_image(&[lane(9), lane(4)]), 0x89);
-    assert_eq!(
-        lanes_image(&[lane(31), lane(31), lane(31), lane(31)]),
-        super::LANES_MASK
-    );
+fn priorities_replace_each_lane_and_preserve_the_other_fields() {
+    let original = BleSchedulerItemCoexistencePriority::ZERO
+        .with_bits_20_31_opaque(0xa5a)
+        .expect("test opaque image fits");
+    for lanes in [[4, 0, 13, 13], [31; 4], [0; 4]] {
+        let image = with_priorities(original, &lanes.map(lane));
+        assert_eq!(
+            [
+                image.lane_0(),
+                image.lane_1(),
+                image.lane_2(),
+                image.lane_3()
+            ],
+            lanes
+        );
+        assert_eq!(image.bits_20_31_opaque(), original.bits_20_31_opaque());
+    }
 }
 
 #[test]

@@ -4,7 +4,7 @@ use std::boxed::Box;
 use super::{
     BLUETOOTH_DTM_MAX_PACKET_CAPACITY, DtmError, DtmPool, DtmPositionalEventSeed, DtmPrepareError,
     DtmRxResultProjection, DtmRxRotationError, DtmSchedulerItemCompletionStatus, DtmStorage,
-    DtmTxPacketPrepareError, codec::LINK_STATE_RX_TAIL_OFFSET,
+    DtmTxPacketPrepareError,
 };
 use crate::{
     dtm_event_image::{DtmPositionalEventWords, DtmRole},
@@ -58,7 +58,7 @@ fn run_event(pool: &mut Pool, instance: &SchedulerRoleInstance, status: u32) {
 /// Hardware returns one packet through the current RX tail.
 fn return_packet(pool: &Pool, instance: &SchedulerRoleInstance, result_word: u32, auxiliary: u16) {
     let (graph, binding, _) = pool.shared(instance).unwrap();
-    let tail = graph.link_state.read_word(LINK_STATE_RX_TAIL_OFFSET);
+    let tail = graph.link_state.layout.rx_tail().read().bits();
     let header = if tail == binding.rx_header.controller_address().address() {
         &graph.rx_header
     } else {
@@ -98,7 +98,15 @@ fn the_item_carries_the_dtm_number() {
     let (graph, _, _) = pool.shared(&instance).unwrap();
     // Two advertising instances, one reserved number, three connections,
     // nine private numbers and four periodic synchronizations.
-    assert_eq!(graph.scheduler_item.read_word(0x20 / 4), 2 + 1 + 3 + 9 + 4);
+    assert_eq!(
+        graph
+            .scheduler_item
+            .layout
+            .allocation_number()
+            .read()
+            .bits(),
+        2 + 1 + 3 + 9 + 4
+    );
 }
 
 #[test]

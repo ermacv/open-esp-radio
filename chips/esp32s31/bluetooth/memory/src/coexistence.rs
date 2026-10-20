@@ -55,18 +55,20 @@ impl PeripheralConnectionCoexistenceProtection {
     }
 }
 
-/// Lanes occupying bits 19:0 of the item word.
-pub(crate) const LANES_MASK: u32 = 0x000f_ffff;
-
-/// The low lanes of the item word, from lane zero up.
-pub(crate) const fn lanes_image(lanes: &[SchedulerItemCoexistencePriority]) -> u32 {
-    let mut image = 0;
-    let mut index = 0;
-    while index < lanes.len() {
-        image |= (lanes[index].0 as u32) << (5 * index);
-        index += 1;
-    }
-    image
+/// Replace the four priority lanes while preserving the remaining generated fields.
+pub(crate) const fn with_priorities(
+    value: oer_esp32s31_hal::layouts::BleSchedulerItemCoexistencePriority,
+    lanes: &[SchedulerItemCoexistencePriority; 4],
+) -> oer_esp32s31_hal::layouts::BleSchedulerItemCoexistencePriority {
+    value
+        .with_lane_0(lanes[0].value())
+        .expect("validated lane fits")
+        .with_lane_1(lanes[1].value())
+        .expect("validated lane fits")
+        .with_lane_2(lanes[2].value())
+        .expect("validated lane fits")
+        .with_lane_3(lanes[3].value())
+        .expect("validated lane fits")
 }
 
 #[cfg(test)]
