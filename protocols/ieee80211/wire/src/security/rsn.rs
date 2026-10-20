@@ -269,20 +269,15 @@ impl<'a> RsnReader<'a> {
 oer_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.4.2.24 (RSN Capabilities field).
     pub struct RsnCapabilities[2] (little) {
-        /// SOURCE: IEEE Std 802.11-2020, 9.4.2.24 (RSN Capabilities field).
         pub mfpr, with_mfpr: bool = 6..7;
-        /// SOURCE: IEEE Std 802.11-2020, 9.4.2.24 (RSN Capabilities field).
         pub mfpc, with_mfpc: bool = 7..8;
-        /// SOURCE: IEEE Std 802.11-2020, 9.4.2.24 (RSN Capabilities field).
         pub spp_capable, with_spp_capable: bool = 10..11;
-        /// SOURCE: IEEE Std 802.11-2020, 9.4.2.24 (RSN Capabilities field).
         pub spp_required, with_spp_required: bool = 11..12;
     }
 }
 oer_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.4.2.241 (RSN Extension element).
     pub struct RsnExtendedCapabilities[1] (little) {
-        /// SOURCE: IEEE Std 802.11-2020, 9.4.2.241 (RSN Extension element).
         pub sae_h2e, with_sae_h2e: bool = 5..6;
     }
 }

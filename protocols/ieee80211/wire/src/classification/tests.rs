@@ -40,3 +40,28 @@ fn wmm_downgrade_graph_is_finite_and_exact() {
     assert_eq!(apply_wmm_admission(2, [true; 3]), 2);
     assert_eq!(apply_wmm_admission(8, [false; 3]), 7);
 }
+
+#[test]
+fn default_ip_priority_ignores_ecn_version_and_flow_label() {
+    for (services, priority) in [
+        (0x03, 0),
+        (0x27, 1),
+        (0x4b, 2),
+        (0x6f, 3),
+        (0x93, 4),
+        (0xb7, 5),
+        (0xdb, 6),
+        (0xff, 7),
+    ] {
+        assert_eq!(
+            user_priority(ETHER_TYPE_IPV4, Some(services), None),
+            priority
+        );
+        for version in [0, 6, 15] {
+            for flow_label in [0, 0x000f_ffff] {
+                let prefix = (version * 0x1000_0000) + (services as u32 * 0x0010_0000) + flow_label;
+                assert_eq!(user_priority(ETHER_TYPE_IPV6, None, Some(prefix)), priority);
+            }
+        }
+    }
+}

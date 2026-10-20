@@ -166,10 +166,6 @@ impl WmmUserPriority {
             UserPriority::Up6 | UserPriority::Up7 => WmmAccessCategory::Voice,
         }
     }
-    const fn from_high_three_bits(value: u8) -> Self {
-        Self::from_code(TrafficOctet::from_bytes([value]).priority())
-    }
-
     const fn from_code(value: u8) -> Self {
         match value {
             0 => Self::UP0,
@@ -203,7 +199,8 @@ impl Dscp {
 
     /// Widely deployed default mapping based on the three DSCP MSBs.
     pub const fn default_user_priority(self) -> WmmUserPriority {
-        WmmUserPriority::from_code(DscpCode::from_bytes([self.0]).priority())
+        let field = crate::encoding::validated(DsField::from_bytes([0]).with_dscp(self.0));
+        WmmUserPriority::from_code(field.class_selector())
     }
 
     /// RFC 8325 station-safe DSCP mapping.
@@ -298,11 +295,11 @@ pub fn classify_ethernet_wmm(ethernet: &[u8]) -> WmmTrafficClass {
 
     let ether_type = u16::from_be_bytes([ether_type_high, ether_type_low]);
     if matches!(ether_type, ETHER_TYPE_VLAN | ETHER_TYPE_PROVIDER_VLAN) {
-        let Some(&[tci_high, _, _, _]) = payload.first_chunk::<4>() else {
+        let Some(&[tci_high, tci_low, _, _]) = payload.first_chunk::<4>() else {
             return WmmTrafficClass::BEST_EFFORT;
         };
-        let tci = u16::from_be_bytes([tci_high, 0]);
-        let user_priority = WmmUserPriority::from_high_three_bits(tci.to_be_bytes()[0]);
+        let tci = VlanTci::from_bytes([tci_high, tci_low]);
+        let user_priority = WmmUserPriority::from_code(tci.pcp());
         // The explicit outer PCP is authoritative even when it is zero.
         return WmmTrafficClass::from_user_priority(
             user_priority,
@@ -315,19 +312,20 @@ pub fn classify_ethernet_wmm(ethernet: &[u8]) -> WmmTrafficClass {
             let Some(&[version_and_length, services]) = payload.first_chunk::<2>() else {
                 return WmmTrafficClass::BEST_EFFORT;
             };
-            if TrafficOctet::from_bytes([version_and_length]).version() != 4 {
+            if Ipv4VersionIhl::from_bytes([version_and_length]).version() != 4 {
                 return WmmTrafficClass::BEST_EFFORT;
             }
-            Dscp(TrafficOctet::from_bytes([services]).dscp())
+            Dscp(DsField::from_bytes([services]).dscp())
         }
         ETHER_TYPE_IPV6 => {
             let Some(&[version_and_class, class_and_label]) = payload.first_chunk::<2>() else {
                 return WmmTrafficClass::BEST_EFFORT;
             };
-            if Ipv6Traffic::from_bytes([version_and_class, class_and_label]).version() != 6 {
+            let prefix = Ipv6HeaderPrefix::from_bytes([version_and_class, class_and_label]);
+            if prefix.version() != 6 {
                 return WmmTrafficClass::BEST_EFFORT;
             }
-            Dscp(Ipv6Traffic::from_bytes([version_and_class, class_and_label]).dscp())
+            Dscp(DsField::from_bytes([prefix.traffic_class()]).dscp())
         }
         _ => return WmmTrafficClass::BEST_EFFORT,
     };
@@ -336,31 +334,44 @@ pub fn classify_ethernet_wmm(ethernet: &[u8]) -> WmmTrafficClass {
 }
 
 oer_wire::bitfield! {
-    /// SOURCE: RFC 791, 3.1; RFC 2474, 3 (IPv4 DS field).
-    pub struct TrafficOctet[1] (little) {
-        /// SOURCE: RFC 791, 3.1; RFC 2474, 3 (IPv4 DS field).
-        pub priority, with_priority: u8 = 5..8;
-        /// SOURCE: RFC 791, 3.1; RFC 2474, 3 (IPv4 DS field).
-        pub dscp, with_dscp: u8 = 2..8;
-        /// SOURCE: RFC 791, 3.1; RFC 2474, 3 (IPv4 DS field).
+    /// IPv4's first octet: version and Internet Header Length.
+    /// SOURCE: RFC 791, 3.1 (Internet Header Format).
+    pub struct Ipv4VersionIhl[1] (little) {
+        pub ihl, with_ihl: u8 = 0..4;
         pub version, with_version: u8 = 4..8;
-    }
-}
-oer_wire::bitfield! {
-    /// SOURCE: RFC 2474, 4.2.2 (Class Selector Codepoints).
-    pub struct DscpCode[1] (little) {
-        /// SOURCE: RFC 2474, 4.2.2 (Class Selector Codepoints).
-        pub priority, with_priority: u8 = 3..6;
     }
 }
 
 oer_wire::bitfield! {
-    /// SOURCE: RFC 8200, 3; RFC 2474, 3 (IPv6 Traffic Class).
-    pub struct Ipv6Traffic[2] (big) {
-        /// SOURCE: RFC 8200, 3; RFC 2474, 3 (IPv6 Traffic Class).
+    /// Differentiated Services field, also carried by IPv6 Traffic Class.
+    /// SOURCE: RFC 2474, 3 (Differentiated Services Field).
+    pub struct DsField[1] (little) {
+        /// SOURCE: RFC 3168, 5 (Explicit Congestion Notification in IP).
+        pub ecn, with_ecn: u8 = 0..2;
+        pub dscp, with_dscp: u8 = 2..8;
+        /// Three DSCP MSBs used by the default priority mapping.
+        /// SOURCE: RFC 2474, 4.2.2 (Class Selector Codepoints).
+        pub class_selector, with_class_selector: u8 = 5..8, view;
+    }
+}
+
+oer_wire::bitfield! {
+    /// First two IPv6 header octets, including the complete Traffic Class.
+    /// SOURCE: RFC 8200, 3 (IPv6 Header Format).
+    pub struct Ipv6HeaderPrefix[2] (big) {
+        pub flow_label_high, with_flow_label_high: u8 = 0..4;
+        pub traffic_class, with_traffic_class: u8 = 4..12;
         pub version, with_version: u8 = 12..16;
-        /// SOURCE: RFC 8200, 3; RFC 2474, 3 (IPv6 Traffic Class).
-        pub dscp, with_dscp: u8 = 6..12;
+    }
+}
+
+oer_wire::bitfield! {
+    /// VLAN tag control information, including Priority Code Point.
+    /// SOURCE: IEEE Std 802.1Q-2022, 9.6 (Tag Control Information).
+    pub struct VlanTci[2] (big) {
+        pub vid, with_vid: u16 = 0..12;
+        pub dei, with_dei: bool = 12..13;
+        pub pcp, with_pcp: u8 = 13..16;
     }
 }
 

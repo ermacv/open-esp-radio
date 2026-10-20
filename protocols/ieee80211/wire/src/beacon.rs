@@ -443,9 +443,7 @@ pub fn stamp(bytes: &mut [u8], timestamp: u64, group_pending: bool) -> Option<(u
 oer_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.4.2.5 (TIM element).
     pub struct TimBitmapControl[1] (little) {
-        /// SOURCE: IEEE Std 802.11-2020, 9.4.2.5 (TIM element).
         pub group, with_group: bool = 0..1;
-        /// SOURCE: IEEE Std 802.11-2020, 9.4.2.5 (TIM element).
         pub offset, with_offset: u8 = 1..8;
     }
 }

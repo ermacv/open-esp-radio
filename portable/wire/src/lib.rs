@@ -35,12 +35,15 @@ pub enum Error {
 /// ```
 ///
 /// A field's type is an unsigned integer of at most 64 bits, `bool` (one bit),
-/// or `[EnumName]`. Overlapping fields may describe alternative views.
+/// or `[EnumName]`. Overlapping fields require an explicit `, view` suffix on
+/// at least one field in each overlapping pair, for example
+/// `pub combined, with_combined: u8 = 0..8, view;`. A view may appear before or
+/// after the fields it aliases; it never permits two ordinary fields to overlap.
 /// An enum declaration supplies `from_encoding` and `encoding`; unknown values
 /// retain their complete encoding in `Reserved`. Optional conversion method names
 /// can follow the raw type, as `(from_raw, raw)`. Numeric and enum setters return
 /// `Result<Self, Error>`; a boolean setter is infallible. Invalid declarations
-/// (range, type width, byte order) fail at compile time.
+/// (range, type width, byte order, implicit overlap) fail at compile time.
 #[macro_export]
 macro_rules! bitfield {
     ($(#[$meta:meta])* $vis:vis enum $name:ident : $raw:ident {
@@ -73,7 +76,7 @@ macro_rules! bitfield {
         }
     };
     ($(#[$meta:meta])* $vis:vis struct $name:ident [$size:literal] ($order:ident) {
-        $($(#[$field_meta:meta])* $fvis:vis $get:ident, $set:ident : $ty:tt = $start:literal .. $end:literal;)*
+        $($(#[$field_meta:meta])* $fvis:vis $get:ident, $set:ident : $ty:tt = $start:literal .. $end:literal $(, $view:ident)?;)*
     }) => {
         $(#[$meta])*
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -86,6 +89,9 @@ macro_rules! bitfield {
                 assert!($start < $end && $end <= $size * 8);
                 $crate::bitfield!(@width $ty, $end - $start);
             )*
+            assert!($crate::__private::valid_overlaps(&[
+                $(($start, $end, $crate::bitfield!(@view $($view)?)),)*
+            ]), "overlapping wire fields require an explicit view");
         };
         impl $name {
             pub const fn from_bytes(bytes: [u8; $size]) -> Self { Self(bytes) }
@@ -96,6 +102,8 @@ macro_rules! bitfield {
             )*
         }
     };
+    (@view) => { false };
+    (@view view) => { true };
     (@width bool, $width:expr) => { assert!($width == 1); };
     (@width [$ty:ident], $width:expr) => { assert!($width <= $ty::BITS); };
     (@width $ty:ident, $width:expr) => {
@@ -150,6 +158,21 @@ macro_rules! bitfield {
 // compile-time-checked declarations, never from a peer.
 #[doc(hidden)]
 pub mod __private {
+    pub const fn valid_overlaps(fields: &[(usize, usize, bool)]) -> bool {
+        let mut remaining = fields;
+        while let Some((&(start, end, view), rest)) = remaining.split_first() {
+            let mut others = rest;
+            while let Some((&(other_start, other_end, other_view), next)) = others.split_first() {
+                if !view && !other_view && start < other_end && other_start < end {
+                    return false;
+                }
+                others = next;
+            }
+            remaining = rest;
+        }
+        true
+    }
+
     pub const fn fits(value: u64, width: usize) -> bool {
         width >= 64 || value < (1_u64 << width)
     }
@@ -235,6 +258,23 @@ mod tests;
 /// ```
 /// ```compile_fail
 /// oer_wire::bitfield! { struct EmptyField[1] (little) { value, with_value: u8 = 1..1; } }
+/// ```
+/// ```compile_fail
+/// oer_wire::bitfield! {
+///     struct Overlap[2] (little) {
+///         first, with_first: u8 = 0..8;
+///         second, with_second: u8 = 4..12;
+///     }
+/// }
+/// ```
+/// ```compile_fail
+/// oer_wire::bitfield! {
+///     struct ViewDoesNotPermitOtherOverlaps[1] (little) {
+///         combined, with_combined: u8 = 0..8, view;
+///         first, with_first: u8 = 0..4;
+///         second, with_second: u8 = 3..7;
+///     }
+/// }
 /// ```
 #[cfg(doctest)]
 pub struct InvalidDeclarations;

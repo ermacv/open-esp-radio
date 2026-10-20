@@ -144,3 +144,30 @@ fn bit_spans_reject_truncation_and_overflow_without_moving() {
         })
     );
 }
+
+crate::bitfield! {
+    struct Views[1] (little) {
+        combined, with_combined: u8 = 0..8, view;
+        low, with_low: u8 = 0..4;
+        high, with_high: u8 = 4..8;
+        flag, with_flag: bool = 7..8, view;
+    }
+}
+
+#[test]
+fn explicit_views_alias_fields_before_and_after_them() {
+    for raw in 0..=u8::MAX {
+        let fields = Views::from_bytes([raw]);
+        assert_eq!(fields.combined(), raw);
+        assert_eq!(fields.low(), raw % 16);
+        assert_eq!(fields.high(), raw / 16);
+        assert_eq!(fields.flag(), raw >= 128);
+        let low = fields.with_low(3).expect("four-bit value");
+        assert_eq!(low.combined(), (raw / 16) * 16 + 3);
+        let high = fields.with_high(5).expect("four-bit value");
+        assert_eq!(high.combined(), 80 + raw % 16);
+        assert_eq!(fields.with_flag(false).high(), fields.high() % 8);
+        let written = fields.with_combined(raw).expect("full octet");
+        assert_eq!(Views::from_bytes(written.to_bytes()), fields);
+    }
+}

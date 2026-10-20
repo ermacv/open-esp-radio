@@ -146,7 +146,7 @@ impl<'payload> Iterator for EspNowV2Elements<'payload> {
                 self.source = EspNowV2ElementSource::Encoded(tail);
                 EspNowV2Element {
                     payload,
-                    more_data: super::EspNowVersion::from_bytes([control]).more_data(),
+                    more_data: EspNowV2Control::from_bytes([control]).more_data(),
                 }
             }
         };
@@ -280,7 +280,7 @@ impl<'payload> EspNowV2Action<'payload> {
             output[offset + 1] = (VENDOR_ELEMENT_FIXED_BODY_LEN + payload.len()) as u8;
             output[offset + 2..offset + 5].copy_from_slice(&ESP_NOW_ORGANIZATION_IDENTIFIER);
             output[offset + 5] = ESP_NOW_VENDOR_ELEMENT_TYPE;
-            output[offset + 6] = super::EspNowVersion::from_bytes([ESP_NOW_V2_VERSION])
+            output[offset + 6] = EspNowV2Control::from_bytes([ESP_NOW_V2_VERSION])
                 .with_more_data(element.more_data())
                 .to_bytes()[0];
             output[offset + VENDOR_ELEMENT_ENCODED_OVERHEAD..offset + encoded_length]
@@ -385,13 +385,13 @@ impl<'payload> EspNowV2Action<'payload> {
                     element_type,
                 });
             }
-            if super::EspNowVersion::from_bytes([control]).reserved_v2() != 0 {
+            if EspNowV2Control::from_bytes([control]).reserved() != 0 {
                 return Err(EspNowV2WireError::ReservedControlBitsSet {
                     element: element_count,
                     control,
                 });
             }
-            let version = super::EspNowVersion::from_bytes([control]).version();
+            let version = EspNowV2Control::from_bytes([control]).version();
             if version != ESP_NOW_V2_VERSION {
                 return Err(EspNowV2WireError::UnsupportedVersion {
                     element: element_count,
@@ -400,7 +400,7 @@ impl<'payload> EspNowV2Action<'payload> {
             }
 
             let has_following_element = !after.is_empty();
-            let more_data = super::EspNowVersion::from_bytes([control]).more_data();
+            let more_data = EspNowV2Control::from_bytes([control]).more_data();
             if has_following_element && !more_data {
                 return Err(EspNowV2WireError::MoreDataClearedBeforeFinal {
                     element: element_count,
@@ -756,3 +756,13 @@ impl fmt::Display for EspNowV2WireError {
 }
 
 impl core::error::Error for EspNowV2WireError {}
+
+oer_wire::bitfield! {
+    /// ESP-NOW v2 vendor-specific element control octet.
+    /// SOURCE: Espressif ESP-NOW specification, Frame Format (vendor-specific content).
+    pub struct EspNowV2Control[1] (little) {
+        pub version, with_version: u8 = 0..4;
+        pub more_data, with_more_data: bool = 4..5;
+        pub reserved, with_reserved: u8 = 5..8;
+    }
+}

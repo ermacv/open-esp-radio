@@ -266,7 +266,7 @@ impl TriggerScheduledUserEncoding {
             return Err(TriggerEncodeError::TargetRssiOutOfRange);
         }
 
-        let mut fields = TriggerUserFields::from_bytes([0; 5]);
+        let mut fields = TriggerScheduledUserFields::from_bytes([0; 5]);
         fields = fields
             .with_aid12(self.association_id)
             .map_err(|_| TriggerEncodeError::AssociationIdOutOfRange)?;
@@ -528,11 +528,11 @@ pub struct TriggerUserField<'a> {
 
 impl TriggerUserField<'_> {
     pub const fn aid12(&self) -> u16 {
-        TriggerUserFields::from_bytes(*self.user_info).aid12()
+        trigger_user_prefix(self.user_info).aid12()
     }
 
     pub const fn ru_allocation(&self) -> u8 {
-        TriggerUserFields::from_bytes(*self.user_info).ru_allocation()
+        trigger_user_prefix(self.user_info).ru_allocation()
     }
 
     pub const fn classified_ru_allocation(&self) -> Option<TriggerRuAllocation> {
@@ -588,8 +588,8 @@ impl<'a> Iterator for TriggerUserIterator<'a> {
                 required: TRIGGER_USER_INFO_LEN,
             });
         };
-        let aid12 = TriggerUserFields::from_bytes(*user_info).aid12();
-        let ru_allocation = TriggerUserFields::from_bytes(*user_info).ru_allocation();
+        let aid12 = trigger_user_prefix(user_info).aid12();
+        let ru_allocation = trigger_user_prefix(user_info).ru_allocation();
         if aid12 == 0x0fff && ru_allocation == 0x7f {
             self.padding = self.remaining;
             self.remaining = &[];
@@ -723,7 +723,7 @@ pub struct TriggerUserRuInfo {
 /// SOURCE(esp32s31)\[BLOB_LIBPP_DBG_DUMP_TRIG_USER_RU]: complete
 /// `libpp.a[hal_debug.o]::dbg_dump_trig_user_ru`.
 pub fn parse_trigger_user_ru(bytes: &[u8]) -> Result<TriggerUserRuInfo, TriggerParseError> {
-    let fields = TriggerUserFields::from_bytes(*chunk(bytes)?);
+    let fields = TriggerRandomAccessUserFields::from_bytes(*chunk(bytes)?);
     let target_rssi_encoding = fields.target_rssi_encoding();
     Ok(TriggerUserRuInfo {
         aid12: fields.aid12(),
@@ -766,7 +766,7 @@ pub struct TriggerUserSpatialStreamInfo {
 pub fn parse_trigger_user_spatial_stream(
     bytes: &[u8],
 ) -> Result<TriggerUserSpatialStreamInfo, TriggerParseError> {
-    let fields = TriggerUserFields::from_bytes(*chunk(bytes)?);
+    let fields = TriggerScheduledUserFields::from_bytes(*chunk(bytes)?);
     let starting_spatial_stream_encoding = fields.starting_spatial_stream_encoding();
     let spatial_stream_count_encoding = fields.spatial_stream_count_encoding();
     let target_rssi_encoding = fields.target_rssi_encoding();
@@ -942,69 +942,64 @@ fn chunk<const N: usize>(bytes: &[u8]) -> Result<&[u8; N], TriggerParseError> {
 oer_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.22 (Trigger frame format).
     pub struct TriggerCommonFields[8] (little) {
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.22 (Trigger frame format).
         pub trigger_type, with_trigger_type: u8 = 0..4;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.22 (Trigger frame format).
         pub uplink_length, with_uplink_length: u16 = 4..16;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.22 (Trigger frame format).
         pub more_trigger_frames, with_more_trigger_frames: bool = 16..17;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.22 (Trigger frame format).
         pub carrier_sense_required, with_carrier_sense_required: bool = 17..18;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.22 (Trigger frame format).
         pub uplink_bandwidth_encoding, with_uplink_bandwidth_encoding: u8 = 18..20;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.22 (Trigger frame format).
         pub gi_ltf, with_gi_ltf: u8 = 20..22;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.22 (Trigger frame format).
         pub mu_mimo_ltf_mode, with_mu_mimo_ltf_mode: bool = 22..23;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.22 (Trigger frame format).
         pub he_ltf_symbols_and_midamble_periodicity, with_he_ltf_symbols_and_midamble_periodicity: u8 = 23..26;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.22 (Trigger frame format).
         pub uplink_stbc, with_uplink_stbc: bool = 26..27;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.22 (Trigger frame format).
         pub ldpc_extra_symbol_segment, with_ldpc_extra_symbol_segment: bool = 27..28;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.22 (Trigger frame format).
         pub ap_tx_power_encoding, with_ap_tx_power_encoding: u8 = 28..34;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.22 (Trigger frame format).
         pub pre_fec_padding_factor_encoding, with_pre_fec_padding_factor_encoding: u8 = 34..36;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.22 (Trigger frame format).
         pub packet_extension_disambiguity, with_packet_extension_disambiguity: bool = 36..37;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.22 (Trigger frame format).
         pub uplink_spatial_reuse, with_uplink_spatial_reuse: u16 = 37..53;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.22 (Trigger frame format).
         pub doppler, with_doppler: bool = 53..54;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.22 (Trigger frame format).
         pub uplink_he_sig_a2_reserved, with_uplink_he_sig_a2_reserved: u16 = 54..63;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.22 (Trigger frame format).
         pub trailing_reserved, with_trailing_reserved: bool = 63..64;
     }
 }
 
 oer_wire::bitfield! {
+    /// Shared prefix of scheduled and random-access Trigger User Info.
     /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.22 (Trigger frame format).
-    pub struct TriggerUserFields[5] (little) {
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.22 (Trigger frame format).
+    pub struct TriggerUserPrefix[3] (little) {
         pub aid12, with_aid12: u16 = 0..12;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.22 (Trigger frame format).
         pub ru_allocation_region, with_ru_allocation_region: bool = 12..13;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.22 (Trigger frame format).
         pub ru_allocation, with_ru_allocation: u8 = 13..20;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.22 (Trigger frame format).
+    }
+}
+oer_wire::bitfield! {
+    /// Scheduled spatial-stream form of Trigger User Info.
+    /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.22 (Trigger frame format).
+    pub struct TriggerScheduledUserFields[5] (little) {
+        pub aid12, with_aid12: u16 = 0..12;
+        pub ru_allocation_region, with_ru_allocation_region: bool = 12..13;
+        pub ru_allocation, with_ru_allocation: u8 = 13..20;
         pub coding_type, with_coding_type: bool = 20..21;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.22 (Trigger frame format).
         pub mcs, with_mcs: u8 = 21..25;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.22 (Trigger frame format).
         pub dcm, with_dcm: bool = 25..26;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.22 (Trigger frame format).
         pub starting_spatial_stream_encoding, with_starting_spatial_stream_encoding: u8 = 26..29;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.22 (Trigger frame format).
         pub spatial_stream_count_encoding, with_spatial_stream_count_encoding: u8 = 29..32;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.22 (Trigger frame format).
-        pub number_of_ra_ru, with_number_of_ra_ru: u8 = 26..31;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.22 (Trigger frame format).
-        pub more_ra_ru, with_more_ra_ru: bool = 31..32;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.22 (Trigger frame format).
         pub target_rssi_encoding, with_target_rssi_encoding: u8 = 32..39;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.22 (Trigger frame format).
+        pub reserved, with_reserved: bool = 39..40;
+    }
+}
+oer_wire::bitfield! {
+    /// Random-access RU form of Trigger User Info.
+    /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.22 (Trigger frame format).
+    pub struct TriggerRandomAccessUserFields[5] (little) {
+        pub aid12, with_aid12: u16 = 0..12;
+        pub ru_allocation_region, with_ru_allocation_region: bool = 12..13;
+        pub ru_allocation, with_ru_allocation: u8 = 13..20;
+        pub coding_type, with_coding_type: bool = 20..21;
+        pub mcs, with_mcs: u8 = 21..25;
+        pub dcm, with_dcm: bool = 25..26;
+        pub number_of_ra_ru, with_number_of_ra_ru: u8 = 26..31;
+        pub more_ra_ru, with_more_ra_ru: bool = 31..32;
+        pub target_rssi_encoding, with_target_rssi_encoding: u8 = 32..39;
         pub reserved, with_reserved: bool = 39..40;
     }
 }
@@ -1012,13 +1007,9 @@ oer_wire::bitfield! {
 oer_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.22 (Trigger frame format).
     pub struct TriggerBasicFields[1] (little) {
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.22 (Trigger frame format).
         pub mpdu_mu_spacing_factor, with_mpdu_mu_spacing_factor: u8 = 0..2;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.22 (Trigger frame format).
         pub tid_aggregation_limit, with_tid_aggregation_limit: u8 = 2..5;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.22 (Trigger frame format).
         pub reserved, with_reserved: bool = 5..6;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.22 (Trigger frame format).
         pub preferred_access_category, with_preferred_access_category: u8 = 6..8;
     }
 }
@@ -1026,17 +1017,11 @@ oer_wire::bitfield! {
 oer_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.22 (Trigger frame format).
     pub struct TriggerNfrpFields[5] (little) {
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.22 (Trigger frame format).
         pub starting_aid, with_starting_aid: u16 = 0..12;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.22 (Trigger frame format).
         pub reserved_9, with_reserved_9: u16 = 12..21;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.22 (Trigger frame format).
         pub feedback_type, with_feedback_type: u8 = 21..25;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.22 (Trigger frame format).
         pub reserved_7, with_reserved_7: u8 = 25..32;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.22 (Trigger frame format).
         pub uplink_target_rssi, with_uplink_target_rssi: u8 = 32..39;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.22 (Trigger frame format).
         pub multiplexing, with_multiplexing: bool = 39..40;
     }
 }
@@ -1044,21 +1029,13 @@ oer_wire::bitfield! {
 oer_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11ax-2021, 9.2.4.6 (HE variant HT Control, TRS Control).
     pub struct TrsFields[4] (little) {
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.2.4.6 (HE variant HT Control, TRS Control).
         pub control_id, with_control_id: u8 = 0..6;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.2.4.6 (HE variant HT Control, TRS Control).
         pub uplink_data_symbols, with_uplink_data_symbols: u8 = 6..11;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.2.4.6 (HE variant HT Control, TRS Control).
         pub ru_allocation_region, with_ru_allocation_region: bool = 11..12;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.2.4.6 (HE variant HT Control, TRS Control).
         pub ru_allocation, with_ru_allocation: u8 = 12..19;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.2.4.6 (HE variant HT Control, TRS Control).
         pub ap_tx_power_encoding, with_ap_tx_power_encoding: u8 = 19..24;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.2.4.6 (HE variant HT Control, TRS Control).
         pub uplink_target_rssi_encoding, with_uplink_target_rssi_encoding: u8 = 24..29;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.2.4.6 (HE variant HT Control, TRS Control).
         pub mcs, with_mcs: u8 = 29..31;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.2.4.6 (HE variant HT Control, TRS Control).
         pub trailing_reserved, with_trailing_reserved: bool = 31..32;
     }
 }
@@ -1066,15 +1043,10 @@ oer_wire::bitfield! {
 oer_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11ax-2021, 9.2.4.6 (HE variant HT Control, UPH Control).
     pub struct UphFields[4] (little) {
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.2.4.6 (HE variant HT Control, UPH Control).
         pub control_id, with_control_id: u8 = 0..6;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.2.4.6 (HE variant HT Control, UPH Control).
         pub uplink_power_headroom, with_uplink_power_headroom: u8 = 6..11;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.2.4.6 (HE variant HT Control, UPH Control).
         pub minimum_transmit_power, with_minimum_transmit_power: bool = 11..12;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.2.4.6 (HE variant HT Control, UPH Control).
         pub reserved, with_reserved: u8 = 12..14;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.2.4.6 (HE variant HT Control, UPH Control).
         pub unparsed_upper_bits, with_unparsed_upper_bits: u32 = 14..32;
     }
 }
@@ -1082,11 +1054,8 @@ oer_wire::bitfield! {
 oer_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.3.1.8 (BlockAckReq frame).
     pub struct BarControlFields[2] (little) {
-        /// SOURCE: IEEE Std 802.11-2020, 9.3.1.8 (BlockAckReq frame).
         pub ack_policy, with_ack_policy: bool = 0..1;
-        /// SOURCE: IEEE Std 802.11-2020, 9.3.1.8 (BlockAckReq frame).
         pub bar_type, with_bar_type: u8 = 1..5;
-        /// SOURCE: IEEE Std 802.11-2020, 9.3.1.8 (BlockAckReq frame).
         pub tid, with_tid: u8 = 12..16;
     }
 }
@@ -1094,9 +1063,13 @@ oer_wire::bitfield! {
 oer_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.22 (GI And HE-LTF Type subfield).
     pub struct GiLtfValue[1] (little) {
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.22 (GI And HE-LTF Type subfield).
         pub value, with_value: u8 = 0..2;
     }
+}
+
+const fn trigger_user_prefix(bytes: &[u8; 5]) -> TriggerUserPrefix {
+    let [first, second, third, ..] = *bytes;
+    TriggerUserPrefix::from_bytes([first, second, third])
 }
 
 #[cfg(test)]

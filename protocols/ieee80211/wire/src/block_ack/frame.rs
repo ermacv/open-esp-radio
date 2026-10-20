@@ -259,22 +259,16 @@ pub fn write_declined_addba_response(
 oer_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.6.5 (Block Ack Action frame details).
     pub struct AddbaParameters[2] (little) {
-        /// SOURCE: IEEE Std 802.11-2020, 9.6.5 (Block Ack Action frame details).
         pub amsdu, with_amsdu: bool = 0..1;
-        /// SOURCE: IEEE Std 802.11-2020, 9.6.5 (Block Ack Action frame details).
         pub immediate, with_immediate: bool = 1..2;
-        /// SOURCE: IEEE Std 802.11-2020, 9.6.5 (Block Ack Action frame details).
         pub tid, with_tid: u8 = 2..6;
-        /// SOURCE: IEEE Std 802.11-2020, 9.6.5 (Block Ack Action frame details).
         pub window, with_window: u16 = 6..16;
     }
 }
 oer_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.6.5 (DELBA frame format).
     pub struct DelbaParameters[2] (little) {
-        /// SOURCE: IEEE Std 802.11-2020, 9.6.5 (DELBA frame format).
         pub initiator, with_initiator: bool = 11..12;
-        /// SOURCE: IEEE Std 802.11-2020, 9.6.5 (DELBA frame format).
         pub tid, with_tid: u8 = 12..16;
     }
 }

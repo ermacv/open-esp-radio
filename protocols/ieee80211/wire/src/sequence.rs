@@ -99,9 +99,7 @@ impl From<SequenceNumber> for u16 {
 oer_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.2.4.4 (Sequence Control field).
     pub struct SequenceControl[2] (little) {
-        /// SOURCE: IEEE Std 802.11-2020, 9.2.4.4 (Sequence Control field).
         pub fragment, with_fragment: u8 = 0..4;
-        /// SOURCE: IEEE Std 802.11-2020, 9.2.4.4 (Sequence Control field).
         pub sequence, with_sequence: u16 = 4..16;
     }
 }

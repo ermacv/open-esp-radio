@@ -444,12 +444,12 @@ impl<'payload> EspNowV1Action<'payload> {
         if element_type != ESP_NOW_VENDOR_ELEMENT_TYPE {
             return Err(EspNowV1WireError::UnsupportedElementType(element_type));
         }
-        if EspNowVersion::from_bytes([version]).upper() != 0 {
+        if EspNowV1Control::from_bytes([version]).reserved() != 0 {
             return Err(EspNowV1WireError::ReservedVersionBitsSet(version));
         }
-        if EspNowVersion::from_bytes([version]).version() != ESP_NOW_V1_VERSION {
+        if EspNowV1Control::from_bytes([version]).version() != ESP_NOW_V1_VERSION {
             return Err(EspNowV1WireError::UnsupportedVersion(
-                EspNowVersion::from_bytes([version]).version(),
+                EspNowV1Control::from_bytes([version]).version(),
             ));
         }
 
@@ -944,16 +944,18 @@ impl fmt::Display for EspNowV1WireError {
 impl core::error::Error for EspNowV1WireError {}
 
 oer_wire::bitfield! {
+    /// Common version nibble used before selecting the ESP-NOW format.
     /// SOURCE: Espressif ESP-NOW specification, Frame Format (vendor-specific content).
     pub struct EspNowVersion[1] (little) {
-        /// SOURCE: Espressif ESP-NOW specification, Frame Format (vendor-specific content).
         pub version, with_version: u8 = 0..4;
-        /// SOURCE: Espressif ESP-NOW specification, Frame Format (vendor-specific content).
-        pub upper, with_upper: u8 = 4..8;
-        /// SOURCE: Espressif ESP-NOW specification, Frame Format (vendor-specific content).
-        pub more_data, with_more_data: bool = 4..5;
-        /// SOURCE: Espressif ESP-NOW specification, Frame Format (vendor-specific content).
-        pub reserved_v2, with_reserved_v2: u8 = 5..8;
+    }
+}
+oer_wire::bitfield! {
+    /// ESP-NOW v1 vendor-specific element control octet.
+    /// SOURCE: Espressif ESP-NOW specification, Frame Format (vendor-specific content).
+    pub struct EspNowV1Control[1] (little) {
+        pub version, with_version: u8 = 0..4;
+        pub reserved, with_reserved: u8 = 4..8;
     }
 }
 

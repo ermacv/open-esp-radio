@@ -759,38 +759,24 @@ fn find_parameters<T>(
 oer_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.4.2.167 (FTM Parameters element).
     pub struct FtmParameterFields[9] (little) {
-        /// SOURCE: IEEE Std 802.11-2020, 9.4.2.167 (FTM Parameters element).
         pub status, with_status: u8 = 0..2;
-        /// SOURCE: IEEE Std 802.11-2020, 9.4.2.167 (FTM Parameters element).
         pub retry, with_retry: u8 = 2..7;
-        /// SOURCE: IEEE Std 802.11-2020, 9.4.2.167 (FTM Parameters element).
         pub status_reserved, with_status_reserved: bool = 7..8;
-        /// SOURCE: IEEE Std 802.11-2020, 9.4.2.167 (FTM Parameters element).
         pub bursts, with_bursts: u8 = 8..12;
-        /// SOURCE: IEEE Std 802.11-2020, 9.4.2.167 (FTM Parameters element).
         pub duration, with_duration: u8 = 12..16;
-        /// SOURCE: IEEE Std 802.11-2020, 9.4.2.167 (FTM Parameters element).
         pub no_partial_tsf, with_no_partial_tsf: bool = 40..41;
-        /// SOURCE: IEEE Std 802.11-2020, 9.4.2.167 (FTM Parameters element).
         pub asap_capable, with_asap_capable: bool = 41..42;
-        /// SOURCE: IEEE Std 802.11-2020, 9.4.2.167 (FTM Parameters element).
         pub asap, with_asap: bool = 42..43;
-        /// SOURCE: IEEE Std 802.11-2020, 9.4.2.167 (FTM Parameters element).
         pub ftms, with_ftms: u8 = 43..48;
-        /// SOURCE: IEEE Std 802.11-2020, 9.4.2.167 (FTM Parameters element).
         pub bandwidth_reserved, with_bandwidth_reserved: u8 = 48..50;
-        /// SOURCE: IEEE Std 802.11-2020, 9.4.2.167 (FTM Parameters element).
         pub bandwidth, with_bandwidth: u8 = 50..56;
     }
 }
 oer_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.6.7.33 (Fine Timing Measurement frame).
     pub struct FtmTimestampErrorFields[2] (little) {
-        /// SOURCE: IEEE Std 802.11-2020, 9.6.7.33 (Fine Timing Measurement frame).
         pub exponent, with_exponent: u8 = 0..5;
-        /// SOURCE: IEEE Std 802.11-2020, 9.6.7.33 (Fine Timing Measurement frame).
         pub reserved, with_reserved: u16 = 5..15;
-        /// SOURCE: IEEE Std 802.11-2020, 9.6.7.33 (Fine Timing Measurement frame).
         pub not_continuous, with_not_continuous: bool = 15..16;
     }
 }

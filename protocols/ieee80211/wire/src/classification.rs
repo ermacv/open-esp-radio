@@ -35,11 +35,15 @@ pub const fn uses_fixed_per_packet_rate(
 pub const fn user_priority(protocol: u16, ipv4_tos: Option<u8>, ipv6_prefix: Option<u32>) -> u32 {
     match protocol {
         ETHER_TYPE_IPV4 => match ipv4_tos {
-            Some(tos) => crate::qos::TrafficOctet::from_bytes([tos]).priority() as u32,
+            Some(tos) => crate::qos::DsField::from_bytes([tos]).class_selector() as u32,
             None => 0,
         },
         ETHER_TYPE_IPV6 => match ipv6_prefix {
-            Some(prefix) => Ipv6Priority::from_bytes(prefix.to_be_bytes()).priority(),
+            Some(prefix) => {
+                let [first, second, ..] = prefix.to_be_bytes();
+                let header = crate::qos::Ipv6HeaderPrefix::from_bytes([first, second]);
+                crate::qos::DsField::from_bytes([header.traffic_class()]).class_selector() as u32
+            }
             None => 0,
         },
         ETHER_TYPE_VENDOR_PRIORITY => 5,
@@ -73,14 +77,6 @@ pub const fn apply_wmm_admission(mut priority: u32, admission_required: [bool; 3
         remaining -= 1;
     }
     7
-}
-
-oer_wire::bitfield! {
-    /// SOURCE: RFC 8200, 3; RFC 2474, 4.2.2 (IPv6 Class Selector bits).
-    pub struct Ipv6Priority[4] (big) {
-        /// SOURCE: RFC 8200, 3; RFC 2474, 4.2.2 (IPv6 Class Selector bits).
-        pub priority, with_priority: u32 = 25..28;
-    }
 }
 
 #[cfg(test)]

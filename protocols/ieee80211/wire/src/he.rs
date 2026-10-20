@@ -45,17 +45,17 @@ pub enum HeMuSigBNonMimoUser {
 
 impl HeMuSigBNonMimoUser {
     pub const fn decode(word: u32) -> Self {
-        let station_id = SigBUserFields::from_bytes(word.to_le_bytes()).station_id();
+        let station_id = SigBNonMimoUserFields::from_bytes(word.to_le_bytes()).station_id();
         if station_id == 0x07fe {
             Self::NonMuMimo
         } else {
             Self::Scheduled {
                 station_id,
-                nsts: SigBUserFields::from_bytes(word.to_le_bytes()).nsts(),
-                beamformed: SigBUserFields::from_bytes(word.to_le_bytes()).beamformed(),
-                mcs: SigBUserFields::from_bytes(word.to_le_bytes()).mcs(),
-                dcm: SigBUserFields::from_bytes(word.to_le_bytes()).dcm(),
-                ldpc: SigBUserFields::from_bytes(word.to_le_bytes()).ldpc(),
+                nsts: SigBNonMimoUserFields::from_bytes(word.to_le_bytes()).nsts(),
+                beamformed: SigBNonMimoUserFields::from_bytes(word.to_le_bytes()).beamformed(),
+                mcs: SigBNonMimoUserFields::from_bytes(word.to_le_bytes()).mcs(),
+                dcm: SigBNonMimoUserFields::from_bytes(word.to_le_bytes()).dcm(),
+                ldpc: SigBNonMimoUserFields::from_bytes(word.to_le_bytes()).ldpc(),
             }
         }
     }
@@ -79,11 +79,11 @@ pub struct HeMuSigBMimoUser {
 impl HeMuSigBMimoUser {
     pub const fn decode(word: u32) -> Self {
         Self {
-            station_id: SigBUserFields::from_bytes(word.to_le_bytes()).station_id(),
-            spatial_configuration: SigBUserFields::from_bytes(word.to_le_bytes())
+            station_id: SigBMimoUserFields::from_bytes(word.to_le_bytes()).station_id(),
+            spatial_configuration: SigBMimoUserFields::from_bytes(word.to_le_bytes())
                 .spatial_configuration(),
-            mcs: SigBUserFields::from_bytes(word.to_le_bytes()).mcs(),
-            ldpc: SigBUserFields::from_bytes(word.to_le_bytes()).ldpc(),
+            mcs: SigBMimoUserFields::from_bytes(word.to_le_bytes()).mcs(),
+            ldpc: SigBMimoUserFields::from_bytes(word.to_le_bytes()).ldpc(),
         }
     }
 }
@@ -314,17 +314,17 @@ impl He20MuSigBRuAllocation {
     pub const fn try_new(encoding: u8) -> Result<Self, He20MuSigBRuAllocationError> {
         let user_count = match encoding {
             0..=15 => HE_MU_SIG_B_COMMON_RU_USER_COUNTS[encoding as usize],
-            16..=39 => RuAllocationCode::from_bytes([encoding]).low3() + 3,
-            40..=47 | 64..=79 => RuAllocationCode::from_bytes([encoding]).low3() + 6,
-            48..=63 | 80..=95 => RuAllocationCode::from_bytes([encoding]).low3() + 5,
-            96..=111 => RuAllocationCode::from_bytes([encoding]).low3() + 4,
+            16..=39 => SingleGroupRuAllocationCode::from_bytes([encoding]).low3() + 3,
+            40..=47 | 64..=79 => SingleGroupRuAllocationCode::from_bytes([encoding]).low3() + 6,
+            48..=63 | 80..=95 => SingleGroupRuAllocationCode::from_bytes([encoding]).low3() + 5,
+            96..=111 => SingleGroupRuAllocationCode::from_bytes([encoding]).low3() + 4,
             112 => 4,
             128..=191 => {
-                RuAllocationCode::from_bytes([encoding]).first_group()
-                    + RuAllocationCode::from_bytes([encoding]).second_group()
+                TwoGroupRuAllocationCode::from_bytes([encoding]).first_group()
+                    + TwoGroupRuAllocationCode::from_bytes([encoding]).second_group()
                     + 2
             }
-            192..=199 => RuAllocationCode::from_bytes([encoding]).low3() + 1,
+            192..=199 => SingleGroupRuAllocationCode::from_bytes([encoding]).low3() + 1,
             200..=216 => return Err(He20MuSigBRuAllocationError::UnsupportedRuType),
             _ => return Err(He20MuSigBRuAllocationError::ReservedEncoding),
         };
@@ -431,14 +431,14 @@ impl He20MuSigBRuAllocation {
 
         let multiplexed = match self.encoding {
             0..=15 | 112 => 0,
-            16..=111 | 192..=199 => RuAllocationCode::from_bytes([self.encoding]).low3(),
+            16..=111 | 192..=199 => SingleGroupRuAllocationCode::from_bytes([self.encoding]).low3(),
             128..=191 => {
                 let first_group_users =
-                    RuAllocationCode::from_bytes([self.encoding]).first_group() + 1;
+                    TwoGroupRuAllocationCode::from_bytes([self.encoding]).first_group() + 1;
                 let users_in_group = if zero_based_position < first_group_users {
                     first_group_users
                 } else {
-                    RuAllocationCode::from_bytes([self.encoding]).second_group() + 1
+                    TwoGroupRuAllocationCode::from_bytes([self.encoding]).second_group() + 1
                 };
                 if users_in_group >= 2 { 1 } else { 0 }
             }
@@ -1195,97 +1195,81 @@ pub fn parse_he20_peer_state(
 oer_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.248.3 (HE PHY Capabilities Information field).
     pub struct HePhyCapabilities[11] (little) {
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.248.3 (HE PHY Capabilities Information field).
         pub one_ltf_800ns_gi, with_one_ltf_800ns_gi: bool = 14..15;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.248.3 (HE PHY Capabilities Information field).
         pub ldpc_coding_in_payload, with_ldpc_coding_in_payload: bool = 13..14;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.248.3 (HE PHY Capabilities Information field).
         pub stbc_transmit_under_80_mhz, with_stbc_transmit_under_80_mhz: bool = 18..19;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.248.3 (HE PHY Capabilities Information field).
         pub stbc_receive_under_80_mhz, with_stbc_receive_under_80_mhz: bool = 19..20;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.248.3 (HE PHY Capabilities Information field).
         pub dcm_transmit, with_dcm_transmit: u8 = 24..26;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.248.3 (HE PHY Capabilities Information field).
         pub dcm_receive, with_dcm_receive: u8 = 27..29;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.248.3 (HE PHY Capabilities Information field).
         pub triggered_su_beamforming_feedback, with_triggered_su_beamforming_feedback: bool = 50..51;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.248.3 (HE PHY Capabilities Information field).
         pub triggered_mu_beamforming_partial_bandwidth_feedback, with_triggered_mu_beamforming_partial_bandwidth_feedback: bool = 51..52;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.248.3 (HE PHY Capabilities Information field).
         pub triggered_cqi_feedback, with_triggered_cqi_feedback: bool = 52..53;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.248.3 (HE PHY Capabilities Information field).
         pub ppe_present, with_ppe_present: bool = 55..56;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.248.3 (HE PHY Capabilities Information field).
         pub non_triggered_cqi_feedback, with_non_triggered_cqi_feedback: bool = 73..74;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.248.3 (HE PHY Capabilities Information field).
         pub nominal_padding, with_nominal_padding: u8 = 78..80;
     }
 }
 oer_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.249 (HE Operation element).
     pub struct HeOperationFields[6] (little) {
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.249 (HE Operation element).
         pub default_pe, with_default_pe: u8 = 0..3;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.249 (HE Operation element).
         pub rts_threshold, with_rts_threshold: u16 = 4..14;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.249 (HE Operation element).
         pub er_su_disabled, with_er_su_disabled: bool = 16..17;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.249 (HE Operation element).
         pub bss_color, with_bss_color: u8 = 24..30;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.249 (HE Operation element).
         pub partial_bss_color, with_partial_bss_color: bool = 30..31;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.249 (HE Operation element).
         pub bss_color_disabled, with_bss_color_disabled: bool = 31..32;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.249 (HE Operation element).
         pub basic_mcs_nss, with_basic_mcs_nss: u16 = 32..48;
     }
 }
 oer_wire::bitfield! {
+    /// Non-MU-MIMO HE-SIG-B User field.
     /// SOURCE: IEEE Std 802.11ax-2021, 27.3.11.8 (HE-SIG-B field).
-    pub struct SigBUserFields[4] (little) {
-        /// SOURCE: IEEE Std 802.11ax-2021, 27.3.11.8 (HE-SIG-B field).
+    pub struct SigBNonMimoUserFields[4] (little) {
         pub station_id, with_station_id: u16 = 0..11;
-        /// SOURCE: IEEE Std 802.11ax-2021, 27.3.11.8 (HE-SIG-B field).
         pub nsts, with_nsts: u8 = 11..14;
-        /// SOURCE: IEEE Std 802.11ax-2021, 27.3.11.8 (HE-SIG-B field).
         pub beamformed, with_beamformed: bool = 14..15;
-        /// SOURCE: IEEE Std 802.11ax-2021, 27.3.11.8 (HE-SIG-B field).
-        pub spatial_configuration, with_spatial_configuration: u8 = 11..15;
-        /// SOURCE: IEEE Std 802.11ax-2021, 27.3.11.8 (HE-SIG-B field).
         pub mcs, with_mcs: u8 = 15..19;
-        /// SOURCE: IEEE Std 802.11ax-2021, 27.3.11.8 (HE-SIG-B field).
         pub dcm, with_dcm: bool = 19..20;
-        /// SOURCE: IEEE Std 802.11ax-2021, 27.3.11.8 (HE-SIG-B field).
+        pub ldpc, with_ldpc: bool = 20..21;
+    }
+}
+oer_wire::bitfield! {
+    /// MU-MIMO HE-SIG-B User field; bit 19 is reserved.
+    /// SOURCE: IEEE Std 802.11ax-2021, 27.3.11.8 (HE-SIG-B field).
+    pub struct SigBMimoUserFields[4] (little) {
+        pub station_id, with_station_id: u16 = 0..11;
+        pub spatial_configuration, with_spatial_configuration: u8 = 11..15;
+        pub mcs, with_mcs: u8 = 15..19;
         pub ldpc, with_ldpc: bool = 20..21;
     }
 }
 oer_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.248.4 (Supported HE-MCS And NSS Set field).
     pub struct HeMcsMap[2] (little) {
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.248.4 (Supported HE-MCS And NSS Set field).
         pub nss1, with_nss1: u8 = 0..2;
     }
 }
 oer_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.248.5 (PPE Thresholds field).
     pub struct PpeFields[2] (little) {
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.248.5 (PPE Thresholds field).
         pub ru0, with_ru0: bool = 3..4;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.248.5 (PPE Thresholds field).
         pub ppet8, with_ppet8: u8 = 7..10;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.248.5 (PPE Thresholds field).
         pub ppet16, with_ppet16: u8 = 10..13;
     }
 }
 
 oer_wire::bitfield! {
+    /// RU Allocation encoding with one MU-MIMO group count.
     /// SOURCE: IEEE Std 802.11ax-2021, 27.3.11.8 (HE-SIG-B RU Allocation subfield).
-    pub struct RuAllocationCode[1] (little) {
-        /// SOURCE: IEEE Std 802.11ax-2021, 27.3.11.8 (HE-SIG-B RU Allocation subfield).
+    pub struct SingleGroupRuAllocationCode[1] (little) {
         pub low3, with_low3: u8 = 0..3;
-        /// SOURCE: IEEE Std 802.11ax-2021, 27.3.11.8 (HE-SIG-B RU Allocation subfield).
+    }
+}
+oer_wire::bitfield! {
+    /// RU Allocation encoding with two MU-MIMO group counts.
+    /// SOURCE: IEEE Std 802.11ax-2021, 27.3.11.8 (HE-SIG-B RU Allocation subfield).
+    pub struct TwoGroupRuAllocationCode[1] (little) {
         pub first_group, with_first_group: u8 = 2..4;
-        /// SOURCE: IEEE Std 802.11ax-2021, 27.3.11.8 (HE-SIG-B RU Allocation subfield).
         pub second_group, with_second_group: u8 = 0..2;
     }
 }

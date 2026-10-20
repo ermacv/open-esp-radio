@@ -268,40 +268,30 @@ pub fn ht_peer_capabilities(bytes: &[u8]) -> Option<HtPeerCapabilities> {
 oer_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.4.2.55.2 (HT Capabilities Info field).
     pub struct HtCapabilityInfo[2] (little) {
-        /// SOURCE: IEEE Std 802.11-2020, 9.4.2.55.2 (HT Capabilities Info field).
         pub width40, with_width40: bool = 1..2;
-        /// SOURCE: IEEE Std 802.11-2020, 9.4.2.55.2 (HT Capabilities Info field).
         pub greenfield, with_greenfield: bool = 4..5;
-        /// SOURCE: IEEE Std 802.11-2020, 9.4.2.55.2 (HT Capabilities Info field).
         pub short_gi20, with_short_gi20: bool = 5..6;
-        /// SOURCE: IEEE Std 802.11-2020, 9.4.2.55.2 (HT Capabilities Info field).
         pub short_gi40, with_short_gi40: bool = 6..7;
     }
 }
 oer_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.4.2.55.3 (A-MPDU Parameters field).
     pub struct HtAmpduParameters[1] (little) {
-        /// SOURCE: IEEE Std 802.11-2020, 9.4.2.55.3 (A-MPDU Parameters field).
         pub exponent, with_exponent: u8 = 0..2;
-        /// SOURCE: IEEE Std 802.11-2020, 9.4.2.55.3 (A-MPDU Parameters field).
         pub spacing, with_spacing: u8 = 2..5;
     }
 }
 oer_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.4.2.56 (HT Operation element).
     pub struct HtOperationInfo[1] (little) {
-        /// SOURCE: IEEE Std 802.11-2020, 9.4.2.56 (HT Operation element).
         pub secondary, with_secondary: u8 = 0..2;
-        /// SOURCE: IEEE Std 802.11-2020, 9.4.2.56 (HT Operation element).
         pub width40, with_width40: bool = 2..3;
     }
 }
 oer_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.4.2.55.4 (Supported MCS Set field).
     pub struct HtTxMcs[1] (little) {
-        /// SOURCE: IEEE Std 802.11-2020, 9.4.2.55.4 (Supported MCS Set field).
         pub defined, with_defined: bool = 0..1;
-        /// SOURCE: IEEE Std 802.11-2020, 9.4.2.55.4 (Supported MCS Set field).
         pub unequal, with_unequal: bool = 1..2;
     }
 }
@@ -309,7 +299,6 @@ oer_wire::bitfield! {
 oer_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.4.2.55.4 (Supported MCS Set, RX MCS bitmap octet 4).
     pub struct HtMcs32Octet[1] (little) {
-        /// SOURCE: IEEE Std 802.11-2020, 9.4.2.55.4 (Supported MCS Set, RX MCS bitmap octet 4).
         pub supported, with_supported: bool = 0..1;
     }
 }

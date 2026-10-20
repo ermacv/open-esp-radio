@@ -449,57 +449,36 @@ impl<'a> HeCompressedBeamformingReport<'a> {
 oer_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.19 (NDP Announcement frame).
     pub struct NdpaStationFields[4] (little) {
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.19 (NDP Announcement frame).
         pub association_id, with_association_id: u16 = 0..11;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.19 (NDP Announcement frame).
         pub resource_unit_start_index, with_resource_unit_start_index: u8 = 11..18;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.19 (NDP Announcement frame).
         pub resource_unit_end_index, with_resource_unit_end_index: u8 = 18..25;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.19 (NDP Announcement frame).
         pub feedback_type_and_ng_encoding, with_feedback_type_and_ng_encoding: u8 = 25..27;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.19 (NDP Announcement frame).
         pub disambiguation, with_disambiguation: bool = 27..28;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.19 (NDP Announcement frame).
         pub codebook_size, with_codebook_size: bool = 28..29;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.19 (NDP Announcement frame).
         pub nc_encoding, with_nc_encoding: u8 = 29..32;
     }
 }
 oer_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.19 (Sounding Dialog Token field).
     pub struct NdpaToken[1] (little) {
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.19 (Sounding Dialog Token field).
         pub he, with_he: bool = 1..2;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.19 (Sounding Dialog Token field).
         pub token, with_token: u8 = 2..8;
     }
 }
 oer_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11ax-2021, 9.4.1.64 (HE MIMO Control field).
     pub struct MimoControlFields[5] (little) {
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.1.64 (HE MIMO Control field).
         pub columns, with_columns: u8 = 0..3;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.1.64 (HE MIMO Control field).
         pub rows, with_rows: u8 = 3..6;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.1.64 (HE MIMO Control field).
         pub bandwidth_encoding, with_bandwidth_encoding: u8 = 6..8;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.1.64 (HE MIMO Control field).
         pub grouping, with_grouping: bool = 8..9;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.1.64 (HE MIMO Control field).
         pub codebook_information, with_codebook_information: bool = 9..10;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.1.64 (HE MIMO Control field).
         pub feedback_type_encoding, with_feedback_type_encoding: u8 = 10..12;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.1.64 (HE MIMO Control field).
         pub remaining_feedback_segments, with_remaining_feedback_segments: u8 = 12..15;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.1.64 (HE MIMO Control field).
         pub first_feedback_segment, with_first_feedback_segment: bool = 15..16;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.1.64 (HE MIMO Control field).
         pub resource_unit_start_index, with_resource_unit_start_index: u8 = 16..23;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.1.64 (HE MIMO Control field).
         pub resource_unit_end_index, with_resource_unit_end_index: u8 = 23..30;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.1.64 (HE MIMO Control field).
         pub sounding_dialog_token, with_sounding_dialog_token: u8 = 30..36;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.4.1.64 (HE MIMO Control field).
         pub reserved, with_reserved: u8 = 36..40;
     }
 }

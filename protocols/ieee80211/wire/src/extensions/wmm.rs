@@ -228,26 +228,18 @@ pub fn parse_wmm_parameter_element(element: &[u8]) -> Option<WmmParameterSet> {
 oer_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.4.2.28 (EDCA Parameter Set element).
     pub struct AcRecord[4] (little) {
-        /// SOURCE: IEEE Std 802.11-2020, 9.4.2.28 (EDCA Parameter Set element).
         pub aifsn, with_aifsn: u8 = 0..4;
-        /// SOURCE: IEEE Std 802.11-2020, 9.4.2.28 (EDCA Parameter Set element).
         pub acm, with_acm: bool = 4..5;
-        /// SOURCE: IEEE Std 802.11-2020, 9.4.2.28 (EDCA Parameter Set element).
         pub aci, with_aci: u8 = 5..7;
-        /// SOURCE: IEEE Std 802.11-2020, 9.4.2.28 (EDCA Parameter Set element).
         pub ecw_min, with_ecw_min: u8 = 8..12;
-        /// SOURCE: IEEE Std 802.11-2020, 9.4.2.28 (EDCA Parameter Set element).
         pub ecw_max, with_ecw_max: u8 = 12..16;
-        /// SOURCE: IEEE Std 802.11-2020, 9.4.2.28 (EDCA Parameter Set element).
         pub txop, with_txop: u16 = 16..32;
     }
 }
 oer_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.4.1 (QoS Info field).
     pub struct QosInfo[1] (little) {
-        /// SOURCE: IEEE Std 802.11-2020, 9.4.1 (QoS Info field).
         pub count, with_count: u8 = 0..4;
-        /// SOURCE: IEEE Std 802.11-2020, 9.4.1 (QoS Info field).
         pub uapsd, with_uapsd: bool = 7..8;
     }
 }

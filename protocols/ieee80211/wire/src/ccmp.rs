@@ -269,11 +269,8 @@ pub const fn ccmp_header(low: u32, high: u32, key_id_bits: u8) -> [u8; CCMP_HEAD
 oer_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 12.5.3.2 (CCMP MPDU format).
     pub struct CcmpKeyControl[1] (little) {
-        /// SOURCE: IEEE Std 802.11-2020, 12.5.3.2 (CCMP MPDU format).
         pub reserved, with_reserved: u8 = 0..5;
-        /// SOURCE: IEEE Std 802.11-2020, 12.5.3.2 (CCMP MPDU format).
         pub extended_iv, with_extended_iv: bool = 5..6;
-        /// SOURCE: IEEE Std 802.11-2020, 12.5.3.2 (CCMP MPDU format).
         pub key_id, with_key_id: u8 = 6..8;
     }
 }

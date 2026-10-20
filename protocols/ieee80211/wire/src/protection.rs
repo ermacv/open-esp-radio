@@ -131,20 +131,15 @@ impl ApBssProtection {
 oer_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.4.2.13 (ERP Information element).
     pub struct ErpInformation[1] (little) {
-        /// SOURCE: IEEE Std 802.11-2020, 9.4.2.13 (ERP Information element).
         pub non_erp, with_non_erp: bool = 0..1;
-        /// SOURCE: IEEE Std 802.11-2020, 9.4.2.13 (ERP Information element).
         pub use_protection, with_use_protection: bool = 1..2;
-        /// SOURCE: IEEE Std 802.11-2020, 9.4.2.13 (ERP Information element).
         pub barker, with_barker: bool = 2..3;
     }
 }
 oer_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.4.2.56 (HT Operation element).
     pub struct HtProtectionInformation[1] (little) {
-        /// SOURCE: IEEE Std 802.11-2020, 9.4.2.56 (HT Operation element).
         pub mode, with_mode: u8 = 0..2;
-        /// SOURCE: IEEE Std 802.11-2020, 9.4.2.56 (HT Operation element).
         pub non_greenfield, with_non_greenfield: bool = 2..3;
     }
 }

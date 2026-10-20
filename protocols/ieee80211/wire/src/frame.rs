@@ -209,55 +209,35 @@ impl<'a> DecodedHeader<'a> {
 oer_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.2.4.1 (Frame Control field).
     pub struct FrameControlFields[2] (little) {
-        /// SOURCE: IEEE Std 802.11-2020, 9.2.4.1 (Frame Control field).
         pub version, with_version: u8 = 0..2;
-        /// SOURCE: IEEE Std 802.11-2020, 9.2.4.1 (Frame Control field).
         pub kind, with_kind: [FrameType] = 2..4;
-        /// SOURCE: IEEE Std 802.11-2020, 9.2.4.1 (Frame Control field).
         pub subtype, with_subtype: u16 = 4..8;
-        /// SOURCE: IEEE Std 802.11-2020, 9.2.4.1 (Frame Control field).
-        pub type_and_subtype, with_type_and_subtype: u8 = 2..8;
-        /// SOURCE: IEEE Std 802.11-2020, 9.2.4.1 (Frame Control field).
-        pub qos, with_qos: bool = 7..8;
-        /// SOURCE: IEEE Std 802.11-2020, 9.2.4.1 (Frame Control field).
+        pub type_and_subtype, with_type_and_subtype: u8 = 2..8, view;
+        pub qos, with_qos: bool = 7..8, view;
         pub ds, with_ds: u16 = 8..10;
-        /// SOURCE: IEEE Std 802.11-2020, 9.2.4.1 (Frame Control field).
         pub more_fragments, with_more_fragments: bool = 10..11;
-        /// SOURCE: IEEE Std 802.11-2020, 9.2.4.1 (Frame Control field).
         pub retry, with_retry: bool = 11..12;
-        /// SOURCE: IEEE Std 802.11-2020, 9.2.4.1 (Frame Control field).
         pub power_management, with_power_management: bool = 12..13;
-        /// SOURCE: IEEE Std 802.11-2020, 9.2.4.1 (Frame Control field).
         pub more_data, with_more_data: bool = 13..14;
-        /// SOURCE: IEEE Std 802.11-2020, 9.2.4.1 (Frame Control field).
         pub protected, with_protected: bool = 14..15;
-        /// SOURCE: IEEE Std 802.11-2020, 9.2.4.1 (Frame Control field).
         pub order, with_order: bool = 15..16;
     }
 }
 oer_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.2.4.5 (QoS Control field).
     pub struct QosControl[2] (little) {
-        /// SOURCE: IEEE Std 802.11-2020, 9.2.4.5 (QoS Control field).
         pub tid, with_tid: u8 = 0..4;
-        /// SOURCE: IEEE Std 802.11-2020, 9.2.4.5 (QoS Control field).
         pub eosp, with_eosp: bool = 4..5;
-        /// SOURCE: IEEE Std 802.11-2020, 9.2.4.5 (QoS Control field).
         pub ack_policy, with_ack_policy: u8 = 5..7;
-        /// SOURCE: IEEE Std 802.11-2020, 9.2.4.5 (QoS Control field).
         pub amsdu, with_amsdu: bool = 7..8;
-        /// SOURCE: IEEE Std 802.11-2020, 9.2.4.5 (QoS Control field).
         pub upper, with_upper: u8 = 8..16;
     }
 }
 oer_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11ax-2021, 9.2.4.6 (HT Control field).
     pub struct HtControl[4] (little) {
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.2.4.6 (HT Control field).
         pub vht, with_vht: bool = 0..1;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.2.4.6 (HT Control field).
         pub he, with_he: bool = 1..2;
-        /// SOURCE: IEEE Std 802.11ax-2021, 9.2.4.6 (HT Control field).
         pub control, with_control: u32 = 2..32;
     }
 }
@@ -270,9 +250,7 @@ oer_wire::bitfield! {
 oer_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.2.4.1.4 (To DS and From DS fields).
     pub struct DsDirection[1] (little) {
-        /// SOURCE: IEEE Std 802.11-2020, 9.2.4.1.4 (To DS and From DS fields).
         pub to_ds, with_to_ds: bool = 0..1;
-        /// SOURCE: IEEE Std 802.11-2020, 9.2.4.1.4 (To DS and From DS fields).
         pub from_ds, with_from_ds: bool = 1..2;
     }
 }
