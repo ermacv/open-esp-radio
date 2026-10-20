@@ -1012,6 +1012,10 @@ where
             .contention_publication(role, LegacyTxQueue::from_access_category(access_category))
             .1
     }
+    pub(crate) fn reset_contention(&mut self, role: VifRole, category: WmmAccessCategory) {
+        self.tx
+            .reset_terminal_exchange(role, LegacyTxQueue::from_access_category(category));
+    }
 
     /// Whether the queue of `access_category` holds an attempt.
     #[cfg(test)]
@@ -1585,6 +1589,7 @@ where
                     {
                         self.finish_attempt(
                             hardware,
+                            role,
                             queue,
                             admission,
                             slot,
@@ -1628,6 +1633,7 @@ where
                         abort_ended |= settling;
                         self.finish_attempt(
                             hardware,
+                            role,
                             queue,
                             admission,
                             slot,
@@ -1668,6 +1674,7 @@ where
     fn finish_attempt<H: CcmpKeyHardware, K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>>(
         &mut self,
         hardware: &mut H,
+        role: VifRole,
         queue: FreeQueue<'core, Path>,
         admission: TxAdmission<'core, Path>,
         slot: Pin<&'slot mut TxSlot<BUFFER_SIZE>>,
@@ -1677,6 +1684,17 @@ where
     ) {
         if let PublicationEnd::Expired { msdus } = end {
             self.expired_msdus = self.expired_msdus.saturating_add(msdus.count_ones());
+        }
+        if matches!(
+            end,
+            PublicationEnd::Collision
+                | PublicationEnd::Completed {
+                    status: TxStatus::AckTimeout | TxStatus::CtsTimeout | TxStatus::Collision,
+                    ..
+                }
+        ) {
+            self.tx
+                .record_retry_failure(role, LegacyTxQueue::from_access_category(queue.category()));
         }
         match admission {
             TxAdmission::Open(ticket) => sink.tx_completed(queue, ticket, slot, end, rate),
@@ -1730,6 +1748,7 @@ where
         };
         match attempt {
             Attempt {
+                role,
                 queue,
                 work: Work::Held { slot, .. },
                 admission,
@@ -1738,6 +1757,7 @@ where
             } => {
                 self.finish_attempt(
                     hardware,
+                    role,
                     queue,
                     admission,
                     slot,

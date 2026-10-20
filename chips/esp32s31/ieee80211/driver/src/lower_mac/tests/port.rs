@@ -3,7 +3,7 @@ use crate::port::*;
 use core::{
     convert::Infallible,
     future::Future,
-    pin::{Pin, pin},
+    pin::pin,
     task::{Context, Poll, Waker},
 };
 use oer_ieee80211_port::*;
@@ -13,7 +13,7 @@ use oer_ieee80211_wire::{
     phy::{LegacyRate, PhyRate},
 };
 use oer_radio_port::{self as radio, PortBackend, PortBody, PortPhase};
-use oer_time::{Clock, Duration, Instant, Timer};
+use oer_time::{Clock, Instant, Timer};
 use std::{
     boxed::Box,
     cell::{Cell, RefCell},
@@ -48,6 +48,7 @@ struct Observed {
     hold_stop: bool,
     cut_calls: usize,
     resumed_cuts: usize,
+    backoffs: Vec<u16>,
     received: std::collections::VecDeque<TestReceive>,
 }
 struct Payload(Rc<Cell<usize>>);
@@ -150,6 +151,12 @@ impl Device<512> for TestDevice {
             }
         }
         let publications = self.hardware.publications();
+        self.observed.borrow_mut().backoffs = self
+            .hardware
+            .legacy
+            .iter()
+            .map(|(_, program)| program.contention_window())
+            .collect();
         self.observed.borrow_mut().publications = publications;
         if self.completed < publications && !self.observed.borrow().hold_completion {
             let (status, detail) = self
@@ -441,6 +448,9 @@ fn port_exhausts_supplied_retry_plan_with_one_terminal() {
         matches!(output[0], TxOutcome::Ended(SingleEnd::AckTimeout(air)) if air.transmissions.get() == 3)
     );
     assert_eq!(observed.borrow().publications, 3);
+    // Standard BE CWmin=15 doubles after each unanswered publication;
+    // the fixed entropy selects 8, 24 and 56 slots from those windows.
+    assert_eq!(observed.borrow().backoffs, [8, 24, 56]);
 }
 
 fn submit_mpdu<'k, 'p, 'id: 'p + 'k>(

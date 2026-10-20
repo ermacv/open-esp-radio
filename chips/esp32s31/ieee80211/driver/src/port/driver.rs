@@ -190,11 +190,14 @@ impl<'id, D: Device<B>, const B: usize> Driver<'id, D, B> {
         deadline
     }
     fn finish(
-        &self,
+        &mut self,
         held: &Held<'id, D, B>,
         pending: Pending<'id, D, B>,
         outcome: SingleOutcome<Ack, Infallible>,
     ) {
+        if pending.publications != 0 {
+            self.core.reset_contention(pending.role(), pending.category);
+        }
         if let TxOutcome::Expired { msdus } = outcome {
             held.storage.expired.set(
                 held.storage

@@ -33,6 +33,18 @@ impl<'id, D: Device<B>, const B: usize> CoreOwner<'id, D, B> {
             _ => panic!("only an idle command frontier lends the core"),
         }
     }
+    pub(super) fn reset_contention(
+        &mut self,
+        role: VifRole,
+        category: oer_ieee80211_wire::qos::WmmAccessCategory,
+    ) {
+        match self.0.as_mut().expect("bank retained") {
+            Bank::ConfigureOpen(c) => c.reset_contention(role, category),
+            Bank::ConfigureClosing(c) => c.reset_contention(role, category),
+            Bank::ConfigureClosed(c) => c.reset_contention(role, category),
+            _ => self.core().reset_contention(role, category),
+        }
+    }
     pub(super) fn disabled(&self) -> bool {
         matches!(self.0, Some(Bank::Disabled(_) | Bank::DisabledClosed(_)))
     }

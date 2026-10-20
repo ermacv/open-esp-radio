@@ -472,6 +472,10 @@ where
         if receive_room == 0 {
             return Poll::Pending;
         }
+        if self.continuation.is_some_and(|at| self.timer.now() < at) {
+            return Poll::Pending;
+        }
+        self.continuation = None;
         let progress = session
             .port_service(
                 &mut active.registers,
@@ -489,9 +493,21 @@ where
             crate::datapath::DatapathRxProgress::Drained
                 | crate::datapath::DatapathRxProgress::UpperLayerBlockedButDroppable
         ) {
+            self.streak = 0;
             Poll::Ready(Ok(None))
+        } else if matches!(
+            progress,
+            crate::datapath::DatapathRxProgress::StageCapacityBlocked
+        ) {
+            Poll::Pending
         } else {
-            cx.waker().wake_by_ref();
+            if self.streak < IMMEDIATE_CONTINUATIONS {
+                self.streak += 1;
+                cx.waker().wake_by_ref();
+            } else {
+                self.streak = 0;
+                self.continuation = Some(self.timer.now().saturating_add(CONTINUATION_WAIT));
+            }
             Poll::Pending
         }
     }
@@ -506,6 +522,8 @@ where
             .port_resume_cut(&mut active.registers, &mut self.routes)
             .map_err(Fault::Receive)?;
         self.cut = false;
+        self.continuation = None;
+        self.streak = 0;
         self.rx_pending = true;
         Ok(())
     }

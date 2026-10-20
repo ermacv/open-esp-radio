@@ -252,8 +252,8 @@ impl<'id, D: Device<B>, const B: usize> TxBufferPool<'id, BufferClass<B>> for Ty
     }
 }
 
-/// This port exposes ordinary MPDUs. Aggregate ownership is uninhabited;
-/// the optional `AmpduPhase` is implemented when aggregate execution exists.
+/// This port exposes ordinary MPDUs. Aggregate ownership is uninhabited,
+/// and the optional `AmpduPhase` is not implemented.
 pub struct NoAggregate<'id, D, const B: usize, S> {
     impossible: Infallible,
     marker: PhantomData<fn(&'id ()) -> (D, S)>,

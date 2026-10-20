@@ -81,6 +81,12 @@ macro_rules! keys {
                 Self::PairwiseSlot,
                 KeyBankParts<Self::PairwiseSlot, Self::GroupSlot, N>,
             ) {
+                const {
+                    let pairwise = $p - 1;
+                    let group = $g;
+                    let required = if pairwise > group { pairwise } else { group };
+                    assert!(N >= required, "key bank must fit the association pool");
+                }
                 let (start, bank) = vacant.into_parts();
                 let (pairwise, group) = bank.into_parts();
                 let mut pairwise = pairwise.into_iter();

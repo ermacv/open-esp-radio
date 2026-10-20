@@ -441,6 +441,8 @@ struct ActiveTx<X: BackendTxProfile> {
     /// backoff and power ceiling, and no re-publication whatever the
     /// completion says.
     single_attempt: Option<SingleAttempt>,
+    /// The queued lower-MAC caller owns the complete logical retry plan.
+    external_contention: bool,
     retry: X::MpduRetry<TxPhyRate, LegacyTxQueue>,
     frame_length: usize,
     descriptor_capacity: u32,
@@ -1027,7 +1029,10 @@ where
         // `slot` is the owner's idle slot again; hand the caller's back.
         core::mem::swap(&mut self.slot, &mut slot);
         match result {
-            Ok(active) => Ok(QueuedSingleAttempt { slot, active }),
+            Ok(mut active) => {
+                active.external_contention = true;
+                Ok(QueuedSingleAttempt { slot, active })
+            }
             Err(error) => Err(QueuedSingleAttemptRefused { error, slot }),
         }
     }
@@ -1265,6 +1270,7 @@ where
         }
 
         let mut active = ActiveTx {
+            external_contention: false,
             cookie: TxCookie(0),
             single_attempt,
             retry,
@@ -1524,7 +1530,7 @@ where
             if status == oer_ieee80211_port::TxStatus::Success {
                 self.policy
                     .record_success(active.route.role(), active.route.queue());
-            } else {
+            } else if !active.external_contention {
                 active.retry.abort(&mut self.policy);
             }
             OrdinaryRetryDecision::Complete
@@ -1623,7 +1629,9 @@ where
         }
 
         let decision = if active.single_attempt.is_some() {
-            active.retry.abort(&mut self.policy);
+            if !active.external_contention {
+                active.retry.abort(&mut self.policy);
+            }
             OrdinaryCollisionDecision::Complete
         } else {
             active.retry.observe_collision(&mut self.policy)
