@@ -44,9 +44,6 @@ impl<'m> Targets<'m> {
         let mut entries = Vec::new();
         let mut admitted = memory.reserve(0, c.position())?;
         for (input, executable) in inputs.iter().enumerate() {
-            if !crate::listing::is_executable_image(executable.bytes()) {
-                continue;
-            }
             let mut position = c.position();
             position.input = Some(input as u64);
             c.set_position(position);
@@ -358,16 +355,26 @@ impl<'m> StoredScan<'m> {
         c: &mut dyn RunControl,
     ) -> Result<()> {
         for (input, executable) in inputs.iter().enumerate() {
-            if !crate::listing::is_executable_image(executable.bytes()) {
-                continue;
-            }
             let mut position = c.position();
             position.input = Some(input as u64);
             c.set_position(position);
             let inventory = captured::inventory(executable, memory, c)?;
+            // Classification, symbols and section metadata all come from the
+            // artifact parser's captured inventory, including for archive inputs.
+            if !inventory.objects.iter().any(|object| {
+                object
+                    .elf
+                    .as_ref()
+                    .is_some_and(|elf| elf.object_type == ET_EXEC)
+            }) {
+                continue;
+            }
             self.summary.incomplete_inventories += u64::from(!inventory.complete());
             for object in &inventory.objects {
                 let Some(elf) = &object.elf else { continue };
+                if elf.object_type != ET_EXEC {
+                    continue;
+                }
                 for section in &elf.sections {
                     c.checkpoint(1)?;
                     if section.flags & SHF_ALLOC == 0
