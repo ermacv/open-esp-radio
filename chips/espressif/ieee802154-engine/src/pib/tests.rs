@@ -42,9 +42,9 @@ fn initial_pib_publishes_the_vendor_defaults_in_order() {
             Call::SetTxPower(3),
             Call::SetCcaMode(Ieee802154CcaMode::EnergyDetection),
             Call::SetCcaThreshold(-75),
-            Call::SetTxAutoAck(true),
-            Call::SetRxAutoAck(true),
-            Call::SetTxEnhancedAck(true),
+            Call::SetTxAutoAck(false),
+            Call::SetRxAutoAck(false),
+            Call::SetTxEnhancedAck(false),
             Call::SetCoordinator(false),
             Call::SetPromiscuous(true),
             Call::SetPendingMode(false),
@@ -192,4 +192,49 @@ fn a_ceiling_below_the_lowest_level_is_refused() {
             lowest_dbm: -9,
         }
     );
+}
+
+#[test]
+fn promiscuous_masks_and_restores_each_configured_ack_flag() {
+    for tx in [false, true] {
+        for rx in [false, true] {
+            for enhanced in [false, true] {
+                let mut pib = Ieee802154Pib::new(
+                    Ieee802154PibDefaults::default(),
+                    levels(),
+                    super::test_permit(11, levels()),
+                );
+                pib.set_auto_ack_tx(tx);
+                pib.set_auto_ack_rx(rx);
+                pib.set_enhanced_ack_tx(enhanced);
+                let calls = published(&mut pib);
+                assert!(calls.contains(&Call::SetTxAutoAck(false)));
+                assert!(calls.contains(&Call::SetRxAutoAck(false)));
+                assert!(calls.contains(&Call::SetTxEnhancedAck(false)));
+                assert_eq!(
+                    (pib.auto_ack_tx(), pib.auto_ack_rx(), pib.enhanced_ack_tx()),
+                    (tx, rx, enhanced)
+                );
+                pib.set_promiscuous(false);
+                let calls = published(&mut pib);
+                assert!(calls.contains(&Call::SetTxAutoAck(tx)));
+                assert!(calls.contains(&Call::SetRxAutoAck(rx)));
+                assert!(calls.contains(&Call::SetTxEnhancedAck(enhanced)));
+                pib.set_promiscuous(true);
+                let _ = published(&mut pib);
+                pib.set_auto_ack_tx(!tx);
+                pib.set_auto_ack_rx(!rx);
+                pib.set_enhanced_ack_tx(!enhanced);
+                let masked = published(&mut pib);
+                assert!(masked.contains(&Call::SetTxAutoAck(false)));
+                assert!(masked.contains(&Call::SetRxAutoAck(false)));
+                assert!(masked.contains(&Call::SetTxEnhancedAck(false)));
+                pib.set_promiscuous(false);
+                let calls = published(&mut pib);
+                assert!(calls.contains(&Call::SetTxAutoAck(!tx)));
+                assert!(calls.contains(&Call::SetRxAutoAck(!rx)));
+                assert!(calls.contains(&Call::SetTxEnhancedAck(!enhanced)));
+            }
+        }
+    }
 }

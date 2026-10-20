@@ -492,7 +492,10 @@ impl Bench {
         );
         let mut hw = Hw::default();
         engine.enable();
-        engine.mac_init(&mut hw, Ieee802154PibDefaults::default());
+        engine.mac_init(&mut hw);
+        engine.update_pib(&mut hw, &mut Env::default(), |pib| {
+            pib.set_promiscuous(false)
+        });
         hw.calls.clear();
         Self {
             engine,
@@ -560,7 +563,7 @@ fn mac_init_publishes_the_register_baseline_and_idles() {
     );
     assert_eq!(engine.state(), Ieee802154State::Disable);
     let mut hw = Hw::default();
-    engine.mac_init(&mut hw, Ieee802154PibDefaults::default());
+    engine.mac_init(&mut hw);
     assert_eq!(
         hw.calls,
         [
@@ -570,6 +573,21 @@ fn mac_init_publishes_the_register_baseline_and_idles() {
             Call::EnableRxAborts(Ieee802154RxAbortEnableSet::RuntimeBaseline),
             Call::EdSampleMode(Ieee802154EdSampleMode::Average),
             Call::DisableCoex,
+            Call::GetExtendedAddress,
+            Call::SetPanId(0),
+            Call::SetShortAddress(0),
+            Call::SetExtendedAddress([0; 8]),
+            Call::SetAckTimeout(0),
+            Call::SetChannel(11),
+            Call::SetTxPower(3),
+            Call::SetCcaMode(Ieee802154CcaMode::EnergyDetection),
+            Call::SetCcaThreshold(-75),
+            Call::SetTxAutoAck(false),
+            Call::SetRxAutoAck(false),
+            Call::SetTxEnhancedAck(false),
+            Call::SetCoordinator(false),
+            Call::SetPromiscuous(true),
+            Call::SetPendingMode(false),
         ]
     );
     assert_eq!(engine.state(), Ieee802154State::Idle);
@@ -605,9 +623,9 @@ fn software_coexistence_publishes_each_scene_priority() {
     engine.set_coexistence(Ieee802154Coexistence::Software(vendor_priorities()));
     let mut hw = Hw::default();
     engine.enable();
-    engine.mac_init(&mut hw, Ieee802154PibDefaults::default());
+    engine.mac_init(&mut hw);
     assert_eq!(
-        hw.calls[5..],
+        hw.calls[5..7],
         [Call::SetAckPti(8), Call::SetTxrxPti(1)],
         "{:#?}",
         hw.calls
@@ -696,9 +714,6 @@ fn transmit_with_ack_reports_the_received_ack() {
             Call::StopTimer(Ieee802154Timer::Timer0),
             Call::StopTimer(Ieee802154Timer::Timer1),
             Call::Command(Ieee802154LlCommand::Stop),
-            Call::SetChannel(11),
-            Call::SetTxPower(3),
-            Call::SetPendingMode(false),
             Call::TxAddress(tx),
             Call::RxAddress(rx0),
             Call::Command(Ieee802154LlCommand::TxStart),
@@ -781,7 +796,11 @@ fn the_ack_timer_reports_a_missing_ack() {
 #[test]
 fn a_crc_abort_restarts_receive_into_the_same_buffer() {
     let mut bench = Bench::enabled();
-    bench.engine.pib().set_rx_when_idle(true);
+    bench
+        .engine
+        .update_pib(&mut bench.hw, &mut bench.env, |pib| {
+            pib.set_rx_when_idle(true)
+        });
     bench.receive();
     bench.hw.rx_abort =
         Ieee802154RxAbortReasonObservation::Named(Ieee802154RxAbortReason::CrcError);
@@ -807,7 +826,11 @@ fn a_crc_abort_restarts_receive_into_the_same_buffer() {
 #[test]
 fn an_auto_acked_frame_is_delivered_after_its_ack() {
     let mut bench = Bench::enabled();
-    bench.engine.pib().set_rx_when_idle(true);
+    bench
+        .engine
+        .update_pib(&mut bench.hw, &mut bench.env, |pib| {
+            pib.set_rx_when_idle(true)
+        });
     bench.receive();
     let mut image = DATA_WITH_ACK;
     image[11] = 0xc9;
@@ -859,7 +882,11 @@ fn an_auto_acked_frame_is_delivered_after_its_ack() {
 #[test]
 fn a_2015_frame_is_answered_with_the_generated_enhanced_ack() {
     let mut bench = Bench::enabled();
-    bench.engine.pib().set_rx_when_idle(true);
+    bench
+        .engine
+        .update_pib(&mut bench.hw, &mut bench.env, |pib| {
+            pib.set_rx_when_idle(true)
+        });
     bench.env.enhanced_ack = Some(vec![0x05, 0x02, 0x20, 0x01, 0, 0]);
     bench.receive();
     let mut image = DATA_WITH_ACK;
@@ -894,7 +921,11 @@ fn a_2015_frame_is_answered_with_the_generated_enhanced_ack() {
 #[test]
 fn a_secured_enhanced_ack_configures_transmit_security_first() {
     let mut bench = Bench::enabled();
-    bench.engine.pib().set_rx_when_idle(true);
+    bench
+        .engine
+        .update_pib(&mut bench.hw, &mut bench.env, |pib| {
+            pib.set_rx_when_idle(true)
+        });
     let address = [0x21; 8];
     bench.engine.set_extended_address(&mut bench.hw, address);
     // ACK, security enabled, 2015, short destination; ENC-MIC-32 key index
@@ -1022,7 +1053,11 @@ fn restarting_a_transmission_reports_the_new_frame_as_aborted() {
 #[test]
 fn a_full_ring_drops_frames_until_a_slot_is_released() {
     let mut bench = Bench::enabled();
-    bench.engine.pib().set_rx_when_idle(true);
+    bench
+        .engine
+        .update_pib(&mut bench.hw, &mut bench.env, |pib| {
+            pib.set_rx_when_idle(true)
+        });
     bench.receive();
     for slot in 0..RX_BUFFER_COUNT {
         assert_eq!(bench.hw.rx_address, Some(bench.rx_address(slot)));
@@ -1285,9 +1320,7 @@ fn txrx_statistics_count_operations_and_drain_the_mac_counters() {
     assert_eq!(bench.engine.txrx_statistics().unwrap().tx.nums, 2);
 
     // `mac_init` clears them.
-    bench
-        .engine
-        .mac_init(&mut bench.hw, Ieee802154PibDefaults::default());
+    bench.engine.mac_init(&mut bench.hw);
     assert_eq!(
         bench.engine.txrx_statistics(),
         Some(Ieee802154TxRxStatistics::default())
@@ -1309,7 +1342,7 @@ fn a_refused_transmission_counts_as_deferred() {
 
 /// The priorities the vendor table resolves for the driver's default
 /// operations (idle 1, TX/RX 3, timed TX/RX 8, ACK 8).
-fn vendor_priorities() -> Ieee802154CoexPriorities {
+pub(super) fn vendor_priorities() -> Ieee802154CoexPriorities {
     Ieee802154CoexPriorities::resolve(&oer_espressif_coex::CoexPtiTable::VENDOR)
 }
 
@@ -1339,4 +1372,236 @@ fn an_unknown_dma_identity_is_rejected_and_the_stub_is_not_a_deliverable_slot() 
             .model_rx_slot(bench.engine.addresses.enhanced_ack)
             .is_none()
     );
+}
+
+/// RX edits publish themselves while listening; automatic restarts never
+/// publish the channel, power or CCA reserved for an operation start.
+#[test]
+fn listening_publishes_rx_settings_without_publishing_transmit_settings() {
+    let mut bench = Bench::enabled();
+    bench.receive();
+    bench.hw.calls.clear();
+    let permit = crate::pib::test_permit(20, bench.engine.levels);
+    bench
+        .engine
+        .update_pib(&mut bench.hw, &mut bench.env, |pib| {
+            pib.set_channel(permit);
+            pib.set_power(-9);
+            pib.set_cca_mode(Ieee802154CcaMode::Carrier);
+            pib.set_coordinator(true);
+            pib.set_auto_ack_tx(false);
+            pib.set_pending_mode(
+                Ieee802154MultipanIndex::CONTEXT0,
+                oer_ieee802154_mac::AutoPendingMode::Enhanced,
+            );
+        });
+    assert_subsequence(
+        &bench.hw.calls,
+        &[
+            Call::Command(Ieee802154LlCommand::Stop),
+            Call::SetTxAutoAck(false),
+            Call::SetCoordinator(true),
+            Call::SetPendingMode(true),
+            Call::Command(Ieee802154LlCommand::RxStart),
+        ],
+    );
+    assert!(!bench.hw.calls.iter().any(|call| matches!(
+        call,
+        Call::SetChannel(_) | Call::SetTxPower(_) | Call::SetCcaMode(_)
+    )));
+    assert_eq!(bench.engine.state(), Ieee802154State::Rx);
+    assert!(!bench.engine.pib().is_rx_pending());
+    assert!(bench.engine.pib().is_pending());
+    bench.hw.calls.clear();
+    bench.transmit(&DATA_NO_ACK, false);
+    assert_subsequence(
+        &bench.hw.calls,
+        &[
+            Call::SetChannel(20),
+            Call::SetTxPower(0),
+            Call::SetCcaMode(Ieee802154CcaMode::Carrier),
+            Call::Command(Ieee802154LlCommand::TxStart),
+        ],
+    );
+}
+
+#[test]
+fn rx_settings_wait_for_the_current_frame_and_its_ack() {
+    let mut bench = Bench::enabled();
+    bench
+        .engine
+        .update_pib(&mut bench.hw, &mut bench.env, |pib| {
+            pib.set_rx_when_idle(true)
+        });
+    bench.receive();
+    bench.hw.current_rx_frame = true;
+    bench.interrupt(&[Ieee802154Event::RxSfdDone]);
+    bench.hw.calls.clear();
+    bench
+        .engine
+        .update_pib(&mut bench.hw, &mut bench.env, |pib| {
+            pib.set_promiscuous(true);
+            pib.set_coordinator(true);
+            pib.set_pending_mode(
+                Ieee802154MultipanIndex::CONTEXT0,
+                oer_ieee802154_mac::AutoPendingMode::Enhanced,
+            );
+        });
+    assert_eq!(bench.hw.calls, [Call::IsCurrentRxFrame]);
+    assert!(bench.hw.tx_auto_ack);
+    bench.deliver(&DATA_WITH_ACK);
+    bench.hw.current_rx_frame = false;
+    bench.interrupt(&[Ieee802154Event::RxDone]);
+    assert_eq!(bench.engine.state(), Ieee802154State::TxAck);
+    assert!(!bench.hw.calls.contains(&Call::SetPromiscuous(true)));
+    bench.interrupt(&[Ieee802154Event::AckTxDone]);
+    assert_subsequence(
+        &bench.hw.calls,
+        &[
+            Call::SetTxAutoAck(false),
+            Call::SetCoordinator(true),
+            Call::SetPromiscuous(true),
+            Call::SetPendingMode(true),
+            Call::Command(Ieee802154LlCommand::RxStart),
+        ],
+    );
+    assert!(!bench.engine.pib().is_rx_pending());
+    assert!(!bench.hw.tx_auto_ack && !bench.hw.rx_auto_ack && !bench.hw.tx_enhanced_ack);
+}
+
+#[test]
+fn a_latched_receive_terminal_still_belongs_to_its_frame() {
+    let mut bench = Bench::enabled();
+    bench
+        .engine
+        .update_pib(&mut bench.hw, &mut bench.env, |pib| {
+            pib.set_rx_when_idle(true)
+        });
+    bench.receive();
+    bench.deliver(&DATA_WITH_ACK);
+    // The hardware has left the frame before the ISR consumes RX_DONE.
+    bench.hw.current_rx_frame = false;
+    bench.hw.events = mask(&[Ieee802154Event::RxDone]);
+    bench.hw.calls.clear();
+    bench
+        .engine
+        .update_pib(&mut bench.hw, &mut bench.env, |pib| {
+            pib.set_coordinator(true)
+        });
+    assert!(!bench.hw.calls.contains(&Call::SetCoordinator(true)));
+    assert!(
+        !bench
+            .hw
+            .calls
+            .contains(&Call::Command(Ieee802154LlCommand::Stop))
+    );
+    bench.interrupt(&[Ieee802154Event::RxDone]);
+    bench.interrupt(&[Ieee802154Event::AckTxDone]);
+    assert!(bench.hw.calls.contains(&Call::SetCoordinator(true)));
+    assert!(matches!(
+        bench.take_notes().as_slice(),
+        [Note::ReceiveDone { .. }]
+    ));
+}
+
+#[test]
+fn rx_edits_during_transmit_keep_the_current_ack_wait() {
+    let mut bench = Bench::enabled();
+    bench.transmit(&DATA_WITH_ACK, false);
+    bench.hw.calls.clear();
+    bench
+        .engine
+        .update_pib(&mut bench.hw, &mut bench.env, |pib| {
+            pib.set_promiscuous(true)
+        });
+    assert!(bench.hw.calls.is_empty());
+    bench.interrupt(&[Ieee802154Event::TxDone]);
+    assert_eq!(bench.engine.state(), Ieee802154State::RxAck);
+    assert!(!bench.hw.calls.contains(&Call::SetPromiscuous(true)));
+    bench
+        .engine
+        .update_pib(&mut bench.hw, &mut bench.env, |pib| {
+            pib.set_coordinator(true)
+        });
+    bench.deliver(&[0x05, 0x02, 0x00, 0x01, 0xc4, 0xc8]);
+    bench.interrupt(&[Ieee802154Event::AckRxDone]);
+    assert!(bench.hw.calls.contains(&Call::SetPromiscuous(true)));
+    assert!(bench.hw.calls.contains(&Call::SetCoordinator(true)));
+    assert!(!bench.engine.pib().is_rx_pending());
+}
+
+#[test]
+fn editing_an_armed_receive_does_not_start_its_window_early() {
+    let mut bench = Bench::enabled();
+    assert!(
+        bench
+            .engine
+            .receive_at(&mut bench.hw, &mut bench.env, 5_000, 2_000)
+    );
+    bench.hw.calls.clear();
+    bench
+        .engine
+        .update_pib(&mut bench.hw, &mut bench.env, |pib| {
+            pib.set_coordinator(true)
+        });
+    assert!(bench.hw.calls.contains(&Call::SetCoordinator(true)));
+    assert!(!bench.hw.calls.iter().any(|call| matches!(
+        call,
+        Call::Command(_) | Call::StopTimer(_) | Call::Threshold(_, _)
+    )));
+    assert!(matches!(
+        bench.engine.timer1,
+        Some(super::TimerAction::StartReceiveAt { .. })
+    ));
+    bench.interrupt(&[Ieee802154Event::Timer1Overflow]);
+    assert!(matches!(
+        bench.engine.timer1,
+        Some(super::TimerAction::FinishReceiveAt)
+    ));
+}
+
+#[test]
+fn settings_before_first_enable_are_kept_including_disabled_pib_edits() {
+    let buffers = Box::leak(Box::new(Ieee802154EngineBuffers::new()));
+    let levels = Ieee802154TxPowerLevels::new(&LEVELS).expect("levels");
+    let mut engine = Ieee802154Engine::new(
+        buffers,
+        crate::ll::model::addresses(),
+        levels,
+        Ieee802154PibDefaults::default(),
+        crate::pib::test_permit(11, levels),
+    );
+    let mut hw = Hw {
+        short_address: 7,
+        extended_address: [8; 8],
+        ..Hw::default()
+    };
+    let mut env = Env::default();
+    engine.set_panid(&mut hw, 0x1234);
+    engine.set_ack_timeout(
+        &mut hw,
+        crate::types::AckTimeout::new(200).expect("bounded timeout"),
+    );
+    hw.calls.clear();
+    engine.update_pib(&mut hw, &mut env, |pib| {
+        pib.set_promiscuous(false);
+        pib.set_coordinator(true);
+        pib.set_cca_threshold(-90);
+    });
+    assert!(hw.calls.is_empty());
+    hw = Hw::default();
+    engine.enable();
+    engine.mac_init(&mut hw);
+    assert_eq!(
+        (
+            hw.panid,
+            hw.short_address,
+            hw.extended_address,
+            hw.ack_timeout
+        ),
+        (0x1234, 7, [8; 8], 13)
+    );
+    assert!(hw.calls.contains(&Call::SetCoordinator(true)));
+    assert!(hw.calls.contains(&Call::SetCcaThreshold(-90)));
+    assert!(hw.tx_auto_ack && hw.rx_auto_ack && hw.tx_enhanced_ack);
 }

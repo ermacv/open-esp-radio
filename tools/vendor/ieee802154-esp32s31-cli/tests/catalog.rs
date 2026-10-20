@@ -48,9 +48,12 @@ fn every_scenario_runs_without_a_driver_assertion() {
     }
 }
 
-/// The production engine reproduces every catalog trace.
+/// The raw comparator keeps configuration differences visible. In every
+/// scenario its first divergence is the new mac_init retention snapshot;
+/// the reasons are catalogued instead of normalizing the engine to C.
+/// Focused comparisons below inspect each intended behavioral difference.
 #[test]
-fn every_scenario_matches_the_production_engine() {
+fn every_scenario_exposes_the_documented_configuration_difference() {
     let list = Command::new(env!("CARGO_BIN_EXE_oer-tool-vendor-ieee802154-esp32s31"))
         .arg("list")
         .output()
@@ -61,7 +64,23 @@ fn every_scenario_matches_the_production_engine() {
             .output()
             .expect("the stand binary compares");
         let verdict = String::from_utf8_lossy(&output.stdout);
-        assert_eq!(verdict.trim(), "MATCH", "{scenario}: {verdict}");
+        assert_eq!(output.status.code(), Some(1), "{scenario}: {verdict}");
+        assert!(output.stderr.is_empty(), "{scenario}: {:?}", output.stderr);
+        assert!(
+            verdict.starts_with(if cfg!(feature = "sw-coex") {
+                "DIFF at 7\n"
+            } else {
+                "DIFF at 6\n"
+            }),
+            "{scenario}: {verdict}"
+        );
+        assert!(
+            verdict.contains("ieee802154_ll_get_multipan_enable_mask()"),
+            "{scenario}: {verdict}"
+        );
+        for reason in oer_vendor_ieee802154_esp32s31::catalog::EXPECTED_CONFIGURATION_DIFFERENCES {
+            assert!(verdict.contains(reason), "{scenario}: {verdict}");
+        }
     }
 }
 
@@ -314,4 +333,118 @@ fn recent_rssi_is_the_signed_low_byte_of_one_rx_info_read() {
         .map(|&index| trace[index].rsplit(" = ").next().unwrap())
         .collect();
     assert_eq!(values, ["-58", "127", "-128", "0"].repeat(5));
+}
+
+fn port_trace(scenario: &str) -> Vec<String> {
+    let output = Command::new(env!("CARGO_BIN_EXE_oer-tool-vendor-ieee802154-esp32s31"))
+        .args(["port", scenario])
+        .output()
+        .expect("the port runs");
+    assert!(output.status.success(), "{scenario}: {output:?}");
+    String::from_utf8(output.stdout)
+        .expect("UTF-8 trace")
+        .lines()
+        .map(str::to_owned)
+        .collect()
+}
+
+/// Configuration timing, retained register snapshots and promiscuous ACK
+/// masking differ intentionally. Keep the remaining operation and callback
+/// comparison, including every radio command, abort and buffer publication.
+#[test]
+fn existing_scenarios_keep_the_same_operations_and_callbacks() {
+    let configuration = |line: &String| {
+        let names = [
+            "ieee802154_ll_set_freq(",
+            "ieee802154_ll_set_power(",
+            "ieee802154_ll_set_cca_mode(",
+            "ieee802154_ll_set_cca_threshold(",
+            "ieee802154_ll_set_tx_auto_ack(",
+            "ieee802154_ll_set_rx_auto_ack(",
+            "ieee802154_ll_set_tx_enhance_ack(",
+            "ieee802154_ll_set_coordinator(",
+            "ieee802154_ll_set_promiscuous(",
+            "ieee802154_ll_set_pending_mode(",
+            "ieee802154_ll_set_multipan_",
+            "ieee802154_ll_get_multipan_",
+            "ieee802154_ll_set_ack_timeout(",
+            "ieee802154_ll_get_ack_timeout(",
+        ];
+        names
+            .iter()
+            .any(|name| line.starts_with(&format!("ll {name}")))
+    };
+    for scenario in oer_vendor_ieee802154_esp32s31::catalog::SCENARIOS {
+        if scenario.name.starts_with("configuration-") {
+            continue;
+        }
+        let relevant = |lines: Vec<String>| {
+            lines
+                .into_iter()
+                .filter(|line| {
+                    !line.starts_with("ext ")
+                        && !line.starts_with("return ")
+                        && !configuration(line)
+                })
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            relevant(port_trace(scenario.name)),
+            relevant(trace(scenario.name)),
+            "{}",
+            scenario.name
+        );
+    }
+}
+
+#[test]
+fn configuration_differences_have_independent_behavioral_expectations() {
+    let vendor = trace("configuration-rx-safe-point");
+    let port = port_trace("configuration-rx-safe-point");
+    assert!(
+        !vendor
+            .iter()
+            .any(|line| line == "ll ieee802154_ll_set_coordinator(0x1)")
+    );
+    assert_subsequence(
+        &port,
+        &[
+            "ll ieee802154_ll_set_coordinator(0x1)",
+            "ll ieee802154_ll_set_cmd(0x42)",
+        ],
+    );
+    let vendor = trace("configuration-promiscuous-mask");
+    let port = port_trace("configuration-promiscuous-mask");
+    let tx_ack = |lines: &[String]| {
+        lines
+            .iter()
+            .rev()
+            .find(|line| line.starts_with("ll ieee802154_ll_set_tx_auto_ack("))
+            .cloned()
+    };
+    assert_eq!(
+        tx_ack(&vendor).as_deref(),
+        Some("ll ieee802154_ll_set_tx_auto_ack(0x1)")
+    );
+    assert_eq!(
+        tx_ack(&port).as_deref(),
+        Some("ll ieee802154_ll_set_tx_auto_ack(0x0)")
+    );
+    let vendor = trace("configuration-retention");
+    let port = port_trace("configuration-retention");
+    let threshold = |lines: &[String]| {
+        lines
+            .iter()
+            .rev()
+            .find(|line| line.starts_with("ll ieee802154_ll_set_cca_threshold("))
+            .cloned()
+    };
+    assert_eq!(
+        threshold(&vendor).as_deref(),
+        Some("ll ieee802154_ll_set_cca_threshold(0xffffffffffffffb5)")
+    );
+    assert_eq!(
+        threshold(&port).as_deref(),
+        Some("ll ieee802154_ll_set_cca_threshold(0xffffffffffffffa6)")
+    );
 }

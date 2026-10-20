@@ -36,6 +36,14 @@ pub struct Ieee802154LlModel<Address = ModelAddress> {
     pub tx_address: Option<Address>,
     /// The published channel's frequency code.
     pub frequency_code: u8,
+    /// Published transmit-power field code.
+    pub tx_power_code: u8,
+    /// Published CCA mode.
+    pub cca_mode: Ieee802154CcaMode,
+    /// Published CCA threshold.
+    pub cca_threshold_dbm: i8,
+    /// Published coordinator role.
+    pub coordinator: bool,
     /// Hardware ACK transmission.
     pub tx_auto_ack: bool,
     /// ACK reception after transmission.
@@ -88,6 +96,10 @@ impl<Address> Default for Ieee802154LlModel<Address> {
             rx_address: None,
             tx_address: None,
             frequency_code: 0,
+            tx_power_code: 0,
+            cca_mode: Ieee802154CcaMode::EnergyDetection,
+            cca_threshold_dbm: 0,
+            coordinator: false,
             tx_auto_ack: false,
             rx_auto_ack: false,
             tx_enhanced_ack: false,
@@ -282,9 +294,15 @@ impl<Address: Copy + Eq> Ieee802154LowLevel for Ieee802154LlModel<Address> {
     fn set_channel(&mut self, channel: Ieee802154Channel) {
         self.frequency_code = channel.frequency_code();
     }
-    fn set_tx_power(&mut self, _power: &Ieee802154ResolvedTxPower<'_>) {}
-    fn set_cca_mode(&mut self, _mode: Ieee802154CcaMode) {}
-    fn set_cca_threshold(&mut self, _threshold_dbm: i8) {}
+    fn set_tx_power(&mut self, power: &Ieee802154ResolvedTxPower<'_>) {
+        self.tx_power_code = power.field_code().value();
+    }
+    fn set_cca_mode(&mut self, mode: Ieee802154CcaMode) {
+        self.cca_mode = mode;
+    }
+    fn set_cca_threshold(&mut self, threshold_dbm: i8) {
+        self.cca_threshold_dbm = threshold_dbm;
+    }
     fn set_tx_auto_ack(&mut self, enable: bool) {
         self.tx_auto_ack = enable;
     }
@@ -294,7 +312,9 @@ impl<Address: Copy + Eq> Ieee802154LowLevel for Ieee802154LlModel<Address> {
     fn set_tx_enhanced_ack(&mut self, enable: bool) {
         self.tx_enhanced_ack = enable;
     }
-    fn set_coordinator(&mut self, _enable: bool) {}
+    fn set_coordinator(&mut self, enable: bool) {
+        self.coordinator = enable;
+    }
     fn set_promiscuous(&mut self, enable: bool) {
         self.promiscuous = enable;
     }

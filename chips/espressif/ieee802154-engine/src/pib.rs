@@ -6,11 +6,12 @@
 //! Systems (Shanghai) Co Ltd, Apache-2.0) and modified by Vladislav
 //! Ermachenkov; see `NOTICE`.
 //!
-//! The PIB holds the radio configuration the driver publishes lazily: every
-//! setter that changes a value marks the PIB pending, and
-//! [`Ieee802154Pib::update`] writes the complete set in the vendor order
-//! before the next operation. Addresses, PAN identifiers and the ACK timeout
-//! are not PIB values; the vendor driver writes them directly.
+//! The PIB keeps receive-side changes separately from channel, power and
+//! CCA. The engine publishes receive-side values at once while listening
+//! without a frame in progress, otherwise at the frame's end. Channel and
+//! transmit-side settings are published at operation start. Promiscuous
+//! reception masks ACK flags without replacing the configured values.
+//! Addresses, PAN identifiers and ACK timeout are written directly.
 
 pub use crate::types::Ieee802154MultipanIndex;
 pub use oer_ieee802154_mac::AutoPendingMode;
@@ -32,8 +33,7 @@ const INTERFACE_COUNT: usize = Ieee802154MultipanIndex::COUNT as usize;
 pub const CCA_THRESHOLD_RANGE_DBM: core::ops::RangeInclusive<i8> = -120..=0;
 
 /// Build-time PIB defaults (`CONFIG_IEEE802154_CCA_MODE` and
-/// `CONFIG_IEEE802154_CCA_THRESHOLD`), which every MAC initialization
-/// restores.
+/// `CONFIG_IEEE802154_CCA_THRESHOLD`), used once at engine construction.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Ieee802154PibDefaults {
     cca_mode: Ieee802154CcaMode,
@@ -162,6 +162,8 @@ pub struct Ieee802154Pib {
     cca_threshold_dbm: i8,
     cca_mode: Ieee802154CcaMode,
     pending: bool,
+    rx_pending: bool,
+    active_pending_mode: [AutoPendingMode; INTERFACE_COUNT],
 }
 
 const fn channel_slot(channel: Ieee802154Channel) -> usize {
@@ -192,32 +194,52 @@ impl Ieee802154Pib {
             cca_threshold_dbm: defaults.cca_threshold_dbm,
             cca_mode: defaults.cca_mode,
             pending: true,
+            rx_pending: true,
+            active_pending_mode: [AutoPendingMode::Disable; INTERFACE_COUNT],
         }
     }
 
     /// `ieee802154_pib_is_pending`.
     pub const fn is_pending(&self) -> bool {
-        self.pending
+        self.pending || self.rx_pending
     }
 
-    /// `ieee802154_pib_update`: when pending, publish the channel, the
-    /// current channel's power, CCA, ACK, role and pending-mode settings in
-    /// the vendor order, then clear the pending mark.
+    /// Whether receive-side settings await a safe publication point.
+    pub const fn is_rx_pending(&self) -> bool {
+        self.rx_pending
+    }
+
+    /// Republish all retained settings after a MAC reset or power cycle.
+    pub(crate) fn invalidate(&mut self) {
+        self.pending = true;
+        self.rx_pending = true;
+    }
+
+    /// Publish channel, power and CCA at the start of an operation, then
+    /// any receive-side changes. Automatic RX restarts publish only RX values.
     pub fn update<Ll: Ieee802154LowLevel + ?Sized>(
         &mut self,
         ll: &mut Ll,
         levels: Ieee802154TxPowerLevels<'_>,
     ) {
-        if !self.pending {
+        if self.pending {
+            ll.set_channel(self.channel);
+            ll.set_tx_power(&levels.resolve(self.channel, self.power().min(self.ceiling_dbm)));
+            ll.set_cca_mode(self.cca_mode);
+            ll.set_cca_threshold(self.cca_threshold_dbm);
+            self.pending = false;
+        }
+        self.update_rx(ll);
+    }
+
+    /// Publish receive-side settings with RX stopped or at a frame boundary.
+    pub(crate) fn update_rx<Ll: Ieee802154LowLevel + ?Sized>(&mut self, ll: &mut Ll) {
+        if !self.rx_pending {
             return;
         }
-        ll.set_channel(self.channel);
-        ll.set_tx_power(&levels.resolve(self.channel, self.power().min(self.ceiling_dbm)));
-        ll.set_cca_mode(self.cca_mode);
-        ll.set_cca_threshold(self.cca_threshold_dbm);
-        ll.set_tx_auto_ack(self.auto_ack_tx);
-        ll.set_rx_auto_ack(self.auto_ack_rx);
-        ll.set_tx_enhanced_ack(self.enhanced_ack_tx);
+        ll.set_tx_auto_ack(self.auto_ack_tx && !self.promiscuous);
+        ll.set_rx_auto_ack(self.auto_ack_rx && !self.promiscuous);
+        ll.set_tx_enhanced_ack(self.enhanced_ack_tx && !self.promiscuous);
         ll.set_coordinator(self.coordinator);
         ll.set_promiscuous(self.promiscuous);
         ll.set_pending_mode(
@@ -225,7 +247,16 @@ impl Ieee802154Pib {
                 .iter()
                 .any(|mode| mode.selects_enhanced_lookup()),
         );
-        self.pending = false;
+        self.active_pending_mode = self.pending_mode;
+        self.rx_pending = false;
+    }
+
+    /// The mode published with the hardware's pending-lookup selector.
+    pub(crate) const fn active_pending_mode(
+        &self,
+        interface: Ieee802154MultipanIndex,
+    ) -> AutoPendingMode {
+        self.active_pending_mode[interface.value() as usize]
     }
 
     fn replace<T: PartialEq>(pending: &mut bool, slot: &mut T, value: T) {
@@ -296,9 +327,10 @@ impl Ieee802154Pib {
         self.promiscuous
     }
 
-    /// `ieee802154_pib_set_promiscuous`.
+    /// Mask ACK flags while promiscuous, retaining their configured values.
+    /// Takes effect at the engine's next safe receive publication point.
     pub fn set_promiscuous(&mut self, enable: bool) {
-        Self::replace(&mut self.pending, &mut self.promiscuous, enable);
+        Self::replace(&mut self.rx_pending, &mut self.promiscuous, enable);
     }
 
     /// `ieee802154_pib_get_cca_threshold`.
@@ -330,9 +362,9 @@ impl Ieee802154Pib {
         self.auto_ack_tx
     }
 
-    /// `ieee802154_pib_set_auto_ack_tx`.
+    /// `ieee802154_pib_set_auto_ack_tx`; applied at the next safe RX point.
     pub fn set_auto_ack_tx(&mut self, enable: bool) {
-        Self::replace(&mut self.pending, &mut self.auto_ack_tx, enable);
+        Self::replace(&mut self.rx_pending, &mut self.auto_ack_tx, enable);
     }
 
     /// `ieee802154_pib_get_auto_ack_rx`.
@@ -340,9 +372,9 @@ impl Ieee802154Pib {
         self.auto_ack_rx
     }
 
-    /// `ieee802154_pib_set_auto_ack_rx`.
+    /// `ieee802154_pib_set_auto_ack_rx`; applied at the next safe RX point.
     pub fn set_auto_ack_rx(&mut self, enable: bool) {
-        Self::replace(&mut self.pending, &mut self.auto_ack_rx, enable);
+        Self::replace(&mut self.rx_pending, &mut self.auto_ack_rx, enable);
     }
 
     /// `ieee802154_pib_get_enhance_ack_tx`.
@@ -350,9 +382,9 @@ impl Ieee802154Pib {
         self.enhanced_ack_tx
     }
 
-    /// `ieee802154_pib_set_enhance_ack_tx`.
+    /// `ieee802154_pib_set_enhance_ack_tx`; applied at the next safe RX point.
     pub fn set_enhanced_ack_tx(&mut self, enable: bool) {
-        Self::replace(&mut self.pending, &mut self.enhanced_ack_tx, enable);
+        Self::replace(&mut self.rx_pending, &mut self.enhanced_ack_tx, enable);
     }
 
     /// `ieee802154_pib_get_coordinator`.
@@ -360,9 +392,9 @@ impl Ieee802154Pib {
         self.coordinator
     }
 
-    /// `ieee802154_pib_set_coordinator`.
+    /// `ieee802154_pib_set_coordinator`; applied at the next safe RX point.
     pub fn set_coordinator(&mut self, enable: bool) {
-        Self::replace(&mut self.pending, &mut self.coordinator, enable);
+        Self::replace(&mut self.rx_pending, &mut self.coordinator, enable);
     }
 
     /// `ieee802154_pib_get_pending_mode`.
@@ -370,14 +402,14 @@ impl Ieee802154Pib {
         self.pending_mode[interface.value() as usize]
     }
 
-    /// `ieee802154_pib_set_pending_mode`.
+    /// `ieee802154_pib_set_pending_mode`; applied at the next safe RX point.
     pub(crate) fn set_pending_mode(
         &mut self,
         interface: Ieee802154MultipanIndex,
         mode: AutoPendingMode,
     ) {
         Self::replace(
-            &mut self.pending,
+            &mut self.rx_pending,
             &mut self.pending_mode[interface.value() as usize],
             mode,
         );

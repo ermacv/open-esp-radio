@@ -10,6 +10,54 @@ use crate::{
     scenario::{Scenario, Step},
 };
 
+/// Intentional differences from the C driver's configuration contract.
+/// These remain raw `DIFF` results, with both traces available for inspection;
+/// they are not normalized into parity or used to alter the engine.
+/// The focused engine tests establish the new behavior independently.
+pub const EXPECTED_CONFIGURATION_DIFFERENCES: [&str; 3] = [
+    "RX safe point: RX settings publish while listening or at frame/ACK completion; C waits for the next explicit operation",
+    "Promiscuous masking: ACK flags are configured && !promiscuous and recover their configured values; C overwrites them",
+    "Retention: mac_init snapshots and republishes backend settings across reset/disable/enable; C restores its PIB defaults",
+];
+
+fn configuration_rx_safe_point() -> Vec<Step> {
+    vec![
+        Step::Enable,
+        Step::SetPromiscuous(false),
+        Step::SetRxWhenIdle(true),
+        Step::Receive,
+        Step::SetCoordinator(true),
+    ]
+}
+
+fn configuration_promiscuous_mask() -> Vec<Step> {
+    vec![
+        Step::Enable,
+        Step::SetAutoAckTx(false),
+        Step::SetPromiscuous(true),
+        Step::Receive,
+        Step::SetPromiscuous(false),
+        Step::Receive,
+    ]
+}
+
+fn configuration_retention() -> Vec<Step> {
+    vec![
+        Step::Enable,
+        Step::SetPanId(0x1234),
+        Step::SetShortAddress(0x5678),
+        Step::SetExtendedAddress([9; 8]),
+        Step::SetAckTimeout(200),
+        Step::SetCcaThreshold(-90),
+        Step::Receive,
+        Step::Sleep,
+        Step::Disable,
+        Step::Enable,
+        Step::Receive,
+        Step::GetIdentity,
+    ]
+}
+
 /// `IEEE802154_EVENT_*` bits.
 pub mod event {
     pub const TX_DONE: u16 = 1 << 0;
@@ -116,6 +164,7 @@ fn interrupt(events: u16) -> Step {
 fn transmit_ack_timer_expires() -> Vec<Step> {
     vec![
         Step::Enable,
+        Step::SetPromiscuous(false),
         Step::Input("esp_timer_get_time", 1_000),
         Step::Transmit {
             frame: data_frame(true),
@@ -129,6 +178,7 @@ fn transmit_ack_timer_expires() -> Vec<Step> {
 fn transmit_ack_abort_timeout() -> Vec<Step> {
     vec![
         Step::Enable,
+        Step::SetPromiscuous(false),
         Step::Transmit {
             frame: data_frame(true),
             cca: false,
@@ -145,6 +195,7 @@ fn transmit_ack_abort_timeout() -> Vec<Step> {
 fn receive_with_enhanced_ack() -> Vec<Step> {
     vec![
         Step::Enable,
+        Step::SetPromiscuous(false),
         Step::SetRxWhenIdle(true),
         Step::Receive,
         Step::DeliverFrame(received_2015_frame()),
@@ -170,6 +221,7 @@ fn secured_enhanced_ack_inputs() -> Inputs {
 fn receive_2015_without_enhanced_ack() -> Vec<Step> {
     vec![
         Step::Enable,
+        Step::SetPromiscuous(false),
         Step::SetRxWhenIdle(true),
         Step::Receive,
         Step::DeliverFrame(received_2015_frame()),
@@ -180,6 +232,7 @@ fn receive_2015_without_enhanced_ack() -> Vec<Step> {
 fn transmit_during_ack_fails() -> Vec<Step> {
     vec![
         Step::Enable,
+        Step::SetPromiscuous(false),
         Step::Receive,
         Step::DeliverFrame(received_data_frame()),
         interrupt(event::RX_DONE),
@@ -326,6 +379,7 @@ fn transmit_with_security() -> Vec<Step> {
 fn multipan_identities() -> Vec<Step> {
     vec![
         Step::Enable,
+        Step::SetPromiscuous(false),
         Step::SetMultipanPanId {
             index: 0,
             panid: 0x1234,
@@ -556,7 +610,7 @@ fn ack_transmit_abort_reasons() -> Vec<Step> {
 /// channel first.
 fn transmit_abort_reasons() -> Vec<Step> {
     use tx_abort::*;
-    let mut steps = vec![Step::Enable];
+    let mut steps = vec![Step::Enable, Step::SetPromiscuous(false)];
     for reason in [
         RX_ACK_STOP,
         RX_ACK_SFD_TIMEOUT,
@@ -634,6 +688,7 @@ fn recent_rssi() -> Vec<Step> {
     let mut steps = Vec::new();
     reads(&mut steps);
     steps.push(Step::Enable);
+    steps.push(Step::SetPromiscuous(false));
     reads(&mut steps);
     steps.push(Step::Receive);
     reads(&mut steps);
@@ -670,6 +725,7 @@ fn transmit_without_ack() -> Vec<Step> {
 fn transmit_with_ack() -> Vec<Step> {
     vec![
         Step::Enable,
+        Step::SetPromiscuous(false),
         Step::Transmit {
             frame: data_frame(true),
             cca: false,
@@ -765,6 +821,22 @@ fn cca_busy() -> Vec<Step> {
 
 /// Every catalog scenario.
 pub const SCENARIOS: &[Scenario] = &[
+    // Expected configuration differences: see the three reasons above.
+    Scenario {
+        name: "configuration-rx-safe-point",
+        inputs: no_inputs,
+        steps: configuration_rx_safe_point,
+    },
+    Scenario {
+        name: "configuration-promiscuous-mask",
+        inputs: no_inputs,
+        steps: configuration_promiscuous_mask,
+    },
+    Scenario {
+        name: "configuration-retention",
+        inputs: no_inputs,
+        steps: configuration_retention,
+    },
     Scenario {
         name: "enable",
         inputs: no_inputs,

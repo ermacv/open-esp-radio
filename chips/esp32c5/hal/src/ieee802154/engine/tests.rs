@@ -82,7 +82,7 @@ fn placed_owner_publishes_its_own_frames_and_keeps_other_arenas_out() {
     assert!(engine.model_dma_read(other_address).is_none());
     assert!(engine.model_rx_slot(other_address).is_none());
     engine.enable();
-    engine.mac_init(Ieee802154PibDefaults::default());
+    engine.mac_init();
     let mut environment = Environment;
     engine.receive(&mut environment);
     let rx = engine.model_ll().rx_address.unwrap();

@@ -36,6 +36,8 @@ pub enum Step {
     SetCcaThreshold(i8),
     /// `esp_ieee802154_set_ack_timeout` in microseconds.
     SetAckTimeout(u32),
+    /// `esp_ieee802154_set_auto_ack_tx`.
+    SetAutoAckTx(bool),
     /// `esp_ieee802154_set_txpower` in dBm: the power of every channel.
     SetTxPower(i8),
     /// `esp_ieee802154_set_power_with_channel` in dBm.
@@ -139,6 +141,7 @@ unsafe extern "C" {
     fn esp_ieee802154_set_cca_mode(mode: u32) -> i32;
     fn esp_ieee802154_set_cca_threshold(threshold: i8) -> i32;
     fn esp_ieee802154_set_ack_timeout(timeout: u32) -> i32;
+    fn esp_ieee802154_set_auto_ack_tx(enable: bool) -> i32;
     fn esp_ieee802154_set_txpower(power: i8) -> i32;
     fn esp_ieee802154_set_power_with_channel(channel: u8, power: i8) -> i32;
     fn esp_ieee802154_get_panid() -> u16;
@@ -226,6 +229,10 @@ fn run_step(step: Step, last_rx: &mut Option<usize>) {
             Step::SetCcaThreshold(threshold) => returned(
                 "esp_ieee802154_set_cca_threshold",
                 esp_ieee802154_set_cca_threshold(threshold),
+            ),
+            Step::SetAutoAckTx(enable) => returned(
+                "esp_ieee802154_set_auto_ack_tx",
+                esp_ieee802154_set_auto_ack_tx(enable),
             ),
             Step::SetAckTimeout(timeout) => returned(
                 "esp_ieee802154_set_ack_timeout",
