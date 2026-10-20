@@ -3243,6 +3243,7 @@ dependencies = [
  "oer-hil-protocol",
  "oer-memory",
  "oer-radio-regulatory",
+ "oer-registers-model",
  "oer-time",
  "static_cell",
 ]

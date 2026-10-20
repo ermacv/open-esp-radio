@@ -186,6 +186,10 @@ impl Radio {
                 {
                     return Err(RejectReason::Internal);
                 }
+                crate::tx_rate_checkpoint::observe(
+                    &self.domain,
+                    crate::tx_rate_checkpoint::Point::AfterPhyRegistration,
+                )?;
                 let cache = self
                     .domain
                     .attachment()
@@ -432,6 +436,10 @@ impl Radio {
             .power_up(&mut self.domain, &self.clocks)
             .map_err(|_| RejectReason::Internal)?;
         self.power = Some(power);
+        crate::tx_rate_checkpoint::observe(
+            &self.domain,
+            crate::tx_rate_checkpoint::Point::AfterWifiCommonPower,
+        )?;
         let mut wifi = powered
             .enable_clocks(&mut self.domain, &self.clocks)
             .map_err(|_| RejectReason::Internal)?;

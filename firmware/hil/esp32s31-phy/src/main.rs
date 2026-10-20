@@ -10,6 +10,7 @@ mod ieee802154;
 mod projection;
 mod radio;
 mod transport;
+mod tx_rate_checkpoint;
 
 use core::future::poll_fn;
 use esp_hal::{efuse, interrupt::software::SoftwareInterrupt, rng::RngOwner};
