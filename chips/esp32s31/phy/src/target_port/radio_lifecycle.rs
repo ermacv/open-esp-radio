@@ -411,7 +411,12 @@ pub(super) async fn execute_rf_wake_with_hal<D: PhyShortDelay>(
                     .await?;
                 }
                 PhyRfWakeOperation::PowerTemperatureSensor => {
-                    oer_esp32s31_hal::phy::temperature::power_up(registers);
+                    oer_esp32s31_hal::phy::temperature::acquire(registers, || {
+                        D::settle_micros(
+                            oer_esp32s31_hal::phy::temperature::SAR_I2C_RESET_SETTLE_MICROS,
+                        )
+                    })
+                    .map_err(|_| PhyTargetPortError::HardwareInvariant)?;
                 }
                 PhyRfWakeOperation::ReadXtalFrequency => {
                     oer_esp32s31_hal::phy::prelude::configure_fixed_xtal_40mhz(registers);

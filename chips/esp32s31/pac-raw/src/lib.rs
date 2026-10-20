@@ -15474,9 +15474,9 @@ pub mod lp_periclkrst {
         pub type LpTsensClkEnR = crate::BitReader;
         #[doc = "Field `LP_TSENS_CLK_EN` writer - Temperature-sensor peripheral clock enable."]
         pub type LpTsensClkEnW<'a, REG> = crate::BitWriter<'a, REG>;
-        #[doc = "Field `LP_TSENS_RST_EN` reader - Temperature-sensor peripheral reset enable; modeled for exact register geometry but not written by this slice."]
+        #[doc = "Field `LP_TSENS_RST_EN` reader - Temperature-sensor peripheral reset enable, pulsed by its first resource owner."]
         pub type LpTsensRstEnR = crate::BitReader;
-        #[doc = "Field `LP_TSENS_RST_EN` writer - Temperature-sensor peripheral reset enable; modeled for exact register geometry but not written by this slice."]
+        #[doc = "Field `LP_TSENS_RST_EN` writer - Temperature-sensor peripheral reset enable, pulsed by its first resource owner."]
         pub type LpTsensRstEnW<'a, REG> = crate::BitWriter<'a, REG>;
         impl R {
             #[doc = "Bit 30 - Temperature-sensor peripheral clock enable."]
@@ -15484,7 +15484,7 @@ pub mod lp_periclkrst {
             pub fn lp_tsens_clk_en(&self) -> LpTsensClkEnR {
                 LpTsensClkEnR::new(((self.bits >> 30) & 1) != 0)
             }
-            #[doc = "Bit 31 - Temperature-sensor peripheral reset enable; modeled for exact register geometry but not written by this slice."]
+            #[doc = "Bit 31 - Temperature-sensor peripheral reset enable, pulsed by its first resource owner."]
             #[inline(always)]
             pub fn lp_tsens_rst_en(&self) -> LpTsensRstEnR {
                 LpTsensRstEnR::new(((self.bits >> 31) & 1) != 0)
@@ -15496,7 +15496,7 @@ pub mod lp_periclkrst {
             pub fn lp_tsens_clk_en(&mut self) -> LpTsensClkEnW<'_, TsensCtrlSpec> {
                 LpTsensClkEnW::new(self, 30)
             }
-            #[doc = "Bit 31 - Temperature-sensor peripheral reset enable; modeled for exact register geometry but not written by this slice."]
+            #[doc = "Bit 31 - Temperature-sensor peripheral reset enable, pulsed by its first resource owner."]
             #[inline(always)]
             pub fn lp_tsens_rst_en(&mut self) -> LpTsensRstEnW<'_, TsensCtrlSpec> {
                 LpTsensRstEnW::new(self, 31)
@@ -75956,6 +75956,28 @@ pub mod field_replace_modify {
                     .bits_25_30_opaque()
                     .bits(((input >> 25) & 0x0000003f) as u8)
             }
+        });
+    }
+
+    /// Replace LP_PERICLKRST.TSENS_CTRL fields `[LP_TSENS_RST_EN]` from one reviewed logical image while preserving every other bit.
+    #[inline]
+    pub fn assert_lp_tsens_reset(registers: &crate::LpPericlkrst) {
+        registers.tsens_ctrl().modify(|_, writer| {
+            let input = 0x00000001_u32;
+            // SAFETY: generator validation proves every logical input projection
+            // fits its named SVD field; no whole-register image crosses this API.
+            writer.lp_tsens_rst_en().bit((input & 0x00000001) != 0)
+        });
+    }
+
+    /// Replace LP_PERICLKRST.TSENS_CTRL fields `[LP_TSENS_RST_EN]` from one reviewed logical image while preserving every other bit.
+    #[inline]
+    pub fn release_lp_tsens_reset(registers: &crate::LpPericlkrst) {
+        registers.tsens_ctrl().modify(|_, writer| {
+            let input = 0x00000000_u32;
+            // SAFETY: generator validation proves every logical input projection
+            // fits its named SVD field; no whole-register image crosses this API.
+            writer.lp_tsens_rst_en().bit((input & 0x00000001) != 0)
         });
     }
 }

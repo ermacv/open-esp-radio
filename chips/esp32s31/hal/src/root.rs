@@ -376,6 +376,8 @@ pub enum RadioPhyReleaseError {
     RxDcoControlRestorePending,
     /// Bluetooth TX-power calibration still owns analog-control snapshots.
     BluetoothTxPowerControlRestorePending,
+    /// The route still owns TSENS/SAR-I2C, or an acquisition failed mid-reset.
+    TemperatureResourcesHeld,
     /// A route-owned cold-power field did not return to its captured baseline.
     WifiPowerRestore(WifiPowerRestoreCheckpoint),
 }
@@ -395,6 +397,9 @@ pub enum WifiPowerRestoreCheckpoint {
 pub(crate) fn check_phy_restore_complete(
     restore: &PhyRouteState,
 ) -> Result<(), RadioPhyReleaseError> {
+    if restore.temperature.blocks_release() {
+        return Err(RadioPhyReleaseError::TemperatureResourcesHeld);
+    }
     if restore.txdc_pending() {
         return Err(RadioPhyReleaseError::TxDcPwdetRestorePending);
     }

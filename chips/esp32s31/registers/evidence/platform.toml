@@ -152,3 +152,7 @@ description = "Official ESP-IDF commit 4d59230ddff16327812782151ef0afef202dc6d7:
 [[sources]]
 id = "ESP_IDF_4D59230D_S31_LP_CLKRST"
 description = "Official ESP-IDF commit 4d59230ddff16327812782151ef0afef202dc6d7: components/soc/esp32s31/register/soc/lp_clkrst_reg.h sha256 0f545692ddb5bc4fd5fee64752871425cd0012090ee203701978bb654874f211 defines LP_AONCLKRST_HPCORE0_RESET_CAUSE_REG at DR_REG_LP_AONCLKRST_BASE + 0x30, read-only HPCORE0_RESET_FLAG at bit 0 and HPCORE0_RESET_CAUSE at bits 6:1 (6'h1 POR reset); components/soc/esp32s31/register/soc/reg_base.h sha256 24a0c98ca63b042ed32d42c5566b979d412e04ec7b1b9d305bb7addc12577f9d sets DR_REG_LP_AONCLKRST_BASE to 0x20701000."
+
+[[sources]]
+id = "IDF_S31_TSENS_POWER_LIFECYCLE"
+description = "Pinned ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7; linked phy_override.c::phy_set_tsens_power dispatches to sar_tsens_ctrl.c temperature power acquire/release. Last release disables TSENS, its clock and SAR-I2C power. First acquire asserts PERIF_I2C reset, settles 1 us, enables its power and releases reset, then enables/resets TSENS and powers it. sar_tsens_ctrl.c sha256 212a4a717ff4ca1cbe2daebb3d99030d321966fa33e5a713e5a22965a1ab1e4e; S31 hal/regi2c_ctrl_ll.h sha256 590a4548f84d2ba30fc8e77d7a6253e913f8553115fba10238cd406587a702f7."

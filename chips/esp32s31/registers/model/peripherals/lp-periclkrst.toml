@@ -22,7 +22,7 @@ bitWidth = 1
 
 [[peripherals.registers.register.fields]]
 name = "LP_TSENS_RST_EN"
-description = "Temperature-sensor peripheral reset enable; modeled for exact register geometry but not written by this slice."
+description = "Temperature-sensor peripheral reset enable, pulsed by its first resource owner."
 bitOffset = 31
 bitWidth = 1
 

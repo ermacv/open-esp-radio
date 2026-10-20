@@ -96,6 +96,7 @@ enum Restore {
 pub struct PhyRouteState {
     restore: Restore,
     registration: PhyRegistration,
+    pub(crate) temperature: super::temperature::TemperatureResources,
 }
 
 impl PhyRouteState {
@@ -104,6 +105,7 @@ impl PhyRouteState {
         Self {
             restore: Restore::Empty,
             registration,
+            temperature: super::temperature::TemperatureResources::new(),
         }
     }
 
@@ -118,6 +120,7 @@ impl PhyRouteState {
     /// obligation remains.
     pub(crate) fn into_registration(self) -> PhyRegistration {
         debug_assert_eq!(self.restore, Restore::Empty);
+        debug_assert!(!self.temperature.blocks_release());
         self.registration.retired()
     }
 

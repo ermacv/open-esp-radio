@@ -414,7 +414,7 @@ impl PhyTemperatureSampleBinding {
     }
 
     #[cfg(target_arch = "riscv32")]
-    pub fn execute_target<P: oer_esp32s31_hal::phy::temperature::PhyTemperatureSystemControl>(
+    pub fn execute_target<P: oer_esp32s31_hal::owner::SharedPhyAccess>(
         self,
         platform: &P,
     ) -> PhyTemperatureCompletion {

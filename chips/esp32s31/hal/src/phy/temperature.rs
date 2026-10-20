@@ -1,100 +1,164 @@
-//! Owned ESP32-S31 temperature-sensor MMIO leaves.
+//! Route-owned TSENS and peripheral SAR-I2C resources.
 //!
-//! The primary sources are pinned `libphy.a[phy_tsens.o]::phy_tsens_read_init`,
-//! size `0x36`, and the complete rev0 ROM `phy_set_tsens_power_` body at
-//! `0x2f82_5dc8`, size `0x1c`. Temperature-code identity is independently
-//! proven by complete ROM `phy_tsens_code_read` at `0x2f82_5ee0`, size
-//! `0x0c`, and `phy_tsens_temp_read_local` at `0x2f82_5f1e`, size `0x5e`.
+//! SOURCE: pinned IDF `phy_override.c::phy_set_tsens_power`,
+//! `sar_tsens_ctrl.c`, `sar_periph_ctrl_common.c` and S31
+//! `regi2c_ctrl_ll.h`. The linked override, rather than the MMIO-only
+//! libphy/ROM leaf, owns the last-release/first-acquire power/reset edges.
 
-/// Official LP peripheral capabilities needed by PHY temperature handling.
-pub trait PhyTemperatureSystemControl {
-    /// Enable the LP temperature-sensor register bank.
-    fn enable_temperature_sensor_register_bank(&mut self);
-    /// Enable the LP temperature-sensor peripheral clock.
-    fn enable_temperature_sensor_clock(&mut self);
-    /// Set the blob-evidenced readout-enable field.
-    fn enable_temperature_sensor_phy_readout(&mut self);
-    /// Set the blob-evidenced conversion-enable field.
-    fn enable_temperature_sensor_phy_conversion(&mut self);
-    /// Power the temperature sensor through the official control field.
-    fn enable_temperature_sensor_power(&mut self);
-    /// Power down the temperature sensor after the RF domain is closed.
-    fn disable_temperature_sensor_power(&mut self);
-    /// Sample the unsigned temperature code exactly once.
-    fn read_temperature_sensor_code(&self) -> u8;
+use crate::owner::{SharedPhyAccess, phy_parts_mut};
+use oer_esp32s31_pac::RadioPhyRegisters;
+
+/// Named minimum settle between asserting SAR-I2C reset and enabling power.
+pub const SAR_I2C_RESET_SETTLE_MICROS: u32 = 1;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum State {
+    Idle,
+    Active,
+    Poisoned,
 }
 
-impl<T: crate::owner::SharedPhyAccess> PhyTemperatureSystemControl for T {
-    fn enable_temperature_sensor_register_bank(&mut self) {
-        crate::phy_pac_mut(self).enable_temperature_sensor_register_bank();
-    }
+/// Why the physical temperature/SAR-I2C owner could not change epoch.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TemperaturePowerError {
+    AlreadyAcquired,
+    NotAcquired,
+    /// Reset started but its minimum settle did not complete. Reset is held;
+    /// the route cannot be reused or returned to the neutral root.
+    ResetSettleFailed,
+    Poisoned,
+}
 
-    fn enable_temperature_sensor_clock(&mut self) {
-        crate::phy_pac_mut(self).enable_temperature_sensor_clock();
-    }
+/// The sole temperature consumer of SAR-I2C, retained in the HAL radio owner.
+/// PHY reads/calibrations borrow that same physical owner; they do not mint
+/// independent references. There is no consumer outside the HAL after handoff.
+#[derive(Debug)]
+pub(crate) struct TemperatureResources {
+    state: State,
+}
 
-    fn enable_temperature_sensor_phy_readout(&mut self) {
-        crate::phy_pac_mut(self).enable_temperature_sensor_phy_readout();
-    }
+trait TemperaturePort {
+    fn cold_readout_prefix(&mut self);
+    fn sar_reset_released(&mut self, released: bool);
+    fn sar_power(&mut self, enabled: bool);
+    fn sensor_clock(&mut self, enabled: bool);
+    fn sensor_reset(&mut self, asserted: bool);
+    fn sensor_power(&mut self, enabled: bool);
+}
 
-    fn enable_temperature_sensor_phy_conversion(&mut self) {
-        crate::phy_pac_mut(self).enable_temperature_sensor_phy_conversion();
+impl TemperaturePort for RadioPhyRegisters {
+    fn cold_readout_prefix(&mut self) {
+        // SOURCE: complete phy_tsens_read_init, before its tail call to the
+        // linked IDF phy_set_tsens_power override. Preserve all four RMWs.
+        self.enable_temperature_sensor_register_bank();
+        self.set_temperature_sensor_clock(true);
+        self.enable_temperature_sensor_phy_readout();
+        self.enable_temperature_sensor_phy_conversion();
     }
-
-    fn enable_temperature_sensor_power(&mut self) {
-        crate::phy_pac_mut(self).enable_temperature_sensor_power();
+    fn sar_reset_released(&mut self, released: bool) {
+        self.set_analog_i2c_reset_released(released);
     }
-
-    fn disable_temperature_sensor_power(&mut self) {
-        crate::phy_pac_mut(self).disable_temperature_sensor_power();
+    fn sar_power(&mut self, enabled: bool) {
+        self.set_analog_i2c_power(enabled);
     }
-
-    fn read_temperature_sensor_code(&self) -> u8 {
-        crate::phy_pac(self).read_temperature_sensor_code()
+    fn sensor_clock(&mut self, enabled: bool) {
+        self.set_temperature_sensor_clock(enabled);
+    }
+    fn sensor_reset(&mut self, asserted: bool) {
+        self.set_temperature_sensor_reset(asserted);
+    }
+    fn sensor_power(&mut self, enabled: bool) {
+        if enabled {
+            self.enable_temperature_sensor_power();
+        } else {
+            self.disable_temperature_sensor_power();
+        }
     }
 }
 
-/// Configure the temperature-sensor read path.
-///
-/// Complete pinned `phy_tsens_read_init` performs five independent
-/// read/modify/write transactions in this order: sensor-control bit 0,
-/// system-control bit 30, sensor-control bit 23, sensor-control bit 9, then
-/// sensor power bit 22. The final transaction is the inlined semantics of
-/// complete ROM `phy_set_tsens_power_(1)`. Both archive ABI arguments are
-/// ignored and therefore do not cross this safe boundary.
-pub fn initialize(platform: &mut impl PhyTemperatureSystemControl) {
-    platform.enable_temperature_sensor_register_bank();
-    platform.enable_temperature_sensor_clock();
-    platform.enable_temperature_sensor_phy_readout();
-    platform.enable_temperature_sensor_phy_conversion();
-    platform.enable_temperature_sensor_power();
+impl TemperatureResources {
+    pub(crate) const fn new() -> Self {
+        Self { state: State::Idle }
+    }
+
+    pub(crate) const fn blocks_release(&self) -> bool {
+        !matches!(self.state, State::Idle)
+    }
+
+    fn acquire_with(
+        &mut self,
+        port: &mut impl TemperaturePort,
+        settle_reset: impl FnOnce() -> bool,
+        cold: bool,
+    ) -> Result<(), TemperaturePowerError> {
+        match self.state {
+            State::Active => return Err(TemperaturePowerError::AlreadyAcquired),
+            State::Poisoned => return Err(TemperaturePowerError::Poisoned),
+            State::Idle => {}
+        }
+        self.state = State::Poisoned;
+        if cold {
+            port.cold_readout_prefix();
+        }
+        port.sar_reset_released(false);
+        if !settle_reset() {
+            return Err(TemperaturePowerError::ResetSettleFailed);
+        }
+        port.sar_power(true);
+        port.sar_reset_released(true);
+        port.sensor_clock(true);
+        port.sensor_reset(true);
+        port.sensor_reset(false);
+        port.sensor_power(true);
+        self.state = State::Active;
+        Ok(())
+    }
+
+    fn release_with(
+        &mut self,
+        port: &mut impl TemperaturePort,
+    ) -> Result<(), TemperaturePowerError> {
+        match self.state {
+            State::Idle => return Err(TemperaturePowerError::NotAcquired),
+            State::Poisoned => return Err(TemperaturePowerError::Poisoned),
+            State::Active => {}
+        }
+        port.sensor_power(false);
+        port.sensor_clock(false);
+        port.sar_power(false);
+        self.state = State::Idle;
+        Ok(())
+    }
 }
 
-/// Sample the unsigned temperature code exactly once.
-///
-/// Complete ROM `phy_tsens_code_read` and `phy_tsens_temp_read_local` both
-/// read `SENSOR_CODE_POWER` once and zero-extend its low-byte `CODE` field.
-/// Readiness, conversion arithmetic and range selection remain in the
-/// caller-driven PHY transition.
-pub fn read_code(platform: &impl PhyTemperatureSystemControl) -> u8 {
-    platform.read_temperature_sensor_code()
+/// Configure the cold read path and acquire TSENS/SAR-I2C at the existing
+/// RF-init action. `settle_reset` completes the named 1 µs hardware settle.
+pub fn initialize(
+    registers: &mut impl SharedPhyAccess,
+    settle_reset: impl FnOnce() -> bool,
+) -> Result<(), TemperaturePowerError> {
+    let (phy, state) = phy_parts_mut(registers);
+    state.temperature.acquire_with(phy, settle_reset, true)
 }
 
-/// Restore temperature-sensor power during retained PHY wake.
-///
-/// Unlike [`initialize`], current-vendor `phy_wakeup_init` only reasserts the
-/// power field. The register-bank, clock, readout and conversion setup remain
-/// retained across the matching RF-close transition.
-pub fn power_up(platform: &mut impl PhyTemperatureSystemControl) {
-    platform.enable_temperature_sensor_power();
+/// First acquire after RF close: reset SAR-I2C, then clock/reset/enable TSENS.
+pub fn acquire(
+    registers: &mut impl SharedPhyAccess,
+    settle_reset: impl FnOnce() -> bool,
+) -> Result<(), TemperaturePowerError> {
+    let (phy, state) = phy_parts_mut(registers);
+    state.temperature.acquire_with(phy, settle_reset, false)
 }
 
-/// Power down the temperature sensor after the shared RF close transaction.
-///
-/// This is deliberately separate from RF close because Espressif's open
-/// lifecycle wrapper owns this outer system-policy edge.
-pub fn power_down(platform: &mut impl PhyTemperatureSystemControl) {
-    platform.disable_temperature_sensor_power();
+/// Last release after RF close: disable TSENS, its clock, then SAR-I2C power.
+pub fn release(registers: &mut impl SharedPhyAccess) -> Result<(), TemperaturePowerError> {
+    let (phy, state) = phy_parts_mut(registers);
+    state.temperature.release_with(phy)
+}
+
+/// Sample one unsigned sensor code through the owner-bound PAC read.
+pub fn read_code(registers: &impl SharedPhyAccess) -> u8 {
+    crate::phy_pac(registers).read_temperature_sensor_code()
 }
 
 #[cfg(test)]

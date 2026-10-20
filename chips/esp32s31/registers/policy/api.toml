@@ -243,7 +243,13 @@ sources = ["BLOB_LIBPHY_PHY_TSENS_READ_INIT"]
 
 [[enum-domains]]
 name = "LpTsensPeripheralClockEnable"
-description = "The sole reviewed enabled image for LP_PERICLKRST.TSENS_CTRL.LP_TSENS_CLK_EN."
+description = "Reviewed enabled and disabled images for LP_PERICLKRST.TSENS_CTRL.LP_TSENS_CLK_EN."
+
+[[enum-domains.values]]
+name = "Disabled"
+value = 0
+description = "Last temperature owner disables the peripheral clock before releasing SAR-I2C."
+sources = ["IDF_S31_TSENS_POWER_LIFECYCLE"]
 
 [[enum-domains.values]]
 name = "Enabled"
@@ -11459,3 +11465,22 @@ field = "BITS_0_31_OPAQUE"
 points-to = "BLE_PHY_ENVIRONMENT"
 member-offset = 0x4d
 sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
+
+
+[[field-replace-modifies]]
+name = "assert_lp_tsens_reset"
+peripheral = "LP_PERICLKRST"
+register = "TSENS_CTRL"
+fields = [{ field = "LP_TSENS_RST_EN", source-bit-offset = 0 }]
+value = 1
+exposure = "facade"
+sources = ["S31_ESP_PACS_SVD", "IDF_S31_TSENS_POWER_LIFECYCLE"]
+
+[[field-replace-modifies]]
+name = "release_lp_tsens_reset"
+peripheral = "LP_PERICLKRST"
+register = "TSENS_CTRL"
+fields = [{ field = "LP_TSENS_RST_EN", source-bit-offset = 0 }]
+value = 0
+exposure = "facade"
+sources = ["S31_ESP_PACS_SVD", "IDF_S31_TSENS_POWER_LIFECYCLE"]

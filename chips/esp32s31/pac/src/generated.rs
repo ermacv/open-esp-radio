@@ -463,10 +463,12 @@ impl LpTsensRegisterBankEnable {
     }
 }
 
-/// The sole reviewed enabled image for LP_PERICLKRST.TSENS_CTRL.LP_TSENS_CLK_EN.
+/// Reviewed enabled and disabled images for LP_PERICLKRST.TSENS_CTRL.LP_TSENS_CLK_EN.
 #[repr(u32)]
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum LpTsensPeripheralClockEnable {
+    /// Last temperature owner disables the peripheral clock before releasing SAR-I2C.
+    Disabled = 0x00000000,
     /// Bit thirty set by complete phy_tsens_read_init.
     Enabled = 0x40000000,
 }
@@ -8913,6 +8915,18 @@ pub(crate) fn replace_ieee802154_rx_abort_ed_operation(registers: &crate::svd::I
 #[inline]
 pub(crate) fn replace_ieee802154_tx_abort_baseline(registers: &crate::svd::Ieee802154Mac) {
     crate::svd::field_replace_modify::replace_ieee802154_tx_abort_baseline(registers);
+}
+
+/// Typed bridge for the reviewed `assert_lp_tsens_reset` fixed field-replacement transaction.
+#[inline]
+pub(crate) fn assert_lp_tsens_reset(registers: &crate::svd::LpPericlkrst) {
+    crate::svd::field_replace_modify::assert_lp_tsens_reset(registers);
+}
+
+/// Typed bridge for the reviewed `release_lp_tsens_reset` fixed field-replacement transaction.
+#[inline]
+pub(crate) fn release_lp_tsens_reset(registers: &crate::svd::LpPericlkrst) {
+    crate::svd::field_replace_modify::release_lp_tsens_reset(registers);
 }
 
 /// Typed bridge for the reviewed `restore_modem_source_clocks` multi-argument field-replacement transaction.

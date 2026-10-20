@@ -81,4 +81,4 @@ address = 0x20704208
 radio = "PMU_RADIO.ANA_PERI_PWR_CTRL"
 esp_hal = "PMU.ana_peri_pwr_ctrl in pmu_init (rtc_cntl/rtc/esp32s31.rs)"
 coordination = "disjoint-lifecycle"
-reason = "Written only by the pmu_init step at the start of rtc::init inside esp_hal::init (rstb/xpd_perif_i2c, esp-hal 4fd4ba9b), before any radio owner exists."
+reason = "esp-hal 2b665dd writes rstb/xpd_perif_i2c only in rtc::init before take_radio. After handoff the HAL radio owner alone controls TSENS/SAR-I2C: last temperature release after RF close clears XPD; first acquire asserts RSTB low, settles 1 us, enables XPD and releases RSTB before TSENS clock/reset/enable. General PHY open-I2C initialization remains under the same owner. No esp-hal runtime consumer of PERIF_I2C or indirect regi2c is reachable in our S31 images after take_radio; bootstrap/PSRAM setup precedes handoff and the retained PSRAM MPLL reference cannot cross zero."

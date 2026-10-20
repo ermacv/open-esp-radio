@@ -854,6 +854,7 @@ impl PhyColdMmioBinding {
     pub fn execute_target<R: oer_esp32s31_hal::owner::SharedPhyAccess>(
         self,
         registers: &mut R,
+        settle_temperature_reset: impl FnOnce() -> bool,
     ) -> Result<PhyRfInitPrefixCompletion, PhyColdLoweringError> {
         match self.outer_action {
             PhyRfInitPrefixAction::ConfigureFeBbClock => {
@@ -875,7 +876,8 @@ impl PhyColdMmioBinding {
                 return self.into_completion();
             }
             PhyRfInitPrefixAction::ConfigureTemperatureSensorRead => {
-                oer_esp32s31_hal::phy::temperature::initialize(registers);
+                oer_esp32s31_hal::phy::temperature::initialize(registers, settle_temperature_reset)
+                    .map_err(|_| PhyColdLoweringError::HardwareRestoreInvariant)?;
                 return self.into_completion();
             }
             PhyRfInitPrefixAction::ConfigureBbpllCalibration { enabled } => {
