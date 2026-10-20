@@ -332,27 +332,31 @@ pub fn complete_rx_gain_i2c(
     clock: &dyn oer_time::Clock,
 ) -> Result<oer_espressif_analog::Completion<crate::analog::i2c::PhyI2cAddress>, PhyTargetPortError>
 {
-    let completed = crate::executor::wait::poll::settled(clock, || {
-        match binding.action() {
-            PhyColdI2cAction::StartRead { .. } | PhyColdI2cAction::StartWrite { .. } => {
-                match binding.start_target(registers) {
-                    Ok(()) | Err(PhyColdI2cError::BusyAtStart) => {}
-                    Err(_) => return Some(Err(PhyTargetPortError::UnexpectedBinding)),
+    let completed = crate::executor::wait::i2c::complete(
+        clock,
+        &mut binding,
+        MaskedI2cWriteBinding::action,
+        |binding, action| {
+            match action {
+                PhyColdI2cAction::StartRead { .. } | PhyColdI2cAction::StartWrite { .. } => {
+                    match binding.start_target(registers) {
+                        Ok(()) | Err(PhyColdI2cError::BusyAtStart) => {}
+                        Err(_) => return Err(PhyTargetPortError::UnexpectedBinding),
+                    }
                 }
-            }
-            PhyColdI2cAction::AwaitReadCompletionEdge { .. }
-            | PhyColdI2cAction::AwaitWriteCompletionEdge { .. } => {
-                if binding.observe_target_edge(registers).is_err() {
-                    return Some(Err(PhyTargetPortError::UnexpectedBinding));
+                PhyColdI2cAction::AwaitReadCompletionEdge { .. }
+                | PhyColdI2cAction::AwaitWriteCompletionEdge { .. } => {
+                    binding
+                        .observe_target_edge(registers)
+                        .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
                 }
+                PhyColdI2cAction::Complete(_) => {}
             }
-            PhyColdI2cAction::Complete(_) => return Some(Ok(())),
-        }
-        None
-    });
-    match completed {
-        Ok(observed) => observed?,
-        Err(_) => return Err(PhyTargetPortError::HardwareEdgeTimedOut),
+            Ok(())
+        },
+    )?;
+    if !completed {
+        return Err(PhyTargetPortError::HardwareEdgeTimedOut);
     }
     binding
         .into_completion()
@@ -369,24 +373,29 @@ pub(crate) fn complete_rfpll_i2c_direct(
     registers: &mut impl SharedPhyAccess,
 ) -> Result<crate::analog::rfpll::RfpllFrequencyCompletion, PhyTargetPortError> {
     use crate::calibration::cold::{PhyColdI2cAction, PhyColdI2cError};
-    let completed = crate::executor::wait::poll::bounded(clock, || {
-        match binding.action() {
-            PhyColdI2cAction::StartRead { .. } | PhyColdI2cAction::StartWrite { .. } => {
-                match binding.start_target(registers) {
-                    Ok(()) | Err(PhyColdI2cError::BusyAtStart) => {}
-                    Err(_) => return Err(PhyTargetPortError::UnexpectedBinding),
+    let completed = crate::executor::wait::i2c::complete(
+        clock,
+        &mut binding,
+        RfpllFrequencyI2cBinding::action,
+        |binding, action| {
+            match action {
+                PhyColdI2cAction::StartRead { .. } | PhyColdI2cAction::StartWrite { .. } => {
+                    match binding.start_target(registers) {
+                        Ok(()) | Err(PhyColdI2cError::BusyAtStart) => {}
+                        Err(_) => return Err(PhyTargetPortError::UnexpectedBinding),
+                    }
                 }
+                PhyColdI2cAction::AwaitReadCompletionEdge { .. }
+                | PhyColdI2cAction::AwaitWriteCompletionEdge { .. } => {
+                    binding
+                        .observe_target_edge(registers)
+                        .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
+                }
+                PhyColdI2cAction::Complete(_) => {}
             }
-            PhyColdI2cAction::AwaitReadCompletionEdge { .. }
-            | PhyColdI2cAction::AwaitWriteCompletionEdge { .. } => {
-                binding
-                    .observe_target_edge(registers)
-                    .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
-            }
-            PhyColdI2cAction::Complete(_) => return Ok(true),
-        }
-        Ok(false)
-    })?;
+            Ok(())
+        },
+    )?;
     if !completed {
         return Err(PhyTargetPortError::HardwareEdgeTimedOut);
     }

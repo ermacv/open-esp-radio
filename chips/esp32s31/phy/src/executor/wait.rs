@@ -14,6 +14,9 @@ use oer_time::{Duration, Timer};
 pub mod tx;
 
 #[cfg(any(target_arch = "riscv32", test))]
+pub(crate) mod i2c;
+
+#[cfg(any(target_arch = "riscv32", test))]
 pub(crate) mod poll;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
