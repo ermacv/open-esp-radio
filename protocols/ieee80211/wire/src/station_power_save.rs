@@ -78,7 +78,11 @@ impl StaNullDataFrame {
             });
         }
 
-        let frame = &mut output[..STA_NULL_DATA_FRAME_LEN];
+        let (frame, _) = output
+            .split_first_chunk_mut::<STA_NULL_DATA_FRAME_LEN>()
+            .ok_or(StationFrameError::OutputTooSmall {
+                required: STA_NULL_DATA_FRAME_LEN,
+            })?;
         frame.fill(0);
         let frame_control = NULL_DATA_TO_DS_FRAME_CONTROL
             | if matches!(self.power_management, StaPowerManagement::PowerSave) {

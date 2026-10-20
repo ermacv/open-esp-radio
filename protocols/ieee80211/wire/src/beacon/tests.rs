@@ -341,3 +341,37 @@ fn a_5_ghz_beacon_carries_no_dsss_parameter_set_erp_or_dsss_rate() {
     };
     assert_eq!(update_bss_protection(frame, protection), Ok(()));
 }
+
+#[test]
+fn protection_update_refuses_truncated_elements_before_mutating_the_frame() {
+    let mut frame = [0; 66];
+    frame[..2].copy_from_slice(&[0x80, 0]);
+    frame[36..39].copy_from_slice(&[42, 1, 0]);
+    frame[39..63].copy_from_slice(&[
+        61, 22, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    ]);
+    frame[63..].copy_from_slice(&[1, 255, 0]);
+    for length in [0, 35, 37, 38, 40, 62, 64, 65, 66] {
+        let before = frame;
+        assert_eq!(
+            update_bss_protection(&mut frame[..length], ApBssProtection::default()),
+            Err(ApBeaconProtectionError::MalformedElement)
+        );
+        assert_eq!(frame, before);
+    }
+}
+
+#[test]
+fn tim_updates_refuse_hostile_lengths_and_truncated_frames_without_moving_bytes() {
+    let bitmap = super::TimVirtualBitmap::<2>::try_new().unwrap();
+    let partial = bitmap.partial();
+    for length in [0, 35, 37, 38, 39, 40, 43, 45, usize::MAX] {
+        let mut storage = beacon();
+        let before = storage;
+        assert_eq!(
+            write_tim_partial_virtual_bitmap(&mut storage, length, partial),
+            None
+        );
+        assert_eq!(storage, before);
+    }
+}

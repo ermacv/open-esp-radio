@@ -179,3 +179,21 @@ fn an_ssid_needs_complete_elements_and_one_bounded_ssid() {
     assert_eq!(ssid(&long), None);
     assert!(!matches_ssid(&[0; 36], b""));
 }
+
+#[test]
+fn response_refuses_truncated_headers_and_hostile_element_lengths_without_writing() {
+    let mut advertisement = [0; 41];
+    advertisement[..2].copy_from_slice(&[0x80, 0]);
+    advertisement[36..].copy_from_slice(&[0, 1, b'a', 1, 255]);
+    for length in 0..=advertisement.len() {
+        if length == 39 {
+            continue;
+        } // The complete one-byte SSID is valid.
+        let mut output = [0xa5; 64];
+        assert_eq!(
+            write_response(&advertisement[..length], PEER, seq(0), 0, &mut output),
+            Err(ResponseError::InvalidAdvertisement)
+        );
+        assert_eq!(output, [0xa5; 64]);
+    }
+}

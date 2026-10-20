@@ -39,25 +39,21 @@ pub struct OpenAuthenticationRequest {
 impl OpenAuthenticationRequest {
     pub fn encode(self, output: &mut [u8]) -> Result<usize, StationFrameError> {
         validate_peer(self.bssid.get())?;
-        let required = MANAGEMENT_HEADER_LEN + 6;
-        if output.len() < required {
-            return Err(StationFrameError::OutputTooSmall { required });
-        }
-
-        let frame = &mut output[..required];
-        frame.fill(0);
-        write_management_header(
-            frame,
+        let header = management_header(
             OPEN_AUTHENTICATION_FRAME_CONTROL,
             self.bssid.get(),
             self.source.get(),
             self.bssid.get(),
             self.sequence_number,
         );
-        frame[24..26].copy_from_slice(&OPEN_SYSTEM_ALGORITHM.to_le_bytes());
-        frame[26..28].copy_from_slice(&OPEN_SYSTEM_REQUEST_SEQUENCE.to_le_bytes());
-        frame[28..30].copy_from_slice(&0_u16.to_le_bytes());
-        Ok(required)
+        crate::encoding::FrameParts([
+            header.as_slice(),
+            &OPEN_SYSTEM_ALGORITHM.to_le_bytes(),
+            &OPEN_SYSTEM_REQUEST_SEQUENCE.to_le_bytes(),
+            &0_u16.to_le_bytes(),
+        ])
+        .write(output)
+        .map_err(|required| StationFrameError::OutputTooSmall { required })
     }
 }
 
@@ -121,27 +117,16 @@ pub struct StaManagementFrame<'a> {
 impl StaManagementFrame<'_> {
     pub fn encode(self, output: &mut [u8]) -> Result<usize, StationFrameError> {
         validate_peer(self.bssid.get())?;
-        let required = MANAGEMENT_HEADER_LEN.checked_add(self.body.len()).ok_or(
-            StationFrameError::OutputTooSmall {
-                required: usize::MAX,
-            },
-        )?;
-        if output.len() < required {
-            return Err(StationFrameError::OutputTooSmall { required });
-        }
-
-        let frame = &mut output[..required];
-        frame.fill(0);
-        write_management_header(
-            frame,
+        let header = management_header(
             self.subtype.frame_control(),
             self.bssid.get(),
             self.source.get(),
             self.bssid.get(),
             self.sequence_number,
         );
-        frame[MANAGEMENT_HEADER_LEN..].copy_from_slice(self.body);
-        Ok(required)
+        crate::encoding::FrameParts([header.as_slice(), self.body])
+            .write(output)
+            .map_err(|required| StationFrameError::OutputTooSmall { required })
     }
 }
 
@@ -166,21 +151,7 @@ pub struct StaProtectedManagementFrame<'a> {
 impl StaProtectedManagementFrame<'_> {
     pub fn encode(self, output: &mut [u8]) -> Result<usize, StationFrameError> {
         validate_peer(self.bssid.get())?;
-        let body_start = MANAGEMENT_HEADER_LEN + CCMP_HEADER_LEN;
-        let required =
-            body_start
-                .checked_add(self.body.len())
-                .ok_or(StationFrameError::OutputTooSmall {
-                    required: usize::MAX,
-                })?;
-        if output.len() < required {
-            return Err(StationFrameError::OutputTooSmall { required });
-        }
-
-        let frame = &mut output[..required];
-        frame.fill(0);
-        write_management_header(
-            frame,
+        let header = management_header(
             FrameControlFields::from_raw(self.subtype.frame_control())
                 .with_protected(true)
                 .raw(),
@@ -189,9 +160,9 @@ impl StaProtectedManagementFrame<'_> {
             self.bssid.get(),
             self.sequence_number,
         );
-        frame[MANAGEMENT_HEADER_LEN..body_start].copy_from_slice(&self.ccmp_header);
-        frame[body_start..].copy_from_slice(self.body);
-        Ok(required)
+        crate::encoding::FrameParts([header.as_slice(), &self.ccmp_header, self.body])
+            .write(output)
+            .map_err(|required| StationFrameError::OutputTooSmall { required })
     }
 }
 
@@ -216,31 +187,22 @@ pub struct SaeAuthenticationFrame<'a> {
 impl SaeAuthenticationFrame<'_> {
     pub fn encode(self, output: &mut [u8]) -> Result<usize, StationFrameError> {
         validate_peer(self.bssid.get())?;
-        let body_start = MANAGEMENT_HEADER_LEN + 6;
-        let required =
-            body_start
-                .checked_add(self.body.len())
-                .ok_or(StationFrameError::OutputTooSmall {
-                    required: usize::MAX,
-                })?;
-        if output.len() < required {
-            return Err(StationFrameError::OutputTooSmall { required });
-        }
-        let frame = &mut output[..required];
-        frame.fill(0);
-        write_management_header(
-            frame,
+        let header = management_header(
             OPEN_AUTHENTICATION_FRAME_CONTROL,
             self.bssid.get(),
             self.source.get(),
             self.bssid.get(),
             self.sequence_number,
         );
-        frame[24..26].copy_from_slice(&SAE_AUTHENTICATION_ALGORITHM.to_le_bytes());
-        frame[26..28].copy_from_slice(&self.transaction.to_le_bytes());
-        frame[28..30].copy_from_slice(&self.status_code.to_le_bytes());
-        frame[body_start..].copy_from_slice(self.body);
-        Ok(required)
+        crate::encoding::FrameParts([
+            header.as_slice(),
+            &SAE_AUTHENTICATION_ALGORITHM.to_le_bytes(),
+            &self.transaction.to_le_bytes(),
+            &self.status_code.to_le_bytes(),
+            self.body,
+        ])
+        .write(output)
+        .map_err(|required| StationFrameError::OutputTooSmall { required })
     }
 }
 

@@ -72,41 +72,47 @@ pub fn write_response(
     timestamp_micros: u64,
     output: &mut [u8],
 ) -> Result<usize, ResponseError> {
-    let elements = beacon
-        .get(36..)
-        .ok_or(ResponseError::InvalidAdvertisement)?;
-    if beacon[..2] != [0x80, 0] || ssid(elements).is_none() {
+    let invalid = |_| ResponseError::InvalidAdvertisement;
+    let mut reader = oer_wire::Reader::new(beacon);
+    let fixed = reader.array::<36>().map_err(invalid)?;
+    let elements = reader.remaining();
+    if fixed[..2] != [0x80, 0] || ssid(elements).is_none() {
         return Err(ResponseError::InvalidAdvertisement);
     }
-    let mut remaining = elements;
-    let mut required = 36;
-    while !remaining.is_empty() {
-        let length = 2 + usize::from(remaining[1]);
-        if remaining[0] != 5 {
-            required += length;
+    let mut required = 36_usize;
+    while !reader.is_empty() {
+        let [id, length] = reader.read::<2>().map_err(invalid)?;
+        reader.take(usize::from(length)).map_err(invalid)?;
+        if id != 5 {
+            required = required.checked_add(2 + usize::from(length)).ok_or(
+                ResponseError::OutputTooSmall {
+                    required: usize::MAX,
+                },
+            )?;
         }
-        remaining = &remaining[length..];
     }
     if output.len() < required {
         return Err(ResponseError::OutputTooSmall { required });
     }
-    output[..36].copy_from_slice(&beacon[..36]);
-    output[..2].copy_from_slice(&[0x50, 0]);
-    output[2..4].fill(0);
-    output[4..10].copy_from_slice(&peer);
-    output[22..24].copy_from_slice(&sequence.sequence_control().to_le_bytes());
-    output[24..32].copy_from_slice(&timestamp_micros.to_le_bytes());
-    let mut offset = 36;
-    remaining = elements;
-    while !remaining.is_empty() {
-        let length = 2 + usize::from(remaining[1]);
-        if remaining[0] != 5 {
-            output[offset..offset + length].copy_from_slice(&remaining[..length]);
-            offset += length;
+    let mut fixed = *fixed;
+    fixed[..2].copy_from_slice(&[0x50, 0]);
+    fixed[2..4].fill(0);
+    fixed[4..10].copy_from_slice(&peer);
+    fixed[22..24].copy_from_slice(&sequence.sequence_control().to_le_bytes());
+    fixed[24..32].copy_from_slice(&timestamp_micros.to_le_bytes());
+    let mut writer = oer_wire::Writer::new(output);
+    let too_small = |_| ResponseError::OutputTooSmall { required };
+    writer.write(&fixed).map_err(too_small)?;
+    let mut reader = oer_wire::Reader::new(elements);
+    while !reader.is_empty() {
+        let header @ [id, length] = reader.read::<2>().map_err(invalid)?;
+        let value = reader.take(usize::from(length)).map_err(invalid)?;
+        if id != 5 {
+            writer.write(&header).map_err(too_small)?;
+            writer.write(value).map_err(too_small)?;
         }
-        remaining = &remaining[length..];
     }
-    Ok(offset)
+    Ok(writer.written())
 }
 
 #[cfg(test)]

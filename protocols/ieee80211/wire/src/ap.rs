@@ -101,23 +101,17 @@ impl ApDataFrame<'_> {
             false,
             false,
         );
-        let header_len = usize::from(plan.header_len);
-        let required = header_len
-            .checked_add(plan.llc_snap.len())
-            .and_then(|length| length.checked_add(self.payload.len()))
-            .ok_or(ApDataFrameError::OutputTooSmall {
-                required: usize::MAX,
-            })?;
-        if output.len() < required {
-            return Err(ApDataFrameError::OutputTooSmall { required });
-        }
-        let frame = &mut output[..required];
-        frame[..header_len].copy_from_slice(&plan.header[..header_len]);
-        frame[22..24].copy_from_slice(&self.sequence_number.sequence_control().to_le_bytes());
-        let llc_end = header_len + plan.llc_snap.len();
-        frame[header_len..llc_end].copy_from_slice(&plan.llc_snap);
-        frame[llc_end..required].copy_from_slice(self.payload);
-        Ok(required)
+        let mut header = plan.header;
+        header[22..24].copy_from_slice(&self.sequence_number.sequence_control().to_le_bytes());
+        let mut reader = oer_wire::Reader::new(&header);
+        let header = reader.take(usize::from(plan.header_len)).map_err(|_| {
+            ApDataFrameError::OutputTooSmall {
+                required: usize::from(plan.header_len),
+            }
+        })?;
+        crate::encoding::FrameParts([header, &plan.llc_snap, self.payload])
+            .write(output)
+            .map_err(|required| ApDataFrameError::OutputTooSmall { required })
     }
 }
 
@@ -145,8 +139,11 @@ impl ApUnprotectedDataFrame<'_> {
         if self.ethernet.len() < ETHERNET_HEADER_LEN {
             return Err(ApDataFrameError::EthernetFrameTooShort);
         }
-        let mut ethernet_header = [0; ETHERNET_HEADER_LEN];
-        ethernet_header.copy_from_slice(&self.ethernet[..ETHERNET_HEADER_LEN]);
+        let mut reader = oer_wire::Reader::new(self.ethernet);
+        let ethernet_header = reader
+            .read::<ETHERNET_HEADER_LEN>()
+            .map_err(|_| ApDataFrameError::EthernetFrameTooShort)?;
+        let payload = reader.remaining();
         let mut plan = plan_data_encapsulation(
             DataInterfaceRole::AccessPoint,
             self.access_point,
@@ -162,23 +159,17 @@ impl ApUnprotectedDataFrame<'_> {
         if self.more_data {
             plan.set_more_data(true);
         }
-        let header_len = usize::from(plan.header_len);
-        let required = header_len
-            .checked_add(plan.llc_snap.len())
-            .and_then(|length| length.checked_add(self.ethernet.len() - ETHERNET_HEADER_LEN))
-            .ok_or(ApDataFrameError::OutputTooSmall {
-                required: usize::MAX,
-            })?;
-        if output.len() < required {
-            return Err(ApDataFrameError::OutputTooSmall { required });
-        }
-        let frame = &mut output[..required];
-        frame[..header_len].copy_from_slice(&plan.header[..header_len]);
-        frame[22..24].copy_from_slice(&self.sequence_number.sequence_control().to_le_bytes());
-        let llc_end = header_len + plan.llc_snap.len();
-        frame[header_len..llc_end].copy_from_slice(&plan.llc_snap);
-        frame[llc_end..required].copy_from_slice(&self.ethernet[ETHERNET_HEADER_LEN..]);
-        Ok(required)
+        let mut header = plan.header;
+        header[22..24].copy_from_slice(&self.sequence_number.sequence_control().to_le_bytes());
+        let mut reader = oer_wire::Reader::new(&header);
+        let header = reader.take(usize::from(plan.header_len)).map_err(|_| {
+            ApDataFrameError::OutputTooSmall {
+                required: usize::from(plan.header_len),
+            }
+        })?;
+        crate::encoding::FrameParts([header, &plan.llc_snap, payload])
+            .write(output)
+            .map_err(|required| ApDataFrameError::OutputTooSmall { required })
     }
 }
 
@@ -225,8 +216,11 @@ impl ApProtectedDataFrame<'_> {
         // The initial AP owns one pairwise slot. Group-addressed Ethernet
         // needs the distinct GTK packet-number owner and is rejected by the
         // chip engine before this codec is called.
-        let mut ethernet_header = [0; ETHERNET_HEADER_LEN];
-        ethernet_header.copy_from_slice(&self.ethernet[..ETHERNET_HEADER_LEN]);
+        let mut reader = oer_wire::Reader::new(self.ethernet);
+        let ethernet_header = reader
+            .read::<ETHERNET_HEADER_LEN>()
+            .map_err(|_| ApDataFrameError::EthernetFrameTooShort)?;
+        let payload = reader.remaining();
         let mut plan = plan_data_encapsulation(
             DataInterfaceRole::AccessPoint,
             self.access_point,
@@ -243,26 +237,17 @@ impl ApProtectedDataFrame<'_> {
         if self.more_data {
             plan.set_more_data(true);
         }
-        let header_len = usize::from(plan.header_len);
-        let required = header_len
-            .checked_add(CCMP_HEADER_LEN)
-            .and_then(|length| length.checked_add(plan.llc_snap.len()))
-            .and_then(|length| length.checked_add(self.ethernet.len() - ETHERNET_HEADER_LEN))
-            .ok_or(ApDataFrameError::OutputTooSmall {
-                required: usize::MAX,
-            })?;
-        if output.len() < required {
-            return Err(ApDataFrameError::OutputTooSmall { required });
-        }
-        let frame = &mut output[..required];
-        frame[..header_len].copy_from_slice(&plan.header[..header_len]);
-        frame[22..24].copy_from_slice(&self.sequence_number.sequence_control().to_le_bytes());
-        let ccmp_end = header_len + CCMP_HEADER_LEN;
-        frame[header_len..ccmp_end].copy_from_slice(&self.ccmp_header);
-        let llc_end = ccmp_end + plan.llc_snap.len();
-        frame[ccmp_end..llc_end].copy_from_slice(&plan.llc_snap);
-        frame[llc_end..required].copy_from_slice(&self.ethernet[ETHERNET_HEADER_LEN..]);
-        Ok(required)
+        let mut header = plan.header;
+        header[22..24].copy_from_slice(&self.sequence_number.sequence_control().to_le_bytes());
+        let mut reader = oer_wire::Reader::new(&header);
+        let header = reader.take(usize::from(plan.header_len)).map_err(|_| {
+            ApDataFrameError::OutputTooSmall {
+                required: usize::from(plan.header_len),
+            }
+        })?;
+        crate::encoding::FrameParts([header, &self.ccmp_header, &plan.llc_snap, payload])
+            .write(output)
+            .map_err(|required| ApDataFrameError::OutputTooSmall { required })
     }
 }
 
@@ -338,7 +323,11 @@ impl ApAmsduFrame<'_> {
             if ethernet.len() < ETHERNET_HEADER_LEN {
                 return Err(ApDataFrameError::EthernetFrameTooShort);
             }
-            if ethernet[..6] != self.peer {
+            if oer_wire::Reader::new(ethernet)
+                .read::<6>()
+                .map_err(|_| ApDataFrameError::EthernetFrameTooShort)?
+                != self.peer
+            {
                 return Err(ApDataFrameError::InvalidPeer);
             }
         }
@@ -409,8 +398,12 @@ impl ApProtectedDataFrame<'_> {
                 required: ethernet_end,
             });
         }
-        let Some(&ethernet_header) =
-            storage[ethernet_offset..ethernet_end].first_chunk::<ETHERNET_HEADER_LEN>()
+        let Some(&ethernet_header) = storage
+            .get(ethernet_offset..ethernet_end)
+            .ok_or(ApDataFrameError::OutputTooSmall {
+                required: ethernet_end,
+            })?
+            .first_chunk::<ETHERNET_HEADER_LEN>()
         else {
             return Err(ApDataFrameError::EthernetFrameTooShort);
         };
@@ -438,12 +431,23 @@ impl ApProtectedDataFrame<'_> {
             .checked_sub(headroom)
             .ok_or(ApDataFrameError::OutputTooSmall { required: headroom })?;
         let frame_length = ethernet_length + headroom;
-        let frame = &mut storage[frame_offset..ethernet_end];
-        frame[..header_len].copy_from_slice(&plan.header[..header_len]);
-        frame[22..24].copy_from_slice(&self.sequence_number.sequence_control().to_le_bytes());
-        let ccmp_end = header_len + CCMP_HEADER_LEN;
-        frame[header_len..ccmp_end].copy_from_slice(&self.ccmp_header);
-        frame[ccmp_end..prefix_len].copy_from_slice(&plan.llc_snap);
+        let prefix_end = frame_offset + prefix_len;
+        let frame =
+            storage
+                .get_mut(frame_offset..prefix_end)
+                .ok_or(ApDataFrameError::OutputTooSmall {
+                    required: prefix_end,
+                })?;
+        let mut header = plan.header;
+        header[22..24].copy_from_slice(&self.sequence_number.sequence_control().to_le_bytes());
+        let header = oer_wire::Reader::new(&header)
+            .take(header_len)
+            .map_err(|_| ApDataFrameError::OutputTooSmall {
+                required: header_len,
+            })?;
+        crate::encoding::FrameParts([header, &self.ccmp_header, &plan.llc_snap])
+            .write(frame)
+            .map_err(|required| ApDataFrameError::OutputTooSmall { required })?;
         Ok(EncodedApFrame {
             offset: frame_offset,
             length: frame_length,
@@ -753,25 +757,15 @@ pub struct ApManagementFrame<'a> {
 
 impl ApManagementFrame<'_> {
     pub fn encode(self, output: &mut [u8]) -> Result<usize, ApAssociationResponseError> {
-        let required = MANAGEMENT_HEADER_LEN.checked_add(self.body.len()).ok_or(
-            ApAssociationResponseError::OutputTooSmall {
-                required: usize::MAX,
-            },
-        )?;
-        if output.len() < required {
-            return Err(ApAssociationResponseError::OutputTooSmall { required });
-        }
-        let frame = &mut output[..required];
-        frame.fill(0);
-        write_management_header(
-            frame,
+        let header = management_header(
             self.subtype.frame_control(),
             self.access_point,
             self.peer,
             self.sequence_number,
         );
-        frame[MANAGEMENT_HEADER_LEN..].copy_from_slice(self.body);
-        Ok(required)
+        crate::encoding::FrameParts([header.as_slice(), self.body])
+            .write(output)
+            .map_err(|required| ApAssociationResponseError::OutputTooSmall { required })
     }
 }
 
@@ -789,19 +783,7 @@ pub struct ApProtectedManagementFrame<'a> {
 
 impl ApProtectedManagementFrame<'_> {
     pub fn encode(self, output: &mut [u8]) -> Result<usize, ApAssociationResponseError> {
-        let body_offset = MANAGEMENT_HEADER_LEN + CCMP_HEADER_LEN;
-        let required = body_offset.checked_add(self.body.len()).ok_or(
-            ApAssociationResponseError::OutputTooSmall {
-                required: usize::MAX,
-            },
-        )?;
-        if output.len() < required {
-            return Err(ApAssociationResponseError::OutputTooSmall { required });
-        }
-        let frame = &mut output[..required];
-        frame.fill(0);
-        write_management_header(
-            frame,
+        let header = management_header(
             FrameControlFields::from_raw(self.subtype.frame_control())
                 .with_protected(true)
                 .raw(),
@@ -809,9 +791,9 @@ impl ApProtectedManagementFrame<'_> {
             self.peer,
             self.sequence_number,
         );
-        frame[MANAGEMENT_HEADER_LEN..body_offset].copy_from_slice(&self.ccmp_header);
-        frame[body_offset..].copy_from_slice(self.body);
-        Ok(required)
+        crate::encoding::FrameParts([header.as_slice(), &self.ccmp_header, self.body])
+            .write(output)
+            .map_err(|required| ApAssociationResponseError::OutputTooSmall { required })
     }
 }
 
@@ -925,17 +907,15 @@ pub fn write_open_authentication_response(
     status: u16,
     management_sequence: SequenceNumber,
 ) -> Result<usize, ApAssociationResponseError> {
-    if output.len() < AP_AUTHENTICATION_RESPONSE_LEN {
-        return Err(ApAssociationResponseError::OutputTooSmall {
-            required: AP_AUTHENTICATION_RESPONSE_LEN,
-        });
-    }
-    let frame = &mut output[..AP_AUTHENTICATION_RESPONSE_LEN];
-    frame.fill(0);
-    write_management_header(frame, 0x00b0, access_point, peer, management_sequence);
-    frame[26..28].copy_from_slice(&2_u16.to_le_bytes());
-    frame[28..30].copy_from_slice(&status.to_le_bytes());
-    Ok(AP_AUTHENTICATION_RESPONSE_LEN)
+    let header = management_header(0x00b0, access_point, peer, management_sequence);
+    crate::encoding::FrameParts([
+        header.as_slice(),
+        &0_u16.to_le_bytes(),
+        &2_u16.to_le_bytes(),
+        &status.to_le_bytes(),
+    ])
+    .write(output)
+    .map_err(|required| ApAssociationResponseError::OutputTooSmall { required })
 }
 
 /// Encode one SAE Authentication frame to `peer`: a Commit or Confirm, or
@@ -949,18 +929,16 @@ pub fn write_sae_authentication(
     body: &[u8],
     management_sequence: SequenceNumber,
 ) -> Result<usize, ApAssociationResponseError> {
-    let required = AP_AUTHENTICATION_RESPONSE_LEN + body.len();
-    if output.len() < required {
-        return Err(ApAssociationResponseError::OutputTooSmall { required });
-    }
-    let frame = &mut output[..required];
-    frame.fill(0);
-    write_management_header(frame, 0x00b0, access_point, peer, management_sequence);
-    frame[24..26].copy_from_slice(&SAE_AUTHENTICATION_ALGORITHM.to_le_bytes());
-    frame[26..28].copy_from_slice(&transaction.to_le_bytes());
-    frame[28..30].copy_from_slice(&status.to_le_bytes());
-    frame[AP_AUTHENTICATION_RESPONSE_LEN..].copy_from_slice(body);
-    Ok(required)
+    let header = management_header(0x00b0, access_point, peer, management_sequence);
+    crate::encoding::FrameParts([
+        header.as_slice(),
+        &SAE_AUTHENTICATION_ALGORITHM.to_le_bytes(),
+        &transaction.to_le_bytes(),
+        &status.to_le_bytes(),
+        body,
+    ])
+    .write(output)
+    .map_err(|required| ApAssociationResponseError::OutputTooSmall { required })
 }
 
 /// Encode an association response with capability privacy matching the exact
@@ -988,7 +966,12 @@ pub fn write_ht_association_response_frame_for_security(
             required: AP_ASSOCIATION_RESPONSE_LEN,
         })?;
     frame.fill(0);
-    write_management_header(frame, 0x0010, access_point, peer, management_sequence);
+    frame[..MANAGEMENT_HEADER_LEN].copy_from_slice(&management_header(
+        0x0010,
+        access_point,
+        peer,
+        management_sequence,
+    ));
     let Some(body) =
         frame[MANAGEMENT_HEADER_LEN..].first_chunk_mut::<AP_ASSOCIATION_RESPONSE_BODY_LEN>()
     else {
@@ -1024,40 +1007,29 @@ pub fn write_ap_peer_disconnect(
     reason: u16,
     management_sequence: SequenceNumber,
 ) -> Result<usize, ApAssociationResponseError> {
-    if output.len() < AP_PEER_DISCONNECT_LEN {
-        return Err(ApAssociationResponseError::OutputTooSmall {
-            required: AP_PEER_DISCONNECT_LEN,
-        });
-    }
-    let frame = &mut output[..AP_PEER_DISCONNECT_LEN];
-    frame.fill(0);
     let frame_control = match kind {
         ApPeerDisconnectKind::Disassociation => 0x00a0,
         ApPeerDisconnectKind::Deauthentication => 0x00c0,
     };
-    write_management_header(
-        frame,
-        frame_control,
-        access_point,
-        peer,
-        management_sequence,
-    );
-    frame[MANAGEMENT_HEADER_LEN..AP_PEER_DISCONNECT_LEN].copy_from_slice(&reason.to_le_bytes());
-    Ok(AP_PEER_DISCONNECT_LEN)
+    let header = management_header(frame_control, access_point, peer, management_sequence);
+    crate::encoding::FrameParts([header.as_slice(), &reason.to_le_bytes()])
+        .write(output)
+        .map_err(|required| ApAssociationResponseError::OutputTooSmall { required })
 }
 
-fn write_management_header(
-    frame: &mut [u8],
+fn management_header(
     frame_control: u16,
     access_point: [u8; 6],
     peer: [u8; 6],
     management_sequence: SequenceNumber,
-) {
+) -> [u8; MANAGEMENT_HEADER_LEN] {
+    let mut frame = [0; MANAGEMENT_HEADER_LEN];
     frame[..2].copy_from_slice(&frame_control.to_le_bytes());
     frame[4..10].copy_from_slice(&peer);
     frame[10..16].copy_from_slice(&access_point);
     frame[16..22].copy_from_slice(&access_point);
     frame[22..24].copy_from_slice(&management_sequence.sequence_control().to_le_bytes());
+    frame
 }
 
 /// Build the finite AP HT association response body: its length, which
@@ -1077,9 +1049,7 @@ pub fn write_ht_association_response(
     {
         return Err(ApAssociationResponseError::MissingAssociationId);
     }
-    body.fill(0);
-    body[..2].copy_from_slice(&profile.capabilities(LinkProtection::Ccmp).to_le_bytes());
-    body[2..4].copy_from_slice(&status.to_le_bytes());
+
     let encoded_association_id = if status == 0 {
         u16::from_le_bytes(
             crate::encoding::validated(
@@ -1091,23 +1061,28 @@ pub fn write_ht_association_response(
     } else {
         0
     };
-    body[4..6].copy_from_slice(&encoded_association_id.to_le_bytes());
-    let mut offset = 6;
-    let mut put = |bytes: &[u8]| {
-        body[offset..offset + bytes.len()].copy_from_slice(bytes);
-        offset += bytes.len();
-    };
-    put(&[1, 8]);
-    put(profile.legacy_rates.supported());
-    put(&[50, 4]);
-    put(profile.legacy_rates.extended());
-    if channel.band() == Band::Ghz2_4 {
-        put(&[42, 1, protection.erp_information()]);
-    }
-    put(&profile.wmm.element());
-    put(&ht_capability_ie_for_peer(profile.ht, channel, peer_ht));
-    put(&ht_operation_ie(channel, protection.ht));
-    Ok(offset)
+    let ht_capability = ht_capability_ie_for_peer(profile.ht, channel, peer_ht);
+    let ht_operation = ht_operation_ie(channel, protection.ht);
+    let erp = [42, 1, protection.erp_information()];
+    crate::encoding::FrameParts([
+        &profile.capabilities(LinkProtection::Ccmp).to_le_bytes(),
+        &status.to_le_bytes(),
+        &encoded_association_id.to_le_bytes(),
+        &[1, 8],
+        profile.legacy_rates.supported(),
+        &[50, 4],
+        profile.legacy_rates.extended(),
+        if channel.band() == Band::Ghz2_4 {
+            &erp
+        } else {
+            &[]
+        },
+        &profile.wmm.element(),
+        &ht_capability,
+        &ht_operation,
+    ])
+    .write(body)
+    .map_err(|required| ApAssociationResponseError::OutputTooSmall { required })
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

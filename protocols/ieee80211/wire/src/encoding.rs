@@ -106,6 +106,10 @@ impl<'a> AmsduBody<'a> {
         FragmentPlan(self.fragments()).length()
     }
 
+    #[expect(
+        clippy::expect_used,
+        reason = "checked validates every immutable Ethernet header and retains the same borrowed frames"
+    )]
     fn fragments(&self) -> impl Clone + Iterator<Item = Fragment<'a>> + use<'a> {
         use crate::data::{ETHERNET_HEADER_LEN, LLC_SNAP_HEADER_LEN, RFC1042_LLC_SNAP_PREFIX};
         let count = self.frames.len();
@@ -114,7 +118,14 @@ impl<'a> AmsduBody<'a> {
             .copied()
             .enumerate()
             .flat_map(move |(index, frame)| {
-                let payload = &frame[ETHERNET_HEADER_LEN..];
+                let mut reader = oer_wire::Reader::new(frame);
+                let addresses = reader
+                    .array::<12>()
+                    .expect("admitted Ethernet addresses remain present");
+                let ether_type = reader
+                    .array::<2>()
+                    .expect("admitted Ethernet type remains present");
+                let payload = reader.remaining();
                 let msdu_length = LLC_SNAP_HEADER_LEN + payload.len();
                 let padding: &[u8] = if index + 1 == count {
                     &[]
@@ -127,10 +138,10 @@ impl<'a> AmsduBody<'a> {
                     }
                 };
                 [
-                    Fragment::Borrowed(&frame[..12]),
+                    Fragment::Borrowed(addresses),
                     Fragment::Length((msdu_length as u16).to_be_bytes()),
                     Fragment::Borrowed(&RFC1042_LLC_SNAP_PREFIX),
-                    Fragment::Borrowed(&frame[12..14]),
+                    Fragment::Borrowed(ether_type),
                     Fragment::Borrowed(payload),
                     Fragment::Borrowed(padding),
                 ]

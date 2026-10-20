@@ -112,19 +112,29 @@ impl<const OCTETS: usize> TimVirtualBitmap<OCTETS> {
 
     /// Derive canonical N1/N2 bounds for the Partial Virtual Bitmap field.
     /// N1 is even, so a set bit in odd octet 1 still retains octet 0.
+    #[expect(
+        clippy::expect_used,
+        reason = "try_new rejects empty storage; iterator positions and their even-rounded start are within that immutable storage"
+    )]
     pub fn partial(&self) -> TimPartialVirtualBitmap<'_> {
         let first = self.octets.iter().position(|octet| *octet != 0);
         let last = self.octets.iter().rposition(|octet| *octet != 0);
         let (Some(first), Some(last)) = (first, last) else {
             return TimPartialVirtualBitmap {
                 bitmap_offset: 0,
-                octets: &self.octets[..1],
+                octets: self
+                    .octets
+                    .first_chunk::<1>()
+                    .expect("validated TIM bitmap is nonempty"),
             };
         };
         let first = first & !1;
         TimPartialVirtualBitmap {
             bitmap_offset: first as u8,
-            octets: &self.octets[first..=last],
+            octets: self
+                .octets
+                .get(first..=last)
+                .expect("nonzero TIM octet positions bound the partial bitmap"),
         }
     }
 }
@@ -254,22 +264,24 @@ pub fn update_bss_protection(
     let mut erp = None;
     let mut ht_operation = None;
     let mut dsss = false;
-    let mut offset = FIXED_BEACON_LENGTH;
-    while offset + 2 <= frame.len() {
-        let id = frame[offset];
-        let length = usize::from(frame[offset + 1]);
-        let value = offset + 2;
-        if value + length > frame.len() {
-            return Err(ApBeaconProtectionError::MalformedElement);
-        }
+    let mut reader = oer_wire::Reader::new(frame);
+    reader
+        .array::<FIXED_BEACON_LENGTH>()
+        .map_err(|_| ApBeaconProtectionError::MalformedElement)?;
+    while !reader.is_empty() {
+        let [id, length] = reader
+            .read::<2>()
+            .map_err(|_| ApBeaconProtectionError::MalformedElement)?;
+        let value = frame.len() - reader.remaining().len();
+        reader
+            .take(usize::from(length))
+            .map_err(|_| ApBeaconProtectionError::MalformedElement)?;
         match id {
             ERP_ELEMENT_ID if length == 1 => erp = Some(value),
             DSSS_PARAMETER_SET_ELEMENT_ID => dsss = true,
-            // Primary Channel, Information byte zero, then byte one.
             HT_OPERATION_ELEMENT_ID if length == 22 => ht_operation = Some(value + 2),
             _ => {}
         }
-        offset = value + length;
     }
     let Some(ht_operation) = ht_operation else {
         return Err(ApBeaconProtectionError::MissingProtectionElement);
@@ -278,9 +290,13 @@ pub fn update_bss_protection(
         return Err(ApBeaconProtectionError::MissingProtectionElement);
     }
     if let Some(erp) = erp {
-        frame[erp] = protection.erp_information();
+        *frame
+            .get_mut(erp)
+            .ok_or(ApBeaconProtectionError::MalformedElement)? = protection.erp_information();
     }
-    frame[ht_operation] = protection.ht.information_byte();
+    *frame
+        .get_mut(ht_operation)
+        .ok_or(ApBeaconProtectionError::MalformedElement)? = protection.ht.information_byte();
     Ok(())
 }
 
@@ -299,32 +315,20 @@ pub enum ApBeaconProtectionError {
 pub fn dtim(bytes: &[u8]) -> Option<(usize, u8, u8)> {
     const FIXED_BEACON_LENGTH: usize = 24 + 8 + 2 + 2;
 
-    if bytes.len() < FIXED_BEACON_LENGTH
-        || FrameControlFields::from_bytes([bytes[0], bytes[1]]).type_and_subtype() != 32
-    {
+    let mut reader = oer_wire::Reader::new(bytes);
+    let fixed = reader.array::<FIXED_BEACON_LENGTH>().ok()?;
+    if FrameControlFields::from_bytes([fixed[0], fixed[1]]).type_and_subtype() != 32 {
         return None;
     }
-    let mut offset = FIXED_BEACON_LENGTH;
     macro_rules! inspect_element {
         () => {{
-            if offset + 2 > bytes.len() {
-                return None;
-            }
-            let id = bytes[offset];
-            let length = usize::from(bytes[offset + 1]);
-            let end = offset + 2 + length;
-            if end > bytes.len() {
-                return None;
-            }
+            let offset = bytes.len() - reader.remaining().len();
+            let [id, length] = reader.read::<2>().ok()?;
+            let element = reader.take(usize::from(length)).ok()?;
             if id == 5 {
-                if length < 4 {
-                    return None;
-                }
-                let count = bytes[offset + 2];
-                let period = bytes[offset + 3];
+                let [count, period, _, _] = oer_wire::Reader::new(element).read::<4>().ok()?;
                 return (period != 0 && count < period).then_some((offset, count, period));
             }
-            offset = end;
         }};
     }
 
@@ -400,14 +404,16 @@ pub fn write_tim_partial_virtual_bitmap(
         storage.copy_within(current_end..frame_len, desired_end);
     }
 
-    storage[tim_offset + 1] = desired_body_len_u8;
-    let group_indication = TimBitmapControl::from_bytes([storage[tim_offset + 4]]).group();
-    storage[tim_offset + 4] = TimBitmapControl::from_bytes([partial.bitmap_offset])
+    *storage.get_mut(tim_offset + 1)? = desired_body_len_u8;
+    let group_indication = TimBitmapControl::from_bytes([*storage.get(tim_offset + 4)?]).group();
+    *storage.get_mut(tim_offset + 4)? = TimBitmapControl::from_bytes([partial.bitmap_offset])
         .with_group(group_indication)
         .to_bytes()[0];
-    storage[tim_offset + 5..desired_end].copy_from_slice(partial.octets);
+    oer_wire::Writer::new(storage.get_mut(tim_offset + 5..desired_end)?)
+        .write(partial.octets)
+        .ok()?;
     if new_len < frame_len {
-        storage[new_len..frame_len].fill(0);
+        storage.get_mut(new_len..frame_len)?.fill(0);
     }
     Some(new_len)
 }
@@ -418,22 +424,24 @@ pub fn stamp(bytes: &mut [u8], timestamp: u64, group_pending: bool) -> Option<(u
     if bytes.len() < FIXED_BEACON_LENGTH {
         return None;
     }
-    bytes[24..32].copy_from_slice(&timestamp.to_le_bytes());
+    oer_wire::Writer::new(bytes.get_mut(24..32)?)
+        .write(&timestamp.to_le_bytes())
+        .ok()?;
 
     let (tim_offset, _, period) = dtim(bytes)?;
-    let interval_tu = u16::from_le_bytes([bytes[32], bytes[33]]);
+    let interval_tu = oer_wire::Reader::new(bytes.get(32..)?).u16_le().ok()?;
     if interval_tu == 0 {
         return None;
     }
     let interval_us = u64::from(interval_tu) * 1_024;
     let phase = ((timestamp / interval_us) % u64::from(period)) as u8;
     let count = period - 1 - phase;
-    bytes[tim_offset + 2] = count;
+    *bytes.get_mut(tim_offset + 2)? = count;
 
     // IEEE 802.11 TIM bitmap-control bit 0 announces buffered group traffic
     // only in a DTIM beacon. The queue itself remains Rust-owned and is
     // released by the corresponding TX-done edge.
-    let bitmap_control = &mut bytes[tim_offset + 4];
+    let bitmap_control = bytes.get_mut(tim_offset + 4)?;
     *bitmap_control = TimBitmapControl::from_bytes([*bitmap_control])
         .with_group(count == 0 && group_pending)
         .to_bytes()[0];

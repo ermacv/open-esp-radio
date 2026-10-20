@@ -65,16 +65,15 @@ impl WmmParameters {
         if parameter_set_count > WMM_NIBBLE_MAX {
             return None;
         }
-        let mut index = 0;
-        while index < access_categories.len() {
-            let category = access_categories[index];
+        let mut remaining = access_categories.as_slice();
+        while let Some((category, rest)) = remaining.split_first() {
             if category.aifsn > WMM_NIBBLE_MAX
                 || category.ecw_min > WMM_NIBBLE_MAX
                 || category.ecw_max > WMM_NIBBLE_MAX
             {
                 return None;
             }
-            index += 1;
+            remaining = rest;
         }
         Some(Self {
             parameter_set_count,

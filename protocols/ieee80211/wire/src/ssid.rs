@@ -27,15 +27,26 @@ impl WifiSsid {
             });
         }
         let mut stored = [0; MAX_SSID_LEN];
-        stored[..bytes.len()].copy_from_slice(bytes);
+        oer_wire::Writer::new(&mut stored)
+            .write(bytes)
+            .map_err(|_| WifiSsidError::TooLong {
+                length: bytes.len(),
+                maximum: MAX_SSID_LEN,
+            })?;
         Ok(Self {
             bytes: stored,
             length: bytes.len() as u8,
         })
     }
 
+    #[expect(
+        clippy::expect_used,
+        reason = "new validates the length against this private fixed-capacity storage"
+    )]
     pub fn as_bytes(&self) -> &[u8] {
-        &self.bytes[..usize::from(self.length)]
+        self.bytes
+            .get(..usize::from(self.length))
+            .expect("validated SSID length fits its storage")
     }
 
     pub const fn len(&self) -> usize {

@@ -202,14 +202,13 @@ impl<P: AssociationPhy> AssociationRequest<'_, P> {
             self.he_ul_mu_power,
         )?;
         let mut fixed = [0; MANAGEMENT_HEADER_LEN + ASSOCIATION_FIXED_BODY_LEN];
-        write_management_header(
-            &mut fixed,
+        fixed[..MANAGEMENT_HEADER_LEN].copy_from_slice(&management_header(
             ASSOCIATION_REQUEST_FRAME_CONTROL,
             self.access_point.bssid.get(),
             self.source.get(),
             self.access_point.bssid.get(),
             self.sequence_number,
-        );
+        ));
         // Privacy comes from the selected security mode, not an untrusted
         // scan record, even if that record bypassed candidate admission.
         let advertised = crate::management::CapabilityInformation::from_bytes(
@@ -226,7 +225,17 @@ impl<P: AssociationPhy> AssociationRequest<'_, P> {
         fixed[24..26].copy_from_slice(&capability.to_bytes());
         fixed[26..28].copy_from_slice(&self.listen_interval.to_le_bytes());
         let mut rates = [0; MAX_SUPPORTED_RATES_LEN];
-        copy_rates(self.access_point, &mut rates[..rates_len]);
+        let rates = rates
+            .get_mut(..rates_len)
+            .ok_or(AssociationRequestError::Frame(
+                StationFrameError::TooManySupportedRates,
+            ))?;
+        copy_rates(self.access_point, rates);
+        let mut reader = oer_wire::Reader::new(rates);
+        let first_rates = reader.take(first_rates_len).map_err(|_| {
+            AssociationRequestError::Frame(StationFrameError::TooManySupportedRates)
+        })?;
+        let extended_rates = reader.remaining();
         let extended_header = [50, extended_rates_len as u8];
         let power_capability = power_capability.map(|value| value.encode());
         let he_ul_mu_power = he_ul_mu_power.map(|value| value.encode());
@@ -238,7 +247,7 @@ impl<P: AssociationPhy> AssociationRequest<'_, P> {
             &[0, ssid.len() as u8],
             ssid,
             &[1, first_rates_len as u8],
-            &rates[..first_rates_len],
+            first_rates,
             selected_rsn.as_bytes(),
             power_capability
                 .as_ref()
@@ -248,7 +257,7 @@ impl<P: AssociationPhy> AssociationRequest<'_, P> {
             } else {
                 &extended_header
             },
-            &rates[first_rates_len..rates_len],
+            extended_rates,
             ht_capability.map_or(&[], |value| value.as_slice()),
             he_capability.map_or(&[], |value| value.as_slice()),
             he_ul_mu_power

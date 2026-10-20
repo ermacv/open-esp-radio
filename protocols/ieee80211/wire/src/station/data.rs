@@ -35,24 +35,17 @@ impl StaDataFrame<'_> {
             false,
             false,
         );
-        let header_len = usize::from(plan.header_len);
-        let required = header_len
-            .checked_add(plan.llc_snap.len())
-            .and_then(|length| length.checked_add(self.payload.len()))
-            .ok_or(StationFrameError::OutputTooSmall {
-                required: usize::MAX,
-            })?;
-        if output.len() < required {
-            return Err(StationFrameError::OutputTooSmall { required });
-        }
-        let frame = &mut output[..required];
-        frame.fill(0);
-        frame[..header_len].copy_from_slice(&plan.header[..header_len]);
-        frame[22..24].copy_from_slice(&self.sequence_number.sequence_control().to_le_bytes());
-        let llc_end = header_len + plan.llc_snap.len();
-        frame[header_len..llc_end].copy_from_slice(&plan.llc_snap);
-        frame[llc_end..required].copy_from_slice(self.payload);
-        Ok(required)
+        let mut header = plan.header;
+        header[22..24].copy_from_slice(&self.sequence_number.sequence_control().to_le_bytes());
+        let mut reader = oer_wire::Reader::new(&header);
+        let header = reader.take(usize::from(plan.header_len)).map_err(|_| {
+            StationFrameError::OutputTooSmall {
+                required: usize::from(plan.header_len),
+            }
+        })?;
+        crate::encoding::FrameParts([header, &plan.llc_snap, self.payload])
+            .write(output)
+            .map_err(|required| StationFrameError::OutputTooSmall { required })
     }
 }
 
@@ -118,35 +111,17 @@ impl StaProtectedDataFrame<'_> {
         // Exact `net80211_tx::encapsulate_ordinary` mutation after successful
         // CCMP key selection.
         plan.set_protected(true);
-        let header_len = usize::from(plan.header_len);
-        let dma_header_len = plan.dma_header_len();
-        let required = dma_header_len
-            .checked_add(CCMP_HEADER_LEN)
-            .and_then(|length| length.checked_add(plan.llc_snap.len()))
-            .and_then(|length| length.checked_add(self.payload.len()))
-            .ok_or(StationFrameError::OutputTooSmall {
-                required: usize::MAX,
-            })?;
-        if output.len() < required {
-            return Err(StationFrameError::OutputTooSmall { required });
-        }
-
-        let frame = &mut output[..required];
-        // Every byte in the returned DMA image is initialized by one of the
-        // exact writes below. Do not clear the complete frame first: for a
-        // full 32-MPDU aggregate that redundant pass wrote roughly 48 KiB to
-        // PSRAM before immediately overwriting it with the real payload.
-        //
-        // SOURCE(esp32s31): complete `libnet80211[ieee80211_output.o]::ieee80211_encap_esfbuf` mutates the ESF header/headroom and retains
-        // the existing payload; it does not clear the complete MPDU.
-        frame[..header_len].copy_from_slice(&plan.header[..header_len]);
-        frame[22..24].copy_from_slice(&self.sequence_number.sequence_control().to_le_bytes());
-        let ccmp_end = dma_header_len + CCMP_HEADER_LEN;
-        frame[dma_header_len..ccmp_end].copy_from_slice(&self.ccmp_header);
-        let llc_end = ccmp_end + plan.llc_snap.len();
-        frame[ccmp_end..llc_end].copy_from_slice(&plan.llc_snap);
-        frame[llc_end..required].copy_from_slice(self.payload);
-        Ok(required)
+        let mut header = plan.header;
+        header[22..24].copy_from_slice(&self.sequence_number.sequence_control().to_le_bytes());
+        let mut reader = oer_wire::Reader::new(&header);
+        let header = reader.take(usize::from(plan.header_len)).map_err(|_| {
+            StationFrameError::OutputTooSmall {
+                required: usize::from(plan.header_len),
+            }
+        })?;
+        crate::encoding::FrameParts([header, &self.ccmp_header, &plan.llc_snap, self.payload])
+            .write(output)
+            .map_err(|required| StationFrameError::OutputTooSmall { required })
     }
 }
 
@@ -224,8 +199,12 @@ impl StaProtectedEthernetFrame {
 
         // Preserve the bytes that the new CCMP/LLC prefix overlaps before
         // mutating the shared allocation.
-        let Some(&ethernet) =
-            storage[ethernet_offset..ethernet_end].first_chunk::<ETHERNET_HEADER_LEN>()
+        let Some(&ethernet) = storage
+            .get(ethernet_offset..ethernet_end)
+            .ok_or(StationFrameError::OutputTooSmall {
+                required: ethernet_end,
+            })?
+            .first_chunk::<ETHERNET_HEADER_LEN>()
         else {
             return Err(StationFrameError::EthernetFrameTooShort);
         };
@@ -258,10 +237,19 @@ impl StaProtectedEthernetFrame {
         // Ethernet end instead of reconstructing it from a second length.
         let payload_start = ethernet_offset + ETHERNET_HEADER_LEN;
         let (before_payload, _) = storage.split_at_mut(payload_start);
-        let prefix = &mut before_payload[frame_offset..];
+        let prefix =
+            before_payload
+                .get_mut(frame_offset..)
+                .ok_or(StationFrameError::OutputTooSmall {
+                    required: payload_start,
+                })?;
         plan.header[22..24].copy_from_slice(&self.sequence_number.sequence_control().to_le_bytes());
         crate::encoding::FrameParts([
-            &plan.header[..header_len],
+            oer_wire::Reader::new(&plan.header)
+                .take(header_len)
+                .map_err(|_| StationFrameError::OutputTooSmall {
+                    required: header_len,
+                })?,
             &self.ccmp_header,
             &plan.llc_snap,
         ])
@@ -314,7 +302,12 @@ impl StaProtectedEthernetFrame {
             });
         }
 
-        let Some(&first_header) = storage[ethernet_offset..].first_chunk::<ETHERNET_HEADER_LEN>()
+        let Some(&first_header) = storage
+            .get(ethernet_offset..ethernet_end)
+            .ok_or(StationFrameError::OutputTooSmall {
+                required: ethernet_end,
+            })?
+            .first_chunk::<ETHERNET_HEADER_LEN>()
         else {
             return Err(StationFrameError::EthernetFrameTooShort);
         };
@@ -364,7 +357,12 @@ impl StaProtectedEthernetFrame {
 
         // Disjoint slices retain the moved first payload while the two
         // fragment plans write only its prefix and the following subframe.
-        let frame = &mut storage[frame_offset..frame_end];
+        let frame =
+            storage
+                .get_mut(frame_offset..frame_end)
+                .ok_or(StationFrameError::OutputTooSmall {
+                    required: frame_end,
+                })?;
         let (first_prefix, body) = frame.split_at_mut(first_prefix_length);
         let (_, following) = body.split_at_mut(first_payload_length);
         let first_msdu_length = LLC_SNAP_HEADER_LEN + first_payload_length;
@@ -381,14 +379,25 @@ impl StaProtectedEthernetFrame {
         let first_subframe_length = AMSDU_SUBFRAME_HEADER_LEN + first_msdu_length;
         let padding = [0; 3];
         let first_padding = (4 - (first_subframe_length & 3)) & 3;
-        let second_payload = &second_ethernet[ETHERNET_HEADER_LEN..];
+        let mut reader = oer_wire::Reader::new(second_ethernet);
+        let second_addresses = reader
+            .array::<12>()
+            .map_err(|_| StationFrameError::EthernetFrameTooShort)?;
+        let second_type = reader
+            .array::<2>()
+            .map_err(|_| StationFrameError::EthernetFrameTooShort)?;
+        let second_payload = reader.remaining();
         let second_msdu_length = LLC_SNAP_HEADER_LEN + second_payload.len();
         let following_written = crate::encoding::FrameParts([
-            &padding[..first_padding],
-            &second_ethernet[..12],
+            oer_wire::Reader::new(&padding)
+                .take(first_padding)
+                .map_err(|_| StationFrameError::OutputTooSmall {
+                    required: first_padding,
+                })?,
+            second_addresses,
             &(second_msdu_length as u16).to_be_bytes(),
             &crate::data::RFC1042_LLC_SNAP_PREFIX,
-            &second_ethernet[12..14],
+            second_type,
             second_payload,
         ])
         .write(following)

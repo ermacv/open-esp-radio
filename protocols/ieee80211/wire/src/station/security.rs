@@ -45,8 +45,14 @@ impl SelectedRsn {
     };
 
     /// The security elements of the association request.
+    #[expect(
+        clippy::expect_used,
+        reason = "only the private selection constructors set length, within the fixed security-IE capacity"
+    )]
     pub fn as_bytes(&self) -> &[u8] {
-        &self.bytes[..usize::from(self.length)]
+        self.bytes
+            .get(..usize::from(self.length))
+            .expect("selected security elements fit their storage")
     }
 
     /// The security the association negotiates.
@@ -57,7 +63,7 @@ impl SelectedRsn {
     /// The same selection naming `pmkid`: an SAE association that resumes a
     /// cached PMKSA lists its PMKID after the RSN capabilities, as the
     /// vendor's `wpa_gen_wpa_ie_rsn` does for the current PMKSA. `None` for
-    /// a selection that is not SAE: only SAE associations are cached.
+    /// a selection that is not SAE or already names a PMKID: only SAE associations are cached.
     pub fn with_pmkid(self, pmkid: Pmkid) -> Option<Self> {
         let AssociationSecurity::Rsn(mut association) = self.security else {
             return None;
@@ -65,17 +71,24 @@ impl SelectedRsn {
         if !matches!(association.akm, AssociationAkm::Sae(_)) {
             return None;
         }
+        if association.pmkid.is_some() {
+            return None;
+        }
         association.pmkid = Some(pmkid);
         let mut resumed = self;
         resumed.security = AssociationSecurity::Rsn(association);
-        let rsnxe = &self.bytes[SELECTED_RSN_IE_LEN..usize::from(self.length)];
+        let mut reader = oer_wire::Reader::new(self.as_bytes());
+        reader.array::<SELECTED_RSN_IE_LEN>().ok()?;
+        let rsnxe = reader.remaining();
         resumed.bytes[1] += PMKID_LIST_LEN as u8;
         resumed.bytes[SELECTED_RSN_IE_LEN..SELECTED_RSN_IE_LEN + 2]
             .copy_from_slice(&1_u16.to_le_bytes());
         resumed.bytes[SELECTED_RSN_IE_LEN + 2..SELECTED_RSN_IE_LEN + PMKID_LIST_LEN]
             .copy_from_slice(&pmkid.0);
         let rsnxe_start = SELECTED_RSN_IE_LEN + PMKID_LIST_LEN;
-        resumed.bytes[rsnxe_start..rsnxe_start + rsnxe.len()].copy_from_slice(rsnxe);
+        oer_wire::Writer::new(resumed.bytes.get_mut(rsnxe_start..)?)
+            .write(rsnxe)
+            .ok()?;
         resumed.length = (rsnxe_start + rsnxe.len()) as u8;
         Some(resumed)
     }
