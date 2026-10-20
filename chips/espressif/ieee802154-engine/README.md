@@ -6,9 +6,10 @@ helpers), ported once for every supported chip.
 
 | Module | Contents |
 | --- | --- |
-| `engine` | Operation state machine, interrupt handler, receive ring and DMA frame buffers, statistics |
+| `engine` | Operation state machine, interrupt handler, receive ring, placed frame storage and typed address table, statistics |
+| `engine::owner` | The engine and its MAC backend held together, exposing semantic entries without a separate backend borrow |
 | `pib` | The driver's PIB and its publication to the MAC |
-| `ll` | The `Ieee802154LowLevel` interface (the driver's `ieee802154_ll_*` accessors, modem ETM steps and timer commands) and the hardware helpers generic over it; `ll::model` is a register model for the crate's own tests (`cfg(test)`) |
+| `ll` | The `Ieee802154LowLevel` interface (the driver's `ieee802154_ll_*` accessors, modem ETM steps and timer commands) and the hardware helpers generic over it; `ll::model` is a register model for tests and explicit `test-support` builds |
 | `capabilities` | The portable capabilities a radio over the engine reports (ESP-IDF's OpenThread port defaults) and the table a chip builds from its transmit-power level set |
 | `types`, `channel`, `coex`, `tx_power` | The chip-neutral values the interface exchanges, the 2.4 GHz channel/frequency-code map, the software-coexistence priorities and the vendor transmit-power resolution |
 
@@ -28,8 +29,9 @@ The engine names no executor, interrupt route or chip. A runtime holds it
 inside the chip HAL's owner together with its MAC token and static buffers.
 The owner's entries borrow its own MAC and expose frames and slot handles,
 without DMA addresses or independently reusable register ownership. The
-caller serializes entries and the interrupt handler in one critical section. Its accessor sequence was compared on the host
-with the compiled vendor driver.
+caller serializes entries and the interrupt handler in one critical section.
+Its accessor sequence was compared on the host with the compiled vendor
+driver.
 
 ## Bring-up and teardown order
 
