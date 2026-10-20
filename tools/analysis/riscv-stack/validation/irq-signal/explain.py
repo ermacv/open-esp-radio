@@ -12,6 +12,7 @@ import json
 from pathlib import Path
 import re
 import subprocess
+import sys
 
 FIELD = re.compile(r'FunctionPointerType \{ subroutine: (\d+), foreign: (true|false) \}')
 
@@ -215,6 +216,11 @@ def main(before, after, output, executable):
 
 
 if __name__ == '__main__':
+    if len(sys.argv) > 1 and sys.argv[1] == 'current-chain':
+        from current_chain import main as current_chain
+        del sys.argv[1]
+        current_chain()
+        raise SystemExit(0)
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('before', type=Path)
     parser.add_argument('after', type=Path)

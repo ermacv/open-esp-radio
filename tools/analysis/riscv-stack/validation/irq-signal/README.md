@@ -1,5 +1,11 @@
 # IRQ callback provenance on w0/w1
 
+The current investigation is in [current-chain.md](current-chain.md), with
+[current-chain.json](current-chain.json) generated on main `694e0c76` (including
+#195 and #194). It supersedes the historical addresses and spill assumptions
+below for the selected callback. The older transport validation remains here
+as a separate historical comparison.
+
 Baseline: main `99f4fd64`, including #172 and #171. Both unconfigured images were built
 before implementation with the pinned toolchain in this checkout. Each completed
 bundle, including its ELF and four reports, was copied to

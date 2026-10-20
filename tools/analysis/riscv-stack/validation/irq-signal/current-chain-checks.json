@@ -1,0 +1,7 @@
+{
+  "repeat_identical": true,
+  "fault_injection": {
+    "load-width": "rejected changed machine fact",
+    "captured-pointer": "rejected changed machine fact"
+  }
+}
