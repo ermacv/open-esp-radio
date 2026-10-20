@@ -48,6 +48,12 @@ cancellation, empty layouts and all 256 indices.
 
 ## Lifecycle and cancellation
 
+The current `run_port` polls its driver and body in the same executor
+context. Its `Held` loan does not establish synchronization between
+different contexts. The S31 conformance image uses this local execution
+on P2; it does not exercise the P2 driver / P1 role-body boundary specified
+in [the architecture](../../../docs/architecture.md#execution-contexts).
+
 `Installed::new(backend, driver)` is the sole constructor. `run_port` consumes
 it, keeps `backend` by value, and lends `&mut B` to `Owner<'p, 'id, B, State>`.
 The core keeps the driver by value beside the backend. Static
