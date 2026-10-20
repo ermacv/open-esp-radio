@@ -2,7 +2,7 @@
 //! A join keeps every producer, and an unknown incoming value loses the
 //! proof. Register copies are followed; calls obey the integer psABI.
 use crate::{
-    Function, Load, Transfer,
+    Function, Load, Transfer, TransferKind,
     image::{self, Observation},
 };
 use oer_analysis_riscv_lift::RiscvDecoder;
@@ -52,7 +52,7 @@ pub(crate) fn bases(
     control: &mut dyn RunControl,
 ) -> Result<BTreeMap<u32, LoadBase>> {
     let mut out = BTreeMap::new();
-    if !observation.closed_graph {
+    if !observation.closed_graph() {
         return Ok(out);
     }
     let code = image::function_bytes(image.file(), function)?;
@@ -148,6 +148,14 @@ pub(crate) fn bases(
     Ok(out)
 }
 
+/// Conditional loads stay separate so consumers must explicitly opt in to
+/// the proof obligation that every eventual target is outside the function.
+#[derive(Default)]
+pub(crate) struct TargetLoads {
+    pub closed: BTreeMap<u32, Vec<Load>>,
+    pub open_exit: BTreeMap<u32, Vec<Load>>,
+}
+
 pub(crate) fn loads(
     image: &ImageFacts<'_>,
     function: &Function,
@@ -155,11 +163,8 @@ pub(crate) fn loads(
     observation: &Observation,
     work: &mut Ledger<'_>,
     control: &mut dyn RunControl,
-) -> Result<BTreeMap<u32, Vec<Load>>> {
-    let mut out = BTreeMap::new();
-    if !observation.closed_graph {
-        return Ok(out);
-    }
+) -> Result<TargetLoads> {
+    let mut out = TargetLoads::default();
     let code = image::function_bytes(image.file(), function)?;
     let bytes = |pc: u32| code.get(pc.wrapping_sub(function.address) as usize..);
     for transfer in transfers
@@ -167,6 +172,12 @@ pub(crate) fn loads(
         .filter(|transfer| transfer.target.is_none())
     {
         control.checkpoint(1)?;
+        let open_exit = !observation.closed_graph();
+        if open_exit
+            && !(transfer.kind == TransferKind::Tail && observation.closed_except(transfer.site))
+        {
+            continue;
+        }
         let Some(call_bytes) = bytes(transfer.site) else {
             continue;
         };
@@ -273,7 +284,12 @@ pub(crate) fn loads(
             for producer in producers.into_values() {
                 work.push(&mut result, producer, control)?;
             }
-            work.insert(&mut out, transfer.site, result, control)?;
+            let loads = if open_exit {
+                &mut out.open_exit
+            } else {
+                &mut out.closed
+            };
+            work.insert(loads, transfer.site, result, control)?;
         }
     }
     Ok(out)

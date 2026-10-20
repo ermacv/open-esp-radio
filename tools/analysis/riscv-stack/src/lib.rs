@@ -127,6 +127,10 @@ pub struct FunctionFacts {
     /// Every reaching word-load definition of each unresolved transfer's
     /// target, only when the local graph and every incoming path prove it.
     pub target_loads: BTreeMap<u32, Vec<Load>>,
+    /// Target loads proved with only the transfer's own indirect exit open.
+    /// A consumer must prove every target lies outside this function before
+    /// using these; ordinary callback and base provenance excludes them.
+    pub open_exit_target_loads: BTreeMap<u32, Vec<Load>>,
     /// Earlier equal register values for each target load's address base,
     /// bounded by the first merge, definition, memory write or unknown step.
     pub load_bases: BTreeMap<u32, LoadBase>,
@@ -630,14 +634,17 @@ fn function_facts(
     let mut transfers = swept.transfers;
     for transfer in &mut transfers {
         if let Some(load) = &mut transfer.load {
-            load.exclusive_producer = observation.closed_graph
+            load.exclusive_producer = observation.closed_graph()
                 && observation
                     .predecessors
                     .get(&transfer.site)
                     .is_some_and(|incoming| incoming.as_slice() == [load.site]);
         }
     }
-    let target_loads = producers::loads(elf, &function, &transfers, &observation, work, control)?;
+    let producers::TargetLoads {
+        closed: target_loads,
+        open_exit: open_exit_target_loads,
+    } = producers::loads(elf, &function, &transfers, &observation, work, control)?;
     let load_bases = producers::bases(elf, &function, &target_loads, &observation, work, control)?;
     let mut table_bases = BTreeMap::new();
     let mut unresolved_registers = BTreeMap::new();
@@ -759,6 +766,7 @@ fn function_facts(
         complete: observation.complete,
         terminal_recursive_callees,
         target_loads,
+        open_exit_target_loads,
         load_bases,
         transfers,
         site_depths: observation.site_depths,
@@ -776,6 +784,7 @@ impl FunctionFacts {
             + names.iter().map(String::capacity).sum::<usize>()
             + self.transfers.capacity() * size_of::<Transfer>()
             + self.target_loads.len() * size_of::<(u32, Vec<Load>)>()
+            + self.open_exit_target_loads.len() * size_of::<(u32, Vec<Load>)>()
             + self.load_bases.len() * size_of::<(u32, LoadBase)>()
             + self
                 .load_bases
@@ -785,6 +794,7 @@ impl FunctionFacts {
             + self
                 .target_loads
                 .values()
+                .chain(self.open_exit_target_loads.values())
                 .map(|loads| loads.capacity() * size_of::<Load>())
                 .sum::<usize>()
             + self.site_depths.len() * size_of::<(u32, u64)>()

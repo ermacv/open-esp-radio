@@ -243,7 +243,7 @@ fn a_table_reachable_unimp_keeps_both_observers_open_at_unknown() {
             &mut || Ok(()),
             |observe, control| {
                 let observed = observe(function, &[], &tables, &mut work, control)?;
-                assert!(!observed.closed_graph);
+                assert!(!observed.closed_graph());
                 assert!(!observed.complete);
                 assert!(observed.predecessors[&(TEXT + 68)].contains(&(TEXT + 56)));
                 Ok(())
