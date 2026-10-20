@@ -737,3 +737,95 @@ fn the_common_audit_obeys_work_and_memory_budgets() {
     })
     .unwrap();
 }
+
+#[test]
+fn a_missing_parameter_type_does_not_exclude_a_candidate() {
+    let mut elf = compiled(&global_program().replace("u16", "u32"));
+    let (other_address, call_address) = {
+        let file = oer_analysis_elf::Elf::parse(&elf).unwrap();
+        let address = |name| file.symbols().find(|s| s.name == name).unwrap().address as u32;
+        (address("OTHER"), address("CALLBACKS") + 4)
+    };
+    // Real DWARF4 input: both storage types have one formal parameter, but
+    // the first parameter has no DW_AT_type. Return types are the same.
+    let abbrev = vec![
+        1, 0x11, 1, 0, 0, // compile_unit
+        2, 0x24, 0, 0x0b, 0x0b, 0, 0, // base_type, byte_size/data1
+        3, 0x15, 1, 0x49, 0x13, 0, 0, // subroutine_type, type/ref4
+        4, 0x05, 0, 0, 0, // formal_parameter with no type
+        5, 0x05, 0, 0x49, 0x13, 0, 0, // formal_parameter, type/ref4
+        6, 0x0f, 0, 0x49, 0x13, 0, 0, // pointer_type, type/ref4
+        7, 0x34, 0, 0x49, 0x13, 0x02, 0x18, 0, 0, // variable, type/ref4, location/exprloc
+        0,
+    ];
+    let mut info = vec![0; 4];
+    info.extend_from_slice(&4_u16.to_le_bytes());
+    info.extend_from_slice(&0_u32.to_le_bytes());
+    info.extend_from_slice(&[4, 1]); // address size, CU
+    let word = info.len() as u32;
+    info.extend_from_slice(&[2, 4]);
+    let stored = info.len();
+    info.push(3);
+    info.extend_from_slice(&word.to_le_bytes());
+    info.extend_from_slice(&[4, 0]); // one untyped parameter, end subroutine
+    let called = info.len();
+    info.push(3);
+    info.extend_from_slice(&word.to_le_bytes());
+    info.push(5);
+    info.extend_from_slice(&word.to_le_bytes());
+    info.push(0);
+    let stored_pointer = info.len() as u32;
+    info.push(6);
+    info.extend_from_slice(&(stored as u32).to_le_bytes());
+    let called_pointer = info.len() as u32;
+    info.push(6);
+    info.extend_from_slice(&(called as u32).to_le_bytes());
+    for (ty, address) in [
+        (stored_pointer, other_address),
+        (called_pointer, call_address),
+    ] {
+        info.push(7);
+        info.extend_from_slice(&ty.to_le_bytes());
+        info.extend_from_slice(&[5, 0x03]); // expression size, DW_OP_addr
+        info.extend_from_slice(&address.to_le_bytes());
+    }
+    info.push(0);
+    let length = (info.len() - 4) as u32;
+    info[..4].copy_from_slice(&length.to_le_bytes());
+    let indices = {
+        let file = oer_analysis_elf::Elf::parse(&elf).unwrap();
+        [
+            file.section_by_name(".debug_info").unwrap().index,
+            file.section_by_name(".debug_abbrev").unwrap().index,
+        ]
+    };
+    let shoff = u32::from_le_bytes(elf[32..36].try_into().unwrap()) as usize;
+    for (index, bytes) in indices.into_iter().zip([info, abbrev]) {
+        let at = elf.len() as u32;
+        elf[shoff + index * 40 + 16..shoff + index * 40 + 20].copy_from_slice(&at.to_le_bytes());
+        elf[shoff + index * 40 + 20..shoff + index * 40 + 24]
+            .copy_from_slice(&(bytes.len() as u32).to_le_bytes());
+        elf.extend_from_slice(&bytes);
+    }
+    let (_, types) = typed_debug(&elf);
+    assert_eq!(types.signatures[&stored].parameters, [None]);
+    assert_eq!(types.signatures[&called].parameters, [Some(word as usize)]);
+    with_facts(&elf, |image| {
+        let mut keep = ledger();
+        let analysis = crate::analyze(image, &[], &[], &UnknownCallBehavior, &mut keep, &mut || Ok(()))?;
+        let audit = audit_function_addresses(image, &analysis, &types, &mut keep, &mut || Ok(()))?;
+        let function = named(&analysis, "different");
+        let uses = audit.uses().find(|(entry, _)| *entry == function).unwrap().1;
+        assert!(!uses.is_empty());
+        assert!(uses.iter().all(|use_| matches!(use_.evidence, StorageEvidence::Typed(_))),
+            "the regression must reach storage-type matching without an unknown-use fallback");
+        let resolutions = crate::function_pointer_resolutions(&audit, &mut keep, &mut || Ok(()))?;
+        let site = analysis.functions[&named(&analysis, "global")].transfers.iter()
+            .find(|t| t.target.is_none()).unwrap().site;
+        let targets = &resolutions.get(site).expect("global callback field").targets;
+        assert!(targets.contains(&function),
+            "one parameter without a type was treated as zero parameters: stored={:?}, called={:?}, targets={targets:?}",
+            types.signatures.get(&stored), types.signatures.get(&called));
+        Ok(())
+    }).unwrap();
+}
