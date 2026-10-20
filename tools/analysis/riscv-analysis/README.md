@@ -58,3 +58,13 @@ operation-local vectors and a bounded-load lookup index. It does not enlarge eac
 register state with an inline array. Joins and Cartesian arithmetic widen explicitly
 on a ninth result; stored `alternative-limit` gaps distinguish this loss from a
 resolved singleton. Public alternatives are nonrecursive and validated on decode.
+
+The optional `ResearchOptions::symbolic_spills` profile reuses those same bounded
+entry-stack words for captured expression values, with exact width/overlap
+checks and existing join, alias-write and call invalidation. The default profile
+is unchanged. `writes::function_writes` describes argument/field-snapshot-to-store
+events over a canonical `FunctionIndex`; `writes::call_writes` substitutes the
+call's actual integer ABI inputs and unions its callee effects. These summaries
+retain conditional writes and unknown effects; they do not forward mutable
+memory contents or establish subsequent reads. See the
+[real w1 evidence and limits](../riscv-stack/validation/argument-writes/README.md).

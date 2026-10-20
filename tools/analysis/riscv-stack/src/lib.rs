@@ -39,6 +39,8 @@ mod task_spawns;
 mod tasks;
 mod trap;
 mod wakers;
+#[cfg(test)]
+mod write_summary_tests;
 
 use oer_analysis_riscv_model::{
     CallBehavior, CodeRange, Error, ErrorCode, FunctionRecord, Ledger, Result, RunControl,
@@ -384,6 +386,64 @@ fn table_jump(function: &Function, site: u32, entries: &[u32]) -> KnownJump {
         site: u64::from(site),
         targets,
     }
+}
+
+/// Inspect one function with the same swept and common-engine table proofs
+/// used by the stack analysis. The sink receives canonical machine facts;
+/// names and source aggregate layouts do not select effects.
+pub fn inspect_function(
+    image: &ImageFacts<'_>,
+    function: &Function,
+    call_behavior: &dyn CallBehavior,
+    options: oer_analysis_riscv_analysis::ResearchOptions,
+    memory: &WorkingMemory,
+    control: &mut dyn RunControl,
+    sink: &mut dyn oer_analysis_riscv_model::FunctionSink,
+) -> Result<()> {
+    use oer_analysis_riscv_analysis::{
+        FunctionInput, PreparedReferences, research_following_tables_with_options,
+    };
+    use oer_analysis_riscv_lift::StructuralRiscvDecoder as RiscvDecoder;
+    use oer_analysis_riscv_model::NoReturns;
+    use oer_analysis_riscv_program::ProgramView;
+    let mut work = Ledger::new(memory, control)?;
+    let swept = sweep::transfers(image, function, &mut work, control)?;
+    let mut jumps = Vec::new();
+    for (site, entries) in &swept.jumps {
+        work.admit(entries.len() * size_of::<u64>(), control)?;
+        work.push(&mut jumps, table_jump(function, *site, entries), control)?;
+    }
+    let references = PreparedReferences::empty();
+    let view = ProgramView::new(image.bytes(), image.file(), &[], memory, control)?;
+    research_following_tables_with_options(
+        FunctionInput {
+            image: Some(&view),
+            section: function.section as u32,
+            extent: CodeRange {
+                start: function.address.into(),
+                length: function.size.into(),
+            },
+            bytes: image::function_bytes(image.file(), function)?,
+            relocations: &references,
+            data_ranges: &[],
+            jumps: &jumps,
+            returns: &NoReturns,
+            call_behavior,
+        },
+        &DispatchTables {
+            recognized: RecognizedTables {
+                entries: &ImageTables { image },
+                section: function.section as u32,
+            },
+            known: &jumps,
+        },
+        &RiscvDecoder,
+        memory,
+        control,
+        sink,
+        options,
+    )?;
+    Ok(())
 }
 
 /// The tables of a function's dispatches: the value analysis's `Dispatch`

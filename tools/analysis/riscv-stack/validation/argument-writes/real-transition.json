@@ -1,0 +1,27 @@
+{
+  "baseline": "c086c4b955b6288a4eb1ded014f9b0f13b47949f",
+  "elf_sha256": "664a12bb421780da1a869a393c2abc0ffa15c6617a8216a305b88fec07464649",
+  "caller": "0x5006e4fc",
+  "call": "0x5006e650",
+  "callee": "0x5004aa74",
+  "abi": "RV32 integer register words; a0 is a future pointer, a1 a Context pointer",
+  "call_inputs": "Some([Constant { value: 0 }, ImageAddress { address: 1342481996 }, EntryStack { offset: -352 }, Expression { id: 2 }, Expression { id: 3 }, Unknown, Unknown, Unknown, Unknown, Unknown, Unknown, EntryStack { offset: -344 }, Unknown, Unknown, Unknown, Unknown, Unknown, Unknown, Expression { id: 47 }, Unknown, Unknown, Unknown, Unknown, Unknown, Unknown, Unknown, Unknown, Unknown, Unknown, Unknown, Unknown, Unknown])",
+  "irq_storage_pointer": "FunctionWrite { site: 1342483286, address: Base { base: Argument(0), offset: 208 }, value: Field { function: 1342483060, read: 1342483186, base: Argument(0), displacement: 228, width: 4, signed: false, offset: 0 }, width: 4, occurrence: May, proof: ClosedGraph }",
+  "irq_storage_call_effect": "CallWrite { callee: 1342483060, source: FunctionWrite { site: 1342483286, address: Base { base: Argument(0), offset: 208 }, value: Field { function: 1342483060, read: 1342483186, base: Argument(0), displacement: 228, width: 4, signed: false, offset: 0 }, width: 4, occurrence: May, proof: ClosedGraph }, write: FunctionWrite { site: 1342483286, address: Base { base: Unknown, offset: 0 }, value: Field { function: 1342483060, read: 1342483186, base: Unknown, displacement: 228, width: 4, signed: false, offset: 0 }, width: 4, occurrence: May, proof: ClosedGraph } }",
+  "line_mac_pointer_to_spill": "FunctionWrite { site: 1342484382, address: Base { base: Stack { function: 1342483060, offset: -600 }, offset: 0 }, value: Field { function: 1342483060, read: 1342483202, base: Argument(0), displacement: 260, width: 4, signed: false, offset: 0 }, width: 4, occurrence: May, proof: ClosedGraph }",
+  "spill_example_kind": "WifiRxExit payload word; not a proved pointer",
+  "spill_example": {
+    "spill": "FunctionWrite { site: 1342483674, address: Base { base: Stack { function: 1342483060, offset: -384 }, offset: 0 }, value: Field { function: 1342483060, read: 1342483652, base: Argument(0), displacement: 340, width: 4, signed: false, offset: 0 }, width: 4, occurrence: May, proof: ClosedGraph }",
+    "reload_before": "StackReload { site: 1342483718, slot: -384, width: 4, value: Base { base: Unknown, offset: 0 } }",
+    "reload_after": "StackReload { site: 1342483718, slot: -384, width: 4, value: Field { function: 1342483060, read: 1342483652, base: Argument(0), displacement: 340, width: 4, signed: false, offset: 0 } }",
+    "store_before": "FunctionWrite { site: 1342483722, address: Base { base: Unknown, offset: 0 }, value: Base { base: Unknown, offset: 0 }, width: 4, occurrence: May, proof: ClosedGraph }",
+    "store_after": "FunctionWrite { site: 1342483722, address: Base { base: Unknown, offset: 0 }, value: Field { function: 1342483060, read: 1342483652, base: Argument(0), displacement: 340, width: 4, signed: false, offset: 0 }, width: 4, occurrence: May, proof: ClosedGraph }"
+  },
+  "install": "FunctionWrite { site: 1342488102, address: Base { base: Unknown, offset: 0 }, value: Base { base: Unknown, offset: 0 }, width: 4, occurrence: May, proof: ClosedGraph }",
+  "remaining_barriers": [
+    "The actual caller a0 value is unknown; no exact future/handler object is substituted.",
+    "The line.mac spill meets unknown call effects at 0x5004afd0 before reload.",
+    "The conditional HandlerCell pointer store remains unknown.",
+    "No complete writes/initial-state/alias/publication-order proof exists for the later handler read."
+  ]
+}
