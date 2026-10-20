@@ -4,6 +4,11 @@
 module, uses public PHY state and typed HAL register reads, and carries no
 station role, network stack, verification hooks or instrumentation cfgs.
 
+The current PHY first-client join can enter Pending for immediate tracking and
+then reject BTBB gain publication as `Btbb(Unregistered)`. The diagnostic
+802.15.4 path therefore stops at PrepareCapture; successful RX/restart capture
+is not established. Failure evidence is retained as INCOMPLETE.
+
 ```console
 cargo hil image build diagnostic-phy --chip esp32s31
 cargo hil run phy-vendor-calibration-cold --chip esp32s31 --board s31-a

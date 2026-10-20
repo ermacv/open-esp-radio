@@ -79,8 +79,9 @@ and check the three differences independently against C and engine traces
 
 ## Bring-up and teardown order
 
-The S31 diagnostic PHY image holds an RX-only assembly of the engine; it
-defines no 802.15.4 block runtime contract. An owner brings
+The S31 diagnostic PHY image contains an RX-only assembly of the engine; its
+current PHY first-client join rejects immediate tracking before MAC startup.
+The assembly defines no 802.15.4 block runtime contract. An owner brings
 the radio up in the order of ESP-IDF's `esp_ieee802154_enable`:
 
 1. the common radio power and the IEEE 802.15.4 module clocks;

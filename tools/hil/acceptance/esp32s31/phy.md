@@ -6,6 +6,11 @@ catalog outside this repository. Cold/restart Wi-Fi points use ten rounds;
 802.15.4 cold/restart RX points use five, with channel 15 and 21 dBm PIB power.
 One-pair smoke scenarios exercise tooling without estimating vendor spread.
 
+The current PHY first-client join can enter Pending for immediate tracking and
+then reject BTBB gain publication as `Btbb(Unregistered)`. The diagnostic
+802.15.4 path therefore stops at PrepareCapture; successful RX/restart capture
+is not established. Failure evidence is retained as INCOMPLETE.
+
 These scenarios alternate two firmwares on the same ESP32-S31 board, in
 rounds: the pinned vendor firmware is flashed and booted, then the production
 image. They compare what each leaves behind:
