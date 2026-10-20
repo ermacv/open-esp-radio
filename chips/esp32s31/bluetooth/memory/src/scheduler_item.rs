@@ -1,23 +1,12 @@
-//! Scheduler-owned header of every Controller scheduler item.
+//! Scheduler operations on the generated header shared by every BLE role.
 //!
-//! Each role allocation places the same scheduler fields at the same offsets;
-//! the role codecs own every other word. This module is the only definition of
-//! those offsets and of the field transforms the scheduler performs. The
-//! contracts come from the vendor scheduler list bodies described in the
-//! scheduler list reference of the vendor investigation.
+//! `BleSchedulerItem` defines the word positions and fields. This view updates
+//! the execution successor, software previous/completion links, window and
+//! status through those named cells. The scheduler list reference records the
+//! handover protocol and the pinned source bodies.
 //!
-//! | Byte offset | Field |
-//! | --- | --- |
-//! | `+0x00` bits 19:0 | Compressed hardware next link; bit 25 is the skip marker; the other upper bits belong to the role allocation |
-//! | `+0x0c`, `+0x10` | Sequence start (raw start plus the scheduler lead) and window duration |
-//! | `+0x38` | Execution status; [`SCHEDULER_ITEM_UNEXECUTED`] until hardware records a result |
-//! | `+0x44`, `+0x48` | Raw start and end of the scheduled window |
-//! | `+0x4c` | Role event byte, role kind byte `+0x4d`, scheduler bytes `+0x4e` and `+0x4f`; `+0x4f` bit 1 marks a deleted item |
-//! | `+0x50` | Full address of the previous item in the list |
-//! | `+0x54` | Full address link of the software completion queue |
-//!
-//! The header performs plain volatile word accesses. It grants no ownership,
-//! ordering or publication authority; callers keep those contracts.
+//! These volatile accesses grant no ownership, ordering or publication
+//! authority; callers retain those contracts.
 
 #![forbid(unsafe_code)]
 
@@ -158,12 +147,6 @@ impl<'item> SchedulerItemHeader<'item> {
         self.layout
             .raw_end()
             .write(BleSchedulerItemRawEnd::from_bits(value));
-    }
-
-    /// Complete control word `+0x4c`.
-    #[cfg(test)]
-    pub(crate) fn control(&self) -> u32 {
-        self.layout.control().read().bits()
     }
 
     pub(crate) fn set_control(&self, value: u32) {

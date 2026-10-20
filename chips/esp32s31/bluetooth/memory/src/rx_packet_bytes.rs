@@ -18,6 +18,10 @@ const REARMED_RESULT: BleRxPacketPrefixResult = BleRxPacketPrefixResult::from_bi
     .with_bits_11_23_opaque(0x1fff)
     .expect("sentinel fits");
 
+/// SOURCE: pinned `memMgmt_3.o` receive allocator's opaque capacity image.
+const RX_CAPACITY: BleRxPacketPrefixByte0004Opaque =
+    BleRxPacketPrefixByte0004Opaque::from_bits(0).with_bits_0_31_opaque(0x0001_0100);
+
 pub(crate) const fn result_not_produced(result: BleRxPacketPrefixResult) -> bool {
     result.bit_0_opaque()
         && result.bit_1_opaque()
@@ -59,12 +63,9 @@ impl RxPacketBytes {
 
     pub(crate) const fn armed() -> Self {
         // SOURCE: pinned DTM RX allocation's capacity and producer/epoch sentinels.
-        const WORDS: [[u8; 4]; 7] = [
+        const PREFIX_CHUNKS: [[u8; size_of::<u32>()]; BleRxPacketPrefix::SIZE / size_of::<u32>()] = [
             [0; 4],
-            BleRxPacketPrefixByte0004Opaque::from_bits(0)
-                .with_bits_0_31_opaque(0x0001_0100)
-                .bits()
-                .to_le_bytes(),
+            RX_CAPACITY.bits().to_le_bytes(),
             [0; 4],
             REARMED_RESULT.bits().to_le_bytes(),
             [0; 4],
@@ -76,11 +77,11 @@ impl RxPacketBytes {
         ];
         let mut storage = Self::zeroed();
         let mut word = 0;
-        while word < WORDS.len() {
+        while word < PREFIX_CHUNKS.len() {
             let mut byte = 0;
-            while byte < WORDS[word].len() {
-                storage.prefix[word * WORDS[word].len() + byte] =
-                    VolatileCell::new(WORDS[word][byte]);
+            while byte < PREFIX_CHUNKS[word].len() {
+                storage.prefix[word * PREFIX_CHUNKS[word].len() + byte] =
+                    VolatileCell::new(PREFIX_CHUNKS[word][byte]);
                 byte += 1;
             }
             word += 1;
@@ -108,11 +109,10 @@ impl RxPacketBytes {
     }
     pub(crate) fn initialize(&self) {
         self.clear();
-        self.update_prefix(|prefix| {
-            prefix.set_byte_0004_opaque(
-                BleRxPacketPrefixByte0004Opaque::from_bits(0).with_bits_0_31_opaque(0x0001_0100),
-            )
-        });
+        self.initialize_fields();
+    }
+    pub(crate) fn initialize_fields(&self) {
+        self.update_prefix(|prefix| prefix.set_byte_0004_opaque(RX_CAPACITY));
         self.rearm();
     }
     pub(crate) fn rearm(&self) {

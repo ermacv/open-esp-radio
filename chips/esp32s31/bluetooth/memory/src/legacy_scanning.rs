@@ -47,12 +47,15 @@ const SCAN_REQUEST_HEADER: u8 = 0x03;
 const SCAN_REQUEST_PAYLOAD_BYTES: usize = 12;
 const SCAN_REQUEST_TX_PACKET_BYTES: usize =
     BLUETOOTH_LE_TX_PACKET_PREFIX_BYTES + SCAN_REQUEST_PAYLOAD_BYTES;
-const SCHEDULER_ITEM_ALLOCATION_PREFIX: u32 = 0x0030_0000;
-/// Item `+0x08` bits 23:20: the kind of scanner item.
-/// SOURCE: pinned role allocation/reset body in the BLE controller-memory reference.
+/// SOURCE: chips/esp32s31/notes/bluetooth-passive-scanning.md, scheduler allocation (bt-lib pin 10c50778).
+const SCHEDULER_ITEM_ALLOCATION_PREFIX: BleSchedulerItemHardwareNext =
+    BleSchedulerItemHardwareNext::ZERO
+        .with_bits_20_21_opaque(0x3)
+        .expect("reviewed field image fits");
+/// SOURCE: chips/esp32s31/notes/bluetooth-passive-scanning.md, allocation/reset profile (bt-lib pin 10c50778).
 const SCHEDULER_ITEM_ALLOCATION_FLAGS_IMAGE: BleSchedulerItemWord001cOpaque =
     BleSchedulerItemWord001cOpaque::ZERO.with_bits_0_31_opaque(0xfdfffff);
-/// SOURCE: pinned role allocation/reset body in the BLE controller-memory reference.
+/// SOURCE: chips/esp32s31/notes/bluetooth-passive-scanning.md, allocation/reset profile (bt-lib pin 10c50778).
 const SCHEDULER_ITEM_EVENT_CLASS_IMAGE: BleSchedulerItemReceiveWait =
     BleSchedulerItemReceiveWait::ZERO.with_value(0x1);
 
@@ -140,7 +143,9 @@ impl ItemStorage {
     ) {
         crate::shared_layout::clear_scheduler_item(&self.layout);
         let header = self.header();
-        header.set_hardware_next_word(SCHEDULER_ITEM_ALLOCATION_PREFIX);
+        self.layout
+            .hardware_next()
+            .write(SCHEDULER_ITEM_ALLOCATION_PREFIX);
         header.link_hardware_next(next_free);
         self.layout
             .context()

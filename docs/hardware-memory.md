@@ -26,7 +26,9 @@ types describe software inputs, not separate hardware layouts. Per-queue
 PLCP1, length-control, power and PTI words use generated register fields.
 BLE buffer headers, RX/TX packet prefixes, scheduler items and contexts,
 link states, PHY environment, resolving list, device table and DF workspace
-also have generated layouts; unassigned fields are positional and opaque.
+also use generated layouts in the controller-memory owner; role reset and
+allocation images are constant generated values built with `with_*`.
+Unassigned fields are positional and opaque.
 The unassigned TX fields and 802.15.4 frame buffers
 retain their existing descriptions, with fields named by offset where their
 meaning is unknown. The PHY's RFPLL codes, frequency-memory records and analog-I2C

@@ -134,6 +134,19 @@ const TX_HEADER: BufferHeaderImage = BufferHeaderImage {
     ..BufferHeaderImage::ZERO
 };
 
+/// SOURCE: pinned connection TX allocation's completed packetless cursor.
+const EMPTY_TX_CURSOR: BufferHeaderImage = BufferHeaderImage {
+    completion: BleBufferHeaderCompletion::ZERO.with_done(true),
+    allocation: BleBufferHeaderAllocation::ZERO
+        .with_llid(1)
+        .expect("reviewed LLID fits"),
+    ..BufferHeaderImage::ZERO
+};
+/// SOURCE: pinned `memMgmt_3.o` common TX packet allocation class and initial state.
+const TX_PACKET_ALLOCATION: BleTxPacketPrefixAllocation = BleTxPacketPrefixAllocation::from_bits(0)
+    .with_class(2)
+    .with_state(0);
+
 impl LeTxBufferHeaderStorage {
     pub(super) const fn new() -> Self {
         Self {
@@ -163,14 +176,7 @@ impl LeTxBufferHeaderStorage {
         .write(&self.layout);
     }
     pub(super) fn initialize_empty_cursor(&self) {
-        BufferHeaderImage {
-            completion: BleBufferHeaderCompletion::ZERO.with_done(true),
-            allocation: BleBufferHeaderAllocation::ZERO
-                .with_llid(1)
-                .expect("reviewed LLID fits"),
-            ..BufferHeaderImage::ZERO
-        }
-        .write(&self.layout);
+        EMPTY_TX_CURSOR.write(&self.layout);
     }
     #[cfg(test)]
     pub(super) fn successor_image(&self) -> u32 {
@@ -365,7 +371,12 @@ impl<const ALLOCATION_BYTES: usize> LeTxPacketStorage<ALLOCATION_BYTES> {
             .try_into()
             .expect("validated allocation holds the prefix");
         let mut prefix = BleTxPacketPrefixMut::new(prefix_bytes);
-        prefix.set_allocation(prefix.allocation().with_class(2).with_state(0));
+        prefix.set_allocation(
+            prefix
+                .allocation()
+                .with_class(TX_PACKET_ALLOCATION.class())
+                .with_state(TX_PACKET_ALLOCATION.state()),
+        );
         prefix.set_pdu_header(BleTxPacketPrefixPduHeader::from_bits(0).with_value(header));
         prefix.set_payload_length(BleTxPacketPrefixPayloadLength::from_bits(0).with_value(length));
         self.bytes[BLUETOOTH_LE_TX_PACKET_PREFIX_BYTES..][..payload.len()].copy_from_slice(payload);
@@ -391,7 +402,12 @@ impl<const ALLOCATION_BYTES: usize> LeTxPacketStorage<ALLOCATION_BYTES> {
             .try_into()
             .expect("validated allocation holds the prefix");
         let mut prefix = BleTxPacketPrefixMut::new(prefix_bytes);
-        prefix.set_allocation(prefix.allocation().with_class(2).with_state(0));
+        prefix.set_allocation(
+            prefix
+                .allocation()
+                .with_class(TX_PACKET_ALLOCATION.class())
+                .with_state(TX_PACKET_ALLOCATION.state()),
+        );
         prefix.set_pdu_header(BleTxPacketPrefixPduHeader::from_bits(0).with_value(pdu[0]));
         prefix.set_payload_length(BleTxPacketPrefixPayloadLength::from_bits(0).with_value(length));
         self.bytes[BLUETOOTH_LE_TX_PACKET_PREFIX_BYTES..][..usize::from(length)]

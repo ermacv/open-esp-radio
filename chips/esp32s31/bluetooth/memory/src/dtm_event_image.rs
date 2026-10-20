@@ -161,7 +161,7 @@ impl DtmLinkStateProfileWord {
     const fn select_direct_test_mode(self) -> Self {
         Self(
             self.0
-                .with_bits_26_27_opaque(3)
+                .with_bits_26_27_opaque(DTM_RESET.profile_word_14.0.bits_26_27_opaque())
                 .expect("reviewed DTM profile fits"),
         )
     }
@@ -273,14 +273,14 @@ impl DtmLinkStateReviewedWords {
             Some(head) => head.apply_to_link_state_word(self.word_00),
             None => self.word_00.with_header(None).expect("empty link fits"),
         }
-        .with_max_tx_octets(255)
-        .with_queue_ready(false)
-        .with_valid(true);
+        .with_max_tx_octets(DTM_RESET.word_00.max_tx_octets())
+        .with_queue_ready(DTM_RESET.word_00.queue_ready())
+        .with_valid(DTM_RESET.word_00.valid());
         self.word_08 = match rx_tail {
             Some(tail) => tail.apply_to_link_state_word(self.word_08),
             None => self.word_08.with_header(None).expect("empty link fits"),
         }
-        .with_unconsumed_limit(255);
+        .with_unconsumed_limit(DTM_RESET.word_08.unconsumed_limit());
         self.profile_word_14 = self.profile_word_14.select_direct_test_mode();
         self.word_30 = self
             .word_30
@@ -300,8 +300,8 @@ impl DtmLinkStateReviewedWords {
             .expect("projected policy fits")
             .with_ready(self.word_50.ready() || config.ready())
             .with_bit_31_opaque(self.word_50.bit_31_opaque() || config.bit_31_opaque());
-        self.with_crc_init(LeCrcInit::LE_PRESET)
-            .with_access_address(LeAccessAddress::DIRECT_TEST_MODE)
+        self.with_crc_init(DTM_RESET.crc_init)
+            .with_access_address(DTM_RESET.access_address)
     }
 
     /// Return the transmit-power index a recurring event copies.
@@ -539,3 +539,24 @@ const DTM_RECEIVER_INITIAL: BleSchedulerItemReceiveWait = BleSchedulerItemReceiv
 /// SOURCE: pinned `dtm_4.o` recurring receiver event configuration.
 const DTM_RECEIVER_RECURRING: BleSchedulerItemReceiveWait =
     BleSchedulerItemReceiveWait::ZERO.with_value(0x1);
+
+/// SOURCE: pinned `dtm_4.o::sym_dtm_7gOGApwmDG1TxZOfQhrh`, reset profile before dynamic links, power and radio policy.
+const DTM_RESET: DtmLinkStateReviewedWords = DtmLinkStateReviewedWords {
+    word_00: BleLinkStateTxPath::ZERO
+        .with_max_tx_octets(0xff)
+        .with_valid(true),
+    word_08: BleLinkStateRxPath::ZERO.with_unconsumed_limit(0xff),
+    word_30: BleLinkStateSequencePolicy::ZERO
+        .with_bits_9_12_opaque(0xf)
+        .expect("reviewed field image fits"),
+    word_34: BleLinkStateEventSpan::ZERO,
+    word_50: BleLinkStateDirectionFinding::ZERO,
+    word_60: BleLinkStateEvent::ZERO,
+    profile_word_14: DtmLinkStateProfileWord(
+        BleLinkStatePacketPolicy::ZERO
+            .with_bits_26_27_opaque(0x3)
+            .expect("reviewed field image fits"),
+    ),
+    crc_init: LeCrcInit::LE_PRESET,
+    access_address: LeAccessAddress::DIRECT_TEST_MODE,
+};

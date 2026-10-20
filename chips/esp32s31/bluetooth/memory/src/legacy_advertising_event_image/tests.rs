@@ -110,3 +110,28 @@ fn only_a_follower_may_start_as_soon_as_its_predecessor_ends() {
         LegacyAdvertisingItemPosition::Follower
     );
 }
+
+#[test]
+fn reset_retains_the_previous_upper_pointer_lane_and_opaque_event_lanes() {
+    let mut initial = zero_link_state();
+    initial.word_00 = BleLinkStateTxPath::from_bits(
+        ControllerSramLinkAddress::new(0x2f04_2000)
+            .expect("previous bound cursor")
+            .compressed_image(),
+    );
+    initial.word_60 = BleLinkStateEvent::ZERO.with_bits_16_31_opaque(0xa5a5);
+    let result = initial.reset(
+        ControllerSramLinkAddress::new(0x2f00_1000).expect("reset TX header"),
+        LegacyAdvertisingOwnAddress::Public,
+        LeTxPower::from_dbm(9).expect("provider power"),
+    );
+    assert_eq!(result.word_00.header_address(), Some(0x2f04_1000));
+    assert_eq!(
+        result.word_60.bits_16_31_opaque(),
+        initial.word_60.bits_16_31_opaque()
+    );
+    assert_eq!(
+        result.word_60.power_index(),
+        LeTxPower::from_dbm(9).expect("provider power").index()
+    );
+}

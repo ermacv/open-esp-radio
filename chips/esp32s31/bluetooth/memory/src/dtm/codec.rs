@@ -48,23 +48,23 @@ pub const BLUETOOTH_DTM_RX_PACKET_BYTES: usize =
 type DtmTxPacketAddress = LeTxPacketAddress<BLUETOOTH_DTM_TX_PACKET_BYTES>;
 
 const RX_PACKET_LAST_ALIGNED_OFFSET: u32 = ((BLUETOOTH_DTM_RX_PACKET_BYTES as u32 - 1) / 4) * 4;
-/// SOURCE: pinned role allocation/reset body in the BLE controller-memory reference.
+/// SOURCE: chips/esp32s31/notes/bluetooth-direct-test-mode.md, allocation/reset profile (bt-lib pin 10c50778).
 const LINK_STATE_ALLOCATION_CONFIG_IMAGE: BleLinkStateSequencePolicy =
     BleLinkStateSequencePolicy::ZERO
         .with_bits_9_12_opaque(0xf)
         .expect("reviewed field image fits");
-/// SOURCE: pinned role allocation/reset body in the BLE controller-memory reference.
+/// SOURCE: chips/esp32s31/notes/bluetooth-direct-test-mode.md, allocation/reset profile (bt-lib pin 10c50778).
 const SCHEDULER_ITEM_ALLOCATION_PREFIX_IMAGE: BleSchedulerItemHardwareNext =
     BleSchedulerItemHardwareNext::ZERO
         .with_bits_20_21_opaque(0x3)
         .expect("reviewed field image fits");
-/// SOURCE: pinned role allocation/reset body in the BLE controller-memory reference.
+/// SOURCE: chips/esp32s31/notes/bluetooth-direct-test-mode.md, allocation/reset profile (bt-lib pin 10c50778).
 const SCHEDULER_ITEM_ALLOCATION_FLAGS_IMAGE: BleSchedulerItemWord001cOpaque =
     BleSchedulerItemWord001cOpaque::ZERO.with_bits_0_31_opaque(0xffdfffff);
 /// SOURCE: pinned `libble_app.a[dtm_4.o]::sym_dtm_qzyGhbH1fEoUEmtalnva`
 /// (`r_ble_lll_dtm_alloc_memory`) stores `0x8421` in the low twenty bits,
 /// four five-bit coexistence priority lanes of one each.
-/// SOURCE: pinned role allocation/reset body in the BLE controller-memory reference.
+/// SOURCE: chips/esp32s31/notes/bluetooth-direct-test-mode.md, allocation/reset profile (bt-lib pin 10c50778).
 const SCHEDULER_ITEM_POSITIONAL_24_IMAGE: BleSchedulerItemCoexistencePriority =
     BleSchedulerItemCoexistencePriority::ZERO
         .with_lane_0(0x1)
@@ -256,6 +256,15 @@ pub(super) struct DtmRxBufferHeaderStorage {
     pub(super) layout: BleBufferHeader,
 }
 
+/// SOURCE: pinned `memMgmt_3.o`/`dtm_4.o` common RX-header allocation.
+const DTM_RX_HEADER: crate::shared_layout::BufferHeaderImage =
+    crate::shared_layout::BufferHeaderImage {
+        pdu_target: BleBufferHeaderPduTarget::ZERO
+            .with_bits_20_31_opaque(0x808)
+            .expect("reviewed prefix fits"),
+        ..crate::shared_layout::BufferHeaderImage::ZERO
+    };
+
 impl DtmRxBufferHeaderStorage {
     const fn new() -> Self {
         Self {
@@ -271,13 +280,7 @@ impl DtmRxBufferHeaderStorage {
             ));
     }
     fn initialize_rx_swap_reserve(&self) {
-        crate::shared_layout::BufferHeaderImage {
-            pdu_target: BleBufferHeaderPduTarget::ZERO
-                .with_bits_20_31_opaque(0x808)
-                .expect("reviewed prefix fits"),
-            ..crate::shared_layout::BufferHeaderImage::ZERO
-        }
-        .write(&self.layout);
+        DTM_RX_HEADER.write(&self.layout);
     }
     fn rx_successor_link(&self) -> Option<DtmRxHeaderSuccessorLink> {
         DtmRxHeaderSuccessorLink::from_image(self.layout.next().read().address())
@@ -421,7 +424,7 @@ impl DtmRxPacketStorage {
         self.bytes.rearm();
     }
     fn initialize_reviewed_allocation_fields(&self) {
-        self.bytes.initialize();
+        self.bytes.initialize_fields();
     }
     fn observe_after_fenced_completion(
         &self,

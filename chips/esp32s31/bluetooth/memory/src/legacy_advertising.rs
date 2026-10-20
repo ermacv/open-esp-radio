@@ -45,12 +45,16 @@ pub const BLUETOOTH_LEGACY_ADVERTISING_TX_PACKET_BYTES: usize =
     BLUETOOTH_LE_TX_PACKET_PREFIX_BYTES + BLUETOOTH_LEGACY_ADVERTISING_MAX_PAYLOAD_BYTES;
 
 const ITEMS: usize = BLUETOOTH_LEGACY_ADVERTISING_SCHEDULER_ITEM_CAPACITY;
-/// SOURCE: pinned role allocation/reset body in the BLE controller-memory reference.
+/// SOURCE: chips/esp32s31/notes/bluetooth-legacy-advertising.md, allocation/reset profile (bt-lib pin 10c50778).
 const LINK_STATE_ALLOCATION_CONFIG_IMAGE: BleLinkStateSequencePolicy =
     BleLinkStateSequencePolicy::ZERO
         .with_bits_9_12_opaque(0xf)
         .expect("reviewed field image fits");
-const SCHEDULER_ITEM_ALLOCATION_PREFIX_IMAGE: u32 = 0x0010_0000;
+/// SOURCE: chips/esp32s31/notes/bluetooth-legacy-advertising.md, scheduler allocation (bt-lib pin 10c50778).
+const SCHEDULER_ITEM_ALLOCATION_PREFIX_IMAGE: BleSchedulerItemHardwareNext =
+    BleSchedulerItemHardwareNext::ZERO
+        .with_bits_20_21_opaque(0x1)
+        .expect("reviewed field image fits");
 
 type AdvertisingTxPacketAddress = LeTxPacketAddress<BLUETOOTH_LEGACY_ADVERTISING_TX_PACKET_BYTES>;
 type AdvertisingTxPacketLength =
@@ -181,8 +185,9 @@ impl ItemStorage {
         number: u16,
     ) {
         crate::shared_layout::clear_scheduler_item(&self.layout);
-        self.header()
-            .set_hardware_next_word(SCHEDULER_ITEM_ALLOCATION_PREFIX_IMAGE);
+        self.layout
+            .hardware_next()
+            .write(SCHEDULER_ITEM_ALLOCATION_PREFIX_IMAGE);
         self.layout
             .context()
             .write(BleSchedulerItemContext::from_bits(

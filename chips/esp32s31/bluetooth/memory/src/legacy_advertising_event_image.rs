@@ -171,7 +171,18 @@ impl LegacyAdvertisingLinkStateWords {
         own_address: LegacyAdvertisingOwnAddress,
         default_tx_power: LeTxPower,
     ) -> Self {
-        self.word_00 = BleLinkStateTxPath::from_bits(tx_header.compressed_image())
+        // SOURCE: the reset's high-halfword transform retains the previous
+        // pointer index's upper byte and ORs the bound header into it.
+        // Operate on the decoded field, independently of its location in SRAM.
+        let previous_index = self.word_00.header().to_le_bytes();
+        let next_index = tx_header.compressed_image().to_le_bytes();
+        let header_index = u32::from_le_bytes([
+            next_index[0],
+            next_index[1],
+            previous_index[2] | next_index[2],
+            next_index[3],
+        ]);
+        self.word_00 = BleLinkStateTxPath::from_bits(header_index)
             .with_max_tx_octets(255)
             .with_queue_ready(true)
             .with_bits_29_30_opaque(self.word_00.bits_29_30_opaque())
@@ -235,7 +246,6 @@ impl LegacyAdvertisingLinkStateWords {
             .expect("reviewed radio policy fits");
         self.word_60 = self
             .word_60
-            .with_bits_16_31_opaque(0)
             .with_priority(DEFAULT_ADVERTISING_PRIORITY)
             .with_power_index(default_tx_power.index());
         self
