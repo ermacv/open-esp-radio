@@ -1,5 +1,6 @@
 //! Forced due tracking in the diagnostic image only, with bounded coarse edges.
 mod recorder;
+mod sar_tails;
 use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_phy::{
     PhyTargetObserver,
@@ -45,13 +46,16 @@ impl Hold {
     }
 }
 
-pub struct Observer(pub recorder::Recorder);
+pub struct Observer(pub recorder::Recorder, pub sar_tails::Tails);
 impl Observer {
     pub fn new(tick: u8) -> Self {
-        Self(recorder::Recorder::new(tick))
+        Self(recorder::Recorder::new(tick), sar_tails::Tails::default())
     }
 }
 impl PhyTargetObserver for &mut Observer {
+    fn tx_sar_wait(&mut self, elapsed: u64, observations: u16, ready: bool) {
+        self.1.observe(elapsed, observations, ready);
+    }
     fn tracking_operation(&mut self, operation: Operation, event: Event) {
         let operation = match operation {
             Operation::Tracking => HoldOperation::Tracking,

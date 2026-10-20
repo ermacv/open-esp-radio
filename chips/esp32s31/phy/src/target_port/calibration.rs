@@ -691,23 +691,30 @@ fn terminal_event<T, E>(result: &Result<T, E>) -> crate::tracking::observation::
     }
 }
 
-/// Execute the complete TX-DC/PWDET root as one vendor-shaped blocking
-/// transaction, including measurement and restoration. The caller retains
-/// physical access until terminal completion. Returning a target error or a
+/// Execute the complete TX-DC/PWDET root as one admitted transaction,
+/// including measurement and restoration. The caller retains physical access
+/// across SAR timer waits until terminal completion. Returning a target error or a
 /// typed failed action does not establish a safe RF state.
 #[inline(never)]
-pub fn tx_dc_pwdet_init<D: PhyShortDelay, O: PhyTargetObserver>(
+pub async fn tx_dc_pwdet_init<D: PhyShortDelay, O: PhyTargetObserver>(
     child: &mut crate::tx::dc_power_detector::PhyTxDcPwdetTransition,
     registers: &mut impl SharedPhyContext,
     observer: &core::cell::RefCell<&mut O>,
-    clock: &impl oer_time::Clock,
+    clock: &impl oer_time::Timer,
 ) -> Result<(), PhyTargetPortError> {
-    child.execute_target_direct(
-        clock,
-        registers,
-        |scope, micros| tx_settle::<D, O>(observer, clock, scope, micros),
-        |ready| observer.borrow_mut().tx_sar_ready(ready),
-    )
+    child
+        .execute_target_direct(
+            clock,
+            registers,
+            |scope, micros| tx_settle::<D, O>(observer, clock, scope, micros),
+            |ready| observer.borrow_mut().tx_sar_ready(ready),
+            |elapsed, observations, ready| {
+                observer
+                    .borrow_mut()
+                    .tx_sar_wait(elapsed, observations, ready)
+            },
+        )
+        .await
 }
 
 fn tx_settle<D: PhyShortDelay, O: PhyTargetObserver>(

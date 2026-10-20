@@ -224,6 +224,8 @@ pub trait PhyTargetObserver {
     ) {
     }
     fn tx_sar_ready(&mut self, _ready: bool) {}
+    /// One completed or expired readiness wait, measured after the 2-us settle.
+    fn tx_sar_wait(&mut self, _elapsed_micros: u64, _observations: u16, _ready: bool) {}
     /// Emitted only after the thermal child restores control and commits state.
     fn rfpll_completed(&mut self, _observation: crate::tracking::rfpll::Observation) {}
     /// Emitted only after the sensor child commits its observed temperature.
@@ -1760,7 +1762,7 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
         Err(PhyTargetPortError::RfOperationLimit)
     }
 
-    fn run_calibration_tx_dc_pwdet<O: PhyTargetObserver>(
+    async fn run_calibration_tx_dc_pwdet<O: PhyTargetObserver>(
         &self,
         mut child: PhyCalibrationTxDcPwdetTransition,
         registers: &mut impl SharedPhyContext,
@@ -1771,7 +1773,8 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
             registers,
             observer,
             self.timer,
-        )?;
+        )
+        .await?;
         child
             .commit()
             .map_err(|_| PhyTargetPortError::UnexpectedBinding)
@@ -2076,13 +2079,15 @@ impl<
                 observer
                     .borrow_mut()
                     .tracking_operation(Operation::TxDcPwdet, Event::PollStarted);
-                let result = TargetCompleter::<D, T>::new(self.timer).run_calibration_tx_dc_pwdet(
-                    transition
-                        .begin_tx_dc_pwdet()
-                        .map_err(|_| PhyTargetPortError::UnexpectedBinding)?,
-                    self.registers,
-                    &observer,
-                );
+                let result = TargetCompleter::<D, T>::new(self.timer)
+                    .run_calibration_tx_dc_pwdet(
+                        transition
+                            .begin_tx_dc_pwdet()
+                            .map_err(|_| PhyTargetPortError::UnexpectedBinding)?,
+                        self.registers,
+                        &observer,
+                    )
+                    .await;
                 observer
                     .borrow_mut()
                     .tracking_operation(Operation::TxDcPwdet, Event::PollReady);
