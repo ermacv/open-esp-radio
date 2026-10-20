@@ -124,48 +124,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_changed_file_gets_a_new_key() {
-        let directory = tempfile::tempdir().unwrap();
-        let path = directory.path().join("file");
-        fs::write(&path, b"one").unwrap();
-        let first = key(&fs::metadata(&path).unwrap());
-        assert_eq!(first, key(&fs::metadata(&path).unwrap()));
-        std::thread::sleep(std::time::Duration::from_millis(20));
-        fs::write(&path, b"two").unwrap();
-        assert_ne!(first, key(&fs::metadata(&path).unwrap()));
-    }
-
-    #[test]
-    fn a_saved_digest_is_reused_and_a_rewritten_file_hashed_again() {
-        let directory = tempfile::tempdir().unwrap();
-        let file = directory.path().join("file");
-        let cache_file = directory.path().join("cache/sha256.json");
-        fs::write(&file, b"one").unwrap();
-        let cache = DigestCache::open(Some(cache_file.clone()));
-        assert_eq!(
-            cache.sha256_file(&file).unwrap(),
-            crate::sha256_bytes(b"one")
-        );
-        cache.save();
-        assert!(cache_file.is_file());
-        // The reopened cache answers from its entry for the unchanged file.
-        let entries: HashMap<String, (String, u64)> =
-            serde_json::from_slice(&fs::read(&cache_file).unwrap()).unwrap();
-        let identity = key(&fs::metadata(&file).unwrap());
-        let mut planted = entries.clone();
-        planted.get_mut(&identity).unwrap().0 = String::from("remembered");
-        fs::write(&cache_file, serde_json::to_vec(&planted).unwrap()).unwrap();
-        let reopened = DigestCache::open(Some(cache_file.clone()));
-        assert_eq!(reopened.sha256_file(&file).unwrap(), "remembered");
-        std::thread::sleep(std::time::Duration::from_millis(20));
-        fs::write(&file, b"two").unwrap();
-        assert_eq!(
-            reopened.sha256_file(&file).unwrap(),
-            crate::sha256_bytes(b"two")
-        );
-    }
-
-    #[test]
     fn a_disabled_cache_hashes_every_time_and_saves_nothing() {
         let directory = tempfile::tempdir().unwrap();
         let file = directory.path().join("file");

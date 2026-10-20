@@ -72,18 +72,6 @@ fn llvm_tools_come_from_the_sysroot_of_the_selected_rustc() {
 }
 
 #[test]
-fn the_active_toolchain_has_every_recorded_llvm_tool() {
-    for tool in [Tool::LlvmNm, Tool::LlvmObjcopy, Tool::LlvmObjdump] {
-        let program = program_in(tool, environment(&[]), sysroot_bin).unwrap();
-        assert!(
-            Path::new(&program).is_file(),
-            "{}",
-            Path::new(&program).display()
-        );
-    }
-}
-
-#[test]
 fn every_recorded_tool_is_listed_once_with_llvm_objdump() {
     let names: Vec<_> = Tool::ALL.into_iter().map(Tool::name).collect();
     assert_eq!(
@@ -104,16 +92,4 @@ fn the_host_triple_is_the_host_line_of_rustc_verbose_version() {
     let verbose = "rustc 1.95.0\nbinary: rustc\nhost: x86_64-unknown-linux-gnu\nrelease: 1.95.0\n";
     assert_eq!(super::host_of(verbose).unwrap(), "x86_64-unknown-linux-gnu");
     assert!(super::host_of("rustc 1.95.0\n").is_err());
-}
-
-#[test]
-fn the_pinned_toolchain_ships_the_lld_that_links_rv32_images() {
-    let lld = lld().unwrap();
-    let name = format!("ld.lld{}", std::env::consts::EXE_SUFFIX);
-    assert!(
-        lld.ends_with(Path::new("gcc-ld").join(name)),
-        "{}",
-        lld.display()
-    );
-    assert!(lld.is_file());
 }

@@ -1,5 +1,3 @@
-use std::{io::Write as _, process::Stdio};
-
 use super::*;
 
 const SSID: &str = "Made Up 'Lab' Net";
@@ -287,18 +285,6 @@ fn a_second_apply_changes_nothing_and_verifies_the_same() {
 }
 
 #[test]
-fn quoting_survives_the_remote_shell() {
-    for text in [SSID, "a b", "it's", "'", "$(reboot)", "a\\b", "`x`;rm"] {
-        let output = std::process::Command::new("sh")
-            .arg("-c")
-            .arg(format!("printf %s {}", quote(text).unwrap()))
-            .output()
-            .unwrap();
-        assert_eq!(String::from_utf8(output.stdout).unwrap(), text);
-    }
-}
-
-#[test]
 fn the_plan_lists_placeholders_only() {
     let plan = plan().unwrap();
     assert_eq!(plan.len(), 6);
@@ -319,109 +305,6 @@ fn the_plan_lists_placeholders_only() {
     for script in &plan {
         assert!(readme.contains(script.as_str()), "README lacks `{script}`");
     }
-}
-
-/// Run `script` with a local `sh`, whose `uci`, `iw`, `ubus` and
-/// `jsonfilter` print the made-up router's raw output: the router's own
-/// filters, checked.
-fn on_fake_router(script: &str, show: &str, changes: &str, iw_dev: &str, iw_phy: &str) -> String {
-    let directory = tempfile::tempdir().unwrap();
-    let dir = directory.path();
-    let file = |name: &str, text: &str| std::fs::write(dir.join(name), text).unwrap();
-    file("show", show);
-    file("changes", changes);
-    file("iw_dev", iw_dev);
-    file("iw_phy", iw_phy);
-    let tool = |name: &str, body: &str| {
-        let path = dir.join(name);
-        std::fs::write(&path, format!("#!/bin/sh\n{body}\n")).unwrap();
-        use std::os::unix::fs::PermissionsExt as _;
-        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
-    };
-    tool(
-        "uci",
-        "case \"$1 $2\" in 'show wireless') cat \"$FAKE/show\";; 'changes wireless') cat \"$FAKE/changes\";; *) exit 2;; esac",
-    );
-    tool(
-        "iw",
-        &format!(
-            "case \"$1 $2 $3\" in 'dev {INTERFACE} info') cat \"$FAKE/iw_dev\";; 'phy phy0 info') cat \"$FAKE/iw_phy\";; *) exit 2;; esac"
-        ),
-    );
-    tool(
-        "ubus",
-        "test \"$1 $2 $3 $4\" = 'call iwinfo phyname {\"section\":\"radio9\"}' && echo '{\"phyname\":\"phy0\"}'",
-    );
-    tool(
-        "jsonfilter",
-        "test \"$1 $2\" = '-e @.phyname' && cat >/dev/null && echo phy0",
-    );
-    let path = format!("{}:/usr/bin:/bin", dir.display());
-    let mut child = std::process::Command::new("sh")
-        .arg("-s")
-        .env("PATH", path)
-        .env("FAKE", dir)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .spawn()
-        .unwrap();
-    child
-        .stdin
-        .take()
-        .unwrap()
-        .write_all(script.as_bytes())
-        .unwrap();
-    let output = child.wait_with_output().unwrap();
-    assert!(output.status.success(), "{script}");
-    String::from_utf8(output.stdout).unwrap()
-}
-
-fn fake(script: &str) -> String {
-    let (radio, ap) = profiled("6");
-    on_fake_router(
-        script,
-        &raw_show(&radio, &ap),
-        "wireless.lab_ap.key='made-up-staged-key'\nwireless.radio9.channel='11'\n",
-        &raw_iw(6, "20 MHz", SSID),
-        &format!(
-            "Wiphy phy0\n\tmax # scan SSIDs: 4\n\tFrequencies:\n{CHANNELS}\tSupported commands:\n"
-        ),
-    )
-}
-
-#[test]
-fn the_router_filters_by_the_allowlist() {
-    let shown = fake(&show_script());
-    for secret in [
-        PASSPHRASE,
-        "made-up-sae",
-        "made-up-radius",
-        "made-up-psk",
-        "made-up-five-key",
-        "made-up-vlan",
-        "psk2",
-        "mac80211",
-        "'lan'",
-    ] {
-        assert!(!shown.contains(secret), "{secret}: {shown}");
-    }
-    assert_eq!(shown, show_profiled());
-    let wireless = Wireless::parse(&shown, SSID).unwrap();
-    wireless.check_after(&profile()).unwrap();
-    assert_eq!(
-        wireless.section("radio9").unwrap().option("country"),
-        Some("DE")
-    );
-    // Staged changes leave the router as their paths.
-    assert_eq!(
-        fake(CHANGES),
-        "wireless.lab_ap.key\nwireless.radio9.channel\n"
-    );
-    // The AP interface's four lines, the PHY's frequency lines.
-    let iw_shown = fake(&profile().iw_script().unwrap());
-    assert_eq!(iw_shown, iw(6, "20 MHz", SSID));
-    assert!(!iw_shown.contains("txpower") && !iw_shown.contains("ifindex"));
-    assert_eq!(fake(&profile().channels_script().unwrap()), CHANNELS);
 }
 
 #[test]

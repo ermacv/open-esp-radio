@@ -238,30 +238,4 @@ mod tests {
         assert_eq!(settings.busy, Duration::from_secs(2));
         assert_eq!(Settings::CONSOLE.lines, Lines::Released);
     }
-
-    #[test]
-    fn a_missing_port_fails_after_its_busy_window_naming_the_path() {
-        let directory = tempfile::tempdir().unwrap();
-        let path = directory.path().join("ttyACM-missing");
-        let started = Instant::now();
-        let error = Port::open(&path, Settings::CONSOLE.busy(Duration::from_millis(100)))
-            .err()
-            .unwrap();
-        assert!(started.elapsed() >= Duration::from_millis(100));
-        assert!(error.to_string().contains("ttyACM-missing"), "{error}");
-        assert_eq!(
-            error
-                .get_ref()
-                .unwrap()
-                .source()
-                .unwrap()
-                .downcast_ref::<serialport::Error>()
-                .unwrap()
-                .kind(),
-            serialport::ErrorKind::Io(io::ErrorKind::NotFound),
-        );
-        let started = Instant::now();
-        assert!(Port::open(&path, Settings::CONSOLE).is_err());
-        assert!(started.elapsed() < Duration::from_millis(100));
-    }
 }

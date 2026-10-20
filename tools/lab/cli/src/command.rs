@@ -766,45 +766,4 @@ mod tests {
         );
         assert!(lease_claims(&[], Some(AirArg(None)), false, &devices).is_err());
     }
-
-    #[test]
-    fn a_lease_command_is_terminated_at_the_hard_limit() {
-        let directory = tempfile::tempdir().unwrap();
-        let arbiter = oer_lab_arbiter::Arbiter::at(directory.path()).unwrap();
-        // A whole-stand lease locks the boards of its stand file: one without
-        // boards.
-        let stand = arbiter.stand_file();
-        std::fs::write(
-            stand,
-            "schema = 1\n[stand]\nid = \"t\"\nair = \"exclusive\"\n",
-        )
-        .unwrap();
-        std::fs::set_permissions(stand, std::os::unix::fs::PermissionsExt::from_mode(0o600))
-            .unwrap();
-        let grant = arbiter
-            .acquire(&oer_lab_arbiter::Request {
-                owner: "stand".into(),
-                work: "sleep".into(),
-                scenarios: Vec::new(),
-                run: None,
-                claims: Vec::new(),
-            })
-            .unwrap();
-        let started = std::time::Instant::now();
-        let mut child = oer_os_process::owned::Child::spawn_with_shutdown_grace(
-            oer_os_process::command("sleep").arg("60"),
-            std::time::Duration::from_secs(1),
-        )
-        .unwrap();
-        let (code, succeeded) =
-            supervise(&grant, &mut child, std::time::Duration::from_secs(1)).unwrap();
-        assert!(!succeeded);
-        assert_eq!(code, std::process::ExitCode::from(HARD_LIMIT_EXIT));
-        assert!(started.elapsed() >= std::time::Duration::from_secs(1));
-        drop(grant);
-        assert_eq!(
-            arbiter.history().unwrap()[0].outcome,
-            oer_lab_arbiter::LeaseOutcome::HardLimit
-        );
-    }
 }

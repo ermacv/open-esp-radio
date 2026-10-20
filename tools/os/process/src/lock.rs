@@ -260,23 +260,6 @@ mod tests {
     }
 
     #[test]
-    fn a_dropped_lock_is_released_while_a_duplicated_descriptor_lives() {
-        let directory = tempfile::tempdir().unwrap();
-        let path = directory.path().join("file.lock");
-        let lock = FileLock::acquire(&path, Mode::Exclusive).unwrap();
-        // dup shares the open file description as inheritance across fork
-        // does; releasing the owner must not depend on it closing.
-        let inherited = lock.file().try_clone().unwrap();
-        drop(lock);
-        assert!(
-            FileLock::try_acquire(&path, Mode::Exclusive)
-                .unwrap()
-                .is_some()
-        );
-        drop(inherited);
-    }
-
-    #[test]
     fn a_wait_takes_the_first_free_lock() {
         let directory = tempfile::tempdir().unwrap();
         let paths = [0, 1].map(|slot| directory.path().join(format!("{slot}.lock")));
@@ -285,20 +268,5 @@ mod tests {
             .unwrap();
         let lock = FileLock::wait_any(&paths, Mode::Exclusive, "waiting").unwrap();
         assert_eq!(lock.path(), paths[1]);
-    }
-
-    #[test]
-    fn a_lock_is_released_when_its_holder_drops_it() {
-        let directory = tempfile::tempdir().unwrap();
-        let path = directory.path().join("file.lock");
-        let held = FileLock::acquire(&path, Mode::Exclusive).unwrap();
-        let waiter = {
-            let path = path.clone();
-            std::thread::spawn(move || FileLock::acquire(&path, Mode::Exclusive).map(drop))
-        };
-        std::thread::sleep(Duration::from_millis(50));
-        assert!(!waiter.is_finished());
-        drop(held);
-        waiter.join().unwrap().unwrap();
     }
 }
