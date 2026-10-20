@@ -88,6 +88,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             &facts,
             target.into(),
             Some(CallAbi::RiscvInteger),
+            &[],
             &memory,
             &mut control,
         )?;

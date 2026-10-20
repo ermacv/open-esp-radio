@@ -59,7 +59,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         add_targets(transfer.target, &mut pending);
     }
     let mut seen = BTreeSet::new();
-    let mut writes = Vec::new();
+    let mut captures = Vec::new();
     while let Some(target) = pending.pop() {
         if !seen.insert(target) {
             continue;
@@ -76,27 +76,13 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             true,
             &mut control,
         )?;
-        let facts = FunctionIndex::new(&records, RecordPolicy::Canonical, &memory, &mut control)?;
-        let summary = function_writes(
-            &facts,
-            target.into(),
-            Some(CallAbi::RiscvInteger),
-            &memory,
-            &mut control,
-        )?;
-        println!(
-            "callee\t{target:#010x}\t{}\tclosed={}\tunknown-effects={}",
-            function.label(),
-            summary.closed_graph,
-            summary.has_unknown_memory_effects()
-        );
         if let Some(facts) = analysis.functions.get(&target) {
             println!(
                 "stack-facts\t{target:#010x}\tframe={:?}\tsource={:?}\ttransfers={:?}",
                 facts.frame, facts.source, facts.transfers
             );
         }
-        for record in facts.records() {
+        for record in records.iter() {
             match record {
                 FunctionRecord::Instruction {
                     offset,
@@ -116,10 +102,17 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
                 }
                 FunctionRecord::Value {
                     offset,
-                    register: 2,
+                    register,
                     value,
                     ..
-                } => println!("sp-write\t{offset:#010x}\t{value:?}"),
+                } => println!("register-write\t{offset:#010x}\t{register}\t{value:?}"),
+                FunctionRecord::CallInputs { offset, registers } => {
+                    println!("rom-inputs\t{offset:#010x}\t{registers:?}");
+                }
+                FunctionRecord::Edge { .. } => println!("rom-edge\t{target:#010x}\t{record:?}"),
+                FunctionRecord::SemanticGap { offset, reason } => {
+                    println!("rom-gap\t{offset:#010x}\t{reason:?}");
+                }
                 FunctionRecord::MemoryAccess {
                     offset,
                     access,
@@ -130,11 +123,37 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
                 _ => (),
             }
         }
+        captures.push((target, function, records));
+    }
+    // Capture each function once. Supply already available summaries to the
+    // same local summarizer; it independently limits composition to one hop.
+    let mut writes = Vec::new();
+    for (target, function, records) in captures.iter().rev() {
+        let facts = FunctionIndex::new(records, RecordPolicy::Canonical, &memory, &mut control)?;
+        let available: Vec<_> = writes.iter().collect();
+        let summary = function_writes(
+            &facts,
+            u64::from(*target),
+            Some(CallAbi::RiscvInteger),
+            &available,
+            &memory,
+            &mut control,
+        )?;
+        println!(
+            "callee\t{target:#010x}\t{}\tclosed={}\tunknown-effects={}",
+            function.label(),
+            summary.closed_graph,
+            summary.has_unknown_memory_effects()
+        );
+        println!("tail-proof\t{target:#010x}\t{:?}", summary.tail);
         for write in summary.writes.iter() {
-            println!("rom-write\t{:#010x}\t{write:?}", write.site);
+            println!("rom-write\t{:#010x}\t{target:#010x}\t{write:?}", write.site);
         }
         for barrier in summary.barriers.iter() {
-            println!("rom-barrier\t{:#010x}\t{:?}", barrier.site, barrier.kind);
+            println!(
+                "rom-barrier\t{:#010x}\t{target:#010x}\t{barrier:?}",
+                barrier.site
+            );
         }
         writes.push(summary);
     }
@@ -152,8 +171,11 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         "preserves\t{site:#010x}\tslot={slot}\t{}",
         applied.preserves_stack_word(caller.address.into(), slot, &mut control)?
     );
+    for write in applied.writes.iter() {
+        println!("call-write\t{:#010x}\t{write:?}", write.write.site);
+    }
     for barrier in applied.barriers.iter() {
-        println!("call-barrier\t{:#010x}\t{:?}", barrier.site, barrier.kind);
+        println!("call-barrier\t{:#010x}\t{barrier:?}", barrier.site);
     }
     let calls = stack_calls(
         &index,
@@ -178,6 +200,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             facts,
             caller.address.into(),
             Some(CallAbi::RiscvInteger),
+            &[],
             &memory,
             &mut control,
         )?;

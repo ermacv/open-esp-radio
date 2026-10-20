@@ -6,6 +6,32 @@
 //! alias, publication, return-order or later-load proof is inferred here.
 use oer_analysis_riscv_model::*;
 
+mod tail;
+
+/// A machine-proved, state-preserving tail transfer. Composition is bounded
+/// to this one hop; the target's local expression identities remain its own.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct TailTransfer {
+    pub entry: u64,
+    pub site: u64,
+    pub target: u64,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct WriteOrigin {
+    /// Owner of the original instruction and its expression identities.
+    pub function: u64,
+    pub tail: Option<TailTransfer>,
+}
+impl WriteOrigin {
+    fn local(function: u64) -> Self {
+        Self {
+            function,
+            tail: None,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum WriteBase {
     Unknown,
@@ -134,6 +160,7 @@ pub enum WriteProof {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct FunctionWrite {
+    pub origin: WriteOrigin,
     pub site: u64,
     pub address: WriteValue,
     pub value: WriteValue,
@@ -154,9 +181,12 @@ pub enum WriteBarrierKind {
     ExternalTransfer,
     UnknownCallee,
     UnknownAbi,
+    TailCycle,
+    TailChain,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct WriteBarrier {
+    pub origin: WriteOrigin,
     pub site: u64,
     pub kind: WriteBarrierKind,
 }
@@ -165,13 +195,19 @@ pub struct FunctionWrites<'m> {
     pub entry: u64,
     pub abi: Option<CallAbi>,
     pub closed_graph: bool,
+    /// Proven transfer, also retained when its target summary is unavailable
+    /// or composition is blocked. Barriers describe any remaining uncertainty.
+    pub tail: Option<TailTransfer>,
     pub writes: AdmittedVec<'m, FunctionWrite>,
     pub barriers: AdmittedVec<'m, WriteBarrier>,
     pub reloads: AdmittedVec<'m, StackReload>,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct StackReload {
+    pub origin: WriteOrigin,
     pub site: u64,
+    /// Offset in the containing summary's entry-stack coordinates; `origin`
+    /// retains the function that owns the original load instruction.
     pub slot: i64,
     pub width: u8,
     pub value: WriteValue,
@@ -313,10 +349,14 @@ pub fn closes_local_graph(record: &FunctionRecord) -> bool {
 
 /// No new CFG or instruction interpreter: consumes canonical expressions,
 /// memory observations, decoded instruction flows and existing graph edges.
+/// Supplied summaries may be composed through one proven transparent tail
+/// instruction. Missing summaries, cycles and longer chains retain barriers;
+/// target effects retain their original PCs, owners and unknown reasons.
 pub fn function_writes<'m>(
     facts: &FunctionIndex<'_, '_>,
     entry: u64,
     abi: Option<CallAbi>,
+    summaries: &[&FunctionWrites<'_>],
     memory: &'m WorkingMemory,
     c: &mut dyn RunControl,
 ) -> Result<FunctionWrites<'m>> {
@@ -326,6 +366,7 @@ pub fn function_writes<'m>(
         entry,
         abi,
         closed_graph: true,
+        tail: None,
         writes: AdmittedVec::new(memory),
         barriers: AdmittedVec::new(memory),
         reloads: AdmittedVec::new(memory),
@@ -354,6 +395,7 @@ pub fn function_writes<'m>(
                     .map_or(WriteValue::UNKNOWN, |(_, value)| value);
                 out.reloads.push(
                     StackReload {
+                        origin: WriteOrigin::local(entry),
                         site: *offset,
                         slot: *slot,
                         width: 4,
@@ -394,6 +436,7 @@ pub fn function_writes<'m>(
                 };
                 out.writes.push(
                     FunctionWrite {
+                        origin: WriteOrigin::local(entry),
                         site: *offset,
                         address,
                         value,
@@ -441,13 +484,20 @@ pub fn function_writes<'m>(
             _ => None,
         };
         if let Some((site, kind)) = barrier {
-            out.barriers
-                .push(WriteBarrier { site, kind }, c.position())?;
+            out.barriers.push(
+                WriteBarrier {
+                    origin: WriteOrigin::local(entry),
+                    site,
+                    kind,
+                },
+                c.position(),
+            )?;
         }
     }
     if !out.closed_graph {
         out.barriers.push(
             WriteBarrier {
+                origin: WriteOrigin::local(entry),
                 site: entry,
                 kind: WriteBarrierKind::OpenGraph,
             },
@@ -472,6 +522,7 @@ pub fn function_writes<'m>(
             reload.value = WriteValue::UNKNOWN;
         }
     }
+    tail::compose(facts, &mut out, summaries, memory, c)?;
     Ok(out)
 }
 
@@ -556,8 +607,52 @@ fn substitute(
                 offset,
             }
         }
+        WriteValue::Field {
+            function,
+            read,
+            base: base @ WriteBase::Stack { .. },
+            displacement,
+            width,
+            signed,
+            offset,
+        } => {
+            let base = match substitute(WriteValue::base(base), arguments, callee, stack) {
+                WriteValue::Base { base, offset: 0 } => base,
+                _ => WriteBase::Unknown,
+            };
+            WriteValue::Field {
+                function,
+                read,
+                base,
+                displacement,
+                width,
+                signed,
+                offset,
+            }
+        }
         value => value,
     }
+}
+
+fn find_summary<'a, 'm>(
+    target: Option<u64>,
+    summaries: &[&'a FunctionWrites<'m>],
+    c: &mut dyn RunControl,
+) -> Result<Option<&'a FunctionWrites<'m>>> {
+    let mut found = None;
+    for candidate in summaries {
+        c.checkpoint(1)?;
+        if target == Some(candidate.entry) {
+            if found.is_some() {
+                return Err(Error::new(
+                    ErrorCode::Integrity,
+                    "duplicate callee write summary",
+                ));
+            }
+            found = Some(*candidate);
+        }
+    }
+    Ok(found)
 }
 
 /// Apply only the targets in the caller's Transfer fact. Missing targets,
@@ -582,6 +677,7 @@ pub fn call_writes<'m>(
         if !closes_local_graph(record) {
             out.barriers.push(
                 WriteBarrier {
+                    origin: WriteOrigin::local(entry),
                     site,
                     kind: WriteBarrierKind::OpenGraph,
                 },
@@ -635,22 +731,10 @@ pub fn call_writes<'m>(
         .map_or(WriteValue::UNKNOWN, |v| values.value(v));
     for target in targets.iter() {
         c.checkpoint(1)?;
-        let mut summary = None;
-        for candidate in summaries {
-            c.checkpoint(1)?;
-            if target.map(u64::from) == Some(candidate.entry) {
-                if summary.is_some() {
-                    return Err(Error::new(
-                        ErrorCode::Integrity,
-                        "duplicate callee write summary",
-                    ));
-                }
-                summary = Some(*candidate);
-            }
-        }
-        let Some(summary) = summary else {
+        let Some(summary) = find_summary(target.map(u64::from), summaries, c)? else {
             out.barriers.push(
                 WriteBarrier {
+                    origin: WriteOrigin::local(entry),
                     site,
                     kind: WriteBarrierKind::UnknownCallee,
                 },
@@ -661,6 +745,7 @@ pub fn call_writes<'m>(
         if abi.is_none() || abi != summary.abi {
             out.barriers.push(
                 WriteBarrier {
+                    origin: WriteOrigin::local(entry),
                     site,
                     kind: WriteBarrierKind::UnknownAbi,
                 },
@@ -671,6 +756,7 @@ pub fn call_writes<'m>(
         if !summary.closed_graph {
             out.barriers.push(
                 WriteBarrier {
+                    origin: WriteOrigin::local(summary.entry),
                     site,
                     kind: WriteBarrierKind::OpenGraph,
                 },
@@ -693,6 +779,7 @@ pub fn call_writes<'m>(
             if write.address.opaque() || write.value.opaque() {
                 out.barriers.push(
                     WriteBarrier {
+                        origin: write.origin,
                         site: write.site,
                         kind: if write.address.opaque() {
                             WriteBarrierKind::UnknownStore

@@ -48,6 +48,7 @@ def compare(before, after):
             a, _, _ = diagnostic(before / filename)
             b, reasons, counts = diagnostic(after / filename)
             out = entry['diagnostics'][stage] = {'unknown_classes': counts, 'resolvers': {}}
+            out['full_tsv_identical'] = (before / filename).read_bytes() == (after / filename).read_bytes()
             for resolver in ('global', 'typed'):
                 keys = sorted(k for k in a.keys() | b.keys() if k[0] == resolver)
                 changed = []
