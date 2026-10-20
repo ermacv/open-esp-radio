@@ -74,10 +74,6 @@ impl LeTxPacketBaseLink {
     fn from_image(image: u32) -> Option<Self> {
         (image != 0).then_some(Self(image))
     }
-
-    const fn image(self) -> u32 {
-        self.0
-    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -86,10 +82,6 @@ pub(super) struct LeTxPduTargetLink(u32);
 impl LeTxPduTargetLink {
     fn from_image(image: u32) -> Option<Self> {
         (image != 0).then_some(Self(image))
-    }
-
-    const fn image(self) -> u32 {
-        self.0
     }
 }
 
@@ -139,10 +131,13 @@ impl LeTxBufferHeaderStorage {
             next: BleBufferHeaderNext::from_bits(
                 successor.map_or(0, ControllerSramLinkAddress::compressed_image),
             ),
-            packet_base: BleBufferHeaderPacketBase::from_bits(packet.base_link().image()),
-            pdu_target: BleBufferHeaderPduTarget::from_bits(packet.pdu_target_link().image())
-                .with_bits_20_31_opaque(TX_HEADER.pdu_target.bits_20_31_opaque())
-                .expect("reviewed prefix fits"),
+            packet_base: BleBufferHeaderPacketBase::ZERO
+                .with_address(packet.base)
+                .expect("the placed TX buffer address is encodable"),
+            pdu_target: TX_HEADER
+                .pdu_target
+                .with_address(packet.header_packet_target)
+                .expect("the placed TX PDU address is encodable"),
             allocation: BleBufferHeaderAllocation::ZERO
                 .with_payload_capacity(LeTxPacketAddress::<N>::payload_capacity()),
             ..TX_HEADER

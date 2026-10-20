@@ -187,7 +187,9 @@ impl LeRxBufferHeaderStorage {
             next: BleBufferHeaderNext::from_bits(
                 successor.map_or(0, ControllerSramLinkAddress::compressed_image),
             ),
-            packet_base: BleBufferHeaderPacketBase::from_bits(packet.compressed_image()),
+            packet_base: BleBufferHeaderPacketBase::ZERO
+                .with_address(packet.0)
+                .expect("the placed RX buffer address is encodable"),
             allocation: BleBufferHeaderAllocation::ZERO.with_terminal(rotates_into_successor),
             previous: BleBufferHeaderPrevious::from_bits(
                 predecessor.map_or(0, BluetoothControllerSramAddress::address),

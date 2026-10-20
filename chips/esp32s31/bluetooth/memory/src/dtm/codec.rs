@@ -253,11 +253,11 @@ impl DtmRxBufferHeaderStorage {
     }
     fn initialize_bound_rx(&self, packet: DtmRxPacketAddress) {
         self.initialize_rx_swap_reserve();
-        self.layout
-            .packet_base()
-            .write(BleBufferHeaderPacketBase::from_bits(
-                packet.compressed_image(),
-            ));
+        self.layout.packet_base().write(
+            BleBufferHeaderPacketBase::ZERO
+                .with_address(packet.base)
+                .expect("the placed DTM RX buffer address is encodable"),
+        );
     }
     fn initialize_rx_swap_reserve(&self) {
         DTM_RX_HEADER.write(&self.layout);
@@ -315,9 +315,11 @@ impl DtmRxBufferHeaderStorage {
     #[cfg(test)]
     pub(super) fn model_retarget_rx_packet(&self, packet: DtmRxPacketAddress) {
         self.layout.packet_base().write(
-            BleBufferHeaderPacketBase::from_bits(packet.compressed_image())
-                .with_bits_20_31_opaque(self.layout.packet_base().read().bits_20_31_opaque())
-                .expect("retained prefix fits"),
+            self.layout
+                .packet_base()
+                .read()
+                .with_address(packet.base)
+                .expect("the placed DTM RX buffer address is encodable"),
         );
     }
 }
