@@ -15,7 +15,7 @@ use core::{
     task::{Context, Poll},
 };
 
-use oer_interrupt_table::signal::{ForeignContext, IrqSignal};
+use oer_interrupt_table::signal::{ForeignContext, IrqSignal, SignalExecutor};
 
 use crate::interrupt::SchedulerWorkerWakeClass;
 
@@ -72,14 +72,14 @@ impl SchedulerWakeBatch {
 /// state rather than executing once per interrupt, and the public OSAL drops
 /// duplicate insertion of its same static event. The marker is accumulated by
 /// OR, so an ordinary publication can never clear an earlier marked one.
-pub struct SchedulerWakeCell {
-    signal: &'static IrqSignal,
+pub struct SchedulerWakeCell<X: SignalExecutor> {
+    signal: &'static IrqSignal<X>,
 }
 
-impl SchedulerWakeCell {
+impl<X: SignalExecutor> SchedulerWakeCell<X> {
     /// The empty handoff of `signal`, the image's scheduler signal of the
     /// worker's executor.
-    pub const fn new(signal: &'static IrqSignal) -> Self {
+    pub const fn new(signal: &'static IrqSignal<X>) -> Self {
         Self { signal }
     }
 

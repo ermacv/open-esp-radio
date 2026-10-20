@@ -10,7 +10,7 @@ use core::{
     task::{Context, Poll},
 };
 
-use oer_interrupt_table::signal::{ForeignContext, IrqSignal};
+use oer_interrupt_table::signal::{ForeignContext, IrqSignal, SignalExecutor};
 
 use oer_esp32s31_hal::bluetooth::{
     BluetoothModemLpTimerCompareDisposition, BluetoothModemLpTimerEpoch,
@@ -46,14 +46,14 @@ const WORKER_PENDING: u32 = 1;
 /// A worker can therefore register after the interrupt without losing work.
 /// The fact travels in the image's static [`IrqSignal`] of the worker's
 /// interrupt-mode executor; only that executor's context observes it.
-pub struct ModemLpTimerWorkerWakeCell {
-    signal: &'static IrqSignal,
+pub struct ModemLpTimerWorkerWakeCell<X: SignalExecutor> {
+    signal: &'static IrqSignal<X>,
 }
 
-impl ModemLpTimerWorkerWakeCell {
+impl<X: SignalExecutor> ModemLpTimerWorkerWakeCell<X> {
     /// The idle wake epoch of `signal`, the image's source-127 signal of the
     /// worker's executor.
-    pub const fn new(signal: &'static IrqSignal) -> Self {
+    pub const fn new(signal: &'static IrqSignal<X>) -> Self {
         Self { signal }
     }
 
@@ -122,9 +122,9 @@ pub enum ModemLpTimerPublishedInterruptStep {
 impl ModemLpTimerStableInterruptStep {
     /// Publish task readiness while preserving the exact register disposition.
     #[cfg(any(target_arch = "riscv32", test))]
-    pub fn publish(
+    pub fn publish<X: SignalExecutor>(
         self,
-        worker_wake: &ModemLpTimerWorkerWakeCell,
+        worker_wake: &ModemLpTimerWorkerWakeCell<X>,
     ) -> ModemLpTimerPublishedInterruptStep {
         match self {
             Self::Spurious => ModemLpTimerPublishedInterruptStep::Spurious,
@@ -613,7 +613,7 @@ impl<'queue, const CAPACITY: usize> ModemLpTimerExpirationPending<'queue, CAPACI
 
     /// Publish the event or return the entire unchanged pending owner on
     /// backpressure. Successful publication is the only path back to `step`.
-    pub fn publish(
+    pub fn publish<X: SignalExecutor>(
         self,
         events: &ModemLpTimerEventCell,
     ) -> Result<

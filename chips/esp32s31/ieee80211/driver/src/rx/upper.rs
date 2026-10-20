@@ -19,6 +19,7 @@
 //! quarantined with [`DrainTimeout`](super::control::WifiRxQuarantine::DrainTimeout).
 
 use core::{future::poll_fn, task::Poll};
+use oer_interrupt_table::signal::SignalExecutor;
 
 use atomic_waker::AtomicWaker;
 use oer_esp32s31_ieee80211_mac::rx::{
@@ -63,11 +64,11 @@ impl<'a, const SLOTS: usize, const BUFFER: usize> RxFrameQueue<'a, SLOTS, BUFFER
     }
 
     /// Lend the runner's end and the application's end.
-    pub(crate) fn split(
+    pub(crate) fn split<X: SignalExecutor>(
         &'a mut self,
         counters: &'a WifiRxCounters,
-        returns: RxReturnNotifier<'a>,
-    ) -> RxFrameEnds<'a, SLOTS, BUFFER> {
+        returns: RxReturnNotifier<'a, X>,
+    ) -> RxFrameEnds<'a, SLOTS, BUFFER, X> {
         let Self { frames, waker } = self;
         let (sender, receiver) = frames.split();
         let waker = &*waker;
@@ -88,11 +89,11 @@ impl<'a, const SLOTS: usize, const BUFFER: usize> RxFrameQueue<'a, SLOTS, BUFFER
 }
 
 /// The two ends of the staged-frame queue a bound arena lends.
-pub struct RxFrameEnds<'a, const SLOTS: usize, const BUFFER: usize> {
+pub struct RxFrameEnds<'a, const SLOTS: usize, const BUFFER: usize, X: SignalExecutor> {
     /// The runner's end; [`QueueSink::new`] makes it a publisher.
     pub sender: FrameSender<'a, SLOTS, BUFFER>,
     /// The application's end.
-    pub receiver: FrameReceiver<'a, SLOTS, BUFFER>,
+    pub receiver: FrameReceiver<'a, SLOTS, BUFFER, X>,
 }
 
 /// The runner's end of the queue.
@@ -154,17 +155,19 @@ impl<'a, C: Clock, const SLOTS: usize, const BUFFER: usize> Publisher<'a, BUFFER
 }
 
 /// The application's end of the queue.
-pub struct FrameReceiver<'a, const SLOTS: usize, const BUFFER: usize> {
+pub struct FrameReceiver<'a, const SLOTS: usize, const BUFFER: usize, X: SignalExecutor> {
     frames: AffineSpscReceiver<'a, NetworkRxFrame<'a, SLOTS, BUFFER>, SLOTS>,
     waker: &'a AtomicWaker,
-    returns: RxReturnNotifier<'a>,
+    returns: RxReturnNotifier<'a, X>,
     counters: &'a WifiRxCounters,
 }
 
-impl<'a, const SLOTS: usize, const BUFFER: usize> FrameReceiver<'a, SLOTS, BUFFER> {
+impl<'a, const SLOTS: usize, const BUFFER: usize, X: SignalExecutor>
+    FrameReceiver<'a, SLOTS, BUFFER, X>
+{
     /// Take an already staged frame without waiting, retaining the same
     /// affine lease as `next`. A finite dwell drains this queue before stop.
-    pub fn try_next(&mut self) -> Option<HeldRxFrame<'a, 'a, SLOTS, BUFFER>> {
+    pub fn try_next(&mut self) -> Option<HeldRxFrame<'a, 'a, SLOTS, BUFFER, X>> {
         self.frames
             .try_receive()
             .ok()
@@ -173,7 +176,7 @@ impl<'a, const SLOTS: usize, const BUFFER: usize> FrameReceiver<'a, SLOTS, BUFFE
 
     /// The next staged frame, in reception order. Dropping it returns the
     /// lease and wakes the runner.
-    pub async fn next(&mut self) -> HeldRxFrame<'a, 'a, SLOTS, BUFFER> {
+    pub async fn next(&mut self) -> HeldRxFrame<'a, 'a, SLOTS, BUFFER, X> {
         poll_fn(|cx| {
             // Registration precedes the receive, so a send is never missed.
             self.waker.register(cx.waker());

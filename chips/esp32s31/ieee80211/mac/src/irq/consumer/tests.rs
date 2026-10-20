@@ -128,7 +128,7 @@ fn publication_before_registration_and_after_pending_are_both_durable() {
 fn publication_during_waker_registration_cannot_be_lost() {
     // Replacing the registered waker drops its last Arc while registration
     // owns AtomicWaker's slot. The old waker's destructor injects the IRQ.
-    struct PublishOnDrop(&'static IrqStorage);
+    struct PublishOnDrop(&'static IrqStorage<oer_interrupt_table::signal::host::Host>);
     #[allow(
         clippy::manual_noop_waker,
         reason = "this waker publishes from Drop during registration, which Waker::noop cannot model"

@@ -41,6 +41,7 @@ use core::{
     pin::pin,
     task::Poll,
 };
+use oer_interrupt_table::signal::SignalExecutor;
 
 use oer_esp32s31_hal::ieee80211::dma::{
     descriptor::RxDescriptor, rx_storage::RxDmaStorage, space::DmaSpace,
@@ -115,6 +116,7 @@ pub const DRAIN_POLL: Duration = Duration::from_micros(100);
     reason = "each argument is one owner the epoch holds until it parks"
 )]
 pub async fn receive<
+    X: SignalExecutor,
     H,
     W,
     I,
@@ -141,8 +143,9 @@ pub async fn receive<
         STAGE_SLOTS,
         S,
         ActiveEpoch<Moderated, I, P>,
+        X,
     >,
-    cell: &'static HandlerCell<WifiIrqLine<ActiveEpoch<Moderated, I, P>>>,
+    cell: &'static HandlerCell<WifiIrqLine<ActiveEpoch<Moderated, I, P>, X>>,
     routes: &mut R,
     doorbell: &D,
     timer: &T,
@@ -256,13 +259,14 @@ pub(super) struct Receiver<
     const STORAGE: usize,
     const STAGE_SLOTS: usize,
     S: DmaSpace,
+    X: SignalExecutor,
 > {
     pub(super) hardware: &'r mut H,
     pub(super) rx_dma: &'r mut W,
     pub(super) rx: &'static RxDmaStorage<COUNT, BUFFER, STORAGE, S>,
     pub(super) stage: &'static RxStagePool<STAGE_SLOTS, BUFFER>,
-    pub(super) irq: &'r mut IrqConsumer<'static>,
-    pub(super) power: &'r mut PowerIrqConsumer<'static>,
+    pub(super) irq: &'r mut IrqConsumer<'static, X>,
+    pub(super) power: &'r mut PowerIrqConsumer<'static, X>,
     pub(super) requests: &'static WifiIrqRequests,
     pub(super) counters: &'static WifiRxCounters,
     pub(super) control: &'r mut ReceiveRunnerControl<'static>,
@@ -292,7 +296,8 @@ impl<
     const STORAGE: usize,
     const STAGE_SLOTS: usize,
     S,
-> Receiver<'_, H, W, R, D, T, E, M, COUNT, BUFFER, STORAGE, STAGE_SLOTS, S>
+    X: SignalExecutor,
+> Receiver<'_, H, W, R, D, T, E, M, COUNT, BUFFER, STORAGE, STAGE_SLOTS, S, X>
 where
     H: MacSnifferHardware + MacRuntimeStopHardware + RxBufferFullCounter,
     W: RxDma,

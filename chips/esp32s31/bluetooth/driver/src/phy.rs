@@ -8,6 +8,7 @@
 //! registration that describes the domain.
 
 use oer_esp32s31_hal::power::PlatformClockBackend;
+use oer_interrupt_table::signal::SignalExecutor;
 
 use oer_esp32s31_hal::domain::RadioDomain;
 use oer_esp32s31_phy::{
@@ -39,8 +40,8 @@ use crate::{low_power::ControllerLowPowerHardwareInitialized, resources::TaskRes
 /// # }
 /// use oer_esp32s31_bluetooth_driver::phy::ControllerPhyJoined;
 /// use oer_esp32s31_hal::power::PlatformClockBackend;
-/// fn engine<B: PlatformClockBackend>() {
-///     let _engine = ControllerPhyJoined::<'static, 4>::initialize_ble_phy_engine::<B, ()>;
+/// fn engine<B: PlatformClockBackend, X: oer_interrupt_table::signal::SignalExecutor>() {
+///     let _engine = ControllerPhyJoined::<'static, 4, X>::initialize_ble_phy_engine::<B, ()>;
 /// }
 /// ```
 ///
@@ -53,8 +54,10 @@ use crate::{low_power::ControllerLowPowerHardwareInitialized, resources::TaskRes
 /// #     loop {}
 /// # }
 /// use oer_esp32s31_bluetooth_driver::low_power::ControllerLowPowerHardwareInitialized;
+/// fn engine<X: oer_interrupt_table::signal::SignalExecutor>() {
 /// let _engine =
-///     ControllerLowPowerHardwareInitialized::<'static, 4>::initialize_ble_phy_engine::<()>;
+///     ControllerLowPowerHardwareInitialized::<'static, 4, X>::initialize_ble_phy_engine::<()>;
+/// }
 /// ```
 ///
 /// And the membership leaves only with the Controller's retirement, never
@@ -69,7 +72,7 @@ use crate::{low_power::ControllerLowPowerHardwareInitialized, resources::TaskRes
 /// #     loop {}
 /// # }
 /// use oer_esp32s31_bluetooth_driver::phy::ControllerPhyJoined;
-/// fn keep(joined: ControllerPhyJoined<'static, 4>) -> ControllerPhyJoined<'static, 4> {
+/// fn keep<X: oer_interrupt_table::signal::SignalExecutor>(joined: ControllerPhyJoined<'static, 4, X>) -> ControllerPhyJoined<'static, 4, X> {
 ///     joined
 /// }
 /// ```
@@ -84,13 +87,13 @@ use crate::{low_power::ControllerLowPowerHardwareInitialized, resources::TaskRes
 /// # }
 /// use oer_esp32s31_bluetooth_driver::phy::ControllerPhyJoined;
 /// use oer_esp32s31_phy::bluetooth_client::BluetoothPhyMembership;
-/// fn leave_early(joined: ControllerPhyJoined<'static, 4>) -> BluetoothPhyMembership {
+/// fn leave_early<X: oer_interrupt_table::signal::SignalExecutor>(joined: ControllerPhyJoined<'static, 4, X>) -> BluetoothPhyMembership {
 ///     joined.membership
 /// }
 /// ```
 #[must_use = "the joined Controller retains its PHY membership"]
-pub struct ControllerPhyJoined<'cells, const MODEM_TIMER_CAPACITY: usize> {
-    pub(crate) controller: ControllerLowPowerHardwareInitialized<'cells, MODEM_TIMER_CAPACITY>,
+pub struct ControllerPhyJoined<'cells, const MODEM_TIMER_CAPACITY: usize, X: SignalExecutor> {
+    pub(crate) controller: ControllerLowPowerHardwareInitialized<'cells, MODEM_TIMER_CAPACITY, X>,
     pub(crate) membership: BluetoothPhyMembership,
 }
 
@@ -100,20 +103,22 @@ pub struct ControllerPhyJoined<'cells, const MODEM_TIMER_CAPACITY: usize> {
 /// which no verified transition reverses before the shutdown of a running
 /// epoch; the retained owner is fail-stop.
 #[must_use = "a failed PHY join retains the powered Controller"]
-pub struct ControllerPhyJoinFailure<'cells, const MODEM_TIMER_CAPACITY: usize> {
-    _controller: ControllerLowPowerHardwareInitialized<'cells, MODEM_TIMER_CAPACITY>,
+pub struct ControllerPhyJoinFailure<'cells, const MODEM_TIMER_CAPACITY: usize, X: SignalExecutor> {
+    _controller: ControllerLowPowerHardwareInitialized<'cells, MODEM_TIMER_CAPACITY, X>,
     error: BluetoothPhyClientError,
 }
 
-impl<const MODEM_TIMER_CAPACITY: usize> ControllerPhyJoinFailure<'_, MODEM_TIMER_CAPACITY> {
+impl<const MODEM_TIMER_CAPACITY: usize, X: SignalExecutor>
+    ControllerPhyJoinFailure<'_, MODEM_TIMER_CAPACITY, X>
+{
     /// The rejection; the client set and BTBB are unchanged.
     pub const fn error(&self) -> BluetoothPhyClientError {
         self.error
     }
 }
 
-impl<'cells, const MODEM_TIMER_CAPACITY: usize>
-    ControllerLowPowerHardwareInitialized<'cells, MODEM_TIMER_CAPACITY>
+impl<'cells, const MODEM_TIMER_CAPACITY: usize, X: SignalExecutor>
+    ControllerLowPowerHardwareInitialized<'cells, MODEM_TIMER_CAPACITY, X>
 {
     /// Enter the shared PHY domain and BTBB as the Bluetooth client, with
     /// the proof that the shared radio's owner prepared the domain.
@@ -136,10 +141,10 @@ impl<'cells, const MODEM_TIMER_CAPACITY: usize>
         clock: &impl oer_time::Clock,
     ) -> Result<
         (
-            ControllerPhyJoined<'cells, MODEM_TIMER_CAPACITY>,
+            ControllerPhyJoined<'cells, MODEM_TIMER_CAPACITY, X>,
             ConcurrentAcquire,
         ),
-        ControllerPhyJoinFailure<'cells, MODEM_TIMER_CAPACITY>,
+        ControllerPhyJoinFailure<'cells, MODEM_TIMER_CAPACITY, X>,
     > {
         match join_bluetooth(ready, self.task().hal(), clock) {
             Ok(joined) => Ok((

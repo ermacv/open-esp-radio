@@ -2,6 +2,8 @@
 
 #[cfg(target_arch = "riscv32")]
 use oer_esp32s31_hal::power::PlatformClockBackend;
+#[cfg(target_arch = "riscv32")]
+use oer_interrupt_table::signal::SignalExecutor;
 
 #[cfg(target_arch = "riscv32")]
 use crate::{phy::ControllerPhyJoined, resources::InterruptBankOwner};
@@ -141,9 +143,13 @@ impl BlePhyTimingAuthority {
 /// HCI dataplane is operational.
 #[must_use = "initialized BLE PHY retains every hardware and storage owner"]
 #[cfg(target_arch = "riscv32")]
-pub struct ControllerBlePhyEngineInitialized<'cells, const MODEM_TIMER_CAPACITY: usize> {
+pub struct ControllerBlePhyEngineInitialized<
+    'cells,
+    const MODEM_TIMER_CAPACITY: usize,
+    X: SignalExecutor,
+> {
     controller:
-        crate::low_power::ControllerLowPowerHardwareInitialized<'cells, MODEM_TIMER_CAPACITY>,
+        crate::low_power::ControllerLowPowerHardwareInitialized<'cells, MODEM_TIMER_CAPACITY, X>,
     retained: BlePhyRetainedOwners,
     report: BlePhyInitializationReport,
 }
@@ -166,9 +172,9 @@ pub struct BlePhyRetainedOwners {
 /// epoch.
 #[cfg(target_arch = "riscv32")]
 #[must_use = "every activated owner belongs to the running epoch"]
-pub struct BlePhyRuntime<'runtime, const MT: usize> {
+pub struct BlePhyRuntime<'runtime, const MT: usize, X: SignalExecutor> {
     /// Task, interrupt and modem-timer endpoints.
-    pub endpoints: crate::low_power::ControllerRuntimeEndpoints<'runtime, MT>,
+    pub endpoints: crate::low_power::ControllerRuntimeEndpoints<'runtime, MT, X>,
     /// Controller interrupt output, prepared for stable ISR storage.
     pub output: oer_esp32s31_hal::bluetooth::InterruptOutputPreparedOwner,
     /// Initialized low-power timer hardware, not yet started.
@@ -182,8 +188,8 @@ pub struct BlePhyRuntime<'runtime, const MT: usize> {
 }
 
 #[cfg(target_arch = "riscv32")]
-impl<'cells, const MODEM_TIMER_CAPACITY: usize>
-    ControllerBlePhyEngineInitialized<'cells, MODEM_TIMER_CAPACITY>
+impl<'cells, const MODEM_TIMER_CAPACITY: usize, X: SignalExecutor>
+    ControllerBlePhyEngineInitialized<'cells, MODEM_TIMER_CAPACITY, X>
 {
     /// Observe completion of the source-owned normal BLE PHY transaction.
     pub const fn report(&self) -> BlePhyInitializationReport {
@@ -198,7 +204,7 @@ impl<'cells, const MODEM_TIMER_CAPACITY: usize>
     /// is the matching Controller epoch. The timer is returned unstarted and
     /// only with the prepared output, so it cannot be started before the
     /// output.
-    pub fn activate(self) -> BlePhyRuntime<'cells, MODEM_TIMER_CAPACITY> {
+    pub fn activate(self) -> BlePhyRuntime<'cells, MODEM_TIMER_CAPACITY, X> {
         let Self {
             mut controller,
             retained,
@@ -224,7 +230,9 @@ impl<'cells, const MODEM_TIMER_CAPACITY: usize>
 }
 
 #[cfg(target_arch = "riscv32")]
-impl<'cells, const MODEM_TIMER_CAPACITY: usize> ControllerPhyJoined<'cells, MODEM_TIMER_CAPACITY> {
+impl<'cells, const MODEM_TIMER_CAPACITY: usize, X: SignalExecutor>
+    ControllerPhyJoined<'cells, MODEM_TIMER_CAPACITY, X>
+{
     /// Publish the recovered BLE PHY register transaction while consuming and
     /// retaining the complete address-bound allocation graph. The BLE base
     /// stack enable also touches the shared radio registers, which `radio`
@@ -242,7 +250,7 @@ impl<'cells, const MODEM_TIMER_CAPACITY: usize> ControllerPhyJoined<'cells, MODE
         storage: BlePhyEngineCpuOwned,
         direction_finding: DirectionFindingWorkspaceCpuOwned,
         public_address: BluetoothPublicDeviceAddress,
-    ) -> ControllerBlePhyEngineInitialized<'cells, MODEM_TIMER_CAPACITY> {
+    ) -> ControllerBlePhyEngineInitialized<'cells, MODEM_TIMER_CAPACITY, X> {
         let controller = &mut self.controller;
         let report = apply_register_init_then_public_address(
             &storage,

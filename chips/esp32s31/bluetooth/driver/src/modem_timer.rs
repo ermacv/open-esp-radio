@@ -15,7 +15,7 @@ use crate::{
 use oer_esp32s31_hal::bluetooth::{
     ModemLpTimerInterruptReadyOwner, ModemLpTimerSoftwarePendingOwner,
 };
-use oer_interrupt_table::signal::ForeignContext;
+use oer_interrupt_table::signal::{ForeignContext, SignalExecutor};
 
 /// Stable-storage boundary for source-127 task ownership.
 ///
@@ -82,13 +82,13 @@ pub enum ControllerModemTimerReadinessClass {
 
 /// Owner-free borrowed readiness observation for source 127.
 #[must_use = "readiness must be checked before polling again"]
-pub struct ControllerModemTimerReadiness<'task> {
+pub struct ControllerModemTimerReadiness<'task, X: SignalExecutor> {
     class: ControllerModemTimerReadinessClass,
-    worker_wake: &'task crate::modem_lp_timer_queue::ModemLpTimerWorkerWakeCell,
+    worker_wake: &'task crate::modem_lp_timer_queue::ModemLpTimerWorkerWakeCell<X>,
     events: &'task ModemLpTimerEventCell,
 }
 
-impl ControllerModemTimerReadiness<'_> {
+impl<X: SignalExecutor> ControllerModemTimerReadiness<'_, X> {
     /// Exact state an executor wait is observing.
     pub const fn class(&self) -> ControllerModemTimerReadinessClass {
         self.class
@@ -170,19 +170,20 @@ pub enum ControllerModemTimerRearm<E> {
 /// readiness and finite `begin`, `step`, and `rearm` calls, so an executor
 /// future never needs to own them.
 #[must_use = "the modem timer task retains source-127 queue and hardware ownership"]
-pub struct ControllerModemTimerTask<'runtime, S, const CAPACITY: usize> {
+pub struct ControllerModemTimerTask<'runtime, S, const CAPACITY: usize, X: SignalExecutor> {
     storage: &'runtime S,
-    runtime: ControllerModemTimerRuntime<'runtime, CAPACITY>,
+    runtime: ControllerModemTimerRuntime<'runtime, CAPACITY, X>,
     phase: ControllerModemTimerTaskPhase,
 }
 
-impl<'runtime, S, const CAPACITY: usize> ControllerModemTimerTask<'runtime, S, CAPACITY>
+impl<'runtime, S, const CAPACITY: usize, X: SignalExecutor>
+    ControllerModemTimerTask<'runtime, S, CAPACITY, X>
 where
     S: ModemLpTimerSoftwareOwnerStorage,
 {
     pub fn new(
         storage: &'runtime S,
-        runtime: ControllerModemTimerRuntime<'runtime, CAPACITY>,
+        runtime: ControllerModemTimerRuntime<'runtime, CAPACITY, X>,
     ) -> Self {
         Self {
             storage,
@@ -192,7 +193,7 @@ where
     }
 
     /// Borrow the current owner-free readiness predicate.
-    pub fn readiness(&self) -> ControllerModemTimerReadiness<'_> {
+    pub fn readiness(&self) -> ControllerModemTimerReadiness<'_, X> {
         let class = match &self.phase {
             ControllerModemTimerTaskPhase::Idle => ControllerModemTimerReadinessClass::Interrupt,
             ControllerModemTimerTaskPhase::Work(_) => ControllerModemTimerReadinessClass::Step,
@@ -322,20 +323,22 @@ pub trait ModemLpTimerRetirementStorage: ModemLpTimerSoftwareOwnerStorage {
 /// borrows retain their original identity. `resume` restores this exact owner
 /// before CPU routes can be bound again.
 #[must_use = "retain the timer hardware and its originating runtime together"]
-pub struct ControllerModemTimerRetired<'runtime, S, const CAPACITY: usize> {
+pub struct ControllerModemTimerRetired<'runtime, S, const CAPACITY: usize, X: SignalExecutor> {
     storage: &'runtime S,
-    runtime: ControllerModemTimerRuntime<'runtime, CAPACITY>,
+    runtime: ControllerModemTimerRuntime<'runtime, CAPACITY, X>,
     owner: ModemLpTimerInterruptReadyOwner,
 }
 
-impl<'runtime, S, const CAPACITY: usize> ControllerModemTimerRetired<'runtime, S, CAPACITY> {
+impl<'runtime, S, const CAPACITY: usize, X: SignalExecutor>
+    ControllerModemTimerRetired<'runtime, S, CAPACITY, X>
+{
     pub fn matches_storage(&self, storage: &S) -> bool {
         core::ptr::eq(self.storage, storage)
     }
 
     pub fn from_maintenance_parts(
         owner: ModemLpTimerInterruptReadyOwner,
-        runtime: ControllerModemTimerRuntime<'runtime, CAPACITY>,
+        runtime: ControllerModemTimerRuntime<'runtime, CAPACITY, X>,
         storage: &'runtime S,
     ) -> Self {
         Self {
@@ -349,15 +352,15 @@ impl<'runtime, S, const CAPACITY: usize> ControllerModemTimerRetired<'runtime, S
         self,
     ) -> (
         ModemLpTimerInterruptReadyOwner,
-        ControllerModemTimerRuntime<'runtime, CAPACITY>,
+        ControllerModemTimerRuntime<'runtime, CAPACITY, X>,
         &'runtime S,
     ) {
         (self.owner, self.runtime, self.storage)
     }
 }
 
-impl<'runtime, S: ModemLpTimerRetirementStorage, const CAPACITY: usize>
-    ControllerModemTimerTask<'runtime, S, CAPACITY>
+impl<'runtime, S: ModemLpTimerRetirementStorage, const CAPACITY: usize, X: SignalExecutor>
+    ControllerModemTimerTask<'runtime, S, CAPACITY, X>
 {
     /// Observe whether task work has drained before attempting IRQ shutdown.
     ///
@@ -385,7 +388,7 @@ impl<'runtime, S: ModemLpTimerRetirementStorage, const CAPACITY: usize>
     pub fn try_retire(
         self,
     ) -> Result<
-        ControllerModemTimerRetired<'runtime, S, CAPACITY>,
+        ControllerModemTimerRetired<'runtime, S, CAPACITY, X>,
         (
             crate::modem_timer_retirement::ControllerModemTimerRetirementError<S::RetireError>,
             Self,
@@ -412,8 +415,8 @@ impl<'runtime, S: ModemLpTimerRetirementStorage, const CAPACITY: usize>
     }
 }
 
-impl<'runtime, S: ModemLpTimerSoftwareOwnerStorage, const CAPACITY: usize>
-    ControllerModemTimerRetired<'runtime, S, CAPACITY>
+impl<'runtime, S: ModemLpTimerSoftwareOwnerStorage, const CAPACITY: usize, X: SignalExecutor>
+    ControllerModemTimerRetired<'runtime, S, CAPACITY, X>
 {
     /// Restore the same timer owner and software epoch before rebinding IRQ.
     /// Rejection retains the complete retired task for a corrected retry.
@@ -423,7 +426,7 @@ impl<'runtime, S: ModemLpTimerSoftwareOwnerStorage, const CAPACITY: usize>
     )]
     pub fn resume(
         self,
-    ) -> Result<ControllerModemTimerTask<'runtime, S, CAPACITY>, (S::RestoreError, Self)> {
+    ) -> Result<ControllerModemTimerTask<'runtime, S, CAPACITY, X>, (S::RestoreError, Self)> {
         match self.storage.restore_modem_lp_timer_ready(self.owner) {
             Ok(()) => Ok(ControllerModemTimerTask::new(self.storage, self.runtime)),
             Err((error, owner)) => Err((

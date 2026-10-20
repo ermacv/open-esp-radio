@@ -14,17 +14,17 @@
 //! parked, starts at most one harmless pass.
 
 use core::ops::{Deref, DerefMut};
+use oer_interrupt_table::signal::SignalExecutor;
 
 use oer_esp32s31_ieee80211_mac::{irq::consumer::IrqPublisher, rx::pool::NetworkRxFrame};
 
 /// The upper layer's handle: tell the runner a lease came back.
-#[derive(Clone, Copy)]
-pub struct RxReturnNotifier<'a> {
-    publisher: &'a IrqPublisher<'a>,
+pub struct RxReturnNotifier<'a, X: SignalExecutor> {
+    publisher: &'a IrqPublisher<'a, X>,
 }
 
-impl<'a> RxReturnNotifier<'a> {
-    pub(crate) const fn new(publisher: &'a IrqPublisher<'a>) -> Self {
+impl<'a, X: SignalExecutor> RxReturnNotifier<'a, X> {
+    pub(crate) const fn new(publisher: &'a IrqPublisher<'a, X>) -> Self {
         Self { publisher }
     }
 
@@ -39,7 +39,7 @@ impl<'a> RxReturnNotifier<'a> {
     pub fn hold<'pool, const SLOTS: usize, const CAPACITY: usize>(
         self,
         frame: NetworkRxFrame<'pool, SLOTS, CAPACITY>,
-    ) -> HeldRxFrame<'pool, 'a, SLOTS, CAPACITY> {
+    ) -> HeldRxFrame<'pool, 'a, SLOTS, CAPACITY, X> {
         HeldRxFrame {
             frame,
             _notice: ReturnNotice(self),
@@ -49,22 +49,22 @@ impl<'a> RxReturnNotifier<'a> {
 
 /// A staged frame held above the radio executor. Dropping it releases the
 /// lease first (fields drop in order) and then wakes the runner.
-pub struct HeldRxFrame<'pool, 'a, const SLOTS: usize, const CAPACITY: usize> {
+pub struct HeldRxFrame<'pool, 'a, const SLOTS: usize, const CAPACITY: usize, X: SignalExecutor> {
     frame: NetworkRxFrame<'pool, SLOTS, CAPACITY>,
-    _notice: ReturnNotice<'a>,
+    _notice: ReturnNotice<'a, X>,
 }
 
 /// Notifies when dropped, after the frame declared before it.
-struct ReturnNotice<'a>(RxReturnNotifier<'a>);
+struct ReturnNotice<'a, X: SignalExecutor>(RxReturnNotifier<'a, X>);
 
-impl Drop for ReturnNotice<'_> {
+impl<X: SignalExecutor> Drop for ReturnNotice<'_, X> {
     fn drop(&mut self) {
         self.0.notify();
     }
 }
 
-impl<'pool, const SLOTS: usize, const CAPACITY: usize> Deref
-    for HeldRxFrame<'pool, '_, SLOTS, CAPACITY>
+impl<'pool, const SLOTS: usize, const CAPACITY: usize, X: SignalExecutor> Deref
+    for HeldRxFrame<'pool, '_, SLOTS, CAPACITY, X>
 {
     type Target = NetworkRxFrame<'pool, SLOTS, CAPACITY>;
 
@@ -73,8 +73,17 @@ impl<'pool, const SLOTS: usize, const CAPACITY: usize> Deref
     }
 }
 
-impl<const SLOTS: usize, const CAPACITY: usize> DerefMut for HeldRxFrame<'_, '_, SLOTS, CAPACITY> {
+impl<const SLOTS: usize, const CAPACITY: usize, X: SignalExecutor> DerefMut
+    for HeldRxFrame<'_, '_, SLOTS, CAPACITY, X>
+{
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.frame
+    }
+}
+
+impl<'a, X: SignalExecutor> Copy for RxReturnNotifier<'a, X> {}
+impl<'a, X: SignalExecutor> Clone for RxReturnNotifier<'a, X> {
+    fn clone(&self) -> Self {
+        *self
     }
 }

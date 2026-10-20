@@ -15,7 +15,7 @@ use oer_esp32s31_hal::bluetooth::BluetoothModemLpTimerEpoch;
 #[cfg(any(target_arch = "riscv32", test))]
 use crate::resources::TaskResources;
 
-use oer_interrupt_table::signal::{ForeignContext, IrqSignal};
+use oer_interrupt_table::signal::{ForeignContext, IrqSignal, SignalExecutor};
 
 use crate::{
     interrupt::SchedulerWakeCell,
@@ -36,29 +36,24 @@ use oer_esp32s31_bluetooth_memory::scheduler::hardware::{
 /// epoch starts only while no notification is pending. The interrupt-side
 /// cells carry the image's static signals of the workers' interrupt-mode
 /// executor; only that executor's context observes or clears them.
-pub struct ControllerEventCells {
-    scheduler_wake: SchedulerWakeCell,
-    modem_lp_timer_worker_wake: ModemLpTimerWorkerWakeCell,
+pub struct ControllerEventCells<X: SignalExecutor> {
+    scheduler_wake: SchedulerWakeCell<X>,
+    modem_lp_timer_worker_wake: ModemLpTimerWorkerWakeCell<X>,
     modem_lp_timer_events: ModemLpTimerEventCell,
 }
 
-impl ControllerEventCells {
+impl<X: SignalExecutor> ControllerEventCells<X> {
     /// Quiet cells over the image's scheduler and source-127 signals,
     /// without allocation or MMIO.
-    pub const fn new(scheduler: &'static IrqSignal, modem_lp_timer: &'static IrqSignal) -> Self {
+    pub const fn new(
+        scheduler: &'static IrqSignal<X>,
+        modem_lp_timer: &'static IrqSignal<X>,
+    ) -> Self {
         Self {
             scheduler_wake: SchedulerWakeCell::new(scheduler),
             modem_lp_timer_worker_wake: ModemLpTimerWorkerWakeCell::new(modem_lp_timer),
             modem_lp_timer_events: ModemLpTimerEventCell::new(),
         }
-    }
-
-    /// Cells over fresh host signals whose facts wait for the take, as
-    /// they wait for an executor the interrupt preempted.
-    #[cfg(test)]
-    pub(crate) fn host() -> Self {
-        use oer_interrupt_table::signal::host::deferred_signal;
-        Self::new(deferred_signal(), deferred_signal())
     }
 
     /// Whether no notification or expiration is pending.
@@ -96,8 +91,9 @@ impl ControllerEventCells {
 /// interrupt-shared [`ControllerEventCells`] are borrowed. The aggregate is
 /// intentionally neither `Copy` nor `Clone`.
 #[must_use = "Controller runtime resources must remain owned by their hardware epoch"]
-pub struct ControllerRuntimeResources<'cells, const MODEM_TIMER_CAPACITY: usize> {
-    cells: &'cells ControllerEventCells,
+pub struct ControllerRuntimeResources<'cells, const MODEM_TIMER_CAPACITY: usize, X: SignalExecutor>
+{
+    cells: &'cells ControllerEventCells<X>,
     scheduler_finished_lists: SchedulerFinishedListWorker,
     #[cfg(target_arch = "riscv32")]
     scheduler_hardware: SchedulerHardware<HalPublications>,
@@ -111,9 +107,9 @@ pub struct ControllerRuntimeResources<'cells, const MODEM_TIMER_CAPACITY: usize>
 /// [`ControllerTaskRuntime`]. It deliberately exposes no timer queue or
 /// scheduler state.
 #[must_use = "the interrupt endpoint must remain paired with its task endpoint"]
-pub struct ControllerInterruptRuntime<'runtime> {
-    scheduler_wake: &'runtime SchedulerWakeCell,
-    modem_lp_timer_worker_wake: &'runtime ModemLpTimerWorkerWakeCell,
+pub struct ControllerInterruptRuntime<'runtime, X: SignalExecutor> {
+    scheduler_wake: &'runtime SchedulerWakeCell<X>,
+    modem_lp_timer_worker_wake: &'runtime ModemLpTimerWorkerWakeCell<X>,
 }
 
 /// Unique mutable modem-timer runtime for one Controller epoch.
@@ -123,17 +119,23 @@ pub struct ControllerInterruptRuntime<'runtime> {
 /// boundary, where stable source-127 storage is joined to it by the typed modem
 /// timer task.
 #[must_use = "the modem-timer runtime must remain paired with its Controller epoch"]
-pub struct ControllerModemTimerRuntime<'runtime, const MODEM_TIMER_CAPACITY: usize> {
+pub struct ControllerModemTimerRuntime<
+    'runtime,
+    const MODEM_TIMER_CAPACITY: usize,
+    X: SignalExecutor,
+> {
     pub(crate) queue: ModemLpTimerQueue<MODEM_TIMER_CAPACITY>,
     #[cfg_attr(not(target_arch = "riscv32"), allow(dead_code))]
     pub(crate) epoch: BluetoothModemLpTimerEpoch,
-    pub(crate) worker_wake: &'runtime ModemLpTimerWorkerWakeCell,
+    pub(crate) worker_wake: &'runtime ModemLpTimerWorkerWakeCell<X>,
     pub(crate) events: &'runtime ModemLpTimerEventCell,
 }
 
-impl<const MODEM_TIMER_CAPACITY: usize> ControllerModemTimerRuntime<'_, MODEM_TIMER_CAPACITY> {
+impl<const MODEM_TIMER_CAPACITY: usize, X: SignalExecutor>
+    ControllerModemTimerRuntime<'_, MODEM_TIMER_CAPACITY, X>
+{
     /// Borrow the durable source-127 readiness cell without acquiring work.
-    pub const fn worker_wake(&self) -> &ModemLpTimerWorkerWakeCell {
+    pub const fn worker_wake(&self) -> &ModemLpTimerWorkerWakeCell<X> {
         self.worker_wake
     }
 
@@ -148,14 +150,14 @@ impl<const MODEM_TIMER_CAPACITY: usize> ControllerModemTimerRuntime<'_, MODEM_TI
     }
 }
 
-impl<'runtime> ControllerInterruptRuntime<'runtime> {
+impl<'runtime, X: SignalExecutor> ControllerInterruptRuntime<'runtime, X> {
     /// Durable scheduler handoff for this epoch.
-    pub const fn scheduler_wake(&self) -> &'runtime SchedulerWakeCell {
+    pub const fn scheduler_wake(&self) -> &'runtime SchedulerWakeCell<X> {
         self.scheduler_wake
     }
 
     /// Durable source-127 task-readiness handoff for this epoch.
-    pub const fn modem_lp_timer_worker_wake(&self) -> &'runtime ModemLpTimerWorkerWakeCell {
+    pub const fn modem_lp_timer_worker_wake(&self) -> &'runtime ModemLpTimerWorkerWakeCell<X> {
         self.modem_lp_timer_worker_wake
     }
 }
@@ -166,16 +168,16 @@ impl<'runtime> ControllerInterruptRuntime<'runtime> {
 /// shared with the matching interrupt endpoint returned by the same
 /// [`ControllerRuntimeResources::split`] call.
 #[must_use = "the task endpoint must remain paired with its interrupt endpoint"]
-pub struct ControllerTaskRuntime<'runtime> {
-    cells: &'runtime ControllerEventCells,
+pub struct ControllerTaskRuntime<'runtime, X: SignalExecutor> {
+    cells: &'runtime ControllerEventCells<X>,
     scheduler_finished_lists: SchedulerFinishedListWorker,
     #[cfg(target_arch = "riscv32")]
     scheduler_hardware: SchedulerHardware<HalPublications>,
 }
 
-impl ControllerTaskRuntime<'_> {
+impl<X: SignalExecutor> ControllerTaskRuntime<'_, X> {
     /// Durable scheduler handoff for this epoch.
-    pub const fn scheduler_wake(&self) -> &SchedulerWakeCell {
+    pub const fn scheduler_wake(&self) -> &SchedulerWakeCell<X> {
         &self.cells.scheduler_wake
     }
 
@@ -207,8 +209,8 @@ impl ControllerTaskRuntime<'_> {
 /// capability, and [`Self::retire`] returns both for the Controller shutdown.
 #[must_use = "the powered task endpoint retains the Controller task owner"]
 #[cfg(any(target_arch = "riscv32", test))]
-pub struct ControllerPoweredTaskRuntime<'runtime> {
-    pub(crate) runtime: ControllerTaskRuntime<'runtime>,
+pub struct ControllerPoweredTaskRuntime<'runtime, X: SignalExecutor> {
+    pub(crate) runtime: ControllerTaskRuntime<'runtime, X>,
     pub(crate) task: TaskResources,
     pub(crate) time_scale: oer_esp32s31_hal::bluetooth::BluetoothControllerTimeScale,
     pub(crate) _standalone_dtm_profile: crate::controller_hal::StandaloneAlwaysAwakeDtmProfile,
@@ -228,9 +230,9 @@ pub enum ControllerTaskRetirementError {
 }
 
 #[cfg(any(target_arch = "riscv32", test))]
-impl<'runtime> ControllerPoweredTaskRuntime<'runtime> {
+impl<'runtime, X: SignalExecutor> ControllerPoweredTaskRuntime<'runtime, X> {
     pub(crate) const fn new(
-        runtime: ControllerTaskRuntime<'runtime>,
+        runtime: ControllerTaskRuntime<'runtime, X>,
         task: TaskResources,
         time_scale: oer_esp32s31_hal::bluetooth::BluetoothControllerTimeScale,
         standalone_dtm_profile: crate::controller_hal::StandaloneAlwaysAwakeDtmProfile,
@@ -299,7 +301,7 @@ impl<'runtime> ControllerPoweredTaskRuntime<'runtime> {
     }
 
     /// Durable scheduler handoff for this epoch.
-    pub const fn scheduler_wake(&self) -> &SchedulerWakeCell {
+    pub const fn scheduler_wake(&self) -> &SchedulerWakeCell<X> {
         self.runtime.scheduler_wake()
     }
 
@@ -309,12 +311,12 @@ impl<'runtime> ControllerPoweredTaskRuntime<'runtime> {
     }
 }
 
-impl<'cells, const MODEM_TIMER_CAPACITY: usize>
-    ControllerRuntimeResources<'cells, MODEM_TIMER_CAPACITY>
+impl<'cells, const MODEM_TIMER_CAPACITY: usize, X: SignalExecutor>
+    ControllerRuntimeResources<'cells, MODEM_TIMER_CAPACITY, X>
 {
     /// Construct one pristine runtime epoch over `cells` without allocation
     /// or MMIO.
-    pub const fn new(cells: &'cells ControllerEventCells) -> Self {
+    pub const fn new(cells: &'cells ControllerEventCells<X>) -> Self {
         assert!(
             MODEM_TIMER_CAPACITY > 0,
             "a Controller runtime needs at least one modem timer slot"
@@ -362,9 +364,9 @@ impl<'cells, const MODEM_TIMER_CAPACITY: usize>
     pub fn split(
         self,
     ) -> (
-        ControllerInterruptRuntime<'cells>,
-        ControllerTaskRuntime<'cells>,
-        ControllerModemTimerRuntime<'cells, MODEM_TIMER_CAPACITY>,
+        ControllerInterruptRuntime<'cells, X>,
+        ControllerTaskRuntime<'cells, X>,
+        ControllerModemTimerRuntime<'cells, MODEM_TIMER_CAPACITY, X>,
     ) {
         let cells = self.cells;
         (
@@ -405,3 +407,13 @@ pub use scheduler::{ControllerRxChainError, ControllerScanStartError};
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+impl ControllerEventCells<oer_interrupt_table::signal::host::Deferred> {
+    /// Cells over fresh host signals whose facts wait for the take, as
+    /// they wait for an executor the interrupt preempted.
+    pub(crate) fn host() -> Self {
+        use oer_interrupt_table::signal::host::deferred_signal;
+        Self::new(deferred_signal(), deferred_signal())
+    }
+}

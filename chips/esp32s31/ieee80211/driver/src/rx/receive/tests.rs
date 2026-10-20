@@ -54,8 +54,16 @@ const STORAGE: usize = 1_668;
 const SLOTS: usize = 32;
 
 type HostEpoch = ActiveEpoch<Moderated, MacInterruptModel, PowerInterruptModel>;
-type HostLine = WifiIrqLine<HostEpoch>;
-type HostStatic = WifiRxStatic<COUNT, BUFFER, STORAGE, SLOTS, HostDma, HostEpoch>;
+type HostLine<X = oer_interrupt_table::signal::host::Host> = WifiIrqLine<HostEpoch, X>;
+type HostStatic = WifiRxStatic<
+    COUNT,
+    BUFFER,
+    STORAGE,
+    SLOTS,
+    oer_interrupt_table::signal::host::Host,
+    HostDma,
+    HostEpoch,
+>;
 type HostStorage = RxDmaStorage<COUNT, BUFFER, STORAGE, HostDma>;
 
 fn leak<T>(value: T) -> &'static mut T {
@@ -79,17 +87,17 @@ enum Event {
 }
 
 /// The hardware every host owner shares.
-struct Host {
+struct Host<X: SignalExecutor = oer_interrupt_table::signal::host::Host> {
     walker: RefCell<RxWalkerModel>,
     log: RefCell<Vec<Event>>,
     routed: Cell<bool>,
     /// The doorbell rings but its handler never runs.
     deaf: Cell<bool>,
     runtime_active: Cell<u8>,
-    cell: HandlerCell<HostLine>,
+    cell: HandlerCell<HostLine<X>>,
 }
 
-impl Host {
+impl<X: SignalExecutor> Host<X> {
     /// A leaked host whose walker reports to its event log.
     fn leaked() -> &'static Self {
         let host: &'static Self = leak(Self::new());
@@ -116,7 +124,7 @@ impl Host {
         core::mem::take(&mut *self.log.borrow_mut())
     }
 
-    fn line<R>(&self, f: impl FnOnce(&mut HostLine) -> R) -> R {
+    fn line<R>(&self, f: impl FnOnce(&mut HostLine<X>) -> R) -> R {
         self.cell.with(f).expect("the line is installed and idle")
     }
 
@@ -155,11 +163,11 @@ impl Host {
     }
 }
 
-struct HostRadio {
-    host: &'static Host,
+struct HostRadio<X: SignalExecutor = oer_interrupt_table::signal::host::Host> {
+    host: &'static Host<X>,
 }
 
-impl RxBufferFullCounter for HostRadio {
+impl<X: SignalExecutor> RxBufferFullCounter for HostRadio<X> {
     fn buffer_full_count(&mut self) -> Option<u16> {
         None
     }
@@ -167,7 +175,7 @@ impl RxBufferFullCounter for HostRadio {
 
 /// The walker's stops go into the host's event log, ordered among the MAC
 /// events.
-impl RxWalkerJournal for Host {
+impl<X: SignalExecutor> RxWalkerJournal for Host<X> {
     fn record(&self, operation: RxWalkerOperation) {
         if operation == RxWalkerOperation::Stop {
             Host::record(self, Event::WalkerStop);
@@ -175,7 +183,7 @@ impl RxWalkerJournal for Host {
     }
 }
 
-impl MacSnifferHardware for HostRadio {
+impl<X: SignalExecutor> MacSnifferHardware for HostRadio<X> {
     fn configure_open_promiscuous_receive(&mut self) {
         self.host.record(Event::PromiscuousOn);
     }
@@ -185,7 +193,7 @@ impl MacSnifferHardware for HostRadio {
     }
 }
 
-impl MacRuntimeStopHardware for HostRadio {
+impl<X: SignalExecutor> MacRuntimeStopHardware for HostRadio<X> {
     fn request_mac_runtime_stop(&mut self) {
         self.host.record(Event::RuntimeStop);
     }
@@ -199,12 +207,12 @@ impl MacRuntimeStopHardware for HostRadio {
     }
 }
 
-struct HostRoutes {
-    host: &'static Host,
+struct HostRoutes<X: SignalExecutor = oer_interrupt_table::signal::host::Host> {
+    host: &'static Host<X>,
     requests: &'static WifiIrqRequests,
 }
 
-impl WifiIrqRoutes for HostRoutes {
+impl<X: SignalExecutor> WifiIrqRoutes for HostRoutes<X> {
     fn enable(&mut self) {
         self.host.record(Event::RoutesEnabled {
             installed: self.host.cell.with(|_| ()).is_some(),
@@ -219,12 +227,12 @@ impl WifiIrqRoutes for HostRoutes {
     }
 }
 
-struct HostDoorbell {
-    host: &'static Host,
+struct HostDoorbell<X: SignalExecutor = oer_interrupt_table::signal::host::Host> {
+    host: &'static Host<X>,
     rx: &'static HostStorage,
 }
 
-impl RadioDoorbell for HostDoorbell {
+impl<X: SignalExecutor> RadioDoorbell for HostDoorbell<X> {
     fn ring(&self) {
         self.host.record(Event::Ring {
             released: self.rx.released_buffer_count(),
@@ -291,8 +299,8 @@ impl Admission for OverReserved {
     }
 }
 
-struct Harness {
-    host: &'static Host,
+struct Harness<X: SignalExecutor = oer_interrupt_table::signal::host::Host> {
+    host: &'static Host<X>,
     rx: &'static HostStorage,
     base: u32,
     requests: &'static WifiIrqRequests,
@@ -321,17 +329,11 @@ where
 }
 
 /// The host executor's signals, each serviced at its raise.
-fn host_signals() -> crate::rx::arena::WifiIrqSignals {
+fn host_signals() -> crate::rx::arena::WifiIrqSignals<oer_interrupt_table::signal::host::Host> {
     crate::rx::arena::WifiIrqSignals {
         mac: oer_interrupt_table::signal::host::signal(),
         power: oer_interrupt_table::signal::host::signal(),
     }
-}
-
-std::thread_local! {
-    /// The signals the next harness binds; the host executor's by default.
-    static SIGNALS: core::cell::Cell<Option<crate::rx::arena::WifiIrqSignals>> =
-        const { core::cell::Cell::new(None) };
 }
 
 /// A harness whose arena has `STAGE` staging slots; `owners` also gets the
@@ -340,8 +342,8 @@ std::thread_local! {
 fn harness_staged<const STAGE: usize, E, M>(
     owners: impl FnOnce(
         &'static WifiRxCounters,
-        RxReturnNotifier<'static>,
-        RxFrameEnds<'static, STAGE, BUFFER>,
+        RxReturnNotifier<'static, oer_interrupt_table::signal::host::Host>,
+        RxFrameEnds<'static, STAGE, BUFFER, oer_interrupt_table::signal::host::Host>,
         &'static VirtualClock,
     ) -> (E, M),
 ) -> Harness
@@ -349,12 +351,25 @@ where
     E: Publisher<'static, BUFFER, STAGE> + 'static,
     M: Admission + 'static,
 {
+    harness_staged_with(host_signals(), owners)
+}
+
+fn harness_staged_with<const STAGE: usize, E, M, X: SignalExecutor>(
+    signals: crate::rx::arena::WifiIrqSignals<X>,
+    owners: impl FnOnce(
+        &'static WifiRxCounters,
+        RxReturnNotifier<'static, X>,
+        RxFrameEnds<'static, STAGE, BUFFER, X>,
+        &'static VirtualClock,
+    ) -> (E, M),
+) -> Harness<X>
+where
+    E: Publisher<'static, BUFFER, STAGE> + 'static,
+    M: Admission + 'static,
+{
     let host = Host::leaked();
-    let arena: &'static mut WifiRxStatic<COUNT, BUFFER, STORAGE, STAGE, HostDma, HostEpoch> =
+    let arena: &'static mut WifiRxStatic<COUNT, BUFFER, STORAGE, STAGE, X, HostDma, HostEpoch> =
         leak(bytemuck::Zeroable::zeroed());
-    let signals = SIGNALS
-        .with(core::cell::Cell::take)
-        .unwrap_or_else(host_signals);
     let (parts, stop, frames) =
         WifiRxArena::bind(oer_esp32s31_hal::dma_static::Placed::host(arena), signals)
             .expect("a zeroed arena binds");
@@ -392,7 +407,7 @@ fn rx_success() -> MacInterruptObservation {
     MacInterruptObservation::from_semantic_events(MacInterruptEvents::RX_SUCCESS, false, false)
 }
 
-impl Harness {
+impl<X: SignalExecutor> Harness<X> {
     /// Run the level and the runner until both are idle, advancing time to
     /// each deadline the runner waits for.
     fn settle(&mut self) {
@@ -806,7 +821,7 @@ fn service_fault_masks_and_quarantines() {
     assert_eq!((report.service_errors, report.doorbell_unmasks), (1, 0));
 }
 
-impl Harness {
+impl<X: SignalExecutor> Harness<X> {
     /// The reserved descriptor's low address, as the walker reports it.
     fn reserved_low(&self) -> u32 {
         (self.base + COUNT as u32 * oer_esp32s31_hal::ieee80211::dma::descriptor::DESCRIPTOR_BYTES)
@@ -920,7 +935,7 @@ fn an_occupied_cell_refuses_the_epoch_before_any_route() {
     // A second epoch on the same cell: its line is refused and masked by
     // the executor itself, and its routes are never enabled.
     let cell = &first.host.cell;
-    let host = Host::leaked();
+    let host: &Host = Host::leaked();
     let arena: &'static mut HostStatic = leak(bytemuck::Zeroable::zeroed());
     let (parts, mut stop, _frames) = WifiRxArena::bind(
         oer_esp32s31_hal::dma_static::Placed::host(arena),
@@ -1002,14 +1017,15 @@ fn report_counts_units_bytes_and_drops() {
 
 const STAGE: usize = 8;
 
-type Returned<const N: usize = STAGE> = RefCell<Vec<HeldRxFrame<'static, 'static, N, BUFFER>>>;
+type Returned<const N: usize = STAGE> =
+    RefCell<Vec<HeldRxFrame<'static, 'static, N, BUFFER, oer_interrupt_table::signal::host::Host>>>;
 
 /// An upper layer that holds its leases while `holding`, through the
 /// notifier, as a network queue would; otherwise it drops them at once.
 struct ReturningSink<const N: usize = STAGE> {
     held: &'static Returned<N>,
     holding: &'static Cell<bool>,
-    returns: RxReturnNotifier<'static>,
+    returns: RxReturnNotifier<'static, oer_interrupt_table::signal::host::Host>,
     counters: &'static WifiRxCounters,
 }
 
@@ -1049,7 +1065,7 @@ fn returning_harness() -> (
     Harness,
     &'static Returned,
     &'static Cell<bool>,
-    RxReturnNotifier<'static>,
+    RxReturnNotifier<'static, oer_interrupt_table::signal::host::Host>,
 ) {
     returning_harness_with::<STAGE>()
 }
@@ -1059,7 +1075,7 @@ fn returning_harness_with<const N: usize>() -> (
     Harness,
     &'static Returned<N>,
     &'static Cell<bool>,
-    RxReturnNotifier<'static>,
+    RxReturnNotifier<'static, oer_interrupt_table::signal::host::Host>,
 ) {
     let held: &'static Returned<N> = leak(RefCell::new(Vec::new()));
     let holding: &'static Cell<bool> = leak(Cell::new(true));
@@ -1215,7 +1231,10 @@ fn a_return_while_rx_is_live_is_harmless() {
 
 /// A harness whose publisher is the product queue; the application's end
 /// of the queue is returned beside it.
-fn queue_harness() -> (Harness, FrameReceiver<'static, STAGE, BUFFER>) {
+fn queue_harness() -> (
+    Harness,
+    FrameReceiver<'static, STAGE, BUFFER, oer_interrupt_table::signal::host::Host>,
+) {
     let mut receiver = None;
     let harness = harness_staged::<STAGE, _, _>(|counters, _, frames, clock| {
         let RxFrameEnds {
@@ -1234,8 +1253,8 @@ fn queue_harness() -> (Harness, FrameReceiver<'static, STAGE, BUFFER>) {
 
 /// Poll the application's receive once.
 fn poll_next(
-    receiver: &mut FrameReceiver<'static, STAGE, BUFFER>,
-) -> Option<HeldRxFrame<'static, 'static, STAGE, BUFFER>> {
+    receiver: &mut FrameReceiver<'static, STAGE, BUFFER, oer_interrupt_table::signal::host::Host>,
+) -> Option<HeldRxFrame<'static, 'static, STAGE, BUFFER, oer_interrupt_table::signal::host::Host>> {
     let mut next = core::pin::pin!(receiver.next());
     match next.as_mut().poll(&mut Context::from_waker(Waker::noop())) {
         Poll::Ready(frame) => Some(frame),
@@ -1933,13 +1952,18 @@ fn a_walker_reported_on_a_held_lease_descriptor_quarantines_the_epoch() {
 
 #[test]
 fn a_runner_outside_its_signals_executor_ends_instead_of_waiting_forever() {
-    SIGNALS.with(|signals| {
-        signals.set(Some(crate::rx::arena::WifiIrqSignals {
+    let mut harness = harness_staged_with::<SLOTS, _, _, _>(
+        crate::rx::arena::WifiIrqSignals {
             mac: oer_interrupt_table::signal::host::foreign_signal(),
             power: oer_interrupt_table::signal::host::foreign_signal(),
-        }));
-    });
-    let mut harness = harness();
+        },
+        |counters, _, _, _| {
+            (
+                CountingSink::new(counters),
+                CountingAdmission::new(counters),
+            )
+        },
+    );
     harness.settle();
     assert!(matches!(
         harness.stop.try_exit(),

@@ -1,6 +1,7 @@
 //! Fact-bounded scheduler initialization after the controller HAL component.
 
 use oer_esp32s31_bluetooth_memory::scheduler::SchedulerSoftwareConfig;
+use oer_interrupt_table::signal::SignalExecutor;
 
 use oer_esp32s31_hal::bluetooth::{
     BluetoothControllerTimeScale, BluetoothSchedulerHardwareListsCleared,
@@ -54,17 +55,19 @@ pub enum ControllerTimeAcquisitionError {
 /// Dropping this state is fail-stop because no verified rollback exists after
 /// scheduler MMIO mutation.
 #[must_use = "the initialized scheduler retains every powered Bluetooth owner"]
-pub struct SchedulerInitialized<'cells, const MODEM_TIMER_CAPACITY: usize> {
+pub struct SchedulerInitialized<'cells, const MODEM_TIMER_CAPACITY: usize, X: SignalExecutor> {
     task: TaskResources,
     interrupts: Option<InterruptBankOwner>,
     time_scale: BluetoothControllerTimeScale,
     standalone_dtm_profile: crate::controller_hal::StandaloneAlwaysAwakeDtmProfile,
     config: SchedulerSoftwareConfig,
     _hardware_lists_cleared: BluetoothSchedulerHardwareListsCleared,
-    runtime: ControllerRuntimeResources<'cells, MODEM_TIMER_CAPACITY>,
+    runtime: ControllerRuntimeResources<'cells, MODEM_TIMER_CAPACITY, X>,
 }
 
-impl<'cells, const MODEM_TIMER_CAPACITY: usize> SchedulerInitialized<'cells, MODEM_TIMER_CAPACITY> {
+impl<'cells, const MODEM_TIMER_CAPACITY: usize, X: SignalExecutor>
+    SchedulerInitialized<'cells, MODEM_TIMER_CAPACITY, X>
+{
     pub(crate) fn task_mut(&mut self) -> &mut TaskResources {
         &mut self.task
     }
@@ -125,9 +128,9 @@ impl<'cells, const MODEM_TIMER_CAPACITY: usize> SchedulerInitialized<'cells, MOD
     pub fn split_runtime(
         self,
     ) -> (
-        ControllerInterruptRuntime<'cells>,
-        ControllerPoweredTaskRuntime<'cells>,
-        ControllerModemTimerRuntime<'cells, MODEM_TIMER_CAPACITY>,
+        ControllerInterruptRuntime<'cells, X>,
+        ControllerPoweredTaskRuntime<'cells, X>,
+        ControllerModemTimerRuntime<'cells, MODEM_TIMER_CAPACITY, X>,
     ) {
         assert!(
             self.interrupts.is_none(),
@@ -150,8 +153,8 @@ impl<'cells, const MODEM_TIMER_CAPACITY: usize> SchedulerInitialized<'cells, MOD
 
 /// A short exclusive view of the durable controller-time phase.
 #[cfg(target_arch = "riscv32")]
-pub enum ControllerTimeAccess<'owner, 'cells> {
-    Idle(ControllerTimeReady<'owner, 'cells>),
+pub enum ControllerTimeAccess<'owner, 'cells, X: SignalExecutor> {
+    Idle(ControllerTimeReady<'owner, 'cells, X>),
     Requested,
     DrainingOrphan,
     Faulted,
@@ -166,18 +169,18 @@ pub enum ControllerTimeAccess<'owner, 'cells> {
 /// # #[panic_handler]
 /// # fn panic(_: &core::panic::PanicInfo) -> ! { loop {} }
 /// use oer_esp32s31_bluetooth_driver::scheduler::ControllerTimeReady;
-/// fn duplicate(ready: ControllerTimeReady<'_, '_>) {
+/// fn duplicate<X: oer_interrupt_table::signal::SignalExecutor>(ready: ControllerTimeReady<'_, '_, X>) {
 ///     let first = ready.request();
 ///     let duplicate = ready.request();
 /// }
 /// ```
 #[cfg(target_arch = "riscv32")]
-pub struct ControllerTimeReady<'owner, 'cells> {
-    runtime: &'owner mut ControllerPoweredTaskRuntime<'cells>,
+pub struct ControllerTimeReady<'owner, 'cells, X: SignalExecutor> {
+    runtime: &'owner mut ControllerPoweredTaskRuntime<'cells, X>,
 }
 
 #[cfg(target_arch = "riscv32")]
-impl ControllerTimeReady<'_, '_> {
+impl<X: SignalExecutor> ControllerTimeReady<'_, '_, X> {
     pub fn request(
         self,
     ) -> Result<
@@ -192,9 +195,9 @@ impl ControllerTimeReady<'_, '_> {
 }
 
 #[cfg(any(target_arch = "riscv32", test))]
-impl<'cells> ControllerPoweredTaskRuntime<'cells> {
+impl<'cells, X: SignalExecutor> ControllerPoweredTaskRuntime<'cells, X> {
     #[cfg(target_arch = "riscv32")]
-    pub fn controller_time_access(&mut self) -> ControllerTimeAccess<'_, 'cells> {
+    pub fn controller_time_access(&mut self) -> ControllerTimeAccess<'_, 'cells, X> {
         use crate::controller_time::ControllerTimeWorkerPhase as Phase;
         match self.task.controller_time_phase() {
             Phase::Idle => ControllerTimeAccess::Idle(ControllerTimeReady { runtime: self }),
@@ -243,28 +246,32 @@ impl ControllerHalInitialized {
     /// into the same powered ownership epoch; it replaces the vendor event,
     /// broker-node and task containers instead of emulating their ABI.
     #[cfg(target_arch = "riscv32")]
-    pub fn initialize_scheduler<'cells, const MODEM_TIMER_CAPACITY: usize>(
+    pub fn initialize_scheduler<'cells, X: SignalExecutor, const MODEM_TIMER_CAPACITY: usize>(
         self,
-        runtime: ControllerRuntimeResources<'cells, MODEM_TIMER_CAPACITY>,
-    ) -> SchedulerInitialized<'cells, MODEM_TIMER_CAPACITY> {
+        runtime: ControllerRuntimeResources<'cells, MODEM_TIMER_CAPACITY, X>,
+    ) -> SchedulerInitialized<'cells, MODEM_TIMER_CAPACITY, X> {
         self.initialize_scheduler_with(runtime, |task| task.clear_scheduler_hardware_list_heads())
     }
 
     #[cfg(test)]
-    pub fn initialize_scheduler_for_validation<'cells, const MODEM_TIMER_CAPACITY: usize>(
+    pub fn initialize_scheduler_for_validation<
+        'cells,
+        X: SignalExecutor,
+        const MODEM_TIMER_CAPACITY: usize,
+    >(
         self,
-        runtime: ControllerRuntimeResources<'cells, MODEM_TIMER_CAPACITY>,
-    ) -> SchedulerInitialized<'cells, MODEM_TIMER_CAPACITY> {
+        runtime: ControllerRuntimeResources<'cells, MODEM_TIMER_CAPACITY, X>,
+    ) -> SchedulerInitialized<'cells, MODEM_TIMER_CAPACITY, X> {
         self.initialize_scheduler_with(runtime, |_| {
             BluetoothSchedulerHardwareListsCleared::for_host_test()
         })
     }
 
-    fn initialize_scheduler_with<'cells, const MODEM_TIMER_CAPACITY: usize>(
+    fn initialize_scheduler_with<'cells, X: SignalExecutor, const MODEM_TIMER_CAPACITY: usize>(
         self,
-        runtime: ControllerRuntimeResources<'cells, MODEM_TIMER_CAPACITY>,
+        runtime: ControllerRuntimeResources<'cells, MODEM_TIMER_CAPACITY, X>,
         initialize_hardware: impl FnOnce(&mut TaskResources) -> BluetoothSchedulerHardwareListsCleared,
-    ) -> SchedulerInitialized<'cells, MODEM_TIMER_CAPACITY> {
+    ) -> SchedulerInitialized<'cells, MODEM_TIMER_CAPACITY, X> {
         assert!(
             runtime.is_pristine() == Ok(true),
             "only a pristine Controller runtime, observed in its event cells' executor, can \

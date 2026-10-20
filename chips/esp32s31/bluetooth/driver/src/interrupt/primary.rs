@@ -9,6 +9,7 @@ use crate::interrupt::{
     PrimaryControllerFault, PrimaryInterruptClassification, SchedulerReferenceAction,
     SchedulerWakeCell, SchedulerWakePublication, SchedulerWorkerWake,
 };
+use oer_interrupt_table::signal::SignalExecutor;
 
 use oer_esp32s31_hal::bluetooth::{
     BluetoothSchedulerReferenceGateObservation, BluetoothSchedulerWorkObservation,
@@ -73,7 +74,10 @@ impl PrimaryInterruptStep {
     /// Publish one classified primary result into the scheduler handoff.
     ///
     /// Fault and empty outcomes never publish ordinary scheduler work.
-    pub fn publish(self, scheduler_wake: &SchedulerWakeCell) -> PrimaryPublishedInterruptStep {
+    pub fn publish<X: SignalExecutor>(
+        self,
+        scheduler_wake: &SchedulerWakeCell<X>,
+    ) -> PrimaryPublishedInterruptStep {
         match self {
             Self::Fault(fault) => PrimaryPublishedInterruptStep::Fault(fault),
             Self::DiagnosticUnsettled(classification) => {

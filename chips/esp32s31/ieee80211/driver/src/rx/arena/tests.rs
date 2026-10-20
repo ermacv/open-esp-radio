@@ -18,7 +18,8 @@ use crate::rx::{
 };
 
 type HostEpoch = ActiveEpoch<Moderated, MacInterruptModel, PowerInterruptModel>;
-type HostStatic = WifiRxStatic<32, 1_664, 1_668, 32, HostDma, HostEpoch>;
+type HostStatic =
+    WifiRxStatic<32, 1_664, 1_668, 32, oer_interrupt_table::signal::host::Host, HostDma, HostEpoch>;
 
 #[test]
 fn the_zero_bytes_bind_with_the_storage_placed_inside_the_static() {
@@ -72,8 +73,9 @@ fn the_zero_bytes_bind_with_the_storage_placed_inside_the_static() {
     assert!(parts.control.stop_requested());
 
     // The line lands in the arena's own slot.
-    let cell: &'static oer_memory::HandlerCell<WifiIrqLine<HostEpoch>> =
-        Box::leak(Box::new(oer_memory::HandlerCell::new()));
+    let cell: &'static oer_memory::HandlerCell<
+        WifiIrqLine<HostEpoch, oer_interrupt_table::signal::host::Host>,
+    > = Box::leak(Box::new(oer_memory::HandlerCell::new()));
     let epoch = ActiveEpoch::for_host_test(MacInterruptModel::new(), PowerInterruptModel::new());
     let Ok(installed) = parts.line.install(epoch, cell) else {
         panic!("an empty cell takes the line");

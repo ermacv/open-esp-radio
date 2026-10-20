@@ -23,8 +23,10 @@ pub const B: usize = 1664;
 pub const S: usize = 1668;
 pub const Q: usize = 32;
 pub const TX: usize = 512;
-pub type Arena = WifiRxArena<N, B, S, Q>;
-type Static = WifiRxStatic<N, B, S, Q>;
+pub type Arena = WifiRxArena<N, B, S, Q, RadioExecutor>;
+type Static = WifiRxStatic<N, B, S, Q, RadioExecutor>;
+pub type RadioExecutor = InterruptExecutor<2>;
+
 type Epoch = ActiveEpoch<Moderated>;
 
 oer_esp32s31_hal::dma_static! {
@@ -32,11 +34,11 @@ oer_esp32s31_hal::dma_static! {
     pub static TX_DMA: TxDmaStorage<TX> = zeroed in ".dma.bss.wifi_tx";
 }
 oer_memory::zeroed_static! {
-    pub static LINE: HandlerCell<WifiIrqLine<Epoch>> = zeroed in ".critical.bss.wifi_rx_line";
+    pub static LINE: HandlerCell<WifiIrqLine<Epoch, RadioExecutor>> = zeroed in ".critical.bss.wifi_rx_line";
 }
 oer_espressif_staged_runtime::placed_static! {
-    pub static MAC_SIGNAL: IrqSignal = IrqSignal::new(InterruptExecutor::<2>::SIGNALS), in critical_data "w2";
-    pub static POWER_SIGNAL: IrqSignal = IrqSignal::new(InterruptExecutor::<2>::SIGNALS), in critical_data "w2";
+    pub static MAC_SIGNAL: IrqSignal<RadioExecutor> = IrqSignal::new(), in critical_data "w2";
+    pub static POWER_SIGNAL: IrqSignal<RadioExecutor> = IrqSignal::new(), in critical_data "w2";
     pub static ERRORS: AtomicU32 = AtomicU32::new(0), in critical_data "w2";
 }
 pub static TX_SLOT: static_cell::StaticCell<TxSlot<TX>> = static_cell::StaticCell::new();

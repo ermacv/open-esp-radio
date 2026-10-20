@@ -19,7 +19,7 @@ use oer_esp32s31_ieee80211_mac::irq::{
 use super::*;
 
 type HostEpoch = ActiveEpoch<Moderated, MacInterruptModel, PowerInterruptModel>;
-type HostLine = WifiIrqLine<HostEpoch>;
+type HostLine = WifiIrqLine<HostEpoch, oer_interrupt_table::signal::host::Host>;
 
 fn leak<T>(value: T) -> &'static mut T {
     Box::leak(Box::new(value))
@@ -27,8 +27,8 @@ fn leak<T>(value: T) -> &'static mut T {
 
 struct Fixture {
     line: HostLine,
-    irq: IrqConsumer<'static>,
-    power: PowerIrqConsumer<'static>,
+    irq: IrqConsumer<'static, oer_interrupt_table::signal::host::Host>,
+    power: PowerIrqConsumer<'static, oer_interrupt_table::signal::host::Host>,
     requests: &'static WifiIrqRequests,
     counters: &'static WifiRxCounters,
 }
@@ -39,9 +39,9 @@ fn host_epoch() -> HostEpoch {
 
 /// The arena's line parts and the consumers of its facts.
 fn parts() -> (
-    WifiIrqLineParts<'static, HostEpoch>,
-    IrqConsumer<'static>,
-    PowerIrqConsumer<'static>,
+    WifiIrqLineParts<'static, HostEpoch, oer_interrupt_table::signal::host::Host>,
+    IrqConsumer<'static, oer_interrupt_table::signal::host::Host>,
+    PowerIrqConsumer<'static, oer_interrupt_table::signal::host::Host>,
 ) {
     let (mac, irq) = leak(IrqStorage::new(oer_interrupt_table::signal::host::signal())).split();
     let (power, power_consumer) = leak(PowerIrqStorage::new(
@@ -300,7 +300,8 @@ fn the_doorbell_is_acknowledged_without_a_line() {
 #[test]
 fn the_chip_line_can_live_in_a_static_cell() {
     fn sync<T: Sync>() {}
-    sync::<HandlerCell<WifiIrqLine<ActiveEpoch<Moderated>>>>();
+    sync::<HandlerCell<WifiIrqLine<ActiveEpoch<Moderated>, oer_interrupt_table::signal::host::Host>>>(
+    );
 }
 
 #[test]

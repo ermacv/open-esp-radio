@@ -23,11 +23,13 @@ fn controller_hal_precedes_complete_scheduler_init() {
     let time_scale = initialized.controller_time_scale();
     let scheduler_operations = Rc::clone(&operations);
     let cells = ControllerEventCells::host();
-    let mut scheduler =
-        initialized.initialize_scheduler_with(ControllerRuntimeResources::<4>::new(&cells), |_| {
+    let mut scheduler = initialized.initialize_scheduler_with(
+        ControllerRuntimeResources::<4, _>::new(&cells),
+        |_| {
             scheduler_operations.borrow_mut().push("scheduler-hardware");
             BluetoothSchedulerHardwareListsCleared::for_host_test()
-        });
+        },
+    );
     assert_eq!(
         operations.borrow().as_slice(),
         ["controller-hal", "scheduler-hardware"]

@@ -380,7 +380,7 @@ static SIGNAL_LISTS: [SignalList; SOFTWARE_INTERRUPT_COUNT] =
 /// software interrupt, whose handler services the signal and polls. It
 /// wakes no task itself.
 #[esp_hal::ram]
-fn pend_signal<const SWI: u8>(_: &'static IrqSignal) {
+fn pend_signal<const SWI: u8>(_: &'static IrqSignal<InterruptExecutor<SWI>>) {
     raise_interrupt(SWI);
 }
 
@@ -404,30 +404,24 @@ pub struct InterruptExecutor<const SWI: u8> {
     inner: raw::Executor,
 }
 
-impl<const SWI: u8> InterruptExecutor<SWI> {
-    /// The executor of this software interrupt's signals: an interrupt
-    /// handler raises an [`IrqSignal`] of it, and the task the signal wakes
-    /// runs on this executor. Only an interrupt-mode executor has one, so a
-    /// signal cannot belong to a thread-mode executor, whose task would share
-    /// its waker with the interrupt.
-    #[allow(unsafe_code, reason = "the executor's signal context contract")]
-    #[allow(
-        clippy::indexing_slicing,
-        reason = "a constant: an SWI beyond the lists fails the build"
-    )]
-    pub const SIGNALS: SignalExecutor =
-        // SAFETY: `signal_context::<SWI>` is true only while this executor's
-        // handler polls (`as_running`), which never reenters itself on its core;
-        // `pend_signal::<SWI>` raises that handler's interrupt, which services
-        // `SIGNAL_LISTS[SWI]` before it polls (`interrupt_handler`).
-        unsafe {
-            SignalExecutor::new(
-                pend_signal::<SWI>,
-                signal_context::<SWI>,
-                &SIGNAL_LISTS[SWI as usize],
-            )
-        };
+#[allow(unsafe_code, reason = "the executor's signal context contract")]
+// SAFETY: `signal_context::<SWI>` is true only while this executor's
+// handler polls (`as_running`), which never reenters itself on its core;
+// `pend_signal::<SWI>` raises that handler's interrupt, which services
+// `SIGNAL_LISTS[SWI]` before it polls (`interrupt_handler`).
+unsafe impl<const SWI: u8> SignalExecutor for InterruptExecutor<SWI> {
+    fn pend(signal: &'static IrqSignal<Self>) {
+        pend_signal::<SWI>(signal);
+    }
+    fn running() -> bool {
+        signal_context::<SWI>()
+    }
+    fn list() -> &'static SignalList {
+        &SIGNAL_LISTS[SWI as usize]
+    }
+}
 
+impl<const SWI: u8> InterruptExecutor<SWI> {
     /// Start polling in the handler of `wake`'s source, whose table entry
     /// names [`interrupt_handler::<SWI>`](interrupt_handler) on this core.
     /// `order` proves that this executor's level lies between the radio
@@ -554,7 +548,7 @@ pub fn interrupt_handler<const SWI: u8>() {
         crate::time_driver::service(SWI);
         // Raised signals wake their tasks here, in this context, before
         // the poll; a signal raised meanwhile raises this interrupt again.
-        InterruptExecutor::<SWI>::SIGNALS.service();
+        oer_interrupt_table::signal::service::<InterruptExecutor<SWI>>();
         #[allow(
             unsafe_code,
             reason = "only this software interrupt's handler polls the executor"

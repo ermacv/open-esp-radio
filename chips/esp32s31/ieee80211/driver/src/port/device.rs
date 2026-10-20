@@ -28,6 +28,7 @@ use oer_esp32s31_ieee80211_mac::{
     rx::pool::NetworkRxFrame,
 };
 use oer_esp32s31_radio_client::{MembershipCell, wifi::Wifi};
+use oer_interrupt_table::signal::SignalExecutor;
 use oer_memory::HandlerCell;
 use oer_radio_regulatory::{PowerLimits, RegulatoryDomain};
 
@@ -93,9 +94,10 @@ pub struct RadioDevice<
     const RB: usize,
     const RS: usize,
     const Q: usize,
+    X: SignalExecutor,
 > {
     active: Option<Active<W>>,
-    session: Result<ReceiveSession<N, RB, RS, Q>, Fault>,
+    session: Result<ReceiveSession<N, RB, RS, Q, X>, Fault>,
     setup: Option<MacInterruptSetup>,
     actor: Option<MembershipCell<Wifi>>,
     retune: Option<WifiRetunePending<W>>,
@@ -118,11 +120,20 @@ pub struct RadioDevice<
     marker: PhantomData<fn() -> C>,
 }
 
-pub struct RadioParts<T, W, R, D, const N: usize, const RB: usize, const RS: usize, const Q: usize>
-{
+pub struct RadioParts<
+    T,
+    W,
+    R,
+    D,
+    const N: usize,
+    const RB: usize,
+    const RS: usize,
+    const Q: usize,
+    X: SignalExecutor,
+> {
     pub wifi: WifiStopped<W>,
-    pub rx: WifiRxParts<'static, N, RB, RS, Q, ChipDma, ActiveEpoch<Moderated>>,
-    pub interrupt_cell: &'static HandlerCell<WifiIrqLine<ActiveEpoch<Moderated>>>,
+    pub rx: WifiRxParts<'static, N, RB, RS, Q, ChipDma, ActiveEpoch<Moderated>, X>,
+    pub interrupt_cell: &'static HandlerCell<WifiIrqLine<ActiveEpoch<Moderated>, X>>,
     pub actor: MembershipCell<Wifi>,
     pub timer: T,
     pub routes: R,
@@ -140,9 +151,10 @@ impl<
     const RB: usize,
     const RS: usize,
     const Q: usize,
-> RadioDevice<C, T, W, R, D, N, RB, RS, Q>
+    X: SignalExecutor,
+> RadioDevice<C, T, W, R, D, N, RB, RS, Q, X>
 {
-    pub fn new(parts: RadioParts<T, W, R, D, N, RB, RS, Q>) -> Self {
+    pub fn new(parts: RadioParts<T, W, R, D, N, RB, RS, Q, X>) -> Self {
         let WifiRuntimeParts {
             platform,
             mut registers,
@@ -218,7 +230,8 @@ impl<
     const RS: usize,
     const Q: usize,
     const B: usize,
-> Device<B> for RadioDevice<C, T, W, R, D, N, RB, RS, Q>
+    X: SignalExecutor,
+> Device<B> for RadioDevice<C, T, W, R, D, N, RB, RS, Q, X>
 where
     C: Composition,
     T: Timer + Clone + 'static,
