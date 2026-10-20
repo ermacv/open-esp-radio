@@ -828,6 +828,10 @@ fn a_missing_parameter_type_does_not_exclude_a_candidate() {
 /// Only the seed instruction has the pointer's DWARF location. All later
 /// evidence must come from the machine path, including its register move.
 fn transported_base(before: &str, between: &str, expected: bool) {
+    transported_base_from(before, between, "t0", expected);
+}
+
+fn transported_base_from(before: &str, between: &str, base: &str, expected: bool) {
     let program = PROGRAM.replace("fn _start(", "fn typed_start(").replace(
         "black_box(&OTHER);",
         "black_box(typed_start as extern \"C\" fn(u32, &Callbacks) -> u32); black_box(&OTHER);",
@@ -850,7 +854,7 @@ seed:
     {between}
 .global callback_load
 callback_load:
-    lw t1, 4(t0)
+    lw t1, 4({base})
     jalr ra, 0(t1)
 exit:
     lw ra, 12(sp)
@@ -919,7 +923,7 @@ exit:
         assert_eq!(
             resolved.get(site).is_some(),
             expected,
-            "{:#?}",
+            "base={base}, before={before:?}, between={between:?}: {:#?}",
             analysis.functions[&start].load_bases
         );
         if let Some(resolved) = resolved.get(site) {
@@ -1008,4 +1012,33 @@ fn an_unclosed_graph_stops_transport() {
         "j callback_load\nunknown: jr a3",
         false,
     );
+}
+
+#[test]
+fn an_addi_write_to_x0_does_not_make_it_equal_to_a_pointer() {
+    transported_base_from("", "addi zero, a1, 0", "zero", false);
+}
+
+#[test]
+fn an_add_write_to_x0_with_zero_on_the_right_does_not_supply_a_pointer() {
+    transported_base_from("", "add zero, a1, zero", "zero", false);
+}
+
+#[test]
+fn an_add_write_to_x0_with_zero_on_the_left_does_not_supply_a_pointer() {
+    transported_base_from("", "add zero, zero, a1", "zero", false);
+}
+
+#[test]
+fn both_register_add_move_forms_preserve_pointer_witnesses() {
+    for instruction in ["add t0, a1, zero", "add t0, zero, a1"] {
+        transported_base("", instruction, true);
+    }
+}
+
+#[test]
+fn copies_from_x0_do_not_reuse_the_previous_pointer_witness() {
+    for instruction in ["addi t0, zero, 0", "add t0, zero, zero"] {
+        transported_base("", instruction, false);
+    }
 }

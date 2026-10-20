@@ -104,7 +104,9 @@ pub(crate) fn bases(
             {
                 break (*from, BaseBarrier::MemoryWrite);
             }
-            if op.destination_register() == Some(register) {
+            // The decoder reports syntactic destinations, including x0.
+            // Writes to x0 are discarded, so they never define its value.
+            if register != 0 && op.destination_register() == Some(register) {
                 // A move supplies value identity. Other definitions, loads
                 // included, need a separate provenance mechanism.
                 match op {

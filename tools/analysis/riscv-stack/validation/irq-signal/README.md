@@ -7,7 +7,9 @@ bundle, including its ELF and four reports, was copied to
 separately. It was compiled at `b88fe906`; the analysis/tool sources are identical
 at `99f4fd64` (the intervening change concerns BLE memory placement). Both baseline
 firmware bundles were rebuilt at `99f4fd64`. Final bundles, full diagnostics, per-function common-engine records
-and check logs are retained under `/tmp/oer-irq-signal/`.
+and check logs are retained under `/tmp/oer-irq-signal/`. The current x0
+regressions, rebuilt bundles and repeated comparisons/checks are retained under
+`/tmp/oer-pr175-x0-fix/`.
 
 ## Fresh IRQ registry
 
@@ -87,8 +89,12 @@ changes the register being followed; it does not turn equal sets of possible
 sources into register equality. A merge, new definition, memory write, call,
 unsupported step, missing predecessor or cycle stops transport. Unclosed graphs
 supply no transported witnesses. No memory contents or callee parameters are
-forwarded. Both vectors and work are metered through the existing ledgers and
-`RunControl`; `FunctionFacts::load_bases` carries the result to the audit.
+forwarded. Writes to `x0` preserve its constant zero value and never supply a
+source register, including all three supported copy forms. This is enforced in
+the base-provenance consumer; the common decoder's syntactic destination
+contract is unchanged. Both vectors and work are metered through the existing
+ledgers and `RunControl`; `FunctionFacts::load_bases` carries the result to the
+audit.
 
 [Local field discovery](../../src/cha/provenance.rs) queries existing prepared
 locations at those earlier PCs, with the original load displacement. Conflicting
@@ -153,11 +159,14 @@ paths, coverage, assumptions and headroom are unchanged.
 
 ## Verification and reproduction
 
-149 stack regressions pass, including positive move/branch transport and negative
+154 stack regressions pass, including positive move/branch transport and negative
 definition bypass, unknown incoming pointer, overwrite, unknown alias write,
 unknown call effects, equal possible sources in unequal registers, and unclosed
-CFG cases. The positive regression removes transport and confirms the old hole
-returns with exactly the same half-open location. Existing unknown-parameter and
+CFG cases. The x0 regressions reject discarded writes via ADDI and both ADD
+operand orders, retain valid register ADD copies, and reject stale pointer
+witnesses after copying zero into a previously typed register. The positive
+regression removes transport and confirms the old hole returns with exactly the
+same half-open location. Existing unknown-parameter and
 PC-relative pair regressions pass. Tests and clippy pass for the 37-package
 selection of stack, its reverse dependencies, six common ELF/RISC-V foundations,
 and dependency-layer tests, with `oer-hil-lab/test-support` and serial tests.
