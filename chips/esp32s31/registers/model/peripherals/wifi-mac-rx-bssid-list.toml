@@ -33,35 +33,28 @@ name = "BITS_20_31_OPAQUE"
 bitOffset = 20
 bitWidth = 12
 
-[[review]]
+[[peripheral-review]]
 entity = "WIFI_MAC_RX_BSSID_LIST"
-sources = [
-    "BLOB_LIBPP_HAL_RX_MISC_DEBUG",
-    "BLOB_LIBPP_HAL_HE_INIT_PREFIX",
+opaque-entities = [
+    "WIFI_MAC_RX_BSSID_LIST.CONTROL.BITS_0_17_OPAQUE",
+    "WIFI_MAC_RX_BSSID_LIST.CONTROL.BITS_20_31_OPAQUE",
 ]
+
+[peripheral-review.peripheral]
+sources = ["BLOB_LIBPP_HAL_RX_MISC_DEBUG", "BLOB_LIBPP_HAL_HE_INIT_PREFIX"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
 
-[[review]]
-entity = "WIFI_MAC_RX_BSSID_LIST.CONTROL.RX_CONTROL_9_BSSID_POSITION"
+[peripheral-review.register]
 naming = "descriptive"
-sources = [
-    "BLOB_LIBPP_HAL_RX_MISC_DEBUG",
-    "BLOB_LIBPP_HAL_HE_INIT_PREFIX",
-]
+
+[peripheral-review.field]
+sources = ["BLOB_LIBPP_HAL_RX_MISC_DEBUG", "BLOB_LIBPP_HAL_HE_INIT_PREFIX"]
+naming = "descriptive"
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
 
-[[review]]
-entity = "WIFI_MAC_RX_BSSID_LIST.CONTROL"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_RX_BSSID_LIST.CONTROL.BITS_0_17_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_RX_BSSID_LIST.CONTROL.BITS_20_31_OPAQUE"
+[peripheral-review.opaque]
 naming = "opaque"

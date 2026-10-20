@@ -19,12 +19,15 @@ description = "Three-bit SAR2 power-detector capacitor code."
 bitOffset = 29
 bitWidth = 3
 
-[[review]]
-entity = "LP_AON_RADIO.SAR_CCT"
-naming = "vendor"
-sources = ["ESP_IDF_4D59230D_C5_LP_AON_SARADC"]
+[[peripheral-review]]
+entity = "LP_AON_RADIO"
 
-[[review]]
-entity = "LP_AON_RADIO.SAR_CCT.SAR2_PWDET_CCT"
-naming = "vendor"
+[peripheral-review.peripheral]
+
+[peripheral-review.register]
 sources = ["ESP_IDF_4D59230D_C5_LP_AON_SARADC"]
+naming = "vendor"
+
+[peripheral-review.field]
+sources = ["ESP_IDF_4D59230D_C5_LP_AON_SARADC"]
+naming = "vendor"

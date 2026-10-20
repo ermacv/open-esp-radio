@@ -35,25 +35,25 @@ description = "Three-bit power-detector circuit-mode field."
 bitOffset = 0
 bitWidth = 3
 
-[[review]]
+[[peripheral-review]]
 entity = "LP_AON_CLKRST"
+
+[peripheral-review.peripheral]
 sources = ["S31_ESP_PACS_SVD", "ROM_REV0_PHY_POWER_DETECTOR"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
 
-[[review]]
-entity = "LP_AON_CLKRST.RTC_SAR2_PWDET_CCT"
-naming = "vendor"
+[peripheral-review.register]
 sources = ["S31_ESP_PACS_SVD", "ROM_REV0_PHY_POWER_DETECTOR"]
+naming = "vendor"
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
 
-[[review]]
-entity = "LP_AON_CLKRST.RTC_SAR2_PWDET_CCT.RTC_SAR2_PWDET_CCT"
-naming = "vendor"
+[peripheral-review.field]
 sources = ["S31_ESP_PACS_SVD", "ROM_REV0_PHY_POWER_DETECTOR"]
+naming = "vendor"
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"

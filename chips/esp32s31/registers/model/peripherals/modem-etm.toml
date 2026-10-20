@@ -221,19 +221,28 @@ value = 85
 name = "IEEE802154_TX_START"
 value = 88
 
-[[review]]
+[[peripheral-review]]
 entity = "MODEM_ETM"
-sources = [
-    "ESP_IDF_ESP32S31_MODEM_REG_BASE",
-    "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG",
-    "ESP_IDF_7B9CC1AC_IEEE802154_DRIVER_ETM",
-    "BLOB_LIBBTDM_RUNTIME_CONTROL",
-    "BLOB_LIBBLE_CONTROLLER_OPERATIONAL_GAPS",
-    "BLOB_LIBBTDM_RUNTIME_OPERATIONAL_GAPS",
-]
+
+[peripheral-review.peripheral]
+sources = ["ESP_IDF_ESP32S31_MODEM_REG_BASE", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "ESP_IDF_7B9CC1AC_IEEE802154_DRIVER_ETM", "BLOB_LIBBTDM_RUNTIME_CONTROL", "BLOB_LIBBLE_CONTROLLER_OPERATIONAL_GAPS", "BLOB_LIBBTDM_RUNTIME_OPERATIONAL_GAPS"]
 provenance = "imported"
 accuracy = "exact"
 completeness = "partial"
+
+[peripheral-review.register]
+sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "ESP_IDF_7B9CC1AC_IEEE802154_DRIVER_ETM", "BLOB_LIBBTDM_RUNTIME_CONTROL"]
+naming = "descriptive"
+provenance = "imported"
+accuracy = "exact"
+completeness = "complete"
+
+[peripheral-review.field]
+sources = ["ESP_IDF_7B9CC1AC_S31_SOC_ETM", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "ESP_IDF_7B9CC1AC_IEEE802154_DRIVER_ETM", "BLOB_LIBBTDM_RUNTIME_CONTROL", "BLOB_LIBBLE_CONTROLLER_OPERATIONAL_GAPS", "BLOB_LIBBTDM_RUNTIME_OPERATIONAL_GAPS"]
+naming = "vendor"
+provenance = "derived"
+accuracy = "exact"
+completeness = "complete"
 
 [[review]]
 entity = "MODEM_ETM.CHANNEL_ENABLE"
@@ -368,66 +377,6 @@ accuracy = "exact"
 completeness = "complete"
 
 [[review]]
-entity = "MODEM_ETM.CHANNEL_ENABLE_SET.CH4"
-naming = "vendor"
-sources = [
-    "ESP_IDF_7B9CC1AC_S31_SOC_ETM",
-    "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG",
-    "ESP_IDF_7B9CC1AC_IEEE802154_DRIVER_ETM",
-    "BLOB_LIBBTDM_RUNTIME_CONTROL",
-    "BLOB_LIBBLE_CONTROLLER_OPERATIONAL_GAPS",
-    "BLOB_LIBBTDM_RUNTIME_OPERATIONAL_GAPS",
-]
-provenance = "derived"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "MODEM_ETM.CHANNEL_ENABLE_SET.CH5"
-naming = "vendor"
-sources = [
-    "ESP_IDF_7B9CC1AC_S31_SOC_ETM",
-    "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG",
-    "ESP_IDF_7B9CC1AC_IEEE802154_DRIVER_ETM",
-    "BLOB_LIBBTDM_RUNTIME_CONTROL",
-    "BLOB_LIBBLE_CONTROLLER_OPERATIONAL_GAPS",
-    "BLOB_LIBBTDM_RUNTIME_OPERATIONAL_GAPS",
-]
-provenance = "derived"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "MODEM_ETM.CHANNEL_ENABLE_SET.CH6"
-naming = "vendor"
-sources = [
-    "ESP_IDF_7B9CC1AC_S31_SOC_ETM",
-    "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG",
-    "ESP_IDF_7B9CC1AC_IEEE802154_DRIVER_ETM",
-    "BLOB_LIBBTDM_RUNTIME_CONTROL",
-    "BLOB_LIBBLE_CONTROLLER_OPERATIONAL_GAPS",
-    "BLOB_LIBBTDM_RUNTIME_OPERATIONAL_GAPS",
-]
-provenance = "derived"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "MODEM_ETM.CHANNEL_ENABLE_SET.CH7"
-naming = "vendor"
-sources = [
-    "ESP_IDF_7B9CC1AC_S31_SOC_ETM",
-    "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG",
-    "ESP_IDF_7B9CC1AC_IEEE802154_DRIVER_ETM",
-    "BLOB_LIBBTDM_RUNTIME_CONTROL",
-    "BLOB_LIBBLE_CONTROLLER_OPERATIONAL_GAPS",
-    "BLOB_LIBBTDM_RUNTIME_OPERATIONAL_GAPS",
-]
-provenance = "derived"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
 entity = "MODEM_ETM.CHANNEL_ENABLE_CLEAR"
 naming = "descriptive"
 sources = [
@@ -517,18 +466,6 @@ accuracy = "exact"
 completeness = "complete"
 
 [[review]]
-entity = "MODEM_ETM.CH%s_EVENT"
-naming = "descriptive"
-sources = [
-    "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG",
-    "ESP_IDF_7B9CC1AC_IEEE802154_DRIVER_ETM",
-    "BLOB_LIBBTDM_RUNTIME_CONTROL",
-]
-provenance = "imported"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
 entity = "MODEM_ETM.CH%s_EVENT.ID"
 naming = "vendor"
 sources = [
@@ -539,18 +476,6 @@ sources = [
 provenance = "imported"
 accuracy = "exact"
 completeness = "partial"
-
-[[review]]
-entity = "MODEM_ETM.CH%s_TASK"
-naming = "descriptive"
-sources = [
-    "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG",
-    "ESP_IDF_7B9CC1AC_IEEE802154_DRIVER_ETM",
-    "BLOB_LIBBTDM_RUNTIME_CONTROL",
-]
-provenance = "imported"
-accuracy = "exact"
-completeness = "complete"
 
 [[review]]
 entity = "MODEM_ETM.CH%s_TASK.ID"

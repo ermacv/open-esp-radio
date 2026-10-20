@@ -24,25 +24,25 @@ description = "Observed command image is one; hardware self-clear and command me
 bitOffset = 0
 bitWidth = 1
 
-[[review]]
+[[peripheral-review]]
 entity = "BLE_ISO_SCHEDULER_NOTIFY"
+
+[peripheral-review.peripheral]
 sources = ["BLOB_LIBBLE_ISO_SCHEDULER_NOTIFY"]
 provenance = "derived"
 accuracy = "exact"
 completeness = "partial"
 
-[[review]]
-entity = "BLE_ISO_SCHEDULER_NOTIFY.COMMAND"
-naming = "descriptive"
+[peripheral-review.register]
 sources = ["BLOB_LIBBLE_ISO_SCHEDULER_NOTIFY"]
+naming = "descriptive"
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
 
-[[review]]
-entity = "BLE_ISO_SCHEDULER_NOTIFY.COMMAND.TRIGGER"
-naming = "descriptive"
+[peripheral-review.field]
 sources = ["BLOB_LIBBLE_ISO_SCHEDULER_NOTIFY"]
+naming = "descriptive"
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"

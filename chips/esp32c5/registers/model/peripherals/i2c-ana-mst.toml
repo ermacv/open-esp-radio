@@ -283,90 +283,16 @@ description = "Two-bit PHY register mode."
 bitOffset = 9
 bitWidth = 2
 
-[[review]]
-entity = "I2C_ANA_MST.I2C0_CTRL"
-naming = "vendor"
+[[peripheral-review]]
+entity = "I2C_ANA_MST"
+
+[peripheral-review.peripheral]
+
+[peripheral-review.register]
 sources = ["ESP_IDF_4D59230D_C5_I2C_ANA_MST"]
-
-[[review]]
-entity = "I2C_ANA_MST.I2C0_CTRL.SLAVE_ADDR"
-naming = "descriptive"
-
-[[review]]
-entity = "I2C_ANA_MST.I2C0_CTRL.SLAVE_REG_ADDR"
-naming = "descriptive"
-
-[[review]]
-entity = "I2C_ANA_MST.I2C0_CTRL.DATA"
-naming = "descriptive"
-
-[[review]]
-entity = "I2C_ANA_MST.I2C0_CTRL.READ_WRITE"
-naming = "descriptive"
-
-[[review]]
-entity = "I2C_ANA_MST.I2C0_CTRL.BUSY"
-naming = "descriptive"
-
-[[review]]
-entity = "I2C_ANA_MST.I2C0_CTRL.START_OR_RESET"
-naming = "descriptive"
-
-[[review]]
-entity = "I2C_ANA_MST.I2C1_CTRL"
 naming = "vendor"
-sources = ["ESP_IDF_4D59230D_C5_I2C_ANA_MST"]
 
-[[review]]
-entity = "I2C_ANA_MST.I2C1_CTRL.SLAVE_ADDR"
-naming = "descriptive"
-
-[[review]]
-entity = "I2C_ANA_MST.I2C1_CTRL.SLAVE_REG_ADDR"
-naming = "descriptive"
-
-[[review]]
-entity = "I2C_ANA_MST.I2C1_CTRL.DATA"
-naming = "descriptive"
-
-[[review]]
-entity = "I2C_ANA_MST.I2C1_CTRL.READ_WRITE"
-naming = "descriptive"
-
-[[review]]
-entity = "I2C_ANA_MST.I2C1_CTRL.BUSY"
-naming = "descriptive"
-
-[[review]]
-entity = "I2C_ANA_MST.I2C1_CTRL.START_OR_RESET"
-naming = "descriptive"
-
-[[review]]
-entity = "I2C_ANA_MST.ANA_CONF1"
-naming = "vendor"
-sources = ["ESP_IDF_4D59230D_C5_I2C_ANA_MST"]
-
-[[review]]
-entity = "I2C_ANA_MST.ANA_CONF1.READ_MASK_COMPLEMENT"
-naming = "descriptive"
-
-
-[[review]]
-entity = "I2C_ANA_MST.ANA_CONF2"
-naming = "vendor"
-sources = ["ESP_IDF_4D59230D_C5_I2C_ANA_MST"]
-
-[[review]]
-entity = "I2C_ANA_MST.ANA_CONF2.PHY_HOST_MAP"
-naming = "descriptive"
-
-[[review]]
-entity = "I2C_ANA_MST.I2C0_CTRL1"
-naming = "vendor"
-sources = ["ESP_IDF_4D59230D_C5_I2C_ANA_MST"]
-
-[[review]]
-entity = "I2C_ANA_MST.I2C0_CTRL1.SCL_PULSE_DURATION"
+[peripheral-review.field]
 naming = "descriptive"
 
 [[review]]
@@ -375,46 +301,11 @@ naming = "vendor"
 sources = ["ESP_IDF_4D59230D_C5_I2C_ANA_MST"]
 
 [[review]]
-entity = "I2C_ANA_MST.I2C1_CTRL1"
-naming = "vendor"
-sources = ["ESP_IDF_4D59230D_C5_I2C_ANA_MST"]
-
-[[review]]
-entity = "I2C_ANA_MST.I2C1_CTRL1.SCL_PULSE_DURATION"
-naming = "descriptive"
-
-[[review]]
 entity = "I2C_ANA_MST.I2C1_CTRL1.SDA_SIDE_GUARD"
 naming = "vendor"
 sources = ["ESP_IDF_4D59230D_C5_I2C_ANA_MST"]
 
 [[review]]
-entity = "I2C_ANA_MST.HW_I2C_CTRL"
-naming = "vendor"
-sources = ["ESP_IDF_4D59230D_C5_I2C_ANA_MST"]
-
-[[review]]
-entity = "I2C_ANA_MST.HW_I2C_CTRL.SCL_PULSE_DURATION"
-naming = "descriptive"
-
-[[review]]
 entity = "I2C_ANA_MST.HW_I2C_CTRL.SDA_SIDE_GUARD"
 naming = "vendor"
 sources = ["ESP_IDF_4D59230D_C5_I2C_ANA_MST"]
-
-[[review]]
-entity = "I2C_ANA_MST.ANA_CONF0"
-naming = "vendor"
-sources = ["ESP_IDF_4D59230D_C5_I2C_ANA_MST"]
-
-[[review]]
-entity = "I2C_ANA_MST.ANA_CONF0.BBPLL_CAL_MODE"
-naming = "descriptive"
-
-[[review]]
-entity = "I2C_ANA_MST.ANA_CONF0.PHY_REGISTER_ENABLE"
-naming = "descriptive"
-
-[[review]]
-entity = "I2C_ANA_MST.ANA_CONF0.PHY_REGISTER_MODE"
-naming = "descriptive"

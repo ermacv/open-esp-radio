@@ -29,29 +29,25 @@ description = "Full-width wrapping counter value in microseconds, at the system 
 bitOffset = 0
 bitWidth = 32
 
-[[review]]
+[[peripheral-review]]
 entity = "WIFI_MAC_LOCAL_TIME"
+
+[peripheral-review.peripheral]
 sources = ["BLOB_LIBPP_MAC_LOCAL_TIME"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
 
-[[review]]
-entity = "WIFI_MAC_LOCAL_TIME.COUNTER"
-naming = "descriptive"
+[peripheral-review.register]
 sources = ["ROM_REV0_PHY_WAIT_I2C_SDM_STABLE"]
+naming = "descriptive"
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
 
-[[review]]
-entity = "WIFI_MAC_LOCAL_TIME.COUNTER.VALUE"
+[peripheral-review.field]
+sources = ["ROM_REV0_PHY_WAIT_I2C_SDM_STABLE", "BLOB_LIBPP_MAC_LOCAL_TIME", "HIL_OPEN_MAC_LOCAL_TIME_RATE_2026_10_03"]
 naming = "descriptive"
-sources = [
-    "ROM_REV0_PHY_WAIT_I2C_SDM_STABLE",
-    "BLOB_LIBPP_MAC_LOCAL_TIME",
-    "HIL_OPEN_MAC_LOCAL_TIME_RATE_2026_10_03",
-]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"

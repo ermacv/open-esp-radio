@@ -20,25 +20,25 @@ description = "Six-bit target replaced with crystal_frequency_mhz minus one by c
 bitOffset = 0
 bitWidth = 6
 
-[[review]]
+[[peripheral-review]]
 entity = "MODEM_LPCON_PHY_TICK"
+
+[peripheral-review.peripheral]
 sources = ["S31_MODEM_LPCON_STRUCT", "BLOB_LIBPHY_PHY_GET_XTAL_FREQ"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
 
-[[review]]
-entity = "MODEM_LPCON_PHY_TICK.TICK_CONF"
-naming = "vendor"
+[peripheral-review.register]
 sources = ["S31_MODEM_LPCON_STRUCT", "BLOB_LIBPHY_PHY_GET_XTAL_FREQ", "S31_ESP_PACS_SVD"]
+naming = "vendor"
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
 
-[[review]]
-entity = "MODEM_LPCON_PHY_TICK.TICK_CONF.MODEM_PWR_TICK_TARGET"
-naming = "vendor"
+[peripheral-review.field]
 sources = ["S31_MODEM_LPCON_STRUCT", "BLOB_LIBPHY_PHY_GET_XTAL_FREQ", "S31_ESP_PACS_SVD"]
+naming = "vendor"
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"

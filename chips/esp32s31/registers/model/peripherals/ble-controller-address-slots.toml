@@ -52,25 +52,25 @@ bitWidth = 16
 minimum = 0x0
 maximum = 0xFFFF
 
-[[review]]
+[[peripheral-review]]
 entity = "BLE_CONTROLLER_ADDRESS_SLOTS"
+
+[peripheral-review.peripheral]
 sources = ["BLOB_LIBBLE_CONTROLLER_ADDRESS_SLOTS"]
 provenance = "derived"
 accuracy = "exact"
 completeness = "partial"
 
-[[review]]
-entity = "BLE_CONTROLLER_ADDRESS_SLOTS.SLOT%s_LOW"
-naming = "descriptive"
+[peripheral-review.register]
 sources = ["BLOB_LIBBLE_CONTROLLER_ADDRESS_SLOTS"]
+naming = "descriptive"
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
 
-[[review]]
-entity = "BLE_CONTROLLER_ADDRESS_SLOTS.SLOT%s_LOW.OCTETS_0_TO_3"
-naming = "descriptive"
+[peripheral-review.field]
 sources = ["BLOB_LIBBLE_CONTROLLER_ADDRESS_SLOTS"]
+naming = "descriptive"
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -82,11 +82,3 @@ sources = ["BLOB_LIBBLE_CONTROLLER_ADDRESS_SLOTS"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
-
-[[review]]
-entity = "BLE_CONTROLLER_ADDRESS_SLOTS.SLOT%s_HIGH.OCTETS_4_TO_5"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_CONTROLLER_ADDRESS_SLOTS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"

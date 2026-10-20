@@ -175,25 +175,35 @@ description = "Analog peripheral I2C active-low reset release."
 bitOffset = 31
 bitWidth = 1
 
-[[review]]
+[[peripheral-review]]
 entity = "PMU_RADIO"
+opaque-entities = [
+    "PMU_RADIO.HP_ACTIVE_HP_CK_POWER.BITS_0_3_OPAQUE",
+]
+
+[peripheral-review.peripheral]
 sources = ["S31_ESP_PACS_SVD", "S31_PMU_HEADERS", "ESP_HAL_63E97BE_S31_MODEM_CLOCK_MAP", "BLOB_LIBPHY_PHY_OPEN_I2C_XPD_NEW", "ROM_REV0_PHY_OPEN_FE_BB_CLK"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
 
-[[review]]
-entity = "PMU_RADIO.HP_ACTIVE_ICG_MODEM"
-naming = "vendor"
+[peripheral-review.register]
 sources = ["S31_ESP_PACS_SVD", "S31_PMU_HEADERS", "ESP_HAL_63E97BE_S31_MODEM_CLOCK_MAP"]
+naming = "vendor"
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
 
-[[review]]
-entity = "PMU_RADIO.HP_ACTIVE_ICG_MODEM.HP_ACTIVE_DIG_ICG_MODEM_CODE"
-naming = "vendor"
+[peripheral-review.field]
 sources = ["S31_ESP_PACS_SVD", "S31_PMU_HEADERS", "ESP_HAL_63E97BE_S31_MODEM_CLOCK_MAP"]
+naming = "vendor"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[peripheral-review.opaque]
+sources = ["ROM_REV0_PHY_OPEN_FE_BB_CLK"]
+naming = "opaque"
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -205,14 +215,6 @@ sources = ["S31_ESP_PACS_SVD", "S31_PMU_HEADERS", "ROM_REV0_PHY_OPEN_FE_BB_CLK"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
-
-[[review]]
-entity = "PMU_RADIO.HP_ACTIVE_HP_CK_POWER.BITS_0_3_OPAQUE"
-naming = "opaque"
-sources = ["ROM_REV0_PHY_OPEN_FE_BB_CLK"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
 
 [[review]]
 entity = "PMU_RADIO.HP_ACTIVE_HP_CK_POWER.HP_ACTIVE_XPD_BB_I2C"
@@ -261,30 +263,6 @@ sources = ["S31_ESP_PACS_SVD", "S31_PMU_HEADERS", "ESP_HAL_63E97BE_S31_MODEM_CLO
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
-
-[[review]]
-entity = "PMU_RADIO.IMM_SLEEP_SYSCLK.UPDATE_DIG_ICG_SWITCH"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD", "S31_PMU_HEADERS", "ESP_HAL_63E97BE_S31_MODEM_CLOCK_MAP"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PMU_RADIO.IMM_MODEM_ICG"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD", "S31_PMU_HEADERS", "ESP_HAL_63E97BE_S31_MODEM_CLOCK_MAP"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PMU_RADIO.IMM_MODEM_ICG.UPDATE_DIG_ICG_MODEM_EN"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD", "S31_PMU_HEADERS", "ESP_HAL_63E97BE_S31_MODEM_CLOCK_MAP"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
 
 [[review]]
 entity = "PMU_RADIO.RF_PWC"

@@ -23,25 +23,25 @@ description = "The reset-idle predicate fails when this exact field is nonzero."
 bitOffset = 0
 bitWidth = 4
 
-[[review]]
+[[peripheral-review]]
 entity = "SHARED_BASEBAND_RESET_IDLE_STATUS"
+
+[peripheral-review.peripheral]
 sources = ["BLOB_LIBBTBB_BBMAC_IDLE_FOR_SWRST"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
 
-[[review]]
-entity = "SHARED_BASEBAND_RESET_IDLE_STATUS.STATUS"
+[peripheral-review.register]
+sources = ["BLOB_LIBBTBB_BBMAC_IDLE_FOR_SWRST"]
 naming = "descriptive"
-sources = ["BLOB_LIBBTBB_BBMAC_IDLE_FOR_SWRST"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
 
-[[review]]
-entity = "SHARED_BASEBAND_RESET_IDLE_STATUS.STATUS.TXRX_STATE"
-naming = "vendor"
+[peripheral-review.field]
 sources = ["BLOB_LIBBTBB_BBMAC_IDLE_FOR_SWRST", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG"]
+naming = "vendor"
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"

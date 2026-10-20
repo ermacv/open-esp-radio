@@ -1049,28 +1049,62 @@ bitWidth = 4
 minimum = 0
 maximum = 0x0F
 
-[[review]]
+[[peripheral-review]]
 entity = "BLUETOOTH_CONTROLLER_CORE"
-sources = [
-    "BLOB_LIBBTDM_SCHEDULER_REGISTERS",
-    "BLOB_LIBBTDM_SCHEDULER_LIFECYCLE",
-    "BLOB_LIBBTDM_SCHEDULER_HEAD_PUBLICATION",
-    "BLOB_LIBBTDM_HAL_CONTROLLER_INIT",
-    "BLOB_LIBBTDM_SLEEP_TIMER_REGISTERS",
-    "BLOB_LIBBTDM_SLEEP_TIMER_SNAPSHOT",
-    "BLOB_LIBBLE_CONTROLLER_TRANSACTION_WORDS",
-    "BLOB_LIBBLE_MMGMT_HW_LISTS",
-    "BLOB_LIBBLE_ISO_COEX_REGISTERS",
-    "BLOB_LIBBLE_SCAN_HW_SNAPSHOT",
-    "BLOB_LIBBLE_CONTROLLER_OPERATIONAL_GAPS",
-    "BLOB_LIBBTDM_SCHEDULER_OPERATIONAL_GAPS",
-    "PUBLIC_ESP32S31_BT_SCHEDULER_ROLES",
-    "BLOB_LIBBTDM_SCHEDULER_WAIT_TAIL",
-    "BLOB_LIBBLE_PHY_INIT_REGISTERS",
+opaque-entities = [
+    "BLUETOOTH_CONTROLLER_CORE.WORD_0244_OPAQUE",
+    "BLUETOOTH_CONTROLLER_CORE.WORD_0244_OPAQUE.BITS_0_31_OPAQUE",
+    "BLUETOOTH_CONTROLLER_CORE.WORD_024C_OPAQUE",
+    "BLUETOOTH_CONTROLLER_CORE.WORD_024C_OPAQUE.BITS_0_31_OPAQUE",
+    "BLUETOOTH_CONTROLLER_CORE.SCHEDULER_SRAM_POINTER_PREFIX.BITS_0_21_OPAQUE",
+    "BLUETOOTH_CONTROLLER_CORE.BTLC_TIMER_CONTROL.BIT_25_OPAQUE",
+    "BLUETOOTH_CONTROLLER_CORE.BTLC_TIMER_CONTROL.BITS_27_30_OPAQUE",
+    "BLUETOOTH_CONTROLLER_CORE.SCHEDULER_COMMAND_0.BIT_25_OPAQUE",
+    "BLUETOOTH_CONTROLLER_CORE.SCHEDULER_COMMAND_0.BIT_30_OPAQUE",
+    "BLUETOOTH_CONTROLLER_CORE.SCHEDULER_COMMAND_1.BIT_16_OPAQUE",
+    "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_LATCH.BITS_0_5_OPAQUE",
+    "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_LATCH.BITS_7_30_OPAQUE",
+    "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_LOW_20.BITS_20_31_OPAQUE",
+    "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_SLOT_MAP%s.BIT_3_OPAQUE",
+    "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_SLOT_MAP%s.BIT_7_OPAQUE",
+    "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_SLOT_MAP%s.BIT_11_OPAQUE",
+    "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_SLOT_MAP%s.BIT_15_OPAQUE",
+    "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_SLOT_MAP%s.BIT_19_OPAQUE",
+    "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_SLOT_MAP%s.BIT_23_OPAQUE",
+    "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_SLOT_MAP%s.BIT_27_OPAQUE",
+    "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_SLOT_MAP%s.BIT_31_OPAQUE",
+    "BLUETOOTH_CONTROLLER_CORE.WORD_0204_OPAQUE",
+    "BLUETOOTH_CONTROLLER_CORE.WORD_0208_OPAQUE",
+    "BLUETOOTH_CONTROLLER_CORE.WORD_0324_OPAQUE",
+    "BLUETOOTH_CONTROLLER_CORE.WORD_036C_OPAQUE",
 ]
+
+[peripheral-review.peripheral]
+sources = ["BLOB_LIBBTDM_SCHEDULER_REGISTERS", "BLOB_LIBBTDM_SCHEDULER_LIFECYCLE", "BLOB_LIBBTDM_SCHEDULER_HEAD_PUBLICATION", "BLOB_LIBBTDM_HAL_CONTROLLER_INIT", "BLOB_LIBBTDM_SLEEP_TIMER_REGISTERS", "BLOB_LIBBTDM_SLEEP_TIMER_SNAPSHOT", "BLOB_LIBBLE_CONTROLLER_TRANSACTION_WORDS", "BLOB_LIBBLE_MMGMT_HW_LISTS", "BLOB_LIBBLE_ISO_COEX_REGISTERS", "BLOB_LIBBLE_SCAN_HW_SNAPSHOT", "BLOB_LIBBLE_CONTROLLER_OPERATIONAL_GAPS", "BLOB_LIBBTDM_SCHEDULER_OPERATIONAL_GAPS", "PUBLIC_ESP32S31_BT_SCHEDULER_ROLES", "BLOB_LIBBTDM_SCHEDULER_WAIT_TAIL", "BLOB_LIBBLE_PHY_INIT_REGISTERS"]
 provenance = "derived"
 accuracy = "exact"
 completeness = "partial"
+
+[peripheral-review.register]
+sources = ["BLOB_LIBBLE_ISO_COEX_REGISTERS"]
+naming = "descriptive"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[peripheral-review.field]
+sources = ["BLOB_LIBBTDM_HAL_CONTROLLER_INIT"]
+naming = "descriptive"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[peripheral-review.opaque]
+sources = ["BLOB_LIBBTDM_HAL_CONTROLLER_INIT"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
 
 [[review]]
 entity = "BLUETOOTH_CONTROLLER_CORE.GPIO_DIAG_ARGUMENT_1"
@@ -1161,14 +1195,6 @@ sources = ["BLOB_LIBBTDM_SCHEDULER_REGISTERS"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
-
-[[review]]
-entity = "BLUETOOTH_CONTROLLER_CORE.SCHEDULER_SRAM_POINTER_PREFIX.BITS_0_21_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTDM_HAL_CONTROLLER_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
 
 [[review]]
 entity = "BLUETOOTH_CONTROLLER_CORE.SCHEDULER_SRAM_POINTER_PREFIX.ADDRESS_PREFIX"
@@ -1371,14 +1397,6 @@ accuracy = "exact"
 completeness = "complete"
 
 [[review]]
-entity = "BLUETOOTH_CONTROLLER_CORE.ISO_COEX_ENABLE"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_ISO_COEX_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
 entity = "BLUETOOTH_CONTROLLER_CORE.ISO_COEX_ENABLE.ENABLE"
 naming = "descriptive"
 sources = ["BLOB_LIBBLE_ISO_COEX_REGISTERS"]
@@ -1387,28 +1405,12 @@ accuracy = "exact"
 completeness = "complete"
 
 [[review]]
-entity = "BLUETOOTH_CONTROLLER_CORE.ISO_COEX_CONTROL_0"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_ISO_COEX_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
 entity = "BLUETOOTH_CONTROLLER_CORE.ISO_COEX_CONTROL_0.ENABLE_0"
 naming = "descriptive"
 sources = ["BLOB_LIBBLE_ISO_COEX_REGISTERS"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_CONTROLLER_CORE.ISO_COEX_THRESHOLD"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_ISO_COEX_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
 
 [[review]]
 entity = "BLUETOOTH_CONTROLLER_CORE.ISO_COEX_THRESHOLD.VALUE_LOW_10"
@@ -1427,28 +1429,12 @@ accuracy = "exact"
 completeness = "complete"
 
 [[review]]
-entity = "BLUETOOTH_CONTROLLER_CORE.ISO_COEX_CONTROL_1"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_ISO_COEX_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
 entity = "BLUETOOTH_CONTROLLER_CORE.ISO_COEX_CONTROL_1.ENABLE_0"
 naming = "descriptive"
 sources = ["BLOB_LIBBLE_ISO_COEX_REGISTERS"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_CONTROLLER_CORE.ISO_COEX_STATE_0"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_ISO_COEX_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
 
 [[review]]
 entity = "BLUETOOTH_CONTROLLER_CORE.ISO_COEX_STATE_0.VALUE"
@@ -1459,28 +1445,12 @@ accuracy = "exact"
 completeness = "complete"
 
 [[review]]
-entity = "BLUETOOTH_CONTROLLER_CORE.ISO_COEX_STATE_1"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_ISO_COEX_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
 entity = "BLUETOOTH_CONTROLLER_CORE.ISO_COEX_STATE_1.VALUE"
 naming = "descriptive"
 sources = ["BLOB_LIBBLE_ISO_COEX_REGISTERS"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_CONTROLLER_CORE.ISO_COEX_TIMING_0"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_ISO_COEX_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
 
 [[review]]
 entity = "BLUETOOTH_CONTROLLER_CORE.ISO_COEX_TIMING_0.VALUE_LOW_24"
@@ -1497,14 +1467,6 @@ sources = ["BLOB_LIBBLE_ISO_COEX_REGISTERS"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_CONTROLLER_CORE.ISO_COEX_TIMING_1"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_ISO_COEX_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
 
 [[review]]
 entity = "BLUETOOTH_CONTROLLER_CORE.ISO_COEX_TIMING_1.VALUE_LOW_20"
@@ -1851,36 +1813,12 @@ accuracy = "exact"
 completeness = "partial"
 
 [[review]]
-entity = "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_BYTES.VALUE_0"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_HAL_CONTROLLER_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_BYTES.VALUE_1"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_HAL_CONTROLLER_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
 entity = "BLUETOOTH_CONTROLLER_CORE.WDT_CONFIG_0"
 naming = "descriptive"
 sources = ["BLOB_LIBBTDM_HAL_CONTROLLER_INIT", "BLOB_LIBBREDR_HAL_LINK_ACCESSORS"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
-
-[[review]]
-entity = "BLUETOOTH_CONTROLLER_CORE.WDT_CONFIG_0.ENABLE"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_HAL_CONTROLLER_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
 
 [[review]]
 entity = "BLUETOOTH_CONTROLLER_CORE.WDT_CONFIG_1"
@@ -1891,76 +1829,12 @@ accuracy = "exact"
 completeness = "partial"
 
 [[review]]
-entity = "BLUETOOTH_CONTROLLER_CORE.WDT_CONFIG_1.CONFIG_3"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_HAL_CONTROLLER_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_CONTROLLER_CORE.WDT_CONFIG_1.CONFIG_6_7"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_HAL_CONTROLLER_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_CONTROLLER_CORE.WDT_CONFIG_1.CONFIG_15"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_HAL_CONTROLLER_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_CONTROLLER_CORE.WDT_CONFIG_1.CONFIG_18_19"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_HAL_CONTROLLER_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
 entity = "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_LATCH"
 naming = "descriptive"
 sources = ["BLOB_LIBBTDM_HAL_CONTROLLER_INIT"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
-
-[[review]]
-entity = "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_LATCH.BITS_0_5_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTDM_HAL_CONTROLLER_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_LATCH.CONFIG_6"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_HAL_CONTROLLER_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_LATCH.BITS_7_30_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTDM_HAL_CONTROLLER_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_LATCH.ENABLE_31"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_HAL_CONTROLLER_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
 
 [[review]]
 entity = "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_LOW_20"
@@ -1971,52 +1845,12 @@ accuracy = "exact"
 completeness = "partial"
 
 [[review]]
-entity = "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_LOW_20.CONFIG_LOW_20"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_HAL_CONTROLLER_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_LOW_20.BITS_20_31_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTDM_HAL_CONTROLLER_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
 entity = "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_SCHEDULER_CONTROL"
 naming = "descriptive"
 sources = ["BLOB_LIBBTDM_HAL_CONTROLLER_INIT"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
-
-[[review]]
-entity = "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_SCHEDULER_CONTROL.CONFIG_BYTE_1"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_HAL_CONTROLLER_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_SCHEDULER_CONTROL.CONFIG_16_20"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_HAL_CONTROLLER_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_SCHEDULER_CONTROL.ENABLE_31"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_HAL_CONTROLLER_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
 
 [[review]]
 entity = "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_LOW_HALF"
@@ -2027,276 +1861,12 @@ accuracy = "exact"
 completeness = "partial"
 
 [[review]]
-entity = "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_LOW_HALF.CONFIG_LOW_16"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_HAL_CONTROLLER_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
 entity = "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_SLOT_MAP%s"
 naming = "descriptive"
 sources = ["BLOB_LIBBTDM_HAL_CONTROLLER_INIT"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
-
-[[review]]
-entity = "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_SLOT_MAP%s.LANE_0_ENABLE"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_HAL_CONTROLLER_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_SLOT_MAP%s.LANE_0_RETAINED_INDEX_LOW"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_HAL_CONTROLLER_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_SLOT_MAP%s.LANE_0_INDEX_HIGH"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_HAL_CONTROLLER_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_SLOT_MAP%s.BIT_3_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTDM_HAL_CONTROLLER_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_SLOT_MAP%s.LANE_1_ENABLE"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_HAL_CONTROLLER_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_SLOT_MAP%s.LANE_1_RETAINED_INDEX_LOW"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_HAL_CONTROLLER_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_SLOT_MAP%s.LANE_1_INDEX_HIGH"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_HAL_CONTROLLER_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_SLOT_MAP%s.BIT_7_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTDM_HAL_CONTROLLER_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_SLOT_MAP%s.LANE_2_ENABLE"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_HAL_CONTROLLER_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_SLOT_MAP%s.LANE_2_RETAINED_INDEX_LOW"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_HAL_CONTROLLER_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_SLOT_MAP%s.LANE_2_INDEX_HIGH"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_HAL_CONTROLLER_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_SLOT_MAP%s.BIT_11_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTDM_HAL_CONTROLLER_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_SLOT_MAP%s.LANE_3_ENABLE"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_HAL_CONTROLLER_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_SLOT_MAP%s.LANE_3_RETAINED_INDEX_LOW"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_HAL_CONTROLLER_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_SLOT_MAP%s.LANE_3_INDEX_HIGH"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_HAL_CONTROLLER_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_SLOT_MAP%s.BIT_15_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTDM_HAL_CONTROLLER_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_SLOT_MAP%s.LANE_4_ENABLE"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_HAL_CONTROLLER_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_SLOT_MAP%s.LANE_4_RETAINED_INDEX_LOW"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_HAL_CONTROLLER_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_SLOT_MAP%s.LANE_4_INDEX_HIGH"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_HAL_CONTROLLER_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_SLOT_MAP%s.BIT_19_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTDM_HAL_CONTROLLER_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_SLOT_MAP%s.LANE_5_ENABLE"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_HAL_CONTROLLER_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_SLOT_MAP%s.LANE_5_RETAINED_INDEX_LOW"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_HAL_CONTROLLER_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_SLOT_MAP%s.LANE_5_INDEX_HIGH"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_HAL_CONTROLLER_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_SLOT_MAP%s.BIT_23_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTDM_HAL_CONTROLLER_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_SLOT_MAP%s.LANE_6_ENABLE"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_HAL_CONTROLLER_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_SLOT_MAP%s.LANE_6_RETAINED_INDEX_LOW"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_HAL_CONTROLLER_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_SLOT_MAP%s.LANE_6_INDEX_HIGH"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_HAL_CONTROLLER_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_SLOT_MAP%s.BIT_27_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTDM_HAL_CONTROLLER_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_SLOT_MAP%s.LANE_7_ENABLE"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_HAL_CONTROLLER_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_SLOT_MAP%s.LANE_7_RETAINED_INDEX_LOW"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_HAL_CONTROLLER_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_SLOT_MAP%s.LANE_7_INDEX_HIGH"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_HAL_CONTROLLER_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_SLOT_MAP%s.BIT_31_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTDM_HAL_CONTROLLER_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
 
 [[review]]
 entity = "BLUETOOTH_CONTROLLER_CORE.BTLC_TIMER_CC_0"

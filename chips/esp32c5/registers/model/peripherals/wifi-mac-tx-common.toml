@@ -253,16 +253,36 @@ name = "QUEUE_3"
 bitOffset = 3
 bitWidth = 1
 
-[[review]]
+[[peripheral-review]]
 entity = "WIFI_MAC_TX_COMMON"
-sources = [
-    "C5_BLOB_LIBPP_HAL_MAC_TX",
-    "C5_BLOB_LIBPP_HAL_TX_TRIGGER_FLOW",
-    "C5_ROM_REV100_PHY_CCA_CONTROL",
+opaque-entities = [
+    "WIFI_MAC_TX_COMMON.CCA_CONTROL.BITS_0_27_OPAQUE",
+    "WIFI_MAC_TX_COMMON.QUEUE_STATE_CLEAR.BITS_4_15_OPAQUE",
+    "WIFI_MAC_TX_COMMON.QUEUE_STATE_CLEAR.BITS_20_31_OPAQUE",
+    "WIFI_MAC_TX_COMMON.QUEUE_STATE.BITS_4_15_OPAQUE",
+    "WIFI_MAC_TX_COMMON.QUEUE_STATE.BITS_20_23_OPAQUE",
+    "WIFI_MAC_TX_COMMON.QUEUE_STATE.BITS_28_31_OPAQUE",
+    "WIFI_MAC_TX_COMMON.COMPLETE_CLEAR.BITS_4_31_OPAQUE",
 ]
+
+[peripheral-review.peripheral]
+sources = ["C5_BLOB_LIBPP_HAL_MAC_TX", "C5_BLOB_LIBPP_HAL_TX_TRIGGER_FLOW", "C5_ROM_REV100_PHY_CCA_CONTROL"]
 provenance = "derived"
 accuracy = "exact"
 completeness = "partial"
+
+[peripheral-review.register]
+sources = ["C5_BLOB_LIBPP_HAL_MAC_TX"]
+naming = "descriptive"
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[peripheral-review.field]
+naming = "descriptive"
+
+[peripheral-review.opaque]
+naming = "opaque"
 
 [[review]]
 entity = "WIFI_MAC_TX_COMMON.CCA_CONTROL"
@@ -297,16 +317,6 @@ accuracy = "exact"
 completeness = "partial"
 
 [[review]]
-entity = "WIFI_MAC_TX_COMMON.QUEUE_STATE_CLEAR"
-naming = "descriptive"
-sources = [
-    "C5_BLOB_LIBPP_HAL_MAC_TX",
-]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
 entity = "WIFI_MAC_TX_COMMON.QUEUE_STATE"
 naming = "descriptive"
 sources = [
@@ -316,163 +326,3 @@ sources = [
 provenance = "derived"
 accuracy = "exact"
 completeness = "partial"
-
-[[review]]
-entity = "WIFI_MAC_TX_COMMON.COMPLETE_CLEAR"
-naming = "descriptive"
-sources = [
-    "C5_BLOB_LIBPP_HAL_MAC_TX",
-]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "WIFI_MAC_TX_COMMON.COMPLETE_STATE"
-naming = "descriptive"
-sources = [
-    "C5_BLOB_LIBPP_HAL_MAC_TX",
-]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "WIFI_MAC_TX_COMMON.CCA_CONTROL.BITS_0_27_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_TX_COMMON.QUEUE_STATE_CLEAR.COLLISION_QUEUE_0"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_COMMON.QUEUE_STATE_CLEAR.COLLISION_QUEUE_1"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_COMMON.QUEUE_STATE_CLEAR.COLLISION_QUEUE_2"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_COMMON.QUEUE_STATE_CLEAR.COLLISION_QUEUE_3"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_COMMON.QUEUE_STATE_CLEAR.BITS_4_15_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_TX_COMMON.QUEUE_STATE_CLEAR.TIMEOUT_QUEUE_0"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_COMMON.QUEUE_STATE_CLEAR.TIMEOUT_QUEUE_1"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_COMMON.QUEUE_STATE_CLEAR.TIMEOUT_QUEUE_2"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_COMMON.QUEUE_STATE_CLEAR.TIMEOUT_QUEUE_3"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_COMMON.QUEUE_STATE_CLEAR.BITS_20_31_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_TX_COMMON.QUEUE_STATE.COLLISION_QUEUE_0"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_COMMON.QUEUE_STATE.COLLISION_QUEUE_1"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_COMMON.QUEUE_STATE.COLLISION_QUEUE_2"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_COMMON.QUEUE_STATE.COLLISION_QUEUE_3"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_COMMON.QUEUE_STATE.BITS_4_15_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_TX_COMMON.QUEUE_STATE.TIMEOUT_QUEUE_0"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_COMMON.QUEUE_STATE.TIMEOUT_QUEUE_1"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_COMMON.QUEUE_STATE.TIMEOUT_QUEUE_2"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_COMMON.QUEUE_STATE.TIMEOUT_QUEUE_3"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_COMMON.QUEUE_STATE.BITS_20_23_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_TX_COMMON.QUEUE_STATE.TRIGGER_FLOW_QUEUE_0"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_COMMON.QUEUE_STATE.TRIGGER_FLOW_QUEUE_1"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_COMMON.QUEUE_STATE.TRIGGER_FLOW_QUEUE_2"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_COMMON.QUEUE_STATE.TRIGGER_FLOW_QUEUE_3"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_COMMON.QUEUE_STATE.BITS_28_31_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_TX_COMMON.COMPLETE_CLEAR.QUEUE_0"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_COMMON.COMPLETE_CLEAR.QUEUE_1"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_COMMON.COMPLETE_CLEAR.QUEUE_2"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_COMMON.COMPLETE_CLEAR.QUEUE_3"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_COMMON.COMPLETE_CLEAR.BITS_4_31_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_TX_COMMON.COMPLETE_STATE.QUEUE_0"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_COMMON.COMPLETE_STATE.QUEUE_1"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_COMMON.COMPLETE_STATE.QUEUE_2"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_TX_COMMON.COMPLETE_STATE.QUEUE_3"
-naming = "descriptive"

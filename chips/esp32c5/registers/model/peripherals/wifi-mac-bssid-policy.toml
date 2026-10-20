@@ -79,13 +79,25 @@ description = "MACBSSID_EN: hal_mac_set_bssid clears this bit before changing th
 bitOffset = 31
 bitWidth = 1
 
-[[review]]
+[[peripheral-review]]
 entity = "WIFI_MAC_BSSID_POLICY"
-sources = [
-    "C5_BLOB_LIBPP_HAL_MAC_SET_BSSID",
-    "C5_BLOB_LIBPP_RX_POLICY",
-    "C5_BLOB_LIBNET80211_WIFI_RX_POLICY",
-]
+
+[peripheral-review.peripheral]
+sources = ["C5_BLOB_LIBPP_HAL_MAC_SET_BSSID", "C5_BLOB_LIBPP_RX_POLICY", "C5_BLOB_LIBNET80211_WIFI_RX_POLICY"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[peripheral-review.register]
+sources = ["C5_BLOB_LIBPP_HAL_MAC_SET_BSSID", "C5_BLOB_LIBPP_RX_POLICY", "C5_BLOB_LIBPP_HAL_HE_SET_MMSS_AND_AID"]
+naming = "descriptive"
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[peripheral-review.field]
+sources = ["C5_BLOB_LIBPP_HAL_HE_SET_MMSS_AND_AID"]
+naming = "descriptive"
 provenance = "derived"
 accuracy = "exact"
 completeness = "partial"
@@ -95,38 +107,6 @@ entity = "WIFI_MAC_BSSID_POLICY.BSSID_LOW%s"
 naming = "descriptive"
 sources = [
     "C5_BLOB_LIBPP_HAL_MAC_SET_BSSID",
-]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "WIFI_MAC_BSSID_POLICY.BSSID_HIGH%s"
-naming = "descriptive"
-sources = [
-    "C5_BLOB_LIBPP_HAL_MAC_SET_BSSID",
-    "C5_BLOB_LIBPP_RX_POLICY",
-    "C5_BLOB_LIBPP_HAL_HE_SET_MMSS_AND_AID",
-]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "WIFI_MAC_BSSID_POLICY.BSSID_HIGH%s.ASSOCIATION_ID"
-naming = "descriptive"
-sources = [
-    "C5_BLOB_LIBPP_HAL_HE_SET_MMSS_AND_AID",
-]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "WIFI_MAC_BSSID_POLICY.BSSID_HIGH%s.MINIMUM_MPDU_START_SPACING"
-naming = "descriptive"
-sources = [
-    "C5_BLOB_LIBPP_HAL_HE_SET_MMSS_AND_AID",
 ]
 provenance = "derived"
 accuracy = "exact"

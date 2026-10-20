@@ -26,34 +26,28 @@ bitWidth = 2
 minimum = 0x0
 maximum = 0x3
 
-[[review]]
+[[peripheral-review]]
 entity = "PHY_RX_DCO_ORACLE"
-sources = [
-    "BLOB_LIBPHY_PHY_XTAL_DUTY_CAL",
-    "ROM_REV0_PHY_RX_DCO_CAL",
+opaque-entities = [
+    "PHY_RX_DCO_ORACLE.CONTROL.BITS_22_23_OPAQUE",
 ]
+
+[peripheral-review.peripheral]
+sources = ["BLOB_LIBPHY_PHY_XTAL_DUTY_CAL", "ROM_REV0_PHY_RX_DCO_CAL"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
 
-[[review]]
-entity = "PHY_RX_DCO_ORACLE.CONTROL"
+[peripheral-review.register]
+sources = ["BLOB_LIBPHY_PHY_XTAL_DUTY_CAL", "ROM_REV0_PHY_RX_DCO_CAL"]
 naming = "descriptive"
-sources = [
-    "BLOB_LIBPHY_PHY_XTAL_DUTY_CAL",
-    "ROM_REV0_PHY_RX_DCO_CAL",
-]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
 
-[[review]]
-entity = "PHY_RX_DCO_ORACLE.CONTROL.BITS_22_23_OPAQUE"
+[peripheral-review.opaque]
+sources = ["BLOB_LIBPHY_PHY_XTAL_DUTY_CAL", "ROM_REV0_PHY_RX_DCO_CAL"]
 naming = "opaque"
-sources = [
-    "BLOB_LIBPHY_PHY_XTAL_DUTY_CAL",
-    "ROM_REV0_PHY_RX_DCO_CAL",
-]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"

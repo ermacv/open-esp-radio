@@ -329,38 +329,62 @@ bitWidth = 32
 minimum = 0x0
 maximum = 0xFFFFFFFF
 
-[[review]]
+[[peripheral-review]]
 entity = "WIFI_MAC_INTERRUPT"
-sources = [
-    "BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT",
-    "BLOB_LIBPP_HAL_MAC_INTERRUPT_CLR_EVENT",
-    "BLOB_LIBPP_WDEV_PROCESS_FIQ",
-    "BLOB_LIBPP_HAL_ENABLE_MAC",
-    "BLOB_LIBPP_HAL_INIT_TAIL",
+opaque-entities = [
+    "WIFI_MAC_INTERRUPT.ENABLE.BITS_0_4_OPAQUE",
+    "WIFI_MAC_INTERRUPT.ENABLE.BIT_6_OPAQUE",
+    "WIFI_MAC_INTERRUPT.ENABLE.BITS_9_10_OPAQUE",
+    "WIFI_MAC_INTERRUPT.ENABLE.BIT_12_OPAQUE",
+    "WIFI_MAC_INTERRUPT.ENABLE.BIT_13_OPAQUE",
+    "WIFI_MAC_INTERRUPT.ENABLE.BITS_16_18_OPAQUE",
+    "WIFI_MAC_INTERRUPT.ENABLE.BIT_20_OPAQUE",
+    "WIFI_MAC_INTERRUPT.ENABLE.BIT_21_OPAQUE",
+    "WIFI_MAC_INTERRUPT.ENABLE.BIT_22_OPAQUE",
+    "WIFI_MAC_INTERRUPT.ENABLE.BIT_23_OPAQUE",
+    "WIFI_MAC_INTERRUPT.ENABLE.BITS_25_26_OPAQUE",
+    "WIFI_MAC_INTERRUPT.ENABLE.BIT_27_OPAQUE",
+    "WIFI_MAC_INTERRUPT.ENABLE.BIT_28_OPAQUE",
+    "WIFI_MAC_INTERRUPT.ENABLE.BITS_29_31_OPAQUE",
+    "WIFI_MAC_INTERRUPT.STATUS.BITS_0_4_OPAQUE",
+    "WIFI_MAC_INTERRUPT.STATUS.BIT_6_OPAQUE",
+    "WIFI_MAC_INTERRUPT.STATUS.BITS_9_10_OPAQUE",
+    "WIFI_MAC_INTERRUPT.STATUS.BIT_12_OPAQUE",
+    "WIFI_MAC_INTERRUPT.STATUS.BIT_13_OPAQUE",
+    "WIFI_MAC_INTERRUPT.STATUS.BITS_16_18_OPAQUE",
+    "WIFI_MAC_INTERRUPT.STATUS.BIT_20_OPAQUE",
+    "WIFI_MAC_INTERRUPT.STATUS.BIT_21_OPAQUE",
+    "WIFI_MAC_INTERRUPT.STATUS.BIT_22_OPAQUE",
+    "WIFI_MAC_INTERRUPT.STATUS.BIT_23_OPAQUE",
+    "WIFI_MAC_INTERRUPT.STATUS.BITS_25_26_OPAQUE",
+    "WIFI_MAC_INTERRUPT.STATUS.BIT_27_OPAQUE",
+    "WIFI_MAC_INTERRUPT.STATUS.BIT_28_OPAQUE",
+    "WIFI_MAC_INTERRUPT.STATUS.BITS_29_31_OPAQUE",
 ]
+
+[peripheral-review.peripheral]
+sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_HAL_MAC_INTERRUPT_CLR_EVENT", "BLOB_LIBPP_WDEV_PROCESS_FIQ", "BLOB_LIBPP_HAL_ENABLE_MAC", "BLOB_LIBPP_HAL_INIT_TAIL"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
 
-[[review]]
-entity = "WIFI_MAC_INTERRUPT.ENABLE"
+[peripheral-review.register]
+sources = ["BLOB_LIBPP_HAL_ENABLE_MAC", "BLOB_LIBPP_WDEV_PROCESS_FIQ", "BLOB_LIBPP_HAL_INIT_TAIL"]
 naming = "descriptive"
-sources = [
-    "BLOB_LIBPP_HAL_ENABLE_MAC",
-    "BLOB_LIBPP_WDEV_PROCESS_FIQ",
-    "BLOB_LIBPP_HAL_INIT_TAIL",
-]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
 
-[[review]]
-entity = "WIFI_MAC_INTERRUPT.ENABLE.BITS_0_4_OPAQUE"
+[peripheral-review.field]
+sources = ["BLOB_LIBPP_WDEV_PROCESS_FIQ", "BLOB_LIBPP_HAL_INIT_TAIL"]
+naming = "descriptive"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[peripheral-review.opaque]
+sources = ["BLOB_LIBPP_HAL_ENABLE_MAC", "BLOB_LIBPP_HAL_INIT_TAIL"]
 naming = "opaque"
-sources = [
-    "BLOB_LIBPP_HAL_ENABLE_MAC",
-    "BLOB_LIBPP_HAL_INIT_TAIL",
-]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
@@ -382,28 +406,12 @@ accuracy = "exact"
 completeness = "unknown"
 
 [[review]]
-entity = "WIFI_MAC_INTERRUPT.ENABLE.TX_COMPLETE"
-naming = "descriptive"
-sources = ["BLOB_LIBPP_WDEV_PROCESS_FIQ", "BLOB_LIBPP_HAL_INIT_TAIL"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
 entity = "WIFI_MAC_INTERRUPT.ENABLE.BSS_COLOR_COLLISION"
 naming = "descriptive"
 sources = ["BLOB_LIBPP_HAL_MAC_COLOR_COLLISION_ISR", "BLOB_LIBPP_HAL_INIT_TAIL"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
-
-[[review]]
-entity = "WIFI_MAC_INTERRUPT.ENABLE.BITS_9_10_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBPP_HAL_ENABLE_MAC", "BLOB_LIBPP_HAL_INIT_TAIL"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "unknown"
 
 [[review]]
 entity = "WIFI_MAC_INTERRUPT.ENABLE.WATCHDOG"
@@ -430,14 +438,6 @@ accuracy = "exact"
 completeness = "unknown"
 
 [[review]]
-entity = "WIFI_MAC_INTERRUPT.ENABLE.RX_SUCCESS"
-naming = "descriptive"
-sources = ["BLOB_LIBPP_WDEV_PROCESS_FIQ", "BLOB_LIBPP_HAL_INIT_TAIL"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
 entity = "WIFI_MAC_INTERRUPT.ENABLE.STA_BEACON_FILTER"
 naming = "descriptive"
 sources = ["BLOB_LIBPP_HAL_RUNTIME_MMIO_LEAVES"]
@@ -446,41 +446,9 @@ accuracy = "exact"
 completeness = "complete"
 
 [[review]]
-entity = "WIFI_MAC_INTERRUPT.ENABLE.BITS_16_18_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBPP_HAL_ENABLE_MAC", "BLOB_LIBPP_HAL_INIT_TAIL"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "unknown"
-
-[[review]]
-entity = "WIFI_MAC_INTERRUPT.ENABLE.TX_TIMEOUT"
-naming = "descriptive"
-sources = ["BLOB_LIBPP_WDEV_PROCESS_FIQ", "BLOB_LIBPP_HAL_INIT_TAIL"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "WIFI_MAC_INTERRUPT.ENABLE.BIT_20_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBPP_HAL_ENABLE_MAC", "BLOB_LIBPP_HAL_INIT_TAIL"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "unknown"
-
-[[review]]
 entity = "WIFI_MAC_INTERRUPT.ENABLE.BIT_21_OPAQUE"
 naming = "opaque"
 sources = ["BLOB_LIBPP_HAL_INIT_TAIL"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "unknown"
-
-[[review]]
-entity = "WIFI_MAC_INTERRUPT.ENABLE.BIT_22_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBPP_HAL_ENABLE_MAC", "BLOB_LIBPP_HAL_INIT_TAIL"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
@@ -502,14 +470,6 @@ accuracy = "exact"
 completeness = "unknown"
 
 [[review]]
-entity = "WIFI_MAC_INTERRUPT.ENABLE.BITS_25_26_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBPP_HAL_ENABLE_MAC", "BLOB_LIBPP_HAL_INIT_TAIL"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "unknown"
-
-[[review]]
 entity = "WIFI_MAC_INTERRUPT.ENABLE.BIT_27_OPAQUE"
 naming = "opaque"
 sources = ["BLOB_LIBPP_HAL_INIT_TAIL"]
@@ -521,14 +481,6 @@ completeness = "unknown"
 entity = "WIFI_MAC_INTERRUPT.ENABLE.BIT_28_OPAQUE"
 naming = "opaque"
 sources = ["BLOB_LIBPP_HAL_INIT_TAIL"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "unknown"
-
-[[review]]
-entity = "WIFI_MAC_INTERRUPT.ENABLE.BITS_29_31_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBPP_HAL_ENABLE_MAC", "BLOB_LIBPP_HAL_INIT_TAIL"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"

@@ -77,12 +77,25 @@ description = "Complete libpp[hal_mac_tx.o]::hal_mac_get_txq_complete contribute
 bitOffset = 7
 bitWidth = 7
 
-[[review]]
+[[peripheral-review]]
 entity = "WIFI_MAC_TX_COMPLETION"
-sources = [
-    "BLOB_LIBPP_HAL_MAC_TX",
-    "PROMOTED_LMAC_TX",
-]
+
+[peripheral-review.peripheral]
+sources = ["BLOB_LIBPP_HAL_MAC_TX", "PROMOTED_LMAC_TX"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+
+[peripheral-review.register]
+sources = ["BLOB_LIBPP_HAL_MAC_TX", "PROMOTED_LMAC_TX"]
+naming = "descriptive"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[peripheral-review.field]
+sources = ["BLOB_LIBPP_HAL_MAC_TX", "PROMOTED_LMAC_TX"]
+naming = "descriptive"
 provenance = "reviewed"
 accuracy = "exact"
 completeness = "complete"
@@ -105,83 +118,6 @@ naming = "descriptive"
 sources = [
     "BLOB_LIBPP_HAL_MAC_TX",
     "HIL_OPEN_HE_RATE_CONTROL_ACK_SNR_2026_07_30",
-]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "WIFI_MAC_TX_COMPLETION.PRIMARY%s.DETAIL"
-naming = "descriptive"
-sources = [
-    "BLOB_LIBPP_HAL_MAC_TX",
-    "PROMOTED_LMAC_TX",
-]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "WIFI_MAC_TX_COMPLETION.PRIMARY%s.STATUS"
-naming = "descriptive"
-sources = [
-    "BLOB_LIBPP_HAL_MAC_TX",
-    "PROMOTED_LMAC_TX",
-]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "WIFI_MAC_TX_COMPLETION.ALTERNATE%s"
-naming = "descriptive"
-sources = [
-    "BLOB_LIBPP_HAL_MAC_TX",
-    "PROMOTED_LMAC_TX",
-]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "WIFI_MAC_TX_COMPLETION.ALTERNATE%s.DETAIL"
-naming = "descriptive"
-sources = [
-    "BLOB_LIBPP_HAL_MAC_TX",
-    "PROMOTED_LMAC_TX",
-]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "WIFI_MAC_TX_COMPLETION.ALTERNATE%s.STATUS"
-naming = "descriptive"
-sources = [
-    "BLOB_LIBPP_HAL_MAC_TX",
-    "PROMOTED_LMAC_TX",
-]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "WIFI_MAC_TX_COMPLETION.AUX_C%s"
-naming = "descriptive"
-sources = [
-    "BLOB_LIBPP_HAL_MAC_TX",
-    "PROMOTED_LMAC_TX",
-]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "WIFI_MAC_TX_COMPLETION.AUX_C%s.SECONDARY_TRIGGER_BASED_PACKET_COUNT"
-naming = "descriptive"
-sources = [
-    "BLOB_LIBPP_HAL_MAC_TX",
-    "PROMOTED_LMAC_TX",
 ]
 provenance = "reviewed"
 accuracy = "exact"

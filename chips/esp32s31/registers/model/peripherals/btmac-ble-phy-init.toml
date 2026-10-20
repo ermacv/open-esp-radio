@@ -443,10 +443,56 @@ name = "INIT_BYTE_3"
 bitOffset = 24
 bitWidth = 8
 
-[[review]]
+[[peripheral-review]]
 entity = "BTMAC_BLE_PHY_INIT"
+opaque-entities = [
+    "BTMAC_BLE_PHY_INIT.DEVICE_TABLE_CONTROL.BIT_18_OPAQUE",
+    "BTMAC_BLE_PHY_INIT.WORD_0074_OPAQUE",
+    "BTMAC_BLE_PHY_INIT.WORD_0074_OPAQUE.BITS_0_31_OPAQUE",
+    "BTMAC_BLE_PHY_INIT.WORD_0138_OPAQUE",
+    "BTMAC_BLE_PHY_INIT.WORD_0138_OPAQUE.BITS_0_31_OPAQUE",
+    "BTMAC_BLE_PHY_INIT.WORD_0254_OPAQUE",
+    "BTMAC_BLE_PHY_INIT.WORD_0400_OPAQUE",
+    "BTMAC_BLE_PHY_INIT.WORD_0458_OPAQUE",
+    "BTMAC_BLE_PHY_INIT.WORD_045C_OPAQUE",
+    "BTMAC_BLE_PHY_INIT.WORD_045C_OPAQUE.BITS_0_31_OPAQUE",
+    "BTMAC_BLE_PHY_INIT.WORD_04A0_OPAQUE",
+    "BTMAC_BLE_PHY_INIT.WORD_04A0_OPAQUE.BITS_0_31_OPAQUE",
+    "BTMAC_BLE_PHY_INIT.WORD_04A4_OPAQUE",
+    "BTMAC_BLE_PHY_INIT.WORD_04A8_OPAQUE",
+    "BTMAC_BLE_PHY_INIT.WORD_0540_OPAQUE",
+    "BTMAC_BLE_PHY_INIT.WORD_0540_OPAQUE.BITS_0_31_OPAQUE",
+    "BTMAC_BLE_PHY_INIT.WORD_054C_OPAQUE",
+    "BTMAC_BLE_PHY_INIT.WORD_0550_OPAQUE",
+    "BTMAC_BLE_PHY_INIT.WORD_0554_OPAQUE",
+    "BTMAC_BLE_PHY_INIT.WORD_0558_OPAQUE",
+    "BTMAC_BLE_PHY_INIT.WORD_055C_OPAQUE",
+]
+
+[peripheral-review.peripheral]
 sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
 provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[peripheral-review.register]
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS", "BLOB_LIBBTDM_SCHEDULER_RUN_EVENT"]
+naming = "descriptive"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[peripheral-review.field]
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
+naming = "descriptive"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[peripheral-review.opaque]
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
+naming = "opaque"
+provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
 
@@ -491,28 +537,12 @@ accuracy = "exact"
 completeness = "complete"
 
 [[review]]
-entity = "BTMAC_BLE_PHY_INIT.WORD_0074_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
 entity = "BTMAC_BLE_PHY_INIT.WORD_0074_OPAQUE.BITS_0_31_OPAQUE"
 naming = "opaque"
 sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
-
-[[review]]
-entity = "BTMAC_BLE_PHY_INIT.INTERRUPT_ENABLE"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS", "BLOB_LIBBTDM_SCHEDULER_RUN_EVENT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
 
 [[review]]
 entity = "BTMAC_BLE_PHY_INIT.INTERRUPT_ENABLE.SCHEDULER_RUN"
@@ -523,36 +553,12 @@ accuracy = "exact"
 completeness = "complete"
 
 [[review]]
-entity = "BTMAC_BLE_PHY_INIT.INTERRUPT_ENABLE.SOURCE_17"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BTMAC_BLE_PHY_INIT.INTERRUPT_CLEAR"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS", "BLOB_LIBBTDM_SCHEDULER_RUN_EVENT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
 entity = "BTMAC_BLE_PHY_INIT.INTERRUPT_CLEAR.SCHEDULER_RUN"
 naming = "descriptive"
 sources = ["BLOB_LIBBTDM_SCHEDULER_RUN_EVENT"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
-
-[[review]]
-entity = "BTMAC_BLE_PHY_INIT.WORD_0138_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
 
 [[review]]
 entity = "BTMAC_BLE_PHY_INIT.WORD_0138_OPAQUE.BITS_0_31_OPAQUE"
@@ -571,110 +577,6 @@ accuracy = "exact"
 completeness = "partial"
 
 [[review]]
-entity = "BTMAC_BLE_PHY_INIT.LC_TX_ON_DELAY_CONFIG.LC_TX_ON_DELAY"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BTMAC_BLE_PHY_INIT.LC_TX_ON_DELAY_CONFIG.INIT_DUPLICATE_BYTE"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BTMAC_BLE_PHY_INIT.WORD_0254_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "BTMAC_BLE_PHY_INIT.WORD_0254_OPAQUE.INIT_BYTE_0"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BTMAC_BLE_PHY_INIT.WORD_0254_OPAQUE.INIT_BYTE_1"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BTMAC_BLE_PHY_INIT.WORD_0254_OPAQUE.INIT_BYTE_2_LOW_7"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BTMAC_BLE_PHY_INIT.WORD_0254_OPAQUE.INIT_BYTE_2_HIGH"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BTMAC_BLE_PHY_INIT.WORD_0400_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "BTMAC_BLE_PHY_INIT.WORD_0400_OPAQUE.INIT_ENABLE_22"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BTMAC_BLE_PHY_INIT.WORD_0400_OPAQUE.INIT_ENABLE_31"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BTMAC_BLE_PHY_INIT.WORD_0458_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "BTMAC_BLE_PHY_INIT.WORD_0458_OPAQUE.INIT_HIGH_HALF"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BTMAC_BLE_PHY_INIT.WORD_045C_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
 entity = "BTMAC_BLE_PHY_INIT.WORD_045C_OPAQUE.BITS_0_31_OPAQUE"
 naming = "opaque"
 sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
@@ -683,96 +585,8 @@ accuracy = "exact"
 completeness = "complete"
 
 [[review]]
-entity = "BTMAC_BLE_PHY_INIT.WORD_04A0_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
 entity = "BTMAC_BLE_PHY_INIT.WORD_04A0_OPAQUE.BITS_0_31_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BTMAC_BLE_PHY_INIT.WORD_04A4_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "BTMAC_BLE_PHY_INIT.WORD_04A4_OPAQUE.INIT_BYTE_0"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BTMAC_BLE_PHY_INIT.WORD_04A4_OPAQUE.INIT_BYTE_1"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BTMAC_BLE_PHY_INIT.WORD_04A4_OPAQUE.INIT_BYTE_2"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BTMAC_BLE_PHY_INIT.WORD_04A4_OPAQUE.INIT_BYTE_3"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BTMAC_BLE_PHY_INIT.WORD_04A8_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "BTMAC_BLE_PHY_INIT.WORD_04A8_OPAQUE.INIT_BYTE_0"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BTMAC_BLE_PHY_INIT.WORD_04A8_OPAQUE.INIT_BYTE_1"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BTMAC_BLE_PHY_INIT.WORD_04A8_OPAQUE.INIT_BYTE_2"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BTMAC_BLE_PHY_INIT.WORD_04A8_OPAQUE.INIT_BYTE_3"
-naming = "descriptive"
 sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
 provenance = "observed"
 accuracy = "exact"
@@ -806,184 +620,8 @@ accuracy = "exact"
 completeness = "complete"
 
 [[review]]
-entity = "BTMAC_BLE_PHY_INIT.WORD_0540_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
 entity = "BTMAC_BLE_PHY_INIT.WORD_0540_OPAQUE.BITS_0_31_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BTMAC_BLE_PHY_INIT.WORD_054C_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "BTMAC_BLE_PHY_INIT.WORD_054C_OPAQUE.INIT_LOW_5"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BTMAC_BLE_PHY_INIT.WORD_0550_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "BTMAC_BLE_PHY_INIT.WORD_0550_OPAQUE.INIT_BYTE_0"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BTMAC_BLE_PHY_INIT.WORD_0550_OPAQUE.INIT_BYTE_1"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BTMAC_BLE_PHY_INIT.WORD_0550_OPAQUE.INIT_BYTE_2"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BTMAC_BLE_PHY_INIT.WORD_0554_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "BTMAC_BLE_PHY_INIT.WORD_0554_OPAQUE.INIT_BYTE_0"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BTMAC_BLE_PHY_INIT.WORD_0554_OPAQUE.INIT_BYTE_1"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BTMAC_BLE_PHY_INIT.WORD_0554_OPAQUE.INIT_BYTE_2"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BTMAC_BLE_PHY_INIT.WORD_0554_OPAQUE.INIT_BYTE_3"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BTMAC_BLE_PHY_INIT.WORD_0558_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "BTMAC_BLE_PHY_INIT.WORD_0558_OPAQUE.INIT_BYTE_0"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BTMAC_BLE_PHY_INIT.WORD_0558_OPAQUE.INIT_BYTE_1"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BTMAC_BLE_PHY_INIT.WORD_0558_OPAQUE.INIT_BYTE_2"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BTMAC_BLE_PHY_INIT.WORD_0558_OPAQUE.INIT_BYTE_3"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BTMAC_BLE_PHY_INIT.WORD_055C_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "BTMAC_BLE_PHY_INIT.WORD_055C_OPAQUE.INIT_BYTE_0"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BTMAC_BLE_PHY_INIT.WORD_055C_OPAQUE.INIT_BYTE_1"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BTMAC_BLE_PHY_INIT.WORD_055C_OPAQUE.INIT_BYTE_2"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BTMAC_BLE_PHY_INIT.WORD_055C_OPAQUE.INIT_BYTE_3"
-naming = "descriptive"
 sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
 provenance = "observed"
 accuracy = "exact"

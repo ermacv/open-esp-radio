@@ -236,12 +236,52 @@ description = "The reset-idle predicate compares this exact field with the finit
 bitOffset = 0
 bitWidth = 3
 
-[[review]]
+[[peripheral-review]]
 entity = "ZBBB_RADIO_CONTROL"
+opaque-entities = [
+    "ZBBB_RADIO_CONTROL.RX_SETUP_IMAGE.BITS_12_31_OPAQUE",
+    "ZBBB_RADIO_CONTROL.RX_SETUP_CONTROL.BITS_0_1_OPAQUE",
+    "ZBBB_RADIO_CONTROL.RX_SETUP_CONTROL.BIT_8_OPAQUE",
+    "ZBBB_RADIO_CONTROL.RX_SETUP_CONTROL.BITS_10_20_OPAQUE",
+    "ZBBB_RADIO_CONTROL.SHARED_RX_INIT_IMAGE_0.BITS_13_20_OPAQUE",
+    "ZBBB_RADIO_CONTROL.SHARED_RX_INIT_IMAGE_0.BITS_21_31_OPAQUE",
+    "ZBBB_RADIO_CONTROL.SHARED_RX_INIT_CONTROL_0.BIT_1_OPAQUE",
+    "ZBBB_RADIO_CONTROL.SHARED_RX_INIT_IMAGE_1.BITS_0_10_OPAQUE",
+    "ZBBB_RADIO_CONTROL.SHARED_RX_INIT_CONTROL_1.BIT_30_OPAQUE",
+    "ZBBB_RADIO_CONTROL.SHARED_RX_INIT_IMAGE_2.BITS_0_7_OPAQUE",
+    "ZBBB_RADIO_CONTROL.SHARED_RX_INIT_IMAGE_2.BITS_8_31_OPAQUE",
+    "ZBBB_RADIO_CONTROL.SHARED_RX_INIT_IMAGE_3.BITS_8_31_OPAQUE",
+    "ZBBB_RADIO_CONTROL.SHARED_RX_INIT_IMAGE_4.BIT_0_OPAQUE",
+    "ZBBB_RADIO_CONTROL.SHARED_RX_INIT_IMAGE_4.BITS_9_19_OPAQUE",
+    "ZBBB_RADIO_CONTROL.SHARED_RX_INIT_IMAGE_4.BITS_20_30_OPAQUE",
+]
+
+[peripheral-review.peripheral]
 sources = ["BLOB_LIBBTBB_BT_RX_SETUP", "BLOB_LIBBTBB_BBMAC_IDLE_FOR_SWRST", "BLOB_LIBBTBB_SHARED_RX_INIT", "BLOB_LIBBTBB_BT_BB_V2_INIT"]
 provenance = "derived"
 accuracy = "exact"
 completeness = "partial"
+
+[peripheral-review.register]
+sources = ["BLOB_LIBBTBB_SHARED_RX_INIT"]
+naming = "descriptive"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[peripheral-review.field]
+sources = ["BLOB_LIBBTBB_BBMAC_IDLE_FOR_SWRST"]
+naming = "descriptive"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[peripheral-review.opaque]
+sources = ["BLOB_LIBBTBB_SHARED_RX_INIT"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
 
 [[review]]
 entity = "ZBBB_RADIO_CONTROL.RX_SETUP_IMAGE"
@@ -284,169 +324,9 @@ completeness = "complete"
 naming = "opaque"
 
 [[review]]
-entity = "ZBBB_RADIO_CONTROL.RX_SETUP_CONTROL.BITS_10_20_OPAQUE"
-sources = ["BLOB_LIBBTBB_SHARED_RX_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-naming = "opaque"
-
-[[review]]
-entity = "ZBBB_RADIO_CONTROL.SHARED_RX_INIT_IMAGE_0"
-sources = ["BLOB_LIBBTBB_SHARED_RX_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-naming = "descriptive"
-
-[[review]]
-entity = "ZBBB_RADIO_CONTROL.SHARED_RX_INIT_IMAGE_0.BITS_13_20_OPAQUE"
-sources = ["BLOB_LIBBTBB_SHARED_RX_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-naming = "opaque"
-
-[[review]]
-entity = "ZBBB_RADIO_CONTROL.SHARED_RX_INIT_IMAGE_0.BITS_21_31_OPAQUE"
-sources = ["BLOB_LIBBTBB_SHARED_RX_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-naming = "opaque"
-
-[[review]]
-entity = "ZBBB_RADIO_CONTROL.SHARED_RX_INIT_CONTROL_0"
-sources = ["BLOB_LIBBTBB_SHARED_RX_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-naming = "descriptive"
-
-[[review]]
-entity = "ZBBB_RADIO_CONTROL.SHARED_RX_INIT_CONTROL_0.BIT_1_OPAQUE"
-sources = ["BLOB_LIBBTBB_SHARED_RX_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-naming = "opaque"
-
-[[review]]
-entity = "ZBBB_RADIO_CONTROL.SHARED_RX_INIT_IMAGE_1"
-sources = ["BLOB_LIBBTBB_SHARED_RX_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-naming = "descriptive"
-
-[[review]]
-entity = "ZBBB_RADIO_CONTROL.SHARED_RX_INIT_IMAGE_1.BITS_0_10_OPAQUE"
-sources = ["BLOB_LIBBTBB_SHARED_RX_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-naming = "opaque"
-
-[[review]]
-entity = "ZBBB_RADIO_CONTROL.SHARED_RX_INIT_CONTROL_1"
-sources = ["BLOB_LIBBTBB_SHARED_RX_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-naming = "descriptive"
-
-[[review]]
-entity = "ZBBB_RADIO_CONTROL.SHARED_RX_INIT_CONTROL_1.BIT_30_OPAQUE"
-sources = ["BLOB_LIBBTBB_SHARED_RX_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-naming = "opaque"
-
-[[review]]
-entity = "ZBBB_RADIO_CONTROL.SHARED_RX_INIT_IMAGE_2"
-sources = ["BLOB_LIBBTBB_SHARED_RX_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-naming = "descriptive"
-
-[[review]]
-entity = "ZBBB_RADIO_CONTROL.SHARED_RX_INIT_IMAGE_2.BITS_0_7_OPAQUE"
-sources = ["BLOB_LIBBTBB_SHARED_RX_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-naming = "opaque"
-
-[[review]]
-entity = "ZBBB_RADIO_CONTROL.SHARED_RX_INIT_IMAGE_2.BITS_8_31_OPAQUE"
-sources = ["BLOB_LIBBTBB_SHARED_RX_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-naming = "opaque"
-
-[[review]]
-entity = "ZBBB_RADIO_CONTROL.SHARED_RX_INIT_IMAGE_3"
-sources = ["BLOB_LIBBTBB_SHARED_RX_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-naming = "descriptive"
-
-[[review]]
-entity = "ZBBB_RADIO_CONTROL.SHARED_RX_INIT_IMAGE_3.BITS_8_31_OPAQUE"
-sources = ["BLOB_LIBBTBB_SHARED_RX_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-naming = "opaque"
-
-[[review]]
-entity = "ZBBB_RADIO_CONTROL.SHARED_RX_INIT_IMAGE_4"
-sources = ["BLOB_LIBBTBB_SHARED_RX_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-naming = "descriptive"
-
-[[review]]
-entity = "ZBBB_RADIO_CONTROL.SHARED_RX_INIT_IMAGE_4.BIT_0_OPAQUE"
-sources = ["BLOB_LIBBTBB_SHARED_RX_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-naming = "opaque"
-
-[[review]]
-entity = "ZBBB_RADIO_CONTROL.SHARED_RX_INIT_IMAGE_4.BITS_9_19_OPAQUE"
-sources = ["BLOB_LIBBTBB_SHARED_RX_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-naming = "opaque"
-
-[[review]]
-entity = "ZBBB_RADIO_CONTROL.SHARED_RX_INIT_IMAGE_4.BITS_20_30_OPAQUE"
-sources = ["BLOB_LIBBTBB_SHARED_RX_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-naming = "opaque"
-
-[[review]]
 entity = "ZBBB_RADIO_CONTROL.SOFTWARE_RESET_IDLE_STATUS"
 sources = ["BLOB_LIBBTBB_BBMAC_IDLE_FOR_SWRST"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
-naming = "descriptive"
-
-[[review]]
-entity = "ZBBB_RADIO_CONTROL.SOFTWARE_RESET_IDLE_STATUS.LOW_3_REQUIRED_IMAGE"
-sources = ["BLOB_LIBBTBB_BBMAC_IDLE_FOR_SWRST"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
 naming = "descriptive"

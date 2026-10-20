@@ -68,6 +68,75 @@ index, since a library has no addresses. A chip that places a library layout
 re-exports the library's module from its raw PAC and may not define
 transactions on that peripheral. See [`chips/espressif/registers/ieee80211`](../../../chips/espressif/registers/ieee80211/README.md).
 
+## Peripheral review defaults
+
+Schema-2 peripheral fragments and schema-1 chip review files for shared
+peripherals may carry separate `[[peripheral-review]]` tables. Each table's
+`entity` names one peripheral declared in that fragment (or placed from the
+shared library). It applies to that peripheral alone, including when a file
+declares several peripherals:
+
+```toml
+[[peripheral-review]]
+entity = "RADIO"
+opaque-entities = ["RADIO.CONTROL.BITS_1_31_OPAQUE"]
+
+[peripheral-review.peripheral]
+sources = ["radio-evidence"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[peripheral-review.register]
+sources = ["radio-evidence"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+naming = "descriptive"
+
+[peripheral-review.field]
+sources = ["radio-evidence"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[peripheral-review.opaque]
+sources = ["radio-evidence"]
+provenance = "observed"
+accuracy = "positional"
+completeness = "partial"
+naming = "opaque"
+```
+
+The `register` template also covers clusters and reusable `dim` declarations;
+review paths use template names, including `%s`, rather than expanded instances.
+`naming` still applies only to registers and fields: a cluster can use an
+explicit review without `naming` when its register template includes that key.
+Interrupt and enumeration-value records remain explicit.
+
+`opaque-entities` explicitly selects individual registers or fields by their
+full review paths. An `_OPAQUE` suffix does not select a template, and marking
+a register does not mark its fields. A listed entity uses the independent
+`opaque` template when supplied, otherwise its level's template. This does not
+merge metadata between templates.
+
+An explicit `[[review]]` replaces the applicable template in full, including
+omitted keys. Each peripheral, cluster, register and field in a declared scope
+must have a resolved review.
+An empty template supplies an empty record, making no evidence or naming
+claim. Existing validation of naming, sources, classification and reviewed
+coverage runs on resolved records; defaults cannot turn a navigation hint
+into accepted evidence. Unknown keys, absent entities, duplicate scopes,
+duplicate opaque selections, duplicate reviews, and an explicit review equal
+to its applicable default are errors. There are no global or cross-file
+defaults.
+
+The loader resolves templates before any consumer reads reviews, using the
+same resolver as memory layouts. These source tables live outside SVD
+`[[peripherals]]`; SVD imports create no review templates, exports carry no
+template syntax, and shared library layouts cannot contain chip reviews.
+
 ## Memory layouts
 
 A device manifest's `layouts` lists memory layouts: structures in RAM whose

@@ -76,25 +76,34 @@ addressOffset = 0x104
 size = 32
 access = "read-write"
 
-[[review]]
+[[peripheral-review]]
 entity = "PHY_NRX_RECOVERED_GAPS"
-sources = [
-    "ESP_IDF_25FE69F_S31_PHY_RETENTION",
-    "BLOB_LIBPHY_PHY_DEBUG_REG_CHECK",
+opaque-entities = [
+    "PHY_NRX_RECOVERED_GAPS.WORD_0000_OPAQUE",
+    "PHY_NRX_RECOVERED_GAPS.WORD_000C_OPAQUE",
+    "PHY_NRX_RECOVERED_GAPS.WORD_0030_OPAQUE",
+    "PHY_NRX_RECOVERED_GAPS.WORD_0098_OPAQUE",
+    "PHY_NRX_RECOVERED_GAPS.WORD_00B8_OPAQUE",
+    "PHY_NRX_RECOVERED_GAPS.WORD_0104_OPAQUE",
+    "PHY_NRX_RECOVERED_GAPS.WORD_00B8_OPAQUE.BITS_29_31_OPAQUE",
 ]
+
+[peripheral-review.peripheral]
+sources = ["ESP_IDF_25FE69F_S31_PHY_RETENTION", "BLOB_LIBPHY_PHY_DEBUG_REG_CHECK"]
 provenance = "derived"
 accuracy = "exact"
 completeness = "unknown"
 
-[[review]]
-entity = "PHY_NRX_RECOVERED_GAPS.WORD_0000_OPAQUE"
-naming = "opaque"
-sources = ["ROM_REV0_PHY_BLOBRAY_GAPS"]
+[peripheral-review.field]
+sources = ["ROM_REV0_RADIO_ACCESSOR_FIELDS"]
+naming = "descriptive"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
 
-[[review]]
-entity = "PHY_NRX_RECOVERED_GAPS.WORD_000C_OPAQUE"
-naming = "opaque"
+[peripheral-review.opaque]
 sources = ["ROM_REV0_PHY_BLOBRAY_GAPS"]
+naming = "opaque"
 
 [[review]]
 entity = "PHY_NRX_RECOVERED_GAPS.WORD_0030_OPAQUE"
@@ -102,36 +111,10 @@ naming = "opaque"
 sources = ["ROM_REV0_PHY_CFO_SPUR_CONTROLS"]
 
 [[review]]
-entity = "PHY_NRX_RECOVERED_GAPS.WORD_0098_OPAQUE"
-naming = "opaque"
-sources = ["ROM_REV0_PHY_BLOBRAY_GAPS"]
-
-[[review]]
 entity = "PHY_NRX_RECOVERED_GAPS.WORD_00B8_OPAQUE"
 naming = "opaque"
 sources = ["ROM_REV0_PHY_CFO_SPUR_CONTROLS"]
 
 [[review]]
-entity = "PHY_NRX_RECOVERED_GAPS.WORD_0104_OPAQUE"
-naming = "opaque"
-sources = ["ROM_REV0_PHY_BLOBRAY_GAPS"]
-
-[[review]]
 entity = "PHY_NRX_RECOVERED_GAPS.WORD_00B8_OPAQUE.BITS_29_31_OPAQUE"
 naming = "opaque"
-
-[[review]]
-entity = "PHY_NRX_RECOVERED_GAPS.WORD_0000_OPAQUE.FFT_SCALE_FORCE"
-naming = "descriptive"
-sources = ["ROM_REV0_RADIO_ACCESSOR_FIELDS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "PHY_NRX_RECOVERED_GAPS.WORD_0000_OPAQUE.FFT_SCALE"
-naming = "descriptive"
-sources = ["ROM_REV0_RADIO_ACCESSOR_FIELDS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"

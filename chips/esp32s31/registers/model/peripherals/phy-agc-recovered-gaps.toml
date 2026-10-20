@@ -152,60 +152,40 @@ addressOffset = 0x438
 size = 32
 access = "read-write"
 
-[[review]]
+[[peripheral-review]]
 entity = "PHY_AGC_RECOVERED_GAPS"
-sources = [
-    "ESP_IDF_25FE69F_S31_PHY_RETENTION",
-    "BLOB_LIBPHY_PHY_DEBUG_REG_CHECK",
+opaque-entities = [
+    "PHY_AGC_RECOVERED_GAPS.WORD_0010_OPAQUE",
+    "PHY_AGC_RECOVERED_GAPS.WORD_0014_OPAQUE",
+    "PHY_AGC_RECOVERED_GAPS.WORD_001C_OPAQUE",
+    "PHY_AGC_RECOVERED_GAPS.WORD_0050_OPAQUE",
+    "PHY_AGC_RECOVERED_GAPS.WORD_006C_OPAQUE",
+    "PHY_AGC_RECOVERED_GAPS.WORD_0074_OPAQUE",
+    "PHY_AGC_RECOVERED_GAPS.WORD_00CC_OPAQUE",
+    "PHY_AGC_RECOVERED_GAPS.WORD_00F4_OPAQUE",
+    "PHY_AGC_RECOVERED_GAPS.WORD_0108_OPAQUE",
+    "PHY_AGC_RECOVERED_GAPS.WORD_0430_OPAQUE",
+    "PHY_AGC_RECOVERED_GAPS.WORD_0434_OPAQUE",
+    "PHY_AGC_RECOVERED_GAPS.WORD_0438_OPAQUE",
+    "PHY_AGC_RECOVERED_GAPS.WORD_0430_OPAQUE.BIT_27_OPAQUE",
 ]
+
+[peripheral-review.peripheral]
+sources = ["ESP_IDF_25FE69F_S31_PHY_RETENTION", "BLOB_LIBPHY_PHY_DEBUG_REG_CHECK"]
 provenance = "derived"
 accuracy = "exact"
 completeness = "unknown"
 
-[[review]]
-entity = "PHY_AGC_RECOVERED_GAPS.WORD_0010_OPAQUE"
-naming = "opaque"
-sources = ["ROM_REV0_PHY_BLOBRAY_GAPS"]
+[peripheral-review.field]
+sources = ["ROM_REV0_RADIO_ACCESSOR_FIELDS"]
+naming = "descriptive"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
 
-[[review]]
-entity = "PHY_AGC_RECOVERED_GAPS.WORD_0014_OPAQUE"
-naming = "opaque"
+[peripheral-review.opaque]
 sources = ["ROM_REV0_PHY_BLOBRAY_GAPS"]
-
-[[review]]
-entity = "PHY_AGC_RECOVERED_GAPS.WORD_001C_OPAQUE"
 naming = "opaque"
-sources = ["ROM_REV0_PHY_BLOBRAY_GAPS"]
-
-[[review]]
-entity = "PHY_AGC_RECOVERED_GAPS.WORD_0050_OPAQUE"
-naming = "opaque"
-sources = ["ROM_REV0_PHY_BLOBRAY_GAPS"]
-
-[[review]]
-entity = "PHY_AGC_RECOVERED_GAPS.WORD_006C_OPAQUE"
-naming = "opaque"
-sources = ["ROM_REV0_PHY_BLOBRAY_GAPS"]
-
-[[review]]
-entity = "PHY_AGC_RECOVERED_GAPS.WORD_0074_OPAQUE"
-naming = "opaque"
-sources = ["ROM_REV0_PHY_BLOBRAY_GAPS"]
-
-[[review]]
-entity = "PHY_AGC_RECOVERED_GAPS.WORD_00CC_OPAQUE"
-naming = "opaque"
-sources = ["ROM_REV0_PHY_BLOBRAY_GAPS"]
-
-[[review]]
-entity = "PHY_AGC_RECOVERED_GAPS.WORD_00F4_OPAQUE"
-naming = "opaque"
-sources = ["ROM_REV0_PHY_BLOBRAY_GAPS"]
-
-[[review]]
-entity = "PHY_AGC_RECOVERED_GAPS.WORD_0108_OPAQUE"
-naming = "opaque"
-sources = ["ROM_REV0_PHY_BLOBRAY_GAPS"]
 
 [[review]]
 entity = "PHY_AGC_RECOVERED_GAPS.WORD_0430_OPAQUE"
@@ -225,51 +205,3 @@ sources = ["ROM_REV0_PHY_CFO_SPUR_CONTROLS"]
 [[review]]
 entity = "PHY_AGC_RECOVERED_GAPS.WORD_0430_OPAQUE.BIT_27_OPAQUE"
 naming = "opaque"
-
-[[review]]
-entity = "PHY_AGC_RECOVERED_GAPS.WORD_0010_OPAQUE.RX_SENSE"
-naming = "descriptive"
-sources = ["ROM_REV0_RADIO_ACCESSOR_FIELDS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "PHY_AGC_RECOVERED_GAPS.WORD_0014_OPAQUE.RX_SENSE"
-naming = "descriptive"
-sources = ["ROM_REV0_RADIO_ACCESSOR_FIELDS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "PHY_AGC_RECOVERED_GAPS.WORD_001C_OPAQUE.CCA_THRESHOLD"
-naming = "descriptive"
-sources = ["ROM_REV0_RADIO_ACCESSOR_FIELDS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "PHY_AGC_RECOVERED_GAPS.WORD_0050_OPAQUE.NOISE_FLOOR"
-naming = "descriptive"
-sources = ["ROM_REV0_RADIO_ACCESSOR_FIELDS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "PHY_AGC_RECOVERED_GAPS.WORD_006C_OPAQUE.RSSI_ABOVE_NOISE_FLOOR"
-naming = "descriptive"
-sources = ["ROM_REV0_RADIO_ACCESSOR_FIELDS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "PHY_AGC_RECOVERED_GAPS.WORD_00F4_OPAQUE.RIFS_MODE_ENABLE"
-naming = "descriptive"
-sources = ["ROM_REV0_RADIO_ACCESSOR_FIELDS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"

@@ -67,20 +67,31 @@ name = "BIT_12_OPAQUE"
 bitOffset = 12
 bitWidth = 1
 
-[[review]]
+[[peripheral-review]]
 entity = "PHY_BB_RECOVERED_GAPS"
-sources = [
-    "ESP_IDF_25FE69F_S31_PHY_RETENTION",
-    "BLOB_LIBPHY_PHY_DEBUG_REG_CHECK",
+opaque-entities = [
+    "PHY_BB_RECOVERED_GAPS.WORD_0014_OPAQUE",
+    "PHY_BB_RECOVERED_GAPS.WORD_0058_OPAQUE",
+    "PHY_BB_RECOVERED_GAPS.WORD_005C_OPAQUE",
+    "PHY_BB_RECOVERED_GAPS.WORD_0060_OPAQUE",
+    "PHY_BB_RECOVERED_GAPS.WORD_00E8_OPAQUE",
+    "PHY_BB_RECOVERED_GAPS.WORD_00EC_OPAQUE",
+    "PHY_BB_RECOVERED_GAPS.WORD_0014_OPAQUE.BIT_13_OPAQUE",
+    "PHY_BB_RECOVERED_GAPS.WORD_00EC_OPAQUE.BIT_12_OPAQUE",
 ]
+
+[peripheral-review.peripheral]
+sources = ["ESP_IDF_25FE69F_S31_PHY_RETENTION", "BLOB_LIBPHY_PHY_DEBUG_REG_CHECK"]
 provenance = "derived"
 accuracy = "exact"
 completeness = "unknown"
 
-[[review]]
-entity = "PHY_BB_RECOVERED_GAPS.WORD_0014_OPAQUE"
-naming = "opaque"
+[peripheral-review.register]
 sources = ["ROM_REV0_PHY_CFO_SPUR_CONTROLS"]
+naming = "opaque"
+
+[peripheral-review.field]
+naming = "opaque"
 
 [[review]]
 entity = "PHY_BB_RECOVERED_GAPS.WORD_0058_OPAQUE"
@@ -96,21 +107,3 @@ sources = ["ROM_REV0_PHY_BLOBRAY_GAPS"]
 entity = "PHY_BB_RECOVERED_GAPS.WORD_0060_OPAQUE"
 naming = "opaque"
 sources = ["ROM_REV0_PHY_BLOBRAY_GAPS"]
-
-[[review]]
-entity = "PHY_BB_RECOVERED_GAPS.WORD_00E8_OPAQUE"
-naming = "opaque"
-sources = ["ROM_REV0_PHY_CFO_SPUR_CONTROLS"]
-
-[[review]]
-entity = "PHY_BB_RECOVERED_GAPS.WORD_00EC_OPAQUE"
-naming = "opaque"
-sources = ["ROM_REV0_PHY_CFO_SPUR_CONTROLS"]
-
-[[review]]
-entity = "PHY_BB_RECOVERED_GAPS.WORD_0014_OPAQUE.BIT_13_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "PHY_BB_RECOVERED_GAPS.WORD_00EC_OPAQUE.BIT_12_OPAQUE"
-naming = "opaque"

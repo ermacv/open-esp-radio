@@ -35,8 +35,10 @@ mod pac_api_render;
 mod pac_api_svd;
 mod pac_bindings;
 mod partition_image;
+mod peripherals;
 mod register_evidence;
 mod register_lints;
+mod review_defaults;
 mod shared;
 
 pub use pac_api::{
@@ -186,6 +188,7 @@ pub struct ModelDevice {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
+#[serde(try_from = "peripherals::FragmentSource")]
 pub struct RegisterModelFragment {
     pub schema: u32,
     pub peripherals: Vec<Peripheral>,
@@ -2559,6 +2562,57 @@ mod tests {
     }
 
     #[test]
+    fn placed_library_reviews_resolve_chip_scoped_defaults() {
+        let manifest = shared_fixture("placed-review-defaults", "", "RADIO = 0x2000");
+        let review_path = manifest
+            .parent()
+            .expect("chip fixture directory")
+            .join("radio.review.toml");
+        fs::write(
+            &review_path,
+            r#"schema = 1
+[[peripheral-review]]
+entity = "RADIO"
+[peripheral-review.peripheral]
+[peripheral-review.register]
+sources = ["chip-register"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+naming = "descriptive"
+[peripheral-review.field]
+naming = "descriptive"
+"#,
+        )
+        .expect("write chip review defaults");
+        let model = RegisterModel::load_for_publication(&manifest)
+            .expect("placed peripheral with resolved reviews");
+        assert_eq!(model.review().len(), 3);
+        assert_eq!(
+            model
+                .register_review_annotations()
+                .expect("register reviews")
+                .values()
+                .next()
+                .expect("placed register review")
+                .sources,
+            ["chip-register"]
+        );
+        let text = fs::read_to_string(&review_path).expect("chip reviews");
+        fs::write(
+            &review_path,
+            text.replace("entity = \"RADIO\"", "entity = \"ABSENT\""),
+        )
+        .expect("write invalid scope");
+        assert!(
+            RegisterModel::load(&manifest)
+                .expect_err("absent scope")
+                .to_string()
+                .contains("does not exist in this fragment")
+        );
+    }
+
+    #[test]
     fn layouts_carry_neither_placement_nor_reviews() {
         let based = shared_fixture("based", "baseAddress = 0x10\n", "RADIO = 0x2000");
         let error = RegisterModel::load(&based).unwrap_err().to_string();
@@ -2575,6 +2629,21 @@ mod tests {
         text.push_str("\n[[review]]\nentity = \"RADIO\"\nsources = [\"fixture\"]\n");
         fs::write(&layout, text).unwrap();
         let error = RegisterModel::load(&reviewed).unwrap_err().to_string();
+        assert!(error.contains("carries reviews"), "{error}");
+
+        let defaults = shared_fixture("library-review-defaults", "", "RADIO = 0x2000");
+        let layout = defaults
+            .parent()
+            .expect("chip directory")
+            .parent()
+            .expect("fixture root")
+            .join("lib/radio.toml");
+        let mut text = fs::read_to_string(&layout).expect("library fixture");
+        text.push_str("\n[[peripheral-review]]\nentity = \"RADIO\"\n");
+        fs::write(&layout, text).expect("write invalid library scope");
+        let error = RegisterModel::load(&defaults)
+            .expect_err("library cannot carry chip defaults")
+            .to_string();
         assert!(error.contains("carries reviews"), "{error}");
     }
 

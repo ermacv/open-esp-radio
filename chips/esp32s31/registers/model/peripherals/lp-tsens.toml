@@ -97,17 +97,36 @@ description = "Blob-evidenced readout-path enable; the individual hardware meani
 bitOffset = 23
 bitWidth = 1
 
-[[review]]
+[[peripheral-review]]
 entity = "LP_TSENS"
+opaque-entities = [
+    "LP_TSENS.CLK_CONF.BIT_9_OPAQUE",
+    "LP_TSENS.CLK_CONF.BIT_23_OPAQUE",
+]
+
+[peripheral-review.peripheral]
 sources = ["S31_ESP_PACS_SVD", "ROM_REV0_PHY_TSENS", "BLOB_LIBPHY_PHY_TSENS_READ_INIT"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
 
-[[review]]
-entity = "LP_TSENS.CTRL"
-naming = "vendor"
+[peripheral-review.register]
 sources = ["S31_ESP_PACS_SVD", "ROM_REV0_PHY_TSENS"]
+naming = "vendor"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[peripheral-review.field]
+sources = ["S31_ESP_PACS_SVD"]
+naming = "vendor"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[peripheral-review.opaque]
+sources = ["BLOB_LIBPHY_PHY_TSENS_READ_INIT"]
+naming = "opaque"
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -129,54 +148,6 @@ accuracy = "exact"
 completeness = "complete"
 
 [[review]]
-entity = "LP_TSENS.CTRL.READY"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "LP_TSENS.CTRL.SAMPLE_EN"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "LP_TSENS.CTRL.WAKEUP_MASK"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "LP_TSENS.CTRL.INT_EN"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "LP_TSENS.CTRL.IN_INV"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "LP_TSENS.CTRL.CLK_DIV"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
 entity = "LP_TSENS.CTRL.POWER_UP"
 naming = "vendor"
 sources = ["S31_ESP_PACS_SVD", "ROM_REV0_PHY_TSENS"]
@@ -185,33 +156,9 @@ accuracy = "exact"
 completeness = "complete"
 
 [[review]]
-entity = "LP_TSENS.CTRL.POWER_UP_FORCE"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
 entity = "LP_TSENS.CLK_CONF.CLK_EN"
 naming = "vendor"
 sources = ["S31_ESP_PACS_SVD", "BLOB_LIBPHY_PHY_TSENS_READ_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "LP_TSENS.CLK_CONF.BIT_9_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBPHY_PHY_TSENS_READ_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "LP_TSENS.CLK_CONF.BIT_23_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBPHY_PHY_TSENS_READ_INIT"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"

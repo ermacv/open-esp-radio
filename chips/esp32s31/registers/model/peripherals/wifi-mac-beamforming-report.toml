@@ -25,21 +25,23 @@ name = "BITS_8_31_OPAQUE"
 bitOffset = 8
 bitWidth = 24
 
-[[review]]
+[[peripheral-review]]
 entity = "WIFI_MAC_BEAMFORMING_REPORT"
+opaque-entities = [
+    "WIFI_MAC_BEAMFORMING_REPORT.AVERAGE_SNR.BITS_8_31_OPAQUE",
+]
+
+[peripheral-review.peripheral]
 sources = ["BLOB_LIBPP_BFR_AVERAGE_SNR"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
 
-[[review]]
-entity = "WIFI_MAC_BEAMFORMING_REPORT.AVERAGE_SNR"
+[peripheral-review.register]
 naming = "descriptive"
 
-[[review]]
-entity = "WIFI_MAC_BEAMFORMING_REPORT.AVERAGE_SNR.STREAM_0_CODE"
+[peripheral-review.field]
 naming = "descriptive"
 
-[[review]]
-entity = "WIFI_MAC_BEAMFORMING_REPORT.AVERAGE_SNR.BITS_8_31_OPAQUE"
+[peripheral-review.opaque]
 naming = "opaque"

@@ -65,81 +65,25 @@ description = "Modem crystal clock enable."
 bitOffset = 5
 bitWidth = 1
 
-[[review]]
+[[peripheral-review]]
 entity = "HP_SYS_CLKRST_RADIO"
+
+[peripheral-review.peripheral]
 sources = ["S31_ESP_PACS_SVD"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
 
-[[review]]
-entity = "HP_SYS_CLKRST_RADIO.MODEM_CTRL0"
-naming = "vendor"
+[peripheral-review.register]
 sources = ["S31_ESP_PACS_SVD"]
+naming = "vendor"
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
 
-[[review]]
-entity = "HP_SYS_CLKRST_RADIO.MODEM_CTRL0.MODEM_CLK_EN"
-naming = "vendor"
+[peripheral-review.field]
 sources = ["S31_ESP_PACS_SVD"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "HP_SYS_CLKRST_RADIO.MODEM_CONF"
 naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "HP_SYS_CLKRST_RADIO.MODEM_CONF.MODEM_APB_CLK_EN"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "HP_SYS_CLKRST_RADIO.MODEM_CONF.MODEM_RST_EN"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "HP_SYS_CLKRST_RADIO.MODEM_CONF.MODEM_CLK_EN"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "HP_SYS_CLKRST_RADIO.MODEM_CONF.MODEM_CLK_SOURCE_SEL"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "HP_SYS_CLKRST_RADIO.MODEM_CONF.MODEM_PLL_CLK_EN"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "HP_SYS_CLKRST_RADIO.MODEM_CONF.MODEM_XTAL_CLK_EN"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"

@@ -266,24 +266,38 @@ bitWidth = 24
 minimum = 0x0
 maximum = 0xFFFFFF
 
-[[review]]
+[[peripheral-review]]
 entity = "WIFI_MAC_POWER_INTERRUPT"
-sources = [
-    "C5_BLOB_LIBPP_HAL_PWR_INTERRUPT",
-    "C5_BLOB_LIBPP_HAL_TSF_TIMER",
-    "C5_BLOB_LIBPP_HAL_TSF_TBTT_20260927",
+opaque-entities = [
+    "WIFI_MAC_POWER_INTERRUPT.ENABLE.BITS_8_31_OPAQUE",
+    "WIFI_MAC_POWER_INTERRUPT.RAW.BITS_8_31_OPAQUE",
+    "WIFI_MAC_POWER_INTERRUPT.STATUS.BITS_8_31_OPAQUE",
+    "WIFI_MAC_POWER_INTERRUPT.CLEAR.BITS_8_31_OPAQUE",
 ]
+
+[peripheral-review.peripheral]
+sources = ["C5_BLOB_LIBPP_HAL_PWR_INTERRUPT", "C5_BLOB_LIBPP_HAL_TSF_TIMER", "C5_BLOB_LIBPP_HAL_TSF_TBTT_20260927"]
 provenance = "derived"
 accuracy = "exact"
 completeness = "partial"
 
-[[review]]
-entity = "WIFI_MAC_POWER_INTERRUPT.ENABLE"
+[peripheral-review.register]
+sources = ["C5_BLOB_LIBPP_HAL_TSF_TIMER", "C5_BLOB_LIBPP_HAL_TSF_TBTT_20260927"]
 naming = "descriptive"
-sources = [
-    "C5_BLOB_LIBPP_HAL_TSF_TIMER",
-    "C5_BLOB_LIBPP_HAL_TSF_TBTT_20260927",
-]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[peripheral-review.field]
+sources = ["C5_BLOB_LIBPP_HAL_TSF_TBTT_20260927"]
+naming = "descriptive"
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[peripheral-review.opaque]
+sources = ["C5_BLOB_LIBPP_HAL_PWR_INTERRUPT", "C5_BLOB_LIBPP_HAL_TSF_TIMER"]
+naming = "opaque"
 provenance = "derived"
 accuracy = "exact"
 completeness = "partial"
@@ -305,57 +319,6 @@ naming = "descriptive"
 sources = [
     "C5_BLOB_LIBPP_HAL_PWR_INTERRUPT",
     "C5_BLOB_LIBPP_HAL_TSF_TIMER",
-    "C5_BLOB_LIBPP_HAL_TSF_TBTT_20260927",
-]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "WIFI_MAC_POWER_INTERRUPT.RAW"
-naming = "descriptive"
-sources = [
-    "C5_BLOB_LIBPP_HAL_TSF_TIMER",
-    "C5_BLOB_LIBPP_HAL_TSF_TBTT_20260927",
-]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "WIFI_MAC_POWER_INTERRUPT.ENABLE.TBTT_3"
-naming = "descriptive"
-sources = [
-    "C5_BLOB_LIBPP_HAL_TSF_TBTT_20260927",
-]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "WIFI_MAC_POWER_INTERRUPT.ENABLE.TBTT_2"
-naming = "descriptive"
-sources = [
-    "C5_BLOB_LIBPP_HAL_TSF_TBTT_20260927",
-]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "WIFI_MAC_POWER_INTERRUPT.ENABLE.TBTT_1"
-naming = "descriptive"
-sources = [
-    "C5_BLOB_LIBPP_HAL_TSF_TBTT_20260927",
-]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "WIFI_MAC_POWER_INTERRUPT.ENABLE.TBTT_0"
-naming = "descriptive"
-sources = [
     "C5_BLOB_LIBPP_HAL_TSF_TBTT_20260927",
 ]
 provenance = "derived"
@@ -413,46 +376,6 @@ accuracy = "exact"
 completeness = "partial"
 
 [[review]]
-entity = "WIFI_MAC_POWER_INTERRUPT.RAW.TBTT_3"
-naming = "descriptive"
-sources = [
-    "C5_BLOB_LIBPP_HAL_TSF_TBTT_20260927",
-]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "WIFI_MAC_POWER_INTERRUPT.RAW.TBTT_2"
-naming = "descriptive"
-sources = [
-    "C5_BLOB_LIBPP_HAL_TSF_TBTT_20260927",
-]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "WIFI_MAC_POWER_INTERRUPT.RAW.TBTT_1"
-naming = "descriptive"
-sources = [
-    "C5_BLOB_LIBPP_HAL_TSF_TBTT_20260927",
-]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "WIFI_MAC_POWER_INTERRUPT.RAW.TBTT_0"
-naming = "descriptive"
-sources = [
-    "C5_BLOB_LIBPP_HAL_TSF_TBTT_20260927",
-]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
 entity = "WIFI_MAC_POWER_INTERRUPT.RAW.TSF_TIMER_3"
 naming = "descriptive"
 sources = [
@@ -503,46 +426,6 @@ accuracy = "exact"
 completeness = "partial"
 
 [[review]]
-entity = "WIFI_MAC_POWER_INTERRUPT.STATUS.TBTT_3"
-naming = "descriptive"
-sources = [
-    "C5_BLOB_LIBPP_HAL_TSF_TBTT_20260927",
-]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "WIFI_MAC_POWER_INTERRUPT.STATUS.TBTT_2"
-naming = "descriptive"
-sources = [
-    "C5_BLOB_LIBPP_HAL_TSF_TBTT_20260927",
-]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "WIFI_MAC_POWER_INTERRUPT.STATUS.TBTT_1"
-naming = "descriptive"
-sources = [
-    "C5_BLOB_LIBPP_HAL_TSF_TBTT_20260927",
-]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "WIFI_MAC_POWER_INTERRUPT.STATUS.TBTT_0"
-naming = "descriptive"
-sources = [
-    "C5_BLOB_LIBPP_HAL_TSF_TBTT_20260927",
-]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
 entity = "WIFI_MAC_POWER_INTERRUPT.STATUS.TSF_TIMER_3"
 naming = "descriptive"
 sources = [
@@ -587,57 +470,6 @@ accuracy = "exact"
 completeness = "partial"
 
 [[review]]
-entity = "WIFI_MAC_POWER_INTERRUPT.STATUS.BITS_8_31_OPAQUE"
-naming = "opaque"
-sources = [
-    "C5_BLOB_LIBPP_HAL_PWR_INTERRUPT",
-    "C5_BLOB_LIBPP_HAL_TSF_TIMER",
-]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "WIFI_MAC_POWER_INTERRUPT.CLEAR.TBTT_3"
-naming = "descriptive"
-sources = [
-    "C5_BLOB_LIBPP_HAL_TSF_TBTT_20260927",
-]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "WIFI_MAC_POWER_INTERRUPT.CLEAR.TBTT_2"
-naming = "descriptive"
-sources = [
-    "C5_BLOB_LIBPP_HAL_TSF_TBTT_20260927",
-]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "WIFI_MAC_POWER_INTERRUPT.CLEAR.TBTT_1"
-naming = "descriptive"
-sources = [
-    "C5_BLOB_LIBPP_HAL_TSF_TBTT_20260927",
-]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "WIFI_MAC_POWER_INTERRUPT.CLEAR.TBTT_0"
-naming = "descriptive"
-sources = [
-    "C5_BLOB_LIBPP_HAL_TSF_TBTT_20260927",
-]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
 entity = "WIFI_MAC_POWER_INTERRUPT.CLEAR.TSF_TIMER_3"
 naming = "descriptive"
 sources = [
@@ -671,17 +503,6 @@ completeness = "partial"
 entity = "WIFI_MAC_POWER_INTERRUPT.CLEAR.TSF_TIMER_0"
 naming = "descriptive"
 sources = [
-    "C5_BLOB_LIBPP_HAL_TSF_TIMER",
-]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "WIFI_MAC_POWER_INTERRUPT.CLEAR.BITS_8_31_OPAQUE"
-naming = "opaque"
-sources = [
-    "C5_BLOB_LIBPP_HAL_PWR_INTERRUPT",
     "C5_BLOB_LIBPP_HAL_TSF_TIMER",
 ]
 provenance = "derived"

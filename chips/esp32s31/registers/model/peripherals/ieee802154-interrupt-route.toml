@@ -77,80 +77,35 @@ description = "Bits the vendor declares reserved, retained solely so reset-state
 bitOffset = 10
 bitWidth = 22
 
-[[review]]
+[[peripheral-review]]
 entity = "IEEE802154_INTERRUPT_ROUTE"
-sources = [
-    "ESP_PACS_AAA5C2EA_S31_INTERRUPT_MATRIX",
-    "ESP_IDF_S31_INTERRUPT_SOURCES",
+opaque-entities = [
+    "IEEE802154_INTERRUPT_ROUTE.CORE0_ROUTE.BITS_6_7_OPAQUE",
+    "IEEE802154_INTERRUPT_ROUTE.CORE0_ROUTE.BITS_10_31_OPAQUE",
+    "IEEE802154_INTERRUPT_ROUTE.CORE1_ROUTE.BITS_6_7_OPAQUE",
+    "IEEE802154_INTERRUPT_ROUTE.CORE1_ROUTE.BITS_10_31_OPAQUE",
 ]
+
+[peripheral-review.peripheral]
+sources = ["ESP_PACS_AAA5C2EA_S31_INTERRUPT_MATRIX", "ESP_IDF_S31_INTERRUPT_SOURCES"]
 provenance = "imported"
 accuracy = "exact"
 completeness = "partial"
 
-[[review]]
-entity = "IEEE802154_INTERRUPT_ROUTE.CORE0_ROUTE"
+[peripheral-review.register]
 sources = ["ESP_PACS_AAA5C2EA_S31_INTERRUPT_MATRIX"]
+naming = "descriptive"
 provenance = "imported"
 accuracy = "exact"
 completeness = "partial"
-naming = "descriptive"
 
-[[review]]
-entity = "IEEE802154_INTERRUPT_ROUTE.CORE0_ROUTE.MAP"
+[peripheral-review.field]
 sources = ["ESP_PACS_AAA5C2EA_S31_INTERRUPT_MATRIX"]
+naming = "descriptive"
 provenance = "imported"
 accuracy = "exact"
 completeness = "complete"
-naming = "descriptive"
 
-[[review]]
-entity = "IEEE802154_INTERRUPT_ROUTE.CORE0_ROUTE.PASS_LEVEL"
-sources = ["ESP_PACS_AAA5C2EA_S31_INTERRUPT_MATRIX"]
-provenance = "imported"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "IEEE802154_INTERRUPT_ROUTE.CORE1_ROUTE"
-sources = ["ESP_PACS_AAA5C2EA_S31_INTERRUPT_MATRIX"]
-provenance = "imported"
-accuracy = "exact"
-completeness = "partial"
-naming = "descriptive"
-
-[[review]]
-entity = "IEEE802154_INTERRUPT_ROUTE.CORE1_ROUTE.MAP"
-sources = ["ESP_PACS_AAA5C2EA_S31_INTERRUPT_MATRIX"]
-provenance = "imported"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "IEEE802154_INTERRUPT_ROUTE.CORE1_ROUTE.PASS_LEVEL"
-sources = ["ESP_PACS_AAA5C2EA_S31_INTERRUPT_MATRIX"]
-provenance = "imported"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "IEEE802154_INTERRUPT_ROUTE.CORE0_ROUTE.BITS_6_7_OPAQUE"
-naming = "opaque"
+[peripheral-review.opaque]
 sources = ["ESP_IDF_4D59230D_S31_INTERRUPT_ZB_MAC_MAP"]
-
-[[review]]
-entity = "IEEE802154_INTERRUPT_ROUTE.CORE0_ROUTE.BITS_10_31_OPAQUE"
 naming = "opaque"
-sources = ["ESP_IDF_4D59230D_S31_INTERRUPT_ZB_MAC_MAP"]
-
-[[review]]
-entity = "IEEE802154_INTERRUPT_ROUTE.CORE1_ROUTE.BITS_6_7_OPAQUE"
-naming = "opaque"
-sources = ["ESP_IDF_4D59230D_S31_INTERRUPT_ZB_MAC_MAP"]
-
-[[review]]
-entity = "IEEE802154_INTERRUPT_ROUTE.CORE1_ROUTE.BITS_10_31_OPAQUE"
-naming = "opaque"
-sources = ["ESP_IDF_4D59230D_S31_INTERRUPT_ZB_MAC_MAP"]

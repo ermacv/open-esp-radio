@@ -26,25 +26,25 @@ bitWidth = 20
 minimum = 0
 maximum = 0xF_FFFF
 
-[[review]]
+[[peripheral-review]]
 entity = "BLE_HW_RESOLVING_LIST"
+
+[peripheral-review.peripheral]
 sources = ["BLOB_LIBBLE_HW_RESOLV_LIST_SET"]
 provenance = "derived"
 accuracy = "exact"
 completeness = "partial"
 
-[[review]]
-entity = "BLE_HW_RESOLVING_LIST.BASE_POINTER"
-naming = "descriptive"
+[peripheral-review.register]
 sources = ["BLOB_LIBBLE_HW_RESOLV_LIST_SET"]
+naming = "descriptive"
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
 
-[[review]]
-entity = "BLE_HW_RESOLVING_LIST.BASE_POINTER.COMPRESSED_SRAM_POINTER"
-naming = "descriptive"
+[peripheral-review.field]
 sources = ["BLOB_LIBBLE_HW_RESOLV_LIST_SET"]
+naming = "descriptive"
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"

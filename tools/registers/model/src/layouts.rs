@@ -310,8 +310,18 @@ fn parse_layout(path: &Path, file: LayoutFile, naming: NamingRequirement) -> Res
             review_entities.insert(format!("{entity}.{}", field.name), field.opaque);
         }
     }
-    let resolved_review = review::resolve(source.review.as_ref(), file.review, &review_entities)
-        .map_err(|error| invalid(path, error))?;
+    let resolved_review = crate::review_defaults::resolve(
+        file.review,
+        &review_entities,
+        |_, opaque| {
+            source
+                .review
+                .as_ref()
+                .map(|defaults| defaults.metadata(opaque))
+        },
+        "layout",
+    )
+    .map_err(|error| invalid(path, error))?;
     validate_name(&source.name).map_err(|reason| invalid(path, reason))?;
     if source.description.trim().is_empty() {
         return Err(invalid(path, "a layout needs a description"));

@@ -62,73 +62,33 @@ description = "Set in the middle RMW of each word in the second reverse traversa
 bitOffset = 5
 bitWidth = 1
 
-[[review]]
+[[peripheral-review]]
 entity = "WIFI_MAC_ANTENNA_INIT"
+opaque-entities = [
+    "WIFI_MAC_ANTENNA_INIT.COMMON_CONTROL.BIT_2_OPAQUE",
+    "WIFI_MAC_ANTENNA_INIT.COMMON_CONTROL.BIT_5_OPAQUE",
+    "WIFI_MAC_ANTENNA_INIT.BANK_CONTROL%s.BIT_2_OPAQUE",
+    "WIFI_MAC_ANTENNA_INIT.BANK_CONTROL%s.BIT_3_OPAQUE",
+    "WIFI_MAC_ANTENNA_INIT.BANK_CONTROL%s.BIT_4_OPAQUE",
+    "WIFI_MAC_ANTENNA_INIT.BANK_CONTROL%s.BIT_5_OPAQUE",
+]
+
+[peripheral-review.peripheral]
 sources = ["BLOB_LIBPP_HAL_ANTENNA_INIT"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
 
-[[review]]
-entity = "WIFI_MAC_ANTENNA_INIT.COMMON_CONTROL"
+[peripheral-review.register]
+sources = ["BLOB_LIBPP_HAL_ANTENNA_INIT"]
 naming = "descriptive"
-sources = ["BLOB_LIBPP_HAL_ANTENNA_INIT"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
 
-[[review]]
-entity = "WIFI_MAC_ANTENNA_INIT.COMMON_CONTROL.BIT_2_OPAQUE"
+[peripheral-review.opaque]
+sources = ["BLOB_LIBPP_HAL_ANTENNA_INIT"]
 naming = "opaque"
-sources = ["BLOB_LIBPP_HAL_ANTENNA_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "WIFI_MAC_ANTENNA_INIT.COMMON_CONTROL.BIT_5_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBPP_HAL_ANTENNA_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "WIFI_MAC_ANTENNA_INIT.BANK_CONTROL%s"
-naming = "descriptive"
-sources = ["BLOB_LIBPP_HAL_ANTENNA_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "unknown"
-
-[[review]]
-entity = "WIFI_MAC_ANTENNA_INIT.BANK_CONTROL%s.BIT_2_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBPP_HAL_ANTENNA_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "WIFI_MAC_ANTENNA_INIT.BANK_CONTROL%s.BIT_3_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBPP_HAL_ANTENNA_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "WIFI_MAC_ANTENNA_INIT.BANK_CONTROL%s.BIT_4_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBPP_HAL_ANTENNA_INIT"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "WIFI_MAC_ANTENNA_INIT.BANK_CONTROL%s.BIT_5_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBPP_HAL_ANTENNA_INIT"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"

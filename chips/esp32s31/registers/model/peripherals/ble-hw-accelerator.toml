@@ -271,14 +271,30 @@ name = "VALUE"
 bitOffset = 0
 bitWidth = 32
 
-[[review]]
+# Every register and field is reviewed from complete ESP32-S31 bodies.
+[[peripheral-review]]
 entity = "BLE_HW_ACCELERATOR"
+
+[peripheral-review.peripheral]
 sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS", "BLOB_LIBBLE_HW_ENCRYPT_BLOCK", "BLOB_LIBBLE_HW_RESOLV_LIST_SEARCH"]
 provenance = "derived"
 accuracy = "exact"
 completeness = "partial"
 
-# Every register and field below is reviewed from complete ESP32-S31 bodies.
+[peripheral-review.register]
+sources = ["BLOB_LIBBLE_HW_ENCRYPT_BLOCK"]
+naming = "descriptive"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[peripheral-review.field]
+sources = ["BLOB_LIBBLE_HW_ENCRYPT_BLOCK"]
+naming = "descriptive"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
 [[review]]
 entity = "BLE_HW_ACCELERATOR.INIT_CONFIG"
 naming = "descriptive"
@@ -290,141 +306,6 @@ completeness = "partial"
 entity = "BLE_HW_ACCELERATOR.INIT_CONFIG.VALUE"
 naming = "descriptive"
 sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLE_HW_ACCELERATOR.ENCRYPT_START"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_HW_ENCRYPT_BLOCK"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-[[review]]
-entity = "BLE_HW_ACCELERATOR.ENCRYPT_START.COMMAND"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_HW_ENCRYPT_BLOCK"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLE_HW_ACCELERATOR.ENCRYPT_CONFIG"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_HW_ENCRYPT_BLOCK"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-[[review]]
-entity = "BLE_HW_ACCELERATOR.ENCRYPT_CONFIG.VALUE"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_HW_ENCRYPT_BLOCK"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLE_HW_ACCELERATOR.ENCRYPT_BLOCK_LENGTH"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_HW_ENCRYPT_BLOCK"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-[[review]]
-entity = "BLE_HW_ACCELERATOR.ENCRYPT_BLOCK_LENGTH.BYTES"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_HW_ENCRYPT_BLOCK"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLE_HW_ACCELERATOR.ENCRYPT_KEY_WORD_0"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_HW_ENCRYPT_BLOCK"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-[[review]]
-entity = "BLE_HW_ACCELERATOR.ENCRYPT_KEY_WORD_0.VALUE"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_HW_ENCRYPT_BLOCK"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLE_HW_ACCELERATOR.ENCRYPT_KEY_WORD_1"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_HW_ENCRYPT_BLOCK"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-[[review]]
-entity = "BLE_HW_ACCELERATOR.ENCRYPT_KEY_WORD_1.VALUE"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_HW_ENCRYPT_BLOCK"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLE_HW_ACCELERATOR.ENCRYPT_KEY_WORD_2"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_HW_ENCRYPT_BLOCK"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-[[review]]
-entity = "BLE_HW_ACCELERATOR.ENCRYPT_KEY_WORD_2.VALUE"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_HW_ENCRYPT_BLOCK"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLE_HW_ACCELERATOR.ENCRYPT_KEY_WORD_3"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_HW_ENCRYPT_BLOCK"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-[[review]]
-entity = "BLE_HW_ACCELERATOR.ENCRYPT_KEY_WORD_3.VALUE"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_HW_ENCRYPT_BLOCK"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLE_HW_ACCELERATOR.ENCRYPT_INPUT_BUFFER_ADDRESS"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_HW_ENCRYPT_BLOCK"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-[[review]]
-entity = "BLE_HW_ACCELERATOR.ENCRYPT_INPUT_BUFFER_ADDRESS.ADDRESS"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_HW_ENCRYPT_BLOCK"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLE_HW_ACCELERATOR.ENCRYPT_OUTPUT_BUFFER_ADDRESS"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_HW_ENCRYPT_BLOCK"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-[[review]]
-entity = "BLE_HW_ACCELERATOR.ENCRYPT_OUTPUT_BUFFER_ADDRESS.ADDRESS"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_HW_ENCRYPT_BLOCK"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -534,13 +415,6 @@ provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
 [[review]]
-entity = "BLE_HW_ACCELERATOR.ENGINE_CONTROL.ENCRYPT_CONFIG_BITS"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_HW_ENCRYPT_BLOCK"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-[[review]]
 entity = "BLE_HW_ACCELERATOR.ENGINE_CONTROL.RESOLV_CONFIG_BIT"
 naming = "descriptive"
 sources = ["BLOB_LIBBLE_HW_RESOLV_LIST_SEARCH"]
@@ -570,14 +444,6 @@ sources = ["BLOB_LIBBLE_HW_ENCRYPT_BLOCK"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
-[[review]]
-entity = "BLE_HW_ACCELERATOR.ENCRYPT_COMPLETION_STATUS.VALUE"
-naming = "descriptive"
-sources = ["BLOB_LIBBLE_HW_ENCRYPT_BLOCK"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
 [[review]]
 entity = "BLE_HW_ACCELERATOR.INIT_SRAM_REGION_0"
 naming = "descriptive"

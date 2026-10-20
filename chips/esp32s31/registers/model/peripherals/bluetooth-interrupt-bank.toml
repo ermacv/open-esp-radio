@@ -336,61 +336,52 @@ name = "PENDING_BITS"
 bitOffset = 0
 bitWidth = 32
 
-[[review]]
+[[peripheral-review]]
 entity = "BLUETOOTH_INTERRUPT_BANK"
-sources = [
-    "BLOB_LIBBTDM_CONTROLLER_IRQ",
-    "BLOB_LIBBLE_ISO_COEX_REGISTERS",
+opaque-entities = [
+    "BLUETOOTH_INTERRUPT_BANK.IRQ_CLEAR_0.BITS_0_6_OPAQUE",
+    "BLUETOOTH_INTERRUPT_BANK.IRQ_CLEAR_0.BITS_8_14_OPAQUE",
+    "BLUETOOTH_INTERRUPT_BANK.IRQ_CLEAR_0.BITS_16_20_OPAQUE",
+    "BLUETOOTH_INTERRUPT_BANK.IRQ_CLEAR_0.BITS_22_26_OPAQUE",
+    "BLUETOOTH_INTERRUPT_BANK.IRQ_CLEAR_0.BITS_29_31_OPAQUE",
+    "BLUETOOTH_INTERRUPT_BANK.IRQ_STATUS_0.BITS_0_14_OPAQUE",
+    "BLUETOOTH_INTERRUPT_BANK.IRQ_STATUS_0.BITS_16_20_OPAQUE",
+    "BLUETOOTH_INTERRUPT_BANK.IRQ_STATUS_0.BITS_22_26_OPAQUE",
+    "BLUETOOTH_INTERRUPT_BANK.IRQ_STATUS_0.BITS_29_31_OPAQUE",
+    "BLUETOOTH_INTERRUPT_BANK.IRQ_CLEAR_1.BITS_0_2_OPAQUE",
+    "BLUETOOTH_INTERRUPT_BANK.IRQ_CLEAR_1.BITS_4_7_OPAQUE",
+    "BLUETOOTH_INTERRUPT_BANK.IRQ_CLEAR_1.BITS_10_11_OPAQUE",
+    "BLUETOOTH_INTERRUPT_BANK.IRQ_CLEAR_1.BITS_13_31_OPAQUE",
+    "BLUETOOTH_INTERRUPT_BANK.IRQ_STATUS_1.BITS_0_2_OPAQUE",
+    "BLUETOOTH_INTERRUPT_BANK.IRQ_STATUS_1.BITS_4_7_OPAQUE",
+    "BLUETOOTH_INTERRUPT_BANK.IRQ_STATUS_1.BITS_10_11_OPAQUE",
+    "BLUETOOTH_INTERRUPT_BANK.IRQ_STATUS_1.BITS_13_31_OPAQUE",
 ]
+
+[peripheral-review.peripheral]
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "BLOB_LIBBLE_ISO_COEX_REGISTERS"]
 provenance = "derived"
 accuracy = "exact"
 completeness = "partial"
 
-[[review]]
-entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_CONTROL_0"
-naming = "descriptive"
+[peripheral-review.register]
 sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+naming = "descriptive"
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
 
-[[review]]
-entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_CONTROL_0.COMMAND"
-naming = "descriptive"
+[peripheral-review.field]
 sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+naming = "descriptive"
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
 
-[[review]]
-entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_CONTROL_1"
-naming = "descriptive"
+[peripheral-review.opaque]
 sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_CONTROL_1.COMMAND"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_CONTROL_2"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_CONTROL_2.COMMAND"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
-provenance = "observed"
+naming = "opaque"
+provenance = "derived"
 accuracy = "exact"
 completeness = "complete"
 
@@ -435,33 +426,9 @@ accuracy = "exact"
 completeness = "complete"
 
 [[review]]
-entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_ENABLE_0.SOURCE_15"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
 entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_ENABLE_0.SOURCE_16"
 naming = "descriptive"
 sources = ["BLOB_LIBBLE_ISO_COEX_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_ENABLE_0.SOURCE_21"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_ENABLE_0.SOURCES_27_28"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -475,14 +442,6 @@ accuracy = "exact"
 completeness = "complete"
 
 [[review]]
-entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_CLEAR_0.BITS_0_6_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
-provenance = "derived"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
 entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_CLEAR_0.SOURCE_7"
 naming = "descriptive"
 sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "BLOB_LIBBTDM_SCHEDULER_CANCELLATION", "PUBLIC_ESP32S31_BT_SCHEDULER_CANCELLATION_ROLES"]
@@ -491,188 +450,12 @@ accuracy = "exact"
 completeness = "partial"
 
 [[review]]
-entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_CLEAR_0.BITS_8_14_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
-provenance = "derived"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_CLEAR_0.SOURCE_15"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_CLEAR_0.BITS_16_20_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
-provenance = "derived"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_CLEAR_0.SOURCE_21"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_CLEAR_0.BITS_22_26_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
-provenance = "derived"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_CLEAR_0.SOURCES_27_28"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_CLEAR_0.BITS_29_31_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
-provenance = "derived"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_STATUS_0"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_STATUS_0.BITS_0_14_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
-provenance = "derived"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_STATUS_0.SOURCE_15"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_STATUS_0.BITS_16_20_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
-provenance = "derived"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_STATUS_0.SOURCE_21"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_STATUS_0.BITS_22_26_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
-provenance = "derived"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_STATUS_0.SOURCES_27_28"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_STATUS_0.BITS_29_31_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
-provenance = "derived"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
 entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_ENABLE_1"
 naming = "descriptive"
 sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "BLOB_LIBBLE_ISO_COEX_REGISTERS"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
-
-[[review]]
-entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_ENABLE_1.SOURCE_3"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_ENABLE_1.SOURCE_4"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_ENABLE_1.SOURCE_5"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_ENABLE_1.SOURCE_6"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_ENABLE_1.SOURCE_8"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_ENABLE_1.SOURCE_9"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_ENABLE_1.SOURCE_12"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
 
 [[review]]
 entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_ENABLE_1.SOURCE_13"
@@ -691,190 +474,6 @@ accuracy = "exact"
 completeness = "complete"
 
 [[review]]
-entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_CLEAR_1.BITS_0_2_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
-provenance = "derived"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_CLEAR_1.SOURCE_3"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_CLEAR_1.BITS_4_7_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
-provenance = "derived"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_CLEAR_1.SOURCE_8"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_CLEAR_1.SOURCE_9"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_CLEAR_1.BITS_10_11_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
-provenance = "derived"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_CLEAR_1.SOURCE_12"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_CLEAR_1.BITS_13_31_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
-provenance = "derived"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_STATUS_1"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_STATUS_1.BITS_0_2_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
-provenance = "derived"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_STATUS_1.SOURCE_3"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_STATUS_1.BITS_4_7_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
-provenance = "derived"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_STATUS_1.SOURCE_8"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_STATUS_1.SOURCE_9"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_STATUS_1.BITS_10_11_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
-provenance = "derived"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_STATUS_1.SOURCE_12"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_STATUS_1.BITS_13_31_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
-provenance = "derived"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_DIAGNOSTIC_STATE"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_DIAGNOSTIC_STATE.VALUE"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_DIAGNOSTIC_DETAIL_0"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_DIAGNOSTIC_DETAIL_0.VALUE"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_DIAGNOSTIC_DETAIL_1"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_DIAGNOSTIC_DETAIL_1.VALUE"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
 entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_STATUS_SNAPSHOT_0"
 naming = "descriptive"
 sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
@@ -883,23 +482,7 @@ accuracy = "exact"
 completeness = "complete"
 
 [[review]]
-entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_STATUS_SNAPSHOT_0.PENDING_BITS"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
 entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_STATUS_SNAPSHOT_1"
-naming = "descriptive"
-sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_STATUS_SNAPSHOT_1.PENDING_BITS"
 naming = "descriptive"
 sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
 provenance = "observed"

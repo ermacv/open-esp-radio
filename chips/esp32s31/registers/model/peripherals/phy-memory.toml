@@ -162,35 +162,32 @@ bitWidth = 8
 minimum = 0x0
 maximum = 0xFF
 
-[[review]]
+[[peripheral-review]]
 entity = "PHY_MEMORY"
-sources = [
-    "ROM_REV0_PHY_SET_PBUS_MEM",
-    "ROM_REV0_PHY_WRITE_PBUS_MEM",
-    "ROM_REV0_PHY_SAVE_PBUS_REG",
-    "BLOB_LIBPHY_PHY_SET_TX_CFR_MEM",
-    "ROM_REV0_PHY_WRITE_GAIN_MEM",
+opaque-entities = [
+    "PHY_MEMORY.COMMAND.BITS_0_10_OPAQUE",
 ]
+
+[peripheral-review.peripheral]
+sources = ["ROM_REV0_PHY_SET_PBUS_MEM", "ROM_REV0_PHY_WRITE_PBUS_MEM", "ROM_REV0_PHY_SAVE_PBUS_REG", "BLOB_LIBPHY_PHY_SET_TX_CFR_MEM", "ROM_REV0_PHY_WRITE_GAIN_MEM"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
 
-[[review]]
-entity = "PHY_MEMORY.COMMAND"
+[peripheral-review.register]
+sources = ["ROM_REV0_PHY_WRITE_PBUS_MEM", "BLOB_LIBPHY_PHY_SET_TX_CFR_MEM", "ROM_REV0_PHY_WRITE_GAIN_MEM"]
 naming = "descriptive"
-sources = [
-    "ROM_REV0_PHY_WRITE_PBUS_MEM",
-    "BLOB_LIBPHY_PHY_SET_TX_CFR_MEM",
-    "ROM_REV0_PHY_WRITE_GAIN_MEM",
-]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
 
-[[review]]
-entity = "PHY_MEMORY.COMMAND.BITS_0_10_OPAQUE"
-naming = "opaque"
+[peripheral-review.field]
 sources = ["ROM_REV0_PHY_WRITE_GAIN_MEM"]
+naming = "descriptive"
+
+[peripheral-review.opaque]
+sources = ["ROM_REV0_PHY_WRITE_GAIN_MEM"]
+naming = "opaque"
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
@@ -235,18 +232,6 @@ accuracy = "exact"
 completeness = "complete"
 
 [[review]]
-entity = "PHY_MEMORY.DATA_0"
-naming = "descriptive"
-sources = [
-    "ROM_REV0_PHY_WRITE_PBUS_MEM",
-    "BLOB_LIBPHY_PHY_SET_TX_CFR_MEM",
-    "ROM_REV0_PHY_WRITE_GAIN_MEM",
-]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
 entity = "PHY_MEMORY.DATA_1"
 naming = "descriptive"
 sources = ["ROM_REV0_PHY_WRITE_GAIN_MEM"]
@@ -273,21 +258,6 @@ sources = [
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
-
-[[review]]
-entity = "PHY_MEMORY.DATA_0.VALUE"
-naming = "descriptive"
-sources = ["ROM_REV0_PHY_WRITE_GAIN_MEM"]
-
-[[review]]
-entity = "PHY_MEMORY.DATA_1.VALUE"
-naming = "descriptive"
-sources = ["ROM_REV0_PHY_WRITE_GAIN_MEM"]
-
-[[review]]
-entity = "PHY_MEMORY.DATA_2.VALUE"
-naming = "descriptive"
-sources = ["ROM_REV0_PHY_WRITE_GAIN_MEM"]
 
 [[review]]
 entity = "PHY_MEMORY.GROUP_BOUNDARY%s.EVEN_GROUP_FIRST_ENTRY"

@@ -26,25 +26,25 @@ description = "Temperature-sensor peripheral reset enable; modeled for exact reg
 bitOffset = 31
 bitWidth = 1
 
-[[review]]
+[[peripheral-review]]
 entity = "LP_PERICLKRST"
+
+[peripheral-review.peripheral]
 sources = ["S31_ESP_PACS_SVD", "BLOB_LIBPHY_PHY_TSENS_READ_INIT"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
 
-[[review]]
-entity = "LP_PERICLKRST.TSENS_CTRL"
-naming = "vendor"
+[peripheral-review.register]
 sources = ["S31_ESP_PACS_SVD", "BLOB_LIBPHY_PHY_TSENS_READ_INIT"]
+naming = "vendor"
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
 
-[[review]]
-entity = "LP_PERICLKRST.TSENS_CTRL.LP_TSENS_CLK_EN"
-naming = "vendor"
+[peripheral-review.field]
 sources = ["S31_ESP_PACS_SVD", "BLOB_LIBPHY_PHY_TSENS_READ_INIT"]
+naming = "vendor"
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"

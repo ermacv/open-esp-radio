@@ -320,120 +320,33 @@ bitWidth = 32
 minimum = 0x0
 maximum = 0xffffffff
 
-[[review]]
+[[peripheral-review]]
 entity = "WIFI_MAC_KEY_TABLE"
+opaque-entities = [
+    "WIFI_MAC_KEY_TABLE.ENTRY_PEER_CONTROL%s.BITS_16_17_OPAQUE",
+    "WIFI_MAC_KEY_TABLE.ENTRY_PEER_CONTROL%s.BIT_20_OPAQUE",
+    "WIFI_MAC_KEY_TABLE.ENTRY_PEER_CONTROL%s.BIT_26_OPAQUE",
+    "WIFI_MAC_KEY_TABLE.ENTRY_PEER_CONTROL%s.BITS_28_29_OPAQUE",
+]
+
+[peripheral-review.peripheral]
 sources = ["BLOB_LIBPP_HAL_CRYPTO"]
 provenance = "reviewed"
 accuracy = "exact"
 completeness = "complete"
 
-[[review]]
-entity = "WIFI_MAC_KEY_TABLE.ENTRY_PEER_LOW%s"
-naming = "descriptive"
+[peripheral-review.register]
 sources = ["BLOB_LIBPP_HAL_CRYPTO"]
+naming = "descriptive"
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
 
-[[review]]
-entity = "WIFI_MAC_KEY_TABLE.ENTRY_PEER_LOW%s.PEER_LOW"
+[peripheral-review.field]
 naming = "descriptive"
 
-[[review]]
-entity = "WIFI_MAC_KEY_TABLE.ENTRY_PEER_CONTROL%s"
-naming = "descriptive"
-sources = ["BLOB_LIBPP_HAL_CRYPTO"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "WIFI_MAC_KEY_TABLE.ENTRY_PEER_CONTROL%s.PEER_HIGH"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_KEY_TABLE.ENTRY_PEER_CONTROL%s.BITS_16_17_OPAQUE"
+[peripheral-review.opaque]
 naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_KEY_TABLE.ENTRY_PEER_CONTROL%s.ALGORITHM"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_KEY_TABLE.ENTRY_PEER_CONTROL%s.BIT_20_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_KEY_TABLE.ENTRY_PEER_CONTROL%s.DIRECTION"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_KEY_TABLE.ENTRY_PEER_CONTROL%s.INTERFACE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_KEY_TABLE.ENTRY_PEER_CONTROL%s.BIT_26_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_KEY_TABLE.ENTRY_PEER_CONTROL%s.LOGICAL_INDEX_NOT_THREE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_KEY_TABLE.ENTRY_PEER_CONTROL%s.BITS_28_29_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_KEY_TABLE.ENTRY_PEER_CONTROL%s.LOGICAL_KEY_INDEX"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_0%s"
-naming = "descriptive"
-sources = ["BLOB_LIBPP_HAL_CRYPTO"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_0%s.VALUE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_1%s"
-naming = "descriptive"
-sources = ["BLOB_LIBPP_HAL_CRYPTO"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_1%s.VALUE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_2%s"
-naming = "descriptive"
-sources = ["BLOB_LIBPP_HAL_CRYPTO"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_2%s.VALUE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_3%s"
-naming = "descriptive"
-sources = ["BLOB_LIBPP_HAL_CRYPTO"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_3%s.VALUE"
-naming = "descriptive"
 
 [[review]]
 entity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_0%s"
@@ -444,20 +357,12 @@ accuracy = "exact"
 completeness = "partial"
 
 [[review]]
-entity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_0%s.VALUE"
-naming = "descriptive"
-
-[[review]]
 entity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_1%s"
 naming = "descriptive"
 sources = ["BLOB_LIBPP_HAL_CRYPTO"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
-
-[[review]]
-entity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_1%s.VALUE"
-naming = "descriptive"
 
 [[review]]
 entity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_2%s"
@@ -468,17 +373,9 @@ accuracy = "exact"
 completeness = "partial"
 
 [[review]]
-entity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_2%s.VALUE"
-naming = "descriptive"
-
-[[review]]
 entity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_3%s"
 naming = "descriptive"
 sources = ["BLOB_LIBPP_HAL_CRYPTO"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
-
-[[review]]
-entity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_3%s.VALUE"
-naming = "descriptive"

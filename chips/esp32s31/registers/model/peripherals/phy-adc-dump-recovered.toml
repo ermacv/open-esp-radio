@@ -193,16 +193,48 @@ description = "Set by complete adctrig after the lane selectors."
 bitOffset = 24
 bitWidth = 1
 
-[[review]]
+[[peripheral-review]]
 entity = "PHY_ADC_DUMP_RECOVERED"
-sources = [
-    "BLOB_LIBRFTEST_ADCTRIG",
-    "BLOB_LIBRFTEST_SET_DUMP_MODE",
-    "BLOB_LIBRFTEST_PRINT_DUMP_DATA",
+opaque-entities = [
+    "PHY_ADC_DUMP_RECOVERED.WORD_08CC_OPAQUE",
+    "PHY_ADC_DUMP_RECOVERED.WORD_08CC_OPAQUE.BITS_19_22_OPAQUE",
+    "PHY_ADC_DUMP_RECOVERED.WORD_20B4_OPAQUE",
+    "PHY_ADC_DUMP_RECOVERED.WORD_20B4_OPAQUE.BIT_0_OPAQUE",
+    "PHY_ADC_DUMP_RECOVERED.WORD_70B8_OPAQUE",
+    "PHY_ADC_DUMP_RECOVERED.WORD_70B8_OPAQUE.BITS_0_2_OPAQUE",
+    "PHY_ADC_DUMP_RECOVERED.DUMP_CONTROL.BIT_17_OPAQUE",
+    "PHY_ADC_DUMP_RECOVERED.DUMP_CONTROL.BITS_20_21_OPAQUE",
+    "PHY_ADC_DUMP_RECOVERED.DUMP_CONFIG.BITS_0_15_OPAQUE",
+    "PHY_ADC_DUMP_RECOVERED.DUMP_CONFIG.BITS_21_24_OPAQUE",
+    "PHY_ADC_DUMP_RECOVERED.DUMP_LANE_SELECT.BIT_24_OPAQUE",
 ]
+
+[peripheral-review.peripheral]
+sources = ["BLOB_LIBRFTEST_ADCTRIG", "BLOB_LIBRFTEST_SET_DUMP_MODE", "BLOB_LIBRFTEST_PRINT_DUMP_DATA"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
+
+[peripheral-review.register]
+sources = ["BLOB_LIBRFTEST_ADCTRIG"]
+naming = "descriptive"
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[peripheral-review.field]
+sources = ["BLOB_LIBRFTEST_ADCTRIG"]
+naming = "descriptive"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[peripheral-review.opaque]
+sources = ["BLOB_LIBRFTEST_ADCTRIG"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
 
 [[review]]
 entity = "PHY_ADC_DUMP_RECOVERED.WORD_08CC_OPAQUE"
@@ -229,14 +261,6 @@ accuracy = "exact"
 completeness = "unknown"
 
 [[review]]
-entity = "PHY_ADC_DUMP_RECOVERED.WORD_20B4_OPAQUE.BIT_0_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBRFTEST_ADCTRIG"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
 entity = "PHY_ADC_DUMP_RECOVERED.WORD_70B8_OPAQUE"
 naming = "opaque"
 sources = ["BLOB_LIBRFTEST_SET_DUMP_MODE"]
@@ -248,142 +272,6 @@ completeness = "unknown"
 entity = "PHY_ADC_DUMP_RECOVERED.WORD_70B8_OPAQUE.BITS_0_2_OPAQUE"
 naming = "opaque"
 sources = ["BLOB_LIBRFTEST_SET_DUMP_MODE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_ADC_DUMP_RECOVERED.DUMP_CONTROL"
-naming = "descriptive"
-sources = ["BLOB_LIBRFTEST_ADCTRIG"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "unknown"
-
-[[review]]
-entity = "PHY_ADC_DUMP_RECOVERED.DUMP_CONTROL.LENGTH"
-naming = "descriptive"
-sources = ["BLOB_LIBRFTEST_ADCTRIG"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_ADC_DUMP_RECOVERED.DUMP_CONTROL.BIT_17_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBRFTEST_ADCTRIG"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_ADC_DUMP_RECOVERED.DUMP_CONTROL.DONE"
-naming = "descriptive"
-sources = ["BLOB_LIBRFTEST_ADCTRIG"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_ADC_DUMP_RECOVERED.DUMP_CONTROL.TRIGGER"
-naming = "descriptive"
-sources = ["BLOB_LIBRFTEST_ADCTRIG"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_ADC_DUMP_RECOVERED.DUMP_CONTROL.BITS_20_21_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBRFTEST_ADCTRIG"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_ADC_DUMP_RECOVERED.DUMP_CONTROL.ENABLE"
-naming = "descriptive"
-sources = ["BLOB_LIBRFTEST_ADCTRIG"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_ADC_DUMP_RECOVERED.DUMP_CONFIG"
-naming = "descriptive"
-sources = ["BLOB_LIBRFTEST_ADCTRIG"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "unknown"
-
-[[review]]
-entity = "PHY_ADC_DUMP_RECOVERED.DUMP_CONFIG.BITS_0_15_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBRFTEST_ADCTRIG"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_ADC_DUMP_RECOVERED.DUMP_CONFIG.SOURCE_SELECT"
-naming = "descriptive"
-sources = ["BLOB_LIBRFTEST_ADCTRIG"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_ADC_DUMP_RECOVERED.DUMP_CONFIG.BITS_21_24_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBRFTEST_ADCTRIG"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_ADC_DUMP_RECOVERED.DUMP_LANE_SELECT"
-naming = "descriptive"
-sources = ["BLOB_LIBRFTEST_ADCTRIG"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "unknown"
-
-[[review]]
-entity = "PHY_ADC_DUMP_RECOVERED.DUMP_LANE_SELECT.LANE_0"
-naming = "descriptive"
-sources = ["BLOB_LIBRFTEST_ADCTRIG"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_ADC_DUMP_RECOVERED.DUMP_LANE_SELECT.LANE_1"
-naming = "descriptive"
-sources = ["BLOB_LIBRFTEST_ADCTRIG"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_ADC_DUMP_RECOVERED.DUMP_LANE_SELECT.LANE_2"
-naming = "descriptive"
-sources = ["BLOB_LIBRFTEST_ADCTRIG"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_ADC_DUMP_RECOVERED.DUMP_LANE_SELECT.LANE_3"
-naming = "descriptive"
-sources = ["BLOB_LIBRFTEST_ADCTRIG"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_ADC_DUMP_RECOVERED.DUMP_LANE_SELECT.BIT_24_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBRFTEST_ADCTRIG"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"

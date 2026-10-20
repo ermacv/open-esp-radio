@@ -266,29 +266,41 @@ bitWidth = 24
 minimum = 0x0
 maximum = 0xFFFFFF
 
-[[review]]
+[[peripheral-review]]
 entity = "WIFI_MAC_POWER_INTERRUPT"
-sources = [
-    "BLOB_LIBPP_ISR_REGISTER_DUMP",
-    "BLOB_LIBPP_HAL_PWR_INTERRUPT",
-    "BLOB_LIBPP_HAL_TSF_TIMER",
-    "BLOB_LIBPP_HAL_TSF_TBTT_20260927",
+opaque-entities = [
+    "WIFI_MAC_POWER_INTERRUPT.ENABLE.BITS_8_31_OPAQUE",
+    "WIFI_MAC_POWER_INTERRUPT.RAW.BITS_8_31_OPAQUE",
+    "WIFI_MAC_POWER_INTERRUPT.STATUS.BITS_8_31_OPAQUE",
+    "WIFI_MAC_POWER_INTERRUPT.CLEAR.BITS_8_31_OPAQUE",
 ]
+
+[peripheral-review.peripheral]
+sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER", "BLOB_LIBPP_HAL_TSF_TBTT_20260927"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
 
-[[review]]
-entity = "WIFI_MAC_POWER_INTERRUPT.ENABLE"
+[peripheral-review.register]
+sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_TSF_TIMER", "BLOB_LIBPP_HAL_TSF_TBTT_20260927"]
 naming = "descriptive"
-sources = [
-    "BLOB_LIBPP_ISR_REGISTER_DUMP",
-    "BLOB_LIBPP_HAL_TSF_TIMER",
-    "BLOB_LIBPP_HAL_TSF_TBTT_20260927",
-]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
+
+[peripheral-review.field]
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927"]
+naming = "descriptive"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[peripheral-review.opaque]
+sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_TSF_TIMER"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
 
 [[review]]
 entity = "WIFI_MAC_POWER_INTERRUPT.STATUS"
@@ -310,50 +322,6 @@ sources = [
     "BLOB_LIBPP_HAL_TSF_TIMER",
     "BLOB_LIBPP_HAL_TSF_TBTT_20260927",
 ]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "WIFI_MAC_POWER_INTERRUPT.RAW"
-naming = "descriptive"
-sources = [
-    "BLOB_LIBPP_ISR_REGISTER_DUMP",
-    "BLOB_LIBPP_HAL_TSF_TIMER",
-    "BLOB_LIBPP_HAL_TSF_TBTT_20260927",
-]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "WIFI_MAC_POWER_INTERRUPT.ENABLE.TBTT_3"
-naming = "descriptive"
-sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "WIFI_MAC_POWER_INTERRUPT.ENABLE.TBTT_2"
-naming = "descriptive"
-sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "WIFI_MAC_POWER_INTERRUPT.ENABLE.TBTT_1"
-naming = "descriptive"
-sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "WIFI_MAC_POWER_INTERRUPT.ENABLE.TBTT_0"
-naming = "descriptive"
-sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -391,46 +359,6 @@ accuracy = "exact"
 completeness = "complete"
 
 [[review]]
-entity = "WIFI_MAC_POWER_INTERRUPT.ENABLE.BITS_8_31_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_TSF_TIMER"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "unknown"
-
-[[review]]
-entity = "WIFI_MAC_POWER_INTERRUPT.RAW.TBTT_3"
-naming = "descriptive"
-sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "WIFI_MAC_POWER_INTERRUPT.RAW.TBTT_2"
-naming = "descriptive"
-sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "WIFI_MAC_POWER_INTERRUPT.RAW.TBTT_1"
-naming = "descriptive"
-sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "WIFI_MAC_POWER_INTERRUPT.RAW.TBTT_0"
-naming = "descriptive"
-sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
 entity = "WIFI_MAC_POWER_INTERRUPT.RAW.TSF_TIMER_3"
 naming = "descriptive"
 sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_TSF_TIMER"]
@@ -458,46 +386,6 @@ completeness = "complete"
 entity = "WIFI_MAC_POWER_INTERRUPT.RAW.TSF_TIMER_0"
 naming = "descriptive"
 sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_TSF_TIMER"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "WIFI_MAC_POWER_INTERRUPT.RAW.BITS_8_31_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_TSF_TIMER"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "unknown"
-
-[[review]]
-entity = "WIFI_MAC_POWER_INTERRUPT.STATUS.TBTT_3"
-naming = "descriptive"
-sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "WIFI_MAC_POWER_INTERRUPT.STATUS.TBTT_2"
-naming = "descriptive"
-sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "WIFI_MAC_POWER_INTERRUPT.STATUS.TBTT_1"
-naming = "descriptive"
-sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "WIFI_MAC_POWER_INTERRUPT.STATUS.TBTT_0"
-naming = "descriptive"
-sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -541,38 +429,6 @@ sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
-
-[[review]]
-entity = "WIFI_MAC_POWER_INTERRUPT.CLEAR.TBTT_3"
-naming = "descriptive"
-sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "WIFI_MAC_POWER_INTERRUPT.CLEAR.TBTT_2"
-naming = "descriptive"
-sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "WIFI_MAC_POWER_INTERRUPT.CLEAR.TBTT_1"
-naming = "descriptive"
-sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "WIFI_MAC_POWER_INTERRUPT.CLEAR.TBTT_0"
-naming = "descriptive"
-sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
 
 [[review]]
 entity = "WIFI_MAC_POWER_INTERRUPT.CLEAR.TSF_TIMER_3"

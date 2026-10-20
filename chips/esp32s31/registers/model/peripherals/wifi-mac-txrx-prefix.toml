@@ -175,31 +175,45 @@ bitWidth = 2
 minimum = 0x0
 maximum = 0x3
 
-[[review]]
+[[peripheral-review]]
 entity = "WIFI_MAC_TXRX_PREFIX"
-sources = [
-    "BLOB_LIBPP_MAC_TXRX_INIT_PREFIX",
-    "BLOB_LIBPP_HAL_INIT_TAIL",
+opaque-entities = [
+    "WIFI_MAC_TXRX_PREFIX.FEATURE_EDGES.BIT_28_OPAQUE",
+    "WIFI_MAC_TXRX_PREFIX.MODE_CONTROL.BIT_2_OPAQUE",
+    "WIFI_MAC_TXRX_PREFIX.RX_QUEUE_DEFAULT%s.BITS_16_23_OPAQUE",
+    "WIFI_MAC_TXRX_PREFIX.RX_QUEUE_DEFAULT%s.BIT_24_OPAQUE",
+    "WIFI_MAC_TXRX_PREFIX.RX_QUEUE_DEFAULT%s.BIT_25_OPAQUE",
+    "WIFI_MAC_TXRX_PREFIX.RX_QUEUE_DEFAULT%s.BIT_26_OPAQUE",
+    "WIFI_MAC_TXRX_PREFIX.RX_QUEUE_DEFAULT%s.BITS_27_31_OPAQUE",
+    "WIFI_MAC_TXRX_PREFIX.CONTROL_EDGES.BIT_0_OPAQUE",
+    "WIFI_MAC_TXRX_PREFIX.CONTROL_EDGES.BIT_4_OPAQUE",
+    "WIFI_MAC_TXRX_PREFIX.TIMING_CONTROL.BITS_20_27_OPAQUE",
+    "WIFI_MAC_TXRX_PREFIX.TIMING_CONTROL.BIT_31_OPAQUE",
+    "WIFI_MAC_TXRX_PREFIX.FEATURE_EDGES.BIT_9_OPAQUE",
+    "WIFI_MAC_TXRX_PREFIX.FEATURE_EDGES.BIT_12_OPAQUE",
+    "WIFI_MAC_TXRX_PREFIX.FEATURE_EDGES.BIT_13_OPAQUE",
+    "WIFI_MAC_TXRX_PREFIX.FEATURE_EDGES.BIT_15_OPAQUE",
+    "WIFI_MAC_TXRX_PREFIX.FEATURE_EDGES.BIT_23_OPAQUE",
+    "WIFI_MAC_TXRX_PREFIX.FEATURE_EDGES.BIT_31_OPAQUE",
+    "WIFI_MAC_TXRX_PREFIX.MODE_CONTROL.BIT_3_OPAQUE",
+    "WIFI_MAC_TXRX_PREFIX.SHARED_ENABLE_CONTROL.BITS_0_1_OPAQUE",
 ]
+
+[peripheral-review.peripheral]
+sources = ["BLOB_LIBPP_MAC_TXRX_INIT_PREFIX", "BLOB_LIBPP_HAL_INIT_TAIL"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
 
-[[review]]
-entity = "WIFI_MAC_TXRX_PREFIX.RX_QUEUE_DEFAULT%s"
-naming = "descriptive"
+[peripheral-review.register]
 sources = ["BLOB_LIBPP_MAC_TXRX_INIT_PREFIX"]
+naming = "descriptive"
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
 
-[[review]]
-entity = "WIFI_MAC_TXRX_PREFIX.CONTROL_EDGES"
-naming = "descriptive"
-sources = ["BLOB_LIBPP_MAC_TXRX_INIT_PREFIX"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "unknown"
+[peripheral-review.opaque]
+naming = "opaque"
 
 [[review]]
 entity = "WIFI_MAC_TXRX_PREFIX.TIMING_CONTROL"
@@ -249,79 +263,3 @@ sources = ["BLOB_LIBPP_HAL_HE_INIT_SUFFIX"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
-
-[[review]]
-entity = "WIFI_MAC_TXRX_PREFIX.SHARED_ENABLE_CONTROL"
-naming = "descriptive"
-sources = ["BLOB_LIBPP_MAC_TXRX_INIT_PREFIX"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "unknown"
-
-[[review]]
-entity = "WIFI_MAC_TXRX_PREFIX.RX_QUEUE_DEFAULT%s.BITS_16_23_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_TXRX_PREFIX.RX_QUEUE_DEFAULT%s.BIT_24_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_TXRX_PREFIX.RX_QUEUE_DEFAULT%s.BIT_25_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_TXRX_PREFIX.RX_QUEUE_DEFAULT%s.BIT_26_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_TXRX_PREFIX.RX_QUEUE_DEFAULT%s.BITS_27_31_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_TXRX_PREFIX.CONTROL_EDGES.BIT_0_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_TXRX_PREFIX.CONTROL_EDGES.BIT_4_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_TXRX_PREFIX.TIMING_CONTROL.BITS_20_27_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_TXRX_PREFIX.TIMING_CONTROL.BIT_31_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_TXRX_PREFIX.FEATURE_EDGES.BIT_9_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_TXRX_PREFIX.FEATURE_EDGES.BIT_12_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_TXRX_PREFIX.FEATURE_EDGES.BIT_13_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_TXRX_PREFIX.FEATURE_EDGES.BIT_15_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_TXRX_PREFIX.FEATURE_EDGES.BIT_23_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_TXRX_PREFIX.FEATURE_EDGES.BIT_31_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_TXRX_PREFIX.MODE_CONTROL.BIT_3_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_TXRX_PREFIX.SHARED_ENABLE_CONTROL.BITS_0_1_OPAQUE"
-naming = "opaque"

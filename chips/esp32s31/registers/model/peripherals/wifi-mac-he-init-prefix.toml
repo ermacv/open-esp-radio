@@ -357,12 +357,35 @@ name = "CLEAR_15"
 bitOffset = 15
 bitWidth = 1
 
-[[review]]
+[[peripheral-review]]
 entity = "WIFI_MAC_HE_INIT_PREFIX"
+opaque-entities = [
+    "WIFI_MAC_HE_INIT_PREFIX.BF_VECTOR_CONTROL.BITS_12_23_OPAQUE",
+    "WIFI_MAC_HE_INIT_PREFIX.BF_ENABLE.BIT_31_OPAQUE",
+    "WIFI_MAC_HE_INIT_PREFIX.PARENT_ENABLE.BIT_12_OPAQUE",
+    "WIFI_MAC_HE_INIT_PREFIX.BF_TIMING_CONTROL.BIT_23_OPAQUE",
+    "WIFI_MAC_HE_INIT_PREFIX.BF_TIMING_CONTROL.BIT_25_OPAQUE",
+    "WIFI_MAC_HE_INIT_PREFIX.BF_HIGH_IMAGE.BITS_20_31_OPAQUE",
+]
+
+[peripheral-review.peripheral]
 sources = ["BLOB_LIBPP_HAL_HE_INIT_PREFIX"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
+
+[peripheral-review.register]
+sources = ["BLOB_LIBPP_HAL_HE_INIT_PREFIX"]
+naming = "descriptive"
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[peripheral-review.field]
+naming = "descriptive"
+
+[peripheral-review.opaque]
+naming = "opaque"
 
 [[review]]
 entity = "WIFI_MAC_HE_INIT_PREFIX.RX_FIELD_CONTROL"
@@ -414,22 +437,6 @@ sources = [
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_PREFIX.BF_VECTOR_CONTROL"
-naming = "descriptive"
-sources = ["BLOB_LIBPP_HAL_HE_INIT_PREFIX"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "unknown"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_PREFIX.BF_ENABLE"
-naming = "descriptive"
-sources = ["BLOB_LIBPP_HAL_HE_INIT_PREFIX"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "unknown"
 
 [[review]]
 entity = "WIFI_MAC_HE_INIT_PREFIX.PARENT_ENABLE"
@@ -497,151 +504,3 @@ sources = [
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_PREFIX.BF_HIGH_IMAGE"
-naming = "descriptive"
-sources = ["BLOB_LIBPP_HAL_HE_INIT_PREFIX"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "unknown"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_PREFIX.TB_TX_CONTROL"
-naming = "descriptive"
-sources = ["BLOB_LIBPP_HAL_HE_INIT_PREFIX"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "unknown"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_PREFIX.RX_FIELD_CONTROL.COLOR_BITMAP_CLEAR"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_PREFIX.RX_FIELD_CONTROL.BITMAP_CONTROL_HIGH"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_PREFIX.RX_FIELD_CONTROL.TIMEOUT_SECONDS"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_PREFIX.RX_FIELD_CONTROL.COLLISION_THRESHOLD"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_PREFIX.BF_REPORT_RATE.BPSK_RATE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_PREFIX.BF_REPORT_RATE.BPSK_SIGNAL_MODE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_PREFIX.BF_REPORT_RATE.BPSK_DCM"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_PREFIX.BF_REPORT_RATE.BPSK_ERSU"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_PREFIX.BF_REPORT_RATE.QPSK_RATE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_PREFIX.BF_REPORT_RATE.QPSK_SIGNAL_MODE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_PREFIX.BF_REPORT_RATE.QPSK_DCM"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_PREFIX.BF_REPORT_RATE.QPSK_ERSU"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_PREFIX.BF_REPORT_RATE.QAM16_RATE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_PREFIX.BF_REPORT_RATE.QAM16_SIGNAL_MODE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_PREFIX.BF_REPORT_RATE.QAM16_DCM"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_PREFIX.BF_REPORT_RATE.QAM16_ERSU"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_PREFIX.BF_VECTOR_CONTROL.BITS_12_23_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_PREFIX.BF_ENABLE.BIT_31_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_PREFIX.PARENT_ENABLE.BIT_12_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_PREFIX.INTERRUPT_1_RAW.EVENTS"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_PREFIX.INTERRUPT_1_STATUS.EVENTS"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_PREFIX.INTERRUPT_1_CLEAR.BSS_COLOR"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_PREFIX.BF_TIMING_CONTROL.BF_MEMORY_WRITE_ENABLE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_PREFIX.BF_TIMING_CONTROL.HE_BEAM_NDP_TIME"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_PREFIX.BF_TIMING_CONTROL.HE_BEAM_HW_SEQUENCE_SELECT"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_PREFIX.BF_TIMING_CONTROL.HE_BEAM_HW_SEQUENCE_ENABLE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_PREFIX.BF_TIMING_CONTROL.NON_TB_BEAM_RU_SELECT"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_PREFIX.BF_TIMING_CONTROL.BEAM_RU_SELECT"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_PREFIX.BF_TIMING_CONTROL.BIT_23_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_PREFIX.BF_TIMING_CONTROL.BIT_25_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_PREFIX.BF_HIGH_IMAGE.BITS_20_31_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_PREFIX.TB_TX_CONTROL.CLEAR_14"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_INIT_PREFIX.TB_TX_CONTROL.CLEAR_15"
-naming = "descriptive"

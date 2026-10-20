@@ -135,103 +135,31 @@ value = 66
 name = "IEEE802154_TX_START"
 value = 69
 
-[[review]]
+[[peripheral-review]]
 entity = "MODEM_ETM"
+
+[peripheral-review.peripheral]
 sources = ["C5_REG_BASE", "ESP_IDF_4D59230D_C5_IEEE802154_REG", "ESP_IDF_4D59230D_IEEE802154_DRIVER_ETM"]
 provenance = "imported"
 accuracy = "exact"
 completeness = "partial"
 
-[[review]]
-entity = "MODEM_ETM.CHANNEL_ENABLE"
+[peripheral-review.register]
 sources = ["ESP_IDF_4D59230D_C5_IEEE802154_REG", "ESP_IDF_4D59230D_IEEE802154_DRIVER_ETM"]
+naming = "descriptive"
 provenance = "imported"
 accuracy = "exact"
 completeness = "partial"
-naming = "descriptive"
 
-[[review]]
-entity = "MODEM_ETM.CHANNEL_ENABLE.CH0"
+[peripheral-review.field]
 sources = ["ESP_IDF_4D59230D_C5_IEEE802154_REG", "ESP_IDF_4D59230D_IEEE802154_DRIVER_ETM"]
+naming = "descriptive"
 provenance = "imported"
 accuracy = "exact"
 completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "MODEM_ETM.CHANNEL_ENABLE.CH1"
-sources = ["ESP_IDF_4D59230D_C5_IEEE802154_REG", "ESP_IDF_4D59230D_IEEE802154_DRIVER_ETM"]
-provenance = "imported"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "MODEM_ETM.CHANNEL_ENABLE_SET"
-sources = ["ESP_IDF_4D59230D_C5_IEEE802154_REG", "ESP_IDF_4D59230D_IEEE802154_DRIVER_ETM"]
-provenance = "imported"
-accuracy = "exact"
-completeness = "partial"
-naming = "descriptive"
-
-[[review]]
-entity = "MODEM_ETM.CHANNEL_ENABLE_SET.CH0"
-sources = ["ESP_IDF_4D59230D_C5_IEEE802154_REG", "ESP_IDF_4D59230D_IEEE802154_DRIVER_ETM"]
-provenance = "imported"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "MODEM_ETM.CHANNEL_ENABLE_SET.CH1"
-sources = ["ESP_IDF_4D59230D_C5_IEEE802154_REG", "ESP_IDF_4D59230D_IEEE802154_DRIVER_ETM"]
-provenance = "imported"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "MODEM_ETM.CHANNEL_ENABLE_CLEAR"
-sources = ["ESP_IDF_4D59230D_C5_IEEE802154_REG", "ESP_IDF_4D59230D_IEEE802154_DRIVER_ETM"]
-provenance = "imported"
-accuracy = "exact"
-completeness = "partial"
-naming = "descriptive"
-
-[[review]]
-entity = "MODEM_ETM.CHANNEL_ENABLE_CLEAR.CH0"
-sources = ["ESP_IDF_4D59230D_C5_IEEE802154_REG", "ESP_IDF_4D59230D_IEEE802154_DRIVER_ETM"]
-provenance = "imported"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "MODEM_ETM.CHANNEL_ENABLE_CLEAR.CH1"
-sources = ["ESP_IDF_4D59230D_C5_IEEE802154_REG", "ESP_IDF_4D59230D_IEEE802154_DRIVER_ETM"]
-provenance = "imported"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "MODEM_ETM.CH%s_EVENT"
-sources = ["ESP_IDF_4D59230D_C5_IEEE802154_REG", "ESP_IDF_4D59230D_IEEE802154_DRIVER_ETM"]
-provenance = "imported"
-accuracy = "exact"
-completeness = "partial"
-naming = "descriptive"
 
 [[review]]
 entity = "MODEM_ETM.CH%s_EVENT.ID"
-sources = ["ESP_IDF_4D59230D_C5_IEEE802154_REG", "ESP_IDF_4D59230D_IEEE802154_DRIVER_ETM"]
-provenance = "imported"
-accuracy = "exact"
-completeness = "partial"
-naming = "descriptive"
-
-[[review]]
-entity = "MODEM_ETM.CH%s_TASK"
 sources = ["ESP_IDF_4D59230D_C5_IEEE802154_REG", "ESP_IDF_4D59230D_IEEE802154_DRIVER_ETM"]
 provenance = "imported"
 accuracy = "exact"

@@ -1279,17 +1279,125 @@ bitWidth = 4
 minimum = 0x0
 maximum = 0xF
 
-[[review]]
+[[peripheral-review]]
 entity = "PHY_BTAGC_RECOVERED"
-sources = [
-    "ESP_IDF_25FE69F_S31_PHY_RETENTION",
-    "BLOB_LIBPHY_PHY_DEBUG_REG_CHECK",
-    "BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE",
-    "BLOB_LIBBTBB_BT_AGC_BASIC_RUNTIME",
+opaque-entities = [
+    "PHY_BTAGC_RECOVERED.CCA_CONFIG.BIT_23_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_0048_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_0068_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_004C_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_004C_OPAQUE.BIT_26_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_0088_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_0088_OPAQUE.BIT_18_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_0088_OPAQUE.BIT_29_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_008C_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_008C_OPAQUE.BIT_29_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_00D0_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_00D4_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_006C_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_0084_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_00A0_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_00A8_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_00B0_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_00B4_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_00B8_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_00BC_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_00C0_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_00C0_OPAQUE.BITS_5_9_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_00C0_OPAQUE.BITS_10_14_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_00C0_OPAQUE.BITS_15_19_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_00C0_OPAQUE.BITS_20_23_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_00C0_OPAQUE.BITS_24_31_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_00C4_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_00C4_OPAQUE.BITS_10_14_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_00C4_OPAQUE.BITS_15_19_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_00C4_OPAQUE.BITS_20_23_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_00C4_OPAQUE.BITS_24_31_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_00DC_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_00E0_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_00E0_OPAQUE.BITS_0_7_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_00E0_OPAQUE.BITS_8_15_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_00E0_OPAQUE.BITS_16_23_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_00E0_OPAQUE.BITS_24_31_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_00E4_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_00E4_OPAQUE.BITS_0_7_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_00E4_OPAQUE.BITS_8_15_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_00E4_OPAQUE.BITS_16_23_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_00E4_OPAQUE.BITS_24_31_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_00E8_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_00E8_OPAQUE.BITS_10_15_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_00E8_OPAQUE.BITS_16_23_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_00E8_OPAQUE.BITS_24_31_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_00EC_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_00EC_OPAQUE.BITS_0_7_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_00EC_OPAQUE.BITS_8_15_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_00EC_OPAQUE.BITS_16_23_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_00EC_OPAQUE.BITS_24_31_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_00F0_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_00F0_OPAQUE.BITS_16_23_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_00F0_OPAQUE.BITS_24_31_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_00F8_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_00F8_OPAQUE.BITS_2_7_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_00F8_OPAQUE.BITS_8_13_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_00F8_OPAQUE.BITS_14_19_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_00F8_OPAQUE.BITS_20_25_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_00F8_OPAQUE.BITS_26_31_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_0100_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_0100_OPAQUE.BITS_12_15_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_0100_OPAQUE.BITS_16_19_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_0100_OPAQUE.BITS_20_23_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_0100_OPAQUE.BITS_24_27_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_0100_OPAQUE.BITS_28_31_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_0048_OPAQUE.BITS_0_4_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_0048_OPAQUE.BITS_5_9_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_0068_OPAQUE.BITS_0_4_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_0068_OPAQUE.BIT_5_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_0068_OPAQUE.BITS_6_10_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_0068_OPAQUE.BITS_11_12_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_0068_OPAQUE.BIT_13_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_0088_OPAQUE.BIT_30_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_00A0_OPAQUE.BITS_16_23_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_00A0_OPAQUE.BITS_24_27_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_00A8_OPAQUE.BITS_0_3_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_00A8_OPAQUE.BITS_4_11_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_00A8_OPAQUE.BITS_12_16_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_00A8_OPAQUE.BITS_17_24_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_00B8_OPAQUE.BITS_8_11_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_00B8_OPAQUE.BITS_12_19_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_004C_OPAQUE.BIT_19_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_004C_OPAQUE.BIT_24_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_004C_OPAQUE.BIT_28_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_004C_OPAQUE.BIT_30_OPAQUE",
+    "PHY_BTAGC_RECOVERED.WORD_004C_OPAQUE.BIT_31_OPAQUE",
+    "PHY_BTAGC_RECOVERED.CTE_RE_GAIN.BIT_3_OPAQUE",
 ]
+
+[peripheral-review.peripheral]
+sources = ["ESP_IDF_25FE69F_S31_PHY_RETENTION", "BLOB_LIBPHY_PHY_DEBUG_REG_CHECK", "BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE", "BLOB_LIBBTBB_BT_AGC_BASIC_RUNTIME"]
 provenance = "derived"
 accuracy = "exact"
 completeness = "unknown"
+
+[peripheral-review.register]
+sources = ["BLOB_LIBBTBB_BT_AGC_BASIC_RUNTIME"]
+naming = "descriptive"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[peripheral-review.field]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
+naming = "descriptive"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[peripheral-review.opaque]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
 
 [[review]]
 entity = "PHY_BTAGC_RECOVERED.CTE_DC_SHIFT"
@@ -1517,46 +1625,6 @@ accuracy = "exact"
 completeness = "partial"
 
 [[review]]
-entity = "PHY_BTAGC_RECOVERED.RX_COMP_CONTROL.DYNAMIC_BITS_0_6"
-naming = "descriptive"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.RX_COMP_CONTROL.DYNAMIC_BITS_7_13"
-naming = "descriptive"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.RX_COMP_CONTROL.FINITE_BITS_14_18"
-naming = "descriptive"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.RX_COMP_CONTROL.FINITE_BITS_19_23"
-naming = "descriptive"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.RX_COMP_CONTROL.FINITE_BITS_24_28"
-naming = "descriptive"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
 entity = "PHY_BTAGC_RECOVERED.AGC_GAIN_MAX_CONTROL"
 naming = "descriptive"
 sources = ["BLOB_LIBBTBB_BT_AGC_BASIC_RUNTIME"]
@@ -1581,44 +1649,12 @@ accuracy = "exact"
 completeness = "complete"
 
 [[review]]
-entity = "PHY_BTAGC_RECOVERED.AGC_SAT_GAIN_IMAGE_0"
-naming = "descriptive"
-sources = ["BLOB_LIBBTBB_BT_AGC_BASIC_RUNTIME"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.AGC_SAT_GAIN_IMAGE_1"
-naming = "descriptive"
-sources = ["BLOB_LIBBTBB_BT_AGC_BASIC_RUNTIME"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.AGC_SAT_GAIN_CONFIG"
-naming = "descriptive"
-sources = ["BLOB_LIBBTBB_BT_AGC_BASIC_RUNTIME"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
 entity = "PHY_BTAGC_RECOVERED.WORD_006C_OPAQUE"
 naming = "opaque"
 sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_006C_OPAQUE.FINITE_BITS_24_31"
-naming = "descriptive"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
 
 [[review]]
 entity = "PHY_BTAGC_RECOVERED.WORD_0084_OPAQUE"
@@ -1629,60 +1665,12 @@ accuracy = "exact"
 completeness = "partial"
 
 [[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_0084_OPAQUE.FINITE_BITS_24_31"
-naming = "descriptive"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_00A0_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_00A8_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
 entity = "PHY_BTAGC_RECOVERED.WORD_00B0_OPAQUE"
 naming = "opaque"
 sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_00B0_OPAQUE.RECORRECT_BITS_13_17"
-naming = "descriptive"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_00B0_OPAQUE.RECORRECT_BITS_18_22"
-naming = "descriptive"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_00B0_OPAQUE.TARGET_BITS_23_31"
-naming = "descriptive"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
 
 [[review]]
 entity = "PHY_BTAGC_RECOVERED.WORD_00B4_OPAQUE"
@@ -1693,84 +1681,12 @@ accuracy = "exact"
 completeness = "partial"
 
 [[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_00B4_OPAQUE.RECORRECT_BIT_8"
-naming = "descriptive"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_00B4_OPAQUE.RECORRECT_BITS_9_13"
-naming = "descriptive"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_00B4_OPAQUE.TARGET_BITS_23_31"
-naming = "descriptive"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_00B8_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
 entity = "PHY_BTAGC_RECOVERED.WORD_00BC_OPAQUE"
 naming = "opaque"
 sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_00BC_OPAQUE.RECORRECT_BIT_5"
-naming = "descriptive"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_00BC_OPAQUE.RECORRECT_BIT_6"
-naming = "descriptive"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_00BC_OPAQUE.RECORRECT_BIT_7"
-naming = "descriptive"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_00BC_OPAQUE.RECORRECT_BIT_8"
-naming = "descriptive"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_00BC_OPAQUE.RESTART_BIT_31"
-naming = "descriptive"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
 
 [[review]]
 entity = "PHY_BTAGC_RECOVERED.WORD_00C0_OPAQUE"
@@ -1781,84 +1697,12 @@ accuracy = "exact"
 completeness = "partial"
 
 [[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_00C0_OPAQUE.BITS_5_9_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_00C0_OPAQUE.BITS_10_14_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_00C0_OPAQUE.BITS_15_19_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_00C0_OPAQUE.BITS_20_23_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_00C0_OPAQUE.BITS_24_31_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
 entity = "PHY_BTAGC_RECOVERED.WORD_00C4_OPAQUE"
 naming = "opaque"
 sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_00C4_OPAQUE.BITS_10_14_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_00C4_OPAQUE.BITS_15_19_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_00C4_OPAQUE.BITS_20_23_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_00C4_OPAQUE.BITS_24_31_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
 
 [[review]]
 entity = "PHY_BTAGC_RECOVERED.WORD_00DC_OPAQUE"
@@ -1869,196 +1713,12 @@ accuracy = "exact"
 completeness = "partial"
 
 [[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_00DC_OPAQUE.RESTART_BIT_27"
-naming = "descriptive"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_00DC_OPAQUE.RESTART_BIT_28"
-naming = "descriptive"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_00DC_OPAQUE.RESTART_BIT_29"
-naming = "descriptive"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_00DC_OPAQUE.RESTART_BIT_30"
-naming = "descriptive"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_00DC_OPAQUE.RESTART_BIT_31"
-naming = "descriptive"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_00E0_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_00E0_OPAQUE.BITS_0_7_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_00E0_OPAQUE.BITS_8_15_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_00E0_OPAQUE.BITS_16_23_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_00E0_OPAQUE.BITS_24_31_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_00E4_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_00E4_OPAQUE.BITS_0_7_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_00E4_OPAQUE.BITS_8_15_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_00E4_OPAQUE.BITS_16_23_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_00E4_OPAQUE.BITS_24_31_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
 entity = "PHY_BTAGC_RECOVERED.WORD_00E8_OPAQUE"
 naming = "opaque"
 sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_00E8_OPAQUE.BITS_10_15_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_00E8_OPAQUE.BITS_16_23_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_00E8_OPAQUE.BITS_24_31_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_00EC_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_00EC_OPAQUE.BITS_0_7_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_00EC_OPAQUE.BITS_8_15_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_00EC_OPAQUE.BITS_16_23_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_00EC_OPAQUE.BITS_24_31_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
 
 [[review]]
 entity = "PHY_BTAGC_RECOVERED.WORD_00F0_OPAQUE"
@@ -2069,22 +1729,6 @@ accuracy = "exact"
 completeness = "partial"
 
 [[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_00F0_OPAQUE.BITS_16_23_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_00F0_OPAQUE.BITS_24_31_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
 entity = "PHY_BTAGC_RECOVERED.WORD_00F8_OPAQUE"
 naming = "opaque"
 sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
@@ -2093,100 +1737,12 @@ accuracy = "exact"
 completeness = "partial"
 
 [[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_00F8_OPAQUE.BITS_2_7_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_00F8_OPAQUE.BITS_8_13_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_00F8_OPAQUE.BITS_14_19_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_00F8_OPAQUE.BITS_20_25_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_00F8_OPAQUE.BITS_26_31_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
 entity = "PHY_BTAGC_RECOVERED.WORD_0100_OPAQUE"
 naming = "opaque"
 sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_0100_OPAQUE.BITS_12_15_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_0100_OPAQUE.BITS_16_19_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_0100_OPAQUE.BITS_20_23_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_0100_OPAQUE.BITS_24_27_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_0100_OPAQUE.BITS_28_31_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.RX_GAIN_FORCE.DYNAMIC_BITS_0_6"
-naming = "descriptive"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
 
 [[review]]
 entity = "PHY_BTAGC_RECOVERED.RX_GAIN_FORCE.AGC_TARGET"
@@ -2216,22 +1772,6 @@ accuracy = "exact"
 completeness = "complete"
 
 [[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_0048_OPAQUE.BITS_0_4_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_0048_OPAQUE.BITS_5_9_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
 entity = "PHY_BTAGC_RECOVERED.WORD_0048_OPAQUE.GAIN_OFFSET_0"
 naming = "descriptive"
 sources = ["ROM_REV0_RADIO_ACCESSOR_FIELDS", "BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
@@ -2243,46 +1783,6 @@ completeness = "complete"
 entity = "PHY_BTAGC_RECOVERED.WORD_0048_OPAQUE.GAIN_OFFSET_1"
 naming = "descriptive"
 sources = ["ROM_REV0_RADIO_ACCESSOR_FIELDS", "BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_0068_OPAQUE.BITS_0_4_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_0068_OPAQUE.BIT_5_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_0068_OPAQUE.BITS_6_10_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_0068_OPAQUE.BITS_11_12_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_0068_OPAQUE.BIT_13_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -2304,113 +1804,9 @@ accuracy = "exact"
 completeness = "complete"
 
 [[review]]
-entity = "PHY_BTAGC_RECOVERED.CCA_CONFIG.TARGET_BITS_14_22"
-naming = "descriptive"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.CTE_AGC_TARGET.BASEBAND_TARGET_VALUE"
-naming = "descriptive"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
 entity = "PHY_BTAGC_RECOVERED.WORD_0088_OPAQUE.BIT_30_OPAQUE"
 naming = "opaque"
 sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE", "BLOB_LIBBTBB_BT_AGC_BASIC_RUNTIME"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_008C_OPAQUE.TARGET_BITS_0_8"
-naming = "descriptive"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_008C_OPAQUE.TARGET_BITS_9_17"
-naming = "descriptive"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.AGC_GAIN_IMAGE.DYNAMIC_BITS_2_8"
-naming = "descriptive"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_00A0_OPAQUE.BITS_16_23_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_00A0_OPAQUE.BITS_24_27_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_00A8_OPAQUE.BITS_0_3_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_00A8_OPAQUE.BITS_4_11_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_00A8_OPAQUE.BITS_12_16_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_00A8_OPAQUE.BITS_17_24_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_00B8_OPAQUE.BITS_8_11_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_BTAGC_RECOVERED.WORD_00B8_OPAQUE.BITS_12_19_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"

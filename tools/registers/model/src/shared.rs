@@ -51,12 +51,14 @@ pub struct SharedFragmentReference {
 }
 
 /// Schema-1 file of one chip's review annotations of a layout fragment.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 struct ReviewOverlay {
     schema: u32,
     #[serde(default)]
     review: Vec<ReviewAnnotation>,
+    #[serde(default)]
+    peripheral_review: Vec<crate::peripherals::PeripheralReview>,
 }
 
 /// The library a placed peripheral comes from.
@@ -161,7 +163,7 @@ impl RegisterLibraryManifest {
             let span = error.span();
             Error::manifest_span("register layout fragment", &path, error, span)
         })?;
-        if document.contains_key("review") {
+        if document.contains_key("review") || document.contains_key("peripheral-review") {
             return Err(Error::manifest(
                 "register layout fragment",
                 &path,
@@ -345,7 +347,12 @@ pub(crate) fn load_placed_fragment(
             "requires schema = 1",
         ));
     }
-    fragment.review = overlay.review;
+    fragment.review = crate::peripherals::resolve(
+        &fragment.peripherals,
+        overlay.review,
+        &overlay.peripheral_review,
+    )
+    .map_err(|error| Error::manifest("register review file", &review_path, error))?;
     let members = reference
         .placement
         .keys()

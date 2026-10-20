@@ -71,67 +71,29 @@ name = "DCM"
 bitOffset = 13
 bitWidth = 1
 
-[[review]]
-entity = "WIFI_MAC_CSI_DUMP.CSI_DUMP_CONFIG"
-naming = "descriptive"
+[[peripheral-review]]
+entity = "WIFI_MAC_CSI_DUMP"
+
+[peripheral-review.peripheral]
 sources = ["BLOB_LIBPP_TEST_HAL_CSI"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+
+[peripheral-review.register]
+sources = ["BLOB_LIBPP_TEST_HAL_CSI"]
+naming = "descriptive"
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
+
+[peripheral-review.field]
+naming = "descriptive"
 
 [[review]]
 entity = "WIFI_MAC_CSI_DUMP.CSI_DUMP_CONFIG.BEAMFORMED"
 naming = "descriptive"
 sources = ["BLOB_LIBPP_TEST_HAL_CSI"]
 provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "WIFI_MAC_CSI_DUMP.CSI_DUMP_CONFIG.FORCE_LLTF"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_CSI_DUMP.CSI_DUMP_CONFIG.MU"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_CSI_DUMP.CSI_DUMP_CONFIG.SU"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_CSI_DUMP.CSI_DUMP_CONFIG.VHT"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_CSI_DUMP.CSI_DUMP_CONFIG.HT40"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_CSI_DUMP.CSI_DUMP_CONFIG.HT20"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_CSI_DUMP.CSI_DUMP_CONFIG.LEGACY"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_CSI_DUMP.CSI_DUMP_CONFIG.STBC_MODE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_CSI_DUMP.CSI_DUMP_CONFIG.STANDALONE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_CSI_DUMP.CSI_DUMP_CONFIG.DCM"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_CSI_DUMP"
-sources = [
-    "BLOB_LIBPP_TEST_HAL_CSI",
-]
-provenance = "reviewed"
 accuracy = "exact"
 completeness = "complete"

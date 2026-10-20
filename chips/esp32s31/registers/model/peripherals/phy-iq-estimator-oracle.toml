@@ -200,27 +200,45 @@ description = "Nonzero is treated as IQ-estimator activity and as an RX-saturati
 bitOffset = 20
 bitWidth = 2
 
-[[review]]
+[[peripheral-review]]
 entity = "PHY_IQ_ESTIMATOR_ORACLE"
-sources = [
-    "ROM_REV0_PHY_IQ_ESTIMATOR",
-    "BLOB_LIBPHY_PHY_CHECK_RX_SAT",
+opaque-entities = [
+    "PHY_IQ_ESTIMATOR_ORACLE.ESTIMATOR_CONFIG.BITS_26_27_OPAQUE",
+    "PHY_IQ_ESTIMATOR_ORACLE.ESTIMATOR_CONTROL.BITS_2_16_OPAQUE",
+    "PHY_IQ_ESTIMATOR_ORACLE.ESTIMATOR_CONTROL.BITS_19_20_OPAQUE",
+    "PHY_IQ_ESTIMATOR_ORACLE.ESTIMATOR_ACTIVITY_STATUS.BITS_20_21_OPAQUE",
 ]
+
+[peripheral-review.peripheral]
+sources = ["ROM_REV0_PHY_IQ_ESTIMATOR", "BLOB_LIBPHY_PHY_CHECK_RX_SAT"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
 
-[[review]]
-entity = "PHY_IQ_ESTIMATOR_ORACLE.ESTIMATOR_CONFIG"
-naming = "descriptive"
+[peripheral-review.register]
 sources = ["ROM_REV0_PHY_IQ_ESTIMATOR"]
+naming = "descriptive"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[peripheral-review.field]
+sources = ["ROM_REV0_PHY_IQ_ESTIMATOR"]
+naming = "descriptive"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[peripheral-review.opaque]
+sources = ["ROM_REV0_PHY_IQ_ESTIMATOR"]
+naming = "opaque"
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
 
 [[review]]
-entity = "PHY_IQ_ESTIMATOR_ORACLE.ESTIMATOR_CONFIG.BITS_26_27_OPAQUE"
-naming = "opaque"
+entity = "PHY_IQ_ESTIMATOR_ORACLE.ESTIMATOR_CONFIG"
+naming = "descriptive"
 sources = ["ROM_REV0_PHY_IQ_ESTIMATOR"]
 provenance = "observed"
 accuracy = "exact"
@@ -233,142 +251,6 @@ sources = ["ROM_REV0_PHY_IQ_ESTIMATOR"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
-
-[[review]]
-entity = "PHY_IQ_ESTIMATOR_ORACLE.ESTIMATOR_CONTROL.BITS_2_16_OPAQUE"
-naming = "opaque"
-sources = ["ROM_REV0_PHY_IQ_ESTIMATOR"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "unknown"
-
-[[review]]
-entity = "PHY_IQ_ESTIMATOR_ORACLE.ESTIMATOR_CONTROL.BITS_19_20_OPAQUE"
-naming = "opaque"
-sources = ["ROM_REV0_PHY_IQ_ESTIMATOR"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "unknown"
-
-[[review]]
-entity = "PHY_IQ_ESTIMATOR_ORACLE.SIGNAL_POWER_SUM_I"
-naming = "descriptive"
-sources = ["ROM_REV0_PHY_IQ_ESTIMATOR"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_IQ_ESTIMATOR_ORACLE.SIGNAL_POWER_SUM_I.VALUE"
-naming = "descriptive"
-sources = ["ROM_REV0_PHY_IQ_ESTIMATOR"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_IQ_ESTIMATOR_ORACLE.SIGNAL_POWER_DIFFERENCE_I"
-naming = "descriptive"
-sources = ["ROM_REV0_PHY_IQ_ESTIMATOR"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_IQ_ESTIMATOR_ORACLE.SIGNAL_POWER_DIFFERENCE_I.VALUE"
-naming = "descriptive"
-sources = ["ROM_REV0_PHY_IQ_ESTIMATOR"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_IQ_ESTIMATOR_ORACLE.SIGNAL_POWER_DIFFERENCE_Q"
-naming = "descriptive"
-sources = ["ROM_REV0_PHY_IQ_ESTIMATOR"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_IQ_ESTIMATOR_ORACLE.SIGNAL_POWER_DIFFERENCE_Q.VALUE"
-naming = "descriptive"
-sources = ["ROM_REV0_PHY_IQ_ESTIMATOR"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_IQ_ESTIMATOR_ORACLE.SIGNAL_POWER_SUM_Q"
-naming = "descriptive"
-sources = ["ROM_REV0_PHY_IQ_ESTIMATOR"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_IQ_ESTIMATOR_ORACLE.SIGNAL_POWER_SUM_Q.VALUE"
-naming = "descriptive"
-sources = ["ROM_REV0_PHY_IQ_ESTIMATOR"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_IQ_ESTIMATOR_ORACLE.DC_I_ACCUMULATOR"
-naming = "descriptive"
-sources = ["ROM_REV0_PHY_IQ_ESTIMATOR"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_IQ_ESTIMATOR_ORACLE.DC_I_ACCUMULATOR.VALUE"
-naming = "descriptive"
-sources = ["ROM_REV0_PHY_IQ_ESTIMATOR"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_IQ_ESTIMATOR_ORACLE.DC_Q_ACCUMULATOR"
-naming = "descriptive"
-sources = ["ROM_REV0_PHY_IQ_ESTIMATOR"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_IQ_ESTIMATOR_ORACLE.DC_Q_ACCUMULATOR.VALUE"
-naming = "descriptive"
-sources = ["ROM_REV0_PHY_IQ_ESTIMATOR"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_IQ_ESTIMATOR_ORACLE.POWER_ACCUMULATOR"
-naming = "descriptive"
-sources = ["ROM_REV0_PHY_IQ_ESTIMATOR"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_IQ_ESTIMATOR_ORACLE.POWER_ACCUMULATOR.VALUE"
-naming = "descriptive"
-sources = ["ROM_REV0_PHY_IQ_ESTIMATOR"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "PHY_IQ_ESTIMATOR_ORACLE.ESTIMATOR_READY_STATUS"
-naming = "descriptive"
-sources = ["ROM_REV0_PHY_IQ_ESTIMATOR"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
 
 [[review]]
 entity = "PHY_IQ_ESTIMATOR_ORACLE.ESTIMATOR_ACTIVITY_STATUS"

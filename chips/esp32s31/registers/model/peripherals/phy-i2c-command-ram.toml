@@ -93,32 +93,25 @@ bitWidth = 8
 minimum = 0x0
 maximum = 0xFF
 
-[[review]]
+[[peripheral-review]]
 entity = "PHY_I2C_COMMAND_RAM"
-sources = [
-    "ESP_IDF_ESP32S31_MODEM_REG_BASE",
-    "BLOB_LIBPHY_PHY_I2C",
-    "BLOB_LIBPHY_PHY_DEBUG_I2C",
-]
+
+[peripheral-review.peripheral]
+sources = ["ESP_IDF_ESP32S31_MODEM_REG_BASE", "BLOB_LIBPHY_PHY_I2C", "BLOB_LIBPHY_PHY_DEBUG_I2C"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
 
-[[review]]
-entity = "PHY_I2C_COMMAND_RAM.COMMAND_MEMORY%s"
+[peripheral-review.register]
+sources = ["ESP_IDF_ESP32S31_MODEM_REG_BASE", "BLOB_LIBPHY_PHY_I2C"]
 naming = "descriptive"
-sources = [
-    "ESP_IDF_ESP32S31_MODEM_REG_BASE",
-    "BLOB_LIBPHY_PHY_I2C",
-]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
 
-[[review]]
-entity = "PHY_I2C_COMMAND_RAM.COMMAND_MEMORY%s.BLOCK"
-naming = "descriptive"
+[peripheral-review.field]
 sources = ["BLOB_LIBPHY_PHY_DEBUG_I2C"]
+naming = "descriptive"
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"

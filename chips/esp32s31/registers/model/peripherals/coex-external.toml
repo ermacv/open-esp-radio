@@ -173,113 +173,31 @@ description = "Bits no external-coexistence leaf writes."
 bitOffset = 4
 bitWidth = 28
 
-[[review]]
+[[peripheral-review]]
 entity = "COEX_EXTERNAL"
+opaque-entities = [
+    "COEX_EXTERNAL.PTI.BITS_16_19_OPAQUE",
+    "COEX_EXTERNAL.PTI.BITS_20_23_OPAQUE",
+    "COEX_EXTERNAL.PTI.BITS_24_27_OPAQUE",
+    "COEX_EXTERNAL.PTI.BITS_30_31_OPAQUE",
+    "COEX_EXTERNAL.CONTROL.BITS_20_31_OPAQUE",
+    "COEX_EXTERNAL.ENABLE_1.BITS_0_13_OPAQUE",
+    "COEX_EXTERNAL.ENABLE_1.BITS_15_31_OPAQUE",
+    "COEX_EXTERNAL.ENABLE_MASK_0.BITS_4_31_OPAQUE",
+    "COEX_EXTERNAL.ENABLE_MASK_1.BITS_4_31_OPAQUE",
+]
+
+[peripheral-review.peripheral]
 sources = ["BLOB_LIBCOEX_EXTERNAL"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
 
-[[review]]
-entity = "COEX_EXTERNAL.PTI"
+[peripheral-review.register]
 naming = "descriptive"
 
-[[review]]
-entity = "COEX_EXTERNAL.PTI.PRIORITY_0"
+[peripheral-review.field]
 naming = "descriptive"
 
-[[review]]
-entity = "COEX_EXTERNAL.PTI.PRIORITY_1"
-naming = "descriptive"
-
-[[review]]
-entity = "COEX_EXTERNAL.PTI.PRIORITY_2"
-naming = "descriptive"
-
-[[review]]
-entity = "COEX_EXTERNAL.PTI.ADVANCED_PRIORITY"
-naming = "descriptive"
-
-[[review]]
-entity = "COEX_EXTERNAL.PTI.BITS_16_19_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "COEX_EXTERNAL.PTI.BITS_20_23_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "COEX_EXTERNAL.PTI.BITS_24_27_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "COEX_EXTERNAL.PTI.WORK_MODE"
-naming = "descriptive"
-
-[[review]]
-entity = "COEX_EXTERNAL.PTI.BITS_30_31_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "COEX_EXTERNAL.CONTROL"
-naming = "descriptive"
-
-[[review]]
-entity = "COEX_EXTERNAL.CONTROL.VALIDATE_HIGH"
-naming = "descriptive"
-
-[[review]]
-entity = "COEX_EXTERNAL.CONTROL.GRANT_DELAY"
-naming = "descriptive"
-
-[[review]]
-entity = "COEX_EXTERNAL.CONTROL.ENABLE"
-naming = "descriptive"
-
-[[review]]
-entity = "COEX_EXTERNAL.CONTROL.SYNC"
-naming = "descriptive"
-
-[[review]]
-entity = "COEX_EXTERNAL.CONTROL.BITS_20_31_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "COEX_EXTERNAL.ENABLE_1"
-naming = "descriptive"
-
-[[review]]
-entity = "COEX_EXTERNAL.ENABLE_1.BITS_0_13_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "COEX_EXTERNAL.ENABLE_1.ENABLE"
-naming = "descriptive"
-
-[[review]]
-entity = "COEX_EXTERNAL.ENABLE_1.BITS_15_31_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "COEX_EXTERNAL.ENABLE_MASK_0"
-naming = "descriptive"
-
-[[review]]
-entity = "COEX_EXTERNAL.ENABLE_MASK_0.MASK"
-naming = "descriptive"
-
-[[review]]
-entity = "COEX_EXTERNAL.ENABLE_MASK_0.BITS_4_31_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "COEX_EXTERNAL.ENABLE_MASK_1"
-naming = "descriptive"
-
-[[review]]
-entity = "COEX_EXTERNAL.ENABLE_MASK_1.MASK"
-naming = "descriptive"
-
-[[review]]
-entity = "COEX_EXTERNAL.ENABLE_MASK_1.BITS_4_31_OPAQUE"
+[peripheral-review.opaque]
 naming = "opaque"

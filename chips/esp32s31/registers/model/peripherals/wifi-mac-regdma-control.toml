@@ -62,28 +62,34 @@ description = "The dedicated enable and disable leaves set or clear bit 31."
 bitOffset = 31
 bitWidth = 1
 
-[[review]]
+[[peripheral-review]]
 entity = "WIFI_MAC_REGDMA_CONTROL"
-sources = [
-    "BLOB_LIBPP_MAC_CHANNEL_SWITCH",
-    "BLOB_LIBPP_HAL_PWR",
-    "HIL_OPEN_REGDMA_LINK4_2026_07_29",
+opaque-entities = [
+    "WIFI_MAC_REGDMA_CONTROL.CONTROL.BIT_16_OPAQUE",
 ]
+
+[peripheral-review.peripheral]
+sources = ["BLOB_LIBPP_MAC_CHANNEL_SWITCH", "BLOB_LIBPP_HAL_PWR", "HIL_OPEN_REGDMA_LINK4_2026_07_29"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
 
-[[review]]
-entity = "WIFI_MAC_REGDMA_CONTROL.CONTROL"
+[peripheral-review.register]
+sources = ["BLOB_LIBPP_MAC_CHANNEL_SWITCH", "BLOB_LIBPP_HAL_PWR", "HIL_OPEN_REGDMA_LINK4_2026_07_29"]
 naming = "descriptive"
-sources = [
-    "BLOB_LIBPP_MAC_CHANNEL_SWITCH",
-    "BLOB_LIBPP_HAL_PWR",
-    "HIL_OPEN_REGDMA_LINK4_2026_07_29",
-]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
+
+[peripheral-review.field]
+sources = ["BLOB_LIBPP_HAL_PWR"]
+naming = "descriptive"
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[peripheral-review.opaque]
+naming = "opaque"
 
 [[review]]
 entity = "WIFI_MAC_REGDMA_CONTROL.CONTROL.MODEM_WAKEUP_PROTECT_EARLY_TIME"
@@ -103,23 +109,3 @@ sources = [
 provenance = "reviewed"
 accuracy = "exact"
 completeness = "complete"
-
-[[review]]
-entity = "WIFI_MAC_REGDMA_CONTROL.CONTROL.MODEM_TBTT_AUTO_PERIOD_INTERVAL"
-naming = "descriptive"
-sources = ["BLOB_LIBPP_HAL_PWR"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "unknown"
-
-[[review]]
-entity = "WIFI_MAC_REGDMA_CONTROL.CONTROL.MODEM_TBTT_AUTO_PERIOD_ENABLE"
-naming = "descriptive"
-sources = ["BLOB_LIBPP_HAL_PWR"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "unknown"
-
-[[review]]
-entity = "WIFI_MAC_REGDMA_CONTROL.CONTROL.BIT_16_OPAQUE"
-naming = "opaque"

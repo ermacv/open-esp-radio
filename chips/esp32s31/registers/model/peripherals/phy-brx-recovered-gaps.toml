@@ -14,17 +14,18 @@ addressOffset = 0x50
 size = 32
 access = "read-write"
 
-[[review]]
+[[peripheral-review]]
 entity = "PHY_BRX_RECOVERED_GAPS"
-sources = [
-    "ESP_IDF_25FE69F_S31_PHY_RETENTION",
-    "BLOB_LIBPHY_PHY_DEBUG_REG_CHECK",
+opaque-entities = [
+    "PHY_BRX_RECOVERED_GAPS.WORD_0050_OPAQUE",
 ]
+
+[peripheral-review.peripheral]
+sources = ["ESP_IDF_25FE69F_S31_PHY_RETENTION", "BLOB_LIBPHY_PHY_DEBUG_REG_CHECK"]
 provenance = "derived"
 accuracy = "exact"
 completeness = "unknown"
 
-[[review]]
-entity = "PHY_BRX_RECOVERED_GAPS.WORD_0050_OPAQUE"
-naming = "opaque"
+[peripheral-review.opaque]
 sources = ["ROM_REV0_PHY_BLOBRAY_GAPS"]
+naming = "opaque"

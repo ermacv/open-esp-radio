@@ -359,20 +359,34 @@ name = "BIT_28_OPAQUE"
 bitOffset = 28
 bitWidth = 1
 
-[[review]]
+[[peripheral-review]]
 entity = "MODEM_SYSCON_RADIO"
+opaque-entities = [
+    "MODEM_SYSCON_RADIO.WIFI_BB_CFG.BIT_0_OPAQUE",
+    "MODEM_SYSCON_RADIO.WIFI_BB_CFG.BIT_3_OPAQUE",
+    "MODEM_SYSCON_RADIO.WIFI_BB_CFG.BITS_11_13_OPAQUE",
+    "MODEM_SYSCON_RADIO.WIFI_BB_CFG.BIT_28_OPAQUE",
+]
+
+[peripheral-review.peripheral]
 sources = ["S31_MODEM_SYSCON_STRUCT", "S31_ESP_PACS_SVD"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
 
-[[review]]
-entity = "MODEM_SYSCON_RADIO.CLK_CONF"
-naming = "vendor"
+[peripheral-review.register]
 sources = ["S31_MODEM_SYSCON_STRUCT", "S31_ESP_PACS_SVD"]
+naming = "vendor"
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
+
+[peripheral-review.field]
+sources = ["S31_ESP_PACS_SVD"]
+naming = "vendor"
+
+[peripheral-review.opaque]
+naming = "opaque"
 
 [[review]]
 entity = "MODEM_SYSCON_RADIO.CLK_CONF_POWER_ST"
@@ -383,78 +397,12 @@ accuracy = "exact"
 completeness = "complete"
 
 [[review]]
-entity = "MODEM_SYSCON_RADIO.MODEM_RST_CONF"
-naming = "vendor"
-sources = ["S31_MODEM_SYSCON_STRUCT", "S31_ESP_PACS_SVD"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "MODEM_SYSCON_RADIO.CLK_CONF1"
-naming = "vendor"
-sources = ["S31_MODEM_SYSCON_STRUCT", "S31_ESP_PACS_SVD"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
 entity = "MODEM_SYSCON_RADIO.WIFI_BB_CFG"
 naming = "vendor"
 sources = ["S31_MODEM_SYSCON_STRUCT", "S31_ESP_PACS_SVD", "ROM_REV0_PHY_FREQUENCY_CHANNEL", "BLOB_LIBPHY_PHY_BB_INIT"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
-
-[[review]]
-entity = "MODEM_SYSCON_RADIO.CLK_CONF.CLK_I2C_MST_SEL_160M"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-
-[[review]]
-entity = "MODEM_SYSCON_RADIO.CLK_CONF.CLK_ETM_EN"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-
-[[review]]
-entity = "MODEM_SYSCON_RADIO.CLK_CONF.CLK_ZB_APB_EN"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-
-[[review]]
-entity = "MODEM_SYSCON_RADIO.CLK_CONF.CLK_ZBMAC_EN"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-
-[[review]]
-entity = "MODEM_SYSCON_RADIO.CLK_CONF.CLK_MODEM_SEC_ECB_EN"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-
-[[review]]
-entity = "MODEM_SYSCON_RADIO.CLK_CONF.CLK_MODEM_SEC_CCM_EN"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-
-[[review]]
-entity = "MODEM_SYSCON_RADIO.CLK_CONF.CLK_MODEM_SEC_BAH_EN"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-
-[[review]]
-entity = "MODEM_SYSCON_RADIO.CLK_CONF.CLK_MODEM_SEC_APB_EN"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-
-[[review]]
-entity = "MODEM_SYSCON_RADIO.CLK_CONF.CLK_MODEM_SEC_EN"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-
-[[review]]
-entity = "MODEM_SYSCON_RADIO.CLK_CONF.CLK_BLE_TIMER_EN"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
 
 [[review]]
 entity = "MODEM_SYSCON_RADIO.CLK_CONF_POWER_ST.CLK_ZB_ST_MAP_BIT_TWO"
@@ -493,170 +441,6 @@ entity = "MODEM_SYSCON_RADIO.CLK_CONF_POWER_ST.CLK_MODEM_APB_ST_MAP_BIT_TWO"
 naming = "descriptive"
 
 [[review]]
-entity = "MODEM_SYSCON_RADIO.MODEM_RST_CONF.RST_WIFIBB"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-
-[[review]]
-entity = "MODEM_SYSCON_RADIO.MODEM_RST_CONF.RST_WIFIMAC"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-
-[[review]]
-entity = "MODEM_SYSCON_RADIO.MODEM_RST_CONF.RST_BTMAC_APB"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-
-[[review]]
-entity = "MODEM_SYSCON_RADIO.MODEM_RST_CONF.RST_BTMAC"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-
-[[review]]
-entity = "MODEM_SYSCON_RADIO.MODEM_RST_CONF.RST_ZBMAC_APB"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-
-[[review]]
-entity = "MODEM_SYSCON_RADIO.MODEM_RST_CONF.RST_ZBMAC"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-
-[[review]]
-entity = "MODEM_SYSCON_RADIO.MODEM_RST_CONF.RST_MODEM_ECB"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-
-[[review]]
-entity = "MODEM_SYSCON_RADIO.MODEM_RST_CONF.RST_MODEM_CCM"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-
-[[review]]
-entity = "MODEM_SYSCON_RADIO.MODEM_RST_CONF.RST_MODEM_BAH"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-
-[[review]]
-entity = "MODEM_SYSCON_RADIO.MODEM_RST_CONF.RST_MODEM_SEC"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-
-[[review]]
-entity = "MODEM_SYSCON_RADIO.MODEM_RST_CONF.RST_BLE_TIMER"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-
-[[review]]
-entity = "MODEM_SYSCON_RADIO.CLK_CONF1.CLK_WIFIBB_22M_EN"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-
-[[review]]
-entity = "MODEM_SYSCON_RADIO.CLK_CONF1.CLK_WIFIBB_40M_EN"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-
-[[review]]
-entity = "MODEM_SYSCON_RADIO.CLK_CONF1.CLK_WIFIBB_44M_EN"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-
-[[review]]
-entity = "MODEM_SYSCON_RADIO.CLK_CONF1.CLK_WIFIBB_80M_EN"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-
-[[review]]
-entity = "MODEM_SYSCON_RADIO.CLK_CONF1.CLK_WIFIBB_40X_EN"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-
-[[review]]
-entity = "MODEM_SYSCON_RADIO.CLK_CONF1.CLK_WIFIBB_80X_EN"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-
-[[review]]
-entity = "MODEM_SYSCON_RADIO.CLK_CONF1.CLK_WIFIBB_40X1_EN"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-
-[[review]]
-entity = "MODEM_SYSCON_RADIO.CLK_CONF1.CLK_WIFIBB_80X1_EN"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-
-[[review]]
-entity = "MODEM_SYSCON_RADIO.CLK_CONF1.CLK_WIFIBB_160X1_EN"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-
-[[review]]
-entity = "MODEM_SYSCON_RADIO.CLK_CONF1.CLK_WIFIMAC_EN"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-
-[[review]]
-entity = "MODEM_SYSCON_RADIO.CLK_CONF1.CLK_WIFI_APB_EN"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-
-[[review]]
-entity = "MODEM_SYSCON_RADIO.CLK_CONF1.CLK_FE_80M_EN"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-
-[[review]]
-entity = "MODEM_SYSCON_RADIO.CLK_CONF1.CLK_FE_160M_EN"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-
-[[review]]
-entity = "MODEM_SYSCON_RADIO.CLK_CONF1.CLK_FE_APB_EN"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-
-[[review]]
-entity = "MODEM_SYSCON_RADIO.CLK_CONF1.CLK_BT_APB_EN"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-
-[[review]]
-entity = "MODEM_SYSCON_RADIO.CLK_CONF1.CLK_BTBB_EN"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-
-[[review]]
-entity = "MODEM_SYSCON_RADIO.CLK_CONF1.CLK_BTMAC_EN"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-
-[[review]]
-entity = "MODEM_SYSCON_RADIO.CLK_CONF1.CLK_FE_PWDET_ADC_EN"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-
-[[review]]
-entity = "MODEM_SYSCON_RADIO.CLK_CONF1.CLK_FE_ADC_EN"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-
-[[review]]
-entity = "MODEM_SYSCON_RADIO.CLK_CONF1.CLK_FE_DAC_EN"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-
-[[review]]
-entity = "MODEM_SYSCON_RADIO.WIFI_BB_CFG.BIT_0_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "MODEM_SYSCON_RADIO.WIFI_BB_CFG.WIFI_ENABLE"
-naming = "vendor"
-sources = ["S31_ESP_PACS_SVD"]
-
-[[review]]
 entity = "MODEM_SYSCON_RADIO.WIFI_BB_CFG.BSS_CBW_40_DIGITAL"
 naming = "descriptive"
 sources = ["ROM_REV0_RADIO_ACCESSOR_FIELDS"]
@@ -665,11 +449,3 @@ sources = ["ROM_REV0_RADIO_ACCESSOR_FIELDS"]
 entity = "MODEM_SYSCON_RADIO.WIFI_BB_CFG.BIT_3_OPAQUE"
 naming = "opaque"
 sources = ["ROM_REV0_RADIO_ACCESSOR_FIELDS"]
-
-[[review]]
-entity = "MODEM_SYSCON_RADIO.WIFI_BB_CFG.BITS_11_13_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "MODEM_SYSCON_RADIO.WIFI_BB_CFG.BIT_28_OPAQUE"
-naming = "opaque"

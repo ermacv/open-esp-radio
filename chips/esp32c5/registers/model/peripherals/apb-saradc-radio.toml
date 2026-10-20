@@ -50,32 +50,15 @@ description = "Select the temperature-sensor clock."
 bitOffset = 15
 bitWidth = 1
 
-[[review]]
-entity = "APB_SARADC_RADIO.CTRL"
-naming = "vendor"
-sources = ["ESP_IDF_4D59230D_C5_LP_AON_SARADC"]
+[[peripheral-review]]
+entity = "APB_SARADC_RADIO"
 
-[[review]]
-entity = "APB_SARADC_RADIO.CTRL.SARADC2_PWDET_DRV"
-naming = "vendor"
-sources = ["ESP_IDF_4D59230D_C5_LP_AON_SARADC"]
+[peripheral-review.peripheral]
 
-[[review]]
-entity = "APB_SARADC_RADIO.TSENS_CTRL"
-naming = "vendor"
+[peripheral-review.register]
 sources = ["ESP_IDF_4D59230D_C5_LP_AON_SARADC"]
+naming = "vendor"
 
-[[review]]
-entity = "APB_SARADC_RADIO.TSENS_CTRL.TSENS_PU"
-naming = "vendor"
+[peripheral-review.field]
 sources = ["ESP_IDF_4D59230D_C5_LP_AON_SARADC"]
-
-[[review]]
-entity = "APB_SARADC_RADIO.TSENS_CTRL2"
 naming = "vendor"
-sources = ["ESP_IDF_4D59230D_C5_LP_AON_SARADC"]
-
-[[review]]
-entity = "APB_SARADC_RADIO.TSENS_CTRL2.TSENS_CLK_SEL"
-naming = "vendor"
-sources = ["ESP_IDF_4D59230D_C5_LP_AON_SARADC"]

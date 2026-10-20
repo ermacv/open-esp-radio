@@ -45,32 +45,31 @@ description = "Set before and cleared after the 0x20104308 clear pulse by comple
 bitOffset = 16
 bitWidth = 1
 
-[[review]]
+[[peripheral-review]]
 entity = "WIFI_MAC_CORE_ENABLE"
-sources = ["BLOB_LIBPP_HAL_ENABLE_MAC"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
-
-[[review]]
-entity = "WIFI_MAC_CORE_ENABLE.CONTROL"
-naming = "descriptive"
-sources = [
-    "BLOB_LIBPP_HAL_ENABLE_MAC",
-    "BLOB_LIBPP_DEBUG_STATISTICS_CONTROL",
+opaque-entities = [
+    "WIFI_MAC_CORE_ENABLE.CONTROL.BITS_4_7_OPAQUE",
 ]
+
+[peripheral-review.peripheral]
+sources = ["BLOB_LIBPP_HAL_ENABLE_MAC"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
 
-[[review]]
-entity = "WIFI_MAC_CORE_ENABLE.CONTROL.BITS_4_7_OPAQUE"
-naming = "opaque"
+[peripheral-review.register]
+sources = ["BLOB_LIBPP_HAL_ENABLE_MAC", "BLOB_LIBPP_DEBUG_STATISTICS_CONTROL"]
+naming = "descriptive"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[peripheral-review.field]
+naming = "descriptive"
+
+[peripheral-review.opaque]
 sources = ["BLOB_LIBPP_HAL_ENABLE_MAC"]
+naming = "opaque"
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
-
-[[review]]
-entity = "WIFI_MAC_CORE_ENABLE.CONTROL.HARDWARE_STATISTICS_CLEAR_ARM"
-naming = "descriptive"

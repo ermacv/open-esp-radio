@@ -185,21 +185,32 @@ name = "BITS_23_31_OPAQUE"
 bitOffset = 23
 bitWidth = 9
 
-[[review]]
+[[peripheral-review]]
 entity = "WIFI_MAC_HE_BUFFER_STATUS"
-sources = [
-    "BLOB_LIBPP_HAL_HE_BSR_DEBUG",
-    "BLOB_LIBPP_HAL_HE_BSR_STATUS",
-    "BLOB_LIBPP_MAC_TX_SET_TB",
-    "BLOB_LIBPP_DBG_READ_TX_PPDU",
-    "ROM_REV0_MAC_TX_SET_TB",
-    "BLOB_LIBNET80211_HE_TID_BITMAP",
-    "HIL_OPEN_HE_BSR_TID_LIFECYCLE_2026_07_29",
-    "HIL_OPEN_HE_TB_QUEUE_PUBLICATION_2026_07_30",
+opaque-entities = [
+    "WIFI_MAC_HE_BUFFER_STATUS.HARDWARE_BSR%s.BITS_20_31_OPAQUE",
+    "WIFI_MAC_HE_BUFFER_STATUS.SOFTWARE_BSR%s.BITS_20_31_OPAQUE",
+    "WIFI_MAC_HE_BUFFER_STATUS.CONTROL.BITS_23_31_OPAQUE",
 ]
+
+[peripheral-review.peripheral]
+sources = ["BLOB_LIBPP_HAL_HE_BSR_DEBUG", "BLOB_LIBPP_HAL_HE_BSR_STATUS", "BLOB_LIBPP_MAC_TX_SET_TB", "BLOB_LIBPP_DBG_READ_TX_PPDU", "ROM_REV0_MAC_TX_SET_TB", "BLOB_LIBNET80211_HE_TID_BITMAP", "HIL_OPEN_HE_BSR_TID_LIFECYCLE_2026_07_29", "HIL_OPEN_HE_TB_QUEUE_PUBLICATION_2026_07_30"]
 provenance = "reviewed"
 accuracy = "exact"
 completeness = "complete"
+
+[peripheral-review.register]
+sources = ["BLOB_LIBPP_HAL_HE_BSR_DEBUG", "BLOB_LIBPP_MAC_TX_SET_TB", "ROM_REV0_MAC_TX_SET_TB", "BLOB_LIBNET80211_HE_TID_BITMAP", "HIL_OPEN_HE_BSR_TID_LIFECYCLE_2026_07_29", "HIL_OPEN_HE_TB_QUEUE_PUBLICATION_2026_07_30"]
+naming = "descriptive"
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+
+[peripheral-review.field]
+naming = "descriptive"
+
+[peripheral-review.opaque]
+naming = "opaque"
 
 [[review]]
 entity = "WIFI_MAC_HE_BUFFER_STATUS.HARDWARE_BSR%s"
@@ -225,118 +236,3 @@ sources = [
 provenance = "reviewed"
 accuracy = "exact"
 completeness = "complete"
-
-[[review]]
-entity = "WIFI_MAC_HE_BUFFER_STATUS.CONTROL"
-naming = "descriptive"
-sources = [
-    "BLOB_LIBPP_HAL_HE_BSR_DEBUG",
-    "BLOB_LIBPP_MAC_TX_SET_TB",
-    "ROM_REV0_MAC_TX_SET_TB",
-    "BLOB_LIBNET80211_HE_TID_BITMAP",
-    "HIL_OPEN_HE_BSR_TID_LIFECYCLE_2026_07_29",
-    "HIL_OPEN_HE_TB_QUEUE_PUBLICATION_2026_07_30",
-]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "WIFI_MAC_HE_BUFFER_STATUS.HARDWARE_BSR%s.VALUE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_BUFFER_STATUS.HARDWARE_BSR%s.BITS_20_31_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_HE_BUFFER_STATUS.SOFTWARE_BSR%s.VALUE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_BUFFER_STATUS.SOFTWARE_BSR%s.BITS_20_31_OPAQUE"
-naming = "opaque"
-
-[[review]]
-entity = "WIFI_MAC_HE_BUFFER_STATUS.CONTROL.VALID_0"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_BUFFER_STATUS.CONTROL.VALID_1"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_BUFFER_STATUS.CONTROL.VALID_2"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_BUFFER_STATUS.CONTROL.VALID_3"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_BUFFER_STATUS.CONTROL.VALID_4"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_BUFFER_STATUS.CONTROL.VALID_5"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_BUFFER_STATUS.CONTROL.VALID_6"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_BUFFER_STATUS.CONTROL.VALID_7"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_BUFFER_STATUS.CONTROL.AC_EMPTY_SOFTWARE_TID"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_BUFFER_STATUS.CONTROL.AC_EMPTY_USE_SOFTWARE_TID"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_BUFFER_STATUS.CONTROL.TRIGGER_BASED_TID_0_ENABLED"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_BUFFER_STATUS.CONTROL.TRIGGER_BASED_TID_1_ENABLED"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_BUFFER_STATUS.CONTROL.TRIGGER_BASED_TID_2_ENABLED"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_BUFFER_STATUS.CONTROL.TRIGGER_BASED_TID_3_ENABLED"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_BUFFER_STATUS.CONTROL.TRIGGER_BASED_TID_4_ENABLED"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_BUFFER_STATUS.CONTROL.TRIGGER_BASED_TID_5_ENABLED"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_BUFFER_STATUS.CONTROL.TRIGGER_BASED_TID_6_ENABLED"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_BUFFER_STATUS.CONTROL.TRIGGER_BASED_TID_7_ENABLED"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_BUFFER_STATUS.CONTROL.BASIC_SPECIAL_BSR_SEQUENCE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_BUFFER_STATUS.CONTROL.TID_LIMIT_ZERO_BSR_SEQUENCE"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_HE_BUFFER_STATUS.CONTROL.BITS_23_31_OPAQUE"
-naming = "opaque"

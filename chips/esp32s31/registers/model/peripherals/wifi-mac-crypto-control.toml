@@ -267,52 +267,38 @@ bitWidth = 7
 minimum = 0
 maximum = 0
 
-[[review]]
+[[peripheral-review]]
 entity = "WIFI_MAC_CRYPTO_CONTROL"
-sources = [
-    "BLOB_LIBPP_HAL_CRYPTO",
-    "BLOB_LIBPP_HAL_CRYPTO_INIT",
+opaque-entities = [
+    "WIFI_MAC_CRYPTO_CONTROL.INTERFACE_CONTROL%s.BITS_0_8_OPAQUE",
+    "WIFI_MAC_CRYPTO_CONTROL.INTERFACE_CONTROL%s.BITS_30_31_OPAQUE",
+    "WIFI_MAC_CRYPTO_CONTROL.POLICY_CONTROL.BITS_6_21_OPAQUE",
+    "WIFI_MAC_CRYPTO_CONTROL.WORD_000C_OPAQUE",
+    "WIFI_MAC_CRYPTO_CONTROL.POLICY_CONTROL.BITS_0_5_OPAQUE",
+    "WIFI_MAC_CRYPTO_CONTROL.POLICY_CONTROL.BITS_22_31_OPAQUE",
+    "WIFI_MAC_CRYPTO_CONTROL.WORD_000C_OPAQUE.BITS_0_31_OPAQUE",
+    "WIFI_MAC_CRYPTO_CONTROL.INTERFACE_CONTROL%s.BITS_10_29_OPAQUE",
 ]
+
+[peripheral-review.peripheral]
+sources = ["BLOB_LIBPP_HAL_CRYPTO", "BLOB_LIBPP_HAL_CRYPTO_INIT"]
 provenance = "reviewed"
 accuracy = "exact"
 completeness = "complete"
 
-[[review]]
-entity = "WIFI_MAC_CRYPTO_CONTROL.INTERFACE_CONTROL%s"
-naming = "descriptive"
+[peripheral-review.register]
 sources = ["BLOB_LIBPP_HAL_CRYPTO"]
+naming = "descriptive"
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
 
-[[review]]
-entity = "WIFI_MAC_CRYPTO_CONTROL.INTERFACE_CONTROL%s.BITS_0_8_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBPP_HAL_CRYPTO"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "unknown"
-
-[[review]]
-entity = "WIFI_MAC_CRYPTO_CONTROL.INTERFACE_CONTROL%s.BITS_30_31_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBPP_HAL_CRYPTO"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "unknown"
-
-[[review]]
-entity = "WIFI_MAC_CRYPTO_CONTROL.POLICY_CONTROL"
+[peripheral-review.field]
 naming = "descriptive"
-sources = ["BLOB_LIBPP_HAL_CRYPTO"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
 
-[[review]]
-entity = "WIFI_MAC_CRYPTO_CONTROL.POLICY_CONTROL.BITS_6_21_OPAQUE"
-naming = "opaque"
+[peripheral-review.opaque]
 sources = ["BLOB_LIBPP_HAL_CRYPTO"]
+naming = "opaque"
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
@@ -346,121 +332,9 @@ entity = "WIFI_MAC_CRYPTO_CONTROL.WORD_000C_OPAQUE.BITS_0_31_OPAQUE"
 naming = "opaque"
 
 [[review]]
-entity = "WIFI_MAC_CRYPTO_CONTROL.KEY_VALID_BITMAP.ENTRY_0_VALID"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_CRYPTO_CONTROL.KEY_VALID_BITMAP.ENTRY_1_VALID"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_CRYPTO_CONTROL.KEY_VALID_BITMAP.ENTRY_2_VALID"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_CRYPTO_CONTROL.KEY_VALID_BITMAP.ENTRY_3_VALID"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_CRYPTO_CONTROL.KEY_VALID_BITMAP.ENTRY_4_VALID"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_CRYPTO_CONTROL.KEY_VALID_BITMAP.ENTRY_5_VALID"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_CRYPTO_CONTROL.KEY_VALID_BITMAP.ENTRY_6_VALID"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_CRYPTO_CONTROL.KEY_VALID_BITMAP.ENTRY_7_VALID"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_CRYPTO_CONTROL.KEY_VALID_BITMAP.ENTRY_8_VALID"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_CRYPTO_CONTROL.KEY_VALID_BITMAP.ENTRY_9_VALID"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_CRYPTO_CONTROL.KEY_VALID_BITMAP.ENTRY_10_VALID"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_CRYPTO_CONTROL.KEY_VALID_BITMAP.ENTRY_11_VALID"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_CRYPTO_CONTROL.KEY_VALID_BITMAP.ENTRY_12_VALID"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_CRYPTO_CONTROL.KEY_VALID_BITMAP.ENTRY_13_VALID"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_CRYPTO_CONTROL.KEY_VALID_BITMAP.ENTRY_14_VALID"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_CRYPTO_CONTROL.KEY_VALID_BITMAP.ENTRY_15_VALID"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_CRYPTO_CONTROL.KEY_VALID_BITMAP.ENTRY_16_VALID"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_CRYPTO_CONTROL.KEY_VALID_BITMAP.ENTRY_17_VALID"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_CRYPTO_CONTROL.KEY_VALID_BITMAP.ENTRY_18_VALID"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_CRYPTO_CONTROL.KEY_VALID_BITMAP.ENTRY_19_VALID"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_CRYPTO_CONTROL.KEY_VALID_BITMAP.ENTRY_20_VALID"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_CRYPTO_CONTROL.KEY_VALID_BITMAP.ENTRY_21_VALID"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_CRYPTO_CONTROL.KEY_VALID_BITMAP.ENTRY_22_VALID"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_CRYPTO_CONTROL.KEY_VALID_BITMAP.ENTRY_23_VALID"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_CRYPTO_CONTROL.KEY_VALID_BITMAP.ENTRY_24_VALID"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_MAC_CRYPTO_CONTROL.KEY_VALID_BITMAP.RESERVED_HIGH"
-naming = "descriptive"
-
-[[review]]
 entity = "WIFI_MAC_CRYPTO_CONTROL.INTERFACE_CONTROL%s.SPP_AMSDU"
 naming = "descriptive"
 sources = ["BLOB_LIBPP_SPP_AMSDU"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
-
-[[review]]
-entity = "WIFI_MAC_CRYPTO_CONTROL.INTERFACE_CONTROL%s.BITS_10_29_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBPP_HAL_CRYPTO"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "unknown"
