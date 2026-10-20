@@ -6,11 +6,11 @@
 //! The checks an image build runs when its caller requests them are
 //! assembled here.
 //!
-//! [`Gates`] are the checks an image build runs: `cargo fw` reports them,
-//! HIL images must pass them all.
+//! [`Gates`] are the checks an image build runs: `cargo fw build` enforces
+//! interrupt bounds, stand experiments report them, and HIL enforces them all.
 //! Every check reads what it needs from the chip profile and the stack
 //! policy, whatever the chip's boot kind. A requested check whose data is
-//! absent is a [`CheckResult::MissingContract`], which fails the build: a
+//! absent is a [`CheckResult::MissingContract`], which fails an enforced check: a
 //! missing table never proves that a property does not apply.
 
 #![forbid(unsafe_code)]
@@ -115,7 +115,7 @@ pub const PLACEMENT_REPORT: &str = "placement.txt";
 pub type Audit = Box<dyn Fn(&oer_analysis_elf::Elf<'_>) -> Result<()> + Send + Sync>;
 
 /// One check a developer can request.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum Check {
     /// The task and bootstrap stacks and the frame coverage.
     Stack,
@@ -125,12 +125,44 @@ pub enum Check {
     Interrupts,
 }
 
+/// Which requested checks must pass for the build to succeed.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub enum Enforced {
+    /// Every requested check, including the caller's audit.
+    All,
+    /// Only the named built-in checks; the caller's audit remains a report.
+    Only(BTreeSet<Check>),
+    /// Every check is reported; failures become warnings.
+    #[default]
+    Reported,
+}
+
+impl Enforced {
+    /// Whether the requested check `name` must pass. An audit is enforced
+    /// only by [`Enforced::All`].
+    pub fn requires(&self, name: &str) -> bool {
+        match self {
+            Self::All => true,
+            Self::Only(checks) => {
+                let check = match name {
+                    STACK => Check::Stack,
+                    INTERRUPTS => Check::Interrupts,
+                    PLACEMENT => Check::Placement,
+                    _ => return false,
+                };
+                checks.contains(&check)
+            }
+            Self::Reported => false,
+        }
+    }
+}
+
 /// The checks of one image build.
 #[derive(Default)]
 pub struct Gates {
-    /// Whether a requested check that does not pass fails the build;
-    /// otherwise the build reports it as a warning.
-    pub enforced: bool,
+    /// Which requested checks fail the build when they do not pass;
+    /// the others are reported as warnings.
+    pub enforced: Enforced,
     /// The task and bootstrap stacks.
     pub stack: bool,
     /// The image's placement in the chip's memory map.
@@ -145,7 +177,7 @@ impl Gates {
     /// Every check, the interrupt stacks held to `interrupts`.
     pub fn all(interrupts: Required) -> Self {
         Self {
-            enforced: true,
+            enforced: Enforced::All,
             stack: true,
             placement: true,
             interrupts: Some(interrupts),
@@ -156,7 +188,7 @@ impl Gates {
     /// The checks `checks` names, the interrupt stacks proven.
     pub fn of(checks: &[Check]) -> Self {
         Self {
-            enforced: true,
+            enforced: Enforced::All,
             stack: checks.contains(&Check::Stack),
             placement: checks.contains(&Check::Placement),
             interrupts: checks
@@ -386,5 +418,40 @@ impl Gates {
         };
         outcome.results.push((STACK.to_owned(), result));
         Ok(outcome)
+    }
+}
+
+#[cfg(test)]
+mod enforcement_tests {
+    use super::*;
+
+    #[test]
+    fn constructors_enforce_every_requested_check_and_default_reports() {
+        for gates in [
+            Gates::all(Required::Proven),
+            Gates::of(&[Check::Interrupts]),
+        ] {
+            assert_eq!(gates.enforced, Enforced::All);
+        }
+        let gates = Gates::default();
+        assert_eq!(gates.enforced, Enforced::Reported);
+        assert!(gates.requested(CheckedElf::Runtime).is_empty());
+    }
+
+    #[test]
+    fn only_enforces_the_named_checks_and_never_the_audit() {
+        for (check, name) in [
+            (Check::Stack, STACK),
+            (Check::Interrupts, INTERRUPTS),
+            (Check::Placement, PLACEMENT),
+        ] {
+            let enforced = Enforced::Only([check].into());
+            for requested in [STACK, INTERRUPTS, PLACEMENT, AUDIT] {
+                assert_eq!(enforced.requires(requested), requested == name);
+                assert!(Enforced::All.requires(requested));
+                assert!(!Enforced::Reported.requires(requested));
+            }
+        }
+        assert!(!Enforced::Only(BTreeSet::new()).requires(AUDIT));
     }
 }

@@ -43,7 +43,9 @@ pub use oer_chip_profile::{Boot, FlashMap};
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
-pub use oer_image_checks::{CheckInput, CheckOutcome, CheckRecord, CheckResult, CheckedElf, Gates};
+pub use oer_image_checks::{
+    Check, CheckInput, CheckOutcome, CheckRecord, CheckResult, CheckedElf, Enforced, Gates,
+};
 
 /// The Cargo profile every image builds with (the root `Cargo.toml`).
 pub const FIRMWARE_PROFILE: &str = "firmware";
@@ -293,7 +295,8 @@ mod tests;
 /// Fold the outcome of the checks of `elf` into `bundle`: every requested
 /// check's result into its `checks` record, the reports, summaries and
 /// warnings beside it. A requested check without a result, or with one that
-/// does not pass, fails an enforced build (a warning otherwise) after the results are written to
+/// does not pass, fails the build if it is enforced (a warning otherwise),
+/// after the results are written to
 /// [`files::CHECKS`](crate::bundle::files::CHECKS) in its directory.
 pub(crate) fn apply_outcome(
     checks: &Gates,
@@ -315,7 +318,7 @@ pub(crate) fn apply_outcome(
                 .push(format!("check `{name}` does not apply: {reason}"));
         }
         if !result.passes() {
-            if checks.enforced {
+            if checks.enforced.requires(&name) {
                 failed.push(format!("{name} ({elf:?}): {result}"));
             } else {
                 bundle.warnings.push(format!(

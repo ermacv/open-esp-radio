@@ -61,7 +61,7 @@ fn an_unchanged_embedded_runtime_keeps_its_timestamp() {
 /// with `placement` its placement too.
 fn requested(placement: bool) -> Gates {
     Gates {
-        enforced: true,
+        enforced: Enforced::All,
         stack: true,
         placement,
         interrupts: Some(oer_image_checks::interrupts::Required::Proven),
@@ -161,7 +161,7 @@ fn a_reported_check_that_does_not_pass_is_a_warning() {
     let directory = tempfile::tempdir().unwrap();
     let mut bundle = empty_bundle(directory.path());
     let checks = Gates {
-        enforced: false,
+        enforced: Enforced::Reported,
         ..requested(false)
     };
     let results = [("stack", CheckResult::Failed("no bound".into()))];
@@ -276,4 +276,122 @@ pub(crate) fn repository() -> tempfile::TempDir {
         std::fs::write(path, text).unwrap();
     }
     directory
+}
+
+#[test]
+fn only_interrupts_rejects_failed_missing_and_absent_results() {
+    for result in [
+        Some(CheckResult::Failed("no bound".into())),
+        Some(CheckResult::MissingContract("no interrupt table".into())),
+        None,
+    ] {
+        let directory = tempfile::tempdir().unwrap();
+        let mut bundle = empty_bundle(directory.path());
+        let checks = Gates {
+            enforced: Enforced::Only([Check::Interrupts].into()),
+            ..requested(false)
+        };
+        let mut results = vec![("stack", CheckResult::Failed("task has no bound".into()))];
+        if let Some(result) = result {
+            results.push(("interrupts", result));
+        }
+        let error = apply_outcome(&checks, CheckedElf::Runtime, outcome(&results), &mut bundle)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.starts_with("requested checks did not pass: interrupts (Runtime):"),
+            "{error}"
+        );
+        assert!(!error.contains("task has no bound"), "{error}");
+        assert!(
+            bundle
+                .warnings
+                .iter()
+                .any(|warning| warning.contains("stack")
+                    && warning.contains("reported only")
+                    && warning.contains("task has no bound"))
+        );
+        let written: Vec<CheckRecord> = serde_json::from_slice(
+            &std::fs::read(bundle.path(crate::bundle::files::CHECKS)).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(written, bundle.checks);
+        assert_eq!(written.len(), 2);
+    }
+}
+
+#[test]
+fn only_interrupts_reports_failed_runtime_and_bootstrap_stacks() {
+    for elf in [CheckedElf::Runtime, CheckedElf::Bootstrap] {
+        let directory = tempfile::tempdir().unwrap();
+        let mut bundle = empty_bundle(directory.path());
+        let checks = Gates {
+            enforced: Enforced::Only([Check::Interrupts].into()),
+            ..requested(true)
+        };
+        let results = [
+            ("stack", CheckResult::Failed("no bound".into())),
+            ("interrupts", CheckResult::Passed),
+            ("placement", CheckResult::Failed("outside SRAM".into())),
+        ];
+        apply_outcome(&checks, elf, outcome(&results), &mut bundle).unwrap();
+        assert!(
+            bundle
+                .warnings
+                .iter()
+                .any(|warning| warning.contains("stack")
+                    && warning.contains("reported only")
+                    && warning.contains("no bound"))
+        );
+        if elf == CheckedElf::Runtime {
+            assert!(
+                bundle
+                    .warnings
+                    .iter()
+                    .any(|warning| warning.contains("placement")
+                        && warning.contains("reported only")
+                        && warning.contains("outside SRAM"))
+            );
+        }
+        assert!(!bundle.path(crate::bundle::files::CHECKS).exists());
+    }
+}
+
+#[test]
+fn only_interrupts_passes_with_the_executor_invariant_warning() {
+    let directory = tempfile::tempdir().unwrap();
+    let mut bundle = empty_bundle(directory.path());
+    let checks = Gates {
+        enforced: Enforced::Only([Check::Interrupts].into()),
+        ..Gates::of(&[Check::Interrupts])
+    };
+    let warning = "hart 0's interrupt stack is conditional on the executor invariant";
+    let mut result = outcome(&[("interrupts", CheckResult::Passed)]);
+    result.warnings.push(warning.into());
+    apply_outcome(&checks, CheckedElf::Runtime, result, &mut bundle).unwrap();
+    assert_eq!(bundle.warnings, [warning]);
+    assert_eq!(bundle.checks[0].result, CheckResult::Passed);
+}
+
+#[test]
+fn only_all_enforces_the_callers_audit() {
+    for enforced in [
+        Enforced::All,
+        Enforced::Only([Check::Stack, Check::Placement, Check::Interrupts].into()),
+        Enforced::Reported,
+    ] {
+        let directory = tempfile::tempdir().unwrap();
+        let mut bundle = empty_bundle(directory.path());
+        let all = enforced == Enforced::All;
+        let checks = Gates {
+            enforced,
+            audit: Some(Box::new(|_| Ok(()))),
+            ..Gates::default()
+        };
+        let results = [("audit", CheckResult::Failed("audit failed".into()))];
+        let result = apply_outcome(&checks, CheckedElf::Runtime, outcome(&results), &mut bundle);
+        assert_eq!(result.is_err(), all);
+        assert_eq!(bundle.warnings.is_empty(), all);
+        assert_eq!(bundle.checks[0].result, results[0].1);
+    }
 }
