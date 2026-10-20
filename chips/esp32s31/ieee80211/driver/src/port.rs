@@ -402,6 +402,8 @@ impl<'id, D: Device<B>, const B: usize> Held<'id, D, B> {
                 *self.failed_terminal.borrow_mut() = Some(terminal);
             }
             self.storage.poison(Fault::Capacity);
+        } else {
+            oer_trace::emit(&trace::TerminalPosted);
         }
         self.storage.body.wake();
     }

@@ -215,6 +215,9 @@ bounds) live in the code that applies them.
   the backend's declared capabilities. A-MPDU/BlockAck cases remain Hardware;
   a backend without `AmpduPhase` reports them separately as unsupported until
   W6, never as model-only. The gate e report lists the skips and their reason.
+  Fixture body numbers are allocated with the body and released when it is
+  freed; reusing an address after free is valid. Each operation also checks
+  its original and returned body pointers independently.
 
 - **Driver core.** The driver owns all four EDCA queues and executes each
   attempt's retry plan; a protected MPDU is numbered at its first launch; DMA

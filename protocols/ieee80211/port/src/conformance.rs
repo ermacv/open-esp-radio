@@ -9,6 +9,8 @@
 //! Changed MPDU bytes report `MpduChanged`, separately from `Owners` for
 //! a context, ticket or buffer identity mismatch.
 
+/// Allocation lifetime identities used by backend fixtures.
+pub mod allocations;
 pub mod catalog;
 pub mod edca;
 /// GTK installation, replacement and selection RX boundaries.

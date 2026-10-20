@@ -1,11 +1,38 @@
 //! Ownership observations from ordinary ModelBackend operations.
 use super::*;
+use conformance::allocations::{Allocation, Ids};
 use oer_ieee80211_port::conformance::{self, Class, End, Operation, Resources, Scenario};
 use oer_ieee80211_wire::qos::WmmAccessCategory;
+#[derive(Debug)]
+struct Body {
+    memory: ModelBody,
+    allocation: Allocation<Rc<Ids<4>>, 4>,
+}
+impl TxBody for Body {
+    fn bytes(&self) -> &[u8] {
+        self.memory.bytes()
+    }
+}
+#[derive(Default)]
+struct Capture {
+    rows: Vec<conformance::Returned>,
+    pointers: Vec<bool>,
+}
+impl Capture {
+    fn len(&self) -> usize {
+        self.rows.len()
+    }
+}
+/// Actual owner observations, with each original/returned raw pointer check.
+pub struct OwnershipTrace {
+    pub owners: conformance::Trace<Vec<conformance::Returned>>,
+    pub body_pointers_match: Vec<bool>,
+}
 
 struct Context {
     operation: Operation,
     resources: Resources,
+    pointer: usize,
     drops: Rc<Cell<usize>>,
 }
 impl Drop for Context {
@@ -15,13 +42,12 @@ impl Drop for Context {
 }
 struct Contexts;
 impl ModelContext for Contexts {
-    type Body = ModelBody;
+    type Body = Body;
     type Context<'id> = Context;
     type StationConfigureContext<'id> = ();
     type AccessPointConfigureContext<'id> = ();
 }
 type Backend = ModelBackend<ModelCaps, Contexts>;
-pub type Trace = conformance::Trace<Vec<conformance::Returned>>;
 
 /// Exercise the same four owned operations as the physical fixture.
 pub async fn ownership(
@@ -29,7 +55,7 @@ pub async fn ownership(
     channel: Channel,
     rate: LegacyRate,
     clock: Rc<dyn Clock>,
-) -> Result<Trace, &'static str> {
+) -> Result<OwnershipTrace, &'static str> {
     let station = IndividualAddress::new([2, 0, 0, 0, 0, 1]).ok_or("model station")?;
     let ap = IndividualAddress::new([2, 0, 0, 0, 0, 2]).ok_or("model AP")?;
     let (backend, air) = Backend::new(channel, [station, ap], clock);
@@ -50,10 +76,10 @@ pub async fn ownership(
 fn observe(
     context: Context,
     ticket: Slot<'_, ModelTickets, ModelPool<1>>,
-    buffer: ModelAnyBuffer<'_>,
-    body: Option<ModelBody>,
+    buffer: ModelAnyBuffer<'_, Body>,
+    body: Option<Body>,
     end: End,
-    seen: &mut Vec<conformance::Returned>,
+    seen: &mut Capture,
 ) -> Result<(), &'static str> {
     let (class, index, body) = match buffer {
         ModelAnyBuffer::Small(buffer) => (Class::Small, buffer.slot.index(), body),
@@ -75,14 +101,16 @@ fn observe(
     {
         return Err("model changed external body");
     }
-    seen.push(conformance::Returned {
+    seen.pointers
+        .push(context.pointer == body.bytes().as_ptr() as usize);
+    seen.rows.push(conformance::Returned {
         operation: context.operation,
         expected: context.resources,
         actual: Resources {
             ticket: ticket.index(),
             buffer: index,
             class,
-            body: body.0.as_ptr() as usize,
+            body: usize::from(body.allocation.id()),
         },
         end,
     });
@@ -91,7 +119,7 @@ fn observe(
 fn returned<'id>(
     terminal: LowerMacTerminal<'id, ModelTypes<Contexts>>,
     access: &mut oer_ieee80211_port::TerminalAccess<'id, ModelTickets, ModelPool<1>>,
-    seen: &mut Vec<conformance::Returned>,
+    seen: &mut Capture,
 ) -> Result<(), &'static str> {
     match terminal {
         LowerMacTerminal::TxCompleted(TxCompleted::Single(terminal)) => {
@@ -145,7 +173,7 @@ struct Operations {
     rate: LegacyRate,
 }
 impl PortBody<Backend> for Operations {
-    type Output = Result<Trace, &'static str>;
+    type Output = Result<OwnershipTrace, &'static str>;
     async fn run<'p, 'id>(
         self,
         owner: Owner<'p, 'id, Backend, Disabled>,
@@ -156,7 +184,8 @@ impl PortBody<Backend> for Operations {
             Err(failed) => return Ended::fail_stopped(failed.fail_stop(), Err("model enable")),
         };
         let drops = Rc::new(Cell::new(0));
-        let mut seen = Vec::new();
+        let mut seen = Capture::default();
+        let ids = Rc::new(Ids::<4>::new());
         let mut access = resources.terminal_access;
         let result = async {
             let mut tickets = resources.tickets.into_iter();
@@ -166,10 +195,12 @@ impl PortBody<Backend> for Operations {
             self.air.hold(WmmAccessCategory::BestEffort, true);
             for operation in conformance::OPERATIONS {
                 let ticket = tickets.next().ok_or("model ticket")?;
-                let body = ModelBody(
-                    alloc::vec![operation.id; if self.scenario == Scenario::Refuse {17} else {4}],
-                );
-                let pointer = body.0.as_ptr() as usize;
+                let body = Body {
+                    memory: ModelBody(alloc::vec![operation.id; if self.scenario == Scenario::Refuse {17} else {4}]),
+                    allocation: Allocation::new(ids.clone()).ok_or("model body allocation slots exhausted")?,
+                };
+                let pointer = body.bytes().as_ptr() as usize;
+                let body_id = body.allocation.id();
                 macro_rules! source {
                     ($buffer:expr, $class:ty, $variant:ident) => {{
                         let mut buffer = $buffer;
@@ -215,8 +246,9 @@ impl PortBody<Backend> for Operations {
                         ticket: ticket.index(),
                         buffer: index,
                         class: operation.class,
-                        body: pointer,
+                        body: usize::from(body_id),
                     },
+                    pointer,
                     drops: drops.clone(),
                 };
                 match source {
@@ -297,11 +329,14 @@ impl PortBody<Backend> for Operations {
         };
         let output = match error {
             Some(why) => Err(why),
-            None => Ok(Trace {
-                returned: seen,
-                contexts_dropped: drops.get(),
-                before_teardown_dropped: drops.get(),
-                publications: self.air.sent().len(),
+            None => Ok(OwnershipTrace {
+                owners: conformance::Trace {
+                    returned: seen.rows,
+                    contexts_dropped: drops.get(),
+                    before_teardown_dropped: drops.get(),
+                    publications: self.air.sent().len(),
+                },
+                body_pointers_match: seen.pointers,
             }),
         };
         Ended::uninstall(owner, (), output)

@@ -8,7 +8,9 @@ use oer_ieee80211_wire::{frame::FrameControl, phy::LegacyRate};
 use oer_radio_port::{Disabled, Ended, Owner, PortBody, PortEnd};
 
 mod ownership;
-pub use ownership::ownership;
+pub use ownership::{OwnershipTrace, ownership};
+mod barrier;
+pub use barrier::barrier;
 
 /// A trace whose owners and terminals were read from ModelBackend.
 pub type OutcomeTrace = outcomes::Trace<ModelAck, ModelBlockAckEvidence, ModelAirDenied>;

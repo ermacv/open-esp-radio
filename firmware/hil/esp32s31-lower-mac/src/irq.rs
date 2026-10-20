@@ -60,9 +60,9 @@ static ACK: HandlerCell<DoorbellAcknowledger<3>> = HandlerCell::new();
 const BELL: SameLevel<WifiMacToken, DoorbellToken> = SameLevel::new();
 
 #[cfg(oer_debug_control)]
-pub fn hold_completion(hold: bool) -> Result<(), oer_interrupt_table::signal::ForeignContext> {
+pub fn hold_completion(hold: bool) {
     use oer_esp32s31_ieee80211_mac::irq::{EVENT_TX_COMPLETE, EVENT_TX_TIMEOUT};
-    MAC_SIGNAL.debug_hold(EVENT_TX_COMPLETE | EVENT_TX_TIMEOUT, hold)
+    MAC_SIGNAL.debug_hold(EVENT_TX_COMPLETE | EVENT_TX_TIMEOUT, hold);
 }
 
 #[esp_hal::ram]

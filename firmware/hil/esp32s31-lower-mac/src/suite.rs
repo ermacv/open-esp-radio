@@ -63,6 +63,7 @@ use oer_trace::Event as _;
 use sha2::{Digest as _, Sha256};
 use static_cell::StaticCell;
 
+mod barrier;
 mod ownership;
 use ownership::{Context, FixtureBody};
 
@@ -72,7 +73,7 @@ type Backend = Esp32s31Backend<Device, TX>;
 type Family = Types<Device, TX>;
 type Caps = Esp32s31Caps<TX>;
 static STORAGE: StaticCell<PortStorage<Device, TX>> = StaticCell::new();
-static RETAINED: oer_trace::Retained<256, 0, 0> = oer_trace::Retained::new();
+static RETAINED: oer_trace::Retained<256, 4, 33> = oer_trace::Retained::new();
 static TRACE: oer_trace::Trace = oer_trace::Trace::new(&RETAINED);
 oer_trace::clock!(oer_embassy_time::now_micros);
 
@@ -234,6 +235,7 @@ pub struct Server {
     peer: Option<Peer>,
     epoch: u32,
     exchange: Pin<&'static mut Option<ExchangeFuture>>,
+    bodies: &'static ownership::BodyPool,
 }
 impl Server {
     pub fn new(boot: Boot) -> Self {
@@ -243,6 +245,7 @@ impl Server {
             peer: None,
             epoch: 1,
             exchange: Pin::static_mut(EXCHANGE_FUTURE.init(None)),
+            bodies: ownership::BodyPool::new(),
         }
     }
     pub async fn request(&mut self, request: Request) -> Result<Answer, RejectReason> {
@@ -278,7 +281,15 @@ impl Server {
                 let installed = stopped
                     .reinstall(self.epoch)
                     .map_err(|_| RejectReason::Internal)?;
-                exchange_future(&mut self.exchange, installed, Exchange { peer, case });
+                exchange_future(
+                    &mut self.exchange,
+                    installed,
+                    Exchange {
+                        peer,
+                        case,
+                        bodies: self.bodies,
+                    },
+                );
                 let result = poll_exchange(
                     self.exchange
                         .as_mut()
@@ -493,6 +504,7 @@ async fn discover<'p, 'id: 'p>(
 struct Exchange {
     peer: Peer,
     case: catalog::Case,
+    bodies: &'static ownership::BodyPool,
 }
 impl PortBody<Backend> for Exchange {
     type Output = Result<oer_hil_protocol::lower_mac::Trace, &'static str>;
@@ -506,7 +518,10 @@ impl PortBody<Backend> for Exchange {
             Err(failed) => return Ended::fail_stopped(failed.fail_stop(), Err("enable")),
         };
         if let catalog::Case::Ownership(scenario) = self.case {
-            return ownership::run(owner, resources, self.peer, scenario).await;
+            return ownership::run(owner, resources, self.peer, scenario, self.bodies).await;
+        }
+        if let catalog::Case::Barrier(case) = self.case {
+            return barrier::run(owner, resources, self.peer, case).await;
         }
         let output = match self.case {
             catalog::Case::Outcome(case) => {

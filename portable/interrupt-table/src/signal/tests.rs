@@ -16,7 +16,7 @@ fn held_facts_survive_service_and_unrelated_wakes_until_release() {
     let (counting, waker) = counting(None);
     let mut cx = Context::from_waker(&waker);
     assert_eq!(signal.poll_take(&mut cx), Poll::Pending);
-    assert_eq!(signal.debug_hold(0b10, true), Ok(()));
+    signal.debug_hold(0b10, true);
     signal.raise(0b10);
     signal.service();
     assert_eq!(counting.wakes.get(), 0);
@@ -27,7 +27,8 @@ fn held_facts_survive_service_and_unrelated_wakes_until_release() {
     assert_eq!(counting.wakes.get(), 1);
     assert_eq!(signal.poll_take(&mut cx), Poll::Ready(Ok(0b01)));
     assert_eq!(signal.poll_take(&mut cx), Poll::Pending);
-    assert_eq!(signal.debug_hold(0b10, false), Ok(()));
+    signal.debug_hold(0b10, false);
+    signal.service();
     assert_eq!(counting.wakes.get(), 2);
     assert_eq!(signal.poll_take(&mut cx), Poll::Ready(Ok(0b10)));
     assert_eq!(signal.poll_take(&mut cx), Poll::Pending);
@@ -35,11 +36,13 @@ fn held_facts_survive_service_and_unrelated_wakes_until_release() {
 
 #[cfg(oer_debug_control)]
 #[test]
-fn another_executor_cannot_change_a_signal_hold() {
-    assert_eq!(
-        host::foreign_signal().debug_hold(1, true),
-        Err(ForeignContext)
-    );
+fn a_control_from_another_context_never_consumes_task_facts() {
+    let signal = host::foreign_signal();
+    signal.debug_hold(1, true);
+    signal.raise(1);
+    signal.debug_hold(1, false);
+    assert_eq!(signal.take(), Err(ForeignContext));
+    assert_eq!(signal.pending.load(Ordering::Acquire), 1);
 }
 
 std::thread_local! {

@@ -37,6 +37,9 @@ pub enum End {
     HardwareTimeout,
     Withdrawn,
     Expired,
+    CtsTimeout,
+    Unsolicited,
+    BlockAck,
 }
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub struct OutcomeTrace {
@@ -60,6 +63,140 @@ pub struct CaseTrace {
 pub enum Trace {
     Outcome(OutcomeTrace),
     Ownership(OwnershipTrace),
+    Barrier(BarrierTrace),
+}
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct HeldSnapshot {
+    pub publications: u16,
+    pub events: u16,
+}
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub enum BarrierEvent {
+    Tx {
+        ticket: u8,
+        sent: bool,
+        end: End,
+        withdraw: Option<u8>,
+        transmissions: u16,
+        rate_kbps: Option<u32>,
+    },
+    GateClosed,
+    KeyRemoved,
+}
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct Frame {
+    pub len: u8,
+    pub bytes: [[u8; 32]; 2],
+}
+fn frame(bytes: &[u8]) -> Option<Frame> {
+    if bytes.len() > 64 {
+        return None;
+    }
+    let mut out = Frame {
+        len: bytes.len().try_into().ok()?,
+        bytes: [[0; 32]; 2],
+    };
+    for (index, (out, byte)) in out.bytes.iter_mut().flatten().zip(bytes).enumerate() {
+        // The three physical MAC addresses are fixture coordinates. All other
+        // encoded octets, including FC, Duration, SN, PN and payload, survive.
+        *out = if (4..22).contains(&index) { 0 } else { *byte };
+    }
+    Some(out)
+}
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct BarrierTrace {
+    pub tickets: [u8; 2],
+    pub before_request: HeldSnapshot,
+    pub before_result: HeldSnapshot,
+    pub publications_at_barrier: u16,
+    pub events: [Option<BarrierEvent>; 8],
+    pub first_frame: Frame,
+    pub retried_frames: [Option<Frame>; 4],
+}
+pub fn barrier_trace<
+    A,
+    D,
+    E: AsRef<[conformance::BarrierEvent<A, D>]>,
+    F: AsRef<[u8]>,
+    R: AsRef<[F]>,
+>(
+    raw: &conformance::BarrierTrace<E, F, R>,
+) -> Option<BarrierTrace> {
+    fn snapshot(raw: conformance::HeldSnapshot) -> Option<HeldSnapshot> {
+        Some(HeldSnapshot {
+            publications: raw.publications.try_into().ok()?,
+            events: raw.events.try_into().ok()?,
+        })
+    }
+    let mut events = core::array::from_fn(|_| None);
+    for (index, event) in raw.events.as_ref().iter().enumerate() {
+        *events.get_mut(index)? = Some(match event {
+            conformance::BarrierEvent::GateClosed => BarrierEvent::GateClosed,
+            conformance::BarrierEvent::KeyRemoved => BarrierEvent::KeyRemoved,
+            conformance::BarrierEvent::Tx {
+                ticket,
+                state,
+                outcome,
+            } => {
+                let (end, air, withdraw) = match outcome {
+                    TxOutcome::Ended(SingleEnd::Delivered { air, response }) => (
+                        match response {
+                            SingleResponse::Ack(_) => End::Ack,
+                            SingleResponse::Unsolicited => End::Unsolicited,
+                            SingleResponse::BlockAck { .. } => End::BlockAck,
+                        },
+                        Some(*air),
+                        None,
+                    ),
+                    TxOutcome::Ended(SingleEnd::AckTimeout(air)) => {
+                        (End::NoResponse, Some(*air), None)
+                    }
+                    TxOutcome::Ended(SingleEnd::CtsTimeout(air)) => (End::CtsTimeout, *air, None),
+                    TxOutcome::Ended(SingleEnd::ContentionLimit(air)) => {
+                        (End::Collision, *air, None)
+                    }
+                    TxOutcome::Ended(SingleEnd::AirDenied { air, .. }) => {
+                        (End::AirDenied, *air, None)
+                    }
+                    TxOutcome::Withdrawn(cause) => (
+                        End::Withdrawn,
+                        None,
+                        Some(match cause {
+                            WithdrawCause::GateClosed => 0,
+                            WithdrawCause::KeyRemoved => 1,
+                            WithdrawCause::Disabled => 2,
+                        }),
+                    ),
+                    TxOutcome::Indeterminate(_) => (End::HardwareTimeout, None, None),
+                    TxOutcome::Expired { .. } => (End::Expired, None, None),
+                };
+                BarrierEvent::Tx {
+                    ticket: *ticket,
+                    sent: *state == MpduState::Sent,
+                    end,
+                    withdraw,
+                    transmissions: air.map_or(0, |air| air.transmissions.get()),
+                    rate_kbps: air.and_then(|air| match air.rate {
+                        PhyRate::Legacy(rate) => Some(rate.kbps()),
+                        _ => None,
+                    }),
+                }
+            }
+        });
+    }
+    let mut retries = core::array::from_fn(|_| None);
+    for (index, bytes) in raw.retried_frames.as_ref().iter().enumerate() {
+        *retries.get_mut(index)? = Some(frame(bytes.as_ref())?);
+    }
+    Some(BarrierTrace {
+        tickets: raw.tickets,
+        before_request: snapshot(raw.before_request)?,
+        before_result: snapshot(raw.before_result)?,
+        publications_at_barrier: raw.publications_at_barrier.try_into().ok()?,
+        events,
+        first_frame: frame(raw.first_frame.as_ref())?,
+        retried_frames: retries,
+    })
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub struct OwnerResources {
@@ -78,6 +215,7 @@ pub struct OwnerReturn {
     pub expected: OwnerResources,
     pub actual: OwnerResources,
     pub end: u8,
+    pub body_pointer_matches: bool,
 }
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub struct OwnershipTrace {
@@ -86,10 +224,11 @@ pub struct OwnershipTrace {
     pub before_teardown_dropped: u16,
     pub publications: u16,
 }
-/// Pointer coordinates differ across machines. Preserve allocation identity
-/// by looking it up in the original contexts, including a failed lookup.
+/// Allocation numbers come from the actual body owners and their frees. Raw
+/// pointer equality is recorded separately for each original/returned pair.
 pub fn ownership_trace<R: AsRef<[conformance::Returned]>>(
     trace: &conformance::Trace<R>,
+    body_pointers_match: &[bool],
 ) -> Option<OwnershipTrace> {
     use conformance::{Class, End, Resources};
     fn class(value: Class) -> u8 {
@@ -103,17 +242,18 @@ pub fn ownership_trace<R: AsRef<[conformance::Returned]>>(
         ticket: value.ticket,
         buffer: value.buffer,
         class: class(value.class),
-        body: rows
-            .iter()
-            .find(|row| row.expected.body == value.body)
-            .map(|row| row.operation.id),
+        body: u8::try_from(value.body).ok(),
     };
+    if rows.len() != body_pointers_match.len() {
+        return None;
+    }
     let mut returned = [None; 8];
     for (index, row) in rows.iter().enumerate() {
         *returned.get_mut(index)? = Some(OwnerReturn {
             operation: row.operation.id,
             category: row.operation.category as u8,
             class: class(row.operation.class),
+            body_pointer_matches: *body_pointers_match.get(index)?,
             expected: resource(row.expected),
             actual: resource(row.actual),
             end: match row.end {
@@ -209,47 +349,29 @@ mod tests {
     }
 
     #[test]
-    fn ownership_projection_keeps_unknown_and_exchanged_body_allocations() {
+    fn ownership_projection_preserves_lifetime_numbers_and_pointer_mismatch() {
         use conformance::{End, OPERATIONS, Resources, Returned};
-        let first = Resources {
+        let resource = Resources {
             ticket: 0,
             buffer: 0,
             class: OPERATIONS[0].class,
-            body: 11,
-        };
-        let second = Resources {
-            ticket: 1,
-            buffer: 0,
-            class: OPERATIONS[1].class,
-            body: 22,
+            body: 0,
         };
         let mut raw = conformance::Trace {
-            returned: [
-                Returned {
-                    operation: OPERATIONS[0],
-                    expected: first,
-                    actual: first,
-                    end: End::Ended,
-                },
-                Returned {
-                    operation: OPERATIONS[1],
-                    expected: second,
-                    actual: second,
-                    end: End::Ended,
-                },
-            ],
-            contexts_dropped: 2,
-            before_teardown_dropped: 2,
-            publications: 2,
+            returned: [Returned {
+                operation: OPERATIONS[0],
+                expected: resource,
+                actual: resource,
+                end: End::Refused,
+            }],
+            contexts_dropped: 1,
+            before_teardown_dropped: 1,
+            publications: 0,
         };
-        let original = ownership_trace(&raw).unwrap();
-        raw.returned[0].actual.body = second.body;
-        let exchanged = ownership_trace(&raw).unwrap();
-        assert_eq!(exchanged.returned[0].unwrap().actual.body, Some(1));
-        assert_ne!(original, exchanged);
-        raw.returned[0].actual.body = 33;
-        let unknown = ownership_trace(&raw).unwrap();
-        assert_eq!(unknown.returned[0].unwrap().actual.body, None);
-        assert_ne!(original, unknown);
+        let original = ownership_trace(&raw, &[true]).unwrap();
+        assert_eq!(original.returned[0].unwrap().actual.body, Some(0));
+        assert_ne!(original, ownership_trace(&raw, &[false]).unwrap());
+        raw.returned[0].actual.body = 1;
+        assert_ne!(original, ownership_trace(&raw, &[true]).unwrap());
     }
 }

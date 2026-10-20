@@ -6,11 +6,68 @@ use oer_ieee80211_port::conformance::{self, Class, End, Operation, Resources, Sc
 use oer_ieee80211_wire::qos::WmmAccessCategory;
 
 static DROPS: AtomicU32 = AtomicU32::new(0);
-static BODIES: [[u8; 17]; 4] = [[0; 17], [1; 17], [2; 17], [3; 17]];
-pub(super) struct FixtureBody(&'static [u8]);
+use conformance::allocations::{Allocation, Ids};
+use core::cell::RefCell;
+static BODY_BYTES: StaticCell<[[u8; 17]; 4]> = StaticCell::new();
+static BODY_POOL: StaticCell<BodyPool> = StaticCell::new();
+pub(super) struct BodyPool {
+    ids: Ids<4>,
+    slots: RefCell<[Option<&'static mut [u8; 17]>; 4]>,
+}
+impl BodyPool {
+    pub(super) fn new() -> &'static Self {
+        let mut slots = BODY_BYTES.init([[0; 17]; 4]).iter_mut();
+        BODY_POOL.init(Self {
+            ids: Ids::new(),
+            slots: RefCell::new(core::array::from_fn(|_| slots.next())),
+        })
+    }
+    fn allocate(&'static self, value: u8, len: usize) -> Result<FixtureBody, &'static str> {
+        if len > 17 {
+            return Err("body allocation extent");
+        }
+        let allocation = Allocation::new(&self.ids).ok_or("body allocation slots exhausted")?;
+        let bytes = self
+            .slots
+            .borrow_mut()
+            .get_mut(usize::from(allocation.id()))
+            .and_then(Option::take)
+            .ok_or("body slot owner missing")?;
+        bytes.fill(value);
+        Ok(FixtureBody {
+            pool: self,
+            bytes: Some(bytes),
+            len,
+            allocation,
+        })
+    }
+}
+pub(super) struct FixtureBody {
+    pool: &'static BodyPool,
+    bytes: Option<&'static mut [u8; 17]>,
+    len: usize,
+    allocation: Allocation<&'static Ids<4>, 4>,
+}
+impl Drop for FixtureBody {
+    fn drop(&mut self) {
+        if let Some(bytes) = self.bytes.take() {
+            let old = self
+                .pool
+                .slots
+                .borrow_mut()
+                .get_mut(usize::from(self.allocation.id()))
+                .expect("allocation number names its static body slot")
+                .replace(bytes);
+            assert!(old.is_none(), "body allocation is returned once");
+        }
+    }
+}
 impl TxBody for FixtureBody {
     fn bytes(&self) -> &[u8] {
-        self.0
+        self.bytes
+            .as_deref()
+            .and_then(|bytes| bytes.get(..self.len))
+            .expect("live body owns its checked allocation extent")
     }
 }
 pub(super) enum Context {
@@ -18,6 +75,7 @@ pub(super) enum Context {
     Owner {
         operation: Operation,
         resources: Resources,
+        pointer: usize,
     },
 }
 impl Drop for Context {
@@ -163,7 +221,21 @@ macro_rules! pool {
 pool!(Small, 128, 0);
 pool!(Large, 256, 1);
 
-type Returns = heapless::Vec<conformance::Returned, 8>;
+struct Returns {
+    rows: heapless::Vec<conformance::Returned, 8>,
+    pointers: heapless::Vec<bool, 8>,
+}
+impl Returns {
+    fn new() -> Self {
+        Self {
+            rows: heapless::Vec::new(),
+            pointers: heapless::Vec::new(),
+        }
+    }
+    fn len(&self) -> usize {
+        self.rows.len()
+    }
+}
 fn observe<'id>(
     context: Context,
     ticket: radio::Slot<'id, Tickets, <Family as PhaseTypes<'id>>::TicketPath>,
@@ -175,6 +247,7 @@ fn observe<'id>(
     let Context::Owner {
         operation,
         resources,
+        pointer,
     } = context
     else {
         return Err("ownership context");
@@ -187,24 +260,29 @@ fn observe<'id>(
     if !body.bytes().iter().all(|byte| *byte == operation.id) {
         return Err("changed external body");
     }
-    seen.push(conformance::Returned {
-        operation,
-        expected: resources,
-        actual: Resources {
-            ticket: ticket.index(),
-            buffer: buffer.index() / 2,
-            class: class(buffer.index()),
-            body: body.0.as_ptr() as usize,
-        },
-        end,
-    })
-    .map_err(|_| "too many ownership returns")
+    seen.pointers
+        .push(pointer == body.bytes().as_ptr() as usize)
+        .map_err(|_| "too many pointer returns")?;
+    seen.rows
+        .push(conformance::Returned {
+            operation,
+            expected: resources,
+            actual: Resources {
+                ticket: ticket.index(),
+                buffer: buffer.index() / 2,
+                class: class(buffer.index()),
+                body: usize::from(body.allocation.id()),
+            },
+            end,
+        })
+        .map_err(|_| "too many ownership returns")
 }
 pub(super) async fn run<'p, 'id>(
     mut owner: Owner<'p, 'id, Backend, radio::Enabled>,
     resources: <Backend as PortBackend>::Resources<'id>,
     peer: Peer,
     scenario: Scenario,
+    body_pool: &'static BodyPool,
 ) -> Ended<'id, Backend, Result<Trace, &'static str>> {
     DROPS.store(0, Ordering::Relaxed);
     let mut access = resources.terminal_access;
@@ -224,14 +302,12 @@ pub(super) async fn run<'p, 'id>(
             }
             let index = buffer.index() / 2;
             let actual_class = class(buffer.index());
-            let body = FixtureBody(
-                BODIES
-                    .get(usize::from(operation.id))
-                    .ok_or("body allocation")?
-                    .get(..if scenario == Scenario::Refuse { 17 } else { 4 })
-                    .ok_or("body extent")?,
-            );
-            let pointer = body.0.as_ptr() as usize;
+            let body = body_pool.allocate(
+                operation.id,
+                if scenario == Scenario::Refuse { 17 } else { 4 },
+            )?;
+            let pointer = body.bytes().as_ptr() as usize;
+            let body_id = body.allocation.id();
             let rate = phase
                 .rate(PhyRate::Legacy(peer.rate))
                 .ok_or("ownership rate")?;
@@ -286,11 +362,12 @@ pub(super) async fn run<'p, 'id>(
             };
             let context = Context::Owner {
                 operation,
+                pointer,
                 resources: Resources {
                     ticket: ticket.index(),
                     buffer: index,
                     class: actual_class,
-                    body: pointer,
+                    body: usize::from(body_id),
                 },
             };
             match source {
@@ -352,7 +429,7 @@ pub(super) async fn run<'p, 'id>(
         Some(why) => Err(why),
         None => {
             let trace = conformance::Trace {
-                returned: seen,
+                returned: seen.rows,
                 contexts_dropped: DROPS.load(Ordering::Relaxed) as usize,
                 before_teardown_dropped: DROPS.load(Ordering::Relaxed) as usize,
                 publications: TRACE
@@ -360,7 +437,7 @@ pub(super) async fn run<'p, 'id>(
                     .filter(|record| record.decode::<port::trace::Publication>().is_some())
                     .count(),
             };
-            ownership_trace(&trace)
+            ownership_trace(&trace, &seen.pointers)
                 .map(Trace::Ownership)
                 .ok_or("ownership trace extent")
         }

@@ -88,6 +88,18 @@ fn model(case: Case, prepared: &Prepared, channel: u8) -> Result<Trace> {
     let basic = BasicRates::from_rate_elements(rates, &[]);
     let rate = management_rate(Band::Ghz2_4, Some(&basic)).ok_or("no basic management rate")?;
     let channel = Channel::ghz2_4(channel, ChannelWidth::Mhz20).map_err(|_| "invalid channel")?;
+    if let Case::Barrier(case) = case {
+        let raw = complete(oer_ieee80211_model::conformance::barrier(
+            case,
+            channel,
+            rate,
+            Rc::new(oer_time_virtual::VirtualClock::<8>::new()),
+        ))??;
+        let trace = barrier_trace(&raw).ok_or("unrepresentable model barrier")?;
+        oer_ieee80211_port::conformance::verify_barrier(case, raw)
+            .map_err(|why| format!("model barrier conformance violation: {why:?}"))?;
+        return Ok(Trace::Barrier(trace));
+    }
     if let Case::Ownership(scenario) = case {
         let raw = complete(oer_ieee80211_model::conformance::ownership(
             scenario,
@@ -95,8 +107,9 @@ fn model(case: Case, prepared: &Prepared, channel: u8) -> Result<Trace> {
             rate,
             Rc::new(oer_time_virtual::VirtualClock::<8>::new()),
         ))??;
-        let trace = ownership_trace(&raw).ok_or("unrepresentable model ownership")?;
-        oer_ieee80211_port::conformance::verify(scenario, raw)
+        let trace = ownership_trace(&raw.owners, &raw.body_pointers_match)
+            .ok_or("unrepresentable model ownership")?;
+        oer_ieee80211_port::conformance::verify(scenario, raw.owners)
             .map_err(|why| format!("model ownership conformance violation: {why:?}"))?;
         return Ok(Trace::Ownership(trace));
     }
@@ -169,6 +182,29 @@ mod tests {
             };
             assert_eq!(trace.contexts_dropped, 4);
             assert_eq!(trace.returned.iter().flatten().count(), 4);
+            for row in trace.returned.iter().flatten() {
+                assert!(row.body_pointer_matches);
+                if scenario == oer_ieee80211_port::conformance::Scenario::Refuse {
+                    assert_eq!(row.expected.body, Some(0));
+                    assert_eq!(row.actual.body, Some(0));
+                }
+            }
+        }
+    }
+    #[test]
+    fn every_physical_model_barrier_passes_the_shared_contract() {
+        let prepared = Prepared {
+            ampdu: false,
+            basic_rates: [0x8c, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            basic_rates_len: 1,
+        };
+        for case in oer_ieee80211_port::conformance::BarrierCase::ALL {
+            if case.execution() == Execution::Hardware {
+                assert!(matches!(
+                    model(Case::Barrier(case), &prepared, 6).unwrap(),
+                    Trace::Barrier(_)
+                ));
+            }
         }
     }
 }

@@ -20,3 +20,34 @@ impl Event for Publication {
         })
     }
 }
+
+/// A terminal successfully entered the real port event queue.
+pub struct TerminalPosted;
+impl Event for TerminalPosted {
+    const KIND: Kind = Kind::new(Domain::Ieee80211, 102);
+    const CHANNEL: Channel = Publication::CHANNEL;
+    fn encode(&self) -> [u32; 2] {
+        [0, 0]
+    }
+    fn decode(words: [u32; 2]) -> Option<Self> {
+        (words == [0, 0]).then_some(Self)
+    }
+}
+/// Snapshot of the encoded DMA input immediately before reservation.
+pub const ENCODED_MPDU: Kind = Kind::new(Domain::Ieee80211, 101);
+#[cfg(oer_trace)]
+#[inline(always)]
+pub(crate) fn encoded_mpdu(bytes: &[u8]) {
+    if oer_trace::enabled(Publication::CHANNEL) {
+        oer_trace::capture(ENCODED_MPDU, |snapshot| {
+            snapshot.push(bytes.len() as u32);
+            for chunk in bytes.chunks(4) {
+                let mut word = [0; 4];
+                for (out, byte) in word.iter_mut().zip(chunk) {
+                    *out = *byte;
+                }
+                snapshot.push(u32::from_le_bytes(word));
+            }
+        });
+    }
+}
