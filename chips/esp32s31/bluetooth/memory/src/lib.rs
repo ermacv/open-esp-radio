@@ -53,6 +53,7 @@ pub mod scheduler;
 mod scheduler_context;
 mod scheduler_item;
 mod scheduler_pool;
+mod shared_layout;
 mod sram_link;
 
 pub use coexistence::{

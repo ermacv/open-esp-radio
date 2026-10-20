@@ -8,23 +8,24 @@
 #![forbid(unsafe_code)]
 
 /// Bytes reserved for one controller scheduler context.
-pub const BLUETOOTH_SCHEDULER_CONTEXT_BYTES: usize = 0x48;
+pub const BLUETOOTH_SCHEDULER_CONTEXT_BYTES: usize =
+    oer_esp32s31_hal::layouts::BleSchedulerContext::SIZE;
 
 /// Opaque, zero-based CPU-owned scheduler context allocation.
 #[repr(C, align(4))]
 pub struct SchedulerContextStorage {
-    words: [u32; BLUETOOTH_SCHEDULER_CONTEXT_BYTES / 4],
+    layout: oer_esp32s31_hal::layouts::BleSchedulerContext,
 }
 
 impl SchedulerContextStorage {
     pub(crate) const fn new() -> Self {
         Self {
-            words: [0; BLUETOOTH_SCHEDULER_CONTEXT_BYTES / 4],
+            layout: oer_esp32s31_hal::layouts::BleSchedulerContext::zeroed(),
         }
     }
 
     pub(crate) fn clear(&mut self) {
-        self.words.fill(0);
+        crate::shared_layout::clear_scheduler_context(&self.layout);
     }
 }
 
