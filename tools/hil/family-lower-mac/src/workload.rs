@@ -88,6 +88,17 @@ fn model(case: Case, prepared: &Prepared, channel: u8) -> Result<Trace> {
     let basic = BasicRates::from_rate_elements(rates, &[]);
     let rate = management_rate(Band::Ghz2_4, Some(&basic)).ok_or("no basic management rate")?;
     let channel = Channel::ghz2_4(channel, ChannelWidth::Mhz20).map_err(|_| "invalid channel")?;
+    if let Case::Configure(case) = case {
+        let raw = complete(oer_ieee80211_model::conformance::configure(
+            case,
+            channel,
+            Rc::new(oer_time_virtual::VirtualClock::<8>::new()),
+        ))??;
+        let trace = configure_trace(&raw).ok_or("unrepresentable model configuration")?;
+        oer_ieee80211_port::conformance::interface_commands::verify(raw)
+            .map_err(|why| format!("model configuration conformance violation: {why:?}"))?;
+        return Ok(Trace::Configure(trace));
+    }
     if let Case::Barrier(case) = case {
         let raw = complete(oer_ieee80211_model::conformance::barrier(
             case,
@@ -139,6 +150,24 @@ fn complete<F: Future>(future: F) -> Result<F::Output> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn configuration_contexts_return_in_fifo_order_across_every_disable_point() {
+        let prepared = Prepared {
+            ampdu: false,
+            basic_rates: [0x8c; 16],
+            basic_rates_len: 1,
+        };
+        for case in oer_ieee80211_port::conformance::interface_commands::Case::all() {
+            let Trace::Configure(trace) =
+                model(Case::Configure(case), &prepared, 6).expect("configuration trace")
+            else {
+                panic!("configuration")
+            };
+            assert_eq!(trace.returned.iter().flatten().count(), 4);
+            assert_eq!(trace.premature_drops, 0);
+            assert!(!trace.extra_terminal);
+        }
+    }
     #[test]
     fn actual_model_outcomes_are_distinct_and_keep_owner_identity() {
         let prepared = Prepared {

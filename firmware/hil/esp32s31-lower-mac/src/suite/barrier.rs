@@ -25,7 +25,7 @@ pub(super) async fn run<'p, 'id>(
     };
     Ended::uninstall(owner, (), result)
 }
-async fn progress() {
+pub(super) async fn progress() {
     for _ in 0..6 {
         let mut yielded = false;
         core::future::poll_fn(|cx| {

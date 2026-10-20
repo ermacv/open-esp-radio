@@ -11,6 +11,8 @@ mod ownership;
 pub use ownership::{OwnershipTrace, ownership};
 mod barrier;
 pub use barrier::barrier;
+mod configure;
+pub use configure::configure;
 
 /// A trace whose owners and terminals were read from ModelBackend.
 pub type OutcomeTrace = outcomes::Trace<ModelAck, ModelBlockAckEvidence, ModelAirDenied>;

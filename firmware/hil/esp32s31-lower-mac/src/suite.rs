@@ -64,6 +64,7 @@ use sha2::{Digest as _, Sha256};
 use static_cell::StaticCell;
 
 mod barrier;
+mod configure;
 mod ownership;
 use ownership::{Context, FixtureBody};
 
@@ -117,7 +118,7 @@ impl Composition for Fixture {
     type Entropy = Entropy;
     type Body = FixtureBody;
     type Context<'id> = Context;
-    type ConfigureContext<'id> = u8;
+    type ConfigureContext<'id> = configure::Witness;
 }
 struct Coex;
 impl RadioCoexPriorities for Coex {
@@ -425,7 +426,10 @@ impl PortBody<Backend> for Discover {
         let output = {
             let mut phase = owner.phase();
             phase.station().configure(
-                resources.station_commands.configure.with_context(0),
+                resources
+                    .station_commands
+                    .configure
+                    .with_context(configure::Witness::Discovery),
                 StationReceive::OtherBssManagement,
             );
             match select(
@@ -522,6 +526,9 @@ impl PortBody<Backend> for Exchange {
         }
         if let catalog::Case::Barrier(case) = self.case {
             return barrier::run(owner, resources, self.peer, case).await;
+        }
+        if let catalog::Case::Configure(case) = self.case {
+            return configure::run(owner, resources, case).await;
         }
         let output = match self.case {
             catalog::Case::Outcome(case) => {

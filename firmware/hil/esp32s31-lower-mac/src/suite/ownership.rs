@@ -5,7 +5,7 @@ use oer_hil_protocol::lower_mac::{Trace, ownership_trace};
 use oer_ieee80211_port::conformance::{self, Class, End, Operation, Resources, Scenario};
 use oer_ieee80211_wire::qos::WmmAccessCategory;
 
-static DROPS: AtomicU32 = AtomicU32::new(0);
+pub(super) static DROPS: AtomicU32 = AtomicU32::new(0);
 use conformance::allocations::{Allocation, Ids};
 use core::cell::RefCell;
 static BODY_BYTES: StaticCell<[[u8; 17]; 4]> = StaticCell::new();

@@ -64,6 +64,44 @@ pub enum Trace {
     Outcome(OutcomeTrace),
     Ownership(OwnershipTrace),
     Barrier(BarrierTrace),
+    Configure(ConfigureTrace),
+}
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct ConfigureTrace {
+    pub admitted: [[u8; 2]; 2],
+    pub returned: [Option<[u8; 2]>; 8],
+    pub premature_drops: u32,
+    pub extra_terminal: bool,
+}
+/// Normalize opaque allocation coordinates while preserving actual return order.
+pub fn configure_trace<R: AsRef<[conformance::interface_commands::Identity]>>(
+    trace: &conformance::interface_commands::Trace<R>,
+) -> Option<ConfigureTrace> {
+    use conformance::interface_commands::Identity;
+    let identity = |row: Identity| -> Option<[u8; 2]> {
+        Some([
+            match row.role {
+                VifRole::Station => 0,
+                VifRole::AccessPoint => 1,
+            },
+            trace
+                .admitted
+                .iter()
+                .position(|owner| owner.context == row.context)?
+                .try_into()
+                .ok()?,
+        ])
+    };
+    let mut returned = [None; 8];
+    for (index, row) in trace.returned.as_ref().iter().enumerate() {
+        *returned.get_mut(index)? = Some(identity(*row)?);
+    }
+    Some(ConfigureTrace {
+        admitted: [identity(trace.admitted[0])?, identity(trace.admitted[1])?],
+        returned,
+        premature_drops: trace.premature_drops.try_into().ok()?,
+        extra_terminal: trace.extra_terminal,
+    })
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub struct HeldSnapshot {

@@ -42,7 +42,7 @@ bluetooth/secure-gatt/restart 9893ab9bb04be571 endpoint
 bluetooth/secure-gatt/state 11fc2307ae9cffe5 topic
 bluetooth/trace d89efc9fa6f1b45c property
 lower-mac/case/run 7ce548b6cbb39f2d endpoint
-lower-mac/case/trace 6e4b29f697176f29 topic
+lower-mac/case/trace 487c9710534870cb topic
 lower-mac/prepare 335dfabb22e2b8f9 endpoint
 lower-mac/prepared 52e0cc98b6729aeb topic
 network/bidirectional b6817e1d148a8246 property
