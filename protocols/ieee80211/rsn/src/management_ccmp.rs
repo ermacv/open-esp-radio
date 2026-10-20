@@ -40,7 +40,7 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 #[derive(Zeroize, ZeroizeOnDrop)]
 pub struct ManagementCcmpReceiver {
     temporal_key: Ccmp128Key,
-    last_packet_number: Option<u64>,
+    last_packet_number: u64,
 }
 
 impl ManagementCcmpReceiver {
@@ -49,7 +49,7 @@ impl ManagementCcmpReceiver {
     pub fn new(temporal_key: &[u8; 16]) -> Self {
         Self {
             temporal_key: Ccmp128Key::new(temporal_key),
-            last_packet_number: None,
+            last_packet_number: oer_ieee80211_wire::ccmp::CcmpPacketNumber::ZERO.value(),
         }
     }
 
@@ -60,15 +60,12 @@ impl ManagementCcmpReceiver {
     pub fn open<'a>(&mut self, frame: &'a mut [u8]) -> Result<&'a [u8], ManagementCcmpError> {
         let frame = ManagementCcmpFrame::parse(frame)?;
         let packet_number = frame.packet_number();
-        if self
-            .last_packet_number
-            .is_some_and(|last| packet_number <= last)
-        {
+        if packet_number <= self.last_packet_number {
             return Err(ManagementCcmpError::Replay);
         }
 
         let body = frame.open(self.temporal_key.as_bytes())?;
-        self.last_packet_number = Some(packet_number);
+        self.last_packet_number = packet_number;
         Ok(body)
     }
 }

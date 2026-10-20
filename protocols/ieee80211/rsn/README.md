@@ -50,8 +50,9 @@ management nonce flag, independently of SPP. The model applies this transform
 to transmitted wire bytes and verifies incoming encrypted fixtures; a failed
 MIC erases the tentative plaintext before returning the error. Packet-number
 allocation and replay admission remain with their separate installed owners.
-`ManagementCcmpReceiver` adds its management PN frontier around that same
-transform, so a rejected MIC erases the tentative body on the station's PMF
+`ManagementCcmpReceiver` starts its management PN frontier at zero, rejects
+PN zero and admits only KeyID zero with an individually addressed A1 around
+that same transform, so a rejected MIC erases the tentative body on the station's PMF
 path too. The CCM authenticator accepts only the closed `Aad` type built from
 a decoded MAC header: its four layouts occupy 22, 24, 28 or 30 bytes. It
 cannot accept an arbitrary slice whose suffix would escape authentication.
@@ -111,9 +112,7 @@ not enable the policy.
   always derives the keyseed with a zero salt; `rejected_groups` is only
   parsed. H2E with a rejected group does not interoperate.
 - **Management CCMP receiver** (`management_ccmp.rs::ManagementCcmpReceiver`):
-  starts at no PN, so PN 0 is accepted; the KeyID is not checked to be 0;
-  A1 is not checked to be individually addressed. `new` copies the TK from
-  a raw `&[u8; 16]`.
+  `new` copies the TK from a raw `&[u8; 16]`.
 - **Raw keys in the API:** `ccmp_mpdu.rs::CcmpAssociation::seal`/`open`
   take `&[u8; 16]` instead of `&Ccmp128Key`.
 - **Self-generated CCMP fixtures only** (`ccmp_mpdu/test_vector.rs`): no
