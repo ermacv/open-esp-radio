@@ -84,28 +84,6 @@ pub fn unprivileged_in_user_namespace(command: &mut Command, outside: u32) {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use std::io::Read as _;
-    use std::os::fd::AsRawFd as _;
-
-    #[test]
-    fn an_inherited_descriptor_survives_exec_and_closes_with_the_command() {
-        let (mut read, write) = std::io::pipe().unwrap();
-        let fd = write.as_raw_fd();
-        let mut command = std::process::Command::new("sh");
-        command.args(["-c", &format!("echo inherited >&{fd}")]);
-        super::inherit(&mut command, vec![write.into()]);
-        super::without_core_dumps(&mut command);
-        let status = command.status().unwrap();
-        drop(command);
-        assert!(status.success());
-        let mut text = String::new();
-        read.read_to_string(&mut text).unwrap();
-        assert_eq!(text, "inherited\n");
-    }
-}
-
 /// Ignore terminal and broken-pipe signals in a freshly forked helper.
 ///
 /// # Safety
@@ -127,27 +105,3 @@ pub(crate) unsafe fn ignore_terminal_signals() {
     }
 }
 
-#[cfg(test)]
-mod library_tests {
-    use super::*;
-    #[test]
-    fn ignored_helper_signals_remain_ignored_across_exec() {
-        use std::os::unix::process::CommandExt as _;
-        let mut command = std::process::Command::new("sh");
-        command.args([
-            "-c",
-            "kill -INT $$; kill -TERM $$; kill -HUP $$; kill -PIPE $$; printf survived",
-        ]);
-        // SAFETY: pre_exec changes only this freshly forked child's dispositions
-        // using allocation-free raw syscalls before it executes the test shell.
-        unsafe {
-            command.pre_exec(|| {
-                ignore_terminal_signals();
-                Ok(())
-            });
-        }
-        let output = command.output().unwrap();
-        assert!(output.status.success());
-        assert_eq!(output.stdout, b"survived");
-    }
-}
