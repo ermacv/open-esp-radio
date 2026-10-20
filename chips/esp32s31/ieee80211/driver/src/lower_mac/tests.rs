@@ -42,6 +42,7 @@ use crate::tx::WifiTxProgress;
 use oer_ieee80211_port::TSF_DRIFT_PPM;
 
 mod msdu_age;
+mod port;
 
 const STATION: [u8; 6] = [0x02, 0x03, 0x04, 0x05, 0x06, 0x07];
 const ACCESS_POINT: [u8; 6] = [0x02, 0x11, 0x12, 0x13, 0x14, 0x15];

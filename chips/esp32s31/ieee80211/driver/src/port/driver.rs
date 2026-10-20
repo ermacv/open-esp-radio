@@ -1,0 +1,1047 @@
+use super::*;
+use super::{
+    keys::{GroupCommand, Installation, Installed, KeyIdentity, Removal},
+    lifecycle::CoreOwner,
+};
+use oer_ieee80211_wire::qos::WmmAccessCategory;
+
+pub(super) struct Pending<'id, D: Device<B>, const B: usize> {
+    pub operation: Single<'id, D, B>,
+    pub plan: RetryPlan<PhyRate>,
+    pub category: WmmAccessCategory,
+    pub protection: Protection,
+    pub power: TxPower,
+    pub coex: TxOperation,
+    pub stage: usize,
+    pub stage_tries: u8,
+    pub transmissions: u16,
+    pub publications: u16,
+    pub air_rate: Option<PhyRate>,
+}
+impl<D: Device<B>, const B: usize> Pending<'_, D, B> {
+    fn role(&self) -> VifRole {
+        self.operation.payload().role
+    }
+    fn key(&self) -> Option<KeyIdentity> {
+        self.operation.payload().key
+    }
+    fn air(&self) -> Option<Air> {
+        Some(Air {
+            transmissions: core::num::NonZeroU16::new(self.transmissions)?,
+            rate: self.air_rate?,
+        })
+    }
+}
+pub(super) enum Command<'id, D: Device<B>, const B: usize> {
+    Submit(Pending<'id, D, B>),
+    Configure {
+        permission: Configured<'id, Types<D, B>>,
+        config: CoreVif,
+    },
+    CloseGate(GateOpen<'id, Part<1>>),
+    OpenGate,
+    Install {
+        identity: KeyIdentity,
+        installation: Installation<'id>,
+        material: Ccmp128Key,
+    },
+    Remove {
+        identity: KeyIdentity,
+        removal: Removal<'id>,
+    },
+    Group {
+        at: Instant,
+        command: GroupCommand<'id>,
+    },
+}
+struct Completion<'id, const B: usize> {
+    queue: FreeQueue<'id, CorePath>,
+    ticket: TxTicket<'id, CorePath>,
+    slot: Pin<&'static mut TxSlot<B>>,
+    end: PublicationEnd,
+    rate: PhyRate,
+}
+pub(super) struct Sink<'id, const B: usize> {
+    completed: heapless::Vec<Completion<'id, B>, 4>,
+    removed: heapless::Vec<KeyRemoved<'id, CorePath>, 20>,
+    tbtt: Option<TbttEvent>,
+}
+impl<const B: usize> Default for Sink<'_, B> {
+    fn default() -> Self {
+        Self {
+            completed: heapless::Vec::new(),
+            removed: heapless::Vec::new(),
+            tbtt: None,
+        }
+    }
+}
+impl<'id, const B: usize> LowerMacSink<'id, 'static, B, CorePath> for Sink<'id, B> {
+    fn tx_completed(
+        &mut self,
+        queue: FreeQueue<'id, CorePath>,
+        ticket: TxTicket<'id, CorePath>,
+        slot: Pin<&'static mut TxSlot<B>>,
+        end: PublicationEnd,
+        rate: PhyRate,
+    ) {
+        if self
+            .completed
+            .push(Completion {
+                queue,
+                ticket,
+                slot,
+                end,
+                rate,
+            })
+            .is_err()
+        {
+            panic!("one completion per hardware queue per service")
+        }
+    }
+    fn ampdu_completed(
+        &mut self,
+        _: FreeQueue<'id, CorePath>,
+        _: TxTicket<'id, CorePath>,
+        _: PublicationEnd,
+    ) {
+        unreachable!("ordinary port never publishes an aggregate")
+    }
+    fn key_removed(&mut self, removed: KeyRemoved<'id, CorePath>) {
+        if self.removed.push(removed).is_err() {
+            panic!("one removal per installed hardware key")
+        }
+    }
+    fn disabled(&mut self) {}
+    fn tbtt(&mut self, event: TbttEvent) {
+        self.tbtt = Some(event);
+    }
+}
+
+pub(super) struct Driver<'id, D: Device<B>, const B: usize> {
+    core: CoreOwner<'id, D, B>,
+    tickets: [Option<TxTicket<'id, CorePath>>; TX_TICKETS],
+    free: [Option<FreeQueue<'id, CorePath>>; 4],
+    queues: [heapless::Deque<Pending<'id, D, B>, TX_TICKETS>; 4],
+    running: [Option<Pending<'id, D, B>>; 4],
+    pending_command: Option<Command<'id, D, B>>,
+    configuring: Option<Configured<'id, Types<D, B>>>,
+    closing: Option<GateOpen<'id, Part<1>>>,
+    closed: bool,
+    keys: [Option<(KeyIdentity, Installed<'id>)>; 20],
+    applied_ba: [Option<RxBlockAckValues>; 8],
+    transition: Option<Instant>,
+    clock_deadline: Instant,
+    pub(super) poison: radio::PoisonState<Fault>,
+}
+impl<'id, D: Device<B>, const B: usize> Driver<'id, D, B> {
+    pub(super) fn into_transmitter(
+        self,
+    ) -> OrdinaryTxIdleOwner<'static, D::Profile, D::Power, D::Entropy, D::Timer, B> {
+        self.core.into_transmitter()
+    }
+    pub(super) fn new(
+        core: DisabledCore<Core<'id, D, B>>,
+        tickets: [TxTicket<'id, CorePath>; TX_TICKETS],
+        queues: [FreeQueue<'id, CorePath>; 4],
+        now: Instant,
+    ) -> Self {
+        Self {
+            core: CoreOwner::new(core),
+            tickets: tickets.map(Some),
+            free: queues.map(Some),
+            queues: core::array::from_fn(|_| heapless::Deque::new()),
+            running: core::array::from_fn(|_| None),
+            pending_command: None,
+            configuring: None,
+            closing: None,
+            closed: false,
+            keys: core::array::from_fn(|_| None),
+            applied_ba: [None; 8],
+            transition: None,
+            clock_deadline: now.saturating_add(Duration::from_secs(60)),
+            poison: radio::PoisonState::new(),
+        }
+    }
+    pub(super) fn deadline(&mut self, held: &Held<'id, D, B>) -> Instant {
+        let mut deadline = self
+            .core
+            .deadline()
+            .unwrap_or(self.clock_deadline)
+            .min(self.clock_deadline);
+        if let Some(device) = held.storage.device.borrow().next_deadline() {
+            deadline = deadline.min(device);
+        }
+        if let Some(start) = self.transition {
+            deadline = deadline.min(start.saturating_add(COMMAND_BOUND));
+        }
+        if let Some(Command::Group { at, .. }) = self.pending_command.as_ref() {
+            deadline = deadline.min(at.saturating_add(COMMAND_BOUND));
+        }
+        if !self.core.configuring() {
+            for pending in self.queues.iter().flat_map(|q| q.iter()) {
+                if let Some((_, at)) = pending.operation.payload().buffer.admission {
+                    let lifetime = held.edca.get()[vif(pending.role())]
+                        .access_category(pending.category)
+                        .msdu_lifetime;
+                    deadline = deadline.min(at.saturating_add(lifetime));
+                }
+            }
+        }
+        deadline
+    }
+    fn finish(
+        &mut self,
+        held: &Held<'id, D, B>,
+        pending: Pending<'id, D, B>,
+        outcome: SingleOutcome<Ack, Infallible>,
+    ) {
+        if pending.publications != 0 {
+            self.core.reset_contention(pending.role(), pending.category);
+        }
+        if let TxOutcome::Expired { msdus } = outcome {
+            held.storage.expired.set(
+                held.storage
+                    .expired
+                    .get()
+                    .saturating_add(msdus.count_ones()),
+            );
+        }
+        held.terminal(LowerMacTerminal::TxCompleted(TxCompleted::Single(
+            pending.operation.complete(outcome),
+        )));
+    }
+    fn withdraw(
+        &mut self,
+        held: &Held<'id, D, B>,
+        cause: WithdrawCause,
+        mut matches: impl FnMut(&Pending<'id, D, B>) -> bool,
+    ) {
+        for index in 0..4 {
+            let count = self.queues[index].len();
+            for _ in 0..count {
+                let pending = self.queues[index]
+                    .pop_front()
+                    .expect("snapshot count bounds queue");
+                if matches(&pending) {
+                    self.finish(held, pending, TxOutcome::Withdrawn(cause));
+                } else if self.queues[index].push_back(pending).is_err() {
+                    unreachable!("removing one queue owner leaves a place")
+                }
+            }
+        }
+    }
+    fn expired(held: &Held<'id, D, B>, pending: &Pending<'id, D, B>, now: Instant) -> bool {
+        pending
+            .operation
+            .payload()
+            .buffer
+            .admission
+            .is_some_and(|(_, at)| {
+                now.saturating_duration_since(at)
+                    >= held.edca.get()[vif(pending.role())]
+                        .access_category(pending.category)
+                        .msdu_lifetime
+            })
+    }
+    fn collect(
+        &mut self,
+        held: &Held<'id, D, B>,
+        mut sink: Sink<'id, B>,
+        stopping: bool,
+    ) -> Result<(), Fault> {
+        for completion in sink.completed.drain(..) {
+            let index = queue(completion.queue.category());
+            let Some(mut pending) = self.running[index].take() else {
+                return Err(Fault::Capacity);
+            };
+            self.free[index] = Some(completion.queue);
+            let ticket_index = completion.ticket.index();
+            self.tickets[ticket_index] = Some(completion.ticket);
+            let slot = completion.slot;
+            let TxSlotAccess::Free(memory) = slot.access() else {
+                return Err(Fault::Capacity);
+            };
+            pending.operation.execute().mpdu.buffer.memory = Some(memory);
+            let sent = matches!(
+                completion.end,
+                PublicationEnd::Completed {
+                    status: TxStatus::Success | TxStatus::AckTimeout,
+                    ..
+                }
+            );
+            if sent {
+                pending.transmissions = pending
+                    .transmissions
+                    .checked_add(1)
+                    .ok_or(Fault::Capacity)?;
+                pending.air_rate = Some(completion.rate);
+            }
+            let outcome = match completion.end {
+                PublicationEnd::Expired { msdus } => Some(TxOutcome::Expired { msdus }),
+                PublicationEnd::Withdrawn => Some(TxOutcome::Withdrawn(WithdrawCause::Disabled)),
+                PublicationEnd::TimedOut => Some(TxOutcome::Indeterminate(
+                    IndeterminateCause::HardwareTimeout,
+                )),
+                PublicationEnd::Completed {
+                    status: TxStatus::Success,
+                    ack_snr_db,
+                    block_ack,
+                } => {
+                    let response = match pending.operation.payload().layout.kind() {
+                        MpduKind::Group | MpduKind::IndividualNoAck => SingleResponse::Unsolicited,
+                        MpduKind::Individual => SingleResponse::Ack(Ack { snr_db: ack_snr_db }),
+                        MpduKind::BlockAckRequest => SingleResponse::BlockAck {
+                            report: block_ack.ok_or(Fault::Capacity)?,
+                            ack: Ack { snr_db: ack_snr_db },
+                        },
+                    };
+                    Some(TxOutcome::Ended(SingleEnd::Delivered {
+                        air: pending.air().ok_or(Fault::Capacity)?,
+                        response,
+                    }))
+                }
+                end => {
+                    pending.stage_tries =
+                        pending.stage_tries.checked_add(1).ok_or(Fault::Capacity)?;
+                    let stage = pending
+                        .plan
+                        .stages()
+                        .nth(pending.stage)
+                        .ok_or(Fault::Capacity)?;
+                    if pending.stage_tries >= stage.transmissions.get() {
+                        pending.stage += 1;
+                        pending.stage_tries = 0;
+                    }
+                    if pending.plan.stages().nth(pending.stage).is_none() {
+                        Some(TxOutcome::Ended(match end {
+                            PublicationEnd::Collision
+                            | PublicationEnd::Completed {
+                                status: TxStatus::Collision,
+                                ..
+                            } => SingleEnd::ContentionLimit(pending.air()),
+                            PublicationEnd::Completed {
+                                status: TxStatus::CtsTimeout,
+                                ..
+                            } => SingleEnd::CtsTimeout(pending.air()),
+                            _ => SingleEnd::AckTimeout(pending.air().ok_or(Fault::Capacity)?),
+                        }))
+                    } else if stopping {
+                        Some(TxOutcome::Withdrawn(WithdrawCause::Disabled))
+                    } else if self.closing.is_some() || self.closed {
+                        Some(TxOutcome::Withdrawn(WithdrawCause::GateClosed))
+                    } else {
+                        None
+                    }
+                }
+            };
+            if let Some(outcome) = outcome {
+                self.finish(held, pending, outcome);
+            } else if self.queues[index].push_front(pending).is_err() {
+                return Err(Fault::Capacity);
+            }
+        }
+        if let Some(tbtt) = sink.tbtt {
+            if held.events.push(LowerMacEvent::Tbtt(tbtt)).is_err() {
+                held.loss.set(true);
+            }
+            held.storage.body.wake();
+        }
+        if !sink.removed.is_empty() {
+            return Err(Fault::Capacity);
+        }
+        Ok(())
+    }
+    fn receive(
+        &mut self,
+        held: &Held<'id, D, B>,
+        device: &mut D,
+        unit: D::Receive,
+    ) -> Result<(), Fault> {
+        if held.rx_out.get() >= TX_TICKETS {
+            core::mem::forget(unit);
+            return Err(Fault::Capacity);
+        }
+        let accepted = {
+            match unit.normalized() {
+                Ok(frame) => self
+                    .core
+                    .received(device.hardware(), &frame)
+                    .map(|(bytes, meta)| {
+                        (
+                            bytes
+                                .as_ptr()
+                                .addr()
+                                .checked_sub(unit.bytes().as_ptr().addr()),
+                            bytes.len(),
+                            meta,
+                        )
+                    }),
+                Err(_) => None,
+            }
+        };
+        if let Some((Some(start), len, meta)) = accepted {
+            let end = start
+                .checked_add(len)
+                .filter(|end| *end <= unit.bytes().len())
+                .ok_or(Fault::Capacity)?;
+            held.rx_out.set(held.rx_out.get() + 1);
+            if let Err(event) = held.events.push(LowerMacEvent::Received {
+                frame: ReceiveBuffer {
+                    unit: Some(unit),
+                    range: start..end,
+                    poison: &held.storage.poisoned,
+                    driver: &held.storage.driver,
+                },
+                meta,
+            }) {
+                core::mem::forget(event);
+                return Err(Fault::Capacity);
+            }
+            held.storage.body.wake();
+        } else {
+            device.recycle(unit);
+        }
+        Ok(())
+    }
+    pub(super) fn poll(
+        &mut self,
+        cx: &mut Context<'_>,
+        held: &Held<'id, D, B>,
+        device: &mut D,
+    ) -> Result<(), Fault> {
+        while let Some(mut frame) = held.recycled.pop() {
+            device.recycle(
+                frame
+                    .unit
+                    .take()
+                    .expect("recycle consumes the original RX unit"),
+            );
+            held.rx_out
+                .set(held.rx_out.get().checked_sub(1).ok_or(Fault::Capacity)?);
+        }
+        let now = device.timer().now();
+        if now >= self.clock_deadline {
+            device.radio_now().map_err(|_| Fault::Clock)?;
+            self.clock_deadline = now.saturating_add(Duration::from_secs(60));
+        }
+        if self
+            .transition
+            .is_some_and(|start| now.saturating_duration_since(start) >= COMMAND_BOUND)
+        {
+            return Err(Fault::Deadline);
+        }
+        if held.want_enabled.get() && !held.enabled.get() {
+            self.transition.get_or_insert(now);
+            let channel = held.channel.get().wifi_channel().ok_or(Fault::Capacity)?;
+            match device.poll_start(cx, channel) {
+                Poll::Pending => return Ok(()),
+                Poll::Ready(Err(cause)) => return Err(cause),
+                Poll::Ready(Ok(())) => {
+                    if let Some(power) = device.take_power_profile() {
+                        self.core.core().replace_power_profile(power);
+                    }
+                    self.core.tune(channel);
+                    held.enabled.set(true);
+                    self.transition = None;
+                    held.storage.body.wake();
+                }
+            }
+        }
+        if !held.enabled.get() {
+            return Ok(());
+        }
+        let stopping = !held.want_enabled.get();
+        if stopping {
+            self.transition.get_or_insert(now);
+        }
+        let mut sink = Sink::default();
+        self.core
+            .service(device.hardware(), WifiTxWake::Deadline, &mut sink)?;
+        self.collect(held, sink, stopping)?;
+        for _ in 0..4 {
+            match device.poll_receive(TX_TICKETS - held.rx_out.get(), cx) {
+                Poll::Ready(Ok(DeviceEvent::Tx(wake))) => {
+                    let mut sink = Sink::default();
+                    self.core.service(device.hardware(), wake, &mut sink)?;
+                    self.collect(held, sink, stopping)?;
+                    cx.waker().wake_by_ref();
+                }
+                Poll::Ready(Ok(DeviceEvent::Receive(unit))) => {
+                    self.receive(held, device, unit)?;
+                    cx.waker().wake_by_ref();
+                }
+                Poll::Ready(Ok(DeviceEvent::Tbtt)) => {
+                    let mut sink = Sink::default();
+                    if !self.core.configuring() {
+                        self.core.core().station_tbtt(device.hardware(), &mut sink);
+                    }
+                    self.collect(held, sink, stopping)?;
+                }
+                Poll::Ready(Err(cause)) => return Err(cause),
+                Poll::Pending => break,
+            }
+        }
+        if self.core.configuring() {
+            let mut sink = Sink::default();
+            let done = self
+                .core
+                .advance_configuration(device.hardware(), &mut sink);
+            self.collect(held, sink, stopping)?;
+            if done {
+                held.terminal(LowerMacTerminal::Configured(
+                    self.configuring
+                        .take()
+                        .expect("configuration retains its permission"),
+                ));
+            } else {
+                return Ok(());
+            }
+        }
+        if held.dirty_edca.replace(false) {
+            for role in [VifRole::Station, VifRole::AccessPoint] {
+                self.core
+                    .core()
+                    .set_checked_edca(
+                        role,
+                        SupportedEdca::<Esp32s31Caps<B>>::new(held.edca.get()[vif(role)])
+                            .ok_or(Fault::Capacity)?,
+                    )
+                    .map_err(|_| Fault::Capacity)?;
+            }
+        }
+        if let Some(color) = held.color.take() {
+            self.core.core().set_checked_he_bss_color(color);
+        }
+        if held.dirty_ba.replace(false) {
+            let desired = *held.block_acks.borrow();
+            for (old, wanted) in self.applied_ba.iter_mut().zip(desired) {
+                if *old == wanted {
+                    continue;
+                }
+                if let Some(old) = old.take() {
+                    self.core.core().end_checked_rx_block_ack(
+                        device.hardware(),
+                        old.role,
+                        old.peer,
+                        old.tid,
+                    )?;
+                }
+                if let Some(agreement) = wanted {
+                    self.core
+                        .core()
+                        .start_checked_rx_block_ack(device.hardware(), agreement)?;
+                }
+                *old = wanted;
+            }
+        }
+        // Every command is bounded by the affine capacities; a barrier retains
+        // its FIFO position and prevents later publication.
+        for _ in 0..COMMANDS {
+            let Some(command) = self.pending_command.take().or_else(|| held.commands.pop()) else {
+                break;
+            };
+            match command {
+                Command::Submit(pending) => {
+                    if stopping {
+                        self.finish(held, pending, TxOutcome::Withdrawn(WithdrawCause::Disabled));
+                    } else {
+                        let index = queue(pending.category);
+                        if self.queues[index].push_back(pending).is_err() {
+                            return Err(Fault::Capacity);
+                        }
+                    }
+                }
+                Command::Configure { permission, config } => {
+                    self.withdraw(held, WithdrawCause::Disabled, |p| p.role() == config.role);
+                    self.core.configure(config)?;
+                    self.configuring = Some(permission);
+                    cx.waker().wake_by_ref();
+                    break;
+                }
+                Command::CloseGate(gate) => {
+                    self.withdraw(held, WithdrawCause::GateClosed, |_| true);
+                    self.core.hold();
+                    self.closing = Some(gate);
+                }
+                Command::OpenGate => {
+                    let mut sink = Sink::default();
+                    self.core.open(device.hardware(), &mut sink)?;
+                    self.closed = false;
+                    self.collect(held, sink, stopping)?;
+                }
+                Command::Install {
+                    identity,
+                    installation,
+                    material,
+                } => {
+                    self.install(device, identity, installation, &material)?;
+                }
+                Command::Remove { identity, removal } => {
+                    self.withdraw(held, WithdrawCause::KeyRemoved, |p| {
+                        p.key() == Some(identity)
+                    });
+                    if self
+                        .running
+                        .iter()
+                        .flatten()
+                        .any(|p| p.key() == Some(identity))
+                    {
+                        self.pending_command = Some(Command::Remove { identity, removal });
+                        break;
+                    }
+                    let removed = self.remove(device, identity)?;
+                    held.terminal(LowerMacTerminal::KeyRemoved(
+                        self.removed_terminal(removal, removed)?,
+                    ));
+                }
+                Command::Group { at, command } => {
+                    if now.saturating_duration_since(at) >= COMMAND_BOUND {
+                        self.pending_command = Some(Command::Group { at, command });
+                        return Err(Fault::Deadline);
+                    }
+                    if self.running.iter().flatten().any(|p| command.uses(p.key())) {
+                        self.pending_command = Some(Command::Group { at, command });
+                        break;
+                    }
+                    match device.poll_rx_cut(TX_TICKETS - held.rx_out.get(), cx) {
+                        Poll::Ready(Ok(Some(unit))) => {
+                            self.receive(held, device, unit)?;
+                            self.pending_command = Some(Command::Group { at, command });
+                            cx.waker().wake_by_ref();
+                            break;
+                        }
+                        Poll::Pending => {
+                            self.pending_command = Some(Command::Group { at, command });
+                            break;
+                        }
+                        Poll::Ready(Err(cause)) => {
+                            self.pending_command = Some(Command::Group { at, command });
+                            return Err(cause);
+                        }
+                        Poll::Ready(Ok(None)) => {
+                            let terminal = self.group(held, device, command)?;
+                            if let Err(cause) = device.finish_rx_cut() {
+                                *held.failed_terminal.borrow_mut() = Some(terminal);
+                                return Err(cause);
+                            }
+                            held.terminal(terminal);
+                        }
+                    }
+                }
+            }
+        }
+        if self.closing.is_some() && !self.core.configuring() && self.core.close(device.hardware())
+        {
+            let gate = held
+                .gate
+                .borrow_mut()
+                .close(self.closing.take().expect("closing owns gate"));
+            self.closed = true;
+            held.terminal(LowerMacTerminal::GateClosed(gate));
+        }
+        for index in 0..4 {
+            if self.running[index].is_some() {
+                continue;
+            }
+            // Expiry continues behind a gate or a command barrier.
+            while self.queues[index]
+                .front()
+                .is_some_and(|p| Self::expired(held, p, now))
+            {
+                let pending = self.queues[index]
+                    .pop_front()
+                    .expect("expired head retained");
+                self.finish(held, pending, TxOutcome::Expired { msdus: 1 });
+            }
+            if stopping
+                || self.closed
+                || self.closing.is_some()
+                || self.core.configuring()
+                || self.pending_command.is_some()
+            {
+                continue;
+            }
+            if let Some(pending) = self.queues[index].pop_front() {
+                self.publish(held, device, index, pending)?;
+            }
+        }
+        if stopping
+            && self.pending_command.is_none()
+            && held.commands.empty()
+            && !self.core.configuring()
+            && self.closing.is_none()
+        {
+            self.withdraw(held, WithdrawCause::Disabled, |_| true);
+            let mut sink = Sink::default();
+            self.core.disable(device.hardware(), &mut sink);
+            self.collect(held, sink, true)?;
+            let mut sink = Sink::default();
+            let disabled = self.core.finish_disable(&mut sink);
+            self.collect(held, sink, true)?;
+            if disabled {
+                match device.poll_stop(cx) {
+                    Poll::Ready(Ok(())) => {
+                        held.enabled.set(false);
+                        self.transition = None;
+                        held.storage.body.wake();
+                    }
+                    Poll::Ready(Err(cause)) => return Err(cause),
+                    Poll::Pending => {}
+                }
+            }
+        }
+        Ok(())
+    }
+    fn publish(
+        &mut self,
+        held: &Held<'id, D, B>,
+        device: &mut D,
+        index: usize,
+        mut pending: Pending<'id, D, B>,
+    ) -> Result<(), Fault> {
+        let stage = pending
+            .plan
+            .stages()
+            .nth(pending.stage)
+            .ok_or(Fault::Capacity)?;
+        let (rate, protection) = (
+            stage.rate,
+            if pending.publications == 0 {
+                pending.protection
+            } else {
+                stage.protection
+            },
+        );
+        let role = pending.role();
+        let core = self.core.core();
+        let backoff_slots = core.draw_backoff(role, pending.category);
+        let core_ticket = self
+            .tickets
+            .iter_mut()
+            .find_map(Option::take)
+            .ok_or(Fault::Capacity)?;
+        let key = pending.key();
+        let key_handle = key
+            .map(|identity| {
+                self.keys
+                    .iter()
+                    .flatten()
+                    .find(|(key, _)| *key == identity)
+                    .map(|(_, key)| key)
+            })
+            .transpose_option()
+            .ok_or(Fault::Capacity)?;
+        let admission = match key_handle {
+            Some(Installed::Transmit(key)) => core
+                .admit_key(key, core_ticket)
+                .map(TxAdmission::Protected)
+                .map_err(|_| Fault::Capacity)?,
+            Some(Installed::Receive(_)) => return Err(Fault::Capacity),
+            None => TxAdmission::Open(core_ticket),
+        };
+        let mpdu = pending.operation.execute().mpdu;
+        let mut memory = mpdu
+            .buffer
+            .memory
+            .take()
+            .expect("queued MPDU owns free DMA");
+        if !mpdu.published {
+            if let (Some(Installed::Transmit(key)), Some(pn)) = (key_handle, mpdu.pn) {
+                core.write_ccmp_header(key, &mut memory, mpdu.layout.header_len(), pn)
+                    .map_err(|_| Fault::Capacity)?;
+            }
+        }
+        let values = MpduValues::checked(
+            memory,
+            core_mac::MpduParameters {
+                role,
+                admitted_at: mpdu.buffer.admission.ok_or(Fault::Clock)?.1,
+                len: mpdu.layout.mpdu_len(),
+                rate,
+                protection,
+                power_ceiling_dbm: match pending.power {
+                    TxPower::Calibrated => None,
+                    TxPower::MaxDbm(dbm) => Some(dbm),
+                },
+                backoff_slots,
+                no_ack: mpdu.layout.kind() == MpduKind::IndividualNoAck,
+                operation: pending.coex,
+                retry: mpdu.published,
+            },
+        )
+        .map_err(|_| Fault::Capacity)?;
+        mpdu.published = true;
+        pending.publications = pending.publications.checked_add(1).ok_or(Fault::Capacity)?;
+        let queue = self.free[index].take().ok_or(Fault::Capacity)?;
+        // Durable backing owns the indivisible operation before publication.
+        self.running[index] = Some(pending);
+        if let Err(refused) = self
+            .core
+            .submit(device.hardware(), queue, admission, values)
+        {
+            core::mem::forget(refused);
+            return Err(Fault::Capacity);
+        }
+        let _ = held;
+        Ok(())
+    }
+    fn install(
+        &mut self,
+        device: &mut D,
+        identity: KeyIdentity,
+        installation: Installation<'id>,
+        material: &Ccmp128Key,
+    ) -> Result<(), Fault> {
+        let installed = match installation {
+            Installation::Transmit { spp, scope, slot } => Installed::Transmit(
+                self.core
+                    .core()
+                    .install_key_parts(device.hardware(), spp, scope, slot, material.as_bytes())
+                    .map_err(|refused| {
+                        let fault = refused.fault;
+                        core::mem::forget(refused);
+                        Fault::Core(fault)
+                    })?,
+            ),
+            Installation::Receive { spp, slot, key_id } => Installed::Receive(
+                self.core
+                    .core()
+                    .install_station_group_parts(
+                        device.hardware(),
+                        spp,
+                        slot,
+                        key_id,
+                        material.as_bytes(),
+                    )
+                    .map_err(|refused| {
+                        let fault = refused.fault;
+                        core::mem::forget(refused);
+                        Fault::Core(fault)
+                    })?,
+            ),
+        };
+        let place = self
+            .keys
+            .iter_mut()
+            .find(|k| k.is_none())
+            .ok_or(Fault::Capacity)?;
+        *place = Some((identity, installed));
+        Ok(())
+    }
+    fn remove(
+        &mut self,
+        device: &mut D,
+        identity: KeyIdentity,
+    ) -> Result<KeyRemoved<'id, CorePath>, Fault> {
+        let place = self
+            .keys
+            .iter_mut()
+            .find(|entry| entry.as_ref().is_some_and(|(key, _)| *key == identity))
+            .ok_or(Fault::Capacity)?;
+        let (_, installed) = place.take().ok_or(Fault::Capacity)?;
+        let mut sink = Sink::default();
+        match installed {
+            Installed::Transmit(key) => {
+                self.core
+                    .core()
+                    .remove_checked_key(device.hardware(), key, &mut sink)
+            }
+            Installed::Receive(key) => {
+                self.core
+                    .core()
+                    .remove_checked_key(device.hardware(), key, &mut sink)
+            }
+        }
+        sink.removed.pop().ok_or(Fault::Capacity)
+    }
+    fn removed_terminal(
+        &self,
+        removal: Removal<'id>,
+        removed: KeyRemoved<'id, CorePath>,
+    ) -> Result<Removed<'id, Types<D, B>>, Fault> {
+        use core_mac::association::VacantKeySlot as Slot;
+        let removed = match (removal, removed.into_slot()) {
+            (Removal::StationPairwise(association), Slot::StationPairwise(slot)) => {
+                Removed::Station(RemovedKey::Pairwise { slot, association })
+            }
+            (Removal::AccessPointPairwise(association), Slot::AccessPointPairwise(slot)) => {
+                Removed::AccessPoint(RemovedKey::Pairwise { slot, association })
+            }
+            (Removal::StationGroup(permission), Slot::StationGroup(slot)) => {
+                Removed::Station(RemovedKey::Group { slot, permission })
+            }
+            (Removal::AccessPointGroup(permission), Slot::AccessPointGroup(slot)) => {
+                Removed::AccessPoint(RemovedKey::Group { slot, permission })
+            }
+            _ => return Err(Fault::Capacity),
+        };
+        Ok(removed)
+    }
+    fn group(
+        &mut self,
+        held: &Held<'id, D, B>,
+        device: &mut D,
+        command: GroupCommand<'id>,
+    ) -> Result<Terminal<'id, D, B>, Fault> {
+        match command {
+            GroupCommand::InstallStation {
+                spp,
+                slot,
+                permission,
+                key_id,
+                material,
+            } => {
+                let identity = KeyIdentity {
+                    role: VifRole::Station,
+                    slot: slot.index(),
+                    serial: held.serial(),
+                    spp,
+                    key_id,
+                    activity: &held.storage.key_live[1],
+                };
+                self.install(
+                    device,
+                    identity,
+                    Installation::Receive { spp, slot, key_id },
+                    &material,
+                )?;
+                identity.activity.set(identity.serial);
+                return Ok(LowerMacTerminal::GroupKeyInstalled(
+                    InstalledGroup::Station {
+                        key: GroupKey {
+                            identity,
+                            brand: PhantomData,
+                        },
+                        permission,
+                    },
+                ));
+            }
+            GroupCommand::InstallAccessPoint {
+                spp,
+                slot,
+                permission,
+                key_id,
+                material,
+            } => {
+                let identity = KeyIdentity {
+                    role: VifRole::AccessPoint,
+                    slot: slot.index(),
+                    serial: held.serial(),
+                    spp,
+                    key_id,
+                    activity: &held.storage.key_live[17 + usize::from(slot.index())],
+                };
+                let Some(key_id) =
+                    oer_esp32s31_ieee80211_mac::crypto::ApGroupKeyId::new(key_id.get())
+                else {
+                    return Err(Fault::Capacity);
+                };
+                self.install(
+                    device,
+                    identity,
+                    Installation::Transmit {
+                        spp,
+                        scope: TransmitKeyScope::AccessPointGroup { key_id },
+                        slot: core_mac::association::VacantKeySlot::AccessPointGroup(slot),
+                    },
+                    &material,
+                )?;
+                identity.activity.set(identity.serial);
+                return Ok(LowerMacTerminal::GroupKeyInstalled(
+                    InstalledGroup::AccessPoint {
+                        key: GroupKey {
+                            identity,
+                            brand: PhantomData,
+                        },
+                        permission,
+                    },
+                ));
+            }
+            GroupCommand::Replace {
+                permission,
+                key,
+                key_id,
+                material,
+            } => {
+                let removed = self.remove(device, key.identity)?;
+                let core_mac::association::VacantKeySlot::StationGroup(slot) = removed.into_slot()
+                else {
+                    return Err(Fault::Capacity);
+                };
+                let identity = KeyIdentity {
+                    serial: held.serial(),
+                    key_id,
+                    ..key.identity
+                };
+                self.install(
+                    device,
+                    identity,
+                    Installation::Receive {
+                        spp: identity.spp,
+                        slot,
+                        key_id,
+                    },
+                    &material,
+                )?;
+                identity.activity.set(identity.serial);
+                return Ok(LowerMacTerminal::GroupKeyReplaced {
+                    key: GroupKey {
+                        identity,
+                        brand: PhantomData,
+                    },
+                    permission,
+                });
+            }
+            GroupCommand::Select { permission, key } => {
+                if !self
+                    .keys
+                    .iter()
+                    .flatten()
+                    .any(|(identity, _)| *identity == key.identity)
+                {
+                    return Err(Fault::Capacity);
+                }
+                return Ok(LowerMacTerminal::GroupKeySelected { key, permission });
+            }
+            GroupCommand::Remove { identity, removal } => {
+                self.withdraw(held, WithdrawCause::KeyRemoved, |p| {
+                    p.key() == Some(identity)
+                });
+                let removed = self.remove(device, identity)?;
+                return Ok(LowerMacTerminal::KeyRemoved(
+                    self.removed_terminal(removal, removed)?,
+                ));
+            }
+        }
+    }
+}
+fn queue(category: WmmAccessCategory) -> usize {
+    usize::from(LegacyTxQueue::from_access_category(category).hardware_index())
+}
+fn vif(role: VifRole) -> usize {
+    if role == VifRole::Station { 0 } else { 1 }
+}
+impl GroupCommand<'_> {
+    fn uses(&self, key: Option<KeyIdentity>) -> bool {
+        key.is_some_and(|key| match self {
+            Self::Remove { identity, .. } => *identity == key,
+            Self::Replace { key: installed, .. } | Self::Select { key: installed, .. } => {
+                installed.identity == key
+            }
+            _ => false,
+        })
+    }
+}
+
+trait TransposeOption<T> {
+    fn transpose_option(self) -> Option<Option<T>>;
+}
+impl<T> TransposeOption<T> for Option<Option<T>> {
+    fn transpose_option(self) -> Option<Option<T>> {
+        match self {
+            None => Some(None),
+            Some(Some(value)) => Some(Some(value)),
+            Some(None) => None,
+        }
+    }
+}

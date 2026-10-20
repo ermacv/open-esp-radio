@@ -496,7 +496,7 @@ where
         self.counters.exhaustion(snapshot);
     }
 
-    fn service_once(
+    pub(super) fn service_once(
         &mut self,
         ring: &mut RxRingLive<'static, COUNT>,
     ) -> Result<DatapathRxProgress, WifiRxCause> {

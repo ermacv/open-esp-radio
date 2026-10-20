@@ -468,6 +468,7 @@ impl<
                 {
                     self.core.finish_attempt(
                         hardware,
+                        role,
                         queue,
                         admission,
                         slot,
@@ -487,6 +488,7 @@ impl<
                         Err(QueuedSingleAttemptRefused { error, slot }) => {
                             self.core.finish_attempt(
                                 hardware,
+                                role,
                                 queue,
                                 admission,
                                 slot,
@@ -535,6 +537,16 @@ impl<
     /// A pending publication's deadline bounds this FIFO barrier.
     pub fn next_deadline(&self) -> Option<oer_time::Instant> {
         self.core.next_deadline()
+    }
+    pub(crate) fn reset_contention(&mut self, role: VifRole, category: WmmAccessCategory) {
+        self.core.reset_contention(role, category);
+    }
+    pub(crate) fn received<'frame, H: StaNoiseFloorHardware>(
+        &self,
+        hardware: &H,
+        frame: &NormalizedRxFrame<'frame>,
+    ) -> Option<(&'frame [u8], Esp32s31RxMeta)> {
+        self.core.received(hardware, frame)
     }
     /// Service earlier publications without admitting any later command.
     pub fn service<

@@ -57,6 +57,19 @@ pub trait CcmpKeyHardware {
     }
 }
 
+/// Erase the physical key entries this lower MAC can program. This is the
+/// synchronous quarantine/uninstall hook; it grants no reusable slot owner.
+/// STA and AP group entries occupy slots 1..=4; AP AIDs 1..=15 occupy
+/// slots 8..=22, according to the installation mapping below.
+pub fn erase_lower_mac_keys(hardware: &mut impl CcmpKeyHardware) {
+    for index in STA_GROUP_HARDWARE_INDEX..=STA_PAIRWISE_HARDWARE_INDEX {
+        hardware.clear_ccmp_entry(index);
+    }
+    for offset in 0..AP_PAIRWISE_SLOT_COUNT {
+        hardware.clear_ccmp_entry(AP_PAIRWISE_HARDWARE_INDEX_BASE + offset);
+    }
+}
+
 impl CcmpKeyHardware for WifiMacHal<'_> {
     fn configure_ccmp_association(
         &mut self,
