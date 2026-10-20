@@ -25,6 +25,11 @@ without vendor radio binaries. Decisions are in
   module (`#[cfg(test)]`) or in the crate's `tests/`. Tests check behavior and
   ownership, never generated register addresses, masks, shifts or layout
   constants; time in tests comes from the virtual clocks of `oer-time-virtual`.
+  A test is hermetic and safe in parallel: it uses only its own memory and
+  files inside its own temporary directory (`tempfile`). No test starts an
+  external program, changes process-wide state (signals, descriptors,
+  environment, working directory, limits), uses a fixed path, opens a
+  network port or waits on real time.
 - **Hardware access.** MMIO only through typed PAC accessors. A missing field
   is added to `chips/<chip>/registers/` and regenerated (`cargo registers generate`), never
   written as a local mask or shift. `unsafe` stays narrow and carries
