@@ -30,7 +30,6 @@ pub const SCHEMA: u16 = 4;
 const TOLERANCE_SCHEMA: u16 = 2;
 /// The reviewed tolerances, compiled in so a run binds the reviews it used.
 const TOLERANCES: &str = include_str!("tolerances.toml");
-const SECONDS_PER_DAY: u64 = 86_400;
 
 /// The reviews file: every name carries one review, or several whose
 /// lifecycle points differ.
@@ -403,23 +402,19 @@ fn uncovered(length: usize, fields: &[OutputField]) -> Vec<[usize; 2]> {
     ranges
 }
 
-/// `YYYY-MM-DD` of the UTC day holding `unix_seconds` (civil-from-days).
+/// `YYYY-MM-DD` of the UTC day holding `unix_seconds`.
 fn utc_date(unix_seconds: u64) -> String {
-    let days = (unix_seconds / SECONDS_PER_DAY) as i64 + 719_468;
-    let era = days.div_euclid(146_097);
-    let day_of_era = days.rem_euclid(146_097);
-    let year_of_era =
-        (day_of_era - day_of_era / 1_460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
-    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
-    let month_index = (5 * day_of_year + 2) / 153;
-    let day = day_of_year - (153 * month_index + 2) / 5 + 1;
-    let month = if month_index < 10 {
-        month_index + 3
-    } else {
-        month_index - 9
-    };
-    let year = year_of_era + era * 400 + i64::from(month <= 2);
-    format!("{year:04}-{month:02}-{day:02}")
+    let seconds = unix_seconds;
+    // Gregorian dates repeat every 400 years. Reduce into jiff's supported
+    // range without narrowing the existing u64 timestamp domain.
+    const CYCLE_SECONDS: u64 = 146_097 * 86_400;
+    let cycles = seconds / CYCLE_SECONDS;
+    let within_cycle = (seconds % CYCLE_SECONDS) as i64;
+    let date = jiff::Timestamp::from_second(within_cycle)
+        .expect("a 400-year cycle from 1970 fits jiff's timestamp range")
+        .to_zoned(jiff::tz::TimeZone::UTC);
+    let year = date.year() as u64 + cycles * 400;
+    format!("{year:04}-{:02}-{:02}", date.month(), date.day())
 }
 
 impl ReviewFile {
@@ -761,5 +756,23 @@ mod tests {
                 .at(Lifecycle::Cold)
                 .is_err()
         );
+    }
+}
+
+#[cfg(test)]
+mod library_tests {
+    use super::*;
+    #[test]
+    fn utc_dates_preserve_day_boundaries_and_the_full_timestamp_domain() {
+        for (seconds, expected) in [
+            (86_399, "1970-01-01"),
+            (86_400, "1970-01-02"),
+            (951_782_400, "2000-02-29"),
+            (4_107_542_400, "2100-03-01"),
+            (253_402_300_800, "10000-01-01"),
+            (u64::MAX, "584554051223-11-09"),
+        ] {
+            assert_eq!(utc_date(seconds), expected);
+        }
     }
 }

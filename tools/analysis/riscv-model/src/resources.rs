@@ -38,10 +38,8 @@ pub struct RunPosition {
 impl RunPosition {
     pub fn artifact(&mut self, id: &ArtifactId) {
         let mut digest = [0; 32];
-        for (i, byte) in digest.iter_mut().enumerate() {
-            // ArtifactId has already validated lowercase hexadecimal encoding.
-            *byte = u8::from_str_radix(&id.as_str()[i * 2..i * 2 + 2], 16).unwrap();
-        }
+        hex::decode_to_slice(id.as_str(), &mut digest)
+            .expect("ArtifactId validates exactly 32 hexadecimal bytes");
         self.artifact = Some(digest);
     }
 }
@@ -93,4 +91,20 @@ pub fn storage_io(error: std::io::Error) -> Error {
         _ => ErrorCode::Io,
     };
     Error::new(code, error.to_string())
+}
+
+#[cfg(test)]
+mod library_tests {
+    use super::*;
+
+    #[test]
+    fn artifact_positions_keep_the_validated_digest_bytes() {
+        let id: ArtifactId = format!("00{}ff", "1a".repeat(30)).parse().unwrap();
+        let mut position = RunPosition::default();
+        position.artifact(&id);
+        let mut expected = [0x1a; 32];
+        expected[0] = 0;
+        expected[31] = 255;
+        assert_eq!(position.artifact, Some(expected));
+    }
 }

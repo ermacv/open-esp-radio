@@ -9,6 +9,7 @@ publish = false
 description = "Reviewed knowledge identity and applicability contracts"
 
 [dependencies]
+hex = "=0.4.3"
 serde = { version = "=1.0.229", features = ["derive"] }
 sha2 = "=0.10.9"
 

@@ -27,7 +27,7 @@ fn random_hex(bytes: usize) -> crate::Result<String> {
     std::fs::File::open("/dev/urandom")
         .and_then(|mut source| source.read_exact(&mut buffer))
         .map_err(|error| format!("read the host's random source: {error}"))?;
-    Ok(buffer.iter().map(|byte| format!("{byte:02x}")).collect())
+    Ok(hex::encode(buffer))
 }
 
 /// An SSID for a run: `prefix`, a dash and 8 random hex digits.

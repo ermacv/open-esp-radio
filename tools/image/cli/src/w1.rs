@@ -94,7 +94,7 @@ impl Ssid {
 
     /// Two lower-case hex digits per byte, for the runtime build only.
     fn hex(&self) -> String {
-        self.0.iter().map(|byte| format!("{byte:02x}")).collect()
+        hex::encode(&self.0)
     }
 }
 
@@ -3874,5 +3874,14 @@ mod tests {
         }];
         assert_eq!(correlate(&gap, &tick, 15), [Overlap { gap: 0, tick: 0 }]);
         assert!(correlate(&gap, &tick, 0).is_empty());
+    }
+}
+
+#[cfg(test)]
+mod library_tests {
+    use super::*;
+    #[test]
+    fn ssid_build_values_are_two_lowercase_digits_per_byte() {
+        assert_eq!(Ssid::new(&[0, 15, 128, 255]).unwrap().hex(), "000f80ff");
     }
 }

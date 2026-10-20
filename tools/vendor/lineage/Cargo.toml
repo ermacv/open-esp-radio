@@ -10,6 +10,7 @@ description = "Recover vendor function names across obfuscated archive revisions
 readme = "README.md"
 
 [dependencies]
+hex = "=0.4.3"
 oer-vendor-provenance = { path = "../provenance" }
 serde = { version = "=1.0.229", features = ["derive"] }
 sha2 = "=0.10.9"

@@ -463,10 +463,7 @@ impl ReviewKnowledge {
         let mut hash = Sha256::new();
         hash.update(b"blobray/review-knowledge/v2\0");
         hash.update(encoded);
-        hash.finalize()
-            .iter()
-            .map(|byte| format!("{byte:02x}"))
-            .collect()
+        hex::encode(hash.finalize())
     }
 }
 

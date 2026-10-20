@@ -166,9 +166,7 @@ fn guard(read: i32) -> ! {
         // Detach from the owner's terminal signals: a Ctrl-C reaches the
         // owner, which cleans up itself; the guardian must outlive it.
         libc::setsid();
-        for signal in [libc::SIGINT, libc::SIGTERM, libc::SIGHUP, libc::SIGPIPE] {
-            libc::signal(signal, libc::SIG_IGN);
-        }
+        crate::child_setup::ignore_terminal_signals();
         // Keep only the registration pipe: an inherited pipe write end would
         // keep the owner's readers waiting for end of file.
         let null = libc::open(c"/dev/null".as_ptr(), libc::O_RDWR);

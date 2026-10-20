@@ -73,7 +73,7 @@ pub enum Record {
 }
 
 fn hex(bytes: &[u8]) -> String {
-    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+    hex::encode(bytes)
 }
 
 fn list(arguments: &[u64]) -> String {
@@ -469,4 +469,14 @@ extern "C" fn oer_host_register_write(address: u32, value: u32) {
         state.registers.insert(address, value);
         state.records.push(Record::RegisterWrite { address, value });
     });
+}
+
+#[cfg(test)]
+mod library_tests {
+    use super::*;
+    #[test]
+    fn record_byte_arguments_keep_their_printed_form() {
+        assert_eq!(Argument::Bytes(vec![0, 15, 255]).to_string(), "[000fff]");
+        assert_eq!(Argument::Bytes(vec![]).to_string(), "[]");
+    }
 }

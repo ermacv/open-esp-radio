@@ -9,6 +9,7 @@ publish = false
 description = "The HIL scenario model: a scenario's typed specification and pure verdict, derived waits and the stand profile, repetition statistics, resources, target capabilities and tier budgets"
 
 [dependencies]
+hex = "=0.4.3"
 oer-time = { path = "../../../portable/time" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

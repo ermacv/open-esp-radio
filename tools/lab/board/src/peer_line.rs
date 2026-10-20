@@ -86,16 +86,24 @@ pub fn parse(line: &str) -> Option<Line> {
 
 /// Bytes from lowercase or uppercase hex digits, two per byte.
 pub fn hex(text: &str) -> Option<Vec<u8>> {
-    if !text.len().is_multiple_of(2) {
-        return None;
-    }
-    (0..text.len())
-        .step_by(2)
-        .map(|index| u8::from_str_radix(text.get(index..index + 2)?, 16).ok())
-        .collect()
+    hex::decode(text).ok()
 }
 
 /// Lowercase hex digits of `bytes`, as the peers read them.
 pub fn to_hex(bytes: &[u8]) -> String {
-    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+    hex::encode(bytes)
+}
+
+#[cfg(test)]
+mod library_tests {
+    use super::*;
+    #[test]
+    fn peer_byte_fields_keep_their_hex_contract() {
+        assert_eq!(to_hex(&[0, 15, 127, 255]), "000f7fff");
+        assert_eq!(hex("000F7fFf"), Some(vec![0, 15, 127, 255]));
+        assert_eq!(hex(""), Some(vec![]));
+        for malformed in ["0", "0g", "é", "ab cd"] {
+            assert_eq!(hex(malformed), None);
+        }
+    }
 }

@@ -13,6 +13,8 @@ name = "fw"
 path = "src/main.rs"
 
 [dependencies]
+jiff = { version = "=0.2.37", default-features = false, features = ["std"] }
+hex = "=0.4.3"
 oer-hil-lab = { path = "../../hil/lab" }
 oer-radio-regulatory = { path = "../../../protocols/radio/regulatory" }
 oer-ieee80211-wire = { path = "../../../protocols/ieee80211/wire" }

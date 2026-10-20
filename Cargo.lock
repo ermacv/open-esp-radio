@@ -124,6 +124,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "ascii"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d92bec98840b8f03a5ff5413de5293bfcd8bf96467cf5452609f939ec6f5de16"
+
+[[package]]
 name = "async-broadcast"
 version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -497,6 +503,12 @@ name = "cfg_aliases"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f079e83a288787bcd14a6aea84cee5c87a67c5a3e660c30f557a3d24761b3527"
+
+[[package]]
+name = "chunked_transfer"
+version = "1.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6e4de3bc4ea267985becf712dc6d9eed8b04c953b3fcfb339ebc87acd9804901"
 
 [[package]]
 name = "cipher"
@@ -1952,6 +1964,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "httpdate"
+version = "1.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "df3b46402a9d5adb4c86a0cf463f42e19994e3ee891101b1841f30a545cb49a9"
+
+[[package]]
 name = "hybrid-array"
 version = "0.4.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2545,6 +2563,7 @@ dependencies = [
 name = "oer-analysis-riscv-model"
 version = "0.1.0"
 dependencies = [
+ "hex",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -3377,6 +3396,7 @@ name = "oer-hil-lab"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "hex",
  "oer-analysis-elf",
  "oer-chip-profile",
  "oer-hil-link",
@@ -3420,6 +3440,7 @@ dependencies = [
 name = "oer-hil-model"
 version = "0.1.0"
 dependencies = [
+ "hex",
  "oer-chip-profile",
  "oer-hil-protocol",
  "oer-os-durable",
@@ -3783,6 +3804,7 @@ dependencies = [
 name = "oer-image-esp-idf"
 version = "0.1.0"
 dependencies = [
+ "hex",
  "oer-os-durable",
  "oer-os-process",
  "oer-tool-pins",
@@ -3800,6 +3822,7 @@ version = "0.1.0"
 name = "oer-lab-arbiter"
 version = "0.1.0"
 dependencies = [
+ "hex",
  "oer-lab-board",
  "oer-lab-model",
  "oer-os-durable",
@@ -3815,6 +3838,7 @@ name = "oer-lab-board"
 version = "0.1.0"
 dependencies = [
  "espflash",
+ "hex",
  "oer-chip-profile",
  "oer-image-build",
  "oer-lab-model",
@@ -3845,12 +3869,14 @@ dependencies = [
 name = "oer-lab-router"
 version = "0.1.0"
 dependencies = [
+ "hex",
  "oer-lab-model",
  "oer-os-durable",
  "oer-os-process",
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "shlex",
  "tempfile",
  "toml",
 ]
@@ -3977,6 +4003,7 @@ dependencies = [
 name = "oer-registers-contracts"
 version = "0.1.0"
 dependencies = [
+ "hex",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -4026,6 +4053,7 @@ dependencies = [
 name = "oer-registers-review"
 version = "0.1.0"
 dependencies = [
+ "hex",
  "oer-registers-contracts",
  "serde",
  "serde_json",
@@ -4115,6 +4143,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tempfile",
+ "tiny_http",
  "toml",
 ]
 
@@ -4159,6 +4188,8 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "crc",
+ "hex",
+ "jiff",
  "oer-chip-profile",
  "oer-hil-lab",
  "oer-ieee80211-port",
@@ -4318,6 +4349,7 @@ name = "oer-vendor-ieee802154-esp32s31"
 version = "0.1.0"
 dependencies = [
  "cc",
+ "hex",
  "oer-esp32s31-knowledge",
  "oer-espressif-coex",
  "oer-espressif-ieee802154-engine",
@@ -4330,6 +4362,7 @@ dependencies = [
 name = "oer-vendor-lineage"
 version = "0.1.0"
 dependencies = [
+ "hex",
  "object 0.39.1",
  "oer-analysis-elf",
  "oer-vendor-provenance",
@@ -4341,6 +4374,7 @@ dependencies = [
 name = "oer-vendor-phy"
 version = "0.1.0"
 dependencies = [
+ "hex",
  "oer-analysis-elf",
  "oer-hil-lab",
  "oer-hil-link",
@@ -4362,6 +4396,7 @@ dependencies = [
 name = "oer-vendor-phy-esp32s31"
 version = "0.1.0"
 dependencies = [
+ "jiff",
  "oer-esp32s31-knowledge",
  "oer-hil-scenario",
  "oer-os-process",
@@ -4376,6 +4411,7 @@ dependencies = [
 name = "oer-vendor-provenance"
 version = "0.1.0"
 dependencies = [
+ "hex",
  "oer-analysis-elf",
  "oer-os-process",
  "oer-registers-model",
@@ -5352,6 +5388,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1ad99c4c6d32803332c548b1af0540b357b3f5fc0be8f6c6bfe8b2e6ae784070"
 dependencies = [
  "cfg-if",
+]
+
+[[package]]
+name = "tiny_http"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "389915df6413a2e74fb181895f933386023c71110878cd0825588928e64cdc82"
+dependencies = [
+ "ascii",
+ "chunked_transfer",
+ "httpdate",
+ "log",
 ]
 
 [[package]]

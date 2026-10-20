@@ -9,6 +9,7 @@ publish = false
 description = "ESP-IDF projects built against a chip's pinned ESP-IDF in the host-wide cache"
 
 [dependencies]
+hex = "=0.4.3"
 oer-os-durable = { path = "../../os/durable" }
 oer-os-process = { path = "../../os/process" }
 oer-tool-pins = { path = "../../pins" }

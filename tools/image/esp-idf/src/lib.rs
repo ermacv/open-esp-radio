@@ -220,11 +220,7 @@ fn tree_name(pins: &[GitPin], revision: &str) -> String {
         .collect::<Vec<_>>();
     sources.sort();
     let digest = Sha256::digest(sources.concat().as_bytes());
-    let digest = digest
-        .iter()
-        .take(6)
-        .map(|byte| format!("{byte:02x}"))
-        .collect::<String>();
+    let digest = hex::encode(&digest[..6]);
     format!("{revision}-{digest}")
 }
 

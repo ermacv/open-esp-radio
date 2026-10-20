@@ -212,7 +212,7 @@ fn profiled_router() -> Canned {
 const APPLY: &str = "uci set 'wireless.radio9.channel=6' && uci set 'wireless.radio9.htmode=HT20' \
                      && uci set 'wireless.radio9.beacon_int=100' \
                      && uci set 'wireless.radio9.disabled=0' \
-                     && uci set 'wireless.lab_ap.ssid=Made Up '\\''Lab'\\'' Net' \
+                     && uci set \"wireless.lab_ap.ssid=Made Up 'Lab' Net\" \
                      && uci set 'wireless.lab_ap.disabled=0' && uci set 'wireless.lab_ap.hidden=0' \
                      && uci commit wireless && wifi reload";
 
@@ -224,13 +224,13 @@ fn the_profile_is_applied_verified_and_settles() {
     assert_eq!(applied.channel, 6);
     assert_eq!(applied.country, *b"DE");
     assert_eq!(remote.pauses, 2);
-    let iw = profile().iw_script();
+    let iw = profile().iw_script().unwrap();
     assert_eq!(
         remote.scripts,
         [
             CHANGES.to_owned(),
             show_script(),
-            profile().channels_script(),
+            profile().channels_script().unwrap(),
             APPLY.to_owned(),
             show_script(),
             iw.clone(),
@@ -291,7 +291,7 @@ fn quoting_survives_the_remote_shell() {
     for text in [SSID, "a b", "it's", "'", "$(reboot)", "a\\b", "`x`;rm"] {
         let output = std::process::Command::new("sh")
             .arg("-c")
-            .arg(format!("printf %s {}", quote(text)))
+            .arg(format!("printf %s {}", quote(text).unwrap()))
             .output()
             .unwrap();
         assert_eq!(String::from_utf8(output.stdout).unwrap(), text);
@@ -300,7 +300,7 @@ fn quoting_survives_the_remote_shell() {
 
 #[test]
 fn the_plan_lists_placeholders_only() {
-    let plan = plan();
+    let plan = plan().unwrap();
     assert_eq!(plan.len(), 6);
     assert_eq!(
         plan[3],
@@ -418,10 +418,10 @@ fn the_router_filters_by_the_allowlist() {
         "wireless.lab_ap.key\nwireless.radio9.channel\n"
     );
     // The AP interface's four lines, the PHY's frequency lines.
-    let iw_shown = fake(&profile().iw_script());
+    let iw_shown = fake(&profile().iw_script().unwrap());
     assert_eq!(iw_shown, iw(6, "20 MHz", SSID));
     assert!(!iw_shown.contains("txpower") && !iw_shown.contains("ifindex"));
-    assert_eq!(fake(&profile().channels_script()), CHANNELS);
+    assert_eq!(fake(&profile().channels_script().unwrap()), CHANNELS);
 }
 
 #[test]
@@ -766,7 +766,7 @@ fn nothing_secret_is_shown() {
         format!("{ssh:?}"),
         format!("{info:?}"),
         format!("{wireless:?}"),
-        plan().join("\n"),
+        plan().unwrap().join("\n"),
     ]
     .join("\n");
     for secret in [
@@ -804,5 +804,23 @@ fn a_radio_without_a_valid_country_is_refused() {
         let mut remote = Canned::new(vec![(SHOW_PREFIX, vec![Ok(text)])]);
         let error = radio_country(&mut remote, "radio9").unwrap_err();
         assert!(error.contains("country"), "{error}");
+    }
+}
+
+#[test]
+fn shell_quote_rejects_nul_and_preserves_other_words() {
+    assert!(quote("nul\0byte").unwrap_err().contains("nul"));
+    for value in [
+        "",
+        "plain",
+        "line\nbreak",
+        "two words",
+        "a'\"b",
+        "$(exit 9); #",
+        "ä\\b",
+    ] {
+        let quoted = quote(value).unwrap();
+        let words = shlex::split(&quoted).unwrap();
+        assert_eq!(words, [value]);
     }
 }
