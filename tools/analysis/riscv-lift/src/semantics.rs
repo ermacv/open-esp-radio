@@ -35,11 +35,6 @@ impl FunctionSemantics for RiscvDecoder {
         "rv32imafc-zicsr-zba-zbb-zbs-zcb-zcmp/values-11/rv-asm-0.2.1"
     }
     fn lift(&self, bytes: &[u8]) -> SemanticOp {
-        // Zifencei changes instruction-fetch ordering, not integer registers
-        // or the data-memory words of this static-image analysis.
-        if bytes.get(..4) == Some(&[0x0f, 0x10, 0, 0]) {
-            return SemanticOp::None;
-        }
         let inst = match decode_instruction(bytes) {
             Some((Instruction::Base(inst), _)) => inst,
             Some((Instruction::Extension(extension), _)) => return lift_extension(extension),

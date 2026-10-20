@@ -219,6 +219,8 @@ def validate(args):
     assert all(r[4] == 'Some({TaskPolls})' for r in incoming)
     assert any(r[0] == 'stack-context-open' and r[1] == '0x500654f6' and str(0x500659fc) in r[2] for r in stack_rows)
     assert any(r[0] == 'stack-nesting' and r[1] == 'hart=0' and r[2] == 'bytes=None' for r in stack_rows)
+    assert any(r[:4] == ['stack-nesting-level', 'hart=0', 'level=1', 'bytes=Some(576)'] for r in stack_rows)
+    assert any(r[0] == 'stack-context-step' and r[1:3] == ['0x50019a18', '0x50019c1c'] and r[4] == 'sp=Some(EntryStack { offset: -80 })' for r in stack_rows)
     assert ['stack-context-result', 'None'] in stack_rows
     assert ['context-preserves', 'false'] in first_copy_rows
     assert len([r for r in first_copy_rows if r[0] == 'context-call-write']) == 14
@@ -314,7 +316,7 @@ def validate(args):
     assert {r[1] for r in retained} == {'0x2f80d27a', '0x2f80d2c8', '0x2f80d338'}
 
     proof = {
-        'base': 'main 73042ea1, including #207 and #208',
+        'base': 'main 2966eb81, including #207, #208, #206 and #212',
         'inputs': {str(p): sha(p) for p in (args.elf, args.rom, report, summaries, chip, stack_policy)},
         'checked_stack_sources': {str(p): sha(p) for p in map(Path, (
             'tools/analysis/riscv-analysis/src/stack_context.rs',
@@ -330,7 +332,7 @@ def validate(args):
         'checked_stack_context': {
             'machine_setup': setup, 'root': checked_root, 'incoming_contexts': incoming,
             'rows': stack_rows, 'result': 'unknown; no interval is supplied by the validator',
-            'blockers': ['CPU0 main: unknown indirect edge at 0x500659fc, and unknown canonical sp at 0x5006944c',
+            'blockers': ['CPU0 main: unknown indirect edge at 0x500659fc prevents an all-path interval; executor relative sp -80 is proved but supplies no numerical root',
                          'IRQ: trap arrival sp/mscratch numerical context and nested nonwrapping propagation are unproved; partial bounds are not usable as numerical intervals'],
             'assumption': 'ExecutorInvariant remains explicit on TaskPolls; it does not establish sp bounds',
         },

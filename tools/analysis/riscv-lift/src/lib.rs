@@ -52,13 +52,6 @@ impl FunctionDecoder for RiscvDecoder {
         UnsupportedFlow::Unknown
     }
     fn decode(&self, bytes: &[u8]) -> Option<DecodedOp> {
-        if bytes.get(..4) == Some(&[0x0f, 0x10, 0, 0]) {
-            return Some(DecodedOp {
-                length: 4,
-                text: "fence.i".into(),
-                flow: InstructionFlow::Next,
-            });
-        }
         let (inst, width) = match decode_instruction(bytes)? {
             (Instruction::Base(inst), width) => (inst, width),
             (Instruction::Extension(extension), width) => {
@@ -359,6 +352,9 @@ impl FunctionDecoder for StructuralRiscvDecoder {
 }
 
 impl FunctionSemantics for StructuralRiscvDecoder {
+    fn interrupt_wait(&self, bytes: &[u8]) -> bool {
+        RiscvDecoder.interrupt_wait(bytes)
+    }
     fn scratch_write(&self, bytes: &[u8]) -> Option<Operand> {
         RiscvDecoder.scratch_write(bytes)
     }
@@ -377,5 +373,74 @@ impl FunctionSemantics for StructuralRiscvDecoder {
         operation: SemanticOp,
     ) -> ValueRelocation {
         RiscvDecoder.value_relocation(relocation, operation)
+    }
+}
+
+/// Opt-in stack-context semantics over the same decoder and value engine.
+/// Hints preserve integer registers; waits explicitly lose remembered memory
+/// in the evaluator and prove no source contents.
+pub struct StackRiscvDecoder;
+impl FunctionDecoder for StackRiscvDecoder {
+    fn identity(&self) -> &'static str {
+        "rv32/stack-context-1"
+    }
+    fn unsupported_flow(&self, bytes: &[u8]) -> UnsupportedFlow {
+        StructuralRiscvDecoder.unsupported_flow(bytes)
+    }
+    fn decode(&self, bytes: &[u8]) -> Option<DecodedOp> {
+        let hint = if self.interrupt_wait(bytes) {
+            Some("wfi")
+        } else if bytes.get(..4) == Some(&[0x0f, 0x10, 0, 0]) {
+            Some("fence.i")
+        } else {
+            None
+        };
+        if let Some(text) = hint {
+            return Some(DecodedOp {
+                length: 4,
+                text: text.into(),
+                flow: InstructionFlow::Next,
+            });
+        }
+        StructuralRiscvDecoder.decode(bytes)
+    }
+    fn reference(
+        &self,
+        relocation: &FunctionRelocation,
+        all: &[FunctionRelocation],
+        section: u32,
+        c: &mut dyn RunControl,
+    ) -> Result<NormalizedReference> {
+        StructuralRiscvDecoder.reference(relocation, all, section, c)
+    }
+}
+impl FunctionSemantics for StackRiscvDecoder {
+    fn semantic_identity(&self) -> &'static str {
+        "rv32/stack-context-values-1"
+    }
+    fn interrupt_wait(&self, bytes: &[u8]) -> bool {
+        bytes.get(..4) == Some(&[0x73, 0, 0x50, 0x10])
+    }
+    fn scratch_write(&self, bytes: &[u8]) -> Option<Operand> {
+        StructuralRiscvDecoder.scratch_write(bytes)
+    }
+    fn branch(&self, bytes: &[u8]) -> Option<(BranchTest, Operand, Operand)> {
+        StructuralRiscvDecoder.branch(bytes)
+    }
+    fn lift(&self, bytes: &[u8]) -> SemanticOp {
+        if self.interrupt_wait(bytes) {
+            return SemanticOp::Opaque { dest: 0 };
+        }
+        if bytes.get(..4) == Some(&[0x0f, 0x10, 0, 0]) {
+            return SemanticOp::None;
+        }
+        StructuralRiscvDecoder.lift(bytes)
+    }
+    fn value_relocation(
+        &self,
+        relocation: &FunctionRelocation,
+        operation: SemanticOp,
+    ) -> ValueRelocation {
+        StructuralRiscvDecoder.value_relocation(relocation, operation)
     }
 }

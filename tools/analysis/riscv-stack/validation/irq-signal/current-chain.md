@@ -1,6 +1,6 @@
 # Current w1 doorbell to IrqSignal.pend
 
-Current machine evidence is based on main `73042ea1` (#207 and #208).
+Current machine evidence is based on main `2966eb81` (#207 and #208).
 See the [stack-context report](stack-context.md): the constructor copy is now
 `0x5006c62a`; its actual application still returns `DestinationBounds`.
 The earlier investigation below is historical; the regenerated JSON carries

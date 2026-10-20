@@ -1,6 +1,6 @@
 # One-word constructor copy: conditional certificate and remaining bound
 
-This is the #207 snapshot. On main `73042ea1`, the selected call moved to
+This is the #207 snapshot. On main `2966eb81`, the selected call moved to
 `0x5006c62a`. The [checked stack-context follow-up](stack-context.md) proves
 the machine-installed root pointers and adds numerical application/cache
 checks. The real-call discharge still has the explicitly listed CFG and

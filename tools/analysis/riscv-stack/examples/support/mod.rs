@@ -37,7 +37,22 @@ pub fn capture_context<'m>(
     call_behavior: &dyn CallBehavior,
     control: &mut dyn RunControl,
 ) -> Result<RecordBuffer<'m>> {
-    let before = capture(image, function, memory, call_behavior, false, control)?;
+    let options = oer_analysis_riscv_analysis::ResearchOptions {
+        abi: Some(CallAbi::RiscvInteger),
+        ..Default::default()
+    };
+    let mut initial = Saved(RecordBuffer::new(memory));
+    oer_analysis_riscv_stack::inspect_stack_context(
+        image,
+        function,
+        call_behavior,
+        options,
+        &[],
+        memory,
+        control,
+        &mut initial,
+    )?;
+    let before = initial.0;
     let extent = CodeRange {
         start: function.address.into(),
         length: function.size.into(),
@@ -48,7 +63,7 @@ pub fn capture_context<'m>(
         return Ok(before);
     };
     let mut saved = Saved(RecordBuffer::new(memory));
-    oer_analysis_riscv_stack::inspect_function_with_jumps(
+    oer_analysis_riscv_stack::inspect_stack_context(
         image,
         function,
         call_behavior,

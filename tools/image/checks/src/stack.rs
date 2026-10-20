@@ -290,38 +290,24 @@ impl Image {
         keep: &mut Ledger<'_>,
         control: &mut dyn RunControl,
     ) -> Result<Resolutions> {
-        let mut resolutions = Resolutions::new();
+        let resolutions = Resolutions::new();
         let Some(contract) = &self.contract else {
             return Ok(resolutions);
         };
         let Some(ipc) = &contract.interrupts.ipc else {
             return Ok(resolutions);
         };
-        let mut targets = BTreeSet::new();
-        for post in self.address_of(&ipc.post) {
-            if taken.contains(&post) {
-                return Err(format!("`{}` is called through a pointer", ipc.post).into());
-            }
-            targets.extend(
-                self.analysis
-                    .constant_arguments(post, ipc.post_handler_argument)?,
-            );
-        }
-        for dispatch in &ipc.dispatch {
-            for function in self.address_of(dispatch) {
-                for transfer in &self.analysis.functions[&function].transfers {
-                    if transfer.target.is_none() {
-                        keep.admit(Resolutions::admission(targets.len()), control)?;
-                        resolutions.add(
-                            transfer.site,
-                            oer_analysis_riscv_stack::Fact::IpcPosts,
-                            targets.iter().copied(),
-                        );
-                    }
-                }
-            }
-        }
-        Ok(resolutions)
+        Ok(oer_analysis_riscv_stack::ipc_resolutions(
+            &self.analysis,
+            taken,
+            self.address_of(&ipc.post),
+            ipc.post_handler_argument,
+            ipc.dispatch
+                .iter()
+                .flat_map(|dispatch| self.address_of(dispatch)),
+            keep,
+            control,
+        )?)
     }
 }
 

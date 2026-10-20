@@ -1,18 +1,13 @@
 {
-  "repeat_identical": true,
-  "fault_injection": {
-    "load-width": "rejected changed fact",
-    "captured-pointer": "rejected changed fact",
-    "source-load-width": "rejected changed fact",
-    "later-iteration-overlap": "rejected changed fact",
-    "unproved-bounds-admission": "rejected changed fact"
-  },
-  "generic_effects_identical": {
-    "rom-write": true,
-    "rom-barrier": true,
-    "call-write": true,
-    "call-barrier": true,
-    "rom-transfer": true
-  },
-  "actual_call_application": "rejected: DestinationBounds"
+  "positive_replay": "passed",
+  "target_load_width": "rejected",
+  "captured_slot": "rejected",
+  "source_load_width": "rejected",
+  "later_overlapping_store": "rejected",
+  "forged_application": "rejected",
+  "changed_setup_pointer": "rejected",
+  "omitted_cpu0_context": "rejected",
+  "omitted_open_cfg_edge": "rejected",
+  "forged_interval": "rejected",
+  "actual_call_application": "rejected: DestinationBounds; numerical context remains incomplete"
 }

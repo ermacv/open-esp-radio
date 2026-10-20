@@ -135,7 +135,7 @@ pub fn derive<'m>(
         .iter()
         .map(|f| (f.address, oer_analysis_elf::demangle(&f.label())))
         .collect();
-    let resolutions = image_resolutions(
+    let mut resolutions = image_resolutions(
         image,
         analysis,
         dwarf,
@@ -144,6 +144,24 @@ pub fn derive<'m>(
         keep,
         c,
     )?;
+    if let Some(ipc) = &irq.ipc {
+        let taken = taken_addresses(image, keep, c)?;
+        resolutions.extend(ipc_resolutions(
+            analysis,
+            &taken,
+            names
+                .iter()
+                .filter(|(_, name)| name == &ipc.post)
+                .map(|(address, _)| *address),
+            ipc.post_handler_argument,
+            names
+                .iter()
+                .filter(|(_, name)| ipc.dispatch.contains(name))
+                .map(|(address, _)| *address),
+            keep,
+            c,
+        )?);
+    }
     let vectors = vector_table(image, &irq.vector_table_symbol, c)?
         .into_iter()
         .flatten()
@@ -276,6 +294,15 @@ impl<'m> Paths<'_, 'm> {
                     if !oer_analysis_riscv_analysis::writes::closes_local_graph(record) {
                         println!("stack-context-open\t{address:#010x}\t{record:?}");
                         closed = false;
+                    }
+                    if matches!(
+                        record,
+                        FunctionRecord::SemanticGap {
+                            reason: SemanticGapReason::UnsupportedInstruction,
+                            ..
+                        }
+                    ) {
+                        println!("stack-context-semantic\t{address:#010x}\t{record:?}");
                     }
                 }
                 let sp = index

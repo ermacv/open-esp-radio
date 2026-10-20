@@ -1,36 +1,258 @@
 {
-  "base": "main ab2d9f96, including #199 through #205",
+  "base": "main 2966eb81, including #207, #208, #206 and #212",
   "inputs": {
-    "/tmp/oer-pr207-open-cfg/after/w1/runtime.elf": "d5ddcab54ae30dfcb347ba87f787cf78fde099f94c9b30962f94a4566059ceff",
+    "target/fw/w1/runtime.elf": "4589d033be2fcbdc68bbaa1ff2afb4721c69c2824c47ee562f61b232d0c6b4b9",
     "/home/ermacv/.cache/open-esp-radio/vendor/esp-rom-elfs/20260528/esp32s31_rev0_rom.elf": "a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87",
-    "/tmp/oer-pr207-open-cfg/after/w1/interrupt-stack.txt": "2add2a7bf483f0fbf97ab02ccf3a698b2762f2e93b41635b09b9dd127cede54d",
+    "target/fw/w1/interrupt-stack.txt": "3519e5b75981655729e5e3375106d472e871f0b7851a477f678339b4708178cb",
     "chips/esp32s31/platform/rom-functions.toml": "487770cf3eb46549970250a07d7cec155d77ce86272b578f45adcc05ca91ac8a",
-    "chips/esp32s31/platform/chip.toml": "0032c63d94f6cde7867223c90d134cd2a98585a49c8d7457e08ff26c9fe7bc3b"
+    "chips/esp32s31/platform/chip.toml": "0032c63d94f6cde7867223c90d134cd2a98585a49c8d7457e08ff26c9fe7bc3b",
+    "chips/esp32s31/platform/stack.toml": "c56d3be39f7484c5bf726f2cc420a1b6a2d2d64242627e4e11b57efb43e0f511"
+  },
+  "checked_stack_sources": {
+    "tools/analysis/riscv-analysis/src/stack_context.rs": "138e9e6e0996d7985ba155e43a6d5065220fa8f88058325b000b3eef2d38b7ac",
+    "tools/analysis/riscv-analysis/src/writes/word.rs": "21521de706c48903f0337f17f5b764e990f982a10107e772ccc9af21a6d739a0",
+    "tools/analysis/riscv-analysis/src/values.rs": "3f1c4fb53a9d6897ba25f41c2f53f9d6e37318305efd12f20d4f5b3b7f8ee66c",
+    "tools/analysis/riscv-stack/examples/support/stack_context.rs": "9e08e2fbba5fb0ab4a0733989131a264e6abaf91bf55befb5e60cab16c6ea2b7",
+    "tools/analysis/riscv-stack/examples/support/mod.rs": "ba8e2b0863cc9e824f44a6e83b15391eca135ed6c66d90b9c7cc82bc3340c4c5",
+    "tools/analysis/riscv-stack/examples/stack-call-writes.rs": "36be264660949db9989d3edf71b0309ecd3a3ba37edbca85fb6e48e410d4fc73",
+    "tools/analysis/elf/src/lib.rs": "6fabe822e0a08c4311318253c145e048ee3c7bf74cd58781c9bd20d74f741c49"
   },
   "validation_sources": {
-    "current_chain.py": "d6105dd43f915bda21e2f73d1475fa78538d1bd2f78ca15ad6d8b65ce909d287",
+    "current_chain.py": "260e304ea424cd5b7d144fcb98572c22d747b4cc64ba498b4c022c031c798ee7",
     "explain.py": "218886d8caf44068b529107aca0833aabd327f8b522a18c1f15393a508f5f69c"
   },
   "diagnostic_binaries": {
-    "function-records": "e2e97dad1a9964b40f89bec3b927a3c037c6414e68ed19eeef1a3a372e36eaf1",
-    "callback-audit": "fb5f325ae78da6ab97743f53248e3b03d167d9f4bc7d4ebcaaaabee1956476ce",
-    "stack-call-writes": "41076b1b078189a63834d1eb7bf8ee7d51b87d5f7522d83dabe9cad9da1daa35"
+    "function-records": "57654ac905b3c7b255d15c10975e7d1541d9f9a75f9896d98fb24eb0bde21029",
+    "callback-audit": "7be5c567b53de2caa149f4b35833e71d0887a69063e5fb76296a32d660e7b045",
+    "stack-call-writes": "aaf25b47d0dd669582990c8ddf07843d1c4df4aa6dde0bd0f6f4b82aceb90620"
   },
   "streams": {
-    "callbacks.tsv": "a5a7be6c3d6a16c0e97d8c828a4471963b110789e23c38b573a34dd15be14020",
-    "doorbell.tsv": "cec53ee6641769368b0a9da58a6b75088eb2096005622a8a9956176aebf09c2b",
+    "callbacks.tsv": "cd41d14ea5c1a2e706084e2e0387f1dbc736cc5317bb6791703e8d3e2afc7263",
+    "doorbell.tsv": "a8c9c81e3065939a9584d579681a27674cad09af355369453cc028b985692295",
     "irq-root.tsv": "dc2be471f76398e4d0e7c10ea0f7d775c0b1a72af66fda6eccbbb14fd777c60c",
-    "rx-poll.tsv": "66562226f5809d21849d0dba4d80607aca89011670f4b589a54dfec60576f4ee",
-    "run.tsv": "a251d18382ae79209305342e2a3db27c085b0ba218b0c5ef5862e4f5329b8d0d",
-    "pend-initializer-target.tsv": "e3eff564901acb5c8e12cc7441e8b4f62e0aab70653428f1209d5a67e3aba039",
-    "first-constructor-copy.tsv": "78d05694de49e7c9f6c5cc507194616589c60b332172497bba7f1cc8a07a2a15",
-    "short-copy.tsv": "cf26991824abaaecf38be8a231ba16ac97f221af2eea12634e7e7d4c908d3fcc"
+    "rx-poll.tsv": "40e7fd773aa80f602750a458aae80d13d2e7419936c4157c31fccbd8c1a1bc19",
+    "run.tsv": "d6d92ab921147b4fff782f3409763f5011474121691f3b35e660131f104eff99",
+    "pend-initializer-target.tsv": "7266324e9ba8243f42d0abbd711d54a04f35717335976e4d282a35b761faf3c7",
+    "first-constructor-copy.tsv": "799b4dc37a0db3aa3d1e9e11c462a66f693927055942fdc0d77ddb42c835e86c",
+    "short-copy.tsv": "e01c8db7e0f4775e9a4d561947e5f777fc5531dbcde8192aa1c1e7163f104aef"
+  },
+  "checked_stack_context": {
+    "machine_setup": "StackSetup { entry: 788531264, pointer: 1343076800, scratch: 788591808 }",
+    "root": [
+      "stack-root",
+      "runtime_main",
+      "Some(StackContext { owner: 1342655978, start: 1342655978, interval: (1343076800, 1343076800), origins: [StackOrigin { kind: SetupReturn, caller: 1342272768, site: 1342273054, callee: 788531264, interval: (1343076800, 1343076800) }, StackOrigin { kind: Tail, caller: 1342272768, site: 1342273102, callee: 1342655978, interval: (1343076800, 1343076800) }], assumptions: [] })"
+    ],
+    "incoming_contexts": [
+      [
+        "stack-incoming",
+        "0x2f00337e",
+        "0x2f003490",
+        "0x5006bb46",
+        "Some({TaskPolls})"
+      ],
+      [
+        "stack-incoming",
+        "0x50019a18",
+        "0x50019c1c",
+        "0x5006bb46",
+        "Some({TaskPolls})"
+      ]
+    ],
+    "rows": [
+      [
+        "stack-storage",
+        "Range { bottom: \"__runtime_cpu0_task_stack_bottom\", top: \"__runtime_cpu0_task_stack_top\" }",
+        "StorageBounds { start: 1342880192, end: 1343076800, capacity: 196608 }"
+      ],
+      [
+        "stack-setup",
+        "StackSetup { entry: 788531264, pointer: 1343076800, scratch: 788591808 }"
+      ],
+      [
+        "stack-scratch-storage",
+        "[\"__runtime_cpu0_irq_stack_bottom\", \"__runtime_cpu0_irq_stack_top\"]",
+        "StorageBounds { start: 788559040, end: 788591808, capacity: 32768 }"
+      ],
+      [
+        "stack-root",
+        "runtime_main",
+        "Some(StackContext { owner: 1342655978, start: 1342655978, interval: (1343076800, 1343076800), origins: [StackOrigin { kind: SetupReturn, caller: 1342272768, site: 1342273054, callee: 788531264, interval: (1343076800, 1343076800) }, StackOrigin { kind: Tail, caller: 1342272768, site: 1342273102, callee: 1342655978, interval: (1343076800, 1343076800) }], assumptions: [] })"
+      ],
+      [
+        "stack-trap-entries",
+        "47",
+        "Some(TrapEntry { entry: 788531504, frame: 80, handler: 788529856 })",
+        "exception=TrapEntry { entry: 788531336, frame: 80, handler: 788539780 }"
+      ],
+      [
+        "stack-nesting",
+        "hart=0",
+        "bytes=None",
+        "partial=15664",
+        "level-drops=[]",
+        "assumptions={ExecutorInvariant}"
+      ],
+      [
+        "stack-nesting-level",
+        "hart=0",
+        "level=1",
+        "bytes=Some(576)",
+        "partial=576",
+        "frame=80"
+      ],
+      [
+        "stack-nesting-level",
+        "hart=0",
+        "level=2",
+        "bytes=None",
+        "partial=14064",
+        "frame=80"
+      ],
+      [
+        "stack-nesting-level",
+        "hart=0",
+        "level=3",
+        "bytes=None",
+        "partial=576",
+        "frame=80"
+      ],
+      [
+        "stack-nesting",
+        "hart=1",
+        "bytes=Some(1024)",
+        "partial=1024",
+        "level-drops=[]",
+        "assumptions={ExecutorInvariant}"
+      ],
+      [
+        "stack-nesting-level",
+        "hart=1",
+        "level=1",
+        "bytes=Some(576)",
+        "partial=576",
+        "frame=80"
+      ],
+      [
+        "stack-irq-gap",
+        "trap arrival sp/mscratch interval and nesting remain unproved; neither storage capacity nor partial + ? is a numerical root"
+      ],
+      [
+        "stack-incoming",
+        "0x2f00337e",
+        "0x2f003490",
+        "0x5006bb46",
+        "Some({TaskPolls})"
+      ],
+      [
+        "stack-incoming",
+        "0x2f0034f4",
+        "0x2f003502",
+        "0x2f00337e",
+        "None"
+      ],
+      [
+        "stack-incoming",
+        "0x2f004286",
+        "0x2f00428a",
+        "0x2f0034f4",
+        "None"
+      ],
+      [
+        "stack-context-gap",
+        "no checked numerical root for 0x2f004286"
+      ],
+      [
+        "stack-context-step",
+        "0x2f004286",
+        "0x2f00428a",
+        "closed=true",
+        "sp=Some(EntryStack { offset: 0 })",
+        "None"
+      ],
+      [
+        "stack-context-step",
+        "0x2f0034f4",
+        "0x2f003502",
+        "closed=true",
+        "sp=Some(EntryStack { offset: -16 })",
+        "None"
+      ],
+      [
+        "stack-context-step",
+        "0x2f00337e",
+        "0x2f003490",
+        "closed=true",
+        "sp=Some(EntryStack { offset: -32 })",
+        "None"
+      ],
+      [
+        "stack-incoming",
+        "0x50019a18",
+        "0x50019c1c",
+        "0x5006bb46",
+        "Some({TaskPolls})"
+      ],
+      [
+        "stack-incoming",
+        "0x500654f6",
+        "0x5006944c",
+        "0x50019a18",
+        "None"
+      ],
+      [
+        "stack-incoming",
+        "0x50074dea",
+        "0x50074dee",
+        "0x500654f6",
+        "None"
+      ],
+      [
+        "stack-context-step",
+        "0x50074dea",
+        "0x50074dee",
+        "closed=true",
+        "sp=Some(EntryStack { offset: 0 })",
+        "Some(StackContext { owner: 1342592246, start: 1342592246, interval: (1343076800, 1343076800), origins: [StackOrigin { kind: SetupReturn, caller: 1342272768, site: 1342273054, callee: 788531264, interval: (1343076800, 1343076800) }, StackOrigin { kind: Tail, caller: 1342272768, site: 1342273102, callee: 1342655978, interval: (1343076800, 1343076800) }, StackOrigin { kind: Call, caller: 1342655978, site: 1342655982, callee: 1342592246, interval: (1343076800, 1343076800) }], assumptions: [] })"
+      ],
+      [
+        "stack-context-open",
+        "0x500654f6",
+        "Edge { from: 1342593532, target: None, relation: Indirect, external: true }"
+      ],
+      [
+        "stack-context-step",
+        "0x500654f6",
+        "0x5006944c",
+        "closed=false",
+        "sp=Some(EntryStack { offset: -2384 })",
+        "None"
+      ],
+      [
+        "stack-context-step",
+        "0x50019a18",
+        "0x50019c1c",
+        "closed=true",
+        "sp=Some(EntryStack { offset: -80 })",
+        "None"
+      ],
+      [
+        "stack-context-result",
+        "None"
+      ]
+    ],
+    "result": "unknown; no interval is supplied by the validator",
+    "blockers": [
+      "CPU0 main: unknown indirect edge at 0x500659fc prevents an all-path interval; executor relative sp -80 is proved but supplies no numerical root",
+      "IRQ: trap arrival sp/mscratch numerical context and nested nonwrapping propagation are unproved; partial bounds are not usable as numerical intervals"
+    ],
+    "assumption": "ExecutorInvariant remains explicit on TaskPolls; it does not establish sp bounds"
   },
   "irq_binding": {
     "table_entry": [
       "irq-entry",
       "2",
-      "0x500a5200",
+      "0x500a5180",
       "TableEntry { source: 68, level: 3, core: 0, handler: Some(788546190) }"
     ],
     "context": [
@@ -515,7 +737,7 @@
       ],
       "inputs": [
         [
-          "Some([Constant { value: 0 }, Expression { id: 0 }, EntryStack { offset: -32 }, Expression { id: 2 }, Expression { id: 3 }, Expression { id: 4 }, Expression { id: 5 }, Expression { id: 6 }, Constant { value: 1343135744 }, Expression { id: 47 }, Expression { id: 65 }, Expression { id: 68 }, Constant { value: 32 }, Constant { value: 788624580 }, Unknown, Unknown, Expression { id: 15 }, Expression { id: 16 }, Constant { value: 788624576 }, Unknown, Expression { id: 19 }, Expression { id: 20 }, Expression { id: 21 }, Expression { id: 22 }, Expression { id: 23 }, Expression { id: 24 }, Expression { id: 25 }, Expression { id: 26 }, Expression { id: 27 }, Expression { id: 28 }, Expression { id: 29 }, Expression { id: 30 }])"
+          "Some([Constant { value: 0 }, Expression { id: 0 }, EntryStack { offset: -32 }, Expression { id: 2 }, Expression { id: 3 }, Expression { id: 4 }, Expression { id: 5 }, Expression { id: 6 }, Constant { value: 1343135616 }, Expression { id: 47 }, Expression { id: 65 }, Expression { id: 68 }, Constant { value: 32 }, Constant { value: 788624580 }, Unknown, Unknown, Expression { id: 15 }, Expression { id: 16 }, Constant { value: 788624576 }, Unknown, Expression { id: 19 }, Expression { id: 20 }, Expression { id: 21 }, Expression { id: 22 }, Expression { id: 23 }, Expression { id: 24 }, Expression { id: 25 }, Expression { id: 26 }, Expression { id: 27 }, Expression { id: 28 }, Expression { id: 29 }, Expression { id: 30 }])"
         ]
       ],
       "write-barrier": [
@@ -635,7 +857,7 @@
     "load-field",
     "0x2f00371e",
     "0x2f00371c",
-    "Some(CallbackLoadField { field: FunctionPointerType { subroutine: 2462908, foreign: false }, witness: Some(RegisterWitness { site: 788543258, register: 10 }) })",
+    "Some(CallbackLoadField { field: FunctionPointerType { subroutine: 2463869, foreign: false }, witness: Some(RegisterWitness { site: 788543258, register: 10 }) })",
     "Some(LoadBase { witnesses: [RegisterWitness { site: 788543258, register: 10 }, RegisterWitness { site: 788543254, register: 10 }], barrier: (788543250, MemoryWrite) })"
   ],
   "audited_candidate_count": 362,
@@ -650,9 +872,9 @@
     "address_use": [
       "address-use",
       "796",
-      "AddressUse { relocation: Relocation { section: 7, at: 788557828, r_type: 1, target: Symbol(2392), addend: 0, implicit_addend: false }, role: Word, symbol: Some(Symbol { index: 2392, name: \"_RINvNtCs2sTx9gsjQdI_22oer_espressif_executor8executor11pend_signalKh2_ECs99EPaW4oFFu_20oer_firmware_apps_w1\", address: 788541986, size: 100, kind: Text, defined: true, global: false, section: Some(5) }), value: Resolved(788541986), function: FunctionRelation { nearest: Some(FunctionAddress { entry: 788541986, offset: 0 }), matches: 1 }, symbol_function: FunctionRelation { nearest: Some(FunctionAddress { entry: 788541986, offset: 0 }), matches: 1 } }"
+      "AddressUse { relocation: Relocation { section: 7, at: 788557828, r_type: 1, target: Symbol(2392), addend: 0, implicit_addend: false }, role: Word, symbol: Some(Symbol { index: 2392, name: \"_RINvNtCs2sTx9gsjQdI_22oer_espressif_executor8executor11pend_signalKh2_ECscOSaCmiKk0x_20oer_firmware_apps_w1\", address: 788541986, size: 100, kind: Text, defined: true, global: false, section: Some(5) }), value: Resolved(788541986), function: FunctionRelation { nearest: Some(FunctionAddress { entry: 788541986, offset: 0 }), matches: 1 }, symbol_function: FunctionRelation { nearest: Some(FunctionAddress { entry: 788541986, offset: 0 }), matches: 1 } }"
     ],
-    "typed_storage": "use\t0x2f003222\t796\t0x2f007004\tWord\t0\ttyped:{FunctionPointerType { subroutine: 703124, foreign: false }}",
+    "typed_storage": "use\t0x2f003222\t796\t0x2f007004\tWord\t0\ttyped:{FunctionPointerType { subroutine: 703349, foreign: false }}",
     "target_owner": [
       "0x2f003222",
       "oer_espressif_executor::executor::pend_signal::<2>"
@@ -661,9 +883,9 @@
   },
   "constructor_stores": [
     {
-      "pc": "0x5006c590",
+      "pc": "0x5006c50c",
       "owner": [
-        "0x5006bbca",
+        "0x5006bb46",
         "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
       ],
       "inline_context": [
@@ -690,16 +912,16 @@
         ],
         "write-event": [
           [
-            "FunctionWrite { origin: WriteOrigin { function: 1342618570, tail: None }, site: 1342621072, address: Base { base: Address(788624704), offset: 0 }, value: Base { base: Address(788557828), offset: 0 }, width: 4, occurrence: May, proof: ClosedGraph }"
+            "FunctionWrite { origin: WriteOrigin { function: 1342618438, tail: None }, site: 1342620940, address: Base { base: Address(788624704), offset: 0 }, value: Base { base: Address(788557828), offset: 0 }, width: 4, occurrence: May, proof: ClosedGraph }"
           ]
         ]
       },
       "expressions": {}
     },
     {
-      "pc": "0x5006c592",
+      "pc": "0x5006c50e",
       "owner": [
-        "0x5006bbca",
+        "0x5006bb46",
         "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
       ],
       "inline_context": [
@@ -726,16 +948,16 @@
         ],
         "write-event": [
           [
-            "FunctionWrite { origin: WriteOrigin { function: 1342618570, tail: None }, site: 1342621074, address: Base { base: Address(788624708), offset: 0 }, value: Base { base: Address(788624704), offset: 0 }, width: 4, occurrence: May, proof: ClosedGraph }"
+            "FunctionWrite { origin: WriteOrigin { function: 1342618438, tail: None }, site: 1342620942, address: Base { base: Address(788624708), offset: 0 }, value: Base { base: Address(788624704), offset: 0 }, width: 4, occurrence: May, proof: ClosedGraph }"
           ]
         ]
       },
       "expressions": {}
     },
     {
-      "pc": "0x5006c5ee",
+      "pc": "0x5006c56a",
       "owner": [
-        "0x5006bbca",
+        "0x5006bb46",
         "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
       ],
       "inline_context": [
@@ -760,13 +982,13 @@
         ],
         "write-event": [
           [
-            "FunctionWrite { origin: WriteOrigin { function: 1342618570, tail: None }, site: 1342621166, address: Base { base: Argument(0), offset: 1408 }, value: Base { base: Address(788624708), offset: 0 }, width: 4, occurrence: May, proof: ClosedGraph }"
+            "FunctionWrite { origin: WriteOrigin { function: 1342618438, tail: None }, site: 1342621034, address: Base { base: Argument(0), offset: 1408 }, value: Base { base: Address(788624708), offset: 0 }, width: 4, occurrence: May, proof: ClosedGraph }"
           ]
         ]
       },
       "expressions": {
         "2552": {
-          "pc": "0x5006c5ee",
+          "pc": "0x5006c56a",
           "expression": "Some(Integer { op: Add, left: Expression { id: 9 }, right: Constant { value: 1408 } })"
         },
         "9": {
@@ -776,9 +998,9 @@
       }
     },
     {
-      "pc": "0x5006c602",
+      "pc": "0x5006c57e",
       "owner": [
-        "0x5006bbca",
+        "0x5006bb46",
         "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
       ],
       "inline_context": [
@@ -803,13 +1025,13 @@
         ],
         "write-event": [
           [
-            "FunctionWrite { origin: WriteOrigin { function: 1342618570, tail: None }, site: 1342621186, address: Base { base: Argument(0), offset: 1424 }, value: Base { base: Address(788625408), offset: 0 }, width: 4, occurrence: May, proof: ClosedGraph }"
+            "FunctionWrite { origin: WriteOrigin { function: 1342618438, tail: None }, site: 1342621054, address: Base { base: Argument(0), offset: 1424 }, value: Base { base: Address(788625408), offset: 0 }, width: 4, occurrence: May, proof: ClosedGraph }"
           ]
         ]
       },
       "expressions": {
         "2568": {
-          "pc": "0x5006c602",
+          "pc": "0x5006c57e",
           "expression": "Some(Integer { op: Add, left: Expression { id: 9 }, right: Constant { value: 1424 } })"
         },
         "9": {
@@ -819,9 +1041,9 @@
       }
     },
     {
-      "pc": "0x5006c606",
+      "pc": "0x5006c582",
       "owner": [
-        "0x5006bbca",
+        "0x5006bb46",
         "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
       ],
       "inline_context": [
@@ -846,13 +1068,13 @@
         ],
         "write-event": [
           [
-            "FunctionWrite { origin: WriteOrigin { function: 1342618570, tail: None }, site: 1342621190, address: Base { base: Argument(0), offset: 1428 }, value: Base { base: Address(788624708), offset: 0 }, width: 4, occurrence: May, proof: ClosedGraph }"
+            "FunctionWrite { origin: WriteOrigin { function: 1342618438, tail: None }, site: 1342621058, address: Base { base: Argument(0), offset: 1428 }, value: Base { base: Address(788624708), offset: 0 }, width: 4, occurrence: May, proof: ClosedGraph }"
           ]
         ]
       },
       "expressions": {
         "2570": {
-          "pc": "0x5006c606",
+          "pc": "0x5006c582",
           "expression": "Some(Integer { op: Add, left: Expression { id: 9 }, right: Constant { value: 1428 } })"
         },
         "9": {
@@ -862,9 +1084,9 @@
       }
     },
     {
-      "pc": "0x5006c6f4",
+      "pc": "0x5006c670",
       "owner": [
-        "0x5006bbca",
+        "0x5006bb46",
         "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
       ],
       "inline_context": [
@@ -889,13 +1111,13 @@
         ],
         "write-event": [
           [
-            "FunctionWrite { origin: WriteOrigin { function: 1342618570, tail: None }, site: 1342621428, address: Base { base: Argument(0), offset: 348 }, value: Base { base: Address(788624576), offset: 0 }, width: 4, occurrence: May, proof: ClosedGraph }"
+            "FunctionWrite { origin: WriteOrigin { function: 1342618438, tail: None }, site: 1342621296, address: Base { base: Argument(0), offset: 348 }, value: Base { base: Address(788624576), offset: 0 }, width: 4, occurrence: May, proof: ClosedGraph }"
           ]
         ]
       },
       "expressions": {
         "2747": {
-          "pc": "0x5006c6f4",
+          "pc": "0x5006c670",
           "expression": "Some(Integer { op: Add, left: Expression { id: 9 }, right: Constant { value: 348 } })"
         },
         "9": {
@@ -907,9 +1129,9 @@
   ],
   "aggregate_copy_calls": [
     {
-      "pc": "0x5006c6ae",
+      "pc": "0x5006c62a",
       "owner": [
-        "0x5006bbca",
+        "0x5006bb46",
         "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
       ],
       "inline_context": [
@@ -921,13 +1143,13 @@
       "facts": {
         "instruction": [
           [
-            "jalr ra, -486(ra)"
+            "jalr ra, -354(ra)"
           ]
         ],
         "register-write": [
           [
             "1",
-            "ImageAddress { address: 1342621362 }"
+            "ImageAddress { address: 1342621230 }"
           ]
         ],
         "transfer": [
@@ -937,15 +1159,15 @@
         ],
         "inputs": [
           [
-            "Some([Constant { value: 0 }, ImageAddress { address: 796919466 }, EntryStack { offset: -576 }, Expression { id: 2 }, Expression { id: 3 }, Constant { value: 788625344 }, Constant { value: 788625368 }, Constant { value: 788682048 }, Constant { value: 1342854452 }, Expression { id: 2631 }, EntryStack { offset: -280 }, Expression { id: 2579 }, Constant { value: 68 }, Unknown, Constant { value: 788624720 }, Unknown, Constant { value: 788625356 }, Constant { value: 788625152 }, Expression { id: 2577 }, Expression { id: 2636 }, Constant { value: 788680516 }, Constant { value: 788647076 }, Constant { value: 40960 }, Constant { value: 788658780 }, Expression { id: 47 }, Constant { value: 788648748 }, Expression { id: 9 }, Constant { value: 788652092 }, Constant { value: 788626944 }, Constant { value: 788625408 }, Constant { value: 788624708 }, Constant { value: 788628288 }])"
+            "Some([Constant { value: 0 }, ImageAddress { address: 796919334 }, EntryStack { offset: -576 }, Expression { id: 2 }, Expression { id: 3 }, Constant { value: 788625344 }, Constant { value: 788625368 }, Constant { value: 788682048 }, Constant { value: 1342854324 }, Expression { id: 2631 }, EntryStack { offset: -280 }, Expression { id: 2579 }, Constant { value: 68 }, Unknown, Constant { value: 788624720 }, Unknown, Constant { value: 788625356 }, Constant { value: 788625152 }, Expression { id: 2577 }, Expression { id: 2636 }, Constant { value: 788680516 }, Constant { value: 788647076 }, Constant { value: 40960 }, Constant { value: 788658780 }, Expression { id: 47 }, Constant { value: 788648748 }, Expression { id: 9 }, Constant { value: 788652092 }, Constant { value: 788626944 }, Constant { value: 788625408 }, Constant { value: 788624708 }, Constant { value: 788628288 }])"
           ]
         ],
         "write-barrier": [
           [
-            "WriteBarrier { origin: WriteOrigin { function: 1342618570, tail: None }, site: 1342621358, kind: Call }"
+            "WriteBarrier { origin: WriteOrigin { function: 1342618438, tail: None }, site: 1342621226, kind: Call }"
           ],
           [
-            "WriteBarrier { origin: WriteOrigin { function: 1342618570, tail: None }, site: 1342621358, kind: Call }"
+            "WriteBarrier { origin: WriteOrigin { function: 1342618438, tail: None }, site: 1342621226, kind: Call }"
           ]
         ]
       },
@@ -955,23 +1177,23 @@
           "expression": "Some(EntryRegister { register: 10 })"
         },
         "47": {
-          "pc": "0x5006bc14",
+          "pc": "0x5006bb90",
           "expression": "Some(Integer { op: Add, left: Expression { id: 9 }, right: Constant { value: 1446 } })"
         },
         "2636": {
-          "pc": "0x5006c688",
+          "pc": "0x5006c604",
           "expression": "Some(Integer { op: Add, left: Expression { id: 9 }, right: Constant { value: 1436 } })"
         },
         "2577": {
-          "pc": "0x5006c60e",
+          "pc": "0x5006c58a",
           "expression": "Some(Integer { op: Add, left: Expression { id: 9 }, right: Constant { value: 40 } })"
         },
         "2579": {
-          "pc": "0x5006c612",
+          "pc": "0x5006c58e",
           "expression": "Some(Integer { op: Add, left: Expression { id: 9 }, right: Constant { value: 1364 } })"
         },
         "2631": {
-          "pc": "0x5006c684",
+          "pc": "0x5006c600",
           "expression": "Some(Integer { op: Add, left: Expression { id: 9 }, right: Constant { value: 1432 } })"
         },
         "3": {
@@ -985,9 +1207,9 @@
       }
     },
     {
-      "pc": "0x5006c6c0",
+      "pc": "0x5006c63c",
       "owner": [
-        "0x5006bbca",
+        "0x5006bb46",
         "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
       ],
       "inline_context": [
@@ -999,13 +1221,13 @@
       "facts": {
         "instruction": [
           [
-            "jalr ra, -504(ra)"
+            "jalr ra, -372(ra)"
           ]
         ],
         "register-write": [
           [
             "1",
-            "ImageAddress { address: 1342621380 }"
+            "ImageAddress { address: 1342621248 }"
           ]
         ],
         "transfer": [
@@ -1015,15 +1237,15 @@
         ],
         "inputs": [
           [
-            "Some([Constant { value: 0 }, ImageAddress { address: 796919484 }, EntryStack { offset: -576 }, Expression { id: 2 }, Expression { id: 3 }, Unknown, Unknown, Unknown, Constant { value: 1342854452 }, Expression { id: 2631 }, Expression { id: 2702 }, EntryStack { offset: -496 }, Constant { value: 284 }, Unknown, Unknown, Unknown, Unknown, Unknown, Expression { id: 2577 }, Expression { id: 2636 }, Constant { value: 788680516 }, Constant { value: 788647076 }, Constant { value: 40960 }, Constant { value: 788658780 }, Expression { id: 47 }, Constant { value: 788648748 }, Expression { id: 9 }, Constant { value: 788652092 }, Unknown, Unknown, Unknown, Unknown])"
+            "Some([Constant { value: 0 }, ImageAddress { address: 796919352 }, EntryStack { offset: -576 }, Expression { id: 2 }, Expression { id: 3 }, Unknown, Unknown, Unknown, Constant { value: 1342854324 }, Expression { id: 2631 }, Expression { id: 2702 }, EntryStack { offset: -496 }, Constant { value: 284 }, Unknown, Unknown, Unknown, Unknown, Unknown, Expression { id: 2577 }, Expression { id: 2636 }, Constant { value: 788680516 }, Constant { value: 788647076 }, Constant { value: 40960 }, Constant { value: 788658780 }, Expression { id: 47 }, Constant { value: 788648748 }, Expression { id: 9 }, Constant { value: 788652092 }, Unknown, Unknown, Unknown, Unknown])"
           ]
         ],
         "write-barrier": [
           [
-            "WriteBarrier { origin: WriteOrigin { function: 1342618570, tail: None }, site: 1342621376, kind: Call }"
+            "WriteBarrier { origin: WriteOrigin { function: 1342618438, tail: None }, site: 1342621244, kind: Call }"
           ],
           [
-            "WriteBarrier { origin: WriteOrigin { function: 1342618570, tail: None }, site: 1342621376, kind: Call }"
+            "WriteBarrier { origin: WriteOrigin { function: 1342618438, tail: None }, site: 1342621244, kind: Call }"
           ]
         ]
       },
@@ -1033,23 +1255,23 @@
           "expression": "Some(EntryRegister { register: 10 })"
         },
         "47": {
-          "pc": "0x5006bc14",
+          "pc": "0x5006bb90",
           "expression": "Some(Integer { op: Add, left: Expression { id: 9 }, right: Constant { value: 1446 } })"
         },
         "2636": {
-          "pc": "0x5006c688",
+          "pc": "0x5006c604",
           "expression": "Some(Integer { op: Add, left: Expression { id: 9 }, right: Constant { value: 1436 } })"
         },
         "2577": {
-          "pc": "0x5006c60e",
+          "pc": "0x5006c58a",
           "expression": "Some(Integer { op: Add, left: Expression { id: 9 }, right: Constant { value: 40 } })"
         },
         "2702": {
-          "pc": "0x5006c6b2",
+          "pc": "0x5006c62e",
           "expression": "Some(Integer { op: Add, left: Expression { id: 9 }, right: Constant { value: 56 } })"
         },
         "2631": {
-          "pc": "0x5006c684",
+          "pc": "0x5006c600",
           "expression": "Some(Integer { op: Add, left: Expression { id: 9 }, right: Constant { value: 1432 } })"
         },
         "3": {
@@ -1063,9 +1285,9 @@
       }
     },
     {
-      "pc": "0x5006bcc4",
+      "pc": "0x5006bc40",
       "owner": [
-        "0x5006bbca",
+        "0x5006bb46",
         "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
       ],
       "inline_context": [
@@ -1078,13 +1300,13 @@
       "facts": {
         "instruction": [
           [
-            "jalr ra, -2044(ra)"
+            "jalr ra, -1912(ra)"
           ]
         ],
         "register-write": [
           [
             "1",
-            "ImageAddress { address: 1342618824 }"
+            "ImageAddress { address: 1342618692 }"
           ]
         ],
         "transfer": [
@@ -1094,15 +1316,15 @@
         ],
         "inputs": [
           [
-            "Some([Constant { value: 0 }, ImageAddress { address: 796921024 }, EntryStack { offset: -576 }, Expression { id: 2 }, Expression { id: 3 }, Unknown, Unknown, Unknown, Unknown, Expression { id: 68 }, Expression { id: 68 }, Expression { id: 63 }, Constant { value: 640 }, Unknown, Unknown, Unknown, Unknown, Unknown, Unknown, Unknown, Unknown, Unknown, Unknown, Unknown, Expression { id: 47 }, Unknown, Expression { id: 9 }, Unknown, Unknown, Unknown, Unknown, Unknown])"
+            "Some([Constant { value: 0 }, ImageAddress { address: 796920892 }, EntryStack { offset: -576 }, Expression { id: 2 }, Expression { id: 3 }, Unknown, Unknown, Unknown, Unknown, Expression { id: 68 }, Expression { id: 68 }, Expression { id: 63 }, Constant { value: 640 }, Unknown, Unknown, Unknown, Unknown, Unknown, Unknown, Unknown, Unknown, Unknown, Unknown, Unknown, Expression { id: 47 }, Unknown, Expression { id: 9 }, Unknown, Unknown, Unknown, Unknown, Unknown])"
           ]
         ],
         "write-barrier": [
           [
-            "WriteBarrier { origin: WriteOrigin { function: 1342618570, tail: None }, site: 1342618820, kind: Call }"
+            "WriteBarrier { origin: WriteOrigin { function: 1342618438, tail: None }, site: 1342618688, kind: Call }"
           ],
           [
-            "WriteBarrier { origin: WriteOrigin { function: 1342618570, tail: None }, site: 1342618820, kind: Call }"
+            "WriteBarrier { origin: WriteOrigin { function: 1342618438, tail: None }, site: 1342618688, kind: Call }"
           ]
         ]
       },
@@ -1112,15 +1334,15 @@
           "expression": "Some(EntryRegister { register: 10 })"
         },
         "47": {
-          "pc": "0x5006bc14",
+          "pc": "0x5006bb90",
           "expression": "Some(Integer { op: Add, left: Expression { id: 9 }, right: Constant { value: 1446 } })"
         },
         "63": {
-          "pc": "0x5006bcb2",
+          "pc": "0x5006bc2e",
           "expression": "Some(Integer { op: Add, left: Expression { id: 9 }, right: Constant { value: 56 } })"
         },
         "68": {
-          "pc": "0x5006bcb6",
+          "pc": "0x5006bc32",
           "expression": "Some(Integer { op: Add, left: Expression { id: 9 }, right: Constant { value: 696 } })"
         },
         "3": {
@@ -1135,7 +1357,7 @@
     }
   ],
   "first_copy_effect_check": {
-    "call": "0x5006c6ae",
+    "call": "0x5006c62a",
     "destination_word_coordinate": -236,
     "coordinate_meaning": "copy destination + 44; not an existing captured spill",
     "context": [
@@ -1477,9 +1699,9 @@
     ],
     "conditional_caller_instance": [
       "word-instance",
-      "0x5006bbca",
-      "0x5006c6ae",
-      "WordContents { origin: WriteOrigin { function: 796971616, tail: Some(TailTransfer { entry: 796918980, site: 796918980, target: 796971616 }) }, destination: Base { base: Stack { function: 1342618570, offset: -280 }, offset: 44 }, source: Base { base: Argument(0), offset: 1408 }, load: 796971826, load_order: 51, store: 796971832, store_order: 53, width: 4, source_unchanged_before_load: false }",
+      "0x5006bb46",
+      "0x5006c62a",
+      "WordContents { origin: WriteOrigin { function: 796971616, tail: Some(TailTransfer { entry: 796918980, site: 796918980, target: 796971616 }) }, destination: Base { base: Stack { function: 1342618438, offset: -280 }, offset: 44 }, source: Base { base: Argument(0), offset: 1408 }, load: 796971826, load_order: 51, store: 796971832, store_order: 53, width: 4, source_unchanged_before_load: false }",
       "Some(DestinationBounds)"
     ],
     "byte_proofs_under_conditions": [
@@ -1543,9 +1765,9 @@
   },
   "future_pointer_stores": [
     {
-      "pc": "0x5006bcd0",
+      "pc": "0x5006bc4c",
       "owner": [
-        "0x5006bbca",
+        "0x5006bb46",
         "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
       ],
       "inline_context": [
@@ -1571,17 +1793,17 @@
         ],
         "write-event": [
           [
-            "FunctionWrite { origin: WriteOrigin { function: 1342618570, tail: None }, site: 1342618832, address: Base { base: Argument(0), offset: 1340 }, value: Base { base: Argument(0), offset: 696 }, width: 4, occurrence: May, proof: ClosedGraph }"
+            "FunctionWrite { origin: WriteOrigin { function: 1342618438, tail: None }, site: 1342618700, address: Base { base: Argument(0), offset: 1340 }, value: Base { base: Argument(0), offset: 696 }, width: 4, occurrence: May, proof: ClosedGraph }"
           ]
         ]
       },
       "expressions": {
         "80": {
-          "pc": "0x5006bcd0",
+          "pc": "0x5006bc4c",
           "expression": "Some(Integer { op: And, left: Expression { id: 68 }, right: Constant { value: 4294967295 } })"
         },
         "68": {
-          "pc": "0x5006bcb6",
+          "pc": "0x5006bc32",
           "expression": "Some(Integer { op: Add, left: Expression { id: 9 }, right: Constant { value: 696 } })"
         },
         "9": {
@@ -1589,15 +1811,15 @@
           "expression": "Some(EntryRegister { register: 10 })"
         },
         "79": {
-          "pc": "0x5006bcd0",
+          "pc": "0x5006bc4c",
           "expression": "Some(Integer { op: Add, left: Expression { id: 9 }, right: Constant { value: 1340 } })"
         }
       }
     },
     {
-      "pc": "0x5006bcd8",
+      "pc": "0x5006bc54",
       "owner": [
-        "0x5006bbca",
+        "0x5006bb46",
         "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
       ],
       "inline_context": [
@@ -1623,17 +1845,17 @@
         ],
         "write-event": [
           [
-            "FunctionWrite { origin: WriteOrigin { function: 1342618570, tail: None }, site: 1342618840, address: Base { base: Argument(0), offset: 1348 }, value: Base { base: Argument(0), offset: 1340 }, width: 4, occurrence: May, proof: ClosedGraph }"
+            "FunctionWrite { origin: WriteOrigin { function: 1342618438, tail: None }, site: 1342618708, address: Base { base: Argument(0), offset: 1348 }, value: Base { base: Argument(0), offset: 1340 }, width: 4, occurrence: May, proof: ClosedGraph }"
           ]
         ]
       },
       "expressions": {
         "86": {
-          "pc": "0x5006bcd8",
+          "pc": "0x5006bc54",
           "expression": "Some(Integer { op: And, left: Expression { id: 77 }, right: Constant { value: 4294967295 } })"
         },
         "77": {
-          "pc": "0x5006bcc8",
+          "pc": "0x5006bc44",
           "expression": "Some(Integer { op: Add, left: Expression { id: 9 }, right: Constant { value: 1340 } })"
         },
         "9": {
@@ -1641,7 +1863,7 @@
           "expression": "Some(EntryRegister { register: 10 })"
         },
         "85": {
-          "pc": "0x5006bcd8",
+          "pc": "0x5006bc54",
           "expression": "Some(Integer { op: Add, left: Expression { id: 9 }, right: Constant { value: 1348 } })"
         }
       }
@@ -1649,9 +1871,9 @@
   ],
   "constructor_pointer_loads": [
     {
-      "pc": "0x5006bd20",
+      "pc": "0x5006bc9c",
       "owner": [
-        "0x5006bbca",
+        "0x5006bb46",
         "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
       ],
       "inline_context": [
@@ -1688,15 +1910,15 @@
       },
       "expressions": {
         "113": {
-          "pc": "0x5006bd20",
+          "pc": "0x5006bc9c",
           "expression": "Some(Load { address: Unknown, width: 4, signed: false })"
         }
       }
     },
     {
-      "pc": "0x5006bd70",
+      "pc": "0x5006bcec",
       "owner": [
-        "0x5006bbca",
+        "0x5006bb46",
         "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
       ],
       "inline_context": [
@@ -1732,15 +1954,15 @@
       },
       "expressions": {
         "464": {
-          "pc": "0x5006bd70",
+          "pc": "0x5006bcec",
           "expression": "Some(Load { address: Unknown, width: 4, signed: false })"
         }
       }
     },
     {
-      "pc": "0x5006bd88",
+      "pc": "0x5006bd04",
       "owner": [
-        "0x5006bbca",
+        "0x5006bb46",
         "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
       ],
       "inline_context": [
@@ -1776,15 +1998,15 @@
       },
       "expressions": {
         "631": {
-          "pc": "0x5006bd88",
+          "pc": "0x5006bd04",
           "expression": "Some(Load { address: Unknown, width: 4, signed: false })"
         }
       }
     },
     {
-      "pc": "0x5006bd94",
+      "pc": "0x5006bd10",
       "owner": [
-        "0x5006bbca",
+        "0x5006bb46",
         "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
       ],
       "inline_context": [
@@ -1820,7 +2042,7 @@
       },
       "expressions": {
         "720": {
-          "pc": "0x5006bd94",
+          "pc": "0x5006bd10",
           "expression": "Some(Load { address: Unknown, width: 4, signed: false })"
         }
       }
@@ -1830,9 +2052,9 @@
     {
       "slot": -532,
       "definition": {
-        "pc": "0x5006bd74",
+        "pc": "0x5006bcf0",
         "owner": [
-          "0x5006bbca",
+          "0x5006bb46",
           "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
         ],
         "inline_context": [
@@ -1861,21 +2083,21 @@
           ],
           "write-event": [
             [
-              "FunctionWrite { origin: WriteOrigin { function: 1342618570, tail: None }, site: 1342618996, address: Base { base: Stack { function: 1342618570, offset: -532 }, offset: 0 }, value: Base { base: Unknown, offset: 0 }, width: 4, occurrence: May, proof: ClosedGraph }"
+              "FunctionWrite { origin: WriteOrigin { function: 1342618438, tail: None }, site: 1342618864, address: Base { base: Stack { function: 1342618438, offset: -532 }, offset: 0 }, value: Base { base: Unknown, offset: 0 }, width: 4, occurrence: May, proof: ClosedGraph }"
             ]
           ],
           "write-barrier": [
             [
-              "WriteBarrier { origin: WriteOrigin { function: 1342618570, tail: None }, site: 1342618996, kind: UnknownValue }"
+              "WriteBarrier { origin: WriteOrigin { function: 1342618438, tail: None }, site: 1342618864, kind: UnknownValue }"
             ]
           ]
         },
         "expressions": {}
       },
       "reload": {
-        "pc": "0x5006d1c2",
+        "pc": "0x5006d13e",
         "owner": [
-          "0x5006bbca",
+          "0x5006bb46",
           "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
         ],
         "inline_context": [
@@ -1914,48 +2136,48 @@
           ],
           "stack-reload": [
             [
-              "StackReload { origin: WriteOrigin { function: 1342618570, tail: None }, site: 1342624194, slot: -532, width: 4, value: Base { base: Unknown, offset: 0 } }"
+              "StackReload { origin: WriteOrigin { function: 1342618438, tail: None }, site: 1342624062, slot: -532, width: 4, value: Base { base: Unknown, offset: 0 } }"
             ]
           ]
         },
         "expressions": {
           "2757": {
-            "pc": "0x5006d1c2",
+            "pc": "0x5006d13e",
             "expression": "Some(Load { address: EntryStack { offset: -532 }, width: 4, signed: false })"
           }
         }
       },
       "all_same_slot_accesses": [
         [
-          "0x5006bd74",
+          "0x5006bcf0",
           "Store",
           "4",
           "EntryStack { offset: -532 }",
           "Some(Unknown)"
         ],
         [
-          "0x5006c15e",
+          "0x5006c0da",
           "Store",
           "4",
           "EntryStack { offset: -532 }",
           "Some(Unknown)"
         ],
         [
-          "0x5006ccca",
+          "0x5006cc46",
           "Store",
           "4",
           "EntryStack { offset: -532 }",
           "Some(Unknown)"
         ],
         [
-          "0x5006ce66",
+          "0x5006cde2",
           "Load",
           "4",
           "EntryStack { offset: -532 }",
           "None"
         ],
         [
-          "0x5006d1c2",
+          "0x5006d13e",
           "Load",
           "4",
           "EntryStack { offset: -532 }",
@@ -1967,9 +2189,9 @@
     {
       "slot": -556,
       "definition": {
-        "pc": "0x5006c368",
+        "pc": "0x5006c2e4",
         "owner": [
-          "0x5006bbca",
+          "0x5006bb46",
           "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
         ],
         "inline_context": [
@@ -2002,21 +2224,21 @@
           ],
           "write-event": [
             [
-              "FunctionWrite { origin: WriteOrigin { function: 1342618570, tail: None }, site: 1342620520, address: Base { base: Stack { function: 1342618570, offset: -556 }, offset: 0 }, value: Base { base: Unknown, offset: 0 }, width: 4, occurrence: May, proof: ClosedGraph }"
+              "FunctionWrite { origin: WriteOrigin { function: 1342618438, tail: None }, site: 1342620388, address: Base { base: Stack { function: 1342618438, offset: -556 }, offset: 0 }, value: Base { base: Unknown, offset: 0 }, width: 4, occurrence: May, proof: ClosedGraph }"
             ]
           ],
           "write-barrier": [
             [
-              "WriteBarrier { origin: WriteOrigin { function: 1342618570, tail: None }, site: 1342620520, kind: UnknownValue }"
+              "WriteBarrier { origin: WriteOrigin { function: 1342618438, tail: None }, site: 1342620388, kind: UnknownValue }"
             ]
           ]
         },
         "expressions": {}
       },
       "reload": {
-        "pc": "0x5006d1c0",
+        "pc": "0x5006d13c",
         "owner": [
-          "0x5006bbca",
+          "0x5006bb46",
           "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
         ],
         "inline_context": [
@@ -2055,27 +2277,27 @@
           ],
           "stack-reload": [
             [
-              "StackReload { origin: WriteOrigin { function: 1342618570, tail: None }, site: 1342624192, slot: -556, width: 4, value: Base { base: Unknown, offset: 0 } }"
+              "StackReload { origin: WriteOrigin { function: 1342618438, tail: None }, site: 1342624060, slot: -556, width: 4, value: Base { base: Unknown, offset: 0 } }"
             ]
           ]
         },
         "expressions": {
           "2756": {
-            "pc": "0x5006d1c0",
+            "pc": "0x5006d13c",
             "expression": "Some(Load { address: EntryStack { offset: -556 }, width: 4, signed: false })"
           }
         }
       },
       "all_same_slot_accesses": [
         [
-          "0x5006c368",
+          "0x5006c2e4",
           "Store",
           "4",
           "EntryStack { offset: -556 }",
           "Some(Unknown)"
         ],
         [
-          "0x5006d1c0",
+          "0x5006d13c",
           "Load",
           "4",
           "EntryStack { offset: -556 }",
@@ -2087,9 +2309,9 @@
     {
       "slot": -524,
       "definition": {
-        "pc": "0x5006bd98",
+        "pc": "0x5006bd14",
         "owner": [
-          "0x5006bbca",
+          "0x5006bb46",
           "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
         ],
         "inline_context": [
@@ -2118,21 +2340,21 @@
           ],
           "write-event": [
             [
-              "FunctionWrite { origin: WriteOrigin { function: 1342618570, tail: None }, site: 1342619032, address: Base { base: Stack { function: 1342618570, offset: -524 }, offset: 0 }, value: Base { base: Unknown, offset: 0 }, width: 4, occurrence: May, proof: ClosedGraph }"
+              "FunctionWrite { origin: WriteOrigin { function: 1342618438, tail: None }, site: 1342618900, address: Base { base: Stack { function: 1342618438, offset: -524 }, offset: 0 }, value: Base { base: Unknown, offset: 0 }, width: 4, occurrence: May, proof: ClosedGraph }"
             ]
           ],
           "write-barrier": [
             [
-              "WriteBarrier { origin: WriteOrigin { function: 1342618570, tail: None }, site: 1342619032, kind: UnknownValue }"
+              "WriteBarrier { origin: WriteOrigin { function: 1342618438, tail: None }, site: 1342618900, kind: UnknownValue }"
             ]
           ]
         },
         "expressions": {}
       },
       "reload": {
-        "pc": "0x5006d1aa",
+        "pc": "0x5006d126",
         "owner": [
-          "0x5006bbca",
+          "0x5006bb46",
           "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
         ],
         "inline_context": [
@@ -2177,48 +2399,48 @@
           ],
           "stack-reload": [
             [
-              "StackReload { origin: WriteOrigin { function: 1342618570, tail: None }, site: 1342624170, slot: -524, width: 4, value: Base { base: Unknown, offset: 0 } }"
+              "StackReload { origin: WriteOrigin { function: 1342618438, tail: None }, site: 1342624038, slot: -524, width: 4, value: Base { base: Unknown, offset: 0 } }"
             ]
           ]
         },
         "expressions": {
           "2752": {
-            "pc": "0x5006d1aa",
+            "pc": "0x5006d126",
             "expression": "Some(Load { address: EntryStack { offset: -524 }, width: 4, signed: false })"
           }
         }
       },
       "all_same_slot_accesses": [
         [
-          "0x5006bd98",
+          "0x5006bd14",
           "Store",
           "4",
           "EntryStack { offset: -524 }",
           "Some(Unknown)"
         ],
         [
-          "0x5006c126",
+          "0x5006c0a2",
           "Store",
           "4",
           "EntryStack { offset: -524 }",
           "Some(Unknown)"
         ],
         [
-          "0x5006c1de",
+          "0x5006c15a",
           "Store",
           "4",
           "EntryStack { offset: -524 }",
           "Some(Unknown)"
         ],
         [
-          "0x5006d1aa",
+          "0x5006d126",
           "Load",
           "4",
           "EntryStack { offset: -524 }",
           "None"
         ],
         [
-          "0x5006d3e4",
+          "0x5006d360",
           "Store",
           "4",
           "EntryStack { offset: -524 }",
@@ -2230,9 +2452,9 @@
   ],
   "line_field_and_publication": [
     {
-      "pc": "0x5006d1c4",
+      "pc": "0x5006d140",
       "owner": [
-        "0x5006bbca",
+        "0x5006bb46",
         "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
       ],
       "inline_context": [
@@ -2263,34 +2485,34 @@
         ],
         "write-event": [
           [
-            "FunctionWrite { origin: WriteOrigin { function: 1342618570, tail: None }, site: 1342624196, address: Base { base: Unknown, offset: 0 }, value: Base { base: Unknown, offset: 0 }, width: 4, occurrence: May, proof: ClosedGraph }"
+            "FunctionWrite { origin: WriteOrigin { function: 1342618438, tail: None }, site: 1342624064, address: Base { base: Unknown, offset: 0 }, value: Base { base: Unknown, offset: 0 }, width: 4, occurrence: May, proof: ClosedGraph }"
           ]
         ],
         "write-barrier": [
           [
-            "WriteBarrier { origin: WriteOrigin { function: 1342618570, tail: None }, site: 1342624196, kind: UnknownStore }"
+            "WriteBarrier { origin: WriteOrigin { function: 1342618438, tail: None }, site: 1342624064, kind: UnknownStore }"
           ]
         ]
       },
       "expressions": {
         "2758": {
-          "pc": "0x5006d1c4",
+          "pc": "0x5006d140",
           "expression": "Some(Integer { op: And, left: Expression { id: 2757 }, right: Constant { value: 4294967295 } })"
         },
         "2757": {
-          "pc": "0x5006d1c2",
+          "pc": "0x5006d13e",
           "expression": "Some(Load { address: EntryStack { offset: -532 }, width: 4, signed: false })"
         },
         "2756": {
-          "pc": "0x5006d1c0",
+          "pc": "0x5006d13c",
           "expression": "Some(Load { address: EntryStack { offset: -556 }, width: 4, signed: false })"
         }
       }
     },
     {
-      "pc": "0x5006d1f6",
+      "pc": "0x5006d172",
       "owner": [
-        "0x5006bbca",
+        "0x5006bb46",
         "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
       ],
       "inline_context": [
@@ -2323,26 +2545,26 @@
         ],
         "write-event": [
           [
-            "FunctionWrite { origin: WriteOrigin { function: 1342618570, tail: None }, site: 1342624246, address: Base { base: Unknown, offset: 0 }, value: Base { base: Unknown, offset: 0 }, width: 4, occurrence: May, proof: ClosedGraph }"
+            "FunctionWrite { origin: WriteOrigin { function: 1342618438, tail: None }, site: 1342624114, address: Base { base: Unknown, offset: 0 }, value: Base { base: Unknown, offset: 0 }, width: 4, occurrence: May, proof: ClosedGraph }"
           ]
         ],
         "write-barrier": [
           [
-            "WriteBarrier { origin: WriteOrigin { function: 1342618570, tail: None }, site: 1342624246, kind: UnknownStore }"
+            "WriteBarrier { origin: WriteOrigin { function: 1342618438, tail: None }, site: 1342624114, kind: UnknownStore }"
           ]
         ]
       },
       "expressions": {
         "2768": {
-          "pc": "0x5006d1f6",
+          "pc": "0x5006d172",
           "expression": "Some(Integer { op: And, left: Expression { id: 2756 }, right: Constant { value: 4294967295 } })"
         },
         "2756": {
-          "pc": "0x5006d1c0",
+          "pc": "0x5006d13c",
           "expression": "Some(Load { address: EntryStack { offset: -556 }, width: 4, signed: false })"
         },
         "2752": {
-          "pc": "0x5006d1aa",
+          "pc": "0x5006d126",
           "expression": "Some(Load { address: EntryStack { offset: -524 }, width: 4, signed: false })"
         }
       }
@@ -2353,15 +2575,15 @@
     "pc": "0x2f00369e",
     "missing": "all-path reaching mutable-memory definition equating *(RX_LINE) with the initialized WifiIrqLine object",
     "existing_mechanisms": "common values/FunctionIndex and FunctionWrites/CallWrites; target producer and callback field discovery already work",
-    "constructor_prerequisite": "0x5006d1f6 has neither a proved RX_LINE address nor a concrete line pointer; real spill definitions are already unknown",
-    "first_copy_prerequisite": "0x5006c6ae: conditional four-byte provenance exists, but the numerical destination bound is not proved for entry-sp-280",
+    "constructor_prerequisite": "0x5006d172 has neither a proved RX_LINE address nor a concrete line pointer; real spill definitions are already unknown",
+    "first_copy_prerequisite": "0x5006c62a: conditional four-byte provenance exists, but the numerical destination bound is not proved for entry-sp-280",
     "next_change": "derive a numerical stack/address interval from existing checked machine context before applying the conditional word postcondition; source equality, larger copies and publication remain separate obligations"
   },
   "short_copy_check": {
     "call": {
-      "pc": "0x5004db66",
+      "pc": "0x5004dae2",
       "owner": [
-        "0x5004d7c8",
+        "0x5004d744",
         "oer_firmware_apps_w1::run::{closure#0}"
       ],
       "inline_context": [
@@ -2373,13 +2595,13 @@
       "facts": {
         "instruction": [
           [
-            "jalr ra, -1694(ra)"
+            "jalr ra, -1562(ra)"
           ]
         ],
         "register-write": [
           [
             "1",
-            "ImageAddress { address: 1342495594 }"
+            "ImageAddress { address: 1342495462 }"
           ]
         ],
         "transfer": [
@@ -2389,25 +2611,25 @@
         ],
         "inputs": [
           [
-            "Some([Constant { value: 0 }, ImageAddress { address: 796920674 }, EntryStack { offset: -17504 }, Expression { id: 2 }, Expression { id: 3 }, Unknown, Unknown, Unknown, Expression { id: 157 }, Unknown, Unknown, Unknown, Constant { value: 20 }, Unknown, Unknown, Unknown, Unknown, Unknown, Unknown, Constant { value: 540643328 }, Constant { value: 1342855492 }, Unknown, Unknown, Unknown, EntryStack { offset: -8472 }, Unknown, Expression { id: 49 }, Unknown, Unknown, Unknown, Unknown, Unknown])"
+            "Some([Constant { value: 0 }, ImageAddress { address: 796920542 }, EntryStack { offset: -17504 }, Expression { id: 2 }, Expression { id: 3 }, Unknown, Unknown, Unknown, Expression { id: 157 }, Unknown, Unknown, Unknown, Constant { value: 20 }, Unknown, Unknown, Unknown, Unknown, Unknown, Unknown, Constant { value: 540643328 }, Constant { value: 1342855364 }, Unknown, Unknown, Unknown, EntryStack { offset: -8472 }, Unknown, Expression { id: 49 }, Unknown, Unknown, Unknown, Unknown, Unknown])"
           ]
         ],
         "write-barrier": [
           [
-            "WriteBarrier { origin: WriteOrigin { function: 1342494664, tail: None }, site: 1342495590, kind: Call }"
+            "WriteBarrier { origin: WriteOrigin { function: 1342494532, tail: None }, site: 1342495458, kind: Call }"
           ],
           [
-            "WriteBarrier { origin: WriteOrigin { function: 1342494664, tail: None }, site: 1342495590, kind: Call }"
+            "WriteBarrier { origin: WriteOrigin { function: 1342494532, tail: None }, site: 1342495458, kind: Call }"
           ]
         ]
       },
       "expressions": {
         "49": {
-          "pc": "0x5004d83e",
+          "pc": "0x5004d7ba",
           "expression": "Some(Integer { op: Add, left: Expression { id: 45 }, right: Constant { value: 469 } })"
         },
         "45": {
-          "pc": "0x5004d800",
+          "pc": "0x5004d77c",
           "expression": "Some(Integer { op: Add, left: Expression { id: 10 }, right: Constant { value: 2047 } })"
         },
         "10": {
@@ -2415,7 +2637,7 @@
           "expression": "Some(EntryRegister { register: 11 })"
         },
         "157": {
-          "pc": "0x5004db54",
+          "pc": "0x5004dad0",
           "expression": "Some(Integer { op: Add, left: Expression { id: 49 }, right: Constant { value: 588 } })"
         },
         "3": {

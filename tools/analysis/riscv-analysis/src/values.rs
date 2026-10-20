@@ -189,6 +189,7 @@ struct Relocation {
 #[derive(Clone, Copy)]
 struct Operation {
     op: SemanticOp,
+    interrupt_wait: bool,
     opaque_call: bool,
     /// The function a call reaches, where its instruction or relocation
     /// names it.
@@ -224,6 +225,8 @@ fn prepare(
     validate(op)?;
     let mut result = Operation {
         op,
+        interrupt_wait: isa
+            .interrupt_wait(&input.bytes[start..start + node.decoded.length as usize]),
         opaque_call: matches!(
             node.decoded.flow,
             InstructionFlow::Jump { link: true, .. } | InstructionFlow::Indirect { link: true, .. }
@@ -681,6 +684,10 @@ fn transfer(
         } else {
             effects.register = Some((0, Value::Constant(0)));
         }
+    }
+    if operation.interrupt_wait {
+        state.slots = [None; SLOTS];
+        effects.gap = Some(SemanticGapReason::WaitMemory);
     }
     if operation.opaque_call {
         state = unknown_state();
@@ -2580,6 +2587,7 @@ mod tests {
                         swap: false,
                         signed: false,
                     },
+                    interrupt_wait: false,
                     opaque_call: false,
                     callee: None,
                     relocation: None,
@@ -2667,6 +2675,7 @@ mod tests {
         let (out, effects) = transfer(
             Operation {
                 op: SemanticOp::Link { dest: 1 },
+                interrupt_wait: false,
                 opaque_call: true,
                 callee: None,
                 relocation: None,
@@ -2685,6 +2694,7 @@ mod tests {
         let (out, effects) = transfer(
             Operation {
                 op: read(10),
+                interrupt_wait: false,
                 opaque_call: false,
                 callee: None,
                 relocation: None,
@@ -2804,6 +2814,7 @@ mod tests {
         incoming[5] = Value::Constant(42);
         let operation = Operation {
             op: SemanticOp::Link { dest: 1 },
+            interrupt_wait: false,
             opaque_call: true,
             callee: None,
             relocation: None,

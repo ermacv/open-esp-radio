@@ -23,23 +23,8 @@ def compare(before, after):
             b = (after / name).read_text().splitlines()
             entry = result[app]['diagnostics'][stage]
             assert all(not r['changed_sites'] for r in entry['resolvers'].values())
-            classes = ('use', 'proof', 'unknown-class')
-            assert [l for l in a if l.split('\t')[0] not in classes] == [l for l in b if l.split('\t')[0] not in classes]
-
-            def keyed(lines):
-                rows = [l.split('\t') for l in lines if l.split('\t')[0] in classes]
-                return {tuple(r[:3] if r[0] in ('use', 'proof') else r[:2]): r for r in rows}
-
-            old, new = keyed(a), keyed(b)
-            changes = [{'before': old.get(k), 'after': new.get(k)}
-                       for k in sorted(old.keys() | new.keys()) if old.get(k) != new.get(k)]
-            for change in changes:
-                x, y = change['before'], change['after']
-                if (x or y)[0] == 'use':
-                    assert x[:-1] == y[:-1] and (x[-1], y[-1]) == ('ControlFlow', 'UnknownWrite')
-                if (x or y)[0] == 'proof':
-                    assert x[:3] == y[:3] and x[4:] == y[4:], 'proof evidence changed beyond its stopping PC'
-            entry['full_audit_changes'] = changes
+            assert a == b, 'full callback audit changed outside the opt-in stack profile'
+            entry['full_audit_changes'] = []
             entry['full_audit_diff'] = list(difflib.unified_diff(
                 a, b, fromfile='before/' + name, tofile='after/' + name, lineterm=''))
     return result

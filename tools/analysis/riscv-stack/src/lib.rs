@@ -65,7 +65,7 @@ use oer_analysis_riscv_analysis::{
 use oer_analysis_riscv_program::tables::ImageTables;
 pub use producers::{BaseBarrier, LoadBase, RegisterWitness};
 pub use relocations::taken_addresses;
-pub use resolutions::{Assumption, Fact, Resolution, Resolutions};
+pub use resolutions::{Assumption, Fact, Resolution, Resolutions, ipc_resolutions};
 pub use summaries::{Summary, parse as parse_summaries};
 pub use sweep::{LevelDrop, Load, TableBase, TargetSource, Transfer, TransferKind};
 pub use tasks::task_poll_resolutions;
@@ -423,12 +423,13 @@ pub fn inspect_function(
     control: &mut dyn RunControl,
     sink: &mut dyn oer_analysis_riscv_model::FunctionSink,
 ) -> Result<()> {
-    inspect_function_with_jumps(
+    inspect_function_as(
         image,
         function,
         call_behavior,
         options,
         &[],
+        &oer_analysis_riscv_lift::StructuralRiscvDecoder,
         memory,
         control,
         sink,
@@ -437,7 +438,7 @@ pub fn inspect_function(
 
 /// The same pipeline after a checked terminal-transfer refinement.
 #[allow(clippy::too_many_arguments)]
-pub fn inspect_function_with_jumps(
+pub fn inspect_stack_context(
     image: &ImageFacts<'_>,
     function: &Function,
     call_behavior: &dyn CallBehavior,
@@ -447,10 +448,34 @@ pub fn inspect_function_with_jumps(
     control: &mut dyn RunControl,
     sink: &mut dyn oer_analysis_riscv_model::FunctionSink,
 ) -> Result<()> {
+    inspect_function_as(
+        image,
+        function,
+        call_behavior,
+        options,
+        extra,
+        &oer_analysis_riscv_lift::StackRiscvDecoder,
+        memory,
+        control,
+        sink,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn inspect_function_as(
+    image: &ImageFacts<'_>,
+    function: &Function,
+    call_behavior: &dyn CallBehavior,
+    options: oer_analysis_riscv_analysis::ResearchOptions<'_>,
+    extra: &[KnownJump],
+    decoder: &dyn oer_analysis_riscv_model::FunctionSemantics,
+    memory: &WorkingMemory,
+    control: &mut dyn RunControl,
+    sink: &mut dyn oer_analysis_riscv_model::FunctionSink,
+) -> Result<()> {
     use oer_analysis_riscv_analysis::{
         FunctionInput, PreparedReferences, research_following_tables_with_options,
     };
-    use oer_analysis_riscv_lift::StructuralRiscvDecoder as RiscvDecoder;
     use oer_analysis_riscv_model::NoReturns;
     use oer_analysis_riscv_program::ProgramView;
     let mut work = Ledger::new(memory, control)?;
@@ -489,7 +514,7 @@ pub fn inspect_function_with_jumps(
             },
             known: &jumps,
         },
-        &RiscvDecoder,
+        decoder,
         memory,
         control,
         sink,

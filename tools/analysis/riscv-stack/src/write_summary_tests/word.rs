@@ -10,6 +10,37 @@ const QUERY: WordQuery = WordQuery {
 
 use oer_analysis_riscv_analysis::stack_context::*;
 
+fn stack_facts<'m>(words: &[u32], start: u64, memory: &'m WorkingMemory) -> RecordBuffer<'m> {
+    let bytes: Vec<_> = words.iter().flat_map(|w| w.to_le_bytes()).collect();
+    let mut saved = Saved(RecordBuffer::new(memory));
+    research_with_options(
+        FunctionInput {
+            image: Some(&NoMemory),
+            section: 1,
+            extent: CodeRange {
+                start,
+                length: bytes.len() as u64,
+            },
+            bytes: &bytes,
+            relocations: &PreparedReferences::empty(),
+            data_ranges: &[],
+            jumps: &[],
+            returns: &NoReturns,
+            call_behavior: &UnknownCallBehavior,
+        },
+        &oer_analysis_riscv_lift::StackRiscvDecoder,
+        memory,
+        &mut || Ok(()),
+        &mut saved,
+        ResearchOptions {
+            abi: ABI,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    saved.0
+}
+
 fn numerical_root<'m>(top: u32, root: u64, memory: &'m WorkingMemory) -> StackContext<'m> {
     let code = [
         (top.wrapping_add(0x800) & 0xfffff000) | (2 << 7) | 0x37,
@@ -388,7 +419,7 @@ fn startup_terminal_refinement_needs_an_external_all_path_target() {
     let memory = WorkingMemory::new(32 * 1024 * 1024).unwrap();
     // fence.i preserves the entry sp; the terminal's all-path value comes
     // from the common evaluator, including the architectural upper write.
-    let records = facts(&[0x0000100f, 0x00001317, 0x00030067], 0x1000, &memory);
+    let records = stack_facts(&[0x0000100f, 0x00001317, 0x00030067], 0x1000, &memory);
     assert_eq!(
         external_terminal(
             &records,
@@ -428,6 +459,46 @@ fn startup_terminal_refinement_needs_an_external_all_path_target() {
             .is_none()
         );
     }
+}
+
+#[test]
+fn an_interrupt_wait_keeps_sp_but_discards_remembered_word_contents() {
+    let memory = WorkingMemory::new(32 * 1024 * 1024).unwrap();
+    let root = numerical_root(0x50040000, 0x800, &memory);
+    let records = stack_facts(
+        &[
+            addi(2, 2, -32),
+            addi(5, 0, 77),
+            store(5, 2, 8, 2),
+            0x10500073,
+            lw(6, 2, 8),
+            jal(1, 0x2000 - 0x1014),
+            RET,
+        ],
+        0x1000,
+        &memory,
+    );
+    assert_ne!(loaded(&records), &AbstractValue::Constant { value: 77 });
+    assert!(records.iter().any(|r| matches!(
+        r,
+        FunctionRecord::SemanticGap {
+            reason: SemanticGapReason::WaitMemory,
+            ..
+        }
+    )));
+    let context = call_stack_context(
+        &index(&records, &memory),
+        0x1000,
+        0x1014,
+        Some(&root),
+        &memory,
+        &mut || Ok(()),
+    )
+    .unwrap()
+    .unwrap();
+    assert_eq!(context.interval(), (0x5003ffe0, 0x5003ffe0));
+    let writes = summary(&records, 0x1000, &memory);
+    assert!(writes.has_unknown_memory_effects());
 }
 
 #[test]
