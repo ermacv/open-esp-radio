@@ -320,15 +320,17 @@ pub fn dtim(bytes: &[u8]) -> Option<(usize, u8, u8)> {
     if FrameControlFields::from_bytes([fixed[0], fixed[1]]).type_and_subtype() != 32 {
         return None;
     }
+    let mut offset = FIXED_BEACON_LENGTH;
     macro_rules! inspect_element {
         () => {{
-            let offset = bytes.len() - reader.remaining().len();
+            let mut reader = oer_wire::Reader::new(bytes.get(offset..)?);
             let [id, length] = reader.read::<2>().ok()?;
             let element = reader.take(usize::from(length)).ok()?;
             if id == 5 {
                 let [count, period, _, _] = oer_wire::Reader::new(element).read::<4>().ok()?;
                 return (period != 0 && count < period).then_some((offset, count, period));
             }
+            offset += 2 + usize::from(length);
         }};
     }
 
