@@ -53,5 +53,28 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
              }}\n"
         ),
     )?;
+    let observed = [
+        ("PHY_BB_RECOVERED_GAPS", "WORD_0058_OPAQUE"),
+        ("PHY_BB_RECOVERED_GAPS", "WORD_005C_OPAQUE"),
+        ("PHY_BB_RECOVERED_GAPS", "WORD_0060_OPAQUE"),
+        ("MODEM_SYSCON_RADIO", "WIFI_BB_CFG"),
+        ("MODEM_SYSCON_RADIO", "CLK_CONF"),
+        ("MODEM_SYSCON_RADIO", "CLK_CONF1"),
+        ("PHY_AGC_ORACLE", "RX_11B_PATH_CONTROL_0"),
+        (
+            "PHY_BASEBAND_CONFIG_ORACLE",
+            "FRONT_END_AND_TONE_STOP_CONTROL",
+        ),
+    ];
+    let mut selectors = String::from("const REGISTERS: &[(&str, usize)] = &[\n");
+    for (peripheral, name) in observed {
+        let index = registers
+            .iter()
+            .position(|r| r.peripheral == peripheral && r.register == name && r.element.is_none())
+            .expect("CCA observation belongs to the typed PHY image");
+        selectors.push_str(&format!("    (\"{peripheral}.{name}\", {index}),\n"));
+    }
+    selectors.push_str("];\n");
+    fs::write(output.join("cca_checkpoint.rs"), selectors)?;
     Ok(())
 }
