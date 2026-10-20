@@ -231,5 +231,38 @@ pub(super) fn compose<'m>(
     }
     out.barriers = barriers;
     out.closed_graph &= summary.closed_graph;
+    if let Some(word) = summary
+        .word
+        .as_ref()
+        .filter(|word| word.context.entry == summary.entry && Some(word.context.abi) == summary.abi)
+    {
+        let mut events = AdmittedVec::new(memory);
+        for event in word.events.iter() {
+            c.checkpoint(1)?;
+            events.push(
+                WordEvent {
+                    address: translate(event.address),
+                    ..*event
+                },
+                c.position(),
+            )?;
+        }
+        out.word = Some(WordPostcondition {
+            contents: WordContents {
+                origin: origin(word.contents.origin),
+                destination: translate(word.contents.destination),
+                source: translate(word.contents.source),
+                ..word.contents
+            },
+            context: CallContext {
+                entry: out.entry,
+                ..word.context
+            },
+            query: word.query,
+            extent: word.extent,
+            needs_bounds: word.needs_bounds,
+            events,
+        });
+    }
     Ok(())
 }

@@ -1,30 +1,30 @@
 {
-  "base": "main 694e0c76, including #195 and #194",
+  "base": "main ab2d9f96, including #199 through #205",
   "inputs": {
-    "/tmp/oer-irq-chain/after/w1/runtime.elf": "03ab37d09adcb0d9446734231fa8be4648390f21dc8c58c6e3e3ed9340b41dd8",
+    "/tmp/oer-pr207-open-cfg/after/w1/runtime.elf": "d5ddcab54ae30dfcb347ba87f787cf78fde099f94c9b30962f94a4566059ceff",
     "/home/ermacv/.cache/open-esp-radio/vendor/esp-rom-elfs/20260528/esp32s31_rev0_rom.elf": "a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87",
-    "/tmp/oer-irq-chain/after/w1/interrupt-stack.txt": "2add2a7bf483f0fbf97ab02ccf3a698b2762f2e93b41635b09b9dd127cede54d",
+    "/tmp/oer-pr207-open-cfg/after/w1/interrupt-stack.txt": "2add2a7bf483f0fbf97ab02ccf3a698b2762f2e93b41635b09b9dd127cede54d",
     "chips/esp32s31/platform/rom-functions.toml": "487770cf3eb46549970250a07d7cec155d77ce86272b578f45adcc05ca91ac8a",
-    "chips/esp32s31/platform/chip.toml": "b11202981cbd807dc68ba5e884876afea7550f0145694e6d547506d570a3e1ad"
+    "chips/esp32s31/platform/chip.toml": "0032c63d94f6cde7867223c90d134cd2a98585a49c8d7457e08ff26c9fe7bc3b"
   },
   "validation_sources": {
-    "current_chain.py": "9c4788707e53c0dbf4463c34cd1a04d12d847f91470df34bb7c84c164fe39b0e",
+    "current_chain.py": "d6105dd43f915bda21e2f73d1475fa78538d1bd2f78ca15ad6d8b65ce909d287",
     "explain.py": "218886d8caf44068b529107aca0833aabd327f8b522a18c1f15393a508f5f69c"
   },
   "diagnostic_binaries": {
-    "function-records": "9e8cfab19d74a3fc39d6dfdc0cc393ebbce7c5eeee5ec2fa838a62044df5ebf0",
-    "callback-audit": "d09c69e4168eaae732b4f9bc1040a387f2718c15ac776e2286f5517e0362a8c0",
-    "stack-call-writes": "240df8df8cd0fbec743488706785dd01cdc9d63b95e9a9755b571acbd2fa2286"
+    "function-records": "e2e97dad1a9964b40f89bec3b927a3c037c6414e68ed19eeef1a3a372e36eaf1",
+    "callback-audit": "fb5f325ae78da6ab97743f53248e3b03d167d9f4bc7d4ebcaaaabee1956476ce",
+    "stack-call-writes": "41076b1b078189a63834d1eb7bf8ee7d51b87d5f7522d83dabe9cad9da1daa35"
   },
   "streams": {
-    "callbacks.tsv": "96b360f68f0037e1892872b1628971b188c8575e7cec74cb7ddc16afb6afe087",
-    "doorbell.tsv": "1c43cb21df4e46f075873d95175bf05ce6e4d939e5335d5cdc686c248ccbeb22",
+    "callbacks.tsv": "a5a7be6c3d6a16c0e97d8c828a4471963b110789e23c38b573a34dd15be14020",
+    "doorbell.tsv": "cec53ee6641769368b0a9da58a6b75088eb2096005622a8a9956176aebf09c2b",
     "irq-root.tsv": "dc2be471f76398e4d0e7c10ea0f7d775c0b1a72af66fda6eccbbb14fd777c60c",
-    "rx-poll.tsv": "bdef78660b8bc9a728b5e3ac2056bfc3c08d99c7a81a1bcb5e9cf4469c911944",
-    "run.tsv": "b4203f094cf756d7b53c226181d357fd9759c78e3dddc4e29bf531d5a63ba52c",
-    "pend-initializer-target.tsv": "b4488230f557ad00a683e2d1b93640221b9ffa4a98c9214c3e633766965e1c04",
-    "first-constructor-copy.tsv": "eb1c2d14f50b1030286ca7394de67f30f1bef5b8471de8d01acc25c1e7d2cc1a",
-    "short-copy.tsv": "46e88c94b8e7c613e2aa20bc74e771bf7f4ab5b5b5528b37759f4ae553898184"
+    "rx-poll.tsv": "66562226f5809d21849d0dba4d80607aca89011670f4b589a54dfec60576f4ee",
+    "run.tsv": "a251d18382ae79209305342e2a3db27c085b0ba218b0c5ef5862e4f5329b8d0d",
+    "pend-initializer-target.tsv": "e3eff564901acb5c8e12cc7441e8b4f62e0aab70653428f1209d5a67e3aba039",
+    "first-constructor-copy.tsv": "78d05694de49e7c9f6c5cc507194616589c60b332172497bba7f1cc8a07a2a15",
+    "short-copy.tsv": "cf26991824abaaecf38be8a231ba16ac97f221af2eea12634e7e7d4c908d3fcc"
   },
   "irq_binding": {
     "table_entry": [
@@ -635,7 +635,7 @@
     "load-field",
     "0x2f00371e",
     "0x2f00371c",
-    "Some(CallbackLoadField { field: FunctionPointerType { subroutine: 2461413, foreign: false }, witness: Some(RegisterWitness { site: 788543258, register: 10 }) })",
+    "Some(CallbackLoadField { field: FunctionPointerType { subroutine: 2462908, foreign: false }, witness: Some(RegisterWitness { site: 788543258, register: 10 }) })",
     "Some(LoadBase { witnesses: [RegisterWitness { site: 788543258, register: 10 }, RegisterWitness { site: 788543254, register: 10 }], barrier: (788543250, MemoryWrite) })"
   ],
   "audited_candidate_count": 362,
@@ -650,9 +650,9 @@
     "address_use": [
       "address-use",
       "796",
-      "AddressUse { relocation: Relocation { section: 7, at: 788557828, r_type: 1, target: Symbol(2392), addend: 0, implicit_addend: false }, role: Word, symbol: Some(Symbol { index: 2392, name: \"_RINvNtCs2sTx9gsjQdI_22oer_espressif_executor8executor11pend_signalKh2_ECsaM3xIFr85fL_20oer_firmware_apps_w1\", address: 788541986, size: 100, kind: Text, defined: true, global: false, section: Some(5) }), value: Resolved(788541986), function: FunctionRelation { nearest: Some(FunctionAddress { entry: 788541986, offset: 0 }), matches: 1 }, symbol_function: FunctionRelation { nearest: Some(FunctionAddress { entry: 788541986, offset: 0 }), matches: 1 } }"
+      "AddressUse { relocation: Relocation { section: 7, at: 788557828, r_type: 1, target: Symbol(2392), addend: 0, implicit_addend: false }, role: Word, symbol: Some(Symbol { index: 2392, name: \"_RINvNtCs2sTx9gsjQdI_22oer_espressif_executor8executor11pend_signalKh2_ECs99EPaW4oFFu_20oer_firmware_apps_w1\", address: 788541986, size: 100, kind: Text, defined: true, global: false, section: Some(5) }), value: Resolved(788541986), function: FunctionRelation { nearest: Some(FunctionAddress { entry: 788541986, offset: 0 }), matches: 1 }, symbol_function: FunctionRelation { nearest: Some(FunctionAddress { entry: 788541986, offset: 0 }), matches: 1 } }"
     ],
-    "typed_storage": "use\t0x2f003222\t796\t0x2f007004\tWord\t0\ttyped:{FunctionPointerType { subroutine: 702463, foreign: false }}",
+    "typed_storage": "use\t0x2f003222\t796\t0x2f007004\tWord\t0\ttyped:{FunctionPointerType { subroutine: 703124, foreign: false }}",
     "target_owner": [
       "0x2f003222",
       "oer_espressif_executor::executor::pend_signal::<2>"
@@ -754,7 +754,7 @@
           [
             "Store",
             "4",
-            "Expression { id: 2581 }",
+            "Expression { id: 2552 }",
             "Some(Constant { value: 788624708 })"
           ]
         ],
@@ -765,7 +765,7 @@
         ]
       },
       "expressions": {
-        "2581": {
+        "2552": {
           "pc": "0x5006c5ee",
           "expression": "Some(Integer { op: Add, left: Expression { id: 9 }, right: Constant { value: 1408 } })"
         },
@@ -797,7 +797,7 @@
           [
             "Store",
             "4",
-            "Expression { id: 2598 }",
+            "Expression { id: 2568 }",
             "Some(Constant { value: 788625408 })"
           ]
         ],
@@ -808,7 +808,7 @@
         ]
       },
       "expressions": {
-        "2598": {
+        "2568": {
           "pc": "0x5006c602",
           "expression": "Some(Integer { op: Add, left: Expression { id: 9 }, right: Constant { value: 1424 } })"
         },
@@ -840,7 +840,7 @@
           [
             "Store",
             "4",
-            "Expression { id: 2600 }",
+            "Expression { id: 2570 }",
             "Some(Constant { value: 788624708 })"
           ]
         ],
@@ -851,7 +851,7 @@
         ]
       },
       "expressions": {
-        "2600": {
+        "2570": {
           "pc": "0x5006c606",
           "expression": "Some(Integer { op: Add, left: Expression { id: 9 }, right: Constant { value: 1428 } })"
         },
@@ -883,7 +883,7 @@
           [
             "Store",
             "4",
-            "Expression { id: 2778 }",
+            "Expression { id: 2747 }",
             "Some(Constant { value: 788624576 })"
           ]
         ],
@@ -894,7 +894,7 @@
         ]
       },
       "expressions": {
-        "2778": {
+        "2747": {
           "pc": "0x5006c6f4",
           "expression": "Some(Integer { op: Add, left: Expression { id: 9 }, right: Constant { value: 348 } })"
         },
@@ -937,7 +937,7 @@
         ],
         "inputs": [
           [
-            "Some([Constant { value: 0 }, ImageAddress { address: 796919466 }, EntryStack { offset: -576 }, Expression { id: 2 }, Expression { id: 3 }, Constant { value: 788625344 }, Constant { value: 788625368 }, Constant { value: 788682048 }, Constant { value: 1342854452 }, Expression { id: 2661 }, EntryStack { offset: -280 }, Expression { id: 2609 }, Constant { value: 68 }, Unknown, Constant { value: 788624720 }, Unknown, Constant { value: 788625356 }, Constant { value: 788625152 }, Expression { id: 2607 }, Expression { id: 2666 }, Constant { value: 788680516 }, Constant { value: 788647076 }, Constant { value: 40960 }, Constant { value: 788658780 }, Expression { id: 47 }, Constant { value: 788648748 }, Expression { id: 9 }, Constant { value: 788652092 }, Constant { value: 788626944 }, Constant { value: 788625408 }, Constant { value: 788624708 }, Constant { value: 788628288 }])"
+            "Some([Constant { value: 0 }, ImageAddress { address: 796919466 }, EntryStack { offset: -576 }, Expression { id: 2 }, Expression { id: 3 }, Constant { value: 788625344 }, Constant { value: 788625368 }, Constant { value: 788682048 }, Constant { value: 1342854452 }, Expression { id: 2631 }, EntryStack { offset: -280 }, Expression { id: 2579 }, Constant { value: 68 }, Unknown, Constant { value: 788624720 }, Unknown, Constant { value: 788625356 }, Constant { value: 788625152 }, Expression { id: 2577 }, Expression { id: 2636 }, Constant { value: 788680516 }, Constant { value: 788647076 }, Constant { value: 40960 }, Constant { value: 788658780 }, Expression { id: 47 }, Constant { value: 788648748 }, Expression { id: 9 }, Constant { value: 788652092 }, Constant { value: 788626944 }, Constant { value: 788625408 }, Constant { value: 788624708 }, Constant { value: 788628288 }])"
           ]
         ],
         "write-barrier": [
@@ -958,19 +958,19 @@
           "pc": "0x5006bc14",
           "expression": "Some(Integer { op: Add, left: Expression { id: 9 }, right: Constant { value: 1446 } })"
         },
-        "2666": {
+        "2636": {
           "pc": "0x5006c688",
           "expression": "Some(Integer { op: Add, left: Expression { id: 9 }, right: Constant { value: 1436 } })"
         },
-        "2607": {
+        "2577": {
           "pc": "0x5006c60e",
           "expression": "Some(Integer { op: Add, left: Expression { id: 9 }, right: Constant { value: 40 } })"
         },
-        "2609": {
+        "2579": {
           "pc": "0x5006c612",
           "expression": "Some(Integer { op: Add, left: Expression { id: 9 }, right: Constant { value: 1364 } })"
         },
-        "2661": {
+        "2631": {
           "pc": "0x5006c684",
           "expression": "Some(Integer { op: Add, left: Expression { id: 9 }, right: Constant { value: 1432 } })"
         },
@@ -1015,7 +1015,7 @@
         ],
         "inputs": [
           [
-            "Some([Constant { value: 0 }, ImageAddress { address: 796919484 }, EntryStack { offset: -576 }, Expression { id: 2 }, Expression { id: 3 }, Unknown, Unknown, Unknown, Constant { value: 1342854452 }, Expression { id: 2661 }, Expression { id: 2732 }, EntryStack { offset: -496 }, Constant { value: 284 }, Unknown, Unknown, Unknown, Unknown, Unknown, Expression { id: 2607 }, Expression { id: 2666 }, Constant { value: 788680516 }, Constant { value: 788647076 }, Constant { value: 40960 }, Constant { value: 788658780 }, Expression { id: 47 }, Constant { value: 788648748 }, Expression { id: 9 }, Constant { value: 788652092 }, Unknown, Unknown, Unknown, Unknown])"
+            "Some([Constant { value: 0 }, ImageAddress { address: 796919484 }, EntryStack { offset: -576 }, Expression { id: 2 }, Expression { id: 3 }, Unknown, Unknown, Unknown, Constant { value: 1342854452 }, Expression { id: 2631 }, Expression { id: 2702 }, EntryStack { offset: -496 }, Constant { value: 284 }, Unknown, Unknown, Unknown, Unknown, Unknown, Expression { id: 2577 }, Expression { id: 2636 }, Constant { value: 788680516 }, Constant { value: 788647076 }, Constant { value: 40960 }, Constant { value: 788658780 }, Expression { id: 47 }, Constant { value: 788648748 }, Expression { id: 9 }, Constant { value: 788652092 }, Unknown, Unknown, Unknown, Unknown])"
           ]
         ],
         "write-barrier": [
@@ -1036,19 +1036,19 @@
           "pc": "0x5006bc14",
           "expression": "Some(Integer { op: Add, left: Expression { id: 9 }, right: Constant { value: 1446 } })"
         },
-        "2666": {
+        "2636": {
           "pc": "0x5006c688",
           "expression": "Some(Integer { op: Add, left: Expression { id: 9 }, right: Constant { value: 1436 } })"
         },
-        "2607": {
+        "2577": {
           "pc": "0x5006c60e",
           "expression": "Some(Integer { op: Add, left: Expression { id: 9 }, right: Constant { value: 40 } })"
         },
-        "2732": {
+        "2702": {
           "pc": "0x5006c6b2",
           "expression": "Some(Integer { op: Add, left: Expression { id: 9 }, right: Constant { value: 56 } })"
         },
-        "2661": {
+        "2631": {
           "pc": "0x5006c684",
           "expression": "Some(Integer { op: Add, left: Expression { id: 9 }, right: Constant { value: 1432 } })"
         },
@@ -1143,7 +1143,396 @@
     ],
     "applied_effects": 14,
     "preserves_word": false,
-    "status": "unknown: bounded copy contents and complete footprint are not proved"
+    "status": "conditional word contents proved separately; numerical destination bounds and the complete generic footprint remain unknown"
+  },
+  "word_copy": {
+    "conditional_postconditions": [
+      [
+        "post-word",
+        "0x2f80d260",
+        "WordPostcondition { contents: WordContents { origin: WriteOrigin { function: 796971616, tail: None }, destination: Base { base: Argument(0), offset: 44 }, source: Base { base: Argument(1), offset: 44 }, load: 796971826, load_order: 51, store: 796971832, store_order: 53, width: 4, source_unchanged_before_load: false }, context: CallContext { entry: 796971616, abi: RiscvInteger, arguments: [None, None, Some(68), None, Some(788624720), None, Some(788625356), Some(788625152)] }, query: WordQuery { destination: 0, source: 1, length: 2, offset: 44 }, extent: 68, needs_bounds: true, destination_alignment: 4, destination_bounds: Some((0, 4294967227)) }"
+      ],
+      [
+        "post-word",
+        "0x2f8004c4",
+        "WordPostcondition { contents: WordContents { origin: WriteOrigin { function: 796971616, tail: Some(TailTransfer { entry: 796918980, site: 796918980, target: 796971616 }) }, destination: Base { base: Argument(0), offset: 44 }, source: Base { base: Argument(1), offset: 44 }, load: 796971826, load_order: 51, store: 796971832, store_order: 53, width: 4, source_unchanged_before_load: false }, context: CallContext { entry: 796918980, abi: RiscvInteger, arguments: [None, None, Some(68), None, Some(788624720), None, Some(788625356), Some(788625152)] }, query: WordQuery { destination: 0, source: 1, length: 2, offset: 44 }, extent: 68, needs_bounds: true, destination_alignment: 4, destination_bounds: Some((0, 4294967227)) }"
+      ]
+    ],
+    "events": [
+      {
+        "path": 1,
+        "order": 13,
+        "pc": "0x2f80d2d8",
+        "kind": "Load",
+        "width": 4,
+        "address": "Base { base: Argument(1), offset: 0 }",
+        "read": "None"
+      },
+      {
+        "path": 1,
+        "order": 14,
+        "pc": "0x2f80d2dc",
+        "kind": "Load",
+        "width": 4,
+        "address": "Base { base: Argument(1), offset: 4 }",
+        "read": "None"
+      },
+      {
+        "path": 1,
+        "order": 15,
+        "pc": "0x2f80d2e0",
+        "kind": "Load",
+        "width": 4,
+        "address": "Base { base: Argument(1), offset: 8 }",
+        "read": "None"
+      },
+      {
+        "path": 1,
+        "order": 16,
+        "pc": "0x2f80d2e4",
+        "kind": "Load",
+        "width": 4,
+        "address": "Base { base: Argument(1), offset: 12 }",
+        "read": "None"
+      },
+      {
+        "path": 1,
+        "order": 17,
+        "pc": "0x2f80d2e8",
+        "kind": "Load",
+        "width": 4,
+        "address": "Base { base: Argument(1), offset: 16 }",
+        "read": "None"
+      },
+      {
+        "path": 1,
+        "order": 18,
+        "pc": "0x2f80d2ec",
+        "kind": "Load",
+        "width": 4,
+        "address": "Base { base: Argument(1), offset: 20 }",
+        "read": "None"
+      },
+      {
+        "path": 1,
+        "order": 19,
+        "pc": "0x2f80d2f0",
+        "kind": "Load",
+        "width": 4,
+        "address": "Base { base: Argument(1), offset: 24 }",
+        "read": "None"
+      },
+      {
+        "path": 1,
+        "order": 20,
+        "pc": "0x2f80d2f4",
+        "kind": "Load",
+        "width": 4,
+        "address": "Base { base: Argument(1), offset: 28 }",
+        "read": "None"
+      },
+      {
+        "path": 1,
+        "order": 21,
+        "pc": "0x2f80d2f8",
+        "kind": "Store",
+        "width": 4,
+        "address": "Base { base: Argument(0), offset: 0 }",
+        "read": "Some((796971736, 13, 4))"
+      },
+      {
+        "path": 1,
+        "order": 22,
+        "pc": "0x2f80d2fc",
+        "kind": "Store",
+        "width": 4,
+        "address": "Base { base: Argument(0), offset: 4 }",
+        "read": "Some((796971740, 14, 4))"
+      },
+      {
+        "path": 1,
+        "order": 23,
+        "pc": "0x2f80d300",
+        "kind": "Load",
+        "width": 4,
+        "address": "Base { base: Argument(1), offset: 32 }",
+        "read": "None"
+      },
+      {
+        "path": 1,
+        "order": 24,
+        "pc": "0x2f80d304",
+        "kind": "Store",
+        "width": 4,
+        "address": "Base { base: Argument(0), offset: 8 }",
+        "read": "Some((796971744, 15, 4))"
+      },
+      {
+        "path": 1,
+        "order": 25,
+        "pc": "0x2f80d308",
+        "kind": "Store",
+        "width": 4,
+        "address": "Base { base: Argument(0), offset: 12 }",
+        "read": "Some((796971748, 16, 4))"
+      },
+      {
+        "path": 1,
+        "order": 26,
+        "pc": "0x2f80d30c",
+        "kind": "Store",
+        "width": 4,
+        "address": "Base { base: Argument(0), offset: 16 }",
+        "read": "Some((796971752, 17, 4))"
+      },
+      {
+        "path": 1,
+        "order": 27,
+        "pc": "0x2f80d310",
+        "kind": "Store",
+        "width": 4,
+        "address": "Base { base: Argument(0), offset: 20 }",
+        "read": "Some((796971756, 18, 4))"
+      },
+      {
+        "path": 1,
+        "order": 28,
+        "pc": "0x2f80d314",
+        "kind": "Store",
+        "width": 4,
+        "address": "Base { base: Argument(0), offset: 24 }",
+        "read": "Some((796971760, 19, 4))"
+      },
+      {
+        "path": 1,
+        "order": 29,
+        "pc": "0x2f80d318",
+        "kind": "Store",
+        "width": 4,
+        "address": "Base { base: Argument(0), offset: 28 }",
+        "read": "Some((796971764, 20, 4))"
+      },
+      {
+        "path": 1,
+        "order": 32,
+        "pc": "0x2f80d324",
+        "kind": "Store",
+        "width": 4,
+        "address": "Base { base: Argument(0), offset: 32 }",
+        "read": "Some((796971776, 23, 4))"
+      },
+      {
+        "path": 1,
+        "order": 39,
+        "pc": "0x2f80d332",
+        "kind": "Load",
+        "width": 4,
+        "address": "Base { base: Argument(1), offset: 36 }",
+        "read": "None"
+      },
+      {
+        "path": 1,
+        "order": 41,
+        "pc": "0x2f80d338",
+        "kind": "Store",
+        "width": 4,
+        "address": "Base { base: Argument(0), offset: 36 }",
+        "read": "Some((796971826, 39, 4))"
+      },
+      {
+        "path": 1,
+        "order": 45,
+        "pc": "0x2f80d332",
+        "kind": "Load",
+        "width": 4,
+        "address": "Base { base: Argument(1), offset: 40 }",
+        "read": "None"
+      },
+      {
+        "path": 1,
+        "order": 47,
+        "pc": "0x2f80d338",
+        "kind": "Store",
+        "width": 4,
+        "address": "Base { base: Argument(0), offset: 40 }",
+        "read": "Some((796971826, 45, 4))"
+      },
+      {
+        "path": 1,
+        "order": 51,
+        "pc": "0x2f80d332",
+        "kind": "Load",
+        "width": 4,
+        "address": "Base { base: Argument(1), offset: 44 }",
+        "read": "None"
+      },
+      {
+        "path": 1,
+        "order": 53,
+        "pc": "0x2f80d338",
+        "kind": "Store",
+        "width": 4,
+        "address": "Base { base: Argument(0), offset: 44 }",
+        "read": "Some((796971826, 51, 4))"
+      },
+      {
+        "path": 1,
+        "order": 57,
+        "pc": "0x2f80d332",
+        "kind": "Load",
+        "width": 4,
+        "address": "Base { base: Argument(1), offset: 48 }",
+        "read": "None"
+      },
+      {
+        "path": 1,
+        "order": 59,
+        "pc": "0x2f80d338",
+        "kind": "Store",
+        "width": 4,
+        "address": "Base { base: Argument(0), offset: 48 }",
+        "read": "Some((796971826, 57, 4))"
+      },
+      {
+        "path": 1,
+        "order": 63,
+        "pc": "0x2f80d332",
+        "kind": "Load",
+        "width": 4,
+        "address": "Base { base: Argument(1), offset: 52 }",
+        "read": "None"
+      },
+      {
+        "path": 1,
+        "order": 65,
+        "pc": "0x2f80d338",
+        "kind": "Store",
+        "width": 4,
+        "address": "Base { base: Argument(0), offset: 52 }",
+        "read": "Some((796971826, 63, 4))"
+      },
+      {
+        "path": 1,
+        "order": 69,
+        "pc": "0x2f80d332",
+        "kind": "Load",
+        "width": 4,
+        "address": "Base { base: Argument(1), offset: 56 }",
+        "read": "None"
+      },
+      {
+        "path": 1,
+        "order": 71,
+        "pc": "0x2f80d338",
+        "kind": "Store",
+        "width": 4,
+        "address": "Base { base: Argument(0), offset: 56 }",
+        "read": "Some((796971826, 69, 4))"
+      },
+      {
+        "path": 1,
+        "order": 75,
+        "pc": "0x2f80d332",
+        "kind": "Load",
+        "width": 4,
+        "address": "Base { base: Argument(1), offset: 60 }",
+        "read": "None"
+      },
+      {
+        "path": 1,
+        "order": 77,
+        "pc": "0x2f80d338",
+        "kind": "Store",
+        "width": 4,
+        "address": "Base { base: Argument(0), offset: 60 }",
+        "read": "Some((796971826, 75, 4))"
+      },
+      {
+        "path": 1,
+        "order": 81,
+        "pc": "0x2f80d332",
+        "kind": "Load",
+        "width": 4,
+        "address": "Base { base: Argument(1), offset: 64 }",
+        "read": "None"
+      },
+      {
+        "path": 1,
+        "order": 83,
+        "pc": "0x2f80d338",
+        "kind": "Store",
+        "width": 4,
+        "address": "Base { base: Argument(0), offset: 64 }",
+        "read": "Some((796971826, 81, 4))"
+      },
+      {
+        "path": 1,
+        "order": 96,
+        "pc": "0x2f80d2be",
+        "kind": "Return",
+        "width": 0,
+        "address": "Base { base: Unknown, offset: 0 }",
+        "read": "None"
+      }
+    ],
+    "conditional_caller_instance": [
+      "word-instance",
+      "0x5006bbca",
+      "0x5006c6ae",
+      "WordContents { origin: WriteOrigin { function: 796971616, tail: Some(TailTransfer { entry: 796918980, site: 796918980, target: 796971616 }) }, destination: Base { base: Stack { function: 1342618570, offset: -280 }, offset: 44 }, source: Base { base: Argument(0), offset: 1408 }, load: 796971826, load_order: 51, store: 796971832, store_order: 53, width: 4, source_unchanged_before_load: false }",
+      "Some(DestinationBounds)"
+    ],
+    "byte_proofs_under_conditions": [
+      {
+        "path": 1,
+        "destination_byte": 44,
+        "source_byte": 44,
+        "load": "0x2f80d332",
+        "load_order": 51,
+        "last_writer": "0x2f80d338",
+        "store_order": 53,
+        "return": "0x2f80d2be"
+      },
+      {
+        "path": 1,
+        "destination_byte": 45,
+        "source_byte": 45,
+        "load": "0x2f80d332",
+        "load_order": 51,
+        "last_writer": "0x2f80d338",
+        "store_order": 53,
+        "return": "0x2f80d2be"
+      },
+      {
+        "path": 1,
+        "destination_byte": 46,
+        "source_byte": 46,
+        "load": "0x2f80d332",
+        "load_order": 51,
+        "last_writer": "0x2f80d338",
+        "store_order": 53,
+        "return": "0x2f80d2be"
+      },
+      {
+        "path": 1,
+        "destination_byte": 47,
+        "source_byte": 47,
+        "load": "0x2f80d332",
+        "load_order": 51,
+        "last_writer": "0x2f80d338",
+        "store_order": 53,
+        "return": "0x2f80d2be"
+      }
+    ],
+    "destination_alignment": 4,
+    "destination_bounds": [
+      0,
+      4294967227
+    ],
+    "application": "Err(DestinationBounds)",
+    "status": "conditional load-time provenance proved; actual call application remains unknown because numeric entry-sp bounds are absent",
+    "publisher_equality": "unknown: no separate source-preservation/nonalias proof",
+    "wrapping_counterexample": "D=0xffffffc0, length=68: after bulk 36, destination pointer 0xffffffe4 is not unsigned-below end 4; the word at D+44 is not written"
   },
   "conditional_copy_layout": {
     "status": "unknown: arithmetic under unproved copy-content and object-forwarding premises; never supplied to the analyzer",
@@ -1329,7 +1718,7 @@
         "register-write": [
           [
             "10",
-            "Expression { id: 471 }"
+            "Expression { id: 464 }"
           ]
         ],
         "memory": [
@@ -1342,7 +1731,7 @@
         ]
       },
       "expressions": {
-        "471": {
+        "464": {
           "pc": "0x5006bd70",
           "expression": "Some(Load { address: Unknown, width: 4, signed: false })"
         }
@@ -1373,7 +1762,7 @@
         "register-write": [
           [
             "1",
-            "Expression { id: 638 }"
+            "Expression { id: 631 }"
           ]
         ],
         "memory": [
@@ -1386,7 +1775,7 @@
         ]
       },
       "expressions": {
-        "638": {
+        "631": {
           "pc": "0x5006bd88",
           "expression": "Some(Load { address: Unknown, width: 4, signed: false })"
         }
@@ -1417,7 +1806,7 @@
         "register-write": [
           [
             "10",
-            "Expression { id: 727 }"
+            "Expression { id: 720 }"
           ]
         ],
         "memory": [
@@ -1430,7 +1819,7 @@
         ]
       },
       "expressions": {
-        "727": {
+        "720": {
           "pc": "0x5006bd94",
           "expression": "Some(Load { address: Unknown, width: 4, signed: false })"
         }
@@ -1512,7 +1901,7 @@
           "register-write": [
             [
               "12",
-              "Expression { id: 2790 }"
+              "Expression { id: 2757 }"
             ]
           ],
           "memory": [
@@ -1530,7 +1919,7 @@
           ]
         },
         "expressions": {
-          "2790": {
+          "2757": {
             "pc": "0x5006d1c2",
             "expression": "Some(Load { address: EntryStack { offset: -532 }, width: 4, signed: false })"
           }
@@ -1653,7 +2042,7 @@
           "register-write": [
             [
               "15",
-              "Expression { id: 2789 }"
+              "Expression { id: 2756 }"
             ]
           ],
           "memory": [
@@ -1671,7 +2060,7 @@
           ]
         },
         "expressions": {
-          "2789": {
+          "2756": {
             "pc": "0x5006d1c0",
             "expression": "Some(Load { address: EntryStack { offset: -556 }, width: 4, signed: false })"
           }
@@ -1775,7 +2164,7 @@
           "register-write": [
             [
               "9",
-              "Expression { id: 2785 }"
+              "Expression { id: 2752 }"
             ]
           ],
           "memory": [
@@ -1793,7 +2182,7 @@
           ]
         },
         "expressions": {
-          "2785": {
+          "2752": {
             "pc": "0x5006d1aa",
             "expression": "Some(Load { address: EntryStack { offset: -524 }, width: 4, signed: false })"
           }
@@ -1868,8 +2257,8 @@
           [
             "Store",
             "4",
-            "Expression { id: 2789 }",
-            "Some(Expression { id: 2791 })"
+            "Expression { id: 2756 }",
+            "Some(Expression { id: 2758 })"
           ]
         ],
         "write-event": [
@@ -1884,15 +2273,15 @@
         ]
       },
       "expressions": {
-        "2791": {
+        "2758": {
           "pc": "0x5006d1c4",
-          "expression": "Some(Integer { op: And, left: Expression { id: 2790 }, right: Constant { value: 4294967295 } })"
+          "expression": "Some(Integer { op: And, left: Expression { id: 2757 }, right: Constant { value: 4294967295 } })"
         },
-        "2790": {
+        "2757": {
           "pc": "0x5006d1c2",
           "expression": "Some(Load { address: EntryStack { offset: -532 }, width: 4, signed: false })"
         },
-        "2789": {
+        "2756": {
           "pc": "0x5006d1c0",
           "expression": "Some(Load { address: EntryStack { offset: -556 }, width: 4, signed: false })"
         }
@@ -1928,8 +2317,8 @@
           [
             "Store",
             "4",
-            "Expression { id: 2785 }",
-            "Some(Expression { id: 2801 })"
+            "Expression { id: 2752 }",
+            "Some(Expression { id: 2768 })"
           ]
         ],
         "write-event": [
@@ -1944,15 +2333,15 @@
         ]
       },
       "expressions": {
-        "2801": {
+        "2768": {
           "pc": "0x5006d1f6",
-          "expression": "Some(Integer { op: And, left: Expression { id: 2789 }, right: Constant { value: 4294967295 } })"
+          "expression": "Some(Integer { op: And, left: Expression { id: 2756 }, right: Constant { value: 4294967295 } })"
         },
-        "2789": {
+        "2756": {
           "pc": "0x5006d1c0",
           "expression": "Some(Load { address: EntryStack { offset: -556 }, width: 4, signed: false })"
         },
-        "2785": {
+        "2752": {
           "pc": "0x5006d1aa",
           "expression": "Some(Load { address: EntryStack { offset: -524 }, width: 4, signed: false })"
         }
@@ -1965,8 +2354,8 @@
     "missing": "all-path reaching mutable-memory definition equating *(RX_LINE) with the initialized WifiIrqLine object",
     "existing_mechanisms": "common values/FunctionIndex and FunctionWrites/CallWrites; target producer and callback field discovery already work",
     "constructor_prerequisite": "0x5006d1f6 has neither a proved RX_LINE address nor a concrete line pointer; real spill definitions are already unknown",
-    "first_copy_prerequisite": "0x5006c6ae: no machine-proved copied-word postcondition transports the publisher from entry-a0+0x580 to entry-sp-236",
-    "next_change": "bounded common memory-word provenance for exact affine object fields, with must-store/load forwarding and machine-proved copy-word effects through existing tail/call substitution; unknown aliases, joins, calls and open graphs invalidate it; publication across functions remains a separate proof obligation"
+    "first_copy_prerequisite": "0x5006c6ae: conditional four-byte provenance exists, but the numerical destination bound is not proved for entry-sp-280",
+    "next_change": "derive a numerical stack/address interval from existing checked machine context before applying the conditional word postcondition; source equality, larger copies and publication remain separate obligations"
   },
   "short_copy_check": {
     "call": {
@@ -2000,7 +2389,7 @@
         ],
         "inputs": [
           [
-            "Some([Constant { value: 0 }, ImageAddress { address: 796920674 }, EntryStack { offset: -17504 }, Expression { id: 2 }, Expression { id: 3 }, Unknown, Unknown, Unknown, Expression { id: 157 }, Unknown, Unknown, Unknown, Constant { value: 20 }, Unknown, Unknown, Unknown, Unknown, Unknown, Unknown, Constant { value: 540643328 }, Constant { value: 1342854452 }, Unknown, Unknown, Unknown, EntryStack { offset: -8472 }, Unknown, Expression { id: 49 }, Unknown, Unknown, Unknown, Unknown, Unknown])"
+            "Some([Constant { value: 0 }, ImageAddress { address: 796920674 }, EntryStack { offset: -17504 }, Expression { id: 2 }, Expression { id: 3 }, Unknown, Unknown, Unknown, Expression { id: 157 }, Unknown, Unknown, Unknown, Constant { value: 20 }, Unknown, Unknown, Unknown, Unknown, Unknown, Unknown, Constant { value: 540643328 }, Constant { value: 1342855492 }, Unknown, Unknown, Unknown, EntryStack { offset: -8472 }, Unknown, Expression { id: 49 }, Unknown, Unknown, Unknown, Unknown, Unknown])"
           ]
         ],
         "write-barrier": [

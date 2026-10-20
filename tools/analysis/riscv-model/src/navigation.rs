@@ -123,7 +123,10 @@ impl<'a, 'm> FunctionIndex<'a, 'm> {
                             Expression::Integer { left, right, .. } => {
                                 earlier(left) && earlier(right)
                             }
-                            Expression::Load { address, .. } => earlier(address),
+                            Expression::Load { address, .. }
+                            | Expression::CallWord {
+                                source: address, ..
+                            } => earlier(address),
                             _ => true,
                         } {
                             return Err(integrity("forward or cyclic navigation expression"));

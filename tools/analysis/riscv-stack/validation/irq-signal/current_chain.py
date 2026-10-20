@@ -205,10 +205,59 @@ def validate(args):
     constructor.add_entry(constructor.inputs(0x5006bcc4)[10], 10, 0x2b8)
     constructor.add_entry(constructor.inputs(0x5006bcc4)[11], 10, 0x38)
     first_copy = capture('first-constructor-copy.tsv', 'stack-call-writes', args.elf, args.rom,
-                         summaries, '5006c6ae', '-236')
+                         summaries, '5006c6ae', '-236', '--word-offset', '44')
     first_copy_rows = [line.split('\t') for line in first_copy.read_text().splitlines()]
     assert ['context-preserves', 'false'] in first_copy_rows
     assert len([r for r in first_copy_rows if r[0] == 'context-call-write']) == 14
+    word_rows = [r for r in first_copy_rows if r[0] == 'post-word']
+    assert {r[1] for r in word_rows} == {'0x2f80d260', '0x2f8004c4'}
+    for row in word_rows:
+        for required in (f'function: {0x2f80d260}', 'destination: Base { base: Argument(0), offset: 44 }',
+                         'source: Base { base: Argument(1), offset: 44 }',
+                         f'load: {0x2f80d332}, load_order: 51', f'store: {0x2f80d338}, store_order: 53',
+                         'width: 4, source_unchanged_before_load: false', 'extent: 68, needs_bounds: true',
+                         'destination_alignment: 4', 'destination_bounds: Some((0, 4294967227))'):
+            assert required in row[2], (required, row)
+    assert ['word-application', 'Err(DestinationBounds)'] in first_copy_rows
+    instance = one(r for r in first_copy_rows if r[0] == 'word-instance')
+    assert instance[1:3] == ['0x5006bbca', '0x5006c6ae'] and instance[-1] == 'Some(DestinationBounds)'
+    assert f'destination: Base {{ base: Stack {{ function: {0x5006bbca}, offset: -280 }}, offset: 44 }}' in instance[3]
+    assert 'source: Base { base: Argument(0), offset: 1408 }' in instance[3]
+    event_rows = [r for r in first_copy_rows if r[0] == 'word-event']
+    body_events = [r[2] for r in event_rows if r[1] == '0x2f80d260']
+    assert body_events == [r[2] for r in event_rows if r[1] == '0x2f8004c4']
+    events = []
+    for text in body_events:
+        m = re.fullmatch(r'WordEvent \{ owner: (\d+), path: (\d+), order: (\d+), site: (\d+), kind: (\w+), width: (\d+), address: (.*), read: (.*) \}', text)
+        assert m, text
+        owner, path, order, pc, kind, width, address, read = m.groups()
+        assert int(owner) == 0x2f80d260
+        events.append({'path': int(path), 'order': int(order), 'pc': hex(int(pc)),
+                       'kind': kind, 'width': int(width), 'address': address, 'read': read})
+    byte_proofs = []
+    for path in sorted({event['path'] for event in events}):
+        trace = [event for event in events if event['path'] == path]
+        assert trace[-1]['kind'] == 'Return'
+        assert all(a['order'] < b['order'] for a, b in zip(trace, trace[1:]))
+        stores = [event for event in trace if event['kind'] == 'Store']
+        for byte in range(44, 48):
+            writers = []
+            for event in stores:
+                address = re.fullmatch(r'Base \{ base: Argument\(0\), offset: (\d+) \}', event['address'])
+                assert address, 'a different/unknown base could overlap the selected word'
+                offset = int(address[1])
+                if byte in {(offset + n) & 0xffffffff for n in range(event['width'])}:
+                    writers.append(event)
+            assert writers, 'all four bytes need an actual final writer'
+            last = writers[-1]
+            assert (last['pc'], last['order'], last['width']) == ('0x2f80d338', 53, 4)
+            assert last['read'] == f'Some(({0x2f80d332}, 51, 4))'
+            load = one(event for event in trace if event['pc'] == '0x2f80d332' and event['order'] == 51)
+            assert load['address'] == 'Base { base: Argument(1), offset: 44 }' and load['width'] == 4
+            byte_proofs.append({'path': path, 'destination_byte': byte, 'source_byte': byte,
+                                'load': load['pc'], 'load_order': 51,
+                                'last_writer': last['pc'], 'store_order': 53,
+                                'return': trace[-1]['pc']})
 
     # The real initializer's reloads already have unknown values at their
     # definitions. Noninterference cannot create a captured pointer value.
@@ -252,7 +301,7 @@ def validate(args):
     assert {r[1] for r in retained} == {'0x2f80d27a', '0x2f80d2c8', '0x2f80d338'}
 
     proof = {
-        'base': 'main 694e0c76, including #195 and #194',
+        'base': 'main ab2d9f96, including #199 through #205',
         'inputs': {str(p): sha(p) for p in (args.elf, args.rom, report, summaries, chip)},
         'validation_sources': {p.name: sha(p) for p in (Path(__file__), Path(__file__).with_name('explain.py'))},
         'diagnostic_binaries': {name: sha(args.examples / name) for name in ('function-records', 'callback-audit', 'stack-call-writes')},
@@ -271,7 +320,15 @@ def validate(args):
                                     'coordinate_meaning': 'copy destination + 44; not an existing captured spill',
                                     'context': one(r[1:] for r in first_copy_rows if r[0] == 'context'),
                                     'applied_effects': 14, 'preserves_word': False,
-                                    'status': 'unknown: bounded copy contents and complete footprint are not proved'},
+                                    'status': 'conditional word contents proved separately; numerical destination bounds and the complete generic footprint remain unknown'},
+        'word_copy': {'conditional_postconditions': word_rows, 'events': events,
+                      'conditional_caller_instance': instance,
+                      'byte_proofs_under_conditions': byte_proofs,
+                      'destination_alignment': 4, 'destination_bounds': [0, 0xffffffff - 68],
+                      'application': 'Err(DestinationBounds)',
+                      'status': 'conditional load-time provenance proved; actual call application remains unknown because numeric entry-sp bounds are absent',
+                      'publisher_equality': 'unknown: no separate source-preservation/nonalias proof',
+                      'wrapping_counterexample': 'D=0xffffffc0, length=68: after bulk 36, destination pointer 0xffffffe4 is not unsigned-below end 4; the word at D+44 is not written'},
         'conditional_copy_layout': {
             'status': 'unknown: arithmetic under unproved copy-content and object-forwarding premises; never supplied to the analyzer',
             'publisher': 'E+0x580 -> entry-sp-236 -> E+0x13c -> E+0x3bc = (E+0x2b8)+0x104',
@@ -286,8 +343,8 @@ def validate(args):
         'first_barrier': {'pc': '0x2f00369e', 'missing': 'all-path reaching mutable-memory definition equating *(RX_LINE) with the initialized WifiIrqLine object',
                           'existing_mechanisms': 'common values/FunctionIndex and FunctionWrites/CallWrites; target producer and callback field discovery already work',
                           'constructor_prerequisite': '0x5006d1f6 has neither a proved RX_LINE address nor a concrete line pointer; real spill definitions are already unknown',
-                          'first_copy_prerequisite': '0x5006c6ae: no machine-proved copied-word postcondition transports the publisher from entry-a0+0x580 to entry-sp-236',
-                          'next_change': 'bounded common memory-word provenance for exact affine object fields, with must-store/load forwarding and machine-proved copy-word effects through existing tail/call substitution; unknown aliases, joins, calls and open graphs invalidate it; publication across functions remains a separate proof obligation'},
+                          'first_copy_prerequisite': '0x5006c6ae: conditional four-byte provenance exists, but the numerical destination bound is not proved for entry-sp-280',
+                          'next_change': 'derive a numerical stack/address interval from existing checked machine context before applying the conditional word postcondition; source equality, larger copies and publication remain separate obligations'},
         'short_copy_check': {'call': run.snapshot(historical_call), 'frame_bytes': 256, 'historical_slot': -600, 'slot_accesses': [],
                              'contextual_retained_effects': retained,
                              'conclusion': 'the 20-byte call is not the demonstrated pointer-preservation barrier on this chain: it has a different owner and no selected spill/reload; actual constructor definitions are already unknown. Its remaining unknown stores still do not prove general noninterference'},

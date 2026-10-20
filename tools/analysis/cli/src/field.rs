@@ -175,7 +175,9 @@ fn fold(
                 path.push(last);
                 Some((root, path, 0))
             }
-            Some(Expression::Integer { .. }) | None => Some((FieldRoot::Unknown, Vec::new(), 0)),
+            Some(Expression::Integer { .. } | Expression::CallWord { .. }) | None => {
+                Some((FieldRoot::Unknown, Vec::new(), 0))
+            }
         },
         // Missing expressions and unresolved bases keep exact displacements.
         AbstractValue::Alternatives { .. } | AbstractValue::Unknown => {

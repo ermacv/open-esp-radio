@@ -138,12 +138,14 @@ pub fn research(
 }
 
 /// Explicit value-proof profile. Existing callback and publication consumers
-/// keep exact stack words; write summaries additionally capture symbolic words.
+/// keep exact stack words; the opt-in profile also captures symbolic words at
+/// exact affine entry-register addresses, using the same bounded word lattice.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct ResearchOptions<'a> {
     pub abi: Option<CallAbi>,
     pub symbolic_spills: bool,
-    /// Complete call writes prepared from canonical facts; never a ROM default.
+    /// Checked call writes and optional word postconditions from canonical facts;
+    /// never a ROM default. Every cached use revalidates target and live inputs.
     pub stack_calls: Option<&'a writes::StackCalls<'a>>,
 }
 

@@ -122,6 +122,8 @@ impl ContextProof<'_> {
 pub(crate) struct ContextRun<'a, 'm> {
     pub context: &'a CallContext,
     pub proof: Option<ContextProof<'m>>,
+    pub query: Option<WordQuery>,
+    pub word: Option<WordPostcondition<'m>>,
 }
 struct Saved<'m>(RecordBuffer<'m>);
 impl FunctionSink for Saved<'_> {
@@ -142,6 +144,19 @@ pub fn contextual_function_writes<'m>(
     memory: &'m WorkingMemory,
     c: &mut dyn RunControl,
 ) -> Result<FunctionWrites<'m>> {
+    specialized(input, isa, context, None, summaries, memory, c)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(super) fn specialized<'m>(
+    input: FunctionInput<'_>,
+    isa: &dyn FunctionSemantics,
+    context: &CallContext,
+    query: Option<WordQuery>,
+    summaries: &[&FunctionWrites<'_>],
+    memory: &'m WorkingMemory,
+    c: &mut dyn RunControl,
+) -> Result<FunctionWrites<'m>> {
     if input.extent.start != context.entry {
         return Err(Error::new(
             ErrorCode::InvalidRequest,
@@ -152,6 +167,8 @@ pub fn contextual_function_writes<'m>(
     let mut run = ContextRun {
         context,
         proof: None,
+        query,
+        word: None,
     };
     crate::analyze_with(
         input,
@@ -175,5 +192,6 @@ pub fn contextual_function_writes<'m>(
         c,
     )?;
     summary.context = run.proof;
+    summary.word = run.word;
     Ok(summary)
 }

@@ -25,6 +25,9 @@ struct Cli {
     site: u32,
     #[arg(value_name = "SLOT_DECIMAL", allow_negative_numbers = true)]
     slot: i64,
+    /// Query one four-byte normal-return provenance relation.
+    #[arg(long)]
+    word_offset: Option<u32>,
 }
 
 fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
@@ -34,6 +37,12 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let summaries = parse_summaries(&std::fs::read_to_string(cli.stack_summaries_toml)?)?;
     let site = cli.site;
     let slot = cli.slot;
+    let word_query = cli.word_offset.map(|offset| WordQuery {
+        destination: 0,
+        source: 1,
+        length: 2,
+        offset,
+    });
     let memory = WorkingMemory::new(512 * 1024 * 1024)?;
     let mut control = || Ok(());
     let image = ImageFacts::new(&bytes, &[], &memory, &mut control)?;
@@ -203,6 +212,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     for barrier in applied.barriers.iter() {
         println!("call-barrier\t{:#010x}\t{barrier:?}", barrier.site);
     }
+    let mut specialized = Vec::new();
     if let Some(transfer) = index.transfer(site.into(), &mut control)?
         && let AbstractValue::ImageAddress { address } = transfer.target
         && let Some(generic) = writes.iter().find(|s| s.entry == u64::from(*address))
@@ -218,7 +228,6 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     {
         println!("context\t{context:?}");
         let view = ProgramView::new(rom.bytes(), rom.file(), &[], &memory, &mut control)?;
-        let mut specialized = Vec::new();
         for (target, function, records) in captures.iter().rev() {
             let available: Vec<_> = specialized.iter().collect();
             let summary = if u64::from(*target) == context.entry() {
@@ -230,27 +239,40 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
                     .data
                     .get(start..start + function.size as usize)
                     .ok_or("function exceeds its section")?;
-                contextual_function_writes(
-                    FunctionInput {
-                        image: Some(&view),
-                        section: function.section as u32,
-                        extent: CodeRange {
-                            start: function.address.into(),
-                            length: function.size.into(),
-                        },
-                        bytes: code,
-                        relocations: &PreparedReferences::empty(),
-                        data_ranges: &[],
-                        jumps: &[],
-                        returns: &NoReturns,
-                        call_behavior: &UnknownCallBehavior,
+                let input = FunctionInput {
+                    image: Some(&view),
+                    section: function.section as u32,
+                    extent: CodeRange {
+                        start: function.address.into(),
+                        length: function.size.into(),
                     },
-                    &StructuralRiscvDecoder,
-                    &context,
-                    &available,
-                    &memory,
-                    &mut control,
-                )?
+                    bytes: code,
+                    relocations: &PreparedReferences::empty(),
+                    data_ranges: &[],
+                    jumps: &[],
+                    returns: &NoReturns,
+                    call_behavior: &UnknownCallBehavior,
+                };
+                if let Some(query) = word_query {
+                    contextual_word_function_writes(
+                        input,
+                        &StructuralRiscvDecoder,
+                        &context,
+                        query,
+                        &available,
+                        &memory,
+                        &mut control,
+                    )?
+                } else {
+                    contextual_function_writes(
+                        input,
+                        &StructuralRiscvDecoder,
+                        &context,
+                        &available,
+                        &memory,
+                        &mut control,
+                    )?
+                }
             } else {
                 let facts =
                     FunctionIndex::new(records, RecordPolicy::Canonical, &memory, &mut control)?;
@@ -271,9 +293,50 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
                     println!("context-unreachable\t{target:#010x}\t{pc:#010x}");
                 }
             }
+            if let Some(proof) = summary.word_postcondition() {
+                println!("post-word\t{target:#010x}\t{proof:?}");
+                for event in proof.events() {
+                    println!("word-event\t{target:#010x}\t{event:?}");
+                }
+            }
             specialized.push(summary);
         }
         let available: Vec<_> = specialized.iter().collect();
+        if word_query.is_some()
+            && let Some(summary) = specialized
+                .iter()
+                .find(|summary| summary.entry == u64::from(*address))
+        {
+            if let Ok(instance) = instantiate_word(
+                &index,
+                caller.address.into(),
+                site.into(),
+                Some(CallAbi::RiscvInteger),
+                summary,
+                &memory,
+                &mut control,
+            )? {
+                println!(
+                    "word-instance\t{:#010x}\t{:#010x}\t{:?}\t{:?}",
+                    instance.caller(),
+                    instance.site(),
+                    instance.contents(),
+                    instance.barrier()
+                );
+            }
+            println!(
+                "word-application\t{:?}",
+                call_word(
+                    &index,
+                    caller.address.into(),
+                    site.into(),
+                    Some(CallAbi::RiscvInteger),
+                    summary,
+                    &memory,
+                    &mut control
+                )?
+            );
+        }
         let applied = call_writes(
             &index,
             caller.address.into(),
@@ -294,11 +357,16 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             applied.preserves_stack_word(caller.address.into(), slot, &mut control)?
         );
     }
+    let available: Vec<_> = if specialized.is_empty() {
+        writes.iter().collect()
+    } else {
+        specialized.iter().collect()
+    };
     let calls = stack_calls(
         &index,
         caller.address.into(),
         Some(CallAbi::RiscvInteger),
-        &summaries,
+        &available,
         &memory,
         &mut control,
     )?;

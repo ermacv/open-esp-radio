@@ -16,7 +16,10 @@ impl Expression {
     pub fn allocated_bytes(&self) -> u64 {
         match self {
             Self::Integer { left, right, .. } => left.allocated_bytes() + right.allocated_bytes(),
-            Self::Load { address, .. } => address.allocated_bytes(),
+            Self::Load { address, .. }
+            | Self::CallWord {
+                source: address, ..
+            } => address.allocated_bytes(),
             _ => 0,
         }
     }
