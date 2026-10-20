@@ -19,6 +19,13 @@ The link map selects `esp_phy/phy_override.c.obj::phy_set_tsens_power`
 (`0x2f0030cc`, size `0x26`), which calls the IDF temperature power owner.
 The archive/ROM leaf that only changes TSENS power is not this linked function.
 
+Wi-Fi restart control `1792533179530-000408cc` (clean `388ab678`) has the
+same four `0x65` / 5 checkpoints and final vendor96/production101. Reusing ten
+existing vendor restart captures yields MATCH163/163 MMIO,38/38 analog; its
+existing reviewed Wi-Fi69.04 exclusion remains unchanged. That MATCH does not
+mean the SAR2 field matches. Both diagnostic runs have the identical application
+SHA256 `8395332f307327d255ecb78f05658352b9f9e0f1295e2235fc14595de5b080a6`.
+
 SOURCE: `esp_phy/src/phy_init.c::esp_phy_disable` closes RF and calls
 `phy_xpd_tsens`; the linked override releases temperature power.
 `esp_hw_support/sar_tsens_ctrl.c::temperature_sensor_power_release` disables
