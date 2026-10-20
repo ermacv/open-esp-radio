@@ -30,8 +30,12 @@ pub fn observe<B: PlatformClockBackend, T>(
     let (runtime, interrupts, clocks) = wifi.into_running();
     let dma = runtime.receive_dma_snapshot();
     let wifi = WifiClocked::from_running(runtime, interrupts, clocks);
+    let sample = match point {
+        Point::Settled(sample) => Some(sample),
+        _ => None,
+    };
     oer_esp32s31_board::rom::print_fmt(format_args!(
-        "OPEN_RADIO_HIL phy=cca-checkpoint point={point:?} micros={} mac_rx={} reload={} base={:#x} next={:#x} last={:#x}\n",
+        "OPEN_RADIO_HIL phy=cca-checkpoint point={point:?} sample={sample:?} micros={} mac_rx={} reload={} base={:#x} next={:#x} last={:#x}\n",
         EmbassyClock.now().as_micros(),
         dma.walker_enabled,
         dma.reload_pending,
