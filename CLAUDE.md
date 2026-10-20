@@ -77,7 +77,7 @@ The layout is [docs/repository-layout.md](docs/repository-layout.md).
   never links a HAL. Only names and the unsafe boundary are checked
   (`cargo test -p oer-test-layers`).
 - **Names:** a library is `oer-` and its path below the root
-  (`protocols/ieee80211/mac` is `oer-ieee80211-mac`); an executable keeps its
+  (`protocols/ieee80211/wire` is `oer-ieee80211-wire`); an executable keeps its
   root (`oer-firmware-apps-w1`, `oer-tool-image-cli`).
 - Only `cargo fw` builds images; other programs take artifacts.
 - A crate never sits inside another crate's directory. A new crate needs a
