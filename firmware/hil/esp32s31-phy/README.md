@@ -29,6 +29,16 @@ the capture epoch. The frozen cold-calibration projection remains immutable.
 Stop closes RF; a stopped, stale or failed epoch cannot serve pages. A failed
 hardware operation poisons the diagnostic service until reset.
 
+For Wi-Fi, StopCapture first runs a separate CCA experiment after the host's
+calibration, MMIO and analog reads. Four placed RX descriptors with 1664-byte
+buffers use the existing HAL to open RX; bounded timer-driven polling discards
+and returns received units through the same HAL. Five observations are spaced
+by at least 200 ms. No CPU Wi-Fi IRQ route or transmit path is installed.
+The experiment closes the RX gate, rebuilds the halted ring to reclaim all
+buffers, then closes RF through the existing capture teardown. Observation
+failure still attempts DMA and RF cleanup and rejects the stop. These later
+samples are console evidence only; they do not enter the vendor comparison.
+
 The image prints typed `TEMPERATURE_SENSOR_SAR2_STATUS` checkpoints after PHY
 registration, immediately before RF close and after retained wake. Each line
 contains the sampled byte and the named initialization/status field, decoded by

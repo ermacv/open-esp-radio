@@ -18,6 +18,10 @@ pub enum Point {
     BeforeMac,
     AfterMac,
     Settled(u8),
+    BeforeRing,
+    RingOpen,
+    RingSample(u8),
+    RingClosed,
 }
 
 pub fn observe<B: PlatformClockBackend, T>(
@@ -25,13 +29,22 @@ pub fn observe<B: PlatformClockBackend, T>(
     wifi: WifiClocked,
     point: Point,
 ) -> Result<WifiClocked, RejectReason> {
-    // Both ownership transitions perform no MMIO. No DMA storage or interrupt
-    // route is installed; the observation borrows the existing typed RX owner.
+    // Both ownership transitions perform no MMIO.
     let (runtime, interrupts, clocks) = wifi.into_running();
-    let dma = runtime.receive_dma_snapshot();
+    let result = observe_running(domain, &runtime, point);
     let wifi = WifiClocked::from_running(runtime, interrupts, clocks);
+    result?;
+    Ok(wifi)
+}
+
+pub fn observe_running<B: PlatformClockBackend, T>(
+    domain: &RadioDomain<B, T>,
+    runtime: &oer_esp32s31_hal::owner::RadioAccess,
+    point: Point,
+) -> Result<(), RejectReason> {
+    let dma = runtime.receive_dma_snapshot();
     let sample = match point {
-        Point::Settled(sample) => Some(sample),
+        Point::Settled(sample) | Point::RingSample(sample) => Some(sample),
         _ => None,
     };
     oer_esp32s31_board::rom::print_fmt(format_args!(
@@ -51,5 +64,5 @@ pub fn observe<B: PlatformClockBackend, T>(
             "OPEN_RADIO_HIL phy=cca-register point={point:?} name={name} raw={raw:#010x}\n",
         ));
     }
-    Ok(wifi)
+    Ok(())
 }
