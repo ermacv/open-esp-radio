@@ -1,0 +1,5 @@
+2f003222 t oer_espressif_executor::executor::pend_signal::<2>
+2f003348 t oer_espressif_executor::executor::signal_context::<2>
+500ebf0c b oer_espressif_executor::executor::SIGNAL_LISTS
+2f007004 d oer_firmware_apps_w1::irq::MAC_SIGNAL
+2f007028 d oer_firmware_apps_w1::irq::POWER_SIGNAL

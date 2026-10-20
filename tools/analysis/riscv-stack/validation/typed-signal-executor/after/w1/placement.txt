@@ -1,0 +1,12 @@
+profile=psram-code-psram-data-psram-stack
+image=0x50010000..0x500adab1
+text=0x50017500..0x5009f32e
+__runtime_data_start..__runtime_data_bss_end=0x500ad290..0x500ec440
+__runtime_isr_start..__runtime_isr_end=0x2f000000..0x2f004d90
+__runtime_critical_data_start..__runtime_critical_bss_end=0x2f004dc0..0x2f017540
+__runtime_dma_data_start..__runtime_dma_bss_end=0x2f017540..0x2f025d80
+_stack_end.._stack_start=0x500adac0..0x500ddac0
+__runtime_cpu0_irq_stack_bottom..__runtime_cpu0_irq_stack_top=0x2f0074c0..0x2f00f4c0
+__runtime_cpu1_irq_stack_bottom..__runtime_cpu1_irq_stack_top=0x2f00f4c0..0x2f0174c0
+interrupt-handlers=sram,rom
+result=PASS

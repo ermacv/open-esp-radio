@@ -1,0 +1,58 @@
+levels: checked, every CLIC level and route writer runs in start-up or the table
+handler code: 0 floating-point sites, 7 calls into the panic machinery, 0 functions in cached memory
+  oer_espressif_executor::time_driver::alarm_interrupt::<0> calls core::panicking::panic_fmt
+  oer_espressif_executor::time_driver::alarm_interrupt::<1> calls core::panicking::panic_fmt
+  oer_espressif_executor::executor::pend_signal::<2> calls core::panicking::panic_fmt
+  oer_espressif_executor::executor::wake_handler::<0> calls core::panicking::panic_fmt
+  oer_espressif_executor::executor::interrupt_handler::<2> calls core::panicking::panic_fmt
+  handle_interrupts calls core::panicking::panic_bounds_check
+  core::result::unwrap_failed calls core::panicking::panic_fmt
+panic code: 0 functions in cached memory
+panic hook data: 0 static references into cached memory
+hart 0: 2176 + ? of 31744 usable bytes, partial
+  assumes the executor invariant (a task header's poll_fn matches its storage, and an erased pointer is read back as its own type)
+  nesting: checked, no handler can lower the interrupt level
+  level 1: 576 (entry frame 80)
+         0 Trap1
+        96 handle_interrupts
+        48 core::result::unwrap_failed
+        16 core::panicking::panic_fmt
+        32 __rustc::rust_begin_unwind
+       304 oer_espressif_staged_runtime::panic::record
+  level 2: 576 + ? (entry frame 80)
+         0 Trap1
+        96 handle_interrupts
+        48 core::result::unwrap_failed
+        16 core::panicking::panic_fmt
+        32 __rustc::rust_begin_unwind
+       304 oer_espressif_staged_runtime::panic::record
+    unresolved indirect call through a loaded pointer at 0x2f0030b4
+  level 3: 576 (entry frame 80)
+         0 Trap1
+        96 handle_interrupts
+        48 core::result::unwrap_failed
+        16 core::panicking::panic_fmt
+        32 __rustc::rust_begin_unwind
+       304 oer_espressif_staged_runtime::panic::record
+  exception: 448 (entry frame 80)
+         0 _start_trap_rust
+        16 AES
+        16 core::panicking::panic_fmt
+        32 __rustc::rust_begin_unwind
+       304 oer_espressif_staged_runtime::panic::record
+hart 1: 1024 of 31744 usable bytes, conditional
+  assumes the executor invariant (a task header's poll_fn matches its storage, and an erased pointer is read back as its own type)
+  nesting: checked, no handler can lower the interrupt level
+  level 1: 576 (entry frame 80)
+         0 Trap1
+        96 handle_interrupts
+        48 core::result::unwrap_failed
+        16 core::panicking::panic_fmt
+        32 __rustc::rust_begin_unwind
+       304 oer_espressif_staged_runtime::panic::record
+  exception: 448 (entry frame 80)
+         0 _start_trap_rust
+        16 AES
+        16 core::panicking::panic_fmt
+        32 __rustc::rust_begin_unwind
+       304 oer_espressif_staged_runtime::panic::record

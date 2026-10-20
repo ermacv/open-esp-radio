@@ -1,0 +1,159 @@
+analysis: 16506689 of 1000000000 work units, 18553881 of 536870912 bytes of working memory
+frame coverage: 35 of 144 functions have a compiler frame record; 115 reviewed, 0 unreviewed
+  reviewed VectorData 0x2f000000 _mtvt_table
+  reviewed LinkerLabel 0x2f000000 _trap_section_origin
+  reviewed VectorData 0x2f0000c0 _mtvt_table2
+  reviewed VectorData 0x2f000200 _vector_table
+  reviewed Assembly 0x2f0002c0 Trap1
+  reviewed Assembly 0x2f0002c8 Trap10
+  reviewed Assembly 0x2f0002d0 Trap11
+  reviewed Assembly 0x2f0002d8 Trap12
+  reviewed Assembly 0x2f0002e0 Trap13
+  reviewed Assembly 0x2f0002e8 Trap14
+  reviewed Assembly 0x2f0002f0 Trap15
+  reviewed Assembly 0x2f0002f8 Trap16
+  reviewed Assembly 0x2f000300 Trap17
+  reviewed Assembly 0x2f000308 Trap18
+  reviewed Assembly 0x2f000310 Trap19
+  reviewed Assembly 0x2f000318 Trap2
+  reviewed Assembly 0x2f000320 Trap20
+  reviewed Assembly 0x2f000328 Trap21
+  reviewed Assembly 0x2f000330 Trap22
+  reviewed Assembly 0x2f000338 Trap23
+  reviewed Assembly 0x2f000340 Trap24
+  reviewed Assembly 0x2f000348 Trap25
+  reviewed Assembly 0x2f000350 Trap26
+  reviewed Assembly 0x2f000358 Trap27
+  reviewed Assembly 0x2f000360 Trap28
+  reviewed Assembly 0x2f000368 Trap29
+  reviewed Assembly 0x2f000370 Trap3
+  reviewed Assembly 0x2f000378 Trap30
+  reviewed Assembly 0x2f000380 Trap31
+  reviewed Assembly 0x2f000388 Trap32
+  reviewed Assembly 0x2f000394 Trap33
+  reviewed Assembly 0x2f0003a0 Trap34
+  reviewed Assembly 0x2f0003ac Trap35
+  reviewed Assembly 0x2f0003b8 Trap36
+  reviewed Assembly 0x2f0003c4 Trap37
+  reviewed Assembly 0x2f0003d0 Trap38
+  reviewed Assembly 0x2f0003dc Trap39
+  reviewed Assembly 0x2f0003e8 Trap4
+  reviewed Assembly 0x2f0003f0 Trap40
+  reviewed Assembly 0x2f0003fc Trap41
+  reviewed Assembly 0x2f000408 Trap42
+  reviewed Assembly 0x2f000414 Trap43
+  reviewed Assembly 0x2f000420 Trap44
+  reviewed Assembly 0x2f00042c Trap45
+  reviewed Assembly 0x2f000438 Trap46
+  reviewed Assembly 0x2f000444 Trap47
+  reviewed Assembly 0x2f000450 Trap5
+  reviewed Assembly 0x2f000458 Trap6
+  reviewed Assembly 0x2f000460 Trap7
+  reviewed Assembly 0x2f000468 Trap8
+  reviewed Assembly 0x2f000470 Trap9
+  reviewed Assembly 0x2f000478 _pre_default_start_trap
+  reviewed Assembly 0x2f0004a8 _default_start_trap
+  reviewed Assembly 0x2f0004a8 _start_trap
+  reviewed Assembly 0x2f0004ac _pre_default_start_trap_ret
+  reviewed Assembly 0x2f000540 _start_Trap6_trap
+  reviewed Assembly 0x2f000550 _start_Trap7_trap
+  reviewed Assembly 0x2f000560 _start_Trap8_trap
+  reviewed Assembly 0x2f000570 _start_Trap9_trap
+  reviewed Assembly 0x2f000580 _start_Trap10_trap
+  reviewed Assembly 0x2f000590 _start_Trap11_trap
+  reviewed Assembly 0x2f0005a0 _start_Trap12_trap
+  reviewed Assembly 0x2f0005b0 _start_Trap13_trap
+  reviewed Assembly 0x2f0005c0 _start_Trap14_trap
+  reviewed Assembly 0x2f0005d0 _start_Trap15_trap
+  reviewed Assembly 0x2f0005e0 _start_Trap16_trap
+  reviewed Assembly 0x2f0005f0 _start_Trap17_trap
+  reviewed Assembly 0x2f000600 _start_Trap1_trap
+  reviewed Assembly 0x2f000610 _start_Trap18_trap
+  reviewed Assembly 0x2f000620 _start_Trap19_trap
+  reviewed Assembly 0x2f000630 _start_Trap20_trap
+  reviewed Assembly 0x2f000640 _start_Trap21_trap
+  reviewed Assembly 0x2f000650 _start_Trap22_trap
+  reviewed Assembly 0x2f000660 _start_Trap23_trap
+  reviewed Assembly 0x2f000670 _start_Trap24_trap
+  reviewed Assembly 0x2f000680 _start_Trap25_trap
+  reviewed Assembly 0x2f000690 _start_Trap26_trap
+  reviewed Assembly 0x2f0006a0 _start_Trap27_trap
+  reviewed Assembly 0x2f0006b0 _start_Trap2_trap
+  reviewed Assembly 0x2f0006c0 _start_Trap28_trap
+  reviewed Assembly 0x2f0006d0 _start_Trap29_trap
+  reviewed Assembly 0x2f0006e0 _start_Trap30_trap
+  reviewed Assembly 0x2f0006f0 _start_Trap31_trap
+  reviewed Assembly 0x2f000700 _start_Trap32_trap
+  reviewed Assembly 0x2f000710 _start_Trap33_trap
+  reviewed Assembly 0x2f000720 _start_Trap34_trap
+  reviewed Assembly 0x2f000730 _start_Trap35_trap
+  reviewed Assembly 0x2f000740 _start_Trap36_trap
+  reviewed Assembly 0x2f000750 _start_Trap37_trap
+  reviewed Assembly 0x2f000760 _start_Trap3_trap
+  reviewed Assembly 0x2f000770 _start_Trap38_trap
+  reviewed Assembly 0x2f000780 _start_Trap39_trap
+  reviewed Assembly 0x2f000790 _start_Trap40_trap
+  reviewed Assembly 0x2f0007a0 _start_Trap41_trap
+  reviewed Assembly 0x2f0007b0 _start_Trap42_trap
+  reviewed Assembly 0x2f0007c0 _start_Trap43_trap
+  reviewed Assembly 0x2f0007d0 _start_Trap44_trap
+  reviewed Assembly 0x2f0007e0 _start_Trap45_trap
+  reviewed Assembly 0x2f0007f0 _start_Trap46_trap
+  reviewed Assembly 0x2f000800 _start_Trap47_trap
+  reviewed Assembly 0x2f000810 _start_Trap4_trap
+  reviewed Assembly 0x2f000820 _start_Trap5_trap
+  reviewed Assembly 0x2f000830 _start_DefaultHandler_trap
+  reviewed Assembly 0x2f000840 _continue_interrupt_trap
+  reviewed Assembly 0x2f000c00 esp_hal[3c3a92d234bd26d6]::interrupt::ipc::implem::ipc_handler::<0usize>
+  reviewed LinkerLabel 0x2f000c00 _rwtext_start
+  reviewed Assembly 0x2f000c54 esp_hal[3c3a92d234bd26d6]::interrupt::ipc::implem::ipc_handler::<1usize>
+  reviewed Assembly 0x2f000ca8 esp_hal[3c3a92d234bd26d6]::interrupt::ipc::implem::callback_handler
+  reviewed Assembly 0x40050020 __pre_init
+  reviewed Assembly 0x40050090 _start
+  reviewed Assembly 0x40050698 ExceptionHandler
+  reviewed Assembly 0x40050698 _default_abort
+  reviewed Assembly 0x40050698 _pre_init_trap
+  reviewed Assembly 0x40050698 abort
+  reviewed CompilerRuntime 0x4005406c strlen
+bootstrap stack: `_start_rust` needs 736 + ? bytes, partial; budget 361660 bytes (365756 bytes of `_stack_end`..`_stack_start` less 4096 bytes free), 360924 bytes of headroom
+  deepest path:
+        16 _start_rust
+       112 main
+       384 <esp_hal::flash::Flash<esp_hal::Blocking>>::tune_120mhz
+        16 core::panicking::panic_bounds_check
+        16 core::panicking::panic_fmt
+         0 __call_ets_printf
+         0 ets_printf
+         0 ets_vprintf
+        32 _cvt
+        64 __riscv_save_10
+  unresolved: 29 (7 indirect call through a loaded pointer, 14 indirect call through a register, 2 indirect jump out of a function, 6 function without a frame); a hole may reach deeper
+    indirect call through a loaded pointer at 0x2f8027f6 in Cache_Suspend_L1_CORE0_ICache+0x1a (closed by 2: MIR call facts)
+    indirect call through a loaded pointer at 0x2f80282c in Cache_Suspend_L1_CORE0_ICache+0x50 (closed by 2: MIR call facts)
+    indirect call through a loaded pointer at 0x2f802834 in Cache_Suspend_L1_CORE0_ICache+0x58 (closed by 2: MIR call facts)
+    indirect call through a loaded pointer at 0x2f805618 in ets_printf+0x3a (closed by 2: MIR call facts)
+    indirect call through a loaded pointer at 0x2f805636 in ets_printf+0x58 (closed by 2: MIR call facts)
+    indirect call through a loaded pointer at 0x2f80f1d8 in esp_rom_spiflash_read+0x10 (closed by 2: MIR call facts)
+    indirect call through a loaded pointer at 0x2f811350 in esp_rom_spi_set_op_mode+0x1c (closed by 2: MIR call facts)
+    indirect call through a register at 0x2f805180 in ets_vprintf+0x11a (closed by 2: MIR call facts)
+    indirect call through a register at 0x2f805188 in ets_vprintf+0x122 (closed by 2: MIR call facts)
+    indirect call through a register at 0x2f8051fa in ets_vprintf+0x194 (closed by 2: MIR call facts)
+    indirect call through a register at 0x2f805200 in ets_vprintf+0x19a (closed by 2: MIR call facts)
+    indirect call through a register at 0x2f80534a in ets_vprintf+0x2e4 (closed by 2: MIR call facts)
+    indirect call through a register at 0x2f80537a in ets_vprintf+0x314 (closed by 2: MIR call facts)
+    indirect call through a register at 0x2f8053da in ets_vprintf+0x374 (closed by 2: MIR call facts)
+    indirect call through a register at 0x2f8053f6 in ets_vprintf+0x390 (closed by 2: MIR call facts)
+    indirect call through a register at 0x2f805408 in ets_vprintf+0x3a2 (closed by 2: MIR call facts)
+    indirect call through a register at 0x2f805412 in ets_vprintf+0x3ac (closed by 2: MIR call facts)
+    indirect call through a register at 0x2f80541a in ets_vprintf+0x3b4 (closed by 2: MIR call facts)
+    indirect call through a register at 0x2f8054ca in ets_vprintf+0x464 (closed by 2: MIR call facts)
+    indirect call through a register at 0x2f811380 in esp_rom_spi_set_op_mode+0x4c (closed by 2: MIR call facts)
+    indirect call through a register at 0x2f8113ae in esp_rom_spi_set_op_mode+0x7a (closed by 2: MIR call facts)
+    indirect jump out of a function at 0x2f8027da in Cache_Enable_L1_CORE0_ICache+0x14 (closed by 2: MIR call facts)
+    indirect jump out of a function at 0x40054058 in oer_espressif_staged_bootstrap::hand_off+0x6a (closed by 2: MIR call facts)
+    function without a frame at 0x2f8027c6 in Cache_Enable_L1_CORE0_ICache (closed by 1c: assembly frames)
+    function without a frame at 0x2f8027dc in Cache_Suspend_L1_CORE0_ICache (closed by 1c: assembly frames)
+    function without a frame at 0x2f805066 in ets_vprintf (closed by 1c: assembly frames)
+    function without a frame at 0x2f8055de in ets_printf (closed by 1c: assembly frames)
+    function without a frame at 0x2f80f1c8 in esp_rom_spiflash_read (closed by 1c: assembly frames)
+    function without a frame at 0x2f811334 in esp_rom_spi_set_op_mode (closed by 1c: assembly frames)

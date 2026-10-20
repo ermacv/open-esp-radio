@@ -1,0 +1,312 @@
+[
+  {
+    "name": "test-oer-interrupt-table",
+    "command": [
+      "cargo",
+      "test",
+      "-p",
+      "oer-interrupt-table",
+      "--features",
+      "oer-interrupt-table/host-signal"
+    ],
+    "exit_code": 0,
+    "seconds": 0.56
+  },
+  {
+    "name": "clippy-oer-interrupt-table",
+    "command": [
+      "cargo",
+      "clippy",
+      "-p",
+      "oer-interrupt-table",
+      "--features",
+      "oer-interrupt-table/host-signal",
+      "--all-targets"
+    ],
+    "exit_code": 0,
+    "seconds": 0.43
+  },
+  {
+    "name": "test-oer-espressif-executor",
+    "command": [
+      "cargo",
+      "test",
+      "-p",
+      "oer-espressif-executor",
+      "--features",
+      "oer-interrupt-table/host-signal"
+    ],
+    "exit_code": 0,
+    "seconds": 12.17
+  },
+  {
+    "name": "clippy-oer-espressif-executor",
+    "command": [
+      "cargo",
+      "clippy",
+      "-p",
+      "oer-espressif-executor",
+      "--features",
+      "oer-interrupt-table/host-signal",
+      "--all-targets"
+    ],
+    "exit_code": 0,
+    "seconds": 0.91
+  },
+  {
+    "name": "test-oer-esp32s31-ieee80211-mac",
+    "command": [
+      "cargo",
+      "test",
+      "-p",
+      "oer-esp32s31-ieee80211-mac",
+      "--features",
+      "oer-interrupt-table/host-signal"
+    ],
+    "exit_code": 0,
+    "seconds": 5.33
+  },
+  {
+    "name": "clippy-oer-esp32s31-ieee80211-mac",
+    "command": [
+      "cargo",
+      "clippy",
+      "-p",
+      "oer-esp32s31-ieee80211-mac",
+      "--features",
+      "oer-interrupt-table/host-signal",
+      "--all-targets"
+    ],
+    "exit_code": 0,
+    "seconds": 6.77
+  },
+  {
+    "name": "test-oer-esp32s31-ieee80211-driver",
+    "command": [
+      "cargo",
+      "test",
+      "-p",
+      "oer-esp32s31-ieee80211-driver",
+      "--features",
+      "oer-interrupt-table/host-signal"
+    ],
+    "exit_code": 0,
+    "seconds": 26.93
+  },
+  {
+    "name": "clippy-oer-esp32s31-ieee80211-driver",
+    "command": [
+      "cargo",
+      "clippy",
+      "-p",
+      "oer-esp32s31-ieee80211-driver",
+      "--features",
+      "oer-interrupt-table/host-signal",
+      "--all-targets"
+    ],
+    "exit_code": 0,
+    "seconds": 32.54
+  },
+  {
+    "name": "test-oer-esp32s31-bluetooth-driver",
+    "command": [
+      "cargo",
+      "test",
+      "-p",
+      "oer-esp32s31-bluetooth-driver",
+      "--features",
+      "oer-interrupt-table/host-signal"
+    ],
+    "exit_code": 0,
+    "seconds": 1.34
+  },
+  {
+    "name": "clippy-oer-esp32s31-bluetooth-driver",
+    "command": [
+      "cargo",
+      "clippy",
+      "-p",
+      "oer-esp32s31-bluetooth-driver",
+      "--features",
+      "oer-interrupt-table/host-signal",
+      "--all-targets"
+    ],
+    "exit_code": 0,
+    "seconds": 13.13
+  },
+  {
+    "name": "fw-w0",
+    "command": [
+      "cargo",
+      "fw",
+      "build",
+      "w0"
+    ],
+    "exit_code": 0,
+    "seconds": 18.21
+  },
+  {
+    "name": "fw-w1",
+    "command": [
+      "cargo",
+      "fw",
+      "build",
+      "w1"
+    ],
+    "exit_code": 0,
+    "seconds": 36.14
+  },
+  {
+    "name": "fw-w2",
+    "command": [
+      "cargo",
+      "fw",
+      "build",
+      "w2"
+    ],
+    "exit_code": 0,
+    "seconds": 20.45
+  },
+  {
+    "name": "riscv-libraries",
+    "command": [
+      "cargo",
+      "check",
+      "--target",
+      "riscv32imafc-unknown-none-elf",
+      "-p",
+      "oer-interrupt-table",
+      "-p",
+      "oer-espressif-executor",
+      "--features",
+      "oer-espressif-executor/esp32s31",
+      "-p",
+      "oer-esp32s31-ieee80211-mac",
+      "-p",
+      "oer-esp32s31-ieee80211-driver",
+      "-p",
+      "oer-esp32s31-bluetooth-driver"
+    ],
+    "exit_code": 0,
+    "seconds": 8.6
+  },
+  {
+    "name": "probes-s31",
+    "command": [
+      "cargo",
+      "vendor-check",
+      "probes",
+      "--chip",
+      "esp32s31"
+    ],
+    "exit_code": 1,
+    "seconds": 26.65
+  },
+  {
+    "name": "hil-reaching",
+    "command": [
+      "cargo",
+      "hil",
+      "images",
+      "check",
+      "--chip",
+      "esp32s31",
+      "--reaching",
+      "oer-interrupt-table",
+      "--jobs",
+      "2"
+    ],
+    "exit_code": 0,
+    "seconds": 47.62
+  },
+  {
+    "name": "format",
+    "command": [
+      "cargo",
+      "fmt",
+      "--all",
+      "--check"
+    ],
+    "exit_code": 0,
+    "seconds": 3.9
+  },
+  {
+    "name": "probes-s31-explicit-root",
+    "command": [
+      "cargo",
+      "vendor-check",
+      "--root",
+      "/home/ermacv/dev/open-esp-radio-codex",
+      "probes",
+      "--chip",
+      "esp32s31"
+    ],
+    "exit_code": 0,
+    "seconds": 14.35
+  },
+  {
+    "name": "before-fw-w0",
+    "command": [
+      "cargo",
+      "fw",
+      "build",
+      "w0"
+    ],
+    "exit_code": 0,
+    "notes": "Observed process exit for baseline build; w2 retried after moving its temporary target out of full /tmp."
+  },
+  {
+    "name": "before-fw-w1",
+    "command": [
+      "cargo",
+      "fw",
+      "build",
+      "w1"
+    ],
+    "exit_code": 0,
+    "notes": "Observed process exit for baseline build; w2 retried after moving its temporary target out of full /tmp."
+  },
+  {
+    "name": "before-fw-w2",
+    "command": [
+      "cargo",
+      "fw",
+      "build",
+      "w2"
+    ],
+    "exit_code": 0,
+    "notes": "Observed process exit for baseline build; w2 retried after moving its temporary target out of full /tmp."
+  },
+  {
+    "name": "bluetooth-riscv-doctests",
+    "command": [
+      "cargo",
+      "test",
+      "-p",
+      "oer-esp32s31-bluetooth-driver",
+      "--doc",
+      "--target",
+      "riscv32imafc-unknown-none-elf"
+    ],
+    "exit_code": 0
+  },
+  {
+    "name": "final-format",
+    "command": [
+      "cargo",
+      "fmt",
+      "--all",
+      "--check"
+    ],
+    "exit_code": 0
+  },
+  {
+    "name": "final-diff",
+    "command": [
+      "git",
+      "diff",
+      "--check"
+    ],
+    "exit_code": 0
+  }
+]

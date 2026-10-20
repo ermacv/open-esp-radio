@@ -1,0 +1,249 @@
+before/w1/runtime.elf: 0x5005e8f0..0x5005ea50
+5005e8f0: 02b50963     	beq	a0, a1, 0x5005e922
+5005e8f4: e141         	bnez	a0, 0x5005e974
+5005e8f6: 4010         	lw	a2, 0x0(s0)
+5005e8f8: 000b2583     	lw	a1, 0x0(s6)
+5005e8fc: ca0d         	beqz	a2, 0x5005e92e
+5005e8fe: 4054         	lw	a3, 0x4(s0)
+5005e900: 004b2503     	lw	a0, 0x4(s6)
+5005e904: 02a69763     	bne	a3, a0, 0x5005e932
+5005e908: 02b61563     	bne	a2, a1, 0x5005e932
+5005e90c: 4505         	li	a0, 0x1
+5005e90e: 1404a5af     	lr.w.aq	a1, (s1)
+5005e912: 04a59763     	bne	a1, a0, 0x5005e960
+5005e916: 1a04a62f     	sc.w.rl	a2, zero, (s1)
+5005e91a: fa75         	bnez	a2, 0x5005e90e
+5005e91c: 04a59263     	bne	a1, a0, 0x5005e960
+5005e920: a891         	j	0x5005e974
+5005e922: 000b2583     	lw	a1, 0x0(s6)
+5005e926: 004b2503     	lw	a0, 0x4(s6)
+5005e92a: 458c         	lw	a1, 0x8(a1)
+5005e92c: a099         	j	0x5005e972
+5005e92e: 004b2503     	lw	a0, 0x4(s6)
+5005e932: 418c         	lw	a1, 0x0(a1)
+5005e934: 9582         	jalr	a1
+5005e936: 892a         	mv	s2, a0
+5005e938: 4010         	lw	a2, 0x0(s0)
+5005e93a: 89ae         	mv	s3, a1
+5005e93c: c601         	beqz	a2, 0x5005e944
+5005e93e: 4048         	lw	a0, 0x4(s0)
+5005e940: 464c         	lw	a1, 0xc(a2)
+5005e942: 9582         	jalr	a1
+5005e944: 01242023     	sw	s2, 0x0(s0)
+5005e948: 01342223     	sw	s3, 0x4(s0)
+5005e94c: 4505         	li	a0, 0x1
+5005e94e: 1404a5af     	lr.w.aq	a1, (s1)
+5005e952: 00a59563     	bne	a1, a0, 0x5005e95c
+5005e956: 1a04a62f     	sc.w.rl	a2, zero, (s1)
+5005e95a: fa75         	bnez	a2, 0x5005e94e
+5005e95c: 00a58c63     	beq	a1, a0, 0x5005e974
+5005e960: 400c         	lw	a1, 0x0(s0)
+5005e962: 4048         	lw	a0, 0x4(s0)
+5005e964: 00042023     	sw	zero, 0x0(s0)
+5005e968: 60058563     	beqz	a1, 0x5005ef72
+5005e96c: 0e04a02f     	amoswap.w.aqrl	zero, zero, (s1)
+5005e970: 41cc         	lw	a1, 0x4(a1)
+5005e972: 9582         	jalr	a1
+5005e974: 000a0503     	lb	a0, 0x0(s4)
+5005e978: 0230000f     	fence	r, rw
+5005e97c: 36051963     	bnez	a0, 0x5005ecee
+5005e980: 018aa983     	lw	s3, 0x18(s5)
+5005e984: 4905         	li	s2, 0x1
+5005e986: 0009a503     	lw	a0, 0x0(s3)
+5005e98a: 4100         	lw	s0, 0x0(a0)
+5005e98c: 4048         	lw	a0, 0x4(s0)
+5005e98e: 4404         	lw	s1, 0x8(s0)
+5005e990: 9502         	jalr	a0
+5005e992: cd29         	beqz	a0, 0x5005e9ec
+5005e994: 02044503     	lbu	a0, 0x20(s0)
+5005e998: e511         	bnez	a0, 0x5005e9a4
+5005e99a: 03240023     	sb	s2, 0x20(s0)
+5005e99e: 4088         	lw	a0, 0x0(s1)
+5005e9a0: c080         	sw	s0, 0x0(s1)
+5005e9a2: cc48         	sw	a0, 0x1c(s0)
+5005e9a4: 4804         	lw	s1, 0x10(s0)
+5005e9a6: 004b2503     	lw	a0, 0x4(s6)
+5005e9aa: c891         	beqz	s1, 0x5005e9be
+5005e9ac: 01442a03     	lw	s4, 0x14(s0)
+5005e9b0: 000b2583     	lw	a1, 0x0(s6)
+5005e9b4: 00aa1963     	bne	s4, a0, 0x5005e9c6
+5005e9b8: 00b48f63     	beq	s1, a1, 0x5005e9d6
+5005e9bc: a029         	j	0x5005e9c6
+5005e9be: 000b2583     	lw	a1, 0x0(s6)
+5005e9c2: 01442a03     	lw	s4, 0x14(s0)
+5005e9c6: 418c         	lw	a1, 0x0(a1)
+5005e9c8: 9582         	jalr	a1
+5005e9ca: c808         	sw	a0, 0x10(s0)
+5005e9cc: c84c         	sw	a1, 0x14(s0)
+5005e9ce: c481         	beqz	s1, 0x5005e9d6
+5005e9d0: 44cc         	lw	a1, 0xc(s1)
+5005e9d2: 8552         	mv	a0, s4
+5005e9d4: 9582         	jalr	a1
+5005e9d6: 4048         	lw	a0, 0x4(s0)
+5005e9d8: 9502         	jalr	a0
+5005e9da: c909         	beqz	a0, 0x5005e9ec
+5005e9dc: 4c08         	lw	a0, 0x18(s0)
+5005e9de: 00042c23     	sw	zero, 0x18(s0)
+5005e9e2: 0431         	addi	s0, s0, 0xc
+5005e9e4: 0c0425af     	amoswap.w.aq	a1, zero, (s0)
+5005e9e8: 8d4d         	or	a0, a0, a1
+5005e9ea: fd51         	bnez	a0, 0x5005e986
+5005e9ec: 014aa503     	lw	a0, 0x14(s5)
+5005e9f0: 4108         	lw	a0, 0x0(a0)
+5005e9f2: 4100         	lw	s0, 0x0(a0)
+5005e9f4: 4048         	lw	a0, 0x4(s0)
+5005e9f6: 4404         	lw	s1, 0x8(s0)
+5005e9f8: 9502         	jalr	a0
+5005e9fa: 4c21         	li	s8, 0x8
+5005e9fc: 2e050763     	beqz	a0, 0x5005ecea
+5005ea00: 02044503     	lbu	a0, 0x20(s0)
+5005ea04: e519         	bnez	a0, 0x5005ea12
+5005ea06: 4505         	li	a0, 0x1
+5005ea08: 02a40023     	sb	a0, 0x20(s0)
+5005ea0c: 4088         	lw	a0, 0x0(s1)
+5005ea0e: c080         	sw	s0, 0x0(s1)
+5005ea10: cc48         	sw	a0, 0x1c(s0)
+5005ea12: 4804         	lw	s1, 0x10(s0)
+5005ea14: 004b2503     	lw	a0, 0x4(s6)
+5005ea18: c891         	beqz	s1, 0x5005ea2c
+5005ea1a: 01442903     	lw	s2, 0x14(s0)
+5005ea1e: 000b2583     	lw	a1, 0x0(s6)
+5005ea22: 00a91963     	bne	s2, a0, 0x5005ea34
+5005ea26: 00b48f63     	beq	s1, a1, 0x5005ea44
+5005ea2a: a029         	j	0x5005ea34
+5005ea2c: 000b2583     	lw	a1, 0x0(s6)
+5005ea30: 01442903     	lw	s2, 0x14(s0)
+5005ea34: 418c         	lw	a1, 0x0(a1)
+5005ea36: 9582         	jalr	a1
+5005ea38: c808         	sw	a0, 0x10(s0)
+5005ea3a: c84c         	sw	a1, 0x14(s0)
+5005ea3c: c481         	beqz	s1, 0x5005ea44
+5005ea3e: 44cc         	lw	a1, 0xc(s1)
+5005ea40: 854a         	mv	a0, s2
+5005ea42: 9582         	jalr	a1
+5005ea44: 4048         	lw	a0, 0x4(s0)
+5005ea46: 9502         	jalr	a0
+5005ea48: 2a050163     	beqz	a0, 0x5005ecea
+5005ea4c: 4c08         	lw	a0, 0x18(s0)
+5005ea4e: 00042c23     	sw	zero, 0x18(s0)
+before/w1/runtime.elf: 0x5006fb70..0x5006fc04
+5006fb70: 1cac         	addi	a1, sp, 0x278
+5006fb72: 1c0c8c23     	sb	zero, 0x1d8(s9)
+5006fb76: 1ecca023     	sw	a2, 0x1e0(s9)
+5006fb7a: 4c05         	li	s8, 0x1
+5006fb7c: 500ad9b7     	lui	s3, 0x500ad
+5006fb80: 4008         	lw	a0, 0x0(s0)
+5006fb82: 00052a83     	lw	s5, 0x0(a0)
+5006fb86: 004aa503     	lw	a0, 0x4(s5)
+5006fb8a: 008aa483     	lw	s1, 0x8(s5)
+5006fb8e: 9502         	jalr	a0
+5006fb90: c541         	beqz	a0, 0x5006fc18
+5006fb92: 020ac503     	lbu	a0, 0x20(s5)
+5006fb96: e901         	bnez	a0, 0x5006fba6
+5006fb98: 038a8023     	sb	s8, 0x20(s5)
+5006fb9c: 4088         	lw	a0, 0x0(s1)
+5006fb9e: 0154a023     	sw	s5, 0x0(s1)
+5006fba2: 00aaae23     	sw	a0, 0x1c(s5)
+5006fba6: 010aaa03     	lw	s4, 0x10(s5)
+5006fbaa: 020a0a63     	beqz	s4, 0x5006fbde
+5006fbae: 014aa483     	lw	s1, 0x14(s5)
+5006fbb2: 01a49863     	bne	s1, s10, 0x5006fbc2
+5006fbb6: 500a9537     	lui	a0, 0x500a9
+5006fbba: e3c50513     	addi	a0, a0, -0x1c4
+5006fbbe: 02aa0963     	beq	s4, a0, 0x5006fbf0
+5006fbc2: 856a         	mv	a0, s10
+5006fbc4: 00009097     	auipc	ra, 0x9
+5006fbc8: 4bc080e7     	jalr	0x4bc(ra)
+5006fbcc: 00aaa823     	sw	a0, 0x10(s5)
+5006fbd0: 00baaa23     	sw	a1, 0x14(s5)
+5006fbd4: 00ca2583     	lw	a1, 0xc(s4)
+5006fbd8: 8526         	mv	a0, s1
+5006fbda: 9582         	jalr	a1
+5006fbdc: a811         	j	0x5006fbf0
+5006fbde: 856a         	mv	a0, s10
+5006fbe0: 00009097     	auipc	ra, 0x9
+5006fbe4: 4a0080e7     	jalr	0x4a0(ra)
+5006fbe8: 00aaa823     	sw	a0, 0x10(s5)
+5006fbec: 00baaa23     	sw	a1, 0x14(s5)
+5006fbf0: 004aa503     	lw	a0, 0x4(s5)
+5006fbf4: 9502         	jalr	a0
+5006fbf6: c11d         	beqz	a0, 0x5006fc1c
+5006fbf8: 018aa503     	lw	a0, 0x18(s5)
+5006fbfc: 000aac23     	sw	zero, 0x18(s5)
+5006fc00: 0ab1         	addi	s5, s5, 0xc
+5006fc02: 0c0aa5af     	amoswap.w.aq	a1, zero, (s5)
+after/w1/runtime.elf: 0x5005e8d0..0x5005e9b4
+5005e8d0: 2420         	<unknown>
+5005e8d2: 500a7537     	lui	a0, 0x500a7
+5005e8d6: f7c50513     	addi	a0, a0, -0x84
+5005e8da: defa6097     	auipc	ra, 0xdefa6
+5005e8de: 232080e7     	jalr	0x232(ra)
+5005e8e2: 500a7537     	lui	a0, 0x500a7
+5005e8e6: 15c50513     	addi	a0, a0, 0x15c
+5005e8ea: defa6097     	auipc	ra, 0xdefa6
+5005e8ee: 222080e7     	jalr	0x222(ra)
+5005e8f2: 500a7537     	lui	a0, 0x500a7
+5005e8f6: 2b050513     	addi	a0, a0, 0x2b0
+5005e8fa: defa6097     	auipc	ra, 0xdefa6
+5005e8fe: 212080e7     	jalr	0x212(ra)
+5005e902: 0000         	unimp
+5005e904: 480c         	lw	a1, 0x10(s0)
+5005e906: 4850         	lw	a2, 0x14(s0)
+5005e908: 5008         	lw	a0, 0x20(s0)
+5005e90a: 00baaa23     	sw	a1, 0x14(s5)
+5005e90e: 00caac23     	sw	a2, 0x18(s5)
+5005e912: 00aaae23     	sw	a0, 0x1c(s5)
+5005e916: 4140         	lw	s0, 0x4(a0)
+5005e918: 00052b03     	lw	s6, 0x0(a0)
+5005e91c: 00840493     	addi	s1, s0, 0x8
+5005e920: 4585         	li	a1, 0x1
+5005e922: 1404a52f     	lr.w.aq	a0, (s1)
+5005e926: e501         	bnez	a0, 0x5005e92e
+5005e928: 18b4a62f     	sc.w	a2, a1, (s1)
+5005e92c: fa7d         	bnez	a2, 0x5005e922
+5005e92e: 4589         	li	a1, 0x2
+5005e930: 02b50963     	beq	a0, a1, 0x5005e962
+5005e934: e141         	bnez	a0, 0x5005e9b4
+5005e936: 4010         	lw	a2, 0x0(s0)
+5005e938: 000ca583     	lw	a1, 0x0(s9)
+5005e93c: ca0d         	beqz	a2, 0x5005e96e
+5005e93e: 4054         	lw	a3, 0x4(s0)
+5005e940: 004ca503     	lw	a0, 0x4(s9)
+5005e944: 02a69763     	bne	a3, a0, 0x5005e972
+5005e948: 02b61563     	bne	a2, a1, 0x5005e972
+5005e94c: 4505         	li	a0, 0x1
+5005e94e: 1404a5af     	lr.w.aq	a1, (s1)
+5005e952: 04a59763     	bne	a1, a0, 0x5005e9a0
+5005e956: 1a04a62f     	sc.w.rl	a2, zero, (s1)
+5005e95a: fa75         	bnez	a2, 0x5005e94e
+5005e95c: 04a59263     	bne	a1, a0, 0x5005e9a0
+5005e960: a891         	j	0x5005e9b4
+5005e962: 000ca583     	lw	a1, 0x0(s9)
+5005e966: 004ca503     	lw	a0, 0x4(s9)
+5005e96a: 458c         	lw	a1, 0x8(a1)
+5005e96c: a099         	j	0x5005e9b2
+5005e96e: 004ca503     	lw	a0, 0x4(s9)
+5005e972: 418c         	lw	a1, 0x0(a1)
+5005e974: 9582         	jalr	a1
+5005e976: 89aa         	mv	s3, a0
+5005e978: 4010         	lw	a2, 0x0(s0)
+5005e97a: 8a2e         	mv	s4, a1
+5005e97c: c601         	beqz	a2, 0x5005e984
+5005e97e: 4048         	lw	a0, 0x4(s0)
+5005e980: 464c         	lw	a1, 0xc(a2)
+5005e982: 9582         	jalr	a1
+5005e984: 01342023     	sw	s3, 0x0(s0)
+5005e988: 01442223     	sw	s4, 0x4(s0)
+5005e98c: 4505         	li	a0, 0x1
+5005e98e: 1404a5af     	lr.w.aq	a1, (s1)
+5005e992: 00a59563     	bne	a1, a0, 0x5005e99c
+5005e996: 1a04a62f     	sc.w.rl	a2, zero, (s1)
+5005e99a: fa75         	bnez	a2, 0x5005e98e
+5005e99c: 00a58c63     	beq	a1, a0, 0x5005e9b4
+5005e9a0: 400c         	lw	a1, 0x0(s0)
+5005e9a2: 4048         	lw	a0, 0x4(s0)
+5005e9a4: 00042023     	sw	zero, 0x0(s0)
+5005e9a8: 60058463     	beqz	a1, 0x5005efb0
+5005e9ac: 0e04a02f     	amoswap.w.aqrl	zero, zero, (s1)
+5005e9b0: 41cc         	lw	a1, 0x4(a1)
+5005e9b2: 9582         	jalr	a1
