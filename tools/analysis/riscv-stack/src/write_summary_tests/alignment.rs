@@ -2,7 +2,7 @@ use super::*;
 
 mod exit_values;
 
-fn branch(left: u32, right: u32, delta: i32, test: u32) -> u32 {
+pub(super) fn branch(left: u32, right: u32, delta: i32, test: u32) -> u32 {
     let n = delta as u32;
     ((n >> 12 & 1) << 31)
         | ((n >> 5 & 63) << 25)
@@ -13,7 +13,7 @@ fn branch(left: u32, right: u32, delta: i32, test: u32) -> u32 {
         | ((n >> 11 & 1) << 7)
         | 0x63
 }
-fn andi(dest: u32, base: u32, mask: u32) -> u32 {
+pub(super) fn andi(dest: u32, base: u32, mask: u32) -> u32 {
     addi(dest, base, mask as i32) | (7 << 12)
 }
 fn loop_code(pointer: u32) -> Vec<u32> {

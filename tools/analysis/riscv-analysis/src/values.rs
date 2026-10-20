@@ -9,6 +9,7 @@ use std::collections::VecDeque;
 use std::hash::{Hash, Hasher};
 
 mod alignment;
+mod contextual;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(super) enum Value {
@@ -837,15 +838,16 @@ pub(super) fn analyze(
         edges
             .iter()
             .all(|edge| writes::closes_local_edge(edge.target, edge.relation)),
+        None,
     )
 }
 #[allow(clippy::too_many_arguments)]
-pub(super) fn analyze_with(
+pub(super) fn analyze_with<'m>(
     input: &FunctionInput<'_>,
     nodes: &[Node],
     edges: &[Edge],
     isa: &dyn FunctionSemantics,
-    memory: &WorkingMemory,
+    memory: &'m WorkingMemory,
     control: &mut dyn RunControl,
     sink: &mut dyn FunctionSink,
     symbolic: bool,
@@ -854,6 +856,7 @@ pub(super) fn analyze_with(
     stack_calls: Option<&writes::StackCalls<'_>>,
     noreturn: &mut AdmittedVec<'_, u64>,
     closed_graph: bool,
+    context: Option<&mut writes::context::ContextRun<'_, 'm>>,
 ) -> Result<SemanticSummary> {
     control.phase(RunPhase::AnalyzeValues)?;
     let bytes_per_node = std::mem::size_of::<Option<State>>()
@@ -999,6 +1002,22 @@ pub(super) fn analyze_with(
         memory,
         control,
     )?;
+    if let Some(context) = context {
+        context.proof = contextual::analyze(
+            context.context,
+            closed_graph,
+            input,
+            nodes,
+            edges,
+            &operations,
+            &states,
+            &relations,
+            isa,
+            &mut symbols,
+            memory,
+            control,
+        )?;
+    }
     // Emit after convergence. Re-evaluation below only reuses stable DAG nodes.
     let mut emitted = 0;
     let mut summary = SemanticSummary {

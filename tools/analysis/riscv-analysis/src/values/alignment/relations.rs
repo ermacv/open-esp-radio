@@ -157,7 +157,7 @@ pub(in crate::values) fn analyze<'m>(
     Ok(records)
 }
 
-fn local_target(edge: &Edge, nodes: &[Node]) -> Option<usize> {
+pub(in crate::values) fn local_target(edge: &Edge, nodes: &[Node]) -> Option<usize> {
     if !edge.external
         && matches!(
             edge.relation,

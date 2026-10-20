@@ -6,6 +6,7 @@ use oer_analysis_riscv_lift::RiscvDecoder;
 use oer_analysis_riscv_model::*;
 
 mod alignment;
+mod contextual;
 
 struct Saved<'m>(RecordBuffer<'m>);
 impl FunctionSink for Saved<'_> {
