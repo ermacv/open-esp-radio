@@ -1,6 +1,8 @@
 //! The Espressif estimate of the HE SU APEP length that fits below a TXOP
 //! duration RTS threshold.
 
+use core::num::NonZeroU64;
+
 use oer_ieee80211_port::backend_protection::{HePacketPadding, HeTxopDurationRtsThreshold};
 use oer_ieee80211_upper_mac::HeTxopRtsBudget;
 use oer_ieee80211_wire::phy::{HeGiLtf, HeRate};
@@ -78,10 +80,16 @@ pub fn maximum_unprotected_apep_bytes(
     padding: HePacketPadding,
     rate: HeRate,
 ) -> u16 {
-    let (preamble_us, symbol_us) = match rate.gi_ltf() {
-        HeGiLtf::Ltf1xGi800Ns | HeGiLtf::Ltf2xGi800Ns => (23.2, 13.6),
-        HeGiLtf::Ltf2xGi1600Ns => (24.0, 14.4),
-        HeGiLtf::Ltf4xGi3200Ns => (32.0, 16.0),
+    // Counts of 2^-20 microseconds represent the vendor's binary32 table
+    // entries exactly: 23.2f32, 13.6f32 and 14.4f32 are not decimal tenths.
+    const SCALE: u64 = 1 << 20;
+    const SYMBOL_800: NonZeroU64 = NonZeroU64::new(14_260_634).expect("positive symbol duration");
+    const SYMBOL_1600: NonZeroU64 = NonZeroU64::new(15_099_494).expect("positive symbol duration");
+    const SYMBOL_3200: NonZeroU64 = NonZeroU64::new(16 * SCALE).expect("positive symbol duration");
+    let (preamble, symbol) = match rate.gi_ltf() {
+        HeGiLtf::Ltf1xGi800Ns | HeGiLtf::Ltf2xGi800Ns => (24_326_964, SYMBOL_800),
+        HeGiLtf::Ltf2xGi1600Ns => (24 * SCALE, SYMBOL_1600),
+        HeGiLtf::Ltf4xGi3200Ns => (32 * SCALE, SYMBOL_3200),
     };
     let mcs = rate.mcs().index();
     let data_bits = match mcs {
@@ -101,23 +109,28 @@ pub fn maximum_unprotected_apep_bytes(
         0 => 68,
         1 | 2 => 44,
         _ => 32,
-    } as f32;
-    // The checked threshold is 1..=1022: this integer prefix is 12..=32684,
-    // so neither operation wraps. Keep the vendor's subsequent f32 steps
-    // in their original order at symbol-boundary roundings.
-    let budget = i32::from(threshold.units_32_us())
+    };
+    // The checked threshold is 1..=1022. The prefix is an exact integer
+    // 12..=32684 us; its scaled representation fits 35 bits.
+    let prefix = u64::from(threshold.units_32_us())
         .wrapping_mul(32)
-        .wrapping_sub(20) as f32
-        - preamble_us
-        - 16.0
-        - f32::from(padding.micros());
-    if block_ack_us >= budget {
+        .wrapping_sub(20)
+        .wrapping_mul(SCALE);
+    let Some(after_preamble) = prefix.checked_sub(preamble) else {
+        return 0;
+    };
+    // Preserve the first subtraction's round-to-nearest, ties-to-even.
+    // Subsequent subtractions are small whole microseconds: a positive
+    // result has no greater magnitude and remains exactly representable.
+    let budget = round_binary32_significand(after_preamble);
+    let overhead = 16_u64
+        .wrapping_add(u64::from(padding.micros()))
+        .wrapping_add(block_ack_us)
+        .wrapping_mul(SCALE);
+    if budget <= overhead {
         return 0;
     }
-    // The quotient is positive here, so truncation equals `floor`. A time
-    // budget below 32704 us and symbol duration >= 13.6 us give fewer than
-    // 2405 symbols; the float-to-integer conversion is inside i32's range.
-    let symbols = ((budget - block_ack_us) / symbol_us) as i32;
+    let symbols = whole_symbols(budget.wrapping_sub(overhead), symbol) as i32;
     let mut bits: i32 = data_bits;
     if rate.dcm() {
         bits /= 2;
@@ -128,6 +141,41 @@ pub fn maximum_unprotected_apep_bytes(
     // halfword's low 16 bits. A positive sub-symbol budget produces 65533;
     // clamping that result to zero would change the recovered policy.
     (bits.wrapping_mul(symbols).wrapping_sub(22) >> 3) as u16
+}
+
+/// Round a positive fixed-point value to binary32's 24 significant bits.
+fn round_binary32_significand(value: u64) -> u64 {
+    let shift = u64::BITS
+        .wrapping_sub(value.leading_zeros())
+        .saturating_sub(24);
+    if shift == 0 {
+        return value;
+    }
+    // The input fits 35 bits, so shift <= 11 and every operation fits u64.
+    let retained = value >> shift;
+    let discarded = value & 1_u64.wrapping_shl(shift).wrapping_sub(1);
+    let halfway = 1_u64.wrapping_shl(shift.wrapping_sub(1));
+    let round_up = discarded > halfway || (discarded == halfway && retained & 1 != 0);
+    retained.wrapping_add(u64::from(round_up)) << shift
+}
+
+/// Divide, round as binary32, then truncate, without floating point.
+fn whole_symbols(numerator: u64, symbol: NonZeroU64) -> u64 {
+    // The denominator is one of the positive table entries above. The
+    // quotient is below 2405, so binary32 can only change its integer part
+    // by rounding up to the next integer. At a power of two the spacing
+    // immediately below that integer is half the spacing above it.
+    let floor = numerator / symbol;
+    let next = floor.wrapping_add(1);
+    let midpoint_shift = 24_u32
+        .wrapping_sub(next.ilog2())
+        .wrapping_add(u32::from(next.is_power_of_two()));
+    let below_next = symbol.get().wrapping_sub(numerator % symbol);
+    // Compare the exact quotient with the midpoint below `next`. Its
+    // significand is even, so an exact midpoint rounds to `next` too.
+    // midpoint_shift <= 25; the shifted distance fits 49 bits.
+    let round_up = below_next << midpoint_shift <= symbol.get();
+    floor.wrapping_add(u64::from(round_up))
 }
 
 /// [`maximum_unprotected_apep_bytes`] as the portable protection policy's
@@ -170,6 +218,109 @@ mod tests {
     use oer_ieee80211_wire::phy::{FecCoding, HeMcs, PpduBandwidth, SpatialStreams};
 
     use super::*;
+
+    // The original vendor-ordered single-precision calculation is an
+    // independent oracle; production code contains no floating point.
+    fn f32_reference(
+        threshold: HeTxopDurationRtsThreshold,
+        padding: HePacketPadding,
+        rate: HeRate,
+    ) -> u16 {
+        let (preamble_us, symbol_us) = match rate.gi_ltf() {
+            HeGiLtf::Ltf1xGi800Ns | HeGiLtf::Ltf2xGi800Ns => (23.2, 13.6),
+            HeGiLtf::Ltf2xGi1600Ns => (24.0, 14.4),
+            HeGiLtf::Ltf4xGi3200Ns => (32.0, 16.0),
+        };
+        let mcs = rate.mcs().index();
+        let data_bits = match mcs {
+            0 => 117,
+            1 => 234,
+            2 => 351,
+            3 => 468,
+            4 => 702,
+            5 => 936,
+            6 => 1053,
+            7 => 1170,
+            8 => 1404,
+            9 => 1560,
+            _ => return 0,
+        };
+        let block_ack_us = match mcs {
+            0 => 68,
+            1 | 2 => 44,
+            _ => 32,
+        } as f32;
+        // The checked threshold is 1..=1022: this integer prefix is 12..=32684,
+        // so neither operation wraps. Keep the vendor's subsequent f32 steps
+        // in their original order at symbol-boundary roundings.
+        let budget = i32::from(threshold.units_32_us())
+            .wrapping_mul(32)
+            .wrapping_sub(20) as f32
+            - preamble_us
+            - 16.0
+            - f32::from(padding.micros());
+        if block_ack_us >= budget {
+            return 0;
+        }
+        // The quotient is positive here, so truncation equals `floor`. A time
+        // budget below 32704 us and symbol duration >= 13.6 us give fewer than
+        // 2405 symbols; the float-to-integer conversion is inside i32's range.
+        let symbols = ((budget - block_ack_us) / symbol_us) as i32;
+        let mut bits: i32 = data_bits;
+        if rate.dcm() {
+            bits /= 2;
+        }
+        // bits <= 1560 and symbols < 2405: the product and subtraction fit
+        // i32, even when zero whole symbols leave -22 SERVICE/tail bits.
+        // The signed shift and final u16 cast intentionally retain the vendor
+        // halfword's low 16 bits. A positive sub-symbol budget produces 65533;
+        // clamping that result to zero would change the recovered policy.
+        (bits.wrapping_mul(symbols).wrapping_sub(22) >> 3) as u16
+    }
+
+    #[test]
+    fn every_admitted_input_matches_the_original_f32_result() {
+        let mut compared = 0;
+        for units in 1..=1022 {
+            let threshold = HeTxopDurationRtsThreshold::new(units).expect("enabled threshold");
+            for gi_ltf in [
+                HeGiLtf::Ltf1xGi800Ns,
+                HeGiLtf::Ltf2xGi800Ns,
+                HeGiLtf::Ltf2xGi1600Ns,
+                HeGiLtf::Ltf4xGi3200Ns,
+            ] {
+                for mcs in 0..=9 {
+                    for dcm in [false, true] {
+                        if dcm && !matches!(mcs, 0 | 1 | 3 | 4) {
+                            continue;
+                        }
+                        let rate = HeRate::new(
+                            HeMcs::new(mcs).expect("HE20 MCS"),
+                            SpatialStreams::ONE,
+                            PpduBandwidth::Mhz20,
+                            gi_ltf,
+                            FecCoding::Bcc,
+                            dcm,
+                        )
+                        .expect("admitted HE20 rate");
+                        for padding in [
+                            HePacketPadding::None,
+                            HePacketPadding::Us8,
+                            HePacketPadding::Us16,
+                        ] {
+                            assert_eq!(
+                                maximum_unprotected_apep_bytes(threshold, padding, rate),
+                                f32_reference(threshold, padding, rate),
+                                "threshold={units}, gi_ltf={gi_ltf:?}, mcs={mcs}, dcm={dcm}, padding={padding:?}"
+                            );
+                            compared += 1;
+                        }
+                    }
+                }
+            }
+        }
+        assert_eq!(compared, 171_696);
+    }
 
     fn he(mcs: u8) -> HeRate {
         HeRate::new(
