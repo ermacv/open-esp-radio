@@ -129,7 +129,7 @@ fn first_due_join_keeps_membership_and_btbb_through_maintenance() {
     // The PHY client set remains empty: this is its first acquisition.
     radio.hold_btbb_for_test(RadioClient::Bluetooth);
     let clock = VirtualClock::<8>::new();
-    let ready = crate::concurrent::phy_ready(&mut radio).unwrap();
+    let ready = crate::concurrent::phy_ready(&mut radio).expect("valid PHY lifecycle fixture");
     let crate::concurrent::PhyClientAccess::Available(ready) =
         ready.client::<Ieee802154PhyMembership>()
     else {
@@ -149,7 +149,10 @@ fn first_due_join_keeps_membership_and_btbb_through_maintenance() {
     );
     assert!(radio.holds_btbb(RadioClient::Ieee802154));
     assert!(radio.attachment_mut().complete_tracking_for_test());
-    assert!(leave_ieee802154(radio, &clocked, failure.into_membership()).unwrap());
+    assert!(
+        leave_ieee802154(radio, &clocked, failure.into_membership())
+            .expect("valid PHY lifecycle fixture")
+    );
     assert!(!radio.holds_btbb(RadioClient::Ieee802154));
 }
 
@@ -161,15 +164,21 @@ fn settled_join_and_rejoin_after_rf_restart_keep_tracking_history() {
     let clocked = Ieee802154Clocked::for_host_test(partitions.ieee802154);
     radio.hold_btbb_for_test(RadioClient::Bluetooth);
     let clock = VirtualClock::<8>::new();
-    let (membership, acquired) = join_ieee802154_prepared(&mut radio, &clocked, &clock).unwrap();
+    let (membership, acquired) = join_ieee802154_prepared(&mut radio, &clocked, &clock)
+        .expect("valid PHY lifecycle fixture");
     assert_eq!(acquired, ConcurrentAcquire::TrackingDue);
     assert!(radio.attachment_mut().complete_tracking_for_test());
-    assert!(leave_ieee802154(&mut radio, &clocked, membership).unwrap());
-    let (membership, acquired) = join_ieee802154_prepared(&mut radio, &clocked, &clock).unwrap();
+    assert!(
+        leave_ieee802154(&mut radio, &clocked, membership).expect("valid PHY lifecycle fixture")
+    );
+    let (membership, acquired) = join_ieee802154_prepared(&mut radio, &clocked, &clock)
+        .expect("valid PHY lifecycle fixture");
     assert_eq!(acquired, ConcurrentAcquire::Settled);
     assert!(!radio.attachment().tracking_pending());
     assert!(radio.holds_btbb(RadioClient::Ieee802154));
-    assert!(leave_ieee802154(&mut radio, &clocked, membership).unwrap());
+    assert!(
+        leave_ieee802154(&mut radio, &clocked, membership).expect("valid PHY lifecycle fixture")
+    );
 
     // Model RF close/wake with the retained registration and no active client.
     // Target RF transactions themselves are covered by the diagnostic smoke.
@@ -188,12 +197,15 @@ fn settled_join_and_rejoin_after_rf_restart_keep_tracking_history() {
     *radio.attachment_mut().slot_mut() = Slot::Registered(domain);
     clock
         .advance(Duration::from_micros(DEFAULT_PLL_TRACK_PERIOD_MICROS + 1))
-        .unwrap();
-    let (membership, acquired) = join_ieee802154_prepared(&mut radio, &clocked, &clock).unwrap();
+        .expect("valid PHY lifecycle fixture");
+    let (membership, acquired) = join_ieee802154_prepared(&mut radio, &clocked, &clock)
+        .expect("valid PHY lifecycle fixture");
     assert_eq!(acquired, ConcurrentAcquire::TrackingDue);
     assert!(radio.holds_btbb(RadioClient::Ieee802154));
     assert!(radio.attachment_mut().complete_tracking_for_test());
-    assert!(leave_ieee802154(&mut radio, &clocked, membership).unwrap());
+    assert!(
+        leave_ieee802154(&mut radio, &clocked, membership).expect("valid PHY lifecycle fixture")
+    );
 }
 
 #[test]
@@ -202,9 +214,12 @@ fn rejected_clock_and_existing_btbb_return_the_unchanged_client() {
     let clocked = Ieee802154Clocked::for_host_test(partitions.ieee802154);
     radio.hold_btbb_for_test(RadioClient::Bluetooth);
     let clock = VirtualClock::<8>::new();
-    let (membership, _) = join_ieee802154_prepared(&mut radio, &clocked, &clock).unwrap();
+    let (membership, _) = join_ieee802154_prepared(&mut radio, &clocked, &clock)
+        .expect("valid PHY lifecycle fixture");
     assert!(radio.attachment_mut().complete_tracking_for_test());
-    assert!(leave_ieee802154(&mut radio, &clocked, membership).unwrap());
+    assert!(
+        leave_ieee802154(&mut radio, &clocked, membership).expect("valid PHY lifecycle fixture")
+    );
     let before = radio.attachment().client_snapshot();
     let past = VirtualClock::<8>::starting_at(oer_time::Instant::EPOCH);
     assert!(matches!(
@@ -219,7 +234,7 @@ fn rejected_clock_and_existing_btbb_return_the_unchanged_client() {
     assert!(radio.holds_btbb(RadioClient::Bluetooth));
 
     radio.hold_btbb_for_test(RadioClient::Ieee802154);
-    let ready = crate::concurrent::phy_ready(&mut radio).unwrap();
+    let ready = crate::concurrent::phy_ready(&mut radio).expect("valid PHY lifecycle fixture");
     let crate::concurrent::PhyClientAccess::Available(ready) =
         ready.client::<Ieee802154PhyMembership>()
     else {
@@ -235,10 +250,15 @@ fn rejected_clock_and_existing_btbb_return_the_unchanged_client() {
     );
     assert_eq!(refused.radio.attachment().client_snapshot(), before);
     assert!(refused.radio.holds_btbb(RadioClient::Ieee802154));
-    clocked.release_btbb(refused.radio).unwrap();
-    let (membership, acquired) = join_ieee802154_prepared(refused.radio, &clocked, &clock).unwrap();
+    clocked
+        .release_btbb(refused.radio)
+        .expect("valid PHY lifecycle fixture");
+    let (membership, acquired) = join_ieee802154_prepared(refused.radio, &clocked, &clock)
+        .expect("valid PHY lifecycle fixture");
     assert_eq!(acquired, ConcurrentAcquire::Settled);
-    assert!(leave_ieee802154(refused.radio, &clocked, membership).unwrap());
+    assert!(
+        leave_ieee802154(refused.radio, &clocked, membership).expect("valid PHY lifecycle fixture")
+    );
 }
 
 #[test]
@@ -267,8 +287,11 @@ fn refused_baseband_admission_restores_the_prepared_first_client() {
     assert!(!radio.holds_btbb(RadioClient::Ieee802154));
     assert!(radio.holds_btbb(RadioClient::Bluetooth));
     // The refused prepared transition left no claimed bit or refreshed time.
-    let (membership, acquired) = join_ieee802154_prepared(&mut radio, &clocked, &clock).unwrap();
+    let (membership, acquired) = join_ieee802154_prepared(&mut radio, &clocked, &clock)
+        .expect("valid PHY lifecycle fixture");
     assert_eq!(acquired, ConcurrentAcquire::TrackingDue);
     assert!(radio.attachment_mut().complete_tracking_for_test());
-    assert!(leave_ieee802154(&mut radio, &clocked, membership).unwrap());
+    assert!(
+        leave_ieee802154(&mut radio, &clocked, membership).expect("valid PHY lifecycle fixture")
+    );
 }

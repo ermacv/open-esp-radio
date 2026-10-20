@@ -202,10 +202,11 @@ fn wifi_due_rejoin_and_clock_refusal_preserve_membership_authority() {
     use oer_time::{Duration, Instant};
     let (mut radio, clocked) = registered();
     let clock = VirtualClock::<8>::new();
-    let (membership, acquired) = join_wifi_prepared(&mut radio, &clocked, &clock).unwrap();
+    let (membership, acquired) =
+        join_wifi_prepared(&mut radio, &clocked, &clock).expect("valid PHY lifecycle fixture");
     assert_eq!(acquired, ConcurrentAcquire::TrackingDue);
     assert!(radio.attachment_mut().complete_tracking_for_test());
-    assert!(leave_wifi(&mut radio, &clocked, membership).unwrap());
+    assert!(leave_wifi(&mut radio, &clocked, membership).expect("valid PHY lifecycle fixture"));
     let before = radio.attachment().client_snapshot();
     let past = VirtualClock::<8>::starting_at(Instant::EPOCH);
     assert!(matches!(
@@ -213,16 +214,18 @@ fn wifi_due_rejoin_and_clock_refusal_preserve_membership_authority() {
         Err(ConcurrentPhyError::Acquire(_))
     ));
     assert_eq!(radio.attachment().client_snapshot(), before);
-    let (membership, acquired) = join_wifi_prepared(&mut radio, &clocked, &clock).unwrap();
+    let (membership, acquired) =
+        join_wifi_prepared(&mut radio, &clocked, &clock).expect("valid PHY lifecycle fixture");
     assert_eq!(acquired, ConcurrentAcquire::Settled);
-    assert!(leave_wifi(&mut radio, &clocked, membership).unwrap());
+    assert!(leave_wifi(&mut radio, &clocked, membership).expect("valid PHY lifecycle fixture"));
     clock
         .advance(Duration::from_micros(DEFAULT_PLL_TRACK_PERIOD_MICROS + 1))
-        .unwrap();
-    let (membership, acquired) = join_wifi_prepared(&mut radio, &clocked, &clock).unwrap();
+        .expect("valid PHY lifecycle fixture");
+    let (membership, acquired) =
+        join_wifi_prepared(&mut radio, &clocked, &clock).expect("valid PHY lifecycle fixture");
     assert_eq!(acquired, ConcurrentAcquire::TrackingDue);
     assert!(radio.attachment_mut().complete_tracking_for_test());
-    assert!(leave_wifi(&mut radio, &clocked, membership).unwrap());
+    assert!(leave_wifi(&mut radio, &clocked, membership).expect("valid PHY lifecycle fixture"));
     assert!(!radio.holds_btbb(RadioClient::Bluetooth));
     assert!(!radio.holds_btbb(RadioClient::Ieee802154));
 }
