@@ -35,8 +35,10 @@ mod pac_api_render;
 mod pac_api_svd;
 mod pac_bindings;
 mod partition_image;
+mod peripherals;
 mod register_evidence;
 mod register_lints;
+mod review_defaults;
 mod shared;
 
 pub use pac_api::{
@@ -186,6 +188,7 @@ pub struct ModelDevice {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
+#[serde(try_from = "peripherals::FragmentSource")]
 pub struct RegisterModelFragment {
     pub schema: u32,
     pub peripherals: Vec<Peripheral>,
