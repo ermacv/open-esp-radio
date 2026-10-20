@@ -154,6 +154,8 @@ pub enum WriteOccurrence {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum WriteProof {
     ClosedGraph,
+    /// Finite addresses from the common pass's all-entry induction proof.
+    AlignmentLoop(AlignmentLoopProof),
     /// Values are unknown when a local incoming path is unaccounted for.
     OpenGraph,
 }
@@ -375,10 +377,27 @@ pub fn function_writes<'m>(
     let mut straight = true;
     let mut returned = false;
     let mut register_value = None;
+    let mut address_range = None;
     for record in facts.records() {
         c.checkpoint(1)?;
         out.closed_graph &= closes_local_graph(record);
         let barrier = match record {
+            FunctionRecord::StoreAddressRange {
+                offset,
+                initial,
+                first_offset,
+                count,
+                proof,
+            } => {
+                address_range = Some((
+                    *offset,
+                    values.value(initial),
+                    *first_offset,
+                    *count,
+                    *proof,
+                ));
+                None
+            }
             FunctionRecord::Value { offset, value, .. } => {
                 register_value = Some((*offset, values.value(value)));
                 None
@@ -425,7 +444,19 @@ pub fn function_writes<'m>(
                 value,
                 ..
             } => {
-                let address = values.value(address);
+                let range = address_range
+                    .take()
+                    .filter(|(site, initial, _, count, proof)| {
+                        site == offset
+                            && *width == 1
+                            && !initial.opaque()
+                            && *count == proof.mask
+                            && matches!(count, 1 | 3 | 7)
+                    });
+                let address = range.map_or_else(
+                    || values.value(address),
+                    |(_, initial, first, _, _)| initial.add(first),
+                );
                 let value = value
                     .as_ref()
                     .map_or(WriteValue::UNKNOWN, |v| values.value(v));
@@ -434,18 +465,23 @@ pub fn function_writes<'m>(
                 } else {
                     WriteValue::UNKNOWN
                 };
-                out.writes.push(
-                    FunctionWrite {
-                        origin: WriteOrigin::local(entry),
-                        site: *offset,
-                        address,
-                        value,
-                        width: *width,
-                        occurrence: WriteOccurrence::May,
-                        proof: WriteProof::OpenGraph,
-                    },
-                    c.position(),
-                )?;
+                for delta in 0..range.map_or(1, |(_, _, _, count, _)| count) {
+                    c.checkpoint(1)?;
+                    out.writes.push(
+                        FunctionWrite {
+                            origin: WriteOrigin::local(entry),
+                            site: *offset,
+                            address: address.add(u32::from(delta)),
+                            value,
+                            width: *width,
+                            occurrence: WriteOccurrence::May,
+                            proof: range.map_or(WriteProof::OpenGraph, |(_, _, _, _, proof)| {
+                                WriteProof::AlignmentLoop(proof)
+                            }),
+                        },
+                        c.position(),
+                    )?;
+                }
                 if address.opaque() {
                     Some((*offset, WriteBarrierKind::UnknownStore))
                 } else if value.opaque() {
@@ -507,11 +543,14 @@ pub fn function_writes<'m>(
     for write in out.writes.iter_mut() {
         c.checkpoint(1)?;
         if out.closed_graph {
-            write.proof = WriteProof::ClosedGraph;
+            if write.proof == WriteProof::OpenGraph {
+                write.proof = WriteProof::ClosedGraph;
+            }
             if straight && returned {
                 write.occurrence = WriteOccurrence::Must;
             }
         } else {
+            write.proof = WriteProof::OpenGraph;
             write.address = WriteValue::UNKNOWN;
             write.value = WriteValue::UNKNOWN;
         }
@@ -864,7 +903,7 @@ impl CallWrites<'_> {
         };
         for write in self.writes.iter() {
             c.checkpoint(1)?;
-            if write.write.proof != WriteProof::ClosedGraph {
+            if write.write.proof == WriteProof::OpenGraph {
                 return Ok(false);
             }
             let Some((start, end)) = stack_range(write.write.address, function, write.write.width)

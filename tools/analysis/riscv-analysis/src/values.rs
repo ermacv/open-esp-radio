@@ -8,6 +8,8 @@ use super::*;
 use std::collections::VecDeque;
 use std::hash::{Hash, Hasher};
 
+mod alignment;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(super) enum Value {
     Set(u32),
@@ -1207,6 +1209,20 @@ pub(super) fn analyze_with(
             )?;
         }
         if let Some((access, width, addr, v)) = effects.memory {
+            if symbolic && access == MemoryKind::Store && width == 1 {
+                alignment::emit(
+                    i,
+                    input,
+                    nodes,
+                    edges,
+                    &operations,
+                    &states,
+                    isa,
+                    &symbols.sets,
+                    sink,
+                    control,
+                )?;
+            }
             let address = public(addr, input, &symbols.sets);
             summary.accesses += 1;
             summary.known_addresses += u64::from(known(&address));

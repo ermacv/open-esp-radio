@@ -94,6 +94,13 @@ and run-control budgets.
 
 ## Validation and reproduction
 
+The historical comparison below records #185. The current `explain.py` also
+checks the subsequent [alignment-loop proof](../alignment-writes/README.md):
+three finite byte effects replace one unknown-address effect, while eleven
+other store instructions keep their barriers and the reload remains unknown.
+It accepts `--before-facts` to compare every other transported effect with a
+fresh main diagnostic.
+
 Full captures and check logs are retained under `/tmp/oer-tail-summaries/`.
 [real-transition.json](real-transition.json) records the fresh ELF and ROM hashes,
 all twelve transported store PCs, the tail proof and the retained uncertainty.

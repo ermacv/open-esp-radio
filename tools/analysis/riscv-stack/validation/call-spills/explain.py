@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check transparent ROM tail composition and the retained publisher barrier."""
+"""Check ROM tail composition, the alignment footprint and retained barriers."""
 import argparse
 import hashlib
 import json
@@ -17,6 +17,7 @@ def main():
     parser.add_argument('rom', type=Path)
     parser.add_argument('output', type=Path)
     parser.add_argument('--executable', type=Path, default=Path('target/tools/examples/stack-call-writes'))
+    parser.add_argument('--before-facts', type=Path, help='fresh main diagnostic for unchanged-store comparison')
     args = parser.parse_args()
     assert hashlib.sha256(args.rom.read_bytes()).hexdigest() == ROM_SHA256, 'ROM differs from platform pin'
     command = [str(args.executable), str(args.elf), str(args.rom),
@@ -58,26 +59,50 @@ def main():
     assert one('tail-proof', '0x2f80d260') == 'None'
     writes = [r for r in rows if r[0] == 'rom-write' and r[2] == '0x2f80d260']
     imported = [r for r in rows if r[0] == 'rom-write' and r[2] == '0x2f8004c4']
-    assert len(writes) == len(imported) == 12
+    assert len(writes) == len(imported) == 14
+    selected = '0x2f80d2c8'
+    bound = one('rom-loop-bound', selected)
+    assert 'initial: Expression' in bound and 'first_offset: 0, count: 3' in bound
+    assert 'pointer: 15, mask: 3' in bound
+    assert len([r for r in writes if r[1] == selected]) == 3
     for source, destination in zip(writes, imported):
         assert source[1] == destination[1]
         assert 'function: 796971616, tail: None' in source[3]
         assert source[3].replace('tail: None', f'tail: Some({proof})') == destination[3]
-        assert 'address: Base { base: Unknown' in destination[3]
-        assert 'occurrence: May, proof: ClosedGraph' in destination[3]
+        if source[1] == selected:
+            assert 'address: Base { base: Argument(0)' in destination[3]
+            assert 'occurrence: May, proof: AlignmentLoop(' in destination[3]
+        else:
+            assert 'address: Base { base: Unknown' in destination[3]
+            assert 'occurrence: May, proof: ClosedGraph' in destination[3]
     body_barriers = [r for r in rows if r[0] == 'rom-barrier' and r[2] == '0x2f80d260']
     tail_barriers = [r for r in rows if r[0] == 'rom-barrier' and r[2] == '0x2f8004c4']
     assert len(body_barriers) == len(tail_barriers) == 12
     assert {r[1] for r in tail_barriers} == {r[1] for r in writes}
     for source, destination in zip(body_barriers, tail_barriers):
         assert source[3].replace('tail: None', f'tail: Some({proof})') == destination[3]
-        assert 'kind: UnknownStore' in destination[3]
+        assert f'kind: {"UnknownValue" if source[1] == selected else "UnknownStore"}' in destination[3]
     applied = [r for r in rows if r[0] == 'call-write']
-    assert len(applied) == 12 and {r[1] for r in applied} == {r[1] for r in writes}
+    assert len(applied) == 14 and {r[1] for r in applied} == {r[1] for r in writes}
     assert all('callee: 796918980' in r[2] and f'tail: Some({proof})' in r[2] for r in applied)
     call_barriers = [r for r in rows if r[0] == 'call-barrier']
     assert {r[1] for r in call_barriers} == {r[1] for r in writes}
-    assert all('kind: UnknownStore' in r[2] and f'tail: Some({proof})' in r[2] for r in call_barriers)
+    assert all(f'kind: {"UnknownValue" if r[1] == selected else "UnknownStore"}' in r[2]
+               and f'tail: Some({proof})' in r[2] for r in call_barriers)
+    finite = [r for r in applied if r[1] == selected]
+    for delta, row in enumerate(finite):
+        assert f'address: Base {{ base: Argument(0), offset: {delta} }}' in row[2]
+        assert f'address: Base {{ base: Stack {{ function: {0x5004d7c8}, offset: -400 }}, offset: {delta} }}' in row[2]
+        assert row[2].count('value: Base { base: Unknown, offset: 0 }') == 2
+    exclusions = [r for r in rows if r[0] == 'call-write-excludes-spill']
+    assert len(exclusions) == 14
+    assert all(r[2] == ('true' if r[1] == selected else 'false') for r in exclusions)
+    if args.before_facts:
+        previous = [line.split('\t') for line in args.before_facts.read_text().splitlines()]
+        assert len([r for r in previous if r[0] == 'rom-write' and r[2] == '0x2f80d260']) == 12
+        for kind in ('rom-write', 'rom-barrier', 'call-write', 'call-barrier'):
+            assert [r for r in previous if r[0] == kind and r[1] != selected] == [
+                r for r in rows if r[0] == kind and r[1] != selected], kind
     assert {r[1]: int(r[3]) for r in rows if r[0] == 'rom-memory' and r[2] == 'Store'} == {
         '0x2f80d27a': 1, '0x2f80d2c8': 1,
         **{f'{pc:#010x}': 4 for pc in (0x2f80d2f8, 0x2f80d2fc, 0x2f80d304,
@@ -95,7 +120,7 @@ def main():
     args.output.mkdir(parents=True, exist_ok=True)
     (args.output / 'facts.tsv').write_text(text)
     result = {
-        'baseline': '7be12c9e',
+        'baseline': '8db49c49',
         'elf_sha256': hashlib.sha256(args.elf.read_bytes()).hexdigest(),
         'rom_sha256': ROM_SHA256,
         'rom_body_code_sha256': hashlib.sha256(body).hexdigest(),
@@ -105,22 +130,32 @@ def main():
         'actual_inputs': inputs,
         'spill_fact': spill, 'reload_fact': reload,
         'preserved': False,
-        'rom_store_sites': [r[1] for r in writes],
-        'trampoline_store_sites': [r[1] for r in imported],
+        'rom_store_sites': sorted({r[1] for r in writes}),
+        'trampoline_store_sites': sorted({r[1] for r in imported}),
         'tail_proof': proof,
         'trampoline_barrier_removed': True,
-        'body_unknown_store_barriers': len(tail_barriers),
-        'conservative_write_footprint': 'all RV32 addresses; loop-carried store bases remain unknown',
+        'alignment_bound': bound,
+        'alignment_addresses': ['entry_argument0 + 0', 'entry_argument0 + 1', 'entry_argument0 + 2'],
+        'caller_alignment_bytes': [-400, -399, -398],
+        'alignment_bytes_exclude_spill': True,
+        'body_unknown_store_barriers': sum('kind: UnknownStore' in r[3] for r in tail_barriers),
+        'store_inventory': [
+            {'pc': pc, 'width': width,
+             'addresses': ['entry_argument0 + 0', 'entry_argument0 + 1', 'entry_argument0 + 2'] if pc == selected else None,
+             'remaining_reason': 'UnknownValue' if pc == selected else 'UnknownStore: loop-carried base has no supported finite bound'}
+            for pc, width in sorted({r[1]: int(r[3]) for r in rows if r[0] == 'rom-memory' and r[2] == 'Store'}.items())
+        ],
+        'conservative_write_footprint': 'all RV32 addresses; 11 other loop-carried stores remain unknown',
         'first_remaining_barrier': {
             'site': '0x5004dd24',
-            'reason': '12 memcpy UnknownStore sites transported through the proved transparent tail jump',
-            'missing_fact': 'a complete bounded footprint for all 12 loop-carried memcpy stores',
+            'reason': '11 memcpy UnknownStore sites transported through the proved transparent tail jump',
+            'missing_fact': 'bounded footprints for the other 11 memcpy stores',
         },
         'additional_contract_enabled': False,
         'conditional_only': 'If a complete writes-only-[a0,a0+a2) contract were supplied, the substituted destination [-400,-272) would be disjoint from [-600,-596). This is not a derived machine proof.',
     }
     (args.output / 'real-transition.json').write_text(json.dumps(result, indent=2) + '\n')
-    print('Transparent tail proof and all 12 transported stores checked; body unknown ranges retained; publisher reload stays unknown.')
+    print('All 12 store instructions checked: three finite alignment bytes exclude the spill; 11 UnknownStore sites and the unknown reload remain.')
 
 
 if __name__ == '__main__':

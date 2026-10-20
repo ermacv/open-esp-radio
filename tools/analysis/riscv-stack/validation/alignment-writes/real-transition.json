@@ -1,0 +1,150 @@
+{
+  "baseline": "8db49c49",
+  "elf_sha256": "e83610836e6ecf2eb806d8fa152e2e8a58b7f462c6862d34152619ca4b50691b",
+  "rom_sha256": "a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87",
+  "rom_body_code_sha256": "d6011767502f1ba4c9c3368aaede8afa5c436e7b154543ce65264b09742c059f",
+  "caller": "0x5004d7c8",
+  "load": "0x5004d856",
+  "spill": "0x5004dcf2",
+  "call": "0x5004dd24",
+  "trampoline": "0x2f8004c4",
+  "body": "0x2f80d260",
+  "reload": "0x5004eb44",
+  "slot": [
+    -600,
+    -596
+  ],
+  "actual_inputs": "Some([Constant { value: 0 }, ImageAddress { address: 796917024 }, EntryStack { offset: -848 }, Expression { id: 2 }, Expression { id: 3 }, Expression { id: 94 }, Expression { id: 746 }, Expression { id: 456 }, Expression { id: 307 }, Expression { id: 2540 }, EntryStack { offset: -400 }, Expression { id: 2765 }, Constant { value: 128 }, Unknown, Unknown, Expression { id: 83 }, Constant { value: 1 }, Constant { value: 53248 }, Expression { id: 76 }, Expression { id: 9 }, Expression { id: 2521 }, Expression { id: 1947 }, Expression { id: 1349 }, Constant { value: 537935872 }, Constant { value: 540643328 }, Constant { value: 1048575 }, Constant { value: 3735928559 }, Expression { id: 2765 }, Expression { id: 481 }, Expression { id: 507 }, Expression { id: 535 }, Expression { id: 411 }])",
+  "spill_fact": "FunctionWrite { origin: WriteOrigin { function: 1342494664, tail: None }, site: 1342495986, address: Base { base: Stack { function: 1342494664, offset: -600 }, offset: 0 }, value: Field { function: 1342494664, read: 1342494806, base: Argument(0), displacement: 260, width: 4, signed: false, offset: 0 }, width: 4, occurrence: May, proof: ClosedGraph }",
+  "reload_fact": "StackReload { origin: WriteOrigin { function: 1342494664, tail: None }, site: 1342499652, slot: -600, width: 4, value: Base { base: Unknown, offset: 0 } }",
+  "preserved": false,
+  "rom_store_sites": [
+    "0x2f80d27a",
+    "0x2f80d2c8",
+    "0x2f80d2f8",
+    "0x2f80d2fc",
+    "0x2f80d304",
+    "0x2f80d308",
+    "0x2f80d30c",
+    "0x2f80d310",
+    "0x2f80d314",
+    "0x2f80d318",
+    "0x2f80d324",
+    "0x2f80d338"
+  ],
+  "trampoline_store_sites": [
+    "0x2f80d27a",
+    "0x2f80d2c8",
+    "0x2f80d2f8",
+    "0x2f80d2fc",
+    "0x2f80d304",
+    "0x2f80d308",
+    "0x2f80d30c",
+    "0x2f80d310",
+    "0x2f80d314",
+    "0x2f80d318",
+    "0x2f80d324",
+    "0x2f80d338"
+  ],
+  "tail_proof": "TailTransfer { entry: 796918980, site: 796918980, target: 796971616 }",
+  "trampoline_barrier_removed": true,
+  "alignment_bound": "StoreAddressRange { offset: 796971720, initial: Expression { id: 9 }, first_offset: 0, count: 3, proof: AlignmentLoopProof { header: 796971712, guard: 796971724, back_edge: 796971728, step: 796971716, entry_edge: 796971734, pointer: 15, mask: 3 } }",
+  "alignment_addresses": [
+    "entry_argument0 + 0",
+    "entry_argument0 + 1",
+    "entry_argument0 + 2"
+  ],
+  "caller_alignment_bytes": [
+    -400,
+    -399,
+    -398
+  ],
+  "alignment_bytes_exclude_spill": true,
+  "body_unknown_store_barriers": 11,
+  "store_inventory": [
+    {
+      "pc": "0x2f80d27a",
+      "width": 1,
+      "addresses": null,
+      "remaining_reason": "UnknownStore: loop-carried base has no supported finite bound"
+    },
+    {
+      "pc": "0x2f80d2c8",
+      "width": 1,
+      "addresses": [
+        "entry_argument0 + 0",
+        "entry_argument0 + 1",
+        "entry_argument0 + 2"
+      ],
+      "remaining_reason": "UnknownValue"
+    },
+    {
+      "pc": "0x2f80d2f8",
+      "width": 4,
+      "addresses": null,
+      "remaining_reason": "UnknownStore: loop-carried base has no supported finite bound"
+    },
+    {
+      "pc": "0x2f80d2fc",
+      "width": 4,
+      "addresses": null,
+      "remaining_reason": "UnknownStore: loop-carried base has no supported finite bound"
+    },
+    {
+      "pc": "0x2f80d304",
+      "width": 4,
+      "addresses": null,
+      "remaining_reason": "UnknownStore: loop-carried base has no supported finite bound"
+    },
+    {
+      "pc": "0x2f80d308",
+      "width": 4,
+      "addresses": null,
+      "remaining_reason": "UnknownStore: loop-carried base has no supported finite bound"
+    },
+    {
+      "pc": "0x2f80d30c",
+      "width": 4,
+      "addresses": null,
+      "remaining_reason": "UnknownStore: loop-carried base has no supported finite bound"
+    },
+    {
+      "pc": "0x2f80d310",
+      "width": 4,
+      "addresses": null,
+      "remaining_reason": "UnknownStore: loop-carried base has no supported finite bound"
+    },
+    {
+      "pc": "0x2f80d314",
+      "width": 4,
+      "addresses": null,
+      "remaining_reason": "UnknownStore: loop-carried base has no supported finite bound"
+    },
+    {
+      "pc": "0x2f80d318",
+      "width": 4,
+      "addresses": null,
+      "remaining_reason": "UnknownStore: loop-carried base has no supported finite bound"
+    },
+    {
+      "pc": "0x2f80d324",
+      "width": 4,
+      "addresses": null,
+      "remaining_reason": "UnknownStore: loop-carried base has no supported finite bound"
+    },
+    {
+      "pc": "0x2f80d338",
+      "width": 4,
+      "addresses": null,
+      "remaining_reason": "UnknownStore: loop-carried base has no supported finite bound"
+    }
+  ],
+  "conservative_write_footprint": "all RV32 addresses; 11 other loop-carried stores remain unknown",
+  "first_remaining_barrier": {
+    "site": "0x5004dd24",
+    "reason": "11 memcpy UnknownStore sites transported through the proved transparent tail jump",
+    "missing_fact": "bounded footprints for the other 11 memcpy stores"
+  },
+  "additional_contract_enabled": false,
+  "conditional_only": "If a complete writes-only-[a0,a0+a2) contract were supplied, the substituted destination [-400,-272) would be disjoint from [-600,-596). This is not a derived machine proof."
+}
