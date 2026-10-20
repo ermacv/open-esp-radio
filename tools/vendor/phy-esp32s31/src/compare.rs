@@ -717,6 +717,51 @@ mod tests {
     }
 
     #[test]
+    fn sar2_mismatch_fails_restart_while_the_wifi_cold_point_remains_excluded() {
+        let registers = [
+            Register {
+                name: "PhyI2cField.69.04".into(),
+                address: 0x10,
+            },
+            Register {
+                name: "A.CONTROL".into(),
+                address: 0x14,
+            },
+        ];
+        let readings = |value| Readings {
+            values: BTreeMap::from([(0x10, value), (0x14, 7)]),
+            unreadable: Default::default(),
+        };
+        let vendor = [readings(0x60)];
+        for lifecycle in [Lifecycle::Restart, Lifecycle::Ieee802154Restart] {
+            let reviews = ReviewFile::reviewed().unwrap().at(lifecycle).unwrap();
+            let mismatch = readings(0x65);
+            let summary = compare_registers(&registers, &vendor, [&mismatch], &reviews.registers);
+            assert_eq!(summary.verdict, Verdict::Diff);
+            assert_eq!((summary.compared, summary.matched), (2, 1));
+            assert_eq!(summary.differing[0].name, "PhyI2cField.69.04");
+            assert!(summary.excluded.is_empty());
+
+            let matching = readings(0x60);
+            let summary = compare_registers(&registers, &vendor, [&matching], &reviews.registers);
+            assert_eq!(summary.verdict, Verdict::Match);
+            assert_eq!((summary.compared, summary.matched), (2, 2));
+        }
+
+        let reviews = ReviewFile::reviewed().unwrap().at(Lifecycle::Cold).unwrap();
+        let cold_registration = readings(0x65);
+        let summary = compare_registers(
+            &registers,
+            &vendor,
+            [&cold_registration],
+            &reviews.registers,
+        );
+        assert_eq!(summary.verdict, Verdict::Match);
+        assert_eq!((summary.compared, summary.matched), (1, 1));
+        assert_eq!(summary.excluded[0].name, "PhyI2cField.69.04");
+    }
+
+    #[test]
     fn dates_are_utc_days() {
         assert_eq!(utc_date(0), "1970-01-01");
         assert_eq!(utc_date(1_790_467_200), "2026-09-27");
