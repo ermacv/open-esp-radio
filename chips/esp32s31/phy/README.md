@@ -355,10 +355,24 @@ A grant-protect interval is the time the request was programmed, not an observat
 | | idle | ≤ 0.52 ms | ≤ 7.6 ms | ≤ 7.0 ms | ≤ 7.0 ms | ≤ 14.6 ms |
 | Wi-Fi + Bluetooth LE, HT20 UDP RX and an ATT echo load, 2 runs | traffic | ≤ 0.94 ms | ≤ 16.1 ms | ≤ 13.4 ms | ≤ 15.5 ms | ≤ 30.1 ms |
 | | idle | ≤ 0.94 ms | ≤ 7.1 ms | ≤ 13.6 ms | ≤ 13.5 ms | ≤ 21.4 ms |
-| IEEE 802.15.4 receiving, 2 boots | idle | ≤ 0.84 ms | ≤ 6.4 ms | ≤ 7.2 ms | ≤ 7.1 ms | ≤ 14.0 ms |
+| IEEE 802.15.4 receiving, 3 repetitions × 5 due ticks (2026-10-20) | idle | ≤ 1.427 ms | ≤ 8.347 ms | ≤ 8.140 ms | ≤ 8.000 ms | ≤ 17.571 ms |
+
+The 2026-10-20 154 row is reproducible with
+`cargo hil run phy-tracking-hold-ieee802154-idle --chip esp32s31 --board s31-a`.
+Run `1792516969752-0020244b`, main `73042ea1` plus the diagnostic tools,
+tested image source `04292bbd`, completed 15/15 ticks, restored debug policy and
+closed RF in every repetition. Per-repetition maxima (RFPLL/common/transmit/
+baseband-off/whole tick, µs): 1426/7892/7932/7791/16988;
+1427/8275/8004/7862/17571; 1426/8347/8140/8000/17022.
+An earlier diagnostic build/run `1792516851193-001ffe1b` completed two of three
+repetitions (largest complete tick 17.799 ms); the third failed during transmit
+on tick 3, poisoned PHY and could not restore policy or close RF. Its partial
+intervals remain incomplete evidence; the cause did not reproduce in the three
+repetitions above. No reliability or worst-case bound follows from either run.
+The Wi-Fi rows retain their previously recorded values; this run covers 154 only.
 
 What the runs show:
-- **RFPLL.** The correction, the branch an ordinary tick runs most often, holds the air under 1 ms.
+- **RFPLL.** The current 154 idle correction request reached 1.427 ms; the earlier Wi-Fi rows were below 1 ms.
 - **Common bracket.** DCODE and RX gain calibration is the bracket traffic stretches, from ~6 ms idle to observed maxima of 13–18 ms under traffic (the table gives maxima only, no lower bound): interrupts compete with its polled measurements.
 - **Transmit bracket.** Stable at ~7 ms per class, ~13 ms with both classes.
 - **Bound.** The worst single bracket observed is 18.0 ms and the worst whole tick 30.1 ms.
