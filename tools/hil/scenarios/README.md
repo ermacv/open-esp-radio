@@ -1,7 +1,7 @@
 # Versioned scenario catalog
 
 Folders identify the workload domain: system and PHY. PHY investigations
-alternate the pinned Wi-Fi reference and the diagnostic calibration image.
+alternate the pinned Wi-Fi or IEEE 802.15.4 reference and the diagnostic calibration image.
 Scenario IDs are stable across folder moves. Tags select overlapping
 diagnostic and characterization uses; they do not assign ownership or make a
 hardware-readiness claim.

@@ -15,7 +15,12 @@ calibration investigation. The S31 comparison crate composes the family into
 alternating boots per side. `phy-vendor-calibration-smoke` uses one pair with an RF restart and exercises
 the tool without estimating the vendor's boot spread. DIFF and INCOMPLETE
 remain failures, including in the smoke scenario; captures survive the verdict.
-Vendor-only scenarios capture extra boots without a production comparison.
+The IEEE 802.15.4 cold/restart investigations use five pairs, and
+`phy-vendor-calibration-ieee802154-smoke` uses one restart pair. They drive the
+live reference peer and compare register/analog captures without calibration
+objects. Optional vendor windows and post-transmit captures are archived as
+investigation data. Vendor-only scenarios capture extra boots without a
+production comparison.
 
 ```console
 cargo test -p oer-vendor-phy

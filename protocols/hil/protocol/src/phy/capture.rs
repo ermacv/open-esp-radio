@@ -5,13 +5,29 @@ use serde::{Deserialize, Serialize};
 pub const CAPTURE_PAGE: usize = 16;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub enum CaptureRadio {
+    Wifi,
+    Ieee802154 { power_dbm: i8 },
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub struct PrepareCapture {
     pub channel: u8,
+    pub radio: CaptureRadio,
 }
 
 impl PrepareCapture {
     pub const fn valid(self) -> bool {
-        self.channel >= 1 && self.channel <= 14
+        match self.radio {
+            CaptureRadio::Wifi => self.channel >= 1 && self.channel <= 14,
+            CaptureRadio::Ieee802154 { power_dbm } => {
+                self.channel >= 11
+                    && self.channel <= 26
+                    && power_dbm >= -24
+                    && power_dbm <= 21
+                    && power_dbm % 3 == 0
+            }
+        }
     }
 }
 
@@ -19,6 +35,8 @@ impl PrepareCapture {
 pub enum CaptureLifecycle {
     Cold,
     Restart,
+    Ieee802154,
+    Ieee802154Restart,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
@@ -37,6 +55,7 @@ pub struct CaptureReady {
     pub registers: u16,
     pub analog_bytes: u16,
     pub channel: u8,
+    pub radio: CaptureRadio,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
@@ -114,6 +133,31 @@ pub struct AnalogImage {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn configuration_validates_each_radio_before_registration() {
+        for (radio, first, last) in [
+            (CaptureRadio::Wifi, 1, 14),
+            (CaptureRadio::Ieee802154 { power_dbm: 21 }, 11, 26),
+        ] {
+            for channel in 0..=u8::MAX {
+                assert_eq!(
+                    PrepareCapture { channel, radio }.valid(),
+                    (first..=last).contains(&channel)
+                );
+            }
+        }
+        for power_dbm in i8::MIN..=i8::MAX {
+            assert_eq!(
+                PrepareCapture {
+                    channel: 15,
+                    radio: CaptureRadio::Ieee802154 { power_dbm }
+                }
+                .valid(),
+                (-24..=21).contains(&power_dbm) && power_dbm % 3 == 0
+            );
+        }
+    }
 
     #[test]
     fn a_window_must_belong_to_the_active_epoch_and_stay_inside_the_image() {

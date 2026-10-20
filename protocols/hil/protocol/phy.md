@@ -4,11 +4,16 @@ The optional `phy` feature serves diagnostic capture only. It is absent from
 ordinary images; the host registry includes its message schemas. The framing
 and global buffer capacities are the existing HIL ones.
 
-`PrepareCapture` selects the reference's observed Wi-Fi home channel.
+`PrepareCapture` selects Wi-Fi with the reference's observed home channel,
+or IEEE 802.15.4 with an explicit channel and provider power. Valid Wi-Fi
+channels are 1–14; 802.15.4 channels are 11–26 and power levels are -24 through
+21 dBm in 3 dBm steps. Bad configurations are rejected before registration.
 `CaptureReady` reports the full cold-calibration path, projection schema,
-image lengths, lifecycle and nonzero capture epoch. The target requires full
+image lengths, selected radio/channel/power, lifecycle and nonzero capture epoch. The target requires full
 registration with no input cache and freezes its output projection before
-Wi-Fi startup. Register reads occur later, with Wi-Fi RX enabled.
+Wi-Fi startup. Register reads occur later with the selected radio receiving. Lifecycle values
+are Cold, Restart, Ieee802154 and Ieee802154Restart. The 802.15.4 comparison uses
+register/analog images only; the immutable calibration projection is not read.
 
 `RestartCaptureRadio` requires the active epoch and returns explicit RF-close
 and RF-wake evidence plus a new epoch. `StopCapture` closes RF and retires the

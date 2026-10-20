@@ -34,6 +34,7 @@ pub struct Radio {
     identity: PhyCalibrationIdentity,
     station: [u8; 6],
     access_point: [u8; 6],
+    ieee802154: crate::ieee802154::Rx,
     rng: RngOwner<'static>,
     ready: Option<CaptureReady>,
     projection: [u16; projection::WORDS],
@@ -47,6 +48,7 @@ impl Radio {
         domain: RadioDomain<ConcurrentPhy>,
         wifi: WifiPartition,
         coex: CoexAbsent<WifiClient>,
+        ieee802154: crate::ieee802154::Rx,
         clocks: EspHalClocks,
         identity: PhyCalibrationIdentity,
         station: [u8; 6],
@@ -54,6 +56,7 @@ impl Radio {
         rng: RngOwner<'static>,
     ) -> Self {
         Self {
+            ieee802154,
             domain,
             clocks,
             cold: Some(WifiCold::from_partition(wifi)),
@@ -103,8 +106,15 @@ impl Radio {
                     NoopPhyTargetObserver,
                 )
                 .await
-                .map_err(|_| RejectReason::Internal)?;
+                .map_err(|_| {
+                    oer_esp32s31_board::rom::line(c"OPEN_RADIO_HIL phy=FAIL step=registration");
+                    RejectReason::Internal
+                })?;
                 let outcome = registration.outcome();
+                oer_esp32s31_board::rom::print_fmt(format_args!(
+                    "OPEN_RADIO_HIL phy=registration full={} path={:?}\n",
+                    outcome.full_calibration_performed, outcome.calibration_path
+                ));
                 if !outcome.full_calibration_performed
                     || outcome.calibration_path != PhyCalibrationPath::FullForCache
                 {
@@ -124,23 +134,38 @@ impl Radio {
                 // Preserve that same immutable registration product across radio restarts.
                 self.projection = projection::capture(state, cache.snapshot());
                 self.registered = true;
-                self.enter(config.channel).await?;
-                let ready = self.snapshot(1, CaptureLifecycle::Cold, config.channel)?;
+                oer_esp32s31_board::rom::print_fmt(format_args!(
+                    "OPEN_RADIO_HIL phy=enter config={config:?}\n"
+                ));
+                self.enter_capture(config).await?;
+                let lifecycle = match config.radio {
+                    CaptureRadio::Wifi => CaptureLifecycle::Cold,
+                    CaptureRadio::Ieee802154 { .. } => CaptureLifecycle::Ieee802154,
+                };
+                let ready = self.snapshot(1, lifecycle, config)?;
                 Ok(Answer::Ready(ready))
             }
             Request::Restart(RestartCaptureRadio { epoch }) => {
                 let current = self.current(epoch)?;
                 let next = epoch.checked_add(1).ok_or(RejectReason::InvalidState)?;
                 self.ready = None;
-                self.exit().await?;
+                self.exit_capture(current.radio).await?;
                 if !self.domain.attachment().rf_closed() {
                     return Err(RejectReason::Internal);
                 }
                 wake_concurrent_rf::<RomShortDelay>(&EmbassyClock, &mut self.domain, &self.clocks)
                     .await
                     .map_err(|_| RejectReason::Internal)?;
-                self.enter(current.channel).await?;
-                let ready = self.snapshot(next, CaptureLifecycle::Restart, current.channel)?;
+                let config = PrepareCapture {
+                    channel: current.channel,
+                    radio: current.radio,
+                };
+                self.enter_capture(config).await?;
+                let lifecycle = match config.radio {
+                    CaptureRadio::Wifi => CaptureLifecycle::Restart,
+                    CaptureRadio::Ieee802154 { .. } => CaptureLifecycle::Ieee802154Restart,
+                };
+                let ready = self.snapshot(next, lifecycle, config)?;
                 Ok(Answer::Restarted(CaptureRestarted {
                     ready,
                     rf_closed: true,
@@ -148,9 +173,9 @@ impl Radio {
                 }))
             }
             Request::Stop(StopCapture { epoch }) => {
-                self.current(epoch)?;
+                let current = self.current(epoch)?;
                 self.ready = None;
-                self.exit().await?;
+                self.exit_capture(current.radio).await?;
                 Ok(Answer::Stopped(CaptureStopped {
                     epoch,
                     rf_closed: self.domain.attachment().rf_closed(),
@@ -221,7 +246,7 @@ impl Radio {
         &mut self,
         epoch: u32,
         lifecycle: CaptureLifecycle,
-        channel: u8,
+        config: PrepareCapture,
     ) -> Result<CaptureReady> {
         let ready = CaptureReady {
             epoch,
@@ -238,10 +263,29 @@ impl Radio {
             analog_bytes: PhyI2cAddress::IMAGE_LEN
                 .try_into()
                 .map_err(|_| RejectReason::Internal)?,
-            channel,
+            channel: config.channel,
+            radio: config.radio,
         };
         self.ready = Some(ready);
         Ok(ready)
+    }
+
+    async fn enter_capture(&mut self, config: PrepareCapture) -> Result<()> {
+        match config.radio {
+            CaptureRadio::Wifi => self.enter(config.channel).await,
+            CaptureRadio::Ieee802154 { power_dbm } => {
+                self.ieee802154
+                    .enter(&mut self.domain, &self.clocks, config.channel, power_dbm)
+                    .await
+            }
+        }
+    }
+
+    async fn exit_capture(&mut self, radio: CaptureRadio) -> Result<()> {
+        match radio {
+            CaptureRadio::Wifi => self.exit().await,
+            CaptureRadio::Ieee802154 { .. } => self.ieee802154.exit(&mut self.domain).await,
+        }
     }
 
     async fn enter(&mut self, channel: u8) -> Result<()> {

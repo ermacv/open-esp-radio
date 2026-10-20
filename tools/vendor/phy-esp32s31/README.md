@@ -8,6 +8,8 @@ vendor captures against the `diagnostic-phy` image through the reviewed
 ```console
 cargo hil run phy-vendor-calibration-cold --chip esp32s31 --board s31-a
 cargo hil run phy-vendor-calibration-restart --chip esp32s31 --board s31-a
+cargo hil run phy-vendor-calibration-ieee802154 --chip esp32s31 --board s31-a
+cargo hil run phy-vendor-calibration-ieee802154-restart --chip esp32s31 --board s31-a
 cargo test -p oer-vendor-phy-esp32s31
 ```
 
@@ -32,9 +34,20 @@ Capture uses public PHY snapshots/getters, without verification hooks.
 RadioPhyPeripherals partition and the PhyI2cField analog image. Production reads
 only vendor-readable MMIO indices, and each published analog byte once.
 Resetting reads remain recorded as unreadable; missing vendor-readable
-production data never counts as a match. The existing IEEE 802.15.4 reference
-driver and register-only lifecycle DTOs are available, but this image serves
-only the two Wi-Fi lifecycle points.
+production data never counts as a match.
+
+The IEEE 802.15.4 investigations alternate five boots per side using the pinned
+`ieee802154-vendor-reference`: channel 15, 21 dBm, RX active, either after cold
+bring-up or OFF/ON on the reference and verified RF close/wake/rejoin on the
+diagnostic. The diagnostic disables automatic ACKs and exposes no TX operation.
+These points compare registers/analog bytes only, with no calibration object.
+`phy-vendor-calibration-ieee802154-smoke` uses one restart pair. Optional
+`vendor_windows` and `vendor_transmit` retain extra reference-side investigation
+observations without changing the comparison gate.
+
+The diagnostic 802.15.4 path runs first-client tracking before RX and supports
+RF close/wake/rejoin, capture and final RF closure. Failed operations retain
+INCOMPLETE evidence; a one-pair smoke does not establish vendor spread.
 
 `compare.rs` and `tolerances.toml` retain the reviewed rules: calibration
 fields use the widest per-element vendor boot range as margin, each element's

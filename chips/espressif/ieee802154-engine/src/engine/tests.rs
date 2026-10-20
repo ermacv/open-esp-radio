@@ -1605,3 +1605,114 @@ fn settings_before_first_enable_are_kept_including_disabled_pib_edits() {
     assert!(hw.calls.contains(&Call::SetCcaThreshold(-90)));
     assert!(hw.tx_auto_ack && hw.rx_auto_ack && hw.tx_enhanced_ack);
 }
+
+#[test]
+fn detach_returns_active_owner_and_rebind_preserves_storage_and_settings() {
+    use super::owner::Ieee802154EngineOwner;
+    let Bench {
+        engine,
+        hw,
+        mut env,
+    } = Bench::enabled();
+    let mut owner = Ieee802154EngineOwner::new(engine, hw);
+    owner.set_panid(0x4321);
+    owner.receive(&mut env);
+    let rx = owner.model_ll().rx_address;
+    let mut owner = match owner.detach() {
+        Err(owner) => owner,
+        Ok(_) => panic!("active RX must retain its owner"),
+    };
+    owner.sleep(&mut env);
+    for _ in 0..3 {
+        let (detached, hw) = match owner.detach() {
+            Ok(parts) => parts,
+            Err(_) => panic!("completed stop must allow detach"),
+        };
+        owner = detached.rebind(hw);
+        owner.enable();
+        owner.mac_init();
+        assert_eq!(owner.panid(), 0x4321);
+        owner.receive(&mut env);
+        assert_eq!(owner.model_ll().rx_address, rx);
+        owner.sleep(&mut env);
+    }
+}
+
+#[test]
+fn software_state_changes_cannot_hide_an_active_dma_epoch() {
+    use super::owner::Ieee802154EngineOwner;
+    let Bench {
+        engine,
+        hw,
+        mut env,
+    } = Bench::enabled();
+    let mut owner = Ieee802154EngineOwner::new(engine, hw);
+    owner.receive(&mut env);
+    owner.disable();
+    let mut owner = match owner.detach() {
+        Err(owner) => owner,
+        Ok(_) => panic!("disable does not stop DMA"),
+    };
+    owner.enable();
+    owner.mac_init();
+    let mut owner = match owner.detach() {
+        Err(owner) => owner,
+        Ok(_) => panic!("initialization cannot stop a previous DMA epoch"),
+    };
+    owner.sleep(&mut env);
+    assert!(owner.detach().is_ok());
+}
+
+#[test]
+fn detach_rejects_tx_cca_ed_and_armed_receive_until_stopped() {
+    use super::owner::Ieee802154EngineOwner;
+    for operation in 0..5 {
+        let Bench {
+            engine,
+            hw,
+            mut env,
+        } = Bench::enabled();
+        let mut owner = Ieee802154EngineOwner::new(engine, hw);
+        match operation {
+            0 => owner.transmit(&mut env, &DATA_NO_ACK, false).unwrap(),
+            1 => owner.transmit(&mut env, &DATA_NO_ACK, true).unwrap(),
+            2 => owner.energy_detect(&mut env, 8),
+            3 => owner.cca(&mut env),
+            _ => {
+                assert!(owner.receive_at(&mut env, 10_000, 0));
+            }
+        }
+        let mut owner = match owner.detach() {
+            Err(owner) => owner,
+            Ok(_) => panic!("an active or armed operation cannot detach"),
+        };
+        owner.sleep(&mut env);
+        assert!(owner.detach().is_ok());
+    }
+}
+
+#[test]
+fn delivered_slot_keeps_epoch_owned_until_returned() {
+    use super::owner::Ieee802154EngineOwner;
+    let mut bench = Bench::enabled();
+    bench.receive();
+    bench.deliver(&DATA_NO_ACK);
+    bench.interrupt(&[Ieee802154Event::RxDone]);
+    let slot = bench
+        .env
+        .notes
+        .iter()
+        .find_map(|note| match note {
+            Note::ReceiveDone { slot, .. } => Some(Ieee802154RxSlot(*slot as u8)),
+            _ => None,
+        })
+        .expect("one delivered slot");
+    let mut owner = Ieee802154EngineOwner::new(bench.engine, bench.hw);
+    owner.sleep(&mut bench.env);
+    let mut owner = match owner.detach() {
+        Err(owner) => owner,
+        Ok(_) => panic!("delivered slot still belongs to the old epoch"),
+    };
+    owner.receive_handle_done(slot).unwrap();
+    assert!(owner.detach().is_ok());
+}

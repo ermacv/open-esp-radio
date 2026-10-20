@@ -334,6 +334,9 @@ pub struct Ieee802154Engine<'storage, Address: Copy + Eq> {
     needs_next_operation: bool,
     pending_rx_stop: bool,
     rx_armed: bool,
+    // Independent of the public software state: disable/enable/mac_init do
+    // not stop an operation already using the MAC and its DMA storage.
+    operation_active: bool,
     /// TX/RX statistics while collected (`CONFIG_IEEE802154_TXRX_STATISTIC`).
     statistics: Option<Ieee802154TxRxStatistics>,
     timer0: Option<TimerAction>,
@@ -372,6 +375,7 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
             needs_next_operation: false,
             pending_rx_stop: false,
             rx_armed: false,
+            operation_active: false,
             statistics: None,
             timer0: None,
             timer1: None,
@@ -815,7 +819,27 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
     }
 
     fn set_state(&mut self, to: Ieee802154State) {
+        if !matches!(
+            to,
+            Ieee802154State::Disable | Ieee802154State::Idle | Ieee802154State::Sleep
+        ) {
+            self.operation_active = true;
+        }
         self.state = to;
+    }
+
+    fn quiescent(&self) -> bool {
+        !self.operation_active
+            && matches!(
+                self.state,
+                Ieee802154State::Disable | Ieee802154State::Idle | Ieee802154State::Sleep
+            )
+            && !self.rx_armed
+            && self.timer0.is_none()
+            && self.timer1.is_none()
+            && !self.pending_rx_stop
+            && !self.needs_next_operation
+            && !self.rx_info.iter().any(|info| info.process)
     }
 
     /// `ieee802154_enable` after the modem clock is enabled.
@@ -1569,6 +1593,14 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
             }
             Ieee802154State::Tx | Ieee802154State::TxEnhAck => self.stop_tx(cx),
             Ieee802154State::RxAck => self.stop_rx_ack(cx),
+        }
+        // Only a completed stop closes the operation epoch. A software-only
+        // disable must never make an earlier RX/TX operation detachable.
+        if !matches!(
+            self.state,
+            Ieee802154State::Disable | Ieee802154State::Sleep
+        ) {
+            self.operation_active = false;
         }
     }
 

@@ -108,3 +108,35 @@ fn the_hal_buffer_claim_is_affine() {
     let _claimed = first.into_inner();
     assert!(claim_buffers().is_none());
 }
+
+#[test]
+fn detach_rebind_reuses_placed_storage_across_mac_epochs() {
+    let (mut engine, rx, tx) = model();
+    let mut environment = Environment;
+    engine.enable();
+    engine.mac_init();
+    engine.set_panid(0x4321);
+    engine.receive(&mut environment);
+    engine = match engine.detach() {
+        Err(engine) => engine,
+        Ok(_) => panic!("active RX cannot relinquish its placed owner"),
+    };
+    for _ in 0..3 {
+        engine.sleep(&mut environment);
+        engine.mac_deinit();
+        let (detached, mac) = match engine.detach() {
+            Ok(parts) => parts,
+            Err(_) => panic!("quiescent MAC must detach"),
+        };
+        engine = detached.rebind(mac);
+        engine.enable();
+        engine.mac_init();
+        assert_eq!(engine.panid(), 0x4321);
+        engine.receive(&mut environment);
+        assert_eq!(
+            engine.model_ll().rx_address.map(DmaWindowAddress::get),
+            Some(rx)
+        );
+        assert_eq!(engine.model_transmit_address().get(), tx);
+    }
+}
