@@ -3523,7 +3523,13 @@ sources = ["BLOB_LIBCOEX_EXTERNAL"]
 name = "set_coex_external_grant_delay"
 peripheral = "COEX_EXTERNAL"
 register = "CONTROL"
-fields = [{ field = "GRANT_DELAY", source-bit-offset = 0 }]
+# SOURCE: BLOB_LIBCOEX_EXTERNAL, hal_external_coexist.o::hal_set_extern_coex_delay
+# replaces the whole delay byte; ic_set_extern_coex_params supplies delay << 4.
+# The bounded four-bit domain makes its high source nibble exactly zero.
+fields = [
+    { field = "GRANT_DELAY", source-bit-offset = 0 },
+    { field = "GRANT_DELAY_LOW", source-bit-offset = 4 },
+]
 domain = "ExternalCoexGrantDelay"
 exposure = "facade"
 sources = ["BLOB_LIBCOEX_EXTERNAL"]

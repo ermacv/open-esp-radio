@@ -45515,6 +45515,13 @@ bit-width = 1
 access = "read-write"
 
 [[registers.fields]]
+svd-name = "GRANT_DELAY_LOW"
+method = "grant_delay_low"
+bit-offset = 1
+bit-width = 4
+access = "read-write"
+
+[[registers.fields]]
 svd-name = "GRANT_DELAY"
 method = "grant_delay"
 bit-offset = 5
