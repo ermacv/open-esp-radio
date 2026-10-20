@@ -18,6 +18,15 @@ this build. `cargo fw build w2` produces an unconfigured image that reports
 `OER-RESULT: fail w2 unconfigured`. eFuse is read only, including the
 station address; identities in console reports are masked.
 
+`cargo fw build w2 --analysis` builds the configured scanner for analysis
+with a fixed fictitious identity: channel 1, locally administered BSSID
+`02:00:00:00:00:01`, SSID `oer`, country DE and the usual laboratory power
+cap. The bundle lives in `target/fw/w2-analysis/`; its `bundle.json` records
+`purpose: Analysis`, which the shared flash snapshot reader refuses for
+`flash`, `run` and HIL. It cannot be flashed. Machine code may differ from
+the stand build only because of the configuration constants. The stack and
+placement gates remain reports, without enforced checks.
+
 For every permitted channel 1–13, Allowed channels get one broadcast probe
 at the band's derived management rate followed by a 150 ms dwell; NO_IR
 channels receive only. The scanner then returns to the lab channel and

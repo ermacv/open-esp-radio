@@ -50,6 +50,8 @@ pub const FIRMWARE_PROFILE: &str = "firmware";
 
 /// What to build.
 pub struct ImageSpec {
+    /// Whether this build may be flashed or is only for analysis.
+    pub purpose: bundle::Purpose,
     /// The tree the image is built from: a checkout or a worktree.
     pub root: PathBuf,
     /// The chip id; its profile names the boot kind and the flash map.

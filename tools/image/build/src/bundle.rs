@@ -16,6 +16,8 @@
 //! against the manifest's digest, and [`ImageBundle::snapshot`] reads the
 //! flash files once into owned bytes, checked against the same digests:
 //! what a write hashes and writes.
+//! [`Purpose::Analysis`] bundles remain readable for inspection, but cannot
+//! supply a flash snapshot.
 
 use std::{
     collections::BTreeSet,
@@ -34,7 +36,14 @@ use crate::Result;
 /// The bundle's description, beside its files.
 pub const MANIFEST: &str = "bundle.json";
 /// Format of [`MANIFEST`].
-pub const SCHEMA: u32 = 6;
+pub const SCHEMA: u32 = 7;
+
+/// Whether a bundle may be written to a board.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub enum Purpose {
+    Flash,
+    Analysis,
+}
 
 /// Every file name a bundle uses.
 pub mod files {
@@ -57,6 +66,8 @@ pub mod files {
 #[serde(deny_unknown_fields)]
 pub struct ImageBundle {
     schema: u32,
+    /// Whether the shared flash reader may supply this bundle's bytes.
+    pub purpose: Purpose,
     /// The bundle's directory; not recorded, it is where the manifest lies.
     #[serde(skip)]
     pub directory: PathBuf,
@@ -179,6 +190,7 @@ impl ImageBundle {
     pub fn new(directory: &Path, profile: &oer_chip_profile::Profile, flash: FlashMap) -> Self {
         Self {
             schema: SCHEMA,
+            purpose: Purpose::Flash,
             directory: directory.to_owned(),
             chip: profile.id.clone(),
             rust_target: profile.rust_target.clone(),
@@ -261,8 +273,16 @@ impl ImageBundle {
 
     /// The bundle's flash contents, each file read once into owned bytes and
     /// verified against the manifest's digest: the one source of what a
-    /// write hashes and writes.
+    /// write hashes and writes. This is the shared loading boundary for
+    /// every flash writer; analysis bundles cannot supply a flash snapshot.
     pub fn snapshot(&self) -> Result<Snapshot> {
+        if self.purpose == Purpose::Analysis {
+            return Err(format!(
+                "the bundle in {} has purpose Analysis and cannot be flashed",
+                self.directory.display()
+            )
+            .into());
+        }
         let segments = self
             .segments()
             .into_iter()
@@ -410,6 +430,7 @@ impl ImageBundle {
     fn new_like(other: &Self, directory: &Path) -> Self {
         Self {
             schema: SCHEMA,
+            purpose: other.purpose,
             directory: directory.to_owned(),
             chip: other.chip.clone(),
             rust_target: other.rust_target.clone(),

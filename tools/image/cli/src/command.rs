@@ -279,7 +279,7 @@ pub fn run(root: &Path, image: &str, selector: &str, timeout: Duration) -> Resul
         Some(image::Stand::W2(config)) => Some(config.clone()),
         _ => None,
     };
-    image::build(root, image, built.as_ref())?;
+    image::build(root, image, built.as_ref(), false)?;
     let leased = leased(root, &stand, &board)?;
     write_image(root, image, &board.id, &leased)?;
     let run = root
@@ -445,9 +445,9 @@ pub fn power_cycle(root: &Path, selector: &str) -> Result<()> {
     Ok(())
 }
 
-/// `cargo fw build IMAGE`.
-pub fn build(root: &Path, image_name: &str) -> Result<()> {
-    let bundle = image::build(root, image_name, None)?;
+/// `cargo fw build IMAGE [--analysis]`.
+pub fn build(root: &Path, image_name: &str, analysis: bool) -> Result<()> {
+    let bundle = image::build(root, image_name, None, analysis)?;
     for segment in bundle.segments() {
         eprintln!(
             "fw:   {:<16} {:#08x} {}",

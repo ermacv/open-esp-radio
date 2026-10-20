@@ -40,6 +40,7 @@ pub(crate) fn build(
     let staging = Staging::begin(&spec.output)?;
     let output = staging.directory().to_owned();
     let mut bundle = ImageBundle::new(&output, profile, flash);
+    bundle.purpose = spec.purpose;
     bundle.layout_seed = spec.layout_seed;
     let log = BuildLog::create(&output.join(files::BUILD_LOG))?;
     // The runtime and the bootstrap compile with the image's instrumentation,

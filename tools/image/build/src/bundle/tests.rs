@@ -104,3 +104,64 @@ fn a_snapshot_materializes_each_segment_as_a_file() {
     assert_eq!(std::fs::read(&files[2].1).unwrap(), b"app");
     assert_eq!(files[2].0, snapshot.segments[2].offset);
 }
+
+#[test]
+fn purpose_round_trips_and_the_shared_flash_reader_refuses_analysis() {
+    let directory = tempfile::tempdir().unwrap();
+    for purpose in [Purpose::Flash, Purpose::Analysis] {
+        let output = directory.path().join(format!("{purpose:?}"));
+        let mut bundle = staged(&output, b"app");
+        bundle.purpose = purpose;
+        let published = bundle.publish(&output).unwrap();
+        let manifest: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(output.join(MANIFEST)).unwrap()).unwrap();
+        assert_eq!(manifest["schema"], 7);
+        assert_eq!(manifest["purpose"], format!("{purpose:?}"));
+        let loaded = ImageBundle::load(&output).unwrap();
+        assert_eq!(loaded, published);
+        match purpose {
+            Purpose::Flash => assert_eq!(loaded.snapshot().unwrap().segments[2].data, b"app"),
+            Purpose::Analysis => {
+                let error = loaded.snapshot().unwrap_err().to_string();
+                assert!(
+                    error.contains("purpose Analysis") && error.contains("cannot be flashed"),
+                    "{error}"
+                );
+                // Copies for archived HIL applications keep the restriction.
+                let copy = loaded
+                    .with_application(&loaded.application(), &directory.path().join("copy"))
+                    .unwrap();
+                assert_eq!(
+                    ImageBundle::load(&copy.directory).unwrap().purpose,
+                    Purpose::Analysis
+                );
+                assert!(copy.snapshot().is_err());
+            }
+        }
+        // Ordinary loading still checks file integrity for either purpose.
+        std::fs::write(loaded.application(), b"changed").unwrap();
+        assert!(ImageBundle::load(&output).is_err());
+    }
+}
+
+#[test]
+fn schema_six_and_missing_purpose_cannot_default_to_flash() {
+    let directory = tempfile::tempdir().unwrap();
+    let output = directory.path().join("bundle");
+    staged(&output, b"app").publish(&output).unwrap();
+    let path = output.join(MANIFEST);
+    let mut manifest: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    manifest.as_object_mut().unwrap().remove("purpose");
+    manifest["schema"] = 6.into();
+    std::fs::write(&path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+    let error = ImageBundle::load(&output).unwrap_err().to_string();
+    assert!(
+        error.contains("has schema 6") && error.contains("reads schema 7"),
+        "{error}"
+    );
+    manifest["schema"] = SCHEMA.into();
+    std::fs::write(&path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+    let error = ImageBundle::load(&output).unwrap_err().to_string();
+    assert!(error.contains("missing field `purpose`"), "{error}");
+}
