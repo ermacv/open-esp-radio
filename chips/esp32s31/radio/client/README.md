@@ -7,8 +7,9 @@ PHY domain, without the actor itself.
 - `claim()` returns the actor's end and the clients' cells once per image.
   Each client has one `MembershipCell`; `join`, `track` and `leave` post
   synchronously and return a `Pending` future of the answer and the cell.
-- The cell is lock-free: a four-state CAS protocol with two atomic wakers
-  (`src/cell.rs`, the crate's only `unsafe`; see `docs/unsafe.md`).
+- The cell is lock-free: it holds the `oer-memory` `RequestSlot`, a
+  four-state CAS protocol with two atomic wakers (`docs/unsafe.md`); the
+  crate forbids unsafe code.
 - `Member<K, Untracked | Tracked>` is the PHY membership typestate; only
   `track` produces `Tracked`, which alone permits RF use. `RfEpoch` changes at
   every registration and RF wake.
