@@ -111,6 +111,10 @@ impl Radio {
                     RejectReason::Internal
                 })?;
                 let outcome = registration.outcome();
+                oer_esp32s31_board::rom::print_fmt(format_args!(
+                    "OPEN_RADIO_HIL phy=registration full={} path={:?}\n",
+                    outcome.full_calibration_performed, outcome.calibration_path
+                ));
                 if !outcome.full_calibration_performed
                     || outcome.calibration_path != PhyCalibrationPath::FullForCache
                 {
@@ -130,6 +134,9 @@ impl Radio {
                 // Preserve that same immutable registration product across radio restarts.
                 self.projection = projection::capture(state, cache.snapshot());
                 self.registered = true;
+                oer_esp32s31_board::rom::print_fmt(format_args!(
+                    "OPEN_RADIO_HIL phy=enter config={config:?}\n"
+                ));
                 self.enter_capture(config).await?;
                 let lifecycle = match config.radio {
                     CaptureRadio::Wifi => CaptureLifecycle::Cold,

@@ -136,8 +136,16 @@ impl Rx {
         else {
             return Err(RejectReason::Internal);
         };
-        let joined = join_ieee802154(available, &clocked, &EmbassyClock)
-            .map_err(|_| RejectReason::Internal)?;
+        let joined = join_ieee802154(available, &clocked, &EmbassyClock).map_err(|error| {
+            oer_esp32s31_board::rom::print_fmt(format_args!(
+                "OPEN_RADIO_HIL phy=FAIL step=154-join error={error:?}\n"
+            ));
+            RejectReason::Internal
+        })?;
+        oer_esp32s31_board::rom::print_fmt(format_args!(
+            "OPEN_RADIO_HIL phy=joined acquired={:?}\n",
+            joined.acquired
+        ));
         let due = joined.acquired == ConcurrentAcquire::TrackingDue;
         let member = joined.membership;
         if due {
@@ -148,7 +156,12 @@ impl Rx {
                 NoopPhyTargetObserver,
             )
             .await
-            .map_err(|_| RejectReason::Internal)?;
+            .map_err(|error| {
+                oer_esp32s31_board::rom::print_fmt(format_args!(
+                    "OPEN_RADIO_HIL phy=FAIL step=154-maintain error={error:?}\n"
+                ));
+                RejectReason::Internal
+            })?;
         }
         let foundation = clocked
             .reset_mac(domain)
