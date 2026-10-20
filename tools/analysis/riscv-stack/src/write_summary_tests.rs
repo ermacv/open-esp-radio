@@ -64,6 +64,7 @@ fn try_facts_calls<'m>(
     let mut saved = Saved(RecordBuffer::new(memory));
     research_with_options(
         FunctionInput {
+            traps: oer_analysis_riscv_analysis::TrapSemantics::Unknown,
             image: Some(&NoMemory),
             section: 1,
             extent: CodeRange {

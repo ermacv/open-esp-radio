@@ -227,6 +227,7 @@ fn shape(code: &dyn Code, semantics: &dyn FunctionSemantics, pc: u32) -> Option<
             },
         ),
         InstructionFlow::Return { base } => ([base, 0], link(semantics.lift(bytes)), Kind::Return),
+        InstructionFlow::Trap => return None,
         InstructionFlow::Stop => ([0; 2], 0, Kind::Plain),
         InstructionFlow::Next => match semantics.lift(bytes) {
             SemanticOp::Integer {

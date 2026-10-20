@@ -110,6 +110,8 @@ pub enum Operand {
 /// extension or single-precision form it lacks.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Instruction {
+    /// An encoding guaranteed to raise an illegal-instruction exception.
+    Unimp,
     Base(Inst),
     Extension(Extension),
     Float(Float),
@@ -120,6 +122,7 @@ impl Instruction {
     /// 16-bit encoding, C; `compressed` for a 16-bit encoding.
     fn requires(&self, compressed: bool) -> Extensions {
         match *self {
+            Instruction::Unimp => Extensions::NONE,
             Instruction::Base(inst) => match inst {
                 Inst::Mul { .. }
                 | Inst::Mulh { .. }
@@ -164,6 +167,7 @@ impl Instruction {
 impl fmt::Display for Instruction {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Instruction::Unimp => f.write_str("unimp"),
             Instruction::Base(inst) => fmt::Display::fmt(inst, f),
             Instruction::Extension(extension) => fmt::Display::fmt(extension, f),
             Instruction::Float(float) => fmt::Display::fmt(float, f),
@@ -192,6 +196,12 @@ pub fn decode(bytes: &[u8], extensions: Extensions) -> Option<(Instruction, usiz
 
 /// Every form this crate decodes, before the extension selection.
 fn decode_any(bytes: &[u8]) -> Option<(Instruction, usize)> {
+    if bytes.starts_with(&[0, 0]) {
+        return Some((Instruction::Unimp, 2));
+    }
+    if bytes.starts_with(&0xc000_1073u32.to_le_bytes()) {
+        return Some((Instruction::Unimp, 4));
+    }
     match extensions::classify(bytes) {
         extensions::Classified::Extension(extension, width) => {
             return (bytes.len() >= width).then_some((Instruction::Extension(extension), width));

@@ -15,6 +15,7 @@ fn stack_facts<'m>(words: &[u32], start: u64, memory: &'m WorkingMemory) -> Reco
     let mut saved = Saved(RecordBuffer::new(memory));
     research_with_options(
         FunctionInput {
+            traps: oer_analysis_riscv_analysis::TrapSemantics::Unknown,
             image: Some(&NoMemory),
             section: 1,
             extent: CodeRange {
@@ -124,6 +125,7 @@ fn facts_in_capture<'m>(
     let mut saved = Saved(RecordBuffer::new(memory));
     research_with_options(
         FunctionInput {
+            traps: oer_analysis_riscv_analysis::TrapSemantics::Unknown,
             image: Some(image),
             section: 1,
             extent: CodeRange {
@@ -973,6 +975,7 @@ fn specialized_query<'m>(
     let bytes: Vec<_> = code.iter().flat_map(|word| word.to_le_bytes()).collect();
     contextual_word_function_writes(
         FunctionInput {
+            traps: oer_analysis_riscv_analysis::TrapSemantics::Unknown,
             image: Some(&NoMemory),
             section: 1,
             extent: CodeRange {

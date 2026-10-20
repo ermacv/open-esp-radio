@@ -339,6 +339,7 @@ impl Execution<'_, '_> {
                 let mut next = self.index(next_pc);
                 let mut tail_exit = false;
                 match operation.flow {
+                    InstructionFlow::Trap => return Ok(None),
                     InstructionFlow::Return { .. } | InstructionFlow::Stop => break,
                     InstructionFlow::Branch { displacement } => {
                         let Some((test, left, right)) = operation.branch else {

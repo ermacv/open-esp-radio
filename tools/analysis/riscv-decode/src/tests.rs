@@ -85,7 +85,6 @@ fn truncated_and_long_encodings_do_not_decode() {
     assert!(decode(&[1], Extensions::ALL).is_none());
     assert!(decode(&[0x13, 0, 0], Extensions::ALL).is_none());
     assert!(decode(&[0xff, 0xff, 0xff, 0xff], Extensions::ALL).is_none());
-    assert!(decode(&[0, 0], Extensions::ALL).is_none());
 }
 
 #[test]
@@ -128,4 +127,26 @@ fn zicsr_accesses_decode_with_their_csr_and_source() {
     for word in [0x3020_0073u32, 0x1050_0073] {
         assert!(!decodes(&word.to_le_bytes(), Extensions::ALL));
     }
+}
+
+#[test]
+fn illegal_instruction_traps_have_their_own_instruction() {
+    assert_eq!(
+        decode(&[0, 0], Extensions::C),
+        Some((Instruction::Unimp, 2))
+    );
+    assert_eq!(decode(&[0, 0], Extensions::NONE), None);
+    assert_eq!(
+        decode(&0xc000_1073u32.to_le_bytes(), Extensions::NONE),
+        Some((Instruction::Unimp, 4))
+    );
+    assert!(matches!(
+        decode(&[1, 0], Extensions::C),
+        Some((Instruction::Base(_), 2))
+    ));
+    // Nearby CSR reads and writes keep their original meaning.
+    assert!(matches!(
+        decode(&0xc000_2073u32.to_le_bytes(), Extensions::ALL),
+        Some((Instruction::Extension(_), 4))
+    ));
 }

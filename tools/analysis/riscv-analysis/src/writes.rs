@@ -367,7 +367,8 @@ pub fn closes_local_graph(record: &FunctionRecord) -> bool {
 
 pub(crate) fn closes_local_edge(target: Option<u64>, relation: EdgeKind) -> bool {
     !matches!(relation, EdgeKind::Conflict | EdgeKind::Stop)
-        && (target.is_some() || matches!(relation, EdgeKind::Call | EdgeKind::Return))
+        && (target.is_some()
+            || matches!(relation, EdgeKind::Call | EdgeKind::Return | EdgeKind::Trap))
 }
 
 /// No new CFG or instruction interpreter: consumes canonical expressions,

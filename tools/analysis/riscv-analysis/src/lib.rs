@@ -19,7 +19,16 @@ pub use tables::{
 };
 pub use values::fold_integer;
 
+/// Whether the image proves illegal-instruction exceptions cannot resume.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum TrapSemantics {
+    #[default]
+    Unknown,
+    Terminal,
+}
+
 pub struct FunctionInput<'a> {
+    pub traps: TrapSemantics,
     pub image: Option<&'a dyn ImageMemory>,
     pub section: u32,
     pub extent: CodeRange,
@@ -384,7 +393,11 @@ fn analyze_pass<'m>(
         let decoded = if declared_data {
             None
         } else {
-            decoder.decode(&input.bytes[(offset - input.extent.start) as usize..])
+            decoder
+                .decode(&input.bytes[(offset - input.extent.start) as usize..])
+                .filter(|op| {
+                    op.flow != InstructionFlow::Trap || input.traps == TrapSemantics::Terminal
+                })
         };
         let Some(decoded) = decoded else {
             states[index] = 4;
@@ -561,6 +574,7 @@ fn analyze_pass<'m>(
                     }
                 }
             }
+            InstructionFlow::Trap => outgoing.push((None, EdgeKind::Trap)),
             InstructionFlow::Stop => {
                 summary.coverage.control_flow = false;
                 outgoing.push((None, EdgeKind::Stop));
@@ -831,6 +845,7 @@ mod tests {
         }
         let work = |code: [u8; 2], jumps: &[KnownJump]| {
             let input = FunctionInput {
+                traps: crate::TrapSemantics::Unknown,
                 image: None,
                 section: 1,
                 extent: CodeRange {
@@ -874,6 +889,7 @@ mod tests {
             })
             .collect();
         let input = FunctionInput {
+            traps: crate::TrapSemantics::Unknown,
             image: None,
             section: 1,
             extent: CodeRange {
@@ -919,6 +935,7 @@ mod tests {
             targets: (0..4096).map(|i| i * 2).collect(),
         }];
         let input = FunctionInput {
+            traps: crate::TrapSemantics::Unknown,
             image: None,
             section: 1,
             extent: CodeRange {
@@ -989,6 +1006,7 @@ mod tests {
     fn follow(known: &[KnownJump], lose_after: Option<u32>, proves: bool) -> (u64, usize, u32) {
         let code = [1, 0, 0, 0, 0, 0];
         let input = FunctionInput {
+            traps: crate::TrapSemantics::Unknown,
             image: None,
             section: 1,
             extent: CodeRange {

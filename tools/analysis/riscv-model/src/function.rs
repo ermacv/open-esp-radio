@@ -113,6 +113,8 @@ pub enum InstructionFlow {
     Return {
         base: u8,
     },
+    /// Illegal-instruction trap; continuation depends on image trap semantics.
+    Trap,
     Stop,
 }
 
@@ -341,6 +343,7 @@ pub enum EdgeKind {
     PossibleContinuation,
     Indirect,
     Return,
+    Trap,
     Stop,
     Conflict,
 }

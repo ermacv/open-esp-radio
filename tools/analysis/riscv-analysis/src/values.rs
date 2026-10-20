@@ -2233,6 +2233,7 @@ mod tests {
             )
         });
         let input = FunctionInput {
+            traps: crate::TrapSemantics::Unknown,
             image: None,
             section: 1,
             extent: CodeRange {
@@ -2368,6 +2369,7 @@ mod tests {
             })
             .collect();
         let input = FunctionInput {
+            traps: crate::TrapSemantics::Unknown,
             image: Some(&Image),
             section: 1,
             extent: CodeRange {
@@ -2491,6 +2493,7 @@ mod tests {
                 }
             }
             let input = FunctionInput {
+                traps: crate::TrapSemantics::Unknown,
                 image: None,
                 section: 1,
                 extent: CodeRange {
@@ -2597,6 +2600,7 @@ mod tests {
     #[test]
     fn exact_words_round_trip_through_entry_stack_slots_until_clobbered() {
         let input = FunctionInput {
+            traps: crate::TrapSemantics::Unknown,
             image: None,
             section: 1,
             extent: CodeRange {
@@ -2696,6 +2700,7 @@ mod tests {
     #[test]
     fn conflicts_and_calls_cannot_propagate_stale_values() {
         let input = FunctionInput {
+            traps: crate::TrapSemantics::Unknown,
             image: None,
             section: 1,
             extent: CodeRange {
@@ -2766,6 +2771,7 @@ mod tests {
     fn interrupted_solver_releases_admitted_state_before_emitting_records() {
         let bytes = [0, 0, 1, 0];
         let input = FunctionInput {
+            traps: crate::TrapSemantics::Unknown,
             image: None,
             section: 1,
             extent: CodeRange {
@@ -2835,6 +2841,7 @@ mod tests {
     #[test]
     fn explicit_integer_abi_preserves_only_declared_registers() {
         let input = FunctionInput {
+            traps: crate::TrapSemantics::Unknown,
             image: None,
             section: 1,
             extent: CodeRange {
@@ -3015,6 +3022,7 @@ mod tests {
             .collect();
         edges.sort_by_key(|e| (e.from, e.target));
         let input = FunctionInput {
+            traps: crate::TrapSemantics::Unknown,
             image: None,
             section: 1,
             extent: CodeRange {

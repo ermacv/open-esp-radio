@@ -211,6 +211,9 @@ impl Walker<'_, '_> {
                             continue;
                         }
                     }
+                    InstructionFlow::Trap => {
+                        f.gaps.insert(pc);
+                    }
                     InstructionFlow::Stop => {}
                 }
                 break;

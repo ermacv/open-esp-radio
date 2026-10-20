@@ -204,13 +204,13 @@ fn proved_dispatch_does_not_hide_a_decode_gap_or_another_unknown_edge() {
 }
 
 #[test]
-fn a_table_reachable_unimp_separates_stack_observation_from_structural_closure() {
+fn a_table_reachable_unimp_keeps_both_observers_open_at_unknown() {
     let mut code = root(false);
     code.words[17] = 0; // The table has an independent edge to c.unimp.
     let elf = fixture(code, &ENTRIES);
     let structural = capture(&elf);
     assert!(
-        structural
+        !structural
             .iter()
             .all(oer_analysis_riscv_analysis::writes::closes_local_graph)
     );
@@ -238,6 +238,7 @@ fn a_table_reachable_unimp_separates_stack_observation_from_structural_closure()
         image::observing(
             facts,
             &UnknownCallBehavior,
+            oer_analysis_riscv_analysis::TrapSemantics::Unknown,
             &memory,
             &mut || Ok(()),
             |observe, control| {
@@ -293,6 +294,7 @@ fn recognized(elf: &[u8]) -> (Vec<FunctionRecord>, Vec<JumpDispatch>) {
         let mut records = Records::default();
         let (_, found) = research_following_tables(
             FunctionInput {
+                traps: oer_analysis_riscv_analysis::TrapSemantics::Unknown,
                 image: Some(&view),
                 section: function.section as u32,
                 extent: CodeRange {

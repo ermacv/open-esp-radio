@@ -268,6 +268,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
                     .get(start..start + function.size as usize)
                     .ok_or("function exceeds its section")?;
                 let input = FunctionInput {
+                    traps: oer_analysis_riscv_analysis::TrapSemantics::Unknown,
                     image: Some(&view),
                     section: function.section as u32,
                     extent: CodeRange {

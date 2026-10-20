@@ -37,22 +37,10 @@ impl JumpTableSource for DispatchTables<'_> {
     }
 }
 
-// Diagnostic snapshot of Observer::record's closure rules. The replay below
-// checks its aggregate against the actual source-compiled Observer; this is
-// deliberately not a second production closure policy.
+// Observer and diagnostics share the common closure predicate. The replay
+// still checks its aggregate against the actual source-compiled Observer.
 fn observer_closes(record: &FunctionRecord) -> bool {
-    match record {
-        FunctionRecord::Gap { reason, .. } => *reason == GapReason::Unvisited,
-        FunctionRecord::Edge {
-            target, relation, ..
-        } => {
-            !matches!(
-                relation,
-                EdgeKind::Indirect | EdgeKind::Conflict | EdgeKind::Stop
-            ) && (target.is_some() || matches!(relation, EdgeKind::Call | EdgeKind::Return))
-        }
-        _ => true,
-    }
+    closes_local_graph(record)
 }
 
 struct Diagnostic {
@@ -134,12 +122,18 @@ pub fn print(
         },
         known: &jumps,
     };
-    let observed_closed =
-        image::observing(facts, call_behavior, memory, control, |observe, control| {
+    let observed_closed = image::observing(
+        facts,
+        call_behavior,
+        oer_analysis_riscv_analysis::TrapSemantics::Unknown,
+        memory,
+        control,
+        |observe, control| {
             let observed = observe(function, &jumps, &tables, &mut work, control)?;
             println!("stack-observation-closed_graph\t{}", observed.closed_graph);
             Ok(observed.closed_graph)
-        })?;
+        },
+    )?;
     let view = ProgramView::new(facts.bytes(), facts.file(), &[], memory, control)?;
     let references =
         PreparedReferences::new(&[], function.section as u32, &RiscvDecoder, memory, control)?;
@@ -150,6 +144,7 @@ pub fn print(
     };
     research_following_tables(
         FunctionInput {
+            traps: oer_analysis_riscv_analysis::TrapSemantics::Unknown,
             image: Some(&view),
             section: function.section as u32,
             extent: CodeRange {

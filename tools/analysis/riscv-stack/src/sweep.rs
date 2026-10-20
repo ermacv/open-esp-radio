@@ -633,10 +633,11 @@ pub(crate) fn transfers(
         if let Some((index, fact)) = fall_through(&instruction, &facts) {
             facts[index as usize] = Some(fact);
         }
-        // Code after an unconditional transfer is reached only by a jump.
+        // Code after a trap or unconditional transfer needs independent facts.
         if matches!(
             instruction,
-            Instruction::Base(Inst::Jal { dest: Reg(0), .. } | Inst::Jalr { .. })
+            Instruction::Unimp
+                | Instruction::Base(Inst::Jal { dest: Reg(0), .. } | Inst::Jalr { .. })
         ) {
             facts = [None; 32];
             loads = [None; 32];

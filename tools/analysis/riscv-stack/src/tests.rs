@@ -3301,3 +3301,6 @@ fn removing_unproven_declaration_exclusion_exposes_an_unresolved_callee() {
     assert_eq!(bound.bytes, None);
     assert!(bound.reached.contains(&named("deep")));
 }
+
+#[path = "trap_semantics_tests.rs"]
+mod trap_semantics_tests;

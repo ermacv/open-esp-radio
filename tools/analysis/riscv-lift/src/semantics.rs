@@ -32,10 +32,11 @@ impl FunctionSemantics for RiscvDecoder {
     }
 
     fn semantic_identity(&self) -> &'static str {
-        "rv32imafc-zicsr-zba-zbb-zbs-zcb-zcmp/values-11/rv-asm-0.2.1"
+        "rv32imafc-zicsr-zba-zbb-zbs-zcb-zcmp/values-12/rv-asm-0.2.1"
     }
     fn lift(&self, bytes: &[u8]) -> SemanticOp {
         let inst = match decode_instruction(bytes) {
+            Some((Instruction::Unimp, _)) => return SemanticOp::None,
             Some((Instruction::Base(inst), _)) => inst,
             Some((Instruction::Extension(extension), _)) => return lift_extension(extension),
             Some((Instruction::Float(float), _)) => return lift_float(float),

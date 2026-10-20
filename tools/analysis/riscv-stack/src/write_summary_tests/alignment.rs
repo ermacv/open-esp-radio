@@ -340,6 +340,7 @@ fn alignment_analysis_and_expansion_release_memory_at_every_cancelled_step() {
         let mut saved = Saved(RecordBuffer::new(memory));
         research_with_options(
             FunctionInput {
+                traps: oer_analysis_riscv_analysis::TrapSemantics::Unknown,
                 image: Some(&NoMemory),
                 section: 1,
                 extent: CodeRange {
