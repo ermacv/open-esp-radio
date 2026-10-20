@@ -7,7 +7,7 @@ use oer_ieee80211_wire::{
     phy::{HtMcs, HtRate, PpduBandwidth},
 };
 use oer_radio_port::{Disabled, Enabled, Ended, Owner, PortBody, run_port};
-use oer_ieee80211_runtime::lower_mac_owner::model::{ModelBackend, ModelResources};
+use oer_ieee80211_model::{ModelBackend, ModelResources};
 
 fn backend(channel: Channel) -> oer_radio_port::Installed<ModelBackend> {
     ModelBackend::new(

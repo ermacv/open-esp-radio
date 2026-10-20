@@ -3,9 +3,12 @@ use oer_ieee80211_port::conformance::{
     self, Class, End, Harness, Operation, Resources, Scenario, Trace,
 };
 
+// A fixture-local installation brand; this harness never creates a core epoch.
+struct InstallBrand<'id>(PhantomData<fn(&'id ()) -> &'id ()>);
+
 // Deliberately neither Copy nor Clone, and branded by the installation.
 struct Context<'id> {
-    epoch: Option<oer_ieee80211_sta::epoch::LinkEpoch<'id>>,
+    epoch: Option<InstallBrand<'id>>,
     operation: Operation,
     resources: Resources,
     dropped: Rc<Cell<usize>>,

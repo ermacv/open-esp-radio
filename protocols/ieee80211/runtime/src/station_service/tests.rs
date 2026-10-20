@@ -40,7 +40,7 @@ use {
 use super::*;
 
 mod contracts;
-use crate::lower_mac_owner::model::{
+use oer_ieee80211_model::{
     AirFrame, MODEL_RX_EVENTS, MODEL_TX_QUEUE_DEPTH, ModelAck, ModelAir, ModelAnyBuffer,
     ModelBackend, ModelCaps24, ModelLarge, ModelPhase, ModelResources, ModelRxMeta, ModelSetup,
     ModelSmall, ModelTypes,
@@ -60,15 +60,12 @@ const RSN: [u8; 22] = [
 
 struct ServiceContexts;
 
-impl crate::lower_mac_owner::model::ModelContext for ServiceContexts {
-    type StationConfigureContext<'id> = oer_ieee80211_sta::machine::StaConfigurationContext<
-        'id,
-        crate::lower_mac_owner::model::ModelPool<4>,
-    >;
+impl oer_ieee80211_model::ModelContext for ServiceContexts {
+    type StationConfigureContext<'id> =
+        oer_ieee80211_sta::machine::StaConfigurationContext<'id, oer_ieee80211_model::ModelPool<4>>;
     type AccessPointConfigureContext<'id> = ();
     type Body = core::convert::Infallible;
-    type Context<'id> =
-        TxContext<'id, ModelCaps24, ModelLarge, crate::lower_mac_owner::model::ModelPool<4>>;
+    type Context<'id> = TxContext<'id, ModelCaps24, ModelLarge, oer_ieee80211_model::ModelPool<4>>;
 }
 
 impl<'id> StationPort<'id> for ModelBackend<ModelCaps24, ServiceContexts> {
@@ -112,11 +109,11 @@ impl<'id> StationPort<'id> for ModelBackend<ModelCaps24, ServiceContexts> {
 // owners. Each test runs on its own thread; normal storage uses its full bound.
 std::thread_local! { static CUSTODY_LIMIT: Cell<Option<usize>> = const { Cell::new(None) }; }
 struct TestTerminalStorage<T> {
-    values: Box<heapless::Deque<T, { crate::lower_mac_owner::model::MODEL_TERMINALS }>>,
+    values: Box<heapless::Deque<T, { oer_ieee80211_model::MODEL_TERMINALS }>>,
     limit: usize,
 }
 impl<T> TerminalStorage<T> for TestTerminalStorage<T> {
-    const CAPACITY: usize = crate::lower_mac_owner::model::MODEL_TERMINALS;
+    const CAPACITY: usize = oer_ieee80211_model::MODEL_TERMINALS;
     fn empty() -> Self {
         Self {
             values: Box::new(heapless::Deque::new()),
@@ -256,7 +253,7 @@ fn group_message1(ptk: &oer_ieee80211_rsn::Ptk, replay: u64, key_id: u8) -> Vec<
     plain.extend_from_slice(&[0xdd, 22, 0x00, 0x0f, 0xac, 0x01, key_id, 0x00]);
     plain.extend_from_slice(&[0x77; 16]);
     plain.extend_from_slice(&[0xdd, 0, 0, 0, 0, 0, 0, 0]);
-    let wrapped = oer_ieee80211_rsn::aes::software_aes128_key_wrap(ptk.kek(), &plain).unwrap();
+    let wrapped = oer_ieee80211_cipher::aes::software_aes128_key_wrap(ptk.kek(), &plain).unwrap();
     let message =
         RsnTxFrame::<512>::group_message1(Akm::Psk, LOCAL, replay, [0; 8], wrapped.as_bytes())
             .unwrap()
@@ -1472,7 +1469,7 @@ fn message3(ptk: &oer_ieee80211_rsn::Ptk) -> Vec<u8> {
     plain.extend_from_slice(&[0xdd, 22, 0x00, 0x0f, 0xac, 0x01, 0x01, 0x00]);
     plain.extend_from_slice(&[0x99; 16]);
     plain.extend_from_slice(&[0xdd, 0]);
-    let wrapped = oer_ieee80211_rsn::aes::software_aes128_key_wrap(ptk.kek(), &plain).unwrap();
+    let wrapped = oer_ieee80211_cipher::aes::software_aes128_key_wrap(ptk.kek(), &plain).unwrap();
     let message3 =
         RsnTxFrame::<512>::message3(Akm::Psk, LOCAL, 2, ANONCE, [0; 8], wrapped.as_bytes())
             .unwrap()
@@ -2442,7 +2439,7 @@ fn negotiated_pmf_checks_received_management_and_keeps_the_tx_key_through_discon
                     plain.extend_from_slice(&[0x77; 16]);
                     plain.extend_from_slice(&[0xdd, 0, 0, 0]);
                     let wrapped =
-                        oer_ieee80211_rsn::aes::software_aes128_key_wrap(ptk.kek(), &plain)
+                        oer_ieee80211_cipher::aes::software_aes128_key_wrap(ptk.kek(), &plain)
                             .unwrap();
                     let m3 = RsnTxFrame::<512>::message3(
                         Akm::Psk,

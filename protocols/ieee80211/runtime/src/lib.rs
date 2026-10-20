@@ -49,43 +49,7 @@
 //! wait or dropping the permit consumes neither a value nor queue capacity;
 //! the receiver may run on another thread.
 //!
-//! The `test-support` feature exposes `lower_mac_owner`, the in-memory backend
-//! for tests of port consumers. Its fixtures run the shared conformance suite
-//! from `oer-ieee80211-port`; this feature enables that suite. The module is absent
-//! from production builds without that feature. The feature build includes
-//! the same bounded continuous RX and terminal fault injection as unit tests.
-//! It requires `alloc`, including on RV32, but only the host test harness
-//! requires `std`.
-#![cfg_attr(
-    not(feature = "test-support"),
-    doc = r"
-```compile_fail,E0432
-use oer_ieee80211_runtime::lower_mac_owner;
-```
-
-Production code uses the station service directly:
-
-```
-use oer_ieee80211_runtime::station_service::StationService;
-```
-
-"
-)]
-#![cfg_attr(
-    feature = "test-support",
-    doc = r"
-With `test-support`, host fixtures can name the backend's capabilities:
-
-```
-use oer_ieee80211_runtime::lower_mac_owner::model::ModelCaps;
-```
-
-"
-)]
-
 pub mod connected_tasks;
-#[cfg(any(test, feature = "test-support"))]
-pub mod lower_mac_owner;
 pub mod monitor;
 pub mod stack_boundary;
 pub mod station_network;
@@ -100,7 +64,3 @@ pub use monitor::{
 
 #[cfg(test)]
 extern crate std;
-
-// The in-memory lower-MAC model allocates its state and events.
-#[cfg(any(test, feature = "test-support"))]
-extern crate alloc;

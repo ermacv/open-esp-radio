@@ -1,5 +1,5 @@
 #![no_std]
-use oer_ieee80211_arbiter::{Arbiter, ArbiterAuthority, ArbiterPolicy};
+use oer_ieee80211_arbiter::{Arbiter, ArbiterPolicy};
 use oer_ieee80211_port::{GateOpen, Ieee80211Capabilities, SupportedChannel};
 use oer_time::Duration;
 
@@ -17,3 +17,5 @@ pub fn construct<'id, K: Ieee80211Capabilities>(
         ArbiterPolicy::DEFAULT.checked(Duration::ZERO).unwrap(), channel, authority, returned_gate, // ui-error: E0382
     );
 }
+
+use oer_ieee80211_port::ArbiterAuthority;

@@ -20,11 +20,8 @@ extern crate std;
 #[cfg(test)]
 mod fuzz;
 
-pub mod aes;
 pub mod akm;
 pub mod bip;
-mod ccm;
-pub mod ccmp_mpdu;
 pub mod element;
 pub mod frames;
 mod kdf;
@@ -43,7 +40,7 @@ pub use akm::RSN_MIC_LEN;
 pub use crypto::{
     AssociationSecurityBinding, PSK_PASSPHRASE_MAX_LEN, PSK_PASSPHRASE_MIN_LEN,
     PSK_PBKDF2_ITERATIONS, PSK_SSID_MAX_LEN, Pmk, PskDerivationError, Ptk, PtkContext, RSN_KCK_LEN,
-    RSN_KEK_LEN, RSN_KEY_DATA_CAPACITY, RSN_PTK_LEN, RSN_UNWRAPPED_KEY_DATA_CAPACITY,
+    RSN_KEK_LEN, RSN_PTK_LEN,
 };
 pub(crate) use crypto::{RsnKeyConfirmationKey, RsnKeyEncryptionKey};
 pub use eapol::{

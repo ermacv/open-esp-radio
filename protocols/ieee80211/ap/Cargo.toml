@@ -8,6 +8,7 @@ repository.workspace = true
 description = "Executor- and chip-independent single-peer Wi-Fi access-point MLME"
 
 [dependencies]
+oer-ieee80211-cipher = { path = "../cipher" }
 oer-ieee80211-upper-mac = { path = "../upper-mac" }
 oer-ieee80211-wire = { path = "../wire" }
 oer-ieee80211-rsn = { path = "../rsn" }

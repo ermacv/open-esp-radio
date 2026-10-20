@@ -2,8 +2,8 @@
 
 use super::*;
 use oer_ieee80211_port::{
-    BandSet, Channel, ChannelWidth, GateIssuer, HardwareServices, LowerMacCapabilities,
-    PhyFormatSet, RateSupport, ReceiveFilter, WidthSet,
+    ArbiterPool, BandSet, Channel, ChannelWidth, GateIssuer, HardwareServices,
+    LowerMacCapabilities, PhyFormatSet, RateSupport, ReceiveFilter, WidthSet,
 };
 use oer_ieee80211_wire::phy::{HeMcs, HtMcs};
 use oer_radio_port::{Mint, branded};

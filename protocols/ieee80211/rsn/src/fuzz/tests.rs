@@ -4,6 +4,11 @@
 //! mutated real frames) and, `#[ignore]`d, with [`FULL`]. The SAE exchange,
 //! a scalar multiplication per accepted commit, runs a tenth as many.
 
+use oer_ieee80211_cipher::aes::software_aes128_key_unwrap;
+
+use oer_ieee80211_cipher::ccmp_mpdu::CcmpAssociation;
+use oer_ieee80211_wire::management_ccmp_vector::management_wire;
+
 use std::vec::Vec;
 
 use oer_ieee80211_wire::{ccmp::GroupKeyId, security::Spp};
@@ -11,9 +16,7 @@ use oer_ieee80211_wire::{ccmp::GroupKeyId, security::Spp};
 use super::*;
 use crate::{
     Akm, EapolKeyFrame, OwnedEapolFrame, Pmk, PtkContext, RsnInterface,
-    aes::software_aes128_key_unwrap,
     bip::{BipReceiver, BipTransmitter},
-    ccmp_mpdu::{CcmpAssociation, test_vector::management_wire},
     element::validate_rsn_element,
     frames::{
         OwnedAssociationSecurityIes, OwnedRsnIe, RsnIgtk,

@@ -5,7 +5,7 @@ use oer_ieee80211_port::{
 };
 use oer_ieee80211_wire::address::IndividualAddress;
 use oer_radio_port::{Disabled, Ended, Owner, PortBody, run_port};
-use oer_ieee80211_runtime::lower_mac_owner::model::{ModelBackend, ModelPool, ModelResources};
+use oer_ieee80211_model::{ModelBackend, ModelPool, ModelResources};
 use oer_radio_port::Child;
 
 fn backend() -> oer_radio_port::Installed<ModelBackend> {

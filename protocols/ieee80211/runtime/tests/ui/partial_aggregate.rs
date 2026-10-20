@@ -1,6 +1,6 @@
 #![no_std]
 use oer_ieee80211_port::{InFlight, PhaseTypes, TxCompleted};
-use oer_ieee80211_runtime::lower_mac_owner::model::{
+use oer_ieee80211_model::{
     ModelAggregateOutcome, ModelSingleOutcome, ModelSubframes, ModelTypes,
 };
 use oer_radio_port::Slot;

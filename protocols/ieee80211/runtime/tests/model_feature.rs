@@ -1,7 +1,4 @@
-//! Exercise the library compiled with `test-support`, without `cfg(test)`.
-//! The package's `open-radio.test-feature-sets` enrolls this target in both
-//! the changed-package gate and the full CI feature-set check.
-#![cfg(feature = "test-support")]
+//! Exercise the standalone model library without its unit-test cfg.
 #![deny(
     clippy::let_underscore_must_use,
     clippy::let_underscore_untyped,
@@ -36,15 +33,15 @@ use core::{future::Future, num::NonZeroU8, task::Poll};
 use oer_ieee80211_wire::frame::FrameControl;
 use std::{rc::Rc, task::Waker};
 
+use oer_ieee80211_model::{
+    MODEL_RX_EVENTS, ModelAir, ModelAnyBuffer, ModelBackend, ModelLarge, ModelResources,
+    ModelRxMeta, ModelSmall, ModelTypes,
+};
 use oer_ieee80211_port::{
     AckHeader, Attempt, Channel, ChannelWidth, ClassFrame, HeaderSpec, InterfacePhase,
     LowerMacEvent, LowerMacPhase, LowerMacTerminal, MpduLength, Protection, RetryPlan, RetryStage,
     RxBuffer, SizedFrame, Station, SupportedPower, TxBufferPool, TxCompleted, TxFrame, TxOperation,
     TxPower, TxProtection, TxSource,
-};
-use oer_ieee80211_runtime::lower_mac_owner::model::{
-    MODEL_RX_EVENTS, ModelAir, ModelAnyBuffer, ModelBackend, ModelLarge, ModelResources,
-    ModelRxMeta, ModelSmall, ModelTypes,
 };
 use oer_ieee80211_wire::{
     address::IndividualAddress,
@@ -155,8 +152,8 @@ impl PortBody<ModelBackend> for ReceiveLoss {
         resources: ModelResources<'id>,
     ) -> Ended<'id, ModelBackend, ()> {
         use embassy_futures::yield_now;
+        use oer_ieee80211_model::MODEL_EVENTS;
         use oer_ieee80211_port::{StationPhase, StationReceive};
-        use oer_ieee80211_runtime::lower_mac_owner::model::MODEL_EVENTS;
         use oer_radio_port::EventsLost;
 
         let mut owner = owner.enable().await.ok().unwrap();

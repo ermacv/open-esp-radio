@@ -1,6 +1,7 @@
 //! Bounded multi-peer AP MLME and security ownership.
 
 use core::fmt;
+use oer_ieee80211_cipher::aes::{SoftwareAesKeyWrapError, software_aes128_key_wrap};
 use oer_ieee80211_wire::security::spp::SppScope;
 use oer_ieee80211_wire::sequence::SequenceNumber;
 
@@ -28,7 +29,6 @@ use oer_ieee80211_wire::ap::{ApAssociationSecurityObservation, ApPowerSaveObserv
 use crate::pmksa::{AP_PMKID_LEN, ApPmksa, ApPmksaCache};
 use oer_ieee80211_rsn::{
     AssociationSecurityBinding, OwnedEapolFrame, Pmk, Ptk, PtkContext,
-    aes::{SoftwareAesKeyWrapError, software_aes128_key_wrap},
     element::{ValidatedRsnElement, validate_rsn_element},
     frames::{
         OwnedAssociationSecurityIes, RSN_PLAIN_KEY_DATA_CAPACITY, RsnFrameError, RsnGtk, RsnIgtk,

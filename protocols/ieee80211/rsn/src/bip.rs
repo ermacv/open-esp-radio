@@ -18,38 +18,9 @@
     clippy::arithmetic_side_effects
 )]
 
-use aes::Aes128;
-use cmac::{Cmac, Mac, digest::KeyInit};
-use zeroize::{Zeroize, ZeroizeOnDrop};
-
 use crate::frames::{RSN_IGTK_LEN, RSN_IPN_LEN, RsnIgtk};
-
-/// Management MIC element identifier.
-pub const MANAGEMENT_MIC_ELEMENT_ID: u8 = 76;
-/// Management MIC element body of BIP-CMAC-128: key id, IPN and MIC.
-const MANAGEMENT_MIC_BODY_LEN: usize = 2 + RSN_IPN_LEN + BIP_MIC_LEN;
-/// Management MIC element of BIP-CMAC-128, closing a protected group frame.
-pub const MANAGEMENT_MIC_ELEMENT_LEN: usize = 2 + MANAGEMENT_MIC_BODY_LEN;
-const BIP_MIC_LEN: usize = 8;
-/// Frame Control flags BIP leaves out of its additional authentication data:
-/// Retry, Power Management and More Data.
-const AAD_MASKED_FLAGS: u8 = 0x08 | 0x10 | 0x20;
-const MANAGEMENT_HEADER_LEN: usize = 24;
-
-/// Why a group-addressed management frame failed BIP.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum BipError {
-    /// The frame is shorter than a management header and its MIC element.
-    Truncated,
-    /// The frame does not end with a BIP-CMAC-128 Management MIC element.
-    MissingManagementMic,
-    /// The MIC element names another IGTK.
-    UnknownKeyId,
-    /// The IPN does not exceed the last accepted one.
-    Replay,
-    /// The MIC does not verify.
-    InvalidMic,
-}
+use oer_ieee80211_cipher::bip::{self, BipError, BipFrame};
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 /// The receive state of one IGTK: its key and the last accepted IPN.
 #[derive(Zeroize, ZeroizeOnDrop)]
@@ -90,55 +61,15 @@ impl BipReceiver {
     /// Frame Control field to the end of its body, and advance the replay
     /// state when it verifies.
     pub fn verify(&mut self, frame: &[u8]) -> Result<(), BipError> {
-        let Some((header, rest)) = frame.split_first_chunk::<MANAGEMENT_HEADER_LEN>() else {
-            return Err(BipError::Truncated);
-        };
-        let Some((body, mme)) = rest.split_last_chunk::<MANAGEMENT_MIC_ELEMENT_LEN>() else {
-            return Err(BipError::Truncated);
-        };
-        let Some((&[id, length, key_low, key_high], fields)) = mme.split_first_chunk::<4>() else {
-            return Err(BipError::Truncated);
-        };
-        if id != MANAGEMENT_MIC_ELEMENT_ID || usize::from(length) != MANAGEMENT_MIC_BODY_LEN {
-            return Err(BipError::MissingManagementMic);
-        }
-        if u16::from_le_bytes([key_low, key_high]) != u16::from(self.key_id) {
-            return Err(BipError::UnknownKeyId);
-        }
-        let Some((&ipn, mic)) = fields.split_first_chunk::<RSN_IPN_LEN>() else {
-            return Err(BipError::Truncated);
-        };
-        let Some(mme_before_mic) = mme.get(..4 + RSN_IPN_LEN) else {
-            return Err(BipError::Truncated);
-        };
-        let received = packet_number(ipn);
+        let frame = BipFrame::parse(frame, self.key_id)?;
+        let received = frame.packet_number();
         if received <= self.last_packet_number {
             return Err(BipError::Replay);
         }
-        let mut mac = cmac(&self.key);
-        update_aad(&mut mac, header);
-        mac.update(body);
-        mac.update(mme_before_mic);
-        mac.update(&[0; BIP_MIC_LEN]);
-        mac.verify_truncated_left(mic)
-            .map_err(|_| BipError::InvalidMic)?;
+        frame.verify(&self.key)?;
         self.last_packet_number = received;
         Ok(())
     }
-}
-
-/// AES-128-CMAC over a 16-byte IGTK.
-fn cmac(key: &[u8; RSN_IGTK_LEN]) -> Cmac<Aes128> {
-    <Cmac<Aes128> as KeyInit>::new(&(*key).into())
-}
-
-/// The BIP additional authentication data of a management header: frame
-/// control with Retry, Power Management and More Data masked, and the
-/// three addresses; duration and sequence control are left out.
-fn update_aad(mac: &mut Cmac<Aes128>, header: &[u8; MANAGEMENT_HEADER_LEN]) {
-    let [frame_control, flags, _, _, addresses @ .., _, _] = header;
-    mac.update(&[*frame_control, flags & !AAD_MASKED_FLAGS]);
-    mac.update(addresses);
 }
 
 #[derive(Zeroize, ZeroizeOnDrop)]
@@ -166,45 +97,14 @@ impl BipTransmitter {
     }
 
     pub fn protect(&mut self, frame: &mut [u8], length: usize) -> Option<usize> {
-        let protected = length.checked_add(MANAGEMENT_MIC_ELEMENT_LEN)?;
-        if length < MANAGEMENT_HEADER_LEN || self.next_packet_number >= (1_u64 << 48) {
-            return None;
-        }
-        let (frame, _) = frame.split_at_mut_checked(protected)?;
-        let (header, rest) = frame.split_first_chunk_mut::<MANAGEMENT_HEADER_LEN>()?;
-        let (body, mme) = rest.split_last_chunk_mut::<MANAGEMENT_MIC_ELEMENT_LEN>()?;
-        let [k0, k1] = u16::from(self.key_id).to_le_bytes();
-        let [i0, i1, i2, i3, i4, i5] = ipn_bytes(self.next_packet_number);
+        let protected = bip::protect(
+            self.key_id,
+            &self.key,
+            self.next_packet_number,
+            frame,
+            length,
+        )?;
         self.next_packet_number = self.next_packet_number.wrapping_add(1);
-        *mme = [
-            MANAGEMENT_MIC_ELEMENT_ID,
-            MANAGEMENT_MIC_BODY_LEN as u8,
-            k0,
-            k1,
-            i0,
-            i1,
-            i2,
-            i3,
-            i4,
-            i5,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-        ];
-        let mut mac = cmac(&self.key);
-        update_aad(&mut mac, header);
-        mac.update(body);
-        mac.update(mme.as_slice());
-        let tag = mac.finalize().into_bytes();
-        let (_, mic) = mme.split_last_chunk_mut::<BIP_MIC_LEN>()?;
-        for (out, byte) in mic.iter_mut().zip(tag) {
-            *out = byte;
-        }
         Some(protected)
     }
 }

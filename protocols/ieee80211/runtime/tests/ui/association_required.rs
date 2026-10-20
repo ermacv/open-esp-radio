@@ -2,7 +2,7 @@
 use oer_ieee80211_wire::ccmp::Ccmp128Key;
 use oer_ieee80211_port::{InterfacePhase, KeyTypes, LowerMacPhase, Station};
 use oer_ieee80211_wire::address::IndividualAddress;
-use oer_ieee80211_runtime::lower_mac_owner::model::{ModelAssociation, ModelKeys, ModelPhase};
+use oer_ieee80211_model::{ModelAssociation, ModelKeys, ModelPhase};
 pub fn key<'p, 'id: 'p>(
     phase: &mut ModelPhase<'p, 'id>,
     association: ModelAssociation<'id, Station>,

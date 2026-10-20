@@ -214,7 +214,7 @@ impl Work for WirePeer {
             assert_eq!(
                 result,
                 Err(ModelCcmpError::Authentication(
-                    oer_ieee80211_rsn::ccmp_mpdu::CcmpMpduError::InvalidMic
+                    oer_ieee80211_cipher::ccmp_mpdu::CcmpMpduError::InvalidMic
                 ))
             );
             assert!(phase.held.air.rx.borrow().is_empty());

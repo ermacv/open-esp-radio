@@ -1,6 +1,11 @@
 use super::*;
+use oer_ieee80211_cipher::ccmp_mpdu::CcmpAssociation;
+use oer_ieee80211_wire::{ccmp::CCMP_HEADER_LEN, security::Spp};
 
-use crate::ccmp_mpdu::test_vector::{MANAGEMENT_BODY, management_wire as frame};
+const HEADER_LEN: usize = 24;
+const MIC_LEN: usize = 8;
+
+use oer_ieee80211_wire::management_ccmp_vector::{MANAGEMENT_BODY, management_wire as frame};
 
 fn receiver() -> ManagementCcmpReceiver {
     ManagementCcmpReceiver::new(&core::array::from_fn(|index| index as u8))
@@ -88,4 +93,29 @@ fn data_and_reserved_ccmp_headers_never_reach_management_replay() {
         Err(ManagementCcmpError::InvalidCcmpHeader)
     );
     assert!(ccmp.open(&mut frame()).is_ok());
+}
+
+fn mode(spp: bool) -> CcmpAssociation {
+    CcmpAssociation::new(if spp {
+        Spp::Negotiated
+    } else {
+        Spp::NotNegotiated
+    })
+}
+fn key() -> [u8; 16] {
+    core::array::from_fn(|i| i as u8)
+}
+
+#[test]
+fn management_wire_vector_matches_the_replay_receiver_in_both_spp_modes() {
+    use oer_ieee80211_wire::management_ccmp_vector::{MANAGEMENT_BODY, management_wire};
+    for spp in [false, true] {
+        let wire = management_wire();
+        let mut mpdu = wire.clone();
+        assert_eq!(mode(spp).open(&key(), &mut mpdu).unwrap(), MANAGEMENT_BODY);
+        mode(spp).seal(&key(), &mut mpdu).unwrap();
+        assert_eq!(mpdu, wire);
+        let mut receiver = crate::management_ccmp::ManagementCcmpReceiver::new(&key());
+        assert_eq!(receiver.open(&mut mpdu).unwrap(), MANAGEMENT_BODY);
+    }
 }

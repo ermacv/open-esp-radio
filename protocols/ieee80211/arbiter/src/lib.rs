@@ -169,8 +169,8 @@ pub mod coordinator;
 use core::{fmt::Debug, marker::PhantomData};
 
 use oer_ieee80211_port::{
-    AirReservationPhase, GateClosed, GateOpen, Ieee80211Capabilities, Ieee80211Instant,
-    LowerMacPhase, PhaseTypes, SupportedChannel,
+    AirReservationPhase, ArbiterAuthority, GateClosed, GateOpen, Ieee80211Capabilities,
+    Ieee80211Instant, LowerMacPhase, PhaseTypes, SupportedChannel,
 };
 use oer_ieee80211_wire::channel_switch::ChannelSwitchMode;
 use oer_radio_port::{PoolPath, Root};
@@ -186,34 +186,6 @@ use coordinator::{
 pub const MAX_RESERVATION: Duration = Duration::from_micros(32_767);
 
 type Brand<'id, Path> = PhantomData<fn(&'id (), Path) -> (&'id (), Path)>;
-
-/// One gate and its arbiter's unique construction authority.
-///
-/// The installation's mint builds this component once. Returning a gate
-/// after a cycle does not mint another arbiter or another pair of lease places.
-pub struct ArbiterPool;
-
-impl oer_radio_port::PoolSet for ArbiterPool {
-    type Pools<'id, Path: PoolPath> = (
-        oer_ieee80211_port::GateOpen<'id, Path>,
-        oer_ieee80211_port::GateIssuer<'id, Path>,
-        ArbiterAuthority<'id, Path>,
-    );
-
-    fn build<'id, Path: PoolPath>(
-        builder: oer_radio_port::PoolBuilder<'id, Path>,
-    ) -> Self::Pools<'id, Path> {
-        let (open, issuer) = builder.into_pools::<oer_ieee80211_port::GatePool>();
-        (open, issuer, ArbiterAuthority { brand: PhantomData })
-    }
-}
-
-/// The sole right to construct the arbiter of this installation's gate.
-#[derive(Debug)]
-#[must_use = "construct the arbiter exactly once with its initial gate"]
-pub struct ArbiterAuthority<'id, Path: PoolPath = Root> {
-    brand: Brand<'id, Path>,
-}
 
 /// The name of one lease.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1298,7 +1270,7 @@ impl<'id, K: Ieee80211Capabilities, R: ReservationMode, Path: PoolPath> Arbiter<
     pub fn new(
         policy: CheckedArbiterPolicy<R>,
         channel: SupportedChannel<K>,
-        authority: ArbiterAuthority<'id, Path>,
+        _authority: ArbiterAuthority<'id, Path>,
         gate: GateOpen<'id, Path>,
     ) -> (Self, LeasePlace<'id, Path>, AbsencePlace<'id, Path>) {
         let CheckedArbiterPolicy {
@@ -1306,7 +1278,6 @@ impl<'id, K: Ieee80211Capabilities, R: ReservationMode, Path: PoolPath> Arbiter<
             publication_bound,
             mode: _,
         } = policy;
-        let ArbiterAuthority { brand: _ } = authority;
         (
             Self {
                 policy,

@@ -265,14 +265,20 @@ fn the_boundary_is_named_by_package_or_domain() {
 }
 
 #[test]
-fn ieee80211_chip_backends_do_not_link_core_or_profile_implementations() {
+fn ieee80211_backends_do_not_link_core_or_profile_implementations() {
     let root = root();
     let forbidden = [
+        "oer-ieee80211-rsn",
+        "oer-ieee80211-sta",
+        "oer-ieee80211-ap",
+        "oer-ieee80211-arbiter",
+        "oer-ieee80211-runtime",
         "oer-ieee80211-upper-mac",
         "oer-ieee80211-softmac",
         "oer-espressif-ieee80211-policy",
     ];
     for package in [
+        "protocols/ieee80211/model",
         "chips/esp32s31/ieee80211/driver",
         "chips/esp32s31/ieee80211/mac",
     ] {
