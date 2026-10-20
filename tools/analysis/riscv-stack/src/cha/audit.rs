@@ -5,7 +5,7 @@ use crate::Analysis;
 use oer_analysis_elf::rv32::Role;
 use oer_analysis_riscv_lift::{RiscvDecoder, is_base_instruction};
 use oer_analysis_riscv_model::*;
-use oer_analysis_riscv_program::facts::ImageFacts;
+use oer_analysis_riscv_program::facts::{ImageFacts, addresses::TargetValue};
 use std::collections::{BTreeMap, BTreeSet};
 
 /// The missing proof for one address use. These are analysis outcomes, not
@@ -23,6 +23,10 @@ pub enum UnknownUse {
     EscapedValue,
     IncompleteLifetime,
     NoStorage,
+    InvalidPcRelativePair,
+    UnresolvedTarget,
+    RegisterClobbered,
+    IncomingPath,
 }
 
 impl UnknownUse {
@@ -32,7 +36,9 @@ impl UnknownUse {
             Self::NonExactAddress => "exact entry value without addend, odd bit or interior offset",
             Self::UnsupportedRelocation => "semantics of the address relocation",
             Self::MissingStorageType => "one typed function-pointer field at the static word",
-            Self::UnpairedMaterialization => "adjacent absolute HI20/LO12 pair in one section",
+            Self::UnpairedMaterialization => {
+                "a proven materialization pair (absolute HI20/LO12 pairs require adjacency)"
+            }
             Self::ForeignCode => "instruction owner in the address use's ELF",
             Self::UnsupportedMaterialization => "exact address in the same destination register",
             Self::ControlFlow => "all uses across the control-flow boundary",
@@ -40,6 +46,14 @@ impl UnknownUse {
             Self::EscapedValue => "type-preserving destination of the register read",
             Self::IncompleteLifetime => "all reads through the end of the register's lifetime",
             Self::NoStorage => "at least one proven typed storage use",
+            Self::InvalidPcRelativePair => {
+                "one known HI20 selected by the low label's section and identity"
+            }
+            Self::UnresolvedTarget => "resolved RV32 target of the normalized materialization",
+            Self::RegisterClobbered => "the AUIPC value reaches ADDI without a base-register write",
+            Self::IncomingPath => {
+                "every incoming path executes the materialization before this use"
+            }
         }
     }
 }
@@ -57,6 +71,33 @@ pub enum StorageEvidence {
 pub struct AddressUseAudit {
     pub index: usize,
     pub evidence: StorageEvidence,
+    /// Concrete stores encountered before the proof completed or failed.
+    pub stores: Vec<TypedStore>,
+    /// The use/instruction at which a proof stopped being known.
+    pub barrier: Option<u32>,
+}
+
+/// A typed word store observed in the materialized register's lifetime.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct TypedStore {
+    pub site: u32,
+    pub base: u8,
+    pub displacement: i32,
+    pub field: super::FunctionPointerType,
+}
+
+/// The normalizer's result for every original PC-relative low, including
+/// pairs whose actual target is data rather than a function. All indexes
+/// refer to this audit's original ImageFacts observations.
+#[derive(Debug)]
+pub struct PcRelativeUse {
+    pub low: usize,
+    pub high: Option<usize>,
+    pub target: Option<u32>,
+    pub functions: BTreeSet<u32>,
+    /// No inferred callback owner exists when a pair/target is unknown.
+    /// Such a use conservatively prevents type exclusion for the image.
+    pub unknown: Option<UnknownUse>,
 }
 
 /// Prepared once for both resolvers and diagnostics. Borrowing the image,
@@ -67,6 +108,7 @@ pub struct FunctionPointerAudit<'a, 'elf> {
     pub(super) types: &'a TypeFacts,
     pub(super) locations: Locations,
     pub(super) uses: BTreeMap<u32, Vec<AddressUseAudit>>,
+    pc_relative: Vec<PcRelativeUse>,
 }
 
 #[derive(Clone, Copy)]
@@ -87,6 +129,10 @@ impl FunctionPointerAudit<'_, '_> {
             .map(|(&function, uses)| (function, uses.as_slice()))
     }
 
+    pub fn pc_relative_uses(&self) -> &[PcRelativeUse] {
+        &self.pc_relative
+    }
+
     pub(super) fn owns(&self, entry: u32) -> bool {
         self.image
             .functions()
@@ -103,6 +149,16 @@ impl FunctionPointerAudit<'_, '_> {
         control: &mut dyn RunControl,
     ) -> Result<BTreeSet<u32>> {
         let mut targets = BTreeSet::new();
+        let unbound = self.pc_relative.iter().any(|use_| use_.unknown.is_some());
+        if unbound {
+            // An orphan/unresolved pair has no callback target to attach its
+            // uncertainty to. No function in the joint catalog may be excluded.
+            for &function in self.analysis.functions.keys() {
+                control.checkpoint(1)?;
+                keep.add(&mut targets, function, control)?;
+            }
+            return Ok(targets);
+        }
         for (&function, uses) in &self.uses {
             control.checkpoint(1)?;
             let mut possible = uses.is_empty();
@@ -158,16 +214,100 @@ pub fn audit_function_addresses<'a, 'elf>(
         }
     }
     let mut scratch = Ledger::new(keep.memory(), control)?;
-    let mut locations = Locations {
-        aliases: BTreeMap::new(),
-    };
-    if types.locations.is_some() {
-        locations.read_aliases(image, keep, control)?;
-    }
+    let mut locations = Locations::default();
+    locations.read_aliases(image, keep, control)?;
     let mut uses = BTreeMap::new();
+    let mut pc_relative = Vec::new();
+    let mut paired_highs = BTreeSet::new();
+    super::references::visit(
+        image,
+        keep.memory(),
+        control,
+        &mut |low, high, normalized, control| {
+            let low_index = low.index as usize;
+            let mut observation = PcRelativeUse {
+                low: low_index,
+                high: high.map(|high| high.index as usize),
+                target: None,
+                functions: BTreeSet::new(),
+                unknown: None,
+            };
+            if let Some(high) = high {
+                let high_index = high.index as usize;
+                scratch.add(&mut paired_highs, high_index, control)?;
+                let original = &image.address_uses()[high_index];
+                let normalized_value = normalized
+                    .addend
+                    .map(|addend| normalized.target.offset.wrapping_add_signed(addend));
+                if let TargetValue::Resolved(value) = original.value
+                    && normalized_value == Some(value)
+                    && let Ok(target) = u32::try_from(value)
+                {
+                    observation.target = Some(target);
+                    if let Some(projected) = crate::relocations::function_use(
+                        original,
+                        analysis,
+                        crate::relocations::FunctionUsePolicy::TypedStorage,
+                    )? {
+                        for function in [projected.function, projected.containing]
+                            .into_iter()
+                            .flatten()
+                        {
+                            keep.add(&mut observation.functions, function, control)?;
+                        }
+                        for &function in &observation.functions {
+                            let high_use = AddressUse {
+                                index: high_index,
+                                site: original.relocation.at as u32,
+                                section: original.relocation.section,
+                                role: original.role,
+                                exact: projected.exact && projected.function == Some(function),
+                            };
+                            let low_use = AddressUse {
+                                index: low_index,
+                                site: low.offset as u32,
+                                section: low.section as usize,
+                                role: Role::PcRelativeLow,
+                                exact: high_use.exact,
+                            };
+                            let proof = if high_use.exact {
+                                code_use(
+                                    image,
+                                    analysis,
+                                    types,
+                                    &locations,
+                                    function,
+                                    high_use,
+                                    low_use,
+                                    Some(low),
+                                    &mut scratch,
+                                    control,
+                                )?
+                            } else {
+                                Proof::unknown(UnknownUse::NonExactAddress, high_use.site)
+                            };
+                            record(&mut uses, function, high_index, &proof, true, keep, control)?;
+                            record(&mut uses, function, low_index, &proof, false, keep, control)?;
+                        }
+                    }
+                } else {
+                    observation.unknown = Some(UnknownUse::UnresolvedTarget);
+                }
+            } else {
+                observation.unknown = Some(UnknownUse::InvalidPcRelativePair);
+            }
+            keep.push(&mut pc_relative, observation, control)?;
+            Ok(())
+        },
+    )?;
     let mut entries: BTreeMap<u32, Vec<AddressUse>> = BTreeMap::new();
     for (index, address_use) in image.address_uses().iter().enumerate() {
         control.checkpoint(1)?;
+        // LO12 names the AUIPC label, not a callback. Paired high uses
+        // were already audited through the normalizer's actual target.
+        if address_use.role == Role::PcRelativeLow || paired_highs.contains(&index) {
+            continue;
+        }
         // Keep taken functions even when the storage projection has no fact.
         if let Some(function) = crate::relocations::taken_address(address_use)
             && analysis.functions.contains_key(&function)
@@ -206,7 +346,6 @@ pub fn audit_function_addresses<'a, 'elf>(
     }
     for (function, mut entries) in entries {
         entries.sort_by_key(|entry| (entry.section, entry.site));
-        let results = keep.entry(&mut uses, function, Vec::new, control)?;
         let mut at = 0;
         while let Some(entry) = entries.get(at).copied() {
             control.checkpoint(1)?;
@@ -217,12 +356,15 @@ pub fn audit_function_addresses<'a, 'elf>(
                     && low.site == entry.site + 4
             });
             let proof = if !entry.exact || low.is_some_and(|low| !low.exact) {
-                Err(UnknownUse::NonExactAddress)
+                Proof::unknown(UnknownUse::NonExactAddress, entry.site)
             } else if entry.role == Role::Word {
-                types
-                    .field(entry.site)
-                    .map(|field| BTreeSet::from([field]))
-                    .ok_or(UnknownUse::MissingStorageType)
+                match types.field(entry.site) {
+                    Some(field) => Proof {
+                        fields: BTreeSet::from([field]),
+                        ..Proof::default()
+                    },
+                    None => Proof::unknown(UnknownUse::MissingStorageType, entry.site),
+                }
             } else if let Some(low) = low {
                 code_use(
                     image,
@@ -232,33 +374,23 @@ pub fn audit_function_addresses<'a, 'elf>(
                     function,
                     entry,
                     low,
+                    None,
                     &mut scratch,
                     control,
                 )?
             } else if entry.role == Role::Other {
-                Err(UnknownUse::UnsupportedRelocation)
+                Proof::unknown(UnknownUse::UnsupportedRelocation, entry.site)
             } else {
-                Err(UnknownUse::UnpairedMaterialization)
+                Proof::unknown(UnknownUse::UnpairedMaterialization, entry.site)
             };
-            // A materialization's two relocations each retain their outcome.
             for entry in std::iter::once(entry).chain(low) {
-                let evidence = match &proof {
-                    Ok(fields) if !fields.is_empty() => {
-                        let mut stored = BTreeSet::new();
-                        for &field in fields {
-                            keep.add(&mut stored, field, control)?;
-                        }
-                        StorageEvidence::Typed(stored)
-                    }
-                    Ok(_) => StorageEvidence::Unknown(UnknownUse::NoStorage),
-                    Err(reason) => StorageEvidence::Unknown(*reason),
-                };
-                keep.push(
-                    results,
-                    AddressUseAudit {
-                        index: entry.index,
-                        evidence,
-                    },
+                record(
+                    &mut uses,
+                    function,
+                    entry.index,
+                    &proof,
+                    false,
+                    keep,
                     control,
                 )?;
             }
@@ -271,11 +403,91 @@ pub fn audit_function_addresses<'a, 'elf>(
         types,
         locations,
         uses,
+        pc_relative,
     })
 }
 
-/// Existing deliberately small straight-line HI20/LO12 proof. Every read
-/// must be a word store to a typed local field before the register is killed.
+#[derive(Default)]
+struct Proof {
+    fields: BTreeSet<Field>,
+    reason: Option<UnknownUse>,
+    stores: Vec<TypedStore>,
+    barrier: Option<u32>,
+}
+
+impl Proof {
+    fn unknown(reason: UnknownUse, site: u32) -> Self {
+        Self::default().stop(reason, site)
+    }
+    fn stop(mut self, reason: UnknownUse, site: u32) -> Self {
+        self.reason = Some(reason);
+        self.barrier = Some(site);
+        self
+    }
+}
+
+fn record(
+    uses: &mut BTreeMap<u32, Vec<AddressUseAudit>>,
+    function: u32,
+    index: usize,
+    proof: &Proof,
+    merge_high: bool,
+    keep: &mut Ledger<'_>,
+    control: &mut dyn RunControl,
+) -> Result<()> {
+    let records = keep.entry(uses, function, Vec::new, control)?;
+    let reason = proof
+        .reason
+        .or_else(|| proof.fields.is_empty().then_some(UnknownUse::NoStorage));
+    // A high relocation can feed multiple lows. Retain it once, and never
+    // let a successful low erase an unknown read of the same high value.
+    let mut at = None;
+    if merge_high {
+        for (position, entry) in records.iter().enumerate() {
+            control.checkpoint(1)?;
+            if entry.index == index {
+                at = Some(position);
+                break;
+            }
+        }
+    }
+    let entry = if let Some(at) = at {
+        &mut records[at]
+    } else {
+        keep.push(
+            records,
+            AddressUseAudit {
+                index,
+                evidence: StorageEvidence::Typed(BTreeSet::new()),
+                stores: Vec::new(),
+                barrier: None,
+            },
+            control,
+        )?;
+        records.last_mut().unwrap()
+    };
+    if let Some(reason) = reason {
+        if !matches!(entry.evidence, StorageEvidence::Unknown(_)) {
+            entry.evidence = StorageEvidence::Unknown(reason);
+            entry.barrier = proof.barrier;
+        }
+    } else if let StorageEvidence::Typed(fields) = &mut entry.evidence {
+        for &field in &proof.fields {
+            keep.add(fields, field, control)?;
+        }
+    }
+    for &store in &proof.stores {
+        if !entry.stores.contains(&store) {
+            keep.push(&mut entry.stores, store, control)?;
+        }
+    }
+    Ok(())
+}
+
+/// The same deliberately small proof for absolute and PC-relative address
+/// materializations. Pair identity and base-register provenance are separate:
+/// each instruction on the straight-line path must preserve the upper value,
+/// and no other incoming path may bypass it or enter its subsequent lifetime.
 #[allow(clippy::too_many_arguments)]
 fn code_use(
     image: &ImageFacts<'_>,
@@ -285,72 +497,140 @@ fn code_use(
     function: u32,
     high: AddressUse,
     low: AddressUse,
+    low_reference: Option<&FunctionRelocation>,
     keep: &mut Ledger<'_>,
     control: &mut dyn RunControl,
-) -> Result<std::result::Result<BTreeSet<Field>, UnknownUse>> {
-    let Some((_, owner)) = analysis.functions.range(..=high.site).next_back() else {
-        return Ok(Err(UnknownUse::ForeignCode));
+) -> Result<Proof> {
+    let mut proof = Proof::default();
+    macro_rules! unknown {
+        ($reason:ident, $site:expr) => {
+            return Ok(proof.stop(UnknownUse::$reason, $site))
+        };
+    }
+    let Some((_, facts)) = analysis.functions.range(..=high.site).next_back() else {
+        unknown!(ForeignCode, high.site);
     };
     let Ok(local) = image
         .functions()
-        .binary_search_by_key(&owner.function.address, |function| function.address)
+        .binary_search_by_key(&facts.function.address, |f| f.address)
     else {
-        return Ok(Err(UnknownUse::ForeignCode));
+        unknown!(ForeignCode, high.site);
     };
     let owner = &image.functions()[local];
-    if owner.section != high.section {
-        return Ok(Err(UnknownUse::ForeignCode));
+    if owner.section != high.section || low.section != high.section {
+        unknown!(ForeignCode, low.site);
     }
+    if let Some(&site) = locations.unclosed.get(&(owner.section, owner.address)) {
+        unknown!(ControlFlow, site);
+    }
+    let incoming = |site| {
+        locations.entries.contains(&(owner.section, site))
+            || image
+                .functions()
+                .binary_search_by_key(&site, |f| f.address)
+                .is_ok()
+    };
     let code = crate::image::function_bytes(image.file(), owner)?;
-    let at = high.site.wrapping_sub(owner.address) as usize;
-    let Some(bytes) = code.get(at..) else {
-        return Ok(Err(UnknownUse::UnsupportedMaterialization));
+    let bytes_at = |site: u32| code.get(site.wrapping_sub(owner.address) as usize..);
+    let Some(bytes) = bytes_at(high.site) else {
+        unknown!(UnsupportedMaterialization, high.site);
     };
     let Some(first) = RiscvDecoder.decode(bytes) else {
-        return Ok(Err(UnknownUse::UnsupportedMaterialization));
+        unknown!(UnsupportedMaterialization, high.site);
     };
     let SemanticOp::Upper {
         dest: high_register,
         value,
-        pc_relative: false,
+        pc_relative,
     } = RiscvDecoder.lift(bytes)
     else {
-        return Ok(Err(UnknownUse::UnsupportedMaterialization));
+        unknown!(UnsupportedMaterialization, high.site);
     };
-    if first.length != 4 {
-        return Ok(Err(UnknownUse::UnsupportedMaterialization));
+    if first.length != 4 || high_register == 0 || pc_relative != (high.role == Role::PcRelativeHigh)
+    {
+        unknown!(UnsupportedMaterialization, high.site);
     }
-    let Some(bytes) = code.get(at + 4..) else {
-        return Ok(Err(UnknownUse::UnsupportedMaterialization));
+    let mut site = high.site + 4;
+    if site > low.site {
+        unknown!(UnsupportedMaterialization, low.site);
+    }
+    while site < low.site {
+        control.checkpoint(1)?;
+        if incoming(site) {
+            unknown!(IncomingPath, site);
+        }
+        let Some(bytes) = bytes_at(site) else {
+            unknown!(UnsupportedMaterialization, site);
+        };
+        let Some(decoded) = RiscvDecoder.decode(bytes) else {
+            unknown!(UnsupportedMaterialization, site);
+        };
+        if !is_base_instruction(bytes) || site + u32::from(decoded.length) > low.site {
+            unknown!(UnsupportedMaterialization, site);
+        }
+        if decoded.flow != InstructionFlow::Next {
+            unknown!(ControlFlow, site);
+        }
+        let op = RiscvDecoder.lift(bytes);
+        if op.destination_register() == Some(high_register) {
+            unknown!(RegisterClobbered, site);
+        }
+        if op.reads_register(high_register) {
+            unknown!(EscapedValue, site);
+        }
+        site += u32::from(decoded.length);
+    }
+    if incoming(low.site) {
+        unknown!(IncomingPath, low.site);
+    }
+    let Some(bytes) = bytes_at(low.site) else {
+        unknown!(UnsupportedMaterialization, low.site);
     };
     let Some(second) = RiscvDecoder.decode(bytes) else {
-        return Ok(Err(UnknownUse::UnsupportedMaterialization));
+        unknown!(UnsupportedMaterialization, low.site);
     };
+    let op = RiscvDecoder.lift(bytes);
+    if pc_relative
+        && low_reference.is_none_or(|reference| {
+            RiscvDecoder.value_relocation(reference, op) != ValueRelocation::LowerPcRelative
+        })
+    {
+        unknown!(UnsupportedMaterialization, low.site);
+    }
     let SemanticOp::Integer {
         op: IntegerOp::Add,
         dest: register,
         left: Operand::Register(base),
         right: Operand::Immediate(immediate),
-    } = RiscvDecoder.lift(bytes)
+    } = op
     else {
-        return Ok(Err(UnknownUse::UnsupportedMaterialization));
+        unknown!(UnsupportedMaterialization, low.site);
+    };
+    let upper = if pc_relative {
+        value.wrapping_add(high.site)
+    } else {
+        value
     };
     if base != high_register
         || register != high_register
-        || register == 0
-        || value.wrapping_add(immediate) != function
+        || upper.wrapping_add(immediate) != function
     {
-        return Ok(Err(UnknownUse::UnsupportedMaterialization));
+        unknown!(UnsupportedMaterialization, low.site);
     }
-    let mut site = low.site + u32::from(second.length);
-    let mut fields = BTreeSet::new();
-    while let Some(bytes) = code.get(site.wrapping_sub(owner.address) as usize..) {
+    site = low.site + u32::from(second.length);
+    while let Some(bytes) = bytes_at(site) {
+        if bytes.is_empty() {
+            break;
+        }
         control.checkpoint(1)?;
+        if incoming(site) {
+            unknown!(IncomingPath, site);
+        }
         let Some(decoded) = RiscvDecoder.decode(bytes) else {
-            return Ok(Err(UnknownUse::IncompleteLifetime));
+            unknown!(IncompleteLifetime, site);
         };
         if !is_base_instruction(bytes) || decoded.flow != InstructionFlow::Next {
-            return Ok(Err(UnknownUse::ControlFlow));
+            unknown!(ControlFlow, site);
         }
         let op = RiscvDecoder.lift(bytes);
         if op.reads_register(register) {
@@ -374,19 +654,35 @@ fn code_use(
                         )?;
                     }
                     let Some(field) = field else {
-                        return Ok(Err(UnknownUse::UnknownWrite));
+                        unknown!(UnknownWrite, site);
                     };
-                    keep.add(&mut fields, field, control)?;
+                    keep.add(&mut proof.fields, field, control)?;
+                    keep.push(
+                        &mut proof.stores,
+                        TypedStore {
+                            site,
+                            base,
+                            displacement,
+                            field,
+                        },
+                        control,
+                    )?;
                 }
-                _ => return Ok(Err(UnknownUse::EscapedValue)),
+                _ => {
+                    unknown!(EscapedValue, site);
+                }
             }
         }
         if op.destination_register() == Some(register) {
-            return Ok(Ok(fields));
+            return Ok(if proof.fields.is_empty() {
+                proof.stop(UnknownUse::NoStorage, site)
+            } else {
+                proof
+            });
         }
         site += u32::from(decoded.length);
     }
-    Ok(Err(UnknownUse::IncompleteLifetime))
+    unknown!(IncompleteLifetime, site);
 }
 
 fn compatible(types: &TypeFacts, a: Field, b: Field) -> bool {

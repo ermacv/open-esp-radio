@@ -49,8 +49,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
 pub use cha::{
-    AddressUseAudit, FunctionPointerAudit, FunctionPointerType, StorageEvidence, TypeFacts,
-    UnknownUse, audit_function_addresses, function_pointer_resolutions,
+    AddressUseAudit, FunctionPointerAudit, FunctionPointerType, PcRelativeUse, StorageEvidence,
+    TypeFacts, TypedStore, UnknownUse, audit_function_addresses, function_pointer_resolutions,
     typed_function_pointer_resolutions,
 };
 pub use contexts::{HartStack, LevelStack, Stacks, interrupt_stacks};

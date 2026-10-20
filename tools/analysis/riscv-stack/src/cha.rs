@@ -10,8 +10,10 @@ use std::collections::{BTreeMap, BTreeSet};
 mod audit;
 mod locations;
 mod provenance;
+mod references;
 pub use audit::{
-    AddressUseAudit, FunctionPointerAudit, StorageEvidence, UnknownUse, audit_function_addresses,
+    AddressUseAudit, FunctionPointerAudit, PcRelativeUse, StorageEvidence, TypedStore, UnknownUse,
+    audit_function_addresses,
 };
 pub use provenance::typed_function_pointer_resolutions;
 
@@ -758,3 +760,6 @@ mod tests {
         assert!(collect(&nop, true).is_empty());
     }
 }
+
+#[cfg(test)]
+mod pcrel_tests;
