@@ -343,7 +343,12 @@ impl Radio {
                         || committed != 7,
                 )
             }
-            _ => {
+            failure => {
+                // Terminal diagnostic evidence only, outside every measured interval.
+                oer_esp32s31_board::rom::print_fmt(format_args!(
+                    "OPEN_RADIO_HIL hold=FAIL tick={} result={failure:?}\n",
+                    hold.samples.len() + 1,
+                ));
                 self.poisoned = true;
                 (0, true)
             }
