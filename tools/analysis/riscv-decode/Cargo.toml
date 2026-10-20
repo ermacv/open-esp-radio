@@ -12,6 +12,7 @@ description = "RV32 instruction decoding over rv-asm with the F, Zicsr, Zba, Zbb
 rv-asm = "=0.2.1"
 
 [dev-dependencies]
+tempfile = "=3.27.0"
 oer-os-toolchain = { path = "../../os/toolchain" }
 
 [lints]
