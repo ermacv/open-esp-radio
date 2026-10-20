@@ -292,8 +292,8 @@
                   "NonExactAddress": 128,
                   "MissingStorageType": 119,
                   "ControlFlow": 111,
-                  "UnknownWrite": 18,
                   "IncomingPath": 3,
+                  "UnknownWrite": 18,
                   "EscapedValue": 2,
                   "IncompleteLifetime": 1
                 }
@@ -306,8 +306,8 @@
                   "NonExactAddress": 128,
                   "MissingStorageType": 119,
                   "ControlFlow": 111,
-                  "UnknownWrite": 18,
                   "IncomingPath": 3,
+                  "UnknownWrite": 18,
                   "EscapedValue": 2,
                   "IncompleteLifetime": 1
                 }
@@ -320,8 +320,8 @@
                   "NonExactAddress": 128,
                   "MissingStorageType": 119,
                   "ControlFlow": 111,
-                  "UnknownWrite": 18,
                   "IncomingPath": 3,
+                  "UnknownWrite": 18,
                   "EscapedValue": 2,
                   "IncompleteLifetime": 1
                 }
@@ -334,8 +334,8 @@
                   "NonExactAddress": 128,
                   "MissingStorageType": 119,
                   "ControlFlow": 111,
-                  "UnknownWrite": 18,
                   "IncomingPath": 3,
+                  "UnknownWrite": 18,
                   "EscapedValue": 2,
                   "IncompleteLifetime": 1
                 }

@@ -1,10 +1,12 @@
 # IRQ callback provenance on w0/w1
 
-Baseline: main `b88fe906`, including #172. Both unconfigured images were built
+Baseline: main `99f4fd64`, including #172 and #171. Both unconfigured images were built
 before implementation with the pinned toolchain in this checkout. Each completed
 bundle, including its ELF and four reports, was copied to
 `/tmp/oer-irq-signal/before/<app>`. The baseline diagnostic executable is saved
-separately. Final bundles, full diagnostics, per-function common-engine records
+separately. It was compiled at `b88fe906`; the analysis/tool sources are identical
+at `99f4fd64` (the intervening change concerns BLE memory placement). Both baseline
+firmware bundles were rebuilt at `99f4fd64`. Final bundles, full diagnostics, per-function common-engine records
 and check logs are retained under `/tmp/oer-irq-signal/`.
 
 ## Fresh IRQ registry
