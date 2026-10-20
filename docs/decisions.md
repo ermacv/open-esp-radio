@@ -56,7 +56,11 @@ bounds) live in the code that applies them.
   `oer-wire` crate, which generates checked accessors; frames are read and
   written through its bounded cursor, which never panics. Optional fields and
   element lists are code over that cursor. Each field names its clause of the
-  standard. No hand-written masks or shifts for these fields.
+  standard. No hand-written masks or shifts for these fields. Formats the
+  hardware defines (registers, descriptors, SRAM layouts) belong to the
+  register model and its generator, which does not use `oer-wire`; a layout
+  holding a standard's format gives only its place and size as bytes, and the
+  protocol's `wire` parses it.
 - **Compile time first.** Every check that can run at compile time runs
   there.
 - **Knowledge stays, shape goes.** Code whose value is recovered knowledge or
