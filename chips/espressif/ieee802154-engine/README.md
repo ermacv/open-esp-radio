@@ -68,10 +68,14 @@ sets event/abort enables, ED averaging and coexistence PTIs, leaving PIB and
 identity restoration to the engine.
 
 The host vendor catalog records three intentional differences: bounded RX
-publication, promiscuous masking and retained settings. Raw comparisons still
-report `DIFF` and print those reasons. Its tests compare all remaining radio
-commands, aborts, buffers and callbacks, and check the three differences
-independently against C and engine traces (`port <scenario>` prints the latter).
+publication, promiscuous masking and retained settings. Each expectation belongs
+to its scenario and the fingerprints of both complete boundary traces, including
+every record after the first mismatch. A matching expectation reports `EXPECTED`
+with that scenario's reason and succeeds; any other `DIFF` fails without expected
+reasons. `compare all` succeeds when every scenario is `MATCH` or `EXPECTED`.
+Tests also compare the remaining radio commands, aborts, buffers and callbacks,
+and check the three differences independently against C and engine traces
+(`port <scenario>` prints the latter).
 
 ## Bring-up and teardown order
 

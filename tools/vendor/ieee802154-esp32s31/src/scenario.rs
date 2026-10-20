@@ -126,6 +126,9 @@ pub struct Scenario {
     pub name: &'static str,
     pub inputs: fn() -> Inputs,
     pub steps: fn() -> Vec<Step>,
+    /// This scenario's reason for its catalogued trace difference. The
+    /// complete trace fingerprints must also agree; other differences fail.
+    pub expected_difference: Option<&'static str>,
 }
 
 unsafe extern "C" {
