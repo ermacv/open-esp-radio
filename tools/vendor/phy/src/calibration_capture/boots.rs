@@ -50,6 +50,21 @@ pub struct Readings {
 }
 
 impl Readings {
+    /// Readability established in the separate discovery capture, not guessed
+    /// from an absent value. Unknown entries cannot silently disappear.
+    pub(crate) fn permits_read(&self, address: u32) -> Result<bool> {
+        match (
+            self.values.contains_key(&address),
+            self.unreadable.contains(&address),
+        ) {
+            (true, false) => Ok(true),
+            (false, true) => Ok(false),
+            _ => Err(
+                format!("readability discovery is missing or inconsistent for {address:#x}").into(),
+            ),
+        }
+    }
+
     /// The complete replies and unreadable records of `console` in `space`,
     /// in the vendor calibration firmware's line format.
     pub fn parse(space: Space, console: &str) -> Result<Self> {
