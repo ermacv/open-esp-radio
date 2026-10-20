@@ -267,27 +267,37 @@ impl<'payload> EspNowV2Action<'payload> {
             return Err(EspNowV2WireError::OutputTooSmall { required });
         }
 
-        let output = &mut output[..required];
-        output[0] = ESP_NOW_ACTION_CATEGORY;
-        output[1..4].copy_from_slice(&ESP_NOW_ORGANIZATION_IDENTIFIER);
-        output[4..8].copy_from_slice(&self.random_value.bytes());
-
-        let mut offset = ESP_NOW_V2_ACTION_PREFIX_LEN;
+        let mut writer = oer_wire::Writer::new(output);
+        let too_small = |_| EspNowV2WireError::OutputTooSmall { required };
+        writer.u8(ESP_NOW_ACTION_CATEGORY).map_err(too_small)?;
+        writer
+            .write(&ESP_NOW_ORGANIZATION_IDENTIFIER)
+            .map_err(too_small)?;
+        writer
+            .write(&self.random_value.bytes())
+            .map_err(too_small)?;
         for element in self.elements() {
             let payload = element.payload();
-            let encoded_length = VENDOR_ELEMENT_ENCODED_OVERHEAD + payload.len();
-            output[offset] = ESP_NOW_VENDOR_ELEMENT_ID;
-            output[offset + 1] = (VENDOR_ELEMENT_FIXED_BODY_LEN + payload.len()) as u8;
-            output[offset + 2..offset + 5].copy_from_slice(&ESP_NOW_ORGANIZATION_IDENTIFIER);
-            output[offset + 5] = ESP_NOW_VENDOR_ELEMENT_TYPE;
-            output[offset + 6] = EspNowV2Control::from_bytes([ESP_NOW_V2_VERSION])
-                .with_more_data(element.more_data())
-                .to_bytes()[0];
-            output[offset + VENDOR_ELEMENT_ENCODED_OVERHEAD..offset + encoded_length]
-                .copy_from_slice(payload);
-            offset += encoded_length;
+            writer
+                .write(&[
+                    ESP_NOW_VENDOR_ELEMENT_ID,
+                    (VENDOR_ELEMENT_FIXED_BODY_LEN + payload.len()) as u8,
+                ])
+                .map_err(too_small)?;
+            writer
+                .write(&ESP_NOW_ORGANIZATION_IDENTIFIER)
+                .map_err(too_small)?;
+            writer
+                .write(&[
+                    ESP_NOW_VENDOR_ELEMENT_TYPE,
+                    EspNowV2Control::from_bytes([ESP_NOW_V2_VERSION])
+                        .with_more_data(element.more_data())
+                        .to_bytes()[0],
+                ])
+                .map_err(too_small)?;
+            writer.write(payload).map_err(too_small)?;
         }
-        Ok(required)
+        Ok(writer.written())
     }
 
     /// Parse one complete v2 Action body and validate every element before
@@ -502,18 +512,24 @@ impl<'payload> EspNowV2Frame<'payload> {
             return Err(EspNowV2WireError::OutputTooSmall { required });
         }
 
-        let output = &mut output[..required];
-        output[..ESP_NOW_MANAGEMENT_HEADER_LEN].fill(0);
+        let (header, body) = output
+            .split_first_chunk_mut::<ESP_NOW_MANAGEMENT_HEADER_LEN>()
+            .ok_or(EspNowV2WireError::OutputTooSmall { required })?;
+        header.fill(0);
         let frame_control = FrameControlFields::from_raw(ACTION_FRAME_CONTROL)
             .with_retry(self.retry)
             .raw();
-        output[0..2].copy_from_slice(&frame_control.to_le_bytes());
-        output[4..10].copy_from_slice(&self.destination.bytes());
-        output[10..16].copy_from_slice(&self.source.bytes());
-        output[16..22].copy_from_slice(&BROADCAST_ADDRESS);
-        output[22..24].copy_from_slice(&self.sequence_number.sequence_control().to_le_bytes());
-        self.action
-            .encode(&mut output[ESP_NOW_MANAGEMENT_HEADER_LEN..])?;
+        let mut writer = oer_wire::Writer::new(header);
+        let too_small = |_| EspNowV2WireError::OutputTooSmall { required };
+        writer.u16_le(frame_control).map_err(too_small)?;
+        writer.u16_le(0).map_err(too_small)?;
+        writer.write(&self.destination.bytes()).map_err(too_small)?;
+        writer.write(&self.source.bytes()).map_err(too_small)?;
+        writer.write(&BROADCAST_ADDRESS).map_err(too_small)?;
+        writer
+            .u16_le(self.sequence_number.sequence_control())
+            .map_err(too_small)?;
+        self.action.encode(body)?;
         Ok(required)
     }
 

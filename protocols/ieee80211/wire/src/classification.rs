@@ -62,21 +62,24 @@ pub const fn apply_wmm_admission(mut priority: u32, admission_required: [bool; 3
     // Exact transition pairs reconstructed from pinned
     // libnet80211.a[ieee80211_output.o]. A transition always increases the
     // access-category index and category 3 is terminal.
-    const DOWNGRADE: [(usize, u32); 3] = [(1, 5), (2, 0), (3, 1)];
-    let mut remaining = DOWNGRADE.len();
-    while remaining != 0 {
-        if !admission_required[access_category] {
+    let [voice, video, best_effort] = admission_required;
+    if access_category == 0 {
+        if !voice {
             return priority;
         }
-        let (next, downgraded) = DOWNGRADE[access_category];
-        priority = downgraded;
-        if next == 3 {
-            return priority;
-        }
-        access_category = next;
-        remaining -= 1;
+        priority = 5;
+        access_category = 1;
     }
-    7
+    if access_category == 1 {
+        if !video {
+            return priority;
+        }
+        priority = 0;
+    }
+    if !best_effort {
+        return priority;
+    }
+    1
 }
 
 #[cfg(test)]

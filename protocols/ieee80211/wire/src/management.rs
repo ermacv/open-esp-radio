@@ -57,7 +57,12 @@ impl ProbeRequest<'_> {
             .supported_rates
             .len()
             .min(SUPPORTED_RATES_ELEMENT_CAPACITY);
-        let extended_rates_len = self.supported_rates.len() - first_rates_len;
+        let mut reader = oer_wire::Reader::new(self.supported_rates);
+        let first_rates = reader
+            .take(first_rates_len)
+            .map_err(|_| ProbeRequestError::TooManySupportedRates)?;
+        let extended_rates = reader.remaining();
+        let extended_rates_len = extended_rates.len();
         let mut header = [0; MANAGEMENT_HEADER_LEN];
         header[0..2].copy_from_slice(&PROBE_REQUEST_FRAME_CONTROL.to_le_bytes());
         header[4..10].copy_from_slice(&self.destination);
@@ -73,13 +78,13 @@ impl ProbeRequest<'_> {
             &[SSID_ELEMENT_ID, self.ssid.len() as u8],
             self.ssid,
             &[SUPPORTED_RATES_ELEMENT_ID, first_rates_len as u8],
-            &self.supported_rates[..first_rates_len],
+            first_rates,
             if extended_rates_len == 0 {
                 &[]
             } else {
                 &extended_header
             },
-            &self.supported_rates[first_rates_len..],
+            extended_rates,
         ])
         .write(output)
         .map_err(|required| ProbeRequestError::OutputTooSmall { required })

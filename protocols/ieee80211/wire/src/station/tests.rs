@@ -985,3 +985,128 @@ impl NegotiatedAkm for crate::station::SelectedRsn {
         }
     }
 }
+
+#[test]
+fn a_second_pmkid_is_rejected_without_growing_the_selected_elements() {
+    let record = access_point_with_rsn(&[[0, 0x0f, 0xac, 8]], 0xc0);
+    let selected = select_association_rsn(&record, StaSecurityPolicy::Wpa3Personal).unwrap();
+    let resumed = selected.with_pmkid(Pmkid([0x5a; 16])).unwrap();
+    assert_eq!(resumed.with_pmkid(Pmkid([0xa5; 16])), None);
+    assert_eq!(resumed.as_bytes().len(), SELECTED_SECURITY_IES_CAPACITY);
+}
+
+#[test]
+fn in_place_station_encoders_reject_hostile_ranges_before_writing() {
+    let frame = StaProtectedEthernetFrame {
+        bssid: [2, 0, 0, 0, 0, 1],
+        sequence_number: seq(0),
+        user_priority: 0,
+        peer_qos: true,
+        ccmp_header: [0; CCMP_HEADER_LEN],
+    };
+    for (offset, length) in [
+        (usize::MAX, 14),
+        (1, usize::MAX),
+        (64, 14),
+        (0, 13),
+        (0, 14),
+    ] {
+        let mut storage = [0xa5; 64];
+        assert!(
+            frame
+                .encode_in_place(&mut storage, offset, length, DataHeControl::Disabled)
+                .is_err()
+        );
+        assert_eq!(storage, [0xa5; 64]);
+        assert!(
+            frame
+                .encode_amsdu_pair_in_place(&mut storage, offset, length, &[0; 14])
+                .is_err()
+        );
+        assert_eq!(storage, [0xa5; 64]);
+    }
+    let mut storage = [0xa5; 64];
+    assert!(
+        frame
+            .encode_amsdu_pair_in_place(&mut storage, 28, 14, &[0; 13])
+            .is_err()
+    );
+    assert_eq!(storage, [0xa5; 64]);
+}
+
+#[test]
+fn station_encoders_admit_complete_capacity_before_writing() {
+    use crate::address::{Bssid, IndividualAddress, OwnAddress};
+    let source = OwnAddress::new(IndividualAddress::new(LOCAL).unwrap());
+    let bssid = Bssid::new(IndividualAddress::new(BSSID).unwrap()).unwrap();
+    let sequence_number = seq(0);
+    let data = StaDataFrame {
+        source,
+        bssid,
+        destination: BSSID,
+        sequence_number,
+        ether_type: 0x888e,
+        payload: &[1, 2, 3],
+    };
+    let protected_data = StaProtectedDataFrame {
+        source,
+        bssid,
+        destination: BSSID,
+        sequence_number,
+        user_priority: 7,
+        peer_qos: true,
+        ccmp_header: [0; CCMP_HEADER_LEN],
+        ether_type: 0x0800,
+        payload: &[1, 2, 3],
+    };
+    let open = OpenAuthenticationRequest {
+        source,
+        bssid,
+        sequence_number,
+    };
+    let management = StaManagementFrame {
+        source,
+        bssid,
+        sequence_number,
+        subtype: StaManagementSubtype::Action,
+        body: &[3, 1, 0],
+    };
+    let protected_management = StaProtectedManagementFrame {
+        source,
+        bssid,
+        sequence_number,
+        subtype: StaManagementSubtype::Action,
+        ccmp_header: [0; CCMP_HEADER_LEN],
+        body: &[3, 1, 0],
+    };
+    let sae = SaeAuthenticationFrame {
+        source,
+        bssid,
+        sequence_number,
+        transaction: 1,
+        status_code: 0,
+        body: &[1, 2, 3],
+    };
+    type Encoder<'a> = dyn Fn(&mut [u8]) -> Result<usize, StationFrameError> + 'a;
+    let encoders: [&Encoder<'_>; 6] = [
+        &|out| data.encode(out),
+        &|out| protected_data.encode(out),
+        &|out| open.encode(out),
+        &|out| management.encode(out),
+        &|out| protected_management.encode(out),
+        &|out| sae.encode(out),
+    ];
+    for encode in encoders {
+        let mut complete = [0xa5; 128];
+        let required = encode(&mut complete).unwrap();
+        for capacity in 0..required {
+            let mut short = [0xa5; 128];
+            assert_eq!(
+                encode(&mut short[..capacity]),
+                Err(StationFrameError::OutputTooSmall { required })
+            );
+            assert_eq!(short, [0xa5; 128]);
+        }
+        assert!(complete[required..].iter().all(|byte| *byte == 0xa5));
+    }
+}

@@ -739,3 +739,74 @@ fn protected_management_codecs_keep_the_body_after_the_ccmp_header() {
         assert!(parse_ap_management_request(&TEST_ADVERTISEMENT, &frame[..31], ap).is_none());
     }
 }
+
+#[test]
+fn in_place_ap_encoder_rejects_overflowing_and_short_ethernet_ranges() {
+    let frame = ApProtectedDataFrame {
+        access_point: [2, 0, 0, 0, 0, 1],
+        peer: [2, 0, 0, 0, 0, 2],
+        sequence_number: seq(0),
+        user_priority: 0,
+        peer_qos: true,
+        more_data: false,
+        ccmp_header: [0; CCMP_HEADER_LEN],
+        ethernet: &[],
+    };
+    for (offset, length) in [(usize::MAX, 14), (1, usize::MAX), (64, 14), (0, 13)] {
+        let mut storage = [0xa5; 64];
+        assert!(frame.encode_in_place(&mut storage, offset, length).is_err());
+        assert_eq!(storage, [0xa5; 64]);
+    }
+}
+
+#[test]
+fn ap_management_encoders_admit_complete_capacity_before_writing() {
+    let access_point = [2, 0, 0, 0, 0, 1];
+    let peer = [2, 0, 0, 0, 0, 2];
+    let sequence_number = seq(0);
+    let plain = ApManagementFrame {
+        access_point,
+        peer,
+        sequence_number,
+        subtype: ApManagementSubtype::Action,
+        body: &[3, 1, 0],
+    };
+    let protected = ApProtectedManagementFrame {
+        access_point,
+        peer,
+        sequence_number,
+        subtype: ApManagementSubtype::Action,
+        ccmp_header: [0; CCMP_HEADER_LEN],
+        body: &[3, 1, 0],
+    };
+    type Encoder<'a> = dyn Fn(&mut [u8]) -> Result<usize, ApAssociationResponseError> + 'a;
+    let encoders: [&Encoder<'_>; 5] = [
+        &|out| plain.encode(out),
+        &|out| protected.encode(out),
+        &|out| write_open_authentication_response(out, access_point, peer, 0, sequence_number),
+        &|out| write_sae_authentication(out, access_point, peer, 1, 0, &[1, 2, 3], sequence_number),
+        &|out| {
+            write_ap_peer_disconnect(
+                out,
+                access_point,
+                peer,
+                ApPeerDisconnectKind::Deauthentication,
+                1,
+                sequence_number,
+            )
+        },
+    ];
+    for encode in encoders {
+        let mut complete = [0xa5; 128];
+        let required = encode(&mut complete).unwrap();
+        for capacity in 0..required {
+            let mut short = [0xa5; 128];
+            assert_eq!(
+                encode(&mut short[..capacity]),
+                Err(ApAssociationResponseError::OutputTooSmall { required })
+            );
+            assert_eq!(short, [0xa5; 128]);
+        }
+        assert!(complete[required..].iter().all(|byte| *byte == 0xa5));
+    }
+}

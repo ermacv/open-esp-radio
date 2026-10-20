@@ -364,18 +364,20 @@ impl<'payload> EspNowV1Action<'payload> {
             return Err(EspNowV1WireError::OutputTooSmall { required });
         }
 
-        let output = &mut output[..required];
-        output[0] = ESP_NOW_ACTION_CATEGORY;
-        output[1..4].copy_from_slice(&ESP_NOW_ORGANIZATION_IDENTIFIER);
-        output[4..8].copy_from_slice(&self.random_value.bytes());
-        output[8] = ESP_NOW_VENDOR_ELEMENT_ID;
-        output[9] = (VENDOR_ELEMENT_FIXED_BODY_LEN + self.payload.len()) as u8;
-        output[10..13].copy_from_slice(&ESP_NOW_ORGANIZATION_IDENTIFIER);
-        output[13] = ESP_NOW_VENDOR_ELEMENT_TYPE;
-        // Version occupies the low nibble. All v1 reserved bits remain zero.
-        output[14] = ESP_NOW_V1_VERSION;
-        output[15..].copy_from_slice(self.payload.bytes());
-        Ok(required)
+        crate::encoding::FrameParts([
+            &[ESP_NOW_ACTION_CATEGORY],
+            &ESP_NOW_ORGANIZATION_IDENTIFIER,
+            &self.random_value.bytes(),
+            &[
+                ESP_NOW_VENDOR_ELEMENT_ID,
+                (VENDOR_ELEMENT_FIXED_BODY_LEN + self.payload.len()) as u8,
+            ],
+            &ESP_NOW_ORGANIZATION_IDENTIFIER,
+            &[ESP_NOW_VENDOR_ELEMENT_TYPE, ESP_NOW_V1_VERSION],
+            self.payload.bytes(),
+        ])
+        .write(output)
+        .map_err(|required| EspNowV1WireError::OutputTooSmall { required })
     }
 
     /// Parse one complete v1 Action body and reject trailing or partial IEs.
@@ -522,18 +524,24 @@ impl<'payload> EspNowV1Frame<'payload> {
             return Err(EspNowV1WireError::OutputTooSmall { required });
         }
 
-        let output = &mut output[..required];
-        output[..ESP_NOW_MANAGEMENT_HEADER_LEN].fill(0);
+        let (header, body) = output
+            .split_first_chunk_mut::<ESP_NOW_MANAGEMENT_HEADER_LEN>()
+            .ok_or(EspNowV1WireError::OutputTooSmall { required })?;
+        header.fill(0);
         let frame_control = FrameControlFields::from_raw(ACTION_FRAME_CONTROL)
             .with_retry(self.retry)
             .raw();
-        output[0..2].copy_from_slice(&frame_control.to_le_bytes());
-        output[4..10].copy_from_slice(&self.destination.bytes());
-        output[10..16].copy_from_slice(&self.source.bytes());
-        output[16..22].copy_from_slice(&BROADCAST_ADDRESS);
-        output[22..24].copy_from_slice(&self.sequence_number.sequence_control().to_le_bytes());
-        self.action
-            .encode(&mut output[ESP_NOW_MANAGEMENT_HEADER_LEN..])?;
+        let mut writer = oer_wire::Writer::new(header);
+        let too_small = |_| EspNowV1WireError::OutputTooSmall { required };
+        writer.u16_le(frame_control).map_err(too_small)?;
+        writer.u16_le(0).map_err(too_small)?;
+        writer.write(&self.destination.bytes()).map_err(too_small)?;
+        writer.write(&self.source.bytes()).map_err(too_small)?;
+        writer.write(&BROADCAST_ADDRESS).map_err(too_small)?;
+        writer
+            .u16_le(self.sequence_number.sequence_control())
+            .map_err(too_small)?;
+        self.action.encode(body)?;
         Ok(required)
     }
 

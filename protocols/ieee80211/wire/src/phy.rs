@@ -144,6 +144,10 @@ impl HtRate {
     /// The data rate in kb/s: the one-stream rate of IEEE Std 802.11-2020
     /// Tables 19-27 and 19-28, rounded to 100 kb/s as the tables print it,
     /// times the spatial streams.
+    #[expect(
+        clippy::indexing_slicing,
+        reason = "the index is reduced modulo the eight-entry fixed HT rate table"
+    )]
     pub const fn nominal_kbps(self) -> u32 {
         const HT20_LGI: [u32; 8] = [
             6_500, 13_000, 19_500, 26_000, 39_000, 52_000, 58_500, 65_000,
@@ -305,6 +309,10 @@ impl HeRate {
     /// Data bits per OFDM symbol (N_DBPS) of the full-bandwidth resource
     /// unit, as a fraction: data subcarriers times coded bits, coding rate
     /// and spatial streams; DCM halves the data subcarriers.
+    #[expect(
+        clippy::indexing_slicing,
+        reason = "HeMcs has a private representation and its constructor rejects values above 11"
+    )]
     const fn data_bits_per_symbol(self) -> (u64, u64) {
         // Data subcarriers of the 242-, 484-, 996- and 2x996-tone RUs.
         let subcarriers: u64 = match self.bandwidth {

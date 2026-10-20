@@ -174,6 +174,10 @@ impl Channel {
 }
 
 /// The span `bandwidth_mhz` wide around `center_mhz`.
+#[expect(
+    clippy::unreachable,
+    reason = "only validated Channel center frequencies and nonzero 20/40 MHz widths reach this private function"
+)]
 fn centered_span(center_mhz: u16, bandwidth_mhz: u16) -> oer_radio_regulatory::FrequencySpan {
     let half_khz = u32::from(bandwidth_mhz) * 500;
     let center_khz = u32::from(center_mhz) * 1000;

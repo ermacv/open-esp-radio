@@ -110,19 +110,20 @@ pub(crate) fn validate_peer(bssid: [u8; 6]) -> Result<(), StationFrameError> {
     Ok(())
 }
 
-fn write_management_header(
-    frame: &mut [u8],
+fn management_header(
     frame_control: u16,
     destination: [u8; 6],
     source: [u8; 6],
     bssid: [u8; 6],
     sequence_number: SequenceNumber,
-) {
+) -> [u8; MANAGEMENT_HEADER_LEN] {
+    let mut frame = [0; MANAGEMENT_HEADER_LEN];
     frame[0..2].copy_from_slice(&frame_control.to_le_bytes());
     frame[4..10].copy_from_slice(&destination);
     frame[10..16].copy_from_slice(&source);
     frame[16..22].copy_from_slice(&bssid);
     frame[22..24].copy_from_slice(&sequence_number.sequence_control().to_le_bytes());
+    frame
 }
 
 /// The fields of a received management header the station parsers match.

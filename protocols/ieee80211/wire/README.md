@@ -6,6 +6,11 @@ with standard-clause sources; bounded readers and writers handle byte streams.
 Mutable exchange state belongs to upper-mac, station
 and SoftMAC cores.
 
+Production code denies `unwrap_used`, `expect_used`, `panic`, `unreachable`
+and `indexing_slicing`; unit tests use the `cfg(test)` exception. Narrow
+`#[expect(..., reason = "...")]` attributes document validated internal
+invariants. Shared `test-support` library builds retain the production policy.
+
 ## Known defects
 
 - **Channel 14 is admitted regardless of the regulatory domain and the PHY.**
@@ -21,5 +26,3 @@ and SoftMAC cores.
 - **AP side** (`ap.rs::parse_ap_management_request`): Reassociation Request
   is not parsed, and the Listen Interval is read and dropped (see the AP
   crate's known defects).
-- **No strict lint block:** `lib.rs` has only `forbid(unsafe_code)` and the
-  crate has no `clippy.toml` (as `rsn` and `ap`).
