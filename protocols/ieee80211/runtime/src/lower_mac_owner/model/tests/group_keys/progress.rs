@@ -172,7 +172,7 @@ struct Exercise<'a> {
     air: &'a ModelAir,
     case: ProgressCase,
     probe: &'a Probe,
-    trace: &'a RefCell<Option<ProgressTrace>>,
+    trace: &'a RefCell<Option<ProgressTrace<Vec<Completion>, Vec<Owners>>>>,
 }
 impl Exercise<'_> {
     fn record(
@@ -433,7 +433,10 @@ impl Exercise<'_> {
     }
 }
 
-pub(super) async fn exercise(case: ProgressCase, clock: &VirtualClock) -> ProgressTrace {
+pub(super) async fn exercise(
+    case: ProgressCase,
+    clock: &VirtualClock,
+) -> ProgressTrace<Vec<Completion>, Vec<Owners>> {
     let (backend, air) = backend();
     let trace = RefCell::new(None);
     let probe = Probe::default();

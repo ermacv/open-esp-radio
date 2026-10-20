@@ -1,6 +1,8 @@
 use super::*;
-use crate::lower_mac_owner::conformance::interface_commands::{self, Identity, Trace};
+use interface_commands::{Case, Drain, Harness};
 use oer_ieee80211_port::InterfaceRole;
+use oer_ieee80211_port::conformance::interface_commands::{self, Identity, Trace};
+type ConfigureTrace = Trace<Vec<Identity>>;
 
 struct Witness {
     allocation: Box<u8>,
@@ -28,16 +30,11 @@ impl ModelContext for ConfigurationContexts {
 }
 type ConfigurationBackend = ModelBackend<ModelCaps, ConfigurationContexts>;
 
-#[derive(Clone, Copy)]
-enum Drain {
-    Running,
-    Queued,
-    Posted,
-}
 struct ConfigureAcrossDisable {
     drain: Drain,
     ap_first: bool,
     drops: Rc<Cell<usize>>,
+    trace: Rc<RefCell<Option<ConfigureTrace>>>,
 }
 fn record<'id, R: InterfaceRole, Path: oer_radio_port::PoolPath>(
     permission: ConfigurePermission<'id, R, Path, Witness>,
@@ -139,15 +136,12 @@ impl PortBody<ConfigurationBackend> for ConfigureAcrossDisable {
         let extra_terminal = core::pin::pin!(enabled.phase().next_event())
             .poll(&mut core::task::Context::from_waker(Waker::noop()))
             .is_ready();
-        assert_eq!(
-            interface_commands::verify(Trace {
-                admitted,
-                returned,
-                premature_drops: self.drops.get(),
-                extra_terminal
-            }),
-            Ok(())
-        );
+        self.trace.replace(Some(Trace {
+            admitted,
+            returned,
+            premature_drops: self.drops.get(),
+            extra_terminal,
+        }));
         drop((station, access_point));
         assert_eq!(self.drops.get(), 2);
         Ended::uninstall(
@@ -161,27 +155,39 @@ impl PortBody<ConfigurationBackend> for ConfigureAcrossDisable {
         )
     }
 }
+struct ModelConfigurationHarness;
+impl Harness for ModelConfigurationHarness {
+    type Returns = Vec<Identity>;
+    async fn exercise(&mut self, case: Case) -> ConfigureTrace {
+        let (backend, _) = ConfigurationBackend::new(
+            Channel::ghz2_4(6, ChannelWidth::Mhz20).unwrap(),
+            [
+                IndividualAddress::new(STATION).unwrap(),
+                IndividualAddress::new(ACCESS_POINT).unwrap(),
+            ],
+        );
+        let trace = Rc::new(RefCell::new(None));
+        let _port_end = run_port(
+            backend,
+            ConfigureAcrossDisable {
+                drain: case.drain,
+                ap_first: case.ap_first,
+                drops: Rc::new(Cell::new(0)),
+                trace: trace.clone(),
+            },
+        )
+        .await;
+        let captured = trace.borrow_mut().take();
+        captured.expect("the configuration fixture captures actual context returns")
+    }
+}
 #[test]
 fn configure_conformance_preserves_fifo_context_ownership_and_reuse_across_disable() {
-    for drain in [Drain::Running, Drain::Queued, Drain::Posted] {
-        for ap_first in [false, true] {
-            let (backend, _) = ConfigurationBackend::new(
-                Channel::ghz2_4(6, ChannelWidth::Mhz20).unwrap(),
-                [
-                    IndividualAddress::new(STATION).unwrap(),
-                    IndividualAddress::new(ACCESS_POINT).unwrap(),
-                ],
-            );
-            let _port_end = block_on(run_port(
-                backend,
-                ConfigureAcrossDisable {
-                    drain,
-                    ap_first,
-                    drops: Rc::new(Cell::new(0)),
-                },
-            ));
-        }
-    }
+    block_on(interface_commands::check(
+        &mut ModelConfigurationHarness,
+        oer_ieee80211_port::conformance::Environment::Model,
+    ))
+    .expect("the model preserves configuration contexts through every disable point");
 }
 
 struct ReceiveAcrossDisable;

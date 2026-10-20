@@ -398,3 +398,7 @@ fn missed_beacons(elapsed: u64, interval: NonZeroU64) -> u32 {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+#[path = "survey/normalized_handoff_tests.rs"]
+mod normalized_handoff_tests;

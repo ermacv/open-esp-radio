@@ -1,5 +1,5 @@
 use super::*;
-use crate::lower_mac_owner::conformance::group_keys as contract;
+use oer_ieee80211_port::conformance::group_keys as contract;
 use oer_time::{Clock, Timer};
 use oer_time_virtual::VirtualClock;
 
@@ -80,7 +80,7 @@ async fn removed<'p, 'id: 'p>(phase: &mut ModelPhase<'p, 'id>) -> StationGroupPe
 struct Boundary<'a> {
     case: contract::Case,
     air: &'a ModelAir,
-    trace: &'a RefCell<Option<contract::Trace>>,
+    trace: &'a RefCell<Option<contract::Trace<Vec<contract::Event>>>>,
     clock: &'a VirtualClock,
 }
 impl Work for Boundary<'_> {
@@ -296,10 +296,13 @@ impl Boundary<'_> {
 
 struct Harness<'a>(&'a VirtualClock);
 impl contract::Harness for Harness<'_> {
+    type Events = Vec<contract::Event>;
+    type Completions = Vec<contract::Completion>;
+    type Retained = Vec<contract::Owners>;
     const GROUP_COMMAND_BOUND: oer_time::Duration =
         <ModelBackend as LowerMacBackend>::GROUP_COMMAND_BOUND;
     const SCENARIO_BOUND: oer_time::Duration = oer_time::Duration::from_millis(20);
-    async fn exercise(&mut self, case: contract::Case) -> contract::Trace {
+    async fn exercise(&mut self, case: contract::Case) -> contract::Trace<Self::Events> {
         let (backend, air) = backend();
         let trace = RefCell::new(None);
         let boundary = Boundary {
@@ -313,14 +316,25 @@ impl contract::Harness for Harness<'_> {
         assert!(!air.failed());
         trace.into_inner().unwrap()
     }
-    async fn exercise_progress(&mut self, case: contract::ProgressCase) -> contract::ProgressTrace {
+    async fn exercise_progress(
+        &mut self,
+        case: contract::ProgressCase,
+    ) -> contract::ProgressTrace<Self::Completions, Self::Retained> {
         progress::exercise(case, self.0).await
     }
 }
 #[test]
 fn common_gtk_boundary_suite_covers_delayed_ingress_and_retained_selection() {
     let clock = VirtualClock::new();
-    progress::run_clocked(contract::check(&mut Harness(&clock), &clock), &clock).unwrap();
+    progress::run_clocked(
+        contract::check(
+            &mut Harness(&clock),
+            &clock,
+            oer_ieee80211_port::conformance::Environment::Model,
+        ),
+        &clock,
+    )
+    .unwrap();
 }
 
 #[derive(Clone, Copy, Debug)]

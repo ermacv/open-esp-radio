@@ -45,7 +45,7 @@ back; its operations are synchronous and never wait:
   owner extraction. The model projections keep those fields private, and
   host/RV32 UI pairs reject swapping tickets, contexts or MPDUs, reconstructing
   a terminal through fields, and returning a partial aggregate.
-  The common `lower_mac_owner::conformance` suite checks actual returned
+  The common `conformance` suite checks actual returned
   identities and destructor counts before teardown as well as after it.
   Each hardware backend supplies its own fixture for that harness. Context moves unchanged;
   no `Clone` bound, frame inspection or parallel lookup identifies the
@@ -374,3 +374,44 @@ remain in the core profile. `backend_aggregate` carries detached BlockAck
 facts and aggregate retry commands. `espressif` contains LR and ESP-NOW PHY
 requests and static admitted-packet handoffs; ESP-NOW peer/protocol state
 remains in softmac.
+
+
+## Shared backend conformance
+
+The `test-support` feature exposes `conformance` in this crate. Backend tests
+implement its ownership, publication-barrier, configuration, GTK and outcome
+harness traits; they need no dependency on `oer-ieee80211-runtime`. The model
+in runtime runs the same runners with virtual time. Traces contain observations
+from actual submitted/returned owners, publication observers and event streams;
+expected identities cannot substitute for observations.
+
+Each case exposes `execution()`: `Hardware` or `ModelOnly(reason)`. Runners take
+`Environment::Model` to exercise everything, or `Environment::Hardware` to
+exclude injected conditions explicitly. Their `Report` counts verified cases
+and model-only exclusions separately. The physical fixtures still supply real
+ACK/BlockAck evidence and actual backend progress; classification alone does
+not prove a hardware implementation.
+
+| Suite | Hardware cases | Model-only cases |
+| --- | --- | --- |
+| Ownership (`check`) | Complete, close gate, disable, admission refusal | Poisoned backend |
+| Publication (`check_barriers`) | Gate with ACK, Sent retry, key removal | Lost hardware completion |
+| Configuration (`interface_commands::check`) | Both interface orders, running/queued/posted disable | None |
+| Outcomes (`outcomes::check`) | Single ACK, aggregate BlockAck, single/aggregate NoResponse | Single/aggregate Collision, AirDenied, HardwareTimeout |
+| GTK (`group_keys::check`) | Disable before/after each of four mutations, published-key removal | Four independently delayed-ingress RX cuts, four stalled-command expiries |
+
+Hardware ACK uses a reachable peer and NoResponse an absent address. Collision,
+AirDenied and HardwareTimeout require model injection. The GTK receive-cut
+cases independently inject old-key facts at hardware, DMA, interrupt and
+software stages; ordinary RF traffic does not establish those exact cuts.
+Command expiry and fail-stop also require explicit faults. Hardware cases
+that intersect a held publication or a queued command require cooperative
+backend progression and observation at the specified boundaries.
+
+The feature adds no allocator or executor dependency. Harness associated types
+select trace storage through `AsRef<[T]>`: host fixtures use `Vec`, and an image
+can use arrays or bounded collections. `BarrierHarness` also selects frame and
+retry storage. GTK checks take an independent `oer_time::Timer` to bound the
+whole fixture, including a backend that never delivers its terminal; model
+fixtures pass a virtual timer. A standalone consumer in `tests/conformance.rs`
+exercises runner selection and negative verifiers with arrays and `heapless`.

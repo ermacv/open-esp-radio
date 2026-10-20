@@ -246,11 +246,9 @@ fn malformed_prefix_refusals_are_counted_by_reason() {
     );
 }
 
-mod survey {
+mod normalized_handoff {
     use oer_esp32s31_ieee80211_mac::portable::rx_meta;
-    use oer_ieee80211_port::{Channel, ChannelWidth};
-    use oer_ieee80211_runtime::survey::{Gap, MinMax, Survey, SurveyCounters};
-    use oer_ieee80211_wire::address::{Bssid, IndividualAddress};
+    use oer_ieee80211_port::{Channel, ChannelWidth, RxEvidence};
     use oer_time::Instant;
 
     use super::*;
@@ -260,10 +258,6 @@ mod survey {
     /// 100 TU in µs.
     const BI: u64 = 102_400;
     const CHANNEL: u8 = 6;
-
-    fn bssid(address: [u8; 6]) -> Bssid {
-        Bssid::new(IndividualAddress::new(address).unwrap()).unwrap()
-    }
 
     /// A beacon (subtype 8) or probe response (subtype 5) from `bss`.
     fn management(subtype: u8, bss: [u8; 6], tsf: u64, ssid: &[u8], ds: Option<u8>) -> Vec<u8> {
@@ -304,9 +298,9 @@ mod survey {
     }
 
     #[test]
-    fn beacons_through_service_reach_the_scan_table() {
+    fn normalized_frames_preserve_bytes_signal_and_timing_through_service() {
         let mut fixture = fixture();
-        let mut survey = Survey::<4>::new(bssid(STAND));
+        let mut normalized = 0;
         let channel = Channel::ghz2_4(CHANNEL, ChannelWidth::Mhz20).unwrap();
         // One second past the clock's start.
         let base = oer_time_virtual::START.as_micros() + 1_000_000;
@@ -363,13 +357,10 @@ mod survey {
             if let Ok(frame) = fixture.receiver.normalize(&held) {
                 assert_eq!(frame.stamp, Some(stamp));
                 let meta = rx_meta(frame.metadata, channel);
-                survey.take(
-                    fixture.clock.now(),
-                    frame.mpdu,
-                    &meta,
-                    frame.stamp,
-                    times.handoff,
-                );
+                assert_eq!(frame.mpdu, unit.mpdu.as_slice());
+                assert_eq!(meta.channel, channel);
+                assert_eq!(meta.rssi_dbm, RxEvidence::HardwareObserved(unit.rssi));
+                normalized += 1;
             }
             drop(held);
         }
@@ -380,51 +371,7 @@ mod survey {
         assert_eq!(fixture.counters.report().units, units.len() as u32);
         assert_eq!(fixture.counters.report().prefix.mic_failure, 1);
 
-        assert_eq!(
-            survey.counters(),
-            SurveyCounters {
-                frames: 7,
-                header_refusals: 0,
-                data: 1,
-                ignored_management: 0,
-                table_full: 0,
-                off_channel: 0,
-            }
-        );
-        let (record, tally) = survey.bss(0).unwrap();
-        assert_eq!(record.bssid, bssid(STAND));
-        assert_eq!(record.ssid_bytes(), b"stand");
-        assert_eq!((record.channel, record.beacon_interval_tu), (CHANNEL, 100));
-        assert_eq!(
-            (tally.beacons, tally.probe_responses, tally.duplicates),
-            (4, 0, 1)
-        );
-        assert_eq!(tally.rssi_dbm, Some(MinMax { min: -46, max: -40 }));
-        assert_eq!(tally.without_rssi, 0);
-        assert_eq!(tally.handoff_lag_us, Some(MinMax { min: 30, max: 45 }));
-        assert_eq!(
-            (tally.first_stamp, tally.last_stamp),
-            (Some(stamps[0]), Some(stamps[5]))
-        );
-        assert_eq!(tally.max_beacon_gap_us, stamps[5] - stamps[2]);
-        assert_eq!((tally.late_gaps, tally.missed_beacons), (1, 2));
-        assert_eq!(
-            survey.gap_log(),
-            [Gap {
-                stamp: stamps[5],
-                gap_us: stamps[5] - stamps[2],
-                missed_by_tsf: Some(2),
-            }]
-        );
-
-        // The hidden-SSID beacon's BSS learned its SSID from the probe
-        // response.
-        let (record, tally) = survey.bss(1).unwrap();
-        assert_eq!(record.bssid, bssid(OTHER));
-        assert_eq!(record.ssid_bytes(), b"hidden");
-        assert_eq!((tally.beacons, tally.probe_responses), (1, 1));
-        assert_eq!(tally.rssi_dbm, Some(MinMax { min: -70, max: -68 }));
-        assert!(survey.bss(2).is_none());
+        assert_eq!(normalized, 7);
     }
 }
 

@@ -1,6 +1,16 @@
 #![no_std]
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
+#![cfg_attr(
+    not(feature = "test-support"),
+    doc = r"
+The shared backend conformance suite requires `test-support`:
+
+```compile_fail,E0432
+use oer_ieee80211_port::conformance;
+```
+"
+)]
 #![deny(
     clippy::let_underscore_must_use,
     clippy::let_underscore_untyped,
@@ -60,6 +70,9 @@ pub use in_flight::{
 
 pub mod association;
 pub mod capabilities;
+/// Backend conformance cases and observation checks, without an allocator.
+#[cfg(feature = "test-support")]
+pub mod conformance;
 mod layout;
 pub use layout::{
     CheckedAggregate, CheckedSubframe, CheckedTxSource, FreshSource, FreshSubframe, HeaderLayout,
@@ -157,6 +170,8 @@ pub use tx::{
     TxPower, TxResponse, TxStatus, WithdrawCause,
 };
 
+#[cfg(test)]
+extern crate alloc;
 #[cfg(test)]
 extern crate std;
 

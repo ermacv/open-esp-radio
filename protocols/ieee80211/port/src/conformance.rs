@@ -14,60 +14,157 @@ pub mod group_keys;
 /// Configuration permissions and opaque contexts through FIFO and disable.
 pub mod interface_commands;
 
-use alloc::vec::Vec;
-use oer_ieee80211_port::{IndeterminateCause, SingleEnd, SingleOutcome, TxOutcome, WithdrawCause};
+use crate::{IndeterminateCause, SingleEnd, SingleOutcome, TxOutcome, WithdrawCause};
 use oer_ieee80211_wire::qos::WmmAccessCategory;
+
+/// Where a fixture obtains the requested outcomes.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Environment {
+    /// A host model can inject every declared fault and ingress stage.
+    Model,
+    /// A physical backend uses real air and hardware observations.
+    Hardware,
+}
+
+/// Why a case requires the host model rather than a physical air exchange.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ModelOnlyReason {
+    /// A collision cannot be produced deterministically on air.
+    Collision,
+    /// Air arbitration denial requires an injected result.
+    AirDenied,
+    /// A missing hardware completion requires an injected hardware failure.
+    HardwareTimeout,
+    /// Fail-stop/quarantine is deliberately injected into the backend.
+    PoisonedBackend,
+    /// DMA, interrupt and software ingress stages are injected independently.
+    DelayedIngress,
+    /// A group-key hardware change is stalled through its command deadline.
+    CommandStall,
+}
+
+/// A case's physical execution requirements, independent of its fixture.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Execution {
+    /// A physical fixture can use real frames and cooperative backend progress.
+    Hardware,
+    /// The case requires an explicitly injected model condition.
+    ModelOnly(ModelOnlyReason),
+}
+
+/// Explicit accounting of executed cases and model-only exclusions.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct Report {
+    /// Cases whose observations passed their shared verifier.
+    pub passed: u16,
+    /// Cases explicitly excluded from a physical-backend run.
+    pub model_only: u16,
+}
+impl Report {
+    pub(crate) fn includes(&mut self, environment: Environment, execution: Execution) -> bool {
+        if environment == Environment::Hardware && matches!(execution, Execution::ModelOnly(_)) {
+            self.model_only = self.model_only.saturating_add(1);
+            false
+        } else {
+            true
+        }
+    }
+    pub(crate) fn passed(&mut self) {
+        self.passed = self.passed.saturating_add(1);
+    }
+}
+
+/// Single and aggregate attempt outcomes shared by backend fixtures.
+pub mod outcomes;
 
 /// Result supplied to a publication already held when its barrier arrives.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum BarrierCase {
+    /// Close the gate while a held publication later receives its ACK.
     GateAck,
+    /// Close the gate after a held publication, then repeat the returned Sent MPDU.
     GateRetry,
+    /// Hold the publication result until its hardware deadline.
     GateTimeout,
+    /// Remove a key while one of its publications remains held.
     RemoveKey,
+}
+
+impl BarrierCase {
+    /// Every publication/barrier case, in shared-suite order.
+    pub const ALL: [Self; 4] = [
+        Self::GateAck,
+        Self::GateRetry,
+        Self::GateTimeout,
+        Self::RemoveKey,
+    ];
+    /// A held result may be observed cooperatively; a lost hardware completion
+    /// itself cannot be produced as a controlled air response.
+    pub const fn execution(self) -> Execution {
+        match self {
+            Self::GateTimeout => Execution::ModelOnly(ModelOnlyReason::HardwareTimeout),
+            _ => Execution::Hardware,
+        }
+    }
 }
 
 /// Counts sampled from the real backend while its publication result is held.
 #[derive(Clone, Copy, Debug)]
 pub struct HeldSnapshot {
+    /// Publications observed at the sampled boundary.
     pub publications: usize,
+    /// Events captured from the actual backend event stream.
     pub events: usize,
 }
 
 /// The actual state of a returned single MPDU.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MpduState {
+    /// Unpublished memory returned to its caller.
     Fresh,
+    /// Encoded MPDU returned with its original sequence and packet number.
     Sent,
 }
 
 /// Actual terminal/barrier observations, in delivery order, of a backend
 /// with the ACK evidence `A` and lost-air evidence `D`.
 pub enum BarrierEvent<A, D> {
+    /// A transmit terminal observed through the port.
     Tx {
+        /// Actual transmit ticket slot identity.
         ticket: u8,
+        /// State of the MPDU returned by this terminal.
         state: MpduState,
+        /// The outcome delivered by the real port.
         outcome: SingleOutcome<A, D>,
     },
+    /// The gate-closing terminal delivered after pending transmissions.
     GateClosed,
+    /// The key-removal terminal delivered after pending uses.
     KeyRemoved,
 }
 
 /// One published head and one queued successor on the same AC. Fixtures
 /// capture counts and frame bytes from their actual publication observer;
 /// terminals come through the port, never from an expected identity.
-pub struct BarrierTrace<A, D> {
+pub struct BarrierTrace<E, F, R> {
+    /// Head and successor identities captured before admission.
     pub tickets: [u8; 2],
+    /// Sample with the head published, before requesting its barrier.
     pub before_request: HeldSnapshot,
+    /// Sample after requesting the barrier, before releasing the result.
     pub before_result: HeldSnapshot,
+    /// Sample immediately before an intentionally held publication expires.
     pub just_before_timeout: Option<HeldSnapshot>,
+    /// Publication count when the barrier terminal was delivered.
     pub publications_at_barrier: usize,
-    pub events: Vec<BarrierEvent<A, D>>,
+    /// Events captured from the actual backend event stream.
+    pub events: E,
     /// Encoded MPDU after numbering, excluding hardware-generated trailers.
     /// Capture it from the actual publication's owner, before hardware owns it.
-    pub first_frame: Vec<u8>,
+    pub first_frame: F,
     /// The same encoded extent for each real Sent republication.
-    pub retried_frames: Vec<Vec<u8>>,
+    pub retried_frames: R,
 }
 
 /// The publication/barrier suite shared by model and hardware fixtures.
@@ -76,28 +173,40 @@ pub trait BarrierHarness {
     type Ack;
     /// The backend's lost-air evidence.
     type AirDenied;
+    /// Captured event storage; may be an array or bounded collection.
+    type Events: AsRef<[BarrierEvent<Self::Ack, Self::AirDenied>]>;
+    /// Encoded MPDU storage owned by this fixture.
+    type Frame: AsRef<[u8]>;
+    /// Captured republications, without a prescribed allocator.
+    type Retries: AsRef<[Self::Frame]>;
+    /// Run the case through the actual backend and capture its owners and bytes.
     fn exercise_barrier(
         &mut self,
         case: BarrierCase,
-    ) -> impl core::future::Future<Output = BarrierTrace<Self::Ack, Self::AirDenied>>;
+    ) -> impl core::future::Future<Output = BarrierTrace<Self::Events, Self::Frame, Self::Retries>>;
 }
 
+/// Run every prescribed publication/barrier case through the harness.
 pub async fn check_barriers(
     harness: &mut impl BarrierHarness,
-) -> Result<(), (BarrierCase, Violation)> {
-    for case in [
-        BarrierCase::GateAck,
-        BarrierCase::GateRetry,
-        BarrierCase::GateTimeout,
-        BarrierCase::RemoveKey,
-    ] {
+    environment: Environment,
+) -> Result<Report, (BarrierCase, Violation)> {
+    let mut report = Report::default();
+    for case in BarrierCase::ALL {
+        if !report.includes(environment, case.execution()) {
+            continue;
+        }
         verify_barrier(case, harness.exercise_barrier(case).await).map_err(|why| (case, why))?;
+        report.passed();
     }
-    Ok(())
+    Ok(report)
 }
 
 /// Verify real observations of a held publication, its barrier and a Sent retry.
-pub fn verify_barrier<A, D>(case: BarrierCase, trace: BarrierTrace<A, D>) -> Result<(), Violation> {
+pub fn verify_barrier<A, D, E: AsRef<[BarrierEvent<A, D>]>, F: AsRef<[u8]>, R: AsRef<[F]>>(
+    case: BarrierCase,
+    trace: BarrierTrace<E, F, R>,
+) -> Result<(), Violation> {
     for snapshot in [trace.before_request, trace.before_result]
         .into_iter()
         .chain(trace.just_before_timeout)
@@ -124,7 +233,7 @@ pub fn verify_barrier<A, D>(case: BarrierCase, trace: BarrierTrace<A, D>) -> Res
             outcome: tail_outcome,
         },
         barrier,
-    ] = trace.events.as_slice()
+    ] = trace.events.as_ref()
     else {
         return Err(Violation::Order);
     };
@@ -165,29 +274,33 @@ pub fn verify_barrier<A, D>(case: BarrierCase, trace: BarrierTrace<A, D>) -> Res
         return Err(Violation::TerminalKind);
     }
     match case {
-        BarrierCase::GateRetry if trace.retried_frames.is_empty() => {
+        BarrierCase::GateRetry if trace.retried_frames.as_ref().is_empty() => {
             return Err(Violation::Publication);
         }
         BarrierCase::GateAck | BarrierCase::GateTimeout | BarrierCase::RemoveKey
-            if !trace.retried_frames.is_empty() =>
+            if !trace.retried_frames.as_ref().is_empty() =>
         {
             return Err(Violation::Publication);
         }
         _ => {}
     }
-    for retry in trace.retried_frames {
-        let Some(([f0, f1], original)) = trace.first_frame.split_first_chunk::<2>() else {
+    for retry in trace.retried_frames.as_ref() {
+        let Some((first_control, original)) = trace.first_frame.as_ref().split_first_chunk::<2>()
+        else {
             return Err(Violation::Publication);
         };
-        let Some(([r0, r1], repeated)) = retry.split_first_chunk::<2>() else {
+        let Some((retry_control, repeated)) = retry.as_ref().split_first_chunk::<2>() else {
             return Err(Violation::Publication);
         };
         // Everything after Frame Control includes the original SN, CCMP PN
         // and payload. Attempt policy may change; MPDU contents may not.
-        if f0 != r0
-            || f1 & 0x08 != 0
-            || r1 & 0x08 == 0
-            || f1 & !0x08 != r1 & !0x08
+        let first_control =
+            oer_ieee80211_wire::frame::FrameControlFields::from_bytes(*first_control);
+        let retry_control =
+            oer_ieee80211_wire::frame::FrameControlFields::from_bytes(*retry_control);
+        if first_control.retry()
+            || !retry_control.retry()
+            || first_control.to_bytes() != retry_control.with_retry(false).to_bytes()
             || original != repeated
         {
             return Err(Violation::MpduChanged);
@@ -199,7 +312,9 @@ pub fn verify_barrier<A, D>(case: BarrierCase, trace: BarrierTrace<A, D>) -> Res
 /// Resource classes deliberately sharing an AC queue.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Class {
+    /// Small MPDU buffer class.
     Small,
+    /// Large MPDU buffer class.
     Large,
 }
 
@@ -242,11 +357,35 @@ pub const OPERATIONS: [Operation; 4] = [
 /// other ACs complete; then it is released, withdrawn, or ended by teardown.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Scenario {
+    /// Release the held access category and complete every operation.
     Complete,
+    /// Withdraw the held access category by closing the gate.
     CloseGate,
+    /// Drain accepted operations through disable.
     Disable,
+    /// Refuse invalid MPDU layouts before backend submission.
     Refuse,
+    /// Fail-stop with accepted owners still retained.
     Poison,
+}
+
+impl Scenario {
+    /// Every ownership case, in shared-suite order.
+    pub const ALL: [Self; 5] = [
+        Self::Complete,
+        Self::CloseGate,
+        Self::Disable,
+        Self::Refuse,
+        Self::Poison,
+    ];
+    /// Fail-stop is an injected model fault; other cases use real backend
+    /// API admission, completion and lifecycle boundaries.
+    pub const fn execution(self) -> Execution {
+        match self {
+            Self::Poison => Execution::ModelOnly(ModelOnlyReason::PoisonedBackend),
+            _ => Execution::Hardware,
+        }
+    }
 }
 
 /// Stable identities, observed from the resources themselves.
@@ -265,8 +404,11 @@ pub struct Resources {
 /// Distinguishes admission refusal from an accepted terminal.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum End {
-    Completed,
+    /// The accepted operation returned through its terminal.
+    Ended,
+    /// The accepted operation returned through a lifecycle withdrawal.
     Withdrawn,
+    /// The operation was refused before submission, without a terminal.
     Refused,
 }
 
@@ -283,9 +425,9 @@ pub struct Returned {
 }
 
 /// Evidence after the install has ended.
-pub struct Trace {
+pub struct Trace<R> {
     /// Actual returns in observation order.
-    pub returned: Vec<Returned>,
+    pub returned: R,
     /// Context destructors run. Quarantine retains unreturned contexts even
     /// after its receipt has been dropped.
     pub contexts_dropped: usize,
@@ -298,8 +440,13 @@ pub struct Trace {
 
 /// Backend-specific execution, shared scenarios and checks.
 pub trait Harness {
+    /// Storage for actual resource-return observations.
+    type Returns: AsRef<[Returned]>;
     /// Exercise the prescribed operations through the real backend API.
-    fn exercise(&mut self, scenario: Scenario) -> impl core::future::Future<Output = Trace>;
+    fn exercise(
+        &mut self,
+        scenario: Scenario,
+    ) -> impl core::future::Future<Output = Trace<Self::Returns>>;
 }
 
 /// The common suite found a contract violation.
@@ -325,20 +472,23 @@ pub enum Violation {
 
 /// Run the same ownership suite for any backend fixture. Refusal creates
 /// no publication or terminal; fail-stop ends all owners with the install.
-pub async fn check(harness: &mut impl Harness) -> Result<(), (Scenario, Violation)> {
-    for scenario in [
-        Scenario::Complete,
-        Scenario::CloseGate,
-        Scenario::Disable,
-        Scenario::Refuse,
-        Scenario::Poison,
-    ] {
+pub async fn check(
+    harness: &mut impl Harness,
+    environment: Environment,
+) -> Result<Report, (Scenario, Violation)> {
+    let mut report = Report::default();
+    for scenario in Scenario::ALL {
+        if !report.includes(environment, scenario.execution()) {
+            continue;
+        }
         verify(scenario, harness.exercise(scenario).await).map_err(|why| (scenario, why))?;
+        report.passed();
     }
-    Ok(())
+    Ok(report)
 }
 
-fn verify(scenario: Scenario, trace: Trace) -> Result<(), Violation> {
+/// Check captured ownership, publication, lifetime and FIFO observations.
+pub fn verify<R: AsRef<[Returned]>>(scenario: Scenario, trace: Trace<R>) -> Result<(), Violation> {
     let expected_drops = if scenario == Scenario::Poison {
         2
     } else {
@@ -360,7 +510,7 @@ fn verify(scenario: Scenario, trace: Trace) -> Result<(), Violation> {
         return Err(Violation::Publication);
     }
     let mut remaining = OPERATIONS.map(Some);
-    for returned in trace.returned {
+    for returned in trace.returned.as_ref() {
         let Some(slot) = remaining
             .iter_mut()
             .find(|op| op.as_ref() == Some(&returned.operation))
@@ -382,7 +532,7 @@ fn verify(scenario: Scenario, trace: Trace) -> Result<(), Violation> {
             (Scenario::CloseGate | Scenario::Disable, WmmAccessCategory::BestEffort) => {
                 End::Withdrawn
             }
-            _ => End::Completed,
+            _ => End::Ended,
         };
         if returned.end != expected_end {
             return Err(Violation::TerminalKind);

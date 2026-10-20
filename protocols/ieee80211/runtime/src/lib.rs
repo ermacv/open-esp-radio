@@ -50,7 +50,8 @@
 //! the receiver may run on another thread.
 //!
 //! The `test-support` feature exposes `lower_mac_owner`, the in-memory backend
-//! and conformance harness for tests of port consumers. The module is absent
+//! for tests of port consumers. Its fixtures run the shared conformance suite
+//! from `oer-ieee80211-port`; this feature enables that suite. The module is absent
 //! from production builds without that feature. The feature build includes
 //! the same bounded continuous RX and terminal fault injection as unit tests.
 //! It requires `alloc`, including on RV32, but only the host test harness

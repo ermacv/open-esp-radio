@@ -1,11 +1,11 @@
 use super::*;
 use oer_ieee80211_port::{AggregateAttempt, MpduStartSpacing};
 
-#[derive(Clone, Copy, Debug)]
-enum Form {
-    Single,
-    Aggregate,
-}
+use oer_ieee80211_port::conformance::{
+    self,
+    outcomes::{self, Form},
+};
+type OutcomeTrace = outcomes::Trace<ModelAck, ModelBlockAckEvidence, ModelAirDenied>;
 
 /// A returned outcome, of the operation's form.
 #[derive(Debug, Eq, PartialEq)]
@@ -17,6 +17,7 @@ enum Returned {
 struct Results {
     form: Form,
     result: AirAnswer,
+    trace: Option<Rc<RefCell<Option<OutcomeTrace>>>>,
 }
 
 impl Work for Results {
@@ -39,7 +40,10 @@ impl Work for Results {
         air.answer(self.result);
         // The second operation has no injection and must get the default ACK,
         // including when the first operation was an aggregate.
-        for (form, result) in [(self.form, self.result), (Form::Single, AirAnswer::Ack)] {
+        for (round, (form, result)) in [(self.form, self.result), (Form::Single, AirAnswer::Ack)]
+            .into_iter()
+            .enumerate()
+        {
             let rate = match form {
                 Form::Single => {
                     let TxFrame::Individual { frame, plan } = data_frame(phase, false) else {
@@ -203,6 +207,46 @@ impl Work for Results {
                 | (Form::Aggregate, AirAnswer::Ack) => panic!("not an answer this form takes"),
             };
             assert_eq!(outcome, expected, "{form:?}");
+            if round == 0 {
+                if let Some(trace) = &self.trace {
+                    let (actual_buffer, state, sequence) = match &returned_buffer {
+                        ModelAnyBuffer::SmallSent(mpdu) => (
+                            mpdu.buffer.slot.index(),
+                            conformance::MpduState::Sent,
+                            SequenceNumber::from_sequence_control(u16::from_le_bytes(
+                                mpdu.buffer.memory[22..24]
+                                    .try_into()
+                                    .expect("the fixture submitted a complete sequence control"),
+                            )),
+                        ),
+                        ModelAnyBuffer::Small(buffer) => (
+                            buffer.slot.index(),
+                            conformance::MpduState::Fresh,
+                            SequenceNumber::ZERO,
+                        ),
+                        _ => panic!("the fixture submitted a small MPDU"),
+                    };
+                    trace.replace(Some(outcomes::Trace {
+                        admitted: outcomes::Identity {
+                            ticket: original_ticket,
+                            buffer: original_buffer,
+                        },
+                        returned: outcomes::Identity {
+                            ticket: returned_ticket.index(),
+                            buffer: actual_buffer,
+                        },
+                        state,
+                        rate,
+                        sequence,
+                        publications: phase.held.air.sent().len(),
+                        outcome: match outcome {
+                            Returned::Single(outcome) => outcomes::Outcome::Single(outcome),
+                            Returned::Aggregate(outcome) => outcomes::Outcome::Aggregate(outcome),
+                        },
+                    }));
+                }
+            }
+
             ticket = returned_ticket;
             let ModelAnyBuffer::SmallSent(sent) = returned_buffer else {
                 panic!("publication must return Sent")
@@ -228,6 +272,44 @@ impl Work for Results {
     }
 }
 
+struct ModelOutcomeHarness;
+impl outcomes::Harness for ModelOutcomeHarness {
+    type Ack = ModelAck;
+    type BlockAck = ModelBlockAckEvidence;
+    type AirDenied = ModelAirDenied;
+    async fn exercise(&mut self, case: outcomes::Case) -> OutcomeTrace {
+        let result = match case {
+            outcomes::Case::Ack => AirAnswer::Ack,
+            outcomes::Case::BlockAck => AirAnswer::BlockAck(1),
+            outcomes::Case::NoResponse(_) => AirAnswer::NoResponse,
+            outcomes::Case::Collision(_) => AirAnswer::Collision,
+            outcomes::Case::AirDenied(_) => AirAnswer::AirDenied,
+            outcomes::Case::HardwareTimeout(_) => AirAnswer::HardwareTimeout,
+        };
+        let (backend, _) = backend();
+        let trace = Rc::new(RefCell::new(None));
+        let _port_end = run_port(
+            backend,
+            Body(Results {
+                form: case.form(),
+                result,
+                trace: Some(trace.clone()),
+            }),
+        )
+        .await;
+        let captured = trace.borrow_mut().take();
+        captured.expect("the result fixture captures actual terminals and owners")
+    }
+}
+#[test]
+fn shared_outcome_suite_observes_each_actual_single_or_aggregate_terminal() {
+    block_on(outcomes::check(
+        &mut ModelOutcomeHarness,
+        conformance::Environment::Model,
+    ))
+    .expect("the model satisfies every shared outcome case");
+}
+
 #[test]
 fn every_result_is_consumed_by_exactly_one_single_or_aggregate_attempt() {
     for form in [Form::Single, Form::Aggregate] {
@@ -242,7 +324,14 @@ fn every_result_is_consumed_by_exactly_one_single_or_aggregate_attempt() {
             AirAnswer::HardwareTimeout,
         ] {
             let (backend, _) = backend();
-            let _port_end = block_on(run_port(backend, Body(Results { form, result })));
+            let _port_end = block_on(run_port(
+                backend,
+                Body(Results {
+                    form,
+                    result,
+                    trace: None,
+                }),
+            ));
         }
     }
 }
@@ -253,6 +342,7 @@ fn aggregate_honors_timeout_injection() {
     let _port_end = block_on(run_port(
         backend,
         Body(Results {
+            trace: None,
             form: Form::Aggregate,
             result: AirAnswer::HardwareTimeout,
         }),
@@ -265,6 +355,7 @@ fn an_empty_block_ack_is_consumed_before_the_following_single() {
     let _port_end = block_on(run_port(
         backend,
         Body(Results {
+            trace: None,
             form: Form::Aggregate,
             result: AirAnswer::BlockAck(0),
         }),
@@ -277,6 +368,7 @@ fn an_aggregate_s_unmeasured_block_ack_still_delivers_it() {
     let _port_end = block_on(run_port(
         backend,
         Body(Results {
+            trace: None,
             form: Form::Aggregate,
             result: AirAnswer::BlockAckUnmeasured(1),
         }),
