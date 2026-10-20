@@ -29,7 +29,9 @@ without vendor radio binaries. Decisions are in
   files inside its own temporary directory (`tempfile`). No test starts an
   external program, changes process-wide state (signals, descriptors,
   environment, working directory, limits), uses a fixed path, opens a
-  network port or waits on real time.
+  network port or waits on real time. The one exception is the pinned Rust
+  toolchain (`cargo`, `rustc`, `lld`), run into the test's own build
+  directory: compile-fail ownership cases and compiler-driven fixtures.
 - **Hardware access.** MMIO only through typed PAC accessors. A missing field
   is added to `chips/<chip>/registers/` and regenerated (`cargo registers generate`), never
   written as a local mask or shift. `unsafe` stays narrow and carries
