@@ -40,6 +40,7 @@ mod driver;
 mod keys;
 mod lifecycle;
 mod phase;
+pub mod trace;
 pub use buffer::*;
 pub use keys::{GroupKey, PairwiseKey, PortKeys};
 pub use phase::{Esp32s31Interface, Esp32s31Phase, Esp32s31Setup};
@@ -210,6 +211,10 @@ struct Initial<D: Device<B>, const B: usize> {
     coex: &'static dyn RadioCoexPriorities,
 }
 impl<D: Device<B>, const B: usize> Esp32s31Backend<D, B> {
+    /// Optional aggregate admission of this port implementation. Its
+    /// `NoAggregate` owner is uninhabited and it implements no `AmpduPhase`.
+    pub const AMPDU: Option<AmpduCapabilities> = None;
+
     pub fn new(parts: PortParts<D, B>) -> Result<radio::Installed<Self>, PortParts<D, B>> {
         let Ok(station) = IndividualAddress::for_interface(parts.config.station_address) else {
             return Err(parts);

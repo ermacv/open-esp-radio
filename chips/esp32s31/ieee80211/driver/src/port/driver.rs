@@ -772,6 +772,10 @@ impl<'id, D: Device<B>, const B: usize> Driver<'id, D, B> {
         .map_err(|_| Fault::Capacity)?;
         mpdu.published = true;
         pending.publications = pending.publications.checked_add(1).ok_or(Fault::Capacity)?;
+        let publication = super::trace::Publication {
+            ticket: pending.operation.ticket().index(),
+            buffer: pending.operation.execute().mpdu.buffer.index(),
+        };
         let queue = self.free[index].take().ok_or(Fault::Capacity)?;
         // Durable backing owns the indivisible operation before publication.
         self.running[index] = Some(pending);
@@ -782,6 +786,7 @@ impl<'id, D: Device<B>, const B: usize> Driver<'id, D, B> {
             core::mem::forget(refused);
             return Err(Fault::Capacity);
         }
+        oer_trace::emit(&publication);
         let _ = held;
         Ok(())
     }

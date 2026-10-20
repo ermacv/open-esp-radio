@@ -27,6 +27,18 @@ fn packages(tree: &str) -> Vec<String> {
     packages
 }
 
+// Only the dedicated conformance image may link the allocator-free Wi-Fi
+// case definitions. Hardware/placement doubles remain forbidden everywhere.
+fn forbidden_packages(image: &str, tree: &str) -> Vec<String> {
+    packages(tree)
+        .into_iter()
+        .filter(|package| {
+            !(image == "oer-firmware-hil-esp32s31-lower-mac"
+                && package.split_whitespace().next() == Some("oer-ieee80211-port"))
+        })
+        .collect()
+}
+
 /// Refuse the image `package` for `target` at `root` when its dependencies
 /// enable [`TEST_SUPPORT`].
 pub fn refuse(root: &Path, package: &str, target: &str) -> Result<()> {
@@ -45,7 +57,7 @@ pub fn refuse(root: &Path, package: &str, target: &str) -> Result<()> {
         )
         .into());
     }
-    let packages = packages(&String::from_utf8_lossy(&output.stdout));
+    let packages = forbidden_packages(package, &String::from_utf8_lossy(&output.stdout));
     if !packages.is_empty() {
         return Err(format!(
             "image {package} enables `{TEST_SUPPORT}` in {}: host-model support never goes into an image",
@@ -58,6 +70,18 @@ pub fn refuse(root: &Path, package: &str, target: &str) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn only_the_dedicated_suite_can_link_allocator_free_case_definitions() {
+        let tree = "oer-ieee80211-port v0.1.0 (/port)|test-support\noer-esp32s31-hal v0.1.0 (/hal)|test-support\n";
+        assert_eq!(
+            super::forbidden_packages("oer-firmware-hil-esp32s31-lower-mac", tree),
+            ["oer-esp32s31-hal v0.1.0"]
+        );
+        assert_eq!(
+            super::forbidden_packages("oer-firmware-apps-w2", tree).len(),
+            2
+        );
+    }
     #[test]
     fn an_image_with_test_support_is_named() {
         let tree = "oer-firmware-apps-w1 v0.1.0 (/w1)|\noer-esp32s31-hal v0.1.0 (/hal)|test-support\noer-memory v0.1.0 (/m)|serde,test-support\nbytemuck v1.0.0|derive\n";

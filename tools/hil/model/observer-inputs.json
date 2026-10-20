@@ -35,13 +35,17 @@
     ],
     "system": [
       "oer-hil-family-system"
+    ],
+    "lower-mac": [
+      "oer-hil-family-lower-mac"
     ]
   },
   "timing": {
     "system/boot-smoke": false,
     "system/watchdog": true,
     "system/panic-reset": true,
-    "system/stand-recovery": true
+    "system/stand-recovery": true,
+    "lower-mac/conformance": true
   },
   "build": {
     "profile": "debug"

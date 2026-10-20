@@ -1,0 +1,60 @@
+[package]
+name = "oer-firmware-hil-esp32s31-lower-mac"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+description = "Lower-MAC hardware conformance through the ESP32-S31 port"
+build = "build.rs"
+
+[features]
+diagnostic-lower-mac = []
+
+[dependencies]
+sha2 = { version = "0.10", default-features = false }
+embassy-sync = "0.8.0"
+oer-trace = { path = "../../../portable/trace" }
+oer-hil-agent = { path = "../../../portable/hil-agent" }
+oer-hil-protocol = { path = "../../../protocols/hil/protocol", default-features = false, features = ["lower-mac", "async-io"] }
+oer-radio-port = { path = "../../../protocols/radio/port" }
+oer-esp32s31-radio-coex = { path = "../../../chips/esp32s31/radio/coex" }
+oer-espressif-ieee80211-policy = { path = "../../../chips/espressif/ieee80211-policy" }
+oer-ieee80211-upper-mac = { path = "../../../protocols/ieee80211/upper-mac" }
+oer-ieee80211-port = { path = "../../../protocols/ieee80211/port", features = ["test-support"] }
+atomic-waker = "1.1.2"
+embassy-executor = { version = "0.10.0", default-features = false }
+embassy-futures = "0.1.2"
+esp-hal = { workspace = true, features = ["esp32s31", "static-interrupts", "rt", "unstable"] }
+heapless = "0.9.3"
+static_cell = { workspace = true }
+oer-esp32s31-board = { path = "../../../chips/esp32s31/board" }
+oer-espressif-staged-runtime = { path = "../../../chips/espressif/staged-runtime", features = ["esp32s31", "two-harts"] }
+oer-espressif-esp-hal-irq = { workspace = true }
+oer-espressif-executor = { path = "../../../chips/espressif/executor", features = ["esp32s31"] }
+oer-espressif-esp-hal-radio = { path = "../../../chips/espressif/esp-hal/radio", features = ["esp32s31"] }
+oer-embassy-time = { path = "../../../portable/embassy/time" }
+oer-time = { path = "../../../portable/time" }
+oer-interrupt-table = { path = "../../../portable/interrupt-table" }
+oer-memory = { path = "../../../portable/memory" }
+oer-esp32s31-hal = { path = "../../../chips/esp32s31/hal" }
+oer-esp32s31-phy = { path = "../../../chips/esp32s31/phy" }
+oer-esp32s31-radio-client = { path = "../../../chips/esp32s31/radio/client" }
+oer-esp32s31-radio-system = { path = "../../../chips/esp32s31/radio/system" }
+oer-esp32s31-ieee80211-driver = { path = "../../../chips/esp32s31/ieee80211/driver" }
+oer-esp32s31-ieee80211-mac = { path = "../../../chips/esp32s31/ieee80211/mac" }
+oer-ieee80211-wire = { path = "../../../protocols/ieee80211/wire" }
+oer-radio-regulatory = { path = "../../../protocols/radio/regulatory" }
+oer-ieee80211-runtime = { path = "../../../protocols/ieee80211/runtime" }
+oer-ieee80211-softmac = { path = "../../../protocols/ieee80211/softmac" }
+
+[build-dependencies]
+oer-esp32s31-layout = { workspace = true, features = ["build"] }
+
+[lints]
+workspace = true
+
+
+[package.metadata.open-radio]
+instrumentation = ["trace"]

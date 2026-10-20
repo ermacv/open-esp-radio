@@ -4700,3 +4700,7 @@ impl<'p, 'v, 'id: 'p, C: Ieee80211Capabilities, X: ModelContext> AccessPointPhas
 
 #[cfg(test)]
 mod tests;
+
+/// Reusable reference fixtures for the physical conformance runner.
+#[cfg(feature = "test-support")]
+pub mod conformance;

@@ -10,7 +10,7 @@ readme = "README.md"
 
 [features]
 # Shared allocator-free conformance cases and backend testing support.
-test-support = ["oer-radio-port/test-support"]
+test-support = []
 
 [dependencies]
 heapless = "0.9.3"

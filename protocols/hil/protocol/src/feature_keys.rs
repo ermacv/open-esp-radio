@@ -86,6 +86,17 @@ pub fn image_keys(enabled: &dyn Fn(&str) -> bool) -> ImageKeys {
             add(key, true);
         }
     }
+    #[cfg(feature = "lower-mac")]
+    if enabled("diagnostic-lower-mac") {
+        for key in [
+            crate::lower_mac::Prepare::KEY,
+            crate::lower_mac::Prepared::KEY,
+            crate::lower_mac::RunCase::KEY,
+            crate::lower_mac::CaseTrace::KEY,
+        ] {
+            add(key, true);
+        }
+    }
     sorted(keys)
 }
 
@@ -101,6 +112,7 @@ pub const READ_FEATURES: &[&str] = &[
     "system-panic-reset",
     "usb-jtag-off",
     "diagnostic-phy",
+    "diagnostic-lower-mac",
 ];
 
 #[cfg(test)]

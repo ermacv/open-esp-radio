@@ -206,6 +206,11 @@ bounds) live in the code that applies them.
 
 ## Wi-Fi
 
+- **Hardware lower-MAC conformance.** Run every Hardware case supported by
+  the backend's declared capabilities. A-MPDU/BlockAck cases remain Hardware;
+  a backend without `AmpduPhase` reports them separately as unsupported until
+  W6, never as model-only. The gate e report lists the skips and their reason.
+
 - **Driver core.** The driver owns all four EDCA queues and executes each
   attempt's retry plan; a protected MPDU is numbered at its first launch; DMA
   access only through its owner type, never alongside a quiescence proof.
