@@ -13,7 +13,7 @@ use core::{
 
 use crate::dma_static::Placed;
 use crate::layouts::WifiRxDmaDescriptorControl;
-use oer_memory::ExternalRxBuffer;
+use oer_memory::{ExternalRxBuffer, ExternalRxReturn, ExternalRxReturnState};
 
 use crate::ieee80211::dma::{
     descriptor::RxDescriptor,
@@ -32,20 +32,13 @@ use crate::ieee80211::dma::{
 #[derive(bytemuck::Zeroable)]
 pub struct RxDmaBuffer<const BUFFER_SIZE: usize, const STORAGE_SIZE: usize>(
     UnsafeCell<[u8; STORAGE_SIZE]>,
-    AtomicU8,
+    ExternalRxReturn,
 );
-
-const RX_BUFFER_RING: u8 = 0;
-const RX_BUFFER_DETACHED: u8 = 1;
-const RX_BUFFER_RELEASED: u8 = 2;
 
 impl<const BUFFER_SIZE: usize, const STORAGE_SIZE: usize> RxDmaBuffer<BUFFER_SIZE, STORAGE_SIZE> {
     const fn new() -> Self {
         assert!(STORAGE_SIZE >= BUFFER_SIZE + 4);
-        Self(
-            UnsafeCell::new([0; STORAGE_SIZE]),
-            AtomicU8::new(RX_BUFFER_RING),
-        )
+        Self(UnsafeCell::new([0; STORAGE_SIZE]), ExternalRxReturn::new())
     }
 
     fn cpu_owned_mut(&mut self) -> &mut [u8; BUFFER_SIZE] {
@@ -77,12 +70,11 @@ impl<const BUFFER_SIZE: usize, const STORAGE_SIZE: usize> RxDmaBuffer<BUFFER_SIZ
     /// only from the ring's rearm closure.
     #[allow(unsafe_code, reason = "ring rearm owns the DMA buffer transition")]
     pub(crate) unsafe fn prepare_for_recycle(&self) -> Result<(), RxRingError> {
-        match self.1.load(Ordering::Acquire) {
-            RX_BUFFER_RING => {}
-            RX_BUFFER_DETACHED | RX_BUFFER_RELEASED => {
+        match self.1.state() {
+            ExternalRxReturnState::Attached => {}
+            ExternalRxReturnState::Detached | ExternalRxReturnState::Returned => {
                 return Err(RxRingError::BufferOwnershipConflict);
             }
-            _ => return Err(RxRingError::Corrupt),
         }
         // SAFETY: ring ownership makes this the only CPU or DMA writer.
         unsafe { prepare_recycled_buffer(&mut *self.0.get(), BUFFER_SIZE) }
@@ -95,7 +87,7 @@ impl<const BUFFER_SIZE: usize, const STORAGE_SIZE: usize> RxDmaBuffer<BUFFER_SIZ
     /// every upper lease has returned but before the next staged service pass
     /// recycled the released prefix. The descriptor remains observed and is
     /// therefore safe to republish, but its allocation still carries the
-    /// durable `Released` state. Normalize that state in the same transaction;
+    /// durable `Returned` state. Normalize that state in the same transaction;
     /// otherwise the descriptor becomes DMA-visible while a later detach sees
     /// the stale release and rejects a real completion as `BufferOwnershipConflict`.
     #[allow(
@@ -103,43 +95,17 @@ impl<const BUFFER_SIZE: usize, const STORAGE_SIZE: usize> RxDmaBuffer<BUFFER_SIZ
         reason = "the observed live-ring prefix excludes DMA and detached upper ownership"
     )]
     unsafe fn prepare_observed_for_recycle(&self) -> Result<(), RxRingError> {
-        match self.1.load(Ordering::Acquire) {
-            RX_BUFFER_RING => {}
-            RX_BUFFER_RELEASED => {
-                self.1
-                    .compare_exchange(
-                        RX_BUFFER_RELEASED,
-                        RX_BUFFER_RING,
-                        Ordering::AcqRel,
-                        Ordering::Acquire,
-                    )
-                    .map_err(|_| RxRingError::BufferOwnershipConflict)?;
-            }
-            RX_BUFFER_DETACHED => return Err(RxRingError::BufferOwnershipConflict),
-            _ => return Err(RxRingError::Corrupt),
-        }
+        self.1
+            .reattach()
+            .map_err(|_| RxRingError::BufferOwnershipConflict)?;
         // SAFETY: the state check/transition excludes every external owner.
         unsafe { self.prepare_for_recycle() }
     }
 
-    fn detach_with(
-        &self,
-        length: usize,
-        index: usize,
-        owner: NonNull<()>,
-        release: unsafe fn(NonNull<()>, usize),
-    ) -> Result<ExternalRxBuffer, RxRingError> {
+    fn detach_with(&'static self, length: usize) -> Result<ExternalRxBuffer, RxRingError> {
         if length == 0 || length > BUFFER_SIZE {
             return Err(RxRingError::Size);
         }
-        self.1
-            .compare_exchange(
-                RX_BUFFER_RING,
-                RX_BUFFER_DETACHED,
-                Ordering::AcqRel,
-                Ordering::Acquire,
-            )
-            .map_err(|_| RxRingError::BufferOwnershipConflict)?;
         let pointer = NonNull::new(self.0.get().cast::<u8>()).expect("RX DMA buffer is non-null");
         #[allow(
             unsafe_code,
@@ -147,16 +113,17 @@ impl<const BUFFER_SIZE: usize, const STORAGE_SIZE: usize> RxDmaBuffer<BUFFER_SIZ
         )]
         // SAFETY: the completed-unit owner proved that DMA released this
         // buffer. The buffer is part of stable arena storage and the state
-        // transition prevents recycle until the callback marks it released.
-        Ok(unsafe { ExternalRxBuffer::new(pointer, length, BUFFER_SIZE, owner, index, release) })
+        // transition prevents recycle until the affine buffer is returned.
+        unsafe { self.1.detach(pointer, length, BUFFER_SIZE) }
+            .map_err(|_| RxRingError::BufferOwnershipConflict)
     }
 
     fn is_released(&self) -> bool {
-        self.1.load(Ordering::Acquire) == RX_BUFFER_RELEASED
+        self.1.state() == ExternalRxReturnState::Returned
     }
 
-    fn state(&self) -> u8 {
-        self.1.load(Ordering::Acquire)
+    fn state(&self) -> ExternalRxReturnState {
+        self.1.state()
     }
 
     #[allow(
@@ -164,21 +131,9 @@ impl<const BUFFER_SIZE: usize, const STORAGE_SIZE: usize> RxDmaBuffer<BUFFER_SIZ
         reason = "stopped DMA owner may normalize a returned detached buffer"
     )]
     unsafe fn prepare_for_stopped_ring(&self) -> Result<(), RxRingError> {
-        match self.1.load(Ordering::Acquire) {
-            RX_BUFFER_RING => {}
-            RX_BUFFER_RELEASED => {
-                self.1
-                    .compare_exchange(
-                        RX_BUFFER_RELEASED,
-                        RX_BUFFER_RING,
-                        Ordering::AcqRel,
-                        Ordering::Acquire,
-                    )
-                    .map_err(|_| RxRingError::BufferOwnershipConflict)?;
-            }
-            RX_BUFFER_DETACHED => return Err(RxRingError::BufferOwnershipConflict),
-            _ => return Err(RxRingError::Corrupt),
-        }
+        self.1
+            .reattach()
+            .map_err(|_| RxRingError::BufferOwnershipConflict)?;
         // SAFETY: stopped-ring ownership excludes DMA, and DETACHED was
         // rejected before touching the allocation.
         unsafe { self.prepare_for_recycle() }
@@ -209,34 +164,6 @@ impl<const BUFFER_SIZE: usize, const STORAGE_SIZE: usize> RxDmaBuffer<BUFFER_SIZ
 unsafe impl<const BUFFER_SIZE: usize, const STORAGE_SIZE: usize> Sync
     for RxDmaBuffer<BUFFER_SIZE, STORAGE_SIZE>
 {
-}
-
-#[allow(
-    unsafe_code,
-    reason = "type-erased external lease returns to its concrete DMA buffer"
-)]
-unsafe fn release_detached_buffer<const BUFFER_SIZE: usize, const STORAGE_SIZE: usize>(
-    owner: NonNull<()>,
-    _index: usize,
-) {
-    // SAFETY: `RxDmaStorage::detach_buffer` installed this callback with a pointer to
-    // the same concrete buffer allocation, which remains static for the DMA
-    // epoch.
-    let buffer = unsafe {
-        owner
-            .cast::<RxDmaBuffer<BUFFER_SIZE, STORAGE_SIZE>>()
-            .as_ref()
-    };
-    assert_eq!(
-        buffer.1.compare_exchange(
-            RX_BUFFER_DETACHED,
-            RX_BUFFER_RELEASED,
-            Ordering::Release,
-            Ordering::Acquire,
-        ),
-        Ok(RX_BUFFER_DETACHED),
-        "detached RX DMA buffer must be released exactly once"
-    );
 }
 
 /// The reserved descriptor's buffer lent to its live ring.
@@ -720,14 +647,7 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
         index: usize,
     ) -> Result<ExternalRxBuffer, RxRingError> {
         let buffer = self.buffer_by_id(index).ok_or(RxRingError::Count)?;
-        let detached = buffer.detach_with(
-            length,
-            index,
-            NonNull::from(buffer).cast(),
-            release_detached_buffer::<BUFFER_SIZE, STORAGE_SIZE>,
-        );
-        let detached = detached?;
-        Ok(detached)
+        buffer.detach_with(length)
     }
 
     fn observe_append(
@@ -882,14 +802,14 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
         self.buffer_by_id(self.descriptor_buffer_id(descriptor_index)?)
     }
 
-    fn any_buffer_in_state(&self, state: u8) -> bool {
+    fn any_buffer_in_state(&self, state: ExternalRxReturnState) -> bool {
         self.buffers.iter().any(|buffer| buffer.state() == state)
     }
 
     pub fn detached_buffer_count(&self) -> usize {
         self.buffers
             .iter()
-            .filter(|buffer| buffer.state() == RX_BUFFER_DETACHED)
+            .filter(|buffer| buffer.state() == ExternalRxReturnState::Detached)
             .count()
     }
 
@@ -964,7 +884,7 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
         if !ring.belongs_to_arena(&self.arena) {
             return Err((ring, RxRingError::DescriptorOwnerAddress));
         }
-        if self.any_buffer_in_state(RX_BUFFER_DETACHED) {
+        if self.any_buffer_in_state(ExternalRxReturnState::Detached) {
             return Err((ring, RxRingError::OutstandingLeases));
         }
         match self.lifecycle_state() {
@@ -1168,7 +1088,7 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
     /// never detached from the ring.
     ///
     /// This is the deferred-discard counterpart to released-prefix reclaim. A
-    /// returned network buffer (`Released`) and a live upper lease
+    /// returned network buffer (`Returned`) and a live upper lease
     /// (`Detached`) are excluded; the caller must first advance those owners
     /// in ring order. A terminal is required so a partial chain can never be
     /// republished.
@@ -1189,9 +1109,10 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
                 .ok_or(RxRingError::Count)?
                 .state()
             {
-                RX_BUFFER_RING => {}
-                RX_BUFFER_DETACHED | RX_BUFFER_RELEASED => return Ok(None),
-                _ => return Err(RxRingError::Corrupt),
+                ExternalRxReturnState::Attached => {}
+                ExternalRxReturnState::Detached | ExternalRxReturnState::Returned => {
+                    return Ok(None);
+                }
             }
             if self.descriptors()[index].word0().rx_done() {
                 return Ok(Some(step + 1));

@@ -3,8 +3,8 @@
 //! A chip DMA owner creates an [`ExternalRxBuffer`] only after hardware has
 //! released the matching descriptor. The bounded pool then transfers that
 //! exact buffer from the radio/protocol owner to the network owner. No payload
-//! bytes are copied and no safe API exposes the release callback or raw owner
-//! context.
+//! bytes are copied. A shared return state makes the allocation eligible for
+//! DMA reuse after its affine owner relinquishes access.
 
 use core::{
     cell::UnsafeCell,
@@ -19,50 +19,112 @@ const SLOT_READY: u8 = 2;
 const SLOT_RADIO: u8 = 3;
 const SLOT_RELEASING: u8 = 4;
 
+/// The DMA owner's return edge of one detachable buffer.
+#[repr(transparent)]
+pub struct ExternalRxReturn(AtomicU8);
+
+#[allow(unsafe_code, reason = "zero is the Attached return state")]
+// SAFETY: AtomicU8 is zeroable, and zero represents Attached.
+unsafe impl bytemuck::Zeroable for ExternalRxReturn {}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ExternalRxReturnState {
+    Attached,
+    Detached,
+    Returned,
+}
+
+impl ExternalRxReturn {
+    pub const fn new() -> Self {
+        Self(AtomicU8::new(0))
+    }
+
+    pub fn state(&self) -> ExternalRxReturnState {
+        Self::decode(self.0.load(Ordering::Acquire))
+    }
+
+    fn decode(state: u8) -> ExternalRxReturnState {
+        match state {
+            0 => ExternalRxReturnState::Attached,
+            1 => ExternalRxReturnState::Detached,
+            2 => ExternalRxReturnState::Returned,
+            _ => unreachable!("external RX return state is always valid"),
+        }
+    }
+
+    /// Detach the stable allocation after DMA has relinquished it.
+    ///
+    /// # Safety
+    ///
+    /// `pointer..pointer + capacity` is the stable allocation this state
+    /// guards; DMA no longer accesses it while the state is not Attached.
+    /// The first `length` bytes are initialized, and the returned buffer has
+    /// exclusive CPU access until it is returned. The allocation must remain
+    /// valid even if the buffer is forgotten.
+    #[allow(
+        unsafe_code,
+        reason = "chip DMA storage establishes the stable detached-buffer proof"
+    )]
+    pub unsafe fn detach(
+        &'static self,
+        pointer: NonNull<u8>,
+        length: usize,
+        capacity: usize,
+    ) -> Result<ExternalRxBuffer, ExternalRxReturnState> {
+        assert!(length <= capacity, "external RX length exceeds capacity");
+        self.0
+            .compare_exchange(0, 1, Ordering::AcqRel, Ordering::Acquire)
+            .map_err(Self::decode)?;
+        Ok(ExternalRxBuffer {
+            pointer,
+            length,
+            capacity,
+            ret: self,
+            live: true,
+        })
+    }
+
+    #[inline]
+    pub fn reattach(&self) -> Result<(), ExternalRxReturnState> {
+        match self.state() {
+            ExternalRxReturnState::Attached => Ok(()),
+            ExternalRxReturnState::Detached => Err(ExternalRxReturnState::Detached),
+            ExternalRxReturnState::Returned => self
+                .0
+                .compare_exchange(2, 0, Ordering::AcqRel, Ordering::Acquire)
+                .map(|_| ())
+                .map_err(Self::decode),
+        }
+    }
+
+    fn return_once(&self) {
+        assert_eq!(
+            self.0
+                .compare_exchange(1, 2, Ordering::Release, Ordering::Acquire),
+            Ok(1),
+            "detached RX DMA buffer must be released exactly once"
+        );
+        #[cfg(test)]
+        tests::observe_return();
+    }
+}
+
+impl Default for ExternalRxReturn {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// One stable external receive buffer and its affine return edge.
 pub struct ExternalRxBuffer {
     pointer: NonNull<u8>,
     length: usize,
     capacity: usize,
-    owner: NonNull<()>,
-    owner_index: usize,
-    release: unsafe fn(NonNull<()>, usize),
+    ret: &'static ExternalRxReturn,
     live: bool,
 }
 
 impl ExternalRxBuffer {
-    /// Construct a buffer after a DMA owner has detached it from hardware.
-    ///
-    /// # Safety
-    ///
-    /// `pointer..pointer + capacity` must remain allocated and exclusively
-    /// CPU-owned until `release(owner, owner_index)` is called exactly once.
-    /// The callback must make the allocation eligible for DMA reuse only
-    /// after this value has relinquished all access to it.
-    #[allow(
-        unsafe_code,
-        reason = "chip DMA storage establishes the stable detached-buffer proof"
-    )]
-    pub unsafe fn new(
-        pointer: NonNull<u8>,
-        length: usize,
-        capacity: usize,
-        owner: NonNull<()>,
-        owner_index: usize,
-        release: unsafe fn(NonNull<()>, usize),
-    ) -> Self {
-        assert!(length <= capacity, "external RX length exceeds capacity");
-        Self {
-            pointer,
-            length,
-            capacity,
-            owner,
-            owner_index,
-            release,
-            live: true,
-        }
-    }
-
     pub const fn length(&self) -> usize {
         self.length
     }
@@ -116,15 +178,7 @@ impl ExternalRxBuffer {
             return;
         }
         self.live = false;
-        #[allow(
-            unsafe_code,
-            reason = "affine token invokes its bound return edge once"
-        )]
-        // SAFETY: the constructor bound this exact callback and owner identity
-        // to the allocation. `live` makes this the sole invocation.
-        unsafe {
-            (self.release)(self.owner, self.owner_index);
-        }
+        self.ret.return_once();
     }
 }
 
@@ -138,8 +192,9 @@ impl Drop for ExternalRxBuffer {
     unsafe_code,
     reason = "affine external buffer may cross executor cores"
 )]
-// SAFETY: the chip owner promises stable storage and cross-core ownership is
-// transferred only by the pool's release/acquire state transitions.
+// SAFETY: detach promises stable, exclusively CPU-owned storage. The shared
+// static return state is atomic, and the pool's release/acquire transitions
+// transfer the affine buffer's access between cores.
 unsafe impl Send for ExternalRxBuffer {}
 
 struct ExternalRxHandoffSlot {

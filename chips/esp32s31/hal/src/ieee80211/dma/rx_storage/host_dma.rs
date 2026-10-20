@@ -7,7 +7,7 @@
 //! methods. They exist only on a `HostDma` arena: a chip arena has no such
 //! port.
 
-use super::{RX_BUFFER_RING, RxDmaBuffer, RxDmaStorage, RxRingLive};
+use super::{ExternalRxReturnState, RxDmaBuffer, RxDmaStorage, RxRingLive};
 use crate::ieee80211::dma::space::HostDma;
 
 /// Why the modelled DMA engine refused an access.
@@ -110,7 +110,7 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize>
             if len > STORAGE_SIZE - offset {
                 return Err(HostDmaAccessError::OutsideBuffers);
             }
-            if buffer.state() != RX_BUFFER_RING {
+            if buffer.state() != ExternalRxReturnState::Attached {
                 return Err(HostDmaAccessError::NotInRing);
             }
             return Ok((buffer, offset));

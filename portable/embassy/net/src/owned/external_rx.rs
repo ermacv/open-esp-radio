@@ -226,7 +226,7 @@ impl<const FRAME_CAPACITY: usize, const SLOTS: usize> ExternalRxOrigin<FRAME_CAP
     }
 }
 
-/// Xarxa release callback of an [`ExternalRxOrigin`].
+/// Xarxa packet return entry for an [`ExternalRxOrigin`].
 ///
 /// # Safety
 ///
@@ -316,7 +316,7 @@ impl<M: RawMutex, const RX_QUEUE_DEPTH: usize> OwnedRxPublisher<'_, M, RX_QUEUE_
         // SAFETY: `fits_packet` proved an aligned `PACKET_BUF_SIZE` view at
         // the Ethernet start inside the slot's stable, initialized allocation,
         // which the consumed network lease hands exclusively to this packet
-        // until its release callback runs. The origin lives in its static.
+        // until its packet return entry runs. The origin lives in its static.
         let packet = unsafe {
             origin.packets.adopt(
                 usize::from(adoption.index),
