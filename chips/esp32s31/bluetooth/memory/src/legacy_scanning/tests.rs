@@ -1,15 +1,9 @@
 use std::boxed::Box;
 
-use super::{
-    COMPRESSED_LINK_MASK, LINK_STATE_RX_CLASS_WORD, LINK_STATE_TX_HEAD_WORD,
-    LINK_STATE_TX_TAIL_WORD, LINK_STATE_TX_WORD, LegacyScanError, LegacyScanPool,
-    LegacyScanStorage, SCHEDULER_ITEM_ALLOCATION_NUMBER_WORD, SCHEDULER_ITEM_COEX_PRIORITIES_WORD,
-    SCHEDULER_ITEM_KIND_MASK, SCHEDULER_ITEM_LINK_STATE_WORD,
-};
+use super::{LegacyScanError, LegacyScanPool, LegacyScanStorage};
 use crate::{
     LegacyScanCoexistencePriorities, LegacyScanPrimaryChannel, LegacyScanResetConfig,
     LegacyScanSchedulerWindow, LegacyScanStartSelection, SchedulerItemCoexistencePriority,
-    coexistence::lanes_image,
     le_phy_packet::{LeAccessAddress, LeCrcInit},
     le_rx_chain::{LeRxChain, LeRxChainModelAddress, LeRxChainStorage},
     legacy_scanning_event_image::LegacyScanRxHeadProjection,
@@ -100,10 +94,7 @@ fn the_reset_joins_the_scanning_chain() {
     assert!(image.started_flag());
     assert_eq!(image.access_address(), LeAccessAddress::PRIMARY_ADVERTISING);
     assert_eq!(image.window_ticks(), 0);
-    assert_eq!(
-        graph.link_state.words[LINK_STATE_RX_CLASS_WORD].get() >> 28,
-        1
-    );
+    assert_eq!(graph.link_state.layout.rx_list().read().class(), 1);
     // The free chain survives the reset.
     assert_eq!(
         graph.link_state.free_head(),
@@ -119,7 +110,7 @@ fn items_are_numbered_after_the_connections() {
     let (graph, _, _) = pool.shared(&instance).unwrap();
     for (index, item) in graph.items.iter().enumerate() {
         assert_eq!(
-            item.words[SCHEDULER_ITEM_ALLOCATION_NUMBER_WORD].get(),
+            item.layout.allocation_number().read().bits(),
             2 + 1 + 3 + index as u32
         );
     }
@@ -146,8 +137,16 @@ fn a_window_takes_the_free_head_and_finishing_returns_it() {
         assert_eq!(graph.items[2].header().sequence_duration(), 1_000);
         // The window's item carries its coexistence lanes.
         assert_eq!(
-            graph.items[2].words[SCHEDULER_ITEM_COEX_PRIORITIES_WORD].get() & 0x000f_ffff,
-            lanes_image(&priorities([4, 11, 0, 0]).lanes)
+            {
+                let image = graph.items[2].layout.coexistence_priority().read();
+                [
+                    image.lane_0(),
+                    image.lane_1(),
+                    image.lane_2(),
+                    image.lane_3(),
+                ]
+            },
+            [4, 11, 0, 0]
         );
         assert_eq!(
             (
@@ -220,9 +219,9 @@ fn only_an_active_scanner_queues_its_scan_request() {
     let passive = reset(&mut passive_pool);
     {
         let (graph, _, _) = passive_pool.shared(&passive).unwrap();
-        let words = &graph.link_state.words;
-        assert_eq!(words[LINK_STATE_TX_WORD].get() & COMPRESSED_LINK_MASK, 0);
-        assert_eq!(words[LINK_STATE_TX_HEAD_WORD].get(), 0);
+        let layout = &graph.link_state.layout;
+        assert_eq!(layout.tx_path().read().header(), 0);
+        assert_eq!(layout.tx_head().read().bits(), 0);
     }
 
     let mut pool = pool();
@@ -238,18 +237,15 @@ fn only_an_active_scanner_queues_its_scan_request() {
     )
     .unwrap();
     let (graph, binding, _) = pool.shared(&active).unwrap();
-    let words = &graph.link_state.words;
+    let layout = &graph.link_state.layout;
     let header = binding.scan_request_header;
+    assert_eq!(layout.tx_path().read().header(), header.compressed_image());
     assert_eq!(
-        words[LINK_STATE_TX_WORD].get() & COMPRESSED_LINK_MASK,
-        header.compressed_image()
-    );
-    assert_eq!(
-        words[LINK_STATE_TX_HEAD_WORD].get(),
+        layout.tx_head().read().bits(),
         header.controller_address().address()
     );
     assert_eq!(
-        words[LINK_STATE_TX_TAIL_WORD].get(),
+        layout.tx_tail().read().bits(),
         header.controller_address().address()
     );
     // SCAN_REQ with a 12-octet payload the Controller fills.
@@ -276,13 +272,10 @@ fn every_item_carries_the_kind_of_its_scan_type() {
         .unwrap();
         let (graph, binding, _) = pool.shared(&instance).unwrap();
         for item in &graph.items {
-            let word = item.words[SCHEDULER_ITEM_LINK_STATE_WORD].get();
-            assert_eq!(word & SCHEDULER_ITEM_KIND_MASK, scan_type.item_kind());
+            let word = item.layout.link_state().read();
+            assert_eq!(word.bits_20_23_opaque(), scan_type.item_kind());
             // The link-state pointer beside the kind is unchanged.
-            assert_eq!(
-                word & COMPRESSED_LINK_MASK,
-                binding.link_state.compressed_image()
-            );
+            assert_eq!(word.address(), binding.link_state.compressed_image());
         }
     }
 }
@@ -310,23 +303,21 @@ fn the_filter_policy_changes_only_the_filter_words_and_a_later_reset_restores_th
         pool.release(earlier).unwrap();
         let instance = reset(&mut pool, filter_policy);
         let (graph, _, _) = pool.shared(&instance).unwrap();
-        graph
-            .link_state
-            .words
-            .iter()
-            .map(|word| word.get())
-            .collect::<std::vec::Vec<_>>()
+        crate::shared_layout::LinkStateImage::read(&graph.link_state.layout)
     };
     let all = link_state(crate::LegacyScanFilterPolicy::AcceptAll);
     let listed = link_state(crate::LegacyScanFilterPolicy::AcceptListOnly);
-    let changed = all
-        .iter()
-        .zip(&listed)
-        .filter(|(all, listed)| all != listed)
-        .count();
-    assert_eq!(changed, 2);
-    // Filtering only adds bits to the accept-all image.
-    for (all, listed) in all.iter().zip(&listed) {
-        assert_eq!(all & listed, *all);
-    }
+    assert_ne!(all.receive_context, listed.receive_context);
+    assert_ne!(all.crc_initialization, listed.crc_initialization);
+    let restored = crate::shared_layout::LinkStateImage {
+        receive_context: listed.receive_context.with_scan_accept_list_filter(false),
+        crc_initialization: listed
+            .crc_initialization
+            .with_scan_filter_policy(0)
+            .expect("zero fits"),
+        ..listed
+    };
+    assert_eq!(all, restored);
+    assert!(!all.receive_context.scan_accept_list_filter());
+    assert!(listed.receive_context.scan_accept_list_filter());
 }

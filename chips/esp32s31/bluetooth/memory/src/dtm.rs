@@ -16,7 +16,7 @@ mod codec;
 
 use core::{convert::Infallible, num::NonZeroU32};
 
-use vcell::VolatileCell;
+use oer_esp32s31_hal::layouts::BleSchedulerItem;
 
 use crate::{
     dtm_event_image::{
@@ -193,8 +193,8 @@ impl SchedulerRoleStorage for DtmStorage {
         DtmBinding::new(base, number)
     }
 
-    fn item_words(&self, _item: usize) -> &[VolatileCell<u32>] {
-        self.scheduler_item.words()
+    fn item_layout(&self, _item: usize) -> &BleSchedulerItem {
+        &self.scheduler_item.layout
     }
 
     fn item_link(binding: &DtmBinding, _item: usize) -> ControllerSramLinkAddress {

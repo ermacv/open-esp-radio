@@ -1,7 +1,7 @@
 //! Controller-global SRAM workspace retained by ordinary BLE link states.
 //!
-//! The recovered ESP32-S31 controller allocates one `0x20`-byte direction-
-//! finding environment even when no IQ-sampling procedure is enabled. The
+//! The open driver reserves one `0x20`-byte direction-finding environment,
+//! retaining padding after the pinned initializer's `0x1c`-byte allocation. The
 //! open driver owns that allocation directly: it initializes only the two
 //! reviewed baseline members, validates the complete physical extent and
 //! exposes opaque typed links rather than a vendor allocator or raw words.
@@ -20,16 +20,10 @@ use oer_esp32s31_hal::types::{
 };
 
 use oer_esp32s31_hal::bluetooth::BluetoothControllerReset;
-use vcell::VolatileCell;
+use oer_esp32s31_hal::layouts::*;
 
 /// Bytes retained by the recovered controller-global direction-finding environment.
-pub const BLUETOOTH_DIRECTION_FINDING_WORKSPACE_BYTES: usize = 0x20;
-
-const WORKSPACE_WORDS: usize = BLUETOOTH_DIRECTION_FINDING_WORKSPACE_BYTES / size_of::<u32>();
-const LINK_STATE_CONFIGURATION_WORD: usize = 2;
-const DISABLED_CTE_DESCRIPTOR_WORD: usize = 3;
-const LINK_STATE_CONFIGURATION_OFFSET: u32 = 0x08;
-const DISABLED_CTE_DESCRIPTOR_OFFSET: u32 = 0x0c;
+pub const BLUETOOTH_DIRECTION_FINDING_WORKSPACE_BYTES: usize = BleDirectionFindingWorkspace::SIZE;
 
 /// Static storage for the controller-global disabled-CTE baseline.
 ///
@@ -37,7 +31,7 @@ const DISABLED_CTE_DESCRIPTOR_OFFSET: u32 = 0x0c;
 /// published descriptor. No public API grants CPU access after publication.
 #[repr(C, align(4))]
 pub struct DirectionFindingWorkspaceStorage {
-    words: [VolatileCell<u32>; WORKSPACE_WORDS],
+    layout: BleDirectionFindingWorkspace,
     _pin: PhantomPinned,
 }
 
@@ -144,7 +138,15 @@ pub struct DirectionFindingWorkspaceBinding {
 }
 
 impl DirectionFindingWorkspaceBinding {
-    fn new(base: u32) -> Result<Self, DirectionFindingWorkspaceBindError> {
+    fn new(
+        base: u32,
+        storage: &DirectionFindingWorkspaceStorage,
+    ) -> Result<Self, DirectionFindingWorkspaceBindError> {
+        let root = core::ptr::from_ref(&storage.layout).addr();
+        let configuration_offset =
+            core::ptr::from_ref(storage.layout.word_0008_opaque()).addr() - root;
+        let descriptor_offset =
+            core::ptr::from_ref(storage.layout.word_000c_opaque()).addr() - root;
         let base_address = BluetoothControllerSramAddress::new(base)
             .map_err(DirectionFindingWorkspaceBindError::InvalidBase)?;
         let end_exclusive = base
@@ -157,12 +159,12 @@ impl DirectionFindingWorkspaceBinding {
         }
 
         let link_state_configuration = ControllerSramLinkAddress::new(
-            base.checked_add(LINK_STATE_CONFIGURATION_OFFSET)
+            base.checked_add(configuration_offset as u32)
                 .ok_or(DirectionFindingWorkspaceBindError::ExtentOutsidePhysicalSram)?,
         )
         .map_err(|_| DirectionFindingWorkspaceBindError::InvalidMember)?;
         let disabled_cte_descriptor = BluetoothControllerSramAddress::new(
-            base.checked_add(DISABLED_CTE_DESCRIPTOR_OFFSET)
+            base.checked_add(descriptor_offset as u32)
                 .ok_or(DirectionFindingWorkspaceBindError::ExtentOutsidePhysicalSram)?,
         )
         .map_err(|_| DirectionFindingWorkspaceBindError::InvalidMember)?;
@@ -237,16 +239,16 @@ impl DirectionFindingWorkspaceCpuOwned {
     /// Model hardware overwriting the workspace during an epoch.
     #[cfg(test)]
     fn emulate_hardware_clear(&self) {
-        for word in &self.storage.as_ref().get_ref().words {
-            word.set(0);
-        }
+        crate::shared_layout::clear_direction_finding_workspace(
+            &self.storage.as_ref().get_ref().layout,
+        );
     }
 
     /// Confirm the source-owned disabled-CTE initialization is still present.
     pub fn is_disabled_baseline_initialized(&self) -> bool {
         let storage = self.storage.as_ref().get_ref();
-        storage.words[LINK_STATE_CONFIGURATION_WORD].get() == 1
-            && storage.words[DISABLED_CTE_DESCRIPTOR_WORD].get() == 1
+        storage.layout.word_0008_opaque().read() == DF_CONFIGURATION
+            && storage.layout.word_000c_opaque().read() == DF_DESCRIPTOR
     }
 }
 
@@ -254,7 +256,7 @@ impl DirectionFindingWorkspaceStorage {
     /// Reserve zeroed controller-global storage before address binding.
     pub const fn new() -> Self {
         Self {
-            words: [const { VolatileCell::new(0) }; WORKSPACE_WORDS],
+            layout: BleDirectionFindingWorkspace::zeroed(),
             _pin: PhantomPinned,
         }
     }
@@ -289,7 +291,7 @@ impl DirectionFindingWorkspaceStorage {
         storage: &'static mut Self,
         base: u32,
     ) -> Result<DirectionFindingWorkspaceCpuOwned, DirectionFindingWorkspaceBindFailure> {
-        let binding = match DirectionFindingWorkspaceBinding::new(base) {
+        let binding = match DirectionFindingWorkspaceBinding::new(base, storage) {
             Ok(binding) => binding,
             Err(error) => {
                 return Err(DirectionFindingWorkspaceBindFailure::new(storage, error));
@@ -306,11 +308,9 @@ impl DirectionFindingWorkspaceStorage {
 impl DirectionFindingWorkspaceStorage {
     /// Write the zeroed workspace with the source-owned disabled-CTE words.
     fn initialize_disabled_baseline(&self) {
-        for word in &self.words {
-            word.set(0);
-        }
-        self.words[LINK_STATE_CONFIGURATION_WORD].set(1);
-        self.words[DISABLED_CTE_DESCRIPTOR_WORD].set(1);
+        crate::shared_layout::clear_direction_finding_workspace(&self.layout);
+        self.layout.word_0008_opaque().write(DF_CONFIGURATION);
+        self.layout.word_000c_opaque().write(DF_DESCRIPTOR);
     }
 }
 
@@ -322,3 +322,10 @@ impl Default for DirectionFindingWorkspaceStorage {
 
 #[cfg(test)]
 mod tests;
+
+/// SOURCE: pinned `ble_4.o::r_sym_ble_mIskG2GvbtwJXrhsY5EZ`, configuration byte initialized to one.
+const DF_CONFIGURATION: BleDirectionFindingWorkspaceWord0008Opaque =
+    BleDirectionFindingWorkspaceWord0008Opaque::ZERO.with_bits_0_7_opaque(0x1);
+/// SOURCE: the same complete initializer stores word one in the disabled descriptor.
+const DF_DESCRIPTOR: BleDirectionFindingWorkspaceWord000cOpaque =
+    BleDirectionFindingWorkspaceWord000cOpaque::ZERO.with_bits_0_31_opaque(0x1);

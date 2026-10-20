@@ -61,29 +61,32 @@ fn the_environment_records_the_retained_btbb_transmit_power_table() {
     let owner = BlePhyEngineStorage::pin_static_model(storage, base)
         .expect("complete model storage fits physical SRAM");
     let storage = owner.storage.as_ref().get_ref();
-    let word = |offset: usize| {
-        let bytes: [u8; 4] =
-            core::array::from_fn(|index| storage.environment[offset + index].get());
-        u32::from_le_bytes(bytes)
-    };
     let levels = oer_esp32s31_knowledge::tx_power::TX_POWER_LEVELS_DBM;
 
     assert_eq!(storage.tx_power_levels_dbm, levels);
     assert_eq!(
-        word(super::TX_POWER_LEVELS_POINTER_OFFSET),
+        storage.environment.tx_power_levels().read().address(),
         owner.binding().tx_power_levels.address(),
         "the record addresses the table retained by this allocation"
     );
     assert_eq!(
-        usize::from(storage.environment[super::TX_POWER_LEVEL_COUNT_OFFSET].get()),
+        usize::from(storage.environment.tx_power_level_count().read().value()),
         levels.len()
     );
     assert_eq!(
-        word(super::TX_POWER_FIRST_LEVEL_OFFSET) as i32,
+        storage
+            .environment
+            .tx_power_first_level()
+            .read()
+            .dbm_sign_extended() as i32,
         i32::from(levels[0])
     );
     assert_eq!(
-        word(super::TX_POWER_LAST_LEVEL_OFFSET) as i32,
+        storage
+            .environment
+            .tx_power_last_level()
+            .read()
+            .dbm_sign_extended() as i32,
         i32::from(levels[levels.len() - 1])
     );
 }

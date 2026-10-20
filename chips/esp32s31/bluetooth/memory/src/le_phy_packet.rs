@@ -26,16 +26,21 @@ impl LeAccessAddress {
 pub(super) struct LeCrcInit(u32);
 
 impl LeCrcInit {
-    const CONTROLLER_IMAGE_MASK: u32 = 0x00ff_ffff;
-
     /// CRC preset shared by DTM and non-periodic primary advertising.
     pub(super) const LE_PRESET: Self = Self(0x0055_5555);
 
     pub(super) const fn from_controller_word(word: u32) -> Self {
-        Self(word & Self::CONTROLLER_IMAGE_MASK)
+        Self(oer_esp32s31_hal::layouts::BleLinkStateCrcInitialization::from_bits(word).value())
+    }
+
+    pub(super) const fn controller_value(self) -> u32 {
+        self.0
     }
 
     pub(super) const fn apply_to_controller_word(self, word: u32) -> u32 {
-        (word & !Self::CONTROLLER_IMAGE_MASK) | self.0
+        oer_esp32s31_hal::layouts::BleLinkStateCrcInitialization::from_bits(word)
+            .with_value(self.0)
+            .expect("24-bit CRC value fits")
+            .bits()
     }
 }

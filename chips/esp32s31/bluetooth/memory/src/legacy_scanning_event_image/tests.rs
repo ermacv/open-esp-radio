@@ -2,6 +2,7 @@ use crate::{
     le_phy_packet::{LeAccessAddress, LeCrcInit},
     sram_link::ControllerSramLinkAddress,
 };
+use oer_esp32s31_hal::layouts::*;
 
 use super::{
     LegacyScanLinkStateImage, LegacyScanPrimaryChannel, LegacyScanResetConfig,
@@ -52,13 +53,13 @@ fn an_event_records_the_window_and_copies_the_reset_power() {
         .with_window(LegacyScanWindowTicks::new(20_000).unwrap());
         assert_eq!(image.window_ticks(), 20_000);
         let item = LegacyScanSchedulerItemWords {
-            word_00: 0,
-            word_04: 0,
-            word_14: 0,
-            word_18: 0,
-            word_38: 0,
-            raw_start_word_44: 0,
-            raw_end_word_48: 0,
+            word_00: BleSchedulerItemHardwareNext::ZERO,
+            word_04: BleSchedulerItemContext::ZERO,
+            word_14: BleSchedulerItemRateAndPower::ZERO,
+            word_18: BleSchedulerItemChannelAndPriority::ZERO,
+            word_38: BleSchedulerItemStatus::ZERO,
+            raw_start_word_44: BleSchedulerItemRawStart::ZERO,
+            raw_end_word_48: BleSchedulerItemRawEnd::ZERO,
         }
         .prepare_first_event(
             image,
@@ -66,7 +67,7 @@ fn an_event_records_the_window_and_copies_the_reset_power() {
             LegacyScanSchedulerWindow::from_controller_ticks(100, 200).unwrap(),
             LegacyScanStartSelection::Requested,
         );
-        assert_eq!(item.word_14 >> 20 & 0xff, u32::from(power.index()));
+        assert_eq!(item.word_14.power_index(), power.index());
     }
 }
 

@@ -45,10 +45,11 @@ pub enum DtmRxResultProjectionError {
 impl DtmRxResultProjection {
     /// Apply the exact validation performed at returned-buffer offset `+0x0c`.
     pub const fn from_word(word: u32) -> Result<Self, DtmRxResultProjectionError> {
-        if word & 0x00ff_ffff != 0 {
+        let result = oer_esp32s31_hal::layouts::BleRxPacketPrefixResult::from_bits(word);
+        if crate::rx_packet_bytes::result_rejected(result) {
             return Err(DtmRxResultProjectionError::NonzeroLowTwentyFourBits);
         }
-        Ok(Self(DtmRxRssi((word >> 24) as u8 as i8)))
+        Ok(Self(DtmRxRssi(result.rssi() as i8)))
     }
 
     /// Return the signed RSSI copied from returned-buffer offset `+0x0f`.

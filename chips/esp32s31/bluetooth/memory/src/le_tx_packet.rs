@@ -14,18 +14,15 @@ use oer_esp32s31_hal::types::{
     BluetoothControllerSramAddress, BluetoothControllerSramAddressError,
 };
 
-use vcell::VolatileCell;
+use crate::shared_layout::BufferHeaderImage;
+use oer_esp32s31_hal::layouts::*;
 
 /// Bytes in one common controller RX/TX buffer header.
-pub const BLUETOOTH_LE_BUFFER_HEADER_BYTES: usize = 0x18;
+pub const BLUETOOTH_LE_BUFFER_HEADER_BYTES: usize = BleBufferHeader::SIZE;
 /// Bytes preceding the maximum Link Layer payload in a controller TX allocation.
-pub const BLUETOOTH_LE_TX_PACKET_PREFIX_BYTES: usize = 0x12;
+pub const BLUETOOTH_LE_TX_PACKET_PREFIX_BYTES: usize = BleTxPacketPrefix::SIZE;
 
-const CONTROLLER_METADATA_BYTES: usize = 0x10;
-const PDU_HEADER_BYTE: usize = CONTROLLER_METADATA_BYTES;
-const PDU_LENGTH_BYTE: usize = CONTROLLER_METADATA_BYTES + 1;
-const ALLOCATION_CLASS_BYTE: usize = 0x05;
-const ALLOCATION_STATE_BYTE: usize = 0x06;
+const CONTROLLER_METADATA_BYTES: usize = BleTxPacketPrefix::SIZE - size_of::<[u8; 2]>();
 const HEADER_PACKET_TARGET_OFFSET: u32 = CONTROLLER_METADATA_BYTES as u32;
 
 /// Why a complete LE TX packet extent cannot inhabit controller SRAM.
@@ -92,8 +89,8 @@ impl<const ALLOCATION_BYTES: usize> LeTxPacketAddress<ALLOCATION_BYTES> {
         LeTxPduTargetLink(self.header_packet_target.compressed_image())
     }
 
-    const fn allocation_extent_image(self) -> u32 {
-        ((ALLOCATION_BYTES - BLUETOOTH_LE_TX_PACKET_PREFIX_BYTES) as u32) << 3
+    const fn payload_capacity() -> u8 {
+        (ALLOCATION_BYTES - BLUETOOTH_LE_TX_PACKET_PREFIX_BYTES) as u8
     }
 }
 
@@ -126,107 +123,114 @@ impl LeTxPduTargetLink {
 /// CPU-owned common TX buffer header before graph publication.
 #[repr(C, align(4))]
 pub(super) struct LeTxBufferHeaderStorage {
-    words: [VolatileCell<u32>; BLUETOOTH_LE_BUFFER_HEADER_BYTES / 4],
+    pub(crate) layout: BleBufferHeader,
 }
 
-impl LeTxBufferHeaderStorage {
-    const COMPRESSED_LINK_MASK: u32 = 0x000f_ffff;
-    const ALLOCATION_EXTENT_MASK: u32 = 0x0000_07f8;
+/// SOURCE: pinned `memMgmt_3.o` TX-header allocator, opaque prefix of the packet's PDU target.
+const TX_HEADER: BufferHeaderImage = BufferHeaderImage {
+    pdu_target: BleBufferHeaderPduTarget::ZERO
+        .with_bits_20_31_opaque(0x80a)
+        .expect("reviewed prefix fits"),
+    ..BufferHeaderImage::ZERO
+};
 
+/// SOURCE: pinned connection TX allocation's completed packetless cursor.
+const EMPTY_TX_CURSOR: BufferHeaderImage = BufferHeaderImage {
+    completion: BleBufferHeaderCompletion::ZERO.with_done(true),
+    allocation: BleBufferHeaderAllocation::ZERO
+        .with_llid(1)
+        .expect("reviewed LLID fits"),
+    ..BufferHeaderImage::ZERO
+};
+/// SOURCE: pinned `memMgmt_3.o` common TX packet allocation class and initial state.
+const TX_PACKET_ALLOCATION: BleTxPacketPrefixAllocation = BleTxPacketPrefixAllocation::from_bits(0)
+    .with_class(2)
+    .with_state(0);
+
+impl LeTxBufferHeaderStorage {
     pub(super) const fn new() -> Self {
         Self {
-            words: [const { VolatileCell::new(0) }; BLUETOOTH_LE_BUFFER_HEADER_BYTES / 4],
+            layout: BleBufferHeader::zeroed(),
         }
     }
-
-    fn read_word(&self, index: usize) -> u32 {
-        self.words[index].get()
-    }
-
-    fn install(&self, words: [u32; BLUETOOTH_LE_BUFFER_HEADER_BYTES / 4]) {
-        for (cell, word) in self.words.iter().zip(words) {
-            cell.set(word);
-        }
-    }
-
-    pub(super) fn initialize_bound_tx<const ALLOCATION_BYTES: usize>(
-        &self,
-        packet: LeTxPacketAddress<ALLOCATION_BYTES>,
-    ) {
+    pub(super) fn initialize_bound_tx<const N: usize>(&self, packet: LeTxPacketAddress<N>) {
         self.initialize_bound_tx_with_successor(packet, None);
     }
-
-    pub(super) fn initialize_bound_tx_with_successor<const ALLOCATION_BYTES: usize>(
+    pub(super) fn initialize_bound_tx_with_successor<const N: usize>(
         &self,
-        packet: LeTxPacketAddress<ALLOCATION_BYTES>,
+        packet: LeTxPacketAddress<N>,
         successor: Option<ControllerSramLinkAddress>,
     ) {
-        self.install([
-            successor.map_or(0, ControllerSramLinkAddress::compressed_image),
-            packet.base_link().image(),
-            0x80a0_0000 | packet.pdu_target_link().image(),
-            0,
-            packet.allocation_extent_image(),
-            0,
-        ]);
+        BufferHeaderImage {
+            next: BleBufferHeaderNext::from_bits(
+                successor.map_or(0, ControllerSramLinkAddress::compressed_image),
+            ),
+            packet_base: BleBufferHeaderPacketBase::from_bits(packet.base_link().image()),
+            pdu_target: BleBufferHeaderPduTarget::from_bits(packet.pdu_target_link().image())
+                .with_bits_20_31_opaque(TX_HEADER.pdu_target.bits_20_31_opaque())
+                .expect("reviewed prefix fits"),
+            allocation: BleBufferHeaderAllocation::ZERO
+                .with_payload_capacity(LeTxPacketAddress::<N>::payload_capacity()),
+            ..TX_HEADER
+        }
+        .write(&self.layout);
     }
-
-    /// Completed packetless cursor retained by a connection TX list.
     pub(super) fn initialize_empty_cursor(&self) {
-        self.install([0, 0, 0, 0x8000_0000, 2, 0]);
+        EMPTY_TX_CURSOR.write(&self.layout);
     }
-
     #[cfg(test)]
     pub(super) fn successor_image(&self) -> u32 {
-        self.read_word(0) & Self::COMPRESSED_LINK_MASK
+        self.layout.next().read().address()
     }
-
     pub(super) fn link_successor(&self, successor: ControllerSramLinkAddress) {
-        self.words[0]
-            .set((self.read_word(0) & !Self::COMPRESSED_LINK_MASK) | successor.compressed_image());
+        self.layout.next().write(
+            BleBufferHeaderNext::from_bits(successor.compressed_image())
+                .with_bits_20_31_opaque(self.layout.next().read().bits_20_31_opaque())
+                .expect("retained prefix fits"),
+        );
     }
-
     pub(super) fn transmission_completed(&self) -> bool {
-        self.read_word(3) & 0x8000_0000 != 0
+        self.layout.completion().read().done()
     }
-
     pub(super) fn mark_complete_connection_packet(&self, llid: u8) {
         assert!(
             (1..=3).contains(&llid),
             "connection TX requires a valid LLID"
         );
-        // Software completion metadata: end of packet plus the two-bit LLID.
-        self.words[4].set(self.read_word(4) | u32::from(llid << 1));
+        let original = self.layout.allocation().read();
+        self.layout.allocation().write(
+            original
+                .with_llid(original.llid() | llid)
+                .expect("two-bit LLID fits"),
+        );
     }
-
-    /// Retain the hardware cursor after acknowledging the packet to software.
     pub(super) fn release_completed_packet(&self) {
-        self.words[1].set(self.read_word(1) & !Self::COMPRESSED_LINK_MASK);
+        self.layout
+            .packet_base()
+            .write(self.layout.packet_base().read().without_address());
     }
-
     #[cfg(test)]
     pub(super) fn model_complete_transmission(&self) {
-        self.words[3].set(self.read_word(3) | 0x8000_0000);
+        self.layout
+            .completion()
+            .write(self.layout.completion().read().with_done(true));
     }
-
     pub(super) fn packet_base_link(&self) -> Option<LeTxPacketBaseLink> {
-        LeTxPacketBaseLink::from_image(self.read_word(1) & Self::COMPRESSED_LINK_MASK)
+        LeTxPacketBaseLink::from_image(self.layout.packet_base().read().address())
     }
-
     pub(super) fn pdu_target_link(&self) -> Option<LeTxPduTargetLink> {
-        LeTxPduTargetLink::from_image(self.read_word(2) & Self::COMPRESSED_LINK_MASK)
+        LeTxPduTargetLink::from_image(self.layout.pdu_target().read().address())
     }
-
-    pub(super) fn retains_allocation_extent<const ALLOCATION_BYTES: usize>(
+    pub(super) fn retains_allocation_extent<const N: usize>(
         &self,
-        packet: LeTxPacketAddress<ALLOCATION_BYTES>,
+        _packet: LeTxPacketAddress<N>,
     ) -> bool {
-        self.read_word(4) & Self::ALLOCATION_EXTENT_MASK == packet.allocation_extent_image()
+        self.layout.allocation().read().payload_capacity()
+            == LeTxPacketAddress::<N>::payload_capacity()
     }
-
     #[cfg(test)]
-    pub(super) fn snapshot(&self) -> [u32; BLUETOOTH_LE_BUFFER_HEADER_BYTES / 4] {
-        core::array::from_fn(|index| self.read_word(index))
+    pub(super) fn snapshot(&self) -> BufferHeaderImage {
+        BufferHeaderImage::read(&self.layout)
     }
 }
 
@@ -363,10 +367,18 @@ impl<const ALLOCATION_BYTES: usize> LeTxPacketStorage<ALLOCATION_BYTES> {
         }
 
         let length = payload.len() as u8;
-        self.bytes[ALLOCATION_CLASS_BYTE] = 2;
-        self.bytes[ALLOCATION_STATE_BYTE] = 0;
-        self.bytes[PDU_HEADER_BYTE] = header;
-        self.bytes[PDU_LENGTH_BYTE] = length;
+        let prefix_bytes = (&mut self.bytes[..BleTxPacketPrefix::SIZE])
+            .try_into()
+            .expect("validated allocation holds the prefix");
+        let mut prefix = BleTxPacketPrefixMut::new(prefix_bytes);
+        prefix.set_allocation(
+            prefix
+                .allocation()
+                .with_class(TX_PACKET_ALLOCATION.class())
+                .with_state(TX_PACKET_ALLOCATION.state()),
+        );
+        prefix.set_pdu_header(BleTxPacketPrefixPduHeader::from_bits(0).with_value(header));
+        prefix.set_payload_length(BleTxPacketPrefixPayloadLength::from_bits(0).with_value(length));
         self.bytes[BLUETOOTH_LE_TX_PACKET_PREFIX_BYTES..][..payload.len()].copy_from_slice(payload);
         Ok(LeTxPacketPreparedLength(length))
     }
@@ -386,10 +398,18 @@ impl<const ALLOCATION_BYTES: usize> LeTxPacketStorage<ALLOCATION_BYTES> {
     ) -> LeTxPacketPreparedLength<ALLOCATION_BYTES> {
         let pdu = packet.as_bytes();
         let length = packet.payload_bytes();
-        self.bytes[ALLOCATION_CLASS_BYTE] = 2;
-        self.bytes[ALLOCATION_STATE_BYTE] = 0;
-        self.bytes[PDU_HEADER_BYTE] = pdu[0];
-        self.bytes[PDU_LENGTH_BYTE] = length;
+        let prefix_bytes = (&mut self.bytes[..BleTxPacketPrefix::SIZE])
+            .try_into()
+            .expect("validated allocation holds the prefix");
+        let mut prefix = BleTxPacketPrefixMut::new(prefix_bytes);
+        prefix.set_allocation(
+            prefix
+                .allocation()
+                .with_class(TX_PACKET_ALLOCATION.class())
+                .with_state(TX_PACKET_ALLOCATION.state()),
+        );
+        prefix.set_pdu_header(BleTxPacketPrefixPduHeader::from_bits(0).with_value(pdu[0]));
+        prefix.set_payload_length(BleTxPacketPrefixPayloadLength::from_bits(0).with_value(length));
         self.bytes[BLUETOOTH_LE_TX_PACKET_PREFIX_BYTES..][..usize::from(length)]
             .copy_from_slice(&pdu[2..]);
         LeTxPacketPreparedLength(length)
@@ -411,7 +431,14 @@ impl<const ALLOCATION_BYTES: usize> LeTxPacketStorage<ALLOCATION_BYTES> {
 
     #[cfg(test)]
     pub(super) fn pdu_header(&self) -> [u8; 2] {
-        [self.bytes[PDU_HEADER_BYTE], self.bytes[PDU_LENGTH_BYTE]]
+        {
+            let prefix = BleTxPacketPrefix::new(
+                (&self.bytes[..BleTxPacketPrefix::SIZE])
+                    .try_into()
+                    .expect("prepared prefix exists"),
+            );
+            [prefix.pdu_header().value(), prefix.payload_length().value()]
+        }
     }
 
     /// Borrow the semantic Link Layer PDU installed by the enclosing owner.
@@ -428,7 +455,15 @@ impl<const ALLOCATION_BYTES: usize> LeTxPacketStorage<ALLOCATION_BYTES> {
 
     #[cfg(test)]
     pub(super) fn model_pdu(&self) -> &[u8] {
-        &self.bytes[CONTROLLER_METADATA_BYTES..][..2 + usize::from(self.bytes[PDU_LENGTH_BYTE])]
+        &self.bytes[CONTROLLER_METADATA_BYTES..][..2 + usize::from(
+            BleTxPacketPrefix::new(
+                (&self.bytes[..BleTxPacketPrefix::SIZE])
+                    .try_into()
+                    .expect("prepared prefix exists"),
+            )
+            .payload_length()
+            .value(),
+        )]
     }
 
     pub(super) fn clear(&mut self) {

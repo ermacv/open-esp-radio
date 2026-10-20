@@ -6,10 +6,11 @@
 
 #![forbid(unsafe_code)]
 
+use oer_esp32s31_hal::layouts::*;
+
 use crate::{
     le_phy_packet::{LeAccessAddress, LeCrcInit},
     le_tx_power::LeTxPower,
-    link_state_event::{LinkStateEventWord, item_with_le_1m_power},
     sram_link::ControllerSramLinkAddress,
 };
 
@@ -18,19 +19,12 @@ const TX_ADD_RANDOM: u8 = 1 << 6;
 const RESERVED_HEADER_BITS: u8 = (1 << 4) | (1 << 5) | (1 << 7);
 const DEVICE_ADDRESS_BYTES: usize = 6;
 
-const LOW_TWENTY_MASK: u32 = 0x000f_ffff;
 /// Scheduling priority `r_sym_ble_Ok6PLzc6qsIOuEzma5oM` returns for the
 /// first event at the default low advertising level.
 const DEFAULT_ADVERTISING_PRIORITY: u8 = 1;
-const RATE_LANES_MASK: u32 = 0xf000_0000;
-const OPTIONS_IMAGE_MASK: u32 = 0x3f00_0000;
-const REVIEWED_STANDALONE_OPTIONS: u32 = 3 << 24;
 
-const SCHEDULER_ITEM_HARDWARE_NEXT_MASK: u32 = 0x000f_ffff;
 /// Item `+0x00` bit 22, which the scanner's earliest-available start also
 /// selects: the item may start as soon as its predecessor ends.
-const SCHEDULER_ITEM_CHAINED_START: u32 = 1 << 22;
-const SCHEDULER_ITEM_FREQUENCY_MASK: u32 = 0x0000_7f00;
 
 /// Semantic primary channel selected by one legacy advertising event.
 ///
@@ -143,21 +137,21 @@ pub enum LegacyAdvertisingPduError {
 /// Complete observed word subset changed by the restricted reset body.
 #[derive(Clone, Copy)]
 pub(super) struct LegacyAdvertisingLinkStateWords {
-    pub(super) word_00: u32,
-    pub(super) word_04: u32,
-    pub(super) word_08: u32,
-    pub(super) word_0c: u32,
-    pub(super) word_14: u32,
-    pub(super) word_18: u32,
-    pub(super) word_24: u32,
-    pub(super) crc_init_word_2c: u32,
-    pub(super) word_30: u32,
-    pub(super) word_34: u32,
-    pub(super) access_address_word_38: u32,
-    pub(super) word_3c: u32,
-    pub(super) word_40: u32,
-    pub(super) word_50: u32,
-    pub(super) word_60: u32,
+    pub(super) word_00: BleLinkStateTxPath,
+    pub(super) word_04: BleLinkStateScanResponse,
+    pub(super) word_08: BleLinkStateRxPath,
+    pub(super) word_0c: BleLinkStateControlPolicy,
+    pub(super) word_14: BleLinkStatePacketPolicy,
+    pub(super) word_18: BleLinkStateReceiveContext,
+    pub(super) word_24: BleLinkStateOwnAddressPolicy,
+    pub(super) crc_init_word_2c: BleLinkStateCrcInitialization,
+    pub(super) word_30: BleLinkStateSequencePolicy,
+    pub(super) word_34: BleLinkStateEventSpan,
+    pub(super) access_address_word_38: BleLinkStateAccessAddress,
+    pub(super) word_3c: BleLinkStateOwnAddressLow,
+    pub(super) word_40: BleLinkStateOwnAddressHigh,
+    pub(super) word_50: BleLinkStateDirectionFinding,
+    pub(super) word_60: BleLinkStateEvent,
 }
 
 impl LegacyAdvertisingLinkStateWords {
@@ -177,61 +171,103 @@ impl LegacyAdvertisingLinkStateWords {
         own_address: LegacyAdvertisingOwnAddress,
         default_tx_power: LeTxPower,
     ) -> Self {
-        let transformed_high_half =
-            ((((self.word_00 | 0x8000_0000) >> 16) as u16 & 0xe00f) | 0x1ff0) as u32;
-        self.word_00 = (transformed_high_half << 16) | tx_header.compressed_image();
-
-        self.word_04 &= !(LOW_TWENTY_MASK | RATE_LANES_MASK);
-        self.word_08 = 0xeff0_0000;
-        self.word_0c |= 0xa000_0000;
-        self.word_14 = (self.word_14 | 0x0400_0000) & !0x0800_0000;
-        self.word_18 &= 0x1fff_ffff;
-
-        self.word_24 = 0x0710_0000;
+        // SOURCE: the reset's high-halfword transform retains the previous
+        // pointer index's upper byte and ORs the bound header into it.
+        // Operate on the decoded field, independently of its location in SRAM.
+        let previous_index = self.word_00.header().to_le_bytes();
+        let next_index = tx_header.compressed_image().to_le_bytes();
+        let header_index = u32::from_le_bytes([
+            next_index[0],
+            next_index[1],
+            previous_index[2] | next_index[2],
+            next_index[3],
+        ]);
+        self.word_00 = BleLinkStateTxPath::from_bits(header_index)
+            .with_max_tx_octets(255)
+            .with_queue_ready(true)
+            .with_bits_29_30_opaque(self.word_00.bits_29_30_opaque())
+            .expect("retained prefix fits")
+            .with_valid(true);
+        self.word_04 = self
+            .word_04
+            .with_header(None)
+            .expect("empty link fits")
+            .with_bits_28_31_opaque(0)
+            .expect("zero fits");
+        self.word_08 = ADVERTISING_RESET.word_08;
+        self.word_0c = self
+            .word_0c
+            .with_bit_29_opaque(true)
+            .with_bit_31_opaque(true);
+        self.word_14 = self
+            .word_14
+            .with_bits_26_27_opaque(1)
+            .expect("reviewed profile fits");
+        self.word_18 = self
+            .word_18
+            .with_bits_26_29_opaque(self.word_18.bits_26_29_opaque() & 7)
+            .expect("retained prefix fits")
+            .with_bit_30_opaque(false)
+            .with_scan_started(false);
+        self.word_24 = ADVERTISING_RESET.word_24;
         match own_address {
-            LegacyAdvertisingOwnAddress::Public => {
-                self.word_24 &= !0x3000_0000;
-            }
+            LegacyAdvertisingOwnAddress::Public => {}
             LegacyAdvertisingOwnAddress::Random(address) => {
-                self.word_24 = (self.word_24 & !0x3000_0000) | 0x1000_0000;
-                self.word_3c = u32::from_le_bytes([address[0], address[1], address[2], address[3]]);
-                self.word_40 = (self.word_40 & 0xff00_0000)
-                    | address[4] as u32
-                    | ((address[5] as u32) << 8)
-                    | ((self.word_40 | 0x0003_0000) & 0x00ff_0000);
+                self.word_24 = self
+                    .word_24
+                    .with_source(1)
+                    .expect("random address source fits");
+                self.word_3c = self.word_3c.with_value(u32::from_le_bytes([
+                    address[0], address[1], address[2], address[3],
+                ]));
+                self.word_40 = self
+                    .word_40
+                    .with_value(u16::from_le_bytes([address[4], address[5]]))
+                    .with_bits_16_23_opaque(self.word_40.bits_16_23_opaque() | 3);
             }
         }
-
-        self.crc_init_word_2c =
-            LeCrcInit::LE_PRESET.apply_to_controller_word(self.crc_init_word_2c & !0x0300_0000);
-        self.word_30 = (self.word_30 & 0xffff_c100) | 0x0000_1e00;
-        self.word_34 = 0;
-        self.access_address_word_38 = LeAccessAddress::PRIMARY_ADVERTISING.controller_image();
-        self.word_50 = (self.word_50 & !OPTIONS_IMAGE_MASK) | REVIEWED_STANDALONE_OPTIONS;
-        self.word_60 = LinkStateEventWord::from_word(self.word_60 & 0xffff_0000)
-            .with_power(default_tx_power)
+        self.crc_init_word_2c = self
+            .crc_init_word_2c
+            .with_scan_filter_policy(0)
+            .expect("zero fits")
+            .with_value(LeCrcInit::LE_PRESET.controller_value())
+            .expect("CRC fits");
+        self.word_30 = self
+            .word_30
+            .with_bits_0_7_opaque(0)
+            .with_bits_9_12_opaque(15)
+            .expect("reviewed sequence fits")
+            .with_bit_13_opaque(false);
+        self.word_34 = ADVERTISING_RESET.word_34;
+        self.access_address_word_38 = ADVERTISING_RESET.access_address_word_38;
+        self.word_50 = self
+            .word_50
+            .with_common_radio_policy(3)
+            .expect("reviewed radio policy fits");
+        self.word_60 = self
+            .word_60
             .with_priority(DEFAULT_ADVERTISING_PRIORITY)
-            .word();
+            .with_power_index(default_tx_power.index());
         self
     }
 
     /// The power index the common insertion copies into the item.
     const fn power_index(self) -> u8 {
-        LinkStateEventWord::from_word(self.word_60).power_index()
+        self.word_60.power_index()
     }
 }
 
 /// Complete scheduler-item subset changed before first-event admission.
 #[derive(Clone, Copy)]
 pub(super) struct LegacyAdvertisingSchedulerItemWords {
-    pub(super) word_00: u32,
-    pub(super) word_04: u32,
-    pub(super) word_14: u32,
-    pub(super) word_18: u32,
-    pub(super) word_38: u32,
-    pub(super) raw_start_word_44: u32,
-    pub(super) raw_end_word_48: u32,
-    pub(super) word_4c: u32,
+    pub(super) word_00: BleSchedulerItemHardwareNext,
+    pub(super) word_04: BleSchedulerItemContext,
+    pub(super) word_14: BleSchedulerItemRateAndPower,
+    pub(super) word_18: BleSchedulerItemChannelAndPriority,
+    pub(super) word_38: BleSchedulerItemStatus,
+    pub(super) raw_start_word_44: BleSchedulerItemRawStart,
+    pub(super) raw_end_word_48: BleSchedulerItemRawEnd,
+    pub(super) word_4c: BleSchedulerItemControl,
 }
 
 /// Position of one channel item within its advertising event.
@@ -268,23 +304,72 @@ impl LegacyAdvertisingSchedulerItemWords {
         raw_start: u32,
         raw_end: u32,
     ) -> Self {
-        // The executor links the items; each carries only its own window.
-        self.word_00 &= !(SCHEDULER_ITEM_HARDWARE_NEXT_MASK | SCHEDULER_ITEM_CHAINED_START);
-        if matches!(position, LegacyAdvertisingItemPosition::Follower) {
-            self.word_00 |= SCHEDULER_ITEM_CHAINED_START;
-        }
-        self.word_04 |= 0x8000_0000;
-        self.word_14 = item_with_le_1m_power(self.word_14, link_state.power_index());
-        self.word_18 = (self.word_18 & !(SCHEDULER_ITEM_FREQUENCY_MASK | 0xff))
-            | ((channel.frequency_image() as u32) << 8)
-            | 0x11;
-        self.word_38 = 0;
-        self.raw_start_word_44 = raw_start;
-        self.raw_end_word_48 = raw_end;
-        self.word_4c &= !0xff;
+        self.word_00 = self
+            .word_00
+            .with_address(None)
+            .expect("empty link fits")
+            .with_flexible_start(matches!(position, LegacyAdvertisingItemPosition::Follower));
+        self.word_04 = self.word_04.with_event_ready(true);
+        self.word_14 = self
+            .word_14
+            .with_bits_28_29_opaque(0)
+            .expect("zero fits")
+            .with_bits_30_31_opaque(0)
+            .expect("zero fits")
+            .with_power_index(link_state.power_index());
+        self.word_18 = self
+            .word_18
+            .with_frequency(channel.frequency_image())
+            .expect("primary channel fits")
+            .with_arbitration_priority(1)
+            .expect("priority fits")
+            .with_bits_4_7_opaque(1)
+            .expect("reviewed image fits");
+        self.word_38 = ADVERTISING_ITEM_EVENT.word_38;
+        self.raw_start_word_44 = self.raw_start_word_44.with_value(raw_start);
+        self.raw_end_word_48 = self.raw_end_word_48.with_value(raw_end);
+        self.word_4c = self.word_4c.with_event(0);
         self
     }
 }
 
 #[cfg(test)]
 mod tests;
+
+/// SOURCE: pinned `ble_2.o::r_sym_ble_7lsXnox2LxrGG0FmY7qR`, fixed reset lanes.
+const ADVERTISING_RESET: LegacyAdvertisingLinkStateWords = LegacyAdvertisingLinkStateWords {
+    word_00: BleLinkStateTxPath::ZERO,
+    word_04: BleLinkStateScanResponse::ZERO,
+    word_08: BleLinkStateRxPath::ZERO
+        .with_unconsumed_limit(0xff)
+        .with_bits_28_31_opaque(0xe)
+        .expect("reviewed field image fits"),
+    word_0c: BleLinkStateControlPolicy::ZERO,
+    word_14: BleLinkStatePacketPolicy::ZERO,
+    word_18: BleLinkStateReceiveContext::ZERO,
+    word_24: BleLinkStateOwnAddressPolicy::ZERO
+        .with_bits_16_27_opaque(0x710)
+        .expect("reviewed field image fits"),
+    crc_init_word_2c: BleLinkStateCrcInitialization::ZERO,
+    word_30: BleLinkStateSequencePolicy::ZERO,
+    word_34: BleLinkStateEventSpan::ZERO,
+    access_address_word_38: BleLinkStateAccessAddress::ZERO
+        .with_value(LeAccessAddress::PRIMARY_ADVERTISING.controller_image()),
+    word_3c: BleLinkStateOwnAddressLow::ZERO,
+    word_40: BleLinkStateOwnAddressHigh::ZERO,
+    word_50: BleLinkStateDirectionFinding::ZERO,
+    word_60: BleLinkStateEvent::ZERO,
+};
+
+/// SOURCE: pinned `ble_2.o::r_sym_ble_7lsXnox2LxrGG0FmY7qR`, fixed event lanes.
+const ADVERTISING_ITEM_EVENT: LegacyAdvertisingSchedulerItemWords =
+    LegacyAdvertisingSchedulerItemWords {
+        word_00: BleSchedulerItemHardwareNext::ZERO,
+        word_04: BleSchedulerItemContext::ZERO,
+        word_14: BleSchedulerItemRateAndPower::ZERO,
+        word_18: BleSchedulerItemChannelAndPriority::ZERO,
+        word_38: BleSchedulerItemStatus::ZERO,
+        raw_start_word_44: BleSchedulerItemRawStart::ZERO,
+        raw_end_word_48: BleSchedulerItemRawEnd::ZERO,
+        word_4c: BleSchedulerItemControl::ZERO,
+    };

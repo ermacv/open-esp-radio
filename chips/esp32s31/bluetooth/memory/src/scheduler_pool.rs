@@ -20,11 +20,11 @@
 use core::{marker::PhantomPinned, pin::Pin};
 
 use oer_esp32s31_hal::bluetooth::BluetoothControllerReset;
+use oer_esp32s31_hal::layouts::BleSchedulerItem;
 use oer_esp32s31_hal::types::{
     BluetoothControllerSramAddress, BluetoothControllerSramAddressError,
 };
 use pin_project::pin_project;
-use vcell::VolatileCell;
 
 use crate::{
     scheduler_item::{SchedulerItemCompletionStatus, SchedulerItemHeader},
@@ -241,7 +241,7 @@ pub trait SchedulerRoleStorage: sealed::Sealed + Sized + 'static {
     #[doc(hidden)]
     fn bind(base: u32, first_number: u16) -> Result<Self::Binding, SchedulerPoolBindError>;
     #[doc(hidden)]
-    fn item_words(&self, item: usize) -> &[VolatileCell<u32>];
+    fn item_layout(&self, item: usize) -> &BleSchedulerItem;
     #[doc(hidden)]
     fn item_link(binding: &Self::Binding, item: usize) -> ControllerSramLinkAddress;
     /// Return the graph to its allocation-time image and report the
@@ -467,7 +467,7 @@ impl<S: SchedulerRoleStorage, const N: usize> SchedulerRolePool<S, N> {
         if !S::admits(&self.role_states[index], item) {
             return Err(SchedulerPoolError::NotPrepared);
         }
-        let header = SchedulerItemHeader::new(self.graph(index).item_words(item));
+        let header = SchedulerItemHeader::new(self.graph(index).item_layout(item));
         header.set_completion_link(0);
         self.states[index] = InstanceState::Acquired {
             listed: listed | 1 << item,
@@ -588,7 +588,7 @@ pub trait SchedulerItemSource: sealed::Sealed {
     #[doc(hidden)]
     fn item_link(&self, id: SchedulerItemId) -> ControllerSramLinkAddress;
     #[doc(hidden)]
-    fn item_words(&self, id: SchedulerItemId) -> &[VolatileCell<u32>];
+    fn item_layout(&self, id: SchedulerItemId) -> &BleSchedulerItem;
     #[doc(hidden)]
     fn listed_item(&self, link: ControllerSramLinkAddress) -> Option<SchedulerItemId>;
 }
@@ -604,12 +604,12 @@ impl<S: SchedulerRoleStorage, const N: usize> SchedulerItemSource for SchedulerR
         S::item_link(&self.bindings[id.instance()], id.item())
     }
 
-    fn item_words(&self, id: SchedulerItemId) -> &[VolatileCell<u32>] {
+    fn item_layout(&self, id: SchedulerItemId) -> &BleSchedulerItem {
         debug_assert!(
             self.is_listed(id),
             "the executor addresses only listed items"
         );
-        self.graph(id.instance()).item_words(id.item())
+        self.graph(id.instance()).item_layout(id.item())
     }
 
     fn listed_item(&self, link: ControllerSramLinkAddress) -> Option<SchedulerItemId> {
@@ -648,8 +648,8 @@ impl<'pools> SchedulerItemSpace<'pools> {
         self.sources[id.kind.index()].expect("the space holds the pool of every listed item")
     }
 
-    fn header(&self, id: SchedulerItemId) -> SchedulerItemHeader<'pools, [VolatileCell<u32>]> {
-        SchedulerItemHeader::new(self.source(id).item_words(id))
+    fn header(&self, id: SchedulerItemId) -> SchedulerItemHeader<'pools> {
+        SchedulerItemHeader::new(self.source(id).item_layout(id))
     }
 
     /// Controller link of the item.

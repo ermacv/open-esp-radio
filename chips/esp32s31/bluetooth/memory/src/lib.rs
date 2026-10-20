@@ -46,13 +46,14 @@ mod legacy_advertising_event_image;
 mod legacy_advertising_tx_packet;
 mod legacy_scanning;
 mod legacy_scanning_event_image;
-mod link_state_event;
 mod peripheral_connection;
 mod rx_memory_list;
+mod rx_packet_bytes;
 pub mod scheduler;
 mod scheduler_context;
 mod scheduler_item;
 mod scheduler_pool;
+mod shared_layout;
 mod sram_link;
 
 pub use coexistence::{

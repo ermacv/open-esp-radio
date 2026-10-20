@@ -18,7 +18,7 @@
 use core::{marker::PhantomPinned, pin::Pin};
 
 use oer_esp32s31_hal::bluetooth::BluetoothControllerReset;
-use vcell::VolatileCell;
+use oer_esp32s31_hal::layouts::*;
 
 use crate::{BLUETOOTH_CONTROLLER_PHYSICAL_SRAM_HIGH, BLUETOOTH_CONTROLLER_PHYSICAL_SRAM_LOW};
 
@@ -28,23 +28,18 @@ use oer_esp32s31_hal::types::{
 };
 
 /// Bytes in the complete recovered BLE PHY environment allocation.
-pub const BLUETOOTH_BLE_PHY_ENVIRONMENT_BYTES: usize = 0x80;
+pub const BLUETOOTH_BLE_PHY_ENVIRONMENT_BYTES: usize = BlePhyEnvironment::SIZE;
 /// Bytes in one recovered resolving-list hardware allocation.
-pub const BLUETOOTH_BLE_PHY_RESOLVING_LIST_BYTES: usize = 0x40;
+pub const BLUETOOTH_BLE_PHY_RESOLVING_LIST_BYTES: usize = BleResolvingList::SIZE;
 
 const CHANNEL_FREQUENCY_OFFSETS_BYTES: usize = 0x28;
 const PACKET_START_OFFSETS_BYTES: usize = 0x08;
 const RX_ADDRESS_DELAYS_BYTES: usize = 0x04;
-const CHANNEL_FREQUENCY_OFFSETS_POINTER_OFFSET: usize = 0x30;
-const PACKET_START_OFFSETS_POINTER_OFFSET: usize = 0x34;
-const RX_ADDRESS_DELAYS_POINTER_OFFSET: usize = 0x38;
-const TX_POWER_LEVELS_POINTER_OFFSET: usize = 0x48;
-const TX_POWER_LEVEL_COUNT_OFFSET: usize = 0x4c;
-const TX_POWER_FIRST_LEVEL_OFFSET: usize = 0x78;
-const TX_POWER_LAST_LEVEL_OFFSET: usize = 0x7c;
 const TX_POWER_LEVELS: [i8; 16] = oer_esp32s31_knowledge::tx_power::TX_POWER_LEVELS_DBM;
 const TX_POWER_LEVELS_BYTES: usize = TX_POWER_LEVELS.len();
-const RESOLVING_LIST_INITIAL_HEAD_IMAGE: u32 = 0x8000_0000;
+/// SOURCE: pinned BLE PHY allocation, resolving-list initial opaque head.
+const RESOLVING_LIST_INITIAL_HEAD: BleResolvingListWord0000Opaque =
+    BleResolvingListWord0000Opaque::ZERO.with_bit_31_opaque(true);
 
 const LE_1M_PHY_MODE_INDEX: usize = 1;
 
@@ -114,12 +109,12 @@ const fn rx_address_delays_micros() -> [u8; 4] {
 /// advertising, scanning, or connection readiness.
 #[repr(C, align(4))]
 pub struct BlePhyEngineStorage {
-    environment: [VolatileCell<u8>; BLUETOOTH_BLE_PHY_ENVIRONMENT_BYTES],
+    environment: BlePhyEnvironment,
     channel_frequency_offsets_mhz: [u8; CHANNEL_FREQUENCY_OFFSETS_BYTES],
     packet_start_offsets_micros: [u16; 4],
     rx_address_delays_micros: [u8; RX_ADDRESS_DELAYS_BYTES],
     tx_power_levels_dbm: [i8; TX_POWER_LEVELS_BYTES],
-    resolving_list: [VolatileCell<u8>; BLUETOOTH_BLE_PHY_RESOLVING_LIST_BYTES],
+    resolving_list: BleResolvingList,
     _pin: PhantomPinned,
 }
 
@@ -404,21 +399,589 @@ impl BlePhyEngineCpuOwned {
     #[cfg(test)]
     fn image(&self) -> std::vec::Vec<u8> {
         let storage = self.storage.as_ref().get_ref();
-        storage
-            .environment
-            .iter()
-            .chain(&storage.resolving_list)
-            .map(VolatileCell::get)
-            .collect()
+        let mut bytes = std::vec::Vec::new();
+        bytes.extend(
+            storage
+                .environment
+                .word_0000_opaque()
+                .read()
+                .bits()
+                .to_le_bytes(),
+        );
+        bytes.extend(
+            storage
+                .environment
+                .word_0004_opaque()
+                .read()
+                .bits()
+                .to_le_bytes(),
+        );
+        bytes.extend(
+            storage
+                .environment
+                .word_0008_opaque()
+                .read()
+                .bits()
+                .to_le_bytes(),
+        );
+        bytes.extend(
+            storage
+                .environment
+                .word_000c_opaque()
+                .read()
+                .bits()
+                .to_le_bytes(),
+        );
+        bytes.extend(
+            storage
+                .environment
+                .word_0010_opaque()
+                .read()
+                .bits()
+                .to_le_bytes(),
+        );
+        bytes.extend(
+            storage
+                .environment
+                .word_0014_opaque()
+                .read()
+                .bits()
+                .to_le_bytes(),
+        );
+        bytes.extend(
+            storage
+                .environment
+                .word_0018_opaque()
+                .read()
+                .bits()
+                .to_le_bytes(),
+        );
+        bytes.extend(
+            storage
+                .environment
+                .word_001c_opaque()
+                .read()
+                .bits()
+                .to_le_bytes(),
+        );
+        bytes.extend(
+            storage
+                .environment
+                .word_0020_opaque()
+                .read()
+                .bits()
+                .to_le_bytes(),
+        );
+        bytes.extend(
+            storage
+                .environment
+                .word_0024_opaque()
+                .read()
+                .bits()
+                .to_le_bytes(),
+        );
+        bytes.extend(
+            storage
+                .environment
+                .word_0028_opaque()
+                .read()
+                .bits()
+                .to_le_bytes(),
+        );
+        bytes.extend(
+            storage
+                .environment
+                .word_002c_opaque()
+                .read()
+                .bits()
+                .to_le_bytes(),
+        );
+        bytes.extend(
+            storage
+                .environment
+                .channel_frequency_offsets()
+                .read()
+                .bits()
+                .to_le_bytes(),
+        );
+        bytes.extend(
+            storage
+                .environment
+                .packet_start_offsets()
+                .read()
+                .bits()
+                .to_le_bytes(),
+        );
+        bytes.extend(
+            storage
+                .environment
+                .rx_address_delays()
+                .read()
+                .bits()
+                .to_le_bytes(),
+        );
+        bytes.extend(
+            storage
+                .environment
+                .word_003c_opaque()
+                .read()
+                .bits()
+                .to_le_bytes(),
+        );
+        bytes.extend(
+            storage
+                .environment
+                .word_0040_opaque()
+                .read()
+                .bits()
+                .to_le_bytes(),
+        );
+        bytes.extend(
+            storage
+                .environment
+                .word_0044_opaque()
+                .read()
+                .bits()
+                .to_le_bytes(),
+        );
+        bytes.extend(
+            storage
+                .environment
+                .tx_power_levels()
+                .read()
+                .bits()
+                .to_le_bytes(),
+        );
+        bytes.extend(
+            storage
+                .environment
+                .tx_power_level_count()
+                .read()
+                .bits()
+                .to_le_bytes(),
+        );
+        bytes.extend(
+            storage
+                .environment
+                .word_0050_opaque()
+                .read()
+                .bits()
+                .to_le_bytes(),
+        );
+        bytes.extend(
+            storage
+                .environment
+                .word_0054_opaque()
+                .read()
+                .bits()
+                .to_le_bytes(),
+        );
+        bytes.extend(
+            storage
+                .environment
+                .word_0058_opaque()
+                .read()
+                .bits()
+                .to_le_bytes(),
+        );
+        bytes.extend(
+            storage
+                .environment
+                .word_005c_opaque()
+                .read()
+                .bits()
+                .to_le_bytes(),
+        );
+        bytes.extend(
+            storage
+                .environment
+                .word_0060_opaque()
+                .read()
+                .bits()
+                .to_le_bytes(),
+        );
+        bytes.extend(
+            storage
+                .environment
+                .word_0064_opaque()
+                .read()
+                .bits()
+                .to_le_bytes(),
+        );
+        bytes.extend(
+            storage
+                .environment
+                .word_0068_opaque()
+                .read()
+                .bits()
+                .to_le_bytes(),
+        );
+        bytes.extend(
+            storage
+                .environment
+                .word_006c_opaque()
+                .read()
+                .bits()
+                .to_le_bytes(),
+        );
+        bytes.extend(
+            storage
+                .environment
+                .word_0070_opaque()
+                .read()
+                .bits()
+                .to_le_bytes(),
+        );
+        bytes.extend(
+            storage
+                .environment
+                .word_0074_opaque()
+                .read()
+                .bits()
+                .to_le_bytes(),
+        );
+        bytes.extend(
+            storage
+                .environment
+                .tx_power_first_level()
+                .read()
+                .bits()
+                .to_le_bytes(),
+        );
+        bytes.extend(
+            storage
+                .environment
+                .tx_power_last_level()
+                .read()
+                .bits()
+                .to_le_bytes(),
+        );
+        bytes.extend(
+            storage
+                .resolving_list
+                .word_0000_opaque()
+                .read()
+                .bits()
+                .to_le_bytes(),
+        );
+        bytes.extend(
+            storage
+                .resolving_list
+                .word_0004_opaque()
+                .read()
+                .bits()
+                .to_le_bytes(),
+        );
+        bytes.extend(
+            storage
+                .resolving_list
+                .word_0008_opaque()
+                .read()
+                .bits()
+                .to_le_bytes(),
+        );
+        bytes.extend(
+            storage
+                .resolving_list
+                .word_000c_opaque()
+                .read()
+                .bits()
+                .to_le_bytes(),
+        );
+        bytes.extend(
+            storage
+                .resolving_list
+                .word_0010_opaque()
+                .read()
+                .bits()
+                .to_le_bytes(),
+        );
+        bytes.extend(
+            storage
+                .resolving_list
+                .word_0014_opaque()
+                .read()
+                .bits()
+                .to_le_bytes(),
+        );
+        bytes.extend(
+            storage
+                .resolving_list
+                .word_0018_opaque()
+                .read()
+                .bits()
+                .to_le_bytes(),
+        );
+        bytes.extend(
+            storage
+                .resolving_list
+                .word_001c_opaque()
+                .read()
+                .bits()
+                .to_le_bytes(),
+        );
+        bytes.extend(
+            storage
+                .resolving_list
+                .word_0020_opaque()
+                .read()
+                .bits()
+                .to_le_bytes(),
+        );
+        bytes.extend(
+            storage
+                .resolving_list
+                .word_0024_opaque()
+                .read()
+                .bits()
+                .to_le_bytes(),
+        );
+        bytes.extend(
+            storage
+                .resolving_list
+                .word_0028_opaque()
+                .read()
+                .bits()
+                .to_le_bytes(),
+        );
+        bytes.extend(
+            storage
+                .resolving_list
+                .word_002c_opaque()
+                .read()
+                .bits()
+                .to_le_bytes(),
+        );
+        bytes.extend(
+            storage
+                .resolving_list
+                .word_0030_opaque()
+                .read()
+                .bits()
+                .to_le_bytes(),
+        );
+        bytes.extend(
+            storage
+                .resolving_list
+                .word_0034_opaque()
+                .read()
+                .bits()
+                .to_le_bytes(),
+        );
+        bytes.extend(
+            storage
+                .resolving_list
+                .word_0038_opaque()
+                .read()
+                .bits()
+                .to_le_bytes(),
+        );
+        bytes.extend(
+            storage
+                .resolving_list
+                .word_003c_opaque()
+                .read()
+                .bits()
+                .to_le_bytes(),
+        );
+        bytes
     }
 
     /// Model hardware writing the environment during an epoch.
     #[cfg(test)]
     fn emulate_hardware_writes(&self) {
         let storage = self.storage.as_ref().get_ref();
-        for cell in storage.environment.iter().chain(&storage.resolving_list) {
-            cell.set(0xa5);
-        }
+        storage
+            .environment
+            .word_0000_opaque()
+            .write(BlePhyEnvironmentWord0000Opaque::from_bits(0xa5a5_a5a5));
+        storage
+            .environment
+            .word_0004_opaque()
+            .write(BlePhyEnvironmentWord0004Opaque::from_bits(0xa5a5_a5a5));
+        storage
+            .environment
+            .word_0008_opaque()
+            .write(BlePhyEnvironmentWord0008Opaque::from_bits(0xa5a5_a5a5));
+        storage
+            .environment
+            .word_000c_opaque()
+            .write(BlePhyEnvironmentWord000cOpaque::from_bits(0xa5a5_a5a5));
+        storage
+            .environment
+            .word_0010_opaque()
+            .write(BlePhyEnvironmentWord0010Opaque::from_bits(0xa5a5_a5a5));
+        storage
+            .environment
+            .word_0014_opaque()
+            .write(BlePhyEnvironmentWord0014Opaque::from_bits(0xa5a5_a5a5));
+        storage
+            .environment
+            .word_0018_opaque()
+            .write(BlePhyEnvironmentWord0018Opaque::from_bits(0xa5a5_a5a5));
+        storage
+            .environment
+            .word_001c_opaque()
+            .write(BlePhyEnvironmentWord001cOpaque::from_bits(0xa5a5_a5a5));
+        storage
+            .environment
+            .word_0020_opaque()
+            .write(BlePhyEnvironmentWord0020Opaque::from_bits(0xa5a5_a5a5));
+        storage
+            .environment
+            .word_0024_opaque()
+            .write(BlePhyEnvironmentWord0024Opaque::from_bits(0xa5a5_a5a5));
+        storage
+            .environment
+            .word_0028_opaque()
+            .write(BlePhyEnvironmentWord0028Opaque::from_bits(0xa5a5_a5a5));
+        storage
+            .environment
+            .word_002c_opaque()
+            .write(BlePhyEnvironmentWord002cOpaque::from_bits(0xa5a5_a5a5));
+        storage.environment.channel_frequency_offsets().write(
+            BlePhyEnvironmentChannelFrequencyOffsets::from_bits(0xa5a5_a5a5),
+        );
+        storage
+            .environment
+            .packet_start_offsets()
+            .write(BlePhyEnvironmentPacketStartOffsets::from_bits(0xa5a5_a5a5));
+        storage
+            .environment
+            .rx_address_delays()
+            .write(BlePhyEnvironmentRxAddressDelays::from_bits(0xa5a5_a5a5));
+        storage
+            .environment
+            .word_003c_opaque()
+            .write(BlePhyEnvironmentWord003cOpaque::from_bits(0xa5a5_a5a5));
+        storage
+            .environment
+            .word_0040_opaque()
+            .write(BlePhyEnvironmentWord0040Opaque::from_bits(0xa5a5_a5a5));
+        storage
+            .environment
+            .word_0044_opaque()
+            .write(BlePhyEnvironmentWord0044Opaque::from_bits(0xa5a5_a5a5));
+        storage
+            .environment
+            .tx_power_levels()
+            .write(BlePhyEnvironmentTxPowerLevels::from_bits(0xa5a5_a5a5));
+        storage
+            .environment
+            .tx_power_level_count()
+            .write(BlePhyEnvironmentTxPowerLevelCount::from_bits(0xa5a5_a5a5));
+        storage
+            .environment
+            .word_0050_opaque()
+            .write(BlePhyEnvironmentWord0050Opaque::from_bits(0xa5a5_a5a5));
+        storage
+            .environment
+            .word_0054_opaque()
+            .write(BlePhyEnvironmentWord0054Opaque::from_bits(0xa5a5_a5a5));
+        storage
+            .environment
+            .word_0058_opaque()
+            .write(BlePhyEnvironmentWord0058Opaque::from_bits(0xa5a5_a5a5));
+        storage
+            .environment
+            .word_005c_opaque()
+            .write(BlePhyEnvironmentWord005cOpaque::from_bits(0xa5a5_a5a5));
+        storage
+            .environment
+            .word_0060_opaque()
+            .write(BlePhyEnvironmentWord0060Opaque::from_bits(0xa5a5_a5a5));
+        storage
+            .environment
+            .word_0064_opaque()
+            .write(BlePhyEnvironmentWord0064Opaque::from_bits(0xa5a5_a5a5));
+        storage
+            .environment
+            .word_0068_opaque()
+            .write(BlePhyEnvironmentWord0068Opaque::from_bits(0xa5a5_a5a5));
+        storage
+            .environment
+            .word_006c_opaque()
+            .write(BlePhyEnvironmentWord006cOpaque::from_bits(0xa5a5_a5a5));
+        storage
+            .environment
+            .word_0070_opaque()
+            .write(BlePhyEnvironmentWord0070Opaque::from_bits(0xa5a5_a5a5));
+        storage
+            .environment
+            .word_0074_opaque()
+            .write(BlePhyEnvironmentWord0074Opaque::from_bits(0xa5a5_a5a5));
+        storage
+            .environment
+            .tx_power_first_level()
+            .write(BlePhyEnvironmentTxPowerFirstLevel::from_bits(0xa5a5_a5a5));
+        storage
+            .environment
+            .tx_power_last_level()
+            .write(BlePhyEnvironmentTxPowerLastLevel::from_bits(0xa5a5_a5a5));
+        storage
+            .resolving_list
+            .word_0000_opaque()
+            .write(BleResolvingListWord0000Opaque::from_bits(0xa5a5_a5a5));
+        storage
+            .resolving_list
+            .word_0004_opaque()
+            .write(BleResolvingListWord0004Opaque::from_bits(0xa5a5_a5a5));
+        storage
+            .resolving_list
+            .word_0008_opaque()
+            .write(BleResolvingListWord0008Opaque::from_bits(0xa5a5_a5a5));
+        storage
+            .resolving_list
+            .word_000c_opaque()
+            .write(BleResolvingListWord000cOpaque::from_bits(0xa5a5_a5a5));
+        storage
+            .resolving_list
+            .word_0010_opaque()
+            .write(BleResolvingListWord0010Opaque::from_bits(0xa5a5_a5a5));
+        storage
+            .resolving_list
+            .word_0014_opaque()
+            .write(BleResolvingListWord0014Opaque::from_bits(0xa5a5_a5a5));
+        storage
+            .resolving_list
+            .word_0018_opaque()
+            .write(BleResolvingListWord0018Opaque::from_bits(0xa5a5_a5a5));
+        storage
+            .resolving_list
+            .word_001c_opaque()
+            .write(BleResolvingListWord001cOpaque::from_bits(0xa5a5_a5a5));
+        storage
+            .resolving_list
+            .word_0020_opaque()
+            .write(BleResolvingListWord0020Opaque::from_bits(0xa5a5_a5a5));
+        storage
+            .resolving_list
+            .word_0024_opaque()
+            .write(BleResolvingListWord0024Opaque::from_bits(0xa5a5_a5a5));
+        storage
+            .resolving_list
+            .word_0028_opaque()
+            .write(BleResolvingListWord0028Opaque::from_bits(0xa5a5_a5a5));
+        storage
+            .resolving_list
+            .word_002c_opaque()
+            .write(BleResolvingListWord002cOpaque::from_bits(0xa5a5_a5a5));
+        storage
+            .resolving_list
+            .word_0030_opaque()
+            .write(BleResolvingListWord0030Opaque::from_bits(0xa5a5_a5a5));
+        storage
+            .resolving_list
+            .word_0034_opaque()
+            .write(BleResolvingListWord0034Opaque::from_bits(0xa5a5_a5a5));
+        storage
+            .resolving_list
+            .word_0038_opaque()
+            .write(BleResolvingListWord0038Opaque::from_bits(0xa5a5_a5a5));
+        storage
+            .resolving_list
+            .word_003c_opaque()
+            .write(BleResolvingListWord003cOpaque::from_bits(0xa5a5_a5a5));
     }
 
     /// Return the environment and resolving list to their allocation-time
@@ -435,13 +998,12 @@ impl BlePhyEngineStorage {
     /// Reserve storage for the BLE PHY engine and its reviewed immutable data.
     pub const fn new() -> Self {
         Self {
-            environment: [const { VolatileCell::new(0) }; BLUETOOTH_BLE_PHY_ENVIRONMENT_BYTES],
+            environment: BlePhyEnvironment::zeroed(),
             channel_frequency_offsets_mhz: channel_frequency_offsets_mhz(),
             packet_start_offsets_micros: packet_start_offsets_micros(),
             rx_address_delays_micros: rx_address_delays_micros(),
             tx_power_levels_dbm: TX_POWER_LEVELS,
-            resolving_list: [const { VolatileCell::new(0) };
-                BLUETOOTH_BLE_PHY_RESOLVING_LIST_BYTES],
+            resolving_list: BleResolvingList::zeroed(),
             _pin: PhantomPinned,
         }
     }
@@ -577,51 +1139,40 @@ impl BlePhyEngineStorage {
     /// list with the reviewed table pointers, the transmit-power table record
     /// and the resolving-list head.
     fn initialize_reviewed_allocation(&self, binding: &BlePhyEngineBinding) {
-        let write = |cells: &[VolatileCell<u8>], offset: usize, bytes: [u8; 4]| {
-            for (cell, byte) in cells[offset..offset + 4].iter().zip(bytes) {
-                cell.set(byte);
-            }
-        };
-        for cell in self.environment.iter().chain(&self.resolving_list) {
-            cell.set(0);
-        }
-        write(
-            &self.environment,
-            CHANNEL_FREQUENCY_OFFSETS_POINTER_OFFSET,
-            binding.channel_frequency_offsets.address().to_le_bytes(),
+        crate::shared_layout::clear_phy_environment(&self.environment);
+        crate::shared_layout::clear_resolving_list(&self.resolving_list);
+        self.environment.channel_frequency_offsets().write(
+            BlePhyEnvironmentChannelFrequencyOffsets::from_bits(
+                binding.channel_frequency_offsets.address(),
+            ),
         );
-        write(
-            &self.environment,
-            PACKET_START_OFFSETS_POINTER_OFFSET,
-            binding.packet_start_offsets.address().to_le_bytes(),
+        self.environment.packet_start_offsets().write(
+            BlePhyEnvironmentPacketStartOffsets::from_bits(binding.packet_start_offsets.address()),
         );
-        write(
-            &self.environment,
-            RX_ADDRESS_DELAYS_POINTER_OFFSET,
-            binding.rx_address_delays.address().to_le_bytes(),
+        self.environment
+            .rx_address_delays()
+            .write(BlePhyEnvironmentRxAddressDelays::from_bits(
+                binding.rx_address_delays.address(),
+            ));
+        self.environment
+            .tx_power_levels()
+            .write(BlePhyEnvironmentTxPowerLevels::from_bits(
+                binding.tx_power_levels.address(),
+            ));
+        self.environment.tx_power_level_count().write(
+            BlePhyEnvironmentTxPowerLevelCount::ZERO.with_value(TX_POWER_LEVELS_BYTES as u8),
         );
-        write(
-            &self.environment,
-            TX_POWER_LEVELS_POINTER_OFFSET,
-            binding.tx_power_levels.address().to_le_bytes(),
+        self.environment.tx_power_first_level().write(
+            BlePhyEnvironmentTxPowerFirstLevel::ZERO
+                .with_dbm_sign_extended(TX_POWER_LEVELS[0] as i32 as u32),
         );
-        self.environment[TX_POWER_LEVEL_COUNT_OFFSET].set(TX_POWER_LEVELS_BYTES as u8);
-        // The first and last levels are stored sign-extended to words.
-        write(
-            &self.environment,
-            TX_POWER_FIRST_LEVEL_OFFSET,
-            i32::from(TX_POWER_LEVELS[0]).to_le_bytes(),
+        self.environment.tx_power_last_level().write(
+            BlePhyEnvironmentTxPowerLastLevel::ZERO
+                .with_dbm_sign_extended(TX_POWER_LEVELS[TX_POWER_LEVELS_BYTES - 1] as i32 as u32),
         );
-        write(
-            &self.environment,
-            TX_POWER_LAST_LEVEL_OFFSET,
-            i32::from(TX_POWER_LEVELS[TX_POWER_LEVELS_BYTES - 1]).to_le_bytes(),
-        );
-        write(
-            &self.resolving_list,
-            0,
-            RESOLVING_LIST_INITIAL_HEAD_IMAGE.to_le_bytes(),
-        );
+        self.resolving_list
+            .word_0000_opaque()
+            .write(RESOLVING_LIST_INITIAL_HEAD);
     }
 }
 

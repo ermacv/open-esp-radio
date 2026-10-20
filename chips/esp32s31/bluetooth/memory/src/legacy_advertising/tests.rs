@@ -1,13 +1,9 @@
 use std::boxed::Box;
 
-use super::{
-    LegacyAdvertisingError, LegacyAdvertisingPool, LegacyAdvertisingStorage,
-    SCHEDULER_ITEM_ALLOCATION_NUMBER_OFFSET,
-};
+use super::{LegacyAdvertisingError, LegacyAdvertisingPool, LegacyAdvertisingStorage};
 use crate::{
     AdvertisingCoexistencePriorities, LegacyAdvertisingPduError,
     LegacyAdvertisingPrimaryChannelPlan, SchedulerItemCoexistencePriority,
-    coexistence::lanes_image,
     scheduler_pool::{
         SchedulerAllocationConfig, SchedulerItemSpace, SchedulerPoolError,
         SchedulerPoolModelAddress, SchedulerRoleInstance, SchedulerRolePoolStorage,
@@ -54,14 +50,13 @@ fn reset(pool: &mut LegacyAdvertisingPool<2>) -> SchedulerRoleInstance {
     instance
 }
 
-fn item_word(
+fn item_number(
     pool: &LegacyAdvertisingPool<2>,
     instance: &SchedulerRoleInstance,
     item: usize,
-    offset: usize,
-) -> u32 {
+) -> u16 {
     let (graph, _, _) = pool.shared(instance).unwrap();
-    graph.items[item].words[offset].get()
+    graph.items[item].layout.allocation_number().read().value()
 }
 
 #[test]
@@ -70,19 +65,8 @@ fn every_item_carries_its_instance_number() {
     let first = pool.acquire().unwrap();
     let second = pool.acquire().unwrap();
     for item in 0..3 {
-        assert_eq!(
-            item_word(&pool, &first, item, SCHEDULER_ITEM_ALLOCATION_NUMBER_OFFSET),
-            2
-        );
-        assert_eq!(
-            item_word(
-                &pool,
-                &second,
-                item,
-                SCHEDULER_ITEM_ALLOCATION_NUMBER_OFFSET
-            ),
-            3
-        );
+        assert_eq!(item_number(&pool, &first, item), 2);
+        assert_eq!(item_number(&pool, &second, item), 3);
     }
 }
 
@@ -108,8 +92,16 @@ fn an_event_lowers_one_unlinked_item_per_channel() {
         assert_eq!(item.header().hardware_next_image(), 0);
         // Each channel item carries the event's coexistence lanes.
         assert_eq!(
-            item.words[super::SCHEDULER_ITEM_COEX_PRIORITIES_OFFSET].get() & 0x000f_ffff,
-            lanes_image(&priorities([4, 0, 13, 13]).lanes)
+            {
+                let image = item.layout.coexistence_priority().read();
+                [
+                    image.lane_0(),
+                    image.lane_1(),
+                    image.lane_2(),
+                    image.lane_3(),
+                ]
+            },
+            [4, 0, 13, 13]
         );
     }
     assert_eq!(graph.link_state.scheduler_head(), 0);
@@ -154,16 +146,24 @@ fn only_prepared_items_are_submitted_and_the_space_links_them() {
 fn finishing_an_event_restores_the_allocation_image() {
     let mut pool = pool();
     let instance = reset(&mut pool);
-    let before: std::vec::Vec<u32> = (0..3)
-        .flat_map(|item| (0..0x60 / 4).map(move |word| (item, word)))
-        .map(|(item, word)| item_word(&pool, &instance, item, word))
+    let before: std::vec::Vec<_> = pool
+        .shared(&instance)
+        .unwrap()
+        .0
+        .items
+        .iter()
+        .map(|item| crate::shared_layout::SchedulerItemImage::read(&item.layout))
         .collect();
     pool.prepare_event(&instance, all_channels(), 1_000, 128, priorities([15; 4]))
         .unwrap();
     pool.finish_event(&instance).unwrap();
-    let after: std::vec::Vec<u32> = (0..3)
-        .flat_map(|item| (0..0x60 / 4).map(move |word| (item, word)))
-        .map(|(item, word)| item_word(&pool, &instance, item, word))
+    let after: std::vec::Vec<_> = pool
+        .shared(&instance)
+        .unwrap()
+        .0
+        .items
+        .iter()
+        .map(|item| crate::shared_layout::SchedulerItemImage::read(&item.layout))
         .collect();
     assert_eq!(before, after);
     let (graph, binding, _) = pool.shared(&instance).unwrap();

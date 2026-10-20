@@ -25,8 +25,6 @@ pub enum RxMemoryListClass {
 }
 
 impl RxMemoryListClass {
-    const LINK_STATE_CLASS_MASK: u32 = 0x7000_0000;
-
     /// Select this class in link-state word `+0x20` bits 30:28, as
     /// `r_ble_lll_mmgmt_update_global_rxlink` does for every role that
     /// receives through a global list.
@@ -35,7 +33,10 @@ impl RxMemoryListClass {
             Self::Scanning => 1,
             Self::NonScanning => 2,
         };
-        (word & !Self::LINK_STATE_CLASS_MASK) | (class << 28)
+        oer_esp32s31_hal::layouts::BleLinkStateRxList::from_bits(word)
+            .with_class(class)
+            .expect("reviewed RX class fits")
+            .bits()
     }
 
     /// The exact active selector chosen by the complete memory-manager body.
