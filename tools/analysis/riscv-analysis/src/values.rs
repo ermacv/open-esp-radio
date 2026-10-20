@@ -737,11 +737,12 @@ fn known(v: &AbstractValue) -> bool {
 const MAX_SLICE: usize = 32;
 
 /// The table dispatch of the jump at node `at` through register `target`:
-/// `target` is the word loaded from `base + (index << scale)`, the load, the
-/// addition and the scaling on the jump's unique fall-through chain. Returns the base
-/// and index values on entry to the instructions that read them; the base
-/// must be a constant, an image address or a symbol. A base the block or a
-/// loop's preheader forms holds on every pass while the index may merge; one
+/// `target` is the word loaded from `base + (index << scale) + displacement`,
+/// with the load, addition and scaling on the jump's unique fall-through
+/// chain. Returns the base and index values on entry to the instructions
+/// that read them, the scale and the load displacement; the base must be a
+/// constant, an image address or a symbol. A base the block or a loop's
+/// preheader forms holds on every pass while the index may merge; one
 /// a later pass merges leaves that pass without the record.
 #[allow(clippy::too_many_arguments)]
 fn table_dispatch(
@@ -753,7 +754,7 @@ fn table_dispatch(
     incoming: &[u8],
     sets: &Sets<'_>,
     control: &mut dyn RunControl,
-) -> Result<Option<(Value, Value, u8)>> {
+) -> Result<Option<(Value, Value, u8, i32)>> {
     // The nearest node before `from` on its unique fall-through chain that writes
     // `register`, within the slice's reach.
     let mut writer = |from: usize, register: u8| -> Result<Option<usize>> {
@@ -804,7 +805,7 @@ fn table_dispatch(
     let SemanticOp::Memory {
         kind: MemoryKind::Load,
         base: address,
-        displacement: 0,
+        displacement,
         width: 4,
         ..
     } = operations[load].op
@@ -869,7 +870,7 @@ fn table_dispatch(
                 Value::Constant(_) | Value::Image(_) | Value::Symbol(..)
             )
         })
-        .then_some((base, index, scale)))
+        .then_some((base, index, scale, displacement)))
 }
 
 #[cfg(test)]
@@ -1164,7 +1165,7 @@ pub(super) fn analyze_with<'m>(
                 offset: 0,
                 link: false,
             } = node.decoded.flow
-            && let Some((table, index, scale)) = table_dispatch(
+            && let Some((table, index, scale, displacement)) = table_dispatch(
                 i,
                 base,
                 nodes,
@@ -1181,6 +1182,7 @@ pub(super) fn analyze_with<'m>(
                     base: public(table, input, &symbols.sets),
                     index: public(index, input, &symbols.sets),
                     scale,
+                    displacement,
                 },
                 control,
             )?;
@@ -2975,6 +2977,14 @@ mod tests {
             },
             SemanticOp::None,
         ];
+        dispatch_records_of(entered, jump, ops)
+    }
+
+    fn dispatch_records_of(
+        entered: &[usize],
+        jump: InstructionFlow,
+        ops: Vec<SemanticOp>,
+    ) -> Vec<FunctionRecord> {
         let bytes: Vec<u8> = (0..ops.len()).flat_map(|i| [i as u8, 0]).collect();
         let nodes: Vec<_> = (0..ops.len())
             .map(|i| Node {
@@ -3047,6 +3057,147 @@ mod tests {
     }
 
     #[test]
+    fn a_dispatch_retains_every_load_displacement() {
+        for displacement in [i32::MIN, -8, -3, 0, 4, i32::MAX] {
+            let ops = vec![
+                SemanticOp::Opaque { dest: 11 },
+                set(12, 0x5000),
+                SemanticOp::Integer {
+                    op: IntegerOp::Shl,
+                    dest: 13,
+                    left: Operand::Register(11),
+                    right: Operand::Immediate(2),
+                },
+                SemanticOp::Integer {
+                    op: IntegerOp::Add,
+                    dest: 13,
+                    left: Operand::Register(13),
+                    right: Operand::Register(12),
+                },
+                SemanticOp::Memory {
+                    kind: MemoryKind::Load,
+                    base: 13,
+                    displacement,
+                    width: 4,
+                    dest: Some(15),
+                    source: None,
+                    swap: false,
+                    signed: true,
+                },
+                SemanticOp::None,
+            ];
+            let jump = InstructionFlow::Indirect {
+                base: 15,
+                offset: 0,
+                link: false,
+            };
+            let records = dispatch_records_of(&[], jump, ops.clone());
+            assert_eq!(
+                records,
+                [FunctionRecord::Dispatch {
+                    offset: 10,
+                    base: AbstractValue::Constant { value: 0x5000 },
+                    index: AbstractValue::Unknown,
+                    scale: 2,
+                    displacement
+                }]
+            );
+            assert!(dispatch_records_of(&[3], jump, ops.clone()).is_empty());
+            let mut zero = ops;
+            if let SemanticOp::Memory { dest, .. } = &mut zero[4] {
+                *dest = Some(0);
+            }
+            assert!(
+                dispatch_records_of(
+                    &[],
+                    InstructionFlow::Indirect {
+                        base: 0,
+                        offset: 0,
+                        link: false
+                    },
+                    zero
+                )
+                .is_empty()
+            );
+        }
+    }
+
+    #[test]
+    fn an_opaque_byte_index_and_masked_exclusion_keep_the_label_and_displacement() {
+        let ops = vec![
+            SemanticOp::Memory {
+                kind: MemoryKind::Load,
+                base: 10,
+                displacement: 0,
+                width: 1,
+                dest: Some(11),
+                source: None,
+                swap: false,
+                signed: false,
+            },
+            SemanticOp::Integer {
+                op: IntegerOp::And,
+                dest: 14,
+                left: Operand::Register(11),
+                right: Operand::Immediate(0xfe),
+            },
+            SemanticOp::Upper {
+                dest: 12,
+                value: 0x5000,
+                pc_relative: false,
+            },
+            SemanticOp::Integer {
+                op: IntegerOp::Add,
+                dest: 12,
+                left: Operand::Register(12),
+                right: Operand::Immediate(0),
+            },
+            SemanticOp::Integer {
+                op: IntegerOp::Shl,
+                dest: 13,
+                left: Operand::Register(11),
+                right: Operand::Immediate(2),
+            },
+            SemanticOp::Integer {
+                op: IntegerOp::Add,
+                dest: 13,
+                left: Operand::Register(13),
+                right: Operand::Register(12),
+            },
+            SemanticOp::Memory {
+                kind: MemoryKind::Load,
+                base: 13,
+                displacement: -8,
+                width: 4,
+                dest: Some(15),
+                source: None,
+                swap: false,
+                signed: true,
+            },
+            SemanticOp::None,
+        ];
+        let records = dispatch_records_of(
+            &[],
+            InstructionFlow::Indirect {
+                base: 15,
+                offset: 0,
+                link: false,
+            },
+            ops,
+        );
+        assert!(matches!(
+            &records[..],
+            [FunctionRecord::Dispatch {
+                base: AbstractValue::Constant { value: 0x5000 },
+                index: AbstractValue::Expression { .. },
+                scale: 2,
+                displacement: -8,
+                ..
+            }]
+        ));
+    }
+
+    #[test]
     fn a_dispatch_keeps_its_block_formed_base_whatever_its_index() {
         // The index is unknown; the base the block forms still names the table.
         assert_eq!(
@@ -3056,6 +3207,7 @@ mod tests {
                 base: AbstractValue::Constant { value: 0x5000 },
                 index: AbstractValue::Unknown,
                 scale: 2,
+                displacement: 0,
             }]
         );
         // A path entering between the base and the jump breaks the block.

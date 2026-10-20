@@ -11,7 +11,7 @@ use oer_analysis_blobray_application::{
 use oer_analysis_riscv_model::{JumpDispatch, WorkingMemory};
 use oer_tool_analysis_cli::{jump_table::human, wire::NamedFunction};
 
-fn object(alternative: bool) -> Vec<u8> {
+fn object(alternative: bool, displacement: i32) -> Vec<u8> {
     let mut code: Vec<u32> = vec![
         0x0000_0737, // lui a4, %hi(table)
         0x0007_0713, // addi a4, a4, %lo(table)
@@ -27,7 +27,7 @@ fn object(alternative: bool) -> Vec<u8> {
         0x02a5_e263, // bltu a1, a0, 0x40
         0x0025_1513, // slli a0, a0, 2
         0x00e5_0533, // add a0, a0, a4
-        0x0005_2503, // lw a0, 0(a0)
+        0x0005_2503 | ((displacement as u32 & 0xfff) << 20), // lw a0, d(a0)
         0x0005_0067, // jr a0
     ];
     code.resize(0x5c / 4, 0x0000_0013);
@@ -66,7 +66,7 @@ fn object(alternative: bool) -> Vec<u8> {
                 Relocation {
                     offset,
                     symbol: table,
-                    addend: 0,
+                    addend: -i64::from(displacement),
                     flags: RelocationFlags::Elf { r_type: kind },
                 },
             )
@@ -92,11 +92,12 @@ fn object(alternative: bool) -> Vec<u8> {
 
 #[test]
 fn blobray_and_both_cli_formats_preserve_the_dispatch_kind() {
-    for alternative in [false, true] {
+    for (alternative, displacement) in [(false, 0), (true, 0), (false, -8), (true, -8), (false, 8)]
+    {
         let memory = WorkingMemory::new(64 * 1024 * 1024).expect("working memory");
         let mut outcomes = Vec::new();
         analyze_library(
-            &[Executable::new(object(alternative))],
+            &[Executable::new(object(alternative, displacement))],
             Assumptions::default(),
             &oer_analysis_riscv_lift::RiscvDecoder,
             &memory,
@@ -126,9 +127,18 @@ fn blobray_and_both_cli_formats_preserve_the_dispatch_kind() {
         let [outcome] = &outcomes[..] else {
             panic!("one function outcome")
         };
-        let NamedFunction::Analyzed { jump_tables, .. } = outcome else {
+        let NamedFunction::Analyzed {
+            jump_tables,
+            records,
+            ..
+        } = outcome
+        else {
             panic!("analyzed outcome")
         };
+        assert!(records.iter().any(|record| matches!(record,
+            oer_analysis_riscv_model::FunctionRecord::Dispatch { displacement: d, .. } if *d == displacement
+        )));
+        assert_eq!(oer_tool_analysis_cli::wire::FUNCTION_RECORDS_SCHEMA, 9);
         let expected = if alternative {
             JumpDispatch::TargetSet {
                 site: 0x2c,
@@ -144,6 +154,16 @@ fn blobray_and_both_cli_formats_preserve_the_dispatch_kind() {
         assert_eq!(jump_tables, &[expected]);
         let text = human(&jump_tables[0]);
         let json = serde_json::to_value(outcome).expect("serialize function outcome");
+        let dispatch = json["records"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|record| record["kind"] == "dispatch")
+            .unwrap();
+        assert_eq!(dispatch["displacement"], displacement);
+        let mut old = dispatch.clone();
+        old.as_object_mut().unwrap().remove("displacement");
+        assert!(serde_json::from_value::<oer_analysis_riscv_model::FunctionRecord>(old).is_err());
         let mut ambiguous = json.clone();
         let extra = if alternative { "entries" } else { "targets" };
         ambiguous["jump_tables"][0][extra] = serde_json::json!([0x40, 0x50, 0x58]);
@@ -151,7 +171,16 @@ fn blobray_and_both_cli_formats_preserve_the_dispatch_kind() {
             serde_json::from_value::<NamedFunction>(ambiguous).is_err(),
             "JSON must not mix table entries with a target set"
         );
+        let mut legacy = json.clone();
+        legacy["jump_tables"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("kind");
+        assert!(serde_json::from_value::<NamedFunction>(legacy).is_err());
         if alternative {
+            let mut mixed_case = json.clone();
+            mixed_case["jump_tables"][0]["first_case"] = serde_json::json!(0);
+            assert!(serde_json::from_value::<NamedFunction>(mixed_case).is_err());
             assert_eq!(text, "jump targets +2c: +40, +50, +58");
             assert_eq!(
                 json["jump_tables"][0],

@@ -202,3 +202,128 @@ fn proved_dispatch_does_not_hide_a_decode_gap_or_another_unknown_edge() {
         );
     }
 }
+
+/// The w0 state dispatch excludes byte values zero and one, then reads a
+/// table whose label is eight bytes beyond the nominal indexed load start.
+fn displaced_root() -> Symbol {
+    Symbol {
+        name: "displaced",
+        frame: Some(0),
+        words: vec![
+            0x0005_4783, // lbu a5, 0(a0)
+            0x0fe7_f713, // andi a4, a5, 0xfe
+            0x0207_0063, // beq a4, zero, +32 (the excluded 0/1 states)
+            0x0000_2737, // lui a4, 2
+            0x0007_0713, // addi a4, a4, 0: labelled base RODATA
+            0x0027_9793, // slli a5, a5, 2
+            0x00e7_87b3, // add a5, a5, a4
+            0xff87_a783, // lw a5, -8(a5)
+            0x0007_8067, // jr a5
+            RET,         // table entry zero
+            RET,         // table entry one and the excluded states
+        ],
+    }
+}
+
+fn recognized(elf: &[u8]) -> (Vec<FunctionRecord>, Vec<JumpDispatch>) {
+    with_facts(elf, |facts| {
+        use oer_analysis_riscv_analysis::{
+            FunctionInput, PreparedReferences, research_following_tables,
+        };
+        use oer_analysis_riscv_model::NoReturns;
+        let memory = WorkingMemory::new(TEST_MEMORY)?;
+        let view = oer_analysis_riscv_program::ProgramView::new(
+            facts.bytes(),
+            facts.file(),
+            &[],
+            &memory,
+            &mut || Ok(()),
+        )?;
+        let function = &facts.functions()[0];
+        let references = PreparedReferences::empty();
+        let mut records = Records::default();
+        let (_, found) = research_following_tables(
+            FunctionInput {
+                image: Some(&view),
+                section: function.section as u32,
+                extent: CodeRange {
+                    start: function.address.into(),
+                    length: function.size.into(),
+                },
+                bytes: image::function_bytes(facts.file(), function)?,
+                relocations: &references,
+                data_ranges: &[],
+                jumps: &[],
+                returns: &NoReturns,
+                call_behavior: &UnknownCallBehavior,
+            },
+            &RecognizedTables {
+                entries: &ImageTables { image: facts },
+                section: function.section as u32,
+            },
+            &oer_analysis_riscv_lift::StructuralRiscvDecoder,
+            &memory,
+            &mut || Ok(()),
+            &mut records,
+            None,
+        )?;
+        Ok((records.0, found.tables))
+    })
+    .unwrap()
+}
+
+#[test]
+fn the_w0_displaced_shape_proves_a_table_and_closes_the_stack_graph() {
+    let elf = built(
+        TEXT,
+        &[displaced_root()],
+        &Rodata {
+            words: &[TEXT + 36, TEXT + 40, TEXT + 36],
+            relocated: &[0, 1, 2],
+            objects: &[(".LJTI0_0", 0, 0)],
+        },
+    );
+    let (records, found) = recognized(&elf);
+    assert!(
+        records
+            .iter()
+            .all(oer_analysis_riscv_analysis::writes::closes_local_graph)
+    );
+    assert_eq!(
+        found,
+        [JumpDispatch::Table {
+            site: (TEXT + 32).into(),
+            first_case: Some(2),
+            entries: vec![(TEXT + 36).into(), (TEXT + 40).into(), (TEXT + 36).into()],
+        }]
+    );
+    assert_eq!(
+        analyze(&elf, &[], &[]).unwrap().bound(TEXT).unwrap().bytes,
+        Some(0)
+    );
+}
+
+#[test]
+fn a_displaced_table_is_revalidated_after_following_its_targets() {
+    // Entry at the load bypasses the add and introduces a second predecessor.
+    let elf = built(
+        TEXT,
+        &[displaced_root()],
+        &Rodata {
+            words: &[TEXT + 28, TEXT + 40],
+            relocated: &[0, 1],
+            objects: &[(".LJTI0_0", 0, 0)],
+        },
+    );
+    let (records, found) = recognized(&elf);
+    assert!(found.is_empty());
+    assert!(
+        !records
+            .iter()
+            .all(oer_analysis_riscv_analysis::writes::closes_local_graph)
+    );
+    assert!(!records.iter().any(|record| matches!(record,
+        FunctionRecord::Edge { from, target: Some(_), relation: oer_analysis_riscv_model::EdgeKind::Jump, external: false }
+            if *from == u64::from(TEXT + 32)
+    )));
+}

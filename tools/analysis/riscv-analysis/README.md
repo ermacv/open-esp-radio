@@ -27,14 +27,22 @@ tables of the dispatches the pass locates; the function is analyzed again
 following them while each pass proves again every table it followed and
 more, and a pass that loses or changes one reports the function from a pass
 that follows only the caller's own jumps. `RecognizedTables` is the source for compiler `switch` dispatches. The
-value analysis records each jump through `load4[base + (index << 2)]` as a
-`Dispatch` record when the load, addition and scaling lie in the jump's own
-block and the base the addition reads is a constant, image address or object
-symbol: a base the block or a loop's preheader forms holds on every pass even
+value analysis records each jump through `load4[base + (index << 2) + displacement]` as a
+`Dispatch` record when the load, addition and scaling lie on the jump's unique
+predecessor chain and the base the addition reads is a constant, image address
+or object symbol: a base the block or a loop's preheader forms holds on every pass even
 when the index merges to an unknown value; `jump_tables` reads those records, the
 bounds check guarding the dispatch block where its index is known, and asks
-the model's `TableEntries` port what the table at `base` holds; every entry
-must land inside the function. `oer-analysis-riscv-program` implements the port for
+the model's `TableEntries` port what the table holds. An unlabelled table
+starts at the RV32 wrapping address `base + displacement`; a sized data
+object must start exactly there. A labelled table has two candidate starts:
+`base + displacement`, and `base` for a negative displacement divisible by
+`1 << scale`, with at most 4096 skipped indices. Exactly one may start a
+labelled table; ambiguity proves nothing. The second candidate uses the whole
+labelled chain and adds the skipped indices to a known `first_case`, leaving
+an unknown case value unknown. Objects and bounds cannot justify this second
+candidate. Every entry must land inside the function.
+`oer-analysis-riscv-program` implements the port for
 relocatable objects (`ObjectTables`, which needs a bound) and static images
 (`ImageTables`: an `--emit-relocs` image's labelled `.LJTI*` table needs
 none); Blobray uses both. The stack analyzer's source reads an

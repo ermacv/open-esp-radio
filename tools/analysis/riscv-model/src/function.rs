@@ -217,16 +217,19 @@ pub enum FunctionRecord {
         high: AbstractValue,
     },
     /// An indirect jump through a table: its target is the word loaded from
-    /// `base + (index << scale)`, the load, the addition and the scaling all
-    /// in the jump's own block. `base` is the value the addition reads, a
-    /// constant, an image address or an object's symbol; `index` the value
-    /// the scaling reads, possibly unknown. A base the block or a loop's
+    /// `base + (index << scale) + displacement`, with the load, addition and
+    /// scaling on the jump's unique predecessor chain. `base` is the value
+    /// the addition reads, a constant, an image address or an object's
+    /// symbol; `index` is the value the scaling reads, possibly unknown.
+    /// A base the block or a loop's
     /// preheader forms gives the same record on every pass.
     Dispatch {
         offset: u64,
         base: AbstractValue,
         index: AbstractValue,
         scale: u8,
+        /// Immediate byte displacement of the table load.
+        displacement: i32,
     },
     /// A call or out-of-function jump. A resolved target does not prove returns
     /// or effects; unresolved transfers remain visible.

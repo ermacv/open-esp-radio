@@ -96,7 +96,7 @@ pub fn jump_tables<'r, 'm>(
 ) -> Result<ProvenTables<'m, JumpDispatch>> {
     let mut expressions: AdmittedVec<'_, &'r Expression> = AdmittedVec::new(memory);
     let mut blocks: AdmittedVec<'_, (u64, u64)> = AdmittedVec::new(memory);
-    let mut dispatches: AdmittedVec<'_, (u64, &'r AbstractValue, &'r AbstractValue)> =
+    let mut dispatches: AdmittedVec<'_, (u64, &'r AbstractValue, &'r AbstractValue, u8, i32)> =
         AdmittedVec::new(memory);
     for record in records {
         c.checkpoint(1)?;
@@ -117,8 +117,9 @@ pub fn jump_tables<'r, 'm>(
                 offset,
                 base,
                 index,
-                scale: 2,
-            } => dispatches.push((*offset, base, index), c.position())?,
+                scale: scale @ 2,
+                displacement,
+            } => dispatches.push((*offset, base, index, *scale, *displacement), c.position())?,
             _ => {}
         }
     }
@@ -136,7 +137,7 @@ pub fn jump_tables<'r, 'm>(
     jumps
         .try_reserve_exact(dispatches.len())
         .map_err(|_| Error::new(ErrorCode::ResourceLimited, "jump table allocation refused"))?;
-    for &(site, table, index) in dispatches.iter() {
+    for &(site, table, index, scale, displacement) in dispatches.iter() {
         let mut block = None;
         for &(start, end) in blocks.iter() {
             c.checkpoint(1)?;
@@ -163,6 +164,7 @@ pub fn jump_tables<'r, 'm>(
         };
         let mut targets = Vec::new();
         let mut complete = true;
+        let mut case = first_case(index, &expressions);
         let bases = alternatives
             .into_iter()
             .flatten()
@@ -170,11 +172,48 @@ pub fn jump_tables<'r, 'm>(
             .chain(alternatives.is_none().then(|| table.clone()));
         for base in bases {
             c.checkpoint(1)?;
-            let Some(words) = facts.entries(&base, bound, section, memory, c)? else {
+            let Some(effective) = displaced(&base, displacement) else {
                 complete = false;
                 break;
             };
-            complete &= match bound {
+            let direct = facts.entries(&effective, bound, section, memory, c)?;
+            // Query the unshifted base separately: only a label can justify
+            // skipping the excluded prefix of the index's domain. Objects
+            // and bounds never establish that second interpretation.
+            let labelled_base = if displacement == 0 {
+                None
+            } else {
+                facts
+                    .entries(&base, None, section, memory, c)?
+                    .filter(|words| words.source == TableSource::Labelled)
+            };
+            let direct_labelled = direct
+                .as_ref()
+                .is_some_and(|words| words.source == TableSource::Labelled);
+            let (words, bias, expected) = match (direct, labelled_base) {
+                (Some(_), Some(_)) if direct_labelled => {
+                    // Both candidates start labelled tables: ambiguous.
+                    complete = false;
+                    break;
+                }
+                (_, Some(words)) => {
+                    let Some(bias) = displaced_cases(displacement, scale) else {
+                        complete = false;
+                        break;
+                    };
+                    // The label delimits the whole chain, including when
+                    // the value pass no longer knows the index expression.
+                    (words, bias, None)
+                }
+                (Some(words), None) => (words, 0, bound),
+                (None, None) => {
+                    complete = false;
+                    break;
+                }
+            };
+            case =
+                first_case(index, &expressions).and_then(|case| case.checked_add(i64::from(bias)));
+            complete &= match expected {
                 Some(entries) => words.entries.len() == entries as usize,
                 None => !words.entries.is_empty(),
             };
@@ -214,7 +253,7 @@ pub fn jump_tables<'r, 'm>(
             } else {
                 JumpDispatch::Table {
                     site,
-                    first_case: first_case(index, &expressions),
+                    first_case: case,
                     entries: targets,
                 }
             });
@@ -224,6 +263,31 @@ pub fn jump_tables<'r, 'm>(
         tables: jumps,
         reserved,
     })
+}
+
+/// Apply an RV32 load displacement before asking the build for table words.
+fn displaced(base: &AbstractValue, displacement: i32) -> Option<AbstractValue> {
+    Some(match base {
+        AbstractValue::Constant { value } => AbstractValue::Constant {
+            value: value.wrapping_add_signed(displacement),
+        },
+        AbstractValue::ImageAddress { address } => AbstractValue::ImageAddress {
+            address: address.wrapping_add_signed(displacement),
+        },
+        AbstractValue::Symbol { symbol, addend } => AbstractValue::Symbol {
+            symbol: symbol.clone(),
+            addend: addend.checked_add(i64::from(displacement))?,
+        },
+        _ => return None,
+    })
+}
+
+/// The excluded index prefix for a table labelled at the unshifted base.
+fn displaced_cases(displacement: i32, scale: u8) -> Option<u32> {
+    let step = 1_u32.checked_shl(u32::from(scale))?;
+    let prefix = displacement.unsigned_abs();
+    let cases = prefix >> scale;
+    (displacement < 0 && prefix.is_multiple_of(step) && cases <= MAX_ENTRIES).then_some(cases)
 }
 
 fn constant(value: &AbstractValue) -> Option<u32> {
