@@ -1,7 +1,8 @@
 # Versioned scenario catalog
 
 Folders identify the workload domain: system and PHY. PHY investigations
-alternate the pinned Wi-Fi or IEEE 802.15.4 reference and the diagnostic calibration image.
+alternate the pinned Wi-Fi or IEEE 802.15.4 reference and the diagnostic calibration image,
+or measure forced tracking intervals with 802.15.4 receiving in idle.
 Scenario IDs are stable across folder moves. Tags select overlapping
 diagnostic and characterization uses; they do not assign ownership or make a
 hardware-readiness claim.
@@ -37,7 +38,8 @@ kind = "boot-smoke"
 The family owns every executable value:
 
 - `[system]` is a tagged workload whose kind implies the firmware image.
-- `[phy]` runs the vendor calibration cross-check on `diagnostic-phy`.
+- `[phy]` runs the vendor calibration cross-check or the 154 idle tracking-hold
+  investigation on `diagnostic-phy`.
 Every table rejects unknown fields. Relations that remain between the image,
 the data path and the workload are validated by the family.
 
