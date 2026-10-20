@@ -403,16 +403,20 @@ Per-repetition RFPLL/common/transmit/baseband-off/whole maxima (µs):
 
 For that source, IEEE restart5 `1792535209115-00090c8d` matches all193 MMIO and
 39 analog with10 same-point vendor references. Wi-Fi restart10
-`1792535406587-0009653a` matches19/19 groups,163/163 MMIO,38/38 analog with20
+`1792535406587-0009653a` matches19/19 groups,163/163 MMIO,39/39 analog with20
 references. Both protocols directly read69.04=0x60/init0 equal to vendor in every
 restart pair. The HAL's last release powers SAR-I2C off; first acquire resets it
 with a named1 µs settle, then clocks/resets/enables TSENS. No literal69.04 zero is
 assigned. SOURCE: [linked IDF lifecycle and correction](https://github.com/ermacv/open-esp-radio/pull/239).
 Both cold control pairs retain I2C TX-rate order and match with existing cold
 references (Wi-Fi N11,IEEE N41). Wi-Fi cold retains its separate, reviewed0x65/0x60
-lifecycle-point difference. The unchanged restart exclusion is distinct; its raw
-pair equality is checked independently. Raw N1/N5/N10 DIFF summaries remain
-archived and reproduce exactly before reference expansion; no comparison change.
+lifecycle-point difference. Offline reevaluation with the
+[restart review](https://github.com/ermacv/open-esp-radio/pull/244) compares69.04
+normally for both restart points: Wi-Fi coverage increases38→39 analog registers,
+IEEE stays39, and both MATCH. The PSRAM/MPLL rationale is disproved by the matched
+resource lifecycle. Cold retains its separate exclusion. Raw N1/N5/N10 DIFF
+summaries remain archived and reproduce exactly with their capture-time reviews;
+field masks and the vendor-spread rule are unchanged. No new hardware series.
 
 What the runs show:
 - **RFPLL.** The `4d679728` 154 idle correction request reached 1.368 ms; the earlier Wi-Fi rows were below 1 ms.
