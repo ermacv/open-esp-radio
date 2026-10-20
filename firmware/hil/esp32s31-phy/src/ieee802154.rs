@@ -125,12 +125,13 @@ impl Rx {
             .take()
             .ok_or(RejectReason::Internal)?
             .power_up(domain, clocks)
-            .map_err(|_| RejectReason::Internal)?;
+            .map_err(|_| failed(c"OPEN_RADIO_HIL phy=FAIL step=154-power-up"))?;
         self.power = Some(power);
         let clocked = powered
             .enable_clocks(domain, clocks)
-            .map_err(|_| RejectReason::Internal)?;
-        let ready = phy_ready(domain).map_err(|_| RejectReason::Internal)?;
+            .map_err(|_| failed(c"OPEN_RADIO_HIL phy=FAIL step=154-clocks-on"))?;
+        let ready =
+            phy_ready(domain).map_err(|_| failed(c"OPEN_RADIO_HIL phy=FAIL step=154-phy-ready"))?;
         let PhyClientAccess::Available(available) = ready.client::<Ieee802154PhyMembership>()
         else {
             return Err(RejectReason::Internal);
@@ -151,9 +152,9 @@ impl Rx {
         }
         let foundation = clocked
             .reset_mac(domain)
-            .map_err(|_| RejectReason::Internal)?
+            .map_err(|_| failed(c"OPEN_RADIO_HIL phy=FAIL step=154-reset"))?
             .configure_foundation()
-            .map_err(|_| RejectReason::Internal)?;
+            .map_err(|_| failed(c"OPEN_RADIO_HIL phy=FAIL step=154-foundation"))?;
         let RegisteredIeee802154Operational {
             mut task,
             interrupts,
@@ -206,7 +207,8 @@ impl Rx {
             })
             .ok_or(RejectReason::Internal)??;
         self.route = Some(route);
-        oer_espressif_esp_hal_irq::enable(&self.irq).map_err(|_| RejectReason::Internal)?;
+        oer_espressif_esp_hal_irq::enable(&self.irq)
+            .map_err(|_| failed(c"OPEN_RADIO_HIL phy=FAIL step=154-irq-on"))?;
         Ok(())
     }
 
@@ -243,14 +245,16 @@ impl Rx {
             .take()
             .ok_or(RejectReason::Internal)?
             .into_foundation(task, interrupts)
-            .map_err(|_| RejectReason::Internal)?;
+            .map_err(|_| failed(c"OPEN_RADIO_HIL phy=FAIL step=154-return"))?;
         let clocked = foundation.into_clocked();
-        if !leave_ieee802154(domain, &clocked, member).map_err(|_| RejectReason::Internal)? {
+        if !leave_ieee802154(domain, &clocked, member)
+            .map_err(|_| failed(c"OPEN_RADIO_HIL phy=FAIL step=154-leave"))?
+        {
             return Err(RejectReason::Internal);
         }
         let powered = clocked
             .disable_clocks(domain)
-            .map_err(|_| RejectReason::Internal)?;
+            .map_err(|_| failed(c"OPEN_RADIO_HIL phy=FAIL step=154-clocks-off"))?;
         let (absent, _) = domain.leave_coex(self.coex.take().ok_or(RejectReason::Internal)?);
         self.cold = Some(
             powered
@@ -347,4 +351,9 @@ impl Ieee802154Environment for Environment {
     ) -> Ieee802154EnhancedAck {
         Ieee802154EnhancedAck::Refused
     }
+}
+
+fn failed(step: &'static core::ffi::CStr) -> RejectReason {
+    oer_esp32s31_board::rom::line(step);
+    RejectReason::Internal
 }

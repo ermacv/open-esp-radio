@@ -106,7 +106,10 @@ impl Radio {
                     NoopPhyTargetObserver,
                 )
                 .await
-                .map_err(|_| RejectReason::Internal)?;
+                .map_err(|_| {
+                    oer_esp32s31_board::rom::line(c"OPEN_RADIO_HIL phy=FAIL step=registration");
+                    RejectReason::Internal
+                })?;
                 let outcome = registration.outcome();
                 if !outcome.full_calibration_performed
                     || outcome.calibration_path != PhyCalibrationPath::FullForCache
