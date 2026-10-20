@@ -733,16 +733,17 @@ fn known(v: &AbstractValue) -> bool {
     !matches!(v, AbstractValue::Unknown | AbstractValue::Expression { .. })
 }
 
-/// Instructions a dispatch's slice walks back through its block.
+/// Instructions a dispatch's slice walks back through its unique predecessor chain.
 const MAX_SLICE: usize = 32;
 
 /// The table dispatch of the jump at node `at` through register `target`:
 /// `target` is the word loaded from `base + (index << scale)`, the load, the
-/// addition and the scaling all in the jump's own block. Returns the base
+/// addition and the scaling on the jump's unique fall-through chain. Returns the base
 /// and index values on entry to the instructions that read them; the base
 /// must be a constant, an image address or a symbol. A base the block or a
 /// loop's preheader forms holds on every pass while the index may merge; one
 /// a later pass merges leaves that pass without the record.
+#[allow(clippy::too_many_arguments)]
 fn table_dispatch(
     at: usize,
     target: u8,
@@ -750,9 +751,10 @@ fn table_dispatch(
     operations: &[Operation],
     states: &[Option<State>],
     incoming: &[u8],
+    sets: &Sets<'_>,
     control: &mut dyn RunControl,
 ) -> Result<Option<(Value, Value, u8)>> {
-    // The nearest node before `from` in the same block that writes
+    // The nearest node before `from` on its unique fall-through chain that writes
     // `register`, within the slice's reach.
     let mut writer = |from: usize, register: u8| -> Result<Option<usize>> {
         let mut j = from;
@@ -762,14 +764,20 @@ fn table_dispatch(
                 return Ok(None);
             }
             let previous = &nodes[j - 1];
-            let continues = matches!(previous.decoded.flow, InstructionFlow::Next)
-                && incoming[j] == 1
+            let continues = matches!(
+                previous.decoded.flow,
+                InstructionFlow::Next | InstructionFlow::Branch { .. }
+            ) && incoming[j] == 1
+                && !previous.conflict
                 && previous.offset + u64::from(previous.decoded.length) == nodes[j].offset;
             if !continues {
                 return Ok(None);
             }
             j -= 1;
             let op = &operations[j];
+            if op.gap.is_some() || nodes[j].conflict {
+                return Ok(None);
+            }
             let dest = match op.op {
                 SemanticOp::Integer { dest, .. }
                 | SemanticOp::Upper { dest, .. }
@@ -847,11 +855,16 @@ fn table_dispatch(
     let (Some(index), Some(base)) = (index, base) else {
         return Ok(None);
     };
-    Ok(matches!(
-        base,
-        Value::Constant(_) | Value::Image(_) | Value::Symbol(..)
-    )
-    .then_some((base, index, scale)))
+    let bases = sets.get(base);
+    Ok(bases.values[..bases.len]
+        .iter()
+        .all(|base| {
+            matches!(
+                base,
+                Value::Constant(_) | Value::Image(_) | Value::Symbol(..)
+            )
+        })
+        .then_some((base, index, scale)))
 }
 
 #[cfg(test)]
@@ -1146,8 +1159,16 @@ pub(super) fn analyze_with<'m>(
                 offset: 0,
                 link: false,
             } = node.decoded.flow
-            && let Some((table, index, scale)) =
-                table_dispatch(i, base, nodes, &operations, &states, &incoming, control)?
+            && let Some((table, index, scale)) = table_dispatch(
+                i,
+                base,
+                nodes,
+                &operations,
+                &states,
+                &incoming,
+                &symbols.sets,
+                control,
+            )?
         {
             sink.record(
                 &FunctionRecord::Dispatch {
@@ -1308,7 +1329,7 @@ pub(super) fn analyze_with<'m>(
                 // resolve stay transfers. Its registers stay for a caller
                 // that proves the table again.
                 let followed = !call
-                    && target == Value::Unknown
+                    && matches!(target, Value::Unknown | Value::Widened)
                     && matches!(node.decoded.flow, InstructionFlow::Indirect { .. })
                     && super::known_jump(input.jumps, node.offset, control)?.is_some();
                 if !followed {
@@ -2077,6 +2098,30 @@ fn returned(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn jalr_wraps_each_alternative_then_clears_its_low_bit() {
+        let memory = WorkingMemory::new(1 << 20).unwrap();
+        let mut sets = Sets::new(&memory);
+        let mut c = || Ok(());
+        let bases = sets
+            .join(Value::Constant(u32::MAX), Value::Constant(1), &mut c)
+            .unwrap();
+        let target = indirect_target(bases, 3, &mut sets, &mut c).unwrap();
+        let targets = sets.get(target);
+        assert_eq!(
+            &targets.values[..targets.len],
+            &[Value::Image(2), Value::Image(4)]
+        );
+        let unknown = sets.join(bases, Value::Unknown, &mut c).unwrap();
+        assert_eq!(
+            indirect_target(unknown, 3, &mut sets, &mut c).unwrap(),
+            Value::Unknown
+        );
+        assert_eq!(
+            indirect_target(Value::Constant(0), -1, &mut sets, &mut c).unwrap(),
+            Value::Image(u32::MAX - 1)
+        );
+    }
     #[test]
     fn rv32_arithmetic_handles_wrap_shifts_and_division_boundaries() {
         use IntegerOp::*;

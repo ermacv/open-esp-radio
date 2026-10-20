@@ -167,6 +167,38 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
                 println!("return-inputs\t{offset:#010x}\t{registers:?}")
             }
             FunctionRecord::AlignedValue { fact } => println!("aligned-value\t{fact:?}"),
+            FunctionRecord::Dispatch {
+                offset,
+                base,
+                index,
+                scale,
+            } => {
+                println!("dispatch\t{offset:#010x}\t{base:?}\t{index:?}\t{scale}");
+                if image_facts {
+                    let dump = |base: &AbstractValue| {
+                        if let AbstractValue::Constant { value: base }
+                        | AbstractValue::ImageAddress { address: base } = base
+                            && let Some(words) = image.jump_table(*base)
+                        {
+                            for (i, word) in words.enumerate() {
+                                let address = base.wrapping_add(4 * i as u32);
+                                println!(
+                                    "dispatch-word\t{offset:#010x}\t{address:#010x}\t{word:#010x}\t{:?}\t{:?}",
+                                    image.word(address),
+                                    image.read_only_word(address)
+                                );
+                            }
+                        }
+                    };
+                    if let AbstractValue::Alternatives { values } = base {
+                        for value in values.values() {
+                            dump(&value.as_value());
+                        }
+                    } else {
+                        dump(base);
+                    }
+                }
+            }
             FunctionRecord::Instruction {
                 offset, decoded, ..
             } => {
@@ -192,6 +224,13 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             _ => {}
         }
     }
+    println!(
+        "cfg-closed\t{}",
+        index
+            .records()
+            .iter()
+            .all(oer_analysis_riscv_analysis::writes::closes_local_graph)
+    );
     index.accesses(&mut control, &mut |access, _| {
         println!(
             "memory\t{:#010x}\t{:?}\t{}\t{:?}\t{:?}",

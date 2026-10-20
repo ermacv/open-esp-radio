@@ -145,26 +145,59 @@ pub fn jump_tables<'r, 'm>(
         } else {
             guarding_bound(records, index, start, c)?
         };
-        let Some(words) = facts.entries(table, bound, section, memory, c)? else {
-            continue;
+        let alternatives = match table {
+            AbstractValue::Alternatives { values } => Some(values.values()),
+            _ => None,
         };
-        // The sorted copy of the entries the next pass follows as a
-        // `KnownJump` is reserved here, before it is made.
-        let bytes = words.entries.len() as u64 * std::mem::size_of::<u64>() as u64;
-        reserved.push(memory.reserve(bytes, c.position())?, c.position())?;
-        let targets = words.entries;
-        reserved.push(words.reserved, c.position())?;
-        if !targets.iter().all(|&target| inside(target)) {
-            continue;
+        let mut targets = Vec::new();
+        let mut complete = true;
+        for i in 0..alternatives.map_or(1, |values| values.len()) {
+            c.checkpoint(1)?;
+            let base = alternatives.map_or_else(|| table.clone(), |values| values[i].as_value());
+            let Some(words) = facts.entries(&base, bound, section, memory, c)? else {
+                complete = false;
+                break;
+            };
+            complete &= match bound {
+                Some(entries) => words.entries.len() == entries as usize,
+                None => !words.entries.is_empty(),
+            };
+            // Every possible base must prove its complete table. Admit both
+            // the combined entries and the next pass's sorted KnownJump copy.
+            let count = targets.len() + words.entries.len();
+            let bytes = count as u64 * size_of::<u64>() as u64;
+            reserved.push(memory.reserve(bytes * 2, c.position())?, c.position())?;
+            targets
+                .try_reserve_exact(words.entries.len())
+                .map_err(|_| {
+                    Error::new(ErrorCode::ResourceLimited, "jump target allocation refused")
+                })?;
+            for &target in &words.entries {
+                c.checkpoint(1)?;
+                // Dispatch records describe jalr zero, 0(reg). RV32 clears
+                // bit zero AFTER computing the address; never round a target
+                // before reading the table word.
+                let Ok(target) = u32::try_from(target) else {
+                    complete = false;
+                    break;
+                };
+                let target = u64::from(target & !1);
+                complete &= inside(target);
+                targets.push(target);
+            }
+            reserved.push(words.reserved, c.position())?;
         }
-        let complete = match bound {
-            Some(entries) => targets.len() == entries as usize,
-            None => !targets.is_empty(),
-        };
         if complete {
+            if alternatives.is_some() {
+                targets.sort_unstable();
+                targets.dedup();
+            }
             jumps.push(JumpTable {
                 site,
-                first_case: first_case(index, &expressions),
+                first_case: alternatives
+                    .is_none()
+                    .then(|| first_case(index, &expressions))
+                    .flatten(),
                 entries: targets,
             });
         }
