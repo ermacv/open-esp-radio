@@ -206,6 +206,57 @@ impl PhyClientAvailable {
         let client = self.owner.selected_client;
         self.owner.acquire_available(client, clock)
     }
+
+    pub(crate) fn prepare(
+        self,
+        clock: &impl oer_time::Clock,
+    ) -> Result<PreparedClientAcquire, PhyClientAcquireFailure> {
+        let client = self.owner.selected_client;
+        self.owner.prepare_available(client, clock)
+    }
+}
+
+/// The original client owner and an exact clock evaluation, before any client
+/// bit, timer obligation or timestamp changes. A fallible shared-resource join
+/// may return the original owner or commit once that resource was acquired.
+pub(crate) struct PreparedClientAcquire {
+    owner: PhyClientState,
+    client: RadioClient,
+    evaluation: TrackEvaluation,
+}
+
+impl PreparedClientAcquire {
+    pub(crate) fn into_owner(self) -> PhyClientState {
+        self.owner
+    }
+
+    pub(crate) fn commit(self) -> PhyClientAcquireOutcome {
+        let Self {
+            mut owner,
+            client,
+            evaluation,
+        } = self;
+        let bit = client_bit(client);
+        let was_empty = owner.bits == 0;
+        if was_empty {
+            owner.tracker_model_armed = true;
+        }
+        owner.bits |= bit;
+        owner.loaned_clients |= bit;
+        owner.apply_evaluation(evaluation);
+        debug_assert_eq!(owner.bits & !VALID_CLIENT_BITS, 0);
+        debug_assert_eq!(owner.tracker_model_armed, owner.bits != 0);
+        PhyClientAcquireOutcome {
+            client,
+            was_empty,
+            ordering: if was_empty {
+                PhyClientAcquireOrdering::ArmThenSetThenEvaluate
+            } else {
+                PhyClientAcquireOrdering::SetThenEvaluate
+            },
+            continuation: TrackContinuation::new(owner, evaluation),
+        }
+    }
 }
 
 impl PhyClientMember {
@@ -407,12 +458,20 @@ impl PhyClientState {
     /// Only the consumed available phase can set a client bit. The reviewed
     /// arm-before-set-before-evaluate order and clock-error rollback remain.
     fn acquire_available(
-        mut self,
+        self,
         client: RadioClient,
         clock: &impl oer_time::Clock,
     ) -> Result<PhyClientAcquireOutcome, PhyClientAcquireFailure> {
+        self.prepare_available(client, clock)
+            .map(PreparedClientAcquire::commit)
+    }
+
+    fn prepare_available(
+        self,
+        client: RadioClient,
+        clock: &impl oer_time::Clock,
+    ) -> Result<PreparedClientAcquire, PhyClientAcquireFailure> {
         let bit = client_bit(client);
-        let was_empty = self.bits == 0;
         let prospective_bits = self.bits | bit;
         let evaluation = match self.evaluate_for_bits(prospective_bits, clock) {
             Ok(evaluation) => evaluation,
@@ -424,25 +483,10 @@ impl PhyClientState {
             }
         };
 
-        if was_empty {
-            self.tracker_model_armed = true;
-        }
-        self.bits = prospective_bits;
-        self.loaned_clients |= bit;
-        self.apply_evaluation(evaluation);
-
-        debug_assert_eq!(self.bits & !VALID_CLIENT_BITS, 0);
-        debug_assert_eq!(self.tracker_model_armed, self.bits != 0);
-
-        Ok(PhyClientAcquireOutcome {
+        Ok(PreparedClientAcquire {
+            owner: self,
             client,
-            was_empty,
-            ordering: if was_empty {
-                PhyClientAcquireOrdering::ArmThenSetThenEvaluate
-            } else {
-                PhyClientAcquireOrdering::SetThenEvaluate
-            },
-            continuation: TrackContinuation::new(self, evaluation),
+            evaluation,
         })
     }
 

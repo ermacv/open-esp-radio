@@ -182,3 +182,121 @@ fn first_due_join_keeps_membership_and_btbb_through_maintenance() {
     assert!(leave_bluetooth(radio, &task, failure.into_membership()).unwrap());
     assert!(!radio.holds_btbb(RadioClient::Bluetooth));
 }
+
+#[test]
+fn settled_join_and_rejoin_after_rf_restart_keep_tracking_history() {
+    use crate::concurrent::Slot;
+    use oer_time::Duration;
+    let (mut radio, partitions) = radio_domain(false);
+    let task = task(partitions);
+    radio.hold_btbb_for_test(RadioClient::Ieee802154);
+    let clock = VirtualClock::<8>::new();
+    let (membership, acquired) = join_bluetooth_prepared(&mut radio, &task, &clock).unwrap();
+    assert_eq!(acquired, ConcurrentAcquire::TrackingDue);
+    assert!(radio.attachment_mut().complete_tracking_for_test());
+    assert!(leave_bluetooth(&mut radio, &task, membership).unwrap());
+    let (membership, acquired) = join_bluetooth_prepared(&mut radio, &task, &clock).unwrap();
+    assert_eq!(acquired, ConcurrentAcquire::Settled);
+    assert!(!radio.attachment().tracking_pending());
+    assert!(radio.holds_btbb(RadioClient::Bluetooth));
+    assert!(leave_bluetooth(&mut radio, &task, membership).unwrap());
+
+    // Model RF close/wake with the retained registration and no active client.
+    // Target RF transactions themselves are covered by the diagnostic smoke.
+    let Slot::Registered(domain) = core::mem::take(radio.attachment_mut().slot_mut()) else {
+        panic!("settled registration after last leave");
+    };
+    assert!(domain.client_snapshot().is_empty());
+    *radio.attachment_mut().slot_mut() = Slot::RfClosed(domain);
+    assert!(matches!(
+        crate::concurrent::phy_ready(&mut radio),
+        Err(ConcurrentPhyError::RfClosed)
+    ));
+    let Slot::RfClosed(domain) = core::mem::take(radio.attachment_mut().slot_mut()) else {
+        panic!("RF-closed model");
+    };
+    *radio.attachment_mut().slot_mut() = Slot::Registered(domain);
+    clock
+        .advance(Duration::from_micros(DEFAULT_PLL_TRACK_PERIOD_MICROS + 1))
+        .unwrap();
+    let (membership, acquired) = join_bluetooth_prepared(&mut radio, &task, &clock).unwrap();
+    assert_eq!(acquired, ConcurrentAcquire::TrackingDue);
+    assert!(radio.holds_btbb(RadioClient::Bluetooth));
+    assert!(radio.attachment_mut().complete_tracking_for_test());
+    assert!(leave_bluetooth(&mut radio, &task, membership).unwrap());
+}
+
+#[test]
+fn rejected_clock_and_existing_btbb_return_the_unchanged_client() {
+    let (mut radio, partitions) = radio_domain(false);
+    let task = task(partitions);
+    radio.hold_btbb_for_test(RadioClient::Ieee802154);
+    let clock = VirtualClock::<8>::new();
+    let (membership, _) = join_bluetooth_prepared(&mut radio, &task, &clock).unwrap();
+    assert!(radio.attachment_mut().complete_tracking_for_test());
+    assert!(leave_bluetooth(&mut radio, &task, membership).unwrap());
+    let before = radio.attachment().client_snapshot();
+    let past = VirtualClock::<8>::starting_at(oer_time::Instant::EPOCH);
+    assert!(matches!(
+        join_bluetooth_prepared(&mut radio, &task, &past),
+        Err(BluetoothPhyClientError::Phy(ConcurrentPhyError::Acquire(_)))
+    ));
+    assert_eq!(radio.attachment().client_snapshot(), before);
+    assert!(!radio.attachment().tracking_pending());
+    assert!(!radio.holds_btbb(RadioClient::Bluetooth));
+    assert!(radio.holds_btbb(RadioClient::Ieee802154));
+
+    radio.hold_btbb_for_test(RadioClient::Bluetooth);
+    let ready = crate::concurrent::phy_ready(&mut radio).unwrap();
+    let crate::concurrent::PhyClientAccess::Available(ready) =
+        ready.client::<BluetoothPhyMembership>()
+    else {
+        panic!("rejected join did not consume availability");
+    };
+    let refused = match join_bluetooth(ready, &task, &clock) {
+        Err(refused) => refused,
+        Ok(_) => panic!("existing BTBB ownership is not acquired twice"),
+    };
+    assert_eq!(
+        refused.error,
+        BluetoothPhyClientError::Btbb(BtbbError::AlreadyAcquired)
+    );
+    assert_eq!(refused.radio.attachment().client_snapshot(), before);
+    assert!(refused.radio.holds_btbb(RadioClient::Bluetooth));
+    task.release_btbb(refused.radio).unwrap();
+    let (membership, acquired) = join_bluetooth_prepared(refused.radio, &task, &clock).unwrap();
+    assert_eq!(acquired, ConcurrentAcquire::Settled);
+    assert!(leave_bluetooth(refused.radio, &task, membership).unwrap());
+}
+
+#[test]
+fn refused_baseband_admission_restores_the_prepared_first_client() {
+    use crate::concurrent::{BtbbClientAcquireError, acquire_btbb_client};
+    let (mut radio, partitions) = radio_domain(false);
+    let task = task(partitions);
+    radio.hold_btbb_for_test(RadioClient::Ieee802154);
+    let clock = VirtualClock::<8>::new();
+    let before = radio.attachment().client_snapshot();
+    let result = acquire_btbb_client(
+        &mut radio,
+        RadioClient::Bluetooth,
+        &clock,
+        |radio, _gain| {
+            assert!(!radio.holds_btbb(RadioClient::Bluetooth));
+            Err(BtbbError::Stale)
+        },
+    );
+    assert!(matches!(
+        result,
+        Err(BtbbClientAcquireError::Btbb(BtbbError::Stale))
+    ));
+    assert_eq!(radio.attachment().client_snapshot(), before);
+    assert!(!radio.attachment().tracking_pending());
+    assert!(!radio.holds_btbb(RadioClient::Bluetooth));
+    assert!(radio.holds_btbb(RadioClient::Ieee802154));
+    // The refused prepared transition left no claimed bit or refreshed time.
+    let (membership, acquired) = join_bluetooth_prepared(&mut radio, &task, &clock).unwrap();
+    assert_eq!(acquired, ConcurrentAcquire::TrackingDue);
+    assert!(radio.attachment_mut().complete_tracking_for_test());
+    assert!(leave_bluetooth(&mut radio, &task, membership).unwrap());
+}
