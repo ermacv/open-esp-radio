@@ -33,6 +33,7 @@ zeroize = { version = "1.8.1", default-features = false }
 serde_json = { version = "1.0", optional = true }
 
 [dev-dependencies]
+oer-ieee80211-wire = { path = "../../ieee80211/wire" }
 postcard-schema = { version = "0.2.5", features = ["use-std"] }
 
 [[test]]

@@ -233,7 +233,8 @@ impl Gates {
     /// contract, never "not applicable".
     pub fn runtime(&self, input: &CheckInput<'_>) -> Result<CheckOutcome> {
         let mut outcome = CheckOutcome::default();
-        let profile = input.profile;
+        let image_profile = input.policy.runtime_profile(input.profile)?;
+        let profile = &image_profile;
         let chip =
             |table: &str| format!("chips/{}/platform/chip.toml names no {table}", profile.id);
         let missing = |what: String| CheckResult::MissingContract(what);

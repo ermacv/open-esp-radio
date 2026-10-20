@@ -9,6 +9,39 @@ use std::{boxed::Box, sync::Arc, task::Wake};
 
 use super::*;
 
+#[cfg(oer_debug_control)]
+#[test]
+fn held_facts_survive_service_and_unrelated_wakes_until_release() {
+    let signal = host::deferred_signal();
+    let (counting, waker) = counting(None);
+    let mut cx = Context::from_waker(&waker);
+    assert_eq!(signal.poll_take(&mut cx), Poll::Pending);
+    assert_eq!(signal.debug_hold(0b10, true), Ok(()));
+    signal.raise(0b10);
+    signal.service();
+    assert_eq!(counting.wakes.get(), 0);
+    assert_eq!(signal.has_pending(), Ok(false));
+    assert_eq!(signal.poll_take(&mut cx), Poll::Pending);
+    signal.raise(0b01);
+    signal.service();
+    assert_eq!(counting.wakes.get(), 1);
+    assert_eq!(signal.poll_take(&mut cx), Poll::Ready(Ok(0b01)));
+    assert_eq!(signal.poll_take(&mut cx), Poll::Pending);
+    assert_eq!(signal.debug_hold(0b10, false), Ok(()));
+    assert_eq!(counting.wakes.get(), 2);
+    assert_eq!(signal.poll_take(&mut cx), Poll::Ready(Ok(0b10)));
+    assert_eq!(signal.poll_take(&mut cx), Poll::Pending);
+}
+
+#[cfg(oer_debug_control)]
+#[test]
+fn another_executor_cannot_change_a_signal_hold() {
+    assert_eq!(
+        host::foreign_signal().debug_hold(1, true),
+        Err(ForeignContext)
+    );
+}
+
 std::thread_local! {
     static LIST_READS: Cell<u32> = const { Cell::new(0) };
     static PENDS: Cell<u32> = const { Cell::new(0) };

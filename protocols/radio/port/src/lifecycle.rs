@@ -44,7 +44,8 @@ use atomic_waker::AtomicWaker;
 use oer_time::RadioInstant;
 use scopeguard::{ScopeGuard, guard};
 
-use crate::{ClockError, EventEnd, EventsLost, Mint, Poisoned, PoolSet, PortResult, branded};
+use crate::pool::prepare_brand;
+use crate::{ClockError, EventEnd, EventsLost, Mint, Poisoned, PoolSet, PortResult};
 
 type Brand<'id> = PhantomData<fn(&'id ()) -> &'id ()>;
 
@@ -651,6 +652,31 @@ struct Install<'id, B: PortBackend> {
     retiring: Signal,
 }
 
+#[inline(always)]
+fn prepare_install<'id, B: PortBackend>(
+    backend: &mut B,
+    mint: Mint<'id, B::Pools>,
+) -> (
+    Install<'id, B>,
+    ManuallyDrop<B::Local<'id>>,
+    B::Resources<'id>,
+) {
+    let InstallParts {
+        held,
+        local,
+        resources,
+    } = backend.resources(mint);
+    (
+        Install {
+            held: ManuallyDrop::new(held),
+            latch: AbandonLatch::new(),
+            retiring: Signal::new(),
+        },
+        ManuallyDrop::new(local),
+        resources,
+    )
+}
+
 /// Consume one installation and return its owners and unbranded body output.
 /// A faulted driver lets the body drain preceding results and uninstall.
 /// Dropping the owner returns `Abandoned` after the core's retirement path.
@@ -672,10 +698,215 @@ pub fn run_port<B: PortBackend, P: PortBody<B>>(
         // with all owners, applying the same no-Drop quarantine rule.
         drop(Quarantined::new((installed, outcome)));
     });
-    async move {
-        let installed = ScopeGuard::into_inner(installed);
-        branded(async move |mint| install(installed, body, mint).await).await
-    }
+    prepare_brand(async move |mint| {
+        let Installed {
+            mut backend,
+            driver,
+        } = ScopeGuard::into_inner(installed);
+        // Declared before the backend guard, so cancellation first poisons the
+        // backend and then transfers this retained driver into quarantine.
+        let mut driver_owner = guard(driver, |driver| drop(Quarantined::new(driver)));
+        let (install, mut local, resources) = prepare_install(&mut backend, mint);
+        let mut backend = guard(backend, |backend| drop(Quarantined::new(backend)));
+        let bound = backend.retire_bound(Call::new());
+        let mut bound = pin!(bound);
+        // Consuming this guard after the first abandon leaves only the outer
+        // quarantine guard. No backend state or memo is needed to suppress a
+        // second abandon while asynchronous retirement is still pending.
+        let mut armed = guard(&mut *backend, |backend| {
+            abandon_on_cancel(backend, &install.latch);
+        });
+        let end = {
+            let mut driver = pin!(async {
+                ManuallyDrop::new(
+                    B::drive(
+                        DriverLoan {
+                            driver: &mut *driver_owner,
+                        },
+                        &install.held,
+                        Retire {
+                            request: &install.retiring,
+                            latch: &install.latch,
+                        },
+                    )
+                    .await,
+                )
+            });
+            let (outcome, driver) = {
+                let mut body =
+                    pin!(body.run(Owner::new(&mut **armed, &mut local, &install), resources));
+                let first = poll_fn(|cx| {
+                    if let Poll::Ready(ended) = body.as_mut().poll(cx) {
+                        return Poll::Ready(Race::Body(ended));
+                    }
+                    if install.latch.core.poll(cx).is_ready() {
+                        return Poll::Ready(if install.latch.is_fail_stopped() {
+                            Race::FailStopped
+                        } else {
+                            Race::Abandoned
+                        });
+                    }
+                    driver.as_mut().poll(cx).map(Race::Driver)
+                })
+                .await;
+                let (race, driver): (Race<_, core::convert::Infallible>, _) = match first {
+                    Race::Driver(exit) => {
+                        // The returned state stays in ManuallyDrop while the
+                        // body drains results, including cancellation here.
+                        let race = poll_fn(|cx| {
+                            if let Poll::Ready(ended) = body.as_mut().poll(cx) {
+                                return Poll::Ready(Race::Body(ended));
+                            }
+                            if install.latch.core.poll(cx).is_ready() {
+                                return Poll::Ready(if install.latch.is_fail_stopped() {
+                                    Race::FailStopped
+                                } else {
+                                    Race::Abandoned
+                                });
+                            }
+                            Poll::Pending
+                        })
+                        .await;
+                        (race, DriverState::Ended(exit))
+                    }
+                    Race::Body(ended) => (Race::Body(ended), DriverState::Running(driver.as_mut())),
+                    Race::Abandoned => (Race::Abandoned, DriverState::Running(driver.as_mut())),
+                    Race::FailStopped => (Race::FailStopped, DriverState::Running(driver.as_mut())),
+                };
+                match race {
+                    Race::Body(ended) => (BodyOutcome::Returned(ended), driver),
+                    Race::Abandoned => (BodyOutcome::Abandoned, driver),
+                    Race::FailStopped => {
+                        install.retiring.set();
+                        let mut retirement = pin!(retire(driver, bound.as_mut()));
+                        let first = poll_fn(|cx| {
+                            if let Poll::Ready(ended) = body.as_mut().poll(cx) {
+                                return Poll::Ready(Joined::Body(ended));
+                            }
+                            retirement.as_mut().poll(cx).map(Joined::Retired)
+                        })
+                        .await;
+                        let (ended, exit) = match first {
+                            Joined::Body(ended) => (ended, retirement.await),
+                            Joined::Retired(exit) => (body.await, exit),
+                        };
+                        (BodyOutcome::Returned(ended), DriverState::Bounded(exit))
+                    }
+                    Race::Driver(never) => match never {},
+                }
+            };
+            // The body's exclusive loan ended. Retirement retains the armed
+            // guard only while no abandon has happened yet.
+            match outcome {
+                BodyOutcome::Abandoned => {
+                    let backend = ScopeGuard::into_inner(armed);
+                    let outcome = backend.abandon(Quarantine::new());
+                    install.retiring.set();
+                    let state = retire(driver, bound.as_mut()).await;
+                    InstallEnd::Abandoned { outcome, state }
+                }
+                BodyOutcome::Returned(Ended { end, output, .. }) => match end {
+                    BodyEnd::FailStopped(outcome) => {
+                        let _ = ScopeGuard::into_inner(armed);
+                        install.retiring.set();
+                        let state = retire(driver, bound.as_mut()).await;
+                        InstallEnd::FailStopped {
+                            outcome,
+                            state,
+                            output,
+                        }
+                    }
+                    BodyEnd::Uninstall(control) => {
+                        let control = ManuallyDrop::new(control);
+                        install.retiring.set();
+                        match retire(driver, bound.as_mut()).await {
+                            Retirement::Ended(state) => {
+                                let _ = ScopeGuard::into_inner(armed);
+                                InstallEnd::Uninstall {
+                                    state,
+                                    control: ManuallyDrop::into_inner(control),
+                                    output,
+                                }
+                            }
+                            Retirement::TimedOut => {
+                                let backend = ScopeGuard::into_inner(armed);
+                                InstallEnd::FailStopped {
+                                    outcome: backend.abandon(Quarantine::new()),
+                                    state: Retirement::TimedOut,
+                                    output,
+                                }
+                            }
+                        }
+                    }
+                },
+            }
+        };
+        // Dropping the pinned drive future ended its loan. It never owned the
+        // driver; moving these handles cannot move their static DMA backing.
+        let driver = ScopeGuard::into_inner(driver_owner);
+        match end {
+            InstallEnd::Uninstall {
+                state,
+                control,
+                output,
+            } => {
+                let retired = Retired {
+                    state: (driver, driver_state(state)),
+                    brand: PhantomData,
+                };
+                backend.detach(Detach::Retired(Call::new()), &install.held);
+                let backend = ScopeGuard::into_inner(backend);
+                let detached = Detached { brand: PhantomData };
+                PortEnd::Uninstalled {
+                    uninstalled: backend.uninstall(
+                        ManuallyDrop::into_inner(install.held),
+                        ManuallyDrop::into_inner(local),
+                        retired,
+                        detached,
+                        control,
+                    ),
+                    output,
+                }
+            }
+            InstallEnd::FailStopped {
+                outcome,
+                state,
+                output,
+            } => {
+                if let Retirement::Ended(_) = &state {
+                    backend.detach(
+                        Detach::Quarantined {
+                            call: Call::new(),
+                            outcome: &outcome,
+                        },
+                        &install.held,
+                    );
+                }
+                let backend = ScopeGuard::into_inner(backend);
+                PortEnd::FailStopped {
+                    outcome,
+                    quarantined: Quarantined::new((backend, driver, retired_state(state))),
+                    output,
+                }
+            }
+            InstallEnd::Abandoned { outcome, state } => {
+                if let Retirement::Ended(_) = &state {
+                    backend.detach(
+                        Detach::Quarantined {
+                            call: Call::new(),
+                            outcome: &outcome,
+                        },
+                        &install.held,
+                    );
+                }
+                let backend = ScopeGuard::into_inner(backend);
+                PortEnd::Abandoned {
+                    outcome,
+                    quarantined: Quarantined::new((backend, driver, retired_state(state))),
+                }
+            }
+        }
+    })
 }
 
 enum Race<E, S> {
@@ -756,229 +987,6 @@ fn abandon_on_cancel<B: PortBackend>(backend: &mut B, latch: &AbandonLatch) {
         // Cancellation has no result receiver. Retain its outcome; the
         // enclosing guards independently quarantine backend and driver.
         drop(Quarantined::new(outcome));
-    }
-}
-
-async fn install<'id, B: PortBackend, P: PortBody<B>>(
-    Installed {
-        mut backend,
-        driver,
-    }: Installed<B>,
-    body: P,
-    mint: Mint<'id, B::Pools>,
-) -> PortEnd<B, P::Output> {
-    // Declared before the backend guard, so cancellation first poisons the
-    // backend and then transfers this retained driver into quarantine.
-    let mut driver_owner = guard(driver, |driver| drop(Quarantined::new(driver)));
-    let InstallParts {
-        held,
-        local,
-        resources,
-    } = backend.resources(mint);
-    let mut local = ManuallyDrop::new(local);
-    let install = Install {
-        held: ManuallyDrop::new(held),
-        latch: AbandonLatch::new(),
-        retiring: Signal::new(),
-    };
-    let mut backend = guard(backend, |backend| drop(Quarantined::new(backend)));
-    let bound = backend.retire_bound(Call::new());
-    let mut bound = pin!(bound);
-    // Consuming this guard after the first abandon leaves only the outer
-    // quarantine guard. No backend state or memo is needed to suppress a
-    // second abandon while asynchronous retirement is still pending.
-    let mut armed = guard(&mut *backend, |backend| {
-        abandon_on_cancel(backend, &install.latch);
-    });
-    let end = {
-        let mut driver = pin!(async {
-            ManuallyDrop::new(
-                B::drive(
-                    DriverLoan {
-                        driver: &mut *driver_owner,
-                    },
-                    &install.held,
-                    Retire {
-                        request: &install.retiring,
-                        latch: &install.latch,
-                    },
-                )
-                .await,
-            )
-        });
-        let (outcome, driver) = {
-            let mut body =
-                pin!(body.run(Owner::new(&mut **armed, &mut local, &install), resources));
-            let first = poll_fn(|cx| {
-                if let Poll::Ready(ended) = body.as_mut().poll(cx) {
-                    return Poll::Ready(Race::Body(ended));
-                }
-                if install.latch.core.poll(cx).is_ready() {
-                    return Poll::Ready(if install.latch.is_fail_stopped() {
-                        Race::FailStopped
-                    } else {
-                        Race::Abandoned
-                    });
-                }
-                driver.as_mut().poll(cx).map(Race::Driver)
-            })
-            .await;
-            let (race, driver): (Race<_, core::convert::Infallible>, _) = match first {
-                Race::Driver(exit) => {
-                    // The returned state stays in ManuallyDrop while the
-                    // body drains results, including cancellation here.
-                    let race = poll_fn(|cx| {
-                        if let Poll::Ready(ended) = body.as_mut().poll(cx) {
-                            return Poll::Ready(Race::Body(ended));
-                        }
-                        if install.latch.core.poll(cx).is_ready() {
-                            return Poll::Ready(if install.latch.is_fail_stopped() {
-                                Race::FailStopped
-                            } else {
-                                Race::Abandoned
-                            });
-                        }
-                        Poll::Pending
-                    })
-                    .await;
-                    (race, DriverState::Ended(exit))
-                }
-                Race::Body(ended) => (Race::Body(ended), DriverState::Running(driver.as_mut())),
-                Race::Abandoned => (Race::Abandoned, DriverState::Running(driver.as_mut())),
-                Race::FailStopped => (Race::FailStopped, DriverState::Running(driver.as_mut())),
-            };
-            match race {
-                Race::Body(ended) => (BodyOutcome::Returned(ended), driver),
-                Race::Abandoned => (BodyOutcome::Abandoned, driver),
-                Race::FailStopped => {
-                    install.retiring.set();
-                    let mut retirement = pin!(retire(driver, bound.as_mut()));
-                    let first = poll_fn(|cx| {
-                        if let Poll::Ready(ended) = body.as_mut().poll(cx) {
-                            return Poll::Ready(Joined::Body(ended));
-                        }
-                        retirement.as_mut().poll(cx).map(Joined::Retired)
-                    })
-                    .await;
-                    let (ended, exit) = match first {
-                        Joined::Body(ended) => (ended, retirement.await),
-                        Joined::Retired(exit) => (body.await, exit),
-                    };
-                    (BodyOutcome::Returned(ended), DriverState::Bounded(exit))
-                }
-                Race::Driver(never) => match never {},
-            }
-        };
-        // The body's exclusive loan ended. Retirement retains the armed
-        // guard only while no abandon has happened yet.
-        match outcome {
-            BodyOutcome::Abandoned => {
-                let backend = ScopeGuard::into_inner(armed);
-                let outcome = backend.abandon(Quarantine::new());
-                install.retiring.set();
-                let state = retire(driver, bound.as_mut()).await;
-                InstallEnd::Abandoned { outcome, state }
-            }
-            BodyOutcome::Returned(Ended { end, output, .. }) => match end {
-                BodyEnd::FailStopped(outcome) => {
-                    let _ = ScopeGuard::into_inner(armed);
-                    install.retiring.set();
-                    let state = retire(driver, bound.as_mut()).await;
-                    InstallEnd::FailStopped {
-                        outcome,
-                        state,
-                        output,
-                    }
-                }
-                BodyEnd::Uninstall(control) => {
-                    let control = ManuallyDrop::new(control);
-                    install.retiring.set();
-                    match retire(driver, bound.as_mut()).await {
-                        Retirement::Ended(state) => {
-                            let _ = ScopeGuard::into_inner(armed);
-                            InstallEnd::Uninstall {
-                                state,
-                                control: ManuallyDrop::into_inner(control),
-                                output,
-                            }
-                        }
-                        Retirement::TimedOut => {
-                            let backend = ScopeGuard::into_inner(armed);
-                            InstallEnd::FailStopped {
-                                outcome: backend.abandon(Quarantine::new()),
-                                state: Retirement::TimedOut,
-                                output,
-                            }
-                        }
-                    }
-                }
-            },
-        }
-    };
-    // Dropping the pinned drive future ended its loan. It never owned the
-    // driver; moving these handles cannot move their static DMA backing.
-    let driver = ScopeGuard::into_inner(driver_owner);
-    match end {
-        InstallEnd::Uninstall {
-            state,
-            control,
-            output,
-        } => {
-            let retired = Retired {
-                state: (driver, driver_state(state)),
-                brand: PhantomData,
-            };
-            backend.detach(Detach::Retired(Call::new()), &install.held);
-            let backend = ScopeGuard::into_inner(backend);
-            let detached = Detached { brand: PhantomData };
-            PortEnd::Uninstalled {
-                uninstalled: backend.uninstall(
-                    ManuallyDrop::into_inner(install.held),
-                    ManuallyDrop::into_inner(local),
-                    retired,
-                    detached,
-                    control,
-                ),
-                output,
-            }
-        }
-        InstallEnd::FailStopped {
-            outcome,
-            state,
-            output,
-        } => {
-            if let Retirement::Ended(_) = &state {
-                backend.detach(
-                    Detach::Quarantined {
-                        call: Call::new(),
-                        outcome: &outcome,
-                    },
-                    &install.held,
-                );
-            }
-            let backend = ScopeGuard::into_inner(backend);
-            PortEnd::FailStopped {
-                outcome,
-                quarantined: Quarantined::new((backend, driver, retired_state(state))),
-                output,
-            }
-        }
-        InstallEnd::Abandoned { outcome, state } => {
-            if let Retirement::Ended(_) = &state {
-                backend.detach(
-                    Detach::Quarantined {
-                        call: Call::new(),
-                        outcome: &outcome,
-                    },
-                    &install.held,
-                );
-            }
-            let backend = ScopeGuard::into_inner(backend);
-            PortEnd::Abandoned {
-                outcome,
-                quarantined: Quarantined::new((backend, driver, retired_state(state))),
-            }
-        }
     }
 }
 

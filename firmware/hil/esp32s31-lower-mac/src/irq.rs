@@ -59,6 +59,12 @@ pub static SLOT8: static_cell::StaticCell<TxSlot<TX>> = static_cell::StaticCell:
 static ACK: HandlerCell<DoorbellAcknowledger<3>> = HandlerCell::new();
 const BELL: SameLevel<WifiMacToken, DoorbellToken> = SameLevel::new();
 
+#[cfg(oer_debug_control)]
+pub fn hold_completion(hold: bool) -> Result<(), oer_interrupt_table::signal::ForeignContext> {
+    use oer_esp32s31_ieee80211_mac::irq::{EVENT_TX_COMPLETE, EVENT_TX_TIMEOUT};
+    MAC_SIGNAL.debug_hold(EVENT_TX_COMPLETE | EVENT_TX_TIMEOUT, hold)
+}
+
 #[esp_hal::ram]
 pub fn wifi_mac() {
     if LINE.with(service_mac_line).is_none() {

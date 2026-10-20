@@ -52,6 +52,9 @@ pub struct Sent<'id, D: Device<B>, const B: usize> {
     pub(super) mpdu: Mpdu<'id, D, B>,
 }
 impl<D: Device<B>, const B: usize> Sent<'_, D, B> {
+    pub fn index(&self) -> u8 {
+        self.mpdu.buffer.index()
+    }
     pub fn packet_number(&self) -> Option<oer_ieee80211_wire::ccmp::CcmpPacketNumber> {
         self.mpdu.pn
     }

@@ -134,11 +134,12 @@ pub(super) struct Driver<'id, D: Device<B>, const B: usize> {
     pub(super) poison: radio::PoisonState<Fault>,
 }
 impl<'id, D: Device<B>, const B: usize> Driver<'id, D, B> {
-    pub(super) fn into_transmitter(
-        self,
+    pub(super) fn take_transmitter(
+        &mut self,
     ) -> OrdinaryTxIdleOwner<'static, D::Profile, D::Power, D::Entropy, D::Timer, B> {
-        self.core.into_transmitter()
+        self.core.take_transmitter()
     }
+    #[inline(always)]
     pub(super) fn new(
         core: DisabledCore<Core<'id, D, B>>,
         tickets: [TxTicket<'id, CorePath>; TX_TICKETS],
@@ -454,10 +455,16 @@ impl<'id, D: Device<B>, const B: usize> Driver<'id, D, B> {
         if stopping {
             self.transition.get_or_insert(now);
         }
-        let mut sink = Sink::default();
-        self.core
-            .service(device.hardware(), WifiTxWake::Deadline, &mut sink)?;
-        self.collect(held, sink, stopping)?;
+        #[cfg(oer_debug_control)]
+        let completion_held = held.completion_hold.get();
+        #[cfg(not(oer_debug_control))]
+        let completion_held = false;
+        if !completion_held {
+            let mut sink = Sink::default();
+            self.core
+                .service(device.hardware(), WifiTxWake::Deadline, &mut sink)?;
+            self.collect(held, sink, stopping)?;
+        }
         for _ in 0..4 {
             match device.poll_receive(TX_TICKETS - held.rx_out.get(), cx) {
                 Poll::Ready(Ok(DeviceEvent::Tx(wake))) => {
@@ -659,6 +666,10 @@ impl<'id, D: Device<B>, const B: usize> Driver<'id, D, B> {
                 || self.core.configuring()
                 || self.pending_command.is_some()
             {
+                continue;
+            }
+            #[cfg(oer_debug_control)]
+            if held.publication_hold.get() & (1 << index) != 0 {
                 continue;
             }
             if let Some(pending) = self.queues[index].pop_front() {

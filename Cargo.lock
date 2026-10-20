@@ -3559,6 +3559,7 @@ dependencies = [
  "embedded-io-async 0.7.0",
  "heapless 0.9.3",
  "oer-ieee80211-port",
+ "oer-ieee80211-wire",
  "postcard",
  "postcard-schema",
  "serde",

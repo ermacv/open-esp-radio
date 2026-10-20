@@ -114,6 +114,8 @@ const SOURCES: &[(&str, &str)] = &[
     ("io.rs", include_str!("../src/io.rs")),
     ("key.rs", include_str!("../src/key.rs")),
     ("lib.rs", include_str!("../src/lib.rs")),
+    ("lower_mac/mod.rs", include_str!("../src/lower_mac/mod.rs")),
+    ("lower_mac/payload.rs", include_str!("../src/lower_mac/payload.rs")),
     ("network/mod.rs", include_str!("../src/network/mod.rs")),
     (
         "network/session.rs",
@@ -160,7 +162,7 @@ fn referenced(path: &str) -> BTreeSet<&'static str> {
                 .chars()
                 .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
                 .collect();
-            if let Some(module) = MODULES.iter().find(|module| **module == name) {
+            if let Some(module) = MODULES.iter().find(|module| module.replace('-', "_") == name) {
                 modules.insert(*module);
             }
         }
@@ -173,7 +175,7 @@ fn dependencies() -> BTreeMap<&'static str, BTreeSet<&'static str>> {
     MODULES
         .iter()
         .map(|module| {
-            let mut used = referenced(module);
+            let mut used = referenced(&module.replace('-', "_"));
             used.remove(module);
             (*module, used)
         })
@@ -214,8 +216,8 @@ fn lock() -> String {
     let mut messages: Vec<&MessageInfo> = registry().collect();
     messages.sort_by_key(|message| message.path);
     let mut lock = format!(
-        "# The HIL wire of this revision. Regenerate with\n\
-         # `OER_HIL_PROTOCOL_LOCK=write cargo test -p oer-hil-protocol --features registry --test registry`.\n\
+        "# The HIL wire of this revision.\n\
+         # The registry test prints the complete replacement when it differs.\n\
          framing {FRAMING_VERSION}\n\
          [modules]\n"
     );
@@ -244,8 +246,6 @@ fn lock() -> String {
 #[test]
 fn the_lock_is_the_registry() {
     let lock = lock();
-    assert!(
-        lock == MESSAGES_LOCK,
-        "messages.lock differs from the registry; review the wire change"
-    );
+    assert_eq!(lock, MESSAGES_LOCK,
+        "review the printed wire change before replacing messages.lock");
 }

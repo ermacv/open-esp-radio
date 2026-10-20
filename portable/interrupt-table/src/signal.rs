@@ -65,6 +65,8 @@ struct Owned {
 /// Shared implementation, independent of the executor type.
 struct SignalCore {
     pending: AtomicU32,
+    #[cfg(oer_debug_control)]
+    held: AtomicU32,
     owned: UnsafeCell<Owned>,
 }
 
@@ -136,6 +138,17 @@ impl<E: SignalExecutor> IrqSignal<E> {
         Ok(self.core.take(&context::<E>()?))
     }
 
+    /// Retain facts in the existing atomic instrumentation mask. Releasing
+    /// touches no task-owned state; the image arranges another owning poll.
+    #[cfg(oer_debug_control)]
+    pub fn debug_hold(&'static self, facts: u32, hold: bool) {
+        if hold {
+            self.core.held.fetch_or(facts, Ordering::Release);
+        } else {
+            self.core.held.fetch_and(!facts, Ordering::Release);
+        }
+    }
+
     /// Register the task's waker, then take facts; pending while none exist.
     /// The first poll links the signal into its executor's list.
     ///
@@ -189,6 +202,8 @@ impl SignalCore {
     const fn new() -> Self {
         Self {
             pending: AtomicU32::new(0),
+            #[cfg(oer_debug_control)]
+            held: AtomicU32::new(0),
             owned: UnsafeCell::new(Owned {
                 waker: None,
                 delivered: 0,
@@ -204,15 +219,36 @@ impl SignalCore {
     }
 
     fn has_pending(&self, token: &ContextToken) -> bool {
-        let pending = self.pending.load(Ordering::Acquire) != 0;
-        self.owned(token, |owned| pending || owned.delivered != 0)
+        #[cfg(oer_debug_control)]
+        {
+            let pending = self.pending.load(Ordering::Acquire);
+            self.owned(token, |owned| self.deliverable(pending | owned.delivered) != 0)
+        }
+        #[cfg(not(oer_debug_control))]
+        {
+            let pending = self.pending.load(Ordering::Acquire) != 0;
+            self.owned(token, |owned| pending || owned.delivered != 0)
+        }
     }
 
     fn take(&self, token: &ContextToken) -> u32 {
         self.owned(token, |owned| {
-            core::mem::take(&mut owned.delivered) | self.pending.swap(0, Ordering::Acquire)
+            #[cfg(oer_debug_control)]
+            {
+                let facts = owned.delivered | self.pending.swap(0, Ordering::Acquire);
+                let ready = self.deliverable(facts);
+                owned.delivered = facts & !ready;
+                ready
+            }
+            #[cfg(not(oer_debug_control))]
+            {
+                core::mem::take(&mut owned.delivered) | self.pending.swap(0, Ordering::Acquire)
+            }
         })
     }
+
+    #[cfg(oer_debug_control)]
+    fn deliverable(&self, facts: u32) -> u32 { facts & !self.held.load(Ordering::Acquire) }
 
     fn poll_take(
         &'static self,
@@ -267,7 +303,11 @@ impl SignalCore {
         let (wake, next) = self.owned(token, |owned| {
             let facts = self.pending.swap(0, Ordering::Acquire);
             owned.delivered |= facts;
-            let wake = if facts == 0 { None } else { owned.waker.take() };
+            #[cfg(oer_debug_control)]
+            let available = self.deliverable(owned.delivered);
+            #[cfg(not(oer_debug_control))]
+            let available = facts;
+            let wake = if available == 0 { None } else { owned.waker.take() };
             (wake, owned.next)
         });
         // The waker belongs to this executor's task: waking it only marks

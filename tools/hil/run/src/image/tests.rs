@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 fn image_classes_are_stable_and_do_not_use_workload_environment() {
-    assert_eq!(oer_hil_model::schema::image::ImageClass::ALL.len(), 5);
+    assert_eq!(oer_hil_model::schema::image::ImageClass::ALL.len(), 6);
     for (class, features) in [
         (ImageClass::SystemWatchdog, "system-watchdog"),
         (
@@ -11,6 +11,8 @@ fn image_classes_are_stable_and_do_not_use_workload_environment() {
         ),
         (ImageClass::SystemPanicReset, "system-panic-reset"),
         (ImageClass::BootSmoke, "boot-smoke"),
+        (ImageClass::DiagnosticPhy, "diagnostic-phy"),
+        (ImageClass::DiagnosticLowerMac, "diagnostic-lower-mac"),
     ] {
         assert_eq!(class.runtime_features(), features);
     }

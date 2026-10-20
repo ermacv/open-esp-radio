@@ -1,6 +1,7 @@
 #![no_main]
 #![no_std]
 #![forbid(unsafe_code)]
+#![feature(type_alias_impl_trait, impl_trait_in_assoc_type)]
 #[cfg(not(feature = "diagnostic-lower-mac"))]
 compile_error!("build the diagnostic-lower-mac image class through cargo hil");
 mod irq;

@@ -383,6 +383,10 @@ pub struct Held<'id, D: Device<B>, const B: usize> {
     dirty_ba: Cell<bool>,
     color: Cell<Option<BssColor>>,
     loss: Cell<bool>,
+    #[cfg(oer_debug_control)]
+    publication_hold: Cell<u8>,
+    #[cfg(oer_debug_control)]
+    completion_hold: Cell<bool>,
 }
 impl<'id, D: Device<B>, const B: usize> Held<'id, D, B> {
     fn command(&self, command: driver::Command<'id, D, B>) {

@@ -62,6 +62,12 @@ fn link(bin: &str, layout: &Layout, chip_linker_dir: &Path, scripts: &[&str], en
 /// Links binary `bin` as a stage-two runtime of `layout`: code, data and task
 /// stacks in PSRAM, interrupt entries, stacks and DMA state in internal SRAM.
 pub fn configure_runtime(bin: &str, layout: &Layout, chip_linker_dir: &Path) {
+    println!("cargo:rerun-if-env-changed=OPEN_RADIO_IRQ_STACK_BYTES");
+    let irq_stack_bytes = match std::env::var("OPEN_RADIO_IRQ_STACK_BYTES") {
+        Ok(value) => image_irq_stack_bytes(&value).expect("valid image IRQ stack allocation"),
+        Err(std::env::VarError::NotPresent) => layout.irq_stack_bytes,
+        Err(std::env::VarError::NotUnicode(_)) => panic!("IRQ stack allocation is not Unicode"),
+    };
     link(
         bin,
         layout,
@@ -87,7 +93,7 @@ pub fn configure_runtime(bin: &str, layout: &Layout, chip_linker_dir: &Path) {
         ("STAGE_TWO_ABI_VERSION", stage_two::ABI_VERSION),
         ("STAGE_TWO_HEADER_BYTES", stage_two::HEADER_BYTES as u32),
         ("CPU0_PSRAM_TASK_STACK_BYTES", layout.cpu0_task_stack_bytes),
-        ("IRQ_STACK_BYTES", layout.irq_stack_bytes),
+        ("IRQ_STACK_BYTES", irq_stack_bytes),
         ("HART_COUNT", layout.harts),
         ("RETAINED_RESERVED_TAIL", layout.retained_reserved_tail),
     ] {
@@ -99,6 +105,16 @@ pub fn configure_runtime(bin: &str, layout: &Layout, chip_linker_dir: &Path) {
     for argument in shuffle_arguments(seed) {
         println!("cargo:rustc-link-arg-bin={bin}={argument}");
     }
+}
+
+fn image_irq_stack_bytes(value: &str) -> Result<u32, &'static str> {
+    let bytes: u32 = value
+        .parse()
+        .map_err(|_| "IRQ stack allocation is not a u32")?;
+    if bytes <= crate::interrupts::IRQ_STACK_GUARD_BYTES || bytes % 16 != 0 {
+        return Err("IRQ stack allocation must exceed the guard and be aligned to 16 bytes");
+    }
+    Ok(bytes)
 }
 
 /// Environment variable that selects a reproducible alternative placement of
@@ -169,6 +185,14 @@ pub fn configure_bootstrap(bin: &str, layout: &Layout, chip_linker_dir: &Path) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_explicit_irq_stack_allocation_never_silently_falls_back() {
+        assert_eq!(image_irq_stack_bytes("65536"), Ok(65536));
+        for value in ["", "0", "1024", "65537", "-1", "4294967296"] {
+            assert!(image_irq_stack_bytes(value).is_err(), "{value}");
+        }
+    }
 
     #[test]
     fn only_a_nonzero_seed_shuffles_and_it_is_reproducible() {

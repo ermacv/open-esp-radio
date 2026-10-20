@@ -48,8 +48,8 @@ impl<'id, D: Device<B>, const B: usize> CoreOwner<'id, D, B> {
     pub(super) fn disabled(&self) -> bool {
         matches!(self.0, Some(Bank::Disabled(_) | Bank::DisabledClosed(_)))
     }
-    pub(super) fn into_transmitter(
-        mut self,
+    pub(super) fn take_transmitter(
+        &mut self,
     ) -> OrdinaryTxIdleOwner<'static, D::Profile, D::Power, D::Entropy, D::Timer, B> {
         match self.0.take().expect("stopped bank retained") {
             Bank::Disabled(core) => core.dismantle().into_transmitter(),
@@ -298,6 +298,7 @@ impl<D: Device<B>, const B: usize> PortBackend for Esp32s31Backend<D, B> {
     type State = ();
     type Uninstall = ();
     type Uninstalled = Uninstalled<D, B>;
+    #[inline(always)]
     fn resources<'id>(
         &mut self,
         mint: radio::Mint<'id, Self::Pools>,
@@ -380,6 +381,10 @@ impl<D: Device<B>, const B: usize> PortBackend for Esp32s31Backend<D, B> {
                 dirty_ba: Cell::new(false),
                 color: Cell::new(None),
                 loss: Cell::new(false),
+                #[cfg(oer_debug_control)]
+                publication_hold: Cell::new(0),
+                #[cfg(oer_debug_control)]
+                completion_hold: Cell::new(false),
             },
             local: (),
         }
@@ -549,6 +554,7 @@ impl<D: Device<B>, const B: usize> PortBackend for Esp32s31Backend<D, B> {
     fn detach<'id>(&mut self, _: radio::Detach<'_>, _: &Held<'id, D, B>) {
         self.storage.device.borrow_mut().detach();
     }
+    #[inline(always)]
     fn uninstall<'id>(
         self,
         held: Held<'id, D, B>,
@@ -565,7 +571,7 @@ impl<D: Device<B>, const B: usize> PortBackend for Esp32s31Backend<D, B> {
         for activity in &self.storage.key_live {
             activity.set(0);
         }
-        let transmitter = held.state.into_inner().into_transmitter();
+        let transmitter = held.state.borrow_mut().take_transmitter();
         let mut config = self.config;
         config.channel = self
             .channel

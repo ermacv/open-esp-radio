@@ -1,5 +1,4 @@
 //! P2 owns the real lower-MAC port, DMA, RX and cooperative hardware.
-use oer_radio_port::PortPhase;
 use crate::{
     Answer, Request, irq,
     irq::{B, N, Q, S, TX},
@@ -37,7 +36,10 @@ use oer_esp32s31_ieee80211_driver::{
 use oer_esp32s31_ieee80211_mac::tx::{TxSlot, runtime::WifiTxRuntimePolicy};
 use oer_esp32s31_phy::{PhyConfig, PhyTxTargetPowerProfile};
 use oer_esp32s31_radio_client::{MembershipCell, wifi::Wifi};
-use oer_hil_protocol::{base::RejectReason, lower_mac::{Prepare, Prepared, OutcomeTrace, CaseTrace, outcome_trace}};
+use oer_hil_protocol::{
+    base::RejectReason,
+    lower_mac::{CaseTrace, OutcomeTrace, Prepare, Prepared, outcome_trace},
+};
 use oer_ieee80211_port::{
     backend_protection::BasicRates,
     conformance::{MpduState, catalog, outcomes},
@@ -52,6 +54,7 @@ use oer_ieee80211_wire::{
     scan::parse_management,
     sequence::SequenceNumber,
 };
+use oer_radio_port::PortPhase;
 
 use oer_radio_port::{self as radio, Disabled, Ended, Owner, PortBackend, PortBody};
 use oer_radio_regulatory::{Country, RegulatoryDomain};
@@ -59,6 +62,9 @@ use oer_time::{Duration, Timer};
 use oer_trace::Event as _;
 use sha2::{Digest as _, Sha256};
 use static_cell::StaticCell;
+
+mod ownership;
+use ownership::{Context, FixtureBody};
 
 type Device =
     RadioDevice<Fixture, EmbassyClock, Platform, irq::ImageRoutes, irq::ImageDoorbell, N, B, S, Q>;
@@ -108,8 +114,8 @@ struct Fixture;
 impl Composition for Fixture {
     type Profile = oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile;
     type Entropy = Entropy;
-    type Body = Infallible;
-    type Context<'id> = u8;
+    type Body = FixtureBody;
+    type Context<'id> = Context;
     type ConfigureContext<'id> = u8;
 }
 struct Coex;
@@ -119,7 +125,8 @@ impl RadioCoexPriorities for Coex {
         oer_esp32s31_hal::types::MacPti::new(
             oer_esp32s31_radio_coex::CoexPtiTable::VENDOR
                 .pti(event)
-                .value().into(),
+                .value()
+                .into(),
         )
         .expect("four bit PTI")
     }
@@ -132,13 +139,101 @@ struct Peer {
     address: IndividualAddress,
     rate: LegacyRate,
     station: [u8; 6],
-    channel: u8,
+}
+mod futures {
+    use super::*;
+    pub(super) type InstallFuture =
+        impl core::future::Future<Output = Result<radio::Installed<Backend>, &'static str>>;
+    pub(super) type DiscoverFuture = impl core::future::Future<
+            Output = radio::PortEnd<Backend, Result<(Peer, Prepared), &'static str>>,
+        >;
+    pub(super) type ExchangeFuture = impl core::future::Future<
+            Output = radio::PortEnd<
+                Backend,
+                Result<oer_hil_protocol::lower_mac::Trace, &'static str>,
+            >,
+        >;
+    pub(super) static INSTALL_FUTURE: StaticCell<InstallFuture> = StaticCell::new();
+    pub(super) static DISCOVER_FUTURE: StaticCell<DiscoverFuture> = StaticCell::new();
+    pub(super) static EXCHANGE_FUTURE: StaticCell<Option<ExchangeFuture>> = StaticCell::new();
+    pub(super) struct StaticFuture<F: 'static>(pub Pin<&'static mut F>);
+    impl<F: core::future::Future> core::future::Future for StaticFuture<F> {
+        type Output = F::Output;
+        #[inline(never)]
+        fn poll(
+            mut self: Pin<&mut Self>,
+            cx: &mut core::task::Context<'_>,
+        ) -> core::task::Poll<Self::Output> {
+            self.0.as_mut().poll(cx)
+        }
+    }
+    #[inline(never)]
+    pub(super) fn install_future(boot: Boot, config: Prepare) -> StaticFuture<InstallFuture> {
+        StaticFuture(Pin::static_mut(
+            INSTALL_FUTURE.init_with(|| installing(boot, config)),
+        ))
+    }
+    #[inline(never)]
+    pub(super) fn discover_future(
+        installed: radio::Installed<Backend>,
+        body: Discover,
+    ) -> StaticFuture<DiscoverFuture> {
+        StaticFuture(Pin::static_mut(
+            DISCOVER_FUTURE.init_with(|| discovering(installed, body)),
+        ))
+    }
+    #[inline(never)]
+    pub(super) fn exchange_future(
+        future: &mut Pin<&'static mut Option<ExchangeFuture>>,
+        installed: radio::Installed<Backend>,
+        body: Exchange,
+    ) {
+        future.set(None);
+        future.set(Some(exchanging(installed, body)));
+    }
+    #[define_opaque(InstallFuture)]
+    pub(super) fn installing(boot: Boot, config: Prepare) -> InstallFuture {
+        install(boot, config)
+    }
+    #[define_opaque(DiscoverFuture)]
+    pub(super) fn discovering(
+        installed: radio::Installed<Backend>,
+        body: Discover,
+    ) -> DiscoverFuture {
+        radio::run_port(installed, body)
+    }
+    #[define_opaque(ExchangeFuture)]
+    pub(super) fn exchanging(
+        installed: radio::Installed<Backend>,
+        body: Exchange,
+    ) -> ExchangeFuture {
+        radio::run_port(installed, body)
+    }
+}
+use futures::*;
+#[inline(never)]
+fn poll_exchange(
+    mut future: Pin<&mut ExchangeFuture>,
+) -> impl core::future::Future<
+    Output = radio::PortEnd<Backend, Result<oer_hil_protocol::lower_mac::Trace, &'static str>>,
+> {
+    core::future::poll_fn(move |cx| poll_exchange_once(future.as_mut(), cx))
+}
+#[inline(never)]
+fn poll_exchange_once(
+    future: Pin<&mut ExchangeFuture>,
+    cx: &mut core::task::Context<'_>,
+) -> core::task::Poll<
+    radio::PortEnd<Backend, Result<oer_hil_protocol::lower_mac::Trace, &'static str>>,
+> {
+    core::future::Future::poll(future, cx)
 }
 pub struct Server {
     boot: Option<Boot>,
     stopped: Option<StoppedPort<Device, TX>>,
     peer: Option<Peer>,
     epoch: u32,
+    exchange: Pin<&'static mut Option<ExchangeFuture>>,
 }
 impl Server {
     pub fn new(boot: Boot) -> Self {
@@ -147,6 +242,7 @@ impl Server {
             stopped: None,
             peer: None,
             epoch: 1,
+            exchange: Pin::static_mut(EXCHANGE_FUTURE.init(None)),
         }
     }
     pub async fn request(&mut self, request: Request) -> Result<Answer, RejectReason> {
@@ -154,10 +250,10 @@ impl Server {
             Request::Prepare(config) => {
                 let boot = self.boot.take().ok_or(RejectReason::InvalidState)?;
                 let station = boot.station;
-                let installed = install(boot, config)
+                let installed = install_future(boot, config)
                     .await
                     .map_err(|_| RejectReason::Internal)?;
-                let result = radio::run_port(installed, Discover { config, station }).await;
+                let result = discover_future(installed, Discover { config, station }).await;
                 let radio::PortEnd::Uninstalled {
                     output,
                     uninstalled: Uninstalled::Stopped(stopped),
@@ -173,10 +269,7 @@ impl Server {
             }
             Request::Run(key) => {
                 let case = key.case().ok_or(RejectReason::InvalidConfiguration)?;
-                let catalog::Case::Outcome(case) = case else {
-                    return Err(RejectReason::Unsupported);
-                };
-                if case.form() != outcomes::Form::Single {
+                if case.extension().is_some() {
                     return Err(RejectReason::Unsupported);
                 }
                 let peer = self.peer.ok_or(RejectReason::InvalidState)?;
@@ -185,7 +278,14 @@ impl Server {
                 let installed = stopped
                     .reinstall(self.epoch)
                     .map_err(|_| RejectReason::Internal)?;
-                let result = radio::run_port(installed, Exchange { peer, case }).await;
+                exchange_future(&mut self.exchange, installed, Exchange { peer, case });
+                let result = poll_exchange(
+                    self.exchange
+                        .as_mut()
+                        .as_pin_mut()
+                        .ok_or(RejectReason::Internal)?,
+                )
+                .await;
                 let radio::PortEnd::Uninstalled {
                     output,
                     uninstalled: Uninstalled::Stopped(stopped),
@@ -195,8 +295,8 @@ impl Server {
                     return Err(RejectReason::Internal);
                 };
                 self.stopped = Some(stopped);
-                let outcome = output.map_err(|_| RejectReason::Internal)?;
-                Ok(Answer::Trace(CaseTrace { case: key, outcome }))
+                let trace = output.map_err(|_| RejectReason::Internal)?;
+                Ok(Answer::Trace(CaseTrace { case: key, trace }))
             }
         }
     }
@@ -377,7 +477,6 @@ async fn discover<'p, 'id: 'p>(
                         address,
                         rate,
                         station,
-                        channel: config.channel,
                     },
                     Prepared {
                         ampdu: Backend::AMPDU.is_some(),
@@ -386,18 +485,17 @@ async fn discover<'p, 'id: 'p>(
                     },
                 ));
             }
-            LowerMacEvent::Terminal(LowerMacTerminal::Configured(_))
-            | LowerMacEvent::Tbtt(_) => {}
+            LowerMacEvent::Terminal(LowerMacTerminal::Configured(_)) | LowerMacEvent::Tbtt(_) => {}
             _ => return Err("unexpected discovery event"),
         }
     }
 }
 struct Exchange {
     peer: Peer,
-    case: outcomes::Case,
+    case: catalog::Case,
 }
 impl PortBody<Backend> for Exchange {
-    type Output = Result<OutcomeTrace, &'static str>;
+    type Output = Result<oer_hil_protocol::lower_mac::Trace, &'static str>;
     async fn run<'p, 'id>(
         self,
         owner: Owner<'p, 'id, Backend, Disabled>,
@@ -407,7 +505,17 @@ impl PortBody<Backend> for Exchange {
             Ok(owner) => owner,
             Err(failed) => return Ended::fail_stopped(failed.fail_stop(), Err("enable")),
         };
-        let output = exchange(&mut owner.phase(), resources, self.peer, self.case).await;
+        if let catalog::Case::Ownership(scenario) = self.case {
+            return ownership::run(owner, resources, self.peer, scenario).await;
+        }
+        let output = match self.case {
+            catalog::Case::Outcome(case) => {
+                exchange(&mut owner.phase(), resources, self.peer, case)
+                    .await
+                    .map(oer_hil_protocol::lower_mac::Trace::Outcome)
+            }
+            _ => Err("fixture unavailable"),
+        };
         let owner = match owner
             .disable(&mut |_| core::ops::ControlFlow::Continue(()))
             .await
@@ -481,7 +589,7 @@ async fn exchange<'p, 'id: 'p>(
         .station()
         .submit(
             Attempt {
-                context: 0,
+                context: Context::Plain,
                 ticket,
                 source,
                 access_category: oer_ieee80211_wire::qos::WmmAccessCategory::BestEffort,
@@ -509,10 +617,13 @@ async fn exchange<'p, 'id: 'p>(
     };
     let parts = completed.into_parts(&mut access);
     let (buffer, _) = parts.payload.into_parts();
-    let AnyBuffer::Sent(sent) = buffer else {
-        return Err("TX returned Fresh");
+    let (mut buffer, state) = match buffer {
+        AnyBuffer::Fresh(buffer) => (buffer, MpduState::Fresh),
+        AnyBuffer::Sent(sent) => {
+            let (buffer, _) = <Family as TxBufferPool<'id, BufferClass<TX>>>::renew(sent);
+            (buffer, MpduState::Sent)
+        }
     };
-    let (mut buffer, _) = <Family as TxBufferPool<'id, BufferClass<TX>>>::renew(sent);
     let returned = outcomes::Identity {
         ticket: parts.ticket.index(),
         buffer: buffer.index(),
@@ -528,7 +639,7 @@ async fn exchange<'p, 'id: 'p>(
     let trace = outcomes::Trace::<Ack, Ack, Infallible> {
         admitted,
         returned,
-        state: MpduState::Sent,
+        state,
         rate: PhyRate::Legacy(peer.rate),
         sequence,
         publications: TRACE

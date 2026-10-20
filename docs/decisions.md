@@ -91,6 +91,11 @@ bounds) live in the code that applies them.
   Main CI runs the host tests once per class cfg, of the packages whose
   sources hold code under it, found by search, each cfg in its own target
   directory. A further mechanism, such as a profiler, is discussed first.
+  The lower-MAC conformance image declares `debug-control` for two holds:
+  before publication and before completion delivery. Completion facts stay
+  in the image's static P2 signal; the driver only prevents deadline service
+  from consuming the held result. TX, DMA and air outcomes remain real.
+  Working images w0–w2 remain byte-identical.
 - **Every package builds**; the workspace has no `exclude` list.
 
 ## Execution
