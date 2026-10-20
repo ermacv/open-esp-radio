@@ -151,9 +151,13 @@ pub fn jump_tables<'r, 'm>(
         };
         let mut targets = Vec::new();
         let mut complete = true;
-        for i in 0..alternatives.map_or(1, |values| values.len()) {
+        let bases = alternatives
+            .into_iter()
+            .flatten()
+            .map(ValueAlternative::as_value)
+            .chain(alternatives.is_none().then(|| table.clone()));
+        for base in bases {
             c.checkpoint(1)?;
-            let base = alternatives.map_or_else(|| table.clone(), |values| values[i].as_value());
             let Some(words) = facts.entries(&base, bound, section, memory, c)? else {
                 complete = false;
                 break;
@@ -185,7 +189,8 @@ pub fn jump_tables<'r, 'm>(
                 complete &= inside(target);
                 targets.push(target);
             }
-            reserved.push(words.reserved, c.position())?;
+            // The source owns its temporary words/reservation. Only our
+            // copied targets and the next pass's jump survive this iteration.
         }
         if complete {
             if alternatives.is_some() {

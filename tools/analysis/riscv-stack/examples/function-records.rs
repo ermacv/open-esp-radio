@@ -170,10 +170,16 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             FunctionRecord::Dispatch {
                 offset,
                 base,
-                index,
+                index: table_index,
                 scale,
             } => {
-                println!("dispatch\t{offset:#010x}\t{base:?}\t{index:?}\t{scale}");
+                println!("dispatch\t{offset:#010x}\t{base:?}\t{table_index:?}\t{scale}");
+                println!(
+                    "dispatch-inputs\t{offset:#010x}\t{:?}",
+                    index
+                        .call_inputs(*offset, &mut control)?
+                        .map(|inputs| inputs.registers)
+                );
                 if image_facts {
                     let dump = |base: &AbstractValue| {
                         if let AbstractValue::Constant { value: base }
