@@ -55,6 +55,7 @@ impl oer_ieee80211_port::TxBufferClass for Buffer {
 }
 
 impl TxBufferMemory for Buffer {
+    fn renew_msdu(&mut self) {}
     fn bytes_mut(&mut self) -> &mut [u8] {
         &mut self.0
     }
@@ -980,14 +981,16 @@ fn a_category_the_service_does_not_admit_waits_and_the_others_go_in_their_order(
 }
 
 #[test]
-fn indeterminate_and_contention_limit_retire_the_msdu_and_release_admission() {
-    for (outcome, indeterminate, contention) in [
+fn terminal_failures_retire_the_msdu_and_release_admission() {
+    for (outcome, indeterminate, contention, expired) in [
         (
             TxOutcome::Indeterminate(IndeterminateCause::HardwareTimeout),
             1,
             0,
+            0,
         ),
-        (ended(End::ContentionLimit, 0), 0, 1),
+        (ended(End::ContentionLimit, 0), 0, 1, 0),
+        (TxOutcome::Expired { msdus: 1 }, 0, 0, 1),
     ] {
         let mut data = StaData::<Data, Caps>::new(
             [1],
@@ -1016,6 +1019,7 @@ fn indeterminate_and_contention_limit_retire_the_msdu_and_release_admission() {
         assert_eq!(data.available(WmmAccessCategory::Voice), capacity);
         assert_eq!(data.counters().indeterminate, indeterminate);
         assert_eq!(data.counters().contention_limited, contention);
+        assert_eq!(data.counters().expired, expired);
         assert_eq!(data.counters().lost_tokens, 0);
         assert!(
             data.poll_action().is_none(),

@@ -37,12 +37,19 @@ fn queue_accounting_fault_retains_every_owner_until_teardown() {
 }
 
 fn backend() -> (oer_radio_port::Installed<ModelBackend>, Rc<ModelAir>) {
+    backend_on(Rc::new(oer_time_virtual::VirtualClock::<8>::new()))
+}
+
+fn backend_on(
+    clock: Rc<oer_time_virtual::VirtualClock>,
+) -> (oer_radio_port::Installed<ModelBackend>, Rc<ModelAir>) {
     ModelBackend::new(
         Channel::ghz2_4(6, ChannelWidth::Mhz20).unwrap(),
         [
             IndividualAddress::new(STATION).unwrap(),
             IndividualAddress::new(ACCESS_POINT).unwrap(),
         ],
+        clock,
     )
 }
 
@@ -88,6 +95,7 @@ fn each_installation_and_retuned_phase_checks_its_own_channel() {
                     IndividualAddress::new(STATION).unwrap(),
                     IndividualAddress::new(ACCESS_POINT).unwrap(),
                 ],
+                std::rc::Rc::new(oer_time_virtual::VirtualClock::<8>::new()),
             );
             assert!(matches!(
                 run_port(target, Second(&mut source)).await,
@@ -1873,3 +1881,5 @@ impl TestPacketNumbers {
 }
 
 mod edca;
+
+mod msdu_age;

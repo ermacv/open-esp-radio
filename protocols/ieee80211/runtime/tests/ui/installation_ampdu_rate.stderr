@@ -1,21 +1,21 @@
 error: lifetime may not live long enough
-  --> tests/ui/installation_ampdu_rate.rs:89:9
+  --> tests/ui/installation_ampdu_rate.rs:90:9
    |
-57 |     async fn run<'p, 'id>(
+58 |     async fn run<'p, 'id>(
    |                      --- lifetime `'id` defined here
-58 |         self,
+59 |         self,
    |         ---- has type `Target<'_, '_, '1>`
 ...
-89 |         Ended::fail_stopped(target.fail_stop(), ()) // ui-error: lifetime may not live long enough
+90 |         Ended::fail_stopped(target.fail_stop(), ()) // ui-error: lifetime may not live long enough
    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ method was supposed to return data with lifetime `'id` but it is returning data with lifetime `'1`
 
 error: lifetime may not live long enough
-  --> tests/ui/installation_ampdu_rate.rs:89:9
+  --> tests/ui/installation_ampdu_rate.rs:90:9
    |
-57 |     async fn run<'p, 'id>(
+58 |     async fn run<'p, 'id>(
    |                      --- lifetime `'id` defined here
-58 |         self,
+59 |         self,
    |         ---- has type `Target<'_, '_, '1>`
 ...
-89 |         Ended::fail_stopped(target.fail_stop(), ()) // ui-error: lifetime may not live long enough
+90 |         Ended::fail_stopped(target.fail_stop(), ()) // ui-error: lifetime may not live long enough
    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ method was supposed to return data with lifetime `'1` but it is returning data with lifetime `'id`

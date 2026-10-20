@@ -293,6 +293,7 @@ impl Harness for ModelHarness {
                 IndividualAddress::new(STATION).unwrap(),
                 IndividualAddress::new(ACCESS_POINT).unwrap(),
             ],
+            std::rc::Rc::new(oer_time_virtual::VirtualClock::<8>::new()),
         );
         let dropped = Rc::new(Cell::new(0));
         let before_teardown = Rc::new(Cell::new(usize::MAX));
@@ -543,6 +544,7 @@ fn aggregate_terminal_returns_its_context_and_each_subframes_resources_on_air_or
                 IndividualAddress::new(STATION).unwrap(),
                 IndividualAddress::new(ACCESS_POINT).unwrap(),
             ],
+            std::rc::Rc::new(oer_time_virtual::VirtualClock::<8>::new()),
         );
         let dropped = Rc::new(Cell::new(0));
         let _port_end = block_on(run_port(
@@ -749,6 +751,7 @@ fn publication_fault_keeps_the_complete_single_or_aggregate_until_teardown() {
                 IndividualAddress::new(STATION).unwrap(),
                 IndividualAddress::new(ACCESS_POINT).unwrap(),
             ],
+            std::rc::Rc::new(oer_time_virtual::VirtualClock::<8>::new()),
         );
         assert!(matches!(
             block_on(run_port(

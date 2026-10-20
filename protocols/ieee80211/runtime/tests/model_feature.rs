@@ -63,6 +63,7 @@ fn backend() -> (oer_radio_port::Installed<ModelBackend>, Rc<ModelAir>) {
             IndividualAddress::new(STATION).unwrap(),
             IndividualAddress::new(PEER).unwrap(),
         ],
+        std::rc::Rc::new(oer_time_virtual::VirtualClock::<8>::new()),
     )
 }
 

@@ -215,9 +215,11 @@ fn supported_edca_refuses_whole_records_without_clamping() {
         }
         let mut lifetimes = [500; 4];
         *ac.select_mut(&mut lifetimes) = 501;
-        assert!(SupportedEdca::<ModelCaps>::new(EdcaParameterSet::new(wmm, lifetimes)).is_none());
+        assert!(
+            SupportedEdca::<ModelCaps>::new(EdcaParameterSet::from_tu(wmm, lifetimes)).is_none()
+        );
     }
-    let retained = EdcaParameterSet::new(wmm, [0, 1, 200, 500]);
+    let retained = EdcaParameterSet::from_tu(wmm, [0, 1, 200, 500]);
     assert_eq!(
         SupportedEdca::<LimitedTxop>::new(retained).unwrap().get(),
         retained

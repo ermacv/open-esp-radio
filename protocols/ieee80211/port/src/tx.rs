@@ -336,6 +336,14 @@ impl<A, D> SingleEnd<A, D> {
 /// The next operation in the queue may proceed after every terminal.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TxOutcome<E> {
+    /// MSDUs aged before publication or retry. Bit zero names a single
+    /// MPDU; for an aggregate, bit i names its i-th returned subframe.
+    /// All owners return, including live subframes for re-formation.
+    /// No attempt owned by hardware is aborted and no rate sample is made.
+    Expired {
+        /// Positions of expired MSDUs in the returned payload.
+        msdus: u64,
+    },
     /// Lifecycle stopped the attempt before its plan ended; no transmission
     /// delivered it. ReturnedMpdu is Fresh if never published, otherwise Sent,
     /// retaining the original SN, PN and body. No rate sample.
@@ -356,7 +364,7 @@ impl<A, D> SingleOutcome<A, D> {
     pub const fn rate_sample(&self) -> Option<RateSample<'_, A>> {
         match self {
             Self::Ended(end) => end.rate_sample(),
-            Self::Withdrawn(_) | Self::Indeterminate(_) => None,
+            Self::Expired { .. } | Self::Withdrawn(_) | Self::Indeterminate(_) => None,
         }
     }
 

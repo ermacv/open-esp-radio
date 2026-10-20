@@ -459,9 +459,24 @@ impl<
                 role,
                 admission,
                 rate,
+                admitted_at,
                 work,
             } = attempt;
             let work = match work {
+                Work::Held { slot, .. }
+                    if self.core.msdu_expired(role, queue.category(), admitted_at) =>
+                {
+                    self.core.finish_attempt(
+                        hardware,
+                        queue,
+                        admission,
+                        slot,
+                        PublicationEnd::Expired { msdus: 1 },
+                        rate,
+                        sink,
+                    );
+                    continue;
+                }
                 Work::Held { slot, plan, single } => {
                     match self
                         .core
@@ -497,6 +512,7 @@ impl<
                 role,
                 admission,
                 rate,
+                admitted_at,
                 work,
             });
         }

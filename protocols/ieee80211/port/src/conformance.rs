@@ -14,6 +14,7 @@ pub mod edca;
 pub mod group_keys;
 /// Configuration permissions and opaque contexts through FIFO and disable.
 pub mod interface_commands;
+pub mod msdu_age;
 
 use crate::{IndeterminateCause, SingleEnd, SingleOutcome, TxOutcome, WithdrawCause};
 use oer_ieee80211_wire::qos::WmmAccessCategory;
@@ -44,6 +45,8 @@ pub enum ModelOnlyReason {
     CommandStall,
     /// A queue or its completion is held independently of real air.
     HeldContention,
+    /// Explicit age boundaries and held publications require virtual time.
+    MsduAge,
 }
 
 /// A case's physical execution requirements, independent of its fixture.

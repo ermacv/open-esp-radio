@@ -50,13 +50,15 @@ pub(super) async fn run_timed<F: Future>(
     let wakes = Arc::new(Wakes::default());
     let waker = Waker::from(wakes.clone());
     let mut future = core::pin::pin!(future);
+    let mut observed = clock.now();
     poll_fn(|cx| {
         wakes.parent.register(cx.waker());
         let before = wakes.count.load(Ordering::SeqCst);
-        let old = oer_time::Instant::from_micros(air.now_micros.get());
+        let old = observed;
         let now = clock.now();
         if now != old {
-            air.set_time(now);
+            observed = now;
+            air.clock_advanced();
             if let Some(probe) = probe
                 && let Some(deadline) = probe
                     .admitted
@@ -186,7 +188,7 @@ impl Exercise<'_> {
             admitted: owners,
             timing: Timing {
                 admitted_at: self.probe.admitted.get().unwrap(),
-                completed_at: oer_time::Instant::from_micros(self.air.now_micros.get()),
+                completed_at: oer_time::Instant::from_micros(self.air.monotonic_now().as_micros()),
             },
             events,
             retained,
@@ -241,7 +243,7 @@ impl PortBody<ModelBackend> for Exercise<'_> {
             );
             self.air.hold_group_commands(true);
             self.probe.admitted.set(Some(oer_time::Instant::from_micros(
-                self.air.now_micros.get(),
+                self.air.monotonic_now().as_micros(),
             )));
             match mutation {
                 Mutation::Install => phase.station().install_group_key(
@@ -395,7 +397,7 @@ impl Exercise<'_> {
             }
             assert_eq!(self.air.sent().len(), 1);
             self.probe.admitted.set(Some(oer_time::Instant::from_micros(
-                self.air.now_micros.get(),
+                self.air.monotonic_now().as_micros(),
             )));
             phase.access_point().remove_group_key(permission, key);
             for _ in 0..3 {
@@ -435,9 +437,9 @@ impl Exercise<'_> {
 
 pub(super) async fn exercise(
     case: ProgressCase,
-    clock: &VirtualClock,
+    clock: &Rc<VirtualClock>,
 ) -> ProgressTrace<Vec<Completion>, Vec<Owners>> {
-    let (backend, air) = backend();
+    let (backend, air) = backend_on(clock.clone());
     let trace = RefCell::new(None);
     let probe = Probe::default();
     let _port_end = run_timed(

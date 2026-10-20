@@ -20,7 +20,7 @@ pub const MAX_HARDWARE_ECW_EXPONENT: u8 = 10;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum EdcaParametersError {
     AifsnOutOfRange(u8),
-    MsduLifetimeOutOfRange(u16),
+    MsduLifetimeOutOfRange(oer_time::Duration),
     MinimumExponentOutOfRange(u8),
     MaximumExponentOutOfRange(u8),
     InvertedExponentRange { minimum: u8, maximum: u8 },
@@ -44,7 +44,7 @@ pub struct EdcaAccessPolicy {
     contention: EdcaContentionParameters,
     admission_control_mandatory: bool,
     txop_limit_units_32_us: u16,
-    msdu_lifetime_tu: u16,
+    msdu_lifetime: oer_time::Duration,
 }
 
 impl EdcaAccessPolicy {
@@ -52,20 +52,20 @@ impl EdcaAccessPolicy {
         contention: EdcaContentionParameters,
         admission_control_mandatory: bool,
         txop_limit_units_32_us: u16,
-        msdu_lifetime_tu: u16,
+        msdu_lifetime: oer_time::Duration,
     ) -> Self {
         Self {
             contention,
             admission_control_mandatory,
             txop_limit_units_32_us,
-            msdu_lifetime_tu,
+            msdu_lifetime,
         }
     }
 
     pub const fn from_edca(record: EdcaAcParameters) -> Result<Self, EdcaParametersError> {
-        if record.msdu_lifetime_tu > EdcaParameterSet::DEFAULT_MSDU_LIFETIME_TU {
+        if record.msdu_lifetime.as_micros() > EdcaParameterSet::DEFAULT_MSDU_LIFETIME.as_micros() {
             return Err(EdcaParametersError::MsduLifetimeOutOfRange(
-                record.msdu_lifetime_tu,
+                record.msdu_lifetime,
             ));
         }
         let parameters = record.wmm;
@@ -77,12 +77,12 @@ impl EdcaAccessPolicy {
             contention,
             parameters.admission_control_mandatory,
             parameters.txop_limit_units_32_us,
-            record.msdu_lifetime_tu,
+            record.msdu_lifetime,
         ))
     }
 
-    pub const fn msdu_lifetime_tu(self) -> u16 {
-        self.msdu_lifetime_tu
+    pub const fn msdu_lifetime(self) -> oer_time::Duration {
+        self.msdu_lifetime
     }
 
     pub const fn contention(self) -> EdcaContentionParameters {
@@ -163,7 +163,7 @@ impl EdcaBackoffState {
                 parameters,
                 false,
                 0,
-                EdcaParameterSet::DEFAULT_MSDU_LIFETIME_TU,
+                EdcaParameterSet::DEFAULT_MSDU_LIFETIME,
             ),
             contention: EdcaContention::new(
                 parameters.minimum_exponent,

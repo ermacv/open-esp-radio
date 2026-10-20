@@ -119,7 +119,7 @@ pub const fn parameters(role: VifRole, updated: bool) -> EdcaParameterSet {
         (VifRole::AccessPoint, false) => (7, 2, 3, 47, 200),
         (VifRole::AccessPoint, true) => (5, 1, 2, 350, 100),
     };
-    EdcaParameterSet::new(
+    EdcaParameterSet::from_tu(
         WmmParameterSet::new(
             0,
             false,

@@ -1021,7 +1021,7 @@ fn each_queue_draw_uses_its_head_vif_and_retains_the_complete_record() {
     use oer_ieee80211_port::EdcaParameterSet;
     use oer_ieee80211_wire::extensions::wmm::{WmmAcParameters, WmmParameterSet};
     let table = |aifsn, min, max, txop, lifetime| {
-        EdcaParameterSet::new(
+        EdcaParameterSet::from_tu(
             WmmParameterSet::new(
                 0,
                 false,
@@ -1060,7 +1060,10 @@ fn each_queue_draw_uses_its_head_vif_and_retains_the_complete_record() {
         let record = policy.access_policy(VifRole::AccessPoint, queue);
         assert_eq!(record.contention().aifsn(), 7);
         assert_eq!(record.txop_limit_units_32_us(), 350);
-        assert_eq!(record.msdu_lifetime_tu(), 100);
+        assert_eq!(
+            record.msdu_lifetime(),
+            oer_time::Duration::from_micros(100 * 1024)
+        );
         policy.record_retry_failure(VifRole::AccessPoint, queue);
         assert_eq!(
             policy.select_backoff(VifRole::AccessPoint, queue, u32::MAX),

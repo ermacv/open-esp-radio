@@ -167,6 +167,7 @@ fn event_end_returns_every_ordinary_terminal_or_retains_every_quarantined_owner(
                     IndividualAddress::new(STATION).unwrap(),
                     IndividualAddress::new(ACCESS_POINT).unwrap(),
                 ],
+                Rc::new(oer_time_virtual::VirtualClock::<8>::new()),
             );
             let drops = Rc::new(Cell::new(0));
             let ended = block_on(run_port(

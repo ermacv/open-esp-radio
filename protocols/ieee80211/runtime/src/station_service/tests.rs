@@ -347,7 +347,7 @@ enum ExpectedStreamEnd {
 
 struct World<'b> {
     air: Rc<ModelAir>,
-    clock: VirtualClock,
+    clock: std::rc::Rc<VirtualClock>,
     outputs: RefCell<Vec<ObservedOutput>>,
     completions: RefCell<Vec<FrameRates>>,
     refuse_rate: Cell<bool>,
@@ -861,7 +861,7 @@ where
                 output: &mut output,
             };
             let script = self.script;
-            let (completed, ()) = join(service.run(owner, &mut io, &world.clock), async move {
+            let (completed, ()) = join(service.run(owner, &mut io, &*world.clock), async move {
                 script(world).await;
                 world.command(ServiceCommand::Stop).await;
             })
@@ -883,7 +883,7 @@ where
                 ));
                 assert!(notice.is_none());
                 world.outputs.borrow_mut().clear();
-                let (completed, ()) = join(service.run(owner, &mut io, &world.clock), async {
+                let (completed, ()) = join(service.run(owner, &mut io, &*world.clock), async {
                     let mut seen = world.air.sent().len();
                     world.associate(&mut seen, protected).await;
                     if protected {
@@ -1108,12 +1108,14 @@ fn run_case_on_this_thread<S, const GROUPS: usize>(
 where
     S: for<'w, 'b, 'id> FnOnce(&'w Application<'w, 'b, 'id>) -> Script<'w> + Send,
 {
+    let clock = std::rc::Rc::new(VirtualClock::<8>::new());
     let (backend, air) = ModelBackend::<ModelCaps24, ServiceContexts>::new(
         channel6(),
         [
             IndividualAddress::new(LOCAL).unwrap(),
             IndividualAddress::new(ACCESS_POINT_ADDRESS).unwrap(),
         ],
+        clock.clone(),
     );
     let mut transmit = MsduQueue::<TxMsdu, 2>::new();
     let mut receive = MsduQueue::<EthernetFrame, 2>::new();
@@ -1121,7 +1123,7 @@ where
     let (receive, delivered) = receive.split();
     let world = World {
         air,
-        clock: VirtualClock::new(),
+        clock,
         outputs: RefCell::new(Vec::new()),
         completions: RefCell::new(Vec::new()),
         refuse_rate: Cell::new(false),

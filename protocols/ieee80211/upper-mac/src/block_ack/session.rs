@@ -288,6 +288,21 @@ impl TxBlockAckSession {
         true
     }
 
+    /// Retire the expired originator-window head under a live agreement.
+    /// Return the next sequence for the core's BlockAckReq; a non-head
+    /// expiry and an inactive agreement never move the window.
+    pub fn expired_head(&mut self, sequence: SequenceNumber) -> Option<SequenceNumber> {
+        let TxBlockAckPhase::Operational(agreement) = &mut self.phase else {
+            return None;
+        };
+        if agreement.starting_sequence != sequence {
+            return None;
+        }
+        let next = sequence.wrapping_add(1);
+        agreement.starting_sequence = next;
+        Some(next)
+    }
+
     pub fn stop(&mut self) {
         self.phase = TxBlockAckPhase::Idle;
         self.generation = next_generation(self.generation);

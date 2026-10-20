@@ -38,6 +38,7 @@ impl Ieee80211Capabilities for Caps {
 }
 struct Buffer;
 impl TxBufferMemory for Buffer {
+    fn renew_msdu(&mut self) {}
     fn bytes_mut(&mut self) -> &mut [u8] {
         &mut []
     }

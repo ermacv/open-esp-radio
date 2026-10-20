@@ -1371,14 +1371,17 @@ pub enum ReturnedMpdu<B, S> {
     Sent(S),
 }
 
-impl<B, S> ReturnedMpdu<B, S> {
+impl<B: TxBufferMemory, S> ReturnedMpdu<B, S> {
     /// Release the old MPDU through its owner's renewal policy. A fresh
-    /// allocation needs no renewal. The operation consumes either owner once.
+    /// allocation releases any previous admission age as well. The
+    /// operation consumes either owner once.
     pub fn into_fresh(self, renew: impl FnOnce(S) -> B) -> B {
-        match self {
+        let mut buffer = match self {
             Self::Fresh(buffer) => buffer,
             Self::Sent(mpdu) => renew(mpdu),
-        }
+        };
+        buffer.renew_msdu();
+        buffer
     }
 }
 
@@ -1395,6 +1398,9 @@ impl<B, S> ReturnedMpdu<B, S> {
 /// - it is a handle on pinned memory: moving the token never moves the
 ///   buffer.
 pub trait TxBufferMemory {
+    /// Discard the previous MSDU's admission state before reusing its
+    /// allocation for a new MSDU. Retry and re-formation never call this.
+    fn renew_msdu(&mut self);
     /// The buffer's octets, as long as its class holds.
     fn bytes_mut(&mut self) -> &mut [u8];
 }

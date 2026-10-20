@@ -16,6 +16,7 @@ fn backend(channel: Channel) -> oer_radio_port::Installed<ModelBackend> {
             IndividualAddress::new([2, 0, 0, 0, 0, 1]).unwrap(),
             IndividualAddress::new([2, 0, 0, 0, 0, 2]).unwrap(),
         ],
+        std::rc::Rc::new(oer_time_virtual::VirtualClock::<8>::new()),
     )
     .0
 }

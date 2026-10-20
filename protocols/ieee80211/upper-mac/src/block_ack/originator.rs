@@ -353,6 +353,24 @@ impl<const TIDS: usize> TxBlockAckOriginator<TIDS> {
         active
     }
 
+    /// Consume a backend expiry report for the active window head and
+    /// produce the core-owned BAR frame. Backends report expiry only.
+    pub fn expired_head(
+        &mut self,
+        tid: u8,
+        sequence: SequenceNumber,
+        receiver: [u8; 6],
+        transmitter: [u8; 6],
+    ) -> Option<[u8; oer_ieee80211_wire::block_ack::BLOCK_ACK_REQUEST_LEN]> {
+        let next = self.agreement_mut(tid)?.session.expired_head(sequence)?;
+        Some(oer_ieee80211_wire::block_ack::encode_block_ack_request(
+            receiver,
+            transmitter,
+            tid,
+            next,
+        ))
+    }
+
     pub fn operational(&self, tid: u8) -> Option<OperationalTxBlockAck> {
         self.agreement(tid)?.session.operational()
     }

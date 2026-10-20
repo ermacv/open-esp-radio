@@ -165,6 +165,7 @@ impl Harness for ModelConfigurationHarness {
                 IndividualAddress::new(STATION).unwrap(),
                 IndividualAddress::new(ACCESS_POINT).unwrap(),
             ],
+            std::rc::Rc::new(oer_time_virtual::VirtualClock::<8>::new()),
         );
         let trace = Rc::new(RefCell::new(None));
         let _port_end = run_port(
@@ -288,6 +289,7 @@ enum Release {
     Watchdog,
 }
 struct ConfigureBarrier {
+    clock: Rc<oer_time_virtual::VirtualClock>,
     release: Release,
     ap_first: bool,
 }
@@ -351,9 +353,8 @@ impl Work for ConfigureBarrier {
             "the published head and queued successor precede Configured"
         );
         if matches!(self.release, Release::Watchdog) {
-            air.set_time(oer_time::Instant::from_micros(
-                MODEL_PUBLICATION_BOUND.as_micros(),
-            ));
+            self.clock.advance(MODEL_PUBLICATION_BOUND).unwrap();
+            air.clock_advanced();
         } else {
             air.hold_completion(WmmAccessCategory::BestEffort, false);
         }
@@ -408,9 +409,14 @@ impl Work for ConfigureBarrier {
 fn configure_waits_for_own_publication_preserves_ac_order_and_holds_later_fifo_commands() {
     for release in [Release::Ack, Release::Retry, Release::Watchdog] {
         for ap_first in [false, true] {
+            let clock = Rc::new(oer_time_virtual::VirtualClock::<8>::new());
             let _port_end = block_on(run_port(
-                backend().0,
-                Body(ConfigureBarrier { release, ap_first }),
+                backend_on(clock.clone()).0,
+                Body(ConfigureBarrier {
+                    release,
+                    ap_first,
+                    clock,
+                }),
             ));
         }
     }

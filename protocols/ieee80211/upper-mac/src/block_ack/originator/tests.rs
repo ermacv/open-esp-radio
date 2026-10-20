@@ -310,3 +310,35 @@ fn response_routing_never_panics() {
 fn response_routing_never_panics_full() {
     responses(oer_ieee80211_wire::fuzz::FULL);
 }
+
+#[test]
+fn expired_window_head_produces_a_core_bar_and_advances_across_sequence_wrap() {
+    let peer = [2, 0, 0, 0, 0, 2];
+    let local = [2, 0, 0, 0, 0, 1];
+    let mut originator = originator(32, 0);
+    assert_eq!(
+        originator.expired_head(0, sequence(4095), peer, local),
+        None
+    );
+    let request = originator.begin(0, sequence(4095), Instant::EPOCH).unwrap();
+    originator
+        .on_response_action(response(request.dialog_token, 0, 0, 32))
+        .unwrap();
+    // An expired non-head does not move an active window or request a BAR.
+    assert_eq!(originator.expired_head(0, sequence(0), peer, local), None);
+    let frame = originator
+        .expired_head(0, sequence(4095), peer, local)
+        .expect("an active expired head needs a BAR");
+    assert_eq!(
+        frame,
+        oer_ieee80211_wire::block_ack::encode_block_ack_request(peer, local, 0, sequence(0))
+    );
+    assert_eq!(
+        originator.operational(0).unwrap().starting_sequence,
+        sequence(0)
+    );
+    assert_eq!(
+        originator.expired_head(0, sequence(4095), peer, local),
+        None
+    );
+}

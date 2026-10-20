@@ -41,6 +41,8 @@ use crate::station_tsf::StationTsfWrite;
 use crate::tx::WifiTxProgress;
 use oer_ieee80211_port::TSF_DRIFT_PPM;
 
+mod msdu_age;
+
 const STATION: [u8; 6] = [0x02, 0x03, 0x04, 0x05, 0x06, 0x07];
 const ACCESS_POINT: [u8; 6] = [0x02, 0x11, 0x12, 0x13, 0x14, 0x15];
 const BSSID: [u8; 6] = [0x20, 0x21, 0x22, 0x23, 0x24, 0x25];
@@ -1160,6 +1162,7 @@ fn values(frame: &[u8], no_ack: bool) -> Request {
     Request {
         category: WmmAccessCategory::BestEffort,
         values: MpduValues {
+            admitted_at: at(0),
             role: VifRole::Station,
             slot: queued_free_slot(slot),
             len: frame.len(),
@@ -2454,7 +2457,12 @@ fn a_closed_gate_blocks_the_queues_and_holds_the_attempt_until_it_opens() {
             Ok(())
         );
         assert_eq!(hardware.publications(), 0);
-        assert_eq!(core.next_deadline(), None);
+        assert_eq!(
+            core.next_deadline(),
+            Some(at(
+                oer_ieee80211_port::EdcaParameterSet::DEFAULT_MSDU_LIFETIME.as_micros()
+            ))
+        );
         let mut core = core
             .open_gate(&mut hardware)
             .map_err(|refused| refused.fault)
@@ -2609,7 +2617,12 @@ fn a_closed_gate_holds_every_queue_and_opening_it_publishes_them() {
             submit(&mut core, &mut hardware, values_on(category)).unwrap();
         }
         assert_eq!(hardware.publications(), 0);
-        assert_eq!(core.next_deadline(), None);
+        assert_eq!(
+            core.next_deadline(),
+            Some(at(
+                oer_ieee80211_port::EdcaParameterSet::DEFAULT_MSDU_LIFETIME.as_micros()
+            ))
+        );
 
         let core = core
             .open_gate(&mut hardware)
@@ -3018,7 +3031,7 @@ fn aggregate_of(source: &'static Backings, count: usize, len: usize) -> Aggregat
         .ok()
         .expect("an idle aggregate owner");
     for index in 0..count {
-        let mpdu = buffer.push_mpdu(len).expect("a backing");
+        let mpdu = buffer.push_mpdu(len, at(0)).expect("a backing");
         mpdu[..26].copy_from_slice(&data_frame(BSSID));
         mpdu[22..24].copy_from_slice(&((100 + index as u16) << 4).to_le_bytes());
     }
@@ -3322,7 +3335,7 @@ fn aggregates_outside_the_limits_are_refused_with_their_subframes() {
         );
         let mut group = aggregate_of(source, 0, 26);
         group
-            .push_mpdu(26)
+            .push_mpdu(26, at(0))
             .unwrap()
             .copy_from_slice(&data_frame([0xff; 6]));
         assert_eq!(
@@ -3351,14 +3364,14 @@ fn aggregates_outside_the_limits_are_refused_with_their_subframes() {
         // cannot hold with their metadata, MIC and FCS.
         let mut buffer = aggregate_of(source, 0, 26);
         for _ in 0..SUBFRAMES {
-            assert!(buffer.push_mpdu(26).is_some());
+            assert!(buffer.push_mpdu(26, at(0)).is_some());
         }
-        assert!(buffer.push_mpdu(26).is_none());
+        assert!(buffer.push_mpdu(26, at(0)).is_none());
         assert_eq!(buffer.subframes(), SUBFRAMES);
         drop(buffer.into_owner());
         let mut buffer = aggregate_of(source, 0, 26);
-        assert!(buffer.push_mpdu(BACKING - 20).is_some());
-        assert!(buffer.push_mpdu(BACKING - 19).is_none());
+        assert!(buffer.push_mpdu(BACKING - 20, at(0)).is_some());
+        assert!(buffer.push_mpdu(BACKING - 19, at(0)).is_none());
         drop(buffer);
 
         // Refused and dropped aggregates published nothing and kept no
@@ -3717,7 +3730,7 @@ fn key_right_is_retained_by_an_aggregate_through_completion_or_quarantine() {
             let source = backings();
             let mut buffer = aggregate_of(source, 0, 26);
             for _ in 0..2 {
-                let frame = buffer.push_mpdu(26).unwrap();
+                let frame = buffer.push_mpdu(26, at(0)).unwrap();
                 frame.copy_from_slice(&data_frame(BSSID));
                 let fc = oer_ieee80211_wire::frame::FrameControl::new(u16::from_le_bytes([
                     frame[0], frame[1],
@@ -3879,6 +3892,7 @@ fn an_unpublished_right_returned_after_poison_stays_in_custody() {
 #[test]
 fn checked_mpdu_values_retain_refused_slots_and_prevent_unchecked_lengths() {
     let parameters = MpduParameters {
+        admitted_at: at(0),
         role: VifRole::Station,
         len: 26,
         no_ack: false,
@@ -4301,7 +4315,7 @@ fn the_core_draws_from_the_publishing_vif_and_keeps_each_complete_record() {
         core.configure_checked_vif(&mut hardware, access_point())
             .unwrap();
         let table = |aifsn, min, max, txop, lifetime| {
-            EdcaParameterSet::new(
+            EdcaParameterSet::from_tu(
                 WmmParameterSet::new(
                     0,
                     false,
@@ -4347,7 +4361,7 @@ fn the_core_draws_from_the_publishing_vif_and_keeps_each_complete_record() {
                 applied.txop_limit_units_32_us(),
                 record.wmm.txop_limit_units_32_us
             );
-            assert_eq!(applied.msdu_lifetime_tu(), record.msdu_lifetime_tu);
+            assert_eq!(applied.msdu_lifetime(), record.msdu_lifetime);
             complete(&mut core, &mut hardware, 0);
         }
     });

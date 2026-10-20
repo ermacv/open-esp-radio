@@ -352,6 +352,8 @@ pub struct DataCounters {
     pub preparation_refused: u32,
     /// Current-link MSDUs retired after an unknown hardware outcome.
     pub indeterminate: u32,
+    /// Current-link MSDUs retired after their lifetime expired.
+    pub expired: u32,
     /// Current-link MSDUs retired after contention budget exhaustion.
     pub contention_limited: u32,
     /// MPDUs a full queue could not hold: their tokens came back, their
@@ -414,6 +416,7 @@ pub struct StaData<'id, D: StaDataTokens, K, const CAP: usize = 8> {
     left_behind: Counter,
     preparation_refused: Counter,
     indeterminate: Counter,
+    expired: Counter,
     contention_limited: Counter,
 }
 
@@ -429,6 +432,7 @@ pub struct RetiredData<'id, D: StaDataTokens, K, const CAP: usize = 8> {
     left_behind: Counter,
     preparation_refused: Counter,
     indeterminate: Counter,
+    expired: Counter,
     contention_limited: Counter,
 }
 
@@ -439,6 +443,7 @@ impl<'id, D: StaDataTokens, K: oer_ieee80211_port::Ieee80211Capabilities, const 
         DataCounters {
             preparation_refused: self.preparation_refused.get(),
             indeterminate: self.indeterminate.get(),
+            expired: self.expired.get(),
             contention_limited: self.contention_limited.get(),
             overflows: self.overflows.get(),
             lost_tokens: self.tickets.lost().combined(self.buffers.lost()).get(),
@@ -463,6 +468,7 @@ impl<'id, D: StaDataTokens, K: oer_ieee80211_port::Ieee80211Capabilities, const 
             left_behind,
             preparation_refused,
             indeterminate,
+            expired,
             contention_limited,
         } = self;
         StaData {
@@ -475,6 +481,7 @@ impl<'id, D: StaDataTokens, K: oer_ieee80211_port::Ieee80211Capabilities, const 
             left_behind,
             preparation_refused,
             indeterminate,
+            expired,
             contention_limited,
             link: None,
         }
@@ -498,6 +505,7 @@ impl<'id, D: StaDataTokens, K: oer_ieee80211_port::Ieee80211Capabilities, const 
             left_behind,
             preparation_refused,
             indeterminate,
+            expired,
             contention_limited,
             link: _,
         } = self;
@@ -511,6 +519,7 @@ impl<'id, D: StaDataTokens, K: oer_ieee80211_port::Ieee80211Capabilities, const 
             left_behind,
             preparation_refused,
             indeterminate,
+            expired,
             contention_limited,
         }
     }
@@ -543,6 +552,7 @@ impl<'id, D: StaDataTokens, K: oer_ieee80211_port::Ieee80211Capabilities, const 
             link: None,
             preparation_refused: Counter::ZERO,
             indeterminate: Counter::ZERO,
+            expired: Counter::ZERO,
             contention_limited: Counter::ZERO,
             overflows: Counter::ZERO,
             left_behind: Counter::ZERO,
@@ -554,6 +564,7 @@ impl<'id, D: StaDataTokens, K: oer_ieee80211_port::Ieee80211Capabilities, const 
         DataCounters {
             preparation_refused: self.preparation_refused.get(),
             indeterminate: self.indeterminate.get(),
+            expired: self.expired.get(),
             contention_limited: self.contention_limited.get(),
             overflows: self.overflows.get(),
             lost_tokens: self.tickets.lost().combined(self.buffers.lost()).get(),
@@ -622,6 +633,9 @@ impl<'id, D: StaDataTokens, K: oer_ieee80211_port::Ieee80211Capabilities, const 
                     return;
                 }
                 match completion {
+                    TxOutcome::Expired { .. } => {
+                        self.expired.increment();
+                    }
                     TxOutcome::Indeterminate(_) => {
                         self.indeterminate.increment();
                     }

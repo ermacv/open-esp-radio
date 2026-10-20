@@ -226,7 +226,10 @@ bounds) live in the code that applies them.
   defaults to 500 TU and is a typed duration; TU conversion is at the record
   boundary. Age is checked before publication and every retry or re-formation;
   an attempt owned by hardware is never aborted for age. Expired MSDUs have
-  a separate terminal outcome and counter.
+  a separate terminal outcome and counter. The model takes the image's
+  monotonic `oer_time::Clock`. Its radio clock is an affine `ClockRelation`
+  with zero drift and a nonzero offset sampled at construction; `now()`
+  returns that projection. Only the clock's owner advances model time.
 - **Static TX profile.** Hardware backends consume a generic `BackendTxProfile`
   from port without dynamic dispatch. Algorithms, retry/BA/reorder state and
   tables belong to the cores and `ieee80211-policy`; the image/runtime composes

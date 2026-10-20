@@ -17,6 +17,51 @@ use oer_ieee80211_port::{
 };
 use oer_ieee80211_wire::{phy::LegacyRate, sequence::SequenceNumber};
 
+#[test]
+fn age_verification_rejects_reset_age_lost_owners_and_backend_bars() {
+    use conformance::msdu_age::{self, Case, End, Trace, Violation};
+    let good = || Trace {
+        ends: &[End::Expired(1)][..],
+        publications: 0,
+        expired_msdus: 1,
+        admitted: [oer_ieee80211_port::Ieee80211Instant::from_micros(99); 2],
+        returned: [oer_ieee80211_port::Ieee80211Instant::from_micros(99); 2],
+        owners: [1, 2, 2],
+        returned_owners: [1, 2, 2],
+        backend_bars: 0,
+        core_bar: None,
+    };
+    assert_eq!(msdu_age::verify(Case::BeforePublication, good()), Ok(()));
+    let mut trace = good();
+    trace.returned[0] = oer_ieee80211_port::Ieee80211Instant::from_micros(100);
+    assert_eq!(
+        msdu_age::verify(Case::BeforePublication, trace),
+        Err(Violation::Age)
+    );
+    let mut trace = good();
+    trace.returned_owners[1] = 3;
+    assert_eq!(
+        msdu_age::verify(Case::BeforePublication, trace),
+        Err(Violation::Owners)
+    );
+    let mut trace = good();
+    trace.backend_bars = 1;
+    assert_eq!(
+        msdu_age::verify(Case::BeforePublication, trace),
+        Err(Violation::Publication)
+    );
+    let trace = Trace {
+        ends: &[End::Delivered, End::Expired(1), End::Expired(1)][..],
+        publications: 1,
+        expired_msdus: 2,
+        ..good()
+    };
+    assert_eq!(
+        msdu_age::verify(Case::Reformation, trace),
+        Err(Violation::Bar)
+    );
+}
+
 fn ready<T>(future: impl Future<Output = T>) -> T {
     let mut future = pin!(future);
     match future
