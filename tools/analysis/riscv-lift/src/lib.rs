@@ -52,6 +52,13 @@ impl FunctionDecoder for RiscvDecoder {
         UnsupportedFlow::Unknown
     }
     fn decode(&self, bytes: &[u8]) -> Option<DecodedOp> {
+        if bytes.get(..4) == Some(&[0x0f, 0x10, 0, 0]) {
+            return Some(DecodedOp {
+                length: 4,
+                text: "fence.i".into(),
+                flow: InstructionFlow::Next,
+            });
+        }
         let (inst, width) = match decode_instruction(bytes)? {
             (Instruction::Base(inst), width) => (inst, width),
             (Instruction::Extension(extension), width) => {
@@ -352,8 +359,11 @@ impl FunctionDecoder for StructuralRiscvDecoder {
 }
 
 impl FunctionSemantics for StructuralRiscvDecoder {
+    fn scratch_write(&self, bytes: &[u8]) -> Option<Operand> {
+        RiscvDecoder.scratch_write(bytes)
+    }
     fn semantic_identity(&self) -> &'static str {
-        "rv32/conservative-proof-1"
+        "rv32/conservative-proof-2"
     }
     fn branch(&self, bytes: &[u8]) -> Option<(BranchTest, Operand, Operand)> {
         RiscvDecoder.branch(bytes)

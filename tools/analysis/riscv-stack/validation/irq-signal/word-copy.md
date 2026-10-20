@@ -1,5 +1,11 @@
 # One-word constructor copy: conditional certificate and remaining bound
 
+This is the #207 snapshot. On main `73042ea1`, the selected call moved to
+`0x5006c62a`. The [checked stack-context follow-up](stack-context.md) proves
+the machine-installed root pointers and adds numerical application/cache
+checks. The real-call discharge still has the explicitly listed CFG and
+IRQ-context gaps; `DestinationBounds` remains present.
+
 Base: main **`ab2d9f96`**, including #199 through #205. This follow-up adds a bounded common
 word domain and an independently checked normal-return word postcondition.
 The real call has a **conditional** four-byte certificate through the existing

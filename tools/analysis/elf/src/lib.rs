@@ -46,6 +46,60 @@ fn parse_error(error: object::Error) -> Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
+/// The linked extent of storage. Placement and stack consumers share this
+/// result; an extent says nothing about the current value of a pointer.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct StorageBounds {
+    pub start: u64,
+    pub end: u64,
+    pub capacity: u64,
+}
+
+impl StorageBounds {
+    pub fn new(start: u64, end: u64) -> Result<Self> {
+        let capacity = end
+            .checked_sub(start)
+            .ok_or_else(|| Error::new(format!("reversed storage {start:#x}..{end:#x}")))?;
+        Ok(Self {
+            start,
+            end,
+            capacity,
+        })
+    }
+
+    pub fn range(file: &Elf<'_>, bottom: &str, top: &str) -> Result<Option<Self>> {
+        match (file.address(bottom), file.address(top)) {
+            (None, None) => Ok(None),
+            (Some(start), Some(end)) => Self::new(start, end).map(Some),
+            _ => Err(Error::new(format!(
+                "the image links only one of `{bottom}` and `{top}`"
+            ))),
+        }
+    }
+
+    /// Empty placed sections are valid; a stack budget needs nonempty storage.
+    pub fn nonempty(self) -> Result<Self> {
+        if self.capacity == 0 {
+            return Err(Error::new(format!(
+                "empty storage {:#x}..{:#x}",
+                self.start, self.end
+            )));
+        }
+        Ok(self)
+    }
+
+    pub fn symbol(file: &Elf<'_>, name: &str) -> Result<Option<Self>> {
+        let Some(symbol) = file.symbol(name) else {
+            return Ok(None);
+        };
+        let end = symbol
+            .address
+            .checked_add(symbol.size)
+            .ok_or_else(|| Error::new(format!("storage `{name}` overflows")))?;
+        Self::new(symbol.address, end).map(Some)
+    }
+}
+
 /// What a symbol names.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SymbolKind {
@@ -339,6 +393,7 @@ pub struct Code<'data> {
 /// One parsed ELF file.
 pub struct Elf<'data> {
     file: object::File<'data>,
+    capture_id: u64,
 }
 
 /// Whether `bytes` are a static archive or an ELF file.
@@ -381,7 +436,15 @@ impl<'data> Elf<'data> {
         if file.format() != object::BinaryFormat::Elf {
             return Err(Error::new("not an ELF file"));
         }
-        Ok(Self { file })
+        static NEXT_CAPTURE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+        let capture_id = NEXT_CAPTURE
+            .fetch_update(
+                std::sync::atomic::Ordering::Relaxed,
+                std::sync::atomic::Ordering::Relaxed,
+                |n| n.checked_add(1),
+            )
+            .map_err(|_| Error::new("ELF capture identities exhausted"))?;
+        Ok(Self { file, capture_id })
     }
 
     /// Parse a static little-endian RV32 executable.
@@ -421,6 +484,12 @@ impl<'data> Elf<'data> {
     /// whose name is unreadable are skipped.
     pub fn symbols(&self) -> impl Iterator<Item = Symbol<'data>> + '_ {
         self.file.symbols().filter_map(symbol)
+    }
+
+    /// Process-local identity of this immutable parsed capture. A newly
+    /// parsed image, including identical bytes, requires fresh proof context.
+    pub fn capture_id(&self) -> u64 {
+        self.capture_id
     }
 
     /// The symbol at `index` of the static symbol table.

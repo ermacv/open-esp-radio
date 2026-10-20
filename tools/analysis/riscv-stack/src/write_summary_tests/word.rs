@@ -8,6 +8,616 @@ const QUERY: WordQuery = WordQuery {
     offset: 0,
 };
 
+use oer_analysis_riscv_analysis::stack_context::*;
+
+fn numerical_root<'m>(top: u32, root: u64, memory: &'m WorkingMemory) -> StackContext<'m> {
+    let code = [
+        (top.wrapping_add(0x800) & 0xfffff000) | (2 << 7) | 0x37,
+        addi(2, 2, (top << 20) as i32 >> 20),
+        jal(1, 0x1000 - root as i32 - 8),
+        RET,
+    ];
+    let records = facts(&code, root, memory);
+    call_stack_context(
+        &index(&records, memory),
+        root,
+        root + 8,
+        None,
+        memory,
+        &mut || Ok(()),
+    )
+    .unwrap()
+    .unwrap()
+}
+
+fn bounded_copy<'m>(memory: &'m WorkingMemory) -> (Vec<u32>, FunctionWrites<'m>) {
+    let body_code = [
+        (12 << 20) | (10 << 15) | (13 << 7) | 0x33,
+        lw(5, 11, 0),
+        store(5, 10, 0, 2),
+        addi(10, 10, 4),
+        addi(11, 11, 4),
+        branch(10, 13, -16, 6),
+        RET,
+    ];
+    let mut code = caller_code();
+    code[5] = addi(12, 0, 68);
+    code[7] = lw(6, 2, 60); // destination + 44
+    let records = facts(&code, 0x1000, memory);
+    let generic = summary(&facts(&body_code, 0x3000, memory), 0x3000, memory);
+    let tail_records = facts(&[jal(0, 0x1000)], 0x2000, memory);
+    let generic_tail = summary_with_callees(&tail_records, 0x2000, &[&generic], memory);
+    let context = call_context(
+        &index(&records, memory),
+        0x1000,
+        0x1018,
+        ABI,
+        &generic_tail,
+        memory,
+        &mut || Ok(()),
+    )
+    .unwrap()
+    .unwrap();
+    let body = specialized_query(
+        &body_code,
+        &context,
+        WordQuery {
+            offset: 44,
+            ..QUERY
+        },
+        memory,
+        &mut || Ok(()),
+    )
+    .unwrap();
+    let tail = summary_with_callees(&tail_records, 0x2000, &[&body], memory);
+    (code, tail)
+}
+
+fn facts_in_context<'m>(
+    code: &[u32],
+    calls: &StackCalls<'_>,
+    context: Option<&StackContext<'_>>,
+    memory: &'m WorkingMemory,
+) -> RecordBuffer<'m> {
+    facts_in_capture(code, calls, context, memory, &NoMemory)
+}
+
+fn facts_in_capture<'m>(
+    code: &[u32],
+    calls: &StackCalls<'_>,
+    context: Option<&StackContext<'_>>,
+    memory: &'m WorkingMemory,
+    image: &dyn ImageMemory,
+) -> RecordBuffer<'m> {
+    let bytes: Vec<_> = code.iter().flat_map(|w| w.to_le_bytes()).collect();
+    let mut saved = Saved(RecordBuffer::new(memory));
+    research_with_options(
+        FunctionInput {
+            image: Some(image),
+            section: 1,
+            extent: CodeRange {
+                start: 0x1000,
+                length: bytes.len() as u64,
+            },
+            bytes: &bytes,
+            relocations: &PreparedReferences::empty(),
+            data_ranges: &[],
+            jumps: &[],
+            returns: &NoReturns,
+            call_behavior: &UnknownCallBehavior,
+        },
+        &RiscvDecoder,
+        memory,
+        &mut || Ok(()),
+        &mut saved,
+        ResearchOptions {
+            abi: ABI,
+            symbolic_spills: true,
+            stack_calls: Some(calls),
+            stack_context: context,
+        },
+    )
+    .unwrap();
+    saved.0
+}
+
+fn is_call_word(records: &[FunctionRecord], memory: &WorkingMemory) -> bool {
+    let AbstractValue::Expression { id } = loaded(records) else {
+        return false;
+    };
+    matches!(
+        index(records, memory)
+            .expression(*id, &mut || Ok(()))
+            .unwrap(),
+        Some(Expression::CallWord { .. })
+    )
+}
+
+#[test]
+fn checked_stack_bounds_discharge_the_word_premise_and_require_a_live_context() {
+    let memory = WorkingMemory::new(64 * 1024 * 1024).unwrap();
+    let stack = numerical_root(0x50040000, 0x800, &memory);
+    assert_eq!(stack.owner(), 0x1000);
+    assert_eq!(stack.interval(), (0x50040000, 0x50040000));
+    assert_eq!(stack.origins()[0].site, 0x808);
+    let (code, tail) = bounded_copy(&memory);
+    let caller = facts(&code, 0x1000, &memory);
+    let idx = index(&caller, &memory);
+    let misaligned = numerical_root(0x50040001, 0x900, &memory);
+    assert_eq!(
+        call_word_with_stack(
+            &idx,
+            0x1000,
+            0x1018,
+            ABI,
+            &tail,
+            Some(&misaligned),
+            &memory,
+            &mut || Ok(())
+        )
+        .unwrap()
+        .unwrap_err(),
+        WordBarrier::Alignment
+    );
+    assert!(
+        call_word_with_stack(
+            &idx,
+            0x1000,
+            0x1018,
+            ABI,
+            &tail,
+            Some(&stack),
+            &memory,
+            &mut || Ok(())
+        )
+        .unwrap()
+        .is_ok()
+    );
+    assert_eq!(
+        call_word(&idx, 0x1000, 0x1018, ABI, &tail, &memory, &mut || Ok(()))
+            .unwrap()
+            .unwrap_err(),
+        WordBarrier::DestinationBounds
+    );
+    let calls = stack_calls_with_stack(
+        &idx,
+        0x1000,
+        ABI,
+        &[&tail],
+        Some(&stack),
+        &memory,
+        &mut || Ok(()),
+    )
+    .unwrap();
+    assert!(is_call_word(
+        &facts_in_context(&code, &calls, Some(&stack), &memory),
+        &memory
+    ));
+    assert!(!is_call_word(
+        &facts_in_context(&code, &calls, None, &memory),
+        &memory
+    ));
+    // A newly checked startup, even at the same addresses, is a new scope.
+    let current = numerical_root(0x50050000, 0x800, &memory);
+    assert!(!is_call_word(
+        &facts_in_context(&code, &calls, Some(&current), &memory),
+        &memory
+    ));
+    struct FreshImage;
+    impl ImageMemory for FreshImage {
+        fn capture_id(&self) -> Option<u64> {
+            Some(2)
+        }
+        fn read_constant(&self, _: u32, _: &mut [u8], _: &mut dyn RunControl) -> Result<bool> {
+            Ok(false)
+        }
+    }
+    // Even passing the old context object explicitly cannot cross an image
+    // capture boundary. Its ancestor setup may have changed in the new ELF.
+    assert!(!is_call_word(
+        &facts_in_capture(&code, &calls, Some(&stack), &memory, &FreshImage),
+        &memory
+    ));
+    // Changed local bytes cannot reuse the old all-incoming-path evidence.
+    let mut changed = code.clone();
+    changed[0] = addi(2, 2, -48);
+    changed[9] = addi(2, 2, 48);
+    assert!(!is_call_word(
+        &facts_in_context(&changed, &calls, Some(&stack), &memory),
+        &memory
+    ));
+    changed = code.clone();
+    changed[5] = addi(12, 0, 64);
+    assert!(!is_call_word(
+        &facts_in_context(&changed, &calls, Some(&stack), &memory),
+        &memory
+    ));
+}
+
+#[test]
+fn every_stack_context_and_every_incoming_sp_participates_in_bounds() {
+    let memory = WorkingMemory::new(64 * 1024 * 1024).unwrap();
+    let low = numerical_root(0x4000, 0x800, &memory);
+    let high = numerical_root(0x50040000, 0x900, &memory);
+    let merged = merge_stack_contexts(&[Some(&low), Some(&high)], &memory, &mut || Ok(()))
+        .unwrap()
+        .unwrap();
+    assert_eq!(merged.interval(), (0x4000, 0x50040000));
+    assert_eq!(merged.origins().len(), 2);
+    assert!(
+        merge_stack_contexts(&[Some(&low), None], &memory, &mut || Ok(()))
+            .unwrap()
+            .is_none()
+    );
+    let (code, tail) = bounded_copy(&memory);
+    let caller = facts(&code, 0x1000, &memory);
+    assert!(
+        call_word_with_stack(
+            &index(&caller, &memory),
+            0x1000,
+            0x1018,
+            ABI,
+            &tail,
+            Some(&merged),
+            &memory,
+            &mut || Ok(())
+        )
+        .unwrap()
+        .is_ok()
+    );
+    // D = entry-sp - 16 = 0xffffffc0 must remain excluded.
+    let wrap = numerical_root(0xffffffd0, 0xa00, &memory);
+    let merged = merge_stack_contexts(&[Some(&low), Some(&wrap)], &memory, &mut || Ok(()))
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        call_word_with_stack(
+            &index(&caller, &memory),
+            0x1000,
+            0x1018,
+            ABI,
+            &tail,
+            Some(&merged),
+            &memory,
+            &mut || Ok(())
+        )
+        .unwrap()
+        .unwrap_err(),
+        WordBarrier::DestinationBounds
+    );
+    let inputs = facts(
+        &[
+            branch(10, 0, 12, 0),
+            addi(2, 2, -32),
+            jal(0, 8),
+            addi(2, 2, -48),
+            jal(1, 0x2000 - 0x1010),
+            RET,
+        ],
+        0x1000,
+        &memory,
+    );
+    let joined = call_stack_context(
+        &index(&inputs, &memory),
+        0x1000,
+        0x1010,
+        Some(&low),
+        &memory,
+        &mut || Ok(()),
+    )
+    .unwrap()
+    .unwrap();
+    assert_eq!(joined.interval(), (0x4000 - 48, 0x4000 - 32));
+}
+
+#[test]
+fn stack_transfers_fail_closed_on_unknown_control_and_rv32_overflow() {
+    let memory = WorkingMemory::new(32 * 1024 * 1024).unwrap();
+    let low = numerical_root(16, 0x800, &memory);
+    let high = numerical_root(0xfffffff0, 0x900, &memory);
+    for (code, parent) in [
+        (vec![addi(2, 2, -32), jal(1, 0x2000 - 0x1004), RET], &low),
+        (vec![addi(2, 2, 32), jal(0, 0x2000 - 0x1004)], &high),
+        (
+            vec![
+                addi(2, 2, -32),
+                addi(2, 2, 32),
+                jal(1, 0x2000 - 0x1008),
+                RET,
+            ],
+            &low,
+        ),
+        (
+            vec![
+                branch(10, 0, 8, 0),
+                0x00070067,
+                jal(1, 0x2000 - 0x1008),
+                RET,
+            ],
+            &low,
+        ),
+    ] {
+        let caller = facts(&code, 0x1000, &memory);
+        let site = if code.len() == 4 { 0x1008 } else { 0x1004 };
+        assert!(
+            call_stack_context(
+                &index(&caller, &memory),
+                0x1000,
+                site,
+                Some(parent),
+                &memory,
+                &mut || Ok(())
+            )
+            .unwrap()
+            .is_none()
+        );
+    }
+    // A machine stack switch replaces the old coordinate with its new value.
+    let records = facts(
+        &[addi(2, 0, 1024), jal(0, 0x2000 - 0x1004)],
+        0x1000,
+        &memory,
+    );
+    let switched = call_stack_context(
+        &index(&records, &memory),
+        0x1000,
+        0x1004,
+        Some(&high),
+        &memory,
+        &mut || Ok(()),
+    )
+    .unwrap()
+    .unwrap();
+    assert_eq!(switched.interval(), (1024, 1024));
+    assert!(
+        call_stack_context(
+            &index(&records, &memory),
+            0x9000,
+            0x1004,
+            Some(&high),
+            &memory,
+            &mut || Ok(())
+        )
+        .unwrap()
+        .is_none()
+    );
+}
+
+#[test]
+fn startup_terminal_refinement_needs_an_external_all_path_target() {
+    let memory = WorkingMemory::new(32 * 1024 * 1024).unwrap();
+    // fence.i preserves the entry sp; the terminal's all-path value comes
+    // from the common evaluator, including the architectural upper write.
+    let records = facts(&[0x0000100f, 0x00001317, 0x00030067], 0x1000, &memory);
+    assert_eq!(
+        external_terminal(
+            &records,
+            CodeRange {
+                start: 0x1000,
+                length: 12
+            },
+            &mut || Ok(())
+        )
+        .unwrap(),
+        Some((0x1008, 0x2004))
+    );
+    let idx = index(&records, &memory);
+    assert_eq!(
+        idx.call_inputs(0x1008, &mut || Ok(()))
+            .unwrap()
+            .unwrap()
+            .registers[2],
+        AbstractValue::EntryStack { offset: 0 }
+    );
+    for code in [
+        vec![branch(10, 0, 8, 0), 0x00001317, 0x00030067], // bypasses producer
+        vec![0x00000317, 0x00030067],                      // target is local
+        vec![branch(10, 0, 8, 0), 0x00070067, 0x00001317, 0x00030067], // another unknown edge
+    ] {
+        let records = facts(&code, 0x1000, &memory);
+        assert!(
+            external_terminal(
+                &records,
+                CodeRange {
+                    start: 0x1000,
+                    length: code.len() as u64 * 4
+                },
+                &mut || Ok(())
+            )
+            .unwrap()
+            .is_none()
+        );
+    }
+}
+
+#[test]
+fn numerical_context_allocations_release_on_cancellation_and_refused_admission() {
+    let memory = WorkingMemory::new(32 * 1024 * 1024).unwrap();
+    let root = numerical_root(0x50040000, 0x800, &memory);
+    let records = facts(
+        &[addi(2, 2, -32), jal(1, 0x2000 - 0x1004), RET],
+        0x1000,
+        &memory,
+    );
+    let idx = index(&records, &memory);
+    let baseline = memory.used();
+    let mut steps = 0;
+    drop(
+        call_stack_context(&idx, 0x1000, 0x1004, Some(&root), &memory, &mut || {
+            steps += 1;
+            Ok(())
+        })
+        .unwrap(),
+    );
+    assert_eq!(memory.used(), baseline);
+    for stop in 1..=steps {
+        let mut visited = 0;
+        let result = call_stack_context(&idx, 0x1000, 0x1004, Some(&root), &memory, &mut || {
+            visited += 1;
+            if visited == stop {
+                Err(Error::new(ErrorCode::Cancelled, "cancel numerical context"))
+            } else {
+                Ok(())
+            }
+        });
+        assert!(result.is_err());
+        drop(result);
+        assert_eq!(memory.used(), baseline);
+    }
+    let limited = WorkingMemory::new(1).unwrap();
+    assert!(
+        call_stack_context(&idx, 0x1000, 0x1004, Some(&root), &limited, &mut || Ok(())).is_err()
+    );
+    assert_eq!(limited.used(), 0);
+}
+
+#[test]
+fn stack_installation_checks_both_machine_values_and_the_return_predecessor() {
+    let memory = WorkingMemory::new(32 * 1024 * 1024).unwrap();
+    let code = [addi(2, 0, 1024), addi(5, 0, 512), 0x34029073, RET];
+    let records = facts(&code, 0x4000, &memory);
+    let setup = stack_setup(
+        &index(&records, &memory),
+        0x4000,
+        &RiscvDecoder,
+        &mut || Ok(()),
+    )
+    .unwrap()
+    .unwrap();
+    assert_eq!((setup.pointer(), setup.scratch()), (1024, 512));
+    let changed = facts(
+        &[addi(2, 0, 768), addi(5, 0, 256), 0x34029073, RET],
+        0x4000,
+        &memory,
+    );
+    let changed = stack_setup(
+        &index(&changed, &memory),
+        0x4000,
+        &RiscvDecoder,
+        &mut || Ok(()),
+    )
+    .unwrap()
+    .unwrap();
+    assert_eq!((changed.pointer(), changed.scratch()), (768, 256));
+    let bypass = facts(
+        &[
+            addi(2, 0, 1024),
+            addi(5, 0, 512),
+            branch(10, 0, 8, 0),
+            0x34029073,
+            RET,
+        ],
+        0x4000,
+        &memory,
+    );
+    assert!(
+        stack_setup(&index(&bypass, &memory), 0x4000, &RiscvDecoder, &mut || Ok(
+            ()
+        ))
+        .unwrap()
+        .is_none()
+    );
+    let startup = facts(
+        &[
+            jal(1, 0x4000 - 0x5000),
+            addi(5, 0, 0),
+            jal(0, 0x1000 - 0x5008),
+        ],
+        0x5000,
+        &memory,
+    );
+    let resumed = resume_stack_context(
+        &setup,
+        &index(&startup, &memory),
+        0x5000,
+        0x5000,
+        &memory,
+        &mut || Ok(()),
+    )
+    .unwrap()
+    .unwrap();
+    let root = call_stack_context(
+        &index(&startup, &memory),
+        0x5000,
+        0x5008,
+        Some(&resumed),
+        &memory,
+        &mut || Ok(()),
+    )
+    .unwrap()
+    .unwrap();
+    assert_eq!(root.interval(), (1024, 1024));
+}
+
+#[test]
+fn resolved_contexts_keep_the_existing_executor_assumption() {
+    let memory = WorkingMemory::new(64 * 1024 * 1024).unwrap();
+    let root = numerical_root(0x50040000, 0x800, &memory);
+    let executor = facts(&[0x000500e7, RET], 0x1000, &memory);
+    let idx = index(&executor, &memory);
+    assert!(
+        call_stack_context(&idx, 0x1000, 0x1000, Some(&root), &memory, &mut || Ok(()))
+            .unwrap()
+            .is_none()
+    );
+    let mut targets = Resolutions::new();
+    targets.add(0x1000, Fact::TaskPolls, [0x1000]);
+    let context = call_stack_context_with_targets(
+        &idx,
+        0x1000,
+        0x1000,
+        Some(&root),
+        Some(&targets),
+        Some(0x1000),
+        &memory,
+        &mut || Ok(()),
+    )
+    .unwrap()
+    .unwrap();
+    assert_eq!(context.assumptions(), &[Assumption::ExecutorInvariant]);
+    let (code, tail) = bounded_copy(&memory);
+    let caller = facts(&code, 0x1000, &memory);
+    let application = call_word_with_stack(
+        &index(&caller, &memory),
+        0x1000,
+        0x1018,
+        ABI,
+        &tail,
+        Some(&context),
+        &memory,
+        &mut || Ok(()),
+    )
+    .unwrap()
+    .unwrap();
+    assert_eq!(
+        application.stack_assumption,
+        Some(Assumption::ExecutorInvariant)
+    );
+    let calls = stack_calls_with_stack(
+        &index(&caller, &memory),
+        0x1000,
+        ABI,
+        &[&tail],
+        Some(&context),
+        &memory,
+        &mut || Ok(()),
+    )
+    .unwrap();
+    let records = facts_in_context(&code, &calls, Some(&context), &memory);
+    let AbstractValue::Expression { id } = loaded(&records) else {
+        panic!("missing call word");
+    };
+    assert!(matches!(
+        index(&records, &memory)
+            .expression(*id, &mut || Ok(()))
+            .unwrap(),
+        Some(Expression::CallWord {
+            stack_assumption: Some(Assumption::ExecutorInvariant),
+            ..
+        })
+    ));
+}
+
 fn caller_code() -> Vec<u32> {
     vec![
         addi(2, 2, -32),

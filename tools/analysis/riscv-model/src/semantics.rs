@@ -236,6 +236,11 @@ pub enum ValueRelocation {
 }
 /// Extends structural decoding without adding filesystem or execution authority.
 pub trait FunctionSemantics: FunctionDecoder {
+    /// A pure write of mscratch, with no integer destination. Used to check
+    /// stack installation; the ordinary integer evaluator remains unchanged.
+    fn scratch_write(&self, _bytes: &[u8]) -> Option<Operand> {
+        None
+    }
     fn branch(&self, _bytes: &[u8]) -> Option<(BranchTest, Operand, Operand)> {
         None
     }
@@ -487,6 +492,7 @@ pub enum Expression {
         store_order: u32,
         width: u8,
         source: AbstractValue,
+        stack_assumption: Option<crate::Assumption>,
     },
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]

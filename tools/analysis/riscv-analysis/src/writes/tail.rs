@@ -55,7 +55,8 @@ fn transparent(
             } if *offset == entry => (),
             FunctionRecord::Transfer { offset, .. } | FunctionRecord::CallInputs { offset, .. }
                 if *offset == entry => {}
-            FunctionRecord::Expression { .. }
+            FunctionRecord::ImageContext { .. }
+            | FunctionRecord::Expression { .. }
             | FunctionRecord::Block { .. }
             | FunctionRecord::Reference { .. } => (),
             _ => return Ok(None),

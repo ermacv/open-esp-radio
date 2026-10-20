@@ -180,6 +180,7 @@ pub(super) fn specialized<'m>(
         Some(context.abi),
         true,
         None,
+        None,
         Some(&mut run),
     )?;
     let facts = FunctionIndex::new(&saved.0, RecordPolicy::Canonical, memory, c)?;

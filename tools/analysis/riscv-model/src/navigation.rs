@@ -39,6 +39,8 @@ pub struct TransferObservation<'a> {
 /// Positions borrow the original records; no values or names are cloned.
 /// Every index allocation is admitted before growth and released on drop/error.
 pub struct FunctionIndex<'a, 'm> {
+    capture_id: Option<u64>,
+    extent: Option<CodeRange>,
     records: &'a [FunctionRecord],
     policy: RecordPolicy,
     expressions: AdmittedVec<'m, usize>,
@@ -99,6 +101,8 @@ impl<'a, 'm> FunctionIndex<'a, 'm> {
         c: &mut dyn RunControl,
     ) -> Result<Self> {
         let mut out = Self {
+            capture_id: None,
+            extent: None,
             records,
             policy,
             expressions: AdmittedVec::new(memory),
@@ -110,6 +114,13 @@ impl<'a, 'm> FunctionIndex<'a, 'm> {
         for (record, r) in records.iter().enumerate() {
             c.checkpoint(1)?;
             match r {
+                FunctionRecord::ImageContext { capture_id, extent } => {
+                    if out.capture_id.is_some() && policy == RecordPolicy::Canonical {
+                        return Err(integrity("duplicate image context"));
+                    }
+                    out.capture_id = Some(*capture_id);
+                    out.extent = Some(*extent);
+                }
                 FunctionRecord::Instruction { offset, .. } if policy == RecordPolicy::Canonical => {
                     instructions.push(*offset, c.position())?
                 }
@@ -182,6 +193,13 @@ impl<'a, 'm> FunctionIndex<'a, 'm> {
     /// Original order and positions, including records not indexed here.
     pub fn records(&self) -> &'a [FunctionRecord] {
         self.records
+    }
+    pub fn capture_id(&self) -> Option<u64> {
+        self.capture_id
+    }
+
+    pub fn extent(&self) -> Option<CodeRange> {
+        self.extent
     }
 
     /// Borrow a saved expression by exact ID, charging before lookup.

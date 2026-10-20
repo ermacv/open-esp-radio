@@ -6,6 +6,7 @@ mod dispatch;
 #[cfg(test)]
 mod noreturn_tests;
 mod references;
+pub mod stack_context;
 mod tables;
 mod value_sets;
 mod values;
@@ -111,7 +112,7 @@ pub fn analyze(
     sink: &mut dyn FunctionSink,
 ) -> Result<AnalysisSummary> {
     analyze_with(
-        input, decoder, memory, control, sink, false, None, false, None, None,
+        input, decoder, memory, control, sink, false, None, false, None, None, None,
     )
 }
 /// The same CFG/value engine with a bounded expression DAG and explicit ABI assumption.
@@ -133,6 +134,7 @@ pub fn research(
             abi,
             symbolic_spills: false,
             stack_calls: None,
+            stack_context: None,
         },
     )
 }
@@ -147,6 +149,8 @@ pub struct ResearchOptions<'a> {
     /// Checked call writes and optional word postconditions from canonical facts;
     /// never a ROM default. Every cached use revalidates target and live inputs.
     pub stack_calls: Option<&'a writes::StackCalls<'a>>,
+    /// The current machine-proved invocation context, independently of the cache.
+    pub stack_context: Option<&'a stack_context::StackContext<'a>>,
 }
 
 pub fn research_with_options(
@@ -167,6 +171,7 @@ pub fn research_with_options(
         options.abi,
         options.symbolic_spills,
         options.stack_calls,
+        options.stack_context,
         None,
     )
 }
@@ -181,6 +186,7 @@ fn analyze_with<'m>(
     abi: Option<CallAbi>,
     symbolic_spills: bool,
     stack_calls: Option<&writes::StackCalls<'_>>,
+    stack_context: Option<&stack_context::StackContext<'_>>,
     mut context: Option<&mut writes::context::ContextRun<'_, 'm>>,
 ) -> Result<AnalysisSummary> {
     // Prove call targets on the graph with every possible continuation.
@@ -197,6 +203,7 @@ fn analyze_with<'m>(
         abi,
         symbolic_spills,
         stack_calls,
+        stack_context,
         &[],
         context.as_deref_mut(),
     )?;
@@ -220,6 +227,7 @@ fn analyze_with<'m>(
         abi,
         symbolic_spills,
         stack_calls,
+        stack_context,
         &noreturn,
         context,
     )
@@ -237,6 +245,7 @@ fn analyze_pass<'m>(
     abi: Option<CallAbi>,
     symbolic_spills: bool,
     stack_calls: Option<&writes::StackCalls<'_>>,
+    stack_context: Option<&stack_context::StackContext<'_>>,
     noreturn: &[u64],
     context: Option<&mut writes::context::ContextRun<'_, 'm>>,
 ) -> Result<(AnalysisSummary, AdmittedVec<'m, u64>)> {
@@ -245,6 +254,15 @@ fn analyze_pass<'m>(
         closed: true,
     };
     let sink = &mut closure;
+    if let Some(capture_id) = input.image.and_then(ImageMemory::capture_id) {
+        sink.record(
+            &FunctionRecord::ImageContext {
+                capture_id,
+                extent: input.extent,
+            },
+            control,
+        )?;
+    }
     control.phase(RunPhase::AnalyzeFunction)?;
     let end = input
         .extent
@@ -622,6 +640,7 @@ fn analyze_pass<'m>(
         abi,
         symbolic_spills,
         stack_calls,
+        stack_context,
         &mut found_noreturn,
         closed_graph,
         context,

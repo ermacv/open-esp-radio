@@ -54,7 +54,7 @@ impl FunctionRecord {
                 ..
             } => left.allocated_bytes() + right.allocated_bytes(),
             Self::Expression { expression, .. } => expression.allocated_bytes(),
-            Self::CallInputs { registers, .. } => {
+            Self::CallInputs { registers, .. } | Self::ReturnInputs { registers, .. } => {
                 (registers.capacity() * size_of::<AbstractValue>()) as u64
                     + registers
                         .iter()
@@ -77,7 +77,8 @@ impl FunctionRecord {
                     + raw.target.retained_bytes()
                     + target.retained_bytes()
             }
-            Self::SemanticGap { .. }
+            Self::ImageContext { .. }
+            | Self::SemanticGap { .. }
             | Self::Block { .. }
             | Self::Edge { .. }
             | Self::Gap { .. }

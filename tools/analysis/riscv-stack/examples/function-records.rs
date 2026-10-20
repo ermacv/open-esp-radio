@@ -163,6 +163,9 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
                 "expression\t{id}\t{offset:#010x}\t{:?}",
                 index.expression(*id, &mut control)?
             ),
+            FunctionRecord::ReturnInputs { offset, registers } => {
+                println!("return-inputs\t{offset:#010x}\t{registers:?}")
+            }
             FunctionRecord::AlignedValue { fact } => println!("aligned-value\t{fact:?}"),
             FunctionRecord::Instruction {
                 offset, decoded, ..

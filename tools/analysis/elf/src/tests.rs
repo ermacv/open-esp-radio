@@ -5,6 +5,21 @@ use object::write::{
 };
 use object::{Architecture, BinaryFormat, Endianness, SymbolFlags, SymbolScope};
 
+#[test]
+fn storage_extents_distinguish_empty_placement_from_a_stack_budget() {
+    let bounds = StorageBounds::new(256, 512).unwrap();
+    assert_eq!((bounds.start, bounds.end, bounds.capacity), (256, 512, 256));
+    assert_eq!(bounds.nonempty().unwrap(), bounds);
+    let empty = StorageBounds::new(512, 512).unwrap();
+    assert_eq!(empty.capacity, 0);
+    assert!(empty.nonempty().is_err());
+    assert!(StorageBounds::new(512, 256).is_err());
+    let bytes = object();
+    let file = Elf::parse(&bytes).unwrap();
+    let another = Elf::parse(&bytes).unwrap();
+    assert_ne!(file.capture_id(), another.capture_id());
+}
+
 /// A relocatable RV32 object whose `.text` holds `f` and its alias `g` at
 /// offset 0 (eight bytes: `lui a5, 0; lw a4, 0(a5)`, both relocated against
 /// the external `data`) and `h` at offset 8 (`ret`, calling nothing).

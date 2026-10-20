@@ -2591,6 +2591,7 @@ dependencies = [
  "oer-analysis-riscv-lift",
  "oer-analysis-riscv-model",
  "oer-analysis-riscv-program",
+ "oer-chip-profile",
  "serde",
  "toml",
 ]

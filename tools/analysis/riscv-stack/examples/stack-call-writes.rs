@@ -1,5 +1,7 @@
 //! Reproduce stack-word noninterference, including companion machine facts.
 //! PCs and a slot select diagnostic input; they do not select summary semantics.
+#[path = "support/stack_context.rs"]
+mod checked_stack;
 #[path = "support/cli.rs"]
 mod cli;
 mod support;
@@ -28,6 +30,9 @@ struct Cli {
     /// Query one four-byte normal-return provenance relation.
     #[arg(long)]
     word_offset: Option<u32>,
+    /// Derive the current platform's machine stack context; accepts no interval.
+    #[arg(long)]
+    checked_stack_context: bool,
 }
 
 fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
@@ -48,7 +53,16 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let image = ImageFacts::new(&bytes, &[], &memory, &mut control)?;
     let rom = ImageFacts::new(&rom, &[], &memory, &mut control)?;
     let mut keep = Ledger::new(&memory, &mut control)?;
-    let (dwarf, _) = read_debug(&bytes, DebugMetadata::Standard, &mut keep, &mut control)?;
+    let (dwarf, types) = read_debug(
+        &bytes,
+        if cli.checked_stack_context {
+            DebugMetadata::TypedLocations
+        } else {
+            DebugMetadata::Standard
+        },
+        &mut keep,
+        &mut control,
+    )?;
     // The existing joint stack analysis validates companion identities and
     // reviewed frame/call contracts. These are not memory-effect contracts.
     let analysis = analyze(&image, &[&rom], &summaries, &dwarf, &mut keep, &mut control)?;
@@ -59,6 +73,20 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         .ok_or("no caller")?;
     let before = support::capture(&image, caller, &memory, &dwarf, true, &mut control)?;
     let index = FunctionIndex::new(&before, RecordPolicy::Canonical, &memory, &mut control)?;
+    let stack_context = if cli.checked_stack_context {
+        checked_stack::derive(
+            &image,
+            &analysis,
+            &dwarf,
+            &types,
+            caller.address,
+            &memory,
+            &mut keep,
+            &mut control,
+        )?
+    } else {
+        None
+    };
     println!(
         "caller\t{:#010x}\t{}",
         caller.address,
@@ -307,12 +335,13 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
                 .iter()
                 .find(|summary| summary.entry == u64::from(*address))
         {
-            if let Ok(instance) = instantiate_word(
+            if let Ok(instance) = instantiate_word_with_stack(
                 &index,
                 caller.address.into(),
                 site.into(),
                 Some(CallAbi::RiscvInteger),
                 summary,
+                stack_context.as_ref(),
                 &memory,
                 &mut control,
             )? {
@@ -326,12 +355,13 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             }
             println!(
                 "word-application\t{:?}",
-                call_word(
+                call_word_with_stack(
                     &index,
                     caller.address.into(),
                     site.into(),
                     Some(CallAbi::RiscvInteger),
                     summary,
+                    stack_context.as_ref(),
                     &memory,
                     &mut control
                 )?
