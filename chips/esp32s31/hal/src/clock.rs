@@ -11,8 +11,8 @@
 use oer_esp32s31_pac::{RadioPhyRegisters, WifiPowerBaseline, WifiPowerRestoreReadback};
 
 use crate::power::{
-    PlatformClock, PlatformClockError, PlatformClockGuard, PlatformClockHolds,
-    PlatformClockProvider,
+    PlatformClock, PlatformClockBackend, PlatformClockError, PlatformClockGuard,
+    PlatformClockHolds, PlatformClockProvider,
 };
 use crate::root::WifiPowerRestoreCheckpoint;
 
@@ -25,10 +25,10 @@ pub(crate) trait ClockPort {
     ) -> Result<(), WifiPowerRestoreReadback>;
     /// Run the common modem/PHY power sequence, taking the platform clock
     /// references into `refs` at their exact edges.
-    fn run_common_power_sequence(
+    fn run_common_power_sequence<B: PlatformClockBackend>(
         &mut self,
-        refs: &mut PlatformClockRefs,
-        platform: &impl PlatformClockProvider,
+        refs: &mut PlatformClockRefs<B>,
+        platform: &impl PlatformClockProvider<Backend = B>,
         entry: crate::power::PowerEntry,
     ) -> Result<(), crate::power::PowerError>;
 }
@@ -43,10 +43,10 @@ impl ClockPort for RadioPhyRegisters {
     ) -> Result<(), WifiPowerRestoreReadback> {
         self.restore_wifi_power_baseline(baseline)
     }
-    fn run_common_power_sequence(
+    fn run_common_power_sequence<B: PlatformClockBackend>(
         &mut self,
-        refs: &mut PlatformClockRefs,
-        platform: &impl PlatformClockProvider,
+        refs: &mut PlatformClockRefs<B>,
+        platform: &impl PlatformClockProvider<Backend = B>,
         entry: crate::power::PowerEntry,
     ) -> Result<(), crate::power::PowerError> {
         crate::power::execute_owned(
@@ -67,15 +67,25 @@ impl ClockPort for RadioPhyRegisters {
 /// and alone writes their gates. Common power holds one guard for each for as
 /// long as any client holds it; a retried power-up takes only the references
 /// it does not hold yet.
-#[derive(Debug, Default)]
-pub(crate) struct PlatformClockRefs {
-    pll_f160m: Option<PlatformClockGuard>,
-    analog_i2c: Option<PlatformClockGuard>,
-    mpll: Option<PlatformClockGuard>,
+#[derive(Debug)]
+pub(crate) struct PlatformClockRefs<B: PlatformClockBackend> {
+    pll_f160m: Option<PlatformClockGuard<B>>,
+    analog_i2c: Option<PlatformClockGuard<B>>,
+    mpll: Option<PlatformClockGuard<B>>,
 }
 
-impl PlatformClockRefs {
-    fn slot(&mut self, clock: PlatformClock) -> &mut Option<PlatformClockGuard> {
+impl<B: PlatformClockBackend> Default for PlatformClockRefs<B> {
+    fn default() -> Self {
+        Self {
+            pll_f160m: None,
+            analog_i2c: None,
+            mpll: None,
+        }
+    }
+}
+
+impl<B: PlatformClockBackend> PlatformClockRefs<B> {
+    fn slot(&mut self, clock: PlatformClock) -> &mut Option<PlatformClockGuard<B>> {
         match clock {
             PlatformClock::Pll160m => &mut self.pll_f160m,
             PlatformClock::AnalogI2cMaster => &mut self.analog_i2c,
@@ -89,7 +99,7 @@ impl PlatformClockRefs {
     pub(crate) fn acquire(
         &mut self,
         clock: PlatformClock,
-        platform: &impl PlatformClockProvider,
+        platform: &impl PlatformClockProvider<Backend = B>,
     ) -> Result<(), PlatformClockError> {
         let slot = self.slot(clock);
         if slot.is_none() {
@@ -170,8 +180,8 @@ impl RadioClientKind for Ieee802154Client {
 /// use oer_esp32s31_hal::domain::{CoexAbsent, CommonPower, RadioDomain, WifiClient};
 /// use oer_esp32s31_pac::WifiRadioRegisters;
 ///
-/// fn leave(
-///     radio: &mut RadioDomain,
+/// fn leave<B: oer_esp32s31_hal::power::PlatformClockBackend>(
+///     radio: &mut RadioDomain<B>,
 ///     wifi: &WifiRadioRegisters,
 ///     power: CommonPower<WifiClient>,
 ///     coex: &CoexAbsent<WifiClient>,
@@ -186,8 +196,8 @@ impl RadioClientKind for Ieee802154Client {
 /// use oer_esp32s31_hal::domain::{CoexAbsent, CommonPower, RadioDomain, WifiClient};
 /// use oer_esp32s31_pac::BluetoothTaskRegisters;
 ///
-/// fn leave(
-///     radio: &mut RadioDomain,
+/// fn leave<B: oer_esp32s31_hal::power::PlatformClockBackend>(
+///     radio: &mut RadioDomain<B>,
 ///     bluetooth: &BluetoothTaskRegisters,
 ///     power: CommonPower<WifiClient>,
 ///     coex: &CoexAbsent<WifiClient>,
@@ -270,17 +280,27 @@ pub enum CommonRadioPowerError {
 /// after the last client leaves; the reset lines are not part of it. Refcounted modem
 /// clock dependencies such as coexistence belong to the shared modem clock
 /// planner, not to this membership.
-#[derive(Default)]
-pub(crate) struct CommonRadioPower {
+pub(crate) struct CommonRadioPower<B: PlatformClockBackend> {
     clients: u8,
-    refs: PlatformClockRefs,
+    refs: PlatformClockRefs<B>,
     power: PowerEpoch,
     /// The Wi-Fi baseband and MAC resets were pulsed by a successful
     /// power-up since boot.
     wifi_resets_pulsed: bool,
 }
 
-impl CommonRadioPower {
+impl<B: PlatformClockBackend> Default for CommonRadioPower<B> {
+    fn default() -> Self {
+        Self {
+            clients: 0,
+            refs: PlatformClockRefs::default(),
+            power: PowerEpoch::default(),
+            wifi_resets_pulsed: false,
+        }
+    }
+}
+
+impl<B: PlatformClockBackend> CommonRadioPower<B> {
     /// End a test's owner, keeping every reference it still holds on.
     #[cfg(test)]
     pub(crate) fn abandon_for_test(mut self) {
@@ -299,7 +319,7 @@ impl CommonRadioPower {
     pub(crate) fn hold_platform_clock_for_test(
         &mut self,
         clock: PlatformClock,
-        platform: &impl PlatformClockProvider,
+        platform: &impl PlatformClockProvider<Backend = B>,
     ) {
         self.refs
             .acquire(clock, platform)
@@ -307,7 +327,7 @@ impl CommonRadioPower {
     }
 }
 
-impl CommonRadioPower {
+impl<B: PlatformClockBackend> CommonRadioPower<B> {
     /// Whether `client` currently holds common power.
     pub(crate) const fn holds(&self, client: RadioClient) -> bool {
         self.clients & client_bit(client) != 0
@@ -336,7 +356,7 @@ impl CommonRadioPower {
     pub(crate) fn enter<K: RadioClientKind>(
         &mut self,
         port: &mut impl ClockPort,
-        platform: &impl PlatformClockProvider,
+        platform: &impl PlatformClockProvider<Backend = B>,
     ) -> Result<CommonPower<K>, CommonRadioPowerError> {
         let client = K::CLIENT;
         if self.holds(client) {

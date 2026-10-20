@@ -17,8 +17,15 @@ use crate::{
 
 /// A radio domain whose PHY is registered in the domain's current epoch, or,
 /// when `stale`, in an epoch a later registration retired.
-fn radio_domain(stale: bool) -> (RadioDomain<ConcurrentPhy>, ProtocolPartitions) {
-    let (mut radio, partitions) = RadioHardware::for_host_test().split(ConcurrentPhy::new());
+fn radio_domain(
+    stale: bool,
+) -> (
+    RadioDomain<crate::test_clocks::TestClockBackend, ConcurrentPhy>,
+    ProtocolPartitions,
+) {
+    let (mut radio, partitions) =
+        RadioHardware::for_host_test()
+            .split::<crate::test_clocks::TestClockBackend, _>(ConcurrentPhy::new());
     {
         let domain = &mut radio;
         let grant = domain.phy_hal().begin_registration();
@@ -37,7 +44,9 @@ fn radio_domain(stale: bool) -> (RadioDomain<ConcurrentPhy>, ProtocolPartitions)
     (radio, partitions)
 }
 
-fn ieee802154_is_client(radio: &RadioDomain<ConcurrentPhy>) -> bool {
+fn ieee802154_is_client(
+    radio: &RadioDomain<crate::test_clocks::TestClockBackend, ConcurrentPhy>,
+) -> bool {
     radio
         .attachment()
         .client_snapshot()
@@ -46,7 +55,9 @@ fn ieee802154_is_client(radio: &RadioDomain<ConcurrentPhy>) -> bool {
 
 #[test]
 fn joining_an_unregistered_domain_changes_nothing() {
-    let (mut radio, partitions) = RadioHardware::for_host_test().split(ConcurrentPhy::new());
+    let (mut radio, partitions) =
+        RadioHardware::for_host_test()
+            .split::<crate::test_clocks::TestClockBackend, _>(ConcurrentPhy::new());
     let clocked = Ieee802154Clocked::for_host_test(partitions.ieee802154);
     let radio = &mut radio;
 
@@ -102,7 +113,10 @@ fn leaving_without_the_btbb_reference_keeps_the_membership_and_the_client() {
 
 /// Enter `client` with a proof for the domain's registration.
 fn enter_client(
-    radio: &mut oer_esp32s31_hal::domain::RadioDomain<crate::concurrent::ConcurrentPhy>,
+    radio: &mut oer_esp32s31_hal::domain::RadioDomain<
+        crate::test_clocks::TestClockBackend,
+        crate::concurrent::ConcurrentPhy,
+    >,
     client: oer_esp32s31_hal::domain::RadioClient,
     clock: &impl oer_time::Clock,
 ) -> Result<crate::concurrent::ConcurrentAcquire, crate::concurrent::ConcurrentPhyError> {
@@ -111,11 +125,14 @@ fn enter_client(
 
 /// Join with a proof for the domain's registration.
 fn join_ieee802154_prepared(
-    radio: &mut oer_esp32s31_hal::domain::RadioDomain<crate::concurrent::ConcurrentPhy>,
+    radio: &mut oer_esp32s31_hal::domain::RadioDomain<
+        crate::test_clocks::TestClockBackend,
+        crate::concurrent::ConcurrentPhy,
+    >,
     clocked: &Ieee802154Clocked,
     clock: &impl oer_time::Clock,
 ) -> Result<(Ieee802154PhyMembership, ConcurrentAcquire), Ieee802154PhyClientError> {
-    let ready = crate::concurrent::PhyClientReady::<Ieee802154PhyMembership>::for_test(radio);
+    let ready = crate::concurrent::PhyClientReady::<_, Ieee802154PhyMembership>::for_test(radio);
     join_ieee802154(ready, clocked, clock)
         .map(|joined| (joined.membership, joined.acquired))
         .map_err(|refused| refused.error)

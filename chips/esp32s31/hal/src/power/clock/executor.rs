@@ -16,6 +16,8 @@
 //! poisons the transaction: the planner cannot tell a refused request from a
 //! partially applied one.
 
+use core::marker::PhantomData;
+
 use oer_esp32s31_pac::{ModemClockDevice, RadioPhyRegisters};
 
 use super::{
@@ -46,6 +48,20 @@ pub enum PlatformClock {
     ModemLowPowerTimer,
 }
 
+/// One platform's reference counts of the radio's platform clocks.
+///
+/// Its functions take no state: the platform's counts are global, which is
+/// what lets a [`PlatformClockGuard`] give a reference back without a
+/// borrow of its provider.
+pub trait PlatformClockBackend: 'static {
+    /// Take one reference to `clock`.
+    fn acquire(clock: PlatformClock);
+    /// Give back one reference to `clock` that [`Self::acquire`] took.
+    fn release(clock: PlatformClock);
+    /// Record that a reference to `clock` stays held until a chip reset.
+    fn abandon(clock: PlatformClock, how: PlatformClockAbandonment);
+}
+
 /// Platform-owned clocks that radio modules depend on.
 ///
 /// The platform clock owner (ESP-HAL) keeps its own reference count of each,
@@ -53,12 +69,18 @@ pub enum PlatformClock {
 /// [`PlatformClockGuard`] for as long as it needs the clock and gives it back
 /// with [`PlatformClockGuard::release`].
 pub trait PlatformClockProvider {
+    /// The backend every guard from this provider calls.
+    type Backend: PlatformClockBackend;
+
     /// Acquire one reference to `clock`.
     ///
     /// # Errors
     ///
     /// The platform refused the reference; nothing is held.
-    fn acquire(&self, clock: PlatformClock) -> Result<PlatformClockGuard, PlatformClockError>;
+    fn acquire(
+        &self,
+        clock: PlatformClock,
+    ) -> Result<PlatformClockGuard<Self::Backend>, PlatformClockError>;
 }
 
 /// How a platform clock reference ended without going back to the
@@ -86,29 +108,23 @@ pub enum PlatformClockAbandonment {
 /// guard needs no borrow of its provider and may live in a static radio
 /// owner.
 #[must_use = "a guard ends with `release` or `abandon`; dropping it keeps the clock on and is a defect"]
-pub struct PlatformClockGuard {
+pub struct PlatformClockGuard<B: PlatformClockBackend> {
     clock: PlatformClock,
-    release: fn(PlatformClock),
-    abandon: fn(PlatformClock, PlatformClockAbandonment),
     ended: bool,
+    backend: PhantomData<fn() -> B>,
 }
 
-impl PlatformClockGuard {
+impl<B: PlatformClockBackend> PlatformClockGuard<B> {
     /// Wrap one reference to `clock` that the caller just acquired from its
-    /// platform: `release(clock)` gives back exactly that reference, and
-    /// `abandon(clock, how)` records that it stays held.
+    /// platform: `B::release(clock)` gives back exactly that reference, and
+    /// `B::abandon(clock, how)` records that it stays held.
     ///
     /// Only a [`PlatformClockProvider`] implementation creates guards.
-    pub const fn new(
-        clock: PlatformClock,
-        release: fn(PlatformClock),
-        abandon: fn(PlatformClock, PlatformClockAbandonment),
-    ) -> Self {
+    pub const fn new(clock: PlatformClock) -> Self {
         Self {
             clock,
-            release,
-            abandon,
             ended: false,
+            backend: PhantomData,
         }
     }
 
@@ -120,22 +136,22 @@ impl PlatformClockGuard {
     /// Give the reference back to the platform.
     pub fn release(mut self) {
         self.ended = true;
-        (self.release)(self.clock);
+        B::release(self.clock);
     }
 
     /// Keep the clock on until a chip reset, deliberately.
     pub fn abandon(mut self) {
         self.ended = true;
-        (self.abandon)(self.clock, PlatformClockAbandonment::Abandoned);
+        B::abandon(self.clock, PlatformClockAbandonment::Abandoned);
     }
 }
 
-impl Drop for PlatformClockGuard {
+impl<B: PlatformClockBackend> Drop for PlatformClockGuard<B> {
     fn drop(&mut self) {
         if self.ended {
             return;
         }
-        (self.abandon)(self.clock, PlatformClockAbandonment::Dropped);
+        B::abandon(self.clock, PlatformClockAbandonment::Dropped);
         #[cfg(test)]
         if std::thread::panicking() {
             return;
@@ -148,7 +164,7 @@ impl Drop for PlatformClockGuard {
     }
 }
 
-impl core::fmt::Debug for PlatformClockGuard {
+impl<B: PlatformClockBackend> core::fmt::Debug for PlatformClockGuard<B> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_tuple("PlatformClockGuard")
             .field(&self.clock)
@@ -179,7 +195,7 @@ impl PlatformClockHolds {
     }
 
     /// Count the reference `guard` holds.
-    pub(crate) fn count(&mut self, guard: Option<&PlatformClockGuard>) {
+    pub(crate) fn count<B: PlatformClockBackend>(&mut self, guard: Option<&PlatformClockGuard<B>>) {
         if let Some(guard) = guard {
             let index = guard.clock().index();
             self.counts[index] = self.counts[index].saturating_add(1);
@@ -214,15 +230,25 @@ impl PlatformClock {
 
 /// Platform clock references the modem clock planner's dependency edges
 /// hold, one per platform-owned dependency.
-#[derive(Debug, Default)]
-pub(crate) struct ModemPlatformClocks {
-    pll_f160m: Option<PlatformClockGuard>,
-    analog_i2c: Option<PlatformClockGuard>,
-    coexistence: Option<PlatformClockGuard>,
+#[derive(Debug)]
+pub(crate) struct ModemPlatformClocks<B: PlatformClockBackend> {
+    pll_f160m: Option<PlatformClockGuard<B>>,
+    analog_i2c: Option<PlatformClockGuard<B>>,
+    coexistence: Option<PlatformClockGuard<B>>,
 }
 
-impl ModemPlatformClocks {
-    fn slot(&mut self, clock: PlatformClock) -> &mut Option<PlatformClockGuard> {
+impl<B: PlatformClockBackend> Default for ModemPlatformClocks<B> {
+    fn default() -> Self {
+        Self {
+            pll_f160m: None,
+            analog_i2c: None,
+            coexistence: None,
+        }
+    }
+}
+
+impl<B: PlatformClockBackend> ModemPlatformClocks<B> {
+    fn slot(&mut self, clock: PlatformClock) -> &mut Option<PlatformClockGuard<B>> {
         match clock {
             PlatformClock::Pll160m => &mut self.pll_f160m,
             PlatformClock::AnalogI2cMaster => &mut self.analog_i2c,
@@ -236,7 +262,7 @@ impl ModemPlatformClocks {
     fn acquire(
         &mut self,
         clock: PlatformClock,
-        platform: &impl PlatformClockProvider,
+        platform: &impl PlatformClockProvider<Backend = B>,
     ) -> Result<(), PlatformClockError> {
         let slot = self.slot(clock);
         debug_assert!(slot.is_none(), "the planner enables a dependency once");
@@ -307,11 +333,11 @@ const fn modem_device(dependency: Dependency) -> Option<ModemClockDevice> {
     })
 }
 
-fn perform_acquire(
+fn perform_acquire<B: PlatformClockBackend>(
     dependency: Dependency,
     port: &mut impl ModemClockPort,
-    held: &mut ModemPlatformClocks,
-    platform: &impl PlatformClockProvider,
+    held: &mut ModemPlatformClocks<B>,
+    platform: &impl PlatformClockProvider<Backend = B>,
 ) -> Result<(), PlatformClockError> {
     match dependency {
         Dependency::Pll160AndModemSource => {
@@ -329,10 +355,10 @@ fn perform_acquire(
     Ok(())
 }
 
-fn perform_release(
+fn perform_release<B: PlatformClockBackend>(
     dependency: Dependency,
     port: &mut impl ModemClockPort,
-    held: &mut ModemPlatformClocks,
+    held: &mut ModemPlatformClocks<B>,
 ) -> Result<(), PlatformClockError> {
     match dependency {
         Dependency::Pll160AndModemSource => {
@@ -359,11 +385,11 @@ fn perform_release(
     clippy::result_large_err,
     reason = "the poisoned transaction retains the planner without allocation"
 )]
-pub(crate) fn execute_acquire(
+pub(crate) fn execute_acquire<B: PlatformClockBackend>(
     prepared: PreparedModemClockAcquire,
     port: &mut impl ModemClockPort,
-    held: &mut ModemPlatformClocks,
-    platform: &impl PlatformClockProvider,
+    held: &mut ModemPlatformClocks<B>,
+    platform: &impl PlatformClockProvider<Backend = B>,
 ) -> Result<(ModemClockPlanner, ModemClockLease), PoisonedModemClockAcquire> {
     oer_espressif_modem_clock::execute_acquire(prepared, |dependency| {
         perform_acquire(dependency, port, held, platform)
@@ -380,10 +406,10 @@ pub(crate) fn execute_acquire(
     clippy::result_large_err,
     reason = "the poisoned transaction retains the planner and lease without allocation"
 )]
-pub(crate) fn execute_release(
+pub(crate) fn execute_release<B: PlatformClockBackend>(
     prepared: PreparedModemClockRelease,
     port: &mut impl ModemClockPort,
-    held: &mut ModemPlatformClocks,
+    held: &mut ModemPlatformClocks<B>,
 ) -> Result<ModemClockPlanner, PoisonedModemClockRelease> {
     oer_espressif_modem_clock::execute_release(prepared, |dependency| {
         perform_release(dependency, port, held)

@@ -1,12 +1,12 @@
 #![no_std]
 use oer_esp32s31_hal::{
-    ieee80211::client::{ClockPoisoned, StoppedInstallation},
     domain::RadioDomain,
+    ieee80211::client::{ClockPoisoned, StoppedInstallation},
 };
-pub fn retain<T>(
+pub fn retain<B: oer_esp32s31_hal::power::PlatformClockBackend, T>(
     stopped: StoppedInstallation,
     obligation: ClockPoisoned,
-    _lease: &mut RadioDomain<T>,
+    _lease: &mut RadioDomain<B, T>,
 ) -> (StoppedInstallation, ClockPoisoned) {
     #[cfg(ui_reject)]
     obligation.release_clocks(_lease); // ui-error: E0599

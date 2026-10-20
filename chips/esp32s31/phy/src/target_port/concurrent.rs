@@ -1,6 +1,8 @@
 //! Target registration and tracking of the shared PHY domain in the radio
 //! domain.
 
+use oer_esp32s31_hal::power::PlatformClockBackend;
+
 use super::*;
 use crate::{
     concurrent::{
@@ -84,9 +86,9 @@ pub enum ConcurrentRfError {
 
 /// Take `PHY`, then `PHY_CALIBRATION`, as `esp_phy_enable` does before
 /// calibration or RF wake.
-fn enable_phy_clocks(
-    radio: &mut RadioDomain<ConcurrentPhy>,
-    clocks: &impl PlatformClockProvider,
+fn enable_phy_clocks<B: PlatformClockBackend>(
+    radio: &mut RadioDomain<B, ConcurrentPhy>,
+    clocks: &impl PlatformClockProvider<Backend = B>,
 ) -> Result<(), ModemClockError> {
     radio.enable_phy_modem_clocks(PhyClockModule::Phy, clocks)?;
     if let Err(error) = radio.enable_phy_modem_clocks(PhyClockModule::Calibration, clocks) {
@@ -99,7 +101,9 @@ fn enable_phy_clocks(
 }
 
 /// Release both modules after a registration that did not complete.
-fn release_phy_clocks(radio: &mut RadioDomain<ConcurrentPhy>) -> Result<(), ModemClockError> {
+fn release_phy_clocks<B: PlatformClockBackend>(
+    radio: &mut RadioDomain<B, ConcurrentPhy>,
+) -> Result<(), ModemClockError> {
     let calibration = radio.disable_phy_modem_clocks(PhyClockModule::Calibration);
     let phy = radio.disable_phy_modem_clocks(PhyClockModule::Phy);
     calibration.and(phy)
@@ -130,11 +134,11 @@ pub enum ConcurrentPhyTrackingError {
     clippy::result_large_err,
     reason = "fail-stop error retains the allocation-free PHY transition"
 )]
-pub async fn register_concurrent_phy<P, D, O>(
+pub async fn register_concurrent_phy<B: PlatformClockBackend, P, D, O>(
     timer: &impl oer_time::Timer,
-    radio: &mut RadioDomain<ConcurrentPhy>,
+    radio: &mut RadioDomain<B, ConcurrentPhy>,
     platform: &mut P,
-    clocks: &impl PlatformClockProvider,
+    clocks: &impl PlatformClockProvider<Backend = B>,
     config: PhyRegisterConfig,
     observer: O,
 ) -> Result<ConcurrentPhyRegistration, ConcurrentPhyRegisterFailure>
@@ -204,9 +208,9 @@ where
 /// Once polled, drive this future to a terminal result. Cancellation leaves
 /// the domain unregistered in software while RF may be partially closed; the
 /// radio then requires reset.
-pub async fn close_concurrent_rf<P, D>(
+pub async fn close_concurrent_rf<B: PlatformClockBackend, P, D>(
     timer: &impl oer_time::Timer,
-    radio: &mut RadioDomain<ConcurrentPhy>,
+    radio: &mut RadioDomain<B, ConcurrentPhy>,
     platform: &mut P,
 ) -> Result<(), ConcurrentRfError>
 where
@@ -278,10 +282,10 @@ where
 ///
 /// Once polled, drive this future to a terminal result. After the first wake
 /// edge every failure is fail-stop and requires reset.
-pub async fn wake_concurrent_rf<D>(
+pub async fn wake_concurrent_rf<B: PlatformClockBackend, D>(
     timer: &impl oer_time::Timer,
-    radio: &mut RadioDomain<ConcurrentPhy>,
-    clocks: &impl PlatformClockProvider,
+    radio: &mut RadioDomain<B, ConcurrentPhy>,
+    clocks: &impl PlatformClockProvider<Backend = B>,
 ) -> Result<(), ConcurrentRfError>
 where
     D: PhyShortDelay,
@@ -334,9 +338,9 @@ where
 /// Once polled, drive this future to a terminal result. Cancellation after
 /// admission leaves the domain pending in software while hardware may be
 /// partially updated; the radio then requires reset.
-pub async fn maintain_concurrent_phy<P, D, O>(
+pub async fn maintain_concurrent_phy<B: PlatformClockBackend, P, D, O>(
     timer: &impl oer_time::Timer,
-    radio: &mut RadioDomain<ConcurrentPhy>,
+    radio: &mut RadioDomain<B, ConcurrentPhy>,
     platform: &mut P,
     observer: O,
 ) -> Result<PhyParamTrackingOutcome, ConcurrentPhyTrackingError>
@@ -428,8 +432,8 @@ pub enum ConcurrentTrackingTick {
 ///
 /// Once tracking starts, drive this future to a terminal result;
 /// cancellation then leaves hardware partially updated and requires reset.
-pub async fn track_concurrent_phy<P, D, O>(
-    radio: &mut RadioDomain<ConcurrentPhy>,
+pub async fn track_concurrent_phy<B: PlatformClockBackend, P, D, O>(
+    radio: &mut RadioDomain<B, ConcurrentPhy>,
     platform: &mut P,
     timer: &impl oer_time::Timer,
     observer: O,
@@ -454,7 +458,7 @@ where
     if !due {
         return Ok(ConcurrentTrackingTick::NotDue);
     }
-    maintain_concurrent_phy::<P, D, O>(timer, radio, platform, observer)
+    maintain_concurrent_phy::<_, P, D, O>(timer, radio, platform, observer)
         .await
         .map(ConcurrentTrackingTick::Tracked)
 }

@@ -275,7 +275,8 @@ fn trace_channel(
     [dot11p_enabled, dot11p_configuration]: [u8; 2],
 ) -> Result<oer_esp32s31_phy::PhyState, ()> {
     let mut platform = oer_espressif_esp_hal_radio::EspHalClocks::new();
-    let (mut radio, partitions) = oer_esp32s31_hal::root::RadioHardware::for_probe().split(());
+    let (mut radio, partitions) = oer_esp32s31_hal::root::RadioHardware::for_probe()
+        .split::<oer_espressif_esp_hal_radio::EspHal, _>(());
     let mut clocked = oer_esp32s31_hal::ieee80211::client::WifiClocked::for_host_test(
         oer_esp32s31_hal::ieee80211::client::WifiCold::from_partition(partitions.wifi),
     );
@@ -889,9 +890,10 @@ fn enter_common_force_level(
 }
 
 /// The radio domain of a fresh probe root.
-fn validation_radio() -> oer_esp32s31_hal::domain::RadioDomain<()> {
+fn validation_radio() -> oer_esp32s31_hal::domain::RadioDomain<oer_espressif_esp_hal_radio::EspHal>
+{
     oer_esp32s31_hal::root::RadioHardware::for_probe()
-        .split(())
+        .split::<oer_espressif_esp_hal_radio::EspHal, _>(())
         .0
 }
 
@@ -900,8 +902,11 @@ fn validation_radio() -> oer_esp32s31_hal::domain::RadioDomain<()> {
 /// It lives in image memory and is built on first use, so an entry that runs
 /// after `open_phy_validation_arbiter_init` only borrows it, as a production
 /// transaction borrows its domain.
-fn session_radio() -> &'static mut oer_esp32s31_hal::domain::RadioDomain<()> {
-    static mut SESSION_RADIO: Option<oer_esp32s31_hal::domain::RadioDomain<()>> = None;
+fn session_radio()
+-> &'static mut oer_esp32s31_hal::domain::RadioDomain<oer_espressif_esp_hal_radio::EspHal> {
+    static mut SESSION_RADIO: Option<
+        oer_esp32s31_hal::domain::RadioDomain<oer_espressif_esp_hal_radio::EspHal>,
+    > = None;
     // SAFETY: the verifier executes one entry at a time on one hart, and
     // each entry calls this once and drops the reference before it returns,
     // so no two references to the domain are alive together.

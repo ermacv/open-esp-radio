@@ -21,6 +21,8 @@
 //! that describes the radio and published to the domain right before the
 //! acquisition, never supplied by a caller.
 
+use oer_esp32s31_hal::power::PlatformClockBackend;
+
 use core::fmt;
 
 use oer_esp32s31_hal::{
@@ -80,11 +82,11 @@ pub enum Ieee802154PhyClientError {
 /// Every check runs before the client set or BTBB changes: IEEE 802.15.4 already
 /// holds BTBB, or the client set rejects the client. The radio comes back
 /// either way.
-pub fn join_ieee802154<'l>(
-    ready: PhyClientReady<'l, Ieee802154PhyMembership>,
+pub fn join_ieee802154<'l, B: PlatformClockBackend>(
+    ready: PhyClientReady<'l, B, Ieee802154PhyMembership>,
     clocked: &Ieee802154Clocked,
     clock: &impl oer_time::Clock,
-) -> Result<Joined<'l, Ieee802154PhyMembership>, JoinRefused<'l, Ieee802154PhyClientError>> {
+) -> Result<Joined<'l, B, Ieee802154PhyMembership>, JoinRefused<'l, B, Ieee802154PhyClientError>> {
     let radio = ready.into_radio();
     let acquired =
         match acquire_btbb_client(radio, RadioClient::Ieee802154, clock, |radio, gain| {
@@ -144,8 +146,8 @@ impl fmt::Debug for Ieee802154PhyLeaveFailure {
 ///
 /// The domain rejects the release (tracking pending, poisoned) or the BTBB
 /// reference is missing; nothing changed and the membership is returned.
-pub fn leave_ieee802154(
-    radio: &mut RadioDomain<ConcurrentPhy>,
+pub fn leave_ieee802154<B: PlatformClockBackend>(
+    radio: &mut RadioDomain<B, ConcurrentPhy>,
     clocked: &Ieee802154Clocked,
     membership: Ieee802154PhyMembership,
 ) -> Result<bool, Ieee802154PhyLeaveFailure> {

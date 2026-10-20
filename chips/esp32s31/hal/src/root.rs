@@ -10,6 +10,8 @@
 /// The read-only Wi-Fi MAC local-time capability a [`WifiPartition`]
 /// lends.
 pub use oer_esp32s31_pac::MacLocalTime;
+
+use crate::power::PlatformClockBackend;
 use oer_esp32s31_pac::{
     BluetoothControllerPartition, BluetoothInterruptSetup, BluetoothModemLpTimerRegisters,
     Ieee802154Partition, MacInterruptSetup, RadioPartitions, SharedRadioParts,
@@ -68,11 +70,10 @@ impl AnalogBusOwnership {
 /// ```compile_fail
 /// use oer_esp32s31_hal::root::RadioHardware;
 ///
-/// # use oer_esp32s31_hal::root::AnalogBusOwnership;
-/// // SAFETY: a doctest that never runs on hardware.
-/// let hardware = RadioHardware::take(unsafe { AnalogBusOwnership::assume_exclusive() }).unwrap();
-/// let _first = hardware.split(());
-/// let _second = hardware.split(());
+/// # fn split_twice<B: oer_esp32s31_hal::power::PlatformClockBackend>(hardware: RadioHardware) {
+/// let _first = hardware.split::<B, _>(());
+/// let _second = hardware.split::<B, _>(());
+/// # }
 /// ```
 #[must_use = "dropping the radio root permanently loses the unique hardware capability"]
 pub struct RadioHardware {
@@ -229,18 +230,18 @@ pub enum ReunionError {
 
 /// Rejected reunion returning both unchanged owners.
 #[must_use = "a rejected reunion still owns the domain and every partition"]
-pub struct ReunionFailure<T = ()> {
-    shared: RadioDomain<T>,
+pub struct ReunionFailure<B: PlatformClockBackend, T = ()> {
+    shared: RadioDomain<B, T>,
     partitions: ProtocolPartitions,
     error: ReunionError,
 }
 
-impl<T> ReunionFailure<T> {
+impl<B: PlatformClockBackend, T> ReunionFailure<B, T> {
     pub const fn error(&self) -> ReunionError {
         self.error
     }
 
-    pub fn into_parts(self) -> (RadioDomain<T>, ProtocolPartitions) {
+    pub fn into_parts(self) -> (RadioDomain<B, T>, ProtocolPartitions) {
         (self.shared, self.partitions)
     }
 }
@@ -254,9 +255,15 @@ impl RadioHardware {
     /// [`ProtocolPartitions`]. The two are separate owners, so a protocol
     /// driver takes its partition while the radio system owns the domain.
     ///
+    /// `B` is the platform clock backend shared by every provider used with
+    /// this domain.
+    ///
     /// `attachment` is the upper layer's state kept with the domain, such
     /// as the PHY layer's registered domain slot.
-    pub fn split<T>(self, attachment: T) -> (RadioDomain<T>, ProtocolPartitions) {
+    pub fn split<B: PlatformClockBackend, T>(
+        self,
+        attachment: T,
+    ) -> (RadioDomain<B, T>, ProtocolPartitions) {
         let RadioPartitions {
             wifi_mac,
             wifi_rx_dma,
@@ -310,10 +317,10 @@ impl RadioHardware {
         clippy::result_large_err,
         reason = "rejection returns the domain and every partition without allocation"
     )]
-    pub fn reunite<T>(
-        shared: RadioDomain<T>,
+    pub fn reunite<B: PlatformClockBackend, T>(
+        shared: RadioDomain<B, T>,
         partitions: ProtocolPartitions,
-    ) -> Result<(Self, T), ReunionFailure<T>> {
+    ) -> Result<(Self, T), ReunionFailure<B, T>> {
         let (registers, phy, attachment) = match shared.into_parts() {
             Ok(parts) => parts,
             Err((shared, error)) => {

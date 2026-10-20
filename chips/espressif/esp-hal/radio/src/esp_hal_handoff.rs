@@ -10,7 +10,8 @@ use oer_esp32s31_hal::{
     root::{AnalogBusOwnership, RadioHardware},
 };
 
-use crate::{ClockBackend, PlatformClocks};
+use crate::PlatformClocks;
+use oer_esp32s31_hal::power::PlatformClockBackend;
 
 /// esp-hal's singletons of the blocks the radio owns whole.
 ///
@@ -44,10 +45,11 @@ pub type EspHalClocks = PlatformClocks<EspHal>;
 
 /// esp-hal's reference counts: the three `MODEM_LPCON.CLK_CONF` gates
 /// through `clock::ll`'s counted acquire and release, MPLL and the 160 MHz PLL
-/// output through the clock tree's request and release.
+/// output through the clock tree's request and release. The operations
+/// stay in SRAM because the radio actor calls them at interrupt level 2.
 pub struct EspHal;
 
-impl ClockBackend for EspHal {
+impl PlatformClockBackend for EspHal {
     fn acquire(clock: PlatformClock) {
         match clock {
             PlatformClock::AnalogI2cMaster => ll::acquire_analog_i2c_master_clock(),

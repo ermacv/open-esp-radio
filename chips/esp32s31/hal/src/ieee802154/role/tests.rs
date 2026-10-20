@@ -8,7 +8,7 @@ use crate::{
 
 use super::{Ieee802154Clocked, Ieee802154Cold};
 
-fn radio_domain() -> RadioDomain {
+fn radio_domain() -> RadioDomain<crate::power::test_clocks::CountingBackend> {
     let RadioPartitions {
         radio_phy,
         coexistence,
@@ -28,7 +28,8 @@ fn radio_domain() -> RadioDomain {
 
 #[test]
 fn the_cold_client_returns_its_partition_to_the_concurrent_split() {
-    let (shared, mut partitions) = RadioHardware::for_host_test().split(());
+    let (shared, mut partitions) =
+        RadioHardware::for_host_test().split::<crate::power::test_clocks::CountingBackend, _>(());
     let cold = Ieee802154Cold::from_partition(partitions.ieee802154);
     partitions.ieee802154 = cold.into_partition();
     let _hardware = RadioHardware::reunite(shared, partitions)
@@ -39,7 +40,8 @@ fn the_cold_client_returns_its_partition_to_the_concurrent_split() {
 fn a_rejected_power_entry_returns_the_unchanged_cold_client() {
     let mut radio = radio_domain();
     radio.hold_common_power_for_test(RadioClient::Ieee802154);
-    let (_shared, partitions) = RadioHardware::for_host_test().split(());
+    let (_shared, partitions) =
+        RadioHardware::for_host_test().split::<crate::power::test_clocks::CountingBackend, _>(());
     let domain = &mut radio;
 
     let failure = match Ieee802154Cold::from_partition(partitions.ieee802154).power_up(
@@ -56,7 +58,8 @@ fn a_rejected_power_entry_returns_the_unchanged_cold_client() {
 #[test]
 fn the_btbb_steps_require_the_ieee802154_reference() {
     let mut radio = radio_domain();
-    let (_shared, partitions) = RadioHardware::for_host_test().split(());
+    let (_shared, partitions) =
+        RadioHardware::for_host_test().split::<crate::power::test_clocks::CountingBackend, _>(());
     let clocked = Ieee802154Clocked::for_host_test(partitions.ieee802154);
     let domain = &mut radio;
 
@@ -75,7 +78,8 @@ fn the_btbb_steps_require_the_ieee802154_reference() {
 #[test]
 fn releasing_clocks_the_planner_never_granted_keeps_the_clocked_owner() {
     let mut radio = radio_domain();
-    let (_shared, partitions) = RadioHardware::for_host_test().split(());
+    let (_shared, partitions) =
+        RadioHardware::for_host_test().split::<crate::power::test_clocks::CountingBackend, _>(());
     let clocked = Ieee802154Clocked::for_host_test(partitions.ieee802154);
     let domain = &mut radio;
 

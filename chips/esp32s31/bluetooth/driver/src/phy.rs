@@ -7,6 +7,8 @@
 //! and leaves it. The BTBB gain byte is projected by the PHY client from the
 //! registration that describes the domain.
 
+use oer_esp32s31_hal::power::PlatformClockBackend;
+
 use oer_esp32s31_hal::domain::RadioDomain;
 use oer_esp32s31_phy::{
     bluetooth_client::{
@@ -36,7 +38,10 @@ use crate::{low_power::ControllerLowPowerHardwareInitialized, resources::TaskRes
 /// #     loop {}
 /// # }
 /// use oer_esp32s31_bluetooth_driver::phy::ControllerPhyJoined;
-/// let _engine = ControllerPhyJoined::<'static, 4>::initialize_ble_phy_engine::<()>;
+/// use oer_esp32s31_hal::power::PlatformClockBackend;
+/// fn engine<B: PlatformClockBackend>() {
+///     let _engine = ControllerPhyJoined::<'static, 4>::initialize_ble_phy_engine::<B, ()>;
+/// }
 /// ```
 ///
 /// ```compile_fail,E0599
@@ -125,9 +130,9 @@ impl<'cells, const MODEM_TIMER_CAPACITY: usize>
         clippy::result_large_err,
         reason = "the failure retains the complete allocation-free Controller epoch"
     )]
-    pub fn join_phy(
+    pub fn join_phy<B: PlatformClockBackend>(
         self,
-        ready: PhyClientReady<'_, BluetoothPhyMembership>,
+        ready: PhyClientReady<'_, B, BluetoothPhyMembership>,
         clock: &impl oer_time::Clock,
     ) -> Result<
         (
@@ -160,8 +165,8 @@ impl<'cells, const MODEM_TIMER_CAPACITY: usize>
 ///
 /// The domain rejected the release; nothing changed and the membership is
 /// returned.
-pub(crate) fn leave_phy(
-    radio: &mut RadioDomain<ConcurrentPhy>,
+pub(crate) fn leave_phy<B: PlatformClockBackend>(
+    radio: &mut RadioDomain<B, ConcurrentPhy>,
     task: &TaskResources,
     membership: BluetoothPhyMembership,
 ) -> Result<bool, BluetoothPhyLeaveFailure> {

@@ -3,6 +3,8 @@
 //! The role performs stop/restart at its ownership boundary; the actor owns
 //! the shared PHY transaction and calibration, as in initial selection.
 
+use oer_esp32s31_hal::power::PlatformClockBackend;
+
 use oer_esp32s31_hal::{domain::RadioDomain, ieee80211::client::WifiClocked};
 use oer_esp32s31_phy::{
     ConcurrentWifiChannelError, PhyTargetObserver, RomShortDelay, concurrent::ConcurrentPhy,
@@ -11,9 +13,9 @@ use oer_esp32s31_phy::{
 use oer_ieee80211_wire::channel::WifiChannel;
 use oer_radio_regulatory::Permitted;
 
-pub(crate) async fn select_wifi_channel<O: PhyTargetObserver>(
+pub(crate) async fn select_wifi_channel<B: PlatformClockBackend, O: PhyTargetObserver>(
     timer: &impl oer_time::Timer,
-    domain: &mut RadioDomain<ConcurrentPhy>,
+    domain: &mut RadioDomain<B, ConcurrentPhy>,
     wifi: &mut WifiClocked,
     channel: Permitted<WifiChannel>,
     observer: &mut O,

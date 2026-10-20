@@ -135,7 +135,8 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
             park()
         }
     };
-    let (domain, partitions) = hardware.split(ConcurrentPhy::new());
+    let (domain, partitions) =
+        hardware.split::<oer_espressif_esp_hal_radio::EspHal, _>(ConcurrentPhy::new());
     let _ = write!(
         console,
         "OER w0 identity rf_cal_version={} base_mac={:02x?} mac_ext={:#06x}\r\n",

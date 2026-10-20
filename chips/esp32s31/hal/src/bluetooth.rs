@@ -16,6 +16,8 @@
 
 #![deny(unsafe_code)]
 
+use crate::power::PlatformClockBackend;
+
 use core::fmt;
 
 use oer_esp32s31_pac::{
@@ -137,10 +139,10 @@ impl ColdOwner {
     ///
     /// The client already holds power or the first client's sequence failed a
     /// read-back checkpoint; the unchanged owner is returned.
-    pub fn power_up<T>(
+    pub fn power_up<B: PlatformClockBackend, T>(
         self,
-        radio: &mut RadioDomain<T>,
-        clocks: &impl PlatformClockProvider,
+        radio: &mut RadioDomain<B, T>,
+        clocks: &impl PlatformClockProvider<Backend = B>,
     ) -> Result<(PoweredOwner, CommonPower<BluetoothClient>), PowerTransitionFailure<Self>> {
         match radio.enter_common_power(&self.partition.task, clocks) {
             Ok(power) => Ok((
@@ -172,9 +174,9 @@ impl PoweredOwner {
     ///
     /// The baseline did not read back; the client stays entered and the
     /// unchanged owner and proof are returned for a retry.
-    pub fn power_down<T>(
+    pub fn power_down<B: PlatformClockBackend, T>(
         self,
-        radio: &mut RadioDomain<T>,
+        radio: &mut RadioDomain<B, T>,
         power: CommonPower<BluetoothClient>,
         coex: &CoexAbsent<BluetoothClient>,
     ) -> Result<ColdOwner, PowerTransitionFailure<(Self, CommonPower<BluetoothClient>)>> {
@@ -205,10 +207,10 @@ impl PoweredOwner {
     /// read-back failed; every step already taken is rolled back and the
     /// owner is returned. After [`ModemClockError::Poisoned`] no further modem
     /// clock change succeeds until reset.
-    pub fn enable_clocks<T>(
+    pub fn enable_clocks<B: PlatformClockBackend, T>(
         self,
-        radio: &mut RadioDomain<T>,
-        platform: &impl PlatformClockProvider,
+        radio: &mut RadioDomain<B, T>,
+        platform: &impl PlatformClockProvider<Backend = B>,
     ) -> Result<ClockedOwner, ClockTransitionFailure<Self>> {
         let task = &self.partition.task;
         if let Err(error) = radio.enable_modem_clocks(task, platform) {
@@ -309,9 +311,9 @@ impl ClockedOwner {
     /// The planner rejected or poisoned the release; the owner is returned
     /// with the low-power clock already deselected, and a retry continues
     /// with the module clocks.
-    pub fn disable_clocks<T>(
+    pub fn disable_clocks<B: PlatformClockBackend, T>(
         self,
-        radio: &mut RadioDomain<T>,
+        radio: &mut RadioDomain<B, T>,
     ) -> Result<PoweredOwner, ClockTransitionFailure<Self>> {
         let task = &self.partition.task;
         // A retry after a planner failure finds the clock already deselected.
@@ -469,9 +471,9 @@ impl TaskOwner {
     /// owner and left the shared PHY domain and BTBB baseband. The Controller
     /// retains every published memory owner until this operation completes.
     #[doc(hidden)]
-    pub fn shut_down<T>(
+    pub fn shut_down<B: PlatformClockBackend, T>(
         self,
-        radio: &mut RadioDomain<T>,
+        radio: &mut RadioDomain<B, T>,
         output: InterruptOutputReleasedOwner,
         timer: ModemLpTimerInterruptReadyOwner,
     ) -> Result<(ClockedOwner, BluetoothControllerReset), BluetoothShutdownFailure> {
@@ -541,9 +543,9 @@ impl TaskOwner {
     /// # Errors
     ///
     /// As [`RadioDomain::btbb_acquire`].
-    pub fn acquire_btbb<T>(
+    pub fn acquire_btbb<B: PlatformClockBackend, T>(
         &self,
-        radio: &mut RadioDomain<T>,
+        radio: &mut RadioDomain<B, T>,
         gain: &crate::domain::BtbbGain,
     ) -> Result<BtbbAcquired, BtbbError> {
         radio.btbb_acquire(&self.registers, gain)
@@ -554,7 +556,10 @@ impl TaskOwner {
     /// # Errors
     ///
     /// Bluetooth does not hold BTBB.
-    pub fn release_btbb<T>(&self, radio: &mut RadioDomain<T>) -> Result<(), BtbbError> {
+    pub fn release_btbb<B: PlatformClockBackend, T>(
+        &self,
+        radio: &mut RadioDomain<B, T>,
+    ) -> Result<(), BtbbError> {
         radio.btbb_release(&self.registers)
     }
 
@@ -565,9 +570,9 @@ impl TaskOwner {
     /// the initialized controller software and an inactive IRQ route, orders
     /// of the Controller's lifecycle.
     #[doc(hidden)]
-    pub fn enable_ble_base_stack_hardware<T>(
+    pub fn enable_ble_base_stack_hardware<B: PlatformClockBackend, T>(
         &mut self,
-        radio: &mut RadioDomain<T>,
+        radio: &mut RadioDomain<B, T>,
         storage: &BlePhyHardwareObjects,
     ) {
         self.reunitable = false;

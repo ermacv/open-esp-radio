@@ -1,6 +1,6 @@
 //! Counting platform clock provider for host tests.
 //!
-//! A guard releases through a plain function, so the counts and the optional
+//! A guard releases through its backend, so the counts and the optional
 //! event sink live in thread-local state; each test runs on its own thread.
 //! Creating a provider resets that state.
 
@@ -8,8 +8,8 @@ use core::cell::{Cell, RefCell};
 use std::boxed::Box;
 
 use super::{
-    PlatformClock, PlatformClockAbandonment, PlatformClockError, PlatformClockGuard,
-    PlatformClockHolds, PlatformClockProvider,
+    PlatformClock, PlatformClockAbandonment, PlatformClockBackend, PlatformClockError,
+    PlatformClockGuard, PlatformClockHolds, PlatformClockProvider,
 };
 
 /// One platform clock edge the provider observed.
@@ -37,28 +37,41 @@ fn record(event: ClockEvent) {
     });
 }
 
-fn release(clock: PlatformClock) {
-    HELD.with(|held| {
-        let mut holds = held.get();
-        let count = holds.get(clock);
-        assert!(count > 0, "{clock:?} released without a reference");
-        holds.set(clock, count - 1);
-        held.set(holds);
-    });
-    record(ClockEvent::Release(clock));
-}
+/// The thread-local reference counts used by test providers and guards.
+pub(crate) struct CountingBackend;
 
-fn abandon(clock: PlatformClock, how: PlatformClockAbandonment) {
-    let counts = match how {
-        PlatformClockAbandonment::Abandoned => &ABANDONED,
-        PlatformClockAbandonment::Dropped => &DROPPED,
-    };
-    counts.with(|counts| {
-        let mut holds = counts.get();
-        holds.set(clock, holds.get(clock) + 1);
-        counts.set(holds);
-    });
-    record(ClockEvent::Abandon(clock, how));
+impl PlatformClockBackend for CountingBackend {
+    fn acquire(clock: PlatformClock) {
+        HELD.with(|held| {
+            let mut holds = held.get();
+            holds.set(clock, holds.get(clock) + 1);
+            held.set(holds);
+        });
+        record(ClockEvent::Acquire(clock));
+    }
+    fn release(clock: PlatformClock) {
+        HELD.with(|held| {
+            let mut holds = held.get();
+            let count = holds.get(clock);
+            assert!(count > 0, "{clock:?} released without a reference");
+            holds.set(clock, count - 1);
+            held.set(holds);
+        });
+        record(ClockEvent::Release(clock));
+    }
+
+    fn abandon(clock: PlatformClock, how: PlatformClockAbandonment) {
+        let counts = match how {
+            PlatformClockAbandonment::Abandoned => &ABANDONED,
+            PlatformClockAbandonment::Dropped => &DROPPED,
+        };
+        counts.with(|counts| {
+            let mut holds = counts.get();
+            holds.set(clock, holds.get(clock) + 1);
+            counts.set(holds);
+        });
+        record(ClockEvent::Abandon(clock, how));
+    }
 }
 
 /// The references this thread's owners abandoned deliberately, and those
@@ -106,17 +119,17 @@ impl CountingPlatformClocks {
 }
 
 impl PlatformClockProvider for CountingPlatformClocks {
-    fn acquire(&self, clock: PlatformClock) -> Result<PlatformClockGuard, PlatformClockError> {
+    type Backend = CountingBackend;
+
+    fn acquire(
+        &self,
+        clock: PlatformClock,
+    ) -> Result<PlatformClockGuard<Self::Backend>, PlatformClockError> {
         if self.refused.get()[clock.index()] {
             return Err(PlatformClockError);
         }
-        HELD.with(|held| {
-            let mut holds = held.get();
-            holds.set(clock, holds.get(clock) + 1);
-            held.set(holds);
-        });
-        record(ClockEvent::Acquire(clock));
-        Ok(PlatformClockGuard::new(clock, release, abandon))
+        CountingBackend::acquire(clock);
+        Ok(PlatformClockGuard::new(clock))
     }
 }
 

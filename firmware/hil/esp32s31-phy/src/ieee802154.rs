@@ -111,7 +111,7 @@ impl Rx {
 
     pub async fn enter(
         &mut self,
-        domain: &mut RadioDomain<ConcurrentPhy>,
+        domain: &mut RadioDomain<oer_espressif_esp_hal_radio::EspHal, ConcurrentPhy>,
         clocks: &EspHalClocks,
         channel: u8,
         power_dbm: i8,
@@ -149,7 +149,7 @@ impl Rx {
         let due = joined.acquired == ConcurrentAcquire::TrackingDue;
         let member = joined.membership;
         if due {
-            maintain_concurrent_phy::<(), RomShortDelay, _>(
+            maintain_concurrent_phy::<_, (), RomShortDelay, _>(
                 &EmbassyClock,
                 domain,
                 &mut (),
@@ -225,7 +225,10 @@ impl Rx {
         Ok(())
     }
 
-    pub async fn exit(&mut self, domain: &mut RadioDomain<ConcurrentPhy>) -> Result<()> {
+    pub async fn exit(
+        &mut self,
+        domain: &mut RadioDomain<oer_espressif_esp_hal_radio::EspHal, ConcurrentPhy>,
+    ) -> Result<()> {
         // Same P2 as the IRQ, with no yield until it is unrouted and stopped.
         oer_espressif_esp_hal_irq::disable(&self.irq);
         let mut running = ENGINE
@@ -279,7 +282,7 @@ impl Rx {
                 .map_err(|_| RejectReason::Internal)?,
         );
         self.absent = Some(absent);
-        close_concurrent_rf::<(), RomShortDelay>(&EmbassyClock, domain, &mut ())
+        close_concurrent_rf::<_, (), RomShortDelay>(&EmbassyClock, domain, &mut ())
             .await
             .map_err(|_| RejectReason::Internal)?;
         Ok(())

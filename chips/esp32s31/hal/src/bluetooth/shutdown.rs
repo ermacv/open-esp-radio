@@ -6,6 +6,8 @@
 //! domain transaction as boot and `btdm_lp_shutdown`; no synthetic
 //! runtime-counter stop register is used.
 
+use crate::power::PlatformClockBackend;
+
 use oer_esp32s31_pac::{BluetoothInterruptSetup, BluetoothModemLpTimerRegisters};
 
 use super::{ClockedOwner, Partition, TaskOwner};
@@ -100,13 +102,13 @@ fn prepare(control: &mut impl Control) -> Result<(), BluetoothShutdownError> {
     Ok(())
 }
 
-struct Hardware<'a, T> {
+struct Hardware<'a, B: PlatformClockBackend, T> {
     task: &'a mut TaskOwner,
-    radio: &'a mut RadioDomain<T>,
+    radio: &'a mut RadioDomain<B, T>,
     timer: &'a mut BluetoothModemLpTimerRegisters,
 }
 
-impl<T> Control for Hardware<'_, T> {
+impl<B: PlatformClockBackend, T> Control for Hardware<'_, B, T> {
     fn time_pending(&self) -> bool {
         self.task.time_latch.in_flight()
     }
@@ -139,9 +141,9 @@ impl<T> Control for Hardware<'_, T> {
 ///
 /// All memory stays retained until this operation completes. Failure has no
 /// hardware escape.
-pub(super) fn shut_down<T>(
+pub(super) fn shut_down<B: PlatformClockBackend, T>(
     mut task: TaskOwner,
-    radio: &mut RadioDomain<T>,
+    radio: &mut RadioDomain<B, T>,
     output: BluetoothInterruptSetup,
     mut timer: BluetoothModemLpTimerRegisters,
 ) -> Result<(ClockedOwner, BluetoothControllerReset), BluetoothShutdownFailure> {

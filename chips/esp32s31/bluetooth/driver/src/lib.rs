@@ -71,3 +71,6 @@ pub use controller_time::{
 };
 
 pub mod memory;
+
+#[cfg(test)]
+mod test_clocks;

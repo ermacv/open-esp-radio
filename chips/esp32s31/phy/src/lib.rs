@@ -166,3 +166,6 @@ pub use target_port::{
     TargetPhyCalibrationTrackingPort, TargetPhyParamTrackingPort, TargetPhyRegisterPort,
     WeakPhyGrantProtect,
 };
+
+#[cfg(test)]
+mod test_clocks;

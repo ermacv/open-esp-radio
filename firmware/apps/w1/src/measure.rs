@@ -17,12 +17,13 @@ use core::{
 };
 
 use atomic_waker::AtomicWaker;
+use oer_esp32s31_hal::power::PlatformClockBackend;
 use oer_esp32s31_hal::power::{PlatformClock, PlatformClockAbandonment};
 use oer_esp32s31_radio_client::{Client, Failed, LpClock, LpSource, PhyPreparation};
 use oer_esp32s31_radio_system::{
     ClientBackend, CloseFault, Exit, Fault, LastClientLeft, PhyDomain,
 };
-use oer_espressif_esp_hal_radio::{ClockBackend, EspHal};
+use oer_espressif_esp_hal_radio::EspHal;
 use oer_espressif_executor::{
     poll_timing::{CycleHistogram, CycleSource, Mcycle},
     timer_observation::{Report, Window},
@@ -293,10 +294,11 @@ pub fn clock_stats(clock: PlatformClock, op: ClockOp, phase: Phase) -> (u32, u32
 }
 
 /// esp-hal's clock backend, each operation timed by clock, operation and
-/// phase.
+/// phase. The operations stay in SRAM with the underlying backend because
+/// the radio actor calls them at interrupt level 2.
 pub struct TimedEspHal;
 
-impl ClockBackend for TimedEspHal {
+impl PlatformClockBackend for TimedEspHal {
     fn acquire(clock: PlatformClock) {
         clock_op(clock, ClockOp::Acquire, || EspHal::acquire(clock));
     }

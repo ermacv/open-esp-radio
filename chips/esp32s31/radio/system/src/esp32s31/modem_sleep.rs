@@ -4,6 +4,8 @@
 //! and wakes it (`wifi_rf_phy_enable`) while the MAC stays up. The client
 //! lends the proof that its clocks are on.
 
+use oer_esp32s31_hal::power::PlatformClockBackend;
+
 use oer_esp32s31_hal::{domain::RadioDomain, ieee80211::client::WifiClocksOn};
 use oer_esp32s31_phy::{
     concurrent::{ConcurrentAcquire, ConcurrentPhy, ConcurrentPhyError, phy_ready},
@@ -19,8 +21,8 @@ use oer_esp32s31_phy::{
 /// The domain rejected the release; the receive path is restored and the
 /// membership returned.
 #[expect(dead_code, reason = "no client request sleeps the modem yet")]
-pub(crate) fn suspend_wifi_rf(
-    radio: &mut RadioDomain<ConcurrentPhy>,
+pub(crate) fn suspend_wifi_rf<B: PlatformClockBackend>(
+    radio: &mut RadioDomain<B, ConcurrentPhy>,
     clocks: &WifiClocksOn,
     membership: WifiPhyMembership,
 ) -> Result<(WifiPhySuspended, bool), (WifiPhyMembership, ConcurrentPhyError)> {
@@ -46,8 +48,8 @@ pub(crate) fn suspend_wifi_rf(
 /// The domain rejected the client; nothing changed and the suspended token
 /// is returned.
 #[expect(dead_code, reason = "no client request sleeps the modem yet")]
-pub(crate) fn resume_wifi_rf(
-    radio: &mut RadioDomain<ConcurrentPhy>,
+pub(crate) fn resume_wifi_rf<B: PlatformClockBackend>(
+    radio: &mut RadioDomain<B, ConcurrentPhy>,
     clocks: &WifiClocksOn,
     suspended: WifiPhySuspended,
     clock: &impl oer_time::Clock,

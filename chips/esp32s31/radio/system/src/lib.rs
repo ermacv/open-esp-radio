@@ -322,3 +322,6 @@ pub use esp32s31::Esp32s31Radio;
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod test_clocks;

@@ -38,7 +38,8 @@ fn state(temperature: i16) -> PhyState {
 #[test]
 fn due_evaluation_does_not_imply_due_calibration_or_commit_references() {
     let state = state(0);
-    let (mut radio, _partitions) = oer_esp32s31_hal::root::RadioHardware::for_host_test().split(());
+    let (mut radio, _partitions) = oer_esp32s31_hal::root::RadioHardware::for_host_test()
+        .split::<crate::test_clocks::TestClockBackend, _>(());
     let grant =
         oer_esp32s31_hal::owner::PhyInitializationAccess::begin_registration(&mut radio.phy_hal());
     let registered = RegisteredPhyState::from_wrapper_test_model(state, grant);

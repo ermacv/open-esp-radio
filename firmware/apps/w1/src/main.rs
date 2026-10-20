@@ -229,7 +229,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
             park()
         }
     };
-    let (domain, partitions) = hardware.split(ConcurrentPhy::new());
+    let (domain, partitions) = hardware.split::<TimedEspHal, _>(ConcurrentPhy::new());
     let (Some((end, cells)), Some(lp)) = (claim(), LpClock::<RcSlow>::claim()) else {
         let _ = console.write(b"OER-RESULT: fail w1 claim\r\n");
         park()

@@ -12,7 +12,8 @@ use oer_esp32s31_hal::{
 
 #[test]
 fn controller_hal_precedes_complete_scheduler_init() {
-    let (_shared, partitions) = RadioHardware::for_host_test().split(());
+    let (_shared, partitions) =
+        RadioHardware::for_host_test().split::<crate::test_clocks::TestClockBackend, _>(());
     let clocked = ClockedOwner::for_host_test(partitions.bluetooth);
     let operations = Rc::new(RefCell::new(Vec::new()));
     let hal_operations = Rc::clone(&operations);
