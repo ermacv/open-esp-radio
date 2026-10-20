@@ -104,14 +104,30 @@ pub fn build(spec: &ImageSpec) -> Result<crate::bundle::ImageBundle> {
     staged::build(spec, &profile, &instrumentation)
 }
 
-/// Type-check the runtime of `spec` against the committed pins with the
+/// A runtime check that produces no image for the link-time gates.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RuntimeCheck {
+    Types,
+    Clippy,
+}
+
+impl RuntimeCheck {
+    pub fn subcommand(self) -> &'static str {
+        match self {
+            Self::Types => "check",
+            Self::Clippy => "clippy",
+        }
+    }
+}
+
+/// Check the runtime of `spec` against the committed pins with the
 /// image build's target, features and compiler configuration, without code
 /// generation, in its compile cache. Lints that need monomorphization
 /// (`large_assignments`) and the link-time gates still need [`build`].
-pub fn type_check(spec: &ImageSpec) -> Result<()> {
+pub fn check(spec: &ImageSpec, check: RuntimeCheck) -> Result<()> {
     // A type check makes no ELF: a requested check would pass unexamined.
     if spec.checks.is_some() {
-        return Err("a type check builds no image; its checks need a build".into());
+        return Err("a runtime check builds no image; its gates need a build".into());
     }
     let profile = profile(&spec.root, &spec.chip)?;
     let policy = StackPolicy::load(&spec.root.join(&spec.stack_policy))?;
@@ -120,15 +136,22 @@ pub fn type_check(spec: &ImageSpec) -> Result<()> {
     let cache = compile_cache(&spec.root, &instrumentation);
     // The image linker the flags name is this checkout's.
     let _cache = crate::compiler::lock_compile_cache(&cache)?;
-    let mut command = runtime_command(spec, &profile, "check", &policy, &instrumentation)?;
+    let mut command = runtime_command(
+        spec,
+        &profile,
+        check.subcommand(),
+        &policy,
+        &instrumentation,
+    )?;
     command.env("CARGO_TARGET_DIR", &cache);
     cargo::ensure_fetched(&spec.root)?;
     // Through the shared runner, so a caller's output policy (xtask logs
     // child output by default) applies to the type check too.
     oer_os_process::run(&mut command).map_err(|error| {
         format!(
-            "the {} runtime does not type-check: {error}",
-            spec.application.package
+            "the {} runtime {} failed: {error}",
+            spec.application.package,
+            check.subcommand()
         )
     })?;
     Ok(())
@@ -145,7 +168,7 @@ pub fn profile(root: &Path, chip: &str) -> Result<oer_chip_profile::Profile> {
     Ok(profile)
 }
 
-/// The Cargo `subcommand` (`build` or `check`) of `spec`'s runtime with the
+/// The Cargo `subcommand` (`build`, `check` or `clippy`) of `spec`'s runtime with the
 /// image compiler of `policy` and the classes of `instrumentation`: the
 /// application package for the chip's target with the firmware profile, its
 /// features alone, against the committed pins.

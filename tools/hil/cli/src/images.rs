@@ -20,12 +20,15 @@ pub enum ImagesCli {
     /// class: all of them with `--all`, each `--class`, or the classes a
     /// change reaches (`--reaching`); `--list` prints every class
     /// with the runtime features it builds with.
-    #[command(group(clap::ArgGroup::new("selection").required(true).args(["all", "classes", "list", "reaching"])))]
+    #[command(group(clap::ArgGroup::new("selection").required(true).args(["all", "classes", "list", "reaching", "instrumented"])))]
     Check {
         #[arg(long)]
         all: bool,
         #[arg(long)]
         list: bool,
+        /// Only classes whose runtime declares instrumentation.
+        #[arg(long)]
+        instrumented: bool,
         #[arg(long = "class")]
         classes: Vec<ImageClass>,
         /// Packages with changed chip code: every class whose image compiles
@@ -38,6 +41,9 @@ pub enum ImagesCli {
         /// Only `cargo check` each runtime, without code generation or audits.
         #[arg(long)]
         type_check: bool,
+        /// Run Clippy with the image build's features and compiler configuration.
+        #[arg(long, conflicts_with = "type_check")]
+        clippy: bool,
         /// Classes built at once; defaults to half the cores, at most 8.
         #[arg(long)]
         jobs: Option<usize>,
@@ -76,6 +82,8 @@ pub fn command(ctx: &Checkout, cli: ImagesCli) -> Result<std::process::ExitCode>
             reaching,
             vendor_dependencies_absent,
             type_check,
+            clippy,
+            instrumented,
             jobs,
             chip,
             ..
@@ -84,7 +92,13 @@ pub fn command(ctx: &Checkout, cli: ImagesCli) -> Result<std::process::ExitCode>
                 oer_hil_run::image::ensure_vendor_dependencies_absent(&ctx.root)?;
             }
             for chip in check::chips(&ctx.root, chip.as_deref(), &classes)? {
-                let classes = if reaching.is_empty() {
+                let classes = if instrumented {
+                    let classes = check::instrumented(&ctx.root, &chip)?;
+                    if classes.is_empty() {
+                        continue;
+                    }
+                    classes
+                } else if reaching.is_empty() {
                     classes.clone()
                 } else {
                     check::reached(&ctx.root, &chip, &reaching)?
@@ -94,7 +108,9 @@ pub fn command(ctx: &Checkout, cli: ImagesCli) -> Result<std::process::ExitCode>
                     &chip,
                     &classes,
                     if type_check {
-                        check::Depth::TypeCheck
+                        check::Depth::Check(oer_image_build::RuntimeCheck::Types)
+                    } else if clippy {
+                        check::Depth::Check(oer_image_build::RuntimeCheck::Clippy)
                     } else {
                         check::Depth::Build
                     },

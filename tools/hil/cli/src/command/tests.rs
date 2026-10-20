@@ -17,6 +17,7 @@ fn the_complete_tree_accepts_the_existing_host_and_runner_commands() {
         vec!["firmware", "list"],
         vec!["firmware", "build", "peer"],
         vec!["images", "check", "--all", "--type-check"],
+        vec!["images", "check", "--instrumented", "--clippy"],
         vec!["runs", "list", "--scenario", "boot-smoke"],
         vec!["perf", "report", "--since", "3d"],
         vec!["profile", "run-1", "--top", "5"],
@@ -58,6 +59,8 @@ fn the_complete_tree_accepts_the_existing_host_and_runner_commands() {
         vec!["plan", "--enqueue"],
         vec!["run", "a", "--after=a", "--after-any=b"],
         vec!["run", "a", "--after=a", "--after=b"],
+        vec!["images", "check", "--all", "--type-check", "--clippy"],
+        vec!["images", "check", "--all", "--instrumented", "--clippy"],
     ] {
         assert!(HilCli::try_parse_from(&words).is_err(), "{words:?}");
     }

@@ -308,10 +308,12 @@
     "flags": [
       "--all",
       "--list",
+      "--instrumented",
       "--class",
       "--reaching",
       "--vendor-dependencies-absent",
       "--type-check",
+      "--clippy",
       "--jobs",
       "--chip"
     ],

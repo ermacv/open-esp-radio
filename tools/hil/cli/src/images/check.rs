@@ -18,8 +18,8 @@ use oer_os_process::Checkout;
 pub enum Depth {
     /// The full image build and its audits.
     Build,
-    /// A `cargo check` of the runtime with the class's features only.
-    TypeCheck,
+    /// Check the runtime with the class's build configuration.
+    Check(oer_image_build::RuntimeCheck),
 }
 
 /// One class's result.
@@ -89,6 +89,26 @@ pub fn served(
         }
     }
     Ok(served)
+}
+
+/// Served classes whose runtime declares instrumentation, as the builder
+/// reads it. No class or package names are maintained separately for CI.
+pub fn instrumented(root: &std::path::Path, chip: &str) -> Result<Vec<ImageClass>> {
+    let profile = oer_chip_profile::Profile::load(root, chip)?;
+    let mut selected = Vec::new();
+    for class in served(root, chip, &[])? {
+        let recipe = profile
+            .hil_image(class.id())
+            .expect("a served class has a recipe");
+        if oer_image_build::instrumentation::Instrumentation::declared(root, &recipe.package)?
+            .classes()
+            .next()
+            .is_some()
+        {
+            selected.push(class);
+        }
+    }
+    Ok(selected)
 }
 
 /// Classes built at once when `--jobs` is not given. Once the seed classes
@@ -233,7 +253,8 @@ fn build_one(
         index + 1,
         match depth {
             Depth::Build => "building",
-            Depth::TypeCheck => "type-checking",
+            Depth::Check(oer_image_build::RuntimeCheck::Types) => "type-checking",
+            Depth::Check(oer_image_build::RuntimeCheck::Clippy) => "linting",
         },
         class.id()
     );
@@ -243,8 +264,8 @@ fn build_one(
             oer_hil_run::image::build(&ctx.root, chip, class, None, &Default::default())
                 .map(|artifacts| artifacts.bundle.rom_summaries.clone())
         }
-        Depth::TypeCheck => {
-            oer_hil_run::image::check(&ctx.root, chip, class).map(|()| BTreeSet::new())
+        Depth::Check(check) => {
+            oer_hil_run::image::check(&ctx.root, chip, class, check).map(|()| BTreeSet::new())
         }
     };
     let (summaries, failure) = match result {
