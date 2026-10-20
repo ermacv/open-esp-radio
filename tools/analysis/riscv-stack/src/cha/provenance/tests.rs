@@ -9,7 +9,6 @@ use crate::{StorageEvidence, UnknownUse, audit_function_addresses};
 use oer_analysis_elf::dwarf::gimli;
 use oer_analysis_elf::rv32::Role;
 use oer_analysis_riscv_program::facts::ImageFacts;
-use std::collections::BTreeMap;
 
 fn typed_function_pointer_resolutions(
     image: &ImageFacts<'_>,
@@ -90,9 +89,7 @@ fn a_pointer_parameter_names_its_function_field_at_the_load() {
             &mut keep,
             &mut || Ok(()),
         )?;
-        let mut locations = Locations {
-            aliases: BTreeMap::new(),
-        };
+        let mut locations = Locations::default();
         locations.read_aliases(image, &mut keep, &mut || Ok(()))?;
         let start = named(&analysis, "_start");
         let transfer = analysis.functions[&start]
@@ -231,9 +228,7 @@ fn an_optimized_out_piece_does_not_shift_the_next_stack_field() {
         .unwrap();
     let mut types = types;
     types.locations = Some(prepared);
-    let locations = Locations {
-        aliases: BTreeMap::new(),
-    };
+    let locations = Locations::default();
     assert!(
         locations
             .field(&types, 100, 2, 36, &mut || Ok(()))

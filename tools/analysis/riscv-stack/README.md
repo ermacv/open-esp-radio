@@ -207,11 +207,18 @@ is extended by the shared audit.
 Both use `audit_function_addresses` and exactly one candidate rule. Each
 relocated use of a function address retains its original index and either
 all proven storage types or a specific `UnknownUse` reason. An absolute word
-can prove a unique global function-pointer field. The existing small code
-proof accepts an adjacent absolute HI20/LO12 pair only when every subsequent
-read stores the pointer into a typed local field before its register dies.
-Unfamiliar instructions, control flow, destinations and arithmetic stay
-unknown. Function merging unites all aliases' uses at their shared entry.
+can prove a unique global function-pointer field. Code materializations use a
+small straight-line proof: the absolute HI20/LO12 form or a PC-relative
+AUIPC/ADDI pair must reach typed word stores before the result register dies.
+PC-relative binding reuses `PreparedReferences::{normalized,pair}` and
+`RiscvDecoder::reference` through an adapter over the prepared address uses;
+LO12's label is kept for diagnostics while its effective target comes from HI20.
+The linked instructions and `LowerPcRelative` semantics must agree, every gap
+must preserve the upper register, and no incoming path may bypass the upper or
+enter the subsequent lifetime. Unsupported forms and unclosed graphs stay
+unknown. An unpaired/unresolved low cannot identify a callback owner and keeps
+the joint function catalog as candidates. Function merging unites all aliases'
+uses at their shared entry.
 Addends retain both their source function and numerical containing function
 when different. Facts remain bound to their source ELF; another ELF's DIE
 and section offsets cannot establish a storage proof.
@@ -233,7 +240,9 @@ propagation, constructor summaries and new memory models are later work.
 
 The [callback audit validation](validation/callback-address-audit.md) records
 real w0/w1 unknown-use classes, missing facts, before/after results and the
-commands to reproduce the diagnostic without function/address allowlists.
+commands to reproduce the diagnostic without function/address allowlists. The
+[PC-relative validation](validation/pcrel/README.md) additionally explains every
+normalized pair, changed use and changed candidate in the real w0/w1 results.
 
 `interrupt_stacks` bounds each hart's interrupt stack (`Stacks`): one
 interrupt per level the hart takes (its table entries' levels and the levels

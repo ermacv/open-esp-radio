@@ -72,7 +72,69 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
                 "use\t{function:#010x}\t{}\t{:#010x}\t{:?}\t{}\t{result}",
                 use_.index, original.relocation.at, original.role, original.relocation.addend
             );
+            println!(
+                "proof\t{function:#010x}\t{}\t{:?}\t{:?}",
+                use_.index, use_.barrier, use_.stores
+            );
         }
+    }
+    println!(
+        "pcrel-header\tlow_index\thigh_index\tlow_section\tlow_site\tlow_symbol\tlow_symbol_section\tlow_symbol_address\tlow_addend\thigh_site\thigh_symbol\thigh_symbol_section\thigh_symbol_address\thigh_addend\tnormalized_target\tfunctions\tclassification"
+    );
+    for pair in audit.pc_relative_uses() {
+        let low = image.address_uses().get(pair.low).ok_or("bad low index")?;
+        let high = pair.high.and_then(|index| image.address_uses().get(index));
+        let symbol = |use_: &oer_analysis_riscv_program::facts::addresses::AddressUse<'_>| {
+            use_.symbol
+                .as_ref()
+                .map(|symbol| format!("{}:{:?}", symbol.index, symbol.name))
+                .unwrap_or_else(|| "-".into())
+        };
+        let section = |use_: &oer_analysis_riscv_program::facts::addresses::AddressUse<'_>| {
+            use_.symbol
+                .as_ref()
+                .and_then(|s| s.section)
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| "-".into())
+        };
+        let address = |use_: &oer_analysis_riscv_program::facts::addresses::AddressUse<'_>| {
+            use_.symbol
+                .as_ref()
+                .map(|s| format!("{:#010x}", s.address))
+                .unwrap_or_else(|| "-".into())
+        };
+        let classification = if let Some(reason) = pair.unknown {
+            format!("{reason:?}")
+        } else if pair.functions.is_empty() {
+            "NonFunctionTarget".into()
+        } else {
+            "AuditedFunctionTarget".into()
+        };
+        println!(
+            "pcrel\t{}\t{}\t{}\t{:#010x}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{:?}\t{}",
+            pair.low,
+            pair.high
+                .map(|i| i.to_string())
+                .unwrap_or_else(|| "-".into()),
+            low.relocation.section,
+            low.relocation.at,
+            symbol(low),
+            section(low),
+            address(low),
+            low.relocation.addend,
+            high.map(|h| format!("{:#010x}", h.relocation.at))
+                .unwrap_or_else(|| "-".into()),
+            high.map(symbol).unwrap_or_else(|| "-".into()),
+            high.map(section).unwrap_or_else(|| "-".into()),
+            high.map(address).unwrap_or_else(|| "-".into()),
+            high.map(|h| h.relocation.addend.to_string())
+                .unwrap_or_else(|| "-".into()),
+            pair.target
+                .map(|v| format!("{v:#010x}"))
+                .unwrap_or_else(|| "-".into()),
+            pair.functions,
+            classification
+        );
     }
     println!("typed-uses\t{typed_uses}");
     println!("no-uses\t{no_uses}");

@@ -1,0 +1,709 @@
+{
+  "w0": {
+    "machines": {
+      "application.bin": {
+        "identical": true,
+        "sha256": "a8b6f88e9a6dad9355bfe32627d0a6777d56d2c138d207558ff4c339edadeae5"
+      },
+      "bootloader.bin": {
+        "identical": true,
+        "sha256": "aeaf7ba1a57f2c39031a6981381fd748c3140a116fbda73c503ffdc59fbf0079"
+      },
+      "bootstrap.elf": {
+        "identical": true,
+        "sha256": "6501d2d9d7b6132778d216122b40e86070ab7d8d4c9f74e3acec798bd57dc04e"
+      },
+      "otadata.bin": {
+        "identical": true,
+        "sha256": "8ba3b110139f45443d4f268d1a3373ef99a1718b71d51664531b83ee2d4b91a3"
+      },
+      "partitions.bin": {
+        "identical": true,
+        "sha256": "0ea1e539c48b08e74dacbc6b0275f31f429ab64e5830a7d1a3fd20b4a475c5e3"
+      },
+      "runtime.bin": {
+        "identical": true,
+        "sha256": "636ecf51ebe3de20ef7854e5a0912744f991a932eabf7dfb379ece12d99ea44b"
+      },
+      "runtime.elf": {
+        "identical": true,
+        "sha256": "c2723dee3f3690d9a7d6cf17c8a07393c6cb5fb1109d3f636aebd101d6e41f80"
+      }
+    },
+    "reports": {
+      "placement.txt": {
+        "identical": true,
+        "semantic_identical": true,
+        "diff": []
+      },
+      "runtime-stack.txt": {
+        "identical": false,
+        "semantic_identical": true,
+        "diff": [
+          "--- before/runtime-stack.txt",
+          "+++ after/runtime-stack.txt",
+          "@@ -1,4 +1,4 @@",
+          "-analysis: 78170401 of 1000000000 work units, 156917392 of 536870912 bytes of working memory",
+          "+analysis: 77820380 of 1000000000 work units, 156917392 of 536870912 bytes of working memory",
+          " frame coverage: 409 of 570 functions have a compiler frame record; 165 reviewed, 0 unreviewed",
+          "   reviewed VectorData 0x2f000000 _mtvt_table",
+          "   reviewed VectorData 0x2f000000 _runtime_mtvt_table"
+        ]
+      },
+      "interrupt-stack.txt": {
+        "identical": true,
+        "semantic_identical": true,
+        "diff": []
+      },
+      "bootstrap-stack.txt": {
+        "identical": false,
+        "semantic_identical": true,
+        "diff": [
+          "--- before/bootstrap-stack.txt",
+          "+++ after/bootstrap-stack.txt",
+          "@@ -1,4 +1,4 @@",
+          "-analysis: 15711248 of 1000000000 work units, 16354258 of 536870912 bytes of working memory",
+          "+analysis: 15717303 of 1000000000 work units, 16354258 of 536870912 bytes of working memory",
+          " frame coverage: 35 of 144 functions have a compiler frame record; 115 reviewed, 0 unreviewed",
+          "   reviewed VectorData 0x2f000000 _mtvt_table",
+          "   reviewed LinkerLabel 0x2f000000 _trap_section_origin"
+        ]
+      }
+    },
+    "diagnostics": {
+      "runtime": {
+        "unknown_classes": {
+          "typed-uses": 47,
+          "no-uses": 0,
+          "NonExactAddress": {
+            "uses": 4130,
+            "missing_fact": "exact entry value without addend, odd bit or interior offset"
+          },
+          "MissingStorageType": {
+            "uses": 330,
+            "missing_fact": "one typed function-pointer field at the static word"
+          },
+          "ControlFlow": {
+            "uses": 334,
+            "missing_fact": "all uses across the control-flow boundary"
+          },
+          "UnknownWrite": {
+            "uses": 128,
+            "missing_fact": "one typed field at the word store's PC and memory operand"
+          },
+          "EscapedValue": {
+            "uses": 2,
+            "missing_fact": "type-preserving destination of the register read"
+          },
+          "IncompleteLifetime": {
+            "uses": 2,
+            "missing_fact": "all reads through the end of the register's lifetime"
+          },
+          "IncomingPath": {
+            "uses": 8,
+            "missing_fact": "every incoming path executes the materialization before this use"
+          }
+        },
+        "resolvers": {
+          "global": {
+            "sites_before": 0,
+            "sites_after": 0,
+            "candidate_edges_before": 0,
+            "candidate_edges_after": 0,
+            "changed_sites": []
+          },
+          "typed": {
+            "sites_before": 20,
+            "sites_after": 20,
+            "candidate_edges_before": 6895,
+            "candidate_edges_after": 6845,
+            "changed_sites": [
+              {
+                "site": "0x2f003110",
+                "added": 4,
+                "removed": 6,
+                "added_unknown_reasons": {
+                  "IncomingPath": 3,
+                  "ControlFlow": 1
+                }
+              },
+              {
+                "site": "0x2f00373e",
+                "added": 4,
+                "removed": 6,
+                "added_unknown_reasons": {
+                  "IncomingPath": 3,
+                  "ControlFlow": 1
+                }
+              },
+              {
+                "site": "0x2f00385a",
+                "added": 4,
+                "removed": 6,
+                "added_unknown_reasons": {
+                  "IncomingPath": 3,
+                  "ControlFlow": 1
+                }
+              },
+              {
+                "site": "0x2f003970",
+                "added": 4,
+                "removed": 6,
+                "added_unknown_reasons": {
+                  "IncomingPath": 3,
+                  "ControlFlow": 1
+                }
+              },
+              {
+                "site": "0x50055dec",
+                "added": 3,
+                "removed": 6,
+                "added_unknown_reasons": {
+                  "IncomingPath": 3
+                }
+              },
+              {
+                "site": "0x50055e04",
+                "added": 3,
+                "removed": 6,
+                "added_unknown_reasons": {
+                  "IncomingPath": 3
+                }
+              },
+              {
+                "site": "0x50055e1e",
+                "added": 3,
+                "removed": 6,
+                "added_unknown_reasons": {
+                  "IncomingPath": 3
+                }
+              },
+              {
+                "site": "0x50055e36",
+                "added": 3,
+                "removed": 6,
+                "added_unknown_reasons": {
+                  "IncomingPath": 3
+                }
+              },
+              {
+                "site": "0x50055e50",
+                "added": 3,
+                "removed": 6,
+                "added_unknown_reasons": {
+                  "IncomingPath": 3
+                }
+              },
+              {
+                "site": "0x50055e68",
+                "added": 3,
+                "removed": 6,
+                "added_unknown_reasons": {
+                  "IncomingPath": 3
+                }
+              },
+              {
+                "site": "0x50055e82",
+                "added": 3,
+                "removed": 6,
+                "added_unknown_reasons": {
+                  "IncomingPath": 3
+                }
+              },
+              {
+                "site": "0x500592a8",
+                "added": 4,
+                "removed": 6,
+                "added_unknown_reasons": {
+                  "IncomingPath": 3,
+                  "ControlFlow": 1
+                }
+              },
+              {
+                "site": "0x500595a2",
+                "added": 4,
+                "removed": 6,
+                "added_unknown_reasons": {
+                  "IncomingPath": 3,
+                  "ControlFlow": 1
+                }
+              },
+              {
+                "site": "0x500595be",
+                "added": 4,
+                "removed": 6,
+                "added_unknown_reasons": {
+                  "IncomingPath": 3,
+                  "ControlFlow": 1
+                }
+              },
+              {
+                "site": "0x5005ac78",
+                "added": 3,
+                "removed": 6,
+                "added_unknown_reasons": {
+                  "IncomingPath": 2,
+                  "ControlFlow": 1
+                }
+              },
+              {
+                "site": "0x5005afc6",
+                "added": 3,
+                "removed": 6,
+                "added_unknown_reasons": {
+                  "IncomingPath": 2,
+                  "ControlFlow": 1
+                }
+              },
+              {
+                "site": "0x5005b214",
+                "added": 3,
+                "removed": 6,
+                "added_unknown_reasons": {
+                  "IncomingPath": 2,
+                  "ControlFlow": 1
+                }
+              },
+              {
+                "site": "0x5007feb0",
+                "added": 4,
+                "removed": 6,
+                "added_unknown_reasons": {
+                  "IncomingPath": 3,
+                  "ControlFlow": 1
+                }
+              },
+              {
+                "site": "0x5007fec8",
+                "added": 4,
+                "removed": 6,
+                "added_unknown_reasons": {
+                  "IncomingPath": 3,
+                  "ControlFlow": 1
+                }
+              },
+              {
+                "site": "0x5007fee0",
+                "added": 4,
+                "removed": 6,
+                "added_unknown_reasons": {
+                  "IncomingPath": 3,
+                  "ControlFlow": 1
+                }
+              }
+            ]
+          }
+        }
+      },
+      "bootstrap": {
+        "unknown_classes": {
+          "typed-uses": 39,
+          "no-uses": 0,
+          "NonExactAddress": {
+            "uses": 342,
+            "missing_fact": "exact entry value without addend, odd bit or interior offset"
+          },
+          "MissingStorageType": {
+            "uses": 263,
+            "missing_fact": "one typed function-pointer field at the static word"
+          },
+          "ControlFlow": {
+            "uses": 112,
+            "missing_fact": "all uses across the control-flow boundary"
+          },
+          "EscapedValue": {
+            "uses": 2,
+            "missing_fact": "type-preserving destination of the register read"
+          },
+          "IncompleteLifetime": {
+            "uses": 2,
+            "missing_fact": "all reads through the end of the register's lifetime"
+          }
+        },
+        "resolvers": {
+          "global": {
+            "sites_before": 0,
+            "sites_after": 0,
+            "candidate_edges_before": 0,
+            "candidate_edges_after": 0,
+            "changed_sites": []
+          },
+          "typed": {
+            "sites_before": 3,
+            "sites_after": 3,
+            "candidate_edges_before": 333,
+            "candidate_edges_after": 321,
+            "changed_sites": [
+              {
+                "site": "0x2f0024a4",
+                "added": 0,
+                "removed": 4,
+                "added_unknown_reasons": {}
+              },
+              {
+                "site": "0x2f0025c0",
+                "added": 0,
+                "removed": 4,
+                "added_unknown_reasons": {}
+              },
+              {
+                "site": "0x2f002696",
+                "added": 0,
+                "removed": 4,
+                "added_unknown_reasons": {}
+              }
+            ]
+          }
+        }
+      }
+    }
+  },
+  "w1": {
+    "machines": {
+      "application.bin": {
+        "identical": true,
+        "sha256": "3b74dac7a60f5b029d671f250b85e42d61ba283ce5724b7388ca65d8e1d94583"
+      },
+      "bootloader.bin": {
+        "identical": true,
+        "sha256": "aeaf7ba1a57f2c39031a6981381fd748c3140a116fbda73c503ffdc59fbf0079"
+      },
+      "bootstrap.elf": {
+        "identical": true,
+        "sha256": "c1694b08ce9b5be26b5e8827eba676df121c339fc1b503c5c011503a2636701c"
+      },
+      "otadata.bin": {
+        "identical": true,
+        "sha256": "8ba3b110139f45443d4f268d1a3373ef99a1718b71d51664531b83ee2d4b91a3"
+      },
+      "partitions.bin": {
+        "identical": true,
+        "sha256": "0ea1e539c48b08e74dacbc6b0275f31f429ab64e5830a7d1a3fd20b4a475c5e3"
+      },
+      "runtime.bin": {
+        "identical": true,
+        "sha256": "f65f79ec63d67af06570cb75259504d7935bd2d47ff2489fdd2bef0afdd1864c"
+      },
+      "runtime.elf": {
+        "identical": true,
+        "sha256": "03b7a525d74ea6b39b3a8449670788b52c67f2c10e20d27e0462b186beef26c9"
+      }
+    },
+    "reports": {
+      "placement.txt": {
+        "identical": true,
+        "semantic_identical": true,
+        "diff": []
+      },
+      "runtime-stack.txt": {
+        "identical": false,
+        "semantic_identical": true,
+        "diff": [
+          "--- before/runtime-stack.txt",
+          "+++ after/runtime-stack.txt",
+          "@@ -1,4 +1,4 @@",
+          "-analysis: 102551129 of 1000000000 work units, 158355908 of 536870912 bytes of working memory",
+          "+analysis: 100152921 of 1000000000 work units, 158355908 of 536870912 bytes of working memory",
+          " frame coverage: 485 of 646 functions have a compiler frame record; 165 reviewed, 0 unreviewed",
+          "   reviewed VectorData 0x2f000000 _mtvt_table",
+          "   reviewed VectorData 0x2f000000 _runtime_mtvt_table"
+        ]
+      },
+      "interrupt-stack.txt": {
+        "identical": true,
+        "semantic_identical": true,
+        "diff": []
+      },
+      "bootstrap-stack.txt": {
+        "identical": false,
+        "semantic_identical": true,
+        "diff": [
+          "--- before/bootstrap-stack.txt",
+          "+++ after/bootstrap-stack.txt",
+          "@@ -1,4 +1,4 @@",
+          "-analysis: 15710523 of 1000000000 work units, 16468946 of 536870912 bytes of working memory",
+          "+analysis: 15716606 of 1000000000 work units, 16468946 of 536870912 bytes of working memory",
+          " frame coverage: 35 of 144 functions have a compiler frame record; 115 reviewed, 0 unreviewed",
+          "   reviewed VectorData 0x2f000000 _mtvt_table",
+          "   reviewed LinkerLabel 0x2f000000 _trap_section_origin"
+        ]
+      }
+    },
+    "diagnostics": {
+      "runtime": {
+        "unknown_classes": {
+          "typed-uses": 51,
+          "no-uses": 0,
+          "NonExactAddress": {
+            "uses": 4263,
+            "missing_fact": "exact entry value without addend, odd bit or interior offset"
+          },
+          "MissingStorageType": {
+            "uses": 334,
+            "missing_fact": "one typed function-pointer field at the static word"
+          },
+          "ControlFlow": {
+            "uses": 570,
+            "missing_fact": "all uses across the control-flow boundary"
+          },
+          "UnknownWrite": {
+            "uses": 84,
+            "missing_fact": "one typed field at the word store's PC and memory operand"
+          },
+          "EscapedValue": {
+            "uses": 4,
+            "missing_fact": "type-preserving destination of the register read"
+          },
+          "IncompleteLifetime": {
+            "uses": 2,
+            "missing_fact": "all reads through the end of the register's lifetime"
+          },
+          "IncomingPath": {
+            "uses": 6,
+            "missing_fact": "every incoming path executes the materialization before this use"
+          }
+        },
+        "resolvers": {
+          "global": {
+            "sites_before": 0,
+            "sites_after": 0,
+            "candidate_edges_before": 0,
+            "candidate_edges_after": 0,
+            "changed_sites": []
+          },
+          "typed": {
+            "sites_before": 27,
+            "sites_after": 27,
+            "candidate_edges_before": 9873,
+            "candidate_edges_after": 9738,
+            "changed_sites": [
+              {
+                "site": "0x2f003490",
+                "added": 0,
+                "removed": 5,
+                "added_unknown_reasons": {}
+              },
+              {
+                "site": "0x2f0034b2",
+                "added": 0,
+                "removed": 5,
+                "added_unknown_reasons": {}
+              },
+              {
+                "site": "0x2f003f92",
+                "added": 0,
+                "removed": 5,
+                "added_unknown_reasons": {}
+              },
+              {
+                "site": "0x2f0040ae",
+                "added": 0,
+                "removed": 5,
+                "added_unknown_reasons": {}
+              },
+              {
+                "site": "0x2f0041c4",
+                "added": 0,
+                "removed": 5,
+                "added_unknown_reasons": {}
+              },
+              {
+                "site": "0x5001b792",
+                "added": 0,
+                "removed": 5,
+                "added_unknown_reasons": {}
+              },
+              {
+                "site": "0x5001b826",
+                "added": 0,
+                "removed": 5,
+                "added_unknown_reasons": {}
+              },
+              {
+                "site": "0x5001b8b4",
+                "added": 0,
+                "removed": 5,
+                "added_unknown_reasons": {}
+              },
+              {
+                "site": "0x5001d58a",
+                "added": 0,
+                "removed": 5,
+                "added_unknown_reasons": {}
+              },
+              {
+                "site": "0x5001d654",
+                "added": 0,
+                "removed": 5,
+                "added_unknown_reasons": {}
+              },
+              {
+                "site": "0x50054d62",
+                "added": 0,
+                "removed": 5,
+                "added_unknown_reasons": {}
+              },
+              {
+                "site": "0x50054f78",
+                "added": 0,
+                "removed": 5,
+                "added_unknown_reasons": {}
+              },
+              {
+                "site": "0x500551a0",
+                "added": 0,
+                "removed": 5,
+                "added_unknown_reasons": {}
+              },
+              {
+                "site": "0x50055da4",
+                "added": 0,
+                "removed": 5,
+                "added_unknown_reasons": {}
+              },
+              {
+                "site": "0x50057300",
+                "added": 0,
+                "removed": 5,
+                "added_unknown_reasons": {}
+              },
+              {
+                "site": "0x500577f8",
+                "added": 0,
+                "removed": 5,
+                "added_unknown_reasons": {}
+              },
+              {
+                "site": "0x50057974",
+                "added": 0,
+                "removed": 5,
+                "added_unknown_reasons": {}
+              },
+              {
+                "site": "0x50057aaa",
+                "added": 0,
+                "removed": 5,
+                "added_unknown_reasons": {}
+              },
+              {
+                "site": "0x50057eae",
+                "added": 0,
+                "removed": 5,
+                "added_unknown_reasons": {}
+              },
+              {
+                "site": "0x500585ca",
+                "added": 0,
+                "removed": 5,
+                "added_unknown_reasons": {}
+              },
+              {
+                "site": "0x5006c9ea",
+                "added": 0,
+                "removed": 5,
+                "added_unknown_reasons": {}
+              },
+              {
+                "site": "0x5006cce4",
+                "added": 0,
+                "removed": 5,
+                "added_unknown_reasons": {}
+              },
+              {
+                "site": "0x5006cd00",
+                "added": 0,
+                "removed": 5,
+                "added_unknown_reasons": {}
+              },
+              {
+                "site": "0x500985cc",
+                "added": 0,
+                "removed": 5,
+                "added_unknown_reasons": {}
+              },
+              {
+                "site": "0x500985e4",
+                "added": 0,
+                "removed": 5,
+                "added_unknown_reasons": {}
+              },
+              {
+                "site": "0x500985fc",
+                "added": 0,
+                "removed": 5,
+                "added_unknown_reasons": {}
+              },
+              {
+                "site": "0x5009cb30",
+                "added": 0,
+                "removed": 5,
+                "added_unknown_reasons": {}
+              }
+            ]
+          }
+        }
+      },
+      "bootstrap": {
+        "unknown_classes": {
+          "typed-uses": 39,
+          "no-uses": 0,
+          "NonExactAddress": {
+            "uses": 342,
+            "missing_fact": "exact entry value without addend, odd bit or interior offset"
+          },
+          "MissingStorageType": {
+            "uses": 263,
+            "missing_fact": "one typed function-pointer field at the static word"
+          },
+          "ControlFlow": {
+            "uses": 112,
+            "missing_fact": "all uses across the control-flow boundary"
+          },
+          "EscapedValue": {
+            "uses": 2,
+            "missing_fact": "type-preserving destination of the register read"
+          },
+          "IncompleteLifetime": {
+            "uses": 2,
+            "missing_fact": "all reads through the end of the register's lifetime"
+          }
+        },
+        "resolvers": {
+          "global": {
+            "sites_before": 0,
+            "sites_after": 0,
+            "candidate_edges_before": 0,
+            "candidate_edges_after": 0,
+            "changed_sites": []
+          },
+          "typed": {
+            "sites_before": 3,
+            "sites_after": 3,
+            "candidate_edges_before": 333,
+            "candidate_edges_after": 321,
+            "changed_sites": [
+              {
+                "site": "0x2f0024a4",
+                "added": 0,
+                "removed": 4,
+                "added_unknown_reasons": {}
+              },
+              {
+                "site": "0x2f0025c0",
+                "added": 0,
+                "removed": 4,
+                "added_unknown_reasons": {}
+              },
+              {
+                "site": "0x2f002696",
+                "added": 0,
+                "removed": 4,
+                "added_unknown_reasons": {}
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}

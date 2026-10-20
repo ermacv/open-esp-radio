@@ -1,0 +1,846 @@
+[
+  {
+    "image": "w0-runtime",
+    "resolver": "typed",
+    "target": "0x2f000478",
+    "change": "removed",
+    "reason": "OnlyAuipcLabelOperands",
+    "sites": [
+      "0x2f003110",
+      "0x2f00373e",
+      "0x2f00385a",
+      "0x2f003970",
+      "0x50055dec",
+      "0x50055e04",
+      "0x50055e1e",
+      "0x50055e36",
+      "0x50055e50",
+      "0x50055e68",
+      "0x50055e82",
+      "0x500592a8",
+      "0x500595a2",
+      "0x500595be",
+      "0x5005ac78",
+      "0x5005afc6",
+      "0x5005b214",
+      "0x5007feb0",
+      "0x5007fec8",
+      "0x5007fee0"
+    ],
+    "normalized_low_indices": [
+      "225",
+      "227"
+    ]
+  },
+  {
+    "image": "w0-runtime",
+    "resolver": "typed",
+    "target": "0x2f000840",
+    "change": "removed",
+    "reason": "OnlyAuipcLabelOperands",
+    "sites": [
+      "0x2f003110",
+      "0x2f00373e",
+      "0x2f00385a",
+      "0x2f003970",
+      "0x50055dec",
+      "0x50055e04",
+      "0x50055e1e",
+      "0x50055e36",
+      "0x50055e50",
+      "0x50055e68",
+      "0x50055e82",
+      "0x500592a8",
+      "0x500595a2",
+      "0x500595be",
+      "0x5005ac78",
+      "0x5005afc6",
+      "0x5005b214",
+      "0x5007feb0",
+      "0x5007fec8",
+      "0x5007fee0"
+    ],
+    "normalized_low_indices": [
+      "323",
+      "325",
+      "327",
+      "329"
+    ]
+  },
+  {
+    "image": "w0-runtime",
+    "resolver": "typed",
+    "target": "0x2f0028c0",
+    "change": "removed",
+    "reason": "OnlyAuipcLabelOperands",
+    "sites": [
+      "0x2f003110",
+      "0x2f00373e",
+      "0x2f00385a",
+      "0x2f003970",
+      "0x50055dec",
+      "0x50055e04",
+      "0x50055e1e",
+      "0x50055e36",
+      "0x50055e50",
+      "0x50055e68",
+      "0x50055e82",
+      "0x500592a8",
+      "0x500595a2",
+      "0x500595be",
+      "0x5005ac78",
+      "0x5005afc6",
+      "0x5005b214",
+      "0x5007feb0",
+      "0x5007fec8",
+      "0x5007fee0"
+    ],
+    "normalized_low_indices": [
+      "472"
+    ]
+  },
+  {
+    "image": "w0-runtime",
+    "resolver": "typed",
+    "target": "0x2f002d34",
+    "change": "removed",
+    "reason": "OnlyAuipcLabelOperands",
+    "sites": [
+      "0x2f003110",
+      "0x2f00373e",
+      "0x2f00385a",
+      "0x2f003970",
+      "0x50055dec",
+      "0x50055e04",
+      "0x50055e1e",
+      "0x50055e36",
+      "0x50055e50",
+      "0x50055e68",
+      "0x50055e82",
+      "0x500592a8",
+      "0x500595a2",
+      "0x500595be",
+      "0x5005ac78",
+      "0x5005afc6",
+      "0x5005b214",
+      "0x5007feb0",
+      "0x5007fec8",
+      "0x5007fee0"
+    ],
+    "normalized_low_indices": [
+      "7",
+      "9",
+      "11"
+    ]
+  },
+  {
+    "image": "w0-runtime",
+    "resolver": "typed",
+    "target": "0x50014200",
+    "change": "removed",
+    "reason": "OnlyAuipcLabelOperands",
+    "sites": [
+      "0x2f003110",
+      "0x2f00373e",
+      "0x2f00385a",
+      "0x2f003970",
+      "0x50055dec",
+      "0x50055e04",
+      "0x50055e1e",
+      "0x50055e36",
+      "0x50055e50",
+      "0x50055e68",
+      "0x50055e82",
+      "0x500592a8",
+      "0x500595a2",
+      "0x500595be",
+      "0x5005ac78",
+      "0x5005afc6",
+      "0x5005b214",
+      "0x5007feb0",
+      "0x5007fec8",
+      "0x5007fee0"
+    ],
+    "normalized_low_indices": [
+      "767",
+      "769",
+      "771",
+      "773",
+      "775",
+      "777",
+      "779",
+      "781",
+      "783",
+      "785",
+      "787",
+      "789",
+      "791",
+      "793",
+      "795",
+      "797",
+      "799",
+      "801",
+      "803",
+      "805",
+      "807",
+      "809",
+      "811",
+      "813"
+    ]
+  },
+  {
+    "image": "w0-runtime",
+    "resolver": "typed",
+    "target": "0x500830dc",
+    "change": "removed",
+    "reason": "OnlyAuipcLabelOperands",
+    "sites": [
+      "0x2f003110",
+      "0x2f00373e",
+      "0x2f00385a",
+      "0x2f003970",
+      "0x50055dec",
+      "0x50055e04",
+      "0x50055e1e",
+      "0x50055e36",
+      "0x50055e50",
+      "0x50055e68",
+      "0x50055e82",
+      "0x500592a8",
+      "0x500595a2",
+      "0x500595be",
+      "0x5005ac78",
+      "0x5005afc6",
+      "0x5005b214",
+      "0x5007feb0",
+      "0x5007fec8",
+      "0x5007fee0"
+    ],
+    "normalized_low_indices": [
+      "735",
+      "737",
+      "739",
+      "741",
+      "743",
+      "745"
+    ]
+  },
+  {
+    "image": "w0-runtime",
+    "resolver": "typed",
+    "target": "0x5005b80c",
+    "change": "added",
+    "reason": "UnknownValuePath",
+    "uses": [
+      {
+        "index": 967,
+        "site": "0x50017dee",
+        "role": "AbsoluteHigh",
+        "addend": 0,
+        "evidence": "ControlFlow",
+        "barrier": "0x50017dcc",
+        "stores": "[]"
+      },
+      {
+        "index": 968,
+        "site": "0x50017df2",
+        "role": "AbsoluteLow",
+        "addend": 0,
+        "evidence": "ControlFlow",
+        "barrier": "0x50017dcc",
+        "stores": "[]"
+      },
+      {
+        "index": 971,
+        "site": "0x50017e34",
+        "role": "AbsoluteHigh",
+        "addend": 0,
+        "evidence": "ControlFlow",
+        "barrier": "0x50017dcc",
+        "stores": "[]"
+      },
+      {
+        "index": 972,
+        "site": "0x50017e38",
+        "role": "AbsoluteLow",
+        "addend": 0,
+        "evidence": "ControlFlow",
+        "barrier": "0x50017dcc",
+        "stores": "[]"
+      },
+      {
+        "index": 975,
+        "site": "0x50017e74",
+        "role": "AbsoluteHigh",
+        "addend": 0,
+        "evidence": "ControlFlow",
+        "barrier": "0x50017dcc",
+        "stores": "[]"
+      },
+      {
+        "index": 976,
+        "site": "0x50017e78",
+        "role": "AbsoluteLow",
+        "addend": 0,
+        "evidence": "ControlFlow",
+        "barrier": "0x50017dcc",
+        "stores": "[]"
+      },
+      {
+        "index": 2253,
+        "site": "0x5004cdf4",
+        "role": "AbsoluteHigh",
+        "addend": 0,
+        "evidence": "ControlFlow",
+        "barrier": "0x5004ca68",
+        "stores": "[]"
+      },
+      {
+        "index": 2254,
+        "site": "0x5004cdf8",
+        "role": "AbsoluteLow",
+        "addend": 0,
+        "evidence": "ControlFlow",
+        "barrier": "0x5004ca68",
+        "stores": "[]"
+      },
+      {
+        "index": 2257,
+        "site": "0x5004ce90",
+        "role": "AbsoluteHigh",
+        "addend": 0,
+        "evidence": "ControlFlow",
+        "barrier": "0x5004ca68",
+        "stores": "[]"
+      },
+      {
+        "index": 2258,
+        "site": "0x5004ce94",
+        "role": "AbsoluteLow",
+        "addend": 0,
+        "evidence": "ControlFlow",
+        "barrier": "0x5004ca68",
+        "stores": "[]"
+      },
+      {
+        "index": 2261,
+        "site": "0x5004cf1e",
+        "role": "AbsoluteHigh",
+        "addend": 0,
+        "evidence": "ControlFlow",
+        "barrier": "0x5004ca68",
+        "stores": "[]"
+      },
+      {
+        "index": 2262,
+        "site": "0x5004cf22",
+        "role": "AbsoluteLow",
+        "addend": 0,
+        "evidence": "ControlFlow",
+        "barrier": "0x5004ca68",
+        "stores": "[]"
+      }
+    ],
+    "sites": [
+      "0x2f003110",
+      "0x2f00373e",
+      "0x2f00385a",
+      "0x2f003970",
+      "0x500592a8",
+      "0x500595a2",
+      "0x500595be",
+      "0x5005ac78",
+      "0x5005afc6",
+      "0x5005b214",
+      "0x5007feb0",
+      "0x5007fec8",
+      "0x5007fee0"
+    ]
+  },
+  {
+    "image": "w0-runtime",
+    "resolver": "typed",
+    "target": "0x5005cffa",
+    "change": "added",
+    "reason": "UnknownValuePath",
+    "uses": [
+      {
+        "index": 2768,
+        "site": "0x5005a92e",
+        "role": "AbsoluteHigh",
+        "addend": 0,
+        "evidence": "IncomingPath",
+        "barrier": "0x5005a944",
+        "stores": "[TypedStore { site: 0x5005a936, base: 23, displacement: 232, field: FunctionPointerType { subroutine: 1166363, foreign: false } }]"
+      },
+      {
+        "index": 2769,
+        "site": "0x5005a932",
+        "role": "AbsoluteLow",
+        "addend": 0,
+        "evidence": "IncomingPath",
+        "barrier": "0x5005a944",
+        "stores": "[TypedStore { site: 0x5005a936, base: 23, displacement: 232, field: FunctionPointerType { subroutine: 1166363, foreign: false } }]"
+      }
+    ],
+    "sites": [
+      "0x2f003110",
+      "0x2f00373e",
+      "0x2f00385a",
+      "0x2f003970",
+      "0x50055dec",
+      "0x50055e04",
+      "0x50055e1e",
+      "0x50055e36",
+      "0x50055e50",
+      "0x50055e68",
+      "0x50055e82",
+      "0x500592a8",
+      "0x500595a2",
+      "0x500595be",
+      "0x5005ac78",
+      "0x5005b214",
+      "0x5007feb0",
+      "0x5007fec8",
+      "0x5007fee0"
+    ]
+  },
+  {
+    "image": "w0-runtime",
+    "resolver": "typed",
+    "target": "0x5005d03a",
+    "change": "added",
+    "reason": "UnknownValuePath",
+    "uses": [
+      {
+        "index": 2772,
+        "site": "0x5005aa36",
+        "role": "AbsoluteHigh",
+        "addend": 0,
+        "evidence": "IncomingPath",
+        "barrier": "0x5005aa50",
+        "stores": "[TypedStore { site: 0x5005aa3e, base: 23, displacement: 576, field: FunctionPointerType { subroutine: 1166451, foreign: false } }]"
+      },
+      {
+        "index": 2773,
+        "site": "0x5005aa3a",
+        "role": "AbsoluteLow",
+        "addend": 0,
+        "evidence": "IncomingPath",
+        "barrier": "0x5005aa50",
+        "stores": "[TypedStore { site: 0x5005aa3e, base: 23, displacement: 576, field: FunctionPointerType { subroutine: 1166451, foreign: false } }]"
+      }
+    ],
+    "sites": [
+      "0x2f003110",
+      "0x2f00373e",
+      "0x2f00385a",
+      "0x2f003970",
+      "0x50055dec",
+      "0x50055e04",
+      "0x50055e1e",
+      "0x50055e36",
+      "0x50055e50",
+      "0x50055e68",
+      "0x50055e82",
+      "0x500592a8",
+      "0x500595a2",
+      "0x500595be",
+      "0x5005afc6",
+      "0x5005b214",
+      "0x5007feb0",
+      "0x5007fec8",
+      "0x5007fee0"
+    ]
+  },
+  {
+    "image": "w0-runtime",
+    "resolver": "typed",
+    "target": "0x5005d070",
+    "change": "added",
+    "reason": "UnknownValuePath",
+    "uses": [
+      {
+        "index": 2792,
+        "site": "0x5005b132",
+        "role": "AbsoluteHigh",
+        "addend": 0,
+        "evidence": "IncomingPath",
+        "barrier": "0x5005b148",
+        "stores": "[TypedStore { site: 0x5005b13a, base: 23, displacement: 280, field: FunctionPointerType { subroutine: 1166407, foreign: false } }]"
+      },
+      {
+        "index": 2793,
+        "site": "0x5005b136",
+        "role": "AbsoluteLow",
+        "addend": 0,
+        "evidence": "IncomingPath",
+        "barrier": "0x5005b148",
+        "stores": "[TypedStore { site: 0x5005b13a, base: 23, displacement: 280, field: FunctionPointerType { subroutine: 1166407, foreign: false } }]"
+      }
+    ],
+    "sites": [
+      "0x2f003110",
+      "0x2f00373e",
+      "0x2f00385a",
+      "0x2f003970",
+      "0x50055dec",
+      "0x50055e04",
+      "0x50055e1e",
+      "0x50055e36",
+      "0x50055e50",
+      "0x50055e68",
+      "0x50055e82",
+      "0x500592a8",
+      "0x500595a2",
+      "0x500595be",
+      "0x5005ac78",
+      "0x5005afc6",
+      "0x5007feb0",
+      "0x5007fec8",
+      "0x5007fee0"
+    ]
+  },
+  {
+    "image": "w0-bootstrap",
+    "resolver": "typed",
+    "target": "0x2f000478",
+    "change": "removed",
+    "reason": "OnlyAuipcLabelOperands",
+    "sites": [
+      "0x2f0024a4",
+      "0x2f0025c0",
+      "0x2f002696"
+    ],
+    "normalized_low_indices": [
+      "95",
+      "97"
+    ]
+  },
+  {
+    "image": "w0-bootstrap",
+    "resolver": "typed",
+    "target": "0x2f000830",
+    "change": "removed",
+    "reason": "OnlyAuipcLabelOperands",
+    "sites": [
+      "0x2f0024a4",
+      "0x2f0025c0",
+      "0x2f002696"
+    ],
+    "normalized_low_indices": [
+      "193"
+    ]
+  },
+  {
+    "image": "w0-bootstrap",
+    "resolver": "typed",
+    "target": "0x2f000c54",
+    "change": "removed",
+    "reason": "OnlyAuipcLabelOperands",
+    "sites": [
+      "0x2f0024a4",
+      "0x2f0025c0",
+      "0x2f002696"
+    ],
+    "normalized_low_indices": [
+      "370",
+      "372",
+      "374"
+    ]
+  },
+  {
+    "image": "w0-bootstrap",
+    "resolver": "typed",
+    "target": "0x40130020",
+    "change": "removed",
+    "reason": "OnlyAuipcLabelOperands",
+    "sites": [
+      "0x2f0024a4",
+      "0x2f0025c0",
+      "0x2f002696"
+    ],
+    "normalized_low_indices": [
+      "815",
+      "817",
+      "819",
+      "821",
+      "823",
+      "825"
+    ]
+  },
+  {
+    "image": "w1-runtime",
+    "resolver": "typed",
+    "target": "0x2f000478",
+    "change": "removed",
+    "reason": "OnlyAuipcLabelOperands",
+    "sites": [
+      "0x2f003490",
+      "0x2f0034b2",
+      "0x2f003f92",
+      "0x2f0040ae",
+      "0x2f0041c4",
+      "0x5001b792",
+      "0x5001b826",
+      "0x5001b8b4",
+      "0x5001d58a",
+      "0x5001d654",
+      "0x50054d62",
+      "0x50054f78",
+      "0x500551a0",
+      "0x50055da4",
+      "0x50057300",
+      "0x500577f8",
+      "0x50057974",
+      "0x50057aaa",
+      "0x50057eae",
+      "0x500585ca",
+      "0x5006c9ea",
+      "0x5006cce4",
+      "0x5006cd00",
+      "0x500985cc",
+      "0x500985e4",
+      "0x500985fc",
+      "0x5009cb30"
+    ],
+    "normalized_low_indices": [
+      "267",
+      "269"
+    ]
+  },
+  {
+    "image": "w1-runtime",
+    "resolver": "typed",
+    "target": "0x2f000840",
+    "change": "removed",
+    "reason": "OnlyAuipcLabelOperands",
+    "sites": [
+      "0x2f003490",
+      "0x2f0034b2",
+      "0x2f003f92",
+      "0x2f0040ae",
+      "0x2f0041c4",
+      "0x5001b792",
+      "0x5001b826",
+      "0x5001b8b4",
+      "0x5001d58a",
+      "0x5001d654",
+      "0x50054d62",
+      "0x50054f78",
+      "0x500551a0",
+      "0x50055da4",
+      "0x50057300",
+      "0x500577f8",
+      "0x50057974",
+      "0x50057aaa",
+      "0x50057eae",
+      "0x500585ca",
+      "0x5006c9ea",
+      "0x5006cce4",
+      "0x5006cd00",
+      "0x500985cc",
+      "0x500985e4",
+      "0x500985fc",
+      "0x5009cb30"
+    ],
+    "normalized_low_indices": [
+      "365",
+      "367",
+      "369",
+      "371"
+    ]
+  },
+  {
+    "image": "w1-runtime",
+    "resolver": "typed",
+    "target": "0x2f0028c0",
+    "change": "removed",
+    "reason": "OnlyAuipcLabelOperands",
+    "sites": [
+      "0x2f003490",
+      "0x2f0034b2",
+      "0x2f003f92",
+      "0x2f0040ae",
+      "0x2f0041c4",
+      "0x5001b792",
+      "0x5001b826",
+      "0x5001b8b4",
+      "0x5001d58a",
+      "0x5001d654",
+      "0x50054d62",
+      "0x50054f78",
+      "0x500551a0",
+      "0x50055da4",
+      "0x50057300",
+      "0x500577f8",
+      "0x50057974",
+      "0x50057aaa",
+      "0x50057eae",
+      "0x500585ca",
+      "0x5006c9ea",
+      "0x5006cce4",
+      "0x5006cd00",
+      "0x500985cc",
+      "0x500985e4",
+      "0x500985fc",
+      "0x5009cb30"
+    ],
+    "normalized_low_indices": [
+      "514"
+    ]
+  },
+  {
+    "image": "w1-runtime",
+    "resolver": "typed",
+    "target": "0x2f002d34",
+    "change": "removed",
+    "reason": "OnlyAuipcLabelOperands",
+    "sites": [
+      "0x2f003490",
+      "0x2f0034b2",
+      "0x2f003f92",
+      "0x2f0040ae",
+      "0x2f0041c4",
+      "0x5001b792",
+      "0x5001b826",
+      "0x5001b8b4",
+      "0x5001d58a",
+      "0x5001d654",
+      "0x50054d62",
+      "0x50054f78",
+      "0x500551a0",
+      "0x50055da4",
+      "0x50057300",
+      "0x500577f8",
+      "0x50057974",
+      "0x50057aaa",
+      "0x50057eae",
+      "0x500585ca",
+      "0x5006c9ea",
+      "0x5006cce4",
+      "0x5006cd00",
+      "0x500985cc",
+      "0x500985e4",
+      "0x500985fc",
+      "0x5009cb30"
+    ],
+    "normalized_low_indices": [
+      "7",
+      "9",
+      "11"
+    ]
+  },
+  {
+    "image": "w1-runtime",
+    "resolver": "typed",
+    "target": "0x5009cf50",
+    "change": "removed",
+    "reason": "OnlyAuipcLabelOperands",
+    "sites": [
+      "0x2f003490",
+      "0x2f0034b2",
+      "0x2f003f92",
+      "0x2f0040ae",
+      "0x2f0041c4",
+      "0x5001b792",
+      "0x5001b826",
+      "0x5001b8b4",
+      "0x5001d58a",
+      "0x5001d654",
+      "0x50054d62",
+      "0x50054f78",
+      "0x500551a0",
+      "0x50055da4",
+      "0x50057300",
+      "0x500577f8",
+      "0x50057974",
+      "0x50057aaa",
+      "0x50057eae",
+      "0x500585ca",
+      "0x5006c9ea",
+      "0x5006cce4",
+      "0x5006cd00",
+      "0x500985cc",
+      "0x500985e4",
+      "0x500985fc",
+      "0x5009cb30"
+    ],
+    "normalized_low_indices": [
+      "803",
+      "805",
+      "807",
+      "809",
+      "811",
+      "813"
+    ]
+  },
+  {
+    "image": "w1-bootstrap",
+    "resolver": "typed",
+    "target": "0x2f000478",
+    "change": "removed",
+    "reason": "OnlyAuipcLabelOperands",
+    "sites": [
+      "0x2f0024a4",
+      "0x2f0025c0",
+      "0x2f002696"
+    ],
+    "normalized_low_indices": [
+      "95",
+      "97"
+    ]
+  },
+  {
+    "image": "w1-bootstrap",
+    "resolver": "typed",
+    "target": "0x2f000830",
+    "change": "removed",
+    "reason": "OnlyAuipcLabelOperands",
+    "sites": [
+      "0x2f0024a4",
+      "0x2f0025c0",
+      "0x2f002696"
+    ],
+    "normalized_low_indices": [
+      "193"
+    ]
+  },
+  {
+    "image": "w1-bootstrap",
+    "resolver": "typed",
+    "target": "0x2f000c54",
+    "change": "removed",
+    "reason": "OnlyAuipcLabelOperands",
+    "sites": [
+      "0x2f0024a4",
+      "0x2f0025c0",
+      "0x2f002696"
+    ],
+    "normalized_low_indices": [
+      "370",
+      "372",
+      "374"
+    ]
+  },
+  {
+    "image": "w1-bootstrap",
+    "resolver": "typed",
+    "target": "0x40160020",
+    "change": "removed",
+    "reason": "OnlyAuipcLabelOperands",
+    "sites": [
+      "0x2f0024a4",
+      "0x2f0025c0",
+      "0x2f002696"
+    ],
+    "normalized_low_indices": [
+      "815",
+      "817",
+      "819",
+      "821",
+      "823",
+      "825"
+    ]
+  }
+]

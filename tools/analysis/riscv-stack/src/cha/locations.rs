@@ -7,10 +7,16 @@ use oer_analysis_riscv_model::*;
 use oer_analysis_riscv_program::facts::ImageFacts;
 use std::collections::{BTreeMap, BTreeSet};
 
+#[derive(Default)]
 pub(super) struct Locations {
     /// Equal register values at a memory operand, proved by moves since
     /// the last CFG merge. Only nontrivial equivalences are retained.
     pub(super) aliases: BTreeMap<(u32, u8), u32>,
+    /// Potential alternate entries, collected in the alias pass. Section
+    /// identities prevent equal numerical PCs in different sections merging.
+    pub(super) entries: BTreeSet<(usize, u32)>,
+    /// An unknown local jump or decoding gap prevents a straight-line proof.
+    pub(super) unclosed: BTreeMap<(usize, u32), u32>,
 }
 
 impl Locations {
@@ -149,32 +155,52 @@ impl Locations {
             let mut merges = BTreeSet::new();
             let mut scratch = Ledger::new(keep.memory(), control)?;
             let mut at = 0;
-            let mut unsupported_jump = false;
+            let mut unsupported_jump = None;
             while let Some(bytes) = code.get(at..) {
                 control.checkpoint(1)?;
+                if bytes.is_empty() {
+                    break;
+                }
                 let Some(decoded) = RiscvDecoder.decode(bytes) else {
+                    unsupported_jump = Some(function.address + at as u32);
                     break;
                 };
                 match decoded.flow {
                     InstructionFlow::Branch { displacement }
-                    | InstructionFlow::Jump {
-                        displacement,
-                        link: false,
-                    } => {
+                    | InstructionFlow::Jump { displacement, .. } => {
+                        let target =
+                            (function.address + at as u32).wrapping_add(displacement as u32);
+                        let owner = image.functions().partition_point(|f| f.address <= target);
+                        let target_section = owner
+                            .checked_sub(1)
+                            .and_then(|index| image.functions().get(index))
+                            .filter(|f| {
+                                u64::from(target) < u64::from(f.address) + u64::from(f.size)
+                            })
+                            .map_or(function.section, |f| f.section);
+                        keep.add(&mut self.entries, (target_section, target), control)?;
                         scratch.add(
                             &mut merges,
                             (function.address + at as u32).wrapping_add(displacement as u32),
                             control,
                         )?;
                     }
-                    InstructionFlow::Indirect { link: false, .. } => unsupported_jump = true,
+                    InstructionFlow::Indirect { link: false, .. } => {
+                        unsupported_jump = Some(function.address + at as u32)
+                    }
                     _ => {}
                 }
                 at += usize::from(decoded.length);
             }
             // An unknown intra-function jump may give a later block an
             // unseen predecessor; no alias deduction is made in this case.
-            if unsupported_jump {
+            if let Some(site) = unsupported_jump {
+                keep.insert(
+                    &mut self.unclosed,
+                    (function.section, function.address),
+                    site,
+                    control,
+                )?;
                 continue;
             }
             let mut aliases = identity();
