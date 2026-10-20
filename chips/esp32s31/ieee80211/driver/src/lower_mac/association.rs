@@ -64,7 +64,7 @@ pub enum VacantKeySlot<'id, P: PoolPath = Root> {
 }
 
 impl<'id, P: PoolPath> TransmitKeyInstallation<'_, 'id, P> {
-    pub(super) fn into_parts(self) -> (Spp, TransmitKeyScope, VacantKeySlot<'id, P>) {
+    pub(crate) fn into_parts(self) -> (Spp, TransmitKeyScope, VacantKeySlot<'id, P>) {
         match self {
             Self::StationPairwise {
                 association,

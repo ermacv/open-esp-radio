@@ -536,6 +536,13 @@ impl<
     pub fn next_deadline(&self) -> Option<oer_time::Instant> {
         self.core.next_deadline()
     }
+    pub(crate) fn received<'frame, H: StaNoiseFloorHardware>(
+        &self,
+        hardware: &H,
+        frame: &NormalizedRxFrame<'frame>,
+    ) -> Option<(&'frame [u8], Esp32s31RxMeta)> {
+        self.core.received(hardware, frame)
+    }
     /// Service earlier publications without admitting any later command.
     pub fn service<
         H: HtAmpduHardware + CcmpKeyHardware,

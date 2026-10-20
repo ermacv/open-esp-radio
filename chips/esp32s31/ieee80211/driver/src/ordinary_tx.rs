@@ -817,6 +817,9 @@ where
     pub const fn power(&self) -> &P {
         &self.power
     }
+    pub(crate) fn replace_power_profile(&mut self, power: P) {
+        self.power = power;
+    }
 
     /// Recover the phase-independent TX resources while DMA is idle.
     ///

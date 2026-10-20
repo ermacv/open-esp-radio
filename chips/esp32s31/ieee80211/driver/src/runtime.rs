@@ -217,12 +217,19 @@ impl<W> WifiStopped<W> {
     where
         W: crate::startup::WifiMacPlatform,
     {
-        use oer_esp32s31_radio_client::{
-            Failed, RetunedMember,
-            wifi::{WifiRetune, WifiRetuned},
-        };
+        self.start_retune(cell, channel, tx_ceiling).await
+    }
+
+    /// Post the actor transaction into durable task-owned backing. Polling
+    /// the returned owner through a temporary borrow is cancellation-safe.
+    pub fn start_retune(
+        self,
+        cell: MembershipCell<Wifi>,
+        channel: oer_radio_regulatory::Permitted<WifiChannel>,
+        tx_ceiling: oer_radio_regulatory::TxCeiling,
+    ) -> WifiRetunePending<W> {
         let Self {
-            mut platform,
+            platform,
             registers,
             interrupt_setup,
             clocks,
@@ -235,73 +242,47 @@ impl<W> WifiStopped<W> {
         {
             Ok(frontier) => frontier,
             Err(failure) => {
-                return (
-                    cell,
-                    Err(WifiRetuneFailure {
-                        cause: WifiRetuneError::NotStopped(failure.error),
-                        stopped: Self {
-                            platform,
-                            registers: failure.registers,
-                            interrupt_setup: failure.interrupts,
-                            clocks,
-                            member,
-                            start_report,
-                            transition_report,
-                            current_channel,
-                        },
-                    }),
-                );
+                return WifiRetunePending {
+                    pending: None,
+                    context: None,
+                    immediate: Some((
+                        cell,
+                        Err(WifiRetuneFailure {
+                            cause: WifiRetuneError::NotStopped(failure.error),
+                            stopped: Self {
+                                platform,
+                                registers: failure.registers,
+                                interrupt_setup: failure.interrupts,
+                                clocks,
+                                member,
+                                start_report,
+                                transition_report,
+                                current_channel,
+                            },
+                        }),
+                    )),
+                };
             }
         };
         let wifi = WifiClocked::from_running(registers, interrupt_setup, clocks);
-        let (cell, answer) = cell
-            .retune(
+        WifiRetunePending {
+            pending: Some(cell.retune(
                 member,
-                WifiRetune {
+                oer_esp32s31_radio_client::wifi::WifiRetune {
                     wifi,
                     channel,
                     tx_ceiling,
                 },
-            )
-            .await;
-        let (wifi, member, report) = match answer {
-            Ok(RetunedMember {
-                member,
-                payload: WifiRetuned { wifi, report },
-            }) => (wifi, member, Ok(report)),
-            Err(Failed {
-                returned: (member, wifi),
-                cause,
-            }) => (wifi, member, Err(cause)),
-        };
-        let (registers, interrupt_setup, clocks) = wifi.into_running();
-        if let Ok(report) = report {
-            platform.install_phy_tx_power_profile(report.tx_power);
+            )),
+            context: Some((
+                platform,
+                start_report,
+                transition_report,
+                current_channel,
+                channel.channel(),
+            )),
+            immediate: None,
         }
-        let stopped = Self {
-            platform,
-            registers,
-            interrupt_setup,
-            clocks,
-            member,
-            start_report,
-            transition_report,
-            current_channel: if report.is_ok() {
-                channel.channel()
-            } else {
-                current_channel
-            },
-        };
-        (
-            cell,
-            match report {
-                Ok(report) => Ok((stopped, report)),
-                Err(cause) => Err(WifiRetuneFailure {
-                    cause: WifiRetuneError::Radio(cause),
-                    stopped,
-                }),
-            },
-        )
     }
 
     /// Reports from the PHY and common MAC transitions.
@@ -532,5 +513,101 @@ pub(crate) fn enter_esp32s31_wifi_runtime<W>(
             cold_interrupt_mask,
         },
         current_channel: start_report.initial_channel,
+    }
+}
+
+/// A PHY retune retained in static driver backing while the actor owns Wi-Fi.
+/// No field is structurally pinned; polling never lends a pinned platform.
+pub struct WifiRetunePending<W> {
+    pending: Option<
+        oer_esp32s31_radio_client::Pending<Wifi, oer_esp32s31_radio_client::RetuneAnswer<Wifi>>,
+    >,
+    context: Option<(
+        W,
+        WifiStartReport,
+        WifiRuntimeTransitionReport,
+        WifiChannel,
+        WifiChannel,
+    )>,
+    immediate: Option<(
+        MembershipCell<Wifi>,
+        Result<
+            (
+                WifiStopped<W>,
+                oer_esp32s31_radio_client::wifi::RetuneReport,
+            ),
+            WifiRetuneFailure<W>,
+        >,
+    )>,
+}
+impl<W> Unpin for WifiRetunePending<W> {}
+impl<W: crate::startup::WifiMacPlatform> core::future::Future for WifiRetunePending<W> {
+    type Output = (
+        MembershipCell<Wifi>,
+        Result<
+            (
+                WifiStopped<W>,
+                oer_esp32s31_radio_client::wifi::RetuneReport,
+            ),
+            WifiRetuneFailure<W>,
+        >,
+    );
+    fn poll(
+        self: core::pin::Pin<&mut Self>,
+        cx: &mut core::task::Context<'_>,
+    ) -> core::task::Poll<Self::Output> {
+        use core::{pin::Pin, task::Poll};
+        use oer_esp32s31_radio_client::{Failed, RetunedMember, wifi::WifiRetuned};
+        let this = self.get_mut();
+        if let Some(answer) = this.immediate.take() {
+            return Poll::Ready(answer);
+        }
+        let Some(pending) = this.pending.as_mut() else {
+            return Poll::Pending;
+        };
+        let (cell, answer) = core::task::ready!(Pin::new(pending).poll(cx));
+        this.pending = None;
+        let (mut platform, start_report, transition_report, current_channel, target) = this
+            .context
+            .take()
+            .expect("retune retains its context until the answer");
+        let (wifi, member, report) = match answer {
+            Ok(RetunedMember {
+                member,
+                payload: WifiRetuned { wifi, report },
+            }) => (wifi, member, Ok(report)),
+            Err(Failed {
+                returned: (member, wifi),
+                cause,
+            }) => (wifi, member, Err(cause)),
+        };
+        let (registers, interrupt_setup, clocks) = wifi.into_running();
+        if let Ok(report) = report {
+            platform.install_phy_tx_power_profile(report.tx_power);
+        }
+        let stopped = WifiStopped {
+            platform,
+            registers,
+            interrupt_setup,
+            clocks,
+            member,
+            start_report,
+            transition_report,
+            current_channel: if report.is_ok() {
+                target
+            } else {
+                current_channel
+            },
+        };
+        Poll::Ready((
+            cell,
+            match report {
+                Ok(report) => Ok((stopped, report)),
+                Err(cause) => Err(WifiRetuneFailure {
+                    cause: WifiRetuneError::Radio(cause),
+                    stopped,
+                }),
+            },
+        ))
     }
 }

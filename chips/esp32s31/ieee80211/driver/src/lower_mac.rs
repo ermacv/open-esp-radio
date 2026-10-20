@@ -688,6 +688,23 @@ enum KeyToken {
     ApGroup(ApGroupCcmpSlot),
 }
 
+impl<
+    'core,
+    'slot,
+    X: BackendTxProfile,
+    P,
+    E,
+    T,
+    const BUFFER_SIZE: usize,
+    Path: PoolPath,
+    const TICKETS: usize,
+> LowerMacCoreParts<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>
+{
+    pub(crate) fn into_transmitter(self) -> OrdinaryTxIdleOwner<'slot, X, P, E, T, BUFFER_SIZE> {
+        self.tx
+    }
+}
+
 impl KeyToken {
     fn clear<H: CcmpKeyHardware>(self, hardware: &mut H) {
         match self {
@@ -921,6 +938,9 @@ where
     /// `Enable` still awaits its retune.
     pub const fn tuned_channel(&self) -> WifiChannel {
         self.tuned
+    }
+    pub(crate) fn replace_power_profile(&mut self, power: P) {
+        self.tx.replace_power_profile(power);
     }
 
     /// The channel received frames are reported on.
@@ -1839,6 +1859,17 @@ where
         temporal_key: &[u8; CCMP_128_KEY_BYTES],
     ) -> Result<KeyHandle<'core, Path>, association::KeyInstallRefused<'core, Path>> {
         let (spp, scope, slot) = installation.into_parts();
+        self.install_key_parts(hardware, spp, scope, slot, temporal_key)
+    }
+
+    pub(crate) fn install_key_parts<H: LowerMacHardware>(
+        &mut self,
+        hardware: &mut H,
+        spp: oer_ieee80211_wire::security::Spp,
+        scope: TransmitKeyScope,
+        slot: association::VacantKeySlot<'core, Path>,
+        temporal_key: &[u8; CCMP_128_KEY_BYTES],
+    ) -> Result<KeyHandle<'core, Path>, association::KeyInstallRefused<'core, Path>> {
         let free = match self.vacant_key(scope.into()) {
             Ok(index) => index,
             Err(fault) => return Err(association::KeyInstallRefused { fault, slot }),
@@ -1895,6 +1926,17 @@ where
         key_id: oer_ieee80211_wire::ccmp::GroupKeyId,
         temporal_key: &[u8; CCMP_128_KEY_BYTES],
     ) -> Result<ReceiveKeyHandle<'core, Path>, association::KeyInstallRefused<'core, Path>> {
+        self.install_station_group_parts(hardware, association.spp(), slot, key_id, temporal_key)
+    }
+
+    pub(crate) fn install_station_group_parts<H: LowerMacHardware>(
+        &mut self,
+        hardware: &mut H,
+        spp: oer_ieee80211_wire::security::Spp,
+        slot: association::StationGroupSlot<'core, Path>,
+        key_id: oer_ieee80211_wire::ccmp::GroupKeyId,
+        temporal_key: &[u8; CCMP_128_KEY_BYTES],
+    ) -> Result<ReceiveKeyHandle<'core, Path>, association::KeyInstallRefused<'core, Path>> {
         let scope = CheckedKeyScope::StationGroup { key_id };
         let slot = association::VacantKeySlot::StationGroup(slot);
         let index = match self.vacant_key(scope) {
@@ -1903,7 +1945,7 @@ where
         };
         hardware.configure_ccmp_association(
             oer_esp32s31_hal::types::MacInterface::Station,
-            spp_mode(association.spp()),
+            spp_mode(spp),
         );
         let token = match install_sta_group_ccmp(hardware, key_id, temporal_key) {
             Ok(token) => token,

@@ -33,6 +33,21 @@ impl StaApRegisterHardware for WifiMacHal<'_> {
     }
 }
 
+impl StaApRegisterHardware for oer_esp32s31_hal::owner::RadioAccess {
+    fn apply_sta_ap_receive_registers(&mut self, plan: MacStaApReceivePlan) {
+        self.wifi_mac_hal().configure_sta_ap_receive_plan(plan);
+    }
+    fn disable_station_receive_registers(&mut self) {
+        self.wifi_mac_hal().disable_station_receive_policy();
+    }
+    fn disable_access_point_receive_registers(&mut self) {
+        self.wifi_mac_hal().disable_access_point_receive_policy();
+    }
+    fn disable_all_role_receive_registers(&mut self) {
+        self.wifi_mac_hal().disable_all_role_receive_policies();
+    }
+}
+
 /// Leave the station role while retaining the complete SoftAP register bank.
 pub fn disable_station_receive_registers<H: StaApRegisterHardware>(hardware: &mut H) {
     hardware.disable_station_receive_registers();

@@ -367,6 +367,13 @@ instead ends through fail-stop without another disable/drain. Undelivered
 owners stay in permanent quarantine even after its receipt is dropped.
 Hardware backends provide the same resource and terminal contract.
 
+The S31 driver implements this contract in its
+[`port` module](../../../chips/esp32s31/ieee80211/driver/src/port.rs).
+Its P2 owner drives `LowerMacCore`, cooperative registers and the RX ring;
+P3 posts only static typed signals. The image supplies the static TX profile,
+timer, entropy and opaque contexts. Ordinary MPDUs retain caller-supplied
+PNs and external bodies; a normal uninstall returns the stopped resources.
+
 `LowerMacEvent::Terminal(LowerMacTerminal)` carries TX, key, configuration,
 gate and requested clock completions in the normal FIFO. Disable returns
 only `LowerMacTerminal`; RX and TBTT are excluded by type. The backend
