@@ -1050,6 +1050,39 @@ pub fn stack_calls<'m>(
                 );
             }
         }
+        // A conditional exclusion can depend on a length even when it removes
+        // EVERY store. Cache it only if the required arguments are exact live
+        // leaves, so StackCall::preserves rechecks them on each re-analysis.
+        for summary in summaries {
+            c.checkpoint(1)?;
+            let Some(proof) = summary.context.as_ref() else {
+                continue;
+            };
+            let targeted = match target {
+                AbstractValue::ImageAddress { address } => u64::from(*address) == summary.entry,
+                AbstractValue::Alternatives { values } => values.values().iter().any(|value| matches!(value, ValueAlternative::ImageAddress { address } if u64::from(*address) == summary.entry)),
+                _ => false,
+            };
+            if !targeted {
+                continue;
+            }
+            for (required, register) in proof
+                .context
+                .arguments
+                .iter()
+                .zip(proof.context.abi.arguments())
+            {
+                c.checkpoint(1)?;
+                if required.is_some() {
+                    exact_addresses &= matches!(
+                        inputs
+                            .as_ref()
+                            .and_then(|i| i.registers.get(usize::from(register))),
+                        Some(AbstractValue::Constant { .. } | AbstractValue::ImageAddress { .. })
+                    );
+                }
+            }
+        }
         if !exact_addresses {
             continue;
         }

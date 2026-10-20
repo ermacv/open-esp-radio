@@ -79,17 +79,12 @@ pub(super) fn analyze<'m>(
     while let Some(at) = queue.pop_front() {
         queued[at] = false;
         c.checkpoint(1)?;
-        let mut state = states[at].expect("queued context state");
-        let first = equalities.partition_point(|(node, _, _)| *node < at);
-        for (_, register, value) in equalities[first..]
-            .iter()
-            .take_while(|(node, _, _)| *node == at)
-        {
-            c.checkpoint(1)?;
-            state[usize::from(*register)] = *value;
-        }
-        // Store the strengthened entry for final branch witnesses as well.
-        states[at] = Some(state);
+        let state = strengthen(
+            states[at].expect("queued context state"),
+            at,
+            &equalities,
+            c,
+        )?;
         let (out, _) = evaluate(
             operations[at],
             &nodes[at],
@@ -137,7 +132,15 @@ pub(super) fn analyze<'m>(
         match state {
             None => proof.unreachable.push(nodes[at].offset, c.position())?,
             Some(state) => {
-                if let Some(branch) = branch_proof(at, *state, input, nodes, isa, symbols, c)? {
+                if let Some(branch) = branch_proof(
+                    at,
+                    strengthen(*state, at, &equalities, c)?,
+                    input,
+                    nodes,
+                    isa,
+                    symbols,
+                    c,
+                )? {
                     proof.branches.push(branch, c.position())?;
                 }
             }
@@ -156,13 +159,41 @@ pub(super) fn analyze<'m>(
         if let Some(state) = states[from]
             && states[to].is_none()
         {
-            let branch = branch_proof(from, state, input, nodes, isa, symbols, c)?;
+            let branch = branch_proof(
+                from,
+                strengthen(state, from, &equalities, c)?,
+                input,
+                nodes,
+                isa,
+                symbols,
+                c,
+            )?;
             if allowed(edge, branch.as_ref()) {
                 return Ok(None);
             }
         }
     }
     Ok(Some(proof))
+}
+
+// Keep raw incoming states monotone. Equalities strengthen the transfer input;
+// storing strengthened states in the join lattice could repeatedly forget and
+// reintroduce a relation around a cycle.
+fn strengthen(
+    mut state: State,
+    at: usize,
+    equalities: &[(usize, u8, Value)],
+    c: &mut dyn RunControl,
+) -> Result<State> {
+    let first = equalities.partition_point(|(node, _, _)| *node < at);
+    for (_, register, value) in equalities[first..]
+        .iter()
+        .take_while(|(node, _, _)| *node == at)
+    {
+        c.checkpoint(1)?;
+        state[usize::from(*register)] = *value;
+    }
+    Ok(state)
 }
 
 fn allowed(edge: &Edge, branch: Option<&BranchProof>) -> bool {
@@ -189,14 +220,18 @@ fn instantiate(
         AbstractValue::Constant { value } => Value::Constant(*value),
         AbstractValue::EntryStack { offset } => Value::Stack(*offset),
         AbstractValue::Expression { id } => {
-            let Some((site, expression)) = symbols.records.get(*id as usize).cloned() else {
+            let Some((site, expression)) = symbols.records.get(*id as usize) else {
                 return Ok(Value::Unknown);
             };
+            let _payload = symbols
+                .memory
+                .reserve(expression.allocated_bytes(), c.position())?;
+            let (site, expression) = (*site, expression.clone());
             match expression {
                 Expression::EntryRegister { register } => context
                     .abi
                     .argument_word(register)
-                    .and_then(|word| context.arguments[usize::from(word)])
+                    .and_then(|word| context.arguments[word])
                     .map_or(Value::Expr(*id), Value::Constant),
                 Expression::Integer { op, left, right } => {
                     let left = instantiate(&left, context, symbols, input, depth - 1, c)?;
@@ -368,4 +403,24 @@ fn affine<'a>(
         return Some((base, offset.wrapping_add(*delta)));
     }
     Some((value, 0))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn predicates_use_rv32_signedness_including_the_sign_boundary() {
+        for (test, a, b, expected) in [
+            (BranchTest::Eq, 0xffffffff, 0xffffffff, true),
+            (BranchTest::Ne, 0xffffffff, 0, true),
+            (BranchTest::Lt, 32, 0xffffffff, false),
+            (BranchTest::Ltu, 32, 0xffffffff, true),
+            (BranchTest::Ge, 32, 0x80000000, true),
+            (BranchTest::Geu, 32, 0x80000000, false),
+            (BranchTest::Lt, 32, 32, false),
+            (BranchTest::Ge, 32, 32, true),
+        ] {
+            assert_eq!(compare(test, a, b), expected);
+        }
+    }
 }

@@ -2167,6 +2167,7 @@ mod tests {
                 edges
                     .iter()
                     .all(|edge| writes::closes_local_edge(edge.target, edge.relation)),
+                None,
             )
             .unwrap();
             (summary.complete, sink.0)
@@ -2677,6 +2678,7 @@ mod tests {
             edges
                 .iter()
                 .all(|edge| writes::closes_local_edge(edge.target, edge.relation)),
+            None,
         )
         .unwrap();
         sink.0

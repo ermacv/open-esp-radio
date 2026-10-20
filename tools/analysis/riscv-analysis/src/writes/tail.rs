@@ -206,7 +206,9 @@ pub(super) fn compose<'m>(
             c.position(),
         )?;
     }
-    if let Some(proof) = summary.context.as_ref() {
+    if let Some(proof) = summary.context.as_ref().filter(|proof| {
+        proof.context.entry == summary.entry && Some(proof.context.abi) == summary.abi
+    }) {
         let mut branches = AdmittedVec::new(memory);
         for branch in proof.branches.iter() {
             c.checkpoint(1)?;
