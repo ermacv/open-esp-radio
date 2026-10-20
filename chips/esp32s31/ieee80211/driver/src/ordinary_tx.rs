@@ -1686,7 +1686,7 @@ where
             .control()
             .with_he_smpdu(matches!(rate, TxPhyRate::He(_)));
         head.set_control(control);
-        #[cfg(oer_trace)]
+        #[cfg(all(oer_trace, oer_debug_control))]
         if let Some(frame) = metadata
             .get(TX_METADATA_SIZE..)
             .and_then(|bytes| bytes.get(..active.frame_length))

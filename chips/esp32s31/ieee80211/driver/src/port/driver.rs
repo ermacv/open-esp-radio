@@ -788,6 +788,7 @@ impl<'id, D: Device<B>, const B: usize> Driver<'id, D, B> {
         .map_err(|_| Fault::Capacity)?;
         mpdu.published = true;
         pending.publications = pending.publications.checked_add(1).ok_or(Fault::Capacity)?;
+        #[cfg(all(oer_trace, oer_debug_control))]
         let publication = super::trace::Publication {
             ticket: pending.operation.ticket().index(),
             buffer: pending.operation.execute().mpdu.buffer.index(),
@@ -802,6 +803,7 @@ impl<'id, D: Device<B>, const B: usize> Driver<'id, D, B> {
             core::mem::forget(refused);
             return Err(Fault::Capacity);
         }
+        #[cfg(all(oer_trace, oer_debug_control))]
         oer_trace::emit(&publication);
         let _ = held;
         Ok(())

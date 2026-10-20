@@ -40,6 +40,7 @@ mod driver;
 mod keys;
 mod lifecycle;
 mod phase;
+#[cfg(all(oer_trace, oer_debug_control))]
 pub mod trace;
 pub use buffer::*;
 pub use keys::{GroupKey, PairwiseKey, PortKeys};
@@ -403,6 +404,7 @@ impl<'id, D: Device<B>, const B: usize> Held<'id, D, B> {
             }
             self.storage.poison(Fault::Capacity);
         } else {
+            #[cfg(all(oer_trace, oer_debug_control))]
             oer_trace::emit(&trace::TerminalPosted);
         }
         self.storage.body.wake();

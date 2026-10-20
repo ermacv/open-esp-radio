@@ -1,4 +1,4 @@
-//! Publication evidence from the P2 owner. Compiles out without `oer_trace`.
+//! P2 publication evidence for the image declaring trace and debug-control.
 use oer_trace::{Channel, Domain, Event, Kind};
 
 /// A successful publication of one admitted MPDU.

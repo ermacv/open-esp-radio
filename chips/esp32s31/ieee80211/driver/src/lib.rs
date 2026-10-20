@@ -44,7 +44,7 @@ extern crate std;
 
 // Host driver fixtures own virtual time; no installed image trace consumes
 // these timestamps. The clock binding lets the real trace path link in tests.
-#[cfg(all(test, oer_trace))]
+#[cfg(all(test, oer_trace, oer_debug_control))]
 mod trace_clock {
     fn now() -> u64 {
         0
