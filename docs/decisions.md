@@ -119,7 +119,7 @@ bounds) live in the code that applies them.
   any result with a warning; an observed depth above a bound fails the run;
   there is no baseline of accepted holes. A function leaves a call site's
   candidates only when every place that takes its address provably keeps its
-  type.
+  type. `cargo fw build` fails an app image, and so CI, when an interrupt stack has no proven bound, exceeds its budget or rests on an assumption other than the admitted ones; its analysis build is held to the same rule.
 - **Staged boot.** Code and stacks run from PSRAM after the staged bootstrap.
 
 ## Hardware ownership
