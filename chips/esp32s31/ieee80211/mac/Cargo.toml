@@ -32,6 +32,7 @@ oer-interrupt-table = { path = "../../../../portable/interrupt-table", features 
 oer-esp32s31-hal = { path = "../../hal", features = ["test-support"] }
 oer-ieee80211-wire = { path = "../../../../protocols/ieee80211/wire", features = ["test-support"] }
 oer-time-virtual = { path = "../../../../portable/time-virtual" }
+oer-test-ui-cases = { path = "../../../../tools/test/ui-cases" }
 
 [[test]]
 name = "mac"

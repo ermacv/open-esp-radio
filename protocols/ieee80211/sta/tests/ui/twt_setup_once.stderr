@@ -1,0 +1,16 @@
+error[E0382]: use of moved value: `idle`
+ --> tests/ui/twt_setup_once.rs:8:13
+  |
+5 | pub fn setup(idle: IndividualTwtIdleFlow<'_>, proposal: IndividualTwtProposal, now: Instant) {
+  |              ---- move occurs because `idle` has type `IndividualTwtIdleFlow<'_>`, which does not implement the `Copy` trait
+6 |     let _ = idle.queue_setup(proposal, now);
+  |                  -------------------------- `idle` moved due to this method call
+7 |     #[cfg(all())]
+8 |     let _ = idle.queue_setup(proposal, now); // ui-error: E0382
+  |             ^^^^ value used here after move
+  |
+note: `IndividualTwtIdleFlow::<'_>::queue_setup` takes ownership of the receiver `self`, which moves `idle`
+ --> src/twt.rs
+  |
+  |         self,
+  |         ^^^^

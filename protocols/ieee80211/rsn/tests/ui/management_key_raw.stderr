@@ -1,0 +1,13 @@
+error[E0308]: mismatched types
+ --> tests/ui/management_key_raw.rs:6:48
+  |
+6 |     let receiver = ManagementCcmpReceiver::new(&[0; 16]); // ui-error: E0308
+  |                    --------------------------- ^^^^^^^^ expected `Ccmp128Key`, found `&[{integer}; 16]`
+  |                    |
+  |                    arguments to this function are incorrect
+  |
+note: associated function defined here
+ --> src/management_ccmp.rs
+  |
+  |     pub fn new(temporal_key: Ccmp128Key) -> Self {
+  |            ^^^

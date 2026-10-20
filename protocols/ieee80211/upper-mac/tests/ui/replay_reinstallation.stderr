@@ -1,0 +1,22 @@
+error[E0499]: cannot borrow `*epoch` as mutable more than once at a time
+  --> tests/ui/replay_reinstallation.rs:10:9
+   |
+ 5 |     let candidate = epoch
+   |                     ----- first mutable borrow occurs here
+...
+10 |         epoch.remove_group(id); // ui-error: E0499
+   |         ^^^^^ second mutable borrow occurs here
+11 |         let _previous = epoch.exchange_group(id, CcmpRxReplayState::default()); // ui-error: E0499
+12 |         candidate.commit();
+   |         --------- first borrow later used here
+
+error[E0499]: cannot borrow `*epoch` as mutable more than once at a time
+  --> tests/ui/replay_reinstallation.rs:11:25
+   |
+ 5 |     let candidate = epoch
+   |                     ----- first mutable borrow occurs here
+...
+11 |         let _previous = epoch.exchange_group(id, CcmpRxReplayState::default()); // ui-error: E0499
+   |                         ^^^^^ second mutable borrow occurs here
+12 |         candidate.commit();
+   |         --------- first borrow later used here

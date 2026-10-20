@@ -1,0 +1,5 @@
+error[E0616]: field `bytes` of struct `Ccmp128Key` is private
+ --> tests/ui/ccmp_key_bytes.rs:5:22
+  |
+5 |     let bytes = &key.bytes; // ui-error: E0616
+  |                      ^^^^^ private field

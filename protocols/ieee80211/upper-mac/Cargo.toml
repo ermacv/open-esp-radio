@@ -22,3 +22,4 @@ platform = "portable"
 
 [dev-dependencies]
 oer-ieee80211-wire = { path = "../wire", features = ["test-support"] }
+oer-test-ui-cases = { path = "../../../tools/test/ui-cases" }

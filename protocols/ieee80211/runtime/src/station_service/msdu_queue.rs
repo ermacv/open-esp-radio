@@ -335,4 +335,61 @@ mod tests {
         }
         assert_eq!(drops.load(Ordering::Relaxed), 1);
     }
+
+    fn ready<F: Future>(future: F) -> F::Output {
+        let mut future = core::pin::pin!(future);
+        let mut cx = Context::from_waker(Waker::noop());
+        match future.as_mut().poll(&mut cx) {
+            Poll::Ready(value) => value,
+            Poll::Pending => panic!("the queue has credit or a published owner"),
+        }
+    }
+
+    #[test]
+    fn a_dropped_send_permit_publishes_nothing_and_can_be_reserved_again() {
+        let mut queue = MsduQueue::<u8, 1>::new();
+        let (mut sender, receiver) = queue.split();
+        drop(ready(sender.ready()));
+        assert!(receiver.try_receive().is_none());
+        ready(sender.ready()).send(9);
+        assert_eq!(receiver.try_receive(), Some(9));
+    }
+
+    #[test]
+    fn a_producer_on_another_thread_sends_each_owner_once_through_its_permit() {
+        struct Owner(usize, Arc<AtomicUsize>);
+        impl Drop for Owner {
+            fn drop(&mut self) {
+                self.1.fetch_add(1, Ordering::Relaxed);
+            }
+        }
+        const COUNT: usize = 512;
+        let drops = Arc::new(AtomicUsize::new(0));
+        let mut queue = MsduQueue::<Owner, 1>::new();
+        let (mut sender, mut receiver) = queue.split();
+        let published = std::sync::Barrier::new(2);
+        let consumed = std::sync::Barrier::new(2);
+        std::thread::scope(|scope| {
+            let (published, consumed) = (&published, &consumed);
+            let producer_drops = Arc::clone(&drops);
+            let producer = scope.spawn(move || {
+                for id in 0..COUNT {
+                    ready(sender.ready()).send(Owner(id, Arc::clone(&producer_drops)));
+                    published.wait();
+                    consumed.wait();
+                }
+            });
+            for expected in 0..COUNT {
+                published.wait();
+                ready(receiver.ready());
+                let owner = receiver.try_receive().unwrap();
+                assert_eq!(owner.0, expected);
+                drop(owner);
+                consumed.wait();
+            }
+            producer.join().unwrap();
+        });
+        assert!(receiver.try_receive().is_none());
+        assert_eq!(drops.load(Ordering::Relaxed), COUNT);
+    }
 }

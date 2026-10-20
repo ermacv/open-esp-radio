@@ -1,0 +1,5 @@
+error[E0599]: no method named `clone` found for struct `HardwareStopped` in the current scope
+ --> tests/ui/hardware_stopped_affine.rs:5:25
+  |
+5 |     let _second = proof.clone(); // ui-error: E0599
+  |                         ^^^^^ method not found in `HardwareStopped`

@@ -1,0 +1,13 @@
+error[E0308]: mismatched types
+ --> tests/ui/missing_interrupt_bank.rs:7:40
+  |
+7 |     let _inactive = InactiveEpoch::new(mac); // ui-error: E0308
+  |                     ------------------ ^^^ expected `MacInterruptSetup`, found `MacInterruptRegisters`
+  |                     |
+  |                     arguments to this function are incorrect
+  |
+note: associated function defined here
+ --> src/irq/epoch.rs
+  |
+  |     pub const fn new(setup: MacInterruptSetup) -> Self {
+  |                  ^^^

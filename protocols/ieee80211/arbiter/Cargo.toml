@@ -17,6 +17,7 @@ oer-radio-port = { path = "../../radio/port" }
 
 [dev-dependencies]
 oer-radio-regulatory = { path = "../../radio/regulatory", features = ["test-support"] }
+oer-test-ui-cases = { path = "../../../tools/test/ui-cases" }
 
 [lints]
 workspace = true

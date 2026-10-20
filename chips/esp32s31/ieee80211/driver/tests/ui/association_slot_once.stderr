@@ -1,0 +1,11 @@
+error[E0382]: use of moved value: `slot`
+  --> tests/ui/association_slot_once.rs:22:22
+   |
+15 |     slot: StationPairwiseSlot<'id>,
+   |     ---- move occurs because `slot` has type `oer_ieee80211_port::association::PairwiseKeySlot<'_, oer_ieee80211_port::owner::Station, 1, 1, oer_radio_port::pool::path::Child<oer_radio_port::pool::path::Root, 2>>`, which does not implement the `Copy` trait
+...
+18 |         association, slot, peer: [2; 6],
+   |                      ---- value moved here
+...
+22 |         association, slot, peer: [2; 6], // ui-error: E0382
+   |                      ^^^^ value used here after move

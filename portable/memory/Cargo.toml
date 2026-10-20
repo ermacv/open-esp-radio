@@ -15,6 +15,7 @@ bytemuck = { version = "1.25.2", default-features = false, features = ["min_cons
 default = []
 
 [dev-dependencies]
+oer-test-ui-cases = { path = "../../tools/test/ui-cases" }
 bytemuck = { version = "1.25.2", default-features = false, features = ["derive"] }
 
 [lints]

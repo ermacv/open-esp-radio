@@ -1,0 +1,11 @@
+error[E0382]: borrow of moved value: `key`
+  --> tests/ui/key_removed.rs:19:50
+   |
+11 |     key: KeyHandle<'core>,
+   |     --- move occurs because `key` has type `KeyHandle<'_>`, which does not implement the `Copy` trait
+...
+17 |     core.remove_checked_key(hardware, key, sink);
+   |                                       --- value moved here
+18 |     #[cfg(all())]
+19 |     let _admitted_after_removal = core.admit_key(&key, ticket); // ui-error: E0382
+   |                                                  ^^^^ value borrowed here after move

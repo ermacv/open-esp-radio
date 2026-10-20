@@ -35,6 +35,7 @@ oer-ieee80211-port = { path = "../port", features = ["test-support"] }
 oer-radio-port = { path = "../../radio/port", features = ["test-support"] }
 oer-espressif-ieee80211-policy = { path = "../../../chips/espressif/ieee80211-policy" }
 oer-ieee80211-rsn = { path = "../rsn" }
+oer-test-ui-cases = { path = "../../../tools/test/ui-cases" }
 
 [lints]
 workspace = true

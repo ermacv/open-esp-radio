@@ -1,0 +1,19 @@
+warning: unused variable: `retire`
+ --> tests/ui/retired_requires_request.rs:3:25
+  |
+3 | pub async fn retire<'p>(retire: Retire<'p>, driver: DriverLoan<'p, ()>) -> DriverExit<(), ()> {
+  |                         ^^^^^^ help: if this is intentional, prefix it with an underscore: `_retire`
+  |
+  = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `driver`
+ --> tests/ui/retired_requires_request.rs:3:45
+  |
+3 | pub async fn retire<'p>(retire: Retire<'p>, driver: DriverLoan<'p, ()>) -> DriverExit<(), ()> {
+  |                                             ^^^^^^ help: if this is intentional, prefix it with an underscore: `_driver`
+
+error[E0451]: field `private` of struct `RetireProof` is private
+ --> tests/ui/retired_requires_request.rs:5:31
+  |
+5 |     let proof = RetireProof { private: () }; // ui-error: E0451
+  |                               ^^^^^^^ private field

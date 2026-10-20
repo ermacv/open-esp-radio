@@ -2453,6 +2453,9 @@ enum Served<'id, B: StationPort<'id>> {
     },
 }
 
+#[cfg(test)]
+mod tests;
+
 /// Preserve the first contract violation even when the disable also fails.
 fn end_disabled<'p, 'id, B: StationPort<'id>>(
     owner: Result<Owner<'p, 'id, B, Disabled>, PoisonedOwner<'p, 'id, B>>,

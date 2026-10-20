@@ -1,0 +1,16 @@
+error[E0382]: use of moved value: `call`
+ --> tests/ui/quarantine_twice.rs:6:19
+  |
+3 | pub fn stop(call: Quarantine) -> HardwareStopped {
+  |             ---- move occurs because `call` has type `Quarantine`, which does not implement the `Copy` trait
+4 |     let stopped = call.stopped();
+  |                        --------- `call` moved due to this method call
+5 |     #[cfg(all())]
+6 |     let _second = call.stopped(); // ui-error: E0382
+  |                   ^^^^ value used here after move
+  |
+note: `Quarantine::stopped` takes ownership of the receiver `self`, which moves `call`
+ --> src/lifecycle.rs
+  |
+  |     pub fn stopped(self) -> HardwareStopped {
+  |                    ^^^^

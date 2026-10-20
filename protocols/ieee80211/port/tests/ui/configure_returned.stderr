@@ -1,0 +1,11 @@
+error[E0382]: use of moved value: `permission`
+  --> tests/ui/configure_returned.rs:12:35
+   |
+ 7 |         permission,
+   |         ---------- move occurs because `permission` has type `ConfigurePermission<'_, oer_ieee80211_port::Station, <<P as LowerMacPhase<'_, '_>>::Types as PhaseTypes<'_>>::StationCommandPath, <<P as LowerMacPhase<'_, '_>>::Types as PhaseTypes<'_>>::StationConfigureContext>`, which does not implement the `Copy` trait
+...
+10 |         phase.station().configure(permission, StationReceive::Off);
+   |                                   ---------- value moved here
+11 |         #[cfg(all())]
+12 |         phase.station().configure(permission, StationReceive::Off); // ui-error: E0382
+   |                                   ^^^^^^^^^^ value used here after move

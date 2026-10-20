@@ -1,0 +1,17 @@
+error[E0599]: no method named `frame_credits` found for struct `RetiredStation<'id, T, K>` in the current scope
+ --> tests/ui/retired_station_diagnostics.rs:9:18
+  |
+9 |     let _ = bank.frame_credits(); // ui-error: E0599
+  |                  ^^^^^^^^^^^^^ method not found in `RetiredStation<'id, T, K>`
+
+error[E0599]: no method named `key_owners` found for struct `RetiredStation<'id, T, K>` in the current scope
+  --> tests/ui/retired_station_diagnostics.rs:11:18
+   |
+11 |     let _ = bank.key_owners(); // ui-error: E0599
+   |                  ^^^^^^^^^^ method not found in `RetiredStation<'id, T, K>`
+
+error[E0599]: no method named `lost_tokens` found for struct `RetiredStation<'id, T, K>` in the current scope
+  --> tests/ui/retired_station_diagnostics.rs:13:18
+   |
+13 |     let _ = bank.lost_tokens(); // ui-error: E0599
+   |                  ^^^^^^^^^^^ method not found in `RetiredStation<'id, T, K>`

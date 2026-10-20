@@ -1,0 +1,8 @@
+error: lifetime may not live long enough
+  --> tests/ui/dma_range_retains_storage_lifetime.rs:10:16
+   |
+ 4 | pub fn bind<'storage>(storage: &'storage mut [u8; 16]) -> StableDmaRange<'storage> {
+   |             -------- lifetime `'storage` defined here
+...
+10 |     let range: StableDmaRange<'static> = range; // ui-error: lifetime may not live long enough
+   |                ^^^^^^^^^^^^^^^^^^^^^^^ type annotation requires that `'storage` must outlive `'static`

@@ -1,0 +1,13 @@
+warning: unused variable: `access`
+ --> tests/ui/terminal_access.rs:6:5
+  |
+6 |     access: &mut TerminalAccess<'id, K>,
+  |     ^^^^^^ help: if this is intentional, prefix it with an underscore: `_access`
+  |
+  = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+error[E0451]: field `proof` of struct `TerminalAccess` is private
+ --> tests/ui/terminal_access.rs:9:40
+  |
+9 |     let access = &mut TerminalAccess { proof: core::marker::PhantomData }; // ui-error: E0451
+  |                                        ^^^^^ private field

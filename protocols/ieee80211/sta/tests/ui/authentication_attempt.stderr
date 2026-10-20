@@ -1,0 +1,13 @@
+warning: unused import: `StaAuthenticationEvent`
+ --> tests/ui/authentication_attempt.rs:3:47
+  |
+3 | use oer_ieee80211_sta::join::authentication::{StaAuthenticationEvent, StaAuthenticationRuntime};
+  |                                               ^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+error[E0599]: no method named `begin_attempt` found for struct `StaAuthenticationExchange` in the current scope
+ --> tests/ui/authentication_attempt.rs:8:20
+  |
+8 |     let _ = active.begin_attempt(sequence); // ui-error: E0599
+  |                    ^^^^^^^^^^^^^ method not found in `StaAuthenticationExchange`

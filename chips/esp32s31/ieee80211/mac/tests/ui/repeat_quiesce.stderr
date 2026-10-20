@@ -1,0 +1,16 @@
+error[E0382]: use of moved value: `active`
+ --> tests/ui/repeat_quiesce.rs:6:19
+  |
+3 | pub fn quiesce(active: ActiveEpoch<Moderated>) {
+  |                ------ move occurs because `active` has type `ActiveEpoch<Moderated>`, which does not implement the `Copy` trait
+4 |     let inactive = active.quiesce();
+  |                           --------- `active` moved due to this method call
+5 |     #[cfg(all())]
+6 |     let _second = active.quiesce(); // ui-error: E0382
+  |                   ^^^^^^ value used here after move
+  |
+note: `ActiveEpoch::<M>::quiesce` takes ownership of the receiver `self`, which moves `active`
+ --> src/irq/epoch.rs
+  |
+  |     pub fn quiesce(self) -> InactiveEpoch {
+  |                    ^^^^

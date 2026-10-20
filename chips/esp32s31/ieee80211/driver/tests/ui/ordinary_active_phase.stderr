@@ -1,0 +1,5 @@
+error[E0599]: no method named `start` found for struct `OrdinaryTxActive<'owner, 'slot, X, P, E, T, N, LEGACY_ONLY>` in the current scope
+  --> tests/ui/ordinary_active_phase.rs:14:20
+   |
+14 |     let _ = active.start(hardware, _plan); // ui-error: E0599
+   |                    ^^^^^ method not found in `OrdinaryTxActive<'_, '_, EspressifBackendTxProfile, P, E, T, 64>`

@@ -1,0 +1,5 @@
+error[E0451]: field `driver` of struct `DriverLoan` is private
+ --> tests/ui/driver_loan_constructor.rs:5:30
+  |
+5 |     let _loan = DriverLoan { driver }; // ui-error: E0451
+  |                              ^^^^^^ private field

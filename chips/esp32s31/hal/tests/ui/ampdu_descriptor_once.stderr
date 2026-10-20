@@ -1,0 +1,11 @@
+error[E0382]: use of moved value: `backing`
+  --> tests/ui/ampdu_descriptor_once.rs:18:45
+   |
+12 |     let backing = match owner.commit_backing_descriptor(backing, address, 64, 0) {
+   |         ------- move occurs because `backing` has type `RetainedDmaBacking`, which does not implement the `Copy` trait
+...
+16 |     let _ = owner.commit_backing_descriptor(backing, address, 64, 8);
+   |                                             ------- value moved here
+17 |     #[cfg(all())]
+18 |     let _ = owner.commit_backing_descriptor(backing, address, 64, 8); // ui-error: E0382
+   |                                             ^^^^^^^ value used here after move

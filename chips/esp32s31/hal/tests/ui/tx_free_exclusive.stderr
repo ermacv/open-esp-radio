@@ -1,0 +1,10 @@
+error[E0499]: cannot borrow `*owner` as mutable more than once at a time
+ --> tests/ui/tx_free_exclusive.rs:7:23
+  |
+5 |     if let TxDmaAccess::Free(mut free) = owner.access() {
+  |                                          ----- first mutable borrow occurs here
+6 |         #[cfg(all())]
+7 |         let _second = owner.access(); // ui-error: E0499
+  |                       ^^^^^ second mutable borrow occurs here
+8 |         free.buffer_mut()[0] = 1;
+  |         ---- first borrow later used here

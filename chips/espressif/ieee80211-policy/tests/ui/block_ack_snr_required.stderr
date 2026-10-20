@@ -1,0 +1,23 @@
+error[E0277]: the trait bound `Opaque: BlockAckSnr` is not satisfied
+  --> tests/ui/block_ack_snr_required.rs:23:46
+   |
+23 |     return control.observe_ampdu(now, tally, &Opaque); // ui-error: E0277
+   |                    -------------             ^^^^^^^ unsatisfied trait bound
+   |                    |
+   |                    required by a bound introduced by this call
+   |
+help: the trait `BlockAckSnr` is not implemented for `Opaque`
+  --> tests/ui/block_ack_snr_required.rs:15:1
+   |
+15 | pub struct Opaque;
+   | ^^^^^^^^^^^^^^^^^
+help: the trait `BlockAckSnr` is implemented for `Measured`
+  --> tests/ui/block_ack_snr_required.rs:8:1
+   |
+ 8 | impl BlockAckSnr for Measured {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+note: required by a bound in `observe_ampdu`
+  --> $WORKSPACE/protocols/ieee80211/upper-mac/src/rate_control.rs
+   |
+   |     fn observe_ampdu<B: BlockAckSnr>(
+   |                         ^^^^^^^^^^^ required by this bound in `RateControl::observe_ampdu`

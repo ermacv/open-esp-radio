@@ -1,0 +1,15 @@
+error[E0308]: mismatched types
+  --> tests/ui/terminal_foreign_pool.rs:10:32
+   |
+10 |     return terminal.into_parts(foreign); // ui-error: E0308
+   |                     ---------- ^^^^^^^ expected `0`, found `1`
+   |                     |
+   |                     arguments to this method are incorrect
+   |
+   = note: expected mutable reference `&mut TerminalAccess<'_, K, oer_radio_port::Child<Root, 0>>`
+              found mutable reference `&mut TerminalAccess<'id, K, oer_radio_port::Child<Root, 1>>`
+note: method defined here
+  --> src/in_flight.rs
+   |
+   |     pub fn into_parts(
+   |            ^^^^^^^^^^

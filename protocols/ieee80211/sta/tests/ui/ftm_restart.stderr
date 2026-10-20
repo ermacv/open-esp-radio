@@ -1,0 +1,24 @@
+error[E0382]: use of moved value: `requester`
+ --> tests/ui/ftm_restart.rs:8:19
+  |
+5 | pub fn start<const N: usize>(requester: FtmRequester<N>, peer: IndividualAddress, now: Instant) {
+  |                              --------- move occurs because `requester` has type `FtmRequester<N>`, which does not implement the `Copy` trait
+6 |     let session = match requester.start(peer, now) { Ok(session) => session, Err(_) => return };
+  |                                   ---------------- `requester` moved due to this method call
+7 |     #[cfg(all())]
+8 |     let _second = requester.start(peer, now); // ui-error: E0382
+  |                   ^^^^^^^^^ value used here after move
+  |
+note: `FtmRequester::<N>::start` takes ownership of the receiver `self`, which moves `requester`
+ --> src/ftm.rs
+  |
+  |         mut self,
+  |             ^^^^
+
+warning: unused variable: `session`
+ --> tests/ui/ftm_restart.rs:6:9
+  |
+6 |     let session = match requester.start(peer, now) { Ok(session) => session, Err(_) => return };
+  |         ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_session`
+  |
+  = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default

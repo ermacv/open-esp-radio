@@ -1,0 +1,19 @@
+error[E0507]: cannot move out of dereference of `DriverLoan<'_, D>`
+ --> tests/ui/driver_loan_extract.rs:5:18
+  |
+5 |     let _owner = *loan; // ui-error: E0507
+  |                  ^^^^^ move occurs because value has type `D`, which does not implement the `Copy` trait
+  |
+help: if `D` implemented `Clone`, you could clone the value
+ --> tests/ui/driver_loan_extract.rs:3:15
+  |
+3 | pub fn driver<D>(loan: DriverLoan<'_, D>) {
+  |               ^ consider constraining this type parameter with `Clone`
+4 |     #[cfg(all())]
+5 |     let _owner = *loan; // ui-error: E0507
+  |                  ----- you could clone this value
+help: consider removing the dereference here
+  |
+5 -     let _owner = *loan; // ui-error: E0507
+5 +     let _owner = loan; // ui-error: E0507
+  |

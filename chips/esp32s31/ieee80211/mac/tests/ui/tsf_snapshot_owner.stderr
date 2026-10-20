@@ -1,0 +1,11 @@
+error[E0499]: cannot borrow `*owner` as mutable more than once at a time
+  --> tests/ui/tsf_snapshot_owner.rs:11:22
+   |
+ 6 |     let mut sta = owner.wifi_mac_hal();
+   |                   ----- first mutable borrow occurs here
+...
+11 |     let mut second = owner.wifi_mac_hal(); // ui-error: E0499
+   |                      ^^^^^ second mutable borrow occurs here
+12 |     #[cfg(all())]
+13 |     let station = sta.station_tsf();
+   |                   --- first borrow later used here
