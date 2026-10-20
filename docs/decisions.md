@@ -177,8 +177,8 @@ bounds) live in the code that applies them.
 - **Reference models.** Every port has a reference model that keeps its
   contract; doubles that break the contract stay out of the conformance
   suite. A port's reference model is its own host crate,
-  `protocols/<protocol>/model`, beside the chip backends; frame protection is the
-  `cipher` layer that backends and models take, never a core.
+  `protocols/<protocol>/model`, beside the chip backends; frame protection is
+  the `cipher` layer that backends and models take, never a core.
 - **Dropped futures.** A caller that drops an admitted request detaches only
   its waker; the port keeps the registration, queue position and buffer lease
   until the terminal event and reclaims exactly once.
