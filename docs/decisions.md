@@ -132,6 +132,10 @@ bounds) live in the code that applies them.
 - **Radio system.** One actor on the P2 executor owns the shared RF front-end:
   ownership split, actor with per-client cells, PHY membership typestate,
   retune transaction, `LpClock`, named bounds.
+- **Radio power and Wi-Fi reset.** Common radio power enables the shared domain
+  without resetting the Wi-Fi MAC, on both initial and repeated entries. Wi-Fi
+  performs its own cold baseband+MAC reset after PHY calibration at its client
+  entry; IEEE 802.15.4 and BLE do not receive that reset.
 - **Retune** runs `ic_mac_deinit → phy_change_channel → ic_mac_init` as one
   transaction; a failure after the first RF write poisons the PHY domain.
 - **PHY slicing.** Calibration and tracking are cut into bounded P2 steps:

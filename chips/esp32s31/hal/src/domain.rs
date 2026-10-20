@@ -176,6 +176,7 @@ struct SharedRadioState<B: PlatformClockBackend, T> {
     registers: SharedRadioRegisters,
     phy: PhyRouteState,
     power: CommonRadioPower<B>,
+    wifi_power_entry: crate::ieee80211::client::WifiPowerEntry,
     btbb_clients: u8,
     /// The generation of the latest BTBB gain publication.
     btbb_gain_generation: u32,
@@ -346,6 +347,7 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
                 registers,
                 phy,
                 power: CommonRadioPower::default(),
+                wifi_power_entry: crate::ieee80211::client::WifiPowerEntry::default(),
                 btbb_clients: 0,
                 btbb_gain_generation: 0,
                 clocks: ModemClocks::new(),
@@ -535,9 +537,8 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
 
     /// Enter common radio power as the protocol that owns `owner`.
     ///
-    /// Only the first client runs the modem/PHY power sequence; it pulses the
-    /// Wi-Fi baseband and MAC resets, so it never runs while another client
-    /// holds power.
+    /// Only the first client runs the modem/PHY power sequence. Common power
+    /// does not reset the Wi-Fi MAC; that reset belongs to Wi-Fi's own entry.
     ///
     /// The first client also takes the platform's 160 MHz, MPLL and
     /// analog-I2C references from `clocks`; ESP-HAL alone writes those shared
@@ -556,9 +557,25 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
         clocks: &impl PlatformClockProvider<Backend = B>,
     ) -> Result<CommonPower<O::Client>, CommonRadioPowerError> {
         let state = self.state_mut();
+        let entry = state
+            .power
+            .prepare_entry::<O::Client>(state.registers.radio_phy_mut())?;
         state
             .power
-            .enter::<O::Client>(state.registers.radio_phy_mut(), clocks)
+            .finish_entry(entry, state.registers.radio_phy_mut(), clocks)
+    }
+
+    /// Wi-Fi's checked cold-reset edge followed by common power. The whole
+    /// transition stays under this exclusive domain borrow with no yield.
+    pub(crate) fn enter_wifi_power(
+        &mut self,
+        _owner: &WifiRadioRegisters,
+        clocks: &impl PlatformClockProvider<Backend = B>,
+    ) -> Result<CommonPower<WifiClient>, CommonRadioPowerError> {
+        let state = self.state_mut();
+        state
+            .wifi_power_entry
+            .enter(&mut state.power, state.registers.radio_phy_mut(), clocks)
     }
 
     /// How many radios take part in coexistence.

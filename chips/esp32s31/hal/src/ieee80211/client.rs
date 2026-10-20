@@ -25,6 +25,7 @@ use oer_esp32s31_pac::{MacInterruptSetup, WifiRadioRegisters};
 use crate::types::MacInterruptEnableState;
 
 use crate::{
+    clock::{ClockPort, CommonRadioPower},
     domain::{
         CoexAbsent, CommonPower, CommonPowerExitFailure, CommonRadioPowerError, ModemClockError,
         PlatformClockProvider, RadioDomain, WifiClient,
@@ -37,6 +38,44 @@ use crate::{
     owner::RadioAccess,
     root::WifiPartition,
 };
+
+/// The Wi-Fi-specific cold reset is unavailable to common power's port.
+pub(crate) trait WifiPowerPort: ClockPort {
+    fn pulse_wifi_baseband_and_mac_reset(&mut self);
+}
+
+impl WifiPowerPort for oer_esp32s31_pac::RadioPhyRegisters {
+    fn pulse_wifi_baseband_and_mac_reset(&mut self) {
+        self.set_wifi_baseband_and_mac_reset(true);
+        self.set_wifi_baseband_and_mac_reset(false);
+    }
+}
+
+/// Retained across Wi-Fi power epochs, independently of the other protocols.
+#[derive(Default)]
+pub(crate) struct WifiPowerEntry {
+    reset_completed: bool,
+}
+
+impl WifiPowerEntry {
+    pub(crate) fn enter<B: PlatformClockBackend>(
+        &mut self,
+        power: &mut CommonRadioPower<B>,
+        port: &mut impl WifiPowerPort,
+        clocks: &impl PlatformClockProvider<Backend = B>,
+    ) -> Result<CommonPower<WifiClient>, CommonRadioPowerError> {
+        let entry = power.prepare_entry::<WifiClient>(port)?;
+        // SOURCE: IDF Wi-Fi initialization resets its MAC after the initial
+        // PHY calibration. Keep the prior write order: cold baseline, LP
+        // clock selection, combined reset, then the domain power sequence.
+        if !self.reset_completed {
+            port.pulse_wifi_baseband_and_mac_reset();
+        }
+        let entered = power.finish_entry(entry, port, clocks)?;
+        self.reset_completed = true;
+        Ok(entered)
+    }
+}
 
 /// The Wi-Fi MAC register set, the RX walker's registers and the interrupt
 /// setup.
@@ -138,8 +177,9 @@ impl WifiCold {
         WifiPartition::from_parts(mac.into_partition(), rx_dma, interrupts)
     }
 
-    /// Enter common radio power as the Wi-Fi client. Only the first client
-    /// runs the modem/PHY power sequence.
+    /// Enter Wi-Fi after PHY calibration: its first entry pulses its BB+MAC
+    /// reset, then enters common power. Later Wi-Fi entries retain the MAC
+    /// window. Other protocol clients do not perform this reset.
     ///
     /// # Errors
     ///
@@ -153,7 +193,7 @@ impl WifiCold {
         (WifiPowered, CommonPower<WifiClient>),
         WifiTransitionFailure<Self, CommonRadioPowerError>,
     > {
-        match radio.enter_common_power(&self.registers.mac, clocks) {
+        match radio.enter_wifi_power(&self.registers.mac, clocks) {
             Ok(power) => Ok((
                 WifiPowered {
                     registers: self.registers,
