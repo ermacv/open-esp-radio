@@ -1,5 +1,15 @@
 #![no_std]
 #![forbid(unsafe_code)]
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::unreachable,
+        clippy::indexing_slicing
+    )
+)]
 
 //! IEEE 802.11 frame formats and shared value vocabulary.
 //!
