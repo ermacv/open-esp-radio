@@ -108,29 +108,33 @@ mod tests {
     use super::*;
 
     const SCRIPT: &str = include_str!("../linker/runtime/sections.x");
-    /// A chip's generated window check, with a known window.
-    const WINDOW: &str = include_str!("../../../esp32s31/layout/linker/dma-window.x");
-    /// A chip's generated window check, with none known.
-    const NO_WINDOW: &str = include_str!("../../../esp32c5/layout/linker/dma-window.x");
+    /// Both chips have a DMA window; the generator tests cover an unknown window.
+    const WINDOWS: &[(&str, &str)] = &[
+        (
+            "esp32s31",
+            include_str!("../../../esp32s31/layout/linker/dma-window.x"),
+        ),
+        (
+            "esp32c5",
+            include_str!("../../../esp32c5/layout/linker/dma-window.x"),
+        ),
+    ];
 
     #[test]
     fn dma_storage_is_checked_against_the_generated_window() {
         let flat = |text: &str| text.split_whitespace().collect::<Vec<_>>().join(" ");
         assert!(flat(SCRIPT).contains("INCLUDE dma-window.x"), "{SCRIPT}");
-        let script = flat(WINDOW);
-        for check in [
-            "__runtime_dma_data_start >= DMA_WINDOW_ORIGIN",
-            "__runtime_dma_bss_end <= DMA_WINDOW_ORIGIN + DMA_WINDOW_LENGTH",
-            "(__runtime_dma_data_start & ((1 << DMA_ADDRESS_LOW_BITS) - 1)) != 0",
-            "(__runtime_dma_data_start >> DMA_ADDRESS_LOW_BITS) == ((__runtime_dma_bss_end - 1) >> DMA_ADDRESS_LOW_BITS)",
-        ] {
-            assert!(script.contains(check), "{check}");
+        for (chip, window) in WINDOWS {
+            let script = flat(window);
+            for check in [
+                "__runtime_dma_data_start >= DMA_WINDOW_ORIGIN",
+                "__runtime_dma_bss_end <= DMA_WINDOW_ORIGIN + DMA_WINDOW_LENGTH",
+                "(__runtime_dma_data_start & ((1 << DMA_ADDRESS_LOW_BITS) - 1)) != 0",
+                "(__runtime_dma_data_start >> DMA_ADDRESS_LOW_BITS) == ((__runtime_dma_bss_end - 1) >> DMA_ADDRESS_LOW_BITS)",
+            ] {
+                assert!(script.contains(check), "{chip}: {check}");
+            }
         }
-        // Without a window no DMA storage links.
-        assert!(
-            flat(NO_WINDOW).contains("ASSERT(__runtime_dma_bss_end <= __runtime_dma_data_start,"),
-            "{NO_WINDOW}"
-        );
     }
 
     /// The body of output section `name` and whether it is `NOLOAD`.
