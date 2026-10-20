@@ -462,6 +462,16 @@ fn submit_mpdu<'k, 'p, 'id: 'p + 'k>(
     body: Option<Payload>,
     key: Option<&'k PairwiseKey<'id, Station>>,
 ) {
+    submit_mpdu_budget(phase, buffer, ticket, body, key, 1);
+}
+fn submit_mpdu_budget<'k, 'p, 'id: 'p + 'k>(
+    phase: &mut Esp32s31Phase<'p, 'id, TestDevice, 512>,
+    buffer: Buffer<'id, 512>,
+    ticket: radio::Slot<'id, Tickets, radio::Child<radio::Root, 2>>,
+    body: Option<Payload>,
+    key: Option<&'k PairwiseKey<'id, Station>>,
+    budget: u8,
+) {
     let rate = phase
         .rate(PhyRate::Legacy(LegacyRate::Ofdm6M))
         .expect("rate");
@@ -485,7 +495,7 @@ fn submit_mpdu<'k, 'p, 'id: 'p + 'k>(
         .expect("frame"),
         plan: RetryPlan::new(RetryStage {
             rate,
-            transmissions: core::num::NonZeroU8::MIN,
+            transmissions: core::num::NonZeroU8::new(budget).expect("nonzero test budget"),
             protection: Protection::None,
         }),
     })

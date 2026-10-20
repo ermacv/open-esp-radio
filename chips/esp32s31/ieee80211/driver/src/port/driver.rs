@@ -211,25 +211,69 @@ impl<'id, D: Device<B>, const B: usize> Driver<'id, D, B> {
             pending.operation.complete(outcome),
         )));
     }
-    fn withdraw(
-        &mut self,
-        held: &Held<'id, D, B>,
-        cause: WithdrawCause,
-        mut matches: impl FnMut(&Pending<'id, D, B>) -> bool,
-    ) {
+    // The retained barrier is also the withdrawal marker; no owner or result
+    // is moved out of its AC while an earlier owner can still complete.
+    fn withdrawal(&self, pending: &Pending<'id, D, B>) -> Option<WithdrawCause> {
+        if self
+            .configuring
+            .as_ref()
+            .is_some_and(|p| p.role() == pending.role())
+        {
+            return Some(WithdrawCause::Disabled);
+        }
+        match &self.pending_command {
+            Some(Command::Remove { identity, .. })
+            | Some(Command::Group {
+                command: GroupCommand::Remove { identity, .. },
+                ..
+            }) if pending.key() == Some(*identity) => Some(WithdrawCause::KeyRemoved),
+            _ => None,
+        }
+    }
+    #[inline(never)]
+    fn withdraw(&mut self, held: &Held<'id, D, B>) -> bool {
+        let global = if !held.want_enabled.get() {
+            Some(WithdrawCause::Disabled)
+        } else if self.closing.is_some() {
+            Some(WithdrawCause::GateClosed)
+        } else {
+            None
+        };
         for index in 0..4 {
-            let count = self.queues[index].len();
-            for _ in 0..count {
+            if self.running[index].is_some() {
+                continue;
+            }
+            // A selective barrier cannot return an owner past either a
+            // published head or an earlier unaffected queued owner.
+            while let Some(cause) = self.queues[index]
+                .front()
+                .and_then(|pending| global.or_else(|| self.withdrawal(pending)))
+            {
                 let pending = self.queues[index]
                     .pop_front()
-                    .expect("snapshot count bounds queue");
-                if matches(&pending) {
-                    self.finish(held, pending, TxOutcome::Withdrawn(cause));
-                } else if self.queues[index].push_back(pending).is_err() {
-                    unreachable!("removing one queue owner leaves a place")
-                }
+                    .expect("matched head retained");
+                self.finish(held, pending, TxOutcome::Withdrawn(cause));
             }
         }
+        !self
+            .queues
+            .iter()
+            .flat_map(|queue| queue.iter())
+            .chain(self.running.iter().flatten())
+            .any(|pending| self.withdrawal(pending).is_some())
+    }
+    #[inline(always)]
+    fn blocked(&self, pending: &Pending<'id, D, B>) -> bool {
+        self.withdrawal(pending).is_some()
+            || match &self.pending_command {
+                Some(Command::Remove { .. })
+                | Some(Command::Group {
+                    command: GroupCommand::Remove { .. },
+                    ..
+                }) => false,
+                Some(_) => true,
+                None => false,
+            }
     }
     fn expired(held: &Held<'id, D, B>, pending: &Pending<'id, D, B>, now: Instant) -> bool {
         pending
@@ -350,6 +394,7 @@ impl<'id, D: Device<B>, const B: usize> Driver<'id, D, B> {
         if !sink.removed.is_empty() {
             return Err(Fault::Capacity);
         }
+        self.withdraw(held);
         Ok(())
     }
     fn receive(
@@ -488,24 +533,23 @@ impl<'id, D: Device<B>, const B: usize> Driver<'id, D, B> {
                 Poll::Pending => break,
             }
         }
-        if self.core.configuring() {
-            let mut sink = Sink::default();
-            let done = self
-                .core
-                .advance_configuration(device.hardware(), &mut sink);
-            self.collect(held, sink, stopping)?;
-            if done {
+        if self.configuring.is_some() {
+            if self.core.configuring() {
+                let mut sink = Sink::default();
+                let done = self
+                    .core
+                    .advance_configuration(device.hardware(), &mut sink);
+                self.collect(held, sink, stopping)?;
+                if !done {
+                    return Ok(());
+                }
+            }
+            if self.withdraw(held) {
                 let permission = self
                     .configuring
                     .take()
                     .expect("configuration retains its permission");
-                // Retain queued owners until their published predecessors
-                // have posted their terminals, then confirm the barrier.
-                let role = permission.role();
-                self.withdraw(held, WithdrawCause::Disabled, |p| p.role() == role);
                 held.terminal(LowerMacTerminal::Configured(permission));
-            } else {
-                return Ok(());
             }
         }
         if held.dirty_edca.replace(false) {
@@ -548,18 +592,19 @@ impl<'id, D: Device<B>, const B: usize> Driver<'id, D, B> {
         // Every command is bounded by the affine capacities; a barrier retains
         // its FIFO position and prevents later publication.
         for _ in 0..COMMANDS {
-            let Some(command) = self.pending_command.take().or_else(|| held.commands.pop()) else {
+            if self.configuring.is_some() {
+                break;
+            }
+            self.pending_command = self.pending_command.take().or_else(|| held.commands.pop());
+            let drained = self.withdraw(held);
+            let Some(command) = self.pending_command.take() else {
                 break;
             };
             match command {
                 Command::Submit(pending) => {
-                    if stopping {
-                        self.finish(held, pending, TxOutcome::Withdrawn(WithdrawCause::Disabled));
-                    } else {
-                        let index = queue(pending.category);
-                        if self.queues[index].push_back(pending).is_err() {
-                            return Err(Fault::Capacity);
-                        }
+                    let index = queue(pending.category);
+                    if self.queues[index].push_back(pending).is_err() {
+                        return Err(Fault::Capacity);
                     }
                 }
                 Command::Configure { permission, config } => {
@@ -586,15 +631,7 @@ impl<'id, D: Device<B>, const B: usize> Driver<'id, D, B> {
                     self.install(device, identity, installation, &material)?;
                 }
                 Command::Remove { identity, removal } => {
-                    self.withdraw(held, WithdrawCause::KeyRemoved, |p| {
-                        p.key() == Some(identity)
-                    });
-                    if self
-                        .running
-                        .iter()
-                        .flatten()
-                        .any(|p| p.key() == Some(identity))
-                    {
+                    if !drained {
                         self.pending_command = Some(Command::Remove { identity, removal });
                         break;
                     }
@@ -608,7 +645,7 @@ impl<'id, D: Device<B>, const B: usize> Driver<'id, D, B> {
                         self.pending_command = Some(Command::Group { at, command });
                         return Err(Fault::Deadline);
                     }
-                    if self.running.iter().flatten().any(|p| command.uses(p.key())) {
+                    if self.running.iter().flatten().any(|p| command.uses(p.key())) || !drained {
                         self.pending_command = Some(Command::Group { at, command });
                         break;
                     }
@@ -639,11 +676,11 @@ impl<'id, D: Device<B>, const B: usize> Driver<'id, D, B> {
                 }
             }
         }
+        self.withdraw(held);
         if self.closing.is_some() && !self.core.configuring() && self.core.close(device.hardware())
         {
             // The core has returned every published head. Existing AC queues
             // retain their tails in order until those heads are terminal.
-            self.withdraw(held, WithdrawCause::GateClosed, |_| true);
             let gate = held
                 .gate
                 .borrow_mut()
@@ -669,7 +706,7 @@ impl<'id, D: Device<B>, const B: usize> Driver<'id, D, B> {
                 || self.closed
                 || self.closing.is_some()
                 || self.core.configuring()
-                || self.pending_command.is_some()
+                || self.queues[index].front().is_some_and(|p| self.blocked(p))
             {
                 continue;
             }
@@ -685,9 +722,9 @@ impl<'id, D: Device<B>, const B: usize> Driver<'id, D, B> {
             && self.pending_command.is_none()
             && held.commands.empty()
             && !self.core.configuring()
+            && self.configuring.is_none()
             && self.closing.is_none()
         {
-            self.withdraw(held, WithdrawCause::Disabled, |_| true);
             let mut sink = Sink::default();
             self.core.disable(device.hardware(), &mut sink);
             self.collect(held, sink, true)?;
@@ -1027,9 +1064,6 @@ impl<'id, D: Device<B>, const B: usize> Driver<'id, D, B> {
                 return Ok(LowerMacTerminal::GroupKeySelected { key, permission });
             }
             GroupCommand::Remove { identity, removal } => {
-                self.withdraw(held, WithdrawCause::KeyRemoved, |p| {
-                    p.key() == Some(identity)
-                });
                 let removed = self.remove(device, identity)?;
                 return Ok(LowerMacTerminal::KeyRemoved(
                     self.removed_terminal(removal, removed)?,

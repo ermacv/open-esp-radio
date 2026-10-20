@@ -1,5 +1,7 @@
 use super::*;
 
+mod withdraw;
+
 async fn yield_once() {
     let mut yielded = false;
     core::future::poll_fn(|cx| {
