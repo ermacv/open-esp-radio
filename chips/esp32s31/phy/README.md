@@ -373,7 +373,7 @@ invalid tick. Repetition 12, tick 2 failed measurement 0, sample 0 with
 `TxDcPwdet(Search(ToneSar(ReadyObservationLimit { observations: 13, .. })))`.
 The direct SAR readiness settle is 20 µs. SOURCE: complete rev0 ROM
 `phy_pwdet_tone_start` waits for readiness after the same 1/2 µs settles;
-`tx/dc_power_detector.rs` adds the finite direct-observation bound.
+`src/tx/dc_power_detector.rs` adds the finite direct-observation bound.
 The poisoned PHY refused policy restoration and RF closure; the runner reset it
 before the next repetition. Invalid/open intervals are incomplete evidence,
 and successful subsets establish no reliability or worst-case bound.
