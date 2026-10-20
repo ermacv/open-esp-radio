@@ -2638,7 +2638,10 @@ impl oer_ieee80211_port::Ieee80211Capabilities for WideEdca {
 fn edca(
     parameters: oer_ieee80211_wire::extensions::wmm::WmmParameterSet,
 ) -> oer_ieee80211_port::SupportedEdca<WideEdca> {
-    oer_ieee80211_port::SupportedEdca::new(parameters).unwrap()
+    oer_ieee80211_port::SupportedEdca::new(oer_ieee80211_port::EdcaParameterSet::from_wmm(
+        parameters,
+    ))
+    .unwrap()
 }
 
 fn wmm_with_best_effort_txop(txop_units_32_us: u16) -> oer_ieee80211_port::SupportedEdca<WideEdca> {
@@ -3370,9 +3373,9 @@ fn the_backoff_is_drawn_from_the_category_s_contention_window() {
     installed(|pools| {
         let mut hardware = Hardware::default();
         let mut core = enabled(&mut hardware, pools);
-        // The vendor defaults: best effort's CWmin is 15 slots.
+        // The standard defaults: best effort's CWmin is 15 slots.
         for _ in 0..16 {
-            assert!(core.draw_backoff(WmmAccessCategory::BestEffort) <= 15);
+            assert!(core.draw_backoff(VifRole::Station, WmmAccessCategory::BestEffort) <= 15);
         }
     });
 }
@@ -4286,4 +4289,66 @@ fn an_irq_legacy_transmitter_refuses_ht_before_reserving_or_publishing_dma() {
     assert_eq!(hardware.publications(), 0);
     assert!(!owner.active());
     assert_eq!(owner.slot_state(), TxDmaState::Free);
+}
+
+#[test]
+fn the_core_draws_from_the_publishing_vif_and_keeps_each_complete_record() {
+    use oer_ieee80211_port::EdcaParameterSet;
+    use oer_ieee80211_wire::extensions::wmm::{WmmAcParameters, WmmParameterSet};
+    installed(|pools| {
+        let mut hardware = Hardware::default();
+        let mut core = enabled(&mut hardware, pools);
+        core.configure_checked_vif(&mut hardware, access_point())
+            .unwrap();
+        let table = |aifsn, min, max, txop, lifetime| {
+            EdcaParameterSet::new(
+                WmmParameterSet::new(
+                    0,
+                    false,
+                    [WmmAcParameters {
+                        admission_control_mandatory: false,
+                        aifsn,
+                        ecw_min: min,
+                        ecw_max: max,
+                        txop_limit_units_32_us: txop,
+                    }; 4],
+                ),
+                [lifetime; 4],
+            )
+        };
+        let station =
+            oer_ieee80211_port::SupportedEdca::<WideEdca>::new(table(3, 4, 6, 94, 500)).unwrap();
+        let ap =
+            oer_ieee80211_port::SupportedEdca::<WideEdca>::new(table(7, 2, 3, 350, 100)).unwrap();
+        core.set_checked_edca(VifRole::Station, station).unwrap();
+        core.set_checked_edca(VifRole::AccessPoint, ap).unwrap();
+        for role in [VifRole::Station, VifRole::AccessPoint, VifRole::Station] {
+            let record = match role {
+                VifRole::Station => station,
+                VifRole::AccessPoint => ap,
+            }
+            .get()
+            .access_category(WmmAccessCategory::BestEffort);
+            let slots = core.draw_backoff(role, WmmAccessCategory::BestEffort);
+            assert_eq!(slots, (entropy() as u16) & ((1 << record.wmm.ecw_min) - 1));
+            let mut request = values(&data_frame(BSSID), false);
+            request.role = role;
+            request.backoff_slots = slots;
+            submit(&mut core, &mut hardware, request).unwrap();
+            let program = hardware.legacy.last().unwrap().1;
+            assert_eq!(program.interface(), mac_interface(role));
+            assert_eq!(program.contention_window(), slots);
+            let applied = core
+                .tx
+                .policy()
+                .access_policy(role, LegacyTxQueue::BestEffort);
+            assert_eq!(applied.contention().aifsn(), record.wmm.aifsn);
+            assert_eq!(
+                applied.txop_limit_units_32_us(),
+                record.wmm.txop_limit_units_32_us
+            );
+            assert_eq!(applied.msdu_lifetime_tu(), record.msdu_lifetime_tu);
+            complete(&mut core, &mut hardware, 0);
+        }
+    });
 }

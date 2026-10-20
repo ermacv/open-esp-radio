@@ -205,11 +205,15 @@ back; its operations are synchronous and never wait:
   Sampling belongs to the interface whose clock `BeaconTimingPhase` reads.
   Disable drains these command terminals with their owners.
 - **Settings.** EDCA, BSS color, a TBTT plan, monitor reception and Block Ack
-  desired state take effect before the next submission; the latest value
-  of each wins. They consume no FIFO command credit. EDCA belongs to an
-  interface: each keeps its own set, the backend reconciles the sets into
-  its queues and `set_edca` returns the set the interface's attempts
-  contend with.
+  desired state take effect before the next publication; the latest value
+  of each wins. They consume no FIFO command credit. Each VIF keeps its
+  complete EDCA table: AIFSN, ECWmin, ECWmax, TXOP limit and MSDU lifetime.
+  `SupportedEdca` refuses unsupported records; `set_edca` applies them
+  exactly. The head frame's VIF selects the parameters of its AC queue's
+  single contention state. Before a BSS is known, the standard non-AP
+  defaults apply (IEEE 802.11-2020 9.4.2.28, Table 9-155), with 500 TU
+  lifetimes. Local lifetimes are separate from the on-air WMM element.
+  TXOP limits are retained in 32-us units; an access sends one frame.
 - **Gate evidence.** The install includes one `GatePool` in its declared pool set.
   Its private `GatePlace` starts inside `GateOpen`
   and retains one `GateIssuer` in the backend. Closing moves that place to

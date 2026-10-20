@@ -51,6 +51,7 @@ impl Ieee80211Capabilities for Caps {
         rx_block_ack_max_window: 64,
         edca_max_aifsn: 15,
         edca_max_cw_exponent: 10,
+        edca_max_txop_limit_units_32_us: u16::MAX,
     };
 }
 

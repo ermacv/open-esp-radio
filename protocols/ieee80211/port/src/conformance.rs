@@ -9,6 +9,7 @@
 //! Changed MPDU bytes report `MpduChanged`, separately from `Owners` for
 //! a context, ticket or buffer identity mismatch.
 
+pub mod edca;
 /// GTK installation, replacement and selection RX boundaries.
 pub mod group_keys;
 /// Configuration permissions and opaque contexts through FIFO and disable.
@@ -41,6 +42,8 @@ pub enum ModelOnlyReason {
     DelayedIngress,
     /// A group-key hardware change is stalled through its command deadline.
     CommandStall,
+    /// A queue or its completion is held independently of real air.
+    HeldContention,
 }
 
 /// A case's physical execution requirements, independent of its fixture.

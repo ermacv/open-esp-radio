@@ -2,13 +2,12 @@
 //!
 //! The contention window of each queue is the portable
 //! `oer_ieee80211_port::EdcaContention`; its cold values are the
-//! Espressif LMAC defaults of `oer_espressif_ieee80211_policy::lmac`. This
+//! standard non-AP EDCA defaults. This
 //! module adds what the S31 queue imposes: a ten-bit slot field and the
 //! validated AIFSN, ACM and TXOP policy of each queue.
 
-use oer_ieee80211_port::EdcaContention;
-use oer_ieee80211_port::backend::BackendTxProfile;
-use oer_ieee80211_wire::extensions::wmm::{WmmAcParameters, WmmParameterSet};
+use oer_ieee80211_port::{EdcaAcParameters, EdcaContention, EdcaParameterSet};
+use oer_ieee80211_wire::extensions::wmm::WmmAcParameters;
 use oer_ieee80211_wire::qos::WmmAccessCategory;
 
 use crate::tx::LegacyTxQueue;
@@ -21,6 +20,7 @@ pub const MAX_HARDWARE_ECW_EXPONENT: u8 = 10;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum EdcaParametersError {
     AifsnOutOfRange(u8),
+    MsduLifetimeOutOfRange(u16),
     MinimumExponentOutOfRange(u8),
     MaximumExponentOutOfRange(u8),
     InvertedExponentRange { minimum: u8, maximum: u8 },
@@ -44,6 +44,7 @@ pub struct EdcaAccessPolicy {
     contention: EdcaContentionParameters,
     admission_control_mandatory: bool,
     txop_limit_units_32_us: u16,
+    msdu_lifetime_tu: u16,
 }
 
 impl EdcaAccessPolicy {
@@ -51,15 +52,23 @@ impl EdcaAccessPolicy {
         contention: EdcaContentionParameters,
         admission_control_mandatory: bool,
         txop_limit_units_32_us: u16,
+        msdu_lifetime_tu: u16,
     ) -> Self {
         Self {
             contention,
             admission_control_mandatory,
             txop_limit_units_32_us,
+            msdu_lifetime_tu,
         }
     }
 
-    pub const fn from_wmm(parameters: WmmAcParameters) -> Result<Self, EdcaParametersError> {
+    pub const fn from_edca(record: EdcaAcParameters) -> Result<Self, EdcaParametersError> {
+        if record.msdu_lifetime_tu > EdcaParameterSet::DEFAULT_MSDU_LIFETIME_TU {
+            return Err(EdcaParametersError::MsduLifetimeOutOfRange(
+                record.msdu_lifetime_tu,
+            ));
+        }
+        let parameters = record.wmm;
         let contention = match EdcaContentionParameters::from_wmm(parameters) {
             Ok(contention) => contention,
             Err(error) => return Err(error),
@@ -68,7 +77,12 @@ impl EdcaAccessPolicy {
             contention,
             parameters.admission_control_mandatory,
             parameters.txop_limit_units_32_us,
+            record.msdu_lifetime_tu,
         ))
+    }
+
+    pub const fn msdu_lifetime_tu(self) -> u16 {
+        self.msdu_lifetime_tu
     }
 
     pub const fn contention(self) -> EdcaContentionParameters {
@@ -133,18 +147,6 @@ impl EdcaContentionParameters {
     pub const fn maximum_exponent(self) -> u8 {
         self.maximum_exponent
     }
-
-    /// The LMAC's cold contention of a queue: complete
-    /// `libpp[lmac.o]::lmacInit, libpp[lmac.o]::lmacInitAc`, kept as the Espressif
-    /// family's policy data.
-    const fn vendor_default<X: BackendTxProfile>(queue: LegacyTxQueue) -> Self {
-        let defaults = *queue.access_category().select(&X::DEFAULT_CONTENTION);
-        Self {
-            aifsn: defaults.aifsn,
-            minimum_exponent: defaults.ecw_min,
-            maximum_exponent: defaults.ecw_max,
-        }
-    }
 }
 
 /// Runtime contention state for one access category.
@@ -157,7 +159,12 @@ pub struct EdcaBackoffState {
 impl EdcaBackoffState {
     pub const fn new(parameters: EdcaContentionParameters) -> Self {
         Self {
-            policy: EdcaAccessPolicy::new(parameters, false, 0),
+            policy: EdcaAccessPolicy::new(
+                parameters,
+                false,
+                0,
+                EdcaParameterSet::DEFAULT_MSDU_LIFETIME_TU,
+            ),
             contention: EdcaContention::new(
                 parameters.minimum_exponent,
                 parameters.maximum_exponent,
@@ -234,23 +241,30 @@ pub struct EdcaQueues {
 }
 
 impl EdcaQueues {
-    pub const fn vendor_defaults<X: BackendTxProfile>() -> Self {
+    pub const fn standard_defaults() -> Self {
+        const fn state(category: WmmAccessCategory) -> EdcaBackoffState {
+            let record = EdcaParameterSet::STANDARD_DEFAULT.access_category(category);
+            let policy = match EdcaAccessPolicy::from_edca(record) {
+                Ok(policy) => policy,
+                Err(_) => panic!("standard EDCA fits the S31 queues"),
+            };
+            EdcaBackoffState {
+                policy,
+                contention: EdcaContention::from_wmm(record.wmm),
+            }
+        }
         Self {
             queues: [
-                EdcaBackoffState::new(EdcaContentionParameters::vendor_default::<X>(
-                    LegacyTxQueue::Voice,
-                )),
-                EdcaBackoffState::new(EdcaContentionParameters::vendor_default::<X>(
-                    LegacyTxQueue::Video,
-                )),
-                EdcaBackoffState::new(EdcaContentionParameters::vendor_default::<X>(
-                    LegacyTxQueue::BestEffort,
-                )),
-                EdcaBackoffState::new(EdcaContentionParameters::vendor_default::<X>(
-                    LegacyTxQueue::Background,
-                )),
+                state(WmmAccessCategory::Voice),
+                state(WmmAccessCategory::Video),
+                state(WmmAccessCategory::BestEffort),
+                state(WmmAccessCategory::Background),
             ],
         }
+    }
+
+    pub fn select_policy(&mut self, queue: LegacyTxQueue, policy: EdcaAccessPolicy) {
+        self.queues[queue as usize].reconfigure_access_policy(policy);
     }
 
     pub const fn queue(&self, queue: LegacyTxQueue) -> &EdcaBackoffState {
@@ -278,18 +292,18 @@ impl EdcaQueues {
     }
 
     /// Atomically validate and install all four WMM AC records.
-    pub fn configure_from_wmm(
+    pub fn configure_from_edca(
         &mut self,
-        parameters: WmmParameterSet,
+        parameters: EdcaParameterSet,
     ) -> Result<(), EdcaParametersError> {
         let voice =
-            EdcaAccessPolicy::from_wmm(parameters.access_category(WmmAccessCategory::Voice))?;
+            EdcaAccessPolicy::from_edca(parameters.access_category(WmmAccessCategory::Voice))?;
         let video =
-            EdcaAccessPolicy::from_wmm(parameters.access_category(WmmAccessCategory::Video))?;
+            EdcaAccessPolicy::from_edca(parameters.access_category(WmmAccessCategory::Video))?;
         let best_effort =
-            EdcaAccessPolicy::from_wmm(parameters.access_category(WmmAccessCategory::BestEffort))?;
+            EdcaAccessPolicy::from_edca(parameters.access_category(WmmAccessCategory::BestEffort))?;
         let background =
-            EdcaAccessPolicy::from_wmm(parameters.access_category(WmmAccessCategory::Background))?;
+            EdcaAccessPolicy::from_edca(parameters.access_category(WmmAccessCategory::Background))?;
 
         self.queues[LegacyTxQueue::Voice as usize].reconfigure_access_policy(voice);
         self.queues[LegacyTxQueue::Video as usize].reconfigure_access_policy(video);

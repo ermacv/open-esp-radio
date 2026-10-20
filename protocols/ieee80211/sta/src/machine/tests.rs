@@ -71,6 +71,7 @@ impl Ieee80211Capabilities for Caps {
         rx_block_ack_max_window: 64,
         edca_max_aifsn: 15,
         edca_max_cw_exponent: 10,
+        edca_max_txop_limit_units_32_us: u16::MAX,
     };
 }
 
@@ -567,7 +568,7 @@ impl<'id, const G: usize> World<'id, G> {
                         panic!("unexpected contract violation: {reason:?}")
                     }
                     StaAction::Ready(id) => self.arbiter.ready(id),
-                    StaAction::SetEdca(edca) => self.seen.push(Seen::Edca(edca.get())),
+                    StaAction::SetEdca(edca) => self.seen.push(Seen::Edca(edca.get().wmm())),
                     StaAction::InstallPairwiseKey {
                         association,
                         pending,

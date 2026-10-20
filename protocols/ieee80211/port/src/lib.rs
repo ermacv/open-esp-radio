@@ -313,7 +313,7 @@ pub use contract::{
     MacOperationOwner, MacOperationOwnership, MacResourceLimits, MacRxMetadata,
     MacServiceCapabilities, MacTxPlan, MacTxQueueState, MacTxResult, MacTxStatus,
 };
-pub use edca::{BackoffEntropy, EdcaContention, draw_backoff};
+pub use edca::{BackoffEntropy, EdcaAcParameters, EdcaContention, EdcaParameterSet, draw_backoff};
 pub use monitor::{
     MONITOR_CHANNEL_SEQUENCE_CAPACITY, MonitorChannelPolicy, MonitorChannelSequence,
     MonitorChannelSequenceError, MonitorDropReason, MonitorFilter, MonitorFrame, MonitorFrameType,

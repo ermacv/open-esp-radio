@@ -217,7 +217,7 @@ bounds) live in the code that applies them.
   unsupported records are refused. One contention state per AC queue uses
   its head frame's VIF parameters. Before a BSS is known, a non-AP station
   uses the standard default EDCA set. TXOP limits are retained and validated;
-  each access sends one frame until TXOP holding is implemented.
+  each access sends one frame.
 - **MSDU age** starts at software admission, and every subframe keeps its own
   age through A-MPDU formation and retry; removing an aged head under an
   active Block Ack agreement sends a BlockAckReq.

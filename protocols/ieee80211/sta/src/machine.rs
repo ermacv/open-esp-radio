@@ -4433,7 +4433,9 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
             );
         }
         if core::mem::take(&mut connected.edca)
-            && let Some(edca) = SupportedEdca::new(connected.peer.associated.edca)
+            && let Some(edca) = SupportedEdca::new(oer_ieee80211_port::EdcaParameterSet::from_wmm(
+                connected.peer.associated.edca,
+            ))
         {
             return (
                 State::Connected(connected),
@@ -5165,7 +5167,9 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
                     peer,
                     key,
                 };
-                match SupportedEdca::new(peer.associated.edca) {
+                match SupportedEdca::new(oer_ieee80211_port::EdcaParameterSet::from_wmm(
+                    peer.associated.edca,
+                )) {
                     Some(edca) => (next, Some(Owed::SetEdca(edca))),
                     None => {
                         join.step = next;
