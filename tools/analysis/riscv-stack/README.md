@@ -302,3 +302,7 @@ The [alignment-loop validation](validation/alignment-writes/README.md) proves a
 finite footprint for one byte-store instruction through the same trampoline and
 actual caller arguments. The other eleven unknown store sites still prevent
 preserving the selected caller spill across the full call.
+The [exit-value validation](validation/alignment-exit/README.md) reuses that
+induction witness for an explicit edge postcondition and proves the pointer's
+align-up value at the real ROM merge, through both incoming paths. Store effects
+and the full-call barrier retain their previous results.

@@ -71,6 +71,20 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
                 "expression\t{id}\t{offset:#010x}\t{:?}",
                 index.expression(*id, &mut control)?
             ),
+            FunctionRecord::AlignedValue { fact } => println!("aligned-value\t{fact:?}"),
+            FunctionRecord::Instruction {
+                offset, decoded, ..
+            } => {
+                println!("instruction\t{offset:#010x}\t{}", decoded.text);
+            }
+            FunctionRecord::Value {
+                offset,
+                register,
+                value,
+                ..
+            } => {
+                println!("register-write\t{offset:#010x}\t{register}\t{value:?}");
+            }
             FunctionRecord::Edge { .. }
             | FunctionRecord::Gap { .. }
             | FunctionRecord::SemanticGap { .. } => println!("graph\t{record:?}"),

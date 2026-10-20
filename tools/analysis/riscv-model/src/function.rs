@@ -155,6 +155,10 @@ pub trait FunctionDecoder {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
 pub enum FunctionRecord {
+    /// Boxed so a supplementary proof does not enlarge every ordinary record.
+    AlignedValue {
+        fact: Box<AlignedValue>,
+    },
     /// A finite superset of byte-store addresses, proved by the common value
     /// pass from instruction semantics and every incoming CFG edge. Offsets
     /// use RV32 wrapping addition; contents still come from MemoryAccess.
@@ -278,6 +282,36 @@ pub struct AlignmentLoopProof {
     pub entry_edge: u64,
     pub pointer: u8,
     pub mask: u8,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
+pub enum ValuePoint {
+    Edge { from: u64, target: u64 },
+    Entry { offset: u64 },
+}
+/// Derived equality at an explicit control point, NOT an architectural
+/// register write. `value` is (initial + mask) & !mask in RV32 arithmetic.
+/// The shared loop proof also establishes value & mask = 0 and a wrapping
+/// displacement from initial in 0..=mask. Expression IDs belong to owner.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct AlignedValue {
+    pub owner: u64,
+    pub point: ValuePoint,
+    pub register: u8,
+    pub initial: AbstractValue,
+    pub value: AbstractValue,
+    pub proof: AlignmentLoopProof,
+    pub origin: AlignmentValueOrigin,
+}
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum AlignmentValueOrigin {
+    LoopExit,
+    ZeroResidue,
+    Propagation,
+    /// Intersection of all incoming paths in the existing local graph.
+    AllIncoming,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]

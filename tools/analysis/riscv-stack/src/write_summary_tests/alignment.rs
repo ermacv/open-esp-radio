@@ -1,5 +1,7 @@
 use super::*;
 
+mod exit_values;
+
 fn branch(left: u32, right: u32, delta: i32, test: u32) -> u32 {
     let n = delta as u32;
     ((n >> 12 & 1) << 31)
@@ -330,7 +332,10 @@ fn open_graph_discards_an_alignment_address_proof() {
 #[test]
 fn alignment_analysis_and_expansion_release_memory_at_every_cancelled_step() {
     let memory = WorkingMemory::new(8 * 1024 * 1024).unwrap();
-    let code: Vec<_> = loop_code(15).iter().flat_map(|w| w.to_le_bytes()).collect();
+    let code: Vec<_> = exit_values::joined_code(15, 12)
+        .iter()
+        .flat_map(|w| w.to_le_bytes())
+        .collect();
     let run = |memory: &WorkingMemory, c: &mut dyn RunControl| {
         let mut saved = Saved(RecordBuffer::new(memory));
         research_with_options(

@@ -2,8 +2,36 @@
 //! No execution samples, instruction decoding or second value interpreter.
 use super::*;
 
+pub(super) mod relations;
+
+/// One shared induction witness supplies the store footprint and exit value.
+#[derive(Clone, Copy)]
+pub(super) struct Bound {
+    pub store: usize,
+    pub initial: Value,
+    pub first_offset: u32,
+    pub exit: u64,
+    pub proof: AlignmentLoopProof,
+}
+impl Bound {
+    pub fn store_record(
+        &self,
+        input: &FunctionInput<'_>,
+        nodes: &[Node],
+        sets: &Sets<'_>,
+    ) -> FunctionRecord {
+        FunctionRecord::StoreAddressRange {
+            offset: nodes[self.store].offset,
+            initial: public(self.initial, input, sets),
+            first_offset: self.first_offset,
+            count: self.proof.mask,
+            proof: self.proof,
+        }
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
-pub(super) fn emit(
+pub(super) fn prove(
     store: usize,
     input: &FunctionInput<'_>,
     nodes: &[Node],
@@ -11,10 +39,8 @@ pub(super) fn emit(
     operations: &[Operation],
     states: &[Option<State>],
     isa: &dyn FunctionSemantics,
-    sets: &Sets<'_>,
-    sink: &mut dyn FunctionSink,
     c: &mut dyn RunControl,
-) -> Result<()> {
+) -> Result<Option<Bound>> {
     let SemanticOp::Memory {
         kind: MemoryKind::Store,
         base: pointer,
@@ -23,10 +49,10 @@ pub(super) fn emit(
         ..
     } = operations[store].op
     else {
-        return Ok(());
+        return Ok(None);
     };
     if pointer == 0 {
-        return Ok(());
+        return Ok(None);
     }
     // The supported cycle is one straight body followed by a masked test.
     let mut latch = store;
@@ -34,19 +60,19 @@ pub(super) fn emit(
         c.checkpoint(1)?;
         latch += 1;
         if latch == nodes.len() {
-            return Ok(());
+            return Ok(None);
         }
     }
     let InstructionFlow::Branch { displacement: back } = nodes[latch].decoded.flow else {
-        return Ok(());
+        return Ok(None);
     };
     let Some(header) = target(nodes[latch].offset, i64::from(back))
         .and_then(|pc| nodes.binary_search_by_key(&pc, |n| n.offset).ok())
     else {
-        return Ok(());
+        return Ok(None);
     };
     if header > store || store + 1 >= latch || nodes[header].offset <= input.extent.start {
-        return Ok(());
+        return Ok(None);
     }
     let guard = latch - 1;
     let SemanticOp::Integer {
@@ -56,11 +82,11 @@ pub(super) fn emit(
         right: Operand::Immediate(mask),
     } = operations[guard].op
     else {
-        return Ok(());
+        return Ok(None);
     };
     // Bounded expansion, with a power-of-two modulus dividing 2^32.
     if base != pointer || residue == 0 || residue == pointer || !matches!(mask, 1 | 3 | 7) {
-        return Ok(());
+        return Ok(None);
     }
     let start = (nodes[latch].offset - input.extent.start) as usize;
     let condition = isa.branch(&input.bytes[start..start + nodes[latch].decoded.length as usize]);
@@ -68,7 +94,7 @@ pub(super) fn emit(
         condition,
         Some((BranchTest::Ne, Operand::Register(r), Operand::Register(0))) if r == residue
     ) {
-        return Ok(());
+        return Ok(None);
     }
     let mut step = None;
     for at in header..=latch {
@@ -80,7 +106,7 @@ pub(super) fn emit(
             || nodes[at].conflict
             || operation.op == SemanticOp::Unsupported
         {
-            return Ok(());
+            return Ok(None);
         }
         if operation.op.destination_register() == Some(pointer) {
             if step.is_some()
@@ -89,7 +115,7 @@ pub(super) fn emit(
                     right: Operand::Immediate(1),
                 } if dest == pointer && source == pointer)
             {
-                return Ok(());
+                return Ok(None);
             }
             step = Some(at);
         }
@@ -113,7 +139,7 @@ pub(super) fn emit(
             };
             if edge.external || expected.is_none() || edge.target != expected || outgoing & bit != 0
             {
-                return Ok(());
+                return Ok(None);
             }
             outgoing |= bit;
         }
@@ -123,11 +149,11 @@ pub(super) fn emit(
                     || nodes[at].offset + u64::from(nodes[at].decoded.length)
                         != nodes[at + 1].offset))
         {
-            return Ok(());
+            return Ok(None);
         }
     }
     let Some(step) = step.filter(|at| *at < guard) else {
-        return Ok(());
+        return Ok(None);
     };
     // Audit ALL incoming paths, not just a dominating-looking predecessor.
     // An external entry may only reach the test, before the first body.
@@ -147,15 +173,15 @@ pub(super) fn emit(
                     EdgeKind::Jump | EdgeKind::Fallthrough | EdgeKind::Taken
                 )
             {
-                return Ok(());
+                return Ok(None);
             }
             entry = nodes.binary_search_by_key(&edge.from, |n| n.offset).ok();
             if entry.is_none() {
-                return Ok(());
+                return Ok(None);
             }
         }
     }
-    let Some(entry) = entry else { return Ok(()) };
+    let Some(entry) = entry else { return Ok(None) };
     let operation = operations[entry];
     if operation.op.destination_register() == Some(pointer)
         || operation.op == SemanticOp::Unsupported
@@ -164,39 +190,39 @@ pub(super) fn emit(
         || operation.relocation.is_some()
         || nodes[entry].conflict
     {
-        return Ok(());
+        return Ok(None);
     }
     let Some(state) = states[entry] else {
-        return Ok(());
+        return Ok(None);
     };
     let initial = state[usize::from(pointer)];
     if !matches!(
         initial,
         Value::Expr(_) | Value::Constant(_) | Value::Image(_) | Value::Stack(_)
     ) {
-        return Ok(());
+        return Ok(None);
     }
     // Invariant at each test: p = initial + n (mod 2^32). For residue r,
     // r=0 skips the body; otherwise the rank (mask+1)-r is in 1..=mask
     // and decreases by one per unique +1 step until the next zero test.
     // A store observes n or n+1 according to its position relative to step.
+    // At exit, d = 0 for the zero residue, otherwise (mask+1)-r. Hence
+    // 0 <= d <= mask, and initial+d is the unique aligned word in that
+    // forward modular interval: (initial.wrapping_add(mask)) & !mask.
     let first_offset = (displacement as u32).wrapping_add(u32::from(step < store));
-    sink.record(
-        &FunctionRecord::StoreAddressRange {
-            offset: nodes[store].offset,
-            initial: public(initial, input, sets),
-            first_offset,
-            count: mask as u8,
-            proof: AlignmentLoopProof {
-                header: nodes[header].offset,
-                guard: nodes[guard].offset,
-                back_edge: nodes[latch].offset,
-                step: nodes[step].offset,
-                entry_edge: nodes[entry].offset,
-                pointer,
-                mask: mask as u8,
-            },
+    Ok(Some(Bound {
+        store,
+        initial,
+        first_offset,
+        exit: nodes[latch].offset + u64::from(nodes[latch].decoded.length),
+        proof: AlignmentLoopProof {
+            header: nodes[header].offset,
+            guard: nodes[guard].offset,
+            back_edge: nodes[latch].offset,
+            step: nodes[step].offset,
+            entry_edge: nodes[entry].offset,
+            pointer,
+            mask: mask as u8,
         },
-        c,
-    )
+    }))
 }
