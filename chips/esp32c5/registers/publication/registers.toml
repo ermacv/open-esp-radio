@@ -31,7 +31,6 @@ crate-name = "oer_esp32c5_pac_raw"
 target = "none"
 edition = "2024"
 
-# The model names no DMA address field: the generated check refuses DMA
-# storage until it does.
 [outputs.linker]
 path = "../../layout/linker/dma-window.x"
+address-low-field = "IEEE802154_MAC.RX_DMA_ADDRESS.ADDRESS"

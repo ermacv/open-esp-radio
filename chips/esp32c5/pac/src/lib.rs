@@ -51,7 +51,7 @@ pub use ieee802154::mac::{
     Ieee802154ValidationEdDurationState, Ieee802154ValidationEventEnableState,
 };
 
-pub use generated::PhyRxEvmParameter;
+pub use generated::{PhyRxEvmParameter, layouts};
 pub use modem::clock::{Ieee802154ResetObservation, ModemClockDevice, ModemClockRegisters};
 pub use modem::etm::Ieee802154EtmChannels;
 pub use ownership::{

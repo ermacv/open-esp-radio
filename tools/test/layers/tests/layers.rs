@@ -128,6 +128,7 @@ const BELOW_THE_BOUNDARY: &[&str] = &[
     "chips/espressif/ieee80211-pac-raw",
     "chips/esp32c5/pac",
     "chips/esp32s31/pac",
+    "chips/esp32c5/hal",
     "chips/esp32s31/hal",
     "chips/esp32s31/bluetooth/memory",
     "chips/esp32c5/board",
@@ -241,6 +242,7 @@ fn every_crate_below_the_unsafe_boundary_denies_undocumented_unsafe_code() {
 #[test]
 fn the_boundary_is_named_by_package_or_domain() {
     for package in [
+        "chips/esp32c5/hal",
         "chips/esp32s31/hal",
         "chips/espressif/staged-runtime",
         "portable/embassy/net",

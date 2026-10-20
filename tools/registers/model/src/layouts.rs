@@ -922,7 +922,8 @@ pub(crate) fn render(
     regions: &BTreeMap<String, (u64, u64)>,
 ) -> Result<String> {
     let mut output = String::new();
-    if layouts.is_empty() {
+    let dma_region = regions.contains_key(DMA_REGION);
+    if layouts.is_empty() && !dma_region {
         return Ok(output);
     }
     output.push_str(
@@ -933,12 +934,15 @@ pub(crate) fn render(
     );
     let mut named = BTreeSet::new();
     for layout in layouts {
-        named.extend(layout.placement.iter());
+        named.extend(layout.placement.iter().map(String::as_str));
         for unit in &layout.units {
             for field in &unit.fields {
-                named.extend(field.placement.iter());
+                named.extend(field.placement.iter().map(String::as_str));
             }
         }
+    }
+    if dma_region {
+        named.insert(DMA_REGION);
     }
     for region in named {
         let (start, end) = regions.get(region).ok_or_else(|| {
@@ -961,7 +965,7 @@ pub(crate) fn render(
         .flat_map(|layout| &layout.units)
         .flat_map(|unit| &unit.fields)
         .any(LayoutField::is_address);
-    if addressed {
+    if addressed || dma_region {
         render_addresses(&mut output, layouts);
     }
     for layout in layouts {

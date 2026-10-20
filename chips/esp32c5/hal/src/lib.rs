@@ -7,7 +7,7 @@
 //! PHY and the MAC lifecycle are not owned here yet.
 
 #![no_std]
-#![forbid(unsafe_code)]
+#![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
 
 #[cfg(test)]
 extern crate std;
@@ -15,7 +15,12 @@ extern crate std;
 #[cfg(any(test, oer_probe))]
 pub mod analog;
 pub mod coex;
+pub mod dma_address;
+pub mod dma_static;
 pub mod ieee802154;
 pub mod modem_clock;
 
 pub mod root;
+
+/// The PAC's memory layouts and typed addresses for hardware-shared RAM.
+pub use oer_esp32c5_pac::layouts;

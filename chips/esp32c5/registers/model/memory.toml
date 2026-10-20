@@ -6,6 +6,17 @@ id = "cpu"
 address-width = 32
 endianness = "little"
 
+# SOURCE: ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 (Apache-2.0),
+# components/soc/esp32c5/include/soc/soc.h, SOC_DMA_LOW/SOC_DMA_HIGH.
+# sha256 4daede6506a58ddbf4d8184952d0af1c6220a4a916e2173c058e8e456cbcd3cb.
+[[regions]]
+name = "dma-window"
+address-space = "cpu"
+kind = "ram"
+start = 0x40800000
+end-exclusive = 0x40860000
+permissions = "rw"
+
 [[regions]]
 name = "modem-ieee802154"
 address-space = "cpu"

@@ -2633,6 +2633,7 @@ dependencies = [
  "oer-espressif-coex",
  "oer-espressif-ieee802154-engine",
  "oer-espressif-modem-clock",
+ "oer-memory",
 ]
 
 [[package]]

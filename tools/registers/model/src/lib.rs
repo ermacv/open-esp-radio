@@ -290,9 +290,9 @@ pub fn render_dma_linker_fragment(
     let device = svd_parser::parse(svd).map_err(|error| Error::message(error.to_string()))?;
     let binding = pac_api_svd::register(&device, "linker fragment", peripheral, register)?;
     let info = pac_api_svd::field("linker fragment", binding.info, name)?;
-    if info.bit_range.offset != 0 || info.bit_range.width == 0 || info.bit_range.width >= 32 {
+    if info.bit_range.offset != 0 || info.bit_range.width == 0 || info.bit_range.width > 32 {
         return Err(Error::message(format!(
-            "linker address field {field} must be bits N-1:0 of its register, N below 32"
+            "linker address field {field} must be bits N-1:0 of its register, N at most 32"
         )));
     }
     Ok(format!(
@@ -726,7 +726,8 @@ impl RegisterModel {
     }
 
     /// The `layouts` module of the PAC API: the layouts and the RAM regions
-    /// of `memory` they name. Empty for a model without layouts.
+    /// of `memory` they name, including typed addresses when `dma-window`
+    /// exists. Empty only without both layouts and that DMA region.
     pub fn render_layouts_rust(&self, memory: &memory::Memory) -> Result<String> {
         layouts::render(&self.layouts, &memory.ram_regions())
     }

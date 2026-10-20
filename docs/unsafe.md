@@ -41,7 +41,7 @@ Below it are, by directory (`/` ends a domain):
 | Kind | Directories |
 | --- | --- |
 | Generated register access | `chips/esp32c5/pac-raw`, `chips/esp32s31/pac-raw`, `chips/espressif/ieee80211-pac-raw` |
-| Semantic PACs and the HAL | `chips/esp32c5/pac`, `chips/esp32s31/pac`, `chips/esp32s31/hal` |
+| Semantic PACs and the HAL | `chips/esp32c5/pac`, `chips/esp32s31/pac`, `chips/esp32c5/hal`, `chips/esp32s31/hal` |
 | Platform, executor and framework bindings | `chips/esp32c5/board`, `chips/esp32s31/board`, `chips/espressif/staged-bootstrap`, `chips/espressif/staged-runtime`, `chips/espressif/executor`, `chips/espressif/esp-hal-irq`, `chips/espressif/esp-hal/`, `chips/esp32c5/esp-hal-soc`, `portable/embassy/` |
 | Cores of memory the hardware shares | `portable/memory`, `portable/interrupt-table`, `chips/espressif/staged-layout`, `chips/esp32s31/bluetooth/memory` |
 | The host's operating-system bindings | `tools/os/process`, `tools/os/serial` |
@@ -103,7 +103,7 @@ scanner start takes the scanning list's publication of the same Controller
 epoch, so a list another epoch published, or a reset head, never starts
 it.
 
-`esp32s31-hal` has one module that makes typed DMA addresses,
+Each chip's HAL has one module that makes typed DMA addresses,
 `dma_address`: the only caller of the `unsafe` `DmaWindowAddress` and
 `DmaRef` constructors of the PAC's generated `layouts` (clippy
 `disallowed-methods` refuses them elsewhere). Its `placed`/`placed_link`

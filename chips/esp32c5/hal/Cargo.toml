@@ -7,8 +7,13 @@ license.workspace = true
 repository.workspace = true
 description = "Ownership boundaries of the ESP32-C5 radio over its closed PAC"
 
+[features]
+# Synthetic placement for explicit host model builds.
+test-support = ["oer-esp32c5-pac/test-support"]
+
 [dependencies]
 oer-esp32c5-pac = { path = "../pac" }
+oer-memory = { path = "../../../portable/memory" }
 oer-espressif-coex = { path = "../../espressif/coex" }
 oer-espressif-ieee802154-engine = { path = "../../espressif/ieee802154-engine" }
 oer-espressif-analog = { path = "../../espressif/analog" }
