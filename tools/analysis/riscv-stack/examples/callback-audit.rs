@@ -1,7 +1,7 @@
 use oer_analysis_riscv_model::{Ledger, WorkingMemory};
 use oer_analysis_riscv_program::facts::ImageFacts;
 use oer_analysis_riscv_stack::*;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let mut args = std::env::args().skip(1);
@@ -46,6 +46,56 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let audit = audit_function_addresses(&image, &analysis, &types, &mut keep, &mut control)?;
     let global = function_pointer_resolutions(&audit, &mut keep, &mut control)?;
     let typed = typed_function_pointer_resolutions(&audit, &mut keep, &mut control)?;
+    let mut discovered = BTreeSet::new();
+    for facts in analysis.functions.values() {
+        for transfer in facts.transfers.iter().filter(|t| t.target.is_none()) {
+            println!(
+                "unresolved\t{:#010x}\t{}\t{:?}\t{:?}\t{:?}",
+                transfer.site,
+                facts.function.label(),
+                dwarf.inline_chain(transfer.site)?,
+                transfer.load,
+                facts.target_loads.get(&transfer.site),
+            );
+            if let Some(loads) = facts.target_loads.get(&transfer.site) {
+                for load in loads {
+                    let proof =
+                        audit.load_field(facts.function.address, load.site, &mut control)?;
+                    if let Some(proof) = proof {
+                        discovered.insert(proof.field);
+                    }
+                    println!(
+                        "load-field\t{:#010x}\t{:#010x}\t{:?}\t{:?}",
+                        transfer.site,
+                        load.site,
+                        proof,
+                        facts.load_bases.get(&load.site),
+                    );
+                }
+            }
+        }
+    }
+    let stored: BTreeSet<_> = audit
+        .uses()
+        .flat_map(|(_, uses)| uses.iter())
+        .filter_map(|use_| {
+            if let StorageEvidence::Typed(fields) = &use_.evidence {
+                Some(fields)
+            } else {
+                None
+            }
+        })
+        .flatten()
+        .copied()
+        .collect();
+    for field in discovered {
+        for &storage in &stored {
+            println!(
+                "field-match\t{field:?}\t{storage:?}\t{}",
+                audit.compatible_storage(field, storage, &mut control)?
+            );
+        }
+    }
     let mut unknown = BTreeMap::<UnknownUse, usize>::new();
     let mut typed_uses = 0;
     let mut no_uses = 0;

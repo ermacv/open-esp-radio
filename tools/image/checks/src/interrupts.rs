@@ -768,6 +768,7 @@ mod tests {
             complete: true,
             terminal_recursive_callees: false,
             target_loads: BTreeMap::new(),
+            load_bases: BTreeMap::new(),
             transfers: callee
                 .map(|target| Transfer {
                     site: address,

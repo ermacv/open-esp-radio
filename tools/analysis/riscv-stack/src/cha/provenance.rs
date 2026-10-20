@@ -1,9 +1,91 @@
 //! Local callback field discovery; exclusion belongs to the shared audit.
 use super::FunctionPointerAudit;
-use crate::{Fact, Resolutions, TransferKind};
+use crate::{
+    Fact, FunctionFacts, FunctionPointerType, Load, RegisterWitness, Resolutions, TransferKind,
+};
 use oer_analysis_riscv_lift::RiscvDecoder;
 use oer_analysis_riscv_model::*;
 use std::collections::BTreeSet;
+
+/// The storage type of a callback load, with the PC-scoped register witness
+/// used when its address base was transported from an earlier instruction.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CallbackLoadField {
+    pub field: FunctionPointerType,
+    pub witness: Option<RegisterWitness>,
+}
+
+impl FunctionPointerAudit<'_, '_> {
+    /// Evidence for the target load at `site` in this audit's function.
+    /// This reads the same prepared facts used by the local resolver.
+    pub fn load_field(
+        &self,
+        function: u32,
+        site: u32,
+        control: &mut dyn RunControl,
+    ) -> Result<Option<CallbackLoadField>> {
+        if !self.owns(function) {
+            return Ok(None);
+        }
+        let Some(facts) = self.analysis.functions.get(&function) else {
+            return Ok(None);
+        };
+        for load in facts.target_loads.values().flatten() {
+            control.checkpoint(1)?;
+            if load.site == site {
+                return self.field_for_load(facts, load, control);
+            }
+        }
+        Ok(None)
+    }
+
+    fn field_for_load(
+        &self,
+        facts: &FunctionFacts,
+        load: &Load,
+        control: &mut dyn RunControl,
+    ) -> Result<Option<CallbackLoadField>> {
+        let mut field = load.address.and_then(|address| self.types.field(address));
+        if field.is_none() {
+            let fields =
+                self.locations
+                    .fields(self.types, load.site, load.base, load.offset, control)?;
+            if fields.len() > 1 {
+                return Ok(None);
+            }
+            field = fields.first().copied();
+        }
+        if let Some(field) = field {
+            return Ok(Some(CallbackLoadField {
+                field,
+                witness: None,
+            }));
+        }
+        if let Some(base) = facts.load_bases.get(&load.site) {
+            let mut found = None;
+            for witness in &base.witnesses {
+                control.checkpoint(1)?;
+                for field in self.locations.fields(
+                    self.types,
+                    witness.site,
+                    witness.register,
+                    load.offset,
+                    control,
+                )? {
+                    if found.is_some_and(|proof: CallbackLoadField| proof.field != field) {
+                        return Ok(None);
+                    }
+                    found.get_or_insert(CallbackLoadField {
+                        field,
+                        witness: Some(*witness),
+                    });
+                }
+            }
+            return Ok(found);
+        }
+        Ok(None)
+    }
+}
 
 /// Resolve function fields held by PC-specific typed pointer/aggregate
 /// locations. Candidates come from every address use's storage type, never
@@ -62,13 +144,8 @@ pub fn typed_function_pointer_resolutions(
             } else if let Some(loads) = facts.target_loads.get(&transfer.site) {
                 let mut complete = true;
                 for load in loads {
-                    let mut field = load.address.and_then(|address| types.field(address));
-                    if field.is_none() {
-                        field =
-                            locations.field(types, load.site, load.base, load.offset, control)?;
-                    }
-                    if let Some(field) = field {
-                        scratch.add(&mut fields, field, control)?;
+                    if let Some(proof) = audit.field_for_load(facts, load, control)? {
+                        scratch.add(&mut fields, proof.field, control)?;
                     } else {
                         complete = false;
                         break;

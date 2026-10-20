@@ -15,7 +15,7 @@ pub use audit::{
     AddressUseAudit, FunctionPointerAudit, PcRelativeUse, StorageEvidence, TypedStore, UnknownUse,
     audit_function_addresses,
 };
-pub use provenance::typed_function_pointer_resolutions;
+pub use provenance::{CallbackLoadField, typed_function_pointer_resolutions};
 
 /// One type's name and layout.
 #[derive(Debug)]

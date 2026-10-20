@@ -824,3 +824,221 @@ fn a_missing_parameter_type_does_not_exclude_a_candidate() {
         Ok(())
     }).unwrap();
 }
+
+/// Only the seed instruction has the pointer's DWARF location. All later
+/// evidence must come from the machine path, including its register move.
+fn transported_base(before: &str, between: &str, expected: bool) {
+    transported_base_from(before, between, "t0", expected);
+}
+
+fn transported_base_from(before: &str, between: &str, base: &str, expected: bool) {
+    let program = PROGRAM.replace("fn _start(", "fn typed_start(").replace(
+        "black_box(&OTHER);",
+        "black_box(typed_start as extern \"C\" fn(u32, &Callbacks) -> u32); black_box(&OTHER);",
+    );
+    let program = format!(
+        r##"{program}
+core::arch::global_asm!(r#"
+.option push
+.option norvc
+.section .text._start,"ax"
+.global _start
+.type _start,@function
+_start:
+    addi sp, sp, -16
+    sw ra, 12(sp)
+    {before}
+.global seed
+seed:
+    addi t0, a1, 0
+    {between}
+.global callback_load
+callback_load:
+    lw t1, 4({base})
+    jalr ra, 0(t1)
+exit:
+    lw ra, 12(sp)
+    addi sp, sp, 16
+    ret
+.size _start, .-_start
+.option pop
+"#);
+"##
+    );
+    let elf = compiled(&program);
+    let (_, mut types) = typed_debug(&elf);
+    let pointer = *types
+        .types
+        .iter()
+        .find(|(_, ty)| {
+            ty.tag == gimli::DW_TAG_pointer_type
+                && ty
+                    .target
+                    .and_then(|id| types.resolve(id))
+                    .is_some_and(|(_, ty)| ty.name.as_deref() == Some("Callbacks"))
+        })
+        .expect("pointer parameter type")
+        .0;
+    with_facts(&elf, |image| {
+        let seed = image
+            .file()
+            .symbols()
+            .find(|s| s.name == "seed")
+            .unwrap()
+            .address as u32;
+        let mut debug = LocalLocations::default();
+        debug.variables.insert(0, (Some(pointer), None));
+        debug.expression(
+            gimli::Expression(Reader::new(&[0x5b], gimli::RunTimeEndian::Little)), // DW_OP_reg11
+            gimli::Encoding {
+                address_size: 4,
+                format: gimli::Format::Dwarf32,
+                version: 4,
+            },
+            0,
+            &[(seed, seed + 4)],
+            &mut ledger(),
+            &mut || Ok(()),
+        )?;
+        types.locations = Some(debug);
+        let mut keep = ledger();
+        let mut analysis = crate::analyze(
+            image,
+            &[],
+            &[],
+            &UnknownCallBehavior,
+            &mut keep,
+            &mut || Ok(()),
+        )?;
+        let start = named(&analysis, "_start");
+        let site = analysis.functions[&start]
+            .transfers
+            .iter()
+            .find(|t| t.target.is_none())
+            .unwrap()
+            .site;
+        let audit = audit_function_addresses(image, &analysis, &types, &mut keep, &mut || Ok(()))?;
+        let resolved =
+            crate::typed_function_pointer_resolutions(&audit, &mut keep, &mut || Ok(()))?;
+        assert_eq!(
+            resolved.get(site).is_some(),
+            expected,
+            "base={base}, before={before:?}, between={between:?}: {:#?}",
+            analysis.functions[&start].load_bases
+        );
+        if let Some(resolved) = resolved.get(site) {
+            assert!(resolved.targets.contains(&named(&analysis, "target")));
+            assert!(!resolved.targets.contains(&named(&analysis, "different")));
+            let load = analysis.functions[&start].target_loads[&site][0];
+            let proof = audit.load_field(start, load.site, &mut || Ok(()))?.unwrap();
+            assert_eq!(
+                proof.witness,
+                Some(RegisterWitness {
+                    site: seed,
+                    register: 11
+                })
+            );
+        }
+        // Removing transport restores the original hole. The seed's
+        // half-open range is not extended by the new rule.
+        drop(audit);
+        analysis
+            .functions
+            .get_mut(&start)
+            .unwrap()
+            .load_bases
+            .clear();
+        let audit = audit_function_addresses(image, &analysis, &types, &mut keep, &mut || Ok(()))?;
+        assert!(
+            crate::typed_function_pointer_resolutions(&audit, &mut keep, &mut || Ok(()))?
+                .get(site)
+                .is_none()
+        );
+        Ok(())
+    })
+    .unwrap();
+}
+
+#[test]
+fn a_pointer_witness_crosses_a_move_and_a_branch_continuation() {
+    transported_base("", "beq a0, zero, exit", true);
+}
+
+#[test]
+fn a_bypass_of_the_pointer_definition_stops_transport() {
+    transported_base("beq a2, zero, callback_load", "", false);
+}
+
+#[test]
+fn an_unknown_incoming_pointer_stops_transport_at_the_join() {
+    transported_base(
+        "beq a2, zero, unknown",
+        "j callback_load\nunknown: addi t0, a3, 0",
+        false,
+    );
+}
+
+#[test]
+fn equal_possible_sources_do_not_prove_register_equality() {
+    // At the join t0 and a1 both range over the two incoming pointer
+    // values, but they select opposite values on each path. In particular
+    // a1's earlier typed value cannot justify a field reached through t0.
+    transported_base(
+        "beq a2, zero, other",
+        "addi t1, a3, 0\nj joined\nother: addi t0, a3, 0\naddi t1, a1, 0\njoined: addi a1, t1, 0",
+        false,
+    );
+}
+
+#[test]
+fn a_call_with_unknown_memory_effects_stops_transport() {
+    transported_base("", "jal ra, typed_start", false);
+}
+
+#[test]
+fn overwriting_the_pointer_stops_transport() {
+    transported_base("", "addi t0, a2, 0", false);
+}
+
+#[test]
+fn an_unknown_alias_write_stops_transport() {
+    transported_base("", "sw zero, 0(a2)", false);
+}
+
+#[test]
+fn an_unclosed_graph_stops_transport() {
+    transported_base(
+        "beq a2, zero, unknown",
+        "j callback_load\nunknown: jr a3",
+        false,
+    );
+}
+
+#[test]
+fn an_addi_write_to_x0_does_not_make_it_equal_to_a_pointer() {
+    transported_base_from("", "addi zero, a1, 0", "zero", false);
+}
+
+#[test]
+fn an_add_write_to_x0_with_zero_on_the_right_does_not_supply_a_pointer() {
+    transported_base_from("", "add zero, a1, zero", "zero", false);
+}
+
+#[test]
+fn an_add_write_to_x0_with_zero_on_the_left_does_not_supply_a_pointer() {
+    transported_base_from("", "add zero, zero, a1", "zero", false);
+}
+
+#[test]
+fn both_register_add_move_forms_preserve_pointer_witnesses() {
+    for instruction in ["add t0, a1, zero", "add t0, zero, a1"] {
+        transported_base("", instruction, true);
+    }
+}
+
+#[test]
+fn copies_from_x0_do_not_reuse_the_previous_pointer_witness() {
+    for instruction in ["addi t0, zero, 0", "add t0, zero, zero"] {
+        transported_base("", instruction, false);
+    }
+}

@@ -133,6 +133,18 @@ impl FunctionPointerAudit<'_, '_> {
         &self.pc_relative
     }
 
+    /// The shared storage-signature comparison, also available to diagnostic
+    /// consumers explaining an exclusion. Unknown type slots agree.
+    pub fn compatible_storage(
+        &self,
+        field: super::FunctionPointerType,
+        storage: super::FunctionPointerType,
+        control: &mut dyn RunControl,
+    ) -> Result<bool> {
+        control.checkpoint(1)?;
+        Ok(compatible(self.types, field, storage))
+    }
+
     pub(super) fn owns(&self, entry: u32) -> bool {
         self.image
             .functions()
@@ -170,8 +182,7 @@ impl FunctionPointerAudit<'_, '_> {
                         possible |= stored.is_empty();
                         for &storage in stored {
                             for &field in fields {
-                                control.checkpoint(1)?;
-                                possible |= compatible(self.types, field, storage);
+                                possible |= self.compatible_storage(field, storage, control)?;
                             }
                         }
                     }

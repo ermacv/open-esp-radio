@@ -49,9 +49,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
 pub use cha::{
-    AddressUseAudit, FunctionPointerAudit, FunctionPointerType, PcRelativeUse, StorageEvidence,
-    TypeFacts, TypedStore, UnknownUse, audit_function_addresses, function_pointer_resolutions,
-    typed_function_pointer_resolutions,
+    AddressUseAudit, CallbackLoadField, FunctionPointerAudit, FunctionPointerType, PcRelativeUse,
+    StorageEvidence, TypeFacts, TypedStore, UnknownUse, audit_function_addresses,
+    function_pointer_resolutions, typed_function_pointer_resolutions,
 };
 pub use contexts::{HartStack, LevelStack, Stacks, interrupt_stacks};
 pub use dwarf::{DebugMetadata, Dwarf, read as read_debug};
@@ -61,6 +61,7 @@ use oer_analysis_riscv_analysis::{
     JumpTable, JumpTableSource, KnownJump, ProvenTables, RecognizedTables,
 };
 use oer_analysis_riscv_program::tables::ImageTables;
+pub use producers::{BaseBarrier, LoadBase, RegisterWitness};
 pub use relocations::taken_addresses;
 pub use resolutions::{Assumption, Fact, Resolution, Resolutions};
 pub use summaries::{Summary, parse as parse_summaries};
@@ -100,6 +101,9 @@ pub struct FunctionFacts {
     /// Every reaching word-load definition of each unresolved transfer's
     /// target, only when the local graph and every incoming path prove it.
     pub target_loads: BTreeMap<u32, Vec<Load>>,
+    /// Earlier equal register values for each target load's address base,
+    /// bounded by the first merge, definition, memory write or unknown step.
+    pub load_bases: BTreeMap<u32, LoadBase>,
     /// Bytes below the entry `sp` at each transfer the value analysis
     /// reached; a transfer it did not reach is taken at the whole frame.
     pub site_depths: BTreeMap<u32, u64>,
@@ -457,6 +461,7 @@ fn function_facts(
         }
     }
     let target_loads = producers::loads(elf, &function, &transfers, &observation, work, control)?;
+    let load_bases = producers::bases(elf, &function, &target_loads, &observation, work, control)?;
     let mut table_bases = BTreeMap::new();
     let mut unresolved_registers = BTreeMap::new();
     for t in transfers.iter().filter(|t| t.target.is_none()) {
@@ -577,6 +582,7 @@ fn function_facts(
         complete: observation.complete,
         terminal_recursive_callees,
         target_loads,
+        load_bases,
         transfers,
         site_depths: observation.site_depths,
         level_drops: swept.level_drops,
@@ -593,6 +599,12 @@ impl FunctionFacts {
             + names.iter().map(String::capacity).sum::<usize>()
             + self.transfers.capacity() * size_of::<Transfer>()
             + self.target_loads.len() * size_of::<(u32, Vec<Load>)>()
+            + self.load_bases.len() * size_of::<(u32, LoadBase)>()
+            + self
+                .load_bases
+                .values()
+                .map(|base| base.witnesses.capacity() * size_of::<RegisterWitness>())
+                .sum::<usize>()
             + self
                 .target_loads
                 .values()
