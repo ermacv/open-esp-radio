@@ -71,3 +71,9 @@ common, transmit, baseband-off order), debug restoration and final RF closure.
 Incomplete evidence fails. These are observed request intervals, not a measured
 RF exclusion guarantee; nested intervals are not additive. No Wi-Fi hold workload
 is exposed by this family.
+
+The [recorded vendor reference](../../../chips/esp32s31/vendor/phy-baselines/README.md)
+provides generated Wi-Fi cold bounds for labeled boards.
+`cargo hil run phy-recorded-calibration-cold --chip esp32s31 --board s31-b`
+captures only the diagnostic image and applies the same comparison rules;
+no vendor image is built or flashed on this path.

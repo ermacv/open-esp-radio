@@ -27,6 +27,52 @@ impl Comparison for Esp32s31 {
         })
     }
 
+    fn recorded(
+        root: &Path,
+        board: &str,
+        lifecycle: Lifecycle,
+    ) -> Result<oer_vendor_phy::comparison::RecordedReference> {
+        if lifecycle != Lifecycle::Cold {
+            return Err("no recorded reference at this lifecycle".into());
+        }
+        let signature = crate::baseline::Signature::current(root)?;
+        let reference = crate::baseline::Reference::read(&signature.path(root))?;
+        let images = Self::images(root)?;
+        reference.validate(&signature, &images, board, 0)?;
+        Ok(oer_vendor_phy::comparison::RecordedReference {
+            vendor_application_sha256: reference.vendor_application_sha256.clone(),
+            vendor_idf_revision: reference.signature.idf_revision.clone(),
+            channel: reference.channel,
+            readable: reference.readable(board, &images)?,
+            document: serde_json::to_value(reference)?,
+        })
+    }
+
+    fn compare_recorded(
+        root: &Path,
+        board: &str,
+        reference: &oer_vendor_phy::comparison::RecordedReference,
+        identity: &Images,
+        production: &[ProductionBoot],
+        images: &RegisterImages,
+    ) -> Result<Compared> {
+        let reference: crate::baseline::Reference =
+            serde_json::from_value(reference.document.clone())?;
+        let checked = reference.check(
+            &crate::baseline::Signature::current(root)?,
+            images,
+            board,
+            0,
+            identity,
+            production,
+        );
+        Ok(Compared {
+            mismatch: (checked.verdict != compare::Verdict::Match)
+                .then(|| format!("{:?}", checked.verdict)),
+            summary: serde_json::to_value(checked)?,
+        })
+    }
+
     fn compare(
         lifecycle: Lifecycle,
         identity: &Images,

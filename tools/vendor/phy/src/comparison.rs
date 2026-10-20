@@ -27,6 +27,15 @@ pub struct Compared {
     pub mismatch: Option<String>,
 }
 
+/// A validated recorded reference; the chip owns its document and rule.
+pub struct RecordedReference {
+    pub vendor_application_sha256: String,
+    pub vendor_idf_revision: String,
+    pub channel: u8,
+    pub readable: Vec<usize>,
+    pub document: serde_json::Value,
+}
+
 /// One chip's comparison of the vendor and production calibrations.
 pub trait Comparison: Clone + std::fmt::Debug + Default + Eq + Send + Sync + 'static {
     /// The chip whose boards it compares.
@@ -36,6 +45,17 @@ pub trait Comparison: Clone + std::fmt::Debug + Default + Eq + Send + Sync + 'st
 
     /// The register images of the tree at `root`.
     fn images(root: &Path) -> Result<RegisterImages>;
+
+    fn recorded(root: &Path, board: &str, lifecycle: Lifecycle) -> Result<RecordedReference>;
+
+    fn compare_recorded(
+        root: &Path,
+        board: &str,
+        reference: &RecordedReference,
+        identity: &Images,
+        production: &[ProductionBoot],
+        images: &RegisterImages,
+    ) -> Result<Compared>;
 
     /// Compare the `vendor` and `production` boots captured at `lifecycle`
     /// with `images` on both sides.
