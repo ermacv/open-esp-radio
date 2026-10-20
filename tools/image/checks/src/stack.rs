@@ -87,6 +87,7 @@ pub fn audit_bootstrap_stack(
 /// One image's analysis with its pinned ROM, and the facts outside the
 /// machine code every stack bound resolves indirect sites with.
 pub struct Image {
+    pub traps: oer_analysis_riscv_stack::TrapFact,
     pub elf: Rc<[u8]>,
     pub analysis: Analysis,
     /// The image's own functions.
@@ -169,11 +170,53 @@ impl Image {
         let mut keep = Ledger::new(&memory, &mut control)?;
         let (dwarf, types) =
             read_debug(&elf, DebugMetadata::TypedLocations, &mut keep, &mut control)?;
-        let analysis = analyze(
+        let traps = if let Some(contract) = &contract {
+            let interrupts = &contract.interrupts;
+            let mut proof = Ledger::new(&memory, &mut control)?;
+            let mut entry = None;
+            for function in facts.functions() {
+                control.checkpoint(1 + function.names.len() as u64)?;
+                if function.names.contains(&interrupts.exception_entry_symbol) {
+                    entry = Some(function.address);
+                    break;
+                }
+            }
+            let mut entries = Vec::new();
+            for &hart in &interrupts.harts {
+                control.checkpoint(1)?;
+                proof.push(&mut entries, (hart, entry), &mut control)?;
+            }
+            let unknown = analyze(
+                &facts,
+                &companions,
+                summaries,
+                &dwarf,
+                &mut proof,
+                &mut control,
+            )?;
+            oer_analysis_riscv_stack::prove_traps(
+                &facts,
+                &unknown,
+                &entries,
+                &dwarf,
+                &mut keep,
+                &mut control,
+            )?
+        } else {
+            oer_analysis_riscv_stack::TrapFact {
+                failure: Some(oer_analysis_riscv_stack::TrapFailure::Entry {
+                    hart: None,
+                    entry: None,
+                }),
+                ..Default::default()
+            }
+        };
+        let analysis = oer_analysis_riscv_stack::analyze_with_traps(
             &facts,
             &companions,
             summaries,
             &dwarf,
+            traps.semantics,
             &mut keep,
             &mut control,
         )?;
@@ -209,6 +252,7 @@ impl Image {
         drop(companions);
         drop(facts);
         let mut image = Self {
+            traps,
             elf,
             analysis,
             functions,
@@ -314,6 +358,7 @@ impl Image {
 /// The frame coverage and task stack bounds of one image.
 #[derive(Debug)]
 pub struct StackAudit {
+    pub traps: oer_analysis_riscv_stack::TrapFact,
     pub coverage: Coverage,
     pub stacks: Vec<StackBound>,
     /// What the image's analysis used of its [`budget`].
@@ -383,6 +428,7 @@ impl StackAudit {
             });
         }
         Ok(Self {
+            traps: image.traps.clone(),
             coverage,
             stacks: bounds,
             usage: image.usage,
@@ -467,6 +513,7 @@ impl StackAudit {
             "analysis: {} of {WORK_UNITS} work units, {} of {MEMORY_LIMIT} bytes of working memory\n",
             self.usage.work_units, self.usage.memory_bytes
         );
+        let _ = writeln!(out, "{}", self.traps);
         let _ = writeln!(
             out,
             "frame coverage: {} of {} functions have a compiler frame record; {} reviewed, {} \

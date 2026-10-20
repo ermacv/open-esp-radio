@@ -450,6 +450,7 @@ fn research_function<'m>(
         };
         oer_analysis_riscv_analysis::research_following_tables(
             oer_analysis_riscv_analysis::FunctionInput {
+                traps: oer_analysis_riscv_analysis::TrapSemantics::Unknown,
                 image: view.image,
                 section: view.section,
                 extent: view.extent,

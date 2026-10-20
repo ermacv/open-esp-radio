@@ -103,6 +103,7 @@ fn specialized<'m>(
     let code: Vec<_> = f.words.iter().flat_map(|w| w.to_le_bytes()).collect();
     contextual_function_writes(
         FunctionInput {
+            traps: oer_analysis_riscv_analysis::TrapSemantics::Unknown,
             image: Some(&NoMemory),
             section: 1,
             extent: CodeRange {

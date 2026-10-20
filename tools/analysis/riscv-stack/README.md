@@ -85,6 +85,22 @@ far before the jump, which a linear sweep forgets, is still located. A jump
 followed through a proven table, whose entries all lie in the function, is
 no unresolved transfer.
 
+Illegal-instruction traps are exactly `c.unimp` (`0x0000`, with C enabled)
+and `unimp` (`0xc0001073`); `ebreak`, `ecall` and other exceptions retain
+their existing behavior. The image pipeline derives `TrapSemantics::Terminal`
+only when every hart has (a) a checked `trap_entry` that switches to the
+interrupt stack before memory access and calls one handler on all paths,
+(b) a proven nonreturning handler, using a closed graph without reachable
+`Return`, whose exits call or tail-transfer to proven nonreturning functions
+or loop forever, and (c) an exception-root `Bound` with no `level_drops`
+(trap returns or writes of `mnxti`/`mintstatus`). This proof runs with
+`traps = Unknown`, so a handler's own `unimp` cannot justify itself. The
+result applies to every function: `Unknown` leaves a gap, while `Terminal`
+ends the path with a targetless `Trap` edge. The reports print the result
+and any failed condition. The exception path adds no task-stack cost:
+the checked entry uses the interrupt stack, and the exception bound is
+already included above every hart's interrupt levels.
+
 `analyze` also takes reviewed summaries (`Summary`, parsed from a
 `[[function]]` TOML such as `chips/esp32s31/platform/rom-functions.toml`) of
 companion functions the machine code alone does not bound: each names its

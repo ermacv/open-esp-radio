@@ -176,23 +176,14 @@ struct Observer<'l, 'm> {
 
 impl FunctionSink for Observer<'_, '_> {
     fn record(&mut self, record: &FunctionRecord, control: &mut dyn RunControl) -> Result<()> {
+        self.closed_graph &= oer_analysis_riscv_analysis::writes::closes_local_graph(record);
         match record {
-            FunctionRecord::Gap { reason, .. } if *reason != GapReason::Unvisited => {
-                self.closed_graph = false;
-            }
             FunctionRecord::Edge {
                 from,
                 target,
-                relation,
                 external,
+                ..
             } => {
-                if matches!(
-                    relation,
-                    EdgeKind::Indirect | EdgeKind::Conflict | EdgeKind::Stop
-                ) || (target.is_none() && !matches!(relation, EdgeKind::Call | EdgeKind::Return))
-                {
-                    self.closed_graph = false;
-                }
                 if let Some(target) = target
                     && !external
                 {
@@ -312,6 +303,7 @@ pub(crate) type Observe<'a> = dyn FnMut(
 pub(crate) fn observing<R>(
     image: &ImageFacts<'_>,
     call_behavior: &dyn CallBehavior,
+    traps: oer_analysis_riscv_analysis::TrapSemantics,
     memory: &WorkingMemory,
     control: &mut dyn RunControl,
     body: impl FnOnce(&mut Observe<'_>, &mut dyn RunControl) -> Result<R>,
@@ -340,6 +332,7 @@ pub(crate) fn observing<R>(
         };
         let (summary, followed) = research_following_tables(
             FunctionInput {
+                traps,
                 image: Some(&view),
                 section: function.section as u32,
                 extent: CodeRange {

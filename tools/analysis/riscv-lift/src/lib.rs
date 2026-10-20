@@ -8,7 +8,7 @@ use oer_analysis_riscv_model::*;
 pub struct RiscvDecoder;
 impl FunctionDecoder for RiscvDecoder {
     fn identity(&self) -> &'static str {
-        "rv32imafc-zicsr-zba-zbb-zbs-zcb-zcmp/rv-asm-0.2.1/policy-7"
+        "rv32imafc-zicsr-zba-zbb-zbs-zcb-zcmp/rv-asm-0.2.1/policy-8"
     }
     fn unsupported_flow(&self, bytes: &[u8]) -> UnsupportedFlow {
         // ISA structure only, not CSR/privileged execution support. Zicsr:
@@ -53,6 +53,13 @@ impl FunctionDecoder for RiscvDecoder {
     }
     fn decode(&self, bytes: &[u8]) -> Option<DecodedOp> {
         let (inst, width) = match decode_instruction(bytes)? {
+            (Instruction::Unimp, width) => {
+                return Some(DecodedOp {
+                    length: width as u8,
+                    text: "unimp".into(),
+                    flow: InstructionFlow::Trap,
+                });
+            }
             (Instruction::Base(inst), width) => (inst, width),
             (Instruction::Extension(extension), width) => {
                 let flow = match extension {
@@ -320,7 +327,7 @@ mod semantics;
 pub struct StructuralRiscvDecoder;
 impl FunctionDecoder for StructuralRiscvDecoder {
     fn identity(&self) -> &'static str {
-        "rv32/structural-proof-1"
+        "rv32/structural-proof-2"
     }
     fn decode(&self, bytes: &[u8]) -> Option<DecodedOp> {
         RiscvDecoder.decode(bytes).or_else(|| {
@@ -359,7 +366,7 @@ impl FunctionSemantics for StructuralRiscvDecoder {
         RiscvDecoder.scratch_write(bytes)
     }
     fn semantic_identity(&self) -> &'static str {
-        "rv32/conservative-proof-2"
+        "rv32/conservative-proof-3"
     }
     fn branch(&self, bytes: &[u8]) -> Option<(BranchTest, Operand, Operand)> {
         RiscvDecoder.branch(bytes)
@@ -382,7 +389,7 @@ impl FunctionSemantics for StructuralRiscvDecoder {
 pub struct StackRiscvDecoder;
 impl FunctionDecoder for StackRiscvDecoder {
     fn identity(&self) -> &'static str {
-        "rv32/stack-context-1"
+        "rv32/stack-context-2"
     }
     fn unsupported_flow(&self, bytes: &[u8]) -> UnsupportedFlow {
         StructuralRiscvDecoder.unsupported_flow(bytes)
@@ -416,7 +423,7 @@ impl FunctionDecoder for StackRiscvDecoder {
 }
 impl FunctionSemantics for StackRiscvDecoder {
     fn semantic_identity(&self) -> &'static str {
-        "rv32/stack-context-values-1"
+        "rv32/stack-context-values-2"
     }
     fn interrupt_wait(&self, bytes: &[u8]) -> bool {
         bytes.get(..4) == Some(&[0x73, 0, 0x50, 0x10])

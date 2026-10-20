@@ -3,6 +3,15 @@
 #[path = "support/cli.rs"]
 mod cli;
 mod support;
+// Compile the actual stack observer and sweep into this diagnostic only.
+#[allow(dead_code)]
+#[path = "../src/image.rs"]
+mod image;
+#[path = "support/observation.rs"]
+mod observation;
+#[allow(dead_code)]
+#[path = "../src/sweep.rs"]
+mod sweep;
 use clap::Parser;
 use oer_analysis_riscv_analysis::writes::function_writes;
 use oer_analysis_riscv_model::*;
@@ -10,6 +19,7 @@ use oer_analysis_riscv_program::facts::ImageFacts;
 use oer_analysis_riscv_stack::{DebugMetadata, Field, TableLayout, interrupt_table, read_debug};
 use serde::Deserialize;
 use std::rc::Rc;
+use sweep::TransferKind;
 
 #[derive(Debug, Parser)]
 #[command(
@@ -29,6 +39,8 @@ struct Cli {
     image_facts: bool,
     #[arg(long)]
     inline_context: bool,
+    #[arg(long)]
+    stack_observation: bool,
     #[arg(long, value_name = "CHIP_TOML", allow_hyphen_values = true)]
     interrupt_contract: Option<std::path::PathBuf>,
 }
@@ -41,6 +53,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         writes,
         image_facts,
         inline_context,
+        stack_observation,
         interrupt_contract,
     } = cli::parse();
     let bytes: Rc<[u8]> = std::fs::read(elf)?.into();
@@ -100,8 +113,15 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         }
     }
     let mut keep = Ledger::new(&memory, &mut control)?;
-    let debug = inline_context
-        .then(|| read_debug(&bytes, DebugMetadata::Standard, &mut keep, &mut control))
+    let debug = (inline_context || stack_observation)
+        .then(|| {
+            let metadata = if stack_observation {
+                DebugMetadata::TypedLocations
+            } else {
+                DebugMetadata::Standard
+            };
+            read_debug(&bytes, metadata, &mut keep, &mut control)
+        })
         .transpose()?;
     let function = image
         .functions()
@@ -113,15 +133,19 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         "function\t{address:#010x}\t{}",
         oer_analysis_elf::demangle(&function.label())
     );
+    let call_behavior = debug
+        .as_ref()
+        .map_or(&UnknownCallBehavior as &dyn CallBehavior, |(dwarf, _)| {
+            dwarf
+        });
+    if stack_observation {
+        observation::print(&image, function, call_behavior, &memory, &mut control)?;
+    }
     let records = support::capture(
         &image,
         function,
         &memory,
-        debug
-            .as_ref()
-            .map_or(&UnknownCallBehavior as &dyn CallBehavior, |(dwarf, _)| {
-                dwarf
-            }),
+        call_behavior,
         symbolic_spills,
         &mut control,
     )?;
@@ -212,7 +236,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
                 offset, decoded, ..
             } => {
                 println!("instruction\t{offset:#010x}\t{}", decoded.text);
-                if let Some((dwarf, _)) = &debug {
+                if inline_context && let Some((dwarf, _)) = &debug {
                     println!(
                         "inline-context\t{offset:#010x}\t{:?}",
                         dwarf.inline_chain(*offset as u32)?
@@ -285,7 +309,13 @@ mod tests {
         let cli = Cli::try_parse_from(["function-records", "image.elf", "0x2f80d260"])
             .expect("accepted example command line");
         assert_eq!(cli.address, 0x2f80d260);
-        assert!(!(cli.symbolic_spills || cli.writes || cli.image_facts || cli.inline_context));
+        assert!(
+            !(cli.symbolic_spills
+                || cli.writes
+                || cli.image_facts
+                || cli.inline_context
+                || cli.stack_observation)
+        );
         assert!(cli.interrupt_contract.is_none());
         let cli = Cli::try_parse_from([
             "function-records",
@@ -295,6 +325,7 @@ mod tests {
             "--writes",
             "--image-facts",
             "--inline-context",
+            "--stack-observation",
             "--writes",
             "--interrupt-contract",
             "old.toml",
@@ -302,7 +333,13 @@ mod tests {
             "chip.toml",
         ])
         .expect("accepted example command line");
-        assert!(cli.symbolic_spills && cli.writes && cli.image_facts && cli.inline_context);
+        assert!(
+            cli.symbolic_spills
+                && cli.writes
+                && cli.image_facts
+                && cli.inline_context
+                && cli.stack_observation
+        );
         assert_eq!(cli.interrupt_contract, Some("chip.toml".into()));
         assert_eq!(cli.address, 0x2f80d260);
         for arguments in [

@@ -333,7 +333,7 @@ impl Corpus {
                 let mut to = vec![];
                 match op.as_ref().map(|op| op.flow) {
                     None
-                    | Some(InstructionFlow::Next)
+                    | Some(InstructionFlow::Next | InstructionFlow::Trap)
                     | Some(InstructionFlow::Jump { link: true, .. })
                     | Some(InstructionFlow::Indirect { link: true, .. }) => to.push(next),
                     Some(InstructionFlow::Branch { displacement }) => {

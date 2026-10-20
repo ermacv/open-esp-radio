@@ -333,6 +333,7 @@ impl State {
             }
         };
         match *instruction {
+            Instruction::Unimp => Step::Fail("traps before calling its handler"),
             Instruction::Base(inst) => match inst {
                 Inst::Lb { offset, base, dest } | Inst::Lbu { offset, base, dest } => {
                     let step = access(self, base.0, offset.as_i32().into(), 1);

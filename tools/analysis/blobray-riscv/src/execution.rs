@@ -21,12 +21,13 @@ enum Profile {
 impl Profile {
     /// Whether `decoded` belongs to the profile.
     fn admits(self, bytes: &[u8], decoded: &Decoded) -> bool {
-        // No profile executes floating point: the FP register file and its
+        // No profile executes illegal-instruction traps or floating point: the FP register file and its
         // rounding and exception state are not modeled.
         match self {
-            Self::Full => !matches!(decoded.inst, Instruction::Float(_)),
+            Self::Full => !matches!(decoded.inst, Instruction::Unimp | Instruction::Float(_)),
             Self::Rv32imac => {
-                oer_analysis_riscv_decode::decode(bytes, Extensions::RV32IMAC).is_some()
+                !matches!(decoded.inst, Instruction::Unimp)
+                    && oer_analysis_riscv_decode::decode(bytes, Extensions::RV32IMAC).is_some()
             }
         }
     }
@@ -510,7 +511,9 @@ fn run(
                 Extension::Csr { .. } => stop!(ExecutionGap::UnsupportedInstruction),
             },
             // Excluded by every profile's admission.
-            Instruction::Float(_) => stop!(ExecutionGap::UnsupportedInstruction),
+            Instruction::Unimp | Instruction::Float(_) => {
+                stop!(ExecutionGap::UnsupportedInstruction)
+            }
         }
         if let Some((tail, return_pc, indirect)) = transfer
             && next != u32::MAX - 1

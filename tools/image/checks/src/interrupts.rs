@@ -24,6 +24,7 @@ pub const INTERRUPT_REPORT: &str = "interrupt-stack.txt";
 
 /// Each hart's interrupt stack of the runtime ELF `elf`.
 pub struct InterruptStacks {
+    pub traps: oer_analysis_riscv_stack::TrapFact,
     pub harts: Vec<HartStack>,
     /// The ROM summaries the image's analysis applied: those of the ROM
     /// functions it reaches.
@@ -231,7 +232,7 @@ impl InterruptStacks {
     /// Each hart's bound, its levels and their critical paths.
     pub fn render(&self) -> String {
         let name = |address: u32| self.name(address);
-        let mut out = String::new();
+        let mut out = format!("{}\n", self.traps);
         if self.level_writers.is_empty() {
             let _ = writeln!(
                 out,
@@ -480,6 +481,7 @@ pub fn interrupt_stacks_of(image: &Image) -> Result<InterruptStacks> {
         None => Vec::new(),
     };
     Ok(InterruptStacks {
+        traps: image.traps.clone(),
         harts,
         handlers,
         summaries: analysis.summaries.clone(),
@@ -673,6 +675,7 @@ mod tests {
 
     fn stacks(handlers: Vec<(u32, Vec<u32>)>) -> InterruptStacks {
         InterruptStacks {
+            traps: Default::default(),
             harts: Vec::new(),
             summaries: BTreeSet::new(),
             handlers,
@@ -704,6 +707,7 @@ mod tests {
             bound,
         };
         InterruptStacks {
+            traps: Default::default(),
             harts: vec![HartStack {
                 core: 0,
                 levels: Vec::new(),
@@ -804,6 +808,7 @@ mod tests {
                 let leaf = sram + 0x40;
                 let helper = if root == sram { cached } else { leaf };
                 let mut analysis = Analysis {
+                    traps: Default::default(),
                     functions: BTreeMap::from([
                         (root, facts(root, entry, Some(helper))),
                         (helper, facts(helper, "outlined_helper", None)),

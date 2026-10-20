@@ -69,6 +69,10 @@ fn line(
             .map(|high| high.wrapping_add_signed(offset))
     };
     match instruction {
+        Instruction::Unimp => {
+            pending.clear();
+            "unimp".into()
+        }
         Instruction::Base(inst) => match inst {
             Inst::Jal { offset, dest } => {
                 let text = format!(

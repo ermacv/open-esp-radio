@@ -38,6 +38,7 @@ mod sweep;
 mod task_spawns;
 mod tasks;
 mod trap;
+mod trap_semantics;
 mod wakers;
 #[cfg(test)]
 mod write_summary_tests;
@@ -59,6 +60,7 @@ pub use contexts::{HartStack, LevelStack, Stacks, interrupt_stacks};
 pub use dwarf::{DebugMetadata, Dwarf, read as read_debug};
 pub use image::{Function, stack_sizes};
 pub use interrupts::{Field, TableEntry, TableLayout, interrupt_table};
+pub use oer_analysis_riscv_analysis::TrapSemantics;
 use oer_analysis_riscv_analysis::{JumpTableSource, KnownJump, ProvenTables, RecognizedTables};
 use oer_analysis_riscv_program::tables::ImageTables;
 pub use producers::{BaseBarrier, LoadBase, RegisterWitness};
@@ -68,6 +70,7 @@ pub use summaries::{Summary, parse as parse_summaries};
 pub use sweep::{LevelDrop, Load, TableBase, TargetSource, Transfer, TransferKind};
 pub use tasks::task_poll_resolutions;
 pub use trap::{TrapEntry, trap_entry, vector_table};
+pub use trap_semantics::{TrapFact, TrapFailure, prove_traps};
 pub use wakers::{waker_resolutions, waker_vtables};
 
 /// The common image-derived resolutions. Reuses the already captured ELF,
@@ -248,6 +251,8 @@ impl Bound {
 /// Frames, transfers and bounds of one image and its companions.
 #[derive(Clone, Debug)]
 pub struct Analysis {
+    /// Illegal-instruction semantics used for every function.
+    pub traps: TrapSemantics,
     pub functions: BTreeMap<u32, FunctionFacts>,
     /// Address ranges of the executable sections of every analysed ELF.
     pub code: Vec<(u32, u32)>,
@@ -276,8 +281,32 @@ pub fn analyze(
     keep: &mut Ledger<'_>,
     control: &mut dyn RunControl,
 ) -> Result<Analysis> {
+    analyze_with_traps(
+        image,
+        companions,
+        summaries,
+        call_behavior,
+        TrapSemantics::Unknown,
+        keep,
+        control,
+    )
+}
+
+/// Analyze with an image-wide illegal-instruction fact, established at Unknown
+/// by [`prove_traps`] before applying Terminal to any function.
+#[allow(clippy::too_many_arguments)]
+pub fn analyze_with_traps(
+    image: &ImageFacts<'_>,
+    companions: &[&ImageFacts<'_>],
+    summaries: &[Summary],
+    call_behavior: &dyn CallBehavior,
+    traps: TrapSemantics,
+    keep: &mut Ledger<'_>,
+    control: &mut dyn RunControl,
+) -> Result<Analysis> {
     let memory = keep.memory();
     let mut analysis = Analysis {
+        traps,
         functions: BTreeMap::new(),
         code: Vec::new(),
         summaries: BTreeSet::new(),
@@ -288,7 +317,7 @@ pub fn analyze(
     for elf in std::iter::once(image).chain(companions.iter().copied()) {
         let Analysis {
             functions, code, ..
-        } = analyze_one(elf, call_behavior, memory, keep, control)?;
+        } = analyze_one(elf, call_behavior, traps, memory, keep, control)?;
         for &(start, end) in &code {
             if analysis
                 .code
@@ -327,33 +356,42 @@ pub fn analyze(
 fn analyze_one(
     elf: &ImageFacts<'_>,
     call_behavior: &dyn CallBehavior,
+    traps: TrapSemantics,
     memory: &WorkingMemory,
     keep: &mut Ledger<'_>,
     control: &mut dyn RunControl,
 ) -> Result<Analysis> {
     let mut sized = Ledger::new(memory, control)?;
     let sizes = image::stack_sizes(elf, &mut sized, control)?;
-    let functions = image::observing(elf, call_behavior, memory, control, |observe, control| {
-        let mut facts = BTreeMap::new();
-        for function in elf.functions() {
-            // What one function's analysis builds, released once its
-            // facts are admitted in what the analysis keeps.
-            let mut work = Ledger::new(memory, control)?;
-            let names = function.names.iter().map(String::len).sum::<usize>()
-                + function.names.len() * size_of::<String>();
-            work.admit(names, control)?;
-            let function =
-                function_facts(elf, function.clone(), &sizes, observe, &mut work, control)?;
-            keep.admit(function.requested_bytes(), control)?;
-            keep.insert(&mut facts, function.function.address, function, control)?;
-        }
-        Ok(facts)
-    })?;
+    let functions = image::observing(
+        elf,
+        call_behavior,
+        traps,
+        memory,
+        control,
+        |observe, control| {
+            let mut facts = BTreeMap::new();
+            for function in elf.functions() {
+                // What one function's analysis builds, released once its
+                // facts are admitted in what the analysis keeps.
+                let mut work = Ledger::new(memory, control)?;
+                let names = function.names.iter().map(String::len).sum::<usize>()
+                    + function.names.len() * size_of::<String>();
+                work.admit(names, control)?;
+                let function =
+                    function_facts(elf, function.clone(), &sizes, observe, &mut work, control)?;
+                keep.admit(function.requested_bytes(), control)?;
+                keep.insert(&mut facts, function.function.address, function, control)?;
+            }
+            Ok(facts)
+        },
+    )?;
     let mut code = Vec::new();
     for &range in elf.executable_ranges() {
         keep.push(&mut code, range, control)?;
     }
     Ok(Analysis {
+        traps,
         functions,
         code,
         summaries: BTreeSet::new(),
@@ -428,6 +466,7 @@ pub fn inspect_function(
         options,
         &[],
         &oer_analysis_riscv_lift::StructuralRiscvDecoder,
+        TrapSemantics::Unknown,
         memory,
         control,
         sink,
@@ -453,6 +492,7 @@ pub fn inspect_stack_context(
         options,
         extra,
         &oer_analysis_riscv_lift::StackRiscvDecoder,
+        TrapSemantics::Unknown,
         memory,
         control,
         sink,
@@ -467,6 +507,7 @@ fn inspect_function_as(
     options: oer_analysis_riscv_analysis::ResearchOptions<'_>,
     extra: &[KnownJump],
     decoder: &dyn oer_analysis_riscv_model::FunctionSemantics,
+    traps: TrapSemantics,
     memory: &WorkingMemory,
     control: &mut dyn RunControl,
     sink: &mut dyn oer_analysis_riscv_model::FunctionSink,
@@ -492,6 +533,7 @@ fn inspect_function_as(
     let view = ProgramView::new(image.bytes(), image.file(), &[], memory, control)?;
     research_following_tables_with_options(
         FunctionInput {
+            traps,
             image: Some(&view),
             section: function.section as u32,
             extent: CodeRange {

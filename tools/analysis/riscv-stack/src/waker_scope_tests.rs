@@ -298,6 +298,7 @@ fn an_object_call_requires_the_same_relocated_upper_on_every_path() {
         let mut saved = Saved::default();
         let summary = oer_analysis_riscv_analysis::research(
             FunctionInput {
+                traps: oer_analysis_riscv_analysis::TrapSemantics::Unknown,
                 image: None,
                 section: 1,
                 extent: CodeRange {
@@ -439,6 +440,53 @@ fn merging_wake_and_wake_by_ref_preserves_both_targets() {
     assert_eq!(
         resolutions.get(TEXT + 16).unwrap().targets,
         BTreeSet::from([targets[1], targets[2]])
+    );
+}
+
+#[test]
+fn merged_waker_loads_outside_the_call_scope_use_both_slots_of_every_vtable() {
+    let (analysis, dwarf, first) = fixture_with(
+        vec![
+            0x0005_0663, // beq a0, zero, +12.
+            LOAD_WAKE,
+            0x0080_006f, // j +8 to the shared call.
+            LOAD_BY_REF,
+            CALL_A5,
+            RET,
+        ],
+        &[
+            (TEXT + 4, TEXT + 8, "wake"),
+            (TEXT + 12, TEXT + 16, "wake_by_ref"),
+        ],
+        &[],
+    );
+    let site = TEXT + 16;
+    assert_eq!(dwarf.inline_chain(site).unwrap(), ["root"]);
+    // Reaching loads are admitted only when the local observation is closed.
+    let loads = &analysis.functions[&TEXT].target_loads[&site];
+    assert_eq!(
+        loads
+            .iter()
+            .map(|load| load.offset)
+            .collect::<BTreeSet<_>>(),
+        BTreeSet::from([4, 8])
+    );
+    // Four distinct real functions occupy slots 1/2 across the two tables;
+    // clone (slot 0) is deliberately shared and must never be selected.
+    let second = [first[0], first[3], first[3] + 4, first[0]];
+    let resolutions = waker_resolutions(
+        &analysis,
+        &dwarf,
+        &[first, second],
+        &mut ledger(),
+        &mut || Ok(()),
+    )
+    .unwrap();
+    let resolution = resolutions.get(site).unwrap();
+    assert_eq!(resolution.facts, BTreeSet::from([Fact::WakerVtables]));
+    assert_eq!(
+        resolution.targets,
+        BTreeSet::from([first[1], first[2], second[1], second[2]])
     );
 }
 
@@ -610,4 +658,103 @@ fn every_possible_callee_must_be_proven_noreturn() {
             .collect();
         assert_eq!(targets, BTreeSet::from([TEXT + 32, TEXT + 36]));
     }
+}
+
+#[test]
+fn terminal_table_trap_allows_merged_waker_slots_one_and_two() {
+    let elf = debug_scopes(
+        labelled(
+            &[
+                Symbol {
+                    name: "root",
+                    words: vec![
+                        0x0006_0e63, // beq a2,zero,+28 to state dispatch.
+                        0x0005_8663, // beq a1,zero,+12 to wake_by_ref.
+                        LOAD_WAKE,
+                        0x0080_006f, // j +8 to merged call.
+                        LOAD_BY_REF,
+                        CALL_A5,
+                        RET,
+                        0x0000_2537, // lui a0,2: jump table.
+                        0x0025_9593, // slli a1,a1,2.
+                        0x00b5_0533, // add a0,a0,a1.
+                        0x0005_2503, // lw a0,0(a0).
+                        0x0005_0067, // jr a0.
+                        UNIMP,
+                    ],
+                    frame: Some(0),
+                },
+                Symbol {
+                    name: "clone",
+                    words: vec![RET],
+                    frame: Some(0),
+                },
+                Symbol {
+                    name: "wake1",
+                    words: vec![RET],
+                    frame: Some(0),
+                },
+                Symbol {
+                    name: "ref1",
+                    words: vec![RET],
+                    frame: Some(0),
+                },
+                Symbol {
+                    name: "wake2",
+                    words: vec![RET],
+                    frame: Some(0),
+                },
+                Symbol {
+                    name: "ref2",
+                    words: vec![RET],
+                    frame: Some(0),
+                },
+            ],
+            &[TEXT + 4, TEXT + 48],
+        ),
+        &[
+            (TEXT + 8, TEXT + 12, "wake"),
+            (TEXT + 16, TEXT + 20, "wake_by_ref"),
+        ],
+        &[],
+    );
+    let (dwarf, _) = debug(&elf);
+    let tables = [
+        [TEXT + 52, TEXT + 56, TEXT + 60, TEXT + 52],
+        [TEXT + 52, TEXT + 64, TEXT + 68, TEXT + 52],
+    ];
+    with_facts(&elf, |image| {
+        for traps in [TrapSemantics::Unknown, TrapSemantics::Terminal] {
+            let analysis = crate::analyze_with_traps(
+                image,
+                &[],
+                &[],
+                &dwarf,
+                traps,
+                &mut ledger(),
+                &mut || Ok(()),
+            )?;
+            let site = TEXT + 20;
+            let resolutions =
+                waker_resolutions(&analysis, &dwarf, &tables, &mut ledger(), &mut || Ok(()))?;
+            if traps == TrapSemantics::Terminal {
+                assert_eq!(
+                    analysis.functions[&TEXT].target_loads[&site]
+                        .iter()
+                        .map(|l| l.offset)
+                        .collect::<BTreeSet<_>>(),
+                    BTreeSet::from([4, 8])
+                );
+                assert_eq!(
+                    resolutions.get(site).unwrap().targets,
+                    BTreeSet::from([TEXT + 56, TEXT + 60, TEXT + 64, TEXT + 68])
+                );
+            } else {
+                assert!(analysis.functions[&TEXT].target_loads.is_empty());
+                assert!(resolutions.get(site).is_none());
+            }
+        }
+        Ok(())
+    })
+    .unwrap();
 }

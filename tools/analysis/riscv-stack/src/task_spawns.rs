@@ -415,6 +415,7 @@ pub(super) fn owners(
                         let references = PreparedReferences::empty();
                         oer_analysis_riscv_analysis::analyze(
                             FunctionInput {
+                                traps: analysis.traps,
                                 image: Some(&view),
                                 section: caller.function.section as u32,
                                 extent: CodeRange {
@@ -479,6 +480,7 @@ pub(super) fn owners(
             )?;
             research(
                 FunctionInput {
+                    traps: analysis.traps,
                     image: Some(&view),
                     section: owner.function.section as u32,
                     extent: CodeRange {

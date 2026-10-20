@@ -104,6 +104,7 @@ fn an_object_call_uses_explicit_behavior_independently_of_unknown_result_values(
         let mut records = Records::default();
         let summary = analyze(
             FunctionInput {
+                traps: crate::TrapSemantics::Unknown,
                 image: None,
                 section: 1,
                 extent: CodeRange {
