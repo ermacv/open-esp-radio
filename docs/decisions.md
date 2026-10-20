@@ -176,7 +176,7 @@ bounds) live in the code that applies them.
   crosses the lower-MAC port; PHY membership stays inside the backend.
 - **Reference models.** Every port has a reference model that keeps its
   contract; doubles that break the contract stay out of the conformance
-  suite.
+  suite. A port's reference model is its own host crate, `protocols/<protocol>/model`, beside the chip backends; frame protection is the `cipher` layer that backends and models take, never a core.
 - **Dropped futures.** A caller that drops an admitted request detaches only
   its waker; the port keeps the registration, queue position and buffer lease
   until the terminal event and reclaims exactly once.
@@ -339,7 +339,7 @@ bounds) live in the code that applies them.
   the unsafe boundary are. Only `cargo fw` builds images.
 - **Protocol layers.** Each radio protocol has `wire` (over-the-air formats),
   `port` (the backend contract), its sans-IO cores and a `runtime`; a backend
-  depends on `port` and `wire` only.
+  depends on `port`, `wire` and `cipher` only.
 - **Portable runtime.** Only a protocol's runtime awaits, and it binds no
   executor: time from `oer-time`, interrupt signals from `portable/`, no
   `embassy-executor`, `embassy-time`, `embassy-net` or HAL dependency;
