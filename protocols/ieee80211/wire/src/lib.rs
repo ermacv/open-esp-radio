@@ -7,9 +7,9 @@
 //! MMIO, DMA, interrupt, executor, allocator, ESP32-S31, vendor archive, or
 //! ROM ABI dependency.
 //!
-//! [`address::Bssid`] proves a nonzero individual address. Scan storage keeps
-//! [`scan::ScanRecord::new`] requires the actual BSSID,
-//! channel and RSSI. The station core owns the BSS observation table.
+//! [`address::Bssid`] proves a nonzero individual address.
+//! [`scan::ScanRecord::new`] requires the actual BSSID, channel and RSSI.
+//! The station core owns the BSS observation table.
 //!
 //! Management and A-MSDU construction retain immutable frame parts through
 //! capacity admission and writing. Those same parts determine the output

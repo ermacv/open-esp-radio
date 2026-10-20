@@ -119,8 +119,9 @@ The planner holds no frame bytes. The caller encodes each MPDU's sequence
 number; the backend writes its CCMP packet number below the port at the first
 protected transmission, with an `oer-ieee80211-upper-mac::ccmp::CcmpTxPacketNumber`
 of its key, and a retransmission sends the same MPDU, so it keeps both. The
-receive reorder buffer is `block_ack::reorder::RxReorderBuffer`. Adaptive rate control, which chooses a
-frame's first rate from the reports, is the caller's.
+receive reorder buffer is `block_ack::reorder::RxReorderBuffer`. Adaptive
+rate control, which chooses a frame's first rate from the reports, is the
+caller's.
 
 The ESP32-S31 MAC (`oer-esp32s31-ieee80211-mac`) runs its ordinary retry,
 A-MPDU retry and protection owners through these algorithms with adapters
