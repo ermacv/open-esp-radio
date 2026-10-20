@@ -192,6 +192,7 @@ pub(crate) fn spec(
         .ok_or_else(|| format!("{chip} has no {} image", class.id()))?;
     let package = recipe.package.clone();
     Ok(ImageSpec {
+        purpose: oer_image_build::bundle::Purpose::Flash,
         root: root.to_owned(),
         chip: chip.to_owned(),
         application: oer_image_build::Application {

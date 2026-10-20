@@ -1,12 +1,19 @@
 //! Building an image of `firmware/apps` through the image pipeline: its
-//! bundle lies in `target/fw/<image>/`, described by its `bundle.json`.
+//! bundle lies in `target/fw/<image>/` or `target/fw/<image>-analysis/`,
+//! described by its `bundle.json`.
 
-use std::path::{Path, PathBuf};
+use std::{
+    path::{Path, PathBuf},
+    sync::LazyLock,
+};
 
 use serde::Deserialize;
 
 use crate::{w1, w2};
-use oer_image_build::{Application, Gates, ImageSpec, Result, bundle::ImageBundle};
+use oer_image_build::{
+    Application, Gates, ImageSpec, Result,
+    bundle::{ImageBundle, Purpose},
+};
 use oer_image_checks::interrupts::Required;
 
 /// The chip every image of `firmware/apps` is built for.
@@ -49,6 +56,29 @@ pub enum Stand {
     W2(w1::Config),
 }
 
+/// Fixed fictitious stand identities for analysis, independent of the lab.
+const ANALYSIS_W0: Stand = Stand::W0 { country: *b"DE" };
+static ANALYSIS_W1: LazyLock<Stand> = LazyLock::new(|| Stand::W1(analysis_config()));
+static ANALYSIS_W2: LazyLock<Stand> = LazyLock::new(|| Stand::W2(analysis_config()));
+
+fn analysis_config() -> w1::Config {
+    w1::Config {
+        channel: 1,
+        bssid: oer_lab_router::mac::Mac::new([2, 0, 0, 0, 0, 1]).expect("analysis BSSID"),
+        ssid: w1::Ssid::new(b"oer").expect("analysis SSID"),
+        country: *b"DE",
+    }
+}
+
+fn analysis_stand(image: &str) -> Result<&'static Stand> {
+    match image {
+        "w0" => Ok(&ANALYSIS_W0),
+        w1::IMAGE => Ok(&ANALYSIS_W1),
+        w2::IMAGE => Ok(&ANALYSIS_W2),
+        _ => Err(format!("image `{image}` has no stand configuration for --analysis").into()),
+    }
+}
+
 /// The stand's variables a cargo build of `image`'s runtime sets (`Some`) or
 /// removes (`None`): only a configured runtime of its own image gets them,
 /// so a value left in the caller's environment reaches no other build, nor
@@ -86,10 +116,20 @@ pub fn run_timeout(image: &str) -> std::time::Duration {
 
 /// The pipeline's spec of `image`, with the stand's parameters:
 /// every check, reported and never failing the build.
-pub fn spec(root: &Path, image: &str, stand: Option<&Stand>) -> Result<ImageSpec> {
+pub fn spec(root: &Path, image: &str, stand: Option<&Stand>, analysis: bool) -> Result<ImageSpec> {
+    let stand = if analysis {
+        Some(analysis_stand(image)?)
+    } else {
+        stand
+    };
     let profile = oer_chip_profile::Profile::load(root, CHIP)?;
     let package = package(root, image)?;
     Ok(ImageSpec {
+        purpose: if analysis {
+            Purpose::Analysis
+        } else {
+            Purpose::Flash
+        },
         root: root.to_owned(),
         chip: CHIP.to_owned(),
         application: Application {
@@ -101,7 +141,11 @@ pub fn spec(root: &Path, image: &str, stand: Option<&Stand>) -> Result<ImageSpec
         stack_policy: profile.stack_policy(),
         layout_seed: None,
         runtime_environment: runtime_env(image, stand),
-        output: output(root, image),
+        output: if analysis {
+            output(root, &format!("{image}-analysis"))
+        } else {
+            output(root, image)
+        },
         checks: Some(Gates {
             enforced: false,
             ..Gates::all(Required::Proven)
@@ -110,8 +154,13 @@ pub fn spec(root: &Path, image: &str, stand: Option<&Stand>) -> Result<ImageSpec
 }
 
 /// Build `image`, with the stand's parameters, into its bundle.
-pub fn build(root: &Path, image: &str, stand: Option<&Stand>) -> Result<ImageBundle> {
-    let bundle = oer_image_build::build(&spec(root, image, stand)?)?;
+pub fn build(
+    root: &Path,
+    image: &str,
+    stand: Option<&Stand>,
+    analysis: bool,
+) -> Result<ImageBundle> {
+    let bundle = oer_image_build::build(&spec(root, image, stand, analysis)?)?;
     for warning in &bundle.warnings {
         eprintln!("warning: {warning}");
     }
@@ -134,6 +183,142 @@ pub fn bundle(root: &Path, image: &str) -> Result<ImageBundle> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn repository() -> tempfile::TempDir {
+        let directory = tempfile::tempdir().unwrap();
+        let profile = directory.path().join("chips/esp32s31/platform/chip.toml");
+        std::fs::create_dir_all(profile.parent().unwrap()).unwrap();
+        std::fs::write(
+            &profile,
+            include_str!("../../../../chips/esp32s31/platform/chip.toml"),
+        )
+        .unwrap();
+        for image in ["w0", "w1", "w2", "boot-smoke"] {
+            let manifest = directory
+                .path()
+                .join("firmware/apps")
+                .join(image)
+                .join("Cargo.toml");
+            std::fs::create_dir_all(manifest.parent().unwrap()).unwrap();
+            std::fs::write(
+                manifest,
+                format!("[package]\nname = \"oer-firmware-apps-{image}\"\n"),
+            )
+            .unwrap();
+        }
+        directory
+    }
+
+    #[test]
+    fn analysis_uses_the_fixed_stands_through_the_runtime_environment() {
+        let directory = repository();
+        for (image, stand) in [
+            ("w0", &ANALYSIS_W0),
+            ("w1", &*ANALYSIS_W1),
+            ("w2", &*ANALYSIS_W2),
+        ] {
+            let spec = spec(directory.path(), image, None, true).unwrap();
+            assert_eq!(spec.runtime_environment, runtime_env(image, Some(stand)));
+        }
+    }
+
+    #[test]
+    fn analysis_configuration_is_fictitious_and_keeps_the_lab_power_cap() {
+        assert_eq!(ANALYSIS_W0, Stand::W0 { country: *b"DE" });
+        for stand in [&*ANALYSIS_W1, &*ANALYSIS_W2] {
+            let config = match stand {
+                Stand::W1(config) | Stand::W2(config) => config,
+                _ => unreachable!(),
+            };
+            assert_eq!(config.channel, 1);
+            assert_eq!(config.bssid.octets(), [2, 0, 0, 0, 0, 1]);
+            assert_eq!(config.ssid.bytes(), b"oer");
+            assert_eq!(config.country, *b"DE");
+        }
+        assert!(runtime_env("w2", Some(&ANALYSIS_W2)).contains(&(
+            w2::ENV[4].to_owned(),
+            Some(w2::LAB_POWER_CAP_DBM.to_string())
+        )));
+    }
+
+    #[test]
+    fn analysis_has_a_separate_output_and_keeps_every_gate_report_only() {
+        let directory = repository();
+        for image in ["w0", "w1", "w2"] {
+            for analysis in [false, true] {
+                let spec = spec(directory.path(), image, None, analysis).unwrap();
+                assert_eq!(
+                    spec.output,
+                    directory.path().join("target/fw").join(if analysis {
+                        format!("{image}-analysis")
+                    } else {
+                        image.to_owned()
+                    })
+                );
+                assert_eq!(
+                    spec.purpose,
+                    if analysis {
+                        Purpose::Analysis
+                    } else {
+                        Purpose::Flash
+                    }
+                );
+                let gates = spec.checks.unwrap();
+                assert!(!gates.enforced);
+                assert!(gates.stack && gates.placement);
+                assert_eq!(gates.interrupts, Some(Required::Proven));
+                if !analysis {
+                    assert_eq!(spec.runtime_environment, runtime_env(image, None));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn images_without_a_stand_refuse_analysis() {
+        let directory = repository();
+        assert!(spec(directory.path(), "boot-smoke", None, false).is_ok());
+        let error = spec(directory.path(), "boot-smoke", None, true)
+            .err()
+            .unwrap()
+            .to_string();
+        assert!(
+            error.contains("image `boot-smoke` has no stand configuration"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn flash_and_run_cannot_write_an_analysis_bundle_in_the_normal_directory() {
+        let directory = repository();
+        let root = directory.path();
+        let profile = oer_chip_profile::Profile::load(root, CHIP).unwrap();
+        let output = output(root, "w2");
+        let staging = oer_image_build::bundle::staging_directory(&output).unwrap();
+        for purpose in [Purpose::Analysis, Purpose::Flash] {
+            std::fs::create_dir_all(&staging).unwrap();
+            let mut built = ImageBundle::new(&staging, &profile, profile.flash.clone().unwrap());
+            built.purpose = purpose;
+            for segment in built.segments() {
+                std::fs::write(segment.file, b"fixture").unwrap();
+            }
+            built.publish(&output).unwrap();
+            // Both commands' write_image uses this loader, then the common
+            // board writer requests a flash snapshot before writing.
+            let loaded = bundle(root, "w2").unwrap();
+            let snapshot = loaded.snapshot();
+            if purpose == Purpose::Analysis {
+                assert!(
+                    snapshot
+                        .unwrap_err()
+                        .to_string()
+                        .contains("purpose Analysis")
+                );
+            } else {
+                assert!(snapshot.is_ok());
+            }
+        }
+    }
 
     #[test]
     fn w1_waits_long_enough_for_its_report_by_default() {

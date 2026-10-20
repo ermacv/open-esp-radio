@@ -193,6 +193,7 @@ fn runtime_checks_refuse_requested_link_time_gates() {
     let root = repository.path();
     let chip = oer_chip_profile::supported(&root).unwrap().remove(0);
     let spec = ImageSpec {
+        purpose: crate::bundle::Purpose::Flash,
         root: root.to_owned(),
         chip,
         application: Application {

@@ -26,9 +26,15 @@ struct Cli {
 enum Command {
     /// Build an image of firmware/apps into target/fw/<image>/.
     ///
-    /// Image w1 is built unconfigured here; `run w1` builds it for the
-    /// stand.
-    Build { image: String },
+    /// Without --analysis the image is unconfigured; `run` builds it for
+    /// the stand.
+    Build {
+        image: String,
+        /// Use a fixed fictitious stand configuration (w0, w1, w2 only).
+        /// The bundle in target/fw/<image>-analysis/ cannot be flashed.
+        #[arg(long)]
+        analysis: bool,
+    },
     /// Build a probe image of firmware/probes (a package named
     /// `oer-firmware-probes-<chip>-…`) with `cfg(oer_probe)` into
     /// target/fw-probe/ and print its path.
@@ -102,7 +108,7 @@ fn main() -> ExitCode {
     let result = (|| -> oer_image_build::Result<ExitCode> {
         let root = command::root()?;
         match cli.command {
-            Command::Build { image } => command::build(&root, &image)?,
+            Command::Build { image, analysis } => command::build(&root, &image, analysis)?,
             Command::Probe { package, jobs } => {
                 println!("{}", probe::build(&root, &package, jobs)?.display());
             }
@@ -135,6 +141,28 @@ mod tests {
     fn parse(line: &str) -> std::result::Result<Cli, clap::Error> {
         Cli::try_parse_from(line.split(' '))
     }
+    #[test]
+    fn only_build_accepts_analysis() {
+        for image in ["w0", "w1", "w2"] {
+            assert!(matches!(
+                parse(&format!("fw build {image} --analysis"))
+                    .unwrap()
+                    .command,
+                Command::Build { analysis: true, .. }
+            ));
+        }
+        assert!(matches!(
+            parse("fw build w2").unwrap().command,
+            Command::Build {
+                analysis: false,
+                ..
+            }
+        ));
+        for command in ["flash", "run"] {
+            assert!(parse(&format!("fw {command} w2 --board b1 --analysis")).is_err());
+        }
+    }
+
     #[test]
     fn no_image_takes_stand_flags() {
         for line in [

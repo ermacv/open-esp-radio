@@ -5,6 +5,7 @@ flash and runs them to a verdict.
 
 ```console
 cargo fw build <image>
+cargo fw build <w0|w1|w2> --analysis
 cargo fw flash <image> --board <id|MAC>
 cargo fw run <image> --board <id|MAC> [--timeout <duration>]
 cargo fw monitor --board <id|MAC>
@@ -39,6 +40,18 @@ the scanner's report and recomputes gates a–e, including derived rates,
 sequence/ACK correlation and per-queue power readback. See
 [the W2 image](../../../firmware/apps/w2/README.md) for its scan and report
 contract. The five `OER_W2_*` values are removed from unrelated builds.
+
+`build w0 --analysis`, `build w1 --analysis` and `build w2 --analysis`
+build the configured code for analysis with a fixed fictitious stand identity:
+country DE for w0; channel 1, locally administered BSSID
+`02:00:00:00:00:01`, SSID `oer` and country DE for w1 and w2, with the
+usual laboratory power cap for w2. Other images have no stand configuration
+and reject `--analysis`. These bundles live separately in
+`target/fw/<image>-analysis/` and record `purpose: Analysis` in `bundle.json`.
+They cannot be flashed: the shared flash snapshot reader refuses them for
+`flash`, `run` and HIL. Machine code may differ from the stand build only
+because of the configuration constants. The same stack and placement gates
+run as reports, without enforcing their results.
 
 Every image builds with the compiler's frame records (`-Z emit-stack-sizes`),
 moves above the stack policy's `max_move_bytes` warned (`-W

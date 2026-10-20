@@ -172,15 +172,16 @@ jobs:
             --esp-hal-src "$(source_of esp-hal)/src" \
             --pac-src "$(source_of esp32s31)/src"
       - name: Image build
-        # The whole staged pipeline without a board: runtime, packing,
-        # bootstrap and flash encoding.
+        # Build unconfigured and fixed configured images for analysis without a board.
         run: |
           cargo fw build boot-smoke
           cargo fw build radio-root
           cargo fw build w0
-          # Unconfigured: only `run w1/w2` builds for the stand router.
           cargo fw build w1
           cargo fw build w2
+          cargo fw build w0 --analysis
+          cargo fw build w1 --analysis
+          cargo fw build w2 --analysis
       - name: Probe images
         # Compile every probe, including board self-checks, without vendor pins.
         # Discover packages from the workspace so new probes join this check.

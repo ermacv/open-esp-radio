@@ -9,7 +9,8 @@ the workspace's one `Cargo.lock` (`--locked`).
 
 ## Contract
 
-An `ImageSpec` names the tree (`root`: a checkout or a worktree), the
+An `ImageSpec` names the purpose (`Flash` or `Analysis`), the tree
+(`root`: a checkout or a worktree), the
 chip, the application crate (package, binary, features), the stack
 policy, the layout seed, the variables the runtime's build sets or removes
 (`cargo fw`'s stand identity of `w1`), the caller's builder packages and
@@ -49,6 +50,13 @@ An `ImageBundle` is one directory with a `bundle.json`:
 | `runtime.bin`, `bootstrap.elf` | The packed runtime and the bootstrap (staged only) |
 | `placement.txt`, `runtime-stack.txt`, `interrupt-stack.txt`, `bootstrap-stack.txt` | Gate reports |
 | `build.log` | Every step's standard error |
+
+The manifest uses schema 7 and records `purpose: Flash` or `Analysis`.
+Older schemas must be rebuilt; a missing purpose never defaults to `Flash`.
+`ImageBundle::load` verifies files for either purpose. The shared flash
+snapshot reader refuses `Analysis` before supplying bytes to any USB or
+JTAG writer, including `cargo fw` and HIL. Copies made with
+`with_application` retain the original purpose.
 
 `ImageBundle::segments` is what a flash writes: bootloader, partition table
 and application at the flash map's offsets, the OTA selection last. Board
