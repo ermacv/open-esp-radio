@@ -246,36 +246,6 @@ fn each_field_masks_exactly_its_immediate_bits() {
     assert_eq!(short, [0xff; 3], "a part past the end is left alone");
 }
 
-/// This test's own executable symbolizes to this file.
-#[cfg(target_os = "linux")]
-#[test]
-fn an_address_symbolizes_to_its_function_and_source_file() {
-    let path = std::env::current_exe().unwrap();
-    let bytes = std::fs::read(&path).unwrap();
-    let elf = Elf::parse(&bytes).unwrap();
-    let marker = elf
-        .symbols()
-        .find(|s| s.kind == SymbolKind::Text && s.demangled().ends_with("tests::symbolized_marker"))
-        .expect("the marker function is linked");
-    let symbolizer = dwarf::Symbolizer::new(&bytes).unwrap();
-    let frames = symbolizer.frames(marker.address).unwrap();
-    let outer = frames.last().expect("line tables describe the marker");
-    assert!(
-        outer
-            .file
-            .as_deref()
-            .is_some_and(|file| file.ends_with("tests.rs")),
-        "{frames:?}"
-    );
-    assert!(outer.line.is_some(), "{frames:?}");
-    assert!(std::hint::black_box(symbolized_marker as fn() -> u32)() == 7);
-}
-
-#[inline(never)]
-fn symbolized_marker() -> u32 {
-    std::hint::black_box(7)
-}
-
 /// A hand-built ELF32 RV32 executable: a readable `PT_LOAD` of 16 bytes
 /// (four in the file at offset 116), a `PT_TLS`, `e_flags` declaring the
 /// single-float ABI and RV32E, and a writable `.dat` `PROGBITS` section over

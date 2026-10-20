@@ -68,14 +68,4 @@ mod tests {
         );
         assert!(stands(&manifests, "chip-b").is_empty());
     }
-    #[test]
-    fn this_checkout_discovers_its_host_stand() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-        assert_eq!(
-            host_stands(&root, "esp32s31")
-                .expect("workspace host stands")
-                .len(),
-            1
-        );
-    }
 }

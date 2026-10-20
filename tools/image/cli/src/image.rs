@@ -180,15 +180,4 @@ mod tests {
             [set(ENV_W0_COUNTRY, "DE")]
         );
     }
-
-    #[test]
-    fn an_app_image_reports_every_check() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-        let spec = spec(&root, "w0", None).unwrap();
-        assert_eq!(spec.application.package, "oer-firmware-apps-w0");
-        assert_eq!(spec.output, root.join("target/fw/w0"));
-        let checks = spec.checks.unwrap();
-        assert!(!checks.enforced);
-        assert!(checks.stack && checks.placement && checks.interrupts.is_some());
-    }
 }

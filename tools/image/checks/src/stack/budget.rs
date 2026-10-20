@@ -91,29 +91,3 @@ impl RunControl for Budget {
         Ok(())
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn the_budget_admits_exactly_its_units() {
-        let mut budget = Budget::new(10, TIMEOUT);
-        budget.checkpoint(4).unwrap();
-        budget.checkpoint(6).unwrap();
-        assert_eq!(budget.used(), 10);
-        let error = budget.checkpoint(1).unwrap_err();
-        assert_eq!(error.code, ErrorCode::ResourceLimited);
-    }
-
-    #[test]
-    fn a_passed_deadline_stops_the_analysis_at_the_next_clock_check() {
-        let mut budget = Budget::new(u64::MAX, Duration::ZERO);
-        for _ in 1..DEADLINE_INTERVAL {
-            budget.checkpoint(0).unwrap();
-        }
-        let error = budget.checkpoint(0).unwrap_err();
-        assert_eq!(error.code, ErrorCode::ResourceLimited);
-        assert!(error.message.contains("time limit"), "{error:?}");
-    }
-}

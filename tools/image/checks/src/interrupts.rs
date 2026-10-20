@@ -656,12 +656,14 @@ mod tests {
     use oer_analysis_riscv_stack::Assumption;
 
     fn contract() -> Contract {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-        oer_chip_profile::Profile::all(&root)
-            .unwrap()
-            .iter()
-            .find_map(Contract::of)
-            .expect("a chip names an interrupt contract")
+        [
+            include_str!("../../../../chips/esp32c5/platform/chip.toml"),
+            include_str!("../../../../chips/esp32s31/platform/chip.toml"),
+        ]
+        .into_iter()
+        .map(|text| toml::from_str::<oer_chip_profile::Profile>(text).unwrap())
+        .find_map(|profile| Contract::of(&profile))
+        .expect("a chip names an interrupt contract")
     }
 
     /// The `TIMER` slot's handler: in the contract's SRAM.

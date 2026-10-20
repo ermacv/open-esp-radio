@@ -2,7 +2,8 @@ use super::*;
 
 /// A chip with a flash map, whose bundles hold an OTA selection.
 fn profile() -> oer_chip_profile::Profile {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let repository = crate::tests::repository();
+    let root = repository.path();
     oer_chip_profile::Profile::all(&root)
         .unwrap()
         .into_iter()

@@ -701,13 +701,38 @@ fn profile_path(root: &Path, id: &str) -> PathBuf {
 mod tests {
     use super::*;
 
-    fn repository() -> PathBuf {
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..")
+    fn repository() -> tempfile::TempDir {
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path();
+        for (path, text) in [
+            (
+                "chips/esp32c5/platform/chip.toml",
+                include_str!("../../../../chips/esp32c5/platform/chip.toml"),
+            ),
+            (
+                "chips/esp32s31/platform/chip.toml",
+                include_str!("../../../../chips/esp32s31/platform/chip.toml"),
+            ),
+            (
+                "chips/esp32c5/platform/partitions/applications.csv",
+                include_str!("../../../../chips/esp32c5/platform/partitions/applications.csv"),
+            ),
+            (
+                "chips/esp32s31/platform/partitions/applications.csv",
+                include_str!("../../../../chips/esp32s31/platform/partitions/applications.csv"),
+            ),
+        ] {
+            let path = root.join(path);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, text).unwrap();
+        }
+        directory
     }
 
     #[test]
     fn the_tracked_profiles_load() {
-        let root = repository();
+        let repository = repository();
+        let root = repository.path();
         let chips = Profile::all(&root).unwrap();
         assert!(!chips.is_empty());
         assert_eq!(families(&root).unwrap().len(), chips.len());

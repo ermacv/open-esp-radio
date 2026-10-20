@@ -1,14 +1,13 @@
 use super::*;
-use std::path::PathBuf;
 
-fn repository() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..")
+fn repository() -> tempfile::TempDir {
+    crate::tests::repository()
 }
 
 /// This checkout's first chip; a catalog image of it boots through its own
 /// ESP-IDF bootloader.
 fn application_chip() -> String {
-    oer_chip_profile::Profile::all(&repository()).unwrap()[0]
+    oer_chip_profile::Profile::all(repository().path()).unwrap()[0]
         .id
         .clone()
 }
@@ -30,7 +29,8 @@ fn boot_files(root: &Path) -> (Vec<u8>, Vec<u8>) {
 
 #[test]
 fn boot_files_of_another_chip_or_no_boot_files_are_refused() {
-    let root = repository();
+    let repository = repository();
+    let root = repository.path();
     let directory = tempfile::tempdir().unwrap();
     let file = |name: &str, bytes: &[u8]| {
         let path = directory.path().join(name);
@@ -63,7 +63,8 @@ fn boot_files_of_another_chip_or_no_boot_files_are_refused() {
 
 #[test]
 fn an_esp_idf_bundle_takes_its_catalog_boot_files_and_has_no_ota_selection() {
-    let root = repository();
+    let repository = repository();
+    let root = repository.path();
     let directory = tempfile::tempdir().unwrap();
     let file = |name: &str, bytes: &[u8]| {
         let path = directory.path().join(name);
@@ -120,7 +121,8 @@ fn an_esp_idf_bundle_takes_its_catalog_boot_files_and_has_no_ota_selection() {
 
 #[test]
 fn a_run_flashes_a_copy_holding_exactly_its_archived_application() {
-    let root = repository();
+    let repository = repository();
+    let root = repository.path();
     let directory = tempfile::tempdir().unwrap();
     let file = |name: &str, bytes: &[u8]| {
         let path = directory.path().join(name);
@@ -159,7 +161,8 @@ fn a_run_flashes_a_copy_holding_exactly_its_archived_application() {
 
 #[test]
 fn a_failed_rebuild_leaves_the_published_bundle_untouched() {
-    let root = repository();
+    let repository = repository();
+    let root = repository.path();
     let directory = tempfile::tempdir().unwrap();
     let file = |name: &str, bytes: &[u8]| {
         let path = directory.path().join(name);

@@ -1006,22 +1006,19 @@ fn a_summary_the_image_does_not_reach_is_unused() {
 
 #[test]
 fn the_platform_rom_summaries_parse() {
-    let chips = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../chips");
-    let mut parsed = 0;
-    for chip in std::fs::read_dir(chips).unwrap() {
-        let path = chip.unwrap().path().join("platform/rom-functions.toml");
-        let Ok(text) = std::fs::read_to_string(&path) else {
-            continue;
-        };
-        let summaries = parse_summaries(&text).unwrap();
+    let sources = [
+        include_str!("../../../../chips/esp32c5/platform/rom-functions.toml"),
+        include_str!("../../../../chips/esp32s31/platform/rom-functions.toml"),
+    ];
+    assert!(!sources.is_empty());
+    for text in sources {
         assert!(
-            summaries.iter().any(|s| s.name == "memset"),
-            "{}",
-            path.display()
+            parse_summaries(text)
+                .unwrap()
+                .iter()
+                .any(|s| s.name == "memset")
         );
-        parsed += 1;
     }
-    assert!(parsed > 0, "no platform reviews ROM summaries");
 }
 
 #[test]
@@ -1351,13 +1348,8 @@ fn a_relocated_data_word_takes_a_function_s_address() {
 /// relocations kept, as images are.
 /// A build directory no other call shares: tests compiling one program run
 /// in parallel.
-fn build_directory(kind: &str) -> std::path::PathBuf {
-    static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-    let call = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    std::env::temp_dir().join(format!(
-        "oer-riscv-stack-{}-{kind}-{call}",
-        std::process::id()
-    ))
+fn build_directory(kind: &str) -> tempfile::TempDir {
+    tempfile::Builder::new().prefix(kind).tempdir().unwrap()
 }
 
 pub(crate) fn compiled(source: &str) -> Vec<u8> {
@@ -1366,8 +1358,8 @@ pub(crate) fn compiled(source: &str) -> Vec<u8> {
 
 /// [`compiled`], with the extra linker arguments `link`.
 fn compiled_linking(source: &str, link: &[&str]) -> Vec<u8> {
-    let directory = build_directory("program");
-    std::fs::create_dir_all(&directory).unwrap();
+    let build = build_directory("program");
+    let directory = build.path();
     let input = directory.join("main.rs");
     let output = directory.join("main.elf");
     std::fs::write(&input, source).unwrap();
@@ -1400,7 +1392,6 @@ fn compiled_linking(source: &str, link: &[&str]) -> Vec<u8> {
         .unwrap();
     assert!(status.success());
     let elf = std::fs::read(&output).unwrap();
-    let _ = std::fs::remove_dir_all(&directory);
     elf
 }
 
@@ -1417,8 +1408,8 @@ fn compiled_named_library(
     library_name: &str,
     program_name: &str,
 ) -> Vec<u8> {
-    let directory = build_directory("library");
-    std::fs::create_dir_all(&directory).unwrap();
+    let build = build_directory("library");
+    let directory = build.path();
     let rustc = |debuginfo: &str, arguments: &[&std::ffi::OsStr]| {
         let status = std::process::Command::new("rustc")
             .env("RUSTC_BOOTSTRAP", "1")
@@ -1475,7 +1466,6 @@ fn compiled_named_library(
         ],
     );
     let elf = std::fs::read(&output).unwrap();
-    let _ = std::fs::remove_dir_all(&directory);
     elf
 }
 

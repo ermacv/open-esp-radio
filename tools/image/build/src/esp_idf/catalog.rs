@@ -261,7 +261,8 @@ mod tests {
 
     #[test]
     fn the_tracked_catalog_names_its_projects() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+        let repository = crate::tests::repository();
+        let root = repository.path();
         let entries = entries(&root).unwrap();
         for image in ["ieee802154-peer", "vendor-calibration"] {
             assert!(entries.iter().any(|entry| entry.image == image), "{image}");

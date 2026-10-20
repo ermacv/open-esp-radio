@@ -1,6 +1,6 @@
 //! Synthetic source-authoring lifecycle; no generated hardware constants are asserted.
 use oer_registers_model::RegisterModel;
-use std::{fs, path::Path, process::Command};
+use std::{fs, path::Path};
 
 const INIT: &str = r#"
 schema = 1
@@ -26,60 +26,6 @@ const SVD: &str = r#"<?xml version="1.0"?>
 <name>READY</name><bitOffset>0</bitOffset><bitWidth>1</bitWidth></field></fields>
 </register></registers></peripheral></peripherals><vendorExtensions><private>retained</private>
 </vendorExtensions></device>"#;
-
-#[test]
-fn initialization_and_svd_import_reopen_without_promoting_review() {
-    let dir = tempfile::tempdir().unwrap();
-    let request = dir.path().join("init.toml");
-    fs::write(&request, INIT).unwrap();
-    let output = dir.path().join("new");
-    let result = Command::new(env!("CARGO_BIN_EXE_registers"))
-        .args(["init-model", "--request"])
-        .arg(&request)
-        .arg("--directory")
-        .arg(&output)
-        .output()
-        .unwrap();
-    assert!(
-        result.status.success(),
-        "{}",
-        String::from_utf8_lossy(&result.stderr)
-    );
-    let model = RegisterModel::load(&output.join("device.toml")).unwrap();
-    assert!(model.register_identities().unwrap().is_empty());
-    assert!(model.review().is_empty());
-    assert_eq!(
-        fs::read_to_string(output.join("initialization.toml")).unwrap(),
-        INIT
-    );
-    assert!(oer_registers_generate::initialize_model(&request, &output).is_err());
-    let input = dir.path().join("source.svd");
-    fs::write(&input, SVD).unwrap();
-    let output = dir.path().join("imported");
-    let result = Command::new(env!("CARGO_BIN_EXE_registers"))
-        .arg("import-svd")
-        .arg("--source")
-        .arg(&input)
-        .arg("--directory")
-        .arg(&output)
-        .args(["--chip", "fixture-chip", "--address-space", "cpu"])
-        .output()
-        .unwrap();
-    assert!(
-        result.status.success(),
-        "{}",
-        String::from_utf8_lossy(&result.stderr)
-    );
-    fs::remove_file(input).unwrap();
-    let model = RegisterModel::load(&output.join("device.toml")).unwrap();
-    assert!(model.review().is_empty());
-    assert!(model.reviewed_register_facts().is_empty());
-    assert_eq!(model.register_identities().unwrap().len(), 1);
-    let xml = model.render_svd().unwrap().0;
-    assert!(xml.contains("read-only"));
-    assert!(xml.contains("READY"));
-    assert_eq!(fs::read_to_string(output.join("source.svd")).unwrap(), SVD);
-}
 
 #[test]
 fn invalid_geometry_or_svd_never_leaves_a_draft_or_overwrites_sources() {

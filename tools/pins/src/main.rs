@@ -80,16 +80,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_root_holds_the_pins() {
-        assert!(
-            root()
-                .unwrap()
-                .join("chips/esp32s31/vendor/artifacts.toml")
-                .is_file()
-        );
-    }
-
-    #[test]
     fn fetch_takes_a_chip_and_ids() {
         let cli = Cli::try_parse_from(["pins", "fetch", "--chip", "esp32c5", "libphy"]).unwrap();
         let Command::Fetch { chip, ids } = cli.command else {

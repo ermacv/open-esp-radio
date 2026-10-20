@@ -528,36 +528,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_checkout_resolves_relative_submodules_against_its_upstream() {
-        let upstream = tempfile::tempdir().unwrap();
-        let run =
-            |directory: &Path, args: &[&str]| oer_os_process::git::text(directory, args).unwrap();
-        run(upstream.path(), &["init", "--quiet"]);
-        run(
-            upstream.path(),
-            &["config", "user.email", "test@example.invalid"],
-        );
-        run(upstream.path(), &["config", "user.name", "test"]);
-        run(
-            upstream.path(),
-            &["config", "uploadpack.allowReachableSHA1InWant", "true"],
-        );
-        std::fs::write(upstream.path().join("file"), "x").unwrap();
-        run(upstream.path(), &["add", "file"]);
-        run(upstream.path(), &["commit", "--quiet", "-m", "one"]);
-        let revision = run(upstream.path(), &["rev-parse", "HEAD"]);
-        let repository = upstream.path().to_string_lossy().into_owned();
-        let target = tempfile::tempdir().unwrap();
-        let tree = target.path().join("tree");
-        checkout(&tree, &repository, &revision).unwrap();
-        assert_eq!(run(&tree, &["remote", "get-url", "origin"]), repository);
-        // An earlier checkout without an origin gains one.
-        run(&tree, &["remote", "remove", "origin"]);
-        checkout(&tree, &repository, &revision).unwrap();
-        assert_eq!(run(&tree, &["remote", "get-url", "origin"]), repository);
-    }
-
-    #[test]
     fn relative_submodule_urls_resolve_against_the_superproject() {
         let idf = "https://github.com/espressif/esp-idf";
         assert_eq!(

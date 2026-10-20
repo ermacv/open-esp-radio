@@ -74,7 +74,6 @@ fn compile(directory: &Path, declarations: &[&str]) -> Vec<u8> {
 }
 
 #[test]
-#[ignore = "requires the repository RV32 rust-std target and linker"]
 fn new_declarations_survive_rlib_extraction_lto_gc_and_relocation() {
     let temporary = tempfile::tempdir().unwrap();
     let original = temporary.path().join("original");

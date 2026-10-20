@@ -116,7 +116,8 @@ mod tests {
 
     #[test]
     fn this_checkout_registers_functions() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let repository = crate::artifacts::repository();
+        let root = repository.path();
         assert!(!registered(&root, "esp32s31").unwrap().is_empty());
     }
 }

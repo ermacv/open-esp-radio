@@ -1,8 +1,8 @@
 use super::*;
 use crate::bundle::{BootFiles, around};
 
-fn repository() -> std::path::PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..")
+fn repository() -> tempfile::TempDir {
+    crate::tests::repository()
 }
 
 /// Every chip whose profile names a flash map for its images.
@@ -66,7 +66,8 @@ pub(crate) fn elf() -> Vec<u8> {
 
 #[test]
 fn the_flash_map_is_the_partition_tables() {
-    let root = repository();
+    let repository = repository();
+    let root = repository.path();
     for profile in chips(&root) {
         let flash = profile.flash.unwrap();
         let table = partitions(&root, &flash).unwrap();
@@ -87,7 +88,8 @@ fn the_flash_map_is_the_partition_tables() {
 
 #[test]
 fn the_boot_files_are_encoded_into_the_bundle() {
-    let root = repository();
+    let repository = repository();
+    let root = repository.path();
     for profile in chips(&root) {
         let flash = profile.flash.clone().unwrap();
         let directory = tempfile::tempdir().unwrap();
@@ -182,7 +184,8 @@ fn the_boot_files_are_encoded_into_the_bundle() {
 
 #[test]
 fn the_application_and_the_bootloader_are_encoded_in_the_flash_maps_modes() {
-    let root = repository();
+    let repository = repository();
+    let root = repository.path();
     for profile in chips(&root) {
         let flash = profile.flash.clone().unwrap();
         let csv = root.join(&flash.partitions);

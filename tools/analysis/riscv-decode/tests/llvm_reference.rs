@@ -6,20 +6,32 @@
 //! same extensions, except for the differences `expected` names. Field values
 //! are covered by the unit tests; this checks the accepted encoding space.
 //!
-//! Ignored by default because it runs an external tool:
-//! `cargo test -p oer-analysis-riscv-decode --test llvm_reference -- --ignored`. It uses
-//! `$LLVM_OBJDUMP`, or the `llvm-objdump` of the `llvm-tools` component that
-//! `rust-toolchain.toml` installs.
+//! Run this exhaustive check explicitly with
+//! `cargo test -p oer-analysis-riscv-decode --test llvm_reference -- --ignored`.
+//! It uses only the pinned toolchain's llvm-tools component, with no
+//! environment override, and writes probes into its own temporary directory.
 
 use oer_analysis_riscv_decode::{Extensions, decode};
-use std::{env, fs, path::PathBuf, process::Command};
+use std::{fs, path::PathBuf, process::Command};
 
 const ATTRIBUTES: &str = "+m,+a,+f,+c,+zba,+zbb,+zbs,+zcb,+zcmp";
 
 fn objdump() -> PathBuf {
-    oer_os_toolchain::program(oer_os_toolchain::Tool::LlvmObjdump)
-        .unwrap()
-        .into()
+    let rustc = |argument: &str| {
+        let output = Command::new("rustc").arg(argument).output().unwrap();
+        assert!(output.status.success());
+        String::from_utf8(output.stdout).unwrap()
+    };
+    let sysroot = rustc("--print=sysroot");
+    let verbose = rustc("-vV");
+    let host = verbose
+        .lines()
+        .find_map(|line| line.strip_prefix("host: "))
+        .unwrap();
+    PathBuf::from(sysroot.trim())
+        .join("lib/rustlib")
+        .join(host)
+        .join("bin/llvm-objdump")
 }
 
 /// A relocatable RV32 ELF whose only content is `code` in `.text`.
@@ -64,14 +76,14 @@ fn elf(code: &[u8]) -> Vec<u8> {
 /// LLVM's text for each probe, by probe index: every probe occupies `slot`
 /// bytes.
 fn disassemble(code: &[u8], slot: usize) -> Vec<Option<String>> {
-    let path = env::temp_dir().join(format!("oer-riscv-decode-{}.o", std::process::id()));
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("probes.o");
     fs::write(&path, elf(code)).unwrap();
     let output = Command::new(objdump())
         .args(["-d", "-M", "no-aliases", &format!("--mattr={ATTRIBUTES}")])
         .arg(&path)
         .output()
         .expect("llvm-objdump runs");
-    fs::remove_file(&path).unwrap();
     assert!(
         output.status.success(),
         "{}",
@@ -155,7 +167,7 @@ fn compare(encodings: &[u32], compressed: bool, unexpected: &mut Vec<String>) {
 }
 
 #[test]
-#[ignore = "runs the toolchain's llvm-objdump"]
+#[ignore = "exhaustive encoding-space comparison; run explicitly"]
 fn the_accepted_encodings_are_llvm_s() {
     let mut unexpected = Vec::new();
     let halves: Vec<u32> = (0..=u16::MAX)

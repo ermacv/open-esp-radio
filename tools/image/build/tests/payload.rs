@@ -100,9 +100,7 @@ fn a_field_outside_the_header_is_a_contract_error_not_a_panic() {
 /// The fixture line `key` of the stage-two packing fixture the bootstrap's
 /// contract (`oer-espressif-staged-layout`) checks too.
 fn fixture(key: &str) -> String {
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-    std::fs::read_to_string(root.join("chips/espressif/staged-layout/fixtures/stage-two.txt"))
-        .unwrap()
+    include_str!("../../../../chips/espressif/staged-layout/fixtures/stage-two.txt")
         .lines()
         .find_map(|line| Some(line.strip_prefix(key)?.strip_prefix(' ')?.to_owned()))
         .unwrap()
@@ -110,18 +108,20 @@ fn fixture(key: &str) -> String {
 
 #[test]
 fn every_staged_chip_packs_the_shared_fixture_as_the_bootstrap_checks_it() {
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
     let hex = fixture("unpacked");
     let unpacked = (0..hex.len())
         .step_by(2)
         .map(|at| u8::from_str_radix(&hex[at..at + 2], 16).unwrap())
         .collect::<Vec<_>>();
     let crc = u32::from_str_radix(&fixture("crc32"), 16).unwrap();
-    let staged = oer_chip_profile::Profile::all(&root)
-        .unwrap()
-        .into_iter()
-        .filter_map(|profile| profile.staged)
-        .collect::<Vec<_>>();
+    let staged = [
+        include_str!("../../../../chips/esp32c5/platform/chip.toml"),
+        include_str!("../../../../chips/esp32s31/platform/chip.toml"),
+    ]
+    .into_iter()
+    .map(|text| toml::from_str::<oer_chip_profile::Profile>(text).unwrap())
+    .filter_map(|profile| profile.staged)
+    .collect::<Vec<_>>();
     assert!(!staged.is_empty());
     for staged in staged {
         let directory = tempfile::tempdir().unwrap();

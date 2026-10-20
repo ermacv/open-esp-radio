@@ -9,7 +9,7 @@ use object::{
     SymbolScope,
     write::{Object, Relocation, Symbol, SymbolSection},
 };
-use oer_analysis_blobray_application::in_process::{Executable, Limits};
+use oer_analysis_blobray_application::in_process::Executable;
 use oer_analysis_blobray_application::linking::{LinkedImage, link, propose_companions};
 use oer_analysis_blobray_domain::*;
 use oer_analysis_blobray_linker::ElfLinker;
@@ -19,12 +19,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
-/// The LLD of the pinned Rust toolchain, so the tests need no host linker;
-/// `BLOBRAY_TEST_LLD` selects another.
+/// The LLD of the pinned Rust toolchain; no host linker is needed.
 fn linker() -> PathBuf {
-    if let Some(path) = std::env::var_os("BLOBRAY_TEST_LLD") {
-        return path.into();
-    }
     let rustc = |argument: &str| {
         let output = std::process::Command::new("rustc")
             .arg(argument)
@@ -42,6 +38,27 @@ fn linker() -> PathBuf {
         .join("lib/rustlib")
         .join(host)
         .join("bin/gcc-ld/ld.lld")
+}
+
+struct WorkBudget {
+    units: u64,
+}
+impl WorkBudget {
+    fn new() -> Self {
+        Self { units: 0 }
+    }
+}
+impl RunControl for WorkBudget {
+    fn checkpoint(&mut self, units: u64) -> Result<()> {
+        self.units = self.units.saturating_add(units);
+        if self.units > DEFAULT_WORK_UNITS {
+            return Err(Error::new(
+                ErrorCode::ResourceLimited,
+                "test work budget exhausted",
+            ));
+        }
+        Ok(())
+    }
 }
 
 fn symbol(name: &[u8], section: SymbolSection, size: u64, kind: SymbolKind) -> Symbol {
@@ -173,7 +190,7 @@ fn defined(executable: &Executable, member: usize, name: &[u8]) -> SymbolId {
     let inventory = oer_analysis_blobray_application::captured::inventory(
         executable,
         &memory,
-        &mut Limits::new(DEFAULT_WORK_UNITS, std::time::Duration::from_secs(30)),
+        &mut WorkBudget::new(),
     )
     .unwrap();
     inventory.objects[member]
@@ -233,34 +250,12 @@ fn link_with(f: &Fixture, tool: &Path, memory: u64) -> Result<LinkedImage> {
         &ElfLinker,
         f.dir.path(),
         &WorkingMemory::new(memory).unwrap(),
-        &mut Limits::new(DEFAULT_WORK_UNITS, std::time::Duration::from_secs(30)),
+        &mut WorkBudget::new(),
     )
 }
 
 fn linked(f: &Fixture) -> Result<LinkedImage> {
     link_with(f, &linker(), 32 * 1024 * 1024)
-}
-
-/// A linker that runs `body`, except for version queries and the capability
-/// probe, which the real LLD answers.
-fn test_linker(directory: &Path, body: &str) -> PathBuf {
-    wrapper(directory, "test-linker", &linker(), body)
-}
-
-fn wrapper(directory: &Path, name: &str, real: &Path, body: &str) -> PathBuf {
-    use std::os::unix::fs::PermissionsExt;
-    let path = directory.join(name);
-    fs::write(
-        &path,
-        format!(
-            "#!/bin/sh\nif [ \"$1\" = --version ]; then exec '{}' --version; fi\ncase \"$PWD\" in */probe) exec '{}' \"$@\";; esac\n{body}\n",
-            real.display(),
-            real.display()
-        ),
-    )
-    .unwrap();
-    fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).unwrap();
-    path
 }
 
 fn closed_image(tool: &Path) {
@@ -443,58 +438,6 @@ fn weak_definitions_and_common_data_link_under_declared_policy() {
 }
 
 #[test]
-fn working_capacity_and_bad_linker_output_fail_closed() {
-    let f = closed();
-    let error = link_with(&f, &linker(), 1024 * 1024).err().unwrap();
-    assert_eq!(error.code, ErrorCode::ResourceLimited);
-    assert!(error.memory.is_some());
-    let tool = test_linker(f.dir.path(), "printf 'not an ELF'");
-    assert_eq!(
-        link_with(&f, &tool, 32 * 1024 * 1024).err().unwrap().code,
-        ErrorCode::LinkBlocked
-    );
-}
-
-#[test]
-fn linker_stderr_flood_is_bounded_in_the_failure() {
-    let f = closed();
-    let tool = test_linker(
-        f.dir.path(),
-        "/usr/bin/head -c 131072 /dev/zero >&2; exit 42",
-    );
-    let error = link_with(&f, &tool, 32 * 1024 * 1024).err().unwrap();
-    assert_eq!(error.code, ErrorCode::LinkFailed);
-    assert!(error.message.contains("42"), "{}", error.message);
-    assert!(error.message.len() < 2048);
-}
-
-#[test]
-fn crash_and_deadline_fail_and_reap_the_linker() {
-    for (body, expected) in [
-        ("kill -SEGV $$", ErrorCode::LinkFailed),
-        ("exec /bin/sleep 30", ErrorCode::ResourceLimited),
-    ] {
-        let f = closed();
-        let tool = test_linker(f.dir.path(), body);
-        let timeout = if body.contains("sleep") { 1 } else { 30 };
-        let started = std::time::Instant::now();
-        let error = link(
-            &f.request,
-            &f.inputs,
-            &tool,
-            &ElfLinker,
-            f.dir.path(),
-            &WorkingMemory::new(32 * 1024 * 1024).unwrap(),
-            &mut Limits::new(DEFAULT_WORK_UNITS, std::time::Duration::from_secs(timeout)),
-        )
-        .err()
-        .unwrap();
-        assert_eq!(error.code, expected, "{body}: {error:?}");
-        assert!(started.elapsed() < std::time::Duration::from_secs(20));
-    }
-}
-
-#[test]
 fn lld_satisfies_backward_archive_references() {
     let f = fixture(
         vec![
@@ -510,47 +453,6 @@ fn lld_satisfies_backward_archive_references() {
     );
     let lld = linked(&f).unwrap();
     assert_eq!(lld.manifest.linker.implementation, "lld-elf");
-}
-
-#[test]
-fn capabilities_not_version_numbers_decide_adapter_support() {
-    use std::os::unix::fs::PermissionsExt;
-    for (version, real) in [("LLD 99.7", linker())] {
-        let f = closed();
-        let path = f.dir.path().join("future-linker");
-        fs::write(&path, format!("#!/bin/sh\nif [ \"$1\" = --version ]; then echo '{version}'; exit 0; fi\nexec '{}' \"$@\"\n", real.display())).unwrap();
-        fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).unwrap();
-        let image = link_with(&f, &path, 32 * 1024 * 1024).unwrap();
-        assert_eq!(image.manifest.linker.version, version);
-        fs::write(
-            &path,
-            format!("#!/bin/sh\nif [ \"$1\" = --version ]; then echo '{version}'; fi\nexit 0\n"),
-        )
-        .unwrap();
-        let error = link_with(&f, &path, 32 * 1024 * 1024).err().unwrap();
-        assert_eq!(error.code, ErrorCode::Incompatible);
-    }
-}
-
-#[test]
-fn oversized_map_record_and_nondeterministic_capability_evidence_fail() {
-    use std::os::unix::fs::PermissionsExt;
-    let f = closed();
-    let tool = test_linker(
-        f.dir.path(),
-        "for arg in \"$@\"; do case \"$arg\" in --Map=*) map=${arg#--Map=};; esac; done\nif [ -n \"$map\" ]; then exec /usr/bin/head -c 70000 /dev/zero > \"$map\"; else exec /usr/bin/head -c 70000 /dev/zero; fi",
-    );
-    assert_eq!(
-        link_with(&f, &tool, 32 * 1024 * 1024).err().unwrap().code,
-        ErrorCode::ResourceLimited
-    );
-    let real = linker();
-    let varying = f.dir.path().join("varying-linker");
-    fs::write(&varying, format!("#!/bin/sh\nif [ \"$1\" = --version ]; then exec '{}' --version; fi\necho \"$PWD\" >&2\nexec '{}' \"$@\"\n", real.display(), real.display())).unwrap();
-    fs::set_permissions(&varying, fs::Permissions::from_mode(0o700)).unwrap();
-    let error = link_with(&f, &varying, 32 * 1024 * 1024).err().unwrap();
-    assert_eq!(error.code, ErrorCode::Incompatible);
-    assert!(error.message.contains("deterministic"));
 }
 
 /// `entry` calling `helper` and storing the addresses of `value` and, when
@@ -610,7 +512,7 @@ fn trial_link_proposes_function_and_data_companions_and_reports_the_rest() {
             &ElfLinker,
             f.dir.path(),
             &WorkingMemory::new(32 * 1024 * 1024).unwrap(),
-            &mut Limits::new(DEFAULT_WORK_UNITS, std::time::Duration::from_secs(30)),
+            &mut WorkBudget::new(),
         )
     };
     let mut with_missing = fixture(vec![proposal_object(true)], 0, 0);

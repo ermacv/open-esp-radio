@@ -93,32 +93,38 @@ impl Project {
 mod tests {
     use super::*;
 
-    fn root() -> std::path::PathBuf {
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
+    fn root() -> tempfile::TempDir {
+        crate::artifacts::repository()
     }
 
     #[test]
     fn tracked_chips_are_supported_and_others_are_rejected_with_the_list() {
-        let supported = supported(&root()).unwrap();
-        assert_eq!(supported, oer_chip_profile::supported(&root()).unwrap());
-        let error = Project::new(&root(), "chip-x").unwrap_err().to_string();
+        let repository = root();
+        let root = repository.path();
+        let supported = supported(root).unwrap();
+        assert_eq!(supported, oer_chip_profile::supported(root).unwrap());
+        let error = Project::new(root, "chip-x").unwrap_err().to_string();
         assert!(error.contains("unsupported chip `chip-x`"), "{error}");
         assert!(error.contains(&supported.join(", ")), "{error}");
     }
 
     #[test]
     fn the_projects_are_the_chips_with_pins() {
-        let projects = projects(&root()).unwrap();
+        let repository = root();
+        let root = repository.path();
+        let projects = projects(root).unwrap();
         assert!(projects.contains(&"esp32s31".to_owned()), "{projects:?}");
         for chip in &projects {
-            assert!(root().join(crate::manifest(chip)).is_file());
+            assert!(root.join(crate::manifest(chip)).is_file());
         }
     }
 
     #[test]
     fn paths_follow_the_chip_directory() {
-        for name in supported(&root()).unwrap() {
-            let Ok(chip) = Project::new(&root(), &name) else {
+        let repository = root();
+        let root = repository.path();
+        for name in supported(root).unwrap() {
+            let Ok(chip) = Project::new(root, &name) else {
                 continue;
             };
             // Every path of a project lies in this checkout.
@@ -127,7 +133,7 @@ mod tests {
                 format!("{}/Cargo.toml", chip.scenarios_directory()),
                 chip.scenario_decisions(),
             ] {
-                assert!(root().join(&path).exists(), "{path}");
+                assert!(root.join(&path).exists(), "{path}");
             }
             assert_eq!(
                 chip.artifacts(),
@@ -137,7 +143,7 @@ mod tests {
                 chip.scenarios_directory(),
                 format!("tools/vendor/scenarios-{name}")
             );
-            let manifest = root().join(format!("{}-cli/Cargo.toml", chip.scenarios_directory()));
+            let manifest = root.join(format!("{}-cli/Cargo.toml", chip.scenarios_directory()));
             let entry: toml::Table = toml::from_str(
                 &std::fs::read_to_string(manifest).expect("scenario entry manifest"),
             )

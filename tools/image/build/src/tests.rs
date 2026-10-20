@@ -24,7 +24,8 @@ fn an_application_selects_its_features_alone() {
 
 #[test]
 fn every_chip_with_images_names_its_flash_map() {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let repository = repository();
+    let root = repository.path();
     for chip in oer_chip_profile::supported(&root).unwrap() {
         let profile = profile(&root, &chip).unwrap();
         let flash = profile.flash.unwrap();
@@ -70,7 +71,8 @@ fn requested(placement: bool) -> Gates {
 
 /// An empty bundle in `directory` of the first chip with a flash map.
 fn empty_bundle(directory: &Path) -> crate::bundle::ImageBundle {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let repository = repository();
+    let root = repository.path();
     let chip = oer_chip_profile::supported(&root).unwrap().remove(0);
     let profile = profile(&root, &chip).unwrap();
     let flash = profile.flash.clone().unwrap();
@@ -187,10 +189,11 @@ fn a_reported_check_that_does_not_pass_is_a_warning() {
 #[test]
 fn a_type_check_refuses_requested_checks() {
     let directory = tempfile::tempdir().unwrap();
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let repository = repository();
+    let root = repository.path();
     let chip = oer_chip_profile::supported(&root).unwrap().remove(0);
     let spec = ImageSpec {
-        root: root.clone(),
+        root: root.to_owned(),
         chip,
         application: Application {
             package: "station".into(),
@@ -206,4 +209,68 @@ fn a_type_check_refuses_requested_checks() {
     };
     let error = type_check(&spec).unwrap_err().to_string();
     assert!(error.contains("type check"), "{error}");
+}
+
+pub(crate) fn repository() -> tempfile::TempDir {
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path();
+    for (path, text) in [
+        (
+            "chips/esp32c5/platform/chip.toml",
+            include_str!("../../../../chips/esp32c5/platform/chip.toml"),
+        ),
+        (
+            "chips/esp32s31/platform/chip.toml",
+            include_str!("../../../../chips/esp32s31/platform/chip.toml"),
+        ),
+        (
+            "chips/esp32c5/platform/partitions/applications.csv",
+            include_str!("../../../../chips/esp32c5/platform/partitions/applications.csv"),
+        ),
+        (
+            "chips/esp32s31/platform/partitions/applications.csv",
+            include_str!("../../../../chips/esp32s31/platform/partitions/applications.csv"),
+        ),
+        (
+            "firmware/peers/esp32c5-ble-dtm/firmware.toml",
+            include_str!("../../../../firmware/peers/esp32c5-ble-dtm/firmware.toml"),
+        ),
+        (
+            "firmware/peers/esp32c5-ieee802154/firmware.toml",
+            include_str!("../../../../firmware/peers/esp32c5-ieee802154/firmware.toml"),
+        ),
+        (
+            "firmware/peers/esp32c5-openthread/firmware.toml",
+            include_str!("../../../../firmware/peers/esp32c5-openthread/firmware.toml"),
+        ),
+        (
+            "firmware/vendor/esp32c5/ble-scan-request-counter/firmware.toml",
+            include_str!(
+                "../../../../firmware/vendor/esp32c5/ble-scan-request-counter/firmware.toml"
+            ),
+        ),
+        (
+            "firmware/vendor/esp32s31/ble-scan-reference/firmware.toml",
+            include_str!("../../../../firmware/vendor/esp32s31/ble-scan-reference/firmware.toml"),
+        ),
+        (
+            "firmware/vendor/esp32s31/calibration/firmware.toml",
+            include_str!("../../../../firmware/vendor/esp32s31/calibration/firmware.toml"),
+        ),
+        (
+            "firmware/vendor/esp32s31/ieee802154-reference/firmware.toml",
+            include_str!("../../../../firmware/vendor/esp32s31/ieee802154-reference/firmware.toml"),
+        ),
+        (
+            "firmware/vendor/esp32s31/phy-tracking-reference/firmware.toml",
+            include_str!(
+                "../../../../firmware/vendor/esp32s31/phy-tracking-reference/firmware.toml"
+            ),
+        ),
+    ] {
+        let path = root.join(path);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, text).unwrap();
+    }
+    directory
 }

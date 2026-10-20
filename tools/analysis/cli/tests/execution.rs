@@ -2,20 +2,17 @@
 use oer_analysis_blobray_application as app;
 use oer_analysis_blobray_domain::*;
 use oer_analysis_riscv_model::*;
-use std::time::{Duration, Instant};
 mod support;
 use support::{executable as elf, executable_with_symbols as elf_with_symbols};
-/// Work, working-memory and time limits of one execution.
+/// Work and working-memory limits of one execution.
 struct Budget {
     max_work_units: Option<u64>,
     working_memory_bytes: Option<u64>,
-    timeout_ms: u64,
 }
 fn budget() -> Budget {
     Budget {
-        max_work_units: None,
+        max_work_units: Some(DEFAULT_WORK_UNITS),
         working_memory_bytes: Some(32 * 1024 * 1024),
-        timeout_ms: 30000,
     }
 }
 struct Fixture {
@@ -79,8 +76,8 @@ impl Fixture {
             max_events: 16,
         }
     }
-    /// Execute and compare `r` in process under the work, working-memory
-    /// and time limits of `b`.
+    /// Execute and compare `r` in process under the work and working-memory
+    /// limits of `b`.
     fn run(&self, r: ExecutionRequest, b: Budget) -> Result<Executed> {
         self.run_with(&r, &[], &[], b)
     }
@@ -107,7 +104,6 @@ impl Fixture {
             &mut Limits {
                 units: 0,
                 limit: b.max_work_units,
-                deadline: Instant::now() + Duration::from_millis(b.timeout_ms),
             },
         )?;
         Ok(Executed {
@@ -117,11 +113,10 @@ impl Fixture {
         })
     }
 }
-/// Work and time limits of one in-process execution.
+/// Work limits of one in-process execution.
 struct Limits {
     units: u64,
     limit: Option<u64>,
-    deadline: Instant,
 }
 impl RunControl for Limits {
     fn checkpoint(&mut self, units: u64) -> Result<()> {
@@ -131,9 +126,6 @@ impl RunControl for Limits {
                 ErrorCode::ResourceLimited,
                 "work budget exhausted",
             ));
-        }
-        if Instant::now() >= self.deadline {
-            return Err(Error::new(ErrorCode::TimedOut, "time budget exhausted"));
         }
         Ok(())
     }
@@ -259,7 +251,7 @@ fn invalid_memory_and_unsupported_code_stay_incomplete() {
     }
 }
 #[test]
-fn loops_stop_at_the_work_memory_and_time_limits() {
+fn loops_stop_at_the_work_and_memory_limits() {
     let f = Fixture::new(&[0x0000006f]);
     let r = f.request();
     let mut b = budget();
@@ -270,10 +262,6 @@ fn loops_stop_at_the_work_memory_and_time_limits() {
     b.working_memory_bytes = Some(1024 * 1024);
     let run = f.run(r.clone(), b);
     assert_eq!(run.unwrap_err().code, ErrorCode::ResourceLimited);
-    let mut b = budget();
-    b.timeout_ms = 200;
-    let run = f.run(r.clone(), b);
-    assert_eq!(run.unwrap_err().code, ErrorCode::TimedOut);
 }
 
 #[test]

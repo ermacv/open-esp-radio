@@ -209,9 +209,24 @@ mod tests {
 
     #[test]
     fn the_workspace_images_declare_their_classes() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+        let packages: Vec<_> = [
+            include_str!("../../../../firmware/apps/w0/Cargo.toml"),
+            include_str!("../../../../firmware/apps/w1/Cargo.toml"),
+            include_str!("../../../../firmware/apps/boot-smoke/Cargo.toml"),
+        ]
+        .into_iter()
+        .map(|text| {
+            let manifest: toml::Value = toml::from_str(text).unwrap();
+            let package = &manifest["package"];
+            serde_json::json!({
+                "name": package["name"].as_str().unwrap(),
+                "metadata": package.get("metadata"),
+            })
+        })
+        .collect();
+        let metadata = serde_json::json!({"packages": packages});
         let classes = |package| {
-            Instrumentation::declared(&root, package)
+            Instrumentation::of_metadata(&metadata, package)
                 .unwrap()
                 .classes()
                 .collect::<Vec<_>>()

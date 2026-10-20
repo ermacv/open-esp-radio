@@ -607,7 +607,34 @@ fn reviews_match_without_crate_disambiguators_only() {
 
 #[test]
 fn the_repository_policies_load() {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path();
+    for (path, text) in [
+        (
+            "chips/esp32c5/platform/chip.toml",
+            include_str!("../../../../../chips/esp32c5/platform/chip.toml"),
+        ),
+        (
+            "chips/esp32s31/platform/chip.toml",
+            include_str!("../../../../../chips/esp32s31/platform/chip.toml"),
+        ),
+        (
+            "chips/esp32c5/platform/stack.toml",
+            include_str!("../../../../../chips/esp32c5/platform/stack.toml"),
+        ),
+        (
+            "chips/esp32s31/platform/stack.toml",
+            include_str!("../../../../../chips/esp32s31/platform/stack.toml"),
+        ),
+        (
+            "chips/espressif/staged-layout/stack-coverage.toml",
+            include_str!("../../../../../chips/espressif/staged-layout/stack-coverage.toml"),
+        ),
+    ] {
+        let path = root.join(path);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, text).unwrap();
+    }
     for chip in oer_chip_profile::Profile::all(&root).unwrap() {
         let policy = StackPolicy::load(&root.join(chip.stack_policy())).unwrap();
         if let Some(coverage) = &policy.coverage_policy {

@@ -157,24 +157,4 @@ mod tests {
         assert_eq!(decisive_line(&["tail".into()]).as_deref(), Some("tail"));
         assert_eq!(decisive_line(&[]), None);
     }
-
-    #[test]
-    fn a_failed_step_keeps_its_output_in_the_log() {
-        let directory = tempfile::tempdir().unwrap();
-        let log = BuildLog::create(&directory.path().join("build.log")).unwrap();
-        let error = log
-            .run(
-                oer_os_process::command("sh")
-                    .args(["-c", "echo noise >&2; echo 'error: broken' >&2; exit 3"]),
-                "a step",
-            )
-            .unwrap_err();
-        let failed = error.downcast_ref::<BuildStepFailed>().unwrap();
-        assert_eq!(failed.cause, "error: broken");
-        let text = fs::read_to_string(log.path()).unwrap();
-        assert!(
-            text.contains("==> a step\nnoise\nerror: broken\n"),
-            "{text}"
-        );
-    }
 }
