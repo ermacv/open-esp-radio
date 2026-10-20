@@ -108,7 +108,7 @@ def explain(before, after, output):
         (output / f'{name}.json').write_text(json.dumps(rows, indent=2) + '\n')
     def bindings(rows):
         return '; '.join(f"{r['function']}={r['evidence']}" +
-                         (f" barrier={r['barrier']} stores={r['stores']}" if 'barrier' in r else '') for r in rows)
+                         (f" barrier={r['barrier']} stores={r['stores']}" if 'barrier' in r else '') for r in rows) or '-'
     # Complete source identities and low/high outcomes, without copying the
     # whole raw observation into each before/after binding.
     with (output / 'pairs.tsv').open('w') as out:
@@ -126,7 +126,7 @@ def explain(before, after, output):
             proof = row['proof'] or {}
             writer.writerow([row['image'], row['function'], row['index'], use['site'], use['role'],
                              row['before']['evidence'] if row['before'] else '-', row['after']['evidence'] if row['after'] else '-',
-                             proof.get('barrier') or '-', proof.get('stores', '-'), ','.join(p['low'] for p in row['normalized_pairs'])])
+                             proof.get('barrier') or '-', proof.get('stores', '-'), ','.join(p['low'] for p in row['normalized_pairs']) or '-'])
     grouped = {}
     for row in candidate_changes:
         key = (row['image'], row['resolver'], row['change'], row['target'])
