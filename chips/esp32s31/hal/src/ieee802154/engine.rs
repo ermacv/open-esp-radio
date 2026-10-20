@@ -6,7 +6,8 @@ use core::ops::{Deref, DerefMut};
 use oer_espressif_ieee802154_engine::{
     engine::{
         Ieee802154DmaAddresses, Ieee802154Engine as SharedEngine, Ieee802154EngineBuffers,
-        Ieee802154Interfaces, owner::Ieee802154EngineOwner,
+        Ieee802154Interfaces,
+        owner::{DetachedIeee802154Engine as DetachedEngine, Ieee802154EngineOwner},
     },
     ll::Ieee802154LowLevel,
     pib::{Ieee802154Permit, Ieee802154PibDefaults},
@@ -34,7 +35,43 @@ pub struct Ieee802154Engine<
     inner: Ieee802154EngineOwner<'static, Ll>,
 }
 
+/// Quiescent engine retaining the HAL's placed DMA storage between MAC epochs.
+#[must_use = "retain the detached engine to reuse the same placed storage"]
+pub struct DetachedIeee802154Engine {
+    inner: DetachedEngine<'static, DmaWindowAddress>,
+}
+
+impl DetachedIeee802154Engine {
+    /// Rebind the retained, already placed storage to the returned MAC owners.
+    /// No new storage claim, address construction or register access occurs.
+    pub fn rebind<Ll: Ieee802154LowLevel<Address = DmaWindowAddress>>(
+        self,
+        mac: Ll,
+    ) -> Ieee802154Engine<Ll> {
+        Ieee802154Engine {
+            inner: self.inner.rebind(mac),
+        }
+    }
+}
+
 impl<Ll: Ieee802154LowLevel<Address = DmaWindowAddress>> Ieee802154Engine<Ll> {
+    /// Detach a quiescent MAC, retaining the DMA placement proof for rebind.
+    /// Stop the operation, return delivered slots and silence the CPU IRQ route
+    /// first. A software-only disable cannot close an active operation epoch.
+    ///
+    /// # Errors
+    /// Returns the unchanged owner while an operation or DMA epoch is active.
+    #[allow(
+        clippy::result_large_err,
+        reason = "failure retains the affine engine owner"
+    )]
+    pub fn detach(self) -> Result<(DetachedIeee802154Engine, Ll), Self> {
+        self.inner
+            .detach()
+            .map(|(inner, mac)| (DetachedIeee802154Engine { inner }, mac))
+            .map_err(|inner| Self { inner })
+    }
+
     /// Own `mac` with the uniquely placed buffers. No register is touched.
     pub fn place(
         mac: Ll,

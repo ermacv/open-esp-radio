@@ -5,6 +5,24 @@
 
 use super::*;
 
+/// Quiescent engine retaining its unique frame storage while its MAC is absent.
+/// No operation or storage access is available until it is rebound.
+#[must_use = "retain the detached engine to reuse its frame storage"]
+pub struct DetachedIeee802154Engine<'storage, Address: Copy + Eq> {
+    engine: Ieee802154Engine<'storage, Address>,
+}
+
+impl<'storage, Address: Copy + Eq> DetachedIeee802154Engine<'storage, Address> {
+    /// Reunite the retained engine and storage with its MAC for another epoch.
+    /// This performs no register access; initialize the MAC before starting RF.
+    pub fn rebind<Ll: Ieee802154LowLevel<Address = Address>>(
+        self,
+        ll: Ll,
+    ) -> Ieee802154EngineOwner<'storage, Ll> {
+        Ieee802154EngineOwner::new(self.engine, ll)
+    }
+}
+
 /// One MAC backend together with the engine that owns its frame buffers.
 ///
 /// Neither the backend nor the storage can be extracted while the owner is
@@ -19,6 +37,26 @@ impl<'storage, Ll: Ieee802154LowLevel> Ieee802154EngineOwner<'storage, Ll> {
     /// Hold the MAC together with the engine built from its placed buffers.
     pub fn new(engine: Ieee802154Engine<'storage, Ll::Address>, ll: Ll) -> Self {
         Self { engine, ll }
+    }
+
+    /// Return the MAC only after the engine's operation/DMA epoch has ended
+    /// and every delivered receive slot has been returned. Stop the operation
+    /// and silence the platform IRQ route before detaching. A software-only
+    /// `disable` does not establish quiescence. No register access occurs here.
+    ///
+    /// # Errors
+    /// Returns this complete owner unchanged if it is still active.
+    #[allow(
+        clippy::result_large_err,
+        clippy::type_complexity,
+        reason = "failure retains the affine owner and its unique storage"
+    )]
+    pub fn detach(self) -> Result<(DetachedIeee802154Engine<'storage, Ll::Address>, Ll), Self> {
+        if !self.engine.quiescent() {
+            return Err(self);
+        }
+        let Self { engine, ll } = self;
+        Ok((DetachedIeee802154Engine { engine }, ll))
     }
 
     /// The recording MAC, for a host model to latch events and inspect publications.
