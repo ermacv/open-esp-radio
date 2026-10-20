@@ -1,13 +1,12 @@
 # The check of main, run after every merge. Pull requests run nothing:
-# a ready pull request merges at once (merge.yml) and main may be red; the
-# result tells whoever broke it to fix it.
+# the owner merges them and main may be red; the result tells whoever broke
+# it to fix it.
 name: ci
 
 on:
   push:
     branches: [main]
-  # merge.yml merges with the workflow token, whose push starts no workflow,
-  # so it dispatches this one.
+  # A run of main or of a branch started by hand.
   workflow_dispatch:
 
 # Runs of one ref queue behind each other; runs of different refs never touch.

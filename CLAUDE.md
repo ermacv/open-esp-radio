@@ -107,7 +107,7 @@ The layout is [docs/repository-layout.md](docs/repository-layout.md).
   holder, wait for it. Stand runs need no extra approval; the owner's limits
   on secrets, eFuse writes, protected boards and hub ports still apply.
 - Open the pull request as a draft at the start (`gh pr create --draft`) and
-  push the work to it. Pull requests run no CI: mark it ready when the work is
-  done (`gh pr ready`), which squash-merges it and deletes the branch
-  (`.github/workflows/merge.yml`). CI runs on main after each merge; a red
-  main is fixed by whoever broke it, in the next pull request.
+  push the work to it; mark it ready for review when the work is done
+  (`gh pr ready`). The owner merges it (squash, the branch is deleted); an
+  agent never merges. Pull requests run no CI. CI runs on main after each
+  merge; a red main is fixed by whoever broke it, in the next pull request.

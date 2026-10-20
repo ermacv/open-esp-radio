@@ -364,9 +364,10 @@ bounds) live in the code that applies them.
   spawns its futures.
 - **Names.** A library is `oer-` and its path below its root; an executable
   keeps its root (`oer-firmware-<path>`, `oer-tool-<path>`); no `[lib] name`.
-- **Merge.** A pull request starts as a draft; marking it ready squash-merges
-  it and deletes its branch. Pull requests run no CI; CI checks main after
-  every merge; a red main is fixed by whoever broke it.
+- **Merge.** A pull request starts as a draft and is marked ready when its
+  work is done; the owner squash-merges it and its branch is deleted; an
+  agent never merges. Pull requests run no CI; CI checks main after every
+  merge; a red main is fixed by whoever broke it.
 - **Review.** At most one AI review per pull request, only when the owner
   asks for it; its findings go into the pull request.
 - **Documents** state the current state. Plans, work lists and notes live
