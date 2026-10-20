@@ -413,6 +413,12 @@ pub enum CallAbi {
 }
 
 impl CallAbi {
+    /// Standard RV32 integer calling convention (not the reduced-register ABI).
+    pub const fn stack_alignment(self) -> u32 {
+        match self {
+            Self::RiscvInteger => 16,
+        }
+    }
     /// The integer registers that carry a call's first argument words, in
     /// order (`a0` to `a7`).
     pub const fn arguments(self) -> [u8; 8] {
@@ -469,6 +475,18 @@ pub enum Expression {
     CallResult {
         callsite: u64,
         register: u8,
+    },
+    /// A word captured by a checked normal-return memory postcondition.
+    /// The source names the callee's load-time memory, never entry contents.
+    CallWord {
+        callsite: u64,
+        owner: u64,
+        load: u64,
+        load_order: u32,
+        store: u64,
+        store_order: u32,
+        width: u8,
+        source: AbstractValue,
     },
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -692,6 +710,7 @@ mod tests {
     #[test]
     fn the_psabi_register_roles_partition_the_integer_registers() {
         let abi = CallAbi::RiscvInteger;
+        assert_eq!(abi.stack_alignment(), 16);
         let mut roles: Vec<u8> = abi.preserved().into_iter().chain(abi.clobbered()).collect();
         roles.sort_unstable();
         assert_eq!(roles, (1..32).collect::<Vec<u8>>());

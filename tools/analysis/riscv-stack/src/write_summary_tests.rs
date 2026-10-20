@@ -7,6 +7,7 @@ use oer_analysis_riscv_model::*;
 
 mod alignment;
 mod contextual;
+mod word;
 
 struct Saved<'m>(RecordBuffer<'m>);
 impl FunctionSink for Saved<'_> {
@@ -38,6 +39,24 @@ fn facts_calls<'m>(
     symbolic_spills: bool,
     stack_calls: Option<&StackCalls<'_>>,
 ) -> RecordBuffer<'m> {
+    try_facts_calls(
+        words,
+        start,
+        memory,
+        symbolic_spills,
+        stack_calls,
+        &mut || Ok(()),
+    )
+    .unwrap()
+}
+fn try_facts_calls<'m>(
+    words: &[u32],
+    start: u64,
+    memory: &'m WorkingMemory,
+    symbolic_spills: bool,
+    stack_calls: Option<&StackCalls<'_>>,
+    control: &mut dyn RunControl,
+) -> Result<RecordBuffer<'m>> {
     let code: Vec<_> = words.iter().flat_map(|w| w.to_le_bytes()).collect();
     let mut saved = Saved(RecordBuffer::new(memory));
     research_with_options(
@@ -57,16 +76,15 @@ fn facts_calls<'m>(
         },
         &RiscvDecoder,
         memory,
-        &mut || Ok(()),
+        control,
         &mut saved,
         ResearchOptions {
             abi: Some(CallAbi::RiscvInteger),
             symbolic_spills,
             stack_calls,
         },
-    )
-    .unwrap();
-    saved.0
+    )?;
+    Ok(saved.0)
 }
 fn index<'a, 'm>(
     records: &'a [FunctionRecord],
@@ -229,17 +247,15 @@ fn overwriting_a_field_before_read_never_projects_its_entry_contents() {
     code.extend(spilled(&[], 2));
     let records = facts(&code, 0x1000, &memory);
     let summary = summary(&records, 0x1000, &memory);
-    assert!(matches!(
-        summary.writes.last().unwrap().value,
-        WriteValue::Field {
-            read: 0x1008,
-            displacement: 8,
-            ..
-        }
-    ));
-    assert_ne!(
+    // The common word lattice now forwards the actual prior write. This is
+    // argument 1, never an invented read of argument 0's entry field.
+    assert_eq!(
         summary.writes.last().unwrap().value,
         summary.writes[0].value
+    );
+    assert_eq!(
+        summary.writes.last().unwrap().value,
+        WriteValue::base(WriteBase::Argument(1))
     );
     // A write after the capture kills the spill if it may alias it, too.
     let records = facts(&spilled(&[store(11, 10, 8, 2)], 2), 0x1000, &memory);

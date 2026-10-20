@@ -1,15 +1,20 @@
 //! Bounded write-event summaries over the common engine's canonical facts.
 //!
-//! These are observations of stores, never postconditions of memory. A field
-//! denotes a value captured at its load PC, not the field's entry value. Stack
-//! forwarding is exclusively the value engine's entry-stack-word proof. No
-//! alias, publication, return-order or later-load proof is inferred here.
+//! Writes and barriers describe events, never memory postconditions. A field
+//! denotes a value captured at its load PC, not the field's entry value.
+//! The separate opt-in WordPostcondition proves one word at normal return,
+//! using the common evaluator; it does not remove any generic write event.
 use oer_analysis_riscv_model::*;
 
 pub(crate) mod context;
 mod tail;
+mod word;
 pub use context::{
     BranchProof, CallContext, ContextProof, call_context, contextual_function_writes,
+};
+pub use word::{
+    CallWord, WordBarrier, WordContents, WordEvent, WordEventKind, WordInstance, WordPostcondition,
+    WordQuery, call_word, contextual_word_function_writes, instantiate_word,
 };
 
 /// A machine-proved, state-preserving tail transfer. Composition is bounded
@@ -208,6 +213,7 @@ pub struct FunctionWrites<'m> {
     pub barriers: AdmittedVec<'m, WriteBarrier>,
     pub reloads: AdmittedVec<'m, StackReload>,
     context: Option<ContextProof<'m>>,
+    word: Option<WordPostcondition<'m>>,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct StackReload {
@@ -220,6 +226,9 @@ pub struct StackReload {
     pub value: WriteValue,
 }
 impl FunctionWrites<'_> {
+    pub fn word_postcondition(&self) -> Option<&WordPostcondition<'_>> {
+        self.word.as_ref()
+    }
     /// Conditional exclusions; ordinary `writes` and `barriers` stay complete.
     pub fn specialization(&self) -> Option<&ContextProof<'_>> {
         self.context.as_ref()
@@ -384,6 +393,7 @@ pub fn function_writes<'m>(
         barriers: AdmittedVec::new(memory),
         reloads: AdmittedVec::new(memory),
         context: None,
+        word: None,
     };
     let mut next = entry;
     let mut straight = true;
@@ -947,6 +957,7 @@ impl CallWrites<'_> {
 pub struct StackCalls<'m> {
     entry: u64,
     calls: AdmittedVec<'m, StackCall<'m>>,
+    words: AdmittedVec<'m, (u64, CallWord)>,
 }
 impl std::fmt::Debug for StackCalls<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -964,6 +975,32 @@ struct StackCall<'m> {
     writes: CallWrites<'m>,
 }
 impl StackCalls<'_> {
+    pub(crate) fn word(
+        &self,
+        entry: u64,
+        site: u64,
+        target: &AbstractValue,
+        arguments: &[WriteValue; 8],
+        c: &mut dyn RunControl,
+    ) -> Result<Option<CallWord>> {
+        if entry != self.entry {
+            return Ok(None);
+        }
+        for (at, word) in self.words.iter() {
+            c.checkpoint(1)?;
+            if *at == site
+                && matches!(target, AbstractValue::ImageAddress { address } if u64::from(*address) == word.callee)
+                && word
+                    .arguments
+                    .iter()
+                    .zip(arguments)
+                    .all(|(expected, actual)| expected.is_none_or(|value| value == *actual))
+            {
+                return Ok(Some(*word));
+            }
+        }
+        Ok(None)
+    }
     pub(crate) fn preserves(
         &self,
         entry: u64,
@@ -1009,6 +1046,7 @@ pub fn stack_calls<'m>(
     let mut out = StackCalls {
         entry,
         calls: AdmittedVec::new(memory),
+        words: AdmittedVec::new(memory),
     };
     for record in caller.records() {
         c.checkpoint(1)?;
@@ -1020,6 +1058,12 @@ pub fn stack_calls<'m>(
         else {
             continue;
         };
+        if let AbstractValue::ImageAddress { address } = target
+            && let Some(summary) = find_summary(Some(u64::from(*address)), summaries, c)?
+            && let Ok(word) = call_word(caller, entry, *site, abi, summary, memory, c)?
+        {
+            out.words.push((*site, word), c.position())?;
+        }
         let writes = call_writes(caller, entry, *site, abi, summaries, memory, c)?;
         if writes.unknown_addresses(c)? {
             continue;

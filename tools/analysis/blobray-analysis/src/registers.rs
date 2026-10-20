@@ -317,7 +317,7 @@ impl<'f, 'a, 'm> StoredBitsEvaluator<'f, 'a, 'm> {
                         _ => [Bit::Unknown; 32],
                     }
                 }
-                Expression::CallResult { .. } => [Bit::Unknown; 32],
+                Expression::CallResult { .. } | Expression::CallWord { .. } => [Bit::Unknown; 32],
             };
             while self.memo.len() <= top as usize {
                 self.memo.push(None, c.position())?;

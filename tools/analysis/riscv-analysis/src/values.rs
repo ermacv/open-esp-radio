@@ -1,8 +1,7 @@
 //! Finite-height lattice: unreachable -> bounded exact alternatives -> unknown.
 //! Queue membership is bounded by the graph; no expression trees. The only
-//! memory state is a bounded set of entry-stack slots holding words: a
-//! word stored to an exact entry-stack address and loaded back unchanged, as
-//! `core::hint::black_box` spills a function pointer.
+//! memory state is a bounded set of exact words. The opt-in symbolic profile
+//! also admits affine expression bases; different bases may alias.
 use super::value_sets::Sets;
 use super::*;
 use std::collections::VecDeque;
@@ -10,6 +9,7 @@ use std::hash::{Hash, Hasher};
 
 mod alignment;
 mod contextual;
+mod word;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(super) enum Value {
@@ -32,12 +32,39 @@ pub(super) enum Value {
 }
 /// Entry-stack slots one state tracks; a store beyond them is forgotten.
 const SLOTS: usize = 8;
-/// Integer registers, indexed through `Deref`, and the entry-stack words
-/// known exactly, sorted by offset with the free slots last.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum WordAddress {
+    Stack(i64),
+    Absolute(u32),
+    Expression { base: u32, offset: u32 },
+}
+impl WordAddress {
+    fn disjoint(self, width: u8, other: Self, other_width: u8) -> bool {
+        let offsets = match (self, other) {
+            (Self::Stack(a), Self::Stack(b)) => Some((a as u32, b as u32)),
+            (Self::Absolute(a), Self::Absolute(b)) => Some((a, b)),
+            (Self::Expression { base: a, offset: x }, Self::Expression { base: b, offset: y })
+                if a == b =>
+            {
+                Some((x, y))
+            }
+            _ => None,
+        };
+        // Compare bytes in RV32, including crossing the address boundary.
+        offsets.is_some_and(|(a, b)| {
+            (0..width).all(|i| {
+                (0..other_width)
+                    .all(|j| a.wrapping_add(u32::from(i)) != b.wrapping_add(u32::from(j)))
+            })
+        })
+    }
+}
+/// Integer registers and the same bounded word lattice for stack and opt-in
+/// affine object addresses. Free slots sort last.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct State {
     registers: [Value; 32],
-    slots: [Option<(i64, Value)>; SLOTS],
+    slots: [Option<(WordAddress, Value)>; SLOTS],
 }
 impl std::ops::Deref for State {
     type Target = [Value; 32];
@@ -52,18 +79,23 @@ impl std::ops::DerefMut for State {
 }
 impl State {
     fn slot(&self, offset: i64) -> Option<Value> {
+        self.word(WordAddress::Stack(offset))
+    }
+    fn word(&self, address: WordAddress) -> Option<Value> {
         self.slots
             .iter()
             .flatten()
-            .find(|(at, _)| *at == offset)
+            .find(|(at, _)| *at == address)
             .map(|(_, value)| *value)
     }
     /// Forget every slot a `width`-byte store at `offset` overlaps.
     fn clobber(&mut self, offset: i64, width: u8) {
+        self.clobber_word(Some(WordAddress::Stack(offset)), width);
+    }
+    fn clobber_word(&mut self, address: Option<WordAddress>, width: u8) {
         for slot in &mut self.slots {
             if let Some((at, _)) = *slot
-                && at < offset.saturating_add(i64::from(width))
-                && offset < at.saturating_add(4)
+                && !address.is_some_and(|address| address.disjoint(width, at, 4))
             {
                 *slot = None;
             }
@@ -72,25 +104,30 @@ impl State {
     }
     fn remember(&mut self, offset: i64, value: Value) {
         self.clobber(offset, 4);
+        self.remember_word(WordAddress::Stack(offset), value);
+    }
+    fn remember_word(&mut self, address: WordAddress, value: Value) {
         if let Some(free) = self.slots.iter_mut().find(|slot| slot.is_none()) {
-            *free = Some((offset, value));
+            *free = Some((address, value));
         }
         self.canonical();
     }
     fn capture(&mut self, offset: i64, value: Value) {
-        self.clobber(offset, 4);
+        self.capture_word(WordAddress::Stack(offset), value);
+    }
+    fn capture_word(&mut self, address: WordAddress, value: Value) {
+        self.clobber_word(Some(address), 4);
         if let Some(last) = self.slots.last_mut()
-            && last.is_some_and(|(at, _)| offset < at)
+            && last.is_some_and(|(at, _)| address < at)
         {
-            // Keep a fixed projection onto the lowest stack addresses, so
-            // entry register saves cannot occupy every word indefinitely.
+            // A fixed projection avoids a visit-order-dependent eviction policy.
             *last = None;
         }
-        self.remember(offset, value);
+        self.remember_word(address, value);
     }
     fn canonical(&mut self) {
         self.slots
-            .sort_unstable_by_key(|slot| slot.map_or((1, 0), |(at, _)| (0, at)));
+            .sort_unstable_by_key(|slot| (slot.is_none(), slot.map(|(at, _)| at)));
     }
 }
 fn unknown_state() -> State {
@@ -130,10 +167,10 @@ fn join(
         let Some((at, value)) = old.slots[i] else {
             continue;
         };
-        let joined = match new.slot(at) {
-            Some(other) => sets.join(value, other, control)?,
-            None => Value::Unknown,
-        };
+        let joined = new
+            .word(at)
+            .filter(|other| *other == value)
+            .unwrap_or(Value::Unknown);
         let next = (exact(joined) || matches!(joined, Value::Expr(_))).then_some((at, joined));
         changed |= old.slots[i] != next;
         old.slots[i] = next;
@@ -881,6 +918,7 @@ pub(super) fn analyze_with<'m>(
     )?;
     let mut symbols = Symbols::new(if symbolic { nodes.len() } else { 0 }, memory, control)?;
     symbols.symbolic_spills = symbolic_spills;
+    symbols.memory_words = symbolic_spills && closed_graph;
     symbols.stack_calls = stack_calls;
     let mut states = reserve_vec::<Option<State>>(nodes.len())?;
     states.resize(nodes.len(), None);
@@ -1017,6 +1055,22 @@ pub(super) fn analyze_with<'m>(
             memory,
             control,
         )?;
+        if let Some(query) = context.query {
+            context.word = word::analyze(
+                context.context,
+                query,
+                closed_graph,
+                input,
+                nodes,
+                edges,
+                &operations,
+                &states,
+                isa,
+                &mut symbols,
+                memory,
+                control,
+            )?;
+        }
     }
     // Emit after convergence. Re-evaluation below only reuses stable DAG nodes.
     let mut emitted = 0;
@@ -1327,6 +1381,8 @@ pub(super) fn analyze_with<'m>(
 struct Symbols<'a> {
     stack_calls: Option<&'a writes::StackCalls<'a>>,
     symbolic_spills: bool,
+    memory_words: bool,
+    word_range: Option<word::Range>,
     sets: Sets<'a>,
     records: AdmittedVec<'a, (u64, Expression)>,
     slots: AdmittedVec<'a, Option<u32>>,
@@ -1348,6 +1404,8 @@ impl<'a> Symbols<'a> {
         };
         Ok(Self {
             symbolic_spills: false,
+            memory_words: false,
+            word_range: None,
             stack_calls: None,
             sets: Sets::new(memory),
             records: AdmittedVec::new(memory),
@@ -1368,7 +1426,7 @@ impl<'a> Symbols<'a> {
         if let Some(id) = at.and_then(|at| self.slots[at]) {
             return Ok(Value::Expr(id));
         }
-        if self.records.len() == self.limit {
+        if self.records.len() >= self.limit {
             return Err(Error::new(
                 ErrorCode::ResourceLimited,
                 "expression capacity exhausted",
@@ -1457,6 +1515,11 @@ impl<'a> Symbols<'a> {
         input: &FunctionInput<'_>,
         c: &mut dyn RunControl,
     ) -> Result<Value> {
+        if self.word_range.is_some()
+            && let Some(value) = word::binary(self, site, op, a, b, c)?
+        {
+            return Ok(value);
+        }
         let simple = self.sets.binary(a, b, c, |a, b| integer(op, a, b))?;
         if simple != Value::Unknown {
             return Ok(simple);
@@ -1473,6 +1536,129 @@ impl<'a> Symbols<'a> {
             },
             c,
         )
+    }
+    fn word_address(
+        &self,
+        value: Value,
+        depth: u8,
+        c: &mut dyn RunControl,
+    ) -> Result<Option<WordAddress>> {
+        c.checkpoint(1)?;
+        if depth == 0 {
+            return Ok(None);
+        }
+        Ok(match value {
+            Value::Stack(offset) => Some(WordAddress::Stack(offset)),
+            Value::Constant(address) | Value::Image(address) => {
+                Some(WordAddress::Absolute(address))
+            }
+            Value::Expr(id) => match self.records.get(id as usize).map(|(_, e)| e) {
+                Some(Expression::EntryRegister { .. }) => Some(WordAddress::Expression {
+                    base: id,
+                    offset: 0,
+                }),
+                Some(Expression::Integer { op, left, right }) => {
+                    let pair = match (op, left, right) {
+                        (IntegerOp::Add, base, AbstractValue::Constant { value })
+                        | (IntegerOp::Add, AbstractValue::Constant { value }, base) => {
+                            Some((base, *value))
+                        }
+                        (IntegerOp::Sub, base, AbstractValue::Constant { value }) => {
+                            Some((base, value.wrapping_neg()))
+                        }
+                        (IntegerOp::And, base, AbstractValue::Constant { value: u32::MAX })
+                        | (IntegerOp::And, AbstractValue::Constant { value: u32::MAX }, base) => {
+                            Some((base, 0))
+                        }
+                        _ => None,
+                    };
+                    if let Some((base, delta)) = pair {
+                        let base = match base {
+                            AbstractValue::Expression { id } => Value::Expr(*id),
+                            AbstractValue::EntryStack { offset } => Value::Stack(*offset),
+                            AbstractValue::Constant { value } => Value::Constant(*value),
+                            AbstractValue::ImageAddress { address } => Value::Image(*address),
+                            _ => Value::Unknown,
+                        };
+                        match self.word_address(base, depth - 1, c)? {
+                            Some(WordAddress::Stack(at)) => at
+                                .checked_add(i64::from(delta as i32))
+                                .map(WordAddress::Stack),
+                            Some(WordAddress::Absolute(at)) => {
+                                Some(WordAddress::Absolute(at.wrapping_add(delta)))
+                            }
+                            Some(WordAddress::Expression { base, offset }) => {
+                                Some(WordAddress::Expression {
+                                    base,
+                                    offset: offset.wrapping_add(delta),
+                                })
+                            }
+                            None => None,
+                        }
+                    } else {
+                        None
+                    }
+                }
+                _ => None,
+            },
+            _ => None,
+        })
+    }
+    fn word_value(
+        &self,
+        value: Value,
+        owner: u64,
+        c: &mut dyn RunControl,
+    ) -> Result<writes::WriteValue> {
+        use writes::{WriteBase, WriteValue};
+        Ok(match self.word_address(value, 32, c)? {
+            Some(WordAddress::Stack(offset)) => WriteValue::base(WriteBase::Stack {
+                function: owner,
+                offset,
+            }),
+            Some(WordAddress::Absolute(address)) => WriteValue::base(WriteBase::Address(address)),
+            Some(WordAddress::Expression { base, offset }) => match self.records.get(base as usize)
+            {
+                Some((_, Expression::EntryRegister { register })) => CallAbi::RiscvInteger
+                    .argument_word(*register)
+                    .map_or(WriteValue::UNKNOWN, |word| WriteValue::Base {
+                        base: WriteBase::Argument(word as u8),
+                        offset,
+                    }),
+                _ => WriteValue::UNKNOWN,
+            },
+            None => WriteValue::UNKNOWN,
+        })
+    }
+    fn import_word_value(
+        &mut self,
+        value: writes::WriteValue,
+        owner: u64,
+        input: &FunctionInput<'_>,
+        site: u64,
+        c: &mut dyn RunControl,
+    ) -> Result<Value> {
+        use writes::{WriteBase, WriteValue};
+        let WriteValue::Base {
+            base,
+            offset: delta,
+        } = value
+        else {
+            return Ok(Value::Unknown);
+        };
+        let base = match base {
+            WriteBase::Stack { function, offset } if function == owner => Value::Stack(offset),
+            WriteBase::Address(address) => Value::Constant(address),
+            WriteBase::Argument(word) if word < 8 => self.expression(
+                u64::MAX,
+                Expression::EntryRegister {
+                    register: word + 10,
+                },
+                c,
+            )?,
+            _ => return Ok(Value::Unknown),
+        };
+        self.binary(site, IntegerOp::Add, base, Value::Constant(delta), input, c)
     }
 }
 #[allow(clippy::too_many_arguments)]
@@ -1544,6 +1730,35 @@ fn evaluate(
                 _ => effects.memory.and_then(|m| m.3),
             };
             effects.memory = Some((kind, width, address, value));
+            if symbols.memory_words {
+                // The shared transfer first handled concrete stack words.
+                // Refine its address through the same expression DAG and
+                // apply the SAME word lattice's alias/overlap/join rules.
+                state.slots = incoming.slots;
+                let at = symbols.word_address(address, 32, c)?;
+                if !matches!(
+                    kind,
+                    MemoryKind::Load | MemoryKind::LoadReserved | MemoryKind::FloatLoad
+                ) {
+                    state.clobber_word(at, width);
+                    if kind == MemoryKind::Store
+                        && width == 4
+                        && let (Some(at), Some(value)) = (at, value)
+                        && (exact(value) || matches!(value, Value::Expr(_)))
+                    {
+                        state.capture_word(at, value);
+                    }
+                }
+                if kind == MemoryKind::Load
+                    && width == 4
+                    && let (Some(at), Some(dest)) = (at, dest)
+                    && dest != 0
+                    && let Some(value) = state.word(at)
+                {
+                    state[dest as usize] = value;
+                    effects.register = Some((dest, value));
+                }
+            }
             if symbols.symbolic_spills
                 && kind == MemoryKind::Store
                 && width == 4
@@ -1597,6 +1812,9 @@ fn evaluate(
             };
             let target = public(target, input, &symbols.sets);
             for (at, value) in incoming.slots.iter().flatten() {
+                let WordAddress::Stack(at) = at else {
+                    continue;
+                };
                 if calls.preserves(
                     input.extent.start,
                     node.offset,
@@ -1606,6 +1824,55 @@ fn evaluate(
                     c,
                 )? {
                     state.remember(*at, *value);
+                }
+            }
+            let mut arguments = [writes::WriteValue::UNKNOWN; 8];
+            for (word, argument) in arguments.iter_mut().enumerate() {
+                *argument = symbols.word_value(incoming[word + 10], input.extent.start, c)?;
+            }
+            if let Some(word) =
+                calls.word(input.extent.start, node.offset, &target, &arguments, c)?
+            {
+                let source = symbols.import_word_value(
+                    word.contents.source,
+                    input.extent.start,
+                    input,
+                    node.offset,
+                    c,
+                )?;
+                let destination = symbols.import_word_value(
+                    word.contents.destination,
+                    input.extent.start,
+                    input,
+                    node.offset,
+                    c,
+                )?;
+                if let Some(destination) = symbols.word_address(destination, 32, c)? {
+                    let captured = if word.contents.source_unchanged_before_load {
+                        symbols
+                            .word_address(source, 32, c)?
+                            .and_then(|source| incoming.word(source))
+                    } else {
+                        None
+                    };
+                    let value = match captured {
+                        Some(value) => value,
+                        None => symbols.expression(
+                            node.offset,
+                            Expression::CallWord {
+                                callsite: node.offset,
+                                owner: word.contents.origin.function,
+                                load: word.contents.load,
+                                load_order: word.contents.load_order,
+                                store: word.contents.store,
+                                store_order: word.contents.store_order,
+                                width: word.contents.width,
+                                source: public(source, input, &symbols.sets),
+                            },
+                            c,
+                        )?,
+                    };
+                    state.capture_word(destination, value);
                 }
             }
         }
