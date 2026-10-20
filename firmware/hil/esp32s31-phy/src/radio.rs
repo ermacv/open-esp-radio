@@ -353,6 +353,12 @@ impl Radio {
                 (0, true)
             }
         };
+        // Print only after tracking returns, outside all measured intervals.
+        oer_esp32s31_board::rom::print_fmt(format_args!(
+            "OPEN_RADIO_HIL sar_tail tick={} {:?}\n",
+            hold.samples.len() + 1,
+            observer.1,
+        ));
         let sample = observer.0.finish(committed, failed);
         hold.invalid |= sample.invalid;
         if hold.samples.push(sample).is_err() {

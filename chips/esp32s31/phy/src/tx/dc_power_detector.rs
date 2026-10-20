@@ -157,15 +157,16 @@ impl PhyTxDcPwdetSearchTransition {
     /// materialize an action/completion enum for every PBus write, settle or
     /// SAR status sample.
     #[cfg(target_arch = "riscv32")]
-    pub(crate) fn execute_target_direct(
+    pub(crate) async fn execute_target_direct(
         &mut self,
-        clock: &dyn oer_time::Clock,
+        clock: &impl oer_time::Timer,
         registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
         mut settle: impl FnMut(
             crate::executor::wait::tx::Scope,
             u32,
         ) -> Result<(), crate::target_executor::PhyTargetPortError>,
         mut observe_ready: impl FnMut(bool),
+        mut observe_wait: impl FnMut(u64, u16, bool),
     ) -> Result<
         Result<PhyTxDcPwdetSearchOutcome, PhyTxDcPwdetSearchFailure>,
         crate::target_executor::PhyTargetPortError,
@@ -204,26 +205,21 @@ impl PhyTxDcPwdetSearchTransition {
                         settle(Scope::Tone, 1)?;
                         oer_esp32s31_hal::phy::power_detector::trigger_sar(registers);
                         settle(Scope::Sar, 2)?;
-                        let mut observations = 0_u16;
-                        let ready =
-                            crate::executor::wait::poll::bounded::<core::convert::Infallible>(
-                                clock,
-                                || {
-                                    let ready = oer_esp32s31_hal::phy::power_detector::sample_ready(
-                                        registers,
-                                    );
-                                    observe_ready(ready);
-                                    observations = observations.wrapping_add(1);
-                                    Ok(ready)
-                                },
-                            )
-                            .unwrap_or_else(|never| match never {});
-                        if !ready {
+                        let waited =
+                            crate::tx::sar::wait(clock, crate::tx::sar::READY_LIMIT, || {
+                                let ready =
+                                    oer_esp32s31_hal::phy::power_detector::sample_ready(registers);
+                                observe_ready(ready);
+                                ready
+                            })
+                            .await;
+                        if !waited.ready {
+                            observe_wait(waited.elapsed_micros, waited.observations, false);
                             return Ok(Err(PhyTxDcPwdetSearchFailure::ToneSar(
                                 PhyToneSarFailure::ReadyObservationLimit {
                                     measurement,
                                     sample,
-                                    observations,
+                                    observations: waited.observations,
                                 },
                             )));
                         }
@@ -233,6 +229,7 @@ impl PhyTxDcPwdetSearchTransition {
                         sum = sum.wrapping_add(u32::from(
                             oer_esp32s31_hal::phy::power_detector::sample_sar(registers),
                         ));
+                        observe_wait(waited.elapsed_micros, waited.observations, true);
                     }
                     let measured = (sum / 2) as u16;
                     self.total_measurements = self.total_measurements.wrapping_add(1);
@@ -804,15 +801,16 @@ impl PhyTxDcPwdetTransition {
     /// retained for host verification, while per-edge action, binding and
     /// completion values stay out of the calibration hot loop.
     #[cfg(target_arch = "riscv32")]
-    pub(crate) fn execute_target_direct(
+    pub(crate) async fn execute_target_direct(
         &mut self,
-        clock: &dyn oer_time::Clock,
+        clock: &impl oer_time::Timer,
         registers: &mut impl oer_esp32s31_hal::owner::SharedPhyContext,
         mut settle: impl FnMut(
             crate::executor::wait::tx::Scope,
             u32,
         ) -> Result<(), crate::target_executor::PhyTargetPortError>,
         mut observe_ready: impl FnMut(bool),
+        mut observe_wait: impl FnMut(u64, u16, bool),
     ) -> Result<(), crate::target_executor::PhyTargetPortError> {
         use crate::target_executor::{PhyTargetPortError, force_pbus_direct};
 
@@ -891,12 +889,16 @@ impl PhyTxDcPwdetTransition {
                     initial: self.dco[row as usize],
                     clear_tone_after_ready: self.parameters.clear_tone_after_ready,
                 });
-                match search.execute_target_direct(
-                    clock,
-                    registers,
-                    &mut settle,
-                    &mut observe_ready,
-                )? {
+                match search
+                    .execute_target_direct(
+                        clock,
+                        registers,
+                        &mut settle,
+                        &mut observe_ready,
+                        &mut observe_wait,
+                    )
+                    .await?
+                {
                     Ok(outcome) => {
                         self.dco[row as usize] = outcome.dco;
                         self.total_measurements = self

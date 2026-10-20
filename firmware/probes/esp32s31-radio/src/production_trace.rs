@@ -405,12 +405,12 @@ oer_probe_macros::probe! {
         let lease = &mut radio;
         let mut phy = lease.phy_hal();
         let mut observer = NoopPhyTargetObserver;
-        match calibration::tx_dc_pwdet_init::<oer_esp32s31_phy::RomShortDelay, _>(
+        match embassy_futures::block_on(calibration::tx_dc_pwdet_init::<oer_esp32s31_phy::RomShortDelay, _>(
             &mut child,
             &mut phy,
             &core::cell::RefCell::new(&mut observer),
             &TraceTimer::observations(),
-        ) {
+        )) {
             Ok(()) => {}
             Err(oer_esp32s31_phy::PhyTargetPortError::HardwareEdgeTimedOut) => return 2,
             Err(oer_esp32s31_phy::PhyTargetPortError::RfOperationLimit) => return 6,
