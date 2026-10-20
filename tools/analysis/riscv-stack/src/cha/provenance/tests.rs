@@ -975,6 +975,23 @@ fn an_unknown_incoming_pointer_stops_transport_at_the_join() {
 }
 
 #[test]
+fn equal_possible_sources_do_not_prove_register_equality() {
+    // At the join t0 and a1 both range over the two incoming pointer
+    // values, but they select opposite values on each path. In particular
+    // a1's earlier typed value cannot justify a field reached through t0.
+    transported_base(
+        "beq a2, zero, other",
+        "addi t1, a3, 0\nj joined\nother: addi t0, a3, 0\naddi t1, a1, 0\njoined: addi a1, t1, 0",
+        false,
+    );
+}
+
+#[test]
+fn a_call_with_unknown_memory_effects_stops_transport() {
+    transported_base("", "jal ra, typed_start", false);
+}
+
+#[test]
 fn overwriting_the_pointer_stops_transport() {
     transported_base("", "addi t0, a2, 0", false);
 }
