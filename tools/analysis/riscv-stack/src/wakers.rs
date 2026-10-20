@@ -77,6 +77,7 @@ pub fn waker_resolutions(
                 continue;
             }
             let chain = dwarf.inline_chain(transfer.site)?;
+            let mut open_exit = false;
             let mut scratch = Ledger::new(keep.memory(), control)?;
             let mut slots = BTreeSet::new();
             if let Some(slot) = chain.first().and_then(|function| slot(function)) {
@@ -85,7 +86,11 @@ pub fn waker_resolutions(
                 // A source scope can end before the call. Use every reaching
                 // target load in the complete local graph, including merges
                 // of wake and wake_by_ref. A single unknown path leaves a hole.
-                let Some(loads) = facts.target_loads.get(&transfer.site) else {
+                let loads = facts.target_loads.get(&transfer.site).or_else(|| {
+                    open_exit = true;
+                    facts.open_exit_target_loads.get(&transfer.site)
+                });
+                let Some(loads) = loads else {
                     continue;
                 };
                 let mut known = true;
@@ -103,6 +108,22 @@ pub fn waker_resolutions(
                     scratch.add(&mut slots, slot, control)?;
                 }
                 if !known || slots.is_empty() {
+                    continue;
+                }
+            }
+            if open_exit {
+                let start = u64::from(facts.function.address);
+                let end = start + u64::from(facts.function.size);
+                let mut local_target = false;
+                for vtable in vtables {
+                    for slot in &slots {
+                        control.checkpoint(1)?;
+                        if (start..end).contains(&u64::from(vtable[*slot])) {
+                            local_target = true;
+                        }
+                    }
+                }
+                if local_target {
                     continue;
                 }
             }

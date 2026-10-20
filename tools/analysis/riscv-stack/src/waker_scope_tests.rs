@@ -214,7 +214,180 @@ fn an_adjusted_function_pointer_does_not_inherit_the_producers_scope() {
 }
 
 const LOAD_BY_REF: u32 = 0x0085_2783; // lw a5, 8(a0).
+const TAIL_A5: u32 = 0x0007_8067; // jalr zero, 0(a5).
 const UNIMP: u32 = 0x0000_0000; // Two compressed unimp instructions.
+
+fn merged_tail() -> (Analysis, Dwarf, [u32; 4]) {
+    fixture_with(
+        vec![0x0005_0663, LOAD_WAKE, 0x0080_006f, LOAD_BY_REF, TAIL_A5],
+        &[
+            (TEXT + 4, TEXT + 8, "wake"),
+            (TEXT + 12, TEXT + 16, "wake_by_ref"),
+        ],
+        &[],
+    )
+}
+
+#[test]
+fn a_merged_tail_uses_both_slots_of_every_vtable_without_exposing_ordinary_loads() {
+    let (analysis, dwarf, first) = merged_tail();
+    let facts = &analysis.functions[&TEXT];
+    let site = TEXT + 16;
+    assert_eq!(dwarf.inline_chain(site).unwrap(), ["root"]);
+    assert!(facts.target_loads.is_empty());
+    assert!(facts.load_bases.is_empty());
+    assert_eq!(
+        facts.open_exit_target_loads[&site]
+            .iter()
+            .map(|load| load.offset)
+            .collect::<BTreeSet<_>>(),
+        BTreeSet::from([4, 8])
+    );
+    let second = [first[0], first[3], first[3] + 4, first[0]];
+    let resolutions = waker_resolutions(
+        &analysis,
+        &dwarf,
+        &[first, second],
+        &mut ledger(),
+        &mut || Ok(()),
+    )
+    .unwrap();
+    let resolved = resolutions.get(site).unwrap();
+    assert_eq!(resolved.facts, BTreeSet::from([Fact::WakerVtables]));
+    assert_eq!(
+        resolved.targets,
+        BTreeSet::from([first[1], first[2], second[1], second[2]])
+    );
+    assert_eq!(
+        analysis.bound_with(TEXT, &resolutions).unwrap().bytes,
+        Some(64)
+    );
+}
+
+#[test]
+fn another_unresolved_jump_blocks_the_merged_tail_loads() {
+    let (analysis, dwarf, targets) = fixture_with(
+        vec![
+            0x0006_0c63,
+            0x0005_0663,
+            LOAD_WAKE,
+            0x0080_006f,
+            LOAD_BY_REF,
+            TAIL_A5,
+            0x0007_0067,
+        ], // The entry branch reaches jr a4.
+        &[
+            (TEXT + 8, TEXT + 12, "wake"),
+            (TEXT + 16, TEXT + 20, "wake_by_ref"),
+        ],
+        &[],
+    );
+    let facts = &analysis.functions[&TEXT];
+    assert!(facts.target_loads.is_empty());
+    assert!(facts.open_exit_target_loads.is_empty());
+    let resolutions =
+        waker_resolutions(&analysis, &dwarf, &[targets], &mut ledger(), &mut || Ok(())).unwrap();
+    assert!(resolutions.is_empty());
+}
+
+#[test]
+fn an_unresolved_call_still_requires_a_closed_graph() {
+    let (analysis, dwarf, targets) = fixture_with(
+        vec![
+            0x0006_0863, // beq a2, zero, +16 to the call path.
+            LOAD_WAKE,
+            TAIL_A5,
+            RET,
+            LOAD_WAKE,
+            CALL_A5,
+            RET,
+        ],
+        &[(TEXT + 4, TEXT + 8, "wake"), (TEXT + 16, TEXT + 20, "wake")],
+        &[],
+    );
+    let facts = &analysis.functions[&TEXT];
+    assert!(facts.target_loads.is_empty());
+    assert!(facts.open_exit_target_loads.contains_key(&(TEXT + 8)));
+    assert!(!facts.open_exit_target_loads.contains_key(&(TEXT + 20)));
+    let resolutions =
+        waker_resolutions(&analysis, &dwarf, &[targets], &mut ledger(), &mut || Ok(())).unwrap();
+    assert!(resolutions.get(TEXT + 8).is_some());
+    assert!(resolutions.get(TEXT + 20).is_none());
+}
+
+#[test]
+fn a_compressed_tail_uses_the_same_target_load_proof() {
+    let (analysis, dwarf, targets) = fixture_with(
+        vec![LOAD_WAKE, 0x0001_8782], // c.jr a5; unvisited c.nop.
+        &[(TEXT, TEXT + 4, "wake")],
+        &[],
+    );
+    assert!(analysis.functions[&TEXT].target_loads.is_empty());
+    assert!(
+        analysis.functions[&TEXT]
+            .open_exit_target_loads
+            .contains_key(&(TEXT + 4))
+    );
+    let resolutions =
+        waker_resolutions(&analysis, &dwarf, &[targets], &mut ledger(), &mut || Ok(())).unwrap();
+    assert_eq!(
+        resolutions.get(TEXT + 4).unwrap().targets,
+        BTreeSet::from([targets[1]])
+    );
+}
+
+#[test]
+fn any_selected_slot_in_any_vtable_inside_the_function_blocks_the_tail() {
+    let (analysis, dwarf, targets) = merged_tail();
+    let end = TEXT + analysis.functions[&TEXT].function.size;
+    for table in 0..2 {
+        for slot in [1, 2] {
+            for local in [TEXT, TEXT + 4, end - 2] {
+                let mut tables = [targets; 2];
+                tables[table][slot] = local;
+                let resolutions =
+                    waker_resolutions(&analysis, &dwarf, &tables, &mut ledger(), &mut || Ok(()))
+                        .unwrap();
+                assert!(resolutions.get(TEXT + 16).is_none(), "{tables:?}");
+            }
+        }
+    }
+    let mut boundary = targets;
+    boundary[1] = end;
+    let resolutions =
+        waker_resolutions(
+            &analysis,
+            &dwarf,
+            &[boundary],
+            &mut ledger(),
+            &mut || Ok(()),
+        )
+        .unwrap();
+    assert!(resolutions.get(TEXT + 16).unwrap().targets.contains(&end));
+}
+
+#[test]
+fn an_unknown_incoming_producer_keeps_a_tail_unresolved() {
+    let (analysis, dwarf, targets) = fixture_with(
+        vec![
+            0x0006_0a63,
+            0x0005_0663,
+            LOAD_WAKE,
+            0x0080_006f,
+            LOAD_BY_REF,
+            TAIL_A5,
+        ],
+        &[
+            (TEXT + 8, TEXT + 12, "wake"),
+            (TEXT + 16, TEXT + 20, "wake_by_ref"),
+        ],
+        &[],
+    );
+    assert!(analysis.functions[&TEXT].open_exit_target_loads.is_empty());
+    let resolutions =
+        waker_resolutions(&analysis, &dwarf, &[targets], &mut ledger(), &mut || Ok(())).unwrap();
+    assert!(resolutions.is_empty());
+}
 
 #[test]
 fn an_object_call_requires_the_same_relocated_upper_on_every_path() {

@@ -130,8 +130,11 @@ pub fn print(
         control,
         |observe, control| {
             let observed = observe(function, &jumps, &tables, &mut work, control)?;
-            println!("stack-observation-closed_graph\t{}", observed.closed_graph);
-            Ok(observed.closed_graph)
+            println!(
+                "stack-observation-closed_graph\t{}",
+                observed.closed_graph()
+            );
+            Ok(observed.closed_graph())
         },
     )?;
     let view = ProgramView::new(facts.bytes(), facts.file(), &[], memory, control)?;

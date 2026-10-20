@@ -13,6 +13,10 @@ use std::collections::BTreeMap;
 
 const SP: u8 = 2;
 
+#[cfg(test)]
+#[path = "image_tests.rs"]
+mod tests;
+
 /// A defined code symbol and every alias at its address.
 pub use oer_analysis_elf::Function;
 
@@ -157,7 +161,68 @@ pub(crate) struct Observation {
     /// The exact integer registers at each transfer the analysis reached.
     pub site_registers: BTreeMap<u32, [Option<u32>; 32]>,
     pub predecessors: BTreeMap<u32, Vec<u32>>,
-    pub closed_graph: bool,
+    open_graph: OpenGraph,
+}
+
+impl Observation {
+    pub fn closed_graph(&self) -> bool {
+        self.open_graph.closed()
+    }
+
+    /// Only this unresolved external indirect exit is missing. Its eventual
+    /// targets must all be outside the function before using this proof.
+    pub fn closed_except(&self, site: u32) -> bool {
+        !self.open_graph.whole
+            && self.open_graph.sites.len() == 1
+            && self.open_graph.sites.get(&u64::from(site)) == Some(&true)
+            && !self
+                .predecessors
+                .values()
+                .any(|incoming| incoming.contains(&site))
+    }
+}
+
+#[derive(Default)]
+struct OpenGraph {
+    // A site is eligible only if every opening record there is an
+    // unresolved external indirect edge, rather than a gap or conflict.
+    sites: BTreeMap<u64, bool>,
+    whole: bool,
+}
+
+impl OpenGraph {
+    fn closed(&self) -> bool {
+        !self.whole && self.sites.is_empty()
+    }
+
+    fn record(
+        &mut self,
+        record: &FunctionRecord,
+        ledger: &mut Ledger<'_>,
+        control: &mut dyn RunControl,
+    ) -> Result<()> {
+        if oer_analysis_riscv_analysis::writes::closes_local_graph(record) {
+            return Ok(());
+        }
+        let (site, eligible) = match record {
+            FunctionRecord::Edge {
+                from,
+                target,
+                relation,
+                external,
+            } => (
+                *from,
+                target.is_none() && *relation == EdgeKind::Indirect && *external,
+            ),
+            FunctionRecord::Gap { start, .. } => (*start, false),
+            _ => {
+                self.whole = true;
+                return Ok(());
+            }
+        };
+        *ledger.entry(&mut self.sites, site, || true, control)? &= eligible;
+        Ok(())
+    }
 }
 
 /// The value analysis's records of one function, read into what the stack
@@ -171,12 +236,12 @@ struct Observer<'l, 'm> {
     site_registers: BTreeMap<u32, [Option<u32>; 32]>,
     transfers: Vec<(u32, u32, TransferKind)>,
     predecessors: BTreeMap<u32, Vec<u32>>,
-    closed_graph: bool,
+    open_graph: OpenGraph,
 }
 
 impl FunctionSink for Observer<'_, '_> {
     fn record(&mut self, record: &FunctionRecord, control: &mut dyn RunControl) -> Result<()> {
-        self.closed_graph &= oer_analysis_riscv_analysis::writes::closes_local_graph(record);
+        self.open_graph.record(record, self.ledger, control)?;
         match record {
             FunctionRecord::Edge {
                 from,
@@ -328,7 +393,7 @@ pub(crate) fn observing<R>(
             site_registers: BTreeMap::new(),
             transfers: Vec::new(),
             predecessors: BTreeMap::new(),
-            closed_graph: true,
+            open_graph: OpenGraph::default(),
         };
         let (summary, followed) = research_following_tables(
             FunctionInput {
@@ -373,7 +438,7 @@ pub(crate) fn observing<R>(
             site_depths: observer.site_depths,
             site_registers: observer.site_registers,
             predecessors: observer.predecessors,
-            closed_graph: observer.closed_graph,
+            open_graph: observer.open_graph,
         })
     };
     body(&mut observe, control)
