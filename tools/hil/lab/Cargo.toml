@@ -13,6 +13,7 @@ description = "HIL run-level stand operation: the laboratory configuration, the 
 test-support = []
 
 [dependencies]
+hex = "=0.4.3"
 oer-lab-router = { path = "../../lab/router" }
 oer-lab-board = { path = "../../lab/board" }
 oer-hil-runs = { path = "../runs" }

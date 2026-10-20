@@ -271,10 +271,7 @@ fn parse(text: &str) -> Result<Vec<Frame>> {
                     "1" | "True" => true,
                     _ => return Err("invalid retry bit".into()),
                 },
-                ssid: (0..ssid.len())
-                    .step_by(2)
-                    .map(|i| u8::from_str_radix(&ssid[i..i + 2], 16))
-                    .collect::<std::result::Result<_, _>>()?,
+                ssid: hex::decode(&ssid).map_err(|_| "invalid digit found in string")?,
             })
         })
         .collect()

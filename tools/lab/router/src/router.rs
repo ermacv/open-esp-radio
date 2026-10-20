@@ -29,7 +29,7 @@
 //! outside it. An SSID is kept only as whether it is the stand's. The SSH
 //! target, the interface, every SSID and the full BSSID appear in no
 //! message, error or `Debug`; a script's output and stderr are never shown.
-//! Values reach the remote shell single-quoted, inside the script on stdin.
+//! Values reach the remote shell quoted by shlex, inside the script on stdin.
 
 use std::{fmt, time::Duration};
 
@@ -73,8 +73,10 @@ fn section_name(text: &str) -> bool {
 }
 
 /// `text` as one word of the remote shell.
-pub fn quote(text: &str) -> String {
-    format!("'{}'", text.replace('\'', r"'\''"))
+pub fn quote(text: &str) -> Result<String> {
+    shlex::try_quote(text)
+        .map(|word| word.into_owned())
+        .map_err(|error| error.to_string())
 }
 
 /// Step 1: the staged changes, cut to their option paths on the router.
@@ -171,50 +173,50 @@ impl Profile {
 
     /// Step 3: the channels of the radio's PHY, filtered on the router to
     /// the frequency lines.
-    fn channels_script(&self) -> String {
-        format!(
+    fn channels_script(&self) -> Result<String> {
+        Ok(format!(
             "phy=$(ubus call iwinfo phyname {} | jsonfilter -e '@.phyname') && test -n \"$phy\" \
              && info=$(iw phy \"$phy\" info) && printf '%s\\n' \"$info\" | grep -E \
              '^[[:space:]]*\\* [0-9]+(\\.[0-9]+)? MHz \\['",
-            quote(&format!("{{\"section\":\"{}\"}}", self.radio))
-        )
+            quote(&format!("{{\"section\":\"{}\"}}", self.radio))?
+        ))
     }
 
     /// Step 4: the profile, committed and reloaded.
-    fn apply_script(&self) -> String {
-        let set = |section: &str, option: &str, value: &str| {
-            format!(
+    fn apply_script(&self) -> Result<String> {
+        let set = |section: &str, option: &str, value: &str| -> Result<String> {
+            Ok(format!(
                 "uci set {}",
-                quote(&format!("wireless.{section}.{option}={value}"))
-            )
+                quote(&format!("wireless.{section}.{option}={value}"))?
+            ))
         };
-        [
-            set(&self.radio, "channel", &self.channel.to_string()),
-            set(&self.radio, "htmode", HTMODE),
-            set(&self.radio, "beacon_int", &BEACON_INTERVAL_TU.to_string()),
-            set(&self.radio, "disabled", "0"),
-            set(&self.ap_section, "ssid", &self.ssid),
-            set(&self.ap_section, "disabled", "0"),
-            set(&self.ap_section, "hidden", "0"),
+        Ok([
+            set(&self.radio, "channel", &self.channel.to_string())?,
+            set(&self.radio, "htmode", HTMODE)?,
+            set(&self.radio, "beacon_int", &BEACON_INTERVAL_TU.to_string())?,
+            set(&self.radio, "disabled", "0")?,
+            set(&self.ap_section, "ssid", &self.ssid)?,
+            set(&self.ap_section, "disabled", "0")?,
+            set(&self.ap_section, "hidden", "0")?,
             "uci commit wireless".to_owned(),
             "wifi reload".to_owned(),
         ]
-        .join(" && ")
+        .join(" && "))
     }
 
     /// Step 6: the AP interface, filtered on the router to the lines read.
-    fn iw_script(&self) -> String {
-        format!(
+    fn iw_script(&self) -> Result<String> {
+        Ok(format!(
             "info=$(iw dev {} info) && printf '%s\\n' \"$info\" | grep -E \
              '^[[:space:]]*(addr|ssid|type|channel) '",
-            quote(&self.interface)
-        )
+            quote(&self.interface)?
+        ))
     }
 }
 
 /// The remote scripts in order, values as `<placeholders>`: what [`apply`]
 /// runs, as the README lists them.
-pub fn plan() -> Vec<String> {
+pub fn plan() -> Result<Vec<String>> {
     let profile = Profile {
         radio: "<radio>".to_owned(),
         ap_section: "<ap_section>".to_owned(),
@@ -222,16 +224,16 @@ pub fn plan() -> Vec<String> {
         channel: 0,
         ssid: "<ssid>".to_owned(),
     };
-    vec![
+    Ok(vec![
         CHANGES.to_owned(),
         show_script(),
-        profile.channels_script(),
+        profile.channels_script()?,
         profile
-            .apply_script()
+            .apply_script()?
             .replace("channel=0", "channel=<channel>"),
         show_script(),
-        profile.iw_script(),
-    ]
+        profile.iw_script()?,
+    ])
 }
 
 /// The applied profile: the stand AP's BSSID and channel, and the radio's
@@ -268,11 +270,11 @@ pub fn apply(remote: &mut dyn Remote, profile: &Profile) -> Result<Applied> {
     )?;
     let radio = before.check_before(profile)?;
     let channels = remote
-        .run(&profile.channels_script())
+        .run(&profile.channels_script()?)
         .map_err(step("reading the radio's channels"))?;
     check_channel(&channels, profile.channel, radio.option("country"))?;
     remote
-        .run(&profile.apply_script())
+        .run(&profile.apply_script()?)
         .map_err(step("applying the profile"))?;
     let after = Wireless::parse(
         &remote
@@ -330,7 +332,7 @@ fn step(what: &str) -> impl FnOnce(String) -> String + '_ {
 
 /// Step 6: the AP interface until it runs the profile.
 fn settle(remote: &mut dyn Remote, profile: &Profile, country: [u8; 2]) -> Result<Applied> {
-    let script = profile.iw_script();
+    let script = profile.iw_script()?;
     let mut last = String::new();
     for attempt in 0..SETTLE_ATTEMPTS {
         if attempt > 0 {

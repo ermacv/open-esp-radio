@@ -9,6 +9,7 @@ description = "The vendor-versus-production ESP32-S31 PHY calibration comparison
 
 [dependencies]
 oer-hil-scenario = { path = "../../hil/scenario" }
+jiff = { version = "=0.2.37", default-features = false, features = ["std"] }
 oer-vendor-phy = { path = "../phy" }
 oer-esp32s31-knowledge = { path = "../../../chips/esp32s31/knowledge" }
 oer-registers-model = { path = "../../registers/model" }

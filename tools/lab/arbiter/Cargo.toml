@@ -9,6 +9,7 @@ publish = false
 description = "The stand arbiter: the queue and its job tickets, balances, preemption, maintenance and the device locks of every leased board"
 
 [dependencies]
+hex = "=0.4.3"
 oer-lab-board = { path = "../board" }
 oer-os-durable = { path = "../../os/durable" }
 oer-os-process = { path = "../../os/process" }

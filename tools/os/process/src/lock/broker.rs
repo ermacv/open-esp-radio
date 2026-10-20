@@ -274,9 +274,7 @@ unsafe fn serve(descriptors: [i32; 5], token: &[u8; TOKEN_BYTES], owner_pid: i32
     // preallocated stack storage. It never acquires a Rust lock or allocates.
     unsafe {
         libc::setsid();
-        for signal in [libc::SIGINT, libc::SIGTERM, libc::SIGHUP, libc::SIGPIPE] {
-            libc::signal(signal, libc::SIG_IGN);
-        }
+        crate::child_setup::ignore_terminal_signals();
         // Duplicate all inputs first so dup2 cannot overwrite another input.
         let mut copies = [-1; 5];
         for index in 0..5 {

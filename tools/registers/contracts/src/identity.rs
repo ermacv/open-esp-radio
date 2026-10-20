@@ -698,12 +698,7 @@ fn update_framed(hash: &mut Sha256, value: &[u8]) {
 }
 
 fn hex_digest(value: &[u8]) -> String {
-    let mut output = String::with_capacity(value.len() * 2);
-    for byte in value {
-        use fmt::Write as _;
-        write!(&mut output, "{byte:02x}").expect("writing to String cannot fail");
-    }
-    output
+    hex::encode(value)
 }
 
 #[cfg(test)]
@@ -902,5 +897,14 @@ mod tests {
                 .parse::<RevisionOccurrenceId>()
                 .is_err()
         );
+    }
+}
+
+#[cfg(test)]
+mod library_tests {
+    use super::*;
+    #[test]
+    fn identity_digests_keep_lowercase_and_leading_zeroes() {
+        assert_eq!(hex_digest(&[0, 15, 128, 255]), "000f80ff");
     }
 }

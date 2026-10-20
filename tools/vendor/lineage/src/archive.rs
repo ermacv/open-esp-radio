@@ -29,5 +29,14 @@ pub fn read_archive(label: &str, bytes: &[u8]) -> Result<Revision, Error> {
 }
 
 pub(crate) fn hex(bytes: &[u8]) -> String {
-    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+    hex::encode(bytes)
+}
+
+#[cfg(test)]
+mod library_tests {
+    use super::*;
+    #[test]
+    fn archive_digests_keep_lowercase_byte_encoding() {
+        assert_eq!(hex(&[0, 15, 128, 255]), "000f80ff");
+    }
 }

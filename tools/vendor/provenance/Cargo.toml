@@ -10,6 +10,7 @@ description = "Vendor function provenance: the SOURCE citation grammar, the one 
 readme = "README.md"
 
 [dependencies]
+hex = "=0.4.3"
 oer-os-process = { path = "../../os/process" }
 oer-analysis-elf = { path = "../../analysis/elf" }
 oer-registers-model = { path = "../../registers/model" }

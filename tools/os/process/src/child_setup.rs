@@ -105,3 +105,49 @@ mod tests {
         assert_eq!(text, "inherited\n");
     }
 }
+
+/// Ignore terminal and broken-pipe signals in a freshly forked helper.
+///
+/// # Safety
+/// Call only in the helper child: it must keep running after the owner dies.
+/// No handler is installed; these raw system calls allocate and lock nothing.
+pub(crate) unsafe fn ignore_terminal_signals() {
+    use rustix::runtime::{
+        KernelSigaction, KernelSigactionFlags, Signal, kernel_sig_ign, kernel_sigaction,
+    };
+    for signal in [Signal::INT, Signal::TERM, Signal::HUP, Signal::PIPE] {
+        let action = KernelSigaction {
+            sa_handler_kernel: kernel_sig_ign(),
+            sa_flags: KernelSigactionFlags::RESTART,
+            ..KernelSigaction::default()
+        };
+        // SAFETY: this is the freshly forked helper; SIG_IGN invokes no code,
+        // and the action's empty mask and restart flag match libc::signal.
+        let _ = unsafe { kernel_sigaction(signal, Some(action)) };
+    }
+}
+
+#[cfg(test)]
+mod library_tests {
+    use super::*;
+    #[test]
+    fn ignored_helper_signals_remain_ignored_across_exec() {
+        use std::os::unix::process::CommandExt as _;
+        let mut command = std::process::Command::new("sh");
+        command.args([
+            "-c",
+            "kill -INT $$; kill -TERM $$; kill -HUP $$; kill -PIPE $$; printf survived",
+        ]);
+        // SAFETY: pre_exec changes only this freshly forked child's dispositions
+        // using allocation-free raw syscalls before it executes the test shell.
+        unsafe {
+            command.pre_exec(|| {
+                ignore_terminal_signals();
+                Ok(())
+            });
+        }
+        let output = command.output().unwrap();
+        assert!(output.status.success());
+        assert_eq!(output.stdout, b"survived");
+    }
+}

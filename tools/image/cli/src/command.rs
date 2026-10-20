@@ -160,28 +160,22 @@ fn timestamp(time: SystemTime) -> String {
     let seconds = time
         .duration_since(SystemTime::UNIX_EPOCH)
         .map_or(0, |since| since.as_secs());
-    let days = i64::try_from(seconds / 86_400).unwrap_or(0);
-    let of_day = seconds % 86_400;
-    // Howard Hinnant's `civil_from_days`.
-    let z = days + 719_468;
-    let era = z.div_euclid(146_097);
-    let day_of_era = z.rem_euclid(146_097);
-    let year_of_era =
-        (day_of_era - day_of_era / 1460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
-    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
-    let month_index = (5 * day_of_year + 2) / 153;
-    let day = day_of_year - (153 * month_index + 2) / 5 + 1;
-    let month = if month_index < 10 {
-        month_index + 3
-    } else {
-        month_index - 9
-    };
-    let year = year_of_era + era * 400 + i64::from(month <= 2);
+    // Gregorian dates repeat every 400 years. Reduce into jiff's supported
+    // range without narrowing the existing u64 timestamp domain.
+    const CYCLE_SECONDS: u64 = 146_097 * 86_400;
+    let cycles = seconds / CYCLE_SECONDS;
+    let within_cycle = (seconds % CYCLE_SECONDS) as i64;
+    let date = jiff::Timestamp::from_second(within_cycle)
+        .expect("a 400-year cycle from 1970 fits jiff's timestamp range")
+        .to_zoned(jiff::tz::TimeZone::UTC);
+    let year = date.year() as u64 + cycles * 400;
     format!(
-        "{year:04}{month:02}{day:02}T{:02}{:02}{:02}Z",
-        of_day / 3600,
-        of_day / 60 % 60,
-        of_day % 60
+        "{year:04}{:02}{:02}T{:02}{:02}{:02}Z",
+        date.month(),
+        date.day(),
+        date.hour(),
+        date.minute(),
+        date.second()
     )
 }
 
@@ -689,7 +683,7 @@ client_address = "192.168.77.2/24"
             wrong.to_string(),
             unreachable.to_string(),
             format!("{:?}", ssh::Ssh::new(router.ssh_target.expose()).unwrap()),
-            router::plan().join("\n"),
+            router::plan().unwrap().join("\n"),
         ]);
         let shown = shown.join("\n");
         for secret in SECRETS {
@@ -703,5 +697,29 @@ client_address = "192.168.77.2/24"
         let time = SystemTime::UNIX_EPOCH + Duration::from_secs(1_792_281_600 + 3_723);
         assert_eq!(timestamp(time), "20261018T010203Z");
         assert_eq!(timestamp(SystemTime::UNIX_EPOCH), "19700101T000000Z");
+    }
+}
+
+#[cfg(test)]
+mod library_tests {
+    use super::*;
+    #[test]
+    fn timestamps_keep_the_compact_utc_format_and_pre_epoch_clamp() {
+        use std::time::Duration;
+        for (seconds, expected) in [
+            (0, "19700101T000000Z"),
+            (86_399, "19700101T235959Z"),
+            (951_782_400, "20000229T000000Z"),
+            (253_402_300_800, "100000101T000000Z"),
+        ] {
+            assert_eq!(
+                timestamp(SystemTime::UNIX_EPOCH + Duration::from_secs(seconds)),
+                expected
+            );
+        }
+        assert_eq!(
+            timestamp(SystemTime::UNIX_EPOCH - Duration::from_secs(1)),
+            "19700101T000000Z"
+        );
     }
 }

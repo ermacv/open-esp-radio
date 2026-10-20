@@ -892,7 +892,7 @@ impl Drop for Grant {
 fn token() -> crate::Result<String> {
     let mut bytes = [0u8; 16];
     std::fs::File::open("/dev/urandom")?.read_exact(&mut bytes)?;
-    Ok(bytes.iter().map(|byte| format!("{byte:02x}")).collect())
+    Ok(hex::encode(bytes))
 }
 
 #[cfg(test)]

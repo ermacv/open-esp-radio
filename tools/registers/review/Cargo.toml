@@ -9,6 +9,7 @@ publish = false
 description = "Sparse reviewed register assertions, applicability and vendor-bug records"
 
 [dependencies]
+hex = "=0.4.3"
 oer-registers-contracts = { path = "../contracts" }
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.151"

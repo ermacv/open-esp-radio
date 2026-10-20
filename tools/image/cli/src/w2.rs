@@ -107,12 +107,7 @@ fn hex(s: &str, max: usize) -> Result<Vec<u8>, String> {
     if !s.is_ascii() || !s.len().is_multiple_of(2) || s.len() > max * 2 {
         return Err("invalid rate elements".to_owned());
     }
-    (0..s.len())
-        .step_by(2)
-        .map(|i| {
-            u8::from_str_radix(&s[i..i + 2], 16).map_err(|_| "invalid rate elements".to_owned())
-        })
-        .collect()
+    hex::decode(s).map_err(|_| "invalid rate elements".to_owned())
 }
 
 /// Recompute the device gates from primitive report rows, then add independent
@@ -478,3 +473,16 @@ pub fn check(
 
 #[cfg(test)]
 mod check_tests;
+
+#[cfg(test)]
+mod library_tests {
+    use super::*;
+    #[test]
+    fn rate_elements_keep_the_dash_limit_and_error_text() {
+        assert_eq!(hex("-", 0).unwrap(), Vec::<u8>::new());
+        assert_eq!(hex("00aF", 2).unwrap(), [0, 175]);
+        for (text, max) in [("00af", 1), ("0", 2), ("0g", 2), ("é", 2)] {
+            assert_eq!(hex(text, max).unwrap_err(), "invalid rate elements");
+        }
+    }
+}

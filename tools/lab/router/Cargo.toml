@@ -9,6 +9,8 @@ publish = false
 description = "The stand: its file, its OpenWrt lab router and the SSH that reaches it"
 
 [dependencies]
+shlex = "=2.0.1"
+hex = "=0.4.3"
 oer-lab-model = { path = "../model" }
 oer-os-process = { path = "../../os/process" }
 sha2 = "=0.10.9"

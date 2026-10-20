@@ -9,6 +9,7 @@ publish = false
 description = "Board discovery, serial consoles, resets, OpenOCD and receipted image writes under a device lock"
 
 [dependencies]
+hex = "=0.4.3"
 espflash = { version = "=4.5.0", default-features = false, features = ["serialport"] }
 oer-chip-profile = { path = "../../chip/profile" }
 oer-lab-model = { path = "../model" }

@@ -186,13 +186,7 @@ pub fn parse(console: &str) -> Result<BTreeMap<String, Vec<u8>>> {
 }
 
 fn decode_hex(hex: &str) -> Option<Vec<u8>> {
-    if !hex.len().is_multiple_of(2) {
-        return None;
-    }
-    (0..hex.len())
-        .step_by(2)
-        .map(|i| u8::from_str_radix(hex.get(i..i + 2)?, 16).ok())
-        .collect()
+    hex::decode(hex).ok()
 }
 
 /// Whether `console` holds a closed report.
@@ -271,5 +265,18 @@ mod tests {
             .is_err()
         );
         assert!(parse("oer-vendor-calibration a 0\noer-vendor-calibration-end\n").is_err());
+    }
+}
+
+#[cfg(test)]
+mod library_tests {
+    use super::*;
+    #[test]
+    fn report_hex_keeps_case_acceptance_and_malformed_rejection() {
+        assert_eq!(decode_hex("00aF"), Some(vec![0, 175]));
+        assert_eq!(decode_hex(""), Some(vec![]));
+        for malformed in ["0", "0g", "é"] {
+            assert_eq!(decode_hex(malformed), None);
+        }
     }
 }

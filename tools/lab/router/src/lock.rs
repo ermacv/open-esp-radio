@@ -17,11 +17,7 @@ use crate::Result;
 /// The lock file of the router `target` in `directory`.
 pub fn router_path(directory: &Path, target: &str) -> PathBuf {
     let digest = Sha256::digest(target.as_bytes());
-    let key = digest
-        .iter()
-        .take(8)
-        .map(|byte| format!("{byte:02x}"))
-        .collect::<String>();
+    let key = hex::encode(&digest[..8]);
     directory.join(format!("router-{key}.lock"))
 }
 

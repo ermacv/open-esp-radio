@@ -42,15 +42,12 @@ fn transmit_command() -> String {
         .chain(SHORT_ADDRESS.to_le_bytes())
         .chain([TRANSMIT_PAYLOAD])
         .collect();
-    let frame: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
+    let frame: String = hex::encode(&bytes);
     format!("TX 0 {frame}\n")
 }
 
 fn configuration() -> String {
-    let extended: String = EXTENDED_ADDRESS
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect();
+    let extended: String = hex::encode(EXTENDED_ADDRESS);
     format!("CFG {CHANNEL} {PAN_ID:04x} {SHORT_ADDRESS:04x} {extended} 0 {POWER_DBM}\n")
 }
 

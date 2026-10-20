@@ -19,19 +19,11 @@ impl Sha256 {
 
     /// The canonical form only.
     pub fn parse(text: &str) -> Result<Self, InvalidDigest> {
-        let digits = text.as_bytes();
-        if digits.len() != 64 {
+        if text.bytes().any(|byte| byte.is_ascii_uppercase()) {
             return Err(InvalidDigest);
         }
-        let value = |digit: u8| match digit {
-            b'0'..=b'9' => Ok(digit - b'0'),
-            b'a'..=b'f' => Ok(digit - b'a' + 10),
-            _ => Err(InvalidDigest),
-        };
         let mut bytes = [0; 32];
-        for (byte, pair) in bytes.iter_mut().zip(digits.chunks_exact(2)) {
-            *byte = (value(pair[0])? << 4) | value(pair[1])?;
-        }
+        hex::decode_to_slice(text, &mut bytes).map_err(|_| InvalidDigest)?;
         Ok(Self(bytes))
     }
 }
@@ -50,7 +42,7 @@ impl std::error::Error for InvalidDigest {}
 
 impl fmt::Display for Sha256 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.0.iter().try_for_each(|byte| write!(f, "{byte:02x}"))
+        f.write_str(&hex::encode(self.0))
     }
 }
 

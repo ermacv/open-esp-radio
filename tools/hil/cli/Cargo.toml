@@ -13,6 +13,7 @@ name = "hil"
 path = "src/main.rs"
 
 [dependencies]
+tiny_http = "=0.12.0"
 oer-image-esp-idf = { path = "../../image/esp-idf" }
 oer-hil-runs = { path = "../runs" }
 oer-chip-profile = { path = "../../chip/profile" }

@@ -9,6 +9,7 @@ publish = false
 description = "Identities, errors, run control, working memory and the function decoding and lifting contracts of the RV32 program model"
 
 [dependencies]
+hex = "=0.4.3"
 serde = { version = "=1.0.229", features = ["derive", "rc"] }
 sha2 = "=0.10.9"
 thiserror = "=2.0.19"

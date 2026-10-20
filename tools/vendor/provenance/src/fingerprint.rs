@@ -108,7 +108,7 @@ impl Function {
 }
 
 fn hex(digest: impl AsRef<[u8]>) -> String {
-    digest.as_ref().iter().map(|b| format!("{b:02x}")).collect()
+    hex::encode(digest)
 }
 
 fn token(bytes: &[u8], sites: &[&Site], named: bool) -> u64 {
@@ -188,3 +188,12 @@ pub fn similarity_ppm(left: &[u64], right: &[u64]) -> u32 {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod library_tests {
+    use super::*;
+    #[test]
+    fn fingerprints_keep_lowercase_byte_encoding() {
+        assert_eq!(hex([0, 15, 128, 255]), "000f80ff");
+    }
+}

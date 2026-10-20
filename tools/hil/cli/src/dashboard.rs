@@ -1,6 +1,6 @@
 //! `cargo hil dashboard`: a live page of the stand on this host.
 //!
-//! A single-threaded HTTP server bound to the loopback interface serves one
+//! A single request loop on the loopback interface serves one
 //! page and `status.json`: the arbiter's holders, queue, boards and recent
 //! leases, plus the newest runs of the shared run store, each with the owner
 //! and leases of the leases that name it. The page polls the JSON, so it
@@ -12,11 +12,7 @@
 //! one's address, and a different build stops it and takes over. A running
 //! dashboard exits once another replaced it, or once the stand's state has a
 //! schema newer than it reads, instead of serving errors.
-use std::{
-    io::{BufRead as _, BufReader, Write as _},
-    net::{Ipv4Addr, TcpListener, TcpStream},
-    path::Path,
-};
+use std::{net::Ipv4Addr, path::Path};
 
 use oer_hil_runs::RunStore;
 use serde_json::{Value, json};
@@ -76,27 +72,19 @@ pub fn serve(store: &RunStore, cli: DashboardCli) -> Result<std::process::ExitCo
         );
         running.stop();
     }
-    let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, port))
+    let server = tiny_http::Server::http((Ipv4Addr::LOCALHOST, port))
         .map_err(|error| format!("cannot listen on 127.0.0.1:{port}: {error}"))?;
     me.write(&record)?;
     watch_fixtures();
     eprintln!(
         "hil dashboard: http://{} (Ctrl+C stops it)",
-        listener.local_addr()?
+        server.server_addr()
     );
-    listener.set_nonblocking(true)?;
     let mut checked = std::time::Instant::now();
     loop {
-        match listener.accept() {
-            Ok((stream, _)) => {
-                stream.set_nonblocking(false)?;
-                // A client that disconnects mid-request only loses its response.
-                let _ = handle(stream, store);
-            }
-            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
-                std::thread::sleep(std::time::Duration::from_millis(100));
-            }
-            Err(_) => {}
+        if let Ok(Some(request)) = server.recv_timeout(std::time::Duration::from_millis(100)) {
+            // A client that disconnects mid-request only loses its response.
+            let _ = handle(request, store);
         }
         if oer_os_process::cancellation_requested() {
             me.withdraw(&record);
@@ -183,55 +171,57 @@ impl Instance {
     }
 }
 
-fn handle(mut stream: TcpStream, store: &RunStore) -> Result<()> {
-    stream.set_read_timeout(Some(std::time::Duration::from_secs(5)))?;
-    let mut reader = BufReader::new(&stream);
-    let mut request = String::new();
-    reader.read_line(&mut request)?;
-    // Headers are not needed; drain them so the client sees a clean close.
-    let mut header = String::new();
-    while reader.read_line(&mut header)? > 2 {
-        header.clear();
-    }
-    let path = request.split_whitespace().nth(1).unwrap_or("/");
-    let (status, content_type, body) = respond(path, store);
-    write!(
-        stream,
-        "HTTP/1.1 {status}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n",
-        body.len()
-    )?;
-    stream.write_all(&body)?;
+fn handle(request: tiny_http::Request, store: &RunStore) -> Result<()> {
+    use std::io::Write as _;
+    let (status, content_type, body) = respond(request.url(), store);
+    let response = tiny_http::Response::from_data(body)
+        .with_status_code(status)
+        .with_chunked_threshold(usize::MAX)
+        .with_header(
+            tiny_http::Header::from_bytes("Content-Type", content_type)
+                .expect("static content type"),
+        )
+        .with_header(
+            tiny_http::Header::from_bytes("Cache-Control", "no-store")
+                .expect("static cache control"),
+        );
+    // The old server ignored request headers and always sent an HTTP/1.1
+    // response with its known length. Keep that policy even if a client
+    // explicitly asks for chunked encoding; tiny_http still renders all HTTP.
+    let mut writer = request.into_writer();
+    response.raw_print(&mut writer, tiny_http::HTTPVersion(1, 1), &[], false, None)?;
+    writer.flush()?;
     Ok(())
 }
 
-fn respond(path: &str, store: &RunStore) -> (&'static str, &'static str, Vec<u8>) {
+fn respond(path: &str, store: &RunStore) -> (u16, &'static str, Vec<u8>) {
     match path.split('?').next().unwrap_or(path) {
-        "/" => ("200 OK", "text/html; charset=utf-8", PAGE.into()),
+        "/" => (200, "text/html; charset=utf-8", PAGE.into()),
         path if path.starts_with("/runs/") => match run_file(store, &path["/runs/".len()..]) {
-            Some((content_type, bytes)) => ("200 OK", content_type, bytes),
+            Some((content_type, bytes)) => (200, content_type, bytes),
             None => (
-                "404 Not Found",
+                404,
                 "text/plain",
                 b"no such file in a run of the store".to_vec(),
             ),
         },
         path if path.starts_with("/jobs/") => match job_log(&path["/jobs/".len()..]) {
-            Some(log) => ("200 OK", "text/plain; charset=utf-8", log.into_bytes()),
-            None => ("404 Not Found", "text/plain", b"no such job log".to_vec()),
+            Some(log) => (200, "text/plain; charset=utf-8", log.into_bytes()),
+            None => (404, "text/plain", b"no such job log".to_vec()),
         },
         "/status.json" => match snapshot(store) {
             Ok(value) => (
-                "200 OK",
+                200,
                 "application/json",
                 serde_json::to_vec(&value).unwrap_or_default(),
             ),
             Err(error) => (
-                "500 Internal Server Error",
+                500,
                 "application/json",
                 json!({"error": error.to_string()}).to_string().into_bytes(),
             ),
         },
-        _ => ("404 Not Found", "text/plain", b"not found".to_vec()),
+        _ => (404, "text/plain", b"not found".to_vec()),
     }
 }
 
@@ -414,10 +404,7 @@ mod tests {
             &format!("/runs/{id}/scenarios/a/repetition-001/uart.log"),
             &store,
         );
-        assert_eq!(
-            (status, content_type),
-            ("200 OK", "text/plain; charset=utf-8")
-        );
+        assert_eq!((status, content_type), (200, "text/plain; charset=utf-8"));
     }
 
     #[test]
@@ -522,9 +509,131 @@ mod tests {
             ["3000-c", "2000-b"]
         );
         let (status, content_type, body) = respond("/", &store);
-        assert_eq!(status, "200 OK");
+        assert_eq!(status, 200);
         assert!(content_type.starts_with("text/html"));
         assert!(String::from_utf8(body).unwrap().contains("status.json"));
-        assert_eq!(respond("/missing", &store).0, "404 Not Found");
+        assert_eq!(respond("/missing", &store).0, 404);
+    }
+}
+
+#[cfg(test)]
+mod library_tests {
+    use super::*;
+    #[test]
+    fn tiny_http_serves_the_same_routes_headers_and_bodies_on_loopback() {
+        use std::io::{Read as _, Write as _};
+        let directory = tempfile::tempdir().unwrap();
+        let store = RunStore::at(directory.path());
+        let server = tiny_http::Server::http((Ipv4Addr::LOCALHOST, 0)).unwrap();
+        let address = server.server_addr().to_ip().unwrap();
+        assert!(address.ip().is_loopback());
+        std::thread::scope(|scope| {
+            scope.spawn(|| {
+                for _ in 0..3 {
+                    let request = server
+                        .recv_timeout(std::time::Duration::from_secs(5))
+                        .unwrap()
+                        .unwrap();
+                    handle(request, &store).unwrap();
+                }
+            });
+            for (path, status, content_type, expected) in [
+                (
+                    "/?refresh=1",
+                    200,
+                    "text/html; charset=utf-8",
+                    PAGE.as_bytes(),
+                ),
+                ("/missing", 404, "text/plain", b"not found".as_slice()),
+                (
+                    "/runs/missing/report.html",
+                    404,
+                    "text/plain",
+                    b"no such file in a run of the store".as_slice(),
+                ),
+            ] {
+                let mut stream = std::net::TcpStream::connect(address).unwrap();
+                stream
+                    .set_read_timeout(Some(std::time::Duration::from_secs(5)))
+                    .unwrap();
+                write!(
+                    stream,
+                    "GET {path} HTTP/1.1\r\nHost: localhost\r\nTE: chunked\r\nConnection: close\r\n\r\n"
+                )
+                .unwrap();
+                let mut response = Vec::new();
+                stream.read_to_end(&mut response).unwrap();
+                let response = String::from_utf8(response).unwrap();
+                let (headers, body) = response.split_once("\r\n\r\n").unwrap();
+                assert!(headers.starts_with(&format!("HTTP/1.1 {status} ")));
+                let headers = headers.to_ascii_lowercase();
+                assert!(headers.contains(&format!("content-type: {content_type}")));
+                assert!(headers.contains("cache-control: no-store"));
+                assert!(!headers.contains("transfer-encoding:"));
+                assert!(headers.contains(&format!("content-length: {}", expected.len())));
+                assert_eq!(body.as_bytes(), expected);
+            }
+        });
+    }
+}
+
+#[cfg(test)]
+mod keep_alive_tests {
+    use super::*;
+    use std::io::{BufRead as _, BufReader, Read as _, Write as _};
+
+    #[test]
+    fn a_live_page_keep_alive_connection_does_not_hold_up_another_client() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = RunStore::at(directory.path());
+        std::fs::create_dir_all(store.run("1000-a")).unwrap();
+        std::fs::write(store.run("1000-a").join("report.html"), b"second client").unwrap();
+        let server = tiny_http::Server::http((Ipv4Addr::LOCALHOST, 0)).unwrap();
+        let address = server.server_addr().to_ip().unwrap();
+        std::thread::scope(|scope| {
+            scope.spawn(|| {
+                for _ in 0..2 {
+                    let request = server
+                        .recv_timeout(std::time::Duration::from_secs(5))
+                        .unwrap()
+                        .unwrap();
+                    handle(request, &store).unwrap();
+                }
+            });
+            let mut live = std::net::TcpStream::connect(address).unwrap();
+            live.set_read_timeout(Some(std::time::Duration::from_secs(5)))
+                .unwrap();
+            live.write_all(b"GET / HTTP/1.1\r\nHost: localhost\r\n\r\n")
+                .unwrap();
+            let mut live = BufReader::new(live);
+            let mut headers = String::new();
+            loop {
+                let mut line = String::new();
+                assert_ne!(live.read_line(&mut line).unwrap(), 0);
+                if line == "\r\n" {
+                    break;
+                }
+                headers.push_str(&line);
+            }
+            let headers = headers.to_ascii_lowercase();
+            assert!(headers.contains(&format!("content-length: {}", PAGE.len())));
+            assert!(!headers.contains("transfer-encoding:"));
+            assert!(!headers.contains("connection: close"));
+            assert!(headers.contains("date:"));
+            let mut page = vec![0; PAGE.len()];
+            live.read_exact(&mut page).unwrap();
+            assert_eq!(page, PAGE.as_bytes());
+            // `live` remains open while another client retrieves its report.
+            let mut second = std::net::TcpStream::connect(address).unwrap();
+            second
+                .set_read_timeout(Some(std::time::Duration::from_secs(5)))
+                .unwrap();
+            second.write_all(b"GET /runs/1000-a/report.html HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n").unwrap();
+            let mut response = String::new();
+            second.read_to_string(&mut response).unwrap();
+            assert!(response.starts_with("HTTP/1.1 200 "));
+            assert!(response.ends_with("\r\n\r\nsecond client"));
+            drop(live);
+        });
     }
 }
