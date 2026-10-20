@@ -8,11 +8,12 @@ repository.workspace = true
 description = "Allocation-free Bluetooth LE Link Layer protocol and role state"
 
 [dependencies]
+zeroize = { version = "1.9.0", default-features = false, features = ["derive"] }
+ccm = { version = "=0.5.0", default-features = false }
 aes = { version = "0.8.4", default-features = false, features = ["zeroize"] }
 oer-bluetooth-le-radio = { path = "../radio" }
 
 [dev-dependencies]
-zeroize = { version = "1.9.0", default-features = false }
 oer-radio-regulatory = { path = "../../../radio/regulatory", features = ["test-support"] }
 
 [lints]

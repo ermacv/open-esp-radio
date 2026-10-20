@@ -13,6 +13,13 @@ use aes::{
     cipher::{BlockEncrypt, KeyInit, generic_array::GenericArray},
 };
 
+use ccm::{
+    Ccm, Nonce, Tag,
+    aead::AeadInPlace,
+    consts::{U4, U13},
+};
+use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
+
 /// Four-octet MIC appended to every encrypted ACL Data Physical Channel PDU.
 pub const LE_ACL_MIC_BYTES: usize = 4;
 /// Largest plaintext in an encrypted legacy 27-octet Data PDU.
@@ -24,6 +31,7 @@ const PERIPHERAL_TO_CENTRAL_DIRECTION: bool = false;
 const CENTRAL_TO_PERIPHERAL_DIRECTION: bool = true;
 
 /// Host-provided 128-bit Long Term Key.
+#[derive(Zeroize, ZeroizeOnDrop)]
 pub struct LeLongTermKey([u8; 16]);
 
 impl LeLongTermKey {
@@ -33,14 +41,14 @@ impl LeLongTermKey {
 
     /// Derive the connection session key as `AES-128(LTK, SKD)`.
     pub fn derive_session_key(&self, diversifier: LeSessionKeyDiversifier) -> LeAclSessionKey {
-        let mut aes_key = self.0;
+        let mut aes_key = Zeroizing::new(self.0);
         aes_key.reverse();
-        let cipher = Aes128::new(GenericArray::from_slice(&aes_key));
-        let mut key = diversifier.0;
+        let cipher = Aes128::new(GenericArray::from_slice(aes_key.as_ref()));
+        let mut key = Zeroizing::new(diversifier.0);
         key.reverse();
         encrypt_block(&cipher, &mut key);
         key.reverse();
-        LeAclSessionKey(key)
+        LeAclSessionKey(*key)
     }
 }
 
@@ -63,6 +71,7 @@ impl LeAclInitializationVector {
 }
 
 /// Session key produced from one LTK and one connection-specific SKD.
+#[derive(Zeroize, ZeroizeOnDrop)]
 pub struct LeAclSessionKey([u8; 16]);
 
 /// Fresh Peripheral contribution to one encryption start or restart.
@@ -719,7 +728,7 @@ impl LePeripheralAclEncryption {
             header,
             packet,
             plaintext_len,
-        );
+        )?;
         self.peripheral_transmit_counter.commit(counter);
         Ok(plaintext_len + LE_ACL_MIC_BYTES)
     }
@@ -747,7 +756,7 @@ impl LePeripheralAclEncryption {
             return Err(LeAclEncryptionError::PayloadTooLong);
         }
         let counter = self.central_transmit_counter.current()?;
-        if !decrypt_ccm(
+        if let Err(error) = decrypt_ccm(
             &self.session_key.0,
             &self.initialization_vector.0,
             counter,
@@ -756,8 +765,8 @@ impl LePeripheralAclEncryption {
             packet,
             plaintext_len,
         ) {
-            packet.fill(0);
-            return Err(LeAclEncryptionError::MicMismatch);
+            packet.zeroize();
+            return Err(error);
         }
         packet[plaintext_len..].fill(0);
         self.central_transmit_counter.commit(counter);
@@ -810,46 +819,7 @@ fn aad(header: u8) -> u8 {
     header & !0x1c
 }
 
-fn authentication_tag(
-    cipher: &Aes128,
-    nonce: &[u8; 13],
-    header: u8,
-    plaintext: &[u8],
-) -> [u8; LE_ACL_MIC_BYTES] {
-    let mut state = [0; 16];
-    state[0] = 0x49;
-    state[1..14].copy_from_slice(nonce);
-    let length = (plaintext.len() as u16).to_be_bytes();
-    state[14..].copy_from_slice(&length);
-    encrypt_block(cipher, &mut state);
-
-    let mut block = [0; 16];
-    block[1] = 1;
-    block[2] = aad(header);
-    xor_block(&mut block, &state);
-    encrypt_block(cipher, &mut block);
-    state = block;
-
-    for chunk in plaintext.chunks(16) {
-        let mut block = [0; 16];
-        block[..chunk.len()].copy_from_slice(chunk);
-        xor_block(&mut block, &state);
-        encrypt_block(cipher, &mut block);
-        state = block;
-    }
-    state[..LE_ACL_MIC_BYTES]
-        .try_into()
-        .expect("the MIC is the first four octets")
-}
-
-fn keystream(cipher: &Aes128, nonce: &[u8; 13], index: u16) -> [u8; 16] {
-    let mut block = [0; 16];
-    block[0] = 0x01;
-    block[1..14].copy_from_slice(nonce);
-    block[14..].copy_from_slice(&index.to_be_bytes());
-    encrypt_block(cipher, &mut block);
-    block
-}
+type LeAclCcm = Ccm<Aes128, U4, U13>;
 
 fn encrypt_ccm(
     key: &[u8; 16],
@@ -859,22 +829,22 @@ fn encrypt_ccm(
     header: u8,
     packet: &mut [u8],
     plaintext_len: usize,
-) {
-    let mut aes_key = *key;
+) -> Result<(), LeAclEncryptionError> {
+    let (plaintext, tail) = packet
+        .split_at_mut_checked(plaintext_len)
+        .ok_or(LeAclEncryptionError::BufferTooSmall)?;
+    let mic = tail
+        .get_mut(..LE_ACL_MIC_BYTES)
+        .ok_or(LeAclEncryptionError::BufferTooSmall)?;
+    let mut aes_key = Zeroizing::new(*key);
     aes_key.reverse();
-    let cipher = Aes128::new(GenericArray::from_slice(&aes_key));
+    let cipher = LeAclCcm::new(GenericArray::from_slice(aes_key.as_ref()));
     let nonce = nonce(initialization_vector, counter, central);
-    let tag = authentication_tag(&cipher, &nonce, header, &packet[..plaintext_len]);
-    for (block_index, chunk) in packet[..plaintext_len].chunks_mut(16).enumerate() {
-        let stream = keystream(&cipher, &nonce, block_index as u16 + 1);
-        for (byte, mask) in chunk.iter_mut().zip(stream) {
-            *byte ^= mask;
-        }
-    }
-    let stream = keystream(&cipher, &nonce, 0);
-    for index in 0..LE_ACL_MIC_BYTES {
-        packet[plaintext_len + index] = tag[index] ^ stream[index];
-    }
+    let tag = cipher
+        .encrypt_in_place_detached(Nonce::<U13>::from_slice(&nonce), &[aad(header)], plaintext)
+        .map_err(|_| LeAclEncryptionError::PayloadTooLong)?;
+    mic.copy_from_slice(&tag);
+    Ok(())
 }
 
 fn decrypt_ccm(
@@ -885,34 +855,30 @@ fn decrypt_ccm(
     header: u8,
     packet: &mut [u8],
     plaintext_len: usize,
-) -> bool {
-    let mut aes_key = *key;
+) -> Result<(), LeAclEncryptionError> {
+    let (plaintext, tail) = packet
+        .split_at_mut_checked(plaintext_len)
+        .ok_or(LeAclEncryptionError::BufferTooSmall)?;
+    let mic = tail
+        .first_chunk::<LE_ACL_MIC_BYTES>()
+        .ok_or(LeAclEncryptionError::BufferTooSmall)?;
+    let mut aes_key = Zeroizing::new(*key);
     aes_key.reverse();
-    let cipher = Aes128::new(GenericArray::from_slice(&aes_key));
+    let cipher = LeAclCcm::new(GenericArray::from_slice(aes_key.as_ref()));
     let nonce = nonce(initialization_vector, counter, central);
-    for (block_index, chunk) in packet[..plaintext_len].chunks_mut(16).enumerate() {
-        let stream = keystream(&cipher, &nonce, block_index as u16 + 1);
-        for (byte, mask) in chunk.iter_mut().zip(stream) {
-            *byte ^= mask;
-        }
-    }
-    let tag = authentication_tag(&cipher, &nonce, header, &packet[..plaintext_len]);
-    let stream = keystream(&cipher, &nonce, 0);
-    let mut difference = 0;
-    for index in 0..LE_ACL_MIC_BYTES {
-        difference |= packet[plaintext_len + index] ^ tag[index] ^ stream[index];
-    }
-    difference == 0
+    // RustCrypto compares the complete detached MIC in constant time.
+    cipher
+        .decrypt_in_place_detached(
+            Nonce::<U13>::from_slice(&nonce),
+            &[aad(header)],
+            plaintext,
+            Tag::<U4>::from_slice(mic),
+        )
+        .map_err(|_| LeAclEncryptionError::MicMismatch)
 }
 
 fn encrypt_block(cipher: &Aes128, block: &mut [u8; 16]) {
     cipher.encrypt_block(GenericArray::from_mut_slice(block));
-}
-
-fn xor_block(destination: &mut [u8; 16], source: &[u8; 16]) {
-    for (destination, source) in destination.iter_mut().zip(source) {
-        *destination ^= source;
-    }
 }
 
 #[cfg(test)]
@@ -1020,7 +986,8 @@ mod tests {
             0x01,
             &mut tag,
             0,
-        );
+        )
+        .unwrap();
         assert_eq!(
             cipher.decrypt_new_packet(0x01, &mut tag),
             Err(LeAclEncryptionError::BufferTooSmall)
@@ -1256,7 +1223,8 @@ mod tests {
             0x02,
             &mut packet,
             1,
-        );
+        )
+        .unwrap();
         assert_eq!(
             procedure.receive_encrypted_start_response(0x02, &mut packet),
             Err(LePeripheralEncryptionProcedureError::UnexpectedPhysicalChannelPdu)
@@ -1340,7 +1308,8 @@ mod tests {
             0x0f,
             &mut pause_request,
             1,
-        );
+        )
+        .unwrap();
         procedure.begin_pause(0x0f, &mut pause_request).unwrap();
         assert_eq!(pause_request, [0x0a, 0, 0, 0, 0]);
 
@@ -1353,7 +1322,8 @@ mod tests {
             0x03,
             &mut expected_pause_response,
             1,
-        );
+        )
+        .unwrap();
         let pause_response = procedure.pending_response().unwrap();
         assert!(pause_response.is_encrypted());
         assert_eq!(pause_response.as_bytes(), &expected_pause_response);
@@ -1401,7 +1371,8 @@ mod tests {
             0x0f,
             &mut central_restart_response,
             1,
-        );
+        )
+        .unwrap();
         procedure
             .receive_encrypted_start_response(0x0f, &mut central_restart_response)
             .unwrap();
@@ -1421,7 +1392,8 @@ mod tests {
             0x0f,
             &mut second_pause_request,
             1,
-        );
+        )
+        .unwrap();
         procedure
             .begin_pause(0x0f, &mut second_pause_request)
             .unwrap();

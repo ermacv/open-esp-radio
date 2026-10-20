@@ -20,16 +20,11 @@
 )]
 
 use crate::ccm::{self, MIC_LEN, NONCE_LEN};
-use aes::{
-    Aes128,
-    cipher::{KeyInit, generic_array::GenericArray},
-};
 use oer_ieee80211_wire::{
     ccmp::{Ccmp128Key, CcmpHeader},
     frame::DecodedHeader,
     security::Spp,
 };
-use subtle::ConstantTimeEq;
 use zeroize::Zeroize;
 
 /// Why a protected data or management MPDU cannot be authenticated.
@@ -65,14 +60,9 @@ impl CcmpAssociation {
         let blocks = self.blocks(frame)?;
         let (_, body_and_mic) = frame.split_at_mut(blocks.body_start);
         let (body, mic) = body_and_mic.split_at_mut(blocks.body_len);
-        let cipher = Aes128::new(GenericArray::from_slice(key.as_bytes()));
-        mic.copy_from_slice(&ccm::authenticate(
-            &cipher,
-            &blocks.nonce,
-            &blocks.aad,
-            body,
-        ));
-        ccm::crypt(&cipher, &blocks.nonce, body);
+        let tag = ccm::seal(key.as_bytes(), &blocks.nonce, &blocks.aad, body)
+            .map_err(|_| CcmpMpduError::TooLong)?;
+        mic.copy_from_slice(&tag);
         Ok(())
     }
 
@@ -86,12 +76,10 @@ impl CcmpAssociation {
         let blocks = self.blocks(frame)?;
         let (_, body_and_mic) = frame.split_at_mut(blocks.body_start);
         let (body, mic) = body_and_mic.split_at_mut(blocks.body_len);
-        let cipher = Aes128::new(GenericArray::from_slice(key.as_bytes()));
-        ccm::crypt(&cipher, &blocks.nonce, body);
-        let mut expected = ccm::authenticate(&cipher, &blocks.nonce, &blocks.aad, body);
-        let valid = bool::from(expected.ct_eq(mic));
-        expected.zeroize();
-        if !valid {
+        let mic = mic
+            .first_chunk::<MIC_LEN>()
+            .ok_or(CcmpMpduError::Truncated)?;
+        if ccm::open(key.as_bytes(), &blocks.nonce, &blocks.aad, body, mic).is_err() {
             body.zeroize();
             return Err(CcmpMpduError::InvalidMic);
         }

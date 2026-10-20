@@ -19,6 +19,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 
 [[package]]
+name = "aead"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d122413f284cf2d62fb1b7db97e02edb8cda96d769b16e443a4f6195e35662b0"
+dependencies = [
+ "crypto-common 0.1.7",
+ "generic-array",
+]
+
+[[package]]
 name = "aes"
 version = "0.8.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -465,6 +475,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "ccm"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9ae3c82e4355234767756212c570e29833699ab63e6ffd161887314cc5b43847"
+dependencies = [
+ "aead",
+ "cipher",
+ "ctr",
+ "subtle",
+]
+
+[[package]]
 name = "cfg-if"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -712,6 +734,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "704a3c26996a80471189265814dbc2c257598b96b8a7feae2d31ace646bb9782"
 dependencies = [
  "memchr",
+]
+
+[[package]]
+name = "ctr"
+version = "0.9.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0369ee1ad671834580515889b80f2ea915f23b8be8d0daa4bbaf2ac5c7590835"
+dependencies = [
+ "cipher",
 ]
 
 [[package]]
@@ -2564,6 +2595,7 @@ name = "oer-bluetooth-le-ll"
 version = "0.1.0"
 dependencies = [
  "aes",
+ "ccm",
  "oer-bluetooth-le-radio",
  "oer-radio-regulatory",
  "zeroize",
@@ -3030,6 +3062,7 @@ name = "oer-firmware-apps-w1"
 version = "0.1.0"
 dependencies = [
  "atomic-waker",
+ "crc",
  "embassy-executor",
  "embassy-futures",
  "esp-hal",
@@ -3514,6 +3547,7 @@ name = "oer-ieee80211-cipher"
 version = "0.1.0"
 dependencies = [
  "aes",
+ "ccm",
  "cmac",
  "oer-ieee80211-wire",
  "oer-test-ui-cases",
@@ -4095,6 +4129,7 @@ name = "oer-tool-image-cli"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "crc",
  "oer-chip-profile",
  "oer-hil-lab",
  "oer-ieee80211-port",
@@ -4105,6 +4140,7 @@ dependencies = [
  "oer-lab-board",
  "oer-lab-model",
  "oer-lab-router",
+ "oer-memory",
  "oer-os-command-tree",
  "oer-os-durable",
  "oer-radio-regulatory",

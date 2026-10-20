@@ -72,38 +72,8 @@ impl Order {
     }
 }
 
-/// The CRC-32 (IEEE, reflected) table.
-const CRC_TABLE: [u32; 256] = {
-    let mut table = [0_u32; 256];
-    let mut index = 0;
-    while index < 256 {
-        let mut crc = index as u32;
-        let mut bit = 0;
-        while bit < 8 {
-            crc = if crc & 1 != 0 {
-                (crc >> 1) ^ 0xedb8_8320
-            } else {
-                crc >> 1
-            };
-            bit += 1;
-        }
-        table[index] = crc;
-        index += 1;
-    }
-    table
-};
-
-/// The CRC-32 of `bytes`, each byte read volatile: the bytes are a DMA
-/// buffer the hardware must not write, and a write is what the experiment
-/// looks for, so no read may be folded into an earlier one.
-pub fn crc32(bytes: &[u8]) -> u32 {
-    let mut crc = !0_u32;
-    for byte in bytes {
-        let byte = oer_memory::read_volatile(byte);
-        crc = CRC_TABLE[usize::from(crc as u8 ^ byte)] ^ (crc >> 8);
-    }
-    !crc
-}
+mod crc32;
+use crc32::crc32;
 
 /// The ring index of the descriptor at DMA address `address` in the ring
 /// at `ring_base`; `None` outside the ring or between descriptors.
