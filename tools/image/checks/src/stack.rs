@@ -29,8 +29,8 @@ use oer_analysis_riscv_model::{Ledger, RunControl, WorkingMemory};
 use oer_analysis_riscv_program::facts::ImageFacts;
 use oer_analysis_riscv_stack::{
     Analysis, Bound, DebugMetadata, Dwarf, Function, Reason, Resolutions, Summary, analyze,
-    function_pointer_resolutions, parse_summaries, read_debug, stack_sizes, taken_addresses,
-    task_poll_resolutions, waker_resolutions, waker_vtables,
+    audit_function_addresses, function_pointer_resolutions, parse_summaries, read_debug,
+    stack_sizes, taken_addresses, task_poll_resolutions, waker_resolutions, waker_vtables,
 };
 
 use crate::stack::budget::{Budget, MEMORY_LIMIT, TIMEOUT, Usage, WORK_UNITS};
@@ -168,7 +168,8 @@ impl Image {
         // What the image keeps of the analysis, admitted while it counts
         // against the budget.
         let mut keep = Ledger::new(&memory, &mut control)?;
-        let (dwarf, types) = read_debug(&elf, DebugMetadata::Standard, &mut keep, &mut control)?;
+        let (dwarf, types) =
+            read_debug(&elf, DebugMetadata::TypedLocations, &mut keep, &mut control)?;
         let analysis = analyze(
             &facts,
             &companions,
@@ -195,11 +196,11 @@ impl Image {
         let vtables = waker_vtables(&facts, &dwarf, &analysis, &mut keep, &mut control)?;
         let mut resolutions =
             waker_resolutions(&analysis, &dwarf, &vtables, &mut keep, &mut control)?;
-        // Calls through a static's function pointer reach the taken functions
-        // of its type: the diagnostic observers' `OnceCell<fn(..)>`.
+        // Global callback fields use the common per-address storage audit.
+        // Unknown uses keep candidates despite incompatible declarations.
         let taken = taken_addresses(&facts, &mut keep, &mut control)?;
-        let pointers =
-            function_pointer_resolutions(&analysis, &types, &taken, &mut keep, &mut control)?;
+        let audit = audit_function_addresses(&facts, &analysis, &types, &mut keep, &mut control)?;
+        let pointers = function_pointer_resolutions(&audit, &mut keep, &mut control)?;
         // The executor reaches each task's poll through its header.
         resolutions.extend(task_poll_resolutions(
             &facts,
@@ -212,6 +213,7 @@ impl Image {
             &mut keep,
             &mut control,
         )?);
+        drop(audit);
         drop(types);
         let stack_sizes = stack_sizes(&facts, &mut keep, &mut control)?;
         drop(companions);

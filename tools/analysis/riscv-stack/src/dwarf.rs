@@ -22,8 +22,8 @@ use std::rc::Rc;
 pub(crate) mod locations;
 use locations::{LocalLocations, LocationWalk};
 
-/// Additional metadata retained by the shared DWARF pass. Standard image
-/// checks do not need PC-specific local/parameter locations.
+/// Additional metadata retained by the shared DWARF pass. The callback audit
+/// can use local/parameter storage locations without another DWARF walk.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum DebugMetadata {
     #[default]
@@ -131,7 +131,7 @@ pub(crate) fn origin_reference(unit: &Unit<'_>, entry: &Entry<'_>) -> Option<usi
 /// Read the debug information of `elf`: its DWARF facts and type facts,
 /// admitted in `keep`, which the caller holds while it keeps them.
 /// `TypedLocations` additionally prepares PC-specific local/parameter
-/// locations in TypeFacts for the experimental typed resolver. `Standard`
+/// locations in TypeFacts for the common callback audit. `Standard`
 /// skips that collector and allocates no local-location records or scopes.
 pub fn read(
     elf: &Rc<[u8]>,
@@ -148,7 +148,7 @@ pub fn read(
     let mut scratch = Ledger::new(memory, control)?;
     let mut returns = Returns::default();
     let mut copies = Copies::default();
-    let mut types = TypeWalk::new(&file, keep, control)?;
+    let mut types = TypeWalk::default();
     let mut locations = (metadata == DebugMetadata::TypedLocations).then(LocalLocations::default);
     let mut units = dwarf.units();
     while let Some(header) = units.next().map_err(dwarf_error)? {
@@ -186,10 +186,10 @@ pub fn read(
                 locations.entry(&dwarf, &unit, entry, offset, keep, control)?;
             }
         }
-        types.end_unit(keep, &mut scratch, control)?;
     }
-    let mut types = types.finish(keep, control)?;
+    let mut types = types.finish();
     types.locations = locations;
+    types.source = Some(elf.clone());
     let symbolizer = Symbolizer::shared(elf.clone()).map_err(|error| invalid(error.to_string()))?;
     let mut out = Dwarf {
         symbolizer,

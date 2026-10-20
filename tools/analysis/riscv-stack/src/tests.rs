@@ -1537,7 +1537,6 @@ fn a_type_named_in_another_crate_or_unit_still_matches() {
     let elf = compiled_with_library(SHARED_LIBRARY, "2", SHARED_PROGRAM);
     let analysis = analyze(&elf, &[], &[]).unwrap();
     let (_, types) = debug(&elf);
-    let taken = taken_addresses(&elf).unwrap();
     let named = |name: &str| {
         functions(&elf)
             .unwrap()
@@ -1552,9 +1551,12 @@ fn a_type_named_in_another_crate_or_unit_still_matches() {
             .address
     };
     let (start, consume, replace) = (named("_start"), named("consume"), named("replace"));
-    let resolutions =
-        function_pointer_resolutions(&analysis, &types, &taken, &mut ledger(), &mut || Ok(()))
-            .unwrap();
+    let resolutions = with_facts(&elf, |image| {
+        let mut keep = ledger();
+        let audit = audit_function_addresses(image, &analysis, &types, &mut keep, &mut || Ok(()))?;
+        crate::function_pointer_resolutions(&audit, &mut keep, &mut || Ok(()))
+    })
+    .unwrap();
     let site = analysis.functions[&start]
         .transfers
         .iter()
@@ -1625,15 +1627,13 @@ fn panic(_: &core::panic::PanicInfo) -> ! {
 }
 "#;
 
-/// Function merging puts `step_signed` and `step_unsigned` at one address,
-/// whose own subprogram is one of theirs; a field of either type still
-/// reaches it, by the merged symbol's subprogram.
+/// Function merging puts `step_signed` and `step_unsigned` at one address.
+/// Auditing all aliases' storage uses preserves it for either field type.
 #[test]
 fn a_merged_function_of_another_type_stays_a_candidate() {
     let elf = compiled(MERGED_PROGRAM);
     let analysis = analyze(&elf, &[], &[]).unwrap();
     let (_, types) = debug(&elf);
-    let taken = taken_addresses(&elf).unwrap();
     let named = |name: &str| {
         functions(&elf)
             .unwrap()
@@ -1648,9 +1648,12 @@ fn a_merged_function_of_another_type_stays_a_candidate() {
         "not merged: {:?}",
         signed.names
     );
-    let resolutions =
-        function_pointer_resolutions(&analysis, &types, &taken, &mut ledger(), &mut || Ok(()))
-            .unwrap();
+    let resolutions = with_facts(&elf, |image| {
+        let mut keep = ledger();
+        let audit = audit_function_addresses(image, &analysis, &types, &mut keep, &mut || Ok(()))?;
+        crate::function_pointer_resolutions(&audit, &mut keep, &mut || Ok(()))
+    })
+    .unwrap();
     let sites: Vec<u32> = analysis.functions[&start]
         .transfers
         .iter()
@@ -1707,15 +1710,12 @@ fn panic(_: &core::panic::PanicInfo) -> ! {
 }
 "#;
 
-/// A crate built with limited debuginfo, as the precompiled `core` is,
-/// names its functions without their parameters: their shape is unknown, so
-/// they stay candidates of a field that takes arguments.
+/// Limited DWARF cannot turn an unproven storage use into an exclusion.
 #[test]
 fn a_function_of_a_unit_without_types_stays_a_candidate() {
     let elf = compiled_with_library(LIMITED_LIBRARY, "limited", LIMITED_PROGRAM);
     let analysis = analyze(&elf, &[], &[]).unwrap();
     let (_, types) = debug(&elf);
-    let taken = taken_addresses(&elf).unwrap();
     let named = |name: &str| {
         functions(&elf)
             .unwrap()
@@ -1730,9 +1730,12 @@ fn a_function_of_a_unit_without_types_stays_a_candidate() {
             .address
     };
     let (start, limited) = (named("_start"), named("limited"));
-    let resolutions =
-        function_pointer_resolutions(&analysis, &types, &taken, &mut ledger(), &mut || Ok(()))
-            .unwrap();
+    let resolutions = with_facts(&elf, |image| {
+        let mut keep = ledger();
+        let audit = audit_function_addresses(image, &analysis, &types, &mut keep, &mut || Ok(()))?;
+        crate::function_pointer_resolutions(&audit, &mut keep, &mut || Ok(()))
+    })
+    .unwrap();
     let site = analysis.functions[&start]
         .transfers
         .iter()
@@ -1982,11 +1985,10 @@ fn panic(_: &core::panic::PanicInfo<'_>) -> ! {
 "#;
 
 #[test]
-fn a_call_through_a_static_s_function_pointer_reaches_the_taken_functions_of_its_type() {
+fn a_call_through_a_static_preserves_functions_with_unknown_stores() {
     let elf = compiled(HOOK_PROGRAM);
     let analysis = analyze(&elf, &[], &[]).unwrap();
     let (_, types) = debug(&elf);
-    let taken = taken_addresses(&elf).unwrap();
     let named = |name: &str| {
         functions(&elf)
             .unwrap()
@@ -2007,26 +2009,37 @@ fn a_call_through_a_static_s_function_pointer_reaches_the_taken_functions_of_its
         named("negate"),
         named("deep"),
     );
+    let taken = taken_addresses(&elf).unwrap();
     assert!(taken.contains(&shallow) && taken.contains(&deep));
     assert_eq!(analysis.bound(start).unwrap().bytes, None);
-    let resolutions =
-        function_pointer_resolutions(&analysis, &types, &taken, &mut ledger(), &mut || Ok(()))
-            .unwrap();
+    let resolutions = with_facts(&elf, |image| {
+        let mut keep = ledger();
+        let audit = audit_function_addresses(image, &analysis, &types, &mut keep, &mut || Ok(()))?;
+        crate::function_pointer_resolutions(&audit, &mut keep, &mut || Ok(()))
+    })
+    .unwrap();
     let site = analysis.functions[&start]
         .transfers
         .iter()
         .find(|transfer| transfer.target.is_none())
         .unwrap()
         .site;
-    // `negate` and `halve` have the sizes of `fn(u32) -> u32` but `i32`, and
-    // `deep`'s parameter count differs: none can be the field's.
+    // Stores without a proven typed destination retain the function even
+    // when its declaration differs from the call field.
+    let targets = &resolutions.get(site).unwrap().targets;
     assert_eq!(
-        resolutions.get(site).map(|resolution| &resolution.targets),
-        Some(&BTreeSet::from([shallow, twice])),
-        "{resolutions:x?} negate={negate:#x}"
+        targets,
+        &BTreeSet::from([shallow, twice, negate, named("halve"), deep]),
+        "{resolutions:x?}"
     );
     let bound = analysis.bound_with(start, &resolutions).unwrap();
     assert!(bound.unresolved.is_empty(), "{bound:?}");
+    assert!(bound.reached.contains(&deep));
+    assert_eq!(
+        bound.bytes,
+        Some(256),
+        "the newly retained deep function contributes its frame"
+    );
 }
 
 const MRET: u32 = 0x3020_0073;
@@ -3227,4 +3240,62 @@ fn main_and_companion_address_uses_keep_independent_elf_identities() {
         })
     })
     .unwrap();
+}
+
+#[test]
+fn removing_unproven_declaration_exclusion_exposes_an_unresolved_callee() {
+    let source = HOOK_PROGRAM
+        .replace("#[inline(never)]\nfn deep", "#[unsafe(no_mangle)]\n#[inline(never)]\npub fn deep")
+        .replace("fn deep(value: u8) {", "fn deep(value: u8) {\n    let callback: fn() = unsafe { core::mem::transmute(usize::from(value)) };\n    callback();");
+    let elf = compiled(&source);
+    let analysis = analyze(&elf, &[], &[]).unwrap();
+    let (_, types) = debug(&elf);
+    let named = |needle: &str| {
+        analysis
+            .functions
+            .values()
+            .find(|facts| {
+                facts.function.names.iter().any(|name| {
+                    let name = oer_analysis_elf::demangle(name);
+                    name == needle || name.ends_with(&format!("::{needle}"))
+                })
+            })
+            .unwrap()
+            .function
+            .address
+    };
+    let start = named("_start");
+    let site = analysis.functions[&start]
+        .transfers
+        .iter()
+        .find(|t| t.target.is_none())
+        .unwrap()
+        .site;
+    // The former declaration-only subset hid deep's unresolved transfer.
+    let mut former = Resolutions::new();
+    former.add(site, Fact::FieldType, [named("shallow"), named("twice")]);
+    assert!(
+        analysis
+            .bound_with(start, &former)
+            .unwrap()
+            .unresolved
+            .is_empty()
+    );
+    let resolutions = with_facts(&elf, |image| {
+        let mut keep = ledger();
+        let audit = audit_function_addresses(image, &analysis, &types, &mut keep, &mut || Ok(()))?;
+        crate::function_pointer_resolutions(&audit, &mut keep, &mut || Ok(()))
+    })
+    .unwrap();
+    assert!(
+        resolutions
+            .get(site)
+            .unwrap()
+            .targets
+            .contains(&named("deep"))
+    );
+    let bound = analysis.bound_with(start, &resolutions).unwrap();
+    assert!(!bound.unresolved.is_empty(), "{bound:?}");
+    assert_eq!(bound.bytes, None);
+    assert!(bound.reached.contains(&named("deep")));
 }

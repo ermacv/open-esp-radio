@@ -1,7 +1,27 @@
 use super::*;
+use crate::Analysis;
+use crate::cha::TypeFacts;
+use crate::cha::locations::Locations;
 use crate::dwarf::Reader;
 use crate::dwarf::locations::LocalLocations;
 use crate::tests::{compiled, ledger, with_facts};
+use crate::{StorageEvidence, UnknownUse, audit_function_addresses};
+use oer_analysis_elf::dwarf::gimli;
+use oer_analysis_elf::rv32::Role;
+use oer_analysis_riscv_program::facts::ImageFacts;
+use std::collections::BTreeMap;
+
+fn typed_function_pointer_resolutions(
+    image: &ImageFacts<'_>,
+    analysis: &Analysis,
+    types: &TypeFacts,
+    keep: &mut Ledger<'_>,
+    control: &mut dyn RunControl,
+) -> Result<Resolutions> {
+    let mut scratch = Ledger::new(keep.memory(), control)?;
+    let audit = audit_function_addresses(image, analysis, types, &mut scratch, control)?;
+    crate::typed_function_pointer_resolutions(&audit, keep, control)
+}
 
 fn typed_debug(elf: &[u8]) -> (crate::Dwarf, TypeFacts) {
     crate::read_debug(
@@ -71,7 +91,6 @@ fn a_pointer_parameter_names_its_function_field_at_the_load() {
             &mut || Ok(()),
         )?;
         let mut locations = Locations {
-            debug: types.locations.as_ref().unwrap(),
             aliases: BTreeMap::new(),
         };
         locations.read_aliases(image, &mut keep, &mut || Ok(()))?;
@@ -210,8 +229,9 @@ fn an_optimized_out_piece_does_not_shift_the_next_stack_field() {
             &mut || Ok(()),
         )
         .unwrap();
+    let mut types = types;
+    types.locations = Some(prepared);
     let locations = Locations {
-        debug: &prepared,
         aliases: BTreeMap::new(),
     };
     assert!(
@@ -253,7 +273,7 @@ fn reading_locations_respects_the_work_budget() {
 
 #[test]
 fn one_unknown_relocation_among_typed_uses_keeps_the_function_a_candidate() {
-    let source = PROGRAM.replace(
+    let source = global_program().replace(
         "black_box(&OTHER);",
         "black_box(&OTHER); black_box(different as *const () as usize);",
     );
@@ -293,6 +313,7 @@ fn one_unknown_relocation_among_typed_uses_keeps_the_function_a_candidate() {
     };
     // Keep the symbol identity and addend, but make the role unfamiliar.
     elf[at] = 0xff;
+    check_both(&elf, true, Some(UnknownUse::UnsupportedRelocation));
     let (_, types) = typed_debug(&elf);
     with_facts(&elf, |image| {
         let mut keep = ledger();
@@ -364,7 +385,7 @@ fn the_resolver_requires_prepared_locations_without_implicitly_loading_them() {
 #[test]
 fn the_resolver_uses_prepared_metadata_when_debug_sections_cannot_be_loaded_again() {
     let mut elf = compiled(PROGRAM);
-    let (_, types) = typed_debug(&elf);
+    let (_, mut types) = typed_debug(&elf);
     let info = oer_analysis_elf::Elf::parse(&elf)
         .unwrap()
         .section_by_name(".debug_info")
@@ -375,6 +396,10 @@ fn the_resolver_uses_prepared_metadata_when_debug_sections_cannot_be_loaded_agai
     // Marking the already prepared debug section compressed makes any
     // subsequent DebugSections::load fail while preserving machine code.
     elf[flags..flags + 4].copy_from_slice(&object::elf::SHF_COMPRESSED.to_le_bytes());
+    // Corrupt only the retained source's section flags, in the same buffer.
+    // All prepared DIE and storage identities still refer to this image.
+    std::rc::Rc::get_mut(types.source.as_mut().unwrap()).unwrap()[flags..flags + 4]
+        .copy_from_slice(&object::elf::SHF_COMPRESSED.to_le_bytes());
     with_facts(&elf, |image| {
         assert!(oer_analysis_elf::dwarf::DebugSections::load(image.file()).is_err());
         let mut keep = ledger();
@@ -402,6 +427,312 @@ fn the_resolver_uses_prepared_metadata_when_debug_sections_cannot_be_loaded_agai
         let resolution = resolutions.get(site).unwrap();
         assert!(resolution.targets.contains(&named(&analysis, "target")));
         assert!(!resolution.targets.contains(&named(&analysis, "different")));
+        Ok(())
+    })
+    .unwrap();
+}
+
+fn global_program() -> String {
+    PROGRAM
+        .replace("pub static CALLBACKS:", "pub static mut CALLBACKS:")
+        .replace("    &CALLBACKS", "    core::ptr::addr_of!(CALLBACKS)")
+        .replace(
+            "    black_box(&OTHER);",
+            "    black_box(global as extern \"C\" fn(u32) -> u32); black_box(&OTHER);",
+        )
+        + r#"
+#[unsafe(no_mangle)]
+pub extern "C" fn global(value: u32) -> u32 {
+    (unsafe { core::ptr::read_volatile(core::ptr::addr_of!(CALLBACKS.run)) })(value)
+}
+"#
+}
+
+fn check_both(elf: &[u8], expected: bool, reason: Option<UnknownUse>) {
+    let (_, types) = typed_debug(elf);
+    with_facts(elf, |image| {
+        let mut keep = ledger();
+        let analysis = crate::analyze(image, &[], &[], &UnknownCallBehavior, &mut keep, &mut || Ok(()))?;
+        let audit = audit_function_addresses(image, &analysis, &types, &mut keep, &mut || Ok(()))?;
+        let different = named(&analysis, "different");
+        let uses = audit.uses().find(|(function, _)| *function == different).unwrap().1;
+        assert!(!uses.is_empty());
+        if let Some(reason) = reason {
+            assert!(uses.iter().any(|use_| matches!(use_.evidence, StorageEvidence::Typed(_))), "the regression must retain a known use alongside the unknown: {uses:?}");
+            assert!(uses.iter().any(|use_| matches!(use_.evidence, StorageEvidence::Unknown(found) if found == reason)), "{uses:?}");
+        }
+        let global = crate::function_pointer_resolutions(&audit, &mut keep, &mut || Ok(()))?;
+        let typed = crate::typed_function_pointer_resolutions(&audit, &mut keep, &mut || Ok(()))?;
+        let site = |name| analysis.functions[&named(&analysis, name)].transfers.iter().find(|t| t.target.is_none()).unwrap().site;
+        let global = global.get(site("global")).expect("global field");
+        let typed = typed.get(site("_start")).expect("typed field");
+        assert_eq!(global.targets, typed.targets, "the same field and audit must give the same candidates");
+        assert_eq!(global.targets.contains(&different), expected);
+        Ok(())
+    }).unwrap();
+}
+
+#[test]
+fn both_resolvers_use_all_storage_types_including_a_signature_cast() {
+    let source = global_program();
+    check_both(&compiled(&source), false, None);
+    // Keep both incompatible and compatible storage uses of the same function.
+    let source = source.replace("pub static OTHER: fn(u16) -> u16 = different;", "pub static OTHER: fn(u16) -> u16 = different;\n#[unsafe(no_mangle)]\npub static CAST: fn(u32) -> u32 = unsafe { core::mem::transmute(different as fn(u16) -> u16) };").replace("black_box(&OTHER);", "black_box(&OTHER); black_box(&CAST);");
+    check_both(&compiled(&source), true, None);
+}
+
+#[test]
+fn both_resolvers_keep_one_unknown_write_among_known_uses() {
+    let source = global_program().replace("pub static OTHER:", "static mut ERASED: usize = 0;\npub static OTHER:").replace("black_box(&OTHER);", "black_box(&OTHER); unsafe { core::ptr::write_volatile(core::ptr::addr_of_mut!(ERASED), different as *const () as usize); }");
+    check_both(&compiled(&source), true, Some(UnknownUse::UnknownWrite));
+}
+
+#[test]
+fn both_resolvers_keep_an_addend_among_exact_typed_uses() {
+    let source = global_program().replace("pub static OTHER: fn(u16) -> u16 = different;", "pub static OTHER: fn(u16) -> u16 = different;\n#[unsafe(no_mangle)]\npub static EXTRA: fn(u16) -> u16 = different;").replace("black_box(&OTHER);", "black_box(&OTHER); black_box(&EXTRA);");
+    let mut elf = compiled(&source);
+    let (rela_at, word_at, target) = {
+        let file = oer_analysis_elf::Elf::parse(&elf).unwrap();
+        let extra = file.symbols().find(|s| s.name == "EXTRA").unwrap();
+        let section = file.section(extra.section.unwrap()).unwrap();
+        let rela = file
+            .sections()
+            .find(|s| {
+                s.kind == oer_analysis_elf::SectionKind::Rela && s.relocates == Some(section.index)
+            })
+            .unwrap();
+        let index = rela
+            .data
+            .chunks_exact(12)
+            .position(|entry| {
+                u32::from_le_bytes(entry[..4].try_into().unwrap()) == extra.address as u32
+            })
+            .unwrap();
+        let word_at = section.file_offset as usize + (extra.address - section.address) as usize;
+        (
+            rela.file_offset as usize + index * 12 + 8,
+            word_at,
+            u32::from_le_bytes(elf[word_at..word_at + 4].try_into().unwrap()),
+        )
+    };
+    elf[rela_at..rela_at + 4].copy_from_slice(&2_i32.to_le_bytes());
+    elf[word_at..word_at + 4].copy_from_slice(&(target + 2).to_le_bytes());
+    check_both(&elf, true, Some(UnknownUse::NonExactAddress));
+}
+
+#[test]
+fn type_facts_from_another_elf_are_rejected_even_with_matching_die_offsets() {
+    let elf = compiled(&global_program());
+    let other = compiled(&global_program().replace("marker: 7", "marker: 8"));
+    let (_, types) = typed_debug(&other);
+    with_facts(&elf, |image| {
+        let mut keep = ledger();
+        let analysis = crate::analyze(
+            image,
+            &[],
+            &[],
+            &UnknownCallBehavior,
+            &mut keep,
+            &mut || Ok(()),
+        )?;
+        let error = audit_function_addresses(image, &analysis, &types, &mut keep, &mut || Ok(()))
+            .err()
+            .expect("different ELF");
+        assert_eq!(error.code, ErrorCode::Incompatible);
+        Ok(())
+    })
+    .unwrap();
+}
+
+#[test]
+fn no_address_evidence_and_empty_sets_never_prove_unreachability() {
+    let elf = compiled(&global_program());
+    let (_, types) = typed_debug(&elf);
+    with_facts(&elf, |image| {
+        let mut keep = ledger();
+        let analysis = crate::analyze(
+            image,
+            &[],
+            &[],
+            &UnknownCallBehavior,
+            &mut keep,
+            &mut || Ok(()),
+        )?;
+        let mut audit =
+            audit_function_addresses(image, &analysis, &types, &mut keep, &mut || Ok(()))?;
+        // Remove the evidence, retaining the address-taken universe.
+        for uses in audit.uses.values_mut() {
+            uses.clear();
+        }
+        let global = crate::function_pointer_resolutions(&audit, &mut keep, &mut || Ok(()))?;
+        let typed = crate::typed_function_pointer_resolutions(&audit, &mut keep, &mut || Ok(()))?;
+        assert!(!global.is_empty() && !typed.is_empty());
+        assert_eq!(
+            global.iter().next().unwrap().1.targets,
+            typed.iter().next().unwrap().1.targets
+        );
+        assert!(
+            global
+                .iter()
+                .all(|(_, r)| r.targets.contains(&named(&analysis, "different")))
+        );
+        audit.uses.clear();
+        let global = crate::function_pointer_resolutions(&audit, &mut keep, &mut || Ok(()))?;
+        assert!(!global.is_empty());
+        assert!(
+            global
+                .iter()
+                .all(|(_, r)| r.targets.is_empty() && !r.resolves())
+        );
+        let bound = analysis
+            .bound_with(named(&analysis, "_start"), &global)
+            .unwrap();
+        assert!(!bound.unresolved.is_empty());
+        Ok(())
+    })
+    .unwrap();
+}
+
+#[test]
+fn missing_dwarf_supplies_no_exclusion_or_unreachable_call_proof() {
+    let mut elf = compiled(&global_program());
+    // Hide all debug sections from the reader, keeping the code/relocations.
+    let names = {
+        let file = oer_analysis_elf::Elf::parse(&elf).unwrap();
+        file.sections()
+            .filter(|s| s.name.starts_with(".debug_"))
+            .map(|s| s.name.as_bytes().to_vec())
+            .collect::<Vec<_>>()
+    };
+    for name in names {
+        if let Some(at) = elf.windows(name.len()).position(|bytes| bytes == name) {
+            elf[at..at + 7].copy_from_slice(b".erased");
+        }
+    }
+    let (_, types) = typed_debug(&elf);
+    assert!(types.globals.is_empty());
+    with_facts(&elf, |image| {
+        let mut keep = ledger();
+        let analysis = crate::analyze(
+            image,
+            &[],
+            &[],
+            &UnknownCallBehavior,
+            &mut keep,
+            &mut || Ok(()),
+        )?;
+        let audit = audit_function_addresses(image, &analysis, &types, &mut keep, &mut || Ok(()))?;
+        assert!(
+            audit
+                .uses()
+                .flat_map(|(_, uses)| uses)
+                .all(|u| matches!(u.evidence, StorageEvidence::Unknown(_)))
+        );
+        assert!(crate::function_pointer_resolutions(&audit, &mut keep, &mut || Ok(()))?.is_empty());
+        assert!(
+            crate::typed_function_pointer_resolutions(&audit, &mut keep, &mut || Ok(()))?
+                .is_empty()
+        );
+        assert!(
+            !analysis
+                .bound(named(&analysis, "_start"))
+                .unwrap()
+                .unresolved
+                .is_empty()
+        );
+        Ok(())
+    })
+    .unwrap();
+}
+
+#[test]
+fn merged_symbols_share_every_known_and_unknown_address_use() {
+    let source = global_program()
+        .replace("#[unsafe(no_mangle)]\npub static OTHER:", "#[unsafe(no_mangle)]\npub static ALIAS: fn(i32) -> i32 = alias;\n#[unsafe(no_mangle)]\npub static OTHER:")
+        .replace("black_box(&OTHER);", "black_box(&OTHER); black_box(&ALIAS); black_box(alias as *const () as usize);")
+        + r#"
+#[unsafe(no_mangle)]
+#[inline(never)]
+pub fn alias(value: i32) -> i32 { black_box(value.wrapping_add(1)) }
+"#;
+    let source = source.replace(
+        "#[inline(never)]\nfn target",
+        "#[unsafe(no_mangle)]\n#[inline(never)]\npub fn target",
+    );
+    let elf = compiled(&source);
+    with_facts(&elf, |image| {
+        let mut keep = ledger();
+        let analysis = crate::analyze(
+            image,
+            &[],
+            &[],
+            &UnknownCallBehavior,
+            &mut keep,
+            &mut || Ok(()),
+        )?;
+        let target = named(&analysis, "target");
+        assert_eq!(
+            target,
+            named(&analysis, "alias"),
+            "fixture must merge bodies of different declaration types"
+        );
+        let (_, types) = typed_debug(&elf);
+        let audit = audit_function_addresses(image, &analysis, &types, &mut keep, &mut || Ok(()))?;
+        let uses = audit
+            .uses()
+            .find(|(function, _)| *function == target)
+            .unwrap()
+            .1;
+        assert!(
+            uses.iter()
+                .any(|u| matches!(u.evidence, StorageEvidence::Typed(_)))
+        );
+        assert!(
+            uses.iter()
+                .any(|u| matches!(u.evidence, StorageEvidence::Unknown(_)))
+        );
+        for resolutions in [
+            crate::function_pointer_resolutions(&audit, &mut keep, &mut || Ok(()))?,
+            crate::typed_function_pointer_resolutions(&audit, &mut keep, &mut || Ok(()))?,
+        ] {
+            assert!(!resolutions.is_empty());
+            assert!(resolutions.iter().all(|(_, r)| r.targets.contains(&target)));
+        }
+        Ok(())
+    })
+    .unwrap();
+}
+
+#[test]
+fn the_common_audit_obeys_work_and_memory_budgets() {
+    let elf = compiled(PROGRAM);
+    let (_, types) = typed_debug(&elf);
+    with_facts(&elf, |image| {
+        let analysis = crate::analyze(
+            image,
+            &[],
+            &[],
+            &UnknownCallBehavior,
+            &mut ledger(),
+            &mut || Ok(()),
+        )?;
+        let error = audit_function_addresses(image, &analysis, &types, &mut ledger(), &mut || {
+            Err(Error::new(ErrorCode::Cancelled, "stop"))
+        })
+        .err()
+        .expect("work budget");
+        assert_eq!(error.code, ErrorCode::Cancelled);
+        let memory = WorkingMemory::new(1)?;
+        let error = audit_function_addresses(
+            image,
+            &analysis,
+            &types,
+            &mut Ledger::new(&memory, &mut || Ok(()))?,
+            &mut || Ok(()),
+        )
+        .err()
+        .expect("memory budget");
+        assert_eq!(error.code, ErrorCode::ResourceLimited);
         Ok(())
     })
     .unwrap();

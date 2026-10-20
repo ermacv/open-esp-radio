@@ -48,7 +48,11 @@ use oer_analysis_riscv_program::facts::ImageFacts;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
-pub use cha::{TypeFacts, function_pointer_resolutions, typed_function_pointer_resolutions};
+pub use cha::{
+    AddressUseAudit, FunctionPointerAudit, FunctionPointerType, StorageEvidence, TypeFacts,
+    UnknownUse, audit_function_addresses, function_pointer_resolutions,
+    typed_function_pointer_resolutions,
+};
 pub use contexts::{HartStack, LevelStack, Stacks, interrupt_stacks};
 pub use dwarf::{DebugMetadata, Dwarf, read as read_debug};
 pub use image::{Function, stack_sizes};
