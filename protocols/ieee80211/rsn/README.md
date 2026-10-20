@@ -38,7 +38,10 @@ This covers those owners, not arbitrary compiler temporaries. AES-128/192/256
 key schedules enable RustCrypto's `zeroize` feature and wipe on drop, including
 when the stateless cipher crate is built independently. HMAC and SHA-1/SHA-2
 internal state derived from KCK/PMK material does not wipe on drop; zeroizing
-the input owners does not erase that state.
+the input owners does not erase that state. SAE passwords, password elements,
+password tokens, derived keys and comeback-token keys zeroize on drop. Their
+owners do not implement `Copy` or `Clone`, and Debug reveals only a redaction.
+Derived keys expose borrowed bytes through accessors.
 
 `oer_ieee80211_cipher::ccmp_mpdu::CcmpAssociation` authenticates the QoS A-MSDU-present bit in both AAD and
 nonce flags when SPP was negotiated. Without SPP it masks that bit according
@@ -107,10 +110,6 @@ not enable the policy.
 - **SAE H2E ignores the Rejected Groups salt.** `sae.rs::SaeCommit::process`
   always derives the keyseed with a zero salt; `rejected_groups` is only
   parsed. H2E with a rejected group does not interoperate.
-- **SAE secrets are copyable or printable** (`sae.rs`):
-  `SaePasswordElement` and `SaePasswordToken` derive `Clone, Copy, Debug`;
-  `SaeKeys` is `Clone` with `pub kck`, `pmk`, `pmkid`; `SaePassword`
-  is `Clone`; `SaeComebackTokens.key` is never zeroized.
 - **Management CCMP receiver** (`management_ccmp.rs::ManagementCcmpReceiver`):
   starts at no PN, so PN 0 is accepted; the KeyID is not checked to be 0;
   A1 is not checked to be individually addressed. `new` copies the TK from

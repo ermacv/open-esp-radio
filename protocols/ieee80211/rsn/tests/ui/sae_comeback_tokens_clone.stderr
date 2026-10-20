@@ -1,0 +1,5 @@
+error[E0599]: no method named `clone` found for struct `SaeComebackTokens` in the current scope
+ --> tests/ui/sae_comeback_tokens_clone.rs:5:25
+  |
+5 |     let installed = key.clone(); // ui-error: E0599
+  |                         ^^^^^ method not found in `SaeComebackTokens`

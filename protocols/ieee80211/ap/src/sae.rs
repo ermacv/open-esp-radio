@@ -612,7 +612,7 @@ fn draw_commit<R: ApSaeRandom>(
         let mut mask = [0; SAE_PRIME_LEN];
         random.fill(&mut rand);
         random.fill(&mut mask);
-        match SaeCommit::new(pwe, rand, mask) {
+        match SaeCommit::new(&pwe, rand, mask) {
             Err(SaeError::UnsuitableRandom) => {}
             commit => return commit,
         }
@@ -641,8 +641,8 @@ fn accept(session: &mut Session) -> ApSaeResult {
         .as_ref()
         .expect("an accepted session holds its keys");
     ApSaeResult::Accepted {
-        pmk: keys.pmk,
-        pmkid: keys.pmkid,
+        pmk: *keys.pmk(),
+        pmkid: *keys.pmkid(),
     }
 }
 

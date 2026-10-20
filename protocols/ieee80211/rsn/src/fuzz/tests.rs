@@ -217,8 +217,8 @@ fn sae_peers() -> (SaeCommit, SaeCommit) {
     let b = [2, 0, 0, 0, 0, 2];
     let pwe = SaePasswordElement::hunting_and_pecking(b"password", a, b).unwrap();
     (
-        SaeCommit::new(pwe, [0x11; 32], [0x22; 32]).unwrap(),
-        SaeCommit::new(pwe, [0x33; 32], [0x44; 32]).unwrap(),
+        SaeCommit::new(&pwe, [0x11; 32], [0x22; 32]).unwrap(),
+        SaeCommit::new(&pwe, [0x33; 32], [0x44; 32]).unwrap(),
     )
 }
 
@@ -346,7 +346,7 @@ fn constructors_refuse_what_the_views_rely_on() {
     let one = core::array::from_fn(|index| u8::from(index == 31));
     for rand in [[0; 32], one, [0xff; 32]] {
         assert!(matches!(
-            SaeCommit::new(pwe, rand, [0x22; 32]),
+            SaeCommit::new(&pwe, rand, [0x22; 32]),
             Err(SaeError::UnsuitableRandom)
         ));
     }

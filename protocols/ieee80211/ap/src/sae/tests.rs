@@ -50,7 +50,7 @@ impl Station {
             SaePasswordElement::hunting_and_pecking(password, station, ACCESS_POINT).unwrap()
         };
         Self {
-            commit: SaeCommit::new(pwe, [0x21; 32], [0x43; 32]).unwrap(),
+            commit: SaeCommit::new(&pwe, [0x21; 32], [0x43; 32]).unwrap(),
             h2e,
         }
     }
@@ -109,8 +109,8 @@ fn exchange(h2e: bool) {
     let ApSaeResult::Accepted { pmk, pmkid } = output.result else {
         panic!("the confirm is accepted: {output:?}");
     };
-    assert_eq!(pmk, keys.pmk);
-    assert_eq!(pmkid, keys.pmkid);
+    assert_eq!(pmk, *keys.pmk());
+    assert_eq!(pmkid, *keys.pmkid());
     let reply = only_reply(&output);
     assert_eq!((reply.transaction, reply.status), (2, 0));
     assert_eq!(keys.verify_peer_confirm(reply.body()), Ok(1));

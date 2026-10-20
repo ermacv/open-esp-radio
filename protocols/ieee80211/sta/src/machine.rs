@@ -3358,10 +3358,10 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
                             }
                         };
                         let commit =
-                            SaeCommit::new(element, (self.config.nonce)(), (self.config.nonce)())
+                            SaeCommit::new(&element, (self.config.nonce)(), (self.config.nonce)())
                                 .map_err(|error| {
-                                StaDisconnectReason::Sae(StaSaeFailure::Protocol(error))
-                            })?;
+                                    StaDisconnectReason::Sae(StaSaeFailure::Protocol(error))
+                                })?;
                         let (authentication, transmission) =
                             StaSaeAuthentication::new(self.config.address, bssid, commit, pwe, now)
                                 .map_err(StaDisconnectReason::Sae)?;

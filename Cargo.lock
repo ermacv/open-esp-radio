@@ -3569,6 +3569,7 @@ dependencies = [
  "hmac",
  "oer-ieee80211-cipher",
  "oer-ieee80211-wire",
+ "oer-test-ui-cases",
  "oer-time",
  "p256",
  "pbkdf2",
