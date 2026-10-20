@@ -625,7 +625,8 @@ fn a_dma_region_types_buffer_addresses_without_a_pointer_layout() {
 }
 
 #[test]
-fn the_linker_fragment_names_the_dma_window_and_the_address_width() {
+fn the_linker_fragment_names_the_dma_window_and_the_address_width()
+-> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let directory = tempfile::tempdir().unwrap();
     let path = |name: &str| directory.path().join(name);
     for (name, text) in [
@@ -659,13 +660,13 @@ fn the_linker_fragment_names_the_dma_window_and_the_address_width() {
         "DMA_WINDOW_ORIGIN + 4",
         "DMA_WINDOW_ORIGIN + 8",
         None,
-    );
+    )?;
     check_dma_link(
         &fragment,
         "DMA_WINDOW_ORIGIN",
         "DMA_WINDOW_ORIGIN + 8",
         Some("zero low DMA address bits"),
-    );
+    )?;
     // Without a DMA address field no window is known: the link refuses any
     // DMA storage.
     let none = oer_registers_model::render_dma_linker_fragment(&svd, &memory, None).unwrap();
@@ -700,20 +701,20 @@ fn the_linker_fragment_names_the_dma_window_and_the_address_width() {
         "DMA_WINDOW_ORIGIN",
         "DMA_WINDOW_ORIGIN + DMA_WINDOW_LENGTH",
         None,
-    );
-    check_dma_link(&full_address, "0", "0", None);
+    )?;
+    check_dma_link(&full_address, "0", "0", None)?;
     check_dma_link(
         &full_address,
         "DMA_WINDOW_ORIGIN - 1",
         "DMA_WINDOW_ORIGIN + 8",
         Some("outside the DMA window"),
-    );
+    )?;
     check_dma_link(
         &full_address,
         "DMA_WINDOW_ORIGIN + 4",
         "DMA_WINDOW_ORIGIN + DMA_WINDOW_LENGTH + 1",
         Some("outside the DMA window"),
-    );
+    )?;
     // The field must be a low field of its register, and must exist.
     for (field, reason) in [
         ("RADIO.STATUS.FLAG", "bits N-1:0"),
@@ -740,17 +741,23 @@ fn the_linker_fragment_names_the_dma_window_and_the_address_width() {
     .unwrap_err()
     .to_string();
     assert!(error.contains("no RAM region dma-window"), "{error}");
+    Ok(())
 }
 
 /// Exercise the generated assertions with the toolchain's RV32 linker,
 /// including its evaluation of shifts by the complete address width.
-fn check_dma_link(fragment: &str, start: &str, end: &str, expected_error: Option<&str>) {
-    let directory = tempfile::tempdir().unwrap();
+fn check_dma_link(
+    fragment: &str,
+    start: &str,
+    end: &str,
+    expected_error: Option<&str>,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let directory = tempfile::tempdir()?;
     let input = directory.path().join("empty.bin");
     let script = directory.path().join("dma-window.x");
-    fs::write(&input, []).unwrap();
-    fs::write(&script, fragment).unwrap();
-    let result = std::process::Command::new(oer_os_toolchain::lld().unwrap())
+    fs::write(&input, [])?;
+    fs::write(&script, fragment)?;
+    let result = std::process::Command::new(oer_os_toolchain::lld()?)
         .args(["-m", "elf32lriscv", "-b", "binary"])
         .arg(&input)
         .arg("-T")
@@ -761,8 +768,7 @@ fn check_dma_link(fragment: &str, start: &str, end: &str, expected_error: Option
         .arg(format!("__runtime_dma_bss_end={end}"))
         .args(["--entry", "0", "-o"])
         .arg(directory.path().join("image.elf"))
-        .output()
-        .unwrap();
+        .output()?;
     let diagnostic = String::from_utf8_lossy(&result.stderr);
     assert_eq!(
         result.status.success(),
@@ -772,6 +778,7 @@ fn check_dma_link(fragment: &str, start: &str, end: &str, expected_error: Option
     if let Some(reason) = expected_error {
         assert!(diagnostic.contains(reason), "{diagnostic}");
     }
+    Ok(())
 }
 
 const BYTE_ARRAY: &str = r#"schema = 1

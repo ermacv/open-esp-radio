@@ -11,18 +11,18 @@ pub const DMA_BSS_PREFIX: &str = ".dma.bss.";
 
 /// Whether `section` is a `.dma.bss.<block>` input section.
 pub const fn is_dma_section(section: &str) -> bool {
-    let (section, prefix) = (section.as_bytes(), DMA_BSS_PREFIX.as_bytes());
-    if section.len() <= prefix.len() {
-        return false;
-    }
-    let mut index = 0;
-    while index < prefix.len() {
-        if section[index] != prefix[index] {
+    let (mut section, mut prefix) = (section.as_bytes(), DMA_BSS_PREFIX.as_bytes());
+    while let Some((expected, rest)) = prefix.split_first() {
+        let Some((actual, tail)) = section.split_first() else {
+            return false;
+        };
+        if *actual != *expected {
             return false;
         }
-        index += 1;
+        prefix = rest;
+        section = tail;
     }
-    true
+    !section.is_empty()
 }
 
 /// A zero-initialised static placed in the DMA window, claimed once.
