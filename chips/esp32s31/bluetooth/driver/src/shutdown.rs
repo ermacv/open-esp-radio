@@ -24,7 +24,7 @@ use oer_esp32s31_hal::{
     domain::RadioDomain,
 };
 use oer_esp32s31_phy::{bluetooth_client::BluetoothPhyClientError, concurrent::ConcurrentPhy};
-use oer_interrupt_table::signal::ForeignContext;
+use oer_interrupt_table::signal::{ForeignContext, SignalExecutor};
 
 use crate::{
     ble_phy::{BlePhyRetainedOwners, DirectionFindingWorkspaceHardwareOwned},
@@ -56,9 +56,9 @@ pub enum ControllerShutdownError {
 /// lost its routes and runtime, so no transition resumes it; the owners stay
 /// retained until the chip resets.
 #[must_use = "a failed shutdown retains the Controller until the chip resets"]
-pub struct ControllerShutdownFailure {
+pub struct ControllerShutdownFailure<X: SignalExecutor> {
     error: ControllerShutdownError,
-    _retained: Retained,
+    _retained: Retained<X>,
 }
 
 #[allow(
@@ -66,9 +66,9 @@ pub struct ControllerShutdownFailure {
     clippy::large_enum_variant,
     reason = "the retained owners are never read or moved again"
 )]
-enum Retained {
+enum Retained<X: SignalExecutor> {
     Task {
-        task: ControllerPoweredTaskRuntime<'static>,
+        task: ControllerPoweredTaskRuntime<'static, X>,
         retained: BlePhyRetainedOwners,
         output: InterruptOutputAfterRoutesOwner,
         timer: ModemLpTimerInterruptReadyOwner,
@@ -95,13 +95,13 @@ enum Retained {
     Retired(ControllerRetired),
 }
 
-impl ControllerShutdownFailure {
+impl<X: SignalExecutor> ControllerShutdownFailure<X> {
     pub const fn error(&self) -> ControllerShutdownError {
         self.error
     }
 }
 
-impl core::fmt::Debug for ControllerShutdownFailure {
+impl<X: SignalExecutor> core::fmt::Debug for ControllerShutdownFailure<X> {
     fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         formatter
             .debug_struct("ControllerShutdownFailure")
@@ -148,14 +148,14 @@ pub struct ControllerShutDown {
     clippy::result_large_err,
     reason = "the failure retains every owner of the epoch"
 )]
-pub fn retire<B: PlatformClockBackend>(
+pub fn retire<X: SignalExecutor, B: PlatformClockBackend>(
     radio: &mut RadioDomain<B, ConcurrentPhy>,
-    task: ControllerPoweredTaskRuntime<'static>,
+    task: ControllerPoweredTaskRuntime<'static, X>,
     retained: BlePhyRetainedOwners,
     output: InterruptOutputAfterRoutesOwner,
     timer: ModemLpTimerInterruptReadyOwner,
     clock: &dyn oer_time::Clock,
-) -> Result<(ControllerRetired, bool), ControllerShutdownFailure> {
+) -> Result<(ControllerRetired, bool), ControllerShutdownFailure<X>> {
     let mut task = match task.retire() {
         Ok(task) => task,
         Err((error, task)) => {
@@ -230,11 +230,11 @@ impl ControllerRetired {
         clippy::result_large_err,
         reason = "the failure retains every owner of the epoch"
     )]
-    pub fn shut_down<B: PlatformClockBackend, T>(
+    pub fn shut_down<X: SignalExecutor, B: PlatformClockBackend, T>(
         self,
         radio: &mut RadioDomain<B, T>,
-        cells: &ControllerEventCells,
-    ) -> Result<ControllerShutDown, ControllerShutdownFailure> {
+        cells: &ControllerEventCells<X>,
+    ) -> Result<ControllerShutDown, ControllerShutdownFailure<X>> {
         // Before the reset: a foreign context could not discard the
         // notifications after it.
         if let Err(ForeignContext) = cells.is_quiet() {

@@ -13,6 +13,7 @@ use oer_esp32s31_hal::bluetooth::{
     BluetoothSchedulerHardwareListIndex, BluetoothSchedulerStop, BluetoothSchedulerStopStep,
     BluetoothSchedulerStopped, DeviceTablePublication,
 };
+use oer_interrupt_table::signal::SignalExecutor;
 
 use super::ControllerPoweredTaskRuntime;
 use crate::{interrupt::SchedulerWakeBatch, scheduler::SchedulerFinishedListCaptureError};
@@ -40,7 +41,7 @@ pub enum ControllerRxChainError {
     WrongClass,
 }
 
-impl ControllerPoweredTaskRuntime<'_> {
+impl<X: SignalExecutor> ControllerPoweredTaskRuntime<'_, X> {
     /// Perform the actions of one executor step on list zero, in order.
     ///
     /// Every named item must be submitted in `items`; otherwise nothing is

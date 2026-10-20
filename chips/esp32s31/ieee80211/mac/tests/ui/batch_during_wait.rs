@@ -1,6 +1,6 @@
 #![no_std]
 use oer_esp32s31_ieee80211_mac::irq::consumer::IrqConsumer;
-pub fn wait(consumer: &mut IrqConsumer<'_>) {
+pub fn wait<E: oer_interrupt_table::signal::SignalExecutor>(consumer: &mut IrqConsumer<'_, E>) {
     let wait = consumer.wait();
     #[cfg(not(ui_reject))]
     drop(wait);

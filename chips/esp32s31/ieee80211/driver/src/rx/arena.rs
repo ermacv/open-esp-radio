@@ -11,6 +11,7 @@
 //! [`bind`]: WifiRxArena::bind
 
 use core::mem::MaybeUninit;
+use oer_interrupt_table::signal::SignalExecutor;
 
 use oer_esp32s31_hal::{
     dma_static::Placed,
@@ -37,10 +38,9 @@ use crate::irq::{WifiIrqLine, WifiIrqLineParts, WifiIrqRequests};
 
 /// The image's two static signals of the radio executor that carry the
 /// line's facts to the receive runner: the MAC facts and the power facts.
-#[derive(Clone, Copy)]
-pub struct WifiIrqSignals {
-    pub mac: &'static oer_interrupt_table::signal::IrqSignal,
-    pub power: &'static oer_interrupt_table::signal::IrqSignal,
+pub struct WifiIrqSignals<X: SignalExecutor> {
+    pub mac: &'static oer_interrupt_table::signal::IrqSignal<X>,
+    pub power: &'static oer_interrupt_table::signal::IrqSignal<X>,
 }
 
 /// The static arena of one receive epoch.
@@ -56,18 +56,19 @@ pub struct WifiRxArena<
     const BUFFER: usize,
     const STORAGE: usize,
     const STAGE_SLOTS: usize,
+    X: SignalExecutor,
     S: DmaSpace = ChipDma,
     E = ActiveEpoch<Moderated>,
 > {
-    irq: MaybeUninit<IrqStorage>,
+    irq: MaybeUninit<IrqStorage<X>>,
     /// The one MAC fact publisher: the line posts hardware facts through it,
     /// the upper layer the return of a staged lease.
-    irq_publisher: MaybeUninit<IrqPublisher<'static>>,
-    power: MaybeUninit<PowerIrqStorage>,
+    irq_publisher: MaybeUninit<IrqPublisher<'static, X>>,
+    power: MaybeUninit<PowerIrqStorage<X>>,
     requests: WifiIrqRequests,
     counters: WifiRxCounters,
     control: MaybeUninit<ReceiveControl>,
-    line: MaybeUninit<WifiIrqLine<E>>,
+    line: MaybeUninit<WifiIrqLine<E, X>>,
     /// The staged-frame queue from the runner to the application.
     frames: MaybeUninit<RxFrameQueue<'static, STAGE_SLOTS, BUFFER>>,
     stage: RxStagePool<STAGE_SLOTS, BUFFER>,
@@ -82,10 +83,11 @@ pub type WifiRxStatic<
     const BUFFER: usize,
     const STORAGE: usize,
     const STAGE_SLOTS: usize,
+    X,
     S = ChipDma,
     E = ActiveEpoch<Moderated>,
 > = (
-    WifiRxArena<COUNT, BUFFER, STORAGE, STAGE_SLOTS, S, E>,
+    WifiRxArena<COUNT, BUFFER, STORAGE, STAGE_SLOTS, X, S, E>,
     RxDmaStorage<COUNT, BUFFER, STORAGE, S>,
 );
 
@@ -98,16 +100,17 @@ pub struct WifiRxParts<
     const STAGE_SLOTS: usize,
     S: DmaSpace,
     E,
+    X: SignalExecutor,
 > {
     pub(crate) rx: PlacedRxDma<COUNT, BUFFER, STORAGE, S>,
     pub(crate) stage: &'a RxStagePool<STAGE_SLOTS, BUFFER>,
-    pub(crate) irq: IrqConsumer<'a>,
-    pub(crate) power: PowerIrqConsumer<'a>,
+    pub(crate) irq: IrqConsumer<'a, X>,
+    pub(crate) power: PowerIrqConsumer<'a, X>,
     pub(crate) requests: &'a WifiIrqRequests,
     pub(crate) counters: &'a WifiRxCounters,
     pub(crate) control: ReceiveRunnerControl<'a>,
-    pub(crate) line: WifiIrqLineParts<'a, E>,
-    pub(crate) returns: RxReturnNotifier<'a>,
+    pub(crate) line: WifiIrqLineParts<'a, E, X>,
+    pub(crate) returns: RxReturnNotifier<'a, X>,
 }
 
 impl<
@@ -117,7 +120,8 @@ impl<
     const STAGE_SLOTS: usize,
     S: DmaSpace,
     E,
-> WifiRxArena<COUNT, BUFFER, STORAGE, STAGE_SLOTS, S, E>
+    X: SignalExecutor,
+> WifiRxArena<COUNT, BUFFER, STORAGE, STAGE_SLOTS, X, S, E>
 {
     /// Place the DMA storage, write the values whose zero bytes are not
     /// valid, and lend every part: the runner's parts, the application's
@@ -138,13 +142,13 @@ impl<
         reason = "the parts, the stop handle and the queue ends are the owners of one bind"
     )]
     pub fn bind(
-        placed: Placed<WifiRxStatic<COUNT, BUFFER, STORAGE, STAGE_SLOTS, S, E>>,
-        signals: WifiIrqSignals,
+        placed: Placed<WifiRxStatic<COUNT, BUFFER, STORAGE, STAGE_SLOTS, X, S, E>>,
+        signals: WifiIrqSignals<X>,
     ) -> Result<
         (
-            WifiRxParts<'static, COUNT, BUFFER, STORAGE, STAGE_SLOTS, S, E>,
+            WifiRxParts<'static, COUNT, BUFFER, STORAGE, STAGE_SLOTS, S, E, X>,
             ReceiveStopHandle<'static>,
-            RxFrameEnds<'static, STAGE_SLOTS, BUFFER>,
+            RxFrameEnds<'static, STAGE_SLOTS, BUFFER, X>,
         ),
         RxDmaStorageError,
     > {
@@ -174,7 +178,7 @@ impl<
         let (requests, counters): (&'static WifiIrqRequests, &'static WifiRxCounters) =
             (requests, counters);
         let (irq_publisher, irq) = irq.write(IrqStorage::new(signals.mac)).split();
-        let irq_publisher: &'static IrqPublisher<'static> = publisher_slot.write(irq_publisher);
+        let irq_publisher: &'static IrqPublisher<'static, X> = publisher_slot.write(irq_publisher);
         let (power_publisher, power) = power.write(PowerIrqStorage::new(signals.power)).split();
         let (control, stop) = control.write(ReceiveControl::new()).split();
         let returns = RxReturnNotifier::new(irq_publisher);
@@ -211,7 +215,8 @@ impl<
     const STAGE_SLOTS: usize,
     S: DmaSpace,
     E,
-> WifiRxParts<'a, COUNT, BUFFER, STORAGE, STAGE_SLOTS, S, E>
+    X: SignalExecutor,
+> WifiRxParts<'a, COUNT, BUFFER, STORAGE, STAGE_SLOTS, S, E, X>
 {
     pub const fn rx(&self) -> &'static RxDmaStorage<COUNT, BUFFER, STORAGE, S> {
         self.rx.storage()
@@ -235,10 +240,17 @@ impl<
     }
 
     /// The handle the upper layer returns staged leases through.
-    pub const fn returns(&self) -> RxReturnNotifier<'a> {
+    pub const fn returns(&self) -> RxReturnNotifier<'a, X> {
         self.returns
     }
 }
 
 #[cfg(test)]
 mod tests;
+
+impl<X: SignalExecutor> Copy for WifiIrqSignals<X> {}
+impl<X: SignalExecutor> Clone for WifiIrqSignals<X> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}

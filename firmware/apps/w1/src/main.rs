@@ -144,8 +144,8 @@ const RELEASE_STEP: Duration = Duration::from_millis(10);
 const AFTER_RELEASE: Duration = Duration::from_millis(2_000);
 
 type Console = UsbSerialJtag<'static, Blocking>;
-type Held = HeldRxFrame<'static, 'static, SLOTS, BUFFER>;
-type Receiver = FrameReceiver<'static, SLOTS, BUFFER>;
+type Held = HeldRxFrame<'static, 'static, SLOTS, BUFFER, crate::irq::RadioExecutor>;
+type Receiver = FrameReceiver<'static, SLOTS, BUFFER, crate::irq::RadioExecutor>;
 
 static EXECUTOR: StaticCell<Executor<0>> = StaticCell::new();
 static RADIO_EXECUTOR: StaticCell<InterruptExecutor<2>> = StaticCell::new();

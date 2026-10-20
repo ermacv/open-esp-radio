@@ -61,8 +61,8 @@ use {
 };
 use {oer_ieee80211_port::MacTxPlan, oer_ieee80211_wire::address::IndividualAddress};
 
-type Rx = ReceiveSession<N, B, S, Q>;
-type Frames = FrameReceiver<'static, Q, B>;
+type Rx = ReceiveSession<N, B, S, Q, crate::irq::RadioExecutor>;
+type Frames = FrameReceiver<'static, Q, B, crate::irq::RadioExecutor>;
 type Publisher = QueueSink<'static, EmbassyClock, Q, B>;
 type Tx = OrdinaryTxOwner<
     'static,
@@ -549,7 +549,13 @@ async fn drive(
 
 fn observe(
     frames: &Frames,
-    held: &oer_esp32s31_ieee80211_driver::rx::returns::HeldRxFrame<'static, 'static, Q, B>,
+    held: &oer_esp32s31_ieee80211_driver::rx::returns::HeldRxFrame<
+        'static,
+        'static,
+        Q,
+        B,
+        crate::irq::RadioExecutor,
+    >,
     config: W2Config,
     station: [u8; 6],
     basic: &mut Option<BasicRates>,

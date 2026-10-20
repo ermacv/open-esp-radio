@@ -51,10 +51,12 @@ pub const STORAGE: usize = 1_668;
 /// Staging leases.
 pub const SLOTS: usize = 32;
 
+pub type RadioExecutor = InterruptExecutor<2>;
+
 type Epoch = ActiveEpoch<Moderated>;
-type Arena = WifiRxArena<COUNT, BUFFER, STORAGE, SLOTS>;
+type Arena = WifiRxArena<COUNT, BUFFER, STORAGE, SLOTS, RadioExecutor>;
 /// The arena and its RX DMA storage, placed together.
-type Static = WifiRxStatic<COUNT, BUFFER, STORAGE, SLOTS>;
+type Static = WifiRxStatic<COUNT, BUFFER, STORAGE, SLOTS, RadioExecutor>;
 /// The arena's DMA storage.
 pub type Storage = RxDmaStorage<COUNT, BUFFER, STORAGE>;
 
@@ -66,7 +68,7 @@ oer_esp32s31_hal::dma_static! {
 
 oer_memory::zeroed_static! {
     /// Placement: the line the three P3 handlers run, in critical SRAM.
-    static RX_LINE: HandlerCell<WifiIrqLine<Epoch>> = zeroed in ".critical.bss.wifi_rx_line";
+    static RX_LINE: HandlerCell<WifiIrqLine<Epoch, RadioExecutor>> = zeroed in ".critical.bss.wifi_rx_line";
 }
 
 oer_espressif_staged_runtime::placed_static! {
@@ -78,9 +80,9 @@ oer_espressif_staged_runtime::placed_static! {
     pub static ROUTE_ERRORS: AtomicU32 = AtomicU32::new(0), in critical_data "w1";
     /// The MAC facts the P3 line raises for the receive runner on the
     /// radio executor (P2).
-    static MAC_SIGNAL: IrqSignal = IrqSignal::new(InterruptExecutor::<2>::SIGNALS), in critical_data "w1";
+    static MAC_SIGNAL: IrqSignal<RadioExecutor> = IrqSignal::new(), in critical_data "w1";
     /// The WDEVPWR facts the P3 line raises for the receive runner.
-    static POWER_SIGNAL: IrqSignal = IrqSignal::new(InterruptExecutor::<2>::SIGNALS), in critical_data "w1";
+    static POWER_SIGNAL: IrqSignal<RadioExecutor> = IrqSignal::new(), in critical_data "w1";
 }
 
 static DOORBELL_ACK: HandlerCell<DoorbellAcknowledger<3>> = HandlerCell::new();
@@ -189,7 +191,7 @@ impl WifiIrqRoutes for ImageRoutes {
 /// The application's ends of the receive epoch.
 pub struct P1Ends {
     pub stop: ReceiveStopHandle<'static>,
-    pub receiver: FrameReceiver<'static, SLOTS, BUFFER>,
+    pub receiver: FrameReceiver<'static, SLOTS, BUFFER, RadioExecutor>,
     pub counters: &'static WifiRxCounters,
     /// The DMA address of descriptor 0, as the bind laid the arena out.
     pub ring_base: u32,

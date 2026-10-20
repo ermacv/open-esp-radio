@@ -6,7 +6,9 @@ use crate::{
     scheduler::SchedulerInitialized,
 };
 
-fn scheduler(cells: &ControllerEventCells) -> SchedulerInitialized<'_, 4> {
+fn scheduler(
+    cells: &ControllerEventCells<oer_interrupt_table::signal::host::Deferred>,
+) -> SchedulerInitialized<'_, 4, oer_interrupt_table::signal::host::Deferred> {
     let (_shared, partitions) =
         RadioHardware::for_host_test().split::<crate::test_clocks::TestClockBackend, _>(());
     ControllerHalInitialized::initialize_for_validation(

@@ -29,6 +29,7 @@ use core::{
     mem::MaybeUninit,
     sync::atomic::{AtomicU32, Ordering},
 };
+use oer_interrupt_table::signal::SignalExecutor;
 
 use oer_esp32s31_ieee80211_mac::irq::{
     IrqDisposition, MacInterrupt, MacPowerInterrupt, PowerIrqDisposition,
@@ -120,20 +121,20 @@ impl WifiIrqRequests {
 ///
 /// `E` is the active epoch: [`ActiveEpoch<Moderated>`] over the PAC banks
 /// on the chip, over the host models in tests.
-pub struct WifiIrqLine<E> {
+pub struct WifiIrqLine<E, X: SignalExecutor> {
     epoch: Option<E>,
-    mac: &'static IrqPublisher<'static>,
-    power: PowerIrqPublisher<'static>,
+    mac: &'static IrqPublisher<'static, X>,
+    power: PowerIrqPublisher<'static, X>,
     requests: &'static WifiIrqRequests,
     counters: &'static WifiRxCounters,
     masked: bool,
 }
 
-impl<E> WifiIrqLine<E> {
+impl<E, X: SignalExecutor> WifiIrqLine<E, X> {
     const fn new(
         epoch: E,
-        mac: &'static IrqPublisher<'static>,
-        power: PowerIrqPublisher<'static>,
+        mac: &'static IrqPublisher<'static, X>,
+        power: PowerIrqPublisher<'static, X>,
         requests: &'static WifiIrqRequests,
         counters: &'static WifiRxCounters,
     ) -> Self {
@@ -186,8 +187,8 @@ impl<E> WifiIrqLine<E> {
 /// acknowledge, count, then publish and wake after the register borrow
 /// ended.
 #[inline(always)]
-pub fn service_mac_line<I: MacInterrupt, P: MacPowerInterrupt>(
-    line: &mut WifiIrqLine<ActiveEpoch<Moderated, I, P>>,
+pub fn service_mac_line<X: SignalExecutor, I: MacInterrupt, P: MacPowerInterrupt>(
+    line: &mut WifiIrqLine<ActiveEpoch<Moderated, I, P>, X>,
 ) {
     let Some(epoch) = line.epoch.as_mut() else {
         return;
@@ -206,8 +207,8 @@ pub fn service_mac_line<I: MacInterrupt, P: MacPowerInterrupt>(
 
 /// The WDEVPWR handler's body: acknowledge, count and publish the causes.
 #[inline(always)]
-pub fn service_power_line<I: MacInterrupt, P: MacPowerInterrupt>(
-    line: &mut WifiIrqLine<ActiveEpoch<Moderated, I, P>>,
+pub fn service_power_line<X: SignalExecutor, I: MacInterrupt, P: MacPowerInterrupt>(
+    line: &mut WifiIrqLine<ActiveEpoch<Moderated, I, P>, X>,
 ) {
     let Some(epoch) = line.epoch.as_mut() else {
         return;
@@ -223,8 +224,8 @@ pub fn service_power_line<I: MacInterrupt, P: MacPowerInterrupt>(
 /// Apply the requests the radio executor left: the doorbell's work once
 /// its software interrupt was reset.
 #[inline(always)]
-pub fn service_doorbell_line<I: MacInterrupt, P: MacPowerInterrupt>(
-    line: &mut WifiIrqLine<ActiveEpoch<Moderated, I, P>>,
+pub fn service_doorbell_line<X: SignalExecutor, I: MacInterrupt, P: MacPowerInterrupt>(
+    line: &mut WifiIrqLine<ActiveEpoch<Moderated, I, P>, X>,
 ) {
     let pending = line.requests.take();
     let Some(epoch) = line.epoch.as_mut() else {
@@ -255,8 +256,8 @@ pub fn service_doorbell_line<I: MacInterrupt, P: MacPowerInterrupt>(
 /// The reset happens even when `cell` holds no line, so a stray raise
 /// cannot keep the radio level busy. Returns whether a line ran.
 #[inline(always)]
-pub fn run_doorbell<I: MacInterrupt, P: MacPowerInterrupt>(
-    cell: &HandlerCell<WifiIrqLine<ActiveEpoch<Moderated, I, P>>>,
+pub fn run_doorbell<X: SignalExecutor, I: MacInterrupt, P: MacPowerInterrupt>(
+    cell: &HandlerCell<WifiIrqLine<ActiveEpoch<Moderated, I, P>, X>>,
     acknowledge: impl FnOnce(),
 ) -> bool {
     acknowledge();
@@ -264,15 +265,15 @@ pub fn run_doorbell<I: MacInterrupt, P: MacPowerInterrupt>(
 }
 
 /// The arena's parts of one interrupt line, before its epoch exists.
-pub struct WifiIrqLineParts<'a, E> {
-    pub(crate) mac: &'a IrqPublisher<'a>,
-    pub(crate) power: PowerIrqPublisher<'a>,
+pub struct WifiIrqLineParts<'a, E, X: SignalExecutor> {
+    pub(crate) mac: &'a IrqPublisher<'a, X>,
+    pub(crate) power: PowerIrqPublisher<'a, X>,
     pub(crate) requests: &'a WifiIrqRequests,
     pub(crate) counters: &'a WifiRxCounters,
-    pub(crate) slot: &'a mut MaybeUninit<WifiIrqLine<E>>,
+    pub(crate) slot: &'a mut MaybeUninit<WifiIrqLine<E, X>>,
 }
 
-impl<E> WifiIrqLineParts<'static, E> {
+impl<E, X: SignalExecutor> WifiIrqLineParts<'static, E, X> {
     /// Put the line over `epoch` in its arena slot and hand it to the
     /// handlers' `cell`.
     ///
@@ -282,8 +283,8 @@ impl<E> WifiIrqLineParts<'static, E> {
     pub fn install(
         self,
         epoch: E,
-        cell: &'static HandlerCell<WifiIrqLine<E>>,
-    ) -> Result<Installed<'static, WifiIrqLine<E>>, &'static mut WifiIrqLine<E>> {
+        cell: &'static HandlerCell<WifiIrqLine<E, X>>,
+    ) -> Result<Installed<'static, WifiIrqLine<E, X>>, &'static mut WifiIrqLine<E, X>> {
         self.requests.clear();
         let line = WifiIrqLine::new(epoch, self.mac, self.power, self.requests, self.counters);
         cell.install(self.slot.write(line))

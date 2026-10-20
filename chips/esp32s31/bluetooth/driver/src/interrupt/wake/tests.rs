@@ -4,7 +4,7 @@ use oer_interrupt_table::signal::{ForeignContext, host};
 
 use super::{SchedulerWakeCell, SchedulerWakePublication, SchedulerWorkerWakeClass};
 
-fn cell() -> SchedulerWakeCell {
+fn cell() -> SchedulerWakeCell<oer_interrupt_table::signal::host::Deferred> {
     SchedulerWakeCell::new(host::deferred_signal())
 }
 

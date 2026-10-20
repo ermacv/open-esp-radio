@@ -20,7 +20,7 @@ use core::{
 };
 use oer_esp32s31_hal::types::MacPowerInterruptObservation;
 pub use oer_interrupt_table::signal::ForeignContext;
-use oer_interrupt_table::signal::{IrqSignal, SignalPend};
+use oer_interrupt_table::signal::{IrqSignal, SignalExecutor, SignalPend};
 
 use super::{EVENT_KNOWN_MASK, EVENT_RX_SUCCESS, IrqSnapshot, IrqWork, next_irq_work};
 
@@ -65,8 +65,8 @@ impl Iterator for IrqBatch {
 
 /// Storage owned by an installation; its facts travel in the image's
 /// static signal.
-pub struct IrqStorage {
-    signal: &'static IrqSignal,
+pub struct IrqStorage<E: SignalExecutor> {
+    signal: &'static IrqSignal<E>,
     #[cfg(test)]
     rx_posts: AtomicU32,
     #[cfg(test)]
@@ -85,10 +85,10 @@ pub struct IrqStorage {
     mac_irq_cycles: AtomicU32,
 }
 
-impl IrqStorage {
+impl<E: SignalExecutor> IrqStorage<E> {
     /// The storage of `signal`, the image's MAC signal of the radio
     /// executor.
-    pub const fn new(signal: &'static IrqSignal) -> Self {
+    pub const fn new(signal: &'static IrqSignal<E>) -> Self {
         Self {
             signal,
             #[cfg(test)]
@@ -121,7 +121,7 @@ impl IrqStorage {
     /// #     loop {}
     /// # }
     /// use oer_esp32s31_ieee80211_mac::irq::consumer::IrqStorage;
-    /// async fn sequential(storage: &mut IrqStorage) {
+    /// async fn sequential<E: oer_interrupt_table::signal::SignalExecutor>(storage: &mut IrqStorage<E>) {
     ///     let (_publisher, mut consumer) = storage.split();
     ///     let first = consumer.wait();
     ///     drop(first);
@@ -138,14 +138,14 @@ impl IrqStorage {
     /// #     loop {}
     /// # }
     /// use oer_esp32s31_ieee80211_mac::irq::consumer::IrqStorage;
-    /// async fn overlapping(storage: &mut IrqStorage) {
+    /// async fn overlapping<E: oer_interrupt_table::signal::SignalExecutor>(storage: &mut IrqStorage<E>) {
     ///     let (_publisher, mut consumer) = storage.split();
     ///     let first = consumer.wait();
     ///     let second = consumer.wait();
     ///     drop((first, second));
     /// }
     /// ```
-    pub fn split(&mut self) -> (IrqPublisher<'_>, IrqConsumer<'_>) {
+    pub fn split(&mut self) -> (IrqPublisher<'_, E>, IrqConsumer<'_, E>) {
         (
             IrqPublisher { storage: self },
             IrqConsumer { storage: self },
@@ -153,7 +153,7 @@ impl IrqStorage {
     }
 
     #[inline(always)]
-    fn post(&self, events: u32) -> IrqPublication {
+    fn post(&self, events: u32) -> IrqPublication<E> {
         let raised = self.signal.raise_deferred(events);
         IrqPublication {
             #[cfg(test)]
@@ -166,11 +166,11 @@ impl IrqStorage {
 }
 
 /// Shared publication authority, with no ability to consume or wait.
-pub struct IrqPublisher<'irq> {
-    storage: &'irq IrqStorage,
+pub struct IrqPublisher<'irq, E: SignalExecutor> {
+    storage: &'irq IrqStorage<E>,
 }
 
-impl IrqPublisher<'_> {
+impl<E: SignalExecutor> IrqPublisher<'_, E> {
     oer_esp32s31_hal::place_irq_path! {
     /// Publish one acknowledged hardware snapshot with one Release operation.
     #[inline(never)]
@@ -181,7 +181,7 @@ impl IrqPublisher<'_> {
 
     /// Release the MMIO/register borrow before pending the executor.
     #[inline(always)]
-    pub fn publish_deferred(&self, events: u32) -> IrqPublication {
+    pub fn publish_deferred(&self, events: u32) -> IrqPublication<E> {
         let events = events & EVENT_KNOWN_MASK;
         #[cfg(test)]
         if events & EVENT_RX_SUCCESS != 0 {
@@ -193,7 +193,7 @@ impl IrqPublisher<'_> {
     /// Count the complete bounded entry without a global observer callback.
     /// The semantic facts still travel through the one consumer's batch.
     #[inline(always)]
-    pub fn publish_snapshot_deferred(&self, snapshot: IrqSnapshot) -> IrqPublication {
+    pub fn publish_snapshot_deferred(&self, snapshot: IrqSnapshot) -> IrqPublication<E> {
         #[cfg(test)]
         {
             self.storage.entries.fetch_add(1, Ordering::Relaxed);
@@ -242,7 +242,7 @@ impl IrqPublisher<'_> {
     /// Begin the diagnostic interval before reading the MAC status. Finishing
     /// it returns an owned publication with no borrow of this installation.
     #[inline(always)]
-    pub fn begin_mac_entry(&self) -> MacIrqEntry<'_> {
+    pub fn begin_mac_entry(&self) -> MacIrqEntry<'_, E> {
         MacIrqEntry {
             _borrow: core::marker::PhantomData,
             #[cfg(test)]
@@ -254,7 +254,7 @@ impl IrqPublisher<'_> {
 
     /// Borrow the wrapping counters of this installation.
     #[cfg(test)]
-    pub fn diagnostics(&self) -> IrqDiagnostics<'_> {
+    pub fn diagnostics(&self) -> IrqDiagnostics<'_, E> {
         IrqDiagnostics {
             storage: self.storage,
         }
@@ -264,12 +264,12 @@ impl IrqPublisher<'_> {
 /// Read-only diagnostics borrowed from one installation's IRQ owner.
 /// The type, field and accessor do not exist when counting is disabled.
 #[cfg(test)]
-pub struct IrqDiagnostics<'irq> {
-    storage: &'irq IrqStorage,
+pub struct IrqDiagnostics<'irq, E: SignalExecutor> {
+    storage: &'irq IrqStorage<E>,
 }
 
 #[cfg(test)]
-impl IrqDiagnostics<'_> {
+impl<E: SignalExecutor> IrqDiagnostics<'_, E> {
     pub fn rx_post_count(&self) -> u32 {
         self.storage.rx_posts.load(Ordering::Relaxed)
     }
@@ -312,16 +312,16 @@ pub struct IrqDiagnosticSnapshot {
 /// The borrowed part of an IRQ diagnostic interval. Consume it before waking;
 /// the returned publication owns only its waker, never installation memory.
 #[must_use = "finish the measurement before invoking the returned waker"]
-pub struct MacIrqEntry<'irq> {
-    _borrow: core::marker::PhantomData<&'irq IrqStorage>,
+pub struct MacIrqEntry<'irq, E: SignalExecutor> {
+    _borrow: core::marker::PhantomData<&'irq IrqStorage<E>>,
     #[cfg(test)]
-    storage: &'irq IrqStorage,
+    storage: &'irq IrqStorage<E>,
     #[cfg(test)]
     started: u32,
 }
-impl MacIrqEntry<'_> {
+impl<E: SignalExecutor> MacIrqEntry<'_, E> {
     #[inline(always)]
-    pub fn finish(self, publication: IrqPublication) -> IrqPublication {
+    pub fn finish(self, publication: IrqPublication<E>) -> IrqPublication<E> {
         #[cfg(test)]
         self.storage
             .mac_irq_cycles
@@ -337,11 +337,11 @@ fn irq_cycles() -> u32 {
 
 /// The sole MAC waiter and consumer of an installation's coalesced facts.
 #[must_use = "the driver must retain its exclusive IRQ consumer"]
-pub struct IrqConsumer<'irq> {
-    storage: &'irq IrqStorage,
+pub struct IrqConsumer<'irq, E: SignalExecutor> {
+    storage: &'irq IrqStorage<E>,
 }
 
-impl IrqConsumer<'_> {
+impl<E: SignalExecutor> IrqConsumer<'_, E> {
     /// Observe remaining work without removing any fact from its next batch.
     /// An executor uses this Acquire check after arming its event sources.
     ///
@@ -385,11 +385,11 @@ impl IrqConsumer<'_> {
 
 /// Coalesced power facts in the image's static power signal. Bits are local
 /// semantic facts, never register images.
-pub struct PowerIrqStorage {
-    signal: &'static IrqSignal,
+pub struct PowerIrqStorage<E: SignalExecutor> {
+    signal: &'static IrqSignal<E>,
 }
 
-impl PowerIrqStorage {
+impl<E: SignalExecutor> PowerIrqStorage<E> {
     const TSF0: u32 = 1;
     const TSF1: u32 = 2;
     const TSF2: u32 = 4;
@@ -399,11 +399,11 @@ impl PowerIrqStorage {
 
     /// The storage of `signal`, the image's power signal of the radio
     /// executor.
-    pub const fn new(signal: &'static IrqSignal) -> Self {
+    pub const fn new(signal: &'static IrqSignal<E>) -> Self {
         Self { signal }
     }
 
-    pub fn split(&mut self) -> (PowerIrqPublisher<'_>, PowerIrqConsumer<'_>) {
+    pub fn split(&mut self) -> (PowerIrqPublisher<'_, E>, PowerIrqConsumer<'_, E>) {
         (
             PowerIrqPublisher { storage: self },
             PowerIrqConsumer { storage: self },
@@ -422,11 +422,11 @@ impl PowerIrqStorage {
     }
 }
 
-pub struct PowerIrqPublisher<'irq> {
-    storage: &'irq PowerIrqStorage,
+pub struct PowerIrqPublisher<'irq, E: SignalExecutor> {
+    storage: &'irq PowerIrqStorage<E>,
 }
 
-impl PowerIrqPublisher<'_> {
+impl<E: SignalExecutor> PowerIrqPublisher<'_, E> {
     oer_esp32s31_hal::place_irq_path! {
     #[inline(never)]
     pub fn publish(&self, observation: MacPowerInterruptObservation) {
@@ -435,13 +435,13 @@ impl PowerIrqPublisher<'_> {
     }
 
     #[inline(always)]
-    pub fn publish_deferred(&self, observation: MacPowerInterruptObservation) -> IrqPublication {
-        let events = (u32::from(observation.tsf_timer_0()) * PowerIrqStorage::TSF0)
-            | (u32::from(observation.tsf_timer_1()) * PowerIrqStorage::TSF1)
-            | (u32::from(observation.tsf_timer_2()) * PowerIrqStorage::TSF2)
-            | (u32::from(observation.tsf_timer_3()) * PowerIrqStorage::TSF3)
-            | (u32::from(observation.sta_tbtt()) * PowerIrqStorage::TBTT)
-            | (u32::from(observation.has_unhandled_event()) * PowerIrqStorage::UNHANDLED);
+    pub fn publish_deferred(&self, observation: MacPowerInterruptObservation) -> IrqPublication<E> {
+        let events = (u32::from(observation.tsf_timer_0()) * PowerIrqStorage::<E>::TSF0)
+            | (u32::from(observation.tsf_timer_1()) * PowerIrqStorage::<E>::TSF1)
+            | (u32::from(observation.tsf_timer_2()) * PowerIrqStorage::<E>::TSF2)
+            | (u32::from(observation.tsf_timer_3()) * PowerIrqStorage::<E>::TSF3)
+            | (u32::from(observation.sta_tbtt()) * PowerIrqStorage::<E>::TBTT)
+            | (u32::from(observation.has_unhandled_event()) * PowerIrqStorage::<E>::UNHANDLED);
         let raised = self.storage.signal.raise_deferred(events);
         IrqPublication {
             #[cfg(test)]
@@ -455,15 +455,15 @@ impl PowerIrqPublisher<'_> {
 
 /// Acknowledged publication and its detached executor pend.
 #[must_use = "pend the executor after ending the register transaction"]
-pub struct IrqPublication {
+pub struct IrqPublication<E: SignalExecutor> {
     #[cfg(test)]
     added: u32,
     #[cfg(test)]
     previous: u32,
-    pend: Option<SignalPend>,
+    pend: Option<SignalPend<E>>,
 }
 
-impl IrqPublication {
+impl<E: SignalExecutor> IrqPublication<E> {
     /// Pend the radio executor when a fact was new; no waker runs here.
     #[inline(always)]
     pub fn wake(self) {
@@ -474,11 +474,11 @@ impl IrqPublication {
 }
 
 #[must_use = "the driver must retain its exclusive power IRQ consumer"]
-pub struct PowerIrqConsumer<'irq> {
-    storage: &'irq PowerIrqStorage,
+pub struct PowerIrqConsumer<'irq, E: SignalExecutor> {
+    storage: &'irq PowerIrqStorage<E>,
 }
 
-impl PowerIrqConsumer<'_> {
+impl<E: SignalExecutor> PowerIrqConsumer<'_, E> {
     /// Observe remaining work without consuming its next power observation.
     ///
     /// # Errors
@@ -492,7 +492,10 @@ impl PowerIrqConsumer<'_> {
     ///
     /// The caller runs outside the signal's executor; the facts stay.
     pub fn take(&mut self) -> Result<MacPowerInterruptObservation, ForeignContext> {
-        self.storage.signal.take().map(PowerIrqStorage::observation)
+        self.storage
+            .signal
+            .take()
+            .map(PowerIrqStorage::<E>::observation)
     }
 
     /// # Errors
@@ -505,7 +508,7 @@ impl PowerIrqConsumer<'_> {
         self.storage
             .signal
             .poll_take(cx)
-            .map(|facts| facts.map(PowerIrqStorage::observation))
+            .map(|facts| facts.map(PowerIrqStorage::<E>::observation))
     }
 
     /// # Errors

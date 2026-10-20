@@ -17,6 +17,7 @@ use oer_esp32s31_hal::{
     ieee80211::dma::{rx_storage::RxDmaStorage, space::ChipDma},
     owner::{MacInterruptSetup, RadioAccess},
 };
+use oer_interrupt_table::signal::SignalExecutor;
 use oer_memory::HandlerCell;
 use oer_time::{Instant, Timer};
 use {
@@ -33,16 +34,22 @@ use {
 
 type Epoch = ActiveEpoch<Moderated>;
 
-pub struct ReceiveSession<const N: usize, const B: usize, const S: usize, const Q: usize> {
+pub struct ReceiveSession<
+    const N: usize,
+    const B: usize,
+    const S: usize,
+    const Q: usize,
+    X: SignalExecutor,
+> {
     rx: &'static RxDmaStorage<N, B, S>,
     stage: &'static RxStagePool<Q, B>,
-    irq: IrqConsumer<'static>,
-    power: PowerIrqConsumer<'static>,
+    irq: IrqConsumer<'static, X>,
+    power: PowerIrqConsumer<'static, X>,
     requests: &'static WifiIrqRequests,
     counters: &'static WifiRxCounters,
     control: ReceiveRunnerControl<'static>,
     frontier: ReceiveFrontier<'static, N, B>,
-    cell: &'static HandlerCell<WifiIrqLine<Epoch>>,
+    cell: &'static HandlerCell<WifiIrqLine<Epoch, X>>,
     totals: [u64; 3],
     full_since: Option<(Instant, u32)>,
     port_settle: Option<Instant>,
@@ -52,14 +59,16 @@ pub struct ReceiveSession<const N: usize, const B: usize, const S: usize, const 
     port_stop_deadline: Option<Instant>,
 }
 
-impl<const N: usize, const B: usize, const S: usize, const Q: usize> ReceiveSession<N, B, S, Q> {
+impl<const N: usize, const B: usize, const S: usize, const Q: usize, X: SignalExecutor>
+    ReceiveSession<N, B, S, Q, X>
+{
     /// Bind once while the role is stopped. Failure is terminal for this arena;
     /// the caller retains its role/register owners for quarantine or reset.
     pub fn new(
-        parts: WifiRxParts<'static, N, B, S, Q, ChipDma, Epoch>,
+        parts: WifiRxParts<'static, N, B, S, Q, ChipDma, Epoch, X>,
         setup: MacInterruptSetup,
         registers: &mut RadioAccess,
-        cell: &'static HandlerCell<WifiIrqLine<Epoch>>,
+        cell: &'static HandlerCell<WifiIrqLine<Epoch, X>>,
     ) -> Result<Self, WifiRxCause> {
         let WifiRxParts {
             rx,
