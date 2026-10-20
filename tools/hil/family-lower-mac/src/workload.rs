@@ -96,6 +96,18 @@ fn model(case: Case, prepared: &Prepared, channel: u8) -> Result<Trace> {
     let basic = BasicRates::from_rate_elements(rates, &[]);
     let rate = management_rate(Band::Ghz2_4, Some(&basic)).ok_or("no basic management rate")?;
     let channel = Channel::ghz2_4(channel, ChannelWidth::Mhz20).map_err(|_| "invalid channel")?;
+    if let Case::Edca(case) = case {
+        let raw = complete(oer_ieee80211_model::conformance::edca(
+            case,
+            channel,
+            rate,
+            Rc::new(oer_time_virtual::VirtualClock::<8>::new()),
+        ))??;
+        let trace = edca_trace(&raw).ok_or("unrepresentable model EDCA trace")?;
+        oer_ieee80211_port::conformance::edca::verify(case, raw)
+            .map_err(|why| format!("model EDCA conformance violation: {why:?}"))?;
+        return Ok(Trace::Edca(trace));
+    }
     if let Case::Group(case) = case {
         use oer_ieee80211_port::LowerMacBackend;
         let raw = complete(oer_ieee80211_model::conformance::group(
@@ -177,6 +189,29 @@ fn complete<F: Future>(future: F) -> Result<F::Output> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn every_physical_edca_case_preserves_actual_draws_tables_and_fifo() {
+        let prepared = Prepared {
+            ampdu: false,
+            basic_rates: [0x8c; 16],
+            basic_rates_len: 1,
+        };
+        let mut count = 0;
+        for case in oer_ieee80211_port::conformance::edca::Case::ALL {
+            if case.execution() != Execution::Hardware {
+                continue;
+            }
+            let Trace::Edca(trace) = model(Case::Edca(case), &prepared, 6).expect("model EDCA")
+            else {
+                panic!("EDCA trace")
+            };
+            assert_eq!(trace.draws.iter().flatten().count(), 3);
+            assert_eq!(trace.admitted, trace.completed);
+            assert!(trace.installed.iter().flatten().all(Option::is_some));
+            count += 1;
+        }
+        assert_eq!(count, 8);
+    }
     #[test]
     fn group_mutations_return_their_accepted_owners_before_and_after_application() {
         use oer_ieee80211_port::conformance::group_keys::{Mutation, ProgressCase};

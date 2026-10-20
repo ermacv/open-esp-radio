@@ -1008,9 +1008,11 @@ where
     /// and the AC queue's single contention state. The backend calls this
     /// at publication and carries the draw into the single-attempt values.
     pub fn draw_backoff(&mut self, role: VifRole, access_category: WmmAccessCategory) -> u16 {
-        self.tx
-            .contention_publication(role, LegacyTxQueue::from_access_category(access_category))
-            .1
+        let queue = LegacyTxQueue::from_access_category(access_category);
+        let backoff = self.tx.contention_publication(role, queue).1;
+        #[cfg(all(oer_trace, oer_debug_control))]
+        crate::port::trace::contention(self.tx.policy(), role, access_category, backoff);
+        backoff
     }
     pub(crate) fn reset_contention(&mut self, role: VifRole, category: WmmAccessCategory) {
         self.tx

@@ -66,6 +66,82 @@ pub enum Trace {
     Barrier(BarrierTrace),
     Configure(ConfigureTrace),
     Group(GroupTrace),
+    Edca(EdcaTrace),
+}
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct EdcaParameters {
+    pub acm: bool,
+    pub aifsn: u8,
+    pub minimum: u8,
+    pub maximum: u8,
+    pub txop: u16,
+    pub lifetime_us: u32,
+}
+pub fn edca_parameters(record: EdcaAcParameters) -> Option<EdcaParameters> {
+    Some(EdcaParameters {
+        acm: record.wmm.admission_control_mandatory,
+        aifsn: record.wmm.aifsn,
+        minimum: record.wmm.ecw_min,
+        maximum: record.wmm.ecw_max,
+        txop: record.wmm.txop_limit_units_32_us,
+        lifetime_us: record.msdu_lifetime.as_micros().try_into().ok()?,
+    })
+}
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct EdcaHeader {
+    pub count: u8,
+    pub uapsd: bool,
+}
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct EdcaDraw {
+    pub role: u8,
+    pub category: u8,
+    pub parameters: Option<EdcaParameters>,
+    pub window: u16,
+    pub backoff: u16,
+}
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct EdcaTrace {
+    pub draws: [Option<EdcaDraw>; 4],
+    pub installed: [[Option<EdcaParameters>; 4]; 2],
+    pub headers: [Option<EdcaHeader>; 2],
+    pub admitted: [u8; 3],
+    pub completed: [u8; 3],
+    pub held_draws: Option<u16>,
+}
+pub fn edca_trace<D: AsRef<[conformance::edca::Draw]>>(
+    raw: &conformance::edca::Trace<D>,
+) -> Option<EdcaTrace> {
+    use oer_ieee80211_wire::qos::WmmAccessCategory;
+    let mut trace = EdcaTrace {
+        draws: [None; 4],
+        installed: [[None; 4]; 2],
+        headers: [None; 2],
+        admitted: raw.admitted,
+        completed: raw.completed,
+        held_draws: raw.held_draws.map(u16::try_from).transpose().ok()?,
+    };
+    for (index, draw) in raw.draws.as_ref().iter().enumerate() {
+        *trace.draws.get_mut(index)? = Some(EdcaDraw {
+            role: draw.role as u8,
+            category: draw.category as u8,
+            parameters: Some(edca_parameters(draw.parameters)?),
+            window: draw.window_slots,
+            backoff: draw.backoff_slots,
+        });
+    }
+    for (index, set) in raw.installed.iter().enumerate() {
+        let wmm = set.wmm();
+        *trace.headers.get_mut(index)? = Some(EdcaHeader {
+            count: wmm.parameter_set_count,
+            uapsd: wmm.uapsd,
+        });
+        for category in WmmAccessCategory::ALL {
+            *trace.installed.get_mut(index)?.get_mut(category as usize)? =
+                Some(edca_parameters(set.access_category(category))?);
+        }
+    }
+    Some(trace)
 }
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub enum GroupCompletion {

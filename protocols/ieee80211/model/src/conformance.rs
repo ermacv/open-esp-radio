@@ -15,6 +15,8 @@ mod configure;
 pub use configure::configure;
 mod group;
 pub use group::{GroupTrace, group};
+mod edca;
+pub use edca::{EdcaTrace, edca};
 
 /// A trace whose owners and terminals were read from ModelBackend.
 pub type OutcomeTrace = outcomes::Trace<ModelAck, ModelBlockAckEvidence, ModelAirDenied>;
