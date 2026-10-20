@@ -6,6 +6,21 @@ use std::vec::Vec;
 use super::MacKeys;
 use crate::{AppliedSecurity, KeyIdMode};
 
+#[test]
+fn counter_only_moves_back_with_replacement_keys() {
+    let mut keys = MacKeys::new(1, [0; 16], [1; 16], [2; 16], 42);
+    keys.set_frame_counter_if_larger(1);
+    assert_eq!(keys.frame_counter(), 42);
+    keys.set_keys(2, [1; 16], [2; 16], [3; 16], None);
+    assert_eq!(keys.frame_counter(), 42);
+    keys.set_keys(3, [2; 16], [3; 16], [4; 16], Some(1));
+    let next = keys.transmit_security(false);
+    assert_eq!(
+        (next.frame_counter, next.key_id, next.key),
+        (Some(1), Some(3), [3; 16])
+    );
+}
+
 /// `[PHR, MAC...]` of a 2006 data frame secured at ENC-MIC-32 in key
 /// identifier mode 1: security header at image offset 10.
 fn secured_mode_1() -> Vec<u8> {
@@ -41,7 +56,7 @@ fn first_transmissions_take_a_counter_and_retransmissions_keep_it() {
 
     // A retransmission keeps the frame's counter and key index, as the port
     // sets neither for `mIsARetx`, even after the key index changed.
-    keys.set_keys(4, [2; 16], [3; 16], [4; 16]);
+    keys.set_keys(4, [2; 16], [3; 16], [4; 16], None);
     let retry = keys.transmit_security(true);
     assert_eq!(
         (retry.frame_counter, retry.key_id, retry.key),

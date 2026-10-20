@@ -436,6 +436,16 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         &mut self.pib
     }
 
+    /// Set an interface's pending mode, checking the configured interface count.
+    pub fn set_pending_mode(
+        &mut self,
+        index: Ieee802154MultipanIndex,
+        mode: oer_ieee802154_mac::AutoPendingMode,
+    ) {
+        self.assert_interface(index);
+        self.pib.set_pending_mode(index, mode);
+    }
+
     /// The frame-pending table of interface zero.
     pub fn pending_table(&mut self) -> &mut PendingTable<PENDING_TABLE_SIZE> {
         self.pending_table_for(Ieee802154MultipanIndex::CONTEXT0)
@@ -641,13 +651,13 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
     }
 
     /// `esp_ieee802154_set_ack_timeout`: microseconds rounded up to the
-    /// 16-microsecond unit and truncated to the sixteen-bit field.
+    /// 16-microsecond unit, validated before the call.
     pub fn set_ack_timeout<L: Ieee802154LowLevel<Address = Address> + ?Sized>(
         &mut self,
         ll: &mut L,
-        microseconds: u32,
+        timeout: crate::types::AckTimeout,
     ) {
-        ll.set_ack_timeout((microseconds.wrapping_add(15) / 16) as u16);
+        ll.set_ack_timeout(timeout.units());
     }
 
     /// `esp_ieee802154_get_ack_timeout` in microseconds.

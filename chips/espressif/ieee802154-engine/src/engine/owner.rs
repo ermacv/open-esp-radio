@@ -62,6 +62,15 @@ impl<'storage, Ll: Ieee802154LowLevel> Ieee802154EngineOwner<'storage, Ll> {
         self.engine.pib()
     }
 
+    /// [`Ieee802154Engine::set_pending_mode`], with the configured-count check.
+    pub fn set_pending_mode(
+        &mut self,
+        index: Ieee802154MultipanIndex,
+        mode: oer_ieee802154_mac::AutoPendingMode,
+    ) {
+        self.engine.set_pending_mode(index, mode)
+    }
+
     /// [`Ieee802154Engine::pending_table`], using this owner's MAC.
     pub fn pending_table(&mut self) -> &mut PendingTable<PENDING_TABLE_SIZE> {
         self.engine.pending_table()
@@ -173,8 +182,8 @@ impl<'storage, Ll: Ieee802154LowLevel> Ieee802154EngineOwner<'storage, Ll> {
     }
 
     /// [`Ieee802154Engine::set_ack_timeout`], using this owner's MAC.
-    pub fn set_ack_timeout(&mut self, microseconds: u32) {
-        self.engine.set_ack_timeout(&mut self.ll, microseconds)
+    pub fn set_ack_timeout(&mut self, timeout: crate::types::AckTimeout) {
+        self.engine.set_ack_timeout(&mut self.ll, timeout)
     }
 
     /// [`Ieee802154Engine::ack_timeout`], using this owner's MAC.

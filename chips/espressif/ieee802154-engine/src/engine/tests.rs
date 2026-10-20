@@ -1188,7 +1188,10 @@ fn identity_and_ack_timeout_address_interface_zero() {
     engine.set_panid(hw, 0x1234);
     engine.set_short_address(hw, 0x5678);
     engine.set_extended_address(hw, [1, 2, 3, 4, 5, 6, 7, 8]);
-    engine.set_ack_timeout(hw, 200);
+    engine.set_ack_timeout(
+        hw,
+        crate::types::AckTimeout::new(200).expect("bounded timeout"),
+    );
     assert_eq!(
         hw.calls,
         [

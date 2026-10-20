@@ -696,18 +696,12 @@ fn pending_entries_hold_their_interface_slots_across_phases() {
             let (short, extended) = {
                 let mut phase = owner.phase();
                 let parts = &mut *phase;
-                parts
-                    .control
-                    .set_pending_mode(&mut one, has, AutoPendingMode::Enhanced);
+                let first = parts.clients.client(&mut one);
+                let second = parts.clients.client(&mut zero);
+                first.set_pending_mode(has, AutoPendingMode::Enhanced);
                 (
-                    parts
-                        .control
-                        .add_pending_short(&mut one, short, [0x34, 0x12]),
-                    parts.control.add_pending_extended(
-                        &mut zero,
-                        extended,
-                        [1, 2, 3, 4, 5, 6, 7, 8],
-                    ),
+                    first.add_pending_short(short, [0x34, 0x12]),
+                    second.add_pending_extended(extended, [1, 2, 3, 4, 5, 6, 7, 8]),
                 )
             };
             let handle = parts_handle();
@@ -729,8 +723,11 @@ fn pending_entries_hold_their_interface_slots_across_phases() {
             {
                 let mut phase = owner.phase();
                 let parts = &mut *phase;
-                let _slot = parts.control.remove_pending_short(&mut one, short);
-                let _slot = parts.control.remove_pending_extended(&mut zero, extended);
+                let _slot = parts.clients.client(&mut one).remove_pending_short(short);
+                let _slot = parts
+                    .clients
+                    .client(&mut zero)
+                    .remove_pending_extended(extended);
             }
             assert_eq!(handle.interface(Interface::new(1)).pending_short[0], None);
             assert_eq!(
@@ -780,17 +777,22 @@ fn settings_reach_the_radio_while_disabled_and_while_enabled() {
                 parts.control.set_enhanced_ack_header_ies(
                     SupportedHeaderIes::new(&[1, 2, 3]).unwrap_or_else(|| panic!("short")),
                 );
-                parts.control.set_pan_id(&mut zero, 0xabcd);
-                parts
-                    .control
-                    .set_mac_keys(&mut zero, 2, [0; 16], [1; 16], [2; 16]);
-                parts
-                    .control
-                    .update_frame_counter(&mut zero, FrameCounterUpdate::SetIfLarger(7));
-                parts
-                    .control
-                    .update_frame_counter(&mut zero, FrameCounterUpdate::SetIfLarger(3));
-                assert_eq!(parts.control.frame_counter(&zero), Some(7));
+                let client = parts.clients.client(&mut zero);
+                client.set_pan_id(0xabcd);
+                client.set_short_address(0x1234);
+                client.set_mac_keys(2, [0; 16], [1; 16], [2; 16], None);
+                client.update_frame_counter(FrameCounterUpdate::SetIfLarger(7));
+                client.update_frame_counter(FrameCounterUpdate::SetIfLarger(3));
+                assert_eq!(client.frame_counter(), Some(7));
+                client.set_mac_keys(3, [1; 16], [2; 16], [3; 16], None);
+                assert_eq!(client.frame_counter(), Some(7));
+                client.set_mac_keys(4, [2; 16], [3; 16], [4; 16], Some(1));
+                assert_eq!(client.frame_counter(), Some(1));
+                let interface = handle.interface(Interface::new(0));
+                assert_eq!(interface.key_id, Some(4));
+                assert_eq!(interface.frame_counter, Some(1));
+                client.remove_mac_keys();
+                assert_eq!(client.frame_counter(), None);
             }
             assert_eq!(handle.radio().cca_threshold_dbm, Some(-60));
             // The generator is off; its IEs are kept for when it is on.
@@ -801,14 +803,89 @@ fn settings_reach_the_radio_while_disabled_and_while_enabled() {
                 .disable(&mut |_| core::ops::ControlFlow::Continue(()))
                 .await
                 .unwrap_or_else(|_| panic!("not poisoned"));
-            // The disabled owner sets the configured interface too.
-            owner.setup().set_short_address(&mut zero, 0x1234);
+            // The backend retains the interface's settings while disabled.
             assert_eq!(
                 handle.interface(Interface::new(0)).short_address,
                 Some(0x1234)
             );
             let _slot = owner.setup().remove(zero);
             assert!(!handle.interface(Interface::new(0)).configured);
+            oer_radio_port::Ended::uninstall(owner, (), ())
+        }
+    }
+    run(Body);
+}
+
+#[test]
+fn interface_settings_replace_latest_values_during_work_without_changing_its_security() {
+    struct Body;
+    impl PortBody<OwnedModel> for Body {
+        type Output = ();
+
+        async fn run<'p, 'id>(
+            self,
+            mut owner: Owner<'p, 'id, OwnedModel, oer_radio_port::Disabled>,
+            resources: ModelResources<'id>,
+        ) -> Ended<'id, OwnedModel, ()> {
+            let mut zero = owner.setup().configure(resources.interface0.interface);
+            let [short, _] = resources.interface0.short;
+            let [extended, _] = resources.interface0.extended;
+            let [mut seat, _] = resources.operation;
+            let mut owner = owner.enable().await.unwrap_or_else(|_| panic!("enabled"));
+            let handle = parts_handle();
+            {
+                let mut phase = owner.phase();
+                let parts = &mut *phase;
+                let client = parts.clients.client(&mut zero);
+                let original = crate::TxSecurity::Key {
+                    key: [3; 16],
+                    address: [4; 8],
+                };
+                let request = SupportedTransmit::new(Transmission {
+                    security: original,
+                    frame: crate::FrameView::new(&DATA).expect("MAC frame"),
+                    channel: channel(15),
+                    mode: crate::TxMode::Direct,
+                    power: None,
+                    max_frame_retries: 0,
+                    time_sync: None,
+                })
+                .unwrap_or_else(|_| panic!("explicit security supported"));
+                let work = client
+                    .transmit(ready(client.operation(&mut seat)), request)
+                    .expect("admitted");
+                // More replacements than a bounded request queue could hold.
+                for value in 0..256 {
+                    client.set_pan_id(value);
+                    client.set_short_address(value);
+                    client.update_frame_counter(FrameCounterUpdate::SetIfLarger(u32::from(value)));
+                }
+                client.set_extended_address([9; 8]);
+                client.set_mac_keys(5, [4; 16], [5; 16], [6; 16], Some(1));
+                client.update_frame_counter(FrameCounterUpdate::SetIfLarger(0));
+                assert_eq!(client.frame_counter(), Some(1));
+                client.set_pending_mode(Has::from_const(), AutoPendingMode::Enhanced);
+                let short = client.add_pending_short(short, [1, 2]);
+                let extended = client.add_pending_extended(extended, [2; 8]);
+                let current = handle.interface(Interface::new(0));
+                assert_eq!(current.pan_id, Some(255));
+                assert_eq!(current.short_address, Some(255));
+                assert_eq!(current.extended_address, Some([9; 8]));
+                assert_eq!(current.pending_mode, Some(AutoPendingMode::Enhanced));
+                assert_eq!(current.pending_short[0], Some([1, 2]));
+                assert_eq!(current.pending_extended[0], Some([2; 8]));
+                assert_eq!(handle.0.borrow().tx_security, Some(original));
+                let _short = client.remove_pending_short(short);
+                let _extended = client.remove_pending_extended(extended);
+                client.remove_mac_keys();
+                assert_eq!(client.frame_counter(), None);
+                assert_eq!(handle.0.borrow().tx_security, Some(original));
+                assert!(handle.complete_transmit(work.id(), TxStatus::Success));
+            }
+            let owner = owner
+                .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+                .await
+                .unwrap_or_else(|_| panic!("disabled"));
             oer_radio_port::Ended::uninstall(owner, (), ())
         }
     }
@@ -1210,7 +1287,10 @@ fn removing_an_interface_keeps_its_pending_entries() {
             let entry = {
                 let mut phase = owner.phase();
                 let parts = &mut *phase;
-                parts.control.add_pending_short(&mut zero, slot, [7, 7])
+                parts
+                    .clients
+                    .client(&mut zero)
+                    .add_pending_short(slot, [7, 7])
             };
             let mut owner = owner
                 .disable(&mut |_| core::ops::ControlFlow::Continue(()))
@@ -1229,7 +1309,7 @@ fn removing_an_interface_keeps_its_pending_entries() {
             {
                 let mut phase = owner.phase();
                 let parts = &mut *phase;
-                let _slot = parts.control.remove_pending_short(&mut zero, entry);
+                let _slot = parts.clients.client(&mut zero).remove_pending_short(entry);
             }
             assert_eq!(handle.interface(Interface::new(0)).pending_short[0], None);
             let owner = owner
@@ -1298,8 +1378,11 @@ fn a_running_phase_configures_sets_and_removes_an_interface() {
                 // Interface 1 joins while the radio runs, with its settings.
                 let mut one = parts.control.configure(resources.interface1.interface);
                 assert!(handle.interface(Interface::new(1)).configured);
-                parts.control.set_pan_id(&mut one, 0x0102);
-                parts.control.set_extended_address(&mut one, [9; 8]);
+                {
+                    let client = parts.clients.client(&mut one);
+                    client.set_pan_id(0x0102);
+                    client.set_extended_address([9; 8]);
+                }
                 assert_eq!(handle.interface(Interface::new(1)).pan_id, Some(0x0102));
                 assert_eq!(
                     handle.interface(Interface::new(1)).extended_address,
@@ -1320,7 +1403,11 @@ fn a_running_phase_configures_sets_and_removes_an_interface() {
             };
             // The slot configures it again in the next phase.
             let mut one = owner.phase().control.configure(slot);
-            owner.phase().control.set_short_address(&mut one, 0xbeef);
+            owner
+                .phase()
+                .clients
+                .client(&mut one)
+                .set_short_address(0xbeef);
             assert_eq!(
                 handle.interface(Interface::new(1)).short_address,
                 Some(0xbeef)

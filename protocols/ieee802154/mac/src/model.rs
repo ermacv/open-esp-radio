@@ -217,6 +217,7 @@ struct State {
     interfaces: [InterfaceState; MODEL_INTERFACES],
     radio: RadioWide,
     operation: Option<(Interface, RequestId, Kind)>,
+    tx_security: Option<crate::TxSecurity>,
     events: VecDeque<ModelEvent>,
     /// Received frames queued now.
     received: usize,
@@ -727,8 +728,6 @@ macro_rules! interfaces {
         impl<'id> Ieee802154Interfaces<'id> for $type {
             type InterfacePath<const I: u8> = Child<Root, I>;
             type Configured<const I: u8> = ModelConfigured<'id, I>;
-            type ShortEntry<const I: u8> = ModelShortEntry<'id, I>;
-            type ExtendedEntry<const I: u8> = ModelExtendedEntry<'id, I>;
 
             fn configure<const I: u8>(
                 &mut self,
@@ -756,124 +755,6 @@ macro_rules! interfaces {
                 };
                 state.wake_receivers();
                 interface.slot
-            }
-
-            fn set_pan_id<const I: u8>(&mut self, _: &mut ModelConfigured<'id, I>, pan_id: u16) {
-                change_interface::<I>(self.shared, |interface| interface.pan_id = Some(pan_id));
-            }
-
-            fn set_short_address<const I: u8>(
-                &mut self,
-                _: &mut ModelConfigured<'id, I>,
-                address: u16,
-            ) {
-                change_interface::<I>(self.shared, |interface| {
-                    interface.short_address = Some(address)
-                });
-            }
-
-            fn set_extended_address<const I: u8>(
-                &mut self,
-                _: &mut ModelConfigured<'id, I>,
-                address: [u8; 8],
-            ) {
-                change_interface::<I>(self.shared, |interface| {
-                    interface.extended_address = Some(address)
-                });
-            }
-
-            fn set_mac_keys<const I: u8>(
-                &mut self,
-                _: &mut ModelConfigured<'id, I>,
-                key_id: u8,
-                _: [u8; 16],
-                _: [u8; 16],
-                _: [u8; 16],
-            ) {
-                change_interface::<I>(self.shared, |interface| {
-                    interface.key_id = Some(key_id);
-                    interface.frame_counter.get_or_insert(0);
-                });
-            }
-
-            fn remove_mac_keys<const I: u8>(&mut self, _: &mut ModelConfigured<'id, I>) {
-                change_interface::<I>(self.shared, |interface| {
-                    interface.key_id = None;
-                    interface.frame_counter = None;
-                });
-            }
-
-            fn update_frame_counter<const I: u8>(
-                &mut self,
-                _: &mut ModelConfigured<'id, I>,
-                update: FrameCounterUpdate,
-            ) {
-                change_interface::<I>(self.shared, |interface| {
-                    let counter = interface.frame_counter.get_or_insert(0);
-                    *counter = match update {
-                        FrameCounterUpdate::Set(value) => value,
-                        FrameCounterUpdate::SetIfLarger(value) => (*counter).max(value),
-                    };
-                });
-            }
-
-            fn frame_counter<const I: u8>(&self, _: &ModelConfigured<'id, I>) -> Option<u32> {
-                self.shared.borrow().interfaces[usize::from(I)].frame_counter
-            }
-
-            fn set_pending_mode<const I: u8>(
-                &mut self,
-                _: &mut ModelConfigured<'id, I>,
-                _: Has<ModelCaps, SourceMatch>,
-                mode: AutoPendingMode,
-            ) {
-                change_interface::<I>(self.shared, |interface| interface.pending_mode = Some(mode));
-            }
-
-            fn add_pending_short<const I: u8>(
-                &mut self,
-                _: &mut ModelConfigured<'id, I>,
-                slot: Slot<'id, ShortPending<I>, Child<Child<Root, I>, 1>>,
-                address: [u8; 2],
-            ) -> ModelShortEntry<'id, I> {
-                change_interface::<I>(self.shared, |interface| {
-                    interface.pending_short[usize::from(slot.index())] = Some(address);
-                });
-                ModelShortEntry { slot }
-            }
-
-            fn add_pending_extended<const I: u8>(
-                &mut self,
-                _: &mut ModelConfigured<'id, I>,
-                slot: Slot<'id, ExtendedPending<I>, Child<Child<Root, I>, 2>>,
-                address: [u8; 8],
-            ) -> ModelExtendedEntry<'id, I> {
-                change_interface::<I>(self.shared, |interface| {
-                    interface.pending_extended[usize::from(slot.index())] = Some(address);
-                });
-                ModelExtendedEntry { slot }
-            }
-
-            fn remove_pending_short<const I: u8>(
-                &mut self,
-                _: &mut ModelConfigured<'id, I>,
-                entry: ModelShortEntry<'id, I>,
-            ) -> Slot<'id, ShortPending<I>, Child<Child<Root, I>, 1>> {
-                change_interface::<I>(self.shared, |interface| {
-                    interface.pending_short[usize::from(entry.slot.index())] = None;
-                });
-                entry.slot
-            }
-
-            fn remove_pending_extended<const I: u8>(
-                &mut self,
-                _: &mut ModelConfigured<'id, I>,
-                entry: ModelExtendedEntry<'id, I>,
-            ) -> Slot<'id, ExtendedPending<I>, Child<Child<Root, I>, 2>> {
-                change_interface::<I>(self.shared, |interface| {
-                    interface.pending_extended[usize::from(entry.slot.index())] = None;
-                });
-                entry.slot
             }
         }
     };
@@ -1111,6 +992,108 @@ impl<'c, 'id, const I: u8> Ieee802154Client<'id, I> for ModelClient<'c, 'id, I> 
     type OperationPath = Child<Root, 2>;
     type Caps = ModelCaps;
 
+    type InterfacePath = Child<Root, I>;
+    type ShortEntry = ModelShortEntry<'id, I>;
+    type ExtendedEntry = ModelExtendedEntry<'id, I>;
+
+    fn set_pan_id(&self, pan_id: u16) {
+        change_interface::<I>(self.shared, |interface| interface.pan_id = Some(pan_id));
+    }
+
+    fn set_short_address(&self, address: u16) {
+        change_interface::<I>(self.shared, |interface| {
+            interface.short_address = Some(address)
+        });
+    }
+
+    fn set_extended_address(&self, address: [u8; 8]) {
+        change_interface::<I>(self.shared, |interface| {
+            interface.extended_address = Some(address)
+        });
+    }
+
+    fn set_mac_keys(
+        &self,
+        key_id: u8,
+        _: [u8; 16],
+        _: [u8; 16],
+        _: [u8; 16],
+        frame_counter: Option<u32>,
+    ) {
+        change_interface::<I>(self.shared, |interface| {
+            interface.key_id = Some(key_id);
+            let counter = frame_counter.unwrap_or(interface.frame_counter.unwrap_or(0));
+            interface.frame_counter = Some(counter);
+        });
+    }
+
+    fn remove_mac_keys(&self) {
+        change_interface::<I>(self.shared, |interface| {
+            interface.key_id = None;
+            interface.frame_counter = None;
+        });
+    }
+
+    fn update_frame_counter(&self, update: FrameCounterUpdate) {
+        change_interface::<I>(self.shared, |interface| {
+            let counter = interface.frame_counter.get_or_insert(0);
+            let FrameCounterUpdate::SetIfLarger(value) = update;
+            *counter = (*counter).max(value);
+        });
+    }
+
+    fn frame_counter(&self) -> Option<u32> {
+        let state = self.shared.borrow();
+        let interface = &state.interfaces[usize::from(I)];
+        interface.key_id.and(interface.frame_counter)
+    }
+
+    fn set_pending_mode(&self, _: Has<ModelCaps, SourceMatch>, mode: AutoPendingMode) {
+        change_interface::<I>(self.shared, |interface| interface.pending_mode = Some(mode));
+    }
+
+    fn add_pending_short(
+        &self,
+        slot: Slot<'id, ShortPending<I>, Child<Child<Root, I>, 1>>,
+        address: [u8; 2],
+    ) -> ModelShortEntry<'id, I> {
+        change_interface::<I>(self.shared, |interface| {
+            interface.pending_short[usize::from(slot.index())] = Some(address);
+        });
+        ModelShortEntry { slot }
+    }
+
+    fn add_pending_extended(
+        &self,
+        slot: Slot<'id, ExtendedPending<I>, Child<Child<Root, I>, 2>>,
+        address: [u8; 8],
+    ) -> ModelExtendedEntry<'id, I> {
+        change_interface::<I>(self.shared, |interface| {
+            interface.pending_extended[usize::from(slot.index())] = Some(address);
+        });
+        ModelExtendedEntry { slot }
+    }
+
+    fn remove_pending_short(
+        &self,
+        entry: ModelShortEntry<'id, I>,
+    ) -> Slot<'id, ShortPending<I>, Child<Child<Root, I>, 1>> {
+        change_interface::<I>(self.shared, |interface| {
+            interface.pending_short[usize::from(entry.slot.index())] = None;
+        });
+        entry.slot
+    }
+
+    fn remove_pending_extended(
+        &self,
+        entry: ModelExtendedEntry<'id, I>,
+    ) -> Slot<'id, ExtendedPending<I>, Child<Child<Root, I>, 2>> {
+        change_interface::<I>(self.shared, |interface| {
+            interface.pending_extended[usize::from(entry.slot.index())] = None;
+        });
+        entry.slot
+    }
+
     fn receive(&self, channel: Channel) -> impl Future<Output = Result<(), Poisoned<ModelFault>>> {
         poll_fn(move |context| {
             let mut state = self.shared.borrow_mut();
@@ -1185,12 +1168,13 @@ impl<'c, 'id, const I: u8> Ieee802154Client<'id, I> for ModelClient<'c, 'id, I> 
     fn transmit<'o>(
         &'o self,
         permit: OperationPermit<'o, 'id, Child<Root, 2>>,
-        _: SupportedTransmit<'_, ModelCaps>,
+        transmission: SupportedTransmit<'_, ModelCaps>,
     ) -> Result<Work<'o, Self>, Poisoned<ModelFault>>
     where
         'id: 'o,
     {
         let token = self.admit(permit, Kind::Transmit, self.held)?;
+        self.shared.borrow_mut().tx_security = Some(transmission.get().security);
         Ok(Work::new(self, token))
     }
 

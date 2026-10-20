@@ -5,6 +5,57 @@
 //! register-level types; its HAL converts them to these values, so the engine
 //! never sees a register image.
 
+/// An ACK timeout rounded up to sixteen-microsecond units and checked
+/// against the hardware's sixteen-bit field.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct AckTimeout(u16);
+
+/// The rounded ACK timeout exceeds the hardware field.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct AckTimeoutTooLarge;
+
+impl AckTimeout {
+    /// Round up to sixteen microseconds, refusing an unrepresentable value.
+    pub const fn new(microseconds: u32) -> Result<Self, AckTimeoutTooLarge> {
+        let units = microseconds.div_ceil(16);
+        if units > u16::MAX as u32 {
+            Err(AckTimeoutTooLarge)
+        } else {
+            Ok(Self(units as u16))
+        }
+    }
+
+    /// The checked value in hardware units.
+    pub const fn units(self) -> u16 {
+        self.0
+    }
+}
+
+#[cfg(test)]
+mod ack_timeout_tests {
+    use super::{AckTimeout, AckTimeoutTooLarge};
+
+    #[test]
+    fn rounds_up_without_wrapping_at_the_field_boundary() {
+        for (micros, units) in [
+            (0, 0),
+            (1, 1),
+            (16, 1),
+            (17, 2),
+            (200, 13),
+            (1_048_560, 65_535),
+        ] {
+            assert_eq!(
+                AckTimeout::new(micros).expect("representable").units(),
+                units
+            );
+        }
+        for micros in [1_048_561, 1_048_575, 1_048_576, u32::MAX] {
+            assert_eq!(AckTimeout::new(micros), Err(AckTimeoutTooLarge));
+        }
+    }
+}
+
 /// One of the four source-confirmed MAC PAN contexts.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct Ieee802154MultipanIndex(u8);
