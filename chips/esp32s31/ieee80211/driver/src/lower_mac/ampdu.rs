@@ -128,6 +128,8 @@ pub struct Esp32s31AmpduBuffer<'slot, S: AmpduBacking, const SLOTS: usize> {
     pub(super) owner: Esp32s31AmpduOwner<'slot, S::Backing, SLOTS>,
     source: &'slot S,
     subframes: [Option<Subframe<S::Backing>>; SLOTS],
+    // Separate storage avoids per-entry alignment padding on RV32.
+    admitted_at: [oer_time::Instant; SLOTS],
     count: usize,
 }
 
@@ -153,6 +155,7 @@ impl<'slot, S: AmpduBacking, const SLOTS: usize> Esp32s31AmpduBuffer<'slot, S, S
             owner,
             source,
             subframes: [const { None }; SLOTS],
+            admitted_at: [oer_time::Instant::EPOCH; SLOTS],
             count: 0,
         })
     }
@@ -208,7 +211,7 @@ impl<S: AmpduBackingSource, const SLOTS: usize> Esp32s31AmpduBuffer<'_, S, SLOTS
     /// `None` when the aggregate holds `SLOTS`, the length is zero, the
     /// source has no free backing, or its backing is too short for the MPDU
     /// with its metadata, MIC and FCS.
-    pub fn push_mpdu(&mut self, len: usize) -> Option<&mut [u8]> {
+    pub fn push_mpdu(&mut self, len: usize, admitted_at: oer_time::Instant) -> Option<&mut [u8]> {
         if self.count >= SLOTS || len == 0 {
             return None;
         }
@@ -218,6 +221,7 @@ impl<S: AmpduBackingSource, const SLOTS: usize> Esp32s31AmpduBuffer<'_, S, SLOTS
             // Dropping the backing returns it.
             return None;
         }
+        *self.admitted_at.get_mut(self.count)? = admitted_at;
         let subframe = self
             .subframes
             .get_mut(self.count)?
@@ -229,6 +233,55 @@ impl<S: AmpduBackingSource, const SLOTS: usize> Esp32s31AmpduBuffer<'_, S, SLOTS
 }
 
 impl<S: AmpduBacking, const SLOTS: usize> Esp32s31AmpduBuffer<'_, S, SLOTS> {
+    /// The original admission of a retained unpublished subframe.
+    pub fn admitted_at(&self, index: usize) -> Option<oer_time::Instant> {
+        self.subframes.get(index)?.as_ref()?;
+        self.admitted_at.get(index).copied()
+    }
+
+    /// Keep exactly the selected original positions after the core has
+    /// retired expired members. Their backings and admission ages move
+    /// together during compaction. Invalid masks change nothing.
+    #[expect(
+        clippy::indexing_slicing,
+        reason = "push bounds count by SLOTS; compaction's target never exceeds its source index"
+    )]
+    pub fn retain_subframes(&mut self, mask: u64) -> Result<(), super::AmpduRefusal> {
+        if self.count > 64 || (self.count < 64 && mask >> self.count != 0) {
+            return Err(super::AmpduRefusal::TooManySubframes);
+        }
+        let mut target = 0;
+        for index in 0..self.count {
+            let entry = self.subframes[index].take();
+            if mask & (1_u64 << index) != 0 {
+                self.subframes[target] = entry;
+                self.admitted_at[target] = self.admitted_at[index];
+                target += 1;
+            }
+        }
+        self.count = target;
+        Ok(())
+    }
+
+    fn expired_mask(&self, now: oer_time::Instant, lifetime: oer_time::Duration) -> u64 {
+        self.subframes
+            .iter()
+            .zip(self.admitted_at.iter())
+            .enumerate()
+            .fold(0_u64, |mask, (index, (entry, admitted_at))| {
+                if index < 64
+                    && entry.as_ref().is_some_and(|_| {
+                        now.checked_duration_since(*admitted_at)
+                            .is_some_and(|age| age >= lifetime)
+                    })
+                {
+                    mask | (1_u64 << index)
+                } else {
+                    mask
+                }
+            })
+    }
+
     /// The subframes appended.
     pub const fn subframes(&self) -> usize {
         self.count
@@ -255,6 +308,7 @@ pub struct AmpduPlan<'core, Path: PoolPath = Root> {
 
 /// Register values already derived from the owned admission.
 pub(super) struct AmpduSettings {
+    pub lifetime: oer_time::Duration,
     pub queue: LegacyTxQueue,
     pub format: AmpduFormat,
     pub role: AmpduTxRoleAdapter,
@@ -306,6 +360,7 @@ pub struct PublishedAmpdu<'core, 'slot, B, const SLOTS: usize, Path: PoolPath = 
     /// The publication deadline, or the end of the abort settle.
     deadline: oer_time::Instant,
     settling: bool,
+    admitted_at: [oer_time::Instant; SLOTS],
 }
 
 impl<B, const SLOTS: usize, Path: PoolPath> PublishedAmpdu<'_, '_, B, SLOTS, Path> {
@@ -375,6 +430,7 @@ pub struct CompletedAmpdu<'core, 'slot, B, const SLOTS: usize, Path: PoolPath = 
     pub(super) owner: Esp32s31AmpduOwner<'slot, B, SLOTS>,
     pub(super) queue: FreeQueue<'core, Path>,
     pub(super) admission: TxAdmission<'core, Path>,
+    pub(super) admitted_at: [oer_time::Instant; SLOTS],
 }
 
 /// An aggregate fault retains every admitted right and its DMA owner. It has
@@ -385,6 +441,7 @@ pub struct AmpduFault<'core, 'slot, B, const SLOTS: usize, Path: PoolPath = Root
     _owner: Esp32s31AmpduOwner<'slot, B, SLOTS>,
     _queue: FreeQueue<'core, Path>,
     _admission: TxAdmission<'core, Path>,
+    _admitted_at: [oer_time::Instant; SLOTS],
 }
 
 impl<'core, 'slot, B, const SLOTS: usize, Path: PoolPath> AmpduFault<'core, 'slot, B, SLOTS, Path> {
@@ -396,6 +453,7 @@ impl<'core, 'slot, B, const SLOTS: usize, Path: PoolPath> AmpduFault<'core, 'slo
             _owner: completed.owner,
             _queue: completed.queue,
             _admission: completed.admission,
+            _admitted_at: completed.admitted_at,
         }
     }
 }
@@ -408,8 +466,58 @@ impl<B, const SLOTS: usize, Path: PoolPath> fmt::Debug for AmpduFault<'_, '_, B,
     }
 }
 
+/// A publication refused for age, retaining every original owner.
+#[must_use = "complete the expiry terminal and retain the live subframes"]
+pub struct ExpiredAmpdu<'core, 'slot, S: AmpduBacking, const SLOTS: usize, Path: PoolPath = Root> {
+    buffer: Esp32s31AmpduBuffer<'slot, S, SLOTS>,
+    plan: AmpduPlan<'core, Path>,
+    msdus: u64,
+}
+impl<S: AmpduBacking, const SLOTS: usize, Path: PoolPath> fmt::Debug
+    for ExpiredAmpdu<'_, '_, S, SLOTS, Path>
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ExpiredAmpdu")
+            .field("msdus", &self.msdus)
+            .finish_non_exhaustive()
+    }
+}
+impl<'core, 'slot, S: AmpduBacking, const SLOTS: usize, Path: PoolPath>
+    ExpiredAmpdu<'core, 'slot, S, SLOTS, Path>
+{
+    /// Original positions of expired MSDUs; the rest remains live.
+    pub const fn expired_msdus(&self) -> u64 {
+        self.msdus
+    }
+    pub(super) fn into_parts(
+        self,
+    ) -> (
+        Esp32s31AmpduBuffer<'slot, S, SLOTS>,
+        AmpduPlan<'core, Path>,
+        u64,
+    ) {
+        (self.buffer, self.plan, self.msdus)
+    }
+}
+/// Age returns all unpublished owners; a hardware fault quarantines them.
+pub enum AmpduStartError<'core, 'slot, S: AmpduBacking, const SLOTS: usize, Path: PoolPath = Root> {
+    Expired(ExpiredAmpdu<'core, 'slot, S, SLOTS, Path>),
+    Fault(AmpduFault<'core, 'slot, S::Backing, SLOTS, Path>),
+}
+impl<S: AmpduBacking, const SLOTS: usize, Path: PoolPath> fmt::Debug
+    for AmpduStartError<'_, '_, S, SLOTS, Path>
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Expired(expired) => f.debug_tuple("Expired").field(&expired.msdus).finish(),
+            Self::Fault(fault) => fault.fmt(f),
+        }
+    }
+}
+
 /// Commit the buffer's subframes to its owner and publish the aggregate
-/// once. An error returns the owner and its admission in sealed quarantine.
+/// once. Expiry returns every unpublished owner; a hardware fault keeps
+/// the owner and its admission in sealed quarantine.
 #[allow(
     clippy::result_large_err,
     reason = "retain the complete DMA and key owners without allocation"
@@ -422,15 +530,24 @@ pub fn publish<'core, 'slot, S, H, const SLOTS: usize, Path: PoolPath>(
     publication_timeout: oer_time::Duration,
 ) -> Result<
     PublishedAmpdu<'core, 'slot, S::Backing, SLOTS, Path>,
-    AmpduFault<'core, 'slot, S::Backing, SLOTS, Path>,
+    AmpduStartError<'core, 'slot, S, SLOTS, Path>,
 >
 where
     S: AmpduBacking,
     H: HtAmpduHardware,
 {
+    let expired = buffer.expired_mask(now, plan.settings.lifetime);
+    if expired != 0 {
+        return Err(AmpduStartError::Expired(ExpiredAmpdu {
+            buffer,
+            plan,
+            msdus: expired,
+        }));
+    }
     let Esp32s31AmpduBuffer {
         mut owner,
         subframes,
+        admitted_at,
         ..
     } = buffer;
     let AmpduPlan {
@@ -519,15 +636,17 @@ where
             cookie,
             deadline,
             settling: false,
+            admitted_at,
             queue,
             admission,
         }),
-        Err(error) => Err(AmpduFault {
+        Err(error) => Err(AmpduStartError::Fault(AmpduFault {
             error,
             _owner: owner,
             _queue: queue,
             _admission: admission,
-        }),
+            _admitted_at: admitted_at,
+        })),
     }
 }
 
@@ -560,12 +679,14 @@ where
             owner: published.owner,
             queue: published.queue,
             admission: published.admission,
+            admitted_at: published.admitted_at,
         })),
         Err(error) => Err(AmpduFault {
             error,
             _owner: published.owner,
             _queue: published.queue,
             _admission: published.admission,
+            _admitted_at: published.admitted_at,
         }),
     }
 }

@@ -1,7 +1,7 @@
-//! Portable EDCA contention: the CSMA/CA backoff draw a lower-MAC backend
-//! uses for its own queues below the port (the ESP32-S31 driver's
-//! `EdcaBackoffState`). The backoff does not cross the lower-MAC port. [`EdcaContention`] keeps the contention window of one
-//! access category (IEEE 802.11-2020 10.23.2): it starts at `CWmin`, doubles
+//! Portable EDCA records and CSMA/CA contention for a backend's AC queues.
+//! The backoff draw stays below the lower-MAC port. [`EdcaContention`]
+//! keeps the contention window of one access category
+//! (IEEE 802.11-2020 10.23.2): it starts at `CWmin`, doubles
 //! after each failed attempt of a frame up to `CWmax` and returns to
 //! `CWmin` when the frame ends. The random source is injected, so a seeded
 //! source makes the draws deterministic.
@@ -14,8 +14,8 @@ use oer_ieee80211_wire::qos::WmmAccessCategory;
 pub struct EdcaAcParameters {
     /// Contention, admission-control and TXOP fields advertised on air.
     pub wmm: WmmAcParameters,
-    /// Maximum retention from software admission, in 1024-us TUs.
-    pub msdu_lifetime_tu: u16,
+    /// Maximum retention from software admission.
+    pub msdu_lifetime: oer_time::Duration,
 }
 
 /// A VIF's complete EDCA table. Lifetimes are local MIB attributes, not
@@ -23,13 +23,14 @@ pub struct EdcaAcParameters {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct EdcaParameterSet {
     wmm: WmmParameterSet,
-    msdu_lifetimes_tu: [u16; 4],
+    msdu_lifetimes: [oer_time::Duration; 4],
 }
 
 impl EdcaParameterSet {
-    /// Default and largest standard MSDU retention time, in TUs.
+    /// Default and largest standard MSDU retention time (500 TUs).
     // SOURCE: IEEE 802.11-2020 Annex C, dot11EDCATableMSDULifetime.
-    pub const DEFAULT_MSDU_LIFETIME_TU: u16 = 500;
+    pub const DEFAULT_MSDU_LIFETIME: oer_time::Duration =
+        oer_time::Duration::from_micros(500 * 1024);
 
     /// Non-AP defaults before a BSS is known.
     // SOURCE: IEEE 802.11-2020 9.4.2.28, Table 9-155 (OFDM/ERP/HT/HE).
@@ -37,16 +38,32 @@ impl EdcaParameterSet {
 
     /// Lifetimes in ACI order: BE, BK, VI, VO. SupportedEdca validates
     /// the whole table before it can be installed.
-    pub const fn new(wmm: WmmParameterSet, msdu_lifetimes_tu: [u16; 4]) -> Self {
+    pub const fn new(wmm: WmmParameterSet, msdu_lifetimes: [oer_time::Duration; 4]) -> Self {
         Self {
             wmm,
-            msdu_lifetimes_tu,
+            msdu_lifetimes,
         }
+    }
+
+    /// Convert MIB lifetime values in TUs at the record boundary.
+    pub const fn from_tu(wmm: WmmParameterSet, lifetimes_tu: [u16; 4]) -> Self {
+        let [be, bk, vi, vo] = lifetimes_tu;
+        #[expect(
+            clippy::arithmetic_side_effects,
+            reason = "every u16 TU value fits microseconds in u64"
+        )]
+        const fn duration(tu: u16) -> oer_time::Duration {
+            oer_time::Duration::from_micros(tu as u64 * 1024)
+        }
+        Self::new(
+            wmm,
+            [duration(be), duration(bk), duration(vi), duration(vo)],
+        )
     }
 
     /// Advertised contention with the standard local lifetime for each AC.
     pub const fn from_wmm(wmm: WmmParameterSet) -> Self {
-        Self::new(wmm, [Self::DEFAULT_MSDU_LIFETIME_TU; 4])
+        Self::new(wmm, [Self::DEFAULT_MSDU_LIFETIME; 4])
     }
 
     /// Advertised fields, excluding the local lifetime attributes.
@@ -58,7 +75,7 @@ impl EdcaParameterSet {
     pub const fn access_category(self, category: WmmAccessCategory) -> EdcaAcParameters {
         EdcaAcParameters {
             wmm: self.wmm.access_category(category),
-            msdu_lifetime_tu: *category.select(&self.msdu_lifetimes_tu),
+            msdu_lifetime: *category.select(&self.msdu_lifetimes),
         }
     }
 }

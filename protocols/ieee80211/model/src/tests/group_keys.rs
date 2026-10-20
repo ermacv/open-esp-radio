@@ -148,7 +148,7 @@ impl Work for Boundary<'_> {
                 phase.station().select_group_key(permission, a)
             }
         }
-        let admitted_at = oer_time::Instant::from_micros(self.air.now_micros.get());
+        let admitted_at = oer_time::Instant::from_micros(self.air.monotonic_now().as_micros());
         self.finish(
             phase,
             (original, submitted_slot),
@@ -233,7 +233,7 @@ impl Boundary<'_> {
             }
         };
         events.push(Event::Terminal(numbers.snapshot(&key)));
-        let completed_at = oer_time::Instant::from_micros(self.air.now_micros.get());
+        let completed_at = oer_time::Instant::from_micros(self.air.monotonic_now().as_micros());
         let continuous_rx_at_terminal = self.air.rx_stream.borrow().is_some();
         self.air.stop_continuous_receive();
         let inactive = if self.case == contract::Case::SelectCurrent {
@@ -284,7 +284,7 @@ impl Boundary<'_> {
     }
 }
 
-struct Harness<'a>(&'a VirtualClock);
+struct Harness<'a>(&'a Rc<VirtualClock>);
 impl contract::Harness for Harness<'_> {
     type Events = Vec<contract::Event>;
     type Completions = Vec<contract::Completion>;
@@ -293,7 +293,7 @@ impl contract::Harness for Harness<'_> {
         <ModelBackend as LowerMacBackend>::GROUP_COMMAND_BOUND;
     const SCENARIO_BOUND: oer_time::Duration = oer_time::Duration::from_millis(20);
     async fn exercise(&mut self, case: contract::Case) -> contract::Trace<Self::Events> {
-        let (backend, air) = backend();
+        let (backend, air) = backend_on(self.0.clone());
         let trace = RefCell::new(None);
         let boundary = Boundary {
             case,
@@ -315,11 +315,11 @@ impl contract::Harness for Harness<'_> {
 }
 #[test]
 fn common_gtk_boundary_suite_covers_delayed_ingress_and_retained_selection() {
-    let clock = VirtualClock::new();
+    let clock = Rc::new(VirtualClock::<8>::new());
     progress::run_clocked(
         contract::check(
             &mut Harness(&clock),
-            &clock,
+            &*clock,
             oer_ieee80211_port::conformance::Environment::Model,
         ),
         &clock,
@@ -583,7 +583,8 @@ fn a_stalled_group_command_has_a_deadline_wake_and_retains_resources_on_expiry()
             self.0.fetch_add(1, Ordering::SeqCst);
         }
     }
-    let (backend, air) = backend();
+    let clock = Rc::new(VirtualClock::<8>::new());
+    let (backend, air) = backend_on(clock.clone());
     let wakes = Arc::new(Wakes(AtomicUsize::new(0)));
     let waker = Waker::from(wakes.clone());
     let mut cx = core::task::Context::from_waker(&waker);
@@ -592,9 +593,8 @@ fn a_stalled_group_command_has_a_deadline_wake_and_retains_resources_on_expiry()
         assert!(running.as_mut().poll(&mut cx).is_pending());
     }
     let before = wakes.0.load(Ordering::SeqCst);
-    air.set_time(oer_time::Instant::from_micros(
-        MODEL_GROUP_COMMAND_BOUND.as_micros(),
-    ));
+    clock.advance(MODEL_GROUP_COMMAND_BOUND).unwrap();
+    air.clock_advanced();
     assert!(
         wakes.0.load(Ordering::SeqCst) > before,
         "expiry wakes the registered driver"

@@ -283,6 +283,7 @@ fn unsolicited_tsf_and_access_point_terminals_retain_their_real_permissions() {
             IndividualAddress::new(LOCAL).unwrap(),
             IndividualAddress::new(ACCESS_POINT_ADDRESS).unwrap(),
         ],
+        std::rc::Rc::new(oer_time_virtual::VirtualClock::<8>::new()),
     );
     assert!(matches!(
         block_on(run_port(backend, ContractBody(ContractCase::Unsolicited))),
@@ -299,6 +300,7 @@ fn disable_quarantines_the_first_rejected_owner_and_every_later_terminal() {
                 IndividualAddress::new(LOCAL).unwrap(),
                 IndividualAddress::new(ACCESS_POINT_ADDRESS).unwrap(),
             ],
+            std::rc::Rc::new(oer_time_virtual::VirtualClock::<8>::new()),
         );
         assert!(matches!(
             block_on(run_port(
@@ -321,6 +323,7 @@ fn full_custody_returns_the_next_terminal_to_poisoned_port_teardown() {
             IndividualAddress::new(LOCAL).unwrap(),
             IndividualAddress::new(ACCESS_POINT_ADDRESS).unwrap(),
         ],
+        std::rc::Rc::new(oer_time_virtual::VirtualClock::<8>::new()),
     );
     assert!(matches!(
         block_on(run_port(

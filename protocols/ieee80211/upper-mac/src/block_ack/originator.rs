@@ -353,6 +353,54 @@ impl<const TIDS: usize> TxBlockAckOriginator<TIDS> {
         active
     }
 
+    /// Consume delivery marks, one bit per sequence from `starting_sequence`.
+    /// Advancing over deferred expiry produces one BAR at the new head.
+    pub fn on_delivered(
+        &mut self,
+        tid: u8,
+        starting_sequence: SequenceNumber,
+        bitmap: u64,
+        receiver: [u8; 6],
+        transmitter: [u8; 6],
+    ) -> Option<[u8; oer_ieee80211_wire::block_ack::BLOCK_ACK_REQUEST_LEN]> {
+        let next = self
+            .agreement_mut(tid)?
+            .session
+            .on_delivered(starting_sequence, bitmap)?;
+        Some(oer_ieee80211_wire::block_ack::encode_block_ack_request(
+            receiver,
+            transmitter,
+            tid,
+            next,
+        ))
+    }
+
+    /// Consume expiry marks, one bit per sequence from `starting_sequence`.
+    /// Non-head marks remain pending. Advancing over expiry produces one
+    /// BAR at the final head, after every mark in this report was applied.
+    /// Map returned aggregate positions to sequence numbers before marking;
+    /// a re-formed aggregate can contain non-consecutive sequence numbers.
+    /// Backends report expiry only; the core owns this request.
+    pub fn on_expired(
+        &mut self,
+        tid: u8,
+        starting_sequence: SequenceNumber,
+        bitmap: u64,
+        receiver: [u8; 6],
+        transmitter: [u8; 6],
+    ) -> Option<[u8; oer_ieee80211_wire::block_ack::BLOCK_ACK_REQUEST_LEN]> {
+        let next = self
+            .agreement_mut(tid)?
+            .session
+            .on_expired(starting_sequence, bitmap)?;
+        Some(oer_ieee80211_wire::block_ack::encode_block_ack_request(
+            receiver,
+            transmitter,
+            tid,
+            next,
+        ))
+    }
+
     pub fn operational(&self, tid: u8) -> Option<OperationalTxBlockAck> {
         self.agreement(tid)?.session.operational()
     }

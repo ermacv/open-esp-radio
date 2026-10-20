@@ -17,6 +17,91 @@ use oer_ieee80211_port::{
 };
 use oer_ieee80211_wire::{phy::LegacyRate, sequence::SequenceNumber};
 
+#[test]
+fn age_verification_rejects_reset_age_lost_owners_and_backend_bars() {
+    use conformance::msdu_age::{self, Case, End, Trace, Violation};
+    let good = || Trace {
+        ends: &[End::Expired(1)][..],
+        publications: 0,
+        expired_msdus: 1,
+        admitted: [oer_ieee80211_port::Ieee80211Instant::from_micros(99); 2],
+        returned: [oer_ieee80211_port::Ieee80211Instant::from_micros(99); 2],
+        owners: [1, 2, 2],
+        returned_owners: [1, 2, 2],
+        backend_bars: 0,
+        core_bar: None,
+    };
+    assert_eq!(msdu_age::verify(Case::BeforePublication, good()), Ok(()));
+    let mut trace = good();
+    trace.returned[0] = oer_ieee80211_port::Ieee80211Instant::from_micros(100);
+    assert_eq!(
+        msdu_age::verify(Case::BeforePublication, trace),
+        Err(Violation::Age)
+    );
+    let mut trace = good();
+    trace.returned_owners[1] = 3;
+    assert_eq!(
+        msdu_age::verify(Case::BeforePublication, trace),
+        Err(Violation::Owners)
+    );
+    let mut trace = good();
+    trace.backend_bars = 1;
+    assert_eq!(
+        msdu_age::verify(Case::BeforePublication, trace),
+        Err(Violation::Publication)
+    );
+    let trace = Trace {
+        ends: &[End::Delivered, End::Expired(1), End::Expired(1)][..],
+        publications: 1,
+        expired_msdus: 2,
+        ..good()
+    };
+    assert_eq!(
+        msdu_age::verify(Case::Reformation, trace),
+        Err(Violation::Bar)
+    );
+}
+
+#[test]
+fn delivery_before_expiry_requires_the_bar_to_follow_the_new_head() {
+    use conformance::msdu_age::{self, Case, CoreBar, End, Trace, Violation};
+    let trace = |bar_start: u16| Trace {
+        ends: [End::Delivered, End::Expired(1)],
+        publications: 1,
+        expired_msdus: 1,
+        admitted: [oer_ieee80211_port::Ieee80211Instant::from_micros(99); 2],
+        returned: [oer_ieee80211_port::Ieee80211Instant::from_micros(99); 2],
+        owners: [1, 2, 3],
+        returned_owners: [1, 2, 3],
+        backend_bars: 0,
+        core_bar: Some(CoreBar {
+            head: SequenceNumber::new(7).unwrap(),
+            tid: 0,
+            addresses: [[2, 0, 0, 0, 0, 2], [2, 0, 0, 0, 0, 1]],
+            frame: oer_ieee80211_wire::block_ack::encode_block_ack_request(
+                [2, 0, 0, 0, 0, 2],
+                [2, 0, 0, 0, 0, 1],
+                0,
+                SequenceNumber::new(bar_start).unwrap(),
+            ),
+        }),
+    };
+    assert_eq!(
+        msdu_age::verify(Case::DeliveryBeforeExpiry, trace(8)),
+        Ok(())
+    );
+    assert_eq!(
+        msdu_age::verify(Case::DeliveryBeforeExpiry, trace(7)),
+        Err(Violation::Bar)
+    );
+    let mut missing = trace(8);
+    missing.core_bar = None;
+    assert_eq!(
+        msdu_age::verify(Case::DeliveryBeforeExpiry, missing),
+        Err(Violation::Bar)
+    );
+}
+
 fn ready<T>(future: impl Future<Output = T>) -> T {
     let mut future = pin!(future);
     match future

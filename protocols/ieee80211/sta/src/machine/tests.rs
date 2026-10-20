@@ -90,6 +90,7 @@ impl oer_ieee80211_port::TxBufferClass for Buffer {
 }
 
 impl TxBufferMemory for Buffer {
+    fn renew_msdu(&mut self) {}
     fn bytes_mut(&mut self) -> &mut [u8] {
         &mut self.0[..self.1]
     }

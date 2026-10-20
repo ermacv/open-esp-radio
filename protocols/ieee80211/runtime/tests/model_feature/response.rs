@@ -29,6 +29,7 @@ enum Seen {
     ContentionLimit(Option<Air>),
     Withdrawn(WithdrawCause),
     Indeterminate(IndeterminateCause),
+    Expired(u64),
     Other,
 }
 
@@ -48,6 +49,7 @@ impl Seen {
             TxOutcome::Ended(SingleEnd::CtsTimeout(_) | SingleEnd::AirDenied { .. }) => Self::Other,
             TxOutcome::Withdrawn(cause) => Self::Withdrawn(cause),
             TxOutcome::Indeterminate(cause) => Self::Indeterminate(cause),
+            TxOutcome::Expired { msdus } => Self::Expired(msdus),
         }
     }
 
@@ -65,6 +67,7 @@ impl Seen {
             }
             TxOutcome::Withdrawn(cause) => Self::Withdrawn(cause),
             TxOutcome::Indeterminate(cause) => Self::Indeterminate(cause),
+            TxOutcome::Expired { msdus } => Self::Expired(msdus),
         }
     }
 }

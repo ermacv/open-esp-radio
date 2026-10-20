@@ -34,8 +34,8 @@
 //! (`oer_ieee80211_port::phase`), for host tests of the shape and of
 //! the code that drives it.
 //!
-//! [`ModelBackend::new`] takes the install's channel and interface
-//! addresses and returns the backend, which a test hands to
+//! [`ModelBackend::new`] takes the install's channel, interface addresses
+//! and monotonic clock, and returns the backend, which a test hands to
 //! [`run_port`](oer_radio_port::run_port), and the [`ModelAir`] it
 //! plays on: the air answers each transmission, delivers received frames
 //! and records what the hardware saw. Receive Block Ack agreements are
@@ -129,9 +129,10 @@
 
 //! Publication and completion are separate owners. Tests may hold a result
 //! while posting gate/key/disable barriers; only that publication can finish.
-//! The model's 1 ms publication bound is synthetic model time. `set_time`
-//! feeds the test's virtual clock. Hardware backends
-//! must declare their own PPDU plus response/timeout bound.
+//! The model's 1 ms publication bound uses the supplied image clock. Only
+//! that clock's owner advances time. Radio instants are projections through
+//! an affine, zero-drift relation with a sampled nonzero offset. Hardware
+//! backends declare their own PPDU plus response/timeout bound.
 //!
 //! Unit tests and library consumers use the same implementation,
 //! including continuous RX and immediate recycling of its bounded slots. Only the unit-test module is under `cfg(test)`.
@@ -165,6 +166,8 @@ use oer_ieee80211_port::{
 };
 use oer_ieee80211_wire::ccmp::Ccmp128Key;
 use oer_ieee80211_wire::ccmp::GroupKeyId;
+use oer_radio_port::{ClockRelation, GenerationSource, RelationSample};
+use oer_time::{Clock, Duration, Instant};
 
 use oer_ieee80211_wire::phy::{HeMcs, HtMcs, PhyRate};
 use oer_radio_port::{
@@ -400,6 +403,8 @@ pub enum ModelBlockAcks {}
 pub struct ModelBuffer<'id, C: ModelClass> {
     slot: Slot<'id, C, C::Path>,
     memory: ModelMemory,
+    admitted_at: RadioInstant<Ieee80211Radio>,
+    admitted: bool,
 }
 
 enum ModelMemory {
@@ -511,7 +516,22 @@ impl ModelMemory {
     }
 }
 
+impl<C: ModelClass> ModelBuffer<'_, C> {
+    fn admit(&mut self, at: RadioInstant<Ieee80211Radio>) {
+        if !self.admitted {
+            self.admitted_at = at;
+            self.admitted = true;
+        }
+    }
+    fn admission(&self) -> Option<RadioInstant<Ieee80211Radio>> {
+        self.admitted.then_some(self.admitted_at)
+    }
+}
+
 impl<C: ModelClass> TxBufferMemory for ModelBuffer<'_, C> {
+    fn renew_msdu(&mut self) {
+        self.admitted = false;
+    }
     fn bytes_mut(&mut self) -> &mut [u8] {
         &mut self.memory
     }
@@ -822,6 +842,29 @@ impl<'id, D> TxMpdu for ModelMpdu<'id, D> {
     }
 }
 impl<'id, D> ModelMpdu<'id, D> {
+    fn admit(&mut self, at: RadioInstant<Ieee80211Radio>) {
+        match &mut self.buffer {
+            ModelAnyBuffer::Small(buffer) => buffer.admit(at),
+            ModelAnyBuffer::Large(buffer) => buffer.admit(at),
+            ModelAnyBuffer::SmallSent(_) | ModelAnyBuffer::LargeSent(_) => {}
+        }
+    }
+    fn expired(&self, now: RadioInstant<Ieee80211Radio>, lifetime: Duration) -> bool {
+        self.admitted_at()
+            .and_then(|at| now.checked_duration_since(at))
+            .is_some_and(|elapsed| elapsed.as_micros() >= lifetime.as_micros())
+    }
+    /// Original admission, retained even when an unpublished member is
+    /// returned for aggregate re-formation.
+    pub fn admitted_at(&self) -> Option<RadioInstant<Ieee80211Radio>> {
+        match &self.buffer {
+            ModelAnyBuffer::Small(buffer) => buffer.admission(),
+            ModelAnyBuffer::Large(buffer) => buffer.admission(),
+            ModelAnyBuffer::SmallSent(mpdu) => mpdu.buffer.admission(),
+            ModelAnyBuffer::LargeSent(mpdu) => mpdu.buffer.admission(),
+        }
+    }
+
     /// Validate geometry before publication; fresh PNs were allocated by the caller.
     fn preflight(&self, protected: bool) -> Result<(), ModelFault> {
         let memory = self.buffer.memory();
@@ -1159,7 +1202,8 @@ impl<'id, X: ModelContext, C: ModelClass> TxBufferPool<'id, C> for ModelTypes<X>
         C::sent(buffer)
     }
 
-    fn renew(mpdu: Self::Sent) -> (Self::Buffer, Option<X::Body>) {
+    fn renew(mut mpdu: Self::Sent) -> (Self::Buffer, Option<X::Body>) {
+        mpdu.buffer.renew_msdu();
         (mpdu.buffer, mpdu.body)
     }
 }
@@ -1511,9 +1555,31 @@ impl ModelEdca {
     }
 }
 
+struct ModelTime {
+    clock: Rc<dyn Clock>,
+    relation: ClockRelation<Instant, RadioInstant<Ieee80211Radio>>,
+    sample: RelationSample<Instant, RadioInstant<Ieee80211Radio>>,
+}
+impl ModelTime {
+    fn new(clock: Rc<dyn Clock>) -> Self {
+        let source = clock.now();
+        // Toggling one epoch bit guarantees a representable, non-zero offset.
+        let target = RadioInstant::from_micros(source.as_micros() ^ (1_u64 << 32));
+        Self {
+            clock,
+            relation: ClockRelation::affine(0),
+            sample: RelationSample {
+                source,
+                target,
+                uncertainty: oer_time::RadioDuration::ZERO,
+                generation: GenerationSource::new(0).current(),
+            },
+        }
+    }
+}
+
 /// The air and the world of a model: shared by the backend's driver and
 /// the test.
-#[derive(Default)]
 pub struct ModelAir {
     sent: RefCell<Vec<AirFrame>>,
     /// The answers of the next transmissions, in order; once none is
@@ -1546,8 +1612,72 @@ pub struct ModelAir {
     held: Cell<[bool; WmmAccessCategory::ALL.len()]>,
     /// Keep a published PPDU's result pending, independently of prepublication CCA.
     held_results: Cell<[bool; WmmAccessCategory::ALL.len()]>,
-    now_micros: Cell<u64>,
+    time: ModelTime,
     receive_agreements: RefCell<BTreeMap<u8, ModelReceiveAgreement>>,
+    expired_msdus: Cell<u32>,
+}
+impl ModelAir {
+    fn new(clock: Rc<dyn Clock>) -> Self {
+        Self {
+            sent: Default::default(),
+            answers: Default::default(),
+            rx: Default::default(),
+            rx_stream: Default::default(),
+            refuse_enable: Default::default(),
+            group_failure: Default::default(),
+            group_held: Default::default(),
+            key_installations: Default::default(),
+            associations: Default::default(),
+            crypto_operations: Default::default(),
+            group_rx: Default::default(),
+            group_writes: Default::default(),
+            stream: Default::default(),
+            disables: Default::default(),
+            driver: Default::default(),
+            passes: Default::default(),
+            commands: Default::default(),
+            settings: Default::default(),
+            edca: Default::default(),
+            held: Default::default(),
+            held_results: Default::default(),
+            time: ModelTime::new(clock),
+            receive_agreements: Default::default(),
+            expired_msdus: Default::default(),
+        }
+    }
+
+    fn monotonic_now(&self) -> Instant {
+        self.time.clock.now()
+    }
+
+    /// Wake the driver after the clock owner advances virtual time.
+    /// This notification never changes the clock.
+    pub fn clock_advanced(&self) {
+        self.wake_driver();
+    }
+
+    /// Project the image clock into the model radio domain.
+    pub fn radio_now(&self) -> Result<RadioInstant<Ieee80211Radio>, ClockError> {
+        self.time
+            .relation
+            .project(
+                self.time.clock.now(),
+                self.time.sample.generation,
+                &self.time.sample,
+            )
+            .map(|p| p.at)
+            .map_err(|_| ClockError::EpochExhausted)
+    }
+
+    /// The sampled affine relation used by `radio_now()`.
+    pub fn clock_relation(
+        &self,
+    ) -> (
+        ClockRelation<Instant, RadioInstant<Ieee80211Radio>>,
+        RelationSample<Instant, RadioInstant<Ieee80211Radio>>,
+    ) {
+        (self.time.relation, self.time.sample)
+    }
 }
 
 /// Mode application precedes publication of each key's material.
@@ -1717,8 +1847,9 @@ impl ModelAir {
         self.wake_driver();
     }
 
-    /// Delay commands while RX continues. `set_time` supplies the deadline
-    /// wake; the driver poisons at GROUP_COMMAND_BOUND. Normal disable finishes
+    /// Delay commands while RX continues. The supplied clock's owner calls
+    /// `clock_advanced` for the deadline wake; the driver poisons at
+    /// GROUP_COMMAND_BOUND. Normal disable finishes
     /// admitted commands instead of waiting for this test hold to be released.
     pub fn hold_group_commands(&self, held: bool) {
         self.group_held.set(held);
@@ -1832,13 +1963,6 @@ impl ModelAir {
         self.held_results.set(results);
         self.wake_driver();
     }
-    /// Set model time from the test's monotonic virtual clock. A held result
-    /// becomes a hardware timeout at the backend's publication bound.
-    pub fn set_time(&self, now: oer_time::Instant) {
-        self.now_micros.set(now.as_micros());
-        self.wake_driver();
-    }
-
     /// Refuse the next enable.
     pub fn refuse_enable(&self) {
         self.refuse_enable.set(true);
@@ -1899,6 +2023,16 @@ impl ModelAir {
     /// The settings the driver applied so far.
     pub fn settings(&self) -> u32 {
         self.settings.get()
+    }
+
+    /// MSDUs that ended with Expired, counted separately from air failures.
+    pub fn expired_msdus(&self) -> u32 {
+        self.expired_msdus.get()
+    }
+
+    fn expired(&self, mask: u64) {
+        self.expired_msdus
+            .set(self.expired_msdus.get().saturating_add(mask.count_ones()));
     }
 
     /// The complete EDCA set currently installed for this interface.
@@ -2349,12 +2483,15 @@ pub struct ModelBackend<C = ModelCaps, X: ModelContext = ()> {
 
 impl<C: Ieee80211Capabilities, X: ModelContext> ModelBackend<C, X> {
     /// A backend tuned to `channel` with the station's and the access
-    /// point's addresses, and the air it plays on.
+    /// point's addresses, and the air it plays on. `clock` is the image's
+    /// monotonic clock; only its owner advances time. Radio `now()` projects
+    /// it through an affine, zero-drift relation with a nonzero offset.
     pub fn new(
         channel: Channel,
         addresses: [IndividualAddress; 2],
+        clock: Rc<dyn Clock>,
     ) -> (Installed<Self>, Rc<ModelAir>) {
-        let air = Rc::new(ModelAir::default());
+        let air = Rc::new(ModelAir::new(clock));
         (
             Installed::new(
                 Self {
@@ -2505,7 +2642,7 @@ impl<C: Ieee80211Capabilities, X: ModelContext> PortBackend for ModelBackend<C, 
         _call: Call,
     ) -> impl Future<Output = PortResult<RadioInstant<Ieee80211Radio>, ClockError, ModelFault>> + '_
     {
-        core::future::ready(Ok(Err(ClockError::Unavailable)))
+        core::future::ready(Ok(self.air.radio_now()))
     }
 
     fn resources<'id>(&mut self, mint: Mint<'id, Self::Pools>) -> InstallParts<'id, Self> {
@@ -2563,6 +2700,8 @@ impl<C: Ieee80211Capabilities, X: ModelContext> PortBackend for ModelBackend<C, 
                 .map(|slot| ModelBuffer {
                     slot,
                     memory: ModelMemory::Small(Box::new([0; ModelSmall::CAPACITY])),
+                    admitted_at: RadioInstant::from_micros(0),
+                    admitted: false,
                 })
                 .collect(),
             large: large
@@ -2570,6 +2709,8 @@ impl<C: Ieee80211Capabilities, X: ModelContext> PortBackend for ModelBackend<C, 
                 .map(|slot| ModelBuffer {
                     slot,
                     memory: ModelMemory::Large(Box::new([0; ModelLarge::CAPACITY])),
+                    admitted_at: RadioInstant::from_micros(0),
+                    admitted: false,
                 })
                 .collect(),
             station_pairwise,
@@ -2816,7 +2957,7 @@ impl<'id, X: ModelContext> Driver<'id, X> {
                 } => {
                     if admitted_at
                         .checked_add(MODEL_GROUP_COMMAND_BOUND.as_micros())
-                        .is_none_or(|deadline| held.air.now_micros.get() >= deadline)
+                        .is_none_or(|deadline| held.air.monotonic_now().as_micros() >= deadline)
                         || held.air.group_failure.get() == Some(GroupFaultStage::Before)
                     {
                         let _capacity_fault = held.failed_group.push(change);
@@ -3039,8 +3180,8 @@ impl<'id, X: ModelContext> Driver<'id, X> {
                 if let Some(publication) = queue.air.take() {
                     let elapsed = held
                         .air
-                        .now_micros
-                        .get()
+                        .monotonic_now()
+                        .as_micros()
                         .saturating_sub(publication.started);
                     if result_held && elapsed < MODEL_PUBLICATION_BOUND.as_micros() {
                         queue.air = Some(publication);
@@ -3092,7 +3233,7 @@ impl<'id, X: ModelContext> Driver<'id, X> {
             let overdue = removal.group_admitted_at.is_some_and(|admitted| {
                 admitted
                     .checked_add(MODEL_GROUP_COMMAND_BOUND.as_micros())
-                    .is_none_or(|deadline| held.air.now_micros.get() >= deadline)
+                    .is_none_or(|deadline| held.air.monotonic_now().as_micros() >= deadline)
             });
             let uncertain = removal.group_admitted_at.is_some()
                 && held.air.group_failure.get() == Some(GroupFaultStage::After);
@@ -3153,7 +3294,7 @@ impl<'id, X: ModelContext> Driver<'id, X> {
 /// Synthetic model latency, in model time; hardware backends declare their
 /// own PPDU + response/timeout bound. It does not scale with retry-plan length.
 pub const MODEL_PUBLICATION_BOUND: oer_time::Duration = oer_time::Duration::from_millis(1);
-/// Synthetic admission-to-GTK-terminal bound, driven by `ModelAir::set_time`.
+/// Synthetic admission-to-GTK-terminal bound, driven by the supplied clock's owner.
 pub const MODEL_GROUP_COMMAND_BOUND: oer_time::Duration = oer_time::Duration::from_millis(2);
 
 struct TxQueue<'id, X: ModelContext> {
@@ -3398,6 +3539,25 @@ fn publish_single<'id, X: ModelContext>(
     keys: &[KeyIdentity],
     mut plan: SinglePlan<'id, X>,
 ) -> Option<Publication<'id, X>> {
+    let now = match held.air.radio_now() {
+        Ok(now) => now,
+        Err(_) => {
+            let _fault = held.quarantined.push(Work::Single(plan.prepared));
+            held.poison();
+            return None;
+        }
+    };
+    let lifetime = held
+        .air
+        .edca(plan.prepared.role)
+        .access_category(plan.prepared.queue)
+        .msdu_lifetime;
+    if plan.prepared.operation.payload().expired(now, lifetime) {
+        held.air.expired(1);
+        held.air.edca.borrow_mut().reset(plan.prepared.queue);
+        terminal(held, *plan.prepared, TxOutcome::Expired { msdus: 1 });
+        return None;
+    }
     let answer = match held
         .air
         .single_result(plan.prepared.operation.payload().response)
@@ -3448,7 +3608,7 @@ fn publish_single<'id, X: ModelContext>(
         held.air.sent.borrow_mut().push(frame);
     }
     Some(Publication {
-        started: held.air.now_micros.get(),
+        started: held.air.monotonic_now().as_micros(),
         work: Published::Single { plan, answer },
     })
 }
@@ -3484,6 +3644,35 @@ fn publish_aggregate<'id, X: ModelContext>(
     keys: &[KeyIdentity],
     mut aggregate: PreparedAggregate<'id, X>,
 ) -> Option<Publication<'id, X>> {
+    let now = match held.air.radio_now() {
+        Ok(now) => now,
+        Err(_) => {
+            let _fault = held.quarantined.push(Work::Aggregate(aggregate));
+            held.poison();
+            return None;
+        }
+    };
+    let lifetime = held
+        .air
+        .edca(aggregate.role)
+        .access_category(aggregate.queue)
+        .msdu_lifetime;
+    let expired = aggregate.operation.payload().0.iter().enumerate().fold(
+        0_u64,
+        |mask, (index, subframe)| {
+            if subframe.mpdu.expired(now, lifetime) {
+                mask | (1_u64 << index)
+            } else {
+                mask
+            }
+        },
+    );
+    if expired != 0 {
+        held.air.expired(expired);
+        held.air.edca.borrow_mut().reset(aggregate.queue);
+        terminal_aggregate(held, aggregate, TxOutcome::Expired { msdus: expired });
+        return None;
+    }
     let answer = match held.air.aggregate_result() {
         Ok(answer) => answer,
         Err(AnswerShapeMismatch) => {
@@ -3531,7 +3720,7 @@ fn publish_aggregate<'id, X: ModelContext>(
         bitmap,
     };
     Some(Publication {
-        started: held.air.now_micros.get(),
+        started: held.air.monotonic_now().as_micros(),
         work: Published::Aggregate {
             prepared: aggregate,
             report,
@@ -3988,8 +4177,12 @@ where
 
     fn submit<'k>(
         &mut self,
-        attempt: oer_ieee80211_port::InterfaceSubmission<'k, 'p, 'id, Self>,
+        mut attempt: oer_ieee80211_port::InterfaceSubmission<'k, 'p, 'id, Self>,
     ) -> Result<(), Poisoned<ModelFault>> {
+        match self.held.air.radio_now() {
+            Ok(at) => attempt.operation.execute().mpdu.admit(at),
+            Err(_) => self.held.poison(),
+        }
         let ModelTxExecution { plan, key } = attempt.execution;
         self.held.command(Command::Submit(Box::new(Prepared {
             operation: attempt.operation,
@@ -4030,7 +4223,7 @@ where
         key: Ccmp128Key,
     ) {
         self.held.command(Command::Group {
-            admitted_at: self.held.air.now_micros.get(),
+            admitted_at: self.held.air.monotonic_now().as_micros(),
             change: GroupChange::Install(R::installation(PendingGroupInstall {
                 spp: association.owner.spp(),
                 slot,
@@ -4062,7 +4255,7 @@ where
         key: ModelGroupKey<'id, R>,
     ) {
         self.held.command(Command::Group {
-            admitted_at: self.held.air.now_micros.get(),
+            admitted_at: self.held.air.monotonic_now().as_micros(),
             change: GroupChange::Remove {
                 key: key.identity,
                 removed: R::removed(RemovedKey::Group {
@@ -4393,11 +4586,19 @@ where
     }
     fn submit_ampdu<'k>(
         &mut self,
-        attempt: oer_ieee80211_port::InterfaceAggregateSubmission<'k, 'p, 'id, Self>,
+        mut attempt: oer_ieee80211_port::InterfaceAggregateSubmission<'k, 'p, 'id, Self>,
     ) -> Result<(), Poisoned<ModelFault>>
     where
         'id: 'k,
     {
+        match self.held.air.radio_now() {
+            Ok(at) => {
+                for subframe in attempt.operation.execute().subframes {
+                    subframe.mpdu.admit(at);
+                }
+            }
+            Err(_) => self.held.poison(),
+        }
         let ModelAggregateExecution {
             first,
             tid,
@@ -4435,7 +4636,7 @@ impl<'p, 'v, 'id: 'p, C: Ieee80211Capabilities, X: ModelContext> StationPhase<'p
         key: Ccmp128Key,
     ) {
         self.held.command(Command::Group {
-            admitted_at: self.held.air.now_micros.get(),
+            admitted_at: self.held.air.monotonic_now().as_micros(),
             change: GroupChange::Replace {
                 permission,
                 installed,
@@ -4451,7 +4652,7 @@ impl<'p, 'v, 'id: 'p, C: Ieee80211Capabilities, X: ModelContext> StationPhase<'p
         installed: ModelGroupKey<'id, Station>,
     ) {
         self.held.command(Command::Group {
-            admitted_at: self.held.air.now_micros.get(),
+            admitted_at: self.held.air.monotonic_now().as_micros(),
             change: GroupChange::Select {
                 permission,
                 installed,

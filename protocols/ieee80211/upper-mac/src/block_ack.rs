@@ -16,8 +16,9 @@ pub use reorder::{
     MAX_RX_REORDER_WINDOW, RxReorderBuffer, RxReorderError, RxReorderMpdu, RxReorderRelease,
 };
 pub use session::{
-    AddbaRequest, OperationalTxBlockAck, TxBlockAckAlarm, TxBlockAckConfig, TxBlockAckDialogToken,
-    TxBlockAckError, TxBlockAckResponse, TxBlockAckSession,
+    AddbaRequest, MAX_TX_BLOCK_ACK_WINDOW, OperationalTxBlockAck, TxBlockAckAlarm,
+    TxBlockAckConfig, TxBlockAckDialogToken, TxBlockAckError, TxBlockAckResponse,
+    TxBlockAckSession,
 };
 
 pub mod batch;

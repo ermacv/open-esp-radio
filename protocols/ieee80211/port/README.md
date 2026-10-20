@@ -168,6 +168,18 @@ back; its operations are synchronous and never wait:
   `Withdrawn(cause)` with Sent, retaining SN/PN. An unpublished attempt
   returns Fresh. Unknown timeout remains Indeterminate. Per-AC terminals
   precede the barrier confirmation in their original order.
+- **MSDU age.** Each VIF's EDCA table stores a typed `oer_time::Duration`
+  per AC (default 500 TU); `EdcaParameterSet::from_tu` converts MIB units
+  at the record boundary. Admission samples backend `now()` at `submit`,
+  once per MSDU and per aggregate member. Every publication and retry
+  checks age, including re-formation of returned unpublished members.
+  Hardware-owned attempts finish independently of age. `Expired { msdus }`
+  returns all original owners; bit `i` identifies expired aggregate member
+  `i` (bit zero for a single). Live members retain their admission samples
+  for re-formation. Renewal for a new MSDU clears the old sample through
+  `TxBufferMemory::renew_msdu`. Expiry is counted separately and supplies no
+  rate sample. The upper-MAC BA originator produces a BlockAckReq when an
+  active window's head expires; the backend generates no BAR.
 - **Order.** Every operation reaches the hardware in the order the caller
   made it: an attempt that names a key is published after that key's
   install.
@@ -346,7 +358,7 @@ vendor stack are the family package `oer-espressif-ieee80211-policy`.
 
 ## Implementers
 
-The host model in `oer-ieee80211-runtime` implements the phase with
+The host model in `oer-ieee80211-model` implements the phase with
 composition-selected context types. It returns queued operations on gate
 close and normal disable, including queues held by the model air. On
 an ordinary fault it returns admitted terminals before `EventEnd::Drained`;
@@ -385,7 +397,7 @@ remains in softmac.
 The `test-support` feature exposes `conformance` in this crate. Backend tests
 implement its ownership, publication-barrier, configuration, GTK and outcome
 harness traits; they need no dependency on `oer-ieee80211-runtime`. The model
-in runtime runs the same runners with virtual time. Traces contain observations
+in `oer-ieee80211-model` runs the same runners with virtual time. Traces contain observations
 from actual submitted/returned owners, publication observers and event streams;
 expected identities cannot substitute for observations.
 
@@ -403,6 +415,8 @@ not prove a hardware implementation.
 | Configuration (`interface_commands::check`) | Both interface orders, running/queued/posted disable | None |
 | Outcomes (`outcomes::check`) | Single ACK, aggregate BlockAck, single/aggregate NoResponse | Single/aggregate Collision, AirDenied, HardwareTimeout |
 | GTK (`group_keys::check`) | Disable before/after each of four mutations, published-key removal | Four independently delayed-ingress RX cuts, four stalled-command expiries |
+| EDCA (`edca::check`) | Two VIFs with different tables, every AC | None |
+| MSDU age (`msdu_age::check`) | None | Before publication, between retries, re-formation with a core BAR, delivery before head expiry, hardware-owned completion |
 
 Hardware ACK uses a reachable peer and NoResponse an absent address. Collision,
 AirDenied and HardwareTimeout require model injection. The GTK receive-cut

@@ -483,7 +483,8 @@ impl<K: Ieee80211Capabilities> SupportedEdca<K> {
                 && record.wmm.ecw_max <= K::CAPS.edca_max_cw_exponent
                 && record.wmm.ecw_max <= crate::edca::MAX_CW_EXPONENT
                 && record.wmm.txop_limit_units_32_us <= K::CAPS.edca_max_txop_limit_units_32_us
-                && record.msdu_lifetime_tu <= EdcaParameterSet::DEFAULT_MSDU_LIFETIME_TU
+                && record.msdu_lifetime.as_micros()
+                    <= EdcaParameterSet::DEFAULT_MSDU_LIFETIME.as_micros()
                 && record.wmm.ecw_min <= record.wmm.ecw_max
         }
         if !(valid::<K>(parameters, WmmAccessCategory::BestEffort)

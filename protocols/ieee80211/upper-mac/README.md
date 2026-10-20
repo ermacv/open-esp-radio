@@ -112,6 +112,16 @@ receive duplicate history, `fragmentation` bounded MSDU reassembly, and
 `receive` the replay commit boundary. These owners accept decoded wire
 values and retain no executor, HAL or chip dependency.
 
+Each TX Block Ack session tracks delivery and expiry in two 64-bit masks,
+relative to its current originator-window head. Negotiated windows larger
+than 64 are refused. `on_delivered` and `on_expired` apply every mark in a
+report before advancing past the contiguous completed prefix. Non-head
+expiry stays recorded until the head reaches it, including after later
+deliveries. Passing any expired sequence produces one BAR at the final
+window start. Both originator methods return that frame for the caller to
+submit once; the backend only reports outcomes. Sequence arithmetic wraps
+through zero, and stale reports cannot move the window again.
+
 ## What stays outside
 
 The planner holds no frame bytes. The caller encodes each MPDU's sequence

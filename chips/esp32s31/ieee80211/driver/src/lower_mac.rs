@@ -124,7 +124,6 @@ use oer_ieee80211_wire::frame::{FrameControlFields, FrameType};
 use core::pin::Pin;
 use oer_radio_port::{PoolPath, Root};
 
-#[cfg(test)]
 use oer_time::Clock;
 
 use oer_esp32s31_hal::types::{MacPti, StaTbttSchedule};
@@ -505,6 +504,11 @@ pub enum LowerMacFault {
 /// qualified detach instead poisons and quarantines the publication.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PublicationEnd {
+    /// The MSDU aged before publication; no hardware attempt was aborted.
+    Expired {
+        /// Original aggregate member positions; bit zero for a single.
+        msdus: u64,
+    },
     /// Its completion arrived: the hardware's status, the ACK's SNR and a
     /// BlockAck the attempt solicited.
     Completed {
@@ -755,6 +759,7 @@ struct Attempt<'core, 'slot, X: BackendTxProfile, const BUFFER_SIZE: usize, Path
     admission: TxAdmission<'core, Path>,
     /// The rate of its publication, which its completion reports.
     rate: PhyRate,
+    admitted_at: oer_time::Instant,
     work: Work<'slot, X, BUFFER_SIZE>,
 }
 
@@ -838,6 +843,8 @@ pub struct LowerMacCore<
     station_tsf: StationTsf,
     /// The relation of the access-point TSF, which only restarts.
     access_point_tsf: oer_esp32s31_ieee80211_mac::ap_tsf::AccessPointTsf,
+    /// MSDUs retired for age, separately from hardware attempt outcomes.
+    expired_msdus: u32,
     /// The attempt of each ordinary queue, by its hardware index
     /// ([`LegacyTxQueue::hardware_index`]).
     queues: [Option<Attempt<'core, 'slot, X, BUFFER_SIZE, Path>>; LOWER_MAC_TX_QUEUES],
@@ -888,6 +895,7 @@ where
                 config.tsf_epoch,
             ),
             queues: [const { None }; LOWER_MAC_TX_QUEUES],
+            expired_msdus: 0,
             coex,
         })
     }
@@ -920,22 +928,31 @@ where
         Channel::from_wifi_channel(self.channel)
     }
 
-    /// The radio clock: the ordinary TX owner's timer.
-    #[cfg(test)]
+    /// The image clock used by the core's internal deadlines.
     fn now(&self) -> oer_time::Instant {
         self.tx.now()
     }
 
-    /// The earliest deadline of a published attempt or of the timeout
-    /// abort settling, which the runtime turns into [`WifiTxWake::Deadline`].
+    /// The earliest held MSDU expiry, published attempt deadline or timeout
+    /// abort settle, which the runtime turns into [`WifiTxWake::Deadline`].
     /// While an abort settles, no other queue's deadline comes before its
     /// end: that queue's abort waits for it.
     pub fn next_deadline(&self) -> Option<oer_time::Instant> {
         let deadlines = || {
-            self.queues
-                .iter()
-                .flatten()
-                .filter_map(|attempt| attempt.work.deadline())
+            self.queues.iter().flatten().filter_map(|attempt| {
+                attempt.work.deadline().or_else(|| {
+                    if !attempt.work.held() {
+                        return None;
+                    }
+                    let queue = LegacyTxQueue::from_access_category(attempt.queue.category());
+                    let lifetime = self
+                        .tx
+                        .policy()
+                        .access_policy(attempt.role, queue)
+                        .msdu_lifetime();
+                    Some((attempt.admitted_at.saturating_add(lifetime), false))
+                })
+            })
         };
         let settle = deadlines()
             .filter(|(_, settling)| *settling)
@@ -944,6 +961,27 @@ where
         deadlines()
             .map(|(deadline, _)| settle.map_or(deadline, |settle| deadline.max(settle)))
             .min()
+    }
+
+    /// MSDUs completed with Expired, separately from hardware outcomes.
+    pub const fn expired_msdus(&self) -> u32 {
+        self.expired_msdus
+    }
+
+    fn msdu_expired(
+        &self,
+        role: VifRole,
+        category: WmmAccessCategory,
+        admitted_at: oer_time::Instant,
+    ) -> bool {
+        let lifetime = self
+            .tx
+            .policy()
+            .access_policy(role, LegacyTxQueue::from_access_category(category))
+            .msdu_lifetime();
+        self.now()
+            .checked_duration_since(admitted_at)
+            .is_some_and(|age| age >= lifetime)
     }
 
     /// Draw for the head frame of `access_category`, using its VIF's record
@@ -1032,6 +1070,7 @@ where
     ) -> Result<(), SubmitFault<'core, 'slot, BUFFER_SIZE, Path>> {
         let MpduValues {
             role,
+            admitted_at,
             slot,
             len,
             no_ack,
@@ -1102,7 +1141,7 @@ where
         );
         let planned = self.plan_mpdu(common, len, access_category, operation, no_ack);
         let index = usize::from(planned.queue.hardware_index());
-        let work = if publish {
+        let work = if publish && !self.msdu_expired(role, access_category, admitted_at) {
             match self
                 .tx
                 .start_queued_single_attempt(hardware, slot, planned.plan, planned.single)
@@ -1129,6 +1168,7 @@ where
             role,
             admission,
             rate: reported,
+            admitted_at,
             work,
         });
         Ok(())
@@ -1265,7 +1305,10 @@ where
         completed: ampdu::CompletedAmpdu<'core, 'slot, B, SLOTS, Path>,
         sink: &mut K,
     ) -> Result<
-        ampdu::Esp32s31AmpduOwner<'slot, B, SLOTS>,
+        (
+            ampdu::Esp32s31AmpduOwner<'slot, B, SLOTS>,
+            [oer_time::Instant; SLOTS],
+        ),
         ampdu::AmpduFault<'core, 'slot, B, SLOTS, Path>,
     > {
         if self.fault.is_some() {
@@ -1276,6 +1319,7 @@ where
             owner,
             queue,
             admission,
+            admitted_at,
         } = completed;
         match admission {
             TxAdmission::Open(ticket) => sink.ampdu_completed(queue, ticket, outcome.end()),
@@ -1286,7 +1330,46 @@ where
                 self.finish_key_removal(hardware, index, sink);
             }
         }
-        Ok(owner)
+        Ok((owner, admitted_at))
+    }
+
+    /// Return an unpublished expired aggregate's queue and ticket exactly
+    /// once. Its buffer, live members and admission samples remain together.
+    #[allow(
+        clippy::result_large_err,
+        reason = "a poisoned core retains every unpublished owner"
+    )]
+    pub fn complete_expired_ampdu<
+        H: CcmpKeyHardware,
+        K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>,
+        S: AmpduBacking,
+        const SLOTS: usize,
+    >(
+        &mut self,
+        hardware: &mut H,
+        expired: ampdu::ExpiredAmpdu<'core, 'slot, S, SLOTS, Path>,
+        sink: &mut K,
+    ) -> Result<
+        Esp32s31AmpduBuffer<'slot, S, SLOTS>,
+        ampdu::ExpiredAmpdu<'core, 'slot, S, SLOTS, Path>,
+    > {
+        if self.fault.is_some() {
+            return Err(expired);
+        }
+        let (buffer, plan, msdus) = expired.into_parts();
+        self.expired_msdus = self.expired_msdus.saturating_add(msdus.count_ones());
+        match plan.admission {
+            TxAdmission::Open(ticket) => {
+                sink.ampdu_completed(plan.queue, ticket, PublicationEnd::Expired { msdus })
+            }
+            TxAdmission::Protected(key) => {
+                let index = key.index;
+                let ticket = self.keys.uses[index].release(key);
+                sink.ampdu_completed(plan.queue, ticket, PublicationEnd::Expired { msdus });
+                self.finish_key_removal(hardware, index, sink);
+            }
+        }
+        Ok(buffer)
     }
 
     /// Plan an aggregate whose values a caller's types guarantee
@@ -1422,6 +1505,11 @@ where
             (_, None) => return Err(AmpduRefusal::LegacyRate),
         };
         Ok(ampdu::AmpduSettings {
+            lifetime: self
+                .tx
+                .policy()
+                .access_policy(common.role, queue)
+                .msdu_lifetime(),
             queue,
             format,
             role: AmpduTxRoleAdapter {
@@ -1468,15 +1556,31 @@ where
                     role,
                     admission,
                     rate,
+                    admitted_at,
                     work,
                 } = attempt;
                 let queued = match work {
+                    Work::Held { slot, .. }
+                        if self.msdu_expired(role, queue.category(), admitted_at) =>
+                    {
+                        self.finish_attempt(
+                            hardware,
+                            queue,
+                            admission,
+                            slot,
+                            PublicationEnd::Expired { msdus: 1 },
+                            rate,
+                            sink,
+                        );
+                        continue;
+                    }
                     held @ (Work::Held { .. } | Work::Quarantined { .. }) => {
                         self.queues[index] = Some(Attempt {
                             queue,
                             role,
                             admission,
                             rate,
+                            admitted_at,
                             work: held,
                         });
                         continue;
@@ -1496,6 +1600,7 @@ where
                             role,
                             admission,
                             rate,
+                            admitted_at,
                             work: Work::Published(queued),
                         });
                     }
@@ -1517,6 +1622,7 @@ where
                             role,
                             admission,
                             rate,
+                            admitted_at,
                             work: Work::Quarantined { _owner: quarantine },
                         });
                         let fault = LowerMacFault::Tx(error);
@@ -1549,6 +1655,9 @@ where
         rate: PhyRate,
         sink: &mut K,
     ) {
+        if let PublicationEnd::Expired { msdus } = end {
+            self.expired_msdus = self.expired_msdus.saturating_add(msdus.count_ones());
+        }
         match admission {
             TxAdmission::Open(ticket) => sink.tx_completed(queue, ticket, slot, end, rate),
             TxAdmission::Protected(key) => {
@@ -2219,6 +2328,7 @@ impl CheckedKeyScope {
 /// that sends one without an ACK ([`EnabledCore::submit_checked`]).
 pub struct MpduValues<'slot, const BUFFER_SIZE: usize> {
     role: VifRole,
+    admitted_at: oer_time::Instant,
     /// The slot holding the MPDU after the TX metadata word.
     slot: oer_esp32s31_ieee80211_mac::tx::TxSlotFree<'slot, BUFFER_SIZE>,
     /// The MPDU's length, without its MIC and FCS.
@@ -2241,6 +2351,8 @@ pub struct MpduValues<'slot, const BUFFER_SIZE: usize> {
 #[derive(Clone, Copy, Debug)]
 pub struct MpduParameters {
     pub role: VifRole,
+    /// The backend admission sample, retained unchanged on retransmission.
+    pub admitted_at: oer_time::Instant,
     pub len: usize,
     pub no_ack: bool,
     pub rate: PhyRate,
@@ -2297,6 +2409,7 @@ impl<'slot, const BUFFER_SIZE: usize> MpduValues<'slot, BUFFER_SIZE> {
         match checked {
             Ok(rate) => Ok(Self {
                 role: values.role,
+                admitted_at: values.admitted_at,
                 slot,
                 len: values.len,
                 no_ack: values.no_ack,

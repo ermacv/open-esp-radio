@@ -13,7 +13,11 @@ enum Barrier {
 type ModelBarrierTrace =
     BarrierTrace<Vec<BarrierEvent<ModelAck, ModelAirDenied>>, Vec<u8>, Vec<Vec<u8>>>;
 type RecordedBarrier = Rc<RefCell<Option<ModelBarrierTrace>>>;
-struct DuringPublication(Barrier, Option<RecordedBarrier>);
+struct DuringPublication(
+    Barrier,
+    Option<RecordedBarrier>,
+    Rc<oer_time_virtual::VirtualClock>,
+);
 
 fn held_snapshot(phase: &ModelPhase<'_, '_>) -> HeldSnapshot {
     HeldSnapshot {
@@ -95,17 +99,19 @@ impl Work for DuringPublication {
         let before_result = held_snapshot(phase);
         let mut just_before_timeout = None;
         if matches!(self.0, Barrier::GateTimeout) {
-            air.set_time(oer_time::Instant::from_micros(
-                MODEL_PUBLICATION_BOUND.as_micros() - 1,
-            ));
+            self.2
+                .advance(oer_time::Duration::from_micros(
+                    MODEL_PUBLICATION_BOUND.as_micros() - 1,
+                ))
+                .unwrap();
+            air.clock_advanced();
             for _ in 0..3 {
                 yield_now().await;
             }
             assert!(phase.held.events.is_empty());
             just_before_timeout = Some(held_snapshot(phase));
-            air.set_time(oer_time::Instant::from_micros(
-                MODEL_PUBLICATION_BOUND.as_micros(),
-            ));
+            self.2.advance(oer_time::Duration::from_micros(1)).unwrap();
+            air.clock_advanced();
         } else {
             air.hold_completion(WmmAccessCategory::BestEffort, false);
         }
@@ -253,34 +259,38 @@ impl Work for DuringPublication {
 }
 #[test]
 fn gate_waits_one_publication_and_returns_sent_for_retry_with_original_numbers() {
-    let (backend, _) = backend();
+    let clock = Rc::new(oer_time_virtual::VirtualClock::<8>::new());
+    let (backend, _) = backend_on(clock.clone());
     let _port_end = block_on(run_port(
         backend,
-        Body(DuringPublication(Barrier::GateRetry, None)),
+        Body(DuringPublication(Barrier::GateRetry, None, clock.clone())),
     ));
 }
 #[test]
 fn ack_wins_while_gate_closes_and_barrier_follows_the_result() {
-    let (backend, _) = backend();
+    let clock = Rc::new(oer_time_virtual::VirtualClock::<8>::new());
+    let (backend, _) = backend_on(clock.clone());
     let _port_end = block_on(run_port(
         backend,
-        Body(DuringPublication(Barrier::GateAck, None)),
+        Body(DuringPublication(Barrier::GateAck, None, clock.clone())),
     ));
 }
 #[test]
 fn missing_result_ends_at_publication_bound_without_finishing_the_plan() {
-    let (backend, _) = backend();
+    let clock = Rc::new(oer_time_virtual::VirtualClock::<8>::new());
+    let (backend, _) = backend_on(clock.clone());
     let _port_end = block_on(run_port(
         backend,
-        Body(DuringPublication(Barrier::GateTimeout, None)),
+        Body(DuringPublication(Barrier::GateTimeout, None, clock.clone())),
     ));
 }
 #[test]
 fn key_removal_waits_for_the_publication_then_returns_sent_without_retry() {
-    let (backend, _) = backend();
+    let clock = Rc::new(oer_time_virtual::VirtualClock::<8>::new());
+    let (backend, _) = backend_on(clock.clone());
     let _port_end = block_on(run_port(
         backend,
-        Body(DuringPublication(Barrier::RemoveKey, None)),
+        Body(DuringPublication(Barrier::RemoveKey, None, clock.clone())),
     ));
 }
 
@@ -298,11 +308,16 @@ impl conformance::BarrierHarness for ModelBarrierHarness {
             BarrierCase::GateTimeout => Barrier::GateTimeout,
             BarrierCase::RemoveKey => Barrier::RemoveKey,
         };
-        let (backend, _) = backend();
+        let clock = Rc::new(oer_time_virtual::VirtualClock::<8>::new());
+        let (backend, _) = backend_on(clock.clone());
         let recorded = Rc::new(RefCell::new(None));
         let _port_end = run_port(
             backend,
-            Body(DuringPublication(barrier, Some(recorded.clone()))),
+            Body(DuringPublication(
+                barrier,
+                Some(recorded.clone()),
+                clock.clone(),
+            )),
         )
         .await;
         let trace = recorded.borrow_mut().take();
