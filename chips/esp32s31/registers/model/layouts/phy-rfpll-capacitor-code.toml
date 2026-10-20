@@ -6,6 +6,13 @@ description = "Nine-bit RFPLL capacitor code split between its low byte and the 
 size = 2
 align = 1
 
+[layout.review]
+sources = ["ROM_REV0_PHY_RFPLL_VALUE_PACKING"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+naming = "descriptive"
+
 [[layout.bytes]]
 name = "CODE"
 offset = 0
@@ -30,27 +37,3 @@ sources = ["ROM_REV0_PHY_RFPLL_VALUE_PACKING"]
 provenance = "derived"
 accuracy = "exact"
 completeness = "partial"
-
-[[review]]
-entity = "PHY_RFPLL_CAPACITOR_CODE.CODE"
-sources = ["ROM_REV0_PHY_RFPLL_VALUE_PACKING"]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-naming = "descriptive"
-
-[[review]]
-entity = "PHY_RFPLL_CAPACITOR_CODE.CODE.LOW"
-sources = ["ROM_REV0_PHY_RFPLL_VALUE_PACKING"]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-naming = "descriptive"
-
-[[review]]
-entity = "PHY_RFPLL_CAPACITOR_CODE.CODE.HIGH"
-sources = ["ROM_REV0_PHY_RFPLL_VALUE_PACKING"]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-naming = "descriptive"

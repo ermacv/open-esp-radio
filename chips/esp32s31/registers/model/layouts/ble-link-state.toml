@@ -7,6 +7,20 @@ size = 132
 align = 4
 placement = ["dma-window"]
 
+[layout.review]
+sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[layout.review.opaque]
+sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
 [[layout.words]]
 name = "TX_PATH"
 offset = 0x00
@@ -35,6 +49,7 @@ description = "Connection transmit queue ready lane."
 
 [[layout.words.fields]]
 name = "BITS_29_30_OPAQUE"
+opaque = true
 bits = "30:29"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
@@ -61,12 +76,14 @@ encoding = "ble-compressed"
 
 [[layout.words.fields]]
 name = "BITS_20_27_OPAQUE"
+opaque = true
 bits = "27:20"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
 
 [[layout.words.fields]]
 name = "BITS_28_31_OPAQUE"
+opaque = true
 bits = "31:28"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
@@ -93,6 +110,7 @@ description = "Connection unconsumed-RX limit; other role profiles retain their 
 
 [[layout.words.fields]]
 name = "BITS_28_31_OPAQUE"
+opaque = true
 bits = "31:28"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
@@ -105,54 +123,63 @@ description = "Observed word position; unassigned bits retain their exact image.
 
 [[layout.words.fields]]
 name = "BITS_0_19_OPAQUE"
+opaque = true
 bits = "19:0"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
 
 [[layout.words.fields]]
 name = "BITS_20_23_OPAQUE"
+opaque = true
 bits = "23:20"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
 
 [[layout.words.fields]]
 name = "BITS_24_27_OPAQUE"
+opaque = true
 bits = "27:24"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
 
 [[layout.words.fields]]
 name = "BIT_28_OPAQUE"
+opaque = true
 bits = "28"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
 
 [[layout.words.fields]]
 name = "BIT_29_OPAQUE"
+opaque = true
 bits = "29"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
 
 [[layout.words.fields]]
 name = "BIT_30_OPAQUE"
+opaque = true
 bits = "30"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
 
 [[layout.words.fields]]
 name = "BIT_31_OPAQUE"
+opaque = true
 bits = "31"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
 
 [[layout.words]]
 name = "WORD_0010_OPAQUE"
+opaque = true
 offset = 0x10
 access = "shared"
 description = "Observed word position; unassigned bits retain their exact image."
 
 [[layout.words.fields]]
 name = "BITS_0_31_OPAQUE"
+opaque = true
 bits = "31:0"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
@@ -165,18 +192,21 @@ description = "Observed word position; unassigned bits retain their exact image.
 
 [[layout.words.fields]]
 name = "BITS_0_25_OPAQUE"
+opaque = true
 bits = "25:0"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
 
 [[layout.words.fields]]
 name = "BITS_26_27_OPAQUE"
+opaque = true
 bits = "27:26"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
 
 [[layout.words.fields]]
 name = "BITS_28_31_OPAQUE"
+opaque = true
 bits = "31:28"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
@@ -189,6 +219,7 @@ description = "Role-dependent word: scanner policy flags, or the full controller
 
 [[layout.words.fields]]
 name = "BITS_0_19_OPAQUE"
+opaque = true
 bits = "19:0"
 writer = "phased"
 phases = [{ name = "arm", writer = "cpu" }, { name = "complete", writer = "hardware" }]
@@ -196,6 +227,7 @@ description = "Observed position; the physical meaning is not established."
 
 [[layout.words.fields]]
 name = "BIT_20_OPAQUE"
+opaque = true
 bits = "20"
 writer = "phased"
 phases = [{ name = "arm", writer = "cpu" }, { name = "complete", writer = "hardware" }]
@@ -203,6 +235,7 @@ description = "Observed position; the physical meaning is not established."
 
 [[layout.words.fields]]
 name = "BITS_21_24_OPAQUE"
+opaque = true
 bits = "24:21"
 writer = "phased"
 phases = [{ name = "arm", writer = "cpu" }, { name = "complete", writer = "hardware" }]
@@ -217,6 +250,7 @@ description = "Scanner accept-list filtering. In connection mode this word is in
 
 [[layout.words.fields]]
 name = "BITS_26_29_OPAQUE"
+opaque = true
 bits = "29:26"
 writer = "phased"
 phases = [{ name = "arm", writer = "cpu" }, { name = "complete", writer = "hardware" }]
@@ -224,6 +258,7 @@ description = "Observed position; the physical meaning is not established."
 
 [[layout.words.fields]]
 name = "BIT_30_OPAQUE"
+opaque = true
 bits = "30"
 writer = "phased"
 phases = [{ name = "arm", writer = "cpu" }, { name = "complete", writer = "hardware" }]
@@ -238,12 +273,14 @@ description = "Scanner start flag. Connection mode preserves the complete receiv
 
 [[layout.words]]
 name = "WORD_001C_OPAQUE"
+opaque = true
 offset = 0x1c
 access = "shared"
 description = "Observed word position; unassigned bits retain their exact image."
 
 [[layout.words.fields]]
 name = "BITS_0_31_OPAQUE"
+opaque = true
 bits = "31:0"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
@@ -256,6 +293,7 @@ description = "Observed word position; unassigned bits retain their exact image.
 
 [[layout.words.fields]]
 name = "BITS_0_27_OPAQUE"
+opaque = true
 bits = "27:0"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
@@ -268,6 +306,7 @@ description = "Global RX memory-list class: one for scanner, two for admitted no
 
 [[layout.words.fields]]
 name = "BIT_31_OPAQUE"
+opaque = true
 bits = "31"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
@@ -280,12 +319,14 @@ description = "Observed word position; unassigned bits retain their exact image.
 
 [[layout.words.fields]]
 name = "BITS_0_15_OPAQUE"
+opaque = true
 bits = "15:0"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
 
 [[layout.words.fields]]
 name = "BITS_16_27_OPAQUE"
+opaque = true
 bits = "27:16"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
@@ -298,18 +339,21 @@ description = "Own-address source: public or the role-provided random address."
 
 [[layout.words.fields]]
 name = "BITS_30_31_OPAQUE"
+opaque = true
 bits = "31:30"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
 
 [[layout.words]]
 name = "WORD_0028_OPAQUE"
+opaque = true
 offset = 0x28
 access = "shared"
 description = "Observed word position; unassigned bits retain their exact image."
 
 [[layout.words.fields]]
 name = "BITS_0_31_OPAQUE"
+opaque = true
 bits = "31:0"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
@@ -334,6 +378,7 @@ description = "Host scanner filter-policy image; the advertising reset clears th
 
 [[layout.words.fields]]
 name = "BITS_26_30_OPAQUE"
+opaque = true
 bits = "30:26"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
@@ -352,24 +397,28 @@ description = "Observed word position; unassigned bits retain their exact image.
 
 [[layout.words.fields]]
 name = "BITS_0_7_OPAQUE"
+opaque = true
 bits = "7:0"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
 
 [[layout.words.fields]]
 name = "BIT_8_OPAQUE"
+opaque = true
 bits = "8"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
 
 [[layout.words.fields]]
 name = "BITS_9_12_OPAQUE"
+opaque = true
 bits = "12:9"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
 
 [[layout.words.fields]]
 name = "BIT_13_OPAQUE"
+opaque = true
 bits = "13"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
@@ -382,12 +431,14 @@ description = "Connection coexistence protection value."
 
 [[layout.words.fields]]
 name = "BITS_20_21_OPAQUE"
+opaque = true
 bits = "21:20"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
 
 [[layout.words.fields]]
 name = "BITS_22_31_OPAQUE"
+opaque = true
 bits = "31:22"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
@@ -442,60 +493,70 @@ description = "Last two own-address bytes."
 
 [[layout.words.fields]]
 name = "BITS_16_23_OPAQUE"
+opaque = true
 bits = "23:16"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
 
 [[layout.words.fields]]
 name = "BITS_24_31_OPAQUE"
+opaque = true
 bits = "31:24"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
 
 [[layout.words]]
 name = "WORD_0044_OPAQUE"
+opaque = true
 offset = 0x44
 access = "shared"
 description = "Observed word position; unassigned bits retain their exact image."
 
 [[layout.words.fields]]
 name = "BITS_0_31_OPAQUE"
+opaque = true
 bits = "31:0"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
 
 [[layout.words]]
 name = "WORD_0048_OPAQUE"
+opaque = true
 offset = 0x48
 access = "shared"
 description = "Observed word position; unassigned bits retain their exact image."
 
 [[layout.words.fields]]
 name = "BITS_0_8_OPAQUE"
+opaque = true
 bits = "8:0"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
 
 [[layout.words.fields]]
 name = "BIT_9_OPAQUE"
+opaque = true
 bits = "9"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
 
 [[layout.words.fields]]
 name = "BITS_10_31_OPAQUE"
+opaque = true
 bits = "31:10"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
 
 [[layout.words]]
 name = "WORD_004C_OPAQUE"
+opaque = true
 offset = 0x4c
 access = "shared"
 description = "Observed word position; unassigned bits retain their exact image."
 
 [[layout.words.fields]]
 name = "BITS_0_31_OPAQUE"
+opaque = true
 bits = "31:0"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
@@ -516,6 +577,7 @@ encoding = "ble-compressed"
 
 [[layout.words.fields]]
 name = "BITS_20_23_OPAQUE"
+opaque = true
 bits = "23:20"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
@@ -534,6 +596,7 @@ description = "Ordinary-role direction-finding configuration ready lane."
 
 [[layout.words.fields]]
 name = "BIT_31_OPAQUE"
+opaque = true
 bits = "31"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
@@ -546,48 +609,56 @@ description = "Observed word position; unassigned bits retain their exact image.
 
 [[layout.words.fields]]
 name = "BITS_0_18_OPAQUE"
+opaque = true
 bits = "18:0"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
 
 [[layout.words.fields]]
 name = "BITS_19_20_OPAQUE"
+opaque = true
 bits = "20:19"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
 
 [[layout.words.fields]]
 name = "BITS_21_30_OPAQUE"
+opaque = true
 bits = "30:21"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
 
 [[layout.words.fields]]
 name = "BIT_31_OPAQUE"
+opaque = true
 bits = "31"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
 
 [[layout.words]]
 name = "WORD_0058_OPAQUE"
+opaque = true
 offset = 0x58
 access = "shared"
 description = "Observed word position; unassigned bits retain their exact image."
 
 [[layout.words.fields]]
 name = "BITS_0_31_OPAQUE"
+opaque = true
 bits = "31:0"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
 
 [[layout.words]]
 name = "WORD_005C_OPAQUE"
+opaque = true
 offset = 0x5c
 access = "shared"
 description = "Observed word position; unassigned bits retain their exact image."
 
 [[layout.words.fields]]
 name = "BITS_0_31_OPAQUE"
+opaque = true
 bits = "31:0"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
@@ -612,6 +683,7 @@ description = "Rounded transmit-power table index copied into the scheduler item
 
 [[layout.words.fields]]
 name = "BITS_16_31_OPAQUE"
+opaque = true
 bits = "31:16"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
@@ -696,24 +768,28 @@ points-to = "BLE_BUFFER_HEADER"
 
 [[layout.words]]
 name = "WORD_007C_OPAQUE"
+opaque = true
 offset = 0x7c
 access = "shared"
 description = "Observed word position; unassigned bits retain their exact image."
 
 [[layout.words.fields]]
 name = "BITS_0_31_OPAQUE"
+opaque = true
 bits = "31:0"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
 
 [[layout.words]]
 name = "WORD_0080_OPAQUE"
+opaque = true
 offset = 0x80
 access = "shared"
 description = "Observed word position; unassigned bits retain their exact image."
 
 [[layout.words.fields]]
 name = "BITS_0_31_OPAQUE"
+opaque = true
 bits = "31:0"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
@@ -724,923 +800,3 @@ sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
 provenance = "reviewed"
 accuracy = "exact"
 completeness = "complete"
-
-[[review]]
-entity = "BLE_LINK_STATE.TX_PATH"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_LINK_STATE.TX_PATH.HEADER"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_LINK_STATE.TX_PATH.MAX_TX_OCTETS"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_LINK_STATE.TX_PATH.QUEUE_READY"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_LINK_STATE.TX_PATH.BITS_29_30_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_LINK_STATE.TX_PATH.VALID"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_LINK_STATE.SCAN_RESPONSE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_LINK_STATE.SCAN_RESPONSE.HEADER"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_LINK_STATE.SCAN_RESPONSE.BITS_20_27_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_LINK_STATE.SCAN_RESPONSE.BITS_28_31_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_LINK_STATE.RX_PATH"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_LINK_STATE.RX_PATH.HEADER"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_LINK_STATE.RX_PATH.UNCONSUMED_LIMIT"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_LINK_STATE.RX_PATH.BITS_28_31_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_LINK_STATE.CONTROL_POLICY"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_LINK_STATE.CONTROL_POLICY.BITS_0_19_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_LINK_STATE.CONTROL_POLICY.BITS_20_23_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_LINK_STATE.CONTROL_POLICY.BITS_24_27_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_LINK_STATE.CONTROL_POLICY.BIT_28_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_LINK_STATE.CONTROL_POLICY.BIT_29_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_LINK_STATE.CONTROL_POLICY.BIT_30_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_LINK_STATE.CONTROL_POLICY.BIT_31_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_LINK_STATE.WORD_0010_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_LINK_STATE.WORD_0010_OPAQUE.BITS_0_31_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_LINK_STATE.PACKET_POLICY"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_LINK_STATE.PACKET_POLICY.BITS_0_25_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_LINK_STATE.PACKET_POLICY.BITS_26_27_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_LINK_STATE.PACKET_POLICY.BITS_28_31_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_LINK_STATE.RECEIVE_CONTEXT"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_LINK_STATE.RECEIVE_CONTEXT.BITS_0_19_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_LINK_STATE.RECEIVE_CONTEXT.BIT_20_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_LINK_STATE.RECEIVE_CONTEXT.BITS_21_24_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_LINK_STATE.RECEIVE_CONTEXT.SCAN_ACCEPT_LIST_FILTER"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_LINK_STATE.RECEIVE_CONTEXT.BITS_26_29_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_LINK_STATE.RECEIVE_CONTEXT.BIT_30_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_LINK_STATE.RECEIVE_CONTEXT.SCAN_STARTED"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_LINK_STATE.WORD_001C_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_LINK_STATE.WORD_001C_OPAQUE.BITS_0_31_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_LINK_STATE.RX_LIST"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_LINK_STATE.RX_LIST.BITS_0_27_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_LINK_STATE.RX_LIST.CLASS"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_LINK_STATE.RX_LIST.BIT_31_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_LINK_STATE.OWN_ADDRESS_POLICY"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_LINK_STATE.OWN_ADDRESS_POLICY.BITS_0_15_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_LINK_STATE.OWN_ADDRESS_POLICY.BITS_16_27_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_LINK_STATE.OWN_ADDRESS_POLICY.SOURCE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_LINK_STATE.OWN_ADDRESS_POLICY.BITS_30_31_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_LINK_STATE.WORD_0028_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_LINK_STATE.WORD_0028_OPAQUE.BITS_0_31_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_LINK_STATE.CRC_INITIALIZATION"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_LINK_STATE.CRC_INITIALIZATION.VALUE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_LINK_STATE.CRC_INITIALIZATION.SCAN_FILTER_POLICY"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_LINK_STATE.CRC_INITIALIZATION.BITS_26_30_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_LINK_STATE.CRC_INITIALIZATION.READY"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_LINK_STATE.SEQUENCE_POLICY"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_LINK_STATE.SEQUENCE_POLICY.BITS_0_7_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_LINK_STATE.SEQUENCE_POLICY.BIT_8_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_LINK_STATE.SEQUENCE_POLICY.BITS_9_12_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_LINK_STATE.SEQUENCE_POLICY.BIT_13_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_LINK_STATE.SEQUENCE_POLICY.COEXISTENCE_PROTECTION"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_LINK_STATE.SEQUENCE_POLICY.BITS_20_21_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_LINK_STATE.SEQUENCE_POLICY.BITS_22_31_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_LINK_STATE.EVENT_SPAN"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_LINK_STATE.EVENT_SPAN.VALUE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_LINK_STATE.ACCESS_ADDRESS"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_LINK_STATE.ACCESS_ADDRESS.VALUE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_LINK_STATE.OWN_ADDRESS_LOW"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_LINK_STATE.OWN_ADDRESS_LOW.VALUE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_LINK_STATE.OWN_ADDRESS_HIGH"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_LINK_STATE.OWN_ADDRESS_HIGH.VALUE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_LINK_STATE.OWN_ADDRESS_HIGH.BITS_16_23_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_LINK_STATE.OWN_ADDRESS_HIGH.BITS_24_31_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_LINK_STATE.WORD_0044_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_LINK_STATE.WORD_0044_OPAQUE.BITS_0_31_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_LINK_STATE.WORD_0048_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_LINK_STATE.WORD_0048_OPAQUE.BITS_0_8_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_LINK_STATE.WORD_0048_OPAQUE.BIT_9_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_LINK_STATE.WORD_0048_OPAQUE.BITS_10_31_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_LINK_STATE.WORD_004C_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_LINK_STATE.WORD_004C_OPAQUE.BITS_0_31_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_LINK_STATE.DIRECTION_FINDING"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_LINK_STATE.DIRECTION_FINDING.CONFIGURATION"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_LINK_STATE.DIRECTION_FINDING.BITS_20_23_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_LINK_STATE.DIRECTION_FINDING.COMMON_RADIO_POLICY"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_LINK_STATE.DIRECTION_FINDING.READY"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_LINK_STATE.DIRECTION_FINDING.BIT_31_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_LINK_STATE.DIRECTION_FINDING_POLICY"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_LINK_STATE.DIRECTION_FINDING_POLICY.BITS_0_18_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_LINK_STATE.DIRECTION_FINDING_POLICY.BITS_19_20_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_LINK_STATE.DIRECTION_FINDING_POLICY.BITS_21_30_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_LINK_STATE.DIRECTION_FINDING_POLICY.BIT_31_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_LINK_STATE.WORD_0058_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_LINK_STATE.WORD_0058_OPAQUE.BITS_0_31_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_LINK_STATE.WORD_005C_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_LINK_STATE.WORD_005C_OPAQUE.BITS_0_31_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_LINK_STATE.EVENT"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_LINK_STATE.EVENT.PRIORITY"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_LINK_STATE.EVENT.POWER_INDEX"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_LINK_STATE.EVENT.BITS_16_31_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_LINK_STATE.SCHEDULER_HEAD"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_LINK_STATE.SCHEDULER_HEAD.ADDRESS"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_LINK_STATE.RX_HEAD"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_LINK_STATE.RX_HEAD.ADDRESS"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_LINK_STATE.TX_HEAD"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_LINK_STATE.TX_HEAD.ADDRESS"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_LINK_STATE.RX_TAIL"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_LINK_STATE.RX_TAIL.ADDRESS"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_LINK_STATE.TX_TAIL"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_LINK_STATE.TX_TAIL.ADDRESS"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_LINK_STATE.RX_RESERVE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_LINK_STATE.RX_RESERVE.ADDRESS"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_LINK_STATE.WORD_007C_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_LINK_STATE.WORD_007C_OPAQUE.BITS_0_31_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_LINK_STATE.WORD_0080_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_LINK_STATE.WORD_0080_OPAQUE.BITS_0_31_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_LINK_STATE"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"

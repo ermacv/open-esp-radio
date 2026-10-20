@@ -6,6 +6,13 @@ description = "The three command bytes written into frequency memory by phy_freq
 size = 4
 align = 1
 
+[layout.review]
+sources = ["ROM_REV0_PHY_FREQUENCY_PACKING"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+naming = "descriptive"
+
 [[layout.bytes]]
 name = "COMMAND"
 offset = 0
@@ -36,35 +43,3 @@ sources = ["ROM_REV0_PHY_FREQUENCY_PACKING"]
 provenance = "derived"
 accuracy = "exact"
 completeness = "partial"
-
-[[review]]
-entity = "PHY_FREQUENCY_I2C_COMMAND.COMMAND"
-sources = ["ROM_REV0_PHY_FREQUENCY_PACKING"]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-naming = "descriptive"
-
-[[review]]
-entity = "PHY_FREQUENCY_I2C_COMMAND.COMMAND.BLOCK"
-sources = ["ROM_REV0_PHY_FREQUENCY_PACKING"]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-naming = "descriptive"
-
-[[review]]
-entity = "PHY_FREQUENCY_I2C_COMMAND.COMMAND.REGISTER"
-sources = ["ROM_REV0_PHY_FREQUENCY_PACKING"]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-naming = "descriptive"
-
-[[review]]
-entity = "PHY_FREQUENCY_I2C_COMMAND.COMMAND.DATA"
-sources = ["ROM_REV0_PHY_FREQUENCY_PACKING"]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-naming = "descriptive"

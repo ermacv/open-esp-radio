@@ -9,6 +9,20 @@ and right before the MPDU."""
 size = 8
 align = 1
 
+[layout.review]
+sources = ["ESP_WIFI_SYS_S31_RXCTRL"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[layout.review.opaque]
+sources = ["ESP_WIFI_SYS_S31_RXCTRL"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "opaque"
+
 [[layout.bytes]]
 name = "SIGNAL_LENGTH"
 offset = 0x00
@@ -47,12 +61,14 @@ description = "The reception state: 0 successful, others a failure."
 
 [[layout.bytes]]
 name = "BYTE_0005_OPAQUE"
+opaque = true
 offset = 0x05
 size = 1
 access = "owned"
 
 [[layout.bytes.fields]]
 name = "BITS_0_7_OPAQUE"
+opaque = true
 bits = "7:0"
 writer = "hardware"
 description = "Reserved in the public structure; read as a diagnostic."
@@ -63,67 +79,3 @@ sources = ["ESP_WIFI_SYS_S31_RXCTRL"]
 provenance = "reviewed"
 accuracy = "exact"
 completeness = "complete"
-
-[[review]]
-entity = "WIFI_RX_CONTROL_TAIL.SIGNAL_LENGTH"
-sources = ["ESP_WIFI_SYS_S31_RXCTRL"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_RX_CONTROL_TAIL.SIGNAL_LENGTH.LENGTH"
-sources = ["ESP_WIFI_SYS_S31_RXCTRL"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_RX_CONTROL_TAIL.DUMP_LENGTH"
-sources = ["ESP_WIFI_SYS_S31_RXCTRL"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_RX_CONTROL_TAIL.DUMP_LENGTH.LENGTH"
-sources = ["ESP_WIFI_SYS_S31_RXCTRL"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_RX_CONTROL_TAIL.RX_STATE"
-sources = ["ESP_WIFI_SYS_S31_RXCTRL"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_RX_CONTROL_TAIL.RX_STATE.VALUE"
-sources = ["ESP_WIFI_SYS_S31_RXCTRL"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_RX_CONTROL_TAIL.BYTE_0005_OPAQUE"
-sources = ["ESP_WIFI_SYS_S31_RXCTRL"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "WIFI_RX_CONTROL_TAIL.BYTE_0005_OPAQUE.BITS_0_7_OPAQUE"
-sources = ["ESP_WIFI_SYS_S31_RXCTRL"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "unknown"
-naming = "opaque"

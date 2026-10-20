@@ -6,6 +6,13 @@ description = "The first twenty bytes of the ordinary TX descriptor, with the re
 size = 20
 align = 1
 
+[layout.review]
+sources = ["BLOB_LIBNET80211_ORDINARY_TX_DESCRIPTOR"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+naming = "descriptive"
+
 [[layout.bytes]]
 name = "FLAGS"
 offset = 0
@@ -72,83 +79,3 @@ sources = ["BLOB_LIBNET80211_ORDINARY_TX_DESCRIPTOR"]
 provenance = "derived"
 accuracy = "exact"
 completeness = "partial"
-
-[[review]]
-entity = "WIFI_TX_DESCRIPTOR_PREFIX.FLAGS"
-sources = ["BLOB_LIBNET80211_ORDINARY_TX_DESCRIPTOR"]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_TX_DESCRIPTOR_PREFIX.FLAGS.STATION_REQUEST"
-sources = ["BLOB_LIBNET80211_ORDINARY_TX_DESCRIPTOR"]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_TX_DESCRIPTOR_PREFIX.FLAGS.AP_REQUEST"
-sources = ["BLOB_LIBNET80211_ORDINARY_TX_DESCRIPTOR"]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_TX_DESCRIPTOR_PREFIX.FLAGS.HE"
-sources = ["BLOB_LIBNET80211_ORDINARY_TX_DESCRIPTOR"]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_TX_DESCRIPTOR_PREFIX.PRIORITY"
-sources = ["BLOB_LIBNET80211_ORDINARY_TX_DESCRIPTOR"]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_TX_DESCRIPTOR_PREFIX.PRIORITY.USER_PRIORITY"
-sources = ["BLOB_LIBNET80211_ORDINARY_TX_DESCRIPTOR"]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_TX_DESCRIPTOR_PREFIX.PRIORITY.QUEUE_CLASS"
-sources = ["BLOB_LIBNET80211_ORDINARY_TX_DESCRIPTOR"]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_TX_DESCRIPTOR_PREFIX.SECURITY"
-sources = ["BLOB_LIBNET80211_ORDINARY_TX_DESCRIPTOR"]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_TX_DESCRIPTOR_PREFIX.SECURITY.STATION_STATE"
-sources = ["BLOB_LIBNET80211_ORDINARY_TX_DESCRIPTOR"]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-naming = "descriptive"
-
-[[review]]
-entity = "WIFI_TX_DESCRIPTOR_PREFIX.SECURITY.INTERFACE"
-sources = ["BLOB_LIBNET80211_ORDINARY_TX_DESCRIPTOR"]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-naming = "descriptive"

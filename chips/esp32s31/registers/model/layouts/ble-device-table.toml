@@ -7,13 +7,12 @@ size = 96
 align = 4
 placement = ["dma-window"]
 
-[layout.array]
-element = "BLE_DEVICE_TABLE_ENTRY"
-count = 12
-
-[[review]]
-entity = "BLE_DEVICE_TABLE"
+[layout.review]
 sources = ["BLOB_LIBBLE_DEVICE_TABLE"]
 provenance = "reviewed"
 accuracy = "exact"
 completeness = "complete"
+
+[layout.array]
+element = "BLE_DEVICE_TABLE_ENTRY"
+count = 12

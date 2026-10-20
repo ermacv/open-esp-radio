@@ -6,6 +6,13 @@ description = "The command word the analog I2C master consumes, including the re
 size = 4
 align = 1
 
+[layout.review]
+sources = ["C5_BLOB_LIBPHY_PHY_I2C"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+naming = "descriptive"
+
 [[layout.bytes]]
 name = "WORD"
 offset = 0
@@ -36,35 +43,3 @@ sources = ["C5_BLOB_LIBPHY_PHY_I2C"]
 provenance = "derived"
 accuracy = "exact"
 completeness = "partial"
-
-[[review]]
-entity = "PHY_I2C_COMMAND.WORD"
-sources = ["C5_BLOB_LIBPHY_PHY_I2C"]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-naming = "descriptive"
-
-[[review]]
-entity = "PHY_I2C_COMMAND.WORD.BLOCK"
-sources = ["C5_BLOB_LIBPHY_PHY_I2C"]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-naming = "descriptive"
-
-[[review]]
-entity = "PHY_I2C_COMMAND.WORD.REGISTER"
-sources = ["C5_BLOB_LIBPHY_PHY_I2C"]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-naming = "descriptive"
-
-[[review]]
-entity = "PHY_I2C_COMMAND.WORD.DATA"
-sources = ["C5_BLOB_LIBPHY_PHY_I2C"]
-provenance = "derived"
-accuracy = "exact"
-completeness = "partial"
-naming = "descriptive"

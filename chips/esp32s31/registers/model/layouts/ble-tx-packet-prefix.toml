@@ -6,8 +6,23 @@ description = "CPU-written TX packet prefix. Hardware consumes the PDU header at
 size = 18
 align = 1
 
+[layout.review]
+sources = ["BLOB_LIBBLE_MEMORY_TX_PREFIX"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[layout.review.opaque]
+sources = ["BLOB_LIBBLE_MEMORY_TX_PREFIX"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
 [[layout.bytes]]
 name = "BYTE_0000_OPAQUE"
+opaque = true
 offset = 0x00
 size = 4
 access = "owned"
@@ -15,6 +30,7 @@ description = "Observed byte range; decoded only after ownership passes to the C
 
 [[layout.bytes.fields]]
 name = "BITS_0_31_OPAQUE"
+opaque = true
 bits = "31:0"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
@@ -28,6 +44,7 @@ description = "Observed byte range; decoded only after ownership passes to the C
 
 [[layout.bytes.fields]]
 name = "BITS_0_7_OPAQUE"
+opaque = true
 bits = "7:0"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
@@ -46,12 +63,14 @@ description = "Packet allocator state byte; the common TX producer clears it."
 
 [[layout.bytes.fields]]
 name = "BITS_24_31_OPAQUE"
+opaque = true
 bits = "31:24"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
 
 [[layout.bytes]]
 name = "BYTE_0008_OPAQUE"
+opaque = true
 offset = 0x08
 size = 4
 access = "owned"
@@ -59,12 +78,14 @@ description = "Observed byte range; decoded only after ownership passes to the C
 
 [[layout.bytes.fields]]
 name = "BITS_0_31_OPAQUE"
+opaque = true
 bits = "31:0"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
 
 [[layout.bytes]]
 name = "BYTE_000C_OPAQUE"
+opaque = true
 offset = 0x0c
 size = 4
 access = "owned"
@@ -72,6 +93,7 @@ description = "Observed byte range; decoded only after ownership passes to the C
 
 [[layout.bytes.fields]]
 name = "BITS_0_31_OPAQUE"
+opaque = true
 bits = "31:0"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
@@ -108,123 +130,3 @@ sources = ["BLOB_LIBBLE_MEMORY_TX_PREFIX"]
 provenance = "reviewed"
 accuracy = "exact"
 completeness = "complete"
-
-[[review]]
-entity = "BLE_TX_PACKET_PREFIX.BYTE_0000_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_TX_PREFIX"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_TX_PACKET_PREFIX.BYTE_0000_OPAQUE.BITS_0_31_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_TX_PREFIX"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_TX_PACKET_PREFIX.ALLOCATION"
-sources = ["BLOB_LIBBLE_MEMORY_TX_PREFIX"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_TX_PACKET_PREFIX.ALLOCATION.BITS_0_7_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_TX_PREFIX"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_TX_PACKET_PREFIX.ALLOCATION.CLASS"
-sources = ["BLOB_LIBBLE_MEMORY_TX_PREFIX"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_TX_PACKET_PREFIX.ALLOCATION.STATE"
-sources = ["BLOB_LIBBLE_MEMORY_TX_PREFIX"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_TX_PACKET_PREFIX.ALLOCATION.BITS_24_31_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_TX_PREFIX"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_TX_PACKET_PREFIX.BYTE_0008_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_TX_PREFIX"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_TX_PACKET_PREFIX.BYTE_0008_OPAQUE.BITS_0_31_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_TX_PREFIX"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_TX_PACKET_PREFIX.BYTE_000C_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_TX_PREFIX"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_TX_PACKET_PREFIX.BYTE_000C_OPAQUE.BITS_0_31_OPAQUE"
-sources = ["BLOB_LIBBLE_MEMORY_TX_PREFIX"]
-provenance = "reviewed"
-accuracy = "positional"
-completeness = "unknown"
-naming = "opaque"
-
-[[review]]
-entity = "BLE_TX_PACKET_PREFIX.PDU_HEADER"
-sources = ["BLOB_LIBBLE_MEMORY_TX_PREFIX"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_TX_PACKET_PREFIX.PDU_HEADER.VALUE"
-sources = ["BLOB_LIBBLE_MEMORY_TX_PREFIX"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_TX_PACKET_PREFIX.PAYLOAD_LENGTH"
-sources = ["BLOB_LIBBLE_MEMORY_TX_PREFIX"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
-
-[[review]]
-entity = "BLE_TX_PACKET_PREFIX.PAYLOAD_LENGTH.VALUE"
-sources = ["BLOB_LIBBLE_MEMORY_TX_PREFIX"]
-provenance = "reviewed"
-accuracy = "exact"
-completeness = "complete"
-naming = "descriptive"
