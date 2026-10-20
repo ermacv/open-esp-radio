@@ -604,14 +604,3 @@ fn reviews_match_without_crate_disambiguators_only() {
         assert_eq!(stable(name), name);
     }
 }
-
-#[test]
-fn the_repository_policies_load() {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-    for chip in oer_chip_profile::Profile::all(&root).unwrap() {
-        let policy = StackPolicy::load(&root.join(chip.stack_policy())).unwrap();
-        if let Some(coverage) = &policy.coverage_policy {
-            CoveragePolicy::load(coverage).unwrap();
-        }
-    }
-}

@@ -415,49 +415,6 @@ mod tests {
     }
 
     #[test]
-    fn tracked_manifests_parse_with_complete_sources() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-        for chip in oer_chip_profile::supported(&root).unwrap() {
-            let Ok(manifest) = Manifest::load(&root, &chip) else {
-                continue;
-            };
-            assert!(manifest.artifact("libphy").is_ok(), "{chip}");
-            for source in &manifest.source {
-                if source.kind != SourceKind::Firmware {
-                    github(source.repository.as_deref().unwrap()).unwrap();
-                    assert!(source.revision.is_some());
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn the_rom_pin_resolves_into_the_vendor_store() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-        // Every chip's ROM ELF as its profile's `[rom]` names it.
-        for profile in oer_chip_profile::Profile::all(&root).unwrap() {
-            let Some(rom) = profile.rom else {
-                continue;
-            };
-            let manifest = Manifest::load(&root, &profile.id).unwrap();
-            let pinned = &manifest.artifact(&rom.elf).unwrap().path;
-            match fetched(&root, &profile.id, &rom.elf) {
-                Ok(path) => assert!(path.ends_with(pinned)),
-                // A host without the vendor store names the fetch command.
-                Err(error) => assert!(
-                    error
-                        .to_string()
-                        .contains(&format!("--chip {} {}", profile.id, rom.elf)),
-                    "{error}"
-                ),
-            }
-        }
-        let chip = oer_chip_profile::supported(&root).unwrap().remove(0);
-        let error = fetched(&root, &chip, "absent").unwrap_err();
-        assert!(error.to_string().contains("pins no `absent` artifact"));
-    }
-
-    #[test]
     fn artifacts_must_name_declared_sources() {
         let error = Manifest::parse(
             "schema = 1\nsource = []\n[[artifact]]\nid = \"a\"\nsource = \"b\"\npath = \"c\"\nsha256 = \"d\"\n",

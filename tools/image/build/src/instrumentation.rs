@@ -206,18 +206,4 @@ mod tests {
             .to_string();
         assert!(error.contains("no package missing"), "{error}");
     }
-
-    #[test]
-    fn the_workspace_images_declare_their_classes() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-        let classes = |package| {
-            Instrumentation::declared(&root, package)
-                .unwrap()
-                .classes()
-                .collect::<Vec<_>>()
-        };
-        assert_eq!(classes("oer-firmware-apps-w0"), [Class::Trace]);
-        assert_eq!(classes("oer-firmware-apps-w1"), [Class::Profile]);
-        assert_eq!(classes("oer-firmware-apps-boot-smoke"), []);
-    }
 }

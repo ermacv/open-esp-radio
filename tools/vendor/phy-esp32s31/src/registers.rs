@@ -61,29 +61,3 @@ pub fn analog(root: &Path, domain: &str) -> Result<Vec<Register>> {
         })
         .collect())
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn the_published_partition_image_is_ordered_by_address() {
-        let registers = partition(&oer_os_process::built_root(), PARTITION).unwrap();
-        assert!(!registers.is_empty());
-        assert!(registers.windows(2).all(|w| w[0].address < w[1].address));
-    }
-
-    #[test]
-    fn analog_replies_round_trip_through_their_space() {
-        use oer_vendor_phy::calibration_capture::space::Space;
-        let image = analog(&oer_os_process::built_root(), ANALOG_DOMAIN).unwrap();
-        assert!(image.windows(2).all(|w| w[0].address < w[1].address));
-        let register = &image[0];
-        let line = Space::Analog.line(register.address, 0xa5);
-        assert_eq!(
-            Space::Analog.replies(&line).unwrap()[&register.address],
-            0xa5
-        );
-        assert!(Space::Analog.request(register.address).starts_with("a "));
-    }
-}

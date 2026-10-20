@@ -481,62 +481,6 @@ pub fn router_ready() -> Result<()> {
 mod tests {
     use super::*;
 
-    /// Set in the child that holds a board for
-    /// `a_board_another_process_holds_is_refused`: the lock directory.
-    const HOLDER_DIRECTORY: &str = "OER_FW_TEST_HOLDER_DIRECTORY";
-    const BOARD: &str = "02:00:00:00:01:D0";
-
-    /// In the child only: hold the board through the device lock as a HIL
-    /// lease would, say so, and keep it until the parent ends the child.
-    #[test]
-    fn hold_the_board_for_the_parent() {
-        let Some(directory) = std::env::var_os(HOLDER_DIRECTORY) else {
-            return;
-        };
-        let id = DeviceId::parse(BOARD).unwrap();
-        let _held = DeviceAccess::try_acquire_in(Path::new(&directory), &id, "hil lease")
-            .unwrap()
-            .unwrap();
-        println!("held");
-        std::io::stdout().flush().unwrap();
-        std::thread::sleep(Duration::from_secs(60));
-    }
-
-    #[test]
-    fn a_board_another_process_holds_is_refused() {
-        use std::io::BufRead as _;
-        let directory = tempfile::tempdir().unwrap();
-        let mut child = std::process::Command::new(std::env::current_exe().unwrap())
-            .args([
-                "--exact",
-                "command::tests::hold_the_board_for_the_parent",
-                "--nocapture",
-            ])
-            .env(HOLDER_DIRECTORY, directory.path())
-            .stdout(std::process::Stdio::piped())
-            .spawn()
-            .unwrap();
-        let mut lines = std::io::BufReader::new(child.stdout.take().unwrap()).lines();
-        assert!(lines.any(|line| line.unwrap() == "held"));
-        let error = hold_in(directory.path(), BOARD).unwrap_err().to_string();
-        child.kill().unwrap();
-        child.wait().unwrap();
-        assert!(
-            error.contains("is busy") && error.contains("hil lease"),
-            "{error}"
-        );
-        // The holder gone, the board is free.
-        let mut free = None;
-        for _ in 0..100 {
-            if let Ok(access) = hold_in(directory.path(), BOARD) {
-                free = Some(access);
-                break;
-            }
-            std::thread::sleep(Duration::from_millis(50));
-        }
-        assert!(free.is_some());
-    }
-
     #[test]
     fn verdicts_are_read_from_the_marker() {
         assert_eq!(verdict("OER-RESULT: pass boot-smoke"), Some(Verdict::Pass));

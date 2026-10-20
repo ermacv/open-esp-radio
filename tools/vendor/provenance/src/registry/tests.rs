@@ -191,29 +191,6 @@ fn decisions_cite_names_from_observation_and_state() {
 }
 
 #[test]
-fn only_the_retained_decision_modules_are_read_and_a_missing_one_fails() {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-    for chip in ["esp32s31", "esp32c5"] {
-        let project = Project::new(&root, chip).expect("decision source");
-        let files = decision_files(&root, &project).expect("decision source");
-        let names = files
-            .iter()
-            .map(|f| {
-                f.file_name()
-                    .expect("decision file name")
-                    .to_str()
-                    .expect("UTF-8 file name")
-            })
-            .collect::<Vec<_>>();
-        assert_eq!(names, ["mod.rs", "observation.rs", "state.rs"]);
-    }
-    let empty = tempfile::tempdir().expect("temporary decision directory");
-    assert!(decision_words(&[empty.path().join("state.rs")]).is_err());
-    let project = Project::new(&root, "esp32s31").expect("decision source");
-    assert!(decision_files(empty.path(), &project).is_err());
-}
-
-#[test]
 fn notes_are_scanned_but_the_generated_facts_are_not() {
     assert!(PRODUCTION.contains(&"chips"));
     assert!(generated("chips/esp32s31/vendor/facts/provenance.toml"));

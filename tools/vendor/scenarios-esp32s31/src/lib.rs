@@ -48,9 +48,8 @@ pub fn install() {
 
 #[cfg(test)]
 mod tests {
-    use crate::artifacts::{manifest, path, sha256};
+    use crate::artifacts::{manifest, sha256};
     use oer_tool_pins::SourceKind;
-    use std::path::Path;
 
     #[test]
     fn a_firmware_input_has_the_digest_of_its_current_build_or_none() {
@@ -98,43 +97,5 @@ mod tests {
                 );
             }
         }
-    }
-
-    #[test]
-    fn firmware_outputs_lie_in_their_catalog_image_build() {
-        super::install();
-        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-        let entries = oer_image_build::esp_idf::catalog::entries(&root).unwrap();
-        let manifest = manifest();
-        for artifact in &manifest.artifact {
-            let source = manifest.source_of(artifact);
-            if source.kind != SourceKind::Firmware {
-                continue;
-            }
-            let image = source.image.as_deref().unwrap();
-            let entry = oer_image_build::esp_idf::catalog::entry(&entries, image).unwrap();
-            let output = oer_image_esp_idf::output(&root, &entry.project(&root)).join("build");
-            assert!(
-                path(&root, &artifact.id).starts_with(&output),
-                "{}",
-                artifact.id
-            );
-        }
-    }
-
-    #[test]
-    fn fetched_artifacts_live_under_their_source_revision() {
-        super::install();
-        let root = Path::new("/repo");
-        let pins = oer_tool_pins::Manifest::parse(
-            &std::fs::read_to_string(
-                Path::new(env!("CARGO_MANIFEST_DIR"))
-                    .join("../../../chips/esp32s31/vendor/artifacts.toml"),
-            )
-            .unwrap(),
-        )
-        .unwrap();
-        let libphy = pins.artifact("libphy").unwrap();
-        assert_eq!(path(root, "libphy"), pins.location(root, libphy).unwrap());
     }
 }

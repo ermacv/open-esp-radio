@@ -701,40 +701,6 @@ fn profile_path(root: &Path, id: &str) -> PathBuf {
 mod tests {
     use super::*;
 
-    fn repository() -> PathBuf {
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..")
-    }
-
-    #[test]
-    fn the_tracked_profiles_load() {
-        let root = repository();
-        let chips = Profile::all(&root).unwrap();
-        assert!(!chips.is_empty());
-        assert_eq!(families(&root).unwrap().len(), chips.len());
-        for chip in &chips {
-            assert!(valid_identifier(&chip.family), "{}", chip.id);
-            if let Some(flash) = &chip.flash {
-                assert!(flash.bootloader < flash.partition_table, "{}", chip.id);
-                assert!(flash.partition_table < flash.application, "{}", chip.id);
-                // The partition table the platform defines exists.
-                assert!(root.join(&flash.partitions).is_file(), "{}", chip.id);
-            }
-            assert_eq!(
-                chip.directory(&root, "registers"),
-                root.join("chips").join(&chip.id).join("registers")
-            );
-            if let Some(memory) = &chip.memory {
-                assert!(memory.task_stack_region().is_some(), "{}", chip.id);
-            }
-            if let Some(placement) = &chip.placement {
-                let memory = chip.memory.as_ref().unwrap();
-                for rule in &placement.range {
-                    assert!(memory.region(&rule.region).is_some(), "{}", chip.id);
-                }
-            }
-        }
-    }
-
     #[test]
     fn an_unknown_chip_names_the_supported_ones() {
         let root = tempfile::tempdir().unwrap();

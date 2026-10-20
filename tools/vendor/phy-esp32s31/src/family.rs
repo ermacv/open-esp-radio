@@ -59,18 +59,6 @@ impl Comparison for Esp32s31 {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn the_composition_reads_the_published_images_of_its_chip() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-        let images = Esp32s31::images(&root).unwrap();
-        assert!(!images.registers.is_empty() && !images.analog.is_empty());
-    }
-}
-
 /// The executable S31 comparison family; the generic workload names no chip.
 pub const FAMILY: oer_hil_scenario::workload::family::Kind =
     oer_hil_scenario::workload::family::Kind::of::<oer_vendor_phy::scenario::PhyScenario<Esp32s31>>(

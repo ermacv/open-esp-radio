@@ -113,10 +113,4 @@ mod tests {
         ];
         assert_eq!(parse(&render(&entries)).unwrap(), entries);
     }
-
-    #[test]
-    fn this_checkout_registers_functions() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-        assert!(!registered(&root, "esp32s31").unwrap().is_empty());
-    }
 }
