@@ -215,6 +215,19 @@ pub fn vendor(root: &Path, label: &str, revision: u16) -> Result<Vec<Input>> {
 }
 
 /// Read complete production captures from a cold paired or recorded-reference run.
+fn production_series(repetition: &Value, observations: &Value, captures: usize) -> Result<()> {
+    let comparison = observation(observations, "comparison")?;
+    let summary = comparison.get("comparison").unwrap_or(comparison);
+    if !matches!(text(repetition, "outcome")?, "passed" | "failed")
+        || !matches!(text(comparison, "verdict")?, "match" | "diff")
+        || summary.get("production-captures").and_then(Value::as_u64) != Some(captures as u64)
+        || captures == 0
+    {
+        return Err("production series did not complete its capture/comparison".into());
+    }
+    Ok(())
+}
+
 pub fn production(root: &Path, label: &str, channel: u8) -> Result<(Images, Vec<ProductionBoot>)> {
     manifest(root, label)?;
     let suite = read(&root.join("suite.json"))?;
@@ -239,6 +252,7 @@ pub fn production(root: &Path, label: &str, channel: u8) -> Result<(Images, Vec<
             identity = Some(image);
             let directory = text(rep, "artifact_directory")?;
             let n = count(&observations, "production-boot-")?;
+            production_series(rep, &observations, n)?;
             for i in 1..=n {
                 let ready = observation(&observations, &format!("production-{i:03}-registration"))?;
                 if ready.get("lifecycle").and_then(Value::as_str) != Some("Cold")
@@ -273,6 +287,18 @@ pub fn production(root: &Path, label: &str, channel: u8) -> Result<(Images, Vec<
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn partial_production_series_cannot_become_a_match_from_the_completed_prefix() {
+        let mut rep = serde_json::json!({"outcome":"failed"});
+        let mut observations = serde_json::json!({"observations":[{"name":"comparison","value":{"verdict":"diff","production-captures":2}}]});
+        production_series(&rep, &observations, 2).unwrap();
+        assert!(production_series(&rep, &observations, 1).is_err());
+        rep["outcome"] = "broken".into();
+        assert!(production_series(&rep, &observations, 2).is_err());
+        rep["outcome"] = "failed".into();
+        observations["observations"][0]["value"]["verdict"] = "incomplete".into();
+        assert!(production_series(&rep, &observations, 2).is_err());
+    }
     #[test]
     fn attachments_cannot_change_or_escape_and_discovery_is_not_a_primary_series() {
         let dir = tempfile::tempdir().unwrap();
