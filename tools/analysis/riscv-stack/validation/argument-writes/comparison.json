@@ -3,7 +3,7 @@
     "machines": {
       "application.bin": {
         "identical": true,
-        "sha256": "ee78bd5ba8c2175e0bdaec1e769215d693cbf782d37052d2b7041f358d4f3764"
+        "sha256": "e27238446f903ad02c16aabf577b06742ea53dc2dabcd3cf4c3e29eec4d53c1c"
       },
       "bootloader.bin": {
         "identical": true,
@@ -11,7 +11,7 @@
       },
       "bootstrap.elf": {
         "identical": true,
-        "sha256": "e715c33fdc40d9f71004c5ab6a938a5b777370e30bc0388db924326e25bf48ba"
+        "sha256": "2e7c94daadfb4aaa74fc0df3b613673db8d62d37daacea35c0dee669c8442a51"
       },
       "otadata.bin": {
         "identical": true,
@@ -23,11 +23,11 @@
       },
       "runtime.bin": {
         "identical": true,
-        "sha256": "bd4d36cae28d22f64ce02d24df2334d5be0a011bc32eec61b727c9c05a07c9df"
+        "sha256": "606c9489c0c099d9ffe87227496d8b5c975c38b87a1227dd8721281ae39e516e"
       },
       "runtime.elf": {
         "identical": true,
-        "sha256": "692fd407f093107b8bc04bcb5a6fb00e5875c3f4871b5711fa5aa6d8e8da8d2f"
+        "sha256": "e281fee54f1041f1e442c03295522e5a80abcabcb0b42d50170551e4089f4e6e"
       }
     },
     "reports": {
@@ -151,7 +151,7 @@
     "machines": {
       "application.bin": {
         "identical": true,
-        "sha256": "4e9deea3a281e5ede2713c7bde7cc4d0bececf3881bbb0a7aba4ca6ab2d064d3"
+        "sha256": "45cc746519e26e6898536ea27b689b3cc0180ab2e3d2ea75c488781169425572"
       },
       "bootloader.bin": {
         "identical": true,
@@ -159,7 +159,7 @@
       },
       "bootstrap.elf": {
         "identical": true,
-        "sha256": "ed928d120ff89f689e79fc7f5c40d0a1770dc55b4d0617cfb9cdb0b14125852f"
+        "sha256": "1671eef6a225f1325d3ec1917031424f914889ff271f2948344cfbd0c579d8c4"
       },
       "otadata.bin": {
         "identical": true,
@@ -171,11 +171,11 @@
       },
       "runtime.bin": {
         "identical": true,
-        "sha256": "23d54e4902163581271206f7426c73d5316f2458400035f5dad8d2bd24fa62fb"
+        "sha256": "31860f18194ee1462d7efc145cb5e8ec407d0ad03d9fc15c0a1b0d161a9efd90"
       },
       "runtime.elf": {
         "identical": true,
-        "sha256": "664a12bb421780da1a869a393c2abc0ffa15c6617a8216a305b88fec07464649"
+        "sha256": "27938f33263e78e94627209d5eec8592e2c54f03a2efb8e6b99a704c6cf17f82"
       }
     },
     "reports": {

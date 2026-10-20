@@ -1,8 +1,10 @@
 # Call argument and field-write provenance on w1
 
-Baseline: fresh main `c086c4b9`, including #175 and #176. Both w0/w1 bundles
-were built before and after in the same checkout. Captures, full diagnostic
-streams and check logs are under `/tmp/oer-argument-store/`. The checked-in
+Baseline: fresh main `4072d86a`, including #174, #175, #176 and #177. Both w0/w1 bundles
+were built before and after in the same checkout. Earlier experiments on
+`c086c4b9` remain under `/tmp/oer-argument-store/`; the final comparison below
+uses only fresh `4072d86a` bundles. Captures, full diagnostic
+streams and check logs are under `/tmp/oer-argument-store-current/`. The checked-in
 [comparison](comparison.json) contains all 14 machine-file hashes and all eight
 report comparisons. [real-transition.json](real-transition.json) records the
 actual ABI inputs, parameter-relative write and retained barriers.
@@ -60,26 +62,26 @@ callee to summarize. The surviving call is:
 
 | Role | Address / actual instruction |
 | --- | --- |
-| Caller | `rx_task`'s `TaskStorage::poll`, entry `0x5006e4fc` |
-| Future argument | `0x5006e648: lw a0, 0(a1)` |
-| Context argument | `0x5006e64a: addi a1, sp, 8` |
-| Call upper | `0x5006e64c: auipc ra, 0xfffdc` |
-| Call | `0x5006e650: jalr ra, 0x428(ra)` |
-| Callee | `receive` future's poll body, entry `0x5004aa74` |
-| Captured IRQ storage pointer | `0x5004aaf2: lw t1, 0xe4(s3)`; s3 is entry a0 |
-| Write into the input object | `0x5004ab56: sw t1, 0xd0(s3)` |
+| Caller | `rx_task`'s `TaskStorage::poll`, entry `0x5006e58e` |
+| Future argument | `0x5006e6da: lw a0, 0(a1)` |
+| Context argument | `0x5006e6dc: addi a1, sp, 8` |
+| Call upper | `0x5006e6de: auipc ra, 0xfffdf` |
+| Call | `0x5006e6e2: jalr ra, 0xea(ra)` |
+| Callee | `receive` future's poll body, entry `0x5004d7c8` |
+| Captured IRQ storage pointer | `0x5004d846: lw t1, 0xe4(s3)`; s3 is entry a0 |
+| Write into the input object | `0x5004d8aa: sw t1, 0xd0(s3)` |
 
 The new reusable summary proves:
 
 ```
 caller a0 -> callee argument word 0
-  -> read4(argument0 + 0xe4) at 0x5004aaf2
-  -> may-store4(argument0 + 0xd0) at 0x5004ab56
+  -> read4(argument0 + 0xe4) at 0x5004d846
+  -> may-store4(argument0 + 0xd0) at 0x5004d8aa
 ```
 
 DWARF labels these fields as `future.parts.irq.storage` and
-`future.irq.storage`. The actual layout is: receive future DIE `0x8a96a`,
-`Unresumed.parts` at `0xd8`, `WifiRxParts` DIE `0x89ca2` with `irq` at `0x0c`,
+`future.irq.storage`. The actual layout is: receive future DIE `0x8a9a1`,
+`Unresumed.parts` at `0xd8`, `WifiRxParts` DIE `0x89cd9` with `irq` at `0x0c`,
 and `Suspend0.irq` at `0xd0`. These are diagnostic labels from actual debug
 layout, not Rust source field order or summary selection rules. The pointer
 is to the `IrqStorage` shared by the arena's consumer/publisher; its exact
@@ -96,14 +98,14 @@ future or handler to one exact allocation.
 The publisher pointer has a second precise, limited witness:
 
 ```
-read4(argument0 + 0x104) at 0x5004ab02   // parts.line.mac
-  -> store4(callee-entry-sp - 600) at 0x5004af9e
-  -> UNKNOWN CALL at 0x5004afd0
-  -> reload at 0x5004bdf0 remains unknown
+read4(argument0 + 0x104) at 0x5004d856   // parts.line.mac
+  -> store4(callee-entry-sp - 600) at 0x5004dcf2
+  -> UNKNOWN CALL at 0x5004dd24
+  -> reload at 0x5004eb44 remains unknown
 ```
 
 `parts.line` is at `0xd8 + 0x2c`, and `WifiIrqLineParts.mac` is at offset 0
-(DIE `0xa69ae`). The unknown call is a real memory barrier, even if a register
+(DIE `0xa69e5`). The unknown call is a real memory barrier, even if a register
 or source-level ownership relationship appears to survive it.
 
 The new spill profile **does** prove a complete real field/spill/reload/store
@@ -111,10 +113,10 @@ sequence in this same callee:
 
 | Stage | Machine fact |
 | --- | --- |
-| Read snapshot | `0x5004acc4: lw a1, 0x154(s3)` |
-| Spill | `0x5004acda: sw a1, 0x1d0(sp)` = entry-sp minus 384 |
-| Reload | `0x5004ad06: lw a3, 0x1d0(sp)` retains the original load PC |
-| Store | `0x5004ad0a: sw a3, 0x90(a1)` retains that captured value |
+| Read snapshot | `0x5004da18: lw a1, 0x154(s3)` |
+| Spill | `0x5004da2e: sw a1, 0x1d0(sp)` = entry-sp minus 384 |
+| Reload | `0x5004da5a: lw a3, 0x1d0(sp)` retains the original load PC |
+| Store | `0x5004da5e: sw a3, 0x90(a1)` retains that captured value |
 
 The intermediate stores are exact disjoint stack words, not assumed-disjoint
 object writes. The store is conditional; its destination object is unknown.
@@ -125,19 +127,19 @@ spill witness demonstrates the mechanism on a word. A complete *pointer*
 field/spill/reload/object-store witness on the selected publisher/install path
 is still blocked. The scope extension does not justify crossing that call.
 
-At `0x5004be26`, the inlined `HandlerCell::install` pointer store remains
+At `0x5004eb7a`, the inlined `HandlerCell::install` pointer store remains
 `May` with unknown source/destination. The CAS result is checked at
-`0x5004be24`; its other path bypasses the store. The release fence at
-`0x5004be28` and state-byte write at `0x5004be2e` do not provide a missing
+`0x5004eb78`; its other path bypasses the store. The release fence at
+`0x5004eb7c` and state-byte write at `0x5004eb82` do not provide a missing
 pointer or a publication-order proof for later handler reads.
 
 | Real fact | Before | After |
 | --- | --- | --- |
-| `0x5006e650` call | raw transfer/inputs | same actual target plus instantiated write events |
-| IRQ pointer `0x5004aaf2 -> 0x5004ab56` | separate symbolic load/store facts | parameter-relative captured-field -> object-field summary |
-| Publisher `0x5004ab02 -> 0x5004af9e` | separate load/spill facts | captured pointer -> exact entry-stack slot; call barrier retained |
-| Word reload/store `0x5004ad06 -> 0x5004ad0a` | unknown value with old spill profile | snapshot from load `0x5004acc4`, width 4, `May` |
-| Install `0x5004be26` | unknown pointer, conditional | unchanged unknown pointer, conditional |
+| `0x5006e6e2` call | raw transfer/inputs | same actual target plus instantiated write events |
+| IRQ pointer `0x5004d846 -> 0x5004d8aa` | separate symbolic load/store facts | parameter-relative captured-field -> object-field summary |
+| Publisher `0x5004d856 -> 0x5004dcf2` | separate load/spill facts | captured pointer -> exact entry-stack slot; call barrier retained |
+| Word reload/store `0x5004da5a -> 0x5004da5e` | unknown value with old spill profile | snapshot from load `0x5004da18`, width 4, `May` |
+| Install `0x5004eb7a` | unknown pointer, conditional | unchanged unknown pointer, conditional |
 | Later `IrqSignal.pend` | type reaches call; 362 candidates | unchanged; no exact MAC_SIGNAL/handler substitution |
 
 A store event does not prove a subsequent read. That needs every possible write,
@@ -180,10 +182,10 @@ cargo fw build w1
 cargo build --locked --profile tools -p oer-analysis-riscv-stack \
   --example callback-audit --example function-records --example call-writes
 python3 tools/analysis/riscv-stack/validation/compare-callback-audit.py \
-  /tmp/oer-argument-store/before /tmp/oer-argument-store/after \
-  --output /tmp/oer-argument-store/comparison.json
+  /tmp/oer-argument-store-current/before /tmp/oer-argument-store-current/after \
+  --output /tmp/oer-argument-store-current/comparison.json
 python3 tools/analysis/riscv-stack/validation/argument-writes/explain.py \
-  /tmp/oer-argument-store/after/w1/runtime.elf /tmp/oer-argument-store/explained
+  /tmp/oer-argument-store-current/after/w1/runtime.elf /tmp/oer-argument-store-current/explained
 ```
 
 `explain.py` compares the same summary consumer/ELF with symbolic spills disabled
@@ -193,7 +195,7 @@ only select/check this pinned diagnostic fixture. Full before/after streams stay
 outside the repository. For layout inspection with the existing DWARF tool:
 
 ```sh
-llvm-dwarfdump --debug-info=0x8a96a --show-children /tmp/oer-argument-store/after/w1/runtime.elf
-llvm-dwarfdump --debug-info=0x89ca2 --show-children /tmp/oer-argument-store/after/w1/runtime.elf
-llvm-dwarfdump --debug-info=0xa69ae --show-children /tmp/oer-argument-store/after/w1/runtime.elf
+llvm-dwarfdump --debug-info=0x8a9a1 --show-children /tmp/oer-argument-store-current/after/w1/runtime.elf
+llvm-dwarfdump --debug-info=0x89cd9 --show-children /tmp/oer-argument-store-current/after/w1/runtime.elf
+llvm-dwarfdump --debug-info=0xa69e5 --show-children /tmp/oer-argument-store-current/after/w1/runtime.elf
 ```
