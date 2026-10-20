@@ -76,7 +76,7 @@ pub fn run(output: &Path, context: &Context<'_>, selected: Option<Case>) -> Resu
             if hardware.case != key {return Err("lower-MAC returned a different case identity".into())}
             let model = model(case, &prepared, applied.channel)?;
             context.results.observe(format!("case-{index:02}-model"), &model);
-            if hardware.trace != model {
+            if !traces_match(&hardware.trace, &model) {
                 context.results.observe(if selected.is_some() {"diagnostic-result"} else {"gate-e"}, &serde_json::json!({"pass":false,"case":index,"reason":"trace mismatch"}));
                 return Err(format!("lower-MAC trace differs from ModelBackend in {case:?}; stop for owner/architect decision").into());
             }
@@ -88,6 +88,40 @@ pub fn run(output: &Path, context: &Context<'_>, selected: Option<Case>) -> Resu
         Ok(())
     })
 }
+fn traces_match(left: &Trace, right: &Trace) -> bool {
+    let (Trace::Ownership(left), Trace::Ownership(right)) = (left, right) else {
+        return left == right;
+    };
+    if left.returned != right.returned
+        || left.contexts_dropped != right.contexts_dropped
+        || left.before_teardown_dropped != right.before_teardown_dropped
+        || left.publications != right.publications
+        || !left
+            .publication_events
+            .iter()
+            .map(Option::is_some)
+            .eq(right.publication_events.iter().map(Option::is_some))
+    {
+        return false;
+    }
+    use oer_ieee80211_port::conformance::{PublicationEvent, same_publications_by_ac};
+    let publication = |event: &OwnerPublication| match event {
+        OwnerPublication::Tx(ticket) => PublicationEvent::Tx(*ticket),
+        OwnerPublication::GateClosed => PublicationEvent::GateClosed,
+    };
+    same_publications_by_ac(
+        left.publication_events.iter().flatten().map(publication),
+        right.publication_events.iter().flatten().map(publication),
+        |ticket| {
+            left.returned
+                .iter()
+                .flatten()
+                .find(|row| row.actual.ticket == ticket)
+                .and_then(|row| oer_ieee80211_wire::qos::WmmAccessCategory::from_aci(row.category))
+        },
+    )
+}
+
 fn model(case: Case, prepared: &Prepared, channel: u8) -> Result<Trace> {
     let rates = prepared
         .basic_rates
@@ -184,6 +218,39 @@ fn complete<F: Future>(future: F) -> Result<F::Output> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn ownership_comparison_projects_publications_and_keeps_terminals_and_gate_exact() {
+        let prepared = Prepared {
+            ampdu: false,
+            basic_rates: [0x8c, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            basic_rates_len: 1,
+        };
+        let expected = model(
+            Case::Ownership(oer_ieee80211_port::conformance::Scenario::CloseGate),
+            &prepared,
+            6,
+        )
+        .expect("model ownership");
+        let mut actual = expected.clone();
+        if let Trace::Ownership(trace) = &mut actual {
+            trace.publication_events.swap(1, 2); // 2,3,2,3 instead of 2,2,3,3.
+        }
+        assert_ne!(actual, expected);
+        assert!(traces_match(&actual, &expected));
+        let mut wrong_terminal = actual.clone();
+        if let Trace::Ownership(trace) = &mut wrong_terminal {
+            trace.returned[0]
+                .as_mut()
+                .expect("VO terminal")
+                .transmissions = Some(1);
+        }
+        assert!(!traces_match(&wrong_terminal, &expected));
+        if let Trace::Ownership(trace) = &mut actual {
+            trace.publication_events.swap(3, 4);
+        }
+        assert!(!traces_match(&actual, &expected));
+    }
+
     #[test]
     fn every_physical_edca_case_preserves_actual_draws_tables_and_fifo() {
         let prepared = Prepared {

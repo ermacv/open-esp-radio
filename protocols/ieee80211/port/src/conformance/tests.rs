@@ -189,6 +189,39 @@ fn close_gate_rejects_publication_after_confirmation_with_all_counts_correct() {
 }
 
 #[test]
+fn publication_comparison_accepts_different_interleaving_between_access_categories() {
+    use PublicationEvent::{GateClosed, Tx};
+    let left = [Tx(0), Tx(2), Tx(1), Tx(3), GateClosed];
+    let right = [Tx(2), Tx(0), Tx(3), Tx(1), GateClosed];
+    assert!(same_publications_by_ac(
+        left.into_iter(),
+        right.into_iter(),
+        |ticket| {
+            OPERATIONS
+                .get(usize::from(ticket))
+                .map(|operation| operation.category)
+        }
+    ));
+}
+
+#[test]
+fn publication_comparison_rejects_reordering_within_one_access_category() {
+    use PublicationEvent::{GateClosed, Tx};
+    let left = [Tx(0), Tx(2), Tx(1), Tx(3), GateClosed];
+    // The only changed per-AC projection is BE: [0,1] becomes [1,0].
+    let right = [Tx(2), Tx(1), Tx(3), Tx(0), GateClosed];
+    assert!(!same_publications_by_ac(
+        left.into_iter(),
+        right.into_iter(),
+        |ticket| {
+            OPERATIONS
+                .get(usize::from(ticket))
+                .map(|operation| operation.category)
+        }
+    ));
+}
+
+#[test]
 fn edca_verifier_rejects_tail_parameters_wrong_draws_and_queue_reordering() {
     use super::edca::{self, Case, Draw, Scenario};
     use crate::VifRole::{AccessPoint, Station};

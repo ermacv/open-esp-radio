@@ -501,6 +501,45 @@ pub enum PublicationEvent {
     GateClosed,
 }
 
+/// Compare the contract's per-AC publication sequences. Ticket identities and
+/// gate confirmation positions stay exact; independent ACs may interleave.
+/// An unclassified ticket is invalid rather than silently omitted.
+pub fn same_publications_by_ac<L, R>(
+    left: L,
+    right: R,
+    category: impl Fn(u8) -> Option<WmmAccessCategory>,
+) -> bool
+where
+    L: Iterator<Item = PublicationEvent> + Clone,
+    R: Iterator<Item = PublicationEvent> + Clone,
+{
+    if left
+        .clone()
+        .chain(right.clone())
+        .any(|event| matches!(event, PublicationEvent::Tx(ticket) if category(ticket).is_none()))
+    {
+        return false;
+    }
+    let gate = |(index, event)| (event == PublicationEvent::GateClosed).then_some(index);
+    if !left
+        .clone()
+        .enumerate()
+        .filter_map(gate)
+        .eq(right.clone().enumerate().filter_map(gate))
+    {
+        return false;
+    }
+    WmmAccessCategory::ALL.into_iter().all(|ac| {
+        let belongs = |event: &PublicationEvent| match event {
+            PublicationEvent::Tx(ticket) => category(*ticket) == Some(ac),
+            PublicationEvent::GateClosed => true,
+        };
+        left.clone()
+            .filter(belongs)
+            .eq(right.clone().filter(belongs))
+    })
+}
+
 /// Evidence after the install has ended. Terminal evidence follows the
 /// returned owners; publication events preserve their observed order.
 pub struct Trace<R, E, P> {
