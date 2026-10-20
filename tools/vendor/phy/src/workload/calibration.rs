@@ -61,32 +61,43 @@ pub(crate) fn run<C: Comparison>(
     };
     context.results.observe("images", &identity);
     let published = C::images(&root)?;
+    // Discovery may reset the reference; none of its values enter the gate.
+    // Every subsequent measured capture must stay in its one primary boot.
+    images.flash(&bundle, &entry.image)?;
+    let discovered = reference_boot::<C>(
+        context,
+        lifecycle,
+        &published,
+        vendor_windows,
+        vendor_transmit,
+        &output.join("vendor-readability"),
+        None,
+    );
+    let restored = images.restore();
+    let (discovered, _) = discovered?;
+    restored?;
+    std::fs::write(
+        output.join("vendor-readability.json"),
+        serde_json::to_vec_pretty(&discovered)?,
+    )?;
+    context
+        .results
+        .observe("vendor-readability-discovery", &discovered);
     let mut vendors = Vec::new();
     let mut productions = Vec::new();
     for boot in 1..=boots {
         oer_os_process::check_cancelled()?;
         images.flash(&bundle, &entry.image)?;
         let stem = output.join(format!("vendor-{boot:03}"));
-        let captured = if lifecycle.ieee802154() {
-            ieee802154_boot(
-                context,
-                lifecycle,
-                &published.registers,
-                &published.analog,
-                vendor_windows,
-                vendor_transmit,
-                &stem,
-            )
-        } else {
-            calibration_boot(
-                context,
-                lifecycle,
-                C::VENDOR_OBJECT,
-                &published.registers,
-                &published.analog,
-                &stem,
-            )
-        };
+        let captured = reference_boot::<C>(
+            context,
+            lifecycle,
+            &published,
+            vendor_windows,
+            vendor_transmit,
+            &stem,
+            Some(&discovered),
+        );
         // Restore the diagnostic image even if a reference boot/read failed.
         let restored = images.restore();
         let (vendor_boot, channel) = captured?;
@@ -145,6 +156,39 @@ pub(crate) fn run<C: Comparison>(
     match compared.mismatch {
         None => Ok(()),
         Some(reason) => Err(format!("calibration cross-check {reason}").into()),
+    }
+}
+
+fn reference_boot<C: Comparison>(
+    context: &Context<'_>,
+    lifecycle: Lifecycle,
+    published: &crate::comparison::RegisterImages,
+    windows: &[crate::scenario::Window],
+    transmit: bool,
+    stem: &Path,
+    known: Option<&VendorBoot>,
+) -> Result<(VendorBoot, u8)> {
+    if lifecycle.ieee802154() {
+        ieee802154_boot(
+            context,
+            lifecycle,
+            &published.registers,
+            &published.analog,
+            windows,
+            transmit,
+            stem,
+            known,
+        )
+    } else {
+        calibration_boot(
+            context,
+            lifecycle,
+            C::VENDOR_OBJECT,
+            &published.registers,
+            &published.analog,
+            stem,
+            known,
+        )
     }
 }
 
@@ -409,6 +453,7 @@ fn calibration_boot(
     registers: &[Register],
     analog: &[Register],
     stem: &Path,
+    known: Option<&VendorBoot>,
 ) -> Result<(VendorBoot, u8)> {
     let (console, mut serial) = vendor_boot(&context.lab.dut.serial)?;
     std::fs::write(stem.with_extension("log"), &console)?;
@@ -417,21 +462,41 @@ fn calibration_boot(
         .remove(vendor_object)
         .ok_or_else(|| format!("the vendor boot reported no {vendor_object}"))?;
     let mut replies = String::new();
-    if lifecycle == Lifecycle::Restart {
-        vendor_restart(&mut serial, &mut replies)?;
-    }
-    vendor_registers(&mut serial, Space::Mmio, registers, lifecycle, &mut replies)?;
     let mut analog_replies = String::new();
-    vendor_registers(
-        &mut serial,
-        Space::Analog,
-        analog,
-        lifecycle,
-        &mut analog_replies,
-    )?;
-    let channel = vendor::home_channel(&console)?;
+    let result: Result<()> = (|| {
+        if lifecycle == Lifecycle::Restart {
+            vendor_restart(&mut serial, &mut replies)?;
+        }
+        vendor_registers(
+            &mut serial,
+            Space::Mmio,
+            registers,
+            lifecycle,
+            &mut replies,
+            known.map(|boot| &boot.registers),
+        )?;
+        vendor_registers(
+            &mut serial,
+            Space::Analog,
+            analog,
+            lifecycle,
+            &mut analog_replies,
+            known.map(|boot| &boot.analog),
+        )?;
+        Ok(())
+    })();
     std::fs::write(stem.with_extension("registers.log"), &replies)?;
     std::fs::write(stem.with_extension("analog.log"), &analog_replies)?;
+    if let Err(error) = result {
+        std::fs::write(
+            stem.with_extension("incomplete.json"),
+            serde_json::to_vec_pretty(
+                &serde_json::json!({ "verdict": "INCOMPLETE", "failure": error.to_string() }),
+            )?,
+        )?;
+        return Err(error);
+    }
+    let channel = vendor::home_channel(&console)?;
     Ok((
         VendorBoot {
             calibration: Some(calibration),
@@ -454,6 +519,7 @@ fn ieee802154_boot(
     windows: &[crate::scenario::Window],
     transmit: bool,
     stem: &Path,
+    known: Option<&VendorBoot>,
 ) -> Result<(VendorBoot, u8)> {
     let mut peer = crate::reference::Peer::boot(
         reset_console(&context.lab.dut.serial)?,
@@ -461,28 +527,41 @@ fn ieee802154_boot(
     )?;
     let mut partial = VendorBoot::default();
     let result: Result<()> = (|| {
-        let replies = peer.registers(Space::Mmio, registers)?;
+        let replies = peer.registers(Space::Mmio, registers, known.map(|b| &b.registers))?;
         std::fs::write(stem.with_extension("registers.log"), &replies)?;
         partial.registers = Readings::parse(Space::Mmio, &replies)?;
-        let replies = peer.registers(Space::Analog, analog)?;
+        let replies = peer.registers(Space::Analog, analog, known.map(|b| &b.analog))?;
         std::fs::write(stem.with_extension("analog.log"), &replies)?;
         partial.analog = Readings::parse(Space::Analog, &replies)?;
         let extra = window_registers(windows)?;
         if !extra.is_empty() {
-            let replies = peer.registers(Space::Mmio, &extra)?;
+            let replies =
+                peer.registers(Space::Mmio, &extra, known.and_then(|b| b.windows.as_ref()))?;
             std::fs::write(stem.with_extension("windows.log"), &replies)?;
             partial.windows = Some(Readings::parse(Space::Mmio, &replies)?);
         }
         if transmit {
             peer.transmit()?;
-            let replies = peer.registers(Space::Analog, analog)?;
+            let replies = peer.registers(
+                Space::Analog,
+                analog,
+                known
+                    .and_then(|b| b.transmitted.as_ref())
+                    .map(|t| &t.analog),
+            )?;
             std::fs::write(stem.with_extension("transmitted-analog.log"), &replies)?;
             let mut transmitted = Transmitted {
                 analog: Readings::parse(Space::Analog, &replies)?,
                 windows: None,
             };
             if !extra.is_empty() {
-                let replies = peer.registers(Space::Mmio, &extra)?;
+                let replies = peer.registers(
+                    Space::Mmio,
+                    &extra,
+                    known
+                        .and_then(|b| b.transmitted.as_ref())
+                        .and_then(|t| t.windows.as_ref()),
+                )?;
                 std::fs::write(stem.with_extension("transmitted-windows.log"), &replies)?;
                 transmitted.windows = Some(Readings::parse(Space::Mmio, &replies)?);
             }
@@ -549,7 +628,7 @@ fn vendor_boot(port: &Path) -> Result<(String, oer_lab_board::port::Port)> {
 /// Restart the vendor Wi-Fi radio and require that stopping the client
 /// released every PHY modem, which closes RF. `replies` accumulates the
 /// console.
-fn vendor_restart(serial: &mut oer_lab_board::port::Port, replies: &mut String) -> Result<()> {
+fn vendor_restart(serial: &mut (impl Read + Write), replies: &mut String) -> Result<()> {
     let done = vendor::restarts(replies)?.len();
     serial.write_all(vendor::RESTART_REQUEST.as_bytes())?;
     let started = Instant::now();
@@ -583,14 +662,21 @@ fn vendor_restart(serial: &mut oer_lab_board::port::Port, replies: &mut String) 
 /// [`Lifecycle::Restart`] point. `replies` holds the console so far, and
 /// its restarts.
 fn vendor_registers(
-    serial: &mut oer_lab_board::port::Port,
+    serial: &mut (impl Read + Write),
     space: Space,
     registers: &[Register],
     lifecycle: Lifecycle,
     replies: &mut String,
+    known: Option<&Readings>,
 ) -> Result<()> {
     let mut buffer = [0; 256];
     for register in registers {
+        if let Some(known) = known {
+            if !known.permits_read(register.address)? {
+                replies.push_str(&vendor::unreadable_line(register.address));
+                continue;
+            }
+        }
         serial.write_all(space.request(register.address).as_bytes())?;
         let boots = vendor::reports(replies);
         let started = Instant::now();
@@ -599,6 +685,13 @@ fn vendor_registers(
                 break;
             }
             if vendor::reports(replies) > boots {
+                if known.is_some() {
+                    return Err(format!(
+                        "measured reference reset while reading {}; capture would span boots",
+                        register.name
+                    )
+                    .into());
+                }
                 replies.push_str(&vendor::unreadable_line(register.address));
                 if lifecycle == Lifecycle::Restart {
                     vendor_restart(serial, replies)?;
@@ -922,5 +1015,151 @@ mod tests {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod reference_boot_tests {
+    use super::*;
+    use std::collections::VecDeque;
+
+    struct Serial {
+        responses: VecDeque<Vec<u8>>,
+        pending: VecDeque<u8>,
+        requests: Vec<String>,
+    }
+    impl Read for Serial {
+        fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+            if self.pending.is_empty() {
+                return Err(std::io::Error::from(std::io::ErrorKind::UnexpectedEof));
+            }
+            let count = buffer.len().min(self.pending.len());
+            for byte in &mut buffer[..count] {
+                *byte = self.pending.pop_front().unwrap();
+            }
+            Ok(count)
+        }
+    }
+    impl Write for Serial {
+        fn write(&mut self, data: &[u8]) -> std::io::Result<usize> {
+            self.requests
+                .push(String::from_utf8(data.to_vec()).unwrap());
+            self.pending.extend(
+                self.responses
+                    .pop_front()
+                    .expect("one scripted reply per command"),
+            );
+            Ok(data.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    fn register(address: u32) -> Register {
+        Register {
+            address,
+            name: format!("r{address}"),
+        }
+    }
+    fn serial(responses: &[&str]) -> Serial {
+        Serial {
+            responses: responses.iter().map(|s| s.as_bytes().to_vec()).collect(),
+            pending: VecDeque::new(),
+            requests: Vec::new(),
+        }
+    }
+    #[test]
+    fn discovered_unreadable_reads_are_not_reissued_in_the_measured_boot() {
+        let mut io = serial(&["oer-vendor-calibration-register 00000004 00000009\n"]);
+        let known = Readings {
+            values: [(4, 1)].into(),
+            unreadable: [8].into(),
+        };
+        let mut log = String::new();
+        vendor_registers(
+            &mut io,
+            Space::Mmio,
+            &[register(4), register(8)],
+            Lifecycle::Cold,
+            &mut log,
+            Some(&known),
+        )
+        .unwrap();
+        assert_eq!(io.requests, ["r 00000004\n"]);
+        let readings = Readings::parse(Space::Mmio, &log).unwrap();
+        assert_eq!(readings.values, [(4, 9)].into());
+        assert_eq!(readings.unreadable, [8].into());
+    }
+    #[test]
+    fn a_new_boot_aborts_measurement_but_discovery_may_recover() {
+        let mut io = serial(&["oer-vendor-calibration-end\n"]);
+        let known = Readings {
+            values: [(4, 1)].into(),
+            unreadable: Default::default(),
+        };
+        let mut log = String::new();
+        let result = vendor_registers(
+            &mut io,
+            Space::Mmio,
+            &[register(4)],
+            Lifecycle::Cold,
+            &mut log,
+            Some(&known),
+        );
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("capture would span boots")
+        );
+        assert!(log.contains("oer-vendor-calibration-end"));
+        let mut io = serial(&["oer-vendor-calibration-end\n"]);
+        let mut log = String::new();
+        vendor_registers(
+            &mut io,
+            Space::Mmio,
+            &[register(4)],
+            Lifecycle::Cold,
+            &mut log,
+            None,
+        )
+        .unwrap();
+        assert_eq!(
+            Readings::parse(Space::Mmio, &log).unwrap().unreadable,
+            [4].into()
+        );
+    }
+    #[test]
+    fn discovery_failure_or_an_unknown_address_never_becomes_a_skipped_read() {
+        let mut io = serial(&[]);
+        let mut log = String::new();
+        assert!(
+            vendor_registers(
+                &mut io,
+                Space::Mmio,
+                &[register(4)],
+                Lifecycle::Cold,
+                &mut log,
+                Some(&Readings::default())
+            )
+            .is_err()
+        );
+        assert!(io.requests.is_empty());
+        let known = Readings {
+            values: [(4, 1)].into(),
+            unreadable: [4].into(),
+        };
+        assert!(
+            vendor_registers(
+                &mut io,
+                Space::Mmio,
+                &[register(4)],
+                Lifecycle::Cold,
+                &mut log,
+                Some(&known)
+            )
+            .is_err()
+        );
+        assert!(io.requests.is_empty());
     }
 }

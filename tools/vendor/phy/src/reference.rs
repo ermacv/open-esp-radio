@@ -7,6 +7,7 @@
 //! the calibration firmware's line formats, so the comparison reads both
 //! vendor firmwares alike.
 use crate::Result;
+use crate::calibration_capture::boots::Readings;
 use crate::calibration_capture::space::{self, Register, Space, analog_parts};
 use std::io::{Read, Write as _};
 use std::time::{Duration, Instant};
@@ -148,10 +149,26 @@ impl Peer {
     /// line format. A read that resets the chip shows as a new ready line,
     /// and one that hangs it is ended by a board reset: the register is
     /// recorded as unreadable, and the radio is prepared again before the
-    /// reads continue.
-    pub fn registers(&mut self, space: Space, registers: &[Register]) -> Result<String> {
+    /// reads continue during discovery (`known = None`). Measured captures
+    /// supply the discovery inventory and reject a new reset/hang instead of
+    /// combining different boots. The inherited unreadable markers refer to
+    /// discovery, not another attempted read in this primary boot.
+    pub fn registers(
+        &mut self,
+        space: Space,
+        registers: &[Register],
+        known: Option<&Readings>,
+    ) -> Result<String> {
         let mut lines = String::new();
         for register in registers {
+            if let Some(known) = known {
+                if !known.permits_read(register.address)? {
+                    lines.push_str(&crate::calibration_capture::vendor::unreadable_line(
+                        register.address,
+                    ));
+                    continue;
+                }
+            }
             let request = match space {
                 Space::Mmio => format!("PEEK {:08x}\n", register.address),
                 Space::Analog => {
@@ -178,6 +195,13 @@ impl Peer {
                     break;
                 }
                 if ready_lines(&self.console) > boots {
+                    if known.is_some() {
+                        return Err(format!(
+                            "measured reference reset while reading {}; capture would span boots",
+                            register.name
+                        )
+                        .into());
+                    }
                     lines.push_str(&crate::calibration_capture::vendor::unreadable_line(
                         register.address,
                     ));
@@ -185,6 +209,13 @@ impl Peer {
                     break;
                 }
                 if started.elapsed() > REPLY_TIMEOUT {
+                    if known.is_some() {
+                        return Err(format!(
+                            "measured reference hung while reading {}; capture incomplete",
+                            register.name
+                        )
+                        .into());
+                    }
                     // A read that stalls the bus hangs the chip instead of
                     // resetting it: reset the board and treat it alike.
                     oer_lab_board::reset::reset_usb_serial_jtag(&mut self.serial)?;

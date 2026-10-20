@@ -32,3 +32,13 @@ three repetitions. It preserves coarse raw intervals, validates committed
 branches, reports per-repetition maxima and requires policy restoration plus
 RF closure. Invalid pages or failed cleanup remain INCOMPLETE; no Wi-Fi traffic
 or idle hold is served by this workload.
+
+Reference readability is discovered in a separate capture before the alternating
+series. Discovery retains reset/hang evidence and its image identity, and does
+not contribute values to the comparison ranges. Measured boots reuse only that
+readability inventory: known unreadable addresses are recorded with the discovery
+as their source and are not probed again. An unknown entry, inconsistent inventory
+or unexpected reference reset/hang leaves the measured capture INCOMPLETE.
+Every compared calibration projection and register/analog value therefore comes
+from the same primary boot at its selected lifecycle point. Comparison math,
+reviews, exclusions and the treatment of unreadable registers are unchanged.
