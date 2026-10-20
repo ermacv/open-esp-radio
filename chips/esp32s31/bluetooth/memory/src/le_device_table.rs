@@ -82,6 +82,8 @@ pub enum LeDeviceTableBindError {
     AddressWidth,
     /// The storage is not representable as a Controller-SRAM address.
     InvalidAddress(BluetoothControllerSramAddressError),
+    /// The table base compresses to zero, which cannot name a placed table.
+    ZeroCompressedImage,
     /// The storage extends beyond the physical Controller SRAM.
     ExtentOutsidePhysicalSram,
 }
@@ -134,6 +136,9 @@ impl LeDeviceTable {
         }
         let first_entry = BluetoothControllerSramAddress::new(base)
             .map_err(LeDeviceTableBindError::InvalidAddress)?;
+        if first_entry.compressed_image() == 0 {
+            return Err(LeDeviceTableBindError::ZeroCompressedImage);
+        }
         let mut table = Self {
             storage: Pin::static_mut(storage),
             first_entry,
@@ -154,7 +159,10 @@ impl LeDeviceTable {
         // exceeds its capacity, and its words are `VolatileCell`s the CPU
         // reaches only through volatile accesses.
         unsafe {
-            DeviceTablePublication::new(self.first_entry, count)
+            DeviceTablePublication::new(
+                crate::layout_reference::controller_reference(self.first_entry.address()),
+                count,
+            )
         }
     }
 

@@ -2,6 +2,8 @@
 
 #![deny(unsafe_code)]
 
+use crate::layouts::{BleSchedulerItem, DmaRef};
+
 use crate::{
     BluetoothControllerSramAddress, BluetoothSchedulerHardwareListIndex,
     BluetoothSchedulerRunInterruptsPrepared, BluetoothTaskRegisters, device_fence,
@@ -12,7 +14,7 @@ trait BluetoothSchedulerHardwareListHeadControl {
     fn publish_head(
         &mut self,
         index: BluetoothSchedulerHardwareListIndex,
-        head: BluetoothSchedulerHardwareListHead,
+        head: Option<DmaRef<BleSchedulerItem>>,
     );
     fn order_after_publication(&mut self);
 }
@@ -75,11 +77,13 @@ impl BluetoothSchedulerHardwareListHeadControl for BluetoothTaskRegisters {
     fn publish_head(
         &mut self,
         index: BluetoothSchedulerHardwareListIndex,
-        head: BluetoothSchedulerHardwareListHead,
+        head: Option<DmaRef<BleSchedulerItem>>,
     ) {
-        let head_bits =
-            crate::generated::BluetoothSchedulerListHeadBits::new(head.compressed_image())
-                .expect("validated scheduler head fits its generated PAC domain");
+        let head_bits = crate::generated::BluetoothSchedulerListHeadBits::new(
+            crate::generated::bluetooth_scheduler_head_pointer_image(head)
+                .expect("a placed scheduler head is encodable"),
+        )
+        .expect("validated scheduler head fits its generated PAC domain");
         crate::generated::publish_bluetooth_scheduler_hardware_list_head(
             &self.bluetooth.btdm_scheduler_table,
             index.get() as usize,
@@ -95,11 +99,15 @@ impl BluetoothSchedulerHardwareListHeadControl for BluetoothTaskRegisters {
 fn execute_scheduler_hardware_list_head_publication(
     control: &mut impl BluetoothSchedulerHardwareListHeadControl,
     index: BluetoothSchedulerHardwareListIndex,
-    head: BluetoothSchedulerHardwareListHead,
+    head: Option<DmaRef<BleSchedulerItem>>,
 ) -> BluetoothSchedulerHardwareListHeadPublished {
     control.order_descriptor_before_publication();
     control.publish_head(index, head);
     control.order_after_publication();
+    let head = head.map_or(BluetoothSchedulerHardwareListHead::empty(), |head| {
+        BluetoothSchedulerHardwareListHead::from_address(head)
+            .expect("a placed scheduler head is encodable")
+    });
     BluetoothSchedulerHardwareListHeadPublished { index, head }
 }
 
@@ -154,25 +162,19 @@ impl BluetoothSchedulerHardwareListHead {
 
     /// Construct a non-empty head from one validated scheduler-item address.
     pub const fn from_address(
-        address: BluetoothControllerSramAddress,
+        address: DmaRef<BleSchedulerItem>,
     ) -> Result<Self, BluetoothSchedulerHardwareListHeadError> {
-        if address.compressed_image() == 0 {
-            Err(BluetoothSchedulerHardwareListHeadError::EncodesEmptyHead)
-        } else {
-            Ok(Self(Some(address)))
+        match address.ble_compressed() {
+            None => Err(BluetoothSchedulerHardwareListHeadError::EncodesEmptyHead),
+            Some(image) => Ok(Self(Some(
+                BluetoothControllerSramAddress::from_compressed_image(image),
+            ))),
         }
     }
 
     /// Address of the published scheduler item, or `None` for an empty list.
     pub const fn address(self) -> Option<BluetoothControllerSramAddress> {
         self.0
-    }
-
-    const fn compressed_image(self) -> u32 {
-        match self.0 {
-            None => 0,
-            Some(address) => address.compressed_image(),
-        }
     }
 
     const fn from_compressed_image(image: u32) -> Self {
@@ -474,6 +476,20 @@ impl BluetoothTaskRegisters {
     /// serialize this publication with the scheduler interrupt owner. This
     /// method orders prior SRAM writes before the MMIO head update; it does not
     /// validate descriptor contents or establish completion ownership.
+    ///
+    /// A hardware-observed head is an outside identity, not a reference that
+    /// may be published before the memory owner resolves it against its arena:
+    ///
+    /// ```compile_fail
+    /// use oer_esp32s31_pac::{BluetoothTaskRegisters, BluetoothSchedulerHardwareListHead,
+    ///     BluetoothSchedulerHardwareListIndex};
+    /// fn republish(registers: &mut BluetoothTaskRegisters, observed: BluetoothSchedulerHardwareListHead) {
+    ///     unsafe {
+    ///         registers.publish_scheduler_hardware_list_head(
+    ///             BluetoothSchedulerHardwareListIndex::ZERO, observed.address());
+    ///     }
+    /// }
+    /// ```
     #[doc(hidden)]
     #[allow(
         unsafe_code,
@@ -482,7 +498,7 @@ impl BluetoothTaskRegisters {
     pub unsafe fn publish_scheduler_hardware_list_head(
         &mut self,
         index: BluetoothSchedulerHardwareListIndex,
-        head: BluetoothSchedulerHardwareListHead,
+        head: Option<DmaRef<BleSchedulerItem>>,
     ) -> BluetoothSchedulerHardwareListHeadPublished {
         execute_scheduler_hardware_list_head_publication(self, index, head)
     }

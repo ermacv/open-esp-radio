@@ -43,3 +43,14 @@ pub const unsafe fn placed_link<L: DmaLayout>(address: u32) -> Option<DmaRef<L>>
     // SAFETY: the caller's promise is the constructors'.
     Some(unsafe { DmaRef::new_unchecked(DmaWindowAddress::new_unchecked(address)) })
 }
+
+/// A synthetic reference recorded by a host transaction model.
+#[cfg(test)]
+#[allow(
+    unsafe_code,
+    reason = "host model addresses are recorded, never dereferenced"
+)]
+pub(crate) fn model_reference<L: DmaLayout>(address: u32) -> DmaRef<L> {
+    // SAFETY: host transaction models record this identity without accessing memory.
+    unsafe { placed_link(address) }.expect("a model layout has a nonzero CPU address")
+}

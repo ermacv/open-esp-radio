@@ -7,10 +7,9 @@
 
 #![deny(unsafe_code)]
 
-use crate::{
-    BluetoothControllerSramAddress, BluetoothDeviceTableEntryCount, BluetoothTaskRegisters,
-    device_fence,
-};
+use crate::layouts::{BleDeviceTable, DmaRef};
+
+use crate::{BluetoothDeviceTableEntryCount, BluetoothTaskRegisters, device_fence};
 
 /// Affine proof that one device-table count and first-entry address were
 /// published.
@@ -21,12 +20,12 @@ pub struct BluetoothDeviceTablePublished {
 
 trait BluetoothDeviceTableTransaction {
     fn publish_entry_count(&mut self, count: BluetoothDeviceTableEntryCount);
-    fn publish_first_entry(&mut self, first_entry: BluetoothControllerSramAddress);
+    fn publish_first_entry(&mut self, first_entry: DmaRef<BleDeviceTable>);
 }
 
 fn execute_device_table_publication(
     transaction: &mut impl BluetoothDeviceTableTransaction,
-    first_entry: BluetoothControllerSramAddress,
+    first_entry: DmaRef<BleDeviceTable>,
     count: BluetoothDeviceTableEntryCount,
 ) {
     transaction.publish_entry_count(count);
@@ -42,10 +41,11 @@ impl BluetoothDeviceTableTransaction for PacBluetoothDeviceTableTransaction<'_> 
         crate::generated::publish_bluetooth_device_table_entry_count(self.registers, count);
     }
 
-    fn publish_first_entry(&mut self, first_entry: BluetoothControllerSramAddress) {
+    fn publish_first_entry(&mut self, first_entry: DmaRef<BleDeviceTable>) {
         crate::svd::zero_based_field_write::publish_bluetooth_device_table_first_entry(
             self.registers,
-            first_entry.compressed_image(),
+            crate::generated::bluetooth_device_table_pointer_image(Some(first_entry))
+                .expect("the placed layout has a nonzero BLE encoding"),
         );
     }
 }
@@ -67,7 +67,7 @@ impl BluetoothTaskRegisters {
     )]
     pub unsafe fn publish_device_table(
         &mut self,
-        first_entry: BluetoothControllerSramAddress,
+        first_entry: DmaRef<BleDeviceTable>,
         count: BluetoothDeviceTableEntryCount,
     ) -> BluetoothDeviceTablePublished {
         device_fence();

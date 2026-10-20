@@ -2,7 +2,9 @@
 
 #![deny(unsafe_code)]
 
-use crate::{BluetoothControllerSramAddress, BluetoothTaskRegisters, device_fence};
+use crate::layouts::{BleDirectionFindingDescriptor, DmaRef};
+
+use crate::{BluetoothTaskRegisters, device_fence};
 
 /// Hardware ownership of the controller-global direction-finding descriptor.
 ///
@@ -12,12 +14,12 @@ use crate::{BluetoothControllerSramAddress, BluetoothTaskRegisters, device_fence
 /// hardware ownership is explicitly recovered by a future teardown path.
 #[must_use = "the CTE-disabled hardware baseline owns its pinned descriptor"]
 pub struct BluetoothDirectionFindingDisabledBaselinePrepared {
-    descriptor: BluetoothControllerSramAddress,
+    descriptor: DmaRef<BleDirectionFindingDescriptor>,
 }
 
 impl BluetoothDirectionFindingDisabledBaselinePrepared {
     /// Return the exact pinned descriptor claimed by buffer slot zero.
-    pub const fn descriptor(&self) -> BluetoothControllerSramAddress {
+    pub const fn descriptor(&self) -> DmaRef<BleDirectionFindingDescriptor> {
         self.descriptor
     }
 }
@@ -43,10 +45,11 @@ impl BluetoothTaskRegisters {
     )]
     pub unsafe fn prepare_direction_finding_disabled_baseline(
         &mut self,
-        descriptor: BluetoothControllerSramAddress,
+        descriptor: DmaRef<BleDirectionFindingDescriptor>,
     ) -> BluetoothDirectionFindingDisabledBaselinePrepared {
         let compressed = crate::generated::BluetoothCteSampleDescriptorPointerBits::new(
-            descriptor.compressed_image(),
+            crate::generated::bluetooth_df_descriptor_pointer_image(Some(descriptor))
+                .expect("the placed layout has a nonzero BLE encoding"),
         )
         .expect("a validated Controller SRAM address always has a low-twenty-bit image");
 

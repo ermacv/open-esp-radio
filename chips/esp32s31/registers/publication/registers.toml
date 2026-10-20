@@ -6,6 +6,7 @@ ownership = "../policy/ownership.toml"
 api = "../policy/api.toml"
 lints = "../policy/lints.toml"
 evidence = [
+    "../evidence/ble-memory.toml",
     "../evidence/policy.toml",
     "../evidence/platform.toml",
     "../evidence/vendor-rom.toml",

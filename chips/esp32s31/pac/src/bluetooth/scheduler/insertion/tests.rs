@@ -7,10 +7,7 @@ use super::{
     execute_execution_lock_publication, execute_execution_modify_list_deletion_publication,
     execute_execution_modify_publication,
 };
-use crate::{
-    BluetoothControllerSramAddress, BluetoothSchedulerBusyObservation,
-    BluetoothSchedulerHardwareListIndex,
-};
+use crate::{BluetoothSchedulerBusyObservation, BluetoothSchedulerHardwareListIndex};
 
 fn scheduler(busy: bool) -> BluetoothSchedulerBusyObservation {
     BluetoothSchedulerBusyObservation::from_busy_for_host_test(busy)
@@ -173,8 +170,7 @@ impl BluetoothSchedulerInsertionExecutionControl for Recorder {
 
 #[test]
 fn each_execution_command_is_followed_by_its_device_fence() {
-    let address =
-        BluetoothControllerSramAddress::new(0x2f00_0040).expect("test address is representable");
+    let address = crate::test_memory::reference(0x2f00_0040);
     let index = BluetoothSchedulerHardwareListIndex::new(6).expect("test list is representable");
     let request = BluetoothSchedulerExecutionLockRequest::new(address, index);
     let mut recorder = Recorder {

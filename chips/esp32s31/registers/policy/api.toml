@@ -11318,3 +11318,138 @@ name = "APPEND"
 value = 0x00800000
 description = "CSI appending enabled by hal_mac_set_csi."
 sources = ["BLOB_LIBPP_HAL_MAC_SET_CSI"]
+
+[[pointer-fields]]
+name = "bluetooth_rxlink_1_current_pointer_image"
+peripheral = "BLUETOOTH_CONTROLLER_CORE"
+register = "GLOBAL_RXLINK_1_CURRENT"
+field = "COMPRESSED_SRAM_POINTER"
+points-to = "BLE_BUFFER_HEADER"
+encoding = "ble-compressed"
+sources = ["BLOB_LIBBLE_MMGMT_HW_LISTS"]
+
+[[pointer-fields]]
+name = "bluetooth_rxlink_1_next_pointer_image"
+peripheral = "BLUETOOTH_CONTROLLER_CORE"
+register = "GLOBAL_RXLINK_1_NEXT"
+field = "COMPRESSED_SRAM_POINTER"
+points-to = "BLE_BUFFER_HEADER"
+encoding = "ble-compressed"
+sources = ["BLOB_LIBBLE_MMGMT_HW_LISTS"]
+
+[[pointer-fields]]
+name = "bluetooth_rxlink_2_current_pointer_image"
+peripheral = "BLUETOOTH_CONTROLLER_CORE"
+register = "GLOBAL_RXLINK_2_CURRENT"
+field = "COMPRESSED_SRAM_POINTER"
+points-to = "BLE_BUFFER_HEADER"
+encoding = "ble-compressed"
+sources = ["BLOB_LIBBLE_MMGMT_HW_LISTS"]
+
+[[pointer-fields]]
+name = "bluetooth_rxlink_2_next_pointer_image"
+peripheral = "BLUETOOTH_CONTROLLER_CORE"
+register = "GLOBAL_RXLINK_2_NEXT"
+field = "COMPRESSED_SRAM_POINTER"
+points-to = "BLE_BUFFER_HEADER"
+encoding = "ble-compressed"
+sources = ["BLOB_LIBBLE_MMGMT_HW_LISTS"]
+
+[[pointer-fields]]
+name = "bluetooth_rxlink_3_current_pointer_image"
+peripheral = "BLUETOOTH_CONTROLLER_CORE"
+register = "GLOBAL_RXLINK_3_CURRENT"
+field = "COMPRESSED_SRAM_POINTER"
+points-to = "BLE_BUFFER_HEADER"
+encoding = "ble-compressed"
+sources = ["BLOB_LIBBLE_MMGMT_HW_LISTS"]
+
+[[pointer-fields]]
+name = "bluetooth_rxlink_3_next_pointer_image"
+peripheral = "BLUETOOTH_CONTROLLER_CORE"
+register = "GLOBAL_RXLINK_3_NEXT"
+field = "COMPRESSED_SRAM_POINTER"
+points-to = "BLE_BUFFER_HEADER"
+encoding = "ble-compressed"
+sources = ["BLOB_LIBBLE_MMGMT_HW_LISTS"]
+
+[[pointer-fields]]
+name = "bluetooth_scheduler_head_pointer_image"
+peripheral = "BTDM_SCHEDULER_TABLE"
+register = "ENTRY%s"
+field = "HEAD_POINTER"
+points-to = "BLE_SCHEDULER_ITEM"
+encoding = "ble-compressed"
+sources = ["BLOB_LIBBTDM_SCHEDULER_HEAD_PUBLICATION"]
+
+[[pointer-fields]]
+name = "bluetooth_scheduler_lock_pointer_image"
+peripheral = "BLUETOOTH_CONTROLLER_CORE"
+register = "SCHEDULER_COMMAND_0"
+field = "COMPRESSED_SRAM_POINTER"
+points-to = "BLE_SCHEDULER_ITEM"
+encoding = "ble-compressed"
+sources = ["BLOB_LIBBTDM_SCHEDULER_INSERTION_EXECUTION_COMMANDS"]
+
+[[pointer-fields]]
+name = "bluetooth_scheduler_skip_pointer_image"
+peripheral = "BLUETOOTH_CONTROLLER_CORE"
+register = "SCHEDULER_SKIP_REQUEST"
+field = "COMPRESSED_SRAM_POINTER"
+points-to = "BLE_SCHEDULER_ITEM"
+encoding = "ble-compressed"
+sources = ["BLOB_LIBBTDM_SCHEDULER_CANCELLATION"]
+
+[[pointer-fields]]
+name = "bluetooth_scheduler_lock_modify_pointer_image"
+peripheral = "BLUETOOTH_CONTROLLER_CORE"
+register = "SCHEDULER_LOCK_MODIFY_REQUEST"
+field = "COMPRESSED_SRAM_POINTER"
+points-to = "BLE_SCHEDULER_ITEM"
+encoding = "ble-compressed"
+sources = ["BLOB_LIBBTDM_SCHEDULER_REGISTERS"]
+
+[[pointer-fields]]
+name = "bluetooth_device_table_pointer_image"
+peripheral = "BTMAC_BLE_PHY_INIT"
+register = "DEVICE_TABLE_FIRST_ENTRY"
+field = "COMPRESSED_ADDRESS"
+points-to = "BLE_DEVICE_TABLE"
+encoding = "ble-compressed"
+sources = ["BLOB_LIBBLE_DEVICE_TABLE"]
+
+[[pointer-fields]]
+name = "bluetooth_df_descriptor_pointer_image"
+peripheral = "BLE_HW_CTE_RING_CONTROL"
+register = "BUFFER_POINTER%s"
+field = "COMPRESSED_DESCRIPTOR_POINTER"
+points-to = "BLE_DIRECTION_FINDING_DESCRIPTOR"
+encoding = "ble-compressed"
+sources = ["BLOB_LIBBLE_MEMORY_DF_WORKSPACE"]
+
+[[pointer-fields]]
+name = "bluetooth_phy_resolving_list_pointer_image"
+peripheral = "BLE_HW_RESOLVING_LIST"
+register = "BASE_POINTER"
+field = "COMPRESSED_SRAM_POINTER"
+points-to = "BLE_RESOLVING_LIST"
+encoding = "ble-compressed"
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
+
+[[pointer-fields]]
+name = "bluetooth_phy_environment_member_pointer_image"
+peripheral = "BTMAC_BLE_PHY_INIT"
+register = "WORD_04A0_OPAQUE"
+field = "BITS_0_31_OPAQUE"
+points-to = "BLE_PHY_ENVIRONMENT"
+member-offset = 0x2c
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
+
+[[pointer-fields]]
+name = "bluetooth_phy_environment_tail_pointer_image"
+peripheral = "BLUETOOTH_CONTROLLER_CORE"
+register = "WORD_024C_OPAQUE"
+field = "BITS_0_31_OPAQUE"
+points-to = "BLE_PHY_ENVIRONMENT"
+member-offset = 0x4d
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]

@@ -7,10 +7,7 @@ use super::{
     execute_cancellation_observation, execute_cancellation_release, execute_cancellation_request,
     execute_skip_clear, execute_skip_observation, execute_skip_publication,
 };
-use crate::{
-    BluetoothControllerSramAddress, BluetoothSchedulerBusyObservation,
-    BluetoothSchedulerHardwareListIndex,
-};
+use crate::{BluetoothSchedulerBusyObservation, BluetoothSchedulerHardwareListIndex};
 
 fn scheduler(busy: bool) -> BluetoothSchedulerBusyObservation {
     BluetoothSchedulerBusyObservation::from_busy_for_host_test(busy)
@@ -99,8 +96,7 @@ impl BluetoothSchedulerCancellationControl for Recorder {
 
 #[test]
 fn a_skip_request_is_published_observed_and_cleared_in_order() {
-    let address =
-        BluetoothControllerSramAddress::new(0x2f00_0080).expect("test address is representable");
+    let address = crate::test_memory::reference(0x2f00_0080);
     let request = BluetoothSchedulerSkipRequest::new(address, index(0));
     let mut recorder = Recorder::new();
 

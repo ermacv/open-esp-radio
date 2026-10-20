@@ -1,0 +1,428 @@
+schema = 1
+
+[layout]
+name = "BLE_RX_PACKET_PREFIX"
+description = "RX packet prefix, common to ordinary RX and DTM: opaque producer metadata, result/RSSI and auxiliary epoch data, then the two-byte PDU header. Access only after the header completion handover."
+size = 30
+align = 1
+
+[[layout.bytes]]
+name = "BYTE_0000_OPAQUE"
+offset = 0x00
+size = 4
+access = "owned"
+description = "Observed byte range; decoded only after ownership passes to the CPU."
+
+[[layout.bytes.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+writer = "phased"
+phases = [{ name = "arm", writer = "cpu" }, { name = "complete", writer = "hardware" }]
+description = "Observed position; the physical meaning is not established."
+
+[[layout.bytes]]
+name = "BYTE_0004_OPAQUE"
+offset = 0x04
+size = 4
+access = "owned"
+description = "Observed byte range; decoded only after ownership passes to the CPU."
+
+[[layout.bytes.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.bytes]]
+name = "BYTE_0008_OPAQUE"
+offset = 0x08
+size = 4
+access = "owned"
+description = "Observed byte range; decoded only after ownership passes to the CPU."
+
+[[layout.bytes.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+writer = "phased"
+phases = [{ name = "arm", writer = "cpu" }, { name = "complete", writer = "hardware" }]
+description = "Observed position; the physical meaning is not established."
+
+[[layout.bytes]]
+name = "RESULT"
+offset = 0x0c
+size = 4
+access = "owned"
+description = "Observed byte range; decoded only after ownership passes to the CPU."
+
+[[layout.bytes.fields]]
+name = "BIT_0_OPAQUE"
+bits = "0"
+writer = "phased"
+phases = [{ name = "arm", writer = "cpu" }, { name = "complete", writer = "hardware" }]
+description = "Observed position; the physical meaning is not established."
+
+[[layout.bytes.fields]]
+name = "BIT_1_OPAQUE"
+bits = "1"
+writer = "phased"
+phases = [{ name = "arm", writer = "cpu" }, { name = "complete", writer = "hardware" }]
+description = "Observed position; the physical meaning is not established."
+
+[[layout.bytes.fields]]
+name = "BIT_2_OPAQUE"
+bits = "2"
+writer = "phased"
+phases = [{ name = "arm", writer = "cpu" }, { name = "complete", writer = "hardware" }]
+description = "Observed position; the physical meaning is not established."
+
+[[layout.bytes.fields]]
+name = "BIT_3_OPAQUE"
+bits = "3"
+writer = "phased"
+phases = [{ name = "arm", writer = "cpu" }, { name = "complete", writer = "hardware" }]
+description = "Observed position; the physical meaning is not established."
+
+[[layout.bytes.fields]]
+name = "BIT_4_OPAQUE"
+bits = "4"
+writer = "phased"
+phases = [{ name = "arm", writer = "cpu" }, { name = "complete", writer = "hardware" }]
+description = "Observed position; the physical meaning is not established."
+
+[[layout.bytes.fields]]
+name = "BITS_5_8_OPAQUE"
+bits = "8:5"
+writer = "phased"
+phases = [{ name = "arm", writer = "cpu" }, { name = "complete", writer = "hardware" }]
+description = "Observed position; the physical meaning is not established."
+
+[[layout.bytes.fields]]
+name = "BIT_9_OPAQUE"
+bits = "9"
+writer = "phased"
+phases = [{ name = "arm", writer = "cpu" }, { name = "complete", writer = "hardware" }]
+description = "Observed position; the physical meaning is not established."
+
+[[layout.bytes.fields]]
+name = "BIT_10_OPAQUE"
+bits = "10"
+writer = "phased"
+phases = [{ name = "arm", writer = "cpu" }, { name = "complete", writer = "hardware" }]
+description = "Observed position; the physical meaning is not established."
+
+[[layout.bytes.fields]]
+name = "BITS_11_23_OPAQUE"
+bits = "23:11"
+writer = "phased"
+phases = [{ name = "arm", writer = "cpu" }, { name = "complete", writer = "hardware" }]
+description = "Observed position; the physical meaning is not established."
+
+[[layout.bytes.fields]]
+name = "RSSI"
+bits = "31:24"
+writer = "phased"
+phases = [{ name = "arm", writer = "cpu" }, { name = "complete", writer = "hardware" }]
+description = "Signed controller RSSI byte. DTM does not establish a physical unit; ordinary RX reports it as dBm."
+
+[[layout.bytes]]
+name = "BYTE_0010_OPAQUE"
+offset = 0x10
+size = 4
+access = "owned"
+description = "Captured controller-time image at +0x10; its epoch and on-air interpretation remain outside this layout."
+
+[[layout.bytes.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+writer = "hardware"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.bytes]]
+name = "BYTE_0014_OPAQUE"
+offset = 0x14
+size = 4
+access = "owned"
+description = "Observed byte range; decoded only after ownership passes to the CPU."
+
+[[layout.bytes.fields]]
+name = "BITS_0_31_OPAQUE"
+bits = "31:0"
+writer = "hardware"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.bytes]]
+name = "AUXILIARY"
+offset = 0x18
+size = 4
+access = "owned"
+description = "Observed byte range; decoded only after ownership passes to the CPU."
+
+[[layout.bytes.fields]]
+name = "BITS_0_15_OPAQUE"
+bits = "15:0"
+writer = "phased"
+phases = [{ name = "arm", writer = "cpu" }, { name = "complete", writer = "hardware" }]
+description = "Observed position; the physical meaning is not established."
+
+[[layout.bytes.fields]]
+name = "BITS_16_31_OPAQUE"
+bits = "31:16"
+writer = "hardware"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.bytes]]
+name = "PDU_HEADER"
+offset = 0x1c
+size = 1
+access = "owned"
+description = "Observed byte range; decoded only after ownership passes to the CPU."
+
+[[layout.bytes.fields]]
+name = "VALUE"
+bits = "7:0"
+writer = "hardware"
+description = "The received Link Layer header octet."
+
+[[layout.bytes]]
+name = "PAYLOAD_LENGTH"
+offset = 0x1d
+size = 1
+access = "owned"
+description = "Observed byte range; decoded only after ownership passes to the CPU."
+
+[[layout.bytes.fields]]
+name = "VALUE"
+bits = "7:0"
+writer = "hardware"
+description = "Received Link Layer payload length in octets."
+
+[[review]]
+entity = "BLE_RX_PACKET_PREFIX"
+sources = ["BLOB_LIBBLE_MEMORY_RX_PREFIX"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLE_RX_PACKET_PREFIX.BYTE_0000_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_RX_PREFIX"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_RX_PACKET_PREFIX.BYTE_0000_OPAQUE.BITS_0_31_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_RX_PREFIX"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_RX_PACKET_PREFIX.BYTE_0004_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_RX_PREFIX"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_RX_PACKET_PREFIX.BYTE_0004_OPAQUE.BITS_0_31_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_RX_PREFIX"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_RX_PACKET_PREFIX.BYTE_0008_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_RX_PREFIX"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_RX_PACKET_PREFIX.BYTE_0008_OPAQUE.BITS_0_31_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_RX_PREFIX"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_RX_PACKET_PREFIX.RESULT"
+sources = ["BLOB_LIBBLE_MEMORY_RX_PREFIX"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_RX_PACKET_PREFIX.RESULT.BIT_0_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_RX_PREFIX"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_RX_PACKET_PREFIX.RESULT.BIT_1_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_RX_PREFIX"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_RX_PACKET_PREFIX.RESULT.BIT_2_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_RX_PREFIX"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_RX_PACKET_PREFIX.RESULT.BIT_3_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_RX_PREFIX"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_RX_PACKET_PREFIX.RESULT.BIT_4_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_RX_PREFIX"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_RX_PACKET_PREFIX.RESULT.BITS_5_8_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_RX_PREFIX"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_RX_PACKET_PREFIX.RESULT.BIT_9_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_RX_PREFIX"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_RX_PACKET_PREFIX.RESULT.BIT_10_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_RX_PREFIX"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_RX_PACKET_PREFIX.RESULT.BITS_11_23_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_RX_PREFIX"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_RX_PACKET_PREFIX.RESULT.RSSI"
+sources = ["BLOB_LIBBLE_MEMORY_RX_PREFIX"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_RX_PACKET_PREFIX.BYTE_0010_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_RX_PREFIX"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_RX_PACKET_PREFIX.BYTE_0010_OPAQUE.BITS_0_31_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_RX_PREFIX"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_RX_PACKET_PREFIX.BYTE_0014_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_RX_PREFIX"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_RX_PACKET_PREFIX.BYTE_0014_OPAQUE.BITS_0_31_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_RX_PREFIX"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_RX_PACKET_PREFIX.AUXILIARY"
+sources = ["BLOB_LIBBLE_MEMORY_RX_PREFIX"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_RX_PACKET_PREFIX.AUXILIARY.BITS_0_15_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_RX_PREFIX"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_RX_PACKET_PREFIX.AUXILIARY.BITS_16_31_OPAQUE"
+sources = ["BLOB_LIBBLE_MEMORY_RX_PREFIX"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_RX_PACKET_PREFIX.PDU_HEADER"
+sources = ["BLOB_LIBBLE_MEMORY_RX_PREFIX"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_RX_PACKET_PREFIX.PDU_HEADER.VALUE"
+sources = ["BLOB_LIBBLE_MEMORY_RX_PREFIX"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_RX_PACKET_PREFIX.PAYLOAD_LENGTH"
+sources = ["BLOB_LIBBLE_MEMORY_RX_PREFIX"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_RX_PACKET_PREFIX.PAYLOAD_LENGTH.VALUE"
+sources = ["BLOB_LIBBLE_MEMORY_RX_PREFIX"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"

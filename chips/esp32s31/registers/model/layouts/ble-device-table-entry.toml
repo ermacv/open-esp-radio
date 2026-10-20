@@ -1,0 +1,141 @@
+schema = 1
+
+[layout]
+name = "BLE_DEVICE_TABLE_ENTRY"
+description = "One eight-byte device-table entry shared by the filter accept list and resolving list. Address bytes are least significant first."
+size = 8
+align = 4
+placement = ["dma-window"]
+
+[[layout.words]]
+name = "FLAGS_AND_ADDRESS"
+offset = 0x00
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "RESOLVING_LIST_MEMBER"
+bits = "0"
+writer = "cpu"
+description = "Entry belongs to the resolving list."
+
+[[layout.words.fields]]
+name = "ACCEPT_LIST_MEMBER"
+bits = "1"
+writer = "cpu"
+description = "Entry belongs to the filter accept list."
+
+[[layout.words.fields]]
+name = "BITS_2_13_OPAQUE"
+bits = "13:2"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words.fields]]
+name = "RANDOM"
+bits = "14"
+writer = "cpu"
+description = "Address type is random."
+
+[[layout.words.fields]]
+name = "VALID"
+bits = "15"
+writer = "cpu"
+description = "Entry is valid."
+
+[[layout.words.fields]]
+name = "ADDRESS_LOW"
+bits = "31:16"
+writer = "cpu"
+description = "First two address bytes."
+
+[[layout.words]]
+name = "ADDRESS_HIGH"
+offset = 0x04
+access = "shared"
+description = "Observed word position; unassigned bits retain their exact image."
+
+[[layout.words.fields]]
+name = "VALUE"
+bits = "31:0"
+writer = "cpu"
+description = "Remaining four address bytes."
+
+[[review]]
+entity = "BLE_DEVICE_TABLE_ENTRY"
+sources = ["BLOB_LIBBLE_DEVICE_TABLE"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLE_DEVICE_TABLE_ENTRY.FLAGS_AND_ADDRESS"
+sources = ["BLOB_LIBBLE_DEVICE_TABLE"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_DEVICE_TABLE_ENTRY.FLAGS_AND_ADDRESS.RESOLVING_LIST_MEMBER"
+sources = ["BLOB_LIBBLE_DEVICE_TABLE"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_DEVICE_TABLE_ENTRY.FLAGS_AND_ADDRESS.ACCEPT_LIST_MEMBER"
+sources = ["BLOB_LIBBLE_DEVICE_TABLE"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_DEVICE_TABLE_ENTRY.FLAGS_AND_ADDRESS.BITS_2_13_OPAQUE"
+sources = ["BLOB_LIBBLE_DEVICE_TABLE"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BLE_DEVICE_TABLE_ENTRY.FLAGS_AND_ADDRESS.RANDOM"
+sources = ["BLOB_LIBBLE_DEVICE_TABLE"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_DEVICE_TABLE_ENTRY.FLAGS_AND_ADDRESS.VALID"
+sources = ["BLOB_LIBBLE_DEVICE_TABLE"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_DEVICE_TABLE_ENTRY.FLAGS_AND_ADDRESS.ADDRESS_LOW"
+sources = ["BLOB_LIBBLE_DEVICE_TABLE"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_DEVICE_TABLE_ENTRY.ADDRESS_HIGH"
+sources = ["BLOB_LIBBLE_DEVICE_TABLE"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[review]]
+entity = "BLE_DEVICE_TABLE_ENTRY.ADDRESS_HIGH.VALUE"
+sources = ["BLOB_LIBBLE_DEVICE_TABLE"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"

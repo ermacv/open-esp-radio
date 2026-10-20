@@ -45,8 +45,8 @@ pub use pac_api::{
     FixedRegisterSequenceStep, FixedRegisterWrite, FlagDomain, FlagValue, FullRegisterRead,
     FullRegisterValue, FullRegisterWrite, IndirectRegisterField, IndirectRegisterFieldDomain,
     InterruptSnapshot, MaskedRegisterModify, OpaqueDomain, OwnershipPartition, PacApiExposure,
-    PacApiOptions, PacApiPack, PartitionImageRead, RegisterImageRead, RegisterImageWrite,
-    W1cRegisterSnapshot, ZeroBasedFieldWrite, ZeroRegisterWrite,
+    PacApiOptions, PacApiPack, PartitionImageRead, PointerField, RegisterImageRead,
+    RegisterImageWrite, W1cRegisterSnapshot, ZeroBasedFieldWrite, ZeroRegisterWrite,
 };
 pub use pac_bindings::{generate_binding_index, validate_pac_crate_name};
 pub use partition_image::PartitionRegister;
@@ -313,6 +313,25 @@ pub fn render_dma_linker_fragment(
 /// Every pointer register write of `policy` points to one of `layouts` that
 /// a `DmaRef` may refer to; a publication without layouts has none.
 pub fn validate_pointer_writes(layouts: &[MemoryLayout], policy: &PacApiPack) -> Result<()> {
+    for pointer in &policy.pointer_fields {
+        let layout = layouts
+            .iter()
+            .find(|layout| layout.name == pointer.points_to && layout.is_dma_target());
+        if layout.is_none() {
+            return Err(Error::message(format!(
+                "PAC pointer field {:?} points to {}, which is not a DMA layout of this model",
+                pointer.name, pointer.points_to
+            )));
+        }
+        if layout.is_some_and(|layout| pointer.member_offset >= layout.size)
+            || (pointer.encoding.is_some() && !pointer.member_offset.is_multiple_of(4))
+        {
+            return Err(Error::message(format!(
+                "PAC pointer field {:?} has an invalid member offset",
+                pointer.name
+            )));
+        }
+    }
     for operation in &policy.full_register_writes {
         if let FullRegisterValue::PointsTo(target) = operation.value()?
             && !layouts

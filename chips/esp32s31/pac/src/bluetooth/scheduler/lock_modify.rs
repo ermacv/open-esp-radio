@@ -8,22 +8,24 @@
 
 #![deny(unsafe_code)]
 
+use crate::layouts::{BleSchedulerItem, DmaRef};
+
 use crate::{
-    BluetoothControllerSramAddress, BluetoothInterruptRegisters,
-    BluetoothSchedulerHardwareListIndex, BluetoothTaskRegisters, device_fence,
+    BluetoothInterruptRegisters, BluetoothSchedulerHardwareListIndex, BluetoothTaskRegisters,
+    device_fence,
 };
 
 /// One validated scheduler insert-with-lock-modify request.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct BluetoothSchedulerLockModifyRequest {
-    address: BluetoothControllerSramAddress,
+    address: DmaRef<BleSchedulerItem>,
     hardware_list_index: BluetoothSchedulerHardwareListIndex,
 }
 
 impl BluetoothSchedulerLockModifyRequest {
     /// Bind one controller address to its scheduler hardware list.
     pub const fn new(
-        address: BluetoothControllerSramAddress,
+        address: DmaRef<BleSchedulerItem>,
         hardware_list_index: BluetoothSchedulerHardwareListIndex,
     ) -> Self {
         Self {
@@ -33,7 +35,7 @@ impl BluetoothSchedulerLockModifyRequest {
     }
 
     /// Return the validated CPU address without granting dereference access.
-    pub const fn address(self) -> BluetoothControllerSramAddress {
+    pub const fn address(self) -> DmaRef<BleSchedulerItem> {
         self.address
     }
 
@@ -172,7 +174,7 @@ impl BluetoothSchedulerLockModifyPublished {
 trait BluetoothSchedulerLockModifyControl {
     fn clear_hardware_list_index(&mut self);
     fn publish_hardware_list_index(&mut self, index: BluetoothSchedulerHardwareListIndex);
-    fn publish_request(&mut self, address: BluetoothControllerSramAddress);
+    fn publish_request(&mut self, address: DmaRef<BleSchedulerItem>);
     fn order_after_publication(&mut self);
 }
 
@@ -196,10 +198,11 @@ impl BluetoothSchedulerLockModifyControl for HardwareBluetoothSchedulerLockModif
         );
     }
 
-    fn publish_request(&mut self, address: BluetoothControllerSramAddress) {
+    fn publish_request(&mut self, address: DmaRef<BleSchedulerItem>) {
         crate::svd::zero_based_field_write::publish_bluetooth_scheduler_lock_modify_request(
             self.registers,
-            address.compressed_image(),
+            crate::generated::bluetooth_scheduler_lock_modify_pointer_image(Some(address))
+                .expect("the placed layout has a nonzero BLE encoding"),
             true,
         );
     }

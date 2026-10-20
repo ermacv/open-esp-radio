@@ -1,10 +1,11 @@
+use crate::layouts::{BleSchedulerItem, DmaRef};
 use std::vec::Vec;
 
 use super::{
     BluetoothSchedulerLockModifyControl, BluetoothSchedulerLockModifyObservation,
     BluetoothSchedulerLockModifyRequest, execute_scheduler_lock_modify_publication,
 };
-use crate::{BluetoothControllerSramAddress, BluetoothSchedulerHardwareListIndex};
+use crate::BluetoothSchedulerHardwareListIndex;
 
 #[test]
 fn wait_requires_busy_and_start_simultaneously() {
@@ -40,7 +41,7 @@ fn result_projection_uses_idle_zero_or_busy_result_nibble() {
 enum Operation {
     ClearHardwareListIndex,
     PublishHardwareListIndex(BluetoothSchedulerHardwareListIndex),
-    PublishRequest(BluetoothControllerSramAddress),
+    PublishRequest(DmaRef<BleSchedulerItem>),
     DeviceFence,
 }
 
@@ -58,7 +59,7 @@ impl BluetoothSchedulerLockModifyControl for Recorder {
             .push(Operation::PublishHardwareListIndex(index));
     }
 
-    fn publish_request(&mut self, address: BluetoothControllerSramAddress) {
+    fn publish_request(&mut self, address: DmaRef<BleSchedulerItem>) {
         self.operations.push(Operation::PublishRequest(address));
     }
 
@@ -69,8 +70,7 @@ impl BluetoothSchedulerLockModifyControl for Recorder {
 
 #[test]
 fn publication_uses_two_fresh_rmw_edges_before_request_and_fence() {
-    let address =
-        BluetoothControllerSramAddress::new(0x2f00_0040).expect("test address is representable");
+    let address = crate::test_memory::reference(0x2f00_0040);
     let index =
         BluetoothSchedulerHardwareListIndex::new(6).expect("test list index is representable");
     let request = BluetoothSchedulerLockModifyRequest::new(address, index);

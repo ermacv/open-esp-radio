@@ -11,22 +11,24 @@
 
 #![deny(unsafe_code)]
 
+use crate::layouts::{BleSchedulerItem, DmaRef};
+
 use crate::{
-    BluetoothControllerSramAddress, BluetoothInterruptRegisters, BluetoothSchedulerBusyObservation,
+    BluetoothInterruptRegisters, BluetoothSchedulerBusyObservation,
     BluetoothSchedulerHardwareListIndex, BluetoothTaskRegisters, device_fence,
 };
 
 /// Validated listed item and its hardware list for one skip request.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct BluetoothSchedulerSkipRequest {
-    address: BluetoothControllerSramAddress,
+    address: DmaRef<BleSchedulerItem>,
     hardware_list_index: BluetoothSchedulerHardwareListIndex,
 }
 
 impl BluetoothSchedulerSkipRequest {
     /// Bind one listed item to the hardware list that holds it.
     pub const fn new(
-        address: BluetoothControllerSramAddress,
+        address: DmaRef<BleSchedulerItem>,
         hardware_list_index: BluetoothSchedulerHardwareListIndex,
     ) -> Self {
         Self {
@@ -36,7 +38,7 @@ impl BluetoothSchedulerSkipRequest {
     }
 
     /// Listed item address without dereference authority.
-    pub const fn address(self) -> BluetoothControllerSramAddress {
+    pub const fn address(self) -> DmaRef<BleSchedulerItem> {
         self.address
     }
 
@@ -167,7 +169,8 @@ impl BluetoothSchedulerCancellationControl for HardwareBluetoothSchedulerCancell
     fn publish_skip(&mut self, request: BluetoothSchedulerSkipRequest) {
         crate::svd::zero_based_field_write::publish_bluetooth_scheduler_skip_request(
             self.registers,
-            request.address().compressed_image(),
+            crate::generated::bluetooth_scheduler_skip_pointer_image(Some(request.address()))
+                .expect("the placed layout has a nonzero BLE encoding"),
             request.hardware_list_index().get(),
             true,
         );

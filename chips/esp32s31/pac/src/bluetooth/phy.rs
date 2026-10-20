@@ -8,13 +8,10 @@
 
 #![deny(unsafe_code)]
 
-use crate::{
-    BluetoothControllerSramAddress, BluetoothTaskRegisters, SharedRadioRegisters, device_fence,
-};
+use crate::layouts::{BlePhyEnvironment, BleResolvingList, DmaRef};
 
-/// Environment member whose raw address the transaction publishes at
-/// `0x201018a0`.
-const ENVIRONMENT_MEMBER_OFFSET: u32 = 0x2c;
+use crate::{BluetoothTaskRegisters, SharedRadioRegisters, device_fence};
+
 /// Last environment member, whose raw address the transaction publishes at
 /// `0x2010124c`.
 const ENVIRONMENT_LAST_OFFSET: u32 = 0x4d;
@@ -111,8 +108,8 @@ impl BluetoothPhyEnvironmentAddress {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct BluetoothPhyRegisterInitInputs {
     private_timing_source_byte: u8,
-    environment: BluetoothPhyEnvironmentAddress,
-    resolving_list: BluetoothControllerSramAddress,
+    environment: DmaRef<BlePhyEnvironment>,
+    resolving_list: DmaRef<BleResolvingList>,
     set_branch_control_0470_bit_18: bool,
     configuration_word_40: u32,
 }
@@ -127,8 +124,8 @@ impl BluetoothPhyRegisterInitInputs {
     /// prove allocation, contents, lifetime, or exclusive ownership of either
     /// object.
     pub const fn normal_controller_profile(
-        environment: BluetoothPhyEnvironmentAddress,
-        resolving_list: BluetoothControllerSramAddress,
+        environment: DmaRef<BlePhyEnvironment>,
+        resolving_list: DmaRef<BleResolvingList>,
     ) -> Self {
         Self {
             private_timing_source_byte: NORMAL_PROFILE_PRIVATE_TIMING_SOURCE_BYTE,
@@ -243,10 +240,18 @@ impl BluetoothTaskRegisters {
         inputs: BluetoothPhyRegisterInitInputs,
     ) {
         let timing_byte = inputs.private_timing_source_byte.wrapping_sub(1);
-        let environment = inputs.environment.address();
-        let environment_member = environment + ENVIRONMENT_MEMBER_OFFSET;
-        let environment_tail = environment + ENVIRONMENT_LAST_OFFSET;
-        let resolving_list = inputs.resolving_list.compressed_image();
+        let environment_member = crate::generated::bluetooth_phy_environment_member_pointer_image(
+            Some(inputs.environment),
+        )
+        .expect("the placed PHY environment contains its published member");
+        let environment_tail = crate::generated::bluetooth_phy_environment_tail_pointer_image(
+            Some(inputs.environment),
+        )
+        .expect("the placed PHY environment contains its published tail");
+        let resolving_list = crate::generated::bluetooth_phy_resolving_list_pointer_image(Some(
+            inputs.resolving_list,
+        ))
+        .expect("a placed resolving list is encodable");
 
         let bluetooth = &self.bluetooth;
         let btmac = &bluetooth.btmac_ble_phy_init;

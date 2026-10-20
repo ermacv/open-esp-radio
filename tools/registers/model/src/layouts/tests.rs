@@ -285,6 +285,30 @@ fn a_reviewed_word_layout_and_byte_layout_load() {
 }
 
 #[test]
+fn a_positional_review_keeps_a_field_opaque_without_claiming_its_meaning() {
+    let node = NODE.replace(
+        "accuracy = \"exact\"\ncompleteness = \"unknown\"",
+        "accuracy = \"positional\"\ncompleteness = \"unknown\"",
+    );
+    let model = load(&[("node.toml", &node)]).expect("a positional opaque-field review is valid");
+    let review = model.layouts()[0]
+        .review
+        .iter()
+        .find(|review| review.entity == "NODE.CONTROL.BIT_29_OPAQUE")
+        .expect("opaque field review retained");
+    assert_eq!(
+        review.accuracy,
+        Some(oer_registers_contracts::FactAccuracy::Positional)
+    );
+    assert_eq!(
+        review.completeness,
+        Some(oer_registers_contracts::FactCompleteness::Unknown)
+    );
+    let rust = super::render(model.layouts(), &regions()).expect("render positional review");
+    assert!(rust.contains("Opaque: meaning not established."));
+}
+
+#[test]
 fn the_model_lists_its_layout_files_as_inputs() {
     let directory = tempfile::tempdir().unwrap();
     fs::write(directory.path().join("device.toml"), DEVICE).unwrap();

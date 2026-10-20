@@ -489,8 +489,8 @@ fn parse_field(kind: LayoutKind, unit_size: u32, source: FieldSource) -> Result<
         )));
     }
     let width = high - low + 1;
-    if source.encoding.is_some() && source.points_to.is_none() {
-        return Err(Error::message("encoding requires points-to"));
+    if source.encoding.is_some() && source.points_to.is_none() && source.placement.is_empty() {
+        return Err(Error::message("encoding requires placement or points-to"));
     }
     if !source.placement.is_empty() || source.points_to.is_some() {
         let expected_width = if source.encoding.is_some() { 20 } else { 32 };
@@ -1007,12 +1007,17 @@ fn render_addresses(output: &mut String, layouts: &[MemoryLayout]) {
         .any(|field| field.encoding == Some(PointerEncoding::BleCompressed))
     {
         output.push_str(
-            "impl<L: DmaLayout> DmaRef<L> {\n\
+            "impl DmaWindowAddress {\n\
             /// The nonzero BLE word index, if the address is encodable.\n\
             pub const fn ble_compressed(self) -> Option<u32> {\n\
-            let address = self.bits();\n\
+            let address = self.get();\n\
             let index = (address >> 2) & 0x000f_ffff;\n\
             if address & 0xffc0_0003 != 0x2f00_0000 || index == 0 { None } else { Some(index) }\n\
+            }\n}\n\
+            impl<L: DmaLayout> DmaRef<L> {\n\
+            /// The nonzero BLE word index, if the address is encodable.\n\
+            pub const fn ble_compressed(self) -> Option<u32> {\n\
+            self.address().ble_compressed()\n\
             }\n}\n",
         );
     }
@@ -1263,12 +1268,6 @@ fn render_field(
     }
     if field.is_address() {
         if field.encoding == Some(PointerEncoding::BleCompressed) {
-            let target = camel(
-                field
-                    .points_to
-                    .as_deref()
-                    .expect("validated pointer target"),
-            );
             let low = field.low;
             let _ = writeln!(
                 output,
@@ -1280,17 +1279,31 @@ fn render_field(
                 }}\n"
             );
             if builders {
+                let (parameter, index) = match &field.points_to {
+                    Some(target) => (
+                        format!("Option<DmaRef<{}>>", camel(target)),
+                        "match value { None => 0, Some(reference) => match reference.ble_compressed() { Some(index) => index, None => return None } }",
+                    ),
+                    None => (
+                        "DmaWindowAddress".to_owned(),
+                        "match value.ble_compressed() { Some(index) => index, None => return None }",
+                    ),
+                };
                 let _ = writeln!(
                     output,
-                    "    /// Set a nullable BLE link, preserving the other fields.\n\
-                    pub const fn with_{name}(self, value: Option<DmaRef<{target}>>) -> Option<Self> {{\n\
-                    let index = match value {{\n\
-                    None => 0,\n\
-                    Some(reference) => match reference.ble_compressed() {{ Some(index) => index, None => return None }},\n\
-                    }};\n\
+                    "    /// Set a BLE pointer, preserving the other fields; reject an unencodable address.\n\
+                    pub const fn with_{name}(self, value: {parameter}) -> Option<Self> {{\n\
+                    let index = {index};\n\
                     Some(Self((self.0 & 0x{keep:x}) | (index << {low})))\n\
                     }}\n"
                 );
+                if field.points_to.is_none() {
+                    let _ = writeln!(
+                        output,
+                        "    /// Clear the buffer pointer, preserving the other fields.\n\
+                        pub const fn without_{name}(self) -> Self {{ Self(self.0 & 0x{keep:x}) }}\n"
+                    );
+                }
             }
             return;
         }

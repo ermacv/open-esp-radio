@@ -3,11 +3,11 @@ use oer_esp32s31_hal::bluetooth::{
     BluetoothDeviceTableEntryCount, ControllerHal, DeviceTablePublication, RxChainHead,
     RxMemoryListPublished,
 };
-use oer_esp32s31_hal::types::BluetoothControllerSramAddress;
+use oer_esp32s31_hal::layouts::{BleDeviceTable, DmaRef};
 
 // The memory crate's codec vouches for the storage, in an unsafe block.
 pub fn vouched(
-    first: BluetoothControllerSramAddress,
+    first: DmaRef<BleDeviceTable>,
     count: BluetoothDeviceTableEntryCount,
 ) -> DeviceTablePublication {
     // SAFETY: the case only checks that the constructor needs `unsafe`.
@@ -17,7 +17,7 @@ pub fn vouched(
 // Safe code does not vouch for storage.
 #[cfg(ui_reject)]
 pub fn unvouched(
-    first: BluetoothControllerSramAddress,
+    first: DmaRef<BleDeviceTable>,
     count: BluetoothDeviceTableEntryCount,
 ) -> DeviceTablePublication {
     DeviceTablePublication::new(first, count) // ui-error: E0133

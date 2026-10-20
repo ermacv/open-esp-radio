@@ -218,7 +218,9 @@ impl DirectionFindingWorkspaceCpuOwned {
         // reaches only through volatile accesses.
         unsafe {
             oer_esp32s31_hal::bluetooth::DirectionFindingDescriptor::bind(
-                self.binding.disabled_cte_descriptor_address(),
+                crate::layout_reference::controller_reference(
+                    self.binding.disabled_cte_descriptor_address().address(),
+                ),
             )
         }
     }

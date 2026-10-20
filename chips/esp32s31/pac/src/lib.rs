@@ -4,6 +4,9 @@
 #[cfg(test)]
 extern crate std;
 
+#[cfg(test)]
+mod test_memory;
+
 pub(crate) use modem::coex;
 
 pub(crate) use phy::{baseband, cfr};
@@ -39,7 +42,7 @@ pub use generated::MacInterruptMask;
 
 pub use generated::WifiRxCsiControlMask;
 /// Memory layouts the radio hardware reads and writes in RAM: the Wi-Fi DMA
-/// descriptors and the RX-control metadata, generated from the register
+/// descriptors, RX-control metadata and BLE controller structures, generated from the register
 /// model's `layouts/` (`docs/hardware-memory.md`).
 pub use generated::layouts;
 

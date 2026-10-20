@@ -1,7 +1,6 @@
 use super::{
-    BluetoothControllerSramAddress, BluetoothSchedulerHardwareListHead,
-    BluetoothSchedulerHardwareListHeadControl, BluetoothSchedulerHardwareListHeadError,
-    BluetoothSchedulerHardwareListHeadObservationControl,
+    BluetoothSchedulerHardwareListHead, BluetoothSchedulerHardwareListHeadControl,
+    BluetoothSchedulerHardwareListHeadError, BluetoothSchedulerHardwareListHeadObservationControl,
     BluetoothSchedulerHardwareListHeadRetirementDisposition, BluetoothSchedulerHardwareListIndex,
     BluetoothSchedulerRunEventControl, classify_scheduler_hardware_list_head_retirement,
     execute_scheduler_hardware_list_head_observation,
@@ -55,8 +54,12 @@ impl BluetoothSchedulerHardwareListHeadControl for PublicationRecorder {
     fn publish_head(
         &mut self,
         index: BluetoothSchedulerHardwareListIndex,
-        head: BluetoothSchedulerHardwareListHead,
+        head: Option<crate::layouts::DmaRef<crate::layouts::BleSchedulerItem>>,
     ) {
+        let head = head.map_or(BluetoothSchedulerHardwareListHead::empty(), |reference| {
+            BluetoothSchedulerHardwareListHead::from_address(reference)
+                .expect("model head is encodable")
+        });
         self.operations
             .push(PublicationOperation::Publish { index, head });
     }
@@ -111,36 +114,34 @@ fn scheduler_run_event_clears_stale_source_before_enabling_it() {
 
 #[test]
 fn non_empty_head_cannot_alias_the_empty_scheduler_state() {
-    let empty_image = BluetoothControllerSramAddress::new(0x2f00_0000)
-        .expect("controller SRAM window base is representable");
+    let empty_image = crate::test_memory::reference(0x2f00_0000);
     assert_eq!(
         BluetoothSchedulerHardwareListHead::from_address(empty_image),
         Err(BluetoothSchedulerHardwareListHeadError::EncodesEmptyHead)
     );
 
-    let item = BluetoothControllerSramAddress::new(0x2f00_0004)
-        .expect("first non-empty item address is representable");
+    let item = crate::test_memory::reference(0x2f00_0004);
     assert_eq!(
         BluetoothSchedulerHardwareListHead::from_address(item)
             .expect("non-empty controller address is a valid list head")
-            .address(),
-        Some(item)
+            .address()
+            .map(|address| address.address()),
+        Some(item.bits())
     );
 }
 
 #[test]
 fn descriptor_visibility_precedes_head_publication() {
     let index = BluetoothSchedulerHardwareListIndex::ZERO;
-    let head = BluetoothSchedulerHardwareListHead::from_address(
-        BluetoothControllerSramAddress::new(0x2f00_0100)
-            .expect("test item lies in controller SRAM"),
-    )
-    .expect("test item does not encode the empty head");
+    let reference = crate::test_memory::reference(0x2f00_0100);
+    let head = BluetoothSchedulerHardwareListHead::from_address(reference)
+        .expect("test item does not encode the empty head");
     let mut recorder = PublicationRecorder {
         operations: std::vec::Vec::new(),
     };
 
-    let published = execute_scheduler_hardware_list_head_publication(&mut recorder, index, head);
+    let published =
+        execute_scheduler_hardware_list_head_publication(&mut recorder, index, Some(reference));
 
     assert_eq!(published.index(), index);
     assert_eq!(published.head(), head);
@@ -177,15 +178,13 @@ fn post_completion_head_observation_is_fenced_and_bounded() {
 
 #[test]
 fn head_retirement_distinguishes_empty_retained_and_changed_identity() {
-    let expected = BluetoothSchedulerHardwareListHead::from_address(
-        BluetoothControllerSramAddress::new(0x2f00_0100)
-            .expect("expected item lies in controller SRAM"),
-    )
+    let expected = BluetoothSchedulerHardwareListHead::from_address(crate::test_memory::reference(
+        0x2f00_0100,
+    ))
     .expect("expected item is a nonempty head");
-    let changed = BluetoothSchedulerHardwareListHead::from_address(
-        BluetoothControllerSramAddress::new(0x2f00_0200)
-            .expect("changed item lies in controller SRAM"),
-    )
+    let changed = BluetoothSchedulerHardwareListHead::from_address(crate::test_memory::reference(
+        0x2f00_0200,
+    ))
     .expect("changed item is a nonempty head");
 
     assert_eq!(

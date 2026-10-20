@@ -27,7 +27,10 @@ fn compressed_controller_address_rejects_unrepresentable_values() {
     assert_eq!(last.compressed_image(), 0x000f_ffff);
     assert_eq!(BluetoothMemoryListPointerImage::Zero.compressed(), 0);
     assert_eq!(
-        BluetoothMemoryListPointerImage::Address(last).compressed(),
-        0x000f_ffff
+        BluetoothMemoryListPointerImage::Address(crate::test_memory::reference(0x2f00_0040))
+            .compressed(),
+        BluetoothControllerSramAddress::new(0x2f00_0040)
+            .expect("model header")
+            .compressed_image()
     );
 }
