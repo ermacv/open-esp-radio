@@ -2,14 +2,15 @@
 //! returns what it received.
 
 use core::ptr::NonNull;
-use std::sync::atomic::{AtomicUsize, Ordering};
 
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 use oer_embassy_net::{
     ExternalRxOrigin, ExternalRxRefusal, NetworkInterfaceId, OwnedEndpointResources,
     OwnedRxPublisher, RxEnqueueError,
 };
-use oer_memory::{ExternalRxBuffer, ExternalRxHandoffPool, ExternalRxRadioLease};
+use oer_memory::{
+    ExternalRxHandoffPool, ExternalRxRadioLease, ExternalRxReturn, ExternalRxReturnState,
+};
 use xarxa_driver::{PacketBuf, PacketBufAllocator, PacketPool, PacketPoolStorage};
 
 const SLOTS: usize = 32;
@@ -24,24 +25,10 @@ const ETHERNET_OFFSET: usize = 34 - 14 + 8;
 #[repr(C, align(4))]
 struct DmaBuffer([u8; CAPACITY]);
 
-/// Simulated RX DMA ring: counts buffers the handoff pool gave back.
-struct DmaRing {
-    returned: AtomicUsize,
-}
-
-// SAFETY: touches only the ring's atomic counter, from any thread.
-#[allow(unsafe_code, reason = "test DMA owner release edge")]
-unsafe fn return_to_ring(owner: NonNull<()>, _index: usize) {
-    // SAFETY: every buffer is constructed with a leaked `DmaRing` as owner.
-    let ring = unsafe { owner.cast::<DmaRing>().as_ref() };
-    ring.returned.fetch_add(1, Ordering::Relaxed);
-}
-
 struct Radio {
-    ring: &'static DmaRing,
+    returns: Vec<&'static ExternalRxReturn>,
     pool: &'static ExternalRxHandoffPool<CAPACITY, SLOTS>,
     origin: &'static ExternalRxOrigin<CAPACITY, SLOTS>,
-    detached: usize,
 }
 
 /// Each test binds its own statics: an origin names its own address.
@@ -51,12 +38,9 @@ macro_rules! radio {
         static ORIGIN: ExternalRxOrigin<CAPACITY, SLOTS> =
             ExternalRxOrigin::new(&ORIGIN, &POOL, RESERVE);
         Radio {
-            ring: Box::leak(Box::new(DmaRing {
-                returned: AtomicUsize::new(0),
-            })),
+            returns: Vec::new(),
             pool: &POOL,
             origin: &ORIGIN,
-            detached: 0,
         }
     }};
 }
@@ -79,22 +63,15 @@ impl Radio {
         offset: usize,
         marker: u8,
     ) -> Option<ExternalRxRadioLease<'static, CAPACITY>> {
-        let index = self.detached;
-        self.detached += 1;
+        let index = self.returns.len();
+        let ret = &*Box::leak(Box::new(ExternalRxReturn::new()));
+        self.returns.push(ret);
         let buffer: &'static mut DmaBuffer = Box::leak(Box::new(DmaBuffer([0; CAPACITY])));
         // SAFETY (test): the leaked buffer is used only through this binding
         // until the pool returns it.
         #[allow(unsafe_code, reason = "test DMA owner detaches its buffer")]
-        let buffer = unsafe {
-            ExternalRxBuffer::new(
-                NonNull::from(buffer).cast::<u8>(),
-                CAPACITY,
-                CAPACITY,
-                NonNull::from(self.ring).cast(),
-                index,
-                return_to_ring,
-            )
-        };
+        let buffer =
+            unsafe { ret.detach(NonNull::from(buffer).cast::<u8>(), CAPACITY, CAPACITY) }.unwrap();
         let mut lease = self.pool.try_claim_radio(buffer, index % SLOTS).ok()?;
         lease.with_frame(|bytes| {
             let frame = &mut bytes[offset..offset + FRAME_LEN];
@@ -138,6 +115,13 @@ impl Radio {
         }
     }
 
+    fn returned(&self) -> usize {
+        self.returns
+            .iter()
+            .filter(|ret| ret.state() == ExternalRxReturnState::Returned)
+            .count()
+    }
+
     fn free_slots(&self) -> usize {
         SLOTS - self.pool.claimed_slots()
     }
@@ -179,12 +163,12 @@ fn a_consumer_which_never_drains_stops_at_the_cap_and_management_still_flows() {
         assert!(counters.held <= CAP);
         assert!(radio.free_slots() >= RESERVE, "frame {sequence}");
         // Management keeps its slots and returns them to the ring.
-        let returned = radio.ring.returned.load(Ordering::Relaxed);
+        let returned = radio.returned();
         assert!(
             radio.management(),
             "management frame {sequence} found no slot"
         );
-        assert_eq!(radio.ring.returned.load(Ordering::Relaxed), returned + 1);
+        assert_eq!(radio.returned(), returned + 1);
     }
 
     let counters = radio.origin.counters();
@@ -209,7 +193,7 @@ fn a_consumer_which_never_drains_stops_at_the_cap_and_management_still_flows() {
     drop(socket);
     assert_eq!(radio.origin.counters().held, 0);
     assert_eq!(radio.pool.claimed_slots(), 0);
-    assert_eq!(radio.ring.returned.load(Ordering::Relaxed), radio.detached);
+    assert_eq!(radio.returned(), radio.returns.len());
     // The released slots are adopted again.
     assert_eq!(
         radio.receive(&publisher, ETHERNET_OFFSET, 1),

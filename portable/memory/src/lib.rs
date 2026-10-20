@@ -48,7 +48,7 @@ pub use pinned_tx::{
 };
 pub use rx_external_handoff::{
     ExternalRxAdoption, ExternalRxBuffer, ExternalRxHandoffPool, ExternalRxNetworkLease,
-    ExternalRxRadioLease,
+    ExternalRxRadioLease, ExternalRxReturn, ExternalRxReturnState,
 };
 pub use rx_handoff::{RxHandoffPool, RxNetworkLease, RxRadioLease};
 pub use static_ref::StaticRef;
