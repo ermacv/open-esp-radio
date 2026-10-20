@@ -305,35 +305,27 @@ async fn yield_now() {
     .await;
 }
 
-/// How long a service test may take before its watchdog fails it.
-const WATCHDOG: std::time::Duration = std::time::Duration::from_secs(30);
-
-/// Poll `future` with a waker that does nothing until it is ready, under a
-/// watchdog: a loop inside one poll never returns to the poll count, so a
-/// watchdog thread aborts the test process once `WATCHDOG` passed, and a
-/// loop is a failed test, not a hang. (A panic in the watchdog's own
-/// thread would not fail the test.)
+/// Poll with a test-owned watchdog clock. Each pending poll advances it by
+/// one millisecond; the model's clock remains under the scenario's control.
 fn block_on<F: Future>(future: F) -> F::Output {
-    let (done, watched) = std::sync::mpsc::channel::<()>();
-    let test = std::string::String::from(std::thread::current().name().unwrap_or("a test"));
-    let watchdog = std::thread::spawn(move || {
-        if let Err(std::sync::mpsc::RecvTimeoutError::Timeout) = watched.recv_timeout(WATCHDOG) {
-            std::eprintln!("watchdog: {test} did not end within {WATCHDOG:?}");
-            std::process::abort();
-        }
-    });
+    use oer_time::Timer as _;
+
+    let watchdog = VirtualClock::<1>::new();
+    let mut expired = core::pin::pin!(watchdog.wait_for(Duration::from_secs(30)));
     let mut future = core::pin::pin!(future);
     let mut context = core::task::Context::from_waker(Waker::noop());
-    let mut value = None;
-    for _ in 0..100_000 {
-        if let Poll::Ready(ready) = future.as_mut().poll(&mut context) {
-            value = Some(ready);
-            break;
+    loop {
+        if let Poll::Ready(value) = future.as_mut().poll(&mut context) {
+            return value;
         }
+        assert!(
+            expired.as_mut().poll(&mut context).is_pending(),
+            "the test never ended"
+        );
+        watchdog
+            .advance(Duration::from_millis(1))
+            .expect("watchdog time fits");
     }
-    let _ = done.send(());
-    let _ = watchdog.join();
-    value.expect("the test never ended")
 }
 
 /// The world the test plays: the air, the clock, the application's ends.

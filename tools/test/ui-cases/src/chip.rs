@@ -17,6 +17,7 @@ pub fn run_chip(
     sources: &[&str],
 ) {
     std::fs::create_dir_all(scratch).expect("create the chip UI scratch directory");
+    let build = scratch.join("build");
     let mut cargo = Command::new("cargo");
     cargo.current_dir(root).args([
         "check",
@@ -25,6 +26,7 @@ pub fn run_chip(
         target,
         "--message-format=json",
     ]);
+    cargo.arg("--target-dir").arg(&build);
     for (package, feature) in packages {
         cargo.args(["-p", package, "--features", &format!("{package}/{feature}")]);
     }
@@ -93,10 +95,9 @@ pub fn run_chip(
                 .arg(&directory)
                 .arg(&path);
             // Chip metadata also references proc macros built for the host.
-            rustc.arg("-L").arg(format!(
-                "dependency={}",
-                root.join("target/debug/deps").display()
-            ));
+            rustc
+                .arg("-L")
+                .arg(format!("dependency={}", build.join("debug/deps").display()));
             for (name, artifact) in &artifacts {
                 rustc
                     .arg("--extern")

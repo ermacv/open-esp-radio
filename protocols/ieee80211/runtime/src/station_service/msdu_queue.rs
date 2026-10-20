@@ -336,31 +336,12 @@ mod tests {
         assert_eq!(drops.load(Ordering::Relaxed), 1);
     }
 
-    struct ThreadWake(std::thread::Thread);
-
-    impl Wake for ThreadWake {
-        fn wake(self: Arc<Self>) {
-            self.0.unpark();
-        }
-        fn wake_by_ref(self: &Arc<Self>) {
-            self.0.unpark();
-        }
-    }
-
-    fn wait<F: Future>(future: F) -> F::Output {
-        let waker = Waker::from(Arc::new(ThreadWake(std::thread::current())));
-        let mut cx = Context::from_waker(&waker);
+    fn ready<F: Future>(future: F) -> F::Output {
         let mut future = core::pin::pin!(future);
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
-        loop {
-            if let Poll::Ready(value) = future.as_mut().poll(&mut cx) {
-                return value;
-            }
-            assert!(std::time::Instant::now() < deadline, "queue wake timed out");
-            std::thread::park_timeout(
-                deadline.saturating_duration_since(std::time::Instant::now()),
-            );
-            assert!(std::time::Instant::now() < deadline, "queue wake timed out");
+        let mut cx = Context::from_waker(Waker::noop());
+        match future.as_mut().poll(&mut cx) {
+            Poll::Ready(value) => value,
+            Poll::Pending => panic!("the queue has credit or a published owner"),
         }
     }
 
@@ -368,9 +349,9 @@ mod tests {
     fn a_dropped_send_permit_publishes_nothing_and_can_be_reserved_again() {
         let mut queue = MsduQueue::<u8, 1>::new();
         let (mut sender, receiver) = queue.split();
-        drop(wait(sender.ready()));
+        drop(ready(sender.ready()));
         assert!(receiver.try_receive().is_none());
-        wait(sender.ready()).send(9);
+        ready(sender.ready()).send(9);
         assert_eq!(receiver.try_receive(), Some(9));
     }
 
@@ -386,18 +367,25 @@ mod tests {
         let drops = Arc::new(AtomicUsize::new(0));
         let mut queue = MsduQueue::<Owner, 1>::new();
         let (mut sender, mut receiver) = queue.split();
+        let published = std::sync::Barrier::new(2);
+        let consumed = std::sync::Barrier::new(2);
         std::thread::scope(|scope| {
+            let (published, consumed) = (&published, &consumed);
             let producer_drops = Arc::clone(&drops);
             let producer = scope.spawn(move || {
                 for id in 0..COUNT {
-                    wait(sender.ready()).send(Owner(id, Arc::clone(&producer_drops)));
+                    ready(sender.ready()).send(Owner(id, Arc::clone(&producer_drops)));
+                    published.wait();
+                    consumed.wait();
                 }
             });
             for expected in 0..COUNT {
-                wait(receiver.ready());
+                published.wait();
+                ready(receiver.ready());
                 let owner = receiver.try_receive().unwrap();
                 assert_eq!(owner.0, expected);
                 drop(owner);
+                consumed.wait();
             }
             producer.join().unwrap();
         });

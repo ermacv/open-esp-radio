@@ -1,7 +1,6 @@
 //! The registry of every message: identities are unique and well formed.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::{Path, PathBuf};
 
 use oer_hil_protocol::{FRAMING_VERSION, Key, Kind, MESSAGES_LOCK, MessageInfo, registry};
 
@@ -85,39 +84,76 @@ fn a_property_carries_no_payload() {
     }
 }
 
-/// The variable that makes [`the_lock_is_the_registry`] rewrite the lock.
-const WRITE_LOCK: &str = "OER_HIL_PROTOCOL_LOCK";
-
-/// The framework's sources: identity, framing and the envelope. They name
-/// no module.
+/// Framework files name no module; module files may depend on each other.
 const FRAMEWORK: [&str; 5] = ["lib.rs", "key.rs", "framing.rs", "io.rs", "envelope.rs"];
 
-/// Every Rust source under `path`, tests excluded: a test may use any module
-/// without making it a dependency of the wire.
-fn sources(path: &Path, found: &mut Vec<PathBuf>) {
-    if path.is_file() {
-        found.push(path.to_path_buf());
-        return;
-    }
-    for entry in std::fs::read_dir(path).unwrap() {
-        let path = entry.unwrap().path();
-        let name = path.file_name().unwrap().to_str().unwrap();
-        if name == "tests" || name == "tests.rs" {
-            continue;
-        }
-        if path.is_dir() || name.ends_with(".rs") {
-            sources(&path, found);
-        }
-    }
-}
+const SOURCES: &[(&str, &str)] = &[
+    ("base/boot.rs", include_str!("../src/base/boot.rs")),
+    (
+        "base/image_keys.rs",
+        include_str!("../src/base/image_keys.rs"),
+    ),
+    ("base/mod.rs", include_str!("../src/base/mod.rs")),
+    (
+        "bluetooth/gatt.rs",
+        include_str!("../src/bluetooth/gatt.rs"),
+    ),
+    ("bluetooth/mod.rs", include_str!("../src/bluetooth/mod.rs")),
+    (
+        "bluetooth/payload.rs",
+        include_str!("../src/bluetooth/payload.rs"),
+    ),
+    (
+        "bluetooth/secure_gatt.rs",
+        include_str!("../src/bluetooth/secure_gatt.rs"),
+    ),
+    ("envelope.rs", include_str!("../src/envelope.rs")),
+    ("feature_keys.rs", include_str!("../src/feature_keys.rs")),
+    ("framing.rs", include_str!("../src/framing.rs")),
+    ("image_keys.rs", include_str!("../src/image_keys.rs")),
+    ("io.rs", include_str!("../src/io.rs")),
+    ("key.rs", include_str!("../src/key.rs")),
+    ("lib.rs", include_str!("../src/lib.rs")),
+    ("network/mod.rs", include_str!("../src/network/mod.rs")),
+    (
+        "network/session.rs",
+        include_str!("../src/network/session.rs"),
+    ),
+    ("network/state.rs", include_str!("../src/network/state.rs")),
+    (
+        "network/stream_pattern.rs",
+        include_str!("../src/network/stream_pattern.rs"),
+    ),
+    (
+        "network/traffic.rs",
+        include_str!("../src/network/traffic.rs"),
+    ),
+    (
+        "network/udp_probe.rs",
+        include_str!("../src/network/udp_probe.rs"),
+    ),
+    ("phy/capture.rs", include_str!("../src/phy/capture.rs")),
+    ("phy/hold.rs", include_str!("../src/phy/hold.rs")),
+    ("phy/mod.rs", include_str!("../src/phy/mod.rs")),
+    ("system/mod.rs", include_str!("../src/system/mod.rs")),
+    (
+        "system/payload.rs",
+        include_str!("../src/system/payload.rs"),
+    ),
+    ("telemetry/mod.rs", include_str!("../src/telemetry/mod.rs")),
+    (
+        "telemetry/profile.rs",
+        include_str!("../src/telemetry/profile.rs"),
+    ),
+];
 
-/// The modules `path`'s sources name through `crate::<module>`.
-fn referenced(path: &Path) -> BTreeSet<&'static str> {
-    let mut files = Vec::new();
-    sources(path, &mut files);
+/// Read only source text embedded at compile time, excluding test modules.
+fn referenced(path: &str) -> BTreeSet<&'static str> {
     let mut modules = BTreeSet::new();
-    for file in files {
-        let text = std::fs::read_to_string(&file).unwrap();
+    for (_, text) in SOURCES
+        .iter()
+        .filter(|(file, _)| *file == path || file.starts_with(&format!("{path}/")))
+    {
         for (at, _) in text.match_indices("crate::") {
             let rest = &text[at + "crate::".len()..];
             let name: String = rest
@@ -132,16 +168,12 @@ fn referenced(path: &Path) -> BTreeSet<&'static str> {
     modules
 }
 
-fn source() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("src")
-}
-
 /// Each module and the modules it uses, from its directory's sources.
 fn dependencies() -> BTreeMap<&'static str, BTreeSet<&'static str>> {
     MODULES
         .iter()
         .map(|module| {
-            let mut used = referenced(&source().join(module));
+            let mut used = referenced(module);
             used.remove(module);
             (*module, used)
         })
@@ -151,7 +183,7 @@ fn dependencies() -> BTreeMap<&'static str, BTreeSet<&'static str>> {
 #[test]
 fn the_framework_names_no_module() {
     for file in FRAMEWORK {
-        let used = referenced(&source().join(file));
+        let used = referenced(file);
         assert!(used.is_empty(), "{file} uses the modules {used:?}");
     }
 }
@@ -183,7 +215,7 @@ fn lock() -> String {
     messages.sort_by_key(|message| message.path);
     let mut lock = format!(
         "# The HIL wire of this revision. Regenerate with\n\
-         # `{WRITE_LOCK}=write cargo test -p oer-hil-protocol --features registry --test registry`.\n\
+         # `OER_HIL_PROTOCOL_LOCK=write cargo test -p oer-hil-protocol --features registry --test registry`.\n\
          framing {FRAMING_VERSION}\n\
          [modules]\n"
     );
@@ -212,17 +244,8 @@ fn lock() -> String {
 #[test]
 fn the_lock_is_the_registry() {
     let lock = lock();
-    if std::env::var(WRITE_LOCK).as_deref() == Ok("write") {
-        std::fs::write(
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("messages.lock"),
-            &lock,
-        )
-        .unwrap();
-        return;
-    }
     assert!(
         lock == MESSAGES_LOCK,
-        "messages.lock differs from the registry; review the wire change and rerun with \
-         {WRITE_LOCK}=write"
+        "messages.lock differs from the registry; review the wire change"
     );
 }

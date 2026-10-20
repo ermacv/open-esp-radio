@@ -562,28 +562,3 @@ fn nested_search_failure_enters_root_cleanup() {
     assert_eq!(root.row, 0);
     assert_eq!(root.total_measurements, 0);
 }
-
-/// Host state-machine cost, with deterministic SAR completions and no MMIO.
-#[test]
-#[ignore = "manual release-mode CPU benchmark of the nested production TX search"]
-fn benchmark_nested_tx_search() {
-    for sample in 0..3 {
-        let start = std::time::Instant::now();
-        let mut steps = 0;
-        for iteration in 0..2000 {
-            let mut root = search_root(core::hint::black_box(iteration as u8));
-            while let PhyTxDcPwdetAction::Search(action) = core::hint::black_box(&root).action() {
-                let completion = PhyTxDcPwdetCompletion::Search(search_completion(action));
-                core::hint::black_box(&mut root)
-                    .advance(core::hint::black_box(completion))
-                    .unwrap();
-                steps += 1;
-            }
-            core::hint::black_box(root);
-        }
-        std::println!(
-            "sample={sample} iterations=2000 steps={steps} elapsed_ns={}",
-            start.elapsed().as_nanos()
-        );
-    }
-}

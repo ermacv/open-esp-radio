@@ -12,7 +12,8 @@ embassy-time = "0.5.1"
 oer-time = { path = "../../time" }
 
 [dev-dependencies]
-embassy-time = { version = "0.5.1", features = ["generic-queue-64", "std"] }
+embassy-time = { version = "0.5.1", features = ["generic-queue-64", "mock-driver"] }
+critical-section = { version = "1.2.0", features = ["std"] }
 
 [lints]
 workspace = true
