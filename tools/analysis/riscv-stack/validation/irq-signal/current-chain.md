@@ -1,5 +1,10 @@
 # Current w1 doorbell to IrqSignal.pend
 
+The machine chain below is the #199 investigation. The subsequent
+[one-word copy report](word-copy.md) documents the new conditional certificate
+and the numerical bound that still prevents its application. The regenerated
+JSON contains both the chain and this follow-up's checked evidence.
+
 Fresh base: main **`694e0c76`**, including #195 and #194. Both unconfigured
 w0/w1 images were rebuilt in this checkout before and after the BranchTest
 refactor. [The comparison](../short-copy/branch-test-comparison.json) confirms

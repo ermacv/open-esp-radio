@@ -1,8 +1,13 @@
 # IRQ callback provenance on w0/w1
 
-The current investigation is in [current-chain.md](current-chain.md), with
-[current-chain.json](current-chain.json) generated on main `694e0c76` (including
-#195 and #194). It supersedes the historical addresses and spill assumptions
+The #199 follow-up's [one-word copy investigation](word-copy.md) adds a
+conditional normal-return certificate and identifies the still-unproved
+numerical destination bound. The current validator and JSON include that
+certificate without admitting it as an unconditional caller memory value.
+
+The machine-chain investigation is in [current-chain.md](current-chain.md), with
+[current-chain.json](current-chain.json) regenerated on main `ab2d9f96` (including
+#199 through #205). It supersedes the historical addresses and spill assumptions
 below for the selected callback. The older transport validation remains here
 as a separate historical comparison.
 

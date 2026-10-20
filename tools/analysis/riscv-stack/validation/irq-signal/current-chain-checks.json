@@ -1,7 +1,18 @@
 {
   "repeat_identical": true,
   "fault_injection": {
-    "load-width": "rejected changed machine fact",
-    "captured-pointer": "rejected changed machine fact"
-  }
+    "load-width": "rejected changed fact",
+    "captured-pointer": "rejected changed fact",
+    "source-load-width": "rejected changed fact",
+    "later-iteration-overlap": "rejected changed fact",
+    "unproved-bounds-admission": "rejected changed fact"
+  },
+  "generic_effects_identical": {
+    "rom-write": true,
+    "rom-barrier": true,
+    "call-write": true,
+    "call-barrier": true,
+    "rom-transfer": true
+  },
+  "actual_call_application": "rejected: DestinationBounds"
 }
