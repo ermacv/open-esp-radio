@@ -96,4 +96,3 @@ fn a_power_loss_also_needs_a_power_on_reset() {
     assert!(unread.contains("could not be read: no JTAG"), "{unread}");
     assert!(loss(true, Some(after), None).verdict().is_err());
 }
-

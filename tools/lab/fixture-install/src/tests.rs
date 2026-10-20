@@ -9,9 +9,7 @@ use sha2::{Digest as _, Sha256};
 use super::*;
 use crate::{
     model::validate_adapters,
-    transaction::test_support::{
-        Effects, Layout, Stage, apply, policy_bytes,
-    },
+    transaction::test_support::{Effects, Layout, Stage, apply, policy_bytes},
 };
 
 const OPERATOR: &str = "fixture_test";
