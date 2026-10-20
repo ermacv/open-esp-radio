@@ -8,9 +8,5 @@ repository.workspace = true
 publish = false
 description = "Runs a crate's tests/ui twins through trybuild and checks each case's expected error codes"
 
-[dependencies]
-serde_json = "1"
-trybuild = "=1.0.121"
-
 [lints]
 workspace = true

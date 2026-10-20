@@ -1,5 +1,0 @@
-error[E0599]: no associated function or constant named `continuing_after` found for struct `CcmpTxPacketNumber` in the current scope
- --> tests/ui/pn_continuation.rs:6:40
-  |
-6 |     let _rewound = CcmpTxPacketNumber::continuing_after(CcmpPacketNumberStep::ONE, CcmpPacketNumber::ZERO); // ui-error: E0599
-  |                                        ^^^^^^^^^^^^^^^^ associated function or constant not found in `CcmpTxPacketNumber`

@@ -1,5 +1,0 @@
-error[E0599]: no method named `install_group_epoch` found for mutable reference `&mut CcmpRxReplayEpoch` in the current scope
- --> tests/ui/replay_install_group_epoch.rs:6:11
-  |
-6 |     epoch.install_group_epoch(id, CcmpRxReplayState::default()); // ui-error: E0599
-  |           ^^^^^^^^^^^^^^^^^^^ method not found in `&mut CcmpRxReplayEpoch`

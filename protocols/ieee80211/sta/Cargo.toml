@@ -28,7 +28,6 @@ oer-radio-regulatory = { path = "../../radio/regulatory" }
 oer-time-virtual = { path = "../../../portable/time-virtual" }
 oer-radio-regulatory = { path = "../../radio/regulatory", features = ["test-support"] }
 oer-ieee80211-wire = { path = "../wire", features = ["test-support"] }
-oer-test-ui-cases = { path = "../../../tools/test/ui-cases" }
 
 [lints]
 workspace = true

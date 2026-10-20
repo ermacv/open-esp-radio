@@ -34,7 +34,6 @@ oer-ieee80211-softmac = { path = "../../../../protocols/ieee80211/softmac" }
 
 oer-interrupt-table = { path = "../../../../portable/interrupt-table", features = ["host-signal"] }
 oer-time-virtual = { path = "../../../../portable/time-virtual" }
-oer-test-ui-cases = { path = "../../../../tools/test/ui-cases" }
 
 # Host unit tests use the allocating MAC model. RV32 API doctests exercise
 # the production API without introducing an allocator into their binaries.

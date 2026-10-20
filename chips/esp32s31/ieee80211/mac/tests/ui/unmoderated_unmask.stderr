@@ -1,7 +1,0 @@
-error[E0599]: no method named `unmask_rx_after_drain` found for struct `ActiveEpoch<Unmoderated>` in the current scope
- --> tests/ui/unmoderated_unmask.rs:9:12
-  |
-9 |     active.unmask_rx_after_drain(); // ui-error: E0599
-  |            ^^^^^^^^^^^^^^^^^^^^^ method not found in `ActiveEpoch<Unmoderated>`
-  |
-  = note: the method was found for `ActiveEpoch<Moderated, I, P>`

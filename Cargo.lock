@@ -1881,12 +1881,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "glob"
-version = "0.3.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e4eba85ea1d0a966a983acd07deee566e67395d2d96b6fb39e62b5a833f1eb0b"
-
-[[package]]
 name = "group"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2689,7 +2683,6 @@ dependencies = [
  "oer-espressif-modem-clock",
  "oer-memory",
  "oer-radio-regulatory",
- "oer-test-ui-cases",
 ]
 
 [[package]]
@@ -2766,7 +2759,6 @@ dependencies = [
  "oer-memory",
  "oer-radio-coex",
  "oer-radio-regulatory",
- "oer-test-ui-cases",
  "oer-time",
  "pin-project",
  "vcell",
@@ -2792,7 +2784,6 @@ dependencies = [
  "oer-memory",
  "oer-radio-port",
  "oer-radio-regulatory",
- "oer-test-ui-cases",
  "oer-time",
  "oer-time-virtual",
 ]
@@ -2809,7 +2800,6 @@ dependencies = [
  "oer-ieee80211-wire",
  "oer-interrupt-table",
  "oer-memory",
- "oer-test-ui-cases",
  "oer-time",
  "oer-time-virtual",
  "pin-project",
@@ -2956,7 +2946,6 @@ dependencies = [
  "oer-espressif-esp-hal-irq",
  "oer-interrupt-table",
  "oer-memory",
- "oer-test-ui-cases",
  "portable-atomic",
  "riscv",
  "static_cell",
@@ -2984,7 +2973,6 @@ dependencies = [
  "oer-ieee80211-port",
  "oer-ieee80211-upper-mac",
  "oer-ieee80211-wire",
- "oer-test-ui-cases",
  "oer-time",
 ]
 
@@ -3590,7 +3578,6 @@ dependencies = [
  "oer-ieee80211-wire",
  "oer-radio-port",
  "oer-radio-regulatory",
- "oer-test-ui-cases",
  "oer-time",
 ]
 
@@ -3602,7 +3589,6 @@ dependencies = [
  "ccm",
  "cmac",
  "oer-ieee80211-wire",
- "oer-test-ui-cases",
  "subtle",
  "zeroize",
 ]
@@ -3643,7 +3629,6 @@ dependencies = [
  "oer-radio-coex",
  "oer-radio-port",
  "oer-radio-regulatory",
- "oer-test-ui-cases",
  "oer-time",
  "oer-time-virtual",
 ]
@@ -3657,7 +3642,6 @@ dependencies = [
  "hmac",
  "oer-ieee80211-cipher",
  "oer-ieee80211-wire",
- "oer-test-ui-cases",
  "oer-time",
  "p256",
  "pbkdf2",
@@ -3689,7 +3673,6 @@ dependencies = [
  "oer-memory",
  "oer-radio-port",
  "oer-radio-regulatory",
- "oer-test-ui-cases",
  "oer-time",
  "oer-time-virtual",
 ]
@@ -3718,7 +3701,6 @@ dependencies = [
  "oer-ieee80211-wire",
  "oer-radio-port",
  "oer-radio-regulatory",
- "oer-test-ui-cases",
  "oer-time",
  "oer-time-virtual",
 ]
@@ -3729,7 +3711,6 @@ version = "0.1.0"
 dependencies = [
  "oer-ieee80211-port",
  "oer-ieee80211-wire",
- "oer-test-ui-cases",
  "oer-time",
 ]
 
@@ -3738,7 +3719,6 @@ name = "oer-ieee80211-wire"
 version = "0.1.0"
 dependencies = [
  "oer-radio-regulatory",
- "oer-test-ui-cases",
  "oer-time",
  "oer-wire",
  "zeroize",
@@ -3751,7 +3731,6 @@ dependencies = [
  "oer-radio-coex",
  "oer-radio-port",
  "oer-radio-regulatory",
- "oer-test-ui-cases",
  "oer-time",
  "scopeguard",
 ]
@@ -3891,7 +3870,6 @@ version = "0.1.0"
 dependencies = [
  "atomic-waker",
  "bytemuck",
- "oer-test-ui-cases",
 ]
 
 [[package]]
@@ -3977,7 +3955,6 @@ name = "oer-radio-permit-pool"
 version = "0.1.0"
 dependencies = [
  "oer-radio-port",
- "oer-test-ui-cases",
  "oer-time",
 ]
 
@@ -3986,7 +3963,6 @@ name = "oer-radio-port"
 version = "0.1.0"
 dependencies = [
  "atomic-waker",
- "oer-test-ui-cases",
  "oer-time",
  "scopeguard",
 ]
@@ -4076,10 +4052,6 @@ dependencies = [
 [[package]]
 name = "oer-test-ui-cases"
 version = "0.1.0"
-dependencies = [
- "serde_json",
- "trybuild",
-]
 
 [[package]]
 name = "oer-time"
@@ -5321,12 +5293,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "55937e1799185b12863d447f42597ed69d9928686b8d88a1df17376a097d8369"
 
 [[package]]
-name = "target-tuple"
-version = "1.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "876fef147edbcbddc8ac5cbbba92c7b86519e314e86638596c09673b2ed01e7f"
-
-[[package]]
 name = "tempfile"
 version = "3.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5532,21 +5498,6 @@ dependencies = [
  "tracing",
  "tracing-core",
  "tracing-log",
-]
-
-[[package]]
-name = "trybuild"
-version = "1.0.121"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c0cabaa10be1917331a313866bd94526343e03c77bcf69144b62b072ad35d47c"
-dependencies = [
- "glob",
- "serde",
- "serde_derive",
- "serde_json",
- "target-tuple",
- "termcolor",
- "toml",
 ]
 
 [[package]]

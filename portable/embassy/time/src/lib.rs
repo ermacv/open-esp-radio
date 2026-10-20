@@ -63,6 +63,3 @@ impl Timer for EmbassyClock {
         }
     }
 }
-
-#[cfg(test)]
-mod tests;

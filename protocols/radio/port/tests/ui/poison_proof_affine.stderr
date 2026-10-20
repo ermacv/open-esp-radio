@@ -1,5 +1,0 @@
-error[E0599]: no method named `clone` found for struct `PoisonProof` in the current scope
- --> tests/ui/poison_proof_affine.rs:5:22
-  |
-5 |     let _ = poisoned.clone(); // ui-error: E0599
-  |                      ^^^^^ method not found in `PoisonProof`

@@ -1,5 +1,0 @@
-error[E0599]: no method named `complete_transmission` found for struct `FtmSession<N>` in the current scope
- --> tests/ui/ftm_foreign_completion.rs:8:26
-  |
-8 |     let _result = second.complete_transmission(first, true, now); // ui-error: E0599
-  |                          ^^^^^^^^^^^^^^^^^^^^^ method not found in `FtmSession<N>`

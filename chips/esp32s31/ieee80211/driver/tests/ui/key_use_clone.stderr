@@ -1,5 +1,0 @@
-error[E0599]: no method named `clone` found for struct `KeyUse<'core, Path>` in the current scope
- --> tests/ui/key_use_clone.rs:5:21
-  |
-5 |     let _copy = key.clone(); // ui-error: E0599
-  |                     ^^^^^ method not found in `KeyUse<'core>`

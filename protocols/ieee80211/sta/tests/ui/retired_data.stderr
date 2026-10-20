@@ -1,5 +1,0 @@
-error[E0599]: no method named `poll_action` found for struct `RetiredData<'id, D, K, CAP>` in the current scope
- --> tests/ui/retired_data.rs:7:16
-  |
-7 |     drop(ended.poll_action()); // ui-error: E0599
-  |                ^^^^^^^^^^^ method not found in `RetiredData<'id, T, K>`

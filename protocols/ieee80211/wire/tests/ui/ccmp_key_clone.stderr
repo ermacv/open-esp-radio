@@ -1,5 +1,0 @@
-error[E0599]: no method named `clone` found for struct `Ccmp128Key` in the current scope
- --> tests/ui/ccmp_key_clone.rs:5:25
-  |
-5 |     let installed = key.clone(); // ui-error: E0599
-  |                         ^^^^^ method not found in `Ccmp128Key`

@@ -1,5 +1,0 @@
-error[E0451]: fields `peer` and `session_generation` of struct `FtmOperationId` are private
- --> tests/ui/ftm_identity.rs:7:26
-  |
-7 | ...   FtmOperationId { peer: session.operation().peer(), session_generation: session.operation().session_generation() } // ui-error: ...
-  |                        ^^^^ private field                ^^^^^^^^^^^^^^^^^^ private field

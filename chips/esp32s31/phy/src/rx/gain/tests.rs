@@ -321,28 +321,6 @@ fn root_publishes_both_banks_and_retains_state_on_rejected_completion() {
     );
 }
 
-/// Host CPU cost only: no MMIO, waits or radio-quality claim.
-#[test]
-#[ignore = "manual release-mode CPU benchmark of the production publisher"]
-fn benchmark_rx_gain_publication() {
-    for sample in 0..3 {
-        let start = std::time::Instant::now();
-        let mut steps = 0;
-        for iteration in 0..20_000 {
-            let mut parameters = init_parameters();
-            parameters.dc_calibrated = true;
-            parameters.memory.parameter_002 ^= iteration as u8;
-            let (outcome, count) = publish_root(core::hint::black_box(parameters));
-            core::hint::black_box(outcome);
-            steps += count;
-        }
-        std::println!(
-            "sample={sample} iterations=20000 steps={steps} elapsed_ns={}",
-            start.elapsed().as_nanos()
-        );
-    }
-}
-
 #[test]
 fn root_preserves_publish_failure_through_cleanup() {
     let mut parameters = init_parameters();

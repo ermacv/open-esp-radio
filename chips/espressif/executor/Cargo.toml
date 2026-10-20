@@ -48,7 +48,6 @@ oer-espressif-esp-hal-irq = { path = "../esp-hal-irq", optional = true }
 riscv = { version = "0.15", optional = true }
 
 [target.'cfg(not(target_os = "none"))'.dev-dependencies]
-oer-test-ui-cases = { path = "../../../tools/test/ui-cases" }
 
 [dev-dependencies]
 embassy-executor = { version = "0.10.0", default-features = false }

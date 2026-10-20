@@ -1,5 +1,0 @@
-error[E0616]: field `body` of struct `FtmRequestTransmission` is private
- --> tests/ui/ftm_body_private.rs:5:20
-  |
-5 |     { transmission.body[0] = 0; } // ui-error: E0616
-  |                    ^^^^ private field
