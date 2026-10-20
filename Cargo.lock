@@ -3374,7 +3374,6 @@ dependencies = [
  "critical-section",
  "embassy-futures",
  "embassy-sync 0.8.0",
- "embassy-time",
  "embedded-io-async 0.7.0",
  "heapless 0.9.3",
  "log",
