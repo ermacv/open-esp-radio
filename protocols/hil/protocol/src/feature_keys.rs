@@ -64,6 +64,12 @@ pub fn image_keys(enabled: &dyn Fn(&str) -> bool) -> ImageKeys {
     #[cfg(feature = "phy")]
     if enabled("diagnostic-phy") {
         for key in [
+            crate::phy::StartTrackingHold::KEY,
+            crate::phy::HoldStarted::KEY,
+            crate::phy::GetTrackingHold::KEY,
+            crate::phy::TrackingHold::KEY,
+            crate::phy::StopTrackingHold::KEY,
+            crate::phy::HoldStopped::KEY,
             crate::phy::PrepareCapture::KEY,
             crate::phy::CaptureReady::KEY,
             crate::phy::RestartCaptureRadio::KEY,

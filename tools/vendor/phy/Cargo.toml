@@ -10,6 +10,7 @@ description = "PHY HIL workloads: the vendor-versus-production calibration cross
 readme = "README.md"
 
 [dependencies]
+heapless = { version = "0.9.3", features = ["serde"] }
 oer-hil-model = { path = "../../hil/model" }
 oer-hil-link = { path = "../../hil/link" }
 oer-hil-lab = { path = "../../hil/lab" }
@@ -31,6 +32,8 @@ workspace = true
 
 
 [dev-dependencies]
+oer-time = { path = "../../../portable/time" }
+oer-time-virtual = { path = "../../../portable/time-virtual" }
 oer-hil-scenario = { path = "../../hil/scenario", features = ["test-support"] }
 oer-hil-link = { path = "../../hil/link", features = ["test-support"] }
 oer-hil-lab = { path = "../../hil/lab", features = ["test-support"] }

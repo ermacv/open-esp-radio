@@ -9,6 +9,9 @@ publish.workspace = true
 description = "Diagnostic PHY capture through public state and typed register reads"
 build = "build.rs"
 
+[package.metadata.open-radio]
+instrumentation = ["profile", "debug-control"]
+
 [features]
 diagnostic-phy = []
 

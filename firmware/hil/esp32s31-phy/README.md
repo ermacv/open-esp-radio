@@ -2,7 +2,8 @@
 
 `diagnostic-phy` is a separate HIL image. It enables the optional `phy` wire
 module, uses public PHY state and typed HAL register reads, and carries no
-station role, network stack, verification hooks or instrumentation cfgs.
+station role, network stack or verification hooks. Its manifest isolates the
+`profile` and `debug-control` cfgs in the diagnostic compile cache.
 
 The diagnostic 802.15.4 path runs first-client tracking before RX and supports
 RF close/wake/rejoin, capture and final RF closure. Failed operations retain
@@ -55,3 +56,19 @@ returns slots, detaches the quiescent engine, deactivates IRQ ownership and
 returns through the registered foundation before leaving the last PHY client.
 Rejoin rebinds the same placed storage. The assembly defines no 802.15.4 block
 runtime contract. The generic detach/rebind API has no diagnostic-specific shape.
+
+The manual `phy-tracking-hold-ieee802154-idle` investigation runs three boots,
+with five due tracking ticks per boot while channel 15 RX remains active.
+`StartTrackingHold` saves the registered debug policy and selects `(3, 0)`;
+the unchanged production scheduler period and concurrent tracking path run the
+RFPLL, common and transmit branches. The image timestamps only Tracking,
+grant-protect RFPLL/common/transmit and Wi-Fi baseband-off edges. It retains
+bounded raw intervals, including repeated baseband-off intervals, and committed
+branch bits. Data is serialized between ticks; no inner-loop clock reads or
+per-edge console output are added. A started PHY future is driven to completion.
+
+Stop retires the hold id and restores the saved policy; StopCapture then closes
+RF. Overflow, reversed time, failed/missing/duplicate edges, incomplete branches,
+cancellation or missing cleanup invalidate evidence. Parent and child intervals
+are nested and cannot be summed. Grant-request duration is not proof of RF
+exclusion. This image serves only 154 idle hold; associated Wi-Fi hold is absent.
