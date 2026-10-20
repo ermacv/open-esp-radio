@@ -355,37 +355,37 @@ A grant-protect interval is the time the request was programmed, not an observat
 | | idle | ≤ 0.52 ms | ≤ 7.6 ms | ≤ 7.0 ms | ≤ 7.0 ms | ≤ 14.6 ms |
 | Wi-Fi + Bluetooth LE, HT20 UDP RX and an ATT echo load, 2 runs | traffic | ≤ 0.94 ms | ≤ 16.1 ms | ≤ 13.4 ms | ≤ 15.5 ms | ≤ 30.1 ms |
 | | idle | ≤ 0.94 ms | ≤ 7.1 ms | ≤ 13.6 ms | ≤ 13.5 ms | ≤ 21.4 ms |
-| IEEE 802.15.4 receiving, 3 repetitions × 5 due ticks (2026-10-20) | idle | ≤ 1.473 ms | ≤ 8.585 ms | ≤ 8.489 ms | ≤ 8.347 ms | ≤ 17.338 ms |
-| IEEE 802.15.4 receiving, layout seed 1, 19/20 complete repetitions; valid ticks only | idle | ≤ 1.522 ms | ≤ 9.746 ms | ≤ 8.714 ms | ≤ 9.001 ms | ≤ 19.271 ms |
+| IEEE 802.15.4 receiving, 3 repetitions × 5 due ticks (2026-10-20) | idle | ≤ 1.467 ms | ≤ 8.350 ms | ≤ 9.234 ms | ≤ 9.090 ms | ≤ 18.849 ms |
+| IEEE 802.15.4 receiving, layout seed 1, 20 repetitions × 5 due ticks (2026-10-20) | idle | ≤ 1.470 ms | ≤ 8.921 ms | ≤ 9.233 ms | ≤ 9.086 ms | ≤ 19.505 ms |
 
-The 2026-10-20 154 row is reproducible with
-`cargo hil run phy-tracking-hold-ieee802154-idle --chip esp32s31 --board s31-a`.
-Run `1792520090030-002ab3e6`, PHY correction `587104e6`, diagnostic application
-SHA-256 `0e1279d0d3b2ba25556da4ce7b4e17430a2ba66bee4a747bb8aa94529f3cc501`,
-completed 15/15 ticks, restored debug policy and closed RF in every repetition.
-Per-repetition maxima (RFPLL/common/transmit/baseband-off/whole tick, µs):
-1473/7627/8489/8347/17338; 1473/8181/8210/8069/17028;
-1472/8585/7936/7863/17236. Seed-1 run `1792520025693-002a5efd` also completed 3 × 5.
+The 2026-10-20 IEEE 802.15.4 rows use source `5cb90527`, including the I2C
+terminal-recognition correction and timer-woken TX SAR readiness. The selected
+readiness deadline is 40 µs after the mandatory 2 µs trigger settle; physical
+PHY ownership and the grant transaction remain held while the timer is pending.
+The deadline was chosen as twice the maximum observed over 43,282 conversions
+in acquisition runs `1792521908966-002e2465` and `1792521955985-002e287a`.
+That empirical margin is not a guaranteed hardware bound; a late result fails closed.
 
-The extended seed-1 run `1792520732652-002c0b9d`, the same PHY correction with a
-terminal error observer, completed 19/20 repetitions: 96 valid ticks and one
-invalid tick. Repetition 12, tick 2 failed measurement 0, sample 0 with
-`TxDcPwdet(Search(ToneSar(ReadyObservationLimit { observations: 13, .. })))`.
-The direct SAR readiness settle is 20 µs. SOURCE: complete rev0 ROM
-`phy_pwdet_tone_start` waits for readiness after the same 1/2 µs settles;
-`src/tx/dc_power_detector.rs` adds the finite direct-observation bound.
-The poisoned PHY refused policy restoration and RF closure; the runner reset it
-before the next repetition. Invalid/open intervals are incomplete evidence,
-and successful subsets establish no reliability or worst-case bound.
-This reproduces the short transmit failure seen in `1792516851193-001ffe1b`;
-the separate direct-I2C terminal-recognition correction does not eliminate it.
-The Wi-Fi rows retain their previously recorded values; these runs cover 154 only.
+Reproduce with `cargo hil run phy-tracking-hold-ieee802154-idle --chip esp32s31
+--board s31-a --repetitions 3`; use `--repetitions 20 --layout-seed 1` for the
+extended series. Runs `1792522303542-002f44c3` and `1792522693907-002ff8a0`
+complete all 115 ticks, restore debug policy and close RF in every repetition.
+Normal/seed-1 diagnostic application SHA-256:
+`fb0f5c8d21c3512247f07ae7a7806745933d1da68ac07b1acf042f6ed8847960` /
+`07fd1fa417172da438cf69e735db2a28ac090a71f0c29c59c9761b50c0de2ef6`.
+Per-repetition maxima of the three-repeat series, RFPLL/common/transmit/
+baseband-off/whole tick (µs): 1463/8301/8866/8721/18849;
+1467/8350/8939/8794/18233; 1464/8078/9234/9090/18259.
+The extended series records 21,470 SAR conversions, maximum readiness 21 µs,
+with no deadline expiry or invalid tick. These runs establish observed maxima,
+not a reliability or worst-case bound. The Wi-Fi rows retain their previously
+recorded values; the reproducible current-source scenario covers 154 only.
 
 What the runs show:
-- **RFPLL.** The current 154 idle correction request reached 1.522 ms; the earlier Wi-Fi rows were below 1 ms.
+- **RFPLL.** The current 154 idle correction request reached 1.470 ms; the earlier Wi-Fi rows were below 1 ms.
 - **Common bracket.** DCODE and RX gain calibration is the bracket traffic stretches, from ~6 ms idle to observed maxima of 13–18 ms under traffic (the table gives maxima only, no lower bound): interrupts compete with its polled measurements.
-- **Transmit bracket.** Stable at ~7 ms per class, ~13 ms with both classes.
-- **Bound.** The worst single bracket observed is 18.0 ms and the worst whole tick 30.1 ms.
+- **Transmit bracket.** The current 154 idle maximum is 9.234 ms; the recorded Wi-Fi figures are ~7 ms per class, ~13 ms with both classes.
+- **Observed maxima.** The current 154 idle transmit/common brackets reach 9.234/8.921 ms (184.68/178.42 times the P2 50 µs step); the whole tick reaches 19.505 ms (390.1 times). These nested brackets do not bound an individual step. The earlier traffic records reach 18.0 ms per bracket and 30.1 ms per whole tick.
 - **HT20 rows.** The HT20 30 Mbit/s rows, which set the 18.0 ms bracket, came from a tracking-hold scenario outside this repository in an HT20 configuration; that scenario's other form runs HT40 at 60 Mbit/s, and neither is in this repository, so those rows cannot be re-run as recorded.
 - **Spread.** Run-to-run spread under traffic is larger than the effect of the traffic rate. The figures are observed maxima of these runs, not a guaranteed bound.
 
@@ -393,9 +393,9 @@ Against the protocols' tolerances:
 
 | Protocol | Tolerance | Against the observed hold |
 | --- | --- | --- |
-| Wi-Fi | An ordinary attempt aborts after the 250 ms publication watchdog (`TX_COMPLETION_TIMEOUT`); beacons come every ~102 ms | The whole tick is 8× below the watchdog; a tick misses at most one beacon; a frame received during it is retried by its sender |
+| Wi-Fi | An ordinary attempt aborts after the 250 ms publication watchdog (`TX_COMPLETION_TIMEOUT`); beacons come every ~102 ms | The recorded whole tick is about 8× below the watchdog and shorter than one beacon interval; a frame received during it is retried by its sender |
 | Bluetooth LE | The supervision timeout is at least 100 ms | A tick misses at most a few connection events (up to five at a 7.5 ms interval: a 30.1 ms window can cover events at 0, 7.5, 15, 22.5 and 30 ms); the link survives |
-| IEEE 802.15.4 | A sender's MAC retries span about 10–15 ms: 4 attempts, an 864 µs ACK wait, CSMA-CA backoff | A calibration bracket (6–18 ms) is of the same order: a frame that arrives during one can exhaust its sender's retries. The RFPLL correction (< 1 ms) cannot |
+| IEEE 802.15.4 | A sender's MAC retries span about 10–15 ms: 4 attempts, an 864 µs ACK wait, CSMA-CA backoff | A calibration bracket (6–18 ms) is of the same order: a frame that arrives during one can exhaust its sender's retries. The measured 154 RFPLL correction (≤ 1.470 ms) is shorter |
 
 The IEEE 802.15.4 row is the open risk: a calibration branch runs when a temperature reference has drifted past its threshold, not on every tick, and higher layers (OpenThread) retry above the MAC. A direct delivery measurement with a numbered peer stream is still open.
 
