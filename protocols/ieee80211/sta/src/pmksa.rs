@@ -15,7 +15,7 @@
 //! `pmksa_cache_add`) and `src/rsn_supp/wpa.c` (`wpa_set_bss`, which uses an
 //! entry only for the same BSSID, SSID and AKM and flushes it otherwise).
 
-use oer_ieee80211_mac::{address::Bssid, management::MAX_SSID_LEN};
+use oer_ieee80211_wire::{address::Bssid, management::MAX_SSID_LEN};
 use oer_ieee80211_rsn::Pmk;
 
 /// Entries the vendor's PMKSA cache holds.

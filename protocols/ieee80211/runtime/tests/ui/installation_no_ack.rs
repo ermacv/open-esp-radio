@@ -1,10 +1,10 @@
 #![no_std]
-use oer_ieee80211_lower_mac::{
+use oer_ieee80211_port::{
     Attempt, Channel, ChannelWidth, ClassFrame, TxOperation, HeaderSpec, InterfacePhase,
     LowerMacPhase, MpduLength, NoAckHeader, PhyRate, Protection, SizedFrame, Station,
     SupportedPower, TxBufferPool, TxFrame, TxPower, TxProtection, TxSource,
 };
-use oer_ieee80211_mac::{
+use oer_ieee80211_wire::{
     address::IndividualAddress, frame::FrameControl, phy::LegacyRate, qos::WmmAccessCategory,
 };
 use oer_radio_port::{Disabled, Enabled, Ended, Owner, PortBody, run_port};
@@ -83,8 +83,8 @@ impl PortBody<ModelBackend> for Target<'_, '_, '_> {
                 [2, 0, 0, 0, 0, 9],
                 0,
                 None,
-                Some(oer_ieee80211_lower_mac::QosControl {
-                    tid: oer_ieee80211_lower_mac::Tid::new(0).unwrap(),
+                Some(oer_ieee80211_port::QosControl {
+                    tid: oer_ieee80211_port::Tid::new(0).unwrap(),
                     end_of_service_period: false,
                     amsdu_present: false,
                     high: 0,

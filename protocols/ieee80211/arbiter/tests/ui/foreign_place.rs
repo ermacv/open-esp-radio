@@ -1,6 +1,6 @@
 #![no_std]
 use oer_ieee80211_arbiter::{Arbiter, ChannelRequest, LeasePlace};
-use oer_ieee80211_lower_mac::Ieee80211Capabilities;
+use oer_ieee80211_port::Ieee80211Capabilities;
 use oer_time::Instant;
 
 pub fn request<'id, 'foreign, K: Ieee80211Capabilities>(

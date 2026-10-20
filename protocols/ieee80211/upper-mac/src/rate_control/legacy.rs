@@ -1,6 +1,6 @@
 //! The nonempty legacy-rate set carried from association into rate selection.
 
-use oer_ieee80211_mac::phy::LegacyRate;
+use oer_ieee80211_wire::phy::LegacyRate;
 
 use crate::BasicRates;
 
@@ -76,7 +76,7 @@ impl NegotiatedLegacyRates {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oer_ieee80211_mac::phy::DsssPreamble;
+    use oer_ieee80211_wire::phy::DsssPreamble;
 
     #[test]
     fn selection_keeps_supported_nonbasic_and_extended_rates() {

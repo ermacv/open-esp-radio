@@ -1,5 +1,5 @@
 #![no_std]
-use oer_ieee80211_lower_mac::SupportedChannel;
+use oer_ieee80211_port::SupportedChannel;
 use oer_ieee80211_runtime::station_service::{PortAck, PortRxMeta, StationPort, StoppedService};
 use oer_ieee80211_upper_mac::rate_selection::RateSelection;
 

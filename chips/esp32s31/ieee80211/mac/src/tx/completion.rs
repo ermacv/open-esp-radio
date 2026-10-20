@@ -1,7 +1,7 @@
 //! The meaning of a completion event, independent of its published owner.
 
 use oer_esp32s31_hal::types::MacTxCompletionObservation;
-use oer_ieee80211_lower_mac::TxStatus;
+use oer_ieee80211_port::TxStatus;
 
 /// Whether the vendor handler observes a publication result at this event.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

@@ -8,8 +8,8 @@ repository.workspace = true
 description = "Executor-independent Wi-Fi SoftMAC service contract"
 
 [dependencies]
-oer-ieee80211-lower-mac = { path = "../lower-mac" }
-oer-ieee80211-mac = { path = "../mac" }
+oer-ieee80211-port = { path = "../port" }
+oer-ieee80211-wire = { path = "../wire" }
 oer-time = { path = "../../../portable/time" }
 zeroize = { version = "1.9.0", default-features = false, features = ["derive"] }
 

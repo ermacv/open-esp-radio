@@ -1,0 +1,38 @@
+warning: unused import: `end_association`
+ --> tests/ui/association_next_mode.rs:2:87
+  |
+2 | use oer_ieee80211_port::{Station, association::{AssociationStart, VacantKeyBank, end_association}};
+  |                                                                                       ^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+error[E0382]: use of moved value: `start`
+ --> tests/ui/association_next_mode.rs:7:19
+  |
+4 | pub fn next<'id>(start: AssociationStart<'id, Station, 1, 1>, bank: VacantKeyBank<'id, Station, 1, 1>) {
+  |                  ----- move occurs because `start` has type `AssociationStart<'_, oer_ieee80211_port::Station, 1, 1>`, which does not implement the `Copy` trait
+5 |     let first = start.begin(Spp::Negotiated);
+  |                       ---------------------- `start` moved due to this method call
+6 |     #[cfg(all())]
+7 |     let _second = start.begin(Spp::NotNegotiated); // ui-error: E0382
+  |                   ^^^^^ value used here after move
+  |
+note: `AssociationStart::<'id, R, P, G, Path>::begin` takes ownership of the receiver `self`, which moves `start`
+ --> src/association.rs
+  |
+  |     pub fn begin(self, spp: Spp) -> Association<'id, R, P, G, Path> {
+  |                  ^^^^
+
+warning: unused variable: `bank`
+ --> tests/ui/association_next_mode.rs:4:63
+  |
+4 | pub fn next<'id>(start: AssociationStart<'id, Station, 1, 1>, bank: VacantKeyBank<'id, Station, 1, 1>) {
+  |                                                               ^^^^ help: if this is intentional, prefix it with an underscore: `_bank`
+  |
+  = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `first`
+ --> tests/ui/association_next_mode.rs:5:9
+  |
+5 |     let first = start.begin(Spp::Negotiated);
+  |         ^^^^^ help: if this is intentional, prefix it with an underscore: `_first`

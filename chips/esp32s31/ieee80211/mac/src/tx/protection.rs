@@ -37,7 +37,7 @@ use core::num::NonZeroU16;
 use oer_espressif_ieee80211_policy::he_txop::{
     EspressifHeTxopRtsBudget, maximum_unprotected_apep_bytes,
 };
-use oer_ieee80211_mac::{
+use oer_ieee80211_wire::{
     phy::PhyRate,
     protection::{ErpProtection, HtProtectionMode},
 };
@@ -453,7 +453,7 @@ impl WifiTxProtectionPolicy {
                 &self,
                 _: portable::HeTxopDurationRtsThreshold,
                 _: portable::HePacketPadding,
-                _: oer_ieee80211_mac::phy::HeRate,
+                _: oer_ieee80211_wire::phy::HeRate,
             ) -> u16 {
                 unreachable!("a legacy PPDU never asks for an HE TXOP budget")
             }

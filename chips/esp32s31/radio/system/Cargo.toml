@@ -9,7 +9,7 @@ description = "The ESP32-S31 radio system: one actor that owns the shared RF fro
 
 [dependencies]
 oer-espressif-coex = { path = "../../../espressif/coex" }
-oer-ieee80211-lower-mac = { path = "../../../../protocols/ieee80211/lower-mac" }
+oer-ieee80211-port = { path = "../../../../protocols/ieee80211/port" }
 embassy-futures = "0.1.2"
 oer-radio-regulatory = { path = "../../../../protocols/radio/regulatory" }
 oer-time = { path = "../../../../portable/time" }
@@ -17,7 +17,7 @@ oer-esp32s31-hal = { path = "../../hal" }
 oer-esp32s31-ieee80211-mac = { path = "../../ieee80211/mac" }
 oer-esp32s31-phy = { path = "../../phy" }
 oer-esp32s31-radio-client = { path = "../client" }
-oer-ieee80211-mac = { path = "../../../../protocols/ieee80211/mac" }
+oer-ieee80211-wire = { path = "../../../../protocols/ieee80211/wire" }
 
 [dev-dependencies]
 oer-radio-regulatory = { path = "../../../../protocols/radio/regulatory", features = ["test-support"] }

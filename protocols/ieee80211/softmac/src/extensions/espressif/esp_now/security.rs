@@ -7,9 +7,9 @@
 //! claims to produce or authenticate encrypted on-air bytes.
 
 use core::{array, fmt};
-use oer_ieee80211_mac::sequence::SequenceNumber;
+use oer_ieee80211_wire::sequence::SequenceNumber;
 
-use oer_ieee80211_mac::{
+use oer_ieee80211_wire::{
     channel::WifiChannel,
     extensions::espressif::esp_now::{
         ESP_NOW_CCMP_HEADER_LEN, ESP_NOW_CCMP_MIC_LEN, ESP_NOW_MANAGEMENT_HEADER_LEN,

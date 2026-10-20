@@ -1,6 +1,6 @@
 #![no_std]
 use oer_ieee80211_arbiter::{Arbiter, NoReservation, PendingRetune};
-use oer_ieee80211_lower_mac::Ieee80211Capabilities;
+use oer_ieee80211_port::Ieee80211Capabilities;
 use oer_radio_port::{Child, Root};
 
 pub fn complete<'id, K: Ieee80211Capabilities>(

@@ -9,8 +9,8 @@
 //!
 //! Received bytes reach this module; nothing here panics on them.
 
-use oer_ieee80211_lower_mac::{RxEvidence, RxMetadata};
-use oer_ieee80211_mac::{
+use oer_ieee80211_port::{RxEvidence, RxMetadata};
+use oer_ieee80211_wire::{
     frame::DecodedHeader,
     receive::RxDropReason,
     scan::{ScanObservation, ScanTable},

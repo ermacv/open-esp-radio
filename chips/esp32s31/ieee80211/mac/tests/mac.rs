@@ -50,8 +50,8 @@ use oer_esp32s31_ieee80211_mac::{
         TxDmaState, TxError, TxHardware, TxPhyRate, TxSlot, select_esp32s31_ht_duplicate_tx,
     },
 };
-use oer_ieee80211_mac::he::{HeMuSigBMimoUser, HeMuSigBNonMimoUser, HeMuSigBUser};
-use oer_ieee80211_mac::trigger::{
+use oer_ieee80211_wire::he::{HeMuSigBMimoUser, HeMuSigBNonMimoUser, HeMuSigBUser};
+use oer_ieee80211_wire::trigger::{
     parse_trigger_common_info, parse_trigger_frame, parse_trigger_user_spatial_stream,
 };
 use oer_ieee80211_softmac::{MacRxEvidence, MacRxMetadata};

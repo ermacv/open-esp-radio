@@ -1,4 +1,4 @@
-use oer_ieee80211_mac::channel::ChannelWidth;
+use oer_ieee80211_wire::channel::ChannelWidth;
 use std::vec::Vec;
 
 use super::*;

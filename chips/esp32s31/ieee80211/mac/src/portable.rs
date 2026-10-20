@@ -7,8 +7,8 @@
 //! meaning, such as an HE MU reception or a rate the S31 formatter cannot
 //! send, fails closed instead of approximating.
 
-use oer_ieee80211_lower_mac::RxMeta;
-use oer_ieee80211_mac::{
+use oer_ieee80211_port::RxMeta;
+use oer_ieee80211_wire::{
     channel::Channel,
     phy::{self, DsssPreamble, FecCoding, HeGiLtf, PhyRate, PpduBandwidth, SpatialStreams},
 };

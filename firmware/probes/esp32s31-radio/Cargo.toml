@@ -18,9 +18,9 @@ oer-esp32s31-hal = { path = "../../../chips/esp32s31/hal" }
 oer-esp32s31-pac = { path = "../../../chips/esp32s31/pac" }
 oer-esp32s31-phy = { path = "../../../chips/esp32s31/phy" }
 oer-esp32s31-ieee80211-mac = { path = "../../../chips/esp32s31/ieee80211/mac" }
-oer-ieee80211-mac = { path = "../../../protocols/ieee80211/mac" }
+oer-ieee80211-wire = { path = "../../../protocols/ieee80211/wire" }
 oer-espressif-esp-hal-radio = { path = "../../../chips/espressif/esp-hal/radio", features = ["esp32s31"] }
-oer-ieee80211-lower-mac = { path = "../../../protocols/ieee80211/lower-mac" }
+oer-ieee80211-port = { path = "../../../protocols/ieee80211/port" }
 oer-time = { path = "../../../portable/time" }
 
 [lib]

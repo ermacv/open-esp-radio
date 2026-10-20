@@ -78,7 +78,7 @@ fn recorded_message3_authenticates_and_retains_its_gtk_wire_id() {
         assert_eq!(
             install.kind(),
             crate::keys::RsnKeyKind::Group {
-                key_id: oer_ieee80211_mac::ccmp::GroupKeyId::new(raw_id).unwrap(),
+                key_id: oer_ieee80211_wire::ccmp::GroupKeyId::new(raw_id).unwrap(),
                 transmit: false,
             }
         );

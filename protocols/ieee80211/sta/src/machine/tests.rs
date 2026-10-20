@@ -9,19 +9,19 @@ use oer_ieee80211_arbiter::ArbiterPool;
 use oer_ieee80211_arbiter::{
     AccessPointCommand, AccessPointFact, Arbiter, ArbiterAction, ArbiterPolicy, NoReservation,
 };
-use oer_ieee80211_lower_mac::{
+use oer_ieee80211_port::{
     BandSet, Channel, ChannelWidth, GateIssuer, HardwareServices, LowerMacCapabilities,
     PhyFormatSet, RateSupport, RxMeta, WidthSet,
 };
-use oer_ieee80211_mac::channel_switch::ChannelSwitchMode;
-use oer_ieee80211_mac::extensions::wmm::{WmmParameterSet, parse_wmm_parameter_element};
-use oer_ieee80211_mac::phy::{HeMcs, HtMcs, LegacyRate, PhyRate};
+use oer_ieee80211_wire::channel_switch::ChannelSwitchMode;
+use oer_ieee80211_wire::extensions::wmm::{WmmParameterSet, parse_wmm_parameter_element};
+use oer_ieee80211_wire::phy::{HeMcs, HtMcs, LegacyRate, PhyRate};
 use oer_radio_port::{Mint, branded};
 use std::vec::Vec;
 
 type TestPools = (
     ArbiterPool,
-    oer_ieee80211_lower_mac::InterfaceCommandPool<StationRole>,
+    oer_ieee80211_port::InterfaceCommandPool<StationRole>,
 );
 type TestGatePath = oer_radio_port::Child<Root, 0>;
 type TestConfigurationPath = oer_radio_port::Child<Root, 1>;
@@ -44,7 +44,7 @@ fn installed<R>(body: impl for<'id> FnOnce(Mint<'id, TestPools>) -> R) -> R {
 struct Caps;
 
 impl Ieee80211Capabilities for Caps {
-    type SppScope = oer_ieee80211_mac::security::spp::Association;
+    type SppScope = oer_ieee80211_wire::security::spp::Association;
     const CAPS: LowerMacCapabilities = LowerMacCapabilities {
         bands: BandSet::GHZ2_4,
         widths: WidthSet::MHZ20,
@@ -84,7 +84,7 @@ struct GroupPermission;
 
 struct Buffer([u8; 512], usize);
 
-impl oer_ieee80211_lower_mac::TxBufferClass for Buffer {
+impl oer_ieee80211_port::TxBufferClass for Buffer {
     const CAPACITY: usize = 512;
 }
 
@@ -101,12 +101,12 @@ struct Slot(u8);
 struct Key<S = Slot>(S);
 
 #[derive(Debug, Eq, PartialEq)]
-struct Pairwise(Key, oer_ieee80211_mac::security::Spp);
+struct Pairwise(Key, oer_ieee80211_wire::security::Spp);
 struct Tokens<const G: usize = 2>;
 
 impl<const G: usize> StaTokens for Tokens<G> {
     type AssociationStart = ();
-    type Association = oer_ieee80211_mac::security::Spp;
+    type Association = oer_ieee80211_wire::security::Spp;
     type VacantKeyBank = (Slot, heapless::Vec<Slot, KEY_BANK_CAPACITY>);
     type VacantAssociation = (Slot, [Slot; G]);
     fn begin_association(_: (), spp: Self::Association) -> Self::Association {
@@ -120,27 +120,27 @@ impl<const G: usize> StaTokens for Tokens<G> {
     ) -> (
         (),
         Slot,
-        oer_ieee80211_lower_mac::association::KeyBankParts<Slot, Slot, KEY_BANK_CAPACITY>,
+        oer_ieee80211_port::association::KeyBankParts<Slot, Slot, KEY_BANK_CAPACITY>,
     ) {
         (
             (),
             pairwise,
-            oer_ieee80211_lower_mac::association::KeyBankParts {
+            oer_ieee80211_port::association::KeyBankParts {
                 pairwise: heapless::Vec::new(),
                 group: group.into_iter().collect(),
             },
         )
     }
     fn collect_key_bank(
-        parts: oer_ieee80211_lower_mac::association::KeyBankParts<Slot, Slot, KEY_BANK_CAPACITY>,
+        parts: oer_ieee80211_port::association::KeyBankParts<Slot, Slot, KEY_BANK_CAPACITY>,
     ) -> Result<
         Self::VacantKeyBank,
-        oer_ieee80211_lower_mac::association::KeyBankParts<Slot, Slot, KEY_BANK_CAPACITY>,
+        oer_ieee80211_port::association::KeyBankParts<Slot, Slot, KEY_BANK_CAPACITY>,
     > {
         if parts.pairwise.len() != 1 || parts.group.len() != G {
             return Err(parts);
         }
-        let oer_ieee80211_lower_mac::association::KeyBankParts {
+        let oer_ieee80211_port::association::KeyBankParts {
             mut pairwise,
             group,
         } = parts;
@@ -152,12 +152,12 @@ impl<const G: usize> StaTokens for Tokens<G> {
     ) -> (
         (),
         Slot,
-        oer_ieee80211_lower_mac::association::KeyBankParts<Slot, Slot, KEY_BANK_CAPACITY>,
+        oer_ieee80211_port::association::KeyBankParts<Slot, Slot, KEY_BANK_CAPACITY>,
     ) {
         (
             (),
             pairwise,
-            oer_ieee80211_lower_mac::association::KeyBankParts {
+            oer_ieee80211_port::association::KeyBankParts {
                 pairwise: heapless::Vec::new(),
                 group,
             },
@@ -262,13 +262,13 @@ fn meta() -> RxMeta {
 fn verified_meta() -> RxMeta {
     let mut meta = meta();
     meta.crypto = RxEvidence::HardwareObserved(
-        oer_ieee80211_lower_mac::RxCryptoStatus::DecryptedAndIntegrityVerified,
+        oer_ieee80211_port::RxCryptoStatus::DecryptedAndIntegrityVerified,
     );
     meta
 }
 
 fn protected_received(mut frame: Vec<u8>, pn: u64) -> Vec<u8> {
-    use oer_ieee80211_mac::ccmp::{CcmpHeader, CcmpKeyId, CcmpPacketNumber};
+    use oer_ieee80211_wire::ccmp::{CcmpHeader, CcmpKeyId, CcmpPacketNumber};
     frame[1] |= 0x40;
     let header = CcmpHeader::new(
         CcmpPacketNumber::new(pn).unwrap(),
@@ -393,8 +393,8 @@ impl<'id> World<'id> {
             gate,
         );
         let config = StaConfig {
-            address: oer_ieee80211_mac::address::OwnAddress::new(
-                oer_ieee80211_mac::address::IndividualAddress::new(LOCAL).unwrap(),
+            address: oer_ieee80211_wire::address::OwnAddress::new(
+                oer_ieee80211_wire::address::IndividualAddress::new(LOCAL).unwrap(),
             ),
             ssid: heapless::Vec::from_slice(SSID).unwrap(),
             channels,
@@ -1030,8 +1030,8 @@ fn a_station_alone_scans_joins_an_open_network_and_leaves_it() {
                 // A BSS without WMM: the interface contends by the DCF.
                 Seen::Edca(WmmParameterSet::DCF),
                 Seen::Notify(StaNotice::Connected {
-                    bssid: oer_ieee80211_mac::address::Bssid::new(
-                        oer_ieee80211_mac::address::IndividualAddress::new(BSSID).unwrap()
+                    bssid: oer_ieee80211_wire::address::Bssid::new(
+                        oer_ieee80211_wire::address::IndividualAddress::new(BSSID).unwrap()
                     )
                     .unwrap(),
                     channel: 6
@@ -1559,8 +1559,8 @@ fn a_terminal_of_the_previous_connection_only_returns_its_resources() {
         let old = world
             .station
             .encode_null(
-                oer_ieee80211_mac::address::Bssid::new(
-                    oer_ieee80211_mac::address::IndividualAddress::new(BSSID).unwrap(),
+                oer_ieee80211_wire::address::Bssid::new(
+                    oer_ieee80211_wire::address::IndividualAddress::new(BSSID).unwrap(),
                 )
                 .unwrap(),
                 StaPowerManagement::Active,
@@ -1827,7 +1827,7 @@ fn a_const_group_capacity_builds_a_personal_station() {
 #[test]
 fn a_station_joins_a_wpa2_network_through_the_four_way_handshake() {
     installed(|mint| {
-        use oer_ieee80211_mac::security::rsn::Akm;
+        use oer_ieee80211_wire::security::rsn::Akm;
         use oer_ieee80211_rsn::{PtkContext, frames::RsnTxFrame};
 
         let mut world = World::with_security(
@@ -1893,8 +1893,8 @@ fn a_station_joins_a_wpa2_network_through_the_four_way_handshake() {
                     on: 6
                 },
                 Seen::Notify(StaNotice::Connected {
-                    bssid: oer_ieee80211_mac::address::Bssid::new(
-                        oer_ieee80211_mac::address::IndividualAddress::new(BSSID).unwrap()
+                    bssid: oer_ieee80211_wire::address::Bssid::new(
+                        oer_ieee80211_wire::address::IndividualAddress::new(BSSID).unwrap()
                     )
                     .unwrap(),
                     channel: 6
@@ -1934,7 +1934,7 @@ fn wpa2_associated_by<'id, const G: usize>(
     mint: Mint<'id, TestPools>,
     beacon: &[u8],
 ) -> (World<'id, G>, oer_ieee80211_rsn::Ptk) {
-    use oer_ieee80211_mac::security::rsn::Akm;
+    use oer_ieee80211_wire::security::rsn::Akm;
     use oer_ieee80211_rsn::{PtkContext, frames::RsnTxFrame};
 
     let mut world = World::with_groups(
@@ -1980,7 +1980,7 @@ fn wpa2_connected_by<'id, const G: usize>(
     mint: Mint<'id, TestPools>,
     beacon: &[u8],
 ) -> (World<'id, G>, oer_ieee80211_rsn::Ptk) {
-    use oer_ieee80211_mac::security::rsn::Akm;
+    use oer_ieee80211_wire::security::rsn::Akm;
     use oer_ieee80211_rsn::frames::RsnTxFrame;
 
     let (mut world, ptk) = wpa2_associated_by::<G>(mint, beacon);
@@ -2003,7 +2003,7 @@ fn wpa2_connected_by<'id, const G: usize>(
 #[test]
 fn m4_refused_before_admission_never_completes_the_handshake() {
     installed(|mint| {
-        use oer_ieee80211_mac::security::rsn::Akm;
+        use oer_ieee80211_wire::security::rsn::Akm;
         use oer_ieee80211_rsn::frames::RsnTxFrame;
 
         let (mut world, ptk) = wpa2_associated::<2>(mint);
@@ -2050,7 +2050,7 @@ fn m4_refused_before_admission_never_completes_the_handshake() {
 #[test]
 fn a_wpa2_gtk_kde_with_id_zero_uses_a_group_slot() {
     installed(|mint| {
-        use oer_ieee80211_mac::security::rsn::Akm;
+        use oer_ieee80211_wire::security::rsn::Akm;
         use oer_ieee80211_rsn::frames::RsnTxFrame;
 
         let (mut world, ptk) = wpa2_associated::<1>(mint);
@@ -2091,7 +2091,7 @@ fn a_wpa2_gtk_kde_with_id_zero_uses_a_group_slot() {
 
 /// Group Message 1 of key `key_id` with replay counter `replay`.
 fn group_message1(ptk: &oer_ieee80211_rsn::Ptk, replay: u64, key_id: u8) -> std::vec::Vec<u8> {
-    use oer_ieee80211_mac::security::rsn::Akm;
+    use oer_ieee80211_wire::security::rsn::Akm;
     use oer_ieee80211_rsn::frames::RsnTxFrame;
 
     let mut plain = std::vec::Vec::new();
@@ -2184,7 +2184,7 @@ fn tid_and_sequence(frame: &[u8]) -> (u8, u16) {
 fn eapol_and_data_on_tid_7_share_one_counter_and_tid_0_runs_on_across_a_rekey() {
     installed(|mint| {
         use crate::data::{DataInput, Msdu, StaData};
-        use oer_ieee80211_mac::qos::WmmUserPriority;
+        use oer_ieee80211_wire::qos::WmmUserPriority;
 
         // A QoS BSS: the beacon advertises WMM.
         let mut beacon = wpa2_beacon().to_vec();
@@ -2281,13 +2281,13 @@ fn identical_gtk_material_keeps_its_installation_and_replay_frontier() {
         let LinkProtection::Ccmp { replay, .. } = &mut link.protection else {
             panic!()
         };
-        let header = oer_ieee80211_mac::ccmp::CcmpHeader::new(
-            oer_ieee80211_mac::ccmp::CcmpPacketNumber::new(900).unwrap(),
+        let header = oer_ieee80211_wire::ccmp::CcmpHeader::new(
+            oer_ieee80211_wire::ccmp::CcmpPacketNumber::new(900).unwrap(),
             GroupKeyId::new(2).unwrap().key_id(),
         );
         replay
             .check(
-                oer_ieee80211_mac::ccmp::CcmpRxProtection::Group,
+                oer_ieee80211_wire::ccmp::CcmpRxProtection::Group,
                 None,
                 header,
             )
@@ -2305,7 +2305,7 @@ fn identical_gtk_material_keeps_its_installation_and_replay_frontier() {
         assert!(
             replay
                 .check(
-                    oer_ieee80211_mac::ccmp::CcmpRxProtection::Group,
+                    oer_ieee80211_wire::ccmp::CcmpRxProtection::Group,
                     None,
                     header
                 )
@@ -2327,14 +2327,14 @@ fn old_rx_between_replacement_and_its_terminal_cannot_advance_the_successor_epoc
             panic!()
         };
         let header = |pn| {
-            oer_ieee80211_mac::ccmp::CcmpHeader::new(
-                oer_ieee80211_mac::ccmp::CcmpPacketNumber::new(pn).unwrap(),
+            oer_ieee80211_wire::ccmp::CcmpHeader::new(
+                oer_ieee80211_wire::ccmp::CcmpPacketNumber::new(pn).unwrap(),
                 GroupKeyId::new(1).unwrap().key_id(),
             )
         };
         replay
             .check(
-                oer_ieee80211_mac::ccmp::CcmpRxProtection::Group,
+                oer_ieee80211_wire::ccmp::CcmpRxProtection::Group,
                 None,
                 header(900),
             )
@@ -2348,7 +2348,7 @@ fn old_rx_between_replacement_and_its_terminal_cannot_advance_the_successor_epoc
         };
         replay
             .check(
-                oer_ieee80211_mac::ccmp::CcmpRxProtection::Group,
+                oer_ieee80211_wire::ccmp::CcmpRxProtection::Group,
                 None,
                 header(1),
             )
@@ -2356,7 +2356,7 @@ fn old_rx_between_replacement_and_its_terminal_cannot_advance_the_successor_epoc
         assert!(
             replay
                 .check(
-                    oer_ieee80211_mac::ccmp::CcmpRxProtection::Group,
+                    oer_ieee80211_wire::ccmp::CcmpRxProtection::Group,
                     None,
                     header(1)
                 )
@@ -2383,7 +2383,7 @@ fn a_handshake_that_times_out_deauthenticates_with_its_reason() {
 #[test]
 fn a_message_3_whose_key_data_does_not_unwrap_deauthenticates() {
     installed(|mint| {
-        use oer_ieee80211_mac::security::rsn::Akm;
+        use oer_ieee80211_wire::security::rsn::Akm;
         use oer_ieee80211_rsn::frames::RsnTxFrame;
 
         let (mut world, ptk) = wpa2_associated::<2>(mint);
@@ -2567,7 +2567,7 @@ fn a_candidate_on_the_access_points_channel_wins_within_the_margin() {
 
 #[test]
 fn stale_handshake_installations_return_the_association_only_after_all_keys() {
-    use oer_ieee80211_mac::security::rsn::Akm;
+    use oer_ieee80211_wire::security::rsn::Akm;
     use oer_ieee80211_rsn::frames::RsnTxFrame;
 
     for group_pending in [false, true] {
@@ -2700,7 +2700,7 @@ fn group_removal_returns_permission_before_another_owner_can_leave() {
                 material: Ccmp128Key::new(&[id; 16]),
                 key: Key(Slot(slot)),
                 replay: GroupReplay::Retained(
-                    oer_ieee80211_mac::ccmp::CcmpRxReplayState::from_receive_sequence([0; 8])
+                    oer_ieee80211_wire::ccmp::CcmpRxReplayState::from_receive_sequence([0; 8])
                         .unwrap(),
                 ),
             },
@@ -2813,8 +2813,8 @@ fn deauthentication_waits_for_the_ticket_and_buffer_of_an_accepted_transmission(
                 world
                     .station
                     .encode_null(
-                        oer_ieee80211_mac::address::Bssid::new(
-                            oer_ieee80211_mac::address::IndividualAddress::new(BSSID).unwrap(),
+                        oer_ieee80211_wire::address::Bssid::new(
+                            oer_ieee80211_wire::address::IndividualAddress::new(BSSID).unwrap(),
                         )
                         .unwrap(),
                         StaPowerManagement::Active,
@@ -2836,7 +2836,7 @@ fn deauthentication_waits_for_the_ticket_and_buffer_of_an_accepted_transmission(
                 ticket: transmit.ticket,
                 buffer: ReturnedMpdu::Fresh(transmit.buffer),
                 completion: TxOutcome::Withdrawn(
-                    oer_ieee80211_lower_mac::WithdrawCause::GateClosed,
+                    oer_ieee80211_port::WithdrawCause::GateClosed,
                 ),
             },
         );
@@ -3030,14 +3030,14 @@ fn association_waits_for_credit_without_consuming_a_request_and_still_expires() 
             channel: world.station.config.channels[0],
             step: JoinStep::Associate(
                 StaAssociationRuntime::new(
-                    oer_ieee80211_mac::address::OwnAddress::new(
-                        oer_ieee80211_mac::address::IndividualAddress::new(LOCAL).unwrap(),
+                    oer_ieee80211_wire::address::OwnAddress::new(
+                        oer_ieee80211_wire::address::IndividualAddress::new(LOCAL).unwrap(),
                     ),
-                    oer_ieee80211_mac::address::Bssid::new(
-                        oer_ieee80211_mac::address::IndividualAddress::new(BSSID).unwrap(),
+                    oer_ieee80211_wire::address::Bssid::new(
+                        oer_ieee80211_wire::address::IndividualAddress::new(BSSID).unwrap(),
                     )
                     .unwrap(),
-                    oer_ieee80211_mac::security::LinkProtection::Open,
+                    oer_ieee80211_wire::security::LinkProtection::Open,
                     at(100),
                 )
                 .unwrap(),
@@ -3076,7 +3076,7 @@ fn association_waits_for_credit_without_consuming_a_request_and_still_expires() 
                 ticket: transmit.ticket,
                 buffer: ReturnedMpdu::Fresh(transmit.buffer),
                 completion: TxOutcome::Withdrawn(
-                    oer_ieee80211_lower_mac::WithdrawCause::GateClosed,
+                    oer_ieee80211_port::WithdrawCause::GateClosed,
                 ),
             },
         );
@@ -3106,7 +3106,7 @@ fn association_waits_for_credit_without_consuming_a_request_and_still_expires() 
 
 #[test]
 fn handshake_deadline_covers_every_message_key_and_tx_wait() {
-    use oer_ieee80211_mac::security::rsn::Akm;
+    use oer_ieee80211_wire::security::rsn::Akm;
     use oer_ieee80211_rsn::{PtkContext, frames::RsnTxFrame};
     for point in 0..8 {
         installed(|mint| {
@@ -3289,8 +3289,8 @@ fn every_control_encoder_reserves_credit_before_consuming_its_sequence() {
                     match encoding {
                         0 => station
                             .encode_eapol(
-                                oer_ieee80211_mac::address::Bssid::new(
-                                    oer_ieee80211_mac::address::IndividualAddress::new(BSSID)
+                                oer_ieee80211_wire::address::Bssid::new(
+                                    oer_ieee80211_wire::address::IndividualAddress::new(BSSID)
                                         .unwrap(),
                                 )
                                 .unwrap(),
@@ -3300,8 +3300,8 @@ fn every_control_encoder_reserves_credit_before_consuming_its_sequence() {
                             .ok(),
                         1 => station
                             .encode_null(
-                                oer_ieee80211_mac::address::Bssid::new(
-                                    oer_ieee80211_mac::address::IndividualAddress::new(BSSID)
+                                oer_ieee80211_wire::address::Bssid::new(
+                                    oer_ieee80211_wire::address::IndividualAddress::new(BSSID)
                                         .unwrap(),
                                 )
                                 .unwrap(),
@@ -3310,8 +3310,8 @@ fn every_control_encoder_reserves_credit_before_consuming_its_sequence() {
                             .ok(),
                         2 => station
                             .encode_protected_eapol(
-                                oer_ieee80211_mac::address::Bssid::new(
-                                    oer_ieee80211_mac::address::IndividualAddress::new(BSSID)
+                                oer_ieee80211_wire::address::Bssid::new(
+                                    oer_ieee80211_wire::address::IndividualAddress::new(BSSID)
                                         .unwrap(),
                                 )
                                 .unwrap(),
@@ -3322,8 +3322,8 @@ fn every_control_encoder_reserves_credit_before_consuming_its_sequence() {
                             .ok(),
                         3 => station
                             .encode_protected_eapol(
-                                oer_ieee80211_mac::address::Bssid::new(
-                                    oer_ieee80211_mac::address::IndividualAddress::new(BSSID)
+                                oer_ieee80211_wire::address::Bssid::new(
+                                    oer_ieee80211_wire::address::IndividualAddress::new(BSSID)
                                         .unwrap(),
                                 )
                                 .unwrap(),
@@ -3336,8 +3336,8 @@ fn every_control_encoder_reserves_credit_before_consuming_its_sequence() {
                         5 | 6 => station
                             .encode_management(
                                 StaManagementSubtype::Deauthentication,
-                                oer_ieee80211_mac::address::Bssid::new(
-                                    oer_ieee80211_mac::address::IndividualAddress::new(BSSID)
+                                oer_ieee80211_wire::address::Bssid::new(
+                                    oer_ieee80211_wire::address::IndividualAddress::new(BSSID)
                                         .unwrap(),
                                 )
                                 .unwrap(),
@@ -3515,17 +3515,17 @@ enum End {
 }
 
 /// A terminal on the tests' port, whose ACK evidence is empty.
-type Outcome = oer_ieee80211_lower_mac::SingleOutcome<(), ()>;
+type Outcome = oer_ieee80211_port::SingleOutcome<(), ()>;
 
 fn ended(status: End) -> Outcome {
-    let air = oer_ieee80211_lower_mac::Air {
+    let air = oer_ieee80211_port::Air {
         transmissions: NonZeroU16::MIN,
         rate: PhyRate::Legacy(LegacyRate::Ofdm6M),
     };
     TxOutcome::Ended(match status {
         End::Delivered => SingleEnd::Delivered {
             air,
-            response: oer_ieee80211_lower_mac::SingleResponse::Ack(()),
+            response: oer_ieee80211_port::SingleResponse::Ack(()),
         },
         End::AckTimeout => SingleEnd::AckTimeout(air),
         End::ContentionLimit => SingleEnd::ContentionLimit(Some(air)),
@@ -3533,7 +3533,7 @@ fn ended(status: End) -> Outcome {
 }
 
 fn retry_message3(ptk: &oer_ieee80211_rsn::Ptk, counter: u64, material: u8) -> Vec<u8> {
-    use oer_ieee80211_mac::security::rsn::Akm;
+    use oer_ieee80211_wire::security::rsn::Akm;
     use oer_ieee80211_rsn::frames::RsnTxFrame;
     let mut plain = Vec::from(RSN);
     plain.extend_from_slice(&[0xdd, 22, 0x00, 0x0f, 0xac, 0x01, 0x01, 0x00]);
@@ -3549,7 +3549,7 @@ fn retry_message3(ptk: &oer_ieee80211_rsn::Ptk, counter: u64, material: u8) -> V
 
 #[test]
 fn connected_duplicate_m3_answers_without_reinstalling_or_resetting_replay() {
-    use oer_ieee80211_mac::ccmp::{CcmpHeader, CcmpPacketNumber, CcmpRxProtection};
+    use oer_ieee80211_wire::ccmp::{CcmpHeader, CcmpPacketNumber, CcmpRxProtection};
     installed(|mint| {
         let (mut world, ptk) = wpa2_connected::<2>(mint);
         let header = CcmpHeader::new(
@@ -3718,7 +3718,7 @@ fn connected_eapol_rejects_changed_m3_and_unprotected_group_message1() {
 
 #[test]
 fn only_delivered_m4_connects_and_other_terminals_keep_the_original_deadline() {
-    use oer_ieee80211_lower_mac::{IndeterminateCause, WithdrawCause};
+    use oer_ieee80211_port::{IndeterminateCause, WithdrawCause};
     for (outcome, published) in [
         (ended(End::Delivered), true),
         (ended(End::AckTimeout), true),
@@ -3921,7 +3921,7 @@ fn pending_group_material_is_redacted_and_moves_into_the_installed_record() {
             material: Ccmp128Key::new(material.as_bytes()),
             place: keys.groups.reserve().unwrap(),
             replay: GroupReplay::Retained(
-                oer_ieee80211_mac::ccmp::CcmpRxReplayState::from_receive_sequence([0; 8]).unwrap(),
+                oer_ieee80211_wire::ccmp::CcmpRxReplayState::from_receive_sequence([0; 8]).unwrap(),
             ),
         };
         let printed = std::format!("{pending:?}");
@@ -3939,7 +3939,7 @@ fn pending_group_material_is_redacted_and_moves_into_the_installed_record() {
 
 #[test]
 fn repeated_m3_selects_retained_material_and_restores_each_live_replay_frontier() {
-    use oer_ieee80211_mac::ccmp::{CcmpHeader, CcmpPacketNumber, CcmpRxProtection};
+    use oer_ieee80211_wire::ccmp::{CcmpHeader, CcmpPacketNumber, CcmpRxProtection};
     installed(|mint| {
         let (mut world, ptk) = wpa2_associated::<2>(mint);
         let id = GroupKeyId::new(1).unwrap();
@@ -4177,7 +4177,7 @@ fn a_removal_issued_before_leave_returns_its_record_and_permission_after_leave()
 #[test]
 fn delivered_m4_retains_all_installed_groups_until_leave() {
     fn exercise<const G: usize>(leave: bool) {
-        use oer_ieee80211_mac::security::rsn::Akm;
+        use oer_ieee80211_wire::security::rsn::Akm;
         use oer_ieee80211_rsn::{PtkContext, frames::RsnTxFrame};
         installed(|mint| {
             let mut world = World::with_groups(
@@ -4269,7 +4269,7 @@ fn delivered_m4_retains_all_installed_groups_until_leave() {
 
 #[test]
 fn previous_auth_terminal_cannot_finish_new_attempt() {
-    use oer_ieee80211_lower_mac::{IndeterminateCause, WithdrawCause};
+    use oer_ieee80211_port::{IndeterminateCause, WithdrawCause};
     for outcome in [
         Some(ended(End::Delivered)),
         Some(ended(End::AckTimeout)),
@@ -4381,7 +4381,7 @@ fn previous_auth_terminal_cannot_finish_new_attempt() {
 
 #[test]
 fn review_negotiated_pmf_rejects_unprotected_deauthentication() {
-    use oer_ieee80211_mac::security::rsn::Akm;
+    use oer_ieee80211_wire::security::rsn::Akm;
     use oer_ieee80211_rsn::frames::RsnTxFrame;
     installed(|mint| {
         let mut advertised_rsn = RSN;
@@ -4431,7 +4431,7 @@ mod management;
 
 #[test]
 fn negotiated_spp_from_the_association_is_retained_by_the_ptk_owner() {
-    use oer_ieee80211_mac::security::{
+    use oer_ieee80211_wire::security::{
         Spp,
         rsn::{Akm, RSN_CAPABILITY_SPP_AMSDU_CAPABLE, RSN_CAPABILITY_SPP_AMSDU_REQUIRED},
     };

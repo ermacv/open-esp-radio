@@ -30,7 +30,7 @@ use oer_esp32s31_ieee80211_mac::tx::runtime::{
 use oer_esp32s31_ieee80211_mac::tx::{
     HtAmpduTxConfig, HtChannelWidth, HtGuardInterval, HtMcs, HtRate, LegacyTxQueue, TxHardware,
 };
-use oer_ieee80211_mac::sequence::SequenceNumber;
+use oer_ieee80211_wire::sequence::SequenceNumber;
 use oer_memory::{HardwareOwnedTxDma, PinnedDmaTxPool, PinnedDmaTxRadioLease, PreparedTxDma};
 use oer_time::{Duration, Instant};
 

@@ -23,7 +23,7 @@ use oer_esp32s31_radio_client::{
     Untracked,
     wifi::{TrackReport, Wifi, WifiJoin, WifiJoined, WifiReturned, WifiTrack, WifiTracked},
 };
-use oer_ieee80211_mac::channel::WifiChannel;
+use oer_ieee80211_wire::channel::WifiChannel;
 use oer_ieee80211_softmac::WifiMacAddress;
 use oer_time::Duration;
 

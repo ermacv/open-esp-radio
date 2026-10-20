@@ -5,7 +5,7 @@
 //! `oer-ieee80211-upper-mac`, which a backend running the Espressif policy
 //! instantiates with them.
 
-use oer_ieee80211_mac::qos::WmmAccessCategory;
+use oer_ieee80211_wire::qos::WmmAccessCategory;
 use oer_ieee80211_upper_mac::{AckFailureAccounting, AmpduRetryPolicy, RetryLimits};
 use oer_time::Duration;
 

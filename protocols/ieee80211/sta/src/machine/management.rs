@@ -1,6 +1,6 @@
 //! PMF state owned by one association, separate from data replay frontiers.
 
-use oer_ieee80211_mac::{
+use oer_ieee80211_wire::{
     address::{Bssid, OwnAddress},
     frame::DecodedHeader,
     management_protection::SaQuery,

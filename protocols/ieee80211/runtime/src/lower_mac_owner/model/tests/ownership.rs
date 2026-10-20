@@ -73,11 +73,11 @@ fn observe(
 fn returned<'id>(
     event: LowerMacEvent<'id, ModelTypes<Contexts>>,
     seen: &RefCell<Vec<conformance::Returned>>,
-    terminal_access: &mut oer_ieee80211_lower_mac::TerminalAccess<'id, ModelTickets, ModelPool<1>>,
+    terminal_access: &mut oer_ieee80211_port::TerminalAccess<'id, ModelTickets, ModelPool<1>>,
 ) {
     match event {
         LowerMacEvent::Terminal(LowerMacTerminal::TxCompleted(TxCompleted::Single(terminal))) => {
-            let oer_ieee80211_lower_mac::TerminalParts {
+            let oer_ieee80211_port::TerminalParts {
                 context,
                 ticket,
                 outcome: completion,
@@ -209,14 +209,14 @@ impl PortBody<Backend> for Operations {
                         phase
                             .station()
                             .submit(
-                                (oer_ieee80211_lower_mac::Attempt {
+                                (oer_ieee80211_port::Attempt {
                                     context,
                                     ticket,
                                     source,
                                     access_category: operation.category,
                                     protection: Protection::None,
                                     power: SupportedPower::new(TxPower::Calibrated).unwrap(),
-                                    coex_operation: oer_ieee80211_lower_mac::TxOperation::Data,
+                                    coex_operation: oer_ieee80211_port::TxOperation::Data,
                                 })
                                 .admit(),
                             )
@@ -355,7 +355,7 @@ impl PortBody<ModelBackend<ModelCaps, AggregateContext>> for AggregateOwners {
         resources: ModelResources<'id>,
     ) -> Ended<'id, ModelBackend<ModelCaps, AggregateContext>, ()> {
         let mut terminal_access = resources.terminal_access;
-        use oer_ieee80211_lower_mac::{AggregateAttempt, AmpduPhase, MpduStartSpacing, Tid};
+        use oer_ieee80211_port::{AggregateAttempt, AmpduPhase, MpduStartSpacing, Tid};
         let Ok(mut owner) = owner.enable().await else {
             panic!("the model enables")
         };
@@ -368,9 +368,9 @@ impl PortBody<ModelBackend<ModelCaps, AggregateContext>> for AggregateOwners {
         } = resources;
         {
             let mut phase = owner.phase();
-            let ht = oer_ieee80211_mac::phy::HtRate::new(
+            let ht = oer_ieee80211_wire::phy::HtRate::new(
                 HtMcs::new(7).unwrap(),
-                oer_ieee80211_mac::phy::PpduBandwidth::Mhz20,
+                oer_ieee80211_wire::phy::PpduBandwidth::Mhz20,
                 false,
             )
             .unwrap();
@@ -378,7 +378,7 @@ impl PortBody<ModelBackend<ModelCaps, AggregateContext>> for AggregateOwners {
             let mut station = phase.station();
             let association = ModelKeys::<Station>::begin_association(
                 resources.station_association,
-                oer_ieee80211_mac::security::Spp::NotNegotiated,
+                oer_ieee80211_wire::security::Spp::NotNegotiated,
             );
             let key = station.install_pairwise_key(
                 &association,
@@ -450,7 +450,7 @@ impl PortBody<ModelBackend<ModelCaps, AggregateContext>> for AggregateOwners {
             else {
                 unreachable!()
             };
-            let oer_ieee80211_lower_mac::TerminalParts {
+            let oer_ieee80211_port::TerminalParts {
                 context,
                 ticket,
                 payload,
@@ -518,7 +518,7 @@ fn aggregate_terminal_returns_its_context_and_each_subframes_resources_on_air_or
     for (withdraw, initial_pn) in [
         (false, 0),
         (true, 0),
-        (false, oer_ieee80211_mac::ccmp::CCMP_PACKET_NUMBER_MAX - 3),
+        (false, oer_ieee80211_wire::ccmp::CCMP_PACKET_NUMBER_MAX - 3),
     ] {
         let (backend, air) = ModelBackend::<ModelCaps, AggregateContext>::new(
             Channel::ghz2_4(6, ChannelWidth::Mhz20).unwrap(),
@@ -568,10 +568,10 @@ impl PortBody<ModelBackend<ModelCaps, FaultContext>> for PublicationFault {
     ) -> Ended<'id, ModelBackend<ModelCaps, FaultContext>, ()> {
         let station_association = ModelKeys::<Station>::begin_association(
             resources.station_association,
-            oer_ieee80211_mac::security::Spp::NotNegotiated,
+            oer_ieee80211_wire::security::Spp::NotNegotiated,
         );
 
-        use oer_ieee80211_lower_mac::{AggregateAttempt, MpduStartSpacing};
+        use oer_ieee80211_port::{AggregateAttempt, MpduStartSpacing};
         let mut owner = owner.enable().await.ok().unwrap();
         let ModelResources {
             mut tickets,
@@ -587,7 +587,7 @@ impl PortBody<ModelBackend<ModelCaps, FaultContext>> for PublicationFault {
                 IndividualAddress::new(PEER).unwrap(),
                 Ccmp128Key::new(&[7; 16]),
             );
-            let last = oer_ieee80211_mac::ccmp::CCMP_PACKET_NUMBER_MAX - self.remaining;
+            let last = oer_ieee80211_wire::ccmp::CCMP_PACKET_NUMBER_MAX - self.remaining;
             key.identity.0.last.set(last);
             let ticket = tickets.remove(0);
             let ticket_index = ticket.index();
@@ -597,9 +597,9 @@ impl PortBody<ModelBackend<ModelCaps, FaultContext>> for PublicationFault {
             let body = ModelBody(alloc::vec![0x7a; 4]);
             let first_body = body.0.as_ptr();
             if self.aggregate {
-                let ht = oer_ieee80211_mac::phy::HtRate::new(
+                let ht = oer_ieee80211_wire::phy::HtRate::new(
                     HtMcs::new(7).unwrap(),
-                    oer_ieee80211_mac::phy::PpduBandwidth::Mhz20,
+                    oer_ieee80211_wire::phy::PpduBandwidth::Mhz20,
                     false,
                 )
                 .unwrap();
@@ -651,14 +651,14 @@ impl PortBody<ModelBackend<ModelCaps, FaultContext>> for PublicationFault {
                     phase.held.poison();
                 }
                 let submitted = phase.station().submit(
-                    (oer_ieee80211_lower_mac::Attempt {
+                    (oer_ieee80211_port::Attempt {
                         context,
                         ticket,
                         source,
                         access_category: WmmAccessCategory::BestEffort,
                         protection: Protection::None,
                         power: SupportedPower::new(TxPower::Calibrated).unwrap(),
-                        coex_operation: oer_ieee80211_lower_mac::TxOperation::Data,
+                        coex_operation: oer_ieee80211_port::TxOperation::Data,
                     })
                     .admit(),
                 );

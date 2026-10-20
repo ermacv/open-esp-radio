@@ -29,7 +29,7 @@ use oer_esp32s31_ieee80211_mac::{
     },
 };
 
-use oer_ieee80211_mac::{channel::WifiChannel, qos::WmmAccessCategory};
+use oer_ieee80211_wire::{channel::WifiChannel, qos::WmmAccessCategory};
 
 use oer_ieee80211_softmac::EspressifLongRangeRate;
 
@@ -641,8 +641,8 @@ pub enum EspNowTxError {
         required: usize,
         available: usize,
     },
-    Wire(oer_ieee80211_mac::extensions::espressif::esp_now::EspNowV1WireError),
-    V2Wire(oer_ieee80211_mac::extensions::espressif::esp_now::EspNowV2WireError),
+    Wire(oer_ieee80211_wire::extensions::espressif::esp_now::EspNowV1WireError),
+    V2Wire(oer_ieee80211_wire::extensions::espressif::esp_now::EspNowV2WireError),
     Tx(OrdinaryTxError),
 }
 

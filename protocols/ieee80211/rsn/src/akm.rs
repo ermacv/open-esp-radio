@@ -8,7 +8,7 @@
 use aes::Aes128;
 use cmac::Cmac;
 use hmac::{Hmac, Mac};
-use oer_ieee80211_mac::security::rsn::Akm;
+use oer_ieee80211_wire::security::rsn::Akm;
 use sha1::Sha1;
 use zeroize::Zeroize;
 

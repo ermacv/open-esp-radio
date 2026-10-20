@@ -23,7 +23,7 @@ fn retirement_returns_the_table_without_secrets_and_preserves_its_frontier() {
     assert_eq!(peers.storage.generation, old.association_epoch());
 
     let mut restarted =
-        AccessPointService::<oer_ieee80211_mac::security::spp::Association>::new_open(
+        AccessPointService::<oer_ieee80211_wire::security::spp::Association>::new_open(
             AP,
             AccessPointClientLimit::new(2).unwrap(),
             AccessPointInactiveTimeout::default(),

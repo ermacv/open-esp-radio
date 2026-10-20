@@ -6,7 +6,7 @@
 //! `CWmin` when the frame ends. The random source is injected, so a seeded
 //! source makes the draws deterministic.
 
-use oer_ieee80211_mac::extensions::wmm::WmmAcParameters;
+use oer_ieee80211_wire::extensions::wmm::WmmAcParameters;
 
 /// The largest contention-window exponent: the four-bit ECW fields of the
 /// EDCA Parameter Set.

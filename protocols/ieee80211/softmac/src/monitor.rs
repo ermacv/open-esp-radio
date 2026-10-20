@@ -10,7 +10,7 @@ use core::{
     num::{NonZeroU16, NonZeroU32},
 };
 
-use oer_ieee80211_mac::channel::WifiChannel;
+use oer_ieee80211_wire::channel::WifiChannel;
 
 use crate::{
     MacRxEvidence, MacRxMetadata,

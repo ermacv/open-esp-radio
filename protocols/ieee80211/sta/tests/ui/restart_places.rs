@@ -1,6 +1,6 @@
 #![no_std]
 use oer_ieee80211_arbiter::{StationPlaces, StationPlaceReturns};
-use oer_ieee80211_lower_mac::Ieee80211Capabilities;
+use oer_ieee80211_port::Ieee80211Capabilities;
 use oer_ieee80211_sta::machine::{RetiredStation, StaTokens};
 
 pub fn restart<'id, T: StaTokens, K: Ieee80211Capabilities>(

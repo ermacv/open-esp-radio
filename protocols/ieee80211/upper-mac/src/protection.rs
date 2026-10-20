@@ -22,8 +22,8 @@
 
 use core::num::NonZeroU16;
 
-use oer_ieee80211_lower_mac::Protection;
-use oer_ieee80211_mac::{
+use oer_ieee80211_port::Protection;
+use oer_ieee80211_wire::{
     phy::{DsssPreamble, HeRate, LegacyRate, PhyRate, PpduBandwidth},
     protection::{ErpProtection, HtProtectionMode},
 };

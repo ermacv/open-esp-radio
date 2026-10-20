@@ -19,9 +19,9 @@ use oer_esp32s31_ieee80211_mac::{
         runtime::WifiTxRuntimePolicy,
     },
 };
-use oer_ieee80211_lower_mac::{HardwareServices, PhyRate, RxEvidence};
-use oer_ieee80211_mac::tsf::TsfInstant;
-use oer_ieee80211_mac::{
+use oer_ieee80211_port::{HardwareServices, PhyRate, RxEvidence};
+use oer_ieee80211_wire::tsf::TsfInstant;
+use oer_ieee80211_wire::{
     channel::ChannelWidth,
     phy::{self, FecCoding, HeGiLtf, LegacyRate, PpduBandwidth, SpatialStreams},
     qos::WmmAccessCategory,
@@ -38,7 +38,7 @@ use super::*;
 use crate::ordinary_tx::{WifiTxPowerPair, WifiTxResources};
 use crate::station_tsf::StationTsfWrite;
 use crate::tx::WifiTxProgress;
-use oer_ieee80211_lower_mac::TSF_DRIFT_PPM;
+use oer_ieee80211_port::TSF_DRIFT_PPM;
 
 const STATION: MacAddress = [0x02, 0x03, 0x04, 0x05, 0x06, 0x07];
 const ACCESS_POINT: MacAddress = [0x02, 0x11, 0x12, 0x13, 0x14, 0x15];
@@ -484,8 +484,8 @@ impl<'id> TestAssociations<'id> {
         let (ap_start, ap_bank) = access_point.into_parts();
         let (ap_pairwise, ap_group) = ap_bank.into_parts();
         Self {
-            station: start.begin(oer_ieee80211_mac::security::Spp::NotNegotiated),
-            access_point: ap_start.begin(oer_ieee80211_mac::security::Spp::NotNegotiated),
+            station: start.begin(oer_ieee80211_wire::security::Spp::NotNegotiated),
+            access_point: ap_start.begin(oer_ieee80211_wire::security::Spp::NotNegotiated),
             sta_pairwise: Some(pairwise),
             sta_group: Some(group),
             ap_pairwise: ap_pairwise.map(Some),
@@ -582,7 +582,7 @@ impl<'core> Core<'core> {
     fn install_receive_key(
         &mut self,
         hardware: &mut Hardware,
-        id: oer_ieee80211_mac::ccmp::GroupKeyId,
+        id: oer_ieee80211_wire::ccmp::GroupKeyId,
         material: &[u8; 16],
     ) -> Result<ReceiveKeyHandle<'core>, LowerMacFault> {
         let slot = self.associations.sta_group.take().unwrap();
@@ -643,7 +643,7 @@ impl<'core> Core<'core> {
         let key_use = self.inner.admit_key(key, ticket).ok().expect("TX key");
         let frame = &mut request.slot.buffer_mut()[TX_METADATA_SIZE..];
         let control =
-            oer_ieee80211_mac::frame::FrameControl::new(u16::from_le_bytes([frame[0], frame[1]]))
+            oer_ieee80211_wire::frame::FrameControl::new(u16::from_le_bytes([frame[0], frame[1]]))
                 .unwrap();
         frame[..2].copy_from_slice(&control.with_protected(true).get().to_le_bytes());
         self.inner.submit_checked(
@@ -1014,7 +1014,7 @@ fn reserved_descriptor_never_lends_classic_idle_authority() {
 /// inspecting semantic HAL publications rather than register images.
 fn check_management_transmissions(
     receiver: MacAddress,
-    management: oer_ieee80211_lower_mac::ManagementTxPlan,
+    management: oer_ieee80211_port::ManagementTxPlan,
     completions: &[(u8, u8)],
 ) {
     use crate::ordinary_tx::{OrdinaryTxAccess, OrdinaryTxInterface};
@@ -1099,7 +1099,7 @@ fn check_management_transmissions(
 
 #[test]
 fn management_unicast_keeps_its_rate_for_seven_attempts() {
-    use oer_ieee80211_lower_mac::ManagementTxPlan;
+    use oer_ieee80211_port::ManagementTxPlan;
     for rate in [LegacyRate::Ofdm6M, LegacyRate::Ofdm12M] {
         // Both pure ACK failures and mixed failures consume seven attempts.
         for failures in [
@@ -1114,7 +1114,7 @@ fn management_unicast_keeps_its_rate_for_seven_attempts() {
 
 #[test]
 fn management_broadcast_never_retries() {
-    use oer_ieee80211_lower_mac::ManagementTxPlan;
+    use oer_ieee80211_port::ManagementTxPlan;
     for rate in [LegacyRate::Ofdm6M, LegacyRate::Ofdm12M] {
         for completion in [(0, 0), (5, 0), (2, 0), (4, 1)] {
             check_management_transmissions(
@@ -1473,7 +1473,7 @@ fn completion_faults_return_the_existing_backend_fault_without_a_tx_terminal() {
 #[test]
 fn a_transmission_the_plan_sends_again_carries_the_retry_bit() {
     installed(|pools| {
-        use oer_ieee80211_mac::frame::FrameControl;
+        use oer_ieee80211_wire::frame::FrameControl;
 
         let mut hardware = Hardware::default();
         let mut core = enabled(&mut hardware, pools);
@@ -2135,7 +2135,7 @@ fn a_fresh_protected_mpdu_is_numbered_and_receive_only_group_removal_has_its_fif
         let group = core
             .install_receive_key(
                 &mut hardware,
-                oer_ieee80211_mac::ccmp::GroupKeyId::new(1).unwrap(),
+                oer_ieee80211_wire::ccmp::GroupKeyId::new(1).unwrap(),
                 &KEY,
             )
             .unwrap();
@@ -2572,9 +2572,9 @@ fn a_closed_gate_holds_every_queue_and_opening_it_publishes_them() {
 /// carry: what the core's own policy then refuses.
 enum WideEdca {}
 
-impl oer_ieee80211_lower_mac::Ieee80211Capabilities for WideEdca {
-    type SppScope = oer_ieee80211_mac::security::spp::Association;
-    const CAPS: oer_ieee80211_lower_mac::LowerMacCapabilities = {
+impl oer_ieee80211_port::Ieee80211Capabilities for WideEdca {
+    type SppScope = oer_ieee80211_wire::security::spp::Association;
+    const CAPS: oer_ieee80211_port::LowerMacCapabilities = {
         let mut caps = esp32s31_lower_mac_capabilities(BACKING);
         caps.edca_max_cw_exponent = 15;
         caps
@@ -2582,21 +2582,21 @@ impl oer_ieee80211_lower_mac::Ieee80211Capabilities for WideEdca {
 }
 
 fn edca(
-    parameters: oer_ieee80211_mac::extensions::wmm::WmmParameterSet,
-) -> oer_ieee80211_lower_mac::SupportedEdca<WideEdca> {
-    oer_ieee80211_lower_mac::SupportedEdca::new(parameters).unwrap()
+    parameters: oer_ieee80211_wire::extensions::wmm::WmmParameterSet,
+) -> oer_ieee80211_port::SupportedEdca<WideEdca> {
+    oer_ieee80211_port::SupportedEdca::new(parameters).unwrap()
 }
 
 fn wmm_with_best_effort_txop(
     txop_units_32_us: u16,
-) -> oer_ieee80211_lower_mac::SupportedEdca<WideEdca> {
+) -> oer_ieee80211_port::SupportedEdca<WideEdca> {
     edca(wmm_set_with_best_effort_txop(txop_units_32_us))
 }
 
 fn wmm_set_with_best_effort_txop(
     txop_units_32_us: u16,
-) -> oer_ieee80211_mac::extensions::wmm::WmmParameterSet {
-    use oer_ieee80211_mac::extensions::wmm::WmmAcParameters;
+) -> oer_ieee80211_wire::extensions::wmm::WmmParameterSet {
+    use oer_ieee80211_wire::extensions::wmm::WmmAcParameters;
     let category = |aifsn, txop| WmmAcParameters {
         admission_control_mandatory: false,
         aifsn,
@@ -2604,7 +2604,7 @@ fn wmm_set_with_best_effort_txop(
         ecw_max: 10,
         txop_limit_units_32_us: txop,
     };
-    oer_ieee80211_mac::extensions::wmm::WmmParameterSet::new(
+    oer_ieee80211_wire::extensions::wmm::WmmParameterSet::new(
         0,
         false,
         [
@@ -2656,7 +2656,7 @@ fn the_station_s_he_bss_color_is_installed() {
     installed(|pools| {
         let mut hardware = Hardware::default();
         let mut core = enabled(&mut hardware, pools);
-        core.set_checked_he_bss_color(oer_ieee80211_lower_mac::BssColor::new(63).unwrap());
+        core.set_checked_he_bss_color(oer_ieee80211_port::BssColor::new(63).unwrap());
         assert_eq!(core.tx.policy().he_bss_color(), 63);
     });
 }
@@ -2796,14 +2796,14 @@ fn an_edca_set_outside_the_limits_leaves_the_installed_one() {
         core.set_checked_edca(VifRole::Station, wmm_with_best_effort_txop(94))
             .unwrap();
         // A best-effort ECWmax of 11 lies outside the hardware's exponents.
-        let record = |aifsn, ecw_max| oer_ieee80211_mac::extensions::wmm::WmmAcParameters {
+        let record = |aifsn, ecw_max| oer_ieee80211_wire::extensions::wmm::WmmAcParameters {
             admission_control_mandatory: false,
             aifsn,
             ecw_min: 4,
             ecw_max,
             txop_limit_units_32_us: 47,
         };
-        let outside = oer_ieee80211_mac::extensions::wmm::WmmParameterSet::new(
+        let outside = oer_ieee80211_wire::extensions::wmm::WmmParameterSet::new(
             0,
             false,
             [record(3, 11), record(7, 10), record(2, 10), record(2, 10)],
@@ -2847,11 +2847,11 @@ fn each_interface_contends_with_its_own_edca_set() {
         assert_eq!(txop(core.tx.policy(), VifRole::AccessPoint), 47);
         // A refused set of one interface leaves the other's.
         let mut refused = wmm_set_with_best_effort_txop(0);
-        refused = oer_ieee80211_mac::extensions::wmm::WmmParameterSet::new(
+        refused = oer_ieee80211_wire::extensions::wmm::WmmParameterSet::new(
             0,
             false,
             [
-                oer_ieee80211_mac::extensions::wmm::WmmAcParameters {
+                oer_ieee80211_wire::extensions::wmm::WmmAcParameters {
                     ecw_max: 11,
                     ..refused.access_category(WmmAccessCategory::BestEffort)
                 },
@@ -3162,7 +3162,7 @@ fn he_aggregates_publish_an_he_program_with_the_station_bss_color() {
                 .formats
                 .contains_rate(he_rate())
         );
-        core.set_checked_he_bss_color(oer_ieee80211_lower_mac::BssColor::new(0x2a).unwrap());
+        core.set_checked_he_bss_color(oer_ieee80211_port::BssColor::new(0x2a).unwrap());
 
         let mut buffer = aggregate_of(source, 3, 26);
         let plan = core
@@ -3661,7 +3661,7 @@ fn key_right_is_retained_by_an_aggregate_through_completion_or_quarantine() {
             for _ in 0..2 {
                 let frame = buffer.push_mpdu(26).unwrap();
                 frame.copy_from_slice(&data_frame(BSSID));
-                let fc = oer_ieee80211_mac::frame::FrameControl::new(u16::from_le_bytes([
+                let fc = oer_ieee80211_wire::frame::FrameControl::new(u16::from_le_bytes([
                     frame[0], frame[1],
                 ]))
                 .unwrap();
@@ -3887,7 +3887,7 @@ fn a_protected_wire_frame_cannot_publish_with_an_open_ticket() {
         let mut core = enabled(&mut hardware, pools);
         let mut frame = data_frame(BSSID);
         let fc =
-            oer_ieee80211_mac::frame::FrameControl::new(u16::from_le_bytes([frame[0], frame[1]]))
+            oer_ieee80211_wire::frame::FrameControl::new(u16::from_le_bytes([frame[0], frame[1]]))
                 .unwrap();
         frame[..2].copy_from_slice(&fc.with_protected(true).get().to_le_bytes());
         let refused = core
@@ -3934,7 +3934,7 @@ fn maximum_ticket_pool_keeps_key_removal_until_all_256_rights_return() {
             &RadioNine,
         );
         let (start, bank) = resources.station_association.into_parts();
-        let association = start.begin(oer_ieee80211_mac::security::Spp::NotNegotiated);
+        let association = start.begin(oer_ieee80211_wire::security::Spp::NotNegotiated);
         let ([slot], [_group]) = bank.into_parts();
         let mut hardware = Hardware::default();
         let key = core
@@ -4079,8 +4079,8 @@ fn closed_gate_survives_disable_retune_and_enable_without_publishing() {
 fn spp_changes_only_after_the_complete_bank_and_end_has_no_hardware_effect() {
     use association::{TransmitKeyInstallation, VacantKeySlot};
     use oer_esp32s31_hal::types::{MacInterface, MacSppMode};
-    use oer_ieee80211_lower_mac::association::{VacantKeyBank, end_association};
-    use oer_ieee80211_mac::security::Spp;
+    use oer_ieee80211_port::association::{VacantKeyBank, end_association};
+    use oer_ieee80211_wire::security::Spp;
     installed(|resources| {
         let Core {
             mut inner,
@@ -4115,7 +4115,7 @@ fn spp_changes_only_after_the_complete_bank_and_end_has_no_hardware_effect() {
                 &mut hardware,
                 &association,
                 group,
-                oer_ieee80211_mac::ccmp::GroupKeyId::new(1).unwrap(),
+                oer_ieee80211_wire::ccmp::GroupKeyId::new(1).unwrap(),
                 &[2; 16],
             )
             .unwrap();

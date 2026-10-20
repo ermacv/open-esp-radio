@@ -74,14 +74,14 @@ impl PortBody<Backend> for Body {
             .ok()
             .unwrap();
             let submitted = phase.station().submit(
-                (oer_ieee80211_lower_mac::Attempt {
+                (oer_ieee80211_port::Attempt {
                     context: Witness(self.drops.clone()),
                     ticket,
                     source,
                     access_category: WmmAccessCategory::BestEffort,
                     protection: Protection::None,
                     power: SupportedPower::new(TxPower::Calibrated).unwrap(),
-                    coex_operation: oer_ieee80211_lower_mac::TxOperation::Data,
+                    coex_operation: oer_ieee80211_port::TxOperation::Data,
                 })
                 .admit(),
             );

@@ -14,9 +14,9 @@
 //! `7b9cc1ac79f865983f59bb8ff3ff43eb74ff1dbe`
 //! `components/wpa_supplicant/esp_supplicant/src/esp_wpa3.c`.
 
-use oer_ieee80211_mac::address::{Bssid, OwnAddress};
-use oer_ieee80211_mac::security::SaePwe;
-use oer_ieee80211_mac::station::{
+use oer_ieee80211_wire::address::{Bssid, OwnAddress};
+use oer_ieee80211_wire::security::SaePwe;
+use oer_ieee80211_wire::station::{
     SAE_COMMIT_TRANSACTION, SAE_CONFIRM_TRANSACTION, StaDisconnect, parse_sae_authentication,
     parse_sta_disconnect,
 };

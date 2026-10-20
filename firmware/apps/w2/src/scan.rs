@@ -44,8 +44,8 @@ use oer_esp32s31_radio_client::{
     MembershipCell,
     wifi::{ProbePriority, Wifi},
 };
-use oer_ieee80211_lower_mac::{Band, ManagementTxPlan};
-use oer_ieee80211_mac::{
+use oer_ieee80211_port::{Band, ManagementTxPlan};
+use oer_ieee80211_wire::{
     channel::{WifiChannel, WifiChannelWidth},
     management::{BROADCAST_ADDRESS, ProbeRequest},
     qos::WmmAccessCategory,
@@ -396,7 +396,7 @@ fn begin_probe(
     config: W2Config,
     station: [u8; 6],
     destination: [u8; 6],
-    rate: oer_ieee80211_mac::phy::LegacyRate,
+    rate: oer_ieee80211_wire::phy::LegacyRate,
     sequence: SequenceNumber,
     priority: ProbePriority,
 ) -> Result<(), &'static str> {

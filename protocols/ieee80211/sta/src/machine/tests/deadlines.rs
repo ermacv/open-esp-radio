@@ -177,7 +177,7 @@ fn handshake_deadline_overflow_finishes_connect_without_sending_eapol() {
             if message1 {
                 world.receive(at(31), &association_response(0));
                 let frame = RsnTxFrame::<512>::message1(
-                    oer_ieee80211_mac::security::rsn::Akm::Psk,
+                    oer_ieee80211_wire::security::rsn::Akm::Psk,
                     LOCAL,
                     1,
                     ANONCE,

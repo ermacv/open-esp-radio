@@ -15,7 +15,7 @@ use oer_esp32s31_hal::{
         RxBlockAckEntrySnapshot,
     },
 };
-use oer_ieee80211_mac::sequence::SequenceNumber;
+use oer_ieee80211_wire::sequence::SequenceNumber;
 
 const RX_BLOCK_ACK_CAPACITY: u8 = 8;
 /// Highest receive BlockAck TID accepted by the vendor net80211 state machine.

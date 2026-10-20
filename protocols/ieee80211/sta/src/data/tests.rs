@@ -2,23 +2,23 @@
 
 use super::*;
 use core::num::NonZeroU16;
-use oer_ieee80211_lower_mac::association::KEY_BANK_CAPACITY;
-use oer_ieee80211_lower_mac::{
+use oer_ieee80211_port::association::KEY_BANK_CAPACITY;
+use oer_ieee80211_port::{
     BandSet, Channel, ChannelWidth, HardwareServices, Ieee80211Capabilities, LowerMacCapabilities,
     PhyFormatSet, RateSupport, ReceiveFilter, RxEvidence, WidthSet,
 };
-use oer_ieee80211_lower_mac::{IndeterminateCause, WithdrawCause};
-use oer_ieee80211_mac::ccmp::{CcmpRxReplayEpoch, GroupKeyId};
-use oer_ieee80211_mac::data::EthernetFrameParts;
-use oer_ieee80211_mac::phy::{HeMcs, HtMcs, LegacyRate, PhyRate};
-use oer_ieee80211_mac::sequence::SequenceNumber;
-use oer_ieee80211_mac::station::StaSequenceCounter;
+use oer_ieee80211_port::{IndeterminateCause, WithdrawCause};
+use oer_ieee80211_wire::ccmp::{CcmpRxReplayEpoch, GroupKeyId};
+use oer_ieee80211_wire::data::EthernetFrameParts;
+use oer_ieee80211_wire::phy::{HeMcs, HtMcs, LegacyRate, PhyRate};
+use oer_ieee80211_wire::sequence::SequenceNumber;
+use oer_ieee80211_wire::station::StaSequenceCounter;
 use std::vec::Vec;
 
 struct Caps;
 
 impl Ieee80211Capabilities for Caps {
-    type SppScope = oer_ieee80211_mac::security::spp::Association;
+    type SppScope = oer_ieee80211_wire::security::spp::Association;
     const CAPS: LowerMacCapabilities = LowerMacCapabilities {
         bands: BandSet::GHZ2_4,
         widths: WidthSet::MHZ20,
@@ -49,7 +49,7 @@ impl Ieee80211Capabilities for Caps {
 
 struct Buffer(Vec<u8>);
 
-impl oer_ieee80211_lower_mac::TxBufferClass for Buffer {
+impl oer_ieee80211_port::TxBufferClass for Buffer {
     const CAPACITY: usize = 1600;
 }
 
@@ -92,9 +92,9 @@ impl StaTokens for Station {
     type AssociationStart = ();
     type Association = ();
     type VacantKeyBank =
-        oer_ieee80211_lower_mac::association::KeyBankParts<(), (), KEY_BANK_CAPACITY>;
+        oer_ieee80211_port::association::KeyBankParts<(), (), KEY_BANK_CAPACITY>;
     type VacantAssociation = [(); 0];
-    fn begin_association(_: (), _: oer_ieee80211_mac::security::Spp) {}
+    fn begin_association(_: (), _: oer_ieee80211_wire::security::Spp) {}
     fn association(key: &()) -> &() {
         key
     }
@@ -102,7 +102,7 @@ impl StaTokens for Station {
         (
             (),
             (),
-            oer_ieee80211_lower_mac::association::KeyBankParts {
+            oer_ieee80211_port::association::KeyBankParts {
                 pairwise: heapless::Vec::new(),
                 group: group.into_iter().collect(),
             },
@@ -147,11 +147,11 @@ const PEER: [u8; 6] = [2, 0, 0, 0, 0, 3];
 fn qos_link<'a>(key: &'a (), replay: &'a mut CcmpRxReplayEpoch) -> LinkView<'a, 'static, Station> {
     LinkView {
         epoch: LinkEpoch::for_test(1),
-        address: oer_ieee80211_mac::address::OwnAddress::new(
-            oer_ieee80211_mac::address::IndividualAddress::new(LOCAL).unwrap(),
+        address: oer_ieee80211_wire::address::OwnAddress::new(
+            oer_ieee80211_wire::address::IndividualAddress::new(LOCAL).unwrap(),
         ),
-        bssid: oer_ieee80211_mac::address::Bssid::new(
-            oer_ieee80211_mac::address::IndividualAddress::new(BSSID).unwrap(),
+        bssid: oer_ieee80211_wire::address::Bssid::new(
+            oer_ieee80211_wire::address::IndividualAddress::new(BSSID).unwrap(),
         )
         .unwrap(),
         association_id: 1,
@@ -166,11 +166,11 @@ fn qos_link<'a>(key: &'a (), replay: &'a mut CcmpRxReplayEpoch) -> LinkView<'a, 
 fn open_link(counter: &mut StaSequenceCounter) -> LinkView<'_, 'static, Station> {
     LinkView {
         epoch: LinkEpoch::for_test(1),
-        address: oer_ieee80211_mac::address::OwnAddress::new(
-            oer_ieee80211_mac::address::IndividualAddress::new(LOCAL).unwrap(),
+        address: oer_ieee80211_wire::address::OwnAddress::new(
+            oer_ieee80211_wire::address::IndividualAddress::new(LOCAL).unwrap(),
         ),
-        bssid: oer_ieee80211_mac::address::Bssid::new(
-            oer_ieee80211_mac::address::IndividualAddress::new(BSSID).unwrap(),
+        bssid: oer_ieee80211_wire::address::Bssid::new(
+            oer_ieee80211_wire::address::IndividualAddress::new(BSSID).unwrap(),
         )
         .unwrap(),
         association_id: 1,
@@ -357,7 +357,7 @@ fn interleaved_returns_keep_the_original_tid_order_and_admission_count() {
         );
         let spec = operation.context.frame().frame().header().header();
         let mut header = [0; 26];
-        oer_ieee80211_lower_mac::HeaderLayout::new(AckHeader::new(*spec).unwrap(), &mut header)
+        oer_ieee80211_port::HeaderLayout::new(AckHeader::new(*spec).unwrap(), &mut header)
             .unwrap()
             .encode();
         assert_eq!(tid_and_sequence(&header), (tid, sequence));
@@ -399,7 +399,7 @@ fn repeated_unpublished_returns_keep_the_checked_frame_and_payload() {
         assert_eq!(operation.context.frame().frame().len().get(), len);
         let spec = operation.context.frame().frame().header().header();
         let mut header = [0; 26];
-        oer_ieee80211_lower_mac::HeaderLayout::new(AckHeader::new(*spec).unwrap(), &mut header)
+        oer_ieee80211_port::HeaderLayout::new(AckHeader::new(*spec).unwrap(), &mut header)
             .unwrap()
             .encode();
         assert_eq!(tid_and_sequence(&header), (6, 0));
@@ -518,7 +518,7 @@ fn preparation_refusal_ends_only_its_msdu_without_a_radio_terminal_or_retry() {
         ticket: rejected.ticket,
         buffer: rejected.buffer,
         reason: crate::machine::TxRefusal::Layout(
-            oer_ieee80211_lower_mac::LayoutError::BodyOverlap,
+            oer_ieee80211_port::LayoutError::BodyOverlap,
         ),
     });
     assert_eq!(data.available(WmmAccessCategory::Voice), capacity);
@@ -798,14 +798,14 @@ enum End {
 
 /// The terminal of an attempt that made `transmissions`.
 fn ended(status: End, transmissions: u16) -> SingleOutcome<(), ()> {
-    let air = NonZeroU16::new(transmissions).map(|transmissions| oer_ieee80211_lower_mac::Air {
+    let air = NonZeroU16::new(transmissions).map(|transmissions| oer_ieee80211_port::Air {
         transmissions,
         rate: PhyRate::Legacy(LegacyRate::Ofdm6M),
     });
     TxOutcome::Ended(match status {
         End::Delivered => SingleEnd::Delivered {
             air: air.unwrap(),
-            response: oer_ieee80211_lower_mac::SingleResponse::Ack(()),
+            response: oer_ieee80211_port::SingleResponse::Ack(()),
         },
         End::AckTimeout => SingleEnd::AckTimeout(air.unwrap()),
         End::ContentionLimit => SingleEnd::ContentionLimit(air),
@@ -1076,17 +1076,17 @@ fn received<'f, T: StaTokens>(
     frame: &'f [u8],
     meta: &RxMeta,
 ) -> Result<
-    impl Iterator<Item = Result<EthernetFrameParts<'f>, oer_ieee80211_mac::receive::RxDropReason>> + 'f,
-    oer_ieee80211_mac::receive::RxDropReason,
+    impl Iterator<Item = Result<EthernetFrameParts<'f>, oer_ieee80211_wire::receive::RxDropReason>> + 'f,
+    oer_ieee80211_wire::receive::RxDropReason,
 > {
-    use oer_ieee80211_mac::receive::{AdmittedData, RxDropReason};
+    use oer_ieee80211_wire::receive::{AdmittedData, RxDropReason};
     let protected_link = matches!(link.protection, LinkProtection::Ccmp { .. });
     let replay = match &mut link.protection {
         LinkProtection::Ccmp { replay, .. } => Some(&mut **replay),
         LinkProtection::Open => None,
     };
     let admitted = AdmittedData::admit(
-        oer_ieee80211_mac::frame::DecodedHeader::decode(frame).ok_or(RxDropReason::Header)?,
+        oer_ieee80211_wire::frame::DecodedHeader::decode(frame).ok_or(RxDropReason::Header)?,
         link.address,
         link.bssid,
         integrity(meta),

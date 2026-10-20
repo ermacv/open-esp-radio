@@ -8,8 +8,8 @@
 //! 2^64 is refused ([`IndividualTwtWakePlanError::BeyondTsfRange`]). Chip code must separately prove that it can install the accepted
 //! agreement before any TWT Setup frame is published.
 
-use oer_ieee80211_mac::tsf::{TsfDuration, TsfInstant};
-use oer_ieee80211_mac::twt::{
+use oer_ieee80211_wire::tsf::{TsfDuration, TsfInstant};
+use oer_ieee80211_wire::twt::{
     INDIVIDUAL_TWT_FLOW_CAPACITY, INDIVIDUAL_TWT_SETUP_BODY_LEN, INDIVIDUAL_TWT_TEARDOWN_BODY_LEN,
     IndividualTwtAction, IndividualTwtControl, IndividualTwtFlowId, IndividualTwtParameterSet,
     IndividualTwtSetup, IndividualTwtSetupCommand, IndividualTwtTeardown, TwtWakeDurationUnit,
@@ -143,7 +143,7 @@ pub struct IndividualTwtAgreement {
     pub control: IndividualTwtControl,
     pub trigger: bool,
     pub implicit: bool,
-    pub flow_type: oer_ieee80211_mac::twt::IndividualTwtFlowType,
+    pub flow_type: oer_ieee80211_wire::twt::IndividualTwtFlowType,
     pub protection: bool,
     pub target_wake_time: TsfInstant,
     pub wake_interval: TsfDuration,
@@ -495,7 +495,7 @@ impl IndividualTwtRequester {
     ///
     /// ```compile_fail,E0499
     /// use oer_ieee80211_sta::twt::IndividualTwtRequester;
-    /// use oer_ieee80211_mac::twt::IndividualTwtFlowId;
+    /// use oer_ieee80211_wire::twt::IndividualTwtFlowId;
     /// fn overlap(owner: &mut IndividualTwtRequester, flow: IndividualTwtFlowId) {
     ///     let first = owner.flow(flow);
     ///     let second = owner.flow(flow);

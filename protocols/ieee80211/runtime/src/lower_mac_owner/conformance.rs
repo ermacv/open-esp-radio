@@ -15,10 +15,10 @@ pub mod group_keys;
 pub mod interface_commands;
 
 use alloc::vec::Vec;
-use oer_ieee80211_lower_mac::{
+use oer_ieee80211_port::{
     IndeterminateCause, SingleEnd, SingleOutcome, TxOutcome, WithdrawCause,
 };
-use oer_ieee80211_mac::qos::WmmAccessCategory;
+use oer_ieee80211_wire::qos::WmmAccessCategory;
 
 /// Result supplied to a publication already held when its barrier arrives.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

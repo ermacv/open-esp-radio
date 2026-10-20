@@ -1,17 +1,17 @@
 //! Split-MAC offload boundaries, service capabilities and normalized statuses.
 
-use oer_ieee80211_lower_mac::{HardwareServices, TxStatus};
-use oer_ieee80211_mac::{channel::Channel, phy::PhyRate, qos::WmmAccessCategory};
+use oer_ieee80211_port::{HardwareServices, TxStatus};
+use oer_ieee80211_wire::{channel::Channel, phy::PhyRate, qos::WmmAccessCategory};
 
 use crate::interface;
 
 /// Provenance of one normalized receive value: the lower-MAC port's
-/// [`RxEvidence`](oer_ieee80211_lower_mac::RxEvidence).
-pub use oer_ieee80211_lower_mac::RxEvidence as MacRxEvidence;
+/// [`RxEvidence`](oer_ieee80211_port::RxEvidence).
+pub use oer_ieee80211_port::RxEvidence as MacRxEvidence;
 
 /// Crypto result visible for an accepted receive MPDU: the lower-MAC port's
-/// [`RxCryptoStatus`](oer_ieee80211_lower_mac::RxCryptoStatus).
-pub use oer_ieee80211_lower_mac::RxCryptoStatus as MacRxCryptoStatus;
+/// [`RxCryptoStatus`](oer_ieee80211_port::RxCryptoStatus).
+pub use oer_ieee80211_port::RxCryptoStatus as MacRxCryptoStatus;
 
 /// Owner that must perform one indivisible MAC operation.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

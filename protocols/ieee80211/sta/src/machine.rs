@@ -4,7 +4,7 @@
 //! The machine takes the port's events, the channel arbiter's answers and
 //! notices, its commands and time as [`StaInput`] values, and leaves what
 //! the port and the arbiter must do as [`StaAction`] values, in their own
-//! terms (`oer-ieee80211-lower-mac`, `oer-ieee80211-arbiter`): a thin
+//! terms (`oer-ieee80211-port`, `oer-ieee80211-arbiter`): a thin
 //! service loop feeds it and carries its actions out, and holds no logic
 //! of its own:
 //!
@@ -69,22 +69,22 @@
 //! awaits its end: there is no queue of actions to overflow.
 
 use core::marker::PhantomData;
-use oer_ieee80211_lower_mac::association::KEY_BANK_CAPACITY;
-use oer_ieee80211_mac::ccmp::GroupKeyId;
+use oer_ieee80211_port::association::KEY_BANK_CAPACITY;
+use oer_ieee80211_wire::ccmp::GroupKeyId;
 
 use oer_ieee80211_arbiter::{
     AbsenceAnswer, AbsencePlace, Answer, ChannelRequest, Lease, LeaseId, LeasePlace, LeaveReason,
     Purpose, Refusal, StationNotice, StationPlaceReturns, StationPlaces, UpstreamFact,
 };
-use oer_ieee80211_lower_mac::{
+use oer_ieee80211_port::{
     AckHeader, ConnectionFrame, GroupAddress, HeaderSpec, Ieee80211Capabilities, MpduLength,
     ReceiveFilter, ReturnedMpdu, RxMetadata, SingleEnd, SingleOutcome, SizedFrame,
     Station as StationRole, StationReceive, SupportedChannel, SupportedEdca, SupportedFilter,
     TxBufferMemory, TxOutcome,
 };
-use oer_ieee80211_mac::address::{Bssid, IndividualAddress, OwnAddress};
-use oer_ieee80211_mac::ccmp::{Ccmp128Key, CcmpRxReplayEpoch};
-use oer_ieee80211_mac::{
+use oer_ieee80211_wire::address::{Bssid, IndividualAddress, OwnAddress};
+use oer_ieee80211_wire::ccmp::{Ccmp128Key, CcmpRxReplayEpoch};
+use oer_ieee80211_wire::{
     management::{MAX_SSID_LEN, ProbeRequest},
     scan::{ScanRecord, ScanTable},
     security::{AssociationAkm, AssociationSecurity, RsnAssociation, StaSecurityPolicy},
@@ -116,7 +116,7 @@ use crate::association::StaAssociatedPeer;
 use crate::receive::{Management, Received, observe_scan};
 // The machine's tests build receive metadata through `use super::*`.
 #[cfg(test)]
-use oer_ieee80211_lower_mac::RxEvidence;
+use oer_ieee80211_port::RxEvidence;
 use oer_time::{Duration, Instant};
 
 use crate::epoch::{LinkEpoch, LinkEpochSource};
@@ -124,7 +124,7 @@ use crate::join::sae::{StaSaeAuthentication, StaSaeEvent, StaSaeFailure, StaSaeT
 use crate::pmksa::{StaPmksa, StaPmksaCache};
 use crate::pool::Pool;
 use crate::request::StationListenInterval;
-use oer_ieee80211_lower_mac::ConfigurePermission;
+use oer_ieee80211_port::ConfigurePermission;
 use oer_radio_port::{PoolPath, Root};
 mod commands;
 mod deferred_eapol;
@@ -158,9 +158,9 @@ pub enum TxRefusal {
     /// Service rate selection found no rate for the current phase.
     NoRate,
     /// The pool refused preparation and returned the unchanged source.
-    Preparation(oer_ieee80211_lower_mac::PreparationError),
+    Preparation(oer_ieee80211_port::PreparationError),
     /// Portable placement failed before entering the backend.
-    Layout(oer_ieee80211_lower_mac::LayoutError),
+    Layout(oer_ieee80211_port::LayoutError),
 }
 
 /// The tokens a station holds: the port's, or a host test's.
@@ -178,7 +178,7 @@ pub trait StaTokens {
     /// Installation component owning this interface's command permissions.
     type ConfigurationPath: PoolPath;
     /// The checked size class of management frames.
-    type Small: oer_ieee80211_lower_mac::TxBufferClass;
+    type Small: oer_ieee80211_port::TxBufferClass;
     /// A transmit ticket: a place in flight and a place for its terminal.
     type Ticket;
     /// A transmit buffer of the small class, for management frames: its
@@ -203,7 +203,7 @@ pub trait StaTokens {
     /// Split the complete initial bank; one PTK is active, the rest are retained.
     fn split_vacant(
         vacant: Self::VacantAssociation,
-    ) -> oer_ieee80211_lower_mac::association::DistributedKeyBank<
+    ) -> oer_ieee80211_port::association::DistributedKeyBank<
         Self::AssociationStart,
         Self::PairwiseSlot,
         Self::GroupSlot,
@@ -212,18 +212,18 @@ pub trait StaTokens {
     /// Select SPP once before installing PTK.
     fn begin_association(
         start: Self::AssociationStart,
-        spp: oer_ieee80211_mac::security::Spp,
+        spp: oer_ieee80211_wire::security::Spp,
     ) -> Self::Association;
     /// Collect returns; a partial bank remains owned on failure.
     fn collect_key_bank(
-        parts: oer_ieee80211_lower_mac::association::KeyBankParts<
+        parts: oer_ieee80211_port::association::KeyBankParts<
             Self::PairwiseSlot,
             Self::GroupSlot,
             KEY_BANK_CAPACITY,
         >,
     ) -> Result<
         Self::VacantKeyBank,
-        oer_ieee80211_lower_mac::association::KeyBankParts<
+        oer_ieee80211_port::association::KeyBankParts<
             Self::PairwiseSlot,
             Self::GroupSlot,
             KEY_BANK_CAPACITY,
@@ -233,7 +233,7 @@ pub trait StaTokens {
     fn end_association(
         association: Self::Association,
         bank: Self::VacantKeyBank,
-    ) -> oer_ieee80211_lower_mac::association::DistributedKeyBank<
+    ) -> oer_ieee80211_port::association::DistributedKeyBank<
         Self::AssociationStart,
         Self::PairwiseSlot,
         Self::GroupSlot,
@@ -593,9 +593,9 @@ pub enum StaFrameClass {
 /// The kind of a station frame, as the port's frame kinds take it.
 pub enum StaFrame<K, C> {
     /// An individual frame that solicits an ACK.
-    Individual(oer_ieee80211_lower_mac::ClassSizedFrame<C, AckHeader, K>),
+    Individual(oer_ieee80211_port::ClassSizedFrame<C, AckHeader, K>),
     /// A group frame.
-    Group(oer_ieee80211_lower_mac::ClassSizedFrame<C, HeaderSpec<GroupAddress>, K>),
+    Group(oer_ieee80211_port::ClassSizedFrame<C, HeaderSpec<GroupAddress>, K>),
 }
 
 /// The rates a station frame goes at, which the service turns into the
@@ -617,12 +617,12 @@ pub enum StaRatePlan {
 /// A frame refused by admission or by the authenticated RSN protocol.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum StaRxError {
-    Frame(oer_ieee80211_mac::receive::RxDropReason),
+    Frame(oer_ieee80211_wire::receive::RxDropReason),
     Security(RsnConnectedProcessError<oer_ieee80211_rsn::aes::SoftwareAesKeyUnwrapError>),
 }
 
-impl From<oer_ieee80211_mac::receive::RxDropReason> for StaRxError {
-    fn from(reason: oer_ieee80211_mac::receive::RxDropReason) -> Self {
+impl From<oer_ieee80211_wire::receive::RxDropReason> for StaRxError {
+    fn from(reason: oer_ieee80211_wire::receive::RxDropReason) -> Self {
         Self::Frame(reason)
     }
 }
@@ -770,7 +770,7 @@ const REASON_HANDSHAKE_TIMEOUT: u16 = 15;
 ///
 /// ```
 /// use oer_ieee80211_sta::machine::StaConfig;
-/// use oer_ieee80211_lower_mac::SupportedChannel;
+/// use oer_ieee80211_port::SupportedChannel;
 /// fn one<K>(config: &mut StaConfig<K>, channel: SupportedChannel<K>) {
 ///     config.channels = heapless::Vec::from_slice(&[channel]).unwrap();
 /// }
@@ -1158,7 +1158,7 @@ enum KeyCell<T: StaTokens> {
     /// Backend contract violation: every returned owner remains in custody.
     UnreturnedBank {
         _association: T::Association,
-        _parts: oer_ieee80211_lower_mac::association::KeyBankParts<
+        _parts: oer_ieee80211_port::association::KeyBankParts<
             T::PairwiseSlot,
             T::GroupSlot,
             KEY_BANK_CAPACITY,
@@ -1233,7 +1233,7 @@ impl<T: StaTokens> Keys<T> {
     fn take_pairwise_slot<'id>(
         &mut self,
         epoch: LinkEpoch<'id, T::EpochPath>,
-        spp: oer_ieee80211_mac::security::Spp,
+        spp: oer_ieee80211_wire::security::Spp,
     ) -> Option<PairwiseAdmission<'id, T>> {
         match core::mem::replace(&mut self.pairwise, KeyCell::Installing) {
             KeyCell::Free(VacantPairwise { slot, association }) => Some((
@@ -1486,7 +1486,7 @@ struct Handshake<T: StaTokens, K> {
     qos: bool,
     peer: Peer<T::RxMeta>,
     supplicant: RsnStaSupplicant,
-    spp: oer_ieee80211_mac::security::Spp,
+    spp: oer_ieee80211_wire::security::Spp,
     pmk: Pmk,
     qos_sequences: [StaSequenceCounter; 8],
     /// The deadline of the message the station waits for.
@@ -1844,7 +1844,7 @@ const EAPOL_ETHER_TYPE: u16 = 0x888e;
 
 /// A checked management disconnect from the selected BSS.
 fn peer_disconnect(frame: &[u8], local: OwnAddress, bssid: Bssid) -> Option<u16> {
-    oer_ieee80211_mac::station::parse_sta_disconnect(frame, local, bssid)
+    oer_ieee80211_wire::station::parse_sta_disconnect(frame, local, bssid)
         .map(|disconnect| disconnect.reason_code)
 }
 
@@ -2502,7 +2502,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
                 // A complete initial bank and affine returns bound these
                 // collections by the same const capacities checked in Keys::new.
                 let spare = core::mem::take(&mut self.keys.spare_pairwise);
-                let parts = oer_ieee80211_lower_mac::association::KeyBankParts {
+                let parts = oer_ieee80211_port::association::KeyBankParts {
                     pairwise: core::iter::once(slot).chain(spare).collect(),
                     group: self
                         .keys
@@ -3095,7 +3095,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
         if matches!(
             done,
             Done::Tx {
-                completion: TxOutcome::Withdrawn(oer_ieee80211_lower_mac::WithdrawCause::Disabled),
+                completion: TxOutcome::Withdrawn(oer_ieee80211_port::WithdrawCause::Disabled),
                 ..
             }
         ) {
@@ -3328,12 +3328,12 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
                     if let Some(cached) = self.pmksa.resume(bssid, &self.config.ssid) {
                         join.rsn = join
                             .rsn
-                            .with_pmkid(oer_ieee80211_mac::security::Pmkid(cached.pmkid()))
+                            .with_pmkid(oer_ieee80211_wire::security::Pmkid(cached.pmkid()))
                             .ok_or(StaDisconnectReason::AuthenticationFailed)?;
                         AssociationKey::Protected(cached.pmk().duplicate())
                     } else {
                         let element = match pwe {
-                            oer_ieee80211_mac::security::SaePwe::HuntingAndPecking => {
+                            oer_ieee80211_wire::security::SaePwe::HuntingAndPecking => {
                                 SaePasswordElement::hunting_and_pecking(
                                     password.as_bytes(),
                                     self.config.address.get(),
@@ -3343,7 +3343,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
                                     StaDisconnectReason::Sae(StaSaeFailure::Protocol(error))
                                 })?
                             }
-                            oer_ieee80211_mac::security::SaePwe::HashToElement => {
+                            oer_ieee80211_wire::security::SaePwe::HashToElement => {
                                 SaePasswordToken::derive(
                                     &self.config.ssid,
                                     password.as_bytes(),
@@ -3397,7 +3397,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
                 let runtime = match StaAssociationRuntime::new(
                     self.config.address,
                     bssid,
-                    oer_ieee80211_mac::security::LinkProtection::Ccmp,
+                    oer_ieee80211_wire::security::LinkProtection::Ccmp,
                     now,
                 ) {
                     Ok(runtime) => runtime,
@@ -3512,7 +3512,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
     ///
     /// ```
     /// use oer_ieee80211_sta::machine::{Station, StaTokens};
-    /// use oer_ieee80211_lower_mac::Ieee80211Capabilities;
+    /// use oer_ieee80211_port::Ieee80211Capabilities;
     /// fn receive<T: StaTokens, K: Ieee80211Capabilities>(
     ///     station: &mut Station<'_, T, K>, now: oer_time::Instant,
     ///     frame: &[u8], meta: T::RxMeta,
@@ -3525,7 +3525,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
         now: Instant,
         frame: &'frame [u8],
         meta: T::RxMeta,
-        mut deliver: impl FnMut(oer_ieee80211_mac::data::EthernetFrameParts<'frame>),
+        mut deliver: impl FnMut(oer_ieee80211_wire::data::EthernetFrameParts<'frame>),
     ) -> Result<(), StaRxError> {
         let result = self.receive_frame(now, frame, meta, &mut deliver);
         self.complete_commands();
@@ -3537,9 +3537,9 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
         now: Instant,
         frame: &'frame [u8],
         meta: T::RxMeta,
-        mut deliver: impl FnMut(oer_ieee80211_mac::data::EthernetFrameParts<'frame>),
+        mut deliver: impl FnMut(oer_ieee80211_wire::data::EthernetFrameParts<'frame>),
     ) -> Result<(), StaRxError> {
-        use oer_ieee80211_mac::receive::{AdmittedData, RxDropReason};
+        use oer_ieee80211_wire::receive::{AdmittedData, RxDropReason};
         let header = match crate::receive::classify(frame)? {
             Received::Management(management) => {
                 self.received_management(now, management, meta);
@@ -3650,10 +3650,10 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
                                     join.access_point.bssid,
                                     match self.security {
                                         StaSecurity::Open => {
-                                            oer_ieee80211_mac::security::LinkProtection::Open
+                                            oer_ieee80211_wire::security::LinkProtection::Open
                                         }
                                         StaSecurity::Personal { .. } => {
-                                            oer_ieee80211_mac::security::LinkProtection::Ccmp
+                                            oer_ieee80211_wire::security::LinkProtection::Ccmp
                                         }
                                     },
                                     now,
@@ -3844,7 +3844,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
         let Some(rsn) = connected.rsn else {
             return (
                 State::Connected(connected),
-                Err(oer_ieee80211_mac::receive::RxDropReason::Protection.into()),
+                Err(oer_ieee80211_wire::receive::RxDropReason::Protection.into()),
             );
         };
         let (rsn, result) = rsn.receive(eapol, protection);
@@ -4371,7 +4371,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
         Ok(self.encode_reserved(
             credit,
             |frame| {
-                oer_ieee80211_mac::station::StaDataFrame {
+                oer_ieee80211_wire::station::StaDataFrame {
                     source: address,
                     bssid,
                     destination: bssid.get(),
@@ -4584,7 +4584,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
                 permission,
             }));
         }
-        let replay = match oer_ieee80211_mac::ccmp::CcmpRxReplayState::from_receive_sequence(
+        let replay = match oer_ieee80211_wire::ccmp::CcmpRxReplayState::from_receive_sequence(
             *request.receive_sequence(),
         ) {
             Ok(replay) => GroupReplay::Retained(replay),
@@ -4963,7 +4963,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
                 let transmit = self.encode_reserved(
                     credit,
                     |frame| {
-                        oer_ieee80211_mac::station::SaeAuthenticationFrame {
+                        oer_ieee80211_wire::station::SaeAuthenticationFrame {
                             source,
                             bssid,
                             sequence_number,
@@ -5315,12 +5315,12 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
             let length = MpduLength::new(len)?;
             if matches!(plan, StaRatePlan::Group) {
                 let header = HeaderSpec::decode(bytes, GroupAddress::new)?;
-                oer_ieee80211_lower_mac::ClassSizedFrame::new(SizedFrame::new(header, length)?)
+                oer_ieee80211_port::ClassSizedFrame::new(SizedFrame::new(header, length)?)
                     .ok()
                     .map(StaFrame::Group)
             } else {
                 let header = HeaderSpec::decode(bytes, IndividualAddress::new)?;
-                oer_ieee80211_lower_mac::ClassSizedFrame::new(SizedFrame::new(
+                oer_ieee80211_port::ClassSizedFrame::new(SizedFrame::new(
                     AckHeader::new(header)?,
                     length,
                 )?)
@@ -5375,7 +5375,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
             }
             None => self.sequence.take(),
         };
-        let frame = oer_ieee80211_mac::station::StaProtectedDataFrame {
+        let frame = oer_ieee80211_wire::station::StaProtectedDataFrame {
             source: self.config.address,
             bssid,
             destination: bssid.get(),
@@ -5438,7 +5438,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
             credit,
             |frame| {
                 if protected {
-                    return oer_ieee80211_mac::station::StaProtectedManagementFrame {
+                    return oer_ieee80211_wire::station::StaProtectedManagementFrame {
                         subtype,
                         source: address,
                         bssid,

@@ -24,7 +24,7 @@ use aes::{
     Aes128,
     cipher::{KeyInit, generic_array::GenericArray},
 };
-use oer_ieee80211_mac::{ccmp::CcmpHeader, frame::DecodedHeader, security::Spp};
+use oer_ieee80211_wire::{ccmp::CcmpHeader, frame::DecodedHeader, security::Spp};
 use subtle::ConstantTimeEq;
 use zeroize::Zeroize;
 

@@ -7,7 +7,7 @@
 //! entries, the publication deadlines, the software queue of each access
 //! category ahead of the core and the asynchronous PHY retune an `Enable`
 //! needs, and serves the phase contract
-//! (`oer_ieee80211_lower_mac::phase`) over this core.
+//! (`oer_ieee80211_port::phase`) over this core.
 //!
 //! # Checked operations
 //!
@@ -125,8 +125,8 @@ use oer_radio_port::{PoolPath, Root};
 use oer_time::Clock;
 
 use oer_esp32s31_hal::types::{MacPti, StaTbttSchedule};
-use oer_ieee80211_lower_mac::TsfGeneration;
-use oer_ieee80211_mac::tsf::TsfInstant;
+use oer_ieee80211_port::TsfGeneration;
+use oer_ieee80211_wire::tsf::TsfInstant;
 
 use crate::station_tsf::{StationTsf, StationTsfHardware};
 use oer_esp32s31_ieee80211_mac::{
@@ -155,13 +155,13 @@ use oer_esp32s31_ieee80211_mac::{
         runtime::he_txop_limit,
     },
 };
-use oer_ieee80211_lower_mac::{
+use oer_ieee80211_port::{
     BandSet, BeaconTimingCapabilities, BlockAckReport, Channel, ConnectionFrame, LinkMetric,
     LowerMacCapabilities, MacAddress, PhyFormatSet, PhyRate, Protection, RateSupport,
     ReceiveFilter, RxEvidence, RxMeta, RxMetadata, SignalMetadata, TbttEvent, TsfTimingError,
     TxOperation, TxStatus, VifRole, VifRoleSet, VifTsf, WidthSet,
 };
-use oer_ieee80211_mac::{
+use oer_ieee80211_wire::{
     ccmp::CCMP_HEADER_LEN,
     channel::WifiChannel,
     management::BROADCAST_ADDRESS,
@@ -267,7 +267,7 @@ impl Esp32s31RxMeta {
     /// converts from the MAC local time.
     pub const fn with_timestamp(
         mut self,
-        timestamp: RxEvidence<oer_ieee80211_lower_mac::Ieee80211Stamp>,
+        timestamp: RxEvidence<oer_ieee80211_port::Ieee80211Stamp>,
     ) -> Self {
         self.common.timestamp = timestamp;
         self
@@ -1629,7 +1629,7 @@ where
     }
 
     /// Retain the phase's six-bit color proof through the core boundary.
-    pub fn set_checked_he_bss_color(&mut self, color: oer_ieee80211_lower_mac::BssColor) {
+    pub fn set_checked_he_bss_color(&mut self, color: oer_ieee80211_port::BssColor) {
         self.tx.policy_mut().install_he_bss_color(color.get());
     }
 
@@ -1661,12 +1661,12 @@ where
     /// # Errors
     ///
     /// The record the policy refused.
-    pub fn set_checked_edca<K: oer_ieee80211_lower_mac::Ieee80211Capabilities>(
+    pub fn set_checked_edca<K: oer_ieee80211_port::Ieee80211Capabilities>(
         &mut self,
         role: VifRole,
-        parameters: oer_ieee80211_lower_mac::SupportedEdca<K>,
+        parameters: oer_ieee80211_port::SupportedEdca<K>,
     ) -> Result<
-        oer_ieee80211_lower_mac::SupportedEdca<K>,
+        oer_ieee80211_port::SupportedEdca<K>,
         oer_esp32s31_ieee80211_mac::edca::EdcaParametersError,
     > {
         self.tx.policy_mut().install_wmm(role, parameters.get())?;
@@ -1776,7 +1776,7 @@ where
         hardware: &mut H,
         association: &association::StationAssociation<'core, Path>,
         slot: association::StationGroupSlot<'core, Path>,
-        key_id: oer_ieee80211_mac::ccmp::GroupKeyId,
+        key_id: oer_ieee80211_wire::ccmp::GroupKeyId,
         temporal_key: &[u8; CCMP_128_KEY_BYTES],
     ) -> Result<ReceiveKeyHandle<'core, Path>, association::KeyInstallRefused<'core, Path>> {
         let scope = CheckedKeyScope::StationGroup { key_id };
@@ -1986,7 +1986,7 @@ where
     }
 
     /// The station's TSF and the generation of its relation, for a
-    /// [`TsfSample`](oer_ieee80211_lower_mac::TsfSample) the backend pairs
+    /// [`TsfSample`](oer_ieee80211_port::TsfSample) the backend pairs
     /// with its radio clock: the access-point timer has no read seam.
     pub fn station_tsf_reading<H: StationTsfHardware>(
         &self,
@@ -2165,7 +2165,7 @@ pub enum CheckedKeyScope {
         peer: MacAddress,
     },
     StationGroup {
-        key_id: oer_ieee80211_mac::ccmp::GroupKeyId,
+        key_id: oer_ieee80211_wire::ccmp::GroupKeyId,
     },
     AccessPointPairwise {
         peer: MacAddress,
@@ -2464,12 +2464,12 @@ fn block_ack(report: crate::ordinary_tx::OrdinaryTxReport) -> Option<BlockAckRep
 #[cfg(test)]
 mod tests;
 
-fn spp_mode(spp: oer_ieee80211_mac::security::Spp) -> oer_esp32s31_hal::types::MacSppMode {
+fn spp_mode(spp: oer_ieee80211_wire::security::Spp) -> oer_esp32s31_hal::types::MacSppMode {
     match spp {
-        oer_ieee80211_mac::security::Spp::Negotiated => {
+        oer_ieee80211_wire::security::Spp::Negotiated => {
             oer_esp32s31_hal::types::MacSppMode::Authenticated
         }
-        oer_ieee80211_mac::security::Spp::NotNegotiated => {
+        oer_ieee80211_wire::security::Spp::NotNegotiated => {
             oer_esp32s31_hal::types::MacSppMode::Unauthenticated
         }
     }

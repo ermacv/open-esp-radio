@@ -1,6 +1,6 @@
 //! Checked Ethernet-II storage at the network queue boundary.
 
-use oer_ieee80211_mac::data::{ETHERNET_HEADER_LEN, EthernetFrameParts};
+use oer_ieee80211_wire::data::{ETHERNET_HEADER_LEN, EthernetFrameParts};
 
 /// Maximum Ethernet-II payload stored by one network queue slot.
 pub const MAX_ETHERNET_PAYLOAD_LEN: usize = 1500;
@@ -21,7 +21,7 @@ pub struct FrameTooLong {
 /// A network adapter constructs a frame from its checked Ethernet parts:
 ///
 /// ```
-/// use oer_ieee80211_mac::data::EthernetFrameParts;
+/// use oer_ieee80211_wire::data::EthernetFrameParts;
 /// use oer_ieee80211_runtime::station_service::EthernetFrame;
 /// let parts = EthernetFrameParts {
 ///     destination: [0xff; 6], source: [2, 0, 0, 0, 0, 1],

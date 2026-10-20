@@ -1,4 +1,4 @@
-use oer_ieee80211_mac::phy::{FecCoding, HeGiLtf, HeMcs, HtMcs, HtRate, SpatialStreams};
+use oer_ieee80211_wire::phy::{FecCoding, HeGiLtf, HeMcs, HtMcs, HtRate, SpatialStreams};
 
 use super::*;
 

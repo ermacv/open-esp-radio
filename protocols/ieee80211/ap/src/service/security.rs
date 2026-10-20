@@ -2,7 +2,7 @@
 //! Every method borrows the same service and peer storage; no second owner exists.
 
 use super::*;
-use oer_ieee80211_mac::security::{SppCapability, SppError};
+use oer_ieee80211_wire::security::{SppCapability, SppError};
 
 /// Why an association cannot use the advertised RSN profile.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

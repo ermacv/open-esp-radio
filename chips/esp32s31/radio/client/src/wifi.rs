@@ -16,7 +16,7 @@ use oer_esp32s31_ieee80211_mac::init::{
     MacCoexPti, MacColdStartConfig, MacColdStartOutcome, MacSlowClockCalibration,
 };
 use oer_esp32s31_phy::{PhyTxTargetPowerProfile, tracking::TemperatureObservation};
-use oer_ieee80211_mac::channel::WifiChannel;
+use oer_ieee80211_wire::channel::WifiChannel;
 use oer_radio_regulatory::{Permitted, TxCeiling};
 
 use crate::{Client, PhyPreparation, sealed};

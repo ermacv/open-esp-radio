@@ -33,7 +33,7 @@
 //! Portable IEEE 802.11 transmit policy above the lower-MAC port.
 //!
 //! One lower-MAC submission is one hardware transmission attempt
-//! (`oer-ieee80211-lower-mac`). Everything a backend does not do on its own
+//! (`oer-ieee80211-port`). Everything a backend does not do on its own
 //! lies above that port and is decided here, once for every backend:
 //!
 //! - [`retry`]: the retry counters, limits and Retry bit of one MPDU, and the

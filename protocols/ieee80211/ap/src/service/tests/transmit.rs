@@ -1,7 +1,7 @@
 use super::*;
 
 fn begin(
-    service: &mut AccessPointService<'_, oer_ieee80211_mac::security::spp::Association>,
+    service: &mut AccessPointService<'_, oer_ieee80211_wire::security::spp::Association>,
     nonce: [u8; 32],
     replay: u64,
 ) -> ApEapolTransmit<512> {
@@ -67,7 +67,7 @@ fn message4_before_message3_terminal_keeps_the_handshake_complete() {
     let ApWpa2Progress::Transmit(message3) = service.on_eapol(PEER, message2).unwrap() else {
         panic!("verified Message 2 produces Message 3");
     };
-    let message4 = RsnTxFrame::<512>::message4(oer_ieee80211_mac::security::rsn::Akm::Psk, AP, 10)
+    let message4 = RsnTxFrame::<512>::message4(oer_ieee80211_wire::security::rsn::Akm::Psk, AP, 10)
         .unwrap()
         .authenticate(service.pending_ptk(PEER).unwrap());
     let message4 =

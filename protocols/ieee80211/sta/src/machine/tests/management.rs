@@ -1,6 +1,6 @@
 //! Full negotiated PMF exchanges with independent AESCCM/CMAC wire vectors.
 use super::*;
-use oer_ieee80211_mac::security::rsn::Akm;
+use oer_ieee80211_wire::security::rsn::Akm;
 use oer_ieee80211_rsn::{Ptk, frames::RsnTxFrame};
 
 // Generated with Python cryptography AESCCM(tag_length=8) and AES-CMAC.
@@ -259,10 +259,10 @@ fn query_timeout_and_local_leave_keep_the_pairwise_key_until_protected_tx_return
             Some(ended(End::Delivered)),
             Some(ended(End::AckTimeout)),
             Some(TxOutcome::Withdrawn(
-                oer_ieee80211_lower_mac::WithdrawCause::Disabled,
+                oer_ieee80211_port::WithdrawCause::Disabled,
             )),
             Some(TxOutcome::Indeterminate(
-                oer_ieee80211_lower_mac::IndeterminateCause::HardwareTimeout,
+                oer_ieee80211_port::IndeterminateCause::HardwareTimeout,
             )),
             None,
         ] {

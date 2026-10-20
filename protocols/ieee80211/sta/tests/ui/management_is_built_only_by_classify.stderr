@@ -1,5 +1,5 @@
 error[E0423]: expected value, found struct `Management`
  --> tests/ui/management_is_built_only_by_classify.rs:6:71
   |
-6 |     return oer_ieee80211_mac::frame::DecodedHeader::decode(frame).map(Management); // ui-error: E0423
+6 |     return oer_ieee80211_wire::frame::DecodedHeader::decode(frame).map(Management); // ui-error: E0423
   |                                                                       ^^^^^^^^^^ constructor is not visible here due to private fields

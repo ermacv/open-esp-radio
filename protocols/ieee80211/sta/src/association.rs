@@ -4,7 +4,7 @@
 //! This policy neither advertises capabilities nor encodes a PHY channel command.
 
 /// Shared with the wire encoder; no duplicate policy enum or upward dependency.
-pub use oer_ieee80211_mac::station::association::{PhyMode, Preference};
+pub use oer_ieee80211_wire::station::association::{PhyMode, Preference};
 
 /// Choose a mode after the caller has intersected local and peer capabilities.
 /// A peer without HT is legacy; HT20 is the baseline of one with HT; a later
@@ -37,14 +37,14 @@ pub fn select_phy(
 /// 40 MHz (`ht40_capable`), HT20 otherwise, and legacy for an access point
 /// without HT Capabilities.
 pub fn select_association_phy(
-    access_point: &oer_ieee80211_mac::scan::ScanRecord,
+    access_point: &oer_ieee80211_wire::scan::ScanRecord,
     preference: Preference,
     ht40_capable: bool,
 ) -> PhyMode {
     let he20_available =
-        oer_ieee80211_mac::he::parse_he20_capabilities(access_point.he_capability_ie_bytes())
+        oer_ieee80211_wire::he::parse_he20_capabilities(access_point.he_capability_ie_bytes())
             .is_ok_and(|capability| capability.supports_bidirectional_mcs9())
-            && oer_ieee80211_mac::he::parse_he20_operation(access_point.he_operation_ie_bytes())
+            && oer_ieee80211_wire::he::parse_he20_operation(access_point.he_operation_ie_bytes())
                 .is_ok();
     select_phy(
         preference,
@@ -61,14 +61,14 @@ pub fn select_association_phy(
 pub struct StaAssociatedPeer {
     pub phy: PhyMode,
     pub legacy_rates: oer_ieee80211_upper_mac::rate_control::NegotiatedLegacyRates,
-    pub ht_capabilities: Option<oer_ieee80211_mac::ht::HtPeerCapabilities>,
+    pub ht_capabilities: Option<oer_ieee80211_wire::ht::HtPeerCapabilities>,
     /// The A-MPDU Parameters field of the access point's HT Capabilities:
     /// its maximum A-MPDU length exponent and minimum MPDU start spacing;
     /// zero without HT Capabilities.
     pub ht_ampdu_parameters: u8,
-    pub he_capabilities: Option<oer_ieee80211_mac::he::He20Capabilities>,
+    pub he_capabilities: Option<oer_ieee80211_wire::he::He20Capabilities>,
     /// The HE state of an HE association.
-    pub he_peer_state: Option<oer_ieee80211_mac::he::He20PeerState>,
+    pub he_peer_state: Option<oer_ieee80211_wire::he::He20PeerState>,
     /// The BSS color of the access point's HE Operation, zero without one.
     pub he_bss_color: u8,
     /// The protection facts of the BSS the transmitter's planner applies.
@@ -77,7 +77,7 @@ pub struct StaAssociatedPeer {
     /// of the Association Response's WMM Parameter element, else those the
     /// scan heard, else the standard defaults of a QoS BSS, or the DCF's
     /// in a BSS without WMM.
-    pub edca: oer_ieee80211_mac::extensions::wmm::WmmParameterSet,
+    pub edca: oer_ieee80211_wire::extensions::wmm::WmmParameterSet,
 }
 
 /// Why the associated peer could not be derived.
@@ -88,9 +88,9 @@ pub enum StaAssociatedPeerError {
     /// The association contains no usable non-HT rate for control/fallback.
     NoLegacyRates,
     /// An HE association whose access point's HE Capabilities do not parse.
-    HeCapabilities(oer_ieee80211_mac::he::HeElementError),
+    HeCapabilities(oer_ieee80211_wire::he::HeElementError),
     /// An HE association whose access point's HE elements give no peer state.
-    HePeer(oer_ieee80211_mac::he::HeElementError),
+    HePeer(oer_ieee80211_wire::he::HeElementError),
 }
 
 /// Capability Information Short Preamble bit.
@@ -113,12 +113,12 @@ impl StaAssociatedPeer {
     /// access point's HE Capabilities element, an integrator's policy (the
     /// Espressif stack's is `oer-espressif-ieee80211-policy`'s).
     pub fn derive(
-        access_point: &oer_ieee80211_mac::scan::ScanRecord,
-        response: &oer_ieee80211_mac::station::AssociationResponse,
+        access_point: &oer_ieee80211_wire::scan::ScanRecord,
+        response: &oer_ieee80211_wire::station::AssociationResponse,
         phy: PhyMode,
         he_packet_padding: fn(&[u8]) -> oer_ieee80211_upper_mac::HePacketPadding,
     ) -> Result<Self, StaAssociatedPeerError> {
-        use oer_ieee80211_mac::{
+        use oer_ieee80211_wire::{
             extensions::wmm::WmmParameterSet,
             he::{parse_he20_capabilities, parse_he20_operation, parse_he20_peer_state},
             protection::{ErpProtection, HtProtectionMode},

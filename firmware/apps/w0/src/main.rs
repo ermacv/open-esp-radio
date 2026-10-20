@@ -45,7 +45,7 @@ use oer_esp32s31_radio_system::{Esp32s31Radio, RadioSystem};
 use oer_espressif_esp_hal_radio::{EspHalClocks, RadioSingletons, take_radio};
 use oer_espressif_executor::{Executor, InterruptExecutor, LevelOrder};
 use oer_espressif_staged_runtime::panic;
-use oer_ieee80211_mac::channel::{WifiChannel, WifiChannelWidth};
+use oer_ieee80211_wire::channel::{WifiChannel, WifiChannelWidth};
 use oer_ieee80211_softmac::WifiMacAddress;
 use oer_radio_regulatory::{Country, RegulatoryDomain};
 use static_cell::StaticCell;

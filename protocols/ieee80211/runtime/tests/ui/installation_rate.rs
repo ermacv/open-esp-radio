@@ -1,6 +1,6 @@
 #![no_std]
-use oer_ieee80211_lower_mac::{Channel, ChannelWidth, LowerMacPhase, PhyRate};
-use oer_ieee80211_mac::{address::IndividualAddress, phy::LegacyRate};
+use oer_ieee80211_port::{Channel, ChannelWidth, LowerMacPhase, PhyRate};
+use oer_ieee80211_wire::{address::IndividualAddress, phy::LegacyRate};
 use oer_radio_port::{Disabled, Enabled, Ended, Owner, PortBody, run_port};
 use oer_ieee80211_runtime::lower_mac_owner::model::{ModelBackend, ModelResources};
 

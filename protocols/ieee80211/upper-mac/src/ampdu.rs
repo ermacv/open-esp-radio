@@ -23,8 +23,8 @@
 //! [`compact`], [`set_retry_bit`]) work on those masks and on the encoded
 //! MPDUs.
 
-use oer_ieee80211_lower_mac::BlockAckReport;
-use oer_ieee80211_mac::sequence::SequenceNumber;
+use oer_ieee80211_port::BlockAckReport;
+use oer_ieee80211_wire::sequence::SequenceNumber;
 use oer_time::{Duration, Instant};
 
 /// Subframes one A-MPDU exchange tracks: the width of a 64-bit BlockAck

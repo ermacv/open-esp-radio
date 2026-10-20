@@ -2,7 +2,7 @@
 //! Every method borrows the same service and peer storage; no second owner exists.
 
 use super::*;
-use oer_ieee80211_mac::sequence::SequenceNumber;
+use oer_ieee80211_wire::sequence::SequenceNumber;
 
 impl<'peers, S: SppScope> AccessPointService<'peers, S> {
     pub fn next_management_sequence(&mut self) -> SequenceNumber {

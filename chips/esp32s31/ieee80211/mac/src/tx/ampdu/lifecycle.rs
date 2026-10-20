@@ -3,7 +3,7 @@
 use core::pin::Pin;
 
 use oer_esp32s31_hal::types::MacHeTriggerTxQueueSnapshot;
-use oer_ieee80211_mac::sequence::SequenceNumber;
+use oer_ieee80211_wire::sequence::SequenceNumber;
 
 use super::{
     HtAmpduHardware, HtAmpduTxCompletion, HtAmpduTxError, HtAmpduTxStorage, HtBlockAckObservation,

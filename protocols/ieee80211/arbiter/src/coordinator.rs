@@ -33,9 +33,9 @@
 
 use core::num::{NonZeroU8, NonZeroU64};
 
-use oer_ieee80211_lower_mac::{Ieee80211Capabilities, SupportedChannel};
-use oer_ieee80211_mac::channel::{Band, Channel};
-use oer_ieee80211_mac::channel_switch::ChannelSwitchMode;
+use oer_ieee80211_port::{Ieee80211Capabilities, SupportedChannel};
+use oer_ieee80211_wire::channel::{Band, Channel};
+use oer_ieee80211_wire::channel_switch::ChannelSwitchMode;
 use oer_time::{Duration, Instant};
 
 use crate::channel::requires_radar_detection;
@@ -300,7 +300,7 @@ impl BeaconInterval {
 /// publishing an AP fact:
 /// ```compile_fail,E0308
 /// use oer_ieee80211_arbiter::coordinator::ApSchedule;
-/// use oer_ieee80211_lower_mac::SupportedChannel;
+/// use oer_ieee80211_port::SupportedChannel;
 /// fn raw_interval<K>(channel: SupportedChannel<K>) -> ApSchedule<K> {
 ///     ApSchedule { channel, next_tbtt: oer_time::Instant::from_micros(0),
 ///         beacon_interval: oer_time::Duration::ZERO }
@@ -310,7 +310,7 @@ impl BeaconInterval {
 /// The channel must already be accepted by the backend:
 /// ```compile_fail,E0308
 /// use oer_ieee80211_arbiter::coordinator::ApSchedule;
-/// use oer_ieee80211_mac::channel::Channel;
+/// use oer_ieee80211_wire::channel::Channel;
 /// use oer_time::{Duration, Instant};
 /// fn raw_schedule<K>(channel: Channel) -> ApSchedule<K> {
 ///     ApSchedule {
@@ -323,7 +323,7 @@ impl BeaconInterval {
 /// A checked channel is carried unchanged into the schedule:
 /// ```
 /// use oer_ieee80211_arbiter::coordinator::ApSchedule;
-/// use oer_ieee80211_lower_mac::SupportedChannel;
+/// use oer_ieee80211_port::SupportedChannel;
 /// use oer_time::{Duration, Instant};
 /// fn checked_schedule<K>(channel: SupportedChannel<K>) -> ApSchedule<K> {
 ///     ApSchedule {
@@ -409,8 +409,8 @@ enum AccessPoint<K> {
 /// Facts cannot introduce an unchecked channel:
 /// ```compile_fail,E0308
 /// use oer_ieee80211_arbiter::coordinator::ChannelCoordinator;
-/// use oer_ieee80211_mac::channel::Channel;
-/// fn raw_fact<K: oer_ieee80211_lower_mac::Ieee80211Capabilities>(
+/// use oer_ieee80211_wire::channel::Channel;
+/// fn raw_fact<K: oer_ieee80211_port::Ieee80211Capabilities>(
 ///     coordinator: &mut ChannelCoordinator<K>, channel: Channel,
 /// ) {
 ///     let _ = coordinator.station_connected(channel);
@@ -421,7 +421,7 @@ enum AccessPoint<K> {
 /// ```compile_fail,E0599
 /// use oer_ieee80211_arbiter::coordinator::ChannelCoordinator;
 /// use oer_time::Instant;
-/// fn separate_loop<K: oer_ieee80211_lower_mac::Ieee80211Capabilities>(
+/// fn separate_loop<K: oer_ieee80211_port::Ieee80211Capabilities>(
 ///     coordinator: &mut ChannelCoordinator<K>, now: Instant,
 /// ) {
 ///     coordinator.poll(now);
@@ -439,7 +439,7 @@ enum AccessPoint<K> {
 /// One owner can consume facts and move its coordinator:
 /// ```
 /// use oer_ieee80211_arbiter::coordinator::{ApFollowPolicy, ChannelCoordinator};
-/// use oer_ieee80211_lower_mac::{Ieee80211Capabilities, SupportedChannel};
+/// use oer_ieee80211_port::{Ieee80211Capabilities, SupportedChannel};
 /// fn accept<K: Ieee80211Capabilities>(channel: SupportedChannel<K>) {
 ///     let mut coordinator = ChannelCoordinator::new(ApFollowPolicy::DEFAULT);
 ///     let actions = coordinator.station_connected(channel);

@@ -14,11 +14,11 @@
 //! `libpp[hal_crypto.o]::hal_crypto_clr_key_entry` +0x0..+0x88.
 
 use super::{MacAddress, TransmitKeyScope};
-use oer_ieee80211_lower_mac::{
+use oer_ieee80211_port::{
     AccessPoint, Station,
     association::{Association, GroupKeySlot, PairwiseKeySlot, VacantAssociation},
 };
-use oer_ieee80211_mac::security::Spp;
+use oer_ieee80211_wire::security::Spp;
 use oer_radio_port::{Child, PoolPath, Root};
 
 /// The STA interface owns one PTK and one receive-only GTK slot.

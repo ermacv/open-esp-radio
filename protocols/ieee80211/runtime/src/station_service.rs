@@ -91,7 +91,7 @@
 //! fixture parsing and serialization do not belong to the product API.
 
 use core::marker::PhantomData;
-use oer_ieee80211_lower_mac::association::{KEY_BANK_CAPACITY, KeyPool};
+use oer_ieee80211_port::association::{KEY_BANK_CAPACITY, KeyPool};
 use oer_ieee80211_sta::machine::TxRefusal;
 
 use core::future::{Future, poll_fn};
@@ -101,14 +101,14 @@ use oer_ieee80211_arbiter::{
     AccessPointCommand, AccessPointFact, Arbiter, ArbiterAction, ArbiterEnd, ArbiterNotice,
     NoReservation, RetiredArbiter, RetuneRefused,
 };
-use oer_ieee80211_lower_mac::{
+use oer_ieee80211_port::{
     ClassFrame, Ieee80211Capabilities, InstalledGroup, InterfacePhase, KeyTypes, LowerMacBackend,
     LowerMacEvent, LowerMacPhase, LowerMacTerminal, PhaseSingleOutcome, PhaseTypes, PoolMpdu,
     PoolSource, Protection, Removed, RemovedKey, RetransmissionPlan, ReturnedMpdu, RxBuffer,
     StationPhase, SupportedChannel, SupportedPower, TxBufferClass, TxBufferPool, TxCompleted,
     TxMpdu, TxPower, TxProtection, TxSource,
 };
-use oer_ieee80211_mac::qos::{WmmAccessCategory, WmmUserPriority};
+use oer_ieee80211_wire::qos::{WmmAccessCategory, WmmUserPriority};
 use oer_ieee80211_sta::{
     data::{
         self, DataInput, DataProtection, DataRefusal, DataReturn, DataTxContext, Msdu, StaData,
@@ -269,19 +269,19 @@ where
     type VacantAssociation = <Ty::StationKeys as KeyTypes<'id>>::VacantAssociation;
     fn begin_association(
         start: Self::AssociationStart,
-        spp: oer_ieee80211_mac::security::Spp,
+        spp: oer_ieee80211_wire::security::Spp,
     ) -> Self::Association {
         Ty::StationKeys::begin_association(start, spp)
     }
     fn collect_key_bank(
-        parts: oer_ieee80211_lower_mac::association::KeyBankParts<
+        parts: oer_ieee80211_port::association::KeyBankParts<
             Self::PairwiseSlot,
             Self::GroupSlot,
             KEY_BANK_CAPACITY,
         >,
     ) -> Result<
         Self::VacantKeyBank,
-        oer_ieee80211_lower_mac::association::KeyBankParts<
+        oer_ieee80211_port::association::KeyBankParts<
             Self::PairwiseSlot,
             Self::GroupSlot,
             KEY_BANK_CAPACITY,
@@ -294,7 +294,7 @@ where
     ) -> (
         Self::AssociationStart,
         Self::PairwiseSlot,
-        oer_ieee80211_lower_mac::association::KeyBankParts<
+        oer_ieee80211_port::association::KeyBankParts<
             Self::PairwiseSlot,
             Self::GroupSlot,
             KEY_BANK_CAPACITY,
@@ -308,7 +308,7 @@ where
     ) -> (
         Self::AssociationStart,
         Self::PairwiseSlot,
-        oer_ieee80211_lower_mac::association::KeyBankParts<
+        oer_ieee80211_port::association::KeyBankParts<
             Self::PairwiseSlot,
             Self::GroupSlot,
             KEY_BANK_CAPACITY,
@@ -685,7 +685,7 @@ impl<
     )]
     pub fn restart(
         self,
-        channel: oer_ieee80211_lower_mac::SupportedChannel<B::Caps>,
+        channel: oer_ieee80211_port::SupportedChannel<B::Caps>,
     ) -> Result<RestartedService<'p, 'id, B, S, GROUPS>, RestartFailed<'p, 'id, B, S, GROUPS>> {
         let Self {
             mut owner,
@@ -787,7 +787,7 @@ pub struct RetiredService<'id, B: StationPort<'id>, S, const GROUPS: usize = 2> 
         oer_ieee80211_arbiter::StationPlaceReturns<'id, <B::Types as PhaseTypes<'id>>::GatePath>,
     _arbiter: RetiredArbiter<'id, B::Caps, NoReservation, <B::Types as PhaseTypes<'id>>::GatePath>,
     _pending: PendingActions<'id, B>,
-    _terminal_access: oer_ieee80211_lower_mac::TerminalAccess<
+    _terminal_access: oer_ieee80211_port::TerminalAccess<
         'id,
         <B::Types as PhaseTypes<'id>>::TicketKind,
         <B::Types as PhaseTypes<'id>>::TicketPath,
@@ -810,7 +810,7 @@ struct ServiceState<'id, B: StationPort<'id>, S, const GROUPS: usize = 2> {
     rates: S,
     /// What the service dropped or could not send.
     counters: ServiceCounters,
-    terminal_access: oer_ieee80211_lower_mac::TerminalAccess<
+    terminal_access: oer_ieee80211_port::TerminalAccess<
         'id,
         <B::Types as PhaseTypes<'id>>::TicketKind,
         <B::Types as PhaseTypes<'id>>::TicketPath,
@@ -865,7 +865,7 @@ impl<
         data: PortData<'id, B>,
         arbiter: PortArbiter<'id, B>,
         rates: S,
-        terminal_access: oer_ieee80211_lower_mac::TerminalAccess<
+        terminal_access: oer_ieee80211_port::TerminalAccess<
             'id,
             <B::Types as PhaseTypes<'id>>::TicketKind,
             <B::Types as PhaseTypes<'id>>::TicketPath,
@@ -1607,14 +1607,14 @@ impl<
                                 .admissions
                                 .insert(PendingTerminal::Transmit(ticket.index()));
                             let submitted = phase.station().submit(
-                                (oer_ieee80211_lower_mac::Attempt {
+                                (oer_ieee80211_port::Attempt {
                                     context: TxContext::Data(context),
                                     ticket,
                                     source,
                                     access_category,
                                     protection: Protection::None,
                                     power: Levels::<B::Caps>::POWER,
-                                    coex_operation: oer_ieee80211_lower_mac::TxOperation::Data,
+                                    coex_operation: oer_ieee80211_port::TxOperation::Data,
                                 })
                                 .admit(),
                             );
@@ -1775,7 +1775,7 @@ impl<
     ) -> Result<(), ContractFault<'id, B>> {
         let control = match &terminal {
             LowerMacTerminal::GateClosed(_) => Some(ControlTerminal::GateClosed),
-            LowerMacTerminal::Configured(oer_ieee80211_lower_mac::Configured::Station(_)) => {
+            LowerMacTerminal::Configured(oer_ieee80211_port::Configured::Station(_)) => {
                 Some(ControlTerminal::Configure)
             }
             LowerMacTerminal::KeyRemoved(Removed::Station(RemovedKey::Pairwise { .. })) => {
@@ -1794,7 +1794,7 @@ impl<
         }
         match terminal {
             LowerMacTerminal::TxCompleted(TxCompleted::Single(terminal)) => {
-                let oer_ieee80211_lower_mac::TerminalParts {
+                let oer_ieee80211_port::TerminalParts {
                     context,
                     ticket,
                     payload,
@@ -1830,7 +1830,7 @@ impl<
                 ));
             }
             LowerMacTerminal::GateClosed(closed) => arbiter.gate_closed(closed),
-            LowerMacTerminal::Configured(oer_ieee80211_lower_mac::Configured::Station(
+            LowerMacTerminal::Configured(oer_ieee80211_port::Configured::Station(
                 permission,
             )) => {
                 self.station.input(now, StaInput::Configured(permission));
@@ -1849,7 +1849,7 @@ impl<
             | LowerMacTerminal::GroupKeyReplaced { .. }
             | LowerMacTerminal::GroupKeySelected { .. }) => self.group_terminal(now, terminal)?,
             terminal @ (LowerMacTerminal::Configured(
-                oer_ieee80211_lower_mac::Configured::AccessPoint(_),
+                oer_ieee80211_port::Configured::AccessPoint(_),
             )
             | LowerMacTerminal::KeyRemoved(Removed::AccessPoint(_))
             | LowerMacTerminal::GroupKeyInstalled(InstalledGroup::AccessPoint {
@@ -2067,7 +2067,7 @@ type StationPreparation<'k, 'p, 'id, B> = Result<
     <<B as StationPort<'id>>::Types as PhaseTypes<'id>>::Prepared<
         'k,
         'p,
-        oer_ieee80211_lower_mac::Station,
+        oer_ieee80211_port::Station,
         <B as LowerMacBackend>::Caps,
     >,
     (
@@ -2078,7 +2078,7 @@ type StationPreparation<'k, 'p, 'id, B> = Result<
 
 /// Prepare within the class pool; a refusal retains the original owners.
 fn prepare_source<'k, 'p, 'id: 'p + 'k, B: StationPort<'id>, C: TxBufferClass>(
-    source: PoolSource<'k, 'p, 'id, B::Types, C, B::Caps, oer_ieee80211_lower_mac::Station>,
+    source: PoolSource<'k, 'p, 'id, B::Types, C, B::Caps, oer_ieee80211_port::Station>,
 ) -> StationPreparation<'k, 'p, 'id, B>
 where
     B::Types: TxBufferPool<'id, C>,
@@ -2174,13 +2174,13 @@ where
         }
     };
     let coex_operation = match class {
-        StaFrameClass::Connection(frame) => oer_ieee80211_lower_mac::TxOperation::Connection(frame),
-        StaFrameClass::Normal => oer_ieee80211_lower_mac::TxOperation::Data,
+        StaFrameClass::Connection(frame) => oer_ieee80211_port::TxOperation::Connection(frame),
+        StaFrameClass::Normal => oer_ieee80211_port::TxOperation::Data,
     };
     let mut station = phase.station();
     admissions.insert(PendingTerminal::Transmit(ticket.index()));
     match station.submit(
-        (oer_ieee80211_lower_mac::Attempt {
+        (oer_ieee80211_port::Attempt {
             context: TxContext::Station(context),
             ticket,
             source,

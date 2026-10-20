@@ -1,0 +1,28 @@
+[package]
+name = "oer-ieee80211-wire"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Allocation-free IEEE 802.11 protocol types and state machines"
+
+[features]
+default = []
+# The deterministic received-byte inputs of `fuzz`, for other crates' tests.
+test-support = []
+
+[dependencies]
+oer-radio-regulatory = { path = "../../radio/regulatory" }
+oer-time = { path = "../../../portable/time" }
+zeroize = { version = "1.9.0", default-features = false, features = ["derive"] }
+
+[dev-dependencies]
+oer-test-ui-cases = { path = "../../../tools/test/ui-cases" }
+
+[lints]
+workspace = true
+
+[package.metadata.open-radio]
+layer = "protocol"
+platform = "portable"

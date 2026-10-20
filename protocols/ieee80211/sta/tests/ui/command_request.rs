@@ -1,5 +1,5 @@
 #![no_std]
-use oer_ieee80211_lower_mac::Ieee80211Capabilities;
+use oer_ieee80211_port::Ieee80211Capabilities;
 use oer_ieee80211_sta::machine::{StaRequest, StaTokens, Station};
 
 pub fn submit<'id, T: StaTokens, K: Ieee80211Capabilities>(

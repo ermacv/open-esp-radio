@@ -8,7 +8,7 @@
 //! coexistence owner, never of the row.
 
 use crate::pti::{CoexEventId, wifi_events};
-use oer_ieee80211_lower_mac::{ConnectionFrame, Operation as WifiOperation, TxOperation};
+use oer_ieee80211_port::{ConnectionFrame, Operation as WifiOperation, TxOperation};
 use oer_ieee802154_mac::RadioOperation;
 
 /// The shared-table event an IEEE 802.11 operation requests, or `None` for

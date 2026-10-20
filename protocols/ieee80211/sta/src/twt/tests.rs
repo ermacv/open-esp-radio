@@ -1,6 +1,6 @@
 use super::*;
-use oer_ieee80211_mac::tsf::TsfInstant;
-use oer_ieee80211_mac::twt::IndividualTwtFlowType;
+use oer_ieee80211_wire::tsf::TsfInstant;
+use oer_ieee80211_wire::twt::IndividualTwtFlowType;
 
 const CONFIG: IndividualTwtRequesterConfig = match IndividualTwtRequesterConfig::new(
     oer_time::Duration::from_micros(1_000),

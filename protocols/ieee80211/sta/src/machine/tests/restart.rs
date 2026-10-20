@@ -64,7 +64,7 @@ fn stopped_bank_reclaims_old_keys_then_connects_using_the_same_installation() {
         world.answer_authentication(at(83), 0);
         world.receive(at(84), &association_response(0));
         let m1 = RsnTxFrame::<512>::message1(
-            oer_ieee80211_mac::security::rsn::Akm::Psk,
+            oer_ieee80211_wire::security::rsn::Akm::Psk,
             LOCAL,
             1,
             ANONCE,
@@ -72,7 +72,7 @@ fn stopped_bank_reclaims_old_keys_then_connects_using_the_same_installation() {
         .unwrap();
         world.receive(at(85), &eapol_frame(m1.as_bytes()));
         let ptk = Pmk::from_bytes(PMK).derive_ptk(
-            oer_ieee80211_mac::security::rsn::Akm::Psk,
+            oer_ieee80211_wire::security::rsn::Akm::Psk,
             oer_ieee80211_rsn::PtkContext {
                 authenticator_address: BSSID,
                 supplicant_address: LOCAL,

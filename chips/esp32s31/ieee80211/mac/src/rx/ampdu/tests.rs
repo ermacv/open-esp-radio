@@ -1,5 +1,5 @@
 use super::*;
-use oer_ieee80211_mac::block_ack::RxReorderMpdu;
+use oer_ieee80211_wire::block_ack::RxReorderMpdu;
 
 macro_rules! rx_request {
     ($interface:expr, $peer:expr, $token:expr, $tid:expr, $immediate:expr, $window:expr, $timeout:expr, $start:expr) => {

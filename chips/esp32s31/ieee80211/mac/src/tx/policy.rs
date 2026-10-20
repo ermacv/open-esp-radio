@@ -5,7 +5,7 @@
 //! semantic name. Recording the observed transformation is safer than
 //! inventing one for a fixed C node layout that is not fully decoded.
 
-use oer_ieee80211_mac::data::DataInterfaceRole;
+use oer_ieee80211_wire::data::DataInterfaceRole;
 
 use crate::tx::metadata::descriptor_priority_byte;
 use oer_esp32s31_hal::layouts::{WifiTxDescriptorPrefixFlags, WifiTxDescriptorPrefixSecurity};

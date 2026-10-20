@@ -1,6 +1,6 @@
 //! ESP32-S31 lowering of portable Wi-Fi channel definitions.
 
-use oer_ieee80211_mac::channel::{WifiChannel, WifiChannelWidth};
+use oer_ieee80211_wire::channel::{WifiChannel, WifiChannelWidth};
 
 /// Exact arguments accepted by the recovered ESP32-S31 PHY channel root.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

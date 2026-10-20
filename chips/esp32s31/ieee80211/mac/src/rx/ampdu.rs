@@ -5,13 +5,13 @@
 //! variable pointer array for every receive TID. This module keeps negotiation
 //! state and the data-plane reorder engine as separate owned values. The
 //! reorder window of one agreement is the portable
-//! `oer_ieee80211_mac::block_ack::RxReorderBuffer`, bound here to the S31
+//! `oer_ieee80211_wire::block_ack::RxReorderBuffer`, bound here to the S31
 //! window profile; the eight hardware-bank agreements that own those windows
 //! stay with the chip. The integration layer binds the reorder to its exact
 //! staging-pool capacity, and raw packet pointers stay outside both state
 //! machines.
 
-use oer_ieee80211_mac::{
+use oer_ieee80211_wire::{
     block_ack::{RxReorderBuffer, RxReorderError, RxReorderRelease},
     sequence::SequenceNumber,
 };
@@ -150,7 +150,7 @@ pub fn rx_block_ack_request_key(
     })
 }
 
-pub use oer_ieee80211_mac::block_ack::{
+pub use oer_ieee80211_wire::block_ack::{
     ADDBA_STATUS_REQUEST_DECLINED, RxAddbaResponseError, write_declined_addba_response,
     write_successful_addba_response,
 };

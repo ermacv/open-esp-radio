@@ -8,7 +8,7 @@ use oer_esp32s31_phy::{
     ConcurrentWifiChannelError, PhyTargetObserver, RomShortDelay, concurrent::ConcurrentPhy,
     select_concurrent_wifi_channel,
 };
-use oer_ieee80211_mac::channel::WifiChannel;
+use oer_ieee80211_wire::channel::WifiChannel;
 use oer_radio_regulatory::Permitted;
 
 pub(crate) async fn select_wifi_channel<O: PhyTargetObserver>(

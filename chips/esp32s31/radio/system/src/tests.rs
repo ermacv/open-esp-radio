@@ -23,7 +23,7 @@ use oer_esp32s31_radio_client::{
         WifiRetuned, WifiReturned, WifiTrack, WifiTracked,
     },
 };
-use oer_ieee80211_mac::channel::{WifiChannel, WifiChannelWidth};
+use oer_ieee80211_wire::channel::{WifiChannel, WifiChannelWidth};
 use oer_time::{Clock as _, Duration, Instant};
 use oer_time_virtual::VirtualClock;
 

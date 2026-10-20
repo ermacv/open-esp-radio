@@ -1,8 +1,8 @@
 //! Bounded multi-peer AP MLME and security ownership.
 
 use core::fmt;
-use oer_ieee80211_mac::security::spp::SppScope;
-use oer_ieee80211_mac::sequence::SequenceNumber;
+use oer_ieee80211_wire::security::spp::SppScope;
+use oer_ieee80211_wire::sequence::SequenceNumber;
 
 mod block_ack;
 mod management;
@@ -23,20 +23,20 @@ pub use crate::limits::{
     AccessPointClientLimitError,
 };
 
-use oer_ieee80211_mac::ap::{ApAssociationSecurityObservation, ApPowerSaveObservation};
+use oer_ieee80211_wire::ap::{ApAssociationSecurityObservation, ApPowerSaveObservation};
 
 use crate::pmksa::{AP_PMKID_LEN, ApPmksa, ApPmksaCache};
-use oer_ieee80211_mac::beacon::{TimAssociationId, TimBitmapError, TimVirtualBitmap};
-use oer_ieee80211_mac::block_ack::{
+use oer_ieee80211_wire::beacon::{TimAssociationId, TimBitmapError, TimVirtualBitmap};
+use oer_ieee80211_wire::block_ack::{
     AddbaRequest, BlockAckAction, OperationalTxBlockAck, TxBlockAckOriginator,
     TxBlockAckOriginatorConfig, TxBlockAckOriginatorError, TxBlockAckOriginatorPolicy,
     TxBlockAckResponse, TxBlockAckResponseDisposition, TxBlockAckRetry, next_nonzero_dialog_token,
 };
-use oer_ieee80211_mac::ht::HtPeerCapabilities;
-use oer_ieee80211_mac::protection::{
+use oer_ieee80211_wire::ht::HtPeerCapabilities;
+use oer_ieee80211_wire::protection::{
     ApBssProtection, ErpProtection, HtOperationProtection, HtProtectionMode,
 };
-use oer_ieee80211_mac::security::{
+use oer_ieee80211_wire::security::{
     ApSecurityPolicy, AssociationAkm, AssociationSecurity, GroupManagementCipher, LinkProtection,
     RsnAssociation, SaePwe, rsn::Akm,
 };

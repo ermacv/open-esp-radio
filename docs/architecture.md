@@ -152,7 +152,7 @@ power. The images take the country from the stand (`cargo fw`).
 
 ## Radio port
 
-`oer-radio-port` and the Wi-Fi lower-MAC port (`oer-ieee80211-lower-mac`) are
+`oer-radio-port` and the Wi-Fi lower-MAC port (`oer-ieee80211-port`) are
 not frozen. The S31 has no lower-MAC port backend yet: the Wi-Fi images drive
 the chip driver directly.
 [Radio ports](radio-ports.md) states the principles they follow,

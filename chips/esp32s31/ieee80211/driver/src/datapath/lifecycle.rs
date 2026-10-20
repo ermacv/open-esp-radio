@@ -10,7 +10,7 @@ use oer_esp32s31_ieee80211_mac::sta_ap_registers::{
     StaApRegisterHardware, configure_sta_ap_receive_registers,
     disable_access_point_receive_registers, disable_station_receive_registers,
 };
-use oer_ieee80211_mac::channel::WifiChannel;
+use oer_ieee80211_wire::channel::WifiChannel;
 
 /// Addresses required only when the second role joins the shared MAC.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

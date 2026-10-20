@@ -11,7 +11,7 @@
 )]
 
 use super::*;
-use oer_ieee80211_mac::ccmp::GroupKeyId;
+use oer_ieee80211_wire::ccmp::GroupKeyId;
 
 #[derive(Zeroize, ZeroizeOnDrop)]
 pub struct RsnGtk {

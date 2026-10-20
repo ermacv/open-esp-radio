@@ -1,5 +1,5 @@
 use super::*;
-use oer_ieee80211_lower_mac::{AggregateAttempt, MpduStartSpacing};
+use oer_ieee80211_port::{AggregateAttempt, MpduStartSpacing};
 
 #[derive(Clone, Copy, Debug)]
 enum Form {
@@ -70,9 +70,9 @@ impl Work for Results {
                 }
                 Form::Aggregate => {
                     let rate = PhyRate::Ht(
-                        oer_ieee80211_mac::phy::HtRate::new(
+                        oer_ieee80211_wire::phy::HtRate::new(
                             HtMcs::new(7).unwrap(),
-                            oer_ieee80211_mac::phy::PpduBandwidth::Mhz20,
+                            oer_ieee80211_wire::phy::PpduBandwidth::Mhz20,
                             false,
                         )
                         .unwrap(),
@@ -110,7 +110,7 @@ impl Work for Results {
             };
             let (returned_ticket, returned_buffer, outcome) = match (form, completed) {
                 (Form::Single, TxCompleted::Single(terminal)) => {
-                    let oer_ieee80211_lower_mac::TerminalParts {
+                    let oer_ieee80211_port::TerminalParts {
                         ticket,
                         outcome: completion,
                         payload,
@@ -122,7 +122,7 @@ impl Work for Results {
                     (ticket, buffer, Returned::Single(completion))
                 }
                 (Form::Aggregate, TxCompleted::Aggregate(terminal)) => {
-                    let oer_ieee80211_lower_mac::TerminalParts {
+                    let oer_ieee80211_port::TerminalParts {
                         ticket,
                         payload,
                         outcome,

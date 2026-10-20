@@ -5,11 +5,11 @@ extern crate std;
 use core::num::NonZeroU16;
 use std::vec::Vec;
 
-use oer_ieee80211_lower_mac::{
+use oer_ieee80211_port::{
     BandSet, HardwareServices, LowerMacCapabilities, PhyFormatSet, RETRY_STAGES, RateSupport,
     ReceiveFilter, WidthSet,
 };
-use oer_ieee80211_mac::{
+use oer_ieee80211_wire::{
     ht::ht_peer_capabilities,
     phy::{HeMcs, HtMcs},
     station::association::PhyMode,
@@ -17,15 +17,15 @@ use oer_ieee80211_mac::{
 
 use super::*;
 use crate::rate_schedule::{RateScheduleKind, schedule_state};
-use oer_ieee80211_lower_mac::{
+use oer_ieee80211_port::{
     Air, IndeterminateCause, SingleEnd, SingleResponse, TxOutcome, WithdrawCause,
 };
-use oer_ieee80211_lower_mac::{Channel, ChannelWidth, LinkMetric, RxMeta, RxMetadata};
+use oer_ieee80211_port::{Channel, ChannelWidth, LinkMetric, RxMeta, RxMetadata};
 
 struct Caps;
 
 impl Ieee80211Capabilities for Caps {
-    type SppScope = oer_ieee80211_mac::security::spp::Association;
+    type SppScope = oer_ieee80211_wire::security::spp::Association;
     const CAPS: LowerMacCapabilities = LowerMacCapabilities {
         bands: BandSet::GHZ2_4,
         widths: WidthSet::MHZ20,
@@ -450,7 +450,7 @@ fn every_data_and_control_rate_belongs_to_the_negotiated_legacy_set() {
     let he = RatePeer {
         phy: PhyMode::He20,
         he_capabilities: Some(
-            oer_ieee80211_mac::he::parse_he20_capabilities(&[
+            oer_ieee80211_wire::he::parse_he20_capabilities(&[
                 255, 22, 35, 0x03, 0x18, 0x9c, 0xca, 0x10, 0x80, 0x00, 0x10, 0x8a, 0x1b, 0x0d,
                 0xc0, 0x1f, 0x00, 0x02, 0x82, 0x01, 0xfd, 0xff, 0xfd, 0xff,
             ])

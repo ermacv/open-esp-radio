@@ -12,7 +12,7 @@
 //!
 //! A received data MPDU of the station's BSS gives its MSDUs only once the
 //! replay check of the association's keys passed it
-//! ([`CcmpRxReplayEpoch`](oer_ieee80211_mac::ccmp::CcmpRxReplayEpoch)); the reorder, when it comes, runs before it.
+//! ([`CcmpRxReplayEpoch`](oer_ieee80211_wire::ccmp::CcmpRxReplayEpoch)); the reorder, when it comes, runs before it.
 //!
 //! The station's link ([`LinkView`]) is only there while data may go: it
 //! lends the BSS, the pairwise key (an action carries no key: the service
@@ -20,12 +20,12 @@
 //! the replay check and, on a non-QoS BSS, the station's sequence space.
 
 use crate::Counter;
-use oer_ieee80211_lower_mac::{
+use oer_ieee80211_port::{
     AckHeader, HeaderSpec, MpduLength, ReturnedMpdu, RxCryptoStatus, RxEvidence, RxMeta, SingleEnd,
     SingleOutcome, SizedFrame, TxBufferMemory, TxOutcome,
 };
-use oer_ieee80211_mac::address::IndividualAddress;
-use oer_ieee80211_mac::{
+use oer_ieee80211_wire::address::IndividualAddress;
+use oer_ieee80211_wire::{
     qos::{WmmAccessCategory, WmmUserPriority},
     sequence::SequenceNumber,
     station::StaProtectedDataFrame,
@@ -42,7 +42,7 @@ pub trait StaDataTokens {
     /// Component owning the connected station's epoch source.
     type EpochPath: PoolPath;
     /// The checked class carried by the MPDU description and context.
-    type Class: oer_ieee80211_lower_mac::TxBufferClass;
+    type Class: oer_ieee80211_port::TxBufferClass;
     /// A transmit ticket.
     type Ticket;
     /// A transmit buffer: its memory, which the machine encodes into.
@@ -156,7 +156,7 @@ pub enum DataReturn<'id, D: StaDataTokens, K> {
 /// ```
 ///
 /// ```compile_fail,E0609
-/// use oer_ieee80211_mac::qos::WmmAccessCategory;
+/// use oer_ieee80211_wire::qos::WmmAccessCategory;
 /// use oer_ieee80211_sta::data::{DataTransmit, StaDataTokens};
 /// fn change_category<D: StaDataTokens, K>(transmit: &mut DataTransmit<'_, D, K>) {
 ///     transmit.access_category = WmmAccessCategory::Voice;
@@ -251,7 +251,7 @@ pub struct DataTxContext<'id, K, C, A = AcPermit, Path: PoolPath = Root> {
     admission: A,
     link: LinkEpoch<'id, Path>,
     tid: WmmUserPriority,
-    frame: oer_ieee80211_lower_mac::ClassSizedFrame<C, AckHeader, K>,
+    frame: oer_ieee80211_port::ClassSizedFrame<C, AckHeader, K>,
     access_category: WmmAccessCategory,
     protection: DataProtection<()>,
     order: u32,
@@ -299,7 +299,7 @@ impl Admissions {
 
 impl<'id, K, C, A, Path: PoolPath> DataTxContext<'id, K, C, A, Path> {
     /// The checked MPDU description selected when the bytes were encoded.
-    pub const fn frame(&self) -> &oer_ieee80211_lower_mac::ClassSizedFrame<C, AckHeader, K> {
+    pub const fn frame(&self) -> &oer_ieee80211_port::ClassSizedFrame<C, AckHeader, K> {
         &self.frame
     }
 
@@ -372,7 +372,7 @@ pub struct DataCounters {
 /// Data has no timer: its queued work advances on inputs and returned credits.
 ///
 /// ```compile_fail,E0061
-/// use oer_ieee80211_lower_mac::Ieee80211Capabilities;
+/// use oer_ieee80211_port::Ieee80211Capabilities;
 /// use oer_ieee80211_sta::data::{StaData, StaDataTokens};
 /// use oer_time::Instant;
 /// fn poll<D: StaDataTokens, K: Ieee80211Capabilities>(data: &mut StaData<'_, D, K>) {
@@ -381,7 +381,7 @@ pub struct DataCounters {
 /// ```
 ///
 /// ```compile_fail,E0599
-/// use oer_ieee80211_lower_mac::Ieee80211Capabilities;
+/// use oer_ieee80211_port::Ieee80211Capabilities;
 /// use oer_ieee80211_sta::data::{StaData, StaDataTokens};
 /// fn deadline<D: StaDataTokens, K: Ieee80211Capabilities>(data: &StaData<'_, D, K>) {
 ///     let _deadline = data.poll_deadline();
@@ -391,7 +391,7 @@ pub struct DataCounters {
 /// The service drains ready actions after each input:
 ///
 /// ```
-/// use oer_ieee80211_lower_mac::Ieee80211Capabilities;
+/// use oer_ieee80211_port::Ieee80211Capabilities;
 /// use oer_ieee80211_sta::data::{DataTransmit, StaData, StaDataTokens};
 /// fn action<'id, D: StaDataTokens, K: Ieee80211Capabilities>(
 ///     data: &mut StaData<'id, D, K>,
@@ -432,7 +432,7 @@ pub struct RetiredData<'id, D: StaDataTokens, K, const CAP: usize = 8> {
     contention_limited: Counter,
 }
 
-impl<'id, D: StaDataTokens, K: oer_ieee80211_lower_mac::Ieee80211Capabilities, const CAP: usize>
+impl<'id, D: StaDataTokens, K: oer_ieee80211_port::Ieee80211Capabilities, const CAP: usize>
     RetiredData<'id, D, K, CAP>
 {
     pub fn counters(&self) -> DataCounters {
@@ -481,7 +481,7 @@ impl<'id, D: StaDataTokens, K: oer_ieee80211_lower_mac::Ieee80211Capabilities, c
     }
 }
 
-impl<'id, D: StaDataTokens, K: oer_ieee80211_lower_mac::Ieee80211Capabilities, const CAP: usize>
+impl<'id, D: StaDataTokens, K: oer_ieee80211_port::Ieee80211Capabilities, const CAP: usize>
     StaData<'id, D, K, CAP>
 {
     /// End admission and reclaim queued frames after the backend returned its
@@ -636,8 +636,8 @@ impl<'id, D: StaDataTokens, K: oer_ieee80211_lower_mac::Ieee80211Capabilities, c
                 if matches!(
                     completion,
                     TxOutcome::Withdrawn(
-                        oer_ieee80211_lower_mac::WithdrawCause::GateClosed
-                            | oer_ieee80211_lower_mac::WithdrawCause::Disabled
+                        oer_ieee80211_port::WithdrawCause::GateClosed
+                            | oer_ieee80211_port::WithdrawCause::Disabled
                     )
                 ) {
                     let tid = context.tid;
@@ -790,8 +790,8 @@ impl<'id, D: StaDataTokens, K: oer_ieee80211_lower_mac::Ieee80211Capabilities, c
     }
 }
 
-pub(crate) fn integrity(meta: &RxMeta) -> oer_ieee80211_mac::receive::Integrity {
-    use oer_ieee80211_mac::receive::Integrity;
+pub(crate) fn integrity(meta: &RxMeta) -> oer_ieee80211_wire::receive::Integrity {
+    use oer_ieee80211_wire::receive::Integrity;
     match meta.crypto {
         RxEvidence::HardwareObserved(RxCryptoStatus::DecryptedAndIntegrityVerified)
         | RxEvidence::ProtocolValidated(RxCryptoStatus::DecryptedAndIntegrityVerified) => {
@@ -805,7 +805,7 @@ pub(crate) fn integrity(meta: &RxMeta) -> oer_ieee80211_mac::receive::Integrity 
 /// the CCMP header's room on a protected link, the LLC/SNAP header and the
 /// payload.
 const fn mpdu_len(qos: bool, protection: DataProtection<()>, payload: usize) -> Option<usize> {
-    use oer_ieee80211_mac::{
+    use oer_ieee80211_wire::{
         ccmp::CCMP_HEADER_LEN,
         data::{
             IEEE80211_LEGACY_DATA_HEADER_LEN, IEEE80211_QOS_DATA_HEADER_LEN, LLC_SNAP_HEADER_LEN,
@@ -827,8 +827,8 @@ const fn mpdu_len(qos: bool, protection: DataProtection<()>, payload: usize) -> 
 /// The MPDU of `msdu` on `link`, written into `output`.
 fn encode_frame<
     T: StaTokens,
-    K: oer_ieee80211_lower_mac::Ieee80211Capabilities,
-    C: oer_ieee80211_lower_mac::TxBufferClass,
+    K: oer_ieee80211_port::Ieee80211Capabilities,
+    C: oer_ieee80211_port::TxBufferClass,
 >(
     link: &LinkView<'_, '_, T>,
     qos: bool,
@@ -836,7 +836,7 @@ fn encode_frame<
     sequence_number: SequenceNumber,
     protection: DataProtection<()>,
     output: &mut [u8],
-) -> Option<oer_ieee80211_lower_mac::ClassSizedFrame<C, AckHeader, K>> {
+) -> Option<oer_ieee80211_port::ClassSizedFrame<C, AckHeader, K>> {
     if protection == DataProtection::Open {
         // Write the open encoding directly; it never needs a temporary CCMP
         // gap or a second move of the payload. The exact sized header is
@@ -847,10 +847,10 @@ fn encode_frame<
         let length = mpdu_len(qos, DataProtection::Open, msdu.payload.len())?;
         let frame = output.split_at_mut_checked(length)?.0;
         let header = HeaderSpec::new(
-            oer_ieee80211_mac::frame::FrameControl::new(if qos {
-                oer_ieee80211_mac::frame::QOS_DATA_TO_DS
+            oer_ieee80211_wire::frame::FrameControl::new(if qos {
+                oer_ieee80211_wire::frame::QOS_DATA_TO_DS
             } else {
-                oer_ieee80211_mac::frame::DATA_TO_DS
+                oer_ieee80211_wire::frame::DATA_TO_DS
             })?,
             0,
             link.bssid.individual(),
@@ -859,8 +859,8 @@ fn encode_frame<
             sequence_number.sequence_control(),
             None,
             if qos {
-                Some(oer_ieee80211_lower_mac::QosControl {
-                    tid: oer_ieee80211_lower_mac::Tid::new(msdu.priority.value())?,
+                Some(oer_ieee80211_port::QosControl {
+                    tid: oer_ieee80211_port::Tid::new(msdu.priority.value())?,
                     end_of_service_period: false,
                     amsdu_present: false,
                     high: 0,
@@ -871,14 +871,14 @@ fn encode_frame<
             None,
         )?;
         let header_length = header.header_len();
-        oer_ieee80211_lower_mac::HeaderLayout::new(AckHeader::new(header)?, frame)
+        oer_ieee80211_port::HeaderLayout::new(AckHeader::new(header)?, frame)
             .ok()?
             .encode();
         let payload = frame.split_at_mut_checked(header_length)?.1;
         let (llc, payload) =
-            payload.split_first_chunk_mut::<{ oer_ieee80211_mac::data::LLC_SNAP_HEADER_LEN }>()?;
+            payload.split_first_chunk_mut::<{ oer_ieee80211_wire::data::LLC_SNAP_HEADER_LEN }>()?;
         let [e0, e1] = msdu.ether_type.to_be_bytes();
-        let [a, b, c, d, e, f] = oer_ieee80211_mac::data::RFC1042_LLC_SNAP_PREFIX;
+        let [a, b, c, d, e, f] = oer_ieee80211_wire::data::RFC1042_LLC_SNAP_PREFIX;
         *llc = [a, b, c, d, e, f, e0, e1];
         for (to, from) in payload.iter_mut().zip(msdu.payload) {
             *to = *from;
@@ -902,13 +902,13 @@ fn encode_frame<
 }
 
 fn sized<
-    K: oer_ieee80211_lower_mac::Ieee80211Capabilities,
-    C: oer_ieee80211_lower_mac::TxBufferClass,
+    K: oer_ieee80211_port::Ieee80211Capabilities,
+    C: oer_ieee80211_port::TxBufferClass,
 >(
     frame: &[u8],
-) -> Option<oer_ieee80211_lower_mac::ClassSizedFrame<C, AckHeader, K>> {
+) -> Option<oer_ieee80211_port::ClassSizedFrame<C, AckHeader, K>> {
     let header = HeaderSpec::decode(frame, IndividualAddress::new)?;
-    oer_ieee80211_lower_mac::ClassSizedFrame::new(SizedFrame::new(
+    oer_ieee80211_port::ClassSizedFrame::new(SizedFrame::new(
         AckHeader::new(header)?,
         MpduLength::new(frame.len())?,
     )?)

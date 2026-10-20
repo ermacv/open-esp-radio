@@ -1,6 +1,6 @@
 use super::super::test_support::{BSSID, LOCAL, association_response, deauthentication};
 use super::*;
-use oer_ieee80211_mac::station::StaDisconnectKind;
+use oer_ieee80211_wire::station::StaDisconnectKind;
 use oer_time::{Duration, Instant};
 
 fn at(millis: u64) -> Instant {
@@ -13,8 +13,8 @@ fn ms(millis: u64) -> Duration {
 
 fn begin(now: Instant) -> Result<StaAssociationRuntime, StaAssociationFailure> {
     StaAssociationRuntime::new(
-        OwnAddress::new(oer_ieee80211_mac::address::IndividualAddress::new(LOCAL).unwrap()),
-        Bssid::new(oer_ieee80211_mac::address::IndividualAddress::new(BSSID).unwrap()).unwrap(),
+        OwnAddress::new(oer_ieee80211_wire::address::IndividualAddress::new(LOCAL).unwrap()),
+        Bssid::new(oer_ieee80211_wire::address::IndividualAddress::new(BSSID).unwrap()).unwrap(),
         LinkProtection::Ccmp,
         now,
     )

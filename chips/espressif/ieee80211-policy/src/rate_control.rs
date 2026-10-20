@@ -14,8 +14,8 @@
 use core::num::{NonZeroU16, NonZeroU32};
 
 use crate::rate_schedule::{RateScheduleKind, RateScheduleRef, schedule_state};
-use oer_ieee80211_lower_mac::{BlockAckSnr, LinkMetric, SnrSample};
-use oer_ieee80211_mac::{
+use oer_ieee80211_port::{BlockAckSnr, LinkMetric, SnrSample};
+use oer_ieee80211_wire::{
     channel::WifiChannelWidth,
     he::{He20Capabilities, He20PeerState, HeDcmConstellation, HeMcsNssSupport},
     phy::{FecCoding, HeGiLtf, HeMcs, HeRate, HtMcs, HtRate, LegacyRate, PhyRate, PpduBandwidth},

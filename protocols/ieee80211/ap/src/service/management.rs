@@ -3,7 +3,7 @@
 //! by the service through the lower-MAC port.
 
 use super::*;
-use oer_ieee80211_mac::{
+use oer_ieee80211_wire::{
     ap::ApManagementSubtype, ccmp::CcmpPacketNumber, management_protection::SaQuery,
 };
 use oer_ieee80211_rsn::bip::MANAGEMENT_MIC_ELEMENT_LEN;

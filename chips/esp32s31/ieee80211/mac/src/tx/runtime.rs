@@ -5,12 +5,12 @@
 //! wait for interrupts, access MMIO, mutate DMA storage or produce entropy;
 //! those remain separate hardware/executor boundaries.
 
-use oer_ieee80211_lower_mac::{TxStatus, VifRole};
-use oer_ieee80211_mac::extensions::wmm::WmmParameterSet;
-use oer_ieee80211_mac::qos::{
+use oer_ieee80211_port::{TxStatus, VifRole};
+use oer_ieee80211_wire::extensions::wmm::WmmParameterSet;
+use oer_ieee80211_wire::qos::{
     WmmAccessCategory, WmmTrafficClass, WmmUserPriority, classify_ethernet_wmm,
 };
-use oer_ieee80211_mac::sequence::SequenceNumber;
+use oer_ieee80211_wire::sequence::SequenceNumber;
 
 use oer_espressif_ieee80211_policy::lmac;
 use oer_ieee80211_upper_mac::{

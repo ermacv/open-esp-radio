@@ -1,6 +1,6 @@
 use super::*;
-use oer_ieee80211_lower_mac::{QosControl, Tid};
-use oer_ieee80211_mac::security::Spp;
+use oer_ieee80211_port::{QosControl, Tid};
+use oer_ieee80211_wire::security::Spp;
 
 // Independent AESCCM wire peer, PN 010203040506, TID 5, one A-MSDU subframe.
 const WIRE: &[(Spp, &str, &str)] = &[
@@ -185,11 +185,11 @@ impl Work for WirePeer {
         assert_eq!(
             meta.common.crypto,
             RxEvidence::HardwareObserved(
-                oer_ieee80211_lower_mac::RxCryptoStatus::DecryptedAndIntegrityVerified
+                oer_ieee80211_port::RxCryptoStatus::DecryptedAndIntegrityVerified
             )
         );
-        let mut subframes = oer_ieee80211_mac::data::amsdu_subframes(
-            oer_ieee80211_mac::data::DataInterfaceRole::Station,
+        let mut subframes = oer_ieee80211_wire::data::amsdu_subframes(
+            oer_ieee80211_wire::data::DataInterfaceRole::Station,
             frame.bytes(),
             34,
             26,

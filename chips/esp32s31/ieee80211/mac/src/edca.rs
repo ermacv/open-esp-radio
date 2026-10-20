@@ -7,8 +7,8 @@
 //! validated AIFSN, ACM and TXOP policy of each queue.
 
 use oer_espressif_ieee80211_policy::lmac;
-use oer_ieee80211_mac::extensions::wmm::{WmmAcParameters, WmmParameterSet};
-use oer_ieee80211_mac::qos::WmmAccessCategory;
+use oer_ieee80211_wire::extensions::wmm::{WmmAcParameters, WmmParameterSet};
+use oer_ieee80211_wire::qos::WmmAccessCategory;
 use oer_ieee80211_softmac::EdcaContention;
 
 use crate::tx::LegacyTxQueue;

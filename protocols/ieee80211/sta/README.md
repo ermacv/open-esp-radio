@@ -173,7 +173,7 @@ Samples live in one bounded `heapless::Vec`, whose length is the count.
 The terminal takes this vector by value, preserving order through completion,
 failure and cancellation without sparse entries or a separate counter.
 
-Frame parsing/building belongs in `protocols/ieee80211/mac`; ESP32-S31 ordering
+Frame parsing/building belongs in `protocols/ieee80211/wire`; ESP32-S31 ordering
 and hardware ownership belong in the chip driver; clocks, tasks, DMA wakeups
 and network leases belong to the radio runtime; final resource claims and
 board composition belong to integration.
@@ -346,7 +346,7 @@ group-exchange and TX-callback paths and its empty auth-timeout cancellation.
 
 Station alone issues `LinkEpoch`, before starting Connect. Its non-cloneable
 `LinkEpochSource` consumes the install's unique `Slot<ConnectionEpochKind>`
-from `oer-ieee80211-lower-mac`; there is no reset or slot extraction. The
+from `oer-ieee80211-port`; there is no reset or slot extraction. The
 backend supplies that slot, while Station constructs and owns its source. The epoch and contexts carry the invariant
 install brand. Recreating Station therefore cannot restart its counter
 while earlier operations can return. Issuance is total with a wrapping `u64`.
@@ -454,7 +454,7 @@ requirement rather than an inferred meaning of EAPOL's Secure bit. The same
 vendor file's `wpa_supplicant_install_ptk` at line 834 guards against repeated PTK installs.
 
 Key actions and pending/installed GTK records keep material in the shared
-`oer_ieee80211_mac::ccmp::Ccmp128Key` owner. Its Debug is redacted and its destructor zeroizes the
+`oer_ieee80211_wire::ccmp::Ccmp128Key` owner. Its Debug is redacted and its destructor zeroizes the
 owned bytes when a record retires or an unfinished action is dropped.
 Material comparison borrows those bytes; this makes no claim about
 arbitrary compiler temporaries or copies made inside hardware adapters.

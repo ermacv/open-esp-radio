@@ -1,6 +1,6 @@
 #![no_std]
 use oer_ieee80211_arbiter::{Arbiter, PendingRetune, RetuneRefused};
-use oer_ieee80211_lower_mac::Ieee80211Capabilities;
+use oer_ieee80211_port::Ieee80211Capabilities;
 
 pub fn refused<'id, K: Ieee80211Capabilities>(
     mut arbiter: Arbiter<'id, K>,

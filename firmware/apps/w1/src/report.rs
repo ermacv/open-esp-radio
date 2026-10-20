@@ -16,7 +16,7 @@ use oer_esp32s31_ieee80211_driver::rx::{
 };
 use oer_esp32s31_ieee80211_mac::init::MAC_STATION_INTERRUPT_MASK;
 use oer_espressif_executor::poll_timing::CycleHistogram;
-use oer_ieee80211_mac::address::Bssid;
+use oer_ieee80211_wire::address::Bssid;
 use oer_ieee80211_runtime::survey::{BssTally, Survey};
 
 use crate::{

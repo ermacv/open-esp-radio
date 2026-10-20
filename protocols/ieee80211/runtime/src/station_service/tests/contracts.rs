@@ -1,5 +1,5 @@
 use super::*;
-use oer_ieee80211_lower_mac::{Configured, SampledTsfPermission, VifRole};
+use oer_ieee80211_port::{Configured, SampledTsfPermission, VifRole};
 
 enum ContractCase {
     Unsolicited,
@@ -51,9 +51,9 @@ impl PortBody<ModelBackend<ModelCaps24, ServiceContexts>> for ContractBody {
                 buffers: <[_; 4]>::try_from(small).ok().unwrap(),
                 place,
                 absence_place: absence,
-                keys: oer_ieee80211_lower_mac::association::reunite_vacant(
+                keys: oer_ieee80211_port::association::reunite_vacant(
                     station_association,
-                    oer_ieee80211_lower_mac::association::VacantKeyBank::new(
+                    oer_ieee80211_port::association::VacantKeyBank::new(
                         station_pairwise,
                         station_group,
                     ),
@@ -75,7 +75,7 @@ impl PortBody<ModelBackend<ModelCaps24, ServiceContexts>> for ContractBody {
         let access_point_association =
             <ModelTypes<ServiceContexts> as PhaseTypes>::AccessPointKeys::begin_association(
                 access_point_association,
-                oer_ieee80211_mac::security::Spp::NotNegotiated,
+                oer_ieee80211_wire::security::Spp::NotNegotiated,
             );
         let [ap_pairwise, _] = access_point_pairwise;
         let [ap_group, _] = access_point_group;
@@ -222,19 +222,19 @@ impl PortBody<ModelBackend<ModelCaps24, ServiceContexts>> for ContractBody {
             (
                 LowerMacTerminal::TsfSampled {
                     permission: SampledTsfPermission::Station(station_commands.tsf),
-                    sample: oer_ieee80211_lower_mac::TsfSample {
-                        tsf: oer_ieee80211_lower_mac::VifTsf::new(
+                    sample: oer_ieee80211_port::TsfSample {
+                        tsf: oer_ieee80211_port::VifTsf::new(
                             VifRole::Station,
-                            oer_ieee80211_mac::tsf::TsfInstant::from_micros(0),
+                            oer_ieee80211_wire::tsf::TsfInstant::from_micros(0),
                         ),
-                        local: oer_ieee80211_lower_mac::Ieee80211Stamp {
-                            at: oer_ieee80211_lower_mac::Ieee80211Instant::from_micros(0),
+                        local: oer_ieee80211_port::Ieee80211Stamp {
+                            at: oer_ieee80211_port::Ieee80211Instant::from_micros(0),
                             generation: oer_radio_port::GenerationSource::new(1).current(),
                         },
-                        uncertainty: oer_ieee80211_lower_mac::Ieee80211Duration::from_micros(0),
-                        generation: oer_ieee80211_lower_mac::TsfRelation::new(
+                        uncertainty: oer_ieee80211_port::Ieee80211Duration::from_micros(0),
+                        generation: oer_ieee80211_port::TsfRelation::new(
                             1,
-                            oer_ieee80211_mac::tsf::TsfDuration::from_micros(0),
+                            oer_ieee80211_wire::tsf::TsfDuration::from_micros(0),
                         )
                         .generation(),
                     },

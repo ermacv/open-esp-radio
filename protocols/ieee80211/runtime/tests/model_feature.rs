@@ -33,16 +33,16 @@
 )]
 
 use core::{future::Future, num::NonZeroU8, task::Poll};
-use oer_ieee80211_mac::frame::FrameControl;
+use oer_ieee80211_wire::frame::FrameControl;
 use std::{rc::Rc, task::Waker};
 
-use oer_ieee80211_lower_mac::{
+use oer_ieee80211_port::{
     AckHeader, Attempt, Channel, ChannelWidth, ClassFrame, HeaderSpec, InterfacePhase,
     LowerMacEvent, LowerMacPhase, LowerMacTerminal, MpduLength, Protection, RetryPlan, RetryStage,
     RxBuffer, SizedFrame, Station, SupportedPower, TxBufferPool, TxCompleted, TxFrame, TxOperation,
     TxPower, TxProtection, TxSource,
 };
-use oer_ieee80211_mac::{
+use oer_ieee80211_wire::{
     address::IndividualAddress,
     phy::{LegacyRate, PhyRate},
     qos::WmmAccessCategory,
@@ -155,7 +155,7 @@ impl PortBody<ModelBackend> for ReceiveLoss {
         resources: ModelResources<'id>,
     ) -> Ended<'id, ModelBackend, ()> {
         use embassy_futures::yield_now;
-        use oer_ieee80211_lower_mac::{StationPhase, StationReceive};
+        use oer_ieee80211_port::{StationPhase, StationReceive};
         use oer_ieee80211_runtime::lower_mac_owner::model::MODEL_EVENTS;
         use oer_radio_port::EventsLost;
 
@@ -187,7 +187,7 @@ impl PortBody<ModelBackend> for ReceiveLoss {
                         phase.recycle(frame);
                     }
                     Ok(LowerMacEvent::Terminal(LowerMacTerminal::Configured(
-                        oer_ieee80211_lower_mac::Configured::Station(_),
+                        oer_ieee80211_port::Configured::Station(_),
                     ))) => terminals.push(1),
                     Ok(LowerMacEvent::Terminal(LowerMacTerminal::GateClosed(_))) => {
                         terminals.push(2)
@@ -308,10 +308,10 @@ impl PortBody<ModelBackend> for Owners {
                 else {
                     panic!("one Single terminal per submission");
                 };
-                let oer_ieee80211_lower_mac::TerminalParts {
+                let oer_ieee80211_port::TerminalParts {
                     ticket, payload, ..
                 } = terminal.into_parts(&mut resources.terminal_access);
-                let (buffer, _) = oer_ieee80211_lower_mac::TxMpdu::into_parts(payload);
+                let (buffer, _) = oer_ieee80211_port::TxMpdu::into_parts(payload);
                 assert_eq!(ticket.index(), ticket_index);
                 assert_eq!(matches!(buffer, ModelAnyBuffer::LargeSent(_)), large);
                 if !large {

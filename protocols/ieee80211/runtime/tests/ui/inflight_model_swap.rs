@@ -1,5 +1,5 @@
 #![no_std]
-use oer_ieee80211_lower_mac::{Completed, InFlight, PhaseTypes, TerminalAccess};
+use oer_ieee80211_port::{Completed, InFlight, PhaseTypes, TerminalAccess};
 use oer_ieee80211_runtime::lower_mac_owner::model::{ModelMpdu, ModelSingleOutcome, ModelTypes};
 use oer_radio_port::Slot;
 type Kind<'id> = <ModelTypes as PhaseTypes<'id>>::TicketKind;

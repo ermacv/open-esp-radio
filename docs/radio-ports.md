@@ -6,7 +6,7 @@ model. Everything above a port is written once for every backend; everything
 below it is the backend's. The ports are not frozen; this page states the
 principles the port crates follow. The shared lifecycle and vocabulary are in
 [`oer-radio-port`](../protocols/radio/port/README.md), the Wi-Fi port in
-[`oer-ieee80211-lower-mac`](../protocols/ieee80211/lower-mac/README.md).
+[`oer-ieee80211-port`](../protocols/ieee80211/port/README.md).
 
 ## Placement follows hardware autonomy
 

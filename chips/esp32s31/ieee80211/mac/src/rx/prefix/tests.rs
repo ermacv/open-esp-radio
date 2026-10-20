@@ -6,7 +6,7 @@
 use std::vec::Vec;
 
 use oer_esp32s31_hal::layouts::WifiRxDmaDescriptorControl;
-use oer_ieee80211_mac::{
+use oer_ieee80211_wire::{
     channel::{Channel, ChannelWidth},
     fuzz::{FULL, QUICK, XorShift, inputs},
 };

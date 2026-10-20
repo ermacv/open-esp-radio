@@ -101,7 +101,7 @@ fn tx_plan_contains_protocol_policy_but_no_hardware_queue_encoding() {
 fn receive_metadata_keeps_absence_and_provenance_distinct() {
     let staged = MacRxMetadata {
         channel: MacRxEvidence::HardwareObserved(
-            Channel::ghz2_4(6, oer_ieee80211_mac::channel::ChannelWidth::Mhz20).unwrap(),
+            Channel::ghz2_4(6, oer_ieee80211_wire::channel::ChannelWidth::Mhz20).unwrap(),
         ),
         rate: MacRxEvidence::HardwareObserved(11_u8),
         rssi_dbm: MacRxEvidence::HardwareObserved(-47),
@@ -164,7 +164,7 @@ fn ampdu_status_joins_block_ack_and_individual_retries() {
 
 #[test]
 fn hardware_owned_operations_become_the_port_services() {
-    use oer_ieee80211_lower_mac::HardwareServices;
+    use oer_ieee80211_port::HardwareServices;
 
     let services = CAPABILITIES.operations.hardware_services();
     assert!(
@@ -218,7 +218,7 @@ fn hardware_owned_operations_become_the_port_services() {
 
 #[test]
 fn a_chip_rate_maps_to_the_portable_rate_with_its_provenance() {
-    use oer_ieee80211_mac::phy::LegacyRate;
+    use oer_ieee80211_wire::phy::LegacyRate;
 
     let chip = MacRxMetadata {
         rate: MacRxEvidence::HardwareObserved(0x0b_u8),

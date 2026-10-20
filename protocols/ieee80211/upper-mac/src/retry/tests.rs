@@ -1,4 +1,4 @@
-use oer_ieee80211_mac::phy::LegacyRate;
+use oer_ieee80211_wire::phy::LegacyRate;
 
 use super::*;
 

@@ -96,7 +96,7 @@ frame and leaves the aggregate run unchanged. `AmpduLimits` includes aligned
 empty delimiters between MPDUs for the peer's start spacing at the exact
 HT/HE symbol rate, in both the byte and TXOP bounds. The final MPDU needs no
 spacing tail. Admission and backend encoders share checked delimiter geometry
-from `oer-ieee80211-mac::ampdu`; each encoder separately applies its hardware
+from `oer-ieee80211-wire::ampdu`; each encoder separately applies its hardware
 limits. `ampdu::compact` operates on
 fixed arrays of Copy metadata, never on affine MPDUs or payload owners.
 It swaps selected entries into the prefix in order, without a full-array
@@ -108,10 +108,10 @@ The crate uses the canonical strict lint block.
 
 The planner holds no frame bytes. The caller encodes each MPDU's sequence
 number; the backend writes its CCMP packet number below the port at the first
-protected transmission, with an `oer-ieee80211-mac::ccmp::CcmpTxPacketNumber`
+protected transmission, with an `oer-ieee80211-wire::ccmp::CcmpTxPacketNumber`
 of its key, and a retransmission sends the same MPDU, so it keeps both. The
-receive reorder buffer (`oer-ieee80211-mac::block_ack::reorder`) is its
-owner's in `oer-ieee80211-mac`. Adaptive rate control, which chooses a
+receive reorder buffer (`oer-ieee80211-wire::block_ack::reorder`) is its
+owner's in `oer-ieee80211-wire`. Adaptive rate control, which chooses a
 frame's first rate from the reports, is the caller's.
 
 The ESP32-S31 MAC (`oer-esp32s31-ieee80211-mac`) runs its ordinary retry,

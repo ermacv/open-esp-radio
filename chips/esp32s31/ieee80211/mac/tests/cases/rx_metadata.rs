@@ -114,7 +114,7 @@ fn normalized_ht_rx_metadata_separates_mcs32_from_the_five_bit_rate_summary() {
     let signal = phy.ht_signal().unwrap();
     assert_eq!(
         signal.ht_duplicate_mcs32_classification(),
-        HtDuplicateRxClassification::Ht40(oer_ieee80211_mac::ht::HtDuplicateMcs32::new())
+        HtDuplicateRxClassification::Ht40(oer_ieee80211_wire::ht::HtDuplicateMcs32::new())
     );
     assert!(signal.ht_duplicate_mcs32().is_some());
 

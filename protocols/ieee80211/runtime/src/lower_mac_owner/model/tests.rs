@@ -3,13 +3,13 @@
 
 use super::*;
 use core::num::NonZeroU8;
-use oer_ieee80211_lower_mac::{
+use oer_ieee80211_port::{
     AckHeader, ChannelWidth, ClassFrame, HeaderSpec, InstalledGroup, MpduLength, Protection,
     RetryPlan, RetryStage, SizedFrame, SupportedPower, TxPower,
 };
-use oer_ieee80211_mac::ccmp::GroupKeyId;
-use oer_ieee80211_mac::frame::FrameControl;
-use oer_ieee80211_mac::{phy::LegacyRate, qos::WmmAccessCategory};
+use oer_ieee80211_wire::ccmp::GroupKeyId;
+use oer_ieee80211_wire::frame::FrameControl;
+use oer_ieee80211_wire::{phy::LegacyRate, qos::WmmAccessCategory};
 use oer_radio_port::{Disabled, Ended, Owner, PortBody, run_port};
 
 const STATION: [u8; 6] = [2, 0, 0, 0, 0, 1];
@@ -112,9 +112,9 @@ fn each_installation_and_retuned_phase_checks_its_own_channel() {
                 assert!(phase.rate(PhyRate::Legacy(LegacyRate::Dsss1M)).is_none());
                 let rate = phase.rate(PhyRate::Legacy(LegacyRate::Ofdm6M)).unwrap();
                 assert!(phase.no_ack(rate).is_ok());
-                let ht = oer_ieee80211_mac::phy::HtRate::new(
+                let ht = oer_ieee80211_wire::phy::HtRate::new(
                     HtMcs::new(7).unwrap(),
-                    oer_ieee80211_mac::phy::PpduBandwidth::Mhz20,
+                    oer_ieee80211_wire::phy::PpduBandwidth::Mhz20,
                     false,
                 )
                 .unwrap();
@@ -215,14 +215,14 @@ fn submit_frame<'k, 'p, 'id: 'p + 'k, C: ModelClass>(
     phase
         .station()
         .submit(
-            (oer_ieee80211_lower_mac::Attempt {
+            (oer_ieee80211_port::Attempt {
                 context: (),
                 ticket,
                 source,
                 access_category: WmmAccessCategory::BestEffort,
                 protection: Protection::None,
                 power: SupportedPower::new(TxPower::Calibrated).unwrap(),
-                coex_operation: oer_ieee80211_lower_mac::TxOperation::Data,
+                coex_operation: oer_ieee80211_port::TxOperation::Data,
             })
             .admit(),
         )
@@ -288,7 +288,7 @@ fn push_retry<'k, 'p, 'id: 'k + 'p, X: ModelContext<Body = ModelBody>, S: Aggreg
 /// The next terminal's ticket and buffer.
 async fn completion<'p, 'id: 'p>(
     phase: &mut ModelPhase<'p, 'id>,
-    terminal_access: &mut oer_ieee80211_lower_mac::TerminalAccess<'id, ModelTickets, ModelPool<1>>,
+    terminal_access: &mut oer_ieee80211_port::TerminalAccess<'id, ModelTickets, ModelPool<1>>,
 ) -> (Slot<'id, ModelTickets, ModelPool<1>>, ModelAnyBuffer<'id>) {
     loop {
         yield_now().await;
@@ -301,7 +301,7 @@ async fn completion<'p, 'id: 'p>(
             TxCompleted::Single(terminal),
         ))))) = event
         {
-            let oer_ieee80211_lower_mac::TerminalParts {
+            let oer_ieee80211_port::TerminalParts {
                 ticket, payload, ..
             } = terminal.into_parts(terminal_access);
             let (buffer, _) = payload.into_parts();
@@ -325,7 +325,7 @@ impl Work for Numbering {
     ) {
         let station_association = ModelKeys::<Station>::begin_association(
             resources.station_association,
-            oer_ieee80211_mac::security::Spp::NotNegotiated,
+            oer_ieee80211_wire::security::Spp::NotNegotiated,
         );
 
         let mut terminal_access = resources.terminal_access;
@@ -528,7 +528,7 @@ impl Work for KeyThenAttempt {
     ) {
         let station_association = ModelKeys::<Station>::begin_association(
             resources.station_association,
-            oer_ieee80211_mac::security::Spp::NotNegotiated,
+            oer_ieee80211_wire::security::Spp::NotNegotiated,
         );
 
         let ModelResources {
@@ -576,7 +576,7 @@ impl Work for GroupReplacement<'_> {
     ) {
         let station_association = ModelKeys::<Station>::begin_association(
             resources.station_association,
-            oer_ieee80211_mac::security::Spp::NotNegotiated,
+            oer_ieee80211_wire::security::Spp::NotNegotiated,
         );
 
         let [slot, _] = resources.station_group;
@@ -679,7 +679,7 @@ impl Work for KeyAttemptRemoval {
     ) {
         let station_association = ModelKeys::<Station>::begin_association(
             resources.station_association,
-            oer_ieee80211_mac::security::Spp::NotNegotiated,
+            oer_ieee80211_wire::security::Spp::NotNegotiated,
         );
 
         let ModelResources {
@@ -813,12 +813,12 @@ impl Work for MaxWork<'_> {
     ) {
         let station_association = ModelKeys::<Station>::begin_association(
             resources.station_association,
-            oer_ieee80211_mac::security::Spp::NotNegotiated,
+            oer_ieee80211_wire::security::Spp::NotNegotiated,
         );
 
         let access_point_association = ModelKeys::<AccessPoint>::begin_association(
             resources.access_point_association,
-            oer_ieee80211_mac::security::Spp::NotNegotiated,
+            oer_ieee80211_wire::security::Spp::NotNegotiated,
         );
 
         let ModelResources {
@@ -971,7 +971,7 @@ impl Work for AbortHeld<'_> {
     ) {
         let station_association = ModelKeys::<Station>::begin_association(
             resources.station_association,
-            oer_ieee80211_mac::security::Spp::NotNegotiated,
+            oer_ieee80211_wire::security::Spp::NotNegotiated,
         );
 
         let mut terminal_access = resources.terminal_access;
@@ -1005,7 +1005,7 @@ impl Work for AbortHeld<'_> {
                 TxCompleted::Single(terminal),
             ))))) = event
             {
-                let oer_ieee80211_lower_mac::TerminalParts {
+                let oer_ieee80211_port::TerminalParts {
                     outcome: completion,
                     payload,
                     ..
@@ -1140,7 +1140,7 @@ fn subframe_frame(sequence: u16) -> SizedFrame<AckHeader, ModelCaps> {
         PEER,
         sequence << 4,
         None,
-        Some(oer_ieee80211_lower_mac::QosControl {
+        Some(oer_ieee80211_port::QosControl {
             tid: Tid::new(0).unwrap(),
             end_of_service_period: false,
             amsdu_present: false,
@@ -1156,11 +1156,11 @@ fn subframe_frame(sequence: u16) -> SizedFrame<AckHeader, ModelCaps> {
 /// The next terminal: its ticket, complete subframes and Block Ack.
 async fn aggregate_completion<'p, 'id: 'p>(
     phase: &mut ModelPhase<'p, 'id>,
-    terminal_access: &mut oer_ieee80211_lower_mac::TerminalAccess<'id, ModelTickets, ModelPool<1>>,
+    terminal_access: &mut oer_ieee80211_port::TerminalAccess<'id, ModelTickets, ModelPool<1>>,
 ) -> (
     Slot<'id, ModelTickets, ModelPool<1>>,
     ModelSubframes<'id>,
-    Option<oer_ieee80211_lower_mac::BlockAckReport>,
+    Option<oer_ieee80211_port::BlockAckReport>,
 ) {
     loop {
         yield_now().await;
@@ -1173,7 +1173,7 @@ async fn aggregate_completion<'p, 'id: 'p>(
             TxCompleted::Aggregate(terminal),
         ))))) = event
         {
-            let oer_ieee80211_lower_mac::TerminalParts {
+            let oer_ieee80211_port::TerminalParts {
                 ticket,
                 payload,
                 outcome,
@@ -1197,7 +1197,7 @@ async fn aggregate_completion<'p, 'id: 'p>(
 /// subframe.
 struct AggregateRetransmission<'t> {
     air: &'t ModelAir,
-    report: &'t Cell<Option<oer_ieee80211_lower_mac::BlockAckReport>>,
+    report: &'t Cell<Option<oer_ieee80211_port::BlockAckReport>>,
 }
 
 impl Work for AggregateRetransmission<'_> {
@@ -1208,11 +1208,11 @@ impl Work for AggregateRetransmission<'_> {
     ) {
         let station_association = ModelKeys::<Station>::begin_association(
             resources.station_association,
-            oer_ieee80211_mac::security::Spp::NotNegotiated,
+            oer_ieee80211_wire::security::Spp::NotNegotiated,
         );
 
         let mut terminal_access = resources.terminal_access;
-        use oer_ieee80211_lower_mac::{AggregateAttempt, AmpduPhase, MpduStartSpacing, Tid};
+        use oer_ieee80211_port::{AggregateAttempt, AmpduPhase, MpduStartSpacing, Tid};
         let ModelResources {
             mut tickets,
             mut small,
@@ -1225,9 +1225,9 @@ impl Work for AggregateRetransmission<'_> {
             IndividualAddress::new(PEER).unwrap(),
             Ccmp128Key::new(&[7; 16]),
         );
-        let ht = oer_ieee80211_mac::phy::HtRate::new(
+        let ht = oer_ieee80211_wire::phy::HtRate::new(
             HtMcs::new(7).unwrap(),
-            oer_ieee80211_mac::phy::PpduBandwidth::Mhz20,
+            oer_ieee80211_wire::phy::PpduBandwidth::Mhz20,
             false,
         )
         .unwrap();
@@ -1358,7 +1358,7 @@ impl Work for TerminalOutcomes<'_> {
     ) {
         let station_association = ModelKeys::<Station>::begin_association(
             resources.station_association,
-            oer_ieee80211_mac::security::Spp::NotNegotiated,
+            oer_ieee80211_wire::security::Spp::NotNegotiated,
         );
 
         let mut terminal_access = resources.terminal_access;
@@ -1392,7 +1392,7 @@ impl Work for TerminalOutcomes<'_> {
                     LowerMacTerminal::TxCompleted(TxCompleted::Single(terminal)),
                 )))) = Future::poll(next, &mut cx)
                 {
-                    let oer_ieee80211_lower_mac::TerminalParts {
+                    let oer_ieee80211_port::TerminalParts {
                         ticket,
                         outcome: completion,
                         payload,
@@ -1555,7 +1555,7 @@ impl Work for LongRetryPlan<'_> {
                 terminal,
             ))) = event
             {
-                let oer_ieee80211_lower_mac::TerminalParts {
+                let oer_ieee80211_port::TerminalParts {
                     outcome: completion,
                     payload,
                     ..
@@ -1646,7 +1646,7 @@ impl Work for LastRateBeforeCollision<'_> {
                 terminal,
             ))) = event
             {
-                let oer_ieee80211_lower_mac::TerminalParts {
+                let oer_ieee80211_port::TerminalParts {
                     ticket,
                     outcome: completion,
                     payload,

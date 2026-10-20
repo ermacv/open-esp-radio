@@ -1,5 +1,5 @@
 #![no_std]
-use oer_ieee80211_lower_mac::{InFlight, PhaseTypes, TxCompleted};
+use oer_ieee80211_port::{InFlight, PhaseTypes, TxCompleted};
 use oer_ieee80211_runtime::lower_mac_owner::model::{
     ModelAggregateOutcome, ModelSingleOutcome, ModelSubframes, ModelTypes,
 };
@@ -14,7 +14,7 @@ pub fn finish<'id>(
     operation: InFlight<(), Ticket<'id>, ModelSubframes<'id>>,
     outcome: ModelAggregateOutcome,
     _single: ModelSingleOutcome,
-    _access: &mut oer_ieee80211_lower_mac::TerminalAccess<'id, <ModelTypes as PhaseTypes<'id>>::TicketKind, <ModelTypes as PhaseTypes<'id>>::TicketPath>,
+    _access: &mut oer_ieee80211_port::TerminalAccess<'id, <ModelTypes as PhaseTypes<'id>>::TicketKind, <ModelTypes as PhaseTypes<'id>>::TicketPath>,
 ) -> TxCompleted<'id, ModelTypes> {
     #[cfg(ui_reject)]
     {

@@ -8,11 +8,11 @@ use oer_esp32s31_ieee80211_mac::rx::{
     RxCcmpDataView, RxError, RxIngressConfig, RxPhyInfo, RxSegment, decode_normalized_rx_metadata,
     view_ccmp_data, view_ccmp_data_fragment, view_normalized_rx_frame,
 };
-use oer_ieee80211_mac::ccmp::CcmpHeader;
-use oer_ieee80211_mac::data::{
+use oer_ieee80211_wire::ccmp::CcmpHeader;
+use oer_ieee80211_wire::data::{
     DataDecapError, DataDecapsulation, DataInterfaceRole, decapsulate_data_frames,
 };
-use oer_ieee80211_mac::fragmentation::{
+use oer_ieee80211_wire::fragmentation::{
     OpenDataFragment, OpenDataFragmentError, parse_ccmp_data_fragment, parse_open_data_fragment,
 };
 use oer_ieee80211_softmac::{MacRxCryptoStatus, MacRxEvidence, MacRxMetadata};

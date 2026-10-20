@@ -1,6 +1,6 @@
 //! Executor-independent infrastructure-STA Authentication and Association.
 //!
-//! Wire parsing and response values live in `oer-ieee80211-mac`. This
+//! Wire parsing and response values live in `oer-ieee80211-wire`. This
 //! module owns Authentication/Association state and retry policy as state
 //! machines, which the station ([`crate::machine`]) drives.
 

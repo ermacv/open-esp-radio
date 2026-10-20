@@ -1,4 +1,4 @@
-use oer_ieee80211_mac::extensions::wmm::WmmAcParameters;
+use oer_ieee80211_wire::extensions::wmm::WmmAcParameters;
 
 use super::*;
 

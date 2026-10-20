@@ -5,7 +5,7 @@
 //! categories without depending on this encoding.
 
 use oer_esp32s31_hal::layouts::WifiTxDescriptorPrefixPriority;
-use oer_ieee80211_mac::{
+use oer_ieee80211_wire::{
     data::{DataEncapPlan, DataInterfaceRole, IEEE80211_QOS_DATA_HEADER_LEN},
     qos::{WmmAccessCategory, WmmUserPriority},
 };

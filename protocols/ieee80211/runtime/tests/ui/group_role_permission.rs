@@ -1,5 +1,5 @@
 #![no_std]
-use oer_ieee80211_lower_mac::{AccessPoint, KeyTypes, LowerMacPhase, StationPhase, Station};
+use oer_ieee80211_port::{AccessPoint, KeyTypes, LowerMacPhase, StationPhase, Station};
 use oer_ieee80211_runtime::lower_mac_owner::model::{ModelKeys, ModelPhase};
 
 pub fn permission_belongs_to_interface<'p, 'id: 'p>(

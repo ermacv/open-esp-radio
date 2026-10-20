@@ -23,12 +23,12 @@ fn static_key_table_replaces_matching_slot_and_fails_when_full() {
 fn group_transmit_flag_change_reuses_key_id_slot() {
     let mut keys = StaticRsnKeys::<1>::new();
     let first = RsnGtk::new(
-        oer_ieee80211_mac::ccmp::GroupKeyId::new(2).unwrap(),
+        oer_ieee80211_wire::ccmp::GroupKeyId::new(2).unwrap(),
         false,
         &[6; 16],
     );
     let second = RsnGtk::new(
-        oer_ieee80211_mac::ccmp::GroupKeyId::new(2).unwrap(),
+        oer_ieee80211_wire::ccmp::GroupKeyId::new(2).unwrap(),
         true,
         &[7; 16],
     );
@@ -51,7 +51,7 @@ fn group_transmit_flag_change_reuses_key_id_slot() {
     assert_eq!(
         keys.get(0).unwrap().kind(),
         RsnKeyKind::Group {
-            key_id: oer_ieee80211_mac::ccmp::GroupKeyId::new(2).unwrap(),
+            key_id: oer_ieee80211_wire::ccmp::GroupKeyId::new(2).unwrap(),
             transmit: true
         }
     );
