@@ -166,14 +166,7 @@ fn condition(test: BranchTest, left: Value, right: Value) -> Option<bool> {
     let (Value::Constant(a), Value::Constant(b)) = (left, right) else {
         return None;
     };
-    Some(match test {
-        BranchTest::Eq => a == b,
-        BranchTest::Ne => a != b,
-        BranchTest::Lt => (a as i32) < (b as i32),
-        BranchTest::Ge => (a as i32) >= (b as i32),
-        BranchTest::Ltu => a < b,
-        BranchTest::Geu => a >= b,
-    })
+    Some(test.evaluate(a, b))
 }
 
 struct Operation {

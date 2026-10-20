@@ -1,0 +1,2074 @@
+{
+  "base": "main 694e0c76, including #195 and #194",
+  "inputs": {
+    "/tmp/oer-irq-chain/after/w1/runtime.elf": "03ab37d09adcb0d9446734231fa8be4648390f21dc8c58c6e3e3ed9340b41dd8",
+    "/home/ermacv/.cache/open-esp-radio/vendor/esp-rom-elfs/20260528/esp32s31_rev0_rom.elf": "a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87",
+    "/tmp/oer-irq-chain/after/w1/interrupt-stack.txt": "2add2a7bf483f0fbf97ab02ccf3a698b2762f2e93b41635b09b9dd127cede54d",
+    "chips/esp32s31/platform/rom-functions.toml": "487770cf3eb46549970250a07d7cec155d77ce86272b578f45adcc05ca91ac8a",
+    "chips/esp32s31/platform/chip.toml": "b11202981cbd807dc68ba5e884876afea7550f0145694e6d547506d570a3e1ad"
+  },
+  "validation_sources": {
+    "current_chain.py": "9c4788707e53c0dbf4463c34cd1a04d12d847f91470df34bb7c84c164fe39b0e",
+    "explain.py": "218886d8caf44068b529107aca0833aabd327f8b522a18c1f15393a508f5f69c"
+  },
+  "diagnostic_binaries": {
+    "function-records": "9e8cfab19d74a3fc39d6dfdc0cc393ebbce7c5eeee5ec2fa838a62044df5ebf0",
+    "callback-audit": "d09c69e4168eaae732b4f9bc1040a387f2718c15ac776e2286f5517e0362a8c0",
+    "stack-call-writes": "240df8df8cd0fbec743488706785dd01cdc9d63b95e9a9755b571acbd2fa2286"
+  },
+  "streams": {
+    "callbacks.tsv": "96b360f68f0037e1892872b1628971b188c8575e7cec74cb7ddc16afb6afe087",
+    "doorbell.tsv": "1c43cb21df4e46f075873d95175bf05ce6e4d939e5335d5cdc686c248ccbeb22",
+    "irq-root.tsv": "dc2be471f76398e4d0e7c10ea0f7d775c0b1a72af66fda6eccbbb14fd777c60c",
+    "rx-poll.tsv": "bdef78660b8bc9a728b5e3ac2056bfc3c08d99c7a81a1bcb5e9cf4469c911944",
+    "run.tsv": "b4203f094cf756d7b53c226181d357fd9759c78e3dddc4e29bf531d5a63ba52c",
+    "pend-initializer-target.tsv": "b4488230f557ad00a683e2d1b93640221b9ffa4a98c9214c3e633766965e1c04",
+    "first-constructor-copy.tsv": "eb1c2d14f50b1030286ca7394de67f30f1bef5b8471de8d01acc25c1e7d2cc1a",
+    "short-copy.tsv": "46e88c94b8e7c613e2aa20bc74e771bf7f4ab5b5b5528b37759f4ae553898184"
+  },
+  "irq_binding": {
+    "table_entry": [
+      "irq-entry",
+      "2",
+      "0x500a5200",
+      "TableEntry { source: 68, level: 3, core: 0, handler: Some(788546190) }"
+    ],
+    "context": [
+      {
+        "hart": 0,
+        "level": 3,
+        "source": "indirect call through a loaded pointer",
+        "executor": "hardware/doorbell handler"
+      }
+    ],
+    "root": {
+      "pc": "0x2f004292",
+      "owner": [
+        "0x2f00428e",
+        "FROM_CPU_INTR3"
+      ],
+      "inline_context": [
+        [
+          "FROM_CPU_INTR3"
+        ]
+      ],
+      "facts": {
+        "instruction": [
+          [
+            "jalr zero, 846(t1)"
+          ]
+        ],
+        "register-write": [
+          [
+            "0",
+            "Constant { value: 0 }"
+          ]
+        ],
+        "transfer": [
+          [
+            "Some(ImageAddress { address: 788542940 })"
+          ]
+        ],
+        "inputs": [
+          [
+            "Some([Constant { value: 0 }, Expression { id: 0 }, EntryStack { offset: 0 }, Expression { id: 2 }, Expression { id: 3 }, Expression { id: 4 }, ImageAddress { address: 788542094 }, Expression { id: 6 }, Expression { id: 7 }, Expression { id: 8 }, Expression { id: 9 }, Expression { id: 10 }, Expression { id: 11 }, Expression { id: 12 }, Expression { id: 13 }, Expression { id: 14 }, Expression { id: 15 }, Expression { id: 16 }, Expression { id: 17 }, Expression { id: 18 }, Expression { id: 19 }, Expression { id: 20 }, Expression { id: 21 }, Expression { id: 22 }, Expression { id: 23 }, Expression { id: 24 }, Expression { id: 25 }, Expression { id: 26 }, Expression { id: 27 }, Expression { id: 28 }, Expression { id: 29 }, Expression { id: 30 }])"
+          ]
+        ],
+        "write-barrier": [
+          [
+            "WriteBarrier { origin: WriteOrigin { function: 788546190, tail: None }, site: 788546194, kind: ExternalTransfer }"
+          ],
+          [
+            "WriteBarrier { origin: WriteOrigin { function: 788546190, tail: None }, site: 788546194, kind: Call }"
+          ]
+        ]
+      },
+      "expressions": {
+        "30": {
+          "pc": "0xffffffffffffffff",
+          "expression": "Some(EntryRegister { register: 31 })"
+        },
+        "29": {
+          "pc": "0xffffffffffffffff",
+          "expression": "Some(EntryRegister { register: 30 })"
+        },
+        "28": {
+          "pc": "0xffffffffffffffff",
+          "expression": "Some(EntryRegister { register: 29 })"
+        },
+        "27": {
+          "pc": "0xffffffffffffffff",
+          "expression": "Some(EntryRegister { register: 28 })"
+        },
+        "26": {
+          "pc": "0xffffffffffffffff",
+          "expression": "Some(EntryRegister { register: 27 })"
+        },
+        "25": {
+          "pc": "0xffffffffffffffff",
+          "expression": "Some(EntryRegister { register: 26 })"
+        },
+        "24": {
+          "pc": "0xffffffffffffffff",
+          "expression": "Some(EntryRegister { register: 25 })"
+        },
+        "23": {
+          "pc": "0xffffffffffffffff",
+          "expression": "Some(EntryRegister { register: 24 })"
+        },
+        "22": {
+          "pc": "0xffffffffffffffff",
+          "expression": "Some(EntryRegister { register: 23 })"
+        },
+        "21": {
+          "pc": "0xffffffffffffffff",
+          "expression": "Some(EntryRegister { register: 22 })"
+        },
+        "20": {
+          "pc": "0xffffffffffffffff",
+          "expression": "Some(EntryRegister { register: 21 })"
+        },
+        "19": {
+          "pc": "0xffffffffffffffff",
+          "expression": "Some(EntryRegister { register: 20 })"
+        },
+        "18": {
+          "pc": "0xffffffffffffffff",
+          "expression": "Some(EntryRegister { register: 19 })"
+        },
+        "17": {
+          "pc": "0xffffffffffffffff",
+          "expression": "Some(EntryRegister { register: 18 })"
+        },
+        "16": {
+          "pc": "0xffffffffffffffff",
+          "expression": "Some(EntryRegister { register: 17 })"
+        },
+        "15": {
+          "pc": "0xffffffffffffffff",
+          "expression": "Some(EntryRegister { register: 16 })"
+        },
+        "14": {
+          "pc": "0xffffffffffffffff",
+          "expression": "Some(EntryRegister { register: 15 })"
+        },
+        "13": {
+          "pc": "0xffffffffffffffff",
+          "expression": "Some(EntryRegister { register: 14 })"
+        },
+        "12": {
+          "pc": "0xffffffffffffffff",
+          "expression": "Some(EntryRegister { register: 13 })"
+        },
+        "11": {
+          "pc": "0xffffffffffffffff",
+          "expression": "Some(EntryRegister { register: 12 })"
+        },
+        "10": {
+          "pc": "0xffffffffffffffff",
+          "expression": "Some(EntryRegister { register: 11 })"
+        },
+        "9": {
+          "pc": "0xffffffffffffffff",
+          "expression": "Some(EntryRegister { register: 10 })"
+        },
+        "8": {
+          "pc": "0xffffffffffffffff",
+          "expression": "Some(EntryRegister { register: 9 })"
+        },
+        "7": {
+          "pc": "0xffffffffffffffff",
+          "expression": "Some(EntryRegister { register: 8 })"
+        },
+        "6": {
+          "pc": "0xffffffffffffffff",
+          "expression": "Some(EntryRegister { register: 7 })"
+        },
+        "4": {
+          "pc": "0xffffffffffffffff",
+          "expression": "Some(EntryRegister { register: 5 })"
+        },
+        "3": {
+          "pc": "0xffffffffffffffff",
+          "expression": "Some(EntryRegister { register: 4 })"
+        },
+        "2": {
+          "pc": "0xffffffffffffffff",
+          "expression": "Some(EntryRegister { register: 3 })"
+        },
+        "0": {
+          "pc": "0xffffffffffffffff",
+          "expression": "Some(EntryRegister { register: 1 })"
+        }
+      }
+    },
+    "status": "proved: immutable IRQ binding and direct tail to doorbell"
+  },
+  "handler_load_chain": [
+    {
+      "pc": "0x2f00369e",
+      "owner": [
+        "0x2f0035dc",
+        "oer_firmware_apps_w1::irq::doorbell"
+      ],
+      "inline_context": [
+        [
+          "core::sync::atomic::atomic_load::<*mut oer_esp32s31_ieee80211_driver::irq::WifiIrqLine<oer_esp32s31_ieee80211_mac::irq::epoch::ActiveEpoch<oer_esp32s31_ieee80211_mac::irq::epoch::Moderated>>>",
+          "<core::sync::atomic::Atomic<*mut oer_esp32s31_ieee80211_driver::irq::WifiIrqLine<oer_esp32s31_ieee80211_mac::irq::epoch::ActiveEpoch<oer_esp32s31_ieee80211_mac::irq::epoch::Moderated>>>>::load",
+          "<oer_memory::handler_cell::HandlerCell<oer_esp32s31_ieee80211_driver::irq::WifiIrqLine<oer_esp32s31_ieee80211_mac::irq::epoch::ActiveEpoch<oer_esp32s31_ieee80211_mac::irq::epoch::Moderated>>>>::with::<(), oer_esp32s31_ieee80211_driver::irq::service_doorbell_line<oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters>>",
+          "oer_esp32s31_ieee80211_driver::irq::run_doorbell::<oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters, oer_firmware_apps_w1::irq::doorbell::{closure#0}::{closure#0}>",
+          "oer_firmware_apps_w1::irq::doorbell::{closure#0}",
+          "<oer_memory::handler_cell::HandlerCell<oer_espressif_executor::doorbell::DoorbellAcknowledger<3>>>::with::<bool, oer_firmware_apps_w1::irq::doorbell::{closure#0}>",
+          "oer_firmware_apps_w1::irq::doorbell"
+        ]
+      ],
+      "facts": {
+        "instruction": [
+          [
+            "lw s1, 1216(a0)"
+          ]
+        ],
+        "register-write": [
+          [
+            "9",
+            "Expression { id: 47 }"
+          ]
+        ],
+        "memory": [
+          [
+            "Load",
+            "4",
+            "Constant { value: 788624576 }",
+            "None"
+          ]
+        ]
+      },
+      "expressions": {
+        "47": {
+          "pc": "0x2f00369e",
+          "expression": "Some(Load { address: Constant { value: 788624576 }, width: 4, signed: false })"
+        }
+      }
+    },
+    {
+      "pc": "0x2f0036fe",
+      "owner": [
+        "0x2f0035dc",
+        "oer_firmware_apps_w1::irq::doorbell"
+      ],
+      "inline_context": [
+        [
+          "oer_esp32s31_ieee80211_driver::irq::service_doorbell_line::<oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters>",
+          "<oer_esp32s31_ieee80211_driver::irq::service_doorbell_line<oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters> as core::ops::function::FnOnce<(&mut oer_esp32s31_ieee80211_driver::irq::WifiIrqLine<oer_esp32s31_ieee80211_mac::irq::epoch::ActiveEpoch<oer_esp32s31_ieee80211_mac::irq::epoch::Moderated>>,)>>::call_once",
+          "<oer_memory::handler_cell::HandlerCell<oer_esp32s31_ieee80211_driver::irq::WifiIrqLine<oer_esp32s31_ieee80211_mac::irq::epoch::ActiveEpoch<oer_esp32s31_ieee80211_mac::irq::epoch::Moderated>>>>::with::<(), oer_esp32s31_ieee80211_driver::irq::service_doorbell_line<oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters>>",
+          "oer_esp32s31_ieee80211_driver::irq::run_doorbell::<oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters, oer_firmware_apps_w1::irq::doorbell::{closure#0}::{closure#0}>",
+          "oer_firmware_apps_w1::irq::doorbell::{closure#0}",
+          "<oer_memory::handler_cell::HandlerCell<oer_espressif_executor::doorbell::DoorbellAcknowledger<3>>>::with::<bool, oer_firmware_apps_w1::irq::doorbell::{closure#0}>",
+          "oer_firmware_apps_w1::irq::doorbell"
+        ]
+      ],
+      "facts": {
+        "instruction": [
+          [
+            "lw a0, 0(s1)"
+          ]
+        ],
+        "register-write": [
+          [
+            "10",
+            "Expression { id: 61 }"
+          ]
+        ],
+        "memory": [
+          [
+            "Load",
+            "4",
+            "Expression { id: 47 }",
+            "None"
+          ]
+        ]
+      },
+      "expressions": {
+        "47": {
+          "pc": "0x2f00369e",
+          "expression": "Some(Load { address: Constant { value: 788624576 }, width: 4, signed: false })"
+        },
+        "61": {
+          "pc": "0x2f0036fe",
+          "expression": "Some(Load { address: Expression { id: 47 }, width: 4, signed: false })"
+        }
+      }
+    },
+    {
+      "pc": "0x2f003706",
+      "owner": [
+        "0x2f0035dc",
+        "oer_firmware_apps_w1::irq::doorbell"
+      ],
+      "inline_context": [
+        [
+          "oer_esp32s31_ieee80211_driver::irq::service_doorbell_line::<oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters>",
+          "<oer_esp32s31_ieee80211_driver::irq::service_doorbell_line<oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters> as core::ops::function::FnOnce<(&mut oer_esp32s31_ieee80211_driver::irq::WifiIrqLine<oer_esp32s31_ieee80211_mac::irq::epoch::ActiveEpoch<oer_esp32s31_ieee80211_mac::irq::epoch::Moderated>>,)>>::call_once",
+          "<oer_memory::handler_cell::HandlerCell<oer_esp32s31_ieee80211_driver::irq::WifiIrqLine<oer_esp32s31_ieee80211_mac::irq::epoch::ActiveEpoch<oer_esp32s31_ieee80211_mac::irq::epoch::Moderated>>>>::with::<(), oer_esp32s31_ieee80211_driver::irq::service_doorbell_line<oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters>>",
+          "oer_esp32s31_ieee80211_driver::irq::run_doorbell::<oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters, oer_firmware_apps_w1::irq::doorbell::{closure#0}::{closure#0}>",
+          "oer_firmware_apps_w1::irq::doorbell::{closure#0}",
+          "<oer_memory::handler_cell::HandlerCell<oer_espressif_executor::doorbell::DoorbellAcknowledger<3>>>::with::<bool, oer_firmware_apps_w1::irq::doorbell::{closure#0}>",
+          "oer_firmware_apps_w1::irq::doorbell"
+        ]
+      ],
+      "facts": {
+        "instruction": [
+          [
+            "lw a0, 0(a0)"
+          ]
+        ],
+        "register-write": [
+          [
+            "10",
+            "Expression { id: 64 }"
+          ]
+        ],
+        "memory": [
+          [
+            "Load",
+            "4",
+            "Expression { id: 61 }",
+            "None"
+          ]
+        ]
+      },
+      "expressions": {
+        "61": {
+          "pc": "0x2f0036fe",
+          "expression": "Some(Load { address: Expression { id: 47 }, width: 4, signed: false })"
+        },
+        "47": {
+          "pc": "0x2f00369e",
+          "expression": "Some(Load { address: Constant { value: 788624576 }, width: 4, signed: false })"
+        },
+        "64": {
+          "pc": "0x2f003706",
+          "expression": "Some(Load { address: Expression { id: 61 }, width: 4, signed: false })"
+        }
+      }
+    },
+    {
+      "pc": "0x2f003708",
+      "owner": [
+        "0x2f0035dc",
+        "oer_firmware_apps_w1::irq::doorbell"
+      ],
+      "inline_context": [
+        [
+          "<oer_esp32s31_ieee80211_mac::irq::consumer::IrqStorage>::post",
+          "<oer_esp32s31_ieee80211_mac::irq::consumer::IrqPublisher>::notify_masked",
+          "oer_esp32s31_ieee80211_driver::irq::service_doorbell_line::<oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters>",
+          "<oer_esp32s31_ieee80211_driver::irq::service_doorbell_line<oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters> as core::ops::function::FnOnce<(&mut oer_esp32s31_ieee80211_driver::irq::WifiIrqLine<oer_esp32s31_ieee80211_mac::irq::epoch::ActiveEpoch<oer_esp32s31_ieee80211_mac::irq::epoch::Moderated>>,)>>::call_once",
+          "<oer_memory::handler_cell::HandlerCell<oer_esp32s31_ieee80211_driver::irq::WifiIrqLine<oer_esp32s31_ieee80211_mac::irq::epoch::ActiveEpoch<oer_esp32s31_ieee80211_mac::irq::epoch::Moderated>>>>::with::<(), oer_esp32s31_ieee80211_driver::irq::service_doorbell_line<oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters>>",
+          "oer_esp32s31_ieee80211_driver::irq::run_doorbell::<oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters, oer_firmware_apps_w1::irq::doorbell::{closure#0}::{closure#0}>",
+          "oer_firmware_apps_w1::irq::doorbell::{closure#0}",
+          "<oer_memory::handler_cell::HandlerCell<oer_espressif_executor::doorbell::DoorbellAcknowledger<3>>>::with::<bool, oer_firmware_apps_w1::irq::doorbell::{closure#0}>",
+          "oer_firmware_apps_w1::irq::doorbell"
+        ]
+      ],
+      "facts": {
+        "instruction": [
+          [
+            "lw a0, 0(a0)"
+          ]
+        ],
+        "register-write": [
+          [
+            "10",
+            "Expression { id: 65 }"
+          ]
+        ],
+        "memory": [
+          [
+            "Load",
+            "4",
+            "Expression { id: 64 }",
+            "None"
+          ]
+        ]
+      },
+      "expressions": {
+        "64": {
+          "pc": "0x2f003706",
+          "expression": "Some(Load { address: Expression { id: 61 }, width: 4, signed: false })"
+        },
+        "61": {
+          "pc": "0x2f0036fe",
+          "expression": "Some(Load { address: Expression { id: 47 }, width: 4, signed: false })"
+        },
+        "47": {
+          "pc": "0x2f00369e",
+          "expression": "Some(Load { address: Constant { value: 788624576 }, width: 4, signed: false })"
+        },
+        "65": {
+          "pc": "0x2f003708",
+          "expression": "Some(Load { address: Expression { id: 64 }, width: 4, signed: false })"
+        }
+      }
+    },
+    {
+      "pc": "0x2f00371c",
+      "owner": [
+        "0x2f0035dc",
+        "oer_firmware_apps_w1::irq::doorbell"
+      ],
+      "inline_context": [
+        [
+          "<oer_interrupt_table::signal::SignalPend>::pend",
+          "<oer_esp32s31_ieee80211_mac::irq::consumer::IrqPublication>::wake",
+          "<oer_esp32s31_ieee80211_mac::irq::consumer::IrqPublisher>::notify_masked",
+          "oer_esp32s31_ieee80211_driver::irq::service_doorbell_line::<oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters>",
+          "<oer_esp32s31_ieee80211_driver::irq::service_doorbell_line<oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters> as core::ops::function::FnOnce<(&mut oer_esp32s31_ieee80211_driver::irq::WifiIrqLine<oer_esp32s31_ieee80211_mac::irq::epoch::ActiveEpoch<oer_esp32s31_ieee80211_mac::irq::epoch::Moderated>>,)>>::call_once",
+          "<oer_memory::handler_cell::HandlerCell<oer_esp32s31_ieee80211_driver::irq::WifiIrqLine<oer_esp32s31_ieee80211_mac::irq::epoch::ActiveEpoch<oer_esp32s31_ieee80211_mac::irq::epoch::Moderated>>>>::with::<(), oer_esp32s31_ieee80211_driver::irq::service_doorbell_line<oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters>>",
+          "oer_esp32s31_ieee80211_driver::irq::run_doorbell::<oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters, oer_firmware_apps_w1::irq::doorbell::{closure#0}::{closure#0}>",
+          "oer_firmware_apps_w1::irq::doorbell::{closure#0}",
+          "<oer_memory::handler_cell::HandlerCell<oer_espressif_executor::doorbell::DoorbellAcknowledger<3>>>::with::<bool, oer_firmware_apps_w1::irq::doorbell::{closure#0}>",
+          "oer_firmware_apps_w1::irq::doorbell"
+        ]
+      ],
+      "facts": {
+        "instruction": [
+          [
+            "lw a1, 0(a0)"
+          ]
+        ],
+        "register-write": [
+          [
+            "11",
+            "Expression { id: 68 }"
+          ]
+        ],
+        "memory": [
+          [
+            "Load",
+            "4",
+            "Expression { id: 65 }",
+            "None"
+          ]
+        ]
+      },
+      "expressions": {
+        "65": {
+          "pc": "0x2f003708",
+          "expression": "Some(Load { address: Expression { id: 64 }, width: 4, signed: false })"
+        },
+        "64": {
+          "pc": "0x2f003706",
+          "expression": "Some(Load { address: Expression { id: 61 }, width: 4, signed: false })"
+        },
+        "61": {
+          "pc": "0x2f0036fe",
+          "expression": "Some(Load { address: Expression { id: 47 }, width: 4, signed: false })"
+        },
+        "47": {
+          "pc": "0x2f00369e",
+          "expression": "Some(Load { address: Constant { value: 788624576 }, width: 4, signed: false })"
+        },
+        "68": {
+          "pc": "0x2f00371c",
+          "expression": "Some(Load { address: Expression { id: 65 }, width: 4, signed: false })"
+        }
+      }
+    }
+  ],
+  "indirect_call": {
+    "pc": "0x2f00371e",
+    "owner": [
+      "0x2f0035dc",
+      "oer_firmware_apps_w1::irq::doorbell"
+    ],
+    "inline_context": [
+      [
+        "<oer_interrupt_table::signal::SignalPend>::pend",
+        "<oer_esp32s31_ieee80211_mac::irq::consumer::IrqPublication>::wake",
+        "<oer_esp32s31_ieee80211_mac::irq::consumer::IrqPublisher>::notify_masked",
+        "oer_esp32s31_ieee80211_driver::irq::service_doorbell_line::<oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters>",
+        "<oer_esp32s31_ieee80211_driver::irq::service_doorbell_line<oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters> as core::ops::function::FnOnce<(&mut oer_esp32s31_ieee80211_driver::irq::WifiIrqLine<oer_esp32s31_ieee80211_mac::irq::epoch::ActiveEpoch<oer_esp32s31_ieee80211_mac::irq::epoch::Moderated>>,)>>::call_once",
+        "<oer_memory::handler_cell::HandlerCell<oer_esp32s31_ieee80211_driver::irq::WifiIrqLine<oer_esp32s31_ieee80211_mac::irq::epoch::ActiveEpoch<oer_esp32s31_ieee80211_mac::irq::epoch::Moderated>>>>::with::<(), oer_esp32s31_ieee80211_driver::irq::service_doorbell_line<oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters>>",
+        "oer_esp32s31_ieee80211_driver::irq::run_doorbell::<oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters, oer_firmware_apps_w1::irq::doorbell::{closure#0}::{closure#0}>",
+        "oer_firmware_apps_w1::irq::doorbell::{closure#0}",
+        "<oer_memory::handler_cell::HandlerCell<oer_espressif_executor::doorbell::DoorbellAcknowledger<3>>>::with::<bool, oer_firmware_apps_w1::irq::doorbell::{closure#0}>",
+        "oer_firmware_apps_w1::irq::doorbell"
+      ]
+    ],
+    "facts": {
+      "instruction": [
+        [
+          "jalr ra, 0(a1)"
+        ]
+      ],
+      "register-write": [
+        [
+          "1",
+          "ImageAddress { address: 788543264 }"
+        ]
+      ],
+      "transfer": [
+        [
+          "Some(Unknown)"
+        ]
+      ],
+      "inputs": [
+        [
+          "Some([Constant { value: 0 }, Expression { id: 0 }, EntryStack { offset: -32 }, Expression { id: 2 }, Expression { id: 3 }, Expression { id: 4 }, Expression { id: 5 }, Expression { id: 6 }, Constant { value: 1343135744 }, Expression { id: 47 }, Expression { id: 65 }, Expression { id: 68 }, Constant { value: 32 }, Constant { value: 788624580 }, Unknown, Unknown, Expression { id: 15 }, Expression { id: 16 }, Constant { value: 788624576 }, Unknown, Expression { id: 19 }, Expression { id: 20 }, Expression { id: 21 }, Expression { id: 22 }, Expression { id: 23 }, Expression { id: 24 }, Expression { id: 25 }, Expression { id: 26 }, Expression { id: 27 }, Expression { id: 28 }, Expression { id: 29 }, Expression { id: 30 }])"
+        ]
+      ],
+      "write-barrier": [
+        [
+          "WriteBarrier { origin: WriteOrigin { function: 788542940, tail: None }, site: 788543262, kind: Call }"
+        ],
+        [
+          "WriteBarrier { origin: WriteOrigin { function: 788542940, tail: None }, site: 788543262, kind: Call }"
+        ]
+      ]
+    },
+    "expressions": {
+      "30": {
+        "pc": "0xffffffffffffffff",
+        "expression": "Some(EntryRegister { register: 31 })"
+      },
+      "29": {
+        "pc": "0xffffffffffffffff",
+        "expression": "Some(EntryRegister { register: 30 })"
+      },
+      "28": {
+        "pc": "0xffffffffffffffff",
+        "expression": "Some(EntryRegister { register: 29 })"
+      },
+      "27": {
+        "pc": "0xffffffffffffffff",
+        "expression": "Some(EntryRegister { register: 28 })"
+      },
+      "26": {
+        "pc": "0xffffffffffffffff",
+        "expression": "Some(EntryRegister { register: 27 })"
+      },
+      "25": {
+        "pc": "0xffffffffffffffff",
+        "expression": "Some(EntryRegister { register: 26 })"
+      },
+      "24": {
+        "pc": "0xffffffffffffffff",
+        "expression": "Some(EntryRegister { register: 25 })"
+      },
+      "23": {
+        "pc": "0xffffffffffffffff",
+        "expression": "Some(EntryRegister { register: 24 })"
+      },
+      "22": {
+        "pc": "0xffffffffffffffff",
+        "expression": "Some(EntryRegister { register: 23 })"
+      },
+      "21": {
+        "pc": "0xffffffffffffffff",
+        "expression": "Some(EntryRegister { register: 22 })"
+      },
+      "20": {
+        "pc": "0xffffffffffffffff",
+        "expression": "Some(EntryRegister { register: 21 })"
+      },
+      "19": {
+        "pc": "0xffffffffffffffff",
+        "expression": "Some(EntryRegister { register: 20 })"
+      },
+      "16": {
+        "pc": "0xffffffffffffffff",
+        "expression": "Some(EntryRegister { register: 17 })"
+      },
+      "15": {
+        "pc": "0xffffffffffffffff",
+        "expression": "Some(EntryRegister { register: 16 })"
+      },
+      "68": {
+        "pc": "0x2f00371c",
+        "expression": "Some(Load { address: Expression { id: 65 }, width: 4, signed: false })"
+      },
+      "65": {
+        "pc": "0x2f003708",
+        "expression": "Some(Load { address: Expression { id: 64 }, width: 4, signed: false })"
+      },
+      "64": {
+        "pc": "0x2f003706",
+        "expression": "Some(Load { address: Expression { id: 61 }, width: 4, signed: false })"
+      },
+      "61": {
+        "pc": "0x2f0036fe",
+        "expression": "Some(Load { address: Expression { id: 47 }, width: 4, signed: false })"
+      },
+      "47": {
+        "pc": "0x2f00369e",
+        "expression": "Some(Load { address: Constant { value: 788624576 }, width: 4, signed: false })"
+      },
+      "6": {
+        "pc": "0xffffffffffffffff",
+        "expression": "Some(EntryRegister { register: 7 })"
+      },
+      "5": {
+        "pc": "0xffffffffffffffff",
+        "expression": "Some(EntryRegister { register: 6 })"
+      },
+      "4": {
+        "pc": "0xffffffffffffffff",
+        "expression": "Some(EntryRegister { register: 5 })"
+      },
+      "3": {
+        "pc": "0xffffffffffffffff",
+        "expression": "Some(EntryRegister { register: 4 })"
+      },
+      "2": {
+        "pc": "0xffffffffffffffff",
+        "expression": "Some(EntryRegister { register: 3 })"
+      },
+      "0": {
+        "pc": "0xffffffffffffffff",
+        "expression": "Some(EntryRegister { register: 1 })"
+      }
+    }
+  },
+  "callback_producer": "Some([Load { site: 788543260, exclusive_producer: true, base: 10, offset: 0, address: None }])",
+  "callback_field": [
+    "load-field",
+    "0x2f00371e",
+    "0x2f00371c",
+    "Some(CallbackLoadField { field: FunctionPointerType { subroutine: 2461413, foreign: false }, witness: Some(RegisterWitness { site: 788543258, register: 10 }) })",
+    "Some(LoadBase { witnesses: [RegisterWitness { site: 788543258, register: 10 }, RegisterWitness { site: 788543254, register: 10 }], barrier: (788543250, MemoryWrite) })"
+  ],
+  "audited_candidate_count": 362,
+  "callback_status": "proved: nested load computations, unique reaching pend load and field type; unknown: concrete mutable objects and exact runtime target",
+  "static_initializer": {
+    "word": [
+      "image-word",
+      "0x2f007004",
+      "0x2f003222",
+      "read-only=None"
+    ],
+    "address_use": [
+      "address-use",
+      "796",
+      "AddressUse { relocation: Relocation { section: 7, at: 788557828, r_type: 1, target: Symbol(2392), addend: 0, implicit_addend: false }, role: Word, symbol: Some(Symbol { index: 2392, name: \"_RINvNtCs2sTx9gsjQdI_22oer_espressif_executor8executor11pend_signalKh2_ECsaM3xIFr85fL_20oer_firmware_apps_w1\", address: 788541986, size: 100, kind: Text, defined: true, global: false, section: Some(5) }), value: Resolved(788541986), function: FunctionRelation { nearest: Some(FunctionAddress { entry: 788541986, offset: 0 }), matches: 1 }, symbol_function: FunctionRelation { nearest: Some(FunctionAddress { entry: 788541986, offset: 0 }), matches: 1 } }"
+    ],
+    "typed_storage": "use\t0x2f003222\t796\t0x2f007004\tWord\t0\ttyped:{FunctionPointerType { subroutine: 702463, foreign: false }}",
+    "target_owner": [
+      "0x2f003222",
+      "oer_espressif_executor::executor::pend_signal::<2>"
+    ],
+    "status": "proved ELF initializer; unknown runtime equality at this call"
+  },
+  "constructor_stores": [
+    {
+      "pc": "0x5006c590",
+      "owner": [
+        "0x5006bbca",
+        "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
+      ],
+      "inline_context": [
+        [
+          "<core::mem::maybe_uninit::MaybeUninit<oer_esp32s31_ieee80211_mac::irq::consumer::IrqStorage>>::write",
+          "<oer_esp32s31_ieee80211_driver::rx::arena::WifiRxArena<32, 1664, 1668, 32>>::bind",
+          "oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}",
+          "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
+        ]
+      ],
+      "facts": {
+        "instruction": [
+          [
+            "sw a2, 0(a0)"
+          ]
+        ],
+        "memory": [
+          [
+            "Store",
+            "4",
+            "Constant { value: 788624704 }",
+            "Some(Constant { value: 788557828 })"
+          ]
+        ],
+        "write-event": [
+          [
+            "FunctionWrite { origin: WriteOrigin { function: 1342618570, tail: None }, site: 1342621072, address: Base { base: Address(788624704), offset: 0 }, value: Base { base: Address(788557828), offset: 0 }, width: 4, occurrence: May, proof: ClosedGraph }"
+          ]
+        ]
+      },
+      "expressions": {}
+    },
+    {
+      "pc": "0x5006c592",
+      "owner": [
+        "0x5006bbca",
+        "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
+      ],
+      "inline_context": [
+        [
+          "<core::mem::maybe_uninit::MaybeUninit<oer_esp32s31_ieee80211_mac::irq::consumer::IrqPublisher>>::write",
+          "<oer_esp32s31_ieee80211_driver::rx::arena::WifiRxArena<32, 1664, 1668, 32>>::bind",
+          "oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}",
+          "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
+        ]
+      ],
+      "facts": {
+        "instruction": [
+          [
+            "sw a0, 4(a0)"
+          ]
+        ],
+        "memory": [
+          [
+            "Store",
+            "4",
+            "Constant { value: 788624708 }",
+            "Some(Constant { value: 788624704 })"
+          ]
+        ],
+        "write-event": [
+          [
+            "FunctionWrite { origin: WriteOrigin { function: 1342618570, tail: None }, site: 1342621074, address: Base { base: Address(788624708), offset: 0 }, value: Base { base: Address(788624704), offset: 0 }, width: 4, occurrence: May, proof: ClosedGraph }"
+          ]
+        ]
+      },
+      "expressions": {}
+    },
+    {
+      "pc": "0x5006c5ee",
+      "owner": [
+        "0x5006bbca",
+        "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
+      ],
+      "inline_context": [
+        [
+          "oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}",
+          "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
+        ]
+      ],
+      "facts": {
+        "instruction": [
+          [
+            "sw t5, 1408(s10)"
+          ]
+        ],
+        "memory": [
+          [
+            "Store",
+            "4",
+            "Expression { id: 2581 }",
+            "Some(Constant { value: 788624708 })"
+          ]
+        ],
+        "write-event": [
+          [
+            "FunctionWrite { origin: WriteOrigin { function: 1342618570, tail: None }, site: 1342621166, address: Base { base: Argument(0), offset: 1408 }, value: Base { base: Address(788624708), offset: 0 }, width: 4, occurrence: May, proof: ClosedGraph }"
+          ]
+        ]
+      },
+      "expressions": {
+        "2581": {
+          "pc": "0x5006c5ee",
+          "expression": "Some(Integer { op: Add, left: Expression { id: 9 }, right: Constant { value: 1408 } })"
+        },
+        "9": {
+          "pc": "0xffffffffffffffff",
+          "expression": "Some(EntryRegister { register: 10 })"
+        }
+      }
+    },
+    {
+      "pc": "0x5006c602",
+      "owner": [
+        "0x5006bbca",
+        "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
+      ],
+      "inline_context": [
+        [
+          "oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}",
+          "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
+        ]
+      ],
+      "facts": {
+        "instruction": [
+          [
+            "sw t4, 1424(s10)"
+          ]
+        ],
+        "memory": [
+          [
+            "Store",
+            "4",
+            "Expression { id: 2598 }",
+            "Some(Constant { value: 788625408 })"
+          ]
+        ],
+        "write-event": [
+          [
+            "FunctionWrite { origin: WriteOrigin { function: 1342618570, tail: None }, site: 1342621186, address: Base { base: Argument(0), offset: 1424 }, value: Base { base: Address(788625408), offset: 0 }, width: 4, occurrence: May, proof: ClosedGraph }"
+          ]
+        ]
+      },
+      "expressions": {
+        "2598": {
+          "pc": "0x5006c602",
+          "expression": "Some(Integer { op: Add, left: Expression { id: 9 }, right: Constant { value: 1424 } })"
+        },
+        "9": {
+          "pc": "0xffffffffffffffff",
+          "expression": "Some(EntryRegister { register: 10 })"
+        }
+      }
+    },
+    {
+      "pc": "0x5006c606",
+      "owner": [
+        "0x5006bbca",
+        "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
+      ],
+      "inline_context": [
+        [
+          "oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}",
+          "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
+        ]
+      ],
+      "facts": {
+        "instruction": [
+          [
+            "sw t5, 1428(s10)"
+          ]
+        ],
+        "memory": [
+          [
+            "Store",
+            "4",
+            "Expression { id: 2600 }",
+            "Some(Constant { value: 788624708 })"
+          ]
+        ],
+        "write-event": [
+          [
+            "FunctionWrite { origin: WriteOrigin { function: 1342618570, tail: None }, site: 1342621190, address: Base { base: Argument(0), offset: 1428 }, value: Base { base: Address(788624708), offset: 0 }, width: 4, occurrence: May, proof: ClosedGraph }"
+          ]
+        ]
+      },
+      "expressions": {
+        "2600": {
+          "pc": "0x5006c606",
+          "expression": "Some(Integer { op: Add, left: Expression { id: 9 }, right: Constant { value: 1428 } })"
+        },
+        "9": {
+          "pc": "0xffffffffffffffff",
+          "expression": "Some(EntryRegister { register: 10 })"
+        }
+      }
+    },
+    {
+      "pc": "0x5006c6f4",
+      "owner": [
+        "0x5006bbca",
+        "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
+      ],
+      "inline_context": [
+        [
+          "oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}",
+          "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
+        ]
+      ],
+      "facts": {
+        "instruction": [
+          [
+            "sw a0, 348(s10)"
+          ]
+        ],
+        "memory": [
+          [
+            "Store",
+            "4",
+            "Expression { id: 2778 }",
+            "Some(Constant { value: 788624576 })"
+          ]
+        ],
+        "write-event": [
+          [
+            "FunctionWrite { origin: WriteOrigin { function: 1342618570, tail: None }, site: 1342621428, address: Base { base: Argument(0), offset: 348 }, value: Base { base: Address(788624576), offset: 0 }, width: 4, occurrence: May, proof: ClosedGraph }"
+          ]
+        ]
+      },
+      "expressions": {
+        "2778": {
+          "pc": "0x5006c6f4",
+          "expression": "Some(Integer { op: Add, left: Expression { id: 9 }, right: Constant { value: 348 } })"
+        },
+        "9": {
+          "pc": "0xffffffffffffffff",
+          "expression": "Some(EntryRegister { register: 10 })"
+        }
+      }
+    }
+  ],
+  "aggregate_copy_calls": [
+    {
+      "pc": "0x5006c6ae",
+      "owner": [
+        "0x5006bbca",
+        "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
+      ],
+      "inline_context": [
+        [
+          "oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}",
+          "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
+        ]
+      ],
+      "facts": {
+        "instruction": [
+          [
+            "jalr ra, -486(ra)"
+          ]
+        ],
+        "register-write": [
+          [
+            "1",
+            "ImageAddress { address: 1342621362 }"
+          ]
+        ],
+        "transfer": [
+          [
+            "Some(ImageAddress { address: 796918980 })"
+          ]
+        ],
+        "inputs": [
+          [
+            "Some([Constant { value: 0 }, ImageAddress { address: 796919466 }, EntryStack { offset: -576 }, Expression { id: 2 }, Expression { id: 3 }, Constant { value: 788625344 }, Constant { value: 788625368 }, Constant { value: 788682048 }, Constant { value: 1342854452 }, Expression { id: 2661 }, EntryStack { offset: -280 }, Expression { id: 2609 }, Constant { value: 68 }, Unknown, Constant { value: 788624720 }, Unknown, Constant { value: 788625356 }, Constant { value: 788625152 }, Expression { id: 2607 }, Expression { id: 2666 }, Constant { value: 788680516 }, Constant { value: 788647076 }, Constant { value: 40960 }, Constant { value: 788658780 }, Expression { id: 47 }, Constant { value: 788648748 }, Expression { id: 9 }, Constant { value: 788652092 }, Constant { value: 788626944 }, Constant { value: 788625408 }, Constant { value: 788624708 }, Constant { value: 788628288 }])"
+          ]
+        ],
+        "write-barrier": [
+          [
+            "WriteBarrier { origin: WriteOrigin { function: 1342618570, tail: None }, site: 1342621358, kind: Call }"
+          ],
+          [
+            "WriteBarrier { origin: WriteOrigin { function: 1342618570, tail: None }, site: 1342621358, kind: Call }"
+          ]
+        ]
+      },
+      "expressions": {
+        "9": {
+          "pc": "0xffffffffffffffff",
+          "expression": "Some(EntryRegister { register: 10 })"
+        },
+        "47": {
+          "pc": "0x5006bc14",
+          "expression": "Some(Integer { op: Add, left: Expression { id: 9 }, right: Constant { value: 1446 } })"
+        },
+        "2666": {
+          "pc": "0x5006c688",
+          "expression": "Some(Integer { op: Add, left: Expression { id: 9 }, right: Constant { value: 1436 } })"
+        },
+        "2607": {
+          "pc": "0x5006c60e",
+          "expression": "Some(Integer { op: Add, left: Expression { id: 9 }, right: Constant { value: 40 } })"
+        },
+        "2609": {
+          "pc": "0x5006c612",
+          "expression": "Some(Integer { op: Add, left: Expression { id: 9 }, right: Constant { value: 1364 } })"
+        },
+        "2661": {
+          "pc": "0x5006c684",
+          "expression": "Some(Integer { op: Add, left: Expression { id: 9 }, right: Constant { value: 1432 } })"
+        },
+        "3": {
+          "pc": "0xffffffffffffffff",
+          "expression": "Some(EntryRegister { register: 4 })"
+        },
+        "2": {
+          "pc": "0xffffffffffffffff",
+          "expression": "Some(EntryRegister { register: 3 })"
+        }
+      }
+    },
+    {
+      "pc": "0x5006c6c0",
+      "owner": [
+        "0x5006bbca",
+        "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
+      ],
+      "inline_context": [
+        [
+          "oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}",
+          "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
+        ]
+      ],
+      "facts": {
+        "instruction": [
+          [
+            "jalr ra, -504(ra)"
+          ]
+        ],
+        "register-write": [
+          [
+            "1",
+            "ImageAddress { address: 1342621380 }"
+          ]
+        ],
+        "transfer": [
+          [
+            "Some(ImageAddress { address: 796918980 })"
+          ]
+        ],
+        "inputs": [
+          [
+            "Some([Constant { value: 0 }, ImageAddress { address: 796919484 }, EntryStack { offset: -576 }, Expression { id: 2 }, Expression { id: 3 }, Unknown, Unknown, Unknown, Constant { value: 1342854452 }, Expression { id: 2661 }, Expression { id: 2732 }, EntryStack { offset: -496 }, Constant { value: 284 }, Unknown, Unknown, Unknown, Unknown, Unknown, Expression { id: 2607 }, Expression { id: 2666 }, Constant { value: 788680516 }, Constant { value: 788647076 }, Constant { value: 40960 }, Constant { value: 788658780 }, Expression { id: 47 }, Constant { value: 788648748 }, Expression { id: 9 }, Constant { value: 788652092 }, Unknown, Unknown, Unknown, Unknown])"
+          ]
+        ],
+        "write-barrier": [
+          [
+            "WriteBarrier { origin: WriteOrigin { function: 1342618570, tail: None }, site: 1342621376, kind: Call }"
+          ],
+          [
+            "WriteBarrier { origin: WriteOrigin { function: 1342618570, tail: None }, site: 1342621376, kind: Call }"
+          ]
+        ]
+      },
+      "expressions": {
+        "9": {
+          "pc": "0xffffffffffffffff",
+          "expression": "Some(EntryRegister { register: 10 })"
+        },
+        "47": {
+          "pc": "0x5006bc14",
+          "expression": "Some(Integer { op: Add, left: Expression { id: 9 }, right: Constant { value: 1446 } })"
+        },
+        "2666": {
+          "pc": "0x5006c688",
+          "expression": "Some(Integer { op: Add, left: Expression { id: 9 }, right: Constant { value: 1436 } })"
+        },
+        "2607": {
+          "pc": "0x5006c60e",
+          "expression": "Some(Integer { op: Add, left: Expression { id: 9 }, right: Constant { value: 40 } })"
+        },
+        "2732": {
+          "pc": "0x5006c6b2",
+          "expression": "Some(Integer { op: Add, left: Expression { id: 9 }, right: Constant { value: 56 } })"
+        },
+        "2661": {
+          "pc": "0x5006c684",
+          "expression": "Some(Integer { op: Add, left: Expression { id: 9 }, right: Constant { value: 1432 } })"
+        },
+        "3": {
+          "pc": "0xffffffffffffffff",
+          "expression": "Some(EntryRegister { register: 4 })"
+        },
+        "2": {
+          "pc": "0xffffffffffffffff",
+          "expression": "Some(EntryRegister { register: 3 })"
+        }
+      }
+    },
+    {
+      "pc": "0x5006bcc4",
+      "owner": [
+        "0x5006bbca",
+        "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
+      ],
+      "inline_context": [
+        [
+          "oer_firmware_apps_w1::measure::timed::<oer_esp32s31_ieee80211_driver::rx::receive::receive<oer_esp32s31_hal::ieee80211::mac::WifiMacHal, oer_esp32s31_hal::ieee80211::dma::rx_dma::WifiRxDmaEngine, oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters, oer_firmware_apps_w1::irq::ImageRoutes, oer_firmware_apps_w1::irq::ImageDoorbell, oer_embassy_time::EmbassyClock, oer_esp32s31_ieee80211_driver::rx::upper::QueueSink<oer_embassy_time::EmbassyClock, 32, 1664>, oer_esp32s31_ieee80211_driver::rx::sink::CountingAdmission, 32, 1664, 1668, 32, oer_esp32s31_hal::ieee80211::dma::space::ChipDma, oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}::{closure#0}>::{closure#0}, oer_firmware_apps_w1::measure::take_mac_latch>::{closure#0}",
+          "oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}",
+          "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
+        ]
+      ],
+      "facts": {
+        "instruction": [
+          [
+            "jalr ra, -2044(ra)"
+          ]
+        ],
+        "register-write": [
+          [
+            "1",
+            "ImageAddress { address: 1342618824 }"
+          ]
+        ],
+        "transfer": [
+          [
+            "Some(ImageAddress { address: 796918980 })"
+          ]
+        ],
+        "inputs": [
+          [
+            "Some([Constant { value: 0 }, ImageAddress { address: 796921024 }, EntryStack { offset: -576 }, Expression { id: 2 }, Expression { id: 3 }, Unknown, Unknown, Unknown, Unknown, Expression { id: 68 }, Expression { id: 68 }, Expression { id: 63 }, Constant { value: 640 }, Unknown, Unknown, Unknown, Unknown, Unknown, Unknown, Unknown, Unknown, Unknown, Unknown, Unknown, Expression { id: 47 }, Unknown, Expression { id: 9 }, Unknown, Unknown, Unknown, Unknown, Unknown])"
+          ]
+        ],
+        "write-barrier": [
+          [
+            "WriteBarrier { origin: WriteOrigin { function: 1342618570, tail: None }, site: 1342618820, kind: Call }"
+          ],
+          [
+            "WriteBarrier { origin: WriteOrigin { function: 1342618570, tail: None }, site: 1342618820, kind: Call }"
+          ]
+        ]
+      },
+      "expressions": {
+        "9": {
+          "pc": "0xffffffffffffffff",
+          "expression": "Some(EntryRegister { register: 10 })"
+        },
+        "47": {
+          "pc": "0x5006bc14",
+          "expression": "Some(Integer { op: Add, left: Expression { id: 9 }, right: Constant { value: 1446 } })"
+        },
+        "63": {
+          "pc": "0x5006bcb2",
+          "expression": "Some(Integer { op: Add, left: Expression { id: 9 }, right: Constant { value: 56 } })"
+        },
+        "68": {
+          "pc": "0x5006bcb6",
+          "expression": "Some(Integer { op: Add, left: Expression { id: 9 }, right: Constant { value: 696 } })"
+        },
+        "3": {
+          "pc": "0xffffffffffffffff",
+          "expression": "Some(EntryRegister { register: 4 })"
+        },
+        "2": {
+          "pc": "0xffffffffffffffff",
+          "expression": "Some(EntryRegister { register: 3 })"
+        }
+      }
+    }
+  ],
+  "first_copy_effect_check": {
+    "call": "0x5006c6ae",
+    "destination_word_coordinate": -236,
+    "coordinate_meaning": "copy destination + 44; not an existing captured spill",
+    "context": [
+      "CallContext { entry: 796971616, abi: RiscvInteger, arguments: [None, None, Some(68), None, Some(788624720), None, Some(788625356), Some(788625152)] }"
+    ],
+    "applied_effects": 14,
+    "preserves_word": false,
+    "status": "unknown: bounded copy contents and complete footprint are not proved"
+  },
+  "conditional_copy_layout": {
+    "status": "unknown: arithmetic under unproved copy-content and object-forwarding premises; never supplied to the analyzer",
+    "publisher": "E+0x580 -> entry-sp-236 -> E+0x13c -> E+0x3bc = (E+0x2b8)+0x104",
+    "line_slot": "E+0x590 -> entry-sp-220 -> E+0x14c -> E+0x3cc = (E+0x2b8)+0x114",
+    "cell": "E+0x15c -> E+0x3dc = (E+0x2b8)+0x124",
+    "E": "rx-poll entry a0, a symbolic object base, not an exact runtime object address"
+  },
+  "future_pointer_stores": [
+    {
+      "pc": "0x5006bcd0",
+      "owner": [
+        "0x5006bbca",
+        "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
+      ],
+      "inline_context": [
+        [
+          "oer_firmware_apps_w1::measure::timed::<oer_esp32s31_ieee80211_driver::rx::receive::receive<oer_esp32s31_hal::ieee80211::mac::WifiMacHal, oer_esp32s31_hal::ieee80211::dma::rx_dma::WifiRxDmaEngine, oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters, oer_firmware_apps_w1::irq::ImageRoutes, oer_firmware_apps_w1::irq::ImageDoorbell, oer_embassy_time::EmbassyClock, oer_esp32s31_ieee80211_driver::rx::upper::QueueSink<oer_embassy_time::EmbassyClock, 32, 1664>, oer_esp32s31_ieee80211_driver::rx::sink::CountingAdmission, 32, 1664, 1668, 32, oer_esp32s31_hal::ieee80211::dma::space::ChipDma, oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}::{closure#0}>::{closure#0}, oer_firmware_apps_w1::measure::take_mac_latch>::{closure#0}",
+          "oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}",
+          "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
+        ]
+      ],
+      "facts": {
+        "instruction": [
+          [
+            "sw s1, 1340(s10)"
+          ]
+        ],
+        "memory": [
+          [
+            "Store",
+            "4",
+            "Expression { id: 79 }",
+            "Some(Expression { id: 80 })"
+          ]
+        ],
+        "write-event": [
+          [
+            "FunctionWrite { origin: WriteOrigin { function: 1342618570, tail: None }, site: 1342618832, address: Base { base: Argument(0), offset: 1340 }, value: Base { base: Argument(0), offset: 696 }, width: 4, occurrence: May, proof: ClosedGraph }"
+          ]
+        ]
+      },
+      "expressions": {
+        "80": {
+          "pc": "0x5006bcd0",
+          "expression": "Some(Integer { op: And, left: Expression { id: 68 }, right: Constant { value: 4294967295 } })"
+        },
+        "68": {
+          "pc": "0x5006bcb6",
+          "expression": "Some(Integer { op: Add, left: Expression { id: 9 }, right: Constant { value: 696 } })"
+        },
+        "9": {
+          "pc": "0xffffffffffffffff",
+          "expression": "Some(EntryRegister { register: 10 })"
+        },
+        "79": {
+          "pc": "0x5006bcd0",
+          "expression": "Some(Integer { op: Add, left: Expression { id: 9 }, right: Constant { value: 1340 } })"
+        }
+      }
+    },
+    {
+      "pc": "0x5006bcd8",
+      "owner": [
+        "0x5006bbca",
+        "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
+      ],
+      "inline_context": [
+        [
+          "oer_firmware_apps_w1::measure::timed::<oer_esp32s31_ieee80211_driver::rx::receive::receive<oer_esp32s31_hal::ieee80211::mac::WifiMacHal, oer_esp32s31_hal::ieee80211::dma::rx_dma::WifiRxDmaEngine, oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters, oer_firmware_apps_w1::irq::ImageRoutes, oer_firmware_apps_w1::irq::ImageDoorbell, oer_embassy_time::EmbassyClock, oer_esp32s31_ieee80211_driver::rx::upper::QueueSink<oer_embassy_time::EmbassyClock, 32, 1664>, oer_esp32s31_ieee80211_driver::rx::sink::CountingAdmission, 32, 1664, 1668, 32, oer_esp32s31_hal::ieee80211::dma::space::ChipDma, oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}::{closure#0}>::{closure#0}, oer_firmware_apps_w1::measure::take_mac_latch>::{closure#0}",
+          "oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}",
+          "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
+        ]
+      ],
+      "facts": {
+        "instruction": [
+          [
+            "sw a0, 1348(s10)"
+          ]
+        ],
+        "memory": [
+          [
+            "Store",
+            "4",
+            "Expression { id: 85 }",
+            "Some(Expression { id: 86 })"
+          ]
+        ],
+        "write-event": [
+          [
+            "FunctionWrite { origin: WriteOrigin { function: 1342618570, tail: None }, site: 1342618840, address: Base { base: Argument(0), offset: 1348 }, value: Base { base: Argument(0), offset: 1340 }, width: 4, occurrence: May, proof: ClosedGraph }"
+          ]
+        ]
+      },
+      "expressions": {
+        "86": {
+          "pc": "0x5006bcd8",
+          "expression": "Some(Integer { op: And, left: Expression { id: 77 }, right: Constant { value: 4294967295 } })"
+        },
+        "77": {
+          "pc": "0x5006bcc8",
+          "expression": "Some(Integer { op: Add, left: Expression { id: 9 }, right: Constant { value: 1340 } })"
+        },
+        "9": {
+          "pc": "0xffffffffffffffff",
+          "expression": "Some(EntryRegister { register: 10 })"
+        },
+        "85": {
+          "pc": "0x5006bcd8",
+          "expression": "Some(Integer { op: Add, left: Expression { id: 9 }, right: Constant { value: 1348 } })"
+        }
+      }
+    }
+  ],
+  "constructor_pointer_loads": [
+    {
+      "pc": "0x5006bd20",
+      "owner": [
+        "0x5006bbca",
+        "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
+      ],
+      "inline_context": [
+        [
+          "<&mut oer_esp32s31_ieee80211_driver::rx::receive::receive<oer_esp32s31_hal::ieee80211::mac::WifiMacHal, oer_esp32s31_hal::ieee80211::dma::rx_dma::WifiRxDmaEngine, oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters, oer_firmware_apps_w1::irq::ImageRoutes, oer_firmware_apps_w1::irq::ImageDoorbell, oer_embassy_time::EmbassyClock, oer_esp32s31_ieee80211_driver::rx::upper::QueueSink<oer_embassy_time::EmbassyClock, 32, 1664>, oer_esp32s31_ieee80211_driver::rx::sink::CountingAdmission, 32, 1664, 1668, 32, oer_esp32s31_hal::ieee80211::dma::space::ChipDma, oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}::{closure#0}>::{closure#0} as core::ops::deref::DerefMut>::deref_mut",
+          "<core::pin::Pin<&mut oer_esp32s31_ieee80211_driver::rx::receive::receive<oer_esp32s31_hal::ieee80211::mac::WifiMacHal, oer_esp32s31_hal::ieee80211::dma::rx_dma::WifiRxDmaEngine, oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters, oer_firmware_apps_w1::irq::ImageRoutes, oer_firmware_apps_w1::irq::ImageDoorbell, oer_embassy_time::EmbassyClock, oer_esp32s31_ieee80211_driver::rx::upper::QueueSink<oer_embassy_time::EmbassyClock, 32, 1664>, oer_esp32s31_ieee80211_driver::rx::sink::CountingAdmission, 32, 1664, 1668, 32, oer_esp32s31_hal::ieee80211::dma::space::ChipDma, oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}::{closure#0}>::{closure#0}>>::as_mut",
+          "oer_firmware_apps_w1::measure::timed::<oer_esp32s31_ieee80211_driver::rx::receive::receive<oer_esp32s31_hal::ieee80211::mac::WifiMacHal, oer_esp32s31_hal::ieee80211::dma::rx_dma::WifiRxDmaEngine, oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters, oer_firmware_apps_w1::irq::ImageRoutes, oer_firmware_apps_w1::irq::ImageDoorbell, oer_embassy_time::EmbassyClock, oer_esp32s31_ieee80211_driver::rx::upper::QueueSink<oer_embassy_time::EmbassyClock, 32, 1664>, oer_esp32s31_ieee80211_driver::rx::sink::CountingAdmission, 32, 1664, 1668, 32, oer_esp32s31_hal::ieee80211::dma::space::ChipDma, oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}::{closure#0}>::{closure#0}, oer_firmware_apps_w1::measure::take_mac_latch>::{closure#0}::{closure#0}",
+          "<core::future::poll_fn::PollFn<oer_firmware_apps_w1::measure::timed<oer_esp32s31_ieee80211_driver::rx::receive::receive<oer_esp32s31_hal::ieee80211::mac::WifiMacHal, oer_esp32s31_hal::ieee80211::dma::rx_dma::WifiRxDmaEngine, oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters, oer_firmware_apps_w1::irq::ImageRoutes, oer_firmware_apps_w1::irq::ImageDoorbell, oer_embassy_time::EmbassyClock, oer_esp32s31_ieee80211_driver::rx::upper::QueueSink<oer_embassy_time::EmbassyClock, 32, 1664>, oer_esp32s31_ieee80211_driver::rx::sink::CountingAdmission, 32, 1664, 1668, 32, oer_esp32s31_hal::ieee80211::dma::space::ChipDma, oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}::{closure#0}>::{closure#0}, oer_firmware_apps_w1::measure::take_mac_latch>::{closure#0}::{closure#0}> as core::future::future::Future>::poll",
+          "oer_firmware_apps_w1::measure::timed::<oer_esp32s31_ieee80211_driver::rx::receive::receive<oer_esp32s31_hal::ieee80211::mac::WifiMacHal, oer_esp32s31_hal::ieee80211::dma::rx_dma::WifiRxDmaEngine, oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters, oer_firmware_apps_w1::irq::ImageRoutes, oer_firmware_apps_w1::irq::ImageDoorbell, oer_embassy_time::EmbassyClock, oer_esp32s31_ieee80211_driver::rx::upper::QueueSink<oer_embassy_time::EmbassyClock, 32, 1664>, oer_esp32s31_ieee80211_driver::rx::sink::CountingAdmission, 32, 1664, 1668, 32, oer_esp32s31_hal::ieee80211::dma::space::ChipDma, oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}::{closure#0}>::{closure#0}, oer_firmware_apps_w1::measure::take_mac_latch>::{closure#0}",
+          "oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}",
+          "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
+        ]
+      ],
+      "facts": {
+        "instruction": [
+          [
+            "lw s9, 0(a0)"
+          ]
+        ],
+        "register-write": [
+          [
+            "25",
+            "Expression { id: 113 }"
+          ]
+        ],
+        "memory": [
+          [
+            "Load",
+            "4",
+            "Unknown",
+            "None"
+          ]
+        ]
+      },
+      "expressions": {
+        "113": {
+          "pc": "0x5006bd20",
+          "expression": "Some(Load { address: Unknown, width: 4, signed: false })"
+        }
+      }
+    },
+    {
+      "pc": "0x5006bd70",
+      "owner": [
+        "0x5006bbca",
+        "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
+      ],
+      "inline_context": [
+        [
+          "oer_esp32s31_ieee80211_driver::rx::receive::receive::<oer_esp32s31_hal::ieee80211::mac::WifiMacHal, oer_esp32s31_hal::ieee80211::dma::rx_dma::WifiRxDmaEngine, oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters, oer_firmware_apps_w1::irq::ImageRoutes, oer_firmware_apps_w1::irq::ImageDoorbell, oer_embassy_time::EmbassyClock, oer_esp32s31_ieee80211_driver::rx::upper::QueueSink<oer_embassy_time::EmbassyClock, 32, 1664>, oer_esp32s31_ieee80211_driver::rx::sink::CountingAdmission, 32, 1664, 1668, 32, oer_esp32s31_hal::ieee80211::dma::space::ChipDma, oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}::{closure#0}>::{closure#0}",
+          "oer_firmware_apps_w1::measure::timed::<oer_esp32s31_ieee80211_driver::rx::receive::receive<oer_esp32s31_hal::ieee80211::mac::WifiMacHal, oer_esp32s31_hal::ieee80211::dma::rx_dma::WifiRxDmaEngine, oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters, oer_firmware_apps_w1::irq::ImageRoutes, oer_firmware_apps_w1::irq::ImageDoorbell, oer_embassy_time::EmbassyClock, oer_esp32s31_ieee80211_driver::rx::upper::QueueSink<oer_embassy_time::EmbassyClock, 32, 1664>, oer_esp32s31_ieee80211_driver::rx::sink::CountingAdmission, 32, 1664, 1668, 32, oer_esp32s31_hal::ieee80211::dma::space::ChipDma, oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}::{closure#0}>::{closure#0}, oer_firmware_apps_w1::measure::take_mac_latch>::{closure#0}::{closure#0}",
+          "<core::future::poll_fn::PollFn<oer_firmware_apps_w1::measure::timed<oer_esp32s31_ieee80211_driver::rx::receive::receive<oer_esp32s31_hal::ieee80211::mac::WifiMacHal, oer_esp32s31_hal::ieee80211::dma::rx_dma::WifiRxDmaEngine, oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters, oer_firmware_apps_w1::irq::ImageRoutes, oer_firmware_apps_w1::irq::ImageDoorbell, oer_embassy_time::EmbassyClock, oer_esp32s31_ieee80211_driver::rx::upper::QueueSink<oer_embassy_time::EmbassyClock, 32, 1664>, oer_esp32s31_ieee80211_driver::rx::sink::CountingAdmission, 32, 1664, 1668, 32, oer_esp32s31_hal::ieee80211::dma::space::ChipDma, oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}::{closure#0}>::{closure#0}, oer_firmware_apps_w1::measure::take_mac_latch>::{closure#0}::{closure#0}> as core::future::future::Future>::poll",
+          "oer_firmware_apps_w1::measure::timed::<oer_esp32s31_ieee80211_driver::rx::receive::receive<oer_esp32s31_hal::ieee80211::mac::WifiMacHal, oer_esp32s31_hal::ieee80211::dma::rx_dma::WifiRxDmaEngine, oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters, oer_firmware_apps_w1::irq::ImageRoutes, oer_firmware_apps_w1::irq::ImageDoorbell, oer_embassy_time::EmbassyClock, oer_esp32s31_ieee80211_driver::rx::upper::QueueSink<oer_embassy_time::EmbassyClock, 32, 1664>, oer_esp32s31_ieee80211_driver::rx::sink::CountingAdmission, 32, 1664, 1668, 32, oer_esp32s31_hal::ieee80211::dma::space::ChipDma, oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}::{closure#0}>::{closure#0}, oer_firmware_apps_w1::measure::take_mac_latch>::{closure#0}",
+          "oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}",
+          "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
+        ]
+      ],
+      "facts": {
+        "instruction": [
+          [
+            "lw a0, 260(s9)"
+          ]
+        ],
+        "register-write": [
+          [
+            "10",
+            "Expression { id: 471 }"
+          ]
+        ],
+        "memory": [
+          [
+            "Load",
+            "4",
+            "Unknown",
+            "None"
+          ]
+        ]
+      },
+      "expressions": {
+        "471": {
+          "pc": "0x5006bd70",
+          "expression": "Some(Load { address: Unknown, width: 4, signed: false })"
+        }
+      }
+    },
+    {
+      "pc": "0x5006bd88",
+      "owner": [
+        "0x5006bbca",
+        "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
+      ],
+      "inline_context": [
+        [
+          "oer_esp32s31_ieee80211_driver::rx::receive::receive::<oer_esp32s31_hal::ieee80211::mac::WifiMacHal, oer_esp32s31_hal::ieee80211::dma::rx_dma::WifiRxDmaEngine, oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters, oer_firmware_apps_w1::irq::ImageRoutes, oer_firmware_apps_w1::irq::ImageDoorbell, oer_embassy_time::EmbassyClock, oer_esp32s31_ieee80211_driver::rx::upper::QueueSink<oer_embassy_time::EmbassyClock, 32, 1664>, oer_esp32s31_ieee80211_driver::rx::sink::CountingAdmission, 32, 1664, 1668, 32, oer_esp32s31_hal::ieee80211::dma::space::ChipDma, oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}::{closure#0}>::{closure#0}",
+          "oer_firmware_apps_w1::measure::timed::<oer_esp32s31_ieee80211_driver::rx::receive::receive<oer_esp32s31_hal::ieee80211::mac::WifiMacHal, oer_esp32s31_hal::ieee80211::dma::rx_dma::WifiRxDmaEngine, oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters, oer_firmware_apps_w1::irq::ImageRoutes, oer_firmware_apps_w1::irq::ImageDoorbell, oer_embassy_time::EmbassyClock, oer_esp32s31_ieee80211_driver::rx::upper::QueueSink<oer_embassy_time::EmbassyClock, 32, 1664>, oer_esp32s31_ieee80211_driver::rx::sink::CountingAdmission, 32, 1664, 1668, 32, oer_esp32s31_hal::ieee80211::dma::space::ChipDma, oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}::{closure#0}>::{closure#0}, oer_firmware_apps_w1::measure::take_mac_latch>::{closure#0}::{closure#0}",
+          "<core::future::poll_fn::PollFn<oer_firmware_apps_w1::measure::timed<oer_esp32s31_ieee80211_driver::rx::receive::receive<oer_esp32s31_hal::ieee80211::mac::WifiMacHal, oer_esp32s31_hal::ieee80211::dma::rx_dma::WifiRxDmaEngine, oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters, oer_firmware_apps_w1::irq::ImageRoutes, oer_firmware_apps_w1::irq::ImageDoorbell, oer_embassy_time::EmbassyClock, oer_esp32s31_ieee80211_driver::rx::upper::QueueSink<oer_embassy_time::EmbassyClock, 32, 1664>, oer_esp32s31_ieee80211_driver::rx::sink::CountingAdmission, 32, 1664, 1668, 32, oer_esp32s31_hal::ieee80211::dma::space::ChipDma, oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}::{closure#0}>::{closure#0}, oer_firmware_apps_w1::measure::take_mac_latch>::{closure#0}::{closure#0}> as core::future::future::Future>::poll",
+          "oer_firmware_apps_w1::measure::timed::<oer_esp32s31_ieee80211_driver::rx::receive::receive<oer_esp32s31_hal::ieee80211::mac::WifiMacHal, oer_esp32s31_hal::ieee80211::dma::rx_dma::WifiRxDmaEngine, oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters, oer_firmware_apps_w1::irq::ImageRoutes, oer_firmware_apps_w1::irq::ImageDoorbell, oer_embassy_time::EmbassyClock, oer_esp32s31_ieee80211_driver::rx::upper::QueueSink<oer_embassy_time::EmbassyClock, 32, 1664>, oer_esp32s31_ieee80211_driver::rx::sink::CountingAdmission, 32, 1664, 1668, 32, oer_esp32s31_hal::ieee80211::dma::space::ChipDma, oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}::{closure#0}>::{closure#0}, oer_firmware_apps_w1::measure::take_mac_latch>::{closure#0}",
+          "oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}",
+          "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
+        ]
+      ],
+      "facts": {
+        "instruction": [
+          [
+            "lw ra, 276(s9)"
+          ]
+        ],
+        "register-write": [
+          [
+            "1",
+            "Expression { id: 638 }"
+          ]
+        ],
+        "memory": [
+          [
+            "Load",
+            "4",
+            "Unknown",
+            "None"
+          ]
+        ]
+      },
+      "expressions": {
+        "638": {
+          "pc": "0x5006bd88",
+          "expression": "Some(Load { address: Unknown, width: 4, signed: false })"
+        }
+      }
+    },
+    {
+      "pc": "0x5006bd94",
+      "owner": [
+        "0x5006bbca",
+        "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
+      ],
+      "inline_context": [
+        [
+          "oer_esp32s31_ieee80211_driver::rx::receive::receive::<oer_esp32s31_hal::ieee80211::mac::WifiMacHal, oer_esp32s31_hal::ieee80211::dma::rx_dma::WifiRxDmaEngine, oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters, oer_firmware_apps_w1::irq::ImageRoutes, oer_firmware_apps_w1::irq::ImageDoorbell, oer_embassy_time::EmbassyClock, oer_esp32s31_ieee80211_driver::rx::upper::QueueSink<oer_embassy_time::EmbassyClock, 32, 1664>, oer_esp32s31_ieee80211_driver::rx::sink::CountingAdmission, 32, 1664, 1668, 32, oer_esp32s31_hal::ieee80211::dma::space::ChipDma, oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}::{closure#0}>::{closure#0}",
+          "oer_firmware_apps_w1::measure::timed::<oer_esp32s31_ieee80211_driver::rx::receive::receive<oer_esp32s31_hal::ieee80211::mac::WifiMacHal, oer_esp32s31_hal::ieee80211::dma::rx_dma::WifiRxDmaEngine, oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters, oer_firmware_apps_w1::irq::ImageRoutes, oer_firmware_apps_w1::irq::ImageDoorbell, oer_embassy_time::EmbassyClock, oer_esp32s31_ieee80211_driver::rx::upper::QueueSink<oer_embassy_time::EmbassyClock, 32, 1664>, oer_esp32s31_ieee80211_driver::rx::sink::CountingAdmission, 32, 1664, 1668, 32, oer_esp32s31_hal::ieee80211::dma::space::ChipDma, oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}::{closure#0}>::{closure#0}, oer_firmware_apps_w1::measure::take_mac_latch>::{closure#0}::{closure#0}",
+          "<core::future::poll_fn::PollFn<oer_firmware_apps_w1::measure::timed<oer_esp32s31_ieee80211_driver::rx::receive::receive<oer_esp32s31_hal::ieee80211::mac::WifiMacHal, oer_esp32s31_hal::ieee80211::dma::rx_dma::WifiRxDmaEngine, oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters, oer_firmware_apps_w1::irq::ImageRoutes, oer_firmware_apps_w1::irq::ImageDoorbell, oer_embassy_time::EmbassyClock, oer_esp32s31_ieee80211_driver::rx::upper::QueueSink<oer_embassy_time::EmbassyClock, 32, 1664>, oer_esp32s31_ieee80211_driver::rx::sink::CountingAdmission, 32, 1664, 1668, 32, oer_esp32s31_hal::ieee80211::dma::space::ChipDma, oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}::{closure#0}>::{closure#0}, oer_firmware_apps_w1::measure::take_mac_latch>::{closure#0}::{closure#0}> as core::future::future::Future>::poll",
+          "oer_firmware_apps_w1::measure::timed::<oer_esp32s31_ieee80211_driver::rx::receive::receive<oer_esp32s31_hal::ieee80211::mac::WifiMacHal, oer_esp32s31_hal::ieee80211::dma::rx_dma::WifiRxDmaEngine, oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters, oer_firmware_apps_w1::irq::ImageRoutes, oer_firmware_apps_w1::irq::ImageDoorbell, oer_embassy_time::EmbassyClock, oer_esp32s31_ieee80211_driver::rx::upper::QueueSink<oer_embassy_time::EmbassyClock, 32, 1664>, oer_esp32s31_ieee80211_driver::rx::sink::CountingAdmission, 32, 1664, 1668, 32, oer_esp32s31_hal::ieee80211::dma::space::ChipDma, oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}::{closure#0}>::{closure#0}, oer_firmware_apps_w1::measure::take_mac_latch>::{closure#0}",
+          "oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}",
+          "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
+        ]
+      ],
+      "facts": {
+        "instruction": [
+          [
+            "lw a0, 292(s9)"
+          ]
+        ],
+        "register-write": [
+          [
+            "10",
+            "Expression { id: 727 }"
+          ]
+        ],
+        "memory": [
+          [
+            "Load",
+            "4",
+            "Unknown",
+            "None"
+          ]
+        ]
+      },
+      "expressions": {
+        "727": {
+          "pc": "0x5006bd94",
+          "expression": "Some(Load { address: Unknown, width: 4, signed: false })"
+        }
+      }
+    }
+  ],
+  "actual_slots": [
+    {
+      "slot": -532,
+      "definition": {
+        "pc": "0x5006bd74",
+        "owner": [
+          "0x5006bbca",
+          "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
+        ],
+        "inline_context": [
+          [
+            "oer_esp32s31_ieee80211_driver::rx::receive::receive::<oer_esp32s31_hal::ieee80211::mac::WifiMacHal, oer_esp32s31_hal::ieee80211::dma::rx_dma::WifiRxDmaEngine, oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters, oer_firmware_apps_w1::irq::ImageRoutes, oer_firmware_apps_w1::irq::ImageDoorbell, oer_embassy_time::EmbassyClock, oer_esp32s31_ieee80211_driver::rx::upper::QueueSink<oer_embassy_time::EmbassyClock, 32, 1664>, oer_esp32s31_ieee80211_driver::rx::sink::CountingAdmission, 32, 1664, 1668, 32, oer_esp32s31_hal::ieee80211::dma::space::ChipDma, oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}::{closure#0}>::{closure#0}",
+            "oer_firmware_apps_w1::measure::timed::<oer_esp32s31_ieee80211_driver::rx::receive::receive<oer_esp32s31_hal::ieee80211::mac::WifiMacHal, oer_esp32s31_hal::ieee80211::dma::rx_dma::WifiRxDmaEngine, oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters, oer_firmware_apps_w1::irq::ImageRoutes, oer_firmware_apps_w1::irq::ImageDoorbell, oer_embassy_time::EmbassyClock, oer_esp32s31_ieee80211_driver::rx::upper::QueueSink<oer_embassy_time::EmbassyClock, 32, 1664>, oer_esp32s31_ieee80211_driver::rx::sink::CountingAdmission, 32, 1664, 1668, 32, oer_esp32s31_hal::ieee80211::dma::space::ChipDma, oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}::{closure#0}>::{closure#0}, oer_firmware_apps_w1::measure::take_mac_latch>::{closure#0}::{closure#0}",
+            "<core::future::poll_fn::PollFn<oer_firmware_apps_w1::measure::timed<oer_esp32s31_ieee80211_driver::rx::receive::receive<oer_esp32s31_hal::ieee80211::mac::WifiMacHal, oer_esp32s31_hal::ieee80211::dma::rx_dma::WifiRxDmaEngine, oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters, oer_firmware_apps_w1::irq::ImageRoutes, oer_firmware_apps_w1::irq::ImageDoorbell, oer_embassy_time::EmbassyClock, oer_esp32s31_ieee80211_driver::rx::upper::QueueSink<oer_embassy_time::EmbassyClock, 32, 1664>, oer_esp32s31_ieee80211_driver::rx::sink::CountingAdmission, 32, 1664, 1668, 32, oer_esp32s31_hal::ieee80211::dma::space::ChipDma, oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}::{closure#0}>::{closure#0}, oer_firmware_apps_w1::measure::take_mac_latch>::{closure#0}::{closure#0}> as core::future::future::Future>::poll",
+            "oer_firmware_apps_w1::measure::timed::<oer_esp32s31_ieee80211_driver::rx::receive::receive<oer_esp32s31_hal::ieee80211::mac::WifiMacHal, oer_esp32s31_hal::ieee80211::dma::rx_dma::WifiRxDmaEngine, oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters, oer_firmware_apps_w1::irq::ImageRoutes, oer_firmware_apps_w1::irq::ImageDoorbell, oer_embassy_time::EmbassyClock, oer_esp32s31_ieee80211_driver::rx::upper::QueueSink<oer_embassy_time::EmbassyClock, 32, 1664>, oer_esp32s31_ieee80211_driver::rx::sink::CountingAdmission, 32, 1664, 1668, 32, oer_esp32s31_hal::ieee80211::dma::space::ChipDma, oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}::{closure#0}>::{closure#0}, oer_firmware_apps_w1::measure::take_mac_latch>::{closure#0}",
+            "oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}",
+            "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
+          ]
+        ],
+        "facts": {
+          "instruction": [
+            [
+              "sw a0, 44(sp)"
+            ]
+          ],
+          "memory": [
+            [
+              "Store",
+              "4",
+              "EntryStack { offset: -532 }",
+              "Some(Unknown)"
+            ]
+          ],
+          "write-event": [
+            [
+              "FunctionWrite { origin: WriteOrigin { function: 1342618570, tail: None }, site: 1342618996, address: Base { base: Stack { function: 1342618570, offset: -532 }, offset: 0 }, value: Base { base: Unknown, offset: 0 }, width: 4, occurrence: May, proof: ClosedGraph }"
+            ]
+          ],
+          "write-barrier": [
+            [
+              "WriteBarrier { origin: WriteOrigin { function: 1342618570, tail: None }, site: 1342618996, kind: UnknownValue }"
+            ]
+          ]
+        },
+        "expressions": {}
+      },
+      "reload": {
+        "pc": "0x5006d1c2",
+        "owner": [
+          "0x5006bbca",
+          "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
+        ],
+        "inline_context": [
+          [
+            "core::sync::atomic::atomic_store::<u32>",
+            "<core::sync::atomic::Atomic<u32>>::store",
+            "<oer_esp32s31_ieee80211_driver::irq::WifiIrqRequests>::clear",
+            "<oer_esp32s31_ieee80211_driver::irq::WifiIrqLineParts<oer_esp32s31_ieee80211_mac::irq::epoch::ActiveEpoch<oer_esp32s31_ieee80211_mac::irq::epoch::Moderated>>>::install",
+            "oer_esp32s31_ieee80211_driver::rx::receive::receive::<oer_esp32s31_hal::ieee80211::mac::WifiMacHal, oer_esp32s31_hal::ieee80211::dma::rx_dma::WifiRxDmaEngine, oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters, oer_firmware_apps_w1::irq::ImageRoutes, oer_firmware_apps_w1::irq::ImageDoorbell, oer_embassy_time::EmbassyClock, oer_esp32s31_ieee80211_driver::rx::upper::QueueSink<oer_embassy_time::EmbassyClock, 32, 1664>, oer_esp32s31_ieee80211_driver::rx::sink::CountingAdmission, 32, 1664, 1668, 32, oer_esp32s31_hal::ieee80211::dma::space::ChipDma, oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}::{closure#0}>::{closure#0}",
+            "oer_firmware_apps_w1::measure::timed::<oer_esp32s31_ieee80211_driver::rx::receive::receive<oer_esp32s31_hal::ieee80211::mac::WifiMacHal, oer_esp32s31_hal::ieee80211::dma::rx_dma::WifiRxDmaEngine, oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters, oer_firmware_apps_w1::irq::ImageRoutes, oer_firmware_apps_w1::irq::ImageDoorbell, oer_embassy_time::EmbassyClock, oer_esp32s31_ieee80211_driver::rx::upper::QueueSink<oer_embassy_time::EmbassyClock, 32, 1664>, oer_esp32s31_ieee80211_driver::rx::sink::CountingAdmission, 32, 1664, 1668, 32, oer_esp32s31_hal::ieee80211::dma::space::ChipDma, oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}::{closure#0}>::{closure#0}, oer_firmware_apps_w1::measure::take_mac_latch>::{closure#0}::{closure#0}",
+            "<core::future::poll_fn::PollFn<oer_firmware_apps_w1::measure::timed<oer_esp32s31_ieee80211_driver::rx::receive::receive<oer_esp32s31_hal::ieee80211::mac::WifiMacHal, oer_esp32s31_hal::ieee80211::dma::rx_dma::WifiRxDmaEngine, oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters, oer_firmware_apps_w1::irq::ImageRoutes, oer_firmware_apps_w1::irq::ImageDoorbell, oer_embassy_time::EmbassyClock, oer_esp32s31_ieee80211_driver::rx::upper::QueueSink<oer_embassy_time::EmbassyClock, 32, 1664>, oer_esp32s31_ieee80211_driver::rx::sink::CountingAdmission, 32, 1664, 1668, 32, oer_esp32s31_hal::ieee80211::dma::space::ChipDma, oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}::{closure#0}>::{closure#0}, oer_firmware_apps_w1::measure::take_mac_latch>::{closure#0}::{closure#0}> as core::future::future::Future>::poll",
+            "oer_firmware_apps_w1::measure::timed::<oer_esp32s31_ieee80211_driver::rx::receive::receive<oer_esp32s31_hal::ieee80211::mac::WifiMacHal, oer_esp32s31_hal::ieee80211::dma::rx_dma::WifiRxDmaEngine, oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters, oer_firmware_apps_w1::irq::ImageRoutes, oer_firmware_apps_w1::irq::ImageDoorbell, oer_embassy_time::EmbassyClock, oer_esp32s31_ieee80211_driver::rx::upper::QueueSink<oer_embassy_time::EmbassyClock, 32, 1664>, oer_esp32s31_ieee80211_driver::rx::sink::CountingAdmission, 32, 1664, 1668, 32, oer_esp32s31_hal::ieee80211::dma::space::ChipDma, oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}::{closure#0}>::{closure#0}, oer_firmware_apps_w1::measure::take_mac_latch>::{closure#0}",
+            "oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}",
+            "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
+          ]
+        ],
+        "facts": {
+          "instruction": [
+            [
+              "lw a2, 44(sp)"
+            ]
+          ],
+          "register-write": [
+            [
+              "12",
+              "Expression { id: 2790 }"
+            ]
+          ],
+          "memory": [
+            [
+              "Load",
+              "4",
+              "EntryStack { offset: -532 }",
+              "None"
+            ]
+          ],
+          "stack-reload": [
+            [
+              "StackReload { origin: WriteOrigin { function: 1342618570, tail: None }, site: 1342624194, slot: -532, width: 4, value: Base { base: Unknown, offset: 0 } }"
+            ]
+          ]
+        },
+        "expressions": {
+          "2790": {
+            "pc": "0x5006d1c2",
+            "expression": "Some(Load { address: EntryStack { offset: -532 }, width: 4, signed: false })"
+          }
+        }
+      },
+      "all_same_slot_accesses": [
+        [
+          "0x5006bd74",
+          "Store",
+          "4",
+          "EntryStack { offset: -532 }",
+          "Some(Unknown)"
+        ],
+        [
+          "0x5006c15e",
+          "Store",
+          "4",
+          "EntryStack { offset: -532 }",
+          "Some(Unknown)"
+        ],
+        [
+          "0x5006ccca",
+          "Store",
+          "4",
+          "EntryStack { offset: -532 }",
+          "Some(Unknown)"
+        ],
+        [
+          "0x5006ce66",
+          "Load",
+          "4",
+          "EntryStack { offset: -532 }",
+          "None"
+        ],
+        [
+          "0x5006d1c2",
+          "Load",
+          "4",
+          "EntryStack { offset: -532 }",
+          "None"
+        ]
+      ],
+      "status": "unknown: definition contains no captured pointer; same-slot accesses are not an alias or reaching-definition proof"
+    },
+    {
+      "slot": -556,
+      "definition": {
+        "pc": "0x5006c368",
+        "owner": [
+          "0x5006bbca",
+          "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
+        ],
+        "inline_context": [
+          [
+            "<oer_esp32s31_hal::ieee80211::dma::rx_ring::RxRingStopped<32>>::prepare_inner::<oer_esp32s31_hal::ieee80211::dma::rx_dma::WifiRxDmaEngine, <oer_esp32s31_hal::ieee80211::dma::rx_storage::RxDmaStorage<32, 1664, 1668>>::prepare_ring_bound<oer_esp32s31_hal::ieee80211::dma::rx_dma::WifiRxDmaEngine>::{closure#1}, <oer_esp32s31_hal::ieee80211::dma::rx_storage::RxDmaStorage<32, 1664, 1668>>::prepare_ring_bound<oer_esp32s31_hal::ieee80211::dma::rx_dma::WifiRxDmaEngine>::{closure#2}>",
+            "<oer_esp32s31_hal::ieee80211::dma::rx_storage::RxDmaStorage<32, 1664, 1668>>::prepare_ring_bound::<oer_esp32s31_hal::ieee80211::dma::rx_dma::WifiRxDmaEngine>",
+            "<oer_esp32s31_hal::ieee80211::dma::rx_storage::PlacedRxDma<32, 1664, 1668>>::prepare_ring::<oer_esp32s31_hal::ieee80211::dma::rx_dma::WifiRxDmaEngine>",
+            "<oer_esp32s31_ieee80211_driver::rx::frontier::state::ReceiveFrontier<32, 1664>>::prepare_initial::<oer_esp32s31_hal::ieee80211::dma::rx_dma::WifiRxDmaEngine, 1668, oer_esp32s31_hal::ieee80211::dma::space::ChipDma>",
+            "oer_esp32s31_ieee80211_driver::rx::receive::receive::<oer_esp32s31_hal::ieee80211::mac::WifiMacHal, oer_esp32s31_hal::ieee80211::dma::rx_dma::WifiRxDmaEngine, oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters, oer_firmware_apps_w1::irq::ImageRoutes, oer_firmware_apps_w1::irq::ImageDoorbell, oer_embassy_time::EmbassyClock, oer_esp32s31_ieee80211_driver::rx::upper::QueueSink<oer_embassy_time::EmbassyClock, 32, 1664>, oer_esp32s31_ieee80211_driver::rx::sink::CountingAdmission, 32, 1664, 1668, 32, oer_esp32s31_hal::ieee80211::dma::space::ChipDma, oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}::{closure#0}>::{closure#0}",
+            "oer_firmware_apps_w1::measure::timed::<oer_esp32s31_ieee80211_driver::rx::receive::receive<oer_esp32s31_hal::ieee80211::mac::WifiMacHal, oer_esp32s31_hal::ieee80211::dma::rx_dma::WifiRxDmaEngine, oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters, oer_firmware_apps_w1::irq::ImageRoutes, oer_firmware_apps_w1::irq::ImageDoorbell, oer_embassy_time::EmbassyClock, oer_esp32s31_ieee80211_driver::rx::upper::QueueSink<oer_embassy_time::EmbassyClock, 32, 1664>, oer_esp32s31_ieee80211_driver::rx::sink::CountingAdmission, 32, 1664, 1668, 32, oer_esp32s31_hal::ieee80211::dma::space::ChipDma, oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}::{closure#0}>::{closure#0}, oer_firmware_apps_w1::measure::take_mac_latch>::{closure#0}::{closure#0}",
+            "<core::future::poll_fn::PollFn<oer_firmware_apps_w1::measure::timed<oer_esp32s31_ieee80211_driver::rx::receive::receive<oer_esp32s31_hal::ieee80211::mac::WifiMacHal, oer_esp32s31_hal::ieee80211::dma::rx_dma::WifiRxDmaEngine, oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters, oer_firmware_apps_w1::irq::ImageRoutes, oer_firmware_apps_w1::irq::ImageDoorbell, oer_embassy_time::EmbassyClock, oer_esp32s31_ieee80211_driver::rx::upper::QueueSink<oer_embassy_time::EmbassyClock, 32, 1664>, oer_esp32s31_ieee80211_driver::rx::sink::CountingAdmission, 32, 1664, 1668, 32, oer_esp32s31_hal::ieee80211::dma::space::ChipDma, oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}::{closure#0}>::{closure#0}, oer_firmware_apps_w1::measure::take_mac_latch>::{closure#0}::{closure#0}> as core::future::future::Future>::poll",
+            "oer_firmware_apps_w1::measure::timed::<oer_esp32s31_ieee80211_driver::rx::receive::receive<oer_esp32s31_hal::ieee80211::mac::WifiMacHal, oer_esp32s31_hal::ieee80211::dma::rx_dma::WifiRxDmaEngine, oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters, oer_firmware_apps_w1::irq::ImageRoutes, oer_firmware_apps_w1::irq::ImageDoorbell, oer_embassy_time::EmbassyClock, oer_esp32s31_ieee80211_driver::rx::upper::QueueSink<oer_embassy_time::EmbassyClock, 32, 1664>, oer_esp32s31_ieee80211_driver::rx::sink::CountingAdmission, 32, 1664, 1668, 32, oer_esp32s31_hal::ieee80211::dma::space::ChipDma, oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}::{closure#0}>::{closure#0}, oer_firmware_apps_w1::measure::take_mac_latch>::{closure#0}",
+            "oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}",
+            "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
+          ]
+        ],
+        "facts": {
+          "instruction": [
+            [
+              "sw ra, 20(sp)"
+            ]
+          ],
+          "memory": [
+            [
+              "Store",
+              "4",
+              "EntryStack { offset: -556 }",
+              "Some(Unknown)"
+            ]
+          ],
+          "write-event": [
+            [
+              "FunctionWrite { origin: WriteOrigin { function: 1342618570, tail: None }, site: 1342620520, address: Base { base: Stack { function: 1342618570, offset: -556 }, offset: 0 }, value: Base { base: Unknown, offset: 0 }, width: 4, occurrence: May, proof: ClosedGraph }"
+            ]
+          ],
+          "write-barrier": [
+            [
+              "WriteBarrier { origin: WriteOrigin { function: 1342618570, tail: None }, site: 1342620520, kind: UnknownValue }"
+            ]
+          ]
+        },
+        "expressions": {}
+      },
+      "reload": {
+        "pc": "0x5006d1c0",
+        "owner": [
+          "0x5006bbca",
+          "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
+        ],
+        "inline_context": [
+          [
+            "core::sync::atomic::atomic_store::<u32>",
+            "<core::sync::atomic::Atomic<u32>>::store",
+            "<oer_esp32s31_ieee80211_driver::irq::WifiIrqRequests>::clear",
+            "<oer_esp32s31_ieee80211_driver::irq::WifiIrqLineParts<oer_esp32s31_ieee80211_mac::irq::epoch::ActiveEpoch<oer_esp32s31_ieee80211_mac::irq::epoch::Moderated>>>::install",
+            "oer_esp32s31_ieee80211_driver::rx::receive::receive::<oer_esp32s31_hal::ieee80211::mac::WifiMacHal, oer_esp32s31_hal::ieee80211::dma::rx_dma::WifiRxDmaEngine, oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters, oer_firmware_apps_w1::irq::ImageRoutes, oer_firmware_apps_w1::irq::ImageDoorbell, oer_embassy_time::EmbassyClock, oer_esp32s31_ieee80211_driver::rx::upper::QueueSink<oer_embassy_time::EmbassyClock, 32, 1664>, oer_esp32s31_ieee80211_driver::rx::sink::CountingAdmission, 32, 1664, 1668, 32, oer_esp32s31_hal::ieee80211::dma::space::ChipDma, oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}::{closure#0}>::{closure#0}",
+            "oer_firmware_apps_w1::measure::timed::<oer_esp32s31_ieee80211_driver::rx::receive::receive<oer_esp32s31_hal::ieee80211::mac::WifiMacHal, oer_esp32s31_hal::ieee80211::dma::rx_dma::WifiRxDmaEngine, oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters, oer_firmware_apps_w1::irq::ImageRoutes, oer_firmware_apps_w1::irq::ImageDoorbell, oer_embassy_time::EmbassyClock, oer_esp32s31_ieee80211_driver::rx::upper::QueueSink<oer_embassy_time::EmbassyClock, 32, 1664>, oer_esp32s31_ieee80211_driver::rx::sink::CountingAdmission, 32, 1664, 1668, 32, oer_esp32s31_hal::ieee80211::dma::space::ChipDma, oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}::{closure#0}>::{closure#0}, oer_firmware_apps_w1::measure::take_mac_latch>::{closure#0}::{closure#0}",
+            "<core::future::poll_fn::PollFn<oer_firmware_apps_w1::measure::timed<oer_esp32s31_ieee80211_driver::rx::receive::receive<oer_esp32s31_hal::ieee80211::mac::WifiMacHal, oer_esp32s31_hal::ieee80211::dma::rx_dma::WifiRxDmaEngine, oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters, oer_firmware_apps_w1::irq::ImageRoutes, oer_firmware_apps_w1::irq::ImageDoorbell, oer_embassy_time::EmbassyClock, oer_esp32s31_ieee80211_driver::rx::upper::QueueSink<oer_embassy_time::EmbassyClock, 32, 1664>, oer_esp32s31_ieee80211_driver::rx::sink::CountingAdmission, 32, 1664, 1668, 32, oer_esp32s31_hal::ieee80211::dma::space::ChipDma, oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}::{closure#0}>::{closure#0}, oer_firmware_apps_w1::measure::take_mac_latch>::{closure#0}::{closure#0}> as core::future::future::Future>::poll",
+            "oer_firmware_apps_w1::measure::timed::<oer_esp32s31_ieee80211_driver::rx::receive::receive<oer_esp32s31_hal::ieee80211::mac::WifiMacHal, oer_esp32s31_hal::ieee80211::dma::rx_dma::WifiRxDmaEngine, oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters, oer_firmware_apps_w1::irq::ImageRoutes, oer_firmware_apps_w1::irq::ImageDoorbell, oer_embassy_time::EmbassyClock, oer_esp32s31_ieee80211_driver::rx::upper::QueueSink<oer_embassy_time::EmbassyClock, 32, 1664>, oer_esp32s31_ieee80211_driver::rx::sink::CountingAdmission, 32, 1664, 1668, 32, oer_esp32s31_hal::ieee80211::dma::space::ChipDma, oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}::{closure#0}>::{closure#0}, oer_firmware_apps_w1::measure::take_mac_latch>::{closure#0}",
+            "oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}",
+            "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
+          ]
+        ],
+        "facts": {
+          "instruction": [
+            [
+              "lw a5, 20(sp)"
+            ]
+          ],
+          "register-write": [
+            [
+              "15",
+              "Expression { id: 2789 }"
+            ]
+          ],
+          "memory": [
+            [
+              "Load",
+              "4",
+              "EntryStack { offset: -556 }",
+              "None"
+            ]
+          ],
+          "stack-reload": [
+            [
+              "StackReload { origin: WriteOrigin { function: 1342618570, tail: None }, site: 1342624192, slot: -556, width: 4, value: Base { base: Unknown, offset: 0 } }"
+            ]
+          ]
+        },
+        "expressions": {
+          "2789": {
+            "pc": "0x5006d1c0",
+            "expression": "Some(Load { address: EntryStack { offset: -556 }, width: 4, signed: false })"
+          }
+        }
+      },
+      "all_same_slot_accesses": [
+        [
+          "0x5006c368",
+          "Store",
+          "4",
+          "EntryStack { offset: -556 }",
+          "Some(Unknown)"
+        ],
+        [
+          "0x5006d1c0",
+          "Load",
+          "4",
+          "EntryStack { offset: -556 }",
+          "None"
+        ]
+      ],
+      "status": "unknown: definition contains no captured pointer; same-slot accesses are not an alias or reaching-definition proof"
+    },
+    {
+      "slot": -524,
+      "definition": {
+        "pc": "0x5006bd98",
+        "owner": [
+          "0x5006bbca",
+          "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
+        ],
+        "inline_context": [
+          [
+            "oer_esp32s31_ieee80211_driver::rx::receive::receive::<oer_esp32s31_hal::ieee80211::mac::WifiMacHal, oer_esp32s31_hal::ieee80211::dma::rx_dma::WifiRxDmaEngine, oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters, oer_firmware_apps_w1::irq::ImageRoutes, oer_firmware_apps_w1::irq::ImageDoorbell, oer_embassy_time::EmbassyClock, oer_esp32s31_ieee80211_driver::rx::upper::QueueSink<oer_embassy_time::EmbassyClock, 32, 1664>, oer_esp32s31_ieee80211_driver::rx::sink::CountingAdmission, 32, 1664, 1668, 32, oer_esp32s31_hal::ieee80211::dma::space::ChipDma, oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}::{closure#0}>::{closure#0}",
+            "oer_firmware_apps_w1::measure::timed::<oer_esp32s31_ieee80211_driver::rx::receive::receive<oer_esp32s31_hal::ieee80211::mac::WifiMacHal, oer_esp32s31_hal::ieee80211::dma::rx_dma::WifiRxDmaEngine, oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters, oer_firmware_apps_w1::irq::ImageRoutes, oer_firmware_apps_w1::irq::ImageDoorbell, oer_embassy_time::EmbassyClock, oer_esp32s31_ieee80211_driver::rx::upper::QueueSink<oer_embassy_time::EmbassyClock, 32, 1664>, oer_esp32s31_ieee80211_driver::rx::sink::CountingAdmission, 32, 1664, 1668, 32, oer_esp32s31_hal::ieee80211::dma::space::ChipDma, oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}::{closure#0}>::{closure#0}, oer_firmware_apps_w1::measure::take_mac_latch>::{closure#0}::{closure#0}",
+            "<core::future::poll_fn::PollFn<oer_firmware_apps_w1::measure::timed<oer_esp32s31_ieee80211_driver::rx::receive::receive<oer_esp32s31_hal::ieee80211::mac::WifiMacHal, oer_esp32s31_hal::ieee80211::dma::rx_dma::WifiRxDmaEngine, oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters, oer_firmware_apps_w1::irq::ImageRoutes, oer_firmware_apps_w1::irq::ImageDoorbell, oer_embassy_time::EmbassyClock, oer_esp32s31_ieee80211_driver::rx::upper::QueueSink<oer_embassy_time::EmbassyClock, 32, 1664>, oer_esp32s31_ieee80211_driver::rx::sink::CountingAdmission, 32, 1664, 1668, 32, oer_esp32s31_hal::ieee80211::dma::space::ChipDma, oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}::{closure#0}>::{closure#0}, oer_firmware_apps_w1::measure::take_mac_latch>::{closure#0}::{closure#0}> as core::future::future::Future>::poll",
+            "oer_firmware_apps_w1::measure::timed::<oer_esp32s31_ieee80211_driver::rx::receive::receive<oer_esp32s31_hal::ieee80211::mac::WifiMacHal, oer_esp32s31_hal::ieee80211::dma::rx_dma::WifiRxDmaEngine, oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters, oer_firmware_apps_w1::irq::ImageRoutes, oer_firmware_apps_w1::irq::ImageDoorbell, oer_embassy_time::EmbassyClock, oer_esp32s31_ieee80211_driver::rx::upper::QueueSink<oer_embassy_time::EmbassyClock, 32, 1664>, oer_esp32s31_ieee80211_driver::rx::sink::CountingAdmission, 32, 1664, 1668, 32, oer_esp32s31_hal::ieee80211::dma::space::ChipDma, oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}::{closure#0}>::{closure#0}, oer_firmware_apps_w1::measure::take_mac_latch>::{closure#0}",
+            "oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}",
+            "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
+          ]
+        ],
+        "facts": {
+          "instruction": [
+            [
+              "sw a0, 52(sp)"
+            ]
+          ],
+          "memory": [
+            [
+              "Store",
+              "4",
+              "EntryStack { offset: -524 }",
+              "Some(Unknown)"
+            ]
+          ],
+          "write-event": [
+            [
+              "FunctionWrite { origin: WriteOrigin { function: 1342618570, tail: None }, site: 1342619032, address: Base { base: Stack { function: 1342618570, offset: -524 }, offset: 0 }, value: Base { base: Unknown, offset: 0 }, width: 4, occurrence: May, proof: ClosedGraph }"
+            ]
+          ],
+          "write-barrier": [
+            [
+              "WriteBarrier { origin: WriteOrigin { function: 1342618570, tail: None }, site: 1342619032, kind: UnknownValue }"
+            ]
+          ]
+        },
+        "expressions": {}
+      },
+      "reload": {
+        "pc": "0x5006d1aa",
+        "owner": [
+          "0x5006bbca",
+          "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
+        ],
+        "inline_context": [
+          [
+            "core::ptr::write_volatile::<u32>",
+            "<vcell::VolatileCell<u32>>::set",
+            "<oer_esp32s31_pac_raw::generic::Reg<oer_esp32s31_pac_raw::wifi_mac_power_interrupt::enable::EnableSpec>>::modify::<<oer_esp32s31_pac::wifi::mac::interrupt::MacInterruptSetup as oer_esp32s31_pac::wifi::mac::interrupt::MacInterruptActivationBackend>::publish_power_events::{closure#0}>",
+            "<oer_esp32s31_pac::wifi::mac::interrupt::MacInterruptSetup as oer_esp32s31_pac::wifi::mac::interrupt::MacInterruptActivationBackend>::publish_power_events",
+            "oer_esp32s31_pac::wifi::mac::interrupt::activate_mac_interrupt_epoch::<oer_esp32s31_pac::wifi::mac::interrupt::MacInterruptSetup>",
+            "<oer_esp32s31_pac::wifi::mac::interrupt::MacInterruptSetup>::activate",
+            "<oer_esp32s31_hal::owner::MacInterruptSetup>::activate",
+            "<oer_esp32s31_ieee80211_mac::irq::epoch::InactiveEpoch>::activate_with_policy::<oer_esp32s31_ieee80211_mac::irq::epoch::Moderated>",
+            "<oer_esp32s31_ieee80211_mac::irq::epoch::InactiveEpoch>::activate_rx_moderated",
+            "oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}::{closure#0}",
+            "oer_esp32s31_ieee80211_driver::rx::receive::receive::<oer_esp32s31_hal::ieee80211::mac::WifiMacHal, oer_esp32s31_hal::ieee80211::dma::rx_dma::WifiRxDmaEngine, oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters, oer_firmware_apps_w1::irq::ImageRoutes, oer_firmware_apps_w1::irq::ImageDoorbell, oer_embassy_time::EmbassyClock, oer_esp32s31_ieee80211_driver::rx::upper::QueueSink<oer_embassy_time::EmbassyClock, 32, 1664>, oer_esp32s31_ieee80211_driver::rx::sink::CountingAdmission, 32, 1664, 1668, 32, oer_esp32s31_hal::ieee80211::dma::space::ChipDma, oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}::{closure#0}>::{closure#0}",
+            "oer_firmware_apps_w1::measure::timed::<oer_esp32s31_ieee80211_driver::rx::receive::receive<oer_esp32s31_hal::ieee80211::mac::WifiMacHal, oer_esp32s31_hal::ieee80211::dma::rx_dma::WifiRxDmaEngine, oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters, oer_firmware_apps_w1::irq::ImageRoutes, oer_firmware_apps_w1::irq::ImageDoorbell, oer_embassy_time::EmbassyClock, oer_esp32s31_ieee80211_driver::rx::upper::QueueSink<oer_embassy_time::EmbassyClock, 32, 1664>, oer_esp32s31_ieee80211_driver::rx::sink::CountingAdmission, 32, 1664, 1668, 32, oer_esp32s31_hal::ieee80211::dma::space::ChipDma, oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}::{closure#0}>::{closure#0}, oer_firmware_apps_w1::measure::take_mac_latch>::{closure#0}::{closure#0}",
+            "<core::future::poll_fn::PollFn<oer_firmware_apps_w1::measure::timed<oer_esp32s31_ieee80211_driver::rx::receive::receive<oer_esp32s31_hal::ieee80211::mac::WifiMacHal, oer_esp32s31_hal::ieee80211::dma::rx_dma::WifiRxDmaEngine, oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters, oer_firmware_apps_w1::irq::ImageRoutes, oer_firmware_apps_w1::irq::ImageDoorbell, oer_embassy_time::EmbassyClock, oer_esp32s31_ieee80211_driver::rx::upper::QueueSink<oer_embassy_time::EmbassyClock, 32, 1664>, oer_esp32s31_ieee80211_driver::rx::sink::CountingAdmission, 32, 1664, 1668, 32, oer_esp32s31_hal::ieee80211::dma::space::ChipDma, oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}::{closure#0}>::{closure#0}, oer_firmware_apps_w1::measure::take_mac_latch>::{closure#0}::{closure#0}> as core::future::future::Future>::poll",
+            "oer_firmware_apps_w1::measure::timed::<oer_esp32s31_ieee80211_driver::rx::receive::receive<oer_esp32s31_hal::ieee80211::mac::WifiMacHal, oer_esp32s31_hal::ieee80211::dma::rx_dma::WifiRxDmaEngine, oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters, oer_firmware_apps_w1::irq::ImageRoutes, oer_firmware_apps_w1::irq::ImageDoorbell, oer_embassy_time::EmbassyClock, oer_esp32s31_ieee80211_driver::rx::upper::QueueSink<oer_embassy_time::EmbassyClock, 32, 1664>, oer_esp32s31_ieee80211_driver::rx::sink::CountingAdmission, 32, 1664, 1668, 32, oer_esp32s31_hal::ieee80211::dma::space::ChipDma, oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}::{closure#0}>::{closure#0}, oer_firmware_apps_w1::measure::take_mac_latch>::{closure#0}",
+            "oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}",
+            "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
+          ]
+        ],
+        "facts": {
+          "instruction": [
+            [
+              "lw s1, 52(sp)"
+            ]
+          ],
+          "register-write": [
+            [
+              "9",
+              "Expression { id: 2785 }"
+            ]
+          ],
+          "memory": [
+            [
+              "Load",
+              "4",
+              "EntryStack { offset: -524 }",
+              "None"
+            ]
+          ],
+          "stack-reload": [
+            [
+              "StackReload { origin: WriteOrigin { function: 1342618570, tail: None }, site: 1342624170, slot: -524, width: 4, value: Base { base: Unknown, offset: 0 } }"
+            ]
+          ]
+        },
+        "expressions": {
+          "2785": {
+            "pc": "0x5006d1aa",
+            "expression": "Some(Load { address: EntryStack { offset: -524 }, width: 4, signed: false })"
+          }
+        }
+      },
+      "all_same_slot_accesses": [
+        [
+          "0x5006bd98",
+          "Store",
+          "4",
+          "EntryStack { offset: -524 }",
+          "Some(Unknown)"
+        ],
+        [
+          "0x5006c126",
+          "Store",
+          "4",
+          "EntryStack { offset: -524 }",
+          "Some(Unknown)"
+        ],
+        [
+          "0x5006c1de",
+          "Store",
+          "4",
+          "EntryStack { offset: -524 }",
+          "Some(Unknown)"
+        ],
+        [
+          "0x5006d1aa",
+          "Load",
+          "4",
+          "EntryStack { offset: -524 }",
+          "None"
+        ],
+        [
+          "0x5006d3e4",
+          "Store",
+          "4",
+          "EntryStack { offset: -524 }",
+          "Some(Unknown)"
+        ]
+      ],
+      "status": "unknown: definition contains no captured pointer; same-slot accesses are not an alias or reaching-definition proof"
+    }
+  ],
+  "line_field_and_publication": [
+    {
+      "pc": "0x5006d1c4",
+      "owner": [
+        "0x5006bbca",
+        "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
+      ],
+      "inline_context": [
+        [
+          "<core::mem::maybe_uninit::MaybeUninit<oer_esp32s31_ieee80211_driver::irq::WifiIrqLine<oer_esp32s31_ieee80211_mac::irq::epoch::ActiveEpoch<oer_esp32s31_ieee80211_mac::irq::epoch::Moderated>>>>::write",
+          "<oer_esp32s31_ieee80211_driver::irq::WifiIrqLineParts<oer_esp32s31_ieee80211_mac::irq::epoch::ActiveEpoch<oer_esp32s31_ieee80211_mac::irq::epoch::Moderated>>>::install",
+          "oer_esp32s31_ieee80211_driver::rx::receive::receive::<oer_esp32s31_hal::ieee80211::mac::WifiMacHal, oer_esp32s31_hal::ieee80211::dma::rx_dma::WifiRxDmaEngine, oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters, oer_firmware_apps_w1::irq::ImageRoutes, oer_firmware_apps_w1::irq::ImageDoorbell, oer_embassy_time::EmbassyClock, oer_esp32s31_ieee80211_driver::rx::upper::QueueSink<oer_embassy_time::EmbassyClock, 32, 1664>, oer_esp32s31_ieee80211_driver::rx::sink::CountingAdmission, 32, 1664, 1668, 32, oer_esp32s31_hal::ieee80211::dma::space::ChipDma, oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}::{closure#0}>::{closure#0}",
+          "oer_firmware_apps_w1::measure::timed::<oer_esp32s31_ieee80211_driver::rx::receive::receive<oer_esp32s31_hal::ieee80211::mac::WifiMacHal, oer_esp32s31_hal::ieee80211::dma::rx_dma::WifiRxDmaEngine, oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters, oer_firmware_apps_w1::irq::ImageRoutes, oer_firmware_apps_w1::irq::ImageDoorbell, oer_embassy_time::EmbassyClock, oer_esp32s31_ieee80211_driver::rx::upper::QueueSink<oer_embassy_time::EmbassyClock, 32, 1664>, oer_esp32s31_ieee80211_driver::rx::sink::CountingAdmission, 32, 1664, 1668, 32, oer_esp32s31_hal::ieee80211::dma::space::ChipDma, oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}::{closure#0}>::{closure#0}, oer_firmware_apps_w1::measure::take_mac_latch>::{closure#0}::{closure#0}",
+          "<core::future::poll_fn::PollFn<oer_firmware_apps_w1::measure::timed<oer_esp32s31_ieee80211_driver::rx::receive::receive<oer_esp32s31_hal::ieee80211::mac::WifiMacHal, oer_esp32s31_hal::ieee80211::dma::rx_dma::WifiRxDmaEngine, oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters, oer_firmware_apps_w1::irq::ImageRoutes, oer_firmware_apps_w1::irq::ImageDoorbell, oer_embassy_time::EmbassyClock, oer_esp32s31_ieee80211_driver::rx::upper::QueueSink<oer_embassy_time::EmbassyClock, 32, 1664>, oer_esp32s31_ieee80211_driver::rx::sink::CountingAdmission, 32, 1664, 1668, 32, oer_esp32s31_hal::ieee80211::dma::space::ChipDma, oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}::{closure#0}>::{closure#0}, oer_firmware_apps_w1::measure::take_mac_latch>::{closure#0}::{closure#0}> as core::future::future::Future>::poll",
+          "oer_firmware_apps_w1::measure::timed::<oer_esp32s31_ieee80211_driver::rx::receive::receive<oer_esp32s31_hal::ieee80211::mac::WifiMacHal, oer_esp32s31_hal::ieee80211::dma::rx_dma::WifiRxDmaEngine, oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters, oer_firmware_apps_w1::irq::ImageRoutes, oer_firmware_apps_w1::irq::ImageDoorbell, oer_embassy_time::EmbassyClock, oer_esp32s31_ieee80211_driver::rx::upper::QueueSink<oer_embassy_time::EmbassyClock, 32, 1664>, oer_esp32s31_ieee80211_driver::rx::sink::CountingAdmission, 32, 1664, 1668, 32, oer_esp32s31_hal::ieee80211::dma::space::ChipDma, oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}::{closure#0}>::{closure#0}, oer_firmware_apps_w1::measure::take_mac_latch>::{closure#0}",
+          "oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}",
+          "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
+        ]
+      ],
+      "facts": {
+        "instruction": [
+          [
+            "sw a2, 0(a5)"
+          ]
+        ],
+        "memory": [
+          [
+            "Store",
+            "4",
+            "Expression { id: 2789 }",
+            "Some(Expression { id: 2791 })"
+          ]
+        ],
+        "write-event": [
+          [
+            "FunctionWrite { origin: WriteOrigin { function: 1342618570, tail: None }, site: 1342624196, address: Base { base: Unknown, offset: 0 }, value: Base { base: Unknown, offset: 0 }, width: 4, occurrence: May, proof: ClosedGraph }"
+          ]
+        ],
+        "write-barrier": [
+          [
+            "WriteBarrier { origin: WriteOrigin { function: 1342618570, tail: None }, site: 1342624196, kind: UnknownStore }"
+          ]
+        ]
+      },
+      "expressions": {
+        "2791": {
+          "pc": "0x5006d1c4",
+          "expression": "Some(Integer { op: And, left: Expression { id: 2790 }, right: Constant { value: 4294967295 } })"
+        },
+        "2790": {
+          "pc": "0x5006d1c2",
+          "expression": "Some(Load { address: EntryStack { offset: -532 }, width: 4, signed: false })"
+        },
+        "2789": {
+          "pc": "0x5006d1c0",
+          "expression": "Some(Load { address: EntryStack { offset: -556 }, width: 4, signed: false })"
+        }
+      }
+    },
+    {
+      "pc": "0x5006d1f6",
+      "owner": [
+        "0x5006bbca",
+        "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
+      ],
+      "inline_context": [
+        [
+          "core::sync::atomic::atomic_store::<*mut oer_esp32s31_ieee80211_driver::irq::WifiIrqLine<oer_esp32s31_ieee80211_mac::irq::epoch::ActiveEpoch<oer_esp32s31_ieee80211_mac::irq::epoch::Moderated>>>",
+          "<core::sync::atomic::Atomic<*mut oer_esp32s31_ieee80211_driver::irq::WifiIrqLine<oer_esp32s31_ieee80211_mac::irq::epoch::ActiveEpoch<oer_esp32s31_ieee80211_mac::irq::epoch::Moderated>>>>::store",
+          "<oer_memory::handler_cell::HandlerCell<oer_esp32s31_ieee80211_driver::irq::WifiIrqLine<oer_esp32s31_ieee80211_mac::irq::epoch::ActiveEpoch<oer_esp32s31_ieee80211_mac::irq::epoch::Moderated>>>>::install",
+          "<oer_esp32s31_ieee80211_driver::irq::WifiIrqLineParts<oer_esp32s31_ieee80211_mac::irq::epoch::ActiveEpoch<oer_esp32s31_ieee80211_mac::irq::epoch::Moderated>>>::install",
+          "oer_esp32s31_ieee80211_driver::rx::receive::receive::<oer_esp32s31_hal::ieee80211::mac::WifiMacHal, oer_esp32s31_hal::ieee80211::dma::rx_dma::WifiRxDmaEngine, oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters, oer_firmware_apps_w1::irq::ImageRoutes, oer_firmware_apps_w1::irq::ImageDoorbell, oer_embassy_time::EmbassyClock, oer_esp32s31_ieee80211_driver::rx::upper::QueueSink<oer_embassy_time::EmbassyClock, 32, 1664>, oer_esp32s31_ieee80211_driver::rx::sink::CountingAdmission, 32, 1664, 1668, 32, oer_esp32s31_hal::ieee80211::dma::space::ChipDma, oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}::{closure#0}>::{closure#0}",
+          "oer_firmware_apps_w1::measure::timed::<oer_esp32s31_ieee80211_driver::rx::receive::receive<oer_esp32s31_hal::ieee80211::mac::WifiMacHal, oer_esp32s31_hal::ieee80211::dma::rx_dma::WifiRxDmaEngine, oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters, oer_firmware_apps_w1::irq::ImageRoutes, oer_firmware_apps_w1::irq::ImageDoorbell, oer_embassy_time::EmbassyClock, oer_esp32s31_ieee80211_driver::rx::upper::QueueSink<oer_embassy_time::EmbassyClock, 32, 1664>, oer_esp32s31_ieee80211_driver::rx::sink::CountingAdmission, 32, 1664, 1668, 32, oer_esp32s31_hal::ieee80211::dma::space::ChipDma, oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}::{closure#0}>::{closure#0}, oer_firmware_apps_w1::measure::take_mac_latch>::{closure#0}::{closure#0}",
+          "<core::future::poll_fn::PollFn<oer_firmware_apps_w1::measure::timed<oer_esp32s31_ieee80211_driver::rx::receive::receive<oer_esp32s31_hal::ieee80211::mac::WifiMacHal, oer_esp32s31_hal::ieee80211::dma::rx_dma::WifiRxDmaEngine, oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters, oer_firmware_apps_w1::irq::ImageRoutes, oer_firmware_apps_w1::irq::ImageDoorbell, oer_embassy_time::EmbassyClock, oer_esp32s31_ieee80211_driver::rx::upper::QueueSink<oer_embassy_time::EmbassyClock, 32, 1664>, oer_esp32s31_ieee80211_driver::rx::sink::CountingAdmission, 32, 1664, 1668, 32, oer_esp32s31_hal::ieee80211::dma::space::ChipDma, oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}::{closure#0}>::{closure#0}, oer_firmware_apps_w1::measure::take_mac_latch>::{closure#0}::{closure#0}> as core::future::future::Future>::poll",
+          "oer_firmware_apps_w1::measure::timed::<oer_esp32s31_ieee80211_driver::rx::receive::receive<oer_esp32s31_hal::ieee80211::mac::WifiMacHal, oer_esp32s31_hal::ieee80211::dma::rx_dma::WifiRxDmaEngine, oer_esp32s31_hal::owner::MacInterruptRegisters, oer_esp32s31_hal::owner::MacPowerInterruptRegisters, oer_firmware_apps_w1::irq::ImageRoutes, oer_firmware_apps_w1::irq::ImageDoorbell, oer_embassy_time::EmbassyClock, oer_esp32s31_ieee80211_driver::rx::upper::QueueSink<oer_embassy_time::EmbassyClock, 32, 1664>, oer_esp32s31_ieee80211_driver::rx::sink::CountingAdmission, 32, 1664, 1668, 32, oer_esp32s31_hal::ieee80211::dma::space::ChipDma, oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}::{closure#0}>::{closure#0}, oer_firmware_apps_w1::measure::take_mac_latch>::{closure#0}",
+          "oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}",
+          "<embassy_executor::raw::TaskStorage<oer_firmware_apps_w1::irq::__rx_task_task::__rx_task_task_inner_function::{closure#0}>>::poll"
+        ]
+      ],
+      "facts": {
+        "instruction": [
+          [
+            "sw a5, 0(s1)"
+          ]
+        ],
+        "memory": [
+          [
+            "Store",
+            "4",
+            "Expression { id: 2785 }",
+            "Some(Expression { id: 2801 })"
+          ]
+        ],
+        "write-event": [
+          [
+            "FunctionWrite { origin: WriteOrigin { function: 1342618570, tail: None }, site: 1342624246, address: Base { base: Unknown, offset: 0 }, value: Base { base: Unknown, offset: 0 }, width: 4, occurrence: May, proof: ClosedGraph }"
+          ]
+        ],
+        "write-barrier": [
+          [
+            "WriteBarrier { origin: WriteOrigin { function: 1342618570, tail: None }, site: 1342624246, kind: UnknownStore }"
+          ]
+        ]
+      },
+      "expressions": {
+        "2801": {
+          "pc": "0x5006d1f6",
+          "expression": "Some(Integer { op: And, left: Expression { id: 2789 }, right: Constant { value: 4294967295 } })"
+        },
+        "2789": {
+          "pc": "0x5006d1c0",
+          "expression": "Some(Load { address: EntryStack { offset: -556 }, width: 4, signed: false })"
+        },
+        "2785": {
+          "pc": "0x5006d1aa",
+          "expression": "Some(Load { address: EntryStack { offset: -524 }, width: 4, signed: false })"
+        }
+      }
+    }
+  ],
+  "source_only_connection": "Arena::bind -> WifiIrqLineParts::install -> RX_LINE -> handler; equality of the published objects is not proved by machine analysis",
+  "first_barrier": {
+    "pc": "0x2f00369e",
+    "missing": "all-path reaching mutable-memory definition equating *(RX_LINE) with the initialized WifiIrqLine object",
+    "existing_mechanisms": "common values/FunctionIndex and FunctionWrites/CallWrites; target producer and callback field discovery already work",
+    "constructor_prerequisite": "0x5006d1f6 has neither a proved RX_LINE address nor a concrete line pointer; real spill definitions are already unknown",
+    "first_copy_prerequisite": "0x5006c6ae: no machine-proved copied-word postcondition transports the publisher from entry-a0+0x580 to entry-sp-236",
+    "next_change": "bounded common memory-word provenance for exact affine object fields, with must-store/load forwarding and machine-proved copy-word effects through existing tail/call substitution; unknown aliases, joins, calls and open graphs invalidate it; publication across functions remains a separate proof obligation"
+  },
+  "short_copy_check": {
+    "call": {
+      "pc": "0x5004db66",
+      "owner": [
+        "0x5004d7c8",
+        "oer_firmware_apps_w1::run::{closure#0}"
+      ],
+      "inline_context": [
+        [
+          "oer_esp32s31_ieee80211_driver::startup::start_esp32s31_radio::<oer_firmware_apps_w1::Platform>::{closure#0}",
+          "oer_firmware_apps_w1::run::{closure#0}"
+        ]
+      ],
+      "facts": {
+        "instruction": [
+          [
+            "jalr ra, -1694(ra)"
+          ]
+        ],
+        "register-write": [
+          [
+            "1",
+            "ImageAddress { address: 1342495594 }"
+          ]
+        ],
+        "transfer": [
+          [
+            "Some(ImageAddress { address: 796918980 })"
+          ]
+        ],
+        "inputs": [
+          [
+            "Some([Constant { value: 0 }, ImageAddress { address: 796920674 }, EntryStack { offset: -17504 }, Expression { id: 2 }, Expression { id: 3 }, Unknown, Unknown, Unknown, Expression { id: 157 }, Unknown, Unknown, Unknown, Constant { value: 20 }, Unknown, Unknown, Unknown, Unknown, Unknown, Unknown, Constant { value: 540643328 }, Constant { value: 1342854452 }, Unknown, Unknown, Unknown, EntryStack { offset: -8472 }, Unknown, Expression { id: 49 }, Unknown, Unknown, Unknown, Unknown, Unknown])"
+          ]
+        ],
+        "write-barrier": [
+          [
+            "WriteBarrier { origin: WriteOrigin { function: 1342494664, tail: None }, site: 1342495590, kind: Call }"
+          ],
+          [
+            "WriteBarrier { origin: WriteOrigin { function: 1342494664, tail: None }, site: 1342495590, kind: Call }"
+          ]
+        ]
+      },
+      "expressions": {
+        "49": {
+          "pc": "0x5004d83e",
+          "expression": "Some(Integer { op: Add, left: Expression { id: 45 }, right: Constant { value: 469 } })"
+        },
+        "45": {
+          "pc": "0x5004d800",
+          "expression": "Some(Integer { op: Add, left: Expression { id: 10 }, right: Constant { value: 2047 } })"
+        },
+        "10": {
+          "pc": "0xffffffffffffffff",
+          "expression": "Some(EntryRegister { register: 11 })"
+        },
+        "157": {
+          "pc": "0x5004db54",
+          "expression": "Some(Integer { op: Add, left: Expression { id: 49 }, right: Constant { value: 588 } })"
+        },
+        "3": {
+          "pc": "0xffffffffffffffff",
+          "expression": "Some(EntryRegister { register: 4 })"
+        },
+        "2": {
+          "pc": "0xffffffffffffffff",
+          "expression": "Some(EntryRegister { register: 3 })"
+        }
+      }
+    },
+    "frame_bytes": 256,
+    "historical_slot": -600,
+    "slot_accesses": [],
+    "contextual_retained_effects": [
+      [
+        "context-call-write",
+        "0x2f80d27a",
+        "CallWrite { callee: 796918980, source: FunctionWrite { origin: WriteOrigin { function: 796971616, tail: Some(TailTransfer { entry: 796918980, site: 796918980, target: 796971616 }) }, site: 796971642, address: Base { base: Unknown, offset: 0 }, value: Base { base: Unknown, offset: 0 }, width: 1, occurrence: May, proof: ClosedGraph }, write: FunctionWrite { origin: WriteOrigin { function: 796971616, tail: Some(TailTransfer { entry: 796918980, site: 796918980, target: 796971616 }) }, site: 796971642, address: Base { base: Unknown, offset: 0 }, value: Base { base: Unknown, offset: 0 }, width: 1, occurrence: May, proof: ClosedGraph } }"
+      ],
+      [
+        "context-call-write",
+        "0x2f80d2c8",
+        "CallWrite { callee: 796918980, source: FunctionWrite { origin: WriteOrigin { function: 796971616, tail: Some(TailTransfer { entry: 796918980, site: 796918980, target: 796971616 }) }, site: 796971720, address: Base { base: Argument(0), offset: 0 }, value: Base { base: Unknown, offset: 0 }, width: 1, occurrence: May, proof: AlignmentLoop(AlignmentLoopProof { header: 796971712, guard: 796971724, back_edge: 796971728, step: 796971716, entry_edge: 796971734, pointer: 15, mask: 3 }) }, write: FunctionWrite { origin: WriteOrigin { function: 796971616, tail: Some(TailTransfer { entry: 796918980, site: 796918980, target: 796971616 }) }, site: 796971720, address: Base { base: Unknown, offset: 0 }, value: Base { base: Unknown, offset: 0 }, width: 1, occurrence: May, proof: AlignmentLoop(AlignmentLoopProof { header: 796971712, guard: 796971724, back_edge: 796971728, step: 796971716, entry_edge: 796971734, pointer: 15, mask: 3 }) } }"
+      ],
+      [
+        "context-call-write",
+        "0x2f80d2c8",
+        "CallWrite { callee: 796918980, source: FunctionWrite { origin: WriteOrigin { function: 796971616, tail: Some(TailTransfer { entry: 796918980, site: 796918980, target: 796971616 }) }, site: 796971720, address: Base { base: Argument(0), offset: 1 }, value: Base { base: Unknown, offset: 0 }, width: 1, occurrence: May, proof: AlignmentLoop(AlignmentLoopProof { header: 796971712, guard: 796971724, back_edge: 796971728, step: 796971716, entry_edge: 796971734, pointer: 15, mask: 3 }) }, write: FunctionWrite { origin: WriteOrigin { function: 796971616, tail: Some(TailTransfer { entry: 796918980, site: 796918980, target: 796971616 }) }, site: 796971720, address: Base { base: Unknown, offset: 0 }, value: Base { base: Unknown, offset: 0 }, width: 1, occurrence: May, proof: AlignmentLoop(AlignmentLoopProof { header: 796971712, guard: 796971724, back_edge: 796971728, step: 796971716, entry_edge: 796971734, pointer: 15, mask: 3 }) } }"
+      ],
+      [
+        "context-call-write",
+        "0x2f80d2c8",
+        "CallWrite { callee: 796918980, source: FunctionWrite { origin: WriteOrigin { function: 796971616, tail: Some(TailTransfer { entry: 796918980, site: 796918980, target: 796971616 }) }, site: 796971720, address: Base { base: Argument(0), offset: 2 }, value: Base { base: Unknown, offset: 0 }, width: 1, occurrence: May, proof: AlignmentLoop(AlignmentLoopProof { header: 796971712, guard: 796971724, back_edge: 796971728, step: 796971716, entry_edge: 796971734, pointer: 15, mask: 3 }) }, write: FunctionWrite { origin: WriteOrigin { function: 796971616, tail: Some(TailTransfer { entry: 796918980, site: 796918980, target: 796971616 }) }, site: 796971720, address: Base { base: Unknown, offset: 0 }, value: Base { base: Unknown, offset: 0 }, width: 1, occurrence: May, proof: AlignmentLoop(AlignmentLoopProof { header: 796971712, guard: 796971724, back_edge: 796971728, step: 796971716, entry_edge: 796971734, pointer: 15, mask: 3 }) } }"
+      ],
+      [
+        "context-call-write",
+        "0x2f80d338",
+        "CallWrite { callee: 796918980, source: FunctionWrite { origin: WriteOrigin { function: 796971616, tail: Some(TailTransfer { entry: 796918980, site: 796918980, target: 796971616 }) }, site: 796971832, address: Base { base: Unknown, offset: 0 }, value: Base { base: Unknown, offset: 0 }, width: 4, occurrence: May, proof: ClosedGraph }, write: FunctionWrite { origin: WriteOrigin { function: 796971616, tail: Some(TailTransfer { entry: 796918980, site: 796918980, target: 796971616 }) }, site: 796971832, address: Base { base: Unknown, offset: 0 }, value: Base { base: Unknown, offset: 0 }, width: 4, occurrence: May, proof: ClosedGraph } }"
+      ]
+    ],
+    "conclusion": "the 20-byte call is not the demonstrated pointer-preservation barrier on this chain: it has a different owner and no selected spill/reload; actual constructor definitions are already unknown. Its remaining unknown stores still do not prove general noninterference"
+  }
+}

@@ -141,6 +141,18 @@ expression inputs. A common-engine unit test covers all six branch predicates.
 Every checkpoint cancellation and several admission budgets verify release
 of temporary and retained proof allocations.
 
+The follow-up on main `694e0c76` moves concrete comparisons to
+`BranchTest::evaluate` in riscv-model, shared by contextual analysis, recursion
+and Blobray execution. The model tests equality, signed boundaries and the
+signed/unsigned differences. Dispatch bounds and alignment relations only
+recognize predicates; they contain no concrete predicate evaluator.
+[branch-test-comparison.json](branch-test-comparison.json) records fresh
+before/after SHA-256 values and comparisons: all fourteen machine files, eight
+complete reports (including resource counters), and four complete callback
+audits are byte-identical. Tests and all-target clippy pass for the 46 affected
+host packages and consumers; formatting passes. Local reproduction bundles and
+logs for this follow-up are under `/tmp/oer-irq-chain/`.
+
 Tests and all-target clippy pass for 46 affected host packages, including
 reverse dependencies and the dependency-layer gate, with
 `oer-hil-lab/test-support` and serial execution. The focused packages pass

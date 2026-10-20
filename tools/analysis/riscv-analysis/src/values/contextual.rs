@@ -270,11 +270,11 @@ fn branch_proof(
     let Some((right, right_count)) = finite(operand(&state, right), symbols, c)? else {
         return Ok(None);
     };
-    let taken = compare(test, left[0], right[0]);
+    let taken = test.evaluate(left[0], right[0]);
     for a in &left[..usize::from(left_count)] {
         for b in &right[..usize::from(right_count)] {
             c.checkpoint(1)?;
-            if compare(test, *a, *b) != taken {
+            if test.evaluate(*a, *b) != taken {
                 return Ok(None);
             }
         }
@@ -289,17 +289,6 @@ fn branch_proof(
         taken,
     }))
 }
-fn compare(test: BranchTest, a: u32, b: u32) -> bool {
-    match test {
-        BranchTest::Eq => a == b,
-        BranchTest::Ne => a != b,
-        BranchTest::Lt => (a as i32) < (b as i32),
-        BranchTest::Ge => (a as i32) >= (b as i32),
-        BranchTest::Ltu => a < b,
-        BranchTest::Geu => a >= b,
-    }
-}
-
 /// If A=mask+1 divides 2^32 and D=Q+r with Q aligned, then
 /// ((D+a)&!mask)-((D+b)&!mask) = ((r+a)&!mask)-((r+b)&!mask)
 /// in Z/(2^32). Enumerating ALL residues is exact even across wraparound;
@@ -403,24 +392,4 @@ fn affine<'a>(
         return Some((base, offset.wrapping_add(*delta)));
     }
     Some((value, 0))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn predicates_use_rv32_signedness_including_the_sign_boundary() {
-        for (test, a, b, expected) in [
-            (BranchTest::Eq, 0xffffffff, 0xffffffff, true),
-            (BranchTest::Ne, 0xffffffff, 0, true),
-            (BranchTest::Lt, 32, 0xffffffff, false),
-            (BranchTest::Ltu, 32, 0xffffffff, true),
-            (BranchTest::Ge, 32, 0x80000000, true),
-            (BranchTest::Geu, 32, 0x80000000, false),
-            (BranchTest::Lt, 32, 32, false),
-            (BranchTest::Ge, 32, 32, true),
-        ] {
-            assert_eq!(compare(test, a, b), expected);
-        }
-    }
 }
