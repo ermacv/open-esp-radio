@@ -187,7 +187,7 @@ fn a_reported_check_that_does_not_pass_is_a_warning() {
 }
 
 #[test]
-fn a_type_check_refuses_requested_checks() {
+fn runtime_checks_refuse_requested_link_time_gates() {
     let directory = tempfile::tempdir().unwrap();
     let repository = repository();
     let root = repository.path();
@@ -207,8 +207,10 @@ fn a_type_check_refuses_requested_checks() {
         output: directory.path().to_owned(),
         checks: Some(requested(false)),
     };
-    let error = type_check(&spec).unwrap_err().to_string();
-    assert!(error.contains("type check"), "{error}");
+    for check in [RuntimeCheck::Types, RuntimeCheck::Clippy] {
+        let error = super::check(&spec, check).unwrap_err().to_string();
+        assert!(error.contains("runtime check"), "{error}");
+    }
 }
 
 pub(crate) fn repository() -> tempfile::TempDir {

@@ -297,12 +297,17 @@ pub(crate) fn built(
     })
 }
 
-/// Type-check the runtime of `class` for `chip` against the committed
+/// Check the runtime of `class` for `chip` against the committed
 /// pins, with the image build's target, features and compiler
 /// configuration, in the checkout's compile cache. A pre-push check:
 /// lints that need monomorphization (`large_assignments`) and the link-time
 /// gates still need `cargo hil image build`.
-pub fn check(root: &Path, chip: &str, class: ImageClass) -> Result<()> {
+pub fn check(
+    root: &Path,
+    chip: &str,
+    class: ImageClass,
+    check: oer_image_build::RuntimeCheck,
+) -> Result<()> {
     let output =
         root.join("target/hil")
             .join(chip)
@@ -311,7 +316,7 @@ pub fn check(root: &Path, chip: &str, class: ImageClass) -> Result<()> {
     // A type check makes no image for the class's gates to examine; they
     // run on `cargo hil image build`.
     spec.checks = None;
-    oer_image_build::type_check(&spec)
+    oer_image_build::check(&spec, check)
         .map_err(|error| format!("the {} runtime: {error}", class.id()).into())
 }
 

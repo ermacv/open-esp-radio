@@ -119,10 +119,13 @@ jobs:
               | select(.metadata."open-radio".instrumentation == null)
               | "-p " + .name' <<<"$meta"
           }
-          # `<package> <target> <cfg flags>` of each instrumented image.
+          # HIL classes use their build recipes for features and cfgs.
+          cargo hil images check --instrumented --clippy
+          # `<package> <target> <cfg flags>` of each other instrumented image.
           instrumented() {
             jq -r '.packages[]
               | select(.metadata."open-radio".instrumentation != null)
+              | select(.manifest_path | contains("/firmware/hil/") | not)
               | [.name,
                  (if (.manifest_path | test("esp32c5")) then "riscv32imac-unknown-none-elf"
                   else "riscv32imafc-unknown-none-elf" end),
