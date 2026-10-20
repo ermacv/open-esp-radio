@@ -197,9 +197,15 @@ IEEE 802.15.4 composes these steps in [its client module](src/ieee802154_client.
 `PhyReady` proof (`phy_ready`: the domain registered, RF open and settled,
 its registration describing the domain, which the proof borrows until the
 join gives it back); every client's entry into the client set consumes one,
-so no client enters a domain that is not ready. It acquires the client, takes the
-shared BTBB reference with the gain byte projected from that registration and
-applies the transmit-on delay, issuing an affine `Ieee802154PhyMembership`.
+so no client enters a domain that is not ready. The 802.15.4 and Bluetooth
+joins prepare the client clock evaluation without changing its bits, timer
+obligation or timestamps. They publish the retained registration's gain and take
+BTBB before infallibly committing that evaluation. A refusal returns the prior
+client owner; no fallible rollback from Pending is needed. A due commit returns
+`TrackingDue` together with the affine membership and BTBB reference, and the
+caller runs `maintain_concurrent_phy` before using RF. Wi-Fi uses the same
+prepared pure client acquisition without BTBB. IEEE 802.15.4 issues an affine
+`Ieee802154PhyMembership`.
 `RegisteredIeee802154Operational` keeps the membership beside the operational
 MAC owners; they return through a foundation readback, not a policy readback,
 because the operational MAC rewrote the PIB. `leave_ieee802154` releases the

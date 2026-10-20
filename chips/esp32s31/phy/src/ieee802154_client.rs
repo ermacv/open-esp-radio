@@ -33,8 +33,8 @@ use oer_esp32s31_hal::{
 };
 
 use crate::concurrent::{
-    ConcurrentPhy, ConcurrentPhyError, JoinRefused, Joined, PhyClientReady, acquire_client,
-    release_client,
+    BtbbClientAcquireError, ConcurrentPhy, ConcurrentPhyError, JoinRefused, Joined, PhyClientReady,
+    acquire_btbb_client, release_client,
 };
 
 /// IEEE 802.15.4 holds a client bit in the shared PHY domain and a reference
@@ -86,52 +86,20 @@ pub fn join_ieee802154<'l>(
     clock: &impl oer_time::Clock,
 ) -> Result<Joined<'l, Ieee802154PhyMembership>, JoinRefused<'l, Ieee802154PhyClientError>> {
     let radio = ready.into_radio();
-    // The ready proof checked that the settled registration describes the
-    // radio.
-    if let Err(error) = radio.attachment().settled() {
-        return Err(JoinRefused {
-            error: Ieee802154PhyClientError::Phy(error),
-            radio,
-        });
-    }
-    if radio.holds_btbb(RadioClient::Ieee802154) {
-        return Err(JoinRefused {
-            error: Ieee802154PhyClientError::Btbb(BtbbError::AlreadyAcquired),
-            radio,
-        });
-    }
-    let acquired = match acquire_client(radio, RadioClient::Ieee802154, clock) {
-        Ok(acquired) => acquired,
-        Err(error) => {
-            return Err(JoinRefused {
-                error: Ieee802154PhyClientError::Phy(error),
-                radio,
-            });
-        }
-    };
-
+    let acquired =
+        match acquire_btbb_client(radio, RadioClient::Ieee802154, clock, |radio, gain| {
+            clocked.acquire_btbb(radio, gain)
+        }) {
+            Ok(acquired) => acquired,
+            Err(error) => {
+                let error = match error {
+                    BtbbClientAcquireError::Phy(error) => Ieee802154PhyClientError::Phy(error),
+                    BtbbClientAcquireError::Btbb(error) => Ieee802154PhyClientError::Btbb(error),
+                };
+                return Err(JoinRefused { error, radio });
+            }
+        };
     let key = radio.attachment().permission_key();
-    // The settled registered state publishes its current gain byte right
-    // before the acquisition, so BTBB starts with the value the vendor reads
-    // from `phy_param[0x120]` at that moment; a tracking or registration in
-    // progress leaves the domain unsettled, and no gain is published then.
-    let gain = {
-        let (phy, publisher) = radio.btbb_publisher();
-        phy.settled()
-            .map_or(Err(BtbbError::Unregistered), |domain| {
-                domain.registered.publish_btbb_gain(publisher)
-            })
-    };
-    let btbb = gain.and_then(|gain| clocked.acquire_btbb(radio, &gain));
-    if let Err(error) = btbb {
-        // Both rejections were checked above; undo the client bit when the
-        // domain still permits it.
-        let _ = release_client(radio, RadioClient::Ieee802154, key);
-        return Err(JoinRefused {
-            error: Ieee802154PhyClientError::Btbb(error),
-            radio,
-        });
-    }
     Ok(Joined {
         membership: Ieee802154PhyMembership { key },
         acquired,

@@ -23,14 +23,16 @@
 //! `PHY_CALIBRATION` only while registration or RF wake runs. After the last
 //! client leaves, closing RF releases `PHY`; waking RF takes it again.
 
-use oer_esp32s31_hal::domain::{ModemClockError, RadioClient, RadioDomain};
+use oer_esp32s31_hal::domain::{
+    BtbbAcquired, BtbbError, BtbbGain, ModemClockError, RadioClient, RadioDomain,
+};
 
 use crate::{
     PhyState, RegisteredPhyState,
     domain::PhyDomain,
     state::client::{
-        PhyClientAccess as ClientStateAccess, PhyClientAcquireError, PhyClientKey,
-        PhyClientSnapshot, PhyPendingTrack, PhyTrackTimeError,
+        PhyClientAccess as ClientStateAccess, PhyClientAcquireError, PhyClientAcquireOutcome,
+        PhyClientKey, PhyClientSnapshot, PhyPendingTrack, PhyTrackTimeError,
     },
 };
 
@@ -491,23 +493,83 @@ pub(crate) fn acquire_client(
         panic!("PHY client phase invariant");
     };
     match available.acquire(clock) {
-        Ok(outcome) => match outcome.into_owner() {
-            Ok(clients) => {
-                phy.slot = Slot::Registered(PhyDomain::new(registered, clients));
-                Ok(ConcurrentAcquire::Settled)
-            }
-            Err(pending) => {
-                phy.slot = Slot::Pending {
-                    registered,
-                    pending,
-                };
-                Ok(ConcurrentAcquire::TrackingDue)
-            }
-        },
+        Ok(outcome) => Ok(publish_acquisition(phy, registered, outcome)),
         Err(failure) => {
             let error = failure.error();
             phy.slot = Slot::Registered(PhyDomain::new(registered, failure.into_owner()));
             Err(ConcurrentPhyError::Acquire(error))
+        }
+    }
+}
+
+pub(crate) enum BtbbClientAcquireError {
+    Phy(ConcurrentPhyError),
+    Btbb(BtbbError),
+}
+
+/// Prepare the pure client transition before any shared-baseband acquisition.
+/// Until BTBB accepts, the original client owner remains unchanged. After it
+/// accepts, committing the prepared evaluation is infallible, including when
+/// that commit makes tracking pending. There is no fallible client rollback.
+pub(crate) fn acquire_btbb_client(
+    radio: &mut RadioDomain<ConcurrentPhy>,
+    client: RadioClient,
+    clock: &impl oer_time::Clock,
+    acquire: impl FnOnce(&mut RadioDomain<ConcurrentPhy>, &BtbbGain) -> Result<BtbbAcquired, BtbbError>,
+) -> Result<ConcurrentAcquire, BtbbClientAcquireError> {
+    use BtbbClientAcquireError::{Btbb, Phy};
+    radio.attachment().settled().map_err(Phy)?;
+    if radio.holds_btbb(client) {
+        return Err(Btbb(BtbbError::AlreadyAcquired));
+    }
+    let PhyDomain {
+        registered,
+        clients,
+    } = radio.attachment_mut().settled_domain().map_err(Phy)?;
+    let ClientStateAccess::Available(available) = clients.client(client) else {
+        panic!("PHY client phase invariant");
+    };
+    let prepared = match available.prepare(clock) {
+        Ok(prepared) => prepared,
+        Err(failure) => {
+            let error = failure.error();
+            radio.attachment_mut().slot =
+                Slot::Registered(PhyDomain::new(registered, failure.into_owner()));
+            return Err(Phy(ConcurrentPhyError::Acquire(error)));
+        }
+    };
+    // The registered owner is retained locally while the slot is lent. Publish
+    // its gain before committing the client evaluation can create Pending.
+    let gain = registered.publish_btbb_gain(radio.btbb_publisher().1);
+    let result = gain.and_then(|gain| acquire(radio, &gain));
+    if let Err(error) = result {
+        radio.attachment_mut().slot =
+            Slot::Registered(PhyDomain::new(registered, prepared.into_owner()));
+        return Err(Btbb(error));
+    }
+    Ok(publish_acquisition(
+        radio.attachment_mut(),
+        registered,
+        prepared.commit(),
+    ))
+}
+
+fn publish_acquisition(
+    phy: &mut ConcurrentPhy,
+    registered: RegisteredPhyState,
+    outcome: PhyClientAcquireOutcome,
+) -> ConcurrentAcquire {
+    match outcome.into_owner() {
+        Ok(clients) => {
+            phy.slot = Slot::Registered(PhyDomain::new(registered, clients));
+            ConcurrentAcquire::Settled
+        }
+        Err(pending) => {
+            phy.slot = Slot::Pending {
+                registered,
+                pending,
+            };
+            ConcurrentAcquire::TrackingDue
         }
     }
 }
