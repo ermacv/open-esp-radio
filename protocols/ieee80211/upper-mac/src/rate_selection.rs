@@ -9,8 +9,8 @@
 //! the Espressif one (`oer-espressif-ieee80211-policy::rate_selection`)
 //! sends as the vendor's station does.
 
-use oer_ieee80211_lower_mac::{Band, RetryPlan, RxMetadata, SingleOutcome};
-use oer_ieee80211_mac::phy::{LegacyRate, PhyRate};
+use oer_ieee80211_port::{Band, RetryPlan, RxMetadata, SingleOutcome};
+use oer_ieee80211_wire::phy::{LegacyRate, PhyRate};
 use oer_time::Instant;
 
 use crate::BasicRates;
@@ -38,7 +38,7 @@ pub fn management_rate(band: Band, basic_rates: Option<&BasicRates>) -> Option<L
 #[cfg(test)]
 mod management_tests {
     use super::*;
-    use oer_ieee80211_mac::phy::DsssPreamble;
+    use oer_ieee80211_wire::phy::DsssPreamble;
 
     #[test]
     fn unknown_bss_uses_the_bands_lowest_rate() {

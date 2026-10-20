@@ -5,13 +5,12 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Portable IEEE 802.11 transmit policy above the lower-MAC port: retries, A-MPDU retry selection, protection and the attempt planner"
+description = "Portable IEEE 802.11 frame-exchange state, replay, reassembly and transmit policy"
 readme = "README.md"
 
 [dependencies]
-oer-ieee80211-lower-mac = { path = "../lower-mac" }
-oer-ieee80211-mac = { path = "../mac" }
-oer-ieee80211-softmac = { path = "../softmac" }
+oer-ieee80211-port = { path = "../port" }
+oer-ieee80211-wire = { path = "../wire" }
 oer-time = { path = "../../../portable/time" }
 
 [lints]
@@ -20,3 +19,7 @@ workspace = true
 [package.metadata.open-radio]
 layer = "protocol"
 platform = "portable"
+
+[dev-dependencies]
+oer-ieee80211-wire = { path = "../wire", features = ["test-support"] }
+oer-test-ui-cases = { path = "../../../tools/test/ui-cases" }

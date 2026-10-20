@@ -17,7 +17,7 @@
 //!   current schedule record; its terminal adapts the control.
 //!
 //! A record is four `(rate, count)` pairs, so each plan holds at most
-//! four stages ([`oer_ieee80211_lower_mac::RETRY_STAGES`]); once the ladder has no further rate,
+//! four stages ([`oer_ieee80211_port::RETRY_STAGES`]); once the ladder has no further rate,
 //! the remaining transmissions keep the last one, as the vendor's retry
 //! state does.
 //!
@@ -29,15 +29,15 @@
 use core::marker::PhantomData;
 use core::num::NonZeroU8;
 
-use oer_ieee80211_lower_mac::{
+use oer_ieee80211_port::{
     AckSnr, Band, Ieee80211Capabilities, Protection, RateSample, RetryPlan, RetryStage,
     SignalMetadata, SingleOutcome,
 };
-use oer_ieee80211_mac::phy::{LegacyRate, PhyRate};
 use oer_ieee80211_upper_mac::{
     rate_control::{MpduOutcome, RateControl, RatePeer},
     rate_selection::{FrameRates, RateSelection},
 };
+use oer_ieee80211_wire::phy::{LegacyRate, PhyRate};
 use oer_time::Instant;
 
 use crate::{
@@ -56,8 +56,8 @@ use crate::{
 ///
 /// ```compile_fail,E0080
 /// # use oer_espressif_ieee80211_policy::rate_selection::EspressifRateSelection;
-/// # use oer_ieee80211_lower_mac::*;
-/// # use oer_ieee80211_mac::phy::{HeMcs, HtMcs};
+/// # use oer_ieee80211_port::*;
+/// # use oer_ieee80211_wire::phy::{HeMcs, HtMcs};
 /// # const fn caps(bands: BandSet) -> LowerMacCapabilities {
 /// #     LowerMacCapabilities {
 /// #         bands, widths: WidthSet::MHZ20,
@@ -75,7 +75,7 @@ use crate::{
 /// # }
 /// struct DualBand;
 /// impl Ieee80211Capabilities for DualBand {
-///     type SppScope = oer_ieee80211_mac::security::spp::Association;
+///     type SppScope = oer_ieee80211_wire::security::spp::Association;
 ///     const CAPS: LowerMacCapabilities = caps(BandSet::GHZ2_4.union(BandSet::GHZ5));
 /// }
 /// let selection = EspressifRateSelection::<DualBand>::new();
@@ -86,8 +86,8 @@ use crate::{
 ///
 /// ```
 /// # use oer_espressif_ieee80211_policy::rate_selection::EspressifRateSelection;
-/// # use oer_ieee80211_lower_mac::*;
-/// # use oer_ieee80211_mac::phy::{HeMcs, HtMcs};
+/// # use oer_ieee80211_port::*;
+/// # use oer_ieee80211_wire::phy::{HeMcs, HtMcs};
 /// # const fn caps(bands: BandSet) -> LowerMacCapabilities {
 /// #     LowerMacCapabilities {
 /// #         bands, widths: WidthSet::MHZ20,
@@ -105,7 +105,7 @@ use crate::{
 /// # }
 /// struct SingleBand;
 /// impl Ieee80211Capabilities for SingleBand {
-///     type SppScope = oer_ieee80211_mac::security::spp::Association;
+///     type SppScope = oer_ieee80211_wire::security::spp::Association;
 ///     const CAPS: LowerMacCapabilities = caps(BandSet::GHZ2_4);
 /// }
 /// let selection = EspressifRateSelection::<SingleBand>::new();
@@ -239,15 +239,15 @@ fn control_plan(
 ///
 /// ```compile_fail,E0277
 /// # use oer_espressif_ieee80211_policy::rate_selection::EspressifRateSelection;
-/// # use oer_ieee80211_lower_mac::*;
+/// # use oer_ieee80211_port::*;
 /// # use oer_ieee80211_upper_mac::rate_selection::RateSelection;
 /// # struct Caps;
-/// # impl Ieee80211Capabilities for Caps { type SppScope = oer_ieee80211_mac::security::spp::Association; const CAPS: LowerMacCapabilities = PORT; }
+/// # impl Ieee80211Capabilities for Caps { type SppScope = oer_ieee80211_wire::security::spp::Association; const CAPS: LowerMacCapabilities = PORT; }
 /// # const PORT: LowerMacCapabilities = LowerMacCapabilities {
 /// #     bands: BandSet::GHZ2_4, widths: WidthSet::MHZ20,
 /// #     rates: RateSupport { dsss_cck: true, ofdm: true,
-/// #         ht_max_mcs: oer_ieee80211_mac::phy::HtMcs::new(7),
-/// #         he_max_mcs: oer_ieee80211_mac::phy::HeMcs::new(9), he_max_bandwidth_mhz: 20,
+/// #         ht_max_mcs: oer_ieee80211_wire::phy::HtMcs::new(7),
+/// #         he_max_mcs: oer_ieee80211_wire::phy::HeMcs::new(9), he_max_bandwidth_mhz: 20,
 /// #         he_dcm: false, he_ldpc: true, spatial_streams: 1 },
 /// #     services: HardwareServices::FCS, vifs: 1, tx_queues: 4, max_mpdu_length: 2304,
 /// #     tx_power_ceiling_min_dbm: None,
@@ -269,15 +269,15 @@ fn control_plan(
 ///
 /// ```
 /// # use oer_espressif_ieee80211_policy::rate_selection::EspressifRateSelection;
-/// # use oer_ieee80211_lower_mac::*;
+/// # use oer_ieee80211_port::*;
 /// # use oer_ieee80211_upper_mac::rate_selection::RateSelection;
 /// # struct Caps;
-/// # impl Ieee80211Capabilities for Caps { type SppScope = oer_ieee80211_mac::security::spp::Association; const CAPS: LowerMacCapabilities = PORT; }
+/// # impl Ieee80211Capabilities for Caps { type SppScope = oer_ieee80211_wire::security::spp::Association; const CAPS: LowerMacCapabilities = PORT; }
 /// # const PORT: LowerMacCapabilities = LowerMacCapabilities {
 /// #     bands: BandSet::GHZ2_4, widths: WidthSet::MHZ20,
 /// #     rates: RateSupport { dsss_cck: true, ofdm: true,
-/// #         ht_max_mcs: oer_ieee80211_mac::phy::HtMcs::new(7),
-/// #         he_max_mcs: oer_ieee80211_mac::phy::HeMcs::new(9), he_max_bandwidth_mhz: 20,
+/// #         ht_max_mcs: oer_ieee80211_wire::phy::HtMcs::new(7),
+/// #         he_max_mcs: oer_ieee80211_wire::phy::HeMcs::new(9), he_max_bandwidth_mhz: 20,
 /// #         he_dcm: false, he_ldpc: true, spatial_streams: 1 },
 /// #     services: HardwareServices::FCS, vifs: 1, tx_queues: 4, max_mpdu_length: 2304,
 /// #     tx_power_ceiling_min_dbm: None,

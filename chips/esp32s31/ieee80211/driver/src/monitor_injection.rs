@@ -10,7 +10,7 @@ use crate::ordinary_tx::{TX_FCS_SIZE, TX_METADATA_SIZE};
 
 use oer_esp32s31_ieee80211_mac::tx::LegacyRate;
 
-use oer_ieee80211_softmac::{
+use oer_ieee80211_port::{
     MonitorInjectionChannelBinding, MonitorInjectionRate, MonitorInjectionRequest, MonitorSink,
     WifiStandaloneMonitorPlan,
 };

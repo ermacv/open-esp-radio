@@ -11,7 +11,7 @@ description = "The runner contract of the HIL fixture helpers: the Bluetooth and
 [dependencies]
 clap = { version = "4.5", features = ["derive"] }
 rustix = { version = "1.1.4", features = ["event", "fs", "net", "process"] }
-oer-ieee80211-mac = { path = "../../../protocols/ieee80211/mac" }
+oer-ieee80211-wire = { path = "../../../protocols/ieee80211/wire" }
 oer-tool-lab-fixture-install = { path = "../../lab/fixture-install" }
 oer-hil-protocol = { path = "../../../protocols/hil/protocol" }
 serde = { version = "1.0", features = ["derive"] }

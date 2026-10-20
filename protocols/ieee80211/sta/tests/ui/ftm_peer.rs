@@ -1,5 +1,5 @@
 #![no_std]
-use oer_ieee80211_mac::address::IndividualAddress;
+use oer_ieee80211_wire::address::IndividualAddress;
 use oer_ieee80211_sta::ftm::{FtmRefusal, FtmRequester, FtmSession};
 use oer_time::Instant;
 

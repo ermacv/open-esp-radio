@@ -6,14 +6,16 @@
 //! their real hardware/software boundary instead of being advertised by one
 //! ambiguous offload boolean.
 
-use oer_ieee80211_softmac::{
+use oer_ieee80211_port::{
     MacInterfaceCapabilities, MacOperationOwner, MacOperationOwnership, MacResourceLimits,
     MacServiceCapabilities,
 };
 
 use crate::{
-    rx::ampdu::{RX_BLOCK_ACK_BANK_COUNT, RX_BLOCK_ACK_MAX_WINDOW},
-    rx::hardware::S31_RX_BLOCK_ACK_MAX_TID,
+    rx::{
+        ampdu::{RX_BLOCK_ACK_BANK_COUNT, RX_BLOCK_ACK_MAX_WINDOW},
+        hardware::S31_RX_BLOCK_ACK_MAX_TID,
+    },
     tx::ampdu::{TX_AMPDU_SLOT_CAPACITY, TX_BLOCK_ACK_MAX_WINDOW},
 };
 

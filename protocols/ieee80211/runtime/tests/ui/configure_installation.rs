@@ -1,9 +1,9 @@
 #![no_std]
-use oer_ieee80211_lower_mac::{
+use oer_ieee80211_port::{
     Channel, ChannelWidth, ConfigurePermission, LowerMacPhase, Station, StationPhase,
     StationReceive,
 };
-use oer_ieee80211_mac::address::IndividualAddress;
+use oer_ieee80211_wire::address::IndividualAddress;
 use oer_radio_port::{Disabled, Ended, Owner, PortBody, run_port};
 use oer_ieee80211_runtime::lower_mac_owner::model::{ModelBackend, ModelPool, ModelResources};
 use oer_radio_port::Child;

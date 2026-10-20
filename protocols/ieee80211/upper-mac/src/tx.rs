@@ -28,11 +28,11 @@
 //! completion back. A retransmission carries the bytes first encoded, so
 //! its sequence number and CCMP packet number repeat.
 
-use oer_ieee80211_lower_mac::{BlockAckReport, TxOperation, TxPower, TxResponse, TxStatus};
-use oer_ieee80211_mac::{phy::PhyRate, qos::WmmAccessCategory, sequence::SequenceNumber};
-use oer_ieee80211_softmac::{
+use oer_ieee80211_port::{BlockAckReport, TxOperation, TxPower, TxResponse, TxStatus};
+use oer_ieee80211_port::{
     MacAmpduTxResult, MacAmpduTxStatus, MacIndividualRetries, MacTxResult, MacTxStatus,
 };
+use oer_ieee80211_wire::{phy::PhyRate, qos::WmmAccessCategory, sequence::SequenceNumber};
 use oer_time::Instant;
 
 use crate::{
@@ -960,7 +960,7 @@ impl<B: HeTxopRtsBudget> TxPlanner<B> {
 
 impl TxAttemptPlan {
     /// The protection exchange of the attempt as the port requests it.
-    pub const fn port_protection(&self) -> oer_ieee80211_lower_mac::Protection {
+    pub const fn port_protection(&self) -> oer_ieee80211_port::Protection {
         self.protection.protection.port_protection()
     }
 

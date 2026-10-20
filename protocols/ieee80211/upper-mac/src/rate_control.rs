@@ -10,14 +10,16 @@
 
 use core::num::NonZeroU16;
 
-use oer_ieee80211_lower_mac::{BlockAckSnr, LinkMetric};
-use oer_ieee80211_mac::{
-    he::{He20Capabilities, He20PeerState},
-    ht::HtPeerCapabilities,
-    phy::PhyRate,
-    station::association::PhyMode,
-};
+use oer_ieee80211_port::{BlockAckSnr, LinkMetric};
 use oer_time::Instant;
+use {
+    oer_ieee80211_port::PhyMode,
+    oer_ieee80211_wire::{
+        he::{He20Capabilities, He20PeerState},
+        ht::HtPeerCapabilities,
+        phy::PhyRate,
+    },
+};
 
 mod legacy;
 pub use legacy::NegotiatedLegacyRates;
@@ -105,7 +107,7 @@ pub struct AmpduUnavailable;
 ///
 /// ```compile_fail,E0061
 /// use oer_ieee80211_upper_mac::rate_control::RateControl;
-/// fn empty<C: RateControl, B: oer_ieee80211_lower_mac::BlockAckSnr>(
+/// fn empty<C: RateControl, B: oer_ieee80211_port::BlockAckSnr>(
 ///     control: &mut C,
 ///     now: oer_time::Instant,
 ///     ack: &B,
@@ -127,7 +129,7 @@ pub struct AmpduUnavailable;
 ///
 /// ```
 /// use core::num::NonZeroU16;
-/// use oer_ieee80211_lower_mac::{BlockAckSnr, SnrSample};
+/// use oer_ieee80211_port::{BlockAckSnr, SnrSample};
 /// use oer_ieee80211_upper_mac::rate_control::{
 ///     AmpduUnavailable, BlockAckTally, MpduOutcome, RateControl,
 /// };

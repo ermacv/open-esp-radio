@@ -117,7 +117,7 @@
 //!
 //! ```compile_fail,E0277
 //! # use oer_ieee80211_arbiter::{AirReservation, CloseGateWith};
-//! # use oer_ieee80211_lower_mac::{GateOpen, Ieee80211Instant, LowerMacPhase, PhaseTypes};
+//! # use oer_ieee80211_port::{GateOpen, Ieee80211Instant, LowerMacPhase, PhaseTypes};
 //! fn close<'p, 'id: 'p, P: LowerMacPhase<'p, 'id>>(phase: &mut P, gate: GateOpen<'id, <P::Types as PhaseTypes<'id>>::GatePath>) {
 //!     CloseGateWith::<'p, 'id, AirReservation>::close_gate_with(
 //!         phase,
@@ -133,7 +133,7 @@
 //!
 //! ```
 //! # use oer_ieee80211_arbiter::{AirReservation, CloseGateWith, NoReservation};
-//! # use oer_ieee80211_lower_mac::{AirReservationPhase, GateClosed, GateOpen, Ieee80211Instant, LowerMacPhase, PhaseTypes};
+//! # use oer_ieee80211_port::{AirReservationPhase, GateClosed, GateOpen, Ieee80211Instant, LowerMacPhase, PhaseTypes};
 //! fn plain<'p, 'id: 'p, P: LowerMacPhase<'p, 'id>>(phase: &mut P, gate: GateOpen<'id, <P::Types as PhaseTypes<'id>>::GatePath>) {
 //!     CloseGateWith::<'p, 'id, NoReservation>::close_gate_with(
 //!         phase,
@@ -168,11 +168,11 @@ pub mod coordinator;
 
 use core::{fmt::Debug, marker::PhantomData};
 
-use oer_ieee80211_lower_mac::{
+use oer_ieee80211_port::{
     AirReservationPhase, GateClosed, GateOpen, Ieee80211Capabilities, Ieee80211Instant,
     LowerMacPhase, PhaseTypes, SupportedChannel,
 };
-use oer_ieee80211_mac::channel_switch::ChannelSwitchMode;
+use oer_ieee80211_wire::channel_switch::ChannelSwitchMode;
 use oer_radio_port::{PoolPath, Root};
 use oer_time::{Duration, Instant};
 
@@ -195,15 +195,15 @@ pub struct ArbiterPool;
 
 impl oer_radio_port::PoolSet for ArbiterPool {
     type Pools<'id, Path: PoolPath> = (
-        oer_ieee80211_lower_mac::GateOpen<'id, Path>,
-        oer_ieee80211_lower_mac::GateIssuer<'id, Path>,
+        oer_ieee80211_port::GateOpen<'id, Path>,
+        oer_ieee80211_port::GateIssuer<'id, Path>,
         ArbiterAuthority<'id, Path>,
     );
 
     fn build<'id, Path: PoolPath>(
         builder: oer_radio_port::PoolBuilder<'id, Path>,
     ) -> Self::Pools<'id, Path> {
-        let (open, issuer) = builder.into_pools::<oer_ieee80211_lower_mac::GatePool>();
+        let (open, issuer) = builder.into_pools::<oer_ieee80211_port::GatePool>();
         (open, issuer, ArbiterAuthority { brand: PhantomData })
     }
 }

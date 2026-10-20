@@ -10,7 +10,7 @@ use oer_esp32s31_hal::{
     },
 };
 
-use oer_ieee80211_mac::he::{He20PeerState, HeElementError, parse_he20_peer_state};
+use oer_ieee80211_wire::he::{He20PeerState, HeElementError, parse_he20_peer_state};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum He20InstallError {

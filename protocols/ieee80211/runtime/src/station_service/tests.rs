@@ -17,23 +17,25 @@ use oer_espressif_ieee80211_policy::{
     rate_control::EspressifRateControl, rate_selection::EspressifRateSelection,
 };
 use oer_ieee80211_arbiter::ArbiterPolicy;
-use oer_ieee80211_lower_mac::{Channel, ChannelWidth, LowerMacSetup, SignalMetadata};
-use oer_ieee80211_mac::address::IndividualAddress;
-use oer_ieee80211_mac::{
-    phy::LegacyRate,
-    phy::PhyRate,
-    security::rsn::Akm,
-    station::{AssociationCapabilities, association::PhyMode},
-};
+use oer_ieee80211_port::{Channel, ChannelWidth, LowerMacSetup, SignalMetadata};
 use oer_ieee80211_rsn::{Pmk, PtkContext, frames::RsnTxFrame};
 use oer_ieee80211_sta::machine::{GroupCapacity, StaConfig, StaSecurity, StationResources};
 use oer_ieee80211_upper_mac::rate_control::RateControl;
+use oer_ieee80211_wire::address::IndividualAddress;
 use oer_radio_port::{Ended, PortBody, run_port};
 use oer_time::Duration;
 use oer_time_virtual::VirtualClock;
 use std::boxed::Box;
 use std::rc::Rc;
 use std::vec::Vec;
+use {
+    oer_ieee80211_port::PhyMode,
+    oer_ieee80211_wire::{
+        phy::{LegacyRate, PhyRate},
+        security::rsn::Akm,
+        station::AssociationCapabilities,
+    },
+};
 
 use super::*;
 
@@ -162,8 +164,8 @@ fn config(security: StaSecurity) -> TestConfig {
     .unwrap();
     (
         StaConfig {
-            address: oer_ieee80211_mac::address::OwnAddress::new(
-                oer_ieee80211_mac::address::IndividualAddress::new(LOCAL).unwrap(),
+            address: oer_ieee80211_wire::address::OwnAddress::new(
+                oer_ieee80211_wire::address::IndividualAddress::new(LOCAL).unwrap(),
             ),
             ssid: heapless::Vec::from_slice(SSID).unwrap(),
             channels,
@@ -263,7 +265,7 @@ fn group_message1(ptk: &oer_ieee80211_rsn::Ptk, replay: u64, key_id: u8) -> Vec<
 }
 
 fn protected_group_message1(ptk: &oer_ieee80211_rsn::Ptk, replay: u64, key_id: u8) -> Vec<u8> {
-    use oer_ieee80211_mac::ccmp::{CcmpHeader, CcmpKeyId, CcmpPacketNumber};
+    use oer_ieee80211_wire::ccmp::{CcmpHeader, CcmpKeyId, CcmpPacketNumber};
     let mut frame = group_message1(ptk, replay, key_id);
     frame[1] |= 0x40;
     let header = CcmpHeader::new(
@@ -379,7 +381,7 @@ impl RateSelection<ModelRxMeta, ModelAck> for RecordingRates<'_> {
         &self,
         frame: FrameRates,
         carried: impl Fn(PhyRate) -> Option<R>,
-    ) -> Option<oer_ieee80211_lower_mac::RetryPlan<R>> {
+    ) -> Option<oer_ieee80211_port::RetryPlan<R>> {
         if self.refuse_rate.replace(false) {
             return None;
         }
@@ -417,7 +419,7 @@ impl RateSelection<ModelRxMeta, ModelAck> for RecordingRates<'_> {
         &mut self,
         now: Instant,
         frame: FrameRates,
-        completion: &oer_ieee80211_lower_mac::SingleOutcome<ModelAck, D>,
+        completion: &oer_ieee80211_port::SingleOutcome<ModelAck, D>,
     ) {
         self.completions.borrow_mut().push(frame);
         <EspressifRateSelection<ModelCaps24> as RateSelection<ModelRxMeta, ModelAck>>::completed(
@@ -661,8 +663,8 @@ impl<'id> Application<'_, '_, 'id> {
         assert_eq!(message4.key, None);
         assert_eq!(message4.plaintext[1] & 0x40, 0);
         self.notice(StaNotice::Connected {
-            bssid: oer_ieee80211_mac::address::Bssid::new(
-                oer_ieee80211_mac::address::IndividualAddress::new(BSSID).unwrap(),
+            bssid: oer_ieee80211_wire::address::Bssid::new(
+                oer_ieee80211_wire::address::IndividualAddress::new(BSSID).unwrap(),
             )
             .unwrap(),
             channel: 6,
@@ -696,7 +698,7 @@ impl<'id> Application<'_, '_, 'id> {
     fn try_send_msdu_at(&self, destination: [u8; 6], priority: u8) -> bool {
         let packet = TxMsdu {
             priority: WmmUserPriority::new(priority).unwrap(),
-            frame: EthernetFrame::from_parts(oer_ieee80211_mac::data::EthernetFrameParts {
+            frame: EthernetFrame::from_parts(oer_ieee80211_wire::data::EthernetFrameParts {
                 destination,
                 source: LOCAL,
                 ether_type: 0x0800,
@@ -803,9 +805,9 @@ where
                 buffers: small,
                 place,
                 absence_place: absence,
-                keys: oer_ieee80211_lower_mac::association::reunite_vacant(
+                keys: oer_ieee80211_port::association::reunite_vacant(
                     station_association,
-                    oer_ieee80211_lower_mac::association::VacantKeyBank::new(
+                    oer_ieee80211_port::association::VacantKeyBank::new(
                         station_pairwise,
                         station_group,
                     ),
@@ -888,7 +890,7 @@ where
                     } else {
                         world
                             .notice(StaNotice::Connected {
-                                bssid: oer_ieee80211_mac::address::Bssid::new(
+                                bssid: oer_ieee80211_wire::address::Bssid::new(
                                     IndividualAddress::new(BSSID).unwrap(),
                                 )
                                 .unwrap(),
@@ -1232,7 +1234,7 @@ fn event_end_checks_outstanding_tx_and_quarantines_without_disable() {
                 world.associate(&mut seen, false).await;
                 world
                     .notice(StaNotice::Connected {
-                        bssid: oer_ieee80211_mac::address::Bssid::new(
+                        bssid: oer_ieee80211_wire::address::Bssid::new(
                             IndividualAddress::new(BSSID).unwrap(),
                         )
                         .unwrap(),
@@ -1288,7 +1290,7 @@ fn poisoned_disable_after_stop_finishes_the_connected_lifecycle() {
             world.associate(&mut seen, false).await;
             world
                 .notice(StaNotice::Connected {
-                    bssid: oer_ieee80211_mac::address::Bssid::new(
+                    bssid: oer_ieee80211_wire::address::Bssid::new(
                         IndividualAddress::new(BSSID).unwrap(),
                     )
                     .unwrap(),
@@ -1353,8 +1355,8 @@ fn on_an_open_network_the_join_goes_on_the_default_record_and_then_the_associati
             assert_eq!(association.rate, dsss1());
             world
                 .notice(StaNotice::Connected {
-                    bssid: oer_ieee80211_mac::address::Bssid::new(
-                        oer_ieee80211_mac::address::IndividualAddress::new(BSSID).unwrap(),
+                    bssid: oer_ieee80211_wire::address::Bssid::new(
+                        oer_ieee80211_wire::address::IndividualAddress::new(BSSID).unwrap(),
                     )
                     .unwrap(),
                     channel: 6,
@@ -1363,13 +1365,11 @@ fn on_an_open_network_the_join_goes_on_the_default_record_and_then_the_associati
             // A BSS without WMM: the station's interface contends by the
             // DCF, the access point's interface keeps none of its own.
             assert_eq!(
-                world.air.edca(oer_ieee80211_lower_mac::VifRole::Station),
-                Some(oer_ieee80211_mac::extensions::wmm::WmmParameterSet::DCF)
+                world.air.edca(oer_ieee80211_port::VifRole::Station),
+                Some(oer_ieee80211_wire::extensions::wmm::WmmParameterSet::DCF)
             );
             assert_eq!(
-                world
-                    .air
-                    .edca(oer_ieee80211_lower_mac::VifRole::AccessPoint),
+                world.air.edca(oer_ieee80211_port::VifRole::AccessPoint),
                 None
             );
             // Connected at once on an open network: data at the rate control's
@@ -1585,8 +1585,8 @@ fn protected_data(packet_number: u8, source: [u8; 6], payload: &[u8]) -> Vec<u8>
 }
 
 fn decrypted() -> ModelRxMeta {
-    meta().with_crypto(oer_ieee80211_lower_mac::RxEvidence::HardwareObserved(
-        oer_ieee80211_lower_mac::RxCryptoStatus::DecryptedAndIntegrityVerified,
+    meta().with_crypto(oer_ieee80211_port::RxEvidence::HardwareObserved(
+        oer_ieee80211_port::RxCryptoStatus::DecryptedAndIntegrityVerified,
     ))
 }
 
@@ -1797,8 +1797,8 @@ fn a_disconnection_during_an_absence_leaves_no_old_frame_to_go_after_the_reconne
             world.associate(&mut seen, false).await;
             world
                 .notice(StaNotice::Connected {
-                    bssid: oer_ieee80211_mac::address::Bssid::new(
-                        oer_ieee80211_mac::address::IndividualAddress::new(BSSID).unwrap(),
+                    bssid: oer_ieee80211_wire::address::Bssid::new(
+                        oer_ieee80211_wire::address::IndividualAddress::new(BSSID).unwrap(),
                     )
                     .unwrap(),
                     channel: 6,
@@ -1880,8 +1880,8 @@ fn beside_an_access_point_msdus_survive_an_absence() {
             world.associate(&mut seen, false).await;
             world
                 .notice(StaNotice::Connected {
-                    bssid: oer_ieee80211_mac::address::Bssid::new(
-                        oer_ieee80211_mac::address::IndividualAddress::new(BSSID).unwrap(),
+                    bssid: oer_ieee80211_wire::address::Bssid::new(
+                        oer_ieee80211_wire::address::IndividualAddress::new(BSSID).unwrap(),
                     )
                     .unwrap(),
                     channel: 6,
@@ -2121,8 +2121,8 @@ fn continuous_rx_cannot_starve_data_tx_or_application_commands() {
             world.associate(&mut seen, false).await;
             world
                 .notice(StaNotice::Connected {
-                    bssid: oer_ieee80211_mac::address::Bssid::new(
-                        oer_ieee80211_mac::address::IndividualAddress::new(BSSID).unwrap(),
+                    bssid: oer_ieee80211_wire::address::Bssid::new(
+                        oer_ieee80211_wire::address::IndividualAddress::new(BSSID).unwrap(),
                     )
                     .unwrap(),
                     channel: 6,
@@ -2169,8 +2169,8 @@ fn lost_port_events_are_counted_and_the_service_keeps_running() {
             world.associate(&mut seen, false).await;
             world
                 .notice(StaNotice::Connected {
-                    bssid: oer_ieee80211_mac::address::Bssid::new(
-                        oer_ieee80211_mac::address::IndividualAddress::new(BSSID).unwrap(),
+                    bssid: oer_ieee80211_wire::address::Bssid::new(
+                        oer_ieee80211_wire::address::IndividualAddress::new(BSSID).unwrap(),
                     )
                     .unwrap(),
                     channel: 6,
@@ -2224,9 +2224,9 @@ fn application_requests_return_correlated_refusals_and_unique_completions() {
 
 #[test]
 fn protected_qos_ht_group_message_rekeys_once_after_integrity_and_replay_admission() {
-    use oer_ieee80211_mac::{
-        ccmp::{CcmpHeader, CcmpKeyId, CcmpPacketNumber},
-        receive::RxDropReason,
+    use {
+        oer_ieee80211_upper_mac::receive::RxDropReason,
+        oer_ieee80211_wire::ccmp::{CcmpHeader, CcmpKeyId, CcmpPacketNumber},
     };
     let counters = run_with(
         config(StaSecurity::Personal {
@@ -2264,7 +2264,7 @@ fn protected_qos_ht_group_message_rekeys_once_after_integrity_and_replay_admissi
                 let reply = world.sent(&mut seen, DATA).await;
                 assert!(reply.key.is_some());
                 let header =
-                    oer_ieee80211_mac::frame::DecodedHeader::decode(&reply.plaintext).unwrap();
+                    oer_ieee80211_wire::frame::DecodedHeader::decode(&reply.plaintext).unwrap();
                 assert_eq!(header.body()[14..16], [0x88, 0x8e]);
                 let after = world.air.sent().len();
                 world.air.receive(&protected, decrypted());
@@ -2393,7 +2393,7 @@ fn an_extended_ofdm_rate_set_reaches_the_data_and_control_plans() {
             world.associate_with(&mut seen, advertisement, false).await;
             world
                 .notice(StaNotice::Connected {
-                    bssid: oer_ieee80211_mac::address::Bssid::new(
+                    bssid: oer_ieee80211_wire::address::Bssid::new(
                         IndividualAddress::new(BSSID).unwrap(),
                     )
                     .unwrap(),
@@ -2454,7 +2454,7 @@ fn negotiated_pmf_checks_received_management_and_keeps_the_tx_key_through_discon
                     let _message4 = world.sent(&mut seen, DATA).await;
                     world
                         .notice(StaNotice::Connected {
-                            bssid: oer_ieee80211_mac::address::Bssid::new(
+                            bssid: oer_ieee80211_wire::address::Bssid::new(
                                 IndividualAddress::new(BSSID).unwrap(),
                             )
                             .unwrap(),
@@ -2555,7 +2555,7 @@ fn stopped_service_reconnects_and_sends_data_on_the_same_installation() {
                 } else {
                     world
                         .notice(StaNotice::Connected {
-                            bssid: oer_ieee80211_mac::address::Bssid::new(
+                            bssid: oer_ieee80211_wire::address::Bssid::new(
                                 IndividualAddress::new(BSSID).unwrap(),
                             )
                             .unwrap(),

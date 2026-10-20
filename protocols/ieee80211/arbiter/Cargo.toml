@@ -9,8 +9,8 @@ description = "Executor- and chip-independent arbiter of the channel a Wi-Fi sta
 readme = "README.md"
 
 [dependencies]
-oer-ieee80211-lower-mac = { path = "../lower-mac" }
-oer-ieee80211-mac = { path = "../mac" }
+oer-ieee80211-port = { path = "../port" }
+oer-ieee80211-wire = { path = "../wire" }
 oer-time = { path = "../../../portable/time" }
 
 oer-radio-port = { path = "../../radio/port" }

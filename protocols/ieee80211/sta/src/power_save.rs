@@ -10,12 +10,12 @@
 //! point may still buffer its frames, and a beacon whose TIM shows the
 //! station's association identifier says it does: the station sends PM=0
 //! again. The beacon is read with
-//! [`parse_sta_beacon`](oer_ieee80211_mac::station_beacon::parse_sta_beacon).
+//! [`parse_sta_beacon`](oer_ieee80211_wire::station_beacon::parse_sta_beacon).
 
 use core::num::NonZeroU8;
 
-use oer_ieee80211_mac::station_beacon::StaTimObservation;
-use oer_ieee80211_mac::station_power_save::StaPowerManagement;
+use oer_ieee80211_wire::station_beacon::StaTimObservation;
+use oer_ieee80211_wire::station_power_save::StaPowerManagement;
 
 /// The transmissions a Null's retry plan makes: the vendor's limit of
 /// Null retries, plus the first.
@@ -45,7 +45,7 @@ pub enum NullOutcome {
 ///
 /// ```compile_fail,E0308
 /// use oer_ieee80211_sta::power_save::PowerSaveView;
-/// use oer_ieee80211_mac::station_power_save::StaPowerManagement;
+/// use oer_ieee80211_wire::station_power_save::StaPowerManagement;
 /// fn sent(view: &mut PowerSaveView) {
 ///     view.null_sent(StaPowerManagement::Active, false);
 /// }
@@ -55,7 +55,7 @@ pub enum NullOutcome {
 ///
 /// ```
 /// use oer_ieee80211_sta::power_save::{NullOutcome, PowerSaveView};
-/// use oer_ieee80211_mac::station_power_save::StaPowerManagement;
+/// use oer_ieee80211_wire::station_power_save::StaPowerManagement;
 /// let mut view = PowerSaveView::Awake;
 /// view.null_sent(StaPowerManagement::PowerSave, NullOutcome::Delivered);
 /// view.null_sent(StaPowerManagement::Active, NullOutcome::Unconfirmed);

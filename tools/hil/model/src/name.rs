@@ -24,7 +24,7 @@ pub enum Grammar {
     /// underscores, starting with a letter) followed by one or more `::`
     /// and segments of ASCII letters, digits and underscores that start
     /// with a letter or an underscore, at most 128 bytes:
-    /// `oer-ieee80211-lower-mac::LowerMacPort`. Keywords are not refused:
+    /// `oer-ieee80211-port::LowerMacPort`. Keywords are not refused:
     /// the name identifies a contract, it is not compiled.
     Path,
 }
@@ -219,7 +219,7 @@ names! {
     /// A product composition crate, such as `oer-esp32s31-ieee80211-system`.
     CompositionName: Kebab;
     /// The contract a scenario exercises, by its path:
-    /// `oer-ieee80211-lower-mac::LowerMacPort`.
+    /// `oer-ieee80211-port::LowerMacPort`.
     ContractName: Path;
     /// A capability the HIL agent serves, by its `hil/protocol` module and
     /// name, such as `conformance.lower-mac`; the image keys derive from
@@ -315,7 +315,7 @@ mod tests {
 
     #[test]
     fn contract_paths_name_a_package_and_items() {
-        assert!(ContractName::parse("oer-ieee80211-lower-mac::LowerMacPort").is_ok());
+        assert!(ContractName::parse("oer-ieee80211-port::LowerMacPort").is_ok());
         assert!(ContractName::parse("oer_radio_port::conformance::Harness").is_ok());
         for name in [
             "",

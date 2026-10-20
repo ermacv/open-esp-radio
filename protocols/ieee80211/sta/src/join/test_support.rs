@@ -1,6 +1,6 @@
 //! Synthetic peer management frames for STA state-machine tests.
 
-use oer_ieee80211_mac::management::MANAGEMENT_HEADER_LEN;
+use oer_ieee80211_wire::management::MANAGEMENT_HEADER_LEN;
 
 const OPEN_AUTHENTICATION_FRAME_CONTROL: u16 = 0x00b0;
 const DEAUTHENTICATION_FRAME_CONTROL: u16 = 0x00c0;

@@ -1,6 +1,6 @@
 #![no_std]
 use oer_ieee80211_sta::ftm::FtmRequester;
-use oer_ieee80211_mac::address::IndividualAddress;
+use oer_ieee80211_wire::address::IndividualAddress;
 use oer_time::Instant;
 pub fn start<const N: usize>(requester: FtmRequester<N>, peer: IndividualAddress, now: Instant) {
     let session = match requester.start(peer, now) { Ok(session) => session, Err(_) => return };

@@ -555,7 +555,7 @@ fn non_data_frames_use_the_association_control_schedule() {
 }
 
 mod seam {
-    use oer_ieee80211_lower_mac::{BlockAckSnr, LinkMetric, SnrSample};
+    use oer_ieee80211_port::{BlockAckSnr, LinkMetric, SnrSample};
 
     /// BlockAck evidence named by its hardware condition, as the S31's is.
     enum Evidence {
@@ -571,13 +571,15 @@ mod seam {
             }
         }
     }
-    use oer_ieee80211_mac::{
-        ht::ht_peer_capabilities,
-        phy::{HtMcs, HtRate, PhyRate, PpduBandwidth},
-        station::association::PhyMode,
-    };
     use oer_ieee80211_upper_mac::rate_control::{
         AmpduUnavailable, MpduOutcome, RateControl, RatePeer,
+    };
+    use {
+        oer_ieee80211_port::PhyMode,
+        oer_ieee80211_wire::{
+            ht::ht_peer_capabilities,
+            phy::{HtMcs, HtRate, PhyRate, PpduBandwidth},
+        },
     };
 
     use super::{NonZeroU16, tally};
@@ -629,7 +631,7 @@ mod seam {
                 schedule.kind(),
                 schedule_state(schedule).rate,
                 PpduBandwidth::Mhz20,
-                oer_ieee80211_mac::phy::HeGiLtf::Ltf2xGi800Ns,
+                oer_ieee80211_wire::phy::HeGiLtf::Ltf2xGi800Ns,
             );
             if let Some(raw @ PhyRate::Ht(rate)) = raw {
                 assert_eq!(with.rate(schedule), raw);
@@ -835,7 +837,7 @@ fn the_last_record_of_every_table_is_the_slowest() {
             kind,
             code,
             PpduBandwidth::Mhz20,
-            oer_ieee80211_mac::phy::HeGiLtf::Ltf2xGi800Ns,
+            oer_ieee80211_wire::phy::HeGiLtf::Ltf2xGi800Ns,
         )
         .map(|rate| rate.nominal_kbps())
         .unwrap_or_else(|| panic!("{kind:?} record {index} code {code:#x} has no rate"))

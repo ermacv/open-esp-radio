@@ -1245,7 +1245,7 @@ oer_probe_macros::probe! {
         };
         // The vendor comparison runs the station interface's queues.
         let state = OrdinaryMpduRetryState::new(
-            oer_ieee80211_lower_mac::VifRole::Station,
+            oer_ieee80211_port::VifRole::Station,
             queue,
             TxPhyRate::Legacy(LegacyRate::Ofdm6M),
             mpdu_retry_limit as u8,
@@ -1275,7 +1275,7 @@ oer_probe_macros::probe! {
         buffer: u32,
     ) -> u32 {
         use oer_esp32s31_ieee80211_mac::tx::runtime::OrdinaryRetryDecision;
-        use oer_ieee80211_lower_mac::TxStatus;
+        use oer_ieee80211_port::TxStatus;
         let disposition = match disposition {
             0 => TxStatus::AckTimeout,
             1 => TxStatus::CtsTimeout,
@@ -1288,7 +1288,7 @@ oer_probe_macros::probe! {
             .expect("the retry sequence starts with its reset entry");
         let decision = state.observe_completion(policy, disposition);
         let counters = state.counters();
-        let exponent = policy.contention_exponent(oer_ieee80211_lower_mac::VifRole::Station, *queue);
+        let exponent = policy.contention_exponent(oer_ieee80211_port::VifRole::Station, *queue);
         // SAFETY: every retry case supplies writable descriptor, context and
         // frame objects covering these bytes.
         unsafe {
@@ -1386,7 +1386,7 @@ oer_probe_macros::probe! {
     /// libpp[lmac.o]::lmacProcessTxComplete supplies zero at +0x19a and +0x1cc.
     pub fn open_libpp_tx_retry_trace_lmac_process_tx_error(queue: u32, detail: u32, selector: u32) {
         use oer_esp32s31_ieee80211_mac::tx::{CompletionFault, CompletionObservation, CompletionRaw, decode};
-        use oer_ieee80211_lower_mac::TxStatus;
+        use oer_ieee80211_port::TxStatus;
 
         if selector != 0 {
             match detail as u8 {

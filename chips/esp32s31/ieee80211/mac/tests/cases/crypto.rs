@@ -38,7 +38,7 @@ fn sta_group_ccmp_install_uses_the_owned_semantic_slot() {
 
     let slot = install_sta_group_ccmp(
         &mut mmio,
-        oer_ieee80211_mac::ccmp::GroupKeyId::new(1).unwrap(),
+        oer_ieee80211_wire::ccmp::GroupKeyId::new(1).unwrap(),
         &temporal_key,
     )
     .unwrap();
@@ -55,7 +55,7 @@ fn sta_group_ccmp_install_uses_the_owned_semantic_slot() {
 
     slot.clear(&mut mmio);
     assert!(!mmio.ccmp_valid[1]);
-    assert!(oer_ieee80211_mac::ccmp::GroupKeyId::new(4).is_none());
+    assert!(oer_ieee80211_wire::ccmp::GroupKeyId::new(4).is_none());
 }
 
 #[test]
@@ -64,7 +64,7 @@ fn station_key_teardown_consumes_and_clears_both_hardware_slots() {
     let pairwise = install_sta_pairwise_ccmp(&mut mmio, [1, 2, 3, 4, 5, 6], &[0x55; 16]).unwrap();
     let group = install_sta_group_ccmp(
         &mut mmio,
-        oer_ieee80211_mac::ccmp::GroupKeyId::new(2).unwrap(),
+        oer_ieee80211_wire::ccmp::GroupKeyId::new(2).unwrap(),
         &[0xaa; 16],
     )
     .unwrap();

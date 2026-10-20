@@ -21,7 +21,7 @@
 //! espressif/esp32-wifi-lib `af55a0ca`; each method names the function it
 //! follows.
 
-use oer_ieee80211_mac::tsf::TsfInstant;
+use oer_ieee80211_wire::tsf::TsfInstant;
 use oer_time::{Duration, Instant};
 
 /// Beacon receive window requested at each TBTT (`g_pm_cfg[20]`).
@@ -275,7 +275,7 @@ pub const PM_ACTION_CAPACITY: usize = 24;
 ///
 /// ```
 /// use oer_ieee80211_sta::modem_sleep::{CoexView, ModemSleep, PmBeacon, SleepType};
-/// use oer_ieee80211_mac::tsf::TsfInstant;
+/// use oer_ieee80211_wire::tsf::TsfInstant;
 /// let mut pm = ModemSleep::new(SleepType::None);
 /// let beacon = PmBeacon { timestamp_tsf: TsfInstant::from_micros(0), interval_tu: 100, tim: None };
 /// let start = pm.start(beacon, CoexView::INACTIVE);
@@ -289,7 +289,7 @@ pub const PM_ACTION_CAPACITY: usize = 24;
 ///
 /// ```compile_fail,E0599
 /// use oer_ieee80211_sta::modem_sleep::{CoexView, ModemSleep, PmActions, PmBeacon, SleepType};
-/// use oer_ieee80211_mac::tsf::TsfInstant;
+/// use oer_ieee80211_wire::tsf::TsfInstant;
 /// let mut pm = ModemSleep::new(SleepType::None);
 /// let beacon = PmBeacon { timestamp_tsf: TsfInstant::from_micros(0), interval_tu: 100, tim: None };
 /// let mut actions = PmActions::new();

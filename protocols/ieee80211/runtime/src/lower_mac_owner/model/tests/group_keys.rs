@@ -52,7 +52,7 @@ impl Work for Boundary<'_> {
     ) {
         let station_association = ModelKeys::<Station>::begin_association(
             resources.station_association,
-            oer_ieee80211_mac::security::Spp::NotNegotiated,
+            oer_ieee80211_wire::security::Spp::NotNegotiated,
         );
 
         use contract::Case;
@@ -381,7 +381,7 @@ impl PortBody<ModelBackend> for Interrupted<'_> {
     ) -> Ended<'id, ModelBackend, ()> {
         let station_association = ModelKeys::<Station>::begin_association(
             resources.station_association,
-            oer_ieee80211_mac::security::Spp::NotNegotiated,
+            oer_ieee80211_wire::security::Spp::NotNegotiated,
         );
 
         let mut owner = owner.enable().await.ok().unwrap();
@@ -500,7 +500,7 @@ impl Work for Deadline<'_> {
     ) {
         let station_association = ModelKeys::<Station>::begin_association(
             resources.station_association,
-            oer_ieee80211_mac::security::Spp::NotNegotiated,
+            oer_ieee80211_wire::security::Spp::NotNegotiated,
         );
 
         let [slot, _] = resources.station_group;
@@ -566,7 +566,7 @@ impl Work for IndependentIds<'_> {
     ) {
         let station_association = ModelKeys::<Station>::begin_association(
             resources.station_association,
-            oer_ieee80211_mac::security::Spp::NotNegotiated,
+            oer_ieee80211_wire::security::Spp::NotNegotiated,
         );
 
         let [a, b] = resources.station_group;
@@ -663,7 +663,7 @@ impl PortBody<ModelBackend> for Teardown<'_> {
     ) -> Ended<'id, ModelBackend, ()> {
         let station_association = ModelKeys::<Station>::begin_association(
             resources.station_association,
-            oer_ieee80211_mac::security::Spp::NotNegotiated,
+            oer_ieee80211_wire::security::Spp::NotNegotiated,
         );
 
         let mut owner = owner.enable().await.ok().unwrap();
@@ -772,7 +772,7 @@ impl PortBody<ModelBackend> for ReenableGroup<'_> {
     ) -> Ended<'id, ModelBackend, ()> {
         let station_association = ModelKeys::<Station>::begin_association(
             resources.station_association,
-            oer_ieee80211_mac::security::Spp::NotNegotiated,
+            oer_ieee80211_wire::security::Spp::NotNegotiated,
         );
 
         let mut owner = owner.enable().await.ok().unwrap();
@@ -844,7 +844,7 @@ impl Work for Admission<'_> {
     ) {
         let station_association = ModelKeys::<Station>::begin_association(
             resources.station_association,
-            oer_ieee80211_mac::security::Spp::NotNegotiated,
+            oer_ieee80211_wire::security::Spp::NotNegotiated,
         );
 
         let [slot, _] = resources.station_group;

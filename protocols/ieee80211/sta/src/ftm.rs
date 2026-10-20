@@ -11,8 +11,8 @@
 use core::num::NonZeroU8;
 
 use heapless::Vec;
-use oer_ieee80211_mac::address::IndividualAddress;
-use oer_ieee80211_mac::ftm::{
+use oer_ieee80211_wire::address::IndividualAddress;
+use oer_ieee80211_wire::ftm::{
     FTM_INITIAL_REQUEST_BODY_LEN, FtmBurstDuration, FtmFormatAndBandwidth, FtmMeasurement,
     FtmRequestParameters, FtmResponseParameters, FtmResponseStatus, FtmTimestampPs, FtmToaError,
     FtmTodError, encode_initial_request,
@@ -628,7 +628,7 @@ enum FtmRequesterPhase {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct LastMeasurement {
-    fields: oer_ieee80211_mac::ftm::FtmMeasurementFields,
+    fields: oer_ieee80211_wire::ftm::FtmMeasurementFields,
     parameters: Option<FtmResponseParameters>,
     information_elements: OwnedInformationElements,
 }

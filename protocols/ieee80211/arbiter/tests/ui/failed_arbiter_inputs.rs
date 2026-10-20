@@ -2,7 +2,7 @@
 use oer_ieee80211_arbiter::{
     Arbiter, ArbiterEnd, ChannelRequest, FailedArbiter, LeaseId, LeasePlace, PendingRetune, UpstreamFact,
 };
-use oer_ieee80211_lower_mac::Ieee80211Capabilities;
+use oer_ieee80211_port::Ieee80211Capabilities;
 use oer_time::Instant;
 
 pub fn start<'id, K: Ieee80211Capabilities>(mut arbiter: Arbiter<'id, K>) {
@@ -54,7 +54,7 @@ pub fn ready<'id, K: Ieee80211Capabilities>(
 
 pub fn restart<'id, K: Ieee80211Capabilities>(
     mut failed: FailedArbiter<'id, K>,
-    channel: oer_ieee80211_lower_mac::SupportedChannel<K>,
+    channel: oer_ieee80211_port::SupportedChannel<K>,
 ) {
     #[cfg(ui_reject)]
     drop(failed.restart(channel)); // ui-error: E0599

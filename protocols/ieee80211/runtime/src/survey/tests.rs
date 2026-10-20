@@ -1,7 +1,7 @@
 use super::{GAP_LOG_CAPACITY, Gap, MinMax, Survey, missed_beacons};
 use core::num::NonZeroU64;
-use oer_ieee80211_lower_mac::{Channel, ChannelWidth, RxEvidence, RxMeta};
-use oer_ieee80211_mac::address::{Bssid, IndividualAddress};
+use oer_ieee80211_port::{Channel, ChannelWidth, RxEvidence, RxMeta};
+use oer_ieee80211_wire::address::{Bssid, IndividualAddress};
 use oer_time::Instant;
 use std::vec::Vec;
 
@@ -350,7 +350,7 @@ fn missed_beacons_round_the_tsf_periods() {
 }
 
 fn survey_never_panics(count: usize) {
-    use oer_ieee80211_mac::fuzz::{XorShift, inputs};
+    use oer_ieee80211_wire::fuzz::{XorShift, inputs};
     let mut htc = beacon(STAND, BI);
     htc[1] |= 0x80;
     htc.splice(24..24, [1, 2, 3, 4]);
@@ -387,13 +387,13 @@ fn survey_never_panics(count: usize) {
 
 #[test]
 fn the_survey_never_panics_on_received_bytes() {
-    survey_never_panics(oer_ieee80211_mac::fuzz::QUICK);
+    survey_never_panics(oer_ieee80211_wire::fuzz::QUICK);
 }
 
 #[test]
 #[ignore = "the full run"]
 fn the_survey_never_panics_on_received_bytes_full() {
-    survey_never_panics(oer_ieee80211_mac::fuzz::FULL);
+    survey_never_panics(oer_ieee80211_wire::fuzz::FULL);
 }
 
 #[test]

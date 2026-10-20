@@ -1,10 +1,10 @@
 use super::*;
-use oer_ieee80211_mac::security::rsn::{Akm, RsnElement};
 use oer_ieee80211_rsn::{
     Ptk, PtkContext,
     frames::RsnTxFrame,
     sae::{SaeCommitValues, SaeKeys},
 };
+use oer_ieee80211_wire::security::rsn::{Akm, RsnElement};
 use std::vec;
 
 fn advertised(transition: bool, h2e: bool) -> Vec<u8> {
@@ -262,7 +262,7 @@ fn invalid_confirm_returns_credits_and_never_caches_the_pmk() {
                 .station
                 .pmksa
                 .resume(
-                    oer_ieee80211_mac::address::Bssid::new(IndividualAddress::new(BSSID).unwrap())
+                    oer_ieee80211_wire::address::Bssid::new(IndividualAddress::new(BSSID).unwrap())
                         .unwrap(),
                     SSID
                 )

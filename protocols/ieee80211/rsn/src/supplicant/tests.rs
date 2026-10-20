@@ -145,7 +145,7 @@ fn completed_connected() -> (RsnConnectedSupplicant, crate::OwnedEapolFrame<512>
     ));
     let rsn = OwnedRsnIe::<64>::try_copy(&RSN).unwrap();
     let gtk = RsnGtk::new(
-        oer_ieee80211_mac::ccmp::GroupKeyId::new(2).unwrap(),
+        oer_ieee80211_wire::ccmp::GroupKeyId::new(2).unwrap(),
         false,
         &[0x5a; 16],
     );
@@ -192,7 +192,7 @@ fn resolves_m1_through_typed_install_and_authenticated_m4() {
 
     let rsn = OwnedRsnIe::<64>::try_copy(&RSN).unwrap();
     let gtk = RsnGtk::new(
-        oer_ieee80211_mac::ccmp::GroupKeyId::new(2).unwrap(),
+        oer_ieee80211_wire::ccmp::GroupKeyId::new(2).unwrap(),
         false,
         &[0x5a; 16],
     );
@@ -214,7 +214,7 @@ fn resolves_m1_through_typed_install_and_authenticated_m4() {
     assert_eq!(
         request.group().kind(),
         RsnKeyKind::Group {
-            key_id: oer_ieee80211_mac::ccmp::GroupKeyId::new(2).unwrap(),
+            key_id: oer_ieee80211_wire::ccmp::GroupKeyId::new(2).unwrap(),
             transmit: false,
         }
     );
@@ -244,7 +244,7 @@ fn invalid_message3_mic_is_ignored_and_valid_retry_can_install() {
     ));
     let rsn = OwnedRsnIe::<64>::try_copy(&RSN).unwrap();
     let gtk = RsnGtk::new(
-        oer_ieee80211_mac::ccmp::GroupKeyId::new(1).unwrap(),
+        oer_ieee80211_wire::ccmp::GroupKeyId::new(1).unwrap(),
         false,
         &[9; 16],
     );
@@ -439,7 +439,7 @@ fn connected_group_rekey_installs_once_and_retransmits_idempotently() {
     assert_eq!(
         request.group().kind(),
         RsnKeyKind::Group {
-            key_id: oer_ieee80211_mac::ccmp::GroupKeyId::new(1).unwrap(),
+            key_id: oer_ieee80211_wire::ccmp::GroupKeyId::new(1).unwrap(),
             transmit: false,
         }
     );
@@ -652,7 +652,7 @@ fn awaiting_encrypted_message3() -> (RsnStaSupplicant, crate::OwnedEapolFrame<51
     ));
     let rsn = OwnedRsnIe::<64>::try_copy(&RSN).unwrap();
     let gtk = RsnGtk::new(
-        oer_ieee80211_mac::ccmp::GroupKeyId::new(2).unwrap(),
+        oer_ieee80211_wire::ccmp::GroupKeyId::new(2).unwrap(),
         false,
         &[0x5a; 16],
     );

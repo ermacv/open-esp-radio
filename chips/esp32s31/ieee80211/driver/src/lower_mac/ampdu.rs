@@ -46,7 +46,7 @@ use oer_esp32s31_ieee80211_mac::tx::{
         TX_AMPDU_METADATA_SIZE,
     },
 };
-use oer_ieee80211_lower_mac::{AmpduCapabilities, BlockAckReport, PhyFormatSet, TxStatus};
+use oer_ieee80211_port::{AmpduCapabilities, BlockAckReport, PhyFormatSet, TxStatus};
 use oer_memory::{PinnedDmaTxRadioLease, StableDmaBacking as _};
 
 use crate::{
@@ -171,7 +171,7 @@ impl<'slot, S: AmpduBacking, const SLOTS: usize> Esp32s31AmpduBuffer<'slot, S, S
 impl<S: AmpduBacking, const SLOTS: usize> Esp32s31AmpduBuffer<'_, S, SLOTS> {
     pub(super) fn matches_admission<Path: PoolPath>(
         &mut self,
-        role: oer_ieee80211_lower_mac::VifRole,
+        role: oer_ieee80211_port::VifRole,
         admission: &TxAdmission<'_, Path>,
     ) -> bool {
         self.subframes.iter_mut().flatten().all(|subframe| {

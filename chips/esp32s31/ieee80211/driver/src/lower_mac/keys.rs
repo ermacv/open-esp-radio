@@ -4,7 +4,7 @@ use core::marker::PhantomData;
 use oer_radio_port::{PoolPath, Root};
 
 use super::{
-    ApGroupCcmpSlot, ApPairwiseCcmpSlot, CheckedKeyScope, KeyToken, MacAddress, StaGroupCcmpSlot,
+    ApGroupCcmpSlot, ApPairwiseCcmpSlot, CheckedKeyScope, KeyToken, StaGroupCcmpSlot,
     StaPairwiseCcmpSlot, TxTicket,
 };
 
@@ -28,10 +28,10 @@ pub struct KeyHandle<'core, Path: PoolPath = Root> {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TransmitKeyScope {
     StationPairwise {
-        peer: MacAddress,
+        peer: [u8; 6],
     },
     AccessPointPairwise {
-        peer: MacAddress,
+        peer: [u8; 6],
         association_id: u16,
     },
     AccessPointGroup {
@@ -78,7 +78,7 @@ pub struct ReceiveKeyHandle<'core, Path: PoolPath = Root> {
     pub(super) slot: super::association::VacantKeySlot<'core, Path>,
     pub(super) index: usize,
     pub(super) token: StaGroupCcmpSlot,
-    pub(super) key_id: oer_ieee80211_mac::ccmp::GroupKeyId,
+    pub(super) key_id: oer_ieee80211_wire::ccmp::GroupKeyId,
     pub(super) brand: Installation<'core, Path>,
 }
 
@@ -183,7 +183,7 @@ pub struct KeyUse<'core, Path: PoolPath = Root> {
     pub(super) ticket: TxTicket<'core, Path>,
     pub(super) index: usize,
     pub(super) selector: u8,
-    pub(super) role: oer_ieee80211_lower_mac::VifRole,
+    pub(super) role: oer_ieee80211_port::VifRole,
 }
 
 /// The encryption authority of an admitted attempt. The protected variant
@@ -199,13 +199,13 @@ pub enum TxAdmission<'core, Path: PoolPath = Root> {
 impl<Path: PoolPath> TxAdmission<'_, Path> {
     pub(super) fn matches_frame(
         &self,
-        role: oer_ieee80211_lower_mac::VifRole,
+        role: oer_ieee80211_port::VifRole,
         frame: Option<&[u8]>,
     ) -> bool {
         let Some(field) = frame.and_then(|frame| frame.first_chunk::<2>()) else {
             return false;
         };
-        let control = oer_ieee80211_mac::frame::FrameControl::new(u16::from_le_bytes(*field));
+        let control = oer_ieee80211_wire::frame::FrameControl::new(u16::from_le_bytes(*field));
         match self {
             Self::Open(_) => control.is_none_or(|control| !control.protected()),
             Self::Protected(key) => {

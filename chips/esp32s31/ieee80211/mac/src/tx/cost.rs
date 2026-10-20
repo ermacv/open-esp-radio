@@ -1,7 +1,7 @@
 //! Mapping the published S31 PHY format to portable timing facts.
 use super::{HtChannelWidth, HtGuardInterval, HtRate, LegacyRate, TxPhyRate};
 use core::num::{NonZeroU16, NonZeroU32};
-use oer_ieee80211_softmac::tx_cost::{PpduTiming, TxCost, TxProtection, TxResponse};
+use oer_ieee80211_port::tx_cost::{PpduTiming, TxCost, TxProtection, TxResponse};
 
 impl HtRate {
     /// Byte ceiling for one unprotected HT aggregate plus compressed BlockAck.

@@ -16,13 +16,13 @@
 //! insertion of a beacon/probe-response timestamp on air.
 
 use oer_esp32s31_hal::{ieee80211::mac::WifiMacHal, owner::RadioAccess};
-use oer_ieee80211_lower_mac::{TsfGeneration, TsfRelation};
-use oer_ieee80211_mac::tsf::TsfInstant;
+use oer_ieee80211_port::{TsfGeneration, TsfRelation};
+use oer_ieee80211_wire::tsf::TsfInstant;
 
 /// The uncertainty of an access-point TSF sample: a count of the timer's
 /// microseconds.
-pub const ACCESS_POINT_TSF_SAMPLE_UNCERTAINTY: oer_ieee80211_mac::tsf::TsfDuration =
-    oer_ieee80211_mac::tsf::TsfDuration::from_micros(1);
+pub const ACCESS_POINT_TSF_SAMPLE_UNCERTAINTY: oer_ieee80211_wire::tsf::TsfDuration =
+    oer_ieee80211_wire::tsf::TsfDuration::from_micros(1);
 
 /// The capability to write the access-point TSF, which only
 /// [`AccessPointTsf`] holds.

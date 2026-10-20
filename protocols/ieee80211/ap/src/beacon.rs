@@ -14,14 +14,14 @@
 //! due at the next TBTT; the access point's owner moves the port and the
 //! template is written again for the new channel ([`ApBeacon::rewrite`]).
 
-use oer_ieee80211_mac::beacon::dtim;
-use oer_ieee80211_mac::channel_switch::{
+use oer_ieee80211_wire::beacon::dtim;
+use oer_ieee80211_wire::channel_switch::{
     CHANNEL_SWITCH_ELEMENT_ID, ChannelSwitch, EXTENDED_CHANNEL_SWITCH_ELEMENT_ID,
     SECONDARY_CHANNEL_OFFSET_ELEMENT_ID,
 };
-use oer_ieee80211_mac::sequence::SequenceNumber;
+use oer_ieee80211_wire::sequence::SequenceNumber;
 
-use oer_ieee80211_mac::{
+use oer_ieee80211_wire::{
     ap::profile::Advertisement,
     beacon::{
         AP_BEACON_CAPACITY, ApBeaconBuildError, ApBeaconProtectionError, TimPartialVirtualBitmap,

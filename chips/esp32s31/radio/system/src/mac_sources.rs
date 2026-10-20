@@ -1,9 +1,12 @@
 //! The platform values the Wi-Fi MAC cold start reads, answered by the radio
 //! system.
 
-use oer_esp32s31_ieee80211_mac::init::{
-    MacCoexEvent, MacCoexPti, MacCoexPtiSource, MacDelayEntropy, MacSlowClockCalibration,
-    MacSlowClockCalibrationSource, MacTxPowerPair, MacTxPowerSource,
+use oer_esp32s31_hal::{
+    ieee80211::init::{
+        MacCoexEvent, MacCoexPti, MacCoexPtiSource, MacDelayEntropy, MacSlowClockCalibration,
+        MacSlowClockCalibrationSource, MacTxPowerSource,
+    },
+    types::MacTxPowerPair,
 };
 use oer_esp32s31_phy::PhyTxTargetPowerProfile;
 
@@ -65,7 +68,7 @@ pub(crate) fn probe_priority(
     table: oer_espressif_coex::CoexPtiTable,
 ) -> oer_esp32s31_radio_client::wifi::ProbePriority {
     use oer_espressif_coex::{wifi_event, wifi_events};
-    use oer_ieee80211_lower_mac::{ConnectionFrame, Operation, TxOperation};
+    use oer_ieee80211_port::{ConnectionFrame, Operation, TxOperation};
     let event = wifi_event(Operation::Transmit(TxOperation::Connection(
         ConnectionFrame::ProbeRequest,
     )))
@@ -84,7 +87,7 @@ mod probe_tests {
     #[test]
     fn probe_priority_follows_the_live_shared_operation_and_slice_entries() {
         use oer_espressif_coex::{CoexPti, CoexPtiTable, wifi_event, wifi_events};
-        use oer_ieee80211_lower_mac::{ConnectionFrame, Operation, TxOperation};
+        use oer_ieee80211_port::{ConnectionFrame, Operation, TxOperation};
         let event = wifi_event(Operation::Transmit(TxOperation::Connection(
             ConnectionFrame::ProbeRequest,
         )))

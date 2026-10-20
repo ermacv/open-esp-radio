@@ -1,8 +1,11 @@
 use super::*;
-use oer_ieee80211_mac::ccmp::{CcmpHeader, CcmpPacketNumber, CcmpRxProtection};
+use {
+    oer_ieee80211_upper_mac::ccmp::CcmpRxProtection,
+    oer_ieee80211_wire::ccmp::{CcmpHeader, CcmpPacketNumber},
+};
 
 fn exchange_terminals() -> [Outcome; 5] {
-    use oer_ieee80211_lower_mac::{IndeterminateCause, WithdrawCause};
+    use oer_ieee80211_port::{IndeterminateCause, WithdrawCause};
     [
         ended(End::Delivered),
         ended(End::AckTimeout),
@@ -241,9 +244,7 @@ fn connected_deferral_has_no_station_timeout_and_waits_for_the_port_terminal() {
             assert!(world.take().is_empty());
             assert_eq!(world.frames.len(), before);
             world.outcomes.push_back((
-                TxOutcome::Indeterminate(
-                    oer_ieee80211_lower_mac::IndeterminateCause::HardwareTimeout,
-                ),
+                TxOutcome::Indeterminate(oer_ieee80211_port::IndeterminateCause::HardwareTimeout),
                 true,
             ));
             world.end_transmissions(late);
@@ -320,7 +321,7 @@ fn disabled_returns_both_deferred_frame_owners_with_the_station_resources() {
             world.receive_verified(at(51), &group_message1(&ptk, 5, 2));
             let before = world.frames.len();
             world.outcomes.push_back((
-                TxOutcome::Withdrawn(oer_ieee80211_lower_mac::WithdrawCause::Disabled),
+                TxOutcome::Withdrawn(oer_ieee80211_port::WithdrawCause::Disabled),
                 true,
             ));
             world.end_transmissions(at(52));

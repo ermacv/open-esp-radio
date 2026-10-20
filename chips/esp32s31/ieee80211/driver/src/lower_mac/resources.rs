@@ -1,7 +1,7 @@
 //! One core and its four independently owned EDCA queue places.
 
 use oer_esp32s31_ieee80211_mac::tx::LegacyTxQueue;
-use oer_ieee80211_mac::qos::WmmAccessCategory;
+use oer_ieee80211_wire::qos::WmmAccessCategory;
 use oer_radio_port::{Child, PoolBuilder, PoolPath, PoolSet, Root, Slot, Slots};
 
 enum CorePlace {}
@@ -56,13 +56,9 @@ impl<const TICKETS: usize> PoolSet for CorePools<TICKETS> {
             .into_pools::<(
                 Slots<CorePlace, 5>,
                 Slots<TicketPlace, TICKETS>,
-                oer_ieee80211_lower_mac::association::AssociationPool<
-                    oer_ieee80211_lower_mac::Station,
-                    1,
-                    1,
-                >,
-                oer_ieee80211_lower_mac::association::AssociationPool<
-                    oer_ieee80211_lower_mac::AccessPoint,
+                oer_ieee80211_port::association::AssociationPool<oer_ieee80211_port::Station, 1, 1>,
+                oer_ieee80211_port::association::AssociationPool<
+                    oer_ieee80211_port::AccessPoint,
                     15,
                     3,
                 >,

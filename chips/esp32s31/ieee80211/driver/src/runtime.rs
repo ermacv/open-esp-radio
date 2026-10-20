@@ -14,7 +14,7 @@ use oer_esp32s31_radio_client::{
     wifi::{Wifi, WifiLeave, WifiLeft, WifiReturned},
 };
 
-use oer_ieee80211_mac::channel::WifiChannel;
+use oer_ieee80211_wire::channel::WifiChannel;
 
 /// Evidence captured while closing the cold polling interrupt phase.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -46,7 +46,7 @@ pub struct WifiRuntimeTransitionReport {
 /// #     loop {}
 /// # }
 /// use oer_esp32s31_ieee80211_driver::runtime::WifiStopped;
-/// use oer_ieee80211_mac::channel::WifiChannel;
+/// use oer_ieee80211_wire::channel::WifiChannel;
 /// fn channel(stopped: &WifiStopped<()>) -> WifiChannel {
 ///     stopped.current_channel()
 /// }

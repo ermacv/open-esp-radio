@@ -1,7 +1,7 @@
 use super::*;
 use alloc::collections::BTreeSet;
-use oer_ieee80211_lower_mac::association::RxBlockAckPool;
-use oer_ieee80211_lower_mac::{AggregateAttempt, MpduStartSpacing};
+use oer_ieee80211_port::association::RxBlockAckPool;
+use oer_ieee80211_port::{AggregateAttempt, MpduStartSpacing};
 
 struct Window {
     sequences: &'static [u16],
@@ -24,9 +24,9 @@ impl Work for Window {
         let air = phase.held.air.clone();
         let rate = phase
             .rate(PhyRate::Ht(
-                oer_ieee80211_mac::phy::HtRate::new(
+                oer_ieee80211_wire::phy::HtRate::new(
                     HtMcs::new(7).unwrap(),
-                    oer_ieee80211_mac::phy::PpduBandwidth::Mhz20,
+                    oer_ieee80211_wire::phy::PpduBandwidth::Mhz20,
                     false,
                 )
                 .unwrap(),
@@ -196,9 +196,9 @@ impl Work for RefusedSent {
         } = resources;
         let rate = phase
             .rate(PhyRate::Ht(
-                oer_ieee80211_mac::phy::HtRate::new(
+                oer_ieee80211_wire::phy::HtRate::new(
                     HtMcs::new(7).unwrap(),
-                    oer_ieee80211_mac::phy::PpduBandwidth::Mhz20,
+                    oer_ieee80211_wire::phy::PpduBandwidth::Mhz20,
                     false,
                 )
                 .unwrap(),

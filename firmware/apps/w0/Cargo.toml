@@ -10,6 +10,7 @@ description = "W0: the radio system registers the PHY, joins, tracks and leaves 
 build = "build.rs"
 
 [dependencies]
+oer-ieee80211-port = { path = "../../../protocols/ieee80211/port" }
 embassy-executor = { version = "0.10.0", default-features = false }
 esp-hal = { workspace = true, features = ["esp32s31", "static-interrupts", "rt", "unstable"] }
 static_cell = { workspace = true }
@@ -25,7 +26,7 @@ oer-esp32s31-radio-client = { path = "../../../chips/esp32s31/radio/client" }
 oer-esp32s31-radio-system = { path = "../../../chips/esp32s31/radio/system" }
 oer-esp32s31-ieee80211-driver = { path = "../../../chips/esp32s31/ieee80211/driver" }
 oer-esp32s31-ieee80211-mac = { path = "../../../chips/esp32s31/ieee80211/mac" }
-oer-ieee80211-mac = { path = "../../../protocols/ieee80211/mac" }
+oer-ieee80211-wire = { path = "../../../protocols/ieee80211/wire" }
 oer-radio-regulatory = { path = "../../../protocols/radio/regulatory" }
 oer-ieee80211-softmac = { path = "../../../protocols/ieee80211/softmac" }
 

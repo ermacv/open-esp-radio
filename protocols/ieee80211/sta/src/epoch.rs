@@ -3,7 +3,7 @@
 //! Dropping/recreating a station cannot mint another source in that install.
 
 use core::marker::PhantomData;
-use oer_ieee80211_lower_mac::ConnectionEpochKind;
+use oer_ieee80211_port::ConnectionEpochKind;
 use oer_radio_port::{PoolPath, Root, Slot};
 
 /// A connection identity, invariant in the installation's brand. Only the

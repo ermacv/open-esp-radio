@@ -1,12 +1,12 @@
 use oer_ieee80211_arbiter::{AbsencePlace, LeasePlace};
-use oer_ieee80211_lower_mac::association::KEY_BANK_CAPACITY;
-use oer_ieee80211_lower_mac::*;
-use oer_ieee80211_mac::phy::{HeMcs, HtMcs};
+use oer_ieee80211_port::association::KEY_BANK_CAPACITY;
+use oer_ieee80211_port::*;
 use oer_ieee80211_sta::epoch::LinkEpochSource;
 use oer_ieee80211_sta::machine::{StaConfig, StaTokens, Station, StationResources};
+use oer_ieee80211_wire::phy::{HeMcs, HtMcs};
 struct Caps;
 impl Ieee80211Capabilities for Caps {
-    type SppScope = oer_ieee80211_mac::security::spp::Association;
+    type SppScope = oer_ieee80211_wire::security::spp::Association;
     const CAPS: LowerMacCapabilities = LowerMacCapabilities {
         bands: BandSet::GHZ2_4,
         widths: WidthSet::MHZ20,
@@ -42,16 +42,15 @@ impl TxBufferMemory for Buffer {
     }
 }
 struct Tokens<const GROUPS: usize>;
-impl oer_ieee80211_lower_mac::TxBufferClass for Buffer {
+impl oer_ieee80211_port::TxBufferClass for Buffer {
     const CAPACITY: usize = 256;
 }
 impl<const GROUPS: usize> StaTokens for Tokens<GROUPS> {
     type AssociationStart = ();
     type Association = ();
-    type VacantKeyBank =
-        oer_ieee80211_lower_mac::association::KeyBankParts<(), (), KEY_BANK_CAPACITY>;
+    type VacantKeyBank = oer_ieee80211_port::association::KeyBankParts<(), (), KEY_BANK_CAPACITY>;
     type VacantAssociation = [(); GROUPS];
-    fn begin_association(_: (), _: oer_ieee80211_mac::security::Spp) {}
+    fn begin_association(_: (), _: oer_ieee80211_wire::security::Spp) {}
     fn association(key: &()) -> &() {
         key
     }
@@ -59,7 +58,7 @@ impl<const GROUPS: usize> StaTokens for Tokens<GROUPS> {
         (
             (),
             (),
-            oer_ieee80211_lower_mac::association::KeyBankParts {
+            oer_ieee80211_port::association::KeyBankParts {
                 pairwise: core::iter::empty().collect(),
                 group: group.into_iter().collect(),
             },
@@ -101,7 +100,7 @@ fn construct<'id, const T: usize, const B: usize, const G: usize>(
     config: StaConfig<Caps>,
     place: LeasePlace<'id>,
     absence: AbsencePlace<'id>,
-    configure: oer_ieee80211_lower_mac::ConfigurePermission<'id, oer_ieee80211_lower_mac::Station>,
+    configure: oer_ieee80211_port::ConfigurePermission<'id, oer_ieee80211_port::Station>,
 ) -> (
     Station<'id, Tokens<G>, Caps>,
     oer_ieee80211_sta::machine::StaCommandCredits<'id>,

@@ -4,7 +4,7 @@ error[E0624]: associated function `admit` is private
 22 |             InFlight::admit(a.context, b.ticket, b.payload).complete(out), // ui-error: E0624
    |                       ^^^^^ private associated function
    |
-  ::: $WORKSPACE/protocols/ieee80211/lower-mac/src/in_flight.rs
+  ::: $WORKSPACE/protocols/ieee80211/port/src/in_flight.rs
    |
    |     pub(crate) const fn admit(context: C, ticket: T, payload: M) -> Self {
    |     -------------------------------------------------------------------- private associated function defined here
@@ -15,7 +15,7 @@ error[E0624]: associated function `admit` is private
 23 |             InFlight::admit(b.context, a.ticket, a.payload).complete(out), // ui-error: E0624
    |                       ^^^^^ private associated function
    |
-  ::: $WORKSPACE/protocols/ieee80211/lower-mac/src/in_flight.rs
+  ::: $WORKSPACE/protocols/ieee80211/port/src/in_flight.rs
    |
    |     pub(crate) const fn admit(context: C, ticket: T, payload: M) -> Self {
    |     -------------------------------------------------------------------- private associated function defined here

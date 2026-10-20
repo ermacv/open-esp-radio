@@ -1,5 +1,5 @@
 #![no_std]
-use oer_ieee80211_mac::station::StaSequenceCounter;
+use oer_ieee80211_sta::sequence::StaSequenceCounter;
 use oer_ieee80211_sta::join::authentication::{StaAuthenticationEvent, StaAuthenticationRuntime};
 
 pub fn retry(ready: StaAuthenticationRuntime, sequence: &mut StaSequenceCounter) {

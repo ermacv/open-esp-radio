@@ -33,7 +33,7 @@
 //! Espressif IEEE 802.11 transmit policy data.
 //!
 //! The portable algorithms above the lower-MAC port
-//! (`oer-ieee80211-upper-mac`, `oer-ieee80211-mac`) take their limits, rate
+//! (`oer-ieee80211-upper-mac`, `oer-ieee80211-wire`) take their limits, rate
 //! ladders and estimates as parameters. This package holds the values the
 //! Espressif stack uses, recovered from the pinned vendor libraries with
 //! their provenance, for every chip of the family that runs that policy:

@@ -1,5 +1,5 @@
 use super::*;
-use oer_ieee80211_mac::tsf::TsfInstant;
+use oer_ieee80211_wire::tsf::TsfInstant;
 
 use std::vec::Vec;
 

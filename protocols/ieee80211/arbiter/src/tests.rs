@@ -1,11 +1,11 @@
 //! The arbiter on a host port it plays itself.
 
 use super::*;
-use oer_ieee80211_lower_mac::{
+use oer_ieee80211_port::{
     BandSet, Channel, ChannelWidth, GateIssuer, HardwareServices, LowerMacCapabilities,
     PhyFormatSet, RateSupport, ReceiveFilter, WidthSet,
 };
-use oer_ieee80211_mac::phy::{HeMcs, HtMcs};
+use oer_ieee80211_wire::phy::{HeMcs, HtMcs};
 use oer_radio_port::{Mint, branded};
 use std::vec::Vec;
 
@@ -25,7 +25,7 @@ fn installed<R>(body: impl for<'id> FnOnce(Mint<'id, ArbiterPool>) -> R) -> R {
 pub(super) struct Caps;
 
 impl Ieee80211Capabilities for Caps {
-    type SppScope = oer_ieee80211_mac::security::spp::Association;
+    type SppScope = oer_ieee80211_wire::security::spp::Association;
     const CAPS: LowerMacCapabilities = LowerMacCapabilities {
         bands: BandSet::GHZ2_4.union(BandSet::GHZ5),
         widths: WidthSet::MHZ20,

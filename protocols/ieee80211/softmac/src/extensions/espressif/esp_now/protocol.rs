@@ -5,19 +5,21 @@
 //! does not claim receive-filter, key-slot, PHY-low-rate or DMA authority.
 
 use core::fmt;
-use oer_ieee80211_mac::sequence::SequenceNumber;
+use oer_ieee80211_wire::sequence::SequenceNumber;
 
-use oer_ieee80211_mac::{
-    channel::WifiChannel,
-    extensions::espressif::esp_now::{
-        ESP_NOW_V1_MAX_PAYLOAD_LEN, ESP_NOW_V2_MAX_PAYLOAD_LEN, EspNowDestination,
-        EspNowRandomValue, EspNowUnicastAddress, EspNowV1Frame, EspNowV1Payload, EspNowV1WireError,
-        EspNowV2Frame, EspNowV2Payload, EspNowV2WireError,
+use {
+    oer_ieee80211_sta::sequence::StaSequenceCounter,
+    oer_ieee80211_wire::{
+        channel::WifiChannel,
+        extensions::espressif::esp_now::{
+            ESP_NOW_V1_MAX_PAYLOAD_LEN, ESP_NOW_V2_MAX_PAYLOAD_LEN, EspNowDestination,
+            EspNowRandomValue, EspNowUnicastAddress, EspNowV1Frame, EspNowV1Payload,
+            EspNowV1WireError, EspNowV2Frame, EspNowV2Payload, EspNowV2WireError,
+        },
     },
-    station::StaSequenceCounter,
 };
 
-use crate::interface::{BoundVirtualInterface, ChannelContextId, VifRole};
+use oer_ieee80211_port::interface::{BoundVirtualInterface, ChannelContextId, VifRole};
 
 /// Default source-owned peer storage. The const-generic table remains usable
 /// with a smaller application-selected capacity.

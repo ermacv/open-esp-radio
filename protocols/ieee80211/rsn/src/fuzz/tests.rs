@@ -6,7 +6,7 @@
 
 use std::vec::Vec;
 
-use oer_ieee80211_mac::{ccmp::GroupKeyId, security::Spp};
+use oer_ieee80211_wire::{ccmp::GroupKeyId, security::Spp};
 
 use super::*;
 use crate::{

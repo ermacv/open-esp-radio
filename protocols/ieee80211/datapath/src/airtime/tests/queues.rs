@@ -1,7 +1,7 @@
 use super::*;
 use crate::TxQueues;
 use core::num::NonZeroU16;
-use oer_ieee80211_softmac::{
+use oer_ieee80211_port::{
     MacTxWork,
     tx_cost::{PpduTiming, TxCost, TxProtection, TxResponse},
 };

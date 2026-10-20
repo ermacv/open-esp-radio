@@ -29,7 +29,7 @@ impl Work for DuringPublication {
     ) {
         let station_association = ModelKeys::<Station>::begin_association(
             resources.station_association,
-            oer_ieee80211_mac::security::Spp::NotNegotiated,
+            oer_ieee80211_wire::security::Spp::NotNegotiated,
         );
 
         let mut terminal_access = resources.terminal_access;
@@ -109,7 +109,7 @@ impl Work for DuringPublication {
         else {
             panic!("published head returns first, as Sent")
         };
-        let oer_ieee80211_lower_mac::TerminalParts {
+        let oer_ieee80211_port::TerminalParts {
             ticket,
             outcome: completion,
             payload,
@@ -155,7 +155,7 @@ impl Work for DuringPublication {
         else {
             panic!("unpublished tail returns second, as Fresh")
         };
-        let oer_ieee80211_lower_mac::TerminalParts {
+        let oer_ieee80211_port::TerminalParts {
             ticket: tail,
             outcome: completion,
             payload,

@@ -472,7 +472,7 @@ fn scheduled_he20_trigger_rate_fails_closed_at_every_owned_boundary() {
     assert_eq!(scheduled.rate.mcs(), HeMcs::Mcs4);
     assert_eq!(
         scheduled.trigger_gi_ltf,
-        oer_ieee80211_mac::trigger::TriggerGiLtf::TwoLtf1600Ns
+        oer_ieee80211_wire::trigger::TriggerGiLtf::TwoLtf1600Ns
     );
     assert!(scheduled.rate.is_ldpc());
     assert!(scheduled.rate.is_dcm());

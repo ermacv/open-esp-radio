@@ -1,8 +1,8 @@
 #![no_std]
-use oer_ieee80211_lower_mac::{
+use oer_ieee80211_port::{
     AmpduPhase, Channel, ChannelWidth, LowerMacPhase, PhaseAggregate, PhyRate, Tid, TxProtection,
 };
-use oer_ieee80211_mac::{
+use oer_ieee80211_wire::{
     address::IndividualAddress,
     phy::{HtMcs, HtRate, PpduBandwidth},
 };

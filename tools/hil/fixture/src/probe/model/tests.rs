@@ -1,4 +1,4 @@
-use oer_ieee80211_mac::{
+use oer_ieee80211_wire::{
     ap::profile::{Advertisement, LegacyRates, WmmParameters},
     extensions::wmm::WmmAcParameters,
     ht::HtLocalCapabilities,
@@ -54,8 +54,8 @@ fn generated_frames_are_accepted_by_the_production_probe_parser() {
         let r = request(i).unwrap();
         let frame = super::super::frame::encode(&config, bssid, r);
         assert_eq!(
-            oer_ieee80211_mac::ap::parse_ap_management_request(&ADVERTISEMENT, &frame[9..], bssid),
-            Some(oer_ieee80211_mac::ap::ApManagementRequest::Probe {
+            oer_ieee80211_wire::ap::parse_ap_management_request(&ADVERTISEMENT, &frame[9..], bssid),
+            Some(oer_ieee80211_wire::ap::ApManagementRequest::Probe {
                 peer: r.source,
                 ssid: b"test"
             })

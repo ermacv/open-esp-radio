@@ -1,4 +1,4 @@
-use oer_ieee80211_mac::phy::LegacyRate;
+use oer_ieee80211_wire::phy::LegacyRate;
 
 use super::*;
 use crate::{protection::RtsLengthThreshold, retry::AckFailureAccounting};
@@ -144,7 +144,7 @@ fn a_cts_timeout_retries_without_the_retry_bit_under_the_same_protection() {
     let (mut exchange, first) = planner.begin(mpdu(1_500), &Ladder).unwrap();
     assert_eq!(
         first.port_protection(),
-        oer_ieee80211_lower_mac::Protection::RtsCts
+        oer_ieee80211_port::Protection::RtsCts
     );
     let retry = attempt(planner.complete(
         &mut exchange,
@@ -161,7 +161,7 @@ fn a_cts_timeout_retries_without_the_retry_bit_under_the_same_protection() {
     );
     assert_eq!(
         retry.port_protection(),
-        oer_ieee80211_lower_mac::Protection::RtsCts
+        oer_ieee80211_port::Protection::RtsCts
     );
     assert_eq!(retry.rate, OFDM48);
 }

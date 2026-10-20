@@ -2,7 +2,7 @@
 //! owns its vacant place, so its return cannot overflow a retirement pool.
 
 use super::{Ccmp128Key, CcmpRxReplayEpoch, GroupKeyId, Pool};
-use oer_ieee80211_mac::ccmp::CcmpRxReplayState;
+use oer_ieee80211_upper_mac::ccmp::CcmpRxReplayState;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Index {

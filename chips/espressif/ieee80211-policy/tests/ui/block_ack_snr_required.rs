@@ -1,5 +1,5 @@
 #![no_std]
-use oer_ieee80211_lower_mac::{BlockAckSnr, SnrSample};
+use oer_ieee80211_port::{BlockAckSnr, SnrSample};
 use oer_ieee80211_upper_mac::rate_control::{AmpduUnavailable, BlockAckTally, RateControl};
 
 /// BlockAck evidence that splits into an SNR sample or none.

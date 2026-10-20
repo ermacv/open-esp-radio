@@ -12,4 +12,4 @@ Architecture navigation: [whole-radio map](../../FEATURES.md),
 The driver core `LowerMacCore` lives in [`src/lower_mac.rs`](src/lower_mac.rs).
 No ESP32-S31 backend implements the portable lower-MAC port yet; the port's
 operation mapping and limits are in
-[the port's README](../../../../protocols/ieee80211/lower-mac/README.md#implementers).
+[the port's README](../../../../protocols/ieee80211/port/README.md#implementers).

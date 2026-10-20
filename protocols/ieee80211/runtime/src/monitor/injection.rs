@@ -18,7 +18,7 @@ use embassy_sync::{
     blocking_mutex::{Mutex as BlockingMutex, raw::RawMutex},
     channel::{Channel, Receiver, Sender, TrySendError},
 };
-use oer_ieee80211_softmac::{
+use oer_ieee80211_port::{
     MonitorInjectionChannelBinding, MonitorInjectionFrameError, MonitorInjectionMpdu,
     MonitorInjectionRate, MonitorInjectionRequest, MonitorSink,
 };

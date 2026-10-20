@@ -14,7 +14,7 @@
 )]
 
 use oer_esp32s31_hal::layouts::{WifiRxControlPrefix, WifiRxControlTail};
-use oer_ieee80211_softmac::{MacRxEvidence, MacRxMetadata};
+use oer_ieee80211_port::{MacRxMetadata, RxEvidence};
 
 use super::{
     DYNAMIC_TAIL_SIZE, FCS_SIZE, FIXED_PREFIX_SIZE, INGRESS_STRICT_DUMP, INGRESS_STRICT_RXEND,
@@ -96,19 +96,19 @@ pub fn decode_normalized_rx_metadata(buffer: &[u8]) -> Option<MacRxMetadata<RxPh
 fn normalized_metadata(prefix: WifiRxControlPrefix<'_>) -> MacRxMetadata<RxPhyInfo> {
     let rate = phy_info(prefix);
     MacRxMetadata {
-        channel: MacRxEvidence::Unavailable,
-        rate: MacRxEvidence::HardwareObserved(rate),
-        rssi_dbm: MacRxEvidence::HardwareObserved(rssi_dbm(prefix)),
-        crypto: MacRxEvidence::Unavailable,
-        s_mpdu: MacRxEvidence::HardwareObserved(prefix.single_mpdu().single_mpdu()),
+        channel: RxEvidence::Unavailable,
+        rate: RxEvidence::HardwareObserved(rate),
+        rssi_dbm: RxEvidence::HardwareObserved(rssi_dbm(prefix)),
+        crypto: RxEvidence::Unavailable,
+        s_mpdu: RxEvidence::HardwareObserved(prefix.single_mpdu().single_mpdu()),
         ampdu: match rate.ht_aggregation() {
-            Some(ampdu) => MacRxEvidence::HardwareObserved(ampdu),
+            Some(ampdu) => RxEvidence::HardwareObserved(ampdu),
             None => match rate.protocol_ampdu_containment() {
-                Some(ampdu) => MacRxEvidence::ProtocolValidated(ampdu),
-                None => MacRxEvidence::Unavailable,
+                Some(ampdu) => RxEvidence::ProtocolValidated(ampdu),
+                None => RxEvidence::Unavailable,
             },
         },
-        amsdu: MacRxEvidence::Unavailable,
+        amsdu: RxEvidence::Unavailable,
     }
 }
 

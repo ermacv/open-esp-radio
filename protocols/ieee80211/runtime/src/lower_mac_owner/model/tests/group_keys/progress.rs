@@ -82,7 +82,7 @@ fn admitted(slot: u8, permission: u8) -> Owners {
 }
 fn terminal<'id>(
     event: LowerMacEvent<'id, ModelTypes>,
-    access: &mut oer_ieee80211_lower_mac::TerminalAccess<'id, ModelTickets, ModelPool<1>>,
+    access: &mut oer_ieee80211_port::TerminalAccess<'id, ModelTickets, ModelPool<1>>,
 ) -> Completion {
     let (mutation, owners) = match event {
         LowerMacEvent::Terminal(LowerMacTerminal::GroupKeyInstalled(InstalledGroup::Station {
@@ -209,7 +209,7 @@ impl PortBody<ModelBackend> for Exercise<'_> {
         }
         let station_association = ModelKeys::<Station>::begin_association(
             resources.station_association,
-            oer_ieee80211_mac::security::Spp::NotNegotiated,
+            oer_ieee80211_wire::security::Spp::NotNegotiated,
         );
 
         let mut owner = owner.enable().await.ok().unwrap();
@@ -306,9 +306,9 @@ impl Exercise<'_> {
     ) -> Ended<'id, ModelBackend, ()> {
         let access_point_association = ModelKeys::<AccessPoint>::begin_association(
             resources.access_point_association,
-            oer_ieee80211_mac::security::Spp::NotNegotiated,
+            oer_ieee80211_wire::security::Spp::NotNegotiated,
         );
-        use oer_ieee80211_lower_mac::{AttemptKey, GroupAddress};
+        use oer_ieee80211_port::{AttemptKey, GroupAddress};
         let mut owner = owner.enable().await.ok().unwrap();
         {
             let mut phase = owner.phase();
@@ -374,14 +374,14 @@ impl Exercise<'_> {
             phase
                 .access_point()
                 .submit(
-                    (oer_ieee80211_lower_mac::Attempt {
+                    (oer_ieee80211_port::Attempt {
                         context: (),
                         ticket,
                         source,
                         access_category: WmmAccessCategory::BestEffort,
                         protection: Protection::None,
                         power: SupportedPower::new(TxPower::Calibrated).unwrap(),
-                        coex_operation: oer_ieee80211_lower_mac::TxOperation::Data,
+                        coex_operation: oer_ieee80211_port::TxOperation::Data,
                     })
                     .admit(),
                 )

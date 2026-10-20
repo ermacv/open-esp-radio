@@ -14,17 +14,21 @@
 use core::num::{NonZeroU16, NonZeroU32};
 
 use crate::rate_schedule::{RateScheduleKind, RateScheduleRef, schedule_state};
-use oer_ieee80211_lower_mac::{BlockAckSnr, LinkMetric, SnrSample};
-use oer_ieee80211_mac::{
-    channel::WifiChannelWidth,
-    he::{He20Capabilities, He20PeerState, HeDcmConstellation, HeMcsNssSupport},
-    phy::{FecCoding, HeGiLtf, HeMcs, HeRate, HtMcs, HtRate, LegacyRate, PhyRate, PpduBandwidth},
-    station::association::PhyMode,
-};
+use oer_ieee80211_port::{BlockAckSnr, LinkMetric, SnrSample};
 use oer_ieee80211_upper_mac::rate_control::{
     AmpduUnavailable, BlockAckTally, MpduOutcome, NegotiatedLegacyRates, RateControl, RatePeer,
 };
 use oer_time::Instant;
+use {
+    oer_ieee80211_port::PhyMode,
+    oer_ieee80211_wire::{
+        channel::WifiChannelWidth,
+        he::{He20Capabilities, He20PeerState, HeDcmConstellation, HeMcsNssSupport},
+        phy::{
+            FecCoding, HeGiLtf, HeMcs, HeRate, HtMcs, HtRate, LegacyRate, PhyRate, PpduBandwidth,
+        },
+    },
+};
 
 /// Instruction-evidenced fields of one 12-byte rate schedule record.
 ///

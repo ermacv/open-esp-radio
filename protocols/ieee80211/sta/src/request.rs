@@ -7,9 +7,9 @@
 
 use core::{fmt, num::NonZeroU16};
 
-use oer_ieee80211_mac::channel::WifiChannel;
-pub use oer_ieee80211_mac::ssid::{WifiSsid, WifiSsidError};
-use oer_ieee80211_mac::station::association::Preference;
+use oer_ieee80211_port::Preference;
+use oer_ieee80211_wire::channel::WifiChannel;
+pub use oer_ieee80211_wire::ssid::{WifiSsid, WifiSsidError};
 use oer_radio_regulatory::{Initiate, RegulatoryDomain};
 
 const CHANNEL_ONE_BIT: u16 = 1;

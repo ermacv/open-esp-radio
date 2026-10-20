@@ -15,8 +15,8 @@ test-support = []
 [dependencies]
 heapless = "0.9.3"
 oer-ieee80211-arbiter = { path = "../arbiter" }
-oer-ieee80211-lower-mac = { path = "../lower-mac" }
-oer-ieee80211-mac = { path = "../mac" }
+oer-ieee80211-port = { path = "../port" }
+oer-ieee80211-wire = { path = "../wire" }
 oer-ieee80211-rsn = { path = "../rsn" }
 oer-ieee80211-upper-mac = { path = "../upper-mac" }
 oer-time = { path = "../../../portable/time" }
@@ -26,7 +26,7 @@ oer-radio-regulatory = { path = "../../radio/regulatory" }
 [dev-dependencies]
 oer-time-virtual = { path = "../../../portable/time-virtual" }
 oer-radio-regulatory = { path = "../../radio/regulatory", features = ["test-support"] }
-oer-ieee80211-mac = { path = "../mac", features = ["test-support"] }
+oer-ieee80211-wire = { path = "../wire", features = ["test-support"] }
 oer-test-ui-cases = { path = "../../../tools/test/ui-cases" }
 
 [lints]

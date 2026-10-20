@@ -1,6 +1,6 @@
 //! The Espressif CCMP transmit packet-number step.
 
-use oer_ieee80211_mac::ccmp::CcmpPacketNumberStep;
+use oer_ieee80211_wire::ccmp::CcmpPacketNumberStep;
 
 /// How far the Espressif `net80211` stack advances a key's transmit packet
 /// number per MPDU.
@@ -13,7 +13,7 @@ use oer_ieee80211_mac::ccmp::CcmpPacketNumberStep;
 /// requires only a PN that increases per key, so the step is Espressif
 /// behaviour, not an IEEE rule; the tree does not record why the vendor
 /// steps by three. A backend that follows the vendor numbering supplies it
-/// to the portable allocator (`oer-ieee80211-mac::ccmp::CcmpTxPacketNumber`).
+/// to the portable allocator (`oer-ieee80211-wire::ccmp::CcmpTxPacketNumber`).
 pub const TX_PACKET_NUMBER_STEP: CcmpPacketNumberStep = match CcmpPacketNumberStep::new(3) {
     Some(step) => step,
     None => panic!("the step is not zero"),

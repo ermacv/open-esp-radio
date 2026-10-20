@@ -34,7 +34,7 @@
 
 use crate::ccm::MIC_LEN;
 use crate::ccmp_mpdu::{CcmpAssociation, CcmpMpduError};
-use oer_ieee80211_mac::{
+use oer_ieee80211_wire::{
     ccmp::{CCMP_HEADER_LEN, Ccmp128Key, CcmpHeader, CcmpHeaderError},
     frame::DecodedHeader,
     security::Spp,

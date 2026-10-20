@@ -6,7 +6,7 @@
 //! stack has no radar detection, so an access point serves no such
 //! channel.
 
-use oer_ieee80211_mac::channel::{Band, Channel};
+use oer_ieee80211_wire::channel::{Band, Channel};
 
 /// Whether an access point on `channel` must detect radar: the 5 GHz
 /// channels 52 through 144.
@@ -16,7 +16,7 @@ pub const fn requires_radar_detection(channel: Channel) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use oer_ieee80211_mac::channel::ChannelWidth;
+    use oer_ieee80211_wire::channel::ChannelWidth;
 
     use super::*;
 

@@ -12,7 +12,10 @@ use oer_esp32s31_hal::{
 };
 
 use oer_espressif_ieee80211_policy::ccmp::TX_PACKET_NUMBER_STEP;
-use oer_ieee80211_mac::ccmp::{CcmpKeyId, CcmpTxPacketNumber as PacketNumberAllocator, GroupKeyId};
+use {
+    oer_ieee80211_upper_mac::ccmp::CcmpTxPacketNumber as PacketNumberAllocator,
+    oer_ieee80211_wire::ccmp::{CcmpKeyId, GroupKeyId},
+};
 
 use subtle::ConstantTimeEq;
 
@@ -29,7 +32,7 @@ const AP_GROUP_HARDWARE_INDEX_BASE: u8 = 1;
 const CCMP_KEY_BYTES: usize = 16;
 
 /// Exhaustion of one key's finite 48-bit CCMP transmit packet-number space.
-pub use oer_ieee80211_mac::ccmp::CcmpTxPacketNumberError;
+pub use oer_ieee80211_upper_mac::ccmp::CcmpTxPacketNumberError;
 
 /// Unique software owner of one installed key's transmit packet number: the
 /// portable allocator at the Espressif `net80211` step of three
@@ -46,7 +49,7 @@ impl CcmpTxPacketNumber {
     fn after(last: u64) -> Self {
         Self(PacketNumberAllocator::continuing_after(
             TX_PACKET_NUMBER_STEP,
-            oer_ieee80211_mac::ccmp::CcmpPacketNumber::new(last).expect("a 48-bit PN"),
+            oer_ieee80211_wire::ccmp::CcmpPacketNumber::new(last).expect("a 48-bit PN"),
         ))
     }
 
@@ -485,7 +488,7 @@ pub fn install_sta_pairwise_ccmp<H: CcmpKeyHardware>(
 /// #     loop {}
 /// # }
 /// use oer_esp32s31_ieee80211_mac::crypto::{CcmpKeyHardware, install_sta_group_ccmp};
-/// use oer_ieee80211_mac::ccmp::GroupKeyId;
+/// use oer_ieee80211_wire::ccmp::GroupKeyId;
 /// fn install<H: CcmpKeyHardware>(hardware: &mut H, key_id: GroupKeyId) {
 ///     let _ = install_sta_group_ccmp(hardware, key_id, &[0; 16]);
 /// }
@@ -565,7 +568,7 @@ pub fn install_ap_pairwise_ccmp<H: CcmpKeyHardware>(
 /// #     loop {}
 /// # }
 /// use oer_esp32s31_ieee80211_mac::crypto::{CcmpKeyHardware, install_ap_group_ccmp};
-/// use oer_ieee80211_mac::ccmp::GroupKeyId;
+/// use oer_ieee80211_wire::ccmp::GroupKeyId;
 /// fn install<H: CcmpKeyHardware>(hardware: &mut H, key_id: GroupKeyId) {
 ///     let _ = install_ap_group_ccmp(hardware, key_id, &[0; 16]);
 /// }

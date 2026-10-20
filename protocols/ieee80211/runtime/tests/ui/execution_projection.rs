@@ -1,7 +1,7 @@
 #![no_std]
-use oer_ieee80211_lower_mac::InFlight;
+use oer_ieee80211_port::InFlight;
 #[cfg(ui_reject)]
-use oer_ieee80211_lower_mac::TxMpdu;
+use oer_ieee80211_port::TxMpdu;
 use oer_ieee80211_runtime::lower_mac_owner::model::{ModelMpdu, ModelSubframes};
 
 pub fn lend<'id, C, T>(

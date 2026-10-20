@@ -35,7 +35,7 @@ fn contiguous_association_security_ies_retain_exact_rsn_and_rsnxe() {
 fn gtk_key_data_round_trips_with_key_wrap_padding() {
     let rsn = rsn_ie();
     let gtk = RsnGtk::new(
-        oer_ieee80211_mac::ccmp::GroupKeyId::new(2).unwrap(),
+        oer_ieee80211_wire::ccmp::GroupKeyId::new(2).unwrap(),
         false,
         &[0x5a; 16],
     );
@@ -57,7 +57,7 @@ fn protected_key_data_carries_the_rsnxe_and_an_igtk_the_station_reads() {
     elements[..22].copy_from_slice(rsn.as_bytes());
     elements[22..].copy_from_slice(&rsnxe);
     let gtk = RsnGtk::new(
-        oer_ieee80211_mac::ccmp::GroupKeyId::new(1).unwrap(),
+        oer_ieee80211_wire::ccmp::GroupKeyId::new(1).unwrap(),
         false,
         &[0x5a; 16],
     );
@@ -131,7 +131,7 @@ fn state_actions_are_bound_to_role_peer_and_nonce_context() {
 fn parser_rejects_changed_rsn_ie_and_duplicate_gtk() {
     let rsn = rsn_ie();
     let gtk = RsnGtk::new(
-        oer_ieee80211_mac::ccmp::GroupKeyId::new(1).unwrap(),
+        oer_ieee80211_wire::ccmp::GroupKeyId::new(1).unwrap(),
         false,
         &[7; 16],
     );
@@ -163,7 +163,7 @@ fn parser_rejects_changed_rsn_ie_and_duplicate_gtk() {
 fn parser_validates_authenticator_rsnxe_without_ignoring_unknown_elements() {
     let rsn = rsn_ie();
     let gtk = RsnGtk::new(
-        oer_ieee80211_mac::ccmp::GroupKeyId::new(1).unwrap(),
+        oer_ieee80211_wire::ccmp::GroupKeyId::new(1).unwrap(),
         false,
         &[7; 16],
     );
@@ -219,7 +219,7 @@ fn igtk_kde(key_id: u16) -> [u8; 30] {
 #[test]
 fn protected_management_requires_exactly_one_igtk_beside_the_gtk() {
     let gtk = RsnGtk::new(
-        oer_ieee80211_mac::ccmp::GroupKeyId::new(1).unwrap(),
+        oer_ieee80211_wire::ccmp::GroupKeyId::new(1).unwrap(),
         false,
         &[0x55; 16],
     );

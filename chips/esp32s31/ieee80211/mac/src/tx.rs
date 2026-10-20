@@ -4,7 +4,7 @@
 
 use oer_esp32s31_hal::layouts::{DmaRef, WifiTxDmaDescriptor};
 
-pub use oer_ieee80211_softmac::tx_cost::TxContention;
+pub use oer_ieee80211_port::tx_cost::TxContention;
 
 use core::{
     num::{NonZeroU32, NonZeroU64},
@@ -37,10 +37,10 @@ use oer_esp32s31_hal::ieee80211::dma::tx_storage::{
     PinnedTxDmaStorage, TxDmaAccess, TxDmaStorageError,
 };
 
-use oer_ieee80211_lower_mac::TxStatus;
-use oer_ieee80211_mac::qos::WmmAccessCategory;
+use oer_ieee80211_port::TxStatus;
+use oer_ieee80211_wire::qos::WmmAccessCategory;
 
-pub use oer_ieee80211_mac::trigger::HeResourceUnit;
+pub use oer_ieee80211_wire::trigger::HeResourceUnit;
 
 use crate::rate::{
     low::{MacLowRateGateProbe, MacLowRateTransitionError, probe_phy_low_rate_gate},
@@ -51,7 +51,7 @@ use oer_espressif_ieee80211_policy::retry_ladder;
 
 use oer_esp32s31_hal::{ieee80211::mac::WifiMacHal, owner::RadioAccess};
 
-use oer_ieee80211_mac::{
+use oer_ieee80211_wire::{
     he::HeDcmConstellation,
     ht::HtDuplicateMcs32,
     trigger::{
@@ -453,7 +453,7 @@ pub struct TxCookie(pub u32);
 /// # }
 /// # use oer_esp32s31_ieee80211_mac::tx::{TxCompletion, TxCookie};
 /// # use oer_esp32s31_hal::types::MacTxCompletionObservation;
-/// # use oer_ieee80211_lower_mac::TxStatus;
+/// # use oer_ieee80211_port::TxStatus;
 /// fn forge(raw: MacTxCompletionObservation) -> TxCompletion {
 ///     TxCompletion { cookie: TxCookie(1), observation: raw, tx_status: TxStatus::Success }
 /// }
@@ -1144,7 +1144,7 @@ impl HtRate {
     /// complete `rcUpdatePhyMode` mapping and therefore return `None` here
     /// instead of inventing a fallback policy.
     pub fn vendor_retry_rate(self, failed_attempts: u8) -> Option<TxPhyRate> {
-        let oer_ieee80211_mac::phy::PhyRate::Ht(rate) = TxPhyRate::Ht(self).phy_rate() else {
+        let oer_ieee80211_wire::phy::PhyRate::Ht(rate) = TxPhyRate::Ht(self).phy_rate() else {
             unreachable!("an S31 HT rate is a portable HT rate");
         };
         TxPhyRate::try_from(retry_ladder::ht_retry_rate(rate, failed_attempts)?).ok()
@@ -1904,7 +1904,7 @@ impl HeRate {
         if self.dcm {
             return None;
         }
-        let oer_ieee80211_mac::phy::PhyRate::He(rate) = TxPhyRate::He(self).phy_rate() else {
+        let oer_ieee80211_wire::phy::PhyRate::He(rate) = TxPhyRate::He(self).phy_rate() else {
             unreachable!("an S31 HE rate is a portable HE rate");
         };
         TxPhyRate::try_from(retry_ladder::he_retry_rate(rate, failed_attempts)?).ok()
@@ -2166,7 +2166,7 @@ impl HeRate {
         }
         let minimum = self.minimum_ampdu_subframe_bytes(density) as u32;
         let Some(delimiters) =
-            oer_ieee80211_mac::ampdu::empty_delimiters(psdu_length as u32, minimum)
+            oer_ieee80211_wire::ampdu::empty_delimiters(psdu_length as u32, minimum)
         else {
             return None;
         };
@@ -3297,7 +3297,7 @@ fn slot(dma: PinnedTxDmaStorage<512>) -> TxSlot<512> {
 pub struct TxSlot<const BUFFER_SIZE: usize> {
     dma: PinnedTxDmaStorage<BUFFER_SIZE>,
     generation_cursor: u32,
-    work: oer_ieee80211_softmac::MacTxWork,
+    work: oer_ieee80211_port::MacTxWork,
     active: TxCookie,
     queue: LegacyTxQueue,
 }
@@ -3341,7 +3341,7 @@ impl<'owner, const BUFFER_SIZE: usize> TxSlotFree<'owner, BUFFER_SIZE> {
     }
 
     pub fn reset_work(&mut self) {
-        self.slot.as_mut().get_mut().work = oer_ieee80211_softmac::MacTxWork::new();
+        self.slot.as_mut().get_mut().work = oer_ieee80211_port::MacTxWork::new();
     }
 
     pub fn reserve(self, buffer_capacity: u32, transfer_length: u32) -> Result<TxCookie, TxError> {
@@ -3368,7 +3368,7 @@ impl<const BUFFER_SIZE: usize> TxSlot<BUFFER_SIZE> {
         Self {
             dma,
             generation_cursor: 0,
-            work: oer_ieee80211_softmac::MacTxWork::new(),
+            work: oer_ieee80211_port::MacTxWork::new(),
             active: TxCookie(0),
             queue: LegacyTxQueue::Voice,
         }
@@ -3397,7 +3397,7 @@ impl<const BUFFER_SIZE: usize> TxSlot<BUFFER_SIZE> {
 
     /// Receipt remains in pinned CPU metadata across retry detach/abort. Read
     /// at the terminal edge before a new ordinary exchange resets it.
-    pub const fn work(&self) -> oer_ieee80211_softmac::MacTxWork {
+    pub const fn work(&self) -> oer_ieee80211_port::MacTxWork {
         self.work
     }
 
@@ -3666,7 +3666,7 @@ impl<const BUFFER_SIZE: usize> TxSlot<BUFFER_SIZE> {
                         tx,
                         block_ack: ampdu::HtBlockAckObservation::new(
                             registers.block_ack_control(),
-                            oer_ieee80211_mac::sequence::SequenceNumber::from_low_bits(
+                            oer_ieee80211_wire::sequence::SequenceNumber::from_low_bits(
                                 registers.block_ack_starting_sequence(),
                             ),
                             registers.block_ack_bitmap(),

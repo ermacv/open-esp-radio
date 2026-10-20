@@ -7,7 +7,7 @@
 //! entries, the publication deadlines, the software queue of each access
 //! category ahead of the core and the asynchronous PHY retune an `Enable`
 //! needs, and serves the phase contract
-//! (`oer_ieee80211_lower_mac::phase`) over this core.
+//! (`oer_ieee80211_port::phase`) over this core.
 //!
 //! # Checked operations
 //!
@@ -125,8 +125,8 @@ use oer_radio_port::{PoolPath, Root};
 use oer_time::Clock;
 
 use oer_esp32s31_hal::types::{MacPti, StaTbttSchedule};
-use oer_ieee80211_lower_mac::TsfGeneration;
-use oer_ieee80211_mac::tsf::TsfInstant;
+use oer_ieee80211_port::TsfGeneration;
+use oer_ieee80211_wire::tsf::TsfInstant;
 
 use crate::station_tsf::{StationTsf, StationTsfHardware};
 use oer_esp32s31_ieee80211_mac::{
@@ -155,13 +155,14 @@ use oer_esp32s31_ieee80211_mac::{
         runtime::he_txop_limit,
     },
 };
-use oer_ieee80211_lower_mac::{
+use oer_ieee80211_port::MacTxPlan;
+use oer_ieee80211_port::{
     BandSet, BeaconTimingCapabilities, BlockAckReport, Channel, ConnectionFrame, LinkMetric,
-    LowerMacCapabilities, MacAddress, PhyFormatSet, PhyRate, Protection, RateSupport,
-    ReceiveFilter, RxEvidence, RxMeta, RxMetadata, SignalMetadata, TbttEvent, TsfTimingError,
-    TxOperation, TxStatus, VifRole, VifRoleSet, VifTsf, WidthSet,
+    LowerMacCapabilities, PhyFormatSet, PhyRate, Protection, RateSupport, ReceiveFilter,
+    RxEvidence, RxMeta, RxMetadata, SignalMetadata, TbttEvent, TsfTimingError, TxOperation,
+    TxStatus, VifRole, VifRoleSet, VifTsf, WidthSet,
 };
-use oer_ieee80211_mac::{
+use oer_ieee80211_wire::{
     ccmp::CCMP_HEADER_LEN,
     channel::WifiChannel,
     management::BROADCAST_ADDRESS,
@@ -169,7 +170,6 @@ use oer_ieee80211_mac::{
     qos::WmmAccessCategory,
     sequence::SequenceNumber,
 };
-use oer_ieee80211_softmac::MacTxPlan;
 
 pub mod ampdu;
 pub mod association;
@@ -215,7 +215,7 @@ pub const LOWER_MAC_TX_QUEUES: usize = 4;
 /// interface zero) and the access-point context (interface one).
 pub const LOWER_MAC_VIFS: u8 = 2;
 
-const RESOURCES: oer_ieee80211_softmac::MacResourceLimits =
+const RESOURCES: oer_ieee80211_port::MacResourceLimits =
     ESP32S31_MAC_SERVICE_CAPABILITIES.resources;
 
 /// Keys installed at once: the station's pairwise and group slots and the
@@ -267,7 +267,7 @@ impl Esp32s31RxMeta {
     /// converts from the MAC local time.
     pub const fn with_timestamp(
         mut self,
-        timestamp: RxEvidence<oer_ieee80211_lower_mac::Ieee80211Stamp>,
+        timestamp: RxEvidence<oer_ieee80211_port::Ieee80211Stamp>,
     ) -> Self {
         self.common.timestamp = timestamp;
         self
@@ -523,14 +523,14 @@ pub enum PublicationEnd {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct CoreVif {
     pub role: VifRole,
-    pub address: MacAddress,
-    pub bssid: Option<MacAddress>,
+    pub address: [u8; 6],
+    pub bssid: Option<[u8; 6]>,
     pub receive: ReceiveFilter,
 }
 
 impl CoreVif {
     /// The interface's BSS: its BSSID, or an access point's address.
-    fn bss(&self) -> Option<MacAddress> {
+    fn bss(&self) -> Option<[u8; 6]> {
         match self.role {
             VifRole::Station => self.bssid,
             VifRole::AccessPoint => Some(self.address),
@@ -586,12 +586,12 @@ const SUBTYPE_PROBE_REQUEST: u8 = 4;
 const SUBTYPE_PROBE_RESPONSE: u8 = 5;
 const SUBTYPE_BEACON: u8 = 8;
 
-fn frame_address(frame: &[u8], offset: usize) -> Option<MacAddress> {
+fn frame_address(frame: &[u8], offset: usize) -> Option<[u8; 6]> {
     frame.get(offset..offset + 6)?.try_into().ok()
 }
 
 /// The BSSID a management or data frame carries.
-fn frame_bssid(frame: &[u8]) -> Option<MacAddress> {
+fn frame_bssid(frame: &[u8]) -> Option<[u8; 6]> {
     match (frame.first()? >> 2) & 0b11 {
         FRAME_TYPE_MANAGEMENT => frame_address(frame, 16),
         FRAME_TYPE_DATA => match frame.get(1)? & 0b11 {
@@ -622,7 +622,7 @@ pub enum CcmpNumberingError {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RxBlockAckValues {
     pub role: VifRole,
-    pub peer: MacAddress,
+    pub peer: [u8; 6],
     pub tid: u8,
     pub start_sequence: SequenceNumber,
     pub window: u8,
@@ -644,7 +644,7 @@ pub enum RxBeaconPriority {
 pub struct LowerMacConfig {
     /// The station address the cold start published; the station seams have
     /// no transaction that changes it.
-    pub station_address: MacAddress,
+    pub station_address: [u8; 6],
     /// The channel the radio is tuned to.
     pub channel: WifiChannel,
     /// Executor watchdog of one publication.
@@ -710,7 +710,7 @@ impl<Path: PoolPath, const TICKETS: usize> KeyBank<'_, Path, TICKETS> {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct RxBlockAckEntry {
     role: VifRole,
-    peer: MacAddress,
+    peer: [u8; 6],
     tid: u8,
 }
 
@@ -1629,7 +1629,7 @@ where
     }
 
     /// Retain the phase's six-bit color proof through the core boundary.
-    pub fn set_checked_he_bss_color(&mut self, color: oer_ieee80211_lower_mac::BssColor) {
+    pub fn set_checked_he_bss_color(&mut self, color: oer_ieee80211_port::BssColor) {
         self.tx.policy_mut().install_he_bss_color(color.get());
     }
 
@@ -1661,12 +1661,12 @@ where
     /// # Errors
     ///
     /// The record the policy refused.
-    pub fn set_checked_edca<K: oer_ieee80211_lower_mac::Ieee80211Capabilities>(
+    pub fn set_checked_edca<K: oer_ieee80211_port::Ieee80211Capabilities>(
         &mut self,
         role: VifRole,
-        parameters: oer_ieee80211_lower_mac::SupportedEdca<K>,
+        parameters: oer_ieee80211_port::SupportedEdca<K>,
     ) -> Result<
-        oer_ieee80211_lower_mac::SupportedEdca<K>,
+        oer_ieee80211_port::SupportedEdca<K>,
         oer_esp32s31_ieee80211_mac::edca::EdcaParametersError,
     > {
         self.tx.policy_mut().install_wmm(role, parameters.get())?;
@@ -1683,7 +1683,7 @@ where
     }
 
     /// The station address the cold start published.
-    pub const fn station_address(&self) -> MacAddress {
+    pub const fn station_address(&self) -> [u8; 6] {
         self.config.station_address
     }
 
@@ -1776,7 +1776,7 @@ where
         hardware: &mut H,
         association: &association::StationAssociation<'core, Path>,
         slot: association::StationGroupSlot<'core, Path>,
-        key_id: oer_ieee80211_mac::ccmp::GroupKeyId,
+        key_id: oer_ieee80211_wire::ccmp::GroupKeyId,
         temporal_key: &[u8; CCMP_128_KEY_BYTES],
     ) -> Result<ReceiveKeyHandle<'core, Path>, association::KeyInstallRefused<'core, Path>> {
         let scope = CheckedKeyScope::StationGroup { key_id };
@@ -1961,7 +1961,7 @@ where
         &mut self,
         hardware: &mut H,
         role: VifRole,
-        peer: MacAddress,
+        peer: [u8; 6],
         tid: u8,
     ) -> Result<bool, LowerMacFault> {
         let Some(bank) = self.rx_block_ack_bank(role, peer, tid) else {
@@ -1974,7 +1974,7 @@ where
         Ok(true)
     }
 
-    fn rx_block_ack_bank(&self, role: VifRole, peer: MacAddress, tid: u8) -> Option<usize> {
+    fn rx_block_ack_bank(&self, role: VifRole, peer: [u8; 6], tid: u8) -> Option<usize> {
         self.rx_block_acks
             .iter()
             .position(|entry| *entry == Some(RxBlockAckEntry { role, peer, tid }))
@@ -1986,7 +1986,7 @@ where
     }
 
     /// The station's TSF and the generation of its relation, for a
-    /// [`TsfSample`](oer_ieee80211_lower_mac::TsfSample) the backend pairs
+    /// [`TsfSample`](oer_ieee80211_port::TsfSample) the backend pairs
     /// with its radio clock: the access-point timer has no read seam.
     pub fn station_tsf_reading<H: StationTsfHardware>(
         &self,
@@ -2162,13 +2162,13 @@ struct CommonAdmission {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CheckedKeyScope {
     StationPairwise {
-        peer: MacAddress,
+        peer: [u8; 6],
     },
     StationGroup {
-        key_id: oer_ieee80211_mac::ccmp::GroupKeyId,
+        key_id: oer_ieee80211_wire::ccmp::GroupKeyId,
     },
     AccessPointPairwise {
-        peer: MacAddress,
+        peer: [u8; 6],
         association_id: u16,
     },
     AccessPointGroup {
@@ -2379,18 +2379,18 @@ enum ReceivePolicy {
     StationDisabled,
     /// Station policy six: the BSS-member rules.
     Station {
-        bssid: MacAddress,
+        bssid: [u8; 6],
     },
     /// Station policy six, mode two: the BSS-member rules and management
     /// frames of every BSS.
     StationOtherBss {
-        bssid: MacAddress,
+        bssid: [u8; 6],
     },
     AccessPointDisabled,
     /// Access-point policy eight: the BSS-member rules and the Probe
     /// Requests the access point answers, wildcard ones included.
     AccessPoint {
-        address: MacAddress,
+        address: [u8; 6],
     },
 }
 
@@ -2464,12 +2464,12 @@ fn block_ack(report: crate::ordinary_tx::OrdinaryTxReport) -> Option<BlockAckRep
 #[cfg(test)]
 mod tests;
 
-fn spp_mode(spp: oer_ieee80211_mac::security::Spp) -> oer_esp32s31_hal::types::MacSppMode {
+fn spp_mode(spp: oer_ieee80211_wire::security::Spp) -> oer_esp32s31_hal::types::MacSppMode {
     match spp {
-        oer_ieee80211_mac::security::Spp::Negotiated => {
+        oer_ieee80211_wire::security::Spp::Negotiated => {
             oer_esp32s31_hal::types::MacSppMode::Authenticated
         }
-        oer_ieee80211_mac::security::Spp::NotNegotiated => {
+        oer_ieee80211_wire::security::Spp::NotNegotiated => {
             oer_esp32s31_hal::types::MacSppMode::Unauthenticated
         }
     }

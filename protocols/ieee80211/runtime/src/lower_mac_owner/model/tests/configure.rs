@@ -1,6 +1,6 @@
 use super::*;
 use crate::lower_mac_owner::conformance::interface_commands::{self, Identity, Trace};
-use oer_ieee80211_lower_mac::InterfaceRole;
+use oer_ieee80211_port::InterfaceRole;
 
 struct Witness {
     allocation: Box<u8>,

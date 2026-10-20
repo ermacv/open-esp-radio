@@ -3,10 +3,10 @@
 //! by the service through the lower-MAC port.
 
 use super::*;
-use oer_ieee80211_mac::{
+use oer_ieee80211_rsn::bip::MANAGEMENT_MIC_ELEMENT_LEN;
+use oer_ieee80211_wire::{
     ap::ApManagementSubtype, ccmp::CcmpPacketNumber, management_protection::SaQuery,
 };
-use oer_ieee80211_rsn::bip::MANAGEMENT_MIC_ELEMENT_LEN;
 
 /// Absence means no installed PMF key. A present value stores the highest
 /// accepted management PN plus one, so PN zero is representable. The niche

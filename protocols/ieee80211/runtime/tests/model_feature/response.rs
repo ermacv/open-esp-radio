@@ -1,18 +1,18 @@
 //! Public-port response policy, independent of the model's private classifiers.
 use super::*;
 use embassy_futures::yield_now;
-use oer_ieee80211_lower_mac::PhaseTypes;
-use oer_ieee80211_lower_mac::{
+use oer_ieee80211_port::PhaseTypes;
+use oer_ieee80211_port::{
     AggregateAttempt, AggregateEnd, Air, AmpduPhase, BlockAckReport, CheckedAggregate,
     ClassSubframe, GroupAddress, IndeterminateCause, MpduStartSpacing, NoAckHeader, QosControl,
     SingleEnd, SingleResponse, SubframeSource, Tid, TxMpdu, TxOutcome, WithdrawCause,
 };
-use oer_ieee80211_mac::{
-    phy::{HtMcs, HtRate, PpduBandwidth},
-    sequence::SequenceNumber,
-};
 use oer_ieee80211_runtime::lower_mac_owner::model::{
     AirAnswer, ModelAggregateOutcome, ModelCaps, ModelPhase, ModelSingleOutcome,
+};
+use oer_ieee80211_wire::{
+    phy::{HtMcs, HtRate, PpduBandwidth},
+    sequence::SequenceNumber,
 };
 
 /// What a terminal reported, for single MPDUs and aggregates alike.
@@ -186,7 +186,7 @@ impl Case {
         &self,
         event: LowerMacEvent<'id, ModelTypes>,
         ticket_index: u8,
-        terminal_access: &mut oer_ieee80211_lower_mac::TerminalAccess<
+        terminal_access: &mut oer_ieee80211_port::TerminalAccess<
             'id,
             <ModelTypes as PhaseTypes<'id>>::TicketKind,
             <ModelTypes as PhaseTypes<'id>>::TicketPath,

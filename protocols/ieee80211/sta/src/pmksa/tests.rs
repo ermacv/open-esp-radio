@@ -87,5 +87,5 @@ fn a_changed_ssid_compacts_the_cache_without_changing_other_entries_ages() {
 }
 
 fn bssid(bytes: [u8; 6]) -> Bssid {
-    Bssid::new(oer_ieee80211_mac::address::IndividualAddress::new(bytes).unwrap()).unwrap()
+    Bssid::new(oer_ieee80211_wire::address::IndividualAddress::new(bytes).unwrap()).unwrap()
 }

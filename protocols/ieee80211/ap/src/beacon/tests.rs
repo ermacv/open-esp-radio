@@ -1,6 +1,6 @@
-use oer_ieee80211_mac::beacon::{TimAssociationId, TimVirtualBitmap};
+use oer_ieee80211_wire::beacon::{TimAssociationId, TimVirtualBitmap};
 
-use oer_ieee80211_mac::{
+use oer_ieee80211_wire::{
     ap::profile::{LegacyRates, WmmParameters},
     extensions::wmm::WmmAcParameters,
     ht::HtLocalCapabilities,
@@ -45,7 +45,7 @@ fn publication_beacon(storage: &mut [u8; AP_BEACON_CAPACITY]) -> ApBeacon<'_> {
         &ADVERTISEMENT,
         [2; 6],
         &WifiSsid::new(b"ap").unwrap(),
-        Channel::ghz2_4(6, oer_ieee80211_mac::channel::ChannelWidth::Mhz20).unwrap(),
+        Channel::ghz2_4(6, oer_ieee80211_wire::channel::ChannelWidth::Mhz20).unwrap(),
         100,
         2,
         SequenceNumber::ZERO,
@@ -145,7 +145,7 @@ fn static_storage_owns_beacon_dtim_and_next_deadline() {
         &ADVERTISEMENT,
         [2; 6],
         &ssid,
-        Channel::ghz2_4(6, oer_ieee80211_mac::channel::ChannelWidth::Mhz20).unwrap(),
+        Channel::ghz2_4(6, oer_ieee80211_wire::channel::ChannelWidth::Mhz20).unwrap(),
         100,
         2,
         SequenceNumber::new(3).unwrap(),
@@ -201,7 +201,7 @@ fn late_publication_does_not_move_the_absolute_tbtt_schedule() {
         &ADVERTISEMENT,
         [2; 6],
         &ssid,
-        Channel::ghz2_4(6, oer_ieee80211_mac::channel::ChannelWidth::Mhz20).unwrap(),
+        Channel::ghz2_4(6, oer_ieee80211_wire::channel::ChannelWidth::Mhz20).unwrap(),
         100,
         2,
         SequenceNumber::new(3).unwrap(),
@@ -258,7 +258,7 @@ fn the_tbtt_schedule_survives_the_u32_microsecond_boundary() {
         &ADVERTISEMENT,
         [2; 6],
         &ssid,
-        Channel::ghz2_4(6, oer_ieee80211_mac::channel::ChannelWidth::Mhz20).unwrap(),
+        Channel::ghz2_4(6, oer_ieee80211_wire::channel::ChannelWidth::Mhz20).unwrap(),
         100,
         2,
         SequenceNumber::new(3).unwrap(),
@@ -294,8 +294,8 @@ fn the_tbtt_schedule_survives_the_u32_microsecond_boundary() {
 
 #[test]
 fn an_announced_switch_counts_down_in_each_beacon_until_it_is_due() {
-    use oer_ieee80211_mac::channel::{Channel, ChannelWidth};
-    use oer_ieee80211_mac::channel_switch::{
+    use oer_ieee80211_wire::channel::{Channel, ChannelWidth};
+    use oer_ieee80211_wire::channel_switch::{
         ChannelSwitchMode, SecondaryChannelOffset, parse_channel_switch,
     };
 
@@ -306,7 +306,7 @@ fn an_announced_switch_counts_down_in_each_beacon_until_it_is_due() {
         &ADVERTISEMENT,
         [2; 6],
         &ssid,
-        Channel::ghz2_4(6, oer_ieee80211_mac::channel::ChannelWidth::Mhz20).unwrap(),
+        Channel::ghz2_4(6, oer_ieee80211_wire::channel::ChannelWidth::Mhz20).unwrap(),
         100,
         2,
         SequenceNumber::new(3).unwrap(),
@@ -340,7 +340,7 @@ fn an_announced_switch_counts_down_in_each_beacon_until_it_is_due() {
         let carried = announced(frame).unwrap();
         assert_eq!(carried.secondary, SecondaryChannelOffset::Above);
         assert_eq!(
-            carried.target(oer_ieee80211_mac::channel::Band::Ghz2_4),
+            carried.target(oer_ieee80211_wire::channel::Band::Ghz2_4),
             Ok(target)
         );
         counts[tbtt as usize - 1] = carried.count;
@@ -366,7 +366,7 @@ fn an_announced_switch_counts_down_in_each_beacon_until_it_is_due() {
             &ADVERTISEMENT,
             [2; 6],
             &ssid,
-            Channel::ghz2_4(1, oer_ieee80211_mac::channel::ChannelWidth::Mhz40Above).unwrap(),
+            Channel::ghz2_4(1, oer_ieee80211_wire::channel::ChannelWidth::Mhz40Above).unwrap(),
             100,
             2,
             sequence,

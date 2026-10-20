@@ -1,6 +1,6 @@
 #![no_std]
 use oer_ieee80211_arbiter::{AbsencePlace, Arbiter, ChannelRequest, Lease, NoReservation};
-use oer_ieee80211_lower_mac::Ieee80211Capabilities;
+use oer_ieee80211_port::Ieee80211Capabilities;
 use oer_radio_port::{Child, Root};
 use oer_time::Instant;
 

@@ -51,7 +51,7 @@ pub use eapol::{
     EAPOL_PACKET_TYPE_KEY, EapolCopyError, EapolKeyFrame, EapolKeyInfo, EapolKeyMessage,
     EapolParseError, OwnedEapolFrame, RSN_KEY_DESCRIPTOR_TYPE,
 };
-pub(crate) use oer_ieee80211_mac::security::rsn::Akm;
+pub(crate) use oer_ieee80211_wire::security::rsn::Akm;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RsnInterface {

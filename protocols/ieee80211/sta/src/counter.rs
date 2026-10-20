@@ -7,7 +7,7 @@
 /// port contract:
 ///
 /// ```compile_fail,E0432
-/// use oer_ieee80211_lower_mac::Counter;
+/// use oer_ieee80211_port::Counter;
 /// let mut count = Counter::ZERO;
 /// count.increment();
 /// ```

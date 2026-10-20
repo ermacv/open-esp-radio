@@ -13,12 +13,12 @@
 //! `libpp[wdev.o]::wDev_remove_KeyEntry` +0x0..+0x2e and
 //! `libpp[hal_crypto.o]::hal_crypto_clr_key_entry` +0x0..+0x88.
 
-use super::{MacAddress, TransmitKeyScope};
-use oer_ieee80211_lower_mac::{
+use super::TransmitKeyScope;
+use oer_ieee80211_port::{
     AccessPoint, Station,
     association::{Association, GroupKeySlot, PairwiseKeySlot, VacantAssociation},
 };
-use oer_ieee80211_mac::security::Spp;
+use oer_ieee80211_wire::security::Spp;
 use oer_radio_port::{Child, PoolPath, Root};
 
 /// The STA interface owns one PTK and one receive-only GTK slot.
@@ -40,12 +40,12 @@ pub enum TransmitKeyInstallation<'a, 'id, P: PoolPath = Root> {
     StationPairwise {
         association: &'a StationAssociation<'id, P>,
         slot: StationPairwiseSlot<'id, P>,
-        peer: MacAddress,
+        peer: [u8; 6],
     },
     AccessPointPairwise {
         association: &'a AccessPointAssociation<'id, P>,
         slot: AccessPointPairwiseSlot<'id, P>,
-        peer: MacAddress,
+        peer: [u8; 6],
     },
     AccessPointGroup {
         association: &'a AccessPointAssociation<'id, P>,

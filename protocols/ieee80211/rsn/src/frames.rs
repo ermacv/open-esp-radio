@@ -1,6 +1,6 @@
 //! Fixed WPA2-CCMP EAPOL frame construction and GTK key-data parsing.
 
-use oer_ieee80211_mac::security::rsn::{RSN_ELEMENT_ID, RSN_OUI};
+use oer_ieee80211_wire::security::rsn::{RSN_ELEMENT_ID, RSN_OUI};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::state::{RsnApState, RsnStaState, RsnTransmit, RsnTxMessage};

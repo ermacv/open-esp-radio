@@ -14,7 +14,7 @@
     clippy::arithmetic_side_effects
 )]
 
-use oer_ieee80211_mac::security::rsn::{
+use oer_ieee80211_wire::security::rsn::{
     RSN_CAPABILITY_MFPC, RSN_CAPABILITY_MFPR, RSN_CIPHER_BIP_CMAC_128, RSN_CIPHER_CCMP,
     RSN_PMKID_LEN, RsnElement, RsnSyntaxError, ieee_suite,
 };

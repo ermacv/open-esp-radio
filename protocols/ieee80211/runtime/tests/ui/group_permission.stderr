@@ -2,7 +2,7 @@ error[E0382]: use of moved value: `permission`
   --> tests/ui/group_permission.rs:13:38
    |
  7 |     permission: <ModelKeys<'id, Station> as KeyTypes<'id>>::GroupPermission,
-   |     ---------- move occurs because `permission` has type `oer_radio_port::pool::Slot<'_, ModelGroupPermission<oer_ieee80211_lower_mac::Station>, oer_radio_port::pool::path::Child<oer_radio_port::pool::path::Root, 8>>`, which does not implement the `Copy` trait
+   |     ---------- move occurs because `permission` has type `oer_radio_port::pool::Slot<'_, ModelGroupPermission<oer_ieee80211_port::Station>, oer_radio_port::pool::path::Child<oer_radio_port::pool::path::Root, 8>>`, which does not implement the `Copy` trait
 ...
 11 |     phase.station().select_group_key(permission, selected);
    |                                      ---------- value moved here

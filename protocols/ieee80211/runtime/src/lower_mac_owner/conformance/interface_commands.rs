@@ -5,7 +5,7 @@
 //! poll the event stream after both returns to detect an extra terminal.
 
 use alloc::vec::Vec;
-use oer_ieee80211_lower_mac::VifRole;
+use oer_ieee80211_port::VifRole;
 
 /// A stable allocation owned solely by the opaque configuration context.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

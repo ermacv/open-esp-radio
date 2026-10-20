@@ -7,11 +7,11 @@ crates execute its typed key-data unwrap, transmit and key-install requests.
 
 | Module | Responsibility |
 | --- | --- |
-| `akm` | Key descriptor version, PTK expansion and EAPOL-Key MIC of each `oer_ieee80211_mac::security::rsn::Akm` |
+| `akm` | Key descriptor version, PTK expansion and EAPOL-Key MIC of each `oer_ieee80211_wire::security::rsn::Akm` |
 | `sae` | SAE commit/confirm, hunting-and-pecking and hash-to-element password elements, anti-clogging tokens |
 | `bip`, `management_ccmp` | BIP-CMAC-128 for group-addressed and CCMP for individually addressed robust management frames |
 | `ccmp_mpdu` | Software CCMP for wire data and management MPDUs, using one immutable association SPP decision |
-| `element` | Association RSN element policy and selection of its first supported suite; wire syntax is `oer_ieee80211_mac::security::rsn` |
+| `element` | Association RSN element policy and selection of its first supported suite; wire syntax is `oer_ieee80211_wire::security::rsn` |
 | `crypto` | Zeroizing PMK/PTK owners, PSK passphrase derivation and the association security binding |
 | `eapol` | Validated borrowed/owned EAPOL-Key packets and MIC verification |
 | `frames` | EAPOL-Key/Ethernet construction, GTK key data and owned security elements |
@@ -26,7 +26,7 @@ validated Association element; the supplicant takes it from its own
 Association element. Both reject EAPOL-Key frames whose descriptor version
 differs from that suite.
 
-`oer_ieee80211_mac::ccmp::Ccmp128Key` owns temporal-key bytes, redacts Debug
+`oer_ieee80211_wire::ccmp::Ccmp128Key` owns temporal-key bytes, redacts Debug
 output and zeroizes its storage on drop. RSN copies directly from borrowed,
 zeroizing PTK/GTK storage into this owner; lower-MAC installation moves the
 same type without extracting an intermediate array. PTK derivation writes
@@ -78,7 +78,7 @@ restart or channel move rather than reusing IPNs under the same key.
 
 The implemented suites are PSK (`00-0F-AC:2`), PSK-SHA256 (`00-0F-AC:6`) and
 SAE (`00-0F-AC:8`). The MAC package names them and the negotiated
-association (`oer_ieee80211_mac::security::AssociationSecurity`); this crate
+association (`oer_ieee80211_wire::security::AssociationSecurity`); this crate
 owns only their cryptography, each property an exhaustive match over the
 suite.
 

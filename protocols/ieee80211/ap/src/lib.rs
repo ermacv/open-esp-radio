@@ -5,7 +5,7 @@
 //!
 //! This crate implements a bounded Open, WPA2-Personal or WPA3-Personal peer
 //! table, including management protection policy, replay and response effects. Frame
-//! codecs remain in `oer-ieee80211-mac`; MMIO, DMA, IRQ, hardware key
+//! codecs remain in `oer-ieee80211-wire`; MMIO, DMA, IRQ, hardware key
 //! slots and Embassy deadlines remain in chip/runtime crates. Replay and key
 //! ownership exist only in RSN epochs. Management protection decisions take
 //! integrity evidence as values; lower-MAC key slots and TX remain outside.

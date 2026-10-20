@@ -1,5 +1,5 @@
 #![no_std]
-use oer_ieee80211_lower_mac::{KeyTypes, LowerMacPhase, StationPhase, Station};
+use oer_ieee80211_port::{KeyTypes, LowerMacPhase, StationPhase, Station};
 use oer_ieee80211_runtime::lower_mac_owner::model::{ModelKeys, ModelPhase};
 
 pub fn installation_belongs_to_port<'p, 'a: 'p, 'b: 'p>(

@@ -1,9 +1,12 @@
 //! Open Authentication attempts, deadline results and retry ownership.
 
-use oer_ieee80211_mac::address::{Bssid, OwnAddress};
-use oer_ieee80211_mac::sequence::SequenceNumber;
-use oer_ieee80211_mac::station::{
-    StaDisconnect, StaSequenceCounter, parse_open_authentication_response, parse_sta_disconnect,
+use oer_ieee80211_wire::address::{Bssid, OwnAddress};
+use oer_ieee80211_wire::sequence::SequenceNumber;
+use {
+    crate::sequence::StaSequenceCounter,
+    oer_ieee80211_wire::station::{
+        StaDisconnect, parse_open_authentication_response, parse_sta_disconnect,
+    },
 };
 
 use super::STA_RESPONSE_TIMEOUT;

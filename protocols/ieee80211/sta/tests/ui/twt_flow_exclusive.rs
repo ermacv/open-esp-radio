@@ -1,5 +1,5 @@
 #![no_std]
-use oer_ieee80211_mac::twt::IndividualTwtFlowId;
+use oer_ieee80211_wire::twt::IndividualTwtFlowId;
 use oer_ieee80211_sta::twt::IndividualTwtRequester;
 
 pub fn select(owner: &mut IndividualTwtRequester, flow: IndividualTwtFlowId) {

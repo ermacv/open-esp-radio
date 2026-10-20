@@ -30,13 +30,13 @@ impl RxBufferFullCounter for oer_esp32s31_hal::ieee80211::mac::WifiMacHal<'_> {
     }
 }
 
-use oer_ieee80211_mac::ccmp::CcmpHeader;
-use oer_ieee80211_mac::he::{
+use oer_ieee80211_port::MacRxMetadata;
+use oer_ieee80211_wire::ccmp::CcmpHeader;
+use oer_ieee80211_wire::he::{
     He20MuSigBMimoStreamError, He20MuSigBMimoUsers, He20MuSigBNonMimoStreamError,
     He20MuSigBNonMimoUsers, HeMuSigBUser,
 };
-use oer_ieee80211_mac::ht::HtDuplicateMcs32;
-use oer_ieee80211_softmac::MacRxMetadata;
+use oer_ieee80211_wire::ht::HtDuplicateMcs32;
 
 pub const INGRESS_STRICT_RXEND: u32 = 0x01;
 pub const INGRESS_STRICT_DUMP: u32 = 0x02;
@@ -973,7 +973,7 @@ fn extract_mpdu(
 ///
 /// This function owns only descriptor geometry and the IEEE frame-type
 /// admission check. Subtype-specific formats, including 802.11ax Trigger
-/// Common/User Info, belong to `oer-ieee80211-mac`.
+/// Common/User Info, belong to `oer-ieee80211-wire`.
 pub fn extract_control(
     segments: &[RxSegment<'_>],
     config: RxIngressConfig,

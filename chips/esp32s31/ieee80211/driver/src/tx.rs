@@ -142,7 +142,7 @@ pub(crate) const fn capped_power(pair: WifiTxPowerPair, ceiling: Option<i8>) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oer_ieee80211_mac::channel::{WifiChannel, WifiChannelWidth};
+    use oer_ieee80211_wire::channel::{WifiChannel, WifiChannelWidth};
     use oer_radio_regulatory::{Country, PowerLimits, RegulatoryDomain};
 
     struct Calibrated;

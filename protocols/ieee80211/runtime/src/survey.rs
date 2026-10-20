@@ -17,11 +17,14 @@
 //! Received bytes reach this module; nothing here panics on them.
 
 use core::num::NonZeroU64;
-use oer_ieee80211_lower_mac::{RxEvidence, RxMetadata};
-use oer_ieee80211_mac::address::Bssid;
-use oer_ieee80211_mac::scan::{ScanObservation, ScanRecord, ScanTable};
+use oer_ieee80211_port::{RxEvidence, RxMetadata};
 use oer_ieee80211_sta::receive::{Received, classify, observe_scan};
+use oer_ieee80211_wire::address::Bssid;
 use oer_time::Instant;
+use {
+    oer_ieee80211_sta::scan::{ScanObservation, ScanTable},
+    oer_ieee80211_wire::scan::ScanRecord,
+};
 
 /// The gaps the survey logs for its stand BSSID; later ones are counted in
 /// [`Survey::gap_log_dropped`].

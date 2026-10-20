@@ -13,6 +13,7 @@
 //! Every failure is classified as the client contract's [`Failure`] table
 //! states; a `ClientFailed` site says why the shared domain is not touched.
 
+use oer_esp32s31_hal::ieee80211::init::{MacCoexPti, initialize_wifi_mac};
 use oer_esp32s31_hal::{
     domain::{
         CoexAbsent, Coexisting, CommonPower, CommonRadioPowerError, ModemClockError,
@@ -20,7 +21,6 @@ use oer_esp32s31_hal::{
     },
     ieee80211::client::{WifiClocked, WifiCold, WifiPowered},
 };
-use oer_esp32s31_ieee80211_mac::init::{MacCoexPti, initialize_wifi_mac};
 use oer_esp32s31_phy::{
     ConcurrentPhyTrackingError, ConcurrentRfError, ConcurrentWifiChannelError, PhyRegisterConfig,
     PhyTargetObserver, RomShortDelay, close_concurrent_rf,

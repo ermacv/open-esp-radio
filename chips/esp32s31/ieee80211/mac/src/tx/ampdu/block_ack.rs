@@ -1,20 +1,24 @@
 //! ESP32-S31 BlockAck policy and fixed-slot completion adapter.
 //!
 //! Frame parsing and one generic agreement state machine live in
-//! [`oer_ieee80211_mac::block_ack`], the station's originator in
-//! `oer_ieee80211_mac::block_ack::originator` and the vendor TIDs and Dialog Tokens in
+//! [`oer_ieee80211_wire::block_ack`], the station's originator in
+//! `oer_ieee80211_upper_mac::block_ack::originator` and the vendor TIDs and Dialog Tokens in
 //! `oer_espressif_ieee80211_policy::block_ack`. This module retains only
 //! the S31 window bound, the three-register completion snapshot and the
 //! fixed hardware-slot batch. It still owns no DMA address or register access.
 
-use oer_ieee80211_lower_mac::BlockAckReport;
-pub use oer_ieee80211_mac::block_ack::{
-    ADDBA_ACTION_BODY_LEN, ADDBA_REQUEST_ACTION, ADDBA_RESPONSE_ACTION, AddbaRequest,
-    BLOCK_ACK_CATEGORY, BlockAckAction, DELBA_ACTION, OperationalTxBlockAck, TxBlockAckAlarm,
-    TxBlockAckConfig, TxBlockAckDialogToken, TxBlockAckError, TxBlockAckResponse,
-    TxBlockAckSession, parse_block_ack_action,
+use oer_ieee80211_port::BlockAckReport;
+use oer_ieee80211_wire::sequence::SequenceNumber;
+pub use {
+    oer_ieee80211_upper_mac::block_ack::{
+        AddbaRequest, OperationalTxBlockAck, TxBlockAckAlarm, TxBlockAckConfig,
+        TxBlockAckDialogToken, TxBlockAckError, TxBlockAckResponse, TxBlockAckSession,
+    },
+    oer_ieee80211_wire::block_ack::{
+        ADDBA_ACTION_BODY_LEN, ADDBA_REQUEST_ACTION, ADDBA_RESPONSE_ACTION, BLOCK_ACK_CATEGORY,
+        BlockAckAction, DELBA_ACTION, parse_block_ack_action,
+    },
 };
-use oer_ieee80211_mac::sequence::SequenceNumber;
 
 /// Strict S31 TX window recovered from the fixed vendor queue geometry.
 pub const TX_BLOCK_ACK_MAX_WINDOW: u16 = 32;
@@ -147,7 +151,7 @@ pub struct BatchCompleting(Option<TxBlockAckBitmap>);
 ///
 /// ```compile_fail,E0382
 /// use oer_esp32s31_ieee80211_mac::tx::ampdu::TxAmpduBatch;
-/// use oer_ieee80211_mac::sequence::SequenceNumber;
+/// use oer_ieee80211_wire::sequence::SequenceNumber;
 /// let idle = TxAmpduBatch::new();
 /// let building = idle.begin(SequenceNumber::ZERO, 2);
 /// let duplicate = idle.begin(SequenceNumber::ZERO, 2);

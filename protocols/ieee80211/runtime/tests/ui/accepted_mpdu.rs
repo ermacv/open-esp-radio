@@ -1,5 +1,5 @@
 #![no_std]
-use oer_ieee80211_lower_mac::InFlight;
+use oer_ieee80211_port::InFlight;
 use oer_ieee80211_runtime::lower_mac_owner::model::ModelMpdu;
 
 pub fn reorder<'id, C, T>(

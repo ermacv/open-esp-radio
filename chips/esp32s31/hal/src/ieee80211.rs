@@ -18,3 +18,6 @@ pub mod mac;
 pub mod phy_rate;
 
 pub mod station_wake;
+
+/// Role-neutral hardware cold-start before DMA and interrupt publication.
+pub mod init;

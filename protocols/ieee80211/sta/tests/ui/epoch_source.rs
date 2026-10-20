@@ -1,5 +1,5 @@
 #![no_std]
-use oer_ieee80211_lower_mac::ConnectionEpochKind;
+use oer_ieee80211_port::ConnectionEpochKind;
 use oer_ieee80211_sta::epoch::LinkEpochSource;
 use oer_radio_port::{Child, Mint, Root, Slots};
 

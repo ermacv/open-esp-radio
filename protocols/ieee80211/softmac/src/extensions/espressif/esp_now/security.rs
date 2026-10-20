@@ -7,26 +7,26 @@
 //! claims to produce or authenticate encrypted on-air bytes.
 
 use core::{array, fmt};
-use oer_ieee80211_mac::sequence::SequenceNumber;
+use oer_ieee80211_wire::sequence::SequenceNumber;
 
-use oer_ieee80211_mac::{
-    channel::WifiChannel,
-    extensions::espressif::esp_now::{
-        ESP_NOW_CCMP_HEADER_LEN, ESP_NOW_CCMP_MIC_LEN, ESP_NOW_MANAGEMENT_HEADER_LEN,
-        ESP_NOW_V1_ACTION_OVERHEAD, EspNowCcmpPacketNumber, EspNowDestination,
-        EspNowEncryptedV1Unavailable, EspNowProtectedV1Envelope, EspNowProtectedV1WireError,
-        EspNowRandomValue, EspNowUnicastAddress, EspNowV1Payload, EspNowV1WireError,
-    },
-    station::StaSequenceCounter,
-};
 use zeroize::{Zeroize, ZeroizeOnDrop};
-
-use crate::{
-    extensions::espressif::esp_now::protocol::{
-        ESP_NOW_DEFAULT_PEER_CAPACITY, EspNowConfig, EspNowPeerSecurity, EspNowPhyMode,
+use {
+    oer_ieee80211_sta::sequence::StaSequenceCounter,
+    oer_ieee80211_wire::{
+        channel::WifiChannel,
+        extensions::espressif::esp_now::{
+            ESP_NOW_CCMP_HEADER_LEN, ESP_NOW_CCMP_MIC_LEN, ESP_NOW_MANAGEMENT_HEADER_LEN,
+            ESP_NOW_V1_ACTION_OVERHEAD, EspNowCcmpPacketNumber, EspNowDestination,
+            EspNowEncryptedV1Unavailable, EspNowProtectedV1Envelope, EspNowProtectedV1WireError,
+            EspNowRandomValue, EspNowUnicastAddress, EspNowV1Payload, EspNowV1WireError,
+        },
     },
-    interface::{BoundVirtualInterface, ChannelContextId},
 };
+
+use crate::extensions::espressif::esp_now::protocol::{
+    ESP_NOW_DEFAULT_PEER_CAPACITY, EspNowConfig, EspNowPeerSecurity, EspNowPhyMode,
+};
+use oer_ieee80211_port::interface::{BoundVirtualInterface, ChannelContextId};
 
 pub const ESP_NOW_KEY_LEN: usize = 16;
 pub const ESP_NOW_RX_REPLAY_WINDOW_BITS: u32 = 64;
