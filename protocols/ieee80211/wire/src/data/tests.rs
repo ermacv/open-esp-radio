@@ -487,3 +487,37 @@ fn amsdu_subframes_never_panic() {
 fn amsdu_subframes_never_panic_full() {
     run_amsdu_body(crate::fuzz::FULL);
 }
+
+// SOURCE: Linux v6.12 net/wireless/util.c ieee80211_amsdu_to_8023s
+// purges all queued subframes when any later subframe is malformed.
+// Behavioral reference only; no Linux code is incorporated.
+#[test]
+fn a_malformed_later_amsdu_subframe_exposes_no_valid_prefix() {
+    let valid = amsdu_mpdu();
+    for corruption in 0..3 {
+        let mut frame = valid.clone();
+        match corruption {
+            0 => {
+                frame.pop();
+            }
+            1 => {
+                frame[62..64].copy_from_slice(&2u16.to_be_bytes());
+            }
+            _ => {
+                frame[64] = 0;
+            }
+        }
+        let mut delivered = 0;
+        if let Ok(frames) =
+            decapsulate_data_frames(DataInterfaceRole::Station, &frame, 26, frame.len() - 26)
+        {
+            for parts in frames {
+                if parts.is_err() {
+                    break;
+                }
+                delivered += 1;
+            }
+        }
+        assert_eq!(delivered, 0, "malformed tail {corruption}");
+    }
+}

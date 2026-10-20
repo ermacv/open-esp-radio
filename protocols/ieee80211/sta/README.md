@@ -583,12 +583,5 @@ configuration replies.
 
 **Security (A-MSDU and keys)**
 
-- **A-MSDU subframes are delivered before later ones are validated**
-  (`machine.rs::Station::receive_frame` over `mac`'s lazy `AmsduSubframes`);
-  Linux drops the whole A-MSDU.
-- **Plaintext EAPOL subframes are accepted from any DA** in
-  `machine.rs::Station::receive_frame`; in a protected BSS a subframe whose
-  DA is neither own nor the PAE group address must be dropped (an A-MSDU
-  injection vector).
 - **Non-constant-time comparison** of GTK/IGTK material in
   `machine/group_keys.rs` `current_material` and `take_matching`.
