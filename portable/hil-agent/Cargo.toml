@@ -21,7 +21,6 @@ log = "0.4"
 
 [dev-dependencies]
 critical-section = { version = "1.2.0", features = ["std"] }
-embassy-time = { version = "0.5.1", features = ["std", "generic-queue-64"] }
 
 [lints]
 workspace = true
