@@ -214,6 +214,8 @@ type Caps = Esp32s31Caps<512>;
 type Family = Types<TestDevice, 512>;
 type Res<'id> = <Backend as PortBackend>::Resources<'id>;
 
+mod barriers;
+
 fn installed(
     statuses: Vec<(u8, u8)>,
 ) -> (radio::Installed<Backend>, Rc<RefCell<Observed>>, TestTimer) {

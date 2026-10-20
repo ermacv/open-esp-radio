@@ -495,11 +495,15 @@ impl<'id, D: Device<B>, const B: usize> Driver<'id, D, B> {
                 .advance_configuration(device.hardware(), &mut sink);
             self.collect(held, sink, stopping)?;
             if done {
-                held.terminal(LowerMacTerminal::Configured(
-                    self.configuring
-                        .take()
-                        .expect("configuration retains its permission"),
-                ));
+                let permission = self
+                    .configuring
+                    .take()
+                    .expect("configuration retains its permission");
+                // Retain queued owners until their published predecessors
+                // have posted their terminals, then confirm the barrier.
+                let role = permission.role();
+                self.withdraw(held, WithdrawCause::Disabled, |p| p.role() == role);
+                held.terminal(LowerMacTerminal::Configured(permission));
             } else {
                 return Ok(());
             }
@@ -559,14 +563,12 @@ impl<'id, D: Device<B>, const B: usize> Driver<'id, D, B> {
                     }
                 }
                 Command::Configure { permission, config } => {
-                    self.withdraw(held, WithdrawCause::Disabled, |p| p.role() == config.role);
                     self.core.configure(config)?;
                     self.configuring = Some(permission);
                     cx.waker().wake_by_ref();
                     break;
                 }
                 Command::CloseGate(gate) => {
-                    self.withdraw(held, WithdrawCause::GateClosed, |_| true);
                     self.core.hold();
                     self.closing = Some(gate);
                 }
@@ -639,6 +641,9 @@ impl<'id, D: Device<B>, const B: usize> Driver<'id, D, B> {
         }
         if self.closing.is_some() && !self.core.configuring() && self.core.close(device.hardware())
         {
+            // The core has returned every published head. Existing AC queues
+            // retain their tails in order until those heads are terminal.
+            self.withdraw(held, WithdrawCause::GateClosed, |_| true);
             let gate = held
                 .gate
                 .borrow_mut()
