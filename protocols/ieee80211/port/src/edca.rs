@@ -1,7 +1,7 @@
-//! Portable EDCA contention: the CSMA/CA backoff draw a lower-MAC backend
-//! uses for its own queues below the port (the ESP32-S31 driver's
-//! `EdcaBackoffState`). The backoff does not cross the lower-MAC port. [`EdcaContention`] keeps the contention window of one
-//! access category (IEEE 802.11-2020 10.23.2): it starts at `CWmin`, doubles
+//! Portable EDCA records and CSMA/CA contention for a backend's AC queues.
+//! The backoff draw stays below the lower-MAC port. [`EdcaContention`]
+//! keeps the contention window of one access category
+//! (IEEE 802.11-2020 10.23.2): it starts at `CWmin`, doubles
 //! after each failed attempt of a frame up to `CWmax` and returns to
 //! `CWmin` when the frame ends. The random source is injected, so a seeded
 //! source makes the draws deterministic.
