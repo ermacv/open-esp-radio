@@ -1,6 +1,9 @@
 //! Inspect the common engine's records for one linked function, independently
 //! of callback policy. Numerical addresses only select diagnostic input.
+#[path = "support/cli.rs"]
+mod cli;
 mod support;
+use clap::Parser;
 use oer_analysis_riscv_analysis::writes::function_writes;
 use oer_analysis_riscv_model::*;
 use oer_analysis_riscv_program::facts::ImageFacts;
@@ -8,29 +11,39 @@ use oer_analysis_riscv_stack::{DebugMetadata, Field, TableLayout, interrupt_tabl
 use serde::Deserialize;
 use std::rc::Rc;
 
+#[derive(Debug, Parser)]
+#[command(
+    name = "function-records",
+    about = "Inspect one linked function's records",
+    args_override_self = true
+)]
+struct Cli {
+    elf: std::path::PathBuf,
+    #[arg(value_name = "PC_HEX", value_parser = |value: &str| u32::from_str_radix(value.trim_start_matches("0x"), 16))]
+    address: u32,
+    #[arg(long)]
+    symbolic_spills: bool,
+    #[arg(long)]
+    writes: bool,
+    #[arg(long)]
+    image_facts: bool,
+    #[arg(long)]
+    inline_context: bool,
+    #[arg(long, value_name = "CHIP_TOML", allow_hyphen_values = true)]
+    interrupt_contract: Option<std::path::PathBuf>,
+}
+
 fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
-    let mut args = std::env::args().skip(1);
-    let bytes: Rc<[u8]> = std::fs::read(args.next().ok_or(
-        "usage: function-records ELF PC_HEX [--symbolic-spills] [--writes] [--image-facts] [--inline-context] [--interrupt-contract CHIP_TOML]",
-    )?)?
-    .into();
-    let address = args.next().ok_or("missing function address")?;
-    let address = u32::from_str_radix(address.trim_start_matches("0x"), 16)?;
-    let (mut symbolic_spills, mut image_facts, mut inline_context) = (false, false, false);
-    let mut writes = false;
-    let mut interrupt_contract = None;
-    while let Some(arg) = args.next() {
-        match arg.as_str() {
-            "--symbolic-spills" => symbolic_spills = true,
-            "--writes" => writes = true,
-            "--image-facts" => image_facts = true,
-            "--inline-context" => inline_context = true,
-            "--interrupt-contract" => {
-                interrupt_contract = Some(args.next().ok_or("missing chip contract path")?);
-            }
-            _ => return Err(format!("unknown option: {arg}").into()),
-        }
-    }
+    let Cli {
+        elf,
+        address,
+        symbolic_spills,
+        writes,
+        image_facts,
+        inline_context,
+        interrupt_contract,
+    } = cli::parse();
+    let bytes: Rc<[u8]> = std::fs::read(elf)?.into();
     let memory = WorkingMemory::new(512 * 1024 * 1024)?;
     let mut control = || Ok(());
     let image = ImageFacts::new(&bytes, &[], &memory, &mut control)?;
@@ -208,6 +221,53 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::CommandFactory as _;
+
+    #[test]
+    fn previous_diagnostic_flags_and_repetitions_parse() {
+        Cli::command().debug_assert();
+        let cli = Cli::try_parse_from(["function-records", "image.elf", "0x2f80d260"])
+            .expect("accepted example command line");
+        assert_eq!(cli.address, 0x2f80d260);
+        assert!(!(cli.symbolic_spills || cli.writes || cli.image_facts || cli.inline_context));
+        assert!(cli.interrupt_contract.is_none());
+        let cli = Cli::try_parse_from([
+            "function-records",
+            "image.elf",
+            "2F80D260",
+            "--symbolic-spills",
+            "--writes",
+            "--image-facts",
+            "--inline-context",
+            "--writes",
+            "--interrupt-contract",
+            "old.toml",
+            "--interrupt-contract",
+            "chip.toml",
+        ])
+        .expect("accepted example command line");
+        assert!(cli.symbolic_spills && cli.writes && cli.image_facts && cli.inline_context);
+        assert_eq!(cli.interrupt_contract, Some("chip.toml".into()));
+        assert_eq!(cli.address, 0x2f80d260);
+        for arguments in [
+            vec!["function-records", "image.elf"],
+            vec!["function-records", "image.elf", "not-a-pc"],
+            vec![
+                "function-records",
+                "image.elf",
+                "1234",
+                "--interrupt-contract",
+            ],
+            vec!["function-records", "image.elf", "1234", "--bad"],
+        ] {
+            assert!(Cli::try_parse_from(&arguments).is_err(), "{arguments:?}");
+        }
+    }
 }
 
 // Read only the existing platform table layout; the stack library validates

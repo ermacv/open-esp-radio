@@ -1,26 +1,27 @@
 //! Inspect a call's write summaries. Addresses select input; never semantics.
+#[path = "support/cli.rs"]
+mod cli;
 mod support;
+use clap::Parser;
 use oer_analysis_riscv_analysis::writes::*;
 use oer_analysis_riscv_model::*;
 use oer_analysis_riscv_program::facts::ImageFacts;
 
+#[derive(Debug, Parser)]
+#[command(name = "call-writes", about = "Inspect a call's write summaries")]
+struct Cli {
+    elf: std::path::PathBuf,
+    #[arg(value_name = "CALL_PC_HEX", value_parser = |value: &str| u32::from_str_radix(value.trim_start_matches("0x"), 16))]
+    site: u32,
+    #[arg(long)]
+    no_symbolic_spills: bool,
+}
+
 fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
-    let mut args = std::env::args().skip(1);
-    let bytes: std::rc::Rc<[u8]> = std::fs::read(
-        args.next()
-            .ok_or("usage: call-writes ELF CALL_PC_HEX [--no-symbolic-spills]")?,
-    )?
-    .into();
-    let site = args.next().ok_or("missing call PC")?;
-    let site = u32::from_str_radix(site.trim_start_matches("0x"), 16)?;
-    let symbolic_spills = match args.next().as_deref() {
-        None => true,
-        Some("--no-symbolic-spills") => false,
-        Some(_) => return Err("unknown option".into()),
-    };
-    if args.next().is_some() {
-        return Err("too many arguments".into());
-    }
+    let cli: Cli = cli::parse();
+    let bytes: std::rc::Rc<[u8]> = std::fs::read(cli.elf)?.into();
+    let site = cli.site;
+    let symbolic_spills = !cli.no_symbolic_spills;
     let memory = WorkingMemory::new(512 * 1024 * 1024)?;
     let mut control = || Ok(());
     let image = ImageFacts::new(&bytes, &[], &memory, &mut control)?;
@@ -126,4 +127,34 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         println!("call-barrier\t{:#010x}\t{:?}", barrier.site, barrier.kind);
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::CommandFactory as _;
+
+    #[test]
+    fn previous_calls_and_spill_policy_parse() {
+        Cli::command().debug_assert();
+        let cli = Cli::try_parse_from(["call-writes", "image.elf", "0xABCDEF"])
+            .expect("accepted example command line");
+        assert_eq!(cli.elf, std::path::Path::new("image.elf"));
+        assert_eq!(cli.site, 0xabcdef);
+        assert!(!cli.no_symbolic_spills);
+        let cli =
+            Cli::try_parse_from(["call-writes", "image.elf", "abcdef", "--no-symbolic-spills"])
+                .expect("accepted example command line");
+        assert_eq!(cli.site, 0xabcdef);
+        assert!(cli.no_symbolic_spills);
+        for arguments in [
+            vec!["call-writes", "image.elf"],
+            vec!["call-writes", "image.elf", "100000000"],
+            vec!["call-writes", "image.elf", "bad-pc"],
+            vec!["call-writes", "image.elf", "1234", "--bad"],
+            vec!["call-writes", "image.elf", "1234", "extra"],
+        ] {
+            assert!(Cli::try_parse_from(&arguments).is_err(), "{arguments:?}");
+        }
+    }
 }

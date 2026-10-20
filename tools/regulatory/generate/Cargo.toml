@@ -8,6 +8,9 @@ repository.workspace = true
 publish = false
 description = "Generates the regulatory domain tables from a pinned subset of wireless-regdb"
 
+[dependencies]
+clap = { version = "=4.5.48", features = ["derive"] }
+
 [lints]
 workspace = true
 

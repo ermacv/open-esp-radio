@@ -1,6 +1,44 @@
 use super::*;
 
 #[test]
+fn service_requests_use_clap_and_stay_out_of_the_public_tree() {
+    command().debug_assert();
+    assert!(matches!(
+        Invocation::try_parse_from(["runner", "--observer-build"])
+            .expect("accepted runner invocation"),
+        Invocation::ObserverBuild
+    ));
+    assert!(matches!(
+        Invocation::try_parse_from(["runner", "__command-tree"])
+            .expect("accepted runner invocation"),
+        Invocation::CommandTree
+    ));
+    let Invocation::Run(cli) =
+        Invocation::try_parse_from(["runner", "run", "boot-smoke", "--board", "s31-a"])
+            .expect("accepted runner invocation")
+    else {
+        panic!("expected a scenario run");
+    };
+    assert_eq!(cli.board.as_deref(), Some("s31-a"));
+    for arguments in [
+        vec!["runner", "--observer-build", "--bad"],
+        vec!["runner", "__command-tree", "--bad"],
+        vec!["runner", "unknown", "--observer-build"],
+        vec!["runner", "run", "boot-smoke", "--observer-build"],
+    ] {
+        assert!(
+            Invocation::try_parse_from(&arguments).is_err(),
+            "{arguments:?}"
+        );
+    }
+    use clap::CommandFactory as _;
+    assert_eq!(
+        oer_os_command_tree::command_tree(&command(), &[]),
+        oer_os_command_tree::command_tree(&Cli::command(), &[])
+    );
+}
+
+#[test]
 fn a_source_tree_is_a_run_flag_that_replaying_firmware_excludes() {
     let run =
         Cli::try_parse_from(["cargo-hil", "run", "boot-smoke", "--source", "/tmp/arm-a"]).unwrap();

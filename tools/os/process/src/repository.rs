@@ -17,6 +17,26 @@ use crate::Result;
 /// a checkout of this repository.
 const PACKAGE: &str = "tools/os/process";
 
+/// The checkout selected by a host command line.
+#[cfg(feature = "clap")]
+#[derive(Clone, Debug, Default, clap::Args)]
+pub struct CheckoutArgs {
+    /// Act on this checkout instead of the one this executable was built from.
+    #[arg(long, global = true, value_name = "PATH")]
+    pub root: Option<PathBuf>,
+}
+
+#[cfg(feature = "clap")]
+impl CheckoutArgs {
+    /// Resolve the explicit checkout or discover the executable's checkout.
+    pub fn checkout(&self, tool: &str) -> Result<Checkout> {
+        match &self.root {
+            Some(root) => Checkout::new(root),
+            None => Checkout::discover(tool),
+        }
+    }
+}
+
 /// A checkout of this repository.
 #[derive(Clone, Debug)]
 pub struct Checkout {
@@ -116,5 +136,36 @@ mod tests {
         let found = checkout_of(&nested.join("hil/host")).unwrap();
         assert_eq!(found, nested.canonicalize().unwrap());
         assert_eq!(Checkout::new(&found).unwrap().root, found);
+    }
+}
+
+#[cfg(all(test, feature = "clap"))]
+mod cli_tests {
+    use super::*;
+    use clap::{CommandFactory as _, Parser as _};
+
+    #[derive(clap::Parser)]
+    struct Cli {
+        #[command(flatten)]
+        checkout: CheckoutArgs,
+        #[command(subcommand)]
+        command: Command,
+    }
+    #[derive(clap::Subcommand)]
+    enum Command {
+        Queue,
+    }
+
+    #[test]
+    fn the_checkout_is_a_single_global_argument() {
+        Cli::command().debug_assert();
+        for words in [
+            vec!["tool", "--root", "/c", "queue"],
+            vec!["tool", "queue", "--root=/c"],
+        ] {
+            let cli = Cli::try_parse_from(words).unwrap();
+            assert_eq!(cli.checkout.root, Some(PathBuf::from("/c")));
+        }
+        assert!(Cli::try_parse_from(["tool", "--root"]).is_err());
     }
 }

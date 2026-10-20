@@ -51,15 +51,14 @@ fn watch_fixtures() {
     });
 }
 
-pub fn serve(store: &RunStore, args: &[std::ffi::OsString]) -> Result<std::process::ExitCode> {
-    let port = match args {
-        [] => DEFAULT_PORT,
-        [flag, port] if flag == "--port" => port
-            .to_str()
-            .and_then(|port| port.parse().ok())
-            .ok_or("--port takes a port number")?,
-        _ => return Err("usage: cargo hil dashboard [--port PORT]".into()),
-    };
+#[derive(clap::Args)]
+pub struct DashboardCli {
+    #[arg(long, default_value_t = DEFAULT_PORT)]
+    port: u16,
+}
+
+pub fn serve(store: &RunStore, cli: DashboardCli) -> Result<std::process::ExitCode> {
+    let port = cli.port;
     let arbiter = oer_lab_arbiter::Arbiter::open()?;
     let record = arbiter.directory().join("dashboard.json");
     let me = Instance::current(port)?;

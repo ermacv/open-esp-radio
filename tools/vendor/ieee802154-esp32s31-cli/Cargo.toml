@@ -8,6 +8,7 @@ publish.workspace = true
 description = "The IEEE 802.15.4 host stand's program: list, run and compare the catalog scenarios, one per process,"
 
 [dependencies]
+clap = { version = "=4.5.48", features = ["derive"] }
 oer-os-process = { path = "../../os/process" }
 oer-vendor-ieee802154-esp32s31 = { path = "../ieee802154-esp32s31" }
 

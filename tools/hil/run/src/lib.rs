@@ -28,29 +28,26 @@ pub struct Build {
 /// Run the runner with the command line of this process; `build` is the
 /// executable's embedded build record.
 pub fn main(build: Build) {
-    if std::env::args_os()
-        .nth(1)
-        .is_some_and(|a| a == "--observer-build")
+    let arguments = std::env::args_os().collect::<Vec<_>>();
+    let cli = match cli::Invocation::try_parse_from(&arguments).unwrap_or_else(|error| error.exit())
     {
-        println!("{}", build.record);
-        return;
-    }
-    // The runner's commands for `cargo hil __command-tree`.
-    if std::env::args_os()
-        .nth(1)
-        .is_some_and(|a| a == "__command-tree")
-    {
-        use clap::CommandFactory as _;
-        let tree = oer_os_command_tree::command_tree(&cli::Cli::command(), &[]);
-        println!("{}", serde_json::to_string(&tree).unwrap_or_default());
-        return;
-    }
+        cli::Invocation::ObserverBuild => {
+            println!("{}", build.record);
+            return;
+        }
+        cli::Invocation::CommandTree => {
+            let tree = oer_os_command_tree::command_tree(&cli::command(), &[]);
+            println!("{}", serde_json::to_string(&tree).unwrap_or_default());
+            return;
+        }
+        cli::Invocation::Run(cli) => *cli,
+    };
     let registered = oer_hil_runs::run::register_runner(oer_hil_runs::run::RunnerBuild {
         record: build.record,
         package: build.package,
         version: build.version,
     });
-    if let Err(error) = registered.and_then(|()| command::run()) {
+    if let Err(error) = registered.and_then(|()| command::run(cli, arguments)) {
         eprintln!("error: {error}");
         std::process::exit(if oer_os_process::is_cancelled(&*error) {
             130

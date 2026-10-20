@@ -39,7 +39,7 @@ if [ "$1" = --observer-build ]; then
     printf '{"schema":3,"resolved":{"packages":[]}}\n'
     exit 0
 fi
-if [ "$1" = exit ]; then exit 37; fi
+if [ "$1" = plan ]; then exit 37; fi
 trap 'sleep 2; echo cleaned > "$FIXTURE_ROOT/cleaned"; exit 42' TERM
 echo $$ > "$FIXTURE_ROOT/pid"
 while :; do sleep 0.1; done
@@ -104,9 +104,9 @@ fn resolved_owner_reaches_the_runner_without_losing_enclosing_authority() {
         ),
     );
     for (args, owner) in [
-        (vec!["--owner", "other", "owner-probe"], "other"),
-        (vec!["owner-probe", "--owner=other"], "other"),
-        (vec!["owner-probe"], "enclosing-owner"),
+        (vec!["--owner", "other", "plan"], "other"),
+        (vec!["plan", "--owner=other"], "other"),
+        (vec!["plan"], "enclosing-owner"),
     ] {
         let mut command = wrapper(root);
         command
@@ -122,7 +122,7 @@ fn invalid_explicit_owner_is_refused_before_runner_or_job_creation() {
     for args in [
         vec!["--owner", "Bad Name", "run", "boot-smoke"],
         vec!["run", "boot-smoke", "--owner=Bad Name"],
-        vec!["--owner", "Bad Name", "exit"],
+        vec!["--owner", "Bad Name", "plan"],
         vec!["--owner", "Bad Name", "firmware", "list"],
     ] {
         let directory = fixture();
@@ -149,7 +149,7 @@ fn forwards_runner_exit_and_uses_locked_cargo_with_explicit_offline_only() {
     let root = directory.path();
     for offline in [false, true] {
         let mut command = wrapper(root);
-        command.arg("exit").env_remove("CARGO_NET_OFFLINE");
+        command.arg("plan").env_remove("CARGO_NET_OFFLINE");
         if offline {
             command.env("CARGO_NET_OFFLINE", "true");
         }
@@ -175,7 +175,7 @@ fn forwards_runner_exit_and_uses_locked_cargo_with_explicit_offline_only() {
 fn cancellation_of_wrapper_pid_reaches_runner_and_waits_for_cleanup_status() {
     let directory = fixture();
     let root = directory.path();
-    let mut child = wrapper(root).arg("loop").spawn().unwrap();
+    let mut child = wrapper(root).arg("doctor").spawn().unwrap();
     let deadline = Instant::now() + Duration::from_secs(15);
     while !root.join("pid").is_file() {
         assert!(Instant::now() < deadline, "runner never started");

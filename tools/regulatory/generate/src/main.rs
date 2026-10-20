@@ -6,23 +6,59 @@
 mod regdb;
 mod render;
 
+use clap::Parser as _;
 use std::process::ExitCode;
+
+#[derive(clap::Parser)]
+#[command(name = "cargo regdb")]
+struct Cli {
+    #[arg(value_name = "db.txt")]
+    db: String,
+    revision: String,
+    #[arg(value_name = "out.rs")]
+    out: String,
+}
 
 /// The countries whose rules go into the tables: the stand's and the owner's
 /// requests.
 const COUNTRIES: &[&str] = &["DE"];
 
 fn main() -> ExitCode {
-    let arguments: Vec<String> = std::env::args().skip(1).collect();
-    let [db, revision, out] = arguments.as_slice() else {
-        eprintln!("usage: cargo regdb <db.txt> <revision> <out.rs>");
-        return ExitCode::from(2);
+    let cli = match Cli::try_parse() {
+        Ok(cli) => cli,
+        Err(error) => {
+            let _ = error.print();
+            return ExitCode::from(2);
+        }
     };
-    match run(db, revision, out) {
+    match run(&cli.db, &cli.revision, &cli.out) {
         Ok(()) => ExitCode::SUCCESS,
         Err(message) => {
             eprintln!("error: {message}");
             ExitCode::FAILURE
+        }
+    }
+}
+
+#[cfg(test)]
+mod cli_tests {
+    use super::*;
+    use clap::CommandFactory as _;
+
+    #[test]
+    fn the_three_positional_arguments_keep_their_order() {
+        Cli::command().debug_assert();
+        let cli = Cli::try_parse_from(["regdb", "db.txt", "revision", "out.rs"]).unwrap();
+        assert_eq!(
+            (cli.db.as_str(), cli.revision.as_str(), cli.out.as_str()),
+            ("db.txt", "revision", "out.rs")
+        );
+        for args in [
+            vec!["regdb"],
+            vec!["regdb", "db.txt", "revision"],
+            vec!["regdb", "db.txt", "revision", "out.rs", "extra"],
+        ] {
+            assert_eq!(Cli::try_parse_from(args).err().unwrap().exit_code(), 2);
         }
     }
 }

@@ -1,10 +1,6 @@
 //! CLI command dispatch with command-specific ordering and side-effect boundaries.
 
 use crate::image;
-use std::env;
-
-use clap::Parser as _;
-
 use crate::scenario::{Catalog, requirements};
 use crate::{
     Result, cli::Cli, cli::CliCommand, cli::ImageCommand, cli::ScenarioCommand, emit_json,
@@ -17,10 +13,8 @@ use oer_hil_scenario::ScenarioFamily as _;
 use oer_hil_scenario::workload::family::Registry as _;
 use oer_hil_scenario::workload::output;
 
-pub(crate) fn run() -> Result<()> {
+pub(crate) fn run(cli: Cli, invocation: Vec<std::ffi::OsString>) -> Result<()> {
     let root = oer_os_process::built_root();
-    let invocation = env::args_os().collect::<Vec<_>>();
-    let cli = Cli::parse();
     output::reserve_machine_stdout()?;
     let _signals = oer_os_process::install_signal_handlers()?;
     let command = cli.command;

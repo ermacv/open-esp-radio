@@ -1,0 +1,557 @@
+[
+  {
+    "path": [
+      "hil"
+    ],
+    "subcommands": [
+      "dashboard",
+      "peer",
+      "firmware",
+      "images",
+      "observer",
+      "sweep",
+      "runs",
+      "perf",
+      "profile",
+      "bisect",
+      "ab",
+      "wait",
+      "doctor",
+      "fixture",
+      "plan",
+      "scenario",
+      "image",
+      "run",
+      "run-all"
+    ],
+    "flags": [
+      "--owner"
+    ],
+    "forwards": false
+  },
+  {
+    "path": [
+      "hil",
+      "dashboard"
+    ],
+    "subcommands": [],
+    "flags": [
+      "--port"
+    ],
+    "forwards": false
+  },
+  {
+    "path": [
+      "hil",
+      "wait"
+    ],
+    "subcommands": [],
+    "flags": [],
+    "forwards": false
+  },
+  {
+    "path": [
+      "hil",
+      "perf"
+    ],
+    "subcommands": [
+      "report",
+      "baseline",
+      "check"
+    ],
+    "flags": [],
+    "forwards": false
+  },
+  {
+    "path": [
+      "hil",
+      "perf",
+      "report"
+    ],
+    "subcommands": [],
+    "flags": [
+      "--measurement",
+      "--since"
+    ],
+    "forwards": false
+  },
+  {
+    "path": [
+      "hil",
+      "perf",
+      "baseline"
+    ],
+    "subcommands": [],
+    "flags": [
+      "--scenario",
+      "--reason"
+    ],
+    "forwards": false
+  },
+  {
+    "path": [
+      "hil",
+      "perf",
+      "check"
+    ],
+    "subcommands": [],
+    "flags": [],
+    "forwards": false
+  },
+  {
+    "path": [
+      "hil",
+      "runs"
+    ],
+    "subcommands": [
+      "list",
+      "show",
+      "why",
+      "compare",
+      "history",
+      "flaky",
+      "quarantine",
+      "release",
+      "pin",
+      "unpin",
+      "prune"
+    ],
+    "flags": [],
+    "forwards": false
+  },
+  {
+    "path": [
+      "hil",
+      "runs",
+      "list"
+    ],
+    "subcommands": [],
+    "flags": [
+      "--scenario",
+      "--outcome",
+      "--image",
+      "--since",
+      "--limit"
+    ],
+    "forwards": false
+  },
+  {
+    "path": [
+      "hil",
+      "runs",
+      "show"
+    ],
+    "subcommands": [],
+    "flags": [],
+    "forwards": false
+  },
+  {
+    "path": [
+      "hil",
+      "runs",
+      "why"
+    ],
+    "subcommands": [],
+    "flags": [
+      "--tail"
+    ],
+    "forwards": false
+  },
+  {
+    "path": [
+      "hil",
+      "runs",
+      "compare"
+    ],
+    "subcommands": [],
+    "flags": [
+      "--measurement"
+    ],
+    "forwards": false
+  },
+  {
+    "path": [
+      "hil",
+      "runs",
+      "history"
+    ],
+    "subcommands": [],
+    "flags": [
+      "--measurement",
+      "--limit"
+    ],
+    "forwards": false
+  },
+  {
+    "path": [
+      "hil",
+      "runs",
+      "flaky"
+    ],
+    "subcommands": [],
+    "flags": [
+      "--since",
+      "--minimum"
+    ],
+    "forwards": false
+  },
+  {
+    "path": [
+      "hil",
+      "runs",
+      "quarantine"
+    ],
+    "subcommands": [],
+    "flags": [
+      "--reason"
+    ],
+    "forwards": false
+  },
+  {
+    "path": [
+      "hil",
+      "runs",
+      "release"
+    ],
+    "subcommands": [],
+    "flags": [],
+    "forwards": false
+  },
+  {
+    "path": [
+      "hil",
+      "runs",
+      "pin"
+    ],
+    "subcommands": [],
+    "flags": [
+      "--reason"
+    ],
+    "forwards": false
+  },
+  {
+    "path": [
+      "hil",
+      "runs",
+      "unpin"
+    ],
+    "subcommands": [],
+    "flags": [],
+    "forwards": false
+  },
+  {
+    "path": [
+      "hil",
+      "runs",
+      "prune"
+    ],
+    "subcommands": [],
+    "flags": [
+      "--days",
+      "--keep-failed",
+      "--apply",
+      "--unreadable"
+    ],
+    "forwards": false
+  },
+  {
+    "path": [
+      "hil",
+      "firmware"
+    ],
+    "subcommands": [
+      "list",
+      "build"
+    ],
+    "flags": [],
+    "forwards": false
+  },
+  {
+    "path": [
+      "hil",
+      "firmware",
+      "list"
+    ],
+    "subcommands": [],
+    "flags": [],
+    "forwards": false
+  },
+  {
+    "path": [
+      "hil",
+      "firmware",
+      "build"
+    ],
+    "subcommands": [],
+    "flags": [],
+    "forwards": false
+  },
+  {
+    "path": [
+      "hil",
+      "images"
+    ],
+    "subcommands": [
+      "check",
+      "compare"
+    ],
+    "flags": [],
+    "forwards": false
+  },
+  {
+    "path": [
+      "hil",
+      "images",
+      "check"
+    ],
+    "subcommands": [],
+    "flags": [
+      "--all",
+      "--list",
+      "--class",
+      "--reaching",
+      "--vendor-dependencies-absent",
+      "--type-check",
+      "--jobs",
+      "--chip"
+    ],
+    "forwards": false
+  },
+  {
+    "path": [
+      "hil",
+      "images",
+      "compare"
+    ],
+    "subcommands": [],
+    "flags": [
+      "--base",
+      "--class",
+      "--alias",
+      "--allow",
+      "--show",
+      "--chip"
+    ],
+    "forwards": false
+  },
+  {
+    "path": [
+      "hil",
+      "peer"
+    ],
+    "subcommands": [
+      "send"
+    ],
+    "flags": [],
+    "forwards": false
+  },
+  {
+    "path": [
+      "hil",
+      "peer",
+      "send"
+    ],
+    "subcommands": [],
+    "flags": [
+      "--for"
+    ],
+    "forwards": false
+  },
+  {
+    "path": [
+      "hil",
+      "profile"
+    ],
+    "subcommands": [],
+    "flags": [
+      "--scenario",
+      "--repetition",
+      "--top"
+    ],
+    "forwards": false
+  },
+  {
+    "path": [
+      "hil",
+      "bisect"
+    ],
+    "subcommands": [],
+    "flags": [
+      "--scenario",
+      "--chip",
+      "--layout-seed",
+      "--board",
+      "--peer-board"
+    ],
+    "forwards": false
+  },
+  {
+    "path": [
+      "hil",
+      "ab"
+    ],
+    "subcommands": [],
+    "flags": [
+      "--a",
+      "--b",
+      "--scenario",
+      "--repetitions",
+      "--layout-seeds",
+      "--order-seed",
+      "--board",
+      "--peer-board",
+      "--enqueue",
+      "--after",
+      "--after-any"
+    ],
+    "forwards": false
+  },
+  {
+    "path": [
+      "hil",
+      "doctor"
+    ],
+    "subcommands": [],
+    "flags": [
+      "--tag",
+      "--role",
+      "--chip"
+    ],
+    "forwards": false
+  },
+  {
+    "path": [
+      "hil",
+      "fixture"
+    ],
+    "subcommands": [
+      "check"
+    ],
+    "flags": [],
+    "forwards": false
+  },
+  {
+    "path": [
+      "hil",
+      "fixture",
+      "check"
+    ],
+    "subcommands": [],
+    "flags": [
+      "--chip"
+    ],
+    "forwards": false
+  },
+  {
+    "path": [
+      "hil",
+      "plan"
+    ],
+    "subcommands": [],
+    "flags": [
+      "--tag",
+      "--role",
+      "--chip",
+      "--proof"
+    ],
+    "forwards": false
+  },
+  {
+    "path": [
+      "hil",
+      "scenario"
+    ],
+    "subcommands": [
+      "list",
+      "validate"
+    ],
+    "flags": [],
+    "forwards": false
+  },
+  {
+    "path": [
+      "hil",
+      "scenario",
+      "list"
+    ],
+    "subcommands": [],
+    "flags": [],
+    "forwards": false
+  },
+  {
+    "path": [
+      "hil",
+      "scenario",
+      "validate"
+    ],
+    "subcommands": [],
+    "flags": [],
+    "forwards": false
+  },
+  {
+    "path": [
+      "hil",
+      "image"
+    ],
+    "subcommands": [
+      "build"
+    ],
+    "flags": [],
+    "forwards": false
+  },
+  {
+    "path": [
+      "hil",
+      "image",
+      "build"
+    ],
+    "subcommands": [],
+    "flags": [
+      "--layout-seed",
+      "--chip"
+    ],
+    "forwards": false
+  },
+  {
+    "path": [
+      "hil",
+      "run"
+    ],
+    "subcommands": [],
+    "flags": [
+      "--source",
+      "--images",
+      "--firmware-from",
+      "--layout-seed",
+      "--features",
+      "--repetitions",
+      "--then",
+      "--chip",
+      "--owner",
+      "--enqueue",
+      "--after",
+      "--after-any"
+    ],
+    "forwards": false
+  },
+  {
+    "path": [
+      "hil",
+      "run-all"
+    ],
+    "subcommands": [],
+    "flags": [
+      "--layout-seed",
+      "--tag",
+      "--role",
+      "--all",
+      "--exclude",
+      "--chip",
+      "--owner",
+      "--enqueue",
+      "--after",
+      "--after-any"
+    ],
+    "forwards": false
+  }
+]

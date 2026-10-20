@@ -1,6 +1,9 @@
 //! Reproduce stack-word noninterference, including companion machine facts.
 //! PCs and a slot select diagnostic input; they do not select summary semantics.
+#[path = "support/cli.rs"]
+mod cli;
 mod support;
+use clap::Parser;
 use oer_analysis_riscv_analysis::{FunctionInput, PreparedReferences, writes::*};
 use oer_analysis_riscv_lift::StructuralRiscvDecoder;
 use oer_analysis_riscv_model::*;
@@ -9,22 +12,28 @@ use oer_analysis_riscv_program::facts::ImageFacts;
 use oer_analysis_riscv_stack::{DebugMetadata, analyze, parse_summaries, read_debug};
 use std::{collections::BTreeSet, rc::Rc};
 
+#[derive(Debug, Parser)]
+#[command(
+    name = "stack-call-writes",
+    about = "Inspect stack-word noninterference"
+)]
+struct Cli {
+    elf: std::path::PathBuf,
+    rom_elf: std::path::PathBuf,
+    stack_summaries_toml: std::path::PathBuf,
+    #[arg(value_name = "CALL_PC_HEX", value_parser = |value: &str| u32::from_str_radix(value.trim_start_matches("0x"), 16))]
+    site: u32,
+    #[arg(value_name = "SLOT_DECIMAL", allow_negative_numbers = true)]
+    slot: i64,
+}
+
 fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
-    let mut args = std::env::args().skip(1);
-    let bytes: Rc<[u8]> = std::fs::read(args.next().ok_or(
-        "usage: stack-call-writes ELF ROM_ELF STACK_SUMMARIES_TOML CALL_PC_HEX SLOT_DECIMAL",
-    )?)?
-    .into();
-    let rom = std::fs::read(args.next().ok_or("missing companion ELF")?)?;
-    let summaries = parse_summaries(&std::fs::read_to_string(
-        args.next().ok_or("missing stack summaries")?,
-    )?)?;
-    let site = args.next().ok_or("missing call PC")?;
-    let site = u32::from_str_radix(site.trim_start_matches("0x"), 16)?;
-    let slot: i64 = args.next().ok_or("missing slot")?.parse()?;
-    if args.next().is_some() {
-        return Err("too many arguments".into());
-    }
+    let cli: Cli = cli::parse();
+    let bytes: Rc<[u8]> = std::fs::read(cli.elf)?.into();
+    let rom = std::fs::read(cli.rom_elf)?;
+    let summaries = parse_summaries(&std::fs::read_to_string(cli.stack_summaries_toml)?)?;
+    let site = cli.site;
+    let slot = cli.slot;
     let memory = WorkingMemory::new(512 * 1024 * 1024)?;
     let mut control = || Ok(());
     let image = ImageFacts::new(&bytes, &[], &memory, &mut control)?;
@@ -336,5 +345,55 @@ fn add_targets(value: &AbstractValue, pending: &mut Vec<u32>) {
             }
         }
         _ => (), // call_writes retains unknown or mixed alternatives as barriers.
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::CommandFactory as _;
+
+    #[test]
+    fn previous_hex_pc_and_signed_decimal_slot_forms_parse() {
+        Cli::command().debug_assert();
+        for (pc, slot, expected) in [("0x2f80d260", "-16", -16), ("2F80D260", "+24", 24)] {
+            let cli = Cli::try_parse_from([
+                "stack-call-writes",
+                "image.elf",
+                "rom.elf",
+                "summaries.toml",
+                pc,
+                slot,
+            ])
+            .expect("accepted example command line");
+            assert_eq!(cli.elf, std::path::Path::new("image.elf"));
+            assert_eq!(cli.rom_elf, std::path::Path::new("rom.elf"));
+            assert_eq!(
+                cli.stack_summaries_toml,
+                std::path::Path::new("summaries.toml")
+            );
+            assert_eq!(cli.site, 0x2f80d260);
+            assert_eq!(cli.slot, expected);
+        }
+        for tail in [
+            vec![],
+            vec!["bad-pc", "0"],
+            vec!["1234", "bad-slot"],
+            vec!["1234", "0", "extra"],
+        ] {
+            assert!(
+                Cli::try_parse_from(
+                    [
+                        "stack-call-writes",
+                        "image.elf",
+                        "rom.elf",
+                        "summaries.toml"
+                    ]
+                    .into_iter()
+                    .chain(tail)
+                )
+                .is_err()
+            );
+        }
     }
 }

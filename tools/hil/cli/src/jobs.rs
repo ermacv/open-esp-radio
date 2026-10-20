@@ -133,48 +133,32 @@ pub fn images_directory(ctx: &Checkout) -> Result<PathBuf> {
     Ok(directory)
 }
 
-/// `--enqueue` and `--after JOB` (or `--after-any JOB`) taken from `cargo
-/// hil` arguments, up to a `--`.
-pub fn take(args: Vec<OsString>) -> Result<(bool, Option<After>, Vec<OsString>)> {
-    let mut enqueue = false;
-    let mut after = None;
-    let mut remaining = Vec::new();
-    let mut rest = args.into_iter();
-    while let Some(argument) = rest.next() {
-        let text = argument.to_str().unwrap_or_default();
-        let dependency = [(AFTER, false), (AFTER_ANY, true)]
-            .into_iter()
-            .find_map(|(flag, any)| {
-                if text == flag {
-                    Some((flag, any, None))
-                } else {
-                    text.strip_prefix(flag)
-                        .and_then(|value| value.strip_prefix('='))
-                        .map(|value| (flag, any, Some(value.to_owned())))
-                }
-            });
-        if text == "--" {
-            remaining.push(argument);
-            remaining.extend(rest.by_ref());
-            break;
-        } else if text == ENQUEUE {
-            enqueue = true;
-        } else if let Some((flag, any, value)) = dependency {
-            let job = match value {
-                Some(value) => value,
-                None => rest
-                    .next()
-                    .and_then(|value| value.into_string().ok())
-                    .ok_or_else(|| format!("{flag} requires a job id"))?,
-            };
-            if after.replace(After { job, any }).is_some() {
-                return Err("--after or --after-any is given twice".into());
-            }
-        } else {
-            remaining.push(argument);
-        }
+/// Scheduling options shared by the complete host command tree.
+#[derive(Clone, Debug, Default, clap::Args)]
+pub(crate) struct JobArgs {
+    #[arg(long, overrides_with = "enqueue")]
+    pub enqueue: bool,
+    #[arg(long, conflicts_with = "after_any")]
+    after: Option<String>,
+    #[arg(long)]
+    after_any: Option<String>,
+}
+
+impl JobArgs {
+    pub fn after(&self) -> Option<After> {
+        self.after
+            .as_ref()
+            .map(|job| After {
+                job: job.clone(),
+                any: false,
+            })
+            .or_else(|| {
+                self.after_any.as_ref().map(|job| After {
+                    job: job.clone(),
+                    any: true,
+                })
+            })
     }
-    Ok((enqueue, after, remaining))
 }
 
 /// Record a job for `args` and start it detached; returns its id.

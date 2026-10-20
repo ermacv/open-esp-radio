@@ -25,7 +25,7 @@ pub(crate) struct Cli {
 }
 
 #[derive(Debug, Subcommand)]
-pub(crate) enum CliCommand {
+pub enum CliCommand {
     /// Check the selected scenarios' tools and fixture, without resetting hardware.
     Doctor(Selection),
     /// Apply and verify a scenario's fixture, then restore it. Never accesses the DUT.
@@ -145,7 +145,7 @@ pub(crate) enum CliCommand {
 }
 
 #[derive(Debug, Args)]
-pub(crate) struct Selection {
+pub struct Selection {
     /// One scenario; omission selects the catalog, optionally filtered by tags.
     #[arg(conflicts_with = "tag")]
     pub(crate) scenario: Option<String>,
@@ -198,13 +198,13 @@ impl Selection {
 }
 
 #[derive(Debug, Subcommand)]
-pub(crate) enum ScenarioCommand {
+pub enum ScenarioCommand {
     List,
     Validate { scenario: Option<String> },
 }
 
 #[derive(Debug, Subcommand)]
-pub(crate) enum ImageCommand {
+pub enum ImageCommand {
     Build {
         /// Image classes, built one after the other.
         #[arg(required = true, num_args = 1..)]
@@ -225,7 +225,7 @@ pub(crate) enum ImageCommand {
 mod tests;
 
 #[derive(Debug, Subcommand)]
-pub(crate) enum FixtureCommand {
+pub enum FixtureCommand {
     /// Validate prerequisites and exercise AP preparation/restoration without firmware or serial.
     Check {
         scenario: String,
@@ -234,4 +234,39 @@ pub(crate) enum FixtureCommand {
         #[arg(long, value_name = "CHIP")]
         chip: Option<String>,
     },
+}
+
+/// The runner grammar, shared with the host command that launches it.
+pub fn command() -> clap::Command {
+    <Cli as clap::CommandFactory>::command()
+        .subcommand(
+            clap::Command::new("__observer-build")
+                .long_flag("observer-build")
+                .hide(true),
+        )
+        .subcommand(clap::Command::new("__command-tree").hide(true))
+}
+
+/// Service requests are parsed before registering a run or opening the stand.
+#[derive(Debug)]
+pub(crate) enum Invocation {
+    ObserverBuild,
+    CommandTree,
+    Run(Box<Cli>),
+}
+
+impl Invocation {
+    pub(crate) fn try_parse_from<I, T>(arguments: I) -> Result<Self, clap::Error>
+    where
+        I: IntoIterator<Item = T>,
+        T: Into<std::ffi::OsString> + Clone,
+    {
+        use clap::FromArgMatches as _;
+        let matches = command().try_get_matches_from(arguments)?;
+        match matches.subcommand_name() {
+            Some("__observer-build") => Ok(Self::ObserverBuild),
+            Some("__command-tree") => Ok(Self::CommandTree),
+            _ => Cli::from_arg_matches(&matches).map(|cli| Self::Run(Box::new(cli))),
+        }
+    }
 }

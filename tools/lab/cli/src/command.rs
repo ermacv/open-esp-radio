@@ -6,36 +6,41 @@ use std::{ffi::OsString, path::Path};
 use crate::Result;
 use oer_os_process::Checkout;
 
+#[derive(clap::Args)]
+pub(crate) struct OwnerCli {
+    #[command(subcommand)]
+    command: Option<OwnerCommand>,
+}
+
+#[derive(clap::Subcommand)]
+enum OwnerCommand {
+    Set { name: String },
+    Merge { old: String, new: String },
+    Forget { name: String },
+}
+
 /// `cargo stand owner [set NAME | merge OLD NEW | forget NAME]`.
-pub(crate) fn owner(ctx: &Checkout, args: &[OsString]) -> Result<std::process::ExitCode> {
-    const USAGE: &str = "usage: cargo stand owner                 this checkout's owner
-       cargo stand owner set NAME        register this checkout's owner
-       cargo stand owner merge OLD NEW   charge OLD's balance and history to NEW
-       cargo stand owner forget NAME     drop a balance that is no agent's";
-    let args = args
-        .iter()
-        .map(|arg| arg.to_str().ok_or("arguments must be UTF-8"))
-        .collect::<std::result::Result<Vec<_>, _>>()?;
+pub(crate) fn owner(ctx: &Checkout, cli: OwnerCli) -> Result<std::process::ExitCode> {
     let arbiter = oer_lab_arbiter::Arbiter::open()?;
     let owners = oer_lab_arbiter::owner::Owners::open()?;
     let parse = |name: &str| oer_lab_arbiter::owner::Owner::new(name);
-    match args.as_slice() {
-        [] => match owners.of(&ctx.root)? {
+    match cli.command {
+        None => match owners.of(&ctx.root)? {
             Some(owner) => println!("{owner}"),
             None => return Err(oer_lab_arbiter::owner::NoOwner(ctx.root.clone()).into()),
         },
-        ["set", name] => {
-            let owner = parse(name)?;
+        Some(OwnerCommand::Set { name }) => {
+            let owner = parse(&name)?;
             owners.set(&ctx.root, owner.clone())?;
             println!("{} is owned by {owner}", ctx.root.display());
         }
-        ["merge", old, new] => {
-            let new = parse(new)?;
-            arbiter.merge_owner(old, &new)?;
+        Some(OwnerCommand::Merge { old, new }) => {
+            let new = parse(&new)?;
+            arbiter.merge_owner(&old, &new)?;
             println!("{old}'s balance and history are {new}'s");
         }
-        ["forget", name] => {
-            let forgotten = arbiter.forget_owner(name)?;
+        Some(OwnerCommand::Forget { name }) => {
+            let forgotten = arbiter.forget_owner(&name)?;
             println!(
                 "{name}: {}",
                 if forgotten {
@@ -45,56 +50,55 @@ pub(crate) fn owner(ctx: &Checkout, args: &[OsString]) -> Result<std::process::E
                 }
             );
         }
-        _ => return Err(USAGE.into()),
     }
     Ok(std::process::ExitCode::SUCCESS)
 }
 
+#[derive(clap::Args)]
+pub(crate) struct PreemptCli {
+    #[arg(value_parser = parse_lease_id)]
+    id: u64,
+    #[arg(long)]
+    reason: String,
+}
+
+fn parse_lease_id(text: &str) -> std::result::Result<u64, String> {
+    text.trim_start_matches('#')
+        .parse()
+        .map_err(|_| format!("{text} is not a lease number"))
+}
+
 /// `cargo stand preempt ID --reason TEXT`.
-pub(crate) fn preempt(owner: &str, args: &[OsString]) -> Result<std::process::ExitCode> {
-    const USAGE: &str = "usage: cargo stand preempt ID --reason TEXT";
-    let args = args
-        .iter()
-        .map(|arg| arg.to_str().ok_or("arguments must be UTF-8"))
-        .collect::<std::result::Result<Vec<_>, _>>()?;
-    let (id, reason) = match args.as_slice() {
-        [id, "--reason", reason] | ["--reason", reason, id] => (*id, *reason),
-        _ => return Err(USAGE.into()),
-    };
-    let id = id
-        .trim_start_matches('#')
-        .parse::<u64>()
-        .map_err(|_| format!("{id} is not a lease number\n{USAGE}"))?;
-    let end = oer_lab_arbiter::Arbiter::open()?.preempt(id, owner, reason, PREEMPT_GRACE)?;
+pub(crate) fn preempt(owner: &str, cli: PreemptCli) -> Result<std::process::ExitCode> {
+    let end =
+        oer_lab_arbiter::Arbiter::open()?.preempt(cli.id, owner, &cli.reason, PREEMPT_GRACE)?;
     println!(
-        "lease #{id} {}",
+        "lease #{} {}",
+        cli.id,
         match end {
             oer_lab_arbiter::preempt::PreemptEnd::Released => "released after SIGTERM",
-            oer_lab_arbiter::preempt::PreemptEnd::Killed => {
-                "did not release within the grace and was killed"
-            }
+            oer_lab_arbiter::preempt::PreemptEnd::Killed =>
+                "did not release within the grace and was killed",
         }
     );
     Ok(std::process::ExitCode::SUCCESS)
 }
 
+#[derive(clap::Args)]
+#[command(after_help = BALANCE_RULE)]
+pub(crate) struct QueueCli {
+    #[arg(long)]
+    json: bool,
+}
+
 /// Print the stand's holder, queue, board state and recent leases.
-pub(crate) fn queue(args: &[OsString]) -> Result<std::process::ExitCode> {
-    let json = match args {
-        [] => false,
-        [flag] if flag == "--json" => true,
-        [flag] if flag == "--help" || flag == "-h" => {
-            println!("usage: cargo stand queue [--json]\n\n{BALANCE_RULE}");
-            return Ok(std::process::ExitCode::SUCCESS);
-        }
-        _ => return Err("usage: cargo stand queue [--json]".into()),
-    };
+pub(crate) fn queue(cli: QueueCli) -> Result<std::process::ExitCode> {
     let arbiter = oer_lab_arbiter::Arbiter::open()?;
     let status = arbiter.status()?;
     let store = arbiter.jobs();
     let jobs = store.unfinished();
     let ended = store.recently_ended_unjudged(std::time::Duration::from_secs(3600), 5);
-    if json {
+    if cli.json {
         let mut value = serde_json::to_value(&status)?;
         value["jobs"] = serde_json::to_value(oer_lab_arbiter::jobs::views(&jobs, &status))?;
         value["ended_jobs"] = serde_json::to_value(&ended)?;
@@ -107,27 +111,21 @@ pub(crate) fn queue(args: &[OsString]) -> Result<std::process::ExitCode> {
     Ok(std::process::ExitCode::SUCCESS)
 }
 
-/// The boards of `wait --service [BOARD...]`: `--service` is required, so a
-/// board is never mistaken for the flag.
-fn service_boards(args: &[OsString]) -> Result<&[OsString]> {
-    match args.split_first() {
-        Some((flag, boards)) if flag == "--service" => Ok(boards),
-        _ => Err("usage: cargo stand wait --service [BOARD...]".into()),
-    }
+#[derive(clap::Args)]
+pub(crate) struct WaitCli {
+    #[arg(long, required = true)]
+    service: bool,
+    boards: Vec<String>,
 }
 
-/// `cargo stand wait --service [BOARD...]`: block until the boards (every
-/// board when none is named) and the stand are back in service.
-pub(crate) fn wait_for_service(args: &[OsString]) -> Result<std::process::ExitCode> {
-    let boards = service_boards(args)?;
+/// `cargo stand wait --service [BOARD...]`.
+pub(crate) fn wait_for_service(cli: WaitCli) -> Result<std::process::ExitCode> {
     let arbiter = oer_lab_arbiter::Arbiter::open()?;
     let stand = arbiter.stand()?;
-    let macs = boards
+    let macs = cli
+        .boards
         .iter()
-        .map(|board| {
-            let board = board.to_str().ok_or("a board name is text")?;
-            Ok(stand.resolve(board)?.device_id()?.to_string())
-        })
+        .map(|board| Ok(stand.resolve(board)?.device_id()?.to_string()))
         .collect::<Result<Vec<_>>>()?;
     arbiter.wait_for_service(&macs, |out| {
         for entry in out {
@@ -228,33 +226,15 @@ fn nested_stand(program: &OsString, arguments: &[OsString]) -> Option<Vec<OsStri
 /// running it.
 fn check_stand_arguments(args: &[OsString]) -> Result<()> {
     use clap::Parser as _;
-    let (_, args) = crate::Options::split(args)?;
-    let Some((command, rest)) = args.split_first() else {
-        return Ok(());
-    };
-    let parsed = match command.to_str().unwrap_or_default() {
-        "lease" => LeaseCli::try_parse_from(rest).map(drop),
-        "board" => BoardCli::try_parse_from(rest).map(drop),
-        "devices" => DevicesCli::try_parse_from(rest).map(drop),
-        _ => return Ok(()),
-    };
-    parsed.map_err(|error| {
-        format!(
-            "`cargo stand {}`: {}",
-            command.to_string_lossy(),
-            error.render().to_string().trim()
-        )
-        .into()
-    })
+    crate::Cli::try_parse_from(args)
+        .map(drop)
+        .map_err(|error| format!("`cargo stand`: {}", error.render().to_string().trim()).into())
 }
 
 /// `cargo stand lease [OPTIONS] -- COMMAND...`
 #[derive(Debug, clap::Parser)]
 #[command(name = "cargo stand lease", no_binary_name = true)]
-struct LeaseCli {
-    /// Who holds the lease.
-    #[arg(long)]
-    owner: Option<String>,
+pub(crate) struct LeaseCli {
     /// A board the command uses, by registered name, chip or MAC;
     /// repeatable.
     #[arg(long = "board", value_name = "NAME|MAC")]
@@ -271,7 +251,7 @@ struct LeaseCli {
     #[command(flatten)]
     flashed: FlashedArgs,
     #[arg(last = true, required = true)]
-    command: Vec<OsString>,
+    pub(crate) command: Vec<OsString>,
 }
 
 /// A flash a leased command performed outside the flash operation,
@@ -381,13 +361,9 @@ fn switches_hub_power(command: &[OsString]) -> Option<String> {
 pub(crate) fn lease(
     ctx: &Checkout,
     outer: crate::Options,
-    args: &[OsString],
+    cli: LeaseCli,
 ) -> Result<std::process::ExitCode> {
-    use clap::Parser as _;
-    let cli = LeaseCli::try_parse_from(args)?;
-    let options = crate::Options {
-        owner: cli.owner.or(outer.owner),
-    };
+    let options = outer;
     let (program, arguments) = cli
         .command
         .split_first()
@@ -477,10 +453,9 @@ fn supervise(
 pub(crate) fn board(
     ctx: &Checkout,
     options: &crate::Options,
-    args: &[OsString],
+    cli: BoardCli,
 ) -> Result<std::process::ExitCode> {
-    use clap::Parser as _;
-    let BoardCli { command } = BoardCli::try_parse_from(args)?;
+    let BoardCli { command } = cli;
     crate::board::board(ctx, options.owner(ctx)?, command)
 }
 
@@ -497,10 +472,8 @@ enum ConfirmArg {
 pub(crate) fn devices(
     ctx: &Checkout,
     options: &crate::Options,
-    args: &[OsString],
+    cli: DevicesCli,
 ) -> Result<std::process::ExitCode> {
-    use clap::Parser as _;
-    let cli = DevicesCli::try_parse_from(args)?;
     let arbiter = oer_lab_arbiter::Arbiter::open()?;
     match cli.command {
         Some(DevicesCommand::Maintenance {
@@ -609,50 +582,17 @@ pub(crate) fn devices(
     Ok(std::process::ExitCode::SUCCESS)
 }
 
-/// The command tree of `cargo stand`'s own commands below `stand`, for
-/// `__command-tree`: the clap parsers walked, the hand-parsed commands
-/// spelled out.
-pub(crate) fn command_nodes() -> Vec<oer_os_command_tree::CommandNode> {
-    use clap::CommandFactory as _;
-    use oer_os_command_tree::{CommandNode, command_tree as walk};
-    let path = |words: &[&str]| {
-        words
-            .iter()
-            .map(|word| (*word).to_owned())
-            .collect::<Vec<_>>()
-    };
-    let node = |words: &[&str], subcommands: &[&str], flags: &[&str]| CommandNode {
-        path: path(words),
-        subcommands: path(subcommands),
-        flags: path(flags),
-        forwards: false,
-    };
-    let mut nodes = vec![
-        node(&["stand", "queue"], &[], &["--json"]),
-        node(&["stand", "wait"], &[], &["--service"]),
-        node(&["stand", "owner"], &["set", "merge", "forget"], &[]),
-        node(&["stand", "owner", "set"], &[], &[]),
-        node(&["stand", "owner", "merge"], &[], &[]),
-        node(&["stand", "owner", "forget"], &[], &[]),
-        node(&["stand", "preempt"], &[], &["--reason"]),
-    ];
-    nodes.extend(walk(&LeaseCli::command(), &path(&["stand", "lease"])));
-    nodes.extend(walk(&BoardCli::command(), &path(&["stand", "board"])));
-    nodes.extend(walk(&DevicesCli::command(), &path(&["stand", "devices"])));
-    nodes
-}
-
 // The clap parsers of the stand commands, walked by `__command-tree`.
 #[derive(clap::Parser)]
 #[command(name = "cargo stand board", no_binary_name = true)]
-struct BoardCli {
+pub(crate) struct BoardCli {
     #[command(subcommand)]
     command: crate::board::BoardCommand,
 }
 
 #[derive(clap::Parser)]
 #[command(name = "cargo stand devices", no_binary_name = true)]
-struct DevicesCli {
+pub(crate) struct DevicesCli {
     #[arg(long)]
     json: bool,
     #[command(subcommand)]
@@ -748,8 +688,6 @@ mod tests {
     fn lease_records_a_described_flash_on_the_named_board() {
         use clap::Parser as _;
         let cli = LeaseCli::try_parse_from([
-            "--owner",
-            "802154",
             "--flashed",
             "ieee802154-peer",
             "--sha256",
@@ -868,18 +806,5 @@ mod tests {
             arbiter.history().unwrap()[0].outcome,
             oer_lab_arbiter::LeaseOutcome::HardLimit
         );
-    }
-}
-
-#[cfg(test)]
-mod service_tests {
-    use super::*;
-
-    #[test]
-    fn wait_takes_the_service_flag_before_its_boards() {
-        let args = ["--service", "s31-a"].map(OsString::from);
-        assert_eq!(service_boards(&args).unwrap(), &args[1..]);
-        assert!(service_boards(&[]).is_err());
-        assert!(service_boards(&[OsString::from("s31-a")]).is_err());
     }
 }

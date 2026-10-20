@@ -6,6 +6,7 @@
 
 pub mod experiment;
 
+mod arguments;
 pub mod command;
 pub mod dashboard;
 pub mod experiments;

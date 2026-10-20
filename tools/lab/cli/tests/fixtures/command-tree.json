@@ -1,0 +1,312 @@
+[
+  {
+    "path": [
+      "stand"
+    ],
+    "subcommands": [
+      "queue",
+      "wait",
+      "lease",
+      "board",
+      "devices",
+      "owner",
+      "preempt",
+      "discover",
+      "doctor",
+      "init",
+      "install",
+      "fixtures",
+      "fixture"
+    ],
+    "flags": [
+      "--owner",
+      "--root"
+    ],
+    "forwards": false
+  },
+  {
+    "path": [
+      "stand",
+      "queue"
+    ],
+    "subcommands": [],
+    "flags": [
+      "--json"
+    ],
+    "forwards": false
+  },
+  {
+    "path": [
+      "stand",
+      "wait"
+    ],
+    "subcommands": [],
+    "flags": [
+      "--service"
+    ],
+    "forwards": false
+  },
+  {
+    "path": [
+      "stand",
+      "owner"
+    ],
+    "subcommands": [
+      "set",
+      "merge",
+      "forget"
+    ],
+    "flags": [],
+    "forwards": false
+  },
+  {
+    "path": [
+      "stand",
+      "owner",
+      "set"
+    ],
+    "subcommands": [],
+    "flags": [],
+    "forwards": false
+  },
+  {
+    "path": [
+      "stand",
+      "owner",
+      "merge"
+    ],
+    "subcommands": [],
+    "flags": [],
+    "forwards": false
+  },
+  {
+    "path": [
+      "stand",
+      "owner",
+      "forget"
+    ],
+    "subcommands": [],
+    "flags": [],
+    "forwards": false
+  },
+  {
+    "path": [
+      "stand",
+      "preempt"
+    ],
+    "subcommands": [],
+    "flags": [
+      "--reason"
+    ],
+    "forwards": false
+  },
+  {
+    "path": [
+      "stand",
+      "lease"
+    ],
+    "subcommands": [],
+    "flags": [
+      "--owner",
+      "--board",
+      "--stand",
+      "--air",
+      "--flashed",
+      "--application",
+      "--sha256",
+      "--device",
+      "--commit"
+    ],
+    "forwards": false
+  },
+  {
+    "path": [
+      "stand",
+      "board"
+    ],
+    "subcommands": [
+      "reset",
+      "check",
+      "console",
+      "soak"
+    ],
+    "flags": [],
+    "forwards": false
+  },
+  {
+    "path": [
+      "stand",
+      "board",
+      "reset"
+    ],
+    "subcommands": [],
+    "flags": [
+      "--via"
+    ],
+    "forwards": false
+  },
+  {
+    "path": [
+      "stand",
+      "board",
+      "check"
+    ],
+    "subcommands": [],
+    "flags": [],
+    "forwards": false
+  },
+  {
+    "path": [
+      "stand",
+      "board",
+      "console"
+    ],
+    "subcommands": [],
+    "flags": [
+      "--for",
+      "--until"
+    ],
+    "forwards": false
+  },
+  {
+    "path": [
+      "stand",
+      "board",
+      "soak"
+    ],
+    "subcommands": [],
+    "flags": [
+      "--cycles",
+      "--for",
+      "--via",
+      "--batch"
+    ],
+    "forwards": false
+  },
+  {
+    "path": [
+      "stand",
+      "devices"
+    ],
+    "subcommands": [
+      "maintenance",
+      "release"
+    ],
+    "flags": [
+      "--json"
+    ],
+    "forwards": false
+  },
+  {
+    "path": [
+      "stand",
+      "devices",
+      "maintenance"
+    ],
+    "subcommands": [],
+    "flags": [
+      "--stand",
+      "--reason"
+    ],
+    "forwards": false
+  },
+  {
+    "path": [
+      "stand",
+      "devices",
+      "release"
+    ],
+    "subcommands": [],
+    "flags": [
+      "--stand",
+      "--confirm"
+    ],
+    "forwards": false
+  },
+  {
+    "path": [
+      "stand",
+      "discover"
+    ],
+    "subcommands": [],
+    "flags": [
+      "--blink",
+      "--verify-power"
+    ],
+    "forwards": false
+  },
+  {
+    "path": [
+      "stand",
+      "doctor"
+    ],
+    "subcommands": [],
+    "flags": [],
+    "forwards": false
+  },
+  {
+    "path": [
+      "stand",
+      "init"
+    ],
+    "subcommands": [],
+    "flags": [
+      "--force"
+    ],
+    "forwards": false
+  },
+  {
+    "path": [
+      "stand",
+      "install"
+    ],
+    "subcommands": [],
+    "flags": [],
+    "forwards": false
+  },
+  {
+    "path": [
+      "stand",
+      "fixtures"
+    ],
+    "subcommands": [],
+    "flags": [],
+    "forwards": false
+  },
+  {
+    "path": [
+      "stand",
+      "fixture"
+    ],
+    "subcommands": [
+      "install",
+      "build-hostapd"
+    ],
+    "flags": [],
+    "forwards": false
+  },
+  {
+    "path": [
+      "stand",
+      "fixture",
+      "install"
+    ],
+    "subcommands": [],
+    "flags": [
+      "--provider",
+      "--dry-run",
+      "--adapter"
+    ],
+    "forwards": false
+  },
+  {
+    "path": [
+      "stand",
+      "fixture",
+      "build-hostapd"
+    ],
+    "subcommands": [],
+    "flags": [],
+    "forwards": false
+  }
+]

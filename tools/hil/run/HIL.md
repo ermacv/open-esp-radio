@@ -5,6 +5,15 @@ immutable evidence bundles. It does not implement radio behavior, and a passed
 scenario or internally consistent bundle is not by itself a qualification
 decision.
 
+`cargo hil --help` and `cargo stand --help` describe their clap command trees.
+Use `cargo hil COMMAND --help` or `cargo stand COMMAND --help` for details.
+`--root PATH` and `--owner NAME` work before or after a command name. Queueing
+options follow `run`, `run-all` or `ab`, for example
+`cargo hil run boot-smoke --owner phy --enqueue --after JOB`.
+For a leased program, separate its arguments with `--`:
+`cargo stand lease --board dut --owner phy -- sh -c 'cargo hil run boot-smoke'`.
+`cargo stand wait --service [BOARD...]` waits for service; `--service` is required.
+
 ## Choose a route
 
 | Task | Start here | Hardware or host effects |

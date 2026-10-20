@@ -2,8 +2,6 @@
 //! (`discovery`, `doctor`), and the hub port switches
 //! of `discover --blink` and `--verify-power` under a lease.
 
-use std::ffi::OsString;
-
 use oer_lab_model::Stand;
 mod discovery;
 mod doctor;
@@ -36,11 +34,10 @@ pub(crate) enum StandCli {
 pub(crate) fn stand(
     ctx: &Checkout,
     owner: impl FnOnce() -> Result<String>,
-    args: &[OsString],
+    cli: StandCli,
 ) -> Result<std::process::ExitCode> {
-    use clap::Parser as _;
     let path = oer_lab_model::paths::stand_file()?;
-    match StandCli::try_parse_from(args)? {
+    match cli {
         StandCli::Discover {
             blink: Some(target),
             ..

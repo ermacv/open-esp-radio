@@ -2533,6 +2533,7 @@ dependencies = [
 name = "oer-analysis-riscv-stack"
 version = "0.1.0"
 dependencies = [
+ "clap",
  "object 0.39.1",
  "oer-analysis-elf",
  "oer-analysis-riscv-analysis",
@@ -3342,6 +3343,7 @@ dependencies = [
 name = "oer-hil-lab"
 version = "0.1.0"
 dependencies = [
+ "clap",
  "oer-analysis-elf",
  "oer-chip-profile",
  "oer-hil-link",
@@ -3855,6 +3857,7 @@ dependencies = [
 name = "oer-os-process"
 version = "0.1.0"
 dependencies = [
+ "clap",
  "libc",
  "rustix",
  "serde_json",
@@ -4211,6 +4214,9 @@ dependencies = [
 [[package]]
 name = "oer-tool-regulatory-generate"
 version = "0.1.0"
+dependencies = [
+ "clap",
+]
 
 [[package]]
 name = "oer-tool-vendor-cli"
@@ -4243,6 +4249,7 @@ dependencies = [
 name = "oer-tool-vendor-ieee802154-esp32s31-cli"
 version = "0.1.0"
 dependencies = [
+ "clap",
  "oer-os-process",
  "oer-vendor-ieee802154-esp32s31",
 ]
