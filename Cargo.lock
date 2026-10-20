@@ -2533,6 +2533,7 @@ dependencies = [
 name = "oer-analysis-riscv-stack"
 version = "0.1.0"
 dependencies = [
+ "clap",
  "object 0.39.1",
  "oer-analysis-elf",
  "oer-analysis-riscv-analysis",
@@ -3342,6 +3343,7 @@ dependencies = [
 name = "oer-hil-lab"
 version = "0.1.0"
 dependencies = [
+ "clap",
  "oer-analysis-elf",
  "oer-chip-profile",
  "oer-hil-link",

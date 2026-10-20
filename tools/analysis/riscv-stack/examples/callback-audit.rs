@@ -3,23 +3,26 @@ use oer_analysis_riscv_program::facts::ImageFacts;
 use oer_analysis_riscv_stack::*;
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
+
+#[derive(Debug, Parser)]
+#[command(name = "callback-audit", about = "Audit function pointer evidence")]
+struct Cli {
+    elf: std::path::PathBuf,
+    rom_elf: Option<std::path::PathBuf>,
+    summaries_toml: Option<std::path::PathBuf>,
+}
+
 fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
-    let mut args = std::env::args().skip(1);
-    let path = args
-        .next()
-        .ok_or("usage: callback-audit ELF [ROM_ELF [SUMMARIES_TOML]]")?;
-    let bytes: Rc<[u8]> = std::fs::read(path)?.into();
-    let companion = args.next().map(std::fs::read).transpose()?;
-    let summaries = args
-        .next()
+    let cli: Cli = cli::parse();
+    let bytes: Rc<[u8]> = std::fs::read(cli.elf)?.into();
+    let companion = cli.rom_elf.map(std::fs::read).transpose()?;
+    let summaries = cli
+        .summaries_toml
         .map(std::fs::read_to_string)
         .transpose()?
         .map(|text| parse_summaries(&text))
         .transpose()?
         .unwrap_or_default();
-    if args.next().is_some() {
-        return Err("too many arguments".into());
-    }
     let memory = WorkingMemory::new(512 * 1024 * 1024)?;
     let mut control = || Ok(());
     let image = ImageFacts::new(&bytes, &[], &memory, &mut control)?;
@@ -206,4 +209,40 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         }
     }
     Ok(())
+}
+#[path = "support/cli.rs"]
+mod cli;
+use clap::Parser;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::CommandFactory as _;
+
+    #[test]
+    fn previous_optional_companion_and_summary_forms_parse() {
+        Cli::command().debug_assert();
+        for arguments in [
+            vec!["callback-audit", "image.elf"],
+            vec!["callback-audit", "image.elf", "rom.elf"],
+            vec!["callback-audit", "image.elf", "rom.elf", "summaries.toml"],
+        ] {
+            let cli = Cli::try_parse_from(&arguments).expect("accepted example command line");
+            assert_eq!(cli.elf, std::path::Path::new("image.elf"));
+            assert_eq!(cli.rom_elf.is_some(), arguments.len() >= 3);
+            assert_eq!(cli.summaries_toml.is_some(), arguments.len() == 4);
+        }
+        assert!(Cli::try_parse_from(["callback-audit"]).is_err());
+        assert!(
+            Cli::try_parse_from([
+                "callback-audit",
+                "image.elf",
+                "rom.elf",
+                "summaries.toml",
+                "extra",
+            ])
+            .is_err()
+        );
+        assert!(Cli::try_parse_from(["callback-audit", "image.elf", "--bad"]).is_err());
+    }
 }

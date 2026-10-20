@@ -239,4 +239,34 @@ pub enum FixtureCommand {
 /// The runner grammar, shared with the host command that launches it.
 pub fn command() -> clap::Command {
     <Cli as clap::CommandFactory>::command()
+        .subcommand(
+            clap::Command::new("__observer-build")
+                .long_flag("observer-build")
+                .hide(true),
+        )
+        .subcommand(clap::Command::new("__command-tree").hide(true))
+}
+
+/// Service requests are parsed before registering a run or opening the stand.
+#[derive(Debug)]
+pub(crate) enum Invocation {
+    ObserverBuild,
+    CommandTree,
+    Run(Box<Cli>),
+}
+
+impl Invocation {
+    pub(crate) fn try_parse_from<I, T>(arguments: I) -> Result<Self, clap::Error>
+    where
+        I: IntoIterator<Item = T>,
+        T: Into<std::ffi::OsString> + Clone,
+    {
+        use clap::FromArgMatches as _;
+        let matches = command().try_get_matches_from(arguments)?;
+        match matches.subcommand_name() {
+            Some("__observer-build") => Ok(Self::ObserverBuild),
+            Some("__command-tree") => Ok(Self::CommandTree),
+            _ => Cli::from_arg_matches(&matches).map(|cli| Self::Run(Box::new(cli))),
+        }
+    }
 }
