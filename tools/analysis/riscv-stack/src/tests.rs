@@ -7,6 +7,9 @@ mod waker_scopes;
 #[path = "recursion_tests.rs"]
 mod recursion;
 
+#[path = "dispatch_tests.rs"]
+mod dispatches;
+
 /// Working memory of a test's analysis: no test comes near it.
 const TEST_MEMORY: u64 = 1 << 32;
 

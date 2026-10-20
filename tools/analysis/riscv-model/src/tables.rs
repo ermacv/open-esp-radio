@@ -4,6 +4,44 @@
 //! holds, as the image's memory says what its constants hold.
 use crate::*;
 
+/// Complete targets of one proved indirect dispatch. Only a single table
+/// carries an index mapping; a union of possible tables carries a target set.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
+pub enum JumpDispatch {
+    /// One table with its original order and duplicate entries preserved.
+    Table {
+        site: u64,
+        /// Case value of entry zero, when the index computation proves it.
+        first_case: Option<i64>,
+        /// Entry `i` selects this address, even when case values are unknown.
+        entries: Vec<u64>,
+    },
+    /// Complete union of possible targets, with no entry or case mapping.
+    TargetSet {
+        site: u64,
+        /// Distinct target addresses in ascending order.
+        targets: Vec<u64>,
+    },
+}
+
+impl JumpDispatch {
+    pub fn site(&self) -> u64 {
+        match self {
+            Self::Table { site, .. } | Self::TargetSet { site, .. } => *site,
+        }
+    }
+
+    /// Addresses for the CFG projection. Table order and multiplicity are
+    /// meaningful only for Table; TargetSet has no index correspondence.
+    pub fn addresses(&self) -> &[u64] {
+        match self {
+            Self::Table { entries, .. } => entries,
+            Self::TargetSet { targets, .. } => targets,
+        }
+    }
+}
+
 /// A table's entries, admitted in the working memory of the operation that
 /// asked for them.
 pub struct TableWords<'m> {

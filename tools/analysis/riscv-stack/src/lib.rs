@@ -43,8 +43,8 @@ mod wakers;
 mod write_summary_tests;
 
 use oer_analysis_riscv_model::{
-    CallBehavior, CodeRange, Error, ErrorCode, FunctionRecord, Ledger, Result, RunControl,
-    WorkingMemory,
+    CallBehavior, CodeRange, Error, ErrorCode, FunctionRecord, JumpDispatch, Ledger, Result,
+    RunControl, WorkingMemory,
 };
 use oer_analysis_riscv_program::facts::ImageFacts;
 use std::collections::{BTreeMap, BTreeSet};
@@ -59,9 +59,7 @@ pub use contexts::{HartStack, LevelStack, Stacks, interrupt_stacks};
 pub use dwarf::{DebugMetadata, Dwarf, read as read_debug};
 pub use image::{Function, stack_sizes};
 pub use interrupts::{Field, TableEntry, TableLayout, interrupt_table};
-use oer_analysis_riscv_analysis::{
-    JumpTable, JumpTableSource, KnownJump, ProvenTables, RecognizedTables,
-};
+use oer_analysis_riscv_analysis::{JumpTableSource, KnownJump, ProvenTables, RecognizedTables};
 use oer_analysis_riscv_program::tables::ImageTables;
 pub use producers::{BaseBarrier, LoadBase, RegisterWitness};
 pub use relocations::taken_addresses;
@@ -532,9 +530,9 @@ struct DispatchTables<'a> {
 }
 
 impl JumpTableSource for DispatchTables<'_> {
-    type Table = JumpTable;
+    type Table = JumpDispatch;
 
-    fn same(&self, earlier: &JumpTable, later: &JumpTable) -> bool {
+    fn same(&self, earlier: &JumpDispatch, later: &JumpDispatch) -> bool {
         self.recognized.same(earlier, later)
     }
 
@@ -544,15 +542,15 @@ impl JumpTableSource for DispatchTables<'_> {
         extent: CodeRange,
         memory: &'m WorkingMemory,
         control: &mut dyn RunControl,
-    ) -> Result<ProvenTables<'m, JumpTable>> {
+    ) -> Result<ProvenTables<'m, JumpDispatch>> {
         let mut found = self.recognized.tables(records, extent, memory, control)?;
         found
             .tables
-            .retain(|table| !self.known.iter().any(|jump| jump.site == table.site));
+            .retain(|table| !self.known.iter().any(|jump| jump.site == table.site()));
         Ok(found)
     }
 
-    fn jump(&self, table: &JumpTable) -> KnownJump {
+    fn jump(&self, table: &JumpDispatch) -> KnownJump {
         self.recognized.jump(table)
     }
 }

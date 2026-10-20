@@ -11,8 +11,8 @@ pub struct AnalyzedFunction<'a> {
     pub records: &'a [FunctionRecord],
     pub coverage: FunctionCoverage,
     pub semantics: SemanticSummary,
-    /// The jump tables the analysis followed, proven by relocations.
-    pub jump_tables: &'a [JumpTable],
+    /// Ordered tables or complete target sets the analysis followed.
+    pub jump_tables: &'a [JumpDispatch],
 }
 impl AnalyzedFunction<'_> {
     /// Coverage and value semantics are complete.
@@ -417,7 +417,7 @@ fn research_function<'m>(
     sink: &mut dyn FunctionSink,
 ) -> Result<(
     oer_analysis_riscv_analysis::AnalysisSummary,
-    oer_analysis_riscv_analysis::ProvenTables<'m, oer_analysis_riscv_analysis::JumpTable>,
+    oer_analysis_riscv_analysis::ProvenTables<'m, JumpDispatch>,
 )> {
     let mut position = RunPosition {
         phase: RunPhase::AnalyzeFunction,
@@ -663,50 +663,16 @@ fn analyze_object(
                             collect.add(key, complete.then_some(&records[..]), c)?;
                         }
                     }
-                    Ok((summary, found)) => {
-                        // The domain's copy of the tables, admitted before
-                        // it is made.
-                        let bytes = found.tables.len() * size_of::<JumpTable>()
-                            + found
-                                .tables
-                                .iter()
-                                .map(|table| table.entries.len() * size_of::<u64>())
-                                .sum::<usize>();
-                        let _copy = memory.reserve(bytes as u64, c.position())?;
-                        let mut jump_tables: Vec<JumpTable> = Vec::new();
-                        jump_tables
-                            .try_reserve_exact(found.tables.len())
-                            .map_err(|_| {
-                                Error::new(ErrorCode::ResourceLimited, "jump table copy refused")
-                            })?;
-                        for table in &found.tables {
-                            let mut entries = Vec::new();
-                            entries
-                                .try_reserve_exact(table.entries.len())
-                                .map_err(|_| {
-                                    Error::new(
-                                        ErrorCode::ResourceLimited,
-                                        "jump table copy refused",
-                                    )
-                                })?;
-                            entries.extend_from_slice(&table.entries);
-                            jump_tables.push(JumpTable {
-                                site: table.site,
-                                first_case: table.first_case,
-                                entries,
-                            });
-                        }
-                        visit(
-                            LibraryOutcome::Analyzed(AnalyzedFunction {
-                                function,
-                                records: &records,
-                                coverage: summary.coverage,
-                                semantics: summary.semantics,
-                                jump_tables: &jump_tables,
-                            }),
-                            c,
-                        )?
-                    }
+                    Ok((summary, found)) => visit(
+                        LibraryOutcome::Analyzed(AnalyzedFunction {
+                            function,
+                            records: &records,
+                            coverage: summary.coverage,
+                            semantics: summary.semantics,
+                            jump_tables: &found.tables,
+                        }),
+                        c,
+                    )?,
                     Err(error) if blocks_function(&error) => {
                         if let (Some(collect), Some(key)) = (collect.as_deref_mut(), key) {
                             collect.add(key, None, c)?;

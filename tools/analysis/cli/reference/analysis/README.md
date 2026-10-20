@@ -52,11 +52,16 @@ the operation, and a completed analysis is never discarded for them. A
 relocation to a `.L` local label in a read-only string section
 (`SHF_STRINGS`) shows the escaped text there in quotes; labels of other data,
 such as jump tables, get no text. The JSON document is
-`{"schema":7,"inputs":[...],"abi":...,"call_returns":...,"read_only":[...],"functions":[...],"missing":[...]}`:
+`{"schema":8,"inputs":[...],"abi":...,"call_returns":...,"read_only":[...],"functions":[...],"missing":[...]}`:
 an `analyzed` function carries its coverage, its value-semantics summary,
 `complete` and every record (instructions, blocks, edges, references,
 expressions, values, memory accesses, conditions and return values); a
-`blocked` one carries the error that stopped it. `missing` lists the names no
+`blocked` one carries the error that stopped it. `jump_tables` distinguishes
+`{kind: "table", site, first_case, entries}` (original index order, including
+duplicates) from `{kind: "target-set", site, targets}` (the complete sorted
+union of possible targets, without entry or case numbers). The human view
+prints table entries/cases only for `table`, and `jump targets` for a set.
+`missing` lists the names no
 input defines, and the command then exits with failure. `--working-memory-mib`,
 `--timeout-secs` and `--max-work-units` bound the analysis cooperatively.
 
