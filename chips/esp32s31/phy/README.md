@@ -338,7 +338,7 @@ remain separate measurement scopes.
 
 ## Measured RF hold of a tracking tick
 
-The vendor admission tracks with the protocols live (see [Concurrent clients](#concurrent-clients)). How long one tick takes the air from them was measured on ESP32-S31 hardware:
+The vendor admission tracks with the protocols live (see [Concurrent clients](#concurrent-clients)). Tracking and grant-request intervals were measured on ESP32-S31 hardware:
 - tracking branches forced with the vendor's debug policy and a zero threshold, so every due tick runs them: the worst case, not the ordinary tick;
 - timed on the device by a dedicated tracking-hold probe;
 - each grant-protect bracket and the Wi-Fi baseband-off window are wall-time intervals;
@@ -355,13 +355,74 @@ A grant-protect interval is the time the request was programmed, not an observat
 | | idle | ≤ 0.52 ms | ≤ 7.6 ms | ≤ 7.0 ms | ≤ 7.0 ms | ≤ 14.6 ms |
 | Wi-Fi + Bluetooth LE, HT20 UDP RX and an ATT echo load, 2 runs | traffic | ≤ 0.94 ms | ≤ 16.1 ms | ≤ 13.4 ms | ≤ 15.5 ms | ≤ 30.1 ms |
 | | idle | ≤ 0.94 ms | ≤ 7.1 ms | ≤ 13.6 ms | ≤ 13.5 ms | ≤ 21.4 ms |
-| IEEE 802.15.4 receiving, 2 boots | idle | ≤ 0.84 ms | ≤ 6.4 ms | ≤ 7.2 ms | ≤ 7.1 ms | ≤ 14.0 ms |
+| IEEE 802.15.4 receiving, source `5cb90527`, 3 repetitions × 5 due ticks (2026-10-20) | idle | ≤ 1.467 ms | ≤ 8.350 ms | ≤ 9.234 ms | ≤ 9.090 ms | ≤ 18.849 ms |
+| IEEE 802.15.4 receiving, source `5cb90527`, layout seed 1, 20 repetitions × 5 due ticks (2026-10-20) | idle | ≤ 1.470 ms | ≤ 8.921 ms | ≤ 9.233 ms | ≤ 9.086 ms | ≤ 19.505 ms |
+| IEEE 802.15.4 receiving, source `c6442ebf`, 3 repetitions × 5 due ticks (2026-10-20) | idle | ≤ 1.457 ms | ≤ 9.088 ms | ≤ 8.789 ms | ≤ 8.643 ms | ≤ 18.670 ms |
+| IEEE 802.15.4 receiving, source `4d679728`, 3 repetitions × 5 due ticks (2026-10-21) | idle | ≤ 1.368 ms | ≤ 9.500 ms | ≤ 8.645 ms | ≤ 8.773 ms | ≤ 18.704 ms |
+
+The rows marked `5cb90527` include the I2C
+terminal-recognition correction and timer-woken TX SAR readiness. The selected
+readiness deadline is 40 µs after the mandatory 2 µs trigger settle; physical
+PHY ownership and the grant transaction remain held while the timer is pending.
+The deadline was chosen as twice the maximum observed over 43,282 conversions
+in acquisition runs `1792521908966-002e2465` and `1792521955985-002e287a`.
+That empirical margin is not a guaranteed hardware bound; a late result fails closed.
+
+Reproduce with `cargo hil run phy-tracking-hold-ieee802154-idle --chip esp32s31
+--board s31-a --repetitions 3`; use `--repetitions 20 --layout-seed 1` for the
+extended series. Runs `1792522303542-002f44c3` and `1792522693907-002ff8a0`
+complete all 115 ticks, restore debug policy and close RF in every repetition.
+Normal/seed-1 diagnostic application SHA-256:
+`fb0f5c8d21c3512247f07ae7a7806745933d1da68ac07b1acf042f6ed8847960` /
+`07fd1fa417172da438cf69e735db2a28ac090a71f0c29c59c9761b50c0de2ef6`.
+Per-repetition maxima of the three-repeat series, RFPLL/common/transmit/
+baseband-off/whole tick (µs): 1463/8301/8866/8721/18849;
+1467/8350/8939/8794/18233; 1464/8078/9234/9090/18259.
+The extended series records 21,470 SAR conversions, maximum readiness 21 µs,
+with no deadline expiry or invalid tick. These runs establish observed maxima,
+not a reliability or worst-case bound. The Wi-Fi rows retain their previously
+recorded values; the reproducible current-source scenario covers 154 only.
+
+The `c6442ebf` row uses client-owned Wi-Fi reset, preserving the I2C TX rate
+through common power for 154. Run `1792531108337-003fdf50` completes all 15 ticks,
+restores policy and closes RF. Source `4942344f` changes only the scenario catalog;
+its runtime application is identical:
+`f866a7260252b4fe3917b322a41f854e403618667f35bf32065464e817be5eea`.
+Per-repetition RFPLL/common/transmit/baseband-off/whole maxima (µs):
+1452/7735/8785/8640/17991; 1457/7578/8641/8496/17363;
+1456/9088/8789/8643/18670. It records 3262 SAR conversions, maximum readiness
+21 µs, no deadline expiry or invalid tick. These are observed maxima.
+
+The `4d679728` row uses HAL-owned TSENS/SAR-I2C close/wake. Run
+`1792536116095-000a40a2` completes15/15 valid ticks, restores debug policy and
+closes RF in all3 repetitions. Its3156 SAR conversions have maximum readiness
+21 µs and no40 µs deadline expiry. Diagnostic application SHA-256:
+`b21bed3e0400a674c314e14ee3fb1bfb2c86985c5a5e1df68db78ddad24ce2f5`.
+Per-repetition RFPLL/common/transmit/baseband-off/whole maxima (µs):
+1366/9500/8645/8773/18704; 1368/8290/8644/8501/17578; 1367/7752/8642/8499/17379. These are observed maxima, not a worst-case bound.
+
+For that source, IEEE restart5 `1792535209115-00090c8d` matches all193 MMIO and
+39 analog with10 same-point vendor references. Wi-Fi restart10
+`1792535406587-0009653a` matches19/19 groups,163/163 MMIO,39/39 analog with20
+references. Both protocols directly read69.04=0x60/init0 equal to vendor in every
+restart pair. The HAL's last release powers SAR-I2C off; first acquire resets it
+with a named1 µs settle, then clocks/resets/enables TSENS. No literal69.04 zero is
+assigned. SOURCE: [linked IDF lifecycle and correction](https://github.com/ermacv/open-esp-radio/pull/239).
+Both cold control pairs retain I2C TX-rate order and match with existing cold
+references (Wi-Fi N11,IEEE N41). Wi-Fi cold retains its separate, reviewed0x65/0x60
+lifecycle-point difference. Offline reevaluation with the
+[restart review](https://github.com/ermacv/open-esp-radio/pull/244) compares69.04
+normally for both restart points: Wi-Fi coverage increases38→39 analog registers,
+IEEE stays39, and both MATCH. The PSRAM/MPLL rationale is disproved by the matched
+resource lifecycle. Cold retains its separate exclusion. Raw N1/N5/N10 DIFF
+summaries remain archived and reproduce exactly with their capture-time reviews;
+field masks and the vendor-spread rule are unchanged. No new hardware series.
 
 What the runs show:
-- **RFPLL.** The correction, the branch an ordinary tick runs most often, holds the air under 1 ms.
+- **RFPLL.** The `4d679728` 154 idle correction request reached 1.368 ms; the earlier Wi-Fi rows were below 1 ms.
 - **Common bracket.** DCODE and RX gain calibration is the bracket traffic stretches, from ~6 ms idle to observed maxima of 13–18 ms under traffic (the table gives maxima only, no lower bound): interrupts compete with its polled measurements.
-- **Transmit bracket.** Stable at ~7 ms per class, ~13 ms with both classes.
-- **Bound.** The worst single bracket observed is 18.0 ms and the worst whole tick 30.1 ms.
+- **Transmit bracket.** The `4d679728` 154 idle maximum is 8.645 ms; the recorded Wi-Fi figures are ~7 ms per class, ~13 ms with both classes.
+- **Observed maxima.** The `4d679728` 154 idle common/transmit brackets reach 9.500/8.645 ms (190/172.9 times the P2 50 µs step); the whole tick reaches 18.704 ms (374.08 times). These nested brackets do not bound an individual step. The earlier traffic records reach 18.0 ms per bracket and 30.1 ms per whole tick.
 - **HT20 rows.** The HT20 30 Mbit/s rows, which set the 18.0 ms bracket, came from a tracking-hold scenario outside this repository in an HT20 configuration; that scenario's other form runs HT40 at 60 Mbit/s, and neither is in this repository, so those rows cannot be re-run as recorded.
 - **Spread.** Run-to-run spread under traffic is larger than the effect of the traffic rate. The figures are observed maxima of these runs, not a guaranteed bound.
 
@@ -369,9 +430,9 @@ Against the protocols' tolerances:
 
 | Protocol | Tolerance | Against the observed hold |
 | --- | --- | --- |
-| Wi-Fi | An ordinary attempt aborts after the 250 ms publication watchdog (`TX_COMPLETION_TIMEOUT`); beacons come every ~102 ms | The whole tick is 8× below the watchdog; a tick misses at most one beacon; a frame received during it is retried by its sender |
+| Wi-Fi | An ordinary attempt aborts after the 250 ms publication watchdog (`TX_COMPLETION_TIMEOUT`); beacons come every ~102 ms | The recorded whole tick is about 8× below the watchdog and shorter than one beacon interval; a frame received during it is retried by its sender |
 | Bluetooth LE | The supervision timeout is at least 100 ms | A tick misses at most a few connection events (up to five at a 7.5 ms interval: a 30.1 ms window can cover events at 0, 7.5, 15, 22.5 and 30 ms); the link survives |
-| IEEE 802.15.4 | A sender's MAC retries span about 10–15 ms: 4 attempts, an 864 µs ACK wait, CSMA-CA backoff | A calibration bracket (6–18 ms) is of the same order: a frame that arrives during one can exhaust its sender's retries. The RFPLL correction (< 1 ms) cannot |
+| IEEE 802.15.4 | A sender's MAC retries span about 10–15 ms: 4 attempts, an 864 µs ACK wait, CSMA-CA backoff | A calibration bracket (6–18 ms) is of the same order: a frame that arrives during one can exhaust its sender's retries. The measured 154 RFPLL correction (≤ 1.470 ms) is shorter |
 
 The IEEE 802.15.4 row is the open risk: a calibration branch runs when a temperature reference has drifted past its threshold, not on every tick, and higher layers (OpenThread) retry above the MAC. A direct delivery measurement with a numbered peer stream is still open.
 
