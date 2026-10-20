@@ -78,12 +78,12 @@ Each radio protocol has these layers in `protocols/<protocol>/`:
 | cores | the sans-IO state machines (station, access point, RSN, an LE connection, the 802.15.4 MAC) | `port`, `wire`, `cipher` |
 | `runtime` | the async loop over the port: awaits port events and deadlines, feeds the cores, executes their actions | `port`, `wire`, cores, portable time and signals |
 
-A backend implements the port and depends on `port`, `wire` and `cipher` only, never
-on a core: the chip backend in `chips/<chip>/`, the reference model in
-its own host crate `protocols/<protocol>/model` for host tests and simulation. A core never depends
-on a backend. Structures both sides share belong to `port` or `wire`. Host
-tools that read frames (monitors, capture analysis, fixtures) take `wire`.
-This is smoltcp's `wire` beside its `iface` and `socket`.
+A backend implements the port and depends on `port`, `wire` and `cipher` only,
+never on a core: the chip backend in `chips/<chip>/`, the reference model in
+its own host crate `protocols/<protocol>/model` for host tests and simulation.
+A core never depends on a backend. Structures both sides share belong to `port`
+or `wire`. Host tools that read frames (monitors, capture analysis, fixtures)
+take `wire`. This is smoltcp's `wire` beside its `iface` and `socket`.
 
 Wi-Fi transmit profiles implement the generic `BackendTxProfile` in port.
 Core algorithms and family tables remain above the hardware backend; the
