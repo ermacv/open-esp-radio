@@ -828,6 +828,7 @@ pub(super) fn analyze(
         false,
         None,
         false,
+        None,
         &mut AdmittedVec::new(memory),
     )
 }
@@ -843,6 +844,7 @@ pub(super) fn analyze_with(
     symbolic: bool,
     abi: Option<CallAbi>,
     symbolic_spills: bool,
+    stack_calls: Option<&writes::StackCalls<'_>>,
     noreturn: &mut AdmittedVec<'_, u64>,
 ) -> Result<SemanticSummary> {
     control.phase(RunPhase::AnalyzeValues)?;
@@ -868,6 +870,7 @@ pub(super) fn analyze_with(
     )?;
     let mut symbols = Symbols::new(if symbolic { nodes.len() } else { 0 }, memory, control)?;
     symbols.symbolic_spills = symbolic_spills;
+    symbols.stack_calls = stack_calls;
     let mut states = reserve_vec::<Option<State>>(nodes.len())?;
     states.resize(nodes.len(), None);
     let mut queued = reserve_vec::<bool>(nodes.len())?;
@@ -1102,12 +1105,12 @@ pub(super) fn analyze_with(
                 }
                 flow @ (InstructionFlow::Indirect { .. } | InstructionFlow::Return { .. }) => {
                     let (base, displacement, link) = flow.through_register().unwrap_or_default();
-                    let target = symbols.sets.map(state[base as usize], control, |v, _| {
-                        Ok(match offset(v, i64::from(displacement)) {
-                            Value::Constant(n) | Value::Image(n) => Value::Image(n & !1),
-                            _ => Value::Unknown,
-                        })
-                    })?;
+                    let target = indirect_target(
+                        state[base as usize],
+                        displacement,
+                        &mut symbols.sets,
+                        control,
+                    )?;
                     // A return whose address the values know is a transfer.
                     let return_pattern =
                         matches!(flow, InstructionFlow::Return { .. }) && target == Value::Unknown;
@@ -1251,6 +1254,7 @@ pub(super) fn analyze_with(
 }
 
 struct Symbols<'a> {
+    stack_calls: Option<&'a writes::StackCalls<'a>>,
     symbolic_spills: bool,
     sets: Sets<'a>,
     records: AdmittedVec<'a, (u64, Expression)>,
@@ -1273,6 +1277,7 @@ impl<'a> Symbols<'a> {
         };
         Ok(Self {
             symbolic_spills: false,
+            stack_calls: None,
             sets: Sets::new(memory),
             records: AdmittedVec::new(memory),
             slots: AdmittedVec::new(memory),
@@ -1500,6 +1505,39 @@ fn evaluate(
     }
     if op.opaque_call {
         state = unknown_state();
+        if let Some(calls) = symbols.stack_calls
+            && abi == Some(CallAbi::RiscvInteger)
+            && input.image.is_some()
+            && op.relocation.is_none()
+            && !node.conflict
+        {
+            let target = match op.callee {
+                Some(CalleeAt::Address(address)) => Value::Image(address),
+                None => match node.decoded.flow.through_register() {
+                    Some((base, displacement, true)) => indirect_target(
+                        incoming[base as usize],
+                        displacement,
+                        &mut symbols.sets,
+                        c,
+                    )?,
+                    _ => Value::Unknown,
+                },
+                _ => Value::Unknown,
+            };
+            let target = public(target, input, &symbols.sets);
+            for (at, value) in incoming.slots.iter().flatten() {
+                if calls.preserves(
+                    input.extent.start,
+                    node.offset,
+                    &target,
+                    |r| public(incoming[r as usize], input, &symbols.sets),
+                    *at,
+                    c,
+                )? {
+                    state.remember(*at, *value);
+                }
+            }
+        }
         if let Some(abi) = abi {
             for r in abi.preserved() {
                 state[usize::from(r)] = incoming[usize::from(r)];
@@ -1532,6 +1570,21 @@ fn evaluate(
         effects.register = Some((0, Value::Constant(0)));
     }
     Ok((state, effects))
+}
+
+/// Shared with emitted Transfer facts and stack-call proof revalidation.
+fn indirect_target(
+    value: Value,
+    displacement: i32,
+    sets: &mut Sets<'_>,
+    c: &mut dyn RunControl,
+) -> Result<Value> {
+    sets.map(value, c, |v, _| {
+        Ok(match offset(v, i64::from(displacement)) {
+            Value::Constant(n) | Value::Image(n) => Value::Image(n & !1),
+            _ => Value::Unknown,
+        })
+    })
 }
 
 /// The callee of the call `op` at `node` makes: the address or relocated
@@ -2038,6 +2091,7 @@ mod tests {
                 true,
                 None,
                 false,
+                None,
                 &mut AdmittedVec::new(&memory),
             )
             .unwrap();
@@ -2544,6 +2598,7 @@ mod tests {
             true,
             None,
             false,
+            None,
             &mut AdmittedVec::new(&memory),
         )
         .unwrap();

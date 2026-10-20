@@ -68,3 +68,16 @@ call's actual integer ABI inputs and unions its callee effects. These summaries
 retain conditional writes and unknown effects; they do not forward mutable
 memory contents or establish subsequent reads. See the
 [real w1 evidence and limits](../riscv-stack/validation/argument-writes/README.md).
+
+`ResearchOptions::stack_calls` optionally retains an existing stack word when
+`writes::stack_calls` prepared a complete disjoint call footprint from the
+canonical caller index and callee `FunctionWrites`. Every target is required;
+actual targets and exact sp/argument leaves are rechecked at the live call.
+Callee stack coordinates are translated through actual sp. Byte ranges must
+exclude the whole word without overflow or modular aliases. Unknown ranges,
+internal calls and other barriers kill knowledge. Unknown stored contents have
+an explicit `UnknownValue` barrier and do not prevent exclusion of a known
+range. The bounded stack model, original load PCs, register clobbering and
+return/behavior ports keep their existing contracts. No ROM memory contract is
+selected automatically. The [fresh w1 validation](../riscv-stack/validation/call-spills/README.md)
+records the selected ROM call's precise missing loop-footprint proof.

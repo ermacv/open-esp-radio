@@ -147,6 +147,8 @@ pub enum WriteBarrierKind {
     Call,
     Atomic,
     UnknownStore,
+    /// Destination and width are known; the stored contents are opaque.
+    UnknownValue,
     Unsupported,
     OpenGraph,
     ExternalTransfer,
@@ -401,8 +403,13 @@ pub fn function_writes<'m>(
                     },
                     c.position(),
                 )?;
-                (address.opaque() || value.opaque())
-                    .then_some((*offset, WriteBarrierKind::UnknownStore))
+                if address.opaque() {
+                    Some((*offset, WriteBarrierKind::UnknownStore))
+                } else if value.opaque() {
+                    Some((*offset, WriteBarrierKind::UnknownValue))
+                } else {
+                    None
+                }
             }
             FunctionRecord::MemoryAccess { offset, access, .. }
                 if !matches!(access, MemoryKind::Load | MemoryKind::FloatLoad) =>
@@ -479,7 +486,12 @@ pub struct CallWrites<'m> {
     pub barriers: AdmittedVec<'m, WriteBarrier>,
 }
 
-fn substitute(value: WriteValue, arguments: &[WriteValue; 8]) -> WriteValue {
+fn substitute(
+    value: WriteValue,
+    arguments: &[WriteValue; 8],
+    callee: u64,
+    stack: WriteValue,
+) -> WriteValue {
     let argument = |word: u8| {
         arguments
             .get(usize::from(word))
@@ -487,6 +499,36 @@ fn substitute(value: WriteValue, arguments: &[WriteValue; 8]) -> WriteValue {
             .unwrap_or(WriteValue::UNKNOWN)
     };
     match value {
+        WriteValue::Base {
+            base:
+                WriteBase::Stack {
+                    function,
+                    offset: at,
+                },
+            offset,
+        } if function == callee => {
+            // Stack coordinates are scoped to the callee. Only its actual
+            // entry sp translates them into the caller's coordinates.
+            match stack {
+                WriteValue::Base {
+                    base:
+                        WriteBase::Stack {
+                            function,
+                            offset: sp,
+                        },
+                    offset: 0,
+                } => sp
+                    .checked_add(at)
+                    .map_or(WriteValue::UNKNOWN, |at| WriteValue::Base {
+                        base: WriteBase::Stack {
+                            function,
+                            offset: at,
+                        },
+                        offset,
+                    }),
+                _ => WriteValue::UNKNOWN,
+            }
+        }
         WriteValue::Base {
             base: WriteBase::Argument(word),
             offset,
@@ -579,7 +621,7 @@ pub fn call_writes<'m>(
     values.prepare(caller, c)?;
     let inputs = caller.call_inputs(site, c)?;
     let mut arguments = [WriteValue::UNKNOWN; 8];
-    if let (Some(abi), Some(inputs)) = (abi, inputs) {
+    if let (Some(abi), Some(inputs)) = (abi, inputs.as_ref()) {
         for (argument, register) in arguments.iter_mut().zip(abi.arguments()) {
             c.checkpoint(1)?;
             if let Some(value) = inputs.registers.get(usize::from(register)) {
@@ -587,6 +629,10 @@ pub fn call_writes<'m>(
             }
         }
     }
+    let stack = inputs
+        .as_ref()
+        .and_then(|i| i.registers.get(2))
+        .map_or(WriteValue::UNKNOWN, |v| values.value(v));
     for target in targets.iter() {
         c.checkpoint(1)?;
         let mut summary = None;
@@ -622,12 +668,21 @@ pub fn call_writes<'m>(
             )?;
             continue;
         }
+        if !summary.closed_graph {
+            out.barriers.push(
+                WriteBarrier {
+                    site,
+                    kind: WriteBarrierKind::OpenGraph,
+                },
+                c.position(),
+            )?;
+        }
         for write in summary.writes.iter() {
             c.checkpoint(1)?;
             let source = *write;
             let write = FunctionWrite {
-                address: substitute(write.address, &arguments),
-                value: substitute(write.value, &arguments),
+                address: substitute(write.address, &arguments, summary.entry, stack),
+                value: substitute(write.value, &arguments, summary.entry, stack),
                 occurrence: if targets.len() == 1 {
                     write.occurrence
                 } else {
@@ -639,7 +694,11 @@ pub fn call_writes<'m>(
                 out.barriers.push(
                     WriteBarrier {
                         site: write.site,
-                        kind: WriteBarrierKind::UnknownStore,
+                        kind: if write.address.opaque() {
+                            WriteBarrierKind::UnknownStore
+                        } else {
+                            WriteBarrierKind::UnknownValue
+                        },
                     },
                     c.position(),
                 )?;
@@ -657,6 +716,216 @@ pub fn call_writes<'m>(
             c.checkpoint(1)?;
             out.barriers.push(*barrier, c.position())?;
         }
+    }
+    Ok(out)
+}
+
+/// A half-open range in one RV32 entry-stack coordinate system. Restricting
+/// coordinates to the signed RV32 domain also excludes modular aliases and
+/// arithmetic overflow; adding the same actual sp preserves disjointness.
+fn stack_range(value: WriteValue, function: u64, width: u8) -> Option<(i64, i64)> {
+    let WriteValue::Base {
+        base: WriteBase::Stack {
+            function: owner,
+            offset,
+        },
+        offset: delta,
+    } = value
+    else {
+        return None;
+    };
+    if owner != function || width == 0 {
+        return None;
+    }
+    let start = offset.checked_add(i64::from(delta as i32))?;
+    let end = start.checked_add(i64::from(width))?;
+    (start >= i64::from(i32::MIN) && end <= i64::from(i32::MAX)).then_some((start, end))
+}
+
+impl CallWrites<'_> {
+    fn unknown_addresses(&self, c: &mut dyn RunControl) -> Result<bool> {
+        for barrier in self.barriers.iter() {
+            c.checkpoint(1)?;
+            if barrier.kind != WriteBarrierKind::UnknownValue {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+    /// All effects, including callee stack stores, must be known. Absolute,
+    /// symbolic, foreign-stack and wrapping addresses cannot prove exclusion
+    /// from a caller stack whose absolute address is unknown. Store values
+    /// and Must/May never establish exclusion.
+    pub fn preserves_stack_word(
+        &self,
+        function: u64,
+        slot: i64,
+        c: &mut dyn RunControl,
+    ) -> Result<bool> {
+        if self.unknown_addresses(c)? {
+            return Ok(false);
+        }
+        let Some((lo, hi)) = stack_range(
+            WriteValue::base(WriteBase::Stack {
+                function,
+                offset: slot,
+            }),
+            function,
+            4,
+        ) else {
+            return Ok(false);
+        };
+        for write in self.writes.iter() {
+            c.checkpoint(1)?;
+            if write.write.proof != WriteProof::ClosedGraph {
+                return Ok(false);
+            }
+            let Some((start, end)) = stack_range(write.write.address, function, write.write.width)
+            else {
+                return Ok(false);
+            };
+            if start < hi && lo < end {
+                return Ok(false);
+            }
+        }
+        Ok(true)
+    }
+}
+
+/// Prepared applications of existing write summaries, scoped to one caller.
+/// Private entries prevent callers from asserting preservation by PC alone.
+/// Re-analysis must match the proved target and exact argument/sp inputs before
+/// using an application. No expressions or field contents are cached.
+pub struct StackCalls<'m> {
+    entry: u64,
+    calls: AdmittedVec<'m, StackCall<'m>>,
+}
+impl std::fmt::Debug for StackCalls<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("StackCalls")
+            .field("entry", &self.entry)
+            .field("calls", &self.calls.len())
+            .finish()
+    }
+}
+struct StackCall<'m> {
+    site: u64,
+    target: AbstractValue,
+    _target_memory: MemoryReservation<'m>,
+    inputs: [AbstractValue; 9],
+    writes: CallWrites<'m>,
+}
+impl StackCalls<'_> {
+    pub(crate) fn preserves(
+        &self,
+        entry: u64,
+        site: u64,
+        target: &AbstractValue,
+        input: impl Fn(u8) -> AbstractValue,
+        slot: i64,
+        c: &mut dyn RunControl,
+    ) -> Result<bool> {
+        if entry != self.entry {
+            return Ok(false);
+        }
+        for call in self.calls.iter() {
+            c.checkpoint(1)?;
+            if call.site != site || &call.target != target {
+                continue;
+            }
+            for (expected, register) in call.inputs.iter().zip([2, 10, 11, 12, 13, 14, 15, 16, 17])
+            {
+                c.checkpoint(1)?;
+                if *expected != AbstractValue::Unknown && *expected != input(register) {
+                    return Ok(false);
+                }
+            }
+            return call.writes.preserves_stack_word(entry, slot, c);
+        }
+        Ok(false)
+    }
+}
+
+/// Opt-in preparation from a closed caller's canonical FunctionIndex. Every
+/// target needs a complete summary; calls inside a summary remain barriers.
+/// Opaque stored contents do not prevent exclusion of a known byte range.
+/// All other barriers retain their existing conservative meaning.
+pub fn stack_calls<'m>(
+    caller: &FunctionIndex<'_, '_>,
+    entry: u64,
+    abi: Option<CallAbi>,
+    summaries: &[&FunctionWrites<'_>],
+    memory: &'m WorkingMemory,
+    c: &mut dyn RunControl,
+) -> Result<StackCalls<'m>> {
+    let mut out = StackCalls {
+        entry,
+        calls: AdmittedVec::new(memory),
+    };
+    for record in caller.records() {
+        c.checkpoint(1)?;
+        let FunctionRecord::Transfer {
+            offset: site,
+            target,
+            call: true,
+        } = record
+        else {
+            continue;
+        };
+        let writes = call_writes(caller, entry, *site, abi, summaries, memory, c)?;
+        if writes.unknown_addresses(c)? {
+            continue;
+        }
+        let inputs = caller.call_inputs(*site, c)?;
+        // Values can normalize an expression (e.g. a full-word identity mask)
+        // into a Stack base. This profile revalidates exact leaves, not DAG
+        // identities: never let such an unrecorded expression dependency lend
+        // a reusable exclusion proof to different live arguments.
+        let mut exact_addresses = true;
+        for write in writes.writes.iter() {
+            c.checkpoint(1)?;
+            let register = match write.source.address {
+                WriteValue::Base {
+                    base: WriteBase::Argument(word),
+                    ..
+                } if word < 8 => Some(usize::from(word) + 10),
+                WriteValue::Base {
+                    base: WriteBase::Stack { .. },
+                    ..
+                } => Some(2),
+                _ => None,
+            };
+            if let Some(register) = register {
+                exact_addresses &= matches!(
+                    inputs.as_ref().and_then(|i| i.registers.get(register)),
+                    Some(AbstractValue::EntryStack { .. })
+                );
+            }
+        }
+        if !exact_addresses {
+            continue;
+        }
+        let inputs = [2usize, 10, 11, 12, 13, 14, 15, 16, 17].map(|register| {
+            match inputs.as_ref().and_then(|i| i.registers.get(register)) {
+                Some(
+                    v @ (AbstractValue::Constant { .. }
+                    | AbstractValue::ImageAddress { .. }
+                    | AbstractValue::EntryStack { .. }),
+                ) => v.clone(),
+                _ => AbstractValue::Unknown,
+            }
+        });
+        let reservation = memory.reserve(target.allocated_bytes(), c.position())?;
+        out.calls.push(
+            StackCall {
+                site: *site,
+                target: target.clone(),
+                _target_memory: reservation,
+                inputs,
+                writes,
+            },
+            c.position(),
+        )?;
     }
     Ok(out)
 }

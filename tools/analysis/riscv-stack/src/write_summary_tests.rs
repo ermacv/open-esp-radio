@@ -26,6 +26,15 @@ fn facts_profile<'m>(
     memory: &'m WorkingMemory,
     symbolic_spills: bool,
 ) -> RecordBuffer<'m> {
+    facts_calls(words, start, memory, symbolic_spills, None)
+}
+fn facts_calls<'m>(
+    words: &[u32],
+    start: u64,
+    memory: &'m WorkingMemory,
+    symbolic_spills: bool,
+    stack_calls: Option<&StackCalls<'_>>,
+) -> RecordBuffer<'m> {
     let code: Vec<_> = words.iter().flat_map(|w| w.to_le_bytes()).collect();
     let mut saved = Saved(RecordBuffer::new(memory));
     research_with_options(
@@ -50,6 +59,7 @@ fn facts_profile<'m>(
         ResearchOptions {
             abi: Some(CallAbi::RiscvInteger),
             symbolic_spills,
+            stack_calls,
         },
     )
     .unwrap();
@@ -486,4 +496,194 @@ fn an_open_caller_cannot_lend_partial_argument_facts_to_a_callee() {
             .iter()
             .any(|b| b.kind == WriteBarrierKind::OpenGraph)
     );
+}
+
+fn cross_call<'m>(
+    code: &[u32],
+    callees: &[&FunctionWrites<'_>],
+    memory: &'m WorkingMemory,
+) -> FunctionWrites<'m> {
+    let before = facts(code, 0x1000, memory);
+    let calls = stack_calls(
+        &index(&before, memory),
+        0x1000,
+        ABI,
+        callees,
+        memory,
+        &mut || Ok(()),
+    )
+    .unwrap();
+    let after = facts_calls(code, 0x1000, memory, true, Some(&calls));
+    summary(&after, 0x1000, memory)
+}
+
+#[test]
+fn complete_call_writes_preserve_only_disjoint_words_and_the_original_load_pc() {
+    let memory = WorkingMemory::new(8 * 1024 * 1024).unwrap();
+    // Caller slot is [-12,-8), a0 is sp+8 = entry-sp-8; its current
+    // caller-saved t0 is deliberately used after the call as a separate check.
+    let code = spilled(&[addi(10, 2, 8), jal(1, 0x2000 - 0x1010)], 2);
+    for (body, preserved) in [
+        (vec![store(0, 10, 0, 2), RET], true),
+        (vec![store(11, 10, 0, 2), RET], true), // value may be unknown
+        (vec![store(0, 10, -2, 2), RET], false), // partial overlap
+        (vec![store(0, 10, -1, 0), RET], false), // one byte in word
+        (vec![store(0, 2, 0, 2), RET], true),   // callee's own stack
+        (vec![store(0, 2, 4, 2), RET], false),
+        (vec![store(0, 11, 0, 2), RET], false), // unknown address
+        (vec![jal(1, 0x800), RET], false),      // internal call
+        (vec![0x00b5202f, RET], false),         // atomic
+    ] {
+        let callee = facts(&body, 0x2000, &memory);
+        let callee = summary(&callee, 0x2000, &memory);
+        let after = cross_call(&code, &[&callee], &memory);
+        assert_eq!(
+            matches!(
+                after.reloads[0].value,
+                WriteValue::Field { read: 0x1004, .. }
+            ),
+            preserved,
+            "{body:x?}"
+        );
+        assert_eq!(after.writes.last().unwrap().value, after.reloads[0].value);
+    }
+    let callee = facts(&[RET], 0x2000, &memory);
+    let callee = summary(&callee, 0x2000, &memory);
+    let mut code = code;
+    // Replace the final store's source by t0: memory survival must not
+    // preserve this caller-saved register across even a no-write call.
+    let store_at = code.len() - 3;
+    code[store_at] = store(5, 10, 12, 2);
+    let after = cross_call(&code, &[&callee], &memory);
+    assert!(matches!(
+        after.reloads[0].value,
+        WriteValue::Field { read: 0x1004, .. }
+    ));
+    assert_eq!(after.writes.last().unwrap().value, WriteValue::UNKNOWN);
+}
+
+#[test]
+fn every_actual_call_target_needs_a_complete_disjoint_summary() {
+    let memory = WorkingMemory::new(8 * 1024 * 1024).unwrap();
+    let a = facts(&[store(0, 10, 0, 2), RET], 0x2000, &memory);
+    let good = facts(&[store(0, 10, 4, 2), RET], 0x2100, &memory);
+    let bad = facts(&[store(0, 10, -1, 0), RET], 0x2100, &memory);
+    let (a, good, bad) = (
+        summary(&a, 0x2000, &memory),
+        summary(&good, 0x2100, &memory),
+        summary(&bad, 0x2100, &memory),
+    );
+    let code = spilled(
+        &[
+            addi(10, 2, 8),
+            0x00002337, // lui t1,2
+            0x00060463, // beq a2,zero,+8
+            addi(6, 6, 256),
+            0x000300e7, // jalr ra,0(t1)
+        ],
+        2,
+    );
+    for (callees, preserved) in [
+        (vec![&a, &good], true),
+        (vec![&a, &bad], false),
+        (vec![&a], false),
+    ] {
+        let after = cross_call(&code, &callees, &memory);
+        assert_eq!(
+            matches!(
+                after.reloads[0].value,
+                WriteValue::Field { read: 0x1004, .. }
+            ),
+            preserved
+        );
+    }
+    let unknown = spilled(&[addi(10, 2, 8), 0x000700e7], 2); // jalr ra,0(a4)
+    assert_eq!(
+        cross_call(&unknown, &[&a, &good], &memory).reloads[0].value,
+        WriteValue::UNKNOWN
+    );
+}
+
+#[test]
+fn prepared_call_proofs_are_rechecked_for_new_arguments_targets_and_callers() {
+    let memory = WorkingMemory::new(8 * 1024 * 1024).unwrap();
+    let callee = facts(&[store(0, 10, 0, 2), RET], 0x2000, &memory);
+    let callee = summary(&callee, 0x2000, &memory);
+    let code = spilled(&[addi(10, 2, 8), jal(1, 0x2000 - 0x1010)], 2);
+    let before = facts(&code, 0x1000, &memory);
+    let calls = stack_calls(
+        &index(&before, &memory),
+        0x1000,
+        ABI,
+        &[&callee],
+        &memory,
+        &mut || Ok(()),
+    )
+    .unwrap();
+    for (change, word) in [(3, addi(10, 2, 4)), (4, jal(1, 0x2100 - 0x1010))] {
+        let mut changed = code.clone();
+        changed[change] = word;
+        let records = facts_calls(&changed, 0x1000, &memory, true, Some(&calls));
+        assert_eq!(
+            summary(&records, 0x1000, &memory).reloads[0].value,
+            WriteValue::UNKNOWN
+        );
+    }
+    let records = facts_calls(&code, 0x1100, &memory, true, Some(&calls));
+    assert_eq!(
+        summary(&records, 0x1100, &memory).reloads[0].value,
+        WriteValue::UNKNOWN
+    );
+}
+
+#[test]
+fn overflowing_or_modular_stack_write_ranges_cannot_prove_exclusion() {
+    let memory = WorkingMemory::new(8 * 1024 * 1024).unwrap();
+    let records = facts(&[store(0, 10, 0, 2), RET], 0x2000, &memory);
+    let mut callee = summary(&records, 0x2000, &memory);
+    let code = spilled(&[addi(10, 2, 8), jal(1, 0x2000 - 0x1010)], 2);
+    for offset in [
+        i64::MAX,
+        i64::MIN,
+        i64::from(i32::MAX) + 15,
+        (1i64 << 32) - 12,
+    ] {
+        callee.writes[0].address = WriteValue::base(WriteBase::Stack {
+            function: 0x2000,
+            offset,
+        });
+        assert_eq!(
+            cross_call(&code, &[&callee], &memory).reloads[0].value,
+            WriteValue::UNKNOWN
+        );
+    }
+}
+
+#[test]
+fn normalized_symbolic_stack_arguments_cannot_bypass_live_input_revalidation() {
+    let memory = WorkingMemory::new(8 * 1024 * 1024).unwrap();
+    let callee = facts(&[store(0, 10, 0, 2), RET], 0x2000, &memory);
+    let callee = summary(&callee, 0x2000, &memory);
+    // The write summary recognizes andi a0,a0,-1 as an identity on sp+8;
+    // the exact-leaf proof profile must not ignore this symbolic dependency.
+    let code = spilled(&[addi(10, 2, 8), 0xfff57513, jal(1, 0x2000 - 0x1014)], 2);
+    let before = facts(&code, 0x1000, &memory);
+    let calls = stack_calls(
+        &index(&before, &memory),
+        0x1000,
+        ABI,
+        &[&callee],
+        &memory,
+        &mut || Ok(()),
+    )
+    .unwrap();
+    for op in [0xfff57513, lw(10, 11, 0)] {
+        let mut changed = code.clone();
+        changed[4] = op;
+        let records = facts_calls(&changed, 0x1000, &memory, true, Some(&calls));
+        assert_eq!(
+            summary(&records, 0x1000, &memory).reloads[0].value,
+            WriteValue::UNKNOWN
+        );
+    }
 }

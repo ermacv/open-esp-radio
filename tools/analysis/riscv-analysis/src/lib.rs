@@ -96,7 +96,9 @@ pub fn analyze(
     control: &mut dyn RunControl,
     sink: &mut dyn FunctionSink,
 ) -> Result<AnalysisSummary> {
-    analyze_with(input, decoder, memory, control, sink, false, None, false)
+    analyze_with(
+        input, decoder, memory, control, sink, false, None, false, None,
+    )
 }
 /// The same CFG/value engine with a bounded expression DAG and explicit ABI assumption.
 pub fn research(
@@ -116,6 +118,7 @@ pub fn research(
         ResearchOptions {
             abi,
             symbolic_spills: false,
+            stack_calls: None,
         },
     )
 }
@@ -123,9 +126,11 @@ pub fn research(
 /// Explicit value-proof profile. Existing callback and publication consumers
 /// keep exact stack words; write summaries additionally capture symbolic words.
 #[derive(Clone, Copy, Debug, Default)]
-pub struct ResearchOptions {
+pub struct ResearchOptions<'a> {
     pub abi: Option<CallAbi>,
     pub symbolic_spills: bool,
+    /// Complete call writes prepared from canonical facts; never a ROM default.
+    pub stack_calls: Option<&'a writes::StackCalls<'a>>,
 }
 
 pub fn research_with_options(
@@ -134,7 +139,7 @@ pub fn research_with_options(
     memory: &WorkingMemory,
     control: &mut dyn RunControl,
     sink: &mut dyn FunctionSink,
-    options: ResearchOptions,
+    options: ResearchOptions<'_>,
 ) -> Result<AnalysisSummary> {
     analyze_with(
         input,
@@ -145,6 +150,7 @@ pub fn research_with_options(
         true,
         options.abi,
         options.symbolic_spills,
+        options.stack_calls,
     )
 }
 #[allow(clippy::too_many_arguments)]
@@ -157,6 +163,7 @@ fn analyze_with(
     symbolic: bool,
     abi: Option<CallAbi>,
     symbolic_spills: bool,
+    stack_calls: Option<&writes::StackCalls<'_>>,
 ) -> Result<AnalysisSummary> {
     // Prove call targets on the graph with every possible continuation.
     // In particular, AUIPC/JALR needs the value analysis, including all
@@ -171,6 +178,7 @@ fn analyze_with(
         symbolic,
         abi,
         symbolic_spills,
+        stack_calls,
         &[],
     )?;
     if noreturn.is_empty() {
@@ -192,6 +200,7 @@ fn analyze_with(
         symbolic,
         abi,
         symbolic_spills,
+        stack_calls,
         &noreturn,
     )
     .map(|(summary, _)| summary)
@@ -207,6 +216,7 @@ fn analyze_pass<'m>(
     symbolic: bool,
     abi: Option<CallAbi>,
     symbolic_spills: bool,
+    stack_calls: Option<&writes::StackCalls<'_>>,
     noreturn: &[u64],
 ) -> Result<(AnalysisSummary, AdmittedVec<'m, u64>)> {
     control.phase(RunPhase::AnalyzeFunction)?;
@@ -581,6 +591,7 @@ fn analyze_pass<'m>(
         symbolic,
         abi,
         symbolic_spills,
+        stack_calls,
         &mut found_noreturn,
     )?;
     summary.semantics.complete &= summary.coverage.decoding && summary.coverage.control_flow;

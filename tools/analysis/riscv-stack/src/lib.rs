@@ -395,7 +395,7 @@ pub fn inspect_function(
     image: &ImageFacts<'_>,
     function: &Function,
     call_behavior: &dyn CallBehavior,
-    options: oer_analysis_riscv_analysis::ResearchOptions,
+    options: oer_analysis_riscv_analysis::ResearchOptions<'_>,
     memory: &WorkingMemory,
     control: &mut dyn RunControl,
     sink: &mut dyn oer_analysis_riscv_model::FunctionSink,
