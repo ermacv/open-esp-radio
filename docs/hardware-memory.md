@@ -135,9 +135,15 @@ The generated documentation records these phases; the HAL enforces their
 order and handover. A single-writer field does not declare phases.
 
 A fixed array declares `[layout.array]` with `element = "<LAYOUT>"` and
-`count`. Its element is a shared word layout; the array's size, alignment
-and placement must match those of its elements. The generated type exposes
-checked `entry(index)` access to the individual layouts.
+`count`. Its element is a shared-word or owned-byte layout; size is the
+element size times count, and alignment and placement match the element.
+A shared-word array exposes checked `entry(index)` references and can be a
+`DmaRef` target. An owned-byte array decodes a fixed byte buffer through
+checked `entry(index)` element decoders, with a generated `COUNT`. Its writer
+borrows one element writer at a time when the element has CPU-written fields.
+The byte array remains a buffer addressed by `DmaWindowAddress`.
+The channel-frequency lookup uses this indexed form; the packet-start and
+RX-address-delay lookups retain their named PHY-mode slots in the model.
 
 A BLE link to a structure declares `points-to = "<LAYOUT>"` and
 `encoding = "ble-compressed"` on a 20-bit field. A pointer to a byte buffer

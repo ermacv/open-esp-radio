@@ -418,7 +418,7 @@ fn invalid_pointer_encodings_and_phase_declarations_are_rejected() {
 }
 
 #[test]
-fn arrays_require_shared_elements_and_matching_geometry() {
+fn arrays_require_word_or_byte_elements_and_matching_geometry() {
     for (input, reason) in [
         (ARRAY.replace("count = 12", "count = 0"), "nonzero count"),
         (
@@ -427,15 +427,15 @@ fn arrays_require_shared_elements_and_matching_geometry() {
         ),
         (
             ARRAY.replace("element = \"NODE\"", "element = \"TABLE\""),
-            "not a word layout",
+            "not a word or byte layout",
         ),
         (
             ARRAY.replace("element = \"NODE\"", "element = \"PREFIX\""),
-            "not a word layout",
+            "array size, alignment or placement",
         ),
         (
             ARRAY.replace("element = \"NODE\"", "element = \"ABSENT\""),
-            "not a word layout",
+            "not a word or byte layout",
         ),
         (
             ARRAY.replace("align = 4", "align = 8"),
@@ -644,4 +644,86 @@ fn the_linker_fragment_names_the_dma_window_and_the_address_width() {
     .unwrap_err()
     .to_string();
     assert!(error.contains("no RAM region dma-window"), "{error}");
+}
+
+const BYTE_ARRAY: &str = r#"schema = 1
+[layout]
+name = "TABLE"
+description = "Three owned byte-prefix elements."
+size = 24
+align = 1
+[layout.array]
+element = "PREFIX"
+count = 3
+"#;
+
+#[test]
+fn byte_arrays_decode_checked_elements_without_becoming_pointer_targets() {
+    let (model, memory) = load_fixture(NODE, BYTE_ARRAY, PREFIX).expect("valid byte array");
+    let array = model
+        .layouts()
+        .iter()
+        .find(|layout| layout.name == "TABLE")
+        .expect("array loaded");
+    assert_eq!(array.kind, oer_registers_model::LayoutKind::ByteArray);
+    assert!(!array.is_dma_target());
+    let rust = model
+        .render_layouts_rust(&memory)
+        .expect("render byte array");
+    assert!(
+        !rust.contains("struct TableMut"),
+        "hardware-written elements have no CPU writer"
+    );
+    run_generated(
+        &rust,
+        r#"
+        use layouts::*;
+        let mut bytes = [0; Table::SIZE];
+        bytes[12..16].copy_from_slice(&123u32.to_le_bytes());
+        let table = Table::new(&bytes);
+        assert_eq!(Table::COUNT, 3);
+        assert_eq!(table.entry(1).expect("middle element").stamp().value(), 123);
+        assert_eq!(table.entry(0).expect("first element").stamp().value(), 0);
+        assert_eq!(table.entry(2).expect("last element").stamp().value(), 0);
+        assert_eq!(table.bytes(), &bytes);
+        assert!(table.entry(Table::COUNT).is_none());
+        assert!(table.entry(usize::MAX).is_none());
+    "#,
+    );
+}
+
+#[test]
+fn byte_array_writers_borrow_only_the_selected_typed_element() {
+    let cpu_prefix = PREFIX.replace("writer = \"hardware\"", "writer = \"cpu\"");
+    let rust = render_fixture_with_prefix(NODE, BYTE_ARRAY, &cpu_prefix).expect("CPU byte array");
+    run_generated(
+        &rust,
+        r#"
+        use layouts::*;
+        let mut bytes = [0; Table::SIZE];
+        let mut table = TableMut::new(&mut bytes);
+        {
+            let mut entry = table.entry(1).expect("middle element");
+            entry.set_rate(PrefixRate::from_bits(0).with_index(7).expect("rate fits"));
+            entry.set_stamp(PrefixStamp::from_bits(0).with_value(123));
+        }
+        let view = table.view();
+        assert_eq!(view.entry(1).expect("middle element").rate().index(), 7);
+        assert_eq!(view.entry(1).expect("middle element").stamp().value(), 123);
+        assert_eq!(view.entry(0).expect("first element").stamp().value(), 0);
+        assert_eq!(view.entry(2).expect("last element").stamp().value(), 0);
+        assert!(table.entry(Table::COUNT).is_none());
+        assert!(table.entry(usize::MAX).is_none());
+    "#,
+    );
+}
+
+#[test]
+fn a_byte_array_is_a_buffer_even_when_it_names_the_dma_region() {
+    let array = BYTE_ARRAY.replace("align = 1", "align = 1\nplacement = [\"dma-window\"]");
+    let prefix = PREFIX.replace("align = 1", "align = 1\nplacement = [\"dma-window\"]");
+    let node = NODE.replace("placement = [\"dma-window\"] }", "points-to = \"TABLE\" }");
+    let error = render_fixture_with_prefix(&node, &array, &prefix)
+        .expect_err("bytes are not a typed pointer target");
+    assert!(error.contains("not a word layout"), "{error}");
 }
