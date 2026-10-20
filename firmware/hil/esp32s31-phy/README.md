@@ -29,6 +29,14 @@ the capture epoch. The frozen cold-calibration projection remains immutable.
 Stop closes RF; a stopped, stale or failed epoch cannot serve pages. A failed
 hardware operation poisons the diagnostic service until reset.
 
+The image prints typed `TEMPERATURE_SENSOR_SAR2_STATUS` checkpoints after PHY
+registration, immediately before RF close and after retained wake. Each line
+contains the sampled byte and the named initialization/status field, decoded by
+the published PAC field. These reads use the existing PHY clock reference;
+there is no read after close with clocks off, no additional power reference and
+no analog write. The final capture provides the post-rejoin value. Checkpoints
+are outside calibration and tracking-hold measurement brackets.
+
 The HIL console and dispatcher run on P1. A lock-free RequestSlot transfers each
 command to the sole P2 radio owner and returns its response. The console's
 bounded input queue is used only on P1. Analog reads retry with timer-backed

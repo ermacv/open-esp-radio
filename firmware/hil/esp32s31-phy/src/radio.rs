@@ -190,6 +190,11 @@ impl Radio {
                     &self.domain,
                     crate::tx_rate_checkpoint::Point::AfterPhyRegistration,
                 )?;
+                crate::sar2_checkpoint::observe(
+                    &mut self.domain,
+                    crate::sar2_checkpoint::Point::AfterPhyRegistration,
+                )
+                .await?;
                 let cache = self
                     .domain
                     .attachment()
@@ -230,6 +235,11 @@ impl Radio {
                 )
                 .await
                 .map_err(|_| RejectReason::Internal)?;
+                crate::sar2_checkpoint::observe(
+                    &mut self.domain,
+                    crate::sar2_checkpoint::Point::AfterRfWake,
+                )
+                .await?;
                 let config = PrepareCapture {
                     channel: current.channel,
                     radio: current.radio,
@@ -542,6 +552,11 @@ impl Radio {
                 .map_err(|_| RejectReason::Internal)?,
         );
         self.absent = Some(absent);
+        crate::sar2_checkpoint::observe(
+            &mut self.domain,
+            crate::sar2_checkpoint::Point::BeforeRfClose,
+        )
+        .await?;
         close_concurrent_rf::<_, (), RomShortDelay>(&EmbassyClock, &mut self.domain, &mut ())
             .await
             .map_err(|_| RejectReason::Internal)?;

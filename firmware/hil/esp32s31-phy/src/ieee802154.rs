@@ -286,6 +286,8 @@ impl Rx {
                 .map_err(|_| RejectReason::Internal)?,
         );
         self.absent = Some(absent);
+        crate::sar2_checkpoint::observe(domain, crate::sar2_checkpoint::Point::BeforeRfClose)
+            .await?;
         close_concurrent_rf::<_, (), RomShortDelay>(&EmbassyClock, domain, &mut ())
             .await
             .map_err(|_| RejectReason::Internal)?;
