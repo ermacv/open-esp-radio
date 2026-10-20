@@ -117,26 +117,45 @@ mod tests {
 
     #[test]
     fn a_window_must_belong_to_the_active_epoch_and_stay_inside_the_image() {
-        let page = CaptureWindow { epoch: 3, first: 2, count: 4 };
+        let page = CaptureWindow {
+            epoch: 3,
+            first: 2,
+            count: 4,
+        };
         assert_eq!(page.range(3, 6), Some(2..6));
         assert_eq!(page.range(4, 6), None);
         assert_eq!(page.range(0, 6), None);
         assert_eq!(page.range(3, 5), None);
         assert_eq!(CaptureWindow { count: 0, ..page }.range(3, 6), None);
         assert_eq!(CaptureWindow { count: 17, ..page }.range(3, 100), None);
-        assert_eq!(CaptureWindow { first: u16::MAX, ..page }.range(3, 6), None);
+        assert_eq!(
+            CaptureWindow {
+                first: u16::MAX,
+                ..page
+            }
+            .range(3, 6),
+            None
+        );
     }
 
     #[test]
     fn capture_pages_round_trip_through_the_existing_frame() {
         let mut values = heapless::Vec::new();
         values.extend_from_slice(&[u32::MAX; CAPTURE_PAGE]).unwrap();
-        let reply = RegisterImage { epoch: u32::MAX, first: u16::MAX, total: u16::MAX, values };
+        let reply = RegisterImage {
+            epoch: u32::MAX,
+            first: u16::MAX,
+            total: u16::MAX,
+            values,
+        };
         let envelope = crate::Envelope::new(1, 2, 0, 3, reply.clone());
         let mut encoder = crate::FrameEncoder::new();
         let bytes = encoder.encode(&envelope).unwrap();
         let mut decoder = crate::FrameDecoder::new();
-        let frame = bytes.iter().find_map(|byte| decoder.push(*byte).transpose()).unwrap().unwrap();
-        assert_eq!(frame.decode::<RegisterImage>().unwrap(), reply);
+        let mut actual = None;
+        decoder.feed(crate::WireKind::Event, bytes, |frame| {
+            actual = Some(frame.unwrap().decode::<RegisterImage>().unwrap().unwrap());
+        });
+        assert_eq!(actual.unwrap().body, reply);
     }
 }

@@ -26,7 +26,7 @@ pub const NETWORK_FEATURE: &str = "owned-network";
 /// where the chip's runtime declares [`NETWORK_FEATURE`] and the class links
 /// a network, `None` otherwise.
 pub fn network_on(class: ImageClass, chip: &str) -> Option<&'static str> {
-    (declares(chip, NETWORK_FEATURE)
+    (keys::declares_for(class, chip, NETWORK_FEATURE)
         && class.build_features(NETWORK_FEATURE) != class.runtime_features())
     .then_some(NETWORK)
 }

@@ -1,0 +1,38 @@
+[package]
+name = "oer-firmware-hil-esp32s31-phy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+description = "Diagnostic PHY capture through public state and typed register reads"
+build = "build.rs"
+
+[features]
+diagnostic-phy = []
+
+[dependencies]
+oer-memory = { path = "../../../portable/memory" }
+heapless = { version = "0.9.3", features = ["serde"] }
+embassy-sync = "0.8.0"
+oer-hil-protocol = { path = "../../../protocols/hil/protocol", default-features = false, features = ["phy", "async-io"] }
+oer-hil-agent = { path = "../../../portable/hil-agent" }
+oer-espressif-esp-hal-irq = { path = "../../../chips/espressif/esp-hal-irq" }
+embassy-executor = { version = "0.10.0", default-features = false }
+esp-hal = { workspace = true, features = ["esp32s31", "static-interrupts", "rt", "unstable"] }
+static_cell = { workspace = true }
+oer-esp32s31-board = { path = "../../../chips/esp32s31/board" }
+oer-espressif-staged-runtime = { path = "../../../chips/espressif/staged-runtime", features = ["esp32s31", "two-harts"] }
+oer-espressif-executor = { path = "../../../chips/espressif/executor", features = ["esp32s31"] }
+oer-espressif-esp-hal-radio = { path = "../../../chips/espressif/esp-hal/radio", features = ["esp32s31"] }
+oer-embassy-time = { path = "../../../portable/embassy/time" }
+oer-time = { path = "../../../portable/time" }
+oer-esp32s31-hal = { path = "../../../chips/esp32s31/hal" }
+oer-esp32s31-phy = { path = "../../../chips/esp32s31/phy" }
+
+[build-dependencies]
+oer-esp32s31-layout = { workspace = true, features = ["build"] }
+
+[lints]
+workspace = true

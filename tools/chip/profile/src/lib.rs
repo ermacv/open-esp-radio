@@ -425,6 +425,18 @@ pub struct Hil {
     /// relative to the repository root; `None` for a chip without one.
     #[serde(default)]
     pub vendor_calibration: Option<PathBuf>,
+    /// Explicit image-class recipes, relative to the repository root.
+    #[serde(default)]
+    pub images: std::collections::BTreeMap<String, HilImage>,
+}
+
+/// One HIL image class's target package and policies.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+pub struct HilImage {
+    pub package: String,
+    pub manifest: PathBuf,
+    pub stack_policy: PathBuf,
 }
 
 /// The `[packages]` table: the chip's packages by the role the repository
@@ -623,28 +635,9 @@ impl Profile {
         format!("oer-firmware-bootstrap-{}", self.id)
     }
 
-    /// The package of the chip's HIL agent firmware
-    /// (`firmware/hil/<id>`).
-    pub fn hil_agent_package(&self) -> String {
-        format!("oer-firmware-hil-{}", self.id)
-    }
-
-    /// The directory of the chip's HIL agent, relative to the root; a chip
-    /// has a HIL agent where it exists.
-    pub fn hil_agent_directory(&self) -> PathBuf {
-        Path::new("firmware/hil").join(&self.id)
-    }
-
-    /// The manifest of the chip's HIL agent, which declares the features the
-    /// agent's images select from.
-    pub fn hil_agent_manifest(&self, root: &Path) -> PathBuf {
-        root.join(self.hil_agent_directory()).join("Cargo.toml")
-    }
-
-    /// The stack policy the chip's HIL images build under, relative to the
-    /// repository root (`firmware/hil/<id>/stack.toml`).
-    pub fn hil_stack_policy(&self) -> PathBuf {
-        Path::new("firmware/hil").join(&self.id).join("stack.toml")
+    /// The explicit recipe of `class`; an unsupported class has no recipe.
+    pub fn hil_image(&self, class: &str) -> Option<&HilImage> {
+        self.hil.as_ref()?.images.get(class)
     }
 
     /// The chip's own stack policy (`chips/<id>/platform/stack.toml`), relative

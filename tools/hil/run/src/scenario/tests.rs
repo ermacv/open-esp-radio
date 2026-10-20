@@ -256,9 +256,13 @@ fn a_scenario_is_marked_unsupported_exactly_when_no_current_image_serves_it() {
         .into_iter()
         .find(|profile| oer_hil_model::image_class::declares(&profile.id, "system-panic-reset"))
         .unwrap();
-    let manifest: toml::Table =
-        toml::from_str(&std::fs::read_to_string(staged.hil_agent_manifest(&root)).unwrap())
-            .unwrap();
+    let manifest: toml::Table = toml::from_str(
+        &std::fs::read_to_string(
+            root.join(&staged.hil_image("system-panic-reset").unwrap().manifest),
+        )
+        .unwrap(),
+    )
+    .unwrap();
     let features = manifest["features"].as_table().unwrap();
     // The firmware builds a class only while it declares every feature of
     // the class's recipe.

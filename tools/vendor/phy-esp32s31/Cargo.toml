@@ -8,6 +8,7 @@ publish = false
 description = "The vendor-versus-production ESP32-S31 PHY calibration comparison on data: register images, vendor console protocol and the reviewed relation over the projection the firmware reports; the HIL phy family captures it"
 
 [dependencies]
+oer-hil-scenario = { path = "../../hil/scenario" }
 oer-vendor-phy = { path = "../phy" }
 oer-esp32s31-knowledge = { path = "../../../chips/esp32s31/knowledge" }
 oer-registers-model = { path = "../../registers/model" }

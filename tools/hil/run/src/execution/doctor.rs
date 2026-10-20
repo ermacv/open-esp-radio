@@ -49,11 +49,16 @@ pub(crate) fn run(root: &Path, lab: &LabConfig, scenarios: &[&Scenario]) -> Resu
     let mut checks = Checks::default();
     checks.run("firmware-agent", || {
         let profile = oer_chip_profile::Profile::load(root, lab.chip())?;
-        let manifest = profile.hil_agent_manifest(root);
-        manifest
-            .is_file()
-            .then_some(())
-            .ok_or_else(|| format!("missing HIL agent {}", manifest.display()).into())
+        for scenario in scenarios {
+            let recipe = profile
+                .hil_image(scenario.image().id())
+                .ok_or("unsupported HIL class")?;
+            let manifest = root.join(&recipe.manifest);
+            if !manifest.is_file() {
+                return Err(format!("missing HIL image {}", manifest.display()).into());
+            }
+        }
+        Ok(())
     })?;
     checks.run("serial-device", || fs_device_exists(&lab.dut.serial))?;
     for tool in oer_os_toolchain::Tool::ALL {

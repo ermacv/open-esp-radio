@@ -10,6 +10,12 @@ description = "PHY HIL workloads: the vendor-versus-production calibration cross
 readme = "README.md"
 
 [dependencies]
+oer-hil-model = { path = "../../hil/model" }
+oer-hil-link = { path = "../../hil/link" }
+oer-hil-lab = { path = "../../hil/lab" }
+oer-hil-protocol = { path = "../../../protocols/hil/protocol", features = ["registry"] }
+oer-image-build = { path = "../../image/build" }
+oer-os-durable = { path = "../../os/durable" }
 oer-lab-board = { path = "../../lab/board" }
 oer-hil-scenario = { path = "../../hil/scenario" }
 serde_json = "1.0"
@@ -22,3 +28,9 @@ serde = { version = "1.0", features = ["derive"] }
 [lints]
 workspace = true
 
+
+[dev-dependencies]
+oer-hil-scenario = { path = "../../hil/scenario", features = ["test-support"] }
+oer-hil-link = { path = "../../hil/link", features = ["test-support"] }
+oer-hil-lab = { path = "../../hil/lab", features = ["test-support"] }
+toml = "1.1"

@@ -1,0 +1,11 @@
+schema = 5
+id = "phy-vendor-calibration-smoke"
+description = "One alternating cold boot to exercise the PHY capture tool; one vendor boot does not characterize its spread"
+role = "investigation"
+repetitions = 1
+tags = ["phy", "calibration", "tool-smoke", "air-strict"]
+
+[phy]
+kind = "vendor-calibration"
+lifecycle = "cold"
+boots = 1

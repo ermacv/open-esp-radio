@@ -16,24 +16,26 @@ fn main() {
             root.join(oer_chip_profile::platform_dir(&profile.id))
                 .display()
         );
-        let agent = root.join(profile.hil_agent_directory());
-        let manifest = agent.join("Cargo.toml");
-        println!("cargo::rerun-if-changed={}", agent.display());
-        if !manifest.is_file() {
-            continue;
+        let Some(hil) = &profile.hil else { continue };
+        for (class, recipe) in &hil.images {
+            let manifest = root.join(&recipe.manifest);
+            println!("cargo::rerun-if-changed={}", manifest.display());
+            if !manifest.is_file() {
+                panic!("missing HIL manifest {}", manifest.display());
+            }
+            entries.push_str(&format!(
+                "    ({:?}, {:?}, include_str!({:?})),\n",
+                profile.id,
+                class,
+                manifest.display().to_string()
+            ));
         }
-        println!("cargo::rerun-if-changed={}", manifest.display());
-        entries.push_str(&format!(
-            "    ({:?}, include_str!({:?})),\n",
-            profile.id,
-            manifest.display().to_string()
-        ));
     }
     let out =
         Path::new(&std::env::var("OUT_DIR").expect("Cargo sets OUT_DIR")).join("manifests.rs");
     std::fs::write(
         out,
-        format!("/// The runtime manifests of this tree, by chip.\nconst RUNTIME_MANIFESTS: &[(&str, &str)] = &[\n{entries}];\n"),
+        format!("/// The runtime manifests of this tree, by chip.\nconst RUNTIME_MANIFESTS: &[(&str, &str, &str)] = &[\n{entries}];\n"),
     )
     .expect("the manifest table is written");
 }
