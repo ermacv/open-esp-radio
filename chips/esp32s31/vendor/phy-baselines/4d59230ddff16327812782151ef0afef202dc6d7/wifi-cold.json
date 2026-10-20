@@ -9,8 +9,8 @@
     "scenario-sha256": "d76e60adfd4a483617184b1e0effdbf4264a8a67a6087c336e889f2b99b4c1f4",
     "model-sha256": "c7d2b0441a8cda2752036f2ba3d717312f04f1cca60c6e066f62c4287c819930",
     "relation-sha256": "9cfaa367b51c6fecf0bf37a8bffe7a97fb8c2f221bcc4aa5c840437f1ee94dc2",
-    "review-sha256": "f09309c8b23e462aefee43c1a7ff41bf25720e397e211a8030116435ebb67517",
-    "recipe-sha256": "6e46d6ebb6df621db832fed50f1fdbc556cdf5c5e1efe52bb1950a07e09f86b4"
+    "review-sha256": "41ad439ad15a28bfffa13be1b86077753b1b85440b4e0cf1b620182e5dc51ca4",
+    "recipe-sha256": "cd570c205e62f793f9d736540c1a098a57a61a7d53b78fd34d8a5f46a90acbb6"
   },
   "vendor-application-sha256": "e7c115dedfdb1fbf65372ef18655855b2f7d5b415f00de5a2d8347fc0940272a",
   "channel": 1,
