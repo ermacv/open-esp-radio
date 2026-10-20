@@ -8,6 +8,9 @@
 //! Controller and returns the clocked client.
 
 #[cfg(target_arch = "riscv32")]
+use oer_esp32s31_hal::power::PlatformClockBackend;
+
+#[cfg(target_arch = "riscv32")]
 use oer_esp32s31_hal::bluetooth::BluetoothSchedulerHardwareListsCleared;
 
 #[cfg(target_arch = "riscv32")]
@@ -92,9 +95,9 @@ impl TaskResources {
     /// The caller has released Controller output and left the shared PHY
     /// domain and BTBB; the controller-time worker holds no request.
     #[cfg(target_arch = "riscv32")]
-    pub(crate) fn shut_down<T>(
+    pub(crate) fn shut_down<B: PlatformClockBackend, T>(
         self,
-        radio: &mut RadioDomain<T>,
+        radio: &mut RadioDomain<B, T>,
         output: oer_esp32s31_hal::bluetooth::InterruptOutputReleasedOwner,
         timer: oer_esp32s31_hal::bluetooth::ModemLpTimerInterruptReadyOwner,
     ) -> Result<
@@ -269,9 +272,9 @@ impl TaskResources {
     /// and BTBB and the inactive interrupt bank until all controller consumers
     /// are stopped by a verified transition.
     #[cfg(target_arch = "riscv32")]
-    pub(crate) fn enable_ble_base_stack_hardware<T>(
+    pub(crate) fn enable_ble_base_stack_hardware<B: PlatformClockBackend, T>(
         &mut self,
-        radio: &mut RadioDomain<T>,
+        radio: &mut RadioDomain<B, T>,
         objects: &BlePhyHardwareObjects,
     ) {
         self.registers

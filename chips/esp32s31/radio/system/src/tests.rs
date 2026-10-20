@@ -203,7 +203,8 @@ impl ClientBackend<Wifi, RcSlow> for Model {
 }
 
 fn cold() -> WifiCold {
-    let (_domain, partitions) = RadioHardware::for_host_test().split(());
+    let (_domain, partitions) =
+        RadioHardware::for_host_test().split::<crate::test_clocks::TestClockBackend, _>(());
     WifiCold::from_partition(partitions.wifi)
 }
 

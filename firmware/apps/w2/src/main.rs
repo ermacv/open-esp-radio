@@ -102,7 +102,8 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
             park()
         }
     };
-    let (domain, partitions) = hardware.split(ConcurrentPhy::new());
+    let (domain, partitions) =
+        hardware.split::<oer_espressif_esp_hal_radio::EspHal, _>(ConcurrentPhy::new());
     let (Some((end, cells)), Some(lp)) = (claim(), LpClock::<RcSlow>::claim()) else {
         park()
     };

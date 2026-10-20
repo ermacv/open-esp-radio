@@ -36,9 +36,9 @@ pub(crate) trait PowerSequenceBackend {
 
 /// Power-sequence port over one route's shared PHY, its platform clock
 /// references and the platform clock owner.
-pub(crate) struct RoutePower<'route, P> {
+pub(crate) struct RoutePower<'route, P: PlatformClockProvider> {
     pub(crate) phy: &'route mut RadioPhyRegisters,
-    pub(crate) refs: &'route mut PlatformClockRefs,
+    pub(crate) refs: &'route mut PlatformClockRefs<P::Backend>,
     pub(crate) platform: &'route P,
 }
 
@@ -281,6 +281,6 @@ mod tests;
 
 pub(crate) mod clock;
 pub use clock::{
-    PlatformClock, PlatformClockAbandonment, PlatformClockError, PlatformClockGuard,
-    PlatformClockHolds, PlatformClockProvider,
+    PlatformClock, PlatformClockAbandonment, PlatformClockBackend, PlatformClockError,
+    PlatformClockGuard, PlatformClockHolds, PlatformClockProvider,
 };

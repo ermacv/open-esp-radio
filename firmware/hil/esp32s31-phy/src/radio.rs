@@ -23,7 +23,7 @@ use oer_time::{Clock, Timer};
 type Result<T> = core::result::Result<T, RejectReason>;
 
 pub struct Radio {
-    domain: RadioDomain<ConcurrentPhy>,
+    domain: RadioDomain<oer_espressif_esp_hal_radio::EspHal, ConcurrentPhy>,
     clocks: EspHalClocks,
     cold: Option<WifiCold>,
     clocked: Option<WifiClocked>,
@@ -47,7 +47,7 @@ pub struct Radio {
 impl Radio {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        domain: RadioDomain<ConcurrentPhy>,
+        domain: RadioDomain<oer_espressif_esp_hal_radio::EspHal, ConcurrentPhy>,
         wifi: WifiPartition,
         coex: CoexAbsent<WifiClient>,
         ieee802154: crate::ieee802154::Rx,
@@ -163,7 +163,7 @@ impl Radio {
                 if self.registered {
                     return Err(RejectReason::InvalidState);
                 }
-                let registration = register_concurrent_phy::<(), RomShortDelay, _>(
+                let registration = register_concurrent_phy::<_, (), RomShortDelay, _>(
                     &EmbassyClock,
                     &mut self.domain,
                     &mut (),
@@ -219,9 +219,13 @@ impl Radio {
                 if !self.domain.attachment().rf_closed() {
                     return Err(RejectReason::Internal);
                 }
-                wake_concurrent_rf::<RomShortDelay>(&EmbassyClock, &mut self.domain, &self.clocks)
-                    .await
-                    .map_err(|_| RejectReason::Internal)?;
+                wake_concurrent_rf::<_, RomShortDelay>(
+                    &EmbassyClock,
+                    &mut self.domain,
+                    &self.clocks,
+                )
+                .await
+                .map_err(|_| RejectReason::Internal)?;
                 let config = PrepareCapture {
                     channel: current.channel,
                     radio: current.radio,
@@ -322,7 +326,7 @@ impl Radio {
                 oer_esp32s31_phy::state::client::DEFAULT_PLL_TRACK_PERIOD_MICROS,
             ));
         let mut observer = crate::hold::Observer::new(hold.samples.len() as u8 + 1);
-        let tracked = track_concurrent_phy::<(), RomShortDelay, _>(
+        let tracked = track_concurrent_phy::<_, (), RomShortDelay, _>(
             &mut self.domain,
             &mut (),
             &EmbassyClock,
@@ -442,7 +446,7 @@ impl Radio {
         let due = joined.acquired == ConcurrentAcquire::TrackingDue;
         self.member = Some(joined.membership);
         if due {
-            maintain_concurrent_phy::<(), RomShortDelay, _>(
+            maintain_concurrent_phy::<_, (), RomShortDelay, _>(
                 &EmbassyClock,
                 &mut self.domain,
                 &mut (),
@@ -530,7 +534,7 @@ impl Radio {
                 .map_err(|_| RejectReason::Internal)?,
         );
         self.absent = Some(absent);
-        close_concurrent_rf::<(), RomShortDelay>(&EmbassyClock, &mut self.domain, &mut ())
+        close_concurrent_rf::<_, (), RomShortDelay>(&EmbassyClock, &mut self.domain, &mut ())
             .await
             .map_err(|_| RejectReason::Internal)?;
         Ok(())

@@ -13,6 +13,8 @@
 //! Every failure is classified as the client contract's [`Failure`] table
 //! states; a `ClientFailed` site says why the shared domain is not touched.
 
+use oer_esp32s31_hal::power::PlatformClockBackend;
+
 use oer_esp32s31_hal::ieee80211::init::{MacCoexPti, initialize_wifi_mac};
 use oer_esp32s31_hal::{
     domain::{
@@ -71,8 +73,8 @@ struct WifiShare {
 ///
 /// `C` provides the platform clocks, `T` is the PHY's time and `O` observes
 /// the PHY's target work.
-pub struct Esp32s31Radio<C, T, O> {
-    radio: RadioDomain<ConcurrentPhy>,
+pub struct Esp32s31Radio<C: PlatformClockProvider, T, O> {
+    radio: RadioDomain<C::Backend, ConcurrentPhy>,
     clocks: C,
     timer: T,
     observer: O,
@@ -91,7 +93,7 @@ where
     /// The backend over the split radio domain and Wi-Fi's coexistence
     /// state; `registration` configures the first PHY registration.
     pub fn new(
-        radio: RadioDomain<ConcurrentPhy>,
+        radio: RadioDomain<C::Backend, ConcurrentPhy>,
         wifi_coex: CoexAbsent<WifiClient>,
         clocks: C,
         timer: T,
@@ -199,7 +201,7 @@ where
             Rf::Closed => {
                 // Any failure, a rejection included, leaves the domain's
                 // state unknown to the actor: it poisons.
-                wake_concurrent_rf::<RomShortDelay>(&self.timer, &mut self.radio, &self.clocks)
+                wake_concurrent_rf::<_, RomShortDelay>(&self.timer, &mut self.radio, &self.clocks)
                     .await
                     .map_err(|_| Fault)?;
                 self.rf = Rf::Open;
@@ -209,7 +211,7 @@ where
             }
             Rf::Unregistered => {
                 let config = self.registration.take().ok_or(Fault)?;
-                let registration = register_concurrent_phy::<(), RomShortDelay, O>(
+                let registration = register_concurrent_phy::<_, (), RomShortDelay, O>(
                     &self.timer,
                     &mut self.radio,
                     &mut (),
@@ -233,7 +235,8 @@ where
 
     async fn close_rf(&mut self, last: LastClientLeft) -> Result<(), CloseFault> {
         let LastClientLeft(()) = last;
-        match close_concurrent_rf::<(), RomShortDelay>(&self.timer, &mut self.radio, &mut ()).await
+        match close_concurrent_rf::<_, (), RomShortDelay>(&self.timer, &mut self.radio, &mut ())
+            .await
         {
             Ok(()) => {
                 self.rf = Rf::Closed;
@@ -263,7 +266,7 @@ where
     async fn track_tick(&mut self) -> Result<(), Fault> {
         // A rejected tick (the tracking clock ran backwards) would fall due
         // again at once; it poisons like a failed one.
-        track_concurrent_phy::<(), RomShortDelay, O>(
+        track_concurrent_phy::<_, (), RomShortDelay, O>(
             &mut self.radio,
             &mut (),
             &self.timer,
@@ -386,7 +389,7 @@ where
         };
         let tracking_micros = if self.wifi.tracking_due {
             let start = self.timer.now();
-            match maintain_concurrent_phy::<(), RomShortDelay, O>(
+            match maintain_concurrent_phy::<_, (), RomShortDelay, O>(
                 &self.timer,
                 &mut self.radio,
                 &mut (),
@@ -602,9 +605,9 @@ where
 }
 
 #[cfg(target_arch = "riscv32")]
-fn vacant_wifi(
-    ready: oer_esp32s31_phy::concurrent::PhyReady<'_>,
-) -> oer_esp32s31_phy::concurrent::PhyClientReady<'_, WifiPhyMembership> {
+fn vacant_wifi<B: PlatformClockBackend>(
+    ready: oer_esp32s31_phy::concurrent::PhyReady<'_, B>,
+) -> oer_esp32s31_phy::concurrent::PhyClientReady<'_, B, WifiPhyMembership> {
     match ready.client::<WifiPhyMembership>() {
         oer_esp32s31_phy::concurrent::PhyClientAccess::Available(available) => available,
         _ => panic!("Wi-Fi join phase owns the unacquired PHY client"),

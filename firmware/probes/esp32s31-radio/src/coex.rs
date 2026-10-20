@@ -15,8 +15,11 @@ use oer_esp32s31_radio_coex::{
 };
 
 /// The radio domain of a fresh probe root, for one call.
-fn with_domain<R>(operation: impl FnOnce(&mut RadioDomain<()>) -> R) -> R {
-    let (mut radio, _partitions) = RadioHardware::for_probe().split(());
+fn with_domain<R>(
+    operation: impl FnOnce(&mut RadioDomain<oer_espressif_esp_hal_radio::EspHal>) -> R,
+) -> R {
+    let (mut radio, _partitions) =
+        RadioHardware::for_probe().split::<oer_espressif_esp_hal_radio::EspHal, _>(());
     operation(&mut radio)
 }
 

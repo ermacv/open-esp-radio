@@ -2,7 +2,7 @@ use super::*;
 use crate::phy::registration::PhyRegistration;
 use oer_esp32s31_pac::{RadioPartitions, SharedRadioParts};
 
-fn radio_domain() -> RadioDomain {
+fn radio_domain() -> RadioDomain<crate::power::test_clocks::CountingBackend> {
     let RadioPartitions {
         radio_phy,
         coexistence,

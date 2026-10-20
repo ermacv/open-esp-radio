@@ -7,7 +7,8 @@ use crate::{
 };
 
 fn scheduler(cells: &ControllerEventCells) -> SchedulerInitialized<'_, 4> {
-    let (_shared, partitions) = RadioHardware::for_host_test().split(());
+    let (_shared, partitions) =
+        RadioHardware::for_host_test().split::<crate::test_clocks::TestClockBackend, _>(());
     ControllerHalInitialized::initialize_for_validation(
         ClockedOwner::for_host_test(partitions.bluetooth),
         |_, _| {},

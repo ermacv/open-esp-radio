@@ -43,8 +43,8 @@ use crate::power::clock::{
     execute_release,
 };
 pub use crate::power::{
-    PlatformClock, PlatformClockAbandonment, PlatformClockError, PlatformClockGuard,
-    PlatformClockHolds, PlatformClockProvider,
+    PlatformClock, PlatformClockAbandonment, PlatformClockBackend, PlatformClockError,
+    PlatformClockGuard, PlatformClockHolds, PlatformClockProvider,
 };
 use crate::{
     clock::CommonRadioPower,
@@ -172,27 +172,27 @@ pub enum BtbbAcquired {
 
 /// Shared registers, the PHY, power and BTBB state that must stay with them,
 /// and the upper layer's attachment.
-struct SharedRadioState<T> {
+struct SharedRadioState<B: PlatformClockBackend, T> {
     registers: SharedRadioRegisters,
     phy: PhyRouteState,
-    power: CommonRadioPower,
+    power: CommonRadioPower<B>,
     btbb_clients: u8,
     /// The generation of the latest BTBB gain publication.
     btbb_gain_generation: u32,
     clocks: ModemClocks,
     /// Platform references of the modem clock planner's enabled
     /// dependencies; a poisoned planner keeps them held.
-    modem_platform_clocks: ModemPlatformClocks,
+    modem_platform_clocks: ModemPlatformClocks<B>,
     coex_pti: CoexPtiTable,
     phy_grant_protected: bool,
     /// The low-power timer gate reference while Bluetooth selects its clock.
-    bluetooth_low_power_clock: Option<PlatformClockGuard>,
+    bluetooth_low_power_clock: Option<PlatformClockGuard<B>>,
     external_coex: Option<crate::coex::ExternalCoexConfig>,
     coex_participants: CoexParticipants,
     attachment: T,
 }
 
-impl<T> SharedRadioState<T> {
+impl<B: PlatformClockBackend, T> SharedRadioState<B, T> {
     /// The platform clock references the radio holds: common power, the
     /// modem clock dependencies (also while poisoned) and the Bluetooth
     /// low-power timer gate.
@@ -320,19 +320,24 @@ const fn phy_module(module: PhyClockModule) -> ModemClockModule {
 /// software state and common radio power, owned by value.
 ///
 /// ```compile_fail
-/// use oer_esp32s31_hal::domain::RadioDomain;
+/// use oer_esp32s31_hal::{domain::RadioDomain, power::PlatformClockBackend};
 /// fn requires_clone<T: Clone>() {}
-/// requires_clone::<RadioDomain>();
+/// fn cannot_clone<B: PlatformClockBackend>() {
+///     requires_clone::<RadioDomain<B>>();
+/// }
 /// ```
+///
+/// `B` binds every platform clock reference to one backend. Providers used
+/// with this domain must have `Backend = B`.
 ///
 /// `T` is state an upper layer keeps with the domain, such as the PHY
 /// layer's registered domain. The HAL never interprets it.
 #[must_use = "dropping the radio domain permanently loses the shared registers"]
-pub struct RadioDomain<T = ()> {
-    state: SharedRadioState<T>,
+pub struct RadioDomain<B: PlatformClockBackend, T = ()> {
+    state: SharedRadioState<B, T>,
 }
 
-impl<T> RadioDomain<T> {
+impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
     /// Place the shared owner, its PHY state and `attachment` in one domain.
     /// This performs no MMIO.
     pub(crate) fn new(registers: SharedRadioRegisters, phy: PhyRouteState, attachment: T) -> Self {
@@ -418,7 +423,7 @@ impl<T> RadioDomain<T> {
         Ok((state.registers, state.phy, state.attachment))
     }
 
-    fn from_state(state: SharedRadioState<T>) -> Self {
+    fn from_state(state: SharedRadioState<B, T>) -> Self {
         Self { state }
     }
 
@@ -465,7 +470,7 @@ impl<T> RadioDomain<T> {
     pub(crate) fn hold_platform_clock_for_test(
         &mut self,
         clock: PlatformClock,
-        platform: &impl PlatformClockProvider,
+        platform: &impl PlatformClockProvider<Backend = B>,
     ) {
         self.state
             .power
@@ -502,12 +507,12 @@ pub enum RadioDomainReleaseError {
     Restore(crate::root::RadioPhyReleaseError),
 }
 
-impl<T> RadioDomain<T> {
-    fn state(&self) -> &SharedRadioState<T> {
+impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
+    fn state(&self) -> &SharedRadioState<B, T> {
         &self.state
     }
 
-    fn state_mut(&mut self) -> &mut SharedRadioState<T> {
+    fn state_mut(&mut self) -> &mut SharedRadioState<B, T> {
         &mut self.state
     }
 
@@ -548,7 +553,7 @@ impl<T> RadioDomain<T> {
     pub fn enter_common_power<O: RadioClientOwner>(
         &mut self,
         _owner: &O,
-        clocks: &impl PlatformClockProvider,
+        clocks: &impl PlatformClockProvider<Backend = B>,
     ) -> Result<CommonPower<O::Client>, CommonRadioPowerError> {
         let state = self.state_mut();
         state
@@ -721,7 +726,7 @@ impl<T> RadioDomain<T> {
     pub fn enable_modem_clocks<O: RadioClientOwner>(
         &mut self,
         _owner: &O,
-        platform: &impl PlatformClockProvider,
+        platform: &impl PlatformClockProvider<Backend = B>,
     ) -> Result<(), ModemClockError> {
         self.enable_slot(client_index(O::CLIENT), client_module(O::CLIENT), platform)
     }
@@ -789,7 +794,7 @@ impl<T> RadioDomain<T> {
     pub fn select_bluetooth_low_power_clock(
         &mut self,
         _owner: &BluetoothTaskRegisters,
-        clocks: &impl PlatformClockProvider,
+        clocks: &impl PlatformClockProvider<Backend = B>,
     ) -> Result<(), LowPowerClockError> {
         let state = self.state_mut();
         if state.bluetooth_low_power_clock.is_some() {
@@ -834,7 +839,7 @@ impl<T> RadioDomain<T> {
     pub fn enable_phy_modem_clocks(
         &mut self,
         module: PhyClockModule,
-        platform: &impl PlatformClockProvider,
+        platform: &impl PlatformClockProvider<Backend = B>,
     ) -> Result<(), ModemClockError> {
         self.enable_slot(phy_index(module), phy_module(module), platform)
     }
@@ -855,7 +860,7 @@ impl<T> RadioDomain<T> {
     pub fn start_external_coex(
         &mut self,
         config: crate::coex::ExternalCoexConfig,
-        platform: &impl PlatformClockProvider,
+        platform: &impl PlatformClockProvider<Backend = B>,
     ) -> Result<(ExternalCoexistence, u32), crate::coex::ExternalCoexError> {
         if self.state().external_coex.is_some() {
             return Err(crate::coex::ExternalCoexError::AlreadyActive);
@@ -922,7 +927,7 @@ impl<T> RadioDomain<T> {
         &mut self,
         index: usize,
         module: ModemClockModule,
-        platform: &impl PlatformClockProvider,
+        platform: &impl PlatformClockProvider<Backend = B>,
     ) -> Result<(), ModemClockError> {
         let state = self.state_mut();
         let (planner, mut leases) =

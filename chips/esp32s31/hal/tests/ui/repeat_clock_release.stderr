@@ -1,12 +1,13 @@
 error[E0382]: use of moved value: `clocked`
- --> tests/ui/repeat_clock_release.rs:6:19
+ --> tests/ui/repeat_clock_release.rs:9:19
   |
-3 | pub fn release<T>(clocked: WifiClocked, radio: &mut RadioDomain<T>) {
-  |                   ------- move occurs because `clocked` has type `WifiClocked`, which does not implement the `Copy` trait
-4 |     let first = clocked.release_clocks(radio);
+4 |     clocked: WifiClocked,
+  |     ------- move occurs because `clocked` has type `WifiClocked`, which does not implement the `Copy` trait
+...
+7 |     let first = clocked.release_clocks(radio);
   |                         --------------------- `clocked` moved due to this method call
-5 |     #[cfg(all())]
-6 |     let _second = clocked.release_clocks(radio); // ui-error: E0382
+8 |     #[cfg(all())]
+9 |     let _second = clocked.release_clocks(radio); // ui-error: E0382
   |                   ^^^^^^^ value used here after move
   |
 note: `WifiClocked::release_clocks` takes ownership of the receiver `self`, which moves `clocked`

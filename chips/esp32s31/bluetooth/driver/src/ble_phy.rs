@@ -1,6 +1,9 @@
 //! Owned BLE PHY engine activation after common PHY and BTBB initialization.
 
 #[cfg(target_arch = "riscv32")]
+use oer_esp32s31_hal::power::PlatformClockBackend;
+
+#[cfg(target_arch = "riscv32")]
 use crate::{phy::ControllerPhyJoined, resources::InterruptBankOwner};
 #[cfg(any(target_arch = "riscv32", test))]
 use oer_bluetooth_hci::BluetoothPublicDeviceAddress;
@@ -233,9 +236,9 @@ impl<'cells, const MODEM_TIMER_CAPACITY: usize> ControllerPhyJoined<'cells, MODE
     /// remains in canonical display order at this boundary; only the HAL owns
     /// conversion to Controller wire order. The returned state therefore
     /// proves both BLE PHY completion and public-address readiness.
-    pub fn initialize_ble_phy_engine<T>(
+    pub fn initialize_ble_phy_engine<B: PlatformClockBackend, T>(
         mut self,
-        radio: &mut oer_esp32s31_hal::domain::RadioDomain<T>,
+        radio: &mut oer_esp32s31_hal::domain::RadioDomain<B, T>,
         storage: BlePhyEngineCpuOwned,
         direction_finding: DirectionFindingWorkspaceCpuOwned,
         public_address: BluetoothPublicDeviceAddress,

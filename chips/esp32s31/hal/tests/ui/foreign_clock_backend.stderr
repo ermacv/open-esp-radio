@@ -1,0 +1,25 @@
+error[E0271]: type mismatch resolving `<impl PlatformClockProvider<Backend = B2> as PlatformClockProvider>::Backend == B1`
+  --> tests/ui/foreign_clock_backend.rs:14:64
+   |
+ 7 | pub fn enable<B1: PlatformClockBackend, B2: PlatformClockBackend, T>(
+   |               --                        -- found type parameter
+   |               |
+   |               expected type parameter
+...
+14 |     let _ = radio.enable_phy_modem_clocks(PhyClockModule::Phy, foreign); // ui-error: E0271
+   |                   -----------------------                      ^^^^^^^ expected type parameter `B1`, found type parameter `B2`
+   |                   |
+   |                   required by a bound introduced by this call
+   |
+   = note: expected type parameter `B1`
+              found type parameter `B2`
+   = note: a type parameter was expected, but a different one was found; you might be missing a type parameter or trait bound
+   = note: for more information, visit https://doc.rust-lang.org/book/ch10-02-traits.html#traits-as-parameters
+note: required by a bound in `RadioDomain::<B, T>::enable_phy_modem_clocks`
+  --> src/domain.rs
+   |
+   |     pub fn enable_phy_modem_clocks(
+   |            ----------------------- required by a bound in this associated function
+...
+   |         platform: &impl PlatformClockProvider<Backend = B>,
+   |                                               ^^^^^^^^^^^ required by this bound in `RadioDomain::<B, T>::enable_phy_modem_clocks`

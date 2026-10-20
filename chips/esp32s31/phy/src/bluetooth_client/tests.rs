@@ -17,8 +17,15 @@ use crate::{
 
 /// A radio domain whose PHY is registered in the domain's current epoch, or,
 /// when `stale`, in an epoch a later registration retired.
-fn radio_domain(stale: bool) -> (RadioDomain<ConcurrentPhy>, ProtocolPartitions) {
-    let (mut radio, partitions) = RadioHardware::for_host_test().split(ConcurrentPhy::new());
+fn radio_domain(
+    stale: bool,
+) -> (
+    RadioDomain<crate::test_clocks::TestClockBackend, ConcurrentPhy>,
+    ProtocolPartitions,
+) {
+    let (mut radio, partitions) =
+        RadioHardware::for_host_test()
+            .split::<crate::test_clocks::TestClockBackend, _>(ConcurrentPhy::new());
     {
         let domain = &mut radio;
         let grant = domain.phy_hal().begin_registration();
@@ -43,7 +50,9 @@ fn task(partitions: ProtocolPartitions) -> TaskOwner {
     task
 }
 
-fn bluetooth_is_client(radio: &RadioDomain<ConcurrentPhy>) -> bool {
+fn bluetooth_is_client(
+    radio: &RadioDomain<crate::test_clocks::TestClockBackend, ConcurrentPhy>,
+) -> bool {
     radio
         .attachment()
         .client_snapshot()
@@ -52,7 +61,9 @@ fn bluetooth_is_client(radio: &RadioDomain<ConcurrentPhy>) -> bool {
 
 #[test]
 fn joining_an_unregistered_domain_changes_nothing() {
-    let (mut radio, partitions) = RadioHardware::for_host_test().split(ConcurrentPhy::new());
+    let (mut radio, partitions) =
+        RadioHardware::for_host_test()
+            .split::<crate::test_clocks::TestClockBackend, _>(ConcurrentPhy::new());
     let task = task(partitions);
     let radio = &mut radio;
 
@@ -108,7 +119,10 @@ fn leaving_without_the_btbb_reference_keeps_the_membership_and_the_client() {
 
 /// Enter `client` with a proof for the domain's registration.
 fn enter_client(
-    radio: &mut oer_esp32s31_hal::domain::RadioDomain<crate::concurrent::ConcurrentPhy>,
+    radio: &mut oer_esp32s31_hal::domain::RadioDomain<
+        crate::test_clocks::TestClockBackend,
+        crate::concurrent::ConcurrentPhy,
+    >,
     client: oer_esp32s31_hal::domain::RadioClient,
     clock: &impl oer_time::Clock,
 ) -> Result<crate::concurrent::ConcurrentAcquire, crate::concurrent::ConcurrentPhyError> {
@@ -117,11 +131,14 @@ fn enter_client(
 
 /// Join with a proof for the domain's registration.
 fn join_bluetooth_prepared(
-    radio: &mut oer_esp32s31_hal::domain::RadioDomain<crate::concurrent::ConcurrentPhy>,
+    radio: &mut oer_esp32s31_hal::domain::RadioDomain<
+        crate::test_clocks::TestClockBackend,
+        crate::concurrent::ConcurrentPhy,
+    >,
     task: &TaskOwner,
     clock: &impl oer_time::Clock,
 ) -> Result<(BluetoothPhyMembership, ConcurrentAcquire), BluetoothPhyClientError> {
-    let ready = crate::concurrent::PhyClientReady::<BluetoothPhyMembership>::for_test(radio);
+    let ready = crate::concurrent::PhyClientReady::<_, BluetoothPhyMembership>::for_test(radio);
     join_bluetooth(ready, task, clock)
         .map(|joined| (joined.membership, joined.acquired))
         .map_err(|refused| refused.error)

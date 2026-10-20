@@ -11,6 +11,8 @@
 //! Unlike IEEE 802.15.4, Bluetooth keeps the transmit-on delay that the
 //! first BTBB initialization writes.
 
+use oer_esp32s31_hal::power::PlatformClockBackend;
+
 use core::fmt;
 
 use oer_esp32s31_hal::{
@@ -62,11 +64,11 @@ pub enum BluetoothPhyClientError {
 /// Every check runs before the client set or BTBB changes: Bluetooth already
 /// holds BTBB, or the client set rejects the client. The radio comes back
 /// either way.
-pub fn join_bluetooth<'l>(
-    ready: PhyClientReady<'l, BluetoothPhyMembership>,
+pub fn join_bluetooth<'l, B: PlatformClockBackend>(
+    ready: PhyClientReady<'l, B, BluetoothPhyMembership>,
     task: &TaskOwner,
     clock: &impl oer_time::Clock,
-) -> Result<Joined<'l, BluetoothPhyMembership>, JoinRefused<'l, BluetoothPhyClientError>> {
+) -> Result<Joined<'l, B, BluetoothPhyMembership>, JoinRefused<'l, B, BluetoothPhyClientError>> {
     let radio = ready.into_radio();
     let acquired = match acquire_btbb_client(radio, RadioClient::Bluetooth, clock, |radio, gain| {
         task.acquire_btbb(radio, gain)
@@ -125,8 +127,8 @@ impl fmt::Debug for BluetoothPhyLeaveFailure {
 ///
 /// The domain rejects the release (tracking pending, poisoned) or the BTBB
 /// reference is missing; nothing changed and the membership is returned.
-pub fn leave_bluetooth(
-    radio: &mut RadioDomain<ConcurrentPhy>,
+pub fn leave_bluetooth<B: PlatformClockBackend>(
+    radio: &mut RadioDomain<B, ConcurrentPhy>,
     task: &TaskOwner,
     membership: BluetoothPhyMembership,
 ) -> Result<bool, BluetoothPhyLeaveFailure> {

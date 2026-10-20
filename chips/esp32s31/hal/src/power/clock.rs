@@ -189,8 +189,8 @@ impl ModemClockModule {
 mod executor;
 pub(crate) use executor::ModemPlatformClocks;
 pub use executor::{
-    PlatformClock, PlatformClockAbandonment, PlatformClockError, PlatformClockGuard,
-    PlatformClockHolds, PlatformClockProvider,
+    PlatformClock, PlatformClockAbandonment, PlatformClockBackend, PlatformClockError,
+    PlatformClockGuard, PlatformClockHolds, PlatformClockProvider,
 };
 pub(crate) use executor::{execute_acquire, execute_release};
 

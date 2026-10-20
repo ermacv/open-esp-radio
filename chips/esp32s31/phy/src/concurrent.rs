@@ -1,7 +1,7 @@
 //! One registered PHY domain shared by concurrently running protocol clients.
 //!
 //! [`ConcurrentPhy`] is the PHY layer's attachment to the HAL radio domain
-//! (`RadioDomain<ConcurrentPhy>`). Every operation borrows that domain
+//! (`RadioDomain<B, ConcurrentPhy>`). Every operation borrows that domain
 //! mutably, so access to the PHY state is serialized with the shared
 //! registers, and PHY work always runs on the domain's shared-PHY borrow.
 //!
@@ -22,6 +22,8 @@
 //! and `esp_phy_disable` do: `PHY` is held while RF is open, and
 //! `PHY_CALIBRATION` only while registration or RF wake runs. After the last
 //! client leaves, closing RF releases `PHY`; waking RF takes it again.
+
+use oer_esp32s31_hal::power::PlatformClockBackend;
 
 use oer_esp32s31_hal::domain::{
     BtbbAcquired, BtbbError, BtbbGain, ModemClockError, RadioClient, RadioDomain,
@@ -306,7 +308,8 @@ impl ConcurrentPhy {
 ///
 /// ```compile_fail,E0599
 /// use oer_esp32s31_phy::concurrent::PhyReady;
-/// fn clone<'l>(ready: &PhyReady<'l>) -> PhyReady<'l> {
+/// use oer_esp32s31_hal::power::PlatformClockBackend;
+/// fn clone<'l, B: PlatformClockBackend>(ready: &PhyReady<'l, B>) -> PhyReady<'l, B> {
 ///     ready.clone()
 /// }
 /// ```
@@ -316,16 +319,17 @@ impl ConcurrentPhy {
 /// ```compile_fail,E0451
 /// use oer_esp32s31_hal::domain::RadioDomain;
 /// use oer_esp32s31_phy::concurrent::{ConcurrentPhy, PhyReady};
-/// fn forge<'l>(radio: &'l mut RadioDomain<ConcurrentPhy>) -> PhyReady<'l> {
+/// use oer_esp32s31_hal::power::PlatformClockBackend;
+/// fn forge<'l, B: PlatformClockBackend>(radio: &'l mut RadioDomain<B, ConcurrentPhy>) -> PhyReady<'l, B> {
 ///     PhyReady { radio }
 /// }
 /// ```
 #[must_use = "a ready PHY is consumed by the client's join"]
-pub struct PhyReady<'l> {
-    radio: &'l mut RadioDomain<ConcurrentPhy>,
+pub struct PhyReady<'l, B: PlatformClockBackend> {
+    radio: &'l mut RadioDomain<B, ConcurrentPhy>,
 }
 
-impl core::fmt::Debug for PhyReady<'_> {
+impl<B: PlatformClockBackend> core::fmt::Debug for PhyReady<'_, B> {
     fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         formatter.write_str("PhyReady")
     }
@@ -351,9 +355,9 @@ impl PhyClientKind for crate::ieee802154_client::Ieee802154PhyMembership {
     const CLIENT: RadioClient = RadioClient::Ieee802154;
 }
 
-pub enum PhyClientAccess<'l, K: PhyClientKind> {
-    Available(PhyClientReady<'l, K>),
-    Member(PhyReady<'l>),
+pub enum PhyClientAccess<'l, B: PlatformClockBackend, K: PhyClientKind> {
+    Available(PhyClientReady<'l, B, K>),
+    Member(PhyReady<'l, B>),
 }
 
 /// Exclusive, consumed join authority for one protocol and registration.
@@ -361,7 +365,8 @@ pub enum PhyClientAccess<'l, K: PhyClientKind> {
 /// ```no_run
 /// use oer_esp32s31_phy::{concurrent::PhyClientReady, wifi_client::{WifiPhyMembership, join_wifi}};
 /// use oer_esp32s31_hal::ieee80211::client::WifiClocked;
-/// fn wifi(ready: PhyClientReady<'_, WifiPhyMembership>, clocks: &WifiClocked,
+/// use oer_esp32s31_hal::power::PlatformClockBackend;
+/// fn wifi<B: PlatformClockBackend>(ready: PhyClientReady<'_, B, WifiPhyMembership>, clocks: &WifiClocked,
 ///         clock: &impl oer_time::Clock) {
 ///     let _ = join_wifi(ready, clocks, clock);
 /// }
@@ -373,22 +378,23 @@ pub enum PhyClientAccess<'l, K: PhyClientKind> {
 /// use oer_esp32s31_phy::{concurrent::PhyClientReady,
 ///     bluetooth_client::BluetoothPhyMembership, wifi_client::join_wifi};
 /// use oer_esp32s31_hal::ieee80211::client::WifiClocked;
-/// fn foreign(ready: PhyClientReady<'_, BluetoothPhyMembership>, clocks: &WifiClocked,
+/// use oer_esp32s31_hal::power::PlatformClockBackend;
+/// fn foreign<B: PlatformClockBackend>(ready: PhyClientReady<'_, B, BluetoothPhyMembership>, clocks: &WifiClocked,
 ///            clock: &impl oer_time::Clock) {
 ///     let _ = join_wifi(ready, clocks, clock);
 /// }
 /// ```
-pub struct PhyClientReady<'l, K: PhyClientKind> {
-    ready: PhyReady<'l>,
+pub struct PhyClientReady<'l, B: PlatformClockBackend, K: PhyClientKind> {
+    ready: PhyReady<'l, B>,
     kind: core::marker::PhantomData<fn() -> K>,
 }
 
-impl<'l, K: PhyClientKind> PhyClientReady<'l, K> {
-    pub(crate) fn into_radio(self) -> &'l mut RadioDomain<ConcurrentPhy> {
+impl<'l, B: PlatformClockBackend, K: PhyClientKind> PhyClientReady<'l, B, K> {
+    pub(crate) fn into_radio(self) -> &'l mut RadioDomain<B, ConcurrentPhy> {
         self.ready.into_radio()
     }
     #[cfg(test)]
-    pub(crate) fn for_test(radio: &'l mut RadioDomain<ConcurrentPhy>) -> Self {
+    pub(crate) fn for_test(radio: &'l mut RadioDomain<B, ConcurrentPhy>) -> Self {
         Self {
             ready: PhyReady::for_test(radio),
             kind: core::marker::PhantomData,
@@ -396,9 +402,9 @@ impl<'l, K: PhyClientKind> PhyClientReady<'l, K> {
     }
 }
 
-impl<'l> PhyReady<'l> {
+impl<'l, B: PlatformClockBackend> PhyReady<'l, B> {
     /// Lend one client's vacant phase; a member phase has no join operation.
-    pub fn client<K: PhyClientKind>(self) -> PhyClientAccess<'l, K> {
+    pub fn client<K: PhyClientKind>(self) -> PhyClientAccess<'l, B, K> {
         #[allow(
             clippy::ok_expect,
             reason = "an internal phase failure needs no Debug formatter in the firmware"
@@ -421,12 +427,12 @@ impl<'l> PhyReady<'l> {
     }
 
     #[cfg(test)]
-    pub(crate) fn for_test(radio: &'l mut RadioDomain<ConcurrentPhy>) -> Self {
+    pub(crate) fn for_test(radio: &'l mut RadioDomain<B, ConcurrentPhy>) -> Self {
         Self { radio }
     }
 
     /// The radio, for the join that consumes the proof.
-    pub(crate) fn into_radio(self) -> &'l mut RadioDomain<ConcurrentPhy> {
+    pub(crate) fn into_radio(self) -> &'l mut RadioDomain<B, ConcurrentPhy> {
         self.radio
     }
 }
@@ -435,19 +441,19 @@ impl<'l> PhyReady<'l> {
 /// comes back. [`ConcurrentAcquire::TrackingDue`] means the domain must run
 /// its tracking before the client uses RF.
 #[must_use = "the membership must be kept and left"]
-pub struct Joined<'l, M> {
+pub struct Joined<'l, B: PlatformClockBackend, M> {
     pub membership: M,
     pub acquired: ConcurrentAcquire,
-    pub radio: &'l mut RadioDomain<ConcurrentPhy>,
+    pub radio: &'l mut RadioDomain<B, ConcurrentPhy>,
 }
 
 /// The domain refused the client; nothing changed and the radio comes back.
-pub struct JoinRefused<'l, E> {
+pub struct JoinRefused<'l, B: PlatformClockBackend, E> {
     pub error: E,
-    pub radio: &'l mut RadioDomain<ConcurrentPhy>,
+    pub radio: &'l mut RadioDomain<B, ConcurrentPhy>,
 }
 
-impl<E: core::fmt::Debug> core::fmt::Debug for JoinRefused<'_, E> {
+impl<B: PlatformClockBackend, E: core::fmt::Debug> core::fmt::Debug for JoinRefused<'_, B, E> {
     fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         formatter
             .debug_struct("JoinRefused")
@@ -462,9 +468,9 @@ impl<E: core::fmt::Debug> core::fmt::Debug for JoinRefused<'_, E> {
 ///
 /// The domain is not registered, RF is closed, tracking is pending, the
 /// domain is poisoned, or its registration no longer describes the radio.
-pub fn phy_ready<'l>(
-    radio: &'l mut RadioDomain<ConcurrentPhy>,
-) -> Result<PhyReady<'l>, ConcurrentPhyError> {
+pub fn phy_ready<'l, B: PlatformClockBackend>(
+    radio: &'l mut RadioDomain<B, ConcurrentPhy>,
+) -> Result<PhyReady<'l, B>, ConcurrentPhyError> {
     let epoch = radio.registration_epoch();
     let domain = radio.attachment().settled()?;
     if !domain.clients.describes_epoch(epoch) {
@@ -479,8 +485,8 @@ pub fn phy_ready<'l>(
 ///
 /// The client set rejects the client (already acquired, clock error). The
 /// domain is unchanged.
-pub(crate) fn acquire_client(
-    radio: &mut RadioDomain<ConcurrentPhy>,
+pub(crate) fn acquire_client<B: PlatformClockBackend>(
+    radio: &mut RadioDomain<B, ConcurrentPhy>,
     client: RadioClient,
     clock: &impl oer_time::Clock,
 ) -> Result<ConcurrentAcquire, ConcurrentPhyError> {
@@ -511,11 +517,14 @@ pub(crate) enum BtbbClientAcquireError {
 /// Until BTBB accepts, the original client owner remains unchanged. After it
 /// accepts, committing the prepared evaluation is infallible, including when
 /// that commit makes tracking pending. There is no fallible client rollback.
-pub(crate) fn acquire_btbb_client(
-    radio: &mut RadioDomain<ConcurrentPhy>,
+pub(crate) fn acquire_btbb_client<B: PlatformClockBackend>(
+    radio: &mut RadioDomain<B, ConcurrentPhy>,
     client: RadioClient,
     clock: &impl oer_time::Clock,
-    acquire: impl FnOnce(&mut RadioDomain<ConcurrentPhy>, &BtbbGain) -> Result<BtbbAcquired, BtbbError>,
+    acquire: impl FnOnce(
+        &mut RadioDomain<B, ConcurrentPhy>,
+        &BtbbGain,
+    ) -> Result<BtbbAcquired, BtbbError>,
 ) -> Result<ConcurrentAcquire, BtbbClientAcquireError> {
     use BtbbClientAcquireError::{Btbb, Phy};
     radio.attachment().settled().map_err(Phy)?;
@@ -575,8 +584,8 @@ fn publish_acquisition(
 }
 
 /// Resume the existing Wi-Fi claim instead of minting a second join right.
-pub(crate) fn resume_client(
-    radio: &mut RadioDomain<ConcurrentPhy>,
+pub(crate) fn resume_client<B: PlatformClockBackend>(
+    radio: &mut RadioDomain<B, ConcurrentPhy>,
     key: PhyClientKey,
     clock: &impl oer_time::Clock,
 ) -> Result<ConcurrentAcquire, ConcurrentPhyError> {
@@ -612,8 +621,8 @@ pub(crate) fn resume_client(
 }
 
 /// Retire a sleeping client's software permission without opening RF.
-pub(crate) fn retire_suspended_client(
-    radio: &mut RadioDomain<ConcurrentPhy>,
+pub(crate) fn retire_suspended_client<B: PlatformClockBackend>(
+    radio: &mut RadioDomain<B, ConcurrentPhy>,
     key: PhyClientKey,
 ) -> Result<(), ConcurrentPhyError> {
     let phy = radio.attachment_mut();
@@ -634,8 +643,8 @@ pub(crate) fn retire_suspended_client(
 ///
 /// The domain is not registered and settled, or the client was not acquired.
 /// The domain is unchanged.
-pub(crate) fn release_client(
-    radio: &mut RadioDomain<ConcurrentPhy>,
+pub(crate) fn release_client<B: PlatformClockBackend>(
+    radio: &mut RadioDomain<B, ConcurrentPhy>,
     client: RadioClient,
     key: PhyClientKey,
 ) -> Result<bool, ConcurrentPhyError> {
@@ -655,8 +664,8 @@ pub(crate) fn release_client(
     Ok(is_last)
 }
 
-pub(crate) fn suspend_client(
-    radio: &mut RadioDomain<ConcurrentPhy>,
+pub(crate) fn suspend_client<B: PlatformClockBackend>(
+    radio: &mut RadioDomain<B, ConcurrentPhy>,
     key: PhyClientKey,
 ) -> Result<bool, ConcurrentPhyError> {
     let phy = radio.attachment_mut();
@@ -680,8 +689,8 @@ pub(crate) fn suspend_client(
 ///
 /// The domain is not registered and settled, or the clock was rejected; the
 /// domain is unchanged.
-pub fn evaluate_periodic_tracking(
-    radio: &mut RadioDomain<ConcurrentPhy>,
+pub fn evaluate_periodic_tracking<B: PlatformClockBackend>(
+    radio: &mut RadioDomain<B, ConcurrentPhy>,
     clock: &impl oer_time::Clock,
 ) -> Result<bool, ConcurrentPhyError> {
     let phy = radio.attachment_mut();
@@ -718,7 +727,9 @@ pub fn evaluate_periodic_tracking(
 ///
 /// No tracking is pending, or the domain is not registered, RF is closed or
 /// the domain is poisoned.
-pub fn admit_maintenance(radio: &RadioDomain<ConcurrentPhy>) -> Result<(), ConcurrentPhyError> {
+pub fn admit_maintenance<B: PlatformClockBackend>(
+    radio: &RadioDomain<B, ConcurrentPhy>,
+) -> Result<(), ConcurrentPhyError> {
     match &radio.attachment().slot {
         Slot::Pending { .. } => Ok(()),
         Slot::Poisoned => Err(ConcurrentPhyError::Poisoned),

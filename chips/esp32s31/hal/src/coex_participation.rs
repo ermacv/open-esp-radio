@@ -28,8 +28,8 @@ use crate::clock::{RadioClient, RadioClientKind};
 ///     domain::{CoexAbsent, CommonPower, Ieee802154Client, RadioDomain},
 /// };
 ///
-/// fn leave(
-///     radio: &mut RadioDomain,
+/// fn leave<B: oer_esp32s31_hal::power::PlatformClockBackend>(
+///     radio: &mut RadioDomain<B>,
 ///     powered: Ieee802154Powered,
 ///     power: CommonPower<Ieee802154Client>,
 ///     coex: &CoexAbsent<Ieee802154Client>,
@@ -46,8 +46,8 @@ use crate::clock::{RadioClient, RadioClientKind};
 ///     domain::{CommonPower, Coexisting, Ieee802154Client, RadioDomain},
 /// };
 ///
-/// fn leave(
-///     radio: &mut RadioDomain,
+/// fn leave<B: oer_esp32s31_hal::power::PlatformClockBackend>(
+///     radio: &mut RadioDomain<B>,
 ///     powered: Ieee802154Powered,
 ///     power: CommonPower<Ieee802154Client>,
 ///     coex: &Coexisting<Ieee802154Client>,

@@ -12,6 +12,8 @@
 //! returns the clocked client with the BLE PHY allocations, which no hardware
 //! references after the reset.
 
+use oer_esp32s31_hal::power::PlatformClockBackend;
+
 use oer_esp32s31_bluetooth_memory::{BlePhyEngineCpuOwned, DirectionFindingWorkspaceCpuOwned};
 use oer_esp32s31_hal::{
     bluetooth::{
@@ -146,8 +148,8 @@ pub struct ControllerShutDown {
     clippy::result_large_err,
     reason = "the failure retains every owner of the epoch"
 )]
-pub fn retire(
-    radio: &mut RadioDomain<ConcurrentPhy>,
+pub fn retire<B: PlatformClockBackend>(
+    radio: &mut RadioDomain<B, ConcurrentPhy>,
     task: ControllerPoweredTaskRuntime<'static>,
     retained: BlePhyRetainedOwners,
     output: InterruptOutputAfterRoutesOwner,
@@ -228,9 +230,9 @@ impl ControllerRetired {
         clippy::result_large_err,
         reason = "the failure retains every owner of the epoch"
     )]
-    pub fn shut_down<T>(
+    pub fn shut_down<B: PlatformClockBackend, T>(
         self,
-        radio: &mut RadioDomain<T>,
+        radio: &mut RadioDomain<B, T>,
         cells: &ControllerEventCells,
     ) -> Result<ControllerShutDown, ControllerShutdownFailure> {
         // Before the reset: a foreign context could not discard the

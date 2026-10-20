@@ -6,6 +6,8 @@
 //! the domain's current event priorities, the clock port samples the bank's
 //! low-power clock selection.
 
+use oer_esp32s31_hal::power::PlatformClockBackend;
+
 use core::cell::RefCell;
 
 use oer_esp32s31_hal::{
@@ -34,24 +36,24 @@ const fn bank_timer(index: CoexTimerIndex) -> CoexPolicyTimer {
 
 /// The timer and clock ports of one radio domain, shared by the two port
 /// handles of a single transaction.
-pub struct CoexDomainPorts<'radio, T> {
-    radio: RefCell<&'radio mut RadioDomain<T>>,
+pub struct CoexDomainPorts<'radio, B: PlatformClockBackend, T> {
+    radio: RefCell<&'radio mut RadioDomain<B, T>>,
     real_chip: bool,
 }
 
 /// The timer port of [`CoexDomainPorts`].
-pub struct CoexDomainTimer<'ports, 'radio, T> {
-    ports: &'ports CoexDomainPorts<'radio, T>,
+pub struct CoexDomainTimer<'ports, 'radio, B: PlatformClockBackend, T> {
+    ports: &'ports CoexDomainPorts<'radio, B, T>,
 }
 
 /// The clock port of [`CoexDomainPorts`].
-pub struct CoexDomainClock<'ports, 'radio, T> {
-    ports: &'ports CoexDomainPorts<'radio, T>,
+pub struct CoexDomainClock<'ports, 'radio, B: PlatformClockBackend, T> {
+    ports: &'ports CoexDomainPorts<'radio, B, T>,
 }
 
-impl<'radio, T> CoexDomainPorts<'radio, T> {
+impl<'radio, B: PlatformClockBackend, T> CoexDomainPorts<'radio, B, T> {
     /// Lend the domain's coexistence resources for one transaction.
-    pub fn new(radio: &'radio mut RadioDomain<T>) -> Self {
+    pub fn new(radio: &'radio mut RadioDomain<B, T>) -> Self {
         Self {
             radio: RefCell::new(radio),
             real_chip: true,
@@ -62,7 +64,7 @@ impl<'radio, T> CoexDomainPorts<'radio, T> {
     /// a probe image's compiled comparison (`cfg(oer_probe)`).
     #[cfg(oer_probe)]
     #[doc(hidden)]
-    pub fn with_real_chip(radio: &'radio mut RadioDomain<T>, real_chip: bool) -> Self {
+    pub fn with_real_chip(radio: &'radio mut RadioDomain<B, T>, real_chip: bool) -> Self {
         Self {
             radio: RefCell::new(radio),
             real_chip,
@@ -73,8 +75,8 @@ impl<'radio, T> CoexDomainPorts<'radio, T> {
     pub fn ports(
         &self,
     ) -> (
-        CoexDomainTimer<'_, 'radio, T>,
-        CoexDomainClock<'_, 'radio, T>,
+        CoexDomainTimer<'_, 'radio, B, T>,
+        CoexDomainClock<'_, 'radio, B, T>,
     ) {
         (
             CoexDomainTimer { ports: self },
@@ -130,7 +132,7 @@ impl<'radio, T> CoexDomainPorts<'radio, T> {
     }
 }
 
-impl<T> CoexClockHardware for CoexDomainClock<'_, '_, T> {
+impl<B: PlatformClockBackend, T> CoexClockHardware for CoexDomainClock<'_, '_, B, T> {
     fn sample(&mut self) -> Result<CoexTimerClock, CoexError> {
         let observation = self
             .ports
@@ -142,7 +144,7 @@ impl<T> CoexClockHardware for CoexDomainClock<'_, '_, T> {
     }
 }
 
-impl<T> CoexTimerHardware for CoexDomainTimer<'_, '_, T> {
+impl<B: PlatformClockBackend, T> CoexTimerHardware for CoexDomainTimer<'_, '_, B, T> {
     fn pti(&mut self, event: CoexEventId) -> CoexPti {
         self.ports.radio.borrow().coex_pti(event)
     }

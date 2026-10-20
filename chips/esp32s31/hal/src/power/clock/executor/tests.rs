@@ -195,3 +195,39 @@ fn the_planner_releases_its_platform_clocks_explicitly() {
     held_clocks.release(PlatformClock::Pll160m);
     assert!(held().is_empty());
 }
+
+#[test]
+fn release_calls_the_backend_once_and_drop_does_nothing() {
+    let events = Rc::new(RefCell::new(Vec::new()));
+    let sink = events.clone();
+    let platform = CountingPlatformClocks::logging(move |event| sink.borrow_mut().push(event));
+    platform.acquire(PlatformClock::Mpll).unwrap().release();
+    // `release` consumes the guard, so its Drop has already run here.
+    assert_eq!(
+        *events.borrow(),
+        [
+            ClockEvent::Acquire(PlatformClock::Mpll),
+            ClockEvent::Release(PlatformClock::Mpll)
+        ]
+    );
+    assert!(held().is_empty());
+    let (abandoned, dropped) = abandoned();
+    assert!(abandoned.is_empty());
+    assert!(dropped.is_empty());
+}
+
+#[test]
+fn explicit_abandon_and_unfinished_drop_record_distinct_endings_once() {
+    let platform = CountingPlatformClocks::new();
+    platform.acquire(PlatformClock::Mpll).unwrap().abandon();
+    let guard = platform.acquire(PlatformClock::AnalogI2cMaster).unwrap();
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| drop(guard)));
+    assert_eq!(result.is_err(), cfg!(debug_assertions));
+    let (abandoned, dropped) = abandoned();
+    assert_eq!(abandoned, holding(&[PlatformClock::Mpll]));
+    assert_eq!(dropped, holding(&[PlatformClock::AnalogI2cMaster]));
+    assert_eq!(
+        held(),
+        holding(&[PlatformClock::Mpll, PlatformClock::AnalogI2cMaster])
+    );
+}

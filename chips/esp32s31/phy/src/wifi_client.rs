@@ -11,6 +11,8 @@
 //! `wifi_rf_phy_disable`) and back ([`resume_wifi`], `wifi_rf_phy_enable`).
 //! Wi-Fi uses no BTBB baseband.
 
+use oer_esp32s31_hal::power::PlatformClockBackend;
+
 use core::fmt;
 
 use oer_esp32s31_hal::{
@@ -54,11 +56,11 @@ impl fmt::Debug for WifiPhyMembership {
 /// # Errors
 ///
 /// The client set rejects the client; nothing changed.
-pub fn join_wifi<'l>(
-    ready: PhyClientReady<'l, WifiPhyMembership>,
+pub fn join_wifi<'l, B: PlatformClockBackend>(
+    ready: PhyClientReady<'l, B, WifiPhyMembership>,
     clocked: &WifiClocked,
     clock: &impl oer_time::Clock,
-) -> Result<Joined<'l, WifiPhyMembership>, JoinRefused<'l, ConcurrentPhyError>> {
+) -> Result<Joined<'l, B, WifiPhyMembership>, JoinRefused<'l, B, ConcurrentPhyError>> {
     let _ = clocked;
     let radio = ready.into_radio();
     match acquire_client(radio, RadioClient::Wifi, clock) {
@@ -78,8 +80,8 @@ pub fn join_wifi<'l>(
 /// `enable_phy_with_wifi_rx` runs after the PHY is enabled and which the
 /// Wi-Fi client clears before it leaves.
 #[cfg(target_arch = "riscv32")]
-pub fn set_wifi_rx(
-    radio: &mut RadioDomain<ConcurrentPhy>,
+pub fn set_wifi_rx<B: PlatformClockBackend>(
+    radio: &mut RadioDomain<B, ConcurrentPhy>,
     membership: &WifiPhyMembership,
     enabled: bool,
 ) {
@@ -124,8 +126,8 @@ impl fmt::Debug for WifiPhyLeaveFailure {
 ///
 /// The domain rejects the release (tracking pending, poisoned); nothing
 /// changed and the membership is returned.
-pub fn leave_wifi(
-    radio: &mut RadioDomain<ConcurrentPhy>,
+pub fn leave_wifi<B: PlatformClockBackend>(
+    radio: &mut RadioDomain<B, ConcurrentPhy>,
     clocked: &WifiClocked,
     membership: WifiPhyMembership,
 ) -> Result<bool, WifiPhyLeaveFailure> {
@@ -196,8 +198,8 @@ impl fmt::Debug for WifiPhySuspendedFailure {
 ///
 /// A running role proves its clocks with the [`WifiClocksOn`] its clocked
 /// client handed out beside the runtime epoch.
-pub fn suspend_wifi(
-    radio: &mut RadioDomain<ConcurrentPhy>,
+pub fn suspend_wifi<B: PlatformClockBackend>(
+    radio: &mut RadioDomain<B, ConcurrentPhy>,
     clocks: &WifiClocksOn,
     membership: WifiPhyMembership,
 ) -> Result<(WifiPhySuspended, bool), WifiPhyLeaveFailure> {
@@ -220,12 +222,12 @@ pub fn suspend_wifi(
 /// # Errors
 ///
 /// As [`join_wifi`]; the suspended client is returned.
-pub fn resume_wifi<'l>(
-    ready: PhyReady<'l>,
+pub fn resume_wifi<'l, B: PlatformClockBackend>(
+    ready: PhyReady<'l, B>,
     clocks: &WifiClocksOn,
     suspended: WifiPhySuspended,
     clock: &impl oer_time::Clock,
-) -> Result<Joined<'l, WifiPhyMembership>, JoinRefused<'l, WifiPhySuspendedFailure>> {
+) -> Result<Joined<'l, B, WifiPhyMembership>, JoinRefused<'l, B, WifiPhySuspendedFailure>> {
     let _ = clocks;
     let radio = ready.into_radio();
     match resume_client(radio, suspended.key, clock) {
@@ -246,8 +248,8 @@ pub fn resume_wifi<'l>(
 
 /// Stop Wi-Fi while its RF sleeps: the client already left the PHY domain,
 /// so only the token ends. No register access happens here.
-pub fn leave_suspended_wifi(
-    radio: &mut RadioDomain<ConcurrentPhy>,
+pub fn leave_suspended_wifi<B: PlatformClockBackend>(
+    radio: &mut RadioDomain<B, ConcurrentPhy>,
     suspended: WifiPhySuspended,
 ) -> Result<(), WifiPhySuspendedFailure> {
     retire_suspended_client(radio, suspended.key)

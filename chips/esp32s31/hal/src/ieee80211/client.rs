@@ -16,6 +16,8 @@
 //! into the task-side [`RadioAccess`] and the MAC interrupt setup;
 //! [`WifiClocked::from_running`] reunites a stopped runtime epoch.
 
+use crate::power::PlatformClockBackend;
+
 use core::fmt;
 
 use oer_esp32s31_pac::{MacInterruptSetup, WifiRadioRegisters};
@@ -143,10 +145,10 @@ impl WifiCold {
     ///
     /// The client already holds power, or the first client's sequence failed
     /// a read-back checkpoint; the unchanged owner is returned.
-    pub fn power_up<T>(
+    pub fn power_up<B: PlatformClockBackend, T>(
         self,
-        radio: &mut RadioDomain<T>,
-        clocks: &impl PlatformClockProvider,
+        radio: &mut RadioDomain<B, T>,
+        clocks: &impl PlatformClockProvider<Backend = B>,
     ) -> Result<
         (WifiPowered, CommonPower<WifiClient>),
         WifiTransitionFailure<Self, CommonRadioPowerError>,
@@ -175,9 +177,9 @@ impl WifiPowered {
         clippy::type_complexity,
         reason = "the failure returns the owner beside its power proof"
     )]
-    pub fn power_down<T>(
+    pub fn power_down<B: PlatformClockBackend, T>(
         self,
-        radio: &mut RadioDomain<T>,
+        radio: &mut RadioDomain<B, T>,
         power: CommonPower<WifiClient>,
         coex: &CoexAbsent<WifiClient>,
     ) -> Result<
@@ -203,10 +205,10 @@ impl WifiPowered {
     ///
     /// The planner rejected the request before any access, or a platform
     /// request failed and poisoned the modem clocks.
-    pub fn enable_clocks<T>(
+    pub fn enable_clocks<B: PlatformClockBackend, T>(
         self,
-        radio: &mut RadioDomain<T>,
-        platform: &impl PlatformClockProvider,
+        radio: &mut RadioDomain<B, T>,
+        platform: &impl PlatformClockProvider<Backend = B>,
     ) -> Result<WifiClocked, WifiTransitionFailure<Self, ModemClockError>> {
         match radio.enable_modem_clocks(&self.registers.mac, platform) {
             Ok(()) => Ok(WifiClocked {
@@ -228,9 +230,9 @@ impl WifiClocked {
     /// # Errors
     ///
     /// The modem clocks are poisoned.
-    pub fn set_initialized<T>(
+    pub fn set_initialized<B: PlatformClockBackend, T>(
         &mut self,
-        radio: &mut RadioDomain<T>,
+        radio: &mut RadioDomain<B, T>,
         initialized: bool,
     ) -> Result<(), ModemClockError> {
         radio.set_wifi_initialized(&self.registers.mac, initialized)?;
@@ -264,7 +266,7 @@ impl WifiClocked {
     /// Pulse the Wi-Fi MAC reset, as
     /// `modem_clock_module_mac_reset(PERIPH_WIFI_MODULE)` does through
     /// `modem_syscon_ll_reset_wifimac`.
-    pub fn reset_mac<T>(&mut self, radio: &mut RadioDomain<T>) {
+    pub fn reset_mac<B: PlatformClockBackend, T>(&mut self, radio: &mut RadioDomain<B, T>) {
         let phy = radio.registers_mut().radio_phy_mut();
         phy.set_wifi_mac_reset(true);
         phy.set_wifi_mac_reset(false);
@@ -275,9 +277,9 @@ impl WifiClocked {
     ///
     /// Clock and modem-source configuration of the exclusive route are
     /// no-ops here: the radio domain enabled the Wi-Fi module clocks already.
-    pub fn cold_mac_hal<'hal, T>(
+    pub fn cold_mac_hal<'hal, B: PlatformClockBackend, T>(
         &'hal mut self,
-        radio: &'hal mut RadioDomain<T>,
+        radio: &'hal mut RadioDomain<B, T>,
     ) -> WifiMacColdHal<'hal> {
         let WifiClientRegisters {
             mac,
@@ -295,10 +297,10 @@ impl WifiClocked {
     /// Borrow the channel HAL for one channel transaction, with the shared
     /// PHY borrowed from the radio domain.
     #[cfg(any(test, oer_probe))]
-    pub fn channel_hal<'hal, P, T>(
+    pub fn channel_hal<'hal, B: PlatformClockBackend, P, T>(
         &'hal mut self,
         platform: &'hal mut P,
-        radio: &'hal mut RadioDomain<T>,
+        radio: &'hal mut RadioDomain<B, T>,
     ) -> RadioChannelHal<'hal, P> {
         let (phy, restore) = radio.phy_parts_mut();
         RadioChannelHal::from_leased(platform, &mut self.registers.mac, phy, restore)
@@ -306,10 +308,10 @@ impl WifiClocked {
 
     /// Borrow the channel HAL together with the domain's attachment, for a
     /// PHY channel operation that updates the shared domain's state.
-    pub fn channel_hal_with_attachment<'hal, P, T>(
+    pub fn channel_hal_with_attachment<'hal, B: PlatformClockBackend, P, T>(
         &'hal mut self,
         platform: &'hal mut P,
-        radio: &'hal mut RadioDomain<T>,
+        radio: &'hal mut RadioDomain<B, T>,
     ) -> (RadioChannelHal<'hal, P>, &'hal mut T) {
         let (phy, restore, attachment) = radio.phy_parts_with_attachment();
         (
@@ -380,9 +382,9 @@ impl WifiClocked {
         clippy::result_large_err,
         reason = "failure must retain both stopped registers and the clock obligation"
     )]
-    pub fn release_clocks<T>(
+    pub fn release_clocks<B: PlatformClockBackend, T>(
         mut self,
-        radio: &mut RadioDomain<T>,
+        radio: &mut RadioDomain<B, T>,
     ) -> Result<ClockReleased, (StoppedInstallation, ClockPoisoned)> {
         let release = self
             .set_initialized(radio, false)

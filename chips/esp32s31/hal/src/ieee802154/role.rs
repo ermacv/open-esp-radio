@@ -16,6 +16,8 @@
 
 #![deny(unsafe_code)]
 
+use crate::power::PlatformClockBackend;
+
 use core::fmt;
 
 use oer_esp32s31_pac::{
@@ -156,10 +158,10 @@ impl Ieee802154Cold {
     ///
     /// The client already holds power or the first client's sequence failed a
     /// read-back checkpoint; the unchanged owner is returned.
-    pub fn power_up<T>(
+    pub fn power_up<B: PlatformClockBackend, T>(
         self,
-        radio: &mut RadioDomain<T>,
-        clocks: &impl PlatformClockProvider,
+        radio: &mut RadioDomain<B, T>,
+        clocks: &impl PlatformClockProvider<Backend = B>,
     ) -> Result<
         (Ieee802154Powered, CommonPower<Ieee802154Client>),
         Ieee802154PowerTransitionFailure<Self>,
@@ -192,9 +194,9 @@ impl Ieee802154Powered {
         clippy::type_complexity,
         reason = "the failure returns the owner beside its power proof"
     )]
-    pub fn power_down<T>(
+    pub fn power_down<B: PlatformClockBackend, T>(
         self,
-        radio: &mut RadioDomain<T>,
+        radio: &mut RadioDomain<B, T>,
         power: CommonPower<Ieee802154Client>,
         coex: &CoexAbsent<Ieee802154Client>,
     ) -> Result<
@@ -222,10 +224,10 @@ impl Ieee802154Powered {
     ///
     /// The planner rejected the request before any access, or a platform
     /// request failed and poisoned the modem clocks; the owner is returned.
-    pub fn enable_clocks<T>(
+    pub fn enable_clocks<B: PlatformClockBackend, T>(
         self,
-        radio: &mut RadioDomain<T>,
-        platform: &impl PlatformClockProvider,
+        radio: &mut RadioDomain<B, T>,
+        platform: &impl PlatformClockProvider<Backend = B>,
     ) -> Result<Ieee802154Clocked, Ieee802154ClockTransitionFailure<Self>> {
         match radio.enable_modem_clocks(&self.mac.task, platform) {
             Ok(()) => Ok(Ieee802154Clocked {
@@ -486,9 +488,9 @@ impl Ieee802154Clocked {
     ///
     /// The planner rejected the release before any access, or a platform
     /// request failed and poisoned the modem clocks; the owner is returned.
-    pub fn disable_clocks<T>(
+    pub fn disable_clocks<B: PlatformClockBackend, T>(
         self,
-        radio: &mut RadioDomain<T>,
+        radio: &mut RadioDomain<B, T>,
     ) -> Result<Ieee802154Powered, Ieee802154ClockTransitionFailure<Self>> {
         match radio.disable_modem_clocks(&self.inner.backend().task) {
             Ok(()) => Ok(Ieee802154Powered {
@@ -504,9 +506,9 @@ impl Ieee802154Clocked {
     ///
     /// A reset line did not read back released; the clocked owner is
     /// retained for a retry.
-    pub fn reset_mac<T>(
+    pub fn reset_mac<B: PlatformClockBackend, T>(
         self,
-        radio: &mut RadioDomain<T>,
+        radio: &mut RadioDomain<B, T>,
     ) -> Result<Ieee802154Reset, Ieee802154ResetTransitionFailure> {
         let mut port = LeasedResetPort {
             radio_phy: radio.registers_mut().radio_phy_mut(),
@@ -526,9 +528,9 @@ impl Ieee802154Clocked {
     /// # Errors
     ///
     /// As [`crate::domain::RadioDomain::btbb_acquire`].
-    pub fn acquire_btbb<T>(
+    pub fn acquire_btbb<B: PlatformClockBackend, T>(
         &self,
-        radio: &mut RadioDomain<T>,
+        radio: &mut RadioDomain<B, T>,
         gain: &crate::domain::BtbbGain,
     ) -> Result<BtbbAcquired, BtbbError> {
         radio.btbb_acquire(&self.inner.backend().task, gain)
@@ -539,7 +541,10 @@ impl Ieee802154Clocked {
     /// # Errors
     ///
     /// IEEE 802.15.4 does not hold BTBB.
-    pub fn release_btbb<T>(&self, radio: &mut RadioDomain<T>) -> Result<(), BtbbError> {
+    pub fn release_btbb<B: PlatformClockBackend, T>(
+        &self,
+        radio: &mut RadioDomain<B, T>,
+    ) -> Result<(), BtbbError> {
         radio.btbb_release(&self.inner.backend().task)
     }
 }

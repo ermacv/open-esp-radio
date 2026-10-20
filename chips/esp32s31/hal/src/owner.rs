@@ -1,5 +1,7 @@
 //! Hardware ownership, capabilities, and affine lifecycle transitions.
 
+use crate::power::PlatformClockBackend;
+
 use crate::{
     domain::RadioDomain,
     ieee80211::{
@@ -420,7 +422,8 @@ impl RadioAccess {
     #[cfg(test)]
     #[doc(hidden)]
     pub fn claim_for_host_test() -> Self {
-        let (_shared, partitions) = crate::root::RadioHardware::for_host_test().split(());
+        let (_shared, partitions) = crate::root::RadioHardware::for_host_test()
+            .split::<crate::power::test_clocks::CountingBackend, _>(());
         let clocked = crate::ieee80211::client::WifiClocked::for_host_test(
             crate::ieee80211::client::WifiCold::from_partition(partitions.wifi),
         );
@@ -484,10 +487,10 @@ impl RadioAccess {
     /// Borrow the channel HAL for one channel transaction, with the shared
     /// PHY borrowed from the radio domain.
     #[cfg(any(test, oer_probe))]
-    pub fn channel_hal<'hal, P, T>(
+    pub fn channel_hal<'hal, B: PlatformClockBackend, P, T>(
         &'hal mut self,
         platform: &'hal mut P,
-        radio: &'hal mut RadioDomain<T>,
+        radio: &'hal mut RadioDomain<B, T>,
     ) -> channel::RadioChannelHal<'hal, P> {
         let (phy, restore) = radio.phy_parts_mut();
         channel::RadioChannelHal::from_leased(platform, &mut self.registers, phy, restore)
@@ -495,10 +498,10 @@ impl RadioAccess {
 
     /// Borrow the channel HAL together with the domain's attachment, for a
     /// PHY channel operation that updates the shared domain's state.
-    pub fn channel_hal_with_attachment<'hal, P, T>(
+    pub fn channel_hal_with_attachment<'hal, B: PlatformClockBackend, P, T>(
         &'hal mut self,
         platform: &'hal mut P,
-        radio: &'hal mut RadioDomain<T>,
+        radio: &'hal mut RadioDomain<B, T>,
     ) -> (channel::RadioChannelHal<'hal, P>, &'hal mut T) {
         let (phy, restore, attachment) = radio.phy_parts_with_attachment();
         (

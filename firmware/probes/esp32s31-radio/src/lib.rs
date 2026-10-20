@@ -453,10 +453,12 @@ oer_probe_macros::probe! {
 /// The radio domain of a fresh probe root, kept for the whole entry and
 /// never dropped: the vendor leaves keep no domain, so its teardown is not
 /// compared.
-fn grant_protect_domain() -> core::mem::ManuallyDrop<oer_esp32s31_hal::domain::RadioDomain<()>> {
+fn grant_protect_domain() -> core::mem::ManuallyDrop<
+    oer_esp32s31_hal::domain::RadioDomain<oer_espressif_esp_hal_radio::EspHal>,
+> {
     core::mem::ManuallyDrop::new(
         oer_esp32s31_hal::root::RadioHardware::for_probe()
-            .split(())
+            .split::<oer_espressif_esp_hal_radio::EspHal, _>(())
             .0,
     )
 }

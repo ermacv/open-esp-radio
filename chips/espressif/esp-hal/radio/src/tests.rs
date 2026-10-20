@@ -1,6 +1,7 @@
 use std::{cell::RefCell, vec::Vec};
 
 use super::*;
+use oer_esp32s31_hal::power::{PlatformClockAbandonment, PlatformClockBackend};
 
 extern crate std;
 
@@ -18,7 +19,7 @@ std::thread_local! {
 /// Records the platform requests of this test thread.
 struct Recording;
 
-impl ClockBackend for Recording {
+impl PlatformClockBackend for Recording {
     fn acquire(clock: PlatformClock) {
         EVENTS.with(|events| events.borrow_mut().push(Event::Acquire(clock)));
     }

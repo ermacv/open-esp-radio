@@ -21,8 +21,13 @@ type Others = (
 );
 
 /// A concurrent split whose Bluetooth partition is assumed clocked.
-fn clocked() -> (RadioDomain, Others, ClockedOwner) {
-    let (shared, partitions) = RadioHardware::for_host_test().split(());
+fn clocked() -> (
+    RadioDomain<crate::power::test_clocks::CountingBackend>,
+    Others,
+    ClockedOwner,
+) {
+    let (shared, partitions) =
+        RadioHardware::for_host_test().split::<crate::power::test_clocks::CountingBackend, _>(());
     let ProtocolPartitions {
         wifi,
         wifi_coex,

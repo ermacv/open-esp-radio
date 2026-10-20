@@ -3,7 +3,7 @@ use std::{cell::RefCell, rc::Rc, vec::Vec};
 use oer_esp32s31_pac::{WifiPowerBaseline, WifiPowerRestoreReadback};
 
 use crate::power::test_clocks::{ClockEvent, CountingPlatformClocks, abandoned, held, holding};
-use crate::power::{PlatformClock, PlatformClockProvider, PowerEntry};
+use crate::power::{PlatformClock, PlatformClockBackend, PlatformClockProvider, PowerEntry};
 
 use super::{
     BluetoothClient, ClockPort, CommonPower, CommonRadioPower, CommonRadioPowerError,
@@ -54,10 +54,10 @@ impl ClockPort for Port {
             .push(Operation::RestorePower(baseline));
         self.power_readback
     }
-    fn run_common_power_sequence(
+    fn run_common_power_sequence<B: PlatformClockBackend>(
         &mut self,
-        refs: &mut PlatformClockRefs,
-        platform: &impl PlatformClockProvider,
+        refs: &mut PlatformClockRefs<B>,
+        platform: &impl PlatformClockProvider<Backend = B>,
         entry: PowerEntry,
     ) -> Result<(), crate::power::PowerError> {
         self.log.borrow_mut().push(Operation::PowerSequence(entry));
@@ -74,7 +74,7 @@ impl ClockPort for Port {
 
 /// Enter `K`, which the test expects to succeed.
 fn entered<K: RadioClientKind>(
-    power: &mut CommonRadioPower,
+    power: &mut CommonRadioPower<crate::power::test_clocks::CountingBackend>,
     port: &mut Port,
     platform: &CountingPlatformClocks,
 ) -> CommonPower<K> {
@@ -84,7 +84,11 @@ fn entered<K: RadioClientKind>(
 }
 
 /// Leave with `proof`, which the test expects to succeed.
-fn left<K: RadioClientKind>(power: &mut CommonRadioPower, port: &mut Port, proof: CommonPower<K>) {
+fn left<K: RadioClientKind>(
+    power: &mut CommonRadioPower<crate::power::test_clocks::CountingBackend>,
+    port: &mut Port,
+    proof: CommonPower<K>,
+) {
     if let Err(failure) = power.exit(port, proof) {
         panic!("common power left: {:?}", failure.error);
     }

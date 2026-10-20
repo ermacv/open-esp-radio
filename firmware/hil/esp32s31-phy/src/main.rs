@@ -108,7 +108,8 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         &psram,
     )
     .expect("diagnostic radio ownership");
-    let (domain, partitions) = hardware.split(ConcurrentPhy::new());
+    let (domain, partitions) =
+        hardware.split::<oer_espressif_esp_hal_radio::EspHal, _>(ConcurrentPhy::new());
     let mut rng = RngOwner::new(peripherals.RNG);
     let boot = (u64::from(rng.random()) << 32 | u64::from(rng.random())).max(1);
     let radio = radio::Radio::new(

@@ -14,8 +14,13 @@ use crate::{
     state::client::{DEFAULT_PLL_TRACK_PERIOD_MICROS, PhyClientState},
 };
 
-fn registered() -> (RadioDomain<ConcurrentPhy>, WifiClocked) {
-    let (mut radio, partitions) = RadioHardware::for_host_test().split(ConcurrentPhy::new());
+fn registered() -> (
+    RadioDomain<crate::test_clocks::TestClockBackend, ConcurrentPhy>,
+    WifiClocked,
+) {
+    let (mut radio, partitions) =
+        RadioHardware::for_host_test()
+            .split::<crate::test_clocks::TestClockBackend, _>(ConcurrentPhy::new());
     {
         let domain = &mut radio;
         let grant = domain.phy_hal().begin_registration();
@@ -61,7 +66,9 @@ fn wifi_joins_and_leaves_the_shared_domain_as_its_last_client() {
 
 #[test]
 fn an_unregistered_domain_admits_no_wifi_client() {
-    let (mut radio, partitions) = RadioHardware::for_host_test().split(ConcurrentPhy::new());
+    let (mut radio, partitions) =
+        RadioHardware::for_host_test()
+            .split::<crate::test_clocks::TestClockBackend, _>(ConcurrentPhy::new());
     let clocked = WifiClocked::for_host_test(WifiCold::from_partition(partitions.wifi));
     let domain = &mut radio;
     let _ = clocked;
@@ -151,7 +158,10 @@ fn a_rejected_resume_returns_the_suspended_client() {
 
 /// Join with a proof for the domain's registration.
 fn join_wifi_prepared(
-    radio: &mut oer_esp32s31_hal::domain::RadioDomain<crate::concurrent::ConcurrentPhy>,
+    radio: &mut oer_esp32s31_hal::domain::RadioDomain<
+        crate::test_clocks::TestClockBackend,
+        crate::concurrent::ConcurrentPhy,
+    >,
     clocked: &WifiClocked,
     clock: &impl oer_time::Clock,
 ) -> Result<(WifiPhyMembership, ConcurrentAcquire), ConcurrentPhyError> {
@@ -166,7 +176,10 @@ fn join_wifi_prepared(
 
 /// Resume with a proof for the domain's registration.
 fn resume_wifi_prepared(
-    radio: &mut oer_esp32s31_hal::domain::RadioDomain<crate::concurrent::ConcurrentPhy>,
+    radio: &mut oer_esp32s31_hal::domain::RadioDomain<
+        crate::test_clocks::TestClockBackend,
+        crate::concurrent::ConcurrentPhy,
+    >,
     clocks: &oer_esp32s31_hal::ieee80211::client::WifiClocksOn,
     suspended: WifiPhySuspended,
     clock: &impl oer_time::Clock,
