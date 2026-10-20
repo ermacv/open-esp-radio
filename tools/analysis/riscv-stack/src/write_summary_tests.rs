@@ -76,10 +76,19 @@ fn summary<'m>(
     entry: u64,
     memory: &'m WorkingMemory,
 ) -> FunctionWrites<'m> {
+    summary_with_callees(records, entry, &[], memory)
+}
+fn summary_with_callees<'m>(
+    records: &[FunctionRecord],
+    entry: u64,
+    callees: &[&FunctionWrites<'_>],
+    memory: &'m WorkingMemory,
+) -> FunctionWrites<'m> {
     function_writes(
         &index(records, memory),
         entry,
         Some(CallAbi::RiscvInteger),
+        callees,
         memory,
         &mut || Ok(()),
     )
@@ -685,5 +694,379 @@ fn normalized_symbolic_stack_arguments_cannot_bypass_live_input_revalidation() {
             summary(&records, 0x1000, &memory).reloads[0].value,
             WriteValue::UNKNOWN
         );
+    }
+}
+
+#[test]
+fn transparent_tail_keeps_store_load_and_expression_owners_and_occurrence() {
+    let memory = WorkingMemory::new(8 * 1024 * 1024).unwrap();
+    let trampoline = facts(&[jal(0, 0x1000)], 0x2000, &memory);
+    for prefix in [vec![], vec![0x00060a63]] {
+        // optional beq a2,zero,+20
+        let mut code = prefix;
+        code.extend([
+            lw(11, 10, 4),
+            store(11, 10, 8, 2),
+            lw(12, 11, 0),
+            store(12, 10, 12, 2),
+            RET,
+        ]);
+        let records = facts(&code, 0x3000, &memory);
+        let body = summary(&records, 0x3000, &memory);
+        let composed = summary_with_callees(&trampoline, 0x2000, &[&body], &memory);
+        let tail = composed.tail.expect("single transparent jump");
+        assert_eq!(
+            tail,
+            TailTransfer {
+                entry: 0x2000,
+                site: 0x2000,
+                target: 0x3000
+            }
+        );
+        assert_eq!(composed.writes.len(), body.writes.len());
+        for (a, b) in composed.writes.iter().zip(body.writes.iter()) {
+            assert_eq!(
+                *a,
+                FunctionWrite {
+                    origin: WriteOrigin {
+                        function: 0x3000,
+                        tail: Some(tail)
+                    },
+                    ..*b
+                }
+            );
+        }
+        assert!(matches!(
+            composed.writes[0].value,
+            WriteValue::Field {
+                function: 0x3000,
+                ..
+            }
+        ));
+        assert!(matches!(
+            composed.writes[1].value,
+            WriteValue::Base {
+                base: WriteBase::Expression {
+                    function: 0x3000,
+                    ..
+                },
+                ..
+            }
+        ));
+        assert_eq!(composed.barriers.len(), body.barriers.len());
+        for (a, b) in composed.barriers.iter().zip(body.barriers.iter()) {
+            assert_eq!(
+                *a,
+                WriteBarrier {
+                    origin: WriteOrigin {
+                        tail: Some(tail),
+                        ..b.origin
+                    },
+                    ..*b
+                }
+            );
+        }
+    }
+}
+
+#[test]
+fn tail_proof_rejects_changed_state_conditions_unknown_targets_and_semantics() {
+    let memory = WorkingMemory::new(8 * 1024 * 1024).unwrap();
+    let records = facts(&[store(0, 10, 0, 2), RET], 0x3000, &memory);
+    let body = summary(&records, 0x3000, &memory);
+    for code in [
+        vec![addi(10, 10, 4), jal(0, 0xffc)],
+        vec![addi(2, 2, -16), jal(0, 0xffc)],
+        vec![jal(6, 0x1000)], // link=false, but writes t1
+        vec![jal(2, 0x1000)], // link=false, but writes sp
+        vec![jal(1, 0x1000)],
+        vec![0x00050067], // jalr zero,0(a0): unknown target
+        vec![0x00060463, jal(0, 0xffc), RET],
+        vec![0x00000073, jal(0, 0xffc)], // ecall, unsupported semantics
+        vec![store(0, 10, 0, 2), jal(0, 0xffc)],
+    ] {
+        let records = facts(&code, 0x2000, &memory);
+        let composed = summary_with_callees(&records, 0x2000, &[&body], &memory);
+        assert!(composed.tail.is_none(), "{code:x?}");
+        assert!(composed.has_unknown_memory_effects(), "{code:x?}");
+        assert!(!composed.writes.iter().any(|w| w.origin.function == 0x3000));
+    }
+}
+
+#[test]
+fn missing_tail_summary_cycles_and_further_chains_stay_explicitly_unknown() {
+    let memory = WorkingMemory::new(8 * 1024 * 1024).unwrap();
+    let a = facts(&[jal(0, 0x1000)], 0x2000, &memory);
+    let missing = summary(&a, 0x2000, &memory);
+    assert!(missing.tail.is_some());
+    for kind in [
+        WriteBarrierKind::UnknownCallee,
+        WriteBarrierKind::ExternalTransfer,
+        WriteBarrierKind::Call,
+    ] {
+        assert!(missing.barriers.iter().any(|b| b.kind == kind));
+    }
+    let b = facts(&[jal(0, -0x1000)], 0x3000, &memory);
+    let b = summary(&b, 0x3000, &memory);
+    let cycle = summary_with_callees(&a, 0x2000, &[&b], &memory);
+    assert!(
+        cycle
+            .barriers
+            .iter()
+            .any(|b| b.kind == WriteBarrierKind::TailCycle)
+    );
+    let c = facts(&[RET], 0x4000, &memory);
+    let c = summary(&c, 0x4000, &memory);
+    let b = facts(&[jal(0, 0x1000)], 0x3000, &memory);
+    let b = summary_with_callees(&b, 0x3000, &[&c], &memory);
+    assert!(!b.has_unknown_memory_effects());
+    let chain = summary_with_callees(&a, 0x2000, &[&b], &memory);
+    assert!(
+        chain
+            .barriers
+            .iter()
+            .any(|b| b.kind == WriteBarrierKind::TailChain)
+    );
+}
+
+#[test]
+fn tail_stack_coordinates_rebase_through_equal_sp_then_the_actual_call_sp() {
+    let memory = WorkingMemory::new(8 * 1024 * 1024).unwrap();
+    let records = facts(
+        &[addi(11, 2, 4), store(11, 2, 0, 2), lw(12, 2, 0), RET],
+        0x3000,
+        &memory,
+    );
+    let body = summary(&records, 0x3000, &memory);
+    let records = facts(&[jal(0, 0x1000)], 0x2000, &memory);
+    let composed = summary_with_callees(&records, 0x2000, &[&body], &memory);
+    assert_eq!(
+        composed.writes[0].address,
+        WriteValue::base(WriteBase::Stack {
+            function: 0x2000,
+            offset: 0
+        })
+    );
+    assert_eq!(
+        composed.writes[0].value,
+        WriteValue::base(WriteBase::Stack {
+            function: 0x2000,
+            offset: 4
+        })
+    );
+    assert_eq!(composed.reloads[0].site, 0x3008);
+    assert_eq!(composed.reloads[0].origin.function, 0x3000);
+    assert_eq!(composed.reloads[0].value, composed.writes[0].value);
+    let code = spilled(&[addi(10, 2, 8), jal(1, 0x2000 - 0x1010)], 2);
+    let caller = facts(&code, 0x1000, &memory);
+    let applied = call_writes(
+        &index(&caller, &memory),
+        0x1000,
+        0x1010,
+        ABI,
+        &[&composed],
+        &memory,
+        &mut || Ok(()),
+    )
+    .unwrap();
+    assert_eq!(applied.writes[0].source, composed.writes[0]);
+    assert_eq!(applied.writes[0].callee, 0x2000);
+    assert_eq!(
+        applied.writes[0].write.address,
+        WriteValue::base(WriteBase::Stack {
+            function: 0x1000,
+            offset: -16
+        })
+    );
+    assert_eq!(
+        applied.writes[0].write.value,
+        WriteValue::base(WriteBase::Stack {
+            function: 0x1000,
+            offset: -12
+        })
+    );
+    assert!(
+        applied
+            .preserves_stack_word(0x1000, -12, &mut || Ok(()))
+            .unwrap()
+    );
+}
+
+#[test]
+fn complete_tail_effects_preserve_spills_and_body_unknowns_still_kill_them() {
+    let memory = WorkingMemory::new(8 * 1024 * 1024).unwrap();
+    let trampoline = facts(&[jal(0, 0x1000)], 0x2000, &memory);
+    let code = spilled(&[addi(10, 2, 8), jal(1, 0x2000 - 0x1010)], 2);
+    for (body, preserved) in [
+        (vec![store(0, 10, 0, 2), RET], true),
+        (vec![lw(11, 12, 0), store(11, 10, 0, 2), RET], true), // unknown contents
+        (vec![store(0, 2, 0, 2), RET], true),
+        (vec![store(0, 2, 4, 2), RET], false),
+        (vec![store(0, 10, -1, 0), RET], false),
+        (vec![lw(11, 12, 0), store(0, 11, 0, 2), RET], false),
+        (vec![0x00b5202f, RET], false),     // atomic
+        (vec![jal(1, 0x1000), RET], false), // body call, opaque call retained
+        (vec![0x00000073, RET], false),     // unsupported
+        (vec![0x00070067, RET], false),     // open graph and unknown external transfer
+    ] {
+        let label = format!("{body:x?}");
+        let records = facts(&body, 0x3000, &memory);
+        let body = summary(&records, 0x3000, &memory);
+        let composed = summary_with_callees(&trampoline, 0x2000, &[&body], &memory);
+        assert_eq!(composed.closed_graph, body.closed_graph);
+        assert!(composed.tail.is_some());
+        assert!(!composed.barriers.iter().any(|b| b.site == 0x2000));
+        for barrier in body.barriers.iter() {
+            assert!(composed.barriers.iter().any(|b| b.site == barrier.site
+                && b.kind == barrier.kind
+                && b.origin.function == 0x3000
+                && b.origin.tail == composed.tail));
+        }
+        let after = cross_call(&code, &[&composed], &memory);
+        assert_eq!(
+            matches!(
+                after.reloads[0].value,
+                WriteValue::Field {
+                    function: 0x1000,
+                    read: 0x1004,
+                    ..
+                }
+            ),
+            preserved,
+            "{label}"
+        );
+    }
+}
+
+#[test]
+fn prepared_tail_call_proofs_recheck_actual_targets_and_stack_inputs() {
+    let memory = WorkingMemory::new(8 * 1024 * 1024).unwrap();
+    let records = facts(&[store(0, 10, 0, 2), RET], 0x3000, &memory);
+    let body = summary(&records, 0x3000, &memory);
+    let records = facts(&[jal(0, 0x1000)], 0x2000, &memory);
+    let composed = summary_with_callees(&records, 0x2000, &[&body], &memory);
+    let code = spilled(&[addi(10, 2, 8), jal(1, 0x2000 - 0x1010)], 2);
+    let before = facts(&code, 0x1000, &memory);
+    let calls = stack_calls(
+        &index(&before, &memory),
+        0x1000,
+        ABI,
+        &[&composed],
+        &memory,
+        &mut || Ok(()),
+    )
+    .unwrap();
+    for (change, word) in [
+        (3, addi(10, 2, 4)),
+        (3, addi(2, 2, 4)),
+        (4, jal(1, 0x3000 - 0x1010)),
+    ] {
+        let mut changed = code.clone();
+        changed[change] = word;
+        let records = facts_calls(&changed, 0x1000, &memory, true, Some(&calls));
+        assert_eq!(
+            summary(&records, 0x1000, &memory).reloads[0].value,
+            WriteValue::UNKNOWN
+        );
+    }
+}
+
+#[test]
+fn tail_proof_requires_closed_facts_exact_inputs_and_architectural_destination() {
+    let memory = WorkingMemory::new(8 * 1024 * 1024).unwrap();
+    let records = facts(&[store(0, 10, 0, 2), RET], 0x3000, &memory);
+    let body = summary(&records, 0x3000, &memory);
+    let records = facts(&[jal(0, 0x1000)], 0x2000, &memory);
+    for change in 0..6 {
+        let mut changed = records.to_vec();
+        match change {
+            0 => changed.push(FunctionRecord::Edge {
+                from: 0x2000,
+                target: None,
+                relation: EdgeKind::Indirect,
+                external: true,
+            }),
+            1 => changed.push(FunctionRecord::SemanticGap {
+                offset: 0x2000,
+                reason: SemanticGapReason::UnsupportedInstruction,
+            }),
+            2 | 3 => {
+                for record in &mut changed {
+                    if let FunctionRecord::CallInputs { registers, .. } = record {
+                        registers[if change == 2 { 10 } else { 2 }] = AbstractValue::Unknown;
+                    }
+                }
+            }
+            4 => changed.retain(|r| !matches!(r, FunctionRecord::Value { .. })),
+            _ => {
+                for record in &mut changed {
+                    if let FunctionRecord::Transfer { target, .. } = record {
+                        *target = AbstractValue::Unknown;
+                    }
+                }
+            }
+        }
+        let out = summary_with_callees(&changed, 0x2000, &[&body], &memory);
+        assert!(out.tail.is_none(), "{change}");
+        assert!(out.has_unknown_memory_effects());
+    }
+    let mut body = body;
+    body.abi = None;
+    let out = summary_with_callees(&records, 0x2000, &[&body], &memory);
+    assert!(
+        out.barriers
+            .iter()
+            .any(|b| b.kind == WriteBarrierKind::UnknownAbi)
+    );
+    assert!(out.writes.is_empty());
+}
+
+#[test]
+fn tail_composition_charges_work_and_releases_memory_on_every_cancelled_step() {
+    let memory = WorkingMemory::new(1024 * 1024).unwrap();
+    let records = facts(
+        &[lw(11, 12, 0), store(11, 2, 0, 2), lw(12, 2, 0), RET],
+        0x3000,
+        &memory,
+    );
+    let body = summary(&records, 0x3000, &memory);
+    let records = facts(&[jal(0, 0x1000)], 0x2000, &memory);
+    let facts = index(&records, &memory);
+    let before = memory.used();
+    let mut steps = 0;
+    let run = |c: &mut dyn RunControl| function_writes(&facts, 0x2000, ABI, &[&body], &memory, c);
+    let out = run(&mut || {
+        steps += 1;
+        Ok(())
+    })
+    .unwrap();
+    assert!(out.tail.is_some() && !out.writes.is_empty() && !out.reloads.is_empty());
+    drop(out);
+    for stop in 1..=steps {
+        let mut visited = 0;
+        let result = run(&mut || {
+            visited += 1;
+            if visited == stop {
+                Err(Error::new(ErrorCode::Cancelled, "test cancellation"))
+            } else {
+                Ok(())
+            }
+        });
+        assert_eq!(result.err().unwrap().code, ErrorCode::Cancelled);
+        assert_eq!(memory.used(), before);
+    }
+    for allowance in [0, 64, 256, 512, 1024, 2048, 4096, 8192] {
+        let hold = memory
+            .reserve(
+                memory.observation().limit_bytes - before - allowance,
+                RunPosition::default(),
+            )
+            .unwrap();
+        match run(&mut || Ok(())) {
+            Ok(out) => drop(out),
+            Err(error) => assert_eq!(error.code, ErrorCode::ResourceLimited),
+        }
+        drop(hold);
+        assert_eq!(memory.used(), before);
     }
 }

@@ -69,6 +69,20 @@ retain conditional writes and unknown effects; they do not forward mutable
 memory contents or establish subsequent reads. See the
 [real w1 evidence and limits](../riscv-stack/validation/argument-writes/README.md).
 
+`function_writes` also accepts already available callee summaries for one level
+of transparent tail composition. Canonical facts must prove exactly one
+unconditional jump, a closed graph and exact external target, unchanged input
+registers and only an architectural x0 destination. `link=false` alone is
+insufficient. Additional instructions, state changes, gaps and unknown targets
+retain barriers. Missing summaries, cycles and further trampoline chains remain
+explicitly unknown. Composition uses the same argument/stack substitution as
+`call_writes`: entry sp is equal, but stack coordinates change owner. Original
+store/load PCs, expression owners, widths, occurrence and every target barrier
+are retained with the tail proof in `WriteOrigin`. Only this jump's transfer and
+synthetic `OpaqueCall` barriers are removed. The pinned ROM
+[validation](../riscv-stack/validation/call-spills/README.md) checks all twelve
+`memcpy` stores through its trampoline; their loop-carried ranges stay unknown.
+
 `ResearchOptions::stack_calls` optionally retains an existing stack word when
 `writes::stack_calls` prepared a complete disjoint call footprint from the
 canonical caller index and callee `FunctionWrites`. Every target is required;

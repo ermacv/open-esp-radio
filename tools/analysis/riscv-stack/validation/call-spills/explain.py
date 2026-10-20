@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check the current-main publisher barrier using only the public diagnostic."""
+"""Check transparent ROM tail composition and the retained publisher barrier."""
 import argparse
 import hashlib
 import json
@@ -48,10 +48,36 @@ def main():
     assert len(body) == 224
     transfers = [r for r in rows if r[0] == 'rom-transfer']
     assert len(transfers) == 1, transfers  # body is a leaf, trampoline tail only
-    assert not [r for r in rows if r[0] == 'sp-write']
-    writes = [r for r in rows if r[0] == 'rom-write']
-    assert len(writes) == 12
-    assert all('address: Base { base: Unknown' in r[2] for r in writes)
+    assert not [r for r in rows if r[0] == 'register-write' and r[2] == '2']
+    assert [r[2:] for r in rows if r[:2] == ['register-write', '0x2f8004c4']] == [['0', 'Constant { value: 0 }']]
+    assert one('rom-gap', '0x2f8004c4') == 'OpaqueCall'
+    assert 'EntryStack { offset: 0 }' in one('rom-inputs', '0x2f8004c4')
+    assert 'target: Some(796971616), relation: Jump, external: true' in one('rom-edge', '0x2f8004c4')
+    proof = 'TailTransfer { entry: 796918980, site: 796918980, target: 796971616 }'
+    assert one('tail-proof', '0x2f8004c4') == f'Some({proof})'
+    assert one('tail-proof', '0x2f80d260') == 'None'
+    writes = [r for r in rows if r[0] == 'rom-write' and r[2] == '0x2f80d260']
+    imported = [r for r in rows if r[0] == 'rom-write' and r[2] == '0x2f8004c4']
+    assert len(writes) == len(imported) == 12
+    for source, destination in zip(writes, imported):
+        assert source[1] == destination[1]
+        assert 'function: 796971616, tail: None' in source[3]
+        assert source[3].replace('tail: None', f'tail: Some({proof})') == destination[3]
+        assert 'address: Base { base: Unknown' in destination[3]
+        assert 'occurrence: May, proof: ClosedGraph' in destination[3]
+    body_barriers = [r for r in rows if r[0] == 'rom-barrier' and r[2] == '0x2f80d260']
+    tail_barriers = [r for r in rows if r[0] == 'rom-barrier' and r[2] == '0x2f8004c4']
+    assert len(body_barriers) == len(tail_barriers) == 12
+    assert {r[1] for r in tail_barriers} == {r[1] for r in writes}
+    for source, destination in zip(body_barriers, tail_barriers):
+        assert source[3].replace('tail: None', f'tail: Some({proof})') == destination[3]
+        assert 'kind: UnknownStore' in destination[3]
+    applied = [r for r in rows if r[0] == 'call-write']
+    assert len(applied) == 12 and {r[1] for r in applied} == {r[1] for r in writes}
+    assert all('callee: 796918980' in r[2] and f'tail: Some({proof})' in r[2] for r in applied)
+    call_barriers = [r for r in rows if r[0] == 'call-barrier']
+    assert {r[1] for r in call_barriers} == {r[1] for r in writes}
+    assert all('kind: UnknownStore' in r[2] and f'tail: Some({proof})' in r[2] for r in call_barriers)
     assert {r[1]: int(r[3]) for r in rows if r[0] == 'rom-memory' and r[2] == 'Store'} == {
         '0x2f80d27a': 1, '0x2f80d2c8': 1,
         **{f'{pc:#010x}': 4 for pc in (0x2f80d2f8, 0x2f80d2fc, 0x2f80d304,
@@ -69,7 +95,7 @@ def main():
     args.output.mkdir(parents=True, exist_ok=True)
     (args.output / 'facts.tsv').write_text(text)
     result = {
-        'baseline': '44324870',
+        'baseline': '7be12c9e',
         'elf_sha256': hashlib.sha256(args.elf.read_bytes()).hexdigest(),
         'rom_sha256': ROM_SHA256,
         'rom_body_code_sha256': hashlib.sha256(body).hexdigest(),
@@ -80,17 +106,21 @@ def main():
         'spill_fact': spill, 'reload_fact': reload,
         'preserved': False,
         'rom_store_sites': [r[1] for r in writes],
+        'trampoline_store_sites': [r[1] for r in imported],
+        'tail_proof': proof,
+        'trampoline_barrier_removed': True,
+        'body_unknown_store_barriers': len(tail_barriers),
         'conservative_write_footprint': 'all RV32 addresses; loop-carried store bases remain unknown',
         'first_remaining_barrier': {
             'site': '0x5004dd24',
-            'reason': 'trampoline ExternalTransfer/Call; child memcpy has 12 UnknownStore sites',
-            'missing_fact': 'a complete bounded footprint for all loop-carried memcpy stores, transported through its tail trampoline',
+            'reason': '12 memcpy UnknownStore sites transported through the proved transparent tail jump',
+            'missing_fact': 'a complete bounded footprint for all 12 loop-carried memcpy stores',
         },
         'additional_contract_enabled': False,
         'conditional_only': 'If a complete writes-only-[a0,a0+a2) contract were supplied, the substituted destination [-400,-272) would be disjoint from [-600,-596). This is not a derived machine proof.',
     }
     (args.output / 'real-transition.json').write_text(json.dumps(result, indent=2) + '\n')
-    print('Pinned target and complete store inventory checked; missing loop footprint retained; publisher reload stays unknown.')
+    print('Transparent tail proof and all 12 transported stores checked; body unknown ranges retained; publisher reload stays unknown.')
 
 
 if __name__ == '__main__':
