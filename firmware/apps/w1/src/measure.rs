@@ -299,17 +299,14 @@ pub fn clock_stats(clock: PlatformClock, op: ClockOp, phase: Phase) -> (u32, u32
 pub struct TimedEspHal;
 
 impl PlatformClockBackend for TimedEspHal {
-    #[esp_hal::ram]
     fn acquire(clock: PlatformClock) {
         clock_op(clock, ClockOp::Acquire, || EspHal::acquire(clock));
     }
 
-    #[esp_hal::ram]
     fn release(clock: PlatformClock) {
         clock_op(clock, ClockOp::Release, || EspHal::release(clock));
     }
 
-    #[esp_hal::ram]
     fn abandon(clock: PlatformClock, how: PlatformClockAbandonment) {
         clock_op(clock, ClockOp::Abandon, || EspHal::abandon(clock, how));
     }

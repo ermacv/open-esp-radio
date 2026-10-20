@@ -50,7 +50,6 @@ pub type EspHalClocks = PlatformClocks<EspHal>;
 pub struct EspHal;
 
 impl PlatformClockBackend for EspHal {
-    #[esp_hal::ram]
     fn acquire(clock: PlatformClock) {
         match clock {
             PlatformClock::AnalogI2cMaster => ll::acquire_analog_i2c_master_clock(),
@@ -61,7 +60,6 @@ impl PlatformClockBackend for EspHal {
         }
     }
 
-    #[esp_hal::ram]
     fn release(clock: PlatformClock) {
         match clock {
             PlatformClock::AnalogI2cMaster => ll::release_analog_i2c_master_clock(),
@@ -74,7 +72,6 @@ impl PlatformClockBackend for EspHal {
 
     /// The reference stays in esp-hal's count, so the clock stays on: the
     /// fail-safe end of a guard that was not released.
-    #[esp_hal::ram]
     fn abandon(_clock: PlatformClock, _how: PlatformClockAbandonment) {}
 }
 
