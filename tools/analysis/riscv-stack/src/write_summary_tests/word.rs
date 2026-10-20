@@ -669,3 +669,76 @@ fn evaluating_a_load_time_word_releases_memory_at_every_cancelled_step() {
         assert_eq!(memory.used(), before);
     }
 }
+
+#[test]
+fn cached_word_rejects_a_live_unknown_incoming_edge() {
+    let memory = WorkingMemory::new(32 * 1024 * 1024).unwrap();
+    let body = specialized(
+        &[lw(5, 11, 0), store(5, 10, 0, 2), RET],
+        &context(&memory),
+        &memory,
+        &mut || Ok(()),
+    )
+    .unwrap();
+    let tail = summary_with_callees(
+        &facts(&[jal(0, 0x1000)], 0x2000, &memory),
+        0x2000,
+        &[&body],
+        &memory,
+    );
+    let baseline = facts(&caller_code(), 0x1000, &memory);
+    let calls = stack_calls(
+        &index(&baseline, &memory),
+        0x1000,
+        ABI,
+        &[&tail],
+        &memory,
+        &mut || Ok(()),
+    )
+    .unwrap();
+    assert_eq!(
+        loaded(&facts_calls(
+            &caller_code(),
+            0x1000,
+            &memory,
+            true,
+            Some(&calls)
+        )),
+        &AbstractValue::Constant { value: 77 },
+    );
+    let mut changed = caller_code();
+    // The other branch can jump straight to the call at 0x1018, skipping
+    // source initialization. Its target and argument entry values can match
+    // those on the modeled path, while the source still contains 77.
+    changed[1] = branch(13, 0, 40, 0);
+    changed[2] = store(0, 2, 8, 2);
+    changed.push(0x00070067); // jalr zero, 0(a4)
+    let unassisted = facts(&changed, 0x1000, &memory);
+    assert_eq!(
+        call_word(
+            &index(&unassisted, &memory),
+            0x1000,
+            0x1018,
+            ABI,
+            &tail,
+            &memory,
+            &mut || Ok(()),
+        )
+        .unwrap()
+        .unwrap_err(),
+        WordBarrier::MissingProof,
+    );
+    let live = facts_calls(&changed, 0x1000, &memory, true, Some(&calls));
+    assert!(
+        live.iter().any(|record| matches!(
+            record,
+            FunctionRecord::Edge {
+                target: None,
+                relation: EdgeKind::Indirect,
+                ..
+            }
+        )),
+        "fixture must retain an unproved incoming transfer"
+    );
+    assert_ne!(loaded(&live), &AbstractValue::Constant { value: 0 });
+}

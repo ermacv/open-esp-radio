@@ -1,9 +1,9 @@
 {
   "base": "main ab2d9f96, including #199 through #205",
   "inputs": {
-    "/tmp/oer-memory-word/after/w1/runtime.elf": "d5ddcab54ae30dfcb347ba87f787cf78fde099f94c9b30962f94a4566059ceff",
+    "/tmp/oer-pr207-open-cfg/after/w1/runtime.elf": "d5ddcab54ae30dfcb347ba87f787cf78fde099f94c9b30962f94a4566059ceff",
     "/home/ermacv/.cache/open-esp-radio/vendor/esp-rom-elfs/20260528/esp32s31_rev0_rom.elf": "a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87",
-    "/tmp/oer-memory-word/after/w1/interrupt-stack.txt": "2add2a7bf483f0fbf97ab02ccf3a698b2762f2e93b41635b09b9dd127cede54d",
+    "/tmp/oer-pr207-open-cfg/after/w1/interrupt-stack.txt": "2add2a7bf483f0fbf97ab02ccf3a698b2762f2e93b41635b09b9dd127cede54d",
     "chips/esp32s31/platform/rom-functions.toml": "487770cf3eb46549970250a07d7cec155d77ce86272b578f45adcc05ca91ac8a",
     "chips/esp32s31/platform/chip.toml": "0032c63d94f6cde7867223c90d134cd2a98585a49c8d7457e08ff26c9fe7bc3b"
   },
@@ -12,9 +12,9 @@
     "explain.py": "218886d8caf44068b529107aca0833aabd327f8b522a18c1f15393a508f5f69c"
   },
   "diagnostic_binaries": {
-    "function-records": "fd6d79dbbe39d552a6c1c439502e1c05a5c7632688d37021e7bbf8bf0ed28d6b",
-    "callback-audit": "07f9d44cb1a4f4df7aecaf015dc4989eab8249db091c7ddaceb17966b6d117e6",
-    "stack-call-writes": "1e372c0303ce37cbaf1a2e4ab6dfc71686cd4d9b60406c1b7bc95227ecce49f9"
+    "function-records": "e2e97dad1a9964b40f89bec3b927a3c037c6414e68ed19eeef1a3a372e36eaf1",
+    "callback-audit": "fb5f325ae78da6ab97743f53248e3b03d167d9f4bc7d4ebcaaaabee1956476ce",
+    "stack-call-writes": "41076b1b078189a63834d1eb7bf8ee7d51b87d5f7522d83dabe9cad9da1daa35"
   },
   "streams": {
     "callbacks.tsv": "a5a7be6c3d6a16c0e97d8c828a4471963b110789e23c38b573a34dd15be14020",

@@ -919,7 +919,10 @@ pub(super) fn analyze_with<'m>(
     let mut symbols = Symbols::new(if symbolic { nodes.len() } else { 0 }, memory, control)?;
     symbols.symbolic_spills = symbolic_spills;
     symbols.memory_words = symbolic_spills && closed_graph;
-    symbols.stack_calls = stack_calls;
+    // Saved call proofs require all incoming paths to be modeled again in
+    // this run. Reuse the current graph's shared closure result, including
+    // decode gaps, before either fixed-point or emission-time application.
+    symbols.stack_calls = stack_calls.filter(|_| closed_graph);
     let mut states = reserve_vec::<Option<State>>(nodes.len())?;
     states.resize(nodes.len(), None);
     let mut queued = reserve_vec::<bool>(nodes.len())?;

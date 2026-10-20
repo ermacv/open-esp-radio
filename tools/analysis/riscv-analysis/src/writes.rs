@@ -953,7 +953,9 @@ impl CallWrites<'_> {
 /// Prepared applications of existing write summaries, scoped to one caller.
 /// Private entries prevent callers from asserting preservation by PC alone.
 /// Re-analysis must match the proved target and exact argument/sp inputs before
-/// using an application. No expressions or field contents are cached.
+/// using an application. The value evaluator admits these applications only
+/// when the current graph's shared closure check succeeds, independently of
+/// the graph used to prepare them. No field contents are cached.
 pub struct StackCalls<'m> {
     entry: u64,
     calls: AdmittedVec<'m, StackCall<'m>>,

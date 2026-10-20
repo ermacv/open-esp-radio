@@ -12,8 +12,9 @@ No firmware, dependency manifest, ROM summary or trusted contract changes.
 the conditional caller instance, both body/trampoline certificates, every
 memory event on the admitted return path, and a final-writer check for each
 byte. [word-copy-comparison.json](word-copy-comparison.json) records all machine,
-report and callback comparisons. Full bundles, traces and checks are retained
-under `/tmp/oer-memory-word/`. The initial #199-base capture is retained
+report and callback comparisons. The open-CFG fix's bundles, traces and checks
+are retained under `/tmp/oer-pr207-open-cfg/`; the reviewed `5fed3485` capture
+is under `/tmp/oer-memory-word/`. The initial #199-base capture is retained
 separately under `/tmp/oer-memory-word-base199/`; the selected call, frame
 coordinates and ROM path are unchanged on the rebased image.
 
@@ -64,6 +65,10 @@ the value captured by a specified four-byte load. The certificate retains:
 substitution. Only `into_checked` yields the application accepted by forwarding.
 `call_word` performs those checks; `StackCalls` rechecks the actual target,
 caller/site, ABI and all required live normalized arguments before every reuse.
+The evaluator also requires the **current** graph to pass the common closure
+check, including decode gaps, before enabling any prepared call application in
+the fixed point or final emission. Closure of the graph used to prepare a cache
+entry is insufficient for a later analysis.
 Only immutable canonical facts construct a cache entry. Expression identities
 from a previous capture are not used as live argument identities.
 
@@ -151,13 +156,21 @@ obligations. The first handler-side barrier remains `0x2f00369e`.
 ## Validation and reproduction
 
 The affected 46 host packages and consumers pass tests and all-target clippy
-under the workspace warning policy. Formatting and diff checks pass. Ten new
+under the workspace warning policy. Formatting and diff checks pass. Eleven new
 end-to-end groups exercise store/call/load; callee load-time versus entry
 contents; conditional stores and conflicting returns; partial overlap and
 unknown aliases; later caller writes and joins; changed live arguments,
 length/target/ABI; width and order changes; wrapping input and missing bounds;
 every cancellation checkpoint in proof, tail-trace composition, preparation
 and caller evaluation; and refused admission budgets with complete release.
+
+The open-CFG regression prepares a valid cached copy on a closed caller, then
+introduces an unknown indirect jump that can reach the call while bypassing a
+source store. Fresh `call_word` rejects it as `MissingProof`; cached application
+must also be disabled. On reviewed commit `5fed3485` the test falsely forwarded
+zero instead. The fixed evaluator consumes the already-computed shared closure
+result, without another graph scan or closure implementation. The same cache
+still forwards 77 on the original closed caller. All 217 stack tests pass.
 
 Both w0/w1 builds pass. All **14 machine files and four full callback audits
 are byte-identical**. All eight reports have identical semantic content;
@@ -166,6 +179,8 @@ changes in runtime/bootstrap stack reports. Larger exact-address keys and the
 new expression representation increase accounted bytes; strict agreement in
 memory joins avoids some set interning/worklist work. No bound, unresolved
 site, candidate set or coverage assumption changes.
+Relative to reviewed `5fed3485`, the CFG fix leaves all 14 machine files,
+eight complete reports and four full callback audits byte-identical.
 
 ```sh
 cargo fw build w0

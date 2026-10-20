@@ -466,5 +466,22 @@
         }
       }
     }
+  },
+  "review_fix": {
+    "reviewed_head": "5fed3485d1885681773b52cf0295de18f658790c",
+    "regression": "cached_word_rejects_a_live_unknown_incoming_edge",
+    "before": "failed: incorrectly forwarded Constant(0)",
+    "after": "passed: fresh MissingProof and no cached Constant(0); closed caller still forwards Constant(77)",
+    "shared_check": "current closed_graph from all decoded graph edges and decode gaps; prepared call applications disabled before fixed point and emission",
+    "relative_to_reviewed": {
+      "machines_identical": 14,
+      "reports_identical": 8,
+      "callback_audits_identical": 4
+    },
+    "source_sha256": {
+      "tools/analysis/riscv-analysis/src/values.rs": "d5592b8b1fc5967c65caca7643210751989090b4086e58615862b490a2f35f64",
+      "tools/analysis/riscv-analysis/src/writes.rs": "5a7b9bb45c5e5d005ae782b16c4e3f52f6c6c43fd6ffa47a4a8758145b82950b",
+      "tools/analysis/riscv-stack/src/write_summary_tests/word.rs": "13a21075c64860bf9f2927b546bf9e61599418575077a34ee5ee67403970af29"
+    }
   }
 }
