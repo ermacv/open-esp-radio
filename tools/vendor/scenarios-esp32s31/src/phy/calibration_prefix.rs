@@ -622,8 +622,12 @@ pub fn exercise(ctx: &mut I2c) -> Result<()> {
             );
         }
     }
-    for (ready, busy, expected_commands) in
-        [(false, 0u32, 0usize), (true, 65535, 1), (true, 6000, 2)]
+    // SOURCE: target_port/calibration.rs::complete_dcode_direct shares one
+    // 20-us settle across a masked read and write; TraceTimer::observations
+    // advances one us per clock sample. Twelve busy responses complete the
+    // read but time out the write; the former 6000-response fixture timed
+    // out the first command under this elapsed-time bound.
+    for (ready, busy, expected_commands) in [(false, 0u32, 0usize), (true, 65535, 1), (true, 12, 2)]
     {
         let label = format!(
             "dcode-failure-{}-{busy}",

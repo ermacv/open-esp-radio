@@ -108,7 +108,8 @@ struct Cursor {
     repair: bool,
     /// Whether the unit is the whole list: the vendor's list is empty once
     /// `wDev_DiscardFrame` detached it, and both sides publish the unit
-    /// through the base without a doorbell.
+    /// through the base without a doorbell. Production rejects that full-ring
+    /// unit; it is exercised separately as a negative, never as refinement.
     empty: bool,
 }
 
@@ -308,8 +309,14 @@ fn ring(layout: &Layout, unit: usize, later: usize) -> (Vec<u8>, Vec<(u32, Vec<u
         } else {
             0
         };
-        if index + 1 >= unit && index < unit + later {
-            word0 = (armed & !LENGTH_MASK) | (UNIT_LENGTH << LENGTH_SHIFT) | DONE;
+        if index < unit + later {
+            // SOURCE: the RX append probe calls descriptor::rx_completed_word
+            // with UNIT_LENGTH for every completed descriptor, setting DONE
+            // only on the unit's terminal descriptor (or each later unit).
+            word0 = (armed & !LENGTH_MASK) | (UNIT_LENGTH << LENGTH_SHIFT);
+            if index + 1 >= unit {
+                word0 |= DONE;
+            }
         }
         if index + 1 == unit {
             next = 0;
@@ -797,6 +804,128 @@ fn check_exhausted(
     Ok(())
 }
 
+/// Probe ABI status reserved for exactly RxRingError::Corrupt.
+const CORRUPT_UNIT: u32 = 9;
+
+fn check_rejected_unit(
+    status: Option<u32>,
+    events: &[ExecutionEvent],
+    descriptors: &[u8],
+    initial: &[u8],
+) -> Result<()> {
+    if status != Some(CORRUPT_UNIT) {
+        return Err(invalid(format!(
+            "a full-ring unit must fail Corrupt, got {status:?}"
+        )));
+    }
+    if descriptors != initial {
+        let first = descriptors.iter().zip(initial).position(|(a, b)| a != b);
+        return Err(invalid(format!(
+            "a rejected full-ring unit changed descriptor byte {first:?}"
+        )));
+    }
+    if events.iter().any(|event| {
+        matches!(
+            event,
+            ExecutionEvent::Write {
+                address: RX_BASE | RX_CONTROL,
+                ..
+            }
+        )
+    }) {
+        return Err(invalid(
+            "a rejected full-ring unit published BASE or doorbell",
+        ));
+    }
+    Ok(())
+}
+
+/// SOURCE: chips/esp32s31/notes/wifi/rx-walker.md, "The whole ring cannot
+/// follow its own tail", and rx_ring.rs::recycle_completed_group. Product
+/// geometries cannot receive a unit spanning their whole ring. Preserve its
+/// rejection as a production-only negative, not another effect exception.
+fn rejected_whole(ctx: &mut Mac, layout: &Layout, cursor: Cursor) -> Result<()> {
+    let unit = layout.buffers.len();
+    let (initial, _) = ring(layout, unit, 0);
+    let mut observed = vec![selection(layout.base, initial.len() as u32)];
+    for (index, address) in layout.buffers.iter().enumerate() {
+        observed.extend([
+            oer_analysis_blobray_domain::MemorySelection {
+                name: format!("buffer-{index}-head"),
+                ..selection(*address, 4)
+            },
+            oer_analysis_blobray_domain::MemorySelection {
+                name: format!("buffer-{index}-guard"),
+                ..selection(address + layout.capacity, 4)
+            },
+        ]);
+    }
+    let mut rows = vec![];
+    for fill in LEAF_FILLS {
+        let mut phase = ctx.session.probes.invoke(
+            RECYCLE_PROBE,
+            vec![
+                ("descriptors", Arg::Word(Some(unit as i64))),
+                ("later", Arg::Word(Some(0))),
+                ("length", Arg::Word(Some(i64::from(UNIT_LENGTH)))),
+            ],
+            vec![DeviceDeclaration {
+                id: "settled-before-rejection".into(),
+                applicability: "the previous reload settled; no publication is permitted".into(),
+                lifetime: RegionLifetime::Phase,
+                behavior: DeviceBehavior::Fifo {
+                    address: RX_CONTROL,
+                    width: 4,
+                    reads: vec![0],
+                    writes: vec![],
+                },
+            }],
+            observed.clone(),
+        )?;
+        phase.arguments.resize(8, Some(0));
+        let mut row = case(
+            format!("rx-append-{unit}-{}-{fill:02x}", cursor.label),
+            phase,
+            None,
+            SessionReset::Cold,
+            false,
+        );
+        row.relation = None;
+        row.stack_fill = Some(fill);
+        rows.push(row);
+    }
+    let production = ctx.production.clone();
+    let records = ctx
+        .submit(
+            &format!("rx-append-{unit}-rejected"),
+            &crate::session::request(&production, None, None, rows, APPEND_EVENTS),
+            None,
+        )?
+        .records
+        .clone();
+    for case in 0..LEAF_FILLS.len() as u32 {
+        check_rejected_unit(
+            crate::i2c::returned_low(&records, case, false),
+            &crate::evidence::events(&records, case, false),
+            &crate::evidence::selection(&records, case, false, 0),
+            &initial,
+        )?;
+        if !crate::i2c::all_complete(&records, case, false) {
+            return Err(invalid("incomplete full-ring rejection model"));
+        }
+        for buffer in 0..unit as u16 {
+            if crate::evidence::selection(&records, case, false, 1 + buffer * 2)
+                != UNIT_LENGTH.to_le_bytes()
+                || crate::evidence::selection(&records, case, false, 2 + buffer * 2)
+                    != GUARD.to_le_bytes()
+            {
+                return Err(invalid("a rejected full-ring unit rearmed a buffer"));
+            }
+        }
+    }
+    Ok(())
+}
+
 /// The rows of one case: the compared append, whose vendor side preloads
 /// the receive list and ring.
 fn case_rows(
@@ -921,8 +1050,11 @@ fn case_rows(
 /// must MATCH and production must report success.
 pub fn exercise(ctx: &mut Mac) -> Result<()> {
     let layout = layout(ctx)?;
-    if layout.buffers.len() < 2 || layout.capacity & !SIZE_MASK != 0 {
-        return Err(invalid("the RX append layout is not a ring"));
+    if layout.buffers.len() < 2
+        || layout.capacity & !SIZE_MASK != 0
+        || layout.base & LOW_ADDRESS == 0
+    {
+        return Err(invalid("the RX append layout needs a non-null DMA head"));
     }
     let effects = contract(ctx, None)?;
     let exhausted_cursor = *CURSORS
@@ -930,11 +1062,10 @@ pub fn exercise(ctx: &mut Mac) -> Result<()> {
         .find(|c| c.exhausted_reload())
         .expect("an exhausted-list case");
     let exhausted_effects = contract(ctx, Some((&layout, exhausted_cursor)))?;
-    let whole = layout.buffers.len() as u32;
-    for unit in UNITS.iter().copied().chain([whole]) {
+    for unit in UNITS.iter().copied() {
         let mut rows = vec![];
         let mut compared = vec![];
-        for &cursor in CURSORS.iter().filter(|c| c.empty == (unit == whole)) {
+        for &cursor in CURSORS.iter().filter(|c| !c.empty) {
             for fill in LEAF_FILLS {
                 let contract = if cursor.exhausted_reload() {
                     &exhausted_effects
@@ -968,7 +1099,14 @@ pub fn exercise(ctx: &mut Mac) -> Result<()> {
             }
         }
     }
-    Ok(())
+    rejected_whole(
+        ctx,
+        &layout,
+        *CURSORS
+            .iter()
+            .find(|c| c.empty)
+            .expect("the full-ring negative case"),
+    )
 }
 
 #[cfg(test)]
@@ -1074,5 +1212,18 @@ mod tests {
         wrong[link..link + 4].copy_from_slice(&layout.descriptor(1).to_le_bytes());
         assert!(resumed_ring(&layout, 2, &events, &wrong, true).is_err());
         assert!(resumed_ring(&layout, layout.buffers.len(), &events, &descriptors, true).is_err());
+    }
+
+    #[test]
+    fn full_ring_negative_requires_corrupt_and_unchanged_descriptors_without_publication() {
+        let initial = [1, 2, 3, 4];
+        assert!(check_rejected_unit(Some(CORRUPT_UNIT), &[], &initial, &initial).is_ok());
+        for status in [None, Some(0), Some(5)] {
+            assert!(check_rejected_unit(status, &[], &initial, &initial).is_err());
+        }
+        assert!(check_rejected_unit(Some(CORRUPT_UNIT), &[], &[1, 2, 3, 0], &initial).is_err());
+        for event in [write(RX_BASE, 0x2f00_3000), write(RX_CONTROL, DOORBELL)] {
+            assert!(check_rejected_unit(Some(CORRUPT_UNIT), &[event], &initial, &initial).is_err());
+        }
     }
 }

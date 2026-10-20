@@ -3,7 +3,7 @@
 //! One probe entry prepares and starts the production ring over this image's
 //! placed DMA storage, completes a prefix of it as the DMA walker would, then
 //! returns that completed unit to the walker through the production recycle
-//! and the reload doorbell with its base repair. Only the recycle touches
+//! and the reload doorbell with its completion. Only the recycle touches
 //! the MAC, through the HAL's RX DMA engine: preparation and start run
 //! against the HAL's walker model, which stands for a walker the vendor's
 //! own initialization already started. The layout entry reports the
@@ -36,6 +36,9 @@ const RECYCLE_FAILED: u32 = 5;
 const NOT_APPENDED: u32 = 6;
 const RELOAD_FAILED: u32 = 7;
 const INVALID_UNIT: u32 = 8;
+/// A completed unit covers the ring's accepted tail and cannot be appended
+/// behind itself. Keep Corrupt distinct from other recycle failures.
+const CORRUPT_UNIT: u32 = 9;
 
 /// The reload settle's clock: this image has no timer, so each read is one
 /// microsecond later, which bounds the settle at its limit's observations.
@@ -145,6 +148,7 @@ oer_probe_macros::probe! {
             Ok(Some(unit)) => match unit.recycle(engine) {
                 Ok(Some(_append)) => 0,
                 Ok(None) => NOT_APPENDED,
+                Err(oer_esp32s31_hal::ieee80211::dma::rx_ring::RxRingError::Corrupt) => CORRUPT_UNIT,
                 Err(_) => RECYCLE_FAILED,
             },
             Ok(None) => NO_UNIT,

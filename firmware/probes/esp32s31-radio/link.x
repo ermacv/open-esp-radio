@@ -3,7 +3,9 @@ ENTRY(_start)
 MEMORY
 {
   TRACE (rwx) : ORIGIN = 0x10000000, LENGTH = 2M
-  DMA (rw)    : ORIGIN = 0x2f000000, LENGTH = 384K
+  /* SOURCE: chips/esp32s31/layout/linker/dma-window.x requires nonzero
+     low DMA address bits. Leave the null NEXT encoding outside probe storage. */
+  DMA (rw)    : ORIGIN = 0x2f000010, LENGTH = 384K - 16
   IRAM (rx)   : ORIGIN = 0x2f060000, LENGTH = 0x1afc0
 }
 
