@@ -225,6 +225,10 @@ impl<const N: usize> RsnTxFrame<N> {
         &self.bytes[..self.len]
     }
 
+    #[expect(
+        clippy::expect_used,
+        reason = "build validates the EAPOL layout and retains private bytes; authentication changes only the fixed MIC"
+    )]
     pub fn key_frame(&self) -> EapolKeyFrame<'_> {
         EapolKeyFrame::parse(self.as_bytes()).expect("RsnTxFrame is validated on construction")
     }

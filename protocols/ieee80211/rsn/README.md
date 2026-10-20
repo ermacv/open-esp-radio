@@ -95,10 +95,12 @@ suite.
 The strict-lint contract requires boundary constructors to retain checked
 fixed-size fields as array references obtained with `split_first_chunk`.
 Variable-length envelopes must establish each boundary before those fields
-reach crypto and handshake transitions. Runtime expect/unwrap paths become
-retained type proofs or typed peer-input refusals, without mechanically
-replacing indexing with `.get()` or suppressing the lint. The crate root does
-not enable the policy.
+reach crypto and handshake transitions. Unvalidated external input retains
+type proofs or returns typed refusals. Production code denies `unwrap_used`,
+`expect_used`, `panic`, `unreachable` and `indexing_slicing`; unit tests use
+the `cfg(test)` exception. Narrow `#[expect(..., reason = "...")]` attributes
+document internal invariants, including fixed-size key layouts and HMAC
+constructors that accept every key length.
 
 ## Known defects
 
@@ -113,7 +115,4 @@ not enable the policy.
   always derives the keyseed with a zero salt; `rejected_groups` is only
   parsed. H2E with a rejected group does not interoperate.
 - **Non-constant-time comparison** of IGTK material in
-  `bip.rs::BipReceiver::rekey`; `akm.rs` still builds the KCK MAC with
-  `new_from_slice(..).expect`.
-- **No strict lint block:** `lib.rs` has only `forbid(unsafe_code)` and
-  the crate has no `clippy.toml` (as `mac` and `ap`).
+  `bip.rs::BipReceiver::rekey`.

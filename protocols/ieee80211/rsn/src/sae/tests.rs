@@ -50,7 +50,7 @@ fn hash_to_element_matches_annex_j10() {
         "c93049b9e64000f848201649e999f2b5c22dea69b5632c9df4d633b8aa1f6c1e
          73634e94b53d82e7383a8d258199d9dc1a5ee8269d060382ccbf33e614ff59a0",
     );
-    assert_eq!(element_bytes(&pwe.0.to_affine()), expected);
+    assert_eq!(element_bytes(&pwe.0.to_affine()), Ok(expected));
 }
 
 fn peers(derive: impl Fn([u8; 6], [u8; 6]) -> SaePasswordElement) -> (SaeKeys, SaeKeys) {
@@ -336,4 +336,28 @@ fn secret_owners_wipe_and_redact_debug() {
     );
     comeback.zeroize();
     assert_eq!(comeback.key, [0; 32]);
+}
+
+#[test]
+fn a_wiped_password_element_cannot_panic_when_reused_for_a_commit() {
+    let mut pwe =
+        SaePasswordToken::derive(b"byteme", PASSWORD, None).password_element(ADDR1, ADDR2);
+    pwe.zeroize();
+    assert!(matches!(
+        SaeCommit::new(&pwe, [0x11; 32], [0x22; 32]),
+        Err(SaeError::InfiniteSecret)
+    ));
+}
+
+#[test]
+fn sae_password_lengths_are_admitted_before_copying_and_wiping_keeps_a_valid_empty_view() {
+    assert!(SaePassword::new(&[]).is_none());
+    assert!(SaePassword::new(&[0xff; SAE_PASSWORD_MAX_LEN + 1]).is_none());
+    for length in [1, SAE_PASSWORD_MAX_LEN] {
+        let bytes = [0xff; SAE_PASSWORD_MAX_LEN];
+        let mut password = SaePassword::new(&bytes[..length]).unwrap();
+        assert_eq!(password.as_bytes(), &bytes[..length]);
+        password.zeroize();
+        assert!(password.as_bytes().is_empty());
+    }
 }

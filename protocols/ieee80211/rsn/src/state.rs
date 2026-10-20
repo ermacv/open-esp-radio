@@ -110,12 +110,12 @@ pub use authenticator::{RsnApAction, RsnApPeerError, RsnApPeers, RsnApPhase, Rsn
 pub use supplicant::{RsnStaAction, RsnStaPhase, RsnStaState};
 
 const fn nonce_is_zero(nonce: &[u8; RSN_NONCE_LEN]) -> bool {
-    let mut index = 0;
-    while index < nonce.len() {
-        if nonce[index] != 0 {
+    let mut remaining = nonce.as_slice();
+    while let Some((&byte, rest)) = remaining.split_first() {
+        if byte != 0 {
             return false;
         }
-        index += 1;
+        remaining = rest;
     }
     true
 }

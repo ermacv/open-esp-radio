@@ -1,5 +1,15 @@
 #![no_std]
 #![forbid(unsafe_code)]
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::unreachable,
+        clippy::indexing_slicing
+    )
+)]
 
 //! Allocation-free RSN (IEEE 802.11 robust security network) protocol
 //! primitives shared by WPA2 and WPA3 authentication suites.

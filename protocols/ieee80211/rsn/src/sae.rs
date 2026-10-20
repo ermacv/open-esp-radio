@@ -94,7 +94,7 @@ pub enum SaeError {
     InvalidElement,
     /// The peer reflected this station's own commit.
     Reflection,
-    /// The shared secret is the point at infinity.
+    /// A commit element or shared secret is the point at infinity.
     InfiniteSecret,
     /// The peer's confirm does not verify.
     ConfirmMismatch,
@@ -119,15 +119,23 @@ impl SaePassword {
             return None;
         }
         let mut bytes = [0; SAE_PASSWORD_MAX_LEN];
-        bytes[..password.len()].copy_from_slice(password);
+        for (target, source) in bytes.iter_mut().zip(password.iter()) {
+            *target = *source;
+        }
         Some(Self {
             bytes,
             len: password.len() as u8,
         })
     }
 
+    #[expect(
+        clippy::expect_used,
+        reason = "new bounds the private password length to the fixed 63-byte storage"
+    )]
     pub fn as_bytes(&self) -> &[u8] {
-        &self.bytes[..usize::from(self.len)]
+        self.bytes
+            .get(..usize::from(self.len))
+            .expect("validated SAE password fits its storage")
     }
 }
 
@@ -145,6 +153,10 @@ pub struct SaePasswordElement(ProjectivePoint);
 #[derive(Zeroize, ZeroizeOnDrop)]
 pub struct SaePasswordToken(ProjectivePoint);
 
+#[expect(
+    clippy::expect_used,
+    reason = "HMAC accepts every key length, including peer-provided byte strings"
+)]
 fn hmac_sha256(key: &[u8], parts: &[&[u8]]) -> [u8; 32] {
     let mut mac = Hmac::<Sha256>::new_from_slice(key).expect("HMAC accepts every key length");
     for part in parts {
@@ -242,6 +254,10 @@ fn reduce_wide(value: &[u8; H2E_PWD_VALUE_LEN]) -> FieldElement {
 }
 
 /// The simplified SWU map of IEEE 802.11 with Z = -10.
+#[expect(
+    clippy::expect_used,
+    reason = "SSWU over P-256 maps every field element to an on-curve point; field reduction precedes this private function"
+)]
 fn sswu(u: &FieldElement) -> ProjectivePoint {
     let z = FieldElement::ZERO.sub(&FieldElement::from_u64(SSWU_Z));
     let a = FieldElement::ZERO.sub(&FieldElement::from_u64(3));
@@ -302,12 +318,18 @@ impl SaePasswordToken {
 /// HKDF-Expand with SHA-256.
 fn hkdf_expand(prk: &[u8; 32], info: &[u8], output: &mut [u8]) {
     let mut previous = [0_u8; 32];
-    let mut previous_len = 0;
+
     for (counter, chunk) in (1_u8..).zip(output.chunks_mut(32)) {
-        let block = hmac_sha256(prk, &[&previous[..previous_len], info, &[counter]]);
-        chunk.copy_from_slice(&block[..chunk.len()]);
+        let previous_input = if counter == 1 {
+            &[][..]
+        } else {
+            previous.as_slice()
+        };
+        let block = hmac_sha256(prk, &[previous_input, info, &[counter]]);
+        for (target, source) in chunk.iter_mut().zip(block.iter()) {
+            *target = *source;
+        }
         previous = block;
-        previous_len = 32;
     }
     previous.zeroize();
 }
@@ -316,11 +338,15 @@ fn scalar_from(bytes: &[u8; SAE_PRIME_LEN]) -> Option<Scalar> {
     Option::from(Scalar::from_repr(FieldBytes::from(*bytes)))
 }
 
-fn element_bytes(element: &AffinePoint) -> [u8; 2 * SAE_PRIME_LEN] {
+fn element_bytes(element: &AffinePoint) -> Result<[u8; 2 * SAE_PRIME_LEN], SaeError> {
     let encoded = element.to_encoded_point(false);
-    let mut bytes = [0; 2 * SAE_PRIME_LEN];
-    bytes.copy_from_slice(&encoded.as_bytes()[1..]);
-    bytes
+    let Some((&[4], coordinates)) = encoded.as_bytes().split_first_chunk::<1>() else {
+        return Err(SaeError::InfiniteSecret);
+    };
+    let Some(&bytes) = coordinates.first_chunk::<{ 2 * SAE_PRIME_LEN }>() else {
+        return Err(SaeError::InfiniteSecret);
+    };
+    Ok(bytes)
 }
 
 /// One peer's commit: its scalar and element.
@@ -782,7 +808,7 @@ impl SaeCommit {
             rand,
             own: SaeCommitValues {
                 scalar: scalar.to_bytes().into(),
-                element: element_bytes(&element),
+                element: element_bytes(&element)?,
             },
         })
     }
