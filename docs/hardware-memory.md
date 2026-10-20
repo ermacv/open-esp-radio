@@ -229,11 +229,12 @@ to hardware-shared memory.
 
 ### 3. Placement: platform and HAL
 
-A DMA static is declared with `oer_esp32s31_hal::dma_static!`: a zeroed
+A DMA static is declared with the chip HAL's `dma_static!`: a zeroed
 `DmaStatic<T>` in a `.dma.bss.<block>` section (the macro refuses any other
 section name), claimed once as a `Placed<T>`. The register generator writes
-`chips/esp32s31/layout/linker/dma-window.x` from the model: the
-`dma-window` region and the width of `RX_NEXT_DESCRIPTOR.ADDRESS_LOW`. The
+each chip's `layout/linker/dma-window.x` from the model: the `dma-window`
+region and the width of S31's `RX_NEXT_DESCRIPTOR.ADDRESS_LOW` or C5's
+full-width `IEEE802154_MAC.RX_DMA_ADDRESS.ADDRESS`. The
 runtime linker script includes it and asserts that all DMA storage lies in
 the window and holds no address whose low address bits are zero; the
 runtime link uses `--orphan-handling=error`, so a mistyped section name
@@ -289,8 +290,8 @@ the loan is made, with the first such buffer.
 - **Placement is proved before run time.** An arena is declared through a
   macro that puts its static into the block's `.dma.bss.<block>` section; a
   linker `ASSERT` keeps the section inside the DMA window and off a base whose
-  low 20 bits are zero. `DmaRef<T>` is built only from such a placed static,
-  and buffer addresses are typed offsets inside the same arena, so they are
+  low DMA-address-field bits are zero. `DmaRef<T>` is built only from such a
+  placed static, and buffer addresses are typed offsets inside the same arena, so they are
   valid by construction. Size and alignment are compile-time checks. The
   run-time address checks (`descriptor_address_valid`, the run-time part of
   `placement.rs`, the firmware placement warning) are removed. What the

@@ -580,6 +580,51 @@ fn a_layout_is_placed_only_in_ram_regions_of_the_memory_map() {
 }
 
 #[test]
+fn a_dma_region_types_buffer_addresses_without_a_pointer_layout() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = |name: &str| directory.path().join(name);
+    for layouts in ["[]", "[\"prefix.toml\"]"] {
+        let device = DEVICE.replace("[\"node.toml\", \"prefix.toml\"]", layouts);
+        for (name, text) in [
+            ("device.toml", device.as_str()),
+            ("radio.toml", FRAGMENT),
+            ("prefix.toml", PREFIX),
+            ("memory.toml", MEMORY),
+        ] {
+            fs::write(path(name), text).unwrap();
+        }
+        let model = oer_registers_model::RegisterModel::load(&path("device.toml")).unwrap();
+        let memory = oer_registers_model::memory::Memory::load(&path("memory.toml")).unwrap();
+        let rust = model.render_layouts_rust(&memory).unwrap();
+        run_generated(
+            &rust,
+            r#"
+            use layouts::*;
+            fn is_copy_eq<T: Copy + Eq>() {}
+            fn layout_reference_is_copy_eq<L: DmaLayout>() { is_copy_eq::<DmaRef<L>>(); }
+            is_copy_eq::<DmaWindowAddress>();
+            let first = unsafe { DmaWindowAddress::new_unchecked(DMA_WINDOW.start + 4) };
+            let same = first;
+            let other = unsafe { DmaWindowAddress::new_unchecked(first.get() + 4) };
+            assert_eq!(first, same);
+            assert_ne!(first, other);
+            "#,
+        );
+        fs::write(
+            path("memory.toml"),
+            MEMORY.replace("\"dma-window\"", "\"sram\""),
+        )
+        .unwrap();
+        let memory = oer_registers_model::memory::Memory::load(&path("memory.toml")).unwrap();
+        let rust = model.render_layouts_rust(&memory).unwrap();
+        assert!(!rust.contains("DmaWindowAddress"));
+        if layouts == "[]" {
+            assert!(rust.is_empty());
+        }
+    }
+}
+
+#[test]
 fn the_linker_fragment_names_the_dma_window_and_the_address_width() {
     let directory = tempfile::tempdir().unwrap();
     let path = |name: &str| directory.path().join(name);
@@ -609,6 +654,18 @@ fn the_linker_fragment_names_the_dma_window_and_the_address_width() {
     ] {
         assert!(fragment.contains(line), "{line}\n{fragment}");
     }
+    check_dma_link(
+        &fragment,
+        "DMA_WINDOW_ORIGIN + 4",
+        "DMA_WINDOW_ORIGIN + 8",
+        None,
+    );
+    check_dma_link(
+        &fragment,
+        "DMA_WINDOW_ORIGIN",
+        "DMA_WINDOW_ORIGIN + 8",
+        Some("zero low DMA address bits"),
+    );
     // Without a DMA address field no window is known: the link refuses any
     // DMA storage.
     let none = oer_registers_model::render_dma_linker_fragment(&svd, &memory, None).unwrap();
@@ -618,6 +675,45 @@ fn the_linker_fragment_names_the_dma_window_and_the_address_width() {
         "{none}"
     );
     assert!(!none.contains("DMA_WINDOW_ORIGIN"), "{none}");
+    // A MAC that consumes the complete CPU address uses the same placement
+    // proof, with a full-width field rather than a compressed address.
+    fs::write(
+        path("radio.toml"),
+        FRAGMENT.replace("bitWidth = 20", "bitWidth = 32"),
+    )
+    .unwrap();
+    let full_address_model =
+        oer_registers_model::RegisterModel::load(&path("device.toml")).unwrap();
+    let (full_address_svd, _) = full_address_model.render_svd().unwrap();
+    let full_address = oer_registers_model::render_dma_linker_fragment(
+        &full_address_svd,
+        &memory,
+        Some("RADIO.NEXT.ADDRESS_LOW"),
+    )
+    .unwrap();
+    assert!(
+        full_address.contains("DMA_ADDRESS_LOW_BITS = 32;"),
+        "{full_address}"
+    );
+    check_dma_link(
+        &full_address,
+        "DMA_WINDOW_ORIGIN",
+        "DMA_WINDOW_ORIGIN + DMA_WINDOW_LENGTH",
+        None,
+    );
+    check_dma_link(&full_address, "0", "0", None);
+    check_dma_link(
+        &full_address,
+        "DMA_WINDOW_ORIGIN - 1",
+        "DMA_WINDOW_ORIGIN + 8",
+        Some("outside the DMA window"),
+    );
+    check_dma_link(
+        &full_address,
+        "DMA_WINDOW_ORIGIN + 4",
+        "DMA_WINDOW_ORIGIN + DMA_WINDOW_LENGTH + 1",
+        Some("outside the DMA window"),
+    );
     // The field must be a low field of its register, and must exist.
     for (field, reason) in [
         ("RADIO.STATUS.FLAG", "bits N-1:0"),
@@ -644,6 +740,38 @@ fn the_linker_fragment_names_the_dma_window_and_the_address_width() {
     .unwrap_err()
     .to_string();
     assert!(error.contains("no RAM region dma-window"), "{error}");
+}
+
+/// Exercise the generated assertions with the toolchain's RV32 linker,
+/// including its evaluation of shifts by the complete address width.
+fn check_dma_link(fragment: &str, start: &str, end: &str, expected_error: Option<&str>) {
+    let directory = tempfile::tempdir().unwrap();
+    let input = directory.path().join("empty.bin");
+    let script = directory.path().join("dma-window.x");
+    fs::write(&input, []).unwrap();
+    fs::write(&script, fragment).unwrap();
+    let result = std::process::Command::new(oer_os_toolchain::lld().unwrap())
+        .args(["-m", "elf32lriscv", "-b", "binary"])
+        .arg(&input)
+        .arg("-T")
+        .arg(&script)
+        .arg("--defsym")
+        .arg(format!("__runtime_dma_data_start={start}"))
+        .arg("--defsym")
+        .arg(format!("__runtime_dma_bss_end={end}"))
+        .args(["--entry", "0", "-o"])
+        .arg(directory.path().join("image.elf"))
+        .output()
+        .unwrap();
+    let diagnostic = String::from_utf8_lossy(&result.stderr);
+    assert_eq!(
+        result.status.success(),
+        expected_error.is_none(),
+        "{diagnostic}"
+    );
+    if let Some(reason) = expected_error {
+        assert!(diagnostic.contains(reason), "{diagnostic}");
+    }
 }
 
 const BYTE_ARRAY: &str = r#"schema = 1

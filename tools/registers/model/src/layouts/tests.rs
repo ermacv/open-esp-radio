@@ -530,7 +530,7 @@ fn a_word_layout_renders_cells_values_and_its_placement() {
 fn a_byte_layout_renders_a_fixed_size_decoder() {
     let prefix = prefix_reviewed();
     let model = load(&[("prefix.toml", &prefix)]).unwrap();
-    let rust = super::render(model.layouts(), &regions()).unwrap();
+    let rust = super::render(model.layouts(), &BTreeMap::new()).unwrap();
     for item in [
         "pub struct Prefix<'a> {\nbytes: &'a [u8; 8],",
         "pub const fn new(bytes: &'a [u8; 8]) -> Self",
@@ -548,7 +548,7 @@ fn a_byte_layout_renders_a_fixed_size_decoder() {
     );
     assert!(
         !rust.contains("DMA_WINDOW"),
-        "only named regions are rendered"
+        "a decoder without a DMA region has no DMA types"
     );
 }
 
@@ -593,8 +593,8 @@ fn rendering_needs_every_named_region() {
 }
 
 #[test]
-fn a_model_without_layouts_renders_nothing() {
-    assert_eq!(super::render(&[], &regions()).unwrap(), "");
+fn a_model_without_layouts_or_a_dma_region_renders_nothing() {
+    assert_eq!(super::render(&[], &BTreeMap::new()).unwrap(), "");
 }
 
 fn twin() -> String {

@@ -171,10 +171,10 @@ per byte layout a decoder over `&[u8; N]` with a value type per range and a
 getter per field; a byte layout with CPU-written fields also gains a writer
 over `&mut [u8; N]` (`set_<range>` and the range getter) and `from_bits` and
 `with_*` builders on the ranges the CPU writes, never on a hardware-written
-field. When an address field exists it also gains the typed
+field. When the memory map has a `dma-window` RAM region it also gains the typed
 addresses of the DMA region: `DmaWindowAddress` for a buffer and
 `DmaRef<L>` for a layout placed there (the sealed `DmaLayout`), both with an
-`unsafe` constructor only `oer_esp32s31_hal::dma_address` calls. An address
+`unsafe` constructor only the chip HAL's `dma_address` module calls. An address
 field's builder takes that type (`Option<DmaRef<L>>` for a link, `None` for
 none); its getter returns the word as read. No ordering, fence or ownership
 is generated.
@@ -183,7 +183,7 @@ A chip publication may name `[outputs.linker]`: `path` and
 `address-low-field = "PERIPHERAL.REGISTER.FIELD"`. It writes a linker
 fragment with `DMA_WINDOW_ORIGIN` and `DMA_WINDOW_LENGTH` (the memory map's
 `dma-window` region) and `DMA_ADDRESS_LOW_BITS` (that field's width, from
-bit 0), which the runtime linker script includes.
+bit 0, up to the complete 32-bit address), which the runtime linker script includes.
 
 A complete-register write in the API policy takes either a `domain` or, for
 a register the hardware reads as a pointer, `points-to = "<LAYOUT>"`: its
