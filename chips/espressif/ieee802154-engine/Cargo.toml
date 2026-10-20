@@ -7,6 +7,10 @@ license = "Apache-2.0"
 repository.workspace = true
 description = "IEEE 802.15.4 MAC driver engine of the Espressif chips, ported from the public ESP-IDF driver"
 
+[features]
+# Recording LL and synthetic addresses for explicit host models.
+test-support = []
+
 [dependencies]
 bytemuck = { version = "1.25.2", default-features = false, features = ["derive"] }
 oer-memory = { path = "../../../portable/memory" }

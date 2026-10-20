@@ -17,13 +17,18 @@ between these values and its register types; the ESP32-S31 implementation is
 `oer_esp32s31_hal::ieee802154::ll::Ieee802154MacOwners`. What differs between
 chips stays with the chip: register geometry, the transmit-on delays and the
 rest of the MAC lifecycle, the transmit-power level set, the coexistence
-table, the diagnostic counters a chip's LL adds and the memory the MAC DMA
-reaches, which the caller passes to
-`Ieee802154Engine::buffers_dma_visible` before any hardware is touched.
+table and the diagnostic counters a chip's LL adds. Each HAL places its frame
+storage with `dma_static!` in `.dma.bss.ieee802154`, consumes the `Placed`
+claim and builds one typed address per RX, TX and enhanced-ACK slot. The
+linker proves placement; the shared engine selects addresses from that table
+without pointer arithmetic. Unknown model/hardware address identities match
+no slot and are rejected.
 
 The engine names no executor, interrupt route or chip. A runtime holds it
-with the chip's MAC owners in one critical section and calls its operation
-entries and interrupt handler. Its accessor sequence was compared on the host
+inside the chip HAL's owner together with its MAC token and static buffers.
+The owner's entries borrow its own MAC and expose frames and slot handles,
+without DMA addresses or independently reusable register ownership. The
+caller serializes entries and the interrupt handler in one critical section. Its accessor sequence was compared on the host
 with the compiled vendor driver.
 
 ## Bring-up and teardown order

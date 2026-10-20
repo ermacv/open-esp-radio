@@ -604,15 +604,14 @@ impl Ieee802154RegisterLease<'_> {
     /// Publish the complete TX frame-buffer address through its generated
     /// register-specific domain.
     ///
-    /// Buffer provenance, DMA accessibility, alignment, and lifetime remain
-    /// obligations of the higher DMA owner.
-    pub fn publish_transmit_dma_address(&mut self, address: u32) {
+    /// The typed address is supplied by the HAL owner of placed frame storage.
+    pub fn publish_transmit_dma_address(&mut self, address: crate::layouts::DmaWindowAddress) {
         self.registers.publish_transmit_dma_address(address);
     }
 
     /// Publish the complete RX frame-buffer address through its generated
     /// register-specific domain.
-    pub fn publish_receive_dma_address(&mut self, address: u32) {
+    pub fn publish_receive_dma_address(&mut self, address: crate::layouts::DmaWindowAddress) {
         self.registers.publish_receive_dma_address(address);
     }
 

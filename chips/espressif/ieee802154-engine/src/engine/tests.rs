@@ -1,6 +1,7 @@
 //! Engine behavior against a register model. Every expectation is read from
 //! the pinned `esp_ieee802154_dev.c`, not from this engine's output.
 
+use crate::ll::model::ModelAddress;
 use crate::ll::model::{DEBUG_COUNTERS, debug_slot};
 use crate::{channel::*, coex::*, ll::*, tx_power::*, types::*};
 use std::{boxed::Box, vec, vec::Vec};
@@ -26,8 +27,8 @@ pub(crate) enum Call {
     TxAbortReason,
     RxStatus,
     IsCurrentRxFrame,
-    TxAddress(u32),
-    RxAddress(u32),
+    TxAddress(ModelAddress),
+    RxAddress(ModelAddress),
     TxAutoAck,
     RxAutoAck,
     TxEnhancedAck,
@@ -91,7 +92,7 @@ pub(crate) struct Hw {
     current_rx_frame: bool,
     ed_rss: i8,
     cca_busy: bool,
-    rx_address: Option<u32>,
+    rx_address: Option<ModelAddress>,
     panid: u16,
     short_address: u16,
     extended_address: [u8; 8],
@@ -134,6 +135,7 @@ fn etm_index(channel: Ieee802154EtmChannel) -> usize {
 }
 
 impl Ieee802154LowLevel for Hw {
+    type Address = ModelAddress;
     fn set_command(&mut self, command: Ieee802154LlCommand) {
         self.calls.push(Call::Command(command));
     }
@@ -167,10 +169,10 @@ impl Ieee802154LowLevel for Hw {
         self.calls.push(Call::IsCurrentRxFrame);
         self.current_rx_frame
     }
-    fn set_tx_address(&mut self, address: u32) {
+    fn set_tx_address(&mut self, address: ModelAddress) {
         self.calls.push(Call::TxAddress(address));
     }
-    fn set_rx_address(&mut self, address: u32) {
+    fn set_rx_address(&mut self, address: ModelAddress) {
         self.calls.push(Call::RxAddress(address));
         self.rx_address = Some(address);
     }
@@ -471,7 +473,7 @@ fn mask(events: &[Ieee802154Event]) -> Ieee802154EventMask {
 }
 
 struct Bench {
-    engine: Ieee802154Engine<'static>,
+    engine: Ieee802154Engine<'static, ModelAddress>,
     hw: Hw,
     env: Env,
 }
@@ -483,6 +485,7 @@ impl Bench {
         let levels = Ieee802154TxPowerLevels::new(&LEVELS).unwrap();
         let mut engine = Ieee802154Engine::new(
             buffers,
+            crate::ll::model::addresses(),
             levels,
             Ieee802154PibDefaults::default(),
             crate::pib::test_permit(11, levels),
@@ -498,12 +501,12 @@ impl Bench {
         }
     }
 
-    fn rx_address(&self, slot: usize) -> u32 {
-        self.engine.buffers.rx[slot].address()
+    fn rx_address(&self, slot: usize) -> ModelAddress {
+        self.engine.addresses.rx[slot]
     }
 
-    fn tx_address(&self) -> u32 {
-        self.engine.buffers.tx.address()
+    fn tx_address(&self) -> ModelAddress {
+        self.engine.addresses.tx
     }
 
     fn receive(&mut self) {
@@ -550,6 +553,7 @@ fn mac_init_publishes_the_register_baseline_and_idles() {
     let levels = Ieee802154TxPowerLevels::new(&LEVELS).unwrap();
     let mut engine = Ieee802154Engine::new(
         buffers,
+        crate::ll::model::addresses(),
         levels,
         Ieee802154PibDefaults::default(),
         crate::pib::test_permit(11, levels),
@@ -593,6 +597,7 @@ fn software_coexistence_publishes_each_scene_priority() {
     let levels = Ieee802154TxPowerLevels::new(&LEVELS).unwrap();
     let mut engine = Ieee802154Engine::new(
         buffers,
+        crate::ll::model::addresses(),
         levels,
         Ieee802154PibDefaults::default(),
         crate::pib::test_permit(11, levels),
@@ -861,7 +866,7 @@ fn a_2015_frame_is_answered_with_the_generated_enhanced_ack() {
     image[2] = 0xa8;
     bench.deliver(&image);
     bench.interrupt(&[Ieee802154Event::RxDone]);
-    let enhanced_ack = bench.engine.buffers.enhanced_ack.address();
+    let enhanced_ack = bench.engine.addresses.enhanced_ack;
     assert_subsequence(
         &bench.hw.calls,
         &[
@@ -905,7 +910,7 @@ fn a_secured_enhanced_ack_configures_transmit_security_first() {
     image[2] = 0xa8;
     bench.deliver(&image);
     bench.interrupt(&[Ieee802154Event::RxDone]);
-    let enhanced_ack = bench.engine.buffers.enhanced_ack.address();
+    let enhanced_ack = bench.engine.addresses.enhanced_ack;
     assert_subsequence(
         &bench.hw.calls,
         &[
@@ -1303,4 +1308,32 @@ fn a_refused_transmission_counts_as_deferred() {
 /// operations (idle 1, TX/RX 3, timed TX/RX 8, ACK 8).
 fn vendor_priorities() -> Ieee802154CoexPriorities {
     Ieee802154CoexPriorities::resolve(&oer_espressif_coex::CoexPtiTable::VENDOR)
+}
+
+#[test]
+fn an_unknown_dma_identity_is_rejected_and_the_stub_is_not_a_deliverable_slot() {
+    let mut bench = Bench::enabled();
+    assert!(
+        !bench
+            .engine
+            .model_dma_write(ModelAddress::Unknown, &[1, 2, 3])
+    );
+    assert!(bench.engine.model_dma_read(ModelAddress::Unknown).is_none());
+    assert!(bench.engine.model_rx_slot(ModelAddress::Unknown).is_none());
+    let stub = bench.engine.addresses.rx[RX_BUFFER_COUNT];
+    assert!(bench.engine.model_dma_write(stub, &[9]));
+    assert_eq!(bench.engine.model_dma_read(stub).unwrap()[0], 9);
+    assert!(bench.engine.model_rx_slot(stub).is_none());
+    assert!(
+        bench
+            .engine
+            .model_rx_slot(bench.engine.addresses.tx)
+            .is_none()
+    );
+    assert!(
+        bench
+            .engine
+            .model_rx_slot(bench.engine.addresses.enhanced_ack)
+            .is_none()
+    );
 }

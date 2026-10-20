@@ -3,6 +3,7 @@
 //! `esp_ieee802154_multipan.c`.
 
 use crate::ll::model::Ieee802154LlModel;
+use crate::ll::model::ModelAddress;
 use crate::{tx_power::*, types::*};
 use std::{boxed::Box, vec, vec::Vec};
 
@@ -75,7 +76,7 @@ fn data_to(panid: u16, destination: [u8; 2]) -> Vec<u8> {
 }
 
 struct Bench {
-    engine: Ieee802154Engine<'static>,
+    engine: Ieee802154Engine<'static, ModelAddress>,
     hw: Ieee802154LlModel,
     env: Received,
 }
@@ -88,6 +89,7 @@ impl Bench {
         let mut engine = match interfaces {
             Some(count) => Ieee802154Engine::new_multipan(
                 buffers,
+                crate::ll::model::addresses(),
                 levels,
                 defaults,
                 Ieee802154Interfaces::new(count).unwrap(),
@@ -95,6 +97,7 @@ impl Bench {
             ),
             None => Ieee802154Engine::new(
                 buffers,
+                crate::ll::model::addresses(),
                 levels,
                 defaults,
                 crate::pib::test_permit(11, levels),

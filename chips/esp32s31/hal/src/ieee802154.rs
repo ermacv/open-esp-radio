@@ -4,6 +4,8 @@ pub(crate) mod backend;
 
 pub mod lifecycle;
 
+pub mod engine;
+
 pub mod ll;
 
 pub mod mac;
@@ -16,15 +18,6 @@ pub(crate) mod role;
 pub(crate) mod validation;
 
 pub use oer_esp32s31_pac::{Ieee802154MultipanIndex, Ieee802154PowerSequence};
-
-/// The memory the ESP32-S31 IEEE 802.15.4 MAC DMA reaches: the register
-/// model's `dma-window` RAM region ([`crate::layouts::DMA_WINDOW`]), the
-/// internal SRAM of `SOC_DMA_LOW`..`SOC_DMA_HIGH`. PSRAM is outside it: a frame
-/// there makes the MAC report a DMA error, and nothing reaches the air or
-/// memory. The engine checks its frame buffers against it
-/// ([`oer_espressif_ieee802154_engine::engine::Ieee802154Engine::buffers_dma_visible`]).
-pub const IEEE802154_DMA_WINDOW: core::ops::Range<usize> =
-    crate::layouts::DMA_WINDOW.start as usize..crate::layouts::DMA_WINDOW.end as usize;
 
 /// Validation entries of the IEEE 802.15.4 coexistence and BTBB writes.
 #[cfg(oer_probe)]

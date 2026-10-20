@@ -930,19 +930,19 @@ impl TaskRegisters {
 
     /// Publish one complete TX DMA address word.
     #[doc(hidden)]
-    pub fn publish_transmit_dma_address(&mut self, address: u32) {
+    pub fn publish_transmit_dma_address(&mut self, address: crate::layouts::DmaWindowAddress) {
         crate::svd::full_register_write::publish_ieee802154_tx_dma_address(
             &self.registers,
-            address,
+            address.get(),
         );
     }
 
     /// Publish one complete RX DMA address word.
     #[doc(hidden)]
-    pub fn publish_receive_dma_address(&mut self, address: u32) {
+    pub fn publish_receive_dma_address(&mut self, address: crate::layouts::DmaWindowAddress) {
         crate::svd::full_register_write::publish_ieee802154_rx_dma_address(
             &self.registers,
-            address,
+            address.get(),
         );
     }
 

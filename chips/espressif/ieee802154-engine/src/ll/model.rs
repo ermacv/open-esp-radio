@@ -13,7 +13,7 @@ use crate::{channel::*, coex::*, tx_power::*, types::*};
 /// The modelled MAC state; every field is public for the test to set or
 /// inspect.
 #[derive(Clone, Debug)]
-pub struct Ieee802154LlModel {
+pub struct Ieee802154LlModel<Address = ModelAddress> {
     /// Latched events; `clear_events` clears them.
     pub events: Ieee802154EventMask,
     /// Latched receive-abort reason.
@@ -31,9 +31,9 @@ pub struct Ieee802154LlModel {
     /// The last operation command.
     pub command: Option<Ieee802154LlCommand>,
     /// The last published receive buffer.
-    pub rx_address: Option<u32>,
+    pub rx_address: Option<Address>,
     /// The last published transmit buffer.
-    pub tx_address: Option<u32>,
+    pub tx_address: Option<Address>,
     /// The published channel's frequency code.
     pub frequency_code: u8,
     /// Hardware ACK transmission.
@@ -74,7 +74,7 @@ pub struct Ieee802154LlModel {
     pub debug_counters: [u16; DEBUG_COUNTERS],
 }
 
-impl Default for Ieee802154LlModel {
+impl<Address> Default for Ieee802154LlModel<Address> {
     fn default() -> Self {
         Self {
             events: Ieee802154EventMask::NONE,
@@ -134,7 +134,7 @@ pub const fn debug_slot(counter: Ieee802154DebugCounter) -> usize {
     }
 }
 
-impl Ieee802154LlModel {
+impl<Address> Ieee802154LlModel<Address> {
     /// Latch `events` for the next interrupt.
     pub fn raise(&mut self, events: &[Ieee802154Event]) {
         self.events = events
@@ -155,7 +155,8 @@ const fn etm_index(channel: Ieee802154EtmChannel) -> usize {
     }
 }
 
-impl Ieee802154LowLevel for Ieee802154LlModel {
+impl<Address: Copy + Eq> Ieee802154LowLevel for Ieee802154LlModel<Address> {
+    type Address = Address;
     fn set_command(&mut self, command: Ieee802154LlCommand) {
         self.command = Some(command);
     }
@@ -183,10 +184,10 @@ impl Ieee802154LowLevel for Ieee802154LlModel {
     fn is_current_rx_frame(&mut self) -> bool {
         self.current_rx_frame
     }
-    fn set_tx_address(&mut self, address: u32) {
+    fn set_tx_address(&mut self, address: Address) {
         self.tx_address = Some(address);
     }
-    fn set_rx_address(&mut self, address: u32) {
+    fn set_rx_address(&mut self, address: Address) {
         self.rx_address = Some(address);
     }
     fn tx_auto_ack(&mut self) -> bool {
@@ -318,8 +319,30 @@ impl Ieee802154LowLevel for Ieee802154LlModel {
     fn set_etm_route(&mut self, _route: Ieee802154EtmRoute) {}
 }
 
-impl Ieee802154RecentRssi for Ieee802154LlModel {
+impl<Address> Ieee802154RecentRssi for Ieee802154LlModel<Address> {
     fn recent_rssi(&mut self) -> i8 {
         self.recent_rssi
+    }
+}
+
+/// Synthetic identities deliberately carry no arithmetic DMA representation.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ModelAddress {
+    /// A receive ring slot, including the stub.
+    Receive(u8),
+    /// The transmit frame.
+    Transmit,
+    /// The enhanced ACK.
+    EnhancedAck,
+    /// A hardware input that belongs to no frame.
+    Unknown,
+}
+
+/// The model's addresses for one engine, keyed only by slot identity.
+pub fn addresses() -> crate::engine::Ieee802154DmaAddresses<ModelAddress> {
+    crate::engine::Ieee802154DmaAddresses {
+        rx: core::array::from_fn(|index| ModelAddress::Receive(index as u8)),
+        tx: ModelAddress::Transmit,
+        enhanced_ack: ModelAddress::EnhancedAck,
     }
 }

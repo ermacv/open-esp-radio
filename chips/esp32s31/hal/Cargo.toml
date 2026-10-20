@@ -25,6 +25,8 @@ oer-espressif-modem-clock = { path = "../../espressif/modem-clock" }
 oer-radio-coex = { path = "../../../protocols/radio/coex" }
 
 [dev-dependencies]
+oer-radio-regulatory = { path = "../../../protocols/radio/regulatory", features = ["test-support"] }
+oer-espressif-ieee802154-engine = { path = "../../espressif/ieee802154-engine", features = ["test-support"] }
 critical-section = { version = "1.2.0", features = ["std"] }
 oer-esp32s31-pac = { path = "../pac", features = ["test-support"] }
 oer-test-ui-cases = { path = "../../../tools/test/ui-cases" }
