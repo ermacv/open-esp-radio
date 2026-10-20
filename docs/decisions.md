@@ -214,14 +214,19 @@ bounds) live in the code that applies them.
 - **MSDU age** starts at software admission, and every subframe keeps its own
   age through A-MPDU formation and retry; removing an aged head under an
   active Block Ack agreement sends a BlockAckReq.
+- **Static TX profile.** Hardware backends consume a generic `BackendTxProfile`
+  from port without dynamic dispatch. Algorithms, retry/BA/reorder state and
+  tables belong to the cores and `ieee80211-policy`; the image/runtime composes
+  the profile. The core supplies each fresh MPDU's PN through port; the backend
+  formats it and reports BlockAck/RX values.
 - **RX Block Ack banks** form one pool for both roles, with separate role
   tables.
 - **Group key with one slot.** A new key of any ID replaces the single entry
   atomically; frames under the old ID are dropped after the switch.
 - **Keys and timeouts.** After an unconfirmed stop, secrets are erased by a
   required synchronous hook and the installation stays quarantined until
-  reset; packet-number exhaustion is a typed port fault; no retry after a
-  hardware TX timeout until compared with the vendor.
+  reset; packet-number exhaustion is a typed refusal before backend handoff;
+  no retry after a hardware TX timeout until compared with the vendor.
 - **Station TSF.** An update that would cross 2^64 is refused before any TSF
   write; a beacon whose TSF the station cannot follow is dropped whole; a join
   beacon whose TSF cannot be taken ends the association as an ordinary

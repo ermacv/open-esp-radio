@@ -134,16 +134,18 @@ fn station_rx_sessions_bind_protocol_window_hardware_bank_and_response() {
         }
     );
     assert_eq!(
-        crate::tx::ampdu::parse_block_ack_action(activation.response_body()),
-        Some(crate::tx::ampdu::BlockAckAction::AddbaResponse {
-            dialog_token: 17,
-            status: 0,
-            tid: 7,
-            immediate: true,
-            amsdu: false,
-            window: RX_BLOCK_ACK_MAX_WINDOW,
-            timeout_tu: 0,
-        })
+        oer_ieee80211_wire::block_ack::parse_block_ack_action(activation.response_body()),
+        Some(
+            oer_ieee80211_wire::block_ack::BlockAckAction::AddbaResponse {
+                dialog_token: 17,
+                status: 0,
+                tid: 7,
+                immediate: true,
+                amsdu: false,
+                window: RX_BLOCK_ACK_MAX_WINDOW,
+                timeout_tu: 0,
+            }
+        )
     );
     assert!(matches!(
         sessions.begin_pending(),
@@ -180,16 +182,18 @@ fn integration_can_narrow_the_negotiated_rx_window_without_changing_hardware_geo
     assert_eq!(activation.negotiated().window, HALF_WINDOW);
     assert_eq!(activation.hardware().window, RX_BLOCK_ACK_MAX_WINDOW);
     assert_eq!(
-        crate::tx::ampdu::parse_block_ack_action(activation.response_body()),
-        Some(crate::tx::ampdu::BlockAckAction::AddbaResponse {
-            dialog_token: 17,
-            status: 0,
-            tid: 0,
-            immediate: true,
-            amsdu: false,
-            window: HALF_WINDOW,
-            timeout_tu: 0,
-        })
+        oer_ieee80211_wire::block_ack::parse_block_ack_action(activation.response_body()),
+        Some(
+            oer_ieee80211_wire::block_ack::BlockAckAction::AddbaResponse {
+                dialog_token: 17,
+                status: 0,
+                tid: 0,
+                immediate: true,
+                amsdu: false,
+                window: HALF_WINDOW,
+                timeout_tu: 0,
+            }
+        )
     );
 
     assert!(matches!(

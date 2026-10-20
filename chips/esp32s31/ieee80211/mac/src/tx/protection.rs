@@ -34,10 +34,7 @@
 
 use core::num::NonZeroU16;
 
-use oer_espressif_ieee80211_policy::he_txop::{
-    EspressifHeTxopRtsBudget, maximum_unprotected_apep_bytes,
-};
-use oer_ieee80211_upper_mac::protection as portable;
+use oer_ieee80211_port::{backend::BackendTxProfile, backend_protection as portable};
 use oer_ieee80211_wire::{
     phy::PhyRate,
     protection::{ErpProtection, HtProtectionMode},
@@ -127,11 +124,11 @@ impl HeTxopRtsRule {
     /// `oer_espressif_ieee80211_policy::he_txop::maximum_unprotected_apep_bytes`,
     /// recovered from complete
     /// `libpp.a[if_hwctrl.o]::ic_set_he_rts_threshold_bytes_tab`.
-    pub fn maximum_unprotected_apep_bytes(self, rate: HeRate) -> u16 {
+    pub fn maximum_unprotected_apep_bytes<X: BackendTxProfile>(self, rate: HeRate) -> u16 {
         let PhyRate::He(rate) = TxPhyRate::He(rate).phy_rate() else {
             unreachable!("an S31 HE rate is a portable HE rate");
         };
-        maximum_unprotected_apep_bytes(self.threshold.portable(), self.padding.portable(), rate)
+        X::maximum_unprotected_apep_bytes(self.threshold.portable(), self.padding.portable(), rate)
     }
 }
 
@@ -212,7 +209,6 @@ pub struct RtsLengthThreshold(u16);
 impl RtsLengthThreshold {
     /// Complete `lmacInit` stores 0x092a at `lmacConfMib+0x16`; complete
     /// `lmacIsLongFrame` requests RTS for a longer individual PSDU.
-    pub const VENDOR_DEFAULT: Self = Self(0x092a);
 
     pub const fn new(bytes: u16) -> Self {
         Self(bytes)
@@ -351,23 +347,25 @@ impl TxProtectionDecision {
 
 /// BSS requirements plus the local length threshold for one transmitter.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct WifiTxProtectionPolicy {
+pub struct WifiTxProtectionPolicy<X: BackendTxProfile> {
     bss: BssProtection,
     rts_length_threshold: Option<RtsLengthThreshold>,
+    profile: core::marker::PhantomData<X>,
 }
 
-impl Default for WifiTxProtectionPolicy {
+impl<X: BackendTxProfile> Default for WifiTxProtectionPolicy<X> {
     fn default() -> Self {
-        Self::new(Some(RtsLengthThreshold::VENDOR_DEFAULT))
+        Self::new(Some(RtsLengthThreshold::new(X::RTS_THRESHOLD_BYTES)))
     }
 }
 
-impl WifiTxProtectionPolicy {
+impl<X: BackendTxProfile> WifiTxProtectionPolicy<X> {
     /// A transmitter outside any BSS, with its local length threshold.
     pub const fn new(rts_length_threshold: Option<RtsLengthThreshold>) -> Self {
         Self {
             bss: BssProtection::UNPROTECTED,
             rts_length_threshold,
+            profile: core::marker::PhantomData,
         }
     }
 
@@ -394,16 +392,6 @@ impl WifiTxProtectionPolicy {
         self.bss = BssProtection::UNPROTECTED;
     }
 
-    /// The portable policy of these facts.
-    fn portable(&self) -> portable::ProtectionPolicy {
-        let mut policy = portable::ProtectionPolicy::new(
-            self.rts_length_threshold
-                .map(|threshold| portable::RtsLengthThreshold::new(threshold.0)),
-        );
-        policy.install_bss(self.bss.portable());
-        policy
-    }
-
     /// Select the exchange and its control-frame rate for one PPDU.
     ///
     /// The single-MPDU length rule follows complete `lmacIsLongFrame`,
@@ -411,7 +399,10 @@ impl WifiTxProtectionPolicy {
     /// the length threshold, so an aggregate is protected only by the BSS
     /// rules.
     pub fn select(&self, ppdu: ProtectedPpdu) -> TxProtectionDecision {
-        let decision = self.portable().select(
+        let decision = X::select_protection(
+            self.bss.portable(),
+            self.rts_length_threshold
+                .map(|threshold| portable::RtsLengthThreshold::new(threshold.0)),
             portable::ProtectedPpdu {
                 rate: ppdu.rate.phy_rate(),
                 receiver: match ppdu.receiver {
@@ -423,7 +414,6 @@ impl WifiTxProtectionPolicy {
                     TxPsdu::Ampdu { length } => portable::TxPsdu::Ampdu { length },
                 },
             },
-            &EspressifHeTxopRtsBudget,
         );
         TxProtectionDecision {
             protection: match decision.protection {
@@ -447,30 +437,19 @@ impl WifiTxProtectionPolicy {
         receiver: TxReceiver,
         psdu: TxPsdu,
     ) -> TxProtectionDecision {
-        struct LegacyBudget;
-        impl portable::HeTxopRtsBudget for LegacyBudget {
-            fn max_unprotected_apep_bytes(
-                &self,
-                _: portable::HeTxopDurationRtsThreshold,
-                _: portable::HePacketPadding,
-                _: oer_ieee80211_wire::phy::HeRate,
-            ) -> u16 {
-                unreachable!("a legacy PPDU never asks for an HE TXOP budget")
-            }
-        }
-        let decision = self.portable().select(
-            portable::ProtectedPpdu {
-                rate: PhyRate::Legacy(rate.phy_rate()),
-                receiver: match receiver {
-                    TxReceiver::Individual => portable::TxReceiver::Individual,
-                    TxReceiver::Group => portable::TxReceiver::Group,
-                },
-                psdu: match psdu {
-                    TxPsdu::Mpdu { length } => portable::TxPsdu::Mpdu { length },
-                    TxPsdu::Ampdu { length } => portable::TxPsdu::Ampdu { length },
-                },
+        let decision = X::select_legacy_protection(
+            self.bss.portable(),
+            self.rts_length_threshold
+                .map(|threshold| portable::RtsLengthThreshold::new(threshold.0)),
+            rate.phy_rate(),
+            match receiver {
+                TxReceiver::Individual => portable::TxReceiver::Individual,
+                TxReceiver::Group => portable::TxReceiver::Group,
             },
-            &LegacyBudget,
+            match psdu {
+                TxPsdu::Mpdu { length } => portable::TxPsdu::Mpdu { length },
+                TxPsdu::Ampdu { length } => portable::TxPsdu::Ampdu { length },
+            },
         );
         TxProtectionDecision {
             protection: match decision.protection {
@@ -499,7 +478,12 @@ impl WifiTxProtectionPolicy {
     /// A caller that chooses the protection exchange itself, such as the
     /// lower-MAC port's single-attempt path, takes its control rate from here.
     pub fn control_rate(&self, data: TxPhyRate) -> LegacyRate {
-        LegacyRate::from_phy_rate(self.portable().control_rate(data.phy_rate()))
+        LegacyRate::from_phy_rate(X::control_rate(
+            self.bss.portable(),
+            self.rts_length_threshold
+                .map(|threshold| portable::RtsLengthThreshold::new(threshold.0)),
+            data.phy_rate(),
+        ))
     }
 }
 

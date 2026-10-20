@@ -6,7 +6,7 @@ use oer_esp32s31_ieee80211_driver::{
 use oer_time::Timer;
 
 pub fn submit<'core, 'foreign, 'slot, P: WifiTxPowerProfile, E: WifiTxEntropy, T: Timer, H: LowerMacHardware>(
-    core: &mut EnabledCore<LowerMacCore<'core, 'slot, P, E, T, 512>>,
+    core: &mut EnabledCore<LowerMacCore<'core, 'slot, oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile, P, E, T, 512>>,
     hardware: &mut H,
     own: FreeQueue<'core>,
     foreign: FreeQueue<'foreign>,

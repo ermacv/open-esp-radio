@@ -272,3 +272,31 @@ impl FrameControlFields {
         DsDirection::from_bytes([self.ds() as u8]).from_ds()
     }
 }
+
+/// Mark an encoded MPDU as a retransmission, preserving its other bits.
+/// A short frame is refused without mutation.
+pub fn set_retry_bit(mpdu: &mut [u8]) -> bool {
+    let Some(field) = mpdu.first_chunk_mut::<2>() else {
+        return false;
+    };
+    *field = FrameControlFields::from_bytes(*field)
+        .with_retry(true)
+        .to_bytes();
+    true
+}
+
+#[cfg(test)]
+mod retry_tests {
+    use super::*;
+    #[test]
+    fn marking_a_retry_preserves_other_frame_fields_and_refuses_a_short_header() {
+        let mut mpdu = [0x88, 0x01, 0x7b, 0xc2];
+        assert!(set_retry_bit(&mut mpdu));
+        assert_eq!(mpdu, [0x88, 0x09, 0x7b, 0xc2]);
+        assert!(set_retry_bit(&mut mpdu));
+        assert_eq!(mpdu, [0x88, 0x09, 0x7b, 0xc2]);
+        let mut short = [0x88];
+        assert!(!set_retry_bit(&mut short));
+        assert_eq!(short, [0x88]);
+    }
+}

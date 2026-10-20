@@ -41,12 +41,17 @@ impl Work for DuringPublication {
             ..
         } = resources;
         let air = phase.held.air.clone();
-        let mut key = Some(phase.station().install_pairwise_key(
-            &station_association,
-            slot,
-            IndividualAddress::new(PEER).unwrap(),
-            Ccmp128Key::new(&[7; 16]),
-        ));
+        let mut key = Some(
+            phase
+                .station()
+                .install_pairwise_key(
+                    &station_association,
+                    slot,
+                    IndividualAddress::new(PEER).unwrap(),
+                    Ccmp128Key::new(&[7; 16]),
+                )
+                .into_core_key(),
+        );
         air.hold_completion(WmmAccessCategory::BestEffort, true);
         air.answer(if matches!(self.0, Barrier::GateAck) {
             AirAnswer::Ack
@@ -74,7 +79,7 @@ impl Work for DuringPublication {
         if matches!(self.0, Barrier::RemoveKey) {
             phase
                 .station()
-                .remove_pairwise_key(station_association, key.take().unwrap());
+                .remove_pairwise_key(station_association, key.take().unwrap().into_backend());
         } else {
             phase.close_gate(gate);
         }

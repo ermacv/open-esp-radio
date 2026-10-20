@@ -183,7 +183,7 @@ fn a_trigger_flow_end_and_a_changed_count_are_distinct() {
 }
 
 #[test]
-fn helpers_select_compact_and_mark_retries() {
+fn helpers_select_and_compact_retries() {
     let sequences = [seq(7), seq(8), seq(9), seq(10)];
     let report = BlockAckReport {
         start_sequence: seq(7),
@@ -196,10 +196,6 @@ fn helpers_select_compact_and_mark_retries() {
     assert_eq!(compact(&mut kept, 0b1010), 2);
     assert_eq!(kept[..2], [seq(8), seq(10)]);
 
-    let mut mpdu = [0x88_u8, 0x01, 0, 0];
-    assert!(set_retry_bit(&mut mpdu));
-    assert_eq!(mpdu[1], 0x09);
-    assert!(!set_retry_bit(&mut [0x88]));
     assert_eq!(all_subframes(3), 0b111);
     assert_eq!(all_subframes(64), u64::MAX);
 }

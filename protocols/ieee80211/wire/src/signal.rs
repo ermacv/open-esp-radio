@@ -100,3 +100,120 @@ oer_wire::bitfield! {
         pub color, with_color: u8 = 0..6;
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ht_signal_round_trip_preserves_the_carried_length_and_other_flags() {
+        let carried = HtSig::from_bytes([0x87, 0x34, 0x12, 0x88]);
+        assert_eq!(carried.mcs(), 7);
+        assert!(carried.width40());
+        assert!(carried.aggregation());
+        assert!(carried.short_gi());
+        let changed = carried
+            .with_mcs(3)
+            .unwrap()
+            .with_width40(false)
+            .with_short_gi(false);
+        let decoded = HtSig::from_bytes(changed.to_bytes());
+        assert_eq!(decoded.mcs(), 3);
+        assert!(!decoded.width40());
+        assert!(!decoded.short_gi());
+        assert!(decoded.aggregation());
+        assert_eq!(decoded.to_bytes(), [0x03, 0x34, 0x12, 0x08]);
+        assert!(carried.with_mcs(128).is_err());
+        assert_eq!(carried.to_bytes(), [0x87, 0x34, 0x12, 0x88]);
+    }
+
+    #[test]
+    fn he_su_and_mu_round_trip_their_distinct_air_field_domains() {
+        for color in 0..64 {
+            let su = HeSuSigA1::from_bytes([0; 4])
+                .with_format(true)
+                .with_uplink(true)
+                .with_mcs(9)
+                .unwrap()
+                .with_bss_color(color)
+                .unwrap()
+                .with_spatial_reuse(10)
+                .unwrap()
+                .with_bandwidth(2)
+                .unwrap()
+                .with_guard_interval_and_ltf(3)
+                .unwrap();
+            let su = HeSuSigA1::from_bytes(su.to_bytes());
+            assert!(su.format());
+            assert!(su.uplink());
+            assert_eq!(
+                (
+                    su.mcs(),
+                    su.bss_color(),
+                    su.spatial_reuse(),
+                    su.bandwidth(),
+                    su.guard_interval_and_ltf()
+                ),
+                (9, color, 10, 2, 3)
+            );
+            let mu = HeMuSigA1::from_bytes([0; 4])
+                .with_bss_color(color)
+                .unwrap()
+                .with_bandwidth(7)
+                .unwrap()
+                .with_sig_b_mcs(5)
+                .unwrap()
+                .with_sig_b_compression(true)
+                .with_guard_interval_and_ltf(2)
+                .unwrap();
+            let mu = HeMuSigA1::from_bytes(mu.to_bytes());
+            assert_eq!(
+                (
+                    mu.bss_color(),
+                    mu.bandwidth(),
+                    mu.sig_b_mcs(),
+                    mu.guard_interval_and_ltf()
+                ),
+                (color, 7, 5, 2)
+            );
+            assert!(mu.sig_b_compression());
+        }
+        assert!(HeSuSigA1::from_bytes([0; 4]).with_bss_color(64).is_err());
+        assert!(HeMuSigA1::from_bytes([0; 4]).with_bandwidth(8).is_err());
+    }
+
+    #[test]
+    fn trigger_based_spatial_reuse_fields_survive_round_trip_independently() {
+        let sig = HeTriggerBasedSigA1::from_bytes([0; 4])
+            .with_format(true)
+            .with_bss_color(37)
+            .unwrap()
+            .with_bandwidth(1)
+            .unwrap()
+            .with_spatial_reuse0(3)
+            .unwrap()
+            .with_spatial_reuse1(6)
+            .unwrap()
+            .with_spatial_reuse2(9)
+            .unwrap()
+            .with_spatial_reuse3(12)
+            .unwrap();
+        let decoded = HeTriggerBasedSigA1::from_bytes(sig.to_bytes());
+        assert!(decoded.format());
+        assert_eq!((decoded.bss_color(), decoded.bandwidth()), (37, 1));
+        assert_eq!(
+            (
+                decoded.spatial_reuse0(),
+                decoded.spatial_reuse1(),
+                decoded.spatial_reuse2(),
+                decoded.spatial_reuse3()
+            ),
+            (3, 6, 9, 12)
+        );
+        assert!(sig.with_spatial_reuse2(16).is_err());
+        let tail = HeTriggerBasedSigA2::from_bytes([0; 2])
+            .with_txop(77)
+            .unwrap();
+        assert_eq!(HeTriggerBasedSigA2::from_bytes(tail.to_bytes()).txop(), 77);
+    }
+}

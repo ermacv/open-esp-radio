@@ -6,7 +6,7 @@ use oer_esp32s31_ieee80211_driver::{
 use oer_time::Timer;
 
 pub fn receive_only<'core, 'slot, P: WifiTxPowerProfile, E: WifiTxEntropy, T: Timer, H: LowerMacHardware, S: LowerMacSink<'core, 'slot, 512>>(
-    core: &mut LowerMacCore<'core, 'slot, P, E, T, 512>,
+    core: &mut LowerMacCore<'core, 'slot, oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile, P, E, T, 512>,
     hardware: &mut H,
     receive: ReceiveKeyHandle<'core>,
     transmit: KeyHandle<'core>,

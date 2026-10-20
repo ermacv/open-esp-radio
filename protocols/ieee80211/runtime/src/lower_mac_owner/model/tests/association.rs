@@ -34,12 +34,15 @@ impl Work for WirePeer {
         let [ptk_slot, unused_pairwise] = resources.station_pairwise;
         let [gtk_slot, unused_group] = resources.station_group;
         let material = core::array::from_fn(|i| i as u8);
-        let key = phase.station().install_pairwise_key(
-            &association,
-            ptk_slot,
-            IndividualAddress::new(ACCESS_POINT).unwrap(),
-            Ccmp128Key::new(&material),
-        );
+        let key = phase
+            .station()
+            .install_pairwise_key(
+                &association,
+                ptk_slot,
+                IndividualAddress::new(ACCESS_POINT).unwrap(),
+                Ccmp128Key::new(&material),
+            )
+            .into_core_key();
         phase.station().install_group_key(
             &association,
             resources.station_group_permission,
@@ -97,13 +100,16 @@ impl Work for WirePeer {
         let ap_association =
             ModelKeys::<AccessPoint>::begin_association(resources.access_point_association, ap_spp);
         let [ap_slot, _unused_ap_slot] = resources.access_point_pairwise;
-        let _ap_key = phase.access_point().install_pairwise_key(
-            &ap_association,
-            ap_slot,
-            IndividualAddress::new(STATION).unwrap(),
-            Ccmp128Key::new(&[0x48; 16]),
-        );
-        key.identity.0.last.set(0x0102_0304_0505);
+        let _ap_key = phase
+            .access_point()
+            .install_pairwise_key(
+                &ap_association,
+                ap_slot,
+                IndividualAddress::new(STATION).unwrap(),
+                Ccmp128Key::new(&[0x48; 16]),
+            )
+            .into_core_key();
+        key.set_last(0x0102_0304_0505);
         let mut body = alloc::vec![2, 0, 0, 0, 0, 3, 2, 0, 0, 0, 0, 1, 0, 12];
         body.extend_from_slice(b"\xaa\xaa\x03\0\0\0\x08\0test");
         let header = HeaderSpec::new(
@@ -144,7 +150,7 @@ impl Work for WirePeer {
                 buffer: small.remove(0),
                 frame,
                 body: Some(ModelBody(body)),
-                protection: TxProtection::Ccmp(&key),
+                protection: TxProtection::Ccmp(key.numbered()),
             },
         );
         let _returned = completion(phase, &mut terminal_access).await;
@@ -226,7 +232,9 @@ impl Work for WirePeer {
         else {
             panic!("GTK removal");
         };
-        phase.station().remove_pairwise_key(association, key);
+        phase
+            .station()
+            .remove_pairwise_key(association, key.into_backend());
         let Ok(Ok(LowerMacEvent::Terminal(LowerMacTerminal::KeyRemoved(Removed::Station(
             RemovedKey::Pairwise {
                 slot: pairwise,
@@ -246,12 +254,15 @@ impl Work for WirePeer {
         );
         let (start, pairwise, _rest) = ModelKeys::<Station>::split_vacant::<2>(vacant);
         let next = ModelKeys::<Station>::begin_association(start, Spp::NotNegotiated);
-        let _next_ptk = phase.station().install_pairwise_key(
-            &next,
-            pairwise,
-            IndividualAddress::new(ACCESS_POINT).unwrap(),
-            Ccmp128Key::new(&[3; 16]),
-        );
+        let _next_ptk = phase
+            .station()
+            .install_pairwise_key(
+                &next,
+                pairwise,
+                IndividualAddress::new(ACCESS_POINT).unwrap(),
+                Ccmp128Key::new(&[3; 16]),
+            )
+            .into_core_key();
     }
 }
 

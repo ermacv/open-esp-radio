@@ -71,7 +71,7 @@
 //! Preparation derives the Protected bit from [`TxProtection`] and
 //! leaves the 8 octets of its CCMP header after its MAC header; its length
 //! counts them, not the MIC. At the first transmission of the MPDU the
-//! backend writes the CCMP header with a new packet number of the key into
+//! backend writes the CCMP header with the caller-allocated packet number into
 //! the buffer, and the hardware appends the MIC; the plan's transmissions
 //! keep it. The completion gives the buffer back as `Sent`
 //! ([`TxBufferPool::Sent`]): a retransmission of the same MPDU
@@ -983,6 +983,41 @@ pub type InterfaceSubmission<'k, 'p, 'id, I> = AdmittedAttempt<
     <<I as InterfacePhase<'p, 'id>>::Types as PhaseTypes<'id>>::TicketPath,
 >;
 
+/// An installed TX key and the PN allocated by its core for one fresh MPDU.
+/// Retransmissions retain the encoded header rather than requesting another.
+pub struct NumberedKey<Key> {
+    /// The phase's borrowed hardware key authority.
+    pub key: Key,
+    /// Caller-allocated, checked 48-bit packet number.
+    pub packet_number: oer_ieee80211_wire::ccmp::CcmpPacketNumber,
+}
+
+/// Caller-owned numbering of an aggregate member; its encryption key comes
+/// from the builder. Checked placement refuses a mismatched protection class.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TxNumbering {
+    /// This subframe is unprotected.
+    Open,
+    /// The core allocated this PN under the builder's installed key.
+    Ccmp(oer_ieee80211_wire::ccmp::CcmpPacketNumber),
+}
+impl TxNumbering {
+    /// The supplied PN, absent for an open MPDU.
+    pub const fn packet_number(self) -> Option<oer_ieee80211_wire::ccmp::CcmpPacketNumber> {
+        match self {
+            Self::Open => None,
+            Self::Ccmp(pn) => Some(pn),
+        }
+    }
+    pub(crate) const fn matches(self, protection: crate::MpduProtection) -> bool {
+        matches!(
+            (self, protection),
+            (Self::Open, crate::MpduProtection::Open)
+                | (Self::Ccmp(_), crate::MpduProtection::Ccmp)
+        )
+    }
+}
+
 /// The MPDU supplied to a submission. Fresh memory travels with its
 /// `ClassFrame` and body; a `Sent` MPDU already owns that description and
 /// body, and receives only the new attempt's phase-bound rate plan.
@@ -996,7 +1031,7 @@ pub enum TxSource<B, N, F, O, Key, Plan> {
         /// External octets at the end of the MPDU, retained until its return.
         body: Option<O>,
         /// The role's TX protection; the encoded Protected bit is derived from it.
-        protection: TxProtection<Key>,
+        protection: TxProtection<NumberedKey<Key>>,
     },
     /// The same published MPDU again: keep its SN and PN, set Retry.
     Retransmission {
@@ -1278,7 +1313,8 @@ pub trait TxBufferPool<'id, C: TxBufferClass>: PhaseTypes<'id> {
 
     /// Prepare and append through this builder's receiver, TID and protection.
     /// Fresh sources have no protection field. Refusal returns both the entire
-    /// builder and the unchanged class-specific source, before admission or PN.
+    /// builder and unchanged class-specific source before admission,
+    /// retaining its caller-supplied PN.
     fn push_aggregate<'k, 'p, R, K, S>(
         operation: crate::CheckedPoolAggregate<'k, 'p, 'id, Self, C, R, K, S>,
     ) -> crate::AggregatePushResult<'k, 'p, 'id, Self, C, R, K, S>

@@ -1,7 +1,7 @@
-error[E0599]: no method named `open_gate` found for struct `oer_esp32s31_ieee80211_driver::lower_mac::EnabledCore<oer_esp32s31_ieee80211_driver::lower_mac::LowerMacCore<'core, 'slot, P, E, T, 512>, oer_esp32s31_ieee80211_driver::lower_mac::ClosingGate>` in the current scope
+error[E0599]: no method named `open_gate` found for struct `oer_esp32s31_ieee80211_driver::lower_mac::EnabledCore<oer_esp32s31_ieee80211_driver::lower_mac::LowerMacCore<'core, 'slot, EspressifBackendTxProfile, P, E, T, 512>, oer_esp32s31_ieee80211_driver::lower_mac::ClosingGate>` in the current scope
  --> tests/ui/gate_barrier.rs:6:24
   |
 6 |     let _result = core.open_gate(hardware, sink); // ui-error: E0599
-  |                        ^^^^^^^^^ method not found in `oer_esp32s31_ieee80211_driver::lower_mac::EnabledCore<oer_esp32s31_ieee80211_driver::lower_mac::LowerMacCore<'core, 'slot, P, E, T, 512>, oer_esp32s31_ieee80211_driver::lower_mac::ClosingGate>`
+  |                        ^^^^^^^^^ method not found in `oer_esp32s31_ieee80211_driver::lower_mac::EnabledCore<oer_esp32s31_ieee80211_driver::lower_mac::LowerMacCore<'core, 'slot, EspressifBackendTxProfile, P, E, T, 512>, oer_esp32s31_ieee80211_driver::lower_mac::ClosingGate>`
   |
-  = note: the method was found for `oer_esp32s31_ieee80211_driver::lower_mac::EnabledCore<oer_esp32s31_ieee80211_driver::lower_mac::LowerMacCore<'core, 'slot, P, E, T, BUFFER_SIZE, Path, TICKETS>, ClosedGate>`
+  = note: the method was found for `oer_esp32s31_ieee80211_driver::lower_mac::EnabledCore<oer_esp32s31_ieee80211_driver::lower_mac::LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>, ClosedGate>`

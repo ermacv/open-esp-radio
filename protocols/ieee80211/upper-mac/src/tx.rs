@@ -28,6 +28,10 @@
 //! completion back. A retransmission carries the bytes first encoded, so
 //! its sequence number and CCMP packet number repeat.
 
+use oer_ieee80211_port::backend::FrameClass;
+use oer_ieee80211_port::backend_protection::{
+    ProtectedPpdu, TxProtection, TxProtectionDecision, TxPsdu, TxReceiver,
+};
 use oer_ieee80211_port::{BlockAckReport, TxOperation, TxPower, TxResponse, TxStatus};
 use oer_ieee80211_port::{
     MacAmpduTxResult, MacAmpduTxStatus, MacIndividualRetries, MacTxResult, MacTxStatus,
@@ -40,13 +44,9 @@ use crate::{
         AmpduAttemptResult, AmpduRetryDecision, AmpduRetryError, AmpduRetryPolicy, AmpduRetryState,
         MAX_AMPDU_SUBFRAMES,
     },
-    protection::{
-        HeTxopRtsBudget, ProtectedPpdu, ProtectionPolicy, TxProtection, TxProtectionDecision,
-        TxPsdu, TxReceiver,
-    },
+    protection::{HeTxopRtsBudget, ProtectionPolicy},
     retry::{
-        FrameClass, MpduRetryState, RateLadder, RetryDecision, RetryLimits, RetryOutcome,
-        RetryStateError,
+        MpduRetryState, RateLadder, RetryDecision, RetryLimits, RetryOutcome, RetryStateError,
     },
 };
 
@@ -328,14 +328,14 @@ impl TxExchange {
     /// body held by the current phase.
     ///
     /// ```compile_fail,E0308
-    /// use oer_ieee80211_upper_mac::{TxExchange, TxRequest};
+    /// use oer_ieee80211_upper_mac::{TxExchange,TxRequest};
     /// fn borrowed_request(exchange: &TxExchange) -> &TxRequest {
     ///     exchange.request()
     /// }
     /// ```
     ///
     /// ```
-    /// use oer_ieee80211_upper_mac::{TxExchange, TxRequest};
+    /// use oer_ieee80211_upper_mac::{TxExchange,TxRequest};
     /// fn request_snapshot(exchange: &TxExchange) -> TxRequest {
     ///     exchange.request()
     /// }

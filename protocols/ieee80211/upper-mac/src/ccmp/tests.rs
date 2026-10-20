@@ -46,12 +46,12 @@ fn replay_admission_borrows_one_owner_and_cancel_does_not_advance_it() {
 
 #[test]
 fn transmit_packet_numbers_advance_by_their_step_from_a_new_key() {
-    let mut ordinary = CcmpTxPacketNumber::new(CcmpPacketNumberStep::ONE);
+    let ordinary = CcmpTxPacketNumber::new(CcmpPacketNumberStep::ONE);
     assert_eq!(ordinary.last(), CcmpPacketNumber::ZERO);
     assert_eq!(ordinary.allocate(), Ok(CcmpPacketNumber::new(1).unwrap()));
     assert_eq!(ordinary.allocate(), Ok(CcmpPacketNumber::new(2).unwrap()));
 
-    let mut stepped = CcmpTxPacketNumber::new(CcmpPacketNumberStep::new(3).unwrap());
+    let stepped = CcmpTxPacketNumber::new(CcmpPacketNumberStep::new(3).unwrap());
     assert_eq!(
         stepped.next_header(CcmpKeyId::new(1).unwrap()),
         Ok(CcmpHeader::new(
@@ -71,7 +71,7 @@ fn transmit_packet_numbers_advance_by_their_step_from_a_new_key() {
 #[test]
 fn transmit_packet_numbers_stop_at_the_48_bit_limit_without_wrapping() {
     let step = CcmpPacketNumberStep::new(3).unwrap();
-    let mut allocator = CcmpTxPacketNumber::continuing_after(
+    let allocator = CcmpTxPacketNumber::continuing_after(
         step,
         CcmpPacketNumber::new(CCMP_PACKET_NUMBER_MAX - 3).unwrap(),
     );
@@ -87,7 +87,7 @@ fn transmit_packet_numbers_stop_at_the_48_bit_limit_without_wrapping() {
         allocator.last(),
         CcmpPacketNumber::new(CCMP_PACKET_NUMBER_MAX).unwrap()
     );
-    let mut near = CcmpTxPacketNumber::continuing_after(
+    let near = CcmpTxPacketNumber::continuing_after(
         step,
         CcmpPacketNumber::new(CCMP_PACKET_NUMBER_MAX - 2).unwrap(),
     );
@@ -143,4 +143,39 @@ fn header_parse_and_replay_lanes_never_panic() {
 #[ignore = "the full run"]
 fn header_parse_and_replay_lanes_never_panic_full() {
     run(oer_ieee80211_wire::fuzz::FULL);
+}
+
+#[test]
+fn fresh_aggregate_pns_are_reserved_atomically_before_backend_handoff() {
+    for step in [1, 2, 255] {
+        let step = CcmpPacketNumberStep::new(step).unwrap();
+        for remaining in [0, 1] {
+            let last =
+                CcmpPacketNumber::new(CCMP_PACKET_NUMBER_MAX - u64::from(step.get()) * remaining)
+                    .unwrap();
+            let owner = CcmpTxPacketNumber::continuing_after(step, last);
+            for _ in 0..2 {
+                assert_eq!(
+                    owner.allocate_batch::<2>(),
+                    Err(CcmpTxPacketNumberError::Exhausted)
+                );
+                assert_eq!(
+                    owner.last(),
+                    last,
+                    "an unpublishable batch reserves no prefix"
+                );
+            }
+            if remaining == 1 {
+                assert_eq!(owner.allocate().unwrap().value(), CCMP_PACKET_NUMBER_MAX);
+            }
+            assert_eq!(owner.allocate(), Err(CcmpTxPacketNumberError::Exhausted));
+        }
+        let owner = CcmpTxPacketNumber::new(step);
+        assert_eq!(owner.allocate_batch::<0>(), Ok([]));
+        assert_eq!(owner.last(), CcmpPacketNumber::ZERO);
+        let [first, second] = owner.allocate_batch::<2>().unwrap();
+        assert_eq!(first.value(), u64::from(step.get()));
+        assert_eq!(second.value(), 2 * u64::from(step.get()));
+        assert_eq!(owner.allocate().unwrap().value(), 3 * u64::from(step.get()));
+    }
 }

@@ -1,10 +1,10 @@
 use super::*;
-use crate::rate::schedule::{RateScheduleKind, RateScheduleRef};
 use crate::tx::test_support::model_completion;
 use oer_espressif_ieee80211_policy::rate_control::{
     DEFAULT_CONTROL_SCHEDULE, HeLowMetricReportFeatures, StaLinkMetric,
     StaRateControlAssociationInput, StaRateControlPhy,
 };
+use oer_ieee80211_port::backend::RateScheduleKind;
 
 fn association(phy: StaRateControlPhy, p2p: bool) -> StaRateControlAssociation {
     StaRateControlAssociation::new(StaRateControlAssociationInput {
@@ -36,8 +36,14 @@ const HE20_POLICY: StaTxRatePolicy = StaTxRatePolicy {
 
 #[test]
 fn sta_tx_policy_joins_he_schedule_peer_ltf_and_ldpc() {
-    let rate =
-        HE20_POLICY.rate_for_schedule(RateScheduleRef::new(RateScheduleKind::Dot11Ax, 0).unwrap());
+    let rate = HE20_POLICY
+        .rate_for_schedule::<oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile>(
+            oer_espressif_ieee80211_policy::rate_schedule::rate_schedule(
+                RateScheduleKind::Dot11Ax,
+                0,
+            )
+            .unwrap(),
+        );
     assert_eq!(
         rate,
         TxPhyRate::He(HeRate::ldpc(
@@ -57,7 +63,7 @@ fn sta_tx_policy_keeps_hil_override_and_unknown_arena_explicit() {
         ..HE20_POLICY
     };
     assert_eq!(
-        ht40.rate_for_schedule(RateScheduleRef::new(RateScheduleKind::Dot11N, 1).unwrap()),
+        ht40.rate_for_schedule::<oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile>(oer_espressif_ieee80211_policy::rate_schedule::rate_schedule(RateScheduleKind::Dot11N, 1).unwrap()),
         TxPhyRate::Ht(HtRate::new(
             HtMcs::Mcs7,
             HtGuardInterval::Short400Ns,
@@ -69,7 +75,7 @@ fn sta_tx_policy_keeps_hil_override_and_unknown_arena_explicit() {
         ..ht40
     };
     assert_eq!(
-        fixed_mcs.rate_for_schedule(RateScheduleRef::new(RateScheduleKind::Dot11N, 1).unwrap()),
+        fixed_mcs.rate_for_schedule::<oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile>(oer_espressif_ieee80211_policy::rate_schedule::rate_schedule(RateScheduleKind::Dot11N, 1).unwrap()),
         TxPhyRate::Ht(HtRate::new(
             HtMcs::Mcs3,
             HtGuardInterval::Short400Ns,
@@ -77,7 +83,7 @@ fn sta_tx_policy_keeps_hil_override_and_unknown_arena_explicit() {
         ))
     );
     assert_eq!(
-        ht40.rate_for_schedule(RateScheduleRef::new(RateScheduleKind::Lora, 0).unwrap()),
+        ht40.rate_for_schedule::<oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile>(oer_espressif_ieee80211_policy::rate_schedule::rate_schedule(RateScheduleKind::Lora, 0).unwrap()),
         TxPhyRate::Ht(HtRate::new(
             HtMcs::Mcs7,
             HtGuardInterval::Short400Ns,
@@ -89,14 +95,22 @@ fn sta_tx_policy_keeps_hil_override_and_unknown_arena_explicit() {
             high_throughput_enabled: false,
             ..HE20_POLICY
         }
-        .rate_for_schedule(RateScheduleRef::new(RateScheduleKind::Dot11Ax, 0).unwrap()),
+        .rate_for_schedule::<oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile>(
+            oer_espressif_ieee80211_policy::rate_schedule::rate_schedule(
+                RateScheduleKind::Dot11Ax,
+                0
+            )
+            .unwrap()
+        ),
         TxPhyRate::Legacy(LegacyRate::Ofdm54M)
     );
 }
 
 #[test]
 fn sta_tx_policy_fixed_ht_matrix_preserves_negotiated_width() {
-    let schedule = RateScheduleRef::new(RateScheduleKind::Dot11N, 1).unwrap();
+    let schedule =
+        oer_espressif_ieee80211_policy::rate_schedule::rate_schedule(RateScheduleKind::Dot11N, 1)
+            .unwrap();
     for association_phy in [PhyMode::Ht20, PhyMode::Ht40] {
         let width = match association_phy {
             PhyMode::Ht20 => HtChannelWidth::Mhz20,
@@ -115,7 +129,7 @@ fn sta_tx_policy_fixed_ht_matrix_preserves_negotiated_width() {
                     ..HE20_POLICY
                 };
                 assert_eq!(
-                    policy.rate_for_schedule(schedule),
+                    policy.rate_for_schedule::<oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile>(schedule),
                     TxPhyRate::Ht(HtRate::new(mcs, guard_interval, width))
                 );
             }
@@ -133,7 +147,7 @@ fn sta_tx_policy_never_publishes_unadvertised_ht_short_gi() {
         ..HE20_POLICY
     };
     assert_eq!(
-        policy.rate_for_schedule(RateScheduleRef::new(RateScheduleKind::Dot11N, 1).unwrap()),
+        policy.rate_for_schedule::<oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile>(oer_espressif_ieee80211_policy::rate_schedule::rate_schedule(RateScheduleKind::Dot11N, 1).unwrap()),
         TxPhyRate::Ht(HtRate::new(
             HtMcs::Mcs7,
             HtGuardInterval::Long800Ns,
@@ -152,7 +166,9 @@ fn sta_tx_policy_never_publishes_unadvertised_ht_short_gi() {
 
 #[test]
 fn sta_tx_policy_fixed_he_su_matrix_preserves_peer_coding() {
-    let schedule = RateScheduleRef::new(RateScheduleKind::Dot11Ax, 0).unwrap();
+    let schedule =
+        oer_espressif_ieee80211_policy::rate_schedule::rate_schedule(RateScheduleKind::Dot11Ax, 0)
+            .unwrap();
     let gi_ltf_values = [
         HeGuardIntervalAndLtf::OneLtf800Ns,
         HeGuardIntervalAndLtf::TwoLtf800Ns,
@@ -168,7 +184,7 @@ fn sta_tx_policy_fixed_he_su_matrix_preserves_peer_coding() {
                 ..HE20_POLICY
             };
             assert_eq!(
-                policy.rate_for_schedule(schedule),
+                policy.rate_for_schedule::<oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile>(schedule),
                 TxPhyRate::He(HeRate::ldpc(mcs, guard_interval_and_ltf))
             );
         }
@@ -177,7 +193,9 @@ fn sta_tx_policy_fixed_he_su_matrix_preserves_peer_coding() {
 
 #[test]
 fn sta_tx_policy_dcm_override_is_capability_gated_and_preserves_coding() {
-    let schedule = RateScheduleRef::new(RateScheduleKind::Dot11Ax, 0).unwrap();
+    let schedule =
+        oer_espressif_ieee80211_policy::rate_schedule::rate_schedule(RateScheduleKind::Dot11Ax, 0)
+            .unwrap();
     let gi = HeGuardIntervalAndLtf::TwoLtf800Ns;
     let bpsk = HeDcmRate::bcc(crate::tx::HeBccDcmMcs::Mcs0, gi);
     let bpsk_policy = StaTxRatePolicy {
@@ -187,7 +205,7 @@ fn sta_tx_policy_dcm_override_is_capability_gated_and_preserves_coding() {
     };
     assert!(bpsk_policy.he_dcm_override_is_supported());
     assert_eq!(
-        bpsk_policy.rate_for_schedule(schedule),
+        bpsk_policy.rate_for_schedule::<oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile>(schedule),
         TxPhyRate::He(bpsk.rate())
     );
     assert!(!bpsk.rate().is_ldpc());
@@ -199,7 +217,7 @@ fn sta_tx_policy_dcm_override_is_capability_gated_and_preserves_coding() {
         ..HE20_POLICY
     };
     assert!(!unsupported_qpsk.he_dcm_override_is_supported());
-    let TxPhyRate::He(fallback) = unsupported_qpsk.rate_for_schedule(schedule) else {
+    let TxPhyRate::He(fallback) = unsupported_qpsk.rate_for_schedule::<oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile>(schedule) else {
         panic!("HE association retains the ordinary HE schedule");
     };
     assert!(!fallback.is_dcm());
@@ -209,7 +227,7 @@ fn sta_tx_policy_dcm_override_is_capability_gated_and_preserves_coding() {
         ..unsupported_qpsk
     };
     assert_eq!(
-        supported_qpsk.rate_for_schedule(schedule),
+        supported_qpsk.rate_for_schedule::<oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile>(schedule),
         TxPhyRate::He(qpsk.rate())
     );
 
@@ -227,7 +245,7 @@ fn sta_tx_policy_dcm_override_is_capability_gated_and_preserves_coding() {
     };
     assert!(with_ldpc.he_dcm_override_is_supported());
     assert_eq!(
-        with_ldpc.rate_for_schedule(schedule),
+        with_ldpc.rate_for_schedule::<oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile>(schedule),
         TxPhyRate::He(ldpc_16qam.rate())
     );
 }
@@ -244,11 +262,11 @@ fn association_owns_ordinary_ampdu_and_completion_rate_transitions() {
     });
     assert_eq!(
         association.tx_rate(HE20_POLICY),
-        HE20_POLICY.rate_for_schedule(association.current_schedule())
+        HE20_POLICY.rate_for_schedule::<oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile>(association.current_schedule())
     );
     assert_eq!(
         association.ampdu_tx_rate(HE20_POLICY),
-        HE20_POLICY.rate_for_schedule(association.current_ampdu_schedule().unwrap())
+        HE20_POLICY.rate_for_schedule::<oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile>(association.current_ampdu_schedule().unwrap())
     );
     association.observe_tx_completion(
         model_completion(crate::tx::TxCookie(1), 0, 0).with_ack_snr_encoded_model(0xeb),
@@ -258,25 +276,41 @@ fn association_owns_ordinary_ampdu_and_completion_rate_transitions() {
 
 #[test]
 fn basic_ofdm_control_schedule_walks_six_then_one_megabit_within_thirty_two_publications() {
-    use crate::{
-        rate::schedule::schedule_publication_limit,
-        tx::{TxPhyRate, runtime::select_schedule_retry_rate},
-    };
+    use crate::tx::TxPhyRate;
     let schedule = association(StaRateControlPhy::He, false).control_schedule();
     for attempt in 0..7 {
         assert_eq!(
-            select_schedule_retry_rate(schedule, attempt),
+            oer_ieee80211_upper_mac::backend_retry::select_schedule_retry_rate::<
+                oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile,
+                crate::tx::TxPhyRate,
+            >(schedule, attempt),
             Ok(TxPhyRate::Legacy(LegacyRate::Ofdm6M))
         );
     }
     assert_eq!(
-        select_schedule_retry_rate(schedule, 7),
+        oer_ieee80211_upper_mac::backend_retry::select_schedule_retry_rate::<
+            oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile,
+            crate::tx::TxPhyRate,
+        >(schedule, 7),
         Ok(TxPhyRate::Legacy(LegacyRate::Dsss1MLong))
     );
-    assert_eq!(schedule_publication_limit(schedule), 32);
-    assert_eq!(schedule_publication_limit(DEFAULT_CONTROL_SCHEDULE), 32);
     assert_eq!(
-        select_schedule_retry_rate(DEFAULT_CONTROL_SCHEDULE, 0),
+        oer_espressif_ieee80211_policy::rate_schedule::schedule_publication_limit(schedule),
+        32
+    );
+    assert_eq!(
+        oer_espressif_ieee80211_policy::rate_schedule::schedule_publication_limit(
+            DEFAULT_CONTROL_SCHEDULE
+        ),
+        32
+    );
+    assert_eq!(
+        oer_ieee80211_upper_mac::backend_retry::select_schedule_retry_rate::<
+            oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile,
+            crate::tx::TxPhyRate,
+        >(DEFAULT_CONTROL_SCHEDULE, 0),
         Ok(TxPhyRate::Legacy(LegacyRate::Dsss1MLong))
     );
 }
+
+use oer_espressif_ieee80211_policy::rate_control::StaRateControlAssociation;

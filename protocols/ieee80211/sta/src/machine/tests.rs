@@ -406,7 +406,7 @@ impl<'id> World<'id> {
             listen_interval: StationListenInterval::new(10).unwrap(),
             phy: PhyMode::Legacy,
             nonce,
-            he_packet_padding: |_| oer_ieee80211_upper_mac::HePacketPadding::None,
+            he_packet_padding: |_| oer_ieee80211_port::backend_protection::HePacketPadding::None,
         };
         let resources = StationResources {
             configure: permissions.configure,

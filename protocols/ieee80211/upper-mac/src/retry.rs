@@ -19,16 +19,8 @@
 //! Backend faults are carried by Poisoned and do not enter this policy.
 
 use oer_ieee80211_port::TxStatus;
+use oer_ieee80211_port::backend::{FrameClass, RetryCounters};
 use oer_ieee80211_wire::phy::PhyRate;
-
-/// Which retry counter a collision of the frame advances: IEEE 802.11
-/// classifies a frame as long when it is longer than dot11RTSThreshold.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub enum FrameClass {
-    #[default]
-    Short,
-    Long,
-}
 
 /// How an ACK timeout is counted.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -59,28 +51,6 @@ impl RetryLimits {
         long: 4,
         ack_failure: AckFailureAccounting::ByFrameClass,
     };
-}
-
-/// The counters of one frame's failed attempts.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct RetryCounters {
-    /// Unacknowledged transmissions of the frame itself.
-    pub mpdu: u8,
-    pub short: u8,
-    pub long: u8,
-}
-
-impl RetryCounters {
-    /// Failures that walk the rate ladder: every ACK timeout and every
-    /// failure the short counter records. A long-frame collision leaves the
-    /// rate where it is.
-    pub const fn ladder_step(self) -> u8 {
-        if self.mpdu > self.short {
-            self.mpdu
-        } else {
-            self.short
-        }
-    }
 }
 
 /// The rates of one frame's attempts: the peer's rate state.

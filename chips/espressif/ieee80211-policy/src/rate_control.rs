@@ -13,7 +13,7 @@
 
 use core::num::{NonZeroU16, NonZeroU32};
 
-use crate::rate_schedule::{RateScheduleKind, RateScheduleRef, schedule_state};
+use crate::rate_schedule::schedule_state;
 use oer_ieee80211_port::{BlockAckSnr, LinkMetric, SnrSample};
 use oer_ieee80211_upper_mac::rate_control::{
     AmpduUnavailable, BlockAckTally, MpduOutcome, NegotiatedLegacyRates, RateControl, RatePeer,
@@ -208,7 +208,7 @@ impl AmpduRateControlState {
     ) -> Option<Self> {
         let ampdu_index = ordinary_schedule_index.min(Self::VENDOR_AMPDU_FLOOR_INDEX);
         Some(Self {
-            current_schedule: RateScheduleRef::new(schedule_kind, ampdu_index)?,
+            current_schedule: crate::rate_schedule::rate_schedule(schedule_kind, ampdu_index)?,
             highest_schedule_index,
             attempted_mpdu: 0,
             acknowledged_mpdu: 0,
@@ -319,7 +319,7 @@ impl AmpduRateControlState {
                 && self.current_schedule.index() < Self::VENDOR_AMPDU_FLOOR_INDEX
             {
                 let from = self.current_schedule;
-                if let Some(to) = from.advance() {
+                if let Some(to) = crate::rate_schedule::offset_schedule(from, 1) {
                     self.current_schedule = to;
                     self.last_lower_us = now_us;
                     self.clear_after_schedule_change();
@@ -353,7 +353,9 @@ impl AmpduRateControlState {
             && vendor_duration(now_us, self.last_promote_us) > self.promote_cooldown_us
         {
             let from = self.current_schedule;
-            if let Some(to) = RateScheduleRef::new(from.kind(), from.index().wrapping_sub(1)) {
+            if let Some(to) =
+                crate::rate_schedule::rate_schedule(from.kind(), from.index().wrapping_sub(1))
+            {
                 self.current_schedule = to;
                 self.last_promote_us = now_us;
                 self.promotion_probe = true;
@@ -491,9 +493,9 @@ impl RateControlState {
 
         let next_index = u16::from(self.current_schedule.reference.index()) + 1;
         let selected = if u16::from(self.maximum_schedule_index) < next_index {
-            self.legacy_schedule.offset(self.maximum_schedule_index)
+            crate::rate_schedule::offset_schedule(self.legacy_schedule, self.maximum_schedule_index)
         } else {
-            self.current_schedule.reference.advance()
+            crate::rate_schedule::offset_schedule(self.current_schedule.reference, 1)
         };
         let schedule = match selected {
             Some(schedule) => ScheduleSelection::Selected(schedule),
@@ -507,37 +509,7 @@ impl RateControlState {
 ///
 /// Fields are private so callers cannot construct a combination that the
 /// complete blob policy never emits. Use [`beamforming_report_rate`] or
-/// [`beamforming_report_rate_for_metric`] to obtain a value.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct BeamformingReportRate {
-    mode: u8,
-    rate: u16,
-    dcm: bool,
-    ersu: bool,
-    ersu_ack: bool,
-}
-
-impl BeamformingReportRate {
-    pub const fn signal_mode(self) -> u8 {
-        self.mode
-    }
-
-    pub const fn rate_code(self) -> u16 {
-        self.rate
-    }
-
-    pub const fn dcm(self) -> bool {
-        self.dcm
-    }
-
-    pub const fn extended_range_single_user(self) -> bool {
-        self.ersu
-    }
-
-    pub const fn extended_range_ack(self) -> bool {
-        self.ersu_ack
-    }
-}
+use oer_ieee80211_port::backend::BeamformingReportRate;
 
 /// Recovered PHY-family discriminator stored in a rate-control record, and
 /// its rate-code callbacks: the Espressif family's policy data.
@@ -896,8 +868,9 @@ macro_rules! literal_schedule {
     ($kind:expr, $index:expr) => {{
         const KIND: RateScheduleKind = $kind;
         const INDEX: u8 = $index;
-        const _: [(); 1] = [(); ((INDEX as usize) < KIND.record_count()) as usize];
-        const SCHEDULE: RateScheduleRef = match RateScheduleRef::new(KIND, INDEX) {
+        const _: [(); 1] =
+            [(); ((INDEX as usize) < crate::rate_schedule::record_count(KIND)) as usize];
+        const SCHEDULE: RateScheduleRef = match crate::rate_schedule::rate_schedule(KIND, INDEX) {
             Some(schedule) => schedule,
             None => panic!("a literal schedule is outside its arena"),
         };
@@ -1227,29 +1200,11 @@ pub const fn beamforming_report_rate_for_metric(
     he_feature_90: bool,
 ) -> BeamformingReportRate {
     if metric > 13 {
-        BeamformingReportRate {
-            mode: 1,
-            rate: 16,
-            dcm: false,
-            ersu: false,
-            ersu_ack: false,
-        }
+        BeamformingReportRate::new(1, 16, false, false, false)
     } else if he_feature_8f && he_feature_90 {
-        BeamformingReportRate {
-            mode: 2,
-            rate: 16,
-            dcm: true,
-            ersu: true,
-            ersu_ack: true,
-        }
+        BeamformingReportRate::new(2, 16, true, true, true)
     } else {
-        BeamformingReportRate {
-            mode: 0,
-            rate: 11,
-            dcm: false,
-            ersu: false,
-            ersu_ack: false,
-        }
+        BeamformingReportRate::new(0, 11, false, false, false)
     }
 }
 
@@ -1442,3 +1397,21 @@ impl EspressifRateControl {
 
 #[cfg(test)]
 mod tests;
+
+use oer_ieee80211_port::backend::{RateScheduleKind, RateScheduleRef};
+
+impl oer_ieee80211_port::backend::BackendStationRateControl for StaRateControlAssociation {
+    type Profile = crate::backend::EspressifBackendTxProfile;
+    fn current_schedule(&self) -> RateScheduleRef {
+        self.current_schedule()
+    }
+    fn current_ampdu_schedule(&self) -> Option<RateScheduleRef> {
+        self.current_ampdu_schedule()
+    }
+    fn update_ack_snr(&mut self, sample: i8) {
+        self.update_ack_snr(sample)
+    }
+    fn beamforming_report(&self) -> BeamformingReportRate {
+        self.beamforming_report()
+    }
+}

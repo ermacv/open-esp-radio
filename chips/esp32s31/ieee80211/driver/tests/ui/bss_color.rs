@@ -7,7 +7,7 @@ use oer_ieee80211_port::BssColor;
 use oer_time::Timer;
 
 pub fn install<P: WifiTxPowerProfile, E: WifiTxEntropy, T: Timer>(
-    core: &mut LowerMacCore<'_, '_, P, E, T, 512>,
+    core: &mut LowerMacCore<'_, '_, oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile, P, E, T, 512>,
     color: BssColor,
 ) {
     #[cfg(ui_reject)]

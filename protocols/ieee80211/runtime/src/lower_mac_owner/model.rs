@@ -571,7 +571,6 @@ pub struct KeyIdentity(Rc<KeyInstall>);
 struct KeyInstall {
     index: u8,
     key_id: u8,
-    last: Cell<u64>,
     active: Cell<bool>,
     group_role: Option<VifRole>,
     role: VifRole,
@@ -605,7 +604,6 @@ impl KeyIdentity {
         Self(Rc::new(KeyInstall {
             index,
             key_id,
-            last: Cell::new(0),
             active: Cell::new(true),
             group_role: None,
             role,
@@ -625,7 +623,6 @@ impl KeyIdentity {
         let identity = Self(Rc::new(KeyInstall {
             index,
             key_id: key_id.get(),
-            last: Cell::new(0),
             active: Cell::new(true),
             group_role: Some(role),
             role,
@@ -636,28 +633,6 @@ impl KeyIdentity {
         }));
         air.install_material(&identity, key);
         identity
-    }
-    fn check_packet_numbers(&self, count: usize) -> Result<(), ModelFault> {
-        let count = u64::try_from(count).map_err(|_| ModelFault)?;
-        self.0
-            .last
-            .get()
-            .checked_add(count)
-            .filter(|pn| *pn <= oer_ieee80211_wire::ccmp::CCMP_PACKET_NUMBER_MAX)
-            .ok_or(ModelFault)?;
-        Ok(())
-    }
-
-    fn allocate(&self) -> Result<u64, ModelFault> {
-        let next = self
-            .0
-            .last
-            .get()
-            .checked_add(1)
-            .filter(|pn| *pn <= oer_ieee80211_wire::ccmp::CCMP_PACKET_NUMBER_MAX)
-            .ok_or(ModelFault)?;
-        self.0.last.set(next);
-        Ok(next)
     }
 }
 
@@ -696,6 +671,7 @@ pub struct ModelMpdu<'id, D = ModelBody> {
     // consuming the terminal moves both into the returned Sent owner.
     body: Option<D>,
     published: Option<PublishedMpdu>,
+    packet_number: Option<oer_ieee80211_wire::ccmp::CcmpPacketNumber>,
 }
 
 struct PublishedMpdu {
@@ -736,7 +712,7 @@ impl<D> ModelMpduExecution<'_, '_, D> {
                     .ok_or(ModelFault)?
                     .1;
                 let (header, _) = tail.split_first_chunk_mut::<8>().ok_or(ModelFault)?;
-                let pn = key.allocate()?;
+                let pn = mpdu.packet_number.ok_or(ModelFault)?.value();
                 *header = ccmp_header(pn, key.0.key_id);
                 Some(pn)
             }
@@ -763,6 +739,7 @@ impl<'id, D> TxMpdu for ModelMpdu<'id, D> {
             response,
             body,
             published,
+            packet_number: _,
         } = self;
         match (buffer, published) {
             (
@@ -808,9 +785,8 @@ impl<'id, D> TxMpdu for ModelMpdu<'id, D> {
     }
 }
 impl<'id, D> ModelMpdu<'id, D> {
-    /// Validate all fallible geometry before any PN or publication state changes.
-    /// Only a fresh protected MPDU consumes a new PN; Sent retries retain theirs.
-    fn preflight(&self, protected: bool) -> Result<usize, ModelFault> {
+    /// Validate geometry before publication; fresh PNs were allocated by the caller.
+    fn preflight(&self, protected: bool) -> Result<(), ModelFault> {
         let memory = self.buffer.memory();
         memory
             .split_at_checked(self.layout.mpdu_len())
@@ -827,10 +803,8 @@ impl<'id, D> ModelMpdu<'id, D> {
                 .1
                 .first_chunk::<8>()
                 .ok_or(ModelFault)?;
-            Ok(1)
-        } else {
-            Ok(0)
         }
+        Ok(())
     }
 
     fn from_sent(
@@ -845,6 +819,7 @@ impl<'id, D> ModelMpdu<'id, D> {
             response,
             body: None,
             published: None,
+            packet_number: None,
         }
     }
     fn on_air(
@@ -2109,16 +2084,9 @@ impl<D> ModelSubframesExecution<'_, '_, D> {
         key: Option<&KeyIdentity>,
         rate: PhyRate,
     ) -> Result<Vec<AirFrame>, ModelFault> {
-        let fresh = self.subframes.iter().try_fold(0_usize, |count, subframe| {
-            count
-                .checked_add(subframe.mpdu.preflight(key.is_some())?)
-                .ok_or(ModelFault)
-        })?;
-        if let Some(key) = key {
-            key.check_packet_numbers(fresh)?;
+        for subframe in &*self.subframes {
+            subframe.mpdu.preflight(key.is_some())?;
         }
-        // This driver step is synchronous and exclusively owns PN allocation.
-        // No other publication can consume the checked range before this loop.
         let mut frames = Vec::with_capacity(self.subframes.len());
         for subframe in &mut *self.subframes {
             subframe.mpdu.execution().publish(role, key)?;
@@ -3816,9 +3784,12 @@ fn prepare_model<
                 },
                 layout,
             ) = fresh.into_parts();
-            let key = match protection {
-                TxProtection::Open => None,
-                TxProtection::Ccmp(key) => Some(R::tx_identity(&key)),
+            let (key, packet_number) = match protection {
+                TxProtection::Open => (None, None),
+                TxProtection::Ccmp(numbered) => (
+                    Some(R::tx_identity(&numbered.key)),
+                    Some(numbered.packet_number),
+                ),
             };
             let plan = stages(frame.frame());
             let response = ResponsePolicy::of_frame(frame.frame());
@@ -3829,6 +3800,7 @@ fn prepare_model<
                     response,
                     body,
                     published: None,
+                    packet_number,
                 },
                 plan,
                 key,
@@ -4193,6 +4165,7 @@ fn push_model<
         CheckedSubframe::Fresh(fresh) => {
             let (
                 FreshSubframe {
+                    numbering,
                     buffer,
                     frame,
                     body,
@@ -4204,6 +4177,7 @@ fn push_model<
                     reason: PreparationError::BlockAckWindow,
                     aggregate,
                     subframe: SubframeSource::Fresh {
+                        numbering,
                         buffer,
                         frame,
                         body,
@@ -4217,6 +4191,7 @@ fn push_model<
                     response: ResponsePolicy::Ack,
                     body,
                     published: None,
+                    packet_number: numbering.packet_number(),
                 },
                 bit,
             )

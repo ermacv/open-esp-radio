@@ -205,7 +205,7 @@ fn exhausted_pairwise_slot_retains_hardware_clear_authority() {
         occupied: true,
         ..Hardware::default()
     };
-    let mut packet_numbers = oer_ieee80211_upper_mac::ccmp::CcmpTxPacketNumber::continuing_after(
+    let packet_numbers = oer_ieee80211_upper_mac::ccmp::CcmpTxPacketNumber::continuing_after(
         oer_espressif_ieee80211_policy::ccmp::TX_PACKET_NUMBER_STEP,
         oer_ieee80211_wire::ccmp::CcmpPacketNumber::new((1 << 48) - 1).unwrap(),
     );

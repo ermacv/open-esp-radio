@@ -1,5 +1,4 @@
 use super::*;
-use crate::rate_schedule::{RateScheduleKind, RateScheduleRef};
 
 fn tally(attempted: u16, acknowledged: u16) -> BlockAckTally {
     BlockAckTally::new(NonZeroU16::new(attempted).unwrap(), acknowledged).unwrap()
@@ -16,11 +15,11 @@ fn state() -> RateControlState {
         retry_state_1e: 3,
         maximum_schedule_index: 5,
         current_schedule: RateScheduleState {
-            reference: RateScheduleRef::new(RateScheduleKind::Dot11N, 2).unwrap(),
+            reference: crate::rate_schedule::rate_schedule(RateScheduleKind::Dot11N, 2).unwrap(),
             retry_limit: 7,
             adaptive: 1,
         },
-        legacy_schedule: RateScheduleRef::new(RateScheduleKind::Dot11B, 0).unwrap(),
+        legacy_schedule: crate::rate_schedule::rate_schedule(RateScheduleKind::Dot11B, 0).unwrap(),
     }
 }
 
@@ -63,7 +62,7 @@ fn association_installs_selected_schedule_as_owned_runtime_state() {
     });
     assert_eq!(
         association.current_schedule(),
-        RateScheduleRef::new(RateScheduleKind::Dot11Ax, 1).unwrap()
+        crate::rate_schedule::rate_schedule(RateScheduleKind::Dot11Ax, 1).unwrap()
     );
     assert_eq!(
         association.runtime.current_schedule.retry_limit,
@@ -74,11 +73,13 @@ fn association_installs_selected_schedule_as_owned_runtime_state() {
     let update = association.update_tx_per(5);
     assert_eq!(
         update.schedule,
-        ScheduleSelection::Selected(RateScheduleRef::new(RateScheduleKind::Dot11Ax, 2).unwrap())
+        ScheduleSelection::Selected(
+            crate::rate_schedule::rate_schedule(RateScheduleKind::Dot11Ax, 2).unwrap()
+        )
     );
     assert_eq!(
         association.current_schedule(),
-        RateScheduleRef::new(RateScheduleKind::Dot11Ax, 2).unwrap()
+        crate::rate_schedule::rate_schedule(RateScheduleKind::Dot11Ax, 2).unwrap()
     );
 }
 
@@ -122,7 +123,9 @@ fn pressure_threshold_clears_state_and_advances_schedule() {
     let update = value.update_tx_per(5);
     assert_eq!(
         update.schedule,
-        ScheduleSelection::Selected(RateScheduleRef::new(RateScheduleKind::Dot11N, 3).unwrap())
+        ScheduleSelection::Selected(
+            crate::rate_schedule::rate_schedule(RateScheduleKind::Dot11N, 3).unwrap()
+        )
     );
     assert_eq!(value.retry_pressure, 0);
     assert_eq!(value.weighted_retries, 0);
@@ -139,10 +142,13 @@ fn last_schedule_falls_back_to_the_legacy_table() {
     let mut value = state();
     value.retry_pressure = 6;
     value.maximum_schedule_index = 2;
-    value.current_schedule.reference = RateScheduleRef::new(RateScheduleKind::Dot11N, 2).unwrap();
+    value.current_schedule.reference =
+        crate::rate_schedule::rate_schedule(RateScheduleKind::Dot11N, 2).unwrap();
     assert_eq!(
         value.update_tx_per(5).schedule,
-        ScheduleSelection::Selected(RateScheduleRef::new(RateScheduleKind::Dot11B, 2).unwrap())
+        ScheduleSelection::Selected(
+            crate::rate_schedule::rate_schedule(RateScheduleKind::Dot11B, 2).unwrap()
+        )
     );
 }
 
@@ -151,7 +157,8 @@ fn invalid_schedule_transition_is_explicit() {
     let mut value = state();
     value.retry_pressure = 6;
     value.maximum_schedule_index = 6;
-    value.current_schedule.reference = RateScheduleRef::new(RateScheduleKind::Dot11N, 13).unwrap();
+    value.current_schedule.reference =
+        crate::rate_schedule::rate_schedule(RateScheduleKind::Dot11N, 13).unwrap();
     assert_eq!(value.update_tx_per(5).schedule, ScheduleSelection::Invalid);
 }
 
@@ -167,33 +174,15 @@ fn byte_pressure_wrap_is_preserved() {
 fn beamforming_policy_has_three_exact_modes() {
     assert_eq!(
         beamforming_report_rate(40, 20, true, true),
-        BeamformingReportRate {
-            mode: 1,
-            rate: 16,
-            dcm: false,
-            ersu: false,
-            ersu_ack: false,
-        }
+        BeamformingReportRate::new(1, 16, false, false, false)
     );
     assert_eq!(
         beamforming_report_rate(20, 20, true, true),
-        BeamformingReportRate {
-            mode: 2,
-            rate: 16,
-            dcm: true,
-            ersu: true,
-            ersu_ack: true,
-        }
+        BeamformingReportRate::new(2, 16, true, true, true)
     );
     assert_eq!(
         beamforming_report_rate(20, 20, true, false),
-        BeamformingReportRate {
-            mode: 0,
-            rate: 11,
-            dcm: false,
-            ersu: false,
-            ersu_ack: false,
-        }
+        BeamformingReportRate::new(0, 11, false, false, false)
     );
 }
 
@@ -532,7 +521,7 @@ fn association(phy: StaRateControlPhy, p2p: bool) -> StaRateControlAssociation {
 
 #[test]
 fn non_data_frames_use_the_association_control_schedule() {
-    let basic_ofdm = RateScheduleRef::new(RateScheduleKind::BasicOfdm, 0).unwrap();
+    let basic_ofdm = crate::rate_schedule::rate_schedule(RateScheduleKind::BasicOfdm, 0).unwrap();
     for phy in [
         StaRateControlPhy::Dot11G,
         StaRateControlPhy::Ht,
@@ -546,7 +535,7 @@ fn non_data_frames_use_the_association_control_schedule() {
     );
     assert_eq!(
         association(StaRateControlPhy::Dot11G, true).control_schedule(),
-        RateScheduleRef::new(RateScheduleKind::P2pDot11G, 7).unwrap()
+        crate::rate_schedule::rate_schedule(RateScheduleKind::P2pDot11G, 7).unwrap()
     );
     assert_eq!(
         association(StaRateControlPhy::He, true).control_schedule(),
@@ -584,7 +573,7 @@ mod seam {
 
     use super::{NonZeroU16, tally};
 
-    use super::super::{EspressifRateControl, RateScheduleKind, RateScheduleRef, schedule_state};
+    use super::super::{EspressifRateControl, RateScheduleKind, schedule_state};
 
     /// An HT20 peer, with or without the 20 MHz short guard
     /// interval.
@@ -624,7 +613,9 @@ mod seam {
         let without = EspressifRateControl::for_peer((), &ht20_peer(false), metric(60)).decode;
         let mut short = 0;
         for index in 0..14 {
-            let Some(schedule) = RateScheduleRef::new(RateScheduleKind::Dot11N, index) else {
+            let Some(schedule) =
+                crate::rate_schedule::rate_schedule(RateScheduleKind::Dot11N, index)
+            else {
                 continue;
             };
             let raw = crate::rate_code::phy_rate(
@@ -798,7 +789,10 @@ fn phy_mode_selection_indices_stay_inside_their_tables() {
                             selection.fallback,
                             selection.legacy,
                         ] {
-                            assert!(usize::from(schedule.index()) < schedule.kind().record_count());
+                            assert!(
+                                usize::from(schedule.index())
+                                    < crate::rate_schedule::record_count(schedule.kind())
+                            );
                         }
                         inputs += 1;
                     }
@@ -827,7 +821,7 @@ fn the_last_record_of_every_table_is_the_slowest() {
         RateScheduleKind::P2pDot11N,
     ];
     let kbps = |kind, index| {
-        let code = schedule_state(RateScheduleRef::new(kind, index).unwrap()).rate;
+        let code = schedule_state(crate::rate_schedule::rate_schedule(kind, index).unwrap()).rate;
         match code {
             0x29 => return 250,
             0x2a => return 500,
@@ -843,7 +837,7 @@ fn the_last_record_of_every_table_is_the_slowest() {
         .unwrap_or_else(|| panic!("{kind:?} record {index} code {code:#x} has no rate"))
     };
     for kind in KINDS {
-        let last = (kind.record_count() - 1) as u8;
+        let last = (crate::rate_schedule::record_count(kind) - 1) as u8;
         for index in 0..last {
             assert!(
                 kbps(kind, last) <= kbps(kind, index),
@@ -852,3 +846,5 @@ fn the_last_record_of_every_table_is_the_slowest() {
         }
     }
 }
+
+use oer_ieee80211_port::backend::{RateScheduleKind, RateScheduleRef};

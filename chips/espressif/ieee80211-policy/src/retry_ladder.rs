@@ -10,6 +10,7 @@
 //! (`oer-ieee80211-upper-mac::retry`) consumes it through
 //! [`RateLadder`].
 
+use oer_ieee80211_port::backend::RateScheduleKind;
 use oer_ieee80211_upper_mac::RateLadder;
 use oer_ieee80211_wire::phy::{
     FecCoding, HeGiLtf, HeRate, HtRate, LegacyRate, PhyRate, PpduBandwidth,
@@ -18,8 +19,7 @@ use oer_ieee80211_wire::phy::{
 use crate::{
     rate_code::{legacy_code, legacy_rate, phy_rate},
     rate_schedule::{
-        RateScheduleKind, RateScheduleRef, dot11g_schedule_for_legacy_rate,
-        schedule_publication_limit, schedule_rate_after_failures,
+        dot11g_schedule_for_legacy_rate, schedule_publication_limit, schedule_rate_after_failures,
     },
 };
 
@@ -60,7 +60,7 @@ pub fn ht_retry_rate(initial: HtRate, failed_attempts: u8) -> Option<PhyRate> {
         true if mcs == 7 => 0,
         true => return None,
     };
-    let schedule = RateScheduleRef::new(RateScheduleKind::Dot11N, index)?;
+    let schedule = crate::rate_schedule::rate_schedule(RateScheduleKind::Dot11N, index)?;
     let code = schedule_rate_after_failures(schedule, failed_attempts)?;
     phy_rate(
         RateScheduleKind::Dot11N,
@@ -93,7 +93,7 @@ pub fn he_retry_rate(initial: HeRate, failed_attempts: u8) -> Option<PhyRate> {
         HeGiLtf::Ltf2xGi1600Ns => 10_u8.wrapping_sub(mcs),
         HeGiLtf::Ltf1xGi800Ns | HeGiLtf::Ltf2xGi800Ns | HeGiLtf::Ltf4xGi3200Ns => return None,
     };
-    let schedule = RateScheduleRef::new(RateScheduleKind::Dot11Ax, index)?;
+    let schedule = crate::rate_schedule::rate_schedule(RateScheduleKind::Dot11Ax, index)?;
     let code = schedule_rate_after_failures(schedule, failed_attempts)?;
     let selected = phy_rate(
         RateScheduleKind::Dot11Ax,

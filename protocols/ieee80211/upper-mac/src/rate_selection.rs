@@ -13,8 +13,8 @@ use oer_ieee80211_port::{Band, RetryPlan, RxMetadata, SingleOutcome};
 use oer_ieee80211_wire::phy::{LegacyRate, PhyRate};
 use oer_time::Instant;
 
-use crate::BasicRates;
 use crate::rate_control::RatePeer;
+use oer_ieee80211_port::backend_protection::BasicRates;
 
 /// Lowest management/group rate admitted by the band and BSS basic set.
 ///
@@ -115,6 +115,9 @@ pub enum FrameRates {
 /// `A`: a selection that needs what `M` or `A` does not guarantee (a signal
 /// measurement, an ACK's SNR) is not one for that port.
 pub trait RateSelection<M: RxMetadata, A> {
+    /// Packet-number step of this transmit policy, retained by each installed key.
+    fn packet_number_step(&self) -> oer_ieee80211_wire::ccmp::CcmpPacketNumberStep;
+
     /// The retry plan of the next frame for `frame`, in the rates the
     /// port's channel carries: `carried` turns a rate into the phase's, or
     /// refuses it. The selection's own rule decides what a refused stage

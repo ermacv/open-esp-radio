@@ -2,6 +2,7 @@
 //! to this lab profile; a board and the production driver have no default cap.
 
 use crate::w1;
+use oer_ieee80211_port::backend_protection::BasicRates;
 
 pub const IMAGE: &str = "w2";
 pub const LAB_POWER_CAP_DBM: i8 = 10;
@@ -43,7 +44,7 @@ mod tests {
 
 use oer_hil_lab::air::{Frame, acknowledged_probes};
 use oer_ieee80211_port::Band;
-use oer_ieee80211_upper_mac::{BasicRates, rate_selection::management_rate};
+use oer_ieee80211_upper_mac::rate_selection::management_rate;
 use oer_ieee80211_wire::channel::{WifiChannel, WifiChannelWidth};
 use oer_lab_router::mac::Mac;
 use oer_radio_regulatory::{Country, Initiate, PowerLimits, RegulatoryDomain};

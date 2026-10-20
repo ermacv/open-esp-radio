@@ -67,13 +67,17 @@ back; its operations are synchronous and never wait:
   and Block Ack window refusals.
   It retains the phase, install, role and key borrow. `ClassSizedFrame`
   carries a portable machine's size proof until the service adds phase-bound
-  rates, without rechecking the class. `TxProtection::{Open, Ccmp(key)}` in
+  rates, without rechecking the class. `TxProtection::{Open, Ccmp(NumberedKey { key, packet_number })}` in
   the fresh source is the sole source of the Protected bit. It derives
   `MpduProtection` for the layout; callers cannot change a header's protection
   independently through a public setter. Station TX keys
   are pairwise; AP TX may use pairwise or group keys. The portable
   `MpduLayout` constructor checks CCMP room and tail-body overlap once,
-  before any header/body write, admission or PN allocation.
+  before any header/body write or admission. The core reserves a PN before
+  handoff; cancelled preparation may leave a gap, and a reserved PN is never
+  allocated to another MPDU. Fresh aggregate subframes carry `TxNumbering`
+  independently; a numbering/protection mismatch returns every owner before
+  writing memory.
   `PhaseRate` retains the capabilities, generative installation brand and
   enabled phase loan through NoAck, legacy/A-MPDU rates, retry plans and
   prepared frames. Two installations of the same backend cannot exchange
@@ -318,16 +322,17 @@ wire encoding obtains selected capability elements through `AssociationPhy`.
 ## Above the port
 
 What a backend does not report in its `HardwareServices` is software above
-the port, written once in portable packages for every backend, with two
-exceptions the backend always does below the port without reporting them:
-the contention draw of its queues and the numbering of protected MPDUs.
+the port, written once in portable packages for every backend, with one
+exception: the backend draws contention for its hardware queues. The core
+allocates protected MPDU packet numbers and the backend formats the supplied
+PN with the installed key ID.
 
 | Work | Owner |
 | --- | --- |
 | The retry plan of an MPDU and the rate control that chooses it | `oer-ieee80211-upper-mac` |
 | Which A-MPDU subframes the next aggregate resends after a `BlockAckReport` (`BlockAckReport::acknowledges`), the BlockAckReq, aging | `oer-ieee80211-upper-mac` `ampdu` |
 | RTS/CTS or CTS-to-self and the control-frame rate | `oer-ieee80211-upper-mac` `protection` |
-| Receive replay (transmit packet numbers are the backend's, below the port, with `ccmp::CcmpTxPacketNumber`) | `oer-ieee80211-upper-mac` `ccmp` |
+| Transmit packet-number allocation and receive replay | `oer-ieee80211-upper-mac` `ccmp` |
 | Receive Block Ack reordering | `oer-ieee80211-upper-mac` `block_ack::reorder` |
 | The station's lifecycle, from its scan to its disconnect | `oer-ieee80211-sta` `machine` |
 
@@ -359,3 +364,13 @@ and returns each raw slot with its installed key; it carries no station-cell
 wrapper. Station returns removed slots to its declared free pool. Its full
 pool proves that no group install or removal remains outstanding. Pending
 installation tokens carry the protocol key ID and connection epoch.
+
+
+`backend::BackendTxProfile` is selected statically by the image/runtime. Its
+associated retry owner and functions expose core algorithms without a trait
+object or a stored profile. Immutable rate records, retry/protection values
+and completion facts cross this boundary; rate ladders and vendor tables
+remain in the core profile. `backend_aggregate` carries detached BlockAck
+facts and aggregate retry commands. `espressif` contains LR and ESP-NOW PHY
+requests and static admitted-packet handoffs; ESP-NOW peer/protocol state
+remains in softmac.

@@ -5,7 +5,7 @@ use oer_esp32s31_ieee80211_mac::tx::TxHardware;
 use oer_time::Timer;
 
 pub fn start<P: WifiTxPowerProfile, E: WifiTxEntropy, T: Timer, H: TxHardware>(
-    mut idle: OrdinaryTxIdle<'_, '_, P, E, T, 64>,
+    mut idle: OrdinaryTxIdle<'_, '_, oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile, P, E, T, 64>,
     hardware: &mut H,
     plan: OrdinaryTxPlan,
 ) {

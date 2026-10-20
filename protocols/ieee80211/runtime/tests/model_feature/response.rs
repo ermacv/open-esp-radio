@@ -298,6 +298,7 @@ impl PortBody<ModelBackend> for Case {
                     TxProtection::Open,
                 );
                 let source = SubframeSource::Fresh {
+                    numbering: oer_ieee80211_port::TxNumbering::Open,
                     buffer,
                     frame: ClassSubframe::new(
                         SizedFrame::new(

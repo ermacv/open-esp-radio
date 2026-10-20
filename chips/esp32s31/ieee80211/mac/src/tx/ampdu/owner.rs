@@ -18,7 +18,7 @@ use oer_esp32s31_hal::types::{
     MacHeTxProgram, MacHtTxProgram, MacTxDetachOutcome, MacTxDetachReason,
 };
 #[cfg(any(test, feature = "test-support", oer_probe))]
-use oer_ieee80211_upper_mac::ampdu::set_retry_bit;
+use oer_ieee80211_wire::frame::set_retry_bit;
 
 use crate::tx::{
     CompletionObservation, HeAmpduTxConfig, HtAmpduTxConfig, LegacyTxQueue, TxCookie, TxDmaState,
@@ -280,11 +280,14 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
     /// reorder these ownership edges or calculate BlockAck against a stale
     /// descriptor count.
     #[cfg(any(test, feature = "test-support", oer_probe))]
-    pub fn observe_retry_completion<H: HtAmpduHardware, const CAPACITY: usize>(
+    pub fn observe_retry_completion<
+        H: HtAmpduHardware,
+        R: oer_ieee80211_port::backend_aggregate::BackendAmpduRetry,
+    >(
         &mut self,
         hardware: &mut H,
         cookie: TxCookie,
-        retry: &mut crate::tx::runtime::AmpduRetryState<CAPACITY>,
+        retry: &mut R,
         now: oer_time::Instant,
         block_ack_operational: bool,
         admitted: impl Fn(u8) -> Option<oer_time::Instant>,
@@ -298,8 +301,13 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
         self.detach_completed(hardware, cookie)?;
         let subframes = self.frame_count();
         let first_sequence = retry.current_first_sequence();
-        let decision =
-            retry.observe(completion, subframes, now, block_ack_operational, admitted)?;
+        let decision = retry.observe(
+            completion.into(),
+            subframes,
+            now,
+            block_ack_operational,
+            admitted,
+        )?;
         Ok(Some(RetainedAmpduRetryCompletion {
             completion,
             first_sequence,

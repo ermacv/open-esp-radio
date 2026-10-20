@@ -4,8 +4,7 @@
 [lower-MAC port](../port/README.md): one port submission is one hardware
 transmission attempt, and everything a backend does not report as a
 `HardwareServices` offload is decided here, once for every backend, except
-the contention draw of its queues and the numbering of protected MPDUs,
-which every backend does below the port without reporting them. The
+the contention draw, which each backend does for its queues below the port. The
 package is sans-IO: completions and the radio time enter as values, attempt
 plans and reports leave as values, and nothing waits.
 
@@ -116,16 +115,21 @@ values and retain no executor, HAL or chip dependency.
 ## What stays outside
 
 The planner holds no frame bytes. The caller encodes each MPDU's sequence
-number; the backend writes its CCMP packet number below the port at the first
-protected transmission, with an `oer-ieee80211-upper-mac::ccmp::CcmpTxPacketNumber`
-of its key, and a retransmission sends the same MPDU, so it keeps both. The
+number and reserves its CCMP PN with the key's unique `ccmp::CcmpTxPacketNumber`.
+The backend formats that supplied PN at the first protected transmission;
+a retransmission sends the same MPDU and keeps both. `allocate_batch`
+reserves all fresh subframe numbers atomically before an aggregate handoff. The
 receive reorder buffer is `block_ack::reorder::RxReorderBuffer`. Adaptive
 rate control, which chooses a frame's first rate from the reports, is the
 caller's.
 
-The ESP32-S31 MAC (`oer-esp32s31-ieee80211-mac`) runs its ordinary retry,
-A-MPDU retry and protection owners through these algorithms with adapters
-from its chip rate and completion types.
+`backend_retry` owns ordinary retry state over a static port profile and
+portable rate/queue traits. `backend_aggregate` owns bounded aggregate retry
+state; `block_ack::batch` returns each retained MPDU exactly once, and
+`block_ack::banks` pools receive reorder state across interfaces. The
+Espressif profile implements `port::backend::BackendTxProfile` here and in
+`oer-espressif-ieee80211-policy`; the image/runtime composes it with the S31
+hardware backend. The chip crates consume only port/wire values.
 
 ## Known defects
 

@@ -117,6 +117,7 @@
 //! S31 abort path needs the queue's hardware timeout edge. A-MPDU transmission
 //! and access-point TBTT schedules are not implemented yet.
 
+use oer_ieee80211_port::backend::BackendTxProfile;
 use oer_ieee80211_wire::address::AddressFlags;
 use oer_ieee80211_wire::frame::{FrameControlFields, FrameType};
 
@@ -660,6 +661,7 @@ pub struct LowerMacConfig {
 pub struct LowerMacCoreParts<
     'core,
     'slot,
+    X: BackendTxProfile,
     P,
     E,
     T,
@@ -668,7 +670,7 @@ pub struct LowerMacCoreParts<
     const TICKETS: usize = 4,
 > {
     authority: CoreAuthority<'core, Path, TICKETS>,
-    tx: OrdinaryTxIdleOwner<'slot, P, E, T, BUFFER_SIZE>,
+    tx: OrdinaryTxIdleOwner<'slot, X, P, E, T, BUFFER_SIZE>,
     config: LowerMacConfig,
     coex: &'slot dyn RadioCoexPriorities,
     keys: KeyBank<'core, Path, TICKETS>,
@@ -716,7 +718,7 @@ struct RxBlockAckEntry {
 }
 
 /// What one queue's attempt holds.
-enum Work<'slot, const BUFFER_SIZE: usize> {
+enum Work<'slot, X: BackendTxProfile, const BUFFER_SIZE: usize> {
     /// An MPDU in its slot, not yet published: the transmit gate is
     /// closed.
     Held {
@@ -724,13 +726,13 @@ enum Work<'slot, const BUFFER_SIZE: usize> {
         plan: OrdinaryTxPlan,
         single: SingleAttempt,
     },
-    Published(QueuedSingleAttempt<'slot, BUFFER_SIZE>),
+    Published(QueuedSingleAttempt<'slot, X, BUFFER_SIZE>),
     Quarantined {
         _owner: QuarantinedSingleAttempt<'slot, BUFFER_SIZE>,
     },
 }
 
-impl<const BUFFER_SIZE: usize> Work<'_, BUFFER_SIZE> {
+impl<X: BackendTxProfile, const BUFFER_SIZE: usize> Work<'_, X, BUFFER_SIZE> {
     const fn held(&self) -> bool {
         matches!(self, Self::Held { .. })
     }
@@ -746,13 +748,13 @@ impl<const BUFFER_SIZE: usize> Work<'_, BUFFER_SIZE> {
 }
 
 /// The attempt occupying one queue.
-struct Attempt<'core, 'slot, const BUFFER_SIZE: usize, Path: PoolPath> {
+struct Attempt<'core, 'slot, X: BackendTxProfile, const BUFFER_SIZE: usize, Path: PoolPath> {
     queue: FreeQueue<'core, Path>,
     role: VifRole,
     admission: TxAdmission<'core, Path>,
     /// The rate of its publication, which its completion reports.
     rate: PhyRate,
-    work: Work<'slot, BUFFER_SIZE>,
+    work: Work<'slot, X, BUFFER_SIZE>,
 }
 
 /// The running station TBTT schedule.
@@ -787,7 +789,7 @@ impl StationTbtt {
 /// use oer_esp32s31_ieee80211_driver::lower_mac::LowerMacCore;
 /// use oer_esp32s31_ieee80211_driver::ordinary_tx::{WifiTxEntropy, WifiTxPowerProfile};
 /// fn borrow_tx<P: WifiTxPowerProfile, E: WifiTxEntropy, T: oer_time::Timer, const N: usize>(
-///     core: &LowerMacCore<'_, '_, P, E, T, N>,
+///     core: &LowerMacCore<'_, '_, X, P, E, T, N>,
 /// ) {
 ///     core.tx();
 /// }
@@ -801,8 +803,8 @@ impl StationTbtt {
 /// # fn panic(_: &core::panic::PanicInfo) -> ! { loop {} }
 /// use oer_esp32s31_ieee80211_driver::lower_mac::LowerMacCore;
 /// use oer_esp32s31_ieee80211_driver::ordinary_tx::{WifiTxEntropy, WifiTxPowerProfile};
-/// fn deadline<P: WifiTxPowerProfile, E: WifiTxEntropy, T: oer_time::Timer, const N: usize>(
-///     core: &LowerMacCore<'_, '_, P, E, T, N>,
+/// fn deadline<X: oer_ieee80211_port::backend::BackendTxProfile, P: WifiTxPowerProfile, E: WifiTxEntropy, T: oer_time::Timer, const N: usize>(
+///     core: &LowerMacCore<'_, '_, X, P, E, T, N>,
 /// ) -> Option<oer_time::Instant> {
 ///     core.next_deadline()
 /// }
@@ -810,6 +812,7 @@ impl StationTbtt {
 pub struct LowerMacCore<
     'core,
     'slot,
+    X: BackendTxProfile,
     P,
     E,
     T,
@@ -818,7 +821,7 @@ pub struct LowerMacCore<
     const TICKETS: usize = 4,
 > {
     authority: CoreAuthority<'core, Path, TICKETS>,
-    tx: OrdinaryTxOwner<'slot, P, E, T, BUFFER_SIZE>,
+    tx: OrdinaryTxOwner<'slot, X, P, E, T, BUFFER_SIZE>,
     config: LowerMacConfig,
     fault: Option<LowerMacFault>,
     /// The configured channel; the radio is tuned to it unless a retune is
@@ -836,14 +839,23 @@ pub struct LowerMacCore<
     access_point_tsf: oer_esp32s31_ieee80211_mac::ap_tsf::AccessPointTsf,
     /// The attempt of each ordinary queue, by its hardware index
     /// ([`LegacyTxQueue::hardware_index`]).
-    queues: [Option<Attempt<'core, 'slot, BUFFER_SIZE, Path>>; LOWER_MAC_TX_QUEUES],
+    queues: [Option<Attempt<'core, 'slot, X, BUFFER_SIZE, Path>>; LOWER_MAC_TX_QUEUES],
     /// The coexistence priorities the shared radio's owner sets: the beacon
     /// window's and a connection frame's.
     coex: &'slot dyn RadioCoexPriorities,
 }
 
-impl<'core, 'slot, P, E, T, const BUFFER_SIZE: usize, Path: PoolPath, const TICKETS: usize>
-    LowerMacCore<'core, 'slot, P, E, T, BUFFER_SIZE, Path, TICKETS>
+impl<
+    'core,
+    'slot,
+    X: BackendTxProfile,
+    P,
+    E,
+    T,
+    const BUFFER_SIZE: usize,
+    Path: PoolPath,
+    const TICKETS: usize,
+> LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>
 where
     P: WifiTxPowerProfile,
     E: WifiTxEntropy,
@@ -854,7 +866,7 @@ where
     /// frames ask for the air at its priorities.
     pub fn new(
         authority: CoreAuthority<'core, Path, TICKETS>,
-        tx: OrdinaryTxIdleOwner<'slot, P, E, T, BUFFER_SIZE>,
+        tx: OrdinaryTxIdleOwner<'slot, X, P, E, T, BUFFER_SIZE>,
         config: LowerMacConfig,
         coex: &'slot dyn RadioCoexPriorities,
     ) -> DisabledCore<Self> {
@@ -882,7 +894,7 @@ where
     /// A disabled core over the owners a dismantled core returned: the
     /// state of the core they came from is gone, as at a radio start.
     pub fn from_parts(
-        parts: LowerMacCoreParts<'core, 'slot, P, E, T, BUFFER_SIZE, Path, TICKETS>,
+        parts: LowerMacCoreParts<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>,
     ) -> DisabledCore<Self> {
         let LowerMacCoreParts {
             authority,
@@ -954,7 +966,7 @@ where
         self.queues[usize::from(queue.hardware_index())].is_some()
     }
 
-    fn attempts(&self) -> impl Iterator<Item = &Attempt<'core, 'slot, BUFFER_SIZE, Path>> {
+    fn attempts(&self) -> impl Iterator<Item = &Attempt<'core, 'slot, X, BUFFER_SIZE, Path>> {
         self.queues.iter().flatten()
     }
 

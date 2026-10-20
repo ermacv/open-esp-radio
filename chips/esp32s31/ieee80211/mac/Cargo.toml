@@ -9,7 +9,7 @@ description = "Allocation-free source-owned ESP32-S31 Wi-Fi MAC primitives"
 
 [features]
 # Synthetic Wi-Fi observations and DMA bindings for explicit test builds.
-test-support = ["oer-esp32s31-hal/test-support", "oer-esp32s31-hal/test-support", "oer-interrupt-table/host-signal"]
+test-support = ["oer-esp32s31-hal/test-support", "oer-interrupt-table/host-signal"]
 default = []
 
 [dependencies]
@@ -17,17 +17,17 @@ bytemuck = { version = "1.25.2", default-features = false, features = ["derive",
 oer-time = { path = "../../../../portable/time" }
 oer-memory = { path = "../../../../portable/memory" }
 oer-esp32s31-hal = { path = "../../hal" }
-oer-espressif-ieee80211-policy = { path = "../../../espressif/ieee80211-policy" }
 oer-ieee80211-port = { path = "../../../../protocols/ieee80211/port" }
 oer-ieee80211-wire = { path = "../../../../protocols/ieee80211/wire" }
-oer-ieee80211-softmac = { path = "../../../../protocols/ieee80211/softmac" }
-oer-ieee80211-upper-mac = { path = "../../../../protocols/ieee80211/upper-mac" }
 oer-interrupt-table = { path = "../../../../portable/interrupt-table" }
 pin-project = "1.1.13"
 subtle = { version = "2.6.1", default-features = false }
 zeroize = { version = "1.9.0", default-features = false }
 
 [dev-dependencies]
+oer-espressif-ieee80211-policy = { path = "../../../espressif/ieee80211-policy" }
+oer-ieee80211-upper-mac = { path = "../../../../protocols/ieee80211/upper-mac" }
+
 oer-interrupt-table = { path = "../../../../portable/interrupt-table", features = ["host-signal"] }
 oer-esp32s31-hal = { path = "../../hal", features = ["test-support"] }
 oer-ieee80211-wire = { path = "../../../../protocols/ieee80211/wire", features = ["test-support"] }

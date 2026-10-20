@@ -1,6 +1,31 @@
-use super::*;
-use crate::tx::test_support::model_completion;
-use crate::tx::{
+use oer_esp32s31_ieee80211_mac::{
+    edca::*,
+    tx::{runtime::*, *},
+};
+use oer_espressif_ieee80211_policy::{
+    backend::{EspressifAmpduRetryState, EspressifBackendTxProfile},
+    lmac,
+};
+use oer_ieee80211_port::backend::*;
+use oer_ieee80211_port::backend_aggregate::*;
+use oer_ieee80211_wire::{
+    qos::{WmmAccessCategory, WmmUserPriority},
+    sequence::SequenceNumber,
+};
+type WifiTxRuntimePolicy =
+    oer_esp32s31_ieee80211_mac::tx::runtime::WifiTxRuntimePolicy<EspressifBackendTxProfile>;
+type OrdinaryMpduRetryState = oer_ieee80211_upper_mac::backend_retry::BackendMpduRetryState<
+    EspressifBackendTxProfile,
+    TxPhyRate,
+    LegacyTxQueue,
+>;
+type AmpduRetryState<const C: usize> = EspressifAmpduRetryState<C>;
+const VENDOR_SHORT_RETRY_LIMIT: u8 = lmac::SHORT_RETRY_LIMIT;
+const VENDOR_LONG_RETRY_LIMIT: u8 = lmac::LONG_RETRY_LIMIT;
+const VENDOR_AMPDU_MSDU_LIFETIME_MICROS: u32 = lmac::AMPDU_MSDU_LIFETIME_MICROS;
+
+use oer_esp32s31_ieee80211_mac::tx::test_support::model_completion;
+use oer_esp32s31_ieee80211_mac::tx::{
     HtGuardInterval, HtMcs, HtRate, LegacyRate, TxCompletion, TxCookie,
     ampdu::{HtAmpduTxCompletion, HtBlockAckObservation},
 };
@@ -343,8 +368,8 @@ fn ordinary_retry_limit_collision_and_abort_restore_the_minimum_cw() {
 
 #[test]
 fn ordinary_he_retries_walk_the_dot11ax_record() {
-    use crate::rx::HeGuardIntervalAndLtf;
-    use crate::tx::{HeMcs, HeRate};
+    use oer_esp32s31_ieee80211_mac::rx::HeGuardIntervalAndLtf;
+    use oer_esp32s31_ieee80211_mac::tx::{HeMcs, HeRate};
     let counters = |failures| RetryCounters {
         mpdu: failures,
         short: 0,
@@ -354,21 +379,39 @@ fn ordinary_he_retries_walk_the_dot11ax_record() {
         HeMcs::Mcs9,
         HeGuardIntervalAndLtf::TwoLtf1600Ns,
     ));
-    assert_eq!(select_ordinary_retry_rate(mcs9, counters(0)), Ok(mcs9));
     assert_eq!(
-        select_ordinary_retry_rate(mcs9, counters(2)),
+        oer_ieee80211_upper_mac::backend_retry::select_ordinary_retry_rate::<
+            EspressifBackendTxProfile,
+            TxPhyRate,
+        >(mcs9, counters(0)),
+        Ok(mcs9)
+    );
+    assert_eq!(
+        oer_ieee80211_upper_mac::backend_retry::select_ordinary_retry_rate::<
+            EspressifBackendTxProfile,
+            TxPhyRate,
+        >(mcs9, counters(2)),
         Ok(TxPhyRate::He(HeRate::new(
             HeMcs::Mcs7,
             HeGuardIntervalAndLtf::TwoLtf1600Ns,
         )))
     );
     assert_eq!(
-        select_ordinary_retry_rate(mcs9, counters(4)),
+        oer_ieee80211_upper_mac::backend_retry::select_ordinary_retry_rate::<
+            EspressifBackendTxProfile,
+            TxPhyRate,
+        >(mcs9, counters(4)),
         Ok(TxPhyRate::Legacy(LegacyRate::Ofdm6M))
     );
     // An 800-ns rate below MCS9 has no record and keeps its rate.
     let mcs8 = TxPhyRate::He(HeRate::new(HeMcs::Mcs8, HeGuardIntervalAndLtf::OneLtf800Ns));
-    assert_eq!(select_ordinary_retry_rate(mcs8, counters(4)), Ok(mcs8));
+    assert_eq!(
+        oer_ieee80211_upper_mac::backend_retry::select_ordinary_retry_rate::<
+            EspressifBackendTxProfile,
+            TxPhyRate,
+        >(mcs8, counters(4)),
+        Ok(mcs8)
+    );
 }
 
 #[test]
@@ -380,7 +423,7 @@ fn p2p_ht20_sgi_mcs0_through_mcs6_enter_same_mcs_lgi_retry_records() {
             HtGuardInterval::Short400Ns,
             HtChannelWidth::Mhz20,
         ));
-        let schedule = RateScheduleRef::new(
+        let schedule = oer_espressif_ieee80211_policy::rate_schedule::rate_schedule(
             RateScheduleKind::P2pDot11N,
             8_u8.checked_sub(mcs_index).unwrap(),
         )
@@ -422,9 +465,14 @@ fn p2p_ht_sgi_bridge_rejects_a_different_mcs_retry_record() {
         HtGuardInterval::Short400Ns,
         HtChannelWidth::Mhz20,
     ));
-    let wrong =
-        P2pRetryRateSchedule::new(RateScheduleRef::new(RateScheduleKind::P2pDot11N, 3).unwrap())
-            .unwrap();
+    let wrong = P2pRetryRateSchedule::new(
+        oer_espressif_ieee80211_policy::rate_schedule::rate_schedule(
+            RateScheduleKind::P2pDot11N,
+            3,
+        )
+        .unwrap(),
+    )
+    .unwrap();
     assert_eq!(
         OrdinaryMpduRetryState::new_with_rate_policy(
             VifRole::Station,
@@ -540,8 +588,8 @@ fn cts_timeout_republishes_the_unchanged_aggregate_then_requests_its_block_ack()
     assert_eq!(state.current_subframes(), 3);
 }
 
-fn block_ack(starting_sequence: u16, bitmap: u64) -> HtBlockAckObservation {
-    HtBlockAckObservation::new(0, SequenceNumber::new(starting_sequence).unwrap(), bitmap)
+fn block_ack(starting_sequence: u16, bitmap: u64) -> oer_ieee80211_port::BlockAckReport {
+    oer_ieee80211_port::BlockAckReport::new(SequenceNumber::new(starting_sequence).unwrap(), bitmap)
 }
 
 fn exhaust_protection(state: &mut AmpduRetryState<32>, first: u16, subframes: u8) {

@@ -105,6 +105,14 @@ pub struct BlockAckReport {
 }
 
 impl BlockAckReport {
+    /// Construct the observed compressed bitmap and its sequence origin.
+    pub const fn new(start_sequence: SequenceNumber, bitmap: u64) -> Self {
+        Self {
+            start_sequence,
+            bitmap,
+        }
+    }
+
     /// Positions of the 64-bit bitmap.
     pub const BITMAP_BITS: u16 = 64;
 

@@ -2,7 +2,7 @@
 
 use oer_ieee80211_wire::phy::LegacyRate;
 
-use crate::BasicRates;
+use oer_ieee80211_port::backend_protection::BasicRates;
 
 /// All legacy rates admitted by an association. Unlike `BasicRates`, this
 /// includes rates without the basic bit. Construction requires at least one

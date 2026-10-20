@@ -405,17 +405,17 @@ fn he_txop_threshold_matches_the_vendor_byte_budget() {
     );
     // 64 * 32 - 20 - 23.2 - 16 = 1988.8 us; minus the 32-us BlockAck
     // estimate is 143 whole 13.6-us symbols of 1170 bits at MCS7.
-    assert_eq!(rule.maximum_unprotected_apep_bytes(he(HeMcs::Mcs7)), 20_911);
+    assert_eq!(rule.maximum_unprotected_apep_bytes::<oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile>(he(HeMcs::Mcs7)), 20_911);
     let padded = HeTxopRtsRule::new(rule.threshold(), HePacketPadding::Us16);
     assert!(
-        padded.maximum_unprotected_apep_bytes(he(HeMcs::Mcs7))
-            < rule.maximum_unprotected_apep_bytes(he(HeMcs::Mcs7))
+        padded.maximum_unprotected_apep_bytes::<oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile>(he(HeMcs::Mcs7))
+            < rule.maximum_unprotected_apep_bytes::<oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile>(he(HeMcs::Mcs7))
     );
     let short = HeTxopRtsRule::new(
         HeTxopDurationRtsThreshold::new(2).unwrap(),
         HePacketPadding::None,
     );
-    assert_eq!(short.maximum_unprotected_apep_bytes(he(HeMcs::Mcs0)), 0);
+    assert_eq!(short.maximum_unprotected_apep_bytes::<oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile>(he(HeMcs::Mcs0)), 0);
 }
 
 #[test]
@@ -433,7 +433,7 @@ fn he_txop_threshold_requests_rts_for_individual_he_ppdus_above_the_budget() {
     let mut policy = policy(bss);
     policy.set_rts_length_threshold(None);
     let rate = he(HeMcs::Mcs7);
-    let budget = u32::from(rule.maximum_unprotected_apep_bytes(rate));
+    let budget = u32::from(rule.maximum_unprotected_apep_bytes::<oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile>(rate));
     assert_eq!(
         policy
             .select(ampdu(TxPhyRate::He(rate), TxReceiver::Individual, budget))
@@ -471,7 +471,9 @@ fn leaving_the_bss_keeps_only_the_local_length_threshold() {
     assert_eq!(policy.bss(), BssProtection::UNPROTECTED);
     assert_eq!(
         policy.rts_length_threshold(),
-        Some(RtsLengthThreshold::VENDOR_DEFAULT)
+        Some(RtsLengthThreshold::new(
+            oer_espressif_ieee80211_policy::lmac::RTS_THRESHOLD_BYTES
+        ))
     );
 }
 
@@ -498,3 +500,7 @@ fn legacy_protection_keeps_all_rules_without_entering_the_he_budget() {
         }
     }
 }
+
+type WifiTxProtectionPolicy = crate::tx::protection::WifiTxProtectionPolicy<
+    oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile,
+>;

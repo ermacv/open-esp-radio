@@ -3,6 +3,7 @@
 #![forbid(unsafe_code)]
 
 use oer_esp32s31_hal::layouts::{DmaRef, WifiTxDmaDescriptor};
+use oer_ieee80211_wire::phy::PhyRate;
 
 pub use oer_ieee80211_port::tx_cost::TxContention;
 
@@ -42,12 +43,10 @@ use oer_ieee80211_wire::qos::WmmAccessCategory;
 
 pub use oer_ieee80211_wire::trigger::HeResourceUnit;
 
-use crate::rate::{
-    low::{MacLowRateGateProbe, MacLowRateTransitionError, probe_phy_low_rate_gate},
-    schedule::{RateScheduleKind, RateScheduleRef},
-};
+use crate::rate::low::{MacLowRateGateProbe, MacLowRateTransitionError, probe_phy_low_rate_gate};
+use oer_ieee80211_port::backend::{RateScheduleKind, RateScheduleRef};
 
-use oer_espressif_ieee80211_policy::retry_ladder;
+use oer_ieee80211_port::backend::BackendTxProfile;
 
 use oer_esp32s31_hal::{ieee80211::mac::WifiMacHal, owner::RadioAccess};
 
@@ -740,11 +739,14 @@ impl LegacyRate {
     /// record's complete retry budget has been consumed.
     ///
     /// SOURCE: `libpp[trc.o]::rcGetRate, libpp[trc.o]::rcUpdatePhyMode` and the
-    /// exact Rust-owned schedule arenas in [`crate::rate::schedule`],
+    /// exact Rust-owned schedule arenas in [`oer_ieee80211_port::backend::RateScheduleRef`],
     /// cross-checked against `SOURCE[PROMOTED_LMAC_TX]`
     /// `lmac.rs::select_basic_retry_rate`.
-    pub fn vendor_retry_rate(self, failed_attempts: u8) -> Option<Self> {
-        retry_ladder::legacy_retry_rate(self.phy_rate(), failed_attempts).map(Self::from_phy_rate)
+    pub fn vendor_retry_rate<X: BackendTxProfile>(self, failed_attempts: u8) -> Option<Self> {
+        match X::retry_rate(PhyRate::Legacy(self.phy_rate()), failed_attempts) {
+            Some(PhyRate::Legacy(rate)) => Some(Self::from_phy_rate(rate)),
+            _ => None,
+        }
     }
 
     /// Complete number of hardware publications admitted by this rate's
@@ -753,8 +755,8 @@ impl LegacyRate {
     /// This must not be inferred from the first retry-pair count. The vendor
     /// `rcReachRetryLimit` body reads byte `0x08`, while `rcGetRate` consumes
     /// the four `(rate, count)` pairs independently.
-    pub fn vendor_retry_publication_limit(self) -> Option<u8> {
-        retry_ladder::legacy_retry_publication_limit(self.phy_rate())
+    pub fn vendor_retry_publication_limit<X: BackendTxProfile>(self) -> Option<u8> {
+        X::legacy_retry_publication_limit(self.phy_rate())
     }
 
     /// Return the basic protection rate selected by the vendor MAC.
@@ -1151,11 +1153,11 @@ impl HtRate {
     /// MCS values are valid queue rates but have no independent record in the
     /// complete `rcUpdatePhyMode` mapping and therefore return `None` here
     /// instead of inventing a fallback policy.
-    pub fn vendor_retry_rate(self, failed_attempts: u8) -> Option<TxPhyRate> {
+    pub fn vendor_retry_rate<X: BackendTxProfile>(self, failed_attempts: u8) -> Option<TxPhyRate> {
         let oer_ieee80211_wire::phy::PhyRate::Ht(rate) = TxPhyRate::Ht(self).phy_rate() else {
             unreachable!("an S31 HT rate is a portable HT rate");
         };
-        TxPhyRate::try_from(retry_ladder::ht_retry_rate(rate, failed_attempts)?).ok()
+        TxPhyRate::try_from(X::retry_rate(PhyRate::Ht(rate), failed_attempts)?).ok()
     }
 }
 
@@ -1908,14 +1910,14 @@ impl HeRate {
     /// SOURCE: complete pinned `libpp[trc.o]::rcGetRate`, size `0xf6`,
     /// and the pinned `rcUpdatePhyMode` mapping represented by the Rust-owned
     /// [`RateScheduleKind::Dot11Ax`] arena.
-    pub fn vendor_retry_rate(self, failed_attempts: u8) -> Option<TxPhyRate> {
+    pub fn vendor_retry_rate<X: BackendTxProfile>(self, failed_attempts: u8) -> Option<TxPhyRate> {
         if self.dcm {
             return None;
         }
         let oer_ieee80211_wire::phy::PhyRate::He(rate) = TxPhyRate::He(self).phy_rate() else {
             unreachable!("an S31 HE rate is a portable HE rate");
         };
-        TxPhyRate::try_from(retry_ladder::he_retry_rate(rate, failed_attempts)?).ok()
+        TxPhyRate::try_from(X::retry_rate(PhyRate::He(rate), failed_attempts)?).ok()
     }
 
     pub const fn nominal_kbps(self) -> u32 {
@@ -2522,12 +2524,12 @@ impl TxPhyRate {
     }
 
     /// Decode the primary rate of one complete Rust-owned schedule record.
-    pub fn from_rate_control_schedule(
+    pub fn from_rate_control_schedule<X: BackendTxProfile>(
         schedule: RateScheduleRef,
         ht_width: HtChannelWidth,
         he_800ns_gi_ltf: crate::rx::HeGuardIntervalAndLtf,
     ) -> Option<Self> {
-        let code = crate::rate::schedule::schedule_state(schedule).rate;
+        let code = X::schedule_state(schedule).rate;
         Self::from_rate_control_code(schedule.kind(), code, ht_width, he_800ns_gi_ltf)
     }
 
@@ -3827,11 +3829,25 @@ fn map_dma_storage_error(error: TxDmaStorageError) -> TxError {
 
 #[cfg(test)]
 mod completion_tests;
-#[cfg(test)]
-pub(crate) mod test_support;
+#[cfg(any(test, feature = "test-support"))]
+pub mod test_support;
 
 pub mod ampdu;
 pub mod metadata;
 pub mod policy;
 pub mod protection;
 pub mod runtime;
+
+impl oer_ieee80211_port::backend::BackendTxRate for TxPhyRate {
+    fn phy_rate(self) -> oer_ieee80211_wire::phy::PhyRate {
+        self.phy_rate()
+    }
+    fn from_phy_rate(rate: oer_ieee80211_wire::phy::PhyRate) -> Option<Self> {
+        Self::try_from(rate).ok()
+    }
+}
+impl oer_ieee80211_port::backend::BackendTxQueue for LegacyTxQueue {
+    fn access_category(self) -> WmmAccessCategory {
+        self.access_category()
+    }
+}

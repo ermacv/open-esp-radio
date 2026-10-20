@@ -20,7 +20,7 @@
 //! Subframes are named by their position in the first aggregate (bit `i`
 //! of a mask is subframe `i`); a retry compacts the aggregate to the
 //! selected subframes, so the helpers here ([`unacknowledged`],
-//! [`compact`], [`set_retry_bit`]) work on those masks and on the encoded
+//! [`compact`], [`oer_ieee80211_wire::frame::set_retry_bit`]) work on those masks and on the encoded
 //! MPDUs.
 
 use oer_ieee80211_port::BlockAckReport;
@@ -30,21 +30,6 @@ use oer_time::{Duration, Instant};
 /// Subframes one A-MPDU exchange tracks: the width of a 64-bit BlockAck
 /// bitmap.
 pub const MAX_AMPDU_SUBFRAMES: u8 = 64;
-
-/// The Retry subfield of the Frame Control field's second octet.
-const RETRY: u8 = 0x08;
-
-/// Mark an encoded MPDU as a retransmission: set the Retry subfield of its
-/// Frame Control field. `false` when the MPDU is too short to have one.
-pub fn set_retry_bit(mpdu: &mut [u8]) -> bool {
-    match mpdu.get_mut(1) {
-        Some(flags) => {
-            *flags |= RETRY;
-            true
-        }
-        None => false,
-    }
-}
 
 /// The mask of the first `count` subframes.
 pub const fn all_subframes(count: u8) -> u64 {

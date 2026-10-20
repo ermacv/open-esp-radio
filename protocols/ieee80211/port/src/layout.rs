@@ -7,6 +7,8 @@ use oer_ieee80211_wire::{address::IndividualAddress, block_ack::BLOCK_ACK_REQUES
 /// Portable refusals before the backend receives a prepared source.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum LayoutError {
+    /// A fresh aggregate member's numbering disagrees with its builder's protection.
+    NumberingProtectionMismatch,
     /// The supplied allocation cannot hold the described frame or header.
     StorageTooShort,
     /// No room after the MAC header for a complete CCMP header.
@@ -159,7 +161,7 @@ pub enum MpduProtection {
 /// An immutable proof of the MAC/CCMP prefix and tail-body placement.
 /// Constructors use a checked frame length. Backends keep this proof beside
 /// its buffer through preparation, admission and return; they do not repeat
-/// portable layout checks or allocate a PN before this proof exists.
+/// portable layout checks. PN allocation belongs to the caller, before handoff.
 ///
 /// ```compile_fail,E0308
 /// use oer_ieee80211_port::{Ieee80211Capabilities, MpduLayout, TxFrame};
@@ -315,7 +317,7 @@ impl MpduLayout {
 pub struct LayoutRefused<T> {
     /// The failed layout constraint.
     pub reason: LayoutError,
-    /// Original source, or builder and subframe, before admission and PN.
+    /// Original source, or builder and subframe, before admission, retaining its supplied PN.
     pub operation: T,
 }
 
@@ -344,7 +346,7 @@ pub struct FreshSource<B, F, O, Key> {
     /// External body, if any.
     pub body: Option<O>,
     /// The sole source of encryption and the Protected bit.
-    pub protection: crate::TxProtection<Key>,
+    pub protection: crate::TxProtection<crate::NumberedKey<Key>>,
 }
 
 /// Input to backend preparation. Fresh layout has already been checked;
@@ -403,7 +405,7 @@ impl<
     >
 {
     /// Prove the complete layout before entering a backend. A refusal does
-    /// not change memory, consume PN, take admission or create a terminal.
+    /// not change memory, allocate PN, take admission or create a terminal.
     pub fn check(
         self,
     ) -> SourceLayoutResult<
@@ -528,6 +530,8 @@ impl MpduLayout {
 
 /// Fresh aggregate owners have no independent protection.
 pub struct FreshSubframe<B, F, O> {
+    /// Caller-owned PN, or the explicit unprotected class.
+    pub numbering: crate::TxNumbering,
     /// Fresh memory.
     pub buffer: B,
     /// The subframe's checked description.
@@ -548,11 +552,13 @@ impl<B, N, F, O> CheckedSubframe<B, N, F, O> {
         match self {
             Self::Fresh(fresh) => {
                 let FreshSubframe {
+                    numbering,
                     buffer,
                     frame,
                     body,
                 } = fresh.into_source();
                 crate::SubframeSource::Fresh {
+                    numbering,
                     buffer,
                     frame,
                     body,
@@ -588,10 +594,25 @@ impl<A, B: crate::TxBufferMemory, N, C: TxBufferClass, K: Ieee80211Capabilities,
         let source = match source {
             crate::SubframeSource::Sent(mpdu) => CheckedSubframe::Sent(mpdu),
             crate::SubframeSource::Fresh {
+                numbering,
                 mut buffer,
                 frame,
                 body,
             } => {
+                if !numbering.matches(aggregate.protection()) {
+                    return Err(LayoutRefused {
+                        reason: LayoutError::NumberingProtectionMismatch,
+                        operation: (
+                            aggregate,
+                            crate::SubframeSource::Fresh {
+                                numbering,
+                                buffer,
+                                frame,
+                                body,
+                            },
+                        ),
+                    });
+                }
                 let body_bytes = body.as_ref().map(crate::TxBody::bytes);
                 let checked = MpduLayout::subframe(
                     &frame,
@@ -612,6 +633,7 @@ impl<A, B: crate::TxBufferMemory, N, C: TxBufferClass, K: Ieee80211Capabilities,
                 match checked {
                     Ok(layout) => CheckedSubframe::Fresh(LaidOut {
                         source: FreshSubframe {
+                            numbering,
                             buffer,
                             frame,
                             body,
@@ -624,6 +646,7 @@ impl<A, B: crate::TxBufferMemory, N, C: TxBufferClass, K: Ieee80211Capabilities,
                             operation: (
                                 aggregate,
                                 crate::SubframeSource::Fresh {
+                                    numbering,
                                     buffer,
                                     frame,
                                     body,

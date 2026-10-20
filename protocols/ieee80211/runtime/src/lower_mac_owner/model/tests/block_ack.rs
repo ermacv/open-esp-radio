@@ -44,6 +44,7 @@ impl Work for Window {
         let mut indices = alloc::vec![buffer.slot.index()];
         let mut aggregate = push_subframe(
             aggregate,
+            oer_ieee80211_port::TxNumbering::Open,
             buffer,
             subframe_frame(self.sequences[0]),
             Some(ModelBody(alloc::vec![0x5a])),
@@ -51,7 +52,13 @@ impl Work for Window {
         for &sequence in &self.sequences[1..] {
             let buffer = small.remove(0);
             indices.push(buffer.slot.index());
-            aggregate = push_subframe(aggregate, buffer, subframe_frame(sequence), None);
+            aggregate = push_subframe(
+                aggregate,
+                oer_ieee80211_port::TxNumbering::Open,
+                buffer,
+                subframe_frame(sequence),
+                None,
+            );
         }
         if let Some(sequence) = self.refused {
             let buffer = small.remove(0);
@@ -59,6 +66,7 @@ impl Work for Window {
             let operation = CheckedAggregate::new(
                 aggregate,
                 SubframeSource::Fresh {
+                    numbering: oer_ieee80211_port::TxNumbering::Open,
                     buffer,
                     frame: ClassSubframe::new(subframe_frame(sequence)).ok().unwrap(),
                     body: Some(ModelBody(alloc::vec![0x7a])),
@@ -216,6 +224,7 @@ impl Work for RefusedSent {
         let index = original.slot.index();
         let aggregate = push_subframe(
             aggregate,
+            oer_ieee80211_port::TxNumbering::Open,
             original,
             subframe_frame(40),
             Some(ModelBody(alloc::vec![0x7a])),
@@ -252,7 +261,13 @@ impl Work for RefusedSent {
             rate,
             TxProtection::Open,
         );
-        let aggregate = push_subframe(aggregate, small.remove(0), subframe_frame(self.0), None);
+        let aggregate = push_subframe(
+            aggregate,
+            oer_ieee80211_port::TxNumbering::Open,
+            small.remove(0),
+            subframe_frame(self.0),
+            None,
+        );
         let operation = CheckedAggregate::new(aggregate, SubframeSource::Sent(mpdu))
             .ok()
             .unwrap();

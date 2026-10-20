@@ -32,12 +32,7 @@ mod retry;
 mod submission;
 
 pub use block_ack::{
-    ADDBA_ACTION_BODY_LEN, ADDBA_REQUEST_ACTION, ADDBA_RESPONSE_ACTION, AddbaRequest,
-    BLOCK_ACK_CATEGORY, BlockAckAction, DELBA_ACTION, HtBlockAckObservation, OperationalTxBlockAck,
-    TX_AMPDU_SLOT_CAPACITY, TX_BLOCK_ACK_MAX_WINDOW, TxAmpduBatch, TxAmpduBatchError,
-    TxAmpduBatchStep, TxAmpduCompletion, TxAmpduDisposition, TxAmpduMpdu, TxAmpduSlot,
-    TxBlockAckAlarm, TxBlockAckBitmap, TxBlockAckConfig, TxBlockAckDialogToken, TxBlockAckError,
-    TxBlockAckResponse, TxBlockAckSession, parse_block_ack_action,
+    HtBlockAckObservation, TX_AMPDU_SLOT_CAPACITY, TX_BLOCK_ACK_MAX_WINDOW, TxBlockAckBitmap,
 };
 pub use hardware::HtAmpduHardware;
 pub use length::{HtAmpduLength, HtAmpduLengthAccumulator, HtAmpduLengthError};
@@ -55,8 +50,8 @@ pub use request::{
     AmpduFrameLayout, AmpduFrameSize, HeAmpduFrameRequest, HeAmpduPolicy, HtAmpduFrameRequest,
 };
 
-use crate::tx::runtime::{AmpduRetryDecision, AmpduRetryError};
 use crate::tx::{LegacyTxQueue, TxCompletion, TxCookie, TxDmaState};
+use oer_ieee80211_port::backend_aggregate::{AmpduRetryDecision, AmpduRetryError};
 pub const TX_AMPDU_METADATA_SIZE: usize = 8;
 const TX_FCS_SIZE: u16 = 4;
 const TX_AMPDU_DEFAULT_MAX_BYTES: u16 = 0x1fff;
@@ -411,3 +406,14 @@ impl<const SLOTS: usize> Default for HtAmpduTxStorage<SLOTS> {
 
 #[cfg(test)]
 mod tests;
+
+impl From<HtAmpduTxCompletion> for oer_ieee80211_port::backend_aggregate::BackendAmpduCompletion {
+    fn from(completion: HtAmpduTxCompletion) -> Self {
+        Self {
+            status: completion.tx.tx_status(),
+            trigger_flow_end: completion.tx.completes_vendor_trigger_flow(),
+            block_ack_received: completion.block_ack_received,
+            block_ack: completion.valid_block_ack().map(|ack| ack.report()),
+        }
+    }
+}
