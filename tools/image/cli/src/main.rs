@@ -168,3 +168,7 @@ mod tests {
         assert!(parse_duration("soon").is_err());
     }
 }
+
+#[cfg(test)]
+#[path = "../../../../firmware/apps/w1/src/own/crc32.rs"]
+mod ownership_crc;
