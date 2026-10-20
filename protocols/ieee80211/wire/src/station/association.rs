@@ -331,8 +331,7 @@ pub fn parse_association_response(
     let (header, [capability_info, status_code, association_id], information_elements) =
         split_received_management(frame)?;
     if FrameControlFields::from_bytes(header.frame_control.to_le_bytes()).type_and_subtype()
-        != FrameControlFields::from_raw(ASSOCIATION_RESPONSE_FRAME_CONTROL as u16)
-            .type_and_subtype()
+        != FrameControlFields::from_raw(ASSOCIATION_RESPONSE_FRAME_CONTROL).type_and_subtype()
         || header.receiver != local
         || header.transmitter != bssid
         || header.bssid != bssid

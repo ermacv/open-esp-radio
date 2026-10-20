@@ -139,7 +139,7 @@ pub fn parse_sta_beacon(
     ] = *header;
     let frame_control = u16::from_le_bytes([fc0, fc1]);
     if FrameControlFields::from_raw(frame_control).type_and_subtype()
-        != FrameControlFields::from_raw(BEACON_FRAME_CONTROL as u16).type_and_subtype()
+        != FrameControlFields::from_raw(BEACON_FRAME_CONTROL).type_and_subtype()
     {
         return Err(StaBeaconError::NotBeacon);
     }

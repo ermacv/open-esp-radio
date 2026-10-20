@@ -369,8 +369,7 @@ impl<'a> AmsduSubframes<'a> {
             let _ = reader
                 .take(padding)
                 .map_err(|_| DataDecapError::Truncated)?;
-            let next = reader.remaining();
-            next
+            reader.remaining()
         };
         Ok(subframe)
     }

@@ -549,7 +549,7 @@ impl<'payload> EspNowV1Frame<'payload> {
         let frame_control = u16::from_le_bytes([header[0], header[1]]);
         if FrameControlFields::from_raw(frame_control).version() != 0
             || FrameControlFields::from_raw(frame_control).type_and_subtype()
-                != FrameControlFields::from_raw(ACTION_FRAME_CONTROL as u16).type_and_subtype()
+                != FrameControlFields::from_raw(ACTION_FRAME_CONTROL).type_and_subtype()
             || FrameControlFields::from_raw(frame_control).ds() != 0
             || (FrameControlFields::from_raw(frame_control).power_management()
                 || FrameControlFields::from_raw(frame_control).more_data()
@@ -646,7 +646,7 @@ impl<'frame> EspNowProtectedV1Envelope<'frame> {
         let frame_control = u16::from_le_bytes([management_header[0], management_header[1]]);
         if FrameControlFields::from_raw(frame_control).version() != 0
             || FrameControlFields::from_raw(frame_control).type_and_subtype()
-                != FrameControlFields::from_raw(ACTION_FRAME_CONTROL as u16).type_and_subtype()
+                != FrameControlFields::from_raw(ACTION_FRAME_CONTROL).type_and_subtype()
             || FrameControlFields::from_raw(frame_control).ds() != 0
             || (FrameControlFields::from_raw(frame_control).power_management()
                 || FrameControlFields::from_raw(frame_control).more_data()

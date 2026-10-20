@@ -269,7 +269,7 @@ pub fn parse_sae_authentication(
 ) -> Option<SaeAuthentication<'_>> {
     let (header, [algorithm, transaction, status_code], body) = split_received_management(frame)?;
     if FrameControlFields::from_bytes(header.frame_control.to_le_bytes()).type_and_subtype()
-        != FrameControlFields::from_raw(OPEN_AUTHENTICATION_FRAME_CONTROL as u16).type_and_subtype()
+        != FrameControlFields::from_raw(OPEN_AUTHENTICATION_FRAME_CONTROL).type_and_subtype()
         || header.receiver != local
         || header.transmitter != bssid
         || header.bssid != bssid
@@ -304,7 +304,7 @@ pub fn parse_open_authentication_response(
 ) -> Option<OpenAuthenticationResponse> {
     let (header, [algorithm, transaction, status_code], _) = split_received_management(frame)?;
     if FrameControlFields::from_bytes(header.frame_control.to_le_bytes()).type_and_subtype()
-        != FrameControlFields::from_raw(OPEN_AUTHENTICATION_FRAME_CONTROL as u16).type_and_subtype()
+        != FrameControlFields::from_raw(OPEN_AUTHENTICATION_FRAME_CONTROL).type_and_subtype()
         || header.receiver != local
         || header.transmitter != bssid
         || header.bssid != bssid

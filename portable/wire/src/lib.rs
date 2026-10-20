@@ -34,7 +34,8 @@ pub enum Error {
 /// # Ok::<(), oer_wire::Error>(())
 /// ```
 ///
-/// A field's type is an unsigned integer, `bool` (one bit), or `[EnumName]`.
+/// A field's type is an unsigned integer of at most 64 bits, `bool` (one bit),
+/// or `[EnumName]`. Overlapping fields may describe alternative views.
 /// An enum declaration supplies `from_encoding` and `encoding`; unknown values
 /// retain their complete encoding in `Reserved`. Optional conversion method names
 /// can follow the raw type, as `(from_raw, raw)`. Numeric and enum setters return

@@ -138,6 +138,19 @@ impl<'a> AmsduBody<'a> {
     }
 }
 
+/// Assert an internal encoder invariant after its public boundary has checked
+/// the range. Peer-controlled, unvalidated values must propagate the error.
+#[expect(
+    clippy::panic,
+    reason = "only already-validated encoder values reach this invariant assertion"
+)]
+pub(crate) const fn validated<T: Copy>(result: Result<T, oer_wire::Error>) -> T {
+    match result {
+        Ok(value) => value,
+        Err(_) => panic!("validated wire value must fit its declared field"),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::FrameParts;
@@ -153,18 +166,5 @@ mod tests {
         assert_eq!(FrameParts(parts).write(&mut output), Ok(10));
         assert_eq!(&output[..10], b"headerbody");
         assert_eq!(&output[10..], &[0xa5; 2]);
-    }
-}
-
-/// Assert an internal encoder invariant after its public boundary has checked
-/// the range. Peer-controlled, unvalidated values must propagate the error.
-#[expect(
-    clippy::panic,
-    reason = "only already-validated encoder values reach this invariant assertion"
-)]
-pub(crate) const fn validated<T: Copy>(result: Result<T, oer_wire::Error>) -> T {
-    match result {
-        Ok(value) => value,
-        Err(_) => panic!("validated wire value must fit its declared field"),
     }
 }
