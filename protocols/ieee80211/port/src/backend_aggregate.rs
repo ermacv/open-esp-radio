@@ -1,5 +1,9 @@
 //! Bounded aggregate retry commands supplied by a core.
 use oer_ieee80211_wire::sequence::SequenceNumber;
+
+/// Number of subframe positions carried by the port's `u32` retry/aging masks.
+pub const AMPDU_SUBFRAME_MASK_BITS: usize = u32::BITS as usize;
+
 /// Policy for retained A-MPDU retries.
 ///
 /// As the vendor's `ppResortTxAMPDU` does, a partial BlockAck keeps the

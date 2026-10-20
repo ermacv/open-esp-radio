@@ -1,11 +1,10 @@
-//! A core-owned retry adapter for a backend with 32-bit subframe masks.
+//! A core-owned retry adapter for the port's bounded subframe masks.
 use crate::{
     AmpduAttemptResult, AmpduRetryDecision as UpperAmpduRetryDecision,
     AmpduRetryError as UpperAmpduRetryError, AmpduRetryState as UpperAmpduRetryState,
 };
 use oer_ieee80211_port::{TxStatus, backend_aggregate::*};
 use oer_ieee80211_wire::sequence::SequenceNumber;
-const HARDWARE_BLOCK_ACK_WINDOW: usize = 32;
 /// Bounded core retry owner accepting detached port completion facts.
 pub struct BoundedAmpduRetryState<const CAPACITY: usize> {
     state: UpperAmpduRetryState,
@@ -23,7 +22,7 @@ impl<const CAPACITY: usize> BoundedAmpduRetryState<CAPACITY> {
         if retry_policy.lifetime.as_micros() == 0 {
             return Err(AmpduRetryError::ZeroLifetime);
         }
-        if CAPACITY > HARDWARE_BLOCK_ACK_WINDOW {
+        if CAPACITY > AMPDU_SUBFRAME_MASK_BITS {
             return Err(AmpduRetryError::CapacityExceedsHardwareWindow { capacity: CAPACITY });
         }
         if subframes == 0 {
@@ -108,8 +107,8 @@ impl<const CAPACITY: usize> BoundedAmpduRetryState<CAPACITY> {
     }
 
     const fn decision(decision: UpperAmpduRetryDecision) -> AmpduRetryDecision {
-        // The S31 aggregate holds at most `HARDWARE_BLOCK_ACK_WINDOW`
-        // subframes, so every mask fits the descriptor chain's 32 bits.
+        // Construction bounds the aggregate by `AMPDU_SUBFRAME_MASK_BITS`,
+        // so every result fits the port's subframe mask.
         match decision {
             UpperAmpduRetryDecision::RetainAggregate { retry_mask } => {
                 AmpduRetryDecision::RetainAggregate {

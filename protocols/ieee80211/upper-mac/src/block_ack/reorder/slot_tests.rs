@@ -1,4 +1,4 @@
-//! Reorder behavior retained from the S31 integration profile.
+//! Reorder behavior across sequence windows and bounded backing-slot domains.
 
 use super::*;
 
@@ -160,7 +160,7 @@ fn a_slot_index_cannot_be_owned_twice() {
 }
 
 #[test]
-fn esf_slot_id_is_independent_of_reorder_window_index() {
+fn backing_slot_id_is_independent_of_reorder_window_index() {
     let mut reorder = RxReorderBuffer::<64, 34>::new(SequenceNumber::new(1).unwrap(), 64).unwrap();
     let highest_valid = (34 - 1) as u8;
     let first_invalid = 34 as u8;
