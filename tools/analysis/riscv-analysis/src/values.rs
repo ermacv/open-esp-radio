@@ -757,6 +757,11 @@ fn table_dispatch(
     // The nearest node before `from` on its unique fall-through chain that writes
     // `register`, within the slice's reach.
     let mut writer = |from: usize, register: u8| -> Result<Option<usize>> {
+        // An encoded destination x0 discards its result; it cannot supply
+        // a load, address addition or scaling definition to this slice.
+        if register == 0 {
+            return Ok(None);
+        }
         let mut j = from;
         for _ in 0..MAX_SLICE {
             control.checkpoint(1)?;

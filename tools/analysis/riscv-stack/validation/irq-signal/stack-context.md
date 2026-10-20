@@ -6,7 +6,7 @@ applies and has no numerical trap-arrival context. The actual constructor
 application still returns **`Err(DestinationBounds)`**. The validator supplies
 no numerical interval or additional trusted contract.
 
-Fresh base: main `dd942640`, including #222 and its `6ed51a2b` Installed/Entry
+Fresh base: main `4901ee7d`, including #222 and its `6ed51a2b` Installed/Entry
 fix. The [split-dispatch report](../indirect-cfg/README.md) and its
 [machine proof](../indirect-cfg/proof.json) record the fresh ELF hash, full
 indirect target set, common CFG closure and checked CPU0 propagation.

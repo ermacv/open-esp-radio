@@ -1,6 +1,6 @@
 {
-  "base": "main dd942640 (#222, including 6ed51a2b)",
-  "elf_sha256": "e8177e3cbe1cda6c7dc1f3c2bfaf233d8e64a79b2d1cc0917688a34889abc242",
+  "base": "main 4901ee7d (#222, #223, #216, #221; including 6ed51a2b)",
+  "elf_sha256": "dc1ff3ae9e5e007439d5b15310d7b6243276efae1b7dad90873f2e755f357571",
   "rom_sha256": "a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87",
   "streams_sha256": {
     "main.tsv": "0e0db99946ee82921b2f3d3a23fe953296e233869e80084b833c03c48c0d08e7",
@@ -318,6 +318,8 @@
     "changed_table_word": "rejected",
     "omitted_irq_path": "rejected",
     "forged_cpu0_context": "rejected",
+    "forged_cpu0_interval": "rejected",
+    "rebased_installer_context": "rejected",
     "forged_merged_context": "rejected",
     "forged_application": "rejected"
   }

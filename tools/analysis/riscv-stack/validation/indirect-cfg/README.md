@@ -1,10 +1,10 @@
 # Split dispatch and CPU0 stack context
 
-On main `dd942640` (#222, including the `6ed51a2b` Installed/Entry fix),
+On main `4901ee7d` (#222, including the `6ed51a2b` Installed/Entry fix),
 the general analyzer proves all **30** targets of the indirect jump at
 **`0x50065a40`** in main **`0x5006553a`**. Its emitted CFG passes the existing
 `writes::closes_local_graph` check. The fresh w1 runtime ELF SHA-256 is
-`e8177e3cbe1cda6c7dc1f3c2bfaf233d8e64a79b2d1cc0917688a34889abc242`.
+`dc1ff3ae9e5e007439d5b15310d7b6243276efae1b7dad90873f2e755f357571`.
 The #222 fixture used `0x500659fc` in `0x500654f6`; these addresses only select
 diagnostic input and supply no production proof rules.
 
@@ -98,17 +98,17 @@ Neither these contracts nor product code change.
 ## Verification
 
 The real split shape, union of proved bases, unknown incoming base, missing
-table source, newly introduced bypass, decode gap and another unknown edge
+table source, discarded x0 load, newly introduced bypass, decode gap and another unknown edge
 have regressions using the real decoder and an in-memory ELF. The evaluator
 regression checks positive and negative RV32 wrap plus JALR bit-zero clearing
 for every finite alternative. The existing Installed/Entry and stale-code,
 context and image tests remain enabled.
 
-Tests pass for 52 affected host packages, foundations and consumers (1463
-tests, including 234 stack tests and 37 common analysis tests). All-target
+Tests pass for 52 affected host packages, foundations and consumers (1390
+tests, including 235 stack tests and 37 common analysis tests). All-target
 clippy under the workspace warning policy and formatting pass; both w0/w1
 builds pass. Two independent captures have identical streams and proof JSON.
-The positive replay passes; all six injected bad facts are rejected.
+The positive replay passes; all eight injected bad facts are rejected.
 
 [comparison.json](comparison.json) compares all **14 machine files**, all
 **eight complete reports**, and all **four full callback audits** against

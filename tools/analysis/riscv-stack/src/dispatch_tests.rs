@@ -142,6 +142,20 @@ fn one_unknown_incoming_base_blocks_closure() {
 }
 
 #[test]
+fn a_discarded_target_load_does_not_prove_a_jump_through_zero() {
+    let mut code = root(false);
+    code.words[13] = 0x0007_a003; // lw zero, 0(a5)
+    code.words[14] = 0x0000_0067; // jalr zero, 0(zero)
+    let records = capture(&fixture(code, &ENTRIES));
+    assert!(targets(&records).is_empty());
+    assert!(
+        !records
+            .iter()
+            .all(oer_analysis_riscv_analysis::writes::closes_local_graph)
+    );
+}
+
+#[test]
 fn an_unproved_table_alternative_blocks_the_entire_dispatch() {
     let mut code = root(false);
     code.words[5] = 0x0107_0713; // second base points beyond both known tables
