@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "kebab-case")]
 pub enum ImageClass {
     SystemWatchdog,
+    /// Public-read calibration diagnostic; no station data service.
+    DiagnosticPhy,
     /// The radio-free image with the product panic entry alone, without the
     /// HIL panic report: a panic records itself and resets the chip.
     SystemPanicReset,
@@ -23,7 +25,10 @@ impl ImageClass {
     pub fn build_features(self, network: &str) -> String {
         if matches!(
             self,
-            Self::SystemWatchdog | Self::SystemPanicReset | Self::DiagnosticUsbJtagOff
+            Self::SystemWatchdog
+                | Self::SystemPanicReset
+                | Self::DiagnosticUsbJtagOff
+                | Self::DiagnosticPhy
         ) {
             self.runtime_features().to_owned()
         } else {
@@ -31,7 +36,8 @@ impl ImageClass {
         }
     }
 
-    pub const ALL: [Self; 4] = [
+    pub const ALL: [Self; 5] = [
+        Self::DiagnosticPhy,
         Self::SystemWatchdog,
         Self::SystemPanicReset,
         Self::BootSmoke,
@@ -41,11 +47,12 @@ impl ImageClass {
     /// Whether the image adds observers or probes that the product does
     /// not carry. Its observations can never qualify a product.
     pub const fn diagnostic(self) -> bool {
-        matches!(self, Self::DiagnosticUsbJtagOff)
+        matches!(self, Self::DiagnosticUsbJtagOff | Self::DiagnosticPhy)
     }
 
     pub const fn id(self) -> &'static str {
         match self {
+            Self::DiagnosticPhy => "diagnostic-phy",
             Self::SystemWatchdog => "system-watchdog",
             Self::SystemPanicReset => "system-panic-reset",
             Self::BootSmoke => "boot-smoke",
@@ -55,6 +62,7 @@ impl ImageClass {
 
     pub const fn runtime_features(self) -> &'static str {
         match self {
+            Self::DiagnosticPhy => "diagnostic-phy",
             Self::SystemWatchdog => "system-watchdog",
             Self::SystemPanicReset => "system-panic-reset",
             Self::DiagnosticUsbJtagOff => "system-watchdog,usb-jtag-off",

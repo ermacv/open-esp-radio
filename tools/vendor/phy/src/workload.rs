@@ -1,4 +1,2 @@
-//! The PHY family's workloads.
-
+//! Manual PHY investigations.
 pub(crate) mod calibration;
-mod reference;

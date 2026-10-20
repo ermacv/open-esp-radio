@@ -43,6 +43,7 @@ pub use key::{Endpoint, Key, Kind, Message};
 pub mod base;
 pub mod bluetooth;
 pub mod network;
+pub mod phy;
 pub mod system;
 pub mod telemetry;
 
@@ -55,6 +56,7 @@ pub fn registry() -> impl Iterator<Item = &'static MessageInfo> {
         network::MESSAGES,
         bluetooth::MESSAGES,
         telemetry::MESSAGES,
+        phy::MESSAGES,
     ]
     .into_iter()
     .flatten()

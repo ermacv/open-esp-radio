@@ -20,13 +20,17 @@ include!(concat!(env!("OUT_DIR"), "/manifests.rs"));
 
 /// The chips whose HIL agent this tree builds, in profile order.
 pub fn agent_chips() -> impl Iterator<Item = &'static str> {
-    RUNTIME_MANIFESTS.iter().map(|(chip, _)| *chip)
-}
-
-fn runtime_manifest(chip: &str) -> Option<&'static str> {
     RUNTIME_MANIFESTS
         .iter()
-        .find_map(|(name, manifest)| (*name == chip).then_some(*manifest))
+        .map(|(chip, _, _)| *chip)
+        .collect::<std::collections::BTreeSet<_>>()
+        .into_iter()
+}
+
+fn runtime_manifest(class: ImageClass, chip: &str) -> Option<&'static str> {
+    RUNTIME_MANIFESTS
+        .iter()
+        .find_map(|(name, id, manifest)| (*name == chip && *id == class.id()).then_some(*manifest))
 }
 
 /// The runtime's features and the features each enables, leaving out
@@ -73,7 +77,14 @@ fn closure(graph: &BTreeMap<String, Vec<String>>, roots: &[&str]) -> BTreeSet<St
 
 /// Whether `chip`'s runtime declares the Cargo feature `feature`.
 pub fn declares(chip: &str, feature: &str) -> bool {
-    runtime_manifest(chip).is_some_and(|manifest| feature_graph(manifest).contains_key(feature))
+    RUNTIME_MANIFESTS
+        .iter()
+        .any(|(name, _, manifest)| *name == chip && feature_graph(manifest).contains_key(feature))
+}
+
+pub(super) fn declares_for(class: ImageClass, chip: &str, feature: &str) -> bool {
+    runtime_manifest(class, chip)
+        .is_some_and(|manifest| feature_graph(manifest).contains_key(feature))
 }
 
 /// Every Cargo feature `class`'s runtime on `chip` is built with, or `None`
@@ -89,7 +100,7 @@ fn enabled_features_with(
     chip: &str,
     delta: &FeatureDelta,
 ) -> Option<BTreeSet<String>> {
-    let graph = feature_graph(runtime_manifest(chip)?);
+    let graph = feature_graph(runtime_manifest(class, chip)?);
     // A class whose own features the chip's runtime lacks is not built
     // there. The network integration's feature gates no key, so the
     // class's own features decide what it reports.
@@ -143,12 +154,27 @@ mod tests {
 
     use super::*;
 
+    #[test]
+    fn calibration_has_its_own_manifest_and_keys_without_a_network() {
+        let diagnostic = image_keys_on(ImageClass::DiagnosticPhy, "esp32s31").unwrap();
+        assert!(diagnostic.has::<oer_hil_protocol::phy::PrepareCapture>());
+        assert!(diagnostic.has::<oer_hil_protocol::phy::ReadRegisterImage>());
+        assert!(!diagnostic.has::<network::Udp>());
+        assert!(image_keys_on(ImageClass::DiagnosticPhy, "esp32c5").is_none());
+        let system = image_keys_on(ImageClass::SystemWatchdog, "esp32s31").unwrap();
+        assert!(!system.has::<oer_hil_protocol::phy::PrepareCapture>());
+        assert_ne!(
+            runtime_manifest(ImageClass::DiagnosticPhy, "esp32s31"),
+            runtime_manifest(ImageClass::SystemWatchdog, "esp32s31"),
+        );
+    }
+
     /// The chip whose agent builds the most classes: the tree's full HIL
     /// agent.
     fn full_agent() -> &'static str {
         RUNTIME_MANIFESTS
             .iter()
-            .map(|(chip, _)| *chip)
+            .map(|(chip, _, _)| *chip)
             .max_by_key(|chip| {
                 ImageClass::ALL
                     .iter()
@@ -181,7 +207,7 @@ mod tests {
 
     #[test]
     fn every_class_of_a_chip_reports_its_own_keys_and_classifies_as_itself() {
-        for (chip, _) in RUNTIME_MANIFESTS {
+        for (chip, _, _) in RUNTIME_MANIFESTS {
             let mut seen = BTreeMap::new();
             for class in ImageClass::ALL {
                 let Some(image_keys) = image_keys_on(class, chip) else {
@@ -224,9 +250,16 @@ mod tests {
 
     #[test]
     fn every_feature_the_keys_read_is_the_runtime_s() {
-        let graph = feature_graph(runtime_manifest(full_agent()).unwrap());
+        let graphs: Vec<_> = RUNTIME_MANIFESTS
+            .iter()
+            .filter(|(chip, _, _)| *chip == full_agent())
+            .map(|(_, _, manifest)| feature_graph(manifest))
+            .collect();
         for feature in oer_hil_protocol::feature_keys::READ_FEATURES {
-            assert!(graph.contains_key(*feature), "{feature}");
+            assert!(
+                graphs.iter().any(|graph| graph.contains_key(*feature)),
+                "{feature}"
+            );
         }
     }
 
@@ -243,7 +276,7 @@ mod tests {
 
     #[test]
     fn a_partial_agent_builds_only_its_own_classes() {
-        for (chip, _) in RUNTIME_MANIFESTS {
+        for (chip, _, _) in RUNTIME_MANIFESTS {
             if *chip == full_agent() {
                 continue;
             }

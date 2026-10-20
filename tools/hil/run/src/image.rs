@@ -98,7 +98,10 @@ pub fn builds_on(_root: &Path, chip: &str, class: ImageClass) -> Result<bool> {
 /// every feature the class selects.
 pub fn serves(root: &Path, chip: &str, class: ImageClass) -> Result<bool> {
     let profile = oer_chip_profile::Profile::load(root, chip).map_err(|error| error.to_string())?;
-    let path = profile.hil_agent_manifest(root);
+    let Some(recipe) = profile.hil_image(class.id()) else {
+        return Ok(false);
+    };
+    let path = root.join(&recipe.manifest);
     let manifest: toml::Value = toml::from_str(&std::fs::read_to_string(&path)?)?;
     let declared = manifest
         .get("features")
@@ -184,7 +187,10 @@ pub(crate) fn spec(
 ) -> Result<ImageSpec> {
     let profile = oer_chip_profile::Profile::load(root, chip)?;
     let class_features = oer_hil_model::image_class::build_features_on(class, chip);
-    let package = profile.hil_agent_package();
+    let recipe = profile
+        .hil_image(class.id())
+        .ok_or_else(|| format!("{chip} has no {} image", class.id()))?;
+    let package = recipe.package.clone();
     Ok(ImageSpec {
         root: root.to_owned(),
         chip: chip.to_owned(),
@@ -199,7 +205,7 @@ pub(crate) fn spec(
                 .collect(),
             default_features: false,
         },
-        stack_policy: profile.hil_stack_policy(),
+        stack_policy: recipe.stack_policy.clone(),
         layout_seed,
         runtime_environment: Vec::new(),
         output,
@@ -325,7 +331,10 @@ pub fn packages(
         .args(["tree"])
         .args([
             "-p",
-            &profile.hil_agent_package(),
+            &profile
+                .hil_image(class.id())
+                .ok_or("unsupported HIL class")?
+                .package,
             "--target",
             &profile.rust_target,
             "--locked",
@@ -366,7 +375,11 @@ pub fn ensure_vendor_dependencies_absent(root: &Path) -> Result<()> {
         let Some(hil) = &profile.hil else {
             continue;
         };
-        for path in [root.join("Cargo.lock"), profile.hil_agent_manifest(root)] {
+        for path in std::iter::once(root.join("Cargo.lock")).chain(
+            hil.images
+                .values()
+                .map(|recipe| root.join(&recipe.manifest)),
+        ) {
             let contents = std::fs::read_to_string(&path)?;
             for package in &hil.forbidden_packages {
                 let forbidden = format!("name = \"{package}\"");

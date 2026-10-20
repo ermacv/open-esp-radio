@@ -1,30 +1,27 @@
-# PHY HIL evidence
+# PHY calibration capture wire
 
-## Fault injection
+The optional `phy` feature serves diagnostic capture only. It is absent from
+ordinary images; the host registry includes its message schemas. The framing
+and global buffer capacities are the existing HIL ones.
 
-`phy_fault_injection` advertises destructive checkpoints in real PHY maintenance.
-`phy::ControlFault(Arm(mode))` is one-shot per boot. `Status` reports `Reached` only after the
-selected physical frontier. `Release` is accepted only then, and its
-acknowledgement is serialized before injecting the fault. There is no disarm or
-deadline renewal command. `Cancelled` means the actual child future was dropped,
-not merely that the Host stopped waiting. A fresh boot must report `Idle` and
-MWDT1 reset; RF-off timing is not represented by that observation.
+`PrepareCapture` selects the reference's observed Wi-Fi home channel.
+`CaptureReady` reports the full cold-calibration path, projection schema,
+image lengths, lifecycle and nonzero capture epoch. The target requires full
+registration with no input cache and freezes its output projection before
+Wi-Fi startup. Register reads occur later, with Wi-Fi RX enabled.
 
-Wi-Fi runs no PHY maintenance of its own: the shared radio's periodic tracking
-maintains the PHY, so no Wi-Fi command enters PHY calibration.
+`RestartCaptureRadio` requires the active epoch and returns explicit RF-close
+and RF-wake evidence plus a new epoch. `StopCapture` closes RF and retires the
+active capture. Failed hardware work permits no further capture before reset.
 
-## Placement diagnostic
+`ReadCalibrationProjection`, `ReadRegisterImage` and `ReadAnalogImage` take an
+epoch, first index and nonzero count of at most 16 values. Replies carry epoch,
+first index, total image length and bounded values. Every requested range is
+validated before access. A reply with missing values, another epoch or changing
+image length is incomplete evidence, not a zero-valued observation.
 
-`phy_rx_hot_sram` reports that the direct RX-gain transaction executes from
-internal SRAM without changing its graph or ROM short-delay policy.
-
-## Delivery continuity
-
-`network::UdpRxStarted` reports the first 256 valid single-flow UDP datagrams consumed
-inside a session. It is correlated by boot/session and is distinct from
-`network::SessionReady`: readiness alone does not prove delivery.
-
-Transport and per-flow evidence optionally retain `rx_maximum_silence_micros`
-for a complete single-flow UDP receive window, including trailing silence.
-Missing observation is `None`, never inferred as zero from average throughput.
-Concurrent RX flow windows are not projected into one session continuity value.
+The target exposes only model-indexed register/analog images. The host binds
+indices to the model of the archived build and compares production MMIO only at
+indices readable on the reference. Calibration values describe the immutable
+full-registration product; current temperature and non-retained tracking
+progress remain excluded by the existing comparison review.

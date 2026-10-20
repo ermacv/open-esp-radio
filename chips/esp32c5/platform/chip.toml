@@ -192,3 +192,13 @@ package = "oer-firmware-probes-esp32c5-radio"
 [reset-cause]
 field = "LP_CLKRST.RESET_CAUSE.RESET_CAUSE"
 power-on = 1
+
+[hil.images.system-watchdog]
+package = "oer-firmware-hil-esp32c5"
+manifest = "firmware/hil/esp32c5/Cargo.toml"
+stack-policy = "firmware/hil/esp32c5/stack.toml"
+
+[hil.images.boot-smoke]
+package = "oer-firmware-hil-esp32c5"
+manifest = "firmware/hil/esp32c5/Cargo.toml"
+stack-policy = "firmware/hil/esp32c5/stack.toml"

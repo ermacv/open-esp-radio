@@ -70,3 +70,9 @@ mod tests {
         assert!(!images.registers.is_empty() && !images.analog.is_empty());
     }
 }
+
+/// The executable S31 comparison family; the generic workload names no chip.
+pub const FAMILY: oer_hil_scenario::workload::family::Kind =
+    oer_hil_scenario::workload::family::Kind::of::<oer_vendor_phy::scenario::PhyScenario<Esp32s31>>(
+        "phy",
+    );

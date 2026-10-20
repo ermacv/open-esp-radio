@@ -6,6 +6,42 @@ use std::collections::BTreeMap;
 pub const REPORT_PREFIX: &str = "oer-vendor-calibration";
 /// Suffix of the line that closes a boot's report.
 const END_SUFFIX: &str = "-end";
+
+/// The reference reports its actual Wi-Fi home channel after enabling RX.
+/// Missing, ambiguous or invalid configuration cannot choose production defaults.
+pub fn home_channel(console: &str) -> Result<u8> {
+    let mut channels = console
+        .lines()
+        .filter_map(|line| line.trim().strip_prefix("oer-vendor-calibration-channel "));
+    let channel: u8 = channels
+        .next()
+        .ok_or("reference reported no home channel")?
+        .parse()?;
+    if !(1..=14).contains(&channel) || channels.next().is_some() {
+        return Err("reference reported an invalid or duplicate home channel".into());
+    }
+    Ok(channel)
+}
+
+#[cfg(test)]
+mod channel_tests {
+    #[test]
+    fn home_channel_requires_one_valid_explicit_observation() {
+        assert_eq!(
+            super::home_channel("oer-vendor-calibration-channel 6\n").unwrap(),
+            6
+        );
+        for bad in [
+            "",
+            "oer-vendor-calibration-channel 0\n",
+            "oer-vendor-calibration-channel 15\n",
+            "oer-vendor-calibration-channel x\n",
+            "oer-vendor-calibration-channel 1\noer-vendor-calibration-channel 6\n",
+        ] {
+            assert!(super::home_channel(bad).is_err());
+        }
+    }
+}
 /// Suffix of a register reply prefix, and the request the firmware answers.
 const REGISTER_SUFFIX: &str = "-register";
 pub const REGISTER_REQUEST: &str = "r";

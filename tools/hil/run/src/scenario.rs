@@ -11,7 +11,10 @@ use oer_hil_scenario::workload::family::{AnyFamily, FixtureProvider, Kind, Regis
 pub(crate) struct Families;
 
 impl Registry for Families {
-    const FAMILIES: &'static [Kind] = &[oer_hil_family_system::FAMILY];
+    const FAMILIES: &'static [Kind] = &[
+        oer_hil_family_system::FAMILY,
+        oer_vendor_phy_esp32s31::family::FAMILY,
+    ];
     const FIXTURES: &'static [&'static dyn FixtureProvider] = &[];
 }
 

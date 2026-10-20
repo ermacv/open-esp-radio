@@ -9,6 +9,7 @@ publish = false
 description = "The HIL runner: its command line, a run of scenarios on the stand, and the image, flash and executor work it does"
 
 [dependencies]
+oer-vendor-phy-esp32s31 = { path = "../../vendor/phy-esp32s31" }
 oer-image-checks = { path = "../../image/checks" }
 oer-lab-board = { path = "../../lab/board" }
 oer-hil-runs = { path = "../runs" }
@@ -36,6 +37,7 @@ oer-image-compare = { path = "../../image/compare" }
 toml = "1.1"
 
 [dev-dependencies]
+oer-hil-lab = { path = "../lab", features = ["test-support"] }
 oer-hil-runs = { path = "../runs", features = ["test-support"] }
 toml = "1.1"
 oer-hil-scenario = { path = "../scenario", features = ["test-support"] }

@@ -10,5 +10,7 @@ pub mod calibration_capture;
 
 pub mod comparison;
 pub mod reference;
+pub mod scenario;
+mod workload;
 
 pub(crate) use oer_hil_scenario::workload::Result;

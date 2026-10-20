@@ -1,6 +1,9 @@
 # PHY acceptance scenarios: vendor calibration cross-check
 
-HIL catalog outside this repository, state of 2026-10-16; its run records are outside this repository too.
+The Wi-Fi investigations are in `tools/hil/scenarios/phy/` and run the separate
+`diagnostic-phy` image. The historical hardware results below came from a
+catalog outside this repository. IEEE 802.15.4 points are not served by the
+current diagnostic image.
 
 These scenarios alternate two firmwares on the same ESP32-S31 board, in
 rounds: the pinned vendor firmware is flashed and booted, then the production
@@ -66,7 +69,7 @@ The compared classes:
 
 ## Cold calibration against the vendor
 
-- Checks: production calibrates cold (its startup artifact is Created) and
+- Checks: production calibrates cold (it reports full calibration and FullForCache, with an archived immutable registration projection) and
   publishes its calibration; this is compared to the vendor cold boot.
 - Gate: 10 boots per side; MATCH.
 - Hardware: not confirmed as a HIL scenario. A verification tool outside

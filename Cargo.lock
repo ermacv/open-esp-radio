@@ -3162,6 +3162,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-firmware-hil-esp32s31-phy"
+version = "0.1.0"
+dependencies = [
+ "embassy-executor",
+ "embassy-sync 0.8.0",
+ "esp-hal",
+ "heapless 0.9.3",
+ "oer-embassy-time",
+ "oer-esp32s31-board",
+ "oer-esp32s31-hal",
+ "oer-esp32s31-layout",
+ "oer-esp32s31-phy",
+ "oer-espressif-esp-hal-irq",
+ "oer-espressif-esp-hal-radio",
+ "oer-espressif-executor",
+ "oer-espressif-staged-runtime",
+ "oer-hil-agent",
+ "oer-hil-protocol",
+ "oer-memory",
+ "oer-time",
+ "static_cell",
+]
+
+[[package]]
 name = "oer-firmware-probes-esp32c5-radio"
 version = "0.1.0"
 dependencies = [
@@ -3434,6 +3458,7 @@ dependencies = [
  "oer-os-durable",
  "oer-os-process",
  "oer-os-toolchain",
+ "oer-vendor-phy-esp32s31",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -4274,13 +4299,20 @@ name = "oer-vendor-phy"
 version = "0.1.0"
 dependencies = [
  "oer-analysis-elf",
+ "oer-hil-lab",
+ "oer-hil-link",
+ "oer-hil-model",
+ "oer-hil-protocol",
  "oer-hil-scenario",
+ "oer-image-build",
  "oer-lab-board",
+ "oer-os-durable",
  "oer-os-process",
  "oer-os-toolchain",
  "serde",
  "serde_json",
  "tempfile",
+ "toml",
 ]
 
 [[package]]
@@ -4288,6 +4320,7 @@ name = "oer-vendor-phy-esp32s31"
 version = "0.1.0"
 dependencies = [
  "oer-esp32s31-knowledge",
+ "oer-hil-scenario",
  "oer-os-process",
  "oer-registers-model",
  "oer-vendor-phy",

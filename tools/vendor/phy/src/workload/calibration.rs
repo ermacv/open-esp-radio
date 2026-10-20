@@ -1,177 +1,348 @@
-//! The vendor-versus-production calibration cross-check on the board under
-//! test.
-//!
-//! Each round flashes and boots the vendor firmware, then writes the
-//! scenario's production image back and boots it, so both sides see the
-//! same board temperature drift. Every flash goes through the run's
-//! [`BoardImages`], that is the flash operation under the run's lock, which
-//! journals it. Each production boot receives a fresh startup artifact path,
-//! so it calibrates fully and publishes its retained calibration. Every boot
-//! is a typed observation of the repetition; the chip's comparison
-//! ([`Comparison`]) is its result, and anything but MATCH fails the
-//! repetition.
-use std::io::{Read, Write as _};
-use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant};
-
-use oer_hil_model::schema::image::ImageClass;
-use oer_hil_link::{SerialCapture, Target};
-use oer_hil_scenario::workload::context::Context;
-use crate::calibration_capture::boots::{
-    Images, Lifecycle, ProductionBoot, Readings, Transmitted, VendorBoot,
+//! Alternating board captures. Every image write uses the run's leased port.
+use crate::{
+    Result,
+    calibration_capture::{
+        boots::{Images, Lifecycle, ProductionBoot, Readings, VendorBoot},
+        space::{Register, Space},
+        vendor,
+    },
+    comparison::Comparison,
 };
-use crate::calibration_capture::space::{Register, Space};
-use crate::calibration_capture::vendor;
+use oer_hil_protocol::phy::*;
+use oer_hil_scenario::workload::context::Context;
+use oer_image_build::esp_idf::catalog;
+use std::{
+    io::{Read, Write},
+    path::Path,
+    time::{Duration, Instant},
+};
 
-use super::reference::{self, Peer};
-use crate::Result;
-use crate::comparison::Comparison;
-use crate::scenario::{Window, vendor_projects};
-
-/// Longest wait for one vendor boot's closed report.
 const VENDOR_BOOT_TIMEOUT: Duration = Duration::from_secs(20);
-/// Serial read poll interval; the USB-Serial/JTAG console ignores the rate.
 const READ_TIMEOUT: Duration = Duration::from_millis(100);
-/// Longest wait for one Wi-Fi radio restart on either side.
-const RESTART_TIMEOUT: Duration = Duration::from_secs(10);
-/// Longest wait for one production register image window.
-const REGISTER_IMAGE_TIMEOUT: Duration = Duration::from_secs(2);
-/// Longest wait for one IEEE 802.15.4 session command of production.
-const SESSION_TIMEOUT: Duration = Duration::from_secs(10);
-/// Console characters an unanswered register read reports.
+const RESTART_TIMEOUT: Duration = Duration::from_secs(30);
+const REGISTER_IMAGE_TIMEOUT: Duration = Duration::from_secs(3);
+const PREPARE_TIMEOUT: Duration = Duration::from_secs(120);
 const CONSOLE_TAIL_CHARS: usize = 2000;
 
-/// What one repetition compares.
-pub(crate) struct Calibration<'a> {
-    pub lifecycle: Lifecycle,
-    pub boots: u8,
-    pub image: ImageClass,
-    pub vendor_project: &'a str,
-    pub windows: &'a [Window],
-    pub transmit: bool,
-    pub vendor_only: bool,
-}
-
 pub(crate) fn run<C: Comparison>(
-    spec: &Calibration<'_>,
+    lifecycle: Lifecycle,
+    boots: u16,
+    vendor_only: bool,
     output: &Path,
     context: &Context<'_>,
 ) -> Result<()> {
     let root = oer_os_process::built_root();
-    let chip = context.lab.chip();
-    let projects = vendor_projects(chip)?;
+    let entries = catalog::entries(&root)?;
+    let entry = catalog::entry(&entries, "vendor-calibration")?;
+    if entry.chip != C::CHIP || entry.pins != C::CHIP || entry.hold.is_some() {
+        return Err("the calibration reference is held or targets another chip".into());
+    }
+    let build = catalog::build(&root, &entry.image)?;
+    let bundle = catalog::bundle(&root, entry, &build, &output.join("vendor-image"))?;
     let images = context.images()?;
-    // The pinned ESP-IDF build of the vendor firmware is incremental; the
-    // pipeline encodes the HIL bootloader, partition table and OTA selection
-    // around its application.
-    let build = oer_image_esp_idf::build(
-        &root,
-        chip,
-        &[oer_image_esp_idf::Project {
-            name: spec.vendor_project.to_owned(),
-            source: root.join(&projects).join(spec.vendor_project),
-            chip: chip.to_owned(),
-        }],
-    )?
-    .pop()
-    .ok_or("the vendor firmware build produced no image")?;
-    let vendor_bundle = oer_image_build::bundle::around(
-        &root,
-        chip,
-        Path::new(&build.application),
-        oer_image_build::bundle::BootFiles::Encode {
-            elf: Path::new(&build.elf),
-        },
-        &output.join("vendor-image"),
-    )?;
     let identity = Images {
         started_unix_seconds: oer_os_durable::unix_seconds(),
-        vendor_project: spec.vendor_project.to_owned(),
+        vendor_project: lifecycle.vendor_project().into(),
         vendor_application_sha256: build.application_sha256.clone(),
         vendor_idf_revision: build.idf_revision.clone(),
-        production_image: spec.image.id().to_owned(),
+        production_image: "diagnostic-phy".into(),
         production_application_sha256: oer_os_durable::sha256_file(
             &images.scenario_image().application(),
         )?,
     };
     context.results.observe("images", &identity);
-    let images_read = C::images(&root)?;
-    let (registers, analog) = (&images_read.registers, &images_read.analog);
-    let windows = window_registers(spec.windows);
-    let journal_name = format!("vendor-{}", spec.vendor_project);
-    let (mut vendor, mut production) = (Vec::new(), Vec::new());
-    for boot in 1..=spec.boots {
-        images.flash(&vendor_bundle, &journal_name)?;
-        let stem = output.join(format!("vendor-{boot:02}"));
-        let vendor_boot = if spec.lifecycle.ieee802154() {
-            reference_boot(context, spec, registers, analog, &windows, &stem)?
-        } else {
-            calibration_boot(
-                context,
-                spec.lifecycle,
-                C::VENDOR_OBJECT,
-                registers,
-                analog,
-                &stem,
-            )?
-        };
-        context
-            .results
-            .observe(format!("vendor-boot-{boot:02}"), &vendor_boot);
-        let readable: Vec<usize> = registers
-            .iter()
-            .enumerate()
-            .filter(|(_, register)| vendor_boot.registers.values.contains_key(&register.address))
-            .map(|(index, _)| index)
-            .collect();
-        vendor.push(vendor_boot);
-        if spec.vendor_only {
-            continue;
-        }
-        images.restore()?;
-        let production_boot = production_boot(
+    let published = C::images(&root)?;
+    let mut vendors = Vec::new();
+    let mut productions = Vec::new();
+    for boot in 1..=boots {
+        oer_os_process::check_cancelled()?;
+        images.flash(&bundle, &entry.image)?;
+        let stem = output.join(format!("vendor-{boot:03}"));
+        let captured = calibration_boot(
             context,
-            spec.lifecycle,
-            &output.join(format!("production-{boot:02}")),
-            registers,
-            &readable,
-            analog,
+            lifecycle,
+            C::VENDOR_OBJECT,
+            &published.registers,
+            &published.analog,
+            &stem,
+        );
+        // Restore the diagnostic image even if a reference boot/read failed.
+        let restored = images.restore();
+        let (vendor_boot, channel) = captured?;
+        restored?;
+        std::fs::write(
+            stem.with_extension("json"),
+            serde_json::to_vec_pretty(&vendor_boot)?,
         )?;
         context
             .results
-            .observe(format!("production-boot-{boot:02}"), &production_boot);
-        production.push(production_boot);
+            .observe(format!("vendor-boot-{boot:03}"), &vendor_boot);
+        context
+            .results
+            .observe(format!("vendor-channel-{boot:03}"), &channel);
+        let readable: Vec<usize> = published
+            .registers
+            .iter()
+            .enumerate()
+            .filter(|(_, reg)| vendor_boot.registers.values.contains_key(&reg.address))
+            .map(|(index, _)| index)
+            .collect();
+        vendors.push(vendor_boot);
+        if !vendor_only {
+            let directory = output.join(format!("production-{boot:03}"));
+            let production = production_boot(
+                context,
+                lifecycle,
+                channel,
+                &directory,
+                &published.registers,
+                &readable,
+                &published.analog,
+            )?;
+            std::fs::write(
+                directory.join("capture.json"),
+                serde_json::to_vec_pretty(&production)?,
+            )?;
+            context
+                .results
+                .observe(format!("production-boot-{boot:03}"), &production);
+            productions.push(production);
+        }
     }
-    if spec.vendor_only {
-        // The board carries the vendor firmware; the runner flashes the
-        // next scenario's image.
-        context.results.claim(
-            "vendor PHY state captured for an investigation",
-            &["production-equivalence"],
-        );
+    if vendor_only {
+        context
+            .results
+            .claim("vendor boot spread captured", &["production-equivalence"]);
         return Ok(());
     }
-    let compared = C::compare(
-        spec.lifecycle,
-        &identity,
-        &vendor,
-        &production,
-        &images_read,
-    )?;
+    let compared = C::compare(lifecycle, &identity, &vendors, &productions, &published)?;
     context.results.observe("comparison", &compared.summary);
-    context.results.claim(
-        "production PHY calibration and register state within the vendor's boot-to-boot spread",
-        &["modem-sleep", "phy-param-bytes-outside-the-relation"],
-    );
+    std::fs::write(
+        output.join("comparison.json"),
+        serde_json::to_vec_pretty(&compared.summary)?,
+    )?;
     match compared.mismatch {
         None => Ok(()),
-        Some(mismatch) => Err(format!("calibration cross-check {mismatch}").into()),
+        Some(reason) => Err(format!("calibration cross-check {reason}").into()),
     }
 }
 
-/// The console port of the board under test, just reset. The port is
-/// opened through the stand's opener, which never resets the chip on its
-/// own.
+fn validate_ready(ready: &CaptureReady, registers: usize, analog: usize) -> Result<()> {
+    if ready.epoch == 0
+        || !ready.full_calibration_performed
+        || ready.path != CalibrationPath::FullForCache
+        || ready.projection_schema != 1
+        || ready.calibration_words == 0
+        || usize::from(ready.registers) != registers
+        || usize::from(ready.analog_bytes) != analog
+    {
+        return Err(
+            "diagnostic capture did not establish full calibration and the published images".into(),
+        );
+    }
+    Ok(())
+}
+
+fn check_page<T>(
+    ready: &CaptureReady,
+    window: CaptureWindow,
+    epoch: u32,
+    first: u16,
+    total: u16,
+    values: &[T],
+    expected: u16,
+) -> Result<()> {
+    if epoch != ready.epoch
+        || first != window.first
+        || total != expected
+        || values.len() != usize::from(window.count)
+    {
+        return Err(
+            "capture page is missing, stale, truncated or changes its declared image".into(),
+        );
+    }
+    Ok(())
+}
+
+fn production_boot(
+    context: &Context<'_>,
+    lifecycle: Lifecycle,
+    channel: u8,
+    directory: &Path,
+    registers: &[Register],
+    readable: &[usize],
+    analog: &[Register],
+) -> Result<ProductionBoot> {
+    std::fs::create_dir_all(directory)?;
+    let mut captured = ProductionBoot::default();
+    let outcome = context.with_capture(directory, |capture| {
+        let keys = capture.request_image_keys(REGISTER_IMAGE_TIMEOUT)?;
+        if !keys.has::<PrepareCapture>() || !keys.has::<ReadAnalogImage>() {
+            return Err("diagnostic image lacks capture endpoints".into());
+        }
+        let mut ready = capture.request(0, PrepareCapture { channel }, PREPARE_TIMEOUT)?;
+        validate_ready(&ready, registers.len(), analog.len())?;
+        if ready.lifecycle != CaptureLifecycle::Cold || ready.channel != channel {
+            return Err("wrong cold capture point".into());
+        }
+        context.results.observe(
+            format!(
+                "{}-registration",
+                directory
+                    .file_name()
+                    .ok_or("capture directory has no name")?
+                    .to_string_lossy()
+            ),
+            &ready,
+        );
+        if lifecycle == Lifecycle::Restart {
+            let restarted = capture.request(
+                0,
+                RestartCaptureRadio { epoch: ready.epoch },
+                RESTART_TIMEOUT,
+            )?;
+            if !restarted.rf_closed
+                || !restarted.rf_woken
+                || restarted.ready.epoch <= ready.epoch
+                || restarted.ready.lifecycle != CaptureLifecycle::Restart
+                || restarted.ready.channel != channel
+            {
+                return Err("radio restart did not establish a new closed-and-woken epoch".into());
+            }
+            ready = restarted.ready;
+            validate_ready(&ready, registers.len(), analog.len())?;
+            context.results.observe(
+                format!(
+                    "{}-restart",
+                    directory
+                        .file_name()
+                        .ok_or("capture directory has no name")?
+                        .to_string_lossy()
+                ),
+                &restarted,
+            );
+        }
+        let result: Result<()> = (|| {
+            let mut projection = Vec::new();
+            for window in windows(
+                ready.epoch,
+                &(0..usize::from(ready.calibration_words)).collect::<Vec<_>>(),
+            )? {
+                let page = capture.request(
+                    0,
+                    ReadCalibrationProjection(window),
+                    REGISTER_IMAGE_TIMEOUT,
+                )?;
+                check_page(
+                    &ready,
+                    window,
+                    page.epoch,
+                    page.first,
+                    page.total,
+                    &page.values,
+                    ready.calibration_words,
+                )?;
+                projection.extend(page.values.iter().flat_map(|value| value.to_le_bytes()));
+            }
+            captured.calibration = Some(projection);
+            for window in windows(ready.epoch, readable)? {
+                let page = capture.request(0, ReadRegisterImage(window), REGISTER_IMAGE_TIMEOUT)?;
+                check_page(
+                    &ready,
+                    window,
+                    page.epoch,
+                    page.first,
+                    page.total,
+                    &page.values,
+                    ready.registers,
+                )?;
+                for (offset, value) in page.values.iter().enumerate() {
+                    captured.registers.values.insert(
+                        registers
+                            .get(usize::from(window.first) + offset)
+                            .ok_or("register page exceeds the published model")?
+                            .address,
+                        *value,
+                    );
+                }
+            }
+            for window in windows(ready.epoch, &(0..analog.len()).collect::<Vec<_>>())? {
+                let page = capture.request(0, ReadAnalogImage(window), REGISTER_IMAGE_TIMEOUT)?;
+                check_page(
+                    &ready,
+                    window,
+                    page.epoch,
+                    page.first,
+                    page.total,
+                    &page.values,
+                    ready.analog_bytes,
+                )?;
+                for (offset, value) in page.values.iter().enumerate() {
+                    captured.analog.values.insert(
+                        analog
+                            .get(usize::from(window.first) + offset)
+                            .ok_or("analog page exceeds the published model")?
+                            .address,
+                        u32::from(*value),
+                    );
+                }
+            }
+            Ok(())
+        })();
+        let stopped = capture.request(0, StopCapture { epoch: ready.epoch }, RESTART_TIMEOUT);
+        result?;
+        let stopped = stopped?;
+        if stopped.epoch != ready.epoch || !stopped.rf_closed {
+            return Err("capture cleanup did not close RF".into());
+        }
+        Ok(())
+    });
+    if let Err(error) = outcome {
+        let incomplete = serde_json::json!({
+            "verdict": "INCOMPLETE", "failure": error.to_string(), "partial": &captured,
+        });
+        std::fs::write(
+            directory.join("capture-incomplete.json"),
+            serde_json::to_vec_pretty(&incomplete)?,
+        )?;
+        context.results.observe(
+            format!(
+                "capture-incomplete-{}",
+                directory
+                    .file_name()
+                    .ok_or("capture directory has no name")?
+                    .to_string_lossy()
+            ),
+            &incomplete,
+        );
+        return Err(format!("capture INCOMPLETE: {error}").into());
+    }
+    Ok(captured)
+}
+
+fn windows(epoch: u32, indices: &[usize]) -> Result<Vec<CaptureWindow>> {
+    let mut windows: Vec<CaptureWindow> = Vec::new();
+    for &index in indices {
+        let first = u16::try_from(index)?;
+        match windows.last_mut() {
+            Some(last)
+                if usize::from(last.first) + usize::from(last.count) == index
+                    && usize::from(last.count) < CAPTURE_PAGE =>
+            {
+                last.count += 1
+            }
+            Some(last) if index < usize::from(last.first) + usize::from(last.count) => {
+                return Err("capture indices must be unique and increasing".into());
+            }
+            _ => windows.push(CaptureWindow {
+                epoch,
+                first,
+                count: 1,
+            }),
+        }
+    }
+    Ok(windows)
+}
 fn reset_console(port: &Path) -> Result<oer_lab_board::port::Port> {
     use oer_lab_board::reset::{open_without_reset, reset_usb_serial_jtag};
     let mut serial = open_without_reset(port)?;
@@ -190,7 +361,7 @@ fn calibration_boot(
     registers: &[Register],
     analog: &[Register],
     stem: &Path,
-) -> Result<VendorBoot> {
+) -> Result<(VendorBoot, u8)> {
     let (console, mut serial) = vendor_boot(&context.lab.dut.serial)?;
     std::fs::write(stem.with_extension("log"), &console)?;
     let mut objects = vendor::parse(&console)?;
@@ -210,56 +381,21 @@ fn calibration_boot(
         lifecycle,
         &mut analog_replies,
     )?;
-    Ok(VendorBoot {
-        calibration: Some(calibration),
-        registers: Readings::parse(Space::Mmio, &replies)?,
-        analog: Readings::parse(Space::Analog, &analog_replies)?,
-        windows: None,
-        transmitted: None,
-    })
+    let channel = vendor::home_channel(&console)?;
+    std::fs::write(stem.with_extension("registers.log"), &replies)?;
+    std::fs::write(stem.with_extension("analog.log"), &analog_replies)?;
+    Ok((
+        VendorBoot {
+            calibration: Some(calibration),
+            registers: Readings::parse(Space::Mmio, &replies)?,
+            analog: Readings::parse(Space::Analog, &analog_replies)?,
+            windows: None,
+            transmitted: None,
+        },
+        channel,
+    ))
 }
 
-/// One boot of the IEEE 802.15.4 reference firmware, configured and
-/// receiving, with the investigation reads the scenario asks for.
-fn reference_boot(
-    context: &Context<'_>,
-    spec: &Calibration<'_>,
-    registers: &[Register],
-    analog: &[Register],
-    windows: &[Register],
-    stem: &Path,
-) -> Result<VendorBoot> {
-    let mut peer = Peer::boot(
-        reset_console(&context.lab.dut.serial)?,
-        spec.lifecycle == Lifecycle::Ieee802154Restart,
-    )?;
-    let replies = peer.registers(Space::Mmio, registers)?;
-    let analog_replies = peer.registers(Space::Analog, analog)?;
-    let window_readings = (!windows.is_empty())
-        .then(|| Readings::parse(Space::Mmio, &peer.registers(Space::Mmio, windows)?))
-        .transpose()?;
-    let transmitted = if spec.transmit {
-        peer.transmit()?;
-        let analog = Readings::parse(Space::Analog, &peer.registers(Space::Analog, analog)?)?;
-        let windows = (!windows.is_empty())
-            .then(|| Readings::parse(Space::Mmio, &peer.registers(Space::Mmio, windows)?))
-            .transpose()?;
-        Some(Transmitted { analog, windows })
-    } else {
-        None
-    };
-    std::fs::write(stem.with_extension("log"), &peer.console)?;
-    Ok(VendorBoot {
-        calibration: None,
-        registers: Readings::parse(Space::Mmio, &replies)?,
-        analog: Readings::parse(Space::Analog, &analog_replies)?,
-        windows: window_readings,
-        transmitted,
-    })
-}
-
-/// The console of one reset vendor boot, up to its closed report, and the
-/// open port the firmware keeps answering on.
 fn vendor_boot(port: &Path) -> Result<(String, oer_lab_board::port::Port)> {
     let mut serial = reset_console(port)?;
     let started = Instant::now();
@@ -286,10 +422,7 @@ fn vendor_boot(port: &Path) -> Result<(String, oer_lab_board::port::Port)> {
 /// Restart the vendor Wi-Fi radio and require that stopping the client
 /// released every PHY modem, which closes RF. `replies` accumulates the
 /// console.
-fn vendor_restart(
-    serial: &mut oer_lab_board::port::Port,
-    replies: &mut String,
-) -> Result<()> {
+fn vendor_restart(serial: &mut oer_lab_board::port::Port, replies: &mut String) -> Result<()> {
     let done = vendor::restarts(replies)?.len();
     serial.write_all(vendor::RESTART_REQUEST.as_bytes())?;
     let started = Instant::now();
@@ -367,288 +500,263 @@ fn vendor_registers(
     Ok(())
 }
 
-/// One cold production boot publishing its retained calibration to a fresh
-/// startup artifact in `directory`, then reading the register image at the
-/// `readable` indices the vendor boot answered and the whole analog image.
-fn production_boot(
-    context: &Context<'_>,
-    lifecycle: Lifecycle,
-    directory: &Path,
-    registers: &[Register],
-    readable: &[usize],
-    analog: &[Register],
-) -> Result<ProductionBoot> {
-    std::fs::create_dir_all(directory)?;
-    let artifact: PathBuf = directory.join("startup-artifact.bin");
-    let mut lab = context.lab.clone();
-    lab.dut.startup_artifact = Some(artifact.clone());
-    let capture = context.capture_of(&lab, directory)?;
-    let result = (|| {
-        // The IEEE 802.15.4 session replaces the image's own initialization:
-        // it is admitted only before it, and publishes no startup artifact.
-        let status = if lifecycle.ieee802154() {
-            capture.request_image_keys(SESSION_TIMEOUT)?;
-            None
-        } else {
-            let (_, status) = capture.prepare_startup(Target {
-                dut: &lab,
-                station: &lab.station,
-                settings: oer_hil_protocol::wifi::TargetSettings::default(),
-            })?;
-            status
-        };
-        if lifecycle == Lifecycle::Restart {
-            let evidence = capture
-                .wait_command::<oer_hil_protocol::wifi::RadioRestarted>(
-                    capture.command(
-                        oer_hil_protocol::wifi::RestartRadio,
-                        oer_hil_link::PROTOCOL_READY_TIMEOUT,
-                    )?,
-                    RESTART_TIMEOUT,
-                )
-                .map(|completed| completed.0)?;
-            if evidence.rf != oer_hil_protocol::wifi::WifiRadioRestartRf::ClosedAndWoken {
-                return Err(format!("the production restart kept RF open: {evidence:?}").into());
-            }
-        }
-        if lifecycle.ieee802154() {
-            ieee802154_session(&capture)?;
-            if lifecycle == Lifecycle::Ieee802154Restart {
-                // The session stops and starts its radio client, then
-                // configures and receives again without transmitting.
-                let restarted = capture
-                    .request(
-                        0,
-                        oer_hil_protocol::ieee802154::RestartSessionRadio,
-                        SESSION_TIMEOUT,
-                    )
-                    .map(|response| response.0)?;
-                if !restarted.rf_closed {
-                    return Err(format!(
-                        "the production session restart kept RF open: {restarted:?}"
-                    )
-                    .into());
-                }
-            }
-        }
-        let mut values = Readings::default();
-        for window in windows(readable) {
-            let words = capture
-                .request(
-                    0,
-                    oer_hil_protocol::phy::ReadRegisterImage(window),
-                    REGISTER_IMAGE_TIMEOUT,
-                )?
-                .0;
-            for (offset, value) in words.values.iter().enumerate() {
-                let register = &registers[usize::from(words.first) + offset];
-                values.values.insert(register.address, *value);
-            }
-        }
-        let mut analog_values = Readings::default();
-        let every: Vec<usize> = (0..analog.len()).collect();
-        for window in windows(&every) {
-            let bytes = capture
-                .request(
-                    0,
-                    oer_hil_protocol::phy::ReadAnalogImage(window),
-                    REGISTER_IMAGE_TIMEOUT,
-                )?
-                .0;
-            if usize::from(bytes.length) != analog.len() {
-                return Err(format!(
-                    "production reads {} analog registers, the published model {}",
-                    bytes.length,
-                    analog.len()
-                )
-                .into());
-            }
-            for (offset, value) in bytes.values.iter().enumerate() {
-                let register = &analog[usize::from(bytes.first) + offset];
-                analog_values
-                    .values
-                    .insert(register.address, u32::from(*value));
-            }
-        }
-        // The firmware projects the calibration it published; the host
-        // compares the words without replaying the calibration itself.
-        let projection = if status.is_some() {
-            Some(calibration_projection(&capture)?)
-        } else {
-            None
-        };
-        Ok((status, values, analog_values, projection))
-    })();
-    let (status, registers, analog, projection) = capture.finish_with(result)?;
-    let calibration = if lifecycle.ieee802154() {
-        None
-    } else {
-        let status = status.ok_or("the production image published no startup artifact")?;
-        if status.disposition
-            != oer_hil_protocol::phy::StartupArtifactDisposition::Created
-        {
-            return Err(format!(
-                "the production boot did not calibrate cold: {:?}",
-                status.disposition
-            )
-            .into());
-        }
-        Some(projection.ok_or("the production image projected no calibration")?)
-    };
-    Ok(ProductionBoot {
-        calibration,
-        registers,
-        analog,
-    })
-}
-
-/// Start production's IEEE 802.15.4 session on the reference firmware's
-/// channel and receive; the session's default PIB transmits at the same
-/// power.
-fn ieee802154_session(capture: &SerialCapture) -> Result<()> {
-    capture
-        .request(
-            0,
-            oer_hil_protocol::ieee802154::StartSession(
-                oer_hil_protocol::ieee802154::Ieee802154SessionConfig {
-                    channel: reference::CHANNEL,
-                    pan_id: reference::PAN_ID,
-                    short_address: reference::SHORT_ADDRESS,
-                    extended_address: reference::EXTENDED_ADDRESS,
-                    promiscuous: false,
-                    background_maintenance: false,
-                    enhanced_ack: false,
-                    wifi_coexistence: false,
-                },
-            ),
-            SESSION_TIMEOUT,
-        )
-        .map(|response| response.0)?;
-    capture
-        .request(
-            0,
-            oer_hil_protocol::ieee802154::ReceiveSession,
-            Duration::from_secs(5),
-        )
-        .map(drop)
-}
-
-/// Requests covering the ascending `indices` in runs of at most one reply.
-/// The production output bytes of the parent root's calibration projection,
-/// parent words and committed state words, as the image projected the
-/// retained calibration it published (`phy/calibration-projection/read`):
-/// each word little-endian, in the relation's order.
-fn calibration_projection(capture: &SerialCapture) -> Result<Vec<u8>> {
-    let mut words = Vec::new();
-    let mut length = None;
-    while length.is_none_or(|length| words.len() < length) {
-        let window = capture
-            .request(
-                0,
-                oer_hil_protocol::phy::ReadCalibrationProjection(
-                    oer_hil_protocol::phy::PhyCalibrationProjectionRequest {
-                        first: words.len() as u16,
-                        count: length.map_or(
-                            oer_hil_protocol::phy::PHY_CALIBRATION_PROJECTION_WORDS,
-                            |length: usize| {
-                                (length - words.len())
-                                    .min(oer_hil_protocol::phy::PHY_CALIBRATION_PROJECTION_WORDS)
-                            },
-                        ) as u8,
-                    },
-                ),
-                REGISTER_IMAGE_TIMEOUT,
-            )?
-            .0;
-        if usize::from(window.first) != words.len() || window.values.is_empty() {
-            return Err("the calibration projection window does not continue the words".into());
-        }
-        length = Some(usize::from(window.length));
-        words.extend(window.values.iter().copied());
-    }
-    Ok(words.iter().flat_map(|word| word.to_le_bytes()).collect())
-}
-
-fn windows(indices: &[usize]) -> Vec<oer_hil_protocol::phy::PhyRegisterImageRequest> {
-    let mut windows: Vec<oer_hil_protocol::phy::PhyRegisterImageRequest> = vec![];
-    for &index in indices {
-        match windows.last_mut() {
-            Some(window)
-                if usize::from(window.first) + usize::from(window.count) == index
-                    && usize::from(window.count)
-                        < oer_hil_protocol::phy::PHY_REGISTER_IMAGE_WORDS =>
-            {
-                window.count += 1
-            }
-            _ => windows.push(oer_hil_protocol::phy::PhyRegisterImageRequest {
-                first: index as u16,
-                count: 1,
-            }),
-        }
-    }
-    windows
-}
-
-/// The registers of vendor `windows`, one per word.
-fn window_registers(windows: &[Window]) -> Vec<Register> {
-    windows
-        .iter()
-        .flat_map(|window| (0..window.words).map(move |word| window.address + 4 * word))
-        .map(|address| Register {
-            name: format!("window.{address:08x}"),
-            address,
-        })
-        .collect()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use oer_hil_link::{
+        Received,
+        test_support::{self, Input, Output},
+    };
+    use oer_hil_protocol::{Envelope, FrameDecoder, Message, WireKind, base::*};
+    use std::sync::{Arc, Mutex, mpsc};
 
-    #[test]
-    fn vendor_windows_become_word_registers() {
-        let registers = window_registers(&[
-            Window {
-                address: 0x2010_fc00,
-                words: 2,
-            },
-            Window {
-                address: 0x2010_08b8,
-                words: 1,
-            },
-        ]);
-        let addresses: Vec<u32> = registers.iter().map(|r| r.address).collect();
-        assert_eq!(addresses, [0x2010_fc00, 0x2010_fc04, 0x2010_08b8]);
+    fn ready() -> CaptureReady {
+        CaptureReady {
+            epoch: 1,
+            lifecycle: CaptureLifecycle::Cold,
+            full_calibration_performed: true,
+            path: CalibrationPath::FullForCache,
+            projection_schema: 1,
+            calibration_words: 20,
+            registers: 3,
+            analog_bytes: 2,
+            channel: 6,
+        }
     }
 
     #[test]
-    fn readable_indices_group_into_reply_windows() {
-        let indices: Vec<usize> = (0..20).chain([30, 31]).collect();
-        let windows: Vec<_> = windows(&indices)
-            .iter()
-            .map(|w| (w.first, w.count))
-            .collect();
-        assert_eq!(windows, [(0, 16), (16, 4), (30, 2)]);
-    }
-
-    #[test]
-    fn vendor_console_replies_become_typed_readings() {
-        let console = format!(
-            "{}{}{}",
-            vendor::register_line(0x2010_0434, 0xabcd),
-            vendor::unreadable_line(0x2010_2800),
-            vendor::register_line(0x2010_0438, 1)
+    fn incomplete_registration_and_changed_image_lengths_are_rejected() {
+        validate_ready(&ready(), 3, 2).unwrap();
+        assert!(
+            validate_ready(
+                &CaptureReady {
+                    full_calibration_performed: false,
+                    ..ready()
+                },
+                3,
+                2
+            )
+            .is_err()
         );
-        let readings = Readings::parse(Space::Mmio, &console).unwrap();
-        assert_eq!(readings.values[&0x2010_0434], 0xabcd);
-        assert!(readings.unreadable.contains(&0x2010_2800));
-        let boot = VendorBoot {
-            calibration: Some(vec![1, 2]),
-            registers: readings,
-            ..VendorBoot::default()
+        assert!(
+            validate_ready(
+                &CaptureReady {
+                    epoch: 0,
+                    ..ready()
+                },
+                3,
+                2
+            )
+            .is_err()
+        );
+        assert!(validate_ready(&ready(), 4, 2).is_err());
+        let window = CaptureWindow {
+            epoch: 1,
+            first: 2,
+            count: 1,
         };
-        // The observation the run bundle carries reads back as the boot.
-        let value = serde_json::to_value(&boot).unwrap();
-        assert_eq!(serde_json::from_value::<VendorBoot>(value).unwrap(), boot);
+        assert!(check_page(&ready(), window, 2, 2, 3, &[9], 3).is_err());
+        assert!(check_page::<u8>(&ready(), window, 1, 2, 3, &[], 3).is_err());
+        assert!(check_page(&ready(), window, 1, 2, 4, &[9], 3).is_err());
+    }
+
+    fn reply<M: Message>(input: &Input, request: &Received, sequence: &mut u32, value: M) {
+        input
+            .send(Ok(test_support::frame(Envelope::new(
+                7,
+                *sequence,
+                request.session_id,
+                request.request_id,
+                value,
+            ))))
+            .unwrap();
+        *sequence += 1;
+    }
+
+    fn target(input: Input, commands: mpsc::Receiver<Vec<u8>>, stale: bool) -> Vec<&'static str> {
+        let keys = oer_hil_protocol::feature_keys::image_keys(&|name| name == "diagnostic-phy");
+        let key_set = ImageKeySet::new(&keys);
+        input
+            .send(Ok(test_support::frame(Envelope::new(
+                7,
+                0,
+                0,
+                0,
+                key_set.hello(0),
+            ))))
+            .unwrap();
+        let mut sequence = 1;
+        let mut calls = Vec::new();
+        let mut active = ready();
+        while let Ok(bytes) = commands.recv() {
+            let mut decoded = None;
+            FrameDecoder::new().feed(WireKind::Command, &bytes, |frame| {
+                decoded = Some(Received::from_frame(&frame.unwrap()).unwrap())
+            });
+            let request = decoded.unwrap();
+            if let Some(get) = request.decode::<GetImageKeys>() {
+                reply(&input, &request, &mut sequence, key_set.page(get.first));
+            } else if request.is::<GetHello>() {
+                reply(&input, &request, &mut sequence, key_set.hello(0));
+            } else if request.is::<PrepareCapture>() {
+                calls.push("prepare");
+                reply(&input, &request, &mut sequence, active);
+            } else if let Some(restart) = request.decode::<RestartCaptureRadio>() {
+                assert_eq!(restart.epoch, active.epoch);
+                active.epoch += 1;
+                active.lifecycle = CaptureLifecycle::Restart;
+                calls.push("restart");
+                reply(
+                    &input,
+                    &request,
+                    &mut sequence,
+                    CaptureRestarted {
+                        ready: active,
+                        rf_closed: true,
+                        rf_woken: true,
+                    },
+                );
+            } else if let Some(ReadCalibrationProjection(window)) =
+                request.decode::<ReadCalibrationProjection>()
+            {
+                assert_eq!(window.epoch, active.epoch);
+                let values = (window.first..window.first + u16::from(window.count)).collect();
+                calls.push("calibration");
+                reply(
+                    &input,
+                    &request,
+                    &mut sequence,
+                    CalibrationProjection {
+                        epoch: if stale {
+                            active.epoch - 1
+                        } else {
+                            active.epoch
+                        },
+                        first: window.first,
+                        total: active.calibration_words,
+                        values,
+                    },
+                );
+            } else if let Some(ReadRegisterImage(window)) = request.decode::<ReadRegisterImage>() {
+                // Index 1 was unreadable on the vendor; production must not touch it.
+                assert!(
+                    window
+                        .range(active.epoch, 3)
+                        .unwrap()
+                        .all(|index| index != 1)
+                );
+                calls.push("register");
+                reply(
+                    &input,
+                    &request,
+                    &mut sequence,
+                    RegisterImage {
+                        epoch: active.epoch,
+                        first: window.first,
+                        total: 3,
+                        values: [u32::from(window.first) + 100].into_iter().collect(),
+                    },
+                );
+            } else if let Some(ReadAnalogImage(window)) = request.decode::<ReadAnalogImage>() {
+                assert_eq!((window.first, window.count), (0, 2));
+                calls.push("analog");
+                reply(
+                    &input,
+                    &request,
+                    &mut sequence,
+                    AnalogImage {
+                        epoch: active.epoch,
+                        first: 0,
+                        total: 2,
+                        values: [7, 9].into_iter().collect(),
+                    },
+                );
+            } else if let Some(stop) = request.decode::<StopCapture>() {
+                assert_eq!(stop.epoch, active.epoch);
+                calls.push("stop");
+                reply(
+                    &input,
+                    &request,
+                    &mut sequence,
+                    CaptureStopped {
+                        epoch: active.epoch,
+                        rf_closed: true,
+                    },
+                );
+            } else if request.is::<GetLinkHealth>() {
+                reply(
+                    &input,
+                    &request,
+                    &mut sequence,
+                    LinkHealth {
+                        rx_frames: 1,
+                        rx_cobs_errors: 0,
+                        rx_checksum_errors: 0,
+                        rx_decode_errors: 0,
+                        rx_overflows: 0,
+                        tx_frames: 1,
+                        tx_dropped: 0,
+                        text_dropped: 0,
+                        text_truncated: 0,
+                    },
+                );
+            } else {
+                panic!("unexpected capture request {}", request.path());
+            }
+        }
+        calls
+    }
+
+    #[test]
+    fn restart_capture_uses_the_new_epoch_skips_unreadable_mmio_and_closes_on_bad_pages() {
+        for stale in [false, true] {
+            let output = Output::new();
+            let lab = oer_hil_lab::config::LabConfig::for_test();
+            let thread = Arc::new(Mutex::new(None));
+            let store = Arc::clone(&thread);
+            let context = Context::new(&lab, &output.0).with_opener(move |directory| {
+                let (capture, input, commands) = test_support::capture_with_commands_at(directory);
+                *store.lock().unwrap() =
+                    Some(std::thread::spawn(move || target(input, commands, stale)));
+                Ok(capture)
+            });
+            let registers = (0..3)
+                .map(|index| Register {
+                    name: format!("r{index}"),
+                    address: index,
+                })
+                .collect::<Vec<_>>();
+            let analog = (0..2)
+                .map(|index| Register {
+                    name: format!("a{index}"),
+                    address: index,
+                })
+                .collect::<Vec<_>>();
+            let result = production_boot(
+                &context,
+                Lifecycle::Restart,
+                6,
+                &output.0.join("capture"),
+                &registers,
+                &[0, 2],
+                &analog,
+            );
+            let calls = thread.lock().unwrap().take().unwrap().join().unwrap();
+            assert_eq!(&calls[..2], ["prepare", "restart"]);
+            assert_eq!(calls.last(), Some(&"stop"));
+            if stale {
+                assert!(result.unwrap_err().to_string().contains("stale"));
+            } else {
+                let captured = result.unwrap();
+                assert_eq!(captured.registers.values, [(0, 100), (2, 102)].into());
+                assert_eq!(captured.analog.values, [(0, 7), (1, 9)].into());
+                assert_eq!(captured.calibration.unwrap().len(), 40);
+                assert_eq!(
+                    calls.iter().filter(|call| **call == "calibration").count(),
+                    2
+                );
+                assert_eq!(calls.iter().filter(|call| **call == "analog").count(), 1);
+            }
+        }
     }
 }

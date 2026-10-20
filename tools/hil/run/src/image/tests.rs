@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 fn image_classes_are_stable_and_do_not_use_workload_environment() {
-    assert_eq!(oer_hil_model::schema::image::ImageClass::ALL.len(), 4);
+    assert_eq!(oer_hil_model::schema::image::ImageClass::ALL.len(), 5);
     for (class, features) in [
         (ImageClass::SystemWatchdog, "system-watchdog"),
         (
@@ -79,6 +79,39 @@ fn the_application_chip_builds_the_boot_smoke_and_system_watchdog_images() {
 }
 
 #[test]
+fn calibration_recipe_is_separate_and_unsupported_chips_have_no_recipe() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let diagnostic = spec(
+        &root,
+        "esp32s31",
+        ImageClass::DiagnosticPhy,
+        (None, &FeatureDelta::default()),
+        PathBuf::from("/out"),
+    )
+    .unwrap();
+    assert_eq!(
+        diagnostic.application.package,
+        "oer-firmware-hil-esp32s31-phy"
+    );
+    assert_eq!(diagnostic.application.features, ["diagnostic-phy"]);
+    assert_eq!(
+        diagnostic.stack_policy,
+        PathBuf::from("firmware/hil/esp32s31-phy/stack.toml")
+    );
+    assert!(!serves(&root, "esp32c5", ImageClass::DiagnosticPhy).unwrap());
+    assert!(
+        spec(
+            &root,
+            "esp32c5",
+            ImageClass::DiagnosticPhy,
+            (None, &FeatureDelta::default()),
+            PathBuf::from("/out")
+        )
+        .is_err()
+    );
+}
+
+#[test]
 fn each_chip_s_spec_takes_its_agent_policy() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
     let placement = || PathBuf::from("/out");
@@ -92,9 +125,15 @@ fn each_chip_s_spec_takes_its_agent_policy() {
         placement(),
     )
     .unwrap();
-    assert_eq!(staged.application.package, staged_chip.hil_agent_package());
+    assert_eq!(
+        staged.application.package,
+        staged_chip.hil_image("boot-smoke").unwrap().package
+    );
     assert_eq!(staged.application.features, ["system-watchdog"]);
-    assert_eq!(staged.stack_policy, staged_chip.hil_stack_policy());
+    assert_eq!(
+        staged.stack_policy,
+        staged_chip.hil_image("boot-smoke").unwrap().stack_policy
+    );
     assert!(staged.checks.is_some());
     let _diagnostic = spec(
         &root,
@@ -114,9 +153,15 @@ fn each_chip_s_spec_takes_its_agent_policy() {
     .unwrap();
     assert_eq!(
         esp_idf.application.package,
-        application_chip.hil_agent_package()
+        application_chip.hil_image("boot-smoke").unwrap().package
     );
     assert_eq!(esp_idf.application.features, ["system-watchdog"]);
-    assert_eq!(esp_idf.stack_policy, application_chip.hil_stack_policy());
+    assert_eq!(
+        esp_idf.stack_policy,
+        application_chip
+            .hil_image("boot-smoke")
+            .unwrap()
+            .stack_policy
+    );
     assert!(esp_idf.checks.is_some());
 }

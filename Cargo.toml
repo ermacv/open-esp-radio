@@ -27,6 +27,7 @@ members = [
     "firmware/bootstrap/esp32c5",
     "chips/esp32c5/layout",
     "firmware/hil/esp32c5",
+    "firmware/hil/esp32s31-phy",
     "tools/hil/cli",
     "tools/lab/cli",
     "tools/hil/model",

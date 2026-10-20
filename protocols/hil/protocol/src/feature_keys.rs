@@ -61,6 +61,25 @@ pub fn image_keys(enabled: &dyn Fn(&str) -> bool) -> ImageKeys {
         add(system::PanicInjected::KEY, true);
         return sorted(keys);
     }
+    #[cfg(feature = "phy")]
+    if enabled("diagnostic-phy") {
+        for key in [
+            crate::phy::PrepareCapture::KEY,
+            crate::phy::CaptureReady::KEY,
+            crate::phy::RestartCaptureRadio::KEY,
+            crate::phy::CaptureRestarted::KEY,
+            crate::phy::StopCapture::KEY,
+            crate::phy::CaptureStopped::KEY,
+            crate::phy::ReadCalibrationProjection::KEY,
+            crate::phy::CalibrationProjection::KEY,
+            crate::phy::ReadRegisterImage::KEY,
+            crate::phy::RegisterImage::KEY,
+            crate::phy::ReadAnalogImage::KEY,
+            crate::phy::AnalogImage::KEY,
+        ] {
+            add(key, true);
+        }
+    }
     sorted(keys)
 }
 
@@ -71,7 +90,12 @@ fn sorted(mut keys: ImageKeys) -> ImageKeys {
 
 /// Every Cargo feature [`image_keys`] reads, so the host can check that the
 /// runtime manifest declares each of them.
-pub const READ_FEATURES: &[&str] = &["system-watchdog", "system-panic-reset", "usb-jtag-off"];
+pub const READ_FEATURES: &[&str] = &[
+    "system-watchdog",
+    "system-panic-reset",
+    "usb-jtag-off",
+    "diagnostic-phy",
+];
 
 #[cfg(test)]
 mod tests {

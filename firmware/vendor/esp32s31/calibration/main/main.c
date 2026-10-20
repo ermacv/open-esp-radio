@@ -126,6 +126,10 @@ void app_main(void)
      * enables Wi-Fi RX on its initial channel. Promiscuous RX holds the
      * PHY and RX on the current home channel in the same way. */
     ESP_ERROR_CHECK(esp_wifi_set_promiscuous(true));
+    uint8_t home_channel;
+    wifi_second_chan_t secondary;
+    ESP_ERROR_CHECK(esp_wifi_get_channel(&home_channel, &secondary));
+    printf(REPORT_PREFIX "-channel %u\n", (unsigned)home_channel);
     printf(REPORT_PREFIX "-end\n");
     fflush(stdout);
     usb_serial_jtag_driver_config_t config = USB_SERIAL_JTAG_DRIVER_CONFIG_DEFAULT();

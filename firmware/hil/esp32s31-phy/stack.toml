@@ -1,0 +1,2 @@
+schema = 5
+extends = "../../../chips/esp32s31/platform/stack.toml"
