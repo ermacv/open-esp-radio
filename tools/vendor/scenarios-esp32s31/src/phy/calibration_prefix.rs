@@ -449,7 +449,11 @@ pub fn exercise(ctx: &mut I2c) -> Result<()> {
             MAX_EVENTS,
             None,
         )?;
-        assert_eq!(returned_low(&records, 0, false), Some(2));
+        // SOURCE: analog/pbus.rs commits ForceTestTimedOut as a child outcome;
+        // tracking/calibration.rs consumes it into the parent's failure release
+        // path. production_trace.rs::open_phy_calibration_trace_pbus_clear
+        // reports that non-Dcode parent action as 4 (2 is an executor error).
+        assert_eq!(returned_low(&records, 0, false), Some(4));
         let observed = events(&records, 0, false);
         let stuck = observed
             .iter()
@@ -618,8 +622,12 @@ pub fn exercise(ctx: &mut I2c) -> Result<()> {
             );
         }
     }
-    for (ready, busy, expected_commands) in
-        [(false, 0u32, 0usize), (true, 65535, 1), (true, 6000, 2)]
+    // SOURCE: target_port/calibration.rs::complete_dcode_direct shares one
+    // 20-us settle across a masked read and write; TraceTimer::observations
+    // advances one us per clock sample. Twelve busy responses complete the
+    // read but time out the write; the former 6000-response fixture timed
+    // out the first command under this elapsed-time bound.
+    for (ready, busy, expected_commands) in [(false, 0u32, 0usize), (true, 65535, 1), (true, 12, 2)]
     {
         let label = format!(
             "dcode-failure-{}-{busy}",
