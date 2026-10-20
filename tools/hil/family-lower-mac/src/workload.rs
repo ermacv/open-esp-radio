@@ -88,6 +88,21 @@ fn model(case: Case, prepared: &Prepared, channel: u8) -> Result<Trace> {
     let basic = BasicRates::from_rate_elements(rates, &[]);
     let rate = management_rate(Band::Ghz2_4, Some(&basic)).ok_or("no basic management rate")?;
     let channel = Channel::ghz2_4(channel, ChannelWidth::Mhz20).map_err(|_| "invalid channel")?;
+    if let Case::Group(case) = case {
+        use oer_ieee80211_port::LowerMacBackend;
+        let raw = complete(oer_ieee80211_model::conformance::group(
+            case,
+            channel,
+            rate,
+            Rc::new(oer_time_virtual::VirtualClock::<8>::new()),
+        ))??;
+        let bound = oer_ieee80211_model::ModelBackend::<oer_ieee80211_model::ModelCaps>::GROUP_COMMAND_BOUND;
+        let trace =
+            group_trace(&raw, bound.as_micros()).ok_or("unrepresentable model group progress")?;
+        oer_ieee80211_port::conformance::group_keys::verify_progress(case, raw, bound)
+            .map_err(|why| format!("model group conformance violation: {why:?}"))?;
+        return Ok(Trace::Group(trace));
+    }
     if let Case::Configure(case) = case {
         let raw = complete(oer_ieee80211_model::conformance::configure(
             case,
@@ -150,6 +165,37 @@ fn complete<F: Future>(future: F) -> Result<F::Output> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn group_mutations_return_their_accepted_owners_before_and_after_application() {
+        use oer_ieee80211_port::conformance::group_keys::{Mutation, ProgressCase};
+        let prepared = Prepared {
+            ampdu: false,
+            basic_rates: [0x8c; 16],
+            basic_rates_len: 1,
+        };
+        for mutation in Mutation::ALL {
+            for applied in [false, true] {
+                let Trace::Group(trace) = model(
+                    Case::Group(ProgressCase::Disable { mutation, applied }),
+                    &prepared,
+                    6,
+                )
+                .expect("group trace") else {
+                    panic!("group progress")
+                };
+                assert!(trace.within_bound);
+                assert_eq!(trace.events.iter().flatten().count(), 1);
+                assert!(!trace.poisoned);
+            }
+        }
+        let Trace::Group(trace) = model(Case::Group(ProgressCase::PublishedRemoval), &prepared, 6)
+            .expect("published group trace")
+        else {
+            panic!("group progress")
+        };
+        assert!(trace.blocked_while_published);
+        assert_eq!(trace.events.iter().flatten().count(), 2);
+    }
     #[test]
     fn configuration_contexts_return_in_fifo_order_across_every_disable_point() {
         let prepared = Prepared {

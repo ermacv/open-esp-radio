@@ -65,6 +65,7 @@ use static_cell::StaticCell;
 
 mod barrier;
 mod configure;
+mod group;
 mod ownership;
 use ownership::{Context, FixtureBody};
 
@@ -529,6 +530,9 @@ impl PortBody<Backend> for Exchange {
         }
         if let catalog::Case::Configure(case) = self.case {
             return configure::run(owner, resources, case).await;
+        }
+        if let catalog::Case::Group(case) = self.case {
+            return group::run(owner, resources, case, self.peer).await;
         }
         let output = match self.case {
             catalog::Case::Outcome(case) => {

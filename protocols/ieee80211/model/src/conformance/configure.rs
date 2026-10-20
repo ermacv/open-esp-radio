@@ -180,7 +180,7 @@ impl PortBody<Backend> for Exercise {
         stop(owner, Ok(trace)).await
     }
 }
-async fn yield_once() {
+pub(super) async fn yield_once() {
     let mut yielded = false;
     core::future::poll_fn(|cx| {
         if yielded {

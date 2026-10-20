@@ -65,6 +65,72 @@ pub enum Trace {
     Ownership(OwnershipTrace),
     Barrier(BarrierTrace),
     Configure(ConfigureTrace),
+    Group(GroupTrace),
+}
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub enum GroupCompletion {
+    Group { mutation: u8, owners: [u8; 2] },
+    Transmit { ticket: u8, buffer: u32 },
+}
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct GroupTrace {
+    pub admitted: [u8; 2],
+    pub within_bound: bool,
+    pub events: [Option<GroupCompletion>; 4],
+    pub retained: [Option<[u8; 2]>; 4],
+    pub poisoned: bool,
+    pub deadline_woke: bool,
+    pub published: Option<[u32; 2]>,
+    pub blocked_while_published: bool,
+}
+pub fn group_trace<
+    E: AsRef<[conformance::group_keys::Completion]>,
+    R: AsRef<[conformance::group_keys::Owners]>,
+>(
+    raw: &conformance::group_keys::ProgressTrace<E, R>,
+    bound_micros: u64,
+) -> Option<GroupTrace> {
+    use conformance::group_keys::{Completion, Mutation};
+    let mut events = core::array::from_fn(|_| None);
+    for (index, event) in raw.events.as_ref().iter().enumerate() {
+        *events.get_mut(index)? = Some(match event {
+            Completion::Group { mutation, owners } => GroupCompletion::Group {
+                mutation: match mutation {
+                    Mutation::Install => 0,
+                    Mutation::Replace => 1,
+                    Mutation::Select => 2,
+                    Mutation::Remove => 3,
+                },
+                owners: [owners.slot, owners.permission],
+            },
+            Completion::Transmit(tx) => GroupCompletion::Transmit {
+                ticket: tx.ticket,
+                buffer: tx.buffer.try_into().ok()?,
+            },
+        });
+    }
+    let mut retained = [None; 4];
+    for (index, owners) in raw.retained.as_ref().iter().enumerate() {
+        *retained.get_mut(index)? = Some([owners.slot, owners.permission]);
+    }
+    Some(GroupTrace {
+        admitted: [raw.admitted.slot, raw.admitted.permission],
+        within_bound: bound_micros != 0
+            && raw
+                .timing
+                .completed_at
+                .checked_duration_since(raw.timing.admitted_at)
+                .is_some_and(|elapsed| elapsed.as_micros() <= bound_micros),
+        events,
+        retained,
+        poisoned: raw.poisoned,
+        deadline_woke: raw.deadline_woke,
+        published: match raw.published {
+            Some(tx) => Some([u32::from(tx.ticket), tx.buffer.try_into().ok()?]),
+            None => None,
+        },
+        blocked_while_published: raw.blocked_while_published,
+    })
 }
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub struct ConfigureTrace {
