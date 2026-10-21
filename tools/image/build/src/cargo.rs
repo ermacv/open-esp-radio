@@ -22,6 +22,9 @@ pub fn command() -> Command {
         command.env_remove(variable);
     }
     command.env_remove(LAYOUT_SEED_ENV);
+    // Only the runtime build explicitly selects an interrupt-analysis spec;
+    // bootstrap, probes and host tools must not inherit one.
+    command.env_remove(oer_image_checks::linker::strict::SPEC_ENV);
     command
 }
 
@@ -104,5 +107,8 @@ mod tests {
                 .any(|(name, value)| name == LAYOUT_SEED_ENV && value.is_none()),
             "the image's Cargo command must remove {LAYOUT_SEED_ENV}"
         );
+        assert!(command.get_envs().any(|(name, value)| name
+            == oer_image_checks::linker::strict::SPEC_ENV
+            && value.is_none()));
     }
 }

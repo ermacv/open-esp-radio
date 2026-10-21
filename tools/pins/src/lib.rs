@@ -29,7 +29,15 @@ pub fn manifest(chip: &str) -> String {
 /// that lists the supported chips for an unsupported one, or names the
 /// missing manifest of a chip without a vendor verification project.
 pub fn manifest_path(root: &Path, chip: &str) -> Result<String> {
-    let profile = oer_chip_profile::Profile::load(root, chip)?;
+    manifest_path_with_inputs(root, chip, &mut oer_os_durable::inputs::Inputs::default())
+}
+
+fn manifest_path_with_inputs(
+    root: &Path,
+    chip: &str,
+    inputs: &mut oer_os_durable::inputs::Inputs,
+) -> Result<String> {
+    let profile = oer_chip_profile::Profile::load_with_inputs(root, chip, inputs)?;
     let manifest = manifest(&profile.id);
     if !root.join(&manifest).is_file() {
         return Err(format!("chip {chip} has no vendor artifact pins ({manifest})").into());
@@ -130,8 +138,17 @@ impl Manifest {
 
     /// The tracked manifest of `chip` in the repository at `root`.
     pub fn load(root: &Path, chip: &str) -> Result<Self> {
-        let manifest = manifest_path(root, chip)?;
-        Self::parse(&std::fs::read_to_string(root.join(&manifest))?)
+        Self::load_with_inputs(root, chip, &mut oer_os_durable::inputs::Inputs::default())
+    }
+
+    /// Include the artifact pins in the computation that consumes an artifact.
+    pub fn load_with_inputs(
+        root: &Path,
+        chip: &str,
+        inputs: &mut oer_os_durable::inputs::Inputs,
+    ) -> Result<Self> {
+        let manifest = manifest_path_with_inputs(root, chip, inputs)?;
+        Self::parse(&inputs.read_to_string(&root.join(&manifest))?)
             .map_err(|error| format!("{manifest}: {error}").into())
     }
 

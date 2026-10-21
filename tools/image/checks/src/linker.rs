@@ -13,13 +13,17 @@
 //! `rust-lld -flavor gnu` with the same arguments, as rustc would for the
 //! target's `rust-lld` linker.
 //!
-//!  extends this skeleton (stack sizing); today it only checks.
+//! Runtime images with an interrupt contract then reuse the interrupt
+//! analysis to place strict cached code with one additional link.
 
 use std::{
     ffi::{OsStr, OsString},
     fmt, fs,
     path::PathBuf,
 };
+
+pub mod strict;
+use strict::InputSection;
 
 /// An input section bound for a zeroed region that carries an initializer.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -53,15 +57,15 @@ impl fmt::Display for InitializedZeroSection {
 /// Run the link: check its inputs, then the real linker. Returns the exit
 /// code.
 pub fn run(arguments: Vec<OsString>, zeroed: &[String]) -> i32 {
-    let arguments = match expand_response_files(arguments) {
+    let mut arguments = match expand_response_files(arguments) {
         Ok(arguments) => arguments,
         Err(error) => {
             eprintln!("oer-image-linker: {error}");
             return 1;
         }
     };
-    let violations = match check_inputs(&arguments, zeroed) {
-        Ok(violations) => violations,
+    let (violations, sections) = match inspect_inputs(&arguments, zeroed) {
+        Ok(inputs) => inputs,
         Err(error) => {
             eprintln!("oer-image-linker: {error}");
             return 1;
@@ -77,7 +81,65 @@ pub fn run(arguments: Vec<OsString>, zeroed: &[String]) -> i32 {
         );
         return 1;
     }
-    run_linker(&arguments)
+    let spec_path = std::env::var_os(strict::SPEC_ENV).map(PathBuf::from);
+    match link(&mut arguments, &sections, spec_path.as_deref()) {
+        Ok(code) => code,
+        Err(error) => {
+            eprintln!("oer-image-linker: {error}");
+            1
+        }
+    }
+}
+
+fn link(
+    arguments: &mut Vec<OsString>,
+    sections: &[InputSection],
+    spec: Option<&std::path::Path>,
+) -> crate::Result<i32> {
+    let Some(spec_path) = spec else {
+        return Ok(run_linker(arguments));
+    };
+    let mut inputs = oer_os_durable::inputs::Inputs::tracked();
+    let spec = strict::Spec::read(spec_path, &mut inputs)?;
+    let directory = spec_path
+        .parent()
+        .ok_or("image linker specification has no directory")?;
+    let output = output_file(arguments).ok_or("runtime link has no -o output ELF")?;
+    // A previous build's fragment must never affect the first pass.
+    std::fs::write(directory.join(strict::FRAGMENT), "")?;
+    arguments.push("-L".into());
+    arguments.push(directory.into());
+    let code = run_linker(arguments);
+    if code != 0 {
+        return Ok(code);
+    }
+    let placement = strict::analyze(&spec, &output, sections, &mut inputs)?;
+    if !placement.functions.is_empty() {
+        std::fs::write(directory.join(strict::FRAGMENT), placement.fragment())?;
+        let code = run_linker(arguments);
+        if code != 0 {
+            return Ok(code);
+        }
+    }
+    strict::save(placement, directory, &output, inputs)?;
+    Ok(0)
+}
+
+fn output_file(arguments: &[OsString]) -> Option<PathBuf> {
+    let mut arguments = arguments.iter();
+    while let Some(argument) = arguments.next() {
+        let text = argument.to_str()?;
+        if text == "-o" || text == "--output" {
+            return arguments.next().map(PathBuf::from);
+        }
+        if let Some(path) = text
+            .strip_prefix("--output=")
+            .or_else(|| text.strip_prefix("-o").filter(|path| !path.is_empty()))
+        {
+            return Some(path.into());
+        }
+    }
+    None
 }
 
 /// `rust-lld -flavor gnu` with the arguments, from the `PATH` rustc gives
@@ -253,13 +315,27 @@ pub fn check_inputs(
     arguments: &[OsString],
     zeroed: &[String],
 ) -> Result<Vec<InitializedZeroSection>, String> {
+    inspect_inputs(arguments, zeroed).map(|(violations, _)| violations)
+}
+
+fn inspect_inputs(
+    arguments: &[OsString],
+    zeroed: &[String],
+) -> Result<(Vec<InitializedZeroSection>, Vec<InputSection>), String> {
     let mut violations = Vec::new();
+    let mut sections = Vec::new();
     for input in inputs(arguments) {
         let data = fs::read(&input)
             .map_err(|error| format!("cannot read {}: {error}", input.display()))?;
-        check_file(&input.display().to_string(), &data, zeroed, &mut violations);
+        check_file(
+            &input.display().to_string(),
+            &data,
+            zeroed,
+            &mut violations,
+            &mut sections,
+        );
     }
-    Ok(violations)
+    Ok((violations, sections))
 }
 
 fn check_file(
@@ -267,27 +343,32 @@ fn check_file(
     data: &[u8],
     zeroed: &[String],
     violations: &mut Vec<InitializedZeroSection>,
+    sections: &mut Vec<InputSection>,
 ) {
     if data.starts_with(b"!<arch>\n") {
         // A thin archive holds no members of its own to check.
         for (member, member_data) in oer_analysis_elf::members(data).unwrap_or_default() {
             check_object(
                 &format!("{name}({member})"),
+                &format!("{name}:{member}"),
                 member_data,
                 zeroed,
                 violations,
+                sections,
             );
         }
         return;
     }
-    check_object(name, data, zeroed, violations);
+    check_object(name, name, data, zeroed, violations, sections);
 }
 
 fn check_object(
     name: &str,
+    selector: &str,
     data: &[u8],
     zeroed: &[String],
     violations: &mut Vec<InitializedZeroSection>,
+    sections: &mut Vec<InputSection>,
 ) {
     if !data.starts_with(b"\x7fELF") {
         return;
@@ -296,6 +377,20 @@ fn check_object(
         return;
     };
     for section in file.sections() {
+        if section.executable && section.size > 0 {
+            sections.push(InputSection {
+                file: selector.to_owned(),
+                index: section.index,
+                name: section.name.to_owned(),
+                size: section.size,
+                symbols: file
+                    .symbols()
+                    .filter(|symbol| symbol.defined && symbol.section == Some(section.index))
+                    .map(|symbol| symbol.name.to_owned())
+                    .filter(|name| !name.is_empty() && !name.starts_with('$'))
+                    .collect(),
+            });
+        }
         if !is_zeroed_input(zeroed, section.name) || section.nobits {
             continue;
         }

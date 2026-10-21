@@ -165,6 +165,11 @@ pub struct InterruptPlacement {
 }
 
 impl InterruptPlacement {
+    /// Unoccupied bytes in the SRAM contract, counting the union of placed ranges.
+    pub fn free_sram(&self) -> u64 {
+        self.sram.free()
+    }
+
     /// Reuse the analysis's function sizes and the loaded ELF's relocations,
     /// symbols and section/range addresses; do not read an ELF from disk.
     pub fn of(image: &Image, stacks: &InterruptStacks, profile: &Profile) -> Result<Self> {

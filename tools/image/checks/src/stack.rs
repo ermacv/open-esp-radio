@@ -108,9 +108,25 @@ impl Image {
     /// The analysis of `elf` with the chip's pinned ROM ELF and its
     /// reviewed summaries (`[rom]` of the chip profile).
     pub fn read(root: &Path, profile: &oer_chip_profile::Profile, elf: &Path) -> Result<Self> {
+        Self::read_with_inputs(
+            root,
+            profile,
+            elf,
+            &mut oer_os_durable::inputs::Inputs::default(),
+        )
+    }
+
+    /// Record the analysis sources; the output ELF is fingerprinted separately
+    /// after the final link, since placement can change its first-pass bytes.
+    pub fn read_with_inputs(
+        root: &Path,
+        profile: &oer_chip_profile::Profile,
+        elf: &Path,
+        inputs: &mut oer_os_durable::inputs::Inputs,
+    ) -> Result<Self> {
         let elf = std::fs::read(elf)
             .map_err(|error| format!("cannot read {}: {error}", elf.display()))?;
-        Self::of_bytes(root, profile, elf)
+        Self::of_bytes_with_inputs(root, profile, elf, inputs)
     }
 
     /// [`Self::read`] of the ELF bytes `elf`.
@@ -119,17 +135,29 @@ impl Image {
         profile: &oer_chip_profile::Profile,
         elf: Vec<u8>,
     ) -> Result<Self> {
+        Self::of_bytes_with_inputs(
+            root,
+            profile,
+            elf,
+            &mut oer_os_durable::inputs::Inputs::default(),
+        )
+    }
+
+    fn of_bytes_with_inputs(
+        root: &Path,
+        profile: &oer_chip_profile::Profile,
+        elf: Vec<u8>,
+        inputs: &mut oer_os_durable::inputs::Inputs,
+    ) -> Result<Self> {
         let rom = profile
             .rom
             .as_ref()
             .ok_or_else(|| format!("chips/{}/platform/chip.toml names no [rom] ELF", profile.id))?;
-        let rom_elf = std::fs::read(oer_tool_pins::artifacts::ensure(
-            root,
-            &profile.id,
-            &rom.elf,
-        )?)?;
+        let rom_path =
+            oer_tool_pins::artifacts::ensure_with_inputs(root, &profile.id, &rom.elf, inputs)?;
+        let rom_elf = inputs.read(&rom_path)?;
         let summaries = match &rom.summaries {
-            Some(path) => parse_summaries(&std::fs::read_to_string(root.join(path))?)?,
+            Some(path) => parse_summaries(&inputs.read_to_string(&root.join(path))?)?,
             None => Vec::new(),
         };
         Self::new(elf, &[&rom_elf], &summaries, Contract::of(profile))

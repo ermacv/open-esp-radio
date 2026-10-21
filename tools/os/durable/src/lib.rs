@@ -16,6 +16,7 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 
 pub mod digests;
+pub mod inputs;
 pub mod jsonl;
 pub mod xdg;
 

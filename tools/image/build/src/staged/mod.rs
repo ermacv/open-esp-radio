@@ -22,6 +22,8 @@ use crate::{
 
 use crate::encode::stage_two::pack_runtime;
 
+mod strict;
+
 /// The staged images' MMU page: the bootstrap keeps its text on 64-KiB
 /// pages and stage two starts on one.
 const MMU_PAGE_SIZE: u32 = 0x1_0000;
@@ -57,16 +59,60 @@ pub(crate) fn build(
         let _cache = crate::compiler::lock_compile_cache(&cache)?;
         let mut runtime = crate::runtime_command(spec, profile, "build", &policy, instrumentation)?;
         runtime.env("CARGO_TARGET_DIR", &cache);
+        let strict = profile.memory.is_some() && profile.interrupts.is_some();
+        let specification = strict::configure(&mut runtime, spec, &output, strict)?;
         crate::cargo::ensure_fetched(root)?;
-        {
+        let mut build = |invalidate| -> Result<()> {
+            if invalidate {
+                let mut clean = crate::cargo::command();
+                clean
+                    .current_dir(root)
+                    .args([
+                        "clean",
+                        "--locked",
+                        "--profile",
+                        crate::FIRMWARE_PROFILE,
+                        "--target",
+                        target,
+                        "-p",
+                        &spec.application.package,
+                    ])
+                    .env("CARGO_TARGET_DIR", &cache);
+                log.run(
+                    &mut clean,
+                    "invalidate the runtime link after a fingerprint mismatch",
+                )?;
+            }
             let _slot = crate::exclusion::slot(&crate::host_build_root()?.join("tokens"))?;
-            log.run(&mut runtime, "build the stage-two runtime")?;
+            log.run(&mut runtime, "build the stage-two runtime")
+        };
+        if strict {
+            strict::build_with_retry(&mut build, || {
+                strict::restore_if_matching(
+                    &output,
+                    &spec.output,
+                    &release.join(&spec.application.binary),
+                    &specification,
+                    &crate::compiler::linker_target(root).join("debug/oer-image-linker"),
+                )
+            })?;
+        } else {
+            build(false)?;
         }
         let elf = crate::snapshot(
             &release.join(&spec.application.binary),
             &output,
             files::RUNTIME_ELF,
         )?;
+        {
+            use oer_image_checks::linker::strict::{FRAGMENT, PLACEMENT, SPEC_FILE};
+            for file in [FRAGMENT, PLACEMENT, SPEC_FILE] {
+                if !output.join(file).is_file() {
+                    return Err(format!("the runtime linker did not produce {file}").into());
+                }
+                bundle.reports.push(file.to_owned());
+            }
+        }
         elf
     };
     let runtime_bin = output.join(files::RUNTIME_BIN);

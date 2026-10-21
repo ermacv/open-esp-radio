@@ -69,9 +69,17 @@ An `ImageBundle` is one directory with a `bundle.json`:
 | `runtime.bin`, `bootstrap.elf` | The packed runtime and the bootstrap (staged only) |
 | `placement.txt`, `runtime-stack.txt`, `interrupt-stack.txt`, `bootstrap-stack.txt` | Gate reports |
 | `interrupt-placement.txt` | Interrupt code placement, paths to cached functions, static data references and objects, and free SRAM |
+| `image-linker.toml`, `strict-text.x`, `strict-placement.toml` | Runtime linker analysis inputs, generated strict-code fragment and the functions moved with their input sections |
 | `build.log` | Every step's standard error |
 
 The manifest uses schema 7 and records `purpose: Flash` or `Analysis`.
+Runtime links with an interrupt contract run the final check's analysis after
+the first link and may link once more to place strict cached code in SRAM.
+`strict-text.x` is included inside `.isr.text`; an empty fragment preserves the
+first image. The runtime package is invalidated through Cargo before its build
+so the linker reads the current specification even when Cargo would consider
+the executable fresh; dependencies remain cached. The bootstrap has no such
+invalidation or analysis. The existing interrupt check remains final.
 Older schemas must be rebuilt; a missing purpose never defaults to `Flash`.
 `ImageBundle::load` verifies files for either purpose. The shared flash
 snapshot reader refuses `Analysis` before supplying bytes to any USB or
