@@ -105,7 +105,7 @@ pub async fn run<B: PlatformClockBackend, T>(
     domain: &RadioDomain<B, T>,
     wifi: WifiClocked,
     channel: u8,
-    prepared: Prepared,
+    prepared: Option<Prepared>,
 ) -> (WifiClocked, Result<()>) {
     let (mut runtime, interrupts, clocks) = wifi.into_running();
     oer_esp32s31_board::rom::print_fmt(format_args!(
@@ -122,11 +122,17 @@ async fn experiment<B: PlatformClockBackend, T>(
     domain: &RadioDomain<B, T>,
     runtime: &mut RadioAccess,
     channel: u8,
-    prepared: Prepared,
+    prepared: Option<Prepared>,
 ) -> Result<()> {
     observe_running(domain, runtime, Point::BeforeRing)?;
     observe_enables(domain, runtime, Point::BeforeRing)?;
-    let Prepared { storage, stopped } = prepared;
+    // Cold capture retains its original observation point and only prepares
+    // here. A preparation failure still returns the Wi-Fi owner through run
+    // so StopCapture can execute its RF teardown.
+    let Prepared { storage, stopped } = match prepared {
+        Some(prepared) => prepared,
+        None => prepare_inner(domain, runtime, None)?,
+    };
     // The capture prepared common gates and BASE with runtime stop held.
     // Policy preserves that stop until the walker supplies the live proof.
     activate_promiscuous_receive(runtime);

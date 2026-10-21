@@ -277,11 +277,8 @@ impl Radio {
                 // The host has finished reading the calibration/MMIO/analog
                 // pages. This separate RX experiment cannot affect them.
                 let observed = if current.radio == CaptureRadio::Wifi {
-                    if capture_rx.is_none() {
-                        self.prepare_capture_rx(capture_rx)?;
-                    }
                     let wifi = self.clocked.take().ok_or(RejectReason::Internal)?;
-                    let prepared = capture_rx.take().ok_or(RejectReason::Internal)?;
+                    let prepared = capture_rx.take();
                     let (wifi, result) =
                         crate::cca_rx::run(&self.domain, wifi, current.channel, prepared).await;
                     self.clocked = Some(wifi);
