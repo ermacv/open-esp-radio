@@ -16,8 +16,8 @@ policy, the layout seed, the variables the runtime's build sets or removes
 (`cargo fw`'s stand identity of `w1`), the caller's builder packages and
 extra policy files, the bundle directory (every build compiles in the checkout's
 `compile_cache()` of its instrumentation classes) and the checks (`Gates` of `oer-image-checks`): which
-run, what the interrupt-stack check requires (`Required::Proven`, or
-`Partial` for diagnostic images), an optional audit of the runtime ELF (HIL's
+run, what the interrupt check requires (`Required::Product`, or
+`Diagnostic` for diagnostic images), an optional audit of the runtime ELF (HIL's
 observer placement), and which requested checks must pass (`Enforced`).
 `Enforced::All` enforces every requested check, including the caller's audit;
 `Only(BTreeSet<Check>)` enforces only the named built-in checks;
@@ -36,7 +36,9 @@ App builds still report task stacks, the bootstrap stack and placement.
 For app `build`, a `partial + ?` interrupt stack, an exceeded budget or an
 unadmitted assumption fails the build and CI; a bound conditional only on
 the admitted executor invariant passes with a warning. HIL retains its
-`Proven`/`Partial` interrupt policy according to image class.
+`Product`/`Diagnostic` interrupt policy according to image class: diagnostic
+images report strict/P2 code placement violations as warnings; other images
+enforce them.
 
 The chip profile's boot kind selects the pipeline:
 
@@ -66,7 +68,7 @@ An `ImageBundle` is one directory with a `bundle.json`:
 | `otadata.bin` | The OTA selection of the first slot (staged only) |
 | `runtime.bin`, `bootstrap.elf` | The packed runtime and the bootstrap (staged only) |
 | `placement.txt`, `runtime-stack.txt`, `interrupt-stack.txt`, `bootstrap-stack.txt` | Gate reports |
-| `interrupt-placement.txt` | Cached interrupt functions, static data references and objects, and free SRAM (measurements only) |
+| `interrupt-placement.txt` | Interrupt code placement, paths to cached functions, static data references and objects, and free SRAM |
 | `build.log` | Every step's standard error |
 
 The manifest uses schema 7 and records `purpose: Flash` or `Analysis`.
@@ -160,8 +162,8 @@ fetch --chip esp32s31 rom`; a missing or changed ROM is an error)
 and its reviewed summaries, with the platform's interrupt contract
 (`oer-esp32s31-layout`'s `interrupts`). The analysis reports every
 hart as a bound or `partial + ?` with its holes; the gate's policy,
-`Required`, decides what passes: `Proven` (product images) fails
-unless every bound is known, `Partial` (diagnostic image classes, whose
+`Required`, decides what passes: `Product` (product images) fails
+unless every bound is known, `Diagnostic` (diagnostic image classes, whose
 observers the product does not carry) also passes a `partial + ?` hart with a
 warning. Either way the bound, or the proven part, must fit the usable stack
 with the contract's margin, and every table entry's slot symbol and the
@@ -180,8 +182,13 @@ from P2 task code in PSRAM and name the task roots. The task boundary comes from
 `TaskPolls`/`NoTasks` resolution facts through `Analysis::reached_cut`; each level
 uses the same interrupt routes as its stack bound. Strict code, including the
 exception and panic paths, must lie in SRAM/ROM; P2 tasks may also use PSRAM,
-while cached flash fails on both sides. A function with any strict path keeps
-the strict requirement. The summaries also count sized data objects referenced
+while cached flash fails on both sides under `Required::Product`.
+`Required::Diagnostic` reports these placement violations and code outside
+the permitted regions as warnings, one per kind and hart/level, with function
+and byte counts and a reference to `interrupt-placement.txt`. Handler entries
+outside SRAM, cached panic code and cached panic-hook data still fail under
+both policies. A function with any strict path keeps the strict requirement.
+The summaries also count sized data objects referenced
 statically from resolved handler code and usable/placed/free SRAM. Full lists in
 `interrupt-placement.txt` sort cached functions by size with `strict`/`task`
 classification, total them by the first path component of their demangled names,
@@ -199,7 +206,7 @@ data and SRAM measurements do not participate in a gate's verdict.
 Independently of the installed interrupt handlers, it also follows linked
 compiler panic entry points, the platform panic handler and the optional
 image panic hook. A resolved callee in cached memory fails the build under
-both stack policies, so a panic helper or hook cannot silently move to PSRAM.
+both interrupt policies, so a panic helper or hook cannot silently move to PSRAM.
 The hook and its callees also must not statically reference cached memory:
 the retained ELF relocations reveal globals, lookup tables and anonymous
 constants introduced by the compiler, including constant-copy initialization.

@@ -212,12 +212,12 @@ pub(crate) fn spec(
         output,
         // HIL images always request every check; each applies where the
         // chip's data names what it checks.
-        // A diagnostic image's interrupt stacks may be `partial + ?`, with
-        // their holes named.
+        // Diagnostic images report strict/P2 code placement violations
+        // and may have `partial + ?` interrupt stacks, with their holes named.
         checks: Some(Gates::all(if class.diagnostic() {
-            Required::Partial
+            Required::Diagnostic
         } else {
-            Required::Proven
+            Required::Product
         })),
     })
 }

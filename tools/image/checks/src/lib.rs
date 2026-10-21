@@ -167,14 +167,14 @@ pub struct Gates {
     pub stack: bool,
     /// The image's placement in the chip's memory map.
     pub placement: bool,
-    /// What the interrupt stacks must reach, when they are checked.
+    /// The interrupt code placement and stack policy, when checked.
     pub interrupts: Option<Required>,
     /// The caller's own audit of the runtime ELF.
     pub audit: Option<Audit>,
 }
 
 impl Gates {
-    /// Every check, the interrupt stacks held to `interrupts`.
+    /// Every check, with interrupt code and stacks held to `interrupts`.
     pub fn all(interrupts: Required) -> Self {
         Self {
             enforced: Enforced::All,
@@ -185,7 +185,7 @@ impl Gates {
         }
     }
 
-    /// The checks `checks` names, the interrupt stacks proven.
+    /// The checks `checks` names, with the product interrupt policy.
     pub fn of(checks: &[Check]) -> Self {
         Self {
             enforced: Enforced::All,
@@ -193,7 +193,7 @@ impl Gates {
             placement: checks.contains(&Check::Placement),
             interrupts: checks
                 .contains(&Check::Interrupts)
-                .then_some(Required::Proven),
+                .then_some(Required::Product),
             audit: None,
         }
     }
@@ -440,7 +440,7 @@ mod enforcement_tests {
     #[test]
     fn constructors_enforce_every_requested_check_and_default_reports() {
         for gates in [
-            Gates::all(Required::Proven),
+            Gates::all(Required::Product),
             Gates::of(&[Check::Interrupts]),
         ] {
             assert_eq!(gates.enforced, Enforced::All);

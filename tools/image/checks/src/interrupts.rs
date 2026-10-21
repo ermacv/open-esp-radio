@@ -1,7 +1,9 @@
-//! The interrupt-stack gate: each hart's worst-case interrupt stack, bounded
-//! from the image's machine code, its interrupt table and the chip's ROM ELF
-//! (`oer-analysis-riscv-stack`), must leave the platform's margin below the usable
-//! interrupt stack. An unknown bound fails, naming what is unresolved.
+//! The interrupt gate checks code placement and each hart's worst-case stack,
+//! bounded from the image's machine code, its interrupt table and the chip's
+//! ROM ELF (`oer-analysis-riscv-stack`). The bound must leave the platform's
+//! margin below the usable interrupt stack. Diagnostic images report placement
+//! violations and unresolved bounds; handler entries and panic safety are
+//! mandatory under either policy.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
@@ -82,22 +84,23 @@ pub struct HandlerCode {
 /// Sites of each kind the report lists.
 const SHOWN: usize = 10;
 
-/// What an image's interrupt stacks must reach: the gate's policy, apart
+/// The interrupt gate's policy for code placement and stack bounds, apart
 /// from the analysis, which always reports all it can.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Required {
-    /// Every hart's bound is proven: product images.
-    Proven,
-    /// A hart may be `partial + ?` with its holes named, as long as the part
-    /// it proves fits: images whose observers the product does not carry.
-    Partial,
+    /// Enforce strict/P2 code placement and require every hart's bound to be proven.
+    Product,
+    /// Report strict/P2 code placement violations; a hart may be `partial + ?`
+    /// with its holes named, as long as its proven part fits. Handler entries
+    /// and panic paths retain the product requirements.
+    Diagnostic,
 }
 
 impl InterruptStacks {
-    /// The gate under `required`: every entry's handler runs from SRAM, and
-    /// each hart's bound, or under [`Required::Partial`] its proven part, fits
-    /// the usable interrupt stack with the margin. Returns a warning for each
-    /// hart left `partial + ?`.
+    /// Check handler entries, panic safety, code placement and stack bounds.
+    /// Under [`Required::Diagnostic`], report strict/P2 placement violations
+    /// and partial bounds as warnings; each hart's proven part must still fit
+    /// the usable interrupt stack with the margin.
     pub fn check(&self, required: Required) -> Result<Vec<String>> {
         if let Some((function, site, target)) = self.panic_hook_data.first() {
             return Err(format!(
@@ -152,65 +155,86 @@ impl InterruptStacks {
                 .into());
             }
         }
+        let mut warnings = Vec::new();
         for context in &self.code_placement.contexts {
-            for address in &context.strict {
-                if self
-                    .code_placement
-                    .functions
-                    .get(address)
-                    .is_some_and(|function| function.location.cached())
-                {
-                    return Err(format!(
-                        "interrupt handler code runs {} from cached memory, reached from {context}:\n{}",
-                        self.name(*address), self.render()
-                    ).into());
-                }
-                if self
-                    .code_placement
-                    .functions
-                    .get(address)
-                    .is_some_and(|function| function.location == code::Location::Other)
-                {
-                    return Err(format!(
-                        "interrupt handler code runs {} from outside SRAM/ROM, reached from {context}:\n{}",
-                        self.name(*address), self.render()
-                    ).into());
-                }
-            }
-            for address in &context.tasks {
-                if self
-                    .code_placement
-                    .functions
-                    .get(address)
-                    .is_some_and(|function| function.location == code::Location::Flash)
-                {
-                    return Err(format!(
-                        "P2 task code runs {} from cached flash, reached from {context}:\n{}",
-                        self.name(*address),
-                        self.render()
-                    )
-                    .into());
-                }
-                if self
-                    .code_placement
-                    .functions
-                    .get(address)
-                    .is_some_and(|function| function.location == code::Location::Other)
-                {
-                    return Err(format!(
-                        "P2 task code runs {} from outside SRAM/ROM/PSRAM, reached from {context}:\n{}",
-                        self.name(*address), self.render()
-                    ).into());
+            use code::Location::{Flash, Other, Psram};
+            for (addresses, role, subject, region, locations) in [
+                (
+                    &context.strict,
+                    "strict",
+                    "interrupt handler",
+                    "cached memory",
+                    &[Psram, Flash][..],
+                ),
+                (
+                    &context.strict,
+                    "strict",
+                    "interrupt handler",
+                    "outside SRAM/ROM",
+                    &[Other][..],
+                ),
+                (
+                    &context.tasks,
+                    "P2 task",
+                    "P2 task",
+                    "cached flash",
+                    &[Flash][..],
+                ),
+                (
+                    &context.tasks,
+                    "P2 task",
+                    "P2 task",
+                    "outside SRAM/ROM/PSRAM",
+                    &[Other][..],
+                ),
+            ] {
+                let functions: Vec<_> = addresses
+                    .iter()
+                    .filter_map(|address| {
+                        self.code_placement
+                            .functions
+                            .get(address)
+                            .map(|function| (address, function))
+                    })
+                    .filter(|(_, function)| locations.contains(&function.location))
+                    .collect();
+                let Some((first, _)) = functions.first() else {
+                    continue;
+                };
+                match required {
+                    Required::Product => {
+                        return Err(format!(
+                            "{subject} code runs {} from {region}, reached from {context}:\n{}",
+                            self.name(**first),
+                            self.render()
+                        )
+                        .into());
+                    }
+                    Required::Diagnostic => {
+                        let bytes: u64 = functions
+                            .iter()
+                            .map(|(_, function)| u64::from(function.size))
+                            .sum();
+                        let preposition = if region.starts_with("outside") {
+                            ""
+                        } else {
+                            "in "
+                        };
+                        warnings.push(format!(
+                            "{context}: {} {role} functions, {bytes} bytes {preposition}{region} \
+                             (diagnostic image, reported only); see {INTERRUPT_PLACEMENT_REPORT}",
+                            functions.len()
+                        ));
+                    }
                 }
             }
         }
-        let mut warnings = Vec::new();
         for hart in &self.harts {
             // The sum over levels holds only where nothing lowers the level.
             let drops = hart.level_drops();
             if !drops.is_empty() {
                 match required {
-                    Required::Proven => {
+                    Required::Product => {
                         return Err(format!(
                             "hart {}'s interrupt stack is conditional: its handlers can lower \
                              the interrupt level, so one level may nest in itself:\n{}",
@@ -219,7 +243,7 @@ impl InterruptStacks {
                         )
                         .into());
                     }
-                    Required::Partial => warnings.push(format!(
+                    Required::Diagnostic => warnings.push(format!(
                         "hart {}'s interrupt stack is conditional on the nesting rule, which {} \
                          sites may break: they are in the report",
                         hart.core,
@@ -248,7 +272,7 @@ impl InterruptStacks {
             }
             let bytes = match (hart.bytes, required) {
                 (Some(bytes), _) => bytes,
-                (None, Required::Proven) => {
+                (None, Required::Product) => {
                     return Err(format!(
                         "hart {}'s interrupt stack has no bound:\n{}",
                         hart.core,
@@ -256,7 +280,7 @@ impl InterruptStacks {
                     )
                     .into());
                 }
-                (None, Required::Partial) => {
+                (None, Required::Diagnostic) => {
                     warnings.push(format!(
                         "hart {}'s interrupt stack is {} + ? bytes: its holes are in the report",
                         hart.core, hart.partial
@@ -836,24 +860,22 @@ mod tests {
         // A slot whose handler was inlined into it calls nothing itself.
         assert!(
             stacks(vec![(sram, Vec::new())])
-                .check(Required::Proven)
+                .check(Required::Product)
                 .is_ok()
         );
         assert!(
             stacks(vec![(sram, vec![sram + 0x40])])
-                .check(Required::Proven)
+                .check(Required::Product)
                 .is_ok()
         );
-        let error = stacks(vec![(sram, vec![cached])])
-            .check(Required::Proven)
-            .unwrap_err()
-            .to_string();
-        assert!(error.contains("`TIMER`"), "{error}");
-        assert!(
-            stacks(vec![(cached, Vec::new())])
-                .check(Required::Proven)
-                .is_err()
-        );
+        for policy in [Required::Product, Required::Diagnostic] {
+            let error = stacks(vec![(sram, vec![cached])])
+                .check(policy)
+                .unwrap_err()
+                .to_string();
+            assert!(error.contains("`TIMER`"), "{error}");
+            assert!(stacks(vec![(cached, Vec::new())]).check(policy).is_err());
+        }
     }
 
     #[test]
@@ -929,7 +951,7 @@ mod tests {
                 report.names = names.clone();
                 report.panic_code =
                     panic_path_code(&analysis, &names, &resolutions, &memory).unwrap();
-                for policy in [Required::Proven, Required::Partial] {
+                for policy in [Required::Product, Required::Diagnostic] {
                     let error = report.check(policy).unwrap_err().to_string();
                     assert!(error.contains("panic path"), "{entry}: {error}");
                     assert!(error.contains("cached memory"), "{entry}: {error}");
@@ -945,7 +967,7 @@ mod tests {
                 ]);
                 report.panic_code =
                     panic_path_code(&analysis, &names, &resolutions, &memory).unwrap();
-                assert!(report.check(Required::Proven).is_ok());
+                assert!(report.check(Required::Product).is_ok());
             }
         }
     }
@@ -960,7 +982,7 @@ mod tests {
             .insert(hook, "oer_platform_panic_hook".to_owned());
         report.panic_hook_data = vec![(hook, hook + 4, constant)];
         assert!(report.panic_code.cached.is_empty());
-        for policy in [Required::Proven, Required::Partial] {
+        for policy in [Required::Product, Required::Diagnostic] {
             let error = report.check(policy).unwrap_err().to_string();
             assert!(
                 error.contains("panic hook references cached memory"),
@@ -969,13 +991,13 @@ mod tests {
             assert!(error.contains("oer_platform_panic_hook"), "{error}");
         }
         report.panic_hook_data.clear();
-        assert!(report.check(Required::Proven).is_ok());
+        assert!(report.check(Required::Product).is_ok());
     }
 
     #[test]
     fn a_partial_bound_passes_only_where_the_policy_allows_it_and_its_part_fits() {
-        assert!(partial(1000).check(Required::Proven).is_err());
-        let warnings = partial(1000).check(Required::Partial).unwrap();
+        assert!(partial(1000).check(Required::Product).is_err());
+        let warnings = partial(1000).check(Required::Diagnostic).unwrap();
         assert_eq!(warnings.len(), 1);
         assert!(
             warnings.iter().any(|warning| warning.contains("1000 + ?")),
@@ -983,7 +1005,7 @@ mod tests {
         );
         // The proven part alone must fit the usable stack with the margin.
         let over = u64::from(contract().irq_stack_usable_bytes());
-        assert!(partial(over).check(Required::Partial).is_err());
+        assert!(partial(over).check(Required::Diagnostic).is_err());
     }
 
     #[test]
@@ -998,7 +1020,7 @@ mod tests {
             .insert(Assumption::ExecutorInvariant);
         // The gate names it in a warning and the report.
         assert!(stacks.render().contains("conditional"));
-        let warnings = stacks.check(Required::Proven).unwrap();
+        let warnings = stacks.check(Required::Product).unwrap();
         assert_eq!(warnings.len(), 1);
         assert!(
             warnings
@@ -1014,15 +1036,15 @@ mod tests {
         // A bound with no instruction that lowers the level is checked.
         let mut stacks = partial(1000);
         stacks.harts[0].bytes = Some(1000);
-        assert!(stacks.check(Required::Proven).is_ok());
+        assert!(stacks.check(Required::Product).is_ok());
         assert!(stacks.render().contains("nesting: checked"));
         // One such instruction breaks the sum over levels: no proof, and a
-        // warning under the partial policy.
+        // warning under the diagnostic policy.
         stacks.harts[0].exception.bound.level_drops =
             vec![(0x2f00_1000, oer_analysis_riscv_stack::LevelDrop::Return)];
-        let error = stacks.check(Required::Proven).unwrap_err().to_string();
+        let error = stacks.check(Required::Product).unwrap_err().to_string();
         assert!(error.contains("conditional"), "{error}");
-        let warnings = stacks.check(Required::Partial).unwrap();
+        let warnings = stacks.check(Required::Diagnostic).unwrap();
         assert!(warnings[0].contains("nesting rule"), "{warnings:?}");
         assert!(stacks.render().contains("a trap return at 0x2f001000"));
     }
@@ -1034,7 +1056,7 @@ mod tests {
         assert!(stacks.render().contains("levels: checked"));
         stacks.level_writers =
             vec!["`esp_hal::interrupt::map_raw` at 0x2f001000 runs inside main".into()];
-        for required in [Required::Proven, Required::Partial] {
+        for required in [Required::Product, Required::Diagnostic] {
             let error = stacks.check(required).unwrap_err().to_string();
             assert!(error.contains("table levels are not checked"), "{error}");
         }
@@ -1047,7 +1069,7 @@ mod tests {
         stacks.harts[0].bytes = Some(1000);
         stacks.handler_code.panics = vec![(0x2f00_1000, 0x4000_0000)];
         stacks.handler_code.cached = vec![0x4000_0000];
-        assert!(stacks.check(Required::Proven).is_ok());
+        assert!(stacks.check(Required::Product).is_ok());
         let report = stacks.render();
         assert!(
             report.contains("1 calls into the panic machinery"),
@@ -1055,7 +1077,7 @@ mod tests {
         );
         assert!(report.contains("1 functions in cached memory"), "{report}");
         stacks.handler_code.float = vec![(0x2f00_1000, 0x2f00_1004)];
-        let error = stacks.check(Required::Partial).unwrap_err().to_string();
+        let error = stacks.check(Required::Diagnostic).unwrap_err().to_string();
         assert!(error.contains("floating point at 0x2f001004"), "{error}");
     }
 
