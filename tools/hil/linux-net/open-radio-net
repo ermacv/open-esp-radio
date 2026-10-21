@@ -87,30 +87,33 @@ take_network_manager_ownership() {
     # A per-boot configuration match on the interface name also covers every
     # netdev created until `managed` removes it.
     if ! test -e "$NM_UNMANAGED_CONFIG"; then
-        /bin/mkdir -p /run/NetworkManager/conf.d
+        /bin/mkdir -p /run/NetworkManager/conf.d || return
         /usr/bin/printf '[device-open-radio-hil]\nmatch-device=interface-name:wlan0\nmanaged=0\n' \
-            >"$NM_UNMANAGED_CONFIG"
-        /usr/bin/nmcli general reload conf
+            >"$NM_UNMANAGED_CONFIG" || return
+        /usr/bin/nmcli general reload conf || return
     fi
     /usr/bin/nmcli device set wlan0 managed no 2>/dev/null || true
 }
 
 release_network_manager_ownership() {
+    release_nm_status=0
     if test -e "$NM_UNMANAGED_CONFIG"; then
-        /bin/rm -f "$NM_UNMANAGED_CONFIG"
-        /usr/bin/nmcli general reload conf
+        /bin/rm -f "$NM_UNMANAGED_CONFIG" || release_nm_status=1
+        /usr/bin/nmcli general reload conf || release_nm_status=1
     fi
-    /usr/bin/nmcli device set wlan0 managed yes
+    /usr/bin/nmcli device set wlan0 managed yes || release_nm_status=1
+    return "$release_nm_status"
 }
 
 remember_wifi_identity() {
     if test ! -e /sys/class/net/wlan0/phy80211; then
         return
     fi
-    phy=$(/usr/bin/basename "$(/usr/bin/readlink /sys/class/net/wlan0/phy80211)")
-    mac=$(/bin/cat /sys/class/net/wlan0/address)
-    /bin/mkdir -p "$STATE_DIR"
-    /usr/bin/printf '%s\n' "$phy" >"$PHY_STATE"
+    phy_link=$(/usr/bin/readlink /sys/class/net/wlan0/phy80211) || return
+    phy=$(/usr/bin/basename "$phy_link") || return
+    mac=$(/bin/cat /sys/class/net/wlan0/address) || return
+    /bin/mkdir -p "$STATE_DIR" || return
+    /usr/bin/printf '%s\n' "$phy" >"$PHY_STATE" || return
     /usr/bin/printf '%s\n' "$mac" >"$MAC_STATE"
 }
 
@@ -144,33 +147,33 @@ restore_wifi_rfkill() {
     if test ! -s "$RFKILL_ID_STATE" || test ! -s "$RFKILL_SOFT_STATE"; then
         return
     fi
-    id=$(/bin/cat "$RFKILL_ID_STATE")
-    initial=$(/bin/cat "$RFKILL_SOFT_STATE")
-    phy=$(/bin/cat "$PHY_STATE")
+    id=$(/bin/cat "$RFKILL_ID_STATE") || return
+    initial=$(/bin/cat "$RFKILL_SOFT_STATE") || return
+    phy=$(/bin/cat "$PHY_STATE") || return
     case "$id" in ''|*[!0-9]*) return 1;; esac
     case "$initial" in 0|1) ;; *) return 1;; esac
     entry="/sys/class/rfkill/rfkill$id"
-    test "$(/bin/cat "$entry/type")" = wlan
-    test "$(/bin/cat "$entry/name")" = "$phy"
+    test "$(/bin/cat "$entry/type")" = wlan || return
+    test "$(/bin/cat "$entry/name")" = "$phy" || return
     if test "$initial" = 1; then
-        /usr/bin/rfkill block "$id"
+        /usr/bin/rfkill block "$id" || return
     else
-        /usr/bin/rfkill unblock "$id"
+        /usr/bin/rfkill unblock "$id" || return
     fi
-    test "$(/bin/cat "$entry/soft")" = "$initial"
+    test "$(/bin/cat "$entry/soft")" = "$initial" || return
     /bin/rm -f "$RFKILL_ID_STATE" "$RFKILL_SOFT_STATE"
 }
 
 restore_managed_interface() {
     if test -e /sys/class/net/wlan0; then
-        /usr/bin/iw dev wlan0 set type managed
+        /usr/bin/iw dev wlan0 set type managed || return
         return
     fi
-    test -s "$PHY_STATE"
-    test -s "$MAC_STATE"
-    phy=$(/bin/cat "$PHY_STATE")
-    mac=$(/bin/cat "$MAC_STATE")
-    test -e "/sys/class/ieee80211/$phy"
+    test -s "$PHY_STATE" || return
+    test -s "$MAC_STATE" || return
+    phy=$(/bin/cat "$PHY_STATE") || return
+    mac=$(/bin/cat "$MAC_STATE") || return
+    test -e "/sys/class/ieee80211/$phy" || return
     /usr/bin/iw phy "$phy" interface add wlan0 type managed addr "$mac"
 }
 
@@ -345,13 +348,15 @@ EOF
 }
 
 restore_managed() {
-    take_network_manager_ownership
-    remember_wifi_identity
-    stop_radio_services
-    discard_pending_client
-    restore_managed_interface
-    release_network_manager_ownership
-    restore_wifi_rfkill
+    managed_restore_status=0
+    take_network_manager_ownership || managed_restore_status=1
+    remember_wifi_identity || managed_restore_status=1
+    stop_radio_services || managed_restore_status=1
+    discard_pending_client || managed_restore_status=1
+    restore_managed_interface || managed_restore_status=1
+    release_network_manager_ownership || managed_restore_status=1
+    restore_wifi_rfkill || managed_restore_status=1
+    return "$managed_restore_status"
 }
 
 if test "$1" != capabilities; then
