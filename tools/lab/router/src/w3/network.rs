@@ -255,7 +255,7 @@ fn verify_script(interface: &str) -> Result<String> {
         "test \"$(readlink -f /sys/class/net/{}/master)\" = /sys/devices/virtual/net/{}\n\
          test \"$(ls /sys/class/net/{}/brif)\" = {}\n\
          test \"$(ip -4 -o addr show dev {} | awk '{{print $4}}')\" = 10.231.0.1/24\n\
-         nft list chain inet fw4 forward | grep -qF oer-w3-no-forward-out\n\
+         nft list chain inet fw4 forward_oer_w3 | grep -qF oer-w3-no-forward-out\n\
          nft list chain inet fw4 forward | grep -qF oer-w3-no-forward-in\n\
          printf 'verified\\n'\n",
         quote(interface)?,
@@ -371,6 +371,8 @@ mod tests {
         assert!(values.iter().all(|s| s.value != BRIDGE));
         let script = verify_script("made-up'interface").unwrap();
         assert!(script.contains(&quote("made-up'interface").unwrap()));
+        assert!(script.contains("forward_oer_w3 | grep -qF oer-w3-no-forward-out"));
+        assert!(script.contains("fw4 forward | grep -qF oer-w3-no-forward-in"));
     }
 
     struct Fake {
