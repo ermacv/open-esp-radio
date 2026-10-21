@@ -262,7 +262,9 @@ constants introduced by the compiler, including constant-copy initialization.
 The image compiler flags have one owner, `compiler::configure`, which a
 stack policy parameterizes through `compiler::of_policy`:
 `-Z emit-stack-sizes`, `-Z move-size-limit` (the policy's `max_move_bytes`) with `-D large-assignments`,
-`-Z share-generics=y` and the C/C++ `-fstack-size-section`. No
+`-Z share-generics=y` and the C/C++ `-fstack-size-section`. A value larger than
+that move limit lives in placed static storage; futures and task arguments
+borrow it. No
 `.cargo/config.toml` of the repository carries Rust flags (Cargo reads those
 from the directory it runs in, not from the manifest's, so image builds from
 the repository root would never see them). It sets `RUSTC_BOOTSTRAP=1` on the
