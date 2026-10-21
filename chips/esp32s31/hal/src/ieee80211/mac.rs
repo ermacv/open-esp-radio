@@ -281,6 +281,17 @@ impl<'registers> WifiMacHal<'registers> {
         ring.core_ready()
     }
 
+    /// Reopen common gates after a MAC reset while retaining prepared memory.
+    /// The stopped ring still owns its buffers and private DMA binding. Keep
+    /// the runtime stop held while rebuilding/publishing its next epoch;
+    /// releasing MAC RX still requires a live walker.
+    pub fn reopen_mac_core<const COUNT: usize>(
+        &mut self,
+        _ring: &crate::ieee80211::dma::rx_ring::RxRingStopped<'_, COUNT>,
+    ) {
+        self.pac_mut().prepare_mac_runtime();
+    }
+
     /// Release MAC RX only with a live walker carrying its private DMA
     /// binding. A register owner cannot manufacture either ring proof.
     pub fn start_mac_runtime<const COUNT: usize>(

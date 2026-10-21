@@ -84,11 +84,15 @@ impl Radio {
         )
     }
 
-    pub async fn request(&mut self, request: Request) -> Result<Answer> {
+    pub async fn request(
+        &mut self,
+        request: Request,
+        capture_rx: &mut Option<crate::cca_rx::Prepared>,
+    ) -> Result<Answer> {
         if self.poisoned && !matches!(request, Request::HoldGet(_) | Request::HoldStop(_)) {
             return Err(RejectReason::InvalidState);
         }
-        let result = self.execute(request).await;
+        let result = self.execute(request, capture_rx).await;
         if matches!(result, Err(RejectReason::Internal)) {
             self.poisoned = true;
             self.ready = None;
@@ -96,7 +100,11 @@ impl Radio {
         result
     }
 
-    async fn execute(&mut self, request: Request) -> Result<Answer> {
+    async fn execute(
+        &mut self,
+        request: Request,
+        capture_rx: &mut Option<crate::cca_rx::Prepared>,
+    ) -> Result<Answer> {
         if self.hold.is_some() && !matches!(request, Request::HoldGet(_) | Request::HoldStop(_)) {
             return Err(RejectReason::InvalidState);
         }
@@ -249,6 +257,9 @@ impl Radio {
                     radio: current.radio,
                 };
                 self.enter_capture(config).await?;
+                if config.radio == CaptureRadio::Wifi {
+                    self.prepare_capture_rx(capture_rx)?;
+                }
                 let lifecycle = match config.radio {
                     CaptureRadio::Wifi => CaptureLifecycle::Restart,
                     CaptureRadio::Ieee802154 { .. } => CaptureLifecycle::Ieee802154Restart,
@@ -267,8 +278,9 @@ impl Radio {
                 // pages. This separate RX experiment cannot affect them.
                 let observed = if current.radio == CaptureRadio::Wifi {
                     let wifi = self.clocked.take().ok_or(RejectReason::Internal)?;
+                    let prepared = capture_rx.take();
                     let (wifi, result) =
-                        crate::cca_rx::run(&self.domain, wifi, current.channel).await;
+                        crate::cca_rx::run(&self.domain, wifi, current.channel, prepared).await;
                     self.clocked = Some(wifi);
                     result
                 } else {
@@ -438,6 +450,17 @@ impl Radio {
         };
         self.ready = Some(ready);
         Ok(ready)
+    }
+
+    fn prepare_capture_rx(
+        &mut self,
+        capture_rx: &mut Option<crate::cca_rx::Prepared>,
+    ) -> Result<()> {
+        let wifi = self.clocked.take().ok_or(RejectReason::Internal)?;
+        let (wifi, prepared) = crate::cca_rx::prepare(&self.domain, wifi, capture_rx.take());
+        self.clocked = Some(wifi);
+        *capture_rx = Some(prepared?);
+        Ok(())
     }
 
     async fn enter_capture(&mut self, config: PrepareCapture) -> Result<()> {
