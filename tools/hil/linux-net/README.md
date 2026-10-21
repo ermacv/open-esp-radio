@@ -59,6 +59,8 @@ with piped stdin/stdout. It emits one JSON object per line:
 per session; its only destination is the DHCP router. Any lost echo remains
 visible in `received`. The helper uses the fixed interface, count and
 interval; stdin cannot supply a destination, command, path or ping flags.
+Lease timestamps use seconds on Linux's shared `CLOCK_BOOTTIME` clock,
+including suspend time and independent of wall-clock adjustments.
 The station answers reverse echoes through Linux's ICMP responder throughout
 the lease session. A router-side ping can run concurrently with the station's
 ping. The caller verifies its independently captured echo pairs.
@@ -73,8 +75,10 @@ release the DHCP child and deauthenticate the station. `managed` restores
 the fixture's ordinary managed-interface/rfkill state, with the permanent
 NetworkManager exclusion still in place.
 
-The DHCP binary is BusyBox 1.38.0 with only its `udhcpc` applet. Its source
-archive is verified by SHA-256, with the build configuration in provenance.
+The DHCP binary is BusyBox 1.38.0 with only its `udhcpc` applet. BusyBox is
+GPL-2.0-only, built locally from verified source and installed only on this
+host; it is not committed, included in CI/HIL result artifacts or redistributed.
+Its source archive is verified by SHA-256, with the build configuration in provenance.
 The [upstream-derived source hash](https://raw.githubusercontent.com/buildroot/buildroot/master/package/busybox/busybox.hash)
 is pinned in `oer_lab_router::udhcpc`. Build it without root or RF:
 

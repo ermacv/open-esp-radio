@@ -13,7 +13,7 @@ use std::{
     path::Path,
     process::{ExitCode, Stdio},
     sync::mpsc,
-    time::{Duration, Instant, SystemTime},
+    time::{Duration, Instant},
 };
 
 type Result<T> = oer_tool_lab_fixture_install::Result<T>;
@@ -55,9 +55,10 @@ fn run() -> Result<()> {
     }
 }
 fn now() -> Result<u64> {
-    Ok(SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)?
-        .as_secs())
+    // DHCP hooks and the session share one suspend-aware monotonic epoch.
+    Ok(u64::try_from(
+        rustix::time::clock_gettime(rustix::time::ClockId::Boottime).tv_sec,
+    )?)
 }
 fn write_private(path: impl AsRef<Path>, bytes: &[u8]) -> Result<()> {
     let mut tmp = tempfile::NamedTempFile::new_in(STATE)?;

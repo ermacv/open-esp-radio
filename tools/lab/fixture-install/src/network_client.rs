@@ -144,7 +144,9 @@ pub struct Lease {
     pub prefix: u8,
     pub router: Ipv4Addr,
     pub server: Ipv4Addr,
+    /// CLOCK_BOOTTIME seconds, shared by hooks and the owning session.
     pub obtained_at: u64,
+    /// CLOCK_BOOTTIME seconds; wall-clock adjustments do not extend a lease.
     pub expires_at: u64,
 }
 impl Lease {

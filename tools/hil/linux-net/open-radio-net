@@ -50,21 +50,23 @@ stop_pidfile() {
 }
 
 stop_radio_services() {
+    radio_cleanup_status=0
     if test -f "$STATE_DIR/client-session.json" || test -f "$STATE_DIR/client-lease.json"; then
-        "$CLIENT_TOOL" stop-dhcp
+        "$CLIENT_TOOL" stop-dhcp || radio_cleanup_status=1
     fi
-    stop_pidfile "$WPA_PID"
-    stop_pidfile "$DNSMASQ_PID"
-    stop_pidfile "$HOSTAPD_PID"
+    stop_pidfile "$WPA_PID" || radio_cleanup_status=1
+    stop_pidfile "$DNSMASQ_PID" || radio_cleanup_status=1
+    stop_pidfile "$HOSTAPD_PID" || radio_cleanup_status=1
     /usr/bin/iw dev mon0 del 2>/dev/null || true
     /usr/bin/wpa_cli -g /run/wpa_supplicant/global interface_remove wlan0 \
         >/dev/null 2>&1 || true
     /usr/bin/ip link set wlan0 down 2>/dev/null || true
     /usr/bin/ip address flush dev wlan0 2>/dev/null || true
-    /bin/rm -f "$WPA_CONFIG" "$AP_CONFIG"
-    /bin/rm -f "$STATE_DIR/client-network.json"
-    /bin/rm -f "$CTRL_DIR/hostapd.log"
-    /bin/rm -rf "$WPA_CTRL"
+    /bin/rm -f "$WPA_CONFIG" "$AP_CONFIG" || radio_cleanup_status=1
+    /bin/rm -f "$STATE_DIR/client-network.json" || radio_cleanup_status=1
+    /bin/rm -f "$CTRL_DIR/hostapd.log" || radio_cleanup_status=1
+    /bin/rm -rf "$WPA_CTRL" || radio_cleanup_status=1
+    return "$radio_cleanup_status"
 }
 
 discard_pending_client() {
@@ -442,8 +444,10 @@ case "$1" in
         restore_managed
         ;;
     stop)
-        stop_radio_services
-        discard_pending_client
+        stop_status=0
+        stop_radio_services || stop_status=1
+        discard_pending_client || stop_status=1
+        exit "$stop_status"
         ;;
     status)
         /usr/bin/iw dev
