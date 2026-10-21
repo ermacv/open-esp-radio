@@ -1,0 +1,10 @@
+error[E0624]: associated function `new` is private
+ --> tests/ui/body_loan_closed.rs:6:22
+  |
+6 |     return BodyLoan::new(); // ui-error: E0624
+  |                      ^^^ private associated function
+  |
+ ::: src/pool/loan.rs
+  |
+  |     pub(crate) const fn new() -> Self {
+  |     --------------------------------- private associated function defined here

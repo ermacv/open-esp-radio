@@ -45,11 +45,14 @@ impl Drop for Context {
 struct Contexts;
 impl ModelContext for Contexts {
     type Body = Body;
-    type Context<'id> = Context;
-    type StationConfigureContext<'id> = ();
-    type AccessPointConfigureContext<'id> = ();
+    type OwnedContext<Id: SlotIdentity> = Context;
+    type Context<'p, Id: SlotIdentity + 'p> = Context;
+    type OwnedStationConfigureContext<Id: SlotIdentity> = ();
+    type StationConfigureContext<'p, Id: SlotIdentity + 'p> = ();
+    type OwnedAccessPointConfigureContext<Id: SlotIdentity> = ();
+    type AccessPointConfigureContext<'p, Id: SlotIdentity + 'p> = ();
 }
-type Backend = ModelBackend<ModelCaps, Contexts>;
+type Backend<Id> = ModelBackend<Id, ModelCaps, Contexts>;
 
 /// Exercise the same four owned operations as the physical fixture.
 pub async fn ownership(
@@ -60,13 +63,13 @@ pub async fn ownership(
 ) -> Result<OwnershipTrace, &'static str> {
     let station = IndividualAddress::new([2, 0, 0, 0, 0, 1]).ok_or("model station")?;
     let ap = IndividualAddress::new([2, 0, 0, 0, 0, 2]).ok_or("model AP")?;
-    let (backend, air) = Backend::new(channel, [station, ap], clock);
+    let (backend, air) = Fixture::<ModelCaps, Contexts>::new(channel, [station, ap], clock);
     if scenario == Scenario::CloseGate {
         // Match the physical fixture's absent receiver on every publication.
         // Retry exhaustion is determined by the unchanged operation plan.
         air.absent_peer.set(true);
     }
-    match oer_radio_port::run_port(
+    match run_model(
         backend,
         Operations {
             air,
@@ -76,14 +79,14 @@ pub async fn ownership(
     )
     .await
     {
-        PortEnd::Uninstalled { output, .. } => output,
+        Report::Joined(output) => output,
         _ => Err("model ownership failed to uninstall"),
     }
 }
-fn observe(
+fn observe<'id, Id: SlotIdentity + 'id>(
     context: Context,
-    ticket: Slot<'_, ModelTickets, ModelPool<1>>,
-    buffer: ModelAnyBuffer<'_, Body>,
+    ticket: Slot<'id, ModelTickets, ModelPool<Id, 1>>,
+    buffer: ModelAnyBuffer<'id, Backend<Id>>,
     body: Option<Body>,
     (end, evidence): (End, conformance::ReturnEvidence),
     seen: &mut Capture,
@@ -92,11 +95,11 @@ fn observe(
         ModelAnyBuffer::Small(buffer) => (Class::Small, buffer.slot.index(), body),
         ModelAnyBuffer::Large(buffer) => (Class::Large, buffer.slot.index(), body),
         ModelAnyBuffer::SmallSent(sent) => {
-            let (buffer, body) = <ModelTypes<Contexts> as TxBufferPool<ModelSmall>>::renew(sent);
+            let (buffer, body) = <ModelTypes<Backend<Id>> as TxBufferPool<ModelSmall>>::renew(sent);
             (Class::Small, buffer.slot.index(), body)
         }
         ModelAnyBuffer::LargeSent(sent) => {
-            let (buffer, body) = <ModelTypes<Contexts> as TxBufferPool<ModelLarge>>::renew(sent);
+            let (buffer, body) = <ModelTypes<Backend<Id>> as TxBufferPool<ModelLarge>>::renew(sent);
             (Class::Large, buffer.slot.index(), body)
         }
     };
@@ -123,9 +126,9 @@ fn observe(
     });
     Ok(())
 }
-fn returned<'id>(
-    terminal: LowerMacTerminal<'id, ModelTypes<Contexts>>,
-    access: &mut oer_ieee80211_port::TerminalAccess<'id, ModelTickets, ModelPool<1>>,
+fn returned<'id, Id: SlotIdentity + 'id>(
+    terminal: LowerMacTerminal<'id, ModelTypes<Backend<Id>>>,
+    access: &mut oer_ieee80211_port::TerminalAccess<'id, ModelTickets, ModelPool<Id, 1>>,
     seen: &mut Capture,
     air: &ModelAir,
 ) -> Result<(), &'static str> {
@@ -158,8 +161,8 @@ fn returned<'id>(
         _ => Err("unexpected model ownership event"),
     }
 }
-fn frame<'p, 'id: 'p>(
-    phase: &ModelPhase<'p, 'id, ModelCaps, Contexts>,
+fn frame<'p, 'id: 'p, Id: SlotIdentity + 'id>(
+    phase: &ModelPhase<'p, 'id, ModelCaps, Backend<Id>>,
     rate: LegacyRate,
     scenario: Scenario,
 ) -> Result<TxFrame<'p, 'id, ModelCaps>, &'static str> {
@@ -200,16 +203,23 @@ struct Operations {
     scenario: Scenario,
     rate: LegacyRate,
 }
-impl PortBody<Backend> for Operations {
+impl<Id: SlotIdentity> PortBody<Id, Backend<Id>> for Operations {
     type Output = Result<OwnershipTrace, &'static str>;
     async fn run<'p, 'id>(
         self,
-        owner: Owner<'p, 'id, Backend, Disabled>,
-        resources: ModelResources<'id>,
-    ) -> Ended<'id, Backend, Self::Output> {
+        owner: Owner<'p, 'id, Id, Backend<Id>, Disabled>,
+        resources: ModelResources<'id, Backend<Id>>,
+    ) -> Ended<Id, Backend<Id>, Self::Output>
+    where
+        Backend<Id>: 'id,
+        Id: 'id,
+        'id: 'p,
+    {
         let mut owner = match owner.enable().await {
             Ok(owner) => owner,
-            Err(failed) => return Ended::fail_stopped(failed.fail_stop(), Err("model enable")),
+            Err(failed) => {
+                return Ended::fail_stop(failed.fail_stop(), Err("model enable"));
+            }
         };
         let drops = Rc::new(Cell::new(0));
         let mut seen = Capture::default();
@@ -244,7 +254,7 @@ impl PortBody<Backend> for Operations {
                         .check();
                         let source = match source {
                             Ok(source) => {
-                                Ok(<ModelTypes<Contexts> as TxBufferPool<$class>>::prepare::<
+                                Ok(<ModelTypes<Backend<Id>> as TxBufferPool<$class>>::prepare::<
                                     Station,
                                     ModelCaps,
                                 >(source)
@@ -353,7 +363,9 @@ impl PortBody<Backend> for Operations {
             .await
         {
             Ok(owner) => owner,
-            Err(failed) => return Ended::fail_stopped(failed.fail_stop(), Err("model disable")),
+            Err(failed) => {
+                return Ended::fail_stop(failed.fail_stop(), Err("model disable"));
+            }
         };
         let output = match error {
             Some(why) => Err(why),
@@ -380,3 +392,5 @@ impl PortBody<Backend> for Operations {
         Ended::uninstall(owner, (), output)
     }
 }
+
+plain_context!(Context);

@@ -10,7 +10,7 @@ error[E0382]: use of moved value: `start`
  --> tests/ui/association_next_mode.rs:7:19
   |
 4 | pub fn next<'id>(start: AssociationStart<'id, Station, 1, 1>, bank: VacantKeyBank<'id, Station, 1, 1>) {
-  |                  ----- move occurs because `start` has type `AssociationStart<'_, oer_ieee80211_port::Station, 1, 1>`, which does not implement the `Copy` trait
+  |                  ----- move occurs because `start` has type `AssociationStart<'_, oer_ieee80211_port::Station, 1, 1, oer_radio_port::pool::path::Root<oer_radio_port::identity::LocalId<'_>>>`, which does not implement the `Copy` trait
 5 |     let first = start.begin(Spp::Negotiated);
   |                       ---------------------- `start` moved due to this method call
 6 |     #[cfg(all())]

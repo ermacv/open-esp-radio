@@ -43,11 +43,10 @@
 //! backend minted its pool with, so taking a slot synchronously is an
 //! invariant of that count (popping the array it holds), never a refusal.
 //!
-//! The clients of one install share a pool only inside the body's task. A
-//! token is branded, so it never enters `'static` storage such as an
-//! interrupt handler's: a backend keeps the tokens on the task side, keyed
-//! by their [`index`](Permit::index), and its interrupt carries only the
-//! index.
+//! Body-facing tokens retain an invariant body loan. A backend can privately
+//! convert only capacity tokens between that loan and owned Id state through
+//! [`BodyLoan`]; the owned state carries no P1 reference. Their component
+//! paths and [`index`](Permit::index) remain unchanged through that handoff.
 //!
 //! This package owns no state and never waits: it states the tokens and the
 //! rules. A pool's free list, its waiters and their wake-ups belong to a
@@ -190,8 +189,9 @@ use core::{future::Future, marker::PhantomData};
 /// The brand of one install.
 type Brand<'id> = PhantomData<fn(&'id ()) -> &'id ()>;
 
+mod loan;
 mod mint;
-pub(crate) use mint::prepare_brand;
+pub use loan::BodyLoan;
 mod path;
 pub use mint::{
     Mint, PermitSupply, PermitTokens, Permits, PoolBuilder, PoolSet, Pools, Slots, branded,
@@ -212,7 +212,7 @@ const fn index_of(index: usize) -> u8 {
 /// installed resource. Installing a resource moves it in; removing the
 /// resource gives it back.
 #[must_use = "a slot is capacity; dropping it loses it until the next install"]
-pub struct Slot<'id, Kind, Path: PoolPath = Root> {
+pub struct Slot<'id, Kind, Path: PoolPath = Root<crate::LocalId<'id>>> {
     index: u8,
     brand: Brand<'id>,
     kind: PhantomData<fn() -> (Kind, Path)>,
@@ -230,7 +230,7 @@ impl<Kind, Path: PoolPath> Slot<'_, Kind, Path> {
 /// work holds until it ends; the backend that keeps the pool gives it back
 /// before it hands the work's terminal out.
 #[must_use = "a permit goes back to its pool through `PermitPool::release`"]
-pub struct Permit<'id, Kind, Path: PoolPath = Root> {
+pub struct Permit<'id, Kind, Path: PoolPath = Root<crate::LocalId<'id>>> {
     index: u8,
     brand: Brand<'id>,
     kind: PhantomData<fn() -> (Kind, Path)>,
@@ -249,7 +249,7 @@ impl<Kind, Path: PoolPath> Permit<'_, Kind, Path> {
 /// takes. What it stands for beyond its kind (an interface's role and
 /// access category) is its index, which the backend that minted it maps.
 #[must_use = "a seat is a place in a pool's line; dropping it loses it until the next install"]
-pub struct Seat<'id, Kind, Path: PoolPath = Root> {
+pub struct Seat<'id, Kind, Path: PoolPath = Root<crate::LocalId<'id>>> {
     index: u8,
     brand: Brand<'id>,
     kind: PhantomData<fn() -> (Kind, Path)>,
@@ -269,7 +269,7 @@ impl<Kind, Path: PoolPath> Seat<'_, Kind, Path> {
 /// order. It is a copyable receipt, not capacity: each pool whose takers
 /// are these seats takes it, and a seat waits in one take at a time.
 #[must_use = "a line sizes its permit pools"]
-pub struct Line<'id, Kind, const N: usize, Path: PoolPath = Root> {
+pub struct Line<'id, Kind, const N: usize, Path: PoolPath = Root<crate::LocalId<'id>>> {
     brand: Brand<'id>,
     kind: PhantomData<fn() -> (Kind, Path)>,
 }
@@ -295,7 +295,13 @@ impl<Kind, const N: usize, Path: PoolPath> Line<'_, Kind, N, Path> {
 /// holds a place for each seat of its `Waiters` path, which [`Permits`] issued
 /// with its [`Line`]. `Pool` independently identifies the returned permits;
 /// multiple pools may share a waiter domain without sharing capacity.
-pub trait PermitPool<'id, Kind, Pool: PoolPath = Root, Waiters: PoolPath = Pool> {
+pub trait PermitPool<
+    'id,
+    Kind,
+    Pool: PoolPath = Root<crate::LocalId<'id>>,
+    Waiters: PoolPath = Pool,
+>
+{
     /// Take a permit with `seat`, waiting while every permit is held, never
     /// refused, in the order the pool documents (first in, first out by
     /// default). The future borrows the seat while it waits: dropping it

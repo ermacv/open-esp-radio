@@ -25,15 +25,15 @@ pub async fn group(
     }
     let station = IndividualAddress::new([2, 0, 0, 0, 0, 1]).ok_or("station")?;
     let ap = IndividualAddress::new([2, 0, 0, 0, 0, 2]).ok_or("AP")?;
-    let (backend, air) = ModelBackend::new(channel, [station, ap], clock);
+    let (backend, air) = Fixture::<ModelCaps>::new(channel, [station, ap], clock);
     if case == ProgressCase::PublishedRemoval {
-        return match oer_radio_port::run_port(backend, published::Exercise { air, rate }).await {
-            PortEnd::Uninstalled { output, .. } => output,
+        return match run_model(backend, published::Exercise { air, rate }).await {
+            Report::Joined(output) => output,
             _ => Err("published GTK failed to uninstall"),
         };
     }
-    match oer_radio_port::run_port(backend, Exercise { case, air }).await {
-        PortEnd::Uninstalled { output, .. } => output,
+    match run_model(backend, Exercise { case, air }).await {
+        Report::Joined(output) => output,
         _ => Err("group fixture failed to uninstall"),
     }
 }
@@ -41,7 +41,9 @@ struct Exercise {
     case: ProgressCase,
     air: Rc<ModelAir>,
 }
-fn observed(terminal: LowerMacTerminal<'_, ModelTypes>) -> Result<Completion, &'static str> {
+fn observed<'id, Id: SlotIdentity + 'id>(
+    terminal: LowerMacTerminal<'id, ModelTypes<ModelBackend<Id>>>,
+) -> Result<Completion, &'static str> {
     let (mutation, slot, permission) = match terminal {
         LowerMacTerminal::GroupKeyInstalled(InstalledGroup::Station { key, permission }) => {
             (Mutation::Install, key.slot.index(), permission.index())
@@ -66,12 +68,12 @@ fn observed(terminal: LowerMacTerminal<'_, ModelTypes>) -> Result<Completion, &'
         owners: Owners { slot, permission },
     })
 }
-async fn installed<'p, 'id: 'p>(
-    phase: &mut ModelPhase<'p, 'id>,
+async fn installed<'p, 'id: 'p, Id: SlotIdentity + 'id>(
+    phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
 ) -> Result<
     (
-        ModelGroupKey<'id, Station>,
-        Slot<'id, ModelGroupPermission<Station>, ModelPool<8>>,
+        ModelGroupKey<'id, ModelBackend<Id>, Station>,
+        Slot<'id, ModelGroupPermission<Station>, ModelPool<Id, 8>>,
     ),
     &'static str,
 > {
@@ -82,14 +84,16 @@ async fn installed<'p, 'id: 'p>(
         _ => Err("station GTK setup"),
     }
 }
-async fn admit<'p, 'id: 'p>(
-    phase: &mut ModelPhase<'p, 'id>,
-    resources: ModelResources<'id>,
+async fn admit<'p, 'id: 'p, Id: SlotIdentity + 'id>(
+    phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
+    resources: ModelResources<'id, ModelBackend<Id>>,
     air: &ModelAir,
     mutation: Mutation,
 ) -> Result<(Owners, Timing), &'static str> {
-    let association =
-        ModelKeys::<Station>::begin_association(resources.station_association, Spp::NotNegotiated);
+    let association = ModelKeys::<ModelBackend<Id>, Station>::begin_association(
+        resources.station_association,
+        Spp::NotNegotiated,
+    );
     let [slot, ..] = resources.station_group;
     let id = GroupKeyId::new(1).ok_or("KeyID")?;
     let (key, permission, vacant) = if mutation == Mutation::Install {
@@ -143,16 +147,23 @@ async fn admit<'p, 'id: 'p>(
         },
     ))
 }
-impl PortBody<ModelBackend> for Exercise {
+impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id>> for Exercise {
     type Output = Result<GroupTrace, &'static str>;
     async fn run<'p, 'id>(
         self,
-        owner: Owner<'p, 'id, ModelBackend, Disabled>,
-        resources: ModelResources<'id>,
-    ) -> Ended<'id, ModelBackend, Self::Output> {
+        owner: Owner<'p, 'id, Id, ModelBackend<Id>, Disabled>,
+        resources: ModelResources<'id, ModelBackend<Id>>,
+    ) -> Ended<Id, ModelBackend<Id>, Self::Output>
+    where
+        ModelBackend<Id>: 'id,
+        Id: 'id,
+        'id: 'p,
+    {
         let mut owner = match owner.enable().await {
             Ok(owner) => owner,
-            Err(failed) => return Ended::fail_stopped(failed.fail_stop(), Err("group enable")),
+            Err(failed) => {
+                return Ended::fail_stop(failed.fail_stop(), Err("group enable"));
+            }
         };
         let result = match self.case {
             ProgressCase::Disable { mutation, applied } => {
@@ -198,7 +209,7 @@ impl PortBody<ModelBackend> for Exercise {
         });
         match disabled {
             Ok(owner) => Ended::uninstall(owner, (), result),
-            Err(failed) => Ended::fail_stopped(failed.fail_stop(), Err("group disable")),
+            Err(failed) => Ended::fail_stop(failed.fail_stop(), Err("group disable")),
         }
     }
 }

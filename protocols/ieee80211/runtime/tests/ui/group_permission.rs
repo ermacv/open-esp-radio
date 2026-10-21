@@ -3,10 +3,10 @@ use oer_ieee80211_port::{InterfacePhase, KeyTypes, LowerMacPhase, StationPhase, 
 use oer_ieee80211_model::{ModelKeys, ModelPhase};
 
 pub fn one_mutation<'p, 'id: 'p>(
-    phase: &mut ModelPhase<'p, 'id>,
-    permission: <ModelKeys<'id, Station> as KeyTypes<'id>>::GroupPermission,
-    selected: <ModelKeys<'id, Station> as KeyTypes<'id>>::GroupKey,
-    retained: <ModelKeys<'id, Station> as KeyTypes<'id>>::GroupKey,
+    phase: &mut ModelPhase<'p, 'id, oer_ieee80211_model::ModelCaps, Composition>,
+    permission: <ModelKeys<'id, Composition, Station> as KeyTypes<'id>>::GroupPermission,
+    selected: <ModelKeys<'id, Composition, Station> as KeyTypes<'id>>::GroupKey,
+    retained: <ModelKeys<'id, Composition, Station> as KeyTypes<'id>>::GroupKey,
 ) {
     phase.station().select_group_key(permission, selected);
     #[cfg(ui_reject)]
@@ -14,3 +14,6 @@ pub fn one_mutation<'p, 'id: 'p>(
     #[cfg(not(ui_reject))]
     let _retained_until_terminal = retained;
 }
+
+pub enum UiSlot {}
+type Composition = oer_ieee80211_model::ModelBackend<oer_radio_port::StaticId<UiSlot>>;

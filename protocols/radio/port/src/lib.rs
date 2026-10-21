@@ -4,11 +4,15 @@
 
 //! Shared radio capacity, lifecycle and operation contracts.
 //!
-//! [`run_port`] consumes an [`Installed`] backend and its independent driver.
-//! Its [`Owner`] borrows the backend and consumes each typestate transition.
+//! [`PortSlot`] retains the P2 owner and queues outside the body's future.
+//! [`run_port`] consumes its frontend; [`Owner`] borrows body views and consumes each typestate
+//! transition. Fail-stop publishes an affine request; the lifecycle supervisor
+//! waits for the actual stop outcome before returning [`PortEnd`].
+//! [`LocalExecution`] keeps registration and body in the same context without
+//! requiring `Send`; registration precedes construction or polling of the body.
 //! [`Mint::into_pools`] issues each installation's complete capacity once.
-//! The driver owns only unbranded state: queues containing branded slots and
-//! in-flight work belong in [`PortBackend::Held`], borrowed by the driver.
+//! Queues contain complete owned Id payloads, with a separate invariant body
+//! loan on every public resource and protected context.
 //! See [`lifecycle`] for retirement, poisoning and cancellation.
 
 #[cfg(any(test, all(feature = "test-support", not(target_os = "none"))))]
@@ -16,17 +20,29 @@ extern crate std;
 
 #[cfg(any(test, feature = "test-support"))]
 pub mod conformance;
+mod context;
+mod execution;
+mod identity;
 pub mod lifecycle;
 pub mod pool;
 mod relation;
+pub mod slot;
 mod work;
 
+pub use context::{ContextChoice, ContextLoan, ContextProjection, LoanedContext, PortContext};
+pub use execution::LocalExecution;
+pub use identity::{LocalId, SlotIdentity, StaticId};
 pub use lifecycle::*;
+pub use slot::{
+    Joined, ModelSlotOwner, PortSlot, SlotBody, SlotBodyOwner, SlotClaim, SlotCompletion,
+    SlotFrontend, SlotJoin, SlotOwner, SlotQuarantined, SlotRegistration, SlotRetire, SlotStopped,
+    SlotWakes, VacantPortSlot, with_local_slot,
+};
 pub use work::*;
 
 pub use pool::{
-    Child, Line, Mint, Permit, PermitPool, PermitSupply, PermitTokens, Permits, PoolBuilder,
-    PoolPath, PoolSet, Pools, Root, Seat, Slot, Slots, branded,
+    BodyLoan, Child, Line, Mint, Permit, PermitPool, PermitSupply, PermitTokens, Permits,
+    PoolBuilder, PoolPath, PoolSet, Pools, Root, Seat, Slot, Slots, branded,
 };
 pub use relation::{
     ClockInfo, ClockRelation, ClockSample, Generation, GenerationSource, Projected,
@@ -41,7 +57,7 @@ pub type PortResult<T, R, C> = Result<Result<T, R>, Poisoned<C>>;
 ///
 /// This is data, carrying only the backend's cause. It grants no hardware
 /// authority and carries no owners or affine proofs. Undelivered owners stay
-/// in the [`Quarantined`] retained by [`PortEnd`]. Every later
+/// in the slot's permanent quarantine. Every later
 /// [`PortPhase::next_event`] returns the same variant and cause.
 ///
 /// | Backend outcome | Event-stream end |
@@ -62,8 +78,8 @@ pub enum EventEnd<C> {
         /// Why the event stream ended.
         cause: C,
     },
-    /// Undelivered terminals and their owners remain quarantined in
-    /// [`PortEnd`]. The body must fail-stop without attempting further
+    /// Undelivered terminals and their owners remain in the slot's quarantine.
+    /// The body must fail-stop without attempting further
     /// draining or ordinary teardown.
     Quarantined {
         /// Why the event stream ended.

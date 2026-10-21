@@ -247,7 +247,13 @@ pub enum DataRefusal {
 /// Its closed, checked frame description survives every unpublished return;
 /// neither the MPDU length nor its header is reconstructed at completion.
 #[derive(Debug)]
-pub struct DataTxContext<'id, K, C, A = AcPermit, Path: PoolPath = Root> {
+pub struct DataTxContext<
+    'id,
+    K,
+    C,
+    A = AcPermit,
+    Path: PoolPath = Root<oer_radio_port::LocalId<'id>>,
+> {
     admission: A,
     link: LinkEpoch<'id, Path>,
     tid: WmmUserPriority,
@@ -256,6 +262,52 @@ pub struct DataTxContext<'id, K, C, A = AcPermit, Path: PoolPath = Root> {
     protection: DataProtection<()>,
     order: u32,
     admitted: oer_time::Instant,
+}
+
+/// Operation data retained with an owned data epoch. Its private fields cannot
+/// reconstruct an epoch or an access-category admission permission.
+pub struct DataTxInfo<K, C, A> {
+    admission: A,
+    tid: WmmUserPriority,
+    frame: oer_ieee80211_port::ClassSizedFrame<C, AckHeader, K>,
+    access_category: WmmAccessCategory,
+    protection: DataProtection<()>,
+    order: u32,
+    admitted: oer_time::Instant,
+}
+
+impl<'p, K: 'p, C: 'p, A: 'p, Path: PoolPath + 'p> oer_radio_port::LoanedContext<'p, Path::Identity>
+    for DataTxContext<'p, K, C, A, Path>
+where
+    Path::Identity: 'p,
+{
+    type Owned = crate::epoch::EpochContext<Path, DataTxInfo<K, C, A>>;
+
+    fn enclose(self) -> oer_radio_port::PortContext<'p, Path::Identity, Self::Owned> {
+        self.link.context(DataTxInfo {
+            admission: self.admission,
+            tid: self.tid,
+            frame: self.frame,
+            access_category: self.access_category,
+            protection: self.protection,
+            order: self.order,
+            admitted: self.admitted,
+        })
+    }
+
+    fn restore(context: oer_radio_port::PortContext<'p, Path::Identity, Self::Owned>) -> Self {
+        let (link, data) = context.into_parts();
+        Self {
+            admission: data.admission,
+            link,
+            tid: data.tid,
+            frame: data.frame,
+            access_category: data.access_category,
+            protection: data.protection,
+            order: data.order,
+            admitted: data.admitted,
+        }
+    }
 }
 
 /// One non-cloneable permission for a data attempt in an access category.

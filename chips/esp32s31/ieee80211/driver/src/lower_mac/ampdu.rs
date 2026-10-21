@@ -300,7 +300,7 @@ impl<S: AmpduBacking, const SLOTS: usize> fmt::Debug for Esp32s31AmpduBuffer<'_,
 /// The affine publication plan owns both its queue and encryption authority.
 /// A protected plan cannot be forged or retained after publication.
 #[must_use = "publish the aggregate or return its admission"]
-pub struct AmpduPlan<'core, Path: PoolPath = Root> {
+pub struct AmpduPlan<'core, Path: PoolPath = Root<oer_radio_port::LocalId<'core>>> {
     pub(super) queue: FreeQueue<'core, Path>,
     pub(super) admission: TxAdmission<'core, Path>,
     pub(super) settings: AmpduSettings,
@@ -352,7 +352,13 @@ pub const fn protection_spacing(min_mpdu_start_spacing: u8) -> HtProtectionSpaci
 }
 
 /// A published aggregate on its queue.
-pub struct PublishedAmpdu<'core, 'slot, B, const SLOTS: usize, Path: PoolPath = Root> {
+pub struct PublishedAmpdu<
+    'core,
+    'slot,
+    B,
+    const SLOTS: usize,
+    Path: PoolPath = Root<oer_radio_port::LocalId<'core>>,
+> {
     queue: FreeQueue<'core, Path>,
     admission: TxAdmission<'core, Path>,
     owner: Esp32s31AmpduOwner<'slot, B, SLOTS>,
@@ -416,7 +422,13 @@ impl AmpduOutcome {
     }
 }
 
-pub enum AmpduProgress<'core, 'slot, B, const SLOTS: usize, Path: PoolPath = Root> {
+pub enum AmpduProgress<
+    'core,
+    'slot,
+    B,
+    const SLOTS: usize,
+    Path: PoolPath = Root<oer_radio_port::LocalId<'core>>,
+> {
     Pending(PublishedAmpdu<'core, 'slot, B, SLOTS, Path>),
     /// The aggregate ended and released its subframes; the owner is idle.
     Complete(CompletedAmpdu<'core, 'slot, B, SLOTS, Path>),
@@ -425,7 +437,13 @@ pub enum AmpduProgress<'core, 'slot, B, const SLOTS: usize, Path: PoolPath = Roo
 /// The detached aggregate and its affine terminal. Only the installing core
 /// releases the queue and key right while publishing the terminal to its sink.
 #[must_use = "return the detached aggregate through its core"]
-pub struct CompletedAmpdu<'core, 'slot, B, const SLOTS: usize, Path: PoolPath = Root> {
+pub struct CompletedAmpdu<
+    'core,
+    'slot,
+    B,
+    const SLOTS: usize,
+    Path: PoolPath = Root<oer_radio_port::LocalId<'core>>,
+> {
     pub(super) outcome: AmpduOutcome,
     pub(super) owner: Esp32s31AmpduOwner<'slot, B, SLOTS>,
     pub(super) queue: FreeQueue<'core, Path>,
@@ -436,7 +454,13 @@ pub struct CompletedAmpdu<'core, 'slot, B, const SLOTS: usize, Path: PoolPath = 
 /// An aggregate fault retains every admitted right and its DMA owner. It has
 /// no release operation: a poisoned backend carries it through reset custody.
 #[must_use = "retain the poisoned aggregate in the backend's quarantine"]
-pub struct AmpduFault<'core, 'slot, B, const SLOTS: usize, Path: PoolPath = Root> {
+pub struct AmpduFault<
+    'core,
+    'slot,
+    B,
+    const SLOTS: usize,
+    Path: PoolPath = Root<oer_radio_port::LocalId<'core>>,
+> {
     pub error: HtAmpduTxError,
     _owner: Esp32s31AmpduOwner<'slot, B, SLOTS>,
     _queue: FreeQueue<'core, Path>,
@@ -468,7 +492,13 @@ impl<B, const SLOTS: usize, Path: PoolPath> fmt::Debug for AmpduFault<'_, '_, B,
 
 /// A publication refused for age, retaining every original owner.
 #[must_use = "complete the expiry terminal and retain the live subframes"]
-pub struct ExpiredAmpdu<'core, 'slot, S: AmpduBacking, const SLOTS: usize, Path: PoolPath = Root> {
+pub struct ExpiredAmpdu<
+    'core,
+    'slot,
+    S: AmpduBacking,
+    const SLOTS: usize,
+    Path: PoolPath = Root<oer_radio_port::LocalId<'core>>,
+> {
     buffer: Esp32s31AmpduBuffer<'slot, S, SLOTS>,
     plan: AmpduPlan<'core, Path>,
     msdus: u64,
@@ -500,7 +530,13 @@ impl<'core, 'slot, S: AmpduBacking, const SLOTS: usize, Path: PoolPath>
     }
 }
 /// Age returns all unpublished owners; a hardware fault quarantines them.
-pub enum AmpduStartError<'core, 'slot, S: AmpduBacking, const SLOTS: usize, Path: PoolPath = Root> {
+pub enum AmpduStartError<
+    'core,
+    'slot,
+    S: AmpduBacking,
+    const SLOTS: usize,
+    Path: PoolPath = Root<oer_radio_port::LocalId<'core>>,
+> {
     Expired(ExpiredAmpdu<'core, 'slot, S, SLOTS, Path>),
     Fault(AmpduFault<'core, 'slot, S::Backing, SLOTS, Path>),
 }

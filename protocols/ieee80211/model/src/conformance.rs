@@ -1,11 +1,12 @@
 //! Actual port operations for host comparison with a physical backend.
 use super::*;
+use crate::fixture::{Fixture, Report, run_model};
 use oer_ieee80211_port::{
     conformance::{MpduState, outcomes},
     *,
 };
 use oer_ieee80211_wire::{frame::FrameControl, phy::LegacyRate};
-use oer_radio_port::{Disabled, Ended, Owner, PortBody, PortEnd};
+use oer_radio_port::{Disabled, Ended, Owner, PortBody};
 
 mod ownership;
 pub use ownership::{OwnershipTrace, ownership};
@@ -33,7 +34,7 @@ pub async fn outcome(
     }
     let station = IndividualAddress::new([2, 0, 0, 0, 0, 1]).ok_or("fixture station")?;
     let ap = IndividualAddress::new([2, 0, 0, 0, 0, 2]).ok_or("fixture AP")?;
-    let (backend, air) = ModelBackend::<ModelCaps>::new(channel, [station, ap], clock);
+    let (backend, air) = Fixture::<ModelCaps>::new(channel, [station, ap], clock);
     let answer = match case {
         outcomes::Case::Ack => AirAnswer::Ack,
         outcomes::Case::NoResponse(_) => AirAnswer::NoResponse,
@@ -43,24 +44,31 @@ pub async fn outcome(
         _ => return Err("single outcome required"),
     };
     air.answer(answer);
-    match oer_radio_port::run_port(backend, OutcomeBody { rate }).await {
-        PortEnd::Uninstalled { output, .. } => output,
+    match run_model(backend, OutcomeBody { rate }).await {
+        Report::Joined(output) => output,
         _ => Err("model failed to uninstall"),
     }
 }
 struct OutcomeBody {
     rate: LegacyRate,
 }
-impl PortBody<ModelBackend> for OutcomeBody {
+impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id>> for OutcomeBody {
     type Output = Result<OutcomeTrace, &'static str>;
     async fn run<'p, 'id>(
         self,
-        owner: Owner<'p, 'id, ModelBackend, Disabled>,
-        resources: ModelResources<'id>,
-    ) -> Ended<'id, ModelBackend, Self::Output> {
+        owner: Owner<'p, 'id, Id, ModelBackend<Id>, Disabled>,
+        resources: ModelResources<'id, ModelBackend<Id>>,
+    ) -> Ended<Id, ModelBackend<Id>, Self::Output>
+    where
+        ModelBackend<Id>: 'id,
+        Id: 'id,
+        'id: 'p,
+    {
         let mut owner = match owner.enable().await {
             Ok(owner) => owner,
-            Err(failed) => return Ended::fail_stopped(failed.fail_stop(), Err("model enable")),
+            Err(failed) => {
+                return Ended::fail_stop(failed.fail_stop(), Err("model enable"));
+            }
         };
         let result = exchange(&mut owner.phase(), resources, self.rate).await;
         let owner = match owner
@@ -68,14 +76,16 @@ impl PortBody<ModelBackend> for OutcomeBody {
             .await
         {
             Ok(owner) => owner,
-            Err(failed) => return Ended::fail_stopped(failed.fail_stop(), Err("model disable")),
+            Err(failed) => {
+                return Ended::fail_stop(failed.fail_stop(), Err("model disable"));
+            }
         };
         Ended::uninstall(owner, (), result)
     }
 }
-async fn exchange<'p, 'id: 'p>(
-    phase: &mut ModelPhase<'p, 'id>,
-    resources: ModelResources<'id>,
+async fn exchange<'p, 'id: 'p, Id: SlotIdentity + 'id>(
+    phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
+    resources: ModelResources<'id, ModelBackend<Id>>,
     legacy: LegacyRate,
 ) -> Result<OutcomeTrace, &'static str> {
     let ModelResources {

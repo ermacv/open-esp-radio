@@ -210,6 +210,21 @@ bounds) live in the code that applies them.
 - **Dropped futures.** A caller that drops an admitted request detaches only
   its waker; the port keeps the registration, queue position and buffer lease
   until the terminal event and reclaims exactly once.
+- **Abandonment execution.** The body requests abandonment immediately through
+  a static typed signal: an atomic latch, an AtomicWaker and a pend of P2.
+  The handoff shares no lock, `Cell` or `RefCell` between contexts.
+  Only the driver context erases hardware keys, silences routes, abandons the
+  receive session and detaches. The driver checks the request at the start of
+  every poll, before any other work; after observing it there is no further
+  publication, transmission or reception. A one-shot cell carries its answer.
+  Async fail-stop, retirement expiry and ordinary stop wait within a named
+  bound beside the retirement deadline, covering one driver step and the
+  other ready P2 tasks. Only a timely driver proof yields `Stopped`; a missed
+  bound yields `Unconfirmed` and quarantine. Owner Drop and cancellation of
+  `run_port` only request and pend without waiting, retaining `Unconfirmed`
+  quarantine. If the driver side is destroyed without another poll, its Drop
+  erases keys and silences routes in P2; the execution adapter must establish
+  that context and retain all borrowed backing until this Drop completes.
 - **Event streams** end with the uninstall; the next install starts with an
   empty queue.
 - **Coexistence is hybrid.** Hardware PTI and the vendor schedule serve
@@ -283,10 +298,11 @@ bounds) live in the code that applies them.
   tables.
 - **Group key with one slot.** A new key of any ID replaces the single entry
   atomically; frames under the old ID are dropped after the switch.
-- **Keys and timeouts.** After an unconfirmed stop, secrets are erased by a
-  required synchronous hook and the installation stays quarantined until
-  reset; packet-number exhaustion is a typed refusal before backend handoff;
-  no retry after a hardware TX timeout until compared with the vendor.
+- **Keys and timeouts.** After an unconfirmed stop, the driver erases secrets
+  through the abandonment protocol in its own context; the installation
+  stays quarantined until reset. Packet-number exhaustion is a typed refusal
+  before backend handoff; no retry after a hardware TX timeout until compared
+  with the vendor.
 - **Station TSF.** An update that would cross 2^64 is refused before any TSF
   write; a beacon whose TSF the station cannot follow is dropped whole; a join
   beacon whose TSF cannot be taken ends the association as an ordinary

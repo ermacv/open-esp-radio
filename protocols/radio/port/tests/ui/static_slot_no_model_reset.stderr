@@ -1,0 +1,7 @@
+error[E0599]: no method named `end_model_world` found for struct `PortSlot<StaticId<Declaration>, S>` in the current scope
+ --> tests/ui/static_slot_no_model_reset.rs:7:10
+  |
+7 |     slot.end_model_world(); // ui-error: E0599
+  |          ^^^^^^^^^^^^^^^ method not found in `PortSlot<StaticId<Declaration>, S>`
+  |
+  = note: the method was found for `PortSlot<LocalId<'scope>, S>`

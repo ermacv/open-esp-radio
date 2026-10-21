@@ -10,7 +10,7 @@ error: lifetime may not live long enough
    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ argument requires that `'core` must outlive `'foreign`
    |
    = help: consider adding the following bound: `'core: 'foreign`
-   = note: requirement occurs because of the type `FreeQueue<'_>`, which makes the generic argument `'_` invariant
+   = note: requirement occurs because of the type `FreeQueue<'_, oer_radio_port::pool::path::Root<oer_radio_port::identity::LocalId<'_>>>`, which makes the generic argument `'_` invariant
    = note: the struct `FreeQueue<'core, Path>` is invariant over the parameter `'core`
    = help: see <https://doc.rust-lang.org/nomicon/subtyping.html> for more information about variance
 
@@ -26,7 +26,7 @@ error: lifetime may not live long enough
    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ argument requires that `'foreign` must outlive `'core`
    |
    = help: consider adding the following bound: `'foreign: 'core`
-   = note: requirement occurs because of a mutable reference to `EnabledCore<LowerMacCore<'_, '_, EspressifBackendTxProfile, P, E, T, 512>>`
+   = note: requirement occurs because of a mutable reference to `EnabledCore<LowerMacCore<'_, '_, EspressifBackendTxProfile, P, E, T, 512, oer_radio_port::pool::path::Root<oer_radio_port::identity::LocalId<'_>>>>`
    = note: mutable references are invariant over their type parameter
    = help: see <https://doc.rust-lang.org/nomicon/subtyping.html> for more information about variance
 

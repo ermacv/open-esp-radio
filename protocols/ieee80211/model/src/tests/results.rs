@@ -21,10 +21,10 @@ struct Results {
 }
 
 impl Work for Results {
-    async fn work<'p, 'id: 'p>(
+    async fn work<'p, 'id: 'p, Id: SlotIdentity + 'id>(
         self,
-        phase: &mut ModelPhase<'p, 'id>,
-        resources: ModelResources<'id>,
+        phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
+        resources: ModelResources<'id, ModelBackend<Id>>,
     ) {
         let mut terminal_access = resources.terminal_access;
         let ModelResources {
@@ -251,7 +251,8 @@ impl Work for Results {
             let ModelAnyBuffer::SmallSent(sent) = returned_buffer else {
                 panic!("publication must return Sent")
             };
-            let (fresh, body) = <ModelTypes as TxBufferPool<ModelSmall>>::renew(sent);
+            let (fresh, body) =
+                <ModelTypes<ModelBackend<Id>> as TxBufferPool<ModelSmall>>::renew(sent);
             assert!(body.is_none());
             buffer = fresh;
             assert_eq!(ticket.index(), original_ticket);
@@ -288,7 +289,7 @@ impl outcomes::Harness for ModelOutcomeHarness {
         };
         let (backend, _) = backend();
         let trace = Rc::new(RefCell::new(None));
-        let _port_end = run_port(
+        let _port_end = run_model(
             backend,
             Body(Results {
                 form: case.form(),
@@ -324,7 +325,7 @@ fn every_result_is_consumed_by_exactly_one_single_or_aggregate_attempt() {
             AirAnswer::HardwareTimeout,
         ] {
             let (backend, _) = backend();
-            let _port_end = block_on(run_port(
+            let _port_end = block_on(run_model(
                 backend,
                 Body(Results {
                     form,
@@ -339,7 +340,7 @@ fn every_result_is_consumed_by_exactly_one_single_or_aggregate_attempt() {
 #[test]
 fn aggregate_honors_timeout_injection() {
     let (backend, _) = backend();
-    let _port_end = block_on(run_port(
+    let _port_end = block_on(run_model(
         backend,
         Body(Results {
             trace: None,
@@ -352,7 +353,7 @@ fn aggregate_honors_timeout_injection() {
 #[test]
 fn an_empty_block_ack_is_consumed_before_the_following_single() {
     let (backend, _) = backend();
-    let _port_end = block_on(run_port(
+    let _port_end = block_on(run_model(
         backend,
         Body(Results {
             trace: None,
@@ -365,7 +366,7 @@ fn an_empty_block_ack_is_consumed_before_the_following_single() {
 #[test]
 fn an_aggregate_s_unmeasured_block_ack_still_delivers_it() {
     let (backend, _) = backend();
-    let _port_end = block_on(run_port(
+    let _port_end = block_on(run_model(
         backend,
         Body(Results {
             trace: None,
@@ -461,10 +462,10 @@ fn lost_air_gives_no_rate_sample_and_counts_no_transmission() {
 
 struct WrongAnswer;
 impl Work for WrongAnswer {
-    async fn work<'p, 'id: 'p>(
+    async fn work<'p, 'id: 'p, Id: SlotIdentity + 'id>(
         self,
-        phase: &mut ModelPhase<'p, 'id>,
-        resources: ModelResources<'id>,
+        phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
+        resources: ModelResources<'id, ModelBackend<Id>>,
     ) {
         let ModelResources {
             mut tickets,
@@ -488,5 +489,5 @@ impl Work for WrongAnswer {
 #[test]
 fn wrong_answer_shape_retains_the_operation_before_publication() {
     let (backend, _) = backend();
-    let _port_end = block_on(run_port(backend, Body(WrongAnswer)));
+    let _port_end = block_on(run_model(backend, Body(WrongAnswer)));
 }

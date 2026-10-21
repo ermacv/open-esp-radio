@@ -6,9 +6,11 @@
 //! slot access.
 
 mod indexed;
+mod local;
 pub use indexed::{
     AffineIndexedSpscQueue, AffineIndexedSpscReceiver, AffineIndexedSpscSender, UniqueQueueIndex,
 };
+pub use local::{LocalSpscReceiver, LocalSpscSender};
 
 use core::{
     cell::{Cell, UnsafeCell},
@@ -64,9 +66,12 @@ pub struct AffineSpscQueue<T, const DEPTH: usize> {
     unsafe_code,
     reason = "bounded SPSC cursor ownership serializes every value slot"
 )]
-// SAFETY: each slot has exactly one producer before its Release publication
+// SAFETY: each slot has exactly one producer context before its Release publication
 // and exactly one consumer after the matching Acquire load. The consumer's
 // Release cursor prevents reuse until the affine value has moved out.
+// Short local endpoint loans suspend the original endpoint. A local producer
+// loan is copyable only within its context and offers synchronous publication,
+// with no reservation that could overlap another local copy's publication.
 unsafe impl<T: Send, const DEPTH: usize> Sync for AffineSpscQueue<T, DEPTH> {}
 
 impl<T, const DEPTH: usize> AffineSpscQueue<T, DEPTH> {

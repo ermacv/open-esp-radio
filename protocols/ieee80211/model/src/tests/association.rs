@@ -24,13 +24,15 @@ fn bytes(hex: &str) -> Vec<u8> {
 
 struct WirePeer(Spp, &'static str, &'static str);
 impl Work for WirePeer {
-    async fn work<'p, 'id: 'p>(
+    async fn work<'p, 'id: 'p, Id: SlotIdentity + 'id>(
         self,
-        phase: &mut ModelPhase<'p, 'id>,
-        resources: ModelResources<'id>,
+        phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
+        resources: ModelResources<'id, ModelBackend<Id>>,
     ) {
-        let association =
-            ModelKeys::<Station>::begin_association(resources.station_association, self.0);
+        let association = ModelKeys::<ModelBackend<Id>, Station>::begin_association(
+            resources.station_association,
+            self.0,
+        );
         let [ptk_slot, unused_pairwise] = resources.station_pairwise;
         let [gtk_slot, unused_group] = resources.station_group;
         let material = core::array::from_fn(|i| i as u8);
@@ -97,8 +99,10 @@ impl Work for WirePeer {
             Spp::Negotiated => Spp::NotNegotiated,
             Spp::NotNegotiated => Spp::Negotiated,
         };
-        let ap_association =
-            ModelKeys::<AccessPoint>::begin_association(resources.access_point_association, ap_spp);
+        let ap_association = ModelKeys::<ModelBackend<Id>, AccessPoint>::begin_association(
+            resources.access_point_association,
+            ap_spp,
+        );
         let [ap_slot, _unused_ap_slot] = resources.access_point_pairwise;
         let _ap_key = phase
             .access_point()
@@ -143,7 +147,7 @@ impl Work for WirePeer {
         let mut tickets = resources.tickets;
         let mut small = resources.small;
         let mut terminal_access = resources.terminal_access;
-        submit_frame::<ModelSmall>(
+        submit_frame::<_, ModelSmall>(
             phase,
             tickets.remove(0),
             TxSource::Fresh {
@@ -246,14 +250,16 @@ impl Work for WirePeer {
         };
         let before = phase.held.air.commands.get();
         let bank = VacantKeyBank::new([pairwise, unused_pairwise], [group, unused_group]);
-        let vacant = ModelKeys::<Station>::end_association(association, bank);
+        let vacant = ModelKeys::<ModelBackend<Id>, Station>::end_association(association, bank);
         assert_eq!(
             phase.held.air.commands.get(),
             before,
             "ending enqueues no hardware command"
         );
-        let (start, pairwise, _rest) = ModelKeys::<Station>::split_vacant::<2>(vacant);
-        let next = ModelKeys::<Station>::begin_association(start, Spp::NotNegotiated);
+        let (start, pairwise, _rest) =
+            ModelKeys::<ModelBackend<Id>, Station>::split_vacant::<2>(vacant);
+        let next =
+            ModelKeys::<ModelBackend<Id>, Station>::begin_association(start, Spp::NotNegotiated);
         let _next_ptk = phase
             .station()
             .install_pairwise_key(
@@ -271,8 +277,8 @@ fn installed_association_controls_wire_amsdu_and_mic_in_both_directions() {
     for &(spp, up, down) in WIRE {
         let (backend, _) = backend();
         assert!(matches!(
-            block_on(run_port(backend, Body(WirePeer(spp, up, down)))),
-            oer_radio_port::PortEnd::Uninstalled { .. }
+            block_on(run_model(backend, Body(WirePeer(spp, up, down)))),
+            Report::Joined(_)
         ));
     }
 }

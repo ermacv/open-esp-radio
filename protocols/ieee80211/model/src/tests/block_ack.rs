@@ -10,10 +10,10 @@ struct Window {
 }
 
 impl Work for Window {
-    async fn work<'p, 'id: 'p>(
+    async fn work<'p, 'id: 'p, Id: SlotIdentity + 'id>(
         self,
-        phase: &mut ModelPhase<'p, 'id>,
-        resources: ModelResources<'id>,
+        phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
+        resources: ModelResources<'id, ModelBackend<Id>>,
     ) {
         let mut terminal_access = resources.terminal_access;
         let ModelResources {
@@ -78,7 +78,9 @@ impl Work for Window {
                 reason,
                 aggregate: returned,
                 subframe,
-            }) = <ModelTypes as TxBufferPool<ModelSmall>>::push_aggregate(operation)
+            }) = <ModelTypes<ModelBackend<Id>> as TxBufferPool<ModelSmall>>::push_aggregate(
+                operation,
+            )
             else {
                 panic!("out-of-window subframe was accepted")
             };
@@ -137,7 +139,8 @@ impl Work for Window {
             let ModelAnyBuffer::SmallSent(sent) = buffer else {
                 panic!()
             };
-            let (buffer, body) = <ModelTypes as TxBufferPool<ModelSmall>>::renew(sent);
+            let (buffer, body) =
+                <ModelTypes<ModelBackend<Id>> as TxBufferPool<ModelSmall>>::renew(sent);
             assert_eq!(buffer.slot.index(), original_index);
             if index == 0 {
                 assert_eq!(body.unwrap().0, [0x5a]);
@@ -157,7 +160,7 @@ fn bitmap_matches_acknowledged_sequence_set_across_wrap_and_reordering() {
         (&[40, 103, 41, 43][..], 0b1100),
     ] {
         let (backend, _) = backend();
-        let _port_end = block_on(run_port(
+        let _port_end = block_on(run_model(
             backend,
             Body(Window {
                 sequences,
@@ -178,7 +181,7 @@ fn aggregate_does_not_alias_blockack_bit63() {
         (&[40, 43][..], 43),
     ] {
         let (backend, _) = backend();
-        let _port_end = block_on(run_port(
+        let _port_end = block_on(run_model(
             backend,
             Body(Window {
                 sequences: start,
@@ -191,10 +194,10 @@ fn aggregate_does_not_alias_blockack_bit63() {
 
 struct RefusedSent(u16);
 impl Work for RefusedSent {
-    async fn work<'p, 'id: 'p>(
+    async fn work<'p, 'id: 'p, Id: SlotIdentity + 'id>(
         self,
-        phase: &mut ModelPhase<'p, 'id>,
-        resources: ModelResources<'id>,
+        phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
+        resources: ModelResources<'id, ModelBackend<Id>>,
     ) {
         let mut terminal_access = resources.terminal_access;
         let ModelResources {
@@ -275,7 +278,7 @@ impl Work for RefusedSent {
             reason,
             aggregate,
             subframe,
-        }) = <ModelTypes as TxBufferPool<ModelSmall>>::push_aggregate(operation)
+        }) = <ModelTypes<ModelBackend<Id>> as TxBufferPool<ModelSmall>>::push_aggregate(operation)
         else {
             panic!("duplicate or lower-than-head Sent is refused")
         };
@@ -284,7 +287,8 @@ impl Work for RefusedSent {
         let SubframeSource::Sent(mpdu) = subframe else {
             panic!("refusal preserves Sent")
         };
-        let (buffer, body) = <ModelTypes as TxBufferPool<ModelSmall>>::renew(mpdu);
+        let (buffer, body) =
+            <ModelTypes<ModelBackend<Id>> as TxBufferPool<ModelSmall>>::renew(mpdu);
         assert_eq!(buffer.slot.index(), index);
         assert_eq!(body.unwrap().0, [0x7a]);
         assert_eq!(
@@ -299,7 +303,7 @@ impl Work for RefusedSent {
 fn a_duplicate_or_out_of_window_sent_subframe_returns_its_owner_and_body() {
     for head in [40, 41] {
         let (backend, _) = backend();
-        let _port_end = block_on(run_port(backend, Body(RefusedSent(head))));
+        let _port_end = block_on(run_model(backend, Body(RefusedSent(head))));
     }
 }
 
@@ -309,10 +313,10 @@ fn a_duplicate_or_out_of_window_sent_subframe_returns_its_owner_and_body() {
 struct EverySlotApplied<'a>(&'a ModelAir);
 
 impl Work for EverySlotApplied<'_> {
-    async fn work<'p, 'id: 'p>(
+    async fn work<'p, 'id: 'p, Id: SlotIdentity + 'id>(
         self,
-        phase: &mut ModelPhase<'p, 'id>,
-        resources: ModelResources<'id>,
+        phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
+        resources: ModelResources<'id, ModelBackend<Id>>,
     ) {
         let agreement = |tid| {
             SupportedBlockAck::new(
@@ -331,7 +335,7 @@ impl Work for EverySlotApplied<'_> {
         let applied = self.0.receive_agreements();
         assert_eq!(
             applied.len(),
-            <<ModelTypes as PhaseTypes<'id>>::BlockAckPool as RxBlockAckPool>::LEN
+            <<ModelTypes<ModelBackend<Id>> as PhaseTypes<'id>>::BlockAckPool as RxBlockAckPool>::LEN
         );
         let tids: BTreeSet<_> = applied
             .iter()
@@ -351,5 +355,5 @@ impl Work for EverySlotApplied<'_> {
 #[test]
 fn every_minted_block_ack_slot_carries_an_applied_agreement() {
     let (backend, air) = backend();
-    let _port_end = block_on(run_port(backend, Body(EverySlotApplied(&air))));
+    let _port_end = block_on(run_model(backend, Body(EverySlotApplied(&air))));
 }

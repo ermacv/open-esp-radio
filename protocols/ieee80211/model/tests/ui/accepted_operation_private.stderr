@@ -1,0 +1,5 @@
+error[E0616]: field `parts` of struct `AdmittedAttempt` is private
+  --> tests/ui/accepted_operation_private.rs:13:22
+   |
+13 |     return submitted.parts.operation.ticket().index(); // ui-error: E0616
+   |                      ^^^^^ private field

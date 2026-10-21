@@ -143,14 +143,13 @@ fn model(case: Case, prepared: &Prepared, channel: u8) -> Result<Trace> {
         return Ok(Trace::Edca(trace));
     }
     if let Case::Group(case) = case {
-        use oer_ieee80211_port::LowerMacBackend;
         let raw = complete(oer_ieee80211_model::conformance::group(
             case,
             channel,
             rate,
             Rc::new(oer_time_virtual::VirtualClock::<8>::new()),
         ))??;
-        let bound = oer_ieee80211_model::ModelBackend::<oer_ieee80211_model::ModelCaps>::GROUP_COMMAND_BOUND;
+        let bound = oer_ieee80211_model::MODEL_GROUP_COMMAND_BOUND;
         let trace =
             group_trace(&raw, bound.as_micros()).ok_or("unrepresentable model group progress")?;
         oer_ieee80211_port::conformance::group_keys::verify_progress(case, raw, bound)

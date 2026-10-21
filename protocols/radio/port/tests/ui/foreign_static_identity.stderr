@@ -1,0 +1,11 @@
+error[E0308]: mismatched types
+  --> tests/ui/foreign_static_identity.rs:13:12
+   |
+11 | ) -> Slot<'p, Kind, Child<Root<StaticId<First>>, 0>> {
+   |      ----------------------------------------------- expected `Slot<'p, Kind, oer_radio_port::Child<Root<StaticId<First>>, 0>>` because of return type
+12 |     #[cfg(all())]
+13 |     return foreign; // ui-error: E0308
+   |            ^^^^^^^ expected `First`, found `Second`
+   |
+   = note: expected struct `Slot<'p, Kind, oer_radio_port::Child<Root<StaticId<First>>, 0>>`
+              found struct `Slot<'p, Kind, oer_radio_port::Child<Root<StaticId<Second>>, 0>>`

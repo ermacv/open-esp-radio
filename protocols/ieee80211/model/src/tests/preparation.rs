@@ -7,8 +7,8 @@ enum TxRefusal {
     Preparation(PreparationError),
 }
 
-fn frame<'p, 'id: 'p>(
-    phase: &ModelPhase<'p, 'id>,
+fn frame<'p, 'id: 'p, Id: SlotIdentity + 'id>(
+    phase: &ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
     len: usize,
     protected_bit: bool,
 ) -> ClassFrame<'p, 'id, ModelSmall, ModelCaps> {
@@ -23,26 +23,27 @@ fn frame<'p, 'id: 'p>(
     .unwrap()
 }
 
-type RefusedSingle<'id> = (
+type RefusedSingle<'id, Id> = (
     TxRefusal,
-    Slot<'id, ModelTickets, ModelPool<1>>,
-    ModelAnyBuffer<'id>,
+    Slot<'id, ModelTickets, ModelPool<Id, 1>>,
+    ModelAnyBuffer<'id, ModelBackend<Id>>,
     Option<ModelBody>,
 );
 #[expect(
     clippy::result_large_err,
     reason = "a refusal returns the whole operation by value"
 )]
-fn try_source<'k, 'p, 'id: 'p + 'k>(
-    phase: &mut ModelPhase<'p, 'id>,
-    ticket: Slot<'id, ModelTickets, ModelPool<1>>,
-    source: PoolSource<'k, 'p, 'id, ModelTypes, ModelSmall, ModelCaps, Station>,
-) -> Result<(), RefusedSingle<'id>> {
+fn try_source<'k, 'p, 'id: 'p + 'k, Id: SlotIdentity + 'id>(
+    phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
+    ticket: Slot<'id, ModelTickets, ModelPool<Id, 1>>,
+    source: PoolSource<'k, 'p, 'id, ModelTypes<ModelBackend<Id>>, ModelSmall, ModelCaps, Station>,
+) -> Result<(), RefusedSingle<'id, Id>> {
     let checked = match source.check() {
-        Ok(source) => {
-            <ModelTypes as TxBufferPool<ModelSmall>>::prepare::<Station, ModelCaps>(source)
-                .map_err(|refused| (TxRefusal::Preparation(refused.reason), refused.operation))
-        }
+        Ok(source) => <ModelTypes<ModelBackend<Id>> as TxBufferPool<ModelSmall>>::prepare::<
+            Station,
+            ModelCaps,
+        >(source)
+        .map_err(|refused| (TxRefusal::Preparation(refused.reason), refused.operation)),
         Err(refused) => Err((TxRefusal::Layout(refused.reason), refused.operation)),
     };
     let source = match checked {
@@ -75,12 +76,12 @@ fn try_source<'k, 'p, 'id: 'p + 'k>(
 
 struct Boundaries;
 impl Work for Boundaries {
-    async fn work<'p, 'id: 'p>(
+    async fn work<'p, 'id: 'p, Id: SlotIdentity + 'id>(
         self,
-        phase: &mut ModelPhase<'p, 'id>,
-        resources: ModelResources<'id>,
+        phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
+        resources: ModelResources<'id, ModelBackend<Id>>,
     ) {
-        let station_association = ModelKeys::<Station>::begin_association(
+        let station_association = ModelKeys::<ModelBackend<Id>, Station>::begin_association(
             resources.station_association,
             oer_ieee80211_wire::security::Spp::NotNegotiated,
         );
@@ -189,7 +190,8 @@ impl Work for Boundaries {
                 );
                 assert_eq!(mpdu.packet_number(), keyed.then_some(pn_before + 1));
                 assert_eq!(mpdu.buffer.memory[1] & 0x40 != 0, keyed);
-                let (returned, body) = <ModelTypes as TxBufferPool<ModelSmall>>::renew(mpdu);
+                let (returned, body) =
+                    <ModelTypes<ModelBackend<Id>> as TxBufferPool<ModelSmall>>::renew(mpdu);
                 assert_eq!(body.unwrap().0.as_ptr(), body_pointer);
                 buffer = returned;
             }
@@ -202,7 +204,7 @@ impl Work for Boundaries {
 #[test]
 fn body_and_ccmp_boundaries_are_checked_before_admission_or_packet_number_allocation() {
     let (backend, _) = backend();
-    let _port_end = block_on(run_port(backend, Body(Boundaries)));
+    let _port_end = block_on(run_model(backend, Body(Boundaries)));
 }
 
 /// A legal body provider can select a different immutable slice on a later
@@ -233,10 +235,10 @@ struct BodyView {
     aggregate: bool,
 }
 impl Work for BodyView {
-    async fn work<'p, 'id: 'p>(
+    async fn work<'p, 'id: 'p, Id: SlotIdentity + 'id>(
         self,
-        phase: &mut ModelPhase<'p, 'id>,
-        resources: ModelResources<'id>,
+        phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
+        resources: ModelResources<'id, ModelBackend<Id>>,
     ) {
         let ModelResources { mut small, .. } = resources;
         let mut buffer = small.remove(0);
@@ -307,16 +309,18 @@ impl Work for BodyView {
 #[test]
 fn a_single_source_copies_exactly_the_body_view_whose_length_it_checked() {
     let (backend, _) = backend();
-    let _port_end = block_on(run_port(backend, Body(BodyView { aggregate: false })));
+    let _port_end = block_on(run_model(backend, Body(BodyView { aggregate: false })));
 }
 
 #[test]
 fn an_aggregate_copies_exactly_the_body_view_whose_length_it_checked() {
     let (backend, _) = backend();
-    let _port_end = block_on(run_port(backend, Body(BodyView { aggregate: true })));
+    let _port_end = block_on(run_model(backend, Body(BodyView { aggregate: true })));
 }
 
-fn aggregate_rate<'p, 'id: 'p>(phase: &mut ModelPhase<'p, 'id>) -> AmpduRate<'p, 'id, ModelCaps> {
+fn aggregate_rate<'p, 'id: 'p, Id: SlotIdentity + 'id>(
+    phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
+) -> AmpduRate<'p, 'id, ModelCaps> {
     let ht = oer_ieee80211_wire::phy::HtRate::new(
         HtMcs::new(7).unwrap(),
         oer_ieee80211_wire::phy::PpduBandwidth::Mhz20,
@@ -328,12 +332,12 @@ fn aggregate_rate<'p, 'id: 'p>(phase: &mut ModelPhase<'p, 'id>) -> AmpduRate<'p,
 }
 struct RetryIdentity;
 impl Work for RetryIdentity {
-    async fn work<'p, 'id: 'p>(
+    async fn work<'p, 'id: 'p, Id: SlotIdentity + 'id>(
         self,
-        phase: &mut ModelPhase<'p, 'id>,
-        resources: ModelResources<'id>,
+        phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
+        resources: ModelResources<'id, ModelBackend<Id>>,
     ) {
-        let station_association = ModelKeys::<Station>::begin_association(
+        let station_association = ModelKeys::<ModelBackend<Id>, Station>::begin_association(
             resources.station_association,
             oer_ieee80211_wire::security::Spp::NotNegotiated,
         );
@@ -362,7 +366,7 @@ impl Work for RetryIdentity {
             body: Some(body),
             protection: TxProtection::Ccmp(key.numbered()),
         };
-        submit_frame::<ModelSmall>(phase, tickets.remove(0), source);
+        submit_frame::<_, ModelSmall>(phase, tickets.remove(0), source);
         let (ticket, buffer) = completion(phase, &mut terminal_access).await;
         let ModelAnyBuffer::SmallSent(mpdu) = buffer else {
             unreachable!()
@@ -374,7 +378,7 @@ impl Work for RetryIdentity {
             transmissions: NonZeroU8::MIN,
             protection: Protection::None,
         });
-        submit_frame::<ModelSmall>(
+        submit_frame::<_, ModelSmall>(
             phase,
             ticket,
             TxSource::Retransmission {
@@ -447,7 +451,7 @@ impl Work for RetryIdentity {
             rate,
             TxProtection::Ccmp(&replacement),
         );
-        let refused = <ModelTypes as TxBufferPool<ModelSmall>>::push_aggregate(
+        let refused = <ModelTypes<ModelBackend<Id>> as TxBufferPool<ModelSmall>>::push_aggregate(
             CheckedAggregate::new(aggregate, SubframeSource::Sent(mpdu))
                 .ok()
                 .unwrap(),
@@ -470,17 +474,17 @@ impl Work for RetryIdentity {
 #[test]
 fn retry_owns_its_mpdu_and_body_allows_a_new_rate_and_refuses_a_reinstalled_key() {
     let (backend, _) = backend();
-    let _port_end = block_on(run_port(backend, Body(RetryIdentity)));
+    let _port_end = block_on(run_model(backend, Body(RetryIdentity)));
 }
 
 struct AggregateBoundaries;
 impl Work for AggregateBoundaries {
-    async fn work<'p, 'id: 'p>(
+    async fn work<'p, 'id: 'p, Id: SlotIdentity + 'id>(
         self,
-        phase: &mut ModelPhase<'p, 'id>,
-        resources: ModelResources<'id>,
+        phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
+        resources: ModelResources<'id, ModelBackend<Id>>,
     ) {
-        let station_association = ModelKeys::<Station>::begin_association(
+        let station_association = ModelKeys::<ModelBackend<Id>, Station>::begin_association(
             resources.station_association,
             oer_ieee80211_wire::security::Spp::NotNegotiated,
         );
@@ -523,12 +527,13 @@ impl Work for AggregateBoundaries {
                     oer_ieee80211_wire::ccmp::CcmpPacketNumber::new(55).unwrap(),
                 )
             };
-            let source: ModelSubframe<ModelSmall, ModelCaps, ModelBody> = SubframeSource::Fresh {
-                numbering,
-                buffer,
-                frame: ClassSubframe::new(subframe_frame(0)).ok().unwrap(),
-                body: Some(body),
-            };
+            let source: ModelSubframe<'id, ModelBackend<Id>, ModelSmall, ModelCaps> =
+                SubframeSource::Fresh {
+                    numbering,
+                    buffer,
+                    frame: ClassSubframe::new(subframe_frame(0)).ok().unwrap(),
+                    body: Some(body),
+                };
             let refused = CheckedAggregate::new(aggregate, source).err().unwrap();
             assert_eq!(refused.reason, LayoutError::NumberingProtectionMismatch);
             let (aggregate, SubframeSource::Fresh { buffer, body, .. }) = refused.operation else {
@@ -549,14 +554,15 @@ impl Work for AggregateBoundaries {
         let memory = buffer.memory.as_ptr();
         let body = ModelBody(alloc::vec![0x99; 16]);
         let body_pointer = body.0.as_ptr();
-        let source: ModelSubframe<ModelSmall, ModelCaps, ModelBody> = SubframeSource::Fresh {
-            numbering: key.numbering(),
-            buffer,
-            frame: ClassSubframe::<ModelSmall, _>::new(subframe_frame(0))
-                .ok()
-                .unwrap(),
-            body: Some(body),
-        };
+        let source: ModelSubframe<'id, ModelBackend<Id>, ModelSmall, ModelCaps> =
+            SubframeSource::Fresh {
+                numbering: key.numbering(),
+                buffer,
+                frame: ClassSubframe::<ModelSmall, _>::new(subframe_frame(0))
+                    .ok()
+                    .unwrap(),
+                body: Some(body),
+            };
         let refused = CheckedAggregate::new(aggregate, source).err().unwrap();
         assert_eq!(refused.reason, LayoutError::BodyOverlap);
         let (aggregate, subframe) = refused.operation;
@@ -622,19 +628,19 @@ impl Work for AggregateBoundaries {
 #[test]
 fn aggregate_builder_checks_ccmp_before_mutating_and_returns_all_owners() {
     let (backend, _) = backend();
-    let _port_end = block_on(run_port(backend, Body(AggregateBoundaries)));
+    let _port_end = block_on(run_model(backend, Body(AggregateBoundaries)));
 }
 
 struct PreparedRemoval {
     cancel: bool,
 }
 impl Work for PreparedRemoval {
-    async fn work<'p, 'id: 'p>(
+    async fn work<'p, 'id: 'p, Id: SlotIdentity + 'id>(
         self,
-        phase: &mut ModelPhase<'p, 'id>,
-        resources: ModelResources<'id>,
+        phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
+        resources: ModelResources<'id, ModelBackend<Id>>,
     ) {
-        let station_association = ModelKeys::<Station>::begin_association(
+        let station_association = ModelKeys::<ModelBackend<Id>, Station>::begin_association(
             resources.station_association,
             oer_ieee80211_wire::security::Spp::NotNegotiated,
         );
@@ -665,7 +671,10 @@ impl Work for PreparedRemoval {
         let TxFrame::Individual { plan, .. } = data_frame(phase, true) else {
             unreachable!()
         };
-        let prepared = <ModelTypes as TxBufferPool<ModelSmall>>::prepare::<Station, ModelCaps>(
+        let prepared = <ModelTypes<ModelBackend<Id>> as TxBufferPool<ModelSmall>>::prepare::<
+            Station,
+            ModelCaps,
+        >(
             (TxSource::Retransmission {
                 mpdu,
                 plan: RetransmissionPlan::Individual(plan),
@@ -742,16 +751,16 @@ impl Work for PreparedRemoval {
 fn key_removal_waits_for_prepared_retransmission_until_cancellation_or_its_terminal() {
     for cancel in [true, false] {
         let (backend, _) = backend();
-        let _port_end = block_on(run_port(backend, Body(PreparedRemoval { cancel })));
+        let _port_end = block_on(run_model(backend, Body(PreparedRemoval { cancel })));
     }
 }
 
 struct RetryRole;
 impl Work for RetryRole {
-    async fn work<'p, 'id: 'p>(
+    async fn work<'p, 'id: 'p, Id: SlotIdentity + 'id>(
         self,
-        phase: &mut ModelPhase<'p, 'id>,
-        resources: ModelResources<'id>,
+        phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
+        resources: ModelResources<'id, ModelBackend<Id>>,
     ) {
         let mut terminal_access = resources.terminal_access;
         let ModelResources {
@@ -759,7 +768,10 @@ impl Work for RetryRole {
             mut small,
             ..
         } = resources;
-        let source = <ModelTypes as TxBufferPool<ModelSmall>>::prepare::<AccessPoint, ModelCaps>(
+        let source = <ModelTypes<ModelBackend<Id>> as TxBufferPool<ModelSmall>>::prepare::<
+            AccessPoint,
+            ModelCaps,
+        >(
             (TxSource::Fresh {
                 buffer: small.remove(0),
                 frame: frame(phase, 40, false),
@@ -795,7 +807,10 @@ impl Work for RetryRole {
         let TxFrame::Individual { plan, .. } = data_frame(phase, false) else {
             unreachable!()
         };
-        let refused = <ModelTypes as TxBufferPool<ModelSmall>>::prepare::<Station, ModelCaps>(
+        let refused = <ModelTypes<ModelBackend<Id>> as TxBufferPool<ModelSmall>>::prepare::<
+            Station,
+            ModelCaps,
+        >(
             (TxSource::Retransmission {
                 mpdu,
                 plan: RetransmissionPlan::Individual(plan),
@@ -817,5 +832,5 @@ impl Work for RetryRole {
 #[test]
 fn a_sent_mpdu_cannot_change_its_interface_role_during_retransmission() {
     let (backend, _) = backend();
-    let _port_end = block_on(run_port(backend, Body(RetryRole)));
+    let _port_end = block_on(run_model(backend, Body(RetryRole)));
 }

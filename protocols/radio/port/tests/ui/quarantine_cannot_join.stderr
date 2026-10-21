@@ -1,0 +1,5 @@
+error[E0599]: no method named `into_joined` found for struct `SlotQuarantined<Id>` in the current scope
+ --> tests/ui/quarantine_cannot_join.rs:5:21
+  |
+5 |     let _ = outcome.into_joined(); // ui-error: E0599
+  |                     ^^^^^^^^^^^ method not found in `SlotQuarantined<Id>`

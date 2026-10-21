@@ -8,13 +8,20 @@ enum ContractCase {
 
 struct ContractBody(ContractCase);
 
-impl PortBody<ModelBackend<ModelCaps24, ServiceContexts>> for ContractBody {
+impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps24, ServiceContexts>>
+    for ContractBody
+{
     type Output = ();
     async fn run<'p, 'id>(
         self,
-        owner: Owner<'p, 'id, ModelBackend<ModelCaps24, ServiceContexts>, Disabled>,
-        resources: ModelResources<'id>,
-    ) -> Ended<'id, ModelBackend<ModelCaps24, ServiceContexts>, ()> {
+        owner: Owner<'p, 'id, Id, ModelBackend<Id, ModelCaps24, ServiceContexts>, Disabled>,
+        resources: ModelResources<'id, ModelBackend<Id, ModelCaps24, ServiceContexts>>,
+    ) -> Ended<Id, ModelBackend<Id, ModelCaps24, ServiceContexts>, ()>
+    where
+        ModelBackend<Id, ModelCaps24, ServiceContexts>: 'id,
+        Id: 'id,
+        'id: 'p,
+    {
         let ModelResources {
             connection_epoch,
             station_commands,
@@ -35,8 +42,8 @@ impl PortBody<ModelBackend<ModelCaps24, ServiceContexts>> for ContractBody {
             arbiter_authority,
             ..
         } = resources;
-        let (arbiter, place, absence) = PortArbiter::<ModelBackend<ModelCaps24, ServiceContexts>>::new(
-            ArbiterPolicy::DEFAULT.checked(<ModelBackend<ModelCaps24, ServiceContexts> as LowerMacBackend>::PUBLICATION_BOUND).unwrap(),
+        let (arbiter, place, absence) = PortArbiter::<ModelBackend<Id, ModelCaps24, ServiceContexts>>::new(
+            ArbiterPolicy::DEFAULT.checked(<ModelBackend<Id, ModelCaps24, ServiceContexts> as LowerMacBackend<Id>>::PUBLICATION_BOUND).unwrap(),
             SupportedChannel::new(oer_radio_regulatory::TEST_DOMAIN.permit(channel6()).unwrap()).unwrap(), arbiter_authority, gate,
         );
         let mut tickets = tickets.into_iter();
@@ -61,19 +68,20 @@ impl PortBody<ModelBackend<ModelCaps24, ServiceContexts>> for ContractBody {
                 group_permission: station_group_permission,
             },
         );
-        let mut service = StationService::<ModelBackend<ModelCaps24, ServiceContexts>, _, 1>::new(
-            station,
-            StaData::new(
-                data_tickets,
-                <[_; 4]>::try_from(large).ok().unwrap(),
-                MODEL_TX_QUEUE_DEPTH,
-            ),
-            arbiter,
-            EspressifRateSelection::<ModelCaps24>::new(),
-            terminal_access,
-        );
+        let mut service =
+            StationService::<ModelBackend<Id, ModelCaps24, ServiceContexts>, _, 1>::new(
+                station,
+                StaData::new(
+                    data_tickets,
+                    <[_; 4]>::try_from(large).ok().unwrap(),
+                    MODEL_TX_QUEUE_DEPTH,
+                ),
+                arbiter,
+                EspressifRateSelection::<ModelCaps24>::new(),
+                terminal_access,
+            );
         let access_point_association =
-            <ModelTypes<ServiceContexts> as PhaseTypes>::AccessPointKeys::begin_association(
+            <ModelTypes<ModelBackend<Id, ModelCaps24, ServiceContexts>> as PhaseTypes>::AccessPointKeys::begin_association(
                 access_point_association,
                 oer_ieee80211_wire::security::Spp::NotNegotiated,
             );
@@ -277,24 +285,9 @@ impl PortBody<ModelBackend<ModelCaps24, ServiceContexts>> for ContractBody {
 
 #[test]
 fn unsolicited_tsf_and_access_point_terminals_retain_their_real_permissions() {
-    let (backend, _) = ModelBackend::<ModelCaps24, ServiceContexts>::new(
-        channel6(),
-        [
-            IndividualAddress::new(LOCAL).unwrap(),
-            IndividualAddress::new(ACCESS_POINT_ADDRESS).unwrap(),
-        ],
-        std::rc::Rc::new(oer_time_virtual::VirtualClock::<8>::new()),
-    );
-    assert!(matches!(
-        block_on(run_port(backend, ContractBody(ContractCase::Unsolicited))),
-        oer_radio_port::PortEnd::Uninstalled { .. }
-    ));
-}
-
-#[test]
-fn disable_quarantines_the_first_rejected_owner_and_every_later_terminal() {
-    for prior in [false, true] {
-        let (backend, _) = ModelBackend::<ModelCaps24, ServiceContexts>::new(
+    block_on(with_local_slot(async |claim| {
+        let mut slot = claim.place();
+        let (backend, _) = ModelBackend::<_, ModelCaps24, ServiceContexts>::new(
             channel6(),
             [
                 IndividualAddress::new(LOCAL).unwrap(),
@@ -303,36 +296,81 @@ fn disable_quarantines_the_first_rejected_owner_and_every_later_terminal() {
             std::rc::Rc::new(oer_time_virtual::VirtualClock::<8>::new()),
         );
         assert!(matches!(
-            block_on(run_port(
-                backend,
-                ContractBody(ContractCase::Disable {
-                    prior,
-                    overflow: false
-                })
-            )),
+            oer_radio_port::LocalExecution
+                .scope(
+                    (&mut slot)
+                        .register(backend)
+                        .ok()
+                        .expect("fresh local slot"),
+                    async |frontend| run_port(frontend, ContractBody(ContractCase::Unsolicited),)
+                        .await
+                )
+                .await,
             oer_radio_port::PortEnd::Uninstalled { .. }
         ));
+        slot.end_model_world();
+    }));
+}
+
+#[test]
+fn disable_quarantines_the_first_rejected_owner_and_every_later_terminal() {
+    for prior in [false, true] {
+        block_on(with_local_slot(async |claim| {
+            let mut slot = claim.place();
+            let (backend, _) = ModelBackend::<_, ModelCaps24, ServiceContexts>::new(
+                channel6(),
+                [
+                    IndividualAddress::new(LOCAL).unwrap(),
+                    IndividualAddress::new(ACCESS_POINT_ADDRESS).unwrap(),
+                ],
+                std::rc::Rc::new(oer_time_virtual::VirtualClock::<8>::new()),
+            );
+            assert!(matches!(
+                oer_radio_port::LocalExecution
+                    .scope(
+                        (&mut slot)
+                            .register(backend)
+                            .ok()
+                            .expect("fresh local slot"),
+                        async |frontend| run_port(
+                            frontend,
+                            ContractBody(ContractCase::Disable {
+                                prior,
+                                overflow: false
+                            }),
+                        )
+                        .await
+                    )
+                    .await,
+                oer_radio_port::PortEnd::Uninstalled { .. }
+            ));
+            slot.end_model_world();
+        }));
     }
 }
 
 #[test]
 fn full_custody_returns_the_next_terminal_to_poisoned_port_teardown() {
-    let (backend, _) = ModelBackend::<ModelCaps24, ServiceContexts>::new(
-        channel6(),
-        [
-            IndividualAddress::new(LOCAL).unwrap(),
-            IndividualAddress::new(ACCESS_POINT_ADDRESS).unwrap(),
-        ],
-        std::rc::Rc::new(oer_time_virtual::VirtualClock::<8>::new()),
-    );
-    assert!(matches!(
-        block_on(run_port(
-            backend,
-            ContractBody(ContractCase::Disable {
-                prior: false,
-                overflow: true
-            })
-        )),
-        oer_radio_port::PortEnd::Uninstalled { .. }
-    ));
+    block_on(with_local_slot(async |claim| {
+        let mut slot = claim.place();
+        let (backend, _) = ModelBackend::<_, ModelCaps24, ServiceContexts>::new(
+            channel6(),
+            [
+                IndividualAddress::new(LOCAL).unwrap(),
+                IndividualAddress::new(ACCESS_POINT_ADDRESS).unwrap(),
+            ],
+            std::rc::Rc::new(oer_time_virtual::VirtualClock::<8>::new()),
+        );
+        assert!(matches!(
+            oer_radio_port::LocalExecution.scope((&mut slot).register(backend).ok().expect("fresh local slot"), async |frontend| run_port(
+                frontend,
+                ContractBody(ContractCase::Disable {
+                    prior: false,
+                    overflow: true
+                }),
+            ).await).await,
+            oer_radio_port::PortEnd::FailStopped { outcome, .. } if matches!(outcome.outcome(), oer_radio_port::Abandon::Stopped(_))
+        ));
+        slot.end_model_world();
+    }));
 }

@@ -1,5 +1,5 @@
-error[E0616]: field `backend` of struct `Owner` is private
+error[E0609]: no field `backend` on type `&mut Owner<'_, 'id, Id, B, oer_radio_port::Disabled>`
  --> tests/ui/lifecycle_backend_field.rs:6:24
   |
-6 |     let _ = &mut owner.backend; // ui-error: E0616
-  |                        ^^^^^^^ private field
+6 |     let _ = &mut owner.backend; // ui-error: E0609
+  |                        ^^^^^^^ unknown field

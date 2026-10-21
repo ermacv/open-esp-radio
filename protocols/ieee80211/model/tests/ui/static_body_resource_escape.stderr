@@ -1,0 +1,26 @@
+warning: unused import: `oer_ieee80211_port::TxBufferMemory`
+ --> tests/ui/static_body_resource_escape.rs:6:5
+  |
+6 | use oer_ieee80211_port::TxBufferMemory;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: variable does not need to be mutable
+  --> tests/ui/static_body_resource_escape.rs:18:13
+   |
+18 |         let mut buffer = resources.small.pop().expect("one model body resource");
+   |             ----^^^^^^
+   |             |
+   |             help: remove this `mut`
+   |
+   = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+error: lifetime may not live long enough
+  --> tests/ui/static_body_resource_escape.rs:20:36
+   |
+16 |     async fn run<'a, 'p>(self, owner: Owner<'a, 'p, Id, Backend, Disabled>, mut resources: ModelResources<'p, Backend>) -> Ended<Id,...
+   |                      -- lifetime `'p` defined here
+...
+20 |         let output: Box<dyn Any> = Box::new(buffer); // ui-error: lifetime may not live long enough
+   |                                    ^^^^^^^^^^^^^^^^ coercion requires that `'p` must outlive `'static`

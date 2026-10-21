@@ -2,7 +2,7 @@ error[E0599]: no method named `want_access_point` found for enum `RetiredArbiter
   --> tests/ui/failed_arbiter_inputs.rs:11:12
    |
 11 |     failed.want_access_point(); // ui-error: E0599
-   |            ^^^^^^^^^^^^^^^^^ method not found in `RetiredArbiter<'_, K>`
+   |            ^^^^^^^^^^^^^^^^^ method not found in `RetiredArbiter<'_, K, NoReservation, oer_radio_port::pool::path::Root<oer_radio_port::identity::LocalId<'id>>>`
 
 error[E0599]: no method named `upstream` found for struct `FailedArbiter<'id, K, Path>` in the current scope
   --> tests/ui/failed_arbiter_inputs.rs:21:12

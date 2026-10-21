@@ -1,0 +1,27 @@
+error: lifetime may not live long enough
+  --> tests/ui/context_epoch_body_loan.rs:15:12
+   |
+12 | pub fn epoch<'p>(context: PortContext<'p, Id, EpochContext<Path, ()>>) -> Box<dyn Any> {
+   |              -- lifetime `'p` defined here
+...
+15 |     return Box::new(epoch); // ui-error: lifetime may not live long enough
+   |            ^^^^^^^^^^^^^^^ coercion requires that `'p` must outlive `'static`
+   |
+help: to declare that the trait object captures data from argument `context`, you can add an explicit `'p` lifetime bound
+   |
+12 | pub fn epoch<'p>(context: PortContext<'p, Id, EpochContext<Path, ()>>) -> Box<dyn Any + 'p> {
+   |                                                                                       ++++
+
+error: lifetime may not live long enough
+  --> tests/ui/context_epoch_body_loan.rs:23:12
+   |
+20 | pub fn station<'p>(context: StaTxContext<'p, Path>) -> Box<dyn Any> {
+   |                -- lifetime `'p` defined here
+...
+23 |     return Box::new(epoch); // ui-error: lifetime may not live long enough
+   |            ^^^^^^^^^^^^^^^ coercion requires that `'p` must outlive `'static`
+   |
+help: to declare that the trait object captures data from argument `context`, you can add an explicit `'p` lifetime bound
+   |
+20 | pub fn station<'p>(context: StaTxContext<'p, Path>) -> Box<dyn Any + 'p> {
+   |                                                                    ++++

@@ -1,26 +1,32 @@
 use super::*;
-use radio::{EnableResult, PortBackend};
+use radio::{EnableResult, PortBackend, SlotRetire, SlotStopped, SlotWakes};
 
-pub(super) enum Bank<'id, D: Device<B>, const B: usize> {
-    Disabled(DisabledCore<Core<'id, D, B>>),
-    DisabledClosed(DisabledCore<Core<'id, D, B>, ClosedGate>),
-    Open(EnabledCore<Core<'id, D, B>>),
-    Closing(EnabledCore<Core<'id, D, B>, ClosingGate>),
-    Closed(EnabledCore<Core<'id, D, B>, ClosedGate>),
-    Disabling(DisablingCore<Core<'id, D, B>>),
-    DisablingClosing(DisablingCore<Core<'id, D, B>, ClosingGate>),
-    DisablingClosed(DisablingCore<Core<'id, D, B>, ClosedGate>),
-    ConfigureOpen(Configuring<EnabledCore<Core<'id, D, B>>>),
-    ConfigureClosing(Configuring<EnabledCore<Core<'id, D, B>, ClosingGate>>),
-    ConfigureClosed(Configuring<EnabledCore<Core<'id, D, B>, ClosedGate>>),
-    Failed(GateOpenFailed<Core<'id, D, B>>),
+pub(super) enum Bank<'id, Id: SlotIdentity, D: Device<B>, const B: usize> {
+    Disabled(DisabledCore<Core<'id, Id, D, B>>),
+    DisabledClosed(DisabledCore<Core<'id, Id, D, B>, ClosedGate>),
+    Open(EnabledCore<Core<'id, Id, D, B>>),
+    Closing(EnabledCore<Core<'id, Id, D, B>, ClosingGate>),
+    Closed(EnabledCore<Core<'id, Id, D, B>, ClosedGate>),
+    Disabling(DisablingCore<Core<'id, Id, D, B>>),
+    DisablingClosing(DisablingCore<Core<'id, Id, D, B>, ClosingGate>),
+    DisablingClosed(DisablingCore<Core<'id, Id, D, B>, ClosedGate>),
+    ConfigureOpen(Configuring<EnabledCore<Core<'id, Id, D, B>>>),
+    ConfigureClosing(Configuring<EnabledCore<Core<'id, Id, D, B>, ClosingGate>>),
+    ConfigureClosed(Configuring<EnabledCore<Core<'id, Id, D, B>, ClosedGate>>),
+    Failed(GateOpenFailed<Core<'id, Id, D, B>>),
 }
-pub(super) struct CoreOwner<'id, D: Device<B>, const B: usize>(Option<Bank<'id, D, B>>);
-impl<'id, D: Device<B>, const B: usize> CoreOwner<'id, D, B> {
-    pub(super) fn new(core: DisabledCore<Core<'id, D, B>>) -> Self {
-        Self(Some(Bank::Disabled(core)))
+pub(super) struct CoreOwner<'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
+    Option<Bank<'id, Id, D, B>>,
+);
+impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> CoreOwner<'id, Id, D, B> {
+    pub(super) const fn vacant() -> Self {
+        Self(None)
     }
-    pub(super) fn core(&mut self) -> &mut Core<'id, D, B> {
+    pub(super) fn prepare(&mut self, core: DisabledCore<Core<'id, Id, D, B>>) {
+        assert!(self.0.is_none(), "retired core released its bank");
+        self.0 = Some(Bank::Disabled(core));
+    }
+    pub(super) fn core(&mut self) -> &mut Core<'id, Id, D, B> {
         match self.0.as_mut().expect("core owner retains its bank") {
             Bank::Disabled(c) => c,
             Bank::DisabledClosed(c) => c,
@@ -107,10 +113,10 @@ impl<'id, D: Device<B>, const B: usize> CoreOwner<'id, D, B> {
     pub(super) fn submit(
         &mut self,
         hardware: &mut D::Hardware,
-        queue: FreeQueue<'id, CorePath>,
-        ticket: TxAdmission<'id, CorePath>,
+        queue: FreeQueue<'id, CorePath<Id>>,
+        ticket: TxAdmission<'id, CorePath<Id>>,
         values: MpduValues<'static, B>,
-    ) -> Result<(), core_mac::SubmitFault<'id, 'static, B, CorePath>> {
+    ) -> Result<(), core_mac::SubmitFault<'id, 'static, B, CorePath<Id>>> {
         match self.0.as_mut().expect("enabled bank retained") {
             Bank::Open(c) => c.submit_checked(hardware, queue, ticket, values),
             _ => panic!("publication requires an open enabled bank"),
@@ -120,7 +126,7 @@ impl<'id, D: Device<B>, const B: usize> CoreOwner<'id, D, B> {
         &mut self,
         hardware: &mut D::Hardware,
         wake: WifiTxWake,
-        sink: &mut driver::Sink<'id, B>,
+        sink: &mut driver::Sink<'id, Id, B>,
     ) -> Result<(), Fault> {
         match self.0.as_mut().expect("bank retained") {
             Bank::ConfigureOpen(c) => c.service(hardware, wake, sink),
@@ -159,7 +165,7 @@ impl<'id, D: Device<B>, const B: usize> CoreOwner<'id, D, B> {
     pub(super) fn advance_configuration(
         &mut self,
         hardware: &mut D::Hardware,
-        sink: &mut driver::Sink<'id, B>,
+        sink: &mut driver::Sink<'id, Id, B>,
     ) -> bool {
         macro_rules! advance {
             ($c:ident, $waiting:ident, $done:ident) => {
@@ -196,7 +202,7 @@ impl<'id, D: Device<B>, const B: usize> CoreOwner<'id, D, B> {
     pub(super) fn open(
         &mut self,
         hardware: &mut D::Hardware,
-        sink: &mut driver::Sink<'id, B>,
+        sink: &mut driver::Sink<'id, Id, B>,
     ) -> Result<(), Fault> {
         match self.0.take().expect("closed bank retained") {
             Bank::Closed(c) => match c.open_gate(hardware, sink) {
@@ -216,7 +222,11 @@ impl<'id, D: Device<B>, const B: usize> CoreOwner<'id, D, B> {
             }
         }
     }
-    pub(super) fn disable(&mut self, hardware: &mut D::Hardware, sink: &mut driver::Sink<'id, B>) {
+    pub(super) fn disable(
+        &mut self,
+        hardware: &mut D::Hardware,
+        sink: &mut driver::Sink<'id, Id, B>,
+    ) {
         self.0 = Some(match self.0.take().expect("bank retained") {
             Bank::Open(c) => Bank::Disabling(c.disable_checked(hardware, sink)),
             Bank::Closing(c) => Bank::DisablingClosing(c.disable_checked(hardware, sink)),
@@ -224,7 +234,7 @@ impl<'id, D: Device<B>, const B: usize> CoreOwner<'id, D, B> {
             other => other,
         });
     }
-    pub(super) fn finish_disable(&mut self, sink: &mut driver::Sink<'id, B>) -> bool {
+    pub(super) fn finish_disable(&mut self, sink: &mut driver::Sink<'id, Id, B>) -> bool {
         macro_rules! finish {
             ($c:ident, $waiting:ident, $done:ident) => {
                 match $c.finish(sink) {
@@ -246,24 +256,58 @@ impl<'id, D: Device<B>, const B: usize> CoreOwner<'id, D, B> {
     }
 }
 
-pub struct Resources<'id, D: Device<B>, const B: usize> {
-    pub tickets: [Slot<'id, Tickets, Part<2>>; TX_TICKETS],
-    pub terminal_access: TerminalAccess<'id, Tickets, Part<2>>,
-    pub buffers: [Buffer<'id, B>; TX_TICKETS],
-    pub connection_epoch: Slot<'id, ConnectionEpochKind, Part<4>>,
-    pub station_association: core_mac::association::VacantStationAssociation<'id, CorePath>,
+pub struct Resources<'p, Id: SlotIdentity, D: Device<B>, const B: usize> {
+    pub tickets: [Slot<'p, Tickets, Part<Id, 2>>; TX_TICKETS],
+    pub terminal_access: TerminalAccess<'p, Tickets, Part<Id, 2>>,
+    pub buffers: [Buffer<'p, Id, D, B>; TX_TICKETS],
+    pub connection_epoch: Slot<'p, ConnectionEpochKind, Part<Id, 4>>,
+    pub station_association: core_mac::association::VacantStationAssociation<'p, CorePath<Id>>,
     pub access_point_association:
-        core_mac::association::VacantAccessPointAssociation<'id, CorePath>,
-    pub station_commands: InterfacePermissions<'id, Station, Part<8>>,
-    pub access_point_commands: InterfacePermissions<'id, AccessPoint, Part<9>>,
-    pub block_acks: [PhaseBlockAckSlot<'id, Types<D, B>>; 8],
-    pub station_group_permission: keys::StaPermission<'id>,
-    pub access_point_group_permission: keys::ApPermission<'id>,
-    pub gate: GateOpen<'id, Part<1>>,
-    pub arbiter_authority: ArbiterAuthority<'id, Part<1>>,
+        core_mac::association::VacantAccessPointAssociation<'p, CorePath<Id>>,
+    pub station_commands: InterfacePermissions<'p, Station, Part<Id, 8>>,
+    pub access_point_commands: InterfacePermissions<'p, AccessPoint, Part<Id, 9>>,
+    pub block_acks: [association::BlockAckSlot<'p, BlockAcks, 8, Part<Id, 7>>; 8],
+    pub station_group_permission: keys::StaPermission<'p, Id>,
+    pub access_point_group_permission: keys::ApPermission<'p, Id>,
+    pub gate: GateOpen<'p, Part<Id, 1>>,
+    pub arbiter_authority: ArbiterAuthority<'p, Part<Id, 1>>,
 }
-
-impl<D: Device<B>, const B: usize> PortBackend for Esp32s31Backend<D, B> {
+pub struct Queues<Id: SlotIdentity, D: Device<B>, const B: usize> {
+    resources: Option<Resources<'static, Id, D, B>>,
+    held: Held<'static, Id, D, B>,
+    driver: driver::Driver<'static, Id, D, B>,
+    addresses: Option<[IndividualAddress; 2]>,
+}
+impl<Id: SlotIdentity, D: Device<B>, const B: usize> Queues<Id, D, B> {
+    const fn vacant() -> Self {
+        Self {
+            resources: None,
+            held: Held::vacant(),
+            driver: driver::Driver::vacant(),
+            addresses: None,
+        }
+    }
+}
+pub struct RawFrontend<'s, Id: SlotIdentity, D: Device<B>, const B: usize> {
+    resources: &'s mut Option<Resources<'static, Id, D, B>>,
+    held: &'s Held<'static, Id, D, B>,
+    addresses: [IndividualAddress; 2],
+}
+pub struct Invocation<'s, Id: SlotIdentity, D: Device<B>, const B: usize> {
+    held: &'s Held<'static, Id, D, B>,
+    driver: &'s mut driver::Driver<'static, Id, D, B>,
+}
+pub struct Frontend<'p, Id: SlotIdentity, D: Device<B>, const B: usize> {
+    held: &'p Held<'static, Id, D, B>,
+    addresses: [IndividualAddress; 2],
+    loan: BodyLoan<'p, Id, Esp32s31Backend<Id, D, B>>,
+}
+pub struct BodyViews<'p, Id: SlotIdentity, D: Device<B>, const B: usize> {
+    view: Frontend<'p, Id, D, B>,
+    resources: Resources<'p, Id, D, B>,
+}
+impl<Id: SlotIdentity, D: Device<B>, const B: usize> SlotOwner<Id> for Esp32s31Backend<Id, D, B> {
+    type Vacant = StoppedPort<Id, D, B>;
     type Pools = (
         CorePools<TX_TICKETS>,
         ArbiterPool,
@@ -276,33 +320,24 @@ impl<D: Device<B>, const B: usize> PortBackend for Esp32s31Backend<D, B> {
         InterfaceCommandPool<Station>,
         InterfaceCommandPool<AccessPoint>,
     );
-    type Event<'id> = Event<'id, D, B>;
-    type Terminal<'id> = Terminal<'id, D, B>;
-    type Domain = Ieee80211Radio;
-    type Fault = Fault;
-    type Refusal = Fault;
-    type Setup<'a, 'id>
-        = Esp32s31Setup<'a, 'id, D, B>
+    type Queues = Queues<Id, D, B>;
+    const VACANT_QUEUES: Self::Queues = Queues::vacant();
+    type Frontend<'s>
+        = RawFrontend<'s, Id, D, B>
     where
-        Self: 'a,
-        'id: 'a;
-    type Phase<'a, 'id>
-        = Esp32s31Phase<'a, 'id, D, B>
+        Self: 's,
+        Id: 's;
+    type Invocation<'s>
+        = Invocation<'s, Id, D, B>
     where
-        Self: 'a,
-        'id: 'a;
-    type Resources<'id> = Resources<'id, D, B>;
-    type Held<'id> = Held<'id, D, B>;
-    type Local<'id> = ();
-    type Driver = &'static PortStorage<D, B>;
-    type State = ();
-    type Uninstall = ();
-    type Uninstalled = Uninstalled<D, B>;
-    #[inline(always)]
-    fn resources<'id>(
+        Self: 's,
+        Id: 's;
+    #[inline(never)]
+    fn prepare_queues(
         &mut self,
-        mint: radio::Mint<'id, Self::Pools>,
-    ) -> radio::InstallParts<'id, Self> {
+        backing: &mut Self::Queues,
+        mint: radio::Mint<'static, Self::Pools, Id>,
+    ) {
         self.storage.expired.set(0);
         let (
             core,
@@ -323,10 +358,12 @@ impl<D: Device<B>, const B: usize> PortBackend for Esp32s31Backend<D, B> {
             access_point_association,
             queues,
         } = core;
-        let initial = self
-            .initial
+        let BackendState::Initial(initial) = &mut self.state else {
+            panic!("installation consumes initial resources once");
+        };
+        let initial = initial
             .take()
-            .expect("installation consumes initial resources once");
+            .expect("installation retains initial resources");
         let core = LowerMacCore::new(authority, initial.transmitter, initial.config, initial.coex);
         let mut memory = initial.buffers.into_iter();
         let buffers = buffers.map(|place| {
@@ -336,87 +373,308 @@ impl<D: Device<B>, const B: usize> PortBackend for Esp32s31Backend<D, B> {
             };
             Buffer {
                 place,
-                memory: Some(memory),
+                dma: buffer::ReturnableBuffer {
+                    memory: Some(memory),
+                    returned: &self.storage.returned,
+                },
+                loan: None,
                 admission: None,
-                returned: &self.storage.returned,
             }
         });
-        radio::InstallParts {
-            resources: Resources {
-                tickets,
-                terminal_access,
-                buffers,
-                connection_epoch,
-                station_association,
-                access_point_association,
-                station_commands,
-                access_point_commands,
-                block_acks,
-                station_group_permission,
-                access_point_group_permission,
-                gate,
-                arbiter_authority,
-            },
-            held: Held {
-                storage: self.storage,
-                state: RefCell::new(driver::Driver::new(
-                    core,
-                    core_tickets,
-                    queues,
-                    self.timer.now(),
-                )),
-                commands: Queue::new(),
-                events: Queue::new(),
-                rx_out: Cell::new(0),
-                recycled: Queue::new(),
-                failed_command: RefCell::new(None),
-                failed_terminal: RefCell::new(None),
-                gate: RefCell::new(issuer),
-                enabled: Cell::new(false),
-                want_enabled: Cell::new(false),
-                channel: Cell::new(self.channel),
-                edca: Cell::new([EdcaParameterSet::STANDARD_DEFAULT; 2]),
-                dirty_edca: Cell::new(true),
-                block_acks: RefCell::new([None; 8]),
-                dirty_ba: Cell::new(false),
-                color: Cell::new(None),
-                loss: Cell::new(false),
-                #[cfg(oer_debug_control)]
-                publication_hold: Cell::new(0),
-                #[cfg(oer_debug_control)]
-                completion_hold: Cell::new(false),
-            },
-            local: (),
-        }
+        backing
+            .driver
+            .prepare(core, core_tickets, queues, self.timer.now());
+        backing.held.prepare(self.storage, issuer, self.channel);
+        backing.resources = Some(Resources {
+            tickets,
+            terminal_access,
+            buffers,
+            connection_epoch,
+            station_association,
+            access_point_association,
+            station_commands,
+            access_point_commands,
+            block_acks,
+            station_group_permission,
+            access_point_group_permission,
+            gate,
+            arbiter_authority,
+        });
+        backing.addresses = Some(self.addresses);
+        self.state = BackendState::Running;
     }
-    fn setup<'a, 'id: 'a>(
-        &'a mut self,
-        _: radio::Call,
-        held: &'a Held<'id, D, B>,
-        _: &'a mut (),
-    ) -> Self::Setup<'a, 'id> {
-        Esp32s31Setup {
-            backend: self,
-            held,
-        }
+    fn split<'s>(
+        queues: &'s mut Self::Queues,
+        _: SlotWakes<'s, Id>,
+    ) -> (Self::Frontend<'s>, Self::Invocation<'s>)
+    where
+        Self: 's,
+        Id: 's,
+    {
+        (
+            RawFrontend {
+                resources: &mut queues.resources,
+                held: &queues.held,
+                addresses: queues.addresses.expect("prepared slot addresses"),
+            },
+            Invocation {
+                held: &queues.held,
+                driver: &mut queues.driver,
+            },
+        )
     }
-    fn phase<'a, 'id: 'a>(
-        &'a mut self,
-        _: radio::Call,
-        held: &'a Held<'id, D, B>,
-        _: &'a mut (),
-    ) -> Self::Phase<'a, 'id> {
-        Esp32s31Phase {
-            held,
+    async fn run<'s>(
+        &mut self,
+        invocation: &mut Self::Invocation<'s>,
+        retire: SlotRetire<'_, Id, Self>,
+    ) -> SlotStopped<Id, Self>
+    where
+        Self: 's,
+        Id: 's,
+    {
+        let held = invocation.held;
+        let storage = self.storage;
+        assert!(
+            matches!(self.state, BackendState::Running),
+            "registered driver retains its state"
+        );
+        let state = &mut *invocation.driver;
+        loop {
+            let deadline = state.deadline(held);
+            let timer = self.timer.clone();
+            let mut delay = core::pin::pin!(timer.wait_until(deadline));
+            let done = poll_fn(|cx| {
+                storage.driver.register(cx.waker());
+                if storage.poisoned.get().is_some() {
+                    retire.request_quarantine();
+                    return Poll::Pending;
+                }
+                if retire.is_requested() {
+                    match storage.device.borrow_mut().poll_stop(cx) {
+                        Poll::Ready(Ok(())) => return Poll::Ready(true),
+                        Poll::Ready(Err(cause)) => {
+                            storage.poison(cause);
+                            retire.request_quarantine();
+                            return Poll::Pending;
+                        }
+                        Poll::Pending => {
+                            if delay.as_mut().poll(cx).is_ready() {
+                                return Poll::Ready(false);
+                            }
+                            return Poll::Pending;
+                        }
+                    }
+                }
+                let mut device = storage.device.borrow_mut();
+                if let Err(cause) = state.poll(cx, held, &mut *device) {
+                    storage.poison(cause);
+                    retire.request_quarantine();
+                    return Poll::Pending;
+                }
+                drop(device);
+                if state.deadline(held) < deadline {
+                    return Poll::Ready(false);
+                }
+                let mut retiring = core::pin::pin!(retire.wait());
+                if retiring.as_mut().poll(cx).is_ready() {
+                    cx.waker().wake_by_ref();
+                }
+                if delay.as_mut().poll(cx).is_ready() {
+                    return Poll::Ready(false);
+                }
+                Poll::Pending
+            })
+            .await;
+            if done {
+                break;
+            }
+        }
+        if !held.commands.empty()
+            || !held.events.empty()
+            || !held.recycled.empty()
+            || held.failed_command.borrow().is_some()
+            || held.failed_terminal.borrow().is_some()
+            || held.rx_out.get() != 0
+            || storage.returned.borrow().len() != TX_TICKETS
+        {
+            retire.request_quarantine();
+            core::future::pending::<()>().await;
+        }
+        self.channel = held.channel.get();
+        for activity in &storage.key_live {
+            activity.set(0);
+        }
+        storage.device.borrow_mut().detach();
+        retire.requested().await
+    }
+    fn abandon<'s>(
+        &mut self,
+        _: Option<&mut Self::Invocation<'s>>,
+        call: radio::Quarantine,
+    ) -> radio::Abandon
+    where
+        Self: 's,
+        Id: 's,
+    {
+        self.storage.poison(Fault::Abandoned);
+        if let Ok(mut device) = self.storage.device.try_borrow_mut() {
+            if device.abandon() {
+                return radio::Abandon::Stopped(call.stopped());
+            }
+        }
+        radio::Abandon::Unconfirmed(call)
+    }
+    fn finish<'s>(&mut self, invocation: &mut Self::Invocation<'s>) -> Self::Vacant
+    where
+        Self: 's,
+        Id: 's,
+    {
+        assert!(
+            matches!(self.state, BackendState::Running),
+            "stopped slot retains its driver"
+        );
+        let transmitter = invocation.driver.retire();
+        let mut config = self.config;
+        config.channel = self
+            .channel
+            .wifi_channel()
+            .expect("S31 channel retained through setup");
+        StoppedPort {
+            storage: self.storage,
+            transmitter: Some(transmitter),
+            config,
             addresses: self.addresses,
+            coex: self.coex,
+            identity: PhantomData,
         }
     }
-    fn enable<'a, 'id: 'a>(
-        &'a mut self,
+}
+impl<Id: SlotIdentity, D: Device<B>, const B: usize> SlotBodyOwner<Id>
+    for Esp32s31Backend<Id, D, B>
+{
+    type Body<'p>
+        = BodyViews<'p, Id, D, B>
+    where
+        Self: 'p,
+        Id: 'p;
+    fn lend<'p, 's>(
+        frontend: &'p mut Self::Frontend<'s>,
+        loan: BodyLoan<'p, Id, Self>,
+    ) -> Self::Body<'p>
+    where
+        Self: 's,
+        Id: 's,
+        's: 'p,
+    {
+        let resources = frontend
+            .resources
+            .take()
+            .expect("one body receives its resource loan");
+        BodyViews {
+            view: Frontend {
+                held: frontend.held,
+                addresses: frontend.addresses,
+                loan,
+            },
+            resources: Resources {
+                tickets: resources.tickets.map(|s| loan.lend_slot(s)),
+                terminal_access: resources.terminal_access.lend(&loan),
+                buffers: resources.buffers.map(|b| b.lend(&loan)),
+                connection_epoch: loan.lend_slot(resources.connection_epoch),
+                station_association: resources.station_association.lend(&loan),
+                access_point_association: resources.access_point_association.lend(&loan),
+                station_commands: resources.station_commands.lend(&loan),
+                access_point_commands: resources.access_point_commands.lend(&loan),
+                block_acks: resources.block_acks.map(|s| s.lend(&loan)),
+                station_group_permission: loan.lend_slot(resources.station_group_permission),
+                access_point_group_permission: loan
+                    .lend_slot(resources.access_point_group_permission),
+                gate: resources.gate.lend(&loan),
+                arbiter_authority: resources.arbiter_authority.lend(&loan),
+            },
+        }
+    }
+}
+impl<Id: SlotIdentity, D: Device<B>, const B: usize> PortBackend<Id> for Esp32s31Backend<Id, D, B> {
+    type Domain = Ieee80211Radio;
+    type Fault = Fault;
+    type Refusal = Fault;
+    type Uninstall = ();
+    type Event<'p>
+        = Event<'p, Id, D, B>
+    where
+        Self: 'p,
+        Id: 'p;
+    type Terminal<'p>
+        = Terminal<'p, Id, D, B>
+    where
+        Self: 'p,
+        Id: 'p;
+    type View<'p>
+        = Frontend<'p, Id, D, B>
+    where
+        Self: 'p,
+        Id: 'p;
+    type Resources<'p>
+        = Resources<'p, Id, D, B>
+    where
+        Self: 'p,
+        Id: 'p;
+    type Setup<'a, 'p>
+        = Esp32s31Setup<'a, 'p, Id, D, B>
+    where
+        Self: 'p,
+        Id: 'p,
+        'p: 'a;
+    type Phase<'a, 'p>
+        = Esp32s31Phase<'a, 'p, Id, D, B>
+    where
+        Self: 'p,
+        Id: 'p,
+        'p: 'a;
+    fn body_parts<'p>(body: Self::Body<'p>) -> radio::InstallParts<'p, Id, Self>
+    where
+        Self: 'p,
+        Id: 'p,
+    {
+        radio::InstallParts {
+            view: body.view,
+            resources: body.resources,
+        }
+    }
+    fn setup<'a, 'p>(_: radio::Call, view: &'a mut Self::View<'p>) -> Self::Setup<'a, 'p>
+    where
+        Self: 'p,
+        Id: 'p,
+        'p: 'a,
+    {
+        Esp32s31Setup {
+            held: view.held,
+            loan: view.loan,
+        }
+    }
+    fn phase<'a, 'p>(_: radio::Call, view: &'a mut Self::View<'p>) -> Self::Phase<'a, 'p>
+    where
+        Self: 'p,
+        Id: 'p,
+        'p: 'a,
+    {
+        Esp32s31Phase {
+            held: view.held,
+            addresses: view.addresses,
+            loan: view.loan,
+        }
+    }
+    fn enable<'a, 'p>(
         _: radio::Call,
-        held: &'a Held<'id, D, B>,
-        _: &'a mut (),
-    ) -> impl Future<Output = EnableResult<Fault, Fault>> + 'a {
+        view: &'a mut Self::View<'p>,
+    ) -> impl Future<Output = EnableResult<Fault, Fault>> + 'a
+    where
+        Self: 'p,
+        Id: 'p,
+        'p: 'a,
+    {
+        let held = view.held;
         held.want_enabled.set(true);
         held.storage.driver.wake();
         poll_fn(move |cx| {
@@ -431,27 +689,35 @@ impl<D: Device<B>, const B: usize> PortBackend for Esp32s31Backend<D, B> {
             }
         })
     }
-    fn disable<'a, 'id: 'a>(
-        &'a mut self,
+    fn disable<'a, 'p>(
         _: radio::Call,
-        held: &'a Held<'id, D, B>,
-        _: &'a mut (),
-        sink: &'a mut dyn FnMut(Terminal<'id, D, B>) -> core::ops::ControlFlow<Terminal<'id, D, B>>,
-    ) -> impl Future<Output = Result<(), radio::Poisoned<Fault>>> + 'a {
+        view: &'a mut Self::View<'p>,
+        sink: &'a mut dyn FnMut(
+            Terminal<'p, Id, D, B>,
+        ) -> core::ops::ControlFlow<Terminal<'p, Id, D, B>>,
+    ) -> impl Future<Output = Result<(), radio::Poisoned<Fault>>> + 'a
+    where
+        Self: 'p,
+        Id: 'p,
+        'p: 'a,
+    {
+        let held = view.held;
+        let loan = view.loan;
         held.want_enabled.set(false);
         held.storage.driver.wake();
         poll_fn(move |cx| {
             held.storage.body.register(cx.waker());
             while let Some(event) = held.events.pop() {
                 match event {
-                    LowerMacEvent::Terminal(terminal) => {
-                        if let core::ops::ControlFlow::Break(terminal) = sink(terminal) {
-                            *held.failed_terminal.borrow_mut() = Some(terminal);
+                    owned::OwnedEvent::Terminal(t) => {
+                        if let core::ops::ControlFlow::Break(t) = sink(t.lend(&loan)) {
+                            *held.failed_terminal.borrow_mut() =
+                                Some(owned::OwnedTerminal::retain(t, &loan));
                             held.storage.poison(Fault::Abandoned);
                             return Poll::Ready(held.storage.check());
                         }
                     }
-                    LowerMacEvent::Received { frame, .. } => {
+                    owned::OwnedEvent::Received { frame, .. } => {
                         if let Err(frame) = held.recycled.push(frame) {
                             core::mem::forget(frame);
                             held.storage.poison(Fault::Capacity);
@@ -459,7 +725,7 @@ impl<D: Device<B>, const B: usize> PortBackend for Esp32s31Backend<D, B> {
                         held.loss.set(true);
                         held.storage.driver.wake();
                     }
-                    LowerMacEvent::Tbtt(_) => held.loss.set(true),
+                    owned::OwnedEvent::Tbtt(_) => held.loss.set(true),
                 }
             }
             if let Err(error) = held.storage.check() {
@@ -472,126 +738,40 @@ impl<D: Device<B>, const B: usize> PortBackend for Esp32s31Backend<D, B> {
             }
         })
     }
-    async fn now(&self, _: radio::Call) -> radio::PortResult<Ieee80211Instant, ClockError, Fault> {
-        self.storage.check()?;
-        Ok(self.storage.device.borrow_mut().radio_now())
+    async fn now<'a, 'p>(
+        _: radio::Call,
+        view: &'a Self::View<'p>,
+    ) -> radio::PortResult<Ieee80211Instant, ClockError, Fault>
+    where
+        Self: 'p,
+        Id: 'p,
+        'p: 'a,
+    {
+        view.held.storage.check()?;
+        Ok(view.held.storage.device.borrow_mut().radio_now())
     }
-    async fn drive<'p, 'id>(
-        loan: radio::DriverLoan<'p, Self::Driver>,
-        held: &'p Self::Held<'id>,
-        retire: radio::Retire<'p>,
-    ) -> radio::DriverExit<(), Fault> {
-        loop {
-            let deadline = held.state.borrow_mut().deadline(held);
-            let timer = held.storage.device.borrow().timer().clone();
-            let delay = timer.wait_until(deadline);
-            let mut delay = core::pin::pin!(delay);
-            let done = poll_fn(|cx| {
-                held.storage.driver.register(cx.waker());
-                if held.storage.poisoned.get().is_some() {
-                    return Poll::Ready(true);
-                }
-                if retire.is_requested() || retire.is_abandoned() {
-                    let result = held.storage.device.borrow_mut().poll_stop(cx);
-                    match result {
-                        Poll::Ready(Ok(())) => return Poll::Ready(true),
-                        Poll::Ready(Err(cause)) => {
-                            held.storage.poison(cause);
-                            return Poll::Ready(true);
-                        }
-                        Poll::Pending => {
-                            if held.state.borrow_mut().deadline(held) < deadline
-                                || delay.as_mut().poll(cx).is_ready()
-                            {
-                                return Poll::Ready(false);
-                            }
-                            return Poll::Pending;
-                        }
-                    }
-                }
-                let mut device = held.storage.device.borrow_mut();
-                if let Err(cause) = held.state.borrow_mut().poll(cx, held, &mut *device) {
-                    held.storage.poison(cause);
-                    return Poll::Ready(true);
-                }
-                drop(device);
-                if held.state.borrow_mut().deadline(held) < deadline {
-                    return Poll::Ready(false);
-                }
-                let mut retiring = core::pin::pin!(retire.wait());
-                if retiring.as_mut().poll(cx).is_ready() {
-                    return Poll::Ready(true);
-                }
-                if delay.as_mut().poll(cx).is_ready() {
-                    return Poll::Ready(false);
-                }
-                Poll::Pending
-            })
-            .await;
-            if done {
-                break;
-            }
-        }
-        if let Some(cause) = held.storage.poisoned.get() {
-            let (_, published) = held.state.borrow_mut().poison.publish(cause);
-            radio::DriverExit::Faulted {
-                state: (),
-                cause,
-                poisoned: loan.fail_stop(published),
-            }
-        } else {
-            retire.retired(loan, ()).await
-        }
+    fn request_uninstall<'s>(
+        frontend: &mut Self::Frontend<'s>,
+        _: (),
+    ) -> Result<(), radio::Poisoned<Fault>>
+    where
+        Self: 's,
+        Id: 's,
+    {
+        frontend.held.storage.driver.wake();
+        frontend.held.storage.check()
     }
-    fn retire_bound(&self, _: radio::Call) -> impl Future<Output = ()> + use<D, B> {
-        let timer = self.timer.clone();
+    #[allow(refining_impl_trait)]
+    fn shutdown_bound<'s>(frontend: &Self::Frontend<'s>) -> impl Future<Output = ()> + use<Id, D, B>
+    where
+        Self: 's,
+        Id: 's,
+    {
+        let timer = frontend.held.storage.device.borrow().timer().clone();
         async move {
             timer
-                .wait_until(timer.now().saturating_add(COMMAND_BOUND))
+                .wait_until(timer.now().saturating_add(SHUTDOWN_BOUND))
                 .await
         }
-    }
-    fn detach<'id>(&mut self, _: radio::Detach<'_>, _: &Held<'id, D, B>) {
-        self.storage.device.borrow_mut().detach();
-    }
-    #[inline(always)]
-    fn uninstall<'id>(
-        self,
-        held: Held<'id, D, B>,
-        _: (),
-        retired: radio::Retired<'id, (Self::Driver, ())>,
-        _: radio::Detached<'id>,
-        _: (),
-    ) -> Self::Uninstalled {
-        let _ = retired.into_state();
-        if self.storage.poisoned.get().is_some() {
-            let _ = radio::Quarantined::new(held);
-            return Uninstalled::ResetRequired;
-        }
-        for activity in &self.storage.key_live {
-            activity.set(0);
-        }
-        let transmitter = held.state.borrow_mut().take_transmitter();
-        let mut config = self.config;
-        config.channel = self
-            .channel
-            .wifi_channel()
-            .expect("S31 channel retained through setup");
-        Uninstalled::Stopped(StoppedPort {
-            storage: self.storage,
-            transmitter: Some(transmitter),
-            config,
-            addresses: self.addresses,
-            coex: self.coex,
-        })
-    }
-    fn abandon(&mut self, call: radio::Quarantine) -> radio::Abandon {
-        self.storage.poison(Fault::Abandoned);
-        if let Ok(mut device) = self.storage.device.try_borrow_mut() {
-            if device.abandon() {
-                return radio::Abandon::Stopped(call.stopped());
-            }
-        }
-        radio::Abandon::Unconfirmed(call)
     }
 }

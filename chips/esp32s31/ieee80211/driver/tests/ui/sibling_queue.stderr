@@ -6,8 +6,8 @@ error[E0308]: mismatched types
    |                        |
    |                        arguments to this method are incorrect
    |
-   = note: expected struct `FreeQueue<'_, oer_radio_port::Child<Root, 0>>`
-              found struct `FreeQueue<'core, oer_radio_port::Child<Root, 1>>`
+   = note: expected struct `FreeQueue<'_, oer_radio_port::Child<Root<LocalId<'core>>, 0>>`
+              found struct `FreeQueue<'core, oer_radio_port::Child<Root<LocalId<'core>>, 1>>`
 note: method defined here
   --> src/lower_mac/lifecycle.rs
    |

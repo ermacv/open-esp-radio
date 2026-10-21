@@ -1,0 +1,22 @@
+error[E0271]: type mismatch resolving `<Root<Other> as PoolPath>::Identity == Id`
+ --> tests/ui/body_loan_foreign_identity.rs:8:31
+  |
+4 | pub fn reclaim<'p, Id: SlotIdentity, Other: SlotIdentity, S: SlotOwner<Id>>(
+  |                    --                ----- found type parameter
+  |                    |
+  |                    expected type parameter
+...
+8 |     let _ = loan.reclaim_slot(foreign); // ui-error: E0271
+  |                  ------------ ^^^^^^^ expected type parameter `Id`, found type parameter `Other`
+  |                  |
+  |                  required by a bound introduced by this call
+  |
+  = note: expected type parameter `Id`
+             found type parameter `Other`
+  = note: a type parameter was expected, but a different one was found; you might be missing a type parameter or trait bound
+  = note: for more information, visit https://doc.rust-lang.org/book/ch10-02-traits.html#traits-as-parameters
+note: required by a bound in `BodyLoan::<'p, Id, S>::reclaim_slot`
+ --> src/pool/loan.rs
+  |
+  |     pub fn reclaim_slot<K, P: PoolPath<Identity = Id>>(
+  |                                        ^^^^^^^^^^^^^ required by this bound in `BodyLoan::<'p, Id, S>::reclaim_slot`

@@ -1,0 +1,10 @@
+error[E0382]: use of moved value: `request`
+ --> tests/ui/fail_stop_twice.rs:6:30
+  |
+3 | pub fn end<Id: SlotIdentity, B: PortBackend<Id>>(request: FailStopRequested<Id, B>) {
+  |                                                  ------- move occurs because `request` has type `FailStopRequested<Id, B>`, which does not implement the `Copy` trait
+4 |     let first = Ended::fail_stop(request, ());
+  |                                  ------- value moved here
+5 |     #[cfg(all())]
+6 |     let _ = Ended::fail_stop(request, ()); // ui-error: E0382
+  |                              ^^^^^^^ value used here after move

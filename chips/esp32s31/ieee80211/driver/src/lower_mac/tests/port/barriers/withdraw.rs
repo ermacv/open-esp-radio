@@ -32,11 +32,11 @@ impl Kind {
     }
 }
 
-fn submit_ap<'k, 'p, 'id: 'p + 'k>(
-    phase: &mut Esp32s31Phase<'p, 'id, TestDevice, 512>,
-    buffer: Buffer<'id, 512>,
-    ticket: radio::Slot<'id, Tickets, radio::Child<radio::Root, 2>>,
-    key: Option<&'k GroupKey<'id, AccessPoint>>,
+fn submit_ap<'k, 'p, 'id: 'p + 'k, Id: radio::SlotIdentity + 'id>(
+    phase: &mut Esp32s31Phase<'p, 'id, Id, TestDevice, 512>,
+    buffer: Buffer<'id, Id, TestDevice, 512>,
+    ticket: radio::Slot<'id, Tickets, radio::Child<radio::Root<Id>, 2>>,
+    key: Option<&'k GroupKey<'id, Id, AccessPoint>>,
 ) {
     let rate = phase
         .rate(PhyRate::Legacy(LegacyRate::Ofdm6M))
@@ -79,14 +79,14 @@ fn submit_ap<'k, 'p, 'id: 'p + 'k>(
     .ok()
     .expect("AP layout");
     let source =
-        <Family as TxBufferPool<'id, BufferClass<512>>>::prepare::<AccessPoint, Caps>(source)
+        <Family<Id> as TxBufferPool<'id, BufferClass<512>>>::prepare::<AccessPoint, Caps>(source)
             .ok()
             .expect("AP preparation");
     phase
         .access_point()
         .submit(
             Attempt {
-                context: 92,
+                context: Tag(92),
                 ticket,
                 source,
                 access_category: WmmAccessCategory::BestEffort,
@@ -104,9 +104,9 @@ struct Withdraw {
     observed: Rc<RefCell<Observed>>,
 }
 type Row = (u8, bool, SingleOutcome<Ack, Infallible>);
-fn record<'id>(
-    completed: TxCompleted<'id, Family>,
-    access: &mut TerminalAccess<'id, Tickets, radio::Child<radio::Root, 2>>,
+fn record<'id, Id: radio::SlotIdentity + 'id>(
+    completed: TxCompleted<'id, Family<Id>>,
+    access: &mut TerminalAccess<'id, Tickets, radio::Child<radio::Root<Id>, 2>>,
 ) -> Row {
     let TxCompleted::Single(completed) = completed else {
         panic!("single terminal")
@@ -120,13 +120,18 @@ fn record<'id>(
     )
 }
 
-impl PortBody<Backend> for Withdraw {
+impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for Withdraw {
     type Output = ();
     async fn run<'p, 'id>(
         self,
-        owner: radio::Owner<'p, 'id, Backend, radio::Disabled>,
-        mut resources: Res<'id>,
-    ) -> radio::Ended<'id, Backend, ()> {
+        owner: radio::Owner<'p, 'id, Id, Backend<Id>, radio::Disabled>,
+        mut resources: Res<'id, Id>,
+    ) -> radio::Ended<Id, Backend<Id>, ()>
+    where
+        Backend<Id>: 'id,
+        Id: 'id,
+        'id: 'p,
+    {
         let mut owner = match owner.enable().await {
             Ok(owner) => owner,
             Err(_) => panic!("enable"),
@@ -205,7 +210,10 @@ impl PortBody<Backend> for Withdraw {
                 Kind::GroupOtherHead => phase.access_point().remove_group_key(permission, group),
                 Kind::ConfigureOtherHead | Kind::ConfigureIndependent => {
                     phase.access_point().configure(
-                        resources.access_point_commands.configure.with_context(314),
+                        resources
+                            .access_point_commands
+                            .configure
+                            .with_context(Tag(314)),
                         SupportedFilter::new(ReceiveFilter::NONE).expect("filter"),
                     )
                 }
@@ -336,8 +344,8 @@ fn check(kind: Kind) {
         Vec::new()
     });
     assert!(matches!(
-        block_on(radio::run_port(backend, Withdraw { kind, observed })),
-        radio::PortEnd::Uninstalled { .. }
+        block_on(run_body(backend, Withdraw { kind, observed })),
+        Report::Uninstalled { .. }
     ));
 }
 #[test]

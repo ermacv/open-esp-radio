@@ -1,5 +1,5 @@
 error[E0599]: no method named `enable` found for struct `FailedInstallation<'p, 'id, B>` in the current scope
- --> tests/ui/failed_service_installation.rs:7:16
+ --> tests/ui/failed_service_installation.rs:6:16
   |
-7 |     drop(owner.enable()); // ui-error: E0599
+6 |     drop(owner.enable()); // ui-error: E0599
   |                ^^^^^^ method not found in `FailedInstallation<'p, 'id, B>`

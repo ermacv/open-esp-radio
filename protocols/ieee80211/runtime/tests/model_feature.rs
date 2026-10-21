@@ -48,7 +48,9 @@ use oer_ieee80211_wire::{
     phy::{LegacyRate, PhyRate},
     qos::WmmAccessCategory,
 };
-use oer_radio_port::{Disabled, Ended, Owner, PortBody, PortPhase, run_port};
+use oer_radio_port::{
+    Disabled, Ended, LocalId, Owner, PortBody, PortPhase, SlotIdentity, run_port, with_local_slot,
+};
 
 const STATION: [u8; 6] = [2, 0, 0, 0, 0, 1];
 const PEER: [u8; 6] = [2, 0, 0, 0, 0, 2];
@@ -56,7 +58,7 @@ const PEER: [u8; 6] = [2, 0, 0, 0, 0, 2];
 #[path = "model_feature/response.rs"]
 mod response;
 
-fn backend() -> (oer_radio_port::Installed<ModelBackend>, Rc<ModelAir>) {
+fn backend<Id: SlotIdentity>() -> (ModelBackend<Id>, Rc<ModelAir>) {
     ModelBackend::new(
         Channel::ghz2_4(6, ChannelWidth::Mhz20).unwrap(),
         [
@@ -65,6 +67,30 @@ fn backend() -> (oer_radio_port::Installed<ModelBackend>, Rc<ModelAir>) {
         ],
         std::rc::Rc::new(oer_time_virtual::VirtualClock::<8>::new()),
     )
+}
+
+fn exercise_model<P>(body: impl FnOnce(Rc<ModelAir>) -> P) -> bool
+where
+    for<'scope> P: PortBody<LocalId<'scope>, ModelBackend<LocalId<'scope>>, Output = ()>,
+{
+    run(with_local_slot(async |claim| {
+        let mut slot = claim.place();
+        let (backend, air) = backend();
+        let end = oer_radio_port::LocalExecution
+            .scope(
+                (&mut slot)
+                    .register(backend)
+                    .ok()
+                    .expect("fresh local model slot"),
+                async |frontend| run_port(frontend, body(air)).await,
+            )
+            .await;
+        let stopped = matches!(&end, oer_radio_port::PortEnd::FailStopped { outcome, .. } if matches!(outcome.outcome(), oer_radio_port::Abandon::Stopped(_)));
+        assert!(stopped || matches!(&end, oer_radio_port::PortEnd::Uninstalled { .. }));
+        drop(end);
+        slot.end_model_world();
+        stopped
+    }))
 }
 
 fn poll_once<F: Future>(future: F) -> Poll<F::Output> {
@@ -84,13 +110,18 @@ fn run<F: Future>(future: F) -> F::Output {
 
 struct Receive(Rc<ModelAir>);
 
-impl PortBody<ModelBackend> for Receive {
+impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id>> for Receive {
     type Output = ();
-    async fn run<'id>(
+    async fn run<'p, 'id>(
         self,
-        owner: Owner<'_, 'id, ModelBackend, Disabled>,
-        _: ModelResources<'id>,
-    ) -> Ended<'id, ModelBackend, ()> {
+        owner: Owner<'p, 'id, Id, ModelBackend<Id>, Disabled>,
+        _: ModelResources<'id, ModelBackend<Id>>,
+    ) -> Ended<Id, ModelBackend<Id>, ()>
+    where
+        ModelBackend<Id>: 'id,
+        Id: 'id,
+        'id: 'p,
+    {
         let Ok(mut enabled) = owner.enable().await else {
             panic!("enable")
         };
@@ -136,22 +167,23 @@ impl PortBody<ModelBackend> for Receive {
 
 #[test]
 fn continuous_receive_has_the_same_capacity_and_recycling_in_feature_builds() {
-    let (backend, air) = backend();
-    assert!(matches!(
-        run(run_port(backend, Receive(air))),
-        oer_radio_port::PortEnd::Uninstalled { .. }
-    ));
+    assert!(!exercise_model(Receive));
 }
 
 struct ReceiveLoss(Rc<ModelAir>);
 
-impl PortBody<ModelBackend> for ReceiveLoss {
+impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id>> for ReceiveLoss {
     type Output = ();
-    async fn run<'id>(
+    async fn run<'p, 'id>(
         self,
-        owner: Owner<'_, 'id, ModelBackend, Disabled>,
-        resources: ModelResources<'id>,
-    ) -> Ended<'id, ModelBackend, ()> {
+        owner: Owner<'p, 'id, Id, ModelBackend<Id>, Disabled>,
+        resources: ModelResources<'id, ModelBackend<Id>>,
+    ) -> Ended<Id, ModelBackend<Id>, ()>
+    where
+        ModelBackend<Id>: 'id,
+        Id: 'id,
+        'id: 'p,
+    {
         use embassy_futures::yield_now;
         use oer_ieee80211_model::MODEL_EVENTS;
         use oer_ieee80211_port::{StationPhase, StationReceive};
@@ -216,22 +248,23 @@ impl PortBody<ModelBackend> for ReceiveLoss {
 
 #[test]
 fn receive_overflow_is_reported_before_continuous_rx_without_reordering_terminals() {
-    let (backend, air) = backend();
-    assert!(matches!(
-        run(run_port(backend, ReceiveLoss(air))),
-        oer_radio_port::PortEnd::Uninstalled { .. }
-    ));
+    assert!(!exercise_model(ReceiveLoss));
 }
 
 struct Owners;
 
-impl PortBody<ModelBackend> for Owners {
+impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id>> for Owners {
     type Output = ();
-    async fn run<'id>(
+    async fn run<'p, 'id>(
         self,
-        owner: Owner<'_, 'id, ModelBackend, Disabled>,
-        mut resources: ModelResources<'id>,
-    ) -> Ended<'id, ModelBackend, ()> {
+        owner: Owner<'p, 'id, Id, ModelBackend<Id>, Disabled>,
+        mut resources: ModelResources<'id, ModelBackend<Id>>,
+    ) -> Ended<Id, ModelBackend<Id>, ()>
+    where
+        ModelBackend<Id>: 'id,
+        Id: 'id,
+        'id: 'p,
+    {
         let Ok(mut enabled) = owner.enable().await else {
             panic!("enable")
         };
@@ -271,9 +304,10 @@ impl PortBody<ModelBackend> for Owners {
                         body: None,
                         protection: TxProtection::Open,
                     };
-                    let source = <ModelTypes as TxBufferPool<$class>>::prepare::<Station, _>(
-                        source.check().ok().unwrap(),
-                    )
+                    let source = <ModelTypes<ModelBackend<Id>> as TxBufferPool<$class>>::prepare::<
+                        Station,
+                        _,
+                    >(source.check().ok().unwrap())
                     .ok()
                     .unwrap();
                     let ticket = resources.tickets.pop().unwrap();
@@ -330,9 +364,5 @@ impl PortBody<ModelBackend> for Owners {
 
 #[test]
 fn feature_builds_keep_each_accepted_ticket_with_its_original_buffer() {
-    let (backend, _) = backend();
-    assert!(matches!(
-        run(run_port(backend, Owners)),
-        oer_radio_port::PortEnd::Uninstalled { .. }
-    ));
+    assert!(!exercise_model(|_| Owners));
 }

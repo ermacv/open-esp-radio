@@ -5,7 +5,7 @@ use oer_radio_port::{Child, Mint, Root};
 pub fn close<'p, 'id: 'p, P>(phase: &mut P, mint: Mint<'id, (GatePool, GatePool)>)
 where
     P: LowerMacPhase<'p, 'id>,
-    P::Types: PhaseTypes<'id, GatePath = Child<Root, 0>>,
+    P::Types: PhaseTypes<'id, GatePath = Child<Root<oer_radio_port::LocalId<'id>>, 0>>,
 {
     let ((first, _), (second, _)) = mint.into_pools();
     #[cfg(ui_reject)]

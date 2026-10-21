@@ -1,0 +1,15 @@
+error[E0308]: mismatched types
+  --> tests/ui/foreign_preparation_authority.rs:16:39
+   |
+16 |     source.into_admission((), ticket, authority) // ui-error: E0308
+   |            --------------             ^^^^^^^^^ expected `oer_ieee80211_port::Station`, found `oer_ieee80211_port::AccessPoint`
+   |            |
+   |            arguments to this method are incorrect
+   |
+   = note: expected struct `Admission<ModelPrepared<'_, 'phase, 'p, oer_ieee80211_port::Station, ModelCaps, ModelBackend<StaticId<Declaration>>>>`
+              found struct `Admission<ModelPrepared<'k, 'phase, 'p, oer_ieee80211_port::AccessPoint, ModelCaps, ModelBackend<StaticId<Declaration>>>>`
+note: method defined here
+  --> $WORKSPACE/protocols/ieee80211/port/src/phase.rs
+   |
+   |     fn into_admission(
+   |        ^^^^^^^^^^^^^^

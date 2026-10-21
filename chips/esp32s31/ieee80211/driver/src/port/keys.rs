@@ -3,7 +3,7 @@ use oer_ieee80211_port::association::{self as association, *};
 use oer_ieee80211_wire::security::Spp;
 
 #[derive(Clone, Copy, Debug)]
-pub struct KeyIdentity {
+pub struct RawKeyIdentity {
     pub(super) role: VifRole,
     pub(super) slot: u8,
     pub(super) serial: u64,
@@ -11,42 +11,64 @@ pub struct KeyIdentity {
     pub(super) key_id: GroupKeyId,
     pub(super) activity: &'static Cell<u64>,
 }
-impl PartialEq for KeyIdentity {
+impl PartialEq for RawKeyIdentity {
     fn eq(&self, other: &Self) -> bool {
         self.serial == other.serial && core::ptr::eq(self.activity, other.activity)
     }
 }
-impl Eq for KeyIdentity {}
-impl KeyIdentity {
+impl Eq for RawKeyIdentity {}
+impl RawKeyIdentity {
     pub(super) fn active(&self) -> bool {
         self.activity.get() == self.serial
     }
 }
-impl KeyIdentity {
+/// A read-only identity bound to both the slot and this body's loan.
+#[derive(Debug)]
+pub struct KeyIdentity<'p, Id: SlotIdentity> {
+    pub(super) owned: RawKeyIdentity,
+    pub(super) brand: PhantomData<fn(&'p (), Id) -> (&'p (), Id)>,
+}
+impl<Id: SlotIdentity> Clone for KeyIdentity<'_, Id> {
+    fn clone(&self) -> Self {
+        Self {
+            owned: self.owned,
+            brand: PhantomData,
+        }
+    }
+}
+impl<Id: SlotIdentity> PartialEq for KeyIdentity<'_, Id> {
+    fn eq(&self, other: &Self) -> bool {
+        self.owned == other.owned
+    }
+}
+impl<Id: SlotIdentity> Eq for KeyIdentity<'_, Id> {}
+impl<Id: SlotIdentity> KeyIdentity<'_, Id> {
     pub fn role(&self) -> VifRole {
-        self.role
+        self.owned.role
     }
     pub fn key_id(&self) -> GroupKeyId {
-        self.key_id
+        self.owned.key_id
     }
 }
-pub struct PairwiseKey<'id, R> {
-    pub(super) identity: KeyIdentity,
-    pub(super) brand: PhantomData<fn(&'id ()) -> R>,
+pub struct PairwiseKey<'id, Id: SlotIdentity, R> {
+    pub(super) identity: RawKeyIdentity,
+    pub(super) brand: PhantomData<fn(&'id (), Id) -> (&'id (), Id, R)>,
 }
-pub struct GroupKey<'id, R> {
-    pub(super) identity: KeyIdentity,
-    pub(super) brand: PhantomData<fn(&'id ()) -> R>,
+pub struct GroupKey<'id, Id: SlotIdentity, R> {
+    pub(super) identity: RawKeyIdentity,
+    pub(super) brand: PhantomData<fn(&'id (), Id) -> (&'id (), Id, R)>,
 }
-pub struct PortKeys<R>(PhantomData<fn() -> R>);
-pub(super) type StaPath = Child<CorePath, 2>;
-pub(super) type ApPath = Child<CorePath, 3>;
-pub(super) type StaPermission<'id> = Slot<'id, GroupPermission<Station>, Part<5>>;
-pub(super) type ApPermission<'id> = Slot<'id, GroupPermission<AccessPoint>, Part<6>>;
+pub struct PortKeys<Id: SlotIdentity, R>(PhantomData<fn(Id) -> (Id, R)>);
+pub(super) type StaPath<Id: SlotIdentity> = Child<CorePath<Id>, 2>;
+pub(super) type ApPath<Id: SlotIdentity> = Child<CorePath<Id>, 3>;
+pub(super) type StaPermission<'id, Id: SlotIdentity> =
+    Slot<'id, GroupPermission<Station>, Part<Id, 5>>;
+pub(super) type ApPermission<'id, Id: SlotIdentity> =
+    Slot<'id, GroupPermission<AccessPoint>, Part<Id, 6>>;
 
 macro_rules! keys {
     ($role:ty, $p:literal, $g:literal, $path:ty, $permission:ty) => {
-        impl<'id> KeyTypes<'id> for PortKeys<$role> {
+        impl<'id, Id: SlotIdentity + 'id> KeyTypes<'id> for PortKeys<Id, $role> {
             type Pool = AssociationPool<$role, $p, $g>;
             type AssociationStart = AssociationStart<'id, $role, $p, $g, $path>;
             type Association = Association<'id, $role, $p, $g, $path>;
@@ -54,10 +76,10 @@ macro_rules! keys {
             type VacantAssociation = VacantAssociation<'id, $role, $p, $g, $path>;
             type PairwiseSlot = PairwiseKeySlot<'id, $role, $p, $g, $path>;
             type GroupSlot = GroupKeySlot<'id, $role, $p, $g, $path>;
-            type PairwiseKey = PairwiseKey<'id, $role>;
-            type GroupKey = GroupKey<'id, $role>;
+            type PairwiseKey = PairwiseKey<'id, Id, $role>;
+            type GroupKey = GroupKey<'id, Id, $role>;
             type GroupPermission = $permission;
-            type Identity = KeyIdentity;
+            type Identity = KeyIdentity<'id, Id>;
             type GroupSlotIdentity = u8;
             fn begin_association(start: Self::AssociationStart, spp: Spp) -> Self::Association {
                 start.begin(spp)
@@ -107,11 +129,17 @@ macro_rules! keys {
                 }
                 (start, first, parts)
             }
-            fn pairwise_identity(key: &Self::PairwiseKey) -> KeyIdentity {
-                key.identity
+            fn pairwise_identity(key: &Self::PairwiseKey) -> Self::Identity {
+                KeyIdentity {
+                    owned: key.identity,
+                    brand: PhantomData,
+                }
             }
-            fn group_identity(key: &Self::GroupKey) -> KeyIdentity {
-                key.identity
+            fn group_identity(key: &Self::GroupKey) -> Self::Identity {
+                KeyIdentity {
+                    owned: key.identity,
+                    brand: PhantomData,
+                }
             }
             fn group_slot_identity(key: &Self::GroupKey) -> u8 {
                 key.identity.slot
@@ -122,101 +150,104 @@ macro_rules! keys {
         }
     };
 }
-keys!(Station, 1, 1, StaPath, StaPermission<'id>);
-keys!(AccessPoint, 15, 3, ApPath, ApPermission<'id>);
+keys!(Station, 1, 1, StaPath<Id>, StaPermission<'id, Id>);
+keys!(AccessPoint, 15, 3, ApPath<Id>, ApPermission<'id, Id>);
 
-pub(super) enum Installation<'id> {
+pub(super) enum Installation<'id, Id: SlotIdentity> {
     Transmit {
         spp: Spp,
         scope: TransmitKeyScope,
-        slot: core_mac::association::VacantKeySlot<'id, CorePath>,
+        slot: core_mac::association::VacantKeySlot<'id, CorePath<Id>>,
     },
     Receive {
         spp: Spp,
-        slot: core_mac::association::StationGroupSlot<'id, CorePath>,
+        slot: core_mac::association::StationGroupSlot<'id, CorePath<Id>>,
         key_id: GroupKeyId,
     },
 }
-pub(super) enum Installed<'id> {
-    Transmit(KeyHandle<'id, CorePath>),
-    Receive(ReceiveKeyHandle<'id, CorePath>),
+pub(super) enum Installed<'id, Id: SlotIdentity> {
+    Transmit(KeyHandle<'id, CorePath<Id>>),
+    Receive(ReceiveKeyHandle<'id, CorePath<Id>>),
 }
-pub(super) enum Removal<'id> {
-    StationPairwise(<PortKeys<Station> as KeyTypes<'id>>::Association),
-    AccessPointPairwise(<PortKeys<AccessPoint> as KeyTypes<'id>>::Association),
-    StationGroup(StaPermission<'id>),
-    AccessPointGroup(ApPermission<'id>),
+pub(super) enum Removal<'id, Id: SlotIdentity> {
+    StationPairwise(core_mac::association::StationAssociation<'id, CorePath<Id>>),
+    AccessPointPairwise(core_mac::association::AccessPointAssociation<'id, CorePath<Id>>),
+    StationGroup(StaPermission<'id, Id>),
+    AccessPointGroup(ApPermission<'id, Id>),
 }
-pub(super) enum GroupCommand<'id> {
+pub(super) enum GroupCommand<'id, Id: SlotIdentity> {
     InstallStation {
         spp: Spp,
-        slot: core_mac::association::StationGroupSlot<'id, CorePath>,
-        permission: StaPermission<'id>,
+        slot: core_mac::association::StationGroupSlot<'id, CorePath<Id>>,
+        permission: StaPermission<'id, Id>,
         key_id: GroupKeyId,
         material: Ccmp128Key,
     },
     InstallAccessPoint {
         spp: Spp,
-        slot: core_mac::association::AccessPointGroupSlot<'id, CorePath>,
-        permission: ApPermission<'id>,
+        slot: core_mac::association::AccessPointGroupSlot<'id, CorePath<Id>>,
+        permission: ApPermission<'id, Id>,
         key_id: GroupKeyId,
         material: Ccmp128Key,
     },
     Replace {
-        permission: StaPermission<'id>,
-        key: GroupKey<'id, Station>,
+        permission: StaPermission<'id, Id>,
+        key: GroupKey<'id, Id, Station>,
         key_id: GroupKeyId,
         material: Ccmp128Key,
     },
     Select {
-        permission: StaPermission<'id>,
-        key: GroupKey<'id, Station>,
+        permission: StaPermission<'id, Id>,
+        key: GroupKey<'id, Id, Station>,
     },
     Remove {
-        identity: KeyIdentity,
-        removal: Removal<'id>,
+        identity: RawKeyIdentity,
+        removal: Removal<'id, Id>,
     },
 }
 
-pub(super) trait Role<'id>: InterfaceRole + Sized
+pub(super) trait Role<'id, Id: SlotIdentity + 'id>: InterfaceRole + Sized
 where
-    PortKeys<Self>: KeyTypes<'id, Identity = KeyIdentity>,
+    PortKeys<Id, Self>: KeyTypes<'id, Identity = KeyIdentity<'id, Id>>,
 {
     fn identity(
-        association: &<PortKeys<Self> as KeyTypes<'id>>::Association,
-        slot: &<PortKeys<Self> as KeyTypes<'id>>::PairwiseSlot,
+        association: &<PortKeys<Id, Self> as KeyTypes<'id>>::Association,
+        slot: &<PortKeys<Id, Self> as KeyTypes<'id>>::PairwiseSlot,
         serial: u64,
         activity: &'static [Cell<u64>; 20],
-    ) -> KeyIdentity;
+    ) -> RawKeyIdentity;
     fn pairwise(
-        association: &<PortKeys<Self> as KeyTypes<'id>>::Association,
-        slot: <PortKeys<Self> as KeyTypes<'id>>::PairwiseSlot,
+        association: &<PortKeys<Id, Self> as KeyTypes<'id>>::Association,
+        slot: <PortKeys<Id, Self> as KeyTypes<'id>>::PairwiseSlot,
         peer: IndividualAddress,
-    ) -> Installation<'id>;
+    ) -> Installation<'id, Id>;
     fn group(
-        association: &<PortKeys<Self> as KeyTypes<'id>>::Association,
-        slot: <PortKeys<Self> as KeyTypes<'id>>::GroupSlot,
-        permission: <PortKeys<Self> as KeyTypes<'id>>::GroupPermission,
+        association: &<PortKeys<Id, Self> as KeyTypes<'id>>::Association,
+        slot: <PortKeys<Id, Self> as KeyTypes<'id>>::GroupSlot,
+        permission: <PortKeys<Id, Self> as KeyTypes<'id>>::GroupPermission,
         key_id: GroupKeyId,
         material: Ccmp128Key,
-    ) -> GroupCommand<'id>;
-    fn removal(association: <PortKeys<Self> as KeyTypes<'id>>::Association) -> Removal<'id>;
-    fn remove_group(permission: <PortKeys<Self> as KeyTypes<'id>>::GroupPermission)
-    -> Removal<'id>;
-    fn pairwise_key(identity: KeyIdentity) -> <PortKeys<Self> as KeyTypes<'id>>::PairwiseKey;
-    fn group_identity(key: <PortKeys<Self> as KeyTypes<'id>>::GroupKey) -> KeyIdentity;
+    ) -> GroupCommand<'id, Id>;
+    fn removal(association: <PortKeys<Id, Self> as KeyTypes<'id>>::Association)
+    -> Removal<'id, Id>;
+    fn remove_group(
+        permission: <PortKeys<Id, Self> as KeyTypes<'id>>::GroupPermission,
+    ) -> Removal<'id, Id>;
+    fn pairwise_key(identity: RawKeyIdentity)
+    -> <PortKeys<Id, Self> as KeyTypes<'id>>::PairwiseKey;
+    fn group_identity(key: <PortKeys<Id, Self> as KeyTypes<'id>>::GroupKey) -> RawKeyIdentity;
 }
 
 macro_rules! role {
     ($role:ty, $p:literal, $g:literal, $path:ty, $install:ident, $remove:ident, $group_remove:ident) => {
-        impl<'id> Role<'id> for $role {
+        impl<'id, Id: SlotIdentity + 'id> Role<'id, Id> for $role {
             fn identity(
-                association: &<PortKeys<Self> as KeyTypes<'id>>::Association,
-                slot: &<PortKeys<Self> as KeyTypes<'id>>::PairwiseSlot,
+                association: &<PortKeys<Id, Self> as KeyTypes<'id>>::Association,
+                slot: &<PortKeys<Id, Self> as KeyTypes<'id>>::PairwiseSlot,
                 serial: u64,
                 activity: &'static [Cell<u64>; 20],
-            ) -> KeyIdentity {
-                KeyIdentity {
+            ) -> RawKeyIdentity {
+                RawKeyIdentity {
                     role: Self::ROLE,
                     slot: slot.index(),
                     serial,
@@ -230,10 +261,10 @@ macro_rules! role {
                 }
             }
             fn pairwise(
-                association: &<PortKeys<Self> as KeyTypes<'id>>::Association,
-                slot: <PortKeys<Self> as KeyTypes<'id>>::PairwiseSlot,
+                association: &<PortKeys<Id, Self> as KeyTypes<'id>>::Association,
+                slot: <PortKeys<Id, Self> as KeyTypes<'id>>::PairwiseSlot,
                 peer: IndividualAddress,
-            ) -> Installation<'id> {
+            ) -> Installation<'id, Id> {
                 let (spp, scope, slot) = core_mac::association::TransmitKeyInstallation::$install {
                     association,
                     slot,
@@ -243,31 +274,31 @@ macro_rules! role {
                 Installation::Transmit { spp, scope, slot }
             }
             fn removal(
-                association: <PortKeys<Self> as KeyTypes<'id>>::Association,
-            ) -> Removal<'id> {
+                association: <PortKeys<Id, Self> as KeyTypes<'id>>::Association,
+            ) -> Removal<'id, Id> {
                 Removal::$remove(association)
             }
             fn remove_group(
-                permission: <PortKeys<Self> as KeyTypes<'id>>::GroupPermission,
-            ) -> Removal<'id> {
+                permission: <PortKeys<Id, Self> as KeyTypes<'id>>::GroupPermission,
+            ) -> Removal<'id, Id> {
                 Removal::$group_remove(permission)
             }
-            fn pairwise_key(identity: KeyIdentity) -> PairwiseKey<'id, Self> {
+            fn pairwise_key(identity: RawKeyIdentity) -> PairwiseKey<'id, Id, Self> {
                 PairwiseKey {
                     identity,
                     brand: PhantomData,
                 }
             }
-            fn group_identity(key: GroupKey<'id, Self>) -> KeyIdentity {
+            fn group_identity(key: GroupKey<'id, Id, Self>) -> RawKeyIdentity {
                 key.identity
             }
             fn group(
-                association: &<PortKeys<Self> as KeyTypes<'id>>::Association,
-                slot: <PortKeys<Self> as KeyTypes<'id>>::GroupSlot,
-                permission: <PortKeys<Self> as KeyTypes<'id>>::GroupPermission,
+                association: &<PortKeys<Id, Self> as KeyTypes<'id>>::Association,
+                slot: <PortKeys<Id, Self> as KeyTypes<'id>>::GroupSlot,
+                permission: <PortKeys<Id, Self> as KeyTypes<'id>>::GroupPermission,
                 key_id: GroupKeyId,
                 material: Ccmp128Key,
-            ) -> GroupCommand<'id> {
+            ) -> GroupCommand<'id, Id> {
                 Self::group_command(association.spp(), slot, permission, key_id, material)
             }
         }
@@ -277,7 +308,7 @@ role!(
     Station,
     1,
     1,
-    StaPath,
+    StaPath<Id>,
     StationPairwise,
     StationPairwise,
     StationGroup
@@ -286,32 +317,32 @@ role!(
     AccessPoint,
     15,
     3,
-    ApPath,
+    ApPath<Id>,
     AccessPointPairwise,
     AccessPointPairwise,
     AccessPointGroup
 );
 
-trait GroupRole<'id>: InterfaceRole + Sized
+trait GroupRole<'id, Id: SlotIdentity + 'id>: InterfaceRole + Sized
 where
-    PortKeys<Self>: KeyTypes<'id>,
+    PortKeys<Id, Self>: KeyTypes<'id>,
 {
     fn group_command(
         spp: Spp,
-        slot: <PortKeys<Self> as KeyTypes<'id>>::GroupSlot,
-        permission: <PortKeys<Self> as KeyTypes<'id>>::GroupPermission,
+        slot: <PortKeys<Id, Self> as KeyTypes<'id>>::GroupSlot,
+        permission: <PortKeys<Id, Self> as KeyTypes<'id>>::GroupPermission,
         key_id: GroupKeyId,
         material: Ccmp128Key,
-    ) -> GroupCommand<'id>;
+    ) -> GroupCommand<'id, Id>;
 }
-impl<'id> GroupRole<'id> for Station {
+impl<'id, Id: SlotIdentity + 'id> GroupRole<'id, Id> for Station {
     fn group_command(
         spp: Spp,
-        slot: core_mac::association::StationGroupSlot<'id, CorePath>,
-        permission: StaPermission<'id>,
+        slot: core_mac::association::StationGroupSlot<'id, CorePath<Id>>,
+        permission: StaPermission<'id, Id>,
         key_id: GroupKeyId,
         material: Ccmp128Key,
-    ) -> GroupCommand<'id> {
+    ) -> GroupCommand<'id, Id> {
         GroupCommand::InstallStation {
             spp,
             slot,
@@ -321,14 +352,14 @@ impl<'id> GroupRole<'id> for Station {
         }
     }
 }
-impl<'id> GroupRole<'id> for AccessPoint {
+impl<'id, Id: SlotIdentity + 'id> GroupRole<'id, Id> for AccessPoint {
     fn group_command(
         spp: Spp,
-        slot: core_mac::association::AccessPointGroupSlot<'id, CorePath>,
-        permission: ApPermission<'id>,
+        slot: core_mac::association::AccessPointGroupSlot<'id, CorePath<Id>>,
+        permission: ApPermission<'id, Id>,
         key_id: GroupKeyId,
         material: Ccmp128Key,
-    ) -> GroupCommand<'id> {
+    ) -> GroupCommand<'id, Id> {
         GroupCommand::InstallAccessPoint {
             spp,
             slot,

@@ -1,0 +1,5 @@
+error[E0599]: no method named `into_owner` found for struct `SlotFrontend<'s, Id, S>` in the current scope
+ --> tests/ui/frontend_owner_extract.rs:5:22
+  |
+5 |     let _ = frontend.into_owner(); // ui-error: E0599
+  |                      ^^^^^^^^^^ method not found in `SlotFrontend<'_, Id, S>`

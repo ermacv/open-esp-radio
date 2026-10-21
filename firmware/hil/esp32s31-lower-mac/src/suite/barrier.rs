@@ -7,13 +7,22 @@ type Frame = heapless::Vec<u8, 64>;
 type Frames = heapless::Vec<Frame, 4>;
 type Events = heapless::Vec<BarrierEvent<Ack, Infallible>, 8>;
 
-pub(super) async fn run<'p, 'id>(
-    mut owner: Owner<'p, 'id, Backend, radio::Enabled>,
-    resources: <Backend as PortBackend>::Resources<'id>,
+pub(super) async fn run<'p, 'id, Id: radio::SlotIdentity + 'id>(
+    mut owner: Owner<'p, 'id, Id, Backend<Id>, radio::Enabled>,
+    resources: <Backend<Id> as PortBackend<Id>>::Resources<'id>,
     peer: Peer,
     case: BarrierCase,
-) -> Ended<'id, Backend, Result<Trace, &'static str>> {
-    let result = exercise(&mut owner.phase(), resources, peer, case).await;
+    output: &mut TraceScratch,
+) -> Ended<Id, Backend<Id>, Result<Trace, &'static str>> {
+    assert!(output.0.is_none(), "the previous HIL trace was consumed");
+    let output = PendingTrace(output);
+    let error = match run_case(pin!(exercise(&mut owner.phase(), resources, peer, case))).await {
+        Ok(trace) => {
+            output.0.0 = Some(trace);
+            None
+        }
+        Err(error) => Some(error),
+    };
     irq::hold_completion(false);
     owner.phase().debug_hold_completion(false);
     let owner = match owner
@@ -21,7 +30,13 @@ pub(super) async fn run<'p, 'id>(
         .await
     {
         Ok(owner) => owner,
-        Err(failed) => return Ended::fail_stopped(failed.fail_stop(), Err("barrier disable")),
+        Err(failed) => {
+            return Ended::fail_stop(failed.fail_stop(), Err("barrier disable"));
+        }
+    };
+    let result = match error {
+        Some(error) => Err(error),
+        None => Ok(output.0.0.take().expect("one successful HIL trace")),
     };
     Ended::uninstall(owner, (), result)
 }
@@ -89,8 +104,8 @@ fn frames() -> Result<Frames, &'static str> {
     }
     Ok(frames)
 }
-fn frame<'p, 'id: 'p>(
-    phase: &Esp32s31Phase<'p, 'id, Device, TX>,
+fn frame<'p, 'id: 'p, Id: radio::SlotIdentity + 'id>(
+    phase: &Esp32s31Phase<'p, 'id, Id, Device, TX>,
     peer: Peer,
     receiver: IndividualAddress,
 ) -> Result<TxFrame<'p, 'id, Caps>, &'static str> {
@@ -120,9 +135,9 @@ fn frame<'p, 'id: 'p>(
         }),
     })
 }
-async fn exercise<'p, 'id: 'p>(
-    phase: &mut Esp32s31Phase<'p, 'id, Device, TX>,
-    resources: <Backend as PortBackend>::Resources<'id>,
+async fn exercise<'p, 'id: 'p, Id: radio::SlotIdentity + 'id>(
+    phase: &mut Esp32s31Phase<'p, 'id, Id, Device, TX>,
+    resources: <Backend<Id> as PortBackend<Id>>::Resources<'id>,
     peer: Peer,
     case: BarrierCase,
 ) -> Result<Trace, &'static str> {
@@ -131,8 +146,8 @@ async fn exercise<'p, 'id: 'p>(
     }
     let mut access = resources.terminal_access;
     let (start, slot, _vacant) =
-        PortKeys::<Station>::split_vacant::<1>(resources.station_association);
-    let association = PortKeys::<Station>::begin_association(
+        PortKeys::<Id, Station>::split_vacant::<1>(resources.station_association);
+    let association = PortKeys::<Id, Station>::begin_association(
         start,
         oer_ieee80211_wire::security::Spp::NotNegotiated,
     );
@@ -175,8 +190,9 @@ async fn exercise<'p, 'id: 'p>(
         }
         .check()
         .map_err(|_| "protected layout")?;
-        let source = <Family as TxBufferPool<BufferClass<TX>>>::prepare::<Station, Caps>(source)
-            .map_err(|_| "protected preparation")?;
+        let source =
+            <Family<Id> as TxBufferPool<BufferClass<TX>>>::prepare::<Station, Caps>(source)
+                .map_err(|_| "protected preparation")?;
         phase
             .station()
             .submit(
@@ -264,7 +280,7 @@ async fn exercise<'p, 'id: 'p>(
         let TxFrame::Individual { plan, .. } = frame(phase, peer, receiver)? else {
             return Err("retry frame");
         };
-        let source = <Family as TxBufferPool<BufferClass<TX>>>::prepare::<Station, Caps>(
+        let source = <Family<Id> as TxBufferPool<BufferClass<TX>>>::prepare::<Station, Caps>(
             CheckedTxSource::Retransmission {
                 mpdu,
                 plan: RetransmissionPlan::Individual(plan),

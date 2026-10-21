@@ -23,8 +23,8 @@ type TestPools = (
     ArbiterPool,
     oer_ieee80211_port::InterfaceCommandPool<StationRole>,
 );
-type TestGatePath = oer_radio_port::Child<Root, 0>;
-type TestConfigurationPath = oer_radio_port::Child<Root, 1>;
+type TestGatePath<'id> = oer_radio_port::Child<Root<oer_radio_port::LocalId<'id>>, 0>;
+type TestConfigurationPath<'id> = oer_radio_port::Child<Root<oer_radio_port::LocalId<'id>>, 1>;
 
 mod repeated_message3;
 mod restart;
@@ -104,9 +104,9 @@ struct Key<S = Slot>(S);
 
 #[derive(Debug, Eq, PartialEq)]
 struct Pairwise(Key, oer_ieee80211_wire::security::Spp);
-struct Tokens<const G: usize = 2>;
+struct Tokens<'id, const G: usize = 2>(core::marker::PhantomData<fn(&'id ()) -> &'id ()>);
 
-impl<const G: usize> StaTokens for Tokens<G> {
+impl<'id, const G: usize> StaTokens for Tokens<'id, G> {
     type AssociationStart = ();
     type Association = oer_ieee80211_wire::security::Spp;
     type VacantKeyBank = (Slot, heapless::Vec<Slot, KEY_BANK_CAPACITY>);
@@ -168,9 +168,9 @@ impl<const G: usize> StaTokens for Tokens<G> {
     const PAIRWISE_SLOTS: usize = 1;
     const TOTAL_GROUP_SLOTS: usize = G;
     const GROUP_SLOTS: usize = G;
-    type GatePath = TestGatePath;
-    type EpochPath = oer_radio_port::Root;
-    type ConfigurationPath = TestConfigurationPath;
+    type GatePath = TestGatePath<'id>;
+    type EpochPath = oer_radio_port::Root<oer_radio_port::LocalId<'id>>;
+    type ConfigurationPath = TestConfigurationPath<'id>;
     type Small = Buffer;
     type Ticket = Ticket;
     type SmallBuffer = Buffer;
@@ -299,9 +299,9 @@ enum Seen {
 
 /// The loop the thin service runs, with the test as the port.
 struct World<'id, const G: usize = 2> {
-    station: Station<'id, Tokens<G>, Caps>,
-    arbiter: Arbiter<'id, Caps, NoReservation, TestGatePath>,
-    gate_issuer: GateIssuer<'id, TestGatePath>,
+    station: Station<'id, Tokens<'id, G>, Caps>,
+    arbiter: Arbiter<'id, Caps, NoReservation, TestGatePath<'id>>,
+    gate_issuer: GateIssuer<'id, TestGatePath<'id>>,
     seen: Vec<Seen>,
     completed: Vec<ObservedCommandTerminal>,
     command_credits: CommandCredits<'id>,
@@ -311,14 +311,19 @@ struct World<'id, const G: usize = 2> {
     hold_transmissions: bool,
     /// The receive configurations the port has yet to confirm.
     configuring: Option<
-        ConfigurePermission<'id, StationRole, TestConfigurationPath, StaConfigurationContext<'id>>,
+        ConfigurePermission<
+            'id,
+            StationRole,
+            TestConfigurationPath<'id>,
+            StaConfigurationContext<'id>,
+        >,
     >,
     /// The configurations wait for the test's confirmation.
     hold_configured: bool,
     hold_key_installs: bool,
-    pending_installs: Vec<StaInput<'id, Tokens<G>, Caps>>,
+    pending_installs: Vec<StaInput<'id, Tokens<'id, G>, Caps>>,
     hold_group_removals: bool,
-    pending_removals: Vec<StaInput<'id, Tokens<G>, Caps>>,
+    pending_removals: Vec<StaInput<'id, Tokens<'id, G>, Caps>>,
     /// The outcomes of the next transmissions; delivered once none is
     /// queued.
     outcomes: std::collections::VecDeque<(Outcome, bool)>,
@@ -380,10 +385,10 @@ impl<'id> World<'id> {
         group_slots: [Slot; G],
         build: impl FnOnce(
             StaConfig<Caps>,
-            StationResources<'id, Tokens<G>, TX, TX, G>,
+            StationResources<'id, Tokens<'id, G>, TX, TX, G>,
         ) -> (
-            Station<'id, Tokens<G>, Caps>,
-            StaCommandCredits<'id, TestConfigurationPath>,
+            Station<'id, Tokens<'id, G>, Caps>,
+            StaCommandCredits<'id, TestConfigurationPath<'id>>,
         ),
     ) -> World<'id, G> {
         let channels = heapless::Vec::from_slice(&[channel(1), channel(6)]).unwrap();
@@ -480,19 +485,19 @@ struct ObservedCommandRefused {
     reason: CommandRefusal,
 }
 struct CommandCredits<'id> {
-    connect: Option<StaCommandCredit<'id, TestConfigurationPath, ConnectCommand>>,
-    scan: Option<StaCommandCredit<'id, TestConfigurationPath, ScanCommand>>,
-    disconnect: Option<StaCommandCredit<'id, TestConfigurationPath, DisconnectCommand>>,
+    connect: Option<StaCommandCredit<'id, TestConfigurationPath<'id>, ConnectCommand>>,
+    scan: Option<StaCommandCredit<'id, TestConfigurationPath<'id>, ScanCommand>>,
+    disconnect: Option<StaCommandCredit<'id, TestConfigurationPath<'id>, DisconnectCommand>>,
 }
 impl<'id> CommandCredits<'id> {
-    fn new(credits: StaCommandCredits<'id, TestConfigurationPath>) -> Self {
+    fn new(credits: StaCommandCredits<'id, TestConfigurationPath<'id>>) -> Self {
         Self {
             connect: Some(credits.connect),
             scan: Some(credits.scan),
             disconnect: Some(credits.disconnect),
         }
     }
-    fn take(&mut self, kind: StaCommand) -> StaCommandPermission<'id, TestConfigurationPath> {
+    fn take(&mut self, kind: StaCommand) -> StaCommandPermission<'id, TestConfigurationPath<'id>> {
         match kind {
             StaCommand::Connect => self
                 .connect
@@ -509,7 +514,7 @@ impl<'id> CommandCredits<'id> {
                 .into(),
         }
     }
-    fn restore(&mut self, permission: StaCommandPermission<'id, TestConfigurationPath>) {
+    fn restore(&mut self, permission: StaCommandPermission<'id, TestConfigurationPath<'id>>) {
         match permission {
             StaCommandPermission::Connect(credit) => {
                 assert!(self.connect.replace(credit).is_none())
@@ -740,7 +745,7 @@ impl<'id, const G: usize> World<'id, G> {
         }
     }
 
-    fn installed(&mut self, now: Instant, input: StaInput<'id, Tokens<G>, Caps>) {
+    fn installed(&mut self, now: Instant, input: StaInput<'id, Tokens<'id, G>, Caps>) {
         if self.hold_key_installs {
             self.pending_installs.push(input);
         } else {
@@ -785,7 +790,7 @@ impl<'id, const G: usize> World<'id, G> {
 
     /// One frame the station sent: the world records it and holds its
     /// tokens.
-    fn transmitted(&mut self, mut transmit: StaTransmit<'id, Tokens<G>, Caps>, keyed: bool) {
+    fn transmitted(&mut self, mut transmit: StaTransmit<'id, Tokens<'id, G>, Caps>, keyed: bool) {
         let frame = transmit.buffer.bytes_mut();
         // A Null's PM bit tells its power state apart.
         let subtype = u16::from_le_bytes([frame[0], frame[1]]) & 0x10fc;
@@ -2164,8 +2169,8 @@ fn the_handshakes_eapol_goes_unprotected_and_group_message_2_under_the_pairwise_
     });
 }
 
-impl crate::data::StaDataTokens for Tokens {
-    type EpochPath = oer_radio_port::Root;
+impl<'id> crate::data::StaDataTokens for Tokens<'id> {
+    type EpochPath = oer_radio_port::Root<oer_radio_port::LocalId<'id>>;
     type Class = Buffer;
     type Ticket = Ticket;
     type Buffer = Buffer;
@@ -2201,7 +2206,7 @@ fn eapol_and_data_on_tid_7_share_one_counter_and_tid_0_runs_on_across_a_rekey() 
             core::num::NonZeroU8::MIN,
         );
         fn send<'id>(
-            data: &mut StaData<'id, Tokens, Caps>,
+            data: &mut StaData<'id, Tokens<'id>, Caps>,
             world: &mut World<'id>,
             priority: u8,
         ) -> (u8, u16) {
@@ -3283,10 +3288,10 @@ fn every_control_encoder_reserves_credit_before_consuming_its_sequence() {
                 }
                 let mut qos = [StaSequenceCounter::new(SequenceNumber::ZERO); 8];
                 fn encode<'id>(
-                    station: &mut Station<'id, Tokens, Caps>,
+                    station: &mut Station<'id, Tokens<'id>, Caps>,
                     qos: &mut [StaSequenceCounter; 8],
                     encoding: u8,
-                ) -> Option<StaTransmit<'id, Tokens, Caps>> {
+                ) -> Option<StaTransmit<'id, Tokens<'id>, Caps>> {
                     match encoding {
                         0 => station
                             .encode_eapol(

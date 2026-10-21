@@ -2,7 +2,7 @@ error[E0382]: use of moved value: `pending`
   --> tests/ui/repeat_retune.rs:11:21
    |
  7 |     pending: PendingRetune<'id, K>,
-   |     ------- move occurs because `pending` has type `PendingRetune<'_, K>`, which does not implement the `Copy` trait
+   |     ------- move occurs because `pending` has type `PendingRetune<'_, K, oer_radio_port::pool::path::Root<oer_radio_port::identity::LocalId<'_>>>`, which does not implement the `Copy` trait
  8 | ) {
  9 |     arbiter.retuned(pending);
    |                     ------- value moved here

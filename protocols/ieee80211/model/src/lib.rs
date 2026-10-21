@@ -35,9 +35,10 @@
 //! the code that drives it.
 //!
 //! [`ModelBackend::new`] takes the install's channel, interface addresses
-//! and monotonic clock, and returns the backend, which a test hands to
-//! [`run_port`](oer_radio_port::run_port), and the [`ModelAir`] it
-//! plays on: the air answers each transmission, delivers received frames
+//! and monotonic clock, and returns the P2 owner and the [`ModelAir`] it
+//! plays on. A caller places its generative local slot outside the frontend
+//! future, registers it with `LocalExecution::scope`, and calls `run_port`
+//! with that frontend. The air answers each transmission, delivers received frames
 //! and records what the hardware saw. Receive Block Ack agreements are
 //! per-slot desired state: updates coalesce before the driver applies them,
 //! without occupying the command queue. Configure and TSF sampling consume
@@ -46,7 +47,7 @@
 //!
 //! The backend has the phase's shape: the phase
 //! is the body's handle over queues to the model's driver
-//! (`PortBackend::drive`), which alone owns the model's hardware (its
+//! (`SlotOwner::run`), which alone owns the model's hardware (its
 //! queues of prepared attempts, its key table, its receive rules). The
 //! handle writes commands, in one queue and in order, and setting cells;
 //! the driver takes the cells before its next command, carries the
@@ -84,7 +85,7 @@
 //! cannot match an earlier installation. A refused attempt returns all its
 //! resources synchronously and allocates no PN or completion event.
 //! Prepared operations retain a use of their key installation through their
-//! terminal or cancellation. `KeyRemoved` waits for these owners; a returned
+//! terminal or cancellation. `KeyOwnedRemoved` waits for these owners; a returned
 //! Sent retains only identity and therefore permits removal and slot reuse.
 //! PTK and GTK material live in the model's installation table, separately from
 //! cloneable identities. Removal clears its material after the last prepared
@@ -113,9 +114,9 @@
 //! changing any subframe. A publication refusal retains the complete operation;
 //! submission after poisoning likewise transfers its owners to teardown custody.
 //!
-//! `ModelContext` selects an opaque context for each install lifetime, so
-//! a station context can retain its `LinkEpoch` brand through every queue
-//! and terminal. The model grants one epoch-source slot in its resources.
+//! `ModelContext` selects owned contexts by slot Id before lending their
+//! public body views. A station context retains both its nominal `LinkEpoch`
+//! identity and its separate body loan through every queue and terminal. The model grants one epoch-source slot in its resources.
 //!
 //! Capacity is the tokens': every terminal returns a ticket, so no terminal
 //! is ever lost; received frames beyond [`MODEL_RX_EVENTS`] queued are
@@ -138,6 +139,15 @@
 //! including continuous RX and immediate recycling of its bounded slots. Only the unit-test module is under `cfg(test)`.
 //! Runtime's `tests/model_feature.rs` exercises these paths through the public port
 //! from a separate test crate, so the model itself is compiled without that cfg.
+
+#[cfg(any(test, feature = "test-support"))]
+mod fixture;
+#[cfg(any(test, feature = "test-support"))]
+use fixture::plain_context;
+
+mod loan;
+mod owned;
+use owned::*;
 
 extern crate alloc;
 #[cfg(test)]
@@ -166,30 +176,34 @@ use oer_ieee80211_port::{
 };
 use oer_ieee80211_wire::ccmp::Ccmp128Key;
 use oer_ieee80211_wire::ccmp::GroupKeyId;
+use oer_radio_port::{
+    BodyLoan, LoanedContext, ModelSlotOwner, SlotBodyOwner, SlotIdentity, SlotOwner, SlotRetire,
+    SlotStopped, SlotWakes,
+};
 use oer_radio_port::{ClockRelation, GenerationSource, RelationSample};
 use oer_time::{Clock, Duration, Instant};
 
 use oer_ieee80211_wire::phy::{HeMcs, HtMcs, PhyRate};
 use oer_radio_port::{
-    Abandon, Call, ClockError, Detach, Detached, DriverExit, DriverLoan, EnableResult, EventEnd,
-    InstallParts, Installed, PoisonState, PortBackend, PortPhase, Quarantine, Retire, Retired,
+    Abandon, Call, ClockError, EnableResult, EventEnd, InstallParts, PortBackend, PortPhase,
+    Quarantine,
 };
 use oer_radio_port::{EventsLost, Mint, Poisoned, PortResult, Slot};
 use oer_time::RadioInstant;
 
 use oer_ieee80211_port::{
-    AccessPoint, AccessPointPhase, BandSet, BssColor, Channel, CheckedAggregate, CheckedPoolSource,
-    CheckedSubframe, CheckedTxSource, ConfigurePermission, Configured, ConnectionEpochKind,
+    AccessPoint, AccessPointPhase, BandSet, BodyPayload, BssColor, Channel, CheckedAggregate,
+    CheckedPoolSource, CheckedSubframe, CheckedTxSource, ConfigurePermission, ConnectionEpochKind,
     ExecutionPayload, FreshSource, FreshSubframe, GateClosed, GateIssuer, GateOpen,
     HardwareServices, Ieee80211Capabilities, Ieee80211Radio, InFlight, IndeterminateCause,
     InterfaceCommandPool, InterfacePermissions, InterfacePhase, KeyTypes, LinkMetric,
-    LowerMacBackend, LowerMacCapabilities, LowerMacEvent, LowerMacPhase, LowerMacSetup,
-    LowerMacTerminal, MpduKind, MpduLayout, PhaseTypes, PhyFormatSet, PreparationError,
-    PreparationRefused, PreparedTx, RateSupport, ReceiveFilter, Removed, RemovedKey,
-    RetransmissionPlan, RoleKeys, RxBuffer, RxEvidence, RxMeta, RxMetadata, SignalMetadata,
-    Station, StationPhase, StationReceive, SupportedBlockAck, SupportedChannel, SupportedEdca,
-    SupportedFilter, TxBody, TxBufferClass, TxBufferMemory, TxBufferPool, TxCompleted, TxFrame,
-    TxMpdu, TxOutcome, TxProtection, TxSource, VifRole, WidthSet, WithdrawCause,
+    LowerMacBackend, LowerMacCapabilities, LowerMacPhase, LowerMacSetup, MpduKind, MpduLayout,
+    PhaseTypes, PhyFormatSet, PreparationError, PreparationRefused, PreparedTx, RateSupport,
+    ReceiveFilter, RemovedKey, RetransmissionPlan, RoleKeys, RxBuffer, RxEvidence, RxMeta,
+    RxMetadata, SignalMetadata, Station, StationPhase, StationReceive, SupportedBlockAck,
+    SupportedChannel, SupportedEdca, SupportedFilter, TxBody, TxBufferClass, TxBufferMemory,
+    TxBufferPool, TxFrame, TxMpdu, TxOutcome, TxProtection, TxSource, VifRole, WidthSet,
+    WithdrawCause,
 };
 use oer_ieee80211_port::{
     AckSnr, AggregateEnd, AggregateOutcome, Air, BlockAckSnr, SingleEnd, SingleOutcome,
@@ -274,8 +288,12 @@ pub const MODEL_BLOCK_ACK_SLOTS: usize = 2;
 /// The pool of receive Block Ack slots: the one source of their capacity.
 pub type ModelBlockAckPool = BlockAckSlots<ModelBlockAcks, MODEL_BLOCK_ACK_SLOTS>;
 /// One receive Block Ack slot of the model.
-pub type ModelBlockAckSlot<'id> =
-    BlockAckSlot<'id, ModelBlockAcks, MODEL_BLOCK_ACK_SLOTS, ModelPool<7>>;
+pub type ModelBlockAckSlot<'id, B> = BlockAckSlot<
+    'id,
+    ModelBlockAcks,
+    MODEL_BLOCK_ACK_SLOTS,
+    ModelPool<<B as ModelComposition>::Identity, 7>,
+>;
 /// The key pool of one role's association domain.
 pub type ModelAssociationPool<R> = AssociationPool<R, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS>;
 
@@ -375,22 +393,22 @@ impl TxBufferClass for ModelLarge {
 }
 
 /// Paths of the model's fixed installation layout. They add no runtime state.
-pub type ModelPool<const I: u8> = oer_radio_port::Child<oer_radio_port::Root, I>;
+pub type ModelPool<Id, const I: u8> = oer_radio_port::Child<oer_radio_port::Root<Id>, I>;
 
 /// The distinct key pools belonging to each modeled interface role.
 pub trait ModelRole: oer_ieee80211_port::InterfaceRole {
     /// Component containing the role's pairwise slots.
-    type AssociationPath: oer_radio_port::PoolPath;
+    type AssociationPath<Id: SlotIdentity>: oer_radio_port::PoolPath<Identity = Id>;
     /// Component containing the unique GTK mutation permission.
-    type GroupPermissionPath: oer_radio_port::PoolPath;
+    type GroupPermissionPath<Id: SlotIdentity>: oer_radio_port::PoolPath<Identity = Id>;
 }
 impl ModelRole for Station {
-    type AssociationPath = ModelPool<5>;
-    type GroupPermissionPath = ModelPool<8>;
+    type AssociationPath<Id: SlotIdentity> = ModelPool<Id, 5>;
+    type GroupPermissionPath<Id: SlotIdentity> = ModelPool<Id, 8>;
 }
 impl ModelRole for AccessPoint {
-    type AssociationPath = ModelPool<6>;
-    type GroupPermissionPath = oer_radio_port::Child<ModelPool<9>, 0>;
+    type AssociationPath<Id: SlotIdentity> = ModelPool<Id, 6>;
+    type GroupPermissionPath<Id: SlotIdentity> = oer_radio_port::Child<ModelPool<Id, 9>, 0>;
 }
 
 /// The kind of the one GTK mutation permission per interface.
@@ -400,8 +418,9 @@ pub enum ModelBlockAcks {}
 
 /// A transmit buffer of the class `C`: its token and its memory, which
 /// moves with it; only the install mints one.
-pub struct ModelBuffer<'id, C: ModelClass> {
-    slot: Slot<'id, C, C::Path>,
+pub struct ModelBuffer<'id, B: ModelComposition, C: ModelClass> {
+    slot: Slot<'id, C, C::Path<B::Identity>>,
+    loan: Option<BodyLoan<'id, B::Identity, B>>,
     memory: ModelMemory,
     admitted_at: RadioInstant<Ieee80211Radio>,
     admitted: bool,
@@ -516,7 +535,7 @@ impl ModelMemory {
     }
 }
 
-impl<C: ModelClass> ModelBuffer<'_, C> {
+impl<B: ModelComposition, C: ModelClass> ModelBuffer<'_, B, C> {
     fn admit(&mut self, at: RadioInstant<Ieee80211Radio>) {
         if !self.admitted {
             self.admitted_at = at;
@@ -528,7 +547,7 @@ impl<C: ModelClass> ModelBuffer<'_, C> {
     }
 }
 
-impl<C: ModelClass> TxBufferMemory for ModelBuffer<'_, C> {
+impl<B: ModelComposition, C: ModelClass> TxBufferMemory for ModelBuffer<'_, B, C> {
     fn renew_msdu(&mut self) {
         self.admitted = false;
     }
@@ -537,7 +556,7 @@ impl<C: ModelClass> TxBufferMemory for ModelBuffer<'_, C> {
     }
 }
 
-impl<C: ModelClass> core::fmt::Debug for ModelBuffer<'_, C> {
+impl<B: ModelComposition, C: ModelClass> core::fmt::Debug for ModelBuffer<'_, B, C> {
     fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         formatter
             .debug_tuple("ModelBuffer")
@@ -548,42 +567,59 @@ impl<C: ModelClass> core::fmt::Debug for ModelBuffer<'_, C> {
 
 /// A returned published MPDU (open or protected). Its checked layout, installed-key identity,
 /// and external body remain inseparable from the immutable buffer.
-#[derive(Debug)]
-pub struct ModelSent<'id, C: ModelClass, D = ModelBody> {
+pub struct ModelSent<'id, B: ModelComposition, C: ModelClass> {
     role: VifRole,
-    buffer: ModelBuffer<'id, C>,
+    buffer: ModelBuffer<'id, B, C>,
     layout: MpduLayout,
     response: ResponsePolicy,
-    key: Option<KeyIdentity>,
-    body: Option<D>,
+    key: Option<RawKeyIdentity>,
+    body: Option<ModelBodyOf<B>>,
     packet_number: Option<u64>,
 }
 
-impl<'id, C: ModelClass, D> ModelSent<'id, C, D> {
+impl<'id, C: ModelClass, B: ModelComposition> ModelSent<'id, B, C> {
     /// The original PN for a protected MPDU, otherwise `None`; a caller supplies no unchecked header offset.
     pub const fn packet_number(&self) -> Option<u64> {
         self.packet_number
     }
     /// The retained external body, available read-only until renewal.
-    pub fn body(&self) -> Option<&D> {
+    pub fn body(&self) -> Option<&ModelBodyOf<B>> {
         self.body.as_ref()
     }
 }
 
 /// A transmit buffer of either class, fresh or published.
-#[derive(Debug)]
-pub enum ModelAnyBuffer<'id, D = ModelBody> {
+pub enum ModelAnyBuffer<'id, B: ModelComposition> {
     /// Fresh small memory.
-    Small(ModelBuffer<'id, ModelSmall>),
+    Small(ModelBuffer<'id, B, ModelSmall>),
     /// Fresh large memory.
-    Large(ModelBuffer<'id, ModelLarge>),
+    Large(ModelBuffer<'id, B, ModelLarge>),
     /// The original small published MPDU, including its body.
-    SmallSent(ModelSent<'id, ModelSmall, D>),
+    SmallSent(ModelSent<'id, B, ModelSmall>),
     /// The original large published MPDU, including its body.
-    LargeSent(ModelSent<'id, ModelLarge, D>),
+    LargeSent(ModelSent<'id, B, ModelLarge>),
 }
 
-impl<D> ModelAnyBuffer<'_, D> {
+impl<B: ModelComposition, C: ModelClass> core::fmt::Debug for ModelSent<'_, B, C> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("ModelSent")
+            .field("buffer", &self.buffer)
+            .field("packet_number", &self.packet_number)
+            .finish_non_exhaustive()
+    }
+}
+impl<B: ModelComposition> core::fmt::Debug for ModelAnyBuffer<'_, B> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::Small(buffer) => f.debug_tuple("Small").field(buffer).finish(),
+            Self::Large(buffer) => f.debug_tuple("Large").field(buffer).finish(),
+            Self::SmallSent(buffer) => f.debug_tuple("SmallSent").field(buffer).finish(),
+            Self::LargeSent(buffer) => f.debug_tuple("LargeSent").field(buffer).finish(),
+        }
+    }
+}
+
+impl<B: ModelComposition> ModelAnyBuffer<'_, B> {
     fn sequence(&self) -> SequenceNumber {
         match self {
             Self::Small(buffer) => buffer.memory.sequence(),
@@ -618,11 +654,44 @@ impl<D> ModelAnyBuffer<'_, D> {
     }
 }
 
+/// Opaque installed-key identity under this body's loan and nominal slot Id.
+/// Cloning identity retains neither capacity nor live material past stopping.
+type KeyIdentityLoan<'p, Id> = PhantomData<fn(&'p (), Id) -> (&'p (), Id)>;
+
+pub struct KeyIdentity<'p, Id: SlotIdentity> {
+    owned: RawKeyIdentity,
+    loan: KeyIdentityLoan<'p, Id>,
+}
+impl<Id: SlotIdentity> Clone for KeyIdentity<'_, Id> {
+    fn clone(&self) -> Self {
+        Self {
+            owned: self.owned.clone(),
+            loan: PhantomData,
+        }
+    }
+}
+impl<Id: SlotIdentity> PartialEq for KeyIdentity<'_, Id> {
+    fn eq(&self, other: &Self) -> bool {
+        self.owned == other.owned
+    }
+}
+impl<Id: SlotIdentity> Eq for KeyIdentity<'_, Id> {}
+impl<Id: SlotIdentity> core::fmt::Debug for KeyIdentity<'_, Id> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        self.owned.fmt(f)
+    }
+}
+impl<'p, Id: SlotIdentity> KeyIdentity<'p, Id> {
+    fn into_owned<S: SlotOwner<Id>>(self, _: &BodyLoan<'p, Id, S>) -> RawKeyIdentity {
+        self.owned
+    }
+}
+
 /// Identity of an installation of a key, not its reusable slot index.
 /// Rc is the host model's allocation identity; only the driver allocates PN.
 /// Cloning an identity never retains secret material past removal or teardown.
 #[derive(Clone, Debug)]
-pub struct KeyIdentity(Rc<KeyInstall>);
+struct RawKeyIdentity(Rc<KeyInstall>);
 
 #[derive(Debug)]
 struct KeyInstall {
@@ -643,14 +712,14 @@ struct KeyInstallation {
     key: Ccmp128Key,
 }
 
-impl PartialEq for KeyIdentity {
+impl PartialEq for RawKeyIdentity {
     fn eq(&self, other: &Self) -> bool {
         Rc::ptr_eq(&self.0, &other.0)
     }
 }
-impl Eq for KeyIdentity {}
+impl Eq for RawKeyIdentity {}
 
-impl KeyIdentity {
+impl RawKeyIdentity {
     fn new(
         index: u8,
         key_id: u8,
@@ -697,11 +766,11 @@ impl KeyIdentity {
 /// terminal. Sent MPDUs retain identity without retaining a preparation use.
 /// The model uses Rc ownership counts, not a parallel operation lookup table.
 struct PreparedKey {
-    identity: KeyIdentity,
+    identity: RawKeyIdentity,
     _lease: Rc<()>,
 }
 impl PreparedKey {
-    fn new(identity: KeyIdentity) -> Self {
+    fn new(identity: RawKeyIdentity) -> Self {
         let lease = identity.0.preparations.clone();
         Self {
             identity,
@@ -720,38 +789,38 @@ impl Drop for PreparedKey {
 }
 
 /// One closed MPDU, retaining its memory, external body and publication state.
-pub struct ModelMpdu<'id, D = ModelBody> {
-    buffer: ModelAnyBuffer<'id, D>,
+pub struct ModelMpdu<'id, B: ModelComposition> {
+    buffer: ModelAnyBuffer<'id, B>,
     layout: MpduLayout,
     response: ResponsePolicy,
     // Fresh memory keeps its body here, including during publication. Only
     // consuming the terminal moves both into the returned Sent owner.
-    body: Option<D>,
+    body: Option<ModelBodyOf<B>>,
     published: Option<PublishedMpdu>,
     packet_number: Option<oer_ieee80211_wire::ccmp::CcmpPacketNumber>,
 }
 
 struct PublishedMpdu {
     role: VifRole,
-    key: Option<KeyIdentity>,
+    key: Option<RawKeyIdentity>,
     packet_number: Option<u64>,
 }
 
 /// Execution access cannot replace or take the MPDU owner.
-pub struct ModelMpduExecution<'a, 'id, D = ModelBody> {
-    mpdu: &'a mut ModelMpdu<'id, D>,
+pub struct ModelMpduExecution<'a, 'id, B: ModelComposition> {
+    mpdu: &'a mut ModelMpdu<'id, B>,
 }
-impl<'id, D> ExecutionPayload for ModelMpdu<'id, D> {
+impl<'id, B: ModelComposition> ExecutionPayload for ModelMpdu<'id, B> {
     type Execution<'a>
-        = ModelMpduExecution<'a, 'id, D>
+        = ModelMpduExecution<'a, 'id, B>
     where
         Self: 'a;
     fn execution(&mut self) -> Self::Execution<'_> {
         ModelMpduExecution { mpdu: self }
     }
 }
-impl<D> ModelMpduExecution<'_, '_, D> {
-    fn publish(&mut self, role: VifRole, key: Option<&KeyIdentity>) -> Result<(), ModelFault> {
+impl<B: ModelComposition> ModelMpduExecution<'_, '_, B> {
+    fn publish(&mut self, role: VifRole, key: Option<&RawKeyIdentity>) -> Result<(), ModelFault> {
         let mpdu = &mut *self.mpdu;
         mpdu.preflight(key.is_some())?;
         if mpdu.published.is_some() {
@@ -786,9 +855,9 @@ impl<D> ModelMpduExecution<'_, '_, D> {
         self.mpdu.buffer.retry();
     }
 }
-impl<'id, D> TxMpdu for ModelMpdu<'id, D> {
-    type Buffer = ModelAnyBuffer<'id, D>;
-    type Body = D;
+impl<'id, B: ModelComposition> TxMpdu for ModelMpdu<'id, B> {
+    type Buffer = ModelAnyBuffer<'id, B>;
+    type Body = ModelBodyOf<B>;
     fn into_parts(self) -> (Self::Buffer, Option<Self::Body>) {
         let Self {
             buffer,
@@ -841,7 +910,7 @@ impl<'id, D> TxMpdu for ModelMpdu<'id, D> {
         }
     }
 }
-impl<'id, D> ModelMpdu<'id, D> {
+impl<'id, B: ModelComposition> ModelMpdu<'id, B> {
     fn admit(&mut self, at: RadioInstant<Ieee80211Radio>) {
         match &mut self.buffer {
             ModelAnyBuffer::Small(buffer) => buffer.admit(at),
@@ -888,7 +957,7 @@ impl<'id, D> ModelMpdu<'id, D> {
     }
 
     fn from_sent(
-        mut buffer: ModelAnyBuffer<'id, D>,
+        mut buffer: ModelAnyBuffer<'id, B>,
         layout: MpduLayout,
         response: ResponsePolicy,
     ) -> Self {
@@ -906,8 +975,8 @@ impl<'id, D> ModelMpdu<'id, D> {
         &self,
         ticket: u8,
         role: VifRole,
-        keys: &[KeyIdentity],
-        key: Option<&KeyIdentity>,
+        keys: &[RawKeyIdentity],
+        key: Option<&RawKeyIdentity>,
         rate: PhyRate,
     ) -> Result<AirFrame, ModelFault> {
         let bytes = self
@@ -962,142 +1031,139 @@ fn ccmp_header(number: u64, key_id: u8) -> [u8; 8] {
     ]
 }
 
-/// Composition-selected contexts, including the install brand when needed.
-/// The model neither interprets nor clones the associated value. Its lifetime
-/// is the install, not the phase loan. A machine created inside the generic
-/// body cannot be borrowed for that lifetime:
-///
-/// ```compile_fail,E0597
-/// use oer_ieee80211_port::PhaseTypes;
-/// use oer_radio_port::{Disabled, Ended, Owner, PortBody};
-/// use oer_ieee80211_model::{
-///     ModelBackend, ModelCaps, ModelContext, ModelResources, ModelTypes,
-/// };
-/// struct Machine;
-/// struct Contexts;
-/// impl ModelContext for Contexts { type Body = core::convert::Infallible; type Context<'id> = &'id Machine; type StationConfigureContext<'id> = (); type AccessPointConfigureContext<'id> = (); }
-/// type Backend = ModelBackend<ModelCaps, Contexts>;
-/// struct Body;
-/// impl PortBody<Backend> for Body {
-///     type Output = ();
-///     async fn run<'id>(self, owner: Owner<'_, 'id, Backend, Disabled>,
-///         _: ModelResources<'id>) -> Ended<'id, Backend, ()> {
-///         let machine = Machine;
-///         let context: <ModelTypes<Contexts> as PhaseTypes<'id>>::Context = &machine;
-///         core::hint::black_box(context);
-///         Ended::uninstall(owner, (), ())
-///     }
-/// }
-/// ```
-///
-/// A context can instead own an install-branded value. This example uses
-/// a local epoch brand; runtime consumers can choose their core's epoch type.
-/// The `Rc` also demonstrates that the portable contract imposes no `Send`:
-///
-/// ```
-/// use std::rc::Rc;
-/// use oer_ieee80211_port::PhaseTypes;
-/// use oer_radio_port::{Disabled, Ended, Owner, PortBody};
-/// use core::marker::PhantomData;
-/// struct LinkEpoch<'id>(PhantomData<fn(&'id ()) -> &'id ()>);
-/// use oer_ieee80211_model::{
-///     ModelBackend, ModelCaps, ModelContext, ModelResources, ModelTypes,
-/// };
-/// struct Context<'id> { epoch: Option<LinkEpoch<'id>>, owner: Rc<()> }
-/// struct Contexts;
-/// impl ModelContext for Contexts { type Body = core::convert::Infallible; type Context<'id> = Context<'id>; type StationConfigureContext<'id> = (); type AccessPointConfigureContext<'id> = (); }
-/// type Backend = ModelBackend<ModelCaps, Contexts>;
-/// struct Body;
-/// impl PortBody<Backend> for Body {
-///     type Output = ();
-///     async fn run<'id>(self, owner: Owner<'_, 'id, Backend, Disabled>,
-///         _: ModelResources<'id>) -> Ended<'id, Backend, ()> {
-///         let context: <ModelTypes<Contexts> as PhaseTypes<'id>>::Context =
-///             Context { epoch: None, owner: Rc::new(()) };
-///         core::hint::black_box(context);
-///         Ended::uninstall(owner, (), ())
-///     }
-/// }
-/// ```
+/// Composition-selected owned contexts and their separate public body loans.
+/// The model never interprets or clones the contexts, and adds no `Send` bound.
 pub trait ModelContext {
-    /// External body owners selected by the composition; `Infallible` excludes them.
+    /// Whole external payload owners, selected before the body loan.
     type Body: TxBody + core::fmt::Debug;
-    /// One operation's opaque context in the install `'id`.
-    type Context<'id>: 'id;
-    /// Opaque context returned with the configuration permission.
-    type StationConfigureContext<'id>: 'id;
-    /// Opaque context returned with an AP configuration permission.
-    type AccessPointConfigureContext<'id>: 'id;
+    /// Owned operation representation retained in the command/event queues.
+    type OwnedContext<Id: SlotIdentity>;
+    /// Public operation context; conversion never receives backend authority.
+    type Context<'p, Id: SlotIdentity + 'p>: LoanedContext<'p, Id, Owned = Self::OwnedContext<Id>>
+        + 'p
+    where
+        Self: 'p;
+    /// Owned station-configuration context.
+    type OwnedStationConfigureContext<Id: SlotIdentity>;
+    /// Public station-configuration context.
+    type StationConfigureContext<'p, Id: SlotIdentity + 'p>: LoanedContext<'p, Id, Owned = Self::OwnedStationConfigureContext<Id>>
+        + 'p
+    where
+        Self: 'p;
+    /// Owned access-point configuration context.
+    type OwnedAccessPointConfigureContext<Id: SlotIdentity>;
+    /// Public access-point configuration context.
+    type AccessPointConfigureContext<'p, Id: SlotIdentity + 'p>: LoanedContext<'p, Id, Owned = Self::OwnedAccessPointConfigureContext<Id>>
+        + 'p
+    where
+        Self: 'p;
 }
 
 impl ModelContext for () {
     type Body = ModelBody;
-    type Context<'id> = ();
-    type StationConfigureContext<'id> = ();
-    type AccessPointConfigureContext<'id> = ();
+    type OwnedContext<Id: SlotIdentity> = ();
+    type Context<'p, Id: SlotIdentity + 'p> = ();
+    type OwnedStationConfigureContext<Id: SlotIdentity> = ();
+    type StationConfigureContext<'p, Id: SlotIdentity + 'p> = ();
+    type OwnedAccessPointConfigureContext<Id: SlotIdentity> = ();
+    type AccessPointConfigureContext<'p, Id: SlotIdentity + 'p> = ();
 }
 
-/// The types the model's events carry.
-pub struct ModelTypes<X: ModelContext = ()>(PhantomData<fn() -> X>);
+/// The concrete slot owner selecting this model's nominal identity and data.
+pub trait ModelComposition: SlotBodyOwner<Self::Identity> {
+    /// Nominal slot identity, independent of every body loan.
+    type Identity: SlotIdentity;
+    /// Capabilities of this concrete backend.
+    type Caps: Ieee80211Capabilities;
+    /// Context and external payload representations fixed before the body loan.
+    type Contexts: ModelContext;
+}
 
-impl<'id, X: ModelContext> PhaseTypes<'id> for ModelTypes<X> {
+type ModelBodyOf<B> = <<B as ModelComposition>::Contexts as ModelContext>::Body;
+type ModelContextOf<B> = <<B as ModelComposition>::Contexts as ModelContext>::OwnedContext<
+    <B as ModelComposition>::Identity,
+>;
+type ModelStationContextOf<B> =
+    <<B as ModelComposition>::Contexts as ModelContext>::OwnedStationConfigureContext<
+        <B as ModelComposition>::Identity,
+    >;
+type ModelAccessPointContextOf<B> =
+    <<B as ModelComposition>::Contexts as ModelContext>::OwnedAccessPointConfigureContext<
+        <B as ModelComposition>::Identity,
+    >;
+
+/// The types the model's events carry.
+pub struct ModelTypes<B: ModelComposition>(PhantomData<fn() -> B>);
+
+impl<'id, B: ModelComposition + 'id> PhaseTypes<'id> for ModelTypes<B> {
     const COMMAND_CAPACITY: usize = MODEL_COMMANDS;
-    type StationCommandPath = oer_radio_port::Child<ModelPool<9>, 1>;
-    type AccessPointCommandPath = oer_radio_port::Child<ModelPool<9>, 2>;
-    type StationConfigureContext = X::StationConfigureContext<'id>;
-    type AccessPointConfigureContext = X::AccessPointConfigureContext<'id>;
+    type StationCommandPath =
+        oer_radio_port::Child<ModelPool<<B as ModelComposition>::Identity, 9>, 1>;
+    type AccessPointCommandPath =
+        oer_radio_port::Child<ModelPool<<B as ModelComposition>::Identity, 9>, 2>;
+    type StationConfigureContext =
+        <B::Contexts as ModelContext>::StationConfigureContext<'id, B::Identity>;
+    type AccessPointConfigureContext =
+        <B::Contexts as ModelContext>::AccessPointConfigureContext<'id, B::Identity>;
     const TERMINAL_CAPACITY: usize = MODEL_TERMINALS;
-    type EpochPath = ModelPool<4>;
-    type GatePath = ModelPool<0>;
-    type TicketPath = ModelPool<1>;
-    type BlockAckPath = ModelPool<7>;
+    type EpochPath = ModelPool<<B as ModelComposition>::Identity, 4>;
+    type GatePath = ModelPool<<B as ModelComposition>::Identity, 0>;
+    type TicketPath = ModelPool<<B as ModelComposition>::Identity, 1>;
+    type BlockAckPath = ModelPool<<B as ModelComposition>::Identity, 7>;
     type Fault = ModelFault;
-    type Context = X::Context<'id>;
-    type Prepared<'k, 'p, R, K: Ieee80211Capabilities> = ModelPrepared<'k, 'p, 'id, R, K, X>;
-    type KeyIdentity = KeyIdentity;
+    type Context = <B::Contexts as ModelContext>::Context<'id, B::Identity>;
+    type Prepared<'k, 'p, R, K: Ieee80211Capabilities> = ModelPrepared<'k, 'p, 'id, R, K, B>;
+    type KeyIdentity = KeyIdentity<'id, B::Identity>;
     type Aggregate<'k, 'p, R, K, S>
-        = ModelAggregate<'k, 'p, 'id, R, K, X, S>
+        = ModelAggregate<'k, 'p, 'id, R, K, B, S>
     where
         R: RoleKeys<'id, Self>,
         K: Ieee80211Capabilities,
         S: AggregateState,
         'id: 'k;
-    type TxBody = X::Body;
+    type TxBody = ModelBodyOf<B>;
     type TicketKind = ModelTickets;
     type AckEvidence = ModelAck;
     type BlockAckEvidence = ModelBlockAckEvidence;
     type AirDenied = ModelAirDenied;
-    type AnyTxBuffer = ModelAnyBuffer<'id, X::Body>;
-    type TxMpdu = ModelMpdu<'id, X::Body>;
-    type TxAggregate = ModelSubframes<'id, X::Body>;
-    type RxBuffer = ModelRxBuffer;
+    type AnyTxBuffer = ModelAnyBuffer<'id, B>;
+    type TxMpdu = ModelMpdu<'id, B>;
+    type TxAggregate = ModelSubframes<'id, B>;
+    type RxBuffer = ModelRxBuffer<'id, B::Identity>;
     type RxMeta = ModelRxMeta;
-    type StationKeys = ModelKeys<'id, Station>;
-    type AccessPointKeys = ModelKeys<'id, AccessPoint>;
+    type StationKeys = ModelKeys<'id, B, Station>;
+    type AccessPointKeys = ModelKeys<'id, B, AccessPoint>;
     type BlockAckKind = ModelBlockAcks;
     type BlockAckPool = ModelBlockAckPool;
-    type BlockAck = ModelBlockAck<'id>;
+    type BlockAck = ModelBlockAck<'id, B>;
 }
 
 /// The unique protocol owner selecting an interface's immutable association.
 /// Installed keys retain only their interface identity; the modeled hardware
 /// holds exactly one CCMP record at that interface's index.
-pub struct ModelAssociation<'id, R: ModelRole> {
-    owner: Association<'id, R, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, R::AssociationPath>,
+pub struct ModelAssociation<'id, B: ModelComposition, R: ModelRole> {
+    owner: Association<'id, R, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, R::AssociationPath<B::Identity>>,
 }
 
 /// The keys of the role `R` and their slots.
-pub struct ModelKeys<'id, R>(PhantomData<fn(&'id ()) -> R>);
+type KeyTypesLoan<'p, B, R> = PhantomData<fn(&'p (), B) -> (&'p (), B, R)>;
 
-impl<'id, R: ModelRole + 'id> KeyTypes<'id> for ModelKeys<'id, R> {
+pub struct ModelKeys<'id, B: ModelComposition, R>(KeyTypesLoan<'id, B, R>);
+
+impl<'id, B: ModelComposition + 'id, R: ModelRole + 'id> KeyTypes<'id> for ModelKeys<'id, B, R> {
     type Pool = ModelAssociationPool<R>;
     type AssociationStart =
-        AssociationStart<'id, R, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, R::AssociationPath>;
-    type Association = ModelAssociation<'id, R>;
+        AssociationStart<'id, R, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, R::AssociationPath<B::Identity>>;
+    type Association = ModelAssociation<'id, B, R>;
     type VacantKeyBank =
-        VacantKeyBank<'id, R, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, R::AssociationPath>;
-    type VacantAssociation =
-        VacantAssociation<'id, R, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, R::AssociationPath>;
+        VacantKeyBank<'id, R, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, R::AssociationPath<B::Identity>>;
+    type VacantAssociation = VacantAssociation<
+        'id,
+        R,
+        MODEL_KEY_SLOTS,
+        MODEL_KEY_SLOTS,
+        R::AssociationPath<B::Identity>,
+    >;
     fn begin_association(
         start: Self::AssociationStart,
         spp: oer_ieee80211_wire::security::Spp,
@@ -1137,18 +1203,25 @@ impl<'id, R: ModelRole + 'id> KeyTypes<'id> for ModelKeys<'id, R> {
     }
 
     type PairwiseSlot =
-        PairwiseKeySlot<'id, R, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, R::AssociationPath>;
-    type GroupSlot = GroupKeySlot<'id, R, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, R::AssociationPath>;
-    type PairwiseKey = ModelPairwiseKey<'id, R>;
-    type GroupKey = ModelGroupKey<'id, R>;
-    type GroupPermission = Slot<'id, ModelGroupPermission<R>, R::GroupPermissionPath>;
-    type Identity = KeyIdentity;
+        PairwiseKeySlot<'id, R, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, R::AssociationPath<B::Identity>>;
+    type GroupSlot =
+        GroupKeySlot<'id, R, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, R::AssociationPath<B::Identity>>;
+    type PairwiseKey = ModelPairwiseKey<'id, B, R>;
+    type GroupKey = ModelGroupKey<'id, B, R>;
+    type GroupPermission = Slot<'id, ModelGroupPermission<R>, R::GroupPermissionPath<B::Identity>>;
+    type Identity = KeyIdentity<'id, B::Identity>;
     type GroupSlotIdentity = u8;
-    fn pairwise_identity(key: &Self::PairwiseKey) -> KeyIdentity {
-        key.identity.clone()
+    fn pairwise_identity(key: &Self::PairwiseKey) -> Self::Identity {
+        KeyIdentity {
+            owned: key.identity.clone(),
+            loan: PhantomData,
+        }
     }
-    fn group_identity(key: &Self::GroupKey) -> KeyIdentity {
-        key.identity.clone()
+    fn group_identity(key: &Self::GroupKey) -> Self::Identity {
+        KeyIdentity {
+            owned: key.identity.clone(),
+            loan: PhantomData,
+        }
     }
     fn group_slot_identity(key: &Self::GroupKey) -> u8 {
         key.slot.index()
@@ -1158,9 +1231,9 @@ impl<'id, R: ModelRole + 'id> KeyTypes<'id> for ModelKeys<'id, R> {
     }
 }
 
-impl<'id, X: ModelContext, C: ModelClass> TxBufferPool<'id, C> for ModelTypes<X> {
-    type Buffer = ModelBuffer<'id, C>;
-    type Sent = ModelSent<'id, C, X::Body>;
+impl<'id, B: ModelComposition + 'id, C: ModelClass> TxBufferPool<'id, C> for ModelTypes<B> {
+    type Buffer = ModelBuffer<'id, B, C>;
+    type Sent = ModelSent<'id, B, C>;
 
     fn prepare<'k, 'p, R: RoleKeys<'id, Self>, K: Ieee80211Capabilities>(
         source: CheckedPoolSource<'k, 'p, 'id, Self, C, K, R>,
@@ -1183,28 +1256,24 @@ impl<'id, X: ModelContext, C: ModelClass> TxBufferPool<'id, C> for ModelTypes<X>
         push_model(operation)
     }
 
-    fn erase(buffer: Self::Buffer) -> ModelAnyBuffer<'id, X::Body> {
+    fn erase(buffer: Self::Buffer) -> ModelAnyBuffer<'id, B> {
         C::erase(buffer)
     }
 
     /// Return a published MPDU through the terminal buffer enum.
-    fn erase_sent(buffer: Self::Sent) -> ModelAnyBuffer<'id, X::Body> {
+    fn erase_sent(buffer: Self::Sent) -> ModelAnyBuffer<'id, B> {
         C::erase_sent(buffer)
     }
 
-    fn class(
-        buffer: ModelAnyBuffer<'id, X::Body>,
-    ) -> Result<Self::Buffer, ModelAnyBuffer<'id, X::Body>> {
+    fn class(buffer: ModelAnyBuffer<'id, B>) -> Result<Self::Buffer, ModelAnyBuffer<'id, B>> {
         C::class(buffer)
     }
 
-    fn sent(
-        buffer: ModelAnyBuffer<'id, X::Body>,
-    ) -> Result<Self::Sent, ModelAnyBuffer<'id, X::Body>> {
+    fn sent(buffer: ModelAnyBuffer<'id, B>) -> Result<Self::Sent, ModelAnyBuffer<'id, B>> {
         C::sent(buffer)
     }
 
-    fn renew(mut mpdu: Self::Sent) -> (Self::Buffer, Option<X::Body>) {
+    fn renew(mut mpdu: Self::Sent) -> (Self::Buffer, Option<ModelBodyOf<B>>) {
         mpdu.buffer.renew_msdu();
         (mpdu.buffer, mpdu.body)
     }
@@ -1255,29 +1324,46 @@ impl SignalMetadata for ModelRxMeta {
     }
 }
 
-/// The memory of one received MPDU, which goes back through
-/// [`LowerMacPhase::recycle`]: dropping it instead poisons the backend.
-#[derive(Debug)]
-pub struct ModelRxBuffer {
+/// A received allocation under the consumer's invariant body loan and Id.
+/// Dropping it requests poison; only `LowerMacPhase::recycle` returns capacity.
+pub struct ModelRxBuffer<'p, Id: SlotIdentity> {
+    owner: OwnedRxBuffer<Id>,
+    loan: PhantomData<fn(&'p ()) -> &'p ()>,
+}
+
+struct OwnedRxBuffer<Id: SlotIdentity> {
     bytes: Vec<u8>,
     recycled: bool,
     air: Weak<ModelAir>,
     streamed: bool,
+    identity: PhantomData<fn(Id) -> Id>,
 }
 
-impl RxBuffer for ModelRxBuffer {
+impl<Id: SlotIdentity> RxBuffer for ModelRxBuffer<'_, Id> {
     fn bytes(&self) -> &[u8] {
-        &self.bytes
+        &self.owner.bytes
     }
 }
-
-impl Drop for ModelRxBuffer {
+impl<Id: SlotIdentity> core::fmt::Debug for ModelRxBuffer<'_, Id> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("ModelRxBuffer")
+            .field("bytes", &self.owner.bytes.len())
+            .finish_non_exhaustive()
+    }
+}
+impl<Id: SlotIdentity> OwnedRxBuffer<Id> {
+    fn lend<'p, S: SlotOwner<Id>>(self, _: &BodyLoan<'p, Id, S>) -> ModelRxBuffer<'p, Id> {
+        ModelRxBuffer {
+            owner: self,
+            loan: PhantomData,
+        }
+    }
+}
+impl<Id: SlotIdentity> Drop for OwnedRxBuffer<Id> {
     fn drop(&mut self) {
         if !self.recycled
             && let Some(air) = self.air.upgrade()
         {
-            // A dropped affine receive owner cannot be recycled or admitted
-            // again. Signal the existing backend fail-stop, never a panic.
             air.poison();
         }
     }
@@ -1298,55 +1384,98 @@ impl TxBody for ModelBody {
 pub struct ModelFault;
 
 /// The tokens the install gives the body once.
-pub struct ModelResources<'id> {
+pub struct ModelResources<'id, B: ModelComposition> {
     /// Station's unique association-mode selection permission.
-    pub station_association:
-        AssociationStart<'id, Station, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, ModelPool<5>>,
+    pub station_association: AssociationStart<
+        'id,
+        Station,
+        MODEL_KEY_SLOTS,
+        MODEL_KEY_SLOTS,
+        ModelPool<<B as ModelComposition>::Identity, 5>,
+    >,
     /// AP's interface-wide association-mode selection permission.
-    pub access_point_association:
-        AssociationStart<'id, AccessPoint, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, ModelPool<6>>,
+    pub access_point_association: AssociationStart<
+        'id,
+        AccessPoint,
+        MODEL_KEY_SLOTS,
+        MODEL_KEY_SLOTS,
+        ModelPool<<B as ModelComposition>::Identity, 6>,
+    >,
     /// Station command admission from its own installation component.
-    pub station_commands:
-        InterfacePermissions<'id, Station, oer_radio_port::Child<ModelPool<9>, 1>>,
+    pub station_commands: InterfacePermissions<
+        'id,
+        Station,
+        oer_radio_port::Child<ModelPool<<B as ModelComposition>::Identity, 9>, 1>,
+    >,
     /// Access-point command admission from its own installation component.
-    pub access_point_commands:
-        InterfacePermissions<'id, AccessPoint, oer_radio_port::Child<ModelPool<9>, 2>>,
+    pub access_point_commands: InterfacePermissions<
+        'id,
+        AccessPoint,
+        oer_radio_port::Child<ModelPool<<B as ModelComposition>::Identity, 9>, 2>,
+    >,
     /// The install's single epoch-source slot; Station constructs its source.
-    pub connection_epoch: Slot<'id, ConnectionEpochKind, ModelPool<4>>,
+    pub connection_epoch:
+        Slot<'id, ConnectionEpochKind, ModelPool<<B as ModelComposition>::Identity, 4>>,
     /// The transmit tickets.
-    pub tickets: Vec<Slot<'id, ModelTickets, ModelPool<1>>>,
+    pub tickets: Vec<Slot<'id, ModelTickets, ModelPool<<B as ModelComposition>::Identity, 1>>>,
     /// Sole permission for the body to unpack TX terminals.
-    pub terminal_access: oer_ieee80211_port::TerminalAccess<'id, ModelTickets, ModelPool<1>>,
+    pub terminal_access: oer_ieee80211_port::TerminalAccess<
+        'id,
+        ModelTickets,
+        ModelPool<<B as ModelComposition>::Identity, 1>,
+    >,
     /// The small transmit buffers.
-    pub small: Vec<ModelBuffer<'id, ModelSmall>>,
+    pub small: Vec<ModelBuffer<'id, B, ModelSmall>>,
     /// The large transmit buffers.
-    pub large: Vec<ModelBuffer<'id, ModelLarge>>,
+    pub large: Vec<ModelBuffer<'id, B, ModelLarge>>,
     /// The station's pairwise key slots.
-    pub station_pairwise:
-        [PairwiseKeySlot<'id, Station, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, ModelPool<5>>;
-            MODEL_KEY_SLOTS],
+    pub station_pairwise: [PairwiseKeySlot<
+        'id,
+        Station,
+        MODEL_KEY_SLOTS,
+        MODEL_KEY_SLOTS,
+        ModelPool<<B as ModelComposition>::Identity, 5>,
+    >; MODEL_KEY_SLOTS],
     /// The station's group key slots.
-    pub station_group: [GroupKeySlot<'id, Station, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, ModelPool<5>>;
-        MODEL_KEY_SLOTS],
+    pub station_group: [GroupKeySlot<
+        'id,
+        Station,
+        MODEL_KEY_SLOTS,
+        MODEL_KEY_SLOTS,
+        ModelPool<<B as ModelComposition>::Identity, 5>,
+    >; MODEL_KEY_SLOTS],
     /// The access point's pairwise key slots.
-    pub access_point_pairwise:
-        [PairwiseKeySlot<'id, AccessPoint, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, ModelPool<6>>;
-            MODEL_KEY_SLOTS],
+    pub access_point_pairwise: [PairwiseKeySlot<
+        'id,
+        AccessPoint,
+        MODEL_KEY_SLOTS,
+        MODEL_KEY_SLOTS,
+        ModelPool<<B as ModelComposition>::Identity, 6>,
+    >; MODEL_KEY_SLOTS],
     /// The access point's group key slots.
-    pub access_point_group:
-        [GroupKeySlot<'id, AccessPoint, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, ModelPool<6>>;
-            MODEL_KEY_SLOTS],
+    pub access_point_group: [GroupKeySlot<
+        'id,
+        AccessPoint,
+        MODEL_KEY_SLOTS,
+        MODEL_KEY_SLOTS,
+        ModelPool<<B as ModelComposition>::Identity, 6>,
+    >; MODEL_KEY_SLOTS],
     /// The station's sole GTK mutation permission.
-    pub station_group_permission: Slot<'id, ModelGroupPermission<Station>, ModelPool<8>>,
+    pub station_group_permission:
+        Slot<'id, ModelGroupPermission<Station>, ModelPool<<B as ModelComposition>::Identity, 8>>,
     /// The access point's sole GTK mutation permission.
-    pub access_point_group_permission:
-        Slot<'id, ModelGroupPermission<AccessPoint>, oer_radio_port::Child<ModelPool<9>, 0>>,
+    pub access_point_group_permission: Slot<
+        'id,
+        ModelGroupPermission<AccessPoint>,
+        oer_radio_port::Child<ModelPool<<B as ModelComposition>::Identity, 9>, 0>,
+    >,
     /// The receive Block Ack slots both roles share.
-    pub block_acks: [ModelBlockAckSlot<'id>; MODEL_BLOCK_ACK_SLOTS],
+    pub block_acks: [ModelBlockAckSlot<'id, B>; MODEL_BLOCK_ACK_SLOTS],
     /// The sole authority to construct this installation's arbiter.
-    pub arbiter_authority: oer_ieee80211_port::ArbiterAuthority<'id, ModelPool<0>>,
+    pub arbiter_authority:
+        oer_ieee80211_port::ArbiterAuthority<'id, ModelPool<<B as ModelComposition>::Identity, 0>>,
     /// The open transmit gate.
-    pub gate: GateOpen<'id, ModelPool<0>>,
+    pub gate: GateOpen<'id, ModelPool<<B as ModelComposition>::Identity, 0>>,
 }
 
 /// One transmission the air saw.
@@ -1478,7 +1607,7 @@ pub enum GroupRxStage {
 struct CapturedGroupRx {
     frame: Vec<u8>,
     meta: ModelRxMeta,
-    installation: KeyIdentity,
+    installation: RawKeyIdentity,
     stage: GroupRxStage,
 }
 
@@ -1582,9 +1711,32 @@ impl ModelTime {
     }
 }
 
+/// Non-owning observation of one GTK removal retained by P2.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct GroupRemovalObservation {
+    /// Interface retaining the removal.
+    pub role: VifRole,
+    /// Vacant slot retained inside its whole removal command.
+    pub slot: u8,
+    /// Index of the original mutation permission.
+    pub permission: u8,
+}
+
+/// Snapshot published by P2, containing counts and indices, never owners.
+#[derive(Clone, Debug, Default)]
+pub struct DriverObservation {
+    /// Publications awaiting their actual results.
+    pub publications: usize,
+    /// Identities retained in the installed-key table.
+    pub installed_keys: usize,
+    /// GTK removals waiting for earlier admitted uses.
+    pub group_removals: Vec<GroupRemovalObservation>,
+}
+
 /// The air and the world of a model: shared by the backend's driver and
 /// the test.
 pub struct ModelAir {
+    observation: RefCell<DriverObservation>,
     sent: RefCell<Vec<AirFrame>>,
     /// The answers of the next transmissions, in order; once none is
     /// queued, each is acknowledged.
@@ -1624,8 +1776,14 @@ pub struct ModelAir {
     expired_msdus: Cell<u32>,
 }
 impl ModelAir {
+    /// Inspect P2's last published snapshot without borrowing its driver.
+    pub fn driver_observation(&self) -> DriverObservation {
+        self.observation.borrow().clone()
+    }
+
     fn new(clock: Rc<dyn Clock>) -> Self {
         Self {
+            observation: RefCell::default(),
             sent: Default::default(),
             answers: Default::default(),
             #[cfg(feature = "test-support")]
@@ -1747,7 +1905,7 @@ impl InterfaceAssociations {
 }
 
 impl ModelAir {
-    fn install_material(&self, identity: &KeyIdentity, key: Ccmp128Key) {
+    fn install_material(&self, identity: &RawKeyIdentity, key: Ccmp128Key) {
         self.crypto_operations
             .borrow_mut()
             .push(ModelCryptoOperation::Key {
@@ -1830,7 +1988,7 @@ impl ModelAir {
         Ok(())
     }
 
-    fn remove_key_material(&self, identity: &KeyIdentity) {
+    fn remove_key_material(&self, identity: &RawKeyIdentity) {
         self.key_installations
             .borrow_mut()
             .retain(|entry| !entry.identity.ptr_eq(&Rc::downgrade(&identity.0)));
@@ -1903,7 +2061,7 @@ impl ModelAir {
         self.group_rx.borrow_mut().push_back(CapturedGroupRx {
             frame: frame.into(),
             meta,
-            installation: KeyIdentity(installation),
+            installation: RawKeyIdentity(installation),
             stage,
         });
         self.wake_driver();
@@ -2190,89 +2348,116 @@ struct AnswerShapeMismatch;
 /// A command the handle sends the driver, in the order it made it.
 /// The host model boxes its larger single-operation owner so small commands
 /// do not reserve that space; the box moves opaque context without cloning.
-enum Command<'id, X: ModelContext> {
-    Configure(Configured<'id, ModelTypes<X>>),
-    Submit(Box<Prepared<'id, X>>),
-    SubmitAmpdu(PreparedAggregate<'id, X>),
+enum Command<'id, B: ModelComposition> {
+    Configure(OwnedConfigured<'id, B>),
+    Submit(Box<Prepared<'id, B>>),
+    SubmitAmpdu(PreparedAggregate<'id, B>),
     InstallKey {
         spp: oer_ieee80211_wire::security::Spp,
-        key: KeyIdentity,
+        key: RawKeyIdentity,
         material: Ccmp128Key,
     },
     Group {
         admitted_at: u64,
-        change: GroupChange<'id, X>,
+        change: GroupChange<'id, B>,
     },
     RemoveKey {
-        key: KeyIdentity,
-        removed: Removed<'id, ModelTypes<X>>,
+        key: RawKeyIdentity,
+        removed: OwnedRemoved<'id, B>,
     },
-    CloseGate(GateOpen<'id, ModelPool<0>>),
+    CloseGate(GateOpen<'id, ModelPool<<B as ModelComposition>::Identity, 0>>),
     OpenGate,
 }
 
-type StationGroupPermission<'id> = Slot<'id, ModelGroupPermission<Station>, ModelPool<8>>;
+type StationGroupPermission<'id, B> =
+    Slot<'id, ModelGroupPermission<Station>, ModelPool<<B as ModelComposition>::Identity, 8>>;
 
-struct PendingGroupInstall<'id, R: ModelRole> {
+struct PendingGroupInstall<'id, B: ModelComposition, R: ModelRole> {
     spp: oer_ieee80211_wire::security::Spp,
-    slot: GroupKeySlot<'id, R, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, R::AssociationPath>,
-    permission: Slot<'id, ModelGroupPermission<R>, R::GroupPermissionPath>,
+    slot: GroupKeySlot<'id, R, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, R::AssociationPath<B::Identity>>,
+    permission: Slot<'id, ModelGroupPermission<R>, R::GroupPermissionPath<B::Identity>>,
     key_id: GroupKeyId,
     key: Ccmp128Key,
 }
 
-enum GroupInstallationCommand<'id> {
-    Station(PendingGroupInstall<'id, Station>),
-    AccessPoint(PendingGroupInstall<'id, AccessPoint>),
+enum GroupInstallationCommand<'id, B: ModelComposition> {
+    Station(PendingGroupInstall<'id, B, Station>),
+    AccessPoint(PendingGroupInstall<'id, B, AccessPoint>),
 }
 
 trait GroupInstallationRole: ModelRole + Sized {
-    fn installation(pending: PendingGroupInstall<'_, Self>) -> GroupInstallationCommand<'_>;
+    fn installation<B: ModelComposition>(
+        pending: PendingGroupInstall<'_, B, Self>,
+    ) -> GroupInstallationCommand<'_, B>;
+    fn installed<'o, B: ModelComposition>(
+        key: ModelGroupKey<'o, B, Self>,
+        permission: Slot<'o, ModelGroupPermission<Self>, Self::GroupPermissionPath<B::Identity>>,
+    ) -> OwnedInstalledGroup<'o, B>;
 }
 impl GroupInstallationRole for Station {
-    fn installation(pending: PendingGroupInstall<'_, Self>) -> GroupInstallationCommand<'_> {
+    fn installation<B: ModelComposition>(
+        pending: PendingGroupInstall<'_, B, Self>,
+    ) -> GroupInstallationCommand<'_, B> {
         GroupInstallationCommand::Station(pending)
+    }
+    fn installed<'o, B: ModelComposition>(
+        key: ModelGroupKey<'o, B, Self>,
+        permission: StationGroupPermission<'o, B>,
+    ) -> OwnedInstalledGroup<'o, B> {
+        OwnedInstalledGroup::Station { key, permission }
     }
 }
 impl GroupInstallationRole for AccessPoint {
-    fn installation(pending: PendingGroupInstall<'_, Self>) -> GroupInstallationCommand<'_> {
+    fn installation<B: ModelComposition>(
+        pending: PendingGroupInstall<'_, B, Self>,
+    ) -> GroupInstallationCommand<'_, B> {
         GroupInstallationCommand::AccessPoint(pending)
+    }
+    fn installed<'o, B: ModelComposition>(
+        key: ModelGroupKey<'o, B, Self>,
+        permission: Slot<
+            'o,
+            ModelGroupPermission<Self>,
+            oer_radio_port::Child<ModelPool<B::Identity, 9>, 0>,
+        >,
+    ) -> OwnedInstalledGroup<'o, B> {
+        OwnedInstalledGroup::AccessPoint { key, permission }
     }
 }
 
 /// Whole command custody, including permission, material and physical owner.
-enum GroupChange<'id, X: ModelContext> {
-    Install(GroupInstallationCommand<'id>),
+enum GroupChange<'id, B: ModelComposition> {
+    Install(GroupInstallationCommand<'id, B>),
     Replace {
-        permission: StationGroupPermission<'id>,
-        installed: ModelGroupKey<'id, Station>,
+        permission: StationGroupPermission<'id, B>,
+        installed: ModelGroupKey<'id, B, Station>,
         key_id: GroupKeyId,
         key: Ccmp128Key,
     },
     Select {
-        permission: StationGroupPermission<'id>,
-        installed: ModelGroupKey<'id, Station>,
+        permission: StationGroupPermission<'id, B>,
+        installed: ModelGroupKey<'id, B, Station>,
     },
     Remove {
-        key: KeyIdentity,
-        removed: Removed<'id, ModelTypes<X>>,
+        key: RawKeyIdentity,
+        removed: OwnedRemoved<'id, B>,
     },
 }
 
 /// The work of a queue: one MPDU, or one A-MPDU.
-enum Work<'id, X: ModelContext> {
-    Single(Box<Prepared<'id, X>>),
-    Aggregate(PreparedAggregate<'id, X>),
+enum Work<'id, B: ModelComposition> {
+    Single(Box<Prepared<'id, B>>),
+    Aggregate(PreparedAggregate<'id, B>),
 }
 
-impl<X: ModelContext> Work<'_, X> {
+impl<B: ModelComposition> Work<'_, B> {
     fn role(&self) -> VifRole {
         match self {
             Self::Single(prepared) => prepared.role,
             Self::Aggregate(prepared) => prepared.role,
         }
     }
-    fn key(&self) -> Option<&KeyIdentity> {
+    fn key(&self) -> Option<&RawKeyIdentity> {
         match self {
             Self::Single(prepared) => prepared.key.as_ref(),
             Self::Aggregate(prepared) => prepared.key.as_ref(),
@@ -2282,15 +2467,15 @@ impl<X: ModelContext> Work<'_, X> {
 }
 
 /// One subframe of an aggregate, in its buffer.
-struct Subframe<'id, D> {
-    mpdu: ModelMpdu<'id, D>,
+struct Subframe<'id, B: ModelComposition> {
+    mpdu: ModelMpdu<'id, B>,
     /// Checked at admission against the first subframe's BA window.
     acknowledgement_bit: u64,
 }
 
 /// Complete aggregate storage; each subframe retains its own MPDU/body.
-pub struct ModelSubframes<'id, D = ModelBody>(Vec<Subframe<'id, D>>);
-impl<D> ModelSubframes<'_, D> {
+pub struct ModelSubframes<'id, B: ModelComposition>(Vec<Subframe<'id, B>>);
+impl<B: ModelComposition> ModelSubframes<'_, B> {
     /// Number of complete subframes returned by a terminal or cancellation.
     pub fn len(&self) -> usize {
         self.0.len()
@@ -2301,33 +2486,33 @@ impl<D> ModelSubframes<'_, D> {
     }
 }
 /// Owning iteration is available after terminal consumption or cancellation.
-pub struct ModelSubframeIter<'id, D = ModelBody>(alloc::vec::IntoIter<Subframe<'id, D>>);
-impl<D> ModelSubframeIter<'_, D> {
+pub struct ModelSubframeIter<'id, B: ModelComposition>(alloc::vec::IntoIter<Subframe<'id, B>>);
+impl<B: ModelComposition> ModelSubframeIter<'_, B> {
     /// Whether cancellation or terminal iteration has any MPDUs left.
     pub fn is_empty(&self) -> bool {
         self.0.as_slice().is_empty()
     }
 }
-impl<'id, D> Iterator for ModelSubframeIter<'id, D> {
-    type Item = ModelMpdu<'id, D>;
+impl<'id, B: ModelComposition> Iterator for ModelSubframeIter<'id, B> {
+    type Item = ModelMpdu<'id, B>;
     fn next(&mut self) -> Option<Self::Item> {
         self.0.next().map(|subframe| subframe.mpdu)
     }
 }
-impl<'id, D> IntoIterator for ModelSubframes<'id, D> {
-    type Item = ModelMpdu<'id, D>;
-    type IntoIter = ModelSubframeIter<'id, D>;
+impl<'id, B: ModelComposition> IntoIterator for ModelSubframes<'id, B> {
+    type Item = ModelMpdu<'id, B>;
+    type IntoIter = ModelSubframeIter<'id, B>;
     fn into_iter(self) -> Self::IntoIter {
         ModelSubframeIter(self.0.into_iter())
     }
 }
 /// Execution lends subframe storage without exposing replaceable owners.
-pub struct ModelSubframesExecution<'a, 'id, D = ModelBody> {
-    subframes: &'a mut [Subframe<'id, D>],
+pub struct ModelSubframesExecution<'a, 'id, B: ModelComposition> {
+    subframes: &'a mut [Subframe<'id, B>],
 }
-impl<'id, D> ExecutionPayload for ModelSubframes<'id, D> {
+impl<'id, B: ModelComposition> ExecutionPayload for ModelSubframes<'id, B> {
     type Execution<'a>
-        = ModelSubframesExecution<'a, 'id, D>
+        = ModelSubframesExecution<'a, 'id, B>
     where
         Self: 'a;
     fn execution(&mut self) -> Self::Execution<'_> {
@@ -2336,13 +2521,13 @@ impl<'id, D> ExecutionPayload for ModelSubframes<'id, D> {
         }
     }
 }
-impl<D> ModelSubframesExecution<'_, '_, D> {
+impl<B: ModelComposition> ModelSubframesExecution<'_, '_, B> {
     fn publish(
         &mut self,
         ticket: u8,
         role: VifRole,
-        keys: &[KeyIdentity],
-        key: Option<&KeyIdentity>,
+        keys: &[RawKeyIdentity],
+        key: Option<&RawKeyIdentity>,
         rate: PhyRate,
     ) -> Result<Vec<AirFrame>, ModelFault> {
         for subframe in &*self.subframes {
@@ -2357,12 +2542,15 @@ impl<D> ModelSubframesExecution<'_, '_, D> {
     }
 }
 
-type ModelInFlight<'id, X, M> =
-    InFlight<<X as ModelContext>::Context<'id>, Slot<'id, ModelTickets, ModelPool<1>>, M>;
+type ModelInFlight<'id, B, M> = InFlight<
+    ModelContextOf<B>,
+    Slot<'id, ModelTickets, ModelPool<<B as ModelComposition>::Identity, 1>>,
+    M,
+>;
 
 /// An A-MPDU attempt prepared for its queue.
-struct PreparedAggregate<'id, X: ModelContext> {
-    operation: ModelInFlight<'id, X, ModelSubframes<'id, X::Body>>,
+struct PreparedAggregate<'id, B: ModelComposition> {
+    operation: ModelInFlight<'id, B, ModelSubframes<'id, B>>,
     role: VifRole,
     start_sequence: SequenceNumber,
     queue: oer_ieee80211_wire::qos::WmmAccessCategory,
@@ -2371,8 +2559,8 @@ struct PreparedAggregate<'id, X: ModelContext> {
 }
 
 /// An attempt prepared for its queue.
-struct Prepared<'id, X: ModelContext> {
-    operation: ModelInFlight<'id, X, ModelMpdu<'id, X::Body>>,
+struct Prepared<'id, B: ModelComposition> {
+    operation: ModelInFlight<'id, B, ModelMpdu<'id, B>>,
     role: VifRole,
     queue: oer_ieee80211_wire::qos::WmmAccessCategory,
     plan: oer_ieee80211_port::RetryPlan<PhyRate>,
@@ -2393,46 +2581,46 @@ struct Settings {
 /// charged until recycle, including buffers handed to the body by disable.
 /// Disable preserves an unobserved EventsLost indication for the next enable;
 /// draining events does not acknowledge that separate loss indication.
-pub struct ModelHeld<'id, X: ModelContext = ()> {
+pub struct ModelHeld<'id, B: ModelComposition> {
     air: Rc<ModelAir>,
-    poison_state: RefCell<PoisonState<ModelFault>>,
-    driver_state: RefCell<Driver<'id, X>>,
-    commands: Bounded<Command<'id, X>>,
+    commands: Bounded<Command<'id, B>>,
     /// The received buffers the body gives back, at most one per buffer.
-    recycled: Bounded<ModelRxBuffer>,
+    recycled: Bounded<OwnedRxBuffer<B::Identity>>,
     settings: RefCell<Settings>,
-    events: Bounded<LowerMacEvent<'id, ModelTypes<X>>>,
-    quarantined: Bounded<Work<'id, X>>,
-    failed_group: Bounded<GroupChange<'id, X>>,
-    failed_group_terminal: Bounded<LowerMacEvent<'id, ModelTypes<X>>>,
+    events: Bounded<OwnedLowerMacEvent<'id, B>>,
+    quarantined: Bounded<Work<'id, B>>,
+    failed_group: Bounded<GroupChange<'id, B>>,
+    failed_group_terminal: Bounded<OwnedLowerMacEvent<'id, B>>,
     /// The receive buffers out with the body, queued or held.
     rx_out: Cell<usize>,
     /// Received frames dropped since the stream last said so.
     lost: Cell<bool>,
     body: RefCell<Option<Waker>>,
     /// The backend alone attests the hardware barrier with the one gate place.
-    gate_issuer: RefCell<GateIssuer<'id, ModelPool<0>>>,
+    gate_issuer: RefCell<GateIssuer<'id, ModelPool<<B as ModelComposition>::Identity, 0>>>,
     /// Disable asks the driver to return all queued operations before the
     /// owner ends the phase. Unlike poison, this is an ordinary terminal.
     draining: Cell<bool>,
+    returned: Cell<bool>,
 }
 
-impl<'id, X: ModelContext> ModelHeld<'id, X> {
-    fn command(&self, command: Command<'id, X>) {
+impl<'id, B: ModelComposition> ModelHeld<'id, B> {
+    fn command(&self, command: Command<'id, B>) {
+        self.returned.set(false);
         if self.commands.push(command).is_err() {
             self.poison();
         }
         self.air.wake_driver();
     }
 
-    fn post(&self, event: LowerMacEvent<'id, ModelTypes<X>>) {
+    fn post(&self, event: OwnedLowerMacEvent<'id, B>) {
         if self.events.push(event).is_err() {
             self.poison();
         }
         self.wake_body();
     }
 
-    fn take_event(&self) -> Option<LowerMacEvent<'id, ModelTypes<X>>> {
+    fn take_event(&self) -> Option<OwnedLowerMacEvent<'id, B>> {
         self.events.pop()
     }
 
@@ -2479,414 +2667,86 @@ impl<'id, X: ModelContext> ModelHeld<'id, X> {
     }
 }
 
-/// The install's local brand. Key identity belongs to each installed key;
-/// there is no independent wrapping key-index source in the handle.
-#[derive(Default)]
-pub struct ModelLocal<'id> {
-    brand: PhantomData<fn(&'id ()) -> &'id ()>,
-}
+mod lifecycle;
+pub use lifecycle::{ModelBackend, ModelFrontend, ModelSetup, ModelVacant};
 
-/// The model's backend; only [`run_port`](oer_radio_port::run_port)
-/// holds it.
-pub struct ModelBackend<C = ModelCaps, X: ModelContext = ()> {
-    air: Rc<ModelAir>,
-    channel: Channel,
-    addresses: [IndividualAddress; 2],
-    caps: PhantomData<fn() -> (C, X)>,
-}
-
-impl<C: Ieee80211Capabilities, X: ModelContext> ModelBackend<C, X> {
-    /// A backend tuned to `channel` with the station's and the access
-    /// point's addresses, and the air it plays on. `clock` is the image's
-    /// monotonic clock; only its owner advances time. Radio `now()` projects
-    /// it through an affine, zero-drift relation with a nonzero offset.
-    pub fn new(
-        channel: Channel,
-        addresses: [IndividualAddress; 2],
-        clock: Rc<dyn Clock>,
-    ) -> (Installed<Self>, Rc<ModelAir>) {
-        let air = Rc::new(ModelAir::new(clock));
-        (
-            Installed::new(
-                Self {
-                    air: air.clone(),
-                    channel,
-                    addresses,
-                    caps: PhantomData,
-                },
-                (),
-            ),
-            air,
-        )
-    }
-}
-
-/// The model's disabled-only settings.
-pub struct ModelSetup<'a, C = ModelCaps> {
-    channel: &'a mut Channel,
-    caps: PhantomData<fn() -> C>,
-}
-
-impl<C: Ieee80211Capabilities> LowerMacSetup for ModelSetup<'_, C> {
-    type Caps = C;
-
-    fn set_channel(&mut self, channel: SupportedChannel<C>) {
-        *self.channel = channel.channel();
-    }
-}
-
-impl<C: Ieee80211Capabilities, X: ModelContext> PortBackend for ModelBackend<C, X> {
-    type Event<'id> = LowerMacEvent<'id, ModelTypes<X>>;
-    type Terminal<'id> = LowerMacTerminal<'id, ModelTypes<X>>;
-    type Domain = Ieee80211Radio;
-    type Fault = ModelFault;
-    type Refusal = ();
-    type Setup<'a, 'id>
-        = ModelSetup<'a, C>
-    where
-        Self: 'a,
-        'id: 'a;
-    type Phase<'a, 'id>
-        = ModelPhase<'a, 'id, C, X>
-    where
-        Self: 'a,
-        'id: 'a;
-    type Pools = (
-        oer_ieee80211_port::ArbiterPool,
-        oer_ieee80211_port::TransmitPool<ModelTickets, MODEL_TICKETS>,
-        oer_radio_port::Slots<ModelSmall, MODEL_SMALL_BUFFERS>,
-        oer_radio_port::Slots<ModelLarge, MODEL_LARGE_BUFFERS>,
-        oer_radio_port::Slots<ConnectionEpochKind, 1>,
-        ModelAssociationPool<Station>,
-        ModelAssociationPool<AccessPoint>,
-        ModelBlockAckPool,
-        oer_radio_port::Slots<ModelGroupPermission<Station>, 1>,
-        (
-            oer_radio_port::Slots<ModelGroupPermission<AccessPoint>, 1>,
-            InterfaceCommandPool<Station>,
-            InterfaceCommandPool<AccessPoint>,
-        ),
-    );
-    type Resources<'id> = ModelResources<'id>;
-    type Held<'id> = ModelHeld<'id, X>;
-    type Local<'id> = ModelLocal<'id>;
-    type Driver = ();
-    type State = ();
-    type Uninstall = ();
-    type Uninstalled = Rc<ModelAir>;
-
-    fn enable<'a, 'id: 'a>(
-        &'a mut self,
-        _call: Call,
-        _held: &'a Self::Held<'id>,
-        _local: &'a mut Self::Local<'id>,
-    ) -> impl Future<Output = EnableResult<(), ModelFault>> + 'a {
-        let air = &self.air;
-        core::future::ready(if air.admission_closed() {
-            Err(Poisoned { cause: ModelFault })
-        } else if air.refuse_enable.replace(false) {
-            Ok(Err(()))
-        } else {
-            Ok(Ok(()))
-        })
-    }
-
-    fn disable<'a, 'id>(
-        &'a mut self,
-        _call: Call,
-        held: &'a ModelHeld<'id, X>,
-        _: &'a mut ModelLocal<'id>,
-        sink: &'a mut dyn FnMut(
-            LowerMacTerminal<'id, ModelTypes<X>>,
-        )
-            -> core::ops::ControlFlow<LowerMacTerminal<'id, ModelTypes<X>>>,
-    ) -> impl Future<Output = Result<(), Poisoned<ModelFault>>> + 'a
-    where
-        'id: 'a,
-    {
-        self.air
-            .disables
-            .set(self.air.disables.get().saturating_add(1));
-        // The driver ends every admitted command. The terminal sink cannot
-        // receive unsolicited RX; this backend recycles those owners below.
-        held.draining.set(true);
-        held.air.wake_driver();
-        poll_fn(move |cx| {
-            if held.air.failed() {
-                return Poll::Ready(Err(Poisoned { cause: ModelFault }));
-            }
-            if held.draining.get() || !held.commands.is_empty() || !held.recycled.is_empty() {
-                *held.body.borrow_mut() = Some(cx.waker().clone());
-                held.air.wake_driver();
-                return Poll::Pending;
-            }
-            while let Some(event) = held.take_event() {
-                match event {
-                    LowerMacEvent::Terminal(terminal) => {
-                        if let core::ops::ControlFlow::Break(terminal) = sink(terminal) {
-                            held.events
-                                .items
-                                .borrow_mut()
-                                .push_front(LowerMacEvent::Terminal(terminal));
-                            held.poison();
-                            return Poll::Ready(Err(Poisoned { cause: ModelFault }));
-                        }
-                    }
-                    LowerMacEvent::Received { mut frame, .. } => {
-                        frame.recycled = true;
-                        held.release_rx();
-                        held.lost.set(true);
-                    }
-                    LowerMacEvent::Tbtt(_) => held.lost.set(true),
-                }
-            }
-            if !held.air.group_rx.borrow().is_empty() {
-                held.air.group_rx.borrow_mut().clear();
-                held.lost.set(true);
-            }
-            // Only owners actually recycled here release RX capacity; buffers
-            // previously lent to the body remain charged until their return.
-            // The coalesced loss remains observable after re-enable.
-            Poll::Ready(Ok(()))
-        })
-    }
-
-    fn now(
-        &self,
-        _call: Call,
-    ) -> impl Future<Output = PortResult<RadioInstant<Ieee80211Radio>, ClockError, ModelFault>> + '_
-    {
-        core::future::ready(Ok(self.air.radio_now()))
-    }
-
-    fn resources<'id>(&mut self, mint: Mint<'id, Self::Pools>) -> InstallParts<'id, Self> {
-        let (
-            (gate, gate_issuer, arbiter_authority),
-            (tickets, terminal_access),
-            small,
-            large,
-            [epoch_slot],
-            station_vacant,
-            access_point_vacant,
-            block_acks,
-            [station_group_permission],
-            ([access_point_group_permission], station_commands, access_point_commands),
-        ) = mint.into_pools();
-        let (station_association, station_bank) = station_vacant.into_parts();
-        let (station_pairwise, station_group) = station_bank.into_parts();
-        let (access_point_association, access_point_bank) = access_point_vacant.into_parts();
-        let (access_point_pairwise, access_point_group) = access_point_bank.into_parts();
-        let held = ModelHeld {
-            air: self.air.clone(),
-            poison_state: RefCell::default(),
-            driver_state: RefCell::new(Driver {
-                queues: core::array::from_fn(|_| TxQueue {
-                    waiting: VecDeque::new(),
-                    air: None,
-                }),
-                keys: Vec::new(),
-                removing: Vec::new(),
-                gate: DriverGate::Open,
-            }),
-            commands: Bounded::new(MODEL_COMMANDS, "command"),
-            recycled: Bounded::new(MODEL_RX_EVENTS, "recycle"),
-            settings: RefCell::default(),
-            events: Bounded::new(MODEL_EVENTS, "event"),
-            quarantined: Bounded::new(1, "answer shape rejection"),
-            failed_group: Bounded::new(2, "failed GTK command"),
-            failed_group_terminal: Bounded::new(2, "uncertain GTK terminal"),
-            rx_out: Cell::new(0),
-            lost: Cell::new(false),
-            body: RefCell::default(),
-            gate_issuer: RefCell::new(gate_issuer),
-            draining: Cell::new(false),
-        };
-        let resources = ModelResources {
-            station_association,
-            access_point_association,
-            station_commands,
-            access_point_commands,
-            connection_epoch: epoch_slot,
-            tickets: tickets.into_iter().collect(),
-            terminal_access,
-            small: small
-                .into_iter()
-                .map(|slot| ModelBuffer {
-                    slot,
-                    memory: ModelMemory::Small(Box::new([0; ModelSmall::CAPACITY])),
-                    admitted_at: RadioInstant::from_micros(0),
-                    admitted: false,
-                })
-                .collect(),
-            large: large
-                .into_iter()
-                .map(|slot| ModelBuffer {
-                    slot,
-                    memory: ModelMemory::Large(Box::new([0; ModelLarge::CAPACITY])),
-                    admitted_at: RadioInstant::from_micros(0),
-                    admitted: false,
-                })
-                .collect(),
-            station_pairwise,
-            station_group,
-            access_point_pairwise,
-            access_point_group,
-            block_acks,
-            station_group_permission,
-            access_point_group_permission,
-            gate,
-            arbiter_authority,
-        };
-        InstallParts {
-            held,
-            local: ModelLocal::default(),
-            resources,
-        }
-    }
-
-    fn setup<'a, 'id: 'a>(
-        &'a mut self,
-        _call: Call,
-        _held: &'a Self::Held<'id>,
-        _: &'a mut Self::Local<'id>,
-    ) -> Self::Setup<'a, 'id> {
-        ModelSetup {
-            channel: &mut self.channel,
-            caps: PhantomData,
-        }
-    }
-
-    fn phase<'a, 'id>(
-        &'a mut self,
-        _call: Call,
-        held: &'a ModelHeld<'id, X>,
-        _: &'a mut ModelLocal<'id>,
-    ) -> ModelPhase<'a, 'id, C, X>
-    where
-        'id: 'a,
-    {
-        ModelPhase {
-            backend: self,
-            held,
-        }
-    }
-
-    async fn drive<'p, 'id>(
-        driver: DriverLoan<'p, Self::Driver>,
-        held: &'p Self::Held<'id>,
-        retire: Retire<'p>,
-    ) -> DriverExit<(), ModelFault> {
-        poll_fn(|cx| {
-            held.air.passes.set(held.air.passes.get().saturating_add(1));
-            if held.air.failed() || retire.is_requested() || retire.is_abandoned() {
-                return Poll::Ready(());
-            }
-            if matches!(held.air.stream.get(), ModelStream::Draining) {
-                held.draining.set(true);
-            }
-            held.driver_state.borrow_mut().serve(held);
-            if held.air.failed() {
-                return Poll::Ready(());
-            }
-            *held.air.driver.borrow_mut() = Some(cx.waker().clone());
-            // Retirement has its own wake, independent of air traffic.
-            let wait = retire.wait();
-            let mut wait = core::pin::pin!(wait);
-            wait.as_mut().poll(cx)
-        })
-        .await;
-        if held.air.failed() {
-            held.wake_body();
-            let (cause, published) = held.poison_state.borrow_mut().publish(ModelFault);
-            DriverExit::Faulted {
-                state: (),
-                cause: cause.cause,
-                poisoned: driver.fail_stop(published),
-            }
-        } else {
-            retire.retired(driver, ()).await
-        }
-    }
-
-    fn retire_bound(&self, _call: Call) -> impl Future<Output = ()> + use<C, X> {
-        // A model step never awaits hardware. Retirement's registered wake
-        // ends it in the core's next poll.
-        core::future::pending()
-    }
-
-    fn detach<'id>(&mut self, _call: Detach<'_>, _: &ModelHeld<'id, X>) {}
-
-    fn uninstall<'id>(
-        self,
-        held: ModelHeld<'id, X>,
-        local: ModelLocal<'id>,
-        retired: Retired<'id, ((), ())>,
-        detached: Detached<'id>,
-        (): (),
-    ) -> Rc<ModelAir> {
-        let ((), ()) = retired.into_state();
-        // Only Quarantined retains undelivered owners. Drained has returned
-        // them all and may release its now-empty queues during uninstall.
-        if matches!(
-            held.air.stream.get(),
-            ModelStream::Ended(EventEnd::Quarantined { .. })
-        ) {
-            let _quarantined = oer_radio_port::Quarantined::new((held, local, detached));
-        }
-        self.air.end_installation();
-        self.air
-    }
-
-    fn abandon(&mut self, call: Quarantine) -> Abandon {
-        // One host thread owns every step; no ISR or device can outlive it.
-        // Held queues remain in the core's quarantine even after this stop.
-        self.air.poison();
-        self.air.end_installation();
-        Abandon::Stopped(call.stopped())
-    }
-}
-
-/// The depth of the model driver's software queue of each access
-/// category: the composition's initial value.
+/// The composition's initial software depth for each access category.
 pub const MODEL_TX_QUEUE_DEPTH: core::num::NonZeroU8 = match core::num::NonZeroU8::new(2) {
     Some(depth) => depth,
     None => panic!("a queue holds an attempt"),
 };
 
-impl<C: Ieee80211Capabilities, X: ModelContext> LowerMacBackend for ModelBackend<C, X> {
-    type Caps = C;
-    const TX_QUEUE_DEPTH: core::num::NonZeroU8 = MODEL_TX_QUEUE_DEPTH;
-    const PUBLICATION_BOUND: oer_time::Duration = MODEL_PUBLICATION_BOUND;
-    const GROUP_COMMAND_BOUND: oer_time::Duration = MODEL_GROUP_COMMAND_BOUND;
-}
-
 /// The driver retains the unique open place throughout the closing barrier.
-enum DriverGate<'id> {
+enum DriverGate<'id, B: ModelComposition> {
     Open,
-    Closing(GateOpen<'id, ModelPool<0>>),
+    Closing(GateOpen<'id, ModelPool<<B as ModelComposition>::Identity, 0>>),
     Closed,
 }
 
-struct Removal<'id, X: ModelContext> {
-    key: KeyIdentity,
-    removed: Removed<'id, ModelTypes<X>>,
+struct Removal<'id, B: ModelComposition> {
+    key: RawKeyIdentity,
+    removed: OwnedRemoved<'id, B>,
     group_admitted_at: Option<u64>,
 }
 
 /// The model's hardware, which only the driver owns.
-struct Driver<'id, X: ModelContext> {
+struct Driver<'id, B: ModelComposition> {
     /// The prepared attempts of each queue, the head first.
-    queues: [TxQueue<'id, X>; WmmAccessCategory::ALL.len()],
+    queues: [TxQueue<'id, B>; WmmAccessCategory::ALL.len()],
     /// The installed hardware keys.
-    keys: Vec<KeyIdentity>,
-    removing: Vec<Removal<'id, X>>,
-    gate: DriverGate<'id>,
+    keys: Vec<RawKeyIdentity>,
+    removing: Vec<Removal<'id, B>>,
+    gate: DriverGate<'id, B>,
 }
 
-impl<'id, X: ModelContext> Driver<'id, X> {
+impl<'id, B: ModelComposition> Driver<'id, B> {
+    fn observation(&self) -> DriverObservation {
+        DriverObservation {
+            publications: self
+                .queues
+                .iter()
+                .filter(|queue| queue.air.is_some())
+                .count(),
+            installed_keys: self.keys.len(),
+            group_removals: self
+                .removing
+                .iter()
+                .filter_map(|removal| match &removal.removed {
+                    OwnedRemoved::Station(OwnedRemovedKey::Group { slot, permission }) => {
+                        Some(GroupRemovalObservation {
+                            role: VifRole::Station,
+                            slot: slot.index(),
+                            permission: permission.index(),
+                        })
+                    }
+                    OwnedRemoved::AccessPoint(OwnedRemovedKey::Group { slot, permission }) => {
+                        Some(GroupRemovalObservation {
+                            role: VifRole::AccessPoint,
+                            slot: slot.index(),
+                            permission: permission.index(),
+                        })
+                    }
+                    _ => None,
+                })
+                .collect(),
+        }
+    }
+
+    fn new() -> Self {
+        Self {
+            queues: core::array::from_fn(|_| TxQueue {
+                waiting: VecDeque::new(),
+                air: None,
+            }),
+            keys: Vec::new(),
+            removing: Vec::new(),
+            gate: DriverGate::Open,
+        }
+    }
+
     /// Serve everything posted: the settings, the commands in order, the
     /// queues, then the air.
-    fn serve(&mut self, held: &ModelHeld<'id, X>) {
+    fn serve(&mut self, held: &ModelHeld<'id, B>) {
         loop {
             if held.air.failed() {
                 return;
@@ -2942,9 +2802,9 @@ impl<'id, X: ModelContext> Driver<'id, X> {
                     held.air
                         .settings
                         .set(held.air.settings.get().saturating_add(1));
-                    held.post(LowerMacEvent::Terminal(LowerMacTerminal::Configured(
-                        permission,
-                    )));
+                    held.post(OwnedLowerMacEvent::Terminal(
+                        OwnedLowerMacTerminal::Configured(permission),
+                    ));
                 }
                 Command::Submit(prepared) => {
                     let queue = prepared.queue;
@@ -3014,9 +2874,9 @@ impl<'id, X: ModelContext> Driver<'id, X> {
             self.gate = match core::mem::replace(&mut self.gate, DriverGate::Closed) {
                 DriverGate::Closing(gate) => {
                     let closed = held.gate_issuer.borrow_mut().close(gate);
-                    held.post(LowerMacEvent::Terminal(LowerMacTerminal::GateClosed(
-                        closed,
-                    )));
+                    held.post(OwnedLowerMacEvent::Terminal(
+                        OwnedLowerMacTerminal::GateClosed(closed),
+                    ));
                     DriverGate::Closed
                 }
                 state => state,
@@ -3041,7 +2901,7 @@ impl<'id, X: ModelContext> Driver<'id, X> {
         }
     }
 
-    fn activate_group(&mut self, held: &ModelHeld<'id, X>, identity: &KeyIdentity, write: bool) {
+    fn activate_group(&mut self, held: &ModelHeld<'id, B>, identity: &RawKeyIdentity, write: bool) {
         let Some(role) = identity.0.group_role else {
             return;
         };
@@ -3063,14 +2923,14 @@ impl<'id, X: ModelContext> Driver<'id, X> {
     /// stays private until all frozen old RX precedes its FIFO terminal.
     fn install_group<R>(
         &mut self,
-        held: &ModelHeld<'id, X>,
-        pending: PendingGroupInstall<'id, R>,
-    ) -> LowerMacEvent<'id, ModelTypes<X>>
+        held: &ModelHeld<'id, B>,
+        pending: PendingGroupInstall<'id, B, R>,
+    ) -> OwnedLowerMacEvent<'id, B>
     where
-        R: ModelRole + RoleKeys<'id, ModelTypes<X>, Keys = ModelKeys<'id, R>>,
+        R: GroupInstallationRole,
     {
         held.air.apply_association(R::ROLE, pending.spp);
-        let identity = KeyIdentity::group(
+        let identity = RawKeyIdentity::group(
             pending.slot.index(),
             pending.key_id,
             R::ROLE,
@@ -3078,7 +2938,7 @@ impl<'id, X: ModelContext> Driver<'id, X> {
             &held.air,
         );
         self.activate_group(held, &identity, true);
-        LowerMacEvent::Terminal(LowerMacTerminal::GroupKeyInstalled(R::installed_group(
+        OwnedLowerMacEvent::Terminal(OwnedLowerMacTerminal::GroupKeyInstalled(R::installed(
             ModelGroupKey {
                 identity,
                 slot: pending.slot,
@@ -3089,9 +2949,9 @@ impl<'id, X: ModelContext> Driver<'id, X> {
 
     fn group_change(
         &mut self,
-        held: &ModelHeld<'id, X>,
+        held: &ModelHeld<'id, B>,
         admitted_at: u64,
-        change: GroupChange<'id, X>,
+        change: GroupChange<'id, B>,
     ) {
         // Snapshot and mutate before any wake can reenter ModelAir. This
         // single-threaded model has no other interleaving during these steps.
@@ -3117,7 +2977,7 @@ impl<'id, X: ModelContext> Driver<'id, X> {
                 installed.identity.0.rx_active.set(false);
                 held.air.remove_key_material(&installed.identity);
                 self.keys.retain(|key| *key != installed.identity);
-                let identity = KeyIdentity::group(
+                let identity = RawKeyIdentity::group(
                     installed.slot.index(),
                     key_id,
                     VifRole::Station,
@@ -3125,8 +2985,8 @@ impl<'id, X: ModelContext> Driver<'id, X> {
                     &held.air,
                 );
                 self.activate_group(held, &identity, true);
-                Some(LowerMacEvent::Terminal(
-                    LowerMacTerminal::GroupKeyReplaced {
+                Some(OwnedLowerMacEvent::Terminal(
+                    OwnedLowerMacTerminal::GroupKeyReplaced {
                         key: ModelGroupKey {
                             identity,
                             slot: installed.slot,
@@ -3140,8 +3000,8 @@ impl<'id, X: ModelContext> Driver<'id, X> {
                 installed,
             } => {
                 self.activate_group(held, &installed.identity, false);
-                Some(LowerMacEvent::Terminal(
-                    LowerMacTerminal::GroupKeySelected {
+                Some(OwnedLowerMacEvent::Terminal(
+                    OwnedLowerMacTerminal::GroupKeySelected {
                         key: installed,
                         permission,
                     },
@@ -3179,11 +3039,11 @@ impl<'id, X: ModelContext> Driver<'id, X> {
 
     /// Keep each published head until its result; barriers stop the next
     /// publication, not just admission of new plans.
-    fn publish(&mut self, held: &ModelHeld<'id, X>) {
+    fn publish(&mut self, held: &ModelHeld<'id, B>) {
         self.publish_before(held, |_| false);
     }
 
-    fn publish_before(&mut self, held: &ModelHeld<'id, X>, reconfigure: impl Fn(VifRole) -> bool) {
+    fn publish_before(&mut self, held: &ModelHeld<'id, B>, reconfigure: impl Fn(VifRole) -> bool) {
         for ((queue, busy), result_held) in self
             .queues
             .iter_mut()
@@ -3238,7 +3098,7 @@ impl<'id, X: ModelContext> Driver<'id, X> {
         }
     }
 
-    fn finish_removals(&mut self, held: &ModelHeld<'id, X>) {
+    fn finish_removals(&mut self, held: &ModelHeld<'id, B>) {
         // The single reference belongs to KeyInstall. Additional owners are
         // actual prepared/queued/published attempts. Returned Sent identities
         // do not keep a preparation alive and do not delay key-slot reuse.
@@ -3257,9 +3117,9 @@ impl<'id, X: ModelContext> Driver<'id, X> {
             } else if Rc::strong_count(&removal.key.0.preparations) == 1 {
                 held.air.remove_key_material(&removal.key);
                 self.keys.retain(|installed| *installed != removal.key);
-                held.post(LowerMacEvent::Terminal(LowerMacTerminal::KeyRemoved(
-                    removal.removed,
-                )));
+                held.post(OwnedLowerMacEvent::Terminal(
+                    OwnedLowerMacTerminal::KeyRemoved(removal.removed),
+                ));
             } else {
                 pending.push(removal);
             }
@@ -3267,10 +3127,11 @@ impl<'id, X: ModelContext> Driver<'id, X> {
         self.removing = pending;
     }
 
-    fn deliver(&mut self, held: &ModelHeld<'id, X>, frame: Vec<u8>, meta: ModelRxMeta) {
+    fn deliver(&mut self, held: &ModelHeld<'id, B>, frame: Vec<u8>, meta: ModelRxMeta) {
         if held.charge_rx() {
-            held.post(LowerMacEvent::Received {
-                frame: ModelRxBuffer {
+            held.post(OwnedLowerMacEvent::Received {
+                frame: OwnedRxBuffer {
+                    identity: PhantomData,
                     bytes: frame,
                     recycled: false,
                     air: Rc::downgrade(&held.air),
@@ -3286,7 +3147,7 @@ impl<'id, X: ModelContext> Driver<'id, X> {
 
     /// Capture only this finite batch; newly arriving traffic belongs to the
     /// next pass. Delayed ingress is forced through before a GTK boundary.
-    fn receive(&mut self, held: &ModelHeld<'id, X>) {
+    fn receive(&mut self, held: &ModelHeld<'id, B>) {
         let captured = core::mem::take(&mut *held.air.rx.borrow_mut());
         for (frame, meta) in captured {
             self.deliver(held, frame, meta);
@@ -3311,27 +3172,27 @@ pub const MODEL_PUBLICATION_BOUND: oer_time::Duration = oer_time::Duration::from
 /// Synthetic admission-to-GTK-terminal bound, driven by the supplied clock's owner.
 pub const MODEL_GROUP_COMMAND_BOUND: oer_time::Duration = oer_time::Duration::from_millis(2);
 
-struct TxQueue<'id, X: ModelContext> {
-    waiting: VecDeque<Work<'id, X>>,
-    air: Option<Publication<'id, X>>,
+struct TxQueue<'id, B: ModelComposition> {
+    waiting: VecDeque<Work<'id, B>>,
+    air: Option<Publication<'id, B>>,
 }
-struct Publication<'id, X: ModelContext> {
+struct Publication<'id, B: ModelComposition> {
     started: u64,
-    work: Published<'id, X>,
+    work: Published<'id, B>,
 }
-struct SinglePlan<'id, X: ModelContext> {
-    prepared: Box<Prepared<'id, X>>,
+struct SinglePlan<'id, B: ModelComposition> {
+    prepared: Box<Prepared<'id, B>>,
     remaining: VecDeque<PhyRate>,
     last: Option<(NonZeroU16, PhyRate)>,
     rate: PhyRate,
 }
-enum Published<'id, X: ModelContext> {
+enum Published<'id, B: ModelComposition> {
     Single {
-        plan: SinglePlan<'id, X>,
+        plan: SinglePlan<'id, B>,
         answer: SingleAnswer,
     },
     Aggregate {
-        prepared: PreparedAggregate<'id, X>,
+        prepared: PreparedAggregate<'id, B>,
         report: BlockAckReport,
         answer: AggregateAnswer,
     },
@@ -3339,11 +3200,11 @@ enum Published<'id, X: ModelContext> {
 /// Derive the terminal from the actual lifecycle barrier and key owner;
 /// callers cannot exchange three unrelated boolean arguments. Disable wins
 /// over key removal, which wins over a closing or closed gate.
-fn withdrawal<'id, X: ModelContext>(
-    held: &ModelHeld<'id, X>,
-    gate: &DriverGate<'id>,
-    key: Option<&KeyIdentity>,
-    removals: &[Removal<'id, X>],
+fn withdrawal<'id, B: ModelComposition>(
+    held: &ModelHeld<'id, B>,
+    gate: &DriverGate<'id, B>,
+    key: Option<&RawKeyIdentity>,
+    removals: &[Removal<'id, B>],
 ) -> Option<WithdrawCause> {
     if held.draining.get() {
         Some(WithdrawCause::Disabled)
@@ -3356,14 +3217,14 @@ fn withdrawal<'id, X: ModelContext>(
         }
     }
 }
-impl<'id, X: ModelContext> Published<'id, X> {
+impl<'id, B: ModelComposition> Published<'id, B> {
     fn role(&self) -> VifRole {
         match self {
             Self::Single { plan, .. } => plan.prepared.role,
             Self::Aggregate { prepared, .. } => prepared.role,
         }
     }
-    fn key(&self) -> Option<&KeyIdentity> {
+    fn key(&self) -> Option<&RawKeyIdentity> {
         match self {
             Self::Single { plan, .. } => plan.prepared.key.as_ref(),
             Self::Aggregate { prepared, .. } => prepared.key.as_ref(),
@@ -3388,10 +3249,10 @@ impl<'id, X: ModelContext> Published<'id, X> {
     }
     fn complete(
         self,
-        held: &ModelHeld<'id, X>,
-        keys: &[KeyIdentity],
+        held: &ModelHeld<'id, B>,
+        keys: &[RawKeyIdentity],
         cause: Option<WithdrawCause>,
-    ) -> Option<Publication<'id, X>> {
+    ) -> Option<Publication<'id, B>> {
         match self {
             Self::Single {
                 mut plan,
@@ -3518,11 +3379,11 @@ fn aggregate_outcome(
     }
 }
 
-fn start_work<'id, X: ModelContext>(
-    held: &ModelHeld<'id, X>,
-    keys: &[KeyIdentity],
-    work: Work<'id, X>,
-) -> Option<Publication<'id, X>> {
+fn start_work<'id, B: ModelComposition>(
+    held: &ModelHeld<'id, B>,
+    keys: &[RawKeyIdentity],
+    work: Work<'id, B>,
+) -> Option<Publication<'id, B>> {
     match work {
         Work::Single(prepared) => {
             let rate = prepared.plan.first().rate;
@@ -3548,11 +3409,11 @@ fn start_work<'id, X: ModelContext>(
         Work::Aggregate(prepared) => publish_aggregate(held, keys, prepared),
     }
 }
-fn publish_single<'id, X: ModelContext>(
-    held: &ModelHeld<'id, X>,
-    keys: &[KeyIdentity],
-    mut plan: SinglePlan<'id, X>,
-) -> Option<Publication<'id, X>> {
+fn publish_single<'id, B: ModelComposition>(
+    held: &ModelHeld<'id, B>,
+    keys: &[RawKeyIdentity],
+    mut plan: SinglePlan<'id, B>,
+) -> Option<Publication<'id, B>> {
     let now = match held.air.radio_now() {
         Ok(now) => now,
         Err(_) => {
@@ -3629,9 +3490,9 @@ fn publish_single<'id, X: ModelContext>(
 }
 
 /// Preserve the submission shape and every owner on withdrawal.
-fn withdrawn<'id, X: ModelContext>(
-    held: &ModelHeld<'id, X>,
-    work: Work<'id, X>,
+fn withdrawn<'id, B: ModelComposition>(
+    held: &ModelHeld<'id, B>,
+    work: Work<'id, B>,
     cause: WithdrawCause,
 ) {
     match work {
@@ -3644,21 +3505,23 @@ fn withdrawn<'id, X: ModelContext>(
     }
 }
 
-fn terminal_aggregate<'id, X: ModelContext>(
-    held: &ModelHeld<'id, X>,
-    aggregate: PreparedAggregate<'id, X>,
+fn terminal_aggregate<'id, B: ModelComposition>(
+    held: &ModelHeld<'id, B>,
+    aggregate: PreparedAggregate<'id, B>,
     completion: ModelAggregateOutcome,
 ) {
-    held.post(LowerMacEvent::Terminal(LowerMacTerminal::TxCompleted(
-        TxCompleted::Aggregate(aggregate.operation.complete(completion)),
-    )));
+    held.post(OwnedLowerMacEvent::Terminal(
+        OwnedLowerMacTerminal::TxCompleted(OwnedTxCompleted::Aggregate(
+            aggregate.operation.complete(completion),
+        )),
+    ));
 }
 
-fn publish_aggregate<'id, X: ModelContext>(
-    held: &ModelHeld<'id, X>,
-    keys: &[KeyIdentity],
-    mut aggregate: PreparedAggregate<'id, X>,
-) -> Option<Publication<'id, X>> {
+fn publish_aggregate<'id, B: ModelComposition>(
+    held: &ModelHeld<'id, B>,
+    keys: &[RawKeyIdentity],
+    mut aggregate: PreparedAggregate<'id, B>,
+) -> Option<Publication<'id, B>> {
     let now = match held.air.radio_now() {
         Ok(now) => now,
         Err(_) => {
@@ -3747,32 +3610,42 @@ fn publish_aggregate<'id, X: ModelContext>(
 }
 
 /// Post the terminal of `prepared`, with its tokens.
-fn terminal<'id, X: ModelContext>(
-    held: &ModelHeld<'id, X>,
-    prepared: Prepared<'id, X>,
+fn terminal<'id, B: ModelComposition>(
+    held: &ModelHeld<'id, B>,
+    prepared: Prepared<'id, B>,
     outcome: ModelSingleOutcome,
 ) {
-    held.post(LowerMacEvent::Terminal(LowerMacTerminal::TxCompleted(
-        TxCompleted::Single(prepared.operation.complete(outcome)),
-    )));
+    held.post(OwnedLowerMacEvent::Terminal(
+        OwnedLowerMacTerminal::TxCompleted(OwnedTxCompleted::Single(
+            prepared.operation.complete(outcome),
+        )),
+    ));
 }
 
 /// The model's running phase: the body's handle over the queues.
-pub struct ModelPhase<'a, 'id, C = ModelCaps, X: ModelContext = ()> {
-    backend: &'a mut ModelBackend<C, X>,
-    held: &'a ModelHeld<'id, X>,
+pub struct ModelPhase<'a, 'id, C, B: ModelComposition + 'id> {
+    frontend: &'a mut ModelFrontend<'id, B>,
+    caps: PhantomData<fn() -> C>,
+    held: &'a ModelHeld<'static, B>,
 }
 
-impl<'id, C, X: ModelContext> ModelPhase<'_, 'id, C, X> {
+impl<'id, C, B: ModelComposition + 'id> ModelPhase<'_, 'id, C, B> {
     /// Deliberately violate the backend contract while retaining actual minted
     /// owners, for consumer contract regressions outside the conformance suite.
-    pub fn inject_terminal(&mut self, terminal: LowerMacTerminal<'id, ModelTypes<X>>) {
-        self.held.post(LowerMacEvent::Terminal(terminal));
+    pub fn inject_terminal(
+        &mut self,
+        terminal: oer_ieee80211_port::LowerMacTerminal<'id, ModelTypes<B>>,
+    ) {
+        self.held
+            .post(OwnedLowerMacEvent::Terminal(OwnedLowerMacTerminal::retain(
+                terminal,
+                &self.frontend.loan,
+            )));
     }
 }
 
-impl<'id, C, X: ModelContext> PortPhase for ModelPhase<'_, 'id, C, X> {
-    type Event = LowerMacEvent<'id, ModelTypes<X>>;
+impl<'id, C, B: ModelComposition + 'id> PortPhase for ModelPhase<'_, 'id, C, B> {
+    type Event = oer_ieee80211_port::LowerMacEvent<'id, ModelTypes<B>>;
     type Fault = ModelFault;
 
     fn next_event(
@@ -3780,26 +3653,20 @@ impl<'id, C, X: ModelContext> PortPhase for ModelPhase<'_, 'id, C, X> {
     ) -> impl Future<Output = Result<Result<Self::Event, EventsLost>, EventEnd<ModelFault>>> + '_
     {
         let held = self.held;
+        let loan = self.frontend.loan;
         // Cancel-safe: the event stays queued until a poll takes it.
         poll_fn(move |cx| {
             if let ModelStream::Ended(end) = held.air.stream.get() {
                 return Poll::Ready(Err(end));
             }
             if let Some(event) = held.take_event() {
-                return Poll::Ready(Ok(Ok(event)));
+                return Poll::Ready(Ok(Ok(event.lend(&loan))));
             }
             if held.lost.replace(false) {
                 return Poll::Ready(Ok(Err(EventsLost)));
             }
             if matches!(held.air.stream.get(), ModelStream::Draining) {
-                let driver = held.driver_state.borrow();
-                let returned = driver
-                    .queues
-                    .iter()
-                    .all(|queue| queue.air.is_none() && queue.waiting.is_empty())
-                    && driver.removing.is_empty()
-                    && !matches!(driver.gate, DriverGate::Closing(_));
-                if returned
+                if held.returned.get()
                     && !held.draining.get()
                     && held.commands.is_empty()
                     && held.recycled.is_empty()
@@ -3816,15 +3683,17 @@ impl<'id, C, X: ModelContext> PortPhase for ModelPhase<'_, 'id, C, X> {
             if let Some((bytes, meta)) = held.air.rx_stream.borrow().as_ref()
                 && held.charge_rx()
             {
-                return Poll::Ready(Ok(Ok(LowerMacEvent::Received {
-                    frame: ModelRxBuffer {
+                return Poll::Ready(Ok(Ok(OwnedLowerMacEvent::Received {
+                    frame: OwnedRxBuffer {
+                        identity: PhantomData,
                         bytes: bytes.clone(),
                         recycled: false,
                         air: Rc::downgrade(&held.air),
                         streamed: true,
                     },
                     meta: *meta,
-                })));
+                }
+                .lend(&loan))));
             }
             *held.body.borrow_mut() = Some(cx.waker().clone());
             Poll::Pending
@@ -3832,25 +3701,26 @@ impl<'id, C, X: ModelContext> PortPhase for ModelPhase<'_, 'id, C, X> {
     }
 }
 
-impl<'p, 'id: 'p, C: Ieee80211Capabilities, X: ModelContext> LowerMacPhase<'p, 'id>
-    for ModelPhase<'p, 'id, C, X>
+impl<'p, 'id: 'p, C: Ieee80211Capabilities, B: ModelComposition + 'id> LowerMacPhase<'p, 'id>
+    for ModelPhase<'p, 'id, C, B>
 {
     type Caps = C;
-    type Types = ModelTypes<X>;
+    type Types = ModelTypes<B>;
     type Station<'v>
-        = ModelInterface<'p, 'v, 'id, Station, C, X>
+        = ModelInterface<'p, 'v, 'id, Station, C, B>
     where
         Self: 'v;
     type AccessPoint<'v>
-        = ModelInterface<'p, 'v, 'id, AccessPoint, C, X>
+        = ModelInterface<'p, 'v, 'id, AccessPoint, C, B>
     where
         Self: 'v;
 
     fn channel(&self) -> Channel {
-        self.backend.channel
+        self.frontend.channel.get()
     }
 
-    fn recycle(&mut self, buffer: ModelRxBuffer) {
+    fn recycle(&mut self, buffer: ModelRxBuffer<'id, B::Identity>) {
+        let buffer = buffer.owner;
         if buffer.streamed {
             let mut buffer = buffer;
             // The independent source observes this return immediately. Its
@@ -3866,29 +3736,39 @@ impl<'p, 'id: 'p, C: Ieee80211Capabilities, X: ModelContext> LowerMacPhase<'p, '
         self.held.air.wake_driver();
     }
 
-    fn close_gate(&mut self, gate: GateOpen<'id, ModelPool<0>>) {
-        self.held.command(Command::CloseGate(gate));
+    fn close_gate(&mut self, gate: GateOpen<'id, ModelPool<<B as ModelComposition>::Identity, 0>>) {
+        self.held
+            .command(Command::CloseGate(gate.into_owned(&self.frontend.loan)));
     }
 
-    fn open_gate(&mut self, gate: GateClosed<'id, ModelPool<0>>) -> GateOpen<'id, ModelPool<0>> {
-        let open = self.held.gate_issuer.borrow_mut().open(gate);
+    fn open_gate(
+        &mut self,
+        gate: GateClosed<'id, ModelPool<<B as ModelComposition>::Identity, 0>>,
+    ) -> GateOpen<'id, ModelPool<<B as ModelComposition>::Identity, 0>> {
+        let open = self
+            .held
+            .gate_issuer
+            .borrow_mut()
+            .open(gate.into_owned(&self.frontend.loan));
         self.held.command(Command::OpenGate);
-        open
+        open.lend(&self.frontend.loan)
     }
 
-    fn station(&mut self) -> ModelInterface<'p, '_, 'id, Station, C, X> {
-        let [station, _] = self.backend.addresses;
+    fn station(&mut self) -> ModelInterface<'p, '_, 'id, Station, C, B> {
+        let [station, _] = self.frontend.addresses;
         ModelInterface {
             held: self.held,
+            loan: self.frontend.loan,
             address: station,
             role: PhantomData,
         }
     }
 
-    fn access_point(&mut self) -> ModelInterface<'p, '_, 'id, AccessPoint, C, X> {
-        let [_, access_point] = self.backend.addresses;
+    fn access_point(&mut self) -> ModelInterface<'p, '_, 'id, AccessPoint, C, B> {
+        let [_, access_point] = self.frontend.addresses;
         ModelInterface {
             held: self.held,
+            loan: self.frontend.loan,
             address: access_point,
             role: PhantomData,
         }
@@ -3896,27 +3776,29 @@ impl<'p, 'id: 'p, C: Ieee80211Capabilities, X: ModelContext> LowerMacPhase<'p, '
 }
 
 /// One interface of the model's phase.
-pub struct ModelInterface<'p, 'v, 'id, R, C = ModelCaps, X: ModelContext = ()> {
-    held: &'v ModelHeld<'id, X>,
+pub struct ModelInterface<'p, 'v, 'id, R, C, B: ModelComposition + 'id> {
+    held: &'v ModelHeld<'static, B>,
+    loan: BodyLoan<'id, B::Identity, B>,
     address: IndividualAddress,
     role: PhaseProof<'p, (R, C)>,
 }
 
 /// A key the model installed.
-pub struct ModelPairwiseKey<'id, R: ModelRole> {
-    identity: KeyIdentity,
-    slot: PairwiseKeySlot<'id, R, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, R::AssociationPath>,
+pub struct ModelPairwiseKey<'id, B: ModelComposition, R: ModelRole> {
+    identity: RawKeyIdentity,
+    slot:
+        PairwiseKeySlot<'id, R, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, R::AssociationPath<B::Identity>>,
 }
 
 /// A group key the model installed.
-pub struct ModelGroupKey<'id, R: ModelRole> {
-    identity: KeyIdentity,
-    slot: GroupKeySlot<'id, R, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, R::AssociationPath>,
+pub struct ModelGroupKey<'id, B: ModelComposition, R: ModelRole> {
+    identity: RawKeyIdentity,
+    slot: GroupKeySlot<'id, R, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, R::AssociationPath<B::Identity>>,
 }
 
 /// A receive Block Ack agreement the model keeps.
-pub struct ModelBlockAck<'id> {
-    slot: ModelBlockAckSlot<'id>,
+pub struct ModelBlockAck<'id, B: ModelComposition> {
+    slot: ModelBlockAckSlot<'id, B>,
 }
 
 /// A retry plan's stages, as the model's hardware takes them.
@@ -3956,55 +3838,71 @@ fn retry_stages<K>(
 
 type PhaseProof<'p, T> = PhantomData<fn(&'p ()) -> (&'p (), T)>;
 type TypeProof<T> = PhantomData<fn() -> T>;
-type ModelSource<'k, 'p, 'id, C, K, R, X> = TxSource<
-    ModelBuffer<'id, C>,
-    ModelSent<'id, C, <X as ModelContext>::Body>,
+type ModelSource<'k, 'p, 'id, C, K, R, B> = TxSource<
+    ModelBuffer<'id, B, C>,
+    ModelSent<'id, B, C>,
     oer_ieee80211_port::ClassFrame<'p, 'id, C, K>,
-    <X as ModelContext>::Body,
-    <R as RoleKeys<'id, ModelTypes<X>>>::TxKey<'k>,
+    ModelBodyOf<B>,
+    <R as RoleKeys<'id, ModelTypes<B>>>::TxKey<'k>,
     RetransmissionPlan<'p, 'id, K>,
 >;
-type ModelCheckedSource<'k, 'p, 'id, C, K, R, X> = CheckedTxSource<
-    ModelBuffer<'id, C>,
-    ModelSent<'id, C, <X as ModelContext>::Body>,
+type ModelCheckedSource<'k, 'p, 'id, C, K, R, B> = CheckedTxSource<
+    ModelBuffer<'id, B, C>,
+    ModelSent<'id, B, C>,
     oer_ieee80211_port::ClassFrame<'p, 'id, C, K>,
-    <X as ModelContext>::Body,
-    <R as RoleKeys<'id, ModelTypes<X>>>::TxKey<'k>,
+    ModelBodyOf<B>,
+    <R as RoleKeys<'id, ModelTypes<B>>>::TxKey<'k>,
     RetransmissionPlan<'p, 'id, K>,
 >;
-type ModelPreparation<'k, 'p, 'id, R, K, X, C> = Result<
-    ModelPrepared<'k, 'p, 'id, R, K, X>,
-    PreparationRefused<ModelSource<'k, 'p, 'id, C, K, R, X>>,
+type ModelPreparation<'k, 'p, 'id, R, K, B, C> = Result<
+    ModelPrepared<'k, 'p, 'id, R, K, B>,
+    PreparationRefused<ModelSource<'k, 'p, 'id, C, K, R, B>>,
 >;
 
 /// Closed preparation proof retaining role, phase, install and the key borrow.
 /// Dropping or submitting it ends that borrow; a queued operation owns only
 /// the backend identity, never a reference to a portable machine.
-pub struct ModelPrepared<'k, 'p, 'id, R, K, X: ModelContext = ()> {
-    mpdu: ModelMpdu<'id, X::Body>,
+pub struct ModelPrepared<'k, 'p, 'id, R, K, B: ModelComposition> {
+    mpdu: ModelMpdu<'id, B>,
     plan: oer_ieee80211_port::RetryPlan<PhyRate>,
     key: Option<PreparedKey>,
     key_borrow: PhantomData<&'k ()>,
-    proof: PhaseProof<'p, (R, K, X)>,
+    proof: PhaseProof<'p, (R, K, B)>,
 }
 /// Metadata lowered before single-MPDU admission; it owns no payload.
 pub struct ModelTxExecution {
     plan: oer_ieee80211_port::RetryPlan<PhyRate>,
     key: Option<PreparedKey>,
 }
-impl<'id, R, K, X: ModelContext> PreparedTx<'id> for ModelPrepared<'_, '_, 'id, R, K, X> {
-    type Types = ModelTypes<X>;
+impl<'id, R, K, B: ModelComposition + 'id> PreparedTx<'id> for ModelPrepared<'_, '_, 'id, R, K, B> {
+    type Types = ModelTypes<B>;
+    type Backend = B;
+    type OwnedContext = ModelContextOf<B>;
+    type OwnedPayload = ModelMpdu<'static, B>;
     type Execution = ModelTxExecution;
-    fn into_admission(self) -> (ModelMpdu<'id, X::Body>, Self::Execution) {
-        (
-            self.mpdu,
-            ModelTxExecution {
+    fn into_admission(
+        self,
+        context: <Self::Types as PhaseTypes<'id>>::Context,
+        ticket: Slot<'id, ModelTickets, ModelPool<B::Identity, 1>>,
+        _: oer_ieee80211_port::Admission<Self>,
+    ) -> oer_ieee80211_port::AdmissionOwners<
+        Self::OwnedContext,
+        Slot<'static, ModelTickets, ModelPool<B::Identity, 1>>,
+        Self::OwnedPayload,
+        Self::Execution,
+    > {
+        let loan = self.mpdu.buffer.loan();
+        oer_ieee80211_port::AdmissionOwners {
+            context: context.enclose().into_owned(&loan),
+            ticket: loan.reclaim_slot(ticket),
+            payload: self.mpdu.into_owned(&loan),
+            execution: ModelTxExecution {
                 plan: self.plan,
                 key: self.key,
             },
-        )
+        }
     }
-    fn into_parts(self) -> (ModelAnyBuffer<'id, X::Body>, Option<X::Body>) {
+    fn into_parts(self) -> (ModelAnyBuffer<'id, B>, Option<ModelBodyOf<B>>) {
         self.mpdu.into_parts()
     }
 }
@@ -4012,43 +3910,50 @@ impl<'id, R, K, X: ModelContext> PreparedTx<'id> for ModelPrepared<'_, '_, 'id, 
 /// A model buffer class and its unique pool within the installation layout.
 pub trait ModelClass: TxBufferClass + Sized {
     /// Nominal component of the backing memory slots.
-    type Path: oer_radio_port::PoolPath;
+    type Path<Id: SlotIdentity>: oer_radio_port::PoolPath<Identity = Id>;
     /// Return fresh memory through the terminal's exhaustive buffer enum.
-    fn erase<'id, D>(buffer: ModelBuffer<'id, Self>) -> ModelAnyBuffer<'id, D>;
+    fn erase<'id, B: ModelComposition>(buffer: ModelBuffer<'id, B, Self>)
+    -> ModelAnyBuffer<'id, B>;
     /// Return a published MPDU through the terminal buffer enum.
-    fn erase_sent<'id, D>(mpdu: ModelSent<'id, Self, D>) -> ModelAnyBuffer<'id, D>;
+    fn erase_sent<'id, B: ModelComposition>(
+        mpdu: ModelSent<'id, B, Self>,
+    ) -> ModelAnyBuffer<'id, B>;
     /// Recover fresh memory of this class, or preserve the other owner.
-    fn class<'id, D>(
-        buffer: ModelAnyBuffer<'id, D>,
-    ) -> Result<ModelBuffer<'id, Self>, ModelAnyBuffer<'id, D>>;
+    fn class<'id, B: ModelComposition>(
+        buffer: ModelAnyBuffer<'id, B>,
+    ) -> Result<ModelBuffer<'id, B, Self>, ModelAnyBuffer<'id, B>>;
     /// Recover a published MPDU of this class, or preserve the other owner.
-    fn sent<'id, D>(
-        buffer: ModelAnyBuffer<'id, D>,
-    ) -> Result<ModelSent<'id, Self, D>, ModelAnyBuffer<'id, D>>;
+    fn sent<'id, B: ModelComposition>(
+        buffer: ModelAnyBuffer<'id, B>,
+    ) -> Result<ModelSent<'id, B, Self>, ModelAnyBuffer<'id, B>>;
 }
 
 impl ModelClass for ModelSmall {
-    type Path = ModelPool<2>;
-    fn erase<'id, D>(buffer: ModelBuffer<'id, Self>) -> ModelAnyBuffer<'id, D> {
+    type Path<Id: SlotIdentity> = ModelPool<Id, 2>;
+    fn erase<'id, B: ModelComposition>(
+        buffer: ModelBuffer<'id, B, Self>,
+    ) -> ModelAnyBuffer<'id, B> {
         ModelAnyBuffer::Small(buffer)
     }
     /// Return a published MPDU through the terminal buffer enum.
-    fn erase_sent<'id, D>(mpdu: ModelSent<'id, Self, D>) -> ModelAnyBuffer<'id, D> {
+    fn erase_sent<'id, B: ModelComposition>(
+        mpdu: ModelSent<'id, B, Self>,
+    ) -> ModelAnyBuffer<'id, B> {
         ModelAnyBuffer::SmallSent(mpdu)
     }
     /// Recover fresh memory of this class, or preserve the other owner.
-    fn class<'id, D>(
-        buffer: ModelAnyBuffer<'id, D>,
-    ) -> Result<ModelBuffer<'id, Self>, ModelAnyBuffer<'id, D>> {
+    fn class<'id, B: ModelComposition>(
+        buffer: ModelAnyBuffer<'id, B>,
+    ) -> Result<ModelBuffer<'id, B, Self>, ModelAnyBuffer<'id, B>> {
         match buffer {
             ModelAnyBuffer::Small(buffer) => Ok(buffer),
             buffer => Err(buffer),
         }
     }
     /// Recover a published MPDU of this class, or preserve the other owner.
-    fn sent<'id, D>(
-        buffer: ModelAnyBuffer<'id, D>,
-    ) -> Result<ModelSent<'id, Self, D>, ModelAnyBuffer<'id, D>> {
+    fn sent<'id, B: ModelComposition>(
+        buffer: ModelAnyBuffer<'id, B>,
+    ) -> Result<ModelSent<'id, B, Self>, ModelAnyBuffer<'id, B>> {
         match buffer {
             ModelAnyBuffer::SmallSent(buffer) => Ok(buffer),
             buffer => Err(buffer),
@@ -4056,27 +3961,31 @@ impl ModelClass for ModelSmall {
     }
 }
 impl ModelClass for ModelLarge {
-    type Path = ModelPool<3>;
-    fn erase<'id, D>(buffer: ModelBuffer<'id, Self>) -> ModelAnyBuffer<'id, D> {
+    type Path<Id: SlotIdentity> = ModelPool<Id, 3>;
+    fn erase<'id, B: ModelComposition>(
+        buffer: ModelBuffer<'id, B, Self>,
+    ) -> ModelAnyBuffer<'id, B> {
         ModelAnyBuffer::Large(buffer)
     }
     /// Return a published MPDU through the terminal buffer enum.
-    fn erase_sent<'id, D>(mpdu: ModelSent<'id, Self, D>) -> ModelAnyBuffer<'id, D> {
+    fn erase_sent<'id, B: ModelComposition>(
+        mpdu: ModelSent<'id, B, Self>,
+    ) -> ModelAnyBuffer<'id, B> {
         ModelAnyBuffer::LargeSent(mpdu)
     }
     /// Recover fresh memory of this class, or preserve the other owner.
-    fn class<'id, D>(
-        buffer: ModelAnyBuffer<'id, D>,
-    ) -> Result<ModelBuffer<'id, Self>, ModelAnyBuffer<'id, D>> {
+    fn class<'id, B: ModelComposition>(
+        buffer: ModelAnyBuffer<'id, B>,
+    ) -> Result<ModelBuffer<'id, B, Self>, ModelAnyBuffer<'id, B>> {
         match buffer {
             ModelAnyBuffer::Large(buffer) => Ok(buffer),
             buffer => Err(buffer),
         }
     }
     /// Recover a published MPDU of this class, or preserve the other owner.
-    fn sent<'id, D>(
-        buffer: ModelAnyBuffer<'id, D>,
-    ) -> Result<ModelSent<'id, Self, D>, ModelAnyBuffer<'id, D>> {
+    fn sent<'id, B: ModelComposition>(
+        buffer: ModelAnyBuffer<'id, B>,
+    ) -> Result<ModelSent<'id, B, Self>, ModelAnyBuffer<'id, B>> {
         match buffer {
             ModelAnyBuffer::LargeSent(buffer) => Ok(buffer),
             buffer => Err(buffer),
@@ -4095,13 +4004,13 @@ fn prepare_model<
     'k,
     'p,
     'id: 'k,
-    R: RoleKeys<'id, ModelTypes<X>>,
+    R: RoleKeys<'id, ModelTypes<B>>,
     K: Ieee80211Capabilities,
-    X: ModelContext,
+    B: ModelComposition + 'id,
     C: ModelClass,
 >(
-    source: ModelCheckedSource<'k, 'p, 'id, C, K, R, X>,
-) -> ModelPreparation<'k, 'p, 'id, R, K, X, C> {
+    source: ModelCheckedSource<'k, 'p, 'id, C, K, R, B>,
+) -> ModelPreparation<'k, 'p, 'id, R, K, B, C> {
     let (mpdu, plan, key) = match source {
         CheckedTxSource::Fresh(fresh) => {
             let (
@@ -4113,10 +4022,15 @@ fn prepare_model<
                 },
                 layout,
             ) = fresh.into_parts();
+            #[expect(
+                clippy::expect_used,
+                reason = "only loaned body buffers can enter preparation"
+            )]
+            let loan = buffer.loan.expect("body buffer authority");
             let (key, packet_number) = match protection {
                 TxProtection::Open => (None, None),
                 TxProtection::Ccmp(numbered) => (
-                    Some(R::tx_identity(&numbered.key)),
+                    Some(R::tx_identity(&numbered.key).into_owned(&loan)),
                     Some(numbered.packet_number),
                 ),
             };
@@ -4171,13 +4085,13 @@ fn prepare_model<
     })
 }
 
-impl<'p, 'v, 'id: 'p, R, K: Ieee80211Capabilities, X: ModelContext> InterfacePhase<'p, 'id>
-    for ModelInterface<'p, 'v, 'id, R, K, X>
+impl<'p, 'v, 'id: 'p, R, K: Ieee80211Capabilities, B: ModelComposition + 'id>
+    InterfacePhase<'p, 'id> for ModelInterface<'p, 'v, 'id, R, K, B>
 where
-    R: GroupInstallationRole + RoleKeys<'id, ModelTypes<X>, Keys = ModelKeys<'id, R>>,
+    R: GroupInstallationRole + RoleKeys<'id, ModelTypes<B>, Keys = ModelKeys<'id, B, R>>,
 {
     type Caps = K;
-    type Types = ModelTypes<X>;
+    type Types = ModelTypes<B>;
     type Role = R;
 
     fn address(&self) -> IndividualAddress {
@@ -4194,8 +4108,9 @@ where
 
     fn submit<'k>(
         &mut self,
-        mut attempt: oer_ieee80211_port::InterfaceSubmission<'k, 'p, 'id, Self>,
+        attempt: oer_ieee80211_port::InterfaceSubmission<'k, 'p, 'id, Self>,
     ) -> Result<(), Poisoned<ModelFault>> {
+        let mut attempt = attempt.into_parts(&self.loan);
         match self.held.air.radio_now() {
             Ok(at) => attempt.operation.execute().mpdu.admit(at),
             Err(_) => self.held.poison(),
@@ -4217,12 +4132,18 @@ where
 
     fn install_pairwise_key(
         &mut self,
-        association: &ModelAssociation<'id, R>,
-        slot: PairwiseKeySlot<'id, R, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, R::AssociationPath>,
+        association: &ModelAssociation<'id, B, R>,
+        slot: PairwiseKeySlot<
+            'id,
+            R,
+            MODEL_KEY_SLOTS,
+            MODEL_KEY_SLOTS,
+            R::AssociationPath<B::Identity>,
+        >,
         peer: IndividualAddress,
         key: Ccmp128Key,
-    ) -> ModelPairwiseKey<'id, R> {
-        let identity = KeyIdentity::new(slot.index(), 0, R::ROLE, peer, &self.held.air);
+    ) -> ModelPairwiseKey<'id, B, R> {
+        let identity = RawKeyIdentity::new(slot.index(), 0, R::ROLE, peer, &self.held.air);
         self.held.command(Command::InstallKey {
             spp: association.owner.spp(),
             material: key,
@@ -4233,9 +4154,15 @@ where
 
     fn install_group_key(
         &mut self,
-        association: &ModelAssociation<'id, R>,
-        permission: Slot<'id, ModelGroupPermission<R>, R::GroupPermissionPath>,
-        slot: GroupKeySlot<'id, R, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, R::AssociationPath>,
+        association: &ModelAssociation<'id, B, R>,
+        permission: Slot<'id, ModelGroupPermission<R>, R::GroupPermissionPath<B::Identity>>,
+        slot: GroupKeySlot<
+            'id,
+            R,
+            MODEL_KEY_SLOTS,
+            MODEL_KEY_SLOTS,
+            R::AssociationPath<B::Identity>,
+        >,
         key_id: GroupKeyId,
         key: Ccmp128Key,
     ) {
@@ -4243,8 +4170,8 @@ where
             admitted_at: self.held.air.monotonic_now().as_micros(),
             change: GroupChange::Install(R::installation(PendingGroupInstall {
                 spp: association.owner.spp(),
-                slot,
-                permission,
+                slot: slot.into_owned(&self.loan),
+                permission: self.loan.reclaim_slot(permission),
                 key_id,
                 key,
             })),
@@ -4253,41 +4180,47 @@ where
 
     fn remove_pairwise_key(
         &mut self,
-        association: ModelAssociation<'id, R>,
-        key: ModelPairwiseKey<'id, R>,
+        association: ModelAssociation<'id, B, R>,
+        key: ModelPairwiseKey<'id, B, R>,
     ) {
         key.identity.0.active.set(false);
         self.held.command(Command::RemoveKey {
             key: key.identity,
-            removed: R::removed(RemovedKey::Pairwise {
-                slot: key.slot,
-                association,
-            }),
+            removed: OwnedRemoved::retain(
+                R::removed(RemovedKey::Pairwise {
+                    slot: key.slot,
+                    association,
+                }),
+                &self.loan,
+            ),
         });
     }
 
     fn remove_group_key(
         &mut self,
-        permission: Slot<'id, ModelGroupPermission<R>, R::GroupPermissionPath>,
-        key: ModelGroupKey<'id, R>,
+        permission: Slot<'id, ModelGroupPermission<R>, R::GroupPermissionPath<B::Identity>>,
+        key: ModelGroupKey<'id, B, R>,
     ) {
         self.held.command(Command::Group {
             admitted_at: self.held.air.monotonic_now().as_micros(),
             change: GroupChange::Remove {
                 key: key.identity,
-                removed: R::removed(RemovedKey::Group {
-                    slot: key.slot,
-                    permission,
-                }),
+                removed: OwnedRemoved::retain(
+                    R::removed(RemovedKey::Group {
+                        slot: key.slot,
+                        permission,
+                    }),
+                    &self.loan,
+                ),
             },
         });
     }
 
     fn add_block_ack(
         &mut self,
-        slot: ModelBlockAckSlot<'id>,
+        slot: ModelBlockAckSlot<'id, B>,
         agreement: SupportedBlockAck<K>,
-    ) -> ModelBlockAck<'id> {
+    ) -> ModelBlockAck<'id, B> {
         self.held.settings.borrow_mut().block_acks.insert(
             slot.index(),
             Some(ModelReceiveAgreement::checked(R::ROLE, agreement)),
@@ -4298,9 +4231,9 @@ where
 
     fn replace_block_ack(
         &mut self,
-        running: ModelBlockAck<'id>,
+        running: ModelBlockAck<'id, B>,
         agreement: SupportedBlockAck<K>,
-    ) -> ModelBlockAck<'id> {
+    ) -> ModelBlockAck<'id, B> {
         self.held.settings.borrow_mut().block_acks.insert(
             running.slot.index(),
             Some(ModelReceiveAgreement::checked(R::ROLE, agreement)),
@@ -4309,7 +4242,7 @@ where
         running
     }
 
-    fn remove_block_ack(&mut self, agreement: ModelBlockAck<'id>) -> ModelBlockAckSlot<'id> {
+    fn remove_block_ack(&mut self, agreement: ModelBlockAck<'id, B>) -> ModelBlockAckSlot<'id, B> {
         self.held
             .settings
             .borrow_mut()
@@ -4326,49 +4259,54 @@ pub const MODEL_AMPDU_SUBFRAMES: usize = 8;
 /// Builder retaining receiver, TID, role and one installed protection.
 /// Only `push_aggregate` can create the nonempty state accepted by submission.
 ///
-/// Role, phase and install stay in the builder through submission:
+/// Role, phase, nominal identity and body loan stay in the builder:
 ///
 /// ```compile_fail,E0308
-/// use oer_ieee80211_model::ModelAggregate;
+/// use oer_ieee80211_model::{ModelAggregate, ModelComposition};
 /// use oer_ieee80211_port::{Station, AccessPoint};
-/// fn role<'k, 'p, 'id>(a: ModelAggregate<'k, 'p, 'id, Station>) -> ModelAggregate<'k, 'p, 'id, AccessPoint> { a }
+/// fn role<'k, 'phase, 'p, K, B: ModelComposition>(a: ModelAggregate<'k, 'phase, 'p, Station, K, B>) -> ModelAggregate<'k, 'phase, 'p, AccessPoint, K, B> { a }
 /// ```
 ///
 /// ```compile_fail
-/// use oer_ieee80211_model::ModelAggregate;
-/// use oer_ieee80211_port::Station;
-/// fn phase<'k, 'p, 'q, 'id>(a: ModelAggregate<'k, 'p, 'id, Station>) -> ModelAggregate<'k, 'q, 'id, Station> { a }
+/// use oer_ieee80211_model::{ModelAggregate, ModelComposition};
+/// fn phase<'k, 'old, 'new, 'p, R, K, B: ModelComposition>(a: ModelAggregate<'k, 'old, 'p, R, K, B>) -> ModelAggregate<'k, 'new, 'p, R, K, B> { a }
 /// ```
 ///
 /// ```compile_fail
-/// use oer_ieee80211_model::ModelAggregate;
-/// use oer_ieee80211_port::Station;
-/// fn install<'k, 'p, 'id, 'other>(a: ModelAggregate<'k, 'p, 'id, Station>) -> ModelAggregate<'k, 'p, 'other, Station> { a }
+/// use oer_ieee80211_model::{ModelAggregate, ModelComposition};
+/// fn body<'k, 'phase, 'old, 'new, R, K, B: ModelComposition>(a: ModelAggregate<'k, 'phase, 'old, R, K, B>) -> ModelAggregate<'k, 'phase, 'new, R, K, B> { a }
+/// ```
+///
+/// ```compile_fail,E0308
+/// use oer_ieee80211_model::{ModelAggregate, ModelBackend};
+/// use oer_radio_port::SlotIdentity;
+/// fn identity<'k, 'phase, 'p, R, K, Old: SlotIdentity, New: SlotIdentity>(a: ModelAggregate<'k, 'phase, 'p, R, K, ModelBackend<Old>>) -> ModelAggregate<'k, 'phase, 'p, R, K, ModelBackend<New>> { a }
 /// ```
 ///
 /// ```
-/// use oer_ieee80211_model::ModelAggregate;
-/// fn same<'k, 'p, 'id, R>(a: ModelAggregate<'k, 'p, 'id, R>) -> ModelAggregate<'k, 'p, 'id, R> { a }
+/// use oer_ieee80211_model::{ModelAggregate, ModelComposition};
+/// fn same<'k, 'phase, 'p, R, K, B: ModelComposition>(a: ModelAggregate<'k, 'phase, 'p, R, K, B>) -> ModelAggregate<'k, 'phase, 'p, R, K, B> { a }
 /// ```
 pub struct ModelAggregate<
     'k,
     'p,
     'id,
     R,
-    K = ModelCaps,
-    X: ModelContext = (),
+    K,
+    B: ModelComposition,
     S: AggregateState = EmptyAggregate,
 > {
-    subframes: Vec<Subframe<'id, X::Body>>,
+    subframes: Vec<Subframe<'id, B>>,
+    loan: BodyLoan<'id, B::Identity, B>,
     first: S::Head<SequenceNumber>,
     receiver: IndividualAddress,
     tid: Tid,
     rate: AmpduRate<'p, 'id, K>,
     key: Option<PreparedKey>,
     key_borrow: PhantomData<&'k ()>,
-    caps: TypeProof<(R, K, X, S)>,
+    caps: TypeProof<(R, K, B, S)>,
 }
-impl<R, K, X: ModelContext, S: AggregateState> ModelAggregate<'_, '_, '_, R, K, X, S> {
+impl<R, K, B: ModelComposition, S: AggregateState> ModelAggregate<'_, '_, '_, R, K, B, S> {
     fn acknowledgement_bit(&self, sequence: SequenceNumber) -> Option<u64> {
         let first = S::retain_head(&self.first, sequence);
         let distance = first.forward_distance(sequence);
@@ -4387,27 +4325,42 @@ pub struct ModelAggregateExecution {
     rate: PhyRate,
     key: Option<PreparedKey>,
 }
-impl<'id, R, K, X: ModelContext, S: AggregateState> PhaseAggregate<'id>
-    for ModelAggregate<'_, '_, 'id, R, K, X, S>
+impl<'id, R, K, B: ModelComposition + 'id, S: AggregateState> PhaseAggregate<'id>
+    for ModelAggregate<'_, '_, 'id, R, K, B, S>
 {
-    type Types = ModelTypes<X>;
+    type Types = ModelTypes<B>;
+    type Backend = B;
+    type OwnedContext = ModelContextOf<B>;
+    type OwnedPayload = ModelSubframes<'static, B>;
     type State = S;
     type Execution = ModelAggregateExecution;
-    fn into_admission(self) -> (ModelSubframes<'id, X::Body>, Self::Execution)
+    fn into_admission(
+        self,
+        context: <Self::Types as PhaseTypes<'id>>::Context,
+        ticket: Slot<'id, ModelTickets, ModelPool<B::Identity, 1>>,
+        _: oer_ieee80211_port::Admission<Self>,
+    ) -> oer_ieee80211_port::AdmissionOwners<
+        Self::OwnedContext,
+        Slot<'static, ModelTickets, ModelPool<B::Identity, 1>>,
+        Self::OwnedPayload,
+        Self::Execution,
+    >
     where
         S: oer_ieee80211_port::NonEmptyState,
     {
-        (
-            ModelSubframes(self.subframes),
-            ModelAggregateExecution {
+        oer_ieee80211_port::AdmissionOwners {
+            context: context.enclose().into_owned(&self.loan),
+            ticket: self.loan.reclaim_slot(ticket),
+            payload: ModelSubframes(self.subframes).into_owned(&self.loan),
+            execution: ModelAggregateExecution {
                 first: S::into_head(self.first),
                 tid: self.tid,
                 rate: self.rate.rate().get(),
                 key: self.key,
             },
-        )
+        }
     }
-    type Cancelled = ModelSubframeIter<'id, X::Body>;
+    type Cancelled = ModelSubframeIter<'id, B>;
     fn receiver(&self) -> IndividualAddress {
         self.receiver
     }
@@ -4427,21 +4380,22 @@ impl<'id, R, K, X: ModelContext, S: AggregateState> PhaseAggregate<'id>
         ModelSubframeIter(self.subframes.into_iter())
     }
 }
-type ModelSubframe<'id, C, K, D> =
-    SubframeSource<ModelBuffer<'id, C>, ModelSent<'id, C, D>, ClassSubframe<C, K>, D>;
-type ModelCheckedAggregate<'k, 'p, 'id, R, K, X, S, C> = CheckedAggregate<
-    ModelAggregate<'k, 'p, 'id, R, K, X, S>,
-    ModelBuffer<'id, C>,
-    ModelSent<'id, C, <X as ModelContext>::Body>,
+type ModelSubframe<'id, B, C, K> = SubframeSource<
+    ModelBuffer<'id, B, C>,
+    ModelSent<'id, B, C>,
     ClassSubframe<C, K>,
-    <X as ModelContext>::Body,
+    ModelBodyOf<B>,
 >;
-type ModelAggregatePush<'k, 'p, 'id, R, K, X, S, C> = Result<
-    ModelAggregate<'k, 'p, 'id, R, K, X, NonEmptyAggregate>,
-    AggregateRefused<
-        ModelAggregate<'k, 'p, 'id, R, K, X, S>,
-        ModelSubframe<'id, C, K, <X as ModelContext>::Body>,
-    >,
+type ModelCheckedAggregate<'k, 'p, 'id, R, K, B, S, C> = CheckedAggregate<
+    ModelAggregate<'k, 'p, 'id, R, K, B, S>,
+    ModelBuffer<'id, B, C>,
+    ModelSent<'id, B, C>,
+    ClassSubframe<C, K>,
+    ModelBodyOf<B>,
+>;
+type ModelAggregatePush<'k, 'p, 'id, R, K, B, S, C> = Result<
+    ModelAggregate<'k, 'p, 'id, R, K, B, NonEmptyAggregate>,
+    AggregateRefused<ModelAggregate<'k, 'p, 'id, R, K, B, S>, ModelSubframe<'id, B, C, K>>,
 >;
 
 #[cfg_attr(
@@ -4457,12 +4411,12 @@ fn push_model<
     'id,
     R: oer_ieee80211_port::InterfaceRole,
     K: Ieee80211Capabilities,
-    X: ModelContext,
+    B: ModelComposition,
     S: AggregateState,
     C: ModelClass,
 >(
-    operation: ModelCheckedAggregate<'k, 'p, 'id, R, K, X, S, C>,
-) -> ModelAggregatePush<'k, 'p, 'id, R, K, X, S, C> {
+    operation: ModelCheckedAggregate<'k, 'p, 'id, R, K, B, S, C>,
+) -> ModelAggregatePush<'k, 'p, 'id, R, K, B, S, C> {
     let (mut aggregate, source) = operation.into_parts();
     let refused = if aggregate.subframes.len() >= MODEL_AMPDU_SUBFRAMES {
         Some(PreparationError::AggregateFull)
@@ -4546,6 +4500,7 @@ fn push_model<
     });
     let ModelAggregate {
         subframes,
+        loan,
         receiver,
         tid,
         rate,
@@ -4554,6 +4509,7 @@ fn push_model<
     } = aggregate;
     Ok(ModelAggregate {
         first,
+        loan,
         subframes,
         receiver,
         tid,
@@ -4564,10 +4520,10 @@ fn push_model<
     })
 }
 
-impl<'p, 'v, 'id: 'p, R, K: Ieee80211Capabilities, X: ModelContext> AmpduPhase<'p, 'id>
-    for ModelInterface<'p, 'v, 'id, R, K, X>
+impl<'p, 'v, 'id: 'p, R, K: Ieee80211Capabilities, B: ModelComposition + 'id> AmpduPhase<'p, 'id>
+    for ModelInterface<'p, 'v, 'id, R, K, B>
 where
-    R: GroupInstallationRole + RoleKeys<'id, ModelTypes<X>, Keys = ModelKeys<'id, R>>,
+    R: GroupInstallationRole + RoleKeys<'id, ModelTypes<B>, Keys = ModelKeys<'id, B, R>>,
 {
     fn ampdu_capabilities(&self) -> AmpduCapabilities {
         AmpduCapabilities {
@@ -4582,16 +4538,17 @@ where
         tid: Tid,
         rate: AmpduRate<'p, 'id, K>,
         protection: InterfaceProtection<'k, 'p, 'id, Self>,
-    ) -> ModelAggregate<'k, 'p, 'id, R, K, X>
+    ) -> ModelAggregate<'k, 'p, 'id, R, K, B>
     where
         'id: 'k,
     {
         let key = match &protection {
             TxProtection::Open => None,
-            TxProtection::Ccmp(key) => Some(R::tx_identity(key)),
+            TxProtection::Ccmp(key) => Some(R::tx_identity(key).into_owned(&self.loan)),
         };
         ModelAggregate {
             subframes: Vec::new(),
+            loan: self.loan,
             first: (),
             receiver,
             tid,
@@ -4603,11 +4560,12 @@ where
     }
     fn submit_ampdu<'k>(
         &mut self,
-        mut attempt: oer_ieee80211_port::InterfaceAggregateSubmission<'k, 'p, 'id, Self>,
+        attempt: oer_ieee80211_port::InterfaceAggregateSubmission<'k, 'p, 'id, Self>,
     ) -> Result<(), Poisoned<ModelFault>>
     where
         'id: 'k,
     {
+        let mut attempt = attempt.into_parts(&self.loan);
         match self.held.air.radio_now() {
             Ok(at) => {
                 for subframe in attempt.operation.execute().subframes {
@@ -4642,21 +4600,21 @@ where
     }
 }
 
-impl<'p, 'v, 'id: 'p, C: Ieee80211Capabilities, X: ModelContext> StationPhase<'p, 'id>
-    for ModelInterface<'p, 'v, 'id, Station, C, X>
+impl<'p, 'v, 'id: 'p, C: Ieee80211Capabilities, B: ModelComposition + 'id> StationPhase<'p, 'id>
+    for ModelInterface<'p, 'v, 'id, Station, C, B>
 {
     fn replace_group_key(
         &mut self,
-        permission: StationGroupPermission<'id>,
-        installed: ModelGroupKey<'id, Station>,
+        permission: StationGroupPermission<'id, B>,
+        installed: ModelGroupKey<'id, B, Station>,
         key_id: GroupKeyId,
         key: Ccmp128Key,
     ) {
         self.held.command(Command::Group {
             admitted_at: self.held.air.monotonic_now().as_micros(),
             change: GroupChange::Replace {
-                permission,
-                installed,
+                permission: self.loan.reclaim_slot(permission),
+                installed: installed.into_owned(&self.loan),
                 key_id,
                 key,
             },
@@ -4665,14 +4623,14 @@ impl<'p, 'v, 'id: 'p, C: Ieee80211Capabilities, X: ModelContext> StationPhase<'p
 
     fn select_group_key(
         &mut self,
-        permission: StationGroupPermission<'id>,
-        installed: ModelGroupKey<'id, Station>,
+        permission: StationGroupPermission<'id, B>,
+        installed: ModelGroupKey<'id, B, Station>,
     ) {
         self.held.command(Command::Group {
             admitted_at: self.held.air.monotonic_now().as_micros(),
             change: GroupChange::Select {
-                permission,
-                installed,
+                permission: self.loan.reclaim_slot(permission),
+                installed: installed.into_owned(&self.loan),
             },
         });
     }
@@ -4682,13 +4640,15 @@ impl<'p, 'v, 'id: 'p, C: Ieee80211Capabilities, X: ModelContext> StationPhase<'p
         permission: ConfigurePermission<
             'id,
             Station,
-            oer_radio_port::Child<ModelPool<9>, 1>,
-            X::StationConfigureContext<'id>,
+            oer_radio_port::Child<ModelPool<<B as ModelComposition>::Identity, 9>, 1>,
+            <B::Contexts as ModelContext>::StationConfigureContext<'id, B::Identity>,
         >,
         _: StationReceive<C>,
     ) {
         self.held
-            .command(Command::Configure(Configured::Station(permission)));
+            .command(Command::Configure(OwnedConfigured::Station(
+                permission.into_owned(&self.loan),
+            )));
     }
 
     fn set_bss_color(&mut self, _: BssColor) {
@@ -4697,21 +4657,23 @@ impl<'p, 'v, 'id: 'p, C: Ieee80211Capabilities, X: ModelContext> StationPhase<'p
     }
 }
 
-impl<'p, 'v, 'id: 'p, C: Ieee80211Capabilities, X: ModelContext> AccessPointPhase<'p, 'id>
-    for ModelInterface<'p, 'v, 'id, AccessPoint, C, X>
+impl<'p, 'v, 'id: 'p, C: Ieee80211Capabilities, B: ModelComposition + 'id> AccessPointPhase<'p, 'id>
+    for ModelInterface<'p, 'v, 'id, AccessPoint, C, B>
 {
     fn configure(
         &mut self,
         permission: ConfigurePermission<
             'id,
             AccessPoint,
-            oer_radio_port::Child<ModelPool<9>, 2>,
-            X::AccessPointConfigureContext<'id>,
+            oer_radio_port::Child<ModelPool<<B as ModelComposition>::Identity, 9>, 2>,
+            <B::Contexts as ModelContext>::AccessPointConfigureContext<'id, B::Identity>,
         >,
         _: SupportedFilter<C, AccessPoint>,
     ) {
         self.held
-            .command(Command::Configure(Configured::AccessPoint(permission)));
+            .command(Command::Configure(OwnedConfigured::AccessPoint(
+                permission.into_owned(&self.loan),
+            )));
     }
 }
 

@@ -29,8 +29,8 @@ use oer_ieee80211_wire::{
     address::IndividualAddress,
     ccmp::{Ccmp128Key, GroupKeyId},
 };
-use oer_radio_port::ClockError;
 use oer_radio_port::{self as radio, Child, Root, Slot};
+use oer_radio_port::{BodyLoan, ClockError, LoanedContext, SlotBodyOwner, SlotIdentity, SlotOwner};
 use oer_time::{Clock, Duration, Instant, Timer};
 
 mod buffer;
@@ -40,10 +40,14 @@ mod driver;
 mod keys;
 mod lifecycle;
 mod phase;
+mod placement;
+use placement::{Prepared, PreparedCell};
 #[cfg(all(oer_trace, oer_debug_control))]
 pub mod trace;
 pub use buffer::*;
-pub use keys::{GroupKey, PairwiseKey, PortKeys};
+pub use keys::{GroupKey, KeyIdentity, PairwiseKey, PortKeys};
+mod loan;
+mod owned;
 pub use phase::{Esp32s31Interface, Esp32s31Phase, Esp32s31Setup};
 
 /// Shared admission capacity across the four access categories.
@@ -57,9 +61,12 @@ const TERMINALS: usize = TX_TICKETS + 16 + 2 + 1 + INTERFACE_TERMINALS;
 const COMMANDS: usize = TX_TICKETS + 2 * 16 + 2 + 2 + INTERFACE_COMMANDS;
 pub const PUBLICATION_BOUND: Duration = Duration::from_millis(250);
 pub const COMMAND_BOUND: Duration = Duration::from_millis(400);
-type Part<const I: u8> = Child<Root, I>;
-type CorePath = Part<0>;
-type Core<'id, D, const B: usize> = LowerMacCore<
+/// Response/retirement containment budget. It covers one P2 cleanup step and
+/// ready P2 work within the existing command bound; a later answer fails closed.
+pub const SHUTDOWN_BOUND: Duration = COMMAND_BOUND;
+type Part<Id, const I: u8> = Child<Root<Id>, I>;
+type CorePath<Id: SlotIdentity> = Part<Id, 0>;
+type Core<'id, Id: SlotIdentity, D, const B: usize> = LowerMacCore<
     'id,
     'static,
     <D as Device<B>>::Profile,
@@ -67,7 +74,7 @@ type Core<'id, D, const B: usize> = LowerMacCore<
     <D as Device<B>>::Entropy,
     <D as Device<B>>::Timer,
     B,
-    CorePath,
+    CorePath<Id>,
     TX_TICKETS,
 >;
 
@@ -88,8 +95,12 @@ pub trait Device<const B: usize>: Sized + 'static {
     type Hardware: LowerMacHardware;
     type Receive: ReceiveUnit;
     type Body: TxBody + 'static;
-    type Context<'id>;
-    type ConfigureContext<'id>;
+    type OwnedContext<Id: SlotIdentity>;
+    type Context<'p, Id: SlotIdentity + 'p>: LoanedContext<'p, Id, Owned = Self::OwnedContext<Id>>
+        + 'p;
+    type OwnedConfigureContext<Id: SlotIdentity>;
+    type ConfigureContext<'p, Id: SlotIdentity + 'p>: LoanedContext<'p, Id, Owned = Self::OwnedConfigureContext<Id>>
+        + 'p;
     fn hardware(&mut self) -> &mut Self::Hardware;
     fn timer(&self) -> &Self::Timer;
     fn next_deadline(&self) -> Option<Instant>;
@@ -196,14 +207,15 @@ pub struct PortParts<D: Device<B>, const B: usize> {
     pub coex: &'static dyn RadioCoexPriorities,
 }
 
-pub struct Esp32s31Backend<D: Device<B>, const B: usize> {
+pub struct Esp32s31Backend<Id: SlotIdentity, D: Device<B>, const B: usize> {
     storage: &'static PortStorage<D, B>,
-    initial: Option<Initial<D, B>>,
+    state: BackendState<D, B>,
     channel: Channel,
     addresses: [IndividualAddress; 2],
     timer: D::Timer,
     config: LowerMacConfig,
     coex: &'static dyn RadioCoexPriorities,
+    identity: PhantomData<fn(Id) -> Id>,
 }
 struct Initial<D: Device<B>, const B: usize> {
     transmitter: OrdinaryTxIdleOwner<'static, D::Profile, D::Power, D::Entropy, D::Timer, B>,
@@ -211,12 +223,17 @@ struct Initial<D: Device<B>, const B: usize> {
     config: LowerMacConfig,
     coex: &'static dyn RadioCoexPriorities,
 }
-impl<D: Device<B>, const B: usize> Esp32s31Backend<D, B> {
+enum BackendState<D: Device<B>, const B: usize> {
+    Initial(Option<Initial<D, B>>),
+    Running,
+}
+impl<Id: SlotIdentity, D: Device<B>, const B: usize> Esp32s31Backend<Id, D, B> {
     /// Optional aggregate admission of this port implementation. Its
     /// `NoAggregate` owner is uninhabited and it implements no `AmpduPhase`.
     pub const AMPDU: Option<AmpduCapabilities> = None;
 
-    pub fn new(parts: PortParts<D, B>) -> Result<radio::Installed<Self>, PortParts<D, B>> {
+    #[inline(never)]
+    pub fn new(parts: PortParts<D, B>) -> Result<Self, PortParts<D, B>> {
         let Ok(station) = IndividualAddress::for_interface(parts.config.station_address) else {
             return Err(parts);
         };
@@ -247,40 +264,35 @@ impl<D: Device<B>, const B: usize> Esp32s31Backend<D, B> {
             coex,
         } = parts;
         let channel = Channel::from_wifi_channel(config.channel);
-        Ok(radio::Installed::new(
-            Self {
-                storage,
-                initial: Some(Initial {
-                    transmitter,
-                    buffers,
-                    config,
-                    coex,
-                }),
-                channel,
-                addresses: [station, access_point_address],
-                timer,
+        Ok(Self {
+            storage,
+            state: BackendState::Initial(Some(Initial {
+                transmitter,
+                buffers,
                 config,
                 coex,
-            },
-            storage,
-        ))
+            })),
+            channel,
+            addresses: [station, access_point_address],
+            timer,
+            config,
+            coex,
+            identity: PhantomData,
+        })
     }
 }
 
 /// Hardware and reusable DMA owners returned after confirmed normal stopping.
-pub struct StoppedPort<D: Device<B>, const B: usize> {
+pub struct StoppedPort<Id: SlotIdentity, D: Device<B>, const B: usize> {
     storage: &'static PortStorage<D, B>,
     transmitter:
         Option<OrdinaryTxIdleOwner<'static, D::Profile, D::Power, D::Entropy, D::Timer, B>>,
     config: LowerMacConfig,
     addresses: [IndividualAddress; 2],
     coex: &'static dyn RadioCoexPriorities,
+    identity: PhantomData<fn(Id) -> Id>,
 }
-pub enum Uninstalled<D: Device<B>, const B: usize> {
-    Stopped(StoppedPort<D, B>),
-    ResetRequired,
-}
-impl<D: Device<B>, const B: usize> StoppedPort<D, B> {
+impl<Id: SlotIdentity, D: Device<B>, const B: usize> StoppedPort<Id, D, B> {
     pub fn expired_msdus(&self) -> u32 {
         self.storage.expired.get()
     }
@@ -292,10 +304,8 @@ impl<D: Device<B>, const B: usize> StoppedPort<D, B> {
     /// Begin a fresh installation on the same static hardware/RX backing.
     /// The image supplies a distinct TSF epoch. Forgotten TX owners retain
     /// their allocations, so the previous stopped owner returns on refusal.
-    pub fn reinstall(
-        mut self,
-        tsf_epoch: u32,
-    ) -> Result<radio::Installed<Esp32s31Backend<D, B>>, Self> {
+    #[inline(never)]
+    pub fn reinstall(mut self, tsf_epoch: u32) -> Result<Esp32s31Backend<Id, D, B>, Self> {
         if self.storage.poisoned.get().is_some()
             || self.storage.returned.borrow().len() != TX_TICKETS
             || self.transmitter.is_none()
@@ -318,23 +328,21 @@ impl<D: Device<B>, const B: usize> StoppedPort<D, B> {
         self.config.tsf_epoch = tsf_epoch;
         let channel = Channel::from_wifi_channel(self.config.channel);
         let timer = self.storage.device.borrow().timer().clone();
-        Ok(radio::Installed::new(
-            Esp32s31Backend {
-                storage: self.storage,
-                initial: Some(Initial {
-                    transmitter,
-                    buffers,
-                    config: self.config,
-                    coex: self.coex,
-                }),
-                channel,
-                addresses: self.addresses,
-                timer,
+        Ok(Esp32s31Backend {
+            storage: self.storage,
+            state: BackendState::Initial(Some(Initial {
+                transmitter,
+                buffers,
                 config: self.config,
                 coex: self.coex,
-            },
-            self.storage,
-        ))
+            })),
+            channel,
+            addresses: self.addresses,
+            timer,
+            config: self.config,
+            coex: self.coex,
+            identity: PhantomData,
+        })
     }
 }
 
@@ -342,12 +350,15 @@ pub struct Tickets;
 pub struct Buffers;
 pub struct BlockAcks;
 pub struct GroupPermission<R>(PhantomData<fn() -> R>);
-pub struct Types<D, const B: usize>(PhantomData<fn() -> D>);
+pub struct Types<Id: SlotIdentity, D, const B: usize>(PhantomData<fn(Id) -> (Id, D)>);
 
-type Single<'id, D, const B: usize> =
-    InFlight<<D as Device<B>>::Context<'id>, Slot<'id, Tickets, Part<2>>, Mpdu<'id, D, B>>;
-type Event<'id, D, const B: usize> = LowerMacEvent<'id, Types<D, B>>;
-type Terminal<'id, D, const B: usize> = LowerMacTerminal<'id, Types<D, B>>;
+type Single<'id, Id: SlotIdentity, D, const B: usize> = InFlight<
+    <D as Device<B>>::OwnedContext<Id>,
+    Slot<'id, Tickets, Part<Id, 2>>,
+    Mpdu<'id, Id, D, B>,
+>;
+type Event<'id, Id, D, const B: usize> = LowerMacEvent<'id, Types<Id, D, B>>;
+type Terminal<'id, Id: SlotIdentity, D, const B: usize> = LowerMacTerminal<'id, Types<Id, D, B>>;
 
 struct Queue<T, const N: usize>(RefCell<heapless::Deque<T, N>>);
 impl<T, const N: usize> Queue<T, N> {
@@ -365,20 +376,19 @@ impl<T, const N: usize> Queue<T, N> {
     }
 }
 
-pub struct Held<'id, D: Device<B>, const B: usize> {
-    storage: &'static PortStorage<D, B>,
-    state: RefCell<driver::Driver<'id, D, B>>,
-    commands: Queue<driver::Command<'id, D, B>, COMMANDS>,
-    events: Queue<Event<'id, D, B>, { TERMINALS + TX_TICKETS }>,
+pub struct Held<'id, Id: SlotIdentity, D: Device<B>, const B: usize> {
+    storage: Prepared<&'static PortStorage<D, B>>,
+    commands: Queue<driver::Command<'id, Id, D, B>, COMMANDS>,
+    events: Queue<owned::OwnedEvent<'id, Id, D, B>, { TERMINALS + TX_TICKETS }>,
     rx_out: Cell<usize>,
-    recycled: Queue<ReceiveBuffer<D::Receive>, TX_TICKETS>,
-    failed_command: RefCell<Option<driver::Command<'id, D, B>>>,
-    failed_terminal: RefCell<Option<Terminal<'id, D, B>>>,
-    gate: RefCell<GateIssuer<'id, Part<1>>>,
+    recycled: Queue<ReceiveBuffer<'id, Id, D::Receive>, TX_TICKETS>,
+    failed_command: RefCell<Option<driver::Command<'id, Id, D, B>>>,
+    failed_terminal: RefCell<Option<owned::OwnedTerminal<'id, Id, D, B>>>,
+    gate: RefCell<Prepared<GateIssuer<'id, Part<Id, 1>>>>,
     enabled: Cell<bool>,
     want_enabled: Cell<bool>,
-    channel: Cell<Channel>,
-    edca: Cell<[EdcaParameterSet; 2]>,
+    channel: PreparedCell<Channel>,
+    edca: PreparedCell<[EdcaParameterSet; 2]>,
     dirty_edca: Cell<bool>,
     block_acks: RefCell<[Option<core_mac::RxBlockAckValues>; 8]>,
     dirty_ba: Cell<bool>,
@@ -389,17 +399,74 @@ pub struct Held<'id, D: Device<B>, const B: usize> {
     #[cfg(oer_debug_control)]
     completion_hold: Cell<bool>,
 }
-impl<'id, D: Device<B>, const B: usize> Held<'id, D, B> {
-    fn command(&self, command: driver::Command<'id, D, B>) {
+impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Held<'id, Id, D, B> {
+    const fn vacant() -> Self {
+        Self {
+            storage: Prepared::vacant(),
+            commands: Queue::new(),
+            events: Queue::new(),
+            recycled: Queue::new(),
+            rx_out: Cell::new(0),
+            failed_command: RefCell::new(None),
+            failed_terminal: RefCell::new(None),
+            gate: RefCell::new(Prepared::vacant()),
+            enabled: Cell::new(false),
+            want_enabled: Cell::new(false),
+            channel: PreparedCell::vacant(),
+            edca: PreparedCell::vacant(),
+            dirty_edca: Cell::new(false),
+            block_acks: RefCell::new([None; 8]),
+            dirty_ba: Cell::new(false),
+            color: Cell::new(None),
+            loss: Cell::new(false),
+            #[cfg(oer_debug_control)]
+            publication_hold: Cell::new(0),
+            #[cfg(oer_debug_control)]
+            completion_hold: Cell::new(false),
+        }
+    }
+    fn prepare(
+        &mut self,
+        storage: &'static PortStorage<D, B>,
+        issuer: GateIssuer<'id, Part<Id, 1>>,
+        channel: Channel,
+    ) {
+        assert!(
+            self.commands.empty() && self.events.empty() && self.recycled.empty(),
+            "joined installation drained its rings"
+        );
+        assert!(
+            self.failed_command.get_mut().is_none() && self.failed_terminal.get_mut().is_none(),
+            "joined installation returned failed owners"
+        );
+        self.storage.prepare(storage);
+        self.gate.get_mut().prepare(issuer);
+        self.enabled.set(false);
+        self.want_enabled.set(false);
+        self.rx_out.set(0);
+        self.channel.set(channel);
+        self.edca.set([EdcaParameterSet::STANDARD_DEFAULT; 2]);
+        self.dirty_edca.set(true);
+        *self.block_acks.get_mut() = [None; 8];
+        self.dirty_ba.set(false);
+        self.color.set(None);
+        self.loss.set(false);
+        #[cfg(oer_debug_control)]
+        {
+            self.publication_hold.set(0);
+            self.completion_hold.set(false);
+        }
+    }
+    fn command(&self, command: driver::Command<'id, Id, D, B>) {
         if let Err(command) = self.commands.push(command) {
             *self.failed_command.borrow_mut() = Some(command);
             self.storage.poison(Fault::Capacity);
         }
         self.storage.driver.wake();
     }
-    fn terminal(&self, terminal: Terminal<'id, D, B>) {
-        if let Err(event) = self.events.push(LowerMacEvent::Terminal(terminal)) {
-            if let LowerMacEvent::Terminal(terminal) = event {
+    fn terminal(&self, terminal: owned::OwnedTerminal<'id, Id, D, B>) {
+        if let Err(event) = self.events.push(owned::OwnedEvent::Terminal(terminal)) {
+            if let owned::OwnedEvent::Terminal(terminal) = event {
                 *self.failed_terminal.borrow_mut() = Some(terminal);
             }
             self.storage.poison(Fault::Capacity);
@@ -411,13 +478,14 @@ impl<'id, D: Device<B>, const B: usize> Held<'id, D, B> {
     }
 }
 
-pub struct ReceiveBuffer<R> {
+pub struct ReceiveBuffer<'id, Id: SlotIdentity, R> {
+    brand: PhantomData<fn(&'id (), Id) -> (&'id (), Id)>,
     unit: Option<R>,
     range: core::ops::Range<usize>,
     poison: &'static Cell<Option<Fault>>,
     driver: &'static AtomicWaker,
 }
-impl<R: ReceiveUnit> RxBuffer for ReceiveBuffer<R> {
+impl<Id: SlotIdentity, R: ReceiveUnit> RxBuffer for ReceiveBuffer<'_, Id, R> {
     fn bytes(&self) -> &[u8] {
         &self
             .unit
@@ -426,7 +494,7 @@ impl<R: ReceiveUnit> RxBuffer for ReceiveBuffer<R> {
             .bytes()[self.range.clone()]
     }
 }
-impl<R> Drop for ReceiveBuffer<R> {
+impl<Id: SlotIdentity, R> Drop for ReceiveBuffer<'_, Id, R> {
     fn drop(&mut self) {
         if let Some(unit) = self.unit.take() {
             // Losing an affine receive owner quarantines its original DMA
@@ -445,7 +513,9 @@ pub struct Ack {
     pub snr_db: Option<i8>,
 }
 
-impl<D: Device<B>, const B: usize> LowerMacBackend for Esp32s31Backend<D, B> {
+impl<Id: SlotIdentity, D: Device<B>, const B: usize> LowerMacBackend<Id>
+    for Esp32s31Backend<Id, D, B>
+{
     type Caps = Esp32s31Caps<B>;
     const TX_QUEUE_DEPTH: core::num::NonZeroU8 =
         core::num::NonZeroU8::new(8).expect("eight admission tickets");

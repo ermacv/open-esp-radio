@@ -1,0 +1,18 @@
+error[E0308]: mismatched types
+ --> tests/ui/body_loan_foreign_owner.rs:8:12
+  |
+4 | pub fn loan<'p, Id: SlotIdentity, S: SlotOwner<Id>, Other: SlotOwner<Id>>(
+  |                                   -                 ----- found type parameter
+  |                                   |
+  |                                   expected type parameter
+5 |     own: BodyLoan<'p, Id, S>, foreign: BodyLoan<'p, Id, Other>,
+6 | ) -> BodyLoan<'p, Id, S> {
+  |      ------------------- expected `BodyLoan<'p, Id, S>` because of return type
+7 |     #[cfg(all())]
+8 |     return foreign; // ui-error: E0308
+  |            ^^^^^^^ expected `BodyLoan<'_, Id, S>`, found `BodyLoan<'_, Id, Other>`
+  |
+  = note: expected struct `BodyLoan<'p, Id, S>`
+             found struct `BodyLoan<'p, Id, Other>`
+  = note: a type parameter was expected, but a different one was found; you might be missing a type parameter or trait bound
+  = note: for more information, visit https://doc.rust-lang.org/book/ch10-02-traits.html#traits-as-parameters

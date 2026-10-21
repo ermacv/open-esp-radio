@@ -2,7 +2,7 @@ error[E0382]: borrow of moved value: `arbiter`
   --> tests/ui/refused_arbiter_owner.rs:11:5
    |
  6 |     mut arbiter: Arbiter<'id, K>,
-   |     ----------- move occurs because `arbiter` has type `Arbiter<'_, K>`, which does not implement the `Copy` trait
+   |     ----------- move occurs because `arbiter` has type `Arbiter<'_, K, NoReservation, oer_radio_port::pool::path::Root<oer_radio_port::identity::LocalId<'_>>>`, which does not implement the `Copy` trait
 ...
  9 |     let outcome = arbiter.retune_refused(pending);
    |                           ----------------------- `arbiter` moved due to this method call

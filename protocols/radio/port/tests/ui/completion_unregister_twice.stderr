@@ -1,0 +1,16 @@
+error[E0382]: use of moved value: `completion`
+ --> tests/ui/completion_unregister_twice.rs:6:5
+  |
+3 | pub fn unregister<Id: SlotIdentity>(completion: SlotCompletion<'_, Id>) {
+  |                                     ---------- move occurs because `completion` has type `SlotCompletion<'_, Id>`, which does not implement the `Copy` trait
+4 |     completion.unregistered();
+  |                -------------- `completion` moved due to this method call
+5 |     #[cfg(all())]
+6 |     completion.unregistered(); // ui-error: E0382
+  |     ^^^^^^^^^^ value used here after move
+  |
+note: `SlotCompletion::<'_, Id>::unregistered` takes ownership of the receiver `self`, which moves `completion`
+ --> src/slot.rs
+  |
+  |     pub fn unregistered(mut self) {
+  |                             ^^^^

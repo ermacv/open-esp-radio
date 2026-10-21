@@ -450,7 +450,13 @@ impl<H> LowerMacHardware for H where
 }
 
 /// Receiver of the events one core call produces.
-pub trait LowerMacSink<'core, 'slot, const BUFFER_SIZE: usize, Path: PoolPath = Root> {
+pub trait LowerMacSink<
+    'core,
+    'slot,
+    const BUFFER_SIZE: usize,
+    Path: PoolPath = Root<oer_radio_port::LocalId<'core>>,
+>
+{
     /// The attempt of `queue`, submitted at `rate`, ended as `end`: its
     /// slot comes back with it.
     fn tx_completed(
@@ -671,7 +677,7 @@ pub struct LowerMacCoreParts<
     E,
     T,
     const BUFFER_SIZE: usize,
-    Path: PoolPath = Root,
+    Path: PoolPath = Root<oer_radio_port::LocalId<'core>>,
     const TICKETS: usize = 4,
 > {
     authority: CoreAuthority<'core, Path, TICKETS>,
@@ -840,7 +846,7 @@ pub struct LowerMacCore<
     E,
     T,
     const BUFFER_SIZE: usize,
-    Path: PoolPath = Root,
+    Path: PoolPath = Root<oer_radio_port::LocalId<'core>>,
     const TICKETS: usize = 4,
 > {
     authority: CoreAuthority<'core, Path, TICKETS>,
@@ -2312,7 +2318,12 @@ const PRIORITY_ZERO: MacPti = match MacPti::new(0) {
 /// A publication the transmit owner refused: its fault, and the slot that
 /// goes back.
 #[must_use = "retain the returned transmit slot and handle the publication fault"]
-pub struct SubmitFault<'core, 'slot, const BUFFER_SIZE: usize, Path: PoolPath = Root> {
+pub struct SubmitFault<
+    'core,
+    'slot,
+    const BUFFER_SIZE: usize,
+    Path: PoolPath = Root<oer_radio_port::LocalId<'core>>,
+> {
     pub queue: FreeQueue<'core, Path>,
     pub fault: LowerMacFault,
     pub slot: Pin<&'slot mut TxSlot<BUFFER_SIZE>>,
@@ -2508,7 +2519,7 @@ pub struct AmpduValues {
 
 /// A refused aggregate plan returns its admission without publishing.
 #[must_use = "retain both admission owners and handle the reason"]
-pub struct AmpduPlanningRefused<'core, Path: PoolPath = Root> {
+pub struct AmpduPlanningRefused<'core, Path: PoolPath = Root<oer_radio_port::LocalId<'core>>> {
     pub queue: FreeQueue<'core, Path>,
     pub admission: TxAdmission<'core, Path>,
     pub reason: AmpduRefusal,

@@ -3,7 +3,12 @@ use crate::{
     Answer, Request, irq,
     irq::{B, N, Q, S, TX},
 };
-use core::{convert::Infallible, pin::Pin};
+use core::{
+    convert::Infallible,
+    future::{Future, poll_fn},
+    pin::{Pin, pin},
+    task::{Context as PollContext, Poll},
+};
 use embassy_futures::select::{Either, select};
 use esp_hal::rng::RngOwner;
 use oer_embassy_time::EmbassyClock;
@@ -82,8 +87,35 @@ type Device = RadioDevice<
     Q,
     irq::RadioExecutor,
 >;
-type Backend = Esp32s31Backend<Device, TX>;
-type Family = Types<Device, TX>;
+type Backend<Id> = Esp32s31Backend<Id, Device, TX>;
+oer_espressif_executor::declare_port_slot!(slot: super::Backend<Id>);
+
+/// The unique static backing lent to the conformance task.
+pub struct Slot(
+    &'static mut radio::PortSlot<slot::Id, Backend<slot::Id>>,
+    &'static mut TraceScratch,
+);
+impl Slot {
+    /// Claim before starting P2; every later claim refuses permanently.
+    #[inline(never)]
+    pub fn take_static() -> Option<Self> {
+        let port = slot::take_static()?;
+        static OUTPUT: StaticCell<TraceScratch> = StaticCell::new();
+        Some(Self(port, OUTPUT.init_with(|| TraceScratch(None))))
+    }
+}
+
+/// Plain HIL output, retained outside futures while a case disables the port.
+struct TraceScratch(Option<oer_hil_protocol::lower_mac::Trace>);
+struct PendingTrace<'a>(&'a mut TraceScratch);
+impl Drop for PendingTrace<'_> {
+    fn drop(&mut self) {
+        // Cancellation discards the same plain output the old local held.
+        self.0.0 = None;
+    }
+}
+
+type Family<Id> = Types<Id, Device, TX>;
 type Caps = Esp32s31Caps<TX>;
 static STORAGE: StaticCell<PortStorage<Device, TX>> = StaticCell::new();
 static RETAINED: oer_trace::Retained<256, 4, 33> = oer_trace::Retained::new();
@@ -129,8 +161,10 @@ impl Composition for Fixture {
     type Profile = oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile;
     type Entropy = Entropy;
     type Body = FixtureBody;
-    type Context<'id> = Context;
-    type ConfigureContext<'id> = configure::Witness;
+    type OwnedContext<Id: radio::SlotIdentity> = Context;
+    type Context<'p, Id: radio::SlotIdentity + 'p> = Context;
+    type OwnedConfigureContext<Id: radio::SlotIdentity> = configure::Witness;
+    type ConfigureContext<'p, Id: radio::SlotIdentity + 'p> = configure::Witness;
 }
 struct Coex;
 impl RadioCoexPriorities for Coex {
@@ -157,20 +191,9 @@ struct Peer {
 mod futures {
     use super::*;
     pub(super) type InstallFuture =
-        impl core::future::Future<Output = Result<radio::Installed<Backend>, &'static str>>;
-    pub(super) type DiscoverFuture = impl core::future::Future<
-            Output = radio::PortEnd<Backend, Result<(Peer, Prepared), &'static str>>,
-        >;
-    pub(super) type ExchangeFuture = impl core::future::Future<
-            Output = radio::PortEnd<
-                Backend,
-                Result<oer_hil_protocol::lower_mac::Trace, &'static str>,
-            >,
-        >;
-    pub(super) static INSTALL_FUTURE: StaticCell<InstallFuture> = StaticCell::new();
-    pub(super) static DISCOVER_FUTURE: StaticCell<DiscoverFuture> = StaticCell::new();
-    pub(super) static EXCHANGE_FUTURE: StaticCell<Option<ExchangeFuture>> = StaticCell::new();
-    pub(super) struct StaticFuture<F: 'static>(pub Pin<&'static mut F>);
+        impl core::future::Future<Output = Result<PortParts<Device, TX>, &'static str>>;
+    static INSTALL_FUTURE: StaticCell<InstallFuture> = StaticCell::new();
+    pub(super) struct StaticFuture<F: 'static>(Pin<&'static mut F>);
     impl<F: core::future::Future> core::future::Future for StaticFuture<F> {
         type Output = F::Output;
         #[inline(never)]
@@ -187,78 +210,35 @@ mod futures {
             INSTALL_FUTURE.init_with(|| installing(boot, config)),
         ))
     }
-    #[inline(never)]
-    pub(super) fn discover_future(
-        installed: radio::Installed<Backend>,
-        body: Discover,
-    ) -> StaticFuture<DiscoverFuture> {
-        StaticFuture(Pin::static_mut(
-            DISCOVER_FUTURE.init_with(|| discovering(installed, body)),
-        ))
-    }
-    #[inline(never)]
-    pub(super) fn exchange_future(
-        future: &mut Pin<&'static mut Option<ExchangeFuture>>,
-        installed: radio::Installed<Backend>,
-        body: Exchange,
-    ) {
-        future.set(None);
-        future.set(Some(exchanging(installed, body)));
-    }
     #[define_opaque(InstallFuture)]
-    pub(super) fn installing(boot: Boot, config: Prepare) -> InstallFuture {
+    fn installing(boot: Boot, config: Prepare) -> InstallFuture {
         install(boot, config)
     }
-    #[define_opaque(DiscoverFuture)]
-    pub(super) fn discovering(
-        installed: radio::Installed<Backend>,
-        body: Discover,
-    ) -> DiscoverFuture {
-        radio::run_port(installed, body)
-    }
-    #[define_opaque(ExchangeFuture)]
-    pub(super) fn exchanging(
-        installed: radio::Installed<Backend>,
-        body: Exchange,
-    ) -> ExchangeFuture {
-        radio::run_port(installed, body)
-    }
 }
-use futures::*;
-#[inline(never)]
-fn poll_exchange(
-    mut future: Pin<&mut ExchangeFuture>,
-) -> impl core::future::Future<
-    Output = radio::PortEnd<Backend, Result<oer_hil_protocol::lower_mac::Trace, &'static str>>,
-> {
-    core::future::poll_fn(move |cx| poll_exchange_once(future.as_mut(), cx))
-}
-#[inline(never)]
-fn poll_exchange_once(
-    future: Pin<&mut ExchangeFuture>,
-    cx: &mut core::task::Context<'_>,
-) -> core::task::Poll<
-    radio::PortEnd<Backend, Result<oer_hil_protocol::lower_mac::Trace, &'static str>>,
-> {
-    core::future::Future::poll(future, cx)
-}
-pub struct Server {
+use futures::install_future;
+pub struct Server<'s, Id: radio::SlotIdentity> {
+    slot: &'s mut radio::PortSlot<Id, Backend<Id>>,
     boot: Option<Boot>,
-    stopped: Option<StoppedPort<Device, TX>>,
+    joined: Option<radio::Joined<Id>>,
     peer: Option<Peer>,
     epoch: u32,
-    exchange: Pin<&'static mut Option<ExchangeFuture>>,
     bodies: &'static ownership::BodyPool,
+    output: &'s mut TraceScratch,
 }
-impl Server {
-    pub fn new(boot: Boot) -> Self {
+impl<'s, Id: radio::SlotIdentity + 's> Server<'s, Id> {
+    fn new(
+        boot: Boot,
+        slot: &'s mut radio::PortSlot<Id, Backend<Id>>,
+        output: &'s mut TraceScratch,
+    ) -> Self {
         Self {
             boot: Some(boot),
-            stopped: None,
+            joined: None,
+            slot,
             peer: None,
             epoch: 1,
-            exchange: Pin::static_mut(EXCHANGE_FUTURE.init(None)),
             bodies: ownership::BodyPool::new(),
+            output,
         }
     }
     pub async fn request(&mut self, request: Request) -> Result<Answer, RejectReason> {
@@ -266,19 +246,23 @@ impl Server {
             Request::Prepare(config) => {
                 let boot = self.boot.take().ok_or(RejectReason::InvalidState)?;
                 let station = boot.station;
-                let installed = install_future(boot, config)
+                let parts = install_future(boot, config)
                     .await
                     .map_err(|_| RejectReason::Internal)?;
-                let result = discover_future(installed, Discover { config, station }).await;
-                let radio::PortEnd::Uninstalled {
-                    output,
-                    uninstalled: Uninstalled::Stopped(stopped),
-                    ..
-                } = result
-                else {
+                let backend = Backend::<Id>::new(parts).map_err(|_| RejectReason::Internal)?;
+                let registered = self
+                    .slot
+                    .register(backend)
+                    .map_err(|_| RejectReason::Internal)?;
+                let result = radio::LocalExecution
+                    .scope(registered, |frontend| {
+                        radio::run_port(frontend, Discover { config, station })
+                    })
+                    .await;
+                let radio::PortEnd::Uninstalled { output, joined, .. } = result else {
                     return Err(RejectReason::Internal);
                 };
-                self.stopped = Some(stopped);
+                self.joined = Some(joined);
                 let (peer, prepared) = output.map_err(|_| RejectReason::Internal)?;
                 self.peer = Some(peer);
                 Ok(Answer::Prepared(prepared))
@@ -289,43 +273,45 @@ impl Server {
                     return Err(RejectReason::Unsupported);
                 }
                 let peer = self.peer.ok_or(RejectReason::InvalidState)?;
-                let stopped = self.stopped.take().ok_or(RejectReason::InvalidState)?;
+                let joined = self.joined.take().ok_or(RejectReason::InvalidState)?;
                 self.epoch = self.epoch.checked_add(1).ok_or(RejectReason::Internal)?;
-                let installed = stopped
-                    .reinstall(self.epoch)
+                let epoch = self.epoch;
+                let bodies = self.bodies;
+                let output = &mut *self.output;
+                let registered = self
+                    .slot
+                    .reinstall(joined, |stopped| {
+                        stopped
+                            .reinstall(epoch)
+                            .ok()
+                            .expect("Joined retains stopped DMA owners and a distinct epoch")
+                    })
                     .map_err(|_| RejectReason::Internal)?;
-                exchange_future(
-                    &mut self.exchange,
-                    installed,
-                    Exchange {
-                        peer,
-                        case,
-                        bodies: self.bodies,
-                    },
-                );
-                let result = poll_exchange(
-                    self.exchange
-                        .as_mut()
-                        .as_pin_mut()
-                        .ok_or(RejectReason::Internal)?,
-                )
-                .await;
-                let radio::PortEnd::Uninstalled {
-                    output,
-                    uninstalled: Uninstalled::Stopped(stopped),
-                    ..
-                } = result
-                else {
+                let result = radio::LocalExecution
+                    .scope(registered, move |frontend| {
+                        let scratch = output;
+                        radio::run_port(
+                            frontend,
+                            Exchange {
+                                peer,
+                                case,
+                                bodies,
+                                output: scratch,
+                            },
+                        )
+                    })
+                    .await;
+                let radio::PortEnd::Uninstalled { output, joined, .. } = result else {
                     return Err(RejectReason::Internal);
                 };
-                self.stopped = Some(stopped);
+                self.joined = Some(joined);
                 let trace = output.map_err(|_| RejectReason::Internal)?;
                 Ok(Answer::Trace(CaseTrace { case: key, trace }))
             }
         }
     }
 }
-async fn install(boot: Boot, config: Prepare) -> Result<radio::Installed<Backend>, &'static str> {
+async fn install(boot: Boot, config: Prepare) -> Result<PortParts<Device, TX>, &'static str> {
     let domain = RegulatoryDomain::of(Country::new(config.country).map_err(|_| "country")?)
         .ok_or("domain")?;
     let channel =
@@ -418,22 +404,27 @@ async fn install(boot: Boot, config: Prepare) -> Result<radio::Installed<Backend
         coex: &Coex,
     };
     let _ = oer_trace::install(&TRACE);
-    Backend::new(parts).map_err(|_| "port construction")
+    Ok(parts)
 }
 struct Discover {
     config: Prepare,
     station: [u8; 6],
 }
-impl PortBody<Backend> for Discover {
+impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for Discover {
     type Output = Result<(Peer, Prepared), &'static str>;
     async fn run<'p, 'id>(
         self,
-        owner: Owner<'p, 'id, Backend, Disabled>,
-        resources: <Backend as PortBackend>::Resources<'id>,
-    ) -> Ended<'id, Backend, Self::Output> {
+        owner: Owner<'p, 'id, Id, Backend<Id>, Disabled>,
+        resources: <Backend<Id> as PortBackend<Id>>::Resources<'id>,
+    ) -> Ended<Id, Backend<Id>, Self::Output>
+    where
+        Backend<Id>: 'id,
+        Id: 'id,
+        'id: 'p,
+    {
         let mut owner = match owner.enable().await {
             Ok(owner) => owner,
-            Err(failed) => return Ended::fail_stopped(failed.fail_stop(), Err("enable")),
+            Err(failed) => return Ended::fail_stop(failed.fail_stop(), Err("enable")),
         };
         let output = {
             let mut phase = owner.phase();
@@ -459,13 +450,13 @@ impl PortBody<Backend> for Discover {
             .await
         {
             Ok(owner) => owner,
-            Err(failed) => return Ended::fail_stopped(failed.fail_stop(), Err("disable")),
+            Err(failed) => return Ended::fail_stop(failed.fail_stop(), Err("disable")),
         };
         Ended::uninstall(owner, (), output)
     }
 }
-async fn discover<'p, 'id: 'p>(
-    phase: &mut Esp32s31Phase<'p, 'id, Device, TX>,
+async fn discover<'p, 'id: 'p, Id: radio::SlotIdentity + 'id>(
+    phase: &mut Esp32s31Phase<'p, 'id, Id, Device, TX>,
     config: Prepare,
     station: [u8; 6],
 ) -> Result<(Peer, Prepared), &'static str> {
@@ -506,7 +497,7 @@ async fn discover<'p, 'id: 'p>(
                         station,
                     },
                     Prepared {
-                        ampdu: Backend::AMPDU.is_some(),
+                        ampdu: Backend::<Id>::AMPDU.is_some(),
                         basic_rates,
                         basic_rates_len: len as u8,
                     },
@@ -517,58 +508,93 @@ async fn discover<'p, 'id: 'p>(
         }
     }
 }
-struct Exchange {
+struct Exchange<'a> {
     peer: Peer,
     case: catalog::Case,
     bodies: &'static ownership::BodyPool,
+    output: &'a mut TraceScratch,
 }
-impl PortBody<Backend> for Exchange {
+impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for Exchange<'_> {
     type Output = Result<oer_hil_protocol::lower_mac::Trace, &'static str>;
     async fn run<'p, 'id>(
         self,
-        owner: Owner<'p, 'id, Backend, Disabled>,
-        resources: <Backend as PortBackend>::Resources<'id>,
-    ) -> Ended<'id, Backend, Self::Output> {
-        let mut owner = match owner.enable().await {
+        owner: Owner<'p, 'id, Id, Backend<Id>, Disabled>,
+        resources: <Backend<Id> as PortBackend<Id>>::Resources<'id>,
+    ) -> Ended<Id, Backend<Id>, Self::Output>
+    where
+        Backend<Id>: 'id,
+        Id: 'id,
+        'id: 'p,
+    {
+        let owner = match owner.enable().await {
             Ok(owner) => owner,
-            Err(failed) => return Ended::fail_stopped(failed.fail_stop(), Err("enable")),
+            Err(failed) => return Ended::fail_stop(failed.fail_stop(), Err("enable")),
         };
-        if let catalog::Case::Ownership(scenario) = self.case {
-            return ownership::run(owner, resources, self.peer, scenario, self.bodies).await;
-        }
-        if let catalog::Case::Barrier(case) = self.case {
-            return barrier::run(owner, resources, self.peer, case).await;
-        }
-        if let catalog::Case::Configure(case) = self.case {
-            return configure::run(owner, resources, case).await;
-        }
-        if let catalog::Case::Group(case) = self.case {
-            return group::run(owner, resources, case, self.peer).await;
-        }
-        if let catalog::Case::Edca(case) = self.case {
-            return edca::run(owner, resources, self.peer, case).await;
-        }
-        let output = match self.case {
-            catalog::Case::Outcome(case) => {
-                exchange(&mut owner.phase(), resources, self.peer, case)
-                    .await
-                    .map(oer_hil_protocol::lower_mac::Trace::Outcome)
+        match self.case {
+            catalog::Case::Ownership(scenario) => {
+                run_case(pin!(ownership::run(
+                    owner,
+                    resources,
+                    self.peer,
+                    scenario,
+                    self.bodies
+                )))
+                .await
             }
-            _ => Err("fixture unavailable"),
-        };
-        let owner = match owner
-            .disable(&mut |_| core::ops::ControlFlow::Continue(()))
-            .await
-        {
-            Ok(owner) => owner,
-            Err(failed) => return Ended::fail_stopped(failed.fail_stop(), Err("disable")),
-        };
-        Ended::uninstall(owner, (), output)
+            catalog::Case::Barrier(case) => {
+                run_case(pin!(barrier::run(
+                    owner,
+                    resources,
+                    self.peer,
+                    case,
+                    self.output
+                )))
+                .await
+            }
+            catalog::Case::Configure(case) => {
+                run_case(pin!(configure::run(owner, resources, case))).await
+            }
+            catalog::Case::Group(case) => {
+                run_case(pin!(group::run(owner, resources, case, self.peer))).await
+            }
+            catalog::Case::Edca(case) => {
+                run_case(pin!(edca::run(owner, resources, self.peer, case))).await
+            }
+            case => run_case(pin!(outcome(owner, resources, self.peer, case))).await,
+        }
     }
 }
-async fn exchange<'p, 'id: 'p>(
-    phase: &mut Esp32s31Phase<'p, 'id, Device, TX>,
-    resources: <Backend as PortBackend>::Resources<'id>,
+fn run_case<F: Future>(mut future: Pin<&mut F>) -> impl Future<Output = F::Output> + '_ {
+    poll_fn(move |cx| poll_case(future.as_mut(), cx))
+}
+#[inline(never)]
+fn poll_case<F: Future>(future: Pin<&mut F>, cx: &mut PollContext<'_>) -> Poll<F::Output> {
+    future.poll(cx)
+}
+async fn outcome<'p, 'id: 'p, Id: radio::SlotIdentity + 'id>(
+    mut owner: Owner<'p, 'id, Id, Backend<Id>, radio::Enabled>,
+    resources: <Backend<Id> as PortBackend<Id>>::Resources<'id>,
+    peer: Peer,
+    case: catalog::Case,
+) -> Ended<Id, Backend<Id>, Result<oer_hil_protocol::lower_mac::Trace, &'static str>> {
+    let output = match case {
+        catalog::Case::Outcome(case) => exchange(&mut owner.phase(), resources, peer, case)
+            .await
+            .map(oer_hil_protocol::lower_mac::Trace::Outcome),
+        _ => Err("fixture unavailable"),
+    };
+    let owner = match owner
+        .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+        .await
+    {
+        Ok(owner) => owner,
+        Err(failed) => return Ended::fail_stop(failed.fail_stop(), Err("disable")),
+    };
+    Ended::uninstall(owner, (), output)
+}
+async fn exchange<'p, 'id: 'p, Id: radio::SlotIdentity + 'id>(
+    phase: &mut Esp32s31Phase<'p, 'id, Id, Device, TX>,
+    resources: <Backend<Id> as PortBackend<Id>>::Resources<'id>,
     peer: Peer,
     case: outcomes::Case,
 ) -> Result<OutcomeTrace, &'static str> {
@@ -622,8 +648,9 @@ async fn exchange<'p, 'id: 'p>(
     }
     .check()
     .map_err(|_| "layout")?;
-    let source = <Family as TxBufferPool<'id, BufferClass<TX>>>::prepare::<Station, Caps>(source)
-        .map_err(|_| "prepare")?;
+    let source =
+        <Family<Id> as TxBufferPool<'id, BufferClass<TX>>>::prepare::<Station, Caps>(source)
+            .map_err(|_| "prepare")?;
     oer_trace::start(port::trace::Publication::CHANNEL.mask());
     phase
         .station()
@@ -660,7 +687,7 @@ async fn exchange<'p, 'id: 'p>(
     let (mut buffer, state) = match buffer {
         AnyBuffer::Fresh(buffer) => (buffer, MpduState::Fresh),
         AnyBuffer::Sent(sent) => {
-            let (buffer, _) = <Family as TxBufferPool<'id, BufferClass<TX>>>::renew(sent);
+            let (buffer, _) = <Family<Id> as TxBufferPool<'id, BufferClass<TX>>>::renew(sent);
             (buffer, MpduState::Sent)
         }
     };
@@ -689,4 +716,62 @@ async fn exchange<'p, 'id: 'p>(
         outcome: outcomes::Outcome::Single(parts.outcome),
     };
     outcome_trace(&trace).ok_or("unrepresentable outcome")
+}
+
+macro_rules! plain_context {
+    ($ty:ty) => {
+        impl<Id: radio::SlotIdentity> radio::ContextProjection<Id> for $ty {
+            type View<'a, 'p>
+                = &'a Self
+            where
+                Self: 'p,
+                Id: 'p,
+                'p: 'a;
+            type Parts<'p>
+                = Self
+            where
+                Self: 'p,
+                Id: 'p;
+            fn view<'a, 'p>(&'a self, _: radio::ContextLoan<'p, Id>) -> Self::View<'a, 'p>
+            where
+                Self: 'p,
+                Id: 'p,
+                'p: 'a,
+            {
+                self
+            }
+            fn into_parts<'p>(self, _: radio::ContextLoan<'p, Id>) -> Self
+            where
+                Self: 'p,
+                Id: 'p,
+            {
+                self
+            }
+        }
+        impl<'p, Id: radio::SlotIdentity + 'p> radio::LoanedContext<'p, Id> for $ty {
+            type Owned = Self;
+            fn enclose(self) -> radio::PortContext<'p, Id, Self> {
+                radio::PortContext::new(self)
+            }
+            fn restore(context: radio::PortContext<'p, Id, Self>) -> Self {
+                context.into_parts()
+            }
+        }
+    };
+}
+plain_context!(Context);
+plain_context!(configure::Witness);
+
+pub async fn serve(boot: Boot, slot: Slot) {
+    let mut server = Server::new(boot, slot.0, slot.1);
+    loop {
+        core::future::poll_fn(|cx| crate::DOORBELL.poll_rung(cx)).await;
+        if let Some((request, response)) = crate::SLOT.take_request() {
+            let answer = server
+                .request(request)
+                .await
+                .unwrap_or_else(Answer::Rejected);
+            response.answer(answer);
+        }
+    }
 }

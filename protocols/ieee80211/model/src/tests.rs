@@ -3,14 +3,18 @@
 
 use super::*;
 use core::num::NonZeroU8;
+use fixture::{Fixture, Report, run_model};
 use oer_ieee80211_port::{
     AckHeader, ChannelWidth, ClassFrame, HeaderSpec, InstalledGroup, MpduLength, Protection,
     RetryPlan, RetryStage, SizedFrame, SupportedPower, TxPower,
 };
+use oer_ieee80211_port::{
+    Configured, LowerMacEvent, LowerMacTerminal, Removed, RemovedKey, TxCompleted,
+};
 use oer_ieee80211_wire::ccmp::GroupKeyId;
 use oer_ieee80211_wire::frame::FrameControl;
 use oer_ieee80211_wire::{phy::LegacyRate, qos::WmmAccessCategory};
-use oer_radio_port::{Disabled, Ended, Owner, PortBody, run_port};
+use oer_radio_port::{Disabled, Ended, Owner, PortBody};
 
 const STATION: [u8; 6] = [2, 0, 0, 0, 0, 1];
 const ACCESS_POINT: [u8; 6] = [2, 0, 0, 0, 0, 2];
@@ -36,14 +40,12 @@ fn queue_accounting_fault_retains_every_owner_until_teardown() {
     assert_eq!(drops.get(), 2);
 }
 
-fn backend() -> (oer_radio_port::Installed<ModelBackend>, Rc<ModelAir>) {
+fn backend() -> (Fixture, Rc<ModelAir>) {
     backend_on(Rc::new(oer_time_virtual::VirtualClock::<8>::new()))
 }
 
-fn backend_on(
-    clock: Rc<oer_time_virtual::VirtualClock>,
-) -> (oer_radio_port::Installed<ModelBackend>, Rc<ModelAir>) {
-    ModelBackend::new(
+fn backend_on(clock: Rc<oer_time_virtual::VirtualClock>) -> (Fixture, Rc<ModelAir>) {
+    Fixture::<ModelCaps>::new(
         Channel::ghz2_4(6, ChannelWidth::Mhz20).unwrap(),
         [
             IndividualAddress::new(STATION).unwrap(),
@@ -58,14 +60,23 @@ fn each_installation_and_retuned_phase_checks_its_own_channel() {
     use oer_radio_port::Enabled;
 
     struct Channels;
-    struct Second<'s, 'p, 'outer>(&'s mut Owner<'p, 'outer, ModelBackend, Enabled>);
-    impl PortBody<ModelBackend> for Second<'_, '_, '_> {
+    struct Second<'s, 'p, 'outer: 'p, OuterId: SlotIdentity + 'outer>(
+        &'s mut Owner<'p, 'outer, OuterId, ModelBackend<OuterId>, Enabled>,
+    );
+    impl<OuterId: SlotIdentity, Id: SlotIdentity> PortBody<Id, ModelBackend<Id>>
+        for Second<'_, '_, '_, OuterId>
+    {
         type Output = ();
         async fn run<'p, 'id>(
             self,
-            owner: Owner<'p, 'id, ModelBackend, Disabled>,
-            _resources: ModelResources<'id>,
-        ) -> Ended<'id, ModelBackend, ()> {
+            owner: Owner<'p, 'id, Id, ModelBackend<Id>, Disabled>,
+            _resources: ModelResources<'id, ModelBackend<Id>>,
+        ) -> Ended<Id, ModelBackend<Id>, ()>
+        where
+            ModelBackend<Id>: 'id,
+            Id: 'id,
+            'id: 'p,
+        {
             let mut target = owner.enable().await.ok().unwrap();
             {
                 let source = self.0.phase();
@@ -78,18 +89,23 @@ fn each_installation_and_retuned_phase_checks_its_own_channel() {
                     .unwrap();
                 assert!(destination.no_ack(ofdm).is_ok());
             }
-            Ended::fail_stopped(target.fail_stop(), ())
+            Ended::fail_stop(target.fail_stop(), ())
         }
     }
-    impl PortBody<ModelBackend> for Channels {
+    impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id>> for Channels {
         type Output = ();
         async fn run<'p, 'id>(
             self,
-            owner: Owner<'p, 'id, ModelBackend, Disabled>,
-            _resources: ModelResources<'id>,
-        ) -> Ended<'id, ModelBackend, ()> {
+            owner: Owner<'p, 'id, Id, ModelBackend<Id>, Disabled>,
+            _resources: ModelResources<'id, ModelBackend<Id>>,
+        ) -> Ended<Id, ModelBackend<Id>, ()>
+        where
+            ModelBackend<Id>: 'id,
+            Id: 'id,
+            'id: 'p,
+        {
             let mut source = owner.enable().await.ok().unwrap();
-            let (target, _) = ModelBackend::new(
+            let (target, _) = Fixture::<ModelCaps>::new(
                 Channel::ghz5(36, ChannelWidth::Mhz20).unwrap(),
                 [
                     IndividualAddress::new(STATION).unwrap(),
@@ -98,8 +114,8 @@ fn each_installation_and_retuned_phase_checks_its_own_channel() {
                 std::rc::Rc::new(oer_time_virtual::VirtualClock::<8>::new()),
             );
             assert!(matches!(
-                run_port(target, Second(&mut source)).await,
-                oer_radio_port::PortEnd::FailStopped { .. }
+                run_model(target, Second(&mut source)).await,
+                Report::Stopped(_)
             ));
             let mut source = source
                 .disable(&mut |_| core::ops::ControlFlow::Continue(()))
@@ -133,12 +149,12 @@ fn each_installation_and_retuned_phase_checks_its_own_channel() {
                     core::mem::size_of::<PhyRate>()
                 );
             }
-            Ended::fail_stopped(source.fail_stop(), ())
+            Ended::fail_stop(source.fail_stop(), ())
         }
     }
     assert!(matches!(
-        block_on(run_port(backend().0, Channels)),
-        oer_radio_port::PortEnd::FailStopped { .. }
+        block_on(run_model(backend().0, Channels)),
+        Report::Stopped(_)
     ));
 }
 
@@ -182,8 +198,8 @@ fn until(open: &Cell<bool>) -> impl Future<Output = ()> + '_ {
 }
 
 /// A data frame to the peer, 40 octets, protected or not.
-fn data_frame<'p, 'id: 'p, X: ModelContext>(
-    phase: &ModelPhase<'p, 'id, ModelCaps, X>,
+fn data_frame<'p, 'id: 'p, Id: SlotIdentity + 'id, X: ModelContext + 'id>(
+    phase: &ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id, ModelCaps, X>>,
     protected: bool,
 ) -> TxFrame<'p, 'id, ModelCaps> {
     let rate = phase
@@ -214,10 +230,10 @@ fn data_frame<'p, 'id: 'p, X: ModelContext>(
 }
 
 /// Submit a frame and its class's memory at the same boundary.
-fn submit_frame<'k, 'p, 'id: 'p + 'k, C: ModelClass>(
-    phase: &mut ModelPhase<'p, 'id>,
-    ticket: Slot<'id, ModelTickets, ModelPool<1>>,
-    source: ModelSource<'k, 'p, 'id, C, ModelCaps, Station, ()>,
+fn submit_frame<'k, 'p, 'id: 'p + 'k, Id: SlotIdentity + 'id, C: ModelClass>(
+    phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
+    ticket: Slot<'id, ModelTickets, ModelPool<Id, 1>>,
+    source: ModelSource<'k, 'p, 'id, C, ModelCaps, Station, ModelBackend<Id>>,
 ) {
     let source = prepare_model(source.check().ok().unwrap()).ok().unwrap();
     phase
@@ -237,11 +253,11 @@ fn submit_frame<'k, 'p, 'id: 'p + 'k, C: ModelClass>(
         .unwrap();
 }
 
-fn submit<'p, 'id: 'p, C: ModelClass>(
-    phase: &mut ModelPhase<'p, 'id>,
-    ticket: Slot<'id, ModelTickets, ModelPool<1>>,
-    mut buffer: ModelBuffer<'id, C>,
-    key: Option<&CoreKey<ModelPairwiseKey<'id, Station>>>,
+fn submit<'p, 'id: 'p, Id: SlotIdentity + 'id, C: ModelClass>(
+    phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
+    ticket: Slot<'id, ModelTickets, ModelPool<Id, 1>>,
+    mut buffer: ModelBuffer<'id, ModelBackend<Id>, C>,
+    key: Option<&CoreKey<ModelPairwiseKey<'id, ModelBackend<Id>, Station>>>,
 ) {
     buffer.bytes_mut()[..40].fill(0x5a);
     let frame = ClassFrame::new(data_frame(phase, key.is_some()))
@@ -259,14 +275,29 @@ fn submit<'p, 'id: 'p, C: ModelClass>(
     );
 }
 
-fn push_subframe<'k, 'p, 'id: 'k + 'p, X: ModelContext<Body = ModelBody>, S: AggregateState>(
-    aggregate: ModelAggregate<'k, 'p, 'id, Station, ModelCaps, X, S>,
+fn push_subframe<
+    'k,
+    'p,
+    'id: 'k + 'p,
+    Id: SlotIdentity + 'id,
+    X: ModelContext<Body = ModelBody> + 'id,
+    S: AggregateState,
+>(
+    aggregate: ModelAggregate<'k, 'p, 'id, Station, ModelCaps, ModelBackend<Id, ModelCaps, X>, S>,
     numbering: oer_ieee80211_port::TxNumbering,
-    buffer: ModelBuffer<'id, ModelSmall>,
+    buffer: ModelBuffer<'id, ModelBackend<Id, ModelCaps, X>, ModelSmall>,
     frame: SizedFrame<AckHeader, ModelCaps>,
     body: Option<ModelBody>,
-) -> ModelAggregate<'k, 'p, 'id, Station, ModelCaps, X, NonEmptyAggregate> {
-    <ModelTypes<X> as TxBufferPool<ModelSmall>>::push_aggregate(
+) -> ModelAggregate<
+    'k,
+    'p,
+    'id,
+    Station,
+    ModelCaps,
+    ModelBackend<Id, ModelCaps, X>,
+    NonEmptyAggregate,
+> {
+    <ModelTypes<ModelBackend<Id, ModelCaps, X>> as TxBufferPool<ModelSmall>>::push_aggregate(
         CheckedAggregate::new(
             aggregate,
             SubframeSource::Fresh {
@@ -282,11 +313,26 @@ fn push_subframe<'k, 'p, 'id: 'k + 'p, X: ModelContext<Body = ModelBody>, S: Agg
     .ok()
     .unwrap()
 }
-fn push_retry<'k, 'p, 'id: 'k + 'p, X: ModelContext<Body = ModelBody>, S: AggregateState>(
-    aggregate: ModelAggregate<'k, 'p, 'id, Station, ModelCaps, X, S>,
-    mpdu: ModelSent<'id, ModelSmall>,
-) -> ModelAggregate<'k, 'p, 'id, Station, ModelCaps, X, NonEmptyAggregate> {
-    <ModelTypes<X> as TxBufferPool<ModelSmall>>::push_aggregate(
+fn push_retry<
+    'k,
+    'p,
+    'id: 'k + 'p,
+    Id: SlotIdentity + 'id,
+    X: ModelContext<Body = ModelBody> + 'id,
+    S: AggregateState,
+>(
+    aggregate: ModelAggregate<'k, 'p, 'id, Station, ModelCaps, ModelBackend<Id, ModelCaps, X>, S>,
+    mpdu: ModelSent<'id, ModelBackend<Id, ModelCaps, X>, ModelSmall>,
+) -> ModelAggregate<
+    'k,
+    'p,
+    'id,
+    Station,
+    ModelCaps,
+    ModelBackend<Id, ModelCaps, X>,
+    NonEmptyAggregate,
+> {
+    <ModelTypes<ModelBackend<Id, ModelCaps, X>> as TxBufferPool<ModelSmall>>::push_aggregate(
         CheckedAggregate::new(aggregate, SubframeSource::Sent(mpdu))
             .ok()
             .unwrap(),
@@ -296,10 +342,13 @@ fn push_retry<'k, 'p, 'id: 'k + 'p, X: ModelContext<Body = ModelBody>, S: Aggreg
 }
 
 /// The next terminal's ticket and buffer.
-async fn completion<'p, 'id: 'p>(
-    phase: &mut ModelPhase<'p, 'id>,
-    terminal_access: &mut oer_ieee80211_port::TerminalAccess<'id, ModelTickets, ModelPool<1>>,
-) -> (Slot<'id, ModelTickets, ModelPool<1>>, ModelAnyBuffer<'id>) {
+async fn completion<'p, 'id: 'p, Id: SlotIdentity + 'id>(
+    phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
+    terminal_access: &mut oer_ieee80211_port::TerminalAccess<'id, ModelTickets, ModelPool<Id, 1>>,
+) -> (
+    Slot<'id, ModelTickets, ModelPool<Id, 1>>,
+    ModelAnyBuffer<'id, ModelBackend<Id>>,
+) {
     loop {
         yield_now().await;
         let event = {
@@ -328,12 +377,12 @@ struct Numbering {
 }
 
 impl Work for Numbering {
-    async fn work<'p, 'id: 'p>(
+    async fn work<'p, 'id: 'p, Id: SlotIdentity + 'id>(
         self,
-        phase: &mut ModelPhase<'p, 'id>,
-        resources: ModelResources<'id>,
+        phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
+        resources: ModelResources<'id, ModelBackend<Id>>,
     ) {
-        let station_association = ModelKeys::<Station>::begin_association(
+        let station_association = ModelKeys::<ModelBackend<Id>, Station>::begin_association(
             resources.station_association,
             oer_ieee80211_wire::security::Spp::NotNegotiated,
         );
@@ -358,15 +407,16 @@ impl Work for Numbering {
         let key = self.protected.then_some(&key);
         submit(phase, tickets.remove(0), small.remove(0), key);
         let (ticket, buffer) = completion(phase, &mut terminal_access).await;
-        let numbered = <ModelTypes as TxBufferPool<'id, ModelSmall>>::sent(buffer)
-            .expect("a protected attempt's buffer comes back numbered");
+        let numbered =
+            <ModelTypes<ModelBackend<Id>> as TxBufferPool<'id, ModelSmall>>::sent(buffer)
+                .expect("a protected attempt's buffer comes back numbered");
         let number = numbered.packet_number();
         let air = phase.held.air.clone();
         air.hold(WmmAccessCategory::BestEffort, true);
         let TxFrame::Individual { plan, .. } = data_frame(phase, self.protected) else {
             unreachable!()
         };
-        submit_frame::<ModelSmall>(
+        submit_frame::<_, ModelSmall>(
             phase,
             ticket,
             TxSource::Retransmission {
@@ -376,8 +426,9 @@ impl Work for Numbering {
         );
         phase.close_gate(gate);
         let (ticket, buffer) = completion(phase, &mut terminal_access).await;
-        let numbered = <ModelTypes as TxBufferPool<'id, ModelSmall>>::sent(buffer)
-            .expect("withdrawal preserves an already numbered MPDU");
+        let numbered =
+            <ModelTypes<ModelBackend<Id>> as TxBufferPool<'id, ModelSmall>>::sent(buffer)
+                .expect("withdrawal preserves an already numbered MPDU");
         assert_eq!(numbered.packet_number(), number);
         assert_ne!(numbered.buffer.memory[1] & 0x08, 0);
         let Ok(Ok(LowerMacEvent::Terminal(LowerMacTerminal::GateClosed(closed)))) =
@@ -391,7 +442,7 @@ impl Work for Numbering {
         let TxFrame::Individual { plan, .. } = data_frame(phase, self.protected) else {
             unreachable!()
         };
-        submit_frame::<ModelSmall>(
+        submit_frame::<_, ModelSmall>(
             phase,
             ticket,
             TxSource::Retransmission {
@@ -400,10 +451,12 @@ impl Work for Numbering {
             },
         );
         let (ticket, buffer) = completion(phase, &mut terminal_access).await;
-        let numbered = <ModelTypes as TxBufferPool<'id, ModelSmall>>::sent(buffer)
-            .expect("a retransmission's buffer comes back numbered");
+        let numbered =
+            <ModelTypes<ModelBackend<Id>> as TxBufferPool<'id, ModelSmall>>::sent(buffer)
+                .expect("a retransmission's buffer comes back numbered");
         // Renewed, the memory holds a new MPDU, numbered anew.
-        let (renewed, body) = <ModelTypes as TxBufferPool<'id, ModelSmall>>::renew(numbered);
+        let (renewed, body) =
+            <ModelTypes<ModelBackend<Id>> as TxBufferPool<'id, ModelSmall>>::renew(numbered);
         assert!(body.is_none());
         submit(phase, ticket, renewed, key);
         let _ = completion(phase, &mut terminal_access).await;
@@ -414,7 +467,7 @@ impl Work for Numbering {
 #[test]
 fn a_retransmitted_mpdu_keeps_its_packet_number_and_a_renewed_buffer_takes_a_new_one() {
     let (backend, air) = backend();
-    let _port_end = block_on(run_port(backend, Body(Numbering { protected: true })));
+    let _port_end = block_on(run_model(backend, Body(Numbering { protected: true })));
     let numbers: Vec<_> = air.sent().iter().map(|frame| frame.packet_number).collect();
     assert_eq!(numbers, [Some(1), Some(1), Some(2)]);
 }
@@ -422,7 +475,7 @@ fn a_retransmitted_mpdu_keeps_its_packet_number_and_a_renewed_buffer_takes_a_new
 #[test]
 fn an_open_sent_mpdu_retransmits_without_rebuilding_its_sn_or_payload() {
     let (backend, air) = backend();
-    let _port_end = block_on(run_port(backend, Body(Numbering { protected: false })));
+    let _port_end = block_on(run_model(backend, Body(Numbering { protected: false })));
     let frames = air.sent();
     assert_eq!(frames.len(), 3);
     assert_eq!(frames[0].packet_number, None);
@@ -438,12 +491,12 @@ fn an_open_sent_mpdu_retransmits_without_rebuilding_its_sn_or_payload() {
 
 /// Submit an attempt for every ticket, in every buffer of either class,
 /// running `between` after each.
-fn submit_all<'p, 'id: 'p>(
-    phase: &mut ModelPhase<'p, 'id>,
-    tickets: Vec<Slot<'id, ModelTickets, ModelPool<1>>>,
-    small: Vec<ModelBuffer<'id, ModelSmall>>,
-    large: Vec<ModelBuffer<'id, ModelLarge>>,
-    mut between: impl FnMut(&mut ModelPhase<'p, 'id>),
+fn submit_all<'p, 'id: 'p, Id: SlotIdentity + 'id>(
+    phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
+    tickets: Vec<Slot<'id, ModelTickets, ModelPool<Id, 1>>>,
+    small: Vec<ModelBuffer<'id, ModelBackend<Id>, ModelSmall>>,
+    large: Vec<ModelBuffer<'id, ModelBackend<Id>, ModelLarge>>,
+    mut between: impl FnMut(&mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>),
 ) {
     assert_eq!(small.len() + large.len(), MODEL_TICKETS);
     let mut tickets = tickets.into_iter();
@@ -467,7 +520,10 @@ struct Stream {
 
 /// Take every queued event: completions and receptions, their tokens
 /// recycled or dropped.
-fn drain<'p, 'id: 'p>(phase: &mut ModelPhase<'p, 'id>, stream: &mut Stream) {
+fn drain<'p, 'id: 'p, Id: SlotIdentity + 'id>(
+    phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
+    stream: &mut Stream,
+) {
     loop {
         let event = {
             let event = core::pin::pin!(phase.next_event());
@@ -495,10 +551,10 @@ fn drain<'p, 'id: 'p>(phase: &mut ModelPhase<'p, 'id>, stream: &mut Stream) {
 /// What a test's body does over the running phase and the install's
 /// tokens.
 trait Work {
-    async fn work<'p, 'id: 'p>(
+    async fn work<'p, 'id: 'p, Id: SlotIdentity + 'id>(
         self,
-        phase: &mut ModelPhase<'p, 'id>,
-        resources: ModelResources<'id>,
+        phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
+        resources: ModelResources<'id, ModelBackend<Id>>,
     );
 }
 
@@ -506,13 +562,18 @@ trait Work {
 /// uninstalls.
 struct Body<W>(W);
 
-impl<W: Work> PortBody<ModelBackend> for Body<W> {
+impl<Id: SlotIdentity, W: Work> PortBody<Id, ModelBackend<Id>> for Body<W> {
     type Output = ();
-    async fn run<'id>(
+    async fn run<'a, 'id>(
         self,
-        owner: Owner<'_, 'id, ModelBackend, Disabled>,
-        resources: ModelResources<'id>,
-    ) -> Ended<'id, ModelBackend, ()> {
+        owner: Owner<'a, 'id, Id, ModelBackend<Id>, Disabled>,
+        resources: ModelResources<'id, ModelBackend<Id>>,
+    ) -> Ended<Id, ModelBackend<Id>, ()>
+    where
+        ModelBackend<Id>: 'id,
+        Id: 'id,
+        'id: 'a,
+    {
         let Ok(mut enabled) = owner.enable().await else {
             panic!("the model enables");
         };
@@ -525,7 +586,7 @@ impl<W: Work> PortBody<ModelBackend> for Body<W> {
             .await
         {
             Ok(disabled) => Ended::uninstall(disabled, (), ()),
-            Err(poisoned) => Ended::fail_stopped(poisoned.fail_stop(), ()),
+            Err(poisoned) => Ended::fail_stop(poisoned.fail_stop(), ()),
         }
     }
 }
@@ -534,12 +595,12 @@ impl<W: Work> PortBody<ModelBackend> for Body<W> {
 struct KeyThenAttempt;
 
 impl Work for KeyThenAttempt {
-    async fn work<'p, 'id: 'p>(
+    async fn work<'p, 'id: 'p, Id: SlotIdentity + 'id>(
         self,
-        phase: &mut ModelPhase<'p, 'id>,
-        resources: ModelResources<'id>,
+        phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
+        resources: ModelResources<'id, ModelBackend<Id>>,
     ) {
-        let station_association = ModelKeys::<Station>::begin_association(
+        let station_association = ModelKeys::<ModelBackend<Id>, Station>::begin_association(
             resources.station_association,
             oer_ieee80211_wire::security::Spp::NotNegotiated,
         );
@@ -573,7 +634,7 @@ impl Work for KeyThenAttempt {
 #[test]
 fn an_attempt_naming_a_key_goes_after_the_keys_install() {
     let (backend, air) = backend();
-    let _port_end = block_on(run_port(backend, Body(KeyThenAttempt)));
+    let _port_end = block_on(run_model(backend, Body(KeyThenAttempt)));
     let sent = air.sent();
     assert_eq!(sent.len(), 1);
     assert_eq!(sent[0].key, Some((0, true)));
@@ -585,12 +646,12 @@ struct GroupReplacement<'a> {
 }
 
 impl Work for GroupReplacement<'_> {
-    async fn work<'p, 'id: 'p>(
+    async fn work<'p, 'id: 'p, Id: SlotIdentity + 'id>(
         self,
-        phase: &mut ModelPhase<'p, 'id>,
-        resources: ModelResources<'id>,
+        phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
+        resources: ModelResources<'id, ModelBackend<Id>>,
     ) {
-        let station_association = ModelKeys::<Station>::begin_association(
+        let station_association = ModelKeys::<ModelBackend<Id>, Station>::begin_association(
             resources.station_association,
             oer_ieee80211_wire::security::Spp::NotNegotiated,
         );
@@ -631,7 +692,7 @@ impl Work for GroupReplacement<'_> {
         let Ok(Ok(LowerMacEvent::Received { frame, .. })) = phase.next_event().await else {
             panic!("old RX must precede replacement");
         };
-        assert_eq!(frame.bytes, [1]);
+        assert_eq!(frame.bytes(), [1]);
         phase.recycle(frame);
         let Ok(Ok(LowerMacEvent::Terminal(LowerMacTerminal::GroupKeyReplaced { key, permission }))) =
             phase.next_event().await
@@ -644,7 +705,7 @@ impl Work for GroupReplacement<'_> {
         let Ok(Ok(LowerMacEvent::Received { frame, .. })) = phase.next_event().await else {
             panic!("new RX follows replacement");
         };
-        assert_eq!(frame.bytes, [2]);
+        assert_eq!(frame.bytes(), [2]);
         phase.recycle(frame);
         phase.station().remove_group_key(permission, key);
         let Ok(Ok(LowerMacEvent::Terminal(LowerMacTerminal::KeyRemoved(Removed::Station(
@@ -660,7 +721,7 @@ impl Work for GroupReplacement<'_> {
 #[test]
 fn group_replacement_returns_the_same_slot_between_old_and_new_rx() {
     let (backend, air) = backend();
-    let _port_end = block_on(run_port(
+    let _port_end = block_on(run_model(
         backend,
         Body(GroupReplacement {
             air: &air,
@@ -673,7 +734,7 @@ fn group_replacement_returns_the_same_slot_between_old_and_new_rx() {
 #[test]
 fn a_rejected_group_replacement_poisons_without_a_success_terminal() {
     let (backend, air) = backend();
-    let _port_end = block_on(run_port(
+    let _port_end = block_on(run_model(
         backend,
         Body(GroupReplacement {
             air: &air,
@@ -688,12 +749,12 @@ fn a_rejected_group_replacement_poisons_without_a_success_terminal() {
 struct KeyAttemptRemoval;
 
 impl Work for KeyAttemptRemoval {
-    async fn work<'p, 'id: 'p>(
+    async fn work<'p, 'id: 'p, Id: SlotIdentity + 'id>(
         self,
-        phase: &mut ModelPhase<'p, 'id>,
-        resources: ModelResources<'id>,
+        phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
+        resources: ModelResources<'id, ModelBackend<Id>>,
     ) {
-        let station_association = ModelKeys::<Station>::begin_association(
+        let station_association = ModelKeys::<ModelBackend<Id>, Station>::begin_association(
             resources.station_association,
             oer_ieee80211_wire::security::Spp::NotNegotiated,
         );
@@ -742,7 +803,7 @@ impl Work for KeyAttemptRemoval {
 #[test]
 fn an_attempt_between_a_keys_install_and_removal_goes_under_the_key() {
     let (backend, air) = backend();
-    let _port_end = block_on(run_port(backend, Body(KeyAttemptRemoval)));
+    let _port_end = block_on(run_model(backend, Body(KeyAttemptRemoval)));
     let sent = air.sent();
     assert_eq!(sent.len(), 1);
     assert_eq!(sent[0].key, Some((0, true)));
@@ -756,10 +817,10 @@ struct WaitForever<'t> {
 }
 
 impl Work for WaitForever<'_> {
-    async fn work<'p, 'id: 'p>(
+    async fn work<'p, 'id: 'p, Id: SlotIdentity + 'id>(
         self,
-        phase: &mut ModelPhase<'p, 'id>,
-        resources: ModelResources<'id>,
+        phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
+        resources: ModelResources<'id, ModelBackend<Id>>,
     ) {
         submit_all(
             phase,
@@ -779,12 +840,12 @@ fn a_body_that_waits_forever_never_stalls_the_driver() {
     let (backend, air) = backend();
     let open = Cell::new(false);
     let stream = RefCell::new(Stream::default());
-    let mut port = core::pin::pin!(run_port(
+    let mut port = core::pin::pin!(run_model(
         backend,
         Body(WaitForever {
             open: &open,
             stream: &stream,
-        }),
+        })
     ));
     let mut context = core::task::Context::from_waker(Waker::noop());
     for _ in 0..10 {
@@ -825,20 +886,21 @@ struct MaxWork<'t> {
 }
 
 impl Work for MaxWork<'_> {
-    async fn work<'p, 'id: 'p>(
+    async fn work<'p, 'id: 'p, Id: SlotIdentity + 'id>(
         self,
-        phase: &mut ModelPhase<'p, 'id>,
-        resources: ModelResources<'id>,
+        phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
+        resources: ModelResources<'id, ModelBackend<Id>>,
     ) {
-        let station_association = ModelKeys::<Station>::begin_association(
+        let station_association = ModelKeys::<ModelBackend<Id>, Station>::begin_association(
             resources.station_association,
             oer_ieee80211_wire::security::Spp::NotNegotiated,
         );
 
-        let access_point_association = ModelKeys::<AccessPoint>::begin_association(
-            resources.access_point_association,
-            oer_ieee80211_wire::security::Spp::NotNegotiated,
-        );
+        let access_point_association =
+            ModelKeys::<ModelBackend<Id>, AccessPoint>::begin_association(
+                resources.access_point_association,
+                oer_ieee80211_wire::security::Spp::NotNegotiated,
+            );
 
         let ModelResources {
             tickets,
@@ -940,7 +1002,7 @@ impl Work for MaxWork<'_> {
 fn as_much_work_as_the_tickets_allow_loses_no_completion_unread() {
     let (backend, air) = backend();
     let stream = RefCell::new(Stream::default());
-    let _port_end = block_on(run_port(
+    let _port_end = block_on(run_model(
         backend,
         Body(MaxWork {
             air: &air,
@@ -955,7 +1017,7 @@ fn as_much_work_as_the_tickets_allow_loses_no_completion_unread() {
 fn as_much_work_as_allowed_while_every_setting_changes_loses_no_command() {
     let (backend, air) = backend();
     let stream = RefCell::new(Stream::default());
-    let _port_end = block_on(run_port(
+    let _port_end = block_on(run_model(
         backend,
         Body(MaxWork {
             air: &air,
@@ -989,12 +1051,12 @@ struct AbortHeld<'t> {
 }
 
 impl Work for AbortHeld<'_> {
-    async fn work<'p, 'id: 'p>(
+    async fn work<'p, 'id: 'p, Id: SlotIdentity + 'id>(
         self,
-        phase: &mut ModelPhase<'p, 'id>,
-        resources: ModelResources<'id>,
+        phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
+        resources: ModelResources<'id, ModelBackend<Id>>,
     ) {
-        let station_association = ModelKeys::<Station>::begin_association(
+        let station_association = ModelKeys::<ModelBackend<Id>, Station>::begin_association(
             resources.station_association,
             oer_ieee80211_wire::security::Spp::NotNegotiated,
         );
@@ -1042,7 +1104,8 @@ impl Work for AbortHeld<'_> {
 
                 let mut seen = self.seen.borrow_mut();
                 seen.outcome = Some(completion);
-                if let Ok(mut fresh) = <ModelTypes as TxBufferPool<'id, ModelLarge>>::class(buffer)
+                if let Ok(mut fresh) =
+                    <ModelTypes<ModelBackend<Id>> as TxBufferPool<'id, ModelLarge>>::class(buffer)
                 {
                     seen.fresh = true;
                     // The MPDU as it was written: its body, no CCMP header
@@ -1061,7 +1124,7 @@ impl Work for AbortHeld<'_> {
 fn an_attempt_the_closing_gate_aborts_comes_back_fresh_without_a_transmission() {
     let (backend, air) = backend();
     let seen = RefCell::new(Aborted::default());
-    let _port_end = block_on(run_port(
+    let _port_end = block_on(run_model(
         backend,
         Body(AbortHeld {
             air: &air,
@@ -1089,7 +1152,11 @@ struct CancelTheEvent<'t> {
 }
 
 impl Work for CancelTheEvent<'_> {
-    async fn work<'p, 'id: 'p>(self, phase: &mut ModelPhase<'p, 'id>, _: ModelResources<'id>) {
+    async fn work<'p, 'id: 'p, Id: SlotIdentity + 'id>(
+        self,
+        phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
+        _: ModelResources<'id, ModelBackend<Id>>,
+    ) {
         let meta = ModelRxMeta::new(Channel::ghz2_4(6, ChannelWidth::Mhz20).unwrap(), -40, -95);
         let mut context = core::task::Context::from_waker(Waker::noop());
         // Dropped after a pending poll, before the frame arrives.
@@ -1134,7 +1201,7 @@ impl Work for CancelTheEvent<'_> {
 fn a_cancelled_next_event_loses_no_event() {
     let (backend, air) = backend();
     let received = RefCell::new(Vec::new());
-    let _port_end = block_on(run_port(
+    let _port_end = block_on(run_model(
         backend,
         Body(CancelTheEvent {
             air: &air,
@@ -1146,10 +1213,13 @@ fn a_cancelled_next_event_loses_no_event() {
 
 /// A protected data MPDU of `sequence` to the peer, 40 octets, in
 /// `buffer`, and its frame.
-fn subframe<'id, C: ModelClass>(
-    mut buffer: ModelBuffer<'id, C>,
+fn subframe<'id, Id: SlotIdentity + 'id, C: ModelClass>(
+    mut buffer: ModelBuffer<'id, ModelBackend<Id>, C>,
     sequence: u16,
-) -> (ModelBuffer<'id, C>, SizedFrame<AckHeader, ModelCaps>) {
+) -> (
+    ModelBuffer<'id, ModelBackend<Id>, C>,
+    SizedFrame<AckHeader, ModelCaps>,
+) {
     let bytes = buffer.bytes_mut();
     bytes[..40].fill(0x5a);
     bytes[0..2].copy_from_slice(&0x4108_u16.to_le_bytes());
@@ -1182,12 +1252,12 @@ fn subframe_frame(sequence: u16) -> SizedFrame<AckHeader, ModelCaps> {
 }
 
 /// The next terminal: its ticket, complete subframes and Block Ack.
-async fn aggregate_completion<'p, 'id: 'p>(
-    phase: &mut ModelPhase<'p, 'id>,
-    terminal_access: &mut oer_ieee80211_port::TerminalAccess<'id, ModelTickets, ModelPool<1>>,
+async fn aggregate_completion<'p, 'id: 'p, Id: SlotIdentity + 'id>(
+    phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
+    terminal_access: &mut oer_ieee80211_port::TerminalAccess<'id, ModelTickets, ModelPool<Id, 1>>,
 ) -> (
-    Slot<'id, ModelTickets, ModelPool<1>>,
-    ModelSubframes<'id>,
+    Slot<'id, ModelTickets, ModelPool<Id, 1>>,
+    ModelSubframes<'id, ModelBackend<Id>>,
     Option<oer_ieee80211_port::BlockAckReport>,
 ) {
     loop {
@@ -1229,12 +1299,12 @@ struct AggregateRetransmission<'t> {
 }
 
 impl Work for AggregateRetransmission<'_> {
-    async fn work<'p, 'id: 'p>(
+    async fn work<'p, 'id: 'p, Id: SlotIdentity + 'id>(
         self,
-        phase: &mut ModelPhase<'p, 'id>,
-        resources: ModelResources<'id>,
+        phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
+        resources: ModelResources<'id, ModelBackend<Id>>,
     ) {
-        let station_association = ModelKeys::<Station>::begin_association(
+        let station_association = ModelKeys::<ModelBackend<Id>, Station>::begin_association(
             resources.station_association,
             oer_ieee80211_wire::security::Spp::NotNegotiated,
         );
@@ -1319,9 +1389,11 @@ impl Work for AggregateRetransmission<'_> {
             assert_eq!(body.0, [index as u8; 4]);
         }
         // The second again, from its numbered buffer, beside a new one.
-        let numbered = <ModelTypes as TxBufferPool<'id, ModelSmall>>::sent(buffers.remove(1))
-            .map_err(|_| ())
-            .expect("a protected subframe comes back numbered");
+        let numbered = <ModelTypes<ModelBackend<Id>> as TxBufferPool<'id, ModelSmall>>::sent(
+            buffers.remove(1),
+        )
+        .map_err(|_| ())
+        .expect("a protected subframe comes back numbered");
         let rate = phase.rate(PhyRate::Ht(ht)).unwrap();
         let mut station = phase.station();
         let rate = station.ampdu_rate(rate).ok().unwrap();
@@ -1351,7 +1423,7 @@ impl Work for AggregateRetransmission<'_> {
 fn a_lost_subframe_goes_again_with_its_packet_number_beside_new_ones_numbered_anew() {
     let (backend, air) = backend();
     let report = Cell::new(None);
-    let _port_end = block_on(run_port(
+    let _port_end = block_on(run_model(
         backend,
         Body(AggregateRetransmission {
             air: &air,
@@ -1383,12 +1455,12 @@ struct TerminalOutcomes<'a> {
 }
 
 impl Work for TerminalOutcomes<'_> {
-    async fn work<'p, 'id: 'p>(
+    async fn work<'p, 'id: 'p, Id: SlotIdentity + 'id>(
         self,
-        phase: &mut ModelPhase<'p, 'id>,
-        resources: ModelResources<'id>,
+        phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
+        resources: ModelResources<'id, ModelBackend<Id>>,
     ) {
-        let station_association = ModelKeys::<Station>::begin_association(
+        let station_association = ModelKeys::<ModelBackend<Id>, Station>::begin_association(
             resources.station_association,
             oer_ieee80211_wire::security::Spp::NotNegotiated,
         );
@@ -1455,7 +1527,7 @@ impl Work for TerminalOutcomes<'_> {
 fn a_timeout_is_final_and_does_not_stop_or_withdraw_the_queue_tail() {
     let (backend, air) = backend();
     let outcomes = RefCell::default();
-    let _port_end = block_on(run_port(
+    let _port_end = block_on(run_model(
         backend,
         Body(TerminalOutcomes {
             air: &air,
@@ -1495,7 +1567,7 @@ fn a_timeout_is_final_and_does_not_stop_or_withdraw_the_queue_tail() {
 fn collisions_retry_the_head_then_end_at_contention_limit_without_air_transmissions() {
     let (backend, air) = backend();
     let outcomes = RefCell::default();
-    let _port_end = block_on(run_port(
+    let _port_end = block_on(run_model(
         backend,
         Body(TerminalOutcomes {
             air: &air,
@@ -1533,10 +1605,10 @@ fn collisions_retry_the_head_then_end_at_contention_limit_without_air_transmissi
 
 struct LongRetryPlan<'a>(&'a ModelAir);
 impl Work for LongRetryPlan<'_> {
-    async fn work<'p, 'id: 'p>(
+    async fn work<'p, 'id: 'p, Id: SlotIdentity + 'id>(
         self,
-        phase: &mut ModelPhase<'p, 'id>,
-        resources: ModelResources<'id>,
+        phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
+        resources: ModelResources<'id, ModelBackend<Id>>,
     ) {
         let mut terminal_access = resources.terminal_access;
         let ModelResources {
@@ -1570,7 +1642,7 @@ impl Work for LongRetryPlan<'_> {
         let TxFrame::Individual { frame, .. } = data_frame(phase, false) else {
             unreachable!()
         };
-        submit_frame::<ModelLarge>(
+        submit_frame::<_, ModelLarge>(
             phase,
             tickets.remove(0),
             TxSource::Fresh {
@@ -1616,7 +1688,7 @@ impl Work for LongRetryPlan<'_> {
 #[test]
 fn ended_preserves_the_full_retry_budget_and_last_transmitted_rate() {
     let (backend, air) = backend();
-    let _port_end = block_on(run_port(backend, Body(LongRetryPlan(&air))));
+    let _port_end = block_on(run_model(backend, Body(LongRetryPlan(&air))));
     let sent = air.sent();
     assert_eq!(sent.len(), 1020);
     assert_eq!(sent[0].plaintext[1] & 8, 0);
@@ -1629,10 +1701,10 @@ fn ended_preserves_the_full_retry_budget_and_last_transmitted_rate() {
 
 struct LastRateBeforeCollision<'a>(&'a ModelAir);
 impl Work for LastRateBeforeCollision<'_> {
-    async fn work<'p, 'id: 'p>(
+    async fn work<'p, 'id: 'p, Id: SlotIdentity + 'id>(
         self,
-        phase: &mut ModelPhase<'p, 'id>,
-        resources: ModelResources<'id>,
+        phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
+        resources: ModelResources<'id, ModelBackend<Id>>,
     ) {
         let mut terminal_access = resources.terminal_access;
         let ModelResources {
@@ -1661,7 +1733,7 @@ impl Work for LastRateBeforeCollision<'_> {
         let ticket_index = ticket.index();
         let buffer = small.remove(0);
         let buffer_index = buffer.slot.index();
-        submit_frame::<ModelSmall>(
+        submit_frame::<_, ModelSmall>(
             phase,
             ticket,
             TxSource::Fresh {
@@ -1712,17 +1784,17 @@ impl Work for LastRateBeforeCollision<'_> {
 #[test]
 fn a_collision_does_not_overwrite_the_count_or_rate_of_the_last_mpdu_on_air() {
     let (backend, air) = backend();
-    let _port_end = block_on(run_port(backend, Body(LastRateBeforeCollision(&air))));
+    let _port_end = block_on(run_model(backend, Body(LastRateBeforeCollision(&air))));
     assert_eq!(air.sent().len(), 2);
 }
 
 struct ReceiveAgreementState<'a>(&'a ModelAir);
 
 impl Work for ReceiveAgreementState<'_> {
-    async fn work<'p, 'id: 'p>(
+    async fn work<'p, 'id: 'p, Id: SlotIdentity + 'id>(
         self,
-        phase: &mut ModelPhase<'p, 'id>,
-        resources: ModelResources<'id>,
+        phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
+        resources: ModelResources<'id, ModelBackend<Id>>,
     ) {
         let ModelResources {
             block_acks: [first, second],
@@ -1779,7 +1851,7 @@ impl Work for ReceiveAgreementState<'_> {
 #[test]
 fn receive_agreements_apply_latest_state_without_consuming_command_capacity() {
     let (backend, air) = backend();
-    let _port_end = block_on(run_port(backend, Body(ReceiveAgreementState(&air))));
+    let _port_end = block_on(run_model(backend, Body(ReceiveAgreementState(&air))));
 }
 
 mod publication;

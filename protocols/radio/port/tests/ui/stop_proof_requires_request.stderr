@@ -1,0 +1,13 @@
+warning: unused variable: `request`
+ --> tests/ui/stop_proof_requires_request.rs:3:55
+  |
+3 | pub async fn stop<Id: SlotIdentity, S: SlotOwner<Id>>(request: SlotRetire<'_, Id, S>) -> SlotStopped<Id, S> {
+  |                                                       ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_request`
+  |
+  = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+error[E0451]: fields `identity` and `owner` of struct `SlotStopped` are private
+ --> tests/ui/stop_proof_requires_request.rs:5:26
+  |
+5 |     return SlotStopped { identity: core::marker::PhantomData, owner: core::marker::PhantomData }; // ui-error: E0451
+  |                          ^^^^^^^^ private field               ^^^^^ private field

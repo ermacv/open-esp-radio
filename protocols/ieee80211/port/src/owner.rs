@@ -1156,7 +1156,7 @@ impl<H: FrameHeader, K: Ieee80211Capabilities> SizedFrame<H, K> {
 /// [`LowerMacSetup`] and its running phase a
 /// [`LowerMacPhase`](crate::LowerMacPhase); the body's resources give its
 /// transmit tickets, buffers, key and Block Ack slots and its gate once.
-pub trait LowerMacBackend: PortBackend {
+pub trait LowerMacBackend<Id: oer_radio_port::SlotIdentity>: PortBackend<Id> {
     /// The backend's capabilities marker.
     type Caps: Ieee80211Capabilities;
 
@@ -1204,12 +1204,12 @@ pub trait AddressSetup: LowerMacSetup {
 mod extensions;
 
 pub use extensions::{
-    AdmittedAggregate, AggregateAttempt, AggregatePushResult, AggregateRefused, AggregateState,
-    AirReservationPhase, AmpduPhase, AmpduRate, BeaconTimingPhase, BeaconWindow,
-    CheckedPoolAggregate, ClassSubframe, EmptyAggregate, InterfaceAggregate,
-    InterfaceAggregateAttempt, InterfaceAggregateSubmission, InterfaceProtection,
-    MAX_RESERVATION_MICROS, MonitorPhase, MpduStartSpacing, NonEmptyAggregate, NonEmptyState,
-    PhaseAggregate, PoolSubframe, SubframeSource, TbttPlan,
+    AdmittedAggregate, AdmittedAggregateParts, AggregateAttempt, AggregatePushResult,
+    AggregateRefused, AggregateState, AirReservationPhase, AmpduPhase, AmpduRate,
+    BeaconTimingPhase, BeaconWindow, CheckedPoolAggregate, ClassSubframe, EmptyAggregate,
+    InterfaceAggregate, InterfaceAggregateAttempt, InterfaceAggregateSubmission,
+    InterfaceProtection, MAX_RESERVATION_MICROS, MonitorPhase, MpduStartSpacing, NonEmptyAggregate,
+    NonEmptyState, PhaseAggregate, PoolSubframe, SubframeSource, TbttPlan,
 };
 
 #[cfg(test)]

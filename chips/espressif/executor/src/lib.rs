@@ -38,6 +38,8 @@ mod doorbell;
 mod executor;
 #[cfg(any(feature = "chip", test))]
 mod level;
+#[cfg(feature = "port-slots")]
+pub mod port_slot;
 #[cfg(feature = "chip")]
 #[allow(
     clippy::disallowed_methods,

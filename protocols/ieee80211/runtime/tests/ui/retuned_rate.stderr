@@ -1,3 +1,11 @@
+warning: unused imports: `LocalId` and `with_local_slot`
+ --> tests/ui/retuned_rate.rs:6:36
+  |
+6 | use oer_radio_port::{SlotIdentity, LocalId, with_local_slot, Disabled, Ended, Owner, PortBody};
+  |                                    ^^^^^^^  ^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
 error[E0505]: cannot move out of `owner` because it is borrowed
   --> tests/ui/retuned_rate.rs:29:25
    |

@@ -5,7 +5,7 @@ use oer_radio_port::{Child, Mint, Root, Slots};
 
 pub fn source<'id>(
     mint: Mint<'id, (Slots<ConnectionEpochKind, 1>, Slots<ConnectionEpochKind, 1>)>,
-) -> LinkEpochSource<'id, Child<Root, 0>> {
+) -> LinkEpochSource<'id, Child<Root<oer_radio_port::LocalId<'id>>, 0>> {
     let ([first], [second]) = mint.into_pools();
     #[cfg(ui_reject)]
     return LinkEpochSource::new(second); // ui-error: E0308

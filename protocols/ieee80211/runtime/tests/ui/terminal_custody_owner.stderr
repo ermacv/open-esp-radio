@@ -1,8 +1,8 @@
 error[E0382]: use of moved value: `bank`
  --> tests/ui/terminal_custody_owner.rs:7:10
   |
-4 | pub fn return_once<'id, B: StationPort<'id>>(bank: QuarantinedTerminals<'id, B>) {
-  |                                              ---- move occurs because `bank` has type `QuarantinedTerminals<'_, B>`, which does not implement the `Copy` trait
+4 | pub fn return_once<'id, B: StationPort<SlotId: 'id> + 'id>(bank: QuarantinedTerminals<'id, B>) {
+  |                                                            ---- move occurs because `bank` has type `QuarantinedTerminals<'_, B>`, which does not implement the `Copy` trait
 5 |     let returned = bank.into_parts();
   |                         ------------ `bank` moved due to this method call
 6 |     #[cfg(all())]

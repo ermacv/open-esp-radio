@@ -1,0 +1,10 @@
+error[E0382]: use of moved value: `frontend`
+ --> tests/ui/frontend_run_twice.rs:6:22
+  |
+3 | pub fn run<'s, Id: SlotIdentity, B: PortBackend<Id>>(frontend: SlotFrontend<'s, Id, B>, first: impl PortBody<Id, B>, second: impl Por...
+  |                                                      -------- move occurs because `frontend` has type `SlotFrontend<'_, Id, B>`, which does not implement the `Copy` trait
+4 |     let running = run_port(frontend, first);
+  |                            -------- value moved here
+5 |     #[cfg(all())]
+6 |     let _ = run_port(frontend, second); // ui-error: E0382
+  |                      ^^^^^^^^ value used here after move

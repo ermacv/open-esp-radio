@@ -65,7 +65,8 @@ use oer_ieee80211_port::conformance;
 
 mod in_flight;
 pub use in_flight::{
-    Completed, ExecutionPayload, InFlight, TerminalAccess, TerminalParts, TransmitPool, TxMpdu,
+    Admission, AdmissionOwners, BodyPayload, Completed, ExecutionPayload, InFlight, OwnedPayload,
+    TerminalAccess, TerminalParts, TransmitPool, TxMpdu,
 };
 
 pub mod association;
@@ -140,11 +141,12 @@ pub use owner::{
     SupportedFilter, SupportedNoAck, SupportedPower, Tid, TxFrame,
 };
 pub use owner::{
-    AdmittedAggregate, AggregateAttempt, AggregatePushResult, AggregateRefused, AggregateState,
-    AirReservationPhase, AmpduPhase, AmpduRate, BeaconTimingPhase, BeaconWindow, ClassSubframe,
-    EmptyAggregate, InterfaceAggregate, InterfaceAggregateAttempt, InterfaceAggregateSubmission,
-    InterfaceProtection, MAX_RESERVATION_MICROS, MonitorPhase, MpduStartSpacing, NonEmptyAggregate,
-    NonEmptyState, PhaseAggregate, PoolSubframe, SubframeSource, TbttPlan,
+    AdmittedAggregate, AdmittedAggregateParts, AggregateAttempt, AggregatePushResult,
+    AggregateRefused, AggregateState, AirReservationPhase, AmpduPhase, AmpduRate,
+    BeaconTimingPhase, BeaconWindow, ClassSubframe, EmptyAggregate, InterfaceAggregate,
+    InterfaceAggregateAttempt, InterfaceAggregateSubmission, InterfaceProtection,
+    MAX_RESERVATION_MICROS, MonitorPhase, MpduStartSpacing, NonEmptyAggregate, NonEmptyState,
+    PhaseAggregate, PoolSubframe, SubframeSource, TbttPlan,
 };
 mod interface_commands;
 pub use interface_commands::{
@@ -152,14 +154,15 @@ pub use interface_commands::{
     SampledTsfPermission, TsfPermission,
 };
 pub use phase::{
-    AccessPointPhase, AdmittedAttempt, AggregateCompleted, ArbiterAuthority, ArbiterPool, Attempt,
-    AttemptKey, CheckedPoolSource, ClassFrame, ClassSizedFrame, GateClosed, GateIssuer, GateOpen,
-    GatePool, InstalledGroup, InterfaceAttempt, InterfaceKeys, InterfacePhase, InterfaceSubmission,
-    KeyTypes, LowerMacEvent, LowerMacPhase, LowerMacTerminal, PhaseAggregateOutcome,
-    PhaseBlockAckSlot, PhaseSingleOutcome, PhaseTypes, PoolMpdu, PoolPreparation, PoolSource,
-    PreparationError, PreparationRefused, PreparedTx, RETRY_STAGES, Removed, RemovedKey,
-    RetransmissionPlan, RetryPlan, RetryStage, ReturnedMpdu, RoleKeys, SingleCompleted,
-    StationPhase, TxBufferClass, TxBufferMemory, TxBufferPool, TxCompleted, TxProtection, TxSource,
+    AccessPointPhase, AdmittedAttempt, AdmittedTxParts, AggregateCompleted, ArbiterAuthority,
+    ArbiterPool, Attempt, AttemptKey, CheckedPoolSource, ClassFrame, ClassSizedFrame, GateClosed,
+    GateIssuer, GateOpen, GatePool, InstalledGroup, InterfaceAttempt, InterfaceKeys,
+    InterfacePhase, InterfaceSubmission, KeyTypes, LowerMacEvent, LowerMacPhase, LowerMacTerminal,
+    PhaseAggregateOutcome, PhaseBlockAckSlot, PhaseSingleOutcome, PhaseTypes, PoolMpdu,
+    PoolPreparation, PoolSource, PreparationError, PreparationRefused, PreparedTx, RETRY_STAGES,
+    Removed, RemovedKey, RetransmissionPlan, RetryPlan, RetryStage, ReturnedMpdu, RoleKeys,
+    SingleCompleted, StationPhase, TxBufferClass, TxBufferMemory, TxBufferPool, TxCompleted,
+    TxProtection, TxSource,
 };
 pub use rx::{
     LinkMetric, RxBuffer, RxCryptoStatus, RxEvidence, RxMeta, RxMetadata, SignalMetadata,

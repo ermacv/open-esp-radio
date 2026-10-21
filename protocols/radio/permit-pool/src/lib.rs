@@ -103,7 +103,7 @@ pub struct FifoPermitPool<
     K,
     const PERMITS: usize,
     const SEATS: usize,
-    Pool: PoolPath = Root,
+    Pool: PoolPath = Root<oer_radio_port::LocalId<'id>>,
     Waiters: PoolPath = Pool,
 > {
     /// The permits not held, at most `PERMITS`.

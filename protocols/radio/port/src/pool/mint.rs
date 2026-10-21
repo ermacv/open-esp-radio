@@ -1,5 +1,6 @@
 //! One issuance of a backend's declared pool set.
 
+use crate::{LocalId, SlotIdentity};
 use core::marker::PhantomData;
 
 use super::{Brand, Child, Line, Permit, PoolPath, Root, Seat, Slot, index_of};
@@ -19,7 +20,7 @@ pub trait PoolSet {
 }
 
 /// The resources produced by layout `P` for installation `'id`.
-pub type Pools<'id, P, Path = Root> = <P as PoolSet>::Pools<'id, Path>;
+pub type Pools<'id, P, Path = Root<crate::LocalId<'id>>> = <P as PoolSet>::Pools<'id, Path>;
 
 /// The one issuance authority for an installation's declared layout `P`.
 ///
@@ -61,21 +62,23 @@ pub type Pools<'id, P, Path = Root> = <P as PoolSet>::Pools<'id, Path>;
 ///     pools
 /// }
 /// ```
-pub struct Mint<'id, P: PoolSet> {
+pub struct Mint<'id, P: PoolSet, Id: SlotIdentity = LocalId<'id>> {
     brand: Brand<'id>,
     layout: PhantomData<fn() -> P>,
+    identity: PhantomData<fn(Id) -> Id>,
 }
 
-impl<'id, P: PoolSet> Mint<'id, P> {
+impl<'id, P: PoolSet, Id: SlotIdentity> Mint<'id, P, Id> {
     pub(crate) const fn new() -> Self {
         Self {
             brand: PhantomData,
             layout: PhantomData,
+            identity: PhantomData,
         }
     }
 
     /// Issue the declared pool set exactly once, consuming its authority.
-    pub fn into_pools(self) -> P::Pools<'id, Root> {
+    pub fn into_pools(self) -> P::Pools<'id, Root<Id>> {
         P::build(PoolBuilder {
             brand: self.brand,
             path: PhantomData,
@@ -113,7 +116,7 @@ pub(crate) fn prepare_brand<P: PoolSet, R>(
 ///     drop((first, second));
 /// }
 /// ```
-pub struct PoolBuilder<'id, Path: PoolPath = Root> {
+pub struct PoolBuilder<'id, Path: PoolPath = Root<LocalId<'id>>> {
     brand: Brand<'id>,
     path: PhantomData<fn() -> Path>,
 }
@@ -158,7 +161,7 @@ pub struct Permits<Kind, const N: usize, const S: usize>(PhantomData<fn() -> Kin
 ///
 /// FIFO constructors consume this whole authority. Extracting its permits
 /// for another backend consumes it and cannot create a second initial supply.
-pub struct PermitSupply<'id, Kind, const N: usize, Path: PoolPath = Root> {
+pub struct PermitSupply<'id, Kind, const N: usize, Path: PoolPath = Root<crate::LocalId<'id>>> {
     permits: [Permit<'id, Kind, Path>; N],
 }
 
@@ -170,7 +173,13 @@ impl<'id, K, const N: usize, Path: PoolPath> PermitSupply<'id, K, N, Path> {
 }
 
 /// One permit pool's initial owners, line and caller seats.
-pub struct PermitTokens<'id, Kind, const N: usize, const S: usize, Path: PoolPath = Root> {
+pub struct PermitTokens<
+    'id,
+    Kind,
+    const N: usize,
+    const S: usize,
+    Path: PoolPath = Root<crate::LocalId<'id>>,
+> {
     /// All permits, to be retained by the backend's permit pool.
     pub supply: PermitSupply<'id, Kind, N, Path>,
     /// One queue place for every issued seat.

@@ -1,0 +1,15 @@
+error[E0308]: mismatched types
+ --> tests/ui/foreign_completion_identity.rs:5:12
+  |
+3 | ...ompletion<'s, Id: SlotIdentity, Other: SlotIdentity>(own: SlotCompletion<'s, Id>, foreign: SlotCompletion<'s, Other>) -> SlotCompletion<'s, Id> {
+  |                  --                ----- found type parameter                                                               ---------------------- expected `SlotCompletion<'s, Id>` because of return type
+  |                  |
+  |                  expected type parameter
+4 | ...g(all())]
+5 | ...rn foreign; // ui-error: E0308
+  |       ^^^^^^^ expected `SlotCompletion<'_, Id>`, found `SlotCompletion<'_, Other>`
+  |
+  = note: expected struct `SlotCompletion<'s, Id>`
+             found struct `SlotCompletion<'s, Other>`
+  = note: a type parameter was expected, but a different one was found; you might be missing a type parameter or trait bound
+  = note: for more information, visit https://doc.rust-lang.org/book/ch10-02-traits.html#traits-as-parameters

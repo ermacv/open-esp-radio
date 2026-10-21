@@ -17,6 +17,8 @@ use core::marker::PhantomData;
 use oer_ieee80211_wire::security::Spp;
 use oer_radio_port::{Child, PoolBuilder, PoolPath, PoolSet, Root, Slot, Slots};
 
+mod loan;
+
 /// Capacity of each PTK/GTK return collection retained by the portable station.
 /// Backend banks remain generic: this bounds station bookkeeping, not AP slots.
 pub const KEY_BANK_CAPACITY: usize = 8;
@@ -102,7 +104,8 @@ impl<K, const N: usize> PoolSet for BlockAckSlots<K, N> {
 /// One receive Block Ack slot of a pool of `N`: an agreement holds it.
 /// Only [`BlockAckSlots`] mints it.
 #[must_use = "a Block Ack slot is capacity; dropping it loses it until the next install"]
-pub struct BlockAckSlot<'id, K, const N: usize, Path: PoolPath = Root> {
+pub struct BlockAckSlot<'id, K, const N: usize, Path: PoolPath = Root<oer_radio_port::LocalId<'id>>>
+{
     slot: Slot<'id, K, Path>,
 }
 
@@ -123,7 +126,7 @@ impl<K, const N: usize, Path: PoolPath> BlockAckSlot<'_, K, N, Path> {
 /// ```compile_fail,E0308
 /// use oer_ieee80211_port::association::*;
 /// type Declared = BlockAckSlots<u8, 4>;
-/// fn take<'id>(_: <Declared as RxBlockAckPool>::Slot<'id, oer_radio_port::Root>) {}
+/// fn take<'id>(_: <Declared as RxBlockAckPool>::Slot<'id, oer_radio_port::Root<oer_radio_port::LocalId<'id>>>) {}
 /// fn give<'id>(minted: BlockAckSlot<'id, u8, 2>) {
 ///     take(minted)
 /// }
@@ -132,7 +135,7 @@ impl<K, const N: usize, Path: PoolPath> BlockAckSlot<'_, K, N, Path> {
 /// ```
 /// use oer_ieee80211_port::association::*;
 /// type Declared = BlockAckSlots<u8, 2>;
-/// fn take<'id>(_: <Declared as RxBlockAckPool>::Slot<'id, oer_radio_port::Root>) {}
+/// fn take<'id>(_: <Declared as RxBlockAckPool>::Slot<'id, oer_radio_port::Root<oer_radio_port::LocalId<'id>>>) {}
 /// fn give<'id>(minted: BlockAckSlot<'id, u8, 2>) {
 ///     take(minted)
 /// }
@@ -191,15 +194,20 @@ pub struct AssociationStart<
     R: InterfaceRole,
     const P: usize,
     const G: usize,
-    Path: PoolPath = Root,
+    Path: PoolPath = Root<oer_radio_port::LocalId<'id>>,
 > {
     _owner: Slot<'id, OwnerKind<R, P, G>, Child<Path, 0>>,
 }
 
 /// One immutable SPP decision. Its brand also identifies every key slot.
 #[must_use]
-pub struct Association<'id, R: InterfaceRole, const P: usize, const G: usize, Path: PoolPath = Root>
-{
+pub struct Association<
+    'id,
+    R: InterfaceRole,
+    const P: usize,
+    const G: usize,
+    Path: PoolPath = Root<oer_radio_port::LocalId<'id>>,
+> {
     start: AssociationStart<'id, R, P, G, Path>,
     spp: Spp,
 }
@@ -211,7 +219,7 @@ pub struct VacantAssociation<
     R: InterfaceRole,
     const P: usize,
     const G: usize,
-    Path: PoolPath = Root,
+    Path: PoolPath = Root<oer_radio_port::LocalId<'id>>,
 > {
     start: AssociationStart<'id, R, P, G, Path>,
     bank: VacantKeyBank<'id, R, P, G, Path>,
@@ -224,7 +232,7 @@ pub struct PairwiseKeySlot<
     R: InterfaceRole,
     const P: usize,
     const G: usize,
-    Path: PoolPath = Root,
+    Path: PoolPath = Root<oer_radio_port::LocalId<'id>>,
 > {
     slot: Slot<'id, PairwiseKind<R, P, G>, Child<Path, 1>>,
 }
@@ -235,7 +243,7 @@ pub struct GroupKeySlot<
     R: InterfaceRole,
     const P: usize,
     const G: usize,
-    Path: PoolPath = Root,
+    Path: PoolPath = Root<oer_radio_port::LocalId<'id>>,
 > {
     slot: Slot<'id, GroupKind<R, P, G>, Child<Path, 2>>,
 }
@@ -247,7 +255,7 @@ pub struct VacantKeyBank<
     R: InterfaceRole,
     const P: usize,
     const G: usize,
-    Path: PoolPath = Root,
+    Path: PoolPath = Root<oer_radio_port::LocalId<'id>>,
 > {
     pairwise: [PairwiseKeySlot<'id, R, P, G, Path>; P],
     group: [GroupKeySlot<'id, R, P, G, Path>; G],
@@ -266,7 +274,13 @@ pub struct KeyBankParts<P, G, const N: usize> {
 pub type DistributedKeyBank<S, P, G, const N: usize> = (S, P, KeyBankParts<P, G, N>);
 
 /// Every PTK and GTK slot of one association domain, in fixed-size arrays.
-pub type KeyBankArrays<'id, R, const P: usize, const G: usize, Path = Root> = (
+pub type KeyBankArrays<
+    'id,
+    R,
+    const P: usize,
+    const G: usize,
+    Path = Root<oer_radio_port::LocalId<'id>>,
+> = (
     [PairwiseKeySlot<'id, R, P, G, Path>; P],
     [GroupKeySlot<'id, R, P, G, Path>; G],
 );

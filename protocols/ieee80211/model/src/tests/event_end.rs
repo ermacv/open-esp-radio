@@ -1,5 +1,4 @@
 use super::*;
-use oer_radio_port::{Abandon, PortEnd};
 
 struct Witness(Rc<Cell<usize>>);
 impl Drop for Witness {
@@ -10,11 +9,14 @@ impl Drop for Witness {
 struct Contexts;
 impl ModelContext for Contexts {
     type Body = ModelBody;
-    type Context<'id> = Witness;
-    type StationConfigureContext<'id> = Witness;
-    type AccessPointConfigureContext<'id> = ();
+    type OwnedContext<Id: SlotIdentity> = Witness;
+    type Context<'p, Id: SlotIdentity + 'p> = Witness;
+    type OwnedStationConfigureContext<Id: SlotIdentity> = Witness;
+    type StationConfigureContext<'p, Id: SlotIdentity + 'p> = Witness;
+    type OwnedAccessPointConfigureContext<Id: SlotIdentity> = ();
+    type AccessPointConfigureContext<'p, Id: SlotIdentity + 'p> = ();
 }
-type Backend = ModelBackend<ModelCaps, Contexts>;
+type Backend<Id> = ModelBackend<Id, ModelCaps, Contexts>;
 
 #[derive(Clone, Copy)]
 enum End {
@@ -27,13 +29,18 @@ struct Body {
     posted: bool,
     drops: Rc<Cell<usize>>,
 }
-impl PortBody<Backend> for Body {
+impl<Id: SlotIdentity> PortBody<Id, Backend<Id>> for Body {
     type Output = ();
-    async fn run<'id>(
+    async fn run<'a, 'id>(
         self,
-        owner: Owner<'_, 'id, Backend, Disabled>,
-        resources: ModelResources<'id>,
-    ) -> Ended<'id, Backend, ()> {
+        owner: Owner<'a, 'id, Id, Backend<Id>, Disabled>,
+        resources: ModelResources<'id, Backend<Id>>,
+    ) -> Ended<Id, Backend<Id>, ()>
+    where
+        Backend<Id>: 'id,
+        Id: 'id,
+        'id: 'a,
+    {
         let mut owner = owner.enable().await.ok().unwrap();
         let ModelResources {
             mut tickets,
@@ -67,7 +74,7 @@ impl PortBody<Backend> for Body {
             .check()
             .ok()
             .unwrap();
-            let source = <ModelTypes<Contexts> as TxBufferPool<ModelSmall>>::prepare::<
+            let source = <ModelTypes<Backend<Id>> as TxBufferPool<ModelSmall>>::prepare::<
                 Station,
                 ModelCaps,
             >(source)
@@ -151,7 +158,7 @@ impl PortBody<Backend> for Body {
             End::Quarantined => {
                 assert!(returned.is_empty());
                 assert_eq!(self.drops.get(), 0);
-                Ended::fail_stopped(owner.fail_stop(), ())
+                Ended::fail_stop(owner.fail_stop(), ())
             }
         }
     }
@@ -161,7 +168,7 @@ impl PortBody<Backend> for Body {
 fn event_end_returns_every_ordinary_terminal_or_retains_every_quarantined_owner() {
     for end in [End::Drained, End::SubmissionFailed, End::Quarantined] {
         for posted in [false, true] {
-            let (backend, air) = Backend::new(
+            let (backend, air) = Fixture::<ModelCaps, Contexts>::new(
                 Channel::ghz2_4(6, ChannelWidth::Mhz20).unwrap(),
                 [
                     IndividualAddress::new(STATION).unwrap(),
@@ -170,37 +177,118 @@ fn event_end_returns_every_ordinary_terminal_or_retains_every_quarantined_owner(
                 Rc::new(oer_time_virtual::VirtualClock::<8>::new()),
             );
             let drops = Rc::new(Cell::new(0));
-            let ended = block_on(run_port(
+            let ended = block_on(fixture::inspect_model(
                 backend,
                 Body {
                     end,
                     posted,
                     drops: drops.clone(),
                 },
+                |report| match end {
+                    End::Drained | End::SubmissionFailed => {
+                        assert!(matches!(report, Report::Joined(_)));
+                        assert_eq!(air.disable_calls(), 1);
+                        assert_eq!(drops.get(), 2);
+                    }
+                    End::Quarantined => {
+                        assert!(matches!(report, Report::Stopped(_)));
+                        assert_eq!(air.disable_calls(), 0);
+                        assert_eq!(
+                            drops.get(),
+                            0,
+                            "dropping the quarantine receipt releases no owners"
+                        );
+                    }
+                },
             ));
-            match end {
-                End::Drained | End::SubmissionFailed => {
-                    assert!(matches!(ended, PortEnd::Uninstalled { .. }));
-                    assert_eq!(air.disable_calls(), 1);
-                    assert_eq!(drops.get(), 2);
-                }
-                End::Quarantined => {
-                    assert!(matches!(
-                        ended,
-                        PortEnd::FailStopped {
-                            outcome: Abandon::Stopped(_),
-                            ..
-                        }
-                    ));
-                    drop(ended);
-                    assert_eq!(air.disable_calls(), 0);
-                    assert_eq!(
-                        drops.get(),
-                        0,
-                        "dropping the quarantine receipt releases no owners"
-                    );
-                }
-            }
+            drop(ended);
+            assert_eq!(
+                drops.get(),
+                2,
+                "ending the entire inert model world releases retained owners"
+            );
         }
     }
+}
+
+plain_context!(Witness);
+
+struct CancelledBody(Rc<Cell<usize>>);
+impl<Id: SlotIdentity> PortBody<Id, Backend<Id>> for CancelledBody {
+    type Output = ();
+    async fn run<'a, 'p>(
+        self,
+        owner: Owner<'a, 'p, Id, Backend<Id>, Disabled>,
+        mut resources: ModelResources<'p, Backend<Id>>,
+    ) -> Ended<Id, Backend<Id>, ()>
+    where
+        Backend<Id>: 'p,
+        Id: 'p,
+        'p: 'a,
+    {
+        let mut owner = owner.enable().await.ok().expect("model enable");
+        let mut phase = owner.phase();
+        phase.held.air.hold(WmmAccessCategory::BestEffort, true);
+        phase.station().configure(
+            resources
+                .station_commands
+                .configure
+                .with_context(Witness(self.0.clone())),
+            StationReceive::Off,
+        );
+        let frame = ClassFrame::new(data_frame(&phase, false))
+            .ok()
+            .expect("fixture frame");
+        let source = prepare_model(
+            TxSource::Fresh {
+                buffer: resources.small.remove(0),
+                frame,
+                body: None,
+                protection: TxProtection::Open,
+            }
+            .check()
+            .ok()
+            .expect("fixture layout"),
+        )
+        .ok()
+        .expect("fixture preparation");
+        phase
+            .station()
+            .submit(
+                (oer_ieee80211_port::Attempt {
+                    context: Witness(self.0),
+                    ticket: resources.tickets.remove(0),
+                    source,
+                    access_category: WmmAccessCategory::BestEffort,
+                    protection: Protection::None,
+                    power: SupportedPower::new(TxPower::Calibrated).expect("fixture power"),
+                    coex_operation: oer_ieee80211_port::TxOperation::Data,
+                })
+                .admit(),
+            )
+            .expect("fixture admission");
+        core::future::pending().await
+    }
+}
+
+#[test]
+fn cancelling_the_entire_model_scope_removes_async_reachability_before_releasing_retained_owners() {
+    let (world, air) = Fixture::<ModelCaps, Contexts>::new(
+        Channel::ghz2_4(6, ChannelWidth::Mhz20).expect("fixture channel"),
+        [
+            IndividualAddress::new(STATION).expect("fixture station"),
+            IndividualAddress::new(ACCESS_POINT).expect("fixture AP"),
+        ],
+        Rc::new(oer_time_virtual::VirtualClock::<8>::new()),
+    );
+    let drops = Rc::new(Cell::new(0));
+    let mut running = Box::pin(run_model(world, CancelledBody(drops.clone())));
+    let mut cx = core::task::Context::from_waker(Waker::noop());
+    assert!(running.as_mut().poll(&mut cx).is_pending());
+    assert_eq!(drops.get(), 0);
+    drop(running);
+    assert_eq!(air.disable_calls(), 0);
+    assert_eq!(drops.get(), 2);
+    assert!(air.driver.borrow().is_none());
+    assert_eq!(Rc::strong_count(&air), 1);
 }

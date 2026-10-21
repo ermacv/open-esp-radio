@@ -1,7 +1,61 @@
 //! Custody of an accepted TX operation, from admission to its terminal.
 
 use core::marker::PhantomData;
-use oer_radio_port::{PoolBuilder, PoolPath, PoolSet, Root, Slot, Slots};
+use oer_radio_port::{
+    BodyLoan, LoanedContext, PoolBuilder, PoolPath, PoolSet, PortContext, Root, Slot, SlotIdentity,
+    SlotOwner, Slots,
+};
+
+/// Permission to lower one preparation before sealing its accepted operation.
+/// Only the admission boundary constructs it. Its invariant preparation tag
+/// prevents another implementation from borrowing a backend's conversion.
+pub struct Admission<P> {
+    proof: PhantomData<fn(P) -> P>,
+}
+
+impl<P> Admission<P> {
+    pub(crate) const fn new() -> Self {
+        Self { proof: PhantomData }
+    }
+}
+
+/// Owners lowered before the indivisible operation is sealed.
+pub struct AdmissionOwners<C, T, M, E> {
+    /// Opaque owned context.
+    pub context: C,
+    /// Owned capacity, preserving its identity and path.
+    pub ticket: T,
+    /// Complete owned MPDU or aggregate.
+    pub payload: M,
+    /// Backend execution metadata.
+    pub execution: E,
+}
+
+/// Backend-private owned payload conversion at the terminal boundary.
+/// Concrete implementations retain all fields and reconstruct only their
+/// public body loan; the complete operation stays sealed during conversion.
+pub trait OwnedPayload<Id: SlotIdentity, S: SlotOwner<Id>> {
+    /// The same payload under the consumer's invariant body loan.
+    type Lent<'p>
+    where
+        Self: 'p,
+        Id: 'p,
+        S: 'p;
+    /// Lend the complete payload using the concrete backend's private authority.
+    fn lend<'p>(self, loan: &BodyLoan<'p, Id, S>) -> Self::Lent<'p>
+    where
+        Self: 'p,
+        Id: 'p,
+        S: 'p;
+}
+
+/// Backend-private retention of a complete public payload in its owned queue.
+pub trait BodyPayload<'p, Id: SlotIdentity, S: SlotOwner<Id>> {
+    /// Complete queue representation selected before the body loan.
+    type Owned;
+    /// End only the public loan, preserving every owned field.
+    fn into_owned(self, loan: &BodyLoan<'p, Id, S>) -> Self::Owned;
+}
 
 /// Tickets and the unique consumer authority for their terminals. The install
 /// gives the authority to the event consumer, never to the execution backend.
@@ -22,8 +76,18 @@ type Authority<'id, Kind, Path> = fn(&'id (), Kind, Path) -> (&'id (), Kind, Pat
 
 /// Sole permission to recover completed owners of this installation and ticket
 /// pool. Completing an operation does not grant permission to unpack it.
-pub struct TerminalAccess<'id, Kind, Path: PoolPath = Root> {
+pub struct TerminalAccess<'id, Kind, Path: PoolPath = Root<oer_radio_port::LocalId<'id>>> {
     proof: PhantomData<Authority<'id, Kind, Path>>,
+}
+
+impl<Kind, Path: PoolPath> TerminalAccess<'static, Kind, Path> {
+    /// Lend the unique consumer authority without copying it.
+    pub fn lend<'p, S: SlotOwner<Path::Identity>>(
+        self,
+        _: &BodyLoan<'p, Path::Identity, S>,
+    ) -> TerminalAccess<'p, Kind, Path> {
+        TerminalAccess { proof: PhantomData }
+    }
 }
 
 /// A backend's execution projection. Its concrete view lends only the data
@@ -110,7 +174,61 @@ impl<C, T, M, O> Completed<C, T, M, O> {
     }
 }
 
+impl<C, Kind, Path: PoolPath, M, O> Completed<C, Slot<'static, Kind, Path>, M, O> {
+    /// Reintroduce the public body loan on a whole terminal. Context, ticket
+    /// and payload cannot be extracted or independently replaced here.
+    pub fn lend<'p, S, X>(
+        self,
+        loan: &BodyLoan<'p, Path::Identity, S>,
+    ) -> Completed<X, Slot<'p, Kind, Path>, M::Lent<'p>, O>
+    where
+        S: SlotOwner<Path::Identity> + 'p,
+        Path::Identity: 'p,
+        M: OwnedPayload<Path::Identity, S> + 'p,
+        X: LoanedContext<'p, Path::Identity, Owned = C>,
+    {
+        let InFlight {
+            context,
+            ticket,
+            payload,
+        } = self.operation;
+        Completed {
+            operation: InFlight::admit(
+                X::restore(PortContext::from_owned(context, loan)),
+                loan.lend_slot(ticket),
+                payload.lend(loan),
+            ),
+            outcome: self.outcome,
+        }
+    }
+}
+
 impl<'id, C, Kind, Path: PoolPath, M, O> Completed<C, Slot<'id, Kind, Path>, M, O> {
+    /// Retain a whole refused terminal without opening it at a queue boundary.
+    pub fn into_owned<S>(
+        self,
+        loan: &BodyLoan<'id, Path::Identity, S>,
+    ) -> Completed<C::Owned, Slot<'static, Kind, Path>, M::Owned, O>
+    where
+        S: SlotOwner<Path::Identity>,
+        C: LoanedContext<'id, Path::Identity>,
+        M: BodyPayload<'id, Path::Identity, S>,
+    {
+        let InFlight {
+            context,
+            ticket,
+            payload,
+        } = self.operation;
+        Completed {
+            operation: InFlight::admit(
+                context.enclose().into_owned(loan),
+                loan.reclaim_slot(ticket),
+                payload.into_owned(loan),
+            ),
+            outcome: self.outcome,
+        }
+    }
+
     /// Recover the owners using the consumer authority for this ticket pool.
     /// A backend can create and forward terminals, but cannot reopen them.
     pub fn into_parts(

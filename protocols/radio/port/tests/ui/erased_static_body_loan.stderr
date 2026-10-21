@@ -1,0 +1,19 @@
+error: lifetime may not live long enough
+  --> tests/ui/erased_static_body_loan.rs:10:12
+   |
+ 8 | pub fn erase<'p>(slot: Slot<'p, (), Root<StaticId<Declaration>>>) -> impl Erased + 'static {
+   |              -- lifetime `'p` defined here
+ 9 |     #[cfg(all())]
+10 |     return slot; // ui-error: lifetime may not live long enough
+   |            ^^^^ returning this value requires that `'p` must outlive `'static`
+   |
+help: consider changing `impl Erased + 'static`'s explicit `'static` bound to the lifetime of argument `slot`
+   |
+ 8 - pub fn erase<'p>(slot: Slot<'p, (), Root<StaticId<Declaration>>>) -> impl Erased + 'static {
+ 8 + pub fn erase<'p>(slot: Slot<'p, (), Root<StaticId<Declaration>>>) -> impl Erased + 'p {
+   |
+help: alternatively, add an explicit `'static` bound to this reference
+   |
+ 8 - pub fn erase<'p>(slot: Slot<'p, (), Root<StaticId<Declaration>>>) -> impl Erased + 'static {
+ 8 + pub fn erase<'p>(slot: Slot<'static, (), Root<StaticId<Declaration>>>) -> impl Erased + 'static {
+   |

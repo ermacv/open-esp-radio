@@ -1,0 +1,22 @@
+error[E0308]: mismatched types
+ --> tests/ui/foreign_joined_slot.rs:8:28
+  |
+4 | pub fn reinstall<Id: SlotIdentity, Other: SlotIdentity, S: SlotOwner<Id>>(
+  |                  --                ----- found type parameter
+  |                  |
+  |                  expected type parameter
+...
+8 |     let _ = slot.reinstall(foreign, |_| owner); // ui-error: E0308
+  |                  --------- ^^^^^^^ expected `Joined<Id>`, found `Joined<Other>`
+  |                  |
+  |                  arguments to this method are incorrect
+  |
+  = note: expected struct `Joined<Id>`
+             found struct `Joined<Other>`
+  = note: a type parameter was expected, but a different one was found; you might be missing a type parameter or trait bound
+  = note: for more information, visit https://doc.rust-lang.org/book/ch10-02-traits.html#traits-as-parameters
+note: method defined here
+ --> src/slot.rs
+  |
+  |     pub fn reinstall<'s, Resume: FnOnce(S::Vacant) -> S>(
+  |            ^^^^^^^^^

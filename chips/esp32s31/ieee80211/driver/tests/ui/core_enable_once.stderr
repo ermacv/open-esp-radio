@@ -2,7 +2,7 @@ error[E0382]: use of moved value: `core`
  --> tests/ui/core_enable_once.rs:7:19
   |
 4 | ...core, 'slot, P: WifiTxPowerProfile, E: WifiTxEntropy, T: Timer, H: LowerMacHardware, K: LowerMacSink<'core, 'slot, 512>>(core: D...
-  |                                                                                                                             ---- move occurs because `core` has type `oer_esp32s31_ieee80211_driver::lower_mac::DisabledCore<oer_esp32s31_ieee80211_driver::lower_mac::LowerMacCore<'_, '_, EspressifBackendTxProfile, P, E, T, 512>>`, which does not implement the `Copy` trait
+  |                                                                                                                             ---- move occurs because `core` has type `oer_esp32s31_ieee80211_driver::lower_mac::DisabledCore<oer_esp32s31_ieee80211_driver::lower_mac::LowerMacCore<'_, '_, EspressifBackendTxProfile, P, E, T, 512, oer_radio_port::pool::path::Root<oer_radio_port::identity::LocalId<'_>>>>`, which does not implement the `Copy` trait
 5 | ... core.enable_checked();
   |          ---------------- `core` moved due to this method call
 6 | ...)]

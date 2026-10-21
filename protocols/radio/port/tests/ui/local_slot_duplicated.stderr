@@ -1,0 +1,16 @@
+error[E0382]: use of moved value: `claim`
+  --> tests/ui/local_slot_duplicated.rs:11:22
+   |
+ 8 |     with_local_slot(async |claim| {
+   |                            ----- move occurs because `claim` has type `SlotClaim<LocalId<'_>>`, which does not implement the `Copy` trait
+ 9 |         let first = claim.place::<S>();
+   |                           ------------ `claim` moved due to this method call
+10 |         #[cfg(all())]
+11 |         let second = claim.place::<S>(); // ui-error: E0382
+   |                      ^^^^^ value used here after move
+   |
+note: `SlotClaim::<Id>::place` takes ownership of the receiver `self`, which moves `claim`
+  --> src/slot.rs
+   |
+   |     pub const fn place<S: SlotOwner<Id>>(self) -> PortSlot<Id, S> {
+   |                                          ^^^^

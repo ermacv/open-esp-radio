@@ -1,0 +1,11 @@
+error[E0382]: use of moved value: `joined`
+ --> tests/ui/joined_slot_affine.rs:9:28
+  |
+5 |     slot: &mut PortSlot<Id, S>, joined: Joined<Id>, first: S, second: S,
+  |                                 ------ move occurs because `joined` has type `Joined<Id>`, which does not implement the `Copy` trait
+6 | ) {
+7 |     let _ = slot.reinstall(joined, |_| first);
+  |                            ------ value moved here
+8 |     #[cfg(all())]
+9 |     let _ = slot.reinstall(joined, |_| second); // ui-error: E0382
+  |                            ^^^^^^ value used here after move

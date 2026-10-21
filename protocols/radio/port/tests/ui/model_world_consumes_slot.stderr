@@ -1,0 +1,16 @@
+error[E0382]: use of moved value: `slot`
+ --> tests/ui/model_world_consumes_slot.rs:7:5
+  |
+4 | pub fn end<'scope, S: ModelSlotOwner<LocalId<'scope>>>(slot: PortSlot<LocalId<'scope>, S>) {
+  |                                                        ---- move occurs because `slot` has type `PortSlot<LocalId<'_>, S>`, which does not implement the `Copy` trait
+5 |     slot.end_model_world();
+  |          ----------------- `slot` moved due to this method call
+6 |     #[cfg(all())]
+7 |     slot.end_model_world(); // ui-error: E0382
+  |     ^^^^ value used here after move
+  |
+note: `PortSlot::<LocalId<'scope>, S>::end_model_world` takes ownership of the receiver `self`, which moves `slot`
+ --> src/slot.rs
+  |
+  |     pub fn end_model_world(self) {
+  |                            ^^^^

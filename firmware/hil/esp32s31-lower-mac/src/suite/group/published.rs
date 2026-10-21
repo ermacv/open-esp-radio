@@ -2,9 +2,9 @@
 use super::*;
 use oer_ieee80211_port::conformance::group_keys::TxOwners;
 use oer_ieee80211_wire::{ccmp::CcmpPacketNumber, qos::WmmAccessCategory};
-async fn exchange<'p, 'id: 'p>(
-    phase: &mut Esp32s31Phase<'p, 'id, Device, TX>,
-    resources: <Backend as PortBackend>::Resources<'id>,
+async fn exchange<'p, 'id: 'p, Id: radio::SlotIdentity + 'id>(
+    phase: &mut Esp32s31Phase<'p, 'id, Id, Device, TX>,
+    resources: <Backend<Id> as PortBackend<Id>>::Resources<'id>,
     peer: Peer,
 ) -> Result<ProgressTrace<Events, Retained>, &'static str> {
     let (start, bank) = resources.access_point_association.into_parts();
@@ -29,7 +29,7 @@ async fn exchange<'p, 'id: 'p>(
         }
     };
     let admitted = Owners {
-        slot: PortKeys::<AccessPoint>::group_slot_identity(&key),
+        slot: PortKeys::<Id, AccessPoint>::group_slot_identity(&key),
         permission: permission.index(),
     };
     let [ticket, ..] = resources.tickets;
@@ -58,7 +58,7 @@ async fn exchange<'p, 'id: 'p>(
         rate,
     })
     .map_err(|_| "group class")?;
-    let source = <Family as TxBufferPool<BufferClass<TX>>>::prepare::<AccessPoint, Caps>(
+    let source = <Family<Id> as TxBufferPool<BufferClass<TX>>>::prepare::<AccessPoint, Caps>(
         TxSource::Fresh {
             buffer,
             frame,
@@ -150,11 +150,11 @@ async fn exchange<'p, 'id: 'p>(
         blocked_while_published,
     })
 }
-pub(super) async fn run<'p, 'id>(
-    mut owner: Owner<'p, 'id, Backend, radio::Enabled>,
-    resources: <Backend as PortBackend>::Resources<'id>,
+pub(super) async fn run<'p, 'id, Id: radio::SlotIdentity + 'id>(
+    mut owner: Owner<'p, 'id, Id, Backend<Id>, radio::Enabled>,
+    resources: <Backend<Id> as PortBackend<Id>>::Resources<'id>,
     peer: Peer,
-) -> Ended<'id, Backend, Result<Trace, &'static str>> {
+) -> Ended<Id, Backend<Id>, Result<Trace, &'static str>> {
     let mut result = exchange(&mut owner.phase(), resources, peer).await;
     irq::hold_completion(false);
     owner.phase().debug_hold_completion(false);
@@ -176,12 +176,12 @@ pub(super) async fn run<'p, 'id>(
         result = Err("extra group terminal");
     }
     let result = result.and_then(|raw| {
-        group_trace(&raw, Backend::GROUP_COMMAND_BOUND.as_micros())
+        group_trace(&raw, Backend::<Id>::GROUP_COMMAND_BOUND.as_micros())
             .map(Trace::Group)
             .ok_or("group trace extent")
     });
     match disabled {
         Ok(owner) => Ended::uninstall(owner, (), result),
-        Err(failed) => Ended::fail_stopped(failed.fail_stop(), Err("group disable")),
+        Err(failed) => Ended::fail_stop(failed.fail_stop(), Err("group disable")),
     }
 }

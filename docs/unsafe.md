@@ -144,6 +144,11 @@ run outside the macro's unsafe context, and callers keep `forbid(unsafe_code)`.
 The macro resolves storage and pointer operations through its defining crate,
 so a caller cannot replace them by shadowing `core`.
 
+`AffineSpscQueue` lends short local endpoints without new unsafe operations.
+The original endpoint remains exclusively borrowed. A local producer loan can
+be copied within its one context, supports only synchronous publication and
+has no reservation; both local endpoints are neither Send nor Sync. The
+underlying Release/Acquire transfer still moves each complete owner once.
 `AffineIndexedSpscQueue` lets an affine permission's place select its value
 cell while the audited SPSC ring stores only indices; available ring space
 follows from N distinct indices, without an occupancy check, a backend
@@ -216,6 +221,17 @@ fixture installer, which links `oer-os-process`, does not link `serialport`.
 The 802.15.4 host stand binds the pinned ESP-IDF C driver through its FFI.
 
 ## Firmware and platform code below the boundary
+
+`oer-espressif-executor::port_slot` binds a nominal port identity to one
+static allocation. `declare_port_slot!` irreversibly claims its private
+`StaticCell` before constructing `SlotClaim<StaticId<Declaration>>` at one
+unsafe site. The claim has only invariant `PhantomData`; its private safe
+constructor remains inside the portable contract. The declaration must
+never issue a second authority for the same type, including after software
+reset or quarantine, because owned queue permissions rely on that identity
+having exactly one backing store. Static placement itself uses `StaticCell`'s
+safe initialization; no reference lifetime or owner is cast. Local scope
+claims have no static latch and use no unsafe code.
 
 The platform crates (the boards and `chips/espressif/staged-*`), the bootstrap images
 (`firmware/bootstrap/*`) and the probe images (`firmware/probes/*`) own the

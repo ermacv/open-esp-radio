@@ -1,0 +1,10 @@
+error[E0499]: cannot borrow `sender` as mutable more than once at a time
+  --> tests/ui/local_spsc_loan_suspends_original.rs:10:13
+   |
+ 7 |     let local = sender.borrow_local();
+   |                 ------ first mutable borrow occurs here
+...
+10 |     let _ = sender.try_reserve(); // ui-error: E0499
+   |             ^^^^^^ second mutable borrow occurs here
+11 |     let _ = copy.try_send(1);
+   |             ---- first borrow later used here
