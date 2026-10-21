@@ -556,7 +556,7 @@ value = 66
 name = "observe_ieee802154_core0_route"
 peripheral = "IEEE802154_INTERRUPT_ROUTE"
 register = "CORE0_ROUTE"
-fields = ["MAP", "BITS_6_7_OPAQUE", "PASS_IN_SEC", "BITS_9_31_OPAQUE"]
+fields = ["MAP", "PASS_IN_SEC"]
 sources = ["ESP_PACS_5CD68D2_C5_INTERRUPT_MATRIX"]
 
 [[enum-domains]]

@@ -1809,22 +1809,10 @@ transaction starts with the CPU route detached.</description>
               <bitWidth>6</bitWidth>
             </field>
             <field>
-              <name>BITS_6_7_OPAQUE</name>
-              <description>Opaque: meaning not established. Bits the vendor declares reserved, retained solely so reset-state observation cannot erase an unexpected nonzero value.</description>
-              <bitOffset>6</bitOffset>
-              <bitWidth>2</bitWidth>
-            </field>
-            <field>
               <name>PASS_IN_SEC</name>
               <description>Project-assigned name. Secure-world pass-through selection for the peripheral source.</description>
               <bitOffset>8</bitOffset>
               <bitWidth>1</bitWidth>
-            </field>
-            <field>
-              <name>BITS_9_31_OPAQUE</name>
-              <description>Opaque: meaning not established. Bits the vendor declares reserved, retained solely so reset-state observation cannot erase an unexpected nonzero value.</description>
-              <bitOffset>9</bitOffset>
-              <bitWidth>23</bitWidth>
             </field>
           </fields>
         </register>

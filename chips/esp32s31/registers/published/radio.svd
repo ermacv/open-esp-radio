@@ -26807,22 +26807,10 @@ polled or validation transaction starts with both CPU routes detached.</descript
               <bitWidth>6</bitWidth>
             </field>
             <field>
-              <name>BITS_6_7_OPAQUE</name>
-              <description>Opaque: meaning not established. Bits the vendor declares reserved, retained solely so reset-state observation cannot erase an unexpected nonzero value.</description>
-              <bitOffset>6</bitOffset>
-              <bitWidth>2</bitWidth>
-            </field>
-            <field>
               <name>PASS_LEVEL</name>
               <description>Project-assigned name. Privilege pass/remap level selected for the peripheral source.</description>
               <bitOffset>8</bitOffset>
               <bitWidth>2</bitWidth>
-            </field>
-            <field>
-              <name>BITS_10_31_OPAQUE</name>
-              <description>Opaque: meaning not established. Bits the vendor declares reserved, retained solely so reset-state observation cannot erase an unexpected nonzero value.</description>
-              <bitOffset>10</bitOffset>
-              <bitWidth>22</bitWidth>
             </field>
           </fields>
         </register>
@@ -26841,22 +26829,10 @@ polled or validation transaction starts with both CPU routes detached.</descript
               <bitWidth>6</bitWidth>
             </field>
             <field>
-              <name>BITS_6_7_OPAQUE</name>
-              <description>Opaque: meaning not established. Bits the vendor declares reserved, retained solely so reset-state observation cannot erase an unexpected nonzero value.</description>
-              <bitOffset>6</bitOffset>
-              <bitWidth>2</bitWidth>
-            </field>
-            <field>
               <name>PASS_LEVEL</name>
               <description>Project-assigned name. Privilege pass/remap level selected for the peripheral source.</description>
               <bitOffset>8</bitOffset>
               <bitWidth>2</bitWidth>
-            </field>
-            <field>
-              <name>BITS_10_31_OPAQUE</name>
-              <description>Opaque: meaning not established. Bits the vendor declares reserved, retained solely so reset-state observation cannot erase an unexpected nonzero value.</description>
-              <bitOffset>10</bitOffset>
-              <bitWidth>22</bitWidth>
             </field>
           </fields>
         </register>

@@ -1029,23 +1029,15 @@ impl Ieee802154PolledRegisterLease<'_> {
     /// Classify both source-132 routes without exposing register images.
     #[doc(hidden)]
     pub fn interrupt_route_state(&self) -> Ieee802154RouteState {
-        let (core0_map, core0_bits_6_7, core0_pass_level, core0_bits_10_31) =
+        let (core0_map, core0_pass_level) =
             crate::svd::field_snapshot_read::observe_ieee802154_core0_route(
                 self.task.interrupt_route,
             );
-        let (core1_map, core1_bits_6_7, core1_pass_level, core1_bits_10_31) =
+        let (core1_map, core1_pass_level) =
             crate::svd::field_snapshot_read::observe_ieee802154_core1_route(
                 self.task.interrupt_route,
             );
         Ieee802154RouteState::from_observation(
-            core0_map == 0
-                && core0_bits_6_7 == 0
-                && core0_pass_level == 0
-                && core0_bits_10_31 == 0
-                && core1_map == 0
-                && core1_bits_6_7 == 0
-                && core1_pass_level == 0
-                && core1_bits_10_31 == 0,
             core0_map != 0 || core1_map != 0,
             core0_pass_level != 0 || core1_pass_level != 0,
         )

@@ -10,6 +10,9 @@
 #[cfg(test)]
 extern crate std;
 
+#[cfg(test)]
+mod test_memory;
+
 // The generated capability catalog is intentionally broader than this crate's
 // restricted ownership facade. Reviewed leaves stay unreachable until an owner
 // transition exposes them.

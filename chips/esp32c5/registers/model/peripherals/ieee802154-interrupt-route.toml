@@ -16,6 +16,7 @@ name = "CORE0_ROUTE"
 description = "Destination and security routing for ZB_MAC."
 addressOffset = 0x000
 size = 32
+reserved = { mask = 0xfffffec0, sources = ["ESP_IDF_4D59230D_C5_INTERRUPT_MATRIX_ZB_MAC_MAP"] }
 access = "read-write"
 resetValue = 0
 
@@ -25,11 +26,6 @@ description = "CPU-interrupt destination selected for the peripheral source."
 bitOffset = 0
 bitWidth = 6
 
-[[peripherals.registers.register.fields]]
-name = "BITS_6_7_OPAQUE"
-description = "Bits the vendor declares reserved, retained solely so reset-state observation cannot erase an unexpected nonzero value."
-bitOffset = 6
-bitWidth = 2
 
 [[peripherals.registers.register.fields]]
 name = "PASS_IN_SEC"
@@ -37,18 +33,9 @@ description = "Secure-world pass-through selection for the peripheral source."
 bitOffset = 8
 bitWidth = 1
 
-[[peripherals.registers.register.fields]]
-name = "BITS_9_31_OPAQUE"
-description = "Bits the vendor declares reserved, retained solely so reset-state observation cannot erase an unexpected nonzero value."
-bitOffset = 9
-bitWidth = 23
 
 [[peripheral-review]]
 entity = "IEEE802154_INTERRUPT_ROUTE"
-opaque-entities = [
-    "IEEE802154_INTERRUPT_ROUTE.CORE0_ROUTE.BITS_6_7_OPAQUE",
-    "IEEE802154_INTERRUPT_ROUTE.CORE0_ROUTE.BITS_9_31_OPAQUE",
-]
 
 [peripheral-review.peripheral]
 sources = ["ESP_PACS_5CD68D2_C5_INTERRUPT_MATRIX", "ESP_IDF_4D59230D_C5_INTERRUPT_SOURCES"]
@@ -69,7 +56,3 @@ naming = "descriptive"
 provenance = "imported"
 accuracy = "exact"
 completeness = "complete"
-
-[peripheral-review.opaque]
-sources = ["ESP_IDF_4D59230D_C5_INTERRUPT_MATRIX_ZB_MAC_MAP"]
-naming = "opaque"

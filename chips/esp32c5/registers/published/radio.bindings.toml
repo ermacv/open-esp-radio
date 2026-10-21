@@ -77,24 +77,10 @@ bit-width = 6
 access = "read-write"
 
 [[registers.fields]]
-svd-name = "BITS_6_7_OPAQUE"
-method = "bits_6_7_opaque"
-bit-offset = 6
-bit-width = 2
-access = "read-write"
-
-[[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_9_31_OPAQUE"
-method = "bits_9_31_opaque"
-bit-offset = 9
-bit-width = 23
 access = "read-write"
 
 [[registers]]

@@ -59249,38 +59249,20 @@ pub mod ieee802154_interrupt_route {
         pub type MapR = crate::FieldReader;
         #[doc = "Field `MAP` writer - Project-assigned name. CPU-interrupt destination selected for the peripheral source."]
         pub type MapW<'a, REG> = crate::FieldWriter<'a, REG, 6>;
-        #[doc = "Field `BITS_6_7_OPAQUE` reader - Opaque: meaning not established. Bits the vendor declares reserved, retained solely so reset-state observation cannot erase an unexpected nonzero value."]
-        pub type Bits6_7OpaqueR = crate::FieldReader;
-        #[doc = "Field `BITS_6_7_OPAQUE` writer - Opaque: meaning not established. Bits the vendor declares reserved, retained solely so reset-state observation cannot erase an unexpected nonzero value."]
-        pub type Bits6_7OpaqueW<'a, REG> = crate::FieldWriter<'a, REG, 2>;
         #[doc = "Field `PASS_LEVEL` reader - Project-assigned name. Privilege pass/remap level selected for the peripheral source."]
         pub type PassLevelR = crate::FieldReader;
         #[doc = "Field `PASS_LEVEL` writer - Project-assigned name. Privilege pass/remap level selected for the peripheral source."]
         pub type PassLevelW<'a, REG> = crate::FieldWriter<'a, REG, 2>;
-        #[doc = "Field `BITS_10_31_OPAQUE` reader - Opaque: meaning not established. Bits the vendor declares reserved, retained solely so reset-state observation cannot erase an unexpected nonzero value."]
-        pub type Bits10_31OpaqueR = crate::FieldReader<u32>;
-        #[doc = "Field `BITS_10_31_OPAQUE` writer - Opaque: meaning not established. Bits the vendor declares reserved, retained solely so reset-state observation cannot erase an unexpected nonzero value."]
-        pub type Bits10_31OpaqueW<'a, REG> = crate::FieldWriter<'a, REG, 22, u32>;
         impl R {
             #[doc = "Bits 0:5 - Project-assigned name. CPU-interrupt destination selected for the peripheral source."]
             #[inline(always)]
             pub fn map(&self) -> MapR {
                 MapR::new((self.bits & 0x3f) as u8)
             }
-            #[doc = "Bits 6:7 - Opaque: meaning not established. Bits the vendor declares reserved, retained solely so reset-state observation cannot erase an unexpected nonzero value."]
-            #[inline(always)]
-            pub fn bits_6_7_opaque(&self) -> Bits6_7OpaqueR {
-                Bits6_7OpaqueR::new(((self.bits >> 6) & 3) as u8)
-            }
             #[doc = "Bits 8:9 - Project-assigned name. Privilege pass/remap level selected for the peripheral source."]
             #[inline(always)]
             pub fn pass_level(&self) -> PassLevelR {
                 PassLevelR::new(((self.bits >> 8) & 3) as u8)
-            }
-            #[doc = "Bits 10:31 - Opaque: meaning not established. Bits the vendor declares reserved, retained solely so reset-state observation cannot erase an unexpected nonzero value."]
-            #[inline(always)]
-            pub fn bits_10_31_opaque(&self) -> Bits10_31OpaqueR {
-                Bits10_31OpaqueR::new((self.bits >> 10) & 0x003f_ffff)
             }
         }
         impl W {
@@ -59289,20 +59271,10 @@ pub mod ieee802154_interrupt_route {
             pub fn map(&mut self) -> MapW<'_, Core0RouteSpec> {
                 MapW::new(self, 0)
             }
-            #[doc = "Bits 6:7 - Opaque: meaning not established. Bits the vendor declares reserved, retained solely so reset-state observation cannot erase an unexpected nonzero value."]
-            #[inline(always)]
-            pub fn bits_6_7_opaque(&mut self) -> Bits6_7OpaqueW<'_, Core0RouteSpec> {
-                Bits6_7OpaqueW::new(self, 6)
-            }
             #[doc = "Bits 8:9 - Project-assigned name. Privilege pass/remap level selected for the peripheral source."]
             #[inline(always)]
             pub fn pass_level(&mut self) -> PassLevelW<'_, Core0RouteSpec> {
                 PassLevelW::new(self, 8)
-            }
-            #[doc = "Bits 10:31 - Opaque: meaning not established. Bits the vendor declares reserved, retained solely so reset-state observation cannot erase an unexpected nonzero value."]
-            #[inline(always)]
-            pub fn bits_10_31_opaque(&mut self) -> Bits10_31OpaqueW<'_, Core0RouteSpec> {
-                Bits10_31OpaqueW::new(self, 10)
             }
         }
         #[doc = "Project-assigned name. Core-zero destination and privilege routing for MODEM_ZB_MAC.\n\nYou can [`read`](crate::Reg::read) this register and get [`core0_route::R`](R). You can [`reset`](crate::Reg::reset), [`write`](crate::Reg::write), [`write_with_zero`](crate::Reg::write_with_zero) this register using [`core0_route::W`](W). You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api)."]
@@ -59332,38 +59304,20 @@ pub mod ieee802154_interrupt_route {
         pub type MapR = crate::FieldReader;
         #[doc = "Field `MAP` writer - Project-assigned name. CPU-interrupt destination selected for the peripheral source."]
         pub type MapW<'a, REG> = crate::FieldWriter<'a, REG, 6>;
-        #[doc = "Field `BITS_6_7_OPAQUE` reader - Opaque: meaning not established. Bits the vendor declares reserved, retained solely so reset-state observation cannot erase an unexpected nonzero value."]
-        pub type Bits6_7OpaqueR = crate::FieldReader;
-        #[doc = "Field `BITS_6_7_OPAQUE` writer - Opaque: meaning not established. Bits the vendor declares reserved, retained solely so reset-state observation cannot erase an unexpected nonzero value."]
-        pub type Bits6_7OpaqueW<'a, REG> = crate::FieldWriter<'a, REG, 2>;
         #[doc = "Field `PASS_LEVEL` reader - Project-assigned name. Privilege pass/remap level selected for the peripheral source."]
         pub type PassLevelR = crate::FieldReader;
         #[doc = "Field `PASS_LEVEL` writer - Project-assigned name. Privilege pass/remap level selected for the peripheral source."]
         pub type PassLevelW<'a, REG> = crate::FieldWriter<'a, REG, 2>;
-        #[doc = "Field `BITS_10_31_OPAQUE` reader - Opaque: meaning not established. Bits the vendor declares reserved, retained solely so reset-state observation cannot erase an unexpected nonzero value."]
-        pub type Bits10_31OpaqueR = crate::FieldReader<u32>;
-        #[doc = "Field `BITS_10_31_OPAQUE` writer - Opaque: meaning not established. Bits the vendor declares reserved, retained solely so reset-state observation cannot erase an unexpected nonzero value."]
-        pub type Bits10_31OpaqueW<'a, REG> = crate::FieldWriter<'a, REG, 22, u32>;
         impl R {
             #[doc = "Bits 0:5 - Project-assigned name. CPU-interrupt destination selected for the peripheral source."]
             #[inline(always)]
             pub fn map(&self) -> MapR {
                 MapR::new((self.bits & 0x3f) as u8)
             }
-            #[doc = "Bits 6:7 - Opaque: meaning not established. Bits the vendor declares reserved, retained solely so reset-state observation cannot erase an unexpected nonzero value."]
-            #[inline(always)]
-            pub fn bits_6_7_opaque(&self) -> Bits6_7OpaqueR {
-                Bits6_7OpaqueR::new(((self.bits >> 6) & 3) as u8)
-            }
             #[doc = "Bits 8:9 - Project-assigned name. Privilege pass/remap level selected for the peripheral source."]
             #[inline(always)]
             pub fn pass_level(&self) -> PassLevelR {
                 PassLevelR::new(((self.bits >> 8) & 3) as u8)
-            }
-            #[doc = "Bits 10:31 - Opaque: meaning not established. Bits the vendor declares reserved, retained solely so reset-state observation cannot erase an unexpected nonzero value."]
-            #[inline(always)]
-            pub fn bits_10_31_opaque(&self) -> Bits10_31OpaqueR {
-                Bits10_31OpaqueR::new((self.bits >> 10) & 0x003f_ffff)
             }
         }
         impl W {
@@ -59372,20 +59326,10 @@ pub mod ieee802154_interrupt_route {
             pub fn map(&mut self) -> MapW<'_, Core1RouteSpec> {
                 MapW::new(self, 0)
             }
-            #[doc = "Bits 6:7 - Opaque: meaning not established. Bits the vendor declares reserved, retained solely so reset-state observation cannot erase an unexpected nonzero value."]
-            #[inline(always)]
-            pub fn bits_6_7_opaque(&mut self) -> Bits6_7OpaqueW<'_, Core1RouteSpec> {
-                Bits6_7OpaqueW::new(self, 6)
-            }
             #[doc = "Bits 8:9 - Project-assigned name. Privilege pass/remap level selected for the peripheral source."]
             #[inline(always)]
             pub fn pass_level(&mut self) -> PassLevelW<'_, Core1RouteSpec> {
                 PassLevelW::new(self, 8)
-            }
-            #[doc = "Bits 10:31 - Opaque: meaning not established. Bits the vendor declares reserved, retained solely so reset-state observation cannot erase an unexpected nonzero value."]
-            #[inline(always)]
-            pub fn bits_10_31_opaque(&mut self) -> Bits10_31OpaqueW<'_, Core1RouteSpec> {
-                Bits10_31OpaqueW::new(self, 10)
             }
         }
         #[doc = "Project-assigned name. Core-one destination and privilege routing for MODEM_ZB_MAC.\n\nYou can [`read`](crate::Reg::read) this register and get [`core1_route::R`](R). You can [`reset`](crate::Reg::reset), [`write`](crate::Reg::write), [`write_with_zero`](crate::Reg::write_with_zero) this register using [`core1_route::W`](W). You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api)."]
@@ -62265,34 +62209,20 @@ pub mod field_snapshot_read {
         )
     }
 
-    /// Read `MAP`, `BITS_6_7_OPAQUE`, `PASS_LEVEL`, `BITS_10_31_OPAQUE` from one `IEEE802154_INTERRUPT_ROUTE`.`CORE0_ROUTE` sample.
+    /// Read `MAP`, `PASS_LEVEL` from one `IEEE802154_INTERRUPT_ROUTE`.`CORE0_ROUTE` sample.
     #[allow(clippy::type_complexity)]
     #[inline]
-    pub fn observe_ieee802154_core0_route(
-        registers: &crate::Ieee802154InterruptRoute,
-    ) -> (u8, u8, u8, u32) {
+    pub fn observe_ieee802154_core0_route(registers: &crate::Ieee802154InterruptRoute) -> (u8, u8) {
         let sample = registers.core0_route().read();
-        (
-            sample.map().bits(),
-            sample.bits_6_7_opaque().bits(),
-            sample.pass_level().bits(),
-            sample.bits_10_31_opaque().bits(),
-        )
+        (sample.map().bits(), sample.pass_level().bits())
     }
 
-    /// Read `MAP`, `BITS_6_7_OPAQUE`, `PASS_LEVEL`, `BITS_10_31_OPAQUE` from one `IEEE802154_INTERRUPT_ROUTE`.`CORE1_ROUTE` sample.
+    /// Read `MAP`, `PASS_LEVEL` from one `IEEE802154_INTERRUPT_ROUTE`.`CORE1_ROUTE` sample.
     #[allow(clippy::type_complexity)]
     #[inline]
-    pub fn observe_ieee802154_core1_route(
-        registers: &crate::Ieee802154InterruptRoute,
-    ) -> (u8, u8, u8, u32) {
+    pub fn observe_ieee802154_core1_route(registers: &crate::Ieee802154InterruptRoute) -> (u8, u8) {
         let sample = registers.core1_route().read();
-        (
-            sample.map().bits(),
-            sample.bits_6_7_opaque().bits(),
-            sample.pass_level().bits(),
-            sample.bits_10_31_opaque().bits(),
-        )
+        (sample.map().bits(), sample.pass_level().bits())
     }
 
     /// Read `CLK_WIFIPWR_ST_MAP_BIT_ONE`, `CLK_WIFIPWR_ST_MAP_BIT_TWO`, `CLK_COEX_ST_MAP_BIT_ONE`, `CLK_COEX_ST_MAP_BIT_TWO`, `CLK_I2C_MST_ST_MAP_BIT_ONE`, `CLK_I2C_MST_ST_MAP_BIT_TWO`, `CLK_LP_APB_ST_MAP_BIT_ONE`, `CLK_LP_APB_ST_MAP_BIT_TWO` from one `MODEM_LPCON_SHARED_CLOCK`.`CLK_CONF_POWER_ST` sample.

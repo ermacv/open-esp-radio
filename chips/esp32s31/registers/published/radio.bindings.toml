@@ -47374,24 +47374,10 @@ bit-width = 6
 access = "read-write"
 
 [[registers.fields]]
-svd-name = "BITS_6_7_OPAQUE"
-method = "bits_6_7_opaque"
-bit-offset = 6
-bit-width = 2
-access = "read-write"
-
-[[registers.fields]]
 svd-name = "PASS_LEVEL"
 method = "pass_level"
 bit-offset = 8
 bit-width = 2
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_10_31_OPAQUE"
-method = "bits_10_31_opaque"
-bit-offset = 10
-bit-width = 22
 access = "read-write"
 
 [[registers]]
@@ -47413,24 +47399,10 @@ bit-width = 6
 access = "read-write"
 
 [[registers.fields]]
-svd-name = "BITS_6_7_OPAQUE"
-method = "bits_6_7_opaque"
-bit-offset = 6
-bit-width = 2
-access = "read-write"
-
-[[registers.fields]]
 svd-name = "PASS_LEVEL"
 method = "pass_level"
 bit-offset = 8
 bit-width = 2
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_10_31_OPAQUE"
-method = "bits_10_31_opaque"
-bit-offset = 10
-bit-width = 22
 access = "read-write"
 
 [[registers]]
