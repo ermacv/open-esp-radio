@@ -3868,6 +3868,7 @@ dependencies = [
  "oer-analysis-riscv-stack",
  "oer-chip-profile",
  "oer-os-process",
+ "oer-os-toolchain",
  "oer-tool-pins",
  "rustc-demangle",
  "serde",

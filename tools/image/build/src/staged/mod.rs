@@ -57,6 +57,31 @@ pub(crate) fn build(
         let _cache = crate::compiler::lock_compile_cache(&cache)?;
         let mut runtime = crate::runtime_command(spec, profile, "build", &policy, instrumentation)?;
         runtime.env("CARGO_TARGET_DIR", &cache);
+        let strict = profile.memory.is_some() && profile.interrupts.is_some();
+        configure_strict_linker(&mut runtime, spec, &output)?;
+        if strict {
+            // Cargo does not track environment read only by a linker wrapper.
+            // Relink this package with the current specification; dependencies
+            // remain cached and no code-generation flags change its image.
+            let mut clean = crate::cargo::command();
+            clean
+                .current_dir(root)
+                .args([
+                    "clean",
+                    "--locked",
+                    "--profile",
+                    crate::FIRMWARE_PROFILE,
+                    "--target",
+                    target,
+                    "-p",
+                    &spec.application.package,
+                ])
+                .env("CARGO_TARGET_DIR", &cache);
+            log.run(
+                &mut clean,
+                "invalidate the runtime link for its analysis specification",
+            )?;
+        }
         crate::cargo::ensure_fetched(root)?;
         {
             let _slot = crate::exclusion::slot(&crate::host_build_root()?.join("tokens"))?;
@@ -67,6 +92,15 @@ pub(crate) fn build(
             &output,
             files::RUNTIME_ELF,
         )?;
+        {
+            use oer_image_checks::linker::strict::{FRAGMENT, PLACEMENT, SPEC_FILE};
+            for file in [FRAGMENT, PLACEMENT, SPEC_FILE] {
+                if !output.join(file).is_file() {
+                    return Err(format!("the runtime linker did not produce {file}").into());
+                }
+                bundle.reports.push(file.to_owned());
+            }
+        }
         elf
     };
     let runtime_bin = output.join(files::RUNTIME_BIN);
@@ -157,6 +191,31 @@ pub(crate) fn build(
     });
 
     staging.publish(bundle)
+}
+
+fn configure_strict_linker(
+    command: &mut std::process::Command,
+    spec: &ImageSpec,
+    output: &Path,
+) -> Result<()> {
+    use oer_image_checks::linker::strict::{SPEC_ENV, SPEC_FILE, Spec};
+    let analysis = Spec {
+        root: std::fs::canonicalize(&spec.root)?,
+        chip: spec.chip.clone(),
+        stack_policy: std::fs::canonicalize(spec.root.join(&spec.stack_policy))?,
+    };
+    let path = std::path::absolute(output.join(SPEC_FILE))?;
+    std::fs::write(&path, toml::to_string(&analysis)?)?;
+    // An image without an interrupt contract may reuse a fresh Cargo output.
+    // Its empty fragment still belongs in its new bundle.
+    use oer_image_checks::linker::strict::{FRAGMENT, PLACEMENT, Placement};
+    std::fs::write(output.join(FRAGMENT), "")?;
+    std::fs::write(
+        output.join(PLACEMENT),
+        toml::to_string(&Placement::default())?,
+    )?;
+    command.env(SPEC_ENV, path);
+    Ok(())
 }
 
 /// The QIO application image of the bootstrap ELF `elf` for the partition

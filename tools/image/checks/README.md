@@ -21,9 +21,21 @@ Other priorities and exceptions retain strict placement throughout.
 
 The S31 accesses flash and PSRAM through separate MSPI controllers: a flash
 operation does not disable the PSRAM cache. Placement follows this hardware
-contract. Our strict helpers use `#[esp_hal::ram]`; exact input-section rules
-in the staged runtime's `.isr.text` place the required pinned dependency
-functions in SRAM.
+contract. The image linker runs the same interrupt analysis and `CodePlacement`
+after its first link. It resolves strict cached functions to their defining
+input sections using the objects' symbol tables, selects those whole sections
+in the generated `strict-text.x` inside `.isr.text`, and links once more.
+With no strict cached functions the fragment stays empty and the first ELF is
+final. Existing `sram_fn!` declarations and dependency section rules also place
+their code in SRAM. The post-build interrupt check verifies the final ELF.
+
+The runtime build supplies `OER_IMAGE_INTERRUPTS`, the path to `image-linker.toml`
+in its output directory. It names the repository, chip contract and stack policy;
+the analysis loads that chip's pinned ROM and summaries exactly as the check does.
+The linker compares whole selected sections with the same free-SRAM measurement
+before its second invocation. An analysis error, an unrepresentable script name
+or insufficient SRAM fails the link. A diagnostic's partial stack still supplies
+its known strict functions. Bootstrap has no analysis specification.
 
 `interrupt-stack.txt` reports strict code in cached memory by hart/level,
 P2 task code in PSRAM and its task roots, static cached data references and
@@ -35,6 +47,10 @@ ranges. Code sizes come from the existing analysis. SRAM usage counts the
 union of allocated sections and placement ranges, including overlapping
 NOLOAD stacks and DMA; the usable contract already excludes the ROM tail.
 Data without sized symbols remains visible without an invented size.
+Both reports include `strict code placed by the image linker: N functions, B bytes`.
+The placement inventory also lists each selected function's actual input section,
+final size and the other symbols moved with that section. `strict-placement.toml`
+and the generated fragment remain in the bundle.
 
 The existing checks of floating-point instructions, interrupt entry points,
 direct handler calls, nesting rules, bounds and admitted assumptions still

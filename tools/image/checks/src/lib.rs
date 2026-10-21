@@ -309,9 +309,14 @@ impl Gates {
                             let placement = crate::interrupts::InterruptPlacement::of(
                                 &image, &stacks, profile,
                             )?;
+                            let linked = crate::linker::strict::Placement::read(input.output)?;
                             std::fs::write(
                                 input.output.join(crate::interrupts::INTERRUPT_REPORT),
-                                stacks.render_with_placement(&placement),
+                                format!(
+                                    "{}{}",
+                                    stacks.render_with_placement(&placement),
+                                    linked.summary()
+                                ),
                             )?;
                             outcome
                                 .reports
@@ -320,7 +325,7 @@ impl Gates {
                                 input
                                     .output
                                     .join(crate::interrupts::INTERRUPT_PLACEMENT_REPORT),
-                                placement.render(),
+                                format!("{}\n{}", placement.render(), linked.render()),
                             )?;
                             outcome
                                 .reports

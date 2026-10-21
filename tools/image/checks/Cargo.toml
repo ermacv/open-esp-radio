@@ -23,6 +23,7 @@ serde = { version = "=1.0.229", features = ["derive"] }
 toml = "1.1"
 
 [dev-dependencies]
+oer-os-toolchain = { path = "../../os/toolchain" }
 object = { version = "=0.39.1", default-features = false, features = ["elf", "read", "std", "write"] }
 tempfile = "=3.27.0"
 

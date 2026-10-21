@@ -88,6 +88,15 @@ pub struct CodePlacement {
 }
 
 impl CodePlacement {
+    /// The resolved strict functions still in cached memory, by address and size.
+    /// The image linker consumes this same partition as the final check.
+    pub fn strict_cached(&self) -> impl Iterator<Item = (u32, u32)> + '_ {
+        self.functions.iter().filter_map(|(&address, function)| {
+            (function.role == Role::Strict && function.location.cached())
+                .then_some((address, function.size))
+        })
+    }
+
     pub(super) fn of(
         analysis: &Analysis,
         own: &[Function],

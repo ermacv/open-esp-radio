@@ -86,6 +86,7 @@ SECTIONS
        of the pinned compiler. Our handlers and executor use sram_fn!. */
     *(.text.*_RNvNtNtCs*_16embassy_executor3raw5waker4wake);
     *(.text.*_RNvNtNtCs*_16embassy_executor3raw5waker4drop);
+    INCLUDE strict-text.x
     . = ALIGN(4);
     __runtime_isr_end = ABSOLUTE(.);
   } > INTERNAL_LOW

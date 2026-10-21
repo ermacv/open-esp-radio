@@ -6,7 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 publish = false
-description = "The image linker: link-input checks, then the target's rust-lld; rustc runs it for every image"
+description = "The image linker: input checks and analysis-driven strict code placement through the target's rust-lld"
 
 # The cargo configuration and the image pipeline name the linker binary.
 [[bin]]
