@@ -150,6 +150,7 @@ fn ceiling(channel: oer_radio_regulatory::Permitted<WifiChannel>, config: W2Conf
 }
 
 #[allow(clippy::too_many_arguments)]
+#[inline(never)]
 async fn run(
     mut cell: MembershipCell<Wifi>,
     wifi: WifiPartition,
