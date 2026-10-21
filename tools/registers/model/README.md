@@ -84,6 +84,11 @@ an open vendor source is never opaque.
 Code preserves reserved and absent bits or writes their reset value, and the
 PAC exposes no field accessor for them. Layouts follow the same rule: CPU operations
 preserve the exact image of unassigned bits, including bits hardware writes.
+An existing layout unit can declare `fields = []`: its cited position, size,
+whole image and storage remain, with no bit accessors. The `fields` property
+is still required. Encoded pointer fields can copy their pointer from another
+word image with `with_<field>_from`, preserving all other bits without naming
+unassigned lanes.
 
 A native schema-2 fragment adds one optional property on a register:
 

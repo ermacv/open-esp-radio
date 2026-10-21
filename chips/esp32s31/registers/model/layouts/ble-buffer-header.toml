@@ -35,13 +35,6 @@ description = "A graph link; zero denotes no link."
 points-to = "BLE_BUFFER_HEADER"
 encoding = "ble-compressed"
 
-[[layout.words.fields]]
-name = "BITS_20_31_OPAQUE"
-opaque = true
-bits = "31:20"
-writer = "cpu"
-description = "Observed position; the physical meaning is not established."
-
 [[layout.words]]
 name = "PACKET_BASE"
 offset = 0x04
@@ -55,13 +48,6 @@ writer = "cpu"
 description = "Byte-buffer base, including its RX or TX prefix; zero means a packetless cursor."
 placement = ["dma-window"]
 encoding = "ble-compressed"
-
-[[layout.words.fields]]
-name = "BITS_20_31_OPAQUE"
-opaque = true
-bits = "31:20"
-writer = "cpu"
-description = "Observed position; the physical meaning is not established."
 
 [[layout.words]]
 name = "PDU_TARGET"
@@ -78,24 +64,31 @@ placement = ["dma-window"]
 encoding = "ble-compressed"
 
 [[layout.words.fields]]
-name = "BITS_20_31_OPAQUE"
+name = "BIT_21_OPAQUE"
 opaque = true
-bits = "31:20"
+bits = "21"
 writer = "cpu"
-description = "Observed position; the physical meaning is not established."
+description = "Cited allocation profile sets this bit relative to the defined zero allocation image; meaning remains unknown."
+
+[[layout.words.fields]]
+name = "BIT_23_OPAQUE"
+opaque = true
+bits = "23"
+writer = "cpu"
+description = "Cited allocation profile sets this bit relative to the defined zero allocation image; meaning remains unknown."
+
+[[layout.words.fields]]
+name = "BIT_31_OPAQUE"
+opaque = true
+bits = "31"
+writer = "cpu"
+description = "Cited allocation profile sets this bit relative to the defined zero allocation image; meaning remains unknown."
 
 [[layout.words]]
 name = "COMPLETION"
 offset = 0x0c
 access = "shared"
 description = "Observed word position; unassigned bits retain their exact image."
-
-[[layout.words.fields]]
-name = "BITS_0_30_OPAQUE"
-opaque = true
-bits = "30:0"
-writer = "cpu"
-description = "Observed position; the physical meaning is not established."
 
 [[layout.words.fields]]
 name = "DONE"
@@ -127,13 +120,6 @@ name = "PAYLOAD_CAPACITY"
 bits = "10:3"
 writer = "cpu"
 description = "TX payload allocation capacity, excluding the packet prefix."
-
-[[layout.words.fields]]
-name = "BITS_11_31_OPAQUE"
-opaque = true
-bits = "31:11"
-writer = "cpu"
-description = "Observed position; the physical meaning is not established."
 
 [[layout.words]]
 name = "PREVIOUS"

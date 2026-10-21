@@ -20,11 +20,6 @@ bitOffset = 0
 bitWidth = 3
 
 [[peripherals.registers.register.fields]]
-name = "BIT_3_OPAQUE"
-bitOffset = 3
-bitWidth = 1
-
-[[peripherals.registers.register.fields]]
 name = "TXRX_BEAM"
 bitOffset = 4
 bitWidth = 1
@@ -55,11 +50,6 @@ bitOffset = 9
 bitWidth = 1
 
 [[peripherals.registers.register.fields]]
-name = "BITS_10_11_OPAQUE"
-bitOffset = 10
-bitWidth = 2
-
-[[peripherals.registers.register.fields]]
 name = "BFRP_TIMER"
 bitOffset = 12
 bitWidth = 7
@@ -75,19 +65,9 @@ bitOffset = 20
 bitWidth = 6
 
 [[peripherals.registers.register.fields]]
-name = "BIT_26_OPAQUE"
-bitOffset = 26
-bitWidth = 1
-
-[[peripherals.registers.register.fields]]
 name = "NDP_DETECT_SUCCESS"
 bitOffset = 27
 bitWidth = 1
-
-[[peripherals.registers.register.fields]]
-name = "BITS_28_31_OPAQUE"
-bitOffset = 28
-bitWidth = 4
 
 [[peripherals.registers]]
 
@@ -142,11 +122,6 @@ bitOffset = 0
 bitWidth = 5
 
 [[peripherals.registers.register.fields]]
-name = "BITS_5_7_OPAQUE"
-bitOffset = 5
-bitWidth = 3
-
-[[peripherals.registers.register.fields]]
 name = "SU_A_FACTOR"
 bitOffset = 8
 bitWidth = 2
@@ -167,19 +142,9 @@ bitOffset = 12
 bitWidth = 5
 
 [[peripherals.registers.register.fields]]
-name = "BITS_17_19_OPAQUE"
-bitOffset = 17
-bitWidth = 3
-
-[[peripherals.registers.register.fields]]
 name = "TB_PRE_FEC_PADDING"
 bitOffset = 20
 bitWidth = 5
-
-[[peripherals.registers.register.fields]]
-name = "BITS_25_31_OPAQUE"
-bitOffset = 25
-bitWidth = 7
 
 [[peripherals.registers]]
 
@@ -269,11 +234,6 @@ name = "RX_AID"
 bitOffset = 16
 bitWidth = 12
 
-[[peripherals.registers.register.fields]]
-name = "BITS_28_31_OPAQUE"
-bitOffset = 28
-bitWidth = 4
-
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -362,11 +322,6 @@ name = "MORE_TF"
 bitOffset = 29
 bitWidth = 1
 
-[[peripherals.registers.register.fields]]
-name = "BITS_30_31_OPAQUE"
-bitOffset = 30
-bitWidth = 2
-
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -405,11 +360,6 @@ bitWidth = 5
 name = "CONTAINS_TRS"
 bitOffset = 25
 bitWidth = 1
-
-[[peripherals.registers.register.fields]]
-name = "BITS_26_31_OPAQUE"
-bitOffset = 26
-bitWidth = 6
 
 [[peripherals.registers]]
 
@@ -460,25 +410,9 @@ name = "RX_AMPDU_AUTO_ACK_VALID"
 bitOffset = 27
 bitWidth = 1
 
-[[peripherals.registers.register.fields]]
-name = "BITS_28_31_OPAQUE"
-bitOffset = 28
-bitWidth = 4
-
 [[peripheral-review]]
 entity = "WIFI_MAC_HE_TRIGGER_RX_DIAGNOSTICS"
 opaque-entities = [
-    "WIFI_MAC_HE_TRIGGER_RX_DIAGNOSTICS.STATE.BIT_3_OPAQUE",
-    "WIFI_MAC_HE_TRIGGER_RX_DIAGNOSTICS.STATE.BITS_10_11_OPAQUE",
-    "WIFI_MAC_HE_TRIGGER_RX_DIAGNOSTICS.STATE.BIT_26_OPAQUE",
-    "WIFI_MAC_HE_TRIGGER_RX_DIAGNOSTICS.STATE.BITS_28_31_OPAQUE",
-    "WIFI_MAC_HE_TRIGGER_RX_DIAGNOSTICS.PADDING.BITS_5_7_OPAQUE",
-    "WIFI_MAC_HE_TRIGGER_RX_DIAGNOSTICS.PADDING.BITS_17_19_OPAQUE",
-    "WIFI_MAC_HE_TRIGGER_RX_DIAGNOSTICS.PADDING.BITS_25_31_OPAQUE",
-    "WIFI_MAC_HE_TRIGGER_RX_DIAGNOSTICS.BASIC_USER.BITS_28_31_OPAQUE",
-    "WIFI_MAC_HE_TRIGGER_RX_DIAGNOSTICS.COMMON_TRIGGER.BITS_30_31_OPAQUE",
-    "WIFI_MAC_HE_TRIGGER_RX_DIAGNOSTICS.TRS.BITS_26_31_OPAQUE",
-    "WIFI_MAC_HE_TRIGGER_RX_DIAGNOSTICS.PACKET_COUNTS.BITS_28_31_OPAQUE",
 ]
 
 [peripheral-review.peripheral]

@@ -27,11 +27,6 @@ description = "Set before the READY polling loop."
 bitOffset = 1
 bitWidth = 1
 
-[[peripherals.registers.register.fields]]
-name = "BITS_2_31_OPAQUE"
-bitOffset = 2
-bitWidth = 30
-
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -91,7 +86,6 @@ bitWidth = 32
 [[peripheral-review]]
 entity = "WIFI_MAC_COLD_HANDSHAKE"
 opaque-entities = [
-    "WIFI_MAC_COLD_HANDSHAKE.CONTROL.BITS_2_31_OPAQUE",
 ]
 
 [peripheral-review.peripheral]

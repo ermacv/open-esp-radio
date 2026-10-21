@@ -21,32 +21,20 @@ completeness = "unknown"
 naming = "opaque"
 
 [[layout.words]]
+fields = []
 name = "WORD_0000_OPAQUE"
 opaque = true
 offset = 0x00
 access = "shared"
 description = "Observed word position; unassigned bits retain their exact image."
 
-[[layout.words.fields]]
-name = "BITS_0_31_OPAQUE"
-opaque = true
-bits = "31:0"
-writer = "cpu"
-description = "Observed position; the physical meaning is not established."
-
 [[layout.words]]
+fields = []
 name = "WORD_0004_OPAQUE"
 opaque = true
 offset = 0x04
 access = "shared"
 description = "Observed word position; unassigned bits retain their exact image."
-
-[[layout.words.fields]]
-name = "BITS_0_31_OPAQUE"
-opaque = true
-bits = "31:0"
-writer = "cpu"
-description = "Observed position; the physical meaning is not established."
 
 [[layout.words]]
 name = "WORD_0008_OPAQUE"
@@ -84,57 +72,33 @@ writer = "cpu"
 description = "Observed position; the physical meaning is not established."
 
 [[layout.words]]
+fields = []
 name = "WORD_0010_OPAQUE"
 opaque = true
 offset = 0x10
 access = "shared"
 description = "Observed word position; unassigned bits retain their exact image."
 
-[[layout.words.fields]]
-name = "BITS_0_31_OPAQUE"
-opaque = true
-bits = "31:0"
-writer = "cpu"
-description = "Observed position; the physical meaning is not established."
-
 [[layout.words]]
+fields = []
 name = "WORD_0014_OPAQUE"
 opaque = true
 offset = 0x14
 access = "shared"
 description = "Observed word position; unassigned bits retain their exact image."
 
-[[layout.words.fields]]
-name = "BITS_0_31_OPAQUE"
-opaque = true
-bits = "31:0"
-writer = "cpu"
-description = "Observed position; the physical meaning is not established."
-
 [[layout.words]]
+fields = []
 name = "WORD_0018_OPAQUE"
 opaque = true
 offset = 0x18
 access = "shared"
 description = "Observed word position; unassigned bits retain their exact image."
 
-[[layout.words.fields]]
-name = "BITS_0_31_OPAQUE"
-opaque = true
-bits = "31:0"
-writer = "cpu"
-description = "Observed position; the physical meaning is not established."
-
 [[layout.words]]
+fields = []
 name = "WORD_001C_OPAQUE"
 opaque = true
 offset = 0x1c
 access = "shared"
 description = "Observed word position; unassigned bits retain their exact image."
-
-[[layout.words.fields]]
-name = "BITS_0_31_OPAQUE"
-opaque = true
-bits = "31:0"
-writer = "cpu"
-description = "Observed position; the physical meaning is not established."

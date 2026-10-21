@@ -14,11 +14,6 @@ size = 32
 access = "read-only"
 
 [[peripherals.registers.register.fields]]
-name = "BITS_0_15_OPAQUE"
-bitOffset = 0
-bitWidth = 16
-
-[[peripherals.registers.register.fields]]
 name = "TX_COUNT"
 bitOffset = 16
 bitWidth = 8
@@ -59,7 +54,6 @@ bitWidth = 32
 [[peripheral-review]]
 entity = "WIFI_MAC_RX_HANG_STATISTICS"
 opaque-entities = [
-    "WIFI_MAC_RX_HANG_STATISTICS.HANG.BITS_0_15_OPAQUE",
 ]
 
 [peripheral-review.peripheral]

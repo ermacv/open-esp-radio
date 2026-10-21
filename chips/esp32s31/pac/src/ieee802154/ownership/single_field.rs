@@ -255,13 +255,13 @@ impl TaskRegisters {
             writer.rx_abort().set_bit();
             writer.tx_abort().set_bit();
             writer.ed_done().set_bit();
-            writer.bit_7_opaque().set_bit();
+            writer.events_7().set_bit();
             writer.timer0_overflow().set_bit();
             writer.timer1_overflow().set_bit();
             writer.clock_count_match().set_bit();
             writer.tx_sfd_done().set_bit();
             writer.rx_sfd_done().set_bit();
-            writer.bit_13_opaque().set_bit()
+            writer.events_13().set_bit()
         });
     }
 

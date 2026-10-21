@@ -95,8 +95,9 @@ pub(super) struct LeTxBufferHeaderStorage {
 /// SOURCE: pinned `memMgmt_3.o` TX-header allocator, opaque prefix of the packet's PDU target.
 const TX_HEADER: BufferHeaderImage = BufferHeaderImage {
     pdu_target: BleBufferHeaderPduTarget::ZERO
-        .with_bits_20_31_opaque(0x80a)
-        .expect("reviewed prefix fits"),
+        .with_bit_21_opaque(true)
+        .with_bit_23_opaque(true)
+        .with_bit_31_opaque(true),
     ..BufferHeaderImage::ZERO
 };
 
@@ -153,9 +154,10 @@ impl LeTxBufferHeaderStorage {
     }
     pub(super) fn link_successor(&self, successor: ControllerSramLinkAddress) {
         self.layout.next().write(
-            BleBufferHeaderNext::from_bits(successor.compressed_image())
-                .with_bits_20_31_opaque(self.layout.next().read().bits_20_31_opaque())
-                .expect("retained prefix fits"),
+            self.layout
+                .next()
+                .read()
+                .with_address_from(BleBufferHeaderNext::from_bits(successor.compressed_image())),
         );
     }
     pub(super) fn transmission_completed(&self) -> bool {

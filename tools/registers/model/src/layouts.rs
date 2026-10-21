@@ -477,9 +477,8 @@ fn parse_unit(kind: LayoutKind, layout_size: u32, source: UnitSource) -> Result<
             source.name
         )));
     }
-    if source.fields.is_empty() {
-        return Err(Error::message(format!("{} has no fields", source.name)));
-    }
+    // A cited physical unit may have no declared bit capabilities. Keep its
+    // exact image and geometry when the last unproved opaque field is removed.
     let mut fields = Vec::with_capacity(source.fields.len());
     let mut names = BTreeSet::new();
     let mut used = 0u64;
@@ -1357,6 +1356,10 @@ fn render_field(
                     pub const fn with_{name}(self, value: {parameter}) -> Option<Self> {{\n\
                     let index = {index};\n\
                     Some(Self((self.0 & 0x{keep:x}) | (index << {low})))\n\
+                    }}\n\
+                    /// Copy the encoded pointer from another word image, preserving every other bit.\n\
+                    pub const fn with_{name}_from(self, image: Self) -> Self {{\n\
+                    Self((self.0 & 0x{keep:x}) | (image.0 & 0x{shifted:x}))\n\
                     }}\n"
                 );
                 if field.points_to.is_none() {

@@ -664,6 +664,13 @@ bit-width = 1
 access = "read-write"
 
 [[registers.fields]]
+svd-name = "IFS_DIS"
+method = "ifs_dis"
+bit-offset = 5
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
 svd-name = "COORDINATOR"
 method = "coordinator"
 bit-offset = 6
@@ -678,9 +685,58 @@ bit-width = 1
 access = "read-write"
 
 [[registers.fields]]
+svd-name = "VERSION_FILTER_DIS"
+method = "version_filter_dis"
+bit-offset = 11
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
 svd-name = "PENDING_ENHANCED"
 method = "pending_enhanced"
 bit-offset = 12
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "FILTER_ENHANCE_DIS"
+method = "filter_enhance_dis"
+bit-offset = 14
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "COEX_ARB_DELAY"
+method = "coex_arb_delay"
+bit-offset = 16
+bit-width = 8
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_ORDER"
+method = "bit_order"
+bit-offset = 24
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "NO_RSSI_TRIGGER_BREAK_EN"
+method = "no_rssi_trigger_break_en"
+bit-offset = 25
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "COEX_FORCE_RX"
+method = "coex_force_rx"
+bit-offset = 26
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "RX_DONE_TRIG_IDLE"
+method = "rx_done_trig_idle"
+bit-offset = 27
 bit-width = 1
 access = "read-write"
 
@@ -1034,13 +1090,6 @@ bit-offset = 0
 bit-width = 7
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BIT_7_OPAQUE"
-method = "bit_7_opaque"
-bit-offset = 7
-bit-width = 1
-access = "read-write"
-
 [[registers]]
 address = 1611280460
 width = 32
@@ -1075,6 +1124,13 @@ svd-name = "DURATION"
 method = "duration"
 bit-offset = 0
 bit-width = 24
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "DELAY"
+method = "delay"
+bit-offset = 24
+bit-width = 4
 access = "read-write"
 
 [[registers]]
@@ -1209,8 +1265,8 @@ bit-width = 1
 access = "read-write"
 
 [[registers.fields]]
-svd-name = "BIT_7_OPAQUE"
-method = "bit_7_opaque"
+svd-name = "EVENTS_7"
+method = "events_7"
 bit-offset = 7
 bit-width = 1
 access = "read-write"
@@ -1311,8 +1367,8 @@ bit-width = 1
 access = "read-write"
 
 [[registers.fields]]
-svd-name = "BIT_7_OPAQUE"
-method = "bit_7_opaque"
+svd-name = "EVENTS_7"
+method = "events_7"
 bit-offset = 7
 bit-width = 1
 access = "read-write"
@@ -1427,8 +1483,8 @@ bit-width = 1
 access = "read-write"
 
 [[registers.fields]]
-svd-name = "BITS_9_14_OPAQUE"
-method = "bits_9_14_opaque"
+svd-name = "RX_ABORT_EN_9_14"
+method = "rx_abort_en_9_14"
 bit-offset = 9
 bit-width = 6
 access = "read-write"
@@ -1462,8 +1518,8 @@ bit-width = 1
 access = "read-write"
 
 [[registers.fields]]
-svd-name = "BITS_19_22_OPAQUE"
-method = "bits_19_22_opaque"
+svd-name = "RX_ABORT_EN_19_22"
+method = "rx_abort_en_19_22"
 bit-offset = 19
 bit-width = 4
 access = "read-write"
@@ -1490,8 +1546,8 @@ bit-width = 1
 access = "read-write"
 
 [[registers.fields]]
-svd-name = "BITS_26_30_OPAQUE"
-method = "bits_26_30_opaque"
+svd-name = "RX_ABORT_EN_26_30"
+method = "rx_abort_en_26_30"
 bit-offset = 26
 bit-width = 5
 access = "read-write"
@@ -1512,6 +1568,13 @@ svd-name = "FRAME_PENDING"
 method = "frame_pending"
 bit-offset = 0
 bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "PENDING_TIMEOUT"
+method = "pending_timeout"
+bit-offset = 16
+bit-width = 16
 access = "read-write"
 
 [[registers]]
@@ -1537,6 +1600,13 @@ svd-name = "ACK_PTI"
 method = "ack_pti"
 bit-offset = 4
 bit-width = 4
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "CLOSE_RF_SEL"
+method = "close_rf_sel"
+bit-offset = 8
+bit-width = 1
 access = "read-write"
 
 [[registers]]
@@ -1614,8 +1684,8 @@ bit-width = 1
 access = "read-write"
 
 [[registers.fields]]
-svd-name = "BITS_9_14_OPAQUE"
-method = "bits_9_14_opaque"
+svd-name = "TX_ABORT_EN_9_14"
+method = "tx_abort_en_9_14"
 bit-offset = 9
 bit-width = 6
 access = "read-write"
@@ -1649,8 +1719,8 @@ bit-width = 1
 access = "read-write"
 
 [[registers.fields]]
-svd-name = "BITS_19_22_OPAQUE"
-method = "bits_19_22_opaque"
+svd-name = "TX_ABORT_EN_19_22"
+method = "tx_abort_en_19_22"
 bit-offset = 19
 bit-width = 4
 access = "read-write"
@@ -1670,8 +1740,8 @@ bit-width = 1
 access = "read-write"
 
 [[registers.fields]]
-svd-name = "BITS_25_30_OPAQUE"
-method = "bits_25_30_opaque"
+svd-name = "TX_ABORT_EN_25_30"
+method = "tx_abort_en_25_30"
 bit-offset = 25
 bit-width = 6
 access = "read-write"
@@ -1843,6 +1913,24 @@ method = "value"
 bit-offset = 0
 bit-width = 32
 access = "read-only"
+
+[[registers]]
+address = 1611280580
+width = 32
+access = "unspecified"
+identity = "IEEE802154_MAC.SFD_WAIT"
+peripheral = "IEEE802154_MAC"
+peripheral-type = "Ieee802154Mac"
+peripheral-module = "ieee802154_mac"
+scope = []
+register-method = "sfd_wait"
+
+[[registers.fields]]
+svd-name = "SFD_WAIT_SYMBOL_NUM"
+method = "sfd_wait_symbol_num"
+bit-offset = 0
+bit-width = 4
+access = "unspecified"
 
 [[registers]]
 address = 1611280592
@@ -2963,6 +3051,45 @@ svd-name = "BITS_0_2_OPAQUE"
 method = "bits_0_2_opaque"
 bit-offset = 0
 bit-width = 3
+access = "read-write"
+
+[[registers]]
+address = 1611285508
+width = 32
+access = "read-write"
+identity = "WIFI_MAC_ERSU_ACK_RATE.VALUE"
+peripheral = "WIFI_MAC_ERSU_ACK_RATE"
+peripheral-type = "WifiMacErsuAckRate"
+peripheral-module = "wifi_mac_ersu_ack_rate"
+scope = []
+register-method = "value"
+
+[[registers.fields]]
+svd-name = "BITS_0_7_OPAQUE"
+method = "bits_0_7_opaque"
+bit-offset = 0
+bit-width = 8
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_8_15_OPAQUE"
+method = "bits_8_15_opaque"
+bit-offset = 8
+bit-width = 8
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_16_23_OPAQUE"
+method = "bits_16_23_opaque"
+bit-offset = 16
+bit-width = 8
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_24_31_OPAQUE"
+method = "bits_24_31_opaque"
+bit-offset = 24
+bit-width = 8
 access = "read-write"
 
 [[registers]]

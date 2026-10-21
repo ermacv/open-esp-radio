@@ -672,18 +672,12 @@ bitWidth = 7
 minimum = 0x0
 maximum = 0x7F
 
-[[peripherals.registers.register.fields]]
-name = "BITS_21_31_OPAQUE"
-bitOffset = 21
-bitWidth = 11
-
 [[peripheral-review]]
 entity = "WIFI_MAC_HE_INIT_SUFFIX"
 opaque-entities = [
     "WIFI_MAC_HE_INIT_SUFFIX.MULTI_BSSID_HIGH.BITS_16_23_OPAQUE",
     "WIFI_MAC_HE_INIT_SUFFIX.HE_DEFAULT_CONTROL.BITS_21_25_OPAQUE",
     "WIFI_MAC_HE_INIT_SUFFIX.SHARED_ENABLE_CONTROL.BIT_31_OPAQUE",
-    "WIFI_MAC_HE_INIT_SUFFIX.HE_SCRATCH%s.BITS_21_31_OPAQUE",
 ]
 
 [peripheral-review.peripheral]

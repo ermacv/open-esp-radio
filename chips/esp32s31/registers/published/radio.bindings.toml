@@ -9561,6 +9561,13 @@ bit-width = 1
 access = "read-write"
 
 [[registers.fields]]
+svd-name = "IFS_DIS"
+method = "ifs_dis"
+bit-offset = 5
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
 svd-name = "COORDINATOR"
 method = "coordinator"
 bit-offset = 6
@@ -9575,9 +9582,72 @@ bit-width = 1
 access = "read-write"
 
 [[registers.fields]]
+svd-name = "VERSION_FILTER_DIS"
+method = "version_filter_dis"
+bit-offset = 11
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
 svd-name = "PENDING_ENHANCED"
 method = "pending_enhanced"
 bit-offset = 12
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "TX_WAIT_ACK_TIMEOUT_EN"
+method = "tx_wait_ack_timeout_en"
+bit-offset = 13
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "FILTER_ENHANCE_DIS"
+method = "filter_enhance_dis"
+bit-offset = 14
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "RX_FILTER_MULTIPAN_CROSS_CHECK"
+method = "rx_filter_multipan_cross_check"
+bit-offset = 15
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "COEX_ARB_DELAY"
+method = "coex_arb_delay"
+bit-offset = 16
+bit-width = 8
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_ORDER"
+method = "bit_order"
+bit-offset = 24
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "NO_RSSI_TRIGGER_BREAK_EN"
+method = "no_rssi_trigger_break_en"
+bit-offset = 25
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "COEX_FORCE_RX"
+method = "coex_force_rx"
+bit-offset = 26
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "RX_DONE_TRIG_IDLE"
+method = "rx_done_trig_idle"
+bit-offset = 27
 bit-width = 1
 access = "read-write"
 
@@ -9931,6 +10001,62 @@ bit-offset = 0
 bit-width = 8
 access = "read-write"
 
+[[registers.fields]]
+svd-name = "SEC_CH_FREQ"
+method = "sec_ch_freq"
+bit-offset = 8
+bit-width = 8
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "RX_MULTI_CH_EN"
+method = "rx_multi_ch_en"
+bit-offset = 16
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "RX_WAIT_PREMABLE_TIME"
+method = "rx_wait_premable_time"
+bit-offset = 17
+bit-width = 7
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "RX_PREAMBLE_PATTERN_SEL"
+method = "rx_preamble_pattern_sel"
+bit-offset = 24
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "PRI_CH_I2C_SEL"
+method = "pri_ch_i2c_sel"
+bit-offset = 26
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "SEC_CH_I2C_SEL"
+method = "sec_ch_i2c_sel"
+bit-offset = 27
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "FAST_FREQHOP_EN"
+method = "fast_freqhop_en"
+bit-offset = 28
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "FREQ_BASE_SEL"
+method = "freq_base_sel"
+bit-offset = 29
+bit-width = 1
+access = "read-write"
+
 [[registers]]
 address = 537931852
 width = 32
@@ -9965,6 +10091,13 @@ svd-name = "DURATION"
 method = "duration"
 bit-offset = 0
 bit-width = 24
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "DELAY"
+method = "delay"
+bit-offset = 24
+bit-width = 4
 access = "read-write"
 
 [[registers]]
@@ -10099,8 +10232,8 @@ bit-width = 1
 access = "read-write"
 
 [[registers.fields]]
-svd-name = "BIT_7_OPAQUE"
-method = "bit_7_opaque"
+svd-name = "EVENTS_7"
+method = "events_7"
 bit-offset = 7
 bit-width = 1
 access = "read-write"
@@ -10141,8 +10274,8 @@ bit-width = 1
 access = "read-write"
 
 [[registers.fields]]
-svd-name = "BIT_13_OPAQUE"
-method = "bit_13_opaque"
+svd-name = "EVENTS_13"
+method = "events_13"
 bit-offset = 13
 bit-width = 1
 access = "read-write"
@@ -10208,8 +10341,8 @@ bit-width = 1
 access = "read-write"
 
 [[registers.fields]]
-svd-name = "BIT_7_OPAQUE"
-method = "bit_7_opaque"
+svd-name = "EVENTS_7"
+method = "events_7"
 bit-offset = 7
 bit-width = 1
 access = "read-write"
@@ -10250,8 +10383,8 @@ bit-width = 1
 access = "read-write"
 
 [[registers.fields]]
-svd-name = "BIT_13_OPAQUE"
-method = "bit_13_opaque"
+svd-name = "EVENTS_13"
+method = "events_13"
 bit-offset = 13
 bit-width = 1
 access = "read-write"
@@ -10331,8 +10464,8 @@ bit-width = 1
 access = "read-write"
 
 [[registers.fields]]
-svd-name = "BITS_9_14_OPAQUE"
-method = "bits_9_14_opaque"
+svd-name = "RX_ABORT_EN_9_14"
+method = "rx_abort_en_9_14"
 bit-offset = 9
 bit-width = 6
 access = "read-write"
@@ -10366,8 +10499,8 @@ bit-width = 1
 access = "read-write"
 
 [[registers.fields]]
-svd-name = "BITS_19_22_OPAQUE"
-method = "bits_19_22_opaque"
+svd-name = "RX_ABORT_EN_19_22"
+method = "rx_abort_en_19_22"
 bit-offset = 19
 bit-width = 4
 access = "read-write"
@@ -10394,8 +10527,8 @@ bit-width = 1
 access = "read-write"
 
 [[registers.fields]]
-svd-name = "BITS_26_30_OPAQUE"
-method = "bits_26_30_opaque"
+svd-name = "RX_ABORT_EN_26_30"
+method = "rx_abort_en_26_30"
 bit-offset = 26
 bit-width = 5
 access = "read-write"
@@ -10416,6 +10549,13 @@ svd-name = "FRAME_PENDING"
 method = "frame_pending"
 bit-offset = 0
 bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "PENDING_TIMEOUT"
+method = "pending_timeout"
+bit-offset = 16
+bit-width = 16
 access = "read-write"
 
 [[registers]]
@@ -10441,6 +10581,34 @@ svd-name = "ACK_PTI"
 method = "ack_pti"
 bit-offset = 5
 bit-width = 5
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "CLOSE_RF_SEL"
+method = "close_rf_sel"
+bit-offset = 10
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "ANT_MODE"
+method = "ant_mode"
+bit-offset = 11
+bit-width = 3
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "HW_TX_ACK_ANT_MODE"
+method = "hw_tx_ack_ant_mode"
+bit-offset = 14
+bit-width = 3
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "STBY_COEX_GRANT_MASK"
+method = "stby_coex_grant_mask"
+bit-offset = 17
+bit-width = 1
 access = "read-write"
 
 [[registers]]
@@ -10518,8 +10686,8 @@ bit-width = 1
 access = "read-write"
 
 [[registers.fields]]
-svd-name = "BITS_9_14_OPAQUE"
-method = "bits_9_14_opaque"
+svd-name = "TX_ABORT_EN_9_14"
+method = "tx_abort_en_9_14"
 bit-offset = 9
 bit-width = 6
 access = "read-write"
@@ -10553,8 +10721,8 @@ bit-width = 1
 access = "read-write"
 
 [[registers.fields]]
-svd-name = "BITS_19_22_OPAQUE"
-method = "bits_19_22_opaque"
+svd-name = "TX_ABORT_EN_19_22"
+method = "tx_abort_en_19_22"
 bit-offset = 19
 bit-width = 4
 access = "read-write"
@@ -10574,8 +10742,8 @@ bit-width = 1
 access = "read-write"
 
 [[registers.fields]]
-svd-name = "BITS_25_30_OPAQUE"
-method = "bits_25_30_opaque"
+svd-name = "TX_ABORT_EN_25_30"
+method = "tx_abort_en_25_30"
 bit-offset = 25
 bit-width = 6
 access = "read-write"
@@ -10702,6 +10870,59 @@ bit-width = 4
 access = "read-only"
 
 [[registers]]
+address = 537931928
+width = 32
+access = "unspecified"
+identity = "IEEE802154_MAC.DTM_CFG"
+peripheral = "IEEE802154_MAC"
+peripheral-type = "Ieee802154Mac"
+peripheral-module = "ieee802154_mac"
+scope = []
+register-method = "dtm_cfg"
+
+[[registers.fields]]
+svd-name = "DTM_TX_LENGTH"
+method = "dtm_tx_length"
+bit-offset = 0
+bit-width = 8
+access = "unspecified"
+
+[[registers.fields]]
+svd-name = "DTM_TX_PAYLOAD_TYPE"
+method = "dtm_tx_payload_type"
+bit-offset = 8
+bit-width = 4
+access = "unspecified"
+
+[[registers.fields]]
+svd-name = "DTM_HOP_FREQ"
+method = "dtm_hop_freq"
+bit-offset = 16
+bit-width = 8
+access = "unspecified"
+
+[[registers.fields]]
+svd-name = "DTM_CONT_RX_EN"
+method = "dtm_cont_rx_en"
+bit-offset = 24
+bit-width = 1
+access = "unspecified"
+
+[[registers.fields]]
+svd-name = "DTM_ON"
+method = "dtm_on"
+bit-offset = 25
+bit-width = 1
+access = "unspecified"
+
+[[registers.fields]]
+svd-name = "EXTEND_PREAMBLE_BYTE_NUM"
+method = "extend_preamble_byte_num"
+bit-offset = 26
+bit-width = 4
+access = "unspecified"
+
+[[registers]]
 address = 537931944
 width = 32
 access = "write-only"
@@ -10772,6 +10993,24 @@ method = "value"
 bit-offset = 0
 bit-width = 32
 access = "read-only"
+
+[[registers]]
+address = 537931972
+width = 32
+access = "unspecified"
+identity = "IEEE802154_MAC.SFD_WAIT"
+peripheral = "IEEE802154_MAC"
+peripheral-type = "Ieee802154Mac"
+peripheral-module = "ieee802154_mac"
+scope = []
+register-method = "sfd_wait"
+
+[[registers.fields]]
+svd-name = "SFD_WAIT_SYMBOL_NUM"
+method = "sfd_wait_symbol_num"
+bit-offset = 0
+bit-width = 4
+access = "unspecified"
 
 [[registers]]
 address = 537931984
@@ -13527,10 +13766,10 @@ scope = []
 register-method = "control"
 
 [[registers.fields]]
-svd-name = "BITS_0_17_OPAQUE"
-method = "bits_0_17_opaque"
-bit-offset = 0
-bit-width = 18
+svd-name = "BITS_16_17_OPAQUE"
+method = "bits_16_17_opaque"
+bit-offset = 16
+bit-width = 2
 access = "read-write"
 
 [[registers.fields]]
@@ -18206,13 +18445,6 @@ bit-offset = 28
 bit-width = 3
 access = "read-only"
 
-[[registers.fields]]
-svd-name = "BIT_31_OPAQUE"
-method = "bit_31_opaque"
-bit-offset = 31
-bit-width = 1
-access = "read-only"
-
 [[registers]]
 address = 537937160
 width = 32
@@ -18229,13 +18461,6 @@ svd-name = "TRIGGER_STATE_CS"
 method = "trigger_state_cs"
 bit-offset = 0
 bit-width = 3
-access = "read-only"
-
-[[registers.fields]]
-svd-name = "BIT_3_OPAQUE"
-method = "bit_3_opaque"
-bit-offset = 3
-bit-width = 1
 access = "read-only"
 
 [[registers.fields]]
@@ -18281,13 +18506,6 @@ bit-width = 1
 access = "read-only"
 
 [[registers.fields]]
-svd-name = "BITS_10_11_OPAQUE"
-method = "bits_10_11_opaque"
-bit-offset = 10
-bit-width = 2
-access = "read-only"
-
-[[registers.fields]]
 svd-name = "BFRP_TIMER"
 method = "bfrp_timer"
 bit-offset = 12
@@ -18309,24 +18527,10 @@ bit-width = 6
 access = "read-only"
 
 [[registers.fields]]
-svd-name = "BIT_26_OPAQUE"
-method = "bit_26_opaque"
-bit-offset = 26
-bit-width = 1
-access = "read-only"
-
-[[registers.fields]]
 svd-name = "NDP_DETECT_SUCCESS"
 method = "ndp_detect_success"
 bit-offset = 27
 bit-width = 1
-access = "read-only"
-
-[[registers.fields]]
-svd-name = "BITS_28_31_OPAQUE"
-method = "bits_28_31_opaque"
-bit-offset = 28
-bit-width = 4
 access = "read-only"
 
 [[registers]]
@@ -18398,13 +18602,6 @@ bit-width = 5
 access = "read-only"
 
 [[registers.fields]]
-svd-name = "BITS_5_7_OPAQUE"
-method = "bits_5_7_opaque"
-bit-offset = 5
-bit-width = 3
-access = "read-only"
-
-[[registers.fields]]
 svd-name = "SU_A_FACTOR"
 method = "su_a_factor"
 bit-offset = 8
@@ -18433,24 +18630,10 @@ bit-width = 5
 access = "read-only"
 
 [[registers.fields]]
-svd-name = "BITS_17_19_OPAQUE"
-method = "bits_17_19_opaque"
-bit-offset = 17
-bit-width = 3
-access = "read-only"
-
-[[registers.fields]]
 svd-name = "TB_PRE_FEC_PADDING"
 method = "tb_pre_fec_padding"
 bit-offset = 20
 bit-width = 5
-access = "read-only"
-
-[[registers.fields]]
-svd-name = "BITS_25_31_OPAQUE"
-method = "bits_25_31_opaque"
-bit-offset = 25
-bit-width = 7
 access = "read-only"
 
 [[registers]]
@@ -18573,13 +18756,6 @@ bit-offset = 16
 bit-width = 12
 access = "read-only"
 
-[[registers.fields]]
-svd-name = "BITS_28_31_OPAQUE"
-method = "bits_28_31_opaque"
-bit-offset = 28
-bit-width = 4
-access = "read-only"
-
 [[registers]]
 address = 537937184
 width = 32
@@ -18700,13 +18876,6 @@ bit-offset = 29
 bit-width = 1
 access = "read-only"
 
-[[registers.fields]]
-svd-name = "BITS_30_31_OPAQUE"
-method = "bits_30_31_opaque"
-bit-offset = 30
-bit-width = 2
-access = "read-only"
-
 [[registers]]
 address = 537937192
 width = 32
@@ -18758,13 +18927,6 @@ svd-name = "CONTAINS_TRS"
 method = "contains_trs"
 bit-offset = 25
 bit-width = 1
-access = "read-only"
-
-[[registers.fields]]
-svd-name = "BITS_26_31_OPAQUE"
-method = "bits_26_31_opaque"
-bit-offset = 26
-bit-width = 6
 access = "read-only"
 
 [[registers]]
@@ -18832,13 +18994,6 @@ svd-name = "RX_AMPDU_AUTO_ACK_VALID"
 method = "rx_ampdu_auto_ack_valid"
 bit-offset = 27
 bit-width = 1
-access = "read-only"
-
-[[registers.fields]]
-svd-name = "BITS_28_31_OPAQUE"
-method = "bits_28_31_opaque"
-bit-offset = 28
-bit-width = 4
 access = "read-only"
 
 [[registers]]
@@ -19868,13 +20023,6 @@ scope = []
 register-method = "hang"
 
 [[registers.fields]]
-svd-name = "BITS_0_15_OPAQUE"
-method = "bits_0_15_opaque"
-bit-offset = 0
-bit-width = 16
-access = "read-only"
-
-[[registers.fields]]
 svd-name = "TX_COUNT"
 method = "tx_count"
 bit-offset = 16
@@ -20491,13 +20639,6 @@ svd-name = "TYPE_0_ENABLE"
 method = "type_0_enable"
 bit-offset = 29
 bit-width = 1
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_30_31_OPAQUE"
-method = "bits_30_31_opaque"
-bit-offset = 30
-bit-width = 2
 access = "read-write"
 
 [[registers]]
@@ -23108,13 +23249,6 @@ bit-offset = 1
 bit-width = 1
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_2_31_OPAQUE"
-method = "bits_2_31_opaque"
-bit-offset = 2
-bit-width = 30
-access = "read-write"
-
 [[registers]]
 address = 537939428
 width = 32
@@ -24693,13 +24827,6 @@ bit-width = 1
 access = "read-write"
 
 [[registers.fields]]
-svd-name = "BITS_1_3_OPAQUE"
-method = "bits_1_3_opaque"
-bit-offset = 1
-bit-width = 3
-access = "read-write"
-
-[[registers.fields]]
 svd-name = "PTI_0"
 method = "pti_0"
 bit-offset = 4
@@ -24855,13 +24982,6 @@ bit-width = 2
 access = "read-write"
 
 [[registers.fields]]
-svd-name = "BITS_2_3_OPAQUE"
-method = "bits_2_3_opaque"
-bit-offset = 2
-bit-width = 2
-access = "read-write"
-
-[[registers.fields]]
 svd-name = "GROUP_ID"
 method = "group_id"
 bit-offset = 4
@@ -24883,13 +25003,6 @@ bit-width = 9
 access = "read-write"
 
 [[registers.fields]]
-svd-name = "BITS_22_23_OPAQUE"
-method = "bits_22_23_opaque"
-bit-offset = 22
-bit-width = 2
-access = "read-write"
-
-[[registers.fields]]
 svd-name = "SHORT_GI"
 method = "short_gi"
 bit-offset = 24
@@ -24907,13 +25020,6 @@ access = "read-write"
 svd-name = "CODING"
 method = "coding"
 bit-offset = 26
-bit-width = 1
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BIT_27_OPAQUE"
-method = "bit_27_opaque"
-bit-offset = 27
 bit-width = 1
 access = "read-write"
 
@@ -25745,13 +25851,6 @@ bit-width = 1
 access = "read-write"
 
 [[registers.fields]]
-svd-name = "BITS_1_3_OPAQUE"
-method = "bits_1_3_opaque"
-bit-offset = 1
-bit-width = 3
-access = "read-write"
-
-[[registers.fields]]
 svd-name = "PTI_0"
 method = "pti_0"
 bit-offset = 4
@@ -25907,13 +26006,6 @@ bit-width = 2
 access = "read-write"
 
 [[registers.fields]]
-svd-name = "BITS_2_3_OPAQUE"
-method = "bits_2_3_opaque"
-bit-offset = 2
-bit-width = 2
-access = "read-write"
-
-[[registers.fields]]
 svd-name = "GROUP_ID"
 method = "group_id"
 bit-offset = 4
@@ -25935,13 +26027,6 @@ bit-width = 9
 access = "read-write"
 
 [[registers.fields]]
-svd-name = "BITS_22_23_OPAQUE"
-method = "bits_22_23_opaque"
-bit-offset = 22
-bit-width = 2
-access = "read-write"
-
-[[registers.fields]]
 svd-name = "SHORT_GI"
 method = "short_gi"
 bit-offset = 24
@@ -25959,13 +26044,6 @@ access = "read-write"
 svd-name = "CODING"
 method = "coding"
 bit-offset = 26
-bit-width = 1
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BIT_27_OPAQUE"
-method = "bit_27_opaque"
-bit-offset = 27
 bit-width = 1
 access = "read-write"
 
@@ -26797,13 +26875,6 @@ bit-width = 1
 access = "read-write"
 
 [[registers.fields]]
-svd-name = "BITS_1_3_OPAQUE"
-method = "bits_1_3_opaque"
-bit-offset = 1
-bit-width = 3
-access = "read-write"
-
-[[registers.fields]]
 svd-name = "PTI_0"
 method = "pti_0"
 bit-offset = 4
@@ -26959,13 +27030,6 @@ bit-width = 2
 access = "read-write"
 
 [[registers.fields]]
-svd-name = "BITS_2_3_OPAQUE"
-method = "bits_2_3_opaque"
-bit-offset = 2
-bit-width = 2
-access = "read-write"
-
-[[registers.fields]]
 svd-name = "GROUP_ID"
 method = "group_id"
 bit-offset = 4
@@ -26987,13 +27051,6 @@ bit-width = 9
 access = "read-write"
 
 [[registers.fields]]
-svd-name = "BITS_22_23_OPAQUE"
-method = "bits_22_23_opaque"
-bit-offset = 22
-bit-width = 2
-access = "read-write"
-
-[[registers.fields]]
 svd-name = "SHORT_GI"
 method = "short_gi"
 bit-offset = 24
@@ -27011,13 +27068,6 @@ access = "read-write"
 svd-name = "CODING"
 method = "coding"
 bit-offset = 26
-bit-width = 1
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BIT_27_OPAQUE"
-method = "bit_27_opaque"
-bit-offset = 27
 bit-width = 1
 access = "read-write"
 
@@ -27849,13 +27899,6 @@ bit-width = 1
 access = "read-write"
 
 [[registers.fields]]
-svd-name = "BITS_1_3_OPAQUE"
-method = "bits_1_3_opaque"
-bit-offset = 1
-bit-width = 3
-access = "read-write"
-
-[[registers.fields]]
 svd-name = "PTI_0"
 method = "pti_0"
 bit-offset = 4
@@ -28011,13 +28054,6 @@ bit-width = 2
 access = "read-write"
 
 [[registers.fields]]
-svd-name = "BITS_2_3_OPAQUE"
-method = "bits_2_3_opaque"
-bit-offset = 2
-bit-width = 2
-access = "read-write"
-
-[[registers.fields]]
 svd-name = "GROUP_ID"
 method = "group_id"
 bit-offset = 4
@@ -28039,13 +28075,6 @@ bit-width = 9
 access = "read-write"
 
 [[registers.fields]]
-svd-name = "BITS_22_23_OPAQUE"
-method = "bits_22_23_opaque"
-bit-offset = 22
-bit-width = 2
-access = "read-write"
-
-[[registers.fields]]
 svd-name = "SHORT_GI"
 method = "short_gi"
 bit-offset = 24
@@ -28063,13 +28092,6 @@ access = "read-write"
 svd-name = "CODING"
 method = "coding"
 bit-offset = 26
-bit-width = 1
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BIT_27_OPAQUE"
-method = "bit_27_opaque"
-bit-offset = 27
 bit-width = 1
 access = "read-write"
 
@@ -28806,13 +28828,6 @@ bit-offset = 14
 bit-width = 7
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
-access = "read-write"
-
 [[registers]]
 address = 537941492
 width = 32
@@ -28837,13 +28852,6 @@ svd-name = "NEXT_LINK"
 method = "next_link"
 bit-offset = 14
 bit-width = 7
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
 access = "read-write"
 
 [[registers]]
@@ -28872,13 +28880,6 @@ bit-offset = 14
 bit-width = 7
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
-access = "read-write"
-
 [[registers]]
 address = 537941500
 width = 32
@@ -28903,13 +28904,6 @@ svd-name = "NEXT_LINK"
 method = "next_link"
 bit-offset = 14
 bit-width = 7
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
 access = "read-write"
 
 [[registers]]
@@ -28938,13 +28932,6 @@ bit-offset = 14
 bit-width = 7
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
-access = "read-write"
-
 [[registers]]
 address = 537941508
 width = 32
@@ -28969,13 +28956,6 @@ svd-name = "NEXT_LINK"
 method = "next_link"
 bit-offset = 14
 bit-width = 7
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
 access = "read-write"
 
 [[registers]]
@@ -29004,13 +28984,6 @@ bit-offset = 14
 bit-width = 7
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
-access = "read-write"
-
 [[registers]]
 address = 537941516
 width = 32
@@ -29035,13 +29008,6 @@ svd-name = "NEXT_LINK"
 method = "next_link"
 bit-offset = 14
 bit-width = 7
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
 access = "read-write"
 
 [[registers]]
@@ -29070,13 +29036,6 @@ bit-offset = 14
 bit-width = 7
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
-access = "read-write"
-
 [[registers]]
 address = 537941524
 width = 32
@@ -29101,13 +29060,6 @@ svd-name = "NEXT_LINK"
 method = "next_link"
 bit-offset = 14
 bit-width = 7
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
 access = "read-write"
 
 [[registers]]
@@ -29136,13 +29088,6 @@ bit-offset = 14
 bit-width = 7
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
-access = "read-write"
-
 [[registers]]
 address = 537941532
 width = 32
@@ -29167,13 +29112,6 @@ svd-name = "NEXT_LINK"
 method = "next_link"
 bit-offset = 14
 bit-width = 7
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
 access = "read-write"
 
 [[registers]]
@@ -29202,13 +29140,6 @@ bit-offset = 14
 bit-width = 7
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
-access = "read-write"
-
 [[registers]]
 address = 537941540
 width = 32
@@ -29233,13 +29164,6 @@ svd-name = "NEXT_LINK"
 method = "next_link"
 bit-offset = 14
 bit-width = 7
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
 access = "read-write"
 
 [[registers]]
@@ -29268,13 +29192,6 @@ bit-offset = 14
 bit-width = 7
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
-access = "read-write"
-
 [[registers]]
 address = 537941548
 width = 32
@@ -29299,13 +29216,6 @@ svd-name = "NEXT_LINK"
 method = "next_link"
 bit-offset = 14
 bit-width = 7
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
 access = "read-write"
 
 [[registers]]
@@ -29334,13 +29244,6 @@ bit-offset = 14
 bit-width = 7
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
-access = "read-write"
-
 [[registers]]
 address = 537941556
 width = 32
@@ -29365,13 +29268,6 @@ svd-name = "NEXT_LINK"
 method = "next_link"
 bit-offset = 14
 bit-width = 7
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
 access = "read-write"
 
 [[registers]]
@@ -29400,13 +29296,6 @@ bit-offset = 14
 bit-width = 7
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
-access = "read-write"
-
 [[registers]]
 address = 537941564
 width = 32
@@ -29431,13 +29320,6 @@ svd-name = "NEXT_LINK"
 method = "next_link"
 bit-offset = 14
 bit-width = 7
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
 access = "read-write"
 
 [[registers]]
@@ -29466,13 +29348,6 @@ bit-offset = 14
 bit-width = 7
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
-access = "read-write"
-
 [[registers]]
 address = 537941572
 width = 32
@@ -29497,13 +29372,6 @@ svd-name = "NEXT_LINK"
 method = "next_link"
 bit-offset = 14
 bit-width = 7
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
 access = "read-write"
 
 [[registers]]
@@ -29532,13 +29400,6 @@ bit-offset = 14
 bit-width = 7
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
-access = "read-write"
-
 [[registers]]
 address = 537941580
 width = 32
@@ -29563,13 +29424,6 @@ svd-name = "NEXT_LINK"
 method = "next_link"
 bit-offset = 14
 bit-width = 7
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
 access = "read-write"
 
 [[registers]]
@@ -29598,13 +29452,6 @@ bit-offset = 14
 bit-width = 7
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
-access = "read-write"
-
 [[registers]]
 address = 537941588
 width = 32
@@ -29629,13 +29476,6 @@ svd-name = "NEXT_LINK"
 method = "next_link"
 bit-offset = 14
 bit-width = 7
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
 access = "read-write"
 
 [[registers]]
@@ -29664,13 +29504,6 @@ bit-offset = 14
 bit-width = 7
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
-access = "read-write"
-
 [[registers]]
 address = 537941596
 width = 32
@@ -29695,13 +29528,6 @@ svd-name = "NEXT_LINK"
 method = "next_link"
 bit-offset = 14
 bit-width = 7
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
 access = "read-write"
 
 [[registers]]
@@ -29730,13 +29556,6 @@ bit-offset = 14
 bit-width = 7
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
-access = "read-write"
-
 [[registers]]
 address = 537941604
 width = 32
@@ -29761,13 +29580,6 @@ svd-name = "NEXT_LINK"
 method = "next_link"
 bit-offset = 14
 bit-width = 7
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
 access = "read-write"
 
 [[registers]]
@@ -29796,13 +29608,6 @@ bit-offset = 14
 bit-width = 7
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
-access = "read-write"
-
 [[registers]]
 address = 537941612
 width = 32
@@ -29827,13 +29632,6 @@ svd-name = "NEXT_LINK"
 method = "next_link"
 bit-offset = 14
 bit-width = 7
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
 access = "read-write"
 
 [[registers]]
@@ -29862,13 +29660,6 @@ bit-offset = 14
 bit-width = 7
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
-access = "read-write"
-
 [[registers]]
 address = 537941620
 width = 32
@@ -29893,13 +29684,6 @@ svd-name = "NEXT_LINK"
 method = "next_link"
 bit-offset = 14
 bit-width = 7
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
 access = "read-write"
 
 [[registers]]
@@ -29928,13 +29712,6 @@ bit-offset = 14
 bit-width = 7
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
-access = "read-write"
-
 [[registers]]
 address = 537941628
 width = 32
@@ -29959,13 +29736,6 @@ svd-name = "NEXT_LINK"
 method = "next_link"
 bit-offset = 14
 bit-width = 7
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
 access = "read-write"
 
 [[registers]]
@@ -29994,13 +29764,6 @@ bit-offset = 14
 bit-width = 7
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
-access = "read-write"
-
 [[registers]]
 address = 537941636
 width = 32
@@ -30025,13 +29788,6 @@ svd-name = "NEXT_LINK"
 method = "next_link"
 bit-offset = 14
 bit-width = 7
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
 access = "read-write"
 
 [[registers]]
@@ -30060,13 +29816,6 @@ bit-offset = 14
 bit-width = 7
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
-access = "read-write"
-
 [[registers]]
 address = 537941644
 width = 32
@@ -30091,13 +29840,6 @@ svd-name = "NEXT_LINK"
 method = "next_link"
 bit-offset = 14
 bit-width = 7
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
 access = "read-write"
 
 [[registers]]
@@ -30126,13 +29868,6 @@ bit-offset = 14
 bit-width = 7
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
-access = "read-write"
-
 [[registers]]
 address = 537941652
 width = 32
@@ -30157,13 +29892,6 @@ svd-name = "NEXT_LINK"
 method = "next_link"
 bit-offset = 14
 bit-width = 7
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
 access = "read-write"
 
 [[registers]]
@@ -30192,13 +29920,6 @@ bit-offset = 14
 bit-width = 7
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
-access = "read-write"
-
 [[registers]]
 address = 537941660
 width = 32
@@ -30223,13 +29944,6 @@ svd-name = "NEXT_LINK"
 method = "next_link"
 bit-offset = 14
 bit-width = 7
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
 access = "read-write"
 
 [[registers]]
@@ -30258,13 +29972,6 @@ bit-offset = 14
 bit-width = 7
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
-access = "read-write"
-
 [[registers]]
 address = 537941668
 width = 32
@@ -30289,13 +29996,6 @@ svd-name = "NEXT_LINK"
 method = "next_link"
 bit-offset = 14
 bit-width = 7
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
 access = "read-write"
 
 [[registers]]
@@ -30324,13 +30024,6 @@ bit-offset = 14
 bit-width = 7
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
-access = "read-write"
-
 [[registers]]
 address = 537941676
 width = 32
@@ -30355,13 +30048,6 @@ svd-name = "NEXT_LINK"
 method = "next_link"
 bit-offset = 14
 bit-width = 7
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
 access = "read-write"
 
 [[registers]]
@@ -30390,13 +30076,6 @@ bit-offset = 14
 bit-width = 7
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
-access = "read-write"
-
 [[registers]]
 address = 537941684
 width = 32
@@ -30421,13 +30100,6 @@ svd-name = "NEXT_LINK"
 method = "next_link"
 bit-offset = 14
 bit-width = 7
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
 access = "read-write"
 
 [[registers]]
@@ -30456,13 +30128,6 @@ bit-offset = 14
 bit-width = 7
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
-access = "read-write"
-
 [[registers]]
 address = 537941692
 width = 32
@@ -30487,13 +30152,6 @@ svd-name = "NEXT_LINK"
 method = "next_link"
 bit-offset = 14
 bit-width = 7
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
 access = "read-write"
 
 [[registers]]
@@ -30522,13 +30180,6 @@ bit-offset = 14
 bit-width = 7
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
-access = "read-write"
-
 [[registers]]
 address = 537941700
 width = 32
@@ -30553,13 +30204,6 @@ svd-name = "NEXT_LINK"
 method = "next_link"
 bit-offset = 14
 bit-width = 7
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
 access = "read-write"
 
 [[registers]]
@@ -30588,13 +30232,6 @@ bit-offset = 14
 bit-width = 7
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
-access = "read-write"
-
 [[registers]]
 address = 537941708
 width = 32
@@ -30619,13 +30256,6 @@ svd-name = "NEXT_LINK"
 method = "next_link"
 bit-offset = 14
 bit-width = 7
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
 access = "read-write"
 
 [[registers]]
@@ -30654,13 +30284,6 @@ bit-offset = 14
 bit-width = 7
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
-access = "read-write"
-
 [[registers]]
 address = 537941716
 width = 32
@@ -30685,13 +30308,6 @@ svd-name = "NEXT_LINK"
 method = "next_link"
 bit-offset = 14
 bit-width = 7
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
 access = "read-write"
 
 [[registers]]
@@ -30720,13 +30336,6 @@ bit-offset = 14
 bit-width = 7
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
-access = "read-write"
-
 [[registers]]
 address = 537941724
 width = 32
@@ -30751,13 +30360,6 @@ svd-name = "NEXT_LINK"
 method = "next_link"
 bit-offset = 14
 bit-width = 7
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
 access = "read-write"
 
 [[registers]]
@@ -30786,13 +30388,6 @@ bit-offset = 14
 bit-width = 7
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
-access = "read-write"
-
 [[registers]]
 address = 537941732
 width = 32
@@ -30817,13 +30412,6 @@ svd-name = "NEXT_LINK"
 method = "next_link"
 bit-offset = 14
 bit-width = 7
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
 access = "read-write"
 
 [[registers]]
@@ -30852,13 +30440,6 @@ bit-offset = 14
 bit-width = 7
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
-access = "read-write"
-
 [[registers]]
 address = 537941740
 width = 32
@@ -30883,13 +30464,6 @@ svd-name = "NEXT_LINK"
 method = "next_link"
 bit-offset = 14
 bit-width = 7
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
 access = "read-write"
 
 [[registers]]
@@ -30918,13 +30492,6 @@ bit-offset = 14
 bit-width = 7
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
-access = "read-write"
-
 [[registers]]
 address = 537941748
 width = 32
@@ -30949,13 +30516,6 @@ svd-name = "NEXT_LINK"
 method = "next_link"
 bit-offset = 14
 bit-width = 7
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
 access = "read-write"
 
 [[registers]]
@@ -30984,13 +30544,6 @@ bit-offset = 14
 bit-width = 7
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
-access = "read-write"
-
 [[registers]]
 address = 537941756
 width = 32
@@ -31015,13 +30568,6 @@ svd-name = "NEXT_LINK"
 method = "next_link"
 bit-offset = 14
 bit-width = 7
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
 access = "read-write"
 
 [[registers]]
@@ -31050,13 +30596,6 @@ bit-offset = 14
 bit-width = 7
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
-access = "read-write"
-
 [[registers]]
 address = 537941764
 width = 32
@@ -31081,13 +30620,6 @@ svd-name = "NEXT_LINK"
 method = "next_link"
 bit-offset = 14
 bit-width = 7
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
 access = "read-write"
 
 [[registers]]
@@ -31116,13 +30648,6 @@ bit-offset = 14
 bit-width = 7
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
-access = "read-write"
-
 [[registers]]
 address = 537941772
 width = 32
@@ -31147,13 +30672,6 @@ svd-name = "NEXT_LINK"
 method = "next_link"
 bit-offset = 14
 bit-width = 7
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
 access = "read-write"
 
 [[registers]]
@@ -31182,13 +30700,6 @@ bit-offset = 14
 bit-width = 7
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
-access = "read-write"
-
 [[registers]]
 address = 537941780
 width = 32
@@ -31213,13 +30724,6 @@ svd-name = "NEXT_LINK"
 method = "next_link"
 bit-offset = 14
 bit-width = 7
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
 access = "read-write"
 
 [[registers]]
@@ -31248,13 +30752,6 @@ bit-offset = 14
 bit-width = 7
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
-access = "read-write"
-
 [[registers]]
 address = 537941788
 width = 32
@@ -31279,13 +30776,6 @@ svd-name = "NEXT_LINK"
 method = "next_link"
 bit-offset = 14
 bit-width = 7
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
 access = "read-write"
 
 [[registers]]
@@ -31314,13 +30804,6 @@ bit-offset = 14
 bit-width = 7
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
-access = "read-write"
-
 [[registers]]
 address = 537941796
 width = 32
@@ -31345,13 +30828,6 @@ svd-name = "NEXT_LINK"
 method = "next_link"
 bit-offset = 14
 bit-width = 7
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
 access = "read-write"
 
 [[registers]]
@@ -31380,13 +30856,6 @@ bit-offset = 14
 bit-width = 7
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
-access = "read-write"
-
 [[registers]]
 address = 537941804
 width = 32
@@ -31411,13 +30880,6 @@ svd-name = "NEXT_LINK"
 method = "next_link"
 bit-offset = 14
 bit-width = 7
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
 access = "read-write"
 
 [[registers]]
@@ -31446,13 +30908,6 @@ bit-offset = 14
 bit-width = 7
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
-access = "read-write"
-
 [[registers]]
 address = 537941812
 width = 32
@@ -31477,13 +30932,6 @@ svd-name = "NEXT_LINK"
 method = "next_link"
 bit-offset = 14
 bit-width = 7
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
 access = "read-write"
 
 [[registers]]
@@ -31512,13 +30960,6 @@ bit-offset = 14
 bit-width = 7
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
-access = "read-write"
-
 [[registers]]
 address = 537941820
 width = 32
@@ -31543,13 +30984,6 @@ svd-name = "NEXT_LINK"
 method = "next_link"
 bit-offset = 14
 bit-width = 7
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
 access = "read-write"
 
 [[registers]]
@@ -31578,13 +31012,6 @@ bit-offset = 14
 bit-width = 7
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
-access = "read-write"
-
 [[registers]]
 address = 537941828
 width = 32
@@ -31609,13 +31036,6 @@ svd-name = "NEXT_LINK"
 method = "next_link"
 bit-offset = 14
 bit-width = 7
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
 access = "read-write"
 
 [[registers]]
@@ -31644,13 +31064,6 @@ bit-offset = 14
 bit-width = 7
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
-access = "read-write"
-
 [[registers]]
 address = 537941836
 width = 32
@@ -31675,13 +31088,6 @@ svd-name = "NEXT_LINK"
 method = "next_link"
 bit-offset = 14
 bit-width = 7
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
 access = "read-write"
 
 [[registers]]
@@ -31710,13 +31116,6 @@ bit-offset = 14
 bit-width = 7
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
-access = "read-write"
-
 [[registers]]
 address = 537941844
 width = 32
@@ -31741,13 +31140,6 @@ svd-name = "NEXT_LINK"
 method = "next_link"
 bit-offset = 14
 bit-width = 7
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
 access = "read-write"
 
 [[registers]]
@@ -31776,13 +31168,6 @@ bit-offset = 14
 bit-width = 7
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
-access = "read-write"
-
 [[registers]]
 address = 537941852
 width = 32
@@ -31807,13 +31192,6 @@ svd-name = "NEXT_LINK"
 method = "next_link"
 bit-offset = 14
 bit-width = 7
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
 access = "read-write"
 
 [[registers]]
@@ -31842,13 +31220,6 @@ bit-offset = 14
 bit-width = 7
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
-access = "read-write"
-
 [[registers]]
 address = 537941860
 width = 32
@@ -31873,13 +31244,6 @@ svd-name = "NEXT_LINK"
 method = "next_link"
 bit-offset = 14
 bit-width = 7
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
 access = "read-write"
 
 [[registers]]
@@ -31908,13 +31272,6 @@ bit-offset = 14
 bit-width = 7
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
-access = "read-write"
-
 [[registers]]
 address = 537941868
 width = 32
@@ -31939,13 +31296,6 @@ svd-name = "NEXT_LINK"
 method = "next_link"
 bit-offset = 14
 bit-width = 7
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
 access = "read-write"
 
 [[registers]]
@@ -31974,13 +31324,6 @@ bit-offset = 14
 bit-width = 7
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
-access = "read-write"
-
 [[registers]]
 address = 537941876
 width = 32
@@ -32005,13 +31348,6 @@ svd-name = "NEXT_LINK"
 method = "next_link"
 bit-offset = 14
 bit-width = 7
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
 access = "read-write"
 
 [[registers]]
@@ -32040,13 +31376,6 @@ bit-offset = 14
 bit-width = 7
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
-access = "read-write"
-
 [[registers]]
 address = 537941884
 width = 32
@@ -32071,13 +31400,6 @@ svd-name = "NEXT_LINK"
 method = "next_link"
 bit-offset = 14
 bit-width = 7
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
 access = "read-write"
 
 [[registers]]
@@ -32106,13 +31428,6 @@ bit-offset = 14
 bit-width = 7
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
-access = "read-write"
-
 [[registers]]
 address = 537941892
 width = 32
@@ -32137,13 +31452,6 @@ svd-name = "NEXT_LINK"
 method = "next_link"
 bit-offset = 14
 bit-width = 7
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
 access = "read-write"
 
 [[registers]]
@@ -32172,13 +31480,6 @@ bit-offset = 14
 bit-width = 7
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
-access = "read-write"
-
 [[registers]]
 address = 537941900
 width = 32
@@ -32203,13 +31504,6 @@ svd-name = "NEXT_LINK"
 method = "next_link"
 bit-offset = 14
 bit-width = 7
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
 access = "read-write"
 
 [[registers]]
@@ -32238,13 +31532,6 @@ bit-offset = 14
 bit-width = 7
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
-access = "read-write"
-
 [[registers]]
 address = 537941908
 width = 32
@@ -32269,13 +31556,6 @@ svd-name = "NEXT_LINK"
 method = "next_link"
 bit-offset = 14
 bit-width = 7
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
 access = "read-write"
 
 [[registers]]
@@ -32304,13 +31584,6 @@ bit-offset = 14
 bit-width = 7
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
-access = "read-write"
-
 [[registers]]
 address = 537941916
 width = 32
@@ -32335,13 +31608,6 @@ svd-name = "NEXT_LINK"
 method = "next_link"
 bit-offset = 14
 bit-width = 7
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
 access = "read-write"
 
 [[registers]]
@@ -32370,13 +31636,6 @@ bit-offset = 14
 bit-width = 7
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
-access = "read-write"
-
 [[registers]]
 address = 537941924
 width = 32
@@ -32401,13 +31660,6 @@ svd-name = "NEXT_LINK"
 method = "next_link"
 bit-offset = 14
 bit-width = 7
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
 access = "read-write"
 
 [[registers]]
@@ -32436,13 +31688,6 @@ bit-offset = 14
 bit-width = 7
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
-access = "read-write"
-
 [[registers]]
 address = 537941932
 width = 32
@@ -32467,13 +31712,6 @@ svd-name = "NEXT_LINK"
 method = "next_link"
 bit-offset = 14
 bit-width = 7
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
 access = "read-write"
 
 [[registers]]
@@ -32502,13 +31740,6 @@ bit-offset = 14
 bit-width = 7
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
-access = "read-write"
-
 [[registers]]
 address = 537941940
 width = 32
@@ -32533,13 +31764,6 @@ svd-name = "NEXT_LINK"
 method = "next_link"
 bit-offset = 14
 bit-width = 7
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
 access = "read-write"
 
 [[registers]]
@@ -32568,13 +31792,6 @@ bit-offset = 14
 bit-width = 7
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
-access = "read-write"
-
 [[registers]]
 address = 537941948
 width = 32
@@ -32599,13 +31816,6 @@ svd-name = "NEXT_LINK"
 method = "next_link"
 bit-offset = 14
 bit-width = 7
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
 access = "read-write"
 
 [[registers]]
@@ -32634,13 +31844,6 @@ bit-offset = 14
 bit-width = 7
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
-access = "read-write"
-
 [[registers]]
 address = 537941956
 width = 32
@@ -32665,13 +31868,6 @@ svd-name = "NEXT_LINK"
 method = "next_link"
 bit-offset = 14
 bit-width = 7
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
 access = "read-write"
 
 [[registers]]
@@ -32700,13 +31896,6 @@ bit-offset = 14
 bit-width = 7
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
-access = "read-write"
-
 [[registers]]
 address = 537941964
 width = 32
@@ -32731,13 +31920,6 @@ svd-name = "NEXT_LINK"
 method = "next_link"
 bit-offset = 14
 bit-width = 7
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_21_31_OPAQUE"
-method = "bits_21_31_opaque"
-bit-offset = 21
-bit-width = 11
 access = "read-write"
 
 [[registers]]
@@ -39083,13 +38265,6 @@ bit-offset = 0
 bit-width = 8
 access = "read-only"
 
-[[registers.fields]]
-svd-name = "BITS_8_31_OPAQUE"
-method = "bits_8_31_opaque"
-bit-offset = 8
-bit-width = 24
-access = "read-only"
-
 [[registers]]
 address = 537948176
 width = 32
@@ -44768,13 +43943,6 @@ bit-offset = 0
 bit-width = 1
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_1_31_OPAQUE"
-method = "bits_1_31_opaque"
-bit-offset = 1
-bit-width = 31
-access = "read-write"
-
 [[registers]]
 address = 537981964
 width = 32
@@ -44792,13 +43960,6 @@ svd-name = "DISABLE"
 method = "disable"
 bit-offset = 0
 bit-width = 1
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_1_31_OPAQUE"
-method = "bits_1_31_opaque"
-bit-offset = 1
-bit-width = 31
 access = "read-write"
 
 [[registers]]
@@ -44886,13 +44047,6 @@ bit-offset = 0
 bit-width = 1
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_1_31_OPAQUE"
-method = "bits_1_31_opaque"
-bit-offset = 1
-bit-width = 31
-access = "read-write"
-
 [[registers]]
 address = 537981980
 width = 32
@@ -44910,13 +44064,6 @@ svd-name = "DISABLE"
 method = "disable"
 bit-offset = 0
 bit-width = 1
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_1_31_OPAQUE"
-method = "bits_1_31_opaque"
-bit-offset = 1
-bit-width = 31
 access = "read-write"
 
 [[registers]]
@@ -45004,13 +44151,6 @@ bit-offset = 0
 bit-width = 1
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_1_31_OPAQUE"
-method = "bits_1_31_opaque"
-bit-offset = 1
-bit-width = 31
-access = "read-write"
-
 [[registers]]
 address = 537981996
 width = 32
@@ -45028,13 +44168,6 @@ svd-name = "DISABLE"
 method = "disable"
 bit-offset = 0
 bit-width = 1
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_1_31_OPAQUE"
-method = "bits_1_31_opaque"
-bit-offset = 1
-bit-width = 31
 access = "read-write"
 
 [[registers]]
@@ -45122,13 +44255,6 @@ bit-offset = 0
 bit-width = 1
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_1_31_OPAQUE"
-method = "bits_1_31_opaque"
-bit-offset = 1
-bit-width = 31
-access = "read-write"
-
 [[registers]]
 address = 537982012
 width = 32
@@ -45146,13 +44272,6 @@ svd-name = "DISABLE"
 method = "disable"
 bit-offset = 0
 bit-width = 1
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_1_31_OPAQUE"
-method = "bits_1_31_opaque"
-bit-offset = 1
-bit-width = 31
 access = "read-write"
 
 [[registers]]
@@ -45240,13 +44359,6 @@ bit-offset = 0
 bit-width = 1
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_1_31_OPAQUE"
-method = "bits_1_31_opaque"
-bit-offset = 1
-bit-width = 31
-access = "read-write"
-
 [[registers]]
 address = 537982028
 width = 32
@@ -45264,13 +44376,6 @@ svd-name = "DISABLE"
 method = "disable"
 bit-offset = 0
 bit-width = 1
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_1_31_OPAQUE"
-method = "bits_1_31_opaque"
-bit-offset = 1
-bit-width = 31
 access = "read-write"
 
 [[registers]]
@@ -45358,13 +44463,6 @@ bit-offset = 0
 bit-width = 1
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_1_31_OPAQUE"
-method = "bits_1_31_opaque"
-bit-offset = 1
-bit-width = 31
-access = "read-write"
-
 [[registers]]
 address = 537982044
 width = 32
@@ -45382,13 +44480,6 @@ svd-name = "DISABLE"
 method = "disable"
 bit-offset = 0
 bit-width = 1
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_1_31_OPAQUE"
-method = "bits_1_31_opaque"
-bit-offset = 1
-bit-width = 31
 access = "read-write"
 
 [[registers]]
@@ -45530,24 +44621,10 @@ scope = []
 register-method = "enable_1"
 
 [[registers.fields]]
-svd-name = "BITS_0_13_OPAQUE"
-method = "bits_0_13_opaque"
-bit-offset = 0
-bit-width = 14
-access = "read-write"
-
-[[registers.fields]]
 svd-name = "ENABLE"
 method = "enable"
 bit-offset = 14
 bit-width = 1
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_15_31_OPAQUE"
-method = "bits_15_31_opaque"
-bit-offset = 15
-bit-width = 17
 access = "read-write"
 
 [[registers]]
@@ -45568,13 +44645,6 @@ bit-offset = 0
 bit-width = 4
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_4_31_OPAQUE"
-method = "bits_4_31_opaque"
-bit-offset = 4
-bit-width = 28
-access = "read-write"
-
 [[registers]]
 address = 537982168
 width = 32
@@ -45591,13 +44661,6 @@ svd-name = "MASK"
 method = "mask"
 bit-offset = 0
 bit-width = 4
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_4_31_OPAQUE"
-method = "bits_4_31_opaque"
-bit-offset = 4
-bit-width = 28
 access = "read-write"
 
 [[registers]]

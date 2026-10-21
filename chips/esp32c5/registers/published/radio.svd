@@ -160,6 +160,54 @@
               <bitOffset>31</bitOffset>
               <bitWidth>1</bitWidth>
             </field>
+            <field>
+              <name>IFS_DIS</name>
+              <description>Project-assigned name. Open vendor conf.ifs_dis field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred.</description>
+              <bitOffset>5</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>VERSION_FILTER_DIS</name>
+              <description>Project-assigned name. Open vendor conf.version_filter_dis field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred.</description>
+              <bitOffset>11</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>FILTER_ENHANCE_DIS</name>
+              <description>Project-assigned name. Open vendor conf.filter_enhance_dis field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred.</description>
+              <bitOffset>14</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>COEX_ARB_DELAY</name>
+              <description>Project-assigned name. Open vendor conf.coex_arb_delay field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred.</description>
+              <bitOffset>16</bitOffset>
+              <bitWidth>8</bitWidth>
+            </field>
+            <field>
+              <name>BIT_ORDER</name>
+              <description>Project-assigned name. Open vendor conf.bit_order field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred.</description>
+              <bitOffset>24</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>NO_RSSI_TRIGGER_BREAK_EN</name>
+              <description>Project-assigned name. Open vendor conf.no_rssi_trigger_break_en field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred.</description>
+              <bitOffset>25</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>COEX_FORCE_RX</name>
+              <description>Project-assigned name. Open vendor conf.coex_force_rx field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred.</description>
+              <bitOffset>26</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>RX_DONE_TRIG_IDLE</name>
+              <description>Project-assigned name. Open vendor conf.rx_done_trig_idle field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred.</description>
+              <bitOffset>27</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
           </fields>
         </register>
         <register>
@@ -277,12 +325,6 @@
                 </range>
               </writeConstraint>
             </field>
-            <field>
-              <name>BIT_7_OPAQUE</name>
-              <description>Opaque: meaning not established. Implemented read-write bit above the seven-bit frequency code; the public struct declares it reserved and no vendor accessor writes it.</description>
-              <bitOffset>7</bitOffset>
-              <bitWidth>1</bitWidth>
-            </field>
           </fields>
         </register>
         <register>
@@ -312,6 +354,12 @@
               <description>Project-assigned name. Twenty-four-bit physical field. The current public setter accepts only a uint16_t and therefore exercises a strict subset of its declared range.</description>
               <bitOffset>0</bitOffset>
               <bitWidth>24</bitWidth>
+            </field>
+            <field>
+              <name>DELAY</name>
+              <description>Project-assigned name. Open vendor ed_duration.delay field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred.</description>
+              <bitOffset>24</bitOffset>
+              <bitWidth>4</bitWidth>
             </field>
           </fields>
         </register>
@@ -446,7 +494,7 @@
         </register>
         <register>
           <name>EVENT_ENABLE</name>
-          <description>Project-assigned name. Individual event enables mutated by the public common LL. Bits seven and thirteen remain physically observable but have no assigned vendor event semantics.</description>
+          <description>Project-assigned name. Individual event enables mutated by the public common LL. All fourteen lanes belong to the open vendor events field; individual unnamed events remain descriptive partitions.</description>
           <addressOffset>0x60</addressOffset>
           <size>0x20</size>
           <access>read-write</access>
@@ -494,8 +542,8 @@
               <bitWidth>1</bitWidth>
             </field>
             <field>
-              <name>BIT_7_OPAQUE</name>
-              <description>Opaque: meaning not established. Physically present event-enable bit without an assigned public vendor event.</description>
+              <name>EVENTS_7</name>
+              <description>Project-assigned name. Partition of the open vendor events field, bits 7:7; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT.</description>
               <bitOffset>7</bitOffset>
               <bitWidth>1</bitWidth>
             </field>
@@ -582,8 +630,8 @@
               <bitWidth>1</bitWidth>
             </field>
             <field>
-              <name>BIT_7_OPAQUE</name>
-              <description>Opaque: meaning not established. Physically present event-status bit without an assigned public vendor event.</description>
+              <name>EVENTS_7</name>
+              <description>Project-assigned name. Partition of the open vendor events field, bits 7:7; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT.</description>
               <bitOffset>7</bitOffset>
               <bitWidth>1</bitWidth>
             </field>
@@ -681,8 +729,8 @@
               <bitWidth>1</bitWidth>
             </field>
             <field>
-              <name>BITS_9_14_OPAQUE</name>
-              <description>Opaque: meaning not established. Abort-reason enable bits without a public vendor reason.</description>
+              <name>RX_ABORT_EN_9_14</name>
+              <description>Project-assigned name. Partition of the open vendor rx_abort_en field, bits 14:9; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT.</description>
               <bitOffset>9</bitOffset>
               <bitWidth>6</bitWidth>
               <writeConstraint>
@@ -717,8 +765,8 @@
               <bitWidth>1</bitWidth>
             </field>
             <field>
-              <name>BITS_19_22_OPAQUE</name>
-              <description>Opaque: meaning not established. Abort-reason enable bits without a public vendor reason.</description>
+              <name>RX_ABORT_EN_19_22</name>
+              <description>Project-assigned name. Partition of the open vendor rx_abort_en field, bits 22:19; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT.</description>
               <bitOffset>19</bitOffset>
               <bitWidth>4</bitWidth>
               <writeConstraint>
@@ -747,8 +795,8 @@
               <bitWidth>1</bitWidth>
             </field>
             <field>
-              <name>BITS_26_30_OPAQUE</name>
-              <description>Opaque: meaning not established. Abort-reason enable bits without a public vendor reason.</description>
+              <name>RX_ABORT_EN_26_30</name>
+              <description>Project-assigned name. Partition of the open vendor rx_abort_en field, bits 30:26; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT.</description>
               <bitOffset>26</bitOffset>
               <bitWidth>5</bitWidth>
               <writeConstraint>
@@ -772,6 +820,12 @@
               <description>Project-assigned name.</description>
               <bitOffset>0</bitOffset>
               <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>PENDING_TIMEOUT</name>
+              <description>Project-assigned name. Open vendor pending_cfg.pending_timeout field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred.</description>
+              <bitOffset>16</bitOffset>
+              <bitWidth>16</bitWidth>
             </field>
           </fields>
         </register>
@@ -805,6 +859,12 @@
                   <maximum>15</maximum>
                 </range>
               </writeConstraint>
+            </field>
+            <field>
+              <name>CLOSE_RF_SEL</name>
+              <description>Project-assigned name. Open vendor pti.close_rf_sel field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred.</description>
+              <bitOffset>8</bitOffset>
+              <bitWidth>1</bitWidth>
             </field>
           </fields>
         </register>
@@ -870,8 +930,8 @@
               <bitWidth>1</bitWidth>
             </field>
             <field>
-              <name>BITS_9_14_OPAQUE</name>
-              <description>Opaque: meaning not established. Abort-reason enable bits without a public vendor reason.</description>
+              <name>TX_ABORT_EN_9_14</name>
+              <description>Project-assigned name. Partition of the open vendor tx_abort_en field, bits 14:9; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT.</description>
               <bitOffset>9</bitOffset>
               <bitWidth>6</bitWidth>
               <writeConstraint>
@@ -906,8 +966,8 @@
               <bitWidth>1</bitWidth>
             </field>
             <field>
-              <name>BITS_19_22_OPAQUE</name>
-              <description>Opaque: meaning not established. Abort-reason enable bits without a public vendor reason.</description>
+              <name>TX_ABORT_EN_19_22</name>
+              <description>Project-assigned name. Partition of the open vendor tx_abort_en field, bits 22:19; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT.</description>
               <bitOffset>19</bitOffset>
               <bitWidth>4</bitWidth>
               <writeConstraint>
@@ -930,8 +990,8 @@
               <bitWidth>1</bitWidth>
             </field>
             <field>
-              <name>BITS_25_30_OPAQUE</name>
-              <description>Opaque: meaning not established. Abort-reason enable bits without a public vendor reason.</description>
+              <name>TX_ABORT_EN_25_30</name>
+              <description>Project-assigned name. Partition of the open vendor tx_abort_en field, bits 30:25; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT.</description>
               <bitOffset>25</bitOffset>
               <bitWidth>6</bitWidth>
               <writeConstraint>
@@ -1781,6 +1841,20 @@
               <description>Project-assigned name.</description>
               <bitOffset>14</bitOffset>
               <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>SFD_WAIT</name>
+          <description>Project-assigned name. Open vendor sfd_wait word. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset value is claimed.</description>
+          <addressOffset>0xC4</addressOffset>
+          <size>0x20</size>
+          <fields>
+            <field>
+              <name>SFD_WAIT_SYMBOL_NUM</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>4</bitWidth>
             </field>
           </fields>
         </register>
@@ -4676,6 +4750,46 @@ documentation establishes their electrical meaning.</description>
               <description>Project-assigned name.</description>
               <bitOffset>3</bitOffset>
               <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+      </registers>
+    </peripheral>
+    <peripheral>
+      <name>WIFI_MAC_ERSU_ACK_RATE</name>
+      <description>Four byte lanes independently replaced by hal_he_set_ersu_ack_rate; no bit-level rate encoding is assigned. SOURCE: C5_LIBPP_ROM_ERSU_ACK_RATE.</description>
+      <baseAddress>0x600A4404</baseAddress>
+      <registers>
+        <register>
+          <name>VALUE</name>
+          <description>Project-assigned name. Four ordered fresh-read byte replacements at +0, +8, +16 and +24 bits. Each publishes 0x80 or 0xa0 while preserving the other three bytes.</description>
+          <addressOffset>0x0</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>BITS_0_7_OPAQUE</name>
+              <description>Opaque: meaning not established. Byte lane 0 explicitly replaced by complete hal_he_set_ersu_ack_rate; inner encoding unknown. SOURCE: C5_LIBPP_ROM_ERSU_ACK_RATE.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>8</bitWidth>
+            </field>
+            <field>
+              <name>BITS_8_15_OPAQUE</name>
+              <description>Opaque: meaning not established. Byte lane 1 explicitly replaced by complete hal_he_set_ersu_ack_rate; inner encoding unknown. SOURCE: C5_LIBPP_ROM_ERSU_ACK_RATE.</description>
+              <bitOffset>8</bitOffset>
+              <bitWidth>8</bitWidth>
+            </field>
+            <field>
+              <name>BITS_16_23_OPAQUE</name>
+              <description>Opaque: meaning not established. Byte lane 2 explicitly replaced by complete hal_he_set_ersu_ack_rate; inner encoding unknown. SOURCE: C5_LIBPP_ROM_ERSU_ACK_RATE.</description>
+              <bitOffset>16</bitOffset>
+              <bitWidth>8</bitWidth>
+            </field>
+            <field>
+              <name>BITS_24_31_OPAQUE</name>
+              <description>Opaque: meaning not established. Byte lane 3 explicitly replaced by complete hal_he_set_ersu_ack_rate; inner encoding unknown. SOURCE: C5_LIBPP_ROM_ERSU_ACK_RATE.</description>
+              <bitOffset>24</bitOffset>
+              <bitWidth>8</bitWidth>
             </field>
           </fields>
         </register>

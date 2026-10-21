@@ -14,9 +14,9 @@ size = 32
 access = "read-write"
 
 [[peripherals.registers.register.fields]]
-name = "BITS_0_17_OPAQUE"
-bitOffset = 0
-bitWidth = 18
+name = "BITS_16_17_OPAQUE"
+bitOffset = 16
+bitWidth = 2
 
 [[peripherals.registers.register.fields]]
 name = "RX_CONTROL_9_BSSID_POSITION"
@@ -36,7 +36,7 @@ bitWidth = 12
 [[peripheral-review]]
 entity = "WIFI_MAC_RX_BSSID_LIST"
 opaque-entities = [
-    "WIFI_MAC_RX_BSSID_LIST.CONTROL.BITS_0_17_OPAQUE",
+    "WIFI_MAC_RX_BSSID_LIST.CONTROL.BITS_16_17_OPAQUE",
     "WIFI_MAC_RX_BSSID_LIST.CONTROL.BITS_20_31_OPAQUE",
 ]
 

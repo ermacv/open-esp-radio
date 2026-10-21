@@ -11745,23 +11745,9 @@ pub mod layouts {
             };
             Some(Self((self.0 & 0xfff00000) | (index << 0)))
         }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_20_31_OPAQUE`, bits 31:20; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_BUFFER_HEADER.
-        pub const fn bits_20_31_opaque(self) -> u16 {
-            (self.0 >> 20) as u16
-        }
-
-        /// This value with `BITS_20_31_OPAQUE` set to `value`, or `None` when `value` does not
-        /// fit its 12 bits.
-        pub const fn with_bits_20_31_opaque(self, value: u16) -> Option<Self> {
-            if value > 0xfff {
-                None
-            } else {
-                Some(Self((self.0 & 0xfffff) | (value as u32) << 20))
-            }
+        /// Copy the encoded pointer from another word image, preserving every other bit.
+        pub const fn with_address_from(self, image: Self) -> Self {
+            Self((self.0 & 0xfff00000) | (image.0 & 0xfffff))
         }
     }
 
@@ -11828,28 +11814,14 @@ pub mod layouts {
             };
             Some(Self((self.0 & 0xfff00000) | (index << 0)))
         }
+        /// Copy the encoded pointer from another word image, preserving every other bit.
+        pub const fn with_address_from(self, image: Self) -> Self {
+            Self((self.0 & 0xfff00000) | (image.0 & 0xfffff))
+        }
 
         /// Clear the buffer pointer, preserving the other fields.
         pub const fn without_address(self) -> Self {
             Self(self.0 & 0xfff00000)
-        }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_20_31_OPAQUE`, bits 31:20; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_BUFFER_HEADER.
-        pub const fn bits_20_31_opaque(self) -> u16 {
-            (self.0 >> 20) as u16
-        }
-
-        /// This value with `BITS_20_31_OPAQUE` set to `value`, or `None` when `value` does not
-        /// fit its 12 bits.
-        pub const fn with_bits_20_31_opaque(self, value: u16) -> Option<Self> {
-            if value > 0xfff {
-                None
-            } else {
-                Some(Self((self.0 & 0xfffff) | (value as u32) << 20))
-            }
         }
     }
 
@@ -11916,27 +11888,64 @@ pub mod layouts {
             };
             Some(Self((self.0 & 0xfff00000) | (index << 0)))
         }
+        /// Copy the encoded pointer from another word image, preserving every other bit.
+        pub const fn with_address_from(self, image: Self) -> Self {
+            Self((self.0 & 0xfff00000) | (image.0 & 0xfffff))
+        }
 
         /// Clear the buffer pointer, preserving the other fields.
         pub const fn without_address(self) -> Self {
             Self(self.0 & 0xfff00000)
         }
 
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
+        /// Opaque: meaning not established. Cited allocation profile sets this bit relative to the defined zero allocation image; meaning remains unknown.
         ///
-        /// `BITS_20_31_OPAQUE`, bits 31:20; written by the CPU.
+        /// `BIT_21_OPAQUE`, bit 21; written by the CPU.
         /// SOURCE: BLOB_LIBBLE_MEMORY_BUFFER_HEADER.
-        pub const fn bits_20_31_opaque(self) -> u16 {
-            (self.0 >> 20) as u16
+        pub const fn bit_21_opaque(self) -> bool {
+            self.0 & 0x200000 != 0
         }
 
-        /// This value with `BITS_20_31_OPAQUE` set to `value`, or `None` when `value` does not
-        /// fit its 12 bits.
-        pub const fn with_bits_20_31_opaque(self, value: u16) -> Option<Self> {
-            if value > 0xfff {
-                None
+        /// This value with `BIT_21_OPAQUE` set to `value`.
+        pub const fn with_bit_21_opaque(self, value: bool) -> Self {
+            if value {
+                Self(self.0 | 0x200000)
             } else {
-                Some(Self((self.0 & 0xfffff) | (value as u32) << 20))
+                Self(self.0 & 0xffdfffff)
+            }
+        }
+
+        /// Opaque: meaning not established. Cited allocation profile sets this bit relative to the defined zero allocation image; meaning remains unknown.
+        ///
+        /// `BIT_23_OPAQUE`, bit 23; written by the CPU.
+        /// SOURCE: BLOB_LIBBLE_MEMORY_BUFFER_HEADER.
+        pub const fn bit_23_opaque(self) -> bool {
+            self.0 & 0x800000 != 0
+        }
+
+        /// This value with `BIT_23_OPAQUE` set to `value`.
+        pub const fn with_bit_23_opaque(self, value: bool) -> Self {
+            if value {
+                Self(self.0 | 0x800000)
+            } else {
+                Self(self.0 & 0xff7fffff)
+            }
+        }
+
+        /// Opaque: meaning not established. Cited allocation profile sets this bit relative to the defined zero allocation image; meaning remains unknown.
+        ///
+        /// `BIT_31_OPAQUE`, bit 31; written by the CPU.
+        /// SOURCE: BLOB_LIBBLE_MEMORY_BUFFER_HEADER.
+        pub const fn bit_31_opaque(self) -> bool {
+            self.0 & 0x80000000 != 0
+        }
+
+        /// This value with `BIT_31_OPAQUE` set to `value`.
+        pub const fn with_bit_31_opaque(self, value: bool) -> Self {
+            if value {
+                Self(self.0 | 0x80000000)
+            } else {
+                Self(self.0 & 0x7fffffff)
             }
         }
     }
@@ -11977,24 +11986,6 @@ pub mod layouts {
         /// The word image.
         pub const fn bits(self) -> u32 {
             self.0
-        }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_30_OPAQUE`, bits 30:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_BUFFER_HEADER.
-        pub const fn bits_0_30_opaque(self) -> u32 {
-            self.0 & 0x7fffffff
-        }
-
-        /// This value with `BITS_0_30_OPAQUE` set to `value`, or `None` when `value` does not
-        /// fit its 31 bits.
-        pub const fn with_bits_0_30_opaque(self, value: u32) -> Option<Self> {
-            if value > 0x7fffffff {
-                None
-            } else {
-                Some(Self((self.0 & 0x80000000) | value))
-            }
         }
 
         /// Project-assigned name. CPU clears on arm; controller sets when the buffer completes.
@@ -12099,24 +12090,6 @@ pub mod layouts {
         /// This value with `PAYLOAD_CAPACITY` set to `value`.
         pub const fn with_payload_capacity(self, value: u8) -> Self {
             Self((self.0 & 0xfffff807) | (value as u32) << 3)
-        }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_11_31_OPAQUE`, bits 31:11; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_BUFFER_HEADER.
-        pub const fn bits_11_31_opaque(self) -> u32 {
-            self.0 >> 11
-        }
-
-        /// This value with `BITS_11_31_OPAQUE` set to `value`, or `None` when `value` does not
-        /// fit its 21 bits.
-        pub const fn with_bits_11_31_opaque(self, value: u32) -> Option<Self> {
-            if value > 0x1fffff {
-                None
-            } else {
-                Some(Self((self.0 & 0x7ff) | (value) << 11))
-            }
         }
     }
 
@@ -12292,24 +12265,6 @@ pub mod layouts {
         pub const fn bits(self) -> u32 {
             self.0
         }
-
-        /// The value of a range image; every bit pattern is one.
-        pub const fn from_bits(bits: u32) -> Self {
-            Self(bits)
-        }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the participants in the declared phases. Phase `arm`: the CPU. Phase `complete`: the hardware.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_RX_PREFIX.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
-        }
     }
 
     /// Opaque: meaning not established. Observed byte range; decoded only after ownership passes to the CPU.
@@ -12330,17 +12285,38 @@ pub mod layouts {
             Self(bits)
         }
 
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
+        /// Opaque: meaning not established. Cited allocation profile sets this bit relative to the defined zero allocation image; meaning remains unknown.
         ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
+        /// `BIT_8_OPAQUE`, bit 8; written by the CPU.
         /// SOURCE: BLOB_LIBBLE_MEMORY_RX_PREFIX.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
+        pub const fn bit_8_opaque(self) -> bool {
+            self.0 & 0x100 != 0
         }
 
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
+        /// This value with `BIT_8_OPAQUE` set to `value`.
+        pub const fn with_bit_8_opaque(self, value: bool) -> Self {
+            if value {
+                Self(self.0 | 0x100)
+            } else {
+                Self(self.0 & 0xfffffeff)
+            }
+        }
+
+        /// Opaque: meaning not established. Cited allocation profile sets this bit relative to the defined zero allocation image; meaning remains unknown.
+        ///
+        /// `BIT_16_OPAQUE`, bit 16; written by the CPU.
+        /// SOURCE: BLOB_LIBBLE_MEMORY_RX_PREFIX.
+        pub const fn bit_16_opaque(self) -> bool {
+            self.0 & 0x10000 != 0
+        }
+
+        /// This value with `BIT_16_OPAQUE` set to `value`.
+        pub const fn with_bit_16_opaque(self, value: bool) -> Self {
+            if value {
+                Self(self.0 | 0x10000)
+            } else {
+                Self(self.0 & 0xfffeffff)
+            }
         }
     }
 
@@ -12355,24 +12331,6 @@ pub mod layouts {
         /// The range's little-endian value.
         pub const fn bits(self) -> u32 {
             self.0
-        }
-
-        /// The value of a range image; every bit pattern is one.
-        pub const fn from_bits(bits: u32) -> Self {
-            Self(bits)
-        }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the participants in the declared phases. Phase `arm`: the CPU. Phase `complete`: the hardware.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_RX_PREFIX.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
         }
     }
 
@@ -12597,14 +12555,6 @@ pub mod layouts {
         pub const fn bits(self) -> u32 {
             self.0
         }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the hardware.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_RX_PREFIX.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
     }
 
     /// Project-assigned name. Observed byte range; decoded only after ownership passes to the CPU.
@@ -12636,14 +12586,6 @@ pub mod layouts {
         /// This value with `BITS_0_15_OPAQUE` set to `value`.
         pub const fn with_bits_0_15_opaque(self, value: u16) -> Self {
             Self((self.0 & 0xffff0000) | value as u32)
-        }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_16_31_OPAQUE`, bits 31:16; written by the hardware.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_RX_PREFIX.
-        pub const fn bits_16_31_opaque(self) -> u16 {
-            (self.0 >> 16) as u16
         }
     }
 
@@ -12709,20 +12651,6 @@ pub mod layouts {
             BleRxPacketPrefix::new(self.bytes)
         }
 
-        /// Store the `BYTE_0000_OPAQUE` range, little-endian.
-        pub fn set_byte_0000_opaque(&mut self, value: BleRxPacketPrefixByte0000Opaque) {
-            let bytes = value.bits().to_le_bytes();
-            self.bytes[0] = bytes[0];
-            self.bytes[1] = bytes[1];
-            self.bytes[2] = bytes[2];
-            self.bytes[3] = bytes[3];
-        }
-
-        /// The `BYTE_0000_OPAQUE` range as last stored.
-        pub const fn byte_0000_opaque(&self) -> BleRxPacketPrefixByte0000Opaque {
-            self.view().byte_0000_opaque()
-        }
-
         /// Store the `BYTE_0004_OPAQUE` range, little-endian.
         pub fn set_byte_0004_opaque(&mut self, value: BleRxPacketPrefixByte0004Opaque) {
             let bytes = value.bits().to_le_bytes();
@@ -12735,20 +12663,6 @@ pub mod layouts {
         /// The `BYTE_0004_OPAQUE` range as last stored.
         pub const fn byte_0004_opaque(&self) -> BleRxPacketPrefixByte0004Opaque {
             self.view().byte_0004_opaque()
-        }
-
-        /// Store the `BYTE_0008_OPAQUE` range, little-endian.
-        pub fn set_byte_0008_opaque(&mut self, value: BleRxPacketPrefixByte0008Opaque) {
-            let bytes = value.bits().to_le_bytes();
-            self.bytes[8] = bytes[0];
-            self.bytes[9] = bytes[1];
-            self.bytes[10] = bytes[2];
-            self.bytes[11] = bytes[3];
-        }
-
-        /// The `BYTE_0008_OPAQUE` range as last stored.
-        pub const fn byte_0008_opaque(&self) -> BleRxPacketPrefixByte0008Opaque {
-            self.view().byte_0008_opaque()
         }
 
         /// Store the `RESULT` range, little-endian.
@@ -12867,24 +12781,6 @@ pub mod layouts {
         pub const fn bits(self) -> u32 {
             self.0
         }
-
-        /// The value of a range image; every bit pattern is one.
-        pub const fn from_bits(bits: u32) -> Self {
-            Self(bits)
-        }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_TX_PREFIX.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
-        }
     }
 
     /// Project-assigned name. Observed byte range; decoded only after ownership passes to the CPU.
@@ -12903,19 +12799,6 @@ pub mod layouts {
         /// The value of a range image; every bit pattern is one.
         pub const fn from_bits(bits: u32) -> Self {
             Self(bits)
-        }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_7_OPAQUE`, bits 7:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_TX_PREFIX.
-        pub const fn bits_0_7_opaque(self) -> u8 {
-            (self.0 & 0xff) as u8
-        }
-
-        /// This value with `BITS_0_7_OPAQUE` set to `value`.
-        pub const fn with_bits_0_7_opaque(self, value: u8) -> Self {
-            Self((self.0 & 0xffffff00) | value as u32)
         }
 
         /// Project-assigned name. Packet allocator class byte; the common TX producer writes two.
@@ -12943,19 +12826,6 @@ pub mod layouts {
         pub const fn with_state(self, value: u8) -> Self {
             Self((self.0 & 0xff00ffff) | (value as u32) << 16)
         }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_24_31_OPAQUE`, bits 31:24; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_TX_PREFIX.
-        pub const fn bits_24_31_opaque(self) -> u8 {
-            (self.0 >> 24) as u8
-        }
-
-        /// This value with `BITS_24_31_OPAQUE` set to `value`.
-        pub const fn with_bits_24_31_opaque(self, value: u8) -> Self {
-            Self((self.0 & 0xffffff) | (value as u32) << 24)
-        }
     }
 
     /// Opaque: meaning not established. Observed byte range; decoded only after ownership passes to the CPU.
@@ -12970,24 +12840,6 @@ pub mod layouts {
         pub const fn bits(self) -> u32 {
             self.0
         }
-
-        /// The value of a range image; every bit pattern is one.
-        pub const fn from_bits(bits: u32) -> Self {
-            Self(bits)
-        }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_TX_PREFIX.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
-        }
     }
 
     /// Opaque: meaning not established. Observed byte range; decoded only after ownership passes to the CPU.
@@ -13001,24 +12853,6 @@ pub mod layouts {
         /// The range's little-endian value.
         pub const fn bits(self) -> u32 {
             self.0
-        }
-
-        /// The value of a range image; every bit pattern is one.
-        pub const fn from_bits(bits: u32) -> Self {
-            Self(bits)
-        }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_TX_PREFIX.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
         }
     }
 
@@ -13104,20 +12938,6 @@ pub mod layouts {
             BleTxPacketPrefix::new(self.bytes)
         }
 
-        /// Store the `BYTE_0000_OPAQUE` range, little-endian.
-        pub fn set_byte_0000_opaque(&mut self, value: BleTxPacketPrefixByte0000Opaque) {
-            let bytes = value.bits().to_le_bytes();
-            self.bytes[0] = bytes[0];
-            self.bytes[1] = bytes[1];
-            self.bytes[2] = bytes[2];
-            self.bytes[3] = bytes[3];
-        }
-
-        /// The `BYTE_0000_OPAQUE` range as last stored.
-        pub const fn byte_0000_opaque(&self) -> BleTxPacketPrefixByte0000Opaque {
-            self.view().byte_0000_opaque()
-        }
-
         /// Store the `ALLOCATION` range, little-endian.
         pub fn set_allocation(&mut self, value: BleTxPacketPrefixAllocation) {
             let bytes = value.bits().to_le_bytes();
@@ -13130,34 +12950,6 @@ pub mod layouts {
         /// The `ALLOCATION` range as last stored.
         pub const fn allocation(&self) -> BleTxPacketPrefixAllocation {
             self.view().allocation()
-        }
-
-        /// Store the `BYTE_0008_OPAQUE` range, little-endian.
-        pub fn set_byte_0008_opaque(&mut self, value: BleTxPacketPrefixByte0008Opaque) {
-            let bytes = value.bits().to_le_bytes();
-            self.bytes[8] = bytes[0];
-            self.bytes[9] = bytes[1];
-            self.bytes[10] = bytes[2];
-            self.bytes[11] = bytes[3];
-        }
-
-        /// The `BYTE_0008_OPAQUE` range as last stored.
-        pub const fn byte_0008_opaque(&self) -> BleTxPacketPrefixByte0008Opaque {
-            self.view().byte_0008_opaque()
-        }
-
-        /// Store the `BYTE_000C_OPAQUE` range, little-endian.
-        pub fn set_byte_000c_opaque(&mut self, value: BleTxPacketPrefixByte000cOpaque) {
-            let bytes = value.bits().to_le_bytes();
-            self.bytes[12] = bytes[0];
-            self.bytes[13] = bytes[1];
-            self.bytes[14] = bytes[2];
-            self.bytes[15] = bytes[3];
-        }
-
-        /// The `BYTE_000C_OPAQUE` range as last stored.
-        pub const fn byte_000c_opaque(&self) -> BleTxPacketPrefixByte000cOpaque {
-            self.view().byte_000c_opaque()
         }
 
         /// Store the `PDU_HEADER` range, little-endian.
@@ -13461,6 +13253,10 @@ pub mod layouts {
             };
             Some(Self((self.0 & 0xfff00000) | (index << 0)))
         }
+        /// Copy the encoded pointer from another word image, preserving every other bit.
+        pub const fn with_address_from(self, image: Self) -> Self {
+            Self((self.0 & 0xfff00000) | (image.0 & 0xfffff))
+        }
 
         /// Opaque: meaning not established. Observed position; the physical meaning is not established.
         ///
@@ -13636,6 +13432,10 @@ pub mod layouts {
             };
             Some(Self((self.0 & 0xfff00000) | (index << 0)))
         }
+        /// Copy the encoded pointer from another word image, preserving every other bit.
+        pub const fn with_address_from(self, image: Self) -> Self {
+            Self((self.0 & 0xfff00000) | (image.0 & 0xfffff))
+        }
 
         /// Opaque: meaning not established. Observed position; the physical meaning is not established.
         ///
@@ -13738,6 +13538,10 @@ pub mod layouts {
                 },
             };
             Some(Self((self.0 & 0xfff00000) | (index << 0)))
+        }
+        /// Copy the encoded pointer from another word image, preserving every other bit.
+        pub const fn with_address_from(self, image: Self) -> Self {
+            Self((self.0 & 0xfff00000) | (image.0 & 0xfffff))
         }
 
         /// Opaque: meaning not established. Observed position; the physical meaning is not established.
@@ -15650,6 +15454,10 @@ pub mod layouts {
             };
             Some(Self((self.0 & 0xfff00000) | (index << 0)))
         }
+        /// Copy the encoded pointer from another word image, preserving every other bit.
+        pub const fn with_header_from(self, image: Self) -> Self {
+            Self((self.0 & 0xfff00000) | (image.0 & 0xfffff))
+        }
 
         /// Project-assigned name. Connection TX octet limit; other role reset profiles use the same lanes as positional images.
         ///
@@ -15783,6 +15591,10 @@ pub mod layouts {
             };
             Some(Self((self.0 & 0xfff00000) | (index << 0)))
         }
+        /// Copy the encoded pointer from another word image, preserving every other bit.
+        pub const fn with_header_from(self, image: Self) -> Self {
+            Self((self.0 & 0xfff00000) | (image.0 & 0xfffff))
+        }
 
         /// Opaque: meaning not established. Observed position; the physical meaning is not established.
         ///
@@ -15881,6 +15693,10 @@ pub mod layouts {
                 },
             };
             Some(Self((self.0 & 0xfff00000) | (index << 0)))
+        }
+        /// Copy the encoded pointer from another word image, preserving every other bit.
+        pub const fn with_header_from(self, image: Self) -> Self {
+            Self((self.0 & 0xfff00000) | (image.0 & 0xfffff))
         }
 
         /// Project-assigned name. Connection unconsumed-RX limit; other role profiles retain their exact reset image.
@@ -17451,6 +17267,10 @@ pub mod layouts {
             };
             Some(Self((self.0 & 0xfff00000) | (index << 0)))
         }
+        /// Copy the encoded pointer from another word image, preserving every other bit.
+        pub const fn with_configuration_from(self, image: Self) -> Self {
+            Self((self.0 & 0xfff00000) | (image.0 & 0xfffff))
+        }
 
         /// Opaque: meaning not established. Observed position; the physical meaning is not established.
         ///
@@ -18484,19 +18304,6 @@ pub mod layouts {
         pub const fn bits(self) -> u32 {
             self.0
         }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_SCHEDULER_CONTEXT.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
-        }
     }
 
     /// The `BLE_SCHEDULER_CONTEXT.WORD_0004_OPAQUE` word as the hardware may change it: volatile access only.
@@ -18535,19 +18342,6 @@ pub mod layouts {
         /// The word image.
         pub const fn bits(self) -> u32 {
             self.0
-        }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_SCHEDULER_CONTEXT.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
         }
     }
 
@@ -18588,19 +18382,6 @@ pub mod layouts {
         pub const fn bits(self) -> u32 {
             self.0
         }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_SCHEDULER_CONTEXT.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
-        }
     }
 
     /// The `BLE_SCHEDULER_CONTEXT.WORD_000C_OPAQUE` word as the hardware may change it: volatile access only.
@@ -18639,19 +18420,6 @@ pub mod layouts {
         /// The word image.
         pub const fn bits(self) -> u32 {
             self.0
-        }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_SCHEDULER_CONTEXT.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
         }
     }
 
@@ -18692,19 +18460,6 @@ pub mod layouts {
         pub const fn bits(self) -> u32 {
             self.0
         }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_SCHEDULER_CONTEXT.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
-        }
     }
 
     /// The `BLE_SCHEDULER_CONTEXT.WORD_0014_OPAQUE` word as the hardware may change it: volatile access only.
@@ -18743,19 +18498,6 @@ pub mod layouts {
         /// The word image.
         pub const fn bits(self) -> u32 {
             self.0
-        }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_SCHEDULER_CONTEXT.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
         }
     }
 
@@ -18796,19 +18538,6 @@ pub mod layouts {
         pub const fn bits(self) -> u32 {
             self.0
         }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_SCHEDULER_CONTEXT.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
-        }
     }
 
     /// The `BLE_SCHEDULER_CONTEXT.WORD_001C_OPAQUE` word as the hardware may change it: volatile access only.
@@ -18847,19 +18576,6 @@ pub mod layouts {
         /// The word image.
         pub const fn bits(self) -> u32 {
             self.0
-        }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_SCHEDULER_CONTEXT.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
         }
     }
 
@@ -18900,19 +18616,6 @@ pub mod layouts {
         pub const fn bits(self) -> u32 {
             self.0
         }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_SCHEDULER_CONTEXT.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
-        }
     }
 
     /// The `BLE_SCHEDULER_CONTEXT.WORD_0024_OPAQUE` word as the hardware may change it: volatile access only.
@@ -18951,19 +18654,6 @@ pub mod layouts {
         /// The word image.
         pub const fn bits(self) -> u32 {
             self.0
-        }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_SCHEDULER_CONTEXT.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
         }
     }
 
@@ -19004,19 +18694,6 @@ pub mod layouts {
         pub const fn bits(self) -> u32 {
             self.0
         }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_SCHEDULER_CONTEXT.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
-        }
     }
 
     /// The `BLE_SCHEDULER_CONTEXT.WORD_002C_OPAQUE` word as the hardware may change it: volatile access only.
@@ -19055,19 +18732,6 @@ pub mod layouts {
         /// The word image.
         pub const fn bits(self) -> u32 {
             self.0
-        }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_SCHEDULER_CONTEXT.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
         }
     }
 
@@ -19108,19 +18772,6 @@ pub mod layouts {
         pub const fn bits(self) -> u32 {
             self.0
         }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_SCHEDULER_CONTEXT.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
-        }
     }
 
     /// The `BLE_SCHEDULER_CONTEXT.WORD_0034_OPAQUE` word as the hardware may change it: volatile access only.
@@ -19159,19 +18810,6 @@ pub mod layouts {
         /// The word image.
         pub const fn bits(self) -> u32 {
             self.0
-        }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_SCHEDULER_CONTEXT.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
         }
     }
 
@@ -19212,19 +18850,6 @@ pub mod layouts {
         pub const fn bits(self) -> u32 {
             self.0
         }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_SCHEDULER_CONTEXT.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
-        }
     }
 
     /// The `BLE_SCHEDULER_CONTEXT.WORD_003C_OPAQUE` word as the hardware may change it: volatile access only.
@@ -19263,19 +18888,6 @@ pub mod layouts {
         /// The word image.
         pub const fn bits(self) -> u32 {
             self.0
-        }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_SCHEDULER_CONTEXT.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
         }
     }
 
@@ -19316,19 +18928,6 @@ pub mod layouts {
         pub const fn bits(self) -> u32 {
             self.0
         }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_SCHEDULER_CONTEXT.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
-        }
     }
 
     /// The `BLE_SCHEDULER_CONTEXT.WORD_0044_OPAQUE` word as the hardware may change it: volatile access only.
@@ -19367,19 +18966,6 @@ pub mod layouts {
         /// The word image.
         pub const fn bits(self) -> u32 {
             self.0
-        }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_SCHEDULER_CONTEXT.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
         }
     }
 
@@ -19694,19 +19280,6 @@ pub mod layouts {
         pub const fn bits(self) -> u32 {
             self.0
         }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_PHY_ENVIRONMENT.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
-        }
     }
 
     /// The `BLE_PHY_ENVIRONMENT.WORD_0004_OPAQUE` word as the hardware may change it: volatile access only.
@@ -19745,19 +19318,6 @@ pub mod layouts {
         /// The word image.
         pub const fn bits(self) -> u32 {
             self.0
-        }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_PHY_ENVIRONMENT.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
         }
     }
 
@@ -19798,19 +19358,6 @@ pub mod layouts {
         pub const fn bits(self) -> u32 {
             self.0
         }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_PHY_ENVIRONMENT.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
-        }
     }
 
     /// The `BLE_PHY_ENVIRONMENT.WORD_000C_OPAQUE` word as the hardware may change it: volatile access only.
@@ -19849,19 +19396,6 @@ pub mod layouts {
         /// The word image.
         pub const fn bits(self) -> u32 {
             self.0
-        }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_PHY_ENVIRONMENT.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
         }
     }
 
@@ -19902,19 +19436,6 @@ pub mod layouts {
         pub const fn bits(self) -> u32 {
             self.0
         }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_PHY_ENVIRONMENT.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
-        }
     }
 
     /// The `BLE_PHY_ENVIRONMENT.WORD_0014_OPAQUE` word as the hardware may change it: volatile access only.
@@ -19953,19 +19474,6 @@ pub mod layouts {
         /// The word image.
         pub const fn bits(self) -> u32 {
             self.0
-        }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_PHY_ENVIRONMENT.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
         }
     }
 
@@ -20006,19 +19514,6 @@ pub mod layouts {
         pub const fn bits(self) -> u32 {
             self.0
         }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_PHY_ENVIRONMENT.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
-        }
     }
 
     /// The `BLE_PHY_ENVIRONMENT.WORD_001C_OPAQUE` word as the hardware may change it: volatile access only.
@@ -20057,19 +19552,6 @@ pub mod layouts {
         /// The word image.
         pub const fn bits(self) -> u32 {
             self.0
-        }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_PHY_ENVIRONMENT.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
         }
     }
 
@@ -20110,19 +19592,6 @@ pub mod layouts {
         pub const fn bits(self) -> u32 {
             self.0
         }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_PHY_ENVIRONMENT.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
-        }
     }
 
     /// The `BLE_PHY_ENVIRONMENT.WORD_0024_OPAQUE` word as the hardware may change it: volatile access only.
@@ -20161,19 +19630,6 @@ pub mod layouts {
         /// The word image.
         pub const fn bits(self) -> u32 {
             self.0
-        }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_PHY_ENVIRONMENT.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
         }
     }
 
@@ -20214,19 +19670,6 @@ pub mod layouts {
         pub const fn bits(self) -> u32 {
             self.0
         }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_PHY_ENVIRONMENT.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
-        }
     }
 
     /// The `BLE_PHY_ENVIRONMENT.WORD_002C_OPAQUE` word as the hardware may change it: volatile access only.
@@ -20265,19 +19708,6 @@ pub mod layouts {
         /// The word image.
         pub const fn bits(self) -> u32 {
             self.0
-        }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_PHY_ENVIRONMENT.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
         }
     }
 
@@ -20474,19 +19904,6 @@ pub mod layouts {
         pub const fn bits(self) -> u32 {
             self.0
         }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_PHY_ENVIRONMENT.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
-        }
     }
 
     /// The `BLE_PHY_ENVIRONMENT.WORD_0040_OPAQUE` word as the hardware may change it: volatile access only.
@@ -20526,19 +19943,6 @@ pub mod layouts {
         pub const fn bits(self) -> u32 {
             self.0
         }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_PHY_ENVIRONMENT.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
-        }
     }
 
     /// The `BLE_PHY_ENVIRONMENT.WORD_0044_OPAQUE` word as the hardware may change it: volatile access only.
@@ -20577,19 +19981,6 @@ pub mod layouts {
         /// The word image.
         pub const fn bits(self) -> u32 {
             self.0
-        }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_PHY_ENVIRONMENT.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
         }
     }
 
@@ -20695,24 +20086,6 @@ pub mod layouts {
         pub const fn with_value(self, value: u8) -> Self {
             Self((self.0 & 0xffffff00) | value as u32)
         }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_8_31_OPAQUE`, bits 31:8; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_PHY_ENVIRONMENT.
-        pub const fn bits_8_31_opaque(self) -> u32 {
-            self.0 >> 8
-        }
-
-        /// This value with `BITS_8_31_OPAQUE` set to `value`, or `None` when `value` does not
-        /// fit its 24 bits.
-        pub const fn with_bits_8_31_opaque(self, value: u32) -> Option<Self> {
-            if value > 0xffffff {
-                None
-            } else {
-                Some(Self((self.0 & 0xff) | (value) << 8))
-            }
-        }
     }
 
     /// The `BLE_PHY_ENVIRONMENT.WORD_0050_OPAQUE` word as the hardware may change it: volatile access only.
@@ -20751,19 +20124,6 @@ pub mod layouts {
         /// The word image.
         pub const fn bits(self) -> u32 {
             self.0
-        }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_PHY_ENVIRONMENT.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
         }
     }
 
@@ -20804,19 +20164,6 @@ pub mod layouts {
         pub const fn bits(self) -> u32 {
             self.0
         }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_PHY_ENVIRONMENT.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
-        }
     }
 
     /// The `BLE_PHY_ENVIRONMENT.WORD_0058_OPAQUE` word as the hardware may change it: volatile access only.
@@ -20855,19 +20202,6 @@ pub mod layouts {
         /// The word image.
         pub const fn bits(self) -> u32 {
             self.0
-        }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_PHY_ENVIRONMENT.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
         }
     }
 
@@ -20908,19 +20242,6 @@ pub mod layouts {
         pub const fn bits(self) -> u32 {
             self.0
         }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_PHY_ENVIRONMENT.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
-        }
     }
 
     /// The `BLE_PHY_ENVIRONMENT.WORD_0060_OPAQUE` word as the hardware may change it: volatile access only.
@@ -20959,19 +20280,6 @@ pub mod layouts {
         /// The word image.
         pub const fn bits(self) -> u32 {
             self.0
-        }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_PHY_ENVIRONMENT.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
         }
     }
 
@@ -21012,19 +20320,6 @@ pub mod layouts {
         pub const fn bits(self) -> u32 {
             self.0
         }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_PHY_ENVIRONMENT.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
-        }
     }
 
     /// The `BLE_PHY_ENVIRONMENT.WORD_0068_OPAQUE` word as the hardware may change it: volatile access only.
@@ -21063,19 +20358,6 @@ pub mod layouts {
         /// The word image.
         pub const fn bits(self) -> u32 {
             self.0
-        }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_PHY_ENVIRONMENT.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
         }
     }
 
@@ -21116,19 +20398,6 @@ pub mod layouts {
         pub const fn bits(self) -> u32 {
             self.0
         }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_PHY_ENVIRONMENT.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
-        }
     }
 
     /// The `BLE_PHY_ENVIRONMENT.WORD_0070_OPAQUE` word as the hardware may change it: volatile access only.
@@ -21168,19 +20437,6 @@ pub mod layouts {
         pub const fn bits(self) -> u32 {
             self.0
         }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_PHY_ENVIRONMENT.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
-        }
     }
 
     /// The `BLE_PHY_ENVIRONMENT.WORD_0074_OPAQUE` word as the hardware may change it: volatile access only.
@@ -21219,19 +20475,6 @@ pub mod layouts {
         /// The word image.
         pub const fn bits(self) -> u32 {
             self.0
-        }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_PHY_ENVIRONMENT.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
         }
     }
 
@@ -22145,24 +21388,6 @@ pub mod layouts {
 
         /// Opaque: meaning not established. Observed position; the physical meaning is not established.
         ///
-        /// `BITS_0_30_OPAQUE`, bits 30:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_PHY_ENVIRONMENT.
-        pub const fn bits_0_30_opaque(self) -> u32 {
-            self.0 & 0x7fffffff
-        }
-
-        /// This value with `BITS_0_30_OPAQUE` set to `value`, or `None` when `value` does not
-        /// fit its 31 bits.
-        pub const fn with_bits_0_30_opaque(self, value: u32) -> Option<Self> {
-            if value > 0x7fffffff {
-                None
-            } else {
-                Some(Self((self.0 & 0x80000000) | value))
-            }
-        }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
         /// `BIT_31_OPAQUE`, bit 31; written by the CPU.
         /// SOURCE: BLOB_LIBBLE_MEMORY_PHY_ENVIRONMENT.
         pub const fn bit_31_opaque(self) -> bool {
@@ -22216,19 +21441,6 @@ pub mod layouts {
         pub const fn bits(self) -> u32 {
             self.0
         }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_PHY_ENVIRONMENT.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
-        }
     }
 
     /// The `BLE_RESOLVING_LIST.WORD_0008_OPAQUE` word as the hardware may change it: volatile access only.
@@ -22267,19 +21479,6 @@ pub mod layouts {
         /// The word image.
         pub const fn bits(self) -> u32 {
             self.0
-        }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_PHY_ENVIRONMENT.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
         }
     }
 
@@ -22320,19 +21519,6 @@ pub mod layouts {
         pub const fn bits(self) -> u32 {
             self.0
         }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_PHY_ENVIRONMENT.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
-        }
     }
 
     /// The `BLE_RESOLVING_LIST.WORD_0010_OPAQUE` word as the hardware may change it: volatile access only.
@@ -22371,19 +21557,6 @@ pub mod layouts {
         /// The word image.
         pub const fn bits(self) -> u32 {
             self.0
-        }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_PHY_ENVIRONMENT.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
         }
     }
 
@@ -22424,19 +21597,6 @@ pub mod layouts {
         pub const fn bits(self) -> u32 {
             self.0
         }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_PHY_ENVIRONMENT.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
-        }
     }
 
     /// The `BLE_RESOLVING_LIST.WORD_0018_OPAQUE` word as the hardware may change it: volatile access only.
@@ -22475,19 +21635,6 @@ pub mod layouts {
         /// The word image.
         pub const fn bits(self) -> u32 {
             self.0
-        }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_PHY_ENVIRONMENT.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
         }
     }
 
@@ -22528,19 +21675,6 @@ pub mod layouts {
         pub const fn bits(self) -> u32 {
             self.0
         }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_PHY_ENVIRONMENT.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
-        }
     }
 
     /// The `BLE_RESOLVING_LIST.WORD_0020_OPAQUE` word as the hardware may change it: volatile access only.
@@ -22579,19 +21713,6 @@ pub mod layouts {
         /// The word image.
         pub const fn bits(self) -> u32 {
             self.0
-        }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_PHY_ENVIRONMENT.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
         }
     }
 
@@ -22632,19 +21753,6 @@ pub mod layouts {
         pub const fn bits(self) -> u32 {
             self.0
         }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_PHY_ENVIRONMENT.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
-        }
     }
 
     /// The `BLE_RESOLVING_LIST.WORD_0028_OPAQUE` word as the hardware may change it: volatile access only.
@@ -22683,19 +21791,6 @@ pub mod layouts {
         /// The word image.
         pub const fn bits(self) -> u32 {
             self.0
-        }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_PHY_ENVIRONMENT.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
         }
     }
 
@@ -22736,19 +21831,6 @@ pub mod layouts {
         pub const fn bits(self) -> u32 {
             self.0
         }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_PHY_ENVIRONMENT.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
-        }
     }
 
     /// The `BLE_RESOLVING_LIST.WORD_0030_OPAQUE` word as the hardware may change it: volatile access only.
@@ -22787,19 +21869,6 @@ pub mod layouts {
         /// The word image.
         pub const fn bits(self) -> u32 {
             self.0
-        }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_PHY_ENVIRONMENT.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
         }
     }
 
@@ -22840,19 +21909,6 @@ pub mod layouts {
         pub const fn bits(self) -> u32 {
             self.0
         }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_PHY_ENVIRONMENT.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
-        }
     }
 
     /// The `BLE_RESOLVING_LIST.WORD_0038_OPAQUE` word as the hardware may change it: volatile access only.
@@ -22892,19 +21948,6 @@ pub mod layouts {
         pub const fn bits(self) -> u32 {
             self.0
         }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_PHY_ENVIRONMENT.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
-        }
     }
 
     /// The `BLE_RESOLVING_LIST.WORD_003C_OPAQUE` word as the hardware may change it: volatile access only.
@@ -22943,19 +21986,6 @@ pub mod layouts {
         /// The word image.
         pub const fn bits(self) -> u32 {
             self.0
-        }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_PHY_ENVIRONMENT.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
         }
     }
 
@@ -23506,19 +22536,6 @@ pub mod layouts {
         pub const fn bits(self) -> u32 {
             self.0
         }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_DF_WORKSPACE.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
-        }
     }
 
     /// The `BLE_DIRECTION_FINDING_DESCRIPTOR.WORD_0008_OPAQUE` word as the hardware may change it: volatile access only.
@@ -23558,19 +22575,6 @@ pub mod layouts {
         pub const fn bits(self) -> u32 {
             self.0
         }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_DF_WORKSPACE.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
-        }
     }
 
     /// The `BLE_DIRECTION_FINDING_DESCRIPTOR.WORD_000C_OPAQUE` word as the hardware may change it: volatile access only.
@@ -23609,19 +22613,6 @@ pub mod layouts {
         /// The word image.
         pub const fn bits(self) -> u32 {
             self.0
-        }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_DF_WORKSPACE.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
         }
     }
 
@@ -23770,19 +22761,6 @@ pub mod layouts {
         pub const fn bits(self) -> u32 {
             self.0
         }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_DF_WORKSPACE.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
-        }
     }
 
     /// The `BLE_DIRECTION_FINDING_WORKSPACE.WORD_0004_OPAQUE` word as the hardware may change it: volatile access only.
@@ -23821,19 +22799,6 @@ pub mod layouts {
         /// The word image.
         pub const fn bits(self) -> u32 {
             self.0
-        }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_DF_WORKSPACE.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
         }
     }
 
@@ -23996,19 +22961,6 @@ pub mod layouts {
         pub const fn bits(self) -> u32 {
             self.0
         }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_DF_WORKSPACE.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
-        }
     }
 
     /// The `BLE_DIRECTION_FINDING_WORKSPACE.WORD_0014_OPAQUE` word as the hardware may change it: volatile access only.
@@ -24047,19 +22999,6 @@ pub mod layouts {
         /// The word image.
         pub const fn bits(self) -> u32 {
             self.0
-        }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_DF_WORKSPACE.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
         }
     }
 
@@ -24100,19 +23039,6 @@ pub mod layouts {
         pub const fn bits(self) -> u32 {
             self.0
         }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_DF_WORKSPACE.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
-        }
     }
 
     /// The `BLE_DIRECTION_FINDING_WORKSPACE.WORD_001C_OPAQUE` word as the hardware may change it: volatile access only.
@@ -24151,19 +23077,6 @@ pub mod layouts {
         /// The word image.
         pub const fn bits(self) -> u32 {
             self.0
-        }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_0_31_OPAQUE`, bits 31:0; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_DF_WORKSPACE.
-        pub const fn bits_0_31_opaque(self) -> u32 {
-            self.0
-        }
-
-        /// This value with `BITS_0_31_OPAQUE` set to `value`.
-        pub const fn with_bits_0_31_opaque(self, value: u32) -> Self {
-            Self(value)
         }
     }
 }

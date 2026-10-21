@@ -137,11 +137,6 @@ bitOffset = 0
 bitWidth = 1
 
 [[peripherals.registers.register.fields]]
-name = "BITS_1_3_OPAQUE"
-bitOffset = 1
-bitWidth = 3
-
-[[peripherals.registers.register.fields]]
 name = "PTI_0"
 bitOffset = 4
 bitWidth = 4
@@ -309,11 +304,6 @@ bitOffset = 0
 bitWidth = 2
 
 [[peripherals.registers.register.fields]]
-name = "BITS_2_3_OPAQUE"
-bitOffset = 2
-bitWidth = 2
-
-[[peripherals.registers.register.fields]]
 name = "GROUP_ID"
 bitOffset = 4
 bitWidth = 6
@@ -329,11 +319,6 @@ bitOffset = 13
 bitWidth = 9
 
 [[peripherals.registers.register.fields]]
-name = "BITS_22_23_OPAQUE"
-bitOffset = 22
-bitWidth = 2
-
-[[peripherals.registers.register.fields]]
 name = "SHORT_GI"
 bitOffset = 24
 bitWidth = 1
@@ -346,11 +331,6 @@ bitWidth = 1
 [[peripherals.registers.register.fields]]
 name = "CODING"
 bitOffset = 26
-bitWidth = 1
-
-[[peripherals.registers.register.fields]]
-name = "BIT_27_OPAQUE"
-bitOffset = 27
 bitWidth = 1
 
 [[peripherals.registers.register.fields]]
@@ -849,10 +829,6 @@ bitWidth = 1
 [[peripheral-review]]
 entity = "WIFI_MAC_TX_QUEUE_VECTOR"
 opaque-entities = [
-    "WIFI_MAC_TX_QUEUE_VECTOR.PTI%s.BITS_1_3_OPAQUE",
-    "WIFI_MAC_TX_QUEUE_VECTOR.VHT_SIGNAL_1%s.BITS_2_3_OPAQUE",
-    "WIFI_MAC_TX_QUEUE_VECTOR.VHT_SIGNAL_1%s.BITS_22_23_OPAQUE",
-    "WIFI_MAC_TX_QUEUE_VECTOR.VHT_SIGNAL_1%s.BIT_27_OPAQUE",
     "WIFI_MAC_TX_QUEUE_VECTOR.VHT_MODE%s.BITS_0_1_OPAQUE",
     "WIFI_MAC_TX_QUEUE_VECTOR.VHT_MODE%s.BITS_19_31_OPAQUE",
     "WIFI_MAC_TX_QUEUE_VECTOR.HE_SU_SIGNAL_A2_LENGTH%s.BITS_3_7_OPAQUE",

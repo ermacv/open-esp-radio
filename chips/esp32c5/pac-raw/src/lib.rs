@@ -917,17 +917,19 @@ pub mod ieee802154_mac {
         timer0_value: Timer0Value,
         timer1_threshold: Timer1Threshold,
         timer1_value: Timer1Value,
-        _reserved24: [u8; 0x18],
+        _reserved24: [u8; 0x0c],
+        sfd_wait: SfdWait,
+        _reserved25: [u8; 0x08],
         tx_dma_address: TxDmaAddress,
-        _reserved25: [u8; 0x0c],
+        _reserved26: [u8; 0x0c],
         rx_dma_address: RxDmaAddress,
-        _reserved26: [u8; 0x20],
+        _reserved27: [u8; 0x20],
         txon_delay: TxonDelay,
-        _reserved27: [u8; 0x04],
+        _reserved28: [u8; 0x04],
         txoff_delay: TxoffDelay,
         rxon_delay: RxonDelay,
         txrx_switch_delay: TxrxSwitchDelay,
-        _reserved30: [u8; 0x10],
+        _reserved31: [u8; 0x10],
         security_control: SecurityControl,
         security_address_low: SecurityAddressLow,
         security_address_high: SecurityAddressHigh,
@@ -1172,7 +1174,7 @@ pub mod ieee802154_mac {
         pub const fn ack_timeout(&self) -> &AckTimeout {
             &self.ack_timeout
         }
-        #[doc = "0x60 - Project-assigned name. Individual event enables mutated by the public common LL. Bits seven and thirteen remain physically observable but have no assigned vendor event semantics."]
+        #[doc = "0x60 - Project-assigned name. Individual event enables mutated by the public common LL. All fourteen lanes belong to the open vendor events field; individual unnamed events remain descriptive partitions."]
         #[inline(always)]
         pub const fn event_enable(&self) -> &EventEnable {
             &self.event_enable
@@ -1236,6 +1238,11 @@ pub mod ieee802154_mac {
         #[inline(always)]
         pub const fn timer1_value(&self) -> &Timer1Value {
             &self.timer1_value
+        }
+        #[doc = "0xc4 - Project-assigned name. Open vendor sfd_wait word. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset value is claimed."]
+        #[inline(always)]
+        pub const fn sfd_wait(&self) -> &SfdWait {
+            &self.sfd_wait
         }
         #[doc = "0xd0 - Project-assigned name. Complete transmit frame-buffer address written by the public common LL. Address validity and buffer lifetime remain HAL responsibilities."]
         #[inline(always)]
@@ -1526,6 +1533,10 @@ pub mod ieee802154_mac {
         pub type AutoAckRxR = crate::BitReader;
         #[doc = "Field `AUTO_ACK_RX` writer - Project-assigned name."]
         pub type AutoAckRxW<'a, REG> = crate::BitWriter<'a, REG>;
+        #[doc = "Field `IFS_DIS` reader - Project-assigned name. Open vendor conf.ifs_dis field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred."]
+        pub type IfsDisR = crate::BitReader;
+        #[doc = "Field `IFS_DIS` writer - Project-assigned name. Open vendor conf.ifs_dis field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred."]
+        pub type IfsDisW<'a, REG> = crate::BitWriter<'a, REG>;
         #[doc = "Field `COORDINATOR` reader - Project-assigned name."]
         pub type CoordinatorR = crate::BitReader;
         #[doc = "Field `COORDINATOR` writer - Project-assigned name."]
@@ -1534,10 +1545,38 @@ pub mod ieee802154_mac {
         pub type PromiscuousR = crate::BitReader;
         #[doc = "Field `PROMISCUOUS` writer - Project-assigned name."]
         pub type PromiscuousW<'a, REG> = crate::BitWriter<'a, REG>;
+        #[doc = "Field `VERSION_FILTER_DIS` reader - Project-assigned name. Open vendor conf.version_filter_dis field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred."]
+        pub type VersionFilterDisR = crate::BitReader;
+        #[doc = "Field `VERSION_FILTER_DIS` writer - Project-assigned name. Open vendor conf.version_filter_dis field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred."]
+        pub type VersionFilterDisW<'a, REG> = crate::BitWriter<'a, REG>;
         #[doc = "Field `PENDING_ENHANCED` reader - Project-assigned name. Boolean pending-mode selector used by the current public LL. The wider public pending-mode enum is not encoded in this one-bit field."]
         pub type PendingEnhancedR = crate::BitReader;
         #[doc = "Field `PENDING_ENHANCED` writer - Project-assigned name. Boolean pending-mode selector used by the current public LL. The wider public pending-mode enum is not encoded in this one-bit field."]
         pub type PendingEnhancedW<'a, REG> = crate::BitWriter<'a, REG>;
+        #[doc = "Field `FILTER_ENHANCE_DIS` reader - Project-assigned name. Open vendor conf.filter_enhance_dis field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred."]
+        pub type FilterEnhanceDisR = crate::BitReader;
+        #[doc = "Field `FILTER_ENHANCE_DIS` writer - Project-assigned name. Open vendor conf.filter_enhance_dis field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred."]
+        pub type FilterEnhanceDisW<'a, REG> = crate::BitWriter<'a, REG>;
+        #[doc = "Field `COEX_ARB_DELAY` reader - Project-assigned name. Open vendor conf.coex_arb_delay field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred."]
+        pub type CoexArbDelayR = crate::FieldReader;
+        #[doc = "Field `COEX_ARB_DELAY` writer - Project-assigned name. Open vendor conf.coex_arb_delay field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred."]
+        pub type CoexArbDelayW<'a, REG> = crate::FieldWriter<'a, REG, 8>;
+        #[doc = "Field `BIT_ORDER` reader - Project-assigned name. Open vendor conf.bit_order field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred."]
+        pub type BitOrderR = crate::BitReader;
+        #[doc = "Field `BIT_ORDER` writer - Project-assigned name. Open vendor conf.bit_order field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred."]
+        pub type BitOrderW<'a, REG> = crate::BitWriter<'a, REG>;
+        #[doc = "Field `NO_RSSI_TRIGGER_BREAK_EN` reader - Project-assigned name. Open vendor conf.no_rssi_trigger_break_en field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred."]
+        pub type NoRssiTriggerBreakEnR = crate::BitReader;
+        #[doc = "Field `NO_RSSI_TRIGGER_BREAK_EN` writer - Project-assigned name. Open vendor conf.no_rssi_trigger_break_en field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred."]
+        pub type NoRssiTriggerBreakEnW<'a, REG> = crate::BitWriter<'a, REG>;
+        #[doc = "Field `COEX_FORCE_RX` reader - Project-assigned name. Open vendor conf.coex_force_rx field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred."]
+        pub type CoexForceRxR = crate::BitReader;
+        #[doc = "Field `COEX_FORCE_RX` writer - Project-assigned name. Open vendor conf.coex_force_rx field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred."]
+        pub type CoexForceRxW<'a, REG> = crate::BitWriter<'a, REG>;
+        #[doc = "Field `RX_DONE_TRIG_IDLE` reader - Project-assigned name. Open vendor conf.rx_done_trig_idle field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred."]
+        pub type RxDoneTrigIdleR = crate::BitReader;
+        #[doc = "Field `RX_DONE_TRIG_IDLE` writer - Project-assigned name. Open vendor conf.rx_done_trig_idle field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred."]
+        pub type RxDoneTrigIdleW<'a, REG> = crate::BitWriter<'a, REG>;
         #[doc = "Field `MULTIPAN0_ENABLED` reader - Project-assigned name. Enable public multipan context zero."]
         pub type Multipan0EnabledR = crate::BitReader;
         #[doc = "Field `MULTIPAN0_ENABLED` writer - Project-assigned name. Enable public multipan context zero."]
@@ -1570,6 +1609,11 @@ pub mod ieee802154_mac {
             pub fn auto_ack_rx(&self) -> AutoAckRxR {
                 AutoAckRxR::new(((self.bits >> 3) & 1) != 0)
             }
+            #[doc = "Bit 5 - Project-assigned name. Open vendor conf.ifs_dis field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred."]
+            #[inline(always)]
+            pub fn ifs_dis(&self) -> IfsDisR {
+                IfsDisR::new(((self.bits >> 5) & 1) != 0)
+            }
             #[doc = "Bit 6 - Project-assigned name."]
             #[inline(always)]
             pub fn coordinator(&self) -> CoordinatorR {
@@ -1580,10 +1624,45 @@ pub mod ieee802154_mac {
             pub fn promiscuous(&self) -> PromiscuousR {
                 PromiscuousR::new(((self.bits >> 7) & 1) != 0)
             }
+            #[doc = "Bit 11 - Project-assigned name. Open vendor conf.version_filter_dis field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred."]
+            #[inline(always)]
+            pub fn version_filter_dis(&self) -> VersionFilterDisR {
+                VersionFilterDisR::new(((self.bits >> 11) & 1) != 0)
+            }
             #[doc = "Bit 12 - Project-assigned name. Boolean pending-mode selector used by the current public LL. The wider public pending-mode enum is not encoded in this one-bit field."]
             #[inline(always)]
             pub fn pending_enhanced(&self) -> PendingEnhancedR {
                 PendingEnhancedR::new(((self.bits >> 12) & 1) != 0)
+            }
+            #[doc = "Bit 14 - Project-assigned name. Open vendor conf.filter_enhance_dis field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred."]
+            #[inline(always)]
+            pub fn filter_enhance_dis(&self) -> FilterEnhanceDisR {
+                FilterEnhanceDisR::new(((self.bits >> 14) & 1) != 0)
+            }
+            #[doc = "Bits 16:23 - Project-assigned name. Open vendor conf.coex_arb_delay field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred."]
+            #[inline(always)]
+            pub fn coex_arb_delay(&self) -> CoexArbDelayR {
+                CoexArbDelayR::new(((self.bits >> 16) & 0xff) as u8)
+            }
+            #[doc = "Bit 24 - Project-assigned name. Open vendor conf.bit_order field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred."]
+            #[inline(always)]
+            pub fn bit_order(&self) -> BitOrderR {
+                BitOrderR::new(((self.bits >> 24) & 1) != 0)
+            }
+            #[doc = "Bit 25 - Project-assigned name. Open vendor conf.no_rssi_trigger_break_en field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred."]
+            #[inline(always)]
+            pub fn no_rssi_trigger_break_en(&self) -> NoRssiTriggerBreakEnR {
+                NoRssiTriggerBreakEnR::new(((self.bits >> 25) & 1) != 0)
+            }
+            #[doc = "Bit 26 - Project-assigned name. Open vendor conf.coex_force_rx field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred."]
+            #[inline(always)]
+            pub fn coex_force_rx(&self) -> CoexForceRxR {
+                CoexForceRxR::new(((self.bits >> 26) & 1) != 0)
+            }
+            #[doc = "Bit 27 - Project-assigned name. Open vendor conf.rx_done_trig_idle field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred."]
+            #[inline(always)]
+            pub fn rx_done_trig_idle(&self) -> RxDoneTrigIdleR {
+                RxDoneTrigIdleR::new(((self.bits >> 27) & 1) != 0)
             }
             #[doc = "Bit 28 - Project-assigned name. Enable public multipan context zero."]
             #[inline(always)]
@@ -1622,6 +1701,11 @@ pub mod ieee802154_mac {
             pub fn auto_ack_rx(&mut self) -> AutoAckRxW<'_, ControlSpec> {
                 AutoAckRxW::new(self, 3)
             }
+            #[doc = "Bit 5 - Project-assigned name. Open vendor conf.ifs_dis field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred."]
+            #[inline(always)]
+            pub fn ifs_dis(&mut self) -> IfsDisW<'_, ControlSpec> {
+                IfsDisW::new(self, 5)
+            }
             #[doc = "Bit 6 - Project-assigned name."]
             #[inline(always)]
             pub fn coordinator(&mut self) -> CoordinatorW<'_, ControlSpec> {
@@ -1632,10 +1716,45 @@ pub mod ieee802154_mac {
             pub fn promiscuous(&mut self) -> PromiscuousW<'_, ControlSpec> {
                 PromiscuousW::new(self, 7)
             }
+            #[doc = "Bit 11 - Project-assigned name. Open vendor conf.version_filter_dis field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred."]
+            #[inline(always)]
+            pub fn version_filter_dis(&mut self) -> VersionFilterDisW<'_, ControlSpec> {
+                VersionFilterDisW::new(self, 11)
+            }
             #[doc = "Bit 12 - Project-assigned name. Boolean pending-mode selector used by the current public LL. The wider public pending-mode enum is not encoded in this one-bit field."]
             #[inline(always)]
             pub fn pending_enhanced(&mut self) -> PendingEnhancedW<'_, ControlSpec> {
                 PendingEnhancedW::new(self, 12)
+            }
+            #[doc = "Bit 14 - Project-assigned name. Open vendor conf.filter_enhance_dis field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred."]
+            #[inline(always)]
+            pub fn filter_enhance_dis(&mut self) -> FilterEnhanceDisW<'_, ControlSpec> {
+                FilterEnhanceDisW::new(self, 14)
+            }
+            #[doc = "Bits 16:23 - Project-assigned name. Open vendor conf.coex_arb_delay field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred."]
+            #[inline(always)]
+            pub fn coex_arb_delay(&mut self) -> CoexArbDelayW<'_, ControlSpec> {
+                CoexArbDelayW::new(self, 16)
+            }
+            #[doc = "Bit 24 - Project-assigned name. Open vendor conf.bit_order field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred."]
+            #[inline(always)]
+            pub fn bit_order(&mut self) -> BitOrderW<'_, ControlSpec> {
+                BitOrderW::new(self, 24)
+            }
+            #[doc = "Bit 25 - Project-assigned name. Open vendor conf.no_rssi_trigger_break_en field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred."]
+            #[inline(always)]
+            pub fn no_rssi_trigger_break_en(&mut self) -> NoRssiTriggerBreakEnW<'_, ControlSpec> {
+                NoRssiTriggerBreakEnW::new(self, 25)
+            }
+            #[doc = "Bit 26 - Project-assigned name. Open vendor conf.coex_force_rx field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred."]
+            #[inline(always)]
+            pub fn coex_force_rx(&mut self) -> CoexForceRxW<'_, ControlSpec> {
+                CoexForceRxW::new(self, 26)
+            }
+            #[doc = "Bit 27 - Project-assigned name. Open vendor conf.rx_done_trig_idle field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred."]
+            #[inline(always)]
+            pub fn rx_done_trig_idle(&mut self) -> RxDoneTrigIdleW<'_, ControlSpec> {
+                RxDoneTrigIdleW::new(self, 27)
             }
             #[doc = "Bit 28 - Project-assigned name. Enable public multipan context zero."]
             #[inline(always)]
@@ -1841,20 +1960,11 @@ pub mod ieee802154_mac {
         pub type FrequencyCodeR = crate::FieldReader;
         #[doc = "Field `FREQUENCY_CODE` writer - Project-assigned name. Seven-bit code read and written by ieee802154_ll_get_freq/set_freq; this register model does not equate it to an IEEE channel number."]
         pub type FrequencyCodeW<'a, REG> = crate::FieldWriter<'a, REG, 7, u8, crate::Safe>;
-        #[doc = "Field `BIT_7_OPAQUE` reader - Opaque: meaning not established. Implemented read-write bit above the seven-bit frequency code; the public struct declares it reserved and no vendor accessor writes it."]
-        pub type Bit7OpaqueR = crate::BitReader;
-        #[doc = "Field `BIT_7_OPAQUE` writer - Opaque: meaning not established. Implemented read-write bit above the seven-bit frequency code; the public struct declares it reserved and no vendor accessor writes it."]
-        pub type Bit7OpaqueW<'a, REG> = crate::BitWriter<'a, REG>;
         impl R {
             #[doc = "Bits 0:6 - Project-assigned name. Seven-bit code read and written by ieee802154_ll_get_freq/set_freq; this register model does not equate it to an IEEE channel number."]
             #[inline(always)]
             pub fn frequency_code(&self) -> FrequencyCodeR {
                 FrequencyCodeR::new((self.bits & 0x7f) as u8)
-            }
-            #[doc = "Bit 7 - Opaque: meaning not established. Implemented read-write bit above the seven-bit frequency code; the public struct declares it reserved and no vendor accessor writes it."]
-            #[inline(always)]
-            pub fn bit_7_opaque(&self) -> Bit7OpaqueR {
-                Bit7OpaqueR::new(((self.bits >> 7) & 1) != 0)
             }
         }
         impl W {
@@ -1862,11 +1972,6 @@ pub mod ieee802154_mac {
             #[inline(always)]
             pub fn frequency_code(&mut self) -> FrequencyCodeW<'_, ChannelSpec> {
                 FrequencyCodeW::new(self, 0)
-            }
-            #[doc = "Bit 7 - Opaque: meaning not established. Implemented read-write bit above the seven-bit frequency code; the public struct declares it reserved and no vendor accessor writes it."]
-            #[inline(always)]
-            pub fn bit_7_opaque(&mut self) -> Bit7OpaqueW<'_, ChannelSpec> {
-                Bit7OpaqueW::new(self, 7)
             }
         }
         #[doc = "Selected primary frequency code. Other multi-channel and frequency-hop controls declared by the struct are not used by the public common LL and remain absent.\n\nYou can [`read`](crate::Reg::read) this register and get [`channel::R`](R). You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`channel::W`](W). You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api)."]
@@ -1933,11 +2038,20 @@ pub mod ieee802154_mac {
         pub type DurationR = crate::FieldReader<u32>;
         #[doc = "Field `DURATION` writer - Project-assigned name. Twenty-four-bit physical field. The current public setter accepts only a uint16_t and therefore exercises a strict subset of its declared range."]
         pub type DurationW<'a, REG> = crate::FieldWriter<'a, REG, 24, u32>;
+        #[doc = "Field `DELAY` reader - Project-assigned name. Open vendor ed_duration.delay field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred."]
+        pub type DelayR = crate::FieldReader;
+        #[doc = "Field `DELAY` writer - Project-assigned name. Open vendor ed_duration.delay field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred."]
+        pub type DelayW<'a, REG> = crate::FieldWriter<'a, REG, 4>;
         impl R {
             #[doc = "Bits 0:23 - Project-assigned name. Twenty-four-bit physical field. The current public setter accepts only a uint16_t and therefore exercises a strict subset of its declared range."]
             #[inline(always)]
             pub fn duration(&self) -> DurationR {
                 DurationR::new(self.bits & 0x00ff_ffff)
+            }
+            #[doc = "Bits 24:27 - Project-assigned name. Open vendor ed_duration.delay field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred."]
+            #[inline(always)]
+            pub fn delay(&self) -> DelayR {
+                DelayR::new(((self.bits >> 24) & 0x0f) as u8)
             }
         }
         impl W {
@@ -1945,6 +2059,11 @@ pub mod ieee802154_mac {
             #[inline(always)]
             pub fn duration(&mut self) -> DurationW<'_, EdDurationSpec> {
                 DurationW::new(self, 0)
+            }
+            #[doc = "Bits 24:27 - Project-assigned name. Open vendor ed_duration.delay field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred."]
+            #[inline(always)]
+            pub fn delay(&mut self) -> DelayW<'_, EdDurationSpec> {
+                DelayW::new(self, 24)
             }
         }
         #[doc = "Project-assigned name. Energy-detection duration field written by the public common LL. The adjacent delay field is not used there and remains absent.\n\nYou can [`read`](crate::Reg::read) this register and get [`ed_duration::R`](R). You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`ed_duration::W`](W). You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api)."]
@@ -2306,10 +2425,10 @@ pub mod ieee802154_mac {
             type Safety = crate::Unsafe;
         }
     }
-    #[doc = "EVENT_ENABLE (rw) register accessor: Project-assigned name. Individual event enables mutated by the public common LL. Bits seven and thirteen remain physically observable but have no assigned vendor event semantics.\n\nYou can [`read`](crate::Reg::read) this register and get [`event_enable::R`]. You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`event_enable::W`]. You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api).\n\nFor information about available fields see [`mod@event_enable`] module"]
+    #[doc = "EVENT_ENABLE (rw) register accessor: Project-assigned name. Individual event enables mutated by the public common LL. All fourteen lanes belong to the open vendor events field; individual unnamed events remain descriptive partitions.\n\nYou can [`read`](crate::Reg::read) this register and get [`event_enable::R`]. You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`event_enable::W`]. You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api).\n\nFor information about available fields see [`mod@event_enable`] module"]
     #[doc(alias = "EVENT_ENABLE")]
     pub type EventEnable = crate::Reg<event_enable::EventEnableSpec>;
-    #[doc = "Project-assigned name. Individual event enables mutated by the public common LL. Bits seven and thirteen remain physically observable but have no assigned vendor event semantics."]
+    #[doc = "Project-assigned name. Individual event enables mutated by the public common LL. All fourteen lanes belong to the open vendor events field; individual unnamed events remain descriptive partitions."]
     pub mod event_enable {
         #[doc = "Register `EVENT_ENABLE` reader"]
         pub type R = crate::R<EventEnableSpec>;
@@ -2343,10 +2462,10 @@ pub mod ieee802154_mac {
         pub type EdDoneR = crate::BitReader;
         #[doc = "Field `ED_DONE` writer - Project-assigned name."]
         pub type EdDoneW<'a, REG> = crate::BitWriter<'a, REG>;
-        #[doc = "Field `BIT_7_OPAQUE` reader - Opaque: meaning not established. Physically present event-enable bit without an assigned public vendor event."]
-        pub type Bit7OpaqueR = crate::BitReader;
-        #[doc = "Field `BIT_7_OPAQUE` writer - Opaque: meaning not established. Physically present event-enable bit without an assigned public vendor event."]
-        pub type Bit7OpaqueW<'a, REG> = crate::BitWriter<'a, REG>;
+        #[doc = "Field `EVENTS_7` reader - Project-assigned name. Partition of the open vendor events field, bits 7:7; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT."]
+        pub type Events7R = crate::BitReader;
+        #[doc = "Field `EVENTS_7` writer - Project-assigned name. Partition of the open vendor events field, bits 7:7; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT."]
+        pub type Events7W<'a, REG> = crate::BitWriter<'a, REG>;
         #[doc = "Field `TIMER0_OVERFLOW` reader - Project-assigned name."]
         pub type Timer0OverflowR = crate::BitReader;
         #[doc = "Field `TIMER0_OVERFLOW` writer - Project-assigned name."]
@@ -2403,10 +2522,10 @@ pub mod ieee802154_mac {
             pub fn ed_done(&self) -> EdDoneR {
                 EdDoneR::new(((self.bits >> 6) & 1) != 0)
             }
-            #[doc = "Bit 7 - Opaque: meaning not established. Physically present event-enable bit without an assigned public vendor event."]
+            #[doc = "Bit 7 - Project-assigned name. Partition of the open vendor events field, bits 7:7; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT."]
             #[inline(always)]
-            pub fn bit_7_opaque(&self) -> Bit7OpaqueR {
-                Bit7OpaqueR::new(((self.bits >> 7) & 1) != 0)
+            pub fn events_7(&self) -> Events7R {
+                Events7R::new(((self.bits >> 7) & 1) != 0)
             }
             #[doc = "Bit 8 - Project-assigned name."]
             #[inline(always)]
@@ -2470,10 +2589,10 @@ pub mod ieee802154_mac {
             pub fn ed_done(&mut self) -> EdDoneW<'_, EventEnableSpec> {
                 EdDoneW::new(self, 6)
             }
-            #[doc = "Bit 7 - Opaque: meaning not established. Physically present event-enable bit without an assigned public vendor event."]
+            #[doc = "Bit 7 - Project-assigned name. Partition of the open vendor events field, bits 7:7; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT."]
             #[inline(always)]
-            pub fn bit_7_opaque(&mut self) -> Bit7OpaqueW<'_, EventEnableSpec> {
-                Bit7OpaqueW::new(self, 7)
+            pub fn events_7(&mut self) -> Events7W<'_, EventEnableSpec> {
+                Events7W::new(self, 7)
             }
             #[doc = "Bit 8 - Project-assigned name."]
             #[inline(always)]
@@ -2501,7 +2620,7 @@ pub mod ieee802154_mac {
                 RxSfdDoneW::new(self, 12)
             }
         }
-        #[doc = "Project-assigned name. Individual event enables mutated by the public common LL. Bits seven and thirteen remain physically observable but have no assigned vendor event semantics.\n\nYou can [`read`](crate::Reg::read) this register and get [`event_enable::R`](R). You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`event_enable::W`](W). You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api)."]
+        #[doc = "Project-assigned name. Individual event enables mutated by the public common LL. All fourteen lanes belong to the open vendor events field; individual unnamed events remain descriptive partitions.\n\nYou can [`read`](crate::Reg::read) this register and get [`event_enable::R`](R). You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`event_enable::W`](W). You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api)."]
         pub struct EventEnableSpec;
         impl crate::RegisterSpec for EventEnableSpec {
             type Ux = u32;
@@ -2550,10 +2669,10 @@ pub mod ieee802154_mac {
         pub type EdDoneR = crate::BitReader;
         #[doc = "Field `ED_DONE` writer - Project-assigned name."]
         pub type EdDoneW<'a, REG> = crate::BitWriter1C<'a, REG>;
-        #[doc = "Field `BIT_7_OPAQUE` reader - Opaque: meaning not established. Physically present event-status bit without an assigned public vendor event."]
-        pub type Bit7OpaqueR = crate::BitReader;
-        #[doc = "Field `BIT_7_OPAQUE` writer - Opaque: meaning not established. Physically present event-status bit without an assigned public vendor event."]
-        pub type Bit7OpaqueW<'a, REG> = crate::BitWriter1C<'a, REG>;
+        #[doc = "Field `EVENTS_7` reader - Project-assigned name. Partition of the open vendor events field, bits 7:7; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT."]
+        pub type Events7R = crate::BitReader;
+        #[doc = "Field `EVENTS_7` writer - Project-assigned name. Partition of the open vendor events field, bits 7:7; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT."]
+        pub type Events7W<'a, REG> = crate::BitWriter1C<'a, REG>;
         #[doc = "Field `TIMER0_OVERFLOW` reader - Project-assigned name."]
         pub type Timer0OverflowR = crate::BitReader;
         #[doc = "Field `TIMER0_OVERFLOW` writer - Project-assigned name."]
@@ -2610,10 +2729,10 @@ pub mod ieee802154_mac {
             pub fn ed_done(&self) -> EdDoneR {
                 EdDoneR::new(((self.bits >> 6) & 1) != 0)
             }
-            #[doc = "Bit 7 - Opaque: meaning not established. Physically present event-status bit without an assigned public vendor event."]
+            #[doc = "Bit 7 - Project-assigned name. Partition of the open vendor events field, bits 7:7; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT."]
             #[inline(always)]
-            pub fn bit_7_opaque(&self) -> Bit7OpaqueR {
-                Bit7OpaqueR::new(((self.bits >> 7) & 1) != 0)
+            pub fn events_7(&self) -> Events7R {
+                Events7R::new(((self.bits >> 7) & 1) != 0)
             }
             #[doc = "Bit 8 - Project-assigned name."]
             #[inline(always)]
@@ -2677,10 +2796,10 @@ pub mod ieee802154_mac {
             pub fn ed_done(&mut self) -> EdDoneW<'_, EventStatusSpec> {
                 EdDoneW::new(self, 6)
             }
-            #[doc = "Bit 7 - Opaque: meaning not established. Physically present event-status bit without an assigned public vendor event."]
+            #[doc = "Bit 7 - Project-assigned name. Partition of the open vendor events field, bits 7:7; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT."]
             #[inline(always)]
-            pub fn bit_7_opaque(&mut self) -> Bit7OpaqueW<'_, EventStatusSpec> {
-                Bit7OpaqueW::new(self, 7)
+            pub fn events_7(&mut self) -> Events7W<'_, EventStatusSpec> {
+                Events7W::new(self, 7)
             }
             #[doc = "Bit 8 - Project-assigned name."]
             #[inline(always)]
@@ -2766,10 +2885,10 @@ pub mod ieee802154_mac {
         pub type RxRestartR = crate::BitReader;
         #[doc = "Field `RX_RESTART` writer - Project-assigned name. Enable bit of abort reason 9 (rx restart)."]
         pub type RxRestartW<'a, REG> = crate::BitWriter<'a, REG>;
-        #[doc = "Field `BITS_9_14_OPAQUE` reader - Opaque: meaning not established. Abort-reason enable bits without a public vendor reason."]
-        pub type Bits9_14OpaqueR = crate::FieldReader;
-        #[doc = "Field `BITS_9_14_OPAQUE` writer - Opaque: meaning not established. Abort-reason enable bits without a public vendor reason."]
-        pub type Bits9_14OpaqueW<'a, REG> = crate::FieldWriter<'a, REG, 6, u8, crate::Safe>;
+        #[doc = "Field `RX_ABORT_EN_9_14` reader - Project-assigned name. Partition of the open vendor rx_abort_en field, bits 14:9; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT."]
+        pub type RxAbortEn9_14R = crate::FieldReader;
+        #[doc = "Field `RX_ABORT_EN_9_14` writer - Project-assigned name. Partition of the open vendor rx_abort_en field, bits 14:9; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT."]
+        pub type RxAbortEn9_14W<'a, REG> = crate::FieldWriter<'a, REG, 6, u8, crate::Safe>;
         #[doc = "Field `TX_ACK_TIMEOUT` reader - Project-assigned name. Enable bit of abort reason 16 (tx ack timeout)."]
         pub type TxAckTimeoutR = crate::BitReader;
         #[doc = "Field `TX_ACK_TIMEOUT` writer - Project-assigned name. Enable bit of abort reason 16 (tx ack timeout)."]
@@ -2786,10 +2905,10 @@ pub mod ieee802154_mac {
         pub type EnhancedAckSecurityErrorR = crate::BitReader;
         #[doc = "Field `ENHANCED_ACK_SECURITY_ERROR` writer - Project-assigned name. Enable bit of abort reason 19 (enhanced ack security error)."]
         pub type EnhancedAckSecurityErrorW<'a, REG> = crate::BitWriter<'a, REG>;
-        #[doc = "Field `BITS_19_22_OPAQUE` reader - Opaque: meaning not established. Abort-reason enable bits without a public vendor reason."]
-        pub type Bits19_22OpaqueR = crate::FieldReader;
-        #[doc = "Field `BITS_19_22_OPAQUE` writer - Opaque: meaning not established. Abort-reason enable bits without a public vendor reason."]
-        pub type Bits19_22OpaqueW<'a, REG> = crate::FieldWriter<'a, REG, 4, u8, crate::Safe>;
+        #[doc = "Field `RX_ABORT_EN_19_22` reader - Project-assigned name. Partition of the open vendor rx_abort_en field, bits 22:19; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT."]
+        pub type RxAbortEn19_22R = crate::FieldReader;
+        #[doc = "Field `RX_ABORT_EN_19_22` writer - Project-assigned name. Partition of the open vendor rx_abort_en field, bits 22:19; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT."]
+        pub type RxAbortEn19_22W<'a, REG> = crate::FieldWriter<'a, REG, 4, u8, crate::Safe>;
         #[doc = "Field `ED_ABORT` reader - Project-assigned name. Enable bit of abort reason 24 (ed abort)."]
         pub type EdAbortR = crate::BitReader;
         #[doc = "Field `ED_ABORT` writer - Project-assigned name. Enable bit of abort reason 24 (ed abort)."]
@@ -2802,10 +2921,10 @@ pub mod ieee802154_mac {
         pub type EdCoexistenceRejectR = crate::BitReader;
         #[doc = "Field `ED_COEXISTENCE_REJECT` writer - Project-assigned name. Enable bit of abort reason 26 (ed coexistence reject)."]
         pub type EdCoexistenceRejectW<'a, REG> = crate::BitWriter<'a, REG>;
-        #[doc = "Field `BITS_26_30_OPAQUE` reader - Opaque: meaning not established. Abort-reason enable bits without a public vendor reason."]
-        pub type Bits26_30OpaqueR = crate::FieldReader;
-        #[doc = "Field `BITS_26_30_OPAQUE` writer - Opaque: meaning not established. Abort-reason enable bits without a public vendor reason."]
-        pub type Bits26_30OpaqueW<'a, REG> = crate::FieldWriter<'a, REG, 5, u8, crate::Safe>;
+        #[doc = "Field `RX_ABORT_EN_26_30` reader - Project-assigned name. Partition of the open vendor rx_abort_en field, bits 30:26; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT."]
+        pub type RxAbortEn26_30R = crate::FieldReader;
+        #[doc = "Field `RX_ABORT_EN_26_30` writer - Project-assigned name. Partition of the open vendor rx_abort_en field, bits 30:26; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT."]
+        pub type RxAbortEn26_30W<'a, REG> = crate::FieldWriter<'a, REG, 5, u8, crate::Safe>;
         impl R {
             #[doc = "Bit 0 - Project-assigned name. Enable bit of abort reason 1 (rx stop)."]
             #[inline(always)]
@@ -2852,10 +2971,10 @@ pub mod ieee802154_mac {
             pub fn rx_restart(&self) -> RxRestartR {
                 RxRestartR::new(((self.bits >> 8) & 1) != 0)
             }
-            #[doc = "Bits 9:14 - Opaque: meaning not established. Abort-reason enable bits without a public vendor reason."]
+            #[doc = "Bits 9:14 - Project-assigned name. Partition of the open vendor rx_abort_en field, bits 14:9; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT."]
             #[inline(always)]
-            pub fn bits_9_14_opaque(&self) -> Bits9_14OpaqueR {
-                Bits9_14OpaqueR::new(((self.bits >> 9) & 0x3f) as u8)
+            pub fn rx_abort_en_9_14(&self) -> RxAbortEn9_14R {
+                RxAbortEn9_14R::new(((self.bits >> 9) & 0x3f) as u8)
             }
             #[doc = "Bit 15 - Project-assigned name. Enable bit of abort reason 16 (tx ack timeout)."]
             #[inline(always)]
@@ -2877,10 +2996,10 @@ pub mod ieee802154_mac {
             pub fn enhanced_ack_security_error(&self) -> EnhancedAckSecurityErrorR {
                 EnhancedAckSecurityErrorR::new(((self.bits >> 18) & 1) != 0)
             }
-            #[doc = "Bits 19:22 - Opaque: meaning not established. Abort-reason enable bits without a public vendor reason."]
+            #[doc = "Bits 19:22 - Project-assigned name. Partition of the open vendor rx_abort_en field, bits 22:19; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT."]
             #[inline(always)]
-            pub fn bits_19_22_opaque(&self) -> Bits19_22OpaqueR {
-                Bits19_22OpaqueR::new(((self.bits >> 19) & 0x0f) as u8)
+            pub fn rx_abort_en_19_22(&self) -> RxAbortEn19_22R {
+                RxAbortEn19_22R::new(((self.bits >> 19) & 0x0f) as u8)
             }
             #[doc = "Bit 23 - Project-assigned name. Enable bit of abort reason 24 (ed abort)."]
             #[inline(always)]
@@ -2897,10 +3016,10 @@ pub mod ieee802154_mac {
             pub fn ed_coexistence_reject(&self) -> EdCoexistenceRejectR {
                 EdCoexistenceRejectR::new(((self.bits >> 25) & 1) != 0)
             }
-            #[doc = "Bits 26:30 - Opaque: meaning not established. Abort-reason enable bits without a public vendor reason."]
+            #[doc = "Bits 26:30 - Project-assigned name. Partition of the open vendor rx_abort_en field, bits 30:26; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT."]
             #[inline(always)]
-            pub fn bits_26_30_opaque(&self) -> Bits26_30OpaqueR {
-                Bits26_30OpaqueR::new(((self.bits >> 26) & 0x1f) as u8)
+            pub fn rx_abort_en_26_30(&self) -> RxAbortEn26_30R {
+                RxAbortEn26_30R::new(((self.bits >> 26) & 0x1f) as u8)
             }
         }
         impl W {
@@ -2949,10 +3068,10 @@ pub mod ieee802154_mac {
             pub fn rx_restart(&mut self) -> RxRestartW<'_, RxAbortEnableSpec> {
                 RxRestartW::new(self, 8)
             }
-            #[doc = "Bits 9:14 - Opaque: meaning not established. Abort-reason enable bits without a public vendor reason."]
+            #[doc = "Bits 9:14 - Project-assigned name. Partition of the open vendor rx_abort_en field, bits 14:9; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT."]
             #[inline(always)]
-            pub fn bits_9_14_opaque(&mut self) -> Bits9_14OpaqueW<'_, RxAbortEnableSpec> {
-                Bits9_14OpaqueW::new(self, 9)
+            pub fn rx_abort_en_9_14(&mut self) -> RxAbortEn9_14W<'_, RxAbortEnableSpec> {
+                RxAbortEn9_14W::new(self, 9)
             }
             #[doc = "Bit 15 - Project-assigned name. Enable bit of abort reason 16 (tx ack timeout)."]
             #[inline(always)]
@@ -2978,10 +3097,10 @@ pub mod ieee802154_mac {
             ) -> EnhancedAckSecurityErrorW<'_, RxAbortEnableSpec> {
                 EnhancedAckSecurityErrorW::new(self, 18)
             }
-            #[doc = "Bits 19:22 - Opaque: meaning not established. Abort-reason enable bits without a public vendor reason."]
+            #[doc = "Bits 19:22 - Project-assigned name. Partition of the open vendor rx_abort_en field, bits 22:19; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT."]
             #[inline(always)]
-            pub fn bits_19_22_opaque(&mut self) -> Bits19_22OpaqueW<'_, RxAbortEnableSpec> {
-                Bits19_22OpaqueW::new(self, 19)
+            pub fn rx_abort_en_19_22(&mut self) -> RxAbortEn19_22W<'_, RxAbortEnableSpec> {
+                RxAbortEn19_22W::new(self, 19)
             }
             #[doc = "Bit 23 - Project-assigned name. Enable bit of abort reason 24 (ed abort)."]
             #[inline(always)]
@@ -2998,10 +3117,10 @@ pub mod ieee802154_mac {
             pub fn ed_coexistence_reject(&mut self) -> EdCoexistenceRejectW<'_, RxAbortEnableSpec> {
                 EdCoexistenceRejectW::new(self, 25)
             }
-            #[doc = "Bits 26:30 - Opaque: meaning not established. Abort-reason enable bits without a public vendor reason."]
+            #[doc = "Bits 26:30 - Project-assigned name. Partition of the open vendor rx_abort_en field, bits 30:26; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT."]
             #[inline(always)]
-            pub fn bits_26_30_opaque(&mut self) -> Bits26_30OpaqueW<'_, RxAbortEnableSpec> {
-                Bits26_30OpaqueW::new(self, 26)
+            pub fn rx_abort_en_26_30(&mut self) -> RxAbortEn26_30W<'_, RxAbortEnableSpec> {
+                RxAbortEn26_30W::new(self, 26)
             }
         }
         #[doc = "Project-assigned name. Low thirty-one receive-abort enable bits mutated by public LL accessors. Only the finite abort-reason values named by the LL are semantically classified.\n\nYou can [`read`](crate::Reg::read) this register and get [`rx_abort_enable::R`](R). You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`rx_abort_enable::W`](W). You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api)."]
@@ -3029,11 +3148,20 @@ pub mod ieee802154_mac {
         pub type FramePendingR = crate::BitReader;
         #[doc = "Field `FRAME_PENDING` writer - Project-assigned name."]
         pub type FramePendingW<'a, REG> = crate::BitWriter<'a, REG>;
+        #[doc = "Field `PENDING_TIMEOUT` reader - Project-assigned name. Open vendor pending_cfg.pending_timeout field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred."]
+        pub type PendingTimeoutR = crate::FieldReader<u16>;
+        #[doc = "Field `PENDING_TIMEOUT` writer - Project-assigned name. Open vendor pending_cfg.pending_timeout field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred."]
+        pub type PendingTimeoutW<'a, REG> = crate::FieldWriter<'a, REG, 16, u16>;
         impl R {
             #[doc = "Bit 0 - Project-assigned name."]
             #[inline(always)]
             pub fn frame_pending(&self) -> FramePendingR {
                 FramePendingR::new((self.bits & 1) != 0)
+            }
+            #[doc = "Bits 16:31 - Project-assigned name. Open vendor pending_cfg.pending_timeout field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred."]
+            #[inline(always)]
+            pub fn pending_timeout(&self) -> PendingTimeoutR {
+                PendingTimeoutR::new(((self.bits >> 16) & 0xffff) as u16)
             }
         }
         impl W {
@@ -3041,6 +3169,11 @@ pub mod ieee802154_mac {
             #[inline(always)]
             pub fn frame_pending(&mut self) -> FramePendingW<'_, PendingConfigSpec> {
                 FramePendingW::new(self, 0)
+            }
+            #[doc = "Bits 16:31 - Project-assigned name. Open vendor pending_cfg.pending_timeout field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred."]
+            #[inline(always)]
+            pub fn pending_timeout(&mut self) -> PendingTimeoutW<'_, PendingConfigSpec> {
+                PendingTimeoutW::new(self, 16)
             }
         }
         #[doc = "Project-assigned name. Selected outgoing acknowledgment frame-pending bit. The untouched timeout field remains absent.\n\nYou can [`read`](crate::Reg::read) this register and get [`pending_config::R`](R). You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`pending_config::W`](W). You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api)."]
@@ -3072,6 +3205,10 @@ pub mod ieee802154_mac {
         pub type AckPtiR = crate::FieldReader;
         #[doc = "Field `ACK_PTI` writer - Project-assigned name."]
         pub type AckPtiW<'a, REG> = crate::FieldWriter<'a, REG, 4, u8, crate::Safe>;
+        #[doc = "Field `CLOSE_RF_SEL` reader - Project-assigned name. Open vendor pti.close_rf_sel field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred."]
+        pub type CloseRfSelR = crate::BitReader;
+        #[doc = "Field `CLOSE_RF_SEL` writer - Project-assigned name. Open vendor pti.close_rf_sel field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred."]
+        pub type CloseRfSelW<'a, REG> = crate::BitWriter<'a, REG>;
         impl R {
             #[doc = "Bits 0:3 - Project-assigned name."]
             #[inline(always)]
@@ -3082,6 +3219,11 @@ pub mod ieee802154_mac {
             #[inline(always)]
             pub fn ack_pti(&self) -> AckPtiR {
                 AckPtiR::new(((self.bits >> 4) & 0x0f) as u8)
+            }
+            #[doc = "Bit 8 - Project-assigned name. Open vendor pti.close_rf_sel field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred."]
+            #[inline(always)]
+            pub fn close_rf_sel(&self) -> CloseRfSelR {
+                CloseRfSelR::new(((self.bits >> 8) & 1) != 0)
             }
         }
         impl W {
@@ -3094,6 +3236,11 @@ pub mod ieee802154_mac {
             #[inline(always)]
             pub fn ack_pti(&mut self) -> AckPtiW<'_, CoexPtiSpec> {
                 AckPtiW::new(self, 4)
+            }
+            #[doc = "Bit 8 - Project-assigned name. Open vendor pti.close_rf_sel field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred."]
+            #[inline(always)]
+            pub fn close_rf_sel(&mut self) -> CloseRfSelW<'_, CoexPtiSpec> {
+                CloseRfSelW::new(self, 8)
             }
         }
         #[doc = "Selected coexistence priority fields. The public disable-coexistence helper writes value three to each through two preserving field updates. Other antenna and RF controls remain absent.\n\nYou can [`read`](crate::Reg::read) this register and get [`coex_pti::R`](R). You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`coex_pti::W`](W). You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api)."]
@@ -3153,10 +3300,10 @@ pub mod ieee802154_mac {
         pub type RxAckRestartR = crate::BitReader;
         #[doc = "Field `RX_ACK_RESTART` writer - Project-assigned name. Enable bit of abort reason 9 (rx ack restart)."]
         pub type RxAckRestartW<'a, REG> = crate::BitWriter<'a, REG>;
-        #[doc = "Field `BITS_9_14_OPAQUE` reader - Opaque: meaning not established. Abort-reason enable bits without a public vendor reason."]
-        pub type Bits9_14OpaqueR = crate::FieldReader;
-        #[doc = "Field `BITS_9_14_OPAQUE` writer - Opaque: meaning not established. Abort-reason enable bits without a public vendor reason."]
-        pub type Bits9_14OpaqueW<'a, REG> = crate::FieldWriter<'a, REG, 6, u8, crate::Safe>;
+        #[doc = "Field `TX_ABORT_EN_9_14` reader - Project-assigned name. Partition of the open vendor tx_abort_en field, bits 14:9; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT."]
+        pub type TxAbortEn9_14R = crate::FieldReader;
+        #[doc = "Field `TX_ABORT_EN_9_14` writer - Project-assigned name. Partition of the open vendor tx_abort_en field, bits 14:9; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT."]
+        pub type TxAbortEn9_14W<'a, REG> = crate::FieldWriter<'a, REG, 6, u8, crate::Safe>;
         #[doc = "Field `RX_ACK_TIMEOUT` reader - Project-assigned name. Enable bit of abort reason 16 (rx ack timeout)."]
         pub type RxAckTimeoutR = crate::BitReader;
         #[doc = "Field `RX_ACK_TIMEOUT` writer - Project-assigned name. Enable bit of abort reason 16 (rx ack timeout)."]
@@ -3173,10 +3320,10 @@ pub mod ieee802154_mac {
         pub type TxSecurityErrorR = crate::BitReader;
         #[doc = "Field `TX_SECURITY_ERROR` writer - Project-assigned name. Enable bit of abort reason 19 (tx security error)."]
         pub type TxSecurityErrorW<'a, REG> = crate::BitWriter<'a, REG>;
-        #[doc = "Field `BITS_19_22_OPAQUE` reader - Opaque: meaning not established. Abort-reason enable bits without a public vendor reason."]
-        pub type Bits19_22OpaqueR = crate::FieldReader;
-        #[doc = "Field `BITS_19_22_OPAQUE` writer - Opaque: meaning not established. Abort-reason enable bits without a public vendor reason."]
-        pub type Bits19_22OpaqueW<'a, REG> = crate::FieldWriter<'a, REG, 4, u8, crate::Safe>;
+        #[doc = "Field `TX_ABORT_EN_19_22` reader - Project-assigned name. Partition of the open vendor tx_abort_en field, bits 22:19; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT."]
+        pub type TxAbortEn19_22R = crate::FieldReader;
+        #[doc = "Field `TX_ABORT_EN_19_22` writer - Project-assigned name. Partition of the open vendor tx_abort_en field, bits 22:19; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT."]
+        pub type TxAbortEn19_22W<'a, REG> = crate::FieldWriter<'a, REG, 4, u8, crate::Safe>;
         #[doc = "Field `CCA_FAILED` reader - Project-assigned name. Enable bit of abort reason 24 (cca failed)."]
         pub type CcaFailedR = crate::BitReader;
         #[doc = "Field `CCA_FAILED` writer - Project-assigned name. Enable bit of abort reason 24 (cca failed)."]
@@ -3185,10 +3332,10 @@ pub mod ieee802154_mac {
         pub type CcaBusyR = crate::BitReader;
         #[doc = "Field `CCA_BUSY` writer - Project-assigned name. Enable bit of abort reason 25 (cca busy)."]
         pub type CcaBusyW<'a, REG> = crate::BitWriter<'a, REG>;
-        #[doc = "Field `BITS_25_30_OPAQUE` reader - Opaque: meaning not established. Abort-reason enable bits without a public vendor reason."]
-        pub type Bits25_30OpaqueR = crate::FieldReader;
-        #[doc = "Field `BITS_25_30_OPAQUE` writer - Opaque: meaning not established. Abort-reason enable bits without a public vendor reason."]
-        pub type Bits25_30OpaqueW<'a, REG> = crate::FieldWriter<'a, REG, 6, u8, crate::Safe>;
+        #[doc = "Field `TX_ABORT_EN_25_30` reader - Project-assigned name. Partition of the open vendor tx_abort_en field, bits 30:25; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT."]
+        pub type TxAbortEn25_30R = crate::FieldReader;
+        #[doc = "Field `TX_ABORT_EN_25_30` writer - Project-assigned name. Partition of the open vendor tx_abort_en field, bits 30:25; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT."]
+        pub type TxAbortEn25_30W<'a, REG> = crate::FieldWriter<'a, REG, 6, u8, crate::Safe>;
         impl R {
             #[doc = "Bit 0 - Project-assigned name. Enable bit of abort reason 1 (rx ack stop)."]
             #[inline(always)]
@@ -3235,10 +3382,10 @@ pub mod ieee802154_mac {
             pub fn rx_ack_restart(&self) -> RxAckRestartR {
                 RxAckRestartR::new(((self.bits >> 8) & 1) != 0)
             }
-            #[doc = "Bits 9:14 - Opaque: meaning not established. Abort-reason enable bits without a public vendor reason."]
+            #[doc = "Bits 9:14 - Project-assigned name. Partition of the open vendor tx_abort_en field, bits 14:9; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT."]
             #[inline(always)]
-            pub fn bits_9_14_opaque(&self) -> Bits9_14OpaqueR {
-                Bits9_14OpaqueR::new(((self.bits >> 9) & 0x3f) as u8)
+            pub fn tx_abort_en_9_14(&self) -> TxAbortEn9_14R {
+                TxAbortEn9_14R::new(((self.bits >> 9) & 0x3f) as u8)
             }
             #[doc = "Bit 15 - Project-assigned name. Enable bit of abort reason 16 (rx ack timeout)."]
             #[inline(always)]
@@ -3260,10 +3407,10 @@ pub mod ieee802154_mac {
             pub fn tx_security_error(&self) -> TxSecurityErrorR {
                 TxSecurityErrorR::new(((self.bits >> 18) & 1) != 0)
             }
-            #[doc = "Bits 19:22 - Opaque: meaning not established. Abort-reason enable bits without a public vendor reason."]
+            #[doc = "Bits 19:22 - Project-assigned name. Partition of the open vendor tx_abort_en field, bits 22:19; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT."]
             #[inline(always)]
-            pub fn bits_19_22_opaque(&self) -> Bits19_22OpaqueR {
-                Bits19_22OpaqueR::new(((self.bits >> 19) & 0x0f) as u8)
+            pub fn tx_abort_en_19_22(&self) -> TxAbortEn19_22R {
+                TxAbortEn19_22R::new(((self.bits >> 19) & 0x0f) as u8)
             }
             #[doc = "Bit 23 - Project-assigned name. Enable bit of abort reason 24 (cca failed)."]
             #[inline(always)]
@@ -3275,10 +3422,10 @@ pub mod ieee802154_mac {
             pub fn cca_busy(&self) -> CcaBusyR {
                 CcaBusyR::new(((self.bits >> 24) & 1) != 0)
             }
-            #[doc = "Bits 25:30 - Opaque: meaning not established. Abort-reason enable bits without a public vendor reason."]
+            #[doc = "Bits 25:30 - Project-assigned name. Partition of the open vendor tx_abort_en field, bits 30:25; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT."]
             #[inline(always)]
-            pub fn bits_25_30_opaque(&self) -> Bits25_30OpaqueR {
-                Bits25_30OpaqueR::new(((self.bits >> 25) & 0x3f) as u8)
+            pub fn tx_abort_en_25_30(&self) -> TxAbortEn25_30R {
+                TxAbortEn25_30R::new(((self.bits >> 25) & 0x3f) as u8)
             }
         }
         impl W {
@@ -3329,10 +3476,10 @@ pub mod ieee802154_mac {
             pub fn rx_ack_restart(&mut self) -> RxAckRestartW<'_, TxAbortEnableSpec> {
                 RxAckRestartW::new(self, 8)
             }
-            #[doc = "Bits 9:14 - Opaque: meaning not established. Abort-reason enable bits without a public vendor reason."]
+            #[doc = "Bits 9:14 - Project-assigned name. Partition of the open vendor tx_abort_en field, bits 14:9; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT."]
             #[inline(always)]
-            pub fn bits_9_14_opaque(&mut self) -> Bits9_14OpaqueW<'_, TxAbortEnableSpec> {
-                Bits9_14OpaqueW::new(self, 9)
+            pub fn tx_abort_en_9_14(&mut self) -> TxAbortEn9_14W<'_, TxAbortEnableSpec> {
+                TxAbortEn9_14W::new(self, 9)
             }
             #[doc = "Bit 15 - Project-assigned name. Enable bit of abort reason 16 (rx ack timeout)."]
             #[inline(always)]
@@ -3354,10 +3501,10 @@ pub mod ieee802154_mac {
             pub fn tx_security_error(&mut self) -> TxSecurityErrorW<'_, TxAbortEnableSpec> {
                 TxSecurityErrorW::new(self, 18)
             }
-            #[doc = "Bits 19:22 - Opaque: meaning not established. Abort-reason enable bits without a public vendor reason."]
+            #[doc = "Bits 19:22 - Project-assigned name. Partition of the open vendor tx_abort_en field, bits 22:19; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT."]
             #[inline(always)]
-            pub fn bits_19_22_opaque(&mut self) -> Bits19_22OpaqueW<'_, TxAbortEnableSpec> {
-                Bits19_22OpaqueW::new(self, 19)
+            pub fn tx_abort_en_19_22(&mut self) -> TxAbortEn19_22W<'_, TxAbortEnableSpec> {
+                TxAbortEn19_22W::new(self, 19)
             }
             #[doc = "Bit 23 - Project-assigned name. Enable bit of abort reason 24 (cca failed)."]
             #[inline(always)]
@@ -3369,10 +3516,10 @@ pub mod ieee802154_mac {
             pub fn cca_busy(&mut self) -> CcaBusyW<'_, TxAbortEnableSpec> {
                 CcaBusyW::new(self, 24)
             }
-            #[doc = "Bits 25:30 - Opaque: meaning not established. Abort-reason enable bits without a public vendor reason."]
+            #[doc = "Bits 25:30 - Project-assigned name. Partition of the open vendor tx_abort_en field, bits 30:25; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT."]
             #[inline(always)]
-            pub fn bits_25_30_opaque(&mut self) -> Bits25_30OpaqueW<'_, TxAbortEnableSpec> {
-                Bits25_30OpaqueW::new(self, 25)
+            pub fn tx_abort_en_25_30(&mut self) -> TxAbortEn25_30W<'_, TxAbortEnableSpec> {
+                TxAbortEn25_30W::new(self, 25)
             }
         }
         #[doc = "Project-assigned name. Low thirty-one transmit-abort enable bits mutated by public LL accessors. Only the finite abort-reason values named by the LL are semantically classified.\n\nYou can [`read`](crate::Reg::read) this register and get [`tx_abort_enable::R`](R). You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`tx_abort_enable::W`](W). You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api)."]
@@ -4792,6 +4939,45 @@ pub mod ieee802154_mac {
         }
         #[doc = "`write(|w| ..)` method takes [`diagnostic_counter_clear::W`](W) writer structure"]
         impl crate::Writable for DiagnosticCounterClearSpec {
+            type Safety = crate::Unsafe;
+        }
+    }
+    #[doc = "SFD_WAIT (rw) register accessor: Project-assigned name. Open vendor sfd_wait word. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset value is claimed.\n\nYou can [`read`](crate::Reg::read) this register and get [`sfd_wait::R`]. You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`sfd_wait::W`]. You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api).\n\nFor information about available fields see [`mod@sfd_wait`] module"]
+    #[doc(alias = "SFD_WAIT")]
+    pub type SfdWait = crate::Reg<sfd_wait::SfdWaitSpec>;
+    #[doc = "Project-assigned name. Open vendor sfd_wait word. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset value is claimed."]
+    pub mod sfd_wait {
+        #[doc = "Register `SFD_WAIT` reader"]
+        pub type R = crate::R<SfdWaitSpec>;
+        #[doc = "Register `SFD_WAIT` writer"]
+        pub type W = crate::W<SfdWaitSpec>;
+        #[doc = "Field `SFD_WAIT_SYMBOL_NUM` reader - Project-assigned name."]
+        pub type SfdWaitSymbolNumR = crate::FieldReader;
+        #[doc = "Field `SFD_WAIT_SYMBOL_NUM` writer - Project-assigned name."]
+        pub type SfdWaitSymbolNumW<'a, REG> = crate::FieldWriter<'a, REG, 4>;
+        impl R {
+            #[doc = "Bits 0:3 - Project-assigned name."]
+            #[inline(always)]
+            pub fn sfd_wait_symbol_num(&self) -> SfdWaitSymbolNumR {
+                SfdWaitSymbolNumR::new((self.bits & 0x0f) as u8)
+            }
+        }
+        impl W {
+            #[doc = "Bits 0:3 - Project-assigned name."]
+            #[inline(always)]
+            pub fn sfd_wait_symbol_num(&mut self) -> SfdWaitSymbolNumW<'_, SfdWaitSpec> {
+                SfdWaitSymbolNumW::new(self, 0)
+            }
+        }
+        #[doc = "Project-assigned name. Open vendor sfd_wait word. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset value is claimed.\n\nYou can [`read`](crate::Reg::read) this register and get [`sfd_wait::R`](R). You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`sfd_wait::W`](W). You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api)."]
+        pub struct SfdWaitSpec;
+        impl crate::RegisterSpec for SfdWaitSpec {
+            type Ux = u32;
+        }
+        #[doc = "`read()` method returns [`sfd_wait::R`](R) reader structure"]
+        impl crate::Readable for SfdWaitSpec {}
+        #[doc = "`write(|w| ..)` method takes [`sfd_wait::W`](W) writer structure"]
+        impl crate::Writable for SfdWaitSpec {
             type Safety = crate::Unsafe;
         }
     }
@@ -11532,6 +11718,109 @@ pub mod wifi_mac_tx_common {
         impl crate::Readable for CompleteStateSpec {}
     }
 }
+#[doc = "Four byte lanes independently replaced by hal_he_set_ersu_ack_rate; no bit-level rate encoding is assigned. SOURCE: C5_LIBPP_ROM_ERSU_ACK_RATE."]
+pub type WifiMacErsuAckRate = crate::Periph<wifi_mac_ersu_ack_rate::RegisterBlock, 0x600a_4404>;
+impl core::fmt::Debug for WifiMacErsuAckRate {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        f.debug_struct("WifiMacErsuAckRate").finish()
+    }
+}
+#[doc = "Four byte lanes independently replaced by hal_he_set_ersu_ack_rate; no bit-level rate encoding is assigned. SOURCE: C5_LIBPP_ROM_ERSU_ACK_RATE."]
+pub mod wifi_mac_ersu_ack_rate {
+    #[repr(C)]
+    #[doc = "Register block"]
+    pub struct RegisterBlock {
+        value: Value,
+    }
+    impl RegisterBlock {
+        #[doc = "0x00 - Project-assigned name. Four ordered fresh-read byte replacements at +0, +8, +16 and +24 bits. Each publishes 0x80 or 0xa0 while preserving the other three bytes."]
+        #[inline(always)]
+        pub const fn value(&self) -> &Value {
+            &self.value
+        }
+    }
+    #[doc = "VALUE (rw) register accessor: Project-assigned name. Four ordered fresh-read byte replacements at +0, +8, +16 and +24 bits. Each publishes 0x80 or 0xa0 while preserving the other three bytes.\n\nYou can [`read`](crate::Reg::read) this register and get [`value::R`]. You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`value::W`]. You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api).\n\nFor information about available fields see [`mod@value`] module"]
+    #[doc(alias = "VALUE")]
+    pub type Value = crate::Reg<value::ValueSpec>;
+    #[doc = "Project-assigned name. Four ordered fresh-read byte replacements at +0, +8, +16 and +24 bits. Each publishes 0x80 or 0xa0 while preserving the other three bytes."]
+    pub mod value {
+        #[doc = "Register `VALUE` reader"]
+        pub type R = crate::R<ValueSpec>;
+        #[doc = "Register `VALUE` writer"]
+        pub type W = crate::W<ValueSpec>;
+        #[doc = "Field `BITS_0_7_OPAQUE` reader - Opaque: meaning not established. Byte lane 0 explicitly replaced by complete hal_he_set_ersu_ack_rate; inner encoding unknown. SOURCE: C5_LIBPP_ROM_ERSU_ACK_RATE."]
+        pub type Bits0_7OpaqueR = crate::FieldReader;
+        #[doc = "Field `BITS_0_7_OPAQUE` writer - Opaque: meaning not established. Byte lane 0 explicitly replaced by complete hal_he_set_ersu_ack_rate; inner encoding unknown. SOURCE: C5_LIBPP_ROM_ERSU_ACK_RATE."]
+        pub type Bits0_7OpaqueW<'a, REG> = crate::FieldWriter<'a, REG, 8>;
+        #[doc = "Field `BITS_8_15_OPAQUE` reader - Opaque: meaning not established. Byte lane 1 explicitly replaced by complete hal_he_set_ersu_ack_rate; inner encoding unknown. SOURCE: C5_LIBPP_ROM_ERSU_ACK_RATE."]
+        pub type Bits8_15OpaqueR = crate::FieldReader;
+        #[doc = "Field `BITS_8_15_OPAQUE` writer - Opaque: meaning not established. Byte lane 1 explicitly replaced by complete hal_he_set_ersu_ack_rate; inner encoding unknown. SOURCE: C5_LIBPP_ROM_ERSU_ACK_RATE."]
+        pub type Bits8_15OpaqueW<'a, REG> = crate::FieldWriter<'a, REG, 8>;
+        #[doc = "Field `BITS_16_23_OPAQUE` reader - Opaque: meaning not established. Byte lane 2 explicitly replaced by complete hal_he_set_ersu_ack_rate; inner encoding unknown. SOURCE: C5_LIBPP_ROM_ERSU_ACK_RATE."]
+        pub type Bits16_23OpaqueR = crate::FieldReader;
+        #[doc = "Field `BITS_16_23_OPAQUE` writer - Opaque: meaning not established. Byte lane 2 explicitly replaced by complete hal_he_set_ersu_ack_rate; inner encoding unknown. SOURCE: C5_LIBPP_ROM_ERSU_ACK_RATE."]
+        pub type Bits16_23OpaqueW<'a, REG> = crate::FieldWriter<'a, REG, 8>;
+        #[doc = "Field `BITS_24_31_OPAQUE` reader - Opaque: meaning not established. Byte lane 3 explicitly replaced by complete hal_he_set_ersu_ack_rate; inner encoding unknown. SOURCE: C5_LIBPP_ROM_ERSU_ACK_RATE."]
+        pub type Bits24_31OpaqueR = crate::FieldReader;
+        #[doc = "Field `BITS_24_31_OPAQUE` writer - Opaque: meaning not established. Byte lane 3 explicitly replaced by complete hal_he_set_ersu_ack_rate; inner encoding unknown. SOURCE: C5_LIBPP_ROM_ERSU_ACK_RATE."]
+        pub type Bits24_31OpaqueW<'a, REG> = crate::FieldWriter<'a, REG, 8>;
+        impl R {
+            #[doc = "Bits 0:7 - Opaque: meaning not established. Byte lane 0 explicitly replaced by complete hal_he_set_ersu_ack_rate; inner encoding unknown. SOURCE: C5_LIBPP_ROM_ERSU_ACK_RATE."]
+            #[inline(always)]
+            pub fn bits_0_7_opaque(&self) -> Bits0_7OpaqueR {
+                Bits0_7OpaqueR::new((self.bits & 0xff) as u8)
+            }
+            #[doc = "Bits 8:15 - Opaque: meaning not established. Byte lane 1 explicitly replaced by complete hal_he_set_ersu_ack_rate; inner encoding unknown. SOURCE: C5_LIBPP_ROM_ERSU_ACK_RATE."]
+            #[inline(always)]
+            pub fn bits_8_15_opaque(&self) -> Bits8_15OpaqueR {
+                Bits8_15OpaqueR::new(((self.bits >> 8) & 0xff) as u8)
+            }
+            #[doc = "Bits 16:23 - Opaque: meaning not established. Byte lane 2 explicitly replaced by complete hal_he_set_ersu_ack_rate; inner encoding unknown. SOURCE: C5_LIBPP_ROM_ERSU_ACK_RATE."]
+            #[inline(always)]
+            pub fn bits_16_23_opaque(&self) -> Bits16_23OpaqueR {
+                Bits16_23OpaqueR::new(((self.bits >> 16) & 0xff) as u8)
+            }
+            #[doc = "Bits 24:31 - Opaque: meaning not established. Byte lane 3 explicitly replaced by complete hal_he_set_ersu_ack_rate; inner encoding unknown. SOURCE: C5_LIBPP_ROM_ERSU_ACK_RATE."]
+            #[inline(always)]
+            pub fn bits_24_31_opaque(&self) -> Bits24_31OpaqueR {
+                Bits24_31OpaqueR::new(((self.bits >> 24) & 0xff) as u8)
+            }
+        }
+        impl W {
+            #[doc = "Bits 0:7 - Opaque: meaning not established. Byte lane 0 explicitly replaced by complete hal_he_set_ersu_ack_rate; inner encoding unknown. SOURCE: C5_LIBPP_ROM_ERSU_ACK_RATE."]
+            #[inline(always)]
+            pub fn bits_0_7_opaque(&mut self) -> Bits0_7OpaqueW<'_, ValueSpec> {
+                Bits0_7OpaqueW::new(self, 0)
+            }
+            #[doc = "Bits 8:15 - Opaque: meaning not established. Byte lane 1 explicitly replaced by complete hal_he_set_ersu_ack_rate; inner encoding unknown. SOURCE: C5_LIBPP_ROM_ERSU_ACK_RATE."]
+            #[inline(always)]
+            pub fn bits_8_15_opaque(&mut self) -> Bits8_15OpaqueW<'_, ValueSpec> {
+                Bits8_15OpaqueW::new(self, 8)
+            }
+            #[doc = "Bits 16:23 - Opaque: meaning not established. Byte lane 2 explicitly replaced by complete hal_he_set_ersu_ack_rate; inner encoding unknown. SOURCE: C5_LIBPP_ROM_ERSU_ACK_RATE."]
+            #[inline(always)]
+            pub fn bits_16_23_opaque(&mut self) -> Bits16_23OpaqueW<'_, ValueSpec> {
+                Bits16_23OpaqueW::new(self, 16)
+            }
+            #[doc = "Bits 24:31 - Opaque: meaning not established. Byte lane 3 explicitly replaced by complete hal_he_set_ersu_ack_rate; inner encoding unknown. SOURCE: C5_LIBPP_ROM_ERSU_ACK_RATE."]
+            #[inline(always)]
+            pub fn bits_24_31_opaque(&mut self) -> Bits24_31OpaqueW<'_, ValueSpec> {
+                Bits24_31OpaqueW::new(self, 24)
+            }
+        }
+        #[doc = "Project-assigned name. Four ordered fresh-read byte replacements at +0, +8, +16 and +24 bits. Each publishes 0x80 or 0xa0 while preserving the other three bytes.\n\nYou can [`read`](crate::Reg::read) this register and get [`value::R`](R). You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`value::W`](W). You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api)."]
+        pub struct ValueSpec;
+        impl crate::RegisterSpec for ValueSpec {
+            type Ux = u32;
+        }
+        #[doc = "`read()` method returns [`value::R`](R) reader structure"]
+        impl crate::Readable for ValueSpec {}
+        #[doc = "`write(|w| ..)` method takes [`value::W`](W) writer structure"]
+        impl crate::Writable for ValueSpec {
+            type Safety = crate::Unsafe;
+        }
+    }
+}
 #[doc = "Four interface-address pairs consumed by MAC receive filtering."]
 pub type WifiMacInterfaceAddress =
     crate::Periph<wifi_mac_interface_address::RegisterBlock, 0x600a_405c>;
@@ -11585,6 +11874,8 @@ pub struct Peripherals {
     pub wifi_mac_sta_tsf_load: WifiMacStaTsfLoad,
     #[doc = "WIFI_MAC_TX_COMMON"]
     pub wifi_mac_tx_common: WifiMacTxCommon,
+    #[doc = "WIFI_MAC_ERSU_ACK_RATE"]
+    pub wifi_mac_ersu_ack_rate: WifiMacErsuAckRate,
     #[doc = "WIFI_MAC_INTERFACE_ADDRESS"]
     pub wifi_mac_interface_address: WifiMacInterfaceAddress,
 }
@@ -11628,6 +11919,7 @@ impl Peripherals {
             wifi_mac_sta_beacon_filter: unsafe { WifiMacStaBeaconFilter::steal() },
             wifi_mac_sta_tsf_load: unsafe { WifiMacStaTsfLoad::steal() },
             wifi_mac_tx_common: unsafe { WifiMacTxCommon::steal() },
+            wifi_mac_ersu_ack_rate: unsafe { WifiMacErsuAckRate::steal() },
             wifi_mac_interface_address: unsafe { WifiMacInterfaceAddress::steal() },
         }
     }
@@ -11675,6 +11967,7 @@ pub mod peripheral_ownership {
         pub wifi_mac_sta_beacon_filter: crate::WifiMacStaBeaconFilter,
         pub wifi_mac_sta_tsf_load: crate::WifiMacStaTsfLoad,
         pub wifi_mac_tx_common: crate::WifiMacTxCommon,
+        pub wifi_mac_ersu_ack_rate: crate::WifiMacErsuAckRate,
     }
 
     /// Wi-Fi interrupt banks transferred from cold setup to the hard interrupt handlers.
@@ -11724,6 +12017,7 @@ pub mod peripheral_ownership {
             wifi_mac_sta_beacon_filter,
             wifi_mac_sta_tsf_load,
             wifi_mac_tx_common,
+            wifi_mac_ersu_ack_rate,
             wifi_mac_interface_address,
         } = peripherals;
         PeripheralPartitions {
@@ -11752,6 +12046,7 @@ pub mod peripheral_ownership {
                 wifi_mac_sta_beacon_filter,
                 wifi_mac_sta_tsf_load,
                 wifi_mac_tx_common,
+                wifi_mac_ersu_ack_rate,
             },
             wifi_interrupts: WifiInterruptPeripherals {
                 wifi_mac_interrupt,
@@ -12248,9 +12543,9 @@ pub mod w1c_register_snapshot {
         pub const fn ed_done(&self) -> bool {
             self.0 & 0x00000040 != 0
         }
-        /// Sampled value of SVD field `BIT_7_OPAQUE`.
+        /// Sampled value of SVD field `EVENTS_7`.
         #[inline]
-        pub const fn bit_7_opaque(&self) -> bool {
+        pub const fn events_7(&self) -> bool {
             self.0 & 0x00000080 != 0
         }
         /// Sampled value of SVD field `TIMER0_OVERFLOW`.
@@ -12855,7 +13150,7 @@ pub mod field_or_modify {
         });
     }
 
-    /// OR one reviewed logical image in IEEE802154_MAC.RX_ABORT_ENABLE fields `[RX_STOP, SFD_TIMEOUT, CRC_ERROR, INVALID_LENGTH, FILTER_FAIL, NO_RSS, COEXISTENCE_BREAK, UNEXPECTED_ACK, RX_RESTART, BITS_9_14_OPAQUE, TX_ACK_TIMEOUT, TX_ACK_STOP, TX_ACK_COEXISTENCE_BREAK, ENHANCED_ACK_SECURITY_ERROR, BITS_19_22_OPAQUE, ED_ABORT, ED_STOP, ED_COEXISTENCE_REJECT, BITS_26_30_OPAQUE]` while preserving the fresh register observation.
+    /// OR one reviewed logical image in IEEE802154_MAC.RX_ABORT_ENABLE fields `[RX_STOP, SFD_TIMEOUT, CRC_ERROR, INVALID_LENGTH, FILTER_FAIL, NO_RSS, COEXISTENCE_BREAK, UNEXPECTED_ACK, RX_RESTART, RX_ABORT_EN_9_14, TX_ACK_TIMEOUT, TX_ACK_STOP, TX_ACK_COEXISTENCE_BREAK, ENHANCED_ACK_SECURITY_ERROR, RX_ABORT_EN_19_22, ED_ABORT, ED_STOP, ED_COEXISTENCE_REJECT, RX_ABORT_EN_26_30]` while preserving the fresh register observation.
     #[inline]
     pub fn enable_ieee802154_rx_abort_all(registers: &crate::Ieee802154Mac) {
         registers.rx_abort_enable().modify(|reader, writer| {
@@ -12882,8 +13177,8 @@ pub mod field_or_modify {
                     .bit(reader.unexpected_ack().bit() || ((input >> 7) & 0x00000001) != 0)
                     .rx_restart()
                     .bit(reader.rx_restart().bit() || ((input >> 8) & 0x00000001) != 0)
-                    .bits_9_14_opaque()
-                    .bits(reader.bits_9_14_opaque().bits() | ((input >> 9) & 0x0000003f) as u8)
+                    .rx_abort_en_9_14()
+                    .bits(reader.rx_abort_en_9_14().bits() | ((input >> 9) & 0x0000003f) as u8)
                     .tx_ack_timeout()
                     .bit(reader.tx_ack_timeout().bit() || ((input >> 15) & 0x00000001) != 0)
                     .tx_ack_stop()
@@ -12898,16 +13193,16 @@ pub mod field_or_modify {
                         reader.enhanced_ack_security_error().bit()
                             || ((input >> 18) & 0x00000001) != 0,
                     )
-                    .bits_19_22_opaque()
-                    .bits(reader.bits_19_22_opaque().bits() | ((input >> 19) & 0x0000000f) as u8)
+                    .rx_abort_en_19_22()
+                    .bits(reader.rx_abort_en_19_22().bits() | ((input >> 19) & 0x0000000f) as u8)
                     .ed_abort()
                     .bit(reader.ed_abort().bit() || ((input >> 23) & 0x00000001) != 0)
                     .ed_stop()
                     .bit(reader.ed_stop().bit() || ((input >> 24) & 0x00000001) != 0)
                     .ed_coexistence_reject()
                     .bit(reader.ed_coexistence_reject().bit() || ((input >> 25) & 0x00000001) != 0)
-                    .bits_26_30_opaque()
-                    .bits(reader.bits_26_30_opaque().bits() | ((input >> 26) & 0x0000001f) as u8)
+                    .rx_abort_en_26_30()
+                    .bits(reader.rx_abort_en_26_30().bits() | ((input >> 26) & 0x0000001f) as u8)
             }
         });
     }
@@ -12933,7 +13228,7 @@ pub mod field_or_modify {
         });
     }
 
-    /// OR one reviewed logical image in IEEE802154_MAC.TX_ABORT_ENABLE fields `[RX_ACK_STOP, RX_ACK_SFD_TIMEOUT, RX_ACK_CRC_ERROR, RX_ACK_INVALID_LENGTH, RX_ACK_FILTER_FAIL, RX_ACK_NO_RSS, RX_ACK_COEXISTENCE_BREAK, RX_ACK_TYPE_NOT_ACK, RX_ACK_RESTART, BITS_9_14_OPAQUE, RX_ACK_TIMEOUT, TX_STOP, TX_COEXISTENCE_BREAK, TX_SECURITY_ERROR, BITS_19_22_OPAQUE, CCA_FAILED, CCA_BUSY, BITS_25_30_OPAQUE]` while preserving the fresh register observation.
+    /// OR one reviewed logical image in IEEE802154_MAC.TX_ABORT_ENABLE fields `[RX_ACK_STOP, RX_ACK_SFD_TIMEOUT, RX_ACK_CRC_ERROR, RX_ACK_INVALID_LENGTH, RX_ACK_FILTER_FAIL, RX_ACK_NO_RSS, RX_ACK_COEXISTENCE_BREAK, RX_ACK_TYPE_NOT_ACK, RX_ACK_RESTART, TX_ABORT_EN_9_14, RX_ACK_TIMEOUT, TX_STOP, TX_COEXISTENCE_BREAK, TX_SECURITY_ERROR, TX_ABORT_EN_19_22, CCA_FAILED, CCA_BUSY, TX_ABORT_EN_25_30]` while preserving the fresh register observation.
     #[inline]
     pub fn enable_ieee802154_tx_abort_all(registers: &crate::Ieee802154Mac) {
         registers.tx_abort_enable().modify(|reader, writer| {
@@ -12962,8 +13257,8 @@ pub mod field_or_modify {
                     .bit(reader.rx_ack_type_not_ack().bit() || ((input >> 7) & 0x00000001) != 0)
                     .rx_ack_restart()
                     .bit(reader.rx_ack_restart().bit() || ((input >> 8) & 0x00000001) != 0)
-                    .bits_9_14_opaque()
-                    .bits(reader.bits_9_14_opaque().bits() | ((input >> 9) & 0x0000003f) as u8)
+                    .tx_abort_en_9_14()
+                    .bits(reader.tx_abort_en_9_14().bits() | ((input >> 9) & 0x0000003f) as u8)
                     .rx_ack_timeout()
                     .bit(reader.rx_ack_timeout().bit() || ((input >> 15) & 0x00000001) != 0)
                     .tx_stop()
@@ -12972,14 +13267,14 @@ pub mod field_or_modify {
                     .bit(reader.tx_coexistence_break().bit() || ((input >> 17) & 0x00000001) != 0)
                     .tx_security_error()
                     .bit(reader.tx_security_error().bit() || ((input >> 18) & 0x00000001) != 0)
-                    .bits_19_22_opaque()
-                    .bits(reader.bits_19_22_opaque().bits() | ((input >> 19) & 0x0000000f) as u8)
+                    .tx_abort_en_19_22()
+                    .bits(reader.tx_abort_en_19_22().bits() | ((input >> 19) & 0x0000000f) as u8)
                     .cca_failed()
                     .bit(reader.cca_failed().bit() || ((input >> 23) & 0x00000001) != 0)
                     .cca_busy()
                     .bit(reader.cca_busy().bit() || ((input >> 24) & 0x00000001) != 0)
-                    .bits_25_30_opaque()
-                    .bits(reader.bits_25_30_opaque().bits() | ((input >> 25) & 0x0000003f) as u8)
+                    .tx_abort_en_25_30()
+                    .bits(reader.tx_abort_en_25_30().bits() | ((input >> 25) & 0x0000003f) as u8)
             }
         });
     }
@@ -13003,7 +13298,7 @@ pub mod field_clear_modify {
         });
     }
 
-    /// Clear one reviewed logical image in IEEE802154_MAC.RX_ABORT_ENABLE fields `[RX_STOP, SFD_TIMEOUT, CRC_ERROR, INVALID_LENGTH, FILTER_FAIL, NO_RSS, COEXISTENCE_BREAK, UNEXPECTED_ACK, RX_RESTART, BITS_9_14_OPAQUE, TX_ACK_TIMEOUT, TX_ACK_STOP, TX_ACK_COEXISTENCE_BREAK, ENHANCED_ACK_SECURITY_ERROR, BITS_19_22_OPAQUE, ED_ABORT, ED_STOP, ED_COEXISTENCE_REJECT, BITS_26_30_OPAQUE]` while preserving the fresh register observation.
+    /// Clear one reviewed logical image in IEEE802154_MAC.RX_ABORT_ENABLE fields `[RX_STOP, SFD_TIMEOUT, CRC_ERROR, INVALID_LENGTH, FILTER_FAIL, NO_RSS, COEXISTENCE_BREAK, UNEXPECTED_ACK, RX_RESTART, RX_ABORT_EN_9_14, TX_ACK_TIMEOUT, TX_ACK_STOP, TX_ACK_COEXISTENCE_BREAK, ENHANCED_ACK_SECURITY_ERROR, RX_ABORT_EN_19_22, ED_ABORT, ED_STOP, ED_COEXISTENCE_REJECT, RX_ABORT_EN_26_30]` while preserving the fresh register observation.
     #[inline]
     pub fn disable_ieee802154_rx_abort_all(registers: &crate::Ieee802154Mac) {
         registers.rx_abort_enable().modify(|reader, writer| {
@@ -13030,8 +13325,8 @@ pub mod field_clear_modify {
                     .bit(reader.unexpected_ack().bit() && ((input >> 7) & 0x00000001) == 0)
                     .rx_restart()
                     .bit(reader.rx_restart().bit() && ((input >> 8) & 0x00000001) == 0)
-                    .bits_9_14_opaque()
-                    .bits(reader.bits_9_14_opaque().bits() & !((input >> 9) & 0x0000003f) as u8)
+                    .rx_abort_en_9_14()
+                    .bits(reader.rx_abort_en_9_14().bits() & !((input >> 9) & 0x0000003f) as u8)
                     .tx_ack_timeout()
                     .bit(reader.tx_ack_timeout().bit() && ((input >> 15) & 0x00000001) == 0)
                     .tx_ack_stop()
@@ -13046,16 +13341,16 @@ pub mod field_clear_modify {
                         reader.enhanced_ack_security_error().bit()
                             && ((input >> 18) & 0x00000001) == 0,
                     )
-                    .bits_19_22_opaque()
-                    .bits(reader.bits_19_22_opaque().bits() & !((input >> 19) & 0x0000000f) as u8)
+                    .rx_abort_en_19_22()
+                    .bits(reader.rx_abort_en_19_22().bits() & !((input >> 19) & 0x0000000f) as u8)
                     .ed_abort()
                     .bit(reader.ed_abort().bit() && ((input >> 23) & 0x00000001) == 0)
                     .ed_stop()
                     .bit(reader.ed_stop().bit() && ((input >> 24) & 0x00000001) == 0)
                     .ed_coexistence_reject()
                     .bit(reader.ed_coexistence_reject().bit() && ((input >> 25) & 0x00000001) == 0)
-                    .bits_26_30_opaque()
-                    .bits(reader.bits_26_30_opaque().bits() & !((input >> 26) & 0x0000001f) as u8)
+                    .rx_abort_en_26_30()
+                    .bits(reader.rx_abort_en_26_30().bits() & !((input >> 26) & 0x0000001f) as u8)
             }
         });
     }
@@ -13081,7 +13376,7 @@ pub mod field_clear_modify {
         });
     }
 
-    /// Clear one reviewed logical image in IEEE802154_MAC.TX_ABORT_ENABLE fields `[RX_ACK_STOP, RX_ACK_SFD_TIMEOUT, RX_ACK_CRC_ERROR, RX_ACK_INVALID_LENGTH, RX_ACK_FILTER_FAIL, RX_ACK_NO_RSS, RX_ACK_COEXISTENCE_BREAK, RX_ACK_TYPE_NOT_ACK, RX_ACK_RESTART, BITS_9_14_OPAQUE, RX_ACK_TIMEOUT, TX_STOP, TX_COEXISTENCE_BREAK, TX_SECURITY_ERROR, BITS_19_22_OPAQUE, CCA_FAILED, CCA_BUSY, BITS_25_30_OPAQUE]` while preserving the fresh register observation.
+    /// Clear one reviewed logical image in IEEE802154_MAC.TX_ABORT_ENABLE fields `[RX_ACK_STOP, RX_ACK_SFD_TIMEOUT, RX_ACK_CRC_ERROR, RX_ACK_INVALID_LENGTH, RX_ACK_FILTER_FAIL, RX_ACK_NO_RSS, RX_ACK_COEXISTENCE_BREAK, RX_ACK_TYPE_NOT_ACK, RX_ACK_RESTART, TX_ABORT_EN_9_14, RX_ACK_TIMEOUT, TX_STOP, TX_COEXISTENCE_BREAK, TX_SECURITY_ERROR, TX_ABORT_EN_19_22, CCA_FAILED, CCA_BUSY, TX_ABORT_EN_25_30]` while preserving the fresh register observation.
     #[inline]
     pub fn disable_ieee802154_tx_abort_all(registers: &crate::Ieee802154Mac) {
         registers.tx_abort_enable().modify(|reader, writer| {
@@ -13110,8 +13405,8 @@ pub mod field_clear_modify {
                     .bit(reader.rx_ack_type_not_ack().bit() && ((input >> 7) & 0x00000001) == 0)
                     .rx_ack_restart()
                     .bit(reader.rx_ack_restart().bit() && ((input >> 8) & 0x00000001) == 0)
-                    .bits_9_14_opaque()
-                    .bits(reader.bits_9_14_opaque().bits() & !((input >> 9) & 0x0000003f) as u8)
+                    .tx_abort_en_9_14()
+                    .bits(reader.tx_abort_en_9_14().bits() & !((input >> 9) & 0x0000003f) as u8)
                     .rx_ack_timeout()
                     .bit(reader.rx_ack_timeout().bit() && ((input >> 15) & 0x00000001) == 0)
                     .tx_stop()
@@ -13120,14 +13415,14 @@ pub mod field_clear_modify {
                     .bit(reader.tx_coexistence_break().bit() && ((input >> 17) & 0x00000001) == 0)
                     .tx_security_error()
                     .bit(reader.tx_security_error().bit() && ((input >> 18) & 0x00000001) == 0)
-                    .bits_19_22_opaque()
-                    .bits(reader.bits_19_22_opaque().bits() & !((input >> 19) & 0x0000000f) as u8)
+                    .tx_abort_en_19_22()
+                    .bits(reader.tx_abort_en_19_22().bits() & !((input >> 19) & 0x0000000f) as u8)
                     .cca_failed()
                     .bit(reader.cca_failed().bit() && ((input >> 23) & 0x00000001) == 0)
                     .cca_busy()
                     .bit(reader.cca_busy().bit() && ((input >> 24) & 0x00000001) == 0)
-                    .bits_25_30_opaque()
-                    .bits(reader.bits_25_30_opaque().bits() & !((input >> 25) & 0x0000003f) as u8)
+                    .tx_abort_en_25_30()
+                    .bits(reader.tx_abort_en_25_30().bits() & !((input >> 25) & 0x0000003f) as u8)
             }
         });
     }
@@ -13666,7 +13961,7 @@ pub mod field_replace_modify {
         });
     }
 
-    /// Replace IEEE802154_MAC.RX_ABORT_ENABLE fields `[RX_STOP, SFD_TIMEOUT, CRC_ERROR, INVALID_LENGTH, FILTER_FAIL, NO_RSS, COEXISTENCE_BREAK, UNEXPECTED_ACK, RX_RESTART, BITS_9_14_OPAQUE, TX_ACK_TIMEOUT, TX_ACK_STOP, TX_ACK_COEXISTENCE_BREAK, ENHANCED_ACK_SECURITY_ERROR, BITS_19_22_OPAQUE, ED_ABORT, ED_STOP, ED_COEXISTENCE_REJECT, BITS_26_30_OPAQUE]` from one reviewed logical image while preserving every other bit.
+    /// Replace IEEE802154_MAC.RX_ABORT_ENABLE fields `[RX_STOP, SFD_TIMEOUT, CRC_ERROR, INVALID_LENGTH, FILTER_FAIL, NO_RSS, COEXISTENCE_BREAK, UNEXPECTED_ACK, RX_RESTART, RX_ABORT_EN_9_14, TX_ACK_TIMEOUT, TX_ACK_STOP, TX_ACK_COEXISTENCE_BREAK, ENHANCED_ACK_SECURITY_ERROR, RX_ABORT_EN_19_22, ED_ABORT, ED_STOP, ED_COEXISTENCE_REJECT, RX_ABORT_EN_26_30]` from one reviewed logical image while preserving every other bit.
     #[inline]
     pub fn replace_ieee802154_rx_abort_baseline(registers: &crate::Ieee802154Mac) {
         registers.rx_abort_enable().modify(|_, writer| {
@@ -13693,7 +13988,7 @@ pub mod field_replace_modify {
                     .bit(((input >> 7) & 0x00000001) != 0)
                     .rx_restart()
                     .bit(((input >> 8) & 0x00000001) != 0)
-                    .bits_9_14_opaque()
+                    .rx_abort_en_9_14()
                     .bits(((input >> 9) & 0x0000003f) as u8)
                     .tx_ack_timeout()
                     .bit(((input >> 15) & 0x00000001) != 0)
@@ -13703,7 +13998,7 @@ pub mod field_replace_modify {
                     .bit(((input >> 17) & 0x00000001) != 0)
                     .enhanced_ack_security_error()
                     .bit(((input >> 18) & 0x00000001) != 0)
-                    .bits_19_22_opaque()
+                    .rx_abort_en_19_22()
                     .bits(((input >> 19) & 0x0000000f) as u8)
                     .ed_abort()
                     .bit(((input >> 23) & 0x00000001) != 0)
@@ -13711,13 +14006,13 @@ pub mod field_replace_modify {
                     .bit(((input >> 24) & 0x00000001) != 0)
                     .ed_coexistence_reject()
                     .bit(((input >> 25) & 0x00000001) != 0)
-                    .bits_26_30_opaque()
+                    .rx_abort_en_26_30()
                     .bits(((input >> 26) & 0x0000001f) as u8)
             }
         });
     }
 
-    /// Replace IEEE802154_MAC.RX_ABORT_ENABLE fields `[RX_STOP, SFD_TIMEOUT, CRC_ERROR, INVALID_LENGTH, FILTER_FAIL, NO_RSS, COEXISTENCE_BREAK, UNEXPECTED_ACK, RX_RESTART, BITS_9_14_OPAQUE, TX_ACK_TIMEOUT, TX_ACK_STOP, TX_ACK_COEXISTENCE_BREAK, ENHANCED_ACK_SECURITY_ERROR, BITS_19_22_OPAQUE, ED_ABORT, ED_STOP, ED_COEXISTENCE_REJECT, BITS_26_30_OPAQUE]` from one reviewed logical image while preserving every other bit.
+    /// Replace IEEE802154_MAC.RX_ABORT_ENABLE fields `[RX_STOP, SFD_TIMEOUT, CRC_ERROR, INVALID_LENGTH, FILTER_FAIL, NO_RSS, COEXISTENCE_BREAK, UNEXPECTED_ACK, RX_RESTART, RX_ABORT_EN_9_14, TX_ACK_TIMEOUT, TX_ACK_STOP, TX_ACK_COEXISTENCE_BREAK, ENHANCED_ACK_SECURITY_ERROR, RX_ABORT_EN_19_22, ED_ABORT, ED_STOP, ED_COEXISTENCE_REJECT, RX_ABORT_EN_26_30]` from one reviewed logical image while preserving every other bit.
     #[inline]
     pub fn replace_ieee802154_rx_abort_ed_operation(registers: &crate::Ieee802154Mac) {
         registers.rx_abort_enable().modify(|_, writer| {
@@ -13744,7 +14039,7 @@ pub mod field_replace_modify {
                     .bit(((input >> 7) & 0x00000001) != 0)
                     .rx_restart()
                     .bit(((input >> 8) & 0x00000001) != 0)
-                    .bits_9_14_opaque()
+                    .rx_abort_en_9_14()
                     .bits(((input >> 9) & 0x0000003f) as u8)
                     .tx_ack_timeout()
                     .bit(((input >> 15) & 0x00000001) != 0)
@@ -13754,7 +14049,7 @@ pub mod field_replace_modify {
                     .bit(((input >> 17) & 0x00000001) != 0)
                     .enhanced_ack_security_error()
                     .bit(((input >> 18) & 0x00000001) != 0)
-                    .bits_19_22_opaque()
+                    .rx_abort_en_19_22()
                     .bits(((input >> 19) & 0x0000000f) as u8)
                     .ed_abort()
                     .bit(((input >> 23) & 0x00000001) != 0)
@@ -13762,13 +14057,13 @@ pub mod field_replace_modify {
                     .bit(((input >> 24) & 0x00000001) != 0)
                     .ed_coexistence_reject()
                     .bit(((input >> 25) & 0x00000001) != 0)
-                    .bits_26_30_opaque()
+                    .rx_abort_en_26_30()
                     .bits(((input >> 26) & 0x0000001f) as u8)
             }
         });
     }
 
-    /// Replace IEEE802154_MAC.TX_ABORT_ENABLE fields `[RX_ACK_STOP, RX_ACK_SFD_TIMEOUT, RX_ACK_CRC_ERROR, RX_ACK_INVALID_LENGTH, RX_ACK_FILTER_FAIL, RX_ACK_NO_RSS, RX_ACK_COEXISTENCE_BREAK, RX_ACK_TYPE_NOT_ACK, RX_ACK_RESTART, BITS_9_14_OPAQUE, RX_ACK_TIMEOUT, TX_STOP, TX_COEXISTENCE_BREAK, TX_SECURITY_ERROR, BITS_19_22_OPAQUE, CCA_FAILED, CCA_BUSY, BITS_25_30_OPAQUE]` from one reviewed logical image while preserving every other bit.
+    /// Replace IEEE802154_MAC.TX_ABORT_ENABLE fields `[RX_ACK_STOP, RX_ACK_SFD_TIMEOUT, RX_ACK_CRC_ERROR, RX_ACK_INVALID_LENGTH, RX_ACK_FILTER_FAIL, RX_ACK_NO_RSS, RX_ACK_COEXISTENCE_BREAK, RX_ACK_TYPE_NOT_ACK, RX_ACK_RESTART, TX_ABORT_EN_9_14, RX_ACK_TIMEOUT, TX_STOP, TX_COEXISTENCE_BREAK, TX_SECURITY_ERROR, TX_ABORT_EN_19_22, CCA_FAILED, CCA_BUSY, TX_ABORT_EN_25_30]` from one reviewed logical image while preserving every other bit.
     #[inline]
     pub fn replace_ieee802154_tx_abort_baseline(registers: &crate::Ieee802154Mac) {
         registers.tx_abort_enable().modify(|_, writer| {
@@ -13795,7 +14090,7 @@ pub mod field_replace_modify {
                     .bit(((input >> 7) & 0x00000001) != 0)
                     .rx_ack_restart()
                     .bit(((input >> 8) & 0x00000001) != 0)
-                    .bits_9_14_opaque()
+                    .tx_abort_en_9_14()
                     .bits(((input >> 9) & 0x0000003f) as u8)
                     .rx_ack_timeout()
                     .bit(((input >> 15) & 0x00000001) != 0)
@@ -13805,13 +14100,13 @@ pub mod field_replace_modify {
                     .bit(((input >> 17) & 0x00000001) != 0)
                     .tx_security_error()
                     .bit(((input >> 18) & 0x00000001) != 0)
-                    .bits_19_22_opaque()
+                    .tx_abort_en_19_22()
                     .bits(((input >> 19) & 0x0000000f) as u8)
                     .cca_failed()
                     .bit(((input >> 23) & 0x00000001) != 0)
                     .cca_busy()
                     .bit(((input >> 24) & 0x00000001) != 0)
-                    .bits_25_30_opaque()
+                    .tx_abort_en_25_30()
                     .bits(((input >> 25) & 0x0000003f) as u8)
             }
         });

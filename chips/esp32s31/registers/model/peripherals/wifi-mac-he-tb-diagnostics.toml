@@ -131,15 +131,9 @@ name = "UPLINK_PACKET_EXTENSION"
 bitOffset = 28
 bitWidth = 3
 
-[[peripherals.registers.register.fields]]
-name = "BIT_31_OPAQUE"
-bitOffset = 31
-bitWidth = 1
-
 [[peripheral-review]]
 entity = "WIFI_MAC_HE_TB_DIAGNOSTICS"
 opaque-entities = [
-    "WIFI_MAC_HE_TB_DIAGNOSTICS.USER.BIT_31_OPAQUE",
 ]
 
 [peripheral-review.peripheral]

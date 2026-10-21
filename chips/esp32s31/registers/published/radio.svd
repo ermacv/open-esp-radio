@@ -230,10 +230,10 @@
           <access>read-write</access>
           <fields>
             <field>
-              <name>BITS_0_17_OPAQUE</name>
+              <name>BITS_16_17_OPAQUE</name>
               <description>Opaque: meaning not established.</description>
-              <bitOffset>0</bitOffset>
-              <bitWidth>18</bitWidth>
+              <bitOffset>16</bitOffset>
+              <bitWidth>2</bitWidth>
             </field>
             <field>
               <name>RX_CONTROL_9_BSSID_POSITION</name>
@@ -322,12 +322,6 @@
               <description>Project-assigned name.</description>
               <bitOffset>29</bitOffset>
               <bitWidth>1</bitWidth>
-            </field>
-            <field>
-              <name>BITS_30_31_OPAQUE</name>
-              <description>Opaque: meaning not established.</description>
-              <bitOffset>30</bitOffset>
-              <bitWidth>2</bitWidth>
             </field>
           </fields>
         </register>
@@ -1158,12 +1152,6 @@
           <size>0x20</size>
           <access>read-only</access>
           <fields>
-            <field>
-              <name>BITS_0_15_OPAQUE</name>
-              <description>Opaque: meaning not established.</description>
-              <bitOffset>0</bitOffset>
-              <bitWidth>16</bitWidth>
-            </field>
             <field>
               <name>TX_COUNT</name>
               <description>Project-assigned name.</description>
@@ -8641,12 +8629,6 @@
               <bitWidth>1</bitWidth>
             </field>
             <field>
-              <name>BITS_1_3_OPAQUE</name>
-              <description>Opaque: meaning not established.</description>
-              <bitOffset>1</bitOffset>
-              <bitWidth>3</bitWidth>
-            </field>
-            <field>
               <name>PTI_0</name>
               <description>Project-assigned name.</description>
               <bitOffset>4</bitOffset>
@@ -8839,12 +8821,6 @@
               <bitWidth>2</bitWidth>
             </field>
             <field>
-              <name>BITS_2_3_OPAQUE</name>
-              <description>Opaque: meaning not established.</description>
-              <bitOffset>2</bitOffset>
-              <bitWidth>2</bitWidth>
-            </field>
-            <field>
               <name>GROUP_ID</name>
               <description>Project-assigned name.</description>
               <bitOffset>4</bitOffset>
@@ -8863,12 +8839,6 @@
               <bitWidth>9</bitWidth>
             </field>
             <field>
-              <name>BITS_22_23_OPAQUE</name>
-              <description>Opaque: meaning not established.</description>
-              <bitOffset>22</bitOffset>
-              <bitWidth>2</bitWidth>
-            </field>
-            <field>
               <name>SHORT_GI</name>
               <description>Project-assigned name.</description>
               <bitOffset>24</bitOffset>
@@ -8884,12 +8854,6 @@
               <name>CODING</name>
               <description>Project-assigned name.</description>
               <bitOffset>26</bitOffset>
-              <bitWidth>1</bitWidth>
-            </field>
-            <field>
-              <name>BIT_27_OPAQUE</name>
-              <description>Opaque: meaning not established.</description>
-              <bitOffset>27</bitOffset>
               <bitWidth>1</bitWidth>
             </field>
             <field>
@@ -9489,12 +9453,6 @@
               <description>Project-assigned name. Unsigned raw code. Values other than 0x7f convert to quarter-dB units after adding 88.</description>
               <bitOffset>0</bitOffset>
               <bitWidth>8</bitWidth>
-            </field>
-            <field>
-              <name>BITS_8_31_OPAQUE</name>
-              <description>Opaque: meaning not established.</description>
-              <bitOffset>8</bitOffset>
-              <bitWidth>24</bitWidth>
             </field>
           </fields>
         </register>
@@ -10191,12 +10149,6 @@
               <bitOffset>28</bitOffset>
               <bitWidth>3</bitWidth>
             </field>
-            <field>
-              <name>BIT_31_OPAQUE</name>
-              <description>Opaque: meaning not established.</description>
-              <bitOffset>31</bitOffset>
-              <bitWidth>1</bitWidth>
-            </field>
           </fields>
         </register>
       </registers>
@@ -10477,12 +10429,6 @@
               <bitWidth>3</bitWidth>
             </field>
             <field>
-              <name>BIT_3_OPAQUE</name>
-              <description>Opaque: meaning not established.</description>
-              <bitOffset>3</bitOffset>
-              <bitWidth>1</bitWidth>
-            </field>
-            <field>
               <name>TXRX_BEAM</name>
               <description>Project-assigned name.</description>
               <bitOffset>4</bitOffset>
@@ -10519,12 +10465,6 @@
               <bitWidth>1</bitWidth>
             </field>
             <field>
-              <name>BITS_10_11_OPAQUE</name>
-              <description>Opaque: meaning not established.</description>
-              <bitOffset>10</bitOffset>
-              <bitWidth>2</bitWidth>
-            </field>
-            <field>
               <name>BFRP_TIMER</name>
               <description>Project-assigned name.</description>
               <bitOffset>12</bitOffset>
@@ -10543,22 +10483,10 @@
               <bitWidth>6</bitWidth>
             </field>
             <field>
-              <name>BIT_26_OPAQUE</name>
-              <description>Opaque: meaning not established.</description>
-              <bitOffset>26</bitOffset>
-              <bitWidth>1</bitWidth>
-            </field>
-            <field>
               <name>NDP_DETECT_SUCCESS</name>
               <description>Project-assigned name.</description>
               <bitOffset>27</bitOffset>
               <bitWidth>1</bitWidth>
-            </field>
-            <field>
-              <name>BITS_28_31_OPAQUE</name>
-              <description>Opaque: meaning not established.</description>
-              <bitOffset>28</bitOffset>
-              <bitWidth>4</bitWidth>
             </field>
           </fields>
         </register>
@@ -10618,12 +10546,6 @@
               <bitWidth>5</bitWidth>
             </field>
             <field>
-              <name>BITS_5_7_OPAQUE</name>
-              <description>Opaque: meaning not established.</description>
-              <bitOffset>5</bitOffset>
-              <bitWidth>3</bitWidth>
-            </field>
-            <field>
               <name>SU_A_FACTOR</name>
               <description>Project-assigned name.</description>
               <bitOffset>8</bitOffset>
@@ -10648,22 +10570,10 @@
               <bitWidth>5</bitWidth>
             </field>
             <field>
-              <name>BITS_17_19_OPAQUE</name>
-              <description>Opaque: meaning not established.</description>
-              <bitOffset>17</bitOffset>
-              <bitWidth>3</bitWidth>
-            </field>
-            <field>
               <name>TB_PRE_FEC_PADDING</name>
               <description>Project-assigned name.</description>
               <bitOffset>20</bitOffset>
               <bitWidth>5</bitWidth>
-            </field>
-            <field>
-              <name>BITS_25_31_OPAQUE</name>
-              <description>Opaque: meaning not established.</description>
-              <bitOffset>25</bitOffset>
-              <bitWidth>7</bitWidth>
             </field>
           </fields>
         </register>
@@ -10767,12 +10677,6 @@
               <bitOffset>16</bitOffset>
               <bitWidth>12</bitWidth>
             </field>
-            <field>
-              <name>BITS_28_31_OPAQUE</name>
-              <description>Opaque: meaning not established.</description>
-              <bitOffset>28</bitOffset>
-              <bitWidth>4</bitWidth>
-            </field>
           </fields>
         </register>
         <register>
@@ -10875,12 +10779,6 @@
               <bitOffset>29</bitOffset>
               <bitWidth>1</bitWidth>
             </field>
-            <field>
-              <name>BITS_30_31_OPAQUE</name>
-              <description>Opaque: meaning not established.</description>
-              <bitOffset>30</bitOffset>
-              <bitWidth>2</bitWidth>
-            </field>
           </fields>
         </register>
         <register>
@@ -10925,12 +10823,6 @@
               <description>Project-assigned name.</description>
               <bitOffset>25</bitOffset>
               <bitWidth>1</bitWidth>
-            </field>
-            <field>
-              <name>BITS_26_31_OPAQUE</name>
-              <description>Opaque: meaning not established.</description>
-              <bitOffset>26</bitOffset>
-              <bitWidth>6</bitWidth>
             </field>
           </fields>
         </register>
@@ -10988,12 +10880,6 @@
               <description>Project-assigned name.</description>
               <bitOffset>27</bitOffset>
               <bitWidth>1</bitWidth>
-            </field>
-            <field>
-              <name>BITS_28_31_OPAQUE</name>
-              <description>Opaque: meaning not established.</description>
-              <bitOffset>28</bitOffset>
-              <bitWidth>4</bitWidth>
             </field>
           </fields>
         </register>
@@ -12086,12 +11972,6 @@
                   <maximum>127</maximum>
                 </range>
               </writeConstraint>
-            </field>
-            <field>
-              <name>BITS_21_31_OPAQUE</name>
-              <description>Opaque: meaning not established.</description>
-              <bitOffset>21</bitOffset>
-              <bitWidth>11</bitWidth>
             </field>
           </fields>
         </register>
@@ -14441,12 +14321,6 @@
               <bitOffset>0</bitOffset>
               <bitWidth>1</bitWidth>
             </field>
-            <field>
-              <name>BITS_1_31_OPAQUE</name>
-              <description>Opaque: meaning not established.</description>
-              <bitOffset>1</bitOffset>
-              <bitWidth>31</bitWidth>
-            </field>
           </fields>
         </register>
         <register>
@@ -14464,12 +14338,6 @@
               <description>Project-assigned name.</description>
               <bitOffset>0</bitOffset>
               <bitWidth>1</bitWidth>
-            </field>
-            <field>
-              <name>BITS_1_31_OPAQUE</name>
-              <description>Opaque: meaning not established.</description>
-              <bitOffset>1</bitOffset>
-              <bitWidth>31</bitWidth>
             </field>
           </fields>
         </register>
@@ -14596,22 +14464,10 @@
           <access>read-write</access>
           <fields>
             <field>
-              <name>BITS_0_13_OPAQUE</name>
-              <description>Opaque: meaning not established. Bits no external-coexistence leaf writes.</description>
-              <bitOffset>0</bitOffset>
-              <bitWidth>14</bitWidth>
-            </field>
-            <field>
               <name>ENABLE</name>
               <description>Project-assigned name.</description>
               <bitOffset>14</bitOffset>
               <bitWidth>1</bitWidth>
-            </field>
-            <field>
-              <name>BITS_15_31_OPAQUE</name>
-              <description>Opaque: meaning not established. Bits no external-coexistence leaf writes.</description>
-              <bitOffset>15</bitOffset>
-              <bitWidth>17</bitWidth>
             </field>
           </fields>
         </register>
@@ -14628,12 +14484,6 @@
               <bitOffset>0</bitOffset>
               <bitWidth>4</bitWidth>
             </field>
-            <field>
-              <name>BITS_4_31_OPAQUE</name>
-              <description>Opaque: meaning not established. Bits no external-coexistence leaf writes.</description>
-              <bitOffset>4</bitOffset>
-              <bitWidth>28</bitWidth>
-            </field>
           </fields>
         </register>
         <register>
@@ -14648,12 +14498,6 @@
               <description>Project-assigned name.</description>
               <bitOffset>0</bitOffset>
               <bitWidth>4</bitWidth>
-            </field>
-            <field>
-              <name>BITS_4_31_OPAQUE</name>
-              <description>Opaque: meaning not established. Bits no external-coexistence leaf writes.</description>
-              <bitOffset>4</bitOffset>
-              <bitWidth>28</bitWidth>
             </field>
           </fields>
         </register>
@@ -15049,12 +14893,6 @@
               <description>Project-assigned name. Set before the READY polling loop.</description>
               <bitOffset>1</bitOffset>
               <bitWidth>1</bitWidth>
-            </field>
-            <field>
-              <name>BITS_2_31_OPAQUE</name>
-              <description>Opaque: meaning not established.</description>
-              <bitOffset>2</bitOffset>
-              <bitWidth>30</bitWidth>
             </field>
           </fields>
         </register>
@@ -25014,6 +24852,66 @@ Bluetooth or assign a wider ZBBB protocol meaning.</description>
               <bitOffset>31</bitOffset>
               <bitWidth>1</bitWidth>
             </field>
+            <field>
+              <name>IFS_DIS</name>
+              <description>Project-assigned name. Open vendor conf.ifs_dis field. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. No reset or additional access semantics are inferred.</description>
+              <bitOffset>5</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>VERSION_FILTER_DIS</name>
+              <description>Project-assigned name. Open vendor conf.version_filter_dis field. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. No reset or additional access semantics are inferred.</description>
+              <bitOffset>11</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TX_WAIT_ACK_TIMEOUT_EN</name>
+              <description>Project-assigned name. Open vendor conf.tx_wait_ack_timeout_en field. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. No reset or additional access semantics are inferred.</description>
+              <bitOffset>13</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>FILTER_ENHANCE_DIS</name>
+              <description>Project-assigned name. Open vendor conf.filter_enhance_dis field. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. No reset or additional access semantics are inferred.</description>
+              <bitOffset>14</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>RX_FILTER_MULTIPAN_CROSS_CHECK</name>
+              <description>Project-assigned name. Open vendor conf.rx_filter_multipan_cross_check field. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. No reset or additional access semantics are inferred.</description>
+              <bitOffset>15</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>COEX_ARB_DELAY</name>
+              <description>Project-assigned name. Open vendor conf.coex_arb_delay field. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. No reset or additional access semantics are inferred.</description>
+              <bitOffset>16</bitOffset>
+              <bitWidth>8</bitWidth>
+            </field>
+            <field>
+              <name>BIT_ORDER</name>
+              <description>Project-assigned name. Open vendor conf.bit_order field. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. No reset or additional access semantics are inferred.</description>
+              <bitOffset>24</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>NO_RSSI_TRIGGER_BREAK_EN</name>
+              <description>Project-assigned name. Open vendor conf.no_rssi_trigger_break_en field. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. No reset or additional access semantics are inferred.</description>
+              <bitOffset>25</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>COEX_FORCE_RX</name>
+              <description>Project-assigned name. Open vendor conf.coex_force_rx field. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. No reset or additional access semantics are inferred.</description>
+              <bitOffset>26</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>RX_DONE_TRIG_IDLE</name>
+              <description>Project-assigned name. Open vendor conf.rx_done_trig_idle field. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. No reset or additional access semantics are inferred.</description>
+              <bitOffset>27</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
           </fields>
         </register>
         <register>
@@ -25131,6 +25029,54 @@ Bluetooth or assign a wider ZBBB protocol meaning.</description>
                 </range>
               </writeConstraint>
             </field>
+            <field>
+              <name>SEC_CH_FREQ</name>
+              <description>Project-assigned name. Open vendor channel.sec_ch_freq field. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. No reset or additional access semantics are inferred.</description>
+              <bitOffset>8</bitOffset>
+              <bitWidth>8</bitWidth>
+            </field>
+            <field>
+              <name>RX_MULTI_CH_EN</name>
+              <description>Project-assigned name. Open vendor channel.rx_multi_ch_en field. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. No reset or additional access semantics are inferred.</description>
+              <bitOffset>16</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>RX_WAIT_PREMABLE_TIME</name>
+              <description>Project-assigned name. Open vendor channel.rx_wait_premable_time field. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. No reset or additional access semantics are inferred.</description>
+              <bitOffset>17</bitOffset>
+              <bitWidth>7</bitWidth>
+            </field>
+            <field>
+              <name>RX_PREAMBLE_PATTERN_SEL</name>
+              <description>Project-assigned name. Open vendor channel.rx_preamble_pattern_sel field. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. No reset or additional access semantics are inferred.</description>
+              <bitOffset>24</bitOffset>
+              <bitWidth>2</bitWidth>
+            </field>
+            <field>
+              <name>PRI_CH_I2C_SEL</name>
+              <description>Project-assigned name. Open vendor channel.pri_ch_i2c_sel field. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. No reset or additional access semantics are inferred.</description>
+              <bitOffset>26</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>SEC_CH_I2C_SEL</name>
+              <description>Project-assigned name. Open vendor channel.sec_ch_i2c_sel field. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. No reset or additional access semantics are inferred.</description>
+              <bitOffset>27</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>FAST_FREQHOP_EN</name>
+              <description>Project-assigned name. Open vendor channel.fast_freqhop_en field. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. No reset or additional access semantics are inferred.</description>
+              <bitOffset>28</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>FREQ_BASE_SEL</name>
+              <description>Project-assigned name. Open vendor channel.freq_base_sel field. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. No reset or additional access semantics are inferred.</description>
+              <bitOffset>29</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
           </fields>
         </register>
         <register>
@@ -25160,6 +25106,12 @@ Bluetooth or assign a wider ZBBB protocol meaning.</description>
               <description>Project-assigned name. Twenty-four-bit physical field. The current public setter accepts only a uint16_t and therefore exercises a strict subset of its declared range.</description>
               <bitOffset>0</bitOffset>
               <bitWidth>24</bitWidth>
+            </field>
+            <field>
+              <name>DELAY</name>
+              <description>Project-assigned name. Open vendor ed_duration.delay field. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. No reset or additional access semantics are inferred.</description>
+              <bitOffset>24</bitOffset>
+              <bitWidth>4</bitWidth>
             </field>
           </fields>
         </register>
@@ -25294,7 +25246,7 @@ Bluetooth or assign a wider ZBBB protocol meaning.</description>
         </register>
         <register>
           <name>EVENT_ENABLE</name>
-          <description>Project-assigned name. Individual event enables mutated by the public common LL. Bits seven and thirteen remain physically observable but have no assigned vendor event semantics.</description>
+          <description>Project-assigned name. Individual event enables mutated by the public common LL. All fourteen lanes belong to the open vendor events field; individual unnamed events remain descriptive partitions.</description>
           <addressOffset>0x60</addressOffset>
           <size>0x20</size>
           <access>read-write</access>
@@ -25342,8 +25294,8 @@ Bluetooth or assign a wider ZBBB protocol meaning.</description>
               <bitWidth>1</bitWidth>
             </field>
             <field>
-              <name>BIT_7_OPAQUE</name>
-              <description>Opaque: meaning not established. Physically present event-enable bit without an assigned public vendor event.</description>
+              <name>EVENTS_7</name>
+              <description>Project-assigned name. Partition of the open vendor events field, bits 7:7; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT.</description>
               <bitOffset>7</bitOffset>
               <bitWidth>1</bitWidth>
             </field>
@@ -25378,8 +25330,8 @@ Bluetooth or assign a wider ZBBB protocol meaning.</description>
               <bitWidth>1</bitWidth>
             </field>
             <field>
-              <name>BIT_13_OPAQUE</name>
-              <description>Opaque: meaning not established. Physically present event-enable bit without an assigned public vendor event.</description>
+              <name>EVENTS_13</name>
+              <description>Project-assigned name. Partition of the open vendor events field, bits 13:13; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT.</description>
               <bitOffset>13</bitOffset>
               <bitWidth>1</bitWidth>
             </field>
@@ -25387,7 +25339,7 @@ Bluetooth or assign a wider ZBBB protocol meaning.</description>
         </register>
         <register>
           <name>EVENT_STATUS</name>
-          <description>Project-assigned name. Individual event status bits read by the public LL. The target-reviewed overlay assigns the read-write W1C contract for the applicable ESP32-S31 revision; bits seven and thirteen have no assigned vendor event semantics.</description>
+          <description>Project-assigned name. Individual event status bits read by the public LL. The target-reviewed overlay assigns the read-write W1C contract for the applicable ESP32-S31 revision; unnamed event lanes remain partitions of the open vendor events field.</description>
           <addressOffset>0x64</addressOffset>
           <size>0x20</size>
           <access>read-write</access>
@@ -25436,8 +25388,8 @@ Bluetooth or assign a wider ZBBB protocol meaning.</description>
               <bitWidth>1</bitWidth>
             </field>
             <field>
-              <name>BIT_7_OPAQUE</name>
-              <description>Opaque: meaning not established. Physically present event-status bit without an assigned public vendor event.</description>
+              <name>EVENTS_7</name>
+              <description>Project-assigned name. Partition of the open vendor events field, bits 7:7; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT.</description>
               <bitOffset>7</bitOffset>
               <bitWidth>1</bitWidth>
             </field>
@@ -25472,8 +25424,8 @@ Bluetooth or assign a wider ZBBB protocol meaning.</description>
               <bitWidth>1</bitWidth>
             </field>
             <field>
-              <name>BIT_13_OPAQUE</name>
-              <description>Opaque: meaning not established. Physically present event-status bit without an assigned public vendor event.</description>
+              <name>EVENTS_13</name>
+              <description>Project-assigned name. Partition of the open vendor events field, bits 13:13; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT.</description>
               <bitOffset>13</bitOffset>
               <bitWidth>1</bitWidth>
             </field>
@@ -25541,8 +25493,8 @@ Bluetooth or assign a wider ZBBB protocol meaning.</description>
               <bitWidth>1</bitWidth>
             </field>
             <field>
-              <name>BITS_9_14_OPAQUE</name>
-              <description>Opaque: meaning not established. Abort-reason enable bits without a public vendor reason.</description>
+              <name>RX_ABORT_EN_9_14</name>
+              <description>Project-assigned name. Partition of the open vendor rx_abort_en field, bits 14:9; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT.</description>
               <bitOffset>9</bitOffset>
               <bitWidth>6</bitWidth>
               <writeConstraint>
@@ -25577,8 +25529,8 @@ Bluetooth or assign a wider ZBBB protocol meaning.</description>
               <bitWidth>1</bitWidth>
             </field>
             <field>
-              <name>BITS_19_22_OPAQUE</name>
-              <description>Opaque: meaning not established. Abort-reason enable bits without a public vendor reason.</description>
+              <name>RX_ABORT_EN_19_22</name>
+              <description>Project-assigned name. Partition of the open vendor rx_abort_en field, bits 22:19; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT.</description>
               <bitOffset>19</bitOffset>
               <bitWidth>4</bitWidth>
               <writeConstraint>
@@ -25607,8 +25559,8 @@ Bluetooth or assign a wider ZBBB protocol meaning.</description>
               <bitWidth>1</bitWidth>
             </field>
             <field>
-              <name>BITS_26_30_OPAQUE</name>
-              <description>Opaque: meaning not established. Abort-reason enable bits without a public vendor reason.</description>
+              <name>RX_ABORT_EN_26_30</name>
+              <description>Project-assigned name. Partition of the open vendor rx_abort_en field, bits 30:26; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT.</description>
               <bitOffset>26</bitOffset>
               <bitWidth>5</bitWidth>
               <writeConstraint>
@@ -25632,6 +25584,12 @@ Bluetooth or assign a wider ZBBB protocol meaning.</description>
               <description>Project-assigned name.</description>
               <bitOffset>0</bitOffset>
               <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>PENDING_TIMEOUT</name>
+              <description>Project-assigned name. Open vendor pending_cfg.pending_timeout field. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. No reset or additional access semantics are inferred.</description>
+              <bitOffset>16</bitOffset>
+              <bitWidth>16</bitWidth>
             </field>
           </fields>
         </register>
@@ -25665,6 +25623,30 @@ Bluetooth or assign a wider ZBBB protocol meaning.</description>
                   <maximum>31</maximum>
                 </range>
               </writeConstraint>
+            </field>
+            <field>
+              <name>CLOSE_RF_SEL</name>
+              <description>Project-assigned name. Open vendor pti.close_rf_sel field. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. No reset or additional access semantics are inferred.</description>
+              <bitOffset>10</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>ANT_MODE</name>
+              <description>Project-assigned name. Open vendor pti.ant_mode field. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. No reset or additional access semantics are inferred.</description>
+              <bitOffset>11</bitOffset>
+              <bitWidth>3</bitWidth>
+            </field>
+            <field>
+              <name>HW_TX_ACK_ANT_MODE</name>
+              <description>Project-assigned name. Open vendor pti.hw_tx_ack_ant_mode field. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. No reset or additional access semantics are inferred.</description>
+              <bitOffset>14</bitOffset>
+              <bitWidth>3</bitWidth>
+            </field>
+            <field>
+              <name>STBY_COEX_GRANT_MASK</name>
+              <description>Project-assigned name. Open vendor pti.stby_coex_grant_mask field. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. No reset or additional access semantics are inferred.</description>
+              <bitOffset>17</bitOffset>
+              <bitWidth>1</bitWidth>
             </field>
           </fields>
         </register>
@@ -25730,8 +25712,8 @@ Bluetooth or assign a wider ZBBB protocol meaning.</description>
               <bitWidth>1</bitWidth>
             </field>
             <field>
-              <name>BITS_9_14_OPAQUE</name>
-              <description>Opaque: meaning not established. Abort-reason enable bits without a public vendor reason.</description>
+              <name>TX_ABORT_EN_9_14</name>
+              <description>Project-assigned name. Partition of the open vendor tx_abort_en field, bits 14:9; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT.</description>
               <bitOffset>9</bitOffset>
               <bitWidth>6</bitWidth>
               <writeConstraint>
@@ -25766,8 +25748,8 @@ Bluetooth or assign a wider ZBBB protocol meaning.</description>
               <bitWidth>1</bitWidth>
             </field>
             <field>
-              <name>BITS_19_22_OPAQUE</name>
-              <description>Opaque: meaning not established. Abort-reason enable bits without a public vendor reason.</description>
+              <name>TX_ABORT_EN_19_22</name>
+              <description>Project-assigned name. Partition of the open vendor tx_abort_en field, bits 22:19; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT.</description>
               <bitOffset>19</bitOffset>
               <bitWidth>4</bitWidth>
               <writeConstraint>
@@ -25790,8 +25772,8 @@ Bluetooth or assign a wider ZBBB protocol meaning.</description>
               <bitWidth>1</bitWidth>
             </field>
             <field>
-              <name>BITS_25_30_OPAQUE</name>
-              <description>Opaque: meaning not established. Abort-reason enable bits without a public vendor reason.</description>
+              <name>TX_ABORT_EN_25_30</name>
+              <description>Project-assigned name. Partition of the open vendor tx_abort_en field, bits 30:25; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT.</description>
               <bitOffset>25</bitOffset>
               <bitWidth>6</bitWidth>
               <writeConstraint>
@@ -26779,6 +26761,64 @@ Bluetooth or assign a wider ZBBB protocol meaning.</description>
               <description>Raise the DC-DC converter for transmission.</description>
               <bitOffset>31</bitOffset>
               <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>DTM_CFG</name>
+          <description>Project-assigned name. Open vendor dtm_cfg word. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. No reset value is claimed.</description>
+          <addressOffset>0x98</addressOffset>
+          <size>0x20</size>
+          <fields>
+            <field>
+              <name>DTM_TX_LENGTH</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>8</bitWidth>
+            </field>
+            <field>
+              <name>DTM_TX_PAYLOAD_TYPE</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>8</bitOffset>
+              <bitWidth>4</bitWidth>
+            </field>
+            <field>
+              <name>DTM_HOP_FREQ</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>16</bitOffset>
+              <bitWidth>8</bitWidth>
+            </field>
+            <field>
+              <name>DTM_CONT_RX_EN</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>24</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>DTM_ON</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>25</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>EXTEND_PREAMBLE_BYTE_NUM</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>26</bitOffset>
+              <bitWidth>4</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>SFD_WAIT</name>
+          <description>Project-assigned name. Open vendor sfd_wait word. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. No reset value is claimed.</description>
+          <addressOffset>0xC4</addressOffset>
+          <size>0x20</size>
+          <fields>
+            <field>
+              <name>SFD_WAIT_SYMBOL_NUM</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>4</bitWidth>
             </field>
           </fields>
         </register>

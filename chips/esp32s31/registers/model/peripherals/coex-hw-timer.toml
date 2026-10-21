@@ -92,11 +92,6 @@ name = "ENABLE"
 bitOffset = 0
 bitWidth = 1
 
-[[peripherals.registers.register.fields]]
-name = "BITS_1_31_OPAQUE"
-bitOffset = 1
-bitWidth = 31
-
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -114,18 +109,11 @@ name = "DISABLE"
 bitOffset = 0
 bitWidth = 1
 
-[[peripherals.registers.register.fields]]
-name = "BITS_1_31_OPAQUE"
-bitOffset = 1
-bitWidth = 31
-
 [[peripheral-review]]
 entity = "COEX_HW_TIMER"
 opaque-entities = [
     "COEX_HW_TIMER.CONFIGURATION%s.BITS_30_31_OPAQUE",
     "COEX_HW_TIMER.SECONDARY_TARGET%s.BITS_24_31_OPAQUE",
-    "COEX_HW_TIMER.ENABLE_CONTROL%s.BITS_1_31_OPAQUE",
-    "COEX_HW_TIMER.DISABLE_CONTROL%s.BITS_1_31_OPAQUE",
 ]
 
 [peripheral-review.peripheral]

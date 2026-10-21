@@ -460,16 +460,16 @@ fn rx_aborts_all_masked(r: &crate::svd::ieee802154_mac::rx_abort_enable::R) -> b
         || r.coexistence_break().bit()
         || r.unexpected_ack().bit()
         || r.rx_restart().bit()
-        || r.bits_9_14_opaque().bits() != 0
+        || r.rx_abort_en_9_14().bits() != 0
         || r.tx_ack_timeout().bit()
         || r.tx_ack_stop().bit()
         || r.tx_ack_coexistence_break().bit()
         || r.enhanced_ack_security_error().bit()
-        || r.bits_19_22_opaque().bits() != 0
+        || r.rx_abort_en_19_22().bits() != 0
         || r.ed_abort().bit()
         || r.ed_stop().bit()
         || r.ed_coexistence_reject().bit()
-        || r.bits_26_30_opaque().bits() != 0)
+        || r.rx_abort_en_26_30().bits() != 0)
 }
 
 /// Whether exactly the finite ED/CCA receive-abort reasons are enabled.
@@ -486,13 +486,13 @@ fn rx_aborts_ed_operation_only(r: &crate::svd::ieee802154_mac::rx_abort_enable::
             || r.coexistence_break().bit()
             || r.unexpected_ack().bit()
             || r.rx_restart().bit()
-            || r.bits_9_14_opaque().bits() != 0
+            || r.rx_abort_en_9_14().bits() != 0
             || r.tx_ack_timeout().bit()
             || r.tx_ack_stop().bit()
             || r.tx_ack_coexistence_break().bit()
             || r.enhanced_ack_security_error().bit()
-            || r.bits_19_22_opaque().bits() != 0
-            || r.bits_26_30_opaque().bits() != 0)
+            || r.rx_abort_en_19_22().bits() != 0
+            || r.rx_abort_en_26_30().bits() != 0)
 }
 
 /// Whether no transmit-abort reason is enabled.
@@ -506,15 +506,15 @@ fn tx_aborts_all_masked(r: &crate::svd::ieee802154_mac::tx_abort_enable::R) -> b
         || r.rx_ack_coexistence_break().bit()
         || r.rx_ack_type_not_ack().bit()
         || r.rx_ack_restart().bit()
-        || r.bits_9_14_opaque().bits() != 0
+        || r.tx_abort_en_9_14().bits() != 0
         || r.rx_ack_timeout().bit()
         || r.tx_stop().bit()
         || r.tx_coexistence_break().bit()
         || r.tx_security_error().bit()
-        || r.bits_19_22_opaque().bits() != 0
+        || r.tx_abort_en_19_22().bits() != 0
         || r.cca_failed().bit()
         || r.cca_busy().bit()
-        || r.bits_25_30_opaque().bits() != 0)
+        || r.tx_abort_en_25_30().bits() != 0)
 }
 
 /// Closed classification of `RX_ABORT_ENABLE` for one finite ED/CCA operation.
@@ -570,7 +570,7 @@ impl Ieee802154EventReadback {
             rx_abort: reader.rx_abort().bit_is_set(),
             tx_abort: reader.tx_abort().bit_is_set(),
             ed_done: reader.ed_done().bit_is_set(),
-            unclassified_7: reader.bit_7_opaque().bit_is_set(),
+            unclassified_7: reader.events_7().bit_is_set(),
             timer0_overflow: reader.timer0_overflow().bit_is_set(),
             timer1_overflow: reader.timer1_overflow().bit_is_set(),
             clock_count_match: reader.clock_count_match().bit_is_set(),
@@ -588,7 +588,7 @@ impl Ieee802154EventReadback {
             rx_abort: reader.rx_abort().bit_is_set(),
             tx_abort: reader.tx_abort().bit_is_set(),
             ed_done: reader.ed_done().bit_is_set(),
-            unclassified_7: reader.bit_7_opaque().bit_is_set(),
+            unclassified_7: reader.events_7().bit_is_set(),
             timer0_overflow: reader.timer0_overflow().bit_is_set(),
             timer1_overflow: reader.timer1_overflow().bit_is_set(),
             clock_count_match: reader.clock_count_match().bit_is_set(),
@@ -608,7 +608,7 @@ impl Ieee802154EventReadback {
             rx_abort: snapshot.rx_abort(),
             tx_abort: snapshot.tx_abort(),
             ed_done: snapshot.ed_done(),
-            unclassified_7: snapshot.bit_7_opaque(),
+            unclassified_7: snapshot.events_7(),
             timer0_overflow: snapshot.timer0_overflow(),
             timer1_overflow: snapshot.timer1_overflow(),
             clock_count_match: snapshot.clock_count_match(),
@@ -766,7 +766,7 @@ impl TaskRegisters {
             writer.rx_abort().clear_bit();
             writer.tx_abort().clear_bit();
             writer.ed_done().clear_bit();
-            writer.bit_7_opaque().bit(false);
+            writer.events_7().bit(false);
             writer.timer0_overflow().clear_bit();
             writer.timer1_overflow().clear_bit();
             writer.clock_count_match().clear_bit();
@@ -786,7 +786,7 @@ impl TaskRegisters {
             writer.rx_abort().set_bit();
             writer.tx_abort().clear_bit();
             writer.ed_done().set_bit();
-            writer.bit_7_opaque().bit(false);
+            writer.events_7().bit(false);
             writer.timer0_overflow().clear_bit();
             writer.timer1_overflow().clear_bit();
             writer.clock_count_match().clear_bit();
@@ -806,7 +806,7 @@ impl TaskRegisters {
             writer.rx_abort().set_bit();
             writer.tx_abort().set_bit();
             writer.ed_done().set_bit();
-            writer.bit_7_opaque().bit(false);
+            writer.events_7().bit(false);
             writer.timer0_overflow().clear_bit();
             writer.timer1_overflow().set_bit();
             writer.clock_count_match().clear_bit();
@@ -1587,7 +1587,7 @@ impl InterruptRegisters {
             writer
                 .ed_done()
                 .bit(current.ed_done().bit() && in_mask(RawEvent::EdDone));
-            writer.bit_7_opaque().bit(false);
+            writer.events_7().bit(false);
             writer
                 .timer0_overflow()
                 .bit(current.timer0_overflow().bit() && in_mask(RawEvent::Timer0Overflow));

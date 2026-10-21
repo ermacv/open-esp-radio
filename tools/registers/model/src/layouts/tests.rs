@@ -672,6 +672,43 @@ fn default_node() -> String {
 }
 
 #[test]
+fn an_explicitly_unassigned_unit_retains_geometry_without_field_capabilities() {
+    let source = format!(
+        r#"schema = 1
+[layout]
+name = "EMPTY"
+description = "Cited storage whose bits have no established use."
+size = 4
+align = 4
+{DEFAULT_REVIEW}
+{OPAQUE_REVIEW}
+[[layout.words]]
+name = "WORD_0000_OPAQUE"
+opaque = true
+offset = 0
+access = "shared"
+fields = []
+"#
+    );
+    let model = load(&[("empty.toml", &source)]).unwrap();
+    let layout = &model.layouts()[0];
+    assert_eq!((layout.size, layout.align), (4, 4));
+    assert_eq!(layout.units.len(), 1);
+    assert!(layout.units[0].fields.is_empty());
+    let rust = super::render(model.layouts(), &regions()).unwrap();
+    assert!(rust.contains("pub struct EmptyWord0000Opaque(u32)"));
+    assert!(!rust.contains("with_bits_0_31_opaque"));
+    assert!(
+        error(&[("empty.toml", &source.replace("offset = 0", "offset = 4"))])
+            .contains("lies outside the layout")
+    );
+    assert!(
+        error(&[("empty.toml", &source.replace("fields = []", ""))])
+            .contains("missing field `fields`")
+    );
+}
+
+#[test]
 fn local_defaults_cover_layout_words_and_fields() {
     let model = load(&[("node.toml", &default_node())]).expect("a valid layout review fixture");
     let reviews = &model.layouts()[0].review;

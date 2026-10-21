@@ -21,7 +21,7 @@ pub fn enable_timer_events(registers: &crate::svd::Ieee802154Mac) {
         writer.rx_abort().clear_bit();
         writer.tx_abort().clear_bit();
         writer.ed_done().clear_bit();
-        writer.bit_7_opaque().clear_bit();
+        writer.events_7().clear_bit();
         writer.timer0_overflow().set_bit();
         writer.timer1_overflow().set_bit();
         writer.clock_count_match().clear_bit();
@@ -42,7 +42,7 @@ pub fn disable_all_events(registers: &crate::svd::Ieee802154Mac) {
         writer.rx_abort().clear_bit();
         writer.tx_abort().clear_bit();
         writer.ed_done().clear_bit();
-        writer.bit_7_opaque().clear_bit();
+        writer.events_7().clear_bit();
         writer.timer0_overflow().clear_bit();
         writer.timer1_overflow().clear_bit();
         writer.clock_count_match().clear_bit();
