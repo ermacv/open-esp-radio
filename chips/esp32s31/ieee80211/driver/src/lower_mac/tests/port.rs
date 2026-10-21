@@ -275,6 +275,7 @@ fn installed(
         completed: 0,
         stopped: false,
     };
+    let device = Box::leak(Box::new(device));
     let storage = Box::leak(Box::new(PortStorage::new(device)));
     let transmitter = crate::ordinary_tx::OrdinaryTxOwner::new(crate::tx::WifiTxResources {
         slot: slot(),

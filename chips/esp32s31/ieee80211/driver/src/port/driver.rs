@@ -142,7 +142,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Driver<'id, Id, D, B> 
     }
     pub(super) const fn vacant() -> Self {
         Self {
-            core: CoreOwner::vacant(),
+            core: CoreOwner::<Id, D, B>::vacant(),
             tickets: [const { None }; TX_TICKETS],
             free: [const { None }; 4],
             queues: [const { heapless::Deque::new() }; 4],

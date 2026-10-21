@@ -8,6 +8,9 @@ use super::*;
 use core::ops::{Deref, DerefMut};
 use oer_ieee80211_port::backend::BackendTxProfile;
 
+mod bank;
+pub(crate) use bank::{CoreOwner, CoreOwnerFault};
+
 /// The disabled, idle hardware bank. Only this owner can retune or dismantle.
 #[must_use]
 pub struct DisabledCore<C, G = OpenGate> {
@@ -440,85 +443,16 @@ impl<
         EnabledCore<LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>>,
         GateOpenFailed<LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>>,
     > {
-        if let Some(fault) = self.core.fault {
-            return Err(GateOpenFailed {
+        match self.core.open_held_gate(hardware, sink) {
+            Ok(()) => Ok(EnabledCore::new(self.core)),
+            Err(fault) => Err(GateOpenFailed {
                 fault,
                 core: DisablingCore {
                     core: self.core,
                     gate: core::marker::PhantomData,
                 },
-            });
+            }),
         }
-        hardware.set_power_save_tx_block(false);
-        for index in 0..LOWER_MAC_TX_QUEUES {
-            let Some(attempt) = self.core.queues[index].take() else {
-                continue;
-            };
-            let Attempt {
-                queue,
-                role,
-                admission,
-                rate,
-                admitted_at,
-                work,
-            } = attempt;
-            let work = match work {
-                Work::Held { slot, .. }
-                    if self.core.msdu_expired(role, queue.category(), admitted_at) =>
-                {
-                    self.core.finish_attempt(
-                        hardware,
-                        role,
-                        queue,
-                        admission,
-                        slot,
-                        PublicationEnd::Expired { msdus: 1 },
-                        rate,
-                        sink,
-                    );
-                    continue;
-                }
-                Work::Held { slot, plan, single } => {
-                    match self
-                        .core
-                        .tx
-                        .start_queued_single_attempt(hardware, slot, plan, single)
-                    {
-                        Ok(queued) => Work::Published(queued),
-                        Err(QueuedSingleAttemptRefused { error, slot }) => {
-                            self.core.finish_attempt(
-                                hardware,
-                                role,
-                                queue,
-                                admission,
-                                slot,
-                                PublicationEnd::Withdrawn,
-                                rate,
-                                sink,
-                            );
-                            self.core.withdraw_held_attempts(hardware, sink);
-                            return Err(GateOpenFailed {
-                                fault: LowerMacFault::Tx(error),
-                                core: DisablingCore {
-                                    core: self.core,
-                                    gate: core::marker::PhantomData,
-                                },
-                            });
-                        }
-                    }
-                }
-                published @ (Work::Published(_) | Work::Quarantined { .. }) => published,
-            };
-            self.core.queues[index] = Some(Attempt {
-                queue,
-                role,
-                admission,
-                rate,
-                admitted_at,
-                work,
-            });
-        }
-        Ok(EnabledCore::new(self.core))
     }
 }
 impl<
@@ -537,16 +471,6 @@ impl<
     /// A pending publication's deadline bounds this FIFO barrier.
     pub fn next_deadline(&self) -> Option<oer_time::Instant> {
         self.core.next_deadline()
-    }
-    pub(crate) fn reset_contention(&mut self, role: VifRole, category: WmmAccessCategory) {
-        self.core.reset_contention(role, category);
-    }
-    pub(crate) fn received<'frame, H: StaNoiseFloorHardware>(
-        &self,
-        hardware: &H,
-        frame: &NormalizedRxFrame<'frame>,
-    ) -> Option<(&'frame [u8], Esp32s31RxMeta)> {
-        self.core.received(hardware, frame)
     }
     /// Service earlier publications without admitting any later command.
     pub fn service<
@@ -567,26 +491,13 @@ impl<
         hardware: &mut H,
         sink: &mut K,
     ) -> ConfigurationProgress<C> {
-        if self.core.fault.is_some() {
-            return ConfigurationProgress::Waiting(self);
-        }
-        for index in 0..LOWER_MAC_TX_QUEUES {
-            if self.core.queues[index]
-                .as_ref()
-                .is_some_and(|attempt| attempt.role == self.config.role)
-            {
-                self.core.abort_held(hardware, index, sink);
-            }
-        }
         if self
             .core
-            .attempts()
-            .any(|attempt| attempt.role == self.config.role)
+            .advance_vif(hardware, sink, self.config, self.policy)
         {
-            ConfigurationProgress::Waiting(self)
-        } else {
-            self.core.apply_vif(hardware, self.config, self.policy);
             ConfigurationProgress::Configured(self.core)
+        } else {
+            ConfigurationProgress::Waiting(self)
         }
     }
 }
@@ -640,6 +551,118 @@ impl<
                 fault: self.fault,
                 core,
             }),
+        }
+    }
+}
+
+impl<
+    'core,
+    'slot,
+    X: BackendTxProfile,
+    P: WifiTxPowerProfile,
+    E: WifiTxEntropy,
+    T: oer_time::Timer,
+    const BUFFER_SIZE: usize,
+    Path: PoolPath,
+    const TICKETS: usize,
+> LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>
+{
+    // The typed owners and the retained P2 owner share these hardware steps.
+    fn open_held_gate<H: LowerMacHardware, K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>>(
+        &mut self,
+        hardware: &mut H,
+        sink: &mut K,
+    ) -> Result<(), LowerMacFault> {
+        if let Some(fault) = self.fault {
+            return Err(fault);
+        }
+        hardware.set_power_save_tx_block(false);
+        for index in 0..LOWER_MAC_TX_QUEUES {
+            let Some(attempt) = self.queues[index].take() else {
+                continue;
+            };
+            let Attempt {
+                queue,
+                role,
+                admission,
+                rate,
+                admitted_at,
+                work,
+            } = attempt;
+            let work = match work {
+                Work::Held { slot, .. }
+                    if self.msdu_expired(role, queue.category(), admitted_at) =>
+                {
+                    self.finish_attempt(
+                        hardware,
+                        role,
+                        queue,
+                        admission,
+                        slot,
+                        PublicationEnd::Expired { msdus: 1 },
+                        rate,
+                        sink,
+                    );
+                    continue;
+                }
+                Work::Held { slot, plan, single } => {
+                    match self
+                        .tx
+                        .start_queued_single_attempt(hardware, slot, plan, single)
+                    {
+                        Ok(queued) => Work::Published(queued),
+                        Err(QueuedSingleAttemptRefused { error, slot }) => {
+                            self.finish_attempt(
+                                hardware,
+                                role,
+                                queue,
+                                admission,
+                                slot,
+                                PublicationEnd::Withdrawn,
+                                rate,
+                                sink,
+                            );
+                            self.withdraw_held_attempts(hardware, sink);
+                            return Err(LowerMacFault::Tx(error));
+                        }
+                    }
+                }
+                published @ (Work::Published(_) | Work::Quarantined { .. }) => published,
+            };
+            self.queues[index] = Some(Attempt {
+                queue,
+                role,
+                admission,
+                rate,
+                admitted_at,
+                work,
+            });
+        }
+        Ok(())
+    }
+    fn advance_vif<H: LowerMacHardware, K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>>(
+        &mut self,
+        hardware: &mut H,
+        sink: &mut K,
+        config: CoreVif,
+        policy: ReceivePolicy,
+    ) -> bool {
+        if self.fault.is_some() {
+            return false;
+        }
+        for index in 0..LOWER_MAC_TX_QUEUES {
+            if self.queues[index]
+                .as_ref()
+                .is_some_and(|attempt| attempt.role == config.role)
+            {
+                self.abort_held(hardware, index, sink);
+            }
+        }
+        if self.attempts().any(|attempt| attempt.role == config.role) {
+            false
+        } else {
+            self.apply_vif(hardware, config, policy);
+            true
         }
     }
 }

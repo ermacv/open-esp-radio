@@ -71,6 +71,12 @@ impl<'id> TestDriver<'id> {
         };
         core
     }
+    pub(super) fn take_disabled(self) -> DisabledCore<DeviceCore<'id>> {
+        let Some(State::Disabled(core)) = self.0 else {
+            panic!("disabled fixture")
+        };
+        core
+    }
     pub(super) fn idle_disabled(&self) -> bool {
         matches!(
             self.0,

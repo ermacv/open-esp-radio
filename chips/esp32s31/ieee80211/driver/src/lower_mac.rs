@@ -183,6 +183,7 @@ pub use lifecycle::{
     DisabledCore, DisablingCore, EnabledCore, GateClosure, GateOpenFailed, LifecycleStart,
     OpenGate, RetuningCore,
 };
+pub(crate) use lifecycle::{CoreOwner, CoreOwnerFault};
 
 mod keys;
 pub use keys::{
@@ -2570,6 +2571,7 @@ const fn mac_interface(role: VifRole) -> MacInterface {
 }
 
 /// The one receive-policy transaction a configuration maps onto.
+#[derive(Clone, Copy)]
 enum ReceivePolicy {
     StationDisabled,
     /// Station policy six: the BSS-member rules.
