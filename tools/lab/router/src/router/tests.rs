@@ -342,6 +342,8 @@ fn w3_applies_and_verifies_open_security_and_disables_he() {
     assert!(script.contains("wireless.radio9.ieee80211ax=0"));
     assert!(script.contains("wireless.lab_ap.network=oer_w3"));
     assert!(script.contains("wireless.lab_ap.isolate=1"));
+    assert!(script.contains("wifi down radio9"));
+    assert!(script.contains("wifi up radio9"));
     assert!(!profile().apply_script().unwrap().contains("encryption"));
     let configured = show_profiled().replace("encryption='psk2'", "encryption='none'")
         + "wireless.radio9.ieee80211ax='0'\n";

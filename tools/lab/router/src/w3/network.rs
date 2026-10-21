@@ -268,6 +268,11 @@ fn verify_script(interface: &str) -> Result<String> {
 }
 
 pub fn verify(remote: &mut dyn Remote, interface: &str, before: &str) -> Result<()> {
+    // fw4 resolves the source-zone device set again now that netifd has
+    // created the bridge. The initial reload precedes W3 activation.
+    remote
+        .run("/etc/init.d/firewall reload >/dev/null 2>&1")
+        .map_err(|_| "cannot reload firewall for the active W3 device")?;
     let script = verify_script(interface)?;
     let mut verified = false;
     for attempt in 0..10 {
@@ -414,6 +419,7 @@ mod tests {
         let hash = "a".repeat(64);
         let mut remote = Fake {
             replies: [
+                "".into(),
                 "verified\n".into(),
                 hash.clone(),
                 "".into(),
@@ -423,7 +429,8 @@ mod tests {
             scripts: vec![],
         };
         verify(&mut remote, "made-up-interface", &hash).unwrap();
-        assert!(remote.scripts.first().unwrap().contains("/master"));
+        assert!(remote.scripts.first().unwrap().contains("firewall reload"));
+        assert!(remote.scripts.iter().any(|s| s.contains("/master")));
         assert!(
             remote
                 .scripts
@@ -437,7 +444,7 @@ mod tests {
                     .unwrap()
         );
         let mut remote = Fake {
-            replies: ["verified\n".into(), "b".repeat(64)].into(),
+            replies: ["".into(), "verified\n".into(), "b".repeat(64)].into(),
             scripts: vec![],
         };
         assert!(verify(&mut remote, "made-up-interface", &hash).is_err());

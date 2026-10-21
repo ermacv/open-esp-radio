@@ -206,9 +206,10 @@ wireless radio/BSS. These are the complete settings it owns:
 There are no forwarding sections, NAT, LAN/WAN bridge ports or external DNS
 service in the W3 configuration. The firewall is validated and reloaded before
 the network is loaded. Network reload adds the W3 definitions without restarting
-LAN; only W3 is brought up explicitly. Wireless is committed/reloaded, then
-dnsmasq is reloaded after the addressed bridge contains exactly the selected
-BSS. Runtime checks verify the bridge address and membership, firewall reject
+LAN; only W3 is brought up explicitly. Wireless is committed and the selected
+radio is cycled to recreate its AP on the new bridge. Firewall is reloaded
+with the active W3 device before verification; dnsmasq is reloaded after the
+addressed bridge contains exactly the selected BSS. Runtime checks verify the bridge address and membership, firewall reject
 rules and running DHCP instance. SHA-256 of every non-W3 network section must
 be unchanged. The AX211 report lists all settings in `router_profile_changes`
 and service actions in `router_service_actions`, redacting generated SSIDs and

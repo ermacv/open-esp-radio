@@ -224,7 +224,15 @@ impl Profile {
             steps.push(set(&self.ap_section, "network", crate::w3::network::NAME)?);
             steps.push(set(&self.ap_section, "isolate", "1")?);
         }
-        steps.extend(["uci commit wireless".to_owned(), "wifi reload".to_owned()]);
+        steps.push("uci commit wireless".to_owned());
+        if self.open_station {
+            // Recreate the selected AP: a hot reload can update the SSID while
+            // retaining the previous bridge membership of its live netdev.
+            steps.push(format!("wifi down {}", quote(&self.radio)?));
+            steps.push(format!("wifi up {}", quote(&self.radio)?));
+        } else {
+            steps.push("wifi reload".to_owned());
+        }
         Ok(steps.join(" && "))
     }
 
