@@ -61,6 +61,7 @@ fn loads_report_their_sinks_limits_preservation_and_unused_bits() {
     let memory = WorkingMemory::new(64 * 1024 * 1024).expect("working memory");
     let mut by_name: BTreeMap<Vec<u8>, Vec<(u64, ReadUses)>> = BTreeMap::new();
     let mut functions = BTreeMap::new();
+    let mut observations = Vec::new();
     let summary = register_accesses(
         &[Executable::new(fixture(include_str!(
             "fixtures/read_uses.rs"
@@ -77,6 +78,7 @@ fn loads_report_their_sinks_limits_preservation_and_unused_bits() {
         &memory,
         &mut || Ok(()),
         &mut |observation, _| {
+            observations.push(observation.clone());
             if let RegisterAccess::Observation {
                 function,
                 fact,
@@ -130,6 +132,139 @@ fn loads_report_their_sinks_limits_preservation_and_unused_bits() {
     assert_eq!(read("preserve_rmw").preserved, !1);
     assert_eq!(read("preserve_rmw").unused, 1);
     assert!(read("preserve_rmw").uses.is_empty());
+    for (name, replacement) in [
+        ("rmw_variable", 0x3e0),
+        ("rmw_clear", 0x3e0),
+        ("rmw_constant", 0x3e0),
+        ("rmw_set", 32),
+        ("rmw_sparse", 0x39f),
+        ("rmw_right_shift", 0x1f),
+        ("rmw_variable_spilled", 0x3e0),
+    ] {
+        let reads = read(name);
+        assert_eq!(reads.preserved, !replacement, "{name}: {reads:?}");
+        assert_eq!(reads.unused, replacement, "{name}: {reads:?}");
+        assert!(reads.uses.is_empty(), "{name}: {reads:?}");
+        assert!(reads.unknown.is_empty(), "{name}: {reads:?}");
+        if name == "rmw_variable_spilled" {
+            // The CFG forwards known stack bytes; stored expressions do
+            // not forward memory and cannot prove this store's RMW shape.
+            assert!(!observations.iter().any(|observation| matches!(observation,
+                RegisterAccess::Observation { function, mask: Some(RegisterMask { kind: RegisterMaskKind::WriteReplacement, .. }), .. }
+                    if function.name.as_deref() == Some(name.as_bytes()))));
+            continue;
+        }
+        let mask = observations
+            .iter()
+            .find_map(|observation| match observation {
+                RegisterAccess::Observation { function, mask, .. }
+                    if function.name.as_deref() == Some(name.as_bytes())
+                        && mask.is_some_and(|mask| {
+                            mask.kind == RegisterMaskKind::WriteReplacement
+                        }) =>
+                {
+                    *mask
+                }
+                _ => None,
+            })
+            .expect("RMW replacement mask");
+        assert_eq!(mask.bits, replacement, "{name}");
+    }
+    assert_eq!(read("rmw_join").preserved, !1);
+    assert!(read("rmw_join").uses.iter().any(|usage| usage.bits == 1
+        && usage.precision == ReadPrecision::May
+        && matches!(
+            usage.sink,
+            ReadSink::Store {
+                same_word: true,
+                ..
+            }
+        )));
+    assert_eq!(read("rmw_xor").preserved, !1);
+    assert!(read("rmw_xor").uses.iter().any(|usage| usage.bits == 1
+        && usage.precision == ReadPrecision::Exact
+        && matches!(
+            usage.sink,
+            ReadSink::Store {
+                same_word: true,
+                ..
+            }
+        )));
+    let two = &by_name[b"rmw_two_loads".as_slice()];
+    assert_eq!(two[0].1.preserved, 0);
+    assert!(two[0].1.uses.iter().any(|usage| usage.bits == 0x3fff
+        && matches!(
+            usage.sink,
+            ReadSink::Store {
+                same_word: true,
+                ..
+            }
+        )));
+    assert_eq!(two[1].1.preserved, 0xf0003fff);
+    assert!(two[1].1.uses.is_empty());
+    // A bit which stored provenance identifies as an identity copy cannot
+    // also be consumed by that same store. Other sinks remain independent.
+    for observation in &observations {
+        let RegisterAccess::Observation {
+            function,
+            fact,
+            stored: Some(stored),
+            address,
+            ..
+        } = observation
+        else {
+            continue;
+        };
+        let FunctionRecord::MemoryAccess {
+            offset,
+            access: MemoryKind::Store,
+            ..
+        } = fact.as_ref()
+        else {
+            continue;
+        };
+        // Public stored runs omit the load-site id. Compare their masks
+        // only when the source load is unambiguous; the two-load regression
+        // above checks preservation and a moved source bit separately.
+        let loads = observations
+            .iter()
+            .filter(|candidate| {
+                matches!(candidate,
+            RegisterAccess::Observation { function: f, reads: Some(_), address: a, .. }
+                if f == function && a == address)
+            })
+            .count();
+        if loads != 1 {
+            continue;
+        }
+        let preserved = stored.iter().fold(0, |bits, run| {
+            if matches!(run.source, StoredBitsSource::Load { same_word: true, low, .. } if low == run.low) {
+                bits | (u32::MAX >> (32 - u32::from(run.width))) << run.low
+            } else { bits }
+        });
+        for read_observation in &observations {
+            if let RegisterAccess::Observation {
+                function: loaded_function,
+                reads: Some(reads),
+                address: loaded_address,
+                ..
+            } = read_observation
+                && function == loaded_function
+                && address == loaded_address
+            {
+                for usage in &reads.uses {
+                    if matches!(usage.sink, ReadSink::Store { site, same_word: true, .. } if site == *offset)
+                    {
+                        assert_eq!(
+                            usage.bits & preserved,
+                            0,
+                            "stored/read-flow disagreement: {observation:?}, {reads:?}"
+                        );
+                    }
+                }
+            }
+        }
+    }
     assert!(!by_name.contains_key(b"reset_write".as_slice()));
     assert!(!by_name.contains_key(b"nonreset_write".as_slice()));
     let shifted = read("shifted_branch");

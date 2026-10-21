@@ -169,6 +169,11 @@ pub(crate) fn observe<'a, 'm>(
                     c,
                 )?);
             }
+            let mask = mask.or_else(|| {
+                stored.as_deref().and_then(|stored| {
+                    oer_analysis_blobray_analysis::registers::write_mask(width, stored)
+                })
+            });
             emit(
                 Candidate {
                     record,
@@ -184,14 +189,6 @@ pub(crate) fn observe<'a, 'm>(
         })
     };
     facts.accesses(c, &mut |access, c| {
-        let mask = access.value.and_then(|v| {
-            oer_analysis_blobray_analysis::registers::write_mask(
-                facts,
-                access.address,
-                access.width,
-                v,
-            )
-        });
         let stored_value = access
             .value
             .filter(|_| matches!(access.access, MemoryKind::Store));
@@ -199,7 +196,7 @@ pub(crate) fn observe<'a, 'm>(
             access.record,
             access.width,
             access.address,
-            mask,
+            None,
             stored_value,
             c,
         )

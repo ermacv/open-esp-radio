@@ -2,7 +2,7 @@
 
 Inspect MMIO candidates and captured data.
 
-[Choose a task](../../README.md#choose-a-task) · [All command references](../../README.md#reference-navigation).
+[Choose a task](../../../blobray-README.md#choose-a-task) · [All command references](../../README.md#reference-navigation).
 
 ## Captured data, tables and coefficients
 
@@ -117,6 +117,13 @@ evaluation. The human groups print them high bits first, for example
 `[31:25]=kept [24:18]=arg0[6:0] [17:0]=kept`, and another word's bits with
 their load width (`load 1B 0xa[7:0]`); entries with different sources stay
 apart, keyed by the sources themselves.
+
+When at least one stored bit is copied from the same word at the same
+position, `write-replacement` covers every other bit of the write. This
+includes explicit AND-clears and OR-sets, even when the replacement equals
+the hardware reset value. A write without identically preserved bits has no
+replacement mask; its `stored` runs still describe the whole write. These
+observations establish no hardware RMW safety or register-field meaning.
 
 A load observation carries `reads`: `uses` (`bits`, a tagged `sink`, and
 `precision` `exact` or `may`), `unknown` (`bits`, `limit`), `preserved`, and

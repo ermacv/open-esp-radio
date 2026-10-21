@@ -64,50 +64,23 @@ pub fn read_mask<'a>(
     }
 }
 
-/// Recognize a same-address/width load-preserve-OR store. The result includes
-/// every bit the replacement may set; unknown replacement conservatively covers all bits.
-pub fn write_mask(
-    facts: &Facts<'_, '_>,
-    address: &AbstractValue,
-    width: u8,
-    value: &AbstractValue,
-) -> Option<RegisterMask> {
-    let mut expression = facts.value_expression(value)?;
-    if let Some((value, mask)) = masked(expression)
-        && mask == width_mask(width)?
-    {
-        expression = facts.value_expression(value)?;
-    }
-    let Expression::Integer {
-        op: IntegerOp::Or,
-        left,
-        right,
-    } = expression
-    else {
-        return None;
-    };
-    for (preserved, replacement) in [(left, right), (right, left)] {
-        let Some(e) = facts.value_expression(preserved) else {
-            continue;
-        };
-        let Some((load, preserve)) = masked(e) else {
-            continue;
-        };
-        if let Some(Expression::Load {
-            address: original,
-            width: original_width,
-            ..
-        }) = facts.value_expression(load)
-            && address == original
-            && width == *original_width
+/// A read-modify-write replaces every stored bit except those copied
+/// identically from the same word. A write without any preserved bit has no
+/// replacement mask; its stored provenance still describes the whole write.
+pub fn write_mask(width: u8, stored: &[StoredBits]) -> Option<RegisterMask> {
+    let mask = width_mask(width)?;
+    let preserved = stored.iter().fold(0, |bits, run| {
+        if matches!(run.source, StoredBitsSource::Load { low, same_word: true, .. } if low == run.low)
         {
-            return Some(RegisterMask {
-                kind: RegisterMaskKind::WriteReplacement,
-                bits: (!preserve | constant(replacement).unwrap_or(u32::MAX)) & width_mask(width)?,
-            });
+            bits | (u32::MAX >> (32 - u32::from(run.width))) << run.low
+        } else {
+            bits
         }
-    }
-    None
+    }) & mask;
+    (preserved != 0).then_some(RegisterMask {
+        kind: RegisterMaskKind::WriteReplacement,
+        bits: mask & !preserved,
+    })
 }
 
 /// One bit of a stored value: fixed, an entry register's bit, a loaded
@@ -556,10 +529,103 @@ impl ReadAtom {
     }
 }
 
+/// Known value bits travel with dependencies, including values with no
+/// selected load source (arguments, constants and their masked results).
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Hash)]
+struct ReadKnown {
+    zero: u32,
+    one: u32,
+}
+impl ReadKnown {
+    fn constant(value: u32) -> Self {
+        Self {
+            zero: !value,
+            one: value,
+        }
+    }
+    fn not(self) -> Self {
+        Self {
+            zero: self.one,
+            one: self.zero,
+        }
+    }
+    fn constant_value(self) -> Option<u32> {
+        (self.zero | self.one == u32::MAX).then_some(self.one)
+    }
+    fn wire(self, mapping: impl Fn(usize) -> Option<usize>) -> Self {
+        let mut result = Self::default();
+        for i in 0..32 {
+            let bit = 1 << i;
+            match mapping(i) {
+                Some(from) if from < 32 => {
+                    result.zero |= ((self.zero >> from) & 1) << i;
+                    result.one |= ((self.one >> from) & 1) << i;
+                }
+                _ => result.zero |= bit,
+            }
+        }
+        result
+    }
+    fn integer(op: IntegerOp, a: Self, b: Self) -> Self {
+        use IntegerOp::*;
+        match op {
+            AndNot => Self::integer(And, a, b.not()),
+            OrNot => Self::integer(Or, a, b.not()),
+            XorNot => Self::integer(Xor, a, b.not()),
+            And => Self {
+                zero: a.zero | b.zero,
+                one: a.one & b.one,
+            },
+            Or => Self {
+                zero: a.zero & b.zero,
+                one: a.one | b.one,
+            },
+            Xor => Self {
+                zero: (a.zero & b.zero) | (a.one & b.one),
+                one: (a.zero & b.one) | (a.one & b.zero),
+            },
+            Add | Sub if b.constant_value() == Some(0) => a,
+            Add if a.constant_value() == Some(0) => b,
+            Shl | Shr | Sar | RotateLeft | RotateRight | BitExtract
+                if b.constant_value().is_some() =>
+            {
+                let by = b.one as usize & 31;
+                a.wire(|i| match op {
+                    Shl => i.checked_sub(by),
+                    Shr => (i + by < 32).then_some(i + by),
+                    Sar => Some((i + by).min(31)),
+                    RotateLeft => Some((i + 32 - by) & 31),
+                    RotateRight => Some((i + by) & 31),
+                    BitExtract => (i == 0).then_some(by),
+                    _ => None,
+                })
+            }
+            SignExtendByte | SignExtendHalf | ByteReverse => a.wire(|i| {
+                Some(match op {
+                    SignExtendByte => i.min(7),
+                    SignExtendHalf => i.min(15),
+                    _ => (3 - i / 8) * 8 + i % 8,
+                })
+            }),
+            _ => Self::default(),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Hash)]
 struct ReadCell {
     flow: usize,
     atom: ReadAtom,
+    known: ReadKnown,
+}
+impl ReadCell {
+    fn constant(value: u32) -> Self {
+        Self {
+            flow: 0,
+            atom: ReadAtom::Constant(value),
+            known: ReadKnown::constant(value),
+        }
+    }
 }
 #[derive(Clone, Copy, Eq, PartialEq, Hash)]
 struct ReadSlot {
@@ -577,18 +643,13 @@ impl ReadState {
             registers: [ReadCell::default(); 32],
             slots: 0,
         };
-        state.set(
-            0,
-            ReadCell {
-                flow: 0,
-                atom: ReadAtom::Constant(0),
-            },
-        );
+        state.set(0, ReadCell::constant(0));
         state.set(
             2,
             ReadCell {
                 flow: 0,
                 atom: ReadAtom::Stack(0),
+                known: ReadKnown::default(),
             },
         );
         state
@@ -602,10 +663,7 @@ impl ReadState {
     fn operand(&self, operand: Operand) -> ReadCell {
         match operand {
             Operand::Register(register) => self.register(register),
-            Operand::Immediate(value) => ReadCell {
-                flow: 0,
-                atom: ReadAtom::Constant(value),
-            },
+            Operand::Immediate(value) => ReadCell::constant(value),
         }
     }
     fn set(&mut self, register: u8, value: ReadCell) {
@@ -665,7 +723,7 @@ struct ReadDispatch {
 enum ReadFlowOp {
     Join,
     Assemble,
-    Integer(IntegerOp, ReadAtom, ReadAtom),
+    Integer(IntegerOp, ReadKnown, ReadKnown),
 }
 
 /// Bound pathological CFGs without spending the whole operation's budget on
@@ -1049,11 +1107,19 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
             self.binary_flow(
                 left.flow,
                 right.flow,
-                ReadFlowOp::Integer(op, left.atom, right.atom),
+                ReadFlowOp::Integer(op, left.known, right.known),
                 c,
             )?
         };
-        Ok(ReadCell { flow, atom })
+        let known = atom
+            .constant()
+            .map(ReadKnown::constant)
+            .unwrap_or_else(|| ReadKnown::integer(op, left.known, right.known));
+        let atom = known
+            .constant_value()
+            .map(ReadAtom::Constant)
+            .unwrap_or(atom);
+        Ok(ReadCell { flow, atom, known })
     }
     fn map_flow(
         &mut self,
@@ -1103,6 +1169,10 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
                 a.atom
             } else {
                 ReadAtom::Unknown
+            },
+            known: ReadKnown {
+                zero: a.known.zero & b.known.zero,
+                one: a.known.one & b.known.one,
             },
         })
     }
@@ -1267,10 +1337,7 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
                 let value = self.integer(
                     IntegerOp::Add,
                     input.register(base),
-                    ReadCell {
-                        flow: 0,
-                        atom: ReadAtom::Constant(offset as u32),
-                    },
+                    ReadCell::constant(offset as u32),
                     c,
                 )?;
                 if !instruction.dispatch {
@@ -1350,13 +1417,10 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
                 if dest != 0 {
                     output.set(
                         dest,
-                        ReadCell {
-                            flow: 0,
-                            atom: if pc_relative {
-                                ReadAtom::Unknown
-                            } else {
-                                ReadAtom::Constant(value)
-                            },
+                        if pc_relative {
+                            ReadCell::default()
+                        } else {
+                            ReadCell::constant(value)
                         },
                     );
                 }
@@ -1379,10 +1443,7 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
                 let address = self.integer(
                     IntegerOp::Add,
                     input.register(base),
-                    ReadCell {
-                        flow: 0,
-                        atom: ReadAtom::Constant(displacement as u32),
-                    },
+                    ReadCell::constant(displacement as u32),
                     c,
                 )?;
                 if emit {
@@ -1424,7 +1485,11 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
                             output.slots = self.store_byte(
                                 output.slots,
                                 offset.wrapping_add(byte as i64),
-                                ReadCell { flow, atom },
+                                ReadCell {
+                                    flow,
+                                    atom,
+                                    known: value.known.wire(|i| (i < 8).then_some(i + byte * 8)),
+                                },
                                 c,
                             )?;
                         }
@@ -1437,7 +1502,17 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
                     }
                 }
                 if matches!(kind, MemoryKind::Load | MemoryKind::LoadReserved) {
-                    let mut value = ReadCell::default();
+                    let mut value = ReadCell {
+                        known: if signed {
+                            ReadKnown::default()
+                        } else {
+                            ReadKnown {
+                                zero: !mask,
+                                one: 0,
+                            }
+                        },
+                        ..ReadCell::default()
+                    };
                     if let Some(offset) = stack {
                         let mut constant = Some(0u32);
                         for byte in 0..usize::from(width) {
@@ -1456,6 +1531,8 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
                             )?;
                             value.flow =
                                 self.binary_flow(value.flow, flow, ReadFlowOp::Assemble, c)?;
+                            value.known.zero |= (cell.known.zero & 255) << (byte * 8);
+                            value.known.one |= (cell.known.one & 255) << (byte * 8);
                             constant = constant
                                 .zip(cell.atom.constant())
                                 .map(|(a, b)| a | ((b & 255) << (byte * 8)));
@@ -1466,6 +1543,9 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
                                 |i| Some(i.min(usize::from(width) * 8 - 1)),
                                 c,
                             )?;
+                            value.known = value
+                                .known
+                                .wire(|i| Some(i.min(usize::from(width) * 8 - 1)));
                         }
                         value.atom = constant
                             .map(|v| {
@@ -1512,6 +1592,9 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
             if known != ReadAtom::Unknown {
                 let mut value = output.register(register);
                 value.atom = known;
+                if let Some(constant) = known.constant() {
+                    value.known = ReadKnown::constant(constant);
+                }
                 output.set(register, value);
             }
         }
@@ -1837,49 +1920,54 @@ fn opaque_read_registers(bytes: &[u8], operation: SemanticOp) -> u32 {
 
 fn read_operation(
     op: IntegerOp,
-    a: ReadAtom,
-    b: ReadAtom,
+    a: ReadKnown,
+    b: ReadKnown,
     l: ReadDependency,
     r: ReadDependency,
 ) -> ReadDependency {
     let mut out = ReadDependency::empty(l.load);
-    let left = a.constant();
-    let right = b.constant();
+    let right = b.constant_value();
     use IntegerOp::*;
     match op {
-        And | Or | Xor | AndNot | OrNot | XorNot if left.is_some() || right.is_some() => {
-            let (source, constant, inverted_operand) = if let Some(value) = right {
-                (l, value, matches!(op, AndNot | OrNot))
-            } else {
-                (r, left.unwrap_or(0), false)
-            };
-            let constant = if inverted_operand {
-                !constant
-            } else {
-                constant
-            };
-            let keep = match op {
-                And | AndNot => constant,
-                Or | OrNot => !constant,
-                _ => u32::MAX,
-            };
-            out = source.wire(|i| (keep & (1 << i) != 0).then_some(i));
-            let invert = match op {
-                Xor => constant,
-                XorNot => !constant,
-                AndNot | OrNot if right.is_none() => u32::MAX,
-                _ => 0,
-            };
-            out.inverted ^= invert;
-        }
         And | Or | Xor | AndNot | OrNot | XorNot => {
-            for ((out, (le, lm)), (re, rm)) in out
-                .may
+            let (b, r) = if matches!(op, AndNot | OrNot | XorNot) {
+                let mut inverted = r;
+                inverted.inverted ^= u32::MAX;
+                (b.not(), inverted)
+            } else {
+                (b, r)
+            };
+            for (i, ((exact, may), ((le, lm), (re, rm)))) in out
+                .exact
                 .iter_mut()
-                .zip(l.exact.iter().zip(&l.may))
-                .zip(r.exact.iter().zip(&r.may))
+                .zip(&mut out.may)
+                .zip(l.exact.iter().zip(&l.may).zip(r.exact.iter().zip(&r.may)))
+                .enumerate()
             {
-                *out = le | lm | re | rm;
+                let bit = 1 << i;
+                let a_zero = a.zero & bit != 0;
+                let a_one = a.one & bit != 0;
+                let b_zero = b.zero & bit != 0;
+                let b_one = b.one & bit != 0;
+                let source = match op {
+                    And | AndNot if a_zero || b_zero => None,
+                    Or | OrNot if a_one || b_one => None,
+                    And | AndNot if a_one => Some((re, rm, r.inverted, false)),
+                    And | AndNot if b_one => Some((le, lm, l.inverted, false)),
+                    Or | OrNot if a_zero => Some((re, rm, r.inverted, false)),
+                    Or | OrNot if b_zero => Some((le, lm, l.inverted, false)),
+                    Xor | XorNot if a_zero || a_one => Some((re, rm, r.inverted, a_one)),
+                    Xor | XorNot if b_zero || b_one => Some((le, lm, l.inverted, b_one)),
+                    _ => {
+                        *may = le | lm | re | rm;
+                        None
+                    }
+                };
+                if let Some((e, m, inverted, invert)) = source {
+                    *exact = *e;
+                    *may = *m;
+                    out.inverted |= (inverted ^ if invert { bit } else { 0 }) & bit;
+                }
             }
         }
         Shl | Shr | Sar | RotateLeft | RotateRight | BitExtract if right.is_some() => {
@@ -1921,7 +2009,13 @@ fn read_operation(
                 ShiftAdd2 => 2,
                 _ => 3,
             };
-            out = read_operation(Add, ReadAtom::Unknown, b, l.wire(|i| i.checked_sub(by)), r);
+            out = read_operation(
+                Add,
+                ReadKnown::default(),
+                b,
+                l.wire(|i| i.checked_sub(by)),
+                r,
+            );
         }
         _ => {
             let (a, b) = l.selected(u32::MAX);
@@ -2267,7 +2361,7 @@ mod tests {
             .collect()
     }
     #[test]
-    fn masks_preserve_source_bit_positions_and_never_shrink_unknown_replacement() {
+    fn masks_preserve_source_positions_and_require_proven_preservation() {
         let memory = WorkingMemory::new(65536).unwrap();
         let records = records(vec![
             Expression::Load {
@@ -2318,20 +2412,19 @@ mod tests {
         )
         .unwrap();
         assert_eq!((width, mask.bits), (2, 0xf0));
-        assert_eq!(
-            write_mask(&facts, &number(0x20000), 2, &value(4))
-                .unwrap()
-                .bits,
-            0xffff
-        );
-        assert_eq!(
-            write_mask(&facts, &number(0x20000), 2, &value(5))
-                .unwrap()
-                .bits,
-            0x10f
-        );
-        assert!(write_mask(&facts, &number(0x20001), 2, &value(5)).is_none());
-        assert!(write_mask(&facts, &number(0x20000), 4, &value(5)).is_none());
+        let mut evaluator = StoredBitsEvaluator::new(&facts, &memory);
+        let values = [value(4), value(5)];
+        let addresses = [number(0x20000), number(0x20001)];
+        let mut mask = |address, width, value| {
+            write_mask(
+                width,
+                &stored_bits(&mut evaluator, address, width, value, &mut || Ok(())).unwrap(),
+            )
+        };
+        assert!(mask(&addresses[0], 2, &values[0]).is_none());
+        assert_eq!(mask(&addresses[0], 2, &values[1]).unwrap().bits, 0x10f);
+        assert!(mask(&addresses[1], 2, &values[1]).is_none());
+        assert!(mask(&addresses[0], 4, &values[1]).is_none());
     }
     #[test]
     fn stored_bits_name_fields_kept_bits_constants_and_unknowns() {
