@@ -41,8 +41,8 @@ signed intermediate before splitting data and write mode for the typed PAC.
 In particular, underflow can propagate into the mode byte, as in ROM. Matching
 that behavior does not qualify an out-of-range correction on physical RF.
 
-`target_port::rfpll::{search, correct}` uses the existing typed I2C bindings,
-direct bounded status polling and frequency-memory operations. Required 2-us
+The target adapter uses the existing typed I2C bindings, direct bounded status
+polling and frequency-memory operations. Required 2-us
 entry settle uses the short ROM delay backend. The admitted transaction uses
 the private P1 transport engine. Each complete I2C bus command returns `Pending`
 through the waker: the two initial reads, low-byte write and both commands of
@@ -55,6 +55,11 @@ Each complete memory entry (read and write), setup operation, final write and
 channel-index restoration also has a checkpoint. These voluntary yields
 construct no timer. Grant protection and software frequency control remain
 held across them; failure or cancellation cannot publish restoration.
+The Driver shares its outlined clock conversion with the command adapter.
+RFPLL uses its own command/settle timestamps; the generic deadline timestamp
+and unobserved voluntary-yield timestamps are omitted. Required phase timestamps
+are unchanged; the final poll timestamp includes dispatch, hardware, model and
+observer work.
 The finite edge limits do not establish a wall-clock bound.
 
 Cold/registration RFPLL I2C also enters the P1 Driver and the same outlined

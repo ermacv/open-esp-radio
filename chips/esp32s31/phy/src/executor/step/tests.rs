@@ -1253,57 +1253,61 @@ fn rfpll_driver_wakes_once_per_checkpoint_without_a_timer_or_gap_timeout() {
             core::future::ready(())
         }
     }
-    let clock = VirtualClock::<1>::new();
-    let timer = NoWait {
-        clock: &clock,
-        constructed: Cell::new(0),
-    };
-    let mut io = Io {
-        rfpll_initial: 100,
-        ..Io::default()
-    };
-    let mut correction = crate::tracking::rfpll::Correction::new(13);
-    let mut stats = EngineTiming::default();
-    let (waker, wakes) = context();
-    let mut cx = Context::from_waker(&waker);
-    let mut pending = 0;
-    {
-        let mut job = Job::rfpll(rfpll::Cursor::Correction(&mut correction), clock.now())
-            .expect("deadline fits");
-        let mut driver = core::pin::pin!(drive::<TestDelay, _, _>(
-            &mut job,
-            &mut io,
-            &timer,
-            Some(&mut stats),
-            None,
-            None
-        ));
-        loop {
-            match driver.as_mut().poll(&mut cx) {
-                Poll::Pending => {
-                    pending += 1;
-                    clock
-                        .advance(Duration::from_micros(500))
-                        .expect("time fits");
-                }
-                Poll::Ready(result) => {
-                    assert_eq!(result, Ok(()));
-                    break;
+    for observed in [false, true] {
+        let clock = VirtualClock::<1>::new();
+        let timer = NoWait {
+            clock: &clock,
+            constructed: Cell::new(0),
+        };
+        let mut io = Io {
+            rfpll_initial: 100,
+            ..Io::default()
+        };
+        let mut correction = crate::tracking::rfpll::Correction::new(13);
+        let mut stats = EngineTiming::default();
+        let mut trace = crate::tracking::observation::RfpllEngineTrace::default();
+        let (waker, wakes) = context();
+        let mut cx = Context::from_waker(&waker);
+        let mut pending = 0;
+        {
+            let mut job = Job::rfpll(rfpll::Cursor::Correction(&mut correction), clock.now())
+                .expect("deadline fits");
+            let mut driver = core::pin::pin!(drive::<TestDelay, _, _>(
+                &mut job,
+                &mut io,
+                &timer,
+                Some(&mut stats),
+                None,
+                observed.then_some(&mut trace)
+            ));
+            loop {
+                match driver.as_mut().poll(&mut cx) {
+                    Poll::Pending => {
+                        pending += 1;
+                        clock
+                            .advance(Duration::from_micros(500))
+                            .expect("time fits");
+                    }
+                    Poll::Ready(result) => {
+                        assert_eq!(result, Ok(()));
+                        break;
+                    }
                 }
             }
         }
+        assert_eq!(timer.constructed.get(), 0);
+        assert_eq!(pending, 247); // Initial/enable commands, four polls per candidate, final write.
+        assert_eq!(wakes.0.load(std::sync::atomic::Ordering::Relaxed), pending);
+        assert_eq!(
+            (stats.pending as usize, stats.polls as usize, stats.resumes),
+            (pending, pending + 1, 0)
+        );
+        assert!(matches!(
+            correction.action(),
+            crate::tracking::rfpll::Action::Complete(_)
+        ));
+        assert!(!trace.invalid);
     }
-    assert_eq!(timer.constructed.get(), 0);
-    assert_eq!(pending, 247); // Initial/enable commands, four polls per candidate, final write.
-    assert_eq!(wakes.0.load(std::sync::atomic::Ordering::Relaxed), pending);
-    assert_eq!(
-        (stats.pending as usize, stats.polls as usize, stats.resumes),
-        (pending, pending + 1, 0)
-    );
-    assert!(matches!(
-        correction.action(),
-        crate::tracking::rfpll::Action::Complete(_)
-    ));
 }
 
 #[test]

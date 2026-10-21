@@ -21,7 +21,7 @@ use core::{
     task::{Context, Poll},
 };
 use io::Io;
-use oer_time::{Duration, Instant, Timer};
+use oer_time::{Clock, Duration, Instant, Timer};
 
 const EDGE_MICROS: u64 = super::wait::poll::OBSERVATION_MICROS;
 const RETRY: Duration = Duration::from_micros(1);
@@ -449,7 +449,10 @@ impl<
     #[inline(never)]
     fn poll(self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<Self::Output> {
         let mut this = self.project();
-        let started = this.stats.as_ref().map(|_| this.timer.now());
+        // Share the platform clock conversion across all poll branches. The
+        // concrete Timer still owns every wait; observation uses that same clock.
+        let clock = &rfpll::OutlinedClock(*this.timer);
+        let started = this.stats.as_ref().map(|_| clock.now());
         let mut resumed = None;
         let mut advanced = false;
         let mut ready_elapsed = None;
@@ -458,7 +461,7 @@ impl<
             if *this.gate == Gate::Yield {
                 if let Some(trace) = this.trace.as_deref_mut() {
                     trace.yield_resumed(
-                        this.timer
+                        clock
                             .now()
                             .saturating_duration_since(*this.wait_at)
                             .as_micros(),
@@ -486,7 +489,7 @@ impl<
                 if !ready {
                     break Poll::Pending;
                 }
-                resumed = Some((at, this.timer.now()));
+                resumed = Some((at, clock.now()));
                 *this.gate = Gate::Idle;
             }
             let sample = this.trace.as_ref().and_then(|_| match &this.job.work {
@@ -502,12 +505,18 @@ impl<
                 },
                 _ => None,
             });
-            let now = this.timer.now();
+            // RFPLL measures its own command/settle Instants and returns only
+            // Runnable/terminal steps; it never reads the generic deadline now.
+            let now = if matches!(&this.job.work, Work::Rfpll(_)) {
+                Instant::EPOCH
+            } else {
+                clock.now()
+            };
             let mut step = this.registers.advance::<D, _>(this.job, *this.timer, now);
             // A successful T7 publication establishes a fresh answer window
             // from its completion, including RMW's second command.
             if this.job.first_wait {
-                let completed = this.timer.now();
+                let completed = clock.now();
                 match answer_deadline(completed) {
                     Ok(at) => this.job.deadline = at,
                     Err(error) => step = Step::Failure(error),
@@ -516,36 +525,36 @@ impl<
             // Timestamp the completed readiness atom before trace/wake bookkeeping.
             if this.stats.is_some() {
                 if let Some(at) = this.job.ready_started.take() {
-                    ready_elapsed = Some(this.timer.now().saturating_duration_since(at));
+                    ready_elapsed = Some(clock.now().saturating_duration_since(at));
                 }
             }
             if let (Some(trace), Some(sample)) = (this.trace.as_deref_mut(), sample) {
                 if let Some(first) = sample {
                     trace_checked(trace, *this.registers, now, first, step, resumed);
                 } else if this.job.first_wait {
-                    trace.command_started(this.timer.now());
+                    trace.command_started(clock.now());
                 }
             }
             let at = match step {
                 Step::Complete => break Poll::Ready(Ok(())),
                 Step::Failure(error) => break Poll::Ready(Err(error)),
-                Step::Rfpll(sample) => {
-                    rfpll_sample = Some(sample);
+                Step::Rfpll(_) | Step::Runnable => {
+                    if let Step::Rfpll(sample) = step {
+                        rfpll_sample = Some(sample);
+                    }
                     *this.gate = Gate::Yield;
                     context.waker().wake_by_ref();
-                    *this.wait_at = this.timer.now();
-                    break Poll::Pending;
-                }
-                Step::Runnable => {
-                    *this.gate = Gate::Yield;
-                    context.waker().wake_by_ref();
-                    *this.wait_at = this.timer.now();
+                    // A voluntary yield has no timer deadline. Only the T7
+                    // readiness trace consumes its publication/resume interval.
+                    if this.trace.is_some() {
+                        *this.wait_at = clock.now();
+                    }
                     break Poll::Pending;
                 }
                 Step::WaitAt(at) => {
                     // Backoff starts after the status/command atom. The first
                     // temperature observation keeps its full 1-us minimum.
-                    let completed = this.timer.now();
+                    let completed = clock.now();
                     let Some(at) = completed.checked_add(at.saturating_duration_since(now)) else {
                         break Poll::Ready(Err(Failure::DeadlineOverflow));
                     };
@@ -557,7 +566,7 @@ impl<
                 }
             };
             *this.wait_at = at;
-            if at <= this.timer.now() {
+            if at <= clock.now() {
                 *this.gate = Gate::Ready;
             } else {
                 this.wait.as_mut().set(Some((this.make_wait)(at)));
@@ -567,7 +576,7 @@ impl<
         };
         if let (Some(stats), Some(started)) = (this.stats.as_deref_mut(), started) {
             stats.poll_finished(
-                this.timer,
+                clock,
                 started,
                 result.is_pending(),
                 resumed,
