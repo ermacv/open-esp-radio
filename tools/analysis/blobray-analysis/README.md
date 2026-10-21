@@ -8,6 +8,10 @@ navigation. They have no filesystem authority.
 `registers` recognizes bounded load/mask/store expression shapes using
 the shared borrowed fact index. It reports bit-selection observations with their
 original physical load width; application owns address scope.
+Its independent read-use pass propagates load-site dependencies over the
+instruction CFG to a fixed point, with union at joins, explicit limits and
+byte-level stack transfers. Interned state sets and the queue have working
+memory admission; each function's pass also has a 100,000 work-unit cap.
 It never infers register geometry, hardware field meaning or safe RMW semantics.
 
 The `audit` module scans all supplied executable ranges linearly for direct and

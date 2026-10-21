@@ -2454,6 +2454,7 @@ version = "0.1.0"
 dependencies = [
  "oer-analysis-blobray-domain",
  "oer-analysis-riscv-analysis",
+ "oer-analysis-riscv-decode",
  "oer-analysis-riscv-model",
 ]
 

@@ -22,8 +22,8 @@ pub(crate) struct Candidate<'a> {
 /// address and expression observations do not run it or change their results.
 pub(crate) struct ReadObservations<'f, 'a, 'm> {
     evaluator: oer_analysis_blobray_analysis::registers::ReadUsesEvaluator<'f, 'a, 'm>,
-    stored: oer_analysis_blobray_analysis::registers::StoredBitsEvaluator<'f, 'a, 'm>,
-    complete: bool,
+    decoder: &'f dyn FunctionSemantics,
+    ranges: &'f [ImageRegion],
     abi: Option<CallAbi>,
 }
 
@@ -31,17 +31,16 @@ impl<'f, 'a, 'm> ReadObservations<'f, 'a, 'm> {
     pub fn new(
         facts: &'f Facts<'a, 'm>,
         memory: &'m WorkingMemory,
-        complete: bool,
+        decoder: &'f dyn FunctionSemantics,
+        ranges: &'f [ImageRegion],
         abi: Option<CallAbi>,
     ) -> Self {
         Self {
             evaluator: oer_analysis_blobray_analysis::registers::ReadUsesEvaluator::new(
                 facts, memory,
             ),
-            stored: oer_analysis_blobray_analysis::registers::StoredBitsEvaluator::new(
-                facts, memory,
-            ),
-            complete,
+            decoder,
+            ranges,
             abi,
         }
     }
@@ -63,8 +62,12 @@ impl<'f, 'a, 'm> ReadObservations<'f, 'a, 'm> {
             ..
         } = fact
         {
-            self.evaluator
-                .analyze(self.complete, self.abi, &mut self.stored, c)?;
+            self.evaluator.analyze(
+                self.abi,
+                self.decoder,
+                &mut |address, width, c| selected_read(address, width, self.ranges, c),
+                c,
+            )?;
             self.evaluator
                 .reads(*offset, address, *width, *access, c)
                 .map(Some)
@@ -72,6 +75,27 @@ impl<'f, 'a, 'm> ReadObservations<'f, 'a, 'm> {
             Ok(None)
         }
     }
+}
+
+fn selected_read(
+    address: &AbstractValue,
+    width: u8,
+    ranges: &[ImageRegion],
+    c: &mut dyn RunControl,
+) -> Result<bool> {
+    let mut selected = false;
+    candidates(address, c, &mut |address, _, c| {
+        c.checkpoint(ranges.len() as u64 + 1)?;
+        selected |= address.is_none_or(|address| {
+            ranges.is_empty()
+                || ranges.iter().any(|range| {
+                    u64::from(address) < range.end().unwrap_or(0)
+                        && u64::from(range.start) < u64::from(address) + u64::from(width)
+                })
+        });
+        Ok(())
+    })?;
+    Ok(selected)
 }
 
 type Observer<'a> = dyn FnMut(Candidate<'_>, &mut dyn RunControl) -> Result<()> + 'a;

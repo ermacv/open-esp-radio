@@ -182,6 +182,77 @@ function lost_join
 3:  ret
 end lost_join
 
+function loop_accumulate
+    lui t0, 0x20107
+    lw t1, 0(t0)
+    li t2, 0
+2:  add t2, t2, t1
+    addi a2, a2, -1
+    bnez a2, 2b
+    bnez t2, 3f
+    ret
+3:  ret
+end loop_accumulate
+
+function stack_roundtrip
+    addi sp, sp, -16
+    lui t0, 0x20107
+    lw t1, 0(t0)
+    sw t1, 4(sp)
+    lw t2, 4(sp)
+    addi sp, sp, 16
+    bnez t2, 2f
+    ret
+2:  ret
+end stack_roundtrip
+
+function saved_across_call
+    lui t0, 0x20107
+    lw s0, 0(t0)
+    call external
+    bnez s0, 2f
+    ret
+2:  ret
+end saved_across_call
+
+function isolated_opaque
+    lui t0, 0x20107
+    lw t1, 0(t0)
+    lw t2, 4(t0)
+    csrrw zero, 0x340, t1
+    li t2, 0
+    ret
+end isolated_opaque
+
+function dead_before_open_edge
+    lui t0, 0x20107
+    lw t1, 0(t0)
+    li t1, 0
+    jr a2
+end dead_before_open_edge
+
+function unknown_stack_byte
+    lui t0, 0x20107
+    lw t1, 0(t0)
+    sub sp, sp, a2
+    sb t1, 0(sp)
+    li t1, 0
+    ret
+end unknown_stack_byte
+
+function conflicting_join
+    lui t0, 0x20107
+    lw t1, 0(t0)
+    beqz a2, 2f
+    srli t1, t1, 4
+    j 3f
+2:  srli t1, t1, 8
+3:  andi t1, t1, 1
+    bnez t1, 4f
+    ret
+4:  ret
+end conflicting_join
+
 function dispatch_index
     lui t0, 0x20107
     lw t1, 0(t0)

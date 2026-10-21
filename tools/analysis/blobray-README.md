@@ -36,6 +36,42 @@ Real input needs your own identified vendor artifacts.
 | What values or coefficients does this code use? | An exact object and data range | Exact bytes, provenance and relocation counts | Review and record required data with provenance |
 | Does this compiled Rust operation agree with the vendor case? | Both compiled implementations, concrete scenarios, models and a relation | Execution completeness, selected differences and model assumptions | Fix the implementation or review the intended relation |
 
+## Loaded bit uses
+
+`register-accesses` schema 9 adds `reads` to each load observation. Source bit
+positions belong to that load's access width. Each bit is in exactly one class,
+with precedence `uses` > `unknown` > `preserved` > `unused`:
+
+- `uses` names the branch, dispatch index, indirect target, memory address,
+  store, call argument or return register the bit reaches. `Exact` records
+  bit wiring; `May` records arithmetic, comparisons or differing mappings at
+  a control-flow join. One bit can reach several sinks.
+- `unknown` names where following a dependency stopped: a partial CFG edge,
+  an untracked or escaping stack spill, an unsupported operation, or a work
+  limit. An unrelated unknown value does not affect other loads.
+- `preserved` identifies bits only stored back into the same word at their
+  original positions, unchanged. A moved or inverted bit has a `Store` sink.
+- `unused` contains the remaining bits proven to reach no sink or stopping
+  point in the analyzed function.
+
+Dependencies flow through instruction CFG edges to a fixed point, including
+loops. Joins union sources; an exact mapping remains exact when all paths
+carrying that source agree. Known stack offsets transfer byte dependencies
+through stores and reloads. Calls emit ABI argument sinks, clear clobbered
+registers and keep callee-saved register dependencies. The expression DAG
+continues to supply addresses and the selected load sites.
+
+State sets and the work queue use admitted working memory and the caller's
+work/deadline checks. A function's dependency pass has an additional 100,000
+work-unit cap, so a large CFG can report `work-limit` without exhausting the
+whole library operation. Known sinks take precedence over limits.
+
+Grouped human output prints `reads[used=... unknown=... preserved=... unused=...]`
+with sink sites, precision and limit reasons. `read-selection` remains an
+expression observation. Blobray reports these paths; register checker policy,
+reset comparison and field-model intersections belong to `cargo registers`.
+Unresolved addresses remain in the output and cannot identify a register bit.
+
 ## Two different choices
 
 - **Research method:** static analysis, concrete scenario execution or comparison.

@@ -337,3 +337,70 @@ fn an_indexed_observation_is_selected_by_the_words_its_progression_reaches() {
         ]
     );
 }
+
+#[test]
+fn read_classes_stay_separate_and_render_sinks_precision_and_limits() {
+    use oer_analysis_blobray_domain::{
+        ReadLimit, ReadLimitKind, ReadPrecision, ReadSink, ReadUse, ReadUses,
+    };
+    let mut active = observation("read_bits", MemoryKind::Load, Some(0x2010_702c), None);
+    let mut unused = active.clone();
+    if let RegisterAccess::Observation { reads, .. } = &mut active {
+        *reads = Some(ReadUses {
+            uses: vec![
+                ReadUse {
+                    bits: 1,
+                    sink: ReadSink::Branch { site: 32 },
+                    precision: ReadPrecision::Exact,
+                },
+                ReadUse {
+                    bits: 8,
+                    sink: ReadSink::Store {
+                        site: 48,
+                        address: Some(0x2010_702c),
+                        same_word: true,
+                    },
+                    precision: ReadPrecision::May,
+                },
+            ],
+            unknown: vec![ReadLimit {
+                bits: 2,
+                limit: ReadLimitKind::StackSpill,
+            }],
+            preserved: 4,
+            unused: !15,
+        });
+    }
+    if let RegisterAccess::Observation { reads, .. } = &mut unused {
+        *reads = Some(ReadUses {
+            uses: Vec::new(),
+            unknown: Vec::new(),
+            preserved: 0,
+            unused: u32::MAX,
+        });
+    }
+    let mut groups = AccessGroups::new(GroupBy::Function);
+    groups.add(&active);
+    groups.add(&active);
+    groups.add(&unused);
+    assert_eq!(
+        groups
+            .groups()
+            .first()
+            .expect("function group")
+            .entries
+            .len(),
+        2
+    );
+    assert_eq!(
+        groups.human(),
+        [
+            "read_bits (input 0, member 0)",
+            "  0x2010702c load 4B reads[preserved=0x00000000 unused=0xffffffff] x1",
+            "  0x2010702c load 4B reads[used=0x00000001:branch@+20:exact used=0x00000008:store@+30(0x2010702c,same-word):may unknown=0x00000002:stack-spill preserved=0x00000004 unused=0xfffffff0] x2",
+        ]
+    );
+    let wire = serde_json::to_value(groups.groups()).expect("group JSON");
+    let decoded: Vec<AccessGroup> = serde_json::from_value(wire).expect("group roundtrip");
+    assert_eq!(decoded, groups.groups());
+}

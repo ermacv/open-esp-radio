@@ -1,79 +1,148 @@
 use super::*;
 
+struct Decoder;
+impl FunctionDecoder for Decoder {
+    fn identity(&self) -> &'static str {
+        "read-flow-fixture"
+    }
+    fn decode(&self, _bytes: &[u8]) -> Option<DecodedOp> {
+        None
+    }
+    fn reference(
+        &self,
+        _relocation: &FunctionRelocation,
+        _all: &[FunctionRelocation],
+        _section: u32,
+        _c: &mut dyn RunControl,
+    ) -> Result<NormalizedReference> {
+        Err(read_integrity())
+    }
+}
+impl FunctionSemantics for Decoder {
+    fn semantic_identity(&self) -> &'static str {
+        "read-flow-fixture"
+    }
+    fn branch(&self, bytes: &[u8]) -> Option<(BranchTest, Operand, Operand)> {
+        (bytes.first() == Some(&3)).then_some((
+            BranchTest::Ne,
+            Operand::Register(6),
+            Operand::Immediate(0),
+        ))
+    }
+    fn lift(&self, bytes: &[u8]) -> SemanticOp {
+        match bytes.first() {
+            Some(1) => SemanticOp::Memory {
+                kind: MemoryKind::Load,
+                base: 5,
+                displacement: 0,
+                width: 4,
+                dest: Some(6),
+                source: None,
+                signed: false,
+                swap: false,
+            },
+            Some(2) => SemanticOp::Integer {
+                op: IntegerOp::And,
+                dest: 6,
+                left: Operand::Register(6),
+                right: Operand::Immediate(u32::MAX),
+            },
+            _ => SemanticOp::None,
+        }
+    }
+    fn value_relocation(
+        &self,
+        _relocation: &FunctionRelocation,
+        _operation: SemanticOp,
+    ) -> ValueRelocation {
+        ValueRelocation::Ignore
+    }
+}
+
 fn number(value: u32) -> AbstractValue {
     AbstractValue::Constant { value }
 }
-fn expr(id: u32) -> AbstractValue {
-    AbstractValue::Expression { id }
-}
-
-fn graph(depth: u32) -> Vec<FunctionRecord> {
-    let mut records = vec![FunctionRecord::Expression {
-        id: 0,
-        offset: 4,
-        expression: Expression::Load {
-            address: number(0x20000),
-            width: 4,
-            signed: false,
-        },
-    }];
-    for id in 1..depth {
-        records.push(FunctionRecord::Expression {
-            id,
-            offset: 8,
-            expression: Expression::Integer {
-                op: IntegerOp::And,
-                left: expr(id - 1),
-                right: number(u32::MAX),
+fn graph(depth: u64) -> Vec<FunctionRecord> {
+    let mut records = Vec::new();
+    for id in 0..depth + 2 {
+        let offset = id * 4;
+        records.push(FunctionRecord::Instruction {
+            offset,
+            bytes: vec![if id == 0 {
+                1
+            } else if id == depth {
+                3
+            } else {
+                2
+            }],
+            decoded: DecodedOp {
+                length: 4,
+                text: String::new(),
+                flow: if id == depth + 1 {
+                    InstructionFlow::Return { base: 1 }
+                } else {
+                    InstructionFlow::Next
+                },
             },
         });
+        records.push(FunctionRecord::Edge {
+            from: offset,
+            target: (id < depth + 1).then_some(offset + 4),
+            relation: if id == depth + 1 {
+                EdgeKind::Return
+            } else {
+                EdgeKind::Fallthrough
+            },
+            external: id == depth + 1,
+        });
     }
-    records.push(FunctionRecord::Condition {
-        offset: 12,
-        test: BranchTest::Ne,
-        left: expr(depth - 1),
-        right: number(0),
+    records.push(FunctionRecord::MemoryAccess {
+        offset: 0,
+        access: MemoryKind::Load,
+        width: 4,
+        address: number(0x20000),
+        value: None,
+        relocation: None,
     });
     records
 }
 
 #[test]
-fn read_memo_and_sink_storage_are_admitted_reused_and_released() {
+fn read_states_and_sink_storage_are_admitted_reused_and_released() {
     let memory = WorkingMemory::new(1 << 20).expect("working memory");
     {
         let records = graph(128);
         let facts = Facts::new(&records, &memory, &mut || Ok(())).expect("facts");
         let before = memory.used();
-        let mut stored = StoredBitsEvaluator::new(&facts, &memory);
         let mut reads = ReadUsesEvaluator::new(&facts, &memory);
         let mut steps = 0;
         reads
-            .analyze(true, None, &mut stored, &mut || {
+            .analyze(None, &Decoder, &mut |_, _, _| Ok(true), &mut || {
                 steps += 1;
                 Ok(())
             })
             .expect("read analysis");
-        assert!(steps < 1024, "shared nodes are evaluated once");
+        assert!(steps < 4096, "straight-line dependencies take linear work");
         assert!(
             memory.used() > before,
-            "dependencies and events have memory admission"
+            "states and dependencies have memory admission"
         );
         let mut repeated = 0;
         reads
-            .analyze(true, None, &mut stored, &mut || {
+            .analyze(None, &Decoder, &mut |_, _, _| Ok(true), &mut || {
                 repeated += 1;
                 Ok(())
             })
             .expect("reuse analysis");
         assert_eq!(repeated, 0);
         let result = reads
-            .reads(4, &number(0x20000), 4, MemoryKind::Load, &mut || Ok(()))
+            .reads(0, &number(0x20000), 4, MemoryKind::Load, &mut || Ok(()))
             .expect("read uses");
         assert_eq!(
             result.uses,
             [ReadUse {
                 bits: u32::MAX,
-                sink: ReadSink::Branch { site: 12 },
+                sink: ReadSink::Branch { site: 512 },
                 precision: ReadPrecision::Exact
             }]
         );
@@ -84,17 +153,16 @@ fn read_memo_and_sink_storage_are_admitted_reused_and_released() {
 }
 
 #[test]
-fn interrupted_or_refused_dependency_storage_is_unknown_and_cancellation_propagates() {
+fn interrupted_or_refused_state_storage_is_unknown_and_cancellation_propagates() {
     for memory_limit in [4096, 1 << 20] {
         let memory = WorkingMemory::new(memory_limit).expect("working memory");
         {
             let records = graph(128);
             let facts = Facts::new(&records, &memory, &mut || Ok(())).expect("facts");
-            let mut stored = StoredBitsEvaluator::new(&facts, &memory);
             let mut reads = ReadUsesEvaluator::new(&facts, &memory);
             let mut steps = 0;
             reads
-                .analyze(true, None, &mut stored, &mut || {
+                .analyze(None, &Decoder, &mut |_, _, _| Ok(true), &mut || {
                     steps += 1;
                     if memory_limit > 4096 && steps > 16 {
                         Err(Error::new(
@@ -107,7 +175,7 @@ fn interrupted_or_refused_dependency_storage_is_unknown_and_cancellation_propaga
                 })
                 .expect("bounded read analysis");
             let result = reads
-                .reads(4, &number(0x20000), 4, MemoryKind::Load, &mut || Ok(()))
+                .reads(0, &number(0x20000), 4, MemoryKind::Load, &mut || Ok(()))
                 .expect("limited read uses");
             assert_eq!(
                 result.unknown,
@@ -127,16 +195,92 @@ fn interrupted_or_refused_dependency_storage_is_unknown_and_cancellation_propaga
     let memory = WorkingMemory::new(1 << 20).expect("working memory");
     let records = graph(2);
     let facts = Facts::new(&records, &memory, &mut || Ok(())).expect("facts");
-    let mut stored = StoredBitsEvaluator::new(&facts, &memory);
     let mut reads = ReadUsesEvaluator::new(&facts, &memory);
     assert_eq!(
         reads
-            .analyze(true, None, &mut stored, &mut || Err(Error::new(
-                ErrorCode::Cancelled,
-                "cancel fixture"
-            )))
+            .analyze(None, &Decoder, &mut |_, _, _| Ok(true), &mut || Err(
+                Error::new(ErrorCode::Cancelled, "cancel fixture")
+            ))
             .expect_err("cancellation")
             .code,
         ErrorCode::Cancelled
     );
+}
+
+#[test]
+fn conflicting_mappings_demote_but_a_missing_source_does_not_demote() {
+    let memory = WorkingMemory::new(1 << 20).expect("working memory");
+    let facts = Facts::new(&[], &memory, &mut || Ok(())).expect("facts");
+    let mut reads = ReadUsesEvaluator::new(&facts, &memory);
+    let mut c = || Ok(());
+    let original = reads.seed(0, 4, false, &mut c).expect("load seed");
+    assert_eq!(
+        reads.join_flow(original, 0, &mut c).expect("join absent"),
+        original
+    );
+    let shifted = reads
+        .map_flow(original, |i| i.checked_sub(1), &mut c)
+        .expect("shift");
+    let join = reads
+        .join_flow(original, shifted, &mut c)
+        .expect("conflicting join");
+    let dependency = reads
+        .flows
+        .values(join)
+        .expect("flow")
+        .first()
+        .expect("source");
+    assert_eq!(dependency.selected(u32::MAX), (0, u32::MAX));
+}
+
+#[test]
+fn a_function_work_limit_leaves_budget_for_the_next_function() {
+    struct Budget(u64);
+    impl RunControl for Budget {
+        fn checkpoint(&mut self, units: u64) -> Result<()> {
+            self.0 = self.0.checked_sub(units).ok_or_else(|| {
+                Error::new(ErrorCode::ResourceLimited, "operation fixture budget")
+            })?;
+            Ok(())
+        }
+    }
+    let memory = WorkingMemory::new(64 << 20).expect("working memory");
+    let mut budget = Budget(READ_FUNCTION_WORK * 2);
+    {
+        let records = graph(4096);
+        let facts = Facts::new(&records, &memory, &mut || Ok(())).expect("large facts");
+        let mut reads = ReadUsesEvaluator::new(&facts, &memory);
+        reads
+            .analyze(None, &Decoder, &mut |_, _, _| Ok(true), &mut budget)
+            .expect("per-function limit is reported");
+        assert!(
+            budget.0 >= READ_FUNCTION_WORK,
+            "a function cannot spend the entire operation budget"
+        );
+        let result = reads
+            .reads(0, &number(0x20000), 4, MemoryKind::Load, &mut budget)
+            .expect("limited result");
+        assert_eq!(
+            result.unknown,
+            [ReadLimit {
+                bits: u32::MAX,
+                limit: ReadLimitKind::WorkLimit
+            }]
+        );
+    }
+    assert_eq!(memory.used(), 0);
+    {
+        let records = graph(2);
+        let facts = Facts::new(&records, &memory, &mut || Ok(())).expect("small facts");
+        let mut reads = ReadUsesEvaluator::new(&facts, &memory);
+        reads
+            .analyze(None, &Decoder, &mut |_, _, _| Ok(true), &mut budget)
+            .expect("next function still analyzed");
+        let result = reads
+            .reads(0, &number(0x20000), 4, MemoryKind::Load, &mut budget)
+            .expect("next result");
+        assert!(result.unknown.is_empty());
+        assert_eq!(result.uses.first().expect("branch use").bits, u32::MAX);
+    }
+    assert_eq!(memory.used(), 0);
 }

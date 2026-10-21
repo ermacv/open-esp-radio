@@ -750,7 +750,8 @@ pub fn register_accesses(
                 let mut reads = crate::registers::ReadObservations::new(
                     &facts,
                     memory,
-                    analyzed.complete(),
+                    decoder,
+                    ranges,
                     assumptions.abi,
                 );
                 crate::registers::observe(

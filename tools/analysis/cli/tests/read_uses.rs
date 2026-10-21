@@ -17,7 +17,7 @@ fn partition(reads: &ReadUses, width: u8) {
     let mask = u32::MAX >> (32 - u32::from(width) * 8);
     assert_eq!(classes.iter().fold(0, |a, b| a | b), mask, "{reads:?}");
     for (i, a) in classes.iter().enumerate() {
-        for b in &classes[i + 1..] {
+        for b in classes.iter().skip(i + 1) {
             assert_eq!(a & b, 0, "{reads:?}");
         }
     }
@@ -25,6 +25,7 @@ fn partition(reads: &ReadUses, width: u8) {
     assert!(reads.unknown.iter().all(|limit| limit.bits != 0));
 }
 
+#[allow(clippy::expect_used)] // Fixture setup failures fail this compiler-driven test.
 fn fixture() -> Vec<u8> {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
     let temp = tempfile::tempdir_in(root.join("target")).expect("fixture directory");
@@ -224,11 +225,55 @@ fn loads_report_their_sinks_limits_preservation_and_unused_bits() {
         "used takes precedence over unknown"
     );
     assert_eq!(read("variable_and").uses[0].bits, 1);
-    assert_ne!(
-        read("lost_join").unknown.iter().fold(0, |a, b| a | b.bits),
-        0,
-        "a dependency lost at a CFG join is never proven unused"
+    assert!(
+        read("lost_join")
+            .uses
+            .iter()
+            .any(|usage| usage.bits == u32::MAX
+                && usage.precision == ReadPrecision::Exact
+                && matches!(usage.sink, ReadSink::Branch { site: 16 })),
+        "join must retain the load on the path that carries it: {:?}",
+        read("lost_join")
     );
+    assert!(read("lost_join").unknown.is_empty());
+    assert!(
+        read("loop_accumulate")
+            .uses
+            .iter()
+            .any(|usage| usage.bits == u32::MAX
+                && usage.precision == ReadPrecision::May
+                && matches!(usage.sink, ReadSink::Branch { .. })),
+        "{:?}",
+        read("loop_accumulate")
+    );
+    for name in ["stack_roundtrip", "saved_across_call"] {
+        assert!(
+            read(name).uses.iter().any(|usage| usage.bits == u32::MAX
+                && usage.precision == ReadPrecision::Exact
+                && matches!(usage.sink, ReadSink::Branch { .. })),
+            "{name}: {:?}",
+            read(name)
+        );
+        assert!(read(name).unknown.is_empty(), "{name}: {:?}", read(name));
+    }
+    assert_eq!(
+        read("isolated_opaque").unknown,
+        [ReadLimit {
+            bits: u32::MAX,
+            limit: ReadLimitKind::UnsupportedOperation
+        }]
+    );
+    assert_eq!(
+        by_name
+            .get(b"isolated_opaque".as_slice())
+            .expect("two independent loads")
+            .get(1)
+            .expect("second load")
+            .1
+            .unused,
+        u32::MAX
+    );
+    assert_eq!(read("dead_before_open_edge").unused, u32::MAX);
     assert!(
         read("dispatch_index")
             .uses
@@ -236,6 +281,31 @@ fn loads_report_their_sinks_limits_preservation_and_unused_bits() {
             .any(|usage| usage.bits == 3 && matches!(usage.sink, ReadSink::Dispatch { .. })),
         "{:?}",
         read("dispatch_index")
+    );
+    assert_eq!(
+        read("unknown_stack_byte").unknown,
+        [ReadLimit {
+            bits: 0xff,
+            limit: ReadLimitKind::StackSpill
+        }]
+    );
+    assert_eq!(read("unknown_stack_byte").unused, !0xff);
+    assert!(
+        read("conflicting_join")
+            .uses
+            .iter()
+            .any(|usage| usage.bits == 0x110
+                && usage.precision == ReadPrecision::May
+                && matches!(usage.sink, ReadSink::Branch { .. })),
+        "{:?}",
+        read("conflicting_join")
+    );
+    assert!(
+        read("call_argument")
+            .uses
+            .iter()
+            .all(|usage| !matches!(usage.sink, ReadSink::Return { .. })),
+        "call results carry no dependency on the previous argument"
     );
     assert_eq!(oer_tool_analysis_cli::wire::REGISTER_ACCESSES_SCHEMA, 9);
 }

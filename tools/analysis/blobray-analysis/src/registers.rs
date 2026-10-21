@@ -1,4 +1,4 @@
-//! Fixed-depth expression observations, never physical field inference.
+//! Expression observations and bounded CFG bit dataflow, never physical field inference.
 use crate::navigation::Facts;
 use oer_analysis_blobray_domain::*;
 use oer_analysis_riscv_model::*;
@@ -347,108 +347,406 @@ impl<'f, 'a, 'm> StoredBitsEvaluator<'f, 'a, 'm> {
     }
 }
 
-/// Dependencies of one expression on one load. Each output bit names the
-/// source bits reaching it, separately for exact wiring and may flow.
-#[derive(Clone, Copy)]
+/// One source load's bit dependencies in a register or a stack byte.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 struct ReadDependency {
-    load: u32,
+    load: usize,
     exact: [u32; 32],
     may: [u32; 32],
+    inverted: u32,
 }
 
 impl ReadDependency {
-    fn empty(load: u32) -> Self {
+    fn empty(load: usize) -> Self {
         Self {
             load,
             exact: [0; 32],
             may: [0; 32],
+            inverted: 0,
         }
     }
-
     fn selected(&self, outputs: u32) -> (u32, u32) {
-        let mut exact = 0;
-        let mut may = 0;
-        for i in 0..32 {
+        let (mut exact, mut may) = (0, 0);
+        for (i, (&e, &m)) in self.exact.iter().zip(&self.may).enumerate() {
             if outputs & (1 << i) != 0 {
-                exact |= self.exact[i];
-                may |= self.may[i];
+                exact |= e;
+                may |= m;
             }
         }
         (exact & !may, may)
     }
+    fn active(&self) -> bool {
+        self.exact.iter().chain(&self.may).any(|bits| *bits != 0)
+    }
+    fn wire(&self, mapping: impl Fn(usize) -> Option<usize>) -> Self {
+        let mut result = Self::empty(self.load);
+        for (i, (exact, may)) in result.exact.iter_mut().zip(&mut result.may).enumerate() {
+            if let Some(from) = mapping(i) {
+                *exact = self.exact.get(from).copied().unwrap_or(0);
+                *may = self.may.get(from).copied().unwrap_or(0);
+                if self.inverted & (1u32.wrapping_shl(from as u32)) != 0 {
+                    result.inverted |= 1 << i;
+                }
+            }
+        }
+        result
+    }
+    fn join(self, other: Self) -> Self {
+        if self == other {
+            return self;
+        }
+        let mut result = Self::empty(self.load);
+        for (i, ((exact, may), ((a, b), (x, y)))) in result
+            .exact
+            .iter_mut()
+            .zip(&mut result.may)
+            .zip(
+                self.exact
+                    .iter()
+                    .zip(&self.may)
+                    .zip(other.exact.iter().zip(&other.may)),
+            )
+            .enumerate()
+        {
+            let bit = 1 << i;
+            if a == x && b == y && (self.inverted ^ other.inverted) & bit == 0 {
+                *exact = *a;
+                *may = *b;
+                result.inverted |= self.inverted & bit;
+            } else {
+                *may = a | b | x | y;
+            }
+        }
+        result
+    }
 }
 
-#[derive(Default)]
-struct ReadNode {
+#[derive(Clone, Copy)]
+struct ReadSet {
     start: usize,
     end: usize,
-    uses: Option<usize>,
-    preserved: u32,
-    spill: u32,
-    unsupported: u32,
+    hash: u64,
+    next: usize,
 }
 
-struct ReadEvent {
-    usage: ReadUse,
-    next: Option<usize>,
+/// Immutable, interned sets. Every backing allocation is admitted before
+/// growth; ids, not cloned maps, are kept in the CFG states.
+struct ReadSets<'m, T> {
+    entries: AdmittedVec<'m, T>,
+    sets: AdmittedVec<'m, ReadSet>,
+    buckets: AdmittedVec<'m, usize>,
+    scratch: AdmittedVec<'m, T>,
 }
 
-struct ReadLoad<'a> {
-    id: u32,
-    offset: u64,
+fn read_integrity() -> Error {
+    Error::new(ErrorCode::Integrity, "invalid read-flow graph or set id")
+}
+
+impl<'m, T: Copy + Eq + std::hash::Hash> ReadSets<'m, T> {
+    fn new(memory: &'m WorkingMemory) -> Self {
+        Self {
+            entries: AdmittedVec::new(memory),
+            sets: AdmittedVec::new(memory),
+            buckets: AdmittedVec::new(memory),
+            scratch: AdmittedVec::new(memory),
+        }
+    }
+    fn values(&self, id: usize) -> Result<&[T]> {
+        if id == 0 {
+            return Ok(&[]);
+        }
+        let set = self.sets.get(id - 1).ok_or_else(read_integrity)?;
+        self.entries
+            .get(set.start..set.end)
+            .ok_or_else(read_integrity)
+    }
+    fn intern(&mut self, c: &mut dyn RunControl) -> Result<usize> {
+        use std::hash::{Hash, Hasher};
+        if self.scratch.is_empty() {
+            return Ok(0);
+        }
+        c.checkpoint(self.scratch.len() as u64)?;
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        self.scratch.hash(&mut hasher);
+        let hash = hasher.finish();
+        if self.buckets.is_empty() {
+            for _ in 0..64 {
+                self.buckets.push(0, c.position())?;
+            }
+        }
+        let bucket = hash as usize % self.buckets.len();
+        let mut id = self
+            .buckets
+            .get(bucket)
+            .copied()
+            .ok_or_else(read_integrity)?;
+        while id != 0 {
+            let set = self.sets.get(id - 1).copied().ok_or_else(read_integrity)?;
+            c.checkpoint((set.end - set.start) as u64 + 1)?;
+            if set.hash == hash && self.values(id)? == &self.scratch[..] {
+                self.scratch.truncate(0);
+                return Ok(id);
+            }
+            id = set.next;
+        }
+        let start = self.entries.len();
+        for value in self.scratch.iter().copied() {
+            self.entries.push(value, c.position())?;
+        }
+        let next = self
+            .buckets
+            .get(bucket)
+            .copied()
+            .ok_or_else(read_integrity)?;
+        self.sets.push(
+            ReadSet {
+                start,
+                end: self.entries.len(),
+                hash,
+                next,
+            },
+            c.position(),
+        )?;
+        id = self.sets.len();
+        *self.buckets.get_mut(bucket).ok_or_else(read_integrity)? = id;
+        self.scratch.truncate(0);
+        if self.sets.len() > self.buckets.len() * 2 {
+            let old = self.buckets.len();
+            c.checkpoint((old * 2 + self.sets.len()) as u64)?;
+            for _ in old..old * 2 {
+                self.buckets.push(0, c.position())?;
+            }
+            self.buckets.fill(0);
+            for (i, set) in self.sets.iter_mut().enumerate() {
+                let slot = self
+                    .buckets
+                    .get_mut(set.hash as usize % (old * 2))
+                    .ok_or_else(read_integrity)?;
+                set.next = *slot;
+                *slot = i + 1;
+            }
+        }
+        Ok(id)
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Hash)]
+enum ReadAtom {
+    #[default]
+    Unknown,
+    Constant(u32),
+    Stack(i64),
+}
+impl ReadAtom {
+    fn constant(self) -> Option<u32> {
+        if let Self::Constant(value) = self {
+            Some(value)
+        } else {
+            None
+        }
+    }
+    fn from_fact(value: &AbstractValue) -> Self {
+        match value {
+            AbstractValue::Constant { value } | AbstractValue::ImageAddress { address: value } => {
+                Self::Constant(*value)
+            }
+            AbstractValue::EntryStack { offset } => Self::Stack(*offset),
+            _ => Self::Unknown,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Hash)]
+struct ReadCell {
+    flow: usize,
+    atom: ReadAtom,
+}
+#[derive(Clone, Copy, Eq, PartialEq, Hash)]
+struct ReadSlot {
+    offset: i64,
+    cell: ReadCell,
+}
+#[derive(Clone, Copy, Eq, PartialEq)]
+struct ReadState {
+    registers: [ReadCell; 32],
+    slots: usize,
+}
+impl ReadState {
+    fn entry() -> Self {
+        let mut state = Self {
+            registers: [ReadCell::default(); 32],
+            slots: 0,
+        };
+        state.set(
+            0,
+            ReadCell {
+                flow: 0,
+                atom: ReadAtom::Constant(0),
+            },
+        );
+        state.set(
+            2,
+            ReadCell {
+                flow: 0,
+                atom: ReadAtom::Stack(0),
+            },
+        );
+        state
+    }
+    fn register(&self, register: u8) -> ReadCell {
+        self.registers
+            .get(usize::from(register))
+            .copied()
+            .unwrap_or_default()
+    }
+    fn operand(&self, operand: Operand) -> ReadCell {
+        match operand {
+            Operand::Register(register) => self.register(register),
+            Operand::Immediate(value) => ReadCell {
+                flow: 0,
+                atom: ReadAtom::Constant(value),
+            },
+        }
+    }
+    fn set(&mut self, register: u8, value: ReadCell) {
+        if let Some(slot) = self.registers.get_mut(usize::from(register)) {
+            *slot = value;
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+struct ReadInstruction<'a> {
+    site: u64,
+    bytes: &'a [u8],
+    operation: SemanticOp,
+    branch: Option<(BranchTest, Operand, Operand)>,
+    flow: InstructionFlow,
+    address: Option<&'a AbstractValue>,
+    value: Option<(u8, &'a AbstractValue)>,
+    source: Option<usize>,
+    arguments: bool,
+    call: bool,
+    dispatch: bool,
+    edge_start: usize,
+    edge_end: usize,
+}
+struct ReadNode<'a> {
+    instruction: ReadInstruction<'a>,
+    input: Option<ReadState>,
+    queued: bool,
+}
+#[derive(Clone, Copy)]
+struct ReadEdge {
+    from: usize,
+    target: Option<usize>,
+    relation: EdgeKind,
+}
+struct ReadSource<'a> {
+    site: u64,
     address: &'a AbstractValue,
     width: u8,
+    preserved: u32,
+    limits: [u32; 4],
+    event: usize,
+}
+struct ReadEvent {
+    usage: ReadUse,
+    next: usize,
+}
+#[derive(Clone, Copy)]
+struct ReadDispatch {
+    producer: usize,
+    register: u8,
+    site: u64,
 }
 
-/// Forward bit dependencies over a function's canonical expression DAG.
-/// Each id is evaluated once; the memo, sparse dependencies, source index and
-/// sink events all grow through admitted working memory. Memory addresses do
-/// not taint the value loaded from them: they are separate Address sinks.
+#[derive(Clone, Copy)]
+enum ReadFlowOp {
+    Join,
+    Assemble,
+    Integer(IntegerOp, ReadAtom, ReadAtom),
+}
+
+/// Bound pathological CFGs without spending the whole operation's budget on
+/// one function. Every admitted step is still charged to the caller.
+const READ_FUNCTION_WORK: u64 = 100_000;
+struct ReadWork<'c> {
+    caller: &'c mut dyn RunControl,
+    remaining: u64,
+}
+impl RunControl for ReadWork<'_> {
+    fn checkpoint(&mut self, units: u64) -> Result<()> {
+        self.remaining = self.remaining.checked_sub(units).ok_or_else(|| {
+            Error::new(
+                ErrorCode::ResourceLimited,
+                "read-use function work budget exhausted",
+            )
+        })?;
+        self.caller.checkpoint(units)
+    }
+    fn position(&self) -> RunPosition {
+        self.caller.position()
+    }
+    fn set_position(&mut self, position: RunPosition) {
+        self.caller.set_position(position);
+    }
+}
+
+type SelectRead<'s> = dyn FnMut(&AbstractValue, u8, &mut dyn RunControl) -> Result<bool> + 's;
+
+/// A finite forward dataflow of load dependencies over instruction CFG edges.
+/// Joins union sources instead of consulting the value-analysis DAG. Exact
+/// mappings agree on every path carrying that source; disagreements become May.
+/// Interned register/stack sets and the work queue use admitted working memory.
 pub struct ReadUsesEvaluator<'f, 'a, 'm> {
     facts: &'f Facts<'a, 'm>,
-    nodes: AdmittedVec<'m, ReadNode>,
-    dependencies: AdmittedVec<'m, ReadDependency>,
-    loads: AdmittedVec<'m, ReadLoad<'a>>,
+    nodes: AdmittedVec<'m, ReadNode<'a>>,
+    edges: AdmittedVec<'m, ReadEdge>,
+    flows: ReadSets<'m, ReadDependency>,
+    stacks: ReadSets<'m, ReadSlot>,
+    sources: AdmittedVec<'m, ReadSource<'a>>,
     events: AdmittedVec<'m, ReadEvent>,
-    partial: bool,
-    unsupported: bool,
-    work_limit: bool,
+    dispatches: AdmittedVec<'m, ReadDispatch>,
+    queue: AdmittedVec<'m, usize>,
     ready: bool,
-    sorted: bool,
+    work_limit: bool,
 }
-
 impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
     pub fn new(facts: &'f Facts<'a, 'm>, memory: &'m WorkingMemory) -> Self {
         Self {
             facts,
             nodes: AdmittedVec::new(memory),
-            dependencies: AdmittedVec::new(memory),
-            loads: AdmittedVec::new(memory),
+            edges: AdmittedVec::new(memory),
+            flows: ReadSets::new(memory),
+            stacks: ReadSets::new(memory),
+            sources: AdmittedVec::new(memory),
             events: AdmittedVec::new(memory),
-            partial: false,
-            unsupported: false,
-            work_limit: false,
+            dispatches: AdmittedVec::new(memory),
+            queue: AdmittedVec::new(memory),
             ready: false,
-            sorted: false,
+            work_limit: false,
         }
     }
-
-    /// Analyze lazily, once a selected load needs its uses. An interrupted
-    /// walk keeps the sinks already found and labels everything else unknown.
-    /// Cancellation and integrity errors still stop the enclosing operation.
     pub fn analyze(
         &mut self,
-        complete: bool,
         abi: Option<CallAbi>,
-        stored: &mut StoredBitsEvaluator<'f, 'a, 'm>,
+        decoder: &dyn FunctionSemantics,
+        select: &mut SelectRead<'_>,
         c: &mut dyn RunControl,
     ) -> Result<()> {
         if self.ready {
             return Ok(());
         }
-        self.partial = !complete;
         self.ready = true;
-        match self.walk(abi, stored, c) {
+        let mut work = ReadWork {
+            caller: c,
+            remaining: READ_FUNCTION_WORK,
+        };
+        let result = self
+            .prepare(decoder, select, &mut work)
+            .and_then(|()| self.solve(abi, &mut work));
+        match result {
             Err(error)
                 if matches!(error.code, ErrorCode::ResourceLimited | ErrorCode::TimedOut) =>
             {
@@ -458,328 +756,940 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
             result => result,
         }
     }
-
-    fn range(&self, value: &AbstractValue) -> std::ops::Range<usize> {
-        match value {
-            AbstractValue::Expression { id } => self
-                .nodes
-                .get(*id as usize)
-                .map(|node| node.start..node.end)
-                .unwrap_or(0..0),
-            _ => 0..0,
-        }
+    fn node(&self, id: usize) -> Result<&ReadNode<'a>> {
+        self.nodes.get(id).ok_or_else(read_integrity)
     }
-
-    fn walk(
+    fn node_mut(&mut self, id: usize) -> Result<&mut ReadNode<'a>> {
+        self.nodes.get_mut(id).ok_or_else(read_integrity)
+    }
+    fn at(&self, site: u64) -> Option<usize> {
+        self.nodes
+            .binary_search_by_key(&site, |node| node.instruction.site)
+            .ok()
+    }
+    fn source_at(&self, site: u64) -> Option<usize> {
+        self.sources
+            .binary_search_by_key(&site, |source| source.site)
+            .ok()
+    }
+    fn prepare(
         &mut self,
-        abi: Option<CallAbi>,
-        stored: &mut StoredBitsEvaluator<'f, 'a, 'm>,
+        decoder: &dyn FunctionSemantics,
+        select: &mut SelectRead<'_>,
         c: &mut dyn RunControl,
     ) -> Result<()> {
         let records = self.facts.records();
-        // Records referring to an expression may precede its definition.
-        // First build every memo in definition order, then visit sinks.
         for record in records {
             c.checkpoint(1)?;
-            if let FunctionRecord::Expression {
-                id,
-                offset,
-                expression,
-            } = record
-            {
-                let start = self.dependencies.len();
-                match expression {
-                    Expression::Load {
+            match record {
+                FunctionRecord::Instruction {
+                    offset,
+                    bytes,
+                    decoded,
+                } => self.nodes.push(
+                    ReadNode {
+                        instruction: ReadInstruction {
+                            site: *offset,
+                            bytes,
+                            operation: decoder.lift(bytes),
+                            branch: decoder.branch(bytes),
+                            flow: decoded.flow,
+                            address: None,
+                            value: None,
+                            source: None,
+                            arguments: false,
+                            call: false,
+                            dispatch: false,
+                            edge_start: 0,
+                            edge_end: 0,
+                        },
+                        input: None,
+                        queued: false,
+                    },
+                    c.position(),
+                )?,
+                FunctionRecord::MemoryAccess {
+                    offset,
+                    access:
+                        MemoryKind::Load
+                        | MemoryKind::LoadReserved
+                        | MemoryKind::Atomic
+                        | MemoryKind::FloatLoad,
+                    address,
+                    width,
+                    ..
+                } if select(address, *width, c)? => self.sources.push(
+                    ReadSource {
+                        site: *offset,
                         address,
-                        width,
-                        signed,
-                    } => {
-                        let mut dependency = ReadDependency::empty(*id);
-                        let count = u32::from(*width).saturating_mul(8).min(32);
-                        for i in 0..count {
-                            dependency.exact[i as usize] = 1 << i;
+                        width: *width,
+                        preserved: 0,
+                        limits: [0; 4],
+                        event: 0,
+                    },
+                    c.position(),
+                )?,
+                _ => {}
+            }
+        }
+        c.checkpoint(
+            (records.len() as u64).saturating_mul(u64::from(records.len().max(1).ilog2() + 1)),
+        )?;
+        self.nodes
+            .sort_unstable_by_key(|node| node.instruction.site);
+        self.sources.sort_unstable_by_key(|source| source.site);
+        for record in records {
+            c.checkpoint(1)?;
+            match record {
+                FunctionRecord::MemoryAccess {
+                    offset, address, ..
+                } => {
+                    if let Some(id) = self.at(*offset) {
+                        let source = self.source_at(*offset);
+                        let instruction = &mut self.node_mut(id)?.instruction;
+                        instruction.address = Some(address);
+                        instruction.source = source;
+                    }
+                }
+                FunctionRecord::Value {
+                    offset,
+                    register,
+                    value,
+                    ..
+                } => {
+                    if let Some(id) = self.at(*offset) {
+                        self.node_mut(id)?.instruction.value = Some((*register, value));
+                    }
+                }
+                FunctionRecord::CallInputs { offset, .. } => {
+                    if let Some(id) = self.at(*offset) {
+                        self.node_mut(id)?.instruction.arguments = true;
+                    }
+                }
+                FunctionRecord::Edge {
+                    from,
+                    target,
+                    relation,
+                    external,
+                } => {
+                    if let Some(from) = self.at(*from) {
+                        if *relation == EdgeKind::Call {
+                            self.node_mut(from)?.instruction.call = true;
                         }
-                        if *signed && count > 0 {
-                            for i in count..32 {
-                                dependency.exact[i as usize] = 1 << (count - 1);
-                            }
-                        }
-                        self.dependencies.push(dependency, c.position())?;
-                        self.loads.push(
-                            ReadLoad {
-                                id: *id,
-                                offset: *offset,
-                                address,
-                                width: *width,
+                        let target = target
+                            .filter(|_| !external && *relation != EdgeKind::Call)
+                            .and_then(|site| self.at(site));
+                        self.edges.push(
+                            ReadEdge {
+                                from,
+                                target,
+                                relation: *relation,
                             },
                             c.position(),
                         )?;
                     }
-                    Expression::Integer { op, left, right } => {
-                        let mut l = self.range(left);
-                        let mut r = self.range(right);
-                        while !l.is_empty() || !r.is_empty() {
-                            c.checkpoint(1)?;
-                            let a = (!l.is_empty()).then(|| self.dependencies[l.start]);
-                            let b = (!r.is_empty()).then(|| self.dependencies[r.start]);
-                            let load = match (a, b) {
-                                (Some(a), Some(b)) => a.load.min(b.load),
-                                (Some(a), _) => a.load,
-                                (_, Some(b)) => b.load,
-                                _ => unreachable!("a nonempty dependency range has a source"),
-                            };
-                            let a = a.filter(|a| a.load == load);
-                            let b = b.filter(|b| b.load == load);
-                            if a.is_some() {
-                                l.start += 1;
-                            }
-                            if b.is_some() {
-                                r.start += 1;
-                            }
-                            let dependency = read_operation(
-                                *op,
-                                left,
-                                right,
-                                a.unwrap_or_else(|| ReadDependency::empty(load)),
-                                b.unwrap_or_else(|| ReadDependency::empty(load)),
-                            );
-                            if dependency.selected(u32::MAX) != (0, 0) {
-                                self.dependencies.push(dependency, c.position())?;
-                            }
-                        }
-                    }
-                    Expression::EntryRegister { .. } | Expression::CallResult { .. } => {}
-                    Expression::CallWord { source, .. } => {
-                        self.unsupported_value(source, c)?;
-                    }
-                }
-                self.nodes.push(
-                    ReadNode {
-                        start,
-                        end: self.dependencies.len(),
-                        ..ReadNode::default()
-                    },
-                    c.position(),
-                )?;
-            }
-        }
-        c.checkpoint(self.loads.len() as u64 * u64::from(self.loads.len().max(1).ilog2() + 1))?;
-        self.loads.sort_unstable_by_key(|load| load.offset);
-        self.sorted = true;
-        for record in records {
-            c.checkpoint(1)?;
-            match record {
-                FunctionRecord::Condition {
-                    offset,
-                    left,
-                    right,
-                    ..
-                } => {
-                    self.unsupported |= matches!(left, AbstractValue::Unknown)
-                        || matches!(right, AbstractValue::Unknown);
-                    for value in [left, right] {
-                        self.sink(value, u32::MAX, ReadSink::Branch { site: *offset }, c)?;
-                    }
                 }
                 FunctionRecord::Dispatch { offset, index, .. } => {
-                    self.unsupported |= matches!(index, AbstractValue::Unknown);
-                    self.sink(index, u32::MAX, ReadSink::Dispatch { site: *offset }, c)?;
-                }
-                FunctionRecord::Instruction {
-                    offset,
-                    decoded:
-                        DecodedOp {
-                            flow:
-                                InstructionFlow::Indirect {
-                                    base,
-                                    offset: displacement,
-                                    ..
-                                },
+                    if let Some(id) = self.at(*offset) {
+                        self.node_mut(id)?.instruction.dispatch = true;
+                    }
+                    // The value fact locates the physical producer of the
+                    // dispatch index; its dependencies come from the CFG state.
+                    for producer in records {
+                        c.checkpoint(1)?;
+                        if let FunctionRecord::Value {
+                            offset: producer,
+                            register,
+                            value,
                             ..
-                        },
-                    ..
-                } => {
-                    if let Some(inputs) = self.facts.call_inputs(*offset, c)?
-                        && let Some(value) = inputs.registers.get(usize::from(*base))
-                    {
-                        for index in self.range(value) {
-                            c.checkpoint(1)?;
-                            let dependency = self.dependencies[index];
-                            let dependency = if *displacement == 0 {
-                                dependency
-                            } else {
-                                read_operation(
-                                    IntegerOp::Add,
-                                    value,
-                                    &AbstractValue::Constant {
-                                        value: *displacement as u32,
-                                    },
-                                    dependency,
-                                    ReadDependency::empty(dependency.load),
-                                )
-                            };
-                            // JALR clears the low target bit.
-                            self.use_dependency(
-                                dependency,
-                                !1,
-                                ReadSink::IndirectTarget { site: *offset },
-                                c,
+                        } = producer
+                            && value == index
+                            && !matches!(value, AbstractValue::Unknown)
+                            && let Some(producer) = self.at(*producer)
+                        {
+                            self.dispatches.push(
+                                ReadDispatch {
+                                    producer,
+                                    register: *register,
+                                    site: *offset,
+                                },
+                                c.position(),
                             )?;
                         }
                     }
                 }
-                FunctionRecord::Value {
-                    value: AbstractValue::Unknown,
-                    ..
-                } => {
-                    self.unsupported = true;
-                }
-                FunctionRecord::Transfer { offset, target, .. } => {
-                    self.sink(
-                        target,
-                        u32::MAX,
-                        ReadSink::IndirectTarget { site: *offset },
-                        c,
-                    )?;
-                }
-                FunctionRecord::MemoryAccess {
-                    offset,
-                    access,
-                    width,
-                    address,
-                    value,
-                    ..
-                } => {
-                    self.unsupported |= matches!(address, AbstractValue::Unknown)
-                        || matches!(value, Some(AbstractValue::Unknown));
-                    self.sink(address, u32::MAX, ReadSink::Address { site: *offset }, c)?;
-                    if let Some(value) = value {
-                        let mask = width_mask(*width).unwrap_or(u32::MAX);
-                        if matches!(address, AbstractValue::EntryStack { .. }) {
-                            self.limit(value, mask, c)?;
-                        } else {
-                            let identities = stored.bits(value, c)?;
-                            for index in self.range(value) {
-                                c.checkpoint(1)?;
-                                let dependency = self.dependencies[index];
-                                let loaded =
-                                    self.facts.value_expression(&AbstractValue::Expression {
-                                        id: dependency.load,
-                                    });
-                                let same_word = matches!(loaded, Some(Expression::Load { address: loaded, width: loaded_width, .. })
-                                    if same_word(loaded, *loaded_width, address, *width));
-                                let mut preserved_outputs = 0;
-                                if same_word && *access == MemoryKind::Store {
-                                    for (bit, identity) in identities.iter().enumerate() {
-                                        if matches!(identity, Bit::Load(id, _, _, from) if *id == dependency.load && usize::from(*from) == bit)
-                                        {
-                                            preserved_outputs |= 1 << bit;
-                                        }
-                                    }
-                                }
-                                self.nodes[dependency.load as usize].preserved |=
-                                    mask & preserved_outputs;
-                                self.use_dependency(
-                                    dependency,
-                                    mask & !preserved_outputs,
-                                    ReadSink::Store {
-                                        site: *offset,
-                                        address: exact_address(address),
-                                        same_word,
-                                    },
-                                    c,
-                                )?;
-                            }
-                        }
-                    }
-                }
-                FunctionRecord::CallInputs { offset, registers } => {
-                    if let Some(abi) = abi {
-                        for register in abi.arguments() {
-                            if let Some(value) = registers.get(usize::from(register)) {
-                                self.sink(
-                                    value,
-                                    u32::MAX,
-                                    ReadSink::CallArgument {
-                                        site: *offset,
-                                        register,
-                                    },
-                                    c,
-                                )?;
-                            }
-                        }
-                    } else {
-                        // Argument roles require an explicit calling convention.
-                        for value in registers {
-                            self.unsupported_value(value, c)?;
-                        }
-                    }
-                }
-                FunctionRecord::ReturnInputs { registers, .. } => {
-                    for register in CallAbi::RiscvInteger.results() {
-                        if let Some(value) = registers.get(usize::from(register)) {
-                            self.sink(value, u32::MAX, ReadSink::Return { register }, c)?;
-                        }
-                    }
-                }
-                FunctionRecord::ReturnValue { low, high, .. } => {
-                    for (register, value) in
-                        CallAbi::RiscvInteger.results().into_iter().zip([low, high])
-                    {
-                        self.sink(value, u32::MAX, ReadSink::Return { register }, c)?;
-                    }
-                }
-                FunctionRecord::Gap {
-                    reason: GapReason::UnsupportedInstruction,
-                    ..
-                }
-                | FunctionRecord::SemanticGap {
-                    reason:
-                        SemanticGapReason::UnsupportedInstruction | SemanticGapReason::WaitMemory,
-                    ..
-                } => {
-                    self.unsupported = true;
-                }
                 _ => {}
+            }
+        }
+        c.checkpoint(
+            (self.edges.len() as u64)
+                .saturating_mul(u64::from(self.edges.len().max(1).ilog2() + 1)),
+        )?;
+        self.edges.sort_unstable_by_key(|edge| edge.from);
+        for (id, node) in self.nodes.iter_mut().enumerate() {
+            node.instruction.edge_start = self.edges.partition_point(|edge| edge.from < id);
+            node.instruction.edge_end = self.edges.partition_point(|edge| edge.from <= id);
+        }
+        Ok(())
+    }
+    fn join_flow(&mut self, a: usize, b: usize, c: &mut dyn RunControl) -> Result<usize> {
+        if a == b || b == 0 {
+            return Ok(a);
+        }
+        if a == 0 {
+            return Ok(b);
+        }
+        self.binary_flow(a, b, ReadFlowOp::Join, c)
+    }
+    fn binary_flow(
+        &mut self,
+        left: usize,
+        right: usize,
+        operation: ReadFlowOp,
+        c: &mut dyn RunControl,
+    ) -> Result<usize> {
+        let (mut l, mut r) = (0, 0);
+        loop {
+            let a = self.flows.values(left)?.get(l).copied();
+            let b = self.flows.values(right)?.get(r).copied();
+            let load = match (a, b) {
+                (Some(a), Some(b)) => a.load.min(b.load),
+                (Some(a), _) => a.load,
+                (_, Some(b)) => b.load,
+                _ => break,
+            };
+            c.checkpoint(1)?;
+            let a = a.filter(|a| a.load == load);
+            let b = b.filter(|b| b.load == load);
+            if a.is_some() {
+                l += 1;
+            }
+            if b.is_some() {
+                r += 1;
+            }
+            let dependency = match operation {
+                ReadFlowOp::Integer(op, x, y) => read_operation(
+                    op,
+                    x,
+                    y,
+                    a.unwrap_or_else(|| ReadDependency::empty(load)),
+                    b.unwrap_or_else(|| ReadDependency::empty(load)),
+                ),
+                ReadFlowOp::Join => match (a, b) {
+                    (Some(a), Some(b)) => a.join(b),
+                    (Some(a), _) => a,
+                    (_, Some(b)) => b,
+                    _ => return Err(read_integrity()),
+                },
+                ReadFlowOp::Assemble => match (a, b) {
+                    (Some(mut a), Some(b)) => {
+                        for ((exact, may), (e, m)) in a
+                            .exact
+                            .iter_mut()
+                            .zip(&mut a.may)
+                            .zip(b.exact.iter().zip(&b.may))
+                        {
+                            *exact |= e;
+                            *may |= m;
+                        }
+                        a.inverted |= b.inverted;
+                        a
+                    }
+                    (Some(a), _) => a,
+                    (_, Some(b)) => b,
+                    _ => return Err(read_integrity()),
+                },
+            };
+            if dependency.active() {
+                self.flows.scratch.push(dependency, c.position())?;
+            }
+        }
+        self.flows.intern(c)
+    }
+    fn integer(
+        &mut self,
+        op: IntegerOp,
+        left: ReadCell,
+        right: ReadCell,
+        c: &mut dyn RunControl,
+    ) -> Result<ReadCell> {
+        let atom = match (op, left.atom, right.atom) {
+            (_, ReadAtom::Constant(a), ReadAtom::Constant(b)) => {
+                ReadAtom::Constant(op.evaluate(a, b))
+            }
+            (IntegerOp::Add, ReadAtom::Stack(a), ReadAtom::Constant(b))
+            | (IntegerOp::Add, ReadAtom::Constant(b), ReadAtom::Stack(a)) => {
+                ReadAtom::Stack(a.wrapping_add(i64::from(b as i32)))
+            }
+            (IntegerOp::Sub, ReadAtom::Stack(a), ReadAtom::Constant(b)) => {
+                ReadAtom::Stack(a.wrapping_sub(i64::from(b as i32)))
+            }
+            _ => ReadAtom::Unknown,
+        };
+        let flow = if left.flow == 0 && right.flow == 0 {
+            0
+        } else if matches!(op, IntegerOp::Add | IntegerOp::Sub)
+            && right.atom == ReadAtom::Constant(0)
+        {
+            left.flow
+        } else if op == IntegerOp::Add && left.atom == ReadAtom::Constant(0) {
+            right.flow
+        } else {
+            self.binary_flow(
+                left.flow,
+                right.flow,
+                ReadFlowOp::Integer(op, left.atom, right.atom),
+                c,
+            )?
+        };
+        Ok(ReadCell { flow, atom })
+    }
+    fn map_flow(
+        &mut self,
+        flow: usize,
+        mapping: impl Fn(usize) -> Option<usize>,
+        c: &mut dyn RunControl,
+    ) -> Result<usize> {
+        let len = self.flows.values(flow)?.len();
+        for index in 0..len {
+            c.checkpoint(1)?;
+            let dependency = self
+                .flows
+                .values(flow)?
+                .get(index)
+                .copied()
+                .ok_or_else(read_integrity)?
+                .wire(&mapping);
+            if dependency.active() {
+                self.flows.scratch.push(dependency, c.position())?;
+            }
+        }
+        self.flows.intern(c)
+    }
+    fn seed(
+        &mut self,
+        source: usize,
+        width: u8,
+        signed: bool,
+        c: &mut dyn RunControl,
+    ) -> Result<usize> {
+        let count = u32::from(width).saturating_mul(8).min(32) as usize;
+        let mut dependency = ReadDependency::empty(source);
+        for (i, bits) in dependency.exact.iter_mut().enumerate() {
+            if i < count {
+                *bits = 1 << i;
+            } else if signed && count != 0 {
+                *bits = 1 << (count - 1);
+            }
+        }
+        self.flows.scratch.push(dependency, c.position())?;
+        self.flows.intern(c)
+    }
+    fn join_cell(&mut self, a: ReadCell, b: ReadCell, c: &mut dyn RunControl) -> Result<ReadCell> {
+        Ok(ReadCell {
+            flow: self.join_flow(a.flow, b.flow, c)?,
+            atom: if a.atom == b.atom {
+                a.atom
+            } else {
+                ReadAtom::Unknown
+            },
+        })
+    }
+    fn join_stacks(&mut self, a: usize, b: usize, c: &mut dyn RunControl) -> Result<usize> {
+        if a == b {
+            return Ok(a);
+        }
+        let (mut l, mut r) = (0, 0);
+        loop {
+            let x = self.stacks.values(a)?.get(l).copied();
+            let y = self.stacks.values(b)?.get(r).copied();
+            let offset = match (x, y) {
+                (Some(x), Some(y)) => x.offset.min(y.offset),
+                (Some(x), _) => x.offset,
+                (_, Some(y)) => y.offset,
+                _ => break,
+            };
+            c.checkpoint(1)?;
+            let x = x.filter(|x| x.offset == offset);
+            let y = y.filter(|y| y.offset == offset);
+            if x.is_some() {
+                l += 1;
+            }
+            if y.is_some() {
+                r += 1;
+            }
+            let cell = self.join_cell(
+                x.map(|x| x.cell).unwrap_or_default(),
+                y.map(|y| y.cell).unwrap_or_default(),
+                c,
+            )?;
+            self.stacks
+                .scratch
+                .push(ReadSlot { offset, cell }, c.position())?;
+        }
+        self.stacks.intern(c)
+    }
+    fn store_byte(
+        &mut self,
+        stack: usize,
+        offset: i64,
+        cell: ReadCell,
+        c: &mut dyn RunControl,
+    ) -> Result<usize> {
+        let len = self.stacks.values(stack)?.len();
+        let mut inserted = false;
+        for index in 0..len {
+            c.checkpoint(1)?;
+            let slot = self
+                .stacks
+                .values(stack)?
+                .get(index)
+                .copied()
+                .ok_or_else(read_integrity)?;
+            if !inserted && slot.offset >= offset {
+                self.stacks
+                    .scratch
+                    .push(ReadSlot { offset, cell }, c.position())?;
+                inserted = true;
+            }
+            if slot.offset != offset {
+                self.stacks.scratch.push(slot, c.position())?;
+            }
+        }
+        if !inserted {
+            self.stacks
+                .scratch
+                .push(ReadSlot { offset, cell }, c.position())?;
+        }
+        self.stacks.intern(c)
+    }
+    fn merge(&mut self, id: usize, state: ReadState, c: &mut dyn RunControl) -> Result<()> {
+        let old = self.node(id)?.input;
+        let joined = if let Some(old) = old {
+            if old == state {
+                return Ok(());
+            }
+            let mut joined = old;
+            for ((cell, a), b) in joined
+                .registers
+                .iter_mut()
+                .zip(old.registers)
+                .zip(state.registers)
+            {
+                *cell = self.join_cell(a, b, c)?;
+            }
+            joined.slots = self.join_stacks(old.slots, state.slots, c)?;
+            if old == joined {
+                return Ok(());
+            }
+            joined
+        } else {
+            state
+        };
+        let enqueue = !self.node(id)?.queued;
+        if enqueue {
+            self.queue.push(id, c.position())?;
+        }
+        let node = self.node_mut(id)?;
+        node.input = Some(joined);
+        node.queued = true;
+        Ok(())
+    }
+    fn solve(&mut self, abi: Option<CallAbi>, c: &mut dyn RunControl) -> Result<()> {
+        if self.nodes.is_empty() {
+            return Ok(());
+        }
+        self.merge(0, ReadState::entry(), c)?;
+        let mut cursor = 0;
+        while let Some(id) = self.queue.get(cursor).copied() {
+            c.checkpoint(1)?;
+            cursor += 1;
+            self.node_mut(id)?.queued = false;
+            let input = self.node(id)?.input.ok_or_else(read_integrity)?;
+            let output = self.execute(id, input, abi, false, c)?;
+            let instruction = self.node(id)?.instruction;
+            for index in instruction.edge_start..instruction.edge_end {
+                let edge = self.edges.get(index).copied().ok_or_else(read_integrity)?;
+                if let Some(target) = edge.target {
+                    self.merge(target, output, c)?;
+                }
+            }
+            if cursor == self.queue.len() {
+                self.queue.truncate(0);
+                cursor = 0;
+            }
+        }
+        // Emit only at the fixed point: an earlier Exact must not survive a
+        // later join which demotes the same path to May.
+        for id in 0..self.nodes.len() {
+            c.checkpoint(1)?;
+            if let Some(input) = self.node(id)?.input {
+                self.execute(id, input, abi, true, c)?;
             }
         }
         Ok(())
     }
-
-    fn limit(&mut self, value: &AbstractValue, outputs: u32, c: &mut dyn RunControl) -> Result<()> {
-        for index in self.range(value) {
+    fn execute(
+        &mut self,
+        id: usize,
+        input: ReadState,
+        abi: Option<CallAbi>,
+        emit: bool,
+        c: &mut dyn RunControl,
+    ) -> Result<ReadState> {
+        let instruction = self.node(id)?.instruction;
+        let mut output = input;
+        if emit {
+            if let Some((_, left, right)) = instruction.branch {
+                for value in [left, right] {
+                    self.sink(
+                        input.operand(value).flow,
+                        u32::MAX,
+                        ReadSink::Branch {
+                            site: instruction.site,
+                        },
+                        c,
+                    )?;
+                }
+            }
+            if let InstructionFlow::Indirect { base, offset, .. } = instruction.flow {
+                let value = self.integer(
+                    IntegerOp::Add,
+                    input.register(base),
+                    ReadCell {
+                        flow: 0,
+                        atom: ReadAtom::Constant(offset as u32),
+                    },
+                    c,
+                )?;
+                if !instruction.dispatch {
+                    self.sink(
+                        value.flow,
+                        !1,
+                        ReadSink::IndirectTarget {
+                            site: instruction.site,
+                        },
+                        c,
+                    )?;
+                }
+            }
+            if instruction.arguments {
+                self.limit_slots(input.slots, ReadLimitKind::StackSpill, c)?;
+                if let Some(abi) = abi {
+                    for register in abi.arguments() {
+                        self.sink(
+                            input.register(register).flow,
+                            u32::MAX,
+                            ReadSink::CallArgument {
+                                site: instruction.site,
+                                register,
+                            },
+                            c,
+                        )?;
+                    }
+                } else {
+                    self.limit_state(input, ReadLimitKind::UnsupportedOperation, c)?;
+                }
+            }
+            if matches!(instruction.flow, InstructionFlow::Return { .. }) {
+                for register in CallAbi::RiscvInteger.results() {
+                    self.sink(
+                        input.register(register).flow,
+                        u32::MAX,
+                        ReadSink::Return { register },
+                        c,
+                    )?;
+                }
+                self.limit_slots(input.slots, ReadLimitKind::StackSpill, c)?;
+            }
+        }
+        // The integer model omits CSR inputs and moves into the FP file.
+        // Their structural operands identify exactly which live dependencies
+        // stop there; they never poison other loads in the function.
+        let opaque = opaque_read_registers(instruction.bytes, instruction.operation);
+        if emit {
+            for register in 1..32 {
+                if opaque & (1 << register) != 0 {
+                    self.limit(
+                        input.register(register).flow,
+                        ReadLimitKind::UnsupportedOperation,
+                        c,
+                    )?;
+                }
+            }
+        }
+        match instruction.operation {
+            SemanticOp::Integer {
+                op,
+                dest,
+                left,
+                right,
+            } => {
+                let value = self.integer(op, input.operand(left), input.operand(right), c)?;
+                if dest != 0 {
+                    output.set(dest, value);
+                }
+            }
+            SemanticOp::Upper {
+                dest,
+                value,
+                pc_relative,
+            } => {
+                if dest != 0 {
+                    output.set(
+                        dest,
+                        ReadCell {
+                            flow: 0,
+                            atom: if pc_relative {
+                                ReadAtom::Unknown
+                            } else {
+                                ReadAtom::Constant(value)
+                            },
+                        },
+                    );
+                }
+            }
+            SemanticOp::Link { dest } | SemanticOp::Opaque { dest } => {
+                if dest != 0 {
+                    output.set(dest, ReadCell::default());
+                }
+            }
+            SemanticOp::Memory {
+                kind,
+                base,
+                displacement,
+                width,
+                dest,
+                source,
+                signed,
+                ..
+            } => {
+                let address = self.integer(
+                    IntegerOp::Add,
+                    input.register(base),
+                    ReadCell {
+                        flow: 0,
+                        atom: ReadAtom::Constant(displacement as u32),
+                    },
+                    c,
+                )?;
+                if emit {
+                    self.sink(
+                        address.flow,
+                        u32::MAX,
+                        ReadSink::Address {
+                            site: instruction.site,
+                        },
+                        c,
+                    )?;
+                }
+                let stack = match instruction
+                    .address
+                    .map(ReadAtom::from_fact)
+                    .unwrap_or(address.atom)
+                {
+                    ReadAtom::Stack(offset) => Some(offset),
+                    _ => {
+                        if let ReadAtom::Stack(offset) = address.atom {
+                            Some(offset)
+                        } else {
+                            None
+                        }
+                    }
+                };
+                let mask = width_mask(width).unwrap_or(u32::MAX);
+                if let Some(source) = source {
+                    let value = input.register(source);
+                    if let Some(offset) = stack {
+                        for byte in 0..usize::from(width) {
+                            let flow =
+                                self.map_flow(value.flow, |i| (i < 8).then_some(i + byte * 8), c)?;
+                            let atom = value
+                                .atom
+                                .constant()
+                                .map(|value| ReadAtom::Constant((value >> (byte * 8)) & 255))
+                                .unwrap_or_default();
+                            output.slots = self.store_byte(
+                                output.slots,
+                                offset.wrapping_add(byte as i64),
+                                ReadCell { flow, atom },
+                                c,
+                            )?;
+                        }
+                    } else if emit && base == 2 {
+                        let selected =
+                            self.map_flow(value.flow, |i| (mask & (1 << i) != 0).then_some(i), c)?;
+                        self.limit(selected, ReadLimitKind::StackSpill, c)?;
+                    } else if emit {
+                        self.store(value.flow, mask, instruction, kind, width, c)?;
+                    }
+                }
+                if matches!(kind, MemoryKind::Load | MemoryKind::LoadReserved) {
+                    let mut value = ReadCell::default();
+                    if let Some(offset) = stack {
+                        let mut constant = Some(0u32);
+                        for byte in 0..usize::from(width) {
+                            let key = offset.wrapping_add(byte as i64);
+                            let slots = self.stacks.values(input.slots)?;
+                            let cell = slots
+                                .binary_search_by_key(&key, |slot| slot.offset)
+                                .ok()
+                                .and_then(|i| slots.get(i))
+                                .map(|slot| slot.cell)
+                                .unwrap_or_default();
+                            let flow = self.map_flow(
+                                cell.flow,
+                                |i| i.checked_sub(byte * 8).filter(|i| *i < 8),
+                                c,
+                            )?;
+                            value.flow =
+                                self.binary_flow(value.flow, flow, ReadFlowOp::Assemble, c)?;
+                            constant = constant
+                                .zip(cell.atom.constant())
+                                .map(|(a, b)| a | ((b & 255) << (byte * 8)));
+                        }
+                        if signed && width < 4 {
+                            value.flow = self.map_flow(
+                                value.flow,
+                                |i| Some(i.min(usize::from(width) * 8 - 1)),
+                                c,
+                            )?;
+                        }
+                        value.atom = constant
+                            .map(|v| {
+                                ReadAtom::Constant(match (width, signed) {
+                                    (1, true) => v as i8 as i32 as u32,
+                                    (2, true) => v as i16 as i32 as u32,
+                                    _ => v,
+                                })
+                            })
+                            .unwrap_or_default();
+                    }
+                    if let Some(source) = instruction.source {
+                        let seed = self.seed(source, width, signed, c)?;
+                        value.flow = self.join_flow(value.flow, seed, c)?;
+                    }
+                    if let Some(dest) = dest
+                        && dest != 0
+                    {
+                        output.set(dest, value);
+                    }
+                } else if let Some(dest) = dest
+                    && dest != 0
+                {
+                    output.set(dest, ReadCell::default());
+                }
+                if emit
+                    && matches!(kind, MemoryKind::Atomic | MemoryKind::FloatLoad)
+                    && let Some(source) = instruction.source
+                {
+                    self.source_limit(source, mask, ReadLimitKind::UnsupportedOperation)?;
+                }
+            }
+            SemanticOp::Unsupported => {
+                output.registers = ReadState::entry().registers;
+                output.set(2, ReadCell::default());
+                output.slots = 0;
+            }
+            SemanticOp::None | SemanticOp::Fence { .. } => {}
+        }
+        if let Some((register, fact)) = instruction.value
+            && register != 0
+        {
+            let known = ReadAtom::from_fact(fact);
+            if known != ReadAtom::Unknown {
+                let mut value = output.register(register);
+                value.atom = known;
+                output.set(register, value);
+            }
+        }
+        if emit {
+            for index in 0..self.dispatches.len() {
+                let dispatch = self
+                    .dispatches
+                    .get(index)
+                    .copied()
+                    .ok_or_else(read_integrity)?;
+                if dispatch.producer == id {
+                    self.sink(
+                        output.register(dispatch.register).flow,
+                        u32::MAX,
+                        ReadSink::Dispatch {
+                            site: dispatch.site,
+                        },
+                        c,
+                    )?;
+                }
+            }
+            for index in instruction.edge_start..instruction.edge_end {
+                let edge = self.edges.get(index).copied().ok_or_else(read_integrity)?;
+                if edge.target.is_none()
+                    && matches!(
+                        edge.relation,
+                        EdgeKind::Indirect
+                            | EdgeKind::Conflict
+                            | EdgeKind::Taken
+                            | EdgeKind::Fallthrough
+                            | EdgeKind::PossibleContinuation
+                            | EdgeKind::Trap
+                            | EdgeKind::Stop
+                    )
+                    || (edge.target.is_none()
+                        && edge.relation == EdgeKind::Jump
+                        && !instruction.arguments)
+                {
+                    self.limit_state(output, ReadLimitKind::PartialFunction, c)?;
+                }
+            }
+        }
+        if instruction.call {
+            if let Some(abi) = abi {
+                for register in abi.clobbered() {
+                    output.set(register, ReadCell::default());
+                }
+            } else {
+                if emit {
+                    self.limit_state(output, ReadLimitKind::UnsupportedOperation, c)?;
+                }
+                output.registers = ReadState::entry().registers;
+                output.set(2, ReadCell::default());
+            }
+        }
+        Ok(output)
+    }
+    fn store(
+        &mut self,
+        flow: usize,
+        outputs: u32,
+        instruction: ReadInstruction<'_>,
+        kind: MemoryKind,
+        width: u8,
+        c: &mut dyn RunControl,
+    ) -> Result<()> {
+        let len = self.flows.values(flow)?.len();
+        for index in 0..len {
             c.checkpoint(1)?;
-            let dependency = self.dependencies[index];
-            let (exact, may) = dependency.selected(outputs);
-            self.nodes[dependency.load as usize].spill |= exact | may;
+            let dependency = self
+                .flows
+                .values(flow)?
+                .get(index)
+                .copied()
+                .ok_or_else(read_integrity)?;
+            let source = self
+                .sources
+                .get(dependency.load)
+                .ok_or_else(read_integrity)?;
+            let same = instruction
+                .address
+                .is_some_and(|address| same_word(source.address, source.width, address, width));
+            let mut preserved = 0;
+            if same && kind == MemoryKind::Store {
+                for (i, (&exact, &may)) in dependency.exact.iter().zip(&dependency.may).enumerate()
+                {
+                    if exact == 1 << i && may == 0 && dependency.inverted & (1 << i) == 0 {
+                        preserved |= (1 << i) & outputs;
+                    }
+                }
+            }
+            self.sources
+                .get_mut(dependency.load)
+                .ok_or_else(read_integrity)?
+                .preserved |= preserved;
+            self.use_dependency(
+                dependency,
+                outputs & !preserved,
+                ReadSink::Store {
+                    site: instruction.site,
+                    address: instruction.address.and_then(exact_address),
+                    same_word: same,
+                },
+                c,
+            )?;
         }
         Ok(())
     }
-
-    fn unsupported_value(&mut self, value: &AbstractValue, c: &mut dyn RunControl) -> Result<()> {
-        for index in self.range(value) {
+    fn source_limit(&mut self, source: usize, bits: u32, limit: ReadLimitKind) -> Result<()> {
+        let index = match limit {
+            ReadLimitKind::PartialFunction => 0,
+            ReadLimitKind::StackSpill => 1,
+            ReadLimitKind::UnsupportedOperation => 2,
+            ReadLimitKind::WorkLimit => 3,
+        };
+        if let Some(slot) = self
+            .sources
+            .get_mut(source)
+            .and_then(|source| source.limits.get_mut(index))
+        {
+            *slot |= bits;
+            Ok(())
+        } else {
+            Err(read_integrity())
+        }
+    }
+    fn limit(&mut self, flow: usize, reason: ReadLimitKind, c: &mut dyn RunControl) -> Result<()> {
+        let len = self.flows.values(flow)?.len();
+        for index in 0..len {
             c.checkpoint(1)?;
-            let dependency = self.dependencies[index];
-            let (exact, may) = dependency.selected(u32::MAX);
-            self.nodes[dependency.load as usize].unsupported |= exact | may;
+            let dependency = self
+                .flows
+                .values(flow)?
+                .get(index)
+                .copied()
+                .ok_or_else(read_integrity)?;
+            let (a, b) = dependency.selected(u32::MAX);
+            self.source_limit(dependency.load, a | b, reason)?;
         }
         Ok(())
     }
-
+    fn limit_slots(
+        &mut self,
+        slots: usize,
+        reason: ReadLimitKind,
+        c: &mut dyn RunControl,
+    ) -> Result<()> {
+        let len = self.stacks.values(slots)?.len();
+        for index in 0..len {
+            let slot = self
+                .stacks
+                .values(slots)?
+                .get(index)
+                .copied()
+                .ok_or_else(read_integrity)?;
+            self.limit(slot.cell.flow, reason, c)?;
+        }
+        Ok(())
+    }
+    fn limit_state(
+        &mut self,
+        state: ReadState,
+        reason: ReadLimitKind,
+        c: &mut dyn RunControl,
+    ) -> Result<()> {
+        for register in state.registers {
+            self.limit(register.flow, reason, c)?;
+        }
+        self.limit_slots(state.slots, reason, c)
+    }
     fn sink(
         &mut self,
-        value: &AbstractValue,
+        flow: usize,
         outputs: u32,
         sink: ReadSink,
         c: &mut dyn RunControl,
     ) -> Result<()> {
-        for index in self.range(value) {
+        let len = self.flows.values(flow)?.len();
+        for index in 0..len {
             c.checkpoint(1)?;
-            self.use_dependency(self.dependencies[index], outputs, sink.clone(), c)?;
+            let dependency = self
+                .flows
+                .values(flow)?
+                .get(index)
+                .copied()
+                .ok_or_else(read_integrity)?;
+            self.use_dependency(dependency, outputs, sink.clone(), c)?;
         }
         Ok(())
     }
-
     fn use_dependency(
         &mut self,
         dependency: ReadDependency,
@@ -792,12 +1702,16 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
             if bits == 0 {
                 continue;
             }
-            let node = &mut self.nodes[dependency.load as usize];
-            let mut event = node.uses;
+            let head = self
+                .sources
+                .get(dependency.load)
+                .ok_or_else(read_integrity)?
+                .event;
+            let mut event = head;
             let mut found = false;
-            while let Some(index) = event {
+            while event != 0 {
                 c.checkpoint(1)?;
-                let existing = &mut self.events[index];
+                let existing = self.events.get_mut(event - 1).ok_or_else(read_integrity)?;
                 if existing.usage.sink == sink && existing.usage.precision == precision {
                     existing.usage.bits |= bits;
                     found = true;
@@ -813,24 +1727,24 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
                             sink: sink.clone(),
                             precision,
                         },
-                        next: node.uses,
+                        next: head,
                     },
                     c.position(),
                 )?;
-                node.uses = Some(self.events.len() - 1);
+                self.sources
+                    .get_mut(dependency.load)
+                    .ok_or_else(read_integrity)?
+                    .event = self.events.len();
             }
         }
         Ok(())
     }
-
-    /// Uses of the load observation at `offset`. Several saved expressions at
-    /// that instruction are alternative analysis states, never extra loads.
     pub fn reads(
         &self,
         offset: u64,
-        address: &AbstractValue,
+        _address: &AbstractValue,
         width: u8,
-        access: MemoryKind,
+        _access: MemoryKind,
         c: &mut dyn RunControl,
     ) -> Result<ReadUses> {
         let mask = width_mask(width).unwrap_or(u32::MAX);
@@ -840,56 +1754,25 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
             preserved: 0,
             unused: 0,
         };
-        let mut spill = 0;
-        let mut unsupported = 0;
-        let candidates = if self.sorted {
-            let first = self.loads.partition_point(|load| load.offset < offset);
-            let count = self.loads[first..].partition_point(|load| load.offset == offset);
-            c.checkpoint(u64::from(self.loads.len().max(1).ilog2() + 1))?;
-            &self.loads[first..first + count]
-        } else {
-            &self.loads[..]
-        };
-        for load in candidates {
+        let source = self.source_at(offset).and_then(|id| self.sources.get(id));
+        let mut event = source.map(|source| source.event).unwrap_or(0);
+        while event != 0 {
             c.checkpoint(1)?;
-            if load.offset != offset {
-                continue;
-            }
-            if load.address != address || load.width != width {
-                continue;
-            }
-            if let Some(node) = self.nodes.get(load.id as usize) {
-                result.preserved |= node.preserved;
-                spill |= node.spill;
-                unsupported |= node.unsupported;
-                let mut event = node.uses;
-                while let Some(index) = event {
-                    c.checkpoint(result.uses.len() as u64 + 1)?;
-                    let usage = &self.events[index].usage;
-                    if let Some(existing) = result.uses.iter_mut().find(|existing| {
-                        existing.sink == usage.sink && existing.precision == usage.precision
-                    }) {
-                        existing.bits |= usage.bits;
-                    } else {
-                        result.uses.push(usage.clone());
-                    }
-                    event = self.events[index].next;
-                }
-            }
+            let entry = self.events.get(event - 1).ok_or_else(read_integrity)?;
+            result.uses.push(entry.usage.clone());
+            event = entry.next;
         }
         result.uses.sort_unstable();
-        let used = result.uses.iter().fold(0, |bits, usage| bits | usage.bits) & mask;
+        let used = result.uses.iter().fold(0, |bits, usage| bits | usage.bits);
+        let limits = source.map(|source| source.limits).unwrap_or_default();
         let mut remaining = mask & !used;
-        // More specific stopping points precede the function-wide limits.
-        for (bits, limit) in [
-            (spill, ReadLimitKind::StackSpill),
+        for (bits, reason) in [
             (
-                unsupported
-                    | if self.unsupported || access != MemoryKind::Load {
-                        mask
-                    } else {
-                        0
-                    },
+                limits.get(1).copied().unwrap_or(0),
+                ReadLimitKind::StackSpill,
+            ),
+            (
+                limits.get(2).copied().unwrap_or(0),
                 ReadLimitKind::UnsupportedOperation,
             ),
             (
@@ -897,120 +1780,141 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
                 ReadLimitKind::WorkLimit,
             ),
             (
-                if self.partial { mask } else { 0 },
+                limits.first().copied().unwrap_or(0) | if source.is_none() { mask } else { 0 },
                 ReadLimitKind::PartialFunction,
             ),
         ] {
             let bits = bits & remaining;
             if bits != 0 {
-                result.unknown.push(ReadLimit { bits, limit });
+                result.unknown.push(ReadLimit {
+                    bits,
+                    limit: reason,
+                });
                 remaining &= !bits;
             }
         }
-        result.preserved &= remaining;
+        result.preserved = source.map(|source| source.preserved).unwrap_or(0) & remaining;
         result.unused = remaining & !result.preserved;
         Ok(result)
     }
 }
 
-/// Dependency wiring for one RV32 integer operation. Constant bitwise masks
-/// and shifts keep source positions; arithmetic/comparisons carry may flow.
+fn opaque_read_registers(bytes: &[u8], operation: SemanticOp) -> u32 {
+    use oer_analysis_riscv_decode::{
+        Extension, Extensions, Float, Instruction, Operand as IsaOperand, Register,
+    };
+    match oer_analysis_riscv_decode::decode(bytes, Extensions::ALL)
+        .map(|(instruction, _)| instruction)
+    {
+        Some(Instruction::Extension(Extension::Csr {
+            source: IsaOperand::Register(register),
+            ..
+        })) => 1u32.wrapping_shl(u32::from(register)) & !1,
+        Some(Instruction::Float(Float::Operation { operands, .. })) => operands
+            .iter()
+            .skip(1)
+            .filter_map(|operand| match operand {
+                Some(Register::Integer(register)) => Some(1u32.wrapping_shl(u32::from(*register))),
+                _ => None,
+            })
+            .fold(0, |a, b| a | b),
+        _ if operation == SemanticOp::Unsupported => !1,
+        _ => 0,
+    }
+}
+
 fn read_operation(
     op: IntegerOp,
-    left: &AbstractValue,
-    right: &AbstractValue,
+    a: ReadAtom,
+    b: ReadAtom,
     l: ReadDependency,
     r: ReadDependency,
 ) -> ReadDependency {
     let mut out = ReadDependency::empty(l.load);
-    let a = constant(left);
-    let b = constant(right);
-    let mut wire = |to: usize, from: usize, source: &ReadDependency| {
-        out.exact[to] |= source.exact[from];
-        out.may[to] |= source.may[from];
-    };
+    let left = a.constant();
+    let right = b.constant();
     use IntegerOp::*;
     match op {
-        And | Or | Xor | AndNot | OrNot | XorNot if a.is_some() || b.is_some() => {
-            for i in 0..32 {
-                let keep = |k: u32, inverted: bool| {
-                    let bit = ((k >> i) & 1 != 0) ^ inverted;
-                    match op {
-                        And | AndNot => bit,
-                        Or | OrNot => !bit,
-                        _ => true,
-                    }
-                };
-                if let Some(b) = b {
-                    if keep(b, matches!(op, AndNot | OrNot)) {
-                        wire(i, i, &l);
-                    }
-                } else if let Some(a) = a
-                    && keep(a, false)
-                {
-                    wire(i, i, &r);
-                }
-            }
+        And | Or | Xor | AndNot | OrNot | XorNot if left.is_some() || right.is_some() => {
+            let (source, constant, inverted_operand) = if let Some(value) = right {
+                (l, value, matches!(op, AndNot | OrNot))
+            } else {
+                (r, left.unwrap_or(0), false)
+            };
+            let constant = if inverted_operand {
+                !constant
+            } else {
+                constant
+            };
+            let keep = match op {
+                And | AndNot => constant,
+                Or | OrNot => !constant,
+                _ => u32::MAX,
+            };
+            out = source.wire(|i| (keep & (1 << i) != 0).then_some(i));
+            let invert = match op {
+                Xor => constant,
+                XorNot => !constant,
+                AndNot | OrNot if right.is_none() => u32::MAX,
+                _ => 0,
+            };
+            out.inverted ^= invert;
         }
         And | Or | Xor | AndNot | OrNot | XorNot => {
-            for i in 0..32 {
-                out.may[i] = l.exact[i] | l.may[i] | r.exact[i] | r.may[i];
+            for ((out, (le, lm)), (re, rm)) in out
+                .may
+                .iter_mut()
+                .zip(l.exact.iter().zip(&l.may))
+                .zip(r.exact.iter().zip(&r.may))
+            {
+                *out = le | lm | re | rm;
             }
         }
-        Shl | Shr | Sar | RotateLeft | RotateRight | BitExtract if b.is_some() => {
-            let by = b.unwrap_or(0) as usize & 31;
-            for i in 0usize..32 {
-                let from = match op {
-                    Shl => i.checked_sub(by),
-                    Shr => (i + by < 32).then_some(i + by),
-                    Sar => Some((i + by).min(31)),
-                    RotateLeft => Some((i + 32 - by) & 31),
-                    RotateRight => Some((i + by) & 31),
-                    BitExtract => (i == 0).then_some(by),
-                    _ => None,
-                };
-                if let Some(from) = from {
-                    wire(i, from, &l);
-                }
-            }
+        Shl | Shr | Sar | RotateLeft | RotateRight | BitExtract if right.is_some() => {
+            let by = right.unwrap_or(0) as usize & 31;
+            out = l.wire(|i| match op {
+                Shl => i.checked_sub(by),
+                Shr => (i + by < 32).then_some(i + by),
+                Sar => Some((i + by).min(31)),
+                RotateLeft => Some((i + 32 - by) & 31),
+                RotateRight => Some((i + by) & 31),
+                BitExtract => (i == 0).then_some(by),
+                _ => None,
+            });
         }
         SignExtendByte | SignExtendHalf | ByteReverse => {
-            for i in 0usize..32 {
-                let from = match op {
+            out = l.wire(|i| {
+                Some(match op {
                     SignExtendByte => i.min(7),
                     SignExtendHalf => i.min(15),
                     _ => (3 - i / 8) * 8 + i % 8,
-                };
-                wire(i, from, &l);
+                })
+            });
+        }
+        Add | Sub => {
+            let mut bits = 0;
+            for ((out, (le, lm)), (re, rm)) in out
+                .may
+                .iter_mut()
+                .zip(l.exact.iter().zip(&l.may))
+                .zip(r.exact.iter().zip(&r.may))
+            {
+                bits |= le | lm | re | rm;
+                *out = bits;
             }
         }
+        ShiftAdd1 | ShiftAdd2 | ShiftAdd3 => {
+            let by = match op {
+                ShiftAdd1 => 1,
+                ShiftAdd2 => 2,
+                _ => 3,
+            };
+            out = read_operation(Add, ReadAtom::Unknown, b, l.wire(|i| i.checked_sub(by)), r);
+        }
         _ => {
-            let (le, lm) = l.selected(u32::MAX);
-            let right_mask = if matches!(
-                op,
-                Shl | Shr
-                    | Sar
-                    | RotateLeft
-                    | RotateRight
-                    | BitSet
-                    | BitClear
-                    | BitInvert
-                    | BitExtract
-            ) {
-                31
-            } else {
-                u32::MAX
-            };
-            let (re, rm) = r.selected(right_mask);
-            let bits = le | lm | re | rm;
-            let outputs = if matches!(op, Lt | Ltu | BitExtract) {
-                1
-            } else {
-                32
-            };
-            for i in 0..outputs {
-                out.may[i] = bits;
-            }
+            let (a, b) = l.selected(u32::MAX);
+            let (x, y) = r.selected(u32::MAX);
+            out.may.fill(a | b | x | y);
         }
     }
     out
