@@ -1066,12 +1066,16 @@ fn cold_and_direct_rfpll_share_the_same_rmw_atoms_and_preserve_identity() {
         byte: 0xa5,
         ..Io::default()
     };
-    let expected = rfpll::direct_i2c(
+    let mut direct_binding = RfpllFrequencyI2cBinding::new(action).expect("valid RFPLL write");
+    rfpll::direct_i2c(
         &mut super::io::Io::Test(&mut direct, core::marker::PhantomData),
         &clock,
-        RfpllFrequencyI2cBinding::new(action).expect("valid RFPLL write"),
+        direct_binding.transaction_mut(),
     )
     .expect("direct command completes");
+    let expected = direct_binding
+        .into_completion()
+        .expect("direct identity retained");
     let mut binding = RfpllFrequencyI2cBinding::new(action).expect("valid RFPLL write");
     let (waker, _) = context();
     let mut cx = Context::from_waker(&waker);

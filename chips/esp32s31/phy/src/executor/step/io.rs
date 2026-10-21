@@ -84,7 +84,7 @@ impl Registers for oer_esp32s31_hal::owner::ValidationSharedPhy<'_> {
 
 impl Io<'_, '_> {
     #[cfg(target_arch = "riscv32")]
-    #[inline(never)]
+    #[inline(always)]
     fn rfpll_frequency<D: super::super::wait::PhyShortDelay, C: oer_time::Clock + ?Sized>(
         &mut self,
         clock: &C,
@@ -95,7 +95,10 @@ impl Io<'_, '_> {
             RfpllFrequencyExternalBinding as Binding,
         };
         match binding {
-            Binding::I2c(binding) => super::rfpll::direct_i2c(self, clock, binding),
+            Binding::I2c(mut binding) => {
+                super::rfpll::direct_i2c(self, clock, binding.transaction_mut())?;
+                binding.into_completion().map_err(|_| Failure::Binding)
+            }
             Binding::Timer(binding) => {
                 if !D::settle_micros(binding.micros()) {
                     return Err(Failure::Target(

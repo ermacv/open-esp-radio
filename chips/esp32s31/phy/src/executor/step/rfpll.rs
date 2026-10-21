@@ -118,9 +118,8 @@ impl<'a> ColdI2c<'a> {
 pub(super) fn direct_i2c<C: Clock + ?Sized>(
     io: &mut Io<'_, '_>,
     clock: &C,
-    mut binding: crate::analog::rfpll::RfpllFrequencyI2cBinding,
-) -> Result<crate::analog::rfpll::RfpllFrequencyCompletion, Failure> {
-    let transaction = binding.transaction_mut();
+    transaction: &mut PhyColdI2cTransaction,
+) -> Result<(), Failure> {
     let complete = crate::executor::wait::i2c::complete(
         clock,
         transaction,
@@ -136,5 +135,5 @@ pub(super) fn direct_i2c<C: Clock + ?Sized>(
     if !complete {
         return Err(Failure::TimedOut);
     }
-    binding.into_completion().map_err(|_| Failure::Binding)
+    Ok(())
 }
