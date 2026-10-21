@@ -19,6 +19,8 @@ Cross-cutting documents. A component's own details live beside it, in its
   things go.
 - [Unsafe](unsafe.md): the unsafe boundary.
 - [Hardware memory](hardware-memory.md): memory the hardware shares.
+- [Memory and stacks](memory.md): regions, placement, stack contracts and
+  image checks.
 
 Recovered hardware facts and research notes are in each chip's `notes/` and
 `vendor/` below [chips](../chips/).

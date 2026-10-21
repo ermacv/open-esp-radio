@@ -81,12 +81,12 @@ fails with the bin name and instructions to use `cargo fw build`,
 `cargo fw probe` or `cargo hil`. Links using another script ignore a supplied
 specification and produce no analysis fragment or placement record.
 `strict-text.x` is included inside `.isr.text`; an empty fragment preserves the
-first image. A cached runtime link is reused only when its recorded fingerprint
-matches the final ELF, image linker, specification and analysis inputs, and its
-fragment matches the placement record. A mismatch invalidates the runtime
-package through Cargo and rebuilds it once; dependencies remain cached. A
-second mismatch fails the build. The bootstrap has no such invalidation or
-analysis. The existing interrupt check remains final.
+first image. A cached runtime link is reused only when the SHA-256 fingerprint
+in `strict-placement.toml` matches the final ELF, image linker, specification
+and analysis inputs, and its fragment matches the placement record. Only a
+mismatch invalidates the runtime package through Cargo and rebuilds it once;
+dependencies remain cached. A second mismatch fails the build. The bootstrap
+has no such invalidation or analysis. The existing interrupt check remains final.
 Older schemas must be rebuilt; a missing purpose never defaults to `Flash`.
 `ImageBundle::load` verifies files for either purpose. The shared flash
 snapshot reader refuses `Analysis` before supplying bytes to any USB or
