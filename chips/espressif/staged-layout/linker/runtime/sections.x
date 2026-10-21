@@ -82,6 +82,14 @@ SECTIONS
     *(.text.*_R*4core6result13unwrap_failed*);
     *(.text.*_R*4core5slice5index*fail*);
     *(.text.*_R*4core4cell*panic_already*);
+    /* executor and trap code the interrupt handlers run; v0 input-section
+       names of the pinned compiler. Each rule selects one function body;
+       the exported abort/default-handler names use their actual input sections. */
+    *(.text.*_RNvNtNtCs*_16embassy_executor3raw5waker4wake);
+    *(.text.*_RNvNtNtCs*_16embassy_executor3raw5waker4drop);
+    *(.text.*_RNvMs3_NtNtCs*_7esp_hal5timer8systimerNtB5_9AlarmBank7program);
+    *(.text.unlikely.EspDefaultHandler);
+    *(.text.abort);
     . = ALIGN(4);
     __runtime_isr_end = ABSOLUTE(.);
   } > INTERNAL_LOW

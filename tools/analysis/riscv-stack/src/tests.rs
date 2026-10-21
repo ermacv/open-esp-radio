@@ -13,6 +13,9 @@ mod dispatches;
 #[path = "task_poll_tests.rs"]
 mod task_polls;
 
+#[path = "reached_cut_tests.rs"]
+mod reached_cut;
+
 /// Working memory of a test's analysis: no test comes near it.
 const TEST_MEMORY: u64 = 1 << 32;
 

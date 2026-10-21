@@ -98,15 +98,35 @@ impl HartStack {
     }
 }
 
+impl Stacks<'_> {
+    /// The same context-specific dispatch facts used by the level's bound.
+    /// Priority zero denotes the exception, which adds no interrupt routes.
+    pub fn resolutions_for(&self, analysis: &Analysis, core: u32, level: u32) -> Resolutions {
+        let mut resolutions = self.resolutions.clone();
+        if level == 0 {
+            return resolutions;
+        }
+        let handlers: BTreeSet<u32> = self
+            .table
+            .iter()
+            .filter(|entry| entry.core == core && entry.level == level)
+            .filter_map(|entry| entry.handler)
+            .collect();
+        for site in analysis
+            .functions
+            .values()
+            .flat_map(|facts| facts.table_bases.iter())
+            .filter(|&(_, &base)| base == self.sources)
+            .map(|(&site, _)| site)
+        {
+            resolutions.add(site, Fact::InterruptTable, handlers.iter().copied());
+        }
+        resolutions
+    }
+}
+
 /// The interrupt stack of each hart.
 pub fn interrupt_stacks(analysis: &Analysis, stacks: &Stacks<'_>) -> Result<Vec<HartStack>> {
-    let dispatch_sites: BTreeSet<u32> = analysis
-        .functions
-        .values()
-        .flat_map(|facts| facts.table_bases.iter())
-        .filter(|&(_, &base)| base == stacks.sources)
-        .map(|(&site, _)| site)
-        .collect();
     let mut harts = Vec::new();
     for &core in stacks.cores {
         let mut levels: BTreeSet<u32> = stacks
@@ -118,16 +138,7 @@ pub fn interrupt_stacks(analysis: &Analysis, stacks: &Stacks<'_>) -> Result<Vec<
         levels.extend(stacks.always);
         let mut level_stacks = Vec::new();
         for level in levels {
-            let handlers: BTreeSet<u32> = stacks
-                .table
-                .iter()
-                .filter(|entry| entry.core == core && entry.level == level)
-                .filter_map(|entry| entry.handler)
-                .collect();
-            let mut resolutions = stacks.resolutions.clone();
-            for &site in &dispatch_sites {
-                resolutions.add(site, Fact::InterruptTable, handlers.iter().copied());
-            }
+            let resolutions = stacks.resolutions_for(analysis, core, level);
             level_stacks.push(worst(analysis, level, stacks.vectors, &resolutions)?);
         }
         let exception = worst(analysis, 0, &[stacks.exception], stacks.resolutions)?;

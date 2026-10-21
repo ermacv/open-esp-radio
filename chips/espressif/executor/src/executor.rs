@@ -569,6 +569,7 @@ pub(crate) fn mark_work(swi: u8) {
 
 /// Make executor `swi` poll again: a thread-mode executor sees its work flag
 /// at its next wake, an interrupt-mode executor's handler runs.
+#[esp_hal::ram]
 pub(crate) fn pend(swi: u8) {
     if EMBASSY_EXECUTORS_MODE[swi as usize].load(Ordering::Acquire) {
         raise_interrupt(swi);

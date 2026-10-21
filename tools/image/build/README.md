@@ -175,11 +175,18 @@ code every interrupt level reaches, a floating-point instruction fails (the
 handlers run with the FPU off); calls into the panic machinery and functions
 in cached memory (flash, PSRAM) are listed. It writes all of this, each
 hart's levels and their critical paths to `interrupt-stack.txt`.
-Its three placement summary lines also count the cached handler code once per
-image and separately at each hart/level, sized data objects referenced statically
-from resolved handler code, and usable/placed/free SRAM. The full lists in
-`interrupt-placement.txt` sort functions by size, total them by the first path
-component of their demangled names, and name every data reference and object.
+Its placement summary lines separate strict code in cached memory by hart/level
+from P2 task code in PSRAM and name the task roots. The task boundary comes from
+`TaskPolls`/`NoTasks` resolution facts through `Analysis::reached_cut`; each level
+uses the same interrupt routes as its stack bound. Strict code, including the
+exception and panic paths, must lie in SRAM/ROM; P2 tasks may also use PSRAM,
+while cached flash fails on both sides. A function with any strict path keeps
+the strict requirement. The summaries also count sized data objects referenced
+statically from resolved handler code and usable/placed/free SRAM. Full lists in
+`interrupt-placement.txt` sort cached functions by size with `strict`/`task`
+classification, total them by the first path component of their demangled names,
+show strict SRAM/ROM/cache totals and root paths to strict cached functions,
+and name every data reference and object.
 Code targets are excluded from the data count; aliases with the same address and
 size count once, and an interior address counts the whole object. References
 without a sized data symbol remain visible and contribute no invented size.
@@ -188,7 +195,7 @@ SRAM sections, including NOLOAD interrupt stacks and DMA. Overlaps count once;
 the contract's upper boundary already excludes the ROM boot-stack side (the
 chip's layout documents its ESP-IDF source). These are static byte counts of
 resolved paths, without relocation alignment or dynamically addressed data;
-they add no gate, error or warning and change no placement.
+data and SRAM measurements do not participate in a gate's verdict.
 Independently of the installed interrupt handlers, it also follows linked
 compiler panic entry points, the platform panic handler and the optional
 image panic hook. A resolved callee in cached memory fails the build under
