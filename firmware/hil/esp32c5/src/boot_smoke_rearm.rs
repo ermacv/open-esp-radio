@@ -1,4 +1,4 @@
-//! Shared S31/C5 alarm checks, included by both smoke images without a new crate.
+//! Boot-smoke alarm checks; keep the S31 and C5 copies in step.
 
 use core::{future::Future, future::poll_fn, pin::pin, task::Poll};
 

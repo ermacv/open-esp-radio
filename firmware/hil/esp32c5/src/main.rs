@@ -24,7 +24,6 @@ use static_cell::StaticCell;
 #[cfg(feature = "boot-smoke")]
 mod boot_smoke;
 #[cfg(feature = "boot-smoke")]
-#[path = "../../boot_smoke_rearm.rs"]
 mod boot_smoke_rearm;
 #[cfg(feature = "system-watchdog")]
 mod system;

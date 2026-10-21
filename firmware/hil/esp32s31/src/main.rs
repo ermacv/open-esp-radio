@@ -42,7 +42,6 @@ oer_espressif_staged_runtime::interrupt_table! {
 #[cfg(feature = "boot-smoke")]
 mod boot_smoke_console;
 #[cfg(feature = "boot-smoke")]
-#[path = "../../boot_smoke_rearm.rs"]
 mod boot_smoke_rearm;
 mod exception;
 mod fatal;

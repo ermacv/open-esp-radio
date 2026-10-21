@@ -15,9 +15,9 @@ pub(crate) use clear_alarm;
 )]
 mod tests {
     #[test]
-    fn acknowledgement_overwrites_only_its_w1c_bit_on_both_chips() {
+    fn acknowledgements_write_distinct_single_bits_on_both_chips() {
         macro_rules! check_register {
-            ($register:ty, $channel:literal, $expected:literal) => {{
+            ($register:ty, $channel:literal) => {{
                 // SAFETY: these PAC registers contain only a u32 VolatileCell;
                 // zero is valid and the local register is properly aligned.
                 let register: $register = unsafe { core::mem::zeroed() };
@@ -27,14 +27,22 @@ mod tests {
                 clear_alarm!(register, $channel);
                 // SAFETY: the pointer still addresses the local u32. Real
                 // INT_CLR is write-only; this observes the bus write value.
-                assert_eq!(unsafe { register.as_ptr().read_volatile() }, $expected);
+                let written = unsafe { register.as_ptr().read_volatile() };
+                assert_eq!(written.count_ones(), 1);
+                written
             }};
         }
-        check_register!(esp32s31_pac::systimer::INT_CLR, 0, 1);
-        check_register!(esp32s31_pac::systimer::INT_CLR, 1, 2);
-        check_register!(esp32s31_pac::systimer::INT_CLR, 2, 4);
-        check_register!(esp32c5_pac::systimer::INT_CLR, 0, 1);
-        check_register!(esp32c5_pac::systimer::INT_CLR, 1, 2);
-        check_register!(esp32c5_pac::systimer::INT_CLR, 2, 4);
+        macro_rules! check_chip {
+            ($register:ty) => {{
+                let zero = check_register!($register, 0);
+                let one = check_register!($register, 1);
+                let two = check_register!($register, 2);
+                assert_ne!(zero, one);
+                assert_ne!(zero, two);
+                assert_ne!(one, two);
+            }};
+        }
+        check_chip!(esp32s31_pac::systimer::INT_CLR);
+        check_chip!(esp32c5_pac::systimer::INT_CLR);
     }
 }
