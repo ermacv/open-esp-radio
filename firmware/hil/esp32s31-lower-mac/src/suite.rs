@@ -382,7 +382,7 @@ async fn install(boot: Boot, config: Prepare) -> Result<PortParts<Device, TX>, &
     .into_idle()
     .map_err(|_| "TX idle")?;
     let parts = PortParts {
-        storage: STORAGE.init(PortStorage::new(device)),
+        storage: STORAGE.init_with(|| PortStorage::new(device)),
         transmitter,
         buffers: [
             slot!(TX1, SLOT1),

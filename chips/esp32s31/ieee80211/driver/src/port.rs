@@ -171,6 +171,8 @@ pub struct PortStorage<D, const B: usize> {
     expired: Cell<u32>,
 }
 impl<D: Device<B>, const B: usize> PortStorage<D, B> {
+    // Keep the device transfer separate from the install future's poll frame.
+    #[inline(never)]
     pub const fn new(device: D) -> Self {
         Self {
             device: RefCell::new(device),
