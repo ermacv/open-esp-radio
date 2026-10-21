@@ -96,7 +96,7 @@ use crate::{
         parameters::{
             PhyParamTrackingAction, PhyParamTrackingCalibrationTransition,
             PhyParamTrackingCompletion, PhyParamTrackingOutcome, PhyParamTrackingRfpllTransition,
-            PhyParamTrackingTxPowerTransition, PhyParamTrackingWifiI2cTransition,
+            PhyParamTrackingTxPowerTransition,
         },
     },
     tx::{
@@ -1860,32 +1860,6 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
         }
         Err(PhyTargetPortError::RfOperationLimit)
     }
-
-    async fn run_param_wifi_i2c<O: PhyTargetObserver>(
-        &self,
-        mut child: PhyParamTrackingWifiI2cTransition<'_>,
-        registers: &mut (impl SharedPhyAccess + crate::executor::step::Registers),
-        observer: &mut O,
-    ) -> Result<PhyParamTrackingCompletion, PhyTargetPortError> {
-        let mut timing = crate::tracking::observation::EngineTiming::default();
-        let result = crate::executor::step::wifi_i2c::track::<D, _, _>(
-            child.transition_mut(),
-            registers,
-            self.timer,
-            O::OBSERVE_ENGINE_POLLS.then_some(&mut timing),
-        )
-        .await
-        .map_err(step::port_error)
-        .and_then(|_| {
-            child
-                .commit()
-                .map_err(|_| PhyTargetPortError::UnexpectedBinding)
-        });
-        if O::OBSERVE_ENGINE_POLLS {
-            observer.engine_completed(crate::tracking::observation::Operation::WifiI2c, timing);
-        }
-        result
-    }
 }
 
 impl<'a, P, R, D, T, O> TargetPhyRegisterPort<'a, P, R, D, T, O> {
@@ -2185,15 +2159,21 @@ impl<
                     .map_err(|_| PhyTargetPortError::UnexpectedBinding)?
             }
             PhyParamTrackingAction::WifiI2cTrack => {
-                TargetCompleter::<D, T>::new(self.timer)
-                    .run_param_wifi_i2c(
+                let (result, timing) =
+                    crate::executor::step::wifi_i2c::run_param_wifi_i2c::<D, _, _>(
+                        self.timer,
                         pending
                             .begin_wifi_i2c_tracking(state)
                             .map_err(|_| PhyTargetPortError::UnexpectedBinding)?,
                         self.registers,
-                        &mut self.observer,
+                        O::OBSERVE_ENGINE_POLLS,
                     )
-                    .await?
+                    .await;
+                if O::OBSERVE_ENGINE_POLLS {
+                    self.observer
+                        .engine_completed(crate::tracking::observation::Operation::WifiI2c, timing);
+                }
+                result.map_err(step::port_error)?
             }
             PhyParamTrackingAction::TemperatureRead => {
                 let (result, timing) = step::temperature::<D, _, _>(

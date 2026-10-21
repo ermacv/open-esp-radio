@@ -1,38 +1,59 @@
-//! T3 retains each masked read/write until its P1 transport job completes.
+//! One T3 family future owns the semantic commit and its P1 timing.
 use super::{Failure, Job, Registers, drive};
-use crate::tracking::i2c::{
-    PhyWifiI2cTrackingAction, PhyWifiI2cTrackingCompletion, PhyWifiI2cTrackingOutcome,
-    PhyWifiI2cTrackingTransition,
+use crate::tracking::{
+    i2c::{PhyWifiI2cTrackingAction, PhyWifiI2cTrackingCompletion},
+    observation::EngineTiming,
+    parameters::{PhyParamTrackingCompletion, PhyParamTrackingWifiI2cTransition},
 };
-use crate::tracking::observation::EngineTiming;
 use oer_time::Timer;
 
-pub(crate) async fn track<D: crate::executor::wait::PhyShortDelay, R: Registers, T: Timer>(
-    transition: &mut PhyWifiI2cTrackingTransition,
-    registers: &mut R,
+pub(crate) async fn run_param_wifi_i2c<
+    D: crate::executor::wait::PhyShortDelay,
+    R: Registers,
+    T: Timer,
+>(
     timer: &T,
-    mut timing: Option<&mut EngineTiming>,
-) -> Result<PhyWifiI2cTrackingOutcome, Failure> {
-    loop {
-        if let PhyWifiI2cTrackingAction::Complete(outcome) = transition.action() {
-            return Ok(outcome);
+    mut child: PhyParamTrackingWifiI2cTransition<'_>,
+    registers: &mut R,
+    measured: bool,
+) -> (Result<PhyParamTrackingCompletion, Failure>, EngineTiming) {
+    let mut timing = EngineTiming::default();
+    let result = loop {
+        if let PhyWifiI2cTrackingAction::Complete(_) = child.action() {
+            break child.commit().map_err(|_| Failure::Binding);
         }
-        let mut binding = transition.lower_external().map_err(|_| Failure::Binding)?;
+        let mut binding = match child.lower_external() {
+            Ok(binding) => binding,
+            Err(_) => break Err(Failure::Binding),
+        };
         {
-            let mut job = Job::counted_i2c(binding.transaction_mut(), timer.now())?;
-            drive::<D, _, _>(
+            let mut job = match Job::counted_i2c(binding.transaction_mut(), timer.now()) {
+                Ok(job) => job,
+                Err(error) => break Err(error),
+            };
+            if let Err(error) = drive::<D, _, _>(
                 &mut job,
                 registers,
                 timer,
-                timing.as_deref_mut(),
+                measured.then_some(&mut timing),
                 None,
                 None,
             )
-            .await?;
+            .await
+            {
+                break Err(error);
+            }
         }
-        let completion = binding.into_completion().map_err(|_| Failure::Binding)?;
-        transition
+        let completion = match binding.into_completion() {
+            Ok(completion) => completion,
+            Err(_) => break Err(Failure::Binding),
+        };
+        if child
             .advance(PhyWifiI2cTrackingCompletion::MaskedWrite(completion))
-            .map_err(|_| Failure::Binding)?;
-    }
+            .is_err()
+        {
+            break Err(Failure::Binding);
+        }
+    };
+    (result, timing)
 }

@@ -1,14 +1,34 @@
 use super::*;
-use crate::tracking::i2c::{
-    PhyWifiI2cTrackingAction as Action, PhyWifiI2cTrackingBand as Band,
-    PhyWifiI2cTrackingParameters, PhyWifiI2cTrackingTransition,
+use crate::{
+    state::{PhyConfig, PhyState},
+    tracking::{
+        i2c::PhyWifiI2cTrackingBand as Band,
+        parameters::{
+            PhyParamTrackRequest, PhyParamTrackingCompletion, PhyParamTrackingPolicy,
+            PhyParamTrackingTransition, PhyParamTrackingWifiI2cTransition,
+        },
+    },
 };
 
-fn changed() -> PhyWifiI2cTrackingTransition {
-    PhyWifiI2cTrackingTransition::new(PhyWifiI2cTrackingParameters {
-        current_temperature: 100,
-        previous_band: Band::Nominal,
-    })
+fn state(temperature: i16) -> PhyState {
+    let mut state = PhyState::new(PhyConfig::production());
+    state.apply_temperature_outcome(PhyTemperatureOutcome {
+        temperature,
+        sensor_index: 3,
+        next_dac: 4,
+    });
+    state
+}
+
+fn child(state: &mut PhyState) -> PhyParamTrackingWifiI2cTransition<'_> {
+    let mut policy = PhyParamTrackingPolicy::for_registered_state(state);
+    policy.rfpll_cap_tracking_enabled = false;
+    let mut parent =
+        PhyParamTrackingTransition::new(PhyParamTrackRequest::new(true, false), policy);
+    parent
+        .advance(PhyParamTrackingCompletion::EnteredCritical)
+        .expect("enter the tracking owner");
+    parent.begin_wifi_i2c_tracking(state).expect("T3 selected")
 }
 
 #[test]
@@ -19,17 +39,15 @@ fn both_masked_writes_keep_order_and_unrelated_bits_across_real_pending_edges() 
         ..Io::default()
     };
     let atoms = io.atoms.clone();
-    let mut transition = changed();
-    let mut timing = EngineTiming::default();
+    let mut state = state(100);
     let (waker, _) = context();
     let mut cx = Context::from_waker(&waker);
-    let outcome = {
-        let mut future = core::pin::pin!(super::super::wifi_i2c::track::<TestDelay, _, _>(
-            &mut transition,
-            &mut io,
-            &clock,
-            Some(&mut timing)
-        ));
+    let (result, timing) = {
+        let mut future = core::pin::pin!(super::super::wifi_i2c::run_param_wifi_i2c::<
+            TestDelay,
+            _,
+            _,
+        >(&clock, child(&mut state), &mut io, true));
         let mut polls = 0;
         loop {
             polls += 1;
@@ -38,15 +56,18 @@ fn both_masked_writes_keep_order_and_unrelated_bits_across_real_pending_edges() 
             let result = future.as_mut().poll(&mut cx);
             assert!(atoms.get() - before <= 1, "one bus edge per caller poll");
             if let Poll::Ready(result) = result {
-                break result.expect("tracking completes");
+                break result;
             }
             clock
                 .advance(Duration::from_micros(1))
                 .expect("virtual time fits");
         }
     };
-    assert_eq!(outcome.band, Band::Hot);
-    assert!(outcome.changed);
+    assert_eq!(result, Ok(PhyParamTrackingCompletion::WifiI2cTracked));
+    assert_eq!(
+        state.wifi_i2c_tracking_parameters().previous_band,
+        Band::Hot
+    );
     assert!(timing.pending > 0 && timing.polls > timing.pending && timing.resumes > 0);
     let commands: Vec<_> = io
         .actions
@@ -80,30 +101,27 @@ fn both_masked_writes_keep_order_and_unrelated_bits_across_real_pending_edges() 
             },
         ]
     );
-    assert_eq!(transition.action(), Action::Complete(outcome));
 }
 
 #[test]
 fn unchanged_band_finishes_without_hardware_or_a_yield() {
     let clock = VirtualClock::<1>::new();
     let mut io = Io::default();
-    let mut transition = PhyWifiI2cTrackingTransition::new(PhyWifiI2cTrackingParameters {
-        current_temperature: 25,
-        previous_band: Band::Nominal,
-    });
+    let mut state = state(25);
     let (waker, _) = context();
     let mut cx = Context::from_waker(&waker);
     {
-        let mut future = core::pin::pin!(super::super::wifi_i2c::track::<TestDelay, _, _>(
-            &mut transition,
-            &mut io,
-            &clock,
-            None
-        ));
-        let Poll::Ready(Ok(outcome)) = future.as_mut().poll(&mut cx) else {
+        let mut future = core::pin::pin!(super::super::wifi_i2c::run_param_wifi_i2c::<
+            TestDelay,
+            _,
+            _,
+        >(&clock, child(&mut state), &mut io, false));
+        let Poll::Ready((Ok(PhyParamTrackingCompletion::WifiI2cTracked), timing)) =
+            future.as_mut().poll(&mut cx)
+        else {
             panic!("unchanged band is immediately complete")
         };
-        assert!(!outcome.changed);
+        assert_eq!(timing.polls, 0);
     }
     assert!(io.actions.is_empty());
 }
@@ -113,22 +131,21 @@ fn busy_readiness_exhaustion_cannot_complete_either_band_write() {
     let clock = VirtualClock::<1>::new();
     let mut io = Io::default();
     io.busy.set(true);
-    let mut transition = changed();
+    let mut state = state(100);
     let (waker, _) = context();
     let mut cx = Context::from_waker(&waker);
     {
-        let mut future = core::pin::pin!(super::super::wifi_i2c::track::<TestDelay, _, _>(
-            &mut transition,
-            &mut io,
-            &clock,
-            None
-        ));
+        let mut future = core::pin::pin!(super::super::wifi_i2c::run_param_wifi_i2c::<
+            TestDelay,
+            _,
+            _,
+        >(&clock, child(&mut state), &mut io, false));
         let mut polls = 0;
         loop {
             polls += 1;
             assert!(polls < usize::from(crate::HARDWARE_EDGE_LIMIT) * 4);
             if let Poll::Ready(result) = future.as_mut().poll(&mut cx) {
-                assert_eq!(result, Err(Failure::TimedOut));
+                assert_eq!(result.0, Err(Failure::TimedOut));
                 break;
             }
             clock
@@ -136,10 +153,10 @@ fn busy_readiness_exhaustion_cannot_complete_either_band_write() {
                 .expect("virtual time fits");
         }
     }
-    assert!(matches!(
-        transition.action(),
-        Action::MaskedWrite(oer_espressif_analog::Action::Read { .. })
-    ));
+    assert_eq!(
+        state.wifi_i2c_tracking_parameters().previous_band,
+        Band::Nominal
+    );
     assert!(
         !io.actions
             .iter()

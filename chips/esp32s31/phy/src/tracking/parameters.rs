@@ -914,12 +914,6 @@ impl fmt::Debug for PhyParamTrackingWifiI2cTransition<'_> {
 }
 
 impl<'state> PhyParamTrackingWifiI2cTransition<'state> {
-    pub(crate) fn transition_mut(
-        &mut self,
-    ) -> &mut crate::tracking::i2c::PhyWifiI2cTrackingTransition {
-        &mut self.child
-    }
-
     fn lower(
         parent_action: PhyParamTrackingAction,
         state: &'state mut crate::state::PhyState,
@@ -935,7 +929,6 @@ impl<'state> PhyParamTrackingWifiI2cTransition<'state> {
         })
     }
 
-    #[cfg(any(test, oer_probe))]
     pub const fn action(&self) -> crate::tracking::i2c::PhyWifiI2cTrackingAction {
         self.child.action()
     }
