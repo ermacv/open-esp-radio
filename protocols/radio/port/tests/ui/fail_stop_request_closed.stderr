@@ -1,0 +1,17 @@
+warning: unused variable: `request`
+ --> tests/ui/fail_stop_request_closed.rs:4:35
+  |
+4 | pub fn ended<'id, B: PortBackend>(request: FailStopRequested<'id, B>) -> Ended<'id, B, ()> {
+  |                                   ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_request`
+  |
+  = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+error[E0451]: fields `brand` and `backend` of struct `FailStopRequested` are private
+ --> tests/ui/fail_stop_request_closed.rs:7:9
+  |
+6 |     let request = FailStopRequested {
+  |                   ----------------- in this type
+7 |         brand: core::marker::PhantomData, // ui-error: E0451
+  |         ^^^^^ private field
+8 |         backend: core::marker::PhantomData,
+  |         ^^^^^^^ private field

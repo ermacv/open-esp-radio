@@ -22,7 +22,7 @@ pub(super) async fn run<'p, 'id>(
     {
         Ok(owner) => owner,
         Err(failed) => {
-            return Ended::fail_stopped(failed.fail_stop().await, Err("barrier disable"));
+            return Ended::fail_stop(failed.fail_stop(), Err("barrier disable"));
         }
     };
     Ended::uninstall(owner, (), result)

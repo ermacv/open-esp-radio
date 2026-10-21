@@ -486,7 +486,7 @@ fn port_now_projects_the_supplied_clock_and_renewal_starts_a_new_msdu() {
             let next = owner.now().await.unwrap().unwrap();
             buffer.admit(next);
             assert_eq!(buffer.admission(), Some(next));
-            Ended::fail_stopped(owner.fail_stop().await, ())
+            Ended::fail_stop(owner.fail_stop(), ())
         }
     }
     let clock = Rc::new(VirtualClock::<8>::new());

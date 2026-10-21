@@ -554,11 +554,11 @@ impl<D: Device<B>, const B: usize> PortBackend for Esp32s31Backend<D, B> {
             retire.retired(loan, ()).await
         }
     }
-    fn retire_bound(&self, _: radio::Call) -> impl Future<Output = ()> + use<D, B> {
+    fn shutdown_bound(&self, _: radio::Call) -> impl Future<Output = ()> + use<D, B> {
         let timer = self.timer.clone();
         async move {
             timer
-                .wait_until(timer.now().saturating_add(COMMAND_BOUND))
+                .wait_until(timer.now().saturating_add(SHUTDOWN_BOUND))
                 .await
         }
     }

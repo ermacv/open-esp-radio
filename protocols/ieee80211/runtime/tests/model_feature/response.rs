@@ -383,7 +383,7 @@ impl PortBody<ModelBackend> for Case {
             }
         }
         if matches!(self.expected, Expected::Rejected) {
-            return Ended::fail_stopped(owner.fail_stop().await, ());
+            return Ended::fail_stop(owner.fail_stop(), ());
         }
         let mut sink = |event| {
             seen += usize::from(self.check(

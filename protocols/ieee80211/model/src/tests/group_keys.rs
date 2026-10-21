@@ -500,7 +500,7 @@ impl PortBody<ModelBackend> for Interrupted<'_> {
             let Err(poisoned) = disabled else {
                 panic!("hardware uncertainty cannot return an ordinary owner")
             };
-            Ended::fail_stopped(poisoned.fail_stop().await, ())
+            Ended::fail_stop(poisoned.fail_stop(), ())
         } else {
             let Ok(disabled) = disabled else {
                 panic!("disable completes the admitted mutation")
@@ -772,7 +772,7 @@ impl PortBody<ModelBackend> for Teardown<'_> {
                 };
                 Ended::uninstall(poisoned, (), ())
             }
-            EndInstallation::Abandon => Ended::fail_stopped(owner.fail_stop().await, ()),
+            EndInstallation::Abandon => Ended::fail_stop(owner.fail_stop(), ()),
         }
     }
 }

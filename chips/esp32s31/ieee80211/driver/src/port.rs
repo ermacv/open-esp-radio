@@ -57,6 +57,9 @@ const TERMINALS: usize = TX_TICKETS + 16 + 2 + 1 + INTERFACE_TERMINALS;
 const COMMANDS: usize = TX_TICKETS + 2 * 16 + 2 + 2 + INTERFACE_COMMANDS;
 pub const PUBLICATION_BOUND: Duration = Duration::from_millis(250);
 pub const COMMAND_BOUND: Duration = Duration::from_millis(400);
+/// Response/retirement containment budget. It covers one P2 cleanup step and
+/// ready P2 work within the existing command bound; a later answer fails closed.
+pub const SHUTDOWN_BOUND: Duration = COMMAND_BOUND;
 type Part<'id, const I: u8> = Child<Root<oer_radio_port::LocalId<'id>>, I>;
 type CorePath<'id> = Part<'id, 0>;
 type Core<'id, D, const B: usize> = LowerMacCore<

@@ -276,7 +276,7 @@ impl<'a> PortBackend for Backend<'a> {
         }
     }
 
-    fn retire_bound(&self, _: Call) -> impl Future<Output = ()> + use<'a> {
+    fn shutdown_bound(&self, _: Call) -> impl Future<Output = ()> + use<'a> {
         let mode = self.0.mode;
         async move {
             if !matches!(mode, Mode::MissBound) {
@@ -332,7 +332,7 @@ impl<'a> PortBody<Backend<'a>> for Body {
     ) -> Ended<'id, Backend<'a>, ()> {
         match self {
             Self::Uninstall => crate::Ended::uninstall(owner, (), ()),
-            Self::FailStop => crate::Ended::fail_stopped(owner.fail_stop().await, ()),
+            Self::FailStop => crate::Ended::fail_stop(owner.fail_stop(), ()),
             Self::Drop => {
                 drop(owner);
                 pending().await
@@ -356,7 +356,7 @@ impl<'a> PortBody<Backend<'a>> for Body {
                     Err(Failed::Poisoned(poisoned)) => {
                         return crate::Ended::uninstall(poisoned, (), ());
                     }
-                    Err(failed) => return crate::Ended::fail_stopped(failed.fail_stop().await, ()),
+                    Err(failed) => return crate::Ended::fail_stop(failed.fail_stop(), ()),
                 };
                 {
                     let mut phase = enabled.phase();
@@ -547,7 +547,10 @@ fn both_abnormal_ends_report_the_stop_outcome_and_retain_every_owner() {
                     PortEnd::Abandoned { outcome, .. } if !fail_stop => outcome,
                     _ => panic!("wrong end"),
                 };
-                assert_eq!(matches!(outcome, Abandon::Stopped(_)), stopped);
+                assert_eq!(
+                    matches!(outcome, Abandon::Stopped(_)),
+                    stopped && !matches!(mode, Mode::MissBound)
+                );
                 assert_eq!(owner_drops(&model), [0; 3]);
                 assert_eq!(model.loan_ends.get(), 1);
                 drop(end);
@@ -746,7 +749,7 @@ fn fault_after_enable_lets_body_drain_before_uninstall() {
     );
 }
 #[test]
-fn missed_retire_bound_fail_stops_without_detach_or_uninstall() {
+fn missed_shutdown_bound_fail_stops_without_detach_or_uninstall() {
     let m = Model::new(Mode::MissBound);
     assert!(matches!(
         finish(run_port(
@@ -797,33 +800,38 @@ impl Wake for Wakes {
     }
 }
 #[test]
-fn abandon_answer_transfers_the_backend_outcome_once_before_or_after_first_poll() {
-    for stopped in [true, false] {
-        for publish_first in [true, false] {
-            let answer = AbandonAnswer::new();
-            let mut receiver = AbandonReceiver(&answer);
-            let wakes = Arc::new(Wakes(AtomicUsize::new(0)));
-            let waker = wakes.clone().into();
-            if !publish_first {
-                assert!(receiver.poll(&mut Context::from_waker(&waker)).is_pending());
-            }
-            let authority = Quarantine::new();
-            answer.publish(if stopped {
-                Abandon::Stopped(authority.stopped())
-            } else {
-                Abandon::Unconfirmed(authority)
-            });
-            assert_eq!(wakes.0.load(Ordering::Relaxed), usize::from(!publish_first));
-            let Poll::Ready(outcome) = receiver.poll(&mut Context::from_waker(&waker)) else {
-                panic!("the consumed backend proof is published");
-            };
-            assert_eq!(matches!(outcome, Abandon::Stopped(_)), stopped);
-            assert!(
-                receiver.poll(&mut Context::from_waker(&waker)).is_pending(),
-                "a proof cannot be received twice"
-            );
-        }
+fn supervisor_accepts_only_a_stop_answer_observed_within_the_bound() {
+    use oer_time::{Instant, Timer};
+    for (answer_at, resume_at, stopped) in [(5, 5, true), (5, 11, false), (12, 10, false)] {
+        let clock = oer_time_virtual::VirtualClock::<8>::starting_at(Instant::EPOCH);
+        let bound = clock.wait_until(Instant::from_micros(10));
+        let mut bound = pin!(bound);
+        let response = async {
+            clock.wait_until(Instant::from_micros(answer_at)).await;
+            Abandon::Stopped(Quarantine::new().stopped())
+        };
+        let mut supervised = Box::pin(supervise_abandon(response, bound.as_mut()));
+        assert!(poll(supervised.as_mut()).is_pending());
+        clock.advance_to(Instant::from_micros(resume_at));
+        let Poll::Ready(outcome) = poll(supervised.as_mut()) else {
+            panic!("answer or named deadline completes the wait");
+        };
+        assert_eq!(matches!(outcome, Abandon::Stopped(_)), stopped);
     }
+}
+
+#[test]
+fn supervisor_rejects_a_p2_step_that_finishes_after_its_bound() {
+    use oer_time::{Instant, Timer};
+    let clock = oer_time_virtual::VirtualClock::<8>::starting_at(Instant::EPOCH);
+    let bound = clock.wait_until(Instant::from_micros(10));
+    let mut bound = pin!(bound);
+    let response = async {
+        clock.advance_to(Instant::from_micros(11));
+        Abandon::Stopped(Quarantine::new().stopped())
+    };
+    let outcome = finish(supervise_abandon(response, bound.as_mut()));
+    assert!(matches!(outcome, Abandon::Unconfirmed(_)));
 }
 
 #[test]
@@ -896,9 +904,9 @@ impl<'a, 'm> PortBody<Backend<'m>> for StopThenWait<'a> {
         owner: Owner<'p, 'id, Backend<'m>, Disabled>,
         _: (),
     ) -> Ended<'id, Backend<'m>, Self::Output> {
-        let proof = owner.fail_stop().await;
+        let proof = owner.fail_stop();
         poll_fn(|cx| self.0.poll(cx)).await;
-        Ended::fail_stopped(proof, "body result")
+        Ended::fail_stop(proof, "body result")
     }
 }
 
@@ -1008,7 +1016,6 @@ fn fail_stop_request_then_cancellation_preserves_the_first_latch_cause() {
         held: ManuallyDrop::new(11),
         latch: AbandonLatch::new(),
         retiring: Signal::new(),
-        answer: AbandonAnswer::new(),
     };
     let mut frontend = Frontend {
         model: &model,
@@ -1016,18 +1023,17 @@ fn fail_stop_request_then_cancellation_preserves_the_first_latch_cause() {
     };
     let backend = Cleanup::new(Backend(&model));
     let owner = Owner::<_, Disabled>::new(&mut frontend, &install);
-    let mut response = Box::pin(owner.fail_stop());
+    let request = owner.fail_stop();
     assert!(
         install.latch.is_fail_stopped(),
-        "request precedes the response's first poll"
+        "publishing the request does not need a poll"
     );
-    assert!(poll(response.as_mut()).is_pending());
     assert_eq!(
         model.abandons.get(),
         0,
         "the frontend cannot call the backend"
     );
-    drop(response);
+    drop(request);
     drop(backend);
     assert_eq!(
         install.latch.cause.load(Ordering::Acquire),

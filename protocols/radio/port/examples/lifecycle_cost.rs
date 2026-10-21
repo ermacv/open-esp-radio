@@ -161,7 +161,7 @@ macro_rules! port {
                     }
                 }
 
-                fn retire_bound(&self, _: Call) -> impl Future<Output = ()> + use<'r> {
+                fn shutdown_bound(&self, _: Call) -> impl Future<Output = ()> + use<'r> {
                     let probe = self.0;
                     core::future::poll_fn(move |_| probe.poll(4))
                 }
@@ -195,10 +195,7 @@ macro_rules! port {
                     let owner = match owner.enable().await {
                         Ok(owner) => owner,
                         Err(failed) => {
-                            return oer_radio_port::Ended::fail_stopped(
-                                failed.fail_stop().await,
-                                (),
-                            );
+                            return oer_radio_port::Ended::fail_stop(failed.fail_stop(), ());
                         }
                     };
                     match owner
@@ -209,9 +206,7 @@ macro_rules! port {
                         .await
                     {
                         Ok(owner) => oer_radio_port::Ended::uninstall(owner, (), ()),
-                        Err(failed) => {
-                            oer_radio_port::Ended::fail_stopped(failed.fail_stop().await, ())
-                        }
+                        Err(failed) => oer_radio_port::Ended::fail_stop(failed.fail_stop(), ()),
                     }
                 }
             }

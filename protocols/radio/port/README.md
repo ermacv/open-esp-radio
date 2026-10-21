@@ -137,21 +137,31 @@ by value with its completion state. There is no untyped early exit.
 Retirement and abandonment register and wake their waiters. The abandon latch
 has independent core and driver waiters. A dropped owner wakes the core,
 which closes admission, requests retirement and detaches after the driver
-ends; a missed deadline fail-stops. Calling `Owner::fail_stop` publishes the
-request before returning its future. The body awaits a private one-shot
-receiver for the core's actual `Abandon` outcome, then returns its affine
-`FailStopped<'id, B>` proof. The body never invokes `backend.abandon`.
-The core consumes its armed cleanup authority when executing that request,
+ends; a missed deadline fail-stops. Calling `Owner::fail_stop` synchronously
+publishes the request and returns an affine `FailStopRequested<'id, B>`.
+The body forwards it through `Ended::fail_stop`; it has no hardware outcome
+and performs no wait. The body never invokes `backend.abandon`.
+
+One lifecycle supervisor in `run_port` waits for the actual stop answer and
+for retirement. Both phases use independent instances of the backend's
+named `shutdown_bound`. The answer deadline is armed before polling the
+P2 response and checked again afterward. Only an answer observed within
+the bound can transfer `Stopped`; expiry, including a late ready answer,
+returns `Unconfirmed`. S31 uses `SHUTDOWN_BOUND`, within its existing command
+budget. Its current local composition executes cleanup in the same P2 task.
+
+The core consumes its armed cleanup authority when executing the request,
 so cancellation during the response or retirement wait cannot call the
-backend twice. Backends need no memoized stop outcome. The
+backend twice. The supervisor continues while the body waits on another
+future. Backends need no memoized stop outcome. The
 latch preserves its first cause through a `LIVE` compare-exchange.
 `abandon` returns `Abandon::Stopped` only with its `HardwareStopped` proof
 of masked IRQ entries, bounded CPU exclusion and device stopping. `Abandon::Unconfirmed(Quarantine)`
 consumes the authority without claiming those effects; it requires chip reset.
 An overlong driver step or ISR may leave hardware running: every reachable
 allocation stays in permanent quarantine until chip reset. Neither outcome
-authorizes DMA backing reuse. `FailStopped::outcome` exposes this distinction
-without consuming the body's affine proof.
+authorizes DMA backing reuse. `PortEnd` reports this distinction. The request value grants no stop proof
+and has no outcome accessor.
 The core retires independently while the body waits; only final `detach`
 and result delivery wait for the body. Detach consumes its own affine call
 authority and borrows the outcome, which remains available to the caller.
@@ -183,8 +193,8 @@ No allocator or unsafe code is needed by this core.
 The body chooses `PortBody::Output` before its generic `run` introduces `'id`;
 that output cannot contain the installation's brand. It returns
 `Ended::uninstall(owner, control, output)` or
-`Ended::fail_stopped(proof, output)`. `run_port` returns `PortEnd::Uninstalled`
-with owners and output. `FailStopped` carries output, `Abandon` and
+`Ended::fail_stop(proof, output)`. `run_port` returns `PortEnd::Uninstalled`
+with owners and output. `PortEnd::FailStopped` carries output, `Abandon` and
 `Quarantined`; `Abandoned` carries the latter two when a dropped owner made
 the core end the installation without a body result. The caller can
 inspect `Stopped` versus `Unconfirmed`; quarantine permits no backing reuse,
@@ -193,17 +203,16 @@ BLE's service returns `Served` through this output instead of a side channel.
 
 ## Cost
 
-The core allocates no heap memory and contains no unsafe code. Retirement,
-the core's abandonment receiver, the driver's abandonment receiver and the
-body's stop-answer receiver each have an independent atomic waiter. The
-answer's only payload is the variant of a consumed zero-sized stop proof;
-a private `AtomicU8` transfers it once with Release/Acquire ordering. No
-generic response queue or backend stop-outcome cache is needed.
+The core allocates no heap memory and contains no unsafe code. Retirement
+and the core's and driver's abandonment receivers have three independent
+atomic waiters. `FailStopRequested` contains only an invariant installation
+brand and a backend type marker; no body future stores a stop-answer wait.
 
-The backend and its cleanup authority share one retaining guard. Body-side
-frontend state remains separate from that guard. Concrete async future sizes
-include the operation and response waits of each body; measure the linked
-application and its allocated future backing when changing them.
+One supervisor retains the actual answer and polls shutdown deadlines,
+driver completion and the body. It never polls a completed future again.
+Cleanup and permanent backend retention share one guard. Concrete async
+future sizes include that supervisor and the caller's retained state;
+measure the linked application's allocated backing when changing them.
 [The lifecycle cost probe](examples/lifecycle_cost.rs) exercises two concrete
 backends through enable, disable, retirement, detachment and cancellation.
 
@@ -216,7 +225,7 @@ completion state in `Retired`. Hardware-reachable backing stays static,
 outside the movable driver. Its branded queues
 stay in `Held<'id>`; `resources` returns `InstallParts` instead of a tuple.
 Backend calls take the core's affine `Call`; `enable` and `setup` also take
-held/frontend installation loans. Uninstall consumes `Retired` and `Detached`. `retire_bound` returns a future without a backend borrow.
+held/frontend installation loans. Uninstall consumes `Retired` and `Detached`. `shutdown_bound` returns a future without a backend borrow.
 The disable sink uses the same `ControlFlow<Terminal>` rejection shape as
 the Wi-Fi port: consumers that accept every terminal return `Continue(())`.
 Only `next_event` has the outer error `EventEnd<Fault>`; other methods return
@@ -230,7 +239,8 @@ is transferred in the error itself.
 `Unconfirmed` outcome; final `detach` follows the body's return and borrows
 that outcome through its own single-use call authority. Unconfirmed hardware requires chip reset and permanent backing
 quarantine, not a runtime assertion that it stopped. `fail_stop`
-returns a response future yielding `FailStopped`, which `Ended::fail_stopped(proof, output)` consumes.
+returns `FailStopRequested`, which `Ended::fail_stop(request, output)` consumes.
+Only the supervisor obtains the actual outcome for `PortEnd`.
 `run_port` returns `PortEnd`; `StationService` supplies its result as
 `PortBody::Output`. The generic phase, separate event/terminal types,
 consuming owner transitions, `Failed::{Refused, Poisoned}` and `PoisonedOwner`

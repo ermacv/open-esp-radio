@@ -107,12 +107,8 @@ fn accounting_quarantine_does_not_prevent_a_confirmed_hardware_stop() {
                 assert!(!self.0.abandoned());
             }
             assert!(matches!(ready(owner.phase().next_event()), Err(actual) if actual == end));
-            let stopped = owner.fail_stop().await;
-            assert!(matches!(
-                stopped.outcome(),
-                oer_radio_port::Abandon::Stopped(_)
-            ));
-            Ended::fail_stopped(stopped, ())
+            let stopped = owner.fail_stop();
+            Ended::fail_stop(stopped, ())
         }
     }
 
@@ -1110,7 +1106,7 @@ impl PortBackend for PoolProbe {
         }
     }
 
-    fn retire_bound(&self, _: Call) -> impl Future<Output = ()> + use<> {
+    fn shutdown_bound(&self, _: Call) -> impl Future<Output = ()> + use<> {
         core::future::pending()
     }
 

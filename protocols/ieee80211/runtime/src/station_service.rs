@@ -124,7 +124,8 @@ use oer_ieee80211_upper_mac::rate_selection::{FrameRates, RateSelection};
 use oer_ieee80211_wire::qos::{WmmAccessCategory, WmmUserPriority};
 use oer_radio_port::Slot;
 use oer_radio_port::{
-    Disabled, Enabled, Ended, EventEnd, FailStopped, Failed, Owner, PoisonedOwner, PortBackend,
+    Disabled, Enabled, Ended, EventEnd, FailStopRequested, Failed, Owner, PoisonedOwner,
+    PortBackend,
 };
 use oer_time::{Instant, Timer};
 
@@ -596,9 +597,9 @@ pub enum ServiceEnd<'p, 'id, B: StationPort<'id>> {
         custody: TerminalCustody<'id, B>,
     },
     /// Stream quarantine or a false drained claim ends admission without
-    /// another disable. The proof carries the core's stopped/unconfirmed outcome.
+    /// another disable. The request is completed by the lifecycle supervisor.
     Quarantined {
-        proof: FailStopped<'id, B>,
+        request: FailStopRequested<'id, B>,
         fault: ServiceFault<B>,
         custody: TerminalCustody<'id, B>,
     },
@@ -1076,7 +1077,7 @@ impl<
                     if matches!(end, EventEnd::Quarantined { .. }) {
                         return (
                             ServiceEnd::Quarantined {
-                                proof: owner.fail_stop().await,
+                                request: owner.fail_stop(),
                                 fault,
                                 custody,
                             },
@@ -1086,7 +1087,7 @@ impl<
                     if let Some(missing) = self.pending.admissions.first() {
                         return (
                             ServiceEnd::Quarantined {
-                                proof: owner.fail_stop().await,
+                                request: owner.fail_stop(),
                                 fault: ServiceFault::DrainedWithOutstanding { cause, missing },
                                 custody,
                             },

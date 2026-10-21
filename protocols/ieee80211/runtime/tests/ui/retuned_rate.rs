@@ -42,6 +42,6 @@ impl PortBody<ModelBackend> for Retune {
                 assert!(phase.no_ack(rate).is_ok());
             }
         }
-        Ended::fail_stopped(owner.fail_stop().await, ())
+        Ended::fail_stop(owner.fail_stop(), ())
     }
 }

@@ -182,6 +182,6 @@ pub(super) async fn run<'p, 'id>(
     });
     match disabled {
         Ok(owner) => Ended::uninstall(owner, (), result),
-        Err(failed) => Ended::fail_stopped(failed.fail_stop().await, Err("group disable")),
+        Err(failed) => Ended::fail_stop(failed.fail_stop(), Err("group disable")),
     }
 }

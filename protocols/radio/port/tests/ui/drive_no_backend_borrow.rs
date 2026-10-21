@@ -98,7 +98,7 @@ impl PortBackend for Backend {
             }
         }
     }
-    fn retire_bound(&self, _: Call) -> impl Future<Output = ()> + use<> {
+    fn shutdown_bound(&self, _: Call) -> impl Future<Output = ()> + use<> {
         pending()
     }
     fn detach<'id>(&mut self, _: oer_radio_port::Detach<'_>, _: &Self::Held<'id>) {}

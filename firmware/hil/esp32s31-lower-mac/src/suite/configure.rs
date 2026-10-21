@@ -113,19 +113,13 @@ pub(super) async fn run<'p, 'id>(
             let disabled = match owner.disable(&mut consume).await {
                 Ok(owner) => owner,
                 Err(failed) => {
-                    return Ended::fail_stopped(
-                        failed.fail_stop().await,
-                        Err("configuration disable"),
-                    );
+                    return Ended::fail_stop(failed.fail_stop(), Err("configuration disable"));
                 }
             };
             owner = match disabled.enable().await {
                 Ok(owner) => owner,
                 Err(failed) => {
-                    return Ended::fail_stopped(
-                        failed.fail_stop().await,
-                        Err("configuration reenable"),
-                    );
+                    return Ended::fail_stop(failed.fail_stop(), Err("configuration reenable"));
                 }
             };
         } else {
@@ -186,10 +180,7 @@ pub(super) async fn run<'p, 'id>(
     {
         Ok(owner) => owner,
         Err(failed) => {
-            return Ended::fail_stopped(
-                failed.fail_stop().await,
-                Err("configuration final disable"),
-            );
+            return Ended::fail_stop(failed.fail_stop(), Err("configuration final disable"));
         }
     };
     Ended::uninstall(owner, (), result)

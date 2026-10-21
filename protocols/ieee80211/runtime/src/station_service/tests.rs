@@ -1040,7 +1040,7 @@ where
                 }
                 ServiceEnd::Stopped(owner) => Ended::uninstall(owner, (), ()),
                 ServiceEnd::Failed { owner, .. } => owner.uninstall((), ()),
-                ServiceEnd::Quarantined { proof, .. } => Ended::fail_stopped(proof, ()),
+                ServiceEnd::Quarantined { request, .. } => Ended::fail_stop(request, ()),
                 ServiceEnd::Poisoned {
                     owner: poisoned, ..
                 } => Ended::uninstall(poisoned, (), ()),

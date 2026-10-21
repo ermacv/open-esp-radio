@@ -1,13 +1,13 @@
 error: lifetime may not live long enough
- --> tests/ui/foreign_fail_stopped.rs:9:5
+ --> tests/ui/foreign_fail_stop_request.rs:9:5
   |
-5 | pub fn ended<'left, 'right, B: PortBackend>(proof: FailStopped<'left, B>) -> Ended<'right, B, ()>
+5 | pub fn ended<'left, 'right, B: PortBackend>(proof: FailStopRequested<'left, B>) -> Ended<'right, B, ()>
   |              -----  ------ lifetime `'right` defined here
   |              |
   |              lifetime `'left` defined here
 ...
-9 |     Ended::fail_stopped(proof, ()) // ui-error: lifetime may not live long enough
-  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ function was supposed to return data with lifetime `'left` but it is returning data with lifetime `'right`
+9 |     Ended::fail_stop(proof, ()) // ui-error: lifetime may not live long enough
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^ function was supposed to return data with lifetime `'left` but it is returning data with lifetime `'right`
   |
   = help: consider adding the following bound: `'right: 'left`
   = note: requirement occurs because of the type `oer_radio_port::Ended<'_, B, ()>`, which makes the generic argument `'_` invariant

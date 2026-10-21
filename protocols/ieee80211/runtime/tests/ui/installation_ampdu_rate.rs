@@ -46,7 +46,7 @@ impl PortBody<ModelBackend> for Source {
             .await,
             oer_radio_port::PortEnd::FailStopped { .. }
         ));
-        Ended::fail_stopped(source.fail_stop().await, ())
+        Ended::fail_stop(source.fail_stop(), ())
     }
 }
 
@@ -88,6 +88,6 @@ impl PortBody<ModelBackend> for Target<'_, '_, '_> {
         }
         // Exchanging the rates would force the two independent installation
         // lifetimes to be equal. The returned owner exposes both directions.
-        Ended::fail_stopped(target.fail_stop().await, ()) // ui-error: lifetime may not live long enough
+        Ended::fail_stop(target.fail_stop(), ()) // ui-error: lifetime may not live long enough
     }
 }

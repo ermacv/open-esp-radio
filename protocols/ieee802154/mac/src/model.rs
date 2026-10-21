@@ -1412,7 +1412,7 @@ impl PortBackend for OwnedModel {
     }
 
     /// The model's driver retires at once, so its bound never passes.
-    fn retire_bound(&self, _: Call) -> impl Future<Output = ()> + use<> {
+    fn shutdown_bound(&self, _: Call) -> impl Future<Output = ()> + use<> {
         core::future::pending()
     }
 

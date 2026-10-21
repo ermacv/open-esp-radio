@@ -3,7 +3,7 @@ use oer_radio_port::{Disabled, Ended, Owner, PortBackend};
 
 pub async fn cannot_forge<'id, B: PortBackend>(owner: Owner<'_, 'id, B, Disabled>) -> Ended<'id, B, ()> {
     #[cfg(ui_reject)]
-    { drop(owner); Ended::fail_stopped((), ()) } // ui-error: E0308
+    { drop(owner); Ended::fail_stop((), ()) } // ui-error: E0308
     #[cfg(not(ui_reject))]
-    Ended::fail_stopped(owner.fail_stop().await, ())
+    Ended::fail_stop(owner.fail_stop(), ())
 }

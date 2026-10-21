@@ -4070,6 +4070,7 @@ dependencies = [
  "atomic-waker",
  "oer-test-ui-cases",
  "oer-time",
+ "oer-time-virtual",
  "scopeguard",
 ]
 

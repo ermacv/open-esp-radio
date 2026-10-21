@@ -189,7 +189,7 @@ impl PortBody<ModelBackend> for Exercise {
         let mut owner = match owner.enable().await {
             Ok(owner) => owner,
             Err(failed) => {
-                return Ended::fail_stopped(failed.fail_stop().await, Err("EDCA enable"));
+                return Ended::fail_stop(failed.fail_stop(), Err("EDCA enable"));
             }
         };
         let mut result = exchange(&mut owner.phase(), resources, &self).await;
@@ -201,7 +201,7 @@ impl PortBody<ModelBackend> for Exercise {
             .await;
         match disabled {
             Ok(owner) => Ended::uninstall(owner, (), result),
-            Err(failed) => Ended::fail_stopped(failed.fail_stop().await, Err("EDCA disable")),
+            Err(failed) => Ended::fail_stop(failed.fail_stop(), Err("EDCA disable")),
         }
     }
 }

@@ -2820,7 +2820,7 @@ impl<C: Ieee80211Capabilities, X: ModelContext> PortBackend for ModelBackend<C, 
         }
     }
 
-    fn retire_bound(&self, _call: Call) -> impl Future<Output = ()> + use<C, X> {
+    fn shutdown_bound(&self, _call: Call) -> impl Future<Output = ()> + use<C, X> {
         // A model step never awaits hardware. Retirement's registered wake
         // ends it in the core's next poll.
         core::future::pending()

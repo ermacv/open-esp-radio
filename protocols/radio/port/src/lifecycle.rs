@@ -325,12 +325,14 @@ pub trait PortBackend: Sized {
         retire: Retire<'p>,
     ) -> impl Future<Output = DriverExit<Self::State, Self::Fault>> + use<'p, 'id, Self>;
 
-    /// The deadline for a requested retirement, started on its first poll.
-    /// The core constructs this future before starting the body. Precise
-    /// capture excludes the backend borrow, so retirement remains bounded while a
-    /// fail-stopped body waits to return its result. Ready means the driver
-    /// missed its bound; the core quarantines without uninstalling.
-    fn retire_bound(&self, call: Call) -> impl Future<Output = ()> + use<Self>;
+    /// One finite shutdown-phase deadline, started on its first poll.
+    /// The supervisor uses independent instances for the stop answer and
+    /// retirement. Precise capture excludes the backend borrow, so both
+    /// deadlines progress while the body waits to return its result.
+    /// Ready excludes a timely stop proof or an ordinary driver join.
+    /// A synchronous model may have no timed wait when that phase always
+    /// finishes in the same cooperative step.
+    fn shutdown_bound(&self, call: Call) -> impl Future<Output = ()> + use<Self>;
 
     /// Detach interrupt entries synchronously after the driver has ended.
     /// The core issues this authority once per installation. After an
@@ -372,7 +374,7 @@ pub trait PortBackend: Sized {
     ///
     /// The core executes this after observing a fail-stop request, when an
     /// owner is dropped, retirement expires, or `run_port` is cancelled.
-    /// A body only publishes the request and awaits the one-shot answer; it
+    /// A body only publishes the request and returns its typed receipt; it
     /// cannot call this operation or borrow the backend. Only final
     /// detach and result delivery depend on the body's return. An unconfirmed
     /// outcome requires chip reset; it cannot become an ordinary uninstall.
@@ -424,55 +426,6 @@ impl Signal {
         } else {
             Poll::Pending
         }
-    }
-}
-
-// The payload has no data other than its variant: both proof values are
-// private zero-sized authorities. Publishing consumes the actual backend
-// proof; the single private receiver reconstructs that same authority after
-// Acquire, once. No generic payload, pointer, lock or unsafe cell is needed.
-struct AbandonAnswer {
-    outcome: AtomicU8,
-    waiter: AtomicWaker,
-}
-
-impl AbandonAnswer {
-    const WAITING: u8 = 0;
-    const STOPPED: u8 = 1;
-    const UNCONFIRMED: u8 = 2;
-    const TAKEN: u8 = 3;
-
-    const fn new() -> Self {
-        Self {
-            outcome: AtomicU8::new(Self::WAITING),
-            waiter: AtomicWaker::new(),
-        }
-    }
-
-    fn publish(&self, outcome: Abandon) {
-        let value = match outcome {
-            Abandon::Stopped(HardwareStopped { _private: () }) => Self::STOPPED,
-            Abandon::Unconfirmed(Quarantine { private: () }) => Self::UNCONFIRMED,
-        };
-        self.outcome.store(value, Ordering::Release);
-        self.waiter.wake();
-    }
-}
-
-// Only Owner::new issues this receiver, and every owner transition moves it.
-struct AbandonReceiver<'p>(&'p AbandonAnswer);
-impl AbandonReceiver<'_> {
-    fn poll(&mut self, cx: &mut Context<'_>) -> Poll<Abandon> {
-        self.0.waiter.register(cx.waker());
-        let outcome = match self.0.outcome.load(Ordering::Acquire) {
-            AbandonAnswer::STOPPED => Abandon::Stopped(HardwareStopped { _private: () }),
-            AbandonAnswer::UNCONFIRMED => Abandon::Unconfirmed(Quarantine { private: () }),
-            _ => return Poll::Pending,
-        };
-        self.0
-            .outcome
-            .store(AbandonAnswer::TAKEN, Ordering::Relaxed);
-        Poll::Ready(outcome)
     }
 }
 
@@ -751,7 +704,6 @@ struct Install<'id, B: PortBackend> {
     held: ManuallyDrop<B::Held<'id>>,
     latch: AbandonLatch,
     retiring: Signal,
-    answer: AbandonAnswer,
 }
 
 #[inline(always)]
@@ -773,7 +725,6 @@ fn prepare_install<'id, B: PortBackend>(
             held: ManuallyDrop::new(held),
             latch: AbandonLatch::new(),
             retiring: Signal::new(),
-            answer: AbandonAnswer::new(),
         },
         ManuallyDrop::new(frontend),
         resources,
@@ -784,7 +735,8 @@ fn prepare_install<'id, B: PortBackend>(
 /// A faulted driver lets the body drain preceding results and uninstall.
 /// Dropping the owner returns `Abandoned` after the core's retirement path.
 ///
-/// `fail_stop` immediately requests poisoning and awaits the core's answer.
+/// `fail_stop` immediately requests poisoning without waiting in the body.
+/// The supervisor awaits the actual answer within the backend's shutdown bound.
 /// Only its `Abandon::Stopped` proof confirms masking and hardware stopping.
 /// Retirement and its timer then
 /// progress while the body awaits its result; only final detachment and
@@ -814,9 +766,17 @@ pub fn run_port<B: PortBackend, P: PortBody<B>, E: crate::PortExecution<B>>(
         let mut driver_owner = guard(driver, |driver| drop(Quarantined::new(driver)));
         let (install, mut frontend, resources) = prepare_install(&mut backend, mint);
         let mut backend = Cleanup::new(backend);
-        let bound = backend.retire_bound(Call::new());
-        let mut bound = pin!(bound);
+        let retirement_bound = backend.shutdown_bound(Call::new());
+        let response_bound = backend.shutdown_bound(Call::new());
         let end = {
+            let mut retirement_bound = pin!(retirement_bound);
+            // This is the only stop-answer wait. The body carries only its
+            // request; the supervisor retains the actual P2 proof here.
+            let mut stopping = pin!(async {
+                poll_fn(|cx| install.latch.core.poll(cx)).await;
+                let mut response_bound = pin!(response_bound);
+                supervise_abandon(async { backend.quarantine() }, response_bound.as_mut()).await
+            });
             let mut driver = pin!(async {
                 ManuallyDrop::new(
                     execution
@@ -833,112 +793,117 @@ pub fn run_port<B: PortBackend, P: PortBody<B>, E: crate::PortExecution<B>>(
                         .await,
                 )
             });
-            let (outcome, driver) = {
-                let mut body = pin!(body.run(Owner::new(&mut *frontend, &install), resources));
-                let first = poll_fn(|cx| {
-                    if let Poll::Ready(ended) = body.as_mut().poll(cx) {
-                        return Poll::Ready(Race::Body(ended));
+            let mut body = pin!(Some(
+                body.run(Owner::new(&mut *frontend, &install), resources)
+            ));
+            let mut ended = None;
+            let mut abandoned = false;
+            let mut stop_answer = None;
+            let mut driver_exit = None;
+            let mut timed_out = false;
+            poll_fn(|cx| {
+                if let Some(body_future) = body.as_mut().as_pin_mut() {
+                    if let Poll::Ready(result) = body_future.poll(cx) {
+                        ended = Some(result);
+                        body.as_mut().set(None);
                     }
-                    if install.latch.core.poll(cx).is_ready() {
-                        return Poll::Ready(if install.latch.is_fail_stopped() {
-                            Race::FailStopped
-                        } else {
-                            Race::Abandoned
-                        });
-                    }
-                    driver.as_mut().poll(cx).map(Race::Driver)
-                })
-                .await;
-                let (race, driver): (Race<_, core::convert::Infallible>, _) = match first {
-                    Race::Driver(exit) => {
-                        // The returned state stays in ManuallyDrop while the
-                        // body drains results, including cancellation here.
-                        let race = poll_fn(|cx| {
-                            if let Poll::Ready(ended) = body.as_mut().poll(cx) {
-                                return Poll::Ready(Race::Body(ended));
-                            }
-                            if install.latch.core.poll(cx).is_ready() {
-                                return Poll::Ready(if install.latch.is_fail_stopped() {
-                                    Race::FailStopped
-                                } else {
-                                    Race::Abandoned
-                                });
-                            }
-                            Poll::Pending
-                        })
-                        .await;
-                        (race, DriverState::Ended(exit))
-                    }
-                    Race::Body(ended) => (Race::Body(ended), DriverState::Running(driver.as_mut())),
-                    Race::Abandoned => (Race::Abandoned, DriverState::Running(driver.as_mut())),
-                    Race::FailStopped => (Race::FailStopped, DriverState::Running(driver.as_mut())),
-                };
-                match race {
-                    Race::Body(ended) => (BodyOutcome::Returned(ended), driver),
-                    Race::Abandoned => (BodyOutcome::Abandoned, driver),
-                    Race::FailStopped => {
-                        let outcome = backend.quarantine();
-                        install.answer.publish(outcome);
-                        install.retiring.set();
-                        let mut retirement = pin!(retire(driver, bound.as_mut()));
-                        let first = poll_fn(|cx| {
-                            if let Poll::Ready(ended) = body.as_mut().poll(cx) {
-                                return Poll::Ready(Joined::Body(ended));
-                            }
-                            retirement.as_mut().poll(cx).map(Joined::Retired)
-                        })
-                        .await;
-                        let (ended, exit) = match first {
-                            Joined::Body(ended) => (ended, retirement.await),
-                            Joined::Retired(exit) => (body.await, exit),
-                        };
-                        (BodyOutcome::Returned(ended), DriverState::Bounded(exit))
-                    }
-                    Race::Driver(never) => match never {},
                 }
-            };
-            // The body's exclusive loan ended. Retirement retains the armed
-            // guard only while no abandon has happened yet.
-            match outcome {
-                BodyOutcome::Abandoned => {
-                    let outcome = backend.quarantine();
+                if install.latch.is_set() && !install.latch.is_fail_stopped() {
+                    abandoned = true;
+                    body.as_mut().set(None);
+                }
+                // Cleanup takes priority over any new driver work after the
+                // request has been observed, including the first driver poll.
+                if stop_answer.is_none() {
+                    if let Poll::Ready(answer) = stopping.as_mut().poll(cx) {
+                        stop_answer = Some(answer);
+                    }
+                }
+                if ended.is_some() || abandoned || install.latch.is_set() {
                     install.retiring.set();
-                    let state = retire(driver, bound.as_mut()).await;
-                    InstallEnd::Abandoned { outcome, state }
                 }
-                BodyOutcome::Returned(Ended { end, output, .. }) => match end {
-                    BodyEnd::FailStopped(outcome) => {
-                        debug_assert!(!backend.armed);
-                        install.retiring.set();
-                        let state = retire(driver, bound.as_mut()).await;
-                        InstallEnd::FailStopped {
-                            outcome,
-                            state,
-                            output,
-                        }
-                    }
-                    BodyEnd::Uninstall(control) => {
-                        let control = ManuallyDrop::new(control);
-                        install.retiring.set();
-                        match retire(driver, bound.as_mut()).await {
-                            Retirement::Ended(state) => {
-                                backend.disarm();
-                                InstallEnd::Uninstall {
-                                    state,
-                                    control: ManuallyDrop::into_inner(control),
-                                    output,
-                                }
+                if driver_exit.is_none() && !timed_out {
+                    if let Poll::Ready(exit) = driver.as_mut().poll(cx) {
+                        driver_exit = Some(exit);
+                        // A newly faulted driver may have just satisfied the
+                        // body's poison/event wait; permit that handoff now.
+                        if let Some(body_future) = body.as_mut().as_pin_mut() {
+                            if let Poll::Ready(result) = body_future.poll(cx) {
+                                ended = Some(result);
+                                body.as_mut().set(None);
                             }
-                            Retirement::TimedOut => InstallEnd::FailStopped {
-                                outcome: backend.quarantine(),
-                                state: Retirement::TimedOut,
-                                output,
-                            },
                         }
                     }
-                },
-            }
+                }
+                if install.latch.is_set() && !install.latch.is_fail_stopped() {
+                    abandoned = true;
+                    body.as_mut().set(None);
+                }
+                if ended.is_some() || abandoned || install.latch.is_set() {
+                    install.retiring.set();
+                    if !timed_out
+                        && driver_exit.is_none()
+                        && retirement_bound.as_mut().poll(cx).is_ready()
+                    {
+                        timed_out = true;
+                        // Timeout is absorbing: the retained state cannot
+                        // subsequently become an ordinary uninstall.
+                        install.latch.set();
+                    }
+                }
+                // The first driver poll can make the body request fail-stop;
+                // retirement can also request it on expiry in this same poll.
+                if stop_answer.is_none() {
+                    if let Poll::Ready(answer) = stopping.as_mut().poll(cx) {
+                        stop_answer = Some(answer);
+                    }
+                }
+                if driver_exit.is_none() && !timed_out {
+                    return Poll::Pending;
+                }
+                if !abandoned && ended.is_none() {
+                    return Poll::Pending;
+                }
+                if install.latch.is_set() && stop_answer.is_none() {
+                    return Poll::Pending;
+                }
+                let state = driver_exit
+                    .take()
+                    .map_or(Retirement::TimedOut, Retirement::Ended);
+                if abandoned {
+                    return Poll::Ready(InstallEnd::Abandoned {
+                        outcome: stop_answer
+                            .take()
+                            .expect("abandonment has its supervisor answer"),
+                        state,
+                    });
+                }
+                let Ended { end, output, .. } = ended.take().expect("the body returned its result");
+                Poll::Ready(match end {
+                    BodyEnd::Uninstall(control) if !timed_out => InstallEnd::Uninstall {
+                        state: match state {
+                            Retirement::Ended(state) => state,
+                            Retirement::TimedOut => {
+                                unreachable!("ordinary uninstall joined the driver")
+                            }
+                        },
+                        control: ManuallyDrop::into_inner(control),
+                        output,
+                    },
+                    BodyEnd::Uninstall(_) | BodyEnd::FailStopRequested => InstallEnd::FailStopped {
+                        outcome: stop_answer
+                            .take()
+                            .expect("fail-stop has its supervisor answer"),
+                        state,
+                        output,
+                    },
+                })
+            })
+            .await
         };
+        if matches!(&end, InstallEnd::Uninstall { .. }) {
+            backend.disarm();
+        }
         // Dropping the pinned drive future ended its loan. It never owned the
         // driver; moving these handles cannot move their static DMA backing.
         let driver = ScopeGuard::into_inner(driver_owner);
@@ -1007,24 +972,9 @@ pub fn run_port<B: PortBackend, P: PortBody<B>, E: crate::PortExecution<B>>(
     })
 }
 
-enum Race<E, S> {
-    Body(E),
-    Abandoned,
-    FailStopped,
-    Driver(S),
-}
 enum BodyEnd<U> {
-    Uninstall(U),
-    FailStopped(Abandon),
-}
-enum BodyOutcome<E> {
-    Returned(E),
-    Abandoned,
-}
-enum DriverState<D, S> {
-    Running(D),
-    Ended(S),
-    Bounded(Retirement<S>),
+    Uninstall(ManuallyDrop<U>),
+    FailStopRequested,
 }
 /// Driver completion retained with a quarantined installation.
 pub enum Retirement<S> {
@@ -1033,11 +983,6 @@ pub enum Retirement<S> {
     /// The bound expired; cancellation ended only the driver's loan.
     TimedOut,
 }
-enum Joined<E, S> {
-    Body(E),
-    Retired(S),
-}
-
 enum InstallEnd<U, Out, S> {
     Uninstall {
         state: S,
@@ -1076,26 +1021,21 @@ fn retired_state<S, F>(exit: Retirement<ManuallyDrop<DriverExit<S, F>>>) -> Reti
     }
 }
 
-async fn retire<S>(
-    driver: DriverState<Pin<&mut impl Future<Output = S>>, S>,
+async fn supervise_abandon(
+    response: impl Future<Output = Abandon>,
     mut bound: Pin<&mut impl Future<Output = ()>>,
-) -> Retirement<S> {
-    match driver {
-        DriverState::Ended(exit) => Retirement::Ended(exit),
-        DriverState::Bounded(exit) => exit,
-        DriverState::Running(mut driver) => {
-            poll_fn(|cx| {
-                if let Poll::Ready(exit) = driver.as_mut().poll(cx) {
-                    return Poll::Ready(Retirement::Ended(exit));
-                }
-                if bound.as_mut().poll(cx).is_ready() {
-                    return Poll::Ready(Retirement::TimedOut);
-                }
-                Poll::Pending
-            })
-            .await
+) -> Abandon {
+    let mut response = pin!(response);
+    poll_fn(|cx| {
+        let expired = bound.as_mut().poll(cx).is_ready();
+        let outcome = response.as_mut().poll(cx);
+        if expired || bound.as_mut().poll(cx).is_ready() {
+            // A late answer cannot transfer a stop proof to the caller.
+            return Poll::Ready(Abandon::Unconfirmed(Quarantine::new()));
         }
-    }
+        outcome
+    })
+    .await
 }
 
 /// The installation's final outcome, including the body's unbranded result.
@@ -1126,21 +1066,14 @@ pub enum PortEnd<B: PortBackend, Out> {
     },
 }
 
-/// Proof that the core answered this installation's quarantine request.
-/// Its brand ties it to the body; only consuming an owner can construct it.
-#[must_use = "return this proof through Ended::fail_stopped"]
-pub struct FailStopped<'id, B: PortBackend> {
-    outcome: Abandon,
+/// An affine request for this installation's fail-stop.
+///
+/// This proves only that admission was closed and cleanup was requested. The
+/// supervisor obtains the actual hardware outcome before returning `PortEnd`.
+#[must_use = "return the request through Ended::fail_stop"]
+pub struct FailStopRequested<'id, B: PortBackend> {
     brand: Brand<'id>,
     backend: PhantomData<fn() -> B>,
-}
-
-impl<B: PortBackend> FailStopped<'_, B> {
-    /// Inspect whether the core confirmed hardware stopping. The proof
-    /// remains affine and must still return through `Ended::fail_stopped`.
-    pub fn outcome(&self) -> &Abandon {
-        &self.outcome
-    }
 }
 
 /// The body's consumed owner and result, with no borrow lifetime.
@@ -1160,17 +1093,17 @@ impl<'id, B: PortBackend, Out> Ended<'id, B, Out> {
     ) -> Self {
         owner.disarm();
         Self {
-            end: BodyEnd::Uninstall(control),
+            end: BodyEnd::Uninstall(ManuallyDrop::new(control)),
             output,
             brand: PhantomData,
         }
     }
 
-    /// Attach the result to proof of the earlier, immediate fail-stop.
-    pub fn fail_stopped(proof: FailStopped<'id, B>, output: Out) -> Self {
-        let FailStopped { outcome, .. } = proof;
+    /// Attach the body result to its already-published fail-stop request.
+    pub fn fail_stop(request: FailStopRequested<'id, B>, output: Out) -> Self {
+        let FailStopRequested { .. } = request;
         Self {
-            end: BodyEnd::FailStopped(outcome),
+            end: BodyEnd::FailStopRequested,
             output,
             brand: PhantomData,
         }
@@ -1218,7 +1151,6 @@ pub struct Owner<'p, 'id, B: PortBackend + 'p, S> {
     frontend: &'p mut B::Frontend<'id>,
     install: &'p Install<'id, B>,
     sentry: Sentry<'p>,
-    answer: AbandonReceiver<'p>,
     state: PhantomData<S>,
 }
 
@@ -1227,7 +1159,6 @@ impl<'p, 'id, B: PortBackend, S> Owner<'p, 'id, B, S> {
         Self {
             frontend,
             install,
-            answer: AbandonReceiver(&install.answer),
             sentry: Sentry(&install.latch),
             state: PhantomData,
         }
@@ -1240,14 +1171,17 @@ impl<'p, 'id, B: PortBackend, S> Owner<'p, 'id, B, S> {
         B::now(self.frontend, Call::new())
     }
 
-    /// Request quarantine and retirement before returning the response future.
-    /// Await the core's actual stop outcome and return its affine proof through
-    /// `Ended::fail_stopped`. This operation never calls the backend.
-    pub fn fail_stop(self) -> impl Future<Output = FailStopped<'id, B>> {
+    /// Publish quarantine and retirement, returning an affine request at once.
+    /// Return it through `Ended::fail_stop`; only the lifecycle supervisor
+    /// waits for the actual stop outcome. This operation never calls the backend.
+    pub fn fail_stop(self) -> FailStopRequested<'id, B> {
         self.install.latch.fail_stopped();
         self.install.retiring.set();
         self.sentry.disarm();
-        fail_stop_answer(self.install, self.answer)
+        FailStopRequested {
+            brand: PhantomData,
+            backend: PhantomData,
+        }
     }
 }
 
@@ -1263,7 +1197,6 @@ impl<'p, 'id, B: PortBackend> Owner<'p, 'id, B, Disabled> {
         let Self {
             frontend,
             install,
-            answer,
             sentry,
             ..
         } = self;
@@ -1271,7 +1204,6 @@ impl<'p, 'id, B: PortBackend> Owner<'p, 'id, B, Disabled> {
             Ok(Ok(())) => Ok(Owner {
                 frontend,
                 install,
-                answer,
                 sentry,
                 state: PhantomData,
             }),
@@ -1279,7 +1211,6 @@ impl<'p, 'id, B: PortBackend> Owner<'p, 'id, B, Disabled> {
                 Owner {
                     frontend,
                     install,
-                    answer,
                     sentry,
                     state: PhantomData,
                 },
@@ -1288,7 +1219,6 @@ impl<'p, 'id, B: PortBackend> Owner<'p, 'id, B, Disabled> {
             Err(poisoned) => Err(Failed::Poisoned(PoisonedOwner {
                 _frontend: frontend,
                 install,
-                answer,
                 sentry,
                 cause: poisoned.cause,
             })),
@@ -1312,7 +1242,6 @@ impl<'p, 'id, B: PortBackend> Owner<'p, 'id, B, Enabled> {
         let Self {
             frontend,
             install,
-            answer,
             sentry,
             ..
         } = self;
@@ -1320,14 +1249,12 @@ impl<'p, 'id, B: PortBackend> Owner<'p, 'id, B, Enabled> {
             Ok(()) => Ok(Owner {
                 frontend,
                 install,
-                answer,
                 sentry,
                 state: PhantomData,
             }),
             Err(poisoned) => Err(PoisonedOwner {
                 _frontend: frontend,
                 install,
-                answer,
                 sentry,
                 cause: poisoned.cause,
             }),
@@ -1345,15 +1272,18 @@ pub enum Failed<'p, 'id, B: PortBackend> {
 
 impl<'id, B: PortBackend> Failed<'_, 'id, B> {
     /// End either outcome as a fail-stop.
-    pub fn fail_stop(self) -> impl Future<Output = FailStopped<'id, B>> {
-        let (install, sentry, answer) = match self {
-            Self::Refused(owner, _) => (owner.install, owner.sentry, owner.answer),
-            Self::Poisoned(owner) => (owner.install, owner.sentry, owner.answer),
+    pub fn fail_stop(self) -> FailStopRequested<'id, B> {
+        let (install, sentry) = match self {
+            Self::Refused(owner, _) => (owner.install, owner.sentry),
+            Self::Poisoned(owner) => (owner.install, owner.sentry),
         };
         install.latch.fail_stopped();
         install.retiring.set();
         sentry.disarm();
-        fail_stop_answer(install, answer)
+        FailStopRequested {
+            brand: PhantomData,
+            backend: PhantomData,
+        }
     }
 }
 
@@ -1363,7 +1293,6 @@ pub struct PoisonedOwner<'p, 'id, B: PortBackend + 'p> {
     _frontend: &'p mut B::Frontend<'id>,
     install: &'p Install<'id, B>,
     sentry: Sentry<'p>,
-    answer: AbandonReceiver<'p>,
     cause: B::Fault,
 }
 
@@ -1373,25 +1302,16 @@ impl<'id, B: PortBackend> PoisonedOwner<'_, 'id, B> {
         self.cause
     }
 
-    /// Request quarantine and retirement immediately, then await the core's
-    /// stop outcome. Return its proof through `Ended::fail_stopped`.
-    pub fn fail_stop(self) -> impl Future<Output = FailStopped<'id, B>> {
+    /// Publish quarantine and retirement immediately. Return the affine
+    /// request through `Ended::fail_stop`; the supervisor waits for the outcome.
+    pub fn fail_stop(self) -> FailStopRequested<'id, B> {
         self.install.latch.fail_stopped();
         self.install.retiring.set();
         self.sentry.disarm();
-        fail_stop_answer(self.install, self.answer)
-    }
-}
-
-async fn fail_stop_answer<'p, 'id, B: PortBackend>(
-    _install: &'p Install<'id, B>,
-    mut answer: AbandonReceiver<'p>,
-) -> FailStopped<'id, B> {
-    let outcome = poll_fn(|cx| answer.poll(cx)).await;
-    FailStopped {
-        outcome,
-        brand: PhantomData,
-        backend: PhantomData,
+        FailStopRequested {
+            brand: PhantomData,
+            backend: PhantomData,
+        }
     }
 }
 

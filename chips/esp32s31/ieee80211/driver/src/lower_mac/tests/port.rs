@@ -850,7 +850,7 @@ impl PortBody<Backend> for ReceiveBody {
             }
         }
         if self.lose {
-            return radio::Ended::fail_stopped(owner.fail_stop().await, ());
+            return radio::Ended::fail_stop(owner.fail_stop(), ());
         }
         let owner = match owner
             .disable(&mut |_| core::ops::ControlFlow::Continue(()))

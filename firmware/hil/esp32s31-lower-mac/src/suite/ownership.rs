@@ -457,7 +457,7 @@ pub(super) async fn run<'p, 'id>(
     {
         Ok(owner) => owner,
         Err(failed) => {
-            return Ended::fail_stopped(failed.fail_stop().await, Err("ownership disable"));
+            return Ended::fail_stop(failed.fail_stop(), Err("ownership disable"));
         }
     };
     let output = match error {

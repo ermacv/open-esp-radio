@@ -308,7 +308,7 @@ impl PortBody<Backend> for Operations {
             }
             Err(poisoned) => {
                 self.before_teardown.set(self.dropped.get());
-                Ended::fail_stopped(poisoned.fail_stop().await, ())
+                Ended::fail_stop(poisoned.fail_stop(), ())
             }
         }
     }
@@ -789,7 +789,7 @@ impl PortBody<ModelBackend<ModelCaps, FaultContext>> for PublicationFault {
             assert_eq!(mpdu.body.as_ref().unwrap().0.as_ptr(), first_body);
             assert_eq!(mpdu.body.as_ref().unwrap().0, [0x7a; 4]);
         }
-        Ended::fail_stopped(owner.fail_stop().await, ())
+        Ended::fail_stop(owner.fail_stop(), ())
     }
 }
 

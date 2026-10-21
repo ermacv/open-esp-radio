@@ -163,7 +163,7 @@ impl<const N: usize, const S: usize> PortBackend for Probe<N, S> {
         }
     }
 
-    fn retire_bound(&self, _: Call) -> impl Future<Output = ()> + use<N, S> {
+    fn shutdown_bound(&self, _: Call) -> impl Future<Output = ()> + use<N, S> {
         pending()
     }
 

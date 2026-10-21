@@ -60,7 +60,7 @@ impl PortBody<ModelBackend> for Body {
         let mut owner = match owner.enable().await {
             Ok(owner) => owner,
             Err(failed) => {
-                return Ended::fail_stopped(failed.fail_stop().await, Err("model enable"));
+                return Ended::fail_stop(failed.fail_stop(), Err("model enable"));
             }
         };
         let result = exercise(&mut owner.phase(), resources, self).await;
@@ -70,7 +70,7 @@ impl PortBody<ModelBackend> for Body {
         {
             Ok(owner) => owner,
             Err(failed) => {
-                return Ended::fail_stopped(failed.fail_stop().await, Err("model disable"));
+                return Ended::fail_stop(failed.fail_stop(), Err("model disable"));
             }
         };
         Ended::uninstall(owner, (), result)
