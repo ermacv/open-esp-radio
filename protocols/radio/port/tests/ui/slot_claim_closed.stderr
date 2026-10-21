@@ -1,0 +1,13 @@
+warning: unused variable: `original`
+ --> tests/ui/slot_claim_closed.rs:4:32
+  |
+4 | pub fn claim<Id: SlotIdentity>(original: SlotClaim<Id>) -> SlotClaim<Id> {
+  |                                ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_original`
+  |
+  = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+error[E0451]: field `identity` of struct `SlotClaim` is private
+ --> tests/ui/slot_claim_closed.rs:6:24
+  |
+6 |     return SlotClaim { identity: core::marker::PhantomData }; // ui-error: E0451
+  |                        ^^^^^^^^ private field

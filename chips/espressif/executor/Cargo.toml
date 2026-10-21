@@ -36,6 +36,7 @@ chip = [
 static_cell = "2.1.1"
 bytemuck = { version = "1.25.2", default-features = false }
 oer-memory = { path = "../../../portable/memory" }
+oer-radio-port = { path = "../../../protocols/radio/port" }
 embassy-executor = { version = "0.10.0", default-features = false, optional = true }
 embassy-time-driver = { version = "0.2", features = ["tick-hz-1_000_000"], optional = true }
 embassy-time-queue-utils = { version = "0.3", optional = true }

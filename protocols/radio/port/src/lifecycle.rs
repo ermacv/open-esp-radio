@@ -75,7 +75,7 @@ pub struct Quarantine {
     private: (),
 }
 impl Quarantine {
-    const fn new() -> Self {
+    pub(crate) const fn new() -> Self {
         Self { private: () }
     }
 

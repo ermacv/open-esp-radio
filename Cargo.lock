@@ -2966,6 +2966,7 @@ dependencies = [
  "oer-espressif-esp-hal-irq",
  "oer-interrupt-table",
  "oer-memory",
+ "oer-radio-port",
  "oer-test-ui-cases",
  "portable-atomic",
  "riscv",
@@ -4068,6 +4069,7 @@ name = "oer-radio-port"
 version = "0.1.0"
 dependencies = [
  "atomic-waker",
+ "oer-memory",
  "oer-test-ui-cases",
  "oer-time",
  "oer-time-virtual",

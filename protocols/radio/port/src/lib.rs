@@ -25,11 +25,16 @@ mod identity;
 pub mod lifecycle;
 pub mod pool;
 mod relation;
+pub mod slot;
 mod work;
 
 pub use execution::{LocalExecution, PortDriver, PortExecution};
 pub use identity::{LocalId, SlotIdentity, StaticId};
 pub use lifecycle::*;
+pub use slot::{
+    Joined, PortSlot, SlotClaim, SlotCompletion, SlotFrontend, SlotJoin, SlotOwner,
+    SlotQuarantined, SlotRegistration, SlotRetire, SlotStopped, SlotWakes, with_local_slot,
+};
 pub use work::*;
 
 pub use pool::{

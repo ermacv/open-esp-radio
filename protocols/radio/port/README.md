@@ -58,6 +58,23 @@ cancellation, empty layouts and all 256 indices.
 
 ## Lifecycle and cancellation
 
+The `slot` module supplies caller-owned `PortSlot<Id, State>` backing.
+`with_local_slot` issues an invariant scope claim without a global latch;
+consuming that claim places exactly one slot. Static declarations are issued
+by the executor's `declare_port_slot!` and taken irreversibly once.
+Registration stores its P2 owner before returning either endpoint. The
+frontend contains queue endpoints and lifecycle signals; its drop requests quarantine.
+The separate P2 registration drives, abandons and destroys the owner. An
+ordinary stop proof is consumed before P2 destruction. Removing the completed
+P2 future and its registration then publishes `Joined`;
+only that affine authority permits reinstall. Quarantine has no exit.
+
+`LocalExecution::scope` owns the P2 registration outside the inner frontend
+future, including before that future's first poll. The outer scope waits for
+the registration to end and destroys its guard on P2. This storage API and
+its ownership tests are separate from the `Installed` lifecycle below; the
+current model and S31 backends use that existing lifecycle.
+
 `run_port(installed, body, execution)` selects driver execution explicitly.
 The lifecycle gives `PortExecution::start` one `PortDriver`, which retains
 the single driver loan, held-state borrow and retirement receiver. The

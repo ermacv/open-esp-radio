@@ -19,6 +19,7 @@ scopeguard = { version = "1.2.0", default-features = false }
 oer-time = { path = "../../../portable/time" }
 
 [dev-dependencies]
+oer-memory = { path = "../../../portable/memory" }
 oer-time-virtual = { path = "../../../portable/time-virtual" }
 oer-test-ui-cases = { path = "../../../tools/test/ui-cases" }
 

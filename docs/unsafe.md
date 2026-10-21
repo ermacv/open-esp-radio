@@ -217,6 +217,17 @@ The 802.15.4 host stand binds the pinned ESP-IDF C driver through its FFI.
 
 ## Firmware and platform code below the boundary
 
+`oer-espressif-executor::port_slot` binds a nominal port identity to one
+static allocation. `declare_port_slot!` irreversibly claims its private
+`StaticCell` before constructing `SlotClaim<StaticId<Declaration>>` at one
+unsafe site. The claim has only invariant `PhantomData`; its private safe
+constructor remains inside the portable contract. The declaration must
+never issue a second authority for the same type, including after software
+reset or quarantine, because owned queue permissions rely on that identity
+having exactly one backing store. Static placement itself uses `StaticCell`'s
+safe initialization; no reference lifetime or owner is cast. Local scope
+claims have no static latch and use no unsafe code.
+
 The platform crates (the boards and `chips/espressif/staged-*`), the bootstrap images
 (`firmware/bootstrap/*`) and the probe images (`firmware/probes/*`) own the
 target ABI and placement, so they hold unsafe code that no crate above them

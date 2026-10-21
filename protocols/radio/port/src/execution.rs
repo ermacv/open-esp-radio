@@ -49,6 +49,24 @@ pub trait PortExecution<B: PortBackend>: Sized {
 /// It establishes no synchronization for crossing execution contexts.
 pub struct LocalExecution;
 
+impl LocalExecution {
+    /// Register a local slot before publishing its frontend to `body`.
+    ///
+    /// The returned outer future belongs to P2 and outlives the inner body
+    /// future. It joins or quarantines its P2 registration before returning.
+    /// Destroying that outer runner also occurs on P2; cancelling an inner
+    /// frontend future only publishes an abandonment request. No `Send` bound
+    /// is needed for a model whose entire hardware world is local.
+    pub fn scope<'s, Id: crate::SlotIdentity + 's, S: crate::SlotOwner<Id> + 's, R>(
+        self,
+        slot: &'s mut crate::PortSlot<Id, S>,
+        owner: S,
+        body: impl AsyncFnOnce(crate::SlotFrontend<'s, Id, S::Frontend<'s>>) -> R,
+    ) -> Result<impl Future<Output = R>, S> {
+        crate::slot::run_local(slot, owner, body)
+    }
+}
+
 impl<B: PortBackend> PortExecution<B> for LocalExecution {
     fn start<'scope, 'id>(
         self,
