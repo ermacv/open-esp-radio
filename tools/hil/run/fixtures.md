@@ -124,6 +124,14 @@ cargo stand fixture install --provider linux-net --dry-run
 cargo stand fixture install --provider linux-bluetooth --dry-run
 ```
 
+The preview includes `existing_installation`: `fresh` or the selected versioned
+generation. It reads that generation's receipt and verifies its artifact set;
+new roles require absent stable paths. A missing installed artifact, an unmanaged
+path or an unfinished transaction fails the preview without changing host state.
+Sudoers policy checks are listed in `pending_privileged_checks`: its directory
+need not be searchable by the operator. The installer repeats the artifact
+classification under its locks and checks the existing policy before applying.
+
 The helper `capabilities` and sudoers validation subprocesses each have a
 five-second execution deadline; timeout is an installation/preparation failure.
 Bluetooth preparation and execution share the versioned contract in

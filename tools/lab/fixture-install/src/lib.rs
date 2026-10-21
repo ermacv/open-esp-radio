@@ -19,7 +19,7 @@ pub use model::{
     Provider, SourceIdentity,
 };
 pub use prepare::{build_plan, prepare};
-pub use transaction::apply_system;
+pub use transaction::{ExistingInstallation, apply_system, inspect_system};
 
 pub const INSTALLER_BINARY: &str = "open-radio-fixture-install";
 pub const BUNDLE_SCHEMA: u32 = 3;

@@ -4,7 +4,9 @@
 
 use std::path::Path;
 
-use oer_tool_lab_fixture_install::{INSTALLER_BINARY, Provider, build_plan, prepare};
+use oer_tool_lab_fixture_install::{
+    INSTALLER_BINARY, Provider, build_plan, inspect_system, prepare,
+};
 
 use crate::Result;
 
@@ -16,7 +18,22 @@ pub(crate) fn run(
 ) -> Result<()> {
     let plan = build_plan(root, provider, adapters)?;
     if dry_run {
-        println!("{}", serde_json::to_string_pretty(&plan)?);
+        let mut preview = serde_json::to_value(&plan)?;
+        let fields = preview
+            .as_object_mut()
+            .ok_or("fixture plan must be an object")?;
+        fields.insert(
+            "existing_installation".into(),
+            serde_json::to_value(inspect_system(provider)?)?,
+        );
+        fields.insert(
+            "pending_privileged_checks".into(),
+            serde_json::json!([
+                "existing sudoers policy presence, ownership and mode",
+                "candidate and effective sudoers policy validation"
+            ]),
+        );
+        println!("{}", serde_json::to_string_pretty(&preview)?);
         return Ok(());
     }
     #[cfg(target_os = "linux")]

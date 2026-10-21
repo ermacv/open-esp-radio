@@ -15,3 +15,5 @@ artifact already listed in the installed receipt must still be intact. Failed
 updates restore the previous generation and remove newly introduced paths.
 `cargo stand fixture install --provider linux-net --dry-run` checks this
 classification without changing the installation or running privileged checks.
+Sudoers presence, ownership and mode remain mandatory checks in root apply;
+the preview lists them as pending because the policy directory can be private.
