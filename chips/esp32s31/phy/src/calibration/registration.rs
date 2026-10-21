@@ -635,6 +635,9 @@ impl PhyRegisterTransition {
         }
     }
 
+    // Keep phase temporaries in this synchronous model step, rather than in
+    // every registration future's poll frame.
+    #[inline(never)]
     pub fn step_local(&mut self) -> Result<PhyRegisterLocalStep, PhyRegisterTransitionError> {
         let phase = self
             .phase
@@ -908,6 +911,7 @@ impl PhyRegisterTransition {
         }
     }
 
+    #[inline(never)]
     pub fn advance_external(
         &mut self,
         completion: PhyRegisterCompletion,

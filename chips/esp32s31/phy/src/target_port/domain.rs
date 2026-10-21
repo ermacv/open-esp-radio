@@ -33,6 +33,9 @@ impl PhyRegisterConfig {
         self
     }
 
+    // Keep construction in the caller's return place; inlining this large
+    // owner into the registration poll creates another temporary stack copy.
+    #[inline(never)]
     fn into_transition(self) -> PhyRegisterTransition {
         PhyRegisterTransition::with_production_config_and_calibration(
             self.calibration_identity,
