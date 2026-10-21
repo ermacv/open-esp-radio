@@ -37659,7 +37659,7 @@ pub mod phy_fedata_recovered {
         pub const fn word_0030_opaque(&self) -> &Word0030Opaque {
             &self.word_0030_opaque
         }
-        #[doc = "0x40 - Opaque: meaning not established. Complete phy_fe_txrx_reset performs a read-modify-write; individual fields remain unnamed."]
+        #[doc = "0x40 - Opaque: meaning not established. Complete phy_fe_txrx_reset clears then asserts bits 25 and 26 through two fresh-read RMWs. Bits 12:24 are preserved by both edges and have no field. SOURCE: ROM_REV0_PHY_BLOBRAY_GAPS."]
         #[inline(always)]
         pub const fn word_0040_opaque(&self) -> &Word0040Opaque {
             &self.word_0040_opaque
@@ -37704,19 +37704,15 @@ pub mod phy_fedata_recovered {
             type Safety = crate::Unsafe;
         }
     }
-    #[doc = "WORD_0040_OPAQUE (rw) register accessor: Opaque: meaning not established. Complete phy_fe_txrx_reset performs a read-modify-write; individual fields remain unnamed.\n\nYou can [`read`](crate::Reg::read) this register and get [`word_0040_opaque::R`]. You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`word_0040_opaque::W`]. You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api).\n\nFor information about available fields see [`mod@word_0040_opaque`] module"]
+    #[doc = "WORD_0040_OPAQUE (rw) register accessor: Opaque: meaning not established. Complete phy_fe_txrx_reset clears then asserts bits 25 and 26 through two fresh-read RMWs. Bits 12:24 are preserved by both edges and have no field. SOURCE: ROM_REV0_PHY_BLOBRAY_GAPS.\n\nYou can [`read`](crate::Reg::read) this register and get [`word_0040_opaque::R`]. You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`word_0040_opaque::W`]. You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api).\n\nFor information about available fields see [`mod@word_0040_opaque`] module"]
     #[doc(alias = "WORD_0040_OPAQUE")]
     pub type Word0040Opaque = crate::Reg<word_0040_opaque::Word0040OpaqueSpec>;
-    #[doc = "Opaque: meaning not established. Complete phy_fe_txrx_reset performs a read-modify-write; individual fields remain unnamed."]
+    #[doc = "Opaque: meaning not established. Complete phy_fe_txrx_reset clears then asserts bits 25 and 26 through two fresh-read RMWs. Bits 12:24 are preserved by both edges and have no field. SOURCE: ROM_REV0_PHY_BLOBRAY_GAPS."]
     pub mod word_0040_opaque {
         #[doc = "Register `WORD_0040_OPAQUE` reader"]
         pub type R = crate::R<Word0040OpaqueSpec>;
         #[doc = "Register `WORD_0040_OPAQUE` writer"]
         pub type W = crate::W<Word0040OpaqueSpec>;
-        #[doc = "Field `BITS_12_24_OPAQUE` reader - Opaque: meaning not established. Thirteen-bit low reset group cleared by complete phy_fe_txrx_reset."]
-        pub type Bits12_24OpaqueR = crate::FieldReader<u16>;
-        #[doc = "Field `BITS_12_24_OPAQUE` writer - Opaque: meaning not established. Thirteen-bit low reset group cleared by complete phy_fe_txrx_reset."]
-        pub type Bits12_24OpaqueW<'a, REG> = crate::FieldWriter<'a, REG, 13, u16>;
         #[doc = "Field `TX_RX_RESET_BIT_25` reader - Project-assigned name. First upper reset bit asserted by complete phy_fe_txrx_reset."]
         pub type TxRxResetBit25R = crate::BitReader;
         #[doc = "Field `TX_RX_RESET_BIT_25` writer - Project-assigned name. First upper reset bit asserted by complete phy_fe_txrx_reset."]
@@ -37726,11 +37722,6 @@ pub mod phy_fedata_recovered {
         #[doc = "Field `TX_RX_RESET_BIT_26` writer - Project-assigned name. Second upper reset bit cleared and then asserted by complete phy_fe_txrx_reset."]
         pub type TxRxResetBit26W<'a, REG> = crate::BitWriter<'a, REG>;
         impl R {
-            #[doc = "Bits 12:24 - Opaque: meaning not established. Thirteen-bit low reset group cleared by complete phy_fe_txrx_reset."]
-            #[inline(always)]
-            pub fn bits_12_24_opaque(&self) -> Bits12_24OpaqueR {
-                Bits12_24OpaqueR::new(((self.bits >> 12) & 0x1fff) as u16)
-            }
             #[doc = "Bit 25 - Project-assigned name. First upper reset bit asserted by complete phy_fe_txrx_reset."]
             #[inline(always)]
             pub fn tx_rx_reset_bit_25(&self) -> TxRxResetBit25R {
@@ -37743,11 +37734,6 @@ pub mod phy_fedata_recovered {
             }
         }
         impl W {
-            #[doc = "Bits 12:24 - Opaque: meaning not established. Thirteen-bit low reset group cleared by complete phy_fe_txrx_reset."]
-            #[inline(always)]
-            pub fn bits_12_24_opaque(&mut self) -> Bits12_24OpaqueW<'_, Word0040OpaqueSpec> {
-                Bits12_24OpaqueW::new(self, 12)
-            }
             #[doc = "Bit 25 - Project-assigned name. First upper reset bit asserted by complete phy_fe_txrx_reset."]
             #[inline(always)]
             pub fn tx_rx_reset_bit_25(&mut self) -> TxRxResetBit25W<'_, Word0040OpaqueSpec> {
@@ -37759,7 +37745,7 @@ pub mod phy_fedata_recovered {
                 TxRxResetBit26W::new(self, 26)
             }
         }
-        #[doc = "Opaque: meaning not established. Complete phy_fe_txrx_reset performs a read-modify-write; individual fields remain unnamed.\n\nYou can [`read`](crate::Reg::read) this register and get [`word_0040_opaque::R`](R). You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`word_0040_opaque::W`](W). You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api)."]
+        #[doc = "Opaque: meaning not established. Complete phy_fe_txrx_reset clears then asserts bits 25 and 26 through two fresh-read RMWs. Bits 12:24 are preserved by both edges and have no field. SOURCE: ROM_REV0_PHY_BLOBRAY_GAPS.\n\nYou can [`read`](crate::Reg::read) this register and get [`word_0040_opaque::R`](R). You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`word_0040_opaque::W`](W). You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api)."]
         pub struct Word0040OpaqueSpec;
         impl crate::RegisterSpec for Word0040OpaqueSpec {
             type Ux = u32;
@@ -75405,20 +75391,18 @@ pub mod field_replace_modify {
         });
     }
 
-    /// Replace PHY_FEDATA_RECOVERED.WORD_0040_OPAQUE fields `[BITS_12_24_OPAQUE, TX_RX_RESET_BIT_26]` from one reviewed logical image while preserving every other bit.
+    /// Replace PHY_FEDATA_RECOVERED.WORD_0040_OPAQUE fields `[TX_RX_RESET_BIT_25, TX_RX_RESET_BIT_26]` from one reviewed logical image while preserving every other bit.
     #[inline]
     pub fn clear_phy_frontend_txrx_reset_state(registers: &crate::PhyFedataRecovered) {
         registers.word_0040_opaque().modify(|_, writer| {
             let input = 0x00000000_u32;
             // SAFETY: generator validation proves every logical input projection
             // fits its named SVD field; no whole-register image crosses this API.
-            unsafe {
-                writer
-                    .bits_12_24_opaque()
-                    .bits((input & 0x00001fff) as u16)
-                    .tx_rx_reset_bit_26()
-                    .bit(((input >> 13) & 0x00000001) != 0)
-            }
+            writer
+                .tx_rx_reset_bit_25()
+                .bit((input & 0x00000001) != 0)
+                .tx_rx_reset_bit_26()
+                .bit(((input >> 1) & 0x00000001) != 0)
         });
     }
 

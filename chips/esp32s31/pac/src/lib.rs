@@ -7,6 +7,11 @@ extern crate std;
 #[cfg(test)]
 mod test_memory;
 
+// Outside the production PHY module, which forbids all unsafe code.
+#[cfg(all(test, target_os = "linux"))]
+#[path = "phy/baseband/txrx_reset_tests.rs"]
+mod frontend_reset_tests;
+
 pub(crate) use modem::coex;
 
 pub(crate) use phy::{baseband, cfr};
