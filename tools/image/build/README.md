@@ -124,14 +124,17 @@ way.
 
 ## Flash map
 
-Each chip's `platform/<chip>/chip.toml` `[flash]` table
+Each chip's `chips/<chip>/platform/chip.toml` `[flash]` table
 ([`oer-chip-profile`](../../chip/profile/src/lib.rs)'s `FlashMap`) holds the
 bootloader, partition-table, application and OTA-data offsets and the
-partition table CSVs (`chips/esp32s31/platform/partitions/`). The flash map is
-host data: no target code reads it (the bootstrap finds its payload through
-the flash MMU), and the esp32c5, whose partition table comes from its
-ESP-IDF build, has no layout crate. The staged pipeline refuses a flash map
-whose application or OTA-data offset is not the partition table's.
+partition-table CSV path (`chips/<chip>/platform/partitions/`). Both S31 and
+C5 use staged boot. The [C5 profile](../../../chips/esp32c5/platform/chip.toml)
+supplies its staged flash map, and
+[`oer-esp32c5-layout`](../../../chips/esp32c5/layout/src/lib.rs) supplies its
+board memory map. The flash map is host data: no target code reads it (the
+bootstrap finds its payload through the flash MMU). The staged pipeline
+refuses a flash map whose application or OTA-data offset is not the
+partition table's.
 
 ## Encoding
 
@@ -144,15 +147,17 @@ partition; at 90 % the build warns.
 
 ## Gates
 
-Its `stack` module is the stack gate of every image build, with one function
-for the runtime ELF (`audit_runtime_stacks`) and one for the bootstrap ELF
-(`audit_bootstrap_stack`). Each analyses its ELF once with `oer-analysis-riscv-stack`,
-the pinned ROM and its summaries, and resolves indirect sites with the same
-facts (waker vtables, IPC posts, function-pointer field types). The policy is
-a chip's `chips/<chip>/platform/stack.toml` (schema 5), extended by the HIL
-target's policy. Every image runs its tasks on CPU0; none starts the second
-S31 core, and C5 has one hart. Each stack names the function that runs on
-it from its top (its root, by symbol), its storage (a sized symbol, or a
+The image build pipeline invokes the gates in `oer-image-checks`.
+[`oer_image_checks::stack`](../checks/src/stack.rs) implements the runtime
+task-stack gate (`audit_runtime_stacks`) and the bootstrap stack gate
+(`audit_bootstrap_stack`). The checks analyze each ELF once with
+`oer-analysis-riscv-stack`, the pinned ROM and its summaries, and resolve
+indirect sites with the same facts (waker vtables, IPC posts, function-pointer
+field types). The runtime's task and interrupt gates share that analysis.
+The policy is a chip's `chips/<chip>/platform/stack.toml` (schema 5), extended
+by the HIL target's policy. Every image runs its tasks on CPU0; none starts
+the second S31 core, and C5 has one hart. Each stack names the function that
+runs on it from its top (its root, by symbol), its storage (a sized symbol, or a
 linker script's bottom and top symbols) and `minimum_free_bytes`: the root's
 worst-case call chain (`Analysis::bound_with`) must leave the storage that
 many bytes. The runtime's root is `runtime_main` on CPU0's task stack, which
@@ -179,18 +184,16 @@ work units and working memory, coverage, then per stack its bound (proven,
 conditional or partial), budget, headroom, deepest path and unresolved
 sites.
 
-Its `interrupt_stack` module is the interrupt half of the runtime's gate: it
-bounds each hart's interrupt stack from
-the runtime ELF, the pinned ROM ELF (`rom` of
-`chips/esp32s31/vendor/artifacts.toml`, from the vendor store: `cargo pins
-fetch --chip esp32s31 rom`; a missing or changed ROM is an error)
-and its reviewed summaries, with the platform's interrupt contract
-(`oer-esp32s31-layout`'s `interrupts`). The analysis reports every
-hart as a bound or `partial + ?` with its holes; the gate's policy,
-`Required`, decides what passes: `Product` (product images) fails
-unless every bound is known, `Diagnostic` (diagnostic image classes, whose
-observers the product does not carry) also passes a `partial + ?` hart with a
-warning. Either way the bound, or the proven part, must fit the usable stack
+[`oer_image_checks::interrupts`](../checks/src/interrupts.rs) implements the
+runtime's interrupt gate. It bounds each hart's interrupt stack from the
+shared runtime analysis, using the chip profile's `[rom]` ELF and reviewed
+summaries and its `[memory]` map and `[interrupts]` contract. The ROM comes
+from the chip's pinned vendor artifacts; a missing or changed ROM is an error.
+The analysis reports every hart as a bound or `partial + ?` with its holes;
+the gate's policy, `Required`, decides what passes: `Product` (product images)
+fails unless every bound is known, `Diagnostic` (diagnostic image classes,
+whose observers the product does not carry) also passes a `partial + ?` hart
+with a warning. Either way the bound, or the proven part, must fit the usable stack
 with the contract's margin, and every table entry's slot symbol and the
 handler it calls must lie in SRAM (the slot's own direct calls: a call site no
 inlined function owns, by the DWARF). A hart with a bound is `proven`, or

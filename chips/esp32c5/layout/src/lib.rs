@@ -9,7 +9,7 @@
 //! `oer-espressif-staged-layout`; this crate states the board's map once, for
 //! the bootstrap, the board, and the build scripts of every image. With the
 //! `build` feature, [`build`] links a binary with the shared scripts and this
-//! chip's ROM script (`platform/esp32c5/linker`).
+//! chip's ROM script (`chips/esp32c5/layout/linker`).
 //!
 //! The ESP32-C5 has one MMU whose 32-MiB cache window serves flash and PSRAM
 //! alike. The board splits it: the bootstrap's flash pages in the lower half,

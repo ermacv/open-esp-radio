@@ -323,12 +323,15 @@ DWARF, out of line or inlined; the firmware gate requires each copy of the
 CLIC level and route writers to run inside the functions its contract
 allows (start-up, the IPC line's install, the table's routes).
 
-This is the repository's only stack analyzer. The firmware stack gate
-(`oer-image-build`'s `stack`) runs it on every
-runtime and bootstrap ELF: the interrupt stacks above, and each task stack's
-root through `Analysis::bound_with` with the same resolutions. An ELF without
-`.stack_sizes` analyses here with observed frames only; the gate refuses it,
-and requires a review for every function without a record.
+This is the repository's only stack analyzer. The image build pipeline
+(`oer-image-build`) invokes the gates in `oer-image-checks`:
+[`oer_image_checks::stack`](../../image/checks/src/stack.rs) checks the runtime
+task stacks and the bootstrap stack, and
+[`oer_image_checks::interrupts`](../../image/checks/src/interrupts.rs) checks
+the runtime's interrupt stacks above. The runtime gates share one analysis;
+each task stack's root uses `Analysis::bound_with` with the same resolutions.
+An ELF without `.stack_sizes` analyses here with observed frames only; the
+gate refuses it, and requires a review for every function without a record.
 
 ```console
 cargo test -p oer-analysis-riscv-stack
