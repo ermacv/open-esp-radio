@@ -137,8 +137,8 @@ pub(crate) fn clear_scheduler_item(layout: &BleSchedulerItem) {
         .recycle_callback()
         .write(BleSchedulerItemRecycleCallback::ZERO);
     layout
-        .word_005c_opaque()
-        .write(BleSchedulerItemWord005cOpaque::ZERO);
+        .buffer_recycle_callback()
+        .write(BleSchedulerItemBufferRecycleCallback::ZERO);
 }
 
 pub(crate) fn copy_buffer_header(layout: &BleBufferHeader, source: &BleBufferHeader) {
@@ -600,7 +600,7 @@ pub(crate) struct SchedulerItemImage {
     previous: BleSchedulerItemPrevious,
     completion_next: BleSchedulerItemCompletionNext,
     recycle_callback: BleSchedulerItemRecycleCallback,
-    word_005c_opaque: BleSchedulerItemWord005cOpaque,
+    buffer_recycle_callback: BleSchedulerItemBufferRecycleCallback,
 }
 #[cfg(test)]
 impl SchedulerItemImage {
@@ -629,7 +629,7 @@ impl SchedulerItemImage {
             previous: layout.previous().read(),
             completion_next: layout.completion_next().read(),
             recycle_callback: layout.recycle_callback().read(),
-            word_005c_opaque: layout.word_005c_opaque().read(),
+            buffer_recycle_callback: layout.buffer_recycle_callback().read(),
         }
     }
 }

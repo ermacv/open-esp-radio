@@ -61,7 +61,7 @@ const SCHEDULER_ITEM_ALLOCATION_PREFIX: BleSchedulerItemHardwareNext =
 // Complete common allocator applied to the standalone module default.
 /// SOURCE: chips/esp32s31/notes/bluetooth-legacy-advertising.md, allocation/reset profile (bt-lib pin 10c50778).
 const SCHEDULER_ITEM_ALLOCATION_FLAGS_IMAGE: BleSchedulerItemWord001cOpaque =
-    BleSchedulerItemWord001cOpaque::ZERO.with_bits_0_31_opaque(0xffdf7fff);
+    BleSchedulerItemWord001cOpaque::from_bits(0xffdf7fff);
 
 /// Why an encoded advertising PDU cannot fit this S31 allocation.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -282,12 +282,11 @@ impl LinkStateStorage {
         // set without one keeps it empty.
         words.word_04 = words.word_04.with_header(None).expect("empty link fits");
         if scan_response {
-            words.word_04 = BleLinkStateScanResponse::from_bits(
-                binding.scan_response_header.compressed_image(),
-            )
-            .with_bits_20_27_opaque(words.word_04.bits_20_27_opaque())
-            .with_bits_28_31_opaque(words.word_04.bits_28_31_opaque())
-            .expect("retained prefix fits");
+            words.word_04 = words
+                .word_04
+                .with_header_from(BleLinkStateScanResponse::from_bits(
+                    binding.scan_response_header.compressed_image(),
+                ));
         }
         // adv_alloc_rxbuf prepares an empty private RX link before reset.
         // The later memory-manager broker selects the global RX class and
@@ -347,7 +346,7 @@ impl ItemStorage {
             )));
         self.layout.link_state().write(
             BleSchedulerItemLinkState::from_bits(binding.link_state.compressed_image())
-                .with_bits_20_23_opaque(6)
+                .with_kind(6)
                 .expect("reviewed role prefix fits"),
         );
     }

@@ -282,7 +282,7 @@ impl ItemStorage {
             ));
         self.layout.link_state().write(
             BleSchedulerItemLinkState::from_bits(binding.link_state.compressed_image())
-                .with_bits_20_23_opaque(2)
+                .with_kind(2)
                 .expect("connection prefix fits"),
         );
         self.layout.control().write(CONNECTION_ITEM_CONTROL);
@@ -324,7 +324,7 @@ impl ItemStorage {
                 .expect("data channel fits")
                 .with_arbitration_priority(priority.value() % 16)
                 .expect("projected priority fits")
-                .with_bits_4_7_opaque(7)
+                .with_priority_copy(7)
                 .expect("reviewed image fits"),
         );
     }
@@ -347,9 +347,9 @@ impl ItemStorage {
                 .rate_and_power()
                 .read()
                 .with_power_index(power_index)
-                .with_bits_28_29_opaque(0)
+                .with_phy_code_28_29(0)
                 .expect("zero fits")
-                .with_bits_30_31_opaque(0)
+                .with_phy_code_30_31(0)
                 .expect("zero fits"),
         );
         self.layout
@@ -881,7 +881,7 @@ const CONNECTION_WAIT_LONG: BleSchedulerItemReceiveWait = BleSchedulerItemReceiv
 
 /// SOURCE: pinned `ble_3.o` connection allocation/reset and event bodies in the connection reference.
 const CONNECTION_ALLOCATION_FLAGS: BleSchedulerItemWord001cOpaque =
-    BleSchedulerItemWord001cOpaque::ZERO.with_bits_0_31_opaque(0xe7df7fff);
+    BleSchedulerItemWord001cOpaque::from_bits(0xe7df7fff);
 
 /// SOURCE: pinned `ble_3.o` connection allocation/reset and event bodies in the connection reference.
 const CONNECTION_ITEM_CONTROL: BleSchedulerItemControl =

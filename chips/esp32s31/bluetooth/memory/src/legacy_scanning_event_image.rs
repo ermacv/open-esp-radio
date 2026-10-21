@@ -206,7 +206,9 @@ const SCAN_RESET: LinkStateImage = LinkStateImage {
         .expect("reviewed field image fits"),
     receive_context: BleLinkStateReceiveContext::ZERO.with_bit_30_opaque(true),
     own_address_policy: BleLinkStateOwnAddressPolicy::ZERO
-        .with_bits_16_27_opaque(0x110)
+        .with_bits_20_22_opaque(1)
+        .expect("reviewed field image fits")
+        .with_bits_24_26_opaque(0x1)
         .expect("reviewed field image fits"),
     crc_initialization: BleLinkStateCrcInitialization::ZERO
         .with_value(0x555555)
@@ -233,11 +235,7 @@ impl LegacyScanLinkStateImage {
         config: LegacyScanResetConfig,
     ) -> Self {
         let mut image = SCAN_RESET;
-        image.rx_path = rx_head
-            .0
-            .with_unconsumed_limit(image.rx_path.unconsumed_limit())
-            .with_bits_28_31_opaque(image.rx_path.bits_28_31_opaque())
-            .expect("retained image fits");
+        image.rx_path = image.rx_path.with_header_from(rx_head.0);
         let (context, crc) = config
             .filter_policy
             .apply(image.receive_context, image.crc_initialization);
@@ -316,15 +314,15 @@ impl LegacyScanSchedulerItemWords {
         self.word_14 = self
             .word_14
             .with_power_index(link_state.power_index())
-            .with_bits_28_29_opaque(0)
+            .with_phy_code_28_29(0)
             .expect("zero fits")
-            .with_bits_30_31_opaque(0)
+            .with_phy_code_30_31(0)
             .expect("zero fits");
         self.word_18 = self
             .word_18
             .with_arbitration_priority(1)
             .expect("reviewed priority fits")
-            .with_bits_4_7_opaque(0)
+            .with_priority_copy(0)
             .expect("zero fits")
             .with_frequency(channel.frequency_image())
             .expect("primary channel fits");

@@ -32,12 +32,7 @@ impl DtmTxHeaderHeadProjection {
         Self(BleLinkStateTxPath::from_bits(word.header()))
     }
     const fn apply_to_link_state_word(self, word: BleLinkStateTxPath) -> BleLinkStateTxPath {
-        self.0
-            .with_max_tx_octets(word.max_tx_octets())
-            .with_queue_ready(word.queue_ready())
-            .with_bits_29_30_opaque(word.bits_29_30_opaque())
-            .expect("retained prefix fits")
-            .with_valid(word.valid())
+        word.with_header_from(self.0)
     }
 }
 
@@ -57,10 +52,7 @@ impl DtmRxHeaderTailProjection {
         Self(BleLinkStateRxPath::from_bits(word.header()))
     }
     const fn apply_to_link_state_word(self, word: BleLinkStateRxPath) -> BleLinkStateRxPath {
-        self.0
-            .with_unconsumed_limit(word.unconsumed_limit())
-            .with_bits_28_31_opaque(word.bits_28_31_opaque())
-            .expect("retained prefix fits")
+        word.with_header_from(self.0)
     }
 }
 
@@ -390,13 +382,13 @@ impl DtmSchedulerItemReviewedWords {
                 .expect("role image fits")
                 .with_flexible_start(!transmitter),
             word_04: self.word_04.with_event_ready(true),
-            word_08: self.word_08.with_bits_20_23_opaque(0).expect("zero fits"),
+            word_08: self.word_08.with_kind(0).expect("zero fits"),
             word_0c: self.word_0c,
             word_14: self
                 .word_14
-                .with_bits_28_29_opaque(rate)
+                .with_phy_code_28_29(rate)
                 .expect("validated PHY fits")
-                .with_bits_30_31_opaque(rate)
+                .with_phy_code_30_31(rate)
                 .expect("validated PHY fits"),
             word_18: self
                 .word_18

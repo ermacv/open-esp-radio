@@ -56,7 +56,7 @@ const SCHEDULER_ITEM_ALLOCATION_PREFIX_IMAGE: BleSchedulerItemHardwareNext =
         .expect("reviewed field image fits");
 /// SOURCE: chips/esp32s31/notes/bluetooth-direct-test-mode.md, allocation/reset profile (bt-lib pin 10c50778).
 const SCHEDULER_ITEM_ALLOCATION_FLAGS_IMAGE: BleSchedulerItemWord001cOpaque =
-    BleSchedulerItemWord001cOpaque::ZERO.with_bits_0_31_opaque(0xffdfffff);
+    BleSchedulerItemWord001cOpaque::from_bits(0xffdfffff);
 /// SOURCE: pinned `libble_app.a[dtm_4.o]::sym_dtm_qzyGhbH1fEoUEmtalnva`
 /// (`r_ble_lll_dtm_alloc_memory`) stores `0x8421` in the low twenty bits,
 /// four five-bit coexistence priority lanes of one each.

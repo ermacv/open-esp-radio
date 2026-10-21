@@ -197,7 +197,7 @@ impl ItemStorage {
             ));
         self.layout.link_state().write(
             BleSchedulerItemLinkState::from_bits(link_state.compressed_image())
-                .with_bits_20_23_opaque(6)
+                .with_kind(6)
                 .expect("reviewed role prefix fits"),
         );
         self.layout

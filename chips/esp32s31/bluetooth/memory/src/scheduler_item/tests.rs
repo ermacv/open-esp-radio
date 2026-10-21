@@ -10,14 +10,12 @@ fn item() -> BleSchedulerItem {
 }
 
 #[test]
-fn linking_preserves_the_role_allocation_bits() {
+fn linking_preserves_flags_and_the_unassigned_tail() {
     let words = item();
     let header = SchedulerItemHeader::new(&words);
-    words.hardware_next().write(
-        BleSchedulerItemHardwareNext::ZERO
-            .with_bits_20_21_opaque(3)
-            .expect("allocation image fits"),
-    );
+    words
+        .hardware_next()
+        .write(BleSchedulerItemHardwareNext::from_bits(0xfff0_0000));
     let next = ControllerSramLinkAddress::new(0x2f00_0100).expect("test link is representable");
 
     header.link_hardware_next(Some(next));
@@ -29,10 +27,12 @@ fn linking_preserves_the_role_allocation_bits() {
         (3, next.compressed_image())
     );
     assert_eq!(header.hardware_next_image(), next.compressed_image());
+    assert_eq!(words.hardware_next().read().bits() >> 20, 0xfff);
 
     header.link_hardware_next(None);
     assert_eq!(words.hardware_next().read().bits_20_21_opaque(), 3);
     assert_eq!(header.hardware_next_image(), 0);
+    assert_eq!(words.hardware_next().read().bits() >> 20, 0xfff);
 }
 
 #[test]

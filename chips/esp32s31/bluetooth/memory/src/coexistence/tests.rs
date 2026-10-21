@@ -7,9 +7,7 @@ fn lane(value: u8) -> SchedulerItemCoexistencePriority {
 }
 #[test]
 fn priorities_replace_each_lane_and_preserve_the_other_fields() {
-    let original = BleSchedulerItemCoexistencePriority::ZERO
-        .with_bits_20_31_opaque(0xa5a)
-        .expect("test opaque image fits");
+    let original = BleSchedulerItemCoexistencePriority::from_bits(0xa5a0_0000);
     for lanes in [[4, 0, 13, 13], [31; 4], [0; 4]] {
         let image = with_priorities(original, &lanes.map(lane));
         assert_eq!(
@@ -21,7 +19,7 @@ fn priorities_replace_each_lane_and_preserve_the_other_fields() {
             ],
             lanes
         );
-        assert_eq!(image.bits_20_31_opaque(), original.bits_20_31_opaque());
+        assert_eq!(image.bits() >> 20, original.bits() >> 20);
     }
 }
 
