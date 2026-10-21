@@ -70,6 +70,7 @@ fn operation(fact: &FunctionRecord) -> Option<(MmioOperation, Option<u8>)> {
 /// windows or unresolved (`unresolved` then counts one outside the stack).
 fn access(
     observation: crate::registers::Candidate<'_>,
+    stored: Option<Vec<StoredBits>>,
     ranges: &[ImageRegion],
     symbols: &Symbols,
     unresolved: &mut u64,
@@ -94,8 +95,7 @@ fn access(
             return None;
         }
     };
-    let stored = observation
-        .stored
+    let stored = stored
         .into_iter()
         .flatten()
         .map(|run| MmioStoredBits {
@@ -219,6 +219,7 @@ fn collect<'m>(
     admitted: &mut Vec<MemoryReservation<'m>>,
 ) -> Result<(BTreeMap<String, Accesses>, u64, Vec<MmioGap>)> {
     let symbols = symbols(inputs, memory, control, admitted)?;
+    let callees = crate::registers::Callees::capture(inputs, memory, control)?;
     let mut functions: BTreeMap<String, Accesses> = BTreeMap::new();
     let mut blocked = 0;
     let mut gaps = Vec::new();
@@ -241,15 +242,37 @@ fn collect<'m>(
                     memory,
                     c,
                 )?;
+                let mut flow = crate::registers::ReadObservations::new(
+                    &facts,
+                    memory,
+                    decoder,
+                    ranges,
+                    assumptions.abi,
+                    &callees,
+                    analyzed.function,
+                    analyzed.summaries,
+                );
                 crate::registers::observe(
                     analyzed.records,
                     &facts,
                     memory,
                     ranges,
                     c,
-                    &mut |o, c| {
+                    &mut |mut o, c| {
+                        let stored = flow.stored(o.fact, c)?;
+                        if let FunctionRecord::MemoryAccess { width, .. } = o.fact {
+                            o.mask = o.mask.or_else(|| {
+                                stored.as_deref().and_then(|stored| {
+                                    oer_analysis_blobray_analysis::registers::write_mask(
+                                        *width, stored,
+                                    )
+                                })
+                            });
+                        }
                         let input = &symbols[analyzed.function.input as usize];
-                        if let Some(access) = access(o, ranges, input, &mut entry.unresolved) {
+                        if let Some(access) =
+                            access(o, stored, ranges, input, &mut entry.unresolved)
+                        {
                             admit(memory, admitted, access_bytes(&access), c)?;
                             entry.accesses.push(access);
                         }

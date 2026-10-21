@@ -85,269 +85,6 @@ pub fn write_mask(width: u8, stored: &[StoredBits]) -> Option<RegisterMask> {
     })
 }
 
-/// One bit of a stored value: fixed, an entry register's bit, a loaded
-/// value's bit, or unknown. A loaded bit names its load expression's id, so
-/// two loads of one address (two reads of a register) are never one source.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) enum Bit<'a> {
-    Zero,
-    One,
-    Entry(u8, u8),
-    Load(u32, &'a AbstractValue, u8, u8),
-    Unknown,
-}
-
-fn constant_bits<'a>(value: u32) -> [Bit<'a>; 32] {
-    std::array::from_fn(|i| {
-        if value >> i & 1 == 1 {
-            Bit::One
-        } else {
-            Bit::Zero
-        }
-    })
-}
-
-fn and<'a>(a: Bit<'a>, b: Bit<'a>) -> Bit<'a> {
-    match (a, b) {
-        (Bit::Zero, _) | (_, Bit::Zero) => Bit::Zero,
-        (Bit::One, x) | (x, Bit::One) => x,
-        (x, y) if x == y && x != Bit::Unknown => x,
-        _ => Bit::Unknown,
-    }
-}
-
-fn or<'a>(a: Bit<'a>, b: Bit<'a>) -> Bit<'a> {
-    match (a, b) {
-        (Bit::One, _) | (_, Bit::One) => Bit::One,
-        (Bit::Zero, x) | (x, Bit::Zero) => x,
-        (x, y) if x == y && x != Bit::Unknown => x,
-        _ => Bit::Unknown,
-    }
-}
-
-fn not(a: Bit<'_>) -> Bit<'_> {
-    match a {
-        Bit::Zero => Bit::One,
-        Bit::One => Bit::Zero,
-        _ => Bit::Unknown,
-    }
-}
-
-fn xor<'a>(a: Bit<'a>, b: Bit<'a>) -> Bit<'a> {
-    match (a, b) {
-        (Bit::Zero, x) | (x, Bit::Zero) => x,
-        (Bit::One, x) | (x, Bit::One) => not(x),
-        _ => Bit::Unknown,
-    }
-}
-
-/// `left + right` while no bit position can carry; from the first position
-/// where both may be set, every higher bit is unknown.
-fn add<'a>(left: [Bit<'a>; 32], right: [Bit<'a>; 32]) -> [Bit<'a>; 32] {
-    let mut carry = false;
-    std::array::from_fn(|i| {
-        if carry {
-            return Bit::Unknown;
-        }
-        match (left[i], right[i]) {
-            (Bit::Zero, x) | (x, Bit::Zero) => x,
-            _ => {
-                carry = true;
-                Bit::Unknown
-            }
-        }
-    })
-}
-
-fn shift_left(bits: [Bit<'_>; 32], by: u32) -> [Bit<'_>; 32] {
-    std::array::from_fn(|i| {
-        if (i as u32) < by {
-            Bit::Zero
-        } else {
-            bits[i - by as usize]
-        }
-    })
-}
-
-/// Bit-level sources of stored values over one function's expressions.
-///
-/// Expressions form a DAG whose shared nodes the analysis consolidates, so each
-/// node is evaluated once per function and memoized by its dense id; every
-/// newly evaluated node is charged one work unit and the memo reserves its
-/// capacity in working memory before it grows, so the walk stays inside the
-/// caller's work budget, deadline and memory.
-pub struct StoredBitsEvaluator<'f, 'a, 'm> {
-    facts: &'f Facts<'a, 'm>,
-    memory: &'m WorkingMemory,
-    /// Each evaluated expression's bits, by expression id.
-    memo: AdmittedVec<'m, Option<[Bit<'a>; 32]>>,
-}
-
-impl<'f, 'a, 'm> StoredBitsEvaluator<'f, 'a, 'm> {
-    pub fn new(facts: &'f Facts<'a, 'm>, memory: &'m WorkingMemory) -> Self {
-        Self {
-            facts,
-            memory,
-            memo: AdmittedVec::new(memory),
-        }
-    }
-
-    /// The bits of `value`. A leaf is read directly; an expression is
-    /// evaluated with every node it reaches computed exactly once per
-    /// function, in post order on an admitted stack: an operand's id is
-    /// always lower than its node's, so the walk needs no depth bound.
-    fn bits(&mut self, value: &'a AbstractValue, c: &mut dyn RunControl) -> Result<[Bit<'a>; 32]> {
-        let AbstractValue::Expression { id } = value else {
-            return Ok(self.operand(value, u32::MAX));
-        };
-        if self.facts.value_expression(value).is_none() {
-            return Ok([Bit::Unknown; 32]);
-        }
-        let mut stack = AdmittedVec::new(self.memory);
-        stack.push(*id, c.position())?;
-        while let Some(&top) = stack.last() {
-            if self.memoized(top).is_some() {
-                stack.pop();
-                continue;
-            }
-            let Some(expression) = self
-                .facts
-                .value_expression(&AbstractValue::Expression { id: top })
-            else {
-                stack.pop();
-                continue;
-            };
-            let mut pending = false;
-            if let Expression::Integer { left, right, .. } = expression {
-                for operand in [left, right] {
-                    if let AbstractValue::Expression { id: operand } = operand
-                        && *operand < top
-                        && self.memoized(*operand).is_none()
-                        && self
-                            .facts
-                            .value_expression(&AbstractValue::Expression { id: *operand })
-                            .is_some()
-                    {
-                        stack.push(*operand, c.position())?;
-                        pending = true;
-                    }
-                }
-            }
-            if pending {
-                continue;
-            }
-            c.checkpoint(1)?;
-            let result = match expression {
-                Expression::EntryRegister { register } => {
-                    std::array::from_fn(|i| Bit::Entry(*register, i as u8))
-                }
-                Expression::Load {
-                    address,
-                    width,
-                    signed,
-                } => {
-                    let loaded = u32::from(*width) * 8;
-                    std::array::from_fn(|i| {
-                        let i = i as u32;
-                        if i < loaded {
-                            Bit::Load(top, address, *width, i as u8)
-                        } else if *signed && loaded != 0 {
-                            Bit::Load(top, address, *width, (loaded - 1) as u8)
-                        } else {
-                            Bit::Zero
-                        }
-                    })
-                }
-                Expression::Integer { op, left, right } => {
-                    let l = self.operand(left, top);
-                    let r = self.operand(right, top);
-                    let by = constant(right).map(|k| k & 31);
-                    match op {
-                        IntegerOp::And => std::array::from_fn(|i| and(l[i], r[i])),
-                        IntegerOp::AndNot => std::array::from_fn(|i| and(l[i], not(r[i]))),
-                        IntegerOp::Or => std::array::from_fn(|i| or(l[i], r[i])),
-                        IntegerOp::Xor => std::array::from_fn(|i| xor(l[i], r[i])),
-                        IntegerOp::Shl => match by {
-                            Some(by) => shift_left(l, by),
-                            None => [Bit::Unknown; 32],
-                        },
-                        IntegerOp::Shr | IntegerOp::Sar => match by {
-                            Some(by) => std::array::from_fn(|i| {
-                                let from = i as u32 + by;
-                                if from < 32 {
-                                    l[from as usize]
-                                } else if *op == IntegerOp::Sar {
-                                    l[31]
-                                } else {
-                                    Bit::Zero
-                                }
-                            }),
-                            None => [Bit::Unknown; 32],
-                        },
-                        IntegerOp::Add => add(l, r),
-                        IntegerOp::Sub if r.iter().all(|bit| *bit == Bit::Zero) => l,
-                        IntegerOp::ShiftAdd1 => add(shift_left(l, 1), r),
-                        IntegerOp::ShiftAdd2 => add(shift_left(l, 2), r),
-                        IntegerOp::ShiftAdd3 => add(shift_left(l, 3), r),
-                        _ => [Bit::Unknown; 32],
-                    }
-                }
-                Expression::CallResult { .. } | Expression::CallWord { .. } => [Bit::Unknown; 32],
-            };
-            while self.memo.len() <= top as usize {
-                self.memo.push(None, c.position())?;
-            }
-            self.memo[top as usize] = Some(result);
-            stack.pop();
-        }
-        Ok(self.memoized(*id).unwrap_or([Bit::Unknown; 32]))
-    }
-
-    fn memoized(&self, id: u32) -> Option<[Bit<'a>; 32]> {
-        self.memo.get(id as usize).copied().flatten()
-    }
-
-    /// An operand of node `node`: a leaf's bits, or an already evaluated
-    /// earlier expression's; anything else is unknown.
-    fn operand(&self, value: &'a AbstractValue, node: u32) -> [Bit<'a>; 32] {
-        match value {
-            AbstractValue::Constant { value } | AbstractValue::ImageAddress { address: value } => {
-                constant_bits(*value)
-            }
-            AbstractValue::Alternatives { values } => {
-                let shared =
-                    values
-                        .values()
-                        .iter()
-                        .try_fold((u32::MAX, 0), |(all, any), alternative| {
-                            let value = match alternative {
-                                ValueAlternative::Constant { value }
-                                | ValueAlternative::ImageAddress { address: value } => *value,
-                                _ => return None,
-                            };
-                            Some((all & value, any | value))
-                        });
-                match shared {
-                    Some((all, any)) => std::array::from_fn(|i| {
-                        if (all ^ any) >> i & 1 != 0 {
-                            Bit::Unknown
-                        } else if all >> i & 1 != 0 {
-                            Bit::One
-                        } else {
-                            Bit::Zero
-                        }
-                    }),
-                    None => [Bit::Unknown; 32],
-                }
-            }
-            AbstractValue::Expression { id } if *id < node => {
-                self.memoized(*id).unwrap_or([Bit::Unknown; 32])
-            }
-            _ => [Bit::Unknown; 32],
-        }
-    }
-}
-
 /// One load or entry-register source's bit dependencies in a register or stack byte.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 struct ReadDependency {
@@ -565,6 +302,35 @@ struct ReadKnown {
     one: u32,
 }
 impl ReadKnown {
+    fn from_fact(value: &AbstractValue) -> Self {
+        match value {
+            AbstractValue::Constant { value } | AbstractValue::ImageAddress { address: value } => {
+                Self::constant(*value)
+            }
+            AbstractValue::Alternatives { values } => values
+                .values()
+                .iter()
+                .try_fold(
+                    Self {
+                        zero: u32::MAX,
+                        one: u32::MAX,
+                    },
+                    |shared, value| {
+                        let value = match value {
+                            ValueAlternative::Constant { value }
+                            | ValueAlternative::ImageAddress { address: value } => *value,
+                            _ => return None,
+                        };
+                        Some(Self {
+                            zero: shared.zero & !value,
+                            one: shared.one & value,
+                        })
+                    },
+                )
+                .unwrap_or_default(),
+            _ => Self::default(),
+        }
+    }
     fn constant(value: u32) -> Self {
         Self {
             zero: !value,
@@ -612,8 +378,27 @@ impl ReadKnown {
                 zero: (a.zero & b.zero) | (a.one & b.one),
                 one: (a.zero & b.one) | (a.one & b.zero),
             },
-            Add | Sub if b.constant_value() == Some(0) => a,
-            Add if a.constant_value() == Some(0) => b,
+            Add => {
+                let mut result = Self::default();
+                for bit in 0..32 {
+                    let flag = 1 << bit;
+                    if (a.zero | b.zero) & flag == 0 {
+                        break;
+                    }
+                    result.zero |= a.zero & b.zero & flag;
+                    result.one |= (a.one | b.one) & flag;
+                }
+                result
+            }
+            Sub if b.constant_value() == Some(0) => a,
+            ShiftAdd1 | ShiftAdd2 | ShiftAdd3 => {
+                let by = match op {
+                    ShiftAdd1 => 1,
+                    ShiftAdd2 => 2,
+                    _ => 3,
+                };
+                Self::integer(Add, a.wire(|i| i.checked_sub(by)), b)
+            }
             Shl | Shr | Sar | RotateLeft | RotateRight | BitExtract
                 if b.constant_value().is_some() =>
             {
@@ -647,6 +432,13 @@ struct ReadCell {
     known: ReadKnown,
 }
 impl ReadCell {
+    fn from_fact(value: &AbstractValue) -> Self {
+        Self {
+            atom: ReadAtom::from_fact(value),
+            known: ReadKnown::from_fact(value),
+            flow: 0,
+        }
+    }
     fn constant(value: u32) -> Self {
         Self {
             flow: 0,
@@ -709,7 +501,7 @@ struct ReadInstruction<'a> {
     branch: Option<(BranchTest, Operand, Operand)>,
     flow: InstructionFlow,
     address: Option<&'a AbstractValue>,
-    value: Option<(u8, ReadAtom)>,
+    value: Option<(u8, ReadCell)>,
     address_atom: ReadAtom,
     source: Option<usize>,
     arguments: bool,
@@ -739,6 +531,7 @@ enum ReadOrigin<'a> {
 }
 struct ReadSource<'a> {
     origin: ReadOrigin<'a>,
+    observed: bool,
     preserved: u32,
     limits: [u32; 4],
     event: usize,
@@ -931,13 +724,14 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
                     address,
                     width,
                     ..
-                } if select(address, *width, c)? => self.sources.push(
+                } if !self.summary_mode => self.sources.push(
                     ReadSource {
                         origin: ReadOrigin::Load {
                             site: *offset,
                             address,
                             width: *width,
                         },
+                        observed: select(address, *width, c)?,
                         preserved: 0,
                         limits: [0; 4],
                         event: 0,
@@ -979,7 +773,7 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
                 } => {
                     if let Some(id) = self.at(*offset) {
                         self.node_mut(id)?.instruction.value =
-                            Some((*register, ReadAtom::from_fact(value)));
+                            Some((*register, ReadCell::from_fact(value)));
                     }
                 }
                 FunctionRecord::CallInputs { offset, .. } => {
@@ -1338,26 +1132,28 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
             return Ok(());
         }
         let mut entry = ReadState::entry();
-        if self.summary_mode {
-            for register in CallAbi::RiscvInteger.arguments() {
-                let source = self.sources.len();
-                self.sources.push(
-                    ReadSource {
-                        origin: ReadOrigin::Entry(register),
-                        preserved: 0,
-                        limits: [0; 4],
-                        event: 0,
-                    },
-                    c.position(),
-                )?;
-                entry.set(
-                    register,
-                    ReadCell {
-                        flow: self.seed(source, 4, false, c)?,
-                        ..ReadCell::default()
-                    },
-                );
+        for register in 1..32 {
+            if register == 2 || (self.summary_mode && !(10..18).contains(&register)) {
+                continue;
             }
+            let source = self.sources.len();
+            self.sources.push(
+                ReadSource {
+                    origin: ReadOrigin::Entry(register),
+                    observed: self.summary_mode,
+                    preserved: 0,
+                    limits: [0; 4],
+                    event: 0,
+                },
+                c.position(),
+            )?;
+            entry.set(
+                register,
+                ReadCell {
+                    flow: self.seed(source, 4, false, c)?,
+                    ..ReadCell::default()
+                },
+            );
         }
         self.merge(0, entry, c)?;
         let mut cursor = 0;
@@ -1617,7 +1413,10 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
                             })
                             .unwrap_or_default();
                     }
-                    if let Some(source) = instruction.source {
+                    if let Some(source) = instruction.source
+                        && (stack.is_none()
+                            || value.flow == 0 && value.known == ReadKnown::default())
+                    {
                         let seed = self.seed(source, width, signed, c)?;
                         value.flow = self.join_flow(value.flow, seed, c)?;
                     }
@@ -1648,15 +1447,13 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
         if let Some((register, fact)) = instruction.value
             && register != 0
         {
-            let known = fact;
-            if known != ReadAtom::Unknown {
-                let mut value = output.register(register);
-                value.atom = known;
-                if let Some(constant) = known.constant() {
-                    value.known = ReadKnown::constant(constant);
-                }
-                output.set(register, value);
+            let mut value = output.register(register);
+            if fact.atom != ReadAtom::Unknown {
+                value.atom = fact.atom;
             }
+            value.known.zero |= fact.known.zero;
+            value.known.one |= fact.known.one;
+            output.set(register, value);
         }
         if emit {
             for index in 0..self.dispatches.len() {
@@ -1710,8 +1507,32 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
             if let Some(abi) = abi {
                 let mut results = [ReadCell::default(); 2];
                 if let Some(summary) = calls(instruction.site) {
-                    for (cell, register) in results.iter_mut().zip(abi.results()) {
+                    for (index, (cell, register)) in
+                        results.iter_mut().zip(abi.results()).enumerate()
+                    {
                         cell.flow = self.call_result(input, &summary.arguments, register, c)?;
+                        if let Some(values) = summary
+                            .results
+                            .get(index)
+                            .and_then(|v| v.as_ref())
+                            .filter(|v| !v.is_empty())
+                        {
+                            cell.known = values.iter().fold(
+                                ReadKnown {
+                                    zero: u32::MAX,
+                                    one: u32::MAX,
+                                },
+                                |known, value| ReadKnown {
+                                    zero: known.zero & !value,
+                                    one: known.one & value,
+                                },
+                            );
+                            cell.atom = cell
+                                .known
+                                .constant_value()
+                                .map(ReadAtom::Constant)
+                                .unwrap_or_default();
+                        }
                     }
                 }
                 for register in abi.clobbered() {
@@ -1877,6 +1698,14 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
         sink: ReadSink,
         c: &mut dyn RunControl,
     ) -> Result<()> {
+        if !self
+            .sources
+            .get(dependency.source)
+            .ok_or_else(read_integrity)?
+            .observed
+        {
+            return Ok(());
+        }
         let (exact, may) = dependency.selected(outputs);
         for (bits, precision) in [(exact, ReadPrecision::Exact), (may, ReadPrecision::May)] {
             if bits == 0 {
@@ -1918,6 +1747,120 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
             }
         }
         Ok(())
+    }
+    /// Stored provenance is a projection of the converged input cell at this
+    /// store. Keep load-site identity while coalescing adjacent source bits.
+    pub fn stored(
+        &self,
+        site: u64,
+        address: &AbstractValue,
+        width: u8,
+        c: &mut dyn RunControl,
+    ) -> Result<Vec<StoredBits>> {
+        let Some(mask) = width_mask(width) else {
+            return Ok(Vec::new());
+        };
+        let cell = if self.work_limit {
+            ReadCell::default()
+        } else {
+            self.at(site)
+                .and_then(|id| self.nodes.get(id))
+                .and_then(|node| {
+                    let SemanticOp::Memory {
+                        source: Some(register),
+                        ..
+                    } = node.instruction.operation
+                    else {
+                        return None;
+                    };
+                    node.input.map(|input| input.register(register))
+                })
+                .unwrap_or_default()
+        };
+        let dependencies = self.flows.values(cell.flow)?;
+        let mut runs: Vec<StoredBits> = Vec::new();
+        let mut previous_source = None;
+        for bit in 0..mask.count_ones() as u8 {
+            c.checkpoint(dependencies.len() as u64 + 1)?;
+            let flag = 1 << bit;
+            let mut origin = None;
+            let source = if (cell.known.zero | cell.known.one) & flag != 0 {
+                StoredBitsSource::Constant {
+                    value: (cell.known.one >> bit) & 1,
+                }
+            } else {
+                let mut found = None;
+                let mut ambiguous = false;
+                for dependency in dependencies {
+                    let exact = dependency.exact[usize::from(bit)];
+                    let may = dependency.may[usize::from(bit)];
+                    if exact == 0 && may == 0 {
+                        continue;
+                    }
+                    if found.is_some()
+                        || exact.count_ones() != 1
+                        || may != 0
+                        || dependency.inverted & flag != 0
+                    {
+                        ambiguous = true;
+                    }
+                    found = Some((dependency.source, exact.trailing_zeros() as u8));
+                }
+                if let Some((id, low)) = found.filter(|_| !ambiguous) {
+                    origin = Some(id);
+                    match self.sources.get(id).ok_or_else(read_integrity)?.origin {
+                        ReadOrigin::Entry(register) => {
+                            StoredBitsSource::EntryRegister { register, low }
+                        }
+                        ReadOrigin::Load {
+                            address: loaded,
+                            width: loaded_width,
+                            ..
+                        } => StoredBitsSource::Load {
+                            address: exact_address(loaded),
+                            width: loaded_width,
+                            low,
+                            same_word: same_word(loaded, loaded_width, address, width),
+                        },
+                    }
+                } else {
+                    StoredBitsSource::Unknown
+                }
+            };
+            if let Some(last) = runs.last_mut() {
+                let adjacent = match (&last.source, &source) {
+                    (StoredBitsSource::Constant { .. }, StoredBitsSource::Constant { .. }) => true,
+                    (StoredBitsSource::Unknown, StoredBitsSource::Unknown) => true,
+                    (
+                        StoredBitsSource::EntryRegister { low, .. },
+                        StoredBitsSource::EntryRegister { low: next, .. },
+                    )
+                    | (
+                        StoredBitsSource::Load { low, .. },
+                        StoredBitsSource::Load { low: next, .. },
+                    ) => previous_source == origin && *next == *low + last.width,
+                    _ => false,
+                };
+                if adjacent {
+                    if let (
+                        StoredBitsSource::Constant { value },
+                        StoredBitsSource::Constant { value: next },
+                    ) = (&mut last.source, &source)
+                    {
+                        *value |= next << last.width;
+                    }
+                    last.width += 1;
+                    continue;
+                }
+            }
+            runs.push(StoredBits {
+                low: bit,
+                width: 1,
+                source,
+            });
+            previous_source = origin;
+        }
+        Ok(runs)
     }
     pub fn reads(
         &self,
@@ -2014,6 +1957,7 @@ fn read_operation(
     let right = b.constant_value();
     use IntegerOp::*;
     match op {
+        And | Or if l == r => out = l,
         And | Or | Xor | AndNot | OrNot | XorNot => {
             let (b, r) = if matches!(op, AndNot | OrNot | XorNot) {
                 let mut inverted = r;
@@ -2078,14 +2022,19 @@ fn read_operation(
         }
         Add | Sub => {
             let mut bits = 0;
-            for ((out, (le, lm)), (re, rm)) in out
-                .may
-                .iter_mut()
-                .zip(l.exact.iter().zip(&l.may))
-                .zip(r.exact.iter().zip(&r.may))
-            {
-                bits |= le | lm | re | rm;
-                *out = bits;
+            let mut carry = op == Sub;
+            for i in 0..32 {
+                let flag = 1 << i;
+                bits |= l.exact[i] | l.may[i] | r.exact[i] | r.may[i];
+                carry |= (a.zero | b.zero) & flag == 0;
+                if carry {
+                    out.may[i] = bits;
+                } else {
+                    let from = if a.zero & flag != 0 { &r } else { &l };
+                    out.exact[i] = from.exact[i];
+                    out.may[i] = from.may[i];
+                    out.inverted |= from.inverted & flag;
+                }
             }
         }
         ShiftAdd1 | ShiftAdd2 | ShiftAdd3 => {
@@ -2096,7 +2045,7 @@ fn read_operation(
             };
             out = read_operation(
                 Add,
-                ReadKnown::default(),
+                a.wire(|i| i.checked_sub(by)),
                 b,
                 l.wire(|i| i.checked_sub(by)),
                 r,
@@ -2367,64 +2316,6 @@ fn same_word(loaded: &AbstractValue, loaded_width: u8, address: &AbstractValue, 
     loaded == address && loaded_width == width
 }
 
-/// Where each run of the `width`-byte value stored at `address` comes from,
-/// low run first: fixed bits, a function entry register's bits (an argument
-/// for `a0`..`a7`), a loaded value's bits (with `same_word` for the stored word
-/// itself) or unknown. Each bit follows bitwise logic, constant shifts and
-/// carry-free additions of the analysis' expressions; anything else is
-/// unknown, never guessed.
-pub fn stored_bits<'a>(
-    evaluator: &mut StoredBitsEvaluator<'_, 'a, '_>,
-    address: &AbstractValue,
-    width: u8,
-    value: &'a AbstractValue,
-    c: &mut dyn RunControl,
-) -> Result<Vec<StoredBits>> {
-    let Some(mask) = width_mask(width) else {
-        return Ok(Vec::new());
-    };
-    let value = evaluator.bits(value, c)?;
-    let count = mask.count_ones() as usize;
-    let mut runs: Vec<StoredBits> = Vec::new();
-    let mut i = 0;
-    while i < count {
-        let start = i;
-        let first = value[i];
-        i += 1;
-        let next = |previous: Bit<'a>, bit: Bit<'a>| match (previous, bit) {
-            (Bit::Zero | Bit::One, Bit::Zero | Bit::One) => true,
-            (Bit::Entry(r, b), Bit::Entry(s, c)) => r == s && c == b + 1,
-            (Bit::Load(e, _, _, b), Bit::Load(f, _, _, c)) => e == f && c == b + 1,
-            (Bit::Unknown, Bit::Unknown) => true,
-            _ => false,
-        };
-        while i < count && next(value[i - 1], value[i]) {
-            i += 1;
-        }
-        let source = match first {
-            Bit::Zero | Bit::One => StoredBitsSource::Constant {
-                value: (start..i).fold(0, |acc, bit| {
-                    acc | u32::from(value[bit] == Bit::One) << (bit - start)
-                }),
-            },
-            Bit::Entry(register, low) => StoredBitsSource::EntryRegister { register, low },
-            Bit::Load(_, loaded, loaded_width, low) => StoredBitsSource::Load {
-                address: exact_address(loaded),
-                width: loaded_width,
-                low,
-                same_word: same_word(loaded, loaded_width, address, width),
-            },
-            Bit::Unknown => StoredBitsSource::Unknown,
-        };
-        runs.push(StoredBits {
-            low: start as u8,
-            width: (i - start) as u8,
-            source,
-        });
-    }
-    Ok(runs)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2447,8 +2338,6 @@ mod tests {
     }
     #[test]
     fn numeric_alternatives_keep_only_bits_shared_by_every_value() {
-        let memory = WorkingMemory::new(65536).expect("working memory");
-        let facts = Facts::new(&[], &memory, &mut || Ok(())).expect("facts");
         for (values, varying) in [
             (
                 vec![
@@ -2491,18 +2380,9 @@ mod tests {
             let value = AbstractValue::Alternatives {
                 values: ValueAlternatives::new(values).expect("numeric alternatives"),
             };
-            let mut evaluator = StoredBitsEvaluator::new(&facts, &memory);
-            let bits = evaluator.bits(&value, &mut || Ok(())).expect("stored bits");
-            for (i, bit) in bits.into_iter().enumerate() {
-                assert_eq!(
-                    bit,
-                    match i {
-                        i if varying & (1 << i) != 0 => Bit::Unknown,
-                        7 => Bit::One,
-                        _ => Bit::Zero,
-                    }
-                );
-            }
+            let bits = ReadKnown::from_fact(&value);
+            assert_eq!(bits.one, 0x80);
+            assert_eq!(bits.zero, !(0x80 | varying));
         }
         for address in [
             ValueAlternative::Section {
@@ -2533,400 +2413,10 @@ mod tests {
                 let value = AbstractValue::Alternatives {
                     values: ValueAlternatives::new(values).expect("relocatable alternatives"),
                 };
-                let mut evaluator = StoredBitsEvaluator::new(&facts, &memory);
-                assert_eq!(
-                    evaluator.bits(&value, &mut || Ok(())).expect("stored bits"),
-                    [Bit::Unknown; 32]
-                );
+                assert_eq!(ReadKnown::from_fact(&value), ReadKnown::default());
             }
         }
     }
-    #[test]
-    fn masks_preserve_source_positions_and_require_proven_preservation() {
-        let memory = WorkingMemory::new(65536).unwrap();
-        let records = records(vec![
-            Expression::Load {
-                address: number(0x20000),
-                width: 2,
-                signed: true,
-            },
-            Expression::Integer {
-                op: IntegerOp::Shr,
-                left: value(0),
-                right: number(4),
-            },
-            Expression::Integer {
-                op: IntegerOp::And,
-                left: value(1),
-                right: number(15),
-            },
-            Expression::Integer {
-                op: IntegerOp::And,
-                left: value(0),
-                right: number(!15),
-            },
-            Expression::Integer {
-                op: IntegerOp::Or,
-                left: value(3),
-                right: AbstractValue::Unknown,
-            },
-            Expression::Integer {
-                op: IntegerOp::Or,
-                left: value(3),
-                right: number(0x100),
-            },
-        ]);
-        let facts = Facts::new(&records, &memory, &mut || Ok(())).unwrap();
-        let Expression::Integer { .. } = facts
-            .expression(2, &mut || Ok(()))
-            .expect("lookup succeeds")
-            .expect("expression 2 exists")
-        else {
-            panic!()
-        };
-        let (_, width, mask) = read_mask(
-            &facts,
-            facts
-                .expression(2, &mut || Ok(()))
-                .expect("lookup succeeds")
-                .expect("expression 2 exists"),
-        )
-        .unwrap();
-        assert_eq!((width, mask.bits), (2, 0xf0));
-        let mut evaluator = StoredBitsEvaluator::new(&facts, &memory);
-        let values = [value(4), value(5)];
-        let addresses = [number(0x20000), number(0x20001)];
-        let mut mask = |address, width, value| {
-            write_mask(
-                width,
-                &stored_bits(&mut evaluator, address, width, value, &mut || Ok(())).unwrap(),
-            )
-        };
-        assert!(mask(&addresses[0], 2, &values[0]).is_none());
-        assert_eq!(mask(&addresses[0], 2, &values[1]).unwrap().bits, 0x10f);
-        assert!(mask(&addresses[1], 2, &values[1]).is_none());
-        assert!(mask(&addresses[0], 4, &values[1]).is_none());
-    }
-    #[test]
-    fn stored_bits_name_fields_kept_bits_constants_and_unknowns() {
-        let memory = WorkingMemory::new(65536).unwrap();
-        let word = number(0x2010_713c);
-        let records = records(vec![
-            Expression::Load {
-                address: word.clone(),
-                width: 4,
-                signed: false,
-            },
-            Expression::EntryRegister { register: 10 },
-            Expression::Integer {
-                op: IntegerOp::Shl,
-                left: value(1),
-                right: number(18),
-            },
-            Expression::Integer {
-                op: IntegerOp::And,
-                left: value(2),
-                right: number(0x01fc_0000),
-            },
-            Expression::Integer {
-                op: IntegerOp::And,
-                left: value(0),
-                right: number(0xfe03_ffff),
-            },
-            Expression::Integer {
-                op: IntegerOp::Or,
-                left: value(3),
-                right: value(4),
-            },
-            Expression::Integer {
-                op: IntegerOp::Or,
-                left: value(4),
-                right: number(0x1b << 18),
-            },
-            Expression::Integer {
-                op: IntegerOp::Mul,
-                left: value(1),
-                right: number(3),
-            },
-            Expression::EntryRegister { register: 11 },
-            Expression::Integer {
-                op: IntegerOp::Add,
-                left: value(1),
-                right: value(8),
-            },
-        ]);
-        let (field, fixed, product, sum, small) =
-            (value(5), value(6), value(7), value(9), number(0x1ff));
-        let facts = Facts::new(&records, &memory, &mut || Ok(())).unwrap();
-        let mut evaluator = StoredBitsEvaluator::new(&facts, &memory);
-        macro_rules! stored_bits {
-            ($address:expr, $width:expr, $value:expr) => {
-                super::stored_bits(&mut evaluator, $address, $width, $value, &mut || Ok(()))
-                    .unwrap()
-            };
-        }
-        let kept = |low, width| StoredBits {
-            low,
-            width,
-            source: StoredBitsSource::Load {
-                address: Some(0x2010_713c),
-                width: 4,
-                low,
-                same_word: true,
-            },
-        };
-        assert_eq!(
-            stored_bits!(&word, 4, &field),
-            [
-                kept(0, 18),
-                StoredBits {
-                    low: 18,
-                    width: 7,
-                    source: StoredBitsSource::EntryRegister {
-                        register: 10,
-                        low: 0
-                    },
-                },
-                kept(25, 7),
-            ],
-            "the argument's low seven bits replace bits 24:18; the rest are kept"
-        );
-        assert_eq!(
-            stored_bits!(&word, 4, &fixed)[1],
-            StoredBits {
-                low: 18,
-                width: 7,
-                source: StoredBitsSource::Constant { value: 0x1b },
-            }
-        );
-        let elsewhere = number(0x2010_7094);
-        assert!(matches!(
-            stored_bits!(&elsewhere, 4, &field)[0].source,
-            StoredBitsSource::Load {
-                same_word: false,
-                address: Some(0x2010_713c),
-                ..
-            }
-        ));
-        assert_eq!(
-            stored_bits!(&word, 4, &product),
-            [StoredBits {
-                low: 0,
-                width: 32,
-                source: StoredBitsSource::Unknown,
-            }],
-            "a product is never decomposed"
-        );
-        assert_eq!(
-            stored_bits!(&word, 4, &sum),
-            [StoredBits {
-                low: 0,
-                width: 32,
-                source: StoredBitsSource::Unknown,
-            }],
-            "two register values can carry from bit zero"
-        );
-        assert_eq!(
-            stored_bits!(&word, 1, &small),
-            [StoredBits {
-                low: 0,
-                width: 8,
-                source: StoredBitsSource::Constant { value: 0xff },
-            }],
-            "only the access width is described"
-        );
-    }
-    #[test]
-    fn two_loads_of_one_address_are_two_sources() {
-        let memory = WorkingMemory::new(65536).unwrap();
-        let word = number(0x6000_0000);
-        let load = || Expression::Load {
-            address: word.clone(),
-            width: 4,
-            signed: false,
-        };
-        let records = records(vec![
-            load(),
-            load(),
-            Expression::Integer {
-                op: IntegerOp::Or,
-                left: value(0),
-                right: value(1),
-            },
-            Expression::Integer {
-                op: IntegerOp::And,
-                left: value(0),
-                right: number(0xff),
-            },
-            Expression::Integer {
-                op: IntegerOp::And,
-                left: value(1),
-                right: number(0xff00),
-            },
-            Expression::Integer {
-                op: IntegerOp::Or,
-                left: value(3),
-                right: value(4),
-            },
-        ]);
-        let facts = Facts::new(&records, &memory, &mut || Ok(())).unwrap();
-        let (both, bytes) = (value(2), value(5));
-        let mut evaluator = StoredBitsEvaluator::new(&facts, &memory);
-        let mut stored =
-            |value| super::stored_bits(&mut evaluator, &word, 4, value, &mut || Ok(())).unwrap();
-        assert_eq!(
-            stored(&both),
-            [StoredBits {
-                low: 0,
-                width: 32,
-                source: StoredBitsSource::Unknown,
-            }],
-            "the OR of two reads of one register is neither read"
-        );
-        let read = |low, width| StoredBits {
-            low,
-            width,
-            source: StoredBitsSource::Load {
-                address: Some(0x6000_0000),
-                width: 4,
-                low,
-                same_word: true,
-            },
-        };
-        assert_eq!(
-            stored(&bytes),
-            [
-                read(0, 8),
-                read(8, 8),
-                StoredBits {
-                    low: 16,
-                    width: 16,
-                    source: StoredBitsSource::Constant { value: 0 },
-                },
-            ],
-            "bytes of two reads stay two runs"
-        );
-    }
-    #[test]
-    fn a_shared_expression_dag_is_evaluated_once_per_node_inside_the_budget() {
-        let memory = WorkingMemory::new(65536).unwrap();
-        // x0 = a0; x(i+1) = x(i) + x(i): one node per step, 2^steps paths.
-        let chain = |steps: u32| {
-            let mut expressions = vec![Expression::EntryRegister { register: 10 }];
-            for id in 0..steps {
-                expressions.push(Expression::Integer {
-                    op: IntegerOp::Add,
-                    left: value(id),
-                    right: value(id),
-                });
-            }
-            records(expressions)
-        };
-        let visits = |records: &[FunctionRecord], top: &AbstractValue| {
-            let facts = Facts::new(records, &memory, &mut || Ok(())).unwrap();
-            let mut evaluator = StoredBitsEvaluator::new(&facts, &memory);
-            let mut visits = 0_u32;
-            let runs = stored_bits(&mut evaluator, &number(0x2010_702c), 4, top, &mut || {
-                visits += 1;
-                Ok(())
-            })
-            .unwrap();
-            assert_eq!(
-                runs,
-                [StoredBits {
-                    low: 0,
-                    width: 32,
-                    source: StoredBitsSource::Unknown,
-                }],
-                "a register added to itself can carry from bit zero"
-            );
-            visits
-        };
-        let (short, short_top) = (chain(20), value(20));
-        assert_eq!(
-            visits(&short, &short_top),
-            21,
-            "each of the 21 nodes is charged once"
-        );
-        let (long, long_top) = (chain(40), value(40));
-        assert_eq!(
-            visits(&long, &long_top),
-            41,
-            "every one of the 41 nodes is evaluated exactly once, at any depth"
-        );
-        let facts = Facts::new(&long, &memory, &mut || Ok(())).unwrap();
-        let mut evaluator = StoredBitsEvaluator::new(&facts, &memory);
-        let mut exhausted = || Err(Error::new(ErrorCode::ResourceLimited, "work budget"));
-        assert!(
-            stored_bits(
-                &mut evaluator,
-                &number(0x2010_702c),
-                4,
-                &long_top,
-                &mut exhausted
-            )
-            .is_err(),
-            "the walk stops when the budget does"
-        );
-    }
-    #[test]
-    fn the_memo_reserves_working_memory_before_it_grows() {
-        let records = records(vec![
-            Expression::EntryRegister { register: 10 },
-            Expression::Integer {
-                op: IntegerOp::Add,
-                left: value(0),
-                right: value(0),
-            },
-        ]);
-        let top = value(1);
-        // Enough for the expression index, not for eight memo entries of
-        // thirty-two bit sources each.
-        let memo_bytes = 8 * std::mem::size_of::<Option<(u8, [Bit<'_>; 32])>>() as u64;
-        let memory = WorkingMemory::new(memo_bytes - 1).unwrap();
-        let facts = Facts::new(&records, &memory, &mut || Ok(())).unwrap();
-        let mut evaluator = StoredBitsEvaluator::new(&facts, &memory);
-        let error = stored_bits(
-            &mut evaluator,
-            &number(0x2010_702c),
-            4,
-            &top,
-            &mut || Ok(()),
-        )
-        .unwrap_err();
-        assert_eq!(error.code, ErrorCode::ResourceLimited, "{error:?}");
-    }
-    #[test]
-    fn a_node_reached_again_by_a_later_store_costs_nothing() {
-        let memory = WorkingMemory::new(1 << 20).unwrap();
-        let mut expressions = vec![Expression::EntryRegister { register: 10 }];
-        for id in 0..30 {
-            expressions.push(Expression::Integer {
-                op: IntegerOp::Or,
-                left: value(id),
-                right: number(1 << (id % 32)),
-            });
-        }
-        let records = records(expressions);
-        let (deep, middle) = (value(30), value(15));
-        let facts = Facts::new(&records, &memory, &mut || Ok(())).unwrap();
-        let mut evaluator = StoredBitsEvaluator::new(&facts, &memory);
-        let mut charged = 0_u32;
-        stored_bits(&mut evaluator, &number(0), 4, &deep, &mut || {
-            charged += 1;
-            Ok(())
-        })
-        .unwrap();
-        assert_eq!(charged, 31);
-        let mut again = 0_u32;
-        stored_bits(&mut evaluator, &number(0), 4, &middle, &mut || {
-            again += 1;
-            Ok(())
-        })
-        .unwrap();
-        assert_eq!(again, 0, "node 15 was evaluated by the first store's walk");
-    }
-
     /// The indexed progression of `expressions`' last node.
     fn indexed(expressions: Vec<Expression>) -> Option<IndexedAddress> {
         let memory = WorkingMemory::new(1 << 16).unwrap();

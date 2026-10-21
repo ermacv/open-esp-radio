@@ -27,6 +27,7 @@ impl<'m> ArgumentProgram<'m> {
         c: &mut dyn RunControl,
     ) -> Result<Self> {
         let mut evaluator = ReadUsesEvaluator::new(facts, memory);
+        evaluator.summary_mode = true;
         evaluator.prepare(decoder, &mut |_, _, _| Ok(false), c)?;
         let mut instructions = AdmittedVec::new(memory);
         for node in evaluator.nodes.iter() {

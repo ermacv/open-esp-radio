@@ -149,14 +149,6 @@ fn loads_report_their_sinks_limits_preservation_and_unused_bits() {
         assert_eq!(reads.unused, replacement, "{name}: {reads:?}");
         assert!(reads.uses.is_empty(), "{name}: {reads:?}");
         assert!(reads.unknown.is_empty(), "{name}: {reads:?}");
-        if name == "rmw_variable_spilled" {
-            // The CFG forwards known stack bytes; stored expressions do
-            // not forward memory and cannot prove this store's RMW shape.
-            assert!(!observations.iter().any(|observation| matches!(observation,
-                RegisterAccess::Observation { function, mask: Some(RegisterMask { kind: RegisterMaskKind::WriteReplacement, .. }), .. }
-                    if function.name.as_deref() == Some(name.as_bytes()))));
-            continue;
-        }
         let mask = observations
             .iter()
             .find_map(|observation| match observation {
@@ -1020,12 +1012,22 @@ fn shared_port_propagates_constants_through_calls_and_rejects_conflicts() {
 
 #[test]
 fn stored_provenance_follows_joins_stack_arguments_returns_and_unselected_loads() {
-    let mut source = String::from("#![no_std]\ncore::arch::global_asm!(r#\"\n.option norvc\n.option norelax\n");
+    let mut source =
+        String::from("#![no_std]\ncore::arch::global_asm!(r#\"\n.option norvc\n.option norelax\n");
     for (name, body) in [
-        ("joined", "lw t0,0(a5)\nbeqz a0,2f\nandi t1,t0,-2\nj 3f\n2: andi t1,t0,-2\n3: sw t1,0(a5)"),
-        ("stacked", "addi sp,sp,-16\nlw t0,0(a5)\nsw t0,0(sp)\nlw t1,0(sp)\nsw t1,0(a5)\naddi sp,sp,16"),
+        (
+            "joined",
+            "lw t0,0(a5)\nbeqz a0,2f\nandi t1,t0,-2\nj 3f\n2: andi t1,t0,-2\n3: sw t1,0(a5)",
+        ),
+        (
+            "stacked",
+            "addi sp,sp,-16\nlw t0,0(a5)\nsw t0,0(sp)\nlw t1,0(sp)\nsw t1,0(a5)\naddi sp,sp,16",
+        ),
         ("argument", "sw a0,0(a5)"),
-        ("returned", "mv s1,ra\nlw a0,0(a5)\ncall identity\nlui a5,0x20107\nsw a0,0(a5)\nmv ra,s1"),
+        (
+            "returned",
+            "mv s1,ra\nlw a0,0(a5)\ncall identity\nlui a5,0x20107\nsw a0,0(a5)\nmv ra,s1",
+        ),
         ("inverted", "lw t0,0(a5)\nxori t0,t0,-1\nsw t0,0(a5)"),
         ("ram", "lui t0,0x40800\nlw t1,0(t0)\nsw t1,0(a5)"),
     ] {
@@ -1036,34 +1038,82 @@ fn stored_provenance_follows_joins_stack_arguments_returns_and_unselected_loads(
     let mut observations = Vec::new();
     register_accesses(
         &[Executable::new(fixture(&source))],
-        Assumptions { abi: Some(CallAbi::RiscvInteger), call_summaries: true, ..Assumptions::default() },
-        &[ImageRegion { start: 0x2010_7000, length: 4 }],
-        &oer_analysis_riscv_lift::RiscvDecoder, &memory, &mut || Ok(()),
-        &mut |o, _| { observations.push(o.clone()); Ok(()) },
-    ).expect("stored flow analysis");
-    for name in ["joined", "stacked", "argument", "returned", "inverted", "ram"] {
-        let stores: Vec<_> = observations.iter().filter_map(|o| match o {
-            RegisterAccess::Observation { function, stored: Some(stored), .. }
-                if function.name.as_deref() == Some(name.as_bytes()) => Some(stored),
-            _ => None,
-        }).collect();
+        Assumptions {
+            abi: Some(CallAbi::RiscvInteger),
+            call_summaries: true,
+            ..Assumptions::default()
+        },
+        &[ImageRegion {
+            start: 0x2010_7000,
+            length: 4,
+        }],
+        &oer_analysis_riscv_lift::RiscvDecoder,
+        &memory,
+        &mut || Ok(()),
+        &mut |o, _| {
+            observations.push(o.clone());
+            Ok(())
+        },
+    )
+    .expect("stored flow analysis");
+    for name in [
+        "joined", "stacked", "argument", "returned", "inverted", "ram",
+    ] {
+        let stores: Vec<_> = observations
+            .iter()
+            .filter_map(|o| match o {
+                RegisterAccess::Observation {
+                    function,
+                    stored: Some(stored),
+                    address: Some(0x2010_7000),
+                    ..
+                } if function.name.as_deref() == Some(name.as_bytes()) => Some(stored),
+                _ => None,
+            })
+            .collect();
         assert_eq!(stores.len(), 1, "{name}: {observations:?}");
         let stored = stores[0];
         for run in stored {
             match name {
-                "argument" => assert!(matches!(run.source, StoredBitsSource::EntryRegister { register: 10, low } if low == run.low), "{name}: {stored:?}"),
+                "argument" => assert!(
+                    matches!(run.source, StoredBitsSource::EntryRegister { register: 10, low } if low == run.low),
+                    "{name}: {stored:?}"
+                ),
                 "inverted" => assert_eq!(run.source, StoredBitsSource::Unknown),
-                "ram" => assert!(matches!(run.source, StoredBitsSource::Load { address: Some(0x4080_0000), width: 4, low, same_word: false } if low == run.low), "{name}: {stored:?}"),
-                "joined" if run.low == 0 => assert_eq!(run.source, StoredBitsSource::Constant { value: 0 }),
-                _ => assert!(matches!(run.source, StoredBitsSource::Load { address: Some(0x2010_7000), width: 4, low, same_word: true } if low == run.low), "{name}: {stored:?}"),
+                "ram" => assert!(
+                    matches!(run.source, StoredBitsSource::Load { address: Some(0x4080_0000), width: 4, low, same_word: false } if low == run.low),
+                    "{name}: {stored:?}"
+                ),
+                "joined" if run.low == 0 => {
+                    assert_eq!(run.source, StoredBitsSource::Constant { value: 0 })
+                }
+                _ => assert!(
+                    matches!(run.source, StoredBitsSource::Load { address: Some(0x2010_7000), width: 4, low, same_word: true } if low == run.low),
+                    "{name}: {stored:?}"
+                ),
             }
         }
         for o in &observations {
-            if let RegisterAccess::Observation { function, reads: Some(reads), .. } = o
-                && function.name.as_deref() == Some(name.as_bytes()) {
-                assert_eq!(stored_property::missing_preserved_bits(reads, stored), 0, "{name}: {reads:?}, {stored:?}");
+            if let RegisterAccess::Observation {
+                function,
+                reads: Some(reads),
+                ..
+            } = o
+                && function.name.as_deref() == Some(name.as_bytes())
+            {
+                assert_eq!(
+                    stored_property::missing_preserved_bits(reads, stored),
+                    0,
+                    "{name}: {reads:?}, {stored:?}"
+                );
             }
         }
     }
-    assert!(!observations.iter().any(|o| matches!(o, RegisterAccess::Observation { address: Some(0x4080_0000), .. })));
+    assert!(!observations.iter().any(|o| matches!(
+        o,
+        RegisterAccess::Observation {
+            address: Some(0x4080_0000),
+            ..
+        }
+    )));
 }

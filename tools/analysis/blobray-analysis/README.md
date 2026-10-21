@@ -5,13 +5,17 @@ Blobray's analyses over the bounded CFG and value analysis of
 recognition, code-coverage closures and record
 navigation. They have no filesystem authority.
 
-`registers` recognizes load masks and evaluates stored bit provenance using
-the shared borrowed fact index. A read-modify-write's replacement mask covers
+`registers` recognizes load masks using the shared borrowed fact index.
+One CFG dependency engine supplies both read uses and stored bit provenance.
+At a store, known bits become constants; a single exact, non-inverted source
+becomes a load or entry-register run; every other bit stays unknown.
+All function loads are sources, including RAM outside the selected ranges;
+only selected loads produce read-use observations. A read-modify-write's replacement mask covers
 the stored bits not copied identically from the same word and position;
 writes with no preserved bits carry no replacement mask. It reports
 bit-selection observations with their original physical load width;
 application owns address scope.
-Its independent read-use pass propagates load-site dependencies over the
+The pass propagates load-site and entry-register dependencies over the
 instruction CFG to a fixed point, with union at joins, explicit limits and
 byte-level stack transfers. Values also carry known-zero and known-one masks;
 joins retain only bits known equally on every path. Neutral bitwise operands
@@ -43,6 +47,6 @@ control; the function count is bounded.
 
 `navigation::Facts` requires canonical records through the shared
 [`FunctionIndex`](../riscv-model/src/navigation.rs), preserving the earlier-ID DAG
-that the expression evaluators require. The wrapper owns no tables or scans;
+that the expression observations require. The wrapper owns no tables or scans;
 all structural lookups and memory-access visits use the model's index. Unknown
 addresses remain explicit.

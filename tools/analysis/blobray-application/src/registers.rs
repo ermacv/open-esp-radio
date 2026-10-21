@@ -18,12 +18,10 @@ pub(crate) struct Candidate<'a> {
     /// The progression of an unresolved address computed from one index.
     pub indexed: Option<IndexedAddress>,
     pub mask: Option<RegisterMask>,
-    /// The sources of a store's bits.
-    pub stored: Option<Vec<StoredBits>>,
 }
 
-/// Load-use analysis belongs only to register-accesses. Other consumers of
-/// address and expression observations do not run it or change their results.
+/// One lazy CFG pass supplies selected read uses and stored provenance for
+/// register-accesses and MMIO comparison.
 pub(crate) struct ReadObservations<'f, 'a, 'm> {
     evaluator: oer_analysis_blobray_analysis::registers::ReadUsesEvaluator<'f, 'a, 'm>,
     facts: &'f Facts<'a, 'm>,
@@ -84,31 +82,7 @@ impl<'f, 'a, 'm> ReadObservations<'f, 'a, 'm> {
             ..
         } = fact
         {
-            if self.links.is_none() {
-                self.links = Some(CallLinks::new(
-                    self.facts,
-                    self.function,
-                    self.callees,
-                    self.memory,
-                    c,
-                )?);
-            }
-            let links = self
-                .links
-                .as_ref()
-                .ok_or_else(|| Error::new(ErrorCode::Integrity, "missing call links"))?;
-            let summaries = self.summaries;
-            self.evaluator.analyze(
-                self.abi,
-                self.decoder,
-                &mut |address, width, c| selected_read(address, width, self.ranges, c),
-                &|site| {
-                    links
-                        .callee(site)
-                        .and_then(|callee| summaries.summary(callee))
-                },
-                c,
-            )?;
+            self.analyze(c)?;
             let mut reads = self.evaluator.reads(*offset, address, *width, *access, c)?;
             for usage in &mut reads.uses {
                 if let ReadSink::CallArgument { site, callee, .. } = &mut usage.sink {
@@ -116,6 +90,53 @@ impl<'f, 'a, 'm> ReadObservations<'f, 'a, 'm> {
                 }
             }
             Ok(Some(reads))
+        } else {
+            Ok(None)
+        }
+    }
+    fn analyze(&mut self, c: &mut dyn RunControl) -> Result<()> {
+        if self.links.is_none() {
+            self.links = Some(CallLinks::new(
+                self.facts,
+                self.function,
+                self.callees,
+                self.memory,
+                c,
+            )?);
+        }
+        let links = self
+            .links
+            .as_ref()
+            .ok_or_else(|| Error::new(ErrorCode::Integrity, "missing call links"))?;
+        let summaries = self.summaries;
+        self.evaluator.analyze(
+            self.abi,
+            self.decoder,
+            &mut |address, width, c| selected_read(address, width, self.ranges, c),
+            &|site| {
+                links
+                    .callee(site)
+                    .and_then(|callee| summaries.summary(callee))
+            },
+            c,
+        )?;
+        Ok(())
+    }
+    pub fn stored(
+        &mut self,
+        fact: &FunctionRecord,
+        c: &mut dyn RunControl,
+    ) -> Result<Option<Vec<StoredBits>>> {
+        if let FunctionRecord::MemoryAccess {
+            offset,
+            access: MemoryKind::Store,
+            address,
+            width,
+            ..
+        } = fact
+        {
+            self.analyze(c)?;
+            Ok(Some(self.evaluator.stored(*offset, address, *width, c)?))
         } else {
             Ok(None)
         }
@@ -159,21 +180,14 @@ pub(crate) fn observe<'a, 'm>(
     c: &mut dyn RunControl,
     emit: &mut Observer<'_>,
 ) -> Result<()> {
-    // A store's stored bits are evaluated only once one of its candidates
-    // is in range, and once for all of them, so a store the ranges exclude
-    // costs no work and no memo.
-    let mut evaluator =
-        oer_analysis_blobray_analysis::registers::StoredBitsEvaluator::new(facts, memory);
     let mut indexed_addresses =
         oer_analysis_blobray_analysis::registers::IndexedAddresses::new(facts, memory);
     let mut observe = |record: u64,
                        width: u8,
                        address: &'a AbstractValue,
                        mask: Option<RegisterMask>,
-                       stored_value: Option<&'a AbstractValue>,
                        c: &mut dyn RunControl| {
         let fact = &records[record as usize];
-        let mut stored: Option<Vec<StoredBits>> = None;
         let indexed = match indexed_addresses.address(address, c)? {
             Some(indexed) if in_ranges(&indexed, width, ranges, c)? => Some(indexed),
             _ => None,
@@ -189,22 +203,6 @@ pub(crate) fn observe<'a, 'm>(
             {
                 return Ok(());
             }
-            if let Some(value) = stored_value
-                && stored.is_none()
-            {
-                stored = Some(oer_analysis_blobray_analysis::registers::stored_bits(
-                    &mut evaluator,
-                    address,
-                    width,
-                    value,
-                    c,
-                )?);
-            }
-            let mask = mask.or_else(|| {
-                stored.as_deref().and_then(|stored| {
-                    oer_analysis_blobray_analysis::registers::write_mask(width, stored)
-                })
-            });
             emit(
                 Candidate {
                     record,
@@ -213,24 +211,13 @@ pub(crate) fn observe<'a, 'm>(
                     alternative,
                     indexed: if resolved.is_none() { indexed } else { None },
                     mask,
-                    stored: stored.clone(),
                 },
                 c,
             )
         })
     };
     facts.accesses(c, &mut |access, c| {
-        let stored_value = access
-            .value
-            .filter(|_| matches!(access.access, MemoryKind::Store));
-        observe(
-            access.record,
-            access.width,
-            access.address,
-            None,
-            stored_value,
-            c,
-        )
+        observe(access.record, access.width, access.address, None, c)
     })?;
     for (record, fact) in records.iter().enumerate() {
         c.checkpoint(1)?;
@@ -238,7 +225,7 @@ pub(crate) fn observe<'a, 'm>(
             && let Some((address, width, mask)) =
                 oer_analysis_blobray_analysis::registers::read_mask(facts, expression)
         {
-            observe(record as u64, width, address, Some(mask), None, c)?;
+            observe(record as u64, width, address, Some(mask), c)?;
         }
     }
     Ok(())
@@ -379,8 +366,8 @@ mod tests {
             length: 4,
         }];
         assert!(
-            work(&deep, &inside) >= work(&flat, &inside) + u64::from(NODES),
-            "an included store's value is walked, one checkpoint per node"
+            work(&deep, &inside) == work(&flat, &inside),
+            "candidate discovery never evaluates stored expressions"
         );
     }
 
