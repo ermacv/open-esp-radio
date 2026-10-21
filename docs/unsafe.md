@@ -141,6 +141,8 @@ completeness, uniqueness and visibility. Cleanup guards retain initialized field
 the complete value is published; unaligned access also supports packed
 structs. The returned loan retains the storage lifetime. Caller expressions
 run outside the macro's unsafe context, and callers keep `forbid(unsafe_code)`.
+The macro resolves storage and pointer operations through its defining crate,
+so a caller cannot replace them by shadowing `core`.
 
 `AffineIndexedSpscQueue` lets an affine permission's place select its value
 cell while the audited SPSC ring stores only indices; available ring space

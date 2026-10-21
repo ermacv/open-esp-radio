@@ -18,6 +18,9 @@
 //! [`init_in_place!`] initializes a complete struct directly in borrowed
 //! storage, cleaning up its initialized fields if construction stops early.
 
+#[doc(hidden)]
+pub extern crate core as __core;
+
 use core::marker::PhantomData;
 
 mod affine_spsc;

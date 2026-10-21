@@ -21,7 +21,7 @@
 #[macro_export]
 macro_rules! init_in_place {
     ($storage:expr, $($ty:ident)::+ { $($field:ident: $value:expr),+ $(,)? }) => {{
-        let __storage: &mut core::mem::MaybeUninit<$($ty)::+> = $storage;
+        let __storage: &mut $crate::__core::mem::MaybeUninit<$($ty)::+> = $storage;
         // This never runs or captures inputs. Rust checks the complete
         // initializer, including field visibility and construction safety.
         let _ = |$($field),+| $($ty)::+ { $($field),+ };
@@ -33,13 +33,13 @@ macro_rules! init_in_place {
             // the struct. This field exists and is written exactly once.
             // Raw, unaligned access also admits repr(packed) structs.
             unsafe {
-                let __field = core::ptr::addr_of_mut!((*__pointer).$field);
+                let __field = $crate::__core::ptr::addr_of_mut!((*__pointer).$field);
                 __field.write_unaligned(__value);
                 $crate::__InitField::new(__field)
             }
         },)+);
         // All fields now belong to the complete value, not the cleanup guards.
-        core::mem::forget(__fields);
+        $crate::__core::mem::forget(__fields);
         // SAFETY: the checked initializer includes every field. Each was
         // initialized above, with no reference to uninitialized fields.
         unsafe { __storage.assume_init_mut() }

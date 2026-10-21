@@ -1,6 +1,6 @@
 #![no_std]
 #![forbid(unsafe_code)]
-use core::mem::MaybeUninit;
+mod core {} use ::core::mem::MaybeUninit;
 
 pub struct Pair { pub first: u8, pub second: u8 }
 pub fn build(storage: &mut MaybeUninit<Pair>) -> &mut Pair {
