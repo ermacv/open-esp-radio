@@ -380,6 +380,7 @@ pin_project_lite::pin_project! {
         wait: Option<F>,
         make_wait: M,
         wait_at: Instant,
+        previous_exit: Instant,
         gate: Gate,
     }
 }
@@ -394,6 +395,7 @@ impl<R: Registers, T: Timer, F: Future<Output = ()>, M: Fn(Instant) -> F> Future
         let started = this.stats.as_ref().map(|_| this.timer.now());
         let mut resumed = None;
         let mut advanced = false;
+        let mut ready_elapsed = None;
         let result = loop {
             if *this.gate == Gate::Yield {
                 if let Some(trace) = this.trace.as_deref_mut() {
@@ -451,6 +453,12 @@ impl<R: Registers, T: Timer, F: Future<Output = ()>, M: Fn(Instant) -> F> Future
                 match answer_deadline(completed) {
                     Ok(at) => this.job.deadline = at,
                     Err(error) => step = Step::Failure(error),
+                }
+            }
+            // Timestamp the completed readiness atom before trace/wake bookkeeping.
+            if this.stats.is_some() {
+                if let Some(at) = this.job.ready_started.take() {
+                    ready_elapsed = Some(this.timer.now().saturating_duration_since(at));
                 }
             }
             if let (Some(trace), Some(sample)) = (this.trace.as_deref_mut(), sample) {
@@ -516,8 +524,10 @@ impl<R: Registers, T: Timer, F: Future<Output = ()>, M: Fn(Instant) -> F> Future
                 finished,
                 result.is_pending(),
                 resumed,
-                this.job.ready_started.take(),
+                *this.previous_exit,
+                ready_elapsed,
             );
+            *this.previous_exit = finished;
         }
         result
     }
@@ -545,6 +555,7 @@ pub(crate) fn drive<'a, 'j, R: Registers, T: Timer>(
         wait: None,
         make_wait: move |at| timer.wait_until(at),
         wait_at: Instant::EPOCH,
+        previous_exit: Instant::EPOCH,
         gate: Gate::Idle,
     }
 }

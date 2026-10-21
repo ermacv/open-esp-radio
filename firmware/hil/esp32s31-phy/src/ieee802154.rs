@@ -165,9 +165,10 @@ impl Rx {
                 &mut observer,
             )
             .await;
+            let parts = observer.4;
             #[cfg(oer_profile)]
             crate::hold::report_timer(timer_window);
-            crate::hold::report_preparation(&trace, &polls);
+            crate::hold::report_preparation(&trace, &polls, &parts);
             result.map_err(|error| {
                 oer_esp32s31_board::rom::print_fmt(format_args!(
                     "OPEN_RADIO_HIL phy=FAIL step=154-maintain error={error:?}\n"

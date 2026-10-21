@@ -118,9 +118,19 @@ impl ReadinessTrace {
     }
 }
 
+/// Components of the same largest late WaitAt resume, never independent maxima.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct WaitParts {
+    pub late_micros: u32,
+    pub poll_tail_micros: u32,
+    pub executor_gap_micros: u32,
+    pub poll_prefix_micros: u32,
+}
+
 /// Clock-free aggregate of actual engine polls and timer resumes.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct EngineTiming {
+    pub wait_parts: WaitParts,
     pub polls: u16,
     pub pending: u16,
     pub total_micros: u32,
@@ -141,7 +151,8 @@ impl EngineTiming {
         finished: oer_time::Instant,
         pending: bool,
         resumed: Option<(oer_time::Instant, oer_time::Instant)>,
-        ready_started: Option<oer_time::Instant>,
+        previous_exit: oer_time::Instant,
+        ready_elapsed: Option<oer_time::Duration>,
     ) {
         fn increment(total: &mut u16, invalid: &mut bool) {
             if let Some(next) = total.checked_add(1) {
@@ -180,13 +191,32 @@ impl EngineTiming {
             };
             increment(&mut self.resumes, &mut self.invalid);
             add(&mut self.lateness_micros, late, &mut self.invalid);
-            self.maximum_lateness_micros = self.maximum_lateness_micros.max(late);
+            if late >= self.maximum_lateness_micros {
+                self.wait_parts = WaitParts {
+                    late_micros: late,
+                    poll_tail_micros: u32::try_from(
+                        previous_exit
+                            .saturating_duration_since(deadline)
+                            .as_micros(),
+                    )
+                    .unwrap_or(u32::MAX),
+                    executor_gap_micros: u32::try_from(
+                        started
+                            .saturating_duration_since(previous_exit.max(deadline))
+                            .as_micros(),
+                    )
+                    .unwrap_or(u32::MAX),
+                    poll_prefix_micros: u32::try_from(
+                        at.saturating_duration_since(started.max(deadline))
+                            .as_micros(),
+                    )
+                    .unwrap_or(u32::MAX),
+                };
+                self.maximum_lateness_micros = late;
+            }
         }
-        if let Some(started) = ready_started {
-            let Some(elapsed) = finished
-                .checked_duration_since(started)
-                .and_then(|d| u32::try_from(d.as_micros()).ok())
-            else {
+        if let Some(elapsed) = ready_elapsed {
+            let Some(elapsed) = u32::try_from(elapsed.as_micros()).ok() else {
                 self.invalid = true;
                 return;
             };

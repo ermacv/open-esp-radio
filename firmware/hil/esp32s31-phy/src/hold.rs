@@ -54,6 +54,7 @@ pub struct Observer<'a>(
     pub sar_tails::Tails,
     &'a mut HoldPolls,
     Option<&'a mut oer_esp32s31_phy::tracking::observation::ReadinessTrace>,
+    pub oer_esp32s31_phy::tracking::observation::WaitParts,
 );
 impl<'a> Observer<'a> {
     pub fn new(
@@ -66,6 +67,7 @@ impl<'a> Observer<'a> {
             sar_tails::Tails::default(),
             engine,
             trace,
+            Default::default(),
         )
     }
 }
@@ -77,6 +79,7 @@ impl PhyTargetObserver for &mut Observer<'_> {
         self.3.as_deref_mut()
     }
     fn engine_completed(&mut self, timing: oer_esp32s31_phy::tracking::observation::EngineTiming) {
+        self.4 = timing.wait_parts;
         self.2.merge(HoldPolls {
             polls: timing.polls,
             pending: timing.pending,
@@ -124,8 +127,16 @@ impl PhyTargetObserver for &mut Observer<'_> {
 pub fn report_preparation(
     trace: &oer_esp32s31_phy::tracking::observation::ReadinessTrace,
     polls: &HoldPolls,
+    parts: &oer_esp32s31_phy::tracking::observation::WaitParts,
 ) {
     use oer_esp32s31_board::rom::print_fmt;
+    print_fmt(format_args!(
+        "OPEN_RADIO_HIL t7-wait late-us={} tail-us={} gap-us={} prefix-us={}\n",
+        parts.late_micros,
+        parts.poll_tail_micros,
+        parts.executor_gap_micros,
+        parts.poll_prefix_micros
+    ));
     print_fmt(format_args!(
         "OPEN_RADIO_HIL t7-prepare polls={} max-poll-us={}\n",
         polls.polls, polls.maximum_micros

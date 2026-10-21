@@ -396,7 +396,8 @@ impl Radio {
             observer.1,
         ));
         let sample = observer.0.finish(committed, failed);
-        crate::hold::report_preparation(&trace, &hold.engine);
+        let parts = observer.4;
+        crate::hold::report_preparation(&trace, &hold.engine, &parts);
         hold.invalid |= sample.invalid;
         if hold.samples.push(sample).is_err() {
             hold.invalid = true;
