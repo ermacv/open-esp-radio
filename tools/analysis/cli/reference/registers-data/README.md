@@ -2,7 +2,7 @@
 
 Inspect MMIO candidates and captured data.
 
-[Choose a task](../../README.md#choose-a-task) · [All command references](../../README.md#reference-navigation).
+[Choose a task](../../../blobray-README.md#choose-a-task) · [All command references](../../README.md#reference-navigation).
 
 ## Captured data, tables and coefficients
 
