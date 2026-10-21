@@ -93,10 +93,10 @@ top-level command and subcommands. Blobray has no TUI or code generation.
 
 ## Start an investigation
 
-Blobray and the typed vendor scenarios form the separate `tools/analysis/cli` Cargo
-workspace, with its own `Cargo.lock` and `tools/analysis/cli/target` directory, so
-Blobray dependencies never change the radio workspace. From the repository
-root, `cargo blobray` and `--manifest-path tools/analysis/cli/Cargo.toml` select it.
+The Blobray CLI and typed vendor scenarios are members of the repository's root
+Cargo workspace. They share its `Cargo.lock` and `target` directory. From the
+repository root, `cargo blobray` runs `oer-tool-analysis-cli` with the `tools`
+profile.
 
 The Linux linker adapter uses the shared process foundation's `command`
 factory to clear unrelated operation context. Linker ownership and resource
@@ -104,7 +104,7 @@ limits remain the adapter's policy; the analysis core does not depend on
 subprocess mechanisms. The crate boundary test enforces that split.
 
 ```console
-cargo build --manifest-path tools/analysis/cli/Cargo.toml --profile blobray -p oer-tool-analysis-cli --bin blobray
+cargo build --profile tools -p oer-tool-analysis-cli --bin blobray
 cargo blobray --format json register-accesses --input vendor=/path/to/lib.a --range 0x60000000:0x100000
 ```
 

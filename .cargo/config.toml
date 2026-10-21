@@ -1,4 +1,6 @@
 [alias]
+# The captured binary analysis tool (tools/analysis/blobray-README.md).
+blobray = "run --quiet --profile tools -p oer-tool-analysis-cli --"
 # The register tool: validate the register model and generate SVD, PAC and
 # bindings (tools/registers/generate/README.md).
 registers = "run --quiet --profile tools -p oer-tool-registers-cli --"
