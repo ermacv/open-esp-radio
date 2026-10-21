@@ -19,6 +19,9 @@ use crate::stack::{ADMITTED, Image, contract::Contract};
 use oer_analysis_riscv_model::WorkingMemory;
 use oer_analysis_riscv_program::facts::ImageFacts;
 
+mod placement;
+pub use placement::{INTERRUPT_PLACEMENT_REPORT, InterruptPlacement};
+
 /// The interrupt stacks' report in an image build's output directory.
 pub const INTERRUPT_REPORT: &str = "interrupt-stack.txt";
 
@@ -231,6 +234,15 @@ impl InterruptStacks {
 
     /// Each hart's bound, its levels and their critical paths.
     pub fn render(&self) -> String {
+        self.render_report(None)
+    }
+
+    /// The stack report with placement measurements after its handler inventory.
+    pub fn render_with_placement(&self, placement: &InterruptPlacement) -> String {
+        self.render_report(Some(placement))
+    }
+
+    fn render_report(&self, placement: Option<&InterruptPlacement>) -> String {
         let name = |address: u32| self.name(address);
         let mut out = format!("{}\n", self.traps);
         if self.level_writers.is_empty() {
@@ -253,6 +265,9 @@ impl InterruptStacks {
             code.panics.len(),
             code.cached.len()
         );
+        if let Some(placement) = placement {
+            out.push_str(&placement.summary());
+        }
         for (function, site) in code.float.iter().take(SHOWN) {
             let _ = writeln!(
                 out,
@@ -673,7 +688,7 @@ mod tests {
         contract().memory.sram.origin + 0x1000
     }
 
-    fn stacks(handlers: Vec<(u32, Vec<u32>)>) -> InterruptStacks {
+    pub(super) fn stacks(handlers: Vec<(u32, Vec<u32>)>) -> InterruptStacks {
         InterruptStacks {
             traps: Default::default(),
             harts: Vec::new(),
@@ -688,7 +703,7 @@ mod tests {
         }
     }
 
-    fn partial(partial: u64) -> InterruptStacks {
+    pub(super) fn partial(partial: u64) -> InterruptStacks {
         let bound = oer_analysis_riscv_stack::Bound {
             root: 0,
             bytes: None,

@@ -66,6 +66,7 @@ An `ImageBundle` is one directory with a `bundle.json`:
 | `otadata.bin` | The OTA selection of the first slot (staged only) |
 | `runtime.bin`, `bootstrap.elf` | The packed runtime and the bootstrap (staged only) |
 | `placement.txt`, `runtime-stack.txt`, `interrupt-stack.txt`, `bootstrap-stack.txt` | Gate reports |
+| `interrupt-placement.txt` | Cached interrupt functions, static data references and objects, and free SRAM (measurements only) |
 | `build.log` | Every step's standard error |
 
 The manifest uses schema 7 and records `purpose: Flash` or `Analysis`.
@@ -174,6 +175,20 @@ code every interrupt level reaches, a floating-point instruction fails (the
 handlers run with the FPU off); calls into the panic machinery and functions
 in cached memory (flash, PSRAM) are listed. It writes all of this, each
 hart's levels and their critical paths to `interrupt-stack.txt`.
+Its three placement summary lines also count the cached handler code once per
+image and separately at each hart/level, sized data objects referenced statically
+from resolved handler code, and usable/placed/free SRAM. The full lists in
+`interrupt-placement.txt` sort functions by size, total them by the first path
+component of their demangled names, and name every data reference and object.
+Code targets are excluded from the data count; aliases with the same address and
+size count once, and an interior address counts the whole object. References
+without a sized data symbol remain visible and contribute no invented size.
+SRAM usage is the union of the placement contract's SRAM ranges and allocated
+SRAM sections, including NOLOAD interrupt stacks and DMA. Overlaps count once;
+the contract's upper boundary already excludes the ROM boot-stack side (the
+chip's layout documents its ESP-IDF source). These are static byte counts of
+resolved paths, without relocation alignment or dynamically addressed data;
+they add no gate, error or warning and change no placement.
 Independently of the installed interrupt handlers, it also follows linked
 compiler panic entry points, the platform panic handler and the optional
 image panic hook. A resolved callee in cached memory fails the build under

@@ -306,13 +306,25 @@ impl Gates {
                     if let Some(required) = self.interrupts.filter(|_| interrupts_run) {
                         let result = ran((|| -> Result<()> {
                             let stacks = crate::interrupts::interrupt_stacks_of(&image)?;
+                            let placement = crate::interrupts::InterruptPlacement::of(
+                                &image, &stacks, profile,
+                            )?;
                             std::fs::write(
                                 input.output.join(crate::interrupts::INTERRUPT_REPORT),
-                                stacks.render(),
+                                stacks.render_with_placement(&placement),
                             )?;
                             outcome
                                 .reports
                                 .push(crate::interrupts::INTERRUPT_REPORT.to_owned());
+                            std::fs::write(
+                                input
+                                    .output
+                                    .join(crate::interrupts::INTERRUPT_PLACEMENT_REPORT),
+                                placement.render(),
+                            )?;
+                            outcome
+                                .reports
+                                .push(crate::interrupts::INTERRUPT_PLACEMENT_REPORT.to_owned());
                             outcome.warnings.extend(stacks.check(required)?);
                             Ok(())
                         })());
