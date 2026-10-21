@@ -134,57 +134,69 @@ pub enum ConcurrentPhyTrackingError {
     clippy::result_large_err,
     reason = "fail-stop error retains the allocation-free PHY transition"
 )]
-pub async fn register_concurrent_phy<B: PlatformClockBackend, P, D, O>(
-    timer: &impl oer_time::Timer,
-    radio: &mut RadioDomain<B, ConcurrentPhy>,
-    platform: &mut P,
-    clocks: &impl PlatformClockProvider<Backend = B>,
+pub fn register_concurrent_phy<'a, B: PlatformClockBackend, P, D, O>(
+    timer: &'a impl oer_time::Timer,
+    radio: &'a mut RadioDomain<B, ConcurrentPhy>,
+    platform: &'a mut P,
+    clocks: &'a impl PlatformClockProvider<Backend = B>,
     config: PhyRegisterConfig,
     observer: O,
-) -> Result<ConcurrentPhyRegistration, ConcurrentPhyRegisterFailure>
+) -> impl core::future::Future<Output = Result<ConcurrentPhyRegistration, ConcurrentPhyRegisterFailure>>
++ 'a
 where
-    D: PhyShortDelay,
-    O: PhyTargetObserver,
+    D: PhyShortDelay + 'a,
+    O: PhyTargetObserver + 'a,
 {
-    match radio.attachment_mut().slot_mut() {
-        Slot::Empty => {}
-        Slot::Poisoned => {
-            return Err(ConcurrentPhyRegisterFailure::Rejected(
-                ConcurrentPhyError::Poisoned,
-            ));
-        }
-        Slot::Registered(_) | Slot::RfClosed(_) | Slot::Pending { .. } => {
-            return Err(ConcurrentPhyRegisterFailure::Rejected(
-                ConcurrentPhyError::AlreadyRegistered,
-            ));
-        }
-    }
-    enable_phy_clocks(radio, clocks).map_err(|error| {
-        ConcurrentPhyRegisterFailure::Rejected(ConcurrentPhyError::Clock(error))
-    })?;
-    let (mut registers, phy) = radio.phy_hal_with_attachment();
-    match PhyDomain::register::<P, _, D, O>(timer, platform, &mut registers, config, observer).await
-    {
-        Ok(registered) => {
-            let (domain, calibration_cache, outcome, counters) = registered.into_parts();
-            *phy.slot_mut() = Slot::Registered(domain);
-            let registration = ConcurrentPhyRegistration {
-                calibration_cache,
-                outcome,
-                counters,
-            };
-            match radio.disable_phy_modem_clocks(PhyClockModule::Calibration) {
-                Ok(()) => Ok(registration),
-                Err(error) => Err(ConcurrentPhyRegisterFailure::CalibrationClock {
-                    registration,
-                    error,
+    super::domain::RegisterFuture {
+        future: async move {
+            match radio.attachment_mut().slot_mut() {
+                Slot::Empty => {}
+                Slot::Poisoned => {
+                    return Err(ConcurrentPhyRegisterFailure::Rejected(
+                        ConcurrentPhyError::Poisoned,
+                    ));
+                }
+                Slot::Registered(_) | Slot::RfClosed(_) | Slot::Pending { .. } => {
+                    return Err(ConcurrentPhyRegisterFailure::Rejected(
+                        ConcurrentPhyError::AlreadyRegistered,
+                    ));
+                }
+            }
+            enable_phy_clocks(radio, clocks).map_err(|error| {
+                ConcurrentPhyRegisterFailure::Rejected(ConcurrentPhyError::Clock(error))
+            })?;
+            let (mut registers, phy) = radio.phy_hal_with_attachment();
+            match PhyDomain::register::<P, _, D, O>(
+                timer,
+                platform,
+                &mut registers,
+                config,
+                observer,
+            )
+            .await
+            {
+                Ok(registered) => {
+                    let (domain, calibration_cache, outcome, counters) = registered.into_parts();
+                    *phy.slot_mut() = Slot::Registered(domain);
+                    let registration = ConcurrentPhyRegistration {
+                        calibration_cache,
+                        outcome,
+                        counters,
+                    };
+                    match radio.disable_phy_modem_clocks(PhyClockModule::Calibration) {
+                        Ok(()) => Ok(registration),
+                        Err(error) => Err(ConcurrentPhyRegisterFailure::CalibrationClock {
+                            registration,
+                            error,
+                        }),
+                    }
+                }
+                Err(failure) => Err(ConcurrentPhyRegisterFailure::Failed {
+                    failure,
+                    clocks: release_phy_clocks(radio),
                 }),
             }
-        }
-        Err(failure) => Err(ConcurrentPhyRegisterFailure::Failed {
-            failure,
-            clocks: release_phy_clocks(radio),
-        }),
+        },
     }
 }
 
