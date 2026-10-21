@@ -10,6 +10,7 @@ fn declaration(reset: Option<u64>, fields: u32) -> BTreeMap<u32, DeclaredWord> {
         template: "CONTROL".into(),
         reset_value: reset,
         reset_mask: None,
+        reserved: None,
         fields: (0..32)
             .filter(|bit| fields & (1 << bit) != 0)
             .map(|offset| DeclaredField {
@@ -76,6 +77,49 @@ fn check_document(document: Value, declared: &BTreeMap<u32, DeclaredWord>) -> Re
         declared,
         &[],
     )
+}
+
+#[test]
+fn reserved_and_absent_uses_are_distinct_errors_with_cited_masks() {
+    let mut declared = declaration(Some(0), 1);
+    declared
+        .get_mut(&0x1000)
+        .unwrap()
+        .reserved
+        .insert("vendor-header".into(), 2);
+    let report = check_document(document(vec![constant(6)]), &declared).unwrap();
+    let word = &report.words[0];
+    assert_eq!(word.reserved_bits, 2);
+    assert_eq!(word.reserved_violation_bits, 2);
+    assert_eq!(word.absent_violation_bits, 4);
+    assert_eq!(word.violation_bits, 6);
+    let text = report.render("fixture");
+    assert!(text.contains("reserved-used 0x00000002; absent-used 0x00000004"));
+    assert!(text.contains("RESERVED SOURCE vendor-header bits 0x00000002"));
+    let preserved = read(json!([]), json!([]), u32::MAX, 0);
+    let clean = check_document(document(vec![preserved, constant(0)]), &declared).unwrap();
+    assert_eq!(clean.violations(), 0);
+    assert_eq!(clean.words[0].reserved_bits, 2);
+}
+
+#[test]
+fn reserved_branch_reads_fail_and_reserved_unknown_remains_separate() {
+    let mut declared = declaration(None, 1);
+    declared
+        .get_mut(&0x1000)
+        .unwrap()
+        .reserved
+        .insert("vendor-header".into(), 6);
+    let observation = read(
+        json!([{"bits":2,"sink":{"kind":"branch","site":20},"precision":"exact"}]),
+        json!([{"bits":4,"limit":"partial-function"}]),
+        0,
+        !6u32,
+    );
+    let report = check_document(document(vec![observation]), &declared).unwrap();
+    assert_eq!(report.words[0].reserved_violation_bits, 2);
+    assert_eq!(report.words[0].absent_violation_bits, 0);
+    assert_eq!(report.words[0].unknown_bits, 4);
 }
 
 fn run(records: Vec<Value>, reset: Option<u64>, fields: u32) -> Report {
@@ -489,7 +533,11 @@ fn violations_are_errors_after_both_reports_are_written() {
     let directory = tempfile::tempdir().expect("test report directory");
     let error = crate::checks::inventory::run::write_report(directory.path(), "fixture", &report)
         .expect_err("absent-bit use fails the check");
-    assert!(error.to_string().contains("vendor uses absent bits"));
+    assert!(
+        error
+            .to_string()
+            .contains("vendor uses reserved or absent bits")
+    );
     assert!(
         std::fs::read_to_string(directory.path().join("report.txt"))
             .expect("text report")

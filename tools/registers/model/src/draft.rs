@@ -117,6 +117,7 @@ impl ModelDraft {
             reviewed_register_facts: vec![],
             shared_peripherals: BTreeMap::new(),
             layouts: vec![],
+            reserved: BTreeMap::new(),
         };
         model.register_identities()?;
         Ok(Self {
@@ -134,6 +135,7 @@ impl ModelDraft {
                 schema: 2,
                 peripherals,
                 review: vec![],
+                reserved: BTreeMap::new(),
             })?,
         })
     }

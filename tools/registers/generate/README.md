@@ -5,7 +5,7 @@ SVD, raw PAC, restricted PAC API and the binding index. It does not load a binar
 analysis project, vendor binary, device model or global provider registry.
 
 `cargo registers check inventory --chip <chip>` checks vendor uses of register
-bits against the unchanged source model. It runs Blobray `register-accesses`
+bits against the source model. It runs Blobray `register-accesses`
 over every function of every pinned vendor binary, excluding firmware outputs,
 inside the publication's owned MMIO ranges, with `--abi riscv-integer
 --call-summaries`. It requires schema 9 and a complete `reads: ReadUses`
@@ -23,7 +23,12 @@ whole-word reset writes are not uses. Unknown reset or stored value remains
 unknown unless an explicit replacement mask establishes use.
 
 The check writes `target/register-inventory/<chip>/report.txt` and `report.json`
-before failing on used bits without fields. `may_only_bits` lists each word's
+before failing on used bits without fields. `reserved_violation_bits` are
+uses of a source's explicitly reserved bits, with per-source masks;
+`absent_violation_bits` are uses of bits without a field or reserved annotation.
+Both are errors. The single register property `reserved = { mask = ...,
+sources = [...] }` is validated by the native model and retained outside SVD;
+it never creates PAC fields. `may_only_bits` lists each word's
 uses supported only by `May`, excluding any exact read or proven write use.
 Read accounting ranks callees by source bits, retaining targets and diagnostic
 SOURCE citations, and reports diagnostic-call and diagnostic-only shares.

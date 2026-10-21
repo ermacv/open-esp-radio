@@ -58161,18 +58161,11 @@ pub mod ieee802154_mac {
         pub type TxonDelayR = crate::FieldReader<u16>;
         #[doc = "Field `TXON_DELAY` writer - Ten-bit preserving field written with literal 45 by ieee802154_txon_delay_set."]
         pub type TxonDelayW<'a, REG> = crate::FieldWriter<'a, REG, 10, u16, crate::Safe>;
-        #[doc = "Field `BITS_10_31_OPAQUE` reader - Opaque: meaning not established. Bits the vendor declares reserved (reserved10), read so a hardware comparison sees the complete word; the vendor image holds nonzero values here in PAON_DELAY and RXON_DELAY."]
-        pub type Bits10_31OpaqueR = crate::FieldReader<u32>;
         impl R {
             #[doc = "Bits 0:9 - Ten-bit preserving field written with literal 45 by ieee802154_txon_delay_set."]
             #[inline(always)]
             pub fn txon_delay(&self) -> TxonDelayR {
                 TxonDelayR::new((self.bits & 0x03ff) as u16)
-            }
-            #[doc = "Bits 10:31 - Opaque: meaning not established. Bits the vendor declares reserved (reserved10), read so a hardware comparison sees the complete word; the vendor image holds nonzero values here in PAON_DELAY and RXON_DELAY."]
-            #[inline(always)]
-            pub fn bits_10_31_opaque(&self) -> Bits10_31OpaqueR {
-                Bits10_31OpaqueR::new((self.bits >> 10) & 0x003f_ffff)
             }
         }
         impl W {
@@ -58207,18 +58200,11 @@ pub mod ieee802154_mac {
         pub type TxoffDelayR = crate::FieldReader;
         #[doc = "Field `TXOFF_DELAY` writer - Six-bit preserving field written with literal 5 by ieee802154_txon_delay_set."]
         pub type TxoffDelayW<'a, REG> = crate::FieldWriter<'a, REG, 6, u8, crate::Safe>;
-        #[doc = "Field `BITS_6_31_OPAQUE` reader - Opaque: meaning not established. Bits the vendor declares reserved (reserved6), read so a hardware comparison sees the complete word; the vendor image holds nonzero values here in PAON_DELAY and RXON_DELAY."]
-        pub type Bits6_31OpaqueR = crate::FieldReader<u32>;
         impl R {
             #[doc = "Bits 0:5 - Six-bit preserving field written with literal 5 by ieee802154_txon_delay_set."]
             #[inline(always)]
             pub fn txoff_delay(&self) -> TxoffDelayR {
                 TxoffDelayR::new((self.bits & 0x3f) as u8)
-            }
-            #[doc = "Bits 6:31 - Opaque: meaning not established. Bits the vendor declares reserved (reserved6), read so a hardware comparison sees the complete word; the vendor image holds nonzero values here in PAON_DELAY and RXON_DELAY."]
-            #[inline(always)]
-            pub fn bits_6_31_opaque(&self) -> Bits6_31OpaqueR {
-                Bits6_31OpaqueR::new((self.bits >> 6) & 0x03ff_ffff)
             }
         }
         impl W {
@@ -58253,18 +58239,11 @@ pub mod ieee802154_mac {
         pub type RxonDelayR = crate::FieldReader<u16>;
         #[doc = "Field `RXON_DELAY` writer - Eleven-bit preserving field written with literal 50 by ieee802154_txon_delay_set."]
         pub type RxonDelayW<'a, REG> = crate::FieldWriter<'a, REG, 11, u16, crate::Safe>;
-        #[doc = "Field `BITS_11_31_OPAQUE` reader - Opaque: meaning not established. Bits the vendor declares reserved (reserved11), read so a hardware comparison sees the complete word; the vendor image holds nonzero values here in PAON_DELAY and RXON_DELAY."]
-        pub type Bits11_31OpaqueR = crate::FieldReader<u32>;
         impl R {
             #[doc = "Bits 0:10 - Eleven-bit preserving field written with literal 50 by ieee802154_txon_delay_set."]
             #[inline(always)]
             pub fn rxon_delay(&self) -> RxonDelayR {
                 RxonDelayR::new((self.bits & 0x07ff) as u16)
-            }
-            #[doc = "Bits 11:31 - Opaque: meaning not established. Bits the vendor declares reserved (reserved11), read so a hardware comparison sees the complete word; the vendor image holds nonzero values here in PAON_DELAY and RXON_DELAY."]
-            #[inline(always)]
-            pub fn bits_11_31_opaque(&self) -> Bits11_31OpaqueR {
-                Bits11_31OpaqueR::new((self.bits >> 11) & 0x001f_ffff)
             }
         }
         impl W {
@@ -58299,18 +58278,11 @@ pub mod ieee802154_mac {
         pub type TxrxSwitchDelayR = crate::FieldReader<u16>;
         #[doc = "Field `TXRX_SWITCH_DELAY` writer - Ten-bit preserving field written with literal 117 by ieee802154_txon_delay_set."]
         pub type TxrxSwitchDelayW<'a, REG> = crate::FieldWriter<'a, REG, 10, u16, crate::Safe>;
-        #[doc = "Field `BITS_10_31_OPAQUE` reader - Opaque: meaning not established. Bits the vendor declares reserved (reserved10), read so a hardware comparison sees the complete word; the vendor image holds nonzero values here in PAON_DELAY and RXON_DELAY."]
-        pub type Bits10_31OpaqueR = crate::FieldReader<u32>;
         impl R {
             #[doc = "Bits 0:9 - Ten-bit preserving field written with literal 117 by ieee802154_txon_delay_set."]
             #[inline(always)]
             pub fn txrx_switch_delay(&self) -> TxrxSwitchDelayR {
                 TxrxSwitchDelayR::new((self.bits & 0x03ff) as u16)
-            }
-            #[doc = "Bits 10:31 - Opaque: meaning not established. Bits the vendor declares reserved (reserved10), read so a hardware comparison sees the complete word; the vendor image holds nonzero values here in PAON_DELAY and RXON_DELAY."]
-            #[inline(always)]
-            pub fn bits_10_31_opaque(&self) -> Bits10_31OpaqueR {
-                Bits10_31OpaqueR::new((self.bits >> 10) & 0x003f_ffff)
             }
         }
         impl W {
@@ -59049,18 +59021,11 @@ pub mod ieee802154_mac {
         pub type PaonDelayR = crate::FieldReader<u16>;
         #[doc = "Field `PAON_DELAY` writer - Ten-bit power-amplifier-on delay."]
         pub type PaonDelayW<'a, REG> = crate::FieldWriter<'a, REG, 10, u16>;
-        #[doc = "Field `BITS_10_31_OPAQUE` reader - Opaque: meaning not established. Bits the vendor declares reserved (reserved10), read so a hardware comparison sees the complete word; the vendor image holds nonzero values here in PAON_DELAY and RXON_DELAY."]
-        pub type Bits10_31OpaqueR = crate::FieldReader<u32>;
         impl R {
             #[doc = "Bits 0:9 - Ten-bit power-amplifier-on delay."]
             #[inline(always)]
             pub fn paon_delay(&self) -> PaonDelayR {
                 PaonDelayR::new((self.bits & 0x03ff) as u16)
-            }
-            #[doc = "Bits 10:31 - Opaque: meaning not established. Bits the vendor declares reserved (reserved10), read so a hardware comparison sees the complete word; the vendor image holds nonzero values here in PAON_DELAY and RXON_DELAY."]
-            #[inline(always)]
-            pub fn bits_10_31_opaque(&self) -> Bits10_31OpaqueR {
-                Bits10_31OpaqueR::new((self.bits >> 10) & 0x003f_ffff)
             }
         }
         impl W {
@@ -59095,18 +59060,11 @@ pub mod ieee802154_mac {
         pub type TxenStopDlyR = crate::FieldReader;
         #[doc = "Field `TXEN_STOP_DLY` writer - Six-bit transmit-enable stop delay."]
         pub type TxenStopDlyW<'a, REG> = crate::FieldWriter<'a, REG, 6>;
-        #[doc = "Field `BITS_6_31_OPAQUE` reader - Opaque: meaning not established. Bits the vendor declares reserved (reserved6), read so a hardware comparison sees the complete word; the vendor image holds nonzero values here in PAON_DELAY and RXON_DELAY."]
-        pub type Bits6_31OpaqueR = crate::FieldReader<u32>;
         impl R {
             #[doc = "Bits 0:5 - Six-bit transmit-enable stop delay."]
             #[inline(always)]
             pub fn txen_stop_dly(&self) -> TxenStopDlyR {
                 TxenStopDlyR::new((self.bits & 0x3f) as u8)
-            }
-            #[doc = "Bits 6:31 - Opaque: meaning not established. Bits the vendor declares reserved (reserved6), read so a hardware comparison sees the complete word; the vendor image holds nonzero values here in PAON_DELAY and RXON_DELAY."]
-            #[inline(always)]
-            pub fn bits_6_31_opaque(&self) -> Bits6_31OpaqueR {
-                Bits6_31OpaqueR::new((self.bits >> 6) & 0x03ff_ffff)
             }
         }
         impl W {
@@ -59141,18 +59099,11 @@ pub mod ieee802154_mac {
         pub type ContRxDelayR = crate::FieldReader;
         #[doc = "Field `CONT_RX_DELAY` writer - Six-bit continuous-receive delay."]
         pub type ContRxDelayW<'a, REG> = crate::FieldWriter<'a, REG, 6>;
-        #[doc = "Field `BITS_6_31_OPAQUE` reader - Opaque: meaning not established. Bits the vendor declares reserved (uint32_t cont_rx_delay), read so a hardware comparison sees the complete word; the vendor image holds nonzero values here in PAON_DELAY and RXON_DELAY."]
-        pub type Bits6_31OpaqueR = crate::FieldReader<u32>;
         impl R {
             #[doc = "Bits 0:5 - Six-bit continuous-receive delay."]
             #[inline(always)]
             pub fn cont_rx_delay(&self) -> ContRxDelayR {
                 ContRxDelayR::new((self.bits & 0x3f) as u8)
-            }
-            #[doc = "Bits 6:31 - Opaque: meaning not established. Bits the vendor declares reserved (uint32_t cont_rx_delay), read so a hardware comparison sees the complete word; the vendor image holds nonzero values here in PAON_DELAY and RXON_DELAY."]
-            #[inline(always)]
-            pub fn bits_6_31_opaque(&self) -> Bits6_31OpaqueR {
-                Bits6_31OpaqueR::new((self.bits >> 6) & 0x03ff_ffff)
             }
         }
         impl W {
@@ -59195,8 +59146,6 @@ pub mod ieee802154_mac {
         pub type DcdcCtrlEnR = crate::BitReader;
         #[doc = "Field `DCDC_CTRL_EN` writer - The MAC controls the DC-DC converter."]
         pub type DcdcCtrlEnW<'a, REG> = crate::BitWriter<'a, REG>;
-        #[doc = "Field `BITS_17_30_OPAQUE` reader - Opaque: meaning not established. Bits the vendor declares reserved (reserved17), read so a hardware comparison sees the complete word; the vendor image holds nonzero values here in PAON_DELAY and RXON_DELAY."]
-        pub type Bits17_30OpaqueR = crate::FieldReader<u16>;
         #[doc = "Field `TX_DCDC_UP` reader - Raise the DC-DC converter for transmission."]
         pub type TxDcdcUpR = crate::BitReader;
         #[doc = "Field `TX_DCDC_UP` writer - Raise the DC-DC converter for transmission."]
@@ -59216,11 +59165,6 @@ pub mod ieee802154_mac {
             #[inline(always)]
             pub fn dcdc_ctrl_en(&self) -> DcdcCtrlEnR {
                 DcdcCtrlEnR::new(((self.bits >> 16) & 1) != 0)
-            }
-            #[doc = "Bits 17:30 - Opaque: meaning not established. Bits the vendor declares reserved (reserved17), read so a hardware comparison sees the complete word; the vendor image holds nonzero values here in PAON_DELAY and RXON_DELAY."]
-            #[inline(always)]
-            pub fn bits_17_30_opaque(&self) -> Bits17_30OpaqueR {
-                Bits17_30OpaqueR::new(((self.bits >> 17) & 0x3fff) as u16)
             }
             #[doc = "Bit 31 - Raise the DC-DC converter for transmission."]
             #[inline(always)]

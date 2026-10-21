@@ -87,6 +87,102 @@ width = 32
     }
 }
 
+fn reserved_fixture(annotation: &str) -> String {
+    GEOMETRY
+        .split("[[peripherals.registers.register.fields]]\nname = \"BITS_1_31_OPAQUE\"")
+        .next()
+        .unwrap()
+        .replace("size = 32", &format!("size = 32\nreserved = {annotation}"))
+}
+
+#[test]
+fn cited_reserved_masks_roundtrip_expand_arrays_and_publish_no_fields() {
+    let text = reserved_fixture("{ mask = 0xfffffffe, sources = [\"vendor-header\"] }");
+    let fragment: RegisterModelFragment = toml_edit::de::from_str(&text).unwrap();
+    let roundtrip = toml_edit::ser::to_string_pretty(&fragment).unwrap();
+    let model = load(&[&roundtrip], false).unwrap();
+    let geometry = model.register_geometry().unwrap();
+    assert_eq!(geometry.len(), 2);
+    for register in geometry {
+        let reserved = register.reserved.unwrap();
+        assert_eq!(reserved.mask, 0xfffffffe);
+        assert_eq!(reserved.sources, ["vendor-header"]);
+        assert_eq!(register.fields.len(), 1);
+        assert_eq!(register.fields[0].name, "ENABLE");
+    }
+    let (svd, summary) = model.render_svd().unwrap();
+    assert!(!svd.contains("reserved"));
+    assert!(!svd.contains("BITS_1_31_OPAQUE"));
+    assert!(
+        summary
+            .projection_omissions
+            .iter()
+            .any(|line| line.contains("2 cited reserved masks"))
+    );
+    assert_eq!(
+        model.reserved_sources().collect::<Vec<_>>(),
+        ["vendor-header", "vendor-header"]
+    );
+}
+
+#[test]
+fn reserved_masks_reject_overlap_outside_width_and_missing_or_duplicate_sources() {
+    for annotation in [
+        "{ mask = 1, sources = [\"header\"] }",
+        "{ mask = 0x100000000, sources = [\"header\"] }",
+        "{ mask = 0, sources = [\"header\"] }",
+        "{ mask = 2, sources = [] }",
+        "{ mask = 2, sources = [\"header\", \"header\"] }",
+        "{ mask = 2, sources = [\"\"] }",
+        "{ mask = 2, sources = [\"header\"], guessed = true }",
+    ] {
+        assert!(
+            load(&[&reserved_fixture(annotation)], false).is_err(),
+            "accepted {annotation}"
+        );
+    }
+}
+
+#[test]
+fn wide_reserved_masks_keep_high_bits_through_native_roundtrip() {
+    let text = reserved_fixture(
+        "{ mask = \"0xfffffffffffffffffffffffffffffffe\", sources = [\"header\"] }",
+    )
+    .replace("size = 32", "size = 128")
+    .replace("dimIncrement = 4", "dimIncrement = 16");
+    let fragment: RegisterModelFragment = toml_edit::de::from_str(&text).unwrap();
+    let text = toml_edit::ser::to_string_pretty(&fragment).unwrap();
+    let model = load(&[&text], false).unwrap();
+    assert!(
+        model
+            .register_geometry()
+            .unwrap()
+            .iter()
+            .all(|register| register.reserved.as_ref().unwrap().mask == u128::MAX - 1)
+    );
+}
+
+#[test]
+fn reserved_annotations_on_peripherals_or_fields_are_not_silently_discarded() {
+    for text in [
+        GEOMETRY.replace(
+            "baseAddress = 0x1000",
+            "baseAddress = 0x1000\nreserved = { mask = 2, sources = [\"header\"] }",
+        ),
+        GEOMETRY.replace(
+            "bitOffset = 0",
+            "reserved = { mask = 2, sources = [\"header\"] }\nbitOffset = 0",
+        ),
+    ] {
+        assert!(
+            load(&[&text], false)
+                .unwrap_err()
+                .to_string()
+                .contains("reserved is a register property")
+        );
+    }
+}
+
 fn compact() -> String {
     GEOMETRY.to_owned() + DEFAULTS
 }

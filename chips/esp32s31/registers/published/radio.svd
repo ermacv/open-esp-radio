@@ -26174,13 +26174,6 @@ Bluetooth or assign a wider ZBBB protocol meaning.</description>
                 </range>
               </writeConstraint>
             </field>
-            <field>
-              <name>BITS_10_31_OPAQUE</name>
-              <description>Opaque: meaning not established. Bits the vendor declares reserved (reserved10), read so a hardware comparison sees the complete word; the vendor image holds nonzero values here in PAON_DELAY and RXON_DELAY.</description>
-              <bitOffset>10</bitOffset>
-              <bitWidth>22</bitWidth>
-              <access>read-only</access>
-            </field>
           </fields>
         </register>
         <register>
@@ -26201,13 +26194,6 @@ Bluetooth or assign a wider ZBBB protocol meaning.</description>
                   <maximum>63</maximum>
                 </range>
               </writeConstraint>
-            </field>
-            <field>
-              <name>BITS_6_31_OPAQUE</name>
-              <description>Opaque: meaning not established. Bits the vendor declares reserved (reserved6), read so a hardware comparison sees the complete word; the vendor image holds nonzero values here in PAON_DELAY and RXON_DELAY.</description>
-              <bitOffset>6</bitOffset>
-              <bitWidth>26</bitWidth>
-              <access>read-only</access>
             </field>
           </fields>
         </register>
@@ -26230,13 +26216,6 @@ Bluetooth or assign a wider ZBBB protocol meaning.</description>
                 </range>
               </writeConstraint>
             </field>
-            <field>
-              <name>BITS_11_31_OPAQUE</name>
-              <description>Opaque: meaning not established. Bits the vendor declares reserved (reserved11), read so a hardware comparison sees the complete word; the vendor image holds nonzero values here in PAON_DELAY and RXON_DELAY.</description>
-              <bitOffset>11</bitOffset>
-              <bitWidth>21</bitWidth>
-              <access>read-only</access>
-            </field>
           </fields>
         </register>
         <register>
@@ -26257,13 +26236,6 @@ Bluetooth or assign a wider ZBBB protocol meaning.</description>
                   <maximum>1023</maximum>
                 </range>
               </writeConstraint>
-            </field>
-            <field>
-              <name>BITS_10_31_OPAQUE</name>
-              <description>Opaque: meaning not established. Bits the vendor declares reserved (reserved10), read so a hardware comparison sees the complete word; the vendor image holds nonzero values here in PAON_DELAY and RXON_DELAY.</description>
-              <bitOffset>10</bitOffset>
-              <bitWidth>22</bitWidth>
-              <access>read-only</access>
             </field>
           </fields>
         </register>
@@ -26745,13 +26717,6 @@ Bluetooth or assign a wider ZBBB protocol meaning.</description>
               <bitOffset>0</bitOffset>
               <bitWidth>10</bitWidth>
             </field>
-            <field>
-              <name>BITS_10_31_OPAQUE</name>
-              <description>Opaque: meaning not established. Bits the vendor declares reserved (reserved10), read so a hardware comparison sees the complete word; the vendor image holds nonzero values here in PAON_DELAY and RXON_DELAY.</description>
-              <bitOffset>10</bitOffset>
-              <bitWidth>22</bitWidth>
-              <access>read-only</access>
-            </field>
           </fields>
         </register>
         <register>
@@ -26767,13 +26732,6 @@ Bluetooth or assign a wider ZBBB protocol meaning.</description>
               <bitOffset>0</bitOffset>
               <bitWidth>6</bitWidth>
             </field>
-            <field>
-              <name>BITS_6_31_OPAQUE</name>
-              <description>Opaque: meaning not established. Bits the vendor declares reserved (reserved6), read so a hardware comparison sees the complete word; the vendor image holds nonzero values here in PAON_DELAY and RXON_DELAY.</description>
-              <bitOffset>6</bitOffset>
-              <bitWidth>26</bitWidth>
-              <access>read-only</access>
-            </field>
           </fields>
         </register>
         <register>
@@ -26788,13 +26746,6 @@ Bluetooth or assign a wider ZBBB protocol meaning.</description>
               <description>Six-bit continuous-receive delay.</description>
               <bitOffset>0</bitOffset>
               <bitWidth>6</bitWidth>
-            </field>
-            <field>
-              <name>BITS_6_31_OPAQUE</name>
-              <description>Opaque: meaning not established. Bits the vendor declares reserved (uint32_t cont_rx_delay), read so a hardware comparison sees the complete word; the vendor image holds nonzero values here in PAON_DELAY and RXON_DELAY.</description>
-              <bitOffset>6</bitOffset>
-              <bitWidth>26</bitWidth>
-              <access>read-only</access>
             </field>
           </fields>
         </register>
@@ -26828,13 +26779,6 @@ Bluetooth or assign a wider ZBBB protocol meaning.</description>
               <description>Raise the DC-DC converter for transmission.</description>
               <bitOffset>31</bitOffset>
               <bitWidth>1</bitWidth>
-            </field>
-            <field>
-              <name>BITS_17_30_OPAQUE</name>
-              <description>Opaque: meaning not established. Bits the vendor declares reserved (reserved17), read so a hardware comparison sees the complete word; the vendor image holds nonzero values here in PAON_DELAY and RXON_DELAY.</description>
-              <bitOffset>17</bitOffset>
-              <bitWidth>14</bitWidth>
-              <access>read-only</access>
             </field>
           </fields>
         </register>

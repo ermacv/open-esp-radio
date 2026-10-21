@@ -1468,8 +1468,8 @@ impl Ieee802154RegisterLease<'_> {
 /// The MAC power-sequencing words from `PAON_DELAY` to `DCDC_CTRL`: the
 /// power-amplifier-on, transmit-on, transmit-enable stop, transmit-off,
 /// receive-on, transmit/receive switch and continuous-receive delays and the
-/// MAC's control of the DC-DC converter around transmission, with the
-/// vendor-reserved remainder of each word.
+/// MAC's control of the DC-DC converter around transmission. Reserved and
+/// absent bits are not exposed.
 ///
 /// The public driver writes only the transmit-on, transmit-off, receive-on
 /// and switch delays (`ieee802154_txon_delay_set`); no pinned vendor code
@@ -1488,7 +1488,6 @@ pub struct Ieee802154PowerSequence {
     dcdc_drop_delay: u8,
     dcdc_control_enabled: bool,
     dcdc_raise_for_tx: bool,
-    vendor_reserved: [u32; 8],
 }
 
 impl Ieee802154PowerSequence {
@@ -1505,7 +1504,6 @@ impl Ieee802154PowerSequence {
             dcdc_drop_delay: raw.dcdc_down_delay,
             dcdc_control_enabled: raw.dcdc_ctrl_enabled,
             dcdc_raise_for_tx: raw.tx_dcdc_up,
-            vendor_reserved: raw.reserved,
         }
     }
 
@@ -1562,13 +1560,6 @@ impl Ieee802154PowerSequence {
     /// `DCDC_CTRL.TX_DCDC_UP`: raise the DC-DC converter for transmission.
     pub const fn dcdc_raise_for_tx(self) -> bool {
         self.dcdc_raise_for_tx
-    }
-
-    /// The vendor-reserved remainder of each word, from `PAON_DELAY` to
-    /// `DCDC_CTRL` in address order, as the opaque fields read them: bits
-    /// 10..31, 10..31, 6..31, 6..31, 11..31, 10..31, 6..31 and 17..30.
-    pub const fn vendor_reserved_bits(self) -> [u32; 8] {
-        self.vendor_reserved
     }
 }
 

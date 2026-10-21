@@ -1210,6 +1210,7 @@ name = "TXON_DELAY"
 description = "Transmit-on delay written by the pinned ESP32-S31 IEEE 802.15.4 MAC initializer. The literal value 45 is reviewed; Physical units remain outside the PAC."
 addressOffset = 0x104
 size = 32
+reserved = { mask = 0xfffffc00, sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"] }
 access = "read-write"
 
 [[peripherals.registers.register.fields]]
@@ -1222,13 +1223,6 @@ bitWidth = 10
 minimum = 0
 maximum = 0x3ff
 
-[[peripherals.registers.register.fields]]
-name = "BITS_10_31_OPAQUE"
-description = "Bits the vendor declares reserved (reserved10), read so a hardware comparison sees the complete word; the vendor image holds nonzero values here in PAON_DELAY and RXON_DELAY."
-bitOffset = 10
-bitWidth = 22
-access = "read-only"
-
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -1236,6 +1230,7 @@ name = "TXOFF_DELAY"
 description = "Transmit-off delay written by the pinned ESP32-S31 IEEE 802.15.4 MAC initializer. The literal value 5 is reviewed; Physical units remain outside the PAC."
 addressOffset = 0x10c
 size = 32
+reserved = { mask = 0xffffffc0, sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"] }
 access = "read-write"
 
 [[peripherals.registers.register.fields]]
@@ -1248,13 +1243,6 @@ bitWidth = 6
 minimum = 0
 maximum = 0x3f
 
-[[peripherals.registers.register.fields]]
-name = "BITS_6_31_OPAQUE"
-description = "Bits the vendor declares reserved (reserved6), read so a hardware comparison sees the complete word; the vendor image holds nonzero values here in PAON_DELAY and RXON_DELAY."
-bitOffset = 6
-bitWidth = 26
-access = "read-only"
-
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -1262,6 +1250,7 @@ name = "RXON_DELAY"
 description = "Receive-on delay written by the pinned ESP32-S31 IEEE 802.15.4 MAC initializer. The literal value 50 is reviewed; Physical units remain outside the PAC."
 addressOffset = 0x110
 size = 32
+reserved = { mask = 0xfffff800, sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"] }
 access = "read-write"
 
 [[peripherals.registers.register.fields]]
@@ -1274,13 +1263,6 @@ bitWidth = 11
 minimum = 0
 maximum = 0x7ff
 
-[[peripherals.registers.register.fields]]
-name = "BITS_11_31_OPAQUE"
-description = "Bits the vendor declares reserved (reserved11), read so a hardware comparison sees the complete word; the vendor image holds nonzero values here in PAON_DELAY and RXON_DELAY."
-bitOffset = 11
-bitWidth = 21
-access = "read-only"
-
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -1288,6 +1270,7 @@ name = "TXRX_SWITCH_DELAY"
 description = "Transmit/receive turnaround delay written by the pinned ESP32-S31 IEEE 802.15.4 MAC initializer. The literal value 117 is reviewed; Physical units remain outside the PAC."
 addressOffset = 0x114
 size = 32
+reserved = { mask = 0xfffffc00, sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"] }
 access = "read-write"
 
 [[peripherals.registers.register.fields]]
@@ -1299,13 +1282,6 @@ bitWidth = 10
 [peripherals.registers.register.fields.writeConstraint.range]
 minimum = 0
 maximum = 0x3ff
-
-[[peripherals.registers.register.fields]]
-name = "BITS_10_31_OPAQUE"
-description = "Bits the vendor declares reserved (reserved10), read so a hardware comparison sees the complete word; the vendor image holds nonzero values here in PAON_DELAY and RXON_DELAY."
-bitOffset = 10
-bitWidth = 22
-access = "read-only"
 
 [[peripherals.registers]]
 
@@ -1721,6 +1697,7 @@ name = "PAON_DELAY"
 description = "Power-amplifier-on delay. The pinned public driver and LL never write it; the reset value applies unless another owner does. Physical units remain outside the PAC."
 addressOffset = 0x100
 size = 32
+reserved = { mask = 0xfffffc00, sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"] }
 access = "read-write"
 
 [[peripherals.registers.register.fields]]
@@ -1729,13 +1706,6 @@ description = "Ten-bit power-amplifier-on delay."
 bitOffset = 0
 bitWidth = 10
 
-[[peripherals.registers.register.fields]]
-name = "BITS_10_31_OPAQUE"
-description = "Bits the vendor declares reserved (reserved10), read so a hardware comparison sees the complete word; the vendor image holds nonzero values here in PAON_DELAY and RXON_DELAY."
-bitOffset = 10
-bitWidth = 22
-access = "read-only"
-
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -1743,6 +1713,7 @@ name = "TXEN_STOP_DELAY"
 description = "Transmit-enable stop delay. The pinned public driver and LL never write it; physical units remain outside the PAC."
 addressOffset = 0x108
 size = 32
+reserved = { mask = 0xffffffc0, sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"] }
 access = "read-write"
 
 [[peripherals.registers.register.fields]]
@@ -1750,13 +1721,6 @@ name = "TXEN_STOP_DLY"
 description = "Six-bit transmit-enable stop delay."
 bitOffset = 0
 bitWidth = 6
-
-[[peripherals.registers.register.fields]]
-name = "BITS_6_31_OPAQUE"
-description = "Bits the vendor declares reserved (reserved6), read so a hardware comparison sees the complete word; the vendor image holds nonzero values here in PAON_DELAY and RXON_DELAY."
-bitOffset = 6
-bitWidth = 26
-access = "read-only"
 
 [[peripherals.registers]]
 
@@ -1773,13 +1737,6 @@ description = "Six-bit continuous-receive delay."
 bitOffset = 0
 bitWidth = 6
 
-[[peripherals.registers.register.fields]]
-name = "BITS_6_31_OPAQUE"
-description = "Bits the vendor declares reserved (uint32_t cont_rx_delay), read so a hardware comparison sees the complete word; the vendor image holds nonzero values here in PAON_DELAY and RXON_DELAY."
-bitOffset = 6
-bitWidth = 26
-access = "read-only"
-
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -1787,6 +1744,7 @@ name = "DCDC_CTRL"
 description = "MAC control of the DC-DC converter around transmission. The pinned public driver and LL never write it; physical units of the delays remain outside the PAC."
 addressOffset = 0x11c
 size = 32
+reserved = { mask = 0x7ffe0000, sources = ["ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"] }
 access = "read-write"
 
 [[peripherals.registers.register.fields]]
@@ -1813,13 +1771,6 @@ description = "Raise the DC-DC converter for transmission."
 bitOffset = 31
 bitWidth = 1
 
-[[peripherals.registers.register.fields]]
-name = "BITS_17_30_OPAQUE"
-description = "Bits the vendor declares reserved (reserved17), read so a hardware comparison sees the complete word; the vendor image holds nonzero values here in PAON_DELAY and RXON_DELAY."
-bitOffset = 17
-bitWidth = 14
-access = "read-only"
-
 [[peripheral-review]]
 entity = "IEEE802154_MAC"
 opaque-entities = [
@@ -1833,14 +1784,6 @@ opaque-entities = [
     "IEEE802154_MAC.TX_ABORT_ENABLE.BITS_9_14_OPAQUE",
     "IEEE802154_MAC.TX_ABORT_ENABLE.BITS_19_22_OPAQUE",
     "IEEE802154_MAC.TX_ABORT_ENABLE.BITS_25_30_OPAQUE",
-    "IEEE802154_MAC.PAON_DELAY.BITS_10_31_OPAQUE",
-    "IEEE802154_MAC.TXON_DELAY.BITS_10_31_OPAQUE",
-    "IEEE802154_MAC.TXEN_STOP_DELAY.BITS_6_31_OPAQUE",
-    "IEEE802154_MAC.TXOFF_DELAY.BITS_6_31_OPAQUE",
-    "IEEE802154_MAC.RXON_DELAY.BITS_11_31_OPAQUE",
-    "IEEE802154_MAC.TXRX_SWITCH_DELAY.BITS_10_31_OPAQUE",
-    "IEEE802154_MAC.CONT_RX_DELAY.BITS_6_31_OPAQUE",
-    "IEEE802154_MAC.DCDC_CTRL.BITS_17_30_OPAQUE",
 ]
 
 [peripheral-review.peripheral]

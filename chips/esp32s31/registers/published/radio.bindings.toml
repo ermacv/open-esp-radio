@@ -10863,13 +10863,6 @@ bit-offset = 0
 bit-width = 10
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_10_31_OPAQUE"
-method = "bits_10_31_opaque"
-bit-offset = 10
-bit-width = 22
-access = "read-only"
-
 [[registers]]
 address = 537932036
 width = 32
@@ -10887,13 +10880,6 @@ method = "txon_delay"
 bit-offset = 0
 bit-width = 10
 access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_10_31_OPAQUE"
-method = "bits_10_31_opaque"
-bit-offset = 10
-bit-width = 22
-access = "read-only"
 
 [[registers]]
 address = 537932040
@@ -10913,13 +10899,6 @@ bit-offset = 0
 bit-width = 6
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_6_31_OPAQUE"
-method = "bits_6_31_opaque"
-bit-offset = 6
-bit-width = 26
-access = "read-only"
-
 [[registers]]
 address = 537932044
 width = 32
@@ -10937,13 +10916,6 @@ method = "txoff_delay"
 bit-offset = 0
 bit-width = 6
 access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_6_31_OPAQUE"
-method = "bits_6_31_opaque"
-bit-offset = 6
-bit-width = 26
-access = "read-only"
 
 [[registers]]
 address = 537932048
@@ -10963,13 +10935,6 @@ bit-offset = 0
 bit-width = 11
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_11_31_OPAQUE"
-method = "bits_11_31_opaque"
-bit-offset = 11
-bit-width = 21
-access = "read-only"
-
 [[registers]]
 address = 537932052
 width = 32
@@ -10988,13 +10953,6 @@ bit-offset = 0
 bit-width = 10
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BITS_10_31_OPAQUE"
-method = "bits_10_31_opaque"
-bit-offset = 10
-bit-width = 22
-access = "read-only"
-
 [[registers]]
 address = 537932056
 width = 32
@@ -11012,13 +10970,6 @@ method = "cont_rx_delay"
 bit-offset = 0
 bit-width = 6
 access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_6_31_OPAQUE"
-method = "bits_6_31_opaque"
-bit-offset = 6
-bit-width = 26
-access = "read-only"
 
 [[registers]]
 address = 537932060
@@ -11051,13 +11002,6 @@ method = "dcdc_ctrl_en"
 bit-offset = 16
 bit-width = 1
 access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_17_30_OPAQUE"
-method = "bits_17_30_opaque"
-bit-offset = 17
-bit-width = 14
-access = "read-only"
 
 [[registers.fields]]
 svd-name = "TX_DCDC_UP"

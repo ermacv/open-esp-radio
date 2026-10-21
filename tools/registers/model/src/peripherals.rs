@@ -15,7 +15,7 @@ use crate::{
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub(crate) struct FragmentSource {
     schema: u32,
-    peripherals: Vec<Peripheral>,
+    peripherals: Vec<toml::Value>,
     #[serde(default)]
     review: Vec<ReviewAnnotation>,
     #[serde(default)]
@@ -43,15 +43,13 @@ impl TryFrom<FragmentSource> for RegisterModelFragment {
     type Error = Error;
 
     fn try_from(source: FragmentSource) -> Result<Self> {
-        let review = resolve(
-            &source.peripherals,
-            source.review,
-            &source.peripheral_review,
-        )?;
+        let (peripherals, reserved) = crate::reserved::extract(source.peripherals)?;
+        let review = resolve(&peripherals, source.review, &source.peripheral_review)?;
         Ok(Self {
             schema: source.schema,
-            peripherals: source.peripherals,
+            peripherals,
             review,
+            reserved,
         })
     }
 }

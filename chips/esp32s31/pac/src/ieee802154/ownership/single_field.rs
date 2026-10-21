@@ -20,8 +20,7 @@ pub struct RawRxStatus {
 }
 
 /// The MAC power-sequencing words from `PAON_DELAY` to `DCDC_CTRL`, field by
-/// field; `reserved` holds each word's vendor-reserved remainder in address
-/// order.
+/// field. Reserved and absent tails have no field accessor.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RawPowerSequence {
     pub paon_delay: u16,
@@ -35,7 +34,6 @@ pub struct RawPowerSequence {
     pub dcdc_down_delay: u8,
     pub dcdc_ctrl_enabled: bool,
     pub tx_dcdc_up: bool,
-    pub reserved: [u32; 8],
 }
 
 /// Complete `TX_STATUS` observation (`ieee802154_ll_get_tx_status`).
@@ -375,16 +373,6 @@ impl TaskRegisters {
             dcdc_down_delay: dcdc.dcdc_down_delay().bits(),
             dcdc_ctrl_enabled: dcdc.dcdc_ctrl_en().bit_is_set(),
             tx_dcdc_up: dcdc.tx_dcdc_up().bit_is_set(),
-            reserved: [
-                paon.bits_10_31_opaque().bits(),
-                txon.bits_10_31_opaque().bits(),
-                txen_stop.bits_6_31_opaque().bits(),
-                txoff.bits_6_31_opaque().bits(),
-                rxon.bits_11_31_opaque().bits(),
-                txrx_switch.bits_10_31_opaque().bits(),
-                cont_rx.bits_6_31_opaque().bits(),
-                u32::from(dcdc.bits_17_30_opaque().bits()),
-            ],
         }
     }
 

@@ -75,11 +75,14 @@ bounds) live in the code that applies them.
   checked at run time; the handover protocol is the block's HAL engine. A
   field the CPU writes in one phase and the hardware in another lists its
   phases with their writers.
-- **Register bits.** A register or layout bit is described, opaque (a use
-  observed in a cited source, meaning unknown) or absent (no use observed, or
-  reserved). A use is a write of a non-reset value, an explicit masked set,
-  or a read whose value changes behaviour. Code preserves absent bits or
-  writes their reset value; vendor comparison rejects a use of an absent bit.
+- **Register bits.** A register or layout bit is described (named in an open
+  vendor source or otherwise cited), opaque (a use observed, meaning unknown,
+  cited), reserved (a cited source marks it reserved) or absent (no use
+  observed). Reserved and absent bits have no field; a register records its
+  reserved mask and source. A use is a write of a non-reset value, an explicit
+  masked set, or a read whose value changes behaviour. Code preserves reserved
+  and absent bits or writes their reset value; vendor comparison rejects a
+  use of either and reports which.
 - **`unsafe`** stays in the PAC, the placement constructor and the protocol
   core of the HAL; crates above the HAL forbid it.
 - **Probe hooks** compile under `cfg(oer_probe)`, which only `cargo fw probe`
