@@ -15,11 +15,11 @@ pub mod space;
 pub mod tx_ampdu_storage;
 pub mod tx_storage;
 
-/// Place one qualified RX hot-path item in executable internal RAM on S31.
+/// Place one qualified RX hot-path item in executable internal RAM for performance.
 ///
 /// Rust 2024 makes section placement an unsafe attribute because an arbitrary
 /// section can violate platform invariants. This chip leaf owns that invariant:
-/// the board linker maps `.rwtext.*` to aligned executable SRAM, and the macro
+/// the board linker maps `.hot.text.*` to aligned executable SRAM, and the macro
 /// is intentionally limited to code items rather than storage.
 #[macro_export]
 macro_rules! place_rx_hot_path {
@@ -27,7 +27,7 @@ macro_rules! place_rx_hot_path {
         $(#[$attribute])*
         #[cfg_attr(
             target_arch = "riscv32",
-            unsafe(link_section = ".rwtext.open_radio_rx_hot")
+            unsafe(link_section = ".hot.text.open_radio_rx_hot")
         )]
         $visibility fn $name $($body)*
     };
