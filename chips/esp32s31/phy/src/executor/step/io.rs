@@ -147,7 +147,9 @@ impl Io<'_, '_> {
         };
         let mut action = run.cursor.action();
         if let Action::Search(search::Action::DelayMicros(micros)) = action {
-            let remaining = settle_at.saturating_duration_since(clock.now()).as_micros();
+            let remaining = settle_at
+                .saturating_duration_since(super::rfpll::clock_now(clock))
+                .as_micros();
             if remaining > u64::from(micros) {
                 return Err(Failure::Binding);
             }
@@ -169,6 +171,9 @@ impl Io<'_, '_> {
         let sample;
         let completion = match action {
             Action::Search(search_action) => {
+                if matches!(search_action, search::Action::Complete(_)) {
+                    return Ok(Step::Complete);
+                }
                 if run.transaction.is_none() {
                     let request = match search_action {
                         search::Action::ReadInitialCap if run.phase == 0 => {
@@ -266,7 +271,7 @@ impl Io<'_, '_> {
                 } else {
                     Kind::Memory
                 };
-                let started = observed.then(|| clock.now());
+                let started = observed.then(|| super::rfpll::clock_now(clock));
                 let mut done = self.rfpll_memory(memory)?;
                 run.cursor.advance(Completion::Memory(done))?;
                 if matches!(memory, Memory::ReadMemory { .. }) {
@@ -278,14 +283,16 @@ impl Io<'_, '_> {
                     run.cursor.advance(Completion::Memory(done))?;
                 }
                 return Ok(Step::Rfpll(RfpllCommandSample::elapsed(
-                    kind, started, clock,
+                    kind,
+                    started,
+                    &super::rfpll::OutlinedClock(clock),
                 )));
             }
             Action::Complete(_) => return Ok(Step::Complete),
         };
         // The minimum starts only after all writes and their completion edges.
-        let written_at =
-            matches!(action, Action::Search(search::Action::WriteCap(_))).then(|| clock.now());
+        let written_at = matches!(action, Action::Search(search::Action::WriteCap(_)))
+            .then(|| super::rfpll::clock_now(clock));
         run.cursor.advance(completion)?;
         run.phase = 0;
         if let (Some(at), Action::Search(search::Action::DelayMicros(micros))) =

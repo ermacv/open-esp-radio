@@ -7,6 +7,20 @@ use crate::{
 };
 use oer_time::{Clock, Duration, Instant};
 
+/// Outline the platform clock conversion once without changing its identity,
+/// read count or time semantics in the direct observation loop.
+pub(super) struct OutlinedClock<'a, C: ?Sized>(pub(super) &'a C);
+#[inline(never)]
+pub(super) fn clock_now<C: Clock + ?Sized>(clock: &C) -> Instant {
+    clock.now()
+}
+impl<C: Clock + ?Sized> Clock for OutlinedClock<'_, C> {
+    #[inline(always)]
+    fn now(&self) -> Instant {
+        clock_now(self.0)
+    }
+}
+
 pub(crate) enum Cursor<'a> {
     #[cfg(any(test, oer_probe))]
     Search(&'a mut crate::tracking::rfpll::search::Search),
@@ -119,6 +133,7 @@ pub(super) fn direct_i2c<C: Clock + ?Sized>(
     command: Option<crate::tracking::observation::RfpllCommand>,
     observed: bool,
 ) -> Result<crate::tracking::observation::RfpllCommandSample, Failure> {
+    let clock = &OutlinedClock(clock);
     use crate::tracking::observation::{RfpllCommand, RfpllCommandSample};
     let kind = command.unwrap_or(RfpllCommand::InitialLow);
     let started = if observed {

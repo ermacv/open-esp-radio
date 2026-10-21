@@ -1113,6 +1113,43 @@ fn rfpll_busy_command_times_out_without_consuming_a_partial_helper() {
 }
 
 #[test]
+fn rfpll_standalone_search_returns_after_its_last_write() {
+    use crate::tracking::rfpll::search;
+    let clock = VirtualClock::<1>::new();
+    let mut io = Io {
+        rfpll_initial: 100,
+        ..Io::default()
+    };
+    let mut search = search::Search::new();
+    let (waker, _) = context();
+    let mut cx = Context::from_waker(&waker);
+    {
+        let mut job =
+            Job::rfpll(rfpll::Cursor::Search(&mut search), clock.now()).expect("deadline fits");
+        let mut driver = core::pin::pin!(drive::<TestDelay, _, _>(
+            &mut job, &mut io, &clock, None, None, None
+        ));
+        loop {
+            if let Poll::Ready(result) = driver.as_mut().poll(&mut cx) {
+                assert_eq!(result, Ok(()));
+                break;
+            }
+            clock
+                .advance(Duration::from_micros(500))
+                .expect("time fits");
+        }
+    }
+    assert!(matches!(search.action(), search::Action::Complete(_)));
+    assert_eq!(io.rfpll_samples, 60);
+    assert!(matches!(
+        io.rfpll_actions.last(),
+        Some(crate::tracking::rfpll::Action::Search(
+            search::Action::WriteCap(100)
+        ))
+    ));
+}
+
+#[test]
 fn rfpll_pending_failure_and_cancellation_keep_the_thermal_envelope_unrestored() {
     use crate::tracking::rfpll::{
         Action,
