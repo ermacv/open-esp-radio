@@ -58,6 +58,15 @@ own range widened by that margin; registers/analog bytes use their own vendor
 range widened by their own spread. Unreviewed fields and missing readable
 registers yield INCOMPLETE; values outside the reviewed spread yield DIFF.
 The existing signedness, masks and lifecycle-specific exclusions apply.
+The typed `initial-pair = "rx-dc-gain0"` review also accepts a later
+shared or Wi-Fi RX-DC gain pair when both codes equal gain0 of that same
+capture. Gain0 and Wi-Fi fine-calibration pairs retain the range rule.
+Each acceptance outside the vendor bounds appears under the field's
+`initial-pairs`, with capture index, gain, pair and the reason
+`initial pair, vendor-faithful`. Summary schema 5 adds these rows;
+tolerance schema 3 adds the reviewed rule. The live and recorded comparisons
+use the same per-capture check, including when paired vendor boots are
+projected as the CONTROL subject. Reported bounds and margins remain measured.
 `excluded` skips only value comparison. Every vendor-readable register,
 including an excluded one, must be read in every production boot. A missing
 or unreadable production sample yields INCOMPLETE.
