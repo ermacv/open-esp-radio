@@ -89,8 +89,6 @@ enum Command {
 
 #[derive(Subcommand)]
 enum W3Command {
-    /// Apply the W3 router profile and verify it with the laptop AX211 station.
-    Laptop,
     /// Recompute a-d and f from a firmware console and router observations.
     Check {
         #[arg(long)]
@@ -127,9 +125,6 @@ fn main() -> ExitCode {
     let result = (|| -> oer_image_build::Result<ExitCode> {
         let root = command::root()?;
         match cli.command {
-            Command::W3 {
-                command: W3Command::Laptop,
-            } => return w3::laptop(&root),
             Command::W3 {
                 command:
                     W3Command::Check {

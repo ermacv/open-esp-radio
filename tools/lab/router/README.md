@@ -176,9 +176,7 @@ One process at a time drives the router: `cargo fw` holds an exclusive lock
 `$XDG_RUNTIME_DIR/open-esp-radio/routers/router-<hash of the target>.lock` for the whole
 `run w1` or `router`, and a second holder is refused, naming the first.
 
-## Stand notes
-
-### W3 open station
+## W3 open station
 
 `router::Profile::w3` also sets the selected AP's `encryption=none` and the
 radio's `ieee80211ax=0`. The channel is the stand's 2.4 GHz channel, with
@@ -194,10 +192,14 @@ router `ping` establish both 100-echo directions. A fresh hostapd disconnect
 event and the final station snapshot establish departure. Every process is
 owned by the command and remote observers have a 240-second limit.
 
-`cargo fw w3 laptop` holds exclusive air, router and physical-radio ownership
-and checks the same path with the laptop station and DHCP. Its temporary
-NetworkManager profile stays in memory. The strict firmware contract and
-offline checker are documented in [w3](../../../firmware/apps/w3/README.md).
+Callers hold router and exclusive air ownership for the complete run;
+laptop work also holds its physical-radio and fixture-software leases.
+The AX211 station belongs to the installed `linux-net` fixture, while
+NetworkManager's unmanaged rule remains enabled. The strict firmware
+contract and offline checker are documented in
+[w3](../../../firmware/apps/w3/README.md).
+
+## Stand notes
 
 Facts of the stand's Linux hosts, from stand use 2026-09 to 2026-10 (records
 outside this repository). `oer-lab-router` does not use them.

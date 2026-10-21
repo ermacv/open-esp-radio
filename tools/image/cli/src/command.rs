@@ -156,7 +156,7 @@ fn verdict(line: &str) -> Option<Verdict> {
 }
 
 /// `YYYYMMDDTHHMMSSZ` of `time`.
-pub(crate) fn timestamp(time: SystemTime) -> String {
+fn timestamp(time: SystemTime) -> String {
     let seconds = time
         .duration_since(SystemTime::UNIX_EPOCH)
         .map_or(0, |since| since.as_secs());

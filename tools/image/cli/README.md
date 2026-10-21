@@ -10,7 +10,6 @@ cargo fw flash <image> --board <id|MAC>
 cargo fw run <image> --board <id|MAC> [--timeout <duration>]
 cargo fw monitor --board <id|MAC>
 cargo fw router
-cargo fw w3 laptop
 cargo fw w3 check --console <console.txt> --observations <router.json>
 cargo fw boards
 cargo fw power-cycle --board <id|MAC>
@@ -18,11 +17,8 @@ cargo fw power-cycle --board <id|MAC>
 
 ## Build
 
-`w3 laptop` verifies the W3 open HT20 router profile and the host's
-association, DHCP, bidirectional 100-echo and departure observations with
-AX211, under exclusive air and physical-radio leases. It uses a temporary
-NetworkManager connection with DHCP. `w3 check` strictly parses the W3
-firmware report and recomputes gates a–d and f against decoded router
+`w3 check` strictly parses the W3 firmware report and recomputes gates
+a–d and f against decoded router
 evidence. See [the W3 contract](../../../firmware/apps/w3/README.md) for
 fields, prerequisites and exit codes.
 

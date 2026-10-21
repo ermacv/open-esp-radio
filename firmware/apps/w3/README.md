@@ -88,7 +88,6 @@ the existing `lower-mac-conformance` scenario, outside this report.
 
 ```sh
 cargo fw w3 check --console <console.txt> --observations <router.json>
-cargo fw w3 laptop
 ```
 
 `check` exits 0 for pass, 1 for an agreed gate failure and 3 for malformed
@@ -98,12 +97,12 @@ garbage are errors. Router evidence is schema 1 of
 `oer_lab_router::w3::Evidence`, with strict JSON fields. Its ICMP rows contain
 only numeric timestamps, IPv4 endpoints, echo kind, identifier and sequence.
 
-`laptop` exercises the host profile and observations with AX211 as the
-station. It holds the router, physical radio and exclusive air leases,
-uses a volatile open NetworkManager connection and DHCP, and saves decoded
-observations under `target/fw/runs/<run-id>-w3-ax211/`. It checks a–d and
-router-observed departure; device TX counters and IRQ stack are supplied
-only by the real firmware report. The laptop path requires Python's
-`dbus` module, NetworkManager network-control permission and an idle managed
-station interface. The temporary connection disappears on client exit;
-normal cleanup also restores the interface's previous managed setting.
+AX211 station verification uses the installed `linux-net` fixture through
+its launcher and finite sudo policy, under router, physical-radio and
+exclusive air ownership. NetworkManager's unmanaged rule stays enabled.
+The fixture must support open authentication, a station DHCP client with
+lease readback, and a bounded 100-echo ping workload with decoded counts.
+Schema 15 provides a WPA-PSK client with a static address or no address;
+it has no open-client, station DHCP or ping operation. It cannot execute
+the W3 station verification. See [fixture installation and
+ownership](../../../tools/hil/run/fixtures.md).

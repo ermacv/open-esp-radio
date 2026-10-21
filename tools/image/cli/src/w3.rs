@@ -5,9 +5,6 @@ use std::{collections::BTreeMap, io::Read as _, net::Ipv4Addr};
 
 use oer_lab_router::w3::{Evidence, Ping, echo_gate, usable_address};
 
-mod run;
-pub use run::laptop;
-
 type Result<T> = std::result::Result<T, String>;
 type Fields<'a> = BTreeMap<&'a str, &'a str>;
 
