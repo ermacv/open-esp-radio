@@ -22,10 +22,9 @@ process or recovery protocol.
 | `linking::propose_companions` | A `LinkRequest`, candidate companion executables and a linker | Companion symbols that close the request's unresolved names |
 | `linking::link` | A `LinkRequest`, the executables it names and a linker | `LinkedImage`: image manifest, ELF bytes and the linker's map |
 | `data::export` | A `DataRequest` and the executable holding its object | `DataExport`: exact selected bytes with per-span provenance |
-| `audit::audit_targets` | One final image and forbidden ranges | Streamed `TargetAuditRecord`s and a `TargetAuditSummary` |
 | `in_process::verify` | An `ExecutionRequest`, the executables of both implementations, selected contracts and projections | Records, verdict and completeness |
 
-The CLI exposes the target audit and register accesses; the other operations
+The CLI exposes register accesses; the other operations
 are library calls used by the vendor verification scenarios. JSON output is a
 serialization of the same typed results, not a second implementation.
 
@@ -59,15 +58,11 @@ returns has delivered a valid result; the result states its own coverage:
   object parsed without diagnostics;
 - an analyzed function reports control-flow and value-semantics coverage
   separately, and a blocked function or a gap is an outcome, not a failure;
-- a target audit reports `pass`, `fail` or `inconclusive`: `pass` covers
-  statically resolved transfers only, and unresolved indirect transfers are
-  counted separately;
 - a comparison reports `MATCH`, `DIFF` or `INCOMPLETE` under its explicit
   relation, with execution completeness beside it.
 
 Unknown structure stays explicit and never becomes a zero-byte observation.
-The CLI returns success for valid partial research; a failed or inconclusive
-audit returns failure.
+The CLI returns success for valid partial research.
 
 ## Resources and bounded computation
 

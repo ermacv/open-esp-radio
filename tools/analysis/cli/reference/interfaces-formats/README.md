@@ -11,9 +11,9 @@ Reference application owners, content identities, result assessment and native f
 | [domain](../../../blobray-domain/README.md) | Identities, records, limits and portable control/stream ports |
 | [artifacts](../../../blobray-artifacts/README.md) | ELF/AR inventory over borrowed captured bytes |
 | [verification](../../../blobray-verification/README.md) | Concrete observation comparison and verdicts |
-| [analysis](../../../blobray-analysis/README.md) | Target audit, code closure and register navigation over the shared function analysis |
+| [analysis](../../../blobray-analysis/README.md) | Code closure and register navigation over the shared function analysis |
 | [riscv](../../../blobray-riscv/README.md) | Concrete RV32 execution over the shared decoder and lifter |
-| [application](../../../blobray-application/README.md) | Operations over given executables: inventory, library analysis, linking, data, audit and in-process comparison |
+| [application](../../../blobray-application/README.md) | Operations over given executables: inventory, library analysis, linking, data and in-process comparison |
 | [linker](../../../blobray-linker/src/lib.rs) | Linux adapters of the external ELF linkers behind `LinkerHost` |
 | [cli](../../src/main.rs) | CLI rendering and host composition |
 
@@ -56,7 +56,6 @@ schema.
 
 | Document | Schema | Shape |
 | --- | --- | --- |
-| `audit-targets` | `TARGET_AUDIT_SCHEMA` 1 | `{schema, artifact, decoder, semantics, ranges, records, summary, verdict}` |
 | `register-accesses` | `REGISTER_ACCESSES_SCHEMA` 9 | `{schema, inputs, abi, call_returns, read_only, records, groups?, summary}`, records streamed; `groups` only with `--group-by`; a store observation carries `stored`, a load its typed bit classes in `reads` (`uses`, `unknown`, `preserved`, `unused`); a `call-argument` sink carries nullable `callee: {address, function, name}`; an unresolved observation carries its `indexed` progression when it has one; `summary` (its own `schema` 3) carries `partial_causes` and `indexed_addresses` |
 | `function-records` | `FUNCTION_RECORDS_SCHEMA` 9 | `{schema, inputs, abi, call_returns, read_only, functions, missing}`; an analyzed function carries every record of its analysis (a table dispatch as a `dispatch` record: `{offset, base, index, scale, displacement}`) and `jump_tables` it followed: tagged `table` with ordered `entries`/`first_case`, or `target-set` with `targets` and no index mapping |
 | `mmio-diff` | `MMIO_DIFF_SCHEMA` 4 | `{schema, old, new, abi, call_returns, read_only, ranges, functions, changes, uncertain, blocked, gaps}`, each gap `{input, object, reason}`; each uncertain function `{function, state, complete}`; each change `{function, state, complete, removed, added, unresolved}`, `state` the old and new build's `analyzed`, `blocked` or `absent`, an access `{location, operation, width?, mask?, stored?}`, a stored run `{low, width, source}` with `source` `constant` (`{value, symbol?: {name, offset}}`), `entry-register`, `load` or `unknown` |
@@ -79,8 +78,7 @@ under each, so the causes can sum to more than `partial`, and every partial
 function counts under at least one. The human summaries list the nonzero
 causes as `(by cause: …)`.
 
-Partial research exits 0. A failed or inconclusive audit exits nonzero with its
-document on stdout. Other failures print the error document and exit nonzero.
+Partial research exits 0. Failures print the error document and exit nonzero.
 Error codes are machine interfaces; descriptive prose is not a parsing key.
 
 ```console

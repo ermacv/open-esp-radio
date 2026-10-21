@@ -53,15 +53,12 @@ them from ordered candidate executables. See
 [linked images](../cli/reference/inventory-linking/README.md#synthetic-linked-images)
 and [ROM companions](../cli/reference/analysis/README.md#explicit-rom-companions).
 
-## Data and audit
+## Data export
 
 `data::export` resolves one exact object and borrows every selected range from
 one prepared object; it returns the bytes with per-span provenance and
-relocation counts and never applies a relocation. `audit::audit_targets`
-validates a final image's executable sections through the artifact owner and
-streams forbidden-target findings and coverage gaps with a summary. See
-[captured data](../cli/reference/registers-data/README.md#captured-data-tables-and-coefficients)
-and [target audit](../cli/reference/analysis/README.md#final-image-target-audit).
+relocation counts and never applies a relocation. See
+[captured data](../cli/reference/registers-data/README.md#captured-data-tables-and-coefficients).
 
 ## Concrete execution
 

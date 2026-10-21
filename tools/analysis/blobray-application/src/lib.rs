@@ -12,7 +12,6 @@ use oer_analysis_blobray_domain::*;
 use oer_analysis_riscv_model::*;
 use std::path::Path;
 
-pub mod audit;
 pub mod captured;
 mod code_coverage;
 mod command_bank;

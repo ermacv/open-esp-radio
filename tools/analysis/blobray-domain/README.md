@@ -24,8 +24,6 @@ and `ImageSegment`.
 [Data values](src/data.rs) identify exact captured ranges and their spans; file
 offsets and executable VMAs are distinct values. [Register accesses](src/registers.rs)
 are observations of analyzed functions, blocked functions and gaps.
-[Audit values](src/audit.rs) define forbidden target ranges, findings, the
-summary and `CheckVerdict`.
 
 Concrete execution values include exact targets, explicit scenarios, producer
 identities, observations and comparison evidence. `Executor` and `ExecutionMemory`

@@ -26,7 +26,6 @@ Real input needs your own identified vendor artifacts.
 | Check what a change does to the hardware | `blobray mmio-diff` | [MMIO difference between builds](cli/reference/registers-data/README.md#mmio-difference-between-builds) |
 | Recover tables and coefficients | `oer_analysis_blobray_application::data::export` | [Tables and coefficients](cli/reference/registers-data/README.md#captured-data-tables-and-coefficients) |
 | Link an image | `oer_analysis_blobray_application::linking::{link, propose_companions}` | [Linked images](cli/reference/inventory-linking/README.md#synthetic-linked-images), [ROM companions](cli/reference/analysis/README.md#explicit-rom-companions) |
-| Audit a final image | `blobray audit-targets` | [Target audit](cli/reference/analysis/README.md#final-image-target-audit) |
 | Execute and compare | `oer_analysis_blobray_application::in_process::verify` | [Execution and comparison](cli/reference/execution/README.md#concrete-execution-and-comparison), [effect contracts](cli/reference/comparison/README.md#reviewed-effect-comparison) |
 
 | Question | Required input | Inspect in the result | Next action |
@@ -107,7 +106,6 @@ subprocess mechanisms. The crate boundary test enforces that split.
 ```console
 cargo build --manifest-path tools/analysis/cli/Cargo.toml --profile blobray -p oer-tool-analysis-cli --bin blobray
 cargo blobray --format json register-accesses --input vendor=/path/to/lib.a --range 0x60000000:0x100000
-cargo blobray --format json audit-targets --artifact firmware.elf --forbid rom=0x40000000..0x40100000
 ```
 
 `--working-memory-mib`, `--timeout-secs` and `--max-work-units` bound each
