@@ -205,6 +205,14 @@ code every interrupt level reaches, a floating-point instruction fails (the
 handlers run with the FPU off); calls into the panic machinery and functions
 in cached memory (flash, PSRAM) are listed. It writes all of this, each
 hart's levels and their critical paths to `interrupt-stack.txt`.
+Each hart's exception bound (including its entry frame) plus the largest
+own function frame reached at any of its levels, including the exception
+and P2 tasks, must fit `IRQ_STACK_GUARD_BYTES` (1024 bytes). The debug trigger
+catches a write into the guard, not a change of `sp`: a function may lower
+`sp` by its whole frame before writing, or skip the guard with a larger frame.
+The report lists the exception bound, largest frame and function, and their sum
+for each hart. `Required::Product` rejects a guard violation;
+`Required::Diagnostic` warns, also naming any function whose frame is unknown.
 Its placement summary lines separate strict code in cached memory by hart/level
 from P2 task code in PSRAM and name the task roots. The task boundary comes from
 `TaskPolls`/`NoTasks` resolution facts through `Analysis::reached_cut`; each level

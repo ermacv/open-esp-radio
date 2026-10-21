@@ -142,6 +142,8 @@ bounds) live in the code that applies them.
   type. `cargo fw build` fails an app image, and so CI, when an interrupt stack
   has no proven bound, exceeds its budget or rests on an assumption other than
   the admitted ones; its analysis build is held to the same rule.
+  Each hart's exception path plus the largest frame on that hart fits the
+  interrupt stack's guard, so an overflow the guard catches is recorded.
 - **Staged boot.** Code and stacks run from PSRAM after the staged bootstrap.
 
 ## Hardware ownership
