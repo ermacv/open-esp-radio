@@ -142,6 +142,23 @@ pub async fn scanner(boot: Boot) {
     core::future::pending::<()>().await;
 }
 
+// Keep ownership-transfer temporaries out of the scanner's poll frame.
+#[inline(never)]
+fn retuned_tx(
+    tx: &mut Option<Tx>,
+    profile: PhyTxTargetPowerProfile,
+    limit: TxCeiling,
+    busy: &'static str,
+) -> Result<(), &'static str> {
+    let previous = tx
+        .take()
+        .expect("the scanner retains its transmitter between retunes");
+    let mut resources = previous.try_into_resources().map_err(|_| busy)?;
+    resources.power = CappedTxPowerProfile::new(profile, limit);
+    *tx = Some(OrdinaryTxOwner::new_legacy(resources));
+    Ok(())
+}
+
 fn ceiling(channel: oer_radio_regulatory::Permitted<WifiChannel>, config: W2Config) -> TxCeiling {
     channel.tx_ceiling(board::wifi_power_limits(
         i32::from(PhyConfig::production().highest_target_power_quarter_dbm()) * 25,
@@ -150,6 +167,7 @@ fn ceiling(channel: oer_radio_regulatory::Permitted<WifiChannel>, config: W2Conf
 }
 
 #[allow(clippy::too_many_arguments)]
+#[inline(never)]
 async fn run(
     mut cell: MembershipCell<Wifi>,
     wifi: WifiPartition,
@@ -223,7 +241,7 @@ async fn run(
     let dma = TxDmaStorage::pin::<ChipDma>(irq::TX_DMA.take().ok_or("tx-claimed")?)
         .map_err(|_| "tx-bind")?;
     let slot = irq::TX_SLOT.init(TxSlot::from_dma(dma));
-    let mut tx = OrdinaryTxOwner::new_legacy(WifiTxResources {
+    let mut tx = Some(OrdinaryTxOwner::new_legacy(WifiTxResources {
         slot: Pin::new(slot),
         policy: WifiTxRuntimePolicy::<
             oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile,
@@ -231,7 +249,7 @@ async fn run(
         power: CappedTxPowerProfile::new(profile, ceiling(initial, config)),
         entropy: Entropy(rng),
         timer: EmbassyClock,
-    });
+    }));
     let mut sequence = SequenceNumber::ZERO;
     let mut basic = None;
     session
@@ -259,9 +277,7 @@ async fn run(
         session
             .reattach(parts.interrupt_setup)
             .map_err(|_| "irq-reattach")?;
-        let mut resources = tx.try_into_resources().map_err(|_| "tx-active-on-retune")?;
-        resources.power = CappedTxPowerProfile::new(tuned.tx_power, limit);
-        tx = OrdinaryTxOwner::new_legacy(resources);
+        retuned_tx(&mut tx, tuned.tx_power, limit, "tx-active-on-retune")?;
         let priority = tuned.probe_priority;
         session
             .start(&mut registers, &CLOCK, &mut routes)
@@ -278,7 +294,8 @@ async fn run(
         report.visits[index].ceiling = limit.dbm();
         if channel.initiate() == Initiate::Allowed {
             begin_probe(
-                &mut tx,
+                tx.as_mut()
+                    .expect("the scanner retains its transmitter between retunes"),
                 &mut registers,
                 channel,
                 config,
@@ -298,7 +315,8 @@ async fn run(
         drive(
             &mut session,
             &mut registers,
-            &mut tx,
+            tx.as_mut()
+                .expect("the scanner retains its transmitter between retunes"),
             &mut receiver,
             &publisher,
             &mut routes,
@@ -311,7 +329,11 @@ async fn run(
             after(DWELL),
         )
         .await?;
-        if let Some(outcome) = tx.take_last_outcome() {
+        if let Some(outcome) = tx
+            .as_mut()
+            .expect("the scanner retains its transmitter between retunes")
+            .take_last_outcome()
+        {
             report.visits[index].success = outcome.is_success();
         }
     }
@@ -331,11 +353,7 @@ async fn run(
     session
         .reattach(parts.interrupt_setup)
         .map_err(|_| "irq-reattach-unicast")?;
-    let mut resources = tx
-        .try_into_resources()
-        .map_err(|_| "tx-active-before-unicast")?;
-    resources.power = CappedTxPowerProfile::new(tuned.tx_power, limit);
-    tx = OrdinaryTxOwner::new_legacy(resources);
+    retuned_tx(&mut tx, tuned.tx_power, limit, "tx-active-before-unicast")?;
     session
         .start(&mut registers, &CLOCK, &mut routes)
         .await
@@ -346,7 +364,8 @@ async fn run(
     report.unicast_sequence = sequence.get();
     report.unicast_ceiling = limit.dbm();
     begin_probe(
-        &mut tx,
+        tx.as_mut()
+            .expect("the scanner retains its transmitter between retunes"),
         &mut registers,
         initial,
         config,
@@ -363,7 +382,8 @@ async fn run(
     drive(
         &mut session,
         &mut registers,
-        &mut tx,
+        tx.as_mut()
+            .expect("the scanner retains its transmitter between retunes"),
         &mut receiver,
         &publisher,
         &mut routes,
@@ -376,7 +396,11 @@ async fn run(
         after(DWELL),
     )
     .await?;
-    if let Some(outcome) = tx.take_last_outcome() {
+    if let Some(outcome) = tx
+        .as_mut()
+        .expect("the scanner retains its transmitter between retunes")
+        .take_last_outcome()
+    {
         report.unicast_success = outcome.is_success();
         report.unicast_attempts = 1 + outcome.report().retries.total();
         report.unicast_raw = outcome.report().completion.map_or(255, |c| c.status());
