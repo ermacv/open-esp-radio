@@ -165,38 +165,47 @@ where
             enable_phy_clocks(radio, clocks).map_err(|error| {
                 ConcurrentPhyRegisterFailure::Rejected(ConcurrentPhyError::Clock(error))
             })?;
-            let (mut registers, phy) = radio.phy_hal_with_attachment();
-            match PhyDomain::register::<P, _, D, O>(
-                timer,
-                platform,
-                &mut registers,
-                config,
-                observer,
-            )
-            .await
-            {
-                Ok(registered) => {
-                    let (domain, calibration_cache, outcome, counters) = registered.into_parts();
-                    *phy.slot_mut() = Slot::Registered(domain);
-                    let registration = ConcurrentPhyRegistration {
-                        calibration_cache,
-                        outcome,
-                        counters,
-                    };
-                    match radio.disable_phy_modem_clocks(PhyClockModule::Calibration) {
-                        Ok(()) => Ok(registration),
-                        Err(error) => Err(ConcurrentPhyRegisterFailure::CalibrationClock {
-                            registration,
-                            error,
-                        }),
-                    }
-                }
-                Err(failure) => Err(ConcurrentPhyRegisterFailure::Failed {
-                    failure,
-                    clocks: release_phy_clocks(radio),
+            let registered = {
+                let (mut registers, _) = radio.phy_hal_with_attachment();
+                PhyDomain::register::<P, _, D, O>(timer, platform, &mut registers, config, observer)
+                    .await
+            };
+            finish_concurrent_registration(radio, registered)
+        },
+    }
+}
+
+// Keep the consumed terminal result out of the registration poll's stack.
+#[inline(never)]
+#[allow(
+    clippy::result_large_err,
+    reason = "failure retains the unique transition"
+)]
+fn finish_concurrent_registration<B: PlatformClockBackend>(
+    radio: &mut RadioDomain<B, ConcurrentPhy>,
+    registered: Result<super::domain::PhyDomainRegistered, super::domain::PhyDomainRegisterFailure>,
+) -> Result<ConcurrentPhyRegistration, ConcurrentPhyRegisterFailure> {
+    match registered {
+        Ok(registered) => {
+            let (domain, calibration_cache, outcome, counters) = registered.into_parts();
+            *radio.attachment_mut().slot_mut() = Slot::Registered(domain);
+            let registration = ConcurrentPhyRegistration {
+                calibration_cache,
+                outcome,
+                counters,
+            };
+            match radio.disable_phy_modem_clocks(PhyClockModule::Calibration) {
+                Ok(()) => Ok(registration),
+                Err(error) => Err(ConcurrentPhyRegisterFailure::CalibrationClock {
+                    registration,
+                    error,
                 }),
             }
-        },
+        }
+        Err(failure) => Err(ConcurrentPhyRegisterFailure::Failed {
+            failure,
+            clocks: release_phy_clocks(radio),
+        }),
     }
 }
 
