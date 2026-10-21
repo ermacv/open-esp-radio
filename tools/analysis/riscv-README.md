@@ -6,6 +6,11 @@ and the stack analyzer [`oer-analysis-riscv-stack`](riscv-stack/README.md), whic
 stacks of our firmware images. Both read ELF through [`oer-analysis-elf`](elf/README.md),
 whose `rv32` table is the one classification of RV32 relocations.
 
+The [question-owner map](blobray-docs/design/architecture.md#question-owners)
+records which module owns each analysis question and the current overlapping
+paths. New analyses extend that owner; duplicate implementations need a reason
+in the map.
+
 | Package | Owns |
 | --- | --- |
 | [`oer-analysis-riscv-model`](riscv-model/README.md) | Identities, errors, run control, working memory and the function-record vocabulary every layer shares |
