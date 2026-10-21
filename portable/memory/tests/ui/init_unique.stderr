@@ -1,0 +1,14 @@
+error[E0415]: identifier `first` is bound more than once in this parameter list
+ --> tests/ui/init_unique.rs:8:65
+  |
+8 |     return oer_memory::init_in_place!(storage, Pair { first: 1, first: 2, second: 3 }); // ui-error: E0415
+  |                                                                 ^^^^^ used as parameter more than once
+
+error[E0062]: field `first` specified more than once
+ --> tests/ui/init_unique.rs:8:65
+  |
+8 |     return oer_memory::init_in_place!(storage, Pair { first: 1, first: 2, second: 3 }); // ui-error: E0415
+  |            -----------------------------------------------------^^^^^-----------------
+  |            |                                                    |
+  |            |                                                    used more than once
+  |            first use of `first`

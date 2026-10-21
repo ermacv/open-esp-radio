@@ -240,7 +240,7 @@ fn run<F: Future<Output = ()>>(
 ) {
     let (end, cells) = claim_for_host_test();
     let lp = LpClock::<RcSlow>::for_host_test();
-    let actor = RadioSystem::new(end, model.clone(), clock, lp);
+    let mut actor = RadioSystem::new(end, model.clone(), clock, lp);
     match block_on(select(actor.run(), client(cells))) {
         Either::First(never) => match never {},
         Either::Second(()) => {}
@@ -280,6 +280,42 @@ const REGISTRATION: PhyPreparation = PhyPreparation::Registered {
 };
 
 const REGISTERED: Event = Event::Prepare(Ok(REGISTRATION));
+
+#[test]
+fn a_borrowed_run_keeps_membership_when_polled_again() {
+    let model = model(Script::default());
+    let (end, cells) = claim_for_host_test();
+    let lp = LpClock::<RcSlow>::for_host_test();
+    let mut actor = RadioSystem::new(end, model.clone(), clock(), lp);
+    let Either::Second((cell, joined)) = block_on(select(
+        actor.run(),
+        cells.wifi.join(WifiJoin { wifi: cold() }),
+    )) else {
+        panic!("the actor runs until the client completes")
+    };
+    let Ok(joined) = joined else {
+        panic!("a cold join registers")
+    };
+
+    // The completed select drops the first run future. The same actor
+    // must still own the member and close RF on its last leave.
+    let Either::Second((_cell, left)) = block_on(select(
+        actor.run(),
+        cell.leave(
+            Leaving::Untracked(joined.member),
+            WifiLeave {
+                wifi: joined.payload.wifi,
+            },
+        ),
+    )) else {
+        panic!("the actor runs until the client completes")
+    };
+    assert_eq!(left.domain, DomainHealth::Healthy);
+    assert_eq!(
+        model.log(),
+        vec![REGISTERED, Event::Enter, Event::Exit, Event::CloseRf]
+    );
+}
 
 #[test]
 fn join_track_and_leave_run_in_order_and_the_last_leave_closes_rf() {

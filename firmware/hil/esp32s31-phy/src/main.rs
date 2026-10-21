@@ -41,6 +41,7 @@ oer_espressif_staged_runtime::interrupt_table! {
 const LEVELS: LevelOrder<RadioAlarmToken, RadioToken, WakeToken> = LevelOrder::new();
 static EXECUTOR: StaticCell<Executor<0>> = StaticCell::new();
 static RADIO_EXECUTOR: StaticCell<InterruptExecutor<2>> = StaticCell::new();
+static RADIO: StaticCell<radio::Radio> = StaticCell::new();
 static DOORBELL: Doorbell = Doorbell::new();
 static SLOT: RequestSlot<Request, Answer> = RequestSlot::new(&DOORBELL, 1);
 
@@ -116,7 +117,8 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         hardware.split::<oer_espressif_esp_hal_radio::EspHal, _>(ConcurrentPhy::new());
     let mut rng = RngOwner::new(peripherals.RNG);
     let boot = (u64::from(rng.random()) << 32 | u64::from(rng.random())).max(1);
-    let radio = radio::Radio::new(
+    let radio = radio::Radio::place(
+        RADIO.uninit(),
         domain,
         partitions.wifi,
         partitions.wifi_coex,
@@ -226,7 +228,7 @@ async fn dispatch(mut poster: Poster<Request, Answer>) {
 }
 
 #[embassy_executor::task]
-async fn serve_radio(mut radio: radio::Radio) {
+async fn serve_radio(radio: &'static mut radio::Radio) {
     loop {
         if let Some(deadline) = radio.hold_deadline() {
             use core::future::Future;

@@ -1,0 +1,5 @@
+error[E0616]: field `value` of struct `Token` is private
+  --> tests/ui/init_private_fields.rs:16:9
+   |
+16 |         value: 1, // ui-error: E0616
+   |         ^^^^^ private field

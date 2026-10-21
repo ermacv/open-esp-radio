@@ -15,6 +15,11 @@
 //! [`RequestSlot`] carries one request at a time from a client to a server
 //! and its answer back, without a lock. [`retained`] holds records in memory
 //! that survives a reset, one holder at a time.
+//! [`init_in_place!`] initializes a complete struct directly in borrowed
+//! storage, cleaning up its initialized fields if construction stops early.
+
+#[doc(hidden)]
+pub extern crate core as __core;
 
 use core::marker::PhantomData;
 
@@ -22,6 +27,7 @@ mod affine_spsc;
 mod dma_bytes;
 mod handler_cell;
 mod indexed_custody;
+mod init_in_place;
 mod pinned_tx;
 mod request_slot;
 pub mod retained;
@@ -41,6 +47,8 @@ pub use affine_spsc::{
 pub use dma_bytes::DmaBytes;
 pub use handler_cell::{HandlerCell, Installed};
 pub use indexed_custody::{CustodyDomain, Drained, IndexedCustody, Quarantine, RetainedName};
+#[doc(hidden)]
+pub use init_in_place::__InitField;
 pub use pinned_tx::{
     DmaIndexReturn, IndexedStableDmaLease, PinnedDmaTxNetworkLease, PinnedDmaTxPool,
     PinnedDmaTxPoolHandle, PinnedDmaTxRadioLease, ReturningStableDmaBacking,

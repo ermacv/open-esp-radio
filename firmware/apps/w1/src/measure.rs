@@ -11,7 +11,7 @@
 
 use core::{
     future::{Future, poll_fn},
-    pin::pin,
+    pin::Pin,
     sync::atomic::{AtomicU8, AtomicU32, Ordering},
     task::Poll,
 };
@@ -173,20 +173,18 @@ pub fn raise(maxima: &'static [AtomicU32; 3], cycles: u32) {
 
 /// `future`, each poll's cycles recorded into `histograms` by phase; it is
 /// their one writer. `before` runs at the start of each poll.
-pub async fn timed<F: Future>(
-    future: F,
+pub fn timed<F: Future>(
+    mut future: Pin<&mut F>,
     histograms: &'static [CycleHistogram; 3],
     before: impl Fn(),
-) -> F::Output {
-    let mut future = pin!(future);
-    poll_fn(|cx| {
+) -> impl Future<Output = F::Output> {
+    poll_fn(move |cx| {
         before();
         let start = Mcycle.now();
         let poll = future.as_mut().poll(cx);
         record(histograms, Mcycle.now().wrapping_sub(start));
         poll
     })
-    .await
 }
 
 /// Take the MAC latch at a receive poll: the time since the MAC handler

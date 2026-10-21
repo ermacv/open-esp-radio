@@ -54,6 +54,8 @@ static REQUESTS: embassy_sync::channel::Channel<
     (RequestIdentity, Request),
     1,
 > = embassy_sync::channel::Channel::new();
+static ACTOR: StaticCell<Actor> = StaticCell::new();
+
 type Actor = RadioSystem<
     oer_esp32s31_radio_client::wifi::Wifi,
     RcSlow,
@@ -108,7 +110,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         NoopPhyTargetObserver,
         PhyRegisterConfig::new(identity),
     );
-    let actor = RadioSystem::new(end, backend, EmbassyClock, lp);
+    let actor = ACTOR.init_with(|| RadioSystem::new(end, backend, EmbassyClock, lp));
     oer_espressif_executor::init::<2, _>(peripherals.SYSTIMER, interrupts.radio_alarm);
     oer_espressif_executor::bind::<0, _>(interrupts.app_alarm);
     let bell = irq::ImageDoorbell::new(
@@ -152,7 +154,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         });
 }
 #[embassy_executor::task]
-async fn radio_actor(actor: Actor) {
+async fn radio_actor(actor: &'static mut Actor) {
     match actor.run().await {}
 }
 #[embassy_executor::task]

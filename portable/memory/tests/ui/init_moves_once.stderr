@@ -1,0 +1,28 @@
+error[E0382]: use of moved value: `first`
+  --> tests/ui/init_moves_once.rs:11:16
+   |
+ 7 | pub fn build(storage: &mut MaybeUninit<Pair>, first: Token, second: Token) -> &mut Pair {
+   |                                               ----- move occurs because `first` has type `Token`, which does not implement the `Copy` trait
+ 8 |     #[cfg(all())]
+ 9 |     let second = first;
+   |                  ----- value moved here
+10 |     oer_memory::init_in_place!(storage, Pair {
+11 |         first: first, // ui-error: E0382
+   |                ^^^^^ value used here after move
+   |
+note: if `Token` implemented `Clone`, you could clone the value
+  --> tests/ui/init_moves_once.rs:5:1
+   |
+ 5 | pub struct Token;
+   | ^^^^^^^^^^^^^^^^ consider implementing `Clone` for this type
+...
+ 9 |     let second = first;
+   |                  ----- you could clone this value
+
+warning: unused variable: `second`
+ --> tests/ui/init_moves_once.rs:7:61
+  |
+7 | pub fn build(storage: &mut MaybeUninit<Pair>, first: Token, second: Token) -> &mut Pair {
+  |                                                             ^^^^^^ help: if this is intentional, prefix it with an underscore: `_second`
+  |
+  = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default

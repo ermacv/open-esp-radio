@@ -145,6 +145,8 @@ const AFTER_RELEASE: Duration = Duration::from_millis(2_000);
 
 type Console = UsbSerialJtag<'static, Blocking>;
 type Held = HeldRxFrame<'static, 'static, SLOTS, BUFFER, crate::irq::RadioExecutor>;
+type Leases = heapless::Vec<(Held, Fingerprint), SLOTS>;
+type ReleaseSlots = [Option<(Held, Fingerprint)>; SLOTS];
 type Receiver = FrameReceiver<'static, SLOTS, BUFFER, crate::irq::RadioExecutor>;
 
 static EXECUTOR: StaticCell<Executor<0>> = StaticCell::new();
@@ -152,6 +154,14 @@ static RADIO_EXECUTOR: StaticCell<InterruptExecutor<2>> = StaticCell::new();
 static BOUND: StaticCell<AffineSpscQueue<Bound, 1>> = StaticCell::new();
 static TIMER_LINES: StaticCell<AffineSpscQueue<TimerLine, 2>> = StaticCell::new();
 static SURVEY: StaticCell<Survey<{ report::BSS }>> = StaticCell::new();
+static LAGS: StaticCell<report::LagLog> = StaticCell::new();
+static TSF: StaticCell<report::TsfLog> = StaticCell::new();
+static HOLD_CYCLES: StaticCell<[Cycle; CYCLES]> = StaticCell::new();
+static TIMERS: StaticCell<heapless::Vec<TimerLine, 4>> = StaticCell::new();
+static HOLD_LEASES: StaticCell<Leases> = StaticCell::new();
+static RELEASE_SLOTS: StaticCell<ReleaseSlots> = StaticCell::new();
+
+static ACTOR: StaticCell<Actor> = StaticCell::new();
 
 type Actor = RadioSystem<
     oer_esp32s31_radio_client::wifi::Wifi,
@@ -245,7 +255,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         NoopPhyTargetObserver,
         PhyRegisterConfig::new(identity),
     ));
-    let actor = RadioSystem::new(end, backend, EmbassyClock, lp);
+    let actor = ACTOR.init_with(|| RadioSystem::new(end, backend, EmbassyClock, lp));
 
     // The radio executor writes the system timer; the application executor
     // publishes its deadlines to it.
@@ -303,8 +313,8 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
 
 /// The radio system's actor, on the radio executor (P2), each poll timed.
 #[embassy_executor::task]
-async fn radio_actor(actor: Actor) {
-    match measure::timed(actor.run(), &measure::ACTOR, || {}).await {}
+async fn radio_actor(actor: &'static mut Actor) {
+    match measure::timed(core::pin::pin!(actor.run()), &measure::ACTOR, || {}).await {}
 }
 
 /// The run, on the application executor.
@@ -435,10 +445,11 @@ async fn hold_cycle(
     admitted: &mut u32,
     fill_ms: u32,
     cycle: &mut Cycle,
+    leases: &mut Leases,
+    slots: &mut ReleaseSlots,
 ) {
     let fill = Duration::from_millis(fill_ms);
     cycle.fill_ms = fill_ms;
-    let mut leases = heapless::Vec::<(Held, Fingerprint), SLOTS>::new();
     let fill_deadline = after(fill);
     // When the last lease was taken, and the units received then.
     let mut last_lease = (EmbassyClock.now(), counters.report().units);
@@ -468,7 +479,7 @@ async fn hold_cycle(
     }
     cycle.held = leases.len();
     let mut indices = heapless::Vec::<Option<usize>, SLOTS>::new();
-    for (_, print) in &leases {
+    for (_, print) in leases.iter() {
         let _full = indices.push(print.index);
     }
     let filled = counters.report();
@@ -479,7 +490,7 @@ async fn hold_cycle(
     let before = counters.report();
     measure::wait_until(measure::P1_COMPARATOR, after(HOLD)).await;
     cycle.hold = report::Hold::between(leases.len(), &before, &counters.report());
-    for (held, print) in &leases {
+    for (held, print) in leases.iter() {
         if print.changed(held.segment().buffer) {
             cycle.mismatch(Check::Hold, print.index);
         }
@@ -505,8 +516,7 @@ async fn hold_cycle(
     cycle.first_drop = ring
         .and_then(|ring| ring.first().copied())
         .and_then(|position| indices.get(position).copied().flatten());
-    let mut slots: [Option<(Held, Fingerprint)>; SLOTS] = [const { None }; SLOTS];
-    for (slot, lease) in slots.iter_mut().zip(leases) {
+    for (slot, lease) in slots.iter_mut().zip(leases.drain(..)) {
         *slot = Some(lease);
     }
     let released = counters.report();
@@ -682,12 +692,13 @@ async fn run(
     };
 
     let survey = SURVEY.init(Survey::new(stand));
-    let mut lags = report::LagLog::new();
-    let mut tsf = report::TsfLog::new();
+    let lags = LAGS.init(report::LagLog::new());
+    let tsf = TSF.init(report::TsfLog::new());
     let mut admitted = 0_u32;
     let mut window_us = 0;
-    let mut cycles: [Cycle; CYCLES] = core::array::from_fn(|cycle| Cycle::new(Order::of(cycle)));
-    let mut timers = heapless::Vec::<TimerLine, 4>::new();
+    let cycles =
+        HOLD_CYCLES.init_with(|| core::array::from_fn(|cycle| Cycle::new(Order::of(cycle))));
+    let timers = TIMERS.init(heapless::Vec::new());
     measure::enter(Phase::FirstFrame);
     let first = select(
         receiver.next(),
@@ -703,7 +714,7 @@ async fn run(
         take(
             &receiver,
             &held,
-            Some((&mut *survey, &mut lags, &mut tsf, stand)),
+            Some((&mut *survey, lags, tsf, stand)),
             rx_channel,
             &mut admitted,
         );
@@ -718,7 +729,7 @@ async fn run(
             take(
                 &receiver,
                 &held,
-                Some((&mut *survey, &mut lags, &mut tsf, stand)),
+                Some((&mut *survey, lags, tsf, stand)),
                 rx_channel,
                 &mut admitted,
             );
@@ -761,7 +772,9 @@ async fn run(
                 .find(|(record, _)| record.bssid == stand)
                 .map(|(record, _)| record.beacon_interval_tu),
         );
-        for cycle in &mut cycles {
+        let leases = HOLD_LEASES.init(heapless::Vec::new());
+        let slots = RELEASE_SLOTS.init([const { None }; SLOTS]);
+        for cycle in cycles.iter_mut() {
             hold_cycle(
                 &mut receiver,
                 counters,
@@ -771,6 +784,8 @@ async fn run(
                 &mut admitted,
                 fill_ms,
                 cycle,
+                leases,
+                slots,
             )
             .await;
         }
@@ -851,13 +866,13 @@ async fn run(
         rx,
         unserviced_mac: irq::UNSERVICED_MAC.load(core::sync::atomic::Ordering::Relaxed),
         unserviced_pwr: irq::UNSERVICED_PWR.load(core::sync::atomic::Ordering::Relaxed),
-        cycles: &cycles,
-        lags: &lags,
-        tsf: &tsf,
+        cycles,
+        lags,
+        tsf,
         admitted,
         exit,
         ticks: &ticks,
-        timers: &timers,
+        timers,
         irq_bytes: stacks::irq_stack_bytes(),
         irq_free,
     };
