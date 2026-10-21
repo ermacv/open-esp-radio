@@ -390,28 +390,32 @@ impl<'t, D, T> TargetCompleter<'t, D, T> {
 }
 
 impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
-    async fn complete_rfpll(
-        &self,
+    fn complete_rfpll<'a>(
+        &'a self,
         binding: RfpllFrequencyExternalBinding,
-        registers: &mut (impl SharedPhyAccess + crate::executor::step::Registers),
-    ) -> Result<RfpllFrequencyCompletion, PhyTargetPortError> {
-        match binding {
-            RfpllFrequencyExternalBinding::I2c(mut binding) => {
-                use crate::executor::step::{Job, drive};
-                {
-                    let mut job = Job::rfpll_cold_i2c(binding.transaction_mut(), self.timer.now())
-                        .map_err(step::port_error)?;
-                    drive::<D, _, _>(&mut job, registers, self.timer, None, None)
-                        .await
-                        .map_err(step::port_error)?;
+        registers: &'a mut (impl SharedPhyAccess + crate::executor::step::Registers),
+    ) -> impl core::future::Future<Output = Result<RfpllFrequencyCompletion, PhyTargetPortError>> + 'a
+    {
+        async move {
+            match binding {
+                RfpllFrequencyExternalBinding::I2c(mut binding) => {
+                    use crate::executor::step::{Job, drive};
+                    {
+                        let mut job =
+                            Job::rfpll_cold_i2c(binding.transaction_mut(), self.timer.now())
+                                .map_err(step::port_error)?;
+                        drive::<D, _, _>(&mut job, registers, self.timer, None, None)
+                            .await
+                            .map_err(step::port_error)?;
+                    }
+                    binding
+                        .into_completion()
+                        .map_err(|_| PhyTargetPortError::UnexpectedBinding)
                 }
-                binding
-                    .into_completion()
-                    .map_err(|_| PhyTargetPortError::UnexpectedBinding)
+                binding => registers
+                    .rfpll_atom::<D, _>(self.timer, binding)
+                    .map_err(step::port_error),
             }
-            binding => registers
-                .rfpll_atom::<D, _>(self.timer, binding)
-                .map_err(step::port_error),
         }
     }
 
@@ -1761,66 +1765,69 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
             .map_err(|_| PhyTargetPortError::UnexpectedBinding)
     }
 
-    async fn run_param_rfpll<O: PhyTargetObserver>(
-        &self,
-        mut child: PhyParamTrackingRfpllTransition<'_>,
-        registers: &mut (impl SharedPhyAccess + crate::executor::step::Registers),
-        grant: &mut impl PhyGrantProtectPort,
-        observer: &mut O,
-    ) -> Result<PhyParamTrackingCompletion, PhyTargetPortError> {
-        let request = child.request();
-        let mut timing = crate::tracking::observation::EngineTiming::default();
-        let sample_age_micros = O::OBSERVE_RFPLL_AGE
-            .then(|| self.timer.now().as_micros())
-            .and_then(|now| {
-                match child
-                    .state()
-                    .temperature_observation()
-                    .freshness(now, u64::MAX)
-                {
-                    crate::tracking::temperature::Freshness::Fresh { age_micros } => {
-                        Some(age_micros)
+    fn run_param_rfpll<'a, O: PhyTargetObserver>(
+        &'a self,
+        mut child: PhyParamTrackingRfpllTransition<'a>,
+        registers: &'a mut (impl SharedPhyAccess + crate::executor::step::Registers),
+        grant: &'a mut impl PhyGrantProtectPort,
+        observer: &'a mut O,
+    ) -> impl core::future::Future<Output = Result<PhyParamTrackingCompletion, PhyTargetPortError>> + 'a
+    {
+        async move {
+            let request = child.request();
+            let mut timing = crate::tracking::observation::EngineTiming::default();
+            let sample_age_micros = O::OBSERVE_RFPLL_AGE
+                .then(|| self.timer.now().as_micros())
+                .and_then(|now| {
+                    match child
+                        .state()
+                        .temperature_observation()
+                        .freshness(now, u64::MAX)
+                    {
+                        crate::tracking::temperature::Freshness::Fresh { age_micros } => {
+                            Some(age_micros)
+                        }
+                        _ => None,
                     }
-                    _ => None,
-                }
-            });
-        rfpll::envelope::<D>(child.transition_mut(), registers, grant, observer)?;
-        if let Some(correction) = child.transition_mut().correction_mut() {
-            {
-                use crate::executor::step::{Job, drive, rfpll::Cursor};
-                let mut job = Job::rfpll(Cursor::Correction(correction), self.timer.now())
-                    .map_err(step::port_error)?;
-                drive::<D, _, _>(
-                    &mut job,
-                    registers,
-                    self.timer,
-                    O::OBSERVE_ENGINE_POLLS.then_some(&mut timing),
-                    None,
-                )
-                .await
-                .map_err(step::port_error)?;
-            }
-            child
-                .transition_mut()
-                .finish_correction()
-                .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
+                });
             rfpll::envelope::<D>(child.transition_mut(), registers, grant, observer)?;
+            if let Some(correction) = child.transition_mut().correction_mut() {
+                {
+                    use crate::executor::step::{Job, drive, rfpll::Cursor};
+                    let mut job = Job::rfpll(Cursor::Correction(correction), self.timer.now())
+                        .map_err(step::port_error)?;
+                    drive::<D, _, _>(
+                        &mut job,
+                        registers,
+                        self.timer,
+                        O::OBSERVE_ENGINE_POLLS.then_some(&mut timing),
+                        None,
+                    )
+                    .await
+                    .map_err(step::port_error)?;
+                }
+                child
+                    .transition_mut()
+                    .finish_correction()
+                    .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
+                rfpll::envelope::<D>(child.transition_mut(), registers, grant, observer)?;
+            }
+            let crate::tracking::rfpll::thermal::Action::Complete(outcome) = child.action() else {
+                return Err(PhyTargetPortError::UnexpectedBinding);
+            };
+            let completion = child
+                .commit()
+                .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
+            observer.rfpll_completed(crate::tracking::rfpll::Observation {
+                request,
+                outcome,
+                sample_age_micros,
+            });
+            if O::OBSERVE_ENGINE_POLLS {
+                observer.engine_completed(crate::tracking::observation::Operation::Rfpll, timing);
+            }
+            Ok(completion)
         }
-        let crate::tracking::rfpll::thermal::Action::Complete(outcome) = child.action() else {
-            return Err(PhyTargetPortError::UnexpectedBinding);
-        };
-        let completion = child
-            .commit()
-            .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
-        observer.rfpll_completed(crate::tracking::rfpll::Observation {
-            request,
-            outcome,
-            sample_age_micros,
-        });
-        if O::OBSERVE_ENGINE_POLLS {
-            observer.engine_completed(crate::tracking::observation::Operation::Rfpll, timing);
-        }
-        Ok(completion)
     }
 
     async fn run_param_tx_power<P>(

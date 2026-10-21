@@ -223,6 +223,7 @@ pub async fn maintain<D: PhyShortDelay, C: oer_time::Timer>(
         .ok_or(PhyTargetPortError::UnexpectedBinding)
 }
 
+#[inline(never)]
 pub(crate) fn complete_correction<D: PhyShortDelay, C: oer_time::Clock + ?Sized>(
     clock: &C,
     registers: &mut (impl SharedPhyAccess + crate::executor::step::Registers),
