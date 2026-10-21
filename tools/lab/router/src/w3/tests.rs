@@ -121,6 +121,29 @@ fn hundred_distinct_echo_pairs_require_replies_after_the_requests() {
 }
 
 #[test]
+fn neighboring_echo_intervals_allow_sender_drift_and_enforce_inclusive_limits() {
+    let source = Ipv4Addr::new(192, 0, 2, 8);
+    let destination = Ipv4Addr::new(192, 0, 2, 1);
+    for (interval, accepted) in [
+        (1_024_000, true),
+        (750_000, true),
+        (1_250_000, true),
+        (749_999, false),
+        (1_250_001, false),
+    ] {
+        let mut rows = echoes();
+        for row in &mut rows {
+            row.at_us = u64::from(row.sequence) * interval + u64::from(row.reply) * 1000;
+        }
+        assert_eq!(
+            echo_gate(&rows, source, destination),
+            accepted,
+            "interval {interval}"
+        );
+    }
+}
+
+#[test]
 fn runtime_profile_verification_requires_ht_and_refuses_wpa_wep_or_he() {
     struct Fake(&'static str);
     impl Remote for Fake {

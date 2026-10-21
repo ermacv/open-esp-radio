@@ -55,9 +55,10 @@ matching replies; `w3.peer_ping` counts the router's distinct echo requests
 and the station's replies. Each ping direction uses one identifier and 100
 distinct sequence numbers. Lost replies, duplicates substituted for missing
 sequences and replies preceding their requests cannot pass.
-The router capture also checks request cadence against a one-second
-schedule, allowing 250 ms of arrival jitter per request relative to the
-first. An image's `interval_ms` claim alone cannot establish cadence.
+The router capture checks each pair of adjacent echo requests for an interval
+of 1 s ± 250 ms, in both directions. There is no absolute phase requirement
+relative to the first request and no separate series-duration gate. An image's
+`interval_ms` claim alone cannot establish cadence.
 
 `tx_timeout` and `queue_collision` cover the entire run through final
 deauthentication. `irq_free` is the minimum free interrupt-stack bytes,

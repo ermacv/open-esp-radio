@@ -92,6 +92,29 @@ fn passing_report_is_recomputed_from_router_observations() {
 }
 
 #[test]
+fn both_firmware_ping_directions_use_adjacent_intervals_without_absolute_phase() {
+    for (interval, accepted) in [(1_024_000, true), (749_999, false), (1_250_001, false)] {
+        let mut e = evidence();
+        for echo in &mut e.echoes {
+            echo.at_us = u64::from(echo.sequence) * interval + u64::from(echo.reply) * 1000;
+        }
+        let mut report = parse(CONSOLE).unwrap();
+        if !accepted {
+            assert!(
+                check(&report, &e).is_err(),
+                "unchanged passing claims must contradict bad timing"
+            );
+            report.claims[2] = false;
+            report.claims[3] = false;
+            report.result = false;
+        }
+        let result = check(&report, &e).unwrap();
+        assert_eq!(result.gates[2], accepted);
+        assert_eq!(result.gates[3], accepted);
+    }
+}
+
+#[test]
 fn each_host_gate_failure_is_a_failure_with_honest_claims_and_a_contradiction_otherwise() {
     type Case = (usize, fn(&mut Evidence));
     let cases: [Case; 11] = [

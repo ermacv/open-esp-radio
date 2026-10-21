@@ -229,6 +229,8 @@ router `ping` establish both 100-echo directions.
 The capture ends naturally after all 400 ICMP rows, with up to ten seconds to
 drain the final buffered batch and require a successful process exit and clean
 capture statistics. A partial capture cannot establish either echo gate.
+Both echo directions check adjacent request intervals of 1 s ± 250 ms,
+without an absolute phase or a separate total-duration gate.
 A fresh hostapd disconnect
 event and the final station snapshot establish departure. Every process is
 owned by the command and remote observers have a 240-second limit.

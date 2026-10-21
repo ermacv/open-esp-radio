@@ -16,8 +16,8 @@ pub mod stream;
 
 pub const ECHO_COUNT: u32 = 100;
 pub const INTERVAL_MS: u32 = 1000;
-/// Allowed arrival jitter around the one-second echo schedule on the router's
-/// capture clock. This checks cadence independently of the image's claim.
+/// Allowed jitter of each adjacent one-second echo interval on the router's
+/// capture clock. Sender drift does not impose an absolute phase requirement.
 pub const CADENCE_TOLERANCE_US: u64 = 250_000;
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
@@ -335,13 +335,13 @@ pub fn echo_gate(echoes: &[Echo], source: Ipv4Addr, destination: Ipv4Addr) -> bo
     if requests.len() != ECHO_COUNT as usize || replies.len() != ECHO_COUNT as usize {
         return false;
     }
-    let Some(first) = requests.first() else {
-        return false;
-    };
-    if requests.iter().enumerate().any(|(i, echo)| {
-        echo.at_us
-            .checked_sub(first.at_us)
-            .is_none_or(|elapsed| elapsed.abs_diff(i as u64 * 1_000_000) > CADENCE_TOLERANCE_US)
+    if requests.windows(2).any(|pair| {
+        let [previous, next] = pair else {
+            return true;
+        };
+        next.at_us
+            .checked_sub(previous.at_us)
+            .is_none_or(|interval| interval.abs_diff(1_000_000) > CADENCE_TOLERANCE_US)
     }) {
         return false;
     }
