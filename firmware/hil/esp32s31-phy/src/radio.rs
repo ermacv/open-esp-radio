@@ -352,8 +352,12 @@ impl Radio {
             .saturating_add(oer_time::Duration::from_micros(
                 oer_esp32s31_phy::state::client::DEFAULT_PLL_TRACK_PERIOD_MICROS,
             ));
-        let mut observer =
-            crate::hold::Observer::new(hold.samples.len() as u8 + 1, &mut hold.engine, None);
+        let mut trace = oer_esp32s31_phy::tracking::observation::ReadinessTrace::default();
+        let mut observer = crate::hold::Observer::new(
+            hold.samples.len() as u8 + 1,
+            &mut hold.engine,
+            Some(&mut trace),
+        );
         let tracked = track_concurrent_phy::<_, (), RomShortDelay, _>(
             &mut self.domain,
             &mut (),
@@ -392,6 +396,7 @@ impl Radio {
             observer.1,
         ));
         let sample = observer.0.finish(committed, failed);
+        crate::hold::report_preparation(&trace, &hold.engine);
         hold.invalid |= sample.invalid;
         if hold.samples.push(sample).is_err() {
             hold.invalid = true;

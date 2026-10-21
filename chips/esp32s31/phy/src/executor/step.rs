@@ -25,6 +25,17 @@ use oer_time::{Duration, Instant, Timer};
 const EDGE_MICROS: u64 = super::wait::poll::OBSERVATION_MICROS;
 const RETRY: Duration = Duration::from_micros(1);
 
+// T7's answer includes timer/executor resumption: hardware boundary 20 us,
+// measured resume lateness 66 us and 14 us margin. It starts when command
+// publication returns, yields the CPU, and does not delay a ready result.
+pub(crate) const T7_ANSWER_MICROS: u64 = 100;
+
+#[derive(Clone, Copy)]
+pub(crate) enum I2cTiming {
+    Direct,
+    Temperature,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum Failure {
     DeadlineOverflow,
@@ -62,29 +73,35 @@ enum Work<'a> {
 pub(crate) struct Job<'a> {
     work: Work<'a>,
     deadline: Instant,
-    delayed: bool,
+    temperature: bool,
     first_wait: bool,
     finished: bool,
+    start_pending: bool,
     /// One completed edge, consumed by the poll recorder at its exit.
     ready_started: Option<Instant>,
 }
 impl<'a> Job<'a> {
-    fn new(work: Work<'a>, now: Instant, delayed: bool) -> Result<Self, Failure> {
+    fn new(work: Work<'a>, now: Instant, temperature: bool) -> Result<Self, Failure> {
         Ok(Self {
             work,
             deadline: deadline(now)?,
-            delayed,
+            temperature,
             first_wait: false,
             finished: false,
+            start_pending: temperature,
             ready_started: None,
         })
     }
     pub(crate) fn i2c(
         transaction: &'a mut PhyColdI2cTransaction,
         now: Instant,
-        delayed: bool,
+        timing: I2cTiming,
     ) -> Result<Self, Failure> {
-        Self::new(Work::I2c(transaction), now, delayed)
+        Self::new(
+            Work::I2c(transaction),
+            now,
+            matches!(timing, I2cTiming::Temperature),
+        )
     }
     pub(crate) fn code(now: Instant) -> Result<Self, Failure> {
         Self::new(Work::Code(None), now, false)
@@ -175,14 +192,25 @@ impl<'a> Job<'a> {
                 if matches!(transaction.action(), PhyColdI2cAction::Complete(_)) {
                     return Ok(Step::Complete);
                 }
+                // No command is in flight while Runnable waits for the next
+                // poll. Bound a busy-at-start retry from its first attempt,
+                // rather than charging that voluntary yield to hardware.
+                if self.start_pending {
+                    self.deadline = deadline(now)?;
+                    self.start_pending = false;
+                }
                 if now > self.deadline {
                     return Err(Failure::TimedOut);
                 }
                 match transaction.action() {
                     PhyColdI2cAction::StartRead { .. } | PhyColdI2cAction::StartWrite { .. } => {
                         if io.i2c(transaction, true)? == PhyColdI2cObservation::EdgeConsumed {
-                            self.deadline = deadline(now)?;
-                            if !self.delayed {
+                            self.deadline = if self.temperature {
+                                answer_deadline(now)?
+                            } else {
+                                deadline(now)?
+                            };
+                            if !self.temperature {
                                 return Ok(Step::Runnable);
                             }
                             self.first_wait = true;
@@ -190,12 +218,17 @@ impl<'a> Job<'a> {
                     }
                     _ => {
                         if io.i2c(transaction, false)? == PhyColdI2cObservation::EdgeConsumed {
-                            // Every deadline was checked as start + EDGE_MICROS, so this cannot underflow.
+                            // The checked command answer deadline retains its publication timestamp.
                             self.ready_started = Some(Instant::from_micros(
-                                self.deadline.as_micros().wrapping_sub(EDGE_MICROS),
+                                self.deadline.as_micros().wrapping_sub(if self.temperature {
+                                    T7_ANSWER_MICROS
+                                } else {
+                                    EDGE_MICROS
+                                }),
                             ));
                             if !matches!(transaction.action(), PhyColdI2cAction::Complete(_)) {
                                 self.deadline = deadline(now)?;
+                                self.start_pending = self.temperature;
                             }
                             return Ok(Step::Runnable);
                         }
@@ -319,6 +352,10 @@ impl<'a> Job<'a> {
         ))
     }
 }
+fn answer_deadline(now: Instant) -> Result<Instant, Failure> {
+    now.checked_add(Duration::from_micros(T7_ANSWER_MICROS))
+        .ok_or(Failure::DeadlineOverflow)
+}
 fn deadline(now: Instant) -> Result<Instant, Failure> {
     now.checked_add(Duration::from_micros(EDGE_MICROS))
         .ok_or(Failure::DeadlineOverflow)
@@ -329,6 +366,7 @@ enum Gate {
     Idle,
     Waiting,
     Ready,
+    Yield,
 }
 
 pin_project_lite::pin_project! {
@@ -339,7 +377,7 @@ pin_project_lite::pin_project! {
         stats: Option<&'a mut EngineTiming>,
         trace: Option<&'a mut ReadinessTrace>,
         #[pin]
-        wait: F,
+        wait: Option<F>,
         make_wait: M,
         wait_at: Instant,
         gate: Gate,
@@ -357,11 +395,27 @@ impl<R: Registers, T: Timer, F: Future<Output = ()>, M: Fn(Instant) -> F> Future
         let mut resumed = None;
         let mut advanced = false;
         let result = loop {
+            if *this.gate == Gate::Yield {
+                if let Some(trace) = this.trace.as_deref_mut() {
+                    trace.yield_resumed(
+                        this.timer
+                            .now()
+                            .saturating_duration_since(*this.wait_at)
+                            .as_micros(),
+                    );
+                }
+                *this.gate = Gate::Idle;
+            }
             if *this.gate != Gate::Idle {
                 let at = *this.wait_at;
                 // One timer-poll site. A ready future is never polled again.
-                let ready =
-                    *this.gate == Gate::Ready || poll_timer(this.wait.as_mut(), context).is_ready();
+                let ready = if *this.gate == Gate::Ready {
+                    true
+                } else if let Some(wait) = this.wait.as_mut().as_pin_mut() {
+                    poll_timer(wait, context).is_ready()
+                } else {
+                    break Poll::Ready(Err(Failure::Binding));
+                };
                 if advanced {
                     *this.gate = if ready { Gate::Ready } else { Gate::Waiting };
                     if ready {
@@ -389,7 +443,16 @@ impl<R: Registers, T: Timer, F: Future<Output = ()>, M: Fn(Instant) -> F> Future
                 _ => None,
             });
             let now = this.timer.now();
-            let step = this.registers.advance(this.job, now);
+            let mut step = this.registers.advance(this.job, now);
+            // A successful T7 publication establishes a fresh answer window
+            // from its completion, including RMW's second command.
+            if this.job.first_wait {
+                let completed = this.timer.now();
+                match answer_deadline(completed) {
+                    Ok(at) => this.job.deadline = at,
+                    Err(error) => step = Step::Failure(error),
+                }
+            }
             if let (Some(trace), Some(sample)) = (this.trace.as_deref_mut(), sample) {
                 if let Some(first) = sample {
                     let failure = if step == Step::Failure(Failure::TimedOut) {
@@ -417,7 +480,12 @@ impl<R: Registers, T: Timer, F: Future<Output = ()>, M: Fn(Instant) -> F> Future
             let at = match step {
                 Step::Complete => break Poll::Ready(Ok(())),
                 Step::Failure(error) => break Poll::Ready(Err(error)),
-                Step::Runnable => now,
+                Step::Runnable => {
+                    *this.gate = Gate::Yield;
+                    context.waker().wake_by_ref();
+                    *this.wait_at = this.timer.now();
+                    break Poll::Pending;
+                }
                 Step::WaitAt(at) => {
                     // Backoff starts after the status/command atom. The first
                     // temperature observation keeps its full 1-us minimum.
@@ -432,9 +500,13 @@ impl<R: Registers, T: Timer, F: Future<Output = ()>, M: Fn(Instant) -> F> Future
                     }
                 }
             };
-            this.wait.as_mut().set((this.make_wait)(at));
             *this.wait_at = at;
-            *this.gate = Gate::Waiting;
+            if at <= this.timer.now() {
+                *this.gate = Gate::Ready;
+            } else {
+                this.wait.as_mut().set(Some((this.make_wait)(at)));
+                *this.gate = Gate::Waiting;
+            }
             advanced = true;
         };
         if let (Some(stats), Some(started)) = (this.stats.as_deref_mut(), started) {
@@ -470,7 +542,7 @@ pub(crate) fn drive<'a, 'j, R: Registers, T: Timer>(
         timer,
         stats,
         trace,
-        wait: timer.wait_until(Instant::EPOCH),
+        wait: None,
         make_wait: move |at| timer.wait_until(at),
         wait_at: Instant::EPOCH,
         gate: Gate::Idle,

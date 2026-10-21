@@ -19,10 +19,13 @@ pub struct NotReadySample {
 /// This does not consume a late result or change its deadline.
 pub struct ReadinessTrace {
     command_at: oer_time::Instant,
-    not_ready: [NotReadySample; 20],
+    not_ready: [NotReadySample; 16],
     pub maximum_first_check_micros: u32,
     pub failure_elapsed_micros: u32,
     pub failure_lateness_micros: u32,
+    pub yield_total_micros: u32,
+    pub yield_maximum_micros: u16,
+    pub yields: u16,
     pub commands: u8,
     not_ready_count: u8,
     /// Both host busy bits, sampled without reading the result at failure.
@@ -32,10 +35,13 @@ impl Default for ReadinessTrace {
     fn default() -> Self {
         Self {
             command_at: oer_time::Instant::EPOCH,
-            not_ready: [NotReadySample::default(); 20],
+            not_ready: [NotReadySample::default(); 16],
             maximum_first_check_micros: 0,
             failure_elapsed_micros: 0,
             failure_lateness_micros: 0,
+            yield_total_micros: 0,
+            yield_maximum_micros: 0,
+            yields: 0,
             commands: 0,
             not_ready_count: 0,
             failure_busy: None,
@@ -48,6 +54,23 @@ impl ReadinessTrace {
     }
     pub fn complete(&self) -> bool {
         self.commands < u8::MAX && usize::from(self.not_ready_count) <= self.not_ready.len()
+    }
+    #[cfg(any(target_arch = "riscv32", test))]
+    #[inline(never)]
+    pub(crate) fn yield_resumed(&mut self, elapsed: u64) {
+        if let (Ok(elapsed), Some(count), Some(total)) = (
+            u16::try_from(elapsed),
+            self.yields.checked_add(1),
+            u32::try_from(elapsed)
+                .ok()
+                .and_then(|elapsed| self.yield_total_micros.checked_add(elapsed)),
+        ) {
+            self.yields = count;
+            self.yield_total_micros = total;
+            self.yield_maximum_micros = self.yield_maximum_micros.max(elapsed);
+        } else {
+            self.not_ready_count = u8::MAX;
+        }
     }
     #[cfg(any(target_arch = "riscv32", test))]
     pub(crate) fn command_started(&mut self, at: oer_time::Instant) {

@@ -1,6 +1,6 @@
 //! The existing temperature graph chooses transport jobs; conversion and
 //! range publication never become part of the transport dispatcher.
-use super::{Failure, Job, Registers, drive};
+use super::{Failure, I2cTiming, Job, Registers, drive};
 use crate::{
     analog::temperature::{
         PhyTemperatureAction, PhyTemperatureCompletion, PhyTemperatureExternalBinding,
@@ -44,7 +44,11 @@ pub(crate) fn sample<'a, R: Registers, T: Timer>(
                     .map_err(|_| Failure::Binding)?
                 {
                     PhyTemperatureExternalBinding::I2c(mut binding) => {
-                        let mut job = Job::i2c(binding.transaction_mut(), timer.now(), true)?;
+                        let mut job = Job::i2c(
+                            binding.transaction_mut(),
+                            timer.now(),
+                            I2cTiming::Temperature,
+                        )?;
                         drive(
                             &mut job,
                             registers,

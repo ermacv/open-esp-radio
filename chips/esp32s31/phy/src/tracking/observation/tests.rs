@@ -452,7 +452,7 @@ fn preparation_trace_reports_truncation_without_losing_the_failure() {
         trace.checked(clock.now(), index == 0, true, None);
     }
     trace.checked(clock.now(), false, false, Some((0, 19)));
-    assert_eq!(trace.not_ready_samples().len(), 20);
+    assert_eq!(trace.not_ready_samples().len(), 16);
     assert!(!trace.complete());
     assert_eq!(trace.failure_busy, Some(0));
     assert_eq!(trace.failure_elapsed_micros, 21);

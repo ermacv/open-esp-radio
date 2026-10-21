@@ -143,6 +143,10 @@ pub fn report_preparation(
         trace.commands, trace.maximum_first_check_micros
     ));
     print_fmt(format_args!(
+        "OPEN_RADIO_HIL t7-prepare yield-count={} yield-total-us={} yield-max-us={}\n",
+        trace.yields, trace.yield_total_micros, trace.yield_maximum_micros
+    ));
+    print_fmt(format_args!(
         "OPEN_RADIO_HIL t7-prepare failure-elapsed-us={} failure-late-us={}\n",
         trace.failure_elapsed_micros, trace.failure_lateness_micros
     ));
@@ -157,4 +161,32 @@ pub fn report_preparation(
             sample.command, sample.elapsed_micros
         ));
     }
+}
+
+#[cfg(oer_profile)]
+#[inline(never)]
+pub fn report_timer(window: Option<oer_espressif_executor::timer_observation::Window>) {
+    let Some(window) = window else {
+        return;
+    };
+    let r = window.finish();
+    use oer_esp32s31_board::rom::print_fmt;
+    print_fmt(format_args!(
+        "OPEN_RADIO_HIL t7-timer registrations={} due-at-register={} irqs={}\n",
+        r.registrations, r.due_at_registration, r.interrupts
+    ));
+    print_fmt(format_args!(
+        "OPEN_RADIO_HIL t7-timer program-max-us={} dispatch-max-us={} invalid={}\n",
+        r.programming.maximum_micros, r.dispatch.maximum_micros, r.invalid
+    ));
+    print_fmt(format_args!(
+        "OPEN_RADIO_HIL t7-timer alarm-to-irq-max-us={} irq-late-max-us={} irq-to-dispatch-max-us={}\n",
+        r.alarm_to_irq.maximum_micros,
+        r.deadline_lateness.maximum_micros,
+        r.irq_to_dispatch.maximum_micros
+    ));
+    print_fmt(format_args!(
+        "OPEN_RADIO_HIL t7-timer unmatched-irqs={} unmatched-dispatch={} armed={}\n",
+        r.unmatched_interrupts, r.unmatched_dispatches, r.armed_at_end
+    ));
 }

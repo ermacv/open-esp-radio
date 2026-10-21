@@ -242,7 +242,7 @@ fn cancelling_the_transport_after_a_write_leaves_the_phy_poisoned() {
     use crate::{
         analog::i2c::analog_registers,
         calibration::cold::{PhyColdI2cRequest, PhyColdI2cTransaction},
-        executor::step::{Job, drive, tests::Io},
+        executor::step::{I2cTiming, Job, drive, tests::Io},
     };
     use core::{
         future::Future,
@@ -270,7 +270,8 @@ fn cancelling_the_transport_after_a_write_leaves_the_phy_poisoned() {
             else {
                 panic!("tracking was admitted");
             };
-            let mut job = Job::i2c(&mut transaction, clock.now(), false).expect("deadline fits");
+            let mut job =
+                Job::i2c(&mut transaction, clock.now(), I2cTiming::Direct).expect("deadline fits");
             drive(&mut job, &mut io, &clock, None, None).await
         };
         let mut future = core::pin::pin!(future);

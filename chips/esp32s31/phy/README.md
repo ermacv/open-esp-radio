@@ -286,10 +286,15 @@ The final temperature child of parameter tracking uses the private
 read/modify/write and sensor-code atoms each return `Pending` before another
 atom can run, including when the timer is immediately ready. The first bus
 completion sample retains its 1 µs minimum; not-ready retries use the caller's
-timer and the same named 20 µs observation boundary as the direct tier.
+timer. T7's named answer boundary is 100 µs from completed command publication:
+20 µs hardware boundary, 66 µs observed resume lateness and 14 µs margin.
 A ready result at the deadline is accepted; a later result is not consumed.
 The existing temperature graph owns conversion, range writes and dated commit.
 Cancellation leaves the admitted PHY poisoned until reset.
+`Runnable` wakes its waker and returns `Pending` without creating a timer.
+Only a future `WaitAt` constructs and polls the timer; an already reached
+`WaitAt` still yields once. The gap between RMW commands has no command in
+flight; its first busy-at-start attempt establishes that phase's bound.
 
 The diagnostic hold reports aggregate engine poll count/total/maximum, timer
 resume lateness, and maximum command-to-ready time. Counters are fixed local
@@ -298,7 +303,8 @@ or duration overflow invalidates the evidence. These observations cover this
 transport path; the remaining tracking families retain their existing execution.
 The initial IEEE 802.15.4 maintenance also retains a bounded local trace of
 command-to-first-check time, each not-ready check, resume lateness and elapsed
-time at failure. On a late failure it samples both host busy bits without
+time at failure, plus count/total/maximum of voluntary yields without a timer.
+On a late failure it samples both host busy bits without
 consuming the rejected result. The diagnostic reports this trace after
 maintenance returns; an unobserved ready edge has only a time interval.
 
