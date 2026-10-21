@@ -156,6 +156,11 @@ the admitted vendor child. Vendor-only cases retain the busy/result-flag
 characterization. Tests also
 check that a bounded I2C timeout returns without restoring hardware control.
 
+RFPLL's compiled requested-time environment assigns zero time to ready polls,
+so it compares the complete five-microsecond delay. A finite clock-query prefix
+still lets a stuck synchronous observation reach its timeout. Other observation
+probes retain their one-microsecond ticks. Virtual-clock unit tests separately
+exercise early and late RFPLL resumes; physical hold measures actual poll cost.
 The comparison preserves every requested delay, including any unexpected
 executor-added one-microsecond wait. It does not assert equal execution time or raw polling
 traces. Alternative memory layouts, linked coexistence grants and physical RF behavior
