@@ -241,7 +241,7 @@ impl oer_radio_port::PoolSet for GatePool {
 
 /// The install's unique gate place, held inside exactly one gate state.
 #[must_use = "the unique gate place stays in one gate state"]
-struct GatePlace<'id, Path: PoolPath = Root> {
+struct GatePlace<'id, Path: PoolPath = Root<oer_radio_port::LocalId<'id>>> {
     slot: Slot<'id, GateKind, Path>,
 }
 
@@ -271,7 +271,7 @@ impl<Path: PoolPath> core::fmt::Debug for GatePlace<'_, Path> {
 /// The open transmit gate. Closing transfers its unique place to the backend.
 #[derive(Debug)]
 #[must_use = "close_gate consumes the open gate and returns its closed evidence"]
-pub struct GateOpen<'id, Path: PoolPath = Root> {
+pub struct GateOpen<'id, Path: PoolPath = Root<oer_radio_port::LocalId<'id>>> {
     place: GatePlace<'id, Path>,
 }
 
@@ -286,7 +286,7 @@ pub struct GateOpen<'id, Path: PoolPath = Root> {
 /// ```
 #[derive(Debug)]
 #[must_use = "open_gate consumes the closed evidence and returns the open gate"]
-pub struct GateClosed<'id, Path: PoolPath = Root> {
+pub struct GateClosed<'id, Path: PoolPath = Root<oer_radio_port::LocalId<'id>>> {
     place: GatePlace<'id, Path>,
 }
 
@@ -306,7 +306,7 @@ pub struct GateClosed<'id, Path: PoolPath = Root> {
 /// }
 /// ```
 #[must_use = "the backend retains the issuer for the whole install"]
-pub struct GateIssuer<'id, Path: PoolPath = Root> {
+pub struct GateIssuer<'id, Path: PoolPath = Root<oer_radio_port::LocalId<'id>>> {
     brand: core::marker::PhantomData<fn(&'id (), Path) -> &'id ()>,
 }
 
@@ -811,7 +811,7 @@ pub trait LowerMacPhase<'p, 'id: 'p>:
 /// The frame's kind sets its response and
 /// its retry plan ([`RetryPlan`]) or one rate; its access category picks
 /// its queue, whose contention the backend draws.
-pub struct Attempt<'id, T, M, K, X, Path: PoolPath = Root> {
+pub struct Attempt<'id, T, M, K, X, Path: PoolPath = Root<oer_radio_port::LocalId<'id>>> {
     /// The original operation's context, returned with its terminal.
     pub context: X,
     /// The attempt's place in flight.
@@ -832,7 +832,14 @@ pub struct Attempt<'id, T, M, K, X, Path: PoolPath = Root> {
 
 /// An operation sealed before it crosses into backend custody. Execution
 /// metadata is separate; context, ticket and the complete MPDU remain together.
-pub struct AdmittedAttempt<'id, T, M: PreparedTx<'id>, K, X, Path: PoolPath = Root> {
+pub struct AdmittedAttempt<
+    'id,
+    T,
+    M: PreparedTx<'id>,
+    K,
+    X,
+    Path: PoolPath = Root<oer_radio_port::LocalId<'id>>,
+> {
     /// Indivisible owner which the backend executes and completes.
     pub operation: crate::InFlight<X, Slot<'id, T, Path>, <M::Types as PhaseTypes<'id>>::TxMpdu>,
     /// Backend execution metadata, without independently owned MPDUs.
@@ -1725,6 +1732,6 @@ impl oer_radio_port::PoolSet for ArbiterPool {
 /// The sole right to construct the arbiter of this installation's gate.
 #[derive(Debug)]
 #[must_use = "construct the arbiter exactly once with its initial gate"]
-pub struct ArbiterAuthority<'id, Path: PoolPath = Root> {
+pub struct ArbiterAuthority<'id, Path: PoolPath = Root<oer_radio_port::LocalId<'id>>> {
     brand: core::marker::PhantomData<fn(&'id (), Path) -> (&'id (), Path)>,
 }

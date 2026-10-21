@@ -39,10 +39,10 @@ pub struct GroupKey<'id, R> {
     pub(super) brand: PhantomData<fn(&'id ()) -> R>,
 }
 pub struct PortKeys<R>(PhantomData<fn() -> R>);
-pub(super) type StaPath = Child<CorePath, 2>;
-pub(super) type ApPath = Child<CorePath, 3>;
-pub(super) type StaPermission<'id> = Slot<'id, GroupPermission<Station>, Part<5>>;
-pub(super) type ApPermission<'id> = Slot<'id, GroupPermission<AccessPoint>, Part<6>>;
+pub(super) type StaPath<'id> = Child<CorePath<'id>, 2>;
+pub(super) type ApPath<'id> = Child<CorePath<'id>, 3>;
+pub(super) type StaPermission<'id> = Slot<'id, GroupPermission<Station>, Part<'id, 5>>;
+pub(super) type ApPermission<'id> = Slot<'id, GroupPermission<AccessPoint>, Part<'id, 6>>;
 
 macro_rules! keys {
     ($role:ty, $p:literal, $g:literal, $path:ty, $permission:ty) => {
@@ -122,24 +122,24 @@ macro_rules! keys {
         }
     };
 }
-keys!(Station, 1, 1, StaPath, StaPermission<'id>);
-keys!(AccessPoint, 15, 3, ApPath, ApPermission<'id>);
+keys!(Station, 1, 1, StaPath<'id>, StaPermission<'id>);
+keys!(AccessPoint, 15, 3, ApPath<'id>, ApPermission<'id>);
 
 pub(super) enum Installation<'id> {
     Transmit {
         spp: Spp,
         scope: TransmitKeyScope,
-        slot: core_mac::association::VacantKeySlot<'id, CorePath>,
+        slot: core_mac::association::VacantKeySlot<'id, CorePath<'id>>,
     },
     Receive {
         spp: Spp,
-        slot: core_mac::association::StationGroupSlot<'id, CorePath>,
+        slot: core_mac::association::StationGroupSlot<'id, CorePath<'id>>,
         key_id: GroupKeyId,
     },
 }
 pub(super) enum Installed<'id> {
-    Transmit(KeyHandle<'id, CorePath>),
-    Receive(ReceiveKeyHandle<'id, CorePath>),
+    Transmit(KeyHandle<'id, CorePath<'id>>),
+    Receive(ReceiveKeyHandle<'id, CorePath<'id>>),
 }
 pub(super) enum Removal<'id> {
     StationPairwise(<PortKeys<Station> as KeyTypes<'id>>::Association),
@@ -150,14 +150,14 @@ pub(super) enum Removal<'id> {
 pub(super) enum GroupCommand<'id> {
     InstallStation {
         spp: Spp,
-        slot: core_mac::association::StationGroupSlot<'id, CorePath>,
+        slot: core_mac::association::StationGroupSlot<'id, CorePath<'id>>,
         permission: StaPermission<'id>,
         key_id: GroupKeyId,
         material: Ccmp128Key,
     },
     InstallAccessPoint {
         spp: Spp,
-        slot: core_mac::association::AccessPointGroupSlot<'id, CorePath>,
+        slot: core_mac::association::AccessPointGroupSlot<'id, CorePath<'id>>,
         permission: ApPermission<'id>,
         key_id: GroupKeyId,
         material: Ccmp128Key,
@@ -277,7 +277,7 @@ role!(
     Station,
     1,
     1,
-    StaPath,
+    StaPath<'id>,
     StationPairwise,
     StationPairwise,
     StationGroup
@@ -286,7 +286,7 @@ role!(
     AccessPoint,
     15,
     3,
-    ApPath,
+    ApPath<'id>,
     AccessPointPairwise,
     AccessPointPairwise,
     AccessPointGroup
@@ -307,7 +307,7 @@ where
 impl<'id> GroupRole<'id> for Station {
     fn group_command(
         spp: Spp,
-        slot: core_mac::association::StationGroupSlot<'id, CorePath>,
+        slot: core_mac::association::StationGroupSlot<'id, CorePath<'id>>,
         permission: StaPermission<'id>,
         key_id: GroupKeyId,
         material: Ccmp128Key,
@@ -324,7 +324,7 @@ impl<'id> GroupRole<'id> for Station {
 impl<'id> GroupRole<'id> for AccessPoint {
     fn group_command(
         spp: Spp,
-        slot: core_mac::association::AccessPointGroupSlot<'id, CorePath>,
+        slot: core_mac::association::AccessPointGroupSlot<'id, CorePath<'id>>,
         permission: ApPermission<'id>,
         key_id: GroupKeyId,
         material: Ccmp128Key,

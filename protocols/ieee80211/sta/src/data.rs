@@ -247,7 +247,13 @@ pub enum DataRefusal {
 /// Its closed, checked frame description survives every unpublished return;
 /// neither the MPDU length nor its header is reconstructed at completion.
 #[derive(Debug)]
-pub struct DataTxContext<'id, K, C, A = AcPermit, Path: PoolPath = Root> {
+pub struct DataTxContext<
+    'id,
+    K,
+    C,
+    A = AcPermit,
+    Path: PoolPath = Root<oer_radio_port::LocalId<'id>>,
+> {
     admission: A,
     link: LinkEpoch<'id, Path>,
     tid: WmmUserPriority,

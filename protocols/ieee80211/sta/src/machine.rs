@@ -557,7 +557,7 @@ struct TxCredit<'id, T: StaTokens> {
 /// The identity of one station operation. No frame parsing or current-state
 /// guess assigns a completion to a handshake, power transition or link.
 #[derive(Debug)]
-pub struct StaTxContext<'id, Path: PoolPath = Root> {
+pub struct StaTxContext<'id, Path: PoolPath = Root<oer_radio_port::LocalId<'id>>> {
     epoch: LinkEpoch<'id, Path>,
     purpose: TxPurpose,
 }
@@ -893,7 +893,7 @@ pub struct RetiredStation<'id, T: StaTokens, K: Ieee80211Capabilities> {
 }
 
 /// Terminal-only output; finalization never requests a port operation.
-pub enum StaFinalOutput<'id, Path: PoolPath = Root> {
+pub enum StaFinalOutput<'id, Path: PoolPath = Root<oer_radio_port::LocalId<'id>>> {
     CommandCompleted(StaCommandTerminal<'id, Path>),
     Notify(StaNotice),
 }
@@ -1044,7 +1044,7 @@ impl<'id, K, Path: PoolPath> Held<'id, K, Path> {
 /// A pairwise cell awaiting the response to its one installation.
 #[derive(Debug)]
 #[must_use = "return this token with the pairwise installation result"]
-pub struct PendingPairwiseKey<'id, Path: PoolPath = Root> {
+pub struct PendingPairwiseKey<'id, Path: PoolPath = Root<oer_radio_port::LocalId<'id>>> {
     cell: PairwiseCell,
     epoch: LinkEpoch<'id, Path>,
 }
@@ -1080,7 +1080,7 @@ struct PairwiseCell;
 /// ```
 #[derive(Debug)]
 #[must_use = "return this token with the group installation result"]
-pub struct PendingGroupKey<'id, Path: PoolPath = Root> {
+pub struct PendingGroupKey<'id, Path: PoolPath = Root<oer_radio_port::LocalId<'id>>> {
     epoch: LinkEpoch<'id, Path>,
     key_id: GroupKeyId,
     material: Ccmp128Key,
@@ -1115,14 +1115,14 @@ pub struct PendingGroupKey<'id, Path: PoolPath = Root> {
 /// }
 /// ```
 #[must_use = "return this token with the matching group replacement terminal"]
-pub struct PendingGroupReplacement<'id, Path: PoolPath = Root> {
+pub struct PendingGroupReplacement<'id, Path: PoolPath = Root<oer_radio_port::LocalId<'id>>> {
     install: PendingGroupKey<'id, Path>,
     previous_id: GroupKeyId,
 }
 
 /// Replay and material custody of the existing installation being selected.
 #[must_use = "return with the matching selection terminal"]
-pub struct PendingGroupSelection<'id, Path: PoolPath = Root> {
+pub struct PendingGroupSelection<'id, Path: PoolPath = Root<oer_radio_port::LocalId<'id>>> {
     install: PendingGroupKey<'id, Path>,
 }
 
@@ -1130,7 +1130,7 @@ pub struct PendingGroupSelection<'id, Path: PoolPath = Root> {
 /// Its invariant installation and pool path belong to the station that issued
 /// the action, independently of whether that connection has since left.
 #[must_use = "return with the matching removal terminal"]
-pub struct PendingGroupRemoval<'id, Path: PoolPath = Root> {
+pub struct PendingGroupRemoval<'id, Path: PoolPath = Root<oer_radio_port::LocalId<'id>>> {
     key_id: GroupKeyId,
     place: GroupPlace,
     _material: Ccmp128Key,
@@ -1150,7 +1150,7 @@ pub struct PendingGroupRemoval<'id, Path: PoolPath = Root> {
 /// }
 /// ```
 #[derive(Debug)]
-pub struct StaConfigurationContext<'id, Path: PoolPath = Root> {
+pub struct StaConfigurationContext<'id, Path: PoolPath = Root<oer_radio_port::LocalId<'id>>> {
     epoch: Option<LinkEpoch<'id, Path>>,
 }
 

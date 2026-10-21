@@ -7,11 +7,11 @@ use oer_time::Timer;
 
 use oer_radio_port::{Child, Root};
 pub fn submit<'core, 'slot, P: WifiTxPowerProfile, E: WifiTxEntropy, T: Timer, H: LowerMacHardware>(
-    core: &mut EnabledCore<LowerMacCore<'core, 'slot, oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile, P, E, T, 512, Child<Root, 0>>>,
+    core: &mut EnabledCore<LowerMacCore<'core, 'slot, oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile, P, E, T, 512, Child<Root<oer_radio_port::LocalId<'core>>, 0>>>,
     hardware: &mut H,
-    own: FreeQueue<'core, Child<Root, 0>>,
-    sibling: FreeQueue<'core, Child<Root, 1>>,
-    admission: TxAdmission<'core, Child<Root, 0>>,
+    own: FreeQueue<'core, Child<Root<oer_radio_port::LocalId<'core>>, 0>>,
+    sibling: FreeQueue<'core, Child<Root<oer_radio_port::LocalId<'core>>, 1>>,
+    admission: TxAdmission<'core, Child<Root<oer_radio_port::LocalId<'core>>, 0>>,
     values: MpduValues<'slot, 512>,
 ) {
     #[cfg(ui_reject)]

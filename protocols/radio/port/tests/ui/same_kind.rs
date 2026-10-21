@@ -5,7 +5,7 @@ pub enum Kind {}
 
 pub fn select<'id>(
     mint: Mint<'id, (Slots<Kind, 1>, Slots<Kind, 1>)>,
-) -> Slot<'id, Kind, Child<Root, 0>> {
+) -> Slot<'id, Kind, Child<Root<oer_radio_port::LocalId<'id>>, 0>> {
     let ([first], [second]) = mint.into_pools();
     #[cfg(ui_reject)]
     return second; // ui-error: E0308

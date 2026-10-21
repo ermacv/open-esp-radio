@@ -84,10 +84,10 @@ impl<'p, 'id: 'p, D: Device<B>, const B: usize> LowerMacPhase<'p, 'id>
         }
         self.held.storage.driver.wake();
     }
-    fn close_gate(&mut self, gate: GateOpen<'id, Part<1>>) {
+    fn close_gate(&mut self, gate: GateOpen<'id, Part<'id, 1>>) {
         self.held.command(driver::Command::CloseGate(gate));
     }
-    fn open_gate(&mut self, gate: GateClosed<'id, Part<1>>) -> GateOpen<'id, Part<1>> {
+    fn open_gate(&mut self, gate: GateClosed<'id, Part<'id, 1>>) -> GateOpen<'id, Part<'id, 1>> {
         let gate = self.held.gate.borrow_mut().open(gate);
         self.held.command(driver::Command::OpenGate);
         gate
@@ -311,7 +311,7 @@ impl<'p, 'v, 'id: 'p, D: Device<B>, const B: usize> StationPhase<'p, 'id>
     }
     fn configure(
         &mut self,
-        permission: ConfigurePermission<'id, Station, Part<8>, D::ConfigureContext<'id>>,
+        permission: ConfigurePermission<'id, Station, Part<'id, 8>, D::ConfigureContext<'id>>,
         receive: StationReceive<Self::Caps>,
     ) {
         let (bssid, filter) = match receive {
@@ -339,7 +339,7 @@ impl<'p, 'v, 'id: 'p, D: Device<B>, const B: usize> AccessPointPhase<'p, 'id>
 {
     fn configure(
         &mut self,
-        permission: ConfigurePermission<'id, AccessPoint, Part<9>, D::ConfigureContext<'id>>,
+        permission: ConfigurePermission<'id, AccessPoint, Part<'id, 9>, D::ConfigureContext<'id>>,
         receive: SupportedFilter<Self::Caps, AccessPoint>,
     ) {
         self.held.command(driver::Command::Configure {

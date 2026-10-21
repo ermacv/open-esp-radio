@@ -623,7 +623,12 @@ pub enum ExtendedPending<const I: u8> {}
 /// and `P` pending-table slots of each address size. A radio without the
 /// frame-pending table has none. `Path` identifies this interface component;
 /// its three child paths distinguish configuration, short and extended slots.
-pub struct InterfaceResources<'id, const I: u8, const P: usize, Path: PoolPath = Root> {
+pub struct InterfaceResources<
+    'id,
+    const I: u8,
+    const P: usize,
+    Path: PoolPath = Root<oer_radio_port::LocalId<'id>>,
+> {
     /// The slot [`Ieee802154Interfaces::configure`] takes.
     pub interface: Slot<'id, InterfaceKind<I>, Child<Path, 0>>,
     /// The slots of short source addresses.
@@ -685,7 +690,7 @@ trait Release<'id, K, Path: PoolPath> {
     clippy::type_complexity,
     reason = "the affine permit and its return function are held by the same guard"
 )]
-pub struct WorkPermit<'q, 'id, K, Path: PoolPath = Root> {
+pub struct WorkPermit<'q, 'id, K, Path: PoolPath = Root<oer_radio_port::LocalId<'id>>> {
     held: scopeguard::ScopeGuard<HeldPermit<'q, 'id, K, Path>, fn(HeldPermit<'q, 'id, K, Path>)>,
 }
 
@@ -699,7 +704,8 @@ fn release_held<K, Path: PoolPath>(held: HeldPermit<'_, '_, K, Path>) {
 }
 
 /// The radio's one operation permit.
-pub type OperationPermit<'q, 'id, Path = Root> = WorkPermit<'q, 'id, Operation, Path>;
+pub type OperationPermit<'q, 'id, Path = Root<oer_radio_port::LocalId<'id>>> =
+    WorkPermit<'q, 'id, Operation, Path>;
 
 /// The terminal whose matching permit has been returned to its pool.
 #[must_use = "hand the completed operation's terminal to its consumer"]
@@ -743,13 +749,14 @@ struct InFlight<'id, K, Path: PoolPath> {
 /// interface's seat in the pool's line, never refused; a submission moves
 /// it in, and the backend gives it back when it takes the work's terminal,
 /// before it hands the event out.
-pub struct WorkPermits<'id, K, P, Path: PoolPath = Root> {
+pub struct WorkPermits<'id, K, P, Path: PoolPath = Root<oer_radio_port::LocalId<'id>>> {
     pool: P,
     in_flight: RefCell<Option<InFlight<'id, K, Path>>>,
 }
 
 /// The operation permit of one install.
-pub type OperationPermits<'id, P, Path = Root> = WorkPermits<'id, Operation, P, Path>;
+pub type OperationPermits<'id, P, Path = Root<oer_radio_port::LocalId<'id>>> =
+    WorkPermits<'id, Operation, P, Path>;
 
 impl<'id, K, Path: PoolPath, P: PermitPool<'id, K, Path>> WorkPermits<'id, K, P, Path> {
     /// Consume the installation's declared permit component: its one permit

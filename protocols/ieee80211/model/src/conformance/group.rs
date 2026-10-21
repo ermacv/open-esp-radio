@@ -83,7 +83,7 @@ async fn installed<'p, 'id: 'p>(
 ) -> Result<
     (
         ModelGroupKey<'id, Station>,
-        Slot<'id, ModelGroupPermission<Station>, ModelPool<8>>,
+        Slot<'id, ModelGroupPermission<Station>, ModelPool<'id, 8>>,
     ),
     &'static str,
 > {

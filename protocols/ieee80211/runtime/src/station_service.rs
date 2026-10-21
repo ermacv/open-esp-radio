@@ -191,7 +191,12 @@ pub enum StationTxBuffer<'id, B: StationPort<'id>> {
 /// The composition's context for this service. Each variant owns the
 /// original machine operation; the backend treats the entire value as opaque.
 #[derive(Debug)]
-pub enum TxContext<'id, K, C, Path: oer_radio_port::PoolPath = oer_radio_port::Root> {
+pub enum TxContext<
+    'id,
+    K,
+    C,
+    Path: oer_radio_port::PoolPath = oer_radio_port::Root<oer_radio_port::LocalId<'id>>,
+> {
     /// A station protocol operation, including its connection epoch and purpose.
     Station(StaTxContext<'id, Path>),
     /// An MSDU operation, including its original link, TID and queue order.
@@ -422,7 +427,11 @@ pub struct TxMsdu {
 
 /// What the application asks of the service.
 #[derive(Debug, Eq, PartialEq)]
-pub enum ServiceCommand<'id, K, Path: oer_radio_port::PoolPath = oer_radio_port::Root> {
+pub enum ServiceCommand<
+    'id,
+    K,
+    Path: oer_radio_port::PoolPath = oer_radio_port::Root<oer_radio_port::LocalId<'id>>,
+> {
     /// A command of the station.
     Station(StaRequest<'id, Path>),
     /// A fact of the access point beside the station.
@@ -439,7 +448,11 @@ pub enum ServiceCommand<'id, K, Path: oer_radio_port::PoolPath = oer_radio_port:
     clippy::large_enum_variant,
     reason = "a refusal returns the original owned packet without allocation"
 )]
-pub enum ServiceOutput<'id, K, Path: oer_radio_port::PoolPath = oer_radio_port::Root> {
+pub enum ServiceOutput<
+    'id,
+    K,
+    Path: oer_radio_port::PoolPath = oer_radio_port::Root<oer_radio_port::LocalId<'id>>,
+> {
     /// An ordinary protocol RX drop, before network delivery.
     RxFrameDropped(oer_ieee80211_sta::machine::StaRxError),
     /// The original network operation refused before data admission.
@@ -557,7 +570,7 @@ pub struct ServiceIo<
     const TX_DEPTH: usize,
     const RX_DEPTH: usize,
     const COMMAND_DEPTH: usize,
-    Path: oer_radio_port::PoolPath = oer_radio_port::Root,
+    Path: oer_radio_port::PoolPath = oer_radio_port::Root<oer_radio_port::LocalId<'id>>,
 > {
     /// The application's exclusive command receiver. Readiness does not
     /// remove a command; a simultaneous port fault leaves it in this queue.

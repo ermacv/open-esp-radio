@@ -1,4 +1,5 @@
 #![no_std]
+extern crate alloc;
 use oer_ieee80211_port::{
     Attempt, Channel, ChannelWidth, ClassFrame, TxOperation, HeaderSpec, InterfacePhase,
     LowerMacPhase, MpduLength, NoAckHeader, PhyRate, Protection, SizedFrame, Station,
@@ -19,7 +20,7 @@ fn backend(channel: Channel) -> oer_radio_port::Installed<ModelBackend> {
             IndividualAddress::new([2, 0, 0, 0, 0, 1]).unwrap(),
             IndividualAddress::new([2, 0, 0, 0, 0, 2]).unwrap(),
         ],
-        std::rc::Rc::new(oer_time_virtual::VirtualClock::<8>::new()),
+        alloc::rc::Rc::new(oer_time_virtual::VirtualClock::<8>::new()),
     )
     .0
 }

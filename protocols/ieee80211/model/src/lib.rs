@@ -275,7 +275,7 @@ pub const MODEL_BLOCK_ACK_SLOTS: usize = 2;
 pub type ModelBlockAckPool = BlockAckSlots<ModelBlockAcks, MODEL_BLOCK_ACK_SLOTS>;
 /// One receive Block Ack slot of the model.
 pub type ModelBlockAckSlot<'id> =
-    BlockAckSlot<'id, ModelBlockAcks, MODEL_BLOCK_ACK_SLOTS, ModelPool<7>>;
+    BlockAckSlot<'id, ModelBlockAcks, MODEL_BLOCK_ACK_SLOTS, ModelPool<'id, 7>>;
 /// The key pool of one role's association domain.
 pub type ModelAssociationPool<R> = AssociationPool<R, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS>;
 
@@ -375,22 +375,23 @@ impl TxBufferClass for ModelLarge {
 }
 
 /// Paths of the model's fixed installation layout. They add no runtime state.
-pub type ModelPool<const I: u8> = oer_radio_port::Child<oer_radio_port::Root, I>;
+pub type ModelPool<'id, const I: u8> =
+    oer_radio_port::Child<oer_radio_port::Root<oer_radio_port::LocalId<'id>>, I>;
 
 /// The distinct key pools belonging to each modeled interface role.
 pub trait ModelRole: oer_ieee80211_port::InterfaceRole {
     /// Component containing the role's pairwise slots.
-    type AssociationPath: oer_radio_port::PoolPath;
+    type AssociationPath<'id>: oer_radio_port::PoolPath;
     /// Component containing the unique GTK mutation permission.
-    type GroupPermissionPath: oer_radio_port::PoolPath;
+    type GroupPermissionPath<'id>: oer_radio_port::PoolPath;
 }
 impl ModelRole for Station {
-    type AssociationPath = ModelPool<5>;
-    type GroupPermissionPath = ModelPool<8>;
+    type AssociationPath<'id> = ModelPool<'id, 5>;
+    type GroupPermissionPath<'id> = ModelPool<'id, 8>;
 }
 impl ModelRole for AccessPoint {
-    type AssociationPath = ModelPool<6>;
-    type GroupPermissionPath = oer_radio_port::Child<ModelPool<9>, 0>;
+    type AssociationPath<'id> = ModelPool<'id, 6>;
+    type GroupPermissionPath<'id> = oer_radio_port::Child<ModelPool<'id, 9>, 0>;
 }
 
 /// The kind of the one GTK mutation permission per interface.
@@ -401,7 +402,7 @@ pub enum ModelBlockAcks {}
 /// A transmit buffer of the class `C`: its token and its memory, which
 /// moves with it; only the install mints one.
 pub struct ModelBuffer<'id, C: ModelClass> {
-    slot: Slot<'id, C, C::Path>,
+    slot: Slot<'id, C, C::Path<'id>>,
     memory: ModelMemory,
     admitted_at: RadioInstant<Ieee80211Radio>,
     admitted: bool,
@@ -1042,15 +1043,15 @@ pub struct ModelTypes<X: ModelContext = ()>(PhantomData<fn() -> X>);
 
 impl<'id, X: ModelContext> PhaseTypes<'id> for ModelTypes<X> {
     const COMMAND_CAPACITY: usize = MODEL_COMMANDS;
-    type StationCommandPath = oer_radio_port::Child<ModelPool<9>, 1>;
-    type AccessPointCommandPath = oer_radio_port::Child<ModelPool<9>, 2>;
+    type StationCommandPath = oer_radio_port::Child<ModelPool<'id, 9>, 1>;
+    type AccessPointCommandPath = oer_radio_port::Child<ModelPool<'id, 9>, 2>;
     type StationConfigureContext = X::StationConfigureContext<'id>;
     type AccessPointConfigureContext = X::AccessPointConfigureContext<'id>;
     const TERMINAL_CAPACITY: usize = MODEL_TERMINALS;
-    type EpochPath = ModelPool<4>;
-    type GatePath = ModelPool<0>;
-    type TicketPath = ModelPool<1>;
-    type BlockAckPath = ModelPool<7>;
+    type EpochPath = ModelPool<'id, 4>;
+    type GatePath = ModelPool<'id, 0>;
+    type TicketPath = ModelPool<'id, 1>;
+    type BlockAckPath = ModelPool<'id, 7>;
     type Fault = ModelFault;
     type Context = X::Context<'id>;
     type Prepared<'k, 'p, R, K: Ieee80211Capabilities> = ModelPrepared<'k, 'p, 'id, R, K, X>;
@@ -1083,7 +1084,7 @@ impl<'id, X: ModelContext> PhaseTypes<'id> for ModelTypes<X> {
 /// Installed keys retain only their interface identity; the modeled hardware
 /// holds exactly one CCMP record at that interface's index.
 pub struct ModelAssociation<'id, R: ModelRole> {
-    owner: Association<'id, R, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, R::AssociationPath>,
+    owner: Association<'id, R, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, R::AssociationPath<'id>>,
 }
 
 /// The keys of the role `R` and their slots.
@@ -1092,12 +1093,12 @@ pub struct ModelKeys<'id, R>(PhantomData<fn(&'id ()) -> R>);
 impl<'id, R: ModelRole + 'id> KeyTypes<'id> for ModelKeys<'id, R> {
     type Pool = ModelAssociationPool<R>;
     type AssociationStart =
-        AssociationStart<'id, R, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, R::AssociationPath>;
+        AssociationStart<'id, R, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, R::AssociationPath<'id>>;
     type Association = ModelAssociation<'id, R>;
     type VacantKeyBank =
-        VacantKeyBank<'id, R, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, R::AssociationPath>;
+        VacantKeyBank<'id, R, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, R::AssociationPath<'id>>;
     type VacantAssociation =
-        VacantAssociation<'id, R, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, R::AssociationPath>;
+        VacantAssociation<'id, R, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, R::AssociationPath<'id>>;
     fn begin_association(
         start: Self::AssociationStart,
         spp: oer_ieee80211_wire::security::Spp,
@@ -1137,11 +1138,12 @@ impl<'id, R: ModelRole + 'id> KeyTypes<'id> for ModelKeys<'id, R> {
     }
 
     type PairwiseSlot =
-        PairwiseKeySlot<'id, R, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, R::AssociationPath>;
-    type GroupSlot = GroupKeySlot<'id, R, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, R::AssociationPath>;
+        PairwiseKeySlot<'id, R, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, R::AssociationPath<'id>>;
+    type GroupSlot =
+        GroupKeySlot<'id, R, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, R::AssociationPath<'id>>;
     type PairwiseKey = ModelPairwiseKey<'id, R>;
     type GroupKey = ModelGroupKey<'id, R>;
-    type GroupPermission = Slot<'id, ModelGroupPermission<R>, R::GroupPermissionPath>;
+    type GroupPermission = Slot<'id, ModelGroupPermission<R>, R::GroupPermissionPath<'id>>;
     type Identity = KeyIdentity;
     type GroupSlotIdentity = u8;
     fn pairwise_identity(key: &Self::PairwiseKey) -> KeyIdentity {
@@ -1301,52 +1303,53 @@ pub struct ModelFault;
 pub struct ModelResources<'id> {
     /// Station's unique association-mode selection permission.
     pub station_association:
-        AssociationStart<'id, Station, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, ModelPool<5>>,
+        AssociationStart<'id, Station, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, ModelPool<'id, 5>>,
     /// AP's interface-wide association-mode selection permission.
     pub access_point_association:
-        AssociationStart<'id, AccessPoint, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, ModelPool<6>>,
+        AssociationStart<'id, AccessPoint, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, ModelPool<'id, 6>>,
     /// Station command admission from its own installation component.
     pub station_commands:
-        InterfacePermissions<'id, Station, oer_radio_port::Child<ModelPool<9>, 1>>,
+        InterfacePermissions<'id, Station, oer_radio_port::Child<ModelPool<'id, 9>, 1>>,
     /// Access-point command admission from its own installation component.
     pub access_point_commands:
-        InterfacePermissions<'id, AccessPoint, oer_radio_port::Child<ModelPool<9>, 2>>,
+        InterfacePermissions<'id, AccessPoint, oer_radio_port::Child<ModelPool<'id, 9>, 2>>,
     /// The install's single epoch-source slot; Station constructs its source.
-    pub connection_epoch: Slot<'id, ConnectionEpochKind, ModelPool<4>>,
+    pub connection_epoch: Slot<'id, ConnectionEpochKind, ModelPool<'id, 4>>,
     /// The transmit tickets.
-    pub tickets: Vec<Slot<'id, ModelTickets, ModelPool<1>>>,
+    pub tickets: Vec<Slot<'id, ModelTickets, ModelPool<'id, 1>>>,
     /// Sole permission for the body to unpack TX terminals.
-    pub terminal_access: oer_ieee80211_port::TerminalAccess<'id, ModelTickets, ModelPool<1>>,
+    pub terminal_access: oer_ieee80211_port::TerminalAccess<'id, ModelTickets, ModelPool<'id, 1>>,
     /// The small transmit buffers.
     pub small: Vec<ModelBuffer<'id, ModelSmall>>,
     /// The large transmit buffers.
     pub large: Vec<ModelBuffer<'id, ModelLarge>>,
     /// The station's pairwise key slots.
     pub station_pairwise:
-        [PairwiseKeySlot<'id, Station, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, ModelPool<5>>;
+        [PairwiseKeySlot<'id, Station, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, ModelPool<'id, 5>>;
             MODEL_KEY_SLOTS],
     /// The station's group key slots.
-    pub station_group: [GroupKeySlot<'id, Station, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, ModelPool<5>>;
-        MODEL_KEY_SLOTS],
+    pub station_group:
+        [GroupKeySlot<'id, Station, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, ModelPool<'id, 5>>;
+            MODEL_KEY_SLOTS],
     /// The access point's pairwise key slots.
     pub access_point_pairwise:
-        [PairwiseKeySlot<'id, AccessPoint, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, ModelPool<6>>;
+        [PairwiseKeySlot<'id, AccessPoint, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, ModelPool<'id, 6>>;
             MODEL_KEY_SLOTS],
     /// The access point's group key slots.
     pub access_point_group:
-        [GroupKeySlot<'id, AccessPoint, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, ModelPool<6>>;
+        [GroupKeySlot<'id, AccessPoint, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, ModelPool<'id, 6>>;
             MODEL_KEY_SLOTS],
     /// The station's sole GTK mutation permission.
-    pub station_group_permission: Slot<'id, ModelGroupPermission<Station>, ModelPool<8>>,
+    pub station_group_permission: Slot<'id, ModelGroupPermission<Station>, ModelPool<'id, 8>>,
     /// The access point's sole GTK mutation permission.
     pub access_point_group_permission:
-        Slot<'id, ModelGroupPermission<AccessPoint>, oer_radio_port::Child<ModelPool<9>, 0>>,
+        Slot<'id, ModelGroupPermission<AccessPoint>, oer_radio_port::Child<ModelPool<'id, 9>, 0>>,
     /// The receive Block Ack slots both roles share.
     pub block_acks: [ModelBlockAckSlot<'id>; MODEL_BLOCK_ACK_SLOTS],
     /// The sole authority to construct this installation's arbiter.
-    pub arbiter_authority: oer_ieee80211_port::ArbiterAuthority<'id, ModelPool<0>>,
+    pub arbiter_authority: oer_ieee80211_port::ArbiterAuthority<'id, ModelPool<'id, 0>>,
     /// The open transmit gate.
-    pub gate: GateOpen<'id, ModelPool<0>>,
+    pub gate: GateOpen<'id, ModelPool<'id, 0>>,
 }
 
 /// One transmission the air saw.
@@ -2207,16 +2210,16 @@ enum Command<'id, X: ModelContext> {
         key: KeyIdentity,
         removed: Removed<'id, ModelTypes<X>>,
     },
-    CloseGate(GateOpen<'id, ModelPool<0>>),
+    CloseGate(GateOpen<'id, ModelPool<'id, 0>>),
     OpenGate,
 }
 
-type StationGroupPermission<'id> = Slot<'id, ModelGroupPermission<Station>, ModelPool<8>>;
+type StationGroupPermission<'id> = Slot<'id, ModelGroupPermission<Station>, ModelPool<'id, 8>>;
 
 struct PendingGroupInstall<'id, R: ModelRole> {
     spp: oer_ieee80211_wire::security::Spp,
-    slot: GroupKeySlot<'id, R, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, R::AssociationPath>,
-    permission: Slot<'id, ModelGroupPermission<R>, R::GroupPermissionPath>,
+    slot: GroupKeySlot<'id, R, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, R::AssociationPath<'id>>,
+    permission: Slot<'id, ModelGroupPermission<R>, R::GroupPermissionPath<'id>>,
     key_id: GroupKeyId,
     key: Ccmp128Key,
 }
@@ -2358,7 +2361,7 @@ impl<D> ModelSubframesExecution<'_, '_, D> {
 }
 
 type ModelInFlight<'id, X, M> =
-    InFlight<<X as ModelContext>::Context<'id>, Slot<'id, ModelTickets, ModelPool<1>>, M>;
+    InFlight<<X as ModelContext>::Context<'id>, Slot<'id, ModelTickets, ModelPool<'id, 1>>, M>;
 
 /// An A-MPDU attempt prepared for its queue.
 struct PreparedAggregate<'id, X: ModelContext> {
@@ -2411,7 +2414,7 @@ pub struct ModelHeld<'id, X: ModelContext = ()> {
     lost: Cell<bool>,
     body: RefCell<Option<Waker>>,
     /// The backend alone attests the hardware barrier with the one gate place.
-    gate_issuer: RefCell<GateIssuer<'id, ModelPool<0>>>,
+    gate_issuer: RefCell<GateIssuer<'id, ModelPool<'id, 0>>>,
     /// Disable asks the driver to return all queued operations before the
     /// owner ends the phase. Unlike poison, this is an ordinary terminal.
     draining: Cell<bool>,
@@ -2863,7 +2866,7 @@ impl<C: Ieee80211Capabilities, X: ModelContext> LowerMacBackend for ModelBackend
 /// The driver retains the unique open place throughout the closing barrier.
 enum DriverGate<'id> {
     Open,
-    Closing(GateOpen<'id, ModelPool<0>>),
+    Closing(GateOpen<'id, ModelPool<'id, 0>>),
     Closed,
 }
 
@@ -3866,11 +3869,14 @@ impl<'p, 'id: 'p, C: Ieee80211Capabilities, X: ModelContext> LowerMacPhase<'p, '
         self.held.air.wake_driver();
     }
 
-    fn close_gate(&mut self, gate: GateOpen<'id, ModelPool<0>>) {
+    fn close_gate(&mut self, gate: GateOpen<'id, ModelPool<'id, 0>>) {
         self.held.command(Command::CloseGate(gate));
     }
 
-    fn open_gate(&mut self, gate: GateClosed<'id, ModelPool<0>>) -> GateOpen<'id, ModelPool<0>> {
+    fn open_gate(
+        &mut self,
+        gate: GateClosed<'id, ModelPool<'id, 0>>,
+    ) -> GateOpen<'id, ModelPool<'id, 0>> {
         let open = self.held.gate_issuer.borrow_mut().open(gate);
         self.held.command(Command::OpenGate);
         open
@@ -3905,13 +3911,13 @@ pub struct ModelInterface<'p, 'v, 'id, R, C = ModelCaps, X: ModelContext = ()> {
 /// A key the model installed.
 pub struct ModelPairwiseKey<'id, R: ModelRole> {
     identity: KeyIdentity,
-    slot: PairwiseKeySlot<'id, R, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, R::AssociationPath>,
+    slot: PairwiseKeySlot<'id, R, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, R::AssociationPath<'id>>,
 }
 
 /// A group key the model installed.
 pub struct ModelGroupKey<'id, R: ModelRole> {
     identity: KeyIdentity,
-    slot: GroupKeySlot<'id, R, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, R::AssociationPath>,
+    slot: GroupKeySlot<'id, R, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, R::AssociationPath<'id>>,
 }
 
 /// A receive Block Ack agreement the model keeps.
@@ -4012,7 +4018,7 @@ impl<'id, R, K, X: ModelContext> PreparedTx<'id> for ModelPrepared<'_, '_, 'id, 
 /// A model buffer class and its unique pool within the installation layout.
 pub trait ModelClass: TxBufferClass + Sized {
     /// Nominal component of the backing memory slots.
-    type Path: oer_radio_port::PoolPath;
+    type Path<'id>: oer_radio_port::PoolPath;
     /// Return fresh memory through the terminal's exhaustive buffer enum.
     fn erase<'id, D>(buffer: ModelBuffer<'id, Self>) -> ModelAnyBuffer<'id, D>;
     /// Return a published MPDU through the terminal buffer enum.
@@ -4028,7 +4034,7 @@ pub trait ModelClass: TxBufferClass + Sized {
 }
 
 impl ModelClass for ModelSmall {
-    type Path = ModelPool<2>;
+    type Path<'id> = ModelPool<'id, 2>;
     fn erase<'id, D>(buffer: ModelBuffer<'id, Self>) -> ModelAnyBuffer<'id, D> {
         ModelAnyBuffer::Small(buffer)
     }
@@ -4056,7 +4062,7 @@ impl ModelClass for ModelSmall {
     }
 }
 impl ModelClass for ModelLarge {
-    type Path = ModelPool<3>;
+    type Path<'id> = ModelPool<'id, 3>;
     fn erase<'id, D>(buffer: ModelBuffer<'id, Self>) -> ModelAnyBuffer<'id, D> {
         ModelAnyBuffer::Large(buffer)
     }
@@ -4218,7 +4224,7 @@ where
     fn install_pairwise_key(
         &mut self,
         association: &ModelAssociation<'id, R>,
-        slot: PairwiseKeySlot<'id, R, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, R::AssociationPath>,
+        slot: PairwiseKeySlot<'id, R, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, R::AssociationPath<'id>>,
         peer: IndividualAddress,
         key: Ccmp128Key,
     ) -> ModelPairwiseKey<'id, R> {
@@ -4234,8 +4240,8 @@ where
     fn install_group_key(
         &mut self,
         association: &ModelAssociation<'id, R>,
-        permission: Slot<'id, ModelGroupPermission<R>, R::GroupPermissionPath>,
-        slot: GroupKeySlot<'id, R, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, R::AssociationPath>,
+        permission: Slot<'id, ModelGroupPermission<R>, R::GroupPermissionPath<'id>>,
+        slot: GroupKeySlot<'id, R, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, R::AssociationPath<'id>>,
         key_id: GroupKeyId,
         key: Ccmp128Key,
     ) {
@@ -4268,7 +4274,7 @@ where
 
     fn remove_group_key(
         &mut self,
-        permission: Slot<'id, ModelGroupPermission<R>, R::GroupPermissionPath>,
+        permission: Slot<'id, ModelGroupPermission<R>, R::GroupPermissionPath<'id>>,
         key: ModelGroupKey<'id, R>,
     ) {
         self.held.command(Command::Group {
@@ -4682,7 +4688,7 @@ impl<'p, 'v, 'id: 'p, C: Ieee80211Capabilities, X: ModelContext> StationPhase<'p
         permission: ConfigurePermission<
             'id,
             Station,
-            oer_radio_port::Child<ModelPool<9>, 1>,
+            oer_radio_port::Child<ModelPool<'id, 9>, 1>,
             X::StationConfigureContext<'id>,
         >,
         _: StationReceive<C>,
@@ -4705,7 +4711,7 @@ impl<'p, 'v, 'id: 'p, C: Ieee80211Capabilities, X: ModelContext> AccessPointPhas
         permission: ConfigurePermission<
             'id,
             AccessPoint,
-            oer_radio_port::Child<ModelPool<9>, 2>,
+            oer_radio_port::Child<ModelPool<'id, 9>, 2>,
             X::AccessPointConfigureContext<'id>,
         >,
         _: SupportedFilter<C, AccessPoint>,

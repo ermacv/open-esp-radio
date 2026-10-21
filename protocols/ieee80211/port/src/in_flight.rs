@@ -22,7 +22,7 @@ type Authority<'id, Kind, Path> = fn(&'id (), Kind, Path) -> (&'id (), Kind, Pat
 
 /// Sole permission to recover completed owners of this installation and ticket
 /// pool. Completing an operation does not grant permission to unpack it.
-pub struct TerminalAccess<'id, Kind, Path: PoolPath = Root> {
+pub struct TerminalAccess<'id, Kind, Path: PoolPath = Root<oer_radio_port::LocalId<'id>>> {
     proof: PhantomData<Authority<'id, Kind, Path>>,
 }
 

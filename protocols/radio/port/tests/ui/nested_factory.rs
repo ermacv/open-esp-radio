@@ -11,7 +11,7 @@ impl PoolSet for Wrapped {
     }
 }
 
-pub fn select<'id>(mint: Mint<'id, Wrapped>) -> Slot<'id, Kind, Child<Root, 0>> {
+pub fn select<'id>(mint: Mint<'id, Wrapped>) -> Slot<'id, Kind, Child<Root<oer_radio_port::LocalId<'id>>, 0>> {
     let ([first], ([nested],)) = mint.into_pools();
     #[cfg(ui_reject)]
     return nested; // ui-error: E0308

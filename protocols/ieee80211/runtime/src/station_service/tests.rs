@@ -61,11 +61,14 @@ const RSN: [u8; 22] = [
 struct ServiceContexts;
 
 impl oer_ieee80211_model::ModelContext for ServiceContexts {
-    type StationConfigureContext<'id> =
-        oer_ieee80211_sta::machine::StaConfigurationContext<'id, oer_ieee80211_model::ModelPool<4>>;
+    type StationConfigureContext<'id> = oer_ieee80211_sta::machine::StaConfigurationContext<
+        'id,
+        oer_ieee80211_model::ModelPool<'id, 4>,
+    >;
     type AccessPointConfigureContext<'id> = ();
     type Body = core::convert::Infallible;
-    type Context<'id> = TxContext<'id, ModelCaps24, ModelLarge, oer_ieee80211_model::ModelPool<4>>;
+    type Context<'id> =
+        TxContext<'id, ModelCaps24, ModelLarge, oer_ieee80211_model::ModelPool<'id, 4>>;
 }
 
 impl<'id> StationPort<'id> for ModelBackend<ModelCaps24, ServiceContexts> {
@@ -424,7 +427,7 @@ impl RateSelection<ModelRxMeta, ModelAck> for RecordingRates<'_> {
     }
 }
 
-type CommandPath = <ModelTypes<ServiceContexts> as PhaseTypes<'static>>::StationCommandPath;
+type CommandPath<'id> = <ModelTypes<ServiceContexts> as PhaseTypes<'id>>::StationCommandPath;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct ObservedRequest {
@@ -432,7 +435,7 @@ struct ObservedRequest {
     command: StaCommand,
 }
 impl ObservedRequest {
-    fn of(request: &StaRequest<'_, CommandPath>) -> Self {
+    fn of(request: &StaRequest<'_, CommandPath<'_>>) -> Self {
         Self {
             correlation: request.correlation(),
             command: request.command(),
@@ -473,19 +476,19 @@ enum ObservedOutput {
 }
 
 struct CommandCredits<'id> {
-    connect: Option<StaCommandCredit<'id, CommandPath, ConnectCommand>>,
-    scan: Option<StaCommandCredit<'id, CommandPath, ScanCommand>>,
-    disconnect: Option<StaCommandCredit<'id, CommandPath, DisconnectCommand>>,
+    connect: Option<StaCommandCredit<'id, CommandPath<'id>, ConnectCommand>>,
+    scan: Option<StaCommandCredit<'id, CommandPath<'id>, ScanCommand>>,
+    disconnect: Option<StaCommandCredit<'id, CommandPath<'id>, DisconnectCommand>>,
 }
 impl<'id> CommandCredits<'id> {
-    fn new(credits: StaCommandCredits<'id, CommandPath>) -> Self {
+    fn new(credits: StaCommandCredits<'id, CommandPath<'id>>) -> Self {
         Self {
             connect: Some(credits.connect),
             scan: Some(credits.scan),
             disconnect: Some(credits.disconnect),
         }
     }
-    fn take(&mut self, kind: StaCommand) -> StaCommandPermission<'id, CommandPath> {
+    fn take(&mut self, kind: StaCommand) -> StaCommandPermission<'id, CommandPath<'id>> {
         match kind {
             StaCommand::Connect => self
                 .connect
@@ -504,7 +507,7 @@ impl<'id> CommandCredits<'id> {
                 .into(),
         }
     }
-    fn restore(&mut self, permission: StaCommandPermission<'id, CommandPath>) {
+    fn restore(&mut self, permission: StaCommandPermission<'id, CommandPath<'id>>) {
         match permission {
             StaCommandPermission::Connect(credit) => {
                 assert!(self.connect.replace(credit).is_none())
@@ -523,7 +526,7 @@ impl<'id> CommandCredits<'id> {
 /// The outer world's observations own no command permission.
 struct Application<'a, 'b, 'id> {
     world: &'a World<'b>,
-    commands: Cell<Option<MsduSender<'a, ServiceCommand<'id, ModelCaps24, CommandPath>, 4>>>,
+    commands: Cell<Option<MsduSender<'a, ServiceCommand<'id, ModelCaps24, CommandPath<'id>>, 4>>>,
     credits: RefCell<CommandCredits<'id>>,
 }
 impl<'b> core::ops::Deref for Application<'_, 'b, '_> {
@@ -542,7 +545,7 @@ impl<'id> Application<'_, '_, 'id> {
         )))
         .await;
     }
-    fn record_output(&self, output: ServiceOutput<'id, ModelCaps24, CommandPath>) {
+    fn record_output(&self, output: ServiceOutput<'id, ModelCaps24, CommandPath<'id>>) {
         let observed = match output {
             ServiceOutput::RxFrameDropped(error) => ObservedOutput::RxFrameDropped(error),
             ServiceOutput::MsduRefused { packet, reason } => {
@@ -666,7 +669,7 @@ impl<'id> Application<'_, '_, 'id> {
         ptk
     }
 
-    async fn command(&self, command: ServiceCommand<'id, ModelCaps24, CommandPath>) {
+    async fn command(&self, command: ServiceCommand<'id, ModelCaps24, CommandPath<'id>>) {
         let mut sender = self
             .commands
             .take()
@@ -837,7 +840,7 @@ where
                 terminal_access,
             );
             let mut command_queue =
-                MsduQueue::<ServiceCommand<'id, ModelCaps24, CommandPath>, 4>::new();
+                MsduQueue::<ServiceCommand<'id, ModelCaps24, CommandPath<'id>>, 4>::new();
             let (application, commands) = command_queue.split();
             let application = Application {
                 world: self.world,

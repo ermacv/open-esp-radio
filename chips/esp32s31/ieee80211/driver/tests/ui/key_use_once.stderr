@@ -2,7 +2,7 @@ error[E0382]: use of moved value: `key`
  --> tests/ui/key_use_once.rs:6:50
   |
 3 | pub fn protected<'core>(key: KeyUse<'core>) -> TxAdmission<'core> {
-  |                         --- move occurs because `key` has type `KeyUse<'_>`, which does not implement the `Copy` trait
+  |                         --- move occurs because `key` has type `KeyUse<'_, oer_radio_port::pool::path::Root<oer_radio_port::identity::LocalId<'_>>>`, which does not implement the `Copy` trait
 4 |     let admission = TxAdmission::Protected(key);
   |                                            --- value moved here
 5 |     #[cfg(all())]

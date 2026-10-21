@@ -1,7 +1,7 @@
 warning: variable does not need to be mutable
-  --> tests/ui/installation_no_ack.rs:73:17
+  --> tests/ui/installation_no_ack.rs:74:17
    |
-73 |             let mut source = self.source.phase();
+74 |             let mut source = self.source.phase();
    |                 ----^^^^^^
    |                 |
    |                 help: remove this `mut`
@@ -9,23 +9,23 @@ warning: variable does not need to be mutable
    = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
 
 error: lifetime may not live long enough
-   --> tests/ui/installation_no_ack.rs:134:9
+   --> tests/ui/installation_no_ack.rs:135:9
     |
- 63 |     async fn run<'p, 'id>(
+ 64 |     async fn run<'p, 'id>(
     |                      --- lifetime `'id` defined here
- 64 |         mut self,
+ 65 |         mut self,
     |         -------- has type `Target<'_, '_, '1>`
 ...
-134 |         Ended::fail_stopped(target.fail_stop(), ()) // ui-error: lifetime may not live long enough
+135 |         Ended::fail_stopped(target.fail_stop(), ()) // ui-error: lifetime may not live long enough
     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ method was supposed to return data with lifetime `'id` but it is returning data with lifetime `'1`
 
 error: lifetime may not live long enough
-   --> tests/ui/installation_no_ack.rs:134:9
+   --> tests/ui/installation_no_ack.rs:135:9
     |
- 63 |     async fn run<'p, 'id>(
+ 64 |     async fn run<'p, 'id>(
     |                      --- lifetime `'id` defined here
- 64 |         mut self,
+ 65 |         mut self,
     |         -------- has type `Target<'_, '_, '1>`
 ...
-134 |         Ended::fail_stopped(target.fail_stop(), ()) // ui-error: lifetime may not live long enough
+135 |         Ended::fail_stopped(target.fail_stop(), ()) // ui-error: lifetime may not live long enough
     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ method was supposed to return data with lifetime `'1` but it is returning data with lifetime `'id`

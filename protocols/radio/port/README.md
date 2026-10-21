@@ -12,6 +12,7 @@ here.
 | --- | --- |
 | `Installed`, `InstallParts`, `PortBackend`, `PortBody`, `Owner`, `Ended`, `DriverLoan`, `DriverExit`, `Retired`, `Detached`, `Quarantined` | One installed backend and independent driver, a borrowing typestate owner, and affine proofs of driver completion and detachment |
 | `branded`, `Mint`, `PoolSet`, `PoolPath`, `PermitSupply`, `Slots`, `Permits`, `Slot`, `Permit`, `PermitPool`, `Seat`, `Line` | Capacity as branded tokens. `branded` runs an install with the `Mint` of a fresh brand `'id`, generic over it, so nothing branded leaves the install or reaches another; `Mint::into_pools(self)` consumes its authority and issues the complete layout declared by the backend's `Pools` associated type. `Slots<K, N>` supplies synchronous slots; `Permits<K, N, S>` supplies awaited permits, their line and caller seats. Custom layouts consume one `PoolBuilder<'id, Path>` to expand their components. Each tuple derives a sealed `Child<Path, INDEX>` for each member; every slot, permit, seat and line retains that identity, including repeated kinds in nested layouts. A FIFO consumes the indivisible `PermitSupply` once, so subsets cannot form interchangeable FIFOs. Neither authority can issue a second set; no token is `Clone`, `Copy` or `Default` |
+| `SlotIdentity`, `LocalId`, `StaticId`, `Root<Id>` | Closed identity markers independent of token loans. `LocalId<'scope>` is invariant in its scope; `StaticId<Declaration>` is invariant in its declaration. An identity type grants no storage construction or reuse authority |
 | `PortResult`, `Poisoned` | Commands and clock calls return `Result<Result<T, Refusal>, Poisoned<Fault>>`. The inner `Err` is a typed refusal (nothing changed); the outer one carries the backend's cause, which portable code passes on without interpreting it |
 | `EventEnd<Fault>` | `next_event` alone returns `Result<Result<Event, EventsLost>, EventEnd<Fault>>`. `Drained { cause }` promises that every terminal of admitted work was delivered. A missing terminal violates the contract and can be detected by the body. `Quarantined { cause }` leaves undelivered owners in the `Quarantined` of `PortEnd`. The end contains only its cause, no owners or affine proofs, and every subsequent call returns the same variant and cause |
 | `EventsLost` | Events were dropped. Reported once, in place of the first dropped event; events before it precede the gap and events after it follow it. A backend reserves at admission the slot of every terminal event and of data its protocol promises to deliver (acknowledged Bluetooth LE connection data), so the gap holds only data the protocol does not promise (received frames, advertising reports) and the consumer continues |
@@ -26,13 +27,22 @@ seats of its line and at most eight permits it holds aside.
 
 ## Component authority and cost
 
-`Root` is the path of a standalone layout. A tuple adds one `Child` per
+`Root<Id>` is the path of a standalone layout belonging to slot identity
+`Id`. A tuple adds one `Child` per
 component at each nesting level; custom factories preserve the path they
-receive. The default `Root` type parameter describes a standalone pool,
+receive, including its `PoolPath::Identity`. The default root is
+`Root<LocalId<'id>>` for the token's local brand. It describes a standalone pool,
 not a way to erase a tuple component's identity. A line is a copyable receipt
 for its waiter domain. A FIFO's capacity comes from its consuming supply;
 several supplies can deliberately use one line while their permit paths
 remain distinct.
+
+`Mint<'p, Layout, Id>` issues `Layout::Pools<'p, Root<Id>>`. The token loan
+`'p` and the path's identity are separate invariant parameters: two tokens
+with the same loan, kind and component index still differ when their slot
+identities differ. A static identity does not make a token loan static,
+including when a caller attempts to erase its type. Paths and identities
+occupy no runtime storage and use no registry or claim latch.
 
 | Consumer | Authority retained | Runtime cost of the path | Construction and cancellation |
 | --- | --- | --- | --- |

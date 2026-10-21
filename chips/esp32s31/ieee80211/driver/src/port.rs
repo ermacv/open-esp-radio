@@ -57,8 +57,8 @@ const TERMINALS: usize = TX_TICKETS + 16 + 2 + 1 + INTERFACE_TERMINALS;
 const COMMANDS: usize = TX_TICKETS + 2 * 16 + 2 + 2 + INTERFACE_COMMANDS;
 pub const PUBLICATION_BOUND: Duration = Duration::from_millis(250);
 pub const COMMAND_BOUND: Duration = Duration::from_millis(400);
-type Part<const I: u8> = Child<Root, I>;
-type CorePath = Part<0>;
+type Part<'id, const I: u8> = Child<Root<oer_radio_port::LocalId<'id>>, I>;
+type CorePath<'id> = Part<'id, 0>;
 type Core<'id, D, const B: usize> = LowerMacCore<
     'id,
     'static,
@@ -67,7 +67,7 @@ type Core<'id, D, const B: usize> = LowerMacCore<
     <D as Device<B>>::Entropy,
     <D as Device<B>>::Timer,
     B,
-    CorePath,
+    CorePath<'id>,
     TX_TICKETS,
 >;
 
@@ -345,7 +345,7 @@ pub struct GroupPermission<R>(PhantomData<fn() -> R>);
 pub struct Types<D, const B: usize>(PhantomData<fn() -> D>);
 
 type Single<'id, D, const B: usize> =
-    InFlight<<D as Device<B>>::Context<'id>, Slot<'id, Tickets, Part<2>>, Mpdu<'id, D, B>>;
+    InFlight<<D as Device<B>>::Context<'id>, Slot<'id, Tickets, Part<'id, 2>>, Mpdu<'id, D, B>>;
 type Event<'id, D, const B: usize> = LowerMacEvent<'id, Types<D, B>>;
 type Terminal<'id, D, const B: usize> = LowerMacTerminal<'id, Types<D, B>>;
 
@@ -374,7 +374,7 @@ pub struct Held<'id, D: Device<B>, const B: usize> {
     recycled: Queue<ReceiveBuffer<D::Receive>, TX_TICKETS>,
     failed_command: RefCell<Option<driver::Command<'id, D, B>>>,
     failed_terminal: RefCell<Option<Terminal<'id, D, B>>>,
-    gate: RefCell<GateIssuer<'id, Part<1>>>,
+    gate: RefCell<GateIssuer<'id, Part<'id, 1>>>,
     enabled: Cell<bool>,
     want_enabled: Cell<bool>,
     channel: Cell<Channel>,

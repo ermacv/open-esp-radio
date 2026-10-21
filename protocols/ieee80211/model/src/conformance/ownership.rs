@@ -81,9 +81,9 @@ pub async fn ownership(
         _ => Err("model ownership failed to uninstall"),
     }
 }
-fn observe(
+fn observe<'id>(
     context: Context,
-    ticket: Slot<'_, ModelTickets, ModelPool<1>>,
+    ticket: Slot<'id, ModelTickets, ModelPool<'id, 1>>,
     buffer: ModelAnyBuffer<'_, Body>,
     body: Option<Body>,
     (end, evidence): (End, conformance::ReturnEvidence),
@@ -126,7 +126,7 @@ fn observe(
 }
 fn returned<'id>(
     terminal: LowerMacTerminal<'id, ModelTypes<Contexts>>,
-    access: &mut oer_ieee80211_port::TerminalAccess<'id, ModelTickets, ModelPool<1>>,
+    access: &mut oer_ieee80211_port::TerminalAccess<'id, ModelTickets, ModelPool<'id, 1>>,
     seen: &mut Capture,
     air: &ModelAir,
 ) -> Result<(), &'static str> {

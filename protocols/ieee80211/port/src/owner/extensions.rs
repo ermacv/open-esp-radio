@@ -288,7 +288,7 @@ impl MpduStartSpacing {
 }
 
 /// One A-MPDU attempt: its ticket, its aggregate and how it goes.
-pub struct AggregateAttempt<'id, T, A, K, X, Path: PoolPath = Root> {
+pub struct AggregateAttempt<'id, T, A, K, X, Path: PoolPath = Root<oer_radio_port::LocalId<'id>>> {
     /// The caller's context for all subframes, returned with their terminal.
     pub context: X,
     /// The attempt's place in flight.
@@ -305,7 +305,14 @@ pub struct AggregateAttempt<'id, T, A, K, X, Path: PoolPath = Root> {
 
 /// A complete aggregate sealed before backend custody, retaining its original
 /// preparation's phase, installation and key borrow until submission.
-pub struct AdmittedAggregate<'id, T, A: PhaseAggregate<'id>, K, X, Path: PoolPath = Root> {
+pub struct AdmittedAggregate<
+    'id,
+    T,
+    A: PhaseAggregate<'id>,
+    K,
+    X,
+    Path: PoolPath = Root<oer_radio_port::LocalId<'id>>,
+> {
     /// Indivisible owner of every submitted MPDU and body.
     pub operation:
         crate::InFlight<X, Slot<'id, T, Path>, <A::Types as PhaseTypes<'id>>::TxAggregate>,

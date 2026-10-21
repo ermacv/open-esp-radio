@@ -6,7 +6,7 @@ error[E0308]: mismatched types
    |                           |
    |                           arguments to this method are incorrect
    |
-   = note: expected reference `&KeyHandle<'_>`
+   = note: expected reference `&KeyHandle<'_, oer_radio_port::pool::path::Root<oer_radio_port::identity::LocalId<'core>>>`
               found reference `&ReceiveKeyHandle<'core>`
 note: method defined here
   --> src/lower_mac.rs

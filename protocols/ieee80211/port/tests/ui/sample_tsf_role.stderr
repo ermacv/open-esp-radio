@@ -6,8 +6,8 @@ error[E0308]: mismatched types
   |                     |
   |                     arguments to this function are incorrect
   |
-  = note: expected struct `TsfPermission<'_, oer_ieee80211_port::Station>`
-             found struct `TsfPermission<'id, oer_ieee80211_port::AccessPoint>`
+  = note: expected struct `TsfPermission<'_, oer_ieee80211_port::Station, oer_radio_port::pool::path::Root<oer_radio_port::identity::LocalId<'_>>>`
+             found struct `TsfPermission<'id, oer_ieee80211_port::AccessPoint, oer_radio_port::pool::path::Root<oer_radio_port::identity::LocalId<'id>>>`
 note: function defined here
  --> tests/ui/sample_tsf_role.rs:3:8
   |

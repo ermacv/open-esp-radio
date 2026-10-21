@@ -107,10 +107,10 @@ impl<'id, D: Device<B>, const B: usize> CoreOwner<'id, D, B> {
     pub(super) fn submit(
         &mut self,
         hardware: &mut D::Hardware,
-        queue: FreeQueue<'id, CorePath>,
-        ticket: TxAdmission<'id, CorePath>,
+        queue: FreeQueue<'id, CorePath<'id>>,
+        ticket: TxAdmission<'id, CorePath<'id>>,
         values: MpduValues<'static, B>,
-    ) -> Result<(), core_mac::SubmitFault<'id, 'static, B, CorePath>> {
+    ) -> Result<(), core_mac::SubmitFault<'id, 'static, B, CorePath<'id>>> {
         match self.0.as_mut().expect("enabled bank retained") {
             Bank::Open(c) => c.submit_checked(hardware, queue, ticket, values),
             _ => panic!("publication requires an open enabled bank"),
@@ -247,20 +247,20 @@ impl<'id, D: Device<B>, const B: usize> CoreOwner<'id, D, B> {
 }
 
 pub struct Resources<'id, D: Device<B>, const B: usize> {
-    pub tickets: [Slot<'id, Tickets, Part<2>>; TX_TICKETS],
-    pub terminal_access: TerminalAccess<'id, Tickets, Part<2>>,
+    pub tickets: [Slot<'id, Tickets, Part<'id, 2>>; TX_TICKETS],
+    pub terminal_access: TerminalAccess<'id, Tickets, Part<'id, 2>>,
     pub buffers: [Buffer<'id, B>; TX_TICKETS],
-    pub connection_epoch: Slot<'id, ConnectionEpochKind, Part<4>>,
-    pub station_association: core_mac::association::VacantStationAssociation<'id, CorePath>,
+    pub connection_epoch: Slot<'id, ConnectionEpochKind, Part<'id, 4>>,
+    pub station_association: core_mac::association::VacantStationAssociation<'id, CorePath<'id>>,
     pub access_point_association:
-        core_mac::association::VacantAccessPointAssociation<'id, CorePath>,
-    pub station_commands: InterfacePermissions<'id, Station, Part<8>>,
-    pub access_point_commands: InterfacePermissions<'id, AccessPoint, Part<9>>,
+        core_mac::association::VacantAccessPointAssociation<'id, CorePath<'id>>,
+    pub station_commands: InterfacePermissions<'id, Station, Part<'id, 8>>,
+    pub access_point_commands: InterfacePermissions<'id, AccessPoint, Part<'id, 9>>,
     pub block_acks: [PhaseBlockAckSlot<'id, Types<D, B>>; 8],
     pub station_group_permission: keys::StaPermission<'id>,
     pub access_point_group_permission: keys::ApPermission<'id>,
-    pub gate: GateOpen<'id, Part<1>>,
-    pub arbiter_authority: ArbiterAuthority<'id, Part<1>>,
+    pub gate: GateOpen<'id, Part<'id, 1>>,
+    pub arbiter_authority: ArbiterAuthority<'id, Part<'id, 1>>,
 }
 
 impl<D: Device<B>, const B: usize> PortBackend for Esp32s31Backend<D, B> {

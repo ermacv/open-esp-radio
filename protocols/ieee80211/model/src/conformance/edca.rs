@@ -38,7 +38,7 @@ fn submit<'p, 'id: 'p>(
     phase: &mut ModelPhase<'p, 'id>,
     role: VifRole,
     category: WmmAccessCategory,
-    ticket: Slot<'id, ModelTickets, ModelPool<1>>,
+    ticket: Slot<'id, ModelTickets, ModelPool<'id, 1>>,
     mut buffer: ModelBuffer<'id, ModelSmall>,
     legacy: LegacyRate,
 ) -> Result<(), &'static str> {

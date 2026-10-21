@@ -73,10 +73,10 @@ fn fresh_memory(buffer: &mut ReturnedMpdu<Buffer, Buffer>) -> &mut [u8] {
     &mut buffer.0
 }
 
-struct Data;
+struct Data<'id>(core::marker::PhantomData<fn(&'id ()) -> &'id ()>);
 
-impl StaDataTokens for Data {
-    type EpochPath = oer_radio_port::Root;
+impl<'id> StaDataTokens for Data<'id> {
+    type EpochPath = oer_radio_port::Root<oer_radio_port::LocalId<'id>>;
     type Class = Buffer;
     type Ticket = u8;
     type Buffer = Buffer;
@@ -88,9 +88,9 @@ impl StaDataTokens for Data {
     }
 }
 
-struct Station;
+struct Station<'id>(core::marker::PhantomData<fn(&'id ()) -> &'id ()>);
 
-impl StaTokens for Station {
+impl<'id> StaTokens for Station<'id> {
     type AssociationStart = ();
     type Association = ();
     type VacantKeyBank = oer_ieee80211_port::association::KeyBankParts<(), (), KEY_BANK_CAPACITY>;
@@ -121,9 +121,9 @@ impl StaTokens for Station {
     const PAIRWISE_SLOTS: usize = 1;
     const TOTAL_GROUP_SLOTS: usize = 0;
     const GROUP_SLOTS: usize = 0;
-    type GatePath = oer_radio_port::Root;
-    type EpochPath = oer_radio_port::Root;
-    type ConfigurationPath = oer_radio_port::Root;
+    type GatePath = oer_radio_port::Root<oer_radio_port::LocalId<'id>>;
+    type EpochPath = oer_radio_port::Root<oer_radio_port::LocalId<'id>>;
+    type ConfigurationPath = oer_radio_port::Root<oer_radio_port::LocalId<'id>>;
     type Small = Buffer;
     type Ticket = u8;
     type SmallBuffer = Buffer;
@@ -145,7 +145,10 @@ const LOCAL: [u8; 6] = [2, 0, 0, 0, 0, 1];
 const BSSID: [u8; 6] = [2, 0, 0, 0, 0, 2];
 const PEER: [u8; 6] = [2, 0, 0, 0, 0, 3];
 
-fn qos_link<'a>(key: &'a (), replay: &'a mut CcmpRxReplayEpoch) -> LinkView<'a, 'static, Station> {
+fn qos_link<'a>(
+    key: &'a (),
+    replay: &'a mut CcmpRxReplayEpoch,
+) -> LinkView<'a, 'static, Station<'static>> {
     LinkView {
         epoch: LinkEpoch::for_test(1),
         address: oer_ieee80211_wire::address::OwnAddress::new(
@@ -164,7 +167,7 @@ fn qos_link<'a>(key: &'a (), replay: &'a mut CcmpRxReplayEpoch) -> LinkView<'a, 
     }
 }
 
-fn open_link(counter: &mut StaSequenceCounter) -> LinkView<'_, 'static, Station> {
+fn open_link(counter: &mut StaSequenceCounter) -> LinkView<'_, 'static, Station<'static>> {
     LinkView {
         epoch: LinkEpoch::for_test(1),
         address: oer_ieee80211_wire::address::OwnAddress::new(
@@ -180,7 +183,7 @@ fn open_link(counter: &mut StaSequenceCounter) -> LinkView<'_, 'static, Station>
     }
 }
 
-fn machine() -> StaData<'static, Data, Caps> {
+fn machine() -> StaData<'static, Data<'static>, Caps> {
     StaData::new(
         [1, 2],
         [Buffer(std::vec![0; 1600]), Buffer(std::vec![0; 1600])],
@@ -202,7 +205,9 @@ fn epoch() -> CcmpRxReplayEpoch {
     CcmpRxReplayEpoch::new([0; 8], GroupKeyId::new(1).unwrap(), [0; 8]).unwrap()
 }
 
-fn transmit(data: &mut StaData<'static, Data, Caps>) -> DataTransmit<'static, Data, Caps> {
+fn transmit(
+    data: &mut StaData<'static, Data<'static>, Caps>,
+) -> DataTransmit<'static, Data<'static>, Caps> {
     match data.poll_action() {
         Some(transmit) => transmit,
         None => panic!("an attempt is owed"),

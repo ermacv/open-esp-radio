@@ -8,7 +8,7 @@ impl<const B: usize> TxBufferClass for BufferClass<B> {
 
 /// Affine memory owner. Only MPDU octets are lent to the portable core.
 pub struct Buffer<'id, const B: usize> {
-    pub(super) place: Slot<'id, Buffers, Part<3>>,
+    pub(super) place: Slot<'id, Buffers, Part<'id, 3>>,
     pub(super) memory: Option<TxSlotFree<'static, B>>,
     pub(super) admission: Option<(Ieee80211Instant, Instant)>,
     pub(super) returned: &'static RefCell<heapless::Deque<TxSlotFree<'static, B>, TX_TICKETS>>,
@@ -314,14 +314,14 @@ impl<'id, D: Device<B>, const B: usize, S: AggregateState> PhaseAggregate<'id>
 impl<'id, D: Device<B>, const B: usize> PhaseTypes<'id> for Types<D, B> {
     const COMMAND_CAPACITY: usize = COMMANDS;
     const TERMINAL_CAPACITY: usize = TERMINALS;
-    type StationCommandPath = Part<8>;
-    type AccessPointCommandPath = Part<9>;
+    type StationCommandPath = Part<'id, 8>;
+    type AccessPointCommandPath = Part<'id, 9>;
     type StationConfigureContext = D::ConfigureContext<'id>;
     type AccessPointConfigureContext = D::ConfigureContext<'id>;
-    type EpochPath = Part<4>;
-    type GatePath = Part<1>;
-    type TicketPath = Part<2>;
-    type BlockAckPath = Part<7>;
+    type EpochPath = Part<'id, 4>;
+    type GatePath = Part<'id, 1>;
+    type TicketPath = Part<'id, 2>;
+    type BlockAckPath = Part<'id, 7>;
     type Fault = Fault;
     type Context = D::Context<'id>;
     type Prepared<'k, 'p, R, K: Ieee80211Capabilities> = Prepared<'k, 'p, 'id, D, B, R, K>;
@@ -351,5 +351,5 @@ impl<'id, D: Device<B>, const B: usize> PhaseTypes<'id> for Types<D, B> {
 }
 
 pub struct ReceiveAgreement<'id> {
-    pub(super) slot: association::BlockAckSlot<'id, BlockAcks, 8, Part<7>>,
+    pub(super) slot: association::BlockAckSlot<'id, BlockAcks, 8, Part<'id, 7>>,
 }

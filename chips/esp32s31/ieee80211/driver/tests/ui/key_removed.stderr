@@ -2,7 +2,7 @@ error[E0382]: borrow of moved value: `key`
   --> tests/ui/key_removed.rs:19:50
    |
 11 |     key: KeyHandle<'core>,
-   |     --- move occurs because `key` has type `KeyHandle<'_>`, which does not implement the `Copy` trait
+   |     --- move occurs because `key` has type `KeyHandle<'_, oer_radio_port::pool::path::Root<oer_radio_port::identity::LocalId<'_>>>`, which does not implement the `Copy` trait
 ...
 17 |     core.remove_checked_key(hardware, key, sink);
    |                                       --- value moved here

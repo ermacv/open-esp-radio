@@ -14,7 +14,7 @@ use oer_radio_port::{PoolPath, Root, Slot};
 /// fn cross_install<'old, 'new>(old: LinkEpoch<'old>) -> LinkEpoch<'new> { old }
 /// ```
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct LinkEpoch<'id, Path: PoolPath = Root> {
+pub struct LinkEpoch<'id, Path: PoolPath = Root<oer_radio_port::LocalId<'id>>> {
     sequence: u64,
     brand: PhantomData<fn(&'id (), Path) -> &'id ()>,
 }
@@ -22,7 +22,7 @@ pub struct LinkEpoch<'id, Path: PoolPath = Root> {
 /// The station's sole, non-cloneable source. A new source consumes the
 /// install's unique slot. It has no reset and never gives that slot back;
 /// reset requires ending the install, which also ends its branded contexts.
-pub struct LinkEpochSource<'id, Path: PoolPath = Root> {
+pub struct LinkEpochSource<'id, Path: PoolPath = Root<oer_radio_port::LocalId<'id>>> {
     brand: PhantomData<fn(&'id (), Path) -> &'id ()>,
     last: u64,
 }
@@ -65,7 +65,7 @@ impl<'id, Path: PoolPath> LinkEpoch<'id, Path> {
 }
 
 #[cfg(test)]
-impl LinkEpochSource<'_, Root> {
+impl<'id> LinkEpochSource<'id, Root<oer_radio_port::LocalId<'id>>> {
     pub(crate) const fn for_test(last: u64) -> Self {
         Self {
             brand: PhantomData,

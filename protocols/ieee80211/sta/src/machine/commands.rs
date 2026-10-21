@@ -40,7 +40,7 @@ impl<'id, Path: PoolPath, Kind> StaCommandCredit<'id, Path, Kind> {
 
 /// The three independent credits issued with a newly constructed station.
 #[must_use = "the application owns each credit until its request returns"]
-pub struct StaCommandCredits<'id, Path: PoolPath = Root> {
+pub struct StaCommandCredits<'id, Path: PoolPath = Root<oer_radio_port::LocalId<'id>>> {
     pub connect: StaCommandCredit<'id, Path, ConnectCommand>,
     pub scan: StaCommandCredit<'id, Path, ScanCommand>,
     pub disconnect: StaCommandCredit<'id, Path, DisconnectCommand>,
@@ -48,7 +48,7 @@ pub struct StaCommandCredits<'id, Path: PoolPath = Root> {
 
 /// An admitted command's affine permission, returned with its original request.
 #[derive(Debug)]
-pub enum StaCommandPermission<'id, Path: PoolPath = Root> {
+pub enum StaCommandPermission<'id, Path: PoolPath = Root<oer_radio_port::LocalId<'id>>> {
     Connect(StaCommandCredit<'id, Path, ConnectCommand>),
     BackgroundScan(StaCommandCredit<'id, Path, ScanCommand>),
     Disconnect(StaCommandCredit<'id, Path, DisconnectCommand>),
@@ -82,7 +82,7 @@ permission_from!(DisconnectCommand, Disconnect);
 /// A request owns its command credit through refusal or terminal delivery.
 /// Correlation is application data; the credit's type binds the installation.
 #[must_use = "submit this request or retain it for the caller"]
-pub struct StaRequest<'id, Path: PoolPath = Root> {
+pub struct StaRequest<'id, Path: PoolPath = Root<oer_radio_port::LocalId<'id>>> {
     correlation: u64,
     permission: StaCommandPermission<'id, Path>,
 }
@@ -122,7 +122,7 @@ impl<Path: PoolPath> Eq for StaRequest<'_, Path> {}
 
 /// A command which was not admitted; no later terminal is owed.
 #[derive(Debug, Eq, PartialEq)]
-pub struct StaCommandRefused<'id, Path: PoolPath = Root> {
+pub struct StaCommandRefused<'id, Path: PoolPath = Root<oer_radio_port::LocalId<'id>>> {
     pub request: StaRequest<'id, Path>,
     pub reason: CommandRefusal,
 }
@@ -163,7 +163,7 @@ pub enum StaCommandOutcome {
 /// The unique terminal returning the original accepted request.
 #[derive(Debug, Eq, PartialEq)]
 #[must_use = "deliver the terminal to the requesting application"]
-pub struct StaCommandTerminal<'id, Path: PoolPath = Root> {
+pub struct StaCommandTerminal<'id, Path: PoolPath = Root<oer_radio_port::LocalId<'id>>> {
     pub request: StaRequest<'id, Path>,
     pub outcome: StaCommandOutcome,
 }

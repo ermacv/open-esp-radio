@@ -460,7 +460,7 @@ fn port_exhausts_supplied_retry_plan_with_one_terminal() {
 fn submit_mpdu<'k, 'p, 'id: 'p + 'k>(
     phase: &mut Esp32s31Phase<'p, 'id, TestDevice, 512>,
     buffer: Buffer<'id, 512>,
-    ticket: radio::Slot<'id, Tickets, radio::Child<radio::Root, 2>>,
+    ticket: radio::Slot<'id, Tickets, radio::Child<radio::Root<oer_radio_port::LocalId<'id>>, 2>>,
     body: Option<Payload>,
     key: Option<&'k PairwiseKey<'id, Station>>,
 ) {
@@ -469,7 +469,7 @@ fn submit_mpdu<'k, 'p, 'id: 'p + 'k>(
 fn submit_mpdu_budget<'k, 'p, 'id: 'p + 'k>(
     phase: &mut Esp32s31Phase<'p, 'id, TestDevice, 512>,
     buffer: Buffer<'id, 512>,
-    ticket: radio::Slot<'id, Tickets, radio::Child<radio::Root, 2>>,
+    ticket: radio::Slot<'id, Tickets, radio::Child<radio::Root<oer_radio_port::LocalId<'id>>, 2>>,
     body: Option<Payload>,
     key: Option<&'k PairwiseKey<'id, Station>>,
     budget: u8,

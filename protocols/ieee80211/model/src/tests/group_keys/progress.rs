@@ -84,7 +84,7 @@ fn admitted(slot: u8, permission: u8) -> Owners {
 }
 fn terminal<'id>(
     event: LowerMacEvent<'id, ModelTypes>,
-    access: &mut oer_ieee80211_port::TerminalAccess<'id, ModelTickets, ModelPool<1>>,
+    access: &mut oer_ieee80211_port::TerminalAccess<'id, ModelTickets, ModelPool<'id, 1>>,
 ) -> Completion {
     let (mutation, owners) = match event {
         LowerMacEvent::Terminal(LowerMacTerminal::GroupKeyInstalled(InstalledGroup::Station {

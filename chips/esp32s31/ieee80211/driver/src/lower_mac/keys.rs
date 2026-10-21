@@ -14,7 +14,7 @@ type Installation<'core, Path> = PhantomData<fn(&'core (), Path) -> (&'core (), 
 /// further admission then fails to compile. Already admitted attempts own
 /// independent `KeyUse` values and may finish on different EDCA queues.
 #[must_use = "remove the installed key through its core"]
-pub struct KeyHandle<'core, Path: PoolPath = Root> {
+pub struct KeyHandle<'core, Path: PoolPath = Root<oer_radio_port::LocalId<'core>>> {
     pub(super) slot: super::association::VacantKeySlot<'core, Path>,
     pub(super) index: usize,
     pub(super) token: TransmitKeyToken,
@@ -74,7 +74,7 @@ impl TransmitKeyToken {
 /// An installed station group key, usable only for receive and removal.
 /// Neither `admit_key` nor `number` accepts this owner.
 #[must_use = "remove the receive key through its core"]
-pub struct ReceiveKeyHandle<'core, Path: PoolPath = Root> {
+pub struct ReceiveKeyHandle<'core, Path: PoolPath = Root<oer_radio_port::LocalId<'core>>> {
     pub(super) slot: super::association::VacantKeySlot<'core, Path>,
     pub(super) index: usize,
     pub(super) token: StaGroupCcmpSlot,
@@ -85,7 +85,7 @@ pub struct ReceiveKeyHandle<'core, Path: PoolPath = Root> {
 /// A consumed installed handle, retained until hardware removal completes.
 /// Converting either handle into this owner permanently ends new TX admission.
 #[must_use = "submit the consumed key to removal"]
-pub struct RemovingKey<'core, Path: PoolPath = Root> {
+pub struct RemovingKey<'core, Path: PoolPath = Root<oer_radio_port::LocalId<'core>>> {
     pub(super) slot: super::association::VacantKeySlot<'core, Path>,
     pub(super) index: usize,
     pub(super) token: KeyToken,
@@ -179,7 +179,7 @@ impl<const TICKETS: usize> KeyUseCount<TICKETS> {
 /// terminal returns it exactly once. Poisoned keeps it in quarantine: neither
 /// clearing the slot nor reporting `KeyRemoved` is permitted there.
 #[must_use = "return the right only with its attempt's terminal or refusal"]
-pub struct KeyUse<'core, Path: PoolPath = Root> {
+pub struct KeyUse<'core, Path: PoolPath = Root<oer_radio_port::LocalId<'core>>> {
     pub(super) ticket: TxTicket<'core, Path>,
     pub(super) index: usize,
     pub(super) selector: u8,
@@ -189,7 +189,7 @@ pub struct KeyUse<'core, Path: PoolPath = Root> {
 /// The encryption authority of an admitted attempt. The protected variant
 /// cannot be constructed from an index, a handle or a bare ticket.
 #[must_use = "carry the admission to its terminal"]
-pub enum TxAdmission<'core, Path: PoolPath = Root> {
+pub enum TxAdmission<'core, Path: PoolPath = Root<oer_radio_port::LocalId<'core>>> {
     /// An unencrypted attempt still consumes one admission ticket.
     Open(TxTicket<'core, Path>),
     /// The right to use an installed key for this attempt alone.
@@ -226,7 +226,7 @@ impl<Path: PoolPath> TxAdmission<'_, Path> {
 /// emitted at removal's FIFO position if no uses exist, otherwise immediately
 /// after the last TX terminal. There is no polling step to discover completion.
 #[must_use = "complete the corresponding portable key-removal request"]
-pub struct KeyRemoved<'core, Path: PoolPath = Root> {
+pub struct KeyRemoved<'core, Path: PoolPath = Root<oer_radio_port::LocalId<'core>>> {
     pub(super) slot: super::association::VacantKeySlot<'core, Path>,
     pub(super) scope: CheckedKeyScope,
     pub(super) brand: Installation<'core, Path>,
@@ -246,7 +246,7 @@ impl<'core, Path: PoolPath> KeyRemoved<'core, Path> {
 
 /// Admission did not grant a key right; the caller retains its ticket.
 #[must_use = "retain the returned ticket and handle the refusal"]
-pub struct KeyAdmissionRefused<'core, Path: PoolPath = Root> {
+pub struct KeyAdmissionRefused<'core, Path: PoolPath = Root<oer_radio_port::LocalId<'core>>> {
     pub ticket: TxTicket<'core, Path>,
     pub reason: KeyAdmissionError,
 }
@@ -261,6 +261,6 @@ pub enum KeyAdmissionError {
 /// An admission returned after the core was poisoned remains in custody.
 /// It cannot be submitted again or turned into a reusable ticket.
 #[must_use = "retain the admission in the poisoned backend's resource bank"]
-pub struct QuarantinedAdmission<'core, Path: PoolPath = Root> {
+pub struct QuarantinedAdmission<'core, Path: PoolPath = Root<oer_radio_port::LocalId<'core>>> {
     pub(super) _admission: TxAdmission<'core, Path>,
 }

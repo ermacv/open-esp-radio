@@ -28,7 +28,7 @@ fn index(buffer: &ModelAnyBuffer<'_>) -> u8 {
 }
 fn send_aggregate<'k, 'p, 'id: 'k + 'p>(
     phase: &mut ModelPhase<'p, 'id>,
-    ticket: Slot<'id, ModelTickets, ModelPool<1>>,
+    ticket: Slot<'id, ModelTickets, ModelPool<'id, 1>>,
     aggregate: ModelAggregate<'k, 'p, 'id, Station, ModelCaps, (), NonEmptyAggregate>,
 ) {
     phase
@@ -48,9 +48,9 @@ fn send_aggregate<'k, 'p, 'id: 'k + 'p>(
 }
 async fn returned_aggregate<'p, 'id: 'p>(
     phase: &mut ModelPhase<'p, 'id>,
-    access: &mut oer_ieee80211_port::TerminalAccess<'id, ModelTickets, ModelPool<1>>,
+    access: &mut oer_ieee80211_port::TerminalAccess<'id, ModelTickets, ModelPool<'id, 1>>,
 ) -> (
-    Slot<'id, ModelTickets, ModelPool<1>>,
+    Slot<'id, ModelTickets, ModelPool<'id, 1>>,
     ModelSubframes<'id>,
     End,
     Option<oer_ieee80211_port::BlockAckReport>,

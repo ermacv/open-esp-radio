@@ -14,7 +14,7 @@ fn submit_role<'p, 'id: 'p>(
     phase: &mut ModelPhase<'p, 'id>,
     role: VifRole,
     category: WmmAccessCategory,
-    ticket: Slot<'id, ModelTickets, ModelPool<1>>,
+    ticket: Slot<'id, ModelTickets, ModelPool<'id, 1>>,
     buffer: ModelBuffer<'id, ModelSmall>,
 ) {
     let frame = ClassFrame::new(data_frame(phase, false)).ok().unwrap();

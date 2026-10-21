@@ -1,0 +1,41 @@
+error: lifetime may not live long enough
+  --> tests/ui/foreign_local_identity.rs:11:12
+   |
+ 6 | pub fn select<'p, 'first, 'second>(
+   |                   ------  ------- lifetime `'second` defined here
+   |                   |
+   |                   lifetime `'first` defined here
+...
+11 |     return foreign; // ui-error: lifetime may not live long enough
+   |            ^^^^^^^ function was supposed to return data with lifetime `'second` but it is returning data with lifetime `'first`
+   |
+   = help: consider adding the following bound: `'first: 'second`
+   = note: requirement occurs because of the type `Slot<'_, Kind, oer_radio_port::Child<Root<LocalId<'_>>, 0>>`, which makes the generic argument `'_` invariant
+   = note: the struct `Slot<'id, Kind, Path>` is invariant over the parameter `'id`
+   = help: see <https://doc.rust-lang.org/nomicon/subtyping.html> for more information about variance
+
+error: lifetime may not live long enough
+  --> tests/ui/foreign_local_identity.rs:11:12
+   |
+ 6 | pub fn select<'p, 'first, 'second>(
+   |                   ------  ------- lifetime `'second` defined here
+   |                   |
+   |                   lifetime `'first` defined here
+...
+11 |     return foreign; // ui-error: lifetime may not live long enough
+   |            ^^^^^^^ function was supposed to return data with lifetime `'first` but it is returning data with lifetime `'second`
+   |
+   = help: consider adding the following bound: `'second: 'first`
+   = note: requirement occurs because of the type `Slot<'_, Kind, oer_radio_port::Child<Root<LocalId<'_>>, 0>>`, which makes the generic argument `'_` invariant
+   = note: the struct `Slot<'id, Kind, Path>` is invariant over the parameter `'id`
+   = help: see <https://doc.rust-lang.org/nomicon/subtyping.html> for more information about variance
+
+help: `'first` and `'second` must be the same: replace one with the other
+
+warning: unused variable: `own`
+ --> tests/ui/foreign_local_identity.rs:7:5
+  |
+7 |     own: Slot<'p, Kind, Child<Root<LocalId<'first>>, 0>>,
+  |     ^^^ help: if this is intentional, prefix it with an underscore: `_own`
+  |
+  = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default

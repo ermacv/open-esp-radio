@@ -22,21 +22,26 @@ use oer_ieee80211_wire::security::Spp;
 use oer_radio_port::{Child, PoolPath, Root};
 
 /// The STA interface owns one PTK and one receive-only GTK slot.
-pub type StationAssociation<'id, P = Root> = Association<'id, Station, 1, 1, Child<P, 2>>;
+pub type StationAssociation<'id, P = Root<oer_radio_port::LocalId<'id>>> =
+    Association<'id, Station, 1, 1, Child<P, 2>>;
 /// All AP peers share the interface's one SPP policy.
-pub type AccessPointAssociation<'id, P = Root> = Association<'id, AccessPoint, 15, 3, Child<P, 3>>;
-pub type VacantStationAssociation<'id, P = Root> =
+pub type AccessPointAssociation<'id, P = Root<oer_radio_port::LocalId<'id>>> =
+    Association<'id, AccessPoint, 15, 3, Child<P, 3>>;
+pub type VacantStationAssociation<'id, P = Root<oer_radio_port::LocalId<'id>>> =
     VacantAssociation<'id, Station, 1, 1, Child<P, 2>>;
-pub type VacantAccessPointAssociation<'id, P = Root> =
+pub type VacantAccessPointAssociation<'id, P = Root<oer_radio_port::LocalId<'id>>> =
     VacantAssociation<'id, AccessPoint, 15, 3, Child<P, 3>>;
-pub type StationPairwiseSlot<'id, P = Root> = PairwiseKeySlot<'id, Station, 1, 1, Child<P, 2>>;
-pub type StationGroupSlot<'id, P = Root> = GroupKeySlot<'id, Station, 1, 1, Child<P, 2>>;
-pub type AccessPointPairwiseSlot<'id, P = Root> =
+pub type StationPairwiseSlot<'id, P = Root<oer_radio_port::LocalId<'id>>> =
+    PairwiseKeySlot<'id, Station, 1, 1, Child<P, 2>>;
+pub type StationGroupSlot<'id, P = Root<oer_radio_port::LocalId<'id>>> =
+    GroupKeySlot<'id, Station, 1, 1, Child<P, 2>>;
+pub type AccessPointPairwiseSlot<'id, P = Root<oer_radio_port::LocalId<'id>>> =
     PairwiseKeySlot<'id, AccessPoint, 15, 3, Child<P, 3>>;
-pub type AccessPointGroupSlot<'id, P = Root> = GroupKeySlot<'id, AccessPoint, 15, 3, Child<P, 3>>;
+pub type AccessPointGroupSlot<'id, P = Root<oer_radio_port::LocalId<'id>>> =
+    GroupKeySlot<'id, AccessPoint, 15, 3, Child<P, 3>>;
 
 /// An installation cannot name material without the association and its slot.
-pub enum TransmitKeyInstallation<'a, 'id, P: PoolPath = Root> {
+pub enum TransmitKeyInstallation<'a, 'id, P: PoolPath = Root<oer_radio_port::LocalId<'id>>> {
     StationPairwise {
         association: &'a StationAssociation<'id, P>,
         slot: StationPairwiseSlot<'id, P>,
@@ -56,7 +61,7 @@ pub enum TransmitKeyInstallation<'a, 'id, P: PoolPath = Root> {
 
 /// A slot retained by an installed key and returned only by KeyRemoved.
 #[must_use]
-pub enum VacantKeySlot<'id, P: PoolPath = Root> {
+pub enum VacantKeySlot<'id, P: PoolPath = Root<oer_radio_port::LocalId<'id>>> {
     StationPairwise(StationPairwiseSlot<'id, P>),
     StationGroup(StationGroupSlot<'id, P>),
     AccessPointPairwise(AccessPointPairwiseSlot<'id, P>),
@@ -102,7 +107,7 @@ impl<'id, P: PoolPath> TransmitKeyInstallation<'_, 'id, P> {
 
 /// Installation had no effect; the exact vacant slot remains recoverable.
 #[must_use]
-pub struct KeyInstallRefused<'id, P: PoolPath = Root> {
+pub struct KeyInstallRefused<'id, P: PoolPath = Root<oer_radio_port::LocalId<'id>>> {
     pub fault: super::LowerMacFault,
     pub slot: VacantKeySlot<'id, P>,
 }

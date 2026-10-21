@@ -37,9 +37,9 @@ struct Operations {
     gate_closed_at: Rc<Cell<Option<usize>>>,
 }
 
-fn observe(
+fn observe<'id>(
     context: Context<'_>,
-    ticket: Slot<'_, ModelTickets, ModelPool<1>>,
+    ticket: Slot<'id, ModelTickets, ModelPool<'id, 1>>,
     buffer: ModelAnyBuffer<'_>,
     body: Option<ModelBody>,
     end: End,
@@ -78,7 +78,7 @@ fn observe(
 fn returned<'id>(
     event: LowerMacEvent<'id, ModelTypes<Contexts>>,
     seen: &RefCell<Vec<conformance::Returned>>,
-    terminal_access: &mut oer_ieee80211_port::TerminalAccess<'id, ModelTickets, ModelPool<1>>,
+    terminal_access: &mut oer_ieee80211_port::TerminalAccess<'id, ModelTickets, ModelPool<'id, 1>>,
     evidence: &RefCell<Vec<conformance::ReturnEvidence>>,
     gate_closed_at: &Cell<Option<usize>>,
     air: &ModelAir,

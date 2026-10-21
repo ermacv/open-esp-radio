@@ -25,7 +25,7 @@ fn frame<'p, 'id: 'p>(
 
 type RefusedSingle<'id> = (
     TxRefusal,
-    Slot<'id, ModelTickets, ModelPool<1>>,
+    Slot<'id, ModelTickets, ModelPool<'id, 1>>,
     ModelAnyBuffer<'id>,
     Option<ModelBody>,
 );
@@ -35,7 +35,7 @@ type RefusedSingle<'id> = (
 )]
 fn try_source<'k, 'p, 'id: 'p + 'k>(
     phase: &mut ModelPhase<'p, 'id>,
-    ticket: Slot<'id, ModelTickets, ModelPool<1>>,
+    ticket: Slot<'id, ModelTickets, ModelPool<'id, 1>>,
     source: PoolSource<'k, 'p, 'id, ModelTypes, ModelSmall, ModelCaps, Station>,
 ) -> Result<(), RefusedSingle<'id>> {
     let checked = match source.check() {

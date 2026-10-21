@@ -38,7 +38,7 @@ pub(super) enum Command<'id, D: Device<B>, const B: usize> {
         permission: Configured<'id, Types<D, B>>,
         config: CoreVif,
     },
-    CloseGate(GateOpen<'id, Part<1>>),
+    CloseGate(GateOpen<'id, Part<'id, 1>>),
     OpenGate,
     Install {
         identity: KeyIdentity,
@@ -55,15 +55,15 @@ pub(super) enum Command<'id, D: Device<B>, const B: usize> {
     },
 }
 struct Completion<'id, const B: usize> {
-    queue: FreeQueue<'id, CorePath>,
-    ticket: TxTicket<'id, CorePath>,
+    queue: FreeQueue<'id, CorePath<'id>>,
+    ticket: TxTicket<'id, CorePath<'id>>,
     slot: Pin<&'static mut TxSlot<B>>,
     end: PublicationEnd,
     rate: PhyRate,
 }
 pub(super) struct Sink<'id, const B: usize> {
     completed: heapless::Vec<Completion<'id, B>, 4>,
-    removed: heapless::Vec<KeyRemoved<'id, CorePath>, 20>,
+    removed: heapless::Vec<KeyRemoved<'id, CorePath<'id>>, 20>,
     tbtt: Option<TbttEvent>,
 }
 impl<const B: usize> Default for Sink<'_, B> {
@@ -75,11 +75,11 @@ impl<const B: usize> Default for Sink<'_, B> {
         }
     }
 }
-impl<'id, const B: usize> LowerMacSink<'id, 'static, B, CorePath> for Sink<'id, B> {
+impl<'id, const B: usize> LowerMacSink<'id, 'static, B, CorePath<'id>> for Sink<'id, B> {
     fn tx_completed(
         &mut self,
-        queue: FreeQueue<'id, CorePath>,
-        ticket: TxTicket<'id, CorePath>,
+        queue: FreeQueue<'id, CorePath<'id>>,
+        ticket: TxTicket<'id, CorePath<'id>>,
         slot: Pin<&'static mut TxSlot<B>>,
         end: PublicationEnd,
         rate: PhyRate,
@@ -100,13 +100,13 @@ impl<'id, const B: usize> LowerMacSink<'id, 'static, B, CorePath> for Sink<'id, 
     }
     fn ampdu_completed(
         &mut self,
-        _: FreeQueue<'id, CorePath>,
-        _: TxTicket<'id, CorePath>,
+        _: FreeQueue<'id, CorePath<'id>>,
+        _: TxTicket<'id, CorePath<'id>>,
         _: PublicationEnd,
     ) {
         unreachable!("ordinary port never publishes an aggregate")
     }
-    fn key_removed(&mut self, removed: KeyRemoved<'id, CorePath>) {
+    fn key_removed(&mut self, removed: KeyRemoved<'id, CorePath<'id>>) {
         if self.removed.push(removed).is_err() {
             panic!("one removal per installed hardware key")
         }
@@ -119,13 +119,13 @@ impl<'id, const B: usize> LowerMacSink<'id, 'static, B, CorePath> for Sink<'id, 
 
 pub(super) struct Driver<'id, D: Device<B>, const B: usize> {
     core: CoreOwner<'id, D, B>,
-    tickets: [Option<TxTicket<'id, CorePath>>; TX_TICKETS],
-    free: [Option<FreeQueue<'id, CorePath>>; 4],
+    tickets: [Option<TxTicket<'id, CorePath<'id>>>; TX_TICKETS],
+    free: [Option<FreeQueue<'id, CorePath<'id>>>; 4],
     queues: [heapless::Deque<Pending<'id, D, B>, TX_TICKETS>; 4],
     running: [Option<Pending<'id, D, B>>; 4],
     pending_command: Option<Command<'id, D, B>>,
     configuring: Option<Configured<'id, Types<D, B>>>,
-    closing: Option<GateOpen<'id, Part<1>>>,
+    closing: Option<GateOpen<'id, Part<'id, 1>>>,
     closed: bool,
     keys: [Option<(KeyIdentity, Installed<'id>)>; 20],
     applied_ba: [Option<RxBlockAckValues>; 8],
@@ -142,8 +142,8 @@ impl<'id, D: Device<B>, const B: usize> Driver<'id, D, B> {
     #[inline(always)]
     pub(super) fn new(
         core: DisabledCore<Core<'id, D, B>>,
-        tickets: [TxTicket<'id, CorePath>; TX_TICKETS],
-        queues: [FreeQueue<'id, CorePath>; 4],
+        tickets: [TxTicket<'id, CorePath<'id>>; TX_TICKETS],
+        queues: [FreeQueue<'id, CorePath<'id>>; 4],
         now: Instant,
     ) -> Self {
         Self {
@@ -892,7 +892,7 @@ impl<'id, D: Device<B>, const B: usize> Driver<'id, D, B> {
         &mut self,
         device: &mut D,
         identity: KeyIdentity,
-    ) -> Result<KeyRemoved<'id, CorePath>, Fault> {
+    ) -> Result<KeyRemoved<'id, CorePath<'id>>, Fault> {
         let place = self
             .keys
             .iter_mut()
@@ -917,7 +917,7 @@ impl<'id, D: Device<B>, const B: usize> Driver<'id, D, B> {
     fn removed_terminal(
         &self,
         removal: Removal<'id>,
-        removed: KeyRemoved<'id, CorePath>,
+        removed: KeyRemoved<'id, CorePath<'id>>,
     ) -> Result<Removed<'id, Types<D, B>>, Fault> {
         use core_mac::association::VacantKeySlot as Slot;
         let removed = match (removal, removed.into_slot()) {

@@ -2,7 +2,7 @@ error[E0382]: use of moved value: `queue`
   --> tests/ui/queue_owner.rs:19:49
    |
 11 |     queue: FreeQueue<'core>,
-   |     ----- move occurs because `queue` has type `FreeQueue<'_>`, which does not implement the `Copy` trait
+   |     ----- move occurs because `queue` has type `FreeQueue<'_, oer_radio_port::pool::path::Root<oer_radio_port::identity::LocalId<'_>>>`, which does not implement the `Copy` trait
 ...
 17 |     let returned = core.submit_checked(hardware, queue, first_admission, first);
    |                                                  ----- value moved here

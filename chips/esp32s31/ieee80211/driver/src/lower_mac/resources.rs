@@ -12,7 +12,11 @@ enum TicketPlace {}
 pub struct CorePools<const TICKETS: usize = 4>;
 
 /// Construction authority and the queues of the one core it constructs.
-pub struct CoreResources<'core, Path: PoolPath = Root, const TICKETS: usize = 4> {
+pub struct CoreResources<
+    'core,
+    Path: PoolPath = Root<oer_radio_port::LocalId<'core>>,
+    const TICKETS: usize = 4,
+> {
     pub authority: CoreAuthority<'core, Path, TICKETS>,
     /// One admission credit for each TX ticket in the backend layout.
     pub tickets: [TxTicket<'core, Path>; TICKETS],
@@ -22,7 +26,11 @@ pub struct CoreResources<'core, Path: PoolPath = Root, const TICKETS: usize = 4>
 }
 
 /// Unique authority to construct the core associated with these queue places.
-pub struct CoreAuthority<'core, Path: PoolPath = Root, const TICKETS: usize = 4> {
+pub struct CoreAuthority<
+    'core,
+    Path: PoolPath = Root<oer_radio_port::LocalId<'core>>,
+    const TICKETS: usize = 4,
+> {
     _place: Slot<'core, CorePlace, Child<Path, 0>>,
 }
 
@@ -32,7 +40,7 @@ pub struct CoreAuthority<'core, Path: PoolPath = Root, const TICKETS: usize = 4>
 /// No API issues a second owner while an attempt occupies the queue.
 /// Forgetting a place only removes capacity; it cannot permit an overwrite.
 #[must_use = "retain the queue place until its next submission"]
-pub struct FreeQueue<'core, Path: PoolPath = Root> {
+pub struct FreeQueue<'core, Path: PoolPath = Root<oer_radio_port::LocalId<'core>>> {
     _place: Slot<'core, CorePlace, Child<Path, 0>>,
     queue: LegacyTxQueue,
 }
@@ -89,7 +97,7 @@ impl<const TICKETS: usize> PoolSet for CorePools<TICKETS> {
 /// open and protected attempts consume one; a `KeyUse` contains its ticket,
 /// so the number of key uses cannot exceed that same compile-time bound.
 #[must_use = "the ticket is the capacity for one attempt"]
-pub struct TxTicket<'core, Path: PoolPath = Root> {
+pub struct TxTicket<'core, Path: PoolPath = Root<oer_radio_port::LocalId<'core>>> {
     place: Slot<'core, TicketPlace, Child<Path, 1>>,
 }
 

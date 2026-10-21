@@ -220,7 +220,7 @@ fn data_frame<'p, 'id: 'p, X: ModelContext>(
 /// Submit a frame and its class's memory at the same boundary.
 fn submit_frame<'k, 'p, 'id: 'p + 'k, C: ModelClass>(
     phase: &mut ModelPhase<'p, 'id>,
-    ticket: Slot<'id, ModelTickets, ModelPool<1>>,
+    ticket: Slot<'id, ModelTickets, ModelPool<'id, 1>>,
     source: ModelSource<'k, 'p, 'id, C, ModelCaps, Station, ()>,
 ) {
     let source = prepare_model(source.check().ok().unwrap()).ok().unwrap();
@@ -243,7 +243,7 @@ fn submit_frame<'k, 'p, 'id: 'p + 'k, C: ModelClass>(
 
 fn submit<'p, 'id: 'p, C: ModelClass>(
     phase: &mut ModelPhase<'p, 'id>,
-    ticket: Slot<'id, ModelTickets, ModelPool<1>>,
+    ticket: Slot<'id, ModelTickets, ModelPool<'id, 1>>,
     mut buffer: ModelBuffer<'id, C>,
     key: Option<&CoreKey<ModelPairwiseKey<'id, Station>>>,
 ) {
@@ -302,8 +302,11 @@ fn push_retry<'k, 'p, 'id: 'k + 'p, X: ModelContext<Body = ModelBody>, S: Aggreg
 /// The next terminal's ticket and buffer.
 async fn completion<'p, 'id: 'p>(
     phase: &mut ModelPhase<'p, 'id>,
-    terminal_access: &mut oer_ieee80211_port::TerminalAccess<'id, ModelTickets, ModelPool<1>>,
-) -> (Slot<'id, ModelTickets, ModelPool<1>>, ModelAnyBuffer<'id>) {
+    terminal_access: &mut oer_ieee80211_port::TerminalAccess<'id, ModelTickets, ModelPool<'id, 1>>,
+) -> (
+    Slot<'id, ModelTickets, ModelPool<'id, 1>>,
+    ModelAnyBuffer<'id>,
+) {
     loop {
         yield_now().await;
         let event = {
@@ -452,7 +455,7 @@ fn an_open_sent_mpdu_retransmits_without_rebuilding_its_sn_or_payload() {
 /// running `between` after each.
 fn submit_all<'p, 'id: 'p>(
     phase: &mut ModelPhase<'p, 'id>,
-    tickets: Vec<Slot<'id, ModelTickets, ModelPool<1>>>,
+    tickets: Vec<Slot<'id, ModelTickets, ModelPool<'id, 1>>>,
     small: Vec<ModelBuffer<'id, ModelSmall>>,
     large: Vec<ModelBuffer<'id, ModelLarge>>,
     mut between: impl FnMut(&mut ModelPhase<'p, 'id>),
@@ -1211,9 +1214,9 @@ fn subframe_frame(sequence: u16) -> SizedFrame<AckHeader, ModelCaps> {
 /// The next terminal: its ticket, complete subframes and Block Ack.
 async fn aggregate_completion<'p, 'id: 'p>(
     phase: &mut ModelPhase<'p, 'id>,
-    terminal_access: &mut oer_ieee80211_port::TerminalAccess<'id, ModelTickets, ModelPool<1>>,
+    terminal_access: &mut oer_ieee80211_port::TerminalAccess<'id, ModelTickets, ModelPool<'id, 1>>,
 ) -> (
-    Slot<'id, ModelTickets, ModelPool<1>>,
+    Slot<'id, ModelTickets, ModelPool<'id, 1>>,
     ModelSubframes<'id>,
     Option<oer_ieee80211_port::BlockAckReport>,
 ) {

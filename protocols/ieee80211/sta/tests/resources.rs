@@ -43,11 +43,11 @@ impl TxBufferMemory for Buffer {
         &mut []
     }
 }
-struct Tokens<const GROUPS: usize>;
+struct Tokens<'id, const GROUPS: usize>(core::marker::PhantomData<fn(&'id ()) -> &'id ()>);
 impl oer_ieee80211_port::TxBufferClass for Buffer {
     const CAPACITY: usize = 256;
 }
-impl<const GROUPS: usize> StaTokens for Tokens<GROUPS> {
+impl<'id, const GROUPS: usize> StaTokens for Tokens<'id, GROUPS> {
     type AssociationStart = ();
     type Association = ();
     type VacantKeyBank = oer_ieee80211_port::association::KeyBankParts<(), (), KEY_BANK_CAPACITY>;
@@ -78,9 +78,9 @@ impl<const GROUPS: usize> StaTokens for Tokens<GROUPS> {
     const PAIRWISE_SLOTS: usize = 1;
     const TOTAL_GROUP_SLOTS: usize = GROUPS;
     const GROUP_SLOTS: usize = GROUPS;
-    type GatePath = oer_radio_port::Root;
-    type EpochPath = oer_radio_port::Root;
-    type ConfigurationPath = oer_radio_port::Root;
+    type GatePath = oer_radio_port::Root<oer_radio_port::LocalId<'id>>;
+    type EpochPath = oer_radio_port::Root<oer_radio_port::LocalId<'id>>;
+    type ConfigurationPath = oer_radio_port::Root<oer_radio_port::LocalId<'id>>;
     type Small = Buffer;
     type Ticket = u8;
     type SmallBuffer = Buffer;
@@ -104,7 +104,7 @@ fn construct<'id, const T: usize, const B: usize, const G: usize>(
     absence: AbsencePlace<'id>,
     configure: oer_ieee80211_port::ConfigurePermission<'id, oer_ieee80211_port::Station>,
 ) -> (
-    Station<'id, Tokens<G>, Caps>,
+    Station<'id, Tokens<'id, G>, Caps>,
     oer_ieee80211_sta::machine::StaCommandCredits<'id>,
 ) {
     Station::new_open::<T, B, G>(

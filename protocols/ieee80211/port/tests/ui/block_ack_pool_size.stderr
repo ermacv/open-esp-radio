@@ -6,10 +6,10 @@ error[E0308]: mismatched types
   |     |
   |     arguments to this function are incorrect
   |
-  = note: expected struct `BlockAckSlot<'_, u8, 4>`
-             found struct `BlockAckSlot<'id, u8, 2>`
+  = note: expected struct `BlockAckSlot<'_, u8, 4, Root<LocalId<'_>>>`
+             found struct `BlockAckSlot<'id, u8, 2, Root<LocalId<'id>>>`
 note: function defined here
  --> tests/ui/block_ack_pool_size.rs:5:4
   |
-5 | fn take<'id, P: RxBlockAckPool>(_: P::Slot<'id, Root>) {}
-  |    ^^^^                         ---------------------
+5 | fn take<'id, P: RxBlockAckPool>(_: P::Slot<'id, Root<oer_radio_port::LocalId<'id>>>) {}
+  |    ^^^^                         ---------------------------------------------------

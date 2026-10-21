@@ -35,7 +35,7 @@ impl Kind {
 fn submit_ap<'k, 'p, 'id: 'p + 'k>(
     phase: &mut Esp32s31Phase<'p, 'id, TestDevice, 512>,
     buffer: Buffer<'id, 512>,
-    ticket: radio::Slot<'id, Tickets, radio::Child<radio::Root, 2>>,
+    ticket: radio::Slot<'id, Tickets, radio::Child<radio::Root<oer_radio_port::LocalId<'id>>, 2>>,
     key: Option<&'k GroupKey<'id, AccessPoint>>,
 ) {
     let rate = phase
@@ -106,7 +106,11 @@ struct Withdraw {
 type Row = (u8, bool, SingleOutcome<Ack, Infallible>);
 fn record<'id>(
     completed: TxCompleted<'id, Family>,
-    access: &mut TerminalAccess<'id, Tickets, radio::Child<radio::Root, 2>>,
+    access: &mut TerminalAccess<
+        'id,
+        Tickets,
+        radio::Child<radio::Root<oer_radio_port::LocalId<'id>>, 2>,
+    >,
 ) -> Row {
     let TxCompleted::Single(completed) = completed else {
         panic!("single terminal")

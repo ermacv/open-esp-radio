@@ -1,4 +1,5 @@
 #![no_std]
+extern crate alloc;
 use oer_ieee80211_port::{
     Channel, ChannelWidth, ConfigurePermission, LowerMacPhase, Station, StationPhase,
     StationReceive,
@@ -15,7 +16,7 @@ fn backend() -> oer_radio_port::Installed<ModelBackend> {
             IndividualAddress::new([2, 0, 0, 0, 0, 1]).unwrap(),
             IndividualAddress::new([2, 0, 0, 0, 0, 2]).unwrap(),
         ],
-        std::rc::Rc::new(oer_time_virtual::VirtualClock::<8>::new()),
+        alloc::rc::Rc::new(oer_time_virtual::VirtualClock::<8>::new()),
     )
     .0
 }
@@ -31,7 +32,7 @@ impl PortBody<ModelBackend> for Outer {
         Ended::uninstall(owner, (), ())
     }
 }
-struct Inner<'outer>(ConfigurePermission<'outer, Station, Child<ModelPool<9>, 1>>);
+struct Inner<'outer>(ConfigurePermission<'outer, Station, Child<ModelPool<'outer, 9>, 1>>);
 impl PortBody<ModelBackend> for Inner<'_> {
     type Output = ();
     async fn run<'p, 'id>(

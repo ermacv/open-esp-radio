@@ -19,12 +19,14 @@ extern crate std;
 #[cfg(any(test, feature = "test-support"))]
 pub mod conformance;
 mod execution;
+mod identity;
 pub mod lifecycle;
 pub mod pool;
 mod relation;
 mod work;
 
 pub use execution::{LocalExecution, PortDriver, PortExecution};
+pub use identity::{LocalId, SlotIdentity, StaticId};
 pub use lifecycle::*;
 pub use work::*;
 
