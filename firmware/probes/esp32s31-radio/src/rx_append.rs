@@ -113,7 +113,10 @@ oer_probe_macros::probe! {
         };
         let (storage, base) = (placed.storage(), placed.descriptor_base());
         let mut walker = RxWalkerModel::new();
-        let Ok(stopped) = placed.prepare_ring(&mut walker) else {
+        let Ok(stopped) = placed
+            .prepare_ring(&mut walker)
+            .and_then(|ring| ring.core_ready_for_test().publish(&mut walker))
+        else {
             return PREPARE_FAILED;
         };
         let Ok(mut ring) = stopped.try_start(&mut walker) else {
