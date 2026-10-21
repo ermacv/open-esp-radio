@@ -179,9 +179,9 @@ mod resources;
 pub use resources::{CoreAuthority, CorePools, CoreResources, FreeQueue, TxTicket};
 mod lifecycle;
 pub use lifecycle::{
-    ClosedGate, ClosingGate, ConfigurationProgress, ConfigureRefused, ConfiguringView, CoreGate,
-    CoreOwner, CoreView, DisabledView, DisablingView, EnabledView, FailedGateView, GateClosure,
-    LifecycleStart, OpenGate, RetuningView, VacantView,
+    ClosedGate, ClosingGate, CommandView, ConfigurationProgress, ConfigureRefused, ConfiguringView,
+    CoreGate, CoreOwner, CoreView, DisabledView, DisablingView, EnabledView, FailedGateView,
+    GateClosure, LifecycleStart, OpenGate, RetuningView, VacantView,
 };
 
 mod keys;
@@ -1020,6 +1020,7 @@ where
         crate::port::trace::contention(self.tx.policy(), role, access_category, backoff);
         backoff
     }
+    #[inline(never)]
     pub(crate) fn reset_contention(&mut self, role: VifRole, category: WmmAccessCategory) {
         self.tx
             .reset_terminal_exchange(role, LegacyTxQueue::from_access_category(category));

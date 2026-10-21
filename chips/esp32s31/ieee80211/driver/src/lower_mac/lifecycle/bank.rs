@@ -64,6 +64,7 @@ pub struct CoreOwner<C> {
 }
 impl<C> CoreOwner<C> {
     /// Empty storage before initial preparation or after dismantling.
+    #[inline]
     pub const fn vacant() -> Self {
         Self {
             core: None,
@@ -76,7 +77,16 @@ impl<C> CoreOwner<C> {
             phase: Phase::Disabled,
         }
     }
+    #[inline]
+    pub(super) fn stored(&self) -> &C {
+        self.core.as_ref().expect("view retains its core")
+    }
+    #[inline]
+    pub(super) fn stored_mut(&mut self) -> &mut C {
+        self.core.as_mut().expect("view retains its core")
+    }
     /// Borrow the only view corresponding to the retained phase.
+    #[inline]
     pub fn view(&mut self) -> CoreView<'_, C> {
         match self.phase {
             Phase::Vacant => CoreView::Vacant(VacantView { owner: self }),
@@ -142,6 +152,29 @@ pub enum CoreView<'view, C> {
     ConfigureClosed(ConfiguringView<EnabledView<'view, C, ClosedGate>>),
     Failed(FailedGateView<'view, C>),
 }
+impl<'view, C> CoreView<'view, C> {
+    /// Narrow an idle phase to its shared non-lifecycle command set.
+    /// Configuration, retuning and failed gates do not lend these commands.
+    #[inline]
+    pub fn commands(self) -> Option<CommandView<'view, C>> {
+        let owner = match self {
+            Self::Disabled(view) => view.owner,
+            Self::DisabledClosing(view) => view.owner,
+            Self::DisabledClosed(view) => view.owner,
+            Self::Open(view) => view.owner,
+            Self::Closing(view) => view.owner,
+            Self::Closed(view) => view.owner,
+            Self::Disabling(view) => view.owner,
+            Self::DisablingClosing(view) => view.owner,
+            Self::DisablingClosed(view) => view.owner,
+            _ => return None,
+        };
+        Some(CommandView {
+            core: owner.stored_mut(),
+        })
+    }
+}
+
 /// A vacant slot can be prepared once before any lifecycle transition.
 #[must_use]
 pub struct VacantView<'view, C> {
@@ -173,5 +206,103 @@ impl<
         self.owner.core = LowerMacCore::new(authority, tx, config, coex).core;
         self.owner.phase = Phase::Disabled;
         DisabledView::new(self.owner)
+    }
+}
+
+impl<
+    'core,
+    'slot,
+    X: BackendTxProfile,
+    P: WifiTxPowerProfile,
+    E: WifiTxEntropy,
+    T: oer_time::Timer,
+    const BUFFER_SIZE: usize,
+    Path: PoolPath,
+    const TICKETS: usize,
+> CoreOwner<LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>>
+{
+    // Each heavy step has one body regardless of the caller's gate marker.
+    #[inline(never)]
+    pub(super) fn configure_in_place(
+        &mut self,
+        config: CoreVif,
+        enabled: bool,
+        gate: GateMode,
+    ) -> Result<(), UnsupportedVif> {
+        let policy = receive_policy(&self.stored().config, &config)?;
+        self.phase = match (enabled, gate) {
+            (false, GateMode::Open) => Phase::ConfigureDisabled { config, policy },
+            (false, GateMode::Closing) => Phase::ConfigureDisabledClosing { config, policy },
+            (false, GateMode::Closed) => Phase::ConfigureDisabledClosed { config, policy },
+            (true, GateMode::Open) => Phase::ConfigureOpen { config, policy },
+            (true, GateMode::Closing) => Phase::ConfigureClosing { config, policy },
+            (true, GateMode::Closed) => Phase::ConfigureClosed { config, policy },
+        };
+        Ok(())
+    }
+    #[inline(never)]
+    pub(super) fn disable_in_place<
+        H: CcmpKeyHardware,
+        K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>,
+    >(
+        &mut self,
+        hardware: &mut H,
+        sink: &mut K,
+        gate: GateMode,
+    ) {
+        let core = self.stored_mut();
+        if core.fault.is_none() {
+            core.withdraw_held_attempts(hardware, sink);
+        }
+        self.phase = match gate {
+            GateMode::Open => Phase::Disabling,
+            GateMode::Closing => Phase::DisablingClosing,
+            GateMode::Closed => Phase::DisablingClosed,
+        };
+    }
+    #[inline(never)]
+    pub(super) fn advance_configuration_in_place<
+        H: LowerMacHardware,
+        K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>,
+    >(
+        &mut self,
+        hardware: &mut H,
+        sink: &mut K,
+    ) -> bool {
+        let (config, policy) = self.phase.configuration();
+        if !self
+            .stored_mut()
+            .advance_vif(hardware, sink, config, policy)
+        {
+            return false;
+        }
+        self.phase = match self.phase {
+            Phase::ConfigureDisabled { .. } => Phase::Disabled,
+            Phase::ConfigureDisabledClosing { .. } => Phase::DisabledClosing,
+            Phase::ConfigureDisabledClosed { .. } => Phase::DisabledClosed,
+            Phase::ConfigureOpen { .. } => Phase::Open,
+            Phase::ConfigureClosing { .. } => Phase::Closing,
+            Phase::ConfigureClosed { .. } => Phase::Closed,
+            _ => panic!("configuration view retains its original frontier"),
+        };
+        true
+    }
+    #[inline(never)]
+    pub(super) fn finish_disable_in_place<K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>>(
+        &mut self,
+        sink: &mut K,
+        gate: GateMode,
+    ) -> bool {
+        let core = self.stored();
+        if core.fault.is_some() || core.attempts().next().is_some() {
+            return false;
+        }
+        self.phase = match gate {
+            GateMode::Open => Phase::Disabled,
+            GateMode::Closing => Phase::DisabledClosing,
+            GateMode::Closed => Phase::DisabledClosed,
+        };
+        sink.disabled();
+        true
     }
 }

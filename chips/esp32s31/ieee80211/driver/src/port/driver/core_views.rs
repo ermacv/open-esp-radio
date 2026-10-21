@@ -1,6 +1,7 @@
 //! Select typed lower-MAC views at each synchronous P2 frontier.
 use super::*;
 
+#[inline]
 pub(super) fn configuring<'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
     view: CoreView<'_, Core<'id, Id, D, B>>,
 ) -> bool {
@@ -15,6 +16,7 @@ pub(super) fn configuring<'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
     }
 }
 
+#[inline]
 pub(super) fn deadline<'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
     view: CoreView<'_, Core<'id, Id, D, B>>,
 ) -> Option<Instant> {
@@ -42,6 +44,7 @@ pub(super) fn deadline<'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
     }
 }
 
+#[inline]
 pub(super) fn reset_contention<'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
     view: CoreView<'_, Core<'id, Id, D, B>>,
     role: VifRole,
@@ -106,6 +109,7 @@ pub(super) fn reset_contention<'id, Id: SlotIdentity, D: Device<B>, const B: usi
     }
 }
 
+#[inline]
 pub(super) fn service<'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
     view: CoreView<'_, Core<'id, Id, D, B>>,
     hardware: &mut D::Hardware,
@@ -136,6 +140,7 @@ pub(super) fn service<'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
     }
 }
 
+#[inline]
 pub(super) fn received<'frame, 'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
     view: CoreView<'_, Core<'id, Id, D, B>>,
     hardware: &D::Hardware,
@@ -152,6 +157,7 @@ pub(super) fn received<'frame, 'id, Id: SlotIdentity, D: Device<B>, const B: usi
     }
 }
 
+#[inline]
 pub(super) fn tune<'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
     view: CoreView<'_, Core<'id, Id, D, B>>,
     channel: oer_ieee80211_wire::channel::WifiChannel,
@@ -201,6 +207,7 @@ pub(super) fn tune<'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
     }
 }
 
+#[inline]
 pub(super) fn configure<'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
     view: CoreView<'_, Core<'id, Id, D, B>>,
     config: CoreVif,
@@ -222,6 +229,7 @@ pub(super) fn configure<'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
     }
 }
 
+#[inline]
 pub(super) fn advance_configuration<'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
     view: CoreView<'_, Core<'id, Id, D, B>>,
     hardware: &mut D::Hardware,
@@ -268,6 +276,7 @@ pub(super) fn advance_configuration<'id, Id: SlotIdentity, D: Device<B>, const B
     }
 }
 
+#[inline]
 pub(super) fn hold<'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
     view: CoreView<'_, Core<'id, Id, D, B>>,
 ) {
@@ -279,6 +288,7 @@ pub(super) fn hold<'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
     }
 }
 
+#[inline]
 pub(super) fn close<'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
     view: CoreView<'_, Core<'id, Id, D, B>>,
     hardware: &mut D::Hardware,
@@ -292,6 +302,7 @@ pub(super) fn close<'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
     }
 }
 
+#[inline]
 pub(super) fn open<'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
     view: CoreView<'_, Core<'id, Id, D, B>>,
     hardware: &mut D::Hardware,
@@ -306,6 +317,7 @@ pub(super) fn open<'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
     }
 }
 
+#[inline]
 pub(super) fn disable<'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
     view: CoreView<'_, Core<'id, Id, D, B>>,
     hardware: &mut D::Hardware,
@@ -325,6 +337,7 @@ pub(super) fn disable<'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
     }
 }
 
+#[inline]
 pub(super) fn finish_disable<'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
     view: CoreView<'_, Core<'id, Id, D, B>>,
     sink: &mut Sink<'id, Id, B>,

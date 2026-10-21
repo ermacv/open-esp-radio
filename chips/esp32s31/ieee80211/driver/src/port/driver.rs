@@ -6,23 +6,13 @@ use super::{
 use oer_ieee80211_wire::qos::WmmAccessCategory;
 
 mod core_views;
-// Commands use only views at an idle command frontier. P1 violations remain
-// typed capacity refusals, including while a configuration owns the frontier.
+// A single phase projection lends the shared command set. The operation
+// itself has one body; invalid P1 commands remain typed capacity refusals.
 macro_rules! idle_command {
-    ($owner:expr, |$view:ident| $command:expr) => {
-        match $owner.view() {
-            CoreView::Disabled(mut $view) => $command,
-            CoreView::DisabledClosing(mut $view) => $command,
-            CoreView::DisabledClosed(mut $view) => $command,
-            CoreView::Open(mut $view) => $command,
-            CoreView::Closing(mut $view) => $command,
-            CoreView::Closed(mut $view) => $command,
-            CoreView::Disabling(mut $view) => $command,
-            CoreView::DisablingClosing(mut $view) => $command,
-            CoreView::DisablingClosed(mut $view) => $command,
-            _ => return Err(Fault::Capacity),
-        }
-    };
+    ($owner:expr, |$view:ident| $command:expr) => {{
+        let mut $view = $owner.view().commands().ok_or(Fault::Capacity)?;
+        $command
+    }};
 }
 
 pub(super) struct Pending<'id, Id: SlotIdentity, D: Device<B>, const B: usize> {
@@ -601,8 +591,11 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Driver<'id, Id, D, B> 
                 Poll::Ready(Ok(DeviceEvent::Tbtt)) => {
                     let mut sink = Sink::default();
                     if !core_views::configuring::<Id, D, B>(self.core.view()) {
-                        idle_command!(self.core, |view| view
-                            .station_tbtt(device.hardware(), &mut sink));
+                        self.core
+                            .view()
+                            .commands()
+                            .ok_or(Fault::Capacity)?
+                            .station_tbtt(device.hardware(), &mut sink);
                     }
                     self.collect(held, sink, stopping)?;
                 }

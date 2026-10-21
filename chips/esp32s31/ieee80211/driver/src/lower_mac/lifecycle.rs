@@ -41,6 +41,13 @@ impl CoreGate for ClosedGate {
     const PUBLISH: bool = false;
     const BLOCKED: bool = true;
 }
+// The engine receives this small value; it is never specialized by gate.
+#[derive(Clone, Copy)]
+enum GateMode {
+    Open,
+    Closing,
+    Closed,
+}
 // These are compile-time gate choices; no second runtime phase is stored.
 struct GatePhase<G>(PhantomData<G>);
 impl<G: CoreGate> GatePhase<G> {
@@ -65,31 +72,13 @@ impl<G: CoreGate> GatePhase<G> {
     } else {
         Phase::Closing
     };
-    const DISABLING: Phase = if G::PUBLISH {
-        Phase::Disabling
+    const MODE: GateMode = if G::PUBLISH {
+        GateMode::Open
     } else if G::BLOCKED {
-        Phase::DisablingClosed
+        GateMode::Closed
     } else {
-        Phase::DisablingClosing
+        GateMode::Closing
     };
-    fn configure_disabled(config: CoreVif, policy: ReceivePolicy) -> Phase {
-        if G::PUBLISH {
-            Phase::ConfigureDisabled { config, policy }
-        } else if G::BLOCKED {
-            Phase::ConfigureDisabledClosed { config, policy }
-        } else {
-            Phase::ConfigureDisabledClosing { config, policy }
-        }
-    }
-    fn configure_enabled(config: CoreVif, policy: ReceivePolicy) -> Phase {
-        if G::PUBLISH {
-            Phase::ConfigureOpen { config, policy }
-        } else if G::BLOCKED {
-            Phase::ConfigureClosed { config, policy }
-        } else {
-            Phase::ConfigureClosing { config, policy }
-        }
-    }
 }
 
 macro_rules! view {
@@ -101,14 +90,17 @@ macro_rules! view {
             gate: PhantomData<G>,
         }
         impl<'view, C, G> $name<'view, C, G> {
+            #[inline]
             fn new(owner: &'view mut CoreOwner<C>) -> Self { Self { owner, gate: PhantomData } }
         }
         impl<C, G> Deref for $name<'_, C, G> {
             type Target = C;
-            fn deref(&self) -> &C { self.owner.core.as_ref().expect("view retains its core") }
+            #[inline]
+            fn deref(&self) -> &C { self.owner.stored() }
         }
         impl<C, G> DerefMut for $name<'_, C, G> {
-            fn deref_mut(&mut self) -> &mut C { self.owner.core.as_mut().expect("view retains its core") }
+            #[inline]
+            fn deref_mut(&mut self) -> &mut C { self.owner.stored_mut() }
         }
     };
 }
@@ -120,6 +112,26 @@ view!(/// An enabled bank with a statically selected admission policy.
     EnabledView);
 view!(/// A disabling bank retaining all outstanding publications.
     DisablingView);
+
+/// Non-lifecycle commands shared by idle phase views. No transition or TX
+/// admission is available through this narrower borrowed projection.
+#[must_use]
+pub struct CommandView<'view, C> {
+    core: &'view mut C,
+}
+impl<C> Deref for CommandView<'_, C> {
+    type Target = C;
+    #[inline]
+    fn deref(&self) -> &C {
+        self.core
+    }
+}
+impl<C> DerefMut for CommandView<'_, C> {
+    #[inline]
+    fn deref_mut(&mut self) -> &mut C {
+        self.core
+    }
+}
 
 /// Enable either completes or waits for an actual radio retune.
 #[must_use]
@@ -171,6 +183,7 @@ impl<
 > DisabledView<'view, LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>, G>
 {
     /// Recover construction resources after the final terminal.
+    #[inline]
     pub fn dismantle(
         self,
     ) -> LowerMacCoreParts<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS> {
@@ -193,14 +206,17 @@ impl<
         }
     }
     /// Record the actual channel after a radio start.
+    #[inline]
     pub fn radio_tuned_to(&mut self, channel: WifiChannel) {
         self.tuned = channel;
     }
     /// Choose the next enable's channel.
+    #[inline]
     pub fn set_checked_channel(&mut self, channel: WifiChannel) {
         self.deref_mut().set_checked_channel(channel);
     }
     /// Consume this view, updating its owner before returning the next view.
+    #[inline]
     pub fn enable_checked(
         self,
     ) -> LifecycleStart<
@@ -217,15 +233,16 @@ impl<
     }
 
     /// Reserve the bank at this command's FIFO position.
+    #[inline]
     pub fn configure(
         self,
         config: CoreVif,
     ) -> Result<ConfiguringView<Self>, ConfigureRefused<Self>> {
-        match receive_policy(&self.config, &config) {
-            Ok(policy) => {
-                self.owner.phase = GatePhase::<G>::configure_disabled(config, policy);
-                Ok(ConfiguringView { core: self })
-            }
+        match self
+            .owner
+            .configure_in_place(config, false, GatePhase::<G>::MODE)
+        {
+            Ok(()) => Ok(ConfiguringView { core: self }),
             Err(reason) => Err(ConfigureRefused { core: self, reason }),
         }
     }
@@ -246,10 +263,12 @@ impl<
 > RetuningView<'view, LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>, G>
 {
     /// The actual target of this enable's retune.
+    #[inline]
     pub fn target_channel(&self) -> WifiChannel {
         self.channel
     }
     /// A failed retune returns disabled ownership on the previous channel.
+    #[inline]
     pub fn finish_retune(
         mut self,
         retuned: bool,
@@ -287,6 +306,7 @@ impl<
         clippy::result_large_err,
         reason = "refusal returns all admitted owners"
     )]
+    #[inline]
     pub fn submit_checked<H: LowerMacHardware>(
         &mut self,
         hardware: &mut H,
@@ -298,6 +318,7 @@ impl<
             .submit_checked(hardware, queue, admission, values, G::PUBLISH)
     }
     /// Narrow the hardware's superset of receive rules.
+    #[inline]
     pub fn received<'frame, H: StaNoiseFloorHardware>(
         &self,
         hardware: &H,
@@ -306,29 +327,29 @@ impl<
         self.deref().received(hardware, frame)
     }
     /// Withdraw held attempts, retaining published attempts until their terminals.
+    #[inline]
     pub fn disable_checked<H: CcmpKeyHardware, K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>>(
-        mut self,
+        self,
         hardware: &mut H,
         sink: &mut K,
     ) -> DisablingView<'view, LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>, G>
     {
-        if self.fault.is_none() {
-            self.withdraw_held_attempts(hardware, sink);
-        }
-        self.owner.phase = GatePhase::<G>::DISABLING;
+        self.owner
+            .disable_in_place(hardware, sink, GatePhase::<G>::MODE);
         DisablingView::new(self.owner)
     }
 
     /// Reserve the bank at this command's FIFO position.
+    #[inline]
     pub fn configure(
         self,
         config: CoreVif,
     ) -> Result<ConfiguringView<Self>, ConfigureRefused<Self>> {
-        match receive_policy(&self.config, &config) {
-            Ok(policy) => {
-                self.owner.phase = GatePhase::<G>::configure_enabled(config, policy);
-                Ok(ConfiguringView { core: self })
-            }
+        match self
+            .owner
+            .configure_in_place(config, true, GatePhase::<G>::MODE)
+        {
+            Ok(()) => Ok(ConfiguringView { core: self }),
             Err(reason) => Err(ConfigureRefused { core: self, reason }),
         }
     }
@@ -349,6 +370,7 @@ impl<
 > DisablingView<'view, LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>, G>
 {
     /// Emit one Disabled terminal once the entire prefix is retired.
+    #[inline]
     pub fn finish<K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>>(
         self,
         sink: &mut K,
@@ -356,12 +378,13 @@ impl<
         DisabledView<'view, LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>, G>,
         Self,
     > {
-        if self.fault.is_some() || self.attempts().next().is_some() {
-            Err(self)
-        } else {
-            self.owner.phase = GatePhase::<G>::DISABLED;
-            sink.disabled();
+        if self
+            .owner
+            .finish_disable_in_place(sink, GatePhase::<G>::MODE)
+        {
             Ok(DisabledView::new(self.owner))
+        } else {
+            Err(self)
         }
     }
 }
@@ -380,6 +403,7 @@ impl<
 > EnabledView<'view, LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>, OpenGate>
 {
     /// Hold new attempts while the published prefix drains.
+    #[inline]
     pub fn hold_new_attempts(
         self,
     ) -> EnabledView<
@@ -411,6 +435,7 @@ impl<
     >
 {
     /// Block hardware queues only after every published predecessor ended.
+    #[inline]
     pub fn close_gate<H: LowerMacHardware>(
         self,
         hardware: &mut H,
@@ -451,6 +476,7 @@ impl<
     >
 {
     /// Publish the held prefix, retaining published predecessors on failure.
+    #[inline]
     pub fn open_gate<H: LowerMacHardware, K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>>(
         mut self,
         hardware: &mut H,
@@ -490,14 +516,17 @@ impl<
     >
 {
     /// The published prefix's next deadline.
+    #[inline]
     pub fn next_deadline(&self) -> Option<oer_time::Instant> {
         self.core.next_deadline()
     }
     /// Reset contention when an earlier publication ends.
+    #[inline]
     pub(crate) fn reset_contention(&mut self, role: VifRole, category: WmmAccessCategory) {
         self.core.reset_contention(role, category);
     }
     /// Service predecessors without admitting any later command.
+    #[inline]
     pub fn service<
         H: HtAmpduHardware + CcmpKeyHardware,
         K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>,
@@ -510,16 +539,19 @@ impl<
         self.core.service(hardware, wake, sink)
     }
     /// Apply the receive policy after the requested role's prefix ends.
+    #[inline]
     pub fn advance<H: LowerMacHardware, K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>>(
-        mut self,
+        self,
         hardware: &mut H,
         sink: &mut K,
     ) -> ConfigurationProgress<
         DisabledView<'view, LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>, G>,
     > {
-        let (config, policy) = self.core.owner.phase.configuration();
-        if self.core.advance_vif(hardware, sink, config, policy) {
-            self.core.owner.phase = GatePhase::<G>::DISABLED;
+        if self
+            .core
+            .owner
+            .advance_configuration_in_place(hardware, sink)
+        {
             ConfigurationProgress::Configured(self.core)
         } else {
             ConfigurationProgress::Waiting(self)
@@ -545,14 +577,17 @@ impl<
     >
 {
     /// The published prefix's next deadline.
+    #[inline]
     pub fn next_deadline(&self) -> Option<oer_time::Instant> {
         self.core.next_deadline()
     }
     /// Reset contention when an earlier publication ends.
+    #[inline]
     pub(crate) fn reset_contention(&mut self, role: VifRole, category: WmmAccessCategory) {
         self.core.reset_contention(role, category);
     }
     /// Service predecessors without admitting any later command.
+    #[inline]
     pub fn service<
         H: HtAmpduHardware + CcmpKeyHardware,
         K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>,
@@ -565,16 +600,19 @@ impl<
         self.core.service(hardware, wake, sink)
     }
     /// Apply the receive policy after the requested role's prefix ends.
+    #[inline]
     pub fn advance<H: LowerMacHardware, K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>>(
-        mut self,
+        self,
         hardware: &mut H,
         sink: &mut K,
     ) -> ConfigurationProgress<
         EnabledView<'view, LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>, G>,
     > {
-        let (config, policy) = self.core.owner.phase.configuration();
-        if self.core.advance_vif(hardware, sink, config, policy) {
-            self.core.owner.phase = GatePhase::<G>::ENABLED;
+        if self
+            .core
+            .owner
+            .advance_configuration_in_place(hardware, sink)
+        {
             ConfigurationProgress::Configured(self.core)
         } else {
             ConfigurationProgress::Waiting(self)
@@ -582,6 +620,7 @@ impl<
     }
 
     /// Receive with the original interface policy while its barrier drains.
+    #[inline]
     pub fn received<'frame, H: StaNoiseFloorHardware>(
         &self,
         hardware: &H,
@@ -605,6 +644,7 @@ impl<
 > FailedGateView<'view, LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>>
 {
     /// The publication failure that retained this prefix.
+    #[inline]
     pub fn fault(&self) -> LowerMacFault {
         match self.owner.phase {
             Phase::Failed { fault } => fault,
@@ -612,14 +652,12 @@ impl<
         }
     }
     /// The next deadline of the prefix published before failure.
+    #[inline]
     pub fn next_deadline(&self) -> Option<oer_time::Instant> {
-        self.owner
-            .core
-            .as_ref()
-            .expect("failed view retains its core")
-            .next_deadline()
+        self.owner.stored().next_deadline()
     }
     /// Preserve each published predecessor's own terminal outcome.
+    #[inline]
     pub fn service<
         H: HtAmpduHardware + CcmpKeyHardware,
         K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>,
@@ -629,13 +667,10 @@ impl<
         wake: WifiTxWake,
         sink: &mut K,
     ) -> Result<(), LowerMacFault> {
-        self.owner
-            .core
-            .as_mut()
-            .expect("failed view retains its core")
-            .service(hardware, wake, sink)
+        self.owner.stored_mut().service(hardware, wake, sink)
     }
     /// Recover disabled ownership only after every predecessor ended.
+    #[inline]
     pub fn finish<K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>>(
         self,
         sink: &mut K,
@@ -647,17 +682,10 @@ impl<
         >,
         Self,
     > {
-        let core = self
-            .owner
-            .core
-            .as_ref()
-            .expect("failed view retains its core");
-        if core.fault.is_some() || core.attempts().next().is_some() {
-            Err(self)
-        } else {
-            self.owner.phase = Phase::DisabledClosed;
-            sink.disabled();
+        if self.owner.finish_disable_in_place(sink, GateMode::Closed) {
             Ok(DisabledView::new(self.owner))
+        } else {
+            Err(self)
         }
     }
 }
@@ -675,6 +703,7 @@ impl<
 > LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>
 {
     // Every view transition uses these in-place hardware steps.
+    #[inline(never)]
     fn open_held_gate<H: LowerMacHardware, K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>>(
         &mut self,
         hardware: &mut H,
@@ -747,6 +776,7 @@ impl<
         }
         Ok(())
     }
+    #[inline(never)]
     fn advance_vif<H: LowerMacHardware, K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>>(
         &mut self,
         hardware: &mut H,
