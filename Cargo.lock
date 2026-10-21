@@ -4330,6 +4330,8 @@ dependencies = [
  "libc",
  "oer-os-durable",
  "oer-os-process",
+ "oer-time",
+ "oer-time-virtual",
  "rustix",
  "serde",
  "serde_json",

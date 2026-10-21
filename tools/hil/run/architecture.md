@@ -282,10 +282,13 @@ scenario failure. A radio configuration mismatch
 reports the required channel/width and the observed channel line without
 including network credentials. These failures do not change scenario criteria.
 
-The laptop helper contract is schema 6. Its `client` action returns status 10
-only when a prepared client exhausts the association wait; command failures
-and malformed supplicant status are infrastructure errors. `doctor` and the
-selected run preflight reject older helpers before flashing or resetting the DUT.
+The laptop helper contract is schema 16. Its `client` action validates a
+typed JSON profile and prepares a disabled private supplicant network;
+the host subscribes before enabling it and observes association. A
+foreground `client-dhcp` session maintains the lease, runs one bounded
+100-echo ping, and deauthenticates on disconnect or cleanup. Command
+failures and malformed observations are infrastructure errors. The run
+preflight requires the exact contract before operating the fixture.
 Provision it with `cargo stand fixture install --provider linux-net`
 from the repository root before using laptop client scenarios. Installation
 performs software-only verification; it never substitutes for this helper

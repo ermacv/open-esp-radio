@@ -280,7 +280,8 @@
     ],
     "subcommands": [
       "install",
-      "build-hostapd"
+      "build-hostapd",
+      "build-udhcpc"
     ],
     "flags": [],
     "forwards": false
@@ -304,6 +305,16 @@
       "stand",
       "fixture",
       "build-hostapd"
+    ],
+    "subcommands": [],
+    "flags": [],
+    "forwards": false
+  },
+  {
+    "path": [
+      "stand",
+      "fixture",
+      "build-udhcpc"
     ],
     "subcommands": [],
     "flags": [],

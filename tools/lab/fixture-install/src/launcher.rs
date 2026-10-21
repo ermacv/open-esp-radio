@@ -138,6 +138,17 @@ fn launch(target: LaunchTarget) -> crate::Result<std::convert::Infallible> {
     use std::os::unix::process::CommandExt as _;
 
     let lease = super::admit_system(target.provider())?;
+    if matches!(target, LaunchTarget::Network) {
+        // The shell delegates to these immutable artifacts of the same
+        // generation; admit their bytes before any network mutation.
+        for role in [
+            ArtifactRole::NetworkClient,
+            ArtifactRole::Udhcpc,
+            ArtifactRole::UdhcpcProvenance,
+        ] {
+            lease.artifact(role)?;
+        }
+    }
     let helper = lease.artifact(target.role())?;
     handoff::LEASE.pass(lease.file())?;
     let error = oer_os_process::command(&helper)
