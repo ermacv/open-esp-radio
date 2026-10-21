@@ -3,7 +3,8 @@ use crate::captured::{Member, visit_members};
 use crate::in_process::Executable;
 use crate::*;
 use oer_analysis_blobray_analysis::navigation::Facts;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
+mod summaries;
 
 /// One analyzed function with its records, borrowed for a visit.
 pub struct AnalyzedFunction<'a> {
@@ -13,6 +14,8 @@ pub struct AnalyzedFunction<'a> {
     pub semantics: SemanticSummary,
     /// Ordered tables or complete target sets the analysis followed.
     pub jump_tables: &'a [JumpDispatch],
+    /// The shared callee port used for these final records.
+    pub summaries: &'a dyn CallSummaries,
 }
 impl AnalyzedFunction<'_> {
     /// Coverage and value semantics are complete.
@@ -57,7 +60,8 @@ impl AnalyzedFunction<'_> {
     }
 }
 
-/// One outcome of a library analysis, in input, object and symbol order.
+/// One outcome of a library analysis. With summaries, analyzed functions
+/// arrive in callee-first SCC order; otherwise in input, object and symbol order.
 pub enum LibraryOutcome<'a> {
     Analyzed(AnalyzedFunction<'a>),
     /// A function that cannot be analyzed; its behavior is unknown.
@@ -86,11 +90,9 @@ fn blocks_function(error: &Error) -> bool {
     )
 }
 
-/// Analyze every function symbol of an executable section of every object
-/// `inputs` contain under `assumptions`, presenting each outcome to
-/// `visit`. With [`Assumptions::call_returns`], a first pass collects the
-/// constants each function returns and the analysis takes them at calls one
-/// level deep.
+/// Analyze every captured function. With call summaries, the first analysis
+/// records the direct-call graph; the second emits final records in callee-first
+/// SCC order and publishes each callee's result/argument contract once.
 pub fn analyze_library(
     inputs: &[Executable],
     assumptions: Assumptions<'_>,
@@ -99,40 +101,30 @@ pub fn analyze_library(
     control: &mut dyn RunControl,
     visit: &mut Visit<'_>,
 ) -> Result<()> {
-    let Assumptions {
-        abi,
-        call_returns,
-        read_only,
-    } = assumptions;
-    let mut ledger = Ledger::new(memory, control)?;
-    let mut table = ReturnTable::default();
-    for (index, executable) in inputs.iter().enumerate().filter(|_| call_returns) {
-        let input = index as u64;
-        let mut position = RunPosition {
-            input: Some(input),
-            ..RunPosition::default()
-        };
-        position.artifact(executable.id());
-        control.set_position(position);
-        let mut collect = Collect {
-            table: &mut table,
-            ledger: &mut ledger,
-        };
-        visit_members(executable, memory, control, &mut |member, c| {
-            analyze_object(
-                input,
-                member,
-                abi,
-                read_only,
-                &NoReturns,
-                Some(&mut collect),
-                decoder,
-                memory,
-                c,
-                &mut |_, _| Ok(()),
-            )
-        })?;
+    if assumptions.call_summaries {
+        let catalog = crate::registers::Callees::capture(inputs, memory, control)?;
+        summaries::analyze(
+            inputs,
+            assumptions,
+            &catalog,
+            decoder,
+            memory,
+            control,
+            visit,
+        )
+    } else {
+        analyze_without_summaries(inputs, assumptions, decoder, memory, control, visit)
     }
+}
+
+fn analyze_without_summaries(
+    inputs: &[Executable],
+    assumptions: Assumptions<'_>,
+    decoder: &dyn FunctionSemantics,
+    memory: &WorkingMemory,
+    control: &mut dyn RunControl,
+    visit: &mut Visit<'_>,
+) -> Result<()> {
     for (index, executable) in inputs.iter().enumerate() {
         let input = index as u64;
         let mut position = RunPosition {
@@ -143,114 +135,38 @@ pub fn analyze_library(
         control.set_position(position);
         let container = visit_members(executable, memory, control, &mut |member, c| {
             analyze_object(
-                input, member, abi, read_only, &table, None, decoder, memory, c, visit,
+                input,
+                member,
+                assumptions.abi,
+                assumptions.read_only,
+                &NoReturns,
+                decoder,
+                memory,
+                c,
+                visit,
             )
         })?;
-        let gap = |reason: &str, visit: &mut Visit<'_>, c: &mut dyn RunControl| {
+        for reason in [
+            container
+                .framing
+                .is_some()
+                .then_some("archive member enumeration incomplete"),
+            (container.kind == ContainerKind::Unsupported).then_some("unsupported input format"),
+        ]
+        .into_iter()
+        .flatten()
+        {
             visit(
                 LibraryOutcome::Gap {
                     input,
                     object: None,
                     reason,
                 },
-                c,
-            )
-        };
-        if container.framing.is_some() {
-            gap("archive member enumeration incomplete", visit, control)?;
-        }
-        if container.kind == ContainerKind::Unsupported {
-            gap("unsupported input format", visit, control)?;
+                control,
+            )?;
         }
     }
     Ok(())
-}
-
-/// How a call names a function: its address in a linked image, or its
-/// global symbol in a relocatable object.
-#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
-enum CalleeKey {
-    Address(u32),
-    Symbol(Vec<u8>),
-}
-
-/// The constants each function of the inputs leaves in `a0` and `a1` at
-/// every return, where its analysis is complete, no exit leaves it but a
-/// return, and every return's value is a known constant; by how a call names
-/// the function. A name defined with different results answers nothing.
-#[derive(Default)]
-pub struct ReturnTable {
-    addresses: BTreeMap<u32, [Option<Vec<u32>>; 2]>,
-    symbols: BTreeMap<Vec<u8>, [Option<Vec<u32>>; 2]>,
-}
-
-impl CallReturns for ReturnTable {
-    fn returns(&self, callee: Callee<'_>, register: u8) -> Option<&[u32]> {
-        let results = match callee {
-            Callee::Address(address) => self.addresses.get(&address)?,
-            Callee::Symbol(name) => self.symbols.get(name)?,
-        };
-        let slot = CallAbi::RiscvInteger
-            .results()
-            .iter()
-            .position(|&r| r == register)?;
-        results[slot].as_deref()
-    }
-}
-
-/// The first pass's table and the ledger that admits it.
-pub(crate) struct Collect<'t, 'm> {
-    table: &'t mut ReturnTable,
-    ledger: &'t mut Ledger<'m>,
-}
-
-impl Collect<'_, '_> {
-    /// Add the results of the function `key` names from its complete
-    /// analysis's `records`, or, without them (the function is blocked or
-    /// its analysis incomplete), record that it gives no results: another
-    /// definition of the same name then answers nothing either.
-    fn add(
-        &mut self,
-        key: &CalleeKey,
-        records: Option<&[FunctionRecord]>,
-        c: &mut dyn RunControl,
-    ) -> Result<()> {
-        let results = match records {
-            Some(records) => returned_constants(records, c)?,
-            None => [None, None],
-        };
-        let mut admitted: [Option<Vec<u32>>; 2] = [None, None];
-        for (slot, set) in admitted.iter_mut().zip(results) {
-            if let Some(set) =
-                set.filter(|set| !set.is_empty() && set.len() <= MAX_VALUE_ALTERNATIVES)
-            {
-                let mut values = Vec::new();
-                for value in set {
-                    self.ledger.push(&mut values, value, c)?;
-                }
-                *slot = Some(values);
-            }
-        }
-        match key {
-            CalleeKey::Address(address) => insert(
-                &mut self.table.addresses,
-                *address,
-                admitted,
-                self.ledger,
-                c,
-            ),
-            CalleeKey::Symbol(name) => {
-                self.ledger.admit(name.len(), c)?;
-                insert(
-                    &mut self.table.symbols,
-                    name.clone(),
-                    admitted,
-                    self.ledger,
-                    c,
-                )
-            }
-        }
-    }
 }
 
 /// The constants a complete function's `records` leave in `a0` and `a1` at
@@ -259,6 +175,8 @@ impl Collect<'_, '_> {
 /// a return.
 fn returned_constants(
     records: &[FunctionRecord],
+    calls: &dyn CallSummaries,
+    links: &crate::registers::CallLinks<'_>,
     c: &mut dyn RunControl,
 ) -> Result<[Option<BTreeSet<u32>>; 2]> {
     let mut results: [Option<BTreeSet<u32>>; 2] = [Some(BTreeSet::new()), Some(BTreeSet::new())];
@@ -279,14 +197,44 @@ fn returned_constants(
             // A tail call, or any other transfer out but a call, leaves
             // through the code it reaches: its results are not this
             // function's.
-            FunctionRecord::Transfer { call: false, .. } => return Ok([None, None]),
+            FunctionRecord::Transfer {
+                offset,
+                call: false,
+                ..
+            }
+            | FunctionRecord::Edge {
+                from: offset,
+                relation: EdgeKind::Jump,
+                external: true,
+                ..
+            } => {
+                returns += 1;
+                let summary = links
+                    .callee(*offset)
+                    .and_then(|callee| calls.summary(callee));
+                for (index, slot) in results.iter_mut().enumerate() {
+                    if let Some(values) = summary
+                        .and_then(|s| s.results.get(index))
+                        .and_then(Option::as_deref)
+                    {
+                        if let Some(set) = slot {
+                            set.extend(values.iter().copied());
+                            if set.len() > MAX_VALUE_ALTERNATIVES {
+                                *slot = None;
+                            }
+                        }
+                    } else {
+                        *slot = None;
+                    }
+                }
+            }
             FunctionRecord::Edge {
                 relation,
                 external: true,
                 ..
             } if !matches!(
                 relation,
-                EdgeKind::Call | EdgeKind::PossibleContinuation | EdgeKind::Return
+                EdgeKind::Call | EdgeKind::PossibleContinuation | EdgeKind::Return | EdgeKind::Jump
             ) =>
             {
                 return Ok([None, None]);
@@ -302,42 +250,18 @@ fn constants(value: &AbstractValue, set: &mut BTreeSet<u32>) -> bool {
     match value {
         AbstractValue::Constant { value } => {
             set.insert(*value);
-            true
+            set.len() <= MAX_VALUE_ALTERNATIVES
         }
         AbstractValue::Alternatives { values } => values.values().iter().all(|value| match value {
             ValueAlternative::Constant { value } => {
                 set.insert(*value);
-                true
+                set.len() <= MAX_VALUE_ALTERNATIVES
             }
             _ => false,
         }),
         _ => false,
     }
 }
-
-/// Record `results` under `key`; a key seen with other results keeps none.
-fn insert<K: Ord>(
-    map: &mut BTreeMap<K, [Option<Vec<u32>>; 2]>,
-    key: K,
-    results: [Option<Vec<u32>>; 2],
-    ledger: &mut Ledger<'_>,
-    c: &mut dyn RunControl,
-) -> Result<()> {
-    match map.get_mut(&key) {
-        Some(known) => {
-            for (known, new) in known.iter_mut().zip(results) {
-                if *known != new {
-                    *known = None;
-                }
-            }
-        }
-        None => {
-            ledger.insert(map, key, results, c)?;
-        }
-    }
-    Ok(())
-}
-
 /// The explicit assumptions of a library analysis; none by default.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Assumptions<'a> {
@@ -345,11 +269,10 @@ pub struct Assumptions<'a> {
     /// calling convention preserves; without it, every register is unknown
     /// after such a call.
     pub abi: Option<oer_analysis_riscv_model::CallAbi>,
-    /// A call to a function whose every return leaves only known constants
-    /// in a result register takes them for that register. A first pass
-    /// analyzes every function to collect those constants
-    /// ([`ReturnTable`]), so the analysis takes about twice as long.
-    pub call_returns: bool,
+    /// Compute the direct-call graph without summaries, then analyze every
+    /// function in callee-first order with shared result/argument contracts.
+    /// Constants propagate through any acyclic call depth in two analyses.
+    pub call_summaries: bool,
     /// Address ranges read-only at run time whatever a linked image's
     /// section flags say, such as flash mapped for reading: constants are
     /// read from the file-backed bytes inside them.
@@ -409,7 +332,7 @@ fn research_function<'m>(
     input: u64,
     payload: &ArtifactId,
     abi: Option<oer_analysis_riscv_model::CallAbi>,
-    returns: &dyn CallReturns,
+    returns: &dyn CallSummaries,
     tables: &dyn TableEntries,
     decoder: &dyn FunctionSemantics,
     memory: &'m WorkingMemory,
@@ -489,8 +412,7 @@ fn analyze_object(
     member: Member<'_>,
     abi: Option<oer_analysis_riscv_model::CallAbi>,
     read_only: &[ReadOnlyWindow],
-    returns: &dyn CallReturns,
-    mut collect: Option<&mut Collect<'_, '_>>,
+    returns: &dyn CallSummaries,
     decoder: &dyn FunctionSemantics,
     memory: &WorkingMemory,
     control: &mut dyn RunControl,
@@ -544,35 +466,8 @@ fn analyze_object(
         )?;
     }
     let object_type = elf.as_ref().map(|e| e.object_type);
-    // How a call names each function: its address in an image, or its
-    // global symbol in a relocatable object.
-    let keys: Vec<Option<CalleeKey>> = selection
-        .functions
-        .iter()
-        .map(|r| match object_type {
-            Some(2) => u32::try_from(r.value)
-                .ok()
-                .map(|at| CalleeKey::Address(at & !1)),
-            Some(1) => r
-                .name
-                .clone()
-                .filter(|name| r.binding == 1 && !name.is_empty())
-                .map(CalleeKey::Symbol),
-            _ => None,
-        })
-        .collect();
-    // The first pass records that a function no analysis reads gives no
-    // results.
-    let reject = |collect: &mut Option<&mut Collect<'_, '_>>, c: &mut dyn RunControl| {
-        if let Some(collect) = collect.as_deref_mut() {
-            for key in keys.iter().flatten() {
-                collect.add(key, None, c)?;
-            }
-        }
-        Ok::<_, Error>(())
-    };
     let (Some(bytes), Some(payload)) = (bytes, payload) else {
-        return reject(&mut collect, control);
+        return Ok(());
     };
     // A relocatable object's relocations prove its jump tables; a static
     // image's facts (the words an `--emit-relocs` link kept, its `.LJTI*`
@@ -640,7 +535,7 @@ fn analyze_object(
                 (None, None) => &NoTables,
             };
             let mut references = AdmittedVec::new(memory);
-            for (function, key) in functions.iter().zip(&keys) {
+            for function in &functions {
                 let mut records = RecordBuffer::new(memory);
                 let researched = research_function(
                     prepared,
@@ -657,13 +552,6 @@ fn analyze_object(
                     &mut Records(&mut records),
                 );
                 match researched {
-                    Ok((summary, _)) if collect.is_some() => {
-                        if let (Some(collect), Some(key)) = (collect.as_deref_mut(), key) {
-                            let complete =
-                                summary.coverage.complete() && summary.semantics.complete;
-                            collect.add(key, complete.then_some(&records[..]), c)?;
-                        }
-                    }
                     Ok((summary, found)) => visit(
                         LibraryOutcome::Analyzed(AnalyzedFunction {
                             function,
@@ -671,21 +559,17 @@ fn analyze_object(
                             coverage: summary.coverage,
                             semantics: summary.semantics,
                             jump_tables: &found.tables,
+                            summaries: returns,
                         }),
                         c,
                     )?,
-                    Err(error) if blocks_function(&error) => {
-                        if let (Some(collect), Some(key)) = (collect.as_deref_mut(), key) {
-                            collect.add(key, None, c)?;
-                        }
-                        visit(
-                            LibraryOutcome::Blocked {
-                                function,
-                                error: &error,
-                            },
-                            c,
-                        )?
-                    }
+                    Err(error) if blocks_function(&error) => visit(
+                        LibraryOutcome::Blocked {
+                            function,
+                            error: &error,
+                        },
+                        c,
+                    )?,
                     Err(error) => return Err(error),
                 }
             }
@@ -694,7 +578,6 @@ fn analyze_object(
     );
     match result {
         Err(error) if !entered && blocks_function(&error) => {
-            reject(&mut collect, control)?;
             for function in &functions {
                 visit(
                     LibraryOutcome::Blocked {
@@ -735,82 +618,82 @@ pub fn register_accesses(
         unresolved_addresses: 0,
         indexed_addresses: 0,
     };
-    analyze_library(
-        inputs,
-        assumptions,
-        decoder,
-        memory,
-        control,
-        &mut |outcome, c| match outcome {
-            LibraryOutcome::Analyzed(analyzed) => {
-                summary.functions += 1;
-                summary.partial_functions += u64::from(!analyzed.complete());
-                summary.partial_causes.add(analyzed.partial_causes(c)?);
-                c.phase(RunPhase::AnalyzeValues)?;
-                let facts = Facts::new(analyzed.records, memory, c)?;
-                let mut reads = crate::registers::ReadObservations::new(
-                    &facts,
-                    memory,
-                    decoder,
-                    ranges,
-                    assumptions.abi,
-                    &callees,
-                    analyzed.function,
-                );
-                crate::registers::observe(
-                    analyzed.records,
-                    &facts,
-                    memory,
-                    ranges,
-                    c,
-                    &mut |o, c| {
-                        summary.observations += 1;
-                        summary.unresolved_addresses += u64::from(o.address.is_none());
-                        summary.indexed_addresses += u64::from(o.indexed.is_some());
-                        emit(
-                            &RegisterAccess::Observation {
-                                function: analyzed.function.clone(),
-                                record: o.record,
-                                fact: Box::new(o.fact.clone()),
-                                address: o.address,
-                                alternative: o.alternative,
-                                indexed: o.indexed,
-                                mask: o.mask,
-                                stored: o.stored,
-                                reads: reads.reads(o.fact, c)?,
-                            },
-                            c,
-                        )
-                    },
-                )
-            }
-            LibraryOutcome::Blocked { function, error } => {
-                summary.blocked_functions += 1;
+    let mut visit = |outcome: LibraryOutcome<'_>, c: &mut dyn RunControl| match outcome {
+        LibraryOutcome::Analyzed(analyzed) => {
+            summary.functions += 1;
+            summary.partial_functions += u64::from(!analyzed.complete());
+            summary.partial_causes.add(analyzed.partial_causes(c)?);
+            c.phase(RunPhase::AnalyzeValues)?;
+            let facts = Facts::new(analyzed.records, memory, c)?;
+            let mut reads = crate::registers::ReadObservations::new(
+                &facts,
+                memory,
+                decoder,
+                ranges,
+                assumptions.abi,
+                &callees,
+                analyzed.function,
+                analyzed.summaries,
+            );
+            crate::registers::observe(analyzed.records, &facts, memory, ranges, c, &mut |o, c| {
+                summary.observations += 1;
+                summary.unresolved_addresses += u64::from(o.address.is_none());
+                summary.indexed_addresses += u64::from(o.indexed.is_some());
                 emit(
-                    &RegisterAccess::Blocked {
-                        function: function.clone(),
-                        error: error.clone(),
+                    &RegisterAccess::Observation {
+                        function: analyzed.function.clone(),
+                        record: o.record,
+                        fact: Box::new(o.fact.clone()),
+                        address: o.address,
+                        alternative: o.alternative,
+                        indexed: o.indexed,
+                        mask: o.mask,
+                        stored: o.stored,
+                        reads: reads.reads(o.fact, c)?,
                     },
                     c,
                 )
-            }
-            LibraryOutcome::Gap {
-                input,
-                object,
-                reason,
-            } => {
-                summary.gaps += 1;
-                emit(
-                    &RegisterAccess::Gap {
-                        input,
-                        object: object.cloned(),
-                        reason: reason.to_owned(),
-                    },
-                    c,
-                )
-            }
-        },
-    )?;
+            })
+        }
+        LibraryOutcome::Blocked { function, error } => {
+            summary.blocked_functions += 1;
+            emit(
+                &RegisterAccess::Blocked {
+                    function: function.clone(),
+                    error: error.clone(),
+                },
+                c,
+            )
+        }
+        LibraryOutcome::Gap {
+            input,
+            object,
+            reason,
+        } => {
+            summary.gaps += 1;
+            emit(
+                &RegisterAccess::Gap {
+                    input,
+                    object: object.cloned(),
+                    reason: reason.to_owned(),
+                },
+                c,
+            )
+        }
+    };
+    if assumptions.call_summaries {
+        summaries::analyze(
+            inputs,
+            assumptions,
+            &callees,
+            decoder,
+            memory,
+            control,
+            &mut visit,
+        )?;
+    } else {
+        analyze_without_summaries(inputs, assumptions, decoder, memory, control, &mut visit)?;
+    }
     Ok(summary)
 }
 
@@ -850,6 +733,7 @@ mod tests {
                 ..SemanticSummary::default()
             },
             jump_tables: &[],
+            summaries: &NoReturns,
         }
         .partial_causes(c)
     }

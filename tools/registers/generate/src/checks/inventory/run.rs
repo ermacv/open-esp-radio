@@ -66,7 +66,7 @@ fn accesses(
         // A base address the vendor keeps in a callee-saved register across
         // a call stays known: without the assumption every register is
         // unknown after each call.
-        .args(["--abi", "riscv-integer", "--call-returns"])
+        .args(["--abi", "riscv-integer", "--call-summaries"])
         .args(["--timeout-secs", &OPERATION_TIMEOUT_SECS.to_string()]);
     for input in inputs {
         command

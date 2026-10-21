@@ -31,4 +31,6 @@ fn diagnostic(
 }
 
 mod function;
-pub use function::{DataView, FunctionView, PreparedObject, with_prepared_object};
+pub use function::{
+    DataView, FunctionView, PreparedObject, prepare_captured, with_prepared_object,
+};

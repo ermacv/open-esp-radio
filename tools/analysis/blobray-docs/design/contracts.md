@@ -112,9 +112,11 @@ static RV32 objects remain ordinary metadata and grant no dynamic loading or
 TLS support. Static relocations keep their own `sh_link` table independently of
 the selected symbol.
 
-Artifacts owns the prepared object: captured bytes, parsed ELF view, symbol
-targets and section metadata live in one callback scope, and borrowed views
-cannot escape it. Analysis owns normalized section references and logarithmic
+Artifacts owns parsed ELF views, symbol targets and section metadata.
+`with_prepared_object` owns captured bytes in a callback scope;
+`prepare_captured` borrows caller-owned immutable bytes for repeated visits.
+Both verify the payload digest, admit metadata and keep function views borrowed
+from the prepared object. Analysis owns normalized section references and logarithmic
 offset, symbol and relocation-pair lookup. Whole-section HI/LO resolution
 preserves missing and ambiguous outcomes.
 
