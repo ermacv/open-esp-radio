@@ -25,7 +25,7 @@ impl<F: Future<Output = Result<PhyTemperatureOutcome, Failure>>> Future for Samp
         self.project().inner.poll(cx)
     }
 }
-pub(crate) fn sample<'a, R: Registers, T: Timer>(
+pub(crate) fn sample<'a, D: crate::executor::wait::PhyShortDelay + 'a, R: Registers, T: Timer>(
     transition: &'a mut PhyTemperatureTransition,
     registers: &'a mut R,
     timer: &'a T,
@@ -49,7 +49,7 @@ pub(crate) fn sample<'a, R: Registers, T: Timer>(
                             timer.now(),
                             I2cTiming::Temperature,
                         )?;
-                        drive(
+                        drive::<D, _, _>(
                             &mut job,
                             registers,
                             timer,
@@ -61,7 +61,7 @@ pub(crate) fn sample<'a, R: Registers, T: Timer>(
                     }
                     PhyTemperatureExternalBinding::Sample(_) => {
                         let mut job = Job::code(timer.now())?;
-                        drive(
+                        drive::<D, _, _>(
                             &mut job,
                             registers,
                             timer,

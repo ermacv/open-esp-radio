@@ -88,7 +88,24 @@ impl PhyTargetObserver for &mut Observer<'_> {
         self.3.as_deref_mut()
     }
     #[inline(never)]
-    fn engine_completed(&mut self, timing: oer_esp32s31_phy::tracking::observation::EngineTiming) {
+    fn engine_completed(
+        &mut self,
+        operation: Operation,
+        timing: oer_esp32s31_phy::tracking::observation::EngineTiming,
+    ) {
+        oer_esp32s31_board::rom::print_fmt(format_args!(
+            "OPEN_RADIO_HIL engine family={:?} polls={} pending={} ready={} total-us={} max-us={} resumes={} late-total-us={} late-max-us={} invalid={}\n",
+            operation,
+            timing.polls,
+            timing.pending,
+            timing.polls.saturating_sub(timing.pending),
+            timing.total_micros,
+            timing.maximum_micros,
+            timing.resumes,
+            timing.lateness_micros,
+            timing.maximum_lateness_micros,
+            timing.invalid,
+        ));
         self.2.merge(HoldPolls {
             polls: timing.polls,
             pending: timing.pending,

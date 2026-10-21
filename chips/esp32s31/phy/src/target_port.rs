@@ -217,7 +217,12 @@ pub trait PhyTargetObserver {
         None
     }
     const OBSERVE_ENGINE_POLLS: bool = false;
-    fn engine_completed(&mut self, _timing: crate::tracking::observation::EngineTiming) {}
+    fn engine_completed(
+        &mut self,
+        _operation: crate::tracking::observation::Operation,
+        _timing: crate::tracking::observation::EngineTiming,
+    ) {
+    }
     const OBSERVE_DELAYS: bool = false;
     /// Include sensor age at RFPLL entry; disabled observers add no clock read.
     const OBSERVE_RFPLL_AGE: bool = false;
@@ -1790,11 +1795,12 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
     async fn run_param_rfpll<O: PhyTargetObserver>(
         &self,
         mut child: PhyParamTrackingRfpllTransition<'_>,
-        registers: &mut impl SharedPhyAccess,
+        registers: &mut (impl SharedPhyAccess + crate::executor::step::Registers),
         grant: &mut impl PhyGrantProtectPort,
         observer: &mut O,
     ) -> Result<PhyParamTrackingCompletion, PhyTargetPortError> {
         let request = child.request();
+        let mut timing = crate::tracking::observation::EngineTiming::default();
         let sample_age_micros = O::OBSERVE_RFPLL_AGE
             .then(|| self.timer.now().as_micros())
             .and_then(|now| {
@@ -1820,7 +1826,26 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
                     outcome,
                     sample_age_micros,
                 });
+                if O::OBSERVE_ENGINE_POLLS {
+                    observer
+                        .engine_completed(crate::tracking::observation::Operation::Rfpll, timing);
+                }
                 return Ok(completion);
+            }
+            if matches!(action, crate::tracking::rfpll::thermal::Action::Correct(_)) {
+                use crate::executor::step::{Job, drive, rfpll::Cursor};
+                let mut job = Job::rfpll(Cursor::Thermal(child.transition_mut()), self.timer.now())
+                    .map_err(step::port_error)?;
+                drive::<D, _, _>(
+                    &mut job,
+                    registers,
+                    self.timer,
+                    O::OBSERVE_ENGINE_POLLS.then_some(&mut timing),
+                    None,
+                )
+                .await
+                .map_err(step::port_error)?;
+                continue;
             }
             let completion =
                 rfpll::complete_thermal::<D, _>(self.timer, registers, grant, action).await?;
@@ -2194,7 +2219,7 @@ impl<
                     .await?
             }
             PhyParamTrackingAction::TemperatureRead => {
-                let (result, timing) = step::temperature(
+                let (result, timing) = step::temperature::<D, _, _>(
                     self.timer,
                     pending
                         .begin_temperature_read(state)
@@ -2205,7 +2230,10 @@ impl<
                 )
                 .await;
                 if O::OBSERVE_ENGINE_POLLS {
-                    self.observer.engine_completed(timing);
+                    self.observer.engine_completed(
+                        crate::tracking::observation::Operation::Temperature,
+                        timing,
+                    );
                 }
                 let (completion, outcome) = result?;
                 self.observer.temperature_completed(outcome);

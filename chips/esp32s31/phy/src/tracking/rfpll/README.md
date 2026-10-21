@@ -44,8 +44,13 @@ that behavior does not qualify an out-of-range correction on physical RF.
 `target_port::rfpll::{search, correct}` uses the existing typed I2C bindings,
 direct bounded status polling and frequency-memory operations. Required 2-us
 entry and 5-us candidate settles use the short ROM delay backend. The admitted
-transaction completes in one poll without timer suspension. Its finite edge
-limits do not establish a wall-clock bound. The caller must
+transaction uses the private P1 transport engine. Each complete candidate
+(write, five-microsecond settle, status) and each complete memory entry
+(read and write) returns `Pending` through the waker. Setup, final write and
+channel-index restoration have separate checkpoints. These voluntary yields
+construct no timer. Grant protection and software frequency control remain
+held across them; failure or cancellation cannot publish restoration.
+The finite edge limits do not establish a wall-clock bound. The caller must
 already hold exclusive physical PHY access. This child does not acquire a
 coexistence grant, disable hardware frequency updates, change thermal reference
 state, or authorize traffic to resume after failure; the thermal transition

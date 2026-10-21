@@ -1,5 +1,6 @@
 //! Private PHY transport jobs. Hardware ownership stays with the caller.
 mod io;
+pub(crate) mod rfpll;
 pub(crate) mod temperature;
 pub(crate) use io::Registers;
 
@@ -41,6 +42,8 @@ pub(crate) enum Failure {
     DeadlineOverflow,
     TimedOut,
     Binding,
+    #[cfg(target_arch = "riscv32")]
+    Target(crate::target_executor::PhyTargetPortError),
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum Outcome {
@@ -61,6 +64,7 @@ pub(crate) enum Step {
 }
 
 enum Work<'a> {
+    Rfpll(rfpll::Cursor<'a>),
     I2c(&'a mut PhyColdI2cTransaction),
     Code(Option<u8>),
     Pbus(&'a mut PhyPbusHardwareBinding),
@@ -102,6 +106,9 @@ impl<'a> Job<'a> {
             now,
             matches!(timing, I2cTiming::Temperature),
         )
+    }
+    pub(crate) fn rfpll(cursor: rfpll::Cursor<'a>, now: Instant) -> Result<Self, Failure> {
+        Self::new(Work::Rfpll(cursor), now, false)
     }
     pub(crate) fn code(now: Instant) -> Result<Self, Failure> {
         Self::new(Work::Code(None), now, false)
@@ -163,11 +170,17 @@ impl<'a> Job<'a> {
         })
     }
 
-    /// Exactly one hardware atom, or a terminal software-only recognition.
-    /// Temperature conversion, state publication and observers are outside it.
+    /// One admitted hardware checkpoint, or terminal software-only recognition.
+    /// RFPLL retains complete candidates and memory entries inside a checkpoint;
+    /// temperature conversion, state publication and observers are outside it.
     #[inline(never)]
-    fn advance_one(&mut self, io: Io<'_, '_>, now: Instant) -> Step {
-        match self.advance(io, now) {
+    fn advance_one<D: super::wait::PhyShortDelay, C: oer_time::Clock>(
+        &mut self,
+        io: Io<'_, '_>,
+        clock: &C,
+        now: Instant,
+    ) -> Step {
+        match self.advance::<D, _>(io, clock, now) {
             Ok(step) => {
                 if matches!(step, Step::Complete) {
                     self.finished = true;
@@ -177,10 +190,16 @@ impl<'a> Job<'a> {
             Err(error) => Step::Failure(error),
         }
     }
-    fn advance(&mut self, mut io: Io<'_, '_>, now: Instant) -> Result<Step, Failure> {
+    fn advance<D: super::wait::PhyShortDelay, C: oer_time::Clock>(
+        &mut self,
+        mut io: Io<'_, '_>,
+        clock: &C,
+        now: Instant,
+    ) -> Result<Step, Failure> {
         self.ready_started = None;
         self.first_wait = false;
         match &mut self.work {
+            Work::Rfpll(cursor) => return cursor.advance_one::<D, _>(&mut io, clock),
             Work::Code(code) => {
                 if code.is_some() {
                     return Ok(Step::Complete);
@@ -370,7 +389,8 @@ enum Gate {
 }
 
 pin_project_lite::pin_project! {
-    struct Driver<'a, 'j, R, T, F, M> {
+    struct Driver<'a, 'j, R, T, F, M, D> {
+        delay: core::marker::PhantomData<D>,
         job: &'a mut Job<'j>,
         registers: &'a mut R,
         timer: &'a T,
@@ -383,8 +403,13 @@ pin_project_lite::pin_project! {
         gate: Gate,
     }
 }
-impl<R: Registers, T: Timer, F: Future<Output = ()>, M: Fn(Instant) -> F> Future
-    for Driver<'_, '_, R, T, F, M>
+impl<
+    R: Registers,
+    T: Timer,
+    F: Future<Output = ()>,
+    M: Fn(Instant) -> F,
+    D: super::wait::PhyShortDelay,
+> Future for Driver<'_, '_, R, T, F, M, D>
 {
     type Output = Result<(), Failure>;
     /// A single emitted poll per timer/register type, independent of observer.
@@ -444,7 +469,7 @@ impl<R: Registers, T: Timer, F: Future<Output = ()>, M: Fn(Instant) -> F> Future
                 _ => None,
             });
             let now = this.timer.now();
-            let mut step = this.registers.advance(this.job, now);
+            let mut step = this.registers.advance::<D, _>(this.job, this.timer, now);
             // A successful T7 publication establishes a fresh answer window
             // from its completion, including RMW's second command.
             if this.job.first_wait {
@@ -535,7 +560,7 @@ fn poll_timer<F: Future<Output = ()>>(wait: Pin<&mut F>, context: &mut Context<'
     wait.poll(context)
 }
 
-pub(crate) fn drive<'a, 'j, R: Registers, T: Timer>(
+pub(crate) fn drive<'a, 'j, D: super::wait::PhyShortDelay + 'a, R: Registers, T: Timer>(
     job: &'a mut Job<'j>,
     registers: &'a mut R,
     timer: &'a T,
@@ -543,6 +568,7 @@ pub(crate) fn drive<'a, 'j, R: Registers, T: Timer>(
     trace: Option<&'a mut ReadinessTrace>,
 ) -> impl Future<Output = Result<(), Failure>> + 'a {
     Driver {
+        delay: core::marker::PhantomData::<D>,
         job,
         registers,
         timer,

@@ -7,7 +7,12 @@ use crate::{
 use oer_time::Instant;
 
 pub(crate) trait Registers {
-    fn advance(&mut self, job: &mut Job<'_>, now: Instant) -> Step;
+    fn advance<D: super::super::wait::PhyShortDelay, C: oer_time::Clock>(
+        &mut self,
+        job: &mut Job<'_>,
+        clock: &C,
+        now: Instant,
+    ) -> Step;
     fn i2c_status(&mut self) -> u8;
 }
 pub(super) enum Io<'a, 'owner> {
@@ -30,8 +35,13 @@ pub(super) enum Io<'a, 'owner> {
 impl Registers
     for oer_esp32s31_hal::owner::SharedPhyHal<'_, oer_esp32s31_hal::owner::route::Shared>
 {
-    fn advance(&mut self, job: &mut Job<'_>, now: Instant) -> Step {
-        job.advance_one(Io::Shared(self), now)
+    fn advance<D: super::super::wait::PhyShortDelay, C: oer_time::Clock>(
+        &mut self,
+        job: &mut Job<'_>,
+        clock: &C,
+        now: Instant,
+    ) -> Step {
+        job.advance_one::<D, _>(Io::Shared(self), clock, now)
     }
     fn i2c_status(&mut self) -> u8 {
         Io::Shared(self).i2c_status()
@@ -39,8 +49,13 @@ impl Registers
 }
 #[cfg(all(target_arch = "riscv32", oer_probe))]
 impl Registers for oer_esp32s31_hal::owner::ValidationSharedPhy<'_> {
-    fn advance(&mut self, job: &mut Job<'_>, now: Instant) -> Step {
-        job.advance_one(Io::Validation(self), now)
+    fn advance<D: super::super::wait::PhyShortDelay, C: oer_time::Clock>(
+        &mut self,
+        job: &mut Job<'_>,
+        clock: &C,
+        now: Instant,
+    ) -> Step {
+        job.advance_one::<D, _>(Io::Validation(self), clock, now)
     }
     fn i2c_status(&mut self) -> u8 {
         Io::Validation(self).i2c_status()
@@ -48,6 +63,27 @@ impl Registers for oer_esp32s31_hal::owner::ValidationSharedPhy<'_> {
 }
 
 impl Io<'_, '_> {
+    pub(super) fn rfpll<D: super::super::wait::PhyShortDelay, C: oer_time::Clock>(
+        &mut self,
+        _clock: &C,
+        action: crate::tracking::rfpll::Action,
+    ) -> Result<crate::tracking::rfpll::Completion, Failure> {
+        match self {
+            #[cfg(target_arch = "riscv32")]
+            Self::Shared(registers) => {
+                crate::target_port::rfpll::complete_correction::<D, _>(_clock, *registers, action)
+                    .map_err(Failure::Target)
+            }
+            #[cfg(all(target_arch = "riscv32", oer_probe))]
+            Self::Validation(registers) => {
+                crate::target_port::rfpll::complete_correction::<D, _>(_clock, *registers, action)
+                    .map_err(Failure::Target)
+            }
+            #[cfg(test)]
+            Self::Test(io, _) => io.rfpll::<D>(action),
+        }
+    }
+
     fn i2c_status(&mut self) -> u8 {
         #[cfg(target_arch = "riscv32")]
         fn sample(registers: &impl oer_esp32s31_hal::owner::SharedPhyAccess) -> u8 {

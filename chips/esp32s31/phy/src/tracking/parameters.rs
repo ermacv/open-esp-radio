@@ -585,6 +585,10 @@ impl<'state> PhyParamTrackingRfpllTransition<'state> {
         self.child.advance(completion)
     }
 
+    pub(crate) fn transition_mut(&mut self) -> &mut super::rfpll::thermal::Transition {
+        &mut self.child
+    }
+
     pub const fn state(&self) -> &crate::state::PhyState {
         self.state
     }

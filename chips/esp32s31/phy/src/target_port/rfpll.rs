@@ -5,8 +5,13 @@
 //! `maintain` includes the current frequency-control entry and restoration;
 //! `search` and `correct` are children requiring that boundary from the caller.
 //! Runtime execution polls I2C directly and retains the required 2/5-us ROM
-//! settles. These futures do not suspend inside the admitted RFPLL transaction;
-//! each direct completion has a named 20 µs settle on the caller's clock.
+//! settles. The P1 engine yields between complete candidates and memory entries;
+//! each direct I2C completion keeps its named 20 µs settle.
+
+#![allow(
+    private_bounds,
+    reason = "probe entries use the closed transport engine routes"
+)]
 
 use oer_esp32s31_hal::owner::SharedPhyAccess;
 
@@ -136,39 +141,45 @@ fn complete<D: PhyShortDelay, C: oer_time::Clock + ?Sized>(
 /// A hardware failure leaves that borrow with the caller for fault containment;
 /// this entry does not imply that normal RF operation may resume.
 #[cfg(any(test, oer_probe))]
-pub async fn search<D: PhyShortDelay, C: oer_time::Clock + ?Sized>(
+pub async fn search<D: PhyShortDelay, C: oer_time::Timer>(
     clock: &C,
-    registers: &mut impl SharedPhyAccess,
+    registers: &mut (impl SharedPhyAccess + crate::executor::step::Registers),
 ) -> Result<rfpll::search::Outcome, PhyTargetPortError> {
+    use crate::executor::step::{Job, drive, rfpll::Cursor};
     let mut search = rfpll::search::Search::new();
-    loop {
-        let action = search.action();
-        if let Action::Complete(outcome) = action {
-            return Ok(outcome);
-        }
-        search
-            .advance(complete::<D, _>(clock, registers, action)?)
-            .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
+    {
+        let mut job = Job::rfpll(Cursor::Search(&mut search), clock.now())
+            .map_err(super::step::port_error)?;
+        drive::<D, _, _>(&mut job, registers, clock, None, None)
+            .await
+            .map_err(super::step::port_error)?;
+    }
+    match search.action() {
+        Action::Complete(outcome) => Ok(outcome),
+        _ => Err(PhyTargetPortError::UnexpectedBinding),
     }
 }
 
 /// Search, update every frequency-memory entry when the measured delta is
 /// nonzero, and restore the current channel index before returning success.
 #[cfg(any(test, oer_probe))]
-pub async fn correct<D: PhyShortDelay, C: oer_time::Clock + ?Sized>(
+pub async fn correct<D: PhyShortDelay, C: oer_time::Timer>(
     clock: &C,
-    registers: &mut impl SharedPhyAccess,
+    registers: &mut (impl SharedPhyAccess + crate::executor::step::Registers),
     current_channel: u16,
 ) -> Result<rfpll::Outcome, PhyTargetPortError> {
+    use crate::executor::step::{Job, drive, rfpll::Cursor};
     let mut correction = rfpll::Correction::new(current_channel);
-    loop {
-        if let rfpll::Action::Complete(outcome) = correction.action() {
-            return Ok(outcome);
-        }
-        let completion = complete_correction::<D, _>(clock, registers, correction.action())?;
-        correction
-            .advance(completion)
-            .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
+    {
+        let mut job = Job::rfpll(Cursor::Correction(&mut correction), clock.now())
+            .map_err(super::step::port_error)?;
+        drive::<D, _, _>(&mut job, registers, clock, None, None)
+            .await
+            .map_err(super::step::port_error)?;
+    }
+    match correction.action() {
+        rfpll::Action::Complete(outcome) => Ok(outcome),
+        _ => Err(PhyTargetPortError::UnexpectedBinding),
     }
 }
 
@@ -186,9 +197,9 @@ pub async fn correct<D: PhyShortDelay, C: oer_time::Clock + ?Sized>(
 /// disable bit; the existing typed baseband-mode accessor implements the new
 /// operations without duplicating the physical register's identity.
 #[cfg(any(test, oer_probe))]
-pub async fn maintain<D: PhyShortDelay, C: oer_time::Clock + ?Sized>(
+pub async fn maintain<D: PhyShortDelay, C: oer_time::Timer>(
     clock: &C,
-    registers: &mut impl SharedPhyAccess,
+    registers: &mut (impl SharedPhyAccess + crate::executor::step::Registers),
     current_channel: u16,
 ) -> Result<rfpll::Outcome, PhyTargetPortError> {
     let outcome = track::<D, _>(
@@ -207,7 +218,7 @@ pub async fn maintain<D: PhyShortDelay, C: oer_time::Clock + ?Sized>(
         .ok_or(PhyTargetPortError::UnexpectedBinding)
 }
 
-fn complete_correction<D: PhyShortDelay, C: oer_time::Clock + ?Sized>(
+pub(crate) fn complete_correction<D: PhyShortDelay, C: oer_time::Clock + ?Sized>(
     clock: &C,
     registers: &mut impl SharedPhyAccess,
     action: rfpll::Action,
@@ -267,15 +278,24 @@ pub(super) async fn complete_thermal<D: PhyShortDelay, C: oer_time::Clock + ?Siz
 /// all waits. Success is available only after restoration (or a hardware-free
 /// skip). Error or cancellation requires the caller to contain the failed epoch.
 #[cfg(any(test, oer_probe))]
-pub async fn track<D: PhyShortDelay, C: oer_time::Clock + ?Sized>(
+pub async fn track<D: PhyShortDelay, C: oer_time::Timer>(
     clock: &C,
-    registers: &mut impl SharedPhyAccess,
+    registers: &mut (impl SharedPhyAccess + crate::executor::step::Registers),
     request: rfpll::thermal::Request,
 ) -> Result<rfpll::thermal::Outcome, PhyTargetPortError> {
     let mut child = rfpll::thermal::Transition::new(request);
     loop {
         if let rfpll::thermal::Action::Complete(outcome) = child.action() {
             return Ok(outcome);
+        }
+        if matches!(child.action(), rfpll::thermal::Action::Correct(_)) {
+            use crate::executor::step::{Job, drive, rfpll::Cursor};
+            let mut job = Job::rfpll(Cursor::Thermal(&mut child), clock.now())
+                .map_err(super::step::port_error)?;
+            drive::<D, _, _>(&mut job, registers, clock, None, None)
+                .await
+                .map_err(super::step::port_error)?;
+            continue;
         }
         child
             .advance(
