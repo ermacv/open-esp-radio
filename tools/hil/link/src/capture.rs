@@ -5,6 +5,82 @@ use super::*;
 use crate::transport::events::EventPoll;
 use std::{collections::VecDeque, os::fd::AsRawFd};
 
+/// Only a complete success line proves every alarm check. In particular,
+/// neither the old first-wake marker nor a partial UART line is sufficient.
+fn boot_smoke_complete(bytes: &[u8]) -> Result<bool> {
+    const PASS: &[u8] = b"OPEN_RADIO_HIL boot-smoke=PASS timer=PASS rearm=PASS";
+    const PANIC: &[u8] = b"OPEN_RADIO_HIL runtime=PANIC";
+    if bytes.windows(PANIC.len()).any(|part| part == PANIC) {
+        return Err("boot-smoke runtime panicked".into());
+    }
+    let mut passed = false;
+    for line in bytes.split_inclusive(|byte| *byte == b'\n') {
+        let Some(line) = line.strip_suffix(b"\n") else {
+            continue;
+        };
+        let line = line.strip_suffix(b"\r").unwrap_or(line);
+        if line.starts_with(b"OPEN_RADIO_HIL boot-smoke=") {
+            if line != PASS {
+                return Err(format!(
+                    "boot-smoke did not pass timer rearming: {}",
+                    String::from_utf8_lossy(line)
+                )
+                .into());
+            }
+            passed = true;
+        }
+    }
+    Ok(passed)
+}
+
+#[cfg(test)]
+mod boot_smoke_tests {
+    use super::boot_smoke_complete;
+
+    #[test]
+    fn requires_timer_and_rearm_pass_on_a_complete_line() {
+        assert!(
+            boot_smoke_complete(
+                b"OPEN_RADIO_HIL rearm step=3 delay_ms=20 elapsed_us=20010\r\n\
+              OPEN_RADIO_HIL boot-smoke=PASS timer=PASS rearm=PASS\r\n"
+            )
+            .unwrap()
+        );
+        assert!(
+            !boot_smoke_complete(b"OPEN_RADIO_HIL boot-smoke=PASS timer=PASS rearm=PASS").unwrap()
+        );
+        assert!(boot_smoke_complete(b"OPEN_RADIO_HIL boot-smoke=PASS timer=PASS\r\n").is_err());
+        assert!(
+            boot_smoke_complete(b"OPEN_RADIO_HIL boot-smoke=PASS timer=PASS rearm=FAIL\r\n")
+                .is_err()
+        );
+        assert!(
+            boot_smoke_complete(
+                b"OPEN_RADIO_HIL boot-smoke=FAIL rearm=FAIL step=2 elapsed_us=100000\r\n"
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn a_pass_cannot_hide_a_failure_or_panic() {
+        assert!(
+            boot_smoke_complete(
+                b"OPEN_RADIO_HIL boot-smoke=FAIL rearm=FAIL step=1 elapsed_us=0\r\n\
+              OPEN_RADIO_HIL boot-smoke=PASS timer=PASS rearm=PASS\r\n"
+            )
+            .is_err()
+        );
+        assert!(
+            boot_smoke_complete(
+                b"OPEN_RADIO_HIL boot-smoke=PASS timer=PASS rearm=PASS\r\n\
+              OPEN_RADIO_HIL runtime=PANIC"
+            )
+            .is_err()
+        );
+    }
+}
+
 impl SerialCapture {
     /// Retain an admitted operation until this capture's serial worker closes.
     pub fn with_io_lifetime(mut self, lifetime: oer_os_process::IoLifetime) -> Self {
@@ -119,10 +195,8 @@ impl SerialCapture {
     }
 
     /// Boot smoke precedes the typed radio runtime; its text marker is the
-    /// contract for the relocated Embassy timer executing once.
+    /// contract for the relocated Embassy timer and its rearming checks.
     pub fn wait_for_boot_smoke(&self, timeout: Duration) -> Result<()> {
-        const PASS: &[u8] = b"OPEN_RADIO_HIL boot-smoke=PASS timer=PASS";
-        const PANIC: &[u8] = b"OPEN_RADIO_HIL runtime=PANIC";
         let deadline = crate::transport::events::deadline_after(timeout);
         let mut state = self
             .protocol
@@ -136,13 +210,7 @@ impl SerialCapture {
                 .bytes
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
-            if bytes
-                .windows(PANIC.len())
-                .any(|candidate| candidate == PANIC)
-            {
-                return Err("boot-smoke runtime panicked".into());
-            }
-            if bytes.windows(PASS.len()).any(|candidate| candidate == PASS) {
+            if boot_smoke_complete(&bytes)? {
                 return Ok(());
             }
             drop(bytes);
@@ -152,7 +220,7 @@ impl SerialCapture {
                 .wait_timeout(state, deadline.saturating_duration_since(Instant::now()))
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
         }
-        Err("boot-smoke timer completion was not observed".into())
+        Err("boot-smoke timer and rearm completion was not observed".into())
     }
 
     pub fn finish_with<T>(self, result: Result<T>) -> Result<T> {
