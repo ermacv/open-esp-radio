@@ -18,6 +18,62 @@ pub(crate) struct Candidate<'a> {
     pub stored: Option<Vec<StoredBits>>,
 }
 
+/// Load-use analysis belongs only to register-accesses. Other consumers of
+/// address and expression observations do not run it or change their results.
+pub(crate) struct ReadObservations<'f, 'a, 'm> {
+    evaluator: oer_analysis_blobray_analysis::registers::ReadUsesEvaluator<'f, 'a, 'm>,
+    stored: oer_analysis_blobray_analysis::registers::StoredBitsEvaluator<'f, 'a, 'm>,
+    complete: bool,
+    abi: Option<CallAbi>,
+}
+
+impl<'f, 'a, 'm> ReadObservations<'f, 'a, 'm> {
+    pub fn new(
+        facts: &'f Facts<'a, 'm>,
+        memory: &'m WorkingMemory,
+        complete: bool,
+        abi: Option<CallAbi>,
+    ) -> Self {
+        Self {
+            evaluator: oer_analysis_blobray_analysis::registers::ReadUsesEvaluator::new(
+                facts, memory,
+            ),
+            stored: oer_analysis_blobray_analysis::registers::StoredBitsEvaluator::new(
+                facts, memory,
+            ),
+            complete,
+            abi,
+        }
+    }
+
+    pub fn reads(
+        &mut self,
+        fact: &FunctionRecord,
+        c: &mut dyn RunControl,
+    ) -> Result<Option<ReadUses>> {
+        if let FunctionRecord::MemoryAccess {
+            offset,
+            access:
+                access @ (MemoryKind::Load
+                | MemoryKind::LoadReserved
+                | MemoryKind::FloatLoad
+                | MemoryKind::Atomic),
+            address,
+            width,
+            ..
+        } = fact
+        {
+            self.evaluator
+                .analyze(self.complete, self.abi, &mut self.stored, c)?;
+            self.evaluator
+                .reads(*offset, address, *width, *access, c)
+                .map(Some)
+        } else {
+            Ok(None)
+        }
+    }
+}
+
 type Observer<'a> = dyn FnMut(Candidate<'_>, &mut dyn RunControl) -> Result<()> + 'a;
 
 /// Every candidate address the analyzed function `records` access: memory

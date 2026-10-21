@@ -4,7 +4,8 @@
 //! output and the summary always counts the whole analysis, so a selection
 //! cannot hide that the analysis was incomplete.
 use oer_analysis_blobray_domain::{
-    IndexedAddress, RegisterAccess, RegisterMask, RegisterMaskKind, StoredBits, StoredBitsSource,
+    IndexedAddress, ReadUses, RegisterAccess, RegisterMask, RegisterMaskKind, StoredBits,
+    StoredBitsSource,
 };
 use oer_analysis_riscv_model::{FunctionRecord, MemoryKind, ObjectLocation, SymbolId};
 use serde::{Deserialize, Serialize};
@@ -133,13 +134,23 @@ pub struct AccessEntry {
     /// with different sources stay apart.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stored: Option<Vec<StoredBits>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reads: Option<ReadUses>,
     pub count: u64,
 }
 
 /// A group: its word or its function.
 type GroupKey = (Option<u32>, Option<GroupFunction>);
 /// A group's entries with each entry's mask and count.
-type Entries = BTreeMap<EntryKey, (Option<RegisterMask>, Option<Vec<StoredBits>>, u64)>;
+type Entries = BTreeMap<
+    EntryKey,
+    (
+        Option<RegisterMask>,
+        Option<Vec<StoredBits>>,
+        Option<ReadUses>,
+        u64,
+    ),
+>;
 type EntryKey = (
     Option<u32>,
     Option<IndexedAddress>,
@@ -148,6 +159,7 @@ type EntryKey = (
     Option<u8>,
     Option<(u8, u32)>,
     Option<Vec<StoredBits>>,
+    Option<ReadUses>,
 );
 
 /// Aggregates selected observations into groups in key order.
@@ -174,6 +186,7 @@ impl AccessGroups {
             indexed,
             mask,
             stored,
+            reads,
             ..
         } = record
         else {
@@ -205,11 +218,21 @@ impl AccessGroups {
                     width,
                     mask_key,
                     stored_key,
+                    reads.clone(),
                 ),
             ),
             GroupBy::Function => (
                 (None, Some(function)),
-                (word, *indexed, None, access, width, mask_key, stored_key),
+                (
+                    word,
+                    *indexed,
+                    None,
+                    access,
+                    width,
+                    mask_key,
+                    stored_key,
+                    reads.clone(),
+                ),
             ),
         };
         let slot = self
@@ -217,8 +240,8 @@ impl AccessGroups {
             .entry(group)
             .or_default()
             .entry(entry)
-            .or_insert((*mask, stored.clone(), 0));
-        slot.2 += 1;
+            .or_insert((*mask, stored.clone(), reads.clone(), 0));
+        slot.3 += 1;
     }
 
     /// The groups in key order: addresses ascending with unresolved first, or
@@ -233,8 +256,8 @@ impl AccessGroups {
                     .iter()
                     .map(
                         |(
-                            (word, indexed, function, access, width, _, _),
-                            (mask, stored, count),
+                            (word, indexed, function, access, width, _, _, _),
+                            (mask, stored, reads, count),
                         )| {
                             AccessEntry {
                                 word: *word,
@@ -244,6 +267,7 @@ impl AccessGroups {
                                 width: *width,
                                 mask: *mask,
                                 stored: stored.clone(),
+                                reads: reads.clone(),
                                 count: *count,
                             }
                         },
@@ -291,8 +315,13 @@ impl AccessGroups {
                     .as_deref()
                     .map(|runs| format!(" {}", stored_human(runs)))
                     .unwrap_or_default();
+                let reads = entry
+                    .reads
+                    .as_ref()
+                    .map(|reads| format!(" {}", crate::mmio::reads(reads)))
+                    .unwrap_or_default();
                 lines.push(format!(
-                    "  {subject}{indexed} {}{width}{mask}{stored} x{}",
+                    "  {subject}{indexed} {}{width}{mask}{stored}{reads} x{}",
                     entry.access, entry.count
                 ));
             }

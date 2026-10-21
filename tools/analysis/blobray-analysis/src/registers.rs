@@ -347,6 +347,675 @@ impl<'f, 'a, 'm> StoredBitsEvaluator<'f, 'a, 'm> {
     }
 }
 
+/// Dependencies of one expression on one load. Each output bit names the
+/// source bits reaching it, separately for exact wiring and may flow.
+#[derive(Clone, Copy)]
+struct ReadDependency {
+    load: u32,
+    exact: [u32; 32],
+    may: [u32; 32],
+}
+
+impl ReadDependency {
+    fn empty(load: u32) -> Self {
+        Self {
+            load,
+            exact: [0; 32],
+            may: [0; 32],
+        }
+    }
+
+    fn selected(&self, outputs: u32) -> (u32, u32) {
+        let mut exact = 0;
+        let mut may = 0;
+        for i in 0..32 {
+            if outputs & (1 << i) != 0 {
+                exact |= self.exact[i];
+                may |= self.may[i];
+            }
+        }
+        (exact & !may, may)
+    }
+}
+
+#[derive(Default)]
+struct ReadNode {
+    start: usize,
+    end: usize,
+    uses: Option<usize>,
+    preserved: u32,
+    spill: u32,
+    unsupported: u32,
+}
+
+struct ReadEvent {
+    usage: ReadUse,
+    next: Option<usize>,
+}
+
+struct ReadLoad<'a> {
+    id: u32,
+    offset: u64,
+    address: &'a AbstractValue,
+    width: u8,
+}
+
+/// Forward bit dependencies over a function's canonical expression DAG.
+/// Each id is evaluated once; the memo, sparse dependencies, source index and
+/// sink events all grow through admitted working memory. Memory addresses do
+/// not taint the value loaded from them: they are separate Address sinks.
+pub struct ReadUsesEvaluator<'f, 'a, 'm> {
+    facts: &'f Facts<'a, 'm>,
+    nodes: AdmittedVec<'m, ReadNode>,
+    dependencies: AdmittedVec<'m, ReadDependency>,
+    loads: AdmittedVec<'m, ReadLoad<'a>>,
+    events: AdmittedVec<'m, ReadEvent>,
+    partial: bool,
+    unsupported: bool,
+    work_limit: bool,
+    ready: bool,
+    sorted: bool,
+}
+
+impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
+    pub fn new(facts: &'f Facts<'a, 'm>, memory: &'m WorkingMemory) -> Self {
+        Self {
+            facts,
+            nodes: AdmittedVec::new(memory),
+            dependencies: AdmittedVec::new(memory),
+            loads: AdmittedVec::new(memory),
+            events: AdmittedVec::new(memory),
+            partial: false,
+            unsupported: false,
+            work_limit: false,
+            ready: false,
+            sorted: false,
+        }
+    }
+
+    /// Analyze lazily, once a selected load needs its uses. An interrupted
+    /// walk keeps the sinks already found and labels everything else unknown.
+    /// Cancellation and integrity errors still stop the enclosing operation.
+    pub fn analyze(
+        &mut self,
+        complete: bool,
+        abi: Option<CallAbi>,
+        stored: &mut StoredBitsEvaluator<'f, 'a, 'm>,
+        c: &mut dyn RunControl,
+    ) -> Result<()> {
+        if self.ready {
+            return Ok(());
+        }
+        self.partial = !complete;
+        self.ready = true;
+        match self.walk(abi, stored, c) {
+            Err(error)
+                if matches!(error.code, ErrorCode::ResourceLimited | ErrorCode::TimedOut) =>
+            {
+                self.work_limit = true;
+                Ok(())
+            }
+            result => result,
+        }
+    }
+
+    fn range(&self, value: &AbstractValue) -> std::ops::Range<usize> {
+        match value {
+            AbstractValue::Expression { id } => self
+                .nodes
+                .get(*id as usize)
+                .map(|node| node.start..node.end)
+                .unwrap_or(0..0),
+            _ => 0..0,
+        }
+    }
+
+    fn walk(
+        &mut self,
+        abi: Option<CallAbi>,
+        stored: &mut StoredBitsEvaluator<'f, 'a, 'm>,
+        c: &mut dyn RunControl,
+    ) -> Result<()> {
+        let records = self.facts.records();
+        // Records referring to an expression may precede its definition.
+        // First build every memo in definition order, then visit sinks.
+        for record in records {
+            c.checkpoint(1)?;
+            if let FunctionRecord::Expression {
+                id,
+                offset,
+                expression,
+            } = record
+            {
+                let start = self.dependencies.len();
+                match expression {
+                    Expression::Load {
+                        address,
+                        width,
+                        signed,
+                    } => {
+                        let mut dependency = ReadDependency::empty(*id);
+                        let count = u32::from(*width).saturating_mul(8).min(32);
+                        for i in 0..count {
+                            dependency.exact[i as usize] = 1 << i;
+                        }
+                        if *signed && count > 0 {
+                            for i in count..32 {
+                                dependency.exact[i as usize] = 1 << (count - 1);
+                            }
+                        }
+                        self.dependencies.push(dependency, c.position())?;
+                        self.loads.push(
+                            ReadLoad {
+                                id: *id,
+                                offset: *offset,
+                                address,
+                                width: *width,
+                            },
+                            c.position(),
+                        )?;
+                    }
+                    Expression::Integer { op, left, right } => {
+                        let mut l = self.range(left);
+                        let mut r = self.range(right);
+                        while !l.is_empty() || !r.is_empty() {
+                            c.checkpoint(1)?;
+                            let a = (!l.is_empty()).then(|| self.dependencies[l.start]);
+                            let b = (!r.is_empty()).then(|| self.dependencies[r.start]);
+                            let load = match (a, b) {
+                                (Some(a), Some(b)) => a.load.min(b.load),
+                                (Some(a), _) => a.load,
+                                (_, Some(b)) => b.load,
+                                _ => unreachable!("a nonempty dependency range has a source"),
+                            };
+                            let a = a.filter(|a| a.load == load);
+                            let b = b.filter(|b| b.load == load);
+                            if a.is_some() {
+                                l.start += 1;
+                            }
+                            if b.is_some() {
+                                r.start += 1;
+                            }
+                            let dependency = read_operation(
+                                *op,
+                                left,
+                                right,
+                                a.unwrap_or_else(|| ReadDependency::empty(load)),
+                                b.unwrap_or_else(|| ReadDependency::empty(load)),
+                            );
+                            if dependency.selected(u32::MAX) != (0, 0) {
+                                self.dependencies.push(dependency, c.position())?;
+                            }
+                        }
+                    }
+                    Expression::EntryRegister { .. } | Expression::CallResult { .. } => {}
+                    Expression::CallWord { source, .. } => {
+                        self.unsupported_value(source, c)?;
+                    }
+                }
+                self.nodes.push(
+                    ReadNode {
+                        start,
+                        end: self.dependencies.len(),
+                        ..ReadNode::default()
+                    },
+                    c.position(),
+                )?;
+            }
+        }
+        c.checkpoint(self.loads.len() as u64 * u64::from(self.loads.len().max(1).ilog2() + 1))?;
+        self.loads.sort_unstable_by_key(|load| load.offset);
+        self.sorted = true;
+        for record in records {
+            c.checkpoint(1)?;
+            match record {
+                FunctionRecord::Condition {
+                    offset,
+                    left,
+                    right,
+                    ..
+                } => {
+                    self.unsupported |= matches!(left, AbstractValue::Unknown)
+                        || matches!(right, AbstractValue::Unknown);
+                    for value in [left, right] {
+                        self.sink(value, u32::MAX, ReadSink::Branch { site: *offset }, c)?;
+                    }
+                }
+                FunctionRecord::Dispatch { offset, index, .. } => {
+                    self.unsupported |= matches!(index, AbstractValue::Unknown);
+                    self.sink(index, u32::MAX, ReadSink::Dispatch { site: *offset }, c)?;
+                }
+                FunctionRecord::Instruction {
+                    offset,
+                    decoded:
+                        DecodedOp {
+                            flow:
+                                InstructionFlow::Indirect {
+                                    base,
+                                    offset: displacement,
+                                    ..
+                                },
+                            ..
+                        },
+                    ..
+                } => {
+                    if let Some(inputs) = self.facts.call_inputs(*offset, c)?
+                        && let Some(value) = inputs.registers.get(usize::from(*base))
+                    {
+                        for index in self.range(value) {
+                            c.checkpoint(1)?;
+                            let dependency = self.dependencies[index];
+                            let dependency = if *displacement == 0 {
+                                dependency
+                            } else {
+                                read_operation(
+                                    IntegerOp::Add,
+                                    value,
+                                    &AbstractValue::Constant {
+                                        value: *displacement as u32,
+                                    },
+                                    dependency,
+                                    ReadDependency::empty(dependency.load),
+                                )
+                            };
+                            // JALR clears the low target bit.
+                            self.use_dependency(
+                                dependency,
+                                !1,
+                                ReadSink::IndirectTarget { site: *offset },
+                                c,
+                            )?;
+                        }
+                    }
+                }
+                FunctionRecord::Value {
+                    value: AbstractValue::Unknown,
+                    ..
+                } => {
+                    self.unsupported = true;
+                }
+                FunctionRecord::Transfer { offset, target, .. } => {
+                    self.sink(
+                        target,
+                        u32::MAX,
+                        ReadSink::IndirectTarget { site: *offset },
+                        c,
+                    )?;
+                }
+                FunctionRecord::MemoryAccess {
+                    offset,
+                    access,
+                    width,
+                    address,
+                    value,
+                    ..
+                } => {
+                    self.unsupported |= matches!(address, AbstractValue::Unknown)
+                        || matches!(value, Some(AbstractValue::Unknown));
+                    self.sink(address, u32::MAX, ReadSink::Address { site: *offset }, c)?;
+                    if let Some(value) = value {
+                        let mask = width_mask(*width).unwrap_or(u32::MAX);
+                        if matches!(address, AbstractValue::EntryStack { .. }) {
+                            self.limit(value, mask, c)?;
+                        } else {
+                            let identities = stored.bits(value, c)?;
+                            for index in self.range(value) {
+                                c.checkpoint(1)?;
+                                let dependency = self.dependencies[index];
+                                let loaded =
+                                    self.facts.value_expression(&AbstractValue::Expression {
+                                        id: dependency.load,
+                                    });
+                                let same_word = matches!(loaded, Some(Expression::Load { address: loaded, width: loaded_width, .. })
+                                    if same_word(loaded, *loaded_width, address, *width));
+                                let mut preserved_outputs = 0;
+                                if same_word && *access == MemoryKind::Store {
+                                    for (bit, identity) in identities.iter().enumerate() {
+                                        if matches!(identity, Bit::Load(id, _, _, from) if *id == dependency.load && usize::from(*from) == bit)
+                                        {
+                                            preserved_outputs |= 1 << bit;
+                                        }
+                                    }
+                                }
+                                self.nodes[dependency.load as usize].preserved |=
+                                    mask & preserved_outputs;
+                                self.use_dependency(
+                                    dependency,
+                                    mask & !preserved_outputs,
+                                    ReadSink::Store {
+                                        site: *offset,
+                                        address: exact_address(address),
+                                        same_word,
+                                    },
+                                    c,
+                                )?;
+                            }
+                        }
+                    }
+                }
+                FunctionRecord::CallInputs { offset, registers } => {
+                    if let Some(abi) = abi {
+                        for register in abi.arguments() {
+                            if let Some(value) = registers.get(usize::from(register)) {
+                                self.sink(
+                                    value,
+                                    u32::MAX,
+                                    ReadSink::CallArgument {
+                                        site: *offset,
+                                        register,
+                                    },
+                                    c,
+                                )?;
+                            }
+                        }
+                    } else {
+                        // Argument roles require an explicit calling convention.
+                        for value in registers {
+                            self.unsupported_value(value, c)?;
+                        }
+                    }
+                }
+                FunctionRecord::ReturnInputs { registers, .. } => {
+                    for register in CallAbi::RiscvInteger.results() {
+                        if let Some(value) = registers.get(usize::from(register)) {
+                            self.sink(value, u32::MAX, ReadSink::Return { register }, c)?;
+                        }
+                    }
+                }
+                FunctionRecord::ReturnValue { low, high, .. } => {
+                    for (register, value) in
+                        CallAbi::RiscvInteger.results().into_iter().zip([low, high])
+                    {
+                        self.sink(value, u32::MAX, ReadSink::Return { register }, c)?;
+                    }
+                }
+                FunctionRecord::Gap {
+                    reason: GapReason::UnsupportedInstruction,
+                    ..
+                }
+                | FunctionRecord::SemanticGap {
+                    reason:
+                        SemanticGapReason::UnsupportedInstruction | SemanticGapReason::WaitMemory,
+                    ..
+                } => {
+                    self.unsupported = true;
+                }
+                _ => {}
+            }
+        }
+        Ok(())
+    }
+
+    fn limit(&mut self, value: &AbstractValue, outputs: u32, c: &mut dyn RunControl) -> Result<()> {
+        for index in self.range(value) {
+            c.checkpoint(1)?;
+            let dependency = self.dependencies[index];
+            let (exact, may) = dependency.selected(outputs);
+            self.nodes[dependency.load as usize].spill |= exact | may;
+        }
+        Ok(())
+    }
+
+    fn unsupported_value(&mut self, value: &AbstractValue, c: &mut dyn RunControl) -> Result<()> {
+        for index in self.range(value) {
+            c.checkpoint(1)?;
+            let dependency = self.dependencies[index];
+            let (exact, may) = dependency.selected(u32::MAX);
+            self.nodes[dependency.load as usize].unsupported |= exact | may;
+        }
+        Ok(())
+    }
+
+    fn sink(
+        &mut self,
+        value: &AbstractValue,
+        outputs: u32,
+        sink: ReadSink,
+        c: &mut dyn RunControl,
+    ) -> Result<()> {
+        for index in self.range(value) {
+            c.checkpoint(1)?;
+            self.use_dependency(self.dependencies[index], outputs, sink.clone(), c)?;
+        }
+        Ok(())
+    }
+
+    fn use_dependency(
+        &mut self,
+        dependency: ReadDependency,
+        outputs: u32,
+        sink: ReadSink,
+        c: &mut dyn RunControl,
+    ) -> Result<()> {
+        let (exact, may) = dependency.selected(outputs);
+        for (bits, precision) in [(exact, ReadPrecision::Exact), (may, ReadPrecision::May)] {
+            if bits == 0 {
+                continue;
+            }
+            let node = &mut self.nodes[dependency.load as usize];
+            let mut event = node.uses;
+            let mut found = false;
+            while let Some(index) = event {
+                c.checkpoint(1)?;
+                let existing = &mut self.events[index];
+                if existing.usage.sink == sink && existing.usage.precision == precision {
+                    existing.usage.bits |= bits;
+                    found = true;
+                    break;
+                }
+                event = existing.next;
+            }
+            if !found {
+                self.events.push(
+                    ReadEvent {
+                        usage: ReadUse {
+                            bits,
+                            sink: sink.clone(),
+                            precision,
+                        },
+                        next: node.uses,
+                    },
+                    c.position(),
+                )?;
+                node.uses = Some(self.events.len() - 1);
+            }
+        }
+        Ok(())
+    }
+
+    /// Uses of the load observation at `offset`. Several saved expressions at
+    /// that instruction are alternative analysis states, never extra loads.
+    pub fn reads(
+        &self,
+        offset: u64,
+        address: &AbstractValue,
+        width: u8,
+        access: MemoryKind,
+        c: &mut dyn RunControl,
+    ) -> Result<ReadUses> {
+        let mask = width_mask(width).unwrap_or(u32::MAX);
+        let mut result = ReadUses {
+            uses: Vec::new(),
+            unknown: Vec::new(),
+            preserved: 0,
+            unused: 0,
+        };
+        let mut spill = 0;
+        let mut unsupported = 0;
+        let candidates = if self.sorted {
+            let first = self.loads.partition_point(|load| load.offset < offset);
+            let count = self.loads[first..].partition_point(|load| load.offset == offset);
+            c.checkpoint(u64::from(self.loads.len().max(1).ilog2() + 1))?;
+            &self.loads[first..first + count]
+        } else {
+            &self.loads[..]
+        };
+        for load in candidates {
+            c.checkpoint(1)?;
+            if load.offset != offset {
+                continue;
+            }
+            if load.address != address || load.width != width {
+                continue;
+            }
+            if let Some(node) = self.nodes.get(load.id as usize) {
+                result.preserved |= node.preserved;
+                spill |= node.spill;
+                unsupported |= node.unsupported;
+                let mut event = node.uses;
+                while let Some(index) = event {
+                    c.checkpoint(result.uses.len() as u64 + 1)?;
+                    let usage = &self.events[index].usage;
+                    if let Some(existing) = result.uses.iter_mut().find(|existing| {
+                        existing.sink == usage.sink && existing.precision == usage.precision
+                    }) {
+                        existing.bits |= usage.bits;
+                    } else {
+                        result.uses.push(usage.clone());
+                    }
+                    event = self.events[index].next;
+                }
+            }
+        }
+        result.uses.sort_unstable();
+        let used = result.uses.iter().fold(0, |bits, usage| bits | usage.bits) & mask;
+        let mut remaining = mask & !used;
+        // More specific stopping points precede the function-wide limits.
+        for (bits, limit) in [
+            (spill, ReadLimitKind::StackSpill),
+            (
+                unsupported
+                    | if self.unsupported || access != MemoryKind::Load {
+                        mask
+                    } else {
+                        0
+                    },
+                ReadLimitKind::UnsupportedOperation,
+            ),
+            (
+                if self.work_limit { mask } else { 0 },
+                ReadLimitKind::WorkLimit,
+            ),
+            (
+                if self.partial { mask } else { 0 },
+                ReadLimitKind::PartialFunction,
+            ),
+        ] {
+            let bits = bits & remaining;
+            if bits != 0 {
+                result.unknown.push(ReadLimit { bits, limit });
+                remaining &= !bits;
+            }
+        }
+        result.preserved &= remaining;
+        result.unused = remaining & !result.preserved;
+        Ok(result)
+    }
+}
+
+/// Dependency wiring for one RV32 integer operation. Constant bitwise masks
+/// and shifts keep source positions; arithmetic/comparisons carry may flow.
+fn read_operation(
+    op: IntegerOp,
+    left: &AbstractValue,
+    right: &AbstractValue,
+    l: ReadDependency,
+    r: ReadDependency,
+) -> ReadDependency {
+    let mut out = ReadDependency::empty(l.load);
+    let a = constant(left);
+    let b = constant(right);
+    let mut wire = |to: usize, from: usize, source: &ReadDependency| {
+        out.exact[to] |= source.exact[from];
+        out.may[to] |= source.may[from];
+    };
+    use IntegerOp::*;
+    match op {
+        And | Or | Xor | AndNot | OrNot | XorNot if a.is_some() || b.is_some() => {
+            for i in 0..32 {
+                let keep = |k: u32, inverted: bool| {
+                    let bit = ((k >> i) & 1 != 0) ^ inverted;
+                    match op {
+                        And | AndNot => bit,
+                        Or | OrNot => !bit,
+                        _ => true,
+                    }
+                };
+                if let Some(b) = b {
+                    if keep(b, matches!(op, AndNot | OrNot)) {
+                        wire(i, i, &l);
+                    }
+                } else if let Some(a) = a
+                    && keep(a, false)
+                {
+                    wire(i, i, &r);
+                }
+            }
+        }
+        And | Or | Xor | AndNot | OrNot | XorNot => {
+            for i in 0..32 {
+                out.may[i] = l.exact[i] | l.may[i] | r.exact[i] | r.may[i];
+            }
+        }
+        Shl | Shr | Sar | RotateLeft | RotateRight | BitExtract if b.is_some() => {
+            let by = b.unwrap_or(0) as usize & 31;
+            for i in 0usize..32 {
+                let from = match op {
+                    Shl => i.checked_sub(by),
+                    Shr => (i + by < 32).then_some(i + by),
+                    Sar => Some((i + by).min(31)),
+                    RotateLeft => Some((i + 32 - by) & 31),
+                    RotateRight => Some((i + by) & 31),
+                    BitExtract => (i == 0).then_some(by),
+                    _ => None,
+                };
+                if let Some(from) = from {
+                    wire(i, from, &l);
+                }
+            }
+        }
+        SignExtendByte | SignExtendHalf | ByteReverse => {
+            for i in 0usize..32 {
+                let from = match op {
+                    SignExtendByte => i.min(7),
+                    SignExtendHalf => i.min(15),
+                    _ => (3 - i / 8) * 8 + i % 8,
+                };
+                wire(i, from, &l);
+            }
+        }
+        _ => {
+            let (le, lm) = l.selected(u32::MAX);
+            let right_mask = if matches!(
+                op,
+                Shl | Shr
+                    | Sar
+                    | RotateLeft
+                    | RotateRight
+                    | BitSet
+                    | BitClear
+                    | BitInvert
+                    | BitExtract
+            ) {
+                31
+            } else {
+                u32::MAX
+            };
+            let (re, rm) = r.selected(right_mask);
+            let bits = le | lm | re | rm;
+            let outputs = if matches!(op, Lt | Ltu | BitExtract) {
+                1
+            } else {
+                32
+            };
+            for i in 0..outputs {
+                out.may[i] = bits;
+            }
+        }
+    }
+    out
+}
+
 /// Operator nodes an indexed address is followed through; deeper sums are
 /// left unresolved, never truncated into a different progression.
 const INDEXED_DEPTH: u8 = 16;
@@ -599,6 +1268,10 @@ fn exact_address(value: &AbstractValue) -> Option<u32> {
     }
 }
 
+fn same_word(loaded: &AbstractValue, loaded_width: u8, address: &AbstractValue, width: u8) -> bool {
+    loaded == address && loaded_width == width
+}
+
 /// Where each run of the `width`-byte value stored at `address` comes from,
 /// low run first: fixed bits, a function entry register's bits (an argument
 /// for `a0`..`a7`), a loaded value's bits (with `same_word` for the stored word
@@ -644,7 +1317,7 @@ pub fn stored_bits<'a>(
                 address: exact_address(loaded),
                 width: loaded_width,
                 low,
-                same_word: loaded == address && loaded_width == width,
+                same_word: same_word(loaded, loaded_width, address, width),
             },
             Bit::Unknown => StoredBitsSource::Unknown,
         };
@@ -1256,3 +1929,7 @@ mod tests {
         assert_eq!(checkpoints, before);
     }
 }
+
+#[cfg(test)]
+#[path = "registers/read_tests.rs"]
+mod read_tests;

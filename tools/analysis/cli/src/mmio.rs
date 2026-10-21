@@ -144,3 +144,47 @@ pub fn render(diff: &MmioDiff) -> String {
     }
     out
 }
+
+/// Bit classes of one load, with every sink and stopping reason retained.
+pub fn reads(reads: &oer_analysis_blobray_domain::ReadUses) -> String {
+    use oer_analysis_blobray_domain::{ReadLimitKind, ReadPrecision, ReadSink};
+    let mut parts = Vec::new();
+    for usage in &reads.uses {
+        let sink = match usage.sink {
+            ReadSink::Branch { site } => format!("branch@+{site:x}"),
+            ReadSink::Dispatch { site } => format!("dispatch@+{site:x}"),
+            ReadSink::IndirectTarget { site } => format!("indirect-target@+{site:x}"),
+            ReadSink::Address { site } => format!("address@+{site:x}"),
+            ReadSink::Return { register } => format!("return-x{register}"),
+            ReadSink::CallArgument { site, register } => format!("call@+{site:x}-x{register}"),
+            ReadSink::Store {
+                site,
+                address,
+                same_word,
+            } => format!(
+                "store@+{site:x}({}{})",
+                address
+                    .map(|address| format!("{address:#010x}"))
+                    .unwrap_or_else(|| "unresolved".to_owned()),
+                if same_word { ",same-word" } else { "" }
+            ),
+        };
+        let precision = match usage.precision {
+            ReadPrecision::Exact => "exact",
+            ReadPrecision::May => "may",
+        };
+        parts.push(format!("used={:#010x}:{sink}:{precision}", usage.bits));
+    }
+    for limit in &reads.unknown {
+        let reason = match limit.limit {
+            ReadLimitKind::PartialFunction => "partial-function",
+            ReadLimitKind::StackSpill => "stack-spill",
+            ReadLimitKind::UnsupportedOperation => "unsupported-operation",
+            ReadLimitKind::WorkLimit => "work-limit",
+        };
+        parts.push(format!("unknown={:#010x}:{reason}", limit.bits));
+    }
+    parts.push(format!("preserved={:#010x}", reads.preserved));
+    parts.push(format!("unused={:#010x}", reads.unused));
+    format!("reads[{}]", parts.join(" "))
+}

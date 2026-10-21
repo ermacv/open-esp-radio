@@ -47,6 +47,7 @@ fn observation(
         alternative: None,
         indexed: None,
         stored: None,
+        reads: None,
         mask,
     }
 }
@@ -139,6 +140,7 @@ fn address_groups_list_each_accessing_function_by_access_and_mask() {
         width: Some(4),
         mask,
         stored: None,
+        reads: None,
         count,
     };
     assert_eq!(

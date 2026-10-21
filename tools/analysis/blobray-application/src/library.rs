@@ -747,6 +747,12 @@ pub fn register_accesses(
                 summary.partial_causes.add(analyzed.partial_causes(c)?);
                 c.phase(RunPhase::AnalyzeValues)?;
                 let facts = Facts::new(analyzed.records, memory, c)?;
+                let mut reads = crate::registers::ReadObservations::new(
+                    &facts,
+                    memory,
+                    analyzed.complete(),
+                    assumptions.abi,
+                );
                 crate::registers::observe(
                     analyzed.records,
                     &facts,
@@ -767,6 +773,7 @@ pub fn register_accesses(
                                 indexed: o.indexed,
                                 mask: o.mask,
                                 stored: o.stored,
+                                reads: reads.reads(o.fact, c)?,
                             },
                             c,
                         )

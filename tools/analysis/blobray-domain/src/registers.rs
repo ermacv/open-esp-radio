@@ -29,15 +29,25 @@ pub struct ReadUse {
 #[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum ReadSink {
     /// Condition operand.
-    Branch { site: u64 },
+    Branch {
+        site: u64,
+    },
     /// Jump-table index.
-    Dispatch { site: u64 },
+    Dispatch {
+        site: u64,
+    },
     /// Indirect call or jump target.
-    IndirectTarget { site: u64 },
+    IndirectTarget {
+        site: u64,
+    },
     /// Address of another memory access.
-    Address { site: u64 },
+    Address {
+        site: u64,
+    },
     /// Value at return.
-    Return { register: u8 },
+    Return {
+        register: u8,
+    },
     /// Another word, or the same word at another position / after a
     /// non-identity transformation.
     Store {
@@ -45,7 +55,10 @@ pub enum ReadSink {
         address: Option<u32>,
         same_word: bool,
     },
-    CallArgument { site: u64, register: u8 },
+    CallArgument {
+        site: u64,
+        register: u8,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
@@ -219,6 +232,9 @@ pub enum RegisterAccess {
         /// first, covering the access width. Absent for loads.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         stored: Option<Vec<StoredBits>>,
+        /// For a load: uses, limits, RMW preservation and unused bits.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        reads: Option<ReadUses>,
     },
     /// A function that cannot be analyzed; its accesses are unknown.
     Blocked {
