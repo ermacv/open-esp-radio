@@ -199,6 +199,6 @@ pub(super) async fn run<'p, 'id>(
         .await;
     match disabled {
         Ok(owner) => Ended::uninstall(owner, (), result),
-        Err(failed) => Ended::fail_stopped(failed.fail_stop(), Err("EDCA disable")),
+        Err(failed) => Ended::fail_stopped(failed.fail_stop().await, Err("EDCA disable")),
     }
 }

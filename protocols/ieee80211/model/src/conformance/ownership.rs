@@ -210,7 +210,9 @@ impl PortBody<Backend> for Operations {
     ) -> Ended<'id, Backend, Self::Output> {
         let mut owner = match owner.enable().await {
             Ok(owner) => owner,
-            Err(failed) => return Ended::fail_stopped(failed.fail_stop(), Err("model enable")),
+            Err(failed) => {
+                return Ended::fail_stopped(failed.fail_stop().await, Err("model enable"));
+            }
         };
         let drops = Rc::new(Cell::new(0));
         let mut seen = Capture::default();
@@ -354,7 +356,9 @@ impl PortBody<Backend> for Operations {
             .await
         {
             Ok(owner) => owner,
-            Err(failed) => return Ended::fail_stopped(failed.fail_stop(), Err("model disable")),
+            Err(failed) => {
+                return Ended::fail_stopped(failed.fail_stop().await, Err("model disable"));
+            }
         };
         let output = match error {
             Some(why) => Err(why),

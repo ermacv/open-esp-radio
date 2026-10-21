@@ -4,13 +4,11 @@ use super::*;
 use oer_ieee80211_wire::qos::WmmAccessCategory;
 
 pub struct Esp32s31Setup<'a, 'id, D: Device<B>, const B: usize> {
-    pub(super) backend: &'a mut Esp32s31Backend<D, B>,
     pub(super) held: &'a Held<'id, D, B>,
 }
 impl<D: Device<B>, const B: usize> LowerMacSetup for Esp32s31Setup<'_, '_, D, B> {
     type Caps = Esp32s31Caps<B>;
     fn set_channel(&mut self, channel: SupportedChannel<Self::Caps>) {
-        self.backend.channel = channel.channel();
         self.held.channel.set(channel.channel());
         self.held.storage.driver.wake();
     }

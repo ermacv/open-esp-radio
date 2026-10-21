@@ -5,7 +5,8 @@
 //! Shared radio capacity, lifecycle and operation contracts.
 //!
 //! [`run_port`] consumes an [`Installed`] backend and its independent driver.
-//! Its [`Owner`] borrows the backend and consumes each typestate transition.
+//! Its [`Owner`] borrows separate frontend state and consumes each typestate
+//! transition. Fail-stop sends a request and awaits the core's stop outcome.
 //! The composition selects a [`PortExecution`]; [`LocalExecution`] keeps
 //! model drivers and bodies in the same context without requiring `Send`.
 //! [`Mint::into_pools`] issues each installation's complete capacity once.

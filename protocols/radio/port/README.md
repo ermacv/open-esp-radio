@@ -85,7 +85,8 @@ does not implement the driver-context abandonment rule in
 later destruction and permits a join that ends within its original scope.
 
 `Installed::new(backend, driver)` is the sole constructor. `run_port` consumes
-it, keeps `backend` by value, and lends `&mut B` to `Owner<'p, 'id, B, State>`.
+it and keeps `backend` by value. `Owner<'p, 'id, B, State>` borrows only
+`B::Frontend<'id>`; it has no reference to the backend.
 The core keeps the driver by value beside the backend. Static
 `PortBackend::drive` consumes its single affine `DriverLoan`; that loan
 exposes shared driver operations, with no extraction or whole-driver
@@ -95,7 +96,7 @@ fault exit proof. Both handoffs end driver access by type. Its signature
 has no backend receiver to borrow. The driver
 has no installation lifetime: branded queues,
 `Slot<'id>` and in-flight ownership belong in `Held<'id>`. The named
-`InstallParts<'id, B>` separates held queues, body-local accounting and the
+`InstallParts<'id, B>` separates held queues, frontend state and the
 resources delivered to the body. The single mint still consumes the whole
 capacity layout once.
 
@@ -110,7 +111,7 @@ the real admitted owners. It does not decide the hardware outcome: the
 subsequent abandonment can still return `Stopped`.
 
 Enable and disable are consuming, bounded transitions. Both `enable` and
-`setup` receive `&Held<'id>` and `&mut Local<'id>`, as do phase and disable;
+`setup` receive `&Held<'id>` and `&mut Frontend<'id>`, as do phase and disable;
 setup's loan ends before enable can consume its owner. A running phase is
 one invariant `Lent`; its borrowed `PhaseParts` can serve disjoint work in
 the same task. Terminal capacity is reserved when work is admitted, and
@@ -136,13 +137,13 @@ by value with its completion state. There is no untyped early exit.
 Retirement and abandonment register and wake their waiters. The abandon latch
 has independent core and driver waiters. A dropped owner wakes the core,
 which closes admission, requests retirement and detaches after the driver
-ends; a missed deadline fail-stops. `Owner::fail_stop` calls `abandon`
-synchronously and returns an affine `FailStopped<'id, B>` proof. `abandon`
-poisons the installation without unbounded waiting. The core guarantees
-at most one call: after abandonment it consumes the armed cancellation guard
-and keeps a guard that only quarantines the owners. While a fail-stopped body
-still holds its loan, cancellation checks the latched cause instead of
-calling the backend again. Backends need no memoized stop outcome. The
+ends; a missed deadline fail-stops. Calling `Owner::fail_stop` publishes the
+request before returning its future. The body awaits a private one-shot
+receiver for the core's actual `Abandon` outcome, then returns its affine
+`FailStopped<'id, B>` proof. The body never invokes `backend.abandon`.
+The core consumes its armed cleanup authority when executing that request,
+so cancellation during the response or retirement wait cannot call the
+backend twice. Backends need no memoized stop outcome. The
 latch preserves its first cause through a `LIVE` compare-exchange.
 `abandon` returns `Abandon::Stopped` only with its `HardwareStopped` proof
 of masked IRQ entries, bounded CPU exclusion and device stopping. `Abandon::Unconfirmed(Quarantine)`
@@ -164,7 +165,7 @@ backing and touches no hardware. Both abnormal `PortEnd` variants retain
 the backend, driver and `Retirement<State>`; a timed-out drive future ends
 only its loan, while the driver remains owned by the core. A completed
 faulted driver's state is likewise retained if the body is cancelled while
-draining. Branded held/local values cannot leave the installation and are
+draining. Branded held/frontend values cannot leave the installation and are
 retained without Drop on these paths. Only ordinary uninstall extracts them.
 
 Forgetting an owner cannot construct `Ended`. Hardware-reachable memory must
@@ -192,43 +193,19 @@ BLE's service returns `Served` through this output instead of a side channel.
 
 ## Cost
 
-The RV32 measurement uses two concrete backends and the same enable,
-disable, retire, detach and cancellation workload in
-[the lifecycle cost probe](examples/lifecycle_cost.rs). With Rust 1.97.1,
-`riscv32imafc-unknown-none-elf`, opt-level 3, one codegen unit, LTO and aborting
-panics, the shared lifecycle measures 6844 bytes of `.text`; two separate
-per-protocol lifecycles measure 2282 bytes (record outside this repository).
-This is a small lifecycle ELF, not total firmware size or a hardware timing
-result. It includes the cancellation guard before the first poll and the
-retained outcomes and owners; the fixture has no backend stop memo whose
-removal could offset this cost. The future is 432 bytes per backend. The
-fallible disable sink accounts for 416 bytes of the text, mostly in the two
-body state machines (630 bytes each), which handle the sink's returned
-terminal and poisoning path; the `EventEnd` event end adds none. The fixture
-does not poll its event stream, so this measures lifecycle cost, not
-event-dispatch or total BLE firmware cost. Each backend also keeps
-`Option<EventEnd<Fault>>` in `Local`; its size depends on the fault type.
+The core allocates no heap memory and contains no unsafe code. Retirement,
+the core's abandonment receiver, the driver's abandonment receiver and the
+body's stop-answer receiver each have an independent atomic waiter. The
+answer's only payload is the variant of a consumed zero-sized stop proof;
+a private `AtomicU8` transfers it once with Release/Acquire ordering. No
+generic response queue or backend stop-outcome cache is needed.
 
-| Checks | Code size | RAM and CPU | Signatures | Breakage | Alternatives | Reversal |
-| --- | --- | --- | --- | --- | --- | --- |
-| Typestate and opaque affine call/retire/poison/detach proofs are compile-time checks. Hardware refusal, poisoning and bounded waits remain runtime outcomes; lifecycle code has no explicit panic. | Test ELF `.text`: 6844 bytes. Backend/body futures remain concrete monomorphizations; retirement and signal machinery add code. | No allocation. The measured RV32 future is 432 bytes per backend. Three atomic waiter slots per installation: retirement, driver abandonment and core abandonment. Wake registration uses atomic synchronization; consuming proof and call tokens are zero-sized. Hot radio operations acquire no new lifecycle lock. | `Installed<B>`, `InstallParts<'id, B>`, static `drive(DriverLoan, held, retire)`, `DriverExit`, `Call`, `Quarantine`/`Abandon`/`HardwareStopped`/`Detach`, `Retired<'id, (Driver, State)>`, `Detached<'id>`, `Quarantined<S>`, `PortEnd<B, Out>`, `disable` sink returning `ControlFlow<Terminal>`, `EventEnd<Fault>` for `next_event`; owner borrows `&mut B`, `Ended<'id, B, Out>` has no borrow lifetime. | Both blocks consume `Installed`, borrow one phase, and retain terminals rejected by disable. Always-accepting sinks return `Continue(())`. The IEEE 802.11 lower-MAC port is built on the same core. | Keeping two identical owners duplicates fixes. Moving `B` into its owner loses the core's asynchronous abandonment authority. A receiver-based `drive` needs an empty driver slot. Flag-only retirement loses wakes. | Rework signal/future representation if the added code or installation RAM exceeds the target image budget; preserve proofs, wakes and asynchronous teardown. Re-measure this ELF and the affected firmware before accepting that rework. |
-
-Most code is the concrete async state machines: the linked ELF attributes
-2256 bytes to each backend's polling entry, 630 bytes to each body future,
-440 bytes to shared installation drop glue and 516 bytes to the retirement
-poll closure. These sizes include inlined wake handling; they are not an
-ablation attributing a byte count to each guarantee. The extra future RAM
-retains both sides of the body/retirement join, the driver loan and owners,
-the deadline, and the three independently wakeable receivers. The call and
-proof tokens themselves are zero-sized.
-
-A candidate reduction is factoring backend-independent signal and join
-code out of the two monomorphizations. It needs another ELF measurement:
-LTO already shares some glue, and out-of-line calls can increase code or
-execution cost. There is no established cheap saving to claim here. Removing
-an abandon receiver would lose one of two independent wakes; discarding
-join state would lose returned ownership or delay retirement behind the
-body. Neither is an acceptable size reduction.
+The backend and its cleanup authority share one retaining guard. Body-side
+frontend state remains separate from that guard. Concrete async future sizes
+include the operation and response waits of each body; measure the linked
+application and its allocated future backing when changing them.
+[The lifecycle cost probe](examples/lifecycle_cost.rs) exercises two concrete
+backends through enable, disable, retirement, detachment and cancellation.
 
 A backend's installation factory returns `Installed::new(backend, driver)`,
 its driver lives outside the backend, and it implements static
@@ -239,7 +216,7 @@ completion state in `Retired`. Hardware-reachable backing stays static,
 outside the movable driver. Its branded queues
 stay in `Held<'id>`; `resources` returns `InstallParts` instead of a tuple.
 Backend calls take the core's affine `Call`; `enable` and `setup` also take
-held/local installation loans. Uninstall consumes `Retired` and `Detached`. `retire_bound` returns a future without a backend borrow.
+held/frontend installation loans. Uninstall consumes `Retired` and `Detached`. `retire_bound` returns a future without a backend borrow.
 The disable sink uses the same `ControlFlow<Terminal>` rejection shape as
 the Wi-Fi port: consumers that accept every terminal return `Continue(())`.
 Only `next_event` has the outer error `EventEnd<Fault>`; other methods return
@@ -253,7 +230,7 @@ is transferred in the error itself.
 `Unconfirmed` outcome; final `detach` follows the body's return and borrows
 that outcome through its own single-use call authority. Unconfirmed hardware requires chip reset and permanent backing
 quarantine, not a runtime assertion that it stopped. `fail_stop`
-returns `FailStopped`, which `Ended::fail_stopped(proof, output)` consumes.
+returns a response future yielding `FailStopped`, which `Ended::fail_stopped(proof, output)` consumes.
 `run_port` returns `PortEnd`; `StationService` supplies its result as
 `PortBody::Output`. The generic phase, separate event/terminal types,
 consuming owner transitions, `Failed::{Refused, Poisoned}` and `PoisonedOwner`

@@ -1223,6 +1223,12 @@ impl<'c, 'id, const I: u8> Ieee802154Client<'id, I> for ModelClient<'c, 'id, I> 
     }
 }
 
+/// Body-side model state, independent of the backend owner.
+pub struct ModelFrontend {
+    shared: Rc<RefCell<State>>,
+    end: Option<oer_radio_port::EventEnd<ModelFault>>,
+}
+
 impl PortBackend for OwnedModel {
     type Event<'id> = ModelEvent;
     type Terminal<'id> = ModelEvent;
@@ -1231,7 +1237,7 @@ impl PortBackend for OwnedModel {
     where
         Self: 'a,
         'id: 'a;
-    type Local<'id> = Option<oer_radio_port::EventEnd<ModelFault>>;
+    type Frontend<'id> = ModelFrontend;
     type Driver = ();
     type Domain = Ieee802154Radio;
     type Fault = ModelFault;
@@ -1254,15 +1260,14 @@ impl PortBackend for OwnedModel {
     type Uninstalled = ModelHandle;
 
     fn enable<'a, 'id>(
-        &'a mut self,
         _: Call,
         _: &'a Self::Held<'id>,
-        _: &'a mut Self::Local<'id>,
+        frontend: &'a mut Self::Frontend<'id>,
     ) -> impl Future<Output = EnableResult<ModelRefusal, ModelFault>> + 'a
     where
         'id: 'a,
     {
-        let mut state = self.shared.borrow_mut();
+        let mut state = frontend.shared.borrow_mut();
         ready(match state.poisoned {
             Some(cause) => Err(Poisoned { cause }),
             None if state.refuse_enable => Ok(Err(ModelRefusal)),
@@ -1274,17 +1279,16 @@ impl PortBackend for OwnedModel {
     }
 
     fn disable<'a, 'id>(
-        &'a mut self,
         _: Call,
         held: &'a ModelHeld<'id>,
-        _: &'a mut Self::Local<'id>,
+        frontend: &'a mut Self::Frontend<'id>,
         sink: &'a mut dyn FnMut(ModelEvent) -> core::ops::ControlFlow<ModelEvent>,
     ) -> impl Future<Output = Result<(), Poisoned<ModelFault>>> + 'a
     where
         'id: 'a,
     {
         let result = {
-            let mut state = self.shared.borrow_mut();
+            let mut state = frontend.shared.borrow_mut();
             state.abort_operation();
             for index in 0..MODEL_INTERFACES {
                 state.end_window(index);
@@ -1297,19 +1301,19 @@ impl PortBackend for OwnedModel {
             drop(state);
             // Only the work's terminals go to the sink; received frames and
             // a loss marker are dropped with the phase.
-            for event in core::iter::from_fn(|| self.shared.borrow_mut().events.pop_front()) {
+            for event in core::iter::from_fn(|| frontend.shared.borrow_mut().events.pop_front()) {
                 if let Some((_interface, id)) = event.ends() {
                     match held.permits.complete(id) {
                         Ok(_completed) => {
                             if let core::ops::ControlFlow::Break(event) = sink(event) {
-                                let mut state = self.shared.borrow_mut();
+                                let mut state = frontend.shared.borrow_mut();
                                 state.events.push_front(event);
                                 state.poisoned = Some(ModelFault);
                                 return ready(Err(Poisoned { cause: ModelFault }));
                             }
                         }
                         Err(_mismatch) => {
-                            self.shared.borrow_mut().poisoned = Some(ModelFault);
+                            frontend.shared.borrow_mut().poisoned = Some(ModelFault);
                             return ready(Err(Poisoned { cause: ModelFault }));
                         }
                     }
@@ -1323,11 +1327,11 @@ impl PortBackend for OwnedModel {
         ready(result)
     }
 
-    fn now(
-        &self,
+    fn now<'a, 'id: 'a>(
+        frontend: &'a Self::Frontend<'id>,
         _: Call,
-    ) -> impl Future<Output = PortResult<Ieee802154Instant, ClockError, ModelFault>> + '_ {
-        let state = self.shared.borrow();
+    ) -> impl Future<Output = PortResult<Ieee802154Instant, ClockError, ModelFault>> + 'a {
+        let state = frontend.shared.borrow();
         ready(match state.poisoned {
             Some(cause) => Err(Poisoned { cause }),
             None => Ok(Ok(Ieee802154Instant::from_micros(state.now_micros))),
@@ -1349,47 +1353,50 @@ impl PortBackend for OwnedModel {
         };
         InstallParts {
             held,
-            local: None,
+            frontend: ModelFrontend {
+                shared: self.shared.clone(),
+                end: None,
+            },
             resources,
         }
     }
 
     fn setup<'a, 'id>(
-        &'a mut self,
         _: Call,
         _: &'a Self::Held<'id>,
-        _: &'a mut Self::Local<'id>,
+        frontend: &'a mut Self::Frontend<'id>,
     ) -> Self::Setup<'a, 'id>
     where
+        Self: 'a,
         'id: 'a,
     {
         ModelSetup {
-            shared: &self.shared,
+            shared: &frontend.shared,
             brand: PhantomData,
         }
     }
 
     fn phase<'a, 'id>(
-        &'a mut self,
         _: Call,
         held: &'a ModelHeld<'id>,
-        local: &'a mut Self::Local<'id>,
+        frontend: &'a mut Self::Frontend<'id>,
     ) -> Self::Phase<'a, 'id>
     where
+        Self: 'a,
         'id: 'a,
     {
         PhaseParts {
             events: ModelEvents {
-                shared: &self.shared,
+                shared: &frontend.shared,
                 held,
-                end: local,
+                end: &mut frontend.end,
             },
             control: ModelControl {
-                shared: &self.shared,
+                shared: &frontend.shared,
                 brand: PhantomData,
             },
             clients: ModelClients {
-                shared: &self.shared,
+                shared: &frontend.shared,
                 held,
             },
         }
@@ -1415,7 +1422,7 @@ impl PortBackend for OwnedModel {
     fn uninstall<'id>(
         self,
         _: Self::Held<'id>,
-        _: Self::Local<'id>,
+        _: Self::Frontend<'id>,
         _: Retired<'id, (Self::Driver, Self::State)>,
         _: Detached<'id>,
         _: Self::Uninstall,

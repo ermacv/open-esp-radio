@@ -21,7 +21,9 @@ pub(super) async fn run<'p, 'id>(
         .await
     {
         Ok(owner) => owner,
-        Err(failed) => return Ended::fail_stopped(failed.fail_stop(), Err("barrier disable")),
+        Err(failed) => {
+            return Ended::fail_stopped(failed.fail_stop().await, Err("barrier disable"));
+        }
     };
     Ended::uninstall(owner, (), result)
 }

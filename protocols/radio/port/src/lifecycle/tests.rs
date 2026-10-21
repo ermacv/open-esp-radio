@@ -72,6 +72,10 @@ impl Model {
     }
 }
 struct Backend<'a>(&'a Model);
+struct Frontend<'a> {
+    model: &'a Model,
+    accounting: usize,
+}
 struct Driver<'a>(&'a Model);
 struct Completion<'a>(&'a Model);
 struct Terminal {
@@ -147,26 +151,25 @@ impl<'a> PortBackend for Backend<'a> {
         'id: 'p;
     type Resources<'id> = ();
     type Held<'id> = usize;
-    type Local<'id> = usize;
+    type Frontend<'id> = Frontend<'a>;
     type Driver = Driver<'a>;
     type State = Completion<'a>;
     type Uninstall = ();
     type Uninstalled = usize;
     async fn enable<'p, 'id>(
-        &'p mut self,
         _: Call,
         held: &'p Self::Held<'id>,
-        local: &'p mut Self::Local<'id>,
+        frontend: &'p mut Self::Frontend<'id>,
     ) -> EnableResult<(), Fault>
     where
         'id: 'p,
     {
-        if matches!(self.0.mode, Mode::StallEnable) {
+        if matches!(frontend.model.mode, Mode::StallEnable) {
             pending::<()>().await;
         }
-        if matches!(self.0.mode, Mode::FaultBeforeEnable) {
+        if matches!(frontend.model.mode, Mode::FaultBeforeEnable) {
             poll_fn(|_| {
-                if self.0.poison.borrow().get().is_some() {
+                if frontend.model.poison.borrow().get().is_some() {
                     Poll::Ready(())
                 } else {
                     Poll::Pending
@@ -174,63 +177,75 @@ impl<'a> PortBackend for Backend<'a> {
             })
             .await;
         }
-        if let Some(poisoned) = self.0.poison.borrow().get() {
+        if let Some(poisoned) = frontend.model.poison.borrow().get() {
             return Err(poisoned);
         }
-        self.0.configured.set(*held + *local);
-        self.0.record("enable");
-        self.0.enabled.set(true);
+        frontend.model.configured.set(*held + frontend.accounting);
+        frontend.model.record("enable");
+        frontend.model.enabled.set(true);
         Ok(Ok(()))
     }
     async fn disable<'p, 'id>(
-        &'p mut self,
         _: Call,
         _: &'p usize,
-        _: &'p mut usize,
+        frontend: &'p mut Self::Frontend<'id>,
         sink: &'p mut dyn FnMut(Terminal) -> core::ops::ControlFlow<Terminal>,
     ) -> Result<(), Poisoned<Fault>>
     where
         'id: 'p,
     {
-        self.0.record("disable");
-        self.0.enabled.set(false);
-        for terminal in core::iter::from_fn(|| self.0.terminals.borrow_mut().pop_front()) {
+        frontend.model.record("disable");
+        frontend.model.enabled.set(false);
+        for terminal in core::iter::from_fn(|| frontend.model.terminals.borrow_mut().pop_front()) {
             if let core::ops::ControlFlow::Break(terminal) = sink(terminal) {
-                self.0.terminals.borrow_mut().push_front(terminal);
-                let (poisoned, _publication) =
-                    self.0.poison.borrow_mut().publish(Fault::SinkRejected);
+                frontend.model.terminals.borrow_mut().push_front(terminal);
+                let (poisoned, _publication) = frontend
+                    .model
+                    .poison
+                    .borrow_mut()
+                    .publish(Fault::SinkRejected);
                 return Err(poisoned);
             }
         }
-        self.0.poison.borrow().get().map_or(Ok(()), Err)
+        frontend.model.poison.borrow().get().map_or(Ok(()), Err)
     }
-    async fn now(&self, _: Call) -> PortResult<RadioInstant<()>, ClockError, Fault> {
+    async fn now<'p, 'id: 'p>(
+        _: &'p Self::Frontend<'id>,
+        _: Call,
+    ) -> PortResult<RadioInstant<()>, ClockError, Fault> {
         Ok(Ok(RadioInstant::from_micros(0)))
     }
     fn resources<'id>(&mut self, mint: Mint<'id, ()>) -> InstallParts<'id, Self> {
         mint.into_pools();
         InstallParts {
             held: 11,
-            local: 3,
+            frontend: Frontend {
+                model: self.0,
+                accounting: 3,
+            },
             resources: (),
         }
     }
     fn setup<'p, 'id>(
-        &'p mut self,
         _: Call,
         held: &'p Self::Held<'id>,
-        local: &'p mut Self::Local<'id>,
+        frontend: &'p mut Self::Frontend<'id>,
     ) -> Self::Setup<'p, 'id>
     where
+        Self: 'p,
         'id: 'p,
     {
-        Setup { held, local }
+        Setup {
+            held,
+            local: &mut frontend.accounting,
+        }
     }
-    fn phase<'p, 'id>(&'p mut self, _: Call, _: &'p usize, _: &'p mut usize) -> Phase<'p>
+    fn phase<'p, 'id>(_: Call, _: &'p usize, frontend: &'p mut Self::Frontend<'id>) -> Phase<'p>
     where
+        Self: 'p,
         'id: 'p,
     {
-        Phase(self.0)
+        Phase(frontend.model)
     }
     async fn drive<'p, 'id>(
         driver: DriverLoan<'p, Driver<'a>>,
@@ -275,7 +290,7 @@ impl<'a> PortBackend for Backend<'a> {
     fn uninstall<'id>(
         self,
         _: usize,
-        _: usize,
+        _: Self::Frontend<'id>,
         retired: Retired<'id, (Self::Driver, Self::State)>,
         _: Detached<'id>,
         _: (),
@@ -317,7 +332,7 @@ impl<'a> PortBody<Backend<'a>> for Body {
     ) -> Ended<'id, Backend<'a>, ()> {
         match self {
             Self::Uninstall => crate::Ended::uninstall(owner, (), ()),
-            Self::FailStop => crate::Ended::fail_stopped(owner.fail_stop(), ()),
+            Self::FailStop => crate::Ended::fail_stopped(owner.fail_stop().await, ()),
             Self::Drop => {
                 drop(owner);
                 pending().await
@@ -341,7 +356,7 @@ impl<'a> PortBody<Backend<'a>> for Body {
                     Err(Failed::Poisoned(poisoned)) => {
                         return crate::Ended::uninstall(poisoned, (), ());
                     }
-                    Err(failed) => return crate::Ended::fail_stopped(failed.fail_stop(), ()),
+                    Err(failed) => return crate::Ended::fail_stopped(failed.fail_stop().await, ()),
                 };
                 {
                     let mut phase = enabled.phase();
@@ -782,6 +797,36 @@ impl Wake for Wakes {
     }
 }
 #[test]
+fn abandon_answer_transfers_the_backend_outcome_once_before_or_after_first_poll() {
+    for stopped in [true, false] {
+        for publish_first in [true, false] {
+            let answer = AbandonAnswer::new();
+            let mut receiver = AbandonReceiver(&answer);
+            let wakes = Arc::new(Wakes(AtomicUsize::new(0)));
+            let waker = wakes.clone().into();
+            if !publish_first {
+                assert!(receiver.poll(&mut Context::from_waker(&waker)).is_pending());
+            }
+            let authority = Quarantine::new();
+            answer.publish(if stopped {
+                Abandon::Stopped(authority.stopped())
+            } else {
+                Abandon::Unconfirmed(authority)
+            });
+            assert_eq!(wakes.0.load(Ordering::Relaxed), usize::from(!publish_first));
+            let Poll::Ready(outcome) = receiver.poll(&mut Context::from_waker(&waker)) else {
+                panic!("the consumed backend proof is published");
+            };
+            assert_eq!(matches!(outcome, Abandon::Stopped(_)), stopped);
+            assert!(
+                receiver.poll(&mut Context::from_waker(&waker)).is_pending(),
+                "a proof cannot be received twice"
+            );
+        }
+    }
+}
+
+#[test]
 fn retire_request_wakes_the_registered_driver_without_a_poll() {
     let request = Signal::new();
     let latch = AbandonLatch::new();
@@ -851,7 +896,7 @@ impl<'a, 'm> PortBody<Backend<'m>> for StopThenWait<'a> {
         owner: Owner<'p, 'id, Backend<'m>, Disabled>,
         _: (),
     ) -> Ended<'id, Backend<'m>, Self::Output> {
-        let proof = owner.fail_stop();
+        let proof = owner.fail_stop().await;
         poll_fn(|cx| self.0.poll(cx)).await;
         Ended::fail_stopped(proof, "body result")
     }
@@ -957,29 +1002,38 @@ fn uninstall_timeout_then_cancellation_abandons_once() {
 }
 
 #[test]
-fn fail_stop_then_cancellation_preserves_the_first_latch_cause() {
+fn fail_stop_request_then_cancellation_preserves_the_first_latch_cause() {
     let model = Model::new(Mode::Normal);
     let install = Install::<Backend<'_>> {
         held: ManuallyDrop::new(11),
         latch: AbandonLatch::new(),
         retiring: Signal::new(),
+        answer: AbandonAnswer::new(),
     };
-    let mut local = 3;
-    let mut backend = guard(Backend(&model), |backend| drop(Quarantined::new(backend)));
-    let mut armed = guard(&mut *backend, |backend| {
-        abandon_on_cancel(backend, &install.latch)
-    });
-    let owner = Owner::<_, Disabled>::new(&mut **armed, &mut local, &install);
-    let proof = owner.fail_stop();
-    drop(armed);
-    assert!(install.latch.is_fail_stopped());
+    let mut frontend = Frontend {
+        model: &model,
+        accounting: 3,
+    };
+    let backend = Cleanup::new(Backend(&model));
+    let owner = Owner::<_, Disabled>::new(&mut frontend, &install);
+    let mut response = Box::pin(owner.fail_stop());
+    assert!(
+        install.latch.is_fail_stopped(),
+        "request precedes the response's first poll"
+    );
+    assert!(poll(response.as_mut()).is_pending());
+    assert_eq!(
+        model.abandons.get(),
+        0,
+        "the frontend cannot call the backend"
+    );
+    drop(response);
+    drop(backend);
     assert_eq!(
         install.latch.cause.load(Ordering::Acquire),
         AbandonLatch::FAIL_STOPPED
     );
     assert_eq!(model.abandons.get(), 1);
-    drop(proof);
-    drop(backend);
     assert_eq!(owner_drops(&model), [0; 3]);
 }
 

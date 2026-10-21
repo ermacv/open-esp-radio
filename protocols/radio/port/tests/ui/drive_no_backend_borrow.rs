@@ -24,28 +24,27 @@ impl PortBackend for Backend {
     type Setup<'a, 'id> = () where Self: 'a, 'id: 'a;
     type Phase<'a, 'id>
         = Phase
-    where
+    where Self: 'a,
         'id: 'a;
     type Held<'id> = ();
-    type Local<'id> = ();
+    type Frontend<'id> = ();
     type Resources<'id> = ();
     type Driver = ();
     type State = ();
     type Uninstall = ();
     type Uninstalled = ();
-    fn enable<'a, 'id>(&'a mut self, _: Call,
+    fn enable<'a, 'id>(_: Call,
         _: &'a Self::Held<'id>,
-        _: &'a mut Self::Local<'id>,) -> impl Future<Output = EnableResult<(), ()>>
+        _: &'a mut Self::Frontend<'id>,) -> impl Future<Output = EnableResult<(), ()>>
     where
         'id: 'a,
     {
         ready(Ok(Ok(())))
     }
     fn disable<'a, 'id>(
-        &'a mut self,
         _: Call,
         _: &'a Self::Held<'id>,
-        _: &'a mut Self::Local<'id>,
+        _: &'a mut Self::Frontend<'id>,
         _: &'a mut dyn FnMut(()) -> core::ops::ControlFlow<()>,
     ) -> impl Future<Output = Result<(), Poisoned<()>>> + 'a
     where
@@ -53,28 +52,27 @@ impl PortBackend for Backend {
     {
         ready(Ok(()))
     }
-    fn now(&self, _: Call) -> impl Future<Output = PortResult<RadioInstant<()>, ClockError, ()>> {
+    fn now<'a, 'id: 'a>(_frontend: &'a Self::Frontend<'id>, _: Call) -> impl Future<Output = PortResult<RadioInstant<()>, ClockError, ()>> {
         pending()
     }
     fn resources<'id>(&mut self, mint: Mint<'id, ()>) -> InstallParts<'id, Self> {
         mint.into_pools();
         InstallParts {
             held: (),
-            local: (),
+            frontend: (),
             resources: (),
         }
     }
-    fn setup<'a, 'id>(&'a mut self, _: Call, _: &'a Self::Held<'id>, _: &'a mut Self::Local<'id>) -> Self::Setup<'a, 'id>
-    where
+    fn setup<'a, 'id>(_: Call, _: &'a Self::Held<'id>, _: &'a mut Self::Frontend<'id>) -> Self::Setup<'a, 'id>
+    where Self: 'a,
         'id: 'a,
     {}
     fn phase<'a, 'id>(
-        &'a mut self,
         _: Call,
         _: &'a Self::Held<'id>,
-        _: &'a mut Self::Local<'id>,
+        _: &'a mut Self::Frontend<'id>,
     ) -> Self::Phase<'a, 'id>
-    where
+    where Self: 'a,
         'id: 'a,
     {
         Phase
@@ -107,7 +105,7 @@ impl PortBackend for Backend {
     fn uninstall<'id>(
         self,
         _: Self::Held<'id>,
-        _: Self::Local<'id>,
+        _: Self::Frontend<'id>,
         _: Retired<'id, (Self::Driver, ())>,
         _: Detached<'id>,
         _: (),

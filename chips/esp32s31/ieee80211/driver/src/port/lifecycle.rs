@@ -263,6 +263,12 @@ pub struct Resources<'id, D: Device<B>, const B: usize> {
     pub arbiter_authority: ArbiterAuthority<'id, Part<'id, 1>>,
 }
 
+/// Body-side admission and interface configuration.
+pub struct Frontend<D: Device<B>, const B: usize> {
+    addresses: [IndividualAddress; 2],
+    storage: &'static PortStorage<D, B>,
+}
+
 impl<D: Device<B>, const B: usize> PortBackend for Esp32s31Backend<D, B> {
     type Pools = (
         CorePools<TX_TICKETS>,
@@ -293,7 +299,7 @@ impl<D: Device<B>, const B: usize> PortBackend for Esp32s31Backend<D, B> {
         'id: 'a;
     type Resources<'id> = Resources<'id, D, B>;
     type Held<'id> = Held<'id, D, B>;
-    type Local<'id> = ();
+    type Frontend<'id> = Frontend<D, B>;
     type Driver = &'static PortStorage<D, B>;
     type State = ();
     type Uninstall = ();
@@ -386,36 +392,39 @@ impl<D: Device<B>, const B: usize> PortBackend for Esp32s31Backend<D, B> {
                 #[cfg(oer_debug_control)]
                 completion_hold: Cell::new(false),
             },
-            local: (),
+            frontend: Frontend {
+                addresses: self.addresses,
+                storage: self.storage,
+            },
         }
     }
     fn setup<'a, 'id: 'a>(
-        &'a mut self,
         _: radio::Call,
         held: &'a Held<'id, D, B>,
-        _: &'a mut (),
-    ) -> Self::Setup<'a, 'id> {
-        Esp32s31Setup {
-            backend: self,
-            held,
-        }
+        _frontend: &'a mut Self::Frontend<'id>,
+    ) -> Self::Setup<'a, 'id>
+    where
+        Self: 'a,
+    {
+        Esp32s31Setup { held }
     }
     fn phase<'a, 'id: 'a>(
-        &'a mut self,
         _: radio::Call,
         held: &'a Held<'id, D, B>,
-        _: &'a mut (),
-    ) -> Self::Phase<'a, 'id> {
+        frontend: &'a mut Self::Frontend<'id>,
+    ) -> Self::Phase<'a, 'id>
+    where
+        Self: 'a,
+    {
         Esp32s31Phase {
             held,
-            addresses: self.addresses,
+            addresses: frontend.addresses,
         }
     }
     fn enable<'a, 'id: 'a>(
-        &'a mut self,
         _: radio::Call,
         held: &'a Held<'id, D, B>,
-        _: &'a mut (),
+        _frontend: &'a mut Self::Frontend<'id>,
     ) -> impl Future<Output = EnableResult<Fault, Fault>> + 'a {
         held.want_enabled.set(true);
         held.storage.driver.wake();
@@ -432,10 +441,9 @@ impl<D: Device<B>, const B: usize> PortBackend for Esp32s31Backend<D, B> {
         })
     }
     fn disable<'a, 'id: 'a>(
-        &'a mut self,
         _: radio::Call,
         held: &'a Held<'id, D, B>,
-        _: &'a mut (),
+        _frontend: &'a mut Self::Frontend<'id>,
         sink: &'a mut dyn FnMut(Terminal<'id, D, B>) -> core::ops::ControlFlow<Terminal<'id, D, B>>,
     ) -> impl Future<Output = Result<(), radio::Poisoned<Fault>>> + 'a {
         held.want_enabled.set(false);
@@ -472,9 +480,12 @@ impl<D: Device<B>, const B: usize> PortBackend for Esp32s31Backend<D, B> {
             }
         })
     }
-    async fn now(&self, _: radio::Call) -> radio::PortResult<Ieee80211Instant, ClockError, Fault> {
-        self.storage.check()?;
-        Ok(self.storage.device.borrow_mut().radio_now())
+    async fn now<'a, 'id: 'a>(
+        frontend: &'a Self::Frontend<'id>,
+        _: radio::Call,
+    ) -> radio::PortResult<Ieee80211Instant, ClockError, Fault> {
+        frontend.storage.check()?;
+        Ok(frontend.storage.device.borrow_mut().radio_now())
     }
     async fn drive<'p, 'id>(
         loan: radio::DriverLoan<'p, Self::Driver>,
@@ -558,7 +569,7 @@ impl<D: Device<B>, const B: usize> PortBackend for Esp32s31Backend<D, B> {
     fn uninstall<'id>(
         self,
         held: Held<'id, D, B>,
-        _: (),
+        _: Self::Frontend<'id>,
         retired: radio::Retired<'id, (Self::Driver, ())>,
         _: radio::Detached<'id>,
         _: (),
@@ -573,8 +584,9 @@ impl<D: Device<B>, const B: usize> PortBackend for Esp32s31Backend<D, B> {
         }
         let transmitter = held.state.borrow_mut().take_transmitter();
         let mut config = self.config;
-        config.channel = self
+        config.channel = held
             .channel
+            .get()
             .wifi_channel()
             .expect("S31 channel retained through setup");
         Uninstalled::Stopped(StoppedPort {

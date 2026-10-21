@@ -68,7 +68,7 @@ impl<const N: usize, const S: usize> PortBackend for Probe<N, S> {
     where
         Self: 'a,
         'id: 'a;
-    type Local<'id> = ();
+    type Frontend<'id> = ();
     type Driver = ();
     type Domain = Domain;
     type Fault = Fault;
@@ -76,6 +76,7 @@ impl<const N: usize, const S: usize> PortBackend for Probe<N, S> {
     type Setup<'a, 'id>
         = ()
     where
+        Self: 'a,
         'id: 'a;
 
     type Pools = oer_radio_port::Permits<Kind, N, S>;
@@ -86,10 +87,9 @@ impl<const N: usize, const S: usize> PortBackend for Probe<N, S> {
     type Uninstalled = ();
 
     fn enable<'a, 'id>(
-        &'a mut self,
         _: Call,
         _: &'a Self::Held<'id>,
-        _: &'a mut Self::Local<'id>,
+        _: &'a mut Self::Frontend<'id>,
     ) -> impl Future<Output = EnableResult<(), Fault>> + 'a
     where
         'id: 'a,
@@ -98,10 +98,9 @@ impl<const N: usize, const S: usize> PortBackend for Probe<N, S> {
     }
 
     fn disable<'a, 'id>(
-        &'a mut self,
         _: Call,
         _: &'a (),
-        _: &'a mut Self::Local<'id>,
+        _: &'a mut Self::Frontend<'id>,
         _: &'a mut dyn FnMut(()) -> core::ops::ControlFlow<()>,
     ) -> impl Future<Output = Result<(), Poisoned<Fault>>> + 'a
     where
@@ -110,10 +109,10 @@ impl<const N: usize, const S: usize> PortBackend for Probe<N, S> {
         ready(Ok(()))
     }
 
-    fn now(
-        &self,
+    fn now<'a, 'id: 'a>(
+        _frontend: &'a Self::Frontend<'id>,
         _: Call,
-    ) -> impl Future<Output = PortResult<RadioInstant<Domain>, ClockError, Fault>> + '_ {
+    ) -> impl Future<Output = PortResult<RadioInstant<Domain>, ClockError, Fault>> + 'a {
         ready(Ok(Ok(RadioInstant::from_micros(0))))
     }
 
@@ -125,29 +124,25 @@ impl<const N: usize, const S: usize> PortBackend for Probe<N, S> {
         } = mint.into_pools();
         InstallParts {
             held: (),
-            local: (),
+            frontend: (),
             resources: (supply, line, seats),
         }
     }
 
     fn setup<'a, 'id>(
-        &'a mut self,
         _: Call,
         _: &'a Self::Held<'id>,
-        _: &'a mut Self::Local<'id>,
+        _: &'a mut Self::Frontend<'id>,
     ) -> Self::Setup<'a, 'id>
     where
+        Self: 'a,
         'id: 'a,
     {
     }
 
-    fn phase<'a, 'id>(
-        &'a mut self,
-        _: Call,
-        _: &'a (),
-        _: &'a mut Self::Local<'id>,
-    ) -> Self::Phase<'a, 'id>
+    fn phase<'a, 'id>(_: Call, _: &'a (), _: &'a mut Self::Frontend<'id>) -> Self::Phase<'a, 'id>
     where
+        Self: 'a,
         'id: 'a,
     {
         PhaseParts {
@@ -177,7 +172,7 @@ impl<const N: usize, const S: usize> PortBackend for Probe<N, S> {
     fn uninstall<'id>(
         self,
         _: Self::Held<'id>,
-        _: Self::Local<'id>,
+        _: Self::Frontend<'id>,
         _: Retired<'id, (Self::Driver, Self::State)>,
         _: Detached<'id>,
         _: Self::Uninstall,

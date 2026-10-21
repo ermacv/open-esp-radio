@@ -78,7 +78,7 @@ fn each_installation_and_retuned_phase_checks_its_own_channel() {
                     .unwrap();
                 assert!(destination.no_ack(ofdm).is_ok());
             }
-            Ended::fail_stopped(target.fail_stop(), ())
+            Ended::fail_stopped(target.fail_stop().await, ())
         }
     }
     impl PortBody<ModelBackend> for Channels {
@@ -133,7 +133,7 @@ fn each_installation_and_retuned_phase_checks_its_own_channel() {
                     core::mem::size_of::<PhyRate>()
                 );
             }
-            Ended::fail_stopped(source.fail_stop(), ())
+            Ended::fail_stopped(source.fail_stop().await, ())
         }
     }
     assert!(matches!(
@@ -540,7 +540,7 @@ impl<W: Work> PortBody<ModelBackend> for Body<W> {
             .await
         {
             Ok(disabled) => Ended::uninstall(disabled, (), ()),
-            Err(poisoned) => Ended::fail_stopped(poisoned.fail_stop(), ()),
+            Err(poisoned) => Ended::fail_stopped(poisoned.fail_stop().await, ()),
         }
     }
 }

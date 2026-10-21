@@ -16,8 +16,8 @@ error: lifetime may not live long enough
  65 |         mut self,
     |         -------- has type `Target<'_, '_, '1>`
 ...
-135 |         Ended::fail_stopped(target.fail_stop(), ()) // ui-error: lifetime may not live long enough
-    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ method was supposed to return data with lifetime `'id` but it is returning data with lifetime `'1`
+135 |         Ended::fail_stopped(target.fail_stop().await, ()) // ui-error: lifetime may not live long enough
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ method was supposed to return data with lifetime `'id` but it is returning data with lifetime `'1`
 
 error: lifetime may not live long enough
    --> tests/ui/installation_no_ack.rs:135:9
@@ -27,5 +27,5 @@ error: lifetime may not live long enough
  65 |         mut self,
     |         -------- has type `Target<'_, '_, '1>`
 ...
-135 |         Ended::fail_stopped(target.fail_stop(), ()) // ui-error: lifetime may not live long enough
-    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ method was supposed to return data with lifetime `'1` but it is returning data with lifetime `'id`
+135 |         Ended::fail_stopped(target.fail_stop().await, ()) // ui-error: lifetime may not live long enough
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ method was supposed to return data with lifetime `'1` but it is returning data with lifetime `'id`

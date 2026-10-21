@@ -53,7 +53,7 @@ macro_rules! port {
                 type Event<'id> = u32;
                 type Terminal<'id> = u32;
                 type Driver = &'r Probe;
-                type Local<'id> = ();
+                type Frontend<'id> = &'r Probe;
                 type Domain = ();
                 type Fault = u32;
                 type Refusal = ();
@@ -73,40 +73,38 @@ macro_rules! port {
                 type Uninstall = ();
                 type Uninstalled = ();
                 async fn enable<'a, 'id>(
-                    &'a mut self,
                     _: Call,
                     _: &'a Self::Held<'id>,
-                    _: &'a mut Self::Local<'id>,
+                    frontend: &'a mut Self::Frontend<'id>,
                 ) -> EnableResult<(), u32>
                 where
                     'id: 'a,
                 {
-                    self.0.step(1);
-                    core::future::poll_fn(|_| self.0.poll(1)).await;
+                    frontend.step(1);
+                    core::future::poll_fn(|_| frontend.poll(1)).await;
                     Ok(Ok(()))
                 }
                 async fn disable<'a, 'id>(
-                    &'a mut self,
                     _: Call,
                     _: &'a Self::Held<'id>,
-                    _: &'a mut Self::Local<'id>,
+                    frontend: &'a mut Self::Frontend<'id>,
                     sink: &'a mut dyn FnMut(u32) -> core::ops::ControlFlow<u32>,
                 ) -> Result<(), Poisoned<u32>>
                 where
                     'id: 'a,
                 {
-                    self.0.step(2);
-                    core::future::poll_fn(|_| self.0.poll(2)).await;
-                    match sink(self.0.calls.load(Ordering::Relaxed)) {
+                    frontend.step(2);
+                    core::future::poll_fn(|_| frontend.poll(2)).await;
+                    match sink(frontend.calls.load(Ordering::Relaxed)) {
                         core::ops::ControlFlow::Continue(()) => Ok(()),
                         core::ops::ControlFlow::Break(terminal) => {
-                            self.0.calls.store(terminal, Ordering::Relaxed);
+                            frontend.calls.store(terminal, Ordering::Relaxed);
                             Err(Poisoned { cause: 1 })
                         }
                     }
                 }
-                async fn now(
-                    &self,
+                async fn now<'a, 'id: 'a>(
+                    _frontend: &'a Self::Frontend<'id>,
                     _: Call,
                 ) -> PortResult<oer_time::RadioInstant<()>, ClockError, u32> {
                     Ok(Err(ClockError::Unavailable))
@@ -115,27 +113,27 @@ macro_rules! port {
                     mint.into_pools();
                     InstallParts {
                         held: (),
-                        local: (),
+                        frontend: self.0,
                         resources: (),
                     }
                 }
                 fn setup<'a, 'id>(
-                    &'a mut self,
                     _: Call,
                     _: &'a Self::Held<'id>,
-                    _: &'a mut Self::Local<'id>,
+                    _frontend: &'a mut Self::Frontend<'id>,
                 ) -> Self::Setup<'a, 'id>
                 where
+                    Self: 'a,
                     'id: 'a,
                 {
                 }
                 fn phase<'a, 'id>(
-                    &'a mut self,
                     _: Call,
                     _: &'a Self::Held<'id>,
-                    _: &'a mut Self::Local<'id>,
+                    _frontend: &'a mut Self::Frontend<'id>,
                 ) -> Self::Phase<'a, 'id>
                 where
+                    Self: 'a,
                     'id: 'a,
                 {
                     PhaseParts {
@@ -173,7 +171,7 @@ macro_rules! port {
                 fn uninstall<'id>(
                     self,
                     _: Self::Held<'id>,
-                    _: Self::Local<'id>,
+                    _: Self::Frontend<'id>,
                     _: Retired<'id, (Self::Driver, ())>,
                     _: Detached<'id>,
                     _: (),
@@ -197,7 +195,10 @@ macro_rules! port {
                     let owner = match owner.enable().await {
                         Ok(owner) => owner,
                         Err(failed) => {
-                            return oer_radio_port::Ended::fail_stopped(failed.fail_stop(), ());
+                            return oer_radio_port::Ended::fail_stopped(
+                                failed.fail_stop().await,
+                                (),
+                            );
                         }
                     };
                     match owner
@@ -208,7 +209,9 @@ macro_rules! port {
                         .await
                     {
                         Ok(owner) => oer_radio_port::Ended::uninstall(owner, (), ()),
-                        Err(failed) => oer_radio_port::Ended::fail_stopped(failed.fail_stop(), ()),
+                        Err(failed) => {
+                            oer_radio_port::Ended::fail_stopped(failed.fail_stop().await, ())
+                        }
                     }
                 }
             }

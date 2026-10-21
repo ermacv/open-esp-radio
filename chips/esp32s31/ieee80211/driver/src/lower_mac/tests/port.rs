@@ -39,6 +39,7 @@ struct Observed {
     publications: usize,
     statuses: Vec<(u8, u8)>,
     starts: usize,
+    start_channels: Vec<oer_ieee80211_wire::channel::WifiChannel>,
     stops: usize,
     abandoned: bool,
     detached: bool,
@@ -121,12 +122,13 @@ impl Device<512> for TestDevice {
     fn poll_start(
         &mut self,
         _: &mut Context<'_>,
-        _: oer_ieee80211_wire::channel::WifiChannel,
+        channel: oer_ieee80211_wire::channel::WifiChannel,
     ) -> Poll<Result<(), Fault>> {
         if self.observed.borrow().hold_start {
             return Poll::Pending;
         }
         self.observed.borrow_mut().starts += 1;
+        self.observed.borrow_mut().start_channels.push(channel);
         self.stopped = false;
         Poll::Ready(Ok(()))
     }
@@ -848,7 +850,7 @@ impl PortBody<Backend> for ReceiveBody {
             }
         }
         if self.lose {
-            return radio::Ended::fail_stopped(owner.fail_stop(), ());
+            return radio::Ended::fail_stopped(owner.fail_stop().await, ());
         }
         let owner = match owner
             .disable(&mut |_| core::ops::ControlFlow::Continue(()))
@@ -1095,4 +1097,61 @@ fn clean_uninstall_returns_all_dma_and_core_owners_for_a_fresh_installation() {
     assert_eq!(observed.borrow().publications, 2);
     assert_eq!(observed.borrow().starts, 2);
     assert_eq!(observed.borrow().stops, 2);
+}
+
+struct Tune(Channel);
+impl PortBody<Backend> for Tune {
+    type Output = ();
+    async fn run<'p, 'id>(
+        self,
+        mut owner: radio::Owner<'p, 'id, Backend, radio::Disabled>,
+        _: Res<'id>,
+    ) -> radio::Ended<'id, Backend, ()> {
+        owner.setup().set_channel(
+            SupportedChannel::new(
+                oer_radio_regulatory::RegulatoryDomain::of(
+                    oer_radio_regulatory::Country::new(*b"DE").expect("test country"),
+                )
+                .expect("domain fixture")
+                .permit(self.0)
+                .expect("permitted test channel"),
+            )
+            .expect("supported test channel"),
+        );
+        let owner = owner.enable().await.ok().expect("enable");
+        let owner = owner
+            .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+            .await
+            .ok()
+            .expect("disable");
+        radio::Ended::uninstall(owner, (), ())
+    }
+}
+
+#[test]
+fn frontend_channel_setting_survives_normal_stop_and_reinstall() {
+    let (backend, observed, _) = installed(Vec::new());
+    let tuned = Channel::from_wifi_channel(channel(11));
+    let first = block_on(radio::run_port(backend, Tune(tuned), radio::LocalExecution));
+    let radio::PortEnd::Uninstalled {
+        uninstalled: Uninstalled::Stopped(stopped),
+        ..
+    } = first
+    else {
+        panic!("the tuned installation stops normally");
+    };
+    let installed = stopped
+        .reinstall(18)
+        .ok()
+        .expect("the stopped owners reinstall");
+    let _ = block_on(radio::run_port(
+        installed,
+        Exchange {
+            transmissions: 1,
+            expected: 1,
+            close: false,
+        },
+        radio::LocalExecution,
+    ));
+    assert_eq!(observed.borrow().start_channels, [channel(11), channel(11)]);
 }

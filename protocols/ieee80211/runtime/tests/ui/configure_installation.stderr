@@ -6,8 +6,8 @@ error: lifetime may not live long enough
 39 |         self,
    |         ---- has type `Inner<'1>`
 ...
-54 |         Ended::fail_stopped(owner.fail_stop(), ()) // ui-error: lifetime may not live long enough
-   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ method was supposed to return data with lifetime `'id` but it is returning data with lifetime `'1`
+54 |         Ended::fail_stopped(owner.fail_stop().await, ()) // ui-error: lifetime may not live long enough
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ method was supposed to return data with lifetime `'id` but it is returning data with lifetime `'1`
 
 error: lifetime may not live long enough
   --> tests/ui/configure_installation.rs:54:9
@@ -17,8 +17,8 @@ error: lifetime may not live long enough
 39 |         self,
    |         ---- has type `Inner<'1>`
 ...
-54 |         Ended::fail_stopped(owner.fail_stop(), ()) // ui-error: lifetime may not live long enough
-   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ method was supposed to return data with lifetime `'1` but it is returning data with lifetime `'id`
+54 |         Ended::fail_stopped(owner.fail_stop().await, ()) // ui-error: lifetime may not live long enough
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ method was supposed to return data with lifetime `'1` but it is returning data with lifetime `'id`
 
 warning: unused variable: `resources`
   --> tests/ui/configure_installation.rs:41:9

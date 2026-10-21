@@ -6,5 +6,5 @@ error[E0624]: associated function `new` is private
   |
  ::: $WORKSPACE/protocols/radio/port/src/lifecycle.rs
   |
-  |     fn new(backend: &'p mut B, local: &'p mut B::Local<'id>, install: &'p Install<'id, B>) -> Self {
-  |     ---------------------------------------------------------------------------------------------- private associated function defined here
+  |     fn new(frontend: &'p mut B::Frontend<'id>, install: &'p Install<'id, B>) -> Self {
+  |     -------------------------------------------------------------------------------- private associated function defined here

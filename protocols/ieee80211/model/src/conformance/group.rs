@@ -164,7 +164,9 @@ impl PortBody<ModelBackend> for Exercise {
     ) -> Ended<'id, ModelBackend, Self::Output> {
         let mut owner = match owner.enable().await {
             Ok(owner) => owner,
-            Err(failed) => return Ended::fail_stopped(failed.fail_stop(), Err("group enable")),
+            Err(failed) => {
+                return Ended::fail_stopped(failed.fail_stop().await, Err("group enable"));
+            }
         };
         let result = match self.case {
             ProgressCase::Disable { mutation, applied } => {
@@ -210,7 +212,7 @@ impl PortBody<ModelBackend> for Exercise {
         });
         match disabled {
             Ok(owner) => Ended::uninstall(owner, (), result),
-            Err(failed) => Ended::fail_stopped(failed.fail_stop(), Err("group disable")),
+            Err(failed) => Ended::fail_stopped(failed.fail_stop().await, Err("group disable")),
         }
     }
 }

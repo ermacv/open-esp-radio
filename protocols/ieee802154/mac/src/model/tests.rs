@@ -107,7 +107,7 @@ fn accounting_quarantine_does_not_prevent_a_confirmed_hardware_stop() {
                 assert!(!self.0.abandoned());
             }
             assert!(matches!(ready(owner.phase().next_event()), Err(actual) if actual == end));
-            let stopped = owner.fail_stop();
+            let stopped = owner.fail_stop().await;
             assert!(matches!(
                 stopped.outcome(),
                 oer_radio_port::Abandon::Stopped(_)
@@ -1010,7 +1010,7 @@ impl PortBackend for PoolProbe {
     where
         Self: 'a,
         'id: 'a;
-    type Local<'id> = ();
+    type Frontend<'id> = ();
     type Driver = ();
     type Domain = Ieee802154Radio;
     type Fault = ModelFault;
@@ -1032,10 +1032,9 @@ impl PortBackend for PoolProbe {
     type Uninstalled = ();
 
     fn enable<'a, 'id>(
-        &'a mut self,
         _: Call,
         _: &'a Self::Held<'id>,
-        _: &'a mut Self::Local<'id>,
+        _: &'a mut Self::Frontend<'id>,
     ) -> impl Future<Output = oer_radio_port::EnableResult<ModelRefusal, ModelFault>> + 'a
     where
         'id: 'a,
@@ -1044,10 +1043,9 @@ impl PortBackend for PoolProbe {
     }
 
     fn disable<'a, 'id>(
-        &'a mut self,
         _: Call,
         _: &'a (),
-        _: &'a mut Self::Local<'id>,
+        _: &'a mut Self::Frontend<'id>,
         _: &'a mut dyn FnMut(()) -> core::ops::ControlFlow<()>,
     ) -> impl Future<Output = Result<(), Poisoned<ModelFault>>> + 'a
     where
@@ -1056,8 +1054,8 @@ impl PortBackend for PoolProbe {
         core::future::ready(Ok(()))
     }
 
-    fn now(
-        &self,
+    fn now<'a, 'id: 'a>(
+        _frontend: &'a Self::Frontend<'id>,
         _: Call,
     ) -> impl Future<
         Output = oer_radio_port::PortResult<
@@ -1065,7 +1063,7 @@ impl PortBackend for PoolProbe {
             oer_radio_port::ClockError,
             ModelFault,
         >,
-    > + '_ {
+    > + 'a {
         core::future::ready(Ok(Ok(Ieee802154Instant::from_micros(0))))
     }
 
@@ -1073,29 +1071,25 @@ impl PortBackend for PoolProbe {
         let oer_radio_port::PermitTokens { supply, seats, .. } = mint.into_pools();
         InstallParts {
             held: (),
-            local: (),
+            frontend: (),
             resources: (ModelPermitPool::new(supply), seats),
         }
     }
 
     fn setup<'a, 'id>(
-        &'a mut self,
         _: Call,
         _: &'a Self::Held<'id>,
-        _: &'a mut Self::Local<'id>,
+        _: &'a mut Self::Frontend<'id>,
     ) -> Self::Setup<'a, 'id>
     where
+        Self: 'a,
         'id: 'a,
     {
     }
 
-    fn phase<'a, 'id>(
-        &'a mut self,
-        _: Call,
-        _: &'a (),
-        _: &'a mut Self::Local<'id>,
-    ) -> Self::Phase<'a, 'id>
+    fn phase<'a, 'id>(_: Call, _: &'a (), _: &'a mut Self::Frontend<'id>) -> Self::Phase<'a, 'id>
     where
+        Self: 'a,
         'id: 'a,
     {
         PhaseParts {
@@ -1125,7 +1119,7 @@ impl PortBackend for PoolProbe {
     fn uninstall<'id>(
         self,
         _: Self::Held<'id>,
-        _: Self::Local<'id>,
+        _: Self::Frontend<'id>,
         _: Retired<'id, (Self::Driver, Self::State)>,
         _: Detached<'id>,
         _: Self::Uninstall,

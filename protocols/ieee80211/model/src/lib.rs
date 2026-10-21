@@ -2482,10 +2482,12 @@ impl<'id, X: ModelContext> ModelHeld<'id, X> {
     }
 }
 
-/// The install's local brand. Key identity belongs to each installed key;
-/// there is no independent wrapping key-index source in the handle.
-#[derive(Default)]
-pub struct ModelLocal<'id> {
+/// The body's model configuration and air endpoint, separate from the backend.
+/// Key identity belongs to each installed key.
+pub struct ModelFrontend<'id> {
+    air: Rc<ModelAir>,
+    channel: Channel,
+    addresses: [IndividualAddress; 2],
     brand: PhantomData<fn(&'id ()) -> &'id ()>,
 }
 
@@ -2572,19 +2574,18 @@ impl<C: Ieee80211Capabilities, X: ModelContext> PortBackend for ModelBackend<C, 
     );
     type Resources<'id> = ModelResources<'id>;
     type Held<'id> = ModelHeld<'id, X>;
-    type Local<'id> = ModelLocal<'id>;
+    type Frontend<'id> = ModelFrontend<'id>;
     type Driver = ();
     type State = ();
     type Uninstall = ();
     type Uninstalled = Rc<ModelAir>;
 
     fn enable<'a, 'id: 'a>(
-        &'a mut self,
         _call: Call,
         _held: &'a Self::Held<'id>,
-        _local: &'a mut Self::Local<'id>,
+        frontend: &'a mut Self::Frontend<'id>,
     ) -> impl Future<Output = EnableResult<(), ModelFault>> + 'a {
-        let air = &self.air;
+        let air = &frontend.air;
         core::future::ready(if air.admission_closed() {
             Err(Poisoned { cause: ModelFault })
         } else if air.refuse_enable.replace(false) {
@@ -2595,10 +2596,9 @@ impl<C: Ieee80211Capabilities, X: ModelContext> PortBackend for ModelBackend<C, 
     }
 
     fn disable<'a, 'id>(
-        &'a mut self,
         _call: Call,
         held: &'a ModelHeld<'id, X>,
-        _: &'a mut ModelLocal<'id>,
+        frontend: &'a mut ModelFrontend<'id>,
         sink: &'a mut dyn FnMut(
             LowerMacTerminal<'id, ModelTypes<X>>,
         )
@@ -2607,9 +2607,10 @@ impl<C: Ieee80211Capabilities, X: ModelContext> PortBackend for ModelBackend<C, 
     where
         'id: 'a,
     {
-        self.air
+        frontend
+            .air
             .disables
-            .set(self.air.disables.get().saturating_add(1));
+            .set(frontend.air.disables.get().saturating_add(1));
         // The driver ends every admitted command. The terminal sink cannot
         // receive unsolicited RX; this backend recycles those owners below.
         held.draining.set(true);
@@ -2654,12 +2655,12 @@ impl<C: Ieee80211Capabilities, X: ModelContext> PortBackend for ModelBackend<C, 
         })
     }
 
-    fn now(
-        &self,
+    fn now<'a, 'id: 'a>(
+        frontend: &'a Self::Frontend<'id>,
         _call: Call,
-    ) -> impl Future<Output = PortResult<RadioInstant<Ieee80211Radio>, ClockError, ModelFault>> + '_
+    ) -> impl Future<Output = PortResult<RadioInstant<Ieee80211Radio>, ClockError, ModelFault>> + 'a
     {
-        core::future::ready(Ok(self.air.radio_now()))
+        core::future::ready(Ok(frontend.air.radio_now()))
     }
 
     fn resources<'id>(&mut self, mint: Mint<'id, Self::Pools>) -> InstallParts<'id, Self> {
@@ -2742,34 +2743,42 @@ impl<C: Ieee80211Capabilities, X: ModelContext> PortBackend for ModelBackend<C, 
         };
         InstallParts {
             held,
-            local: ModelLocal::default(),
+            frontend: ModelFrontend {
+                air: self.air.clone(),
+                channel: self.channel,
+                addresses: self.addresses,
+                brand: PhantomData,
+            },
             resources,
         }
     }
 
     fn setup<'a, 'id: 'a>(
-        &'a mut self,
         _call: Call,
         _held: &'a Self::Held<'id>,
-        _: &'a mut Self::Local<'id>,
-    ) -> Self::Setup<'a, 'id> {
+        frontend: &'a mut Self::Frontend<'id>,
+    ) -> Self::Setup<'a, 'id>
+    where
+        Self: 'a,
+    {
         ModelSetup {
-            channel: &mut self.channel,
+            channel: &mut frontend.channel,
             caps: PhantomData,
         }
     }
 
     fn phase<'a, 'id>(
-        &'a mut self,
         _call: Call,
         held: &'a ModelHeld<'id, X>,
-        _: &'a mut ModelLocal<'id>,
+        frontend: &'a mut ModelFrontend<'id>,
     ) -> ModelPhase<'a, 'id, C, X>
     where
+        Self: 'a,
         'id: 'a,
     {
         ModelPhase {
-            backend: self,
+            frontend,
+            caps: PhantomData,
             held,
         }
     }
@@ -2822,7 +2831,7 @@ impl<C: Ieee80211Capabilities, X: ModelContext> PortBackend for ModelBackend<C, 
     fn uninstall<'id>(
         self,
         held: ModelHeld<'id, X>,
-        local: ModelLocal<'id>,
+        local: ModelFrontend<'id>,
         retired: Retired<'id, ((), ())>,
         detached: Detached<'id>,
         (): (),
@@ -3762,7 +3771,8 @@ fn terminal<'id, X: ModelContext>(
 
 /// The model's running phase: the body's handle over the queues.
 pub struct ModelPhase<'a, 'id, C = ModelCaps, X: ModelContext = ()> {
-    backend: &'a mut ModelBackend<C, X>,
+    frontend: &'a mut ModelFrontend<'id>,
+    caps: PhantomData<fn() -> C>,
     held: &'a ModelHeld<'id, X>,
 }
 
@@ -3850,7 +3860,7 @@ impl<'p, 'id: 'p, C: Ieee80211Capabilities, X: ModelContext> LowerMacPhase<'p, '
         Self: 'v;
 
     fn channel(&self) -> Channel {
-        self.backend.channel
+        self.frontend.channel
     }
 
     fn recycle(&mut self, buffer: ModelRxBuffer) {
@@ -3883,7 +3893,7 @@ impl<'p, 'id: 'p, C: Ieee80211Capabilities, X: ModelContext> LowerMacPhase<'p, '
     }
 
     fn station(&mut self) -> ModelInterface<'p, '_, 'id, Station, C, X> {
-        let [station, _] = self.backend.addresses;
+        let [station, _] = self.frontend.addresses;
         ModelInterface {
             held: self.held,
             address: station,
@@ -3892,7 +3902,7 @@ impl<'p, 'id: 'p, C: Ieee80211Capabilities, X: ModelContext> LowerMacPhase<'p, '
     }
 
     fn access_point(&mut self) -> ModelInterface<'p, '_, 'id, AccessPoint, C, X> {
-        let [_, access_point] = self.backend.addresses;
+        let [_, access_point] = self.frontend.addresses;
         ModelInterface {
             held: self.held,
             address: access_point,

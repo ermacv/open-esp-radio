@@ -1076,7 +1076,7 @@ impl<
                     if matches!(end, EventEnd::Quarantined { .. }) {
                         return (
                             ServiceEnd::Quarantined {
-                                proof: owner.fail_stop(),
+                                proof: owner.fail_stop().await,
                                 fault,
                                 custody,
                             },
@@ -1086,7 +1086,7 @@ impl<
                     if let Some(missing) = self.pending.admissions.first() {
                         return (
                             ServiceEnd::Quarantined {
-                                proof: owner.fail_stop(),
+                                proof: owner.fail_stop().await,
                                 fault: ServiceFault::DrainedWithOutstanding { cause, missing },
                                 custody,
                             },

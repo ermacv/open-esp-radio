@@ -433,7 +433,7 @@ impl PortBody<Backend> for Discover {
     ) -> Ended<'id, Backend, Self::Output> {
         let mut owner = match owner.enable().await {
             Ok(owner) => owner,
-            Err(failed) => return Ended::fail_stopped(failed.fail_stop(), Err("enable")),
+            Err(failed) => return Ended::fail_stopped(failed.fail_stop().await, Err("enable")),
         };
         let output = {
             let mut phase = owner.phase();
@@ -459,7 +459,7 @@ impl PortBody<Backend> for Discover {
             .await
         {
             Ok(owner) => owner,
-            Err(failed) => return Ended::fail_stopped(failed.fail_stop(), Err("disable")),
+            Err(failed) => return Ended::fail_stopped(failed.fail_stop().await, Err("disable")),
         };
         Ended::uninstall(owner, (), output)
     }
@@ -531,7 +531,7 @@ impl PortBody<Backend> for Exchange {
     ) -> Ended<'id, Backend, Self::Output> {
         let mut owner = match owner.enable().await {
             Ok(owner) => owner,
-            Err(failed) => return Ended::fail_stopped(failed.fail_stop(), Err("enable")),
+            Err(failed) => return Ended::fail_stopped(failed.fail_stop().await, Err("enable")),
         };
         if let catalog::Case::Ownership(scenario) = self.case {
             return ownership::run(owner, resources, self.peer, scenario, self.bodies).await;
@@ -561,7 +561,7 @@ impl PortBody<Backend> for Exchange {
             .await
         {
             Ok(owner) => owner,
-            Err(failed) => return Ended::fail_stopped(failed.fail_stop(), Err("disable")),
+            Err(failed) => return Ended::fail_stopped(failed.fail_stop().await, Err("disable")),
         };
         Ended::uninstall(owner, (), output)
     }

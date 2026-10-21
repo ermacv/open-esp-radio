@@ -151,7 +151,7 @@ impl PortBody<Backend> for Body {
             End::Quarantined => {
                 assert!(returned.is_empty());
                 assert_eq!(self.drops.get(), 0);
-                Ended::fail_stopped(owner.fail_stop(), ())
+                Ended::fail_stopped(owner.fail_stop().await, ())
             }
         }
     }

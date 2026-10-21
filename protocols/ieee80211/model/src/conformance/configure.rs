@@ -62,7 +62,7 @@ impl PortBody<Backend> for Exercise {
         let mut owner = match owner.enable().await {
             Ok(owner) => owner,
             Err(failed) => {
-                return Ended::fail_stopped(failed.fail_stop(), Err("configuration enable"));
+                return Ended::fail_stopped(failed.fail_stop().await, Err("configuration enable"));
             }
         };
         let drops = Rc::new(Cell::new(0));
@@ -132,7 +132,7 @@ impl PortBody<Backend> for Exercise {
                     Ok(owner) => owner,
                     Err(failed) => {
                         return Ended::fail_stopped(
-                            failed.fail_stop(),
+                            failed.fail_stop().await,
                             Err("configuration disable"),
                         );
                     }
@@ -141,7 +141,7 @@ impl PortBody<Backend> for Exercise {
                     Ok(owner) => owner,
                     Err(failed) => {
                         return Ended::fail_stopped(
-                            failed.fail_stop(),
+                            failed.fail_stop().await,
                             Err("configuration reenable"),
                         );
                     }
@@ -203,6 +203,8 @@ async fn stop<'p, 'id>(
         .await
     {
         Ok(owner) => Ended::uninstall(owner, (), result),
-        Err(failed) => Ended::fail_stopped(failed.fail_stop(), Err("configuration final disable")),
+        Err(failed) => {
+            Ended::fail_stopped(failed.fail_stop().await, Err("configuration final disable"))
+        }
     }
 }
