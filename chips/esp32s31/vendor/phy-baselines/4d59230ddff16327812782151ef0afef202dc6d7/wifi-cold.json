@@ -7,10 +7,10 @@
   "signature": {
     "idf-revision": "4d59230ddff16327812782151ef0afef202dc6d7",
     "scenario-sha256": "d76e60adfd4a483617184b1e0effdbf4264a8a67a6087c336e889f2b99b4c1f4",
-    "model-sha256": "1404e9f26a0584785bbb3f52d00f8f80c7a92d0deae4a316c102f5869be553c6",
+    "model-sha256": "fcd53e5da514bad5d5a7b299202af81269737f84a4acf86fae5d63e08485ef43",
     "relation-sha256": "9cfaa367b51c6fecf0bf37a8bffe7a97fb8c2f221bcc4aa5c840437f1ee94dc2",
-    "review-sha256": "47fd88c23c9c6723889b831d4e428600932d29a700f8d2a0cd0cbba1fa839e7f",
-    "recipe-sha256": "0665443dbac78f8fcc28206005df4e2e0da9064c41cc2fecec8c02c1c64accba"
+    "review-sha256": "3f3af92decee5d0205110e81879b09b7bb63517d7a4608b2d0237e4b3638f93c",
+    "recipe-sha256": "eb261e51b765489cc5f61912ef78d479be7c34e229e4be78bd84a9885884d6cf"
   },
   "vendor-application-sha256": "e7c115dedfdb1fbf65372ef18655855b2f7d5b415f00de5a2d8347fc0940272a",
   "channel": 1,

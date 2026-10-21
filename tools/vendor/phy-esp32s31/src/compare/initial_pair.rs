@@ -62,9 +62,9 @@ pub(super) fn compare(
             ])
         };
         let initial = pair_at(0)?;
-        for gain in 0..field.count / 2 {
+        for (gain, bounds) in summary.vendor.chunks_exact(2).enumerate() {
+            let gain = gain as u32;
             let pair = pair_at(gain)?;
-            let bounds = &summary.vendor[gain as usize * 2..gain as usize * 2 + 2];
             if pair
                 .iter()
                 .zip(bounds)
