@@ -812,8 +812,10 @@ impl RfpllFrequencyI2cBinding {
         })
     }
 
-    pub const fn action(&self) -> crate::calibration::cold::PhyColdI2cAction {
-        self.transaction.action()
+    pub(crate) fn transaction_mut(
+        &mut self,
+    ) -> &mut crate::calibration::cold::PhyColdI2cTransaction {
+        &mut self.transaction
     }
 
     #[cfg(any(test, oer_probe))]
@@ -846,25 +848,6 @@ impl RfpllFrequencyI2cBinding {
         crate::calibration::cold::PhyColdI2cError,
     > {
         self.transaction.observe_write_result(result)
-    }
-
-    #[cfg(target_arch = "riscv32")]
-    pub fn start_target<P: oer_esp32s31_hal::owner::SharedPhyAccess>(
-        &mut self,
-        platform: &mut P,
-    ) -> Result<(), crate::calibration::cold::PhyColdI2cError> {
-        self.transaction.start_target(platform)
-    }
-
-    #[cfg(target_arch = "riscv32")]
-    pub fn observe_target_edge<P: oer_esp32s31_hal::owner::SharedPhyAccess>(
-        &mut self,
-        platform: &mut P,
-    ) -> Result<
-        crate::calibration::cold::PhyColdI2cObservation,
-        crate::calibration::cold::PhyColdI2cError,
-    > {
-        self.transaction.observe_target_edge(platform)
     }
 
     pub fn into_completion(self) -> Result<RfpllFrequencyCompletion, RfpllFrequencyBindingError> {

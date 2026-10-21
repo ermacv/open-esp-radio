@@ -91,7 +91,6 @@ impl Correction {
         }
     }
 
-    #[inline(always)]
     pub fn advance(&mut self, completion: Completion) -> Result<(), Error> {
         match (&mut self.step, completion) {
             (Step::Search(search), Completion::Search(completion)) => {

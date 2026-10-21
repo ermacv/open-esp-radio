@@ -18,6 +18,7 @@ fn poll_stamp_includes_the_completed_body_and_preserves_the_ready_endpoint() {
         true,
         Some((deadline, resumed)),
         Some(Duration::from_micros(47)),
+        None,
     );
     assert_eq!(finished, clock.now());
     assert_eq!(
@@ -495,4 +496,76 @@ fn preparation_trace_reports_truncation_without_losing_the_failure() {
     assert_eq!(trace.failure_busy, Some(0));
     assert_eq!(trace.failure_elapsed_micros, 21);
     assert_eq!(trace.failure_lateness_micros, 19);
+}
+
+#[test]
+fn rfpll_command_maxima_keep_the_breakdown_of_the_same_poll() {
+    use super::{RfpllCommand, RfpllCommandSample, RfpllEngineTrace};
+    use oer_time::{Clock, Duration};
+    use oer_time_virtual::VirtualClock;
+    let clock = VirtualClock::<1>::new();
+    let mut trace = RfpllEngineTrace::default();
+    for (command, poll, publication, readiness) in [
+        (RfpllCommand::CapLow, 45, 12, 8),
+        (RfpllCommand::CapLow, 40, 20, 9),
+        (RfpllCommand::Status, 30, 10, 5),
+    ] {
+        let start = clock.now();
+        clock
+            .advance(Duration::from_micros(poll))
+            .expect("time fits");
+        let mut timing = super::EngineTiming::default();
+        timing.poll_finished(
+            &clock,
+            start,
+            true,
+            None,
+            None,
+            Some((
+                &mut trace,
+                RfpllCommandSample {
+                    command,
+                    publication_micros: publication,
+                    readiness_micros: readiness,
+                    invalid: false,
+                },
+            )),
+        );
+    }
+    let cap = trace.commands[RfpllCommand::CapLow as usize];
+    assert_eq!(
+        (
+            cap.poll_micros,
+            cap.publication_micros,
+            cap.readiness_micros
+        ),
+        (45, 12, 8)
+    );
+    assert_eq!(
+        trace.commands[RfpllCommand::Status as usize].poll_micros,
+        30
+    );
+    assert!(!trace.invalid);
+    let at = clock.now();
+    clock
+        .advance(Duration::from_micros(u64::from(u16::MAX) + 1))
+        .expect("time fits");
+    let mut timing = super::EngineTiming::default();
+    timing.poll_finished(
+        &clock,
+        at,
+        true,
+        None,
+        None,
+        Some((
+            &mut trace,
+            RfpllCommandSample {
+                command: RfpllCommand::Status,
+                publication_micros: 0,
+                readiness_micros: 0,
+                invalid: false,
+            },
+        )),
+    );
+    assert!(timing.invalid);
 }

@@ -118,6 +118,100 @@ impl ReadinessTrace {
     }
 }
 
+/// RFPLL helper command whose complete publication/readiness fits one poll.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(u8)]
+pub enum RfpllCommand {
+    InitialLow,
+    InitialHigh,
+    EnableRead,
+    EnableWrite,
+    CapLow,
+    CapHighRead,
+    CapHighWrite,
+    Status,
+    Memory,
+    Restore,
+}
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct RfpllCommandSample {
+    pub command: RfpllCommand,
+    pub publication_micros: u16,
+    pub readiness_micros: u16,
+    pub invalid: bool,
+}
+impl RfpllCommandSample {
+    #[inline(never)]
+    pub(crate) fn intervals(
+        command: RfpllCommand,
+        started: oer_time::Instant,
+        published: oer_time::Instant,
+        finished: oer_time::Instant,
+    ) -> Self {
+        let publication = published
+            .checked_duration_since(started)
+            .and_then(|d| u16::try_from(d.as_micros()).ok());
+        let readiness = finished
+            .checked_duration_since(published)
+            .and_then(|d| u16::try_from(d.as_micros()).ok());
+        Self {
+            command,
+            publication_micros: publication.unwrap_or(0),
+            readiness_micros: readiness.unwrap_or(0),
+            invalid: publication.is_none() || readiness.is_none(),
+        }
+    }
+    pub(crate) fn elapsed<C: oer_time::Clock>(
+        command: RfpllCommand,
+        started: Option<oer_time::Instant>,
+        clock: &C,
+    ) -> Self {
+        if let Some(at) = started {
+            let finished = clock.now();
+            Self::intervals(command, at, finished, finished)
+        } else {
+            Self {
+                command,
+                publication_micros: 0,
+                readiness_micros: 0,
+                invalid: false,
+            }
+        }
+    }
+}
+
+/// Correlated breakdown of the worst poll for one RFPLL command. The residual
+/// poll minus publication/readiness is engine/model/observer overhead.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct RfpllCommandMaximum {
+    pub poll_micros: u16,
+    pub publication_micros: u16,
+    pub readiness_micros: u16,
+}
+/// Observer-owned bounded diagnostics; the admitted future borrows this store.
+#[derive(Debug, Default)]
+pub struct RfpllEngineTrace {
+    pub commands: [RfpllCommandMaximum; 10],
+    pub invalid: bool,
+}
+impl RfpllEngineTrace {
+    fn prepare(&mut self, sample: RfpllCommandSample) -> &mut RfpllCommandMaximum {
+        self.invalid |= sample.invalid;
+        &mut self.commands[sample.command as usize]
+    }
+}
+impl RfpllCommandMaximum {
+    fn record(&mut self, sample: RfpllCommandSample, elapsed: u16) {
+        if elapsed >= self.poll_micros {
+            *self = Self {
+                poll_micros: elapsed,
+                publication_micros: sample.publication_micros,
+                readiness_micros: sample.readiness_micros,
+            };
+        }
+    }
+}
+
 /// Clock-free aggregate of actual engine polls and timer resumes.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct EngineTiming {
@@ -133,68 +227,79 @@ pub struct EngineTiming {
     pub invalid: bool,
 }
 impl EngineTiming {
-    /// Update the bounded event counters before taking the final poll stamp.
-    /// Only the final duration sum/max stores follow that stamp.
-    #[inline(never)]
-    pub(crate) fn poll_finished<C: oer_time::Clock>(
-        &mut self,
-        clock: &C,
-        started: oer_time::Instant,
-        pending: bool,
-        resumed: Option<(oer_time::Instant, oer_time::Instant)>,
-        ready_elapsed: Option<oer_time::Duration>,
-    ) -> oer_time::Instant {
-        fn increment(total: &mut u16, invalid: &mut bool) {
-            if let Some(next) = total.checked_add(1) {
-                *total = next;
-            } else {
-                *invalid = true;
+    oer_esp32s31_hal::place_phy_engine_hot_path! {
+        /// Update the bounded event counters before taking the final poll stamp.
+        /// Only the final duration sum/max stores follow that stamp.
+        #[inline(never)]
+        pub(crate) fn poll_finished<C: oer_time::Clock>(
+            &mut self,
+            clock: &C,
+            started: oer_time::Instant,
+            pending: bool,
+            resumed: Option<(oer_time::Instant, oer_time::Instant)>,
+            ready_elapsed: Option<oer_time::Duration>,
+            rfpll: Option<(&mut RfpllEngineTrace, RfpllCommandSample)>,
+        ) -> oer_time::Instant {
+            fn increment(total: &mut u16, invalid: &mut bool) {
+                if let Some(next) = total.checked_add(1) {
+                    *total = next;
+                } else {
+                    *invalid = true;
+                }
             }
-        }
-        fn add(total: &mut u32, amount: u32, invalid: &mut bool) {
-            if let Some(next) = total.checked_add(amount) {
-                *total = next;
-            } else {
-                *invalid = true;
+            fn add(total: &mut u32, amount: u32, invalid: &mut bool) {
+                if let Some(next) = total.checked_add(amount) {
+                    *total = next;
+                } else {
+                    *invalid = true;
+                }
             }
-        }
-        increment(&mut self.polls, &mut self.invalid);
-        if pending {
-            increment(&mut self.pending, &mut self.invalid);
-        }
-        if let Some((deadline, at)) = resumed {
-            if let Some(late) = at
-                .checked_duration_since(deadline)
+            increment(&mut self.polls, &mut self.invalid);
+            if pending {
+                increment(&mut self.pending, &mut self.invalid);
+            }
+            if let Some((deadline, at)) = resumed {
+                if let Some(late) = at
+                    .checked_duration_since(deadline)
+                    .and_then(|d| u32::try_from(d.as_micros()).ok())
+                {
+                    increment(&mut self.resumes, &mut self.invalid);
+                    add(&mut self.lateness_micros, late, &mut self.invalid);
+                    self.maximum_lateness_micros = self.maximum_lateness_micros.max(late);
+                } else {
+                    self.invalid = true;
+                }
+            }
+            if let Some(elapsed) = ready_elapsed {
+                if let Ok(elapsed) = u32::try_from(elapsed.as_micros()) {
+                    increment(&mut self.ready_edges, &mut self.invalid);
+                    self.maximum_ready_micros = self.maximum_ready_micros.max(elapsed);
+                } else {
+                    self.invalid = true;
+                }
+            }
+            let command = rfpll.map(|(trace, sample)| (trace.prepare(sample), sample));
+            // Includes the event/overflow/ready/command accounting above. No observer,
+            // formatter or report runs inside this measured interval.
+            let finished = clock.now();
+            if let Some(elapsed) = finished
+                .checked_duration_since(started)
                 .and_then(|d| u32::try_from(d.as_micros()).ok())
             {
-                increment(&mut self.resumes, &mut self.invalid);
-                add(&mut self.lateness_micros, late, &mut self.invalid);
-                self.maximum_lateness_micros = self.maximum_lateness_micros.max(late);
+                add(&mut self.total_micros, elapsed, &mut self.invalid);
+                self.maximum_micros = self.maximum_micros.max(elapsed);
+                if let Some((row, sample)) = command {
+                    if let Ok(elapsed) = u16::try_from(elapsed) {
+                        row.record(sample, elapsed);
+                    } else {
+                        self.invalid = true;
+                    }
+                }
             } else {
                 self.invalid = true;
             }
+            finished
         }
-        if let Some(elapsed) = ready_elapsed {
-            if let Ok(elapsed) = u32::try_from(elapsed.as_micros()) {
-                increment(&mut self.ready_edges, &mut self.invalid);
-                self.maximum_ready_micros = self.maximum_ready_micros.max(elapsed);
-            } else {
-                self.invalid = true;
-            }
-        }
-        // Includes the event/overflow/ready accounting above. No observer,
-        // formatter or report runs inside this measured interval.
-        let finished = clock.now();
-        if let Some(elapsed) = finished
-            .checked_duration_since(started)
-            .and_then(|d| u32::try_from(d.as_micros()).ok())
-        {
-            add(&mut self.total_micros, elapsed, &mut self.invalid);
-            self.maximum_micros = self.maximum_micros.max(elapsed);
-        } else {
-            self.invalid = true;
-        }
-        finished
     }
 }
 

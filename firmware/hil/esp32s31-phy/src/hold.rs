@@ -65,6 +65,7 @@ pub struct Observer<'a>(
     pub sar_tails::Tails,
     &'a mut HoldPolls,
     Option<&'a mut oer_esp32s31_phy::tracking::observation::ReadinessTrace>,
+    oer_esp32s31_phy::tracking::observation::RfpllEngineTrace,
 );
 impl<'a> Observer<'a> {
     pub fn new(
@@ -77,18 +78,36 @@ impl<'a> Observer<'a> {
             sar_tails::Tails::default(),
             engine,
             trace,
+            oer_esp32s31_phy::tracking::observation::RfpllEngineTrace::default(),
         )
     }
 }
 impl PhyTargetObserver for &mut Observer<'_> {
     const OBSERVE_ENGINE_POLLS: bool = true;
+    fn rfpll_engine_trace(
+        &mut self,
+    ) -> Option<&mut oer_esp32s31_phy::tracking::observation::RfpllEngineTrace> {
+        self.4 = Default::default();
+        Some(&mut self.4)
+    }
     fn readiness_trace(
         &mut self,
     ) -> Option<&mut oer_esp32s31_phy::tracking::observation::ReadinessTrace> {
         self.3.as_deref_mut()
     }
     #[inline(never)]
-    fn engine_completed(&mut self, timing: oer_esp32s31_phy::tracking::observation::EngineTiming) {
+    fn engine_completed(
+        &mut self,
+        operation: Operation,
+        mut timing: oer_esp32s31_phy::tracking::observation::EngineTiming,
+    ) {
+        if operation == Operation::Rfpll {
+            timing.invalid |= self.4.invalid;
+        }
+        report_engine(operation, &timing);
+        if operation == Operation::Rfpll {
+            report_rfpll_commands(&self.4);
+        }
         self.2.merge(HoldPolls {
             polls: timing.polls,
             pending: timing.pending,
@@ -129,6 +148,67 @@ impl PhyTargetObserver for &mut Observer<'_> {
             _ => {}
         }
     }
+}
+
+/// Family formatting stays outside the observer and measured driver frames.
+#[inline(never)]
+fn report_engine(
+    operation: Operation,
+    timing: &oer_esp32s31_phy::tracking::observation::EngineTiming,
+) {
+    use oer_esp32s31_board::rom::print_fmt;
+    let family = match operation {
+        Operation::Rfpll => 1,
+        Operation::Temperature => 7,
+        _ => 0,
+    };
+    print_fmt(format_args!(
+        "OPEN_RADIO_HIL engine family={} polls={} pending={} ready={}\n",
+        family,
+        timing.polls,
+        timing.pending,
+        timing.polls.saturating_sub(timing.pending)
+    ));
+    print_fmt(format_args!(
+        "OPEN_RADIO_HIL engine family={} total-us={} max-us={}\n",
+        family, timing.total_micros, timing.maximum_micros
+    ));
+    print_fmt(format_args!(
+        "OPEN_RADIO_HIL engine family={} resumes={} late-total-us={}\n",
+        family, timing.resumes, timing.lateness_micros
+    ));
+    print_fmt(format_args!(
+        "OPEN_RADIO_HIL engine family={} late-max-us={} invalid={}\n",
+        family, timing.maximum_lateness_micros, timing.invalid
+    ));
+}
+
+/// Lossless UART quartet: invalid bit 63, command bits 48..62, then
+/// poll/publication/readiness as three u16 values. One formatter argument
+/// keeps the diagnostic frame/code inside the same application budgets.
+#[inline(never)]
+fn report_rfpll_commands(trace: &oer_esp32s31_phy::tracking::observation::RfpllEngineTrace) {
+    for (command, row) in trace.commands.iter().enumerate() {
+        report_rfpll_command(command, row, trace.invalid);
+    }
+}
+
+#[inline(never)]
+fn report_rfpll_command(
+    command: usize,
+    row: &oer_esp32s31_phy::tracking::observation::RfpllCommandMaximum,
+    invalid: bool,
+) {
+    use oer_esp32s31_board::rom::print_fmt;
+    let packed = (u64::from(invalid) << 63)
+        | ((command as u64) << 48)
+        | (u64::from(row.poll_micros) << 32)
+        | (u64::from(row.publication_micros) << 16)
+        | u64::from(row.readiness_micros);
+    print_fmt(format_args!(
+        "OPEN_RADIO_HIL rfpll-command-packed={}\n",
+        packed
+    ));
 }
 
 /// Report preparation only after maintenance returns, including failures.

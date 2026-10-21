@@ -12,7 +12,7 @@ use oer_time::Timer;
 
 type Result =
     core::result::Result<(PhyParamTrackingCompletion, PhyTemperatureOutcome), PhyTargetPortError>;
-pub(super) async fn temperature<R: Registers, T: Timer>(
+pub(super) async fn temperature<D: crate::PhyShortDelay, R: Registers, T: Timer>(
     timer: &T,
     mut child: PhyParamTrackingTemperatureTransition<'_>,
     registers: &mut R,
@@ -21,7 +21,7 @@ pub(super) async fn temperature<R: Registers, T: Timer>(
 ) -> (Result, EngineTiming) {
     let started = Some(timer.now().as_micros());
     let mut timing = EngineTiming::default();
-    let result = match step::temperature::sample(
+    let result = match step::temperature::sample::<D, _, _>(
         child.transition_mut(),
         registers,
         timer,
@@ -38,8 +38,9 @@ pub(super) async fn temperature<R: Registers, T: Timer>(
     };
     (result, timing)
 }
-fn port_error(error: Failure) -> PhyTargetPortError {
+pub(super) fn port_error(error: Failure) -> PhyTargetPortError {
     match error {
+        Failure::Target(error) => error,
         Failure::DeadlineOverflow => PhyTargetPortError::DeadlineOverflow,
         Failure::TimedOut => PhyTargetPortError::HardwareEdgeTimedOut,
         Failure::Binding => PhyTargetPortError::UnexpectedBinding,

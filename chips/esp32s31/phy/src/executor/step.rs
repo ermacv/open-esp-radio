@@ -1,5 +1,6 @@
 //! Private PHY transport jobs. Hardware ownership stays with the caller.
 mod io;
+pub(crate) mod rfpll;
 pub(crate) mod temperature;
 pub(crate) use io::Registers;
 
@@ -20,7 +21,7 @@ use core::{
     task::{Context, Poll},
 };
 use io::Io;
-use oer_time::{Duration, Instant, Timer};
+use oer_time::{Clock, Duration, Instant, Timer};
 
 const EDGE_MICROS: u64 = super::wait::poll::OBSERVATION_MICROS;
 const RETRY: Duration = Duration::from_micros(1);
@@ -41,6 +42,8 @@ pub(crate) enum Failure {
     DeadlineOverflow,
     TimedOut,
     Binding,
+    #[cfg(target_arch = "riscv32")]
+    Target(crate::target_executor::PhyTargetPortError),
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum Outcome {
@@ -55,12 +58,15 @@ pub(crate) enum Outcome {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum Step {
     Runnable,
+    Rfpll(crate::tracking::observation::RfpllCommandSample),
     WaitAt(Instant),
     Complete,
     Failure(Failure),
 }
 
 enum Work<'a> {
+    Rfpll(rfpll::Run<'a>),
+    RfpllColdI2c(rfpll::ColdI2c<'a>),
     I2c(&'a mut PhyColdI2cTransaction),
     Code(Option<u8>),
     Pbus(&'a mut PhyPbusHardwareBinding),
@@ -72,8 +78,11 @@ enum Work<'a> {
 
 pub(crate) struct Job<'a> {
     work: Work<'a>,
+    // Transport answer deadline, or RFPLL's earliest status time after a
+    // completed capacitor write. RFPLL never arms a timer from this field.
     deadline: Instant,
     temperature: bool,
+    rfpll_observed: bool,
     first_wait: bool,
     finished: bool,
     start_pending: bool,
@@ -86,6 +95,7 @@ impl<'a> Job<'a> {
             work,
             deadline: deadline(now)?,
             temperature,
+            rfpll_observed: false,
             first_wait: false,
             finished: false,
             start_pending: temperature,
@@ -102,6 +112,23 @@ impl<'a> Job<'a> {
             now,
             matches!(timing, I2cTiming::Temperature),
         )
+    }
+    pub(crate) fn rfpll(cursor: rfpll::Cursor<'a>, now: Instant) -> Result<Self, Failure> {
+        Self::new(Work::Rfpll(rfpll::Run::new(cursor)), now, false)
+    }
+    pub(crate) fn rfpll_cold_i2c(
+        transaction: &'a mut PhyColdI2cTransaction,
+        now: Instant,
+    ) -> Result<Self, Failure> {
+        let mut job = Self::new(
+            Work::RfpllColdI2c(rfpll::ColdI2c::new(transaction)),
+            now,
+            false,
+        )?;
+        // Cold uses the existing attempt budget rather than an elapsed answer
+        // window; Driver must not clamp its real waits to a direct deadline.
+        job.deadline = Instant::from_micros(u64::MAX);
+        Ok(job)
     }
     pub(crate) fn code(now: Instant) -> Result<Self, Failure> {
         Self::new(Work::Code(None), now, false)
@@ -163,12 +190,22 @@ impl<'a> Job<'a> {
         })
     }
 
-    /// Exactly one hardware atom, or a terminal software-only recognition.
-    /// Temperature conversion, state publication and observers are outside it.
+    /// One admitted hardware checkpoint, or terminal software-only recognition.
+    /// RFPLL retains partial helpers across complete bus-command checkpoints
+    /// and keeps complete memory entries inside a checkpoint;
+    /// temperature conversion, state publication and observers are outside it.
     #[inline(never)]
-    fn advance_one(&mut self, io: Io<'_, '_>, now: Instant) -> Step {
-        match self.advance(io, now) {
-            Ok(step) => {
+    fn advance_one<D: super::wait::PhyShortDelay, C: oer_time::Clock>(
+        &mut self,
+        io: Io<'_, '_>,
+        clock: &C,
+        now: Instant,
+    ) -> Step {
+        match self.advance::<D, _>(io, clock, now) {
+            Ok(mut step) => {
+                if matches!(step, Step::Rfpll(_)) && !self.rfpll_observed {
+                    step = Step::Runnable;
+                }
                 if matches!(step, Step::Complete) {
                     self.finished = true;
                 }
@@ -177,10 +214,24 @@ impl<'a> Job<'a> {
             Err(error) => Step::Failure(error),
         }
     }
-    fn advance(&mut self, mut io: Io<'_, '_>, now: Instant) -> Result<Step, Failure> {
+    fn advance<D: super::wait::PhyShortDelay, C: oer_time::Clock>(
+        &mut self,
+        mut io: Io<'_, '_>,
+        clock: &C,
+        now: Instant,
+    ) -> Result<Step, Failure> {
         self.ready_started = None;
         self.first_wait = false;
         match &mut self.work {
+            Work::Rfpll(run) => {
+                return io.advance_rfpll::<D, _>(
+                    clock,
+                    run,
+                    &mut self.deadline,
+                    self.rfpll_observed,
+                );
+            }
+            Work::RfpllColdI2c(cursor) => return cursor.advance_one(&mut io, now),
             Work::Code(code) => {
                 if code.is_some() {
                     return Ok(Step::Complete);
@@ -370,11 +421,13 @@ enum Gate {
 }
 
 pin_project_lite::pin_project! {
-    struct Driver<'a, 'j, R, T, F, M> {
+    struct Driver<'a, 'j, R, T, F, M, D> {
+        delay: core::marker::PhantomData<D>,
         job: &'a mut Job<'j>,
         registers: &'a mut R,
         timer: &'a T,
         stats: Option<&'a mut EngineTiming>,
+        rfpll: Option<&'a mut crate::tracking::observation::RfpllEngineTrace>,
         trace: Option<&'a mut ReadinessTrace>,
         #[pin]
         wait: Option<F>,
@@ -383,151 +436,187 @@ pin_project_lite::pin_project! {
         gate: Gate,
     }
 }
-impl<R: Registers, T: Timer, F: Future<Output = ()>, M: Fn(Instant) -> F> Future
-    for Driver<'_, '_, R, T, F, M>
+impl<
+    R: Registers,
+    T: Timer,
+    F: Future<Output = ()>,
+    M: Fn(Instant) -> F,
+    D: super::wait::PhyShortDelay,
+> Future for Driver<'_, '_, R, T, F, M, D>
 {
     type Output = Result<(), Failure>;
-    /// A single emitted poll per timer/register type, independent of observer.
-    #[inline(never)]
-    fn poll(self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<Self::Output> {
-        let mut this = self.project();
-        let started = this.stats.as_ref().map(|_| this.timer.now());
-        let mut resumed = None;
-        let mut advanced = false;
-        let mut ready_elapsed = None;
-        let result = loop {
-            if *this.gate == Gate::Yield {
-                if let Some(trace) = this.trace.as_deref_mut() {
-                    trace.yield_resumed(
-                        this.timer
-                            .now()
-                            .saturating_duration_since(*this.wait_at)
-                            .as_micros(),
-                    );
-                }
-                *this.gate = Gate::Idle;
-            }
-            if *this.gate != Gate::Idle {
-                let at = *this.wait_at;
-                // One timer-poll site. A ready future is never polled again.
-                let ready = if *this.gate == Gate::Ready {
-                    true
-                } else if let Some(wait) = this.wait.as_mut().as_pin_mut() {
-                    poll_timer(wait, context).is_ready()
-                } else {
-                    break Poll::Ready(Err(Failure::Binding));
-                };
-                if advanced {
-                    *this.gate = if ready { Gate::Ready } else { Gate::Waiting };
-                    if ready {
-                        context.waker().wake_by_ref();
+    oer_esp32s31_hal::place_phy_engine_hot_path! {
+        /// A single emitted poll per timer/register type, independent of observer.
+        #[inline(never)]
+        fn poll(self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<Self::Output> {
+            let mut this = self.project();
+            // Share the platform clock conversion across all poll branches. The
+            // concrete Timer still owns every wait; observation uses that same clock.
+            let clock = &rfpll::OutlinedClock(*this.timer);
+            let started = this.stats.as_ref().map(|_| clock.now());
+            let mut resumed = None;
+            let mut advanced = false;
+            let mut ready_elapsed = None;
+            let mut rfpll_sample = None;
+            let result = loop {
+                if *this.gate == Gate::Yield {
+                    if let Some(trace) = this.trace.as_deref_mut() {
+                        trace.yield_resumed(
+                            clock
+                                .now()
+                                .saturating_duration_since(*this.wait_at)
+                                .as_micros(),
+                        );
                     }
-                    break Poll::Pending;
+                    *this.gate = Gate::Idle;
                 }
-                if !ready {
-                    break Poll::Pending;
+                if *this.gate != Gate::Idle {
+                    let at = *this.wait_at;
+                    // One timer-poll site. A ready future is never polled again.
+                    let ready = if *this.gate == Gate::Ready {
+                        true
+                    } else if let Some(wait) = this.wait.as_mut().as_pin_mut() {
+                        poll_timer(wait, context).is_ready()
+                    } else {
+                        break Poll::Ready(Err(Failure::Binding));
+                    };
+                    if advanced {
+                        *this.gate = if ready { Gate::Ready } else { Gate::Waiting };
+                        if ready {
+                            context.waker().wake_by_ref();
+                        }
+                        break Poll::Pending;
+                    }
+                    if !ready {
+                        break Poll::Pending;
+                    }
+                    resumed = Some((at, clock.now()));
+                    *this.gate = Gate::Idle;
                 }
-                resumed = Some((at, this.timer.now()));
-                *this.gate = Gate::Idle;
-            }
-            let sample = this.trace.as_ref().and_then(|_| match &this.job.work {
-                Work::I2c(t) => match t.action() {
-                    PhyColdI2cAction::StartRead { .. } | PhyColdI2cAction::StartWrite { .. } => {
-                        Some(None)
-                    }
-                    PhyColdI2cAction::AwaitReadCompletionEdge { .. }
-                    | PhyColdI2cAction::AwaitWriteCompletionEdge { .. } => {
-                        Some(Some(this.job.first_wait))
-                    }
+                let sample = this.trace.as_ref().and_then(|_| match &this.job.work {
+                    Work::I2c(t) => match t.action() {
+                        PhyColdI2cAction::StartRead { .. } | PhyColdI2cAction::StartWrite { .. } => {
+                            Some(None)
+                        }
+                        PhyColdI2cAction::AwaitReadCompletionEdge { .. }
+                        | PhyColdI2cAction::AwaitWriteCompletionEdge { .. } => {
+                            Some(Some(this.job.first_wait))
+                        }
+                        _ => None,
+                    },
                     _ => None,
-                },
-                _ => None,
-            });
-            let now = this.timer.now();
-            let mut step = this.registers.advance(this.job, now);
-            // A successful T7 publication establishes a fresh answer window
-            // from its completion, including RMW's second command.
-            if this.job.first_wait {
-                let completed = this.timer.now();
-                match answer_deadline(completed) {
-                    Ok(at) => this.job.deadline = at,
-                    Err(error) => step = Step::Failure(error),
-                }
-            }
-            // Timestamp the completed readiness atom before trace/wake bookkeeping.
-            if this.stats.is_some() {
-                if let Some(at) = this.job.ready_started.take() {
-                    ready_elapsed = Some(this.timer.now().saturating_duration_since(at));
-                }
-            }
-            if let (Some(trace), Some(sample)) = (this.trace.as_deref_mut(), sample) {
-                if let Some(first) = sample {
-                    let failure = if step == Step::Failure(Failure::TimedOut) {
-                        // Status only: the rejected result remains unconsumed.
-                        Some((
-                            this.registers.i2c_status(),
-                            resumed.map_or(0, |(at, now)| {
-                                now.saturating_duration_since(at).as_micros()
-                            }),
-                        ))
-                    } else {
-                        None
-                    };
-                    trace.checked(
-                        now,
-                        first,
-                        matches!(step, Step::WaitAt(_))
-                            || failure.is_some_and(|(busy, _)| busy != 0),
-                        failure,
-                    );
-                } else if this.job.first_wait {
-                    trace.command_started(this.timer.now());
-                }
-            }
-            let at = match step {
-                Step::Complete => break Poll::Ready(Ok(())),
-                Step::Failure(error) => break Poll::Ready(Err(error)),
-                Step::Runnable => {
-                    *this.gate = Gate::Yield;
-                    context.waker().wake_by_ref();
-                    *this.wait_at = this.timer.now();
-                    break Poll::Pending;
-                }
-                Step::WaitAt(at) => {
-                    // Backoff starts after the status/command atom. The first
-                    // temperature observation keeps its full 1-us minimum.
-                    let completed = this.timer.now();
-                    let Some(at) = completed.checked_add(at.saturating_duration_since(now)) else {
-                        break Poll::Ready(Err(Failure::DeadlineOverflow));
-                    };
-                    if this.job.first_wait {
-                        at
-                    } else {
-                        at.min(this.job.deadline)
+                });
+                // RFPLL measures its own command/settle Instants and returns only
+                // Runnable/terminal steps; it never reads the generic deadline now.
+                let now = if matches!(&this.job.work, Work::Rfpll(_)) {
+                    Instant::EPOCH
+                } else {
+                    clock.now()
+                };
+                let mut step = this.registers.advance::<D, _>(this.job, *this.timer, now);
+                // A successful T7 publication establishes a fresh answer window
+                // from its completion, including RMW's second command.
+                if this.job.first_wait {
+                    let completed = clock.now();
+                    match answer_deadline(completed) {
+                        Ok(at) => this.job.deadline = at,
+                        Err(error) => step = Step::Failure(error),
                     }
                 }
+                // Timestamp the completed readiness atom before trace/wake bookkeeping.
+                if this.stats.is_some() {
+                    if let Some(at) = this.job.ready_started.take() {
+                        ready_elapsed = Some(clock.now().saturating_duration_since(at));
+                    }
+                }
+                if let (Some(trace), Some(sample)) = (this.trace.as_deref_mut(), sample) {
+                    if let Some(first) = sample {
+                        trace_checked(trace, *this.registers, now, first, step, resumed);
+                    } else if this.job.first_wait {
+                        trace.command_started(clock.now());
+                    }
+                }
+                let at = match step {
+                    Step::Complete => break Poll::Ready(Ok(())),
+                    Step::Failure(error) => break Poll::Ready(Err(error)),
+                    Step::Rfpll(_) | Step::Runnable => {
+                        if let Step::Rfpll(sample) = step {
+                            rfpll_sample = Some(sample);
+                        }
+                        *this.gate = Gate::Yield;
+                        context.waker().wake_by_ref();
+                        // A voluntary yield has no timer deadline. Only the T7
+                        // readiness trace consumes its publication/resume interval.
+                        if this.trace.is_some() {
+                            *this.wait_at = clock.now();
+                        }
+                        break Poll::Pending;
+                    }
+                    Step::WaitAt(at) => {
+                        // Backoff starts after the status/command atom. The first
+                        // temperature observation keeps its full 1-us minimum.
+                        let completed = clock.now();
+                        let Some(at) = completed.checked_add(at.saturating_duration_since(now)) else {
+                            break Poll::Ready(Err(Failure::DeadlineOverflow));
+                        };
+                        if this.job.first_wait {
+                            at
+                        } else {
+                            at.min(this.job.deadline)
+                        }
+                    }
+                };
+                *this.wait_at = at;
+                if at <= clock.now() {
+                    *this.gate = Gate::Ready;
+                } else {
+                    this.wait.as_mut().set(Some((this.make_wait)(at)));
+                    *this.gate = Gate::Waiting;
+                }
+                advanced = true;
             };
-            *this.wait_at = at;
-            if at <= this.timer.now() {
-                *this.gate = Gate::Ready;
-            } else {
-                this.wait.as_mut().set(Some((this.make_wait)(at)));
-                *this.gate = Gate::Waiting;
+            if let (Some(stats), Some(started)) = (this.stats.as_deref_mut(), started) {
+                stats.poll_finished(
+                    clock,
+                    started,
+                    result.is_pending(),
+                    resumed,
+                    ready_elapsed,
+                    this.rfpll.as_deref_mut().zip(rfpll_sample),
+                );
             }
-            advanced = true;
-        };
-        if let (Some(stats), Some(started)) = (this.stats.as_deref_mut(), started) {
-            stats.poll_finished(
-                this.timer,
-                started,
-                result.is_pending(),
-                resumed,
-                ready_elapsed,
-            );
+            result
         }
-        result
     }
 }
+// Keep diagnostic failure/status accounting off the hardware dispatch path.
+// The caller's final poll stamp still includes this helper in full.
+#[inline(never)]
+fn trace_checked<R: Registers>(
+    trace: &mut ReadinessTrace,
+    registers: &mut R,
+    now: Instant,
+    first: bool,
+    step: Step,
+    resumed: Option<(Instant, Instant)>,
+) {
+    let failure = if step == Step::Failure(Failure::TimedOut) {
+        // Status only: the rejected result remains unconsumed.
+        Some((
+            registers.i2c_status(),
+            resumed.map_or(0, |(at, now)| now.saturating_duration_since(at).as_micros()),
+        ))
+    } else {
+        None
+    };
+    trace.checked(
+        now,
+        first,
+        matches!(step, Step::WaitAt(_)) || failure.is_some_and(|(busy, _)| busy != 0),
+        failure,
+    );
+}
+
 // Outline the concrete timer's own state machine once, so LLVM cannot
 // duplicate it around the voluntary and readiness branches of Driver::poll.
 #[inline(never)]
@@ -535,18 +624,22 @@ fn poll_timer<F: Future<Output = ()>>(wait: Pin<&mut F>, context: &mut Context<'
     wait.poll(context)
 }
 
-pub(crate) fn drive<'a, 'j, R: Registers, T: Timer>(
+pub(crate) fn drive<'a, 'j, D: super::wait::PhyShortDelay + 'a, R: Registers, T: Timer>(
     job: &'a mut Job<'j>,
     registers: &'a mut R,
     timer: &'a T,
     stats: Option<&'a mut EngineTiming>,
     trace: Option<&'a mut ReadinessTrace>,
+    rfpll: Option<&'a mut crate::tracking::observation::RfpllEngineTrace>,
 ) -> impl Future<Output = Result<(), Failure>> + 'a {
+    job.rfpll_observed = rfpll.is_some();
     Driver {
+        delay: core::marker::PhantomData::<D>,
         job,
         registers,
         timer,
         stats,
+        rfpll,
         trace,
         wait: None,
         make_wait: move |at| timer.wait_until(at),

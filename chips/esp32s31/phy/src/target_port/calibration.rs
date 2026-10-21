@@ -78,7 +78,7 @@ pub fn dcode<D: PhyShortDelay, P, C: oer_time::Clock + ?Sized>(
     clock: &C,
     mut child: PhyCalibrationDcodeTransition,
     _platform: &mut P,
-    registers: &mut impl SharedPhyAccess,
+    registers: &mut (impl SharedPhyAccess + crate::executor::step::Registers),
     mut observe: impl FnMut(bool),
 ) -> Result<PhyCalibrationTrackingCompletion, PhyTargetPortError> {
     use crate::analog::dcode::{PhyDcodeAction, PhyDcodeExternalBinding};
@@ -117,12 +117,14 @@ pub fn dcode<D: PhyShortDelay, P, C: oer_time::Clock + ?Sized>(
 fn complete_dcode_direct<D: PhyShortDelay, C: oer_time::Clock + ?Sized>(
     clock: &C,
     binding: crate::analog::dcode::PhyDcodeExternalBinding,
-    registers: &mut impl SharedPhyAccess,
+    registers: &mut (impl SharedPhyAccess + crate::executor::step::Registers),
 ) -> Result<crate::analog::dcode::PhyDcodeCompletion, PhyTargetPortError> {
     use crate::analog::dcode::{PhyDcodeCompletion, PhyDcodeExternalBinding};
     match binding {
         PhyDcodeExternalBinding::Rfpll(binding) => Ok(PhyDcodeCompletion::Rfpll(
-            complete_rfpll_hot::<D, _>(clock, binding, registers)?,
+            registers
+                .rfpll_atom::<D, _>(clock, binding)
+                .map_err(super::step::port_error)?,
         )),
         PhyDcodeExternalBinding::I2c(mut binding) => {
             use crate::analog::i2c::PhyI2cError;
@@ -185,7 +187,7 @@ pub fn rx_gain<D: PhyShortDelay, P, C: oer_time::Clock + ?Sized>(
     clock: &C,
     mut child: PhyCalibrationRxGainTransition,
     platform: &mut P,
-    registers: &mut impl SharedPhyContext,
+    registers: &mut (impl SharedPhyContext + crate::executor::step::Registers),
     observe: impl FnMut(crate::tracking::observation::Operation, crate::tracking::observation::Event),
     summarize: impl FnMut(crate::tracking::observation::RxGainExecution),
 ) -> Result<PhyCalibrationTrackingCompletion, PhyTargetPortError> {
@@ -209,7 +211,7 @@ pub fn rx_gain_init<D: PhyShortDelay, P, C: oer_time::Clock + ?Sized>(
     clock: &C,
     child: &mut crate::rx::gain::PhyRxGainInitTransition,
     _platform: &mut P,
-    registers: &mut impl SharedPhyContext,
+    registers: &mut (impl SharedPhyContext + crate::executor::step::Registers),
     mut observe: impl FnMut(
         crate::tracking::observation::Operation,
         crate::tracking::observation::Event,
@@ -316,7 +318,7 @@ fn force_rx_gain_pbus<C: oer_time::Clock + ?Sized>(
 fn rx_gain_rfpll_direct<D: PhyShortDelay, C: oer_time::Clock + ?Sized>(
     clock: &C,
     crystal_selector: u8,
-    registers: &mut impl SharedPhyAccess,
+    registers: &mut (impl SharedPhyAccess + crate::executor::step::Registers),
 ) -> Result<(), DirectRxGainDcError> {
     use crate::analog::rfpll::{
         RfpllFrequencyAction, RfpllFrequencyExternalBinding, RfpllFrequencyRequest,
@@ -336,7 +338,9 @@ fn rx_gain_rfpll_direct<D: PhyShortDelay, C: oer_time::Clock + ?Sized>(
             action => {
                 let binding = RfpllFrequencyExternalBinding::lower(action)
                     .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
-                let completion = complete_rfpll_hot::<D, _>(clock, binding, registers)?;
+                let completion = registers
+                    .rfpll_atom::<D, _>(clock, binding)
+                    .map_err(super::step::port_error)?;
                 transition
                     .advance(completion)
                     .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
@@ -348,7 +352,7 @@ fn rx_gain_rfpll_direct<D: PhyShortDelay, C: oer_time::Clock + ?Sized>(
 fn rx_gain_one_step_direct<D: PhyShortDelay, C: oer_time::Clock + ?Sized>(
     clock: &C,
     request: crate::rx::gain_calibration::PhyRxDcCalibrationRequest,
-    registers: &mut impl SharedPhyContext,
+    registers: &mut (impl SharedPhyContext + crate::executor::step::Registers),
     budget: &mut crate::target_executor::DirectOperationBudget,
     execution: &mut crate::tracking::observation::RxGainExecution,
 ) -> Result<crate::rx::gain_calibration::PhyRxDcCalibrationOutcome, DirectRxGainDcError> {
@@ -370,7 +374,7 @@ fn rx_gain_one_step_direct<D: PhyShortDelay, C: oer_time::Clock + ?Sized>(
 
 fn rx_gain_cleanup_direct<D: PhyShortDelay, C: oer_time::Clock + ?Sized>(
     clock: &C,
-    registers: &mut impl SharedPhyContext,
+    registers: &mut (impl SharedPhyContext + crate::executor::step::Registers),
 ) -> Result<(), PhyTargetPortError> {
     oer_esp32s31_hal::phy::pbus::configure_rx_clock(registers, false);
     oer_esp32s31_hal::phy::pbus::configure_tx_clock(registers, false);
@@ -395,7 +399,7 @@ fn rx_gain_cleanup_direct<D: PhyShortDelay, C: oer_time::Clock + ?Sized>(
 fn rx_gain_dc_direct<D: PhyShortDelay, C: oer_time::Clock + ?Sized>(
     clock: &C,
     parameters: crate::rx::gain_calibration::PhyRxGainDcParameters,
-    registers: &mut impl SharedPhyContext,
+    registers: &mut (impl SharedPhyContext + crate::executor::step::Registers),
     budget: &mut crate::target_executor::DirectOperationBudget,
     execution: &mut crate::tracking::observation::RxGainExecution,
 ) -> Result<
@@ -655,33 +659,6 @@ fn short_settle<D: PhyShortDelay>(micros: u32) -> Result<(), PhyTargetPortError>
     }
 }
 
-fn complete_rfpll_hot<D: PhyShortDelay, C: oer_time::Clock + ?Sized>(
-    clock: &C,
-    binding: crate::analog::rfpll::RfpllFrequencyExternalBinding,
-    registers: &mut impl SharedPhyAccess,
-) -> Result<crate::analog::rfpll::RfpllFrequencyCompletion, PhyTargetPortError> {
-    use crate::analog::rfpll::{
-        RfpllFrequencyAction, RfpllFrequencyCompletion, RfpllFrequencyExternalBinding,
-    };
-    match binding {
-        RfpllFrequencyExternalBinding::Mmio(binding) => match binding.action() {
-            RfpllFrequencyAction::ReadChannelReady { samples }
-                if samples >= CHANNEL_READY_SAMPLE_LIMIT =>
-            {
-                Ok(RfpllFrequencyCompletion::ChannelReadyTimedOut)
-            }
-            _ => Ok(binding.execute_target(registers)),
-        },
-        RfpllFrequencyExternalBinding::I2c(binding) => {
-            crate::target_executor::complete_rfpll_i2c_direct(clock, binding, registers)
-        }
-        RfpllFrequencyExternalBinding::Timer(binding) => {
-            short_settle::<D>(binding.micros())?;
-            Ok(binding.into_completion())
-        }
-    }
-}
-
 fn terminal_event<T, E>(result: &Result<T, E>) -> crate::tracking::observation::Event {
     use crate::tracking::observation::Event;
     if result.is_ok() {
@@ -756,7 +733,7 @@ pub fn channel<D: PhyShortDelay, P, O: PhyTargetObserver, C: oer_time::Clock + ?
     clock: &C,
     mut child: PhyCalibrationChannelTransition,
     platform: &mut P,
-    registers: &mut impl SharedPhyAccess,
+    registers: &mut (impl SharedPhyAccess + crate::executor::step::Registers),
     observer: &mut O,
 ) -> Result<PhyCalibrationTrackingCompletion, PhyTargetPortError> {
     for _ in 0..RF_OPERATION_LIMIT {
@@ -785,7 +762,7 @@ fn complete_channel_direct<
     clock: &C,
     binding: crate::channel::PhyChipChannelExternalBinding,
     platform: &mut P,
-    registers: &mut impl SharedPhyAccess,
+    registers: &mut (impl SharedPhyAccess + crate::executor::step::Registers),
     observer: &mut O,
 ) -> Result<crate::channel::PhyChipChannelCompletion, PhyTargetPortError> {
     use crate::channel::{

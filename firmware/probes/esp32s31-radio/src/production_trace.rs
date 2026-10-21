@@ -46,7 +46,7 @@ oer_probe_macros::probe! {
         let mut radio = validation_radio();
         let lease = &mut radio;
         let mut phy = lease.phy_hal();
-        let timer = TraceTimer::observations();
+        let timer = TraceTimer::observations().with_zero_time_polls();
         timer.run(oer_esp32s31_phy::target_port::rfpll::search::<
             RfpllTraceDelay,
             _,
@@ -92,7 +92,7 @@ oer_probe_macros::probe! {
         let mut radio = validation_radio();
         let lease = &mut radio;
         let mut phy = lease.phy_hal();
-        let timer = TraceTimer::observations();
+        let timer = TraceTimer::observations().with_zero_time_polls();
         timer.run(oer_esp32s31_phy::target_port::rfpll::maintain::<
             RfpllTraceDelay,
             _,
@@ -126,7 +126,7 @@ oer_probe_macros::probe! {
             threshold_override,
             current_channel,
         };
-        let timer = TraceTimer::observations();
+        let timer = TraceTimer::observations().with_zero_time_polls();
         timer.run(oer_esp32s31_phy::target_port::rfpll::track::<
             RfpllTraceDelay,
             _,
@@ -754,7 +754,7 @@ oer_probe_macros::probe! {
         // The PHY archive is compared without the coexistence archive, so its
         // weak grant-protect hooks return without effect.
         let mut grant = oer_esp32s31_phy::WeakPhyGrantProtect;
-        let timer = TraceTimer::observations();
+        let timer = TraceTimer::observations().with_zero_time_polls();
         let mut port =
             oer_esp32s31_phy::TargetPhyParamTrackingPort::<_, _, _, RfpllTraceDelay, _, _>::new(
                 &mut platform,

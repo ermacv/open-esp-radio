@@ -577,12 +577,17 @@ impl<'state> PhyParamTrackingRfpllTransition<'state> {
         self.child.action()
     }
 
+    #[cfg(any(test, oer_probe))]
     #[inline(always)]
     pub fn advance(
         &mut self,
         completion: super::rfpll::thermal::Completion,
     ) -> Result<(), super::rfpll::Error> {
         self.child.advance(completion)
+    }
+
+    pub(crate) fn transition_mut(&mut self) -> &mut super::rfpll::thermal::Transition {
+        &mut self.child
     }
 
     pub const fn state(&self) -> &crate::state::PhyState {

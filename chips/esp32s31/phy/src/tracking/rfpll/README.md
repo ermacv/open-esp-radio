@@ -28,8 +28,8 @@ flowchart TD
 
 Each direction permits at most thirty status samples and ends early after two
 direction-specific boundary observations. The observations need not be
-consecutive. Every candidate write is followed by an explicit five-microsecond
-settle before reading status. The final write has no additional search settle.
+consecutive. Every candidate status read occurs at least five microseconds after its
+completed capacitor write. The final write has no additional search settle.
 `Correction` consumes the search outcome and updates the existing frequency
 memory with the measured signed delta, which is not restricted to ±2.
 
@@ -41,11 +41,35 @@ signed intermediate before splitting data and write mode for the typed PAC.
 In particular, underflow can propagate into the mode byte, as in ROM. Matching
 that behavior does not qualify an out-of-range correction on physical RF.
 
-`target_port::rfpll::{search, correct}` uses the existing typed I2C bindings,
-direct bounded status polling and frequency-memory operations. Required 2-us
-entry and 5-us candidate settles use the short ROM delay backend. The admitted
-transaction completes in one poll without timer suspension. Its finite edge
-limits do not establish a wall-clock bound. The caller must
+The target adapter uses the existing typed I2C bindings, direct bounded status
+polling and frequency-memory operations. Required 2-us
+entry settle uses the short ROM delay backend. The admitted transaction uses
+the private P1 transport engine. Each complete I2C bus command returns `Pending`
+through the waker: the two initial reads, low-byte write and both commands of
+masked high-bit writes are separate checkpoints. Partial reads and the typed
+masked transaction remain retained under the exclusive analog owner. An
+`Instant` stamped after the last write
+measures the five-microsecond minimum: the next poll reads status immediately
+if it has elapsed, otherwise the short ROM delay supplies only the remainder.
+Each complete memory entry (read and write), setup operation, final write and
+channel-index restoration also has a checkpoint. These voluntary yields
+construct no timer. Grant protection and software frequency control remain
+held across them; failure or cancellation cannot publish restoration.
+The Driver shares its outlined clock conversion with the command adapter.
+RFPLL uses its own command/settle timestamps; the generic deadline timestamp
+and unobserved voluntary-yield timestamps are omitted. Required phase timestamps
+are unchanged; the final poll timestamp includes dispatch, hardware, model and
+observer work.
+The finite edge limits do not establish a wall-clock bound.
+
+Cold/registration RFPLL I2C also enters the P1 Driver and the same outlined
+start/sample atom. Its first and repeated completion observations retain the
+one-microsecond wait and the original attempt budget. Direct admitted callers
+use that atom with immediate status polling inside their named twenty-
+microsecond settle. The two wait policies do not change each other's bounds.
+There is no separate native asynchronous RFPLL I2C executor. The thermal
+entry/restoration envelope is synchronous around the single correction await;
+semantic commit remains after hardware restoration and grant release. The caller must
 already hold exclusive physical PHY access. This child does not acquire a
 coexistence grant, disable hardware frequency updates, change thermal reference
 state, or authorize traffic to resume after failure; the thermal transition
@@ -140,6 +164,14 @@ the admitted vendor child. Vendor-only cases retain the busy/result-flag
 characterization. Tests also
 check that a bounded I2C timeout returns without restoring hardware control.
 
+RFPLL's compiled requested-time environment assigns zero time to ready polls,
+so it compares the complete five-microsecond delay. A finite clock-query prefix
+still lets a stuck synchronous observation reach its timeout. Diagnostic
+command maxima retain the publication/readiness breakdown of the same worst
+poll; the remaining time includes engine/model/observer accounting. Formatting
+runs after the Driver await. Other observation
+probes retain their one-microsecond ticks. Virtual-clock unit tests separately
+exercise early and late RFPLL resumes; physical hold measures actual poll cost.
 The comparison preserves every requested delay, including any unexpected
 executor-added one-microsecond wait. It does not assert equal execution time or raw polling
 traces. Alternative memory layouts, linked coexistence grants and physical RF behavior
