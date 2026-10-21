@@ -45,27 +45,20 @@ pub static TX_SLOT: static_cell::StaticCell<TxSlot<TX>> = static_cell::StaticCel
 static ACK: HandlerCell<DoorbellAcknowledger<3>> = HandlerCell::new();
 const BELL: SameLevel<WifiMacToken, DoorbellToken> = SameLevel::new();
 
-oer_espressif_staged_runtime::sram_fn! {
-    in rwtext "w2.wifi_mac";
 pub fn wifi_mac() {
     if LINE.with(service_mac_line).is_none() {
         ERRORS.fetch_add(1, Ordering::Relaxed);
     }
 }
-}
-oer_espressif_staged_runtime::sram_fn! {
-    in rwtext "w2.wifi_pwr";
+
 pub fn wifi_pwr() {
     if LINE.with(service_power_line).is_none() {
         ERRORS.fetch_add(1, Ordering::Relaxed);
     }
 }
-}
-oer_espressif_staged_runtime::sram_fn! {
-    in rwtext "w2.doorbell";
+
 pub fn doorbell() {
     let _ = ACK.with(|ack| run_doorbell(&LINE, || ack.acknowledge()));
-}
 }
 
 pub struct ImageDoorbell(Doorbell<3>);

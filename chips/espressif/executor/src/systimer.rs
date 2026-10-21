@@ -77,23 +77,21 @@ impl ComparatorWriter {
         });
     }
 
-    oer_espressif_staged_runtime::sram_fn! {
-        in rwtext "systimer.program";
-        /// Disable, load the high/low target and COMP_LOAD, then enable.
-        /// `None` only disables the comparator. The typed index needs no check.
-        pub fn program(&mut self, comparator: Comparator, ticks: Option<u64>) {
-            self.set_enabled(comparator, false);
-            let Some(ticks) = ticks else { return };
-            let regs = SYSTIMER::regs();
-            let target = regs.trgt(comparator.index());
-            // Both supported targets are little-endian; split the counter
-            // value into words without raw register masks or shifts.
-            let [lo, hi]: [u32; 2] = bytemuck::cast(ticks);
-            target.hi().write(|w| w.hi().set(hi));
-            target.lo().write(|w| w.lo().set(lo));
-            regs.comp_load(comparator.index()).write(|w| w.load().set_bit());
-            self.set_enabled(comparator, true);
-        }
+    /// Disable, load the high/low target and COMP_LOAD, then enable.
+    /// `None` only disables the comparator. The typed index needs no check.
+    pub fn program(&mut self, comparator: Comparator, ticks: Option<u64>) {
+        self.set_enabled(comparator, false);
+        let Some(ticks) = ticks else { return };
+        let regs = SYSTIMER::regs();
+        let target = regs.trgt(comparator.index());
+        // Both supported targets are little-endian; split the counter
+        // value into words without raw register masks or shifts.
+        let [lo, hi]: [u32; 2] = bytemuck::cast(ticks);
+        target.hi().write(|w| w.hi().set(hi));
+        target.lo().write(|w| w.lo().set(lo));
+        regs.comp_load(comparator.index())
+            .write(|w| w.load().set_bit());
+        self.set_enabled(comparator, true);
     }
 }
 

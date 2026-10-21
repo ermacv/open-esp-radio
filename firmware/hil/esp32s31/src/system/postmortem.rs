@@ -67,15 +67,12 @@ pub(crate) fn checkpoint(name: &str, arg: u32) {
     let _ = excess;
 }
 
-oer_espressif_staged_runtime::sram_fn! {
-    in critical_text "panic_hook";
-    /// Record the panic being handled. The other hart may hold the critical
-    /// section while this one panics, so the fault is taken without it, from
-    /// its own cell that no checkpoint takes.
-    #[cfg(feature = "system-watchdog")]
-    pub(crate) fn record_panic(details: &oer_espressif_staged_runtime::panic::PanicDetails<'_>) {
-        if let Some(mut fault) = FAULT.try_lock() {
-            fault.record_panic(details.file, details.line, details.message.unwrap_or(""));
-        }
+/// Record the panic being handled. The other hart may hold the critical
+/// section while this one panics, so the fault is taken without it, from
+/// its own cell that no checkpoint takes.
+#[cfg(feature = "system-watchdog")]
+pub(crate) fn record_panic(details: &oer_espressif_staged_runtime::panic::PanicDetails<'_>) {
+    if let Some(mut fault) = FAULT.try_lock() {
+        fault.record_panic(details.file, details.line, details.message.unwrap_or(""));
     }
 }
