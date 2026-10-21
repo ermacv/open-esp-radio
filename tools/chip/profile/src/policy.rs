@@ -130,7 +130,16 @@ struct Extension {
 
 impl StackPolicy {
     pub fn load(path: &Path) -> Result<Self> {
-        let source = std::fs::read_to_string(path)
+        Self::load_with_inputs(path, &mut oer_os_durable::inputs::Inputs::default())
+    }
+
+    /// Record both this policy and any extended base at their actual reads.
+    pub fn load_with_inputs(
+        path: &Path,
+        inputs: &mut oer_os_durable::inputs::Inputs,
+    ) -> Result<Self> {
+        let source = inputs
+            .read_to_string(path)
             .map_err(|error| format!("cannot read {}: {error}", path.display()))?;
         let table: toml::Table =
             toml::from_str(&source).map_err(|error| format!("{}: {error}", path.display()))?;
@@ -138,7 +147,8 @@ impl StackPolicy {
             let extension: Extension =
                 toml::from_str(&source).map_err(|error| format!("{}: {error}", path.display()))?;
             let base_path = parent(path).join(&extension.extends);
-            let base_source = std::fs::read_to_string(&base_path)
+            let base_source = inputs
+                .read_to_string(&base_path)
                 .map_err(|error| format!("cannot read {}: {error}", base_path.display()))?;
             if toml::from_str::<toml::Table>(&base_source)
                 .is_ok_and(|base| base.contains_key("extends"))
@@ -332,6 +342,36 @@ fn parent(path: &Path) -> &Path {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tracked_loads_record_the_chip_and_both_policy_files_at_their_reads() {
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path();
+        let platform = root.join("chips/esp32s31/platform");
+        std::fs::create_dir_all(&platform).unwrap();
+        let chip = platform.join("chip.toml");
+        let policy = platform.join("policy.toml");
+        let base = platform.join("base.toml");
+        std::fs::write(
+            &chip,
+            include_str!("../../../../chips/esp32s31/platform/chip.toml"),
+        )
+        .unwrap();
+        std::fs::write(&policy, "schema = 5\nextends = 'base.toml'\n").unwrap();
+        std::fs::write(
+            &base,
+            include_str!("../../../../chips/esp32s31/platform/stack.toml"),
+        )
+        .unwrap();
+        let mut inputs = oer_os_durable::inputs::Inputs::tracked();
+        crate::Profile::load_with_inputs(root, "esp32s31", &mut inputs).unwrap();
+        StackPolicy::load_with_inputs(&policy, &mut inputs).unwrap();
+        let digests = inputs.into_digests();
+        assert_eq!(digests.len(), 3);
+        for path in [chip, policy, base] {
+            assert_eq!(digests[&path], oer_os_durable::sha256_file(&path).unwrap());
+        }
+    }
 
     fn profile() -> crate::Profile {
         toml::from_str(include_str!(

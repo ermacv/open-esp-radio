@@ -99,7 +99,8 @@ fn link(
     let Some(spec_path) = spec else {
         return Ok(run_linker(arguments));
     };
-    let spec = strict::Spec::read(spec_path)?;
+    let mut inputs = oer_os_durable::inputs::Inputs::tracked();
+    let spec = strict::Spec::read(spec_path, &mut inputs)?;
     let directory = spec_path
         .parent()
         .ok_or("image linker specification has no directory")?;
@@ -112,7 +113,7 @@ fn link(
     if code != 0 {
         return Ok(code);
     }
-    let placement = strict::analyze(&spec, &output, sections)?;
+    let placement = strict::analyze(&spec, &output, sections, &mut inputs)?;
     if !placement.functions.is_empty() {
         std::fs::write(directory.join(strict::FRAGMENT), placement.fragment())?;
         let code = run_linker(arguments);
@@ -120,7 +121,7 @@ fn link(
             return Ok(code);
         }
     }
-    strict::save(placement, directory, &output)?;
+    strict::save(placement, directory, &output, inputs)?;
     Ok(0)
 }
 

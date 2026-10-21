@@ -2637,6 +2637,7 @@ dependencies = [
 name = "oer-chip-profile"
 version = "0.1.0"
 dependencies = [
+ "oer-os-durable",
  "serde",
  "tempfile",
  "toml",
@@ -3867,6 +3868,7 @@ dependencies = [
  "oer-analysis-riscv-program",
  "oer-analysis-riscv-stack",
  "oer-chip-profile",
+ "oer-os-durable",
  "oer-os-process",
  "oer-os-toolchain",
  "oer-tool-pins",

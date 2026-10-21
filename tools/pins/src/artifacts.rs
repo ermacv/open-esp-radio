@@ -267,8 +267,23 @@ pub fn fetch_vendor_sources(root: &Path, chip: &str) -> Result<()> {
 /// The pinned fetched artifact `id` of `chip`, downloaded into the store
 /// first when it is missing or differs from its pin.
 pub fn ensure(root: &Path, chip: &str, id: &str) -> Result<PathBuf> {
+    ensure_with_inputs(
+        root,
+        chip,
+        id,
+        &mut oer_os_durable::inputs::Inputs::default(),
+    )
+}
+
+/// Resolve the artifact while recording the pins used by the caller's analysis.
+pub fn ensure_with_inputs(
+    root: &Path,
+    chip: &str,
+    id: &str,
+    inputs: &mut oer_os_durable::inputs::Inputs,
+) -> Result<PathBuf> {
     link_store(root, &store()?)?;
-    let manifest = Manifest::load(root, chip)?;
+    let manifest = Manifest::load_with_inputs(root, chip, inputs)?;
     let artifact = manifest.artifact(id)?;
     let source = manifest.source_of(artifact);
     if source.kind == SourceKind::Firmware {

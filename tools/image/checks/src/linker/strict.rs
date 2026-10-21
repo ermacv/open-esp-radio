@@ -9,6 +9,10 @@ use serde::{Deserialize, Serialize};
 use crate::Result;
 use crate::interrupts::{InterruptPlacement, interrupt_stacks_of};
 use crate::stack::Image;
+use oer_os_durable::inputs::Inputs;
+
+mod fingerprint;
+pub use fingerprint::Fingerprint;
 
 /// A runtime's analysis specification, passed only to its linker invocation.
 pub const SPEC_ENV: &str = "OER_IMAGE_INTERRUPTS";
@@ -26,18 +30,23 @@ pub struct Spec {
 }
 
 impl Spec {
-    pub fn read(path: &Path) -> Result<Self> {
-        Ok(toml::from_str(&std::fs::read_to_string(path)?)?)
+    pub fn read(path: &Path, inputs: &mut Inputs) -> Result<Self> {
+        Ok(toml::from_str(&inputs.read_to_string(path)?)?)
     }
 
-    fn image(&self, elf: &Path) -> Result<Option<(Image, oer_chip_profile::Profile)>> {
-        let profile = oer_chip_profile::Profile::load(&self.root, &self.chip)?;
+    fn image(
+        &self,
+        elf: &Path,
+        inputs: &mut Inputs,
+    ) -> Result<Option<(Image, oer_chip_profile::Profile)>> {
+        let profile = oer_chip_profile::Profile::load_with_inputs(&self.root, &self.chip, inputs)?;
         if profile.memory.is_none() || profile.interrupts.is_none() {
             return Ok(None);
         }
-        let policy = oer_chip_profile::policy::StackPolicy::load(&self.stack_policy)?;
+        let policy =
+            oer_chip_profile::policy::StackPolicy::load_with_inputs(&self.stack_policy, inputs)?;
         let profile = policy.runtime_profile(&profile)?;
-        let image = Image::read(&self.root, &profile, elf)?;
+        let image = Image::read_with_inputs(&self.root, &profile, elf, inputs)?;
         Ok(Some((image, profile)))
     }
 }
@@ -80,6 +89,8 @@ pub struct PlacedFunction {
 pub struct Placement {
     #[serde(default)]
     pub functions: Vec<PlacedFunction>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fingerprint: Option<Fingerprint>,
 }
 
 impl Placement {
@@ -162,7 +173,10 @@ impl Placement {
         if bytes > free {
             return Err(format!("strict input sections need {bytes} bytes; only {free} bytes of SRAM are free (short by {} bytes)", bytes - free).into());
         }
-        Ok(Self { functions })
+        Ok(Self {
+            functions,
+            fingerprint: None,
+        })
     }
 
     /// Empty when the first link needs no relocation. Exact file and section
@@ -250,8 +264,13 @@ fn script_name(name: &str, function: &str, file: bool) -> Result<()> {
 
 /// Analyze the first ELF using the final check's implementation. A partial
 /// stack is not a failed analysis and its known strict subset is still placed.
-pub(super) fn analyze(spec: &Spec, output: &Path, sections: &[InputSection]) -> Result<Placement> {
-    let Some((image, profile)) = spec.image(output)? else {
+pub(super) fn analyze(
+    spec: &Spec,
+    output: &Path,
+    sections: &[InputSection],
+    inputs: &mut Inputs,
+) -> Result<Placement> {
+    let Some((image, profile)) = spec.image(output, inputs)? else {
         return Ok(Placement::default());
     };
     let stacks = interrupt_stacks_of(&image)?;
@@ -282,10 +301,20 @@ pub(super) fn analyze(spec: &Spec, output: &Path, sections: &[InputSection]) -> 
 }
 
 /// Finish the selection record after at most one additional link.
-pub(super) fn save(mut placement: Placement, directory: &Path, output: &Path) -> Result<()> {
+pub(super) fn save(
+    mut placement: Placement,
+    directory: &Path,
+    output: &Path,
+    inputs: Inputs,
+) -> Result<()> {
     if !placement.functions.is_empty() {
         placement.final_sizes(output)?;
     }
+    placement.fingerprint = Some(Fingerprint::capture(
+        output,
+        &std::env::current_exe()?,
+        inputs,
+    )?);
     std::fs::write(directory.join(PLACEMENT), toml::to_string(&placement)?)?;
     Ok(())
 }

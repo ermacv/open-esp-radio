@@ -571,8 +571,17 @@ pub enum Start {
 impl Profile {
     /// The profile of `id`, or an error naming the supported chips.
     pub fn load(root: &Path, id: &str) -> Result<Self> {
+        Self::load_with_inputs(root, id, &mut oer_os_durable::inputs::Inputs::default())
+    }
+
+    /// Load the profile and record its source in the caller's computation.
+    pub fn load_with_inputs(
+        root: &Path,
+        id: &str,
+        inputs: &mut oer_os_durable::inputs::Inputs,
+    ) -> Result<Self> {
         let path = profile_path(root, id);
-        let text = match std::fs::read_to_string(&path) {
+        let text = match inputs.read_to_string(&path) {
             Ok(text) => text,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
                 return Err(format!(
