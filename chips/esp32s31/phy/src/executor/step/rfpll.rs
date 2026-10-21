@@ -1,8 +1,7 @@
 //! RFPLL checkpoints retain the physical envelope owned by the caller.
-use super::{Failure, Step, io::Io};
+use super::{Failure, io::Io};
 use crate::{
     calibration::cold::{PhyColdI2cAction, PhyColdI2cObservation, PhyColdI2cTransaction},
-    executor::wait::PhyShortDelay,
     tracking::rfpll::Correction,
 };
 use oer_time::{Clock, Instant};

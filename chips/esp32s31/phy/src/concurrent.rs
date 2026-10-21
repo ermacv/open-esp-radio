@@ -212,17 +212,7 @@ impl ConcurrentPhy {
     /// The ordinary tracking child still performs and commits the update.
     #[cfg(all(oer_debug_control, target_arch = "riscv32"))]
     pub fn force_wifi_i2c_tracking_debug(&mut self) -> Result<(), ConcurrentPhyError> {
-        use crate::tracking::i2c::{PhyWifiI2cTrackingBand as Band, PhyWifiI2cTrackingOutcome};
-        let state = self.settled_mut()?;
-        let band = if state.wifi_i2c_tracking_parameters().target_band() == Band::Nominal {
-            Band::Cold
-        } else {
-            Band::Nominal
-        };
-        state.apply_wifi_i2c_tracking_outcome(PhyWifiI2cTrackingOutcome {
-            band,
-            changed: true,
-        });
+        self.settled_mut()?.force_wifi_i2c_tracking_debug();
         Ok(())
     }
 
