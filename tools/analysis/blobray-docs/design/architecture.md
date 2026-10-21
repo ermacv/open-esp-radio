@@ -114,6 +114,26 @@ required. Extracting a crate requires a distinct authority or independently
 usable contract; file size, common prefixes and similar container names are
 insufficient reasons.
 
+### Question owners
+
+Each question about analyzed code has one owning module; a new analysis extends
+that owner. A second implementation of the same question requires an explicit
+reason in this section. The table records the current paths and their limits;
+"no single owner" means the implementations have no shared question contract.
+
+| Question | Owner | Other current paths | Known differences |
+| --- | --- | --- | --- |
+| ELF, archives and DWARF | [`oer-analysis-elf`](../../elf/README.md); [`blobray-artifacts`](../../blobray-artifacts/README.md) for metered streaming and object emission | [`cli::references`](../../cli/src/references.rs) repeats ELF constants to select captured symbols and sections | The CLI selects parsed facts; it does not parse binary structure. The two parser owners have distinct whole-file and bounded-streaming authority. |
+| Instruction decoding and semantics | [`riscv-decode`](../../riscv-decode/README.md), [`riscv-lift`](../../riscv-lift/README.md) | — | Decoder extension profiles differ explicitly; consumers share lifted operations. |
+| Function CFG and values | [`riscv-analysis`](../../riscv-analysis/README.md) | — | Coverage and semantic gaps remain explicit in canonical function records. |
+| Transfers outside the function CFG | No single owner | [`blobray-analysis::audit`](../../blobray-analysis/src/audit.rs), [`blobray-analysis::closure`](../../blobray-analysis/src/closure.rs), [`riscv-stack::sweep`](../../riscv-stack/src/sweep.rs) | Audit scans executable sections, closure follows reachable code and supplied observations, sweep scans a function's entire extent. Their scopes and unresolved-target evidence differ. |
+| Register-access bits | [`blobray-analysis::registers`](../../blobray-analysis/src/registers.rs) | Inside the owner: `read_mask`, `StoredBitsEvaluator`, `ReadUsesEvaluator`; [`vendor/scenario-report::inspect`](../../../vendor/scenario-report/src/inspect.rs) has a separate forward interpreter | `read_mask` recognizes expression shapes such as AND, while read flow also handles shift selection and stack transfers. Stored expressions do not forward stack spills. Inspect forgets state at joins and has its own bit masks. |
+| Definition-to-use dependencies | No single owner | `ReadUsesEvaluator` in [`registers`](../../blobray-analysis/src/registers.rs), [`riscv-stack::producers`](../../riscv-stack/src/producers.rs), [`riscv-stack::recursion`](../../riscv-stack/src/recursion.rs) | Read flow tracks load bits and stack bytes; producers proves reaching definitions of indirect targets; recursion follows bounded argument construction on acyclic local paths. |
+| Callee facts | [`riscv-model::calls`](../../riscv-model/src/calls.rs): `CallReturns`, `CallBehavior` | [`riscv-analysis::writes`](../../riscv-analysis/src/writes.rs) exposes write-effect and word-postcondition summaries through separate typed ports | Result constants, return-behavior proofs and memory effects have distinct contracts. Blobray's `library::ReturnTable` supplies constant results one call level deep. |
+| Call-site arguments, fields and references | No single owner | [`cli::call_arguments`](../../cli/src/call_arguments.rs), [`cli::field`](../../cli/src/field.rs), [`cli::references`](../../cli/src/references.rs), `vendor/scenario-report::inspect` | CLI analyses project canonical facts; inspect computes its own register state, pointer paths and format-argument selection. Analysis still exists in adapters. |
+| Object fields | No single owner | `cli::field`, [`riscv-stack::cha`](../../riscv-stack/src/cha.rs), `riscv-analysis::writes`, `vendor/scenario-report::inspect` fields | Root/offset access paths, DWARF storage types, values captured at a load PC and inspect's symbolic locations are different representations. |
+| Function fingerprints | [`vendor/provenance::fingerprint`](../../../vendor/provenance/src/fingerprint.rs) | — | Code and named fingerprints differ by inclusion of external target names; both share relocation normalization. |
+
 ```mermaid
 flowchart TD
     Host[CLI / JSON] --> App[Application]
