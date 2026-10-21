@@ -113,20 +113,20 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> SlotOwner<Id> for Esp32s31B
             .take()
             .expect("installation retains initial resources");
         let core = LowerMacCore::new(authority, initial.transmitter, initial.config, initial.coex);
-        let mut memory = initial.buffers.into_iter();
         let buffers = buffers.map(|place| {
-            let slot = memory.next().expect("one DMA allocation per buffer place");
-            let TxSlotAccess::Free(memory) = slot.access() else {
-                panic!("installation takes only idle TX allocations")
-            };
+            let (memory, returned) = self
+                .storage
+                .returned
+                .take(usize::from(place.index()))
+                .expect("one returned DMA allocation per buffer place");
             Buffer {
                 place,
                 dma: buffer::ReturnableBuffer {
                     memory: Some(memory),
-                    returned: &self.storage.returned,
+                    returned: Some(returned),
                 },
                 loan: None,
-                admission: None,
+                admission: BufferAdmission::Vacant,
             }
         });
         backing
@@ -193,7 +193,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> SlotOwner<Id> for Esp32s31B
             let mut delay = core::pin::pin!(timer.wait_until(deadline));
             let done = poll_fn(|cx| {
                 storage.driver.register(cx.waker());
-                if storage.poisoned.get().is_some() {
+                if storage.poisoned.is_requested() {
                     retire.request_quarantine();
                     return Poll::Pending;
                 }
@@ -243,7 +243,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> SlotOwner<Id> for Esp32s31B
             || held.failed_command.borrow().is_some()
             || held.failed_terminal.borrow().is_some()
             || held.rx_out.get() != 0
-            || storage.returned.borrow().len() != TX_TICKETS
+            || !storage.returned.all_returned()
         {
             retire.request_quarantine();
             core::future::pending::<()>().await;

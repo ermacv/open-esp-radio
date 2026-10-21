@@ -175,6 +175,18 @@ over and the other side's Acquire CAS takes it; the client posts only with
 the slot's one `Poster`, which the answer returns. The radio-system client
 uses it and has no unsafe code of its own.
 
+`OnceValue` publishes one immutable, copyable value. The winning atomic
+claim owns the write; an Acquire reader copies only after Release publishes
+the completed payload. A preempted writer is already observable as a request,
+but readers never wait for it. Reset requires exclusive access after the old
+endpoints ended. The S31 port uses it for the first fault cause.
+
+`ReturnBank` pairs each taken value with one affine return token. An Acquire
+CAS transfers the initialized value out of its cell; only the consumed token
+can write a replacement and publish it with Release. A dropped token leaves
+the cell unavailable. The S31 port's free DMA buffers carry these tokens
+through both execution contexts, so return-on-drop shares no producer or lock.
+
 `retained` holds records in memory that survives a reset. A
 `RetainedCell<T: bytemuck::AnyBitPattern>` reads what the previous boot left
 as a `T`, so every bit pattern must be a value; `try_lock` hands the record

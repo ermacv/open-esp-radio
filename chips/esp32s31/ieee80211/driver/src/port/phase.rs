@@ -154,16 +154,13 @@ where
     ) -> Result<(), radio::Poisoned<Fault>> {
         let mut attempt = attempt.into_parts(&self.loan);
         // Admission happens on this call, before the P2 queue is serviced.
-        if attempt.operation.execute().mpdu.buffer.admission.is_none() {
-            let mut device = self.held.storage.device.borrow_mut();
-            match device.radio_now() {
-                Ok(now) => {
-                    attempt.operation.execute().mpdu.buffer.admission =
-                        Some((now, device.timer().now()))
-                }
-                Err(_) => self.held.storage.poison(Fault::Clock),
-            }
-        }
+        attempt
+            .operation
+            .execute()
+            .mpdu
+            .buffer
+            .admission
+            .submit(self.held.storage.device.borrow().timer().now());
         self.held.command(driver::Command::Submit(driver::Pending {
             operation: attempt.operation,
             plan: attempt.execution.plan,

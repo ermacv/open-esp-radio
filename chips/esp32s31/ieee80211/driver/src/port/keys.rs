@@ -9,7 +9,7 @@ pub struct RawKeyIdentity {
     pub(super) serial: u64,
     pub(super) spp: Spp,
     pub(super) key_id: GroupKeyId,
-    pub(super) activity: &'static Cell<u64>,
+    pub(super) activity: &'static KeyActivity,
 }
 impl PartialEq for RawKeyIdentity {
     fn eq(&self, other: &Self) -> bool {
@@ -19,7 +19,7 @@ impl PartialEq for RawKeyIdentity {
 impl Eq for RawKeyIdentity {}
 impl RawKeyIdentity {
     pub(super) fn active(&self) -> bool {
-        self.activity.get() == self.serial
+        self.activity.matches(self.serial)
     }
 }
 /// A read-only identity bound to both the slot and this body's loan.
@@ -214,7 +214,7 @@ where
         association: &<PortKeys<Id, Self> as KeyTypes<'id>>::Association,
         slot: &<PortKeys<Id, Self> as KeyTypes<'id>>::PairwiseSlot,
         serial: u64,
-        activity: &'static [Cell<u64>; 20],
+        activity: &'static [KeyActivity; 20],
     ) -> RawKeyIdentity;
     fn pairwise(
         association: &<PortKeys<Id, Self> as KeyTypes<'id>>::Association,
@@ -245,7 +245,7 @@ macro_rules! role {
                 association: &<PortKeys<Id, Self> as KeyTypes<'id>>::Association,
                 slot: &<PortKeys<Id, Self> as KeyTypes<'id>>::PairwiseSlot,
                 serial: u64,
-                activity: &'static [Cell<u64>; 20],
+                activity: &'static [KeyActivity; 20],
             ) -> RawKeyIdentity {
                 RawKeyIdentity {
                     role: Self::ROLE,

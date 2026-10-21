@@ -127,7 +127,9 @@ frontend state. Deadline checks bracket the answer poll: a late ready answer
 cannot produce Stopped or Joined. Expiry returns Unconfirmed and leaves
 quarantine absorbing. The supervisor polls even when the body awaits an
 unrelated future; cancelling it only requests P2 cleanup. S31 uses its
-existing `SHUTDOWN_BOUND` and exact synchronous radio clock sampling.
+existing `SHUTDOWN_BOUND`. Its submission samples monotonic time before the
+command queue; P2 projects that admission through its sampled `ClockRelation`
+when a radio coordinate is needed, preserving the original age on retry.
 
 `PortEnd::Uninstalled` carries Joined and the body output. `FailStopped`
 carries the actual timely P2 outcome and output; `Abandoned` carries the

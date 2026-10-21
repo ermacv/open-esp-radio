@@ -231,7 +231,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Driver<'id, Id, D, B> 
         }
         if !core_views::configuring::<Id, D, B>(self.core.view()) {
             for pending in self.queues.iter().flat_map(|q| q.iter()) {
-                if let Some((_, at)) = pending.operation.payload().buffer.admission {
+                if let Some(at) = pending.operation.payload().buffer.admission.monotonic() {
                     let lifetime = held.edca.get()[vif(pending.role())]
                         .access_category(pending.category)
                         .msdu_lifetime;
@@ -336,7 +336,8 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Driver<'id, Id, D, B> 
             .payload()
             .buffer
             .admission
-            .is_some_and(|(_, at)| {
+            .monotonic()
+            .is_some_and(|at| {
                 now.saturating_duration_since(at)
                     >= held.edca.get()[vif(pending.role())]
                         .access_category(pending.category)
@@ -670,7 +671,15 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Driver<'id, Id, D, B> 
                 break;
             };
             match command {
-                Command::Submit(pending) => {
+                Command::Submit(mut pending) => {
+                    let radio = device.radio_now().map_err(|_| Fault::Clock)?;
+                    pending
+                        .operation
+                        .execute()
+                        .mpdu
+                        .buffer
+                        .admission
+                        .project(device.timer().now(), radio)?;
                     let index = queue(pending.category);
                     if self.queues[index].push_back(pending).is_err() {
                         return Err(Fault::Capacity);
@@ -882,7 +891,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Driver<'id, Id, D, B> 
             memory,
             core_mac::MpduParameters {
                 role,
-                admitted_at: mpdu.buffer.admission.ok_or(Fault::Clock)?.1,
+                admitted_at: mpdu.buffer.admission.monotonic().ok_or(Fault::Clock)?,
                 len: mpdu.layout.mpdu_len(),
                 rate,
                 protection,

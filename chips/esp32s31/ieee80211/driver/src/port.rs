@@ -33,6 +33,10 @@ use oer_radio_port::{self as radio, Child, Root, Slot};
 use oer_radio_port::{BodyLoan, ClockError, LoanedContext, SlotBodyOwner, SlotIdentity, SlotOwner};
 use oer_time::{Clock, Duration, Instant, Timer};
 
+mod admission;
+use admission::BufferAdmission;
+mod atomic_words;
+use atomic_words::KeyActivity;
 mod buffer;
 #[cfg(target_arch = "riscv32")]
 pub mod device;
@@ -163,12 +167,12 @@ impl<const B: usize> Ieee80211Capabilities for Esp32s31Caps<B> {
 /// Its `RefCell` is never shared with an ISR.
 pub struct PortStorage<D: 'static, const B: usize> {
     device: RefCell<&'static mut D>,
-    poisoned: Cell<Option<Fault>>,
+    poisoned: oer_memory::OnceValue<Fault>,
     driver: AtomicWaker,
     body: AtomicWaker,
-    key_live: [Cell<u64>; 20],
+    key_live: [KeyActivity; 20],
     identity: Cell<u64>,
-    returned: RefCell<heapless::Deque<TxSlotFree<'static, B>, TX_TICKETS>>,
+    returned: oer_memory::ReturnBank<TxSlotFree<'static, B>, TX_TICKETS>,
     expired: Cell<u32>,
 }
 impl<D: Device<B>, const B: usize> PortStorage<D, B> {
@@ -177,19 +181,17 @@ impl<D: Device<B>, const B: usize> PortStorage<D, B> {
     pub const fn new(device: &'static mut D) -> Self {
         Self {
             device: RefCell::new(device),
-            poisoned: Cell::new(None),
+            poisoned: oer_memory::OnceValue::new(),
             driver: AtomicWaker::new(),
             body: AtomicWaker::new(),
-            key_live: [const { Cell::new(0) }; 20],
+            key_live: [const { KeyActivity::new() }; 20],
             identity: Cell::new(1),
-            returned: RefCell::new(heapless::Deque::new()),
+            returned: oer_memory::ReturnBank::new(),
             expired: Cell::new(0),
         }
     }
     fn poison(&self, cause: Fault) {
-        if self.poisoned.get().is_none() {
-            self.poisoned.set(Some(cause));
-        }
+        let _ = self.poisoned.set(cause);
         self.driver.wake();
         self.body.wake();
     }
@@ -222,7 +224,6 @@ pub struct Esp32s31Backend<Id: SlotIdentity, D: Device<B>, const B: usize> {
 }
 struct Initial<D: Device<B>, const B: usize> {
     transmitter: OrdinaryTxIdleOwner<'static, D::Profile, D::Power, D::Entropy, D::Timer, B>,
-    buffers: [Pin<&'static mut TxSlot<B>>; TX_TICKETS],
     config: LowerMacConfig,
     coex: &'static dyn RadioCoexPriorities,
 }
@@ -266,12 +267,19 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> Esp32s31Backend<Id, D, B> {
             access_point_address,
             coex,
         } = parts;
+        for (index, slot) in buffers.into_iter().enumerate() {
+            let TxSlotAccess::Free(memory) = slot.access() else {
+                panic!("installation takes only idle TX allocations")
+            };
+            if storage.returned.seed(index, memory).is_err() {
+                panic!("initial installation seeds each return place once");
+            }
+        }
         let channel = Channel::from_wifi_channel(config.channel);
         Ok(Self {
             storage,
             state: BackendState::Initial(Some(Initial {
                 transmitter,
-                buffers,
                 config,
                 coex,
             })),
@@ -310,20 +318,12 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> StoppedPort<Id, D, B> {
     #[inline(never)]
     pub fn reinstall(mut self, tsf_epoch: u32) -> Result<Esp32s31Backend<Id, D, B>, Self> {
         if self.storage.poisoned.get().is_some()
-            || self.storage.returned.borrow().len() != TX_TICKETS
+            || !self.storage.returned.all_returned()
             || self.transmitter.is_none()
             || tsf_epoch == self.config.tsf_epoch
         {
             return Err(self);
         }
-        let buffers = core::array::from_fn(|_| {
-            self.storage
-                .returned
-                .borrow_mut()
-                .pop_front()
-                .expect("all minted buffers returned")
-                .into_slot()
-        });
         let transmitter = self
             .transmitter
             .take()
@@ -335,7 +335,6 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> StoppedPort<Id, D, B> {
             storage: self.storage,
             state: BackendState::Initial(Some(Initial {
                 transmitter,
-                buffers,
                 config: self.config,
                 coex: self.coex,
             })),
@@ -485,7 +484,7 @@ pub struct ReceiveBuffer<'id, Id: SlotIdentity, R> {
     brand: PhantomData<fn(&'id (), Id) -> (&'id (), Id)>,
     unit: Option<R>,
     range: core::ops::Range<usize>,
-    poison: &'static Cell<Option<Fault>>,
+    poison: &'static oer_memory::OnceValue<Fault>,
     driver: &'static AtomicWaker,
 }
 impl<Id: SlotIdentity, R: ReceiveUnit> RxBuffer for ReceiveBuffer<'_, Id, R> {
@@ -503,9 +502,7 @@ impl<Id: SlotIdentity, R> Drop for ReceiveBuffer<'_, Id, R> {
             // Losing an affine receive owner quarantines its original DMA
             // lease; Drop cannot authorize rearming that allocation.
             core::mem::forget(unit);
-            if self.poison.get().is_none() {
-                self.poison.set(Some(Fault::Abandoned));
-            }
+            let _ = self.poison.set(Fault::Abandoned);
             self.driver.wake();
         }
     }
