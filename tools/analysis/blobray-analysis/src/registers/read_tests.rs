@@ -47,6 +47,22 @@ impl FunctionSemantics for Decoder {
                 left: Operand::Register(6),
                 right: Operand::Immediate(u32::MAX),
             },
+            Some(4) => SemanticOp::Memory {
+                kind: MemoryKind::Load,
+                base: 5,
+                displacement: 0,
+                width: 4,
+                dest: Some(7),
+                source: None,
+                signed: false,
+                swap: false,
+            },
+            Some(5) => SemanticOp::Integer {
+                op: IntegerOp::Add,
+                dest: 6,
+                left: Operand::Register(6),
+                right: Operand::Register(7),
+            },
             _ => SemanticOp::None,
         }
     }
@@ -234,6 +250,66 @@ fn conflicting_mappings_demote_but_a_missing_source_does_not_demote() {
 }
 
 #[test]
+fn a_large_straight_line_function_gets_a_size_proportional_budget() {
+    let memory = WorkingMemory::new(64 << 20).expect("working memory");
+    let records = graph(8192);
+    let facts = Facts::new(&records, &memory, &mut || Ok(())).expect("large facts");
+    let mut reads = ReadUsesEvaluator::new(&facts, &memory);
+    let mut work = 0;
+    struct Count<'a>(&'a mut u64);
+    impl RunControl for Count<'_> {
+        fn checkpoint(&mut self, units: u64) -> Result<()> {
+            *self.0 += units;
+            Ok(())
+        }
+    }
+    reads
+        .analyze(
+            None,
+            &Decoder,
+            &mut |_, _, _| Ok(true),
+            &mut Count(&mut work),
+        )
+        .expect("large straight line");
+    assert!(
+        work > READ_MIN_FUNCTION_WORK,
+        "fixture exceeds the old flat limit"
+    );
+    let result = reads
+        .reads(0, &number(0x20000), 4, MemoryKind::Load, &mut || Ok(()))
+        .expect("large result");
+    assert!(result.unknown.is_empty());
+    assert_eq!(result.uses[0].bits, u32::MAX);
+    assert_eq!(result.uses[0].sink, ReadSink::Branch { site: 8192 * 4 });
+}
+
+/// Many distinct loads accumulate around a cycle. Unlike straight-line code,
+/// dependency sets grow on repeated visits and must still hit the local cap.
+fn accumulating_cycle(depth: u64) -> Vec<FunctionRecord> {
+    let mut records = graph(depth);
+    for record in &mut records {
+        match record {
+            FunctionRecord::Instruction { offset, bytes, .. } if *offset < depth * 4 => {
+                bytes[0] = if *offset % 8 == 0 { 4 } else { 5 };
+            }
+            FunctionRecord::Edge { from, target, .. } if *from == depth * 4 => *target = Some(0),
+            _ => {}
+        }
+    }
+    for id in (2..depth).step_by(2) {
+        records.push(FunctionRecord::MemoryAccess {
+            offset: id * 4,
+            access: MemoryKind::Load,
+            width: 4,
+            address: number(0x20000),
+            value: None,
+            relocation: None,
+        });
+    }
+    records
+}
+
+#[test]
 fn a_function_work_limit_leaves_budget_for_the_next_function() {
     struct Budget(u64);
     impl RunControl for Budget {
@@ -245,16 +321,17 @@ fn a_function_work_limit_leaves_budget_for_the_next_function() {
         }
     }
     let memory = WorkingMemory::new(64 << 20).expect("working memory");
-    let mut budget = Budget(READ_FUNCTION_WORK * 2);
+    let records = accumulating_cycle(256);
+    let local_limit = read_work_limit(258);
+    let mut budget = Budget(local_limit * 3);
     {
-        let records = graph(4096);
         let facts = Facts::new(&records, &memory, &mut || Ok(())).expect("large facts");
         let mut reads = ReadUsesEvaluator::new(&facts, &memory);
         reads
             .analyze(None, &Decoder, &mut |_, _, _| Ok(true), &mut budget)
             .expect("per-function limit is reported");
         assert!(
-            budget.0 >= READ_FUNCTION_WORK,
+            budget.0 >= local_limit,
             "a function cannot spend the entire operation budget"
         );
         let result = reads

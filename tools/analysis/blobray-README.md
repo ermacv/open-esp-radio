@@ -57,13 +57,17 @@ with precedence `uses` > `unknown` > `preserved` > `unused`:
 Dependencies flow through instruction CFG edges to a fixed point, including
 loops. Joins union sources; an exact mapping remains exact when all paths
 carrying that source agree. Known stack offsets transfer byte dependencies
-through stores and reloads. Calls emit ABI argument sinks, clear clobbered
+through stores and reloads. Calls emit ABI argument sinks with the resolved
+callee's address, captured defining function and symbol name when known;
+unresolved indirect callees are `null`. Tail calls use the same sink. Blobray
+does not classify diagnostic functions. Calls clear clobbered
 registers and keep callee-saved register dependencies. The expression DAG
 continues to supply addresses and the selected load sites.
 
 State sets and the work queue use admitted working memory and the caller's
-work/deadline checks. A function's dependency pass has an additional 100,000
-work-unit cap, so a large CFG can report `work-limit` without exhausting the
+work/deadline checks. A function's dependency pass has an additional cap of
+`max(100000, 512 * instruction_count)` work units, so a pathological CFG can
+report `work-limit` without exhausting the
 whole library operation. Known sinks take precedence over limits.
 
 Grouped human output prints `reads[used=... unknown=... preserved=... unused=...]`

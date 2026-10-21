@@ -29,25 +29,15 @@ pub struct ReadUse {
 #[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum ReadSink {
     /// Condition operand.
-    Branch {
-        site: u64,
-    },
+    Branch { site: u64 },
     /// Jump-table index.
-    Dispatch {
-        site: u64,
-    },
+    Dispatch { site: u64 },
     /// Indirect call or jump target.
-    IndirectTarget {
-        site: u64,
-    },
+    IndirectTarget { site: u64 },
     /// Address of another memory access.
-    Address {
-        site: u64,
-    },
+    Address { site: u64 },
     /// Value at return.
-    Return {
-        register: u8,
-    },
+    Return { register: u8 },
     /// Another word, or the same word at another position / after a
     /// non-identity transformation.
     Store {
@@ -58,7 +48,20 @@ pub enum ReadSink {
     CallArgument {
         site: u64,
         register: u8,
+        callee: Option<CallTarget>,
     },
+}
+
+/// The callee of a call or tail call, as far as the analysis resolves it.
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CallTarget {
+    /// The target address when the transfer resolves to one (ROM included).
+    pub address: Option<u32>,
+    /// The defining function among the analyzed inputs, when it is one.
+    pub function: Option<LibraryFunction>,
+    /// The symbol at the target (an input's or the ROM's), when one names it.
+    pub name: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
@@ -200,7 +203,7 @@ fn inverse(value: u32) -> u32 {
 }
 
 /// A function one captured library input defines.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct LibraryFunction {
     /// Position of the defining input among the analyzed inputs.

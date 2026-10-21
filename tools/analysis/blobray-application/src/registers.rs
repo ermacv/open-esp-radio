@@ -1,6 +1,8 @@
 //! Candidate memory addresses one analyzed function accesses.
 use crate::*;
 use oer_analysis_blobray_analysis::navigation::Facts;
+mod callees;
+pub(crate) use callees::Callees;
 
 fn invalid(s: &str) -> Error {
     Error::new(ErrorCode::InvalidRequest, s)
@@ -25,6 +27,9 @@ pub(crate) struct ReadObservations<'f, 'a, 'm> {
     decoder: &'f dyn FunctionSemantics,
     ranges: &'f [ImageRegion],
     abi: Option<CallAbi>,
+    calls: callees::CallSites<'f, 'a, 'm>,
+    callees: &'f Callees<'m>,
+    function: &'f LibraryFunction,
 }
 
 impl<'f, 'a, 'm> ReadObservations<'f, 'a, 'm> {
@@ -34,6 +39,8 @@ impl<'f, 'a, 'm> ReadObservations<'f, 'a, 'm> {
         decoder: &'f dyn FunctionSemantics,
         ranges: &'f [ImageRegion],
         abi: Option<CallAbi>,
+        callees: &'f Callees<'m>,
+        function: &'f LibraryFunction,
     ) -> Self {
         Self {
             evaluator: oer_analysis_blobray_analysis::registers::ReadUsesEvaluator::new(
@@ -42,6 +49,9 @@ impl<'f, 'a, 'm> ReadObservations<'f, 'a, 'm> {
             decoder,
             ranges,
             abi,
+            calls: callees::CallSites::new(facts, memory),
+            callees,
+            function,
         }
     }
 
@@ -68,9 +78,13 @@ impl<'f, 'a, 'm> ReadObservations<'f, 'a, 'm> {
                 &mut |address, width, c| selected_read(address, width, self.ranges, c),
                 c,
             )?;
-            self.evaluator
-                .reads(*offset, address, *width, *access, c)
-                .map(Some)
+            let mut reads = self.evaluator.reads(*offset, address, *width, *access, c)?;
+            for usage in &mut reads.uses {
+                if let ReadSink::CallArgument { site, callee, .. } = &mut usage.sink {
+                    *callee = self.calls.at(*site, self.function, self.callees, c)?;
+                }
+            }
+            Ok(Some(reads))
         } else {
             Ok(None)
         }

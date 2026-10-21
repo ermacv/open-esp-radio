@@ -722,6 +722,7 @@ pub fn register_accesses(
     emit: &mut dyn FnMut(&RegisterAccess, &mut dyn RunControl) -> Result<()>,
 ) -> Result<RegisterAccessSummary> {
     crate::registers::validate_ranges(ranges)?;
+    let callees = crate::registers::Callees::capture(inputs, memory, control)?;
     let mut summary = RegisterAccessSummary {
         schema: 3,
         ranges: ranges.to_vec(),
@@ -753,6 +754,8 @@ pub fn register_accesses(
                     decoder,
                     ranges,
                     assumptions.abi,
+                    &callees,
+                    analyzed.function,
                 );
                 crate::registers::observe(
                     analyzed.records,

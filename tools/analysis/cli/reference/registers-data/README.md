@@ -124,15 +124,21 @@ A load observation carries `reads`: `uses` (`bits`, a tagged `sink`, and
 preserved, unused. Sink sites are instruction offsets in the function's code
 address space; `return` instead names a physical result register. Sink tags
 are `branch`, `dispatch`, `indirect-target`, `address`, `return`, `store` (with
-`address` and `same_word`) and `call-argument` (with `register`). Limit tags
+`address` and `same_word`) and `call-argument` (with `register` and `callee`).
+The callee is `null` for an unresolved indirect call; otherwise it contains
+`address`, the captured defining `function`, and the symbol `name`, each
+nullable when unknown. Relocatable section offsets are not image addresses.
+Tail calls use the same sink. Diagnostic-function policy belongs to the checker.
+Limit tags
 are `partial-function`, `stack-spill`, `unsupported-operation` and `work-limit`.
 
 The read pass follows instruction CFG edges, preserving sources across joins,
 known stack stores/reloads and ABI-preserved registers at calls. Differing
 mappings at a join become `may`; a source absent on another path is retained
 on its carrying paths. Only bits reaching a stopping point are unknown. It
-uses admitted state sets, caller work/deadline checks and a 100,000-unit
-per-function dependency budget. See [loaded bit uses](../../../blobray-README.md#loaded-bit-uses).
+uses admitted state sets, caller work/deadline checks and a per-function
+dependency budget of `max(100000, 512 * instruction_count)` units.
+See [loaded bit uses](../../../blobray-README.md#loaded-bit-uses).
 
 Human groups show the four classes, sinks, precision and reasons; observations
 with different `reads` remain separate entries. Selection masks retain their

@@ -84,6 +84,53 @@ function call_argument
     ret
 end call_argument
 
+function call_named_argument
+    lui t0, 0x20107
+    lw a0, 0(t0)
+    call named_callee
+    ret
+end call_named_argument
+
+function call_local_jal_argument
+    lui t0, 0x20107
+    lw a0, 0(t0)
+    .insn 4, 0x008000ef // jal ra, +8 without a relocation
+    ret
+end call_local_jal_argument
+.globl local_jal_callee
+.type local_jal_callee,@function
+local_jal_callee:
+    ret
+.size local_jal_callee, .-local_jal_callee
+
+function tail_named_argument
+    lui t0, 0x20107
+    lw a0, 0(t0)
+    tail named_callee
+end tail_named_argument
+
+function call_indirect_argument
+    lui t0, 0x20107
+    lw a0, 0(t0)
+    jalr ra, a1, 0
+    ret
+end call_indirect_argument
+
+.globl rom_print
+.set rom_print, 0x40012340
+function call_rom_argument
+    lui t0, 0x20107
+    lw a0, 0(t0)
+    lui t1, 0x40012
+    addi t1, t1, 0x340
+    jalr ra, t1, 0
+    ret
+end call_rom_argument
+
+function named_callee
+    ret
+end named_callee
+
 function return_value
     lui t0, 0x20107
     lw a0, 0(t0)

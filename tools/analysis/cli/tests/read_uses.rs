@@ -26,12 +26,12 @@ fn partition(reads: &ReadUses, width: u8) {
 }
 
 #[allow(clippy::expect_used)] // Fixture setup failures fail this compiler-driven test.
-fn fixture() -> Vec<u8> {
+fn fixture(contents: &str) -> Vec<u8> {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
     let temp = tempfile::tempdir_in(root.join("target")).expect("fixture directory");
     let source = temp.path().join("fixture.rs");
     let output = temp.path().join("fixture.o");
-    std::fs::write(&source, include_str!("fixtures/read_uses.rs")).expect("fixture source");
+    std::fs::write(&source, contents).expect("fixture source");
     let compiled = Command::new("rustc")
         .args([
             "--target",
@@ -60,8 +60,11 @@ fn fixture() -> Vec<u8> {
 fn loads_report_their_sinks_limits_preservation_and_unused_bits() {
     let memory = WorkingMemory::new(64 * 1024 * 1024).expect("working memory");
     let mut by_name: BTreeMap<Vec<u8>, Vec<(u64, ReadUses)>> = BTreeMap::new();
+    let mut functions = BTreeMap::new();
     let summary = register_accesses(
-        &[Executable::new(fixture())],
+        &[Executable::new(fixture(include_str!(
+            "fixtures/read_uses.rs"
+        )))],
         Assumptions {
             abi: Some(CallAbi::RiscvInteger),
             ..Assumptions::default()
@@ -81,6 +84,10 @@ fn loads_report_their_sinks_limits_preservation_and_unused_bits() {
                 ..
             } = observation
             {
+                functions.insert(
+                    function.name.clone().expect("fixture name"),
+                    function.clone(),
+                );
                 if let FunctionRecord::MemoryAccess {
                     access: MemoryKind::Load,
                     width,
@@ -150,6 +157,11 @@ fn loads_report_their_sinks_limits_preservation_and_unused_bits() {
             ReadSink::CallArgument {
                 site: 12,
                 register: 10,
+                callee: Some(CallTarget {
+                    address: None,
+                    function: None,
+                    name: Some("external".to_owned()),
+                }),
             },
         ),
         ("return_value", ReadSink::Return { register: 10 }),
@@ -170,6 +182,53 @@ fn loads_report_their_sinks_limits_preservation_and_unused_bits() {
             read(name)
         );
     }
+    for name in ["call_named_argument", "tail_named_argument"] {
+        let callee = read(name)
+            .uses
+            .iter()
+            .find_map(|usage| match &usage.sink {
+                ReadSink::CallArgument {
+                    register: 10,
+                    callee,
+                    ..
+                } => callee.as_ref(),
+                _ => None,
+            })
+            .expect("named callee");
+        assert_eq!(
+            callee.address, None,
+            "relocatable offsets are not image addresses"
+        );
+        assert_eq!(callee.name.as_deref(), Some("named_callee"));
+        let function = callee.function.as_ref().expect("defining input function");
+        assert_eq!(function.input, 0);
+        assert_eq!(function.name.as_deref(), Some(b"named_callee".as_slice()));
+        assert_eq!(
+            function.symbol.object,
+            functions[b"call_named_argument".as_slice()].symbol.object
+        );
+    }
+    assert!(
+        read("call_indirect_argument")
+            .uses
+            .iter()
+            .any(|usage| matches!(
+                &usage.sink,
+                ReadSink::CallArgument {
+                    register: 10,
+                    callee: None,
+                    ..
+                }
+            )),
+        "unresolved register call: {:?}",
+        read("call_indirect_argument")
+    );
+    assert!(read("call_local_jal_argument").uses.iter().any(|usage| matches!(&usage.sink,
+        ReadSink::CallArgument { register: 10, callee: Some(CallTarget { address: None, function: Some(function), name }), .. } if name.as_deref() == Some("local_jal_callee") && function.input == 0
+    )), "direct CFG target without a relocation: {:?}", read("call_local_jal_argument"));
+    assert!(read("call_rom_argument").uses.iter().any(|usage| matches!(&usage.sink,
+        ReadSink::CallArgument { register: 10, callee: Some(CallTarget { address: Some(0x40012340), function: None, name }), .. } if name.as_deref() == Some("rom_print")
+    )), "resolved register call to ROM: {:?}", read("call_rom_argument"));
     assert!(
         read("indirect_target")
             .uses
@@ -308,4 +367,54 @@ fn loads_report_their_sinks_limits_preservation_and_unused_bits() {
         "call results carry no dependency on the previous argument"
     );
     assert_eq!(oer_tool_analysis_cli::wire::REGISTER_ACCESSES_SCHEMA, 9);
+    assert!(
+        oer_tool_analysis_cli::mmio::reads(read("call_named_argument")).contains("named_callee")
+    );
+    assert!(
+        oer_tool_analysis_cli::mmio::reads(read("call_rom_argument"))
+            .contains("rom_print@0x40012340")
+    );
+}
+
+#[test]
+fn a_named_callee_can_be_defined_by_another_analyzed_input() {
+    let memory = WorkingMemory::new(64 << 20).expect("working memory");
+    let inputs = [
+        Executable::new(fixture(include_str!("fixtures/read_uses.rs"))),
+        Executable::new(fixture(
+            r#"#![no_std]
+core::arch::global_asm!(".section .text.external,\"ax\",@progbits\n.globl external\n.type external,@function\nexternal: ret\n.size external, .-external");
+"#,
+        )),
+    ];
+    let inventory =
+        oer_analysis_blobray_application::captured::inventory(&inputs[1], &memory, &mut || Ok(()))
+            .expect("callee inventory");
+    let symbol = inventory
+        .objects
+        .iter()
+        .filter_map(|o| o.elf.as_ref())
+        .flat_map(|elf| &elf.symbols)
+        .find(|s| s.name.as_deref() == Some(b"external"))
+        .expect("callee symbol");
+    let expected = CallTarget {
+        address: None,
+        function: Some(LibraryFunction {
+            input: 1,
+            symbol: symbol.id.clone(),
+            name: symbol.name.clone(),
+        }),
+        name: Some("external".to_owned()),
+    };
+    let mut found = false;
+    register_accesses(&inputs, Assumptions { abi: Some(CallAbi::RiscvInteger), ..Assumptions::default() }, &[ImageRegion { start: 0x2010_7000, length: 0x100 }], &oer_analysis_riscv_lift::RiscvDecoder, &memory, &mut || Ok(()), &mut |observation, _| {
+        if let RegisterAccess::Observation { function, reads: Some(reads), .. } = observation
+            && function.name.as_deref() == Some(b"call_argument") {
+            found = true;
+            assert!(reads.uses.iter().any(|usage| matches!(&usage.sink, ReadSink::CallArgument { callee: Some(callee), .. } if callee == &expected)), "{reads:?}");
+        }
+        Ok(())
+    }).expect("cross-input callee");
+    assert!(found);
+    assert_eq!(memory.used(), 0, "symbol indexes release their admission");
 }

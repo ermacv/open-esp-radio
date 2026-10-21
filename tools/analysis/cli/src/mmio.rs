@@ -150,13 +150,31 @@ pub fn reads(reads: &oer_analysis_blobray_domain::ReadUses) -> String {
     use oer_analysis_blobray_domain::{ReadLimitKind, ReadPrecision, ReadSink};
     let mut parts = Vec::new();
     for usage in &reads.uses {
-        let sink = match usage.sink {
+        let sink = match &usage.sink {
             ReadSink::Branch { site } => format!("branch@+{site:x}"),
             ReadSink::Dispatch { site } => format!("dispatch@+{site:x}"),
             ReadSink::IndirectTarget { site } => format!("indirect-target@+{site:x}"),
             ReadSink::Address { site } => format!("address@+{site:x}"),
             ReadSink::Return { register } => format!("return-x{register}"),
-            ReadSink::CallArgument { site, register } => format!("call@+{site:x}-x{register}"),
+            ReadSink::CallArgument {
+                site,
+                register,
+                callee,
+            } => {
+                let target = callee
+                    .as_ref()
+                    .map(|target| {
+                        let address = target.address.map(|address| format!("{address:#010x}"));
+                        match (&target.name, address) {
+                            (Some(name), Some(address)) => format!("{name}@{address}"),
+                            (Some(name), None) => name.clone(),
+                            (None, Some(address)) => address,
+                            (None, None) => "?".to_owned(),
+                        }
+                    })
+                    .unwrap_or_else(|| "?".to_owned());
+                format!("call@+{site:x}-x{register}({target})")
+            }
             ReadSink::Store {
                 site,
                 address,
@@ -166,7 +184,7 @@ pub fn reads(reads: &oer_analysis_blobray_domain::ReadUses) -> String {
                 address
                     .map(|address| format!("{address:#010x}"))
                     .unwrap_or_else(|| "unresolved".to_owned()),
-                if same_word { ",same-word" } else { "" }
+                if *same_word { ",same-word" } else { "" }
             ),
         };
         let precision = match usage.precision {

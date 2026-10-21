@@ -670,7 +670,11 @@ enum ReadFlowOp {
 
 /// Bound pathological CFGs without spending the whole operation's budget on
 /// one function. Every admitted step is still charged to the caller.
-const READ_FUNCTION_WORK: u64 = 100_000;
+const READ_MIN_FUNCTION_WORK: u64 = 100_000;
+const READ_INSTRUCTION_WORK: u64 = 512;
+fn read_work_limit(instructions: usize) -> u64 {
+    READ_MIN_FUNCTION_WORK.max((instructions as u64).saturating_mul(READ_INSTRUCTION_WORK))
+}
 struct ReadWork<'c> {
     caller: &'c mut dyn RunControl,
     remaining: u64,
@@ -739,13 +743,20 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
             return Ok(());
         }
         self.ready = true;
-        let mut work = ReadWork {
-            caller: c,
-            remaining: READ_FUNCTION_WORK,
-        };
-        let result = self
-            .prepare(decoder, select, &mut work)
-            .and_then(|()| self.solve(abi, &mut work));
+        let result = (|| {
+            let records = self.facts.records();
+            c.checkpoint(records.len() as u64)?;
+            let instructions = records
+                .iter()
+                .filter(|record| matches!(record, FunctionRecord::Instruction { .. }))
+                .count();
+            let mut work = ReadWork {
+                caller: c,
+                remaining: read_work_limit(instructions),
+            };
+            self.prepare(decoder, select, &mut work)?;
+            self.solve(abi, &mut work)
+        })();
         match result {
             Err(error)
                 if matches!(error.code, ErrorCode::ResourceLimited | ErrorCode::TimedOut) =>
@@ -1283,6 +1294,7 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
                             ReadSink::CallArgument {
                                 site: instruction.site,
                                 register,
+                                callee: None,
                             },
                             c,
                         )?;
