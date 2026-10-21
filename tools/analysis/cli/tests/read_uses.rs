@@ -876,7 +876,7 @@ fn shared_port_propagates_constants_through_calls_and_rejects_conflicts() {
     asm.push_str(&function("tail_root", &returning_call("tail_constant")));
     asm.push_str(&function(
         "opaque_constant",
-        "call external\nli a0, 41\nli a1, 0\nret",
+        "addi sp, sp, -16\nsw ra, 12(sp)\ncall external\nli a0, 41\nli a1, 0\nlw ra, 12(sp)\naddi sp, sp, 16\nret",
     ));
     asm.push_str(&function("opaque_root", &returning_call("opaque_constant")));
     asm.push_str(&function(
