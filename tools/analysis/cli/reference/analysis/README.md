@@ -141,23 +141,30 @@ inferred from ELF flags, and every JSON document records it as `abi`
 (`"riscv-integer"` or `null`). On the pinned ESP32-S31 `libpp.a` it turns
 8000-odd accesses at unknown addresses into known ones.
 
-### Returned constants
+### Callee summaries
 
-`--call-returns` on every analysis command (`function-records`,
+`--call-summaries` on every analysis command (`function-records`,
 `field-accesses`, `callers`, `call-arguments`, `register-accesses`,
-`mmio-diff`) takes the constants a called function returns at every call to
-it. A first pass analyzes every function and keeps, for `a0` and `a1`, the
-constants each one returns when its analysis is complete, every exit is a
-return and every return leaves at most eight known constants there; a tail
-call or another jump out keeps none. The second pass gives a call those
-constants instead of an unknown result, one call level deep. A call names
-its callee by address in an image (a direct `jal`, or a register holding a
-known address) and by a global symbol in a relocatable object; a symbol
-defined with different results answers nothing. The first pass makes the
-analysis take about twice as long: on a HIL correctness image it resolves no
-further address, while in the ESP32-S31 inventory it gives the ROM's
-`phy_pbus_rd` its PHY_PBUS read windows through `phy_pbus_rd_addr`. It is an
-explicit assumption, and every JSON document records it as `call_returns`.
+`mmio-diff`) enables the shared `riscv-model::calls::CallSummaries` port.
+The first analysis builds the direct-call and tail-call graph without summaries.
+The second analyzes each function in callee-first SCC order, emits its final
+records and memoizes its result constants and argument-bit dependencies.
+Constants propagate through any acyclic call depth in these two analyses.
+
+A summary requires complete CFG, decoding and references, with no blocked
+function or gaps. Partial functions qualify only for `OpaqueCall` and
+`AlternativeLimit`; every other partial reason prevents a summary. Each of
+`a0` and `a1` has a constant result set only when every return proves at most
+eight constants there. Known tail callees supply their result contracts.
+Callees are named by image address or relocatable symbol. Incompatible definitions,
+recursive SCCs, unavailable targets and exhausted summaries supply no contract.
+Without a summary, results are unknown and all argument bits are May uses.
+
+Argument contracts come from the same bit-flow engine as loaded-bit uses,
+with entry-register sources. Consumed bits retain Exact/May precision;
+returned bits continue in their physical result positions. Without the flag,
+no summaries are supplied. JSON records the option in the existing
+`call_returns` member; document schemas and shapes are unchanged.
 
 ### Read-only windows
 

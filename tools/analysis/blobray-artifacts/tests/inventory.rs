@@ -354,3 +354,70 @@ fn stream_consumer_failure_is_not_malformed_elf_coverage() {
     assert_eq!(error.message, "consumer rejected a record");
     assert_eq!(memory.used(), 0);
 }
+
+#[test]
+fn captured_preparation_verifies_identity_reuses_metadata_and_releases_admission() {
+    use oer_analysis_blobray_artifacts::prepare_captured;
+    use oer_analysis_riscv_model::*;
+    let bytes = fixture(Architecture::Riscv32, Endianness::Little);
+    let inventory = inventory(&bytes);
+    let symbol = inventory
+        .elf
+        .as_ref()
+        .expect("ELF")
+        .symbols
+        .iter()
+        .find(|s| s.name.as_deref() == Some(b"entry"))
+        .expect("entry")
+        .id
+        .clone();
+    let payload = ArtifactId::of_bytes(&bytes);
+    let memory = WorkingMemory::new(1 << 20).expect("memory");
+    let error = prepare_captured(
+        &bytes,
+        &ArtifactId::of_bytes(b"different"),
+        &[],
+        &memory,
+        &mut || Ok(()),
+    )
+    .err()
+    .expect("identity mismatch");
+    assert_eq!(error.code, ErrorCode::Integrity);
+    assert_eq!(memory.used(), 0);
+    let mut prepared = prepare_captured(&bytes, &payload, &[], &memory, &mut || Ok(()))
+        .expect("captured metadata");
+    let mut first = None;
+    for _ in 0..2 {
+        prepared
+            .with_function(&symbol, &mut || Ok(()), |view, _| {
+                assert!(view.code.as_ptr() >= bytes.as_ptr());
+                assert!(
+                    (view.code.as_ptr() as usize) + view.code.len()
+                        <= bytes.as_ptr() as usize + bytes.len()
+                );
+                let current = (view.code.to_vec(), memory.used());
+                if let Some(previous) = &first {
+                    assert_eq!(previous, &current);
+                } else {
+                    first = Some(current);
+                }
+                Ok(())
+            })
+            .expect("reused function view");
+    }
+    assert!(memory.used() > 0);
+    drop(prepared);
+    assert_eq!(memory.used(), 0);
+    let blocker = memory
+        .reserve(memory.observation().limit_bytes, RunPosition::default())
+        .expect("remaining memory");
+    assert_eq!(
+        prepare_captured(&bytes, &payload, &[], &memory, &mut || Ok(()))
+            .err()
+            .expect("admission fails")
+            .code,
+        ErrorCode::ResourceLimited
+    );
+    drop(blocker);
+    assert_eq!(memory.used(), 0);
+}

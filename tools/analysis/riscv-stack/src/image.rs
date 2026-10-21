@@ -408,7 +408,7 @@ pub(crate) fn observing<R>(
                 relocations: &references,
                 data_ranges: &[],
                 jumps,
-                returns: &NoReturns,
+                returns: &NoSummaries,
                 call_behavior,
             },
             tables,

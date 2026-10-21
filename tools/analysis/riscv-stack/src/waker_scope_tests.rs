@@ -482,7 +482,7 @@ fn an_object_call_requires_the_same_relocated_upper_on_every_path() {
                 relocations: &refs,
                 data_ranges: &[],
                 jumps: &[],
-                returns: &NoReturns,
+                returns: &NoSummaries,
                 call_behavior: &Behavior,
             },
             &RiscvDecoder,

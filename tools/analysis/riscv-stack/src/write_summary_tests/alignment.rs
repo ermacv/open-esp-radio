@@ -351,7 +351,7 @@ fn alignment_analysis_and_expansion_release_memory_at_every_cancelled_step() {
                 relocations: &PreparedReferences::empty(),
                 data_ranges: &[],
                 jumps: &[],
-                returns: &NoReturns,
+                returns: &NoSummaries,
                 call_behavior: &UnknownCallBehavior,
             },
             &RiscvDecoder,

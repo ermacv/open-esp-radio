@@ -19,7 +19,16 @@ pass dependencies exactly; inverted bits remain uses, never preservation.
 Interned state sets and the queue have working
 memory admission; each function's pass also has a
 `max(100000, 512 * instruction_count)` work-unit cap. Application resolves
-call-argument callees against captured input and ROM symbols.
+call-argument callees against captured input and ROM symbols. The same engine
+also seeds entry registers for argument summaries: consumed bits and returned
+bit mappings, including inversion, through the shared
+`riscv-model::calls::CallSummaries` port. Application computes the call graph
+without summaries, then analyzes functions in callee-first SCC order with
+completed callee contracts. Compact argument CFG recipes come from final
+records in this second analysis and are released after solving.
+Recursive components and unavailable or flow-incomplete callees retain May
+argument consumption. Returned dependencies continue in the caller's results;
+summary work and storage use the operation's existing limits.
 It never infers register geometry, hardware field meaning or safe RMW semantics.
 
 `closure::code_closure` walks the code statically reachable from root entries

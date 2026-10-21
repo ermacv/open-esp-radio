@@ -115,7 +115,7 @@ fn an_object_call_uses_explicit_behavior_independently_of_unknown_result_values(
                 relocations: &references,
                 data_ranges: &[],
                 jumps: &[],
-                returns: &NoReturns,
+                returns: &NoSummaries,
                 call_behavior: &Proof(proof),
             },
             &Isa,

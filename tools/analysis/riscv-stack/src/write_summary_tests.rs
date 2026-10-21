@@ -75,7 +75,7 @@ fn try_facts_calls<'m>(
             relocations: &PreparedReferences::empty(),
             data_ranges: &[],
             jumps: &[],
-            returns: &NoReturns,
+            returns: &NoSummaries,
             call_behavior: &UnknownCallBehavior,
         },
         &RiscvDecoder,

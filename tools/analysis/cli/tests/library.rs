@@ -564,7 +564,7 @@ fn a_call_takes_the_constants_its_callee_returns() {
             ("other", 0x1024, 12),
         ],
     );
-    let observed = |call_returns: bool, name: &str| -> Vec<u32> {
+    let observed = |call_summaries: bool, name: &str| -> Vec<u32> {
         let (_, records) = accesses_with(
             &[Executable::new(image.clone())],
             &[ImageRegion {
@@ -573,7 +573,7 @@ fn a_call_takes_the_constants_its_callee_returns() {
             }],
             Assumptions {
                 abi: None,
-                call_returns,
+                call_summaries,
                 read_only: &[],
             },
         )
@@ -663,7 +663,7 @@ fn returned_addresses(inputs: &[Executable], name: &str) -> Vec<u32> {
         }],
         Assumptions {
             abi: None,
-            call_returns: true,
+            call_summaries: true,
             read_only: &[],
         },
     )
@@ -801,4 +801,31 @@ fn a_callee_that_branches_out_returns_nothing() {
         returned_addresses(&[Executable::new(image)], "caller"),
         Vec::<u32>::new()
     );
+}
+
+#[test]
+fn summary_order_preserves_valid_functions_before_a_malformed_archive_suffix() {
+    let mut bytes = library().bytes().to_vec();
+    bytes.extend_from_slice(b"broken member header");
+    let inputs = [Executable::new(bytes)];
+    for call_summaries in [false, true] {
+        let (summary, records) = accesses_with(
+            &inputs,
+            &[],
+            Assumptions {
+                abi: Some(CallAbi::RiscvInteger),
+                call_summaries,
+                ..Default::default()
+            },
+        )
+        .expect("valid prefix remains observable");
+        assert_eq!(summary.functions, 2);
+        assert_eq!(summary.gaps, 1);
+        assert_eq!(summary.blocked_functions, 0);
+        assert!(
+            records
+                .iter()
+                .any(|r| matches!(r, RegisterAccess::Observation { .. }))
+        );
+    }
 }

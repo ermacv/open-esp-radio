@@ -38,8 +38,8 @@ pub struct FunctionInput<'a> {
     /// Indirect jumps whose targets the caller knows from the build's facts.
     pub jumps: &'a [KnownJump],
     /// The constant results of the functions this one calls, which a call
-    /// takes for its result registers ([`CallReturns`]).
-    pub returns: &'a dyn CallReturns,
+    /// takes for its result registers ([`CallSummaries`]).
+    pub returns: &'a dyn CallSummaries,
     /// Explicit proofs of non-returning callees. Unknown behavior keeps
     /// the call's possible continuation; result values imply no behavior.
     pub call_behavior: &'a dyn CallBehavior,
@@ -856,7 +856,7 @@ mod tests {
                 relocations: &PreparedReferences::empty(),
                 data_ranges: &[],
                 jumps,
-                returns: &NoReturns,
+                returns: &NoSummaries,
                 call_behavior: &UnknownCallBehavior,
             };
             let memory = WorkingMemory::new(1024 * 1024).unwrap();
@@ -900,7 +900,7 @@ mod tests {
             relocations: &PreparedReferences::empty(),
             data_ranges: &[],
             jumps: &jumps,
-            returns: &NoReturns,
+            returns: &NoSummaries,
             call_behavior: &UnknownCallBehavior,
         };
         struct Budget(u64);
@@ -946,7 +946,7 @@ mod tests {
             relocations: &PreparedReferences::empty(),
             data_ranges: &[],
             jumps: &jumps,
-            returns: &NoReturns,
+            returns: &NoSummaries,
             call_behavior: &UnknownCallBehavior,
         };
         // The graph's own capacity fits; the known jumps' edges do not.
@@ -1017,7 +1017,7 @@ mod tests {
             relocations: &PreparedReferences::empty(),
             data_ranges: &[],
             jumps: known,
-            returns: &NoReturns,
+            returns: &NoSummaries,
             call_behavior: &UnknownCallBehavior,
         };
         let memory = WorkingMemory::new(1024 * 1024).unwrap();

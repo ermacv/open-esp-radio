@@ -38,7 +38,7 @@ fn trap_encodings_end_only_paths_with_terminal_image_semantics() {
                     relocations: &PreparedReferences::empty(),
                     data_ranges: &[],
                     jumps: &[],
-                    returns: &NoReturns,
+                    returns: &NoSummaries,
                     call_behavior: &UnknownCallBehavior,
                 },
                 &RiscvDecoder,

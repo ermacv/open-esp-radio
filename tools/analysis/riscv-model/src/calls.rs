@@ -1,11 +1,9 @@
-//! What a caller's analysis may know of the functions its calls reach.
+//! What a caller may know of a callee's results and argument-bit flow.
 //!
-//! The value analysis is intraprocedural: a call's result registers are
-//! unknown to the caller. A [`CallReturns`] port answers, for a callee, the
-//! finite set of constants every return of it leaves in a result register,
-//! when its own analysis proved one; the caller then takes that set for the
-//! call's result. A port answers only for a callee whose every return it
-//! knows: one unknown return means no answer.
+//! [`CallSummaries`] supplies one shared contract for value and bit-flow users.
+//! A missing summary means unknown results and May consumption of every
+//! argument bit. Result constants require a proof at every return; argument
+//! dependencies describe consumed bits and physical result positions.
 /// The function a call reaches, as its caller names it: an address in a
 /// linked image, or the global symbol a relocatable object's call names.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -14,25 +12,66 @@ pub enum Callee<'a> {
     Symbol(&'a [u8]),
 }
 
-/// The constant results of the functions calls reach.
-pub trait CallReturns {
-    /// Every constant `register` (`a0` or `a1`) holds when `callee`
-    /// returns, sorted and distinct, if every return of it is known to be
-    /// one of them; at most [`crate::MAX_VALUE_ALTERNATIVES`].
-    fn returns(&self, callee: Callee<'_>, register: u8) -> Option<&[u32]>;
+/// One argument's source-bit consumption. May remains a use.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct ArgumentConsumption {
+    pub exact: u32,
+    pub may: u32,
 }
 
-/// No callee's results are known: every call's result stays unknown.
-pub struct NoReturns;
+/// Returned dependencies in physical result positions. Exact singleton maps
+/// are bit wiring; May maps retain conservative dependencies. Inversion is
+/// explicit so an inverted bit can never prove unchanged preservation.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ReturnedArgument {
+    pub argument: u8,
+    pub register: u8,
+    pub exact: [u32; 32],
+    pub may: [u32; 32],
+    pub inverted: u32,
+}
 
-impl CallReturns for NoReturns {
-    fn returns(&self, _: Callee<'_>, _: u8) -> Option<&[u32]> {
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct ArgumentSummary {
+    /// a0 through a7, indexed by ABI argument word.
+    pub consumed: [ArgumentConsumption; 8],
+    pub returned: Vec<ReturnedArgument>,
+}
+
+/// One producer's complete callee contract, shared by value and bit-flow users.
+/// Dynamic storage is admitted and retained by the producer, never this port.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct CallSummary {
+    /// Sorted distinct constants at every return, for a0 and a1; a missing
+    /// slot means the result is not a proven constant set.
+    pub results: [Option<Vec<u32>>; 2],
+    pub arguments: ArgumentSummary,
+}
+impl CallSummary {
+    pub fn result(&self, register: u8) -> Option<&[u32]> {
+        self.results
+            .get(usize::from(register.checked_sub(10)?))?
+            .as_deref()
+    }
+}
+
+/// Facts of the function a call reaches. Absence means unknown results and
+/// May consumption of every argument bit. Consumers never invent signatures.
+pub trait CallSummaries {
+    fn summary(&self, callee: Callee<'_>) -> Option<&CallSummary>;
+}
+
+/// No callee summary is known. This sentinel supplies neither result values
+/// nor argument narrowing, and does not prove that a function is noreturn.
+pub struct NoSummaries;
+impl CallSummaries for NoSummaries {
+    fn summary(&self, _: Callee<'_>) -> Option<&CallSummary> {
         None
     }
 }
 
 /// Proof of a callee's control-flow behavior, independent of the values
-/// it might return. Unknown results ([`NoReturns`]) do not prove noreturn.
+/// it might return. Missing summaries ([`NoSummaries`]) do not prove noreturn.
 pub trait CallBehavior {
     /// True only when `callee` is proven never to return. Missing or
     /// ambiguous facts must answer false and retain the continuation.

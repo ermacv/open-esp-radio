@@ -66,15 +66,30 @@ pub fn with_prepared_object<T>(
         usize::try_from(source.len()).map_err(|_| invalid("object exceeds host address space"))?;
     let mut bytes = memory.bytes(size, control.position())?;
     source.read_at(0, &mut bytes, control)?;
-    let actual = ArtifactId::of_bytes_controlled(&bytes, control)?;
+    let mut object = prepare_captured(&bytes, payload, read_only, memory, control)?;
+    consume(&mut object, control)
+}
+
+/// Prepare caller-owned immutable captured bytes for repeated function visits.
+/// The payload digest is verified before views are exposed. The caller keeps
+/// the bytes alive; this value owns and admits only its metadata and indexes.
+pub fn prepare_captured<'a>(
+    bytes: &'a [u8],
+    payload: &ArtifactId,
+    read_only: &[ReadOnlyWindow],
+    memory: &'a WorkingMemory,
+    control: &mut dyn RunControl,
+) -> Result<PreparedObject<'a, 'a>> {
+    control.phase(RunPhase::PrepareObject)?;
+    let actual = ArtifactId::of_bytes_controlled(bytes, control)?;
     if actual != *payload {
         return Err(Error::new(
             ErrorCode::Integrity,
             "function payload differs from captured inventory",
         ));
     }
-    let file = object::File::parse(&*bytes).map_err(parse)?;
-    let view = oer_analysis_elf::Elf::parse(&bytes)
+    let file = object::File::parse(bytes).map_err(parse)?;
+    let view = oer_analysis_elf::Elf::parse(bytes)
         .map_err(|e| Error::new(ErrorCode::Integrity, e.to_string()))?;
     if file.is_64()
         || !file.is_little_endian()
@@ -108,7 +123,7 @@ pub fn with_prepared_object<T>(
     }
     let image = if file.kind() == object::ObjectKind::Executable {
         Some(oer_analysis_riscv_program::ProgramView::new(
-            &bytes, &view, read_only, memory, control,
+            bytes, &view, read_only, memory, control,
         )?)
     } else {
         None
@@ -144,8 +159,8 @@ pub fn with_prepared_object<T>(
             .checked_mul(2)
             .ok_or_else(|| invalid("symbol capacity overflow"))?,
     )?;
-    let mut object = PreparedObject {
-        bytes: &bytes,
+    Ok(PreparedObject {
+        bytes,
         file,
         elf: view,
         occurrence: None,
@@ -156,8 +171,7 @@ pub fn with_prepared_object<T>(
         target_capacity,
         sections,
         _capacity,
-    };
-    consume(&mut object, control)
+    })
 }
 impl<'data> PreparedObject<'data, '_> {
     /// Exact executable bytes for an ISA consumer; no instruction semantics here.
