@@ -54,8 +54,8 @@ fn failure(step: &str, error: RxRingError) -> RejectReason {
     RejectReason::Internal
 }
 
-/// Complete the common MAC core edge before observing PHY state, as the
-/// reference's esp_wifi_start does. The walker and MAC runtime stay stopped.
+/// Complete the common MAC core edge, as the reference's esp_wifi_start does.
+/// The walker and MAC runtime stay stopped.
 pub fn prepare<B: PlatformClockBackend, T>(
     domain: &RadioDomain<B, T>,
     wifi: WifiClocked,

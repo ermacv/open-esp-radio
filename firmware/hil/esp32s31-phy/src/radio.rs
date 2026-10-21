@@ -224,7 +224,7 @@ impl Radio {
                 oer_esp32s31_board::rom::print_fmt(format_args!(
                     "OPEN_RADIO_HIL phy=enter config={config:?}\n"
                 ));
-                self.enter_capture(config, capture_rx).await?;
+                self.enter_capture(config).await?;
                 let lifecycle = match config.radio {
                     CaptureRadio::Wifi => CaptureLifecycle::Cold,
                     CaptureRadio::Ieee802154 { .. } => CaptureLifecycle::Ieee802154,
@@ -256,7 +256,10 @@ impl Radio {
                     channel: current.channel,
                     radio: current.radio,
                 };
-                self.enter_capture(config, capture_rx).await?;
+                self.enter_capture(config).await?;
+                if config.radio == CaptureRadio::Wifi {
+                    self.prepare_capture_rx(capture_rx)?;
+                }
                 let lifecycle = match config.radio {
                     CaptureRadio::Wifi => CaptureLifecycle::Restart,
                     CaptureRadio::Ieee802154 { .. } => CaptureLifecycle::Ieee802154Restart,
@@ -274,6 +277,9 @@ impl Radio {
                 // The host has finished reading the calibration/MMIO/analog
                 // pages. This separate RX experiment cannot affect them.
                 let observed = if current.radio == CaptureRadio::Wifi {
+                    if capture_rx.is_none() {
+                        self.prepare_capture_rx(capture_rx)?;
+                    }
                     let wifi = self.clocked.take().ok_or(RejectReason::Internal)?;
                     let prepared = capture_rx.take().ok_or(RejectReason::Internal)?;
                     let (wifi, result) =
@@ -449,13 +455,20 @@ impl Radio {
         Ok(ready)
     }
 
-    async fn enter_capture(
+    fn prepare_capture_rx(
         &mut self,
-        config: PrepareCapture,
         capture_rx: &mut Option<crate::cca_rx::Prepared>,
     ) -> Result<()> {
+        let wifi = self.clocked.take().ok_or(RejectReason::Internal)?;
+        let (wifi, prepared) = crate::cca_rx::prepare(&self.domain, wifi, capture_rx.take());
+        self.clocked = Some(wifi);
+        *capture_rx = Some(prepared?);
+        Ok(())
+    }
+
+    async fn enter_capture(&mut self, config: PrepareCapture) -> Result<()> {
         match config.radio {
-            CaptureRadio::Wifi => self.enter(config.channel, capture_rx).await,
+            CaptureRadio::Wifi => self.enter(config.channel).await,
             CaptureRadio::Ieee802154 { power_dbm } => {
                 self.ieee802154
                     .enter(&mut self.domain, &self.clocks, config.channel, power_dbm)
@@ -471,11 +484,7 @@ impl Radio {
         }
     }
 
-    async fn enter(
-        &mut self,
-        channel: u8,
-        capture_rx: &mut Option<crate::cca_rx::Prepared>,
-    ) -> Result<()> {
+    async fn enter(&mut self, channel: u8) -> Result<()> {
         let absent = self.absent.take().ok_or(RejectReason::Internal)?;
         let (coex, _) = self.domain.enter_coex(absent);
         self.coex = Some(coex);
@@ -568,10 +577,6 @@ impl Radio {
         )
         .await
         .map_err(|_| RejectReason::Internal)?;
-        let (prepared_wifi, prepared_rx) =
-            crate::cca_rx::prepare(&self.domain, wifi, capture_rx.take());
-        wifi = prepared_wifi;
-        *capture_rx = Some(prepared_rx?);
         wifi = observe(&self.domain, wifi, Point::AfterMac)?;
         // Diagnostic observation window only: allow live CCA state time to
         // evolve without changing the radio, MAC, calibration or DMA setup.
