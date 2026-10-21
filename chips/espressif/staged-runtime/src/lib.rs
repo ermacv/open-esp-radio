@@ -10,6 +10,11 @@
 //! bootstrap's PSRAM mapping through its board ([`Handoff::adopt`]) and
 //! enables interrupts ([`Adopted::enable_interrupts`]). A chip feature selects the chip of esp-hal; `two-harts` adds the
 //! second hart's interrupt stack.
+#[allow(
+    unsafe_code,
+    reason = "exported default trap handlers and the abort loop"
+)]
+mod default_handlers;
 #[allow(unsafe_code, reason = "the stage-two reset entry is assembly")]
 mod entry;
 pub mod interrupts;

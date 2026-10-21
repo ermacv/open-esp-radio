@@ -132,10 +132,11 @@ bounds) live in the code that applies them.
 ## Hardware ownership
 
 - **Two roots split by phase.** esp-hal owns the SoC and everything before
-  the radio handoff, our HAL the radio blocks after it. The handoff is a safe
-  constructor consuming esp-hal's radio singletons (`I2C_ANA_MST`,
-  `MODEM_SYSCON`, `MODEM_LPCON`, `WIFI`, `BT`, `IEEE802154`, `LP_TSENS`) and
-  requiring the adopted PSRAM.
+  the radio handoff, except the system timer's comparators: the executor
+  consumes esp-hal's `SYSTIMER` and writes them itself. Our HAL owns the
+  radio blocks after the handoff, taken through a safe constructor consuming
+  esp-hal's radio singletons (`I2C_ANA_MST`, `MODEM_SYSCON`, `MODEM_LPCON`,
+  `WIFI`, `BT`, `IEEE802154`, `LP_TSENS`) and requiring the adopted PSRAM.
 - **Shared words.** Each word that both esp-hal and our PAC write has one
   runtime writer (`chips/esp32s31/registers/shared-words.toml`):
   `MODEM_LPCON.CLK_CONF` belongs to esp-hal and our HAL requests its gates

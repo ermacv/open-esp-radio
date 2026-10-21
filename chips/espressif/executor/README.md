@@ -84,6 +84,8 @@ runtimes.
 
 Software-interrupt construction transfers its singleton into separate raise
 and reset owners. Wakers borrow the published sender; only the line's handler
-borrows its acknowledger. The time driver similarly adopts one SYSTIMER bank
-writer and three independent W1C alarm acknowledgers. Alarm interrupts never
-borrow the bank writer or a task's timer queue.
+borrows its acknowledger. The time driver consumes esp-hal's SYSTIMER into
+our comparator writer and three independent W1C alarm acknowledgers. The
+writer programs typed comparator indices through `SYSTIMER::regs()`; esp-hal
+keeps the independent UNIT0 counter latch and tick rate. Alarm interrupts
+never borrow the comparator writer or a task's timer queue.

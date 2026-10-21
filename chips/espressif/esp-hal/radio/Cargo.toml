@@ -13,7 +13,7 @@ esp32s31 = ["dep:esp-hal"]
 
 [dependencies]
 oer-esp32s31-hal = { path = "../../../esp32s31/hal" }
-esp-hal = { git = "https://github.com/ermacv/esp-hal", rev = "2b665dd27104c6ec9983b675113551fc696050c9", default-features = false, features = ["esp32s31", "static-interrupts", "unstable"], optional = true }
+esp-hal = { git = "https://github.com/ermacv/esp-hal", rev = "d1167e740b3ec947d56f97b5091ebcb67a0cebfa", default-features = false, features = ["esp32s31", "static-interrupts", "unstable"], optional = true }
 
 [lints]
 workspace = true

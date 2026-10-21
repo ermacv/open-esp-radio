@@ -14,11 +14,13 @@ esp32s31 = [
     "chip",
     "esp-hal/esp32s31",
     "oer-espressif-esp-hal-irq/esp32s31",
+    "oer-espressif-staged-runtime/esp32s31",
 ]
 esp32c5 = [
     "chip",
     "esp-hal/esp32c5",
     "oer-espressif-esp-hal-irq/esp32c5",
+    "oer-espressif-staged-runtime/esp32c5",
 ]
 # The executor and time driver, which a chip feature selects.
 chip = [
@@ -29,6 +31,7 @@ chip = [
     "dep:portable-atomic",
     "dep:riscv",
     "dep:oer-espressif-esp-hal-irq",
+    "dep:oer-espressif-staged-runtime",
     "dep:oer-interrupt-table",
 ]
 
@@ -39,16 +42,19 @@ oer-memory = { path = "../../../portable/memory" }
 embassy-executor = { version = "0.10.0", default-features = false, optional = true }
 embassy-time-driver = { version = "0.2", features = ["tick-hz-1_000_000"], optional = true }
 embassy-time-queue-utils = { version = "0.3", optional = true }
-esp-hal = { git = "https://github.com/ermacv/esp-hal", rev = "2b665dd27104c6ec9983b675113551fc696050c9", default-features = false, features = ["static-interrupts", "rt", "unstable"], optional = true }
+esp-hal = { git = "https://github.com/ermacv/esp-hal", rev = "d1167e740b3ec947d56f97b5091ebcb67a0cebfa", default-features = false, features = ["static-interrupts", "rt", "unstable"], optional = true }
 portable-atomic = { version = "1.11", default-features = false, optional = true }
 oer-interrupt-table = { path = "../../../portable/interrupt-table", optional = true }
 oer-espressif-esp-hal-irq = { path = "../esp-hal-irq", optional = true }
+oer-espressif-staged-runtime = { path = "../staged-runtime", optional = true }
 
 [target.'cfg(target_arch = "riscv32")'.dependencies]
 riscv = { version = "0.15", optional = true }
 
 [target.'cfg(not(target_os = "none"))'.dev-dependencies]
 oer-test-ui-cases = { path = "../../../tools/test/ui-cases" }
+esp32s31-pac = { package = "esp32s31", git = "https://github.com/ermacv/esp-pacs", rev = "a1f6cf68e", default-features = false }
+esp32c5-pac = { package = "esp32c5", git = "https://github.com/ermacv/esp-pacs", rev = "a1f6cf68e", default-features = false }
 
 [dev-dependencies]
 embassy-executor = { version = "0.10.0", default-features = false }

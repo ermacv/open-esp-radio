@@ -376,22 +376,26 @@ impl<const SWI: u8> Executor<SWI> {
 static SIGNAL_LISTS: [SignalList; SOFTWARE_INTERRUPT_COUNT] =
     [const { SignalList::new() }; SOFTWARE_INTERRUPT_COUNT];
 
+oer_espressif_staged_runtime::sram_fn! {
+    in rwtext "executor.pend_signal";
 /// Pend the interrupt-mode executor `SWI` for a raised signal: raise its
 /// software interrupt, whose handler services the signal and polls. It
 /// wakes no task itself.
-#[esp_hal::ram]
 fn pend_signal<const SWI: u8>(_: &'static IrqSignal<InterruptExecutor<SWI>>) {
     raise_interrupt(SWI);
 }
+}
 
+oer_espressif_staged_runtime::sram_fn! {
+    in rwtext "executor.signal_context";
 /// Whether the caller runs in the interrupt-mode executor `SWI`'s context:
 /// its handler's poll on this core.
-#[esp_hal::ram]
 fn signal_context<const SWI: u8>() -> bool {
     running() == SWI
         && EMBASSY_EXECUTORS_MODE
             .get(SWI as usize)
             .is_some_and(|interrupt_mode| interrupt_mode.load(Ordering::Acquire))
+}
 }
 
 /// Embassy executor polled in its software interrupt's handler, at that
@@ -520,17 +524,20 @@ pub(crate) const fn software_interrupt_source(swi: u8) -> Interrupt {
     }
 }
 
+oer_espressif_staged_runtime::sram_fn! {
+    in rwtext "executor.wake_handler";
 /// The interrupt-table handler of a thread-mode executor's software interrupt
 /// (`FROM_CPU_INTR<SWI>`): it wakes the executor.
-#[esp_hal::ram]
 pub fn wake_handler<const SWI: u8>() {
     acknowledge_interrupt(SWI);
 }
+}
 
+oer_espressif_staged_runtime::sram_fn! {
+    in rwtext "executor.interrupt_handler";
 /// The interrupt-table handler of an interrupt-mode executor's software
 /// interrupt (`FROM_CPU_INTR<SWI>`): it serves the executor's timers and polls
 /// it.
-#[esp_hal::ram]
 pub fn interrupt_handler<const SWI: u8>() {
     acknowledge_interrupt(SWI);
     let id = EMBASSY_EXECUTORS[SWI as usize].load(Ordering::Acquire);
@@ -561,15 +568,17 @@ pub fn interrupt_handler<const SWI: u8>() {
         };
     });
 }
+}
 
 #[inline(always)]
 pub(crate) fn mark_work(swi: u8) {
     EMBASSY_WORK_PENDING.0[swi as usize].store(true, Ordering::Release);
 }
 
+oer_espressif_staged_runtime::sram_fn! {
+    in rwtext "executor.pend";
 /// Make executor `swi` poll again: a thread-mode executor sees its work flag
 /// at its next wake, an interrupt-mode executor's handler runs.
-#[esp_hal::ram]
 pub(crate) fn pend(swi: u8) {
     if EMBASSY_EXECUTORS_MODE[swi as usize].load(Ordering::Acquire) {
         raise_interrupt(swi);
@@ -580,6 +589,7 @@ pub(crate) fn pend(swi: u8) {
     if target_core != UNASSIGNED_CORE && target_core != Cpu::current() as usize {
         raise_interrupt(swi);
     }
+}
 }
 
 /// Whether each software interrupt serves an interrupt-mode executor.
@@ -613,7 +623,8 @@ pub(crate) fn raise(executor: usize) {
     }
 }
 
-#[esp_hal::ram]
+oer_espressif_staged_runtime::sram_fn! {
+    in rwtext "executor.embassy_pender";
 #[allow(
     unsafe_code,
     reason = "Embassy requires this unique global pender ABI symbol"
@@ -626,4 +637,5 @@ fn embassy_pender(context: *mut ()) {
         16..=19 | 32..=35 => pend(swi),
         _ => unreachable!("invalid Embassy executor context"),
     }
+}
 }

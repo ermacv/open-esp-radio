@@ -145,9 +145,9 @@ pub(super) async fn run<'p, 'id>(
     let extra_terminal = loop {
         let event = {
             let mut next = core::pin::pin!(phase.next_event());
-            next.as_mut().poll(&mut core::task::Context::from_waker(
-                core::task::Waker::noop(),
-            ))
+            // Poll once with this task's SRAM-backed Embassy waker. A noop
+            // waker can escape through the event source to a strict ISR.
+            core::future::poll_fn(|cx| core::task::Poll::Ready(next.as_mut().poll(cx))).await
         };
         match event {
             core::task::Poll::Pending => break false,

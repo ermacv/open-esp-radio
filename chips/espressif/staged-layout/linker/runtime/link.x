@@ -3,15 +3,17 @@ ENTRY(_runtime_start)
 
 /* Minimal esp-riscv-rt integration. Runtime has its own entry and its data/BSS
    are initialized by the bootstrap, but the normal vectored interrupt stubs
-   and esp-hal default handlers are still used after the handoff. */
+   are still used after the handoff. Default handlers belong to this runtime. */
 EXTERN(_default_abort);
 EXTERN(_default_start_trap);
+EXTERN(oer_unhandled_interrupt);
+EXTERN(oer_default_exception);
 PROVIDE(abort = _default_abort);
 PROVIDE(_pre_init_trap = _default_abort);
 PROVIDE(_start_trap = _default_start_trap);
 PROVIDE(_runtime_mtvt_table = _mtvt_table);
-PROVIDE(ExceptionHandler = abort);
-PROVIDE(DefaultHandler = EspDefaultHandler);
+PROVIDE(ExceptionHandler = oer_default_exception);
+PROVIDE(DefaultHandler = oer_unhandled_interrupt);
 PROVIDE(_start_DefaultHandler_trap = _start_trap);
 PROVIDE(_max_hart_id = HART_COUNT - 1);
 PROVIDE(main = runtime_main);

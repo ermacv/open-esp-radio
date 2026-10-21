@@ -39,6 +39,14 @@ mod executor;
 #[cfg(any(feature = "chip", test))]
 mod level;
 #[cfg(feature = "chip")]
+#[allow(
+    clippy::disallowed_methods,
+    reason = "this module consumes SYSTIMER and owns its comparator register writes"
+)]
+pub mod systimer;
+#[cfg(any(feature = "chip", test))]
+mod systimer_ack;
+#[cfg(feature = "chip")]
 mod time_driver;
 #[cfg(any(feature = "chip", test))]
 mod timer_queue;

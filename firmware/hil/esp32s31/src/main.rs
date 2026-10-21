@@ -41,6 +41,8 @@ oer_espressif_staged_runtime::interrupt_table! {
 
 #[cfg(feature = "boot-smoke")]
 mod boot_smoke_console;
+#[cfg(feature = "boot-smoke")]
+mod boot_smoke_rearm;
 mod exception;
 mod fatal;
 #[cfg(any(feature = "system-watchdog", feature = "system-panic-reset"))]
@@ -176,6 +178,12 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
 async fn boot_smoke(mut console: boot_smoke_console::BootSmokeConsole) {
     console.embassy_started();
     Timer::after(Duration::from_millis(50)).await;
+    if let Err(failure) =
+        boot_smoke_rearm::run(|measurement| console.measurement(measurement)).await
+    {
+        console.rearm_failed(&failure);
+        core::future::pending::<()>().await;
+    }
     console.timer_passed();
     loop {
         Timer::after(Duration::from_secs(60)).await;
