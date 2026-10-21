@@ -36,15 +36,22 @@ fn i2c<D: PhyShortDelay, C: oer_time::Clock + ?Sized>(
     clock: &C,
     registers: &mut (impl SharedPhyAccess + crate::executor::step::Registers),
     action: I2cAction,
-) -> Result<I2cCompletion, PhyTargetPortError> {
+) -> Result<u8, PhyTargetPortError> {
     let binding =
         RfpllFrequencyI2cBinding::new(action).map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
-    registers
+    let completion = registers
         .rfpll_atom::<D, _>(
             clock,
             crate::analog::rfpll::RfpllFrequencyExternalBinding::I2c(binding),
         )
-        .map_err(super::step::port_error)
+        .map_err(super::step::port_error)?;
+    match completion {
+        I2cCompletion::ByteRead { value, .. } | I2cCompletion::MaskedRead { value, .. } => {
+            Ok(value)
+        }
+        I2cCompletion::ByteWrite { .. } | I2cCompletion::MaskedWrite { .. } => Ok(0),
+        _ => Err(PhyTargetPortError::UnexpectedBinding),
+    }
 }
 
 fn complete<D: PhyShortDelay, C: oer_time::Clock + ?Sized>(
@@ -54,26 +61,20 @@ fn complete<D: PhyShortDelay, C: oer_time::Clock + ?Sized>(
 ) -> Result<Completion, PhyTargetPortError> {
     match action {
         Action::ReadInitialCap => {
-            let I2cCompletion::ByteRead { value: low, .. } = i2c::<D, _>(
+            let low = i2c::<D, _>(
                 clock,
                 registers,
                 I2cAction::ReadByte {
                     address: analog_registers::RFPLL_CALIBRATED_CAPACITOR_LOW,
                 },
-            )?
-            else {
-                return Err(PhyTargetPortError::UnexpectedBinding);
-            };
-            let I2cCompletion::MaskedRead { value: high, .. } = i2c::<D, _>(
+            )?;
+            let high = i2c::<D, _>(
                 clock,
                 registers,
                 I2cAction::ReadMasked {
                     field: analog_registers::RFPLL_CALIBRATED_CAPACITOR_HIGH,
                 },
-            )?
-            else {
-                return Err(PhyTargetPortError::UnexpectedBinding);
-            };
+            )?;
             Ok(Completion::InitialCap(
                 u16::from(low) | (u16::from(high) << 8),
             ))
@@ -119,16 +120,13 @@ fn complete<D: PhyShortDelay, C: oer_time::Clock + ?Sized>(
             Ok(Completion::DelayElapsed(micros))
         }
         Action::ReadStatus => {
-            let I2cCompletion::MaskedRead { value, .. } = i2c::<D, _>(
+            let value = i2c::<D, _>(
                 clock,
                 registers,
                 I2cAction::ReadMasked {
                     field: analog_registers::RFPLL_CAPACITOR_SEARCH_STATUS,
                 },
-            )?
-            else {
-                return Err(PhyTargetPortError::UnexpectedBinding);
-            };
+            )?;
             let status = match value {
                 0 => Status::Accepted,
                 1 => Status::Increase,
@@ -223,7 +221,7 @@ pub async fn maintain<D: PhyShortDelay, C: oer_time::Timer>(
         .ok_or(PhyTargetPortError::UnexpectedBinding)
 }
 
-#[inline(never)]
+#[inline(always)]
 pub(crate) fn complete_correction<D: PhyShortDelay, C: oer_time::Clock + ?Sized>(
     clock: &C,
     registers: &mut (impl SharedPhyAccess + crate::executor::step::Registers),

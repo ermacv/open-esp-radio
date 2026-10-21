@@ -503,24 +503,7 @@ impl<
             }
             if let (Some(trace), Some(sample)) = (this.trace.as_deref_mut(), sample) {
                 if let Some(first) = sample {
-                    let failure = if step == Step::Failure(Failure::TimedOut) {
-                        // Status only: the rejected result remains unconsumed.
-                        Some((
-                            this.registers.i2c_status(),
-                            resumed.map_or(0, |(at, now)| {
-                                now.saturating_duration_since(at).as_micros()
-                            }),
-                        ))
-                    } else {
-                        None
-                    };
-                    trace.checked(
-                        now,
-                        first,
-                        matches!(step, Step::WaitAt(_))
-                            || failure.is_some_and(|(busy, _)| busy != 0),
-                        failure,
-                    );
+                    trace_checked(trace, *this.registers, now, first, step, resumed);
                 } else if this.job.first_wait {
                     trace.command_started(this.timer.now());
                 }
@@ -569,6 +552,34 @@ impl<
         result
     }
 }
+// Keep diagnostic failure/status accounting off the hardware dispatch path.
+// The caller's final poll stamp still includes this helper in full.
+#[inline(never)]
+fn trace_checked<R: Registers>(
+    trace: &mut ReadinessTrace,
+    registers: &mut R,
+    now: Instant,
+    first: bool,
+    step: Step,
+    resumed: Option<(Instant, Instant)>,
+) {
+    let failure = if step == Step::Failure(Failure::TimedOut) {
+        // Status only: the rejected result remains unconsumed.
+        Some((
+            registers.i2c_status(),
+            resumed.map_or(0, |(at, now)| now.saturating_duration_since(at).as_micros()),
+        ))
+    } else {
+        None
+    };
+    trace.checked(
+        now,
+        first,
+        matches!(step, Step::WaitAt(_)) || failure.is_some_and(|(busy, _)| busy != 0),
+        failure,
+    );
+}
+
 // Outline the concrete timer's own state machine once, so LLVM cannot
 // duplicate it around the voluntary and readiness branches of Driver::poll.
 #[inline(never)]

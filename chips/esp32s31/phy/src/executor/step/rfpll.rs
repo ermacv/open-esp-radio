@@ -30,26 +30,37 @@ impl Cursor<'_> {
             return Ok(Step::Complete);
         }
         for _ in 0..count {
-            let action = match self {
-                #[cfg(any(test, oer_probe))]
-                Self::Search(search) => crate::tracking::rfpll::Action::Search(search.action()),
-                Self::Correction(correction) => correction.action(),
-            };
-            let completion = io.rfpll::<D, _>(clock, action)?;
-            match self {
-                #[cfg(any(test, oer_probe))]
-                Self::Search(search) => {
-                    let crate::tracking::rfpll::Completion::Search(completion) = completion else {
-                        return Err(Failure::Binding);
-                    };
-                    search.advance(completion).map_err(|_| Failure::Binding)?;
-                }
-                Self::Correction(correction) => correction
-                    .advance(completion)
-                    .map_err(|_| Failure::Binding)?,
-            }
+            io.advance_rfpll::<D, _>(clock, self)?;
         }
         Ok(Step::Runnable)
+    }
+
+    #[inline(always)]
+    pub(super) fn action(&self) -> crate::tracking::rfpll::Action {
+        match self {
+            #[cfg(any(test, oer_probe))]
+            Self::Search(search) => crate::tracking::rfpll::Action::Search(search.action()),
+            Self::Correction(correction) => correction.action(),
+        }
+    }
+
+    #[inline(always)]
+    pub(super) fn advance(
+        &mut self,
+        completion: crate::tracking::rfpll::Completion,
+    ) -> Result<(), Failure> {
+        match self {
+            #[cfg(any(test, oer_probe))]
+            Self::Search(search) => {
+                let crate::tracking::rfpll::Completion::Search(completion) = completion else {
+                    return Err(Failure::Binding);
+                };
+                search.advance(completion).map_err(|_| Failure::Binding)
+            }
+            Self::Correction(correction) => {
+                correction.advance(completion).map_err(|_| Failure::Binding)
+            }
+        }
     }
 }
 

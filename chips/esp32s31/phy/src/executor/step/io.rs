@@ -119,12 +119,16 @@ impl Io<'_, '_> {
             }
         }
     }
-    pub(super) fn rfpll<D: super::super::wait::PhyShortDelay, C: oer_time::Clock>(
+    /// Keep aggregate model actions/results in the synchronous atom adapter,
+    /// rather than retaining their stack slots throughout a checkpoint loop.
+    #[inline(never)]
+    pub(super) fn advance_rfpll<D: super::super::wait::PhyShortDelay, C: oer_time::Clock>(
         &mut self,
         _clock: &C,
-        action: crate::tracking::rfpll::Action,
-    ) -> Result<crate::tracking::rfpll::Completion, Failure> {
-        match self {
+        cursor: &mut super::rfpll::Cursor<'_>,
+    ) -> Result<(), Failure> {
+        let action = cursor.action();
+        let completion = match self {
             #[cfg(target_arch = "riscv32")]
             Self::Shared(registers) => {
                 crate::target_port::rfpll::complete_correction::<D, _>(_clock, *registers, action)
@@ -137,7 +141,8 @@ impl Io<'_, '_> {
             }
             #[cfg(test)]
             Self::Test(io, _) => io.rfpll::<D>(action),
-        }
+        }?;
+        cursor.advance(completion)
     }
 
     fn i2c_status(&mut self) -> u8 {
