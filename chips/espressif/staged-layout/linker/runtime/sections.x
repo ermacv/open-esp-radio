@@ -72,20 +72,8 @@ SECTIONS
     KEEP(*(.isr.text .isr.text.*));
     KEEP(*(.flash.critical.text .flash.critical.text.*));
     *(.rwtext .rwtext.*);
-    /* Compiler panic entry helpers can run from an interrupt or an
-       exception while caches are unavailable. Match their pinned compiler's v0
-       Rust input-section names; the platform's own record/reset code marks
-       itself .flash.critical.text.panic. Formatting stays in thread code. */
-    *(.text.*_R*4core9panicking*);
-    *(.text.*_R*4core6option13expect_failed*);
-    *(.text.*_R*4core6option13unwrap_failed*);
-    *(.text.*_R*4core6result13unwrap_failed*);
-    *(.text.*_R*4core5slice5index*fail*);
-    *(.text.*_R*4core4cell*panic_already*);
-    /* Embassy's interrupt-reachable waker bodies; v0 input-section names
-       of the pinned compiler. Our handlers and executor use sram_fn!. */
-    *(.text.*_RNvNtNtCs*_16embassy_executor3raw5waker4wake);
-    *(.text.*_RNvNtNtCs*_16embassy_executor3raw5waker4drop);
+    /* The image linker adds strict code selected by interrupt, exception
+       and panic analysis through this generated fragment. */
     INCLUDE strict-text.x
     . = ALIGN(4);
     __runtime_isr_end = ABSOLUTE(.);

@@ -16,13 +16,10 @@ pub fn report_stack_guard() {
 
 oer_espressif_staged_runtime::exception_handler!(exception);
 
-oer_espressif_staged_runtime::sram_fn! {
-    in rwtext "exception";
-    /// A fatal exception cannot rely on a live executor or acquire a logger
-    /// lock that the interrupted code may already hold: it records the
-    /// machine state without formatting and resets; the next boot reports it.
-    #[inline(always)]
-    fn exception(context: &TrapFrame) -> ! {
-        crate::fatal::record_exception(context.ra as u32)
-    }
+/// A fatal exception cannot rely on a live executor or acquire a logger
+/// lock that the interrupted code may already hold: it records the
+/// machine state without formatting and resets; the next boot reports it.
+#[inline(always)]
+fn exception(context: &TrapFrame) -> ! {
+    crate::fatal::record_exception(context.ra as u32)
 }

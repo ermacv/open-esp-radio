@@ -294,70 +294,64 @@ fn program(comparator: Comparator, deadline: u64) {
     );
 }
 
-oer_espressif_staged_runtime::sram_fn! {
-    in rwtext "time_driver.rearm";
-    /// After `slot`'s queue changed: program its comparator (the writer) or
-    /// publish its next deadline to the writer.
-    fn rearm(swi: u8, comparator: Comparator, slot: &mut Slot, now: u64) {
-        let next = slot.queue.next_deadline();
-        if next == slot.armed {
-            return;
-        }
-        slot.armed = next;
-        let writer = WRITER.load(Ordering::Relaxed);
-        #[cfg(oer_profile)]
-        let start = now;
-        if swi == writer {
-            program(comparator, next);
-        } else {
-            PUBLISHED[swi as usize].publish(next);
-            pend(writer);
-        }
-        #[cfg(oer_profile)]
-        if next == u64::MAX {
-            slot.observation.stop();
-        } else {
-            slot.observation.arm(next, start, self::now());
-        }
-        let _ = now;
+/// After `slot`'s queue changed: program its comparator (the writer) or
+/// publish its next deadline to the writer.
+fn rearm(swi: u8, comparator: Comparator, slot: &mut Slot, now: u64) {
+    let next = slot.queue.next_deadline();
+    if next == slot.armed {
+        return;
     }
+    slot.armed = next;
+    let writer = WRITER.load(Ordering::Relaxed);
+    #[cfg(oer_profile)]
+    let start = now;
+    if swi == writer {
+        program(comparator, next);
+    } else {
+        PUBLISHED[swi as usize].publish(next);
+        pend(writer);
+    }
+    #[cfg(oer_profile)]
+    if next == u64::MAX {
+        slot.observation.stop();
+    } else {
+        slot.observation.arm(next, start, self::now());
+    }
+    let _ = now;
 }
 
-oer_espressif_staged_runtime::sram_fn! {
-    in rwtext "time_driver.service";
-    /// Serve executor `swi`'s timers, in its context before it polls: dispatch
-    /// its expired timers and rearm; the writer also programs the comparators
-    /// whose executors published a new deadline.
-    pub(crate) fn service(swi: u8) {
-        let Some(comparator) = COMPARATOR_OF
-            .get(swi as usize)
-            .and_then(|assignment| Comparator::from_index(assignment.load(Ordering::Acquire)))
-        else {
-            return;
-        };
-        let _ = with_slot(swi, |slot| {
-            let fired = ALARM_FIRED[comparator as usize].swap(false, Ordering::AcqRel);
-            let start = now();
-            #[cfg(oer_profile)]
-            if fired {
-                let (entered, acknowledged) = &ALARM_AT[comparator as usize];
-                if let (Some(entered), Some(acknowledged)) = (entered.read(), acknowledged.read()) {
-                    slot.observation
-                        .interrupt(entered.value, acknowledged.value);
-                }
+/// Serve executor `swi`'s timers, in its context before it polls: dispatch
+/// its expired timers and rearm; the writer also programs the comparators
+/// whose executors published a new deadline.
+pub(crate) fn service(swi: u8) {
+    let Some(comparator) = COMPARATOR_OF
+        .get(swi as usize)
+        .and_then(|assignment| Comparator::from_index(assignment.load(Ordering::Acquire)))
+    else {
+        return;
+    };
+    let _ = with_slot(swi, |slot| {
+        let fired = ALARM_FIRED[comparator as usize].swap(false, Ordering::AcqRel);
+        let start = now();
+        #[cfg(oer_profile)]
+        if fired {
+            let (entered, acknowledged) = &ALARM_AT[comparator as usize];
+            if let (Some(entered), Some(acknowledged)) = (entered.read(), acknowledged.read()) {
+                slot.observation
+                    .interrupt(entered.value, acknowledged.value);
             }
-            let _ = fired;
-            slot.queue.dispatch_expired(start);
-            #[cfg(oer_profile)]
-            slot.observation.dispatch(start, now());
-            // A dispatched alarm leaves the comparator idle: arm it again.
-            slot.armed = u64::MAX - 1;
-            rearm(swi, comparator, slot, start);
-            if swi == WRITER.load(Ordering::Relaxed) {
-                program_published(slot);
-            }
-        });
-    }
+        }
+        let _ = fired;
+        slot.queue.dispatch_expired(start);
+        #[cfg(oer_profile)]
+        slot.observation.dispatch(start, now());
+        // A dispatched alarm leaves the comparator idle: arm it again.
+        slot.armed = u64::MAX - 1;
+        rearm(swi, comparator, slot, start);
+        if swi == WRITER.load(Ordering::Relaxed) {
+            program_published(slot);
+        }
+    });
 }
 
 /// The writer programs every other executor's comparator whose published
@@ -383,32 +377,29 @@ fn program_published(writer: &mut Slot) {
     }
 }
 
-oer_espressif_staged_runtime::sram_fn! {
-    in rwtext "time_driver.alarm_interrupt";
-    /// The interrupt-table handler of comparator `COMPARATOR`'s alarm
-    /// (`SYSTIMER_TARGET<COMPARATOR>`): it acknowledges the alarm and pends the
-    /// comparator's executor. It writes no other register and touches no queue.
-    pub fn alarm_interrupt<const COMPARATOR: u8>() {
-        #[cfg(oer_profile)]
-        let entered = now();
-        assert!(
-            ACKNOWLEDGERS
-                .get(usize::from(COMPARATOR))
-                .and_then(|ack| ack.with(Acknowledger::acknowledge))
-                .is_some(),
-            "only the alarm handler acknowledges its installed comparator"
-        );
-        #[cfg(oer_profile)]
-        {
-            let (entry, acknowledgement) = &ALARM_AT[COMPARATOR as usize];
-            entry.publish(entered);
-            acknowledgement.publish(now());
-        }
-        ALARM_FIRED[COMPARATOR as usize].store(true, Ordering::Release);
-        let executor = EXECUTOR_OF[COMPARATOR as usize].load(Ordering::Acquire);
-        if executor != NO_EXECUTOR {
-            pend(executor);
-        }
+/// The interrupt-table handler of comparator `COMPARATOR`'s alarm
+/// (`SYSTIMER_TARGET<COMPARATOR>`): it acknowledges the alarm and pends the
+/// comparator's executor. It writes no other register and touches no queue.
+pub fn alarm_interrupt<const COMPARATOR: u8>() {
+    #[cfg(oer_profile)]
+    let entered = now();
+    assert!(
+        ACKNOWLEDGERS
+            .get(usize::from(COMPARATOR))
+            .and_then(|ack| ack.with(Acknowledger::acknowledge))
+            .is_some(),
+        "only the alarm handler acknowledges its installed comparator"
+    );
+    #[cfg(oer_profile)]
+    {
+        let (entry, acknowledgement) = &ALARM_AT[COMPARATOR as usize];
+        entry.publish(entered);
+        acknowledgement.publish(now());
+    }
+    ALARM_FIRED[COMPARATOR as usize].store(true, Ordering::Release);
+    let executor = EXECUTOR_OF[COMPARATOR as usize].load(Ordering::Acquire);
+    if executor != NO_EXECUTOR {
+        pend(executor);
     }
 }
 

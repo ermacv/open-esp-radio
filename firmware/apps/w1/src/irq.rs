@@ -92,8 +92,6 @@ pub const BELL: SameLevel<WifiMacToken, DoorbellToken> = SameLevel::new();
 /// The WDEVPWR interrupt shares the MAC interrupt's level and core.
 const _POWER: SameLevel<WifiMacToken, WifiPwrToken> = SameLevel::new();
 
-oer_espressif_staged_runtime::sram_fn! {
-    in rwtext "w1.wifi_mac";
 /// The MAC interrupt (P3): latch the entry for the MAC-to-poll latency,
 /// then run the line.
 pub fn wifi_mac() {
@@ -103,20 +101,14 @@ pub fn wifi_mac() {
         UNSERVICED_MAC.fetch_add(1, Ordering::Relaxed);
     }
 }
-}
 
-oer_espressif_staged_runtime::sram_fn! {
-    in rwtext "w1.wifi_pwr";
 /// The WDEVPWR interrupt (P3).
 pub fn wifi_pwr() {
     if RX_LINE.with(service_power_line).is_none() {
         UNSERVICED_PWR.fetch_add(1, Ordering::Relaxed);
     }
 }
-}
 
-oer_espressif_staged_runtime::sram_fn! {
-    in rwtext "w1.doorbell";
 /// The radio doorbell (P3): the ring-to-handler latency, then the line's
 /// requests.
 pub fn doorbell() {
@@ -126,16 +118,12 @@ pub fn doorbell() {
     }
     let _acknowledged = DOORBELL_ACK.with(|ack| run_doorbell(&RX_LINE, || ack.acknowledge()));
 }
-}
 
-oer_espressif_staged_runtime::sram_fn! {
-    in rwtext "w1.radio_executor";
 /// The radio executor's software interrupt (P2): each run's cycles.
 pub fn radio_executor() {
     let start = Mcycle.now();
     oer_espressif_executor::interrupt_handler::<2>();
     measure::record(&measure::SWI2, Mcycle.now().wrapping_sub(start));
-}
 }
 
 /// The radio doorbell, its ring stamped.

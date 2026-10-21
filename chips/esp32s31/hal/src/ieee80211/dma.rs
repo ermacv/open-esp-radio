@@ -32,19 +32,3 @@ macro_rules! place_rx_hot_path {
         $visibility fn $name $($body)*
     };
 }
-
-/// Place a MAC interrupt publication path in executable internal SRAM.
-///
-/// The S31 linker maps `.rwtext.*` to executable internal RAM. As with
-/// [`place_rx_hot_path`], this macro accepts only functions, never storage.
-#[macro_export]
-macro_rules! place_irq_path {
-    ($(#[$attribute:meta])* $visibility:vis fn $name:ident $($body:tt)*) => {
-        $(#[$attribute])*
-        #[cfg_attr(
-            target_arch = "riscv32",
-            unsafe(link_section = ".rwtext.open_radio_irq")
-        )]
-        $visibility fn $name $($body)*
-    };
-}

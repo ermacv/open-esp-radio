@@ -66,27 +66,20 @@ pub fn hold_completion(hold: bool) {
     MAC_SIGNAL.debug_hold(EVENT_TX_COMPLETE | EVENT_TX_TIMEOUT, hold);
 }
 
-oer_espressif_staged_runtime::sram_fn! {
-    in rwtext "esp32s31-lower-mac.wifi_mac";
 pub fn wifi_mac() {
     if LINE.with(service_mac_line).is_none() {
         ERRORS.fetch_add(1, Ordering::Relaxed);
     }
 }
-}
-oer_espressif_staged_runtime::sram_fn! {
-    in rwtext "esp32s31-lower-mac.wifi_pwr";
+
 pub fn wifi_pwr() {
     if LINE.with(service_power_line).is_none() {
         ERRORS.fetch_add(1, Ordering::Relaxed);
     }
 }
-}
-oer_espressif_staged_runtime::sram_fn! {
-    in rwtext "esp32s31-lower-mac.doorbell";
+
 pub fn doorbell() {
     let _ = ACK.with(|ack| run_doorbell(&LINE, || ack.acknowledge()));
-}
 }
 
 pub struct ImageDoorbell(Doorbell<3>);

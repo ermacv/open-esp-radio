@@ -26,8 +26,10 @@ after its first link. It resolves strict cached functions to their defining
 input sections using the objects' symbol tables, selects those whole sections
 in the generated `strict-text.x` inside `.isr.text`, and links once more.
 With no strict cached functions the fragment stays empty and the first ELF is
-final. Existing `sram_fn!` declarations and dependency section rules also place
-their code in SRAM. The post-build interrupt check verifies the final ELF.
+final. Strict code has no manual function-section annotations. Assembly entry,
+riscv-rt and esp-hal section conventions still place their code in SRAM;
+`.hot.text` selects code for performance. The post-build interrupt check
+verifies the final ELF.
 
 The runtime build supplies `OER_IMAGE_INTERRUPTS`, the path to `image-linker.toml`
 in its output directory. It names the repository, chip contract and stack policy;

@@ -171,12 +171,10 @@ pub struct IrqPublisher<'irq, E: SignalExecutor> {
 }
 
 impl<E: SignalExecutor> IrqPublisher<'_, E> {
-    oer_esp32s31_hal::place_irq_path! {
     /// Publish one acknowledged hardware snapshot with one Release operation.
     #[inline(never)]
     pub fn publish(&self, events: u32) {
         self.publish_deferred(events).wake();
-    }
     }
 
     /// Release the MMIO/register borrow before pending the executor.
@@ -427,11 +425,9 @@ pub struct PowerIrqPublisher<'irq, E: SignalExecutor> {
 }
 
 impl<E: SignalExecutor> PowerIrqPublisher<'_, E> {
-    oer_esp32s31_hal::place_irq_path! {
     #[inline(never)]
     pub fn publish(&self, observation: MacPowerInterruptObservation) {
         self.publish_deferred(observation).wake();
-    }
     }
 
     #[inline(always)]

@@ -2963,7 +2963,6 @@ dependencies = [
  "esp32c5",
  "esp32s31",
  "oer-espressif-esp-hal-irq",
- "oer-espressif-staged-runtime",
  "oer-interrupt-table",
  "oer-memory",
  "oer-test-ui-cases",

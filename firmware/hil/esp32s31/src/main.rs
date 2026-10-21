@@ -88,22 +88,19 @@ use oer_espressif_staged_runtime as _;
 oer_espressif_staged_runtime::panic_hook!(panic_hook);
 
 #[cfg(feature = "panic-hook")]
-oer_espressif_staged_runtime::sram_fn! {
-    in critical_text "panic_hook";
-    /// The image's record of a panic, which the platform's panic entry calls
-    /// after its own record and before it resets the chip (feature
-    /// `panic-hook`): it records the post-mortem fault and the machine state,
-    /// formatting nothing, so the panic path stays a leaf in every stack
-    /// bound. The next boot reports what it recorded.
-    #[inline(always)]
-    fn panic_hook(details: &oer_espressif_staged_runtime::panic::PanicDetails<'_>) {
-        #[cfg(feature = "system-watchdog")]
-        system::postmortem::record_panic(details);
-        #[cfg(not(feature = "system-watchdog"))]
-        let _ = details;
-        let stage = 0;
-        fatal::record_panic(stage);
-    }
+/// The image's record of a panic, which the platform's panic entry calls
+/// after its own record and before it resets the chip (feature
+/// `panic-hook`): it records the post-mortem fault and the machine state,
+/// formatting nothing, so the panic path stays a leaf in every stack
+/// bound. The next boot reports what it recorded.
+#[inline(always)]
+fn panic_hook(details: &oer_espressif_staged_runtime::panic::PanicDetails<'_>) {
+    #[cfg(feature = "system-watchdog")]
+    system::postmortem::record_panic(details);
+    #[cfg(not(feature = "system-watchdog"))]
+    let _ = details;
+    let stage = 0;
+    fatal::record_panic(stage);
 }
 
 oer_espressif_staged_runtime::entry!(main);

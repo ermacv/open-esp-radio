@@ -24,7 +24,7 @@ macro_rules! interrupt_table {
             source: esp_hal::peripherals::Interrupt = esp_hal::peripherals::Interrupt,
             level: esp_hal::interrupt::Priority = esp_hal::interrupt::Priority,
             core: esp_hal::system::Cpu = esp_hal::system::Cpu,
-            handler_attributes: [#[unsafe(link_section = ".rwtext.open_radio_irq")]];
+            handler_attributes: [];
             $($entries)*
         }
     };

@@ -29,7 +29,10 @@ Interrupt-context panics retain hart and interrupted PC, but omit location and
 message: compiler metadata can live in cached PSRAM. Task-context panics keep
 their metadata because their code and stack already require the live mapping.
 The hook and all state it reads must stay in SRAM or retained memory and take
-no locks.
+no locks. The image linker places the hook and its strict callees, together
+with interrupt and exception paths, in SRAM from its analysis; these functions
+have no manual placement annotations. RX hot paths use `.hot.text` for
+performance.
 
 Images are built, written and run by [`cargo fw`](../../../tools/image/cli/README.md);
 no `.cargo/config.toml` adds Rust flags.

@@ -82,83 +82,74 @@ oer_espressif_staged_runtime::retained_static! {
     static SLOT: Slot;
 }
 
-oer_espressif_staged_runtime::sram_fn! {
-    in rwtext "fatal";
-    /// Record a panic's machine state; the platform resets the chip next.
-    #[cfg(feature = "panic-hook")]
-    pub(crate) fn record_panic(stage: u32) {
-        record(PANIC, 0, stage);
-    }
+/// Record a panic's machine state; the platform resets the chip next.
+#[cfg(feature = "panic-hook")]
+pub(crate) fn record_panic(stage: u32) {
+    record(PANIC, 0, stage);
 }
 
-oer_espressif_staged_runtime::sram_fn! {
-    in rwtext "fatal";
-    /// Record an exception's machine state and its `ra`, then reset.
-    pub(crate) fn record_exception(ra: u32) -> ! {
-        record(EXCEPTION, ra, 0);
-        esp_hal::system::software_reset()
-    }
+/// Record an exception's machine state and its `ra`, then reset.
+pub(crate) fn record_exception(ra: u32) -> ! {
+    record(EXCEPTION, ra, 0);
+    esp_hal::system::software_reset()
 }
 
-oer_espressif_staged_runtime::sram_fn! {
-    in rwtext "fatal";
-    fn record(kind: u32, ra: u32, stage: u32) {
-        let TrapRegisters {
-            hart,
-            mcause,
-            mepc,
-            mtval,
-            mscratch,
-            mtvec,
-            mtvt,
-        } = TrapRegisters::read();
-        let vector = mcause & 0x0fff;
-        let mtvt_slot = trap::current_hart_vector_slot(vector).unwrap_or(0);
-        let mut pending = [0; SOURCE_WORDS];
-        for source in esp_hal::interrupt::InterruptStatus::current().iterator() {
-            set(&mut pending, usize::from(source));
-        }
-        let cpu = Cpu::current();
-        let mut routed = [0; SOURCE_WORDS];
-        let mut line = 0;
-        for (source, cpu_interrupt) in esp_hal::interrupt::mapped_sources(cpu) {
-            if cpu_interrupt as usize == vector {
-                set(&mut routed, source);
-                line = u32::from(cpu_interrupt.is_pending())
-                    | u32::from(cpu_interrupt.is_enabled()) << 1
-                    | u32::from(matches!(
-                        cpu_interrupt.kind(),
-                        esp_hal::interrupt::InterruptKind::Edge
-                    )) << 2
-                    | cpu_interrupt.level() << 8;
-            }
-        }
-        // The other hart may hold any lock while this one fails, so the slot
-        // is taken without waiting; when that hart is recording its own
-        // failure, this one's is skipped.
-        let Some(mut slot) = SLOT.try_lock() else {
-            return;
-        };
-        *slot = Slot {
-            magic: MAGIC,
-            kind,
-            hart: hart as u32,
-            mcause: mcause as u32,
-            mepc: mepc as u32,
-            mtval: mtval as u32,
-            ra,
-            mscratch: mscratch as u32,
-            mtvec: mtvec as u32,
-            mtvt: mtvt as u32,
-            mtvt_slot,
-            stage,
-            line,
-            pending,
-            routed,
-            checksum: 0,
-        };
-        slot.checksum = slot.sum();
+fn record(kind: u32, ra: u32, stage: u32) {
+    let TrapRegisters {
+        hart,
+        mcause,
+        mepc,
+        mtval,
+        mscratch,
+        mtvec,
+        mtvt,
+    } = TrapRegisters::read();
+    let vector = mcause & 0x0fff;
+    let mtvt_slot = trap::current_hart_vector_slot(vector).unwrap_or(0);
+    let mut pending = [0; SOURCE_WORDS];
+    for source in esp_hal::interrupt::InterruptStatus::current().iterator() {
+        set(&mut pending, usize::from(source));
     }
+    let cpu = Cpu::current();
+    let mut routed = [0; SOURCE_WORDS];
+    let mut line = 0;
+    for (source, cpu_interrupt) in esp_hal::interrupt::mapped_sources(cpu) {
+        if cpu_interrupt as usize == vector {
+            set(&mut routed, source);
+            line = u32::from(cpu_interrupt.is_pending())
+                | u32::from(cpu_interrupt.is_enabled()) << 1
+                | u32::from(matches!(
+                    cpu_interrupt.kind(),
+                    esp_hal::interrupt::InterruptKind::Edge
+                )) << 2
+                | cpu_interrupt.level() << 8;
+        }
+    }
+    // The other hart may hold any lock while this one fails, so the slot
+    // is taken without waiting; when that hart is recording its own
+    // failure, this one's is skipped.
+    let Some(mut slot) = SLOT.try_lock() else {
+        return;
+    };
+    *slot = Slot {
+        magic: MAGIC,
+        kind,
+        hart: hart as u32,
+        mcause: mcause as u32,
+        mepc: mepc as u32,
+        mtval: mtval as u32,
+        ra,
+        mscratch: mscratch as u32,
+        mtvec: mtvec as u32,
+        mtvt: mtvt as u32,
+        mtvt_slot,
+        stage,
+        line,
+        pending,
+        routed,
+        checksum: 0,
+    };
+    slot.checksum = slot.sum();
 }
 
 /// Set `source`'s bit, without an index whose bounds check could fail: a
