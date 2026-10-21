@@ -1,15 +1,15 @@
 //! Validate Cargo's cached runtime link against the linker's actual inputs.
 
-use crate::{ImageSpec, Result};
+use crate::Result;
 use oer_image_checks::linker::strict::{FRAGMENT, PLACEMENT, Placement, SPEC_ENV, SPEC_FILE, Spec};
 use std::{
     path::{Path, PathBuf},
     process::Command,
 };
 
-pub(super) fn configure(
+pub(crate) fn configure(
     command: &mut Command,
-    spec: &ImageSpec,
+    spec: &Spec,
     output: &Path,
     interrupts: bool,
 ) -> Result<PathBuf> {
@@ -33,7 +33,7 @@ pub(super) fn configure(
     Ok(path)
 }
 
-pub(super) fn build_with_retry(
+pub(crate) fn build_with_retry(
     mut build: impl FnMut(bool) -> Result<()>,
     mut matches: impl FnMut() -> Result<bool>,
 ) -> Result<()> {
@@ -51,7 +51,7 @@ pub(super) fn build_with_retry(
     Ok(())
 }
 
-pub(super) fn restore_if_matching(
+pub(crate) fn restore_if_matching(
     output: &Path,
     published: &Path,
     elf: &Path,
@@ -103,21 +103,10 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let root = directory.path();
         std::fs::write(root.join("stack.toml"), "policy").unwrap();
-        let spec = ImageSpec {
-            purpose: crate::bundle::Purpose::Flash,
+        let spec = Spec {
             root: root.to_owned(),
             chip: "test".into(),
-            application: crate::Application {
-                package: "test".into(),
-                binary: "test".into(),
-                features: Vec::new(),
-                default_features: true,
-            },
             stack_policy: "stack.toml".into(),
-            layout_seed: None,
-            runtime_environment: Vec::new(),
-            output: root.to_owned(),
-            checks: None,
         };
         let mut command = Command::new("not-executed");
         configure(&mut command, &spec, root, true).unwrap();

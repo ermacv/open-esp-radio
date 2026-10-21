@@ -14,7 +14,7 @@ use oer_os_durable::inputs::Inputs;
 mod fingerprint;
 pub use fingerprint::Fingerprint;
 
-/// A runtime's analysis specification, passed only to its linker invocation.
+/// An analysis specification; only links using the runtime script consume it.
 pub const SPEC_ENV: &str = "OER_IMAGE_INTERRUPTS";
 pub const SPEC_FILE: &str = "image-linker.toml";
 pub const FRAGMENT: &str = "strict-text.x";

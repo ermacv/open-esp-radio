@@ -13,8 +13,9 @@
 //! `rust-lld -flavor gnu` with the same arguments, as rustc would for the
 //! target's `rust-lld` linker.
 //!
-//! Runtime images with an interrupt contract then reuse the interrupt
-//! analysis to place strict cached code with one additional link.
+//! Links using the staged runtime script require an analysis specification
+//! and reuse the interrupt analysis to place strict cached code with one
+//! additional link. Other links ignore the specification.
 
 use std::{
     ffi::{OsStr, OsString},
@@ -82,7 +83,7 @@ pub fn run(arguments: Vec<OsString>, zeroed: &[String]) -> i32 {
         return 1;
     }
     let spec_path = std::env::var_os(strict::SPEC_ENV).map(PathBuf::from);
-    match link(&mut arguments, &sections, spec_path.as_deref()) {
+    match link(&mut arguments, &sections, spec_path.as_deref(), run_linker) {
         Ok(code) => code,
         Err(error) => {
             eprintln!("oer-image-linker: {error}");
@@ -95,10 +96,24 @@ fn link(
     arguments: &mut Vec<OsString>,
     sections: &[InputSection],
     spec: Option<&std::path::Path>,
+    mut run_linker: impl FnMut(&[OsString]) -> i32,
 ) -> crate::Result<i32> {
-    let Some(spec_path) = spec else {
+    if !uses_runtime_script(arguments) {
         return Ok(run_linker(arguments));
-    };
+    }
+    let spec_path = spec.ok_or_else(|| {
+        let output = output_file(arguments);
+        let binary = output
+            .as_deref()
+            .and_then(std::path::Path::file_name)
+            .unwrap_or_else(|| OsStr::new("<unknown bin>"))
+            .to_string_lossy();
+        format!(
+            "{binary}: runtime link requires {name}; build runtime images through \
+             cargo fw build, cargo fw probe or cargo hil",
+            name = strict::SPEC_ENV,
+        )
+    })?;
     let mut inputs = oer_os_durable::inputs::Inputs::tracked();
     let spec = strict::Spec::read(spec_path, &mut inputs)?;
     let directory = spec_path
@@ -123,6 +138,25 @@ fn link(
     }
     strict::save(placement, directory, &output, inputs)?;
     Ok(0)
+}
+
+fn uses_runtime_script(arguments: &[OsString]) -> bool {
+    let mut arguments = arguments.iter();
+    while let Some(argument) = arguments.next() {
+        let Some(text) = argument.to_str() else {
+            continue;
+        };
+        let script = if text == "-T" || text == "--script" {
+            arguments.next().and_then(|argument| argument.to_str())
+        } else {
+            text.strip_prefix("-T")
+                .or_else(|| text.strip_prefix("--script="))
+        };
+        if script.is_some_and(|path| std::path::Path::new(path).ends_with("runtime/link.x")) {
+            return true;
+        }
+    }
+    false
 }
 
 fn output_file(arguments: &[OsString]) -> Option<PathBuf> {
