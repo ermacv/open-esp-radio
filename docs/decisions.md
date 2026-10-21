@@ -198,6 +198,7 @@ bounds) live in the code that applies them.
 
 ## Radio ports
 
+- **Lower-MAC lifecycle.** One owner holds the lower-MAC core and its phase in place; every lifecycle transition is a method of a borrowed typestate view, shared by the port and any direct owner.
 - **Port contract.** `oer-radio-port` and the lower-MAC port are not frozen.
   A type-level mechanism must name the bug it prevents. The Bluetooth LE port
   takes the same form as the Wi-Fi lower-MAC port. No radio-system token

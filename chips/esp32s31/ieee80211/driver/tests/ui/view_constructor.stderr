@@ -1,0 +1,10 @@
+error[E0624]: associated function `new` is private
+ --> tests/ui/view_constructor.rs:9:45
+  |
+9 |     let _view = EnabledView::<_, OpenGate>::new(owner); // ui-error: E0624
+  |                                             ^^^ private associated function
+  |
+ ::: src/lower_mac/lifecycle.rs
+  |
+  |             fn new(owner: &'view mut CoreOwner<C>) -> Self { Self { owner, gate: PhantomData } }
+  |             ---------------------------------------------- private associated function defined here

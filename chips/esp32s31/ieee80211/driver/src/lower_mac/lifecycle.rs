@@ -1,40 +1,15 @@
-//! Consuming lifecycle and command barriers for the S31 hardware bank.
-//!
-//! Only an enabled owner admits TX. Disable and configuration retain that
-//! owner while their published attempts drain. A closed gate is constructed
-//! only after the published queues have ended; new admissions in ClosingGate
-//! and ClosedGate remain held. No runtime flag duplicates these states.
+//! Borrowed lifecycle views over one caller-owned hardware bank.
 use super::*;
-use core::ops::{Deref, DerefMut};
+use core::{
+    marker::PhantomData,
+    ops::{Deref, DerefMut},
+};
 use oer_ieee80211_port::backend::BackendTxProfile;
 
 mod bank;
-pub(crate) use bank::{CoreOwner, CoreOwnerFault};
+use bank::Phase;
+pub use bank::{CoreOwner, CoreView, VacantView};
 
-/// The disabled, idle hardware bank. Only this owner can retune or dismantle.
-#[must_use]
-pub struct DisabledCore<C, G = OpenGate> {
-    core: C,
-    gate: core::marker::PhantomData<G>,
-}
-/// An asynchronous enable owns its bank until the radio reports its retune.
-#[must_use]
-pub struct RetuningCore<C, G = OpenGate> {
-    core: C,
-    gate: core::marker::PhantomData<G>,
-}
-/// An enabled bank; the gate type determines whether a submission publishes.
-#[must_use]
-pub struct EnabledCore<C, G = OpenGate> {
-    core: C,
-    gate: core::marker::PhantomData<G>,
-}
-/// Disable owns every outstanding publication until its final terminal.
-#[must_use]
-pub struct DisablingCore<C, G = OpenGate> {
-    core: C,
-    gate: core::marker::PhantomData<G>,
-}
 /// New attempts publish immediately.
 pub enum OpenGate {}
 /// New attempts are held while the published prefix drains.
@@ -47,125 +22,154 @@ mod sealed {
     impl Gate for super::ClosingGate {}
     impl Gate for super::ClosedGate {}
 }
-/// Closed set of admission policies; only the core's transitions change it.
+/// Closed set of admission policies; transitions alone change the gate.
 pub trait CoreGate: sealed::Gate {
     #[doc(hidden)]
     const PUBLISH: bool;
+    #[doc(hidden)]
+    const BLOCKED: bool;
 }
 impl CoreGate for OpenGate {
     const PUBLISH: bool = true;
+    const BLOCKED: bool = false;
 }
 impl CoreGate for ClosingGate {
     const PUBLISH: bool = false;
+    const BLOCKED: bool = false;
 }
 impl CoreGate for ClosedGate {
     const PUBLISH: bool = false;
+    const BLOCKED: bool = true;
+}
+// The engine receives this small value; it is never specialized by gate.
+#[derive(Clone, Copy)]
+enum GateMode {
+    Open,
+    Closing,
+    Closed,
+}
+// These are compile-time gate choices; no second runtime phase is stored.
+struct GatePhase<G>(PhantomData<G>);
+impl<G: CoreGate> GatePhase<G> {
+    const DISABLED: Phase = if G::PUBLISH {
+        Phase::Disabled
+    } else if G::BLOCKED {
+        Phase::DisabledClosed
+    } else {
+        Phase::DisabledClosing
+    };
+    const RETUNING: Phase = if G::PUBLISH {
+        Phase::Retuning
+    } else if G::BLOCKED {
+        Phase::RetuningClosed
+    } else {
+        Phase::RetuningClosing
+    };
+    const ENABLED: Phase = if G::PUBLISH {
+        Phase::Open
+    } else if G::BLOCKED {
+        Phase::Closed
+    } else {
+        Phase::Closing
+    };
+    const MODE: GateMode = if G::PUBLISH {
+        GateMode::Open
+    } else if G::BLOCKED {
+        GateMode::Closed
+    } else {
+        GateMode::Closing
+    };
 }
 
-/// Enable either returns its enabled owner or retains it for an actual retune.
-#[must_use]
-pub enum LifecycleStart<C, G = OpenGate> {
-    Enabled(EnabledCore<C, G>),
-    Retune(RetuningCore<C, G>),
+macro_rules! view {
+    ($(#[$meta:meta])* $name:ident) => {
+        $(#[$meta])*
+        #[must_use]
+        pub struct $name<'view, C, G = OpenGate> {
+            owner: &'view mut CoreOwner<C>,
+            gate: PhantomData<G>,
+        }
+        impl<'view, C, G> $name<'view, C, G> {
+            #[inline]
+            fn new(owner: &'view mut CoreOwner<C>) -> Self { Self { owner, gate: PhantomData } }
+        }
+        impl<C, G> Deref for $name<'_, C, G> {
+            type Target = C;
+            #[inline]
+            fn deref(&self) -> &C { self.owner.stored() }
+        }
+        impl<C, G> DerefMut for $name<'_, C, G> {
+            #[inline]
+            fn deref_mut(&mut self) -> &mut C { self.owner.stored_mut() }
+        }
+    };
 }
-/// A gate barrier retains the closing owner until its published prefix ends.
+view!(/// A disabled bank; only this view can select a channel or dismantle.
+    DisabledView);
+view!(/// A pending enable, retained in its owner during the radio retune.
+    RetuningView);
+view!(/// An enabled bank with a statically selected admission policy.
+    EnabledView);
+view!(/// A disabling bank retaining all outstanding publications.
+    DisablingView);
+
+/// Non-lifecycle commands shared by idle phase views. No transition or TX
+/// admission is available through this narrower borrowed projection.
 #[must_use]
-pub enum GateClosure<C> {
-    Closing(EnabledCore<C, ClosingGate>),
-    Closed(EnabledCore<C, ClosedGate>),
+pub struct CommandView<'view, C> {
+    core: &'view mut C,
 }
-/// Configuration owns the bank, policy and requested interface while TX drains.
-#[must_use]
-pub struct Configuring<C> {
-    core: C,
-    config: CoreVif,
-    policy: ReceivePolicy,
+impl<C> Deref for CommandView<'_, C> {
+    type Target = C;
+    #[inline]
+    fn deref(&self) -> &C {
+        self.core
+    }
 }
-/// Configuration completes exactly once, returning its original lifecycle owner.
-#[must_use]
-pub enum ConfigurationProgress<C> {
-    Waiting(Configuring<C>),
-    Configured(C),
+impl<C> DerefMut for CommandView<'_, C> {
+    #[inline]
+    fn deref_mut(&mut self) -> &mut C {
+        self.core
+    }
 }
-/// A refused receive policy returns the unchanged owner.
+
+/// Enable either completes or waits for an actual radio retune.
 #[must_use]
-pub struct ConfigureRefused<C> {
-    pub core: C,
+pub enum LifecycleStart<V, R> {
+    Enabled(V),
+    Retune(R),
+}
+/// The closing view persists until its published prefix ends.
+#[must_use]
+pub enum GateClosure<V, C> {
+    Closing(V),
+    Closed(C),
+}
+/// A FIFO configuration barrier, borrowing its original lifecycle view.
+#[must_use]
+pub struct ConfiguringView<V> {
+    core: V,
+}
+/// Configuration returns its original lifecycle view exactly once.
+#[must_use]
+pub enum ConfigurationProgress<V> {
+    Waiting(ConfiguringView<V>),
+    Configured(V),
+}
+/// A refused receive policy returns the unchanged view.
+#[must_use]
+pub struct ConfigureRefused<V> {
+    pub core: V,
     pub reason: UnsupportedVif,
 }
-/// Gate publication failed; this owner retains every published predecessor.
+/// Failed gate publication retains its prefix and admits only draining.
 #[must_use]
-pub struct GateOpenFailed<C> {
-    pub fault: LowerMacFault,
-    pub(super) core: DisablingCore<C, ClosedGate>,
-}
-
-impl<C, G> DisabledCore<C, G> {
-    pub(super) fn new(core: C) -> Self {
-        Self {
-            core,
-            gate: core::marker::PhantomData,
-        }
-    }
-}
-impl<C, G> EnabledCore<C, G> {
-    fn new(core: C) -> Self {
-        Self {
-            core,
-            gate: core::marker::PhantomData,
-        }
-    }
-}
-
-impl<C, G> Deref for DisabledCore<C, G> {
-    type Target = C;
-    fn deref(&self) -> &C {
-        &self.core
-    }
-}
-impl<C, G> DerefMut for DisabledCore<C, G> {
-    fn deref_mut(&mut self) -> &mut C {
-        &mut self.core
-    }
-}
-
-impl<C, G> Deref for RetuningCore<C, G> {
-    type Target = C;
-    fn deref(&self) -> &C {
-        &self.core
-    }
-}
-impl<C, G> DerefMut for RetuningCore<C, G> {
-    fn deref_mut(&mut self) -> &mut C {
-        &mut self.core
-    }
-}
-
-impl<C, G> Deref for DisablingCore<C, G> {
-    type Target = C;
-    fn deref(&self) -> &C {
-        &self.core
-    }
-}
-impl<C, G> DerefMut for DisablingCore<C, G> {
-    fn deref_mut(&mut self) -> &mut C {
-        &mut self.core
-    }
-}
-
-impl<C, G> Deref for EnabledCore<C, G> {
-    type Target = C;
-    fn deref(&self) -> &C {
-        &self.core
-    }
-}
-impl<C, G> DerefMut for EnabledCore<C, G> {
-    fn deref_mut(&mut self) -> &mut C {
-        &mut self.core
-    }
+pub struct FailedGateView<'view, C> {
+    pub(super) owner: &'view mut CoreOwner<C>,
 }
 
 impl<
+    'view,
     'core,
     'slot,
     X: BackendTxProfile,
@@ -176,13 +180,25 @@ impl<
     Path: PoolPath,
     const TICKETS: usize,
     G: CoreGate,
-> DisabledCore<LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>, G>
+> DisabledView<'view, LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>, G>
 {
-    /// Recover construction resources. This type has no admitted publication.
+    /// Reset this role's contention after the final exchange terminal.
+    #[inline]
+    pub fn reset_contention(&mut self, role: VifRole, category: WmmAccessCategory) {
+        self.deref_mut().reset_contention(role, category);
+    }
+
+    /// Recover construction resources after the final terminal.
+    #[inline]
     pub fn dismantle(
         self,
     ) -> LowerMacCoreParts<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS> {
-        let core = self.core;
+        self.owner.phase = Phase::Vacant;
+        let core = self
+            .owner
+            .core
+            .take()
+            .expect("disabled view retains its core");
         LowerMacCoreParts {
             authority: core.authority,
             tx: core
@@ -196,40 +212,50 @@ impl<
         }
     }
     /// Record the actual channel after a radio start.
+    #[inline]
     pub fn radio_tuned_to(&mut self, channel: WifiChannel) {
-        self.core.tuned = channel;
+        self.tuned = channel;
     }
-    /// Choose the next enable's channel; an enabled owner has no such operation.
+    /// Choose the next enable's channel.
+    #[inline]
     pub fn set_checked_channel(&mut self, channel: WifiChannel) {
-        self.core.set_checked_channel(channel);
+        self.deref_mut().set_checked_channel(channel);
     }
-    /// Consume disabled ownership, retaining it across an asynchronous retune.
+    /// Consume this view, updating its owner before returning the next view.
+    #[inline]
     pub fn enable_checked(
         self,
-    ) -> LifecycleStart<LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>, G> {
-        if self.core.channel == self.core.tuned {
-            LifecycleStart::Enabled(EnabledCore::new(self.core))
+    ) -> LifecycleStart<
+        EnabledView<'view, LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>, G>,
+        RetuningView<'view, LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>, G>,
+    > {
+        if self.channel == self.tuned {
+            self.owner.phase = GatePhase::<G>::ENABLED;
+            LifecycleStart::Enabled(EnabledView::new(self.owner))
         } else {
-            LifecycleStart::Retune(RetuningCore {
-                core: self.core,
-                gate: core::marker::PhantomData,
-            })
+            self.owner.phase = GatePhase::<G>::RETUNING;
+            LifecycleStart::Retune(RetuningView::new(self.owner))
         }
     }
-    /// Reserve the bank for a receive policy's FIFO barrier.
-    #[allow(clippy::result_large_err, reason = "refusal retains the entire bank")]
-    pub fn configure(self, config: CoreVif) -> Result<Configuring<Self>, ConfigureRefused<Self>> {
-        match receive_policy(&self.core.config, &config) {
-            Ok(policy) => Ok(Configuring {
-                core: self,
-                config,
-                policy,
-            }),
+
+    /// Reserve the bank at this command's FIFO position.
+    #[inline]
+    pub fn configure(
+        self,
+        config: CoreVif,
+    ) -> Result<ConfiguringView<Self>, ConfigureRefused<Self>> {
+        match self
+            .owner
+            .configure_in_place(config, false, GatePhase::<G>::MODE)
+        {
+            Ok(()) => Ok(ConfiguringView { core: self }),
             Err(reason) => Err(ConfigureRefused { core: self, reason }),
         }
     }
 }
+
 impl<
+    'view,
     'core,
     'slot,
     X: BackendTxProfile,
@@ -240,34 +266,41 @@ impl<
     Path: PoolPath,
     const TICKETS: usize,
     G: CoreGate,
-> RetuningCore<LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>, G>
+> RetuningView<'view, LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>, G>
 {
+    /// Reset this role's contention after the final exchange terminal.
+    #[inline]
+    pub fn reset_contention(&mut self, role: VifRole, category: WmmAccessCategory) {
+        self.deref_mut().reset_contention(role, category);
+    }
+
     /// The actual target of this enable's retune.
+    #[inline]
     pub fn target_channel(&self) -> WifiChannel {
-        self.core.channel
+        self.channel
     }
     /// A failed retune returns disabled ownership on the previous channel.
-    #[allow(clippy::result_large_err, reason = "a failed retune retains the bank")]
-    #[expect(
-        clippy::type_complexity,
-        reason = "the consuming transition preserves every concrete hardware owner and gate state"
-    )]
+    #[inline]
     pub fn finish_retune(
         mut self,
         retuned: bool,
     ) -> Result<
-        EnabledCore<LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>, G>,
-        DisabledCore<LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>, G>,
+        EnabledView<'view, LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>, G>,
+        DisabledView<'view, LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>, G>,
     > {
         if retuned {
-            self.core.tuned = self.core.channel;
-            Ok(EnabledCore::new(self.core))
+            self.tuned = self.channel;
+            self.owner.phase = GatePhase::<G>::ENABLED;
+            Ok(EnabledView::new(self.owner))
         } else {
-            Err(DisabledCore::new(self.core))
+            self.owner.phase = GatePhase::<G>::DISABLED;
+            Err(DisabledView::new(self.owner))
         }
     }
 }
+
 impl<
+    'view,
     'core,
     'slot,
     X: BackendTxProfile,
@@ -278,13 +311,20 @@ impl<
     Path: PoolPath,
     const TICKETS: usize,
     G: CoreGate,
-> EnabledCore<LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>, G>
+> EnabledView<'view, LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>, G>
 {
-    /// Admit an MPDU only while enabled; the gate's type selects publication.
+    /// Reset this role's contention after the final exchange terminal.
+    #[inline]
+    pub fn reset_contention(&mut self, role: VifRole, category: WmmAccessCategory) {
+        self.deref_mut().reset_contention(role, category);
+    }
+
+    /// Admit an MPDU; only the gate's type selects publication.
     #[allow(
         clippy::result_large_err,
         reason = "refusal returns all admitted owners"
     )]
+    #[inline]
     pub fn submit_checked<H: LowerMacHardware>(
         &mut self,
         hardware: &mut H,
@@ -292,47 +332,49 @@ impl<
         admission: TxAdmission<'core, Path>,
         values: MpduValues<'slot, BUFFER_SIZE>,
     ) -> Result<(), SubmitFault<'core, 'slot, BUFFER_SIZE, Path>> {
-        self.core
+        self.deref_mut()
             .submit_checked(hardware, queue, admission, values, G::PUBLISH)
     }
-    /// An enabled receiver narrows the hardware's superset of receive rules.
+    /// Narrow the hardware's superset of receive rules.
+    #[inline]
     pub fn received<'frame, H: StaNoiseFloorHardware>(
         &self,
         hardware: &H,
         frame: &NormalizedRxFrame<'frame>,
     ) -> Option<(&'frame [u8], Esp32s31RxMeta)> {
-        self.core.received(hardware, frame)
+        self.deref().received(hardware, frame)
     }
-    /// Withdraw held attempts and retain published attempts in the drain owner.
-    /// A poisoned bank keeps all rights; it can never complete disable.
+    /// Withdraw held attempts, retaining published attempts until their terminals.
+    #[inline]
     pub fn disable_checked<H: CcmpKeyHardware, K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>>(
-        mut self,
+        self,
         hardware: &mut H,
         sink: &mut K,
-    ) -> DisablingCore<LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>, G> {
-        if self.core.fault.is_none() {
-            self.core.withdraw_held_attempts(hardware, sink);
-        }
-        DisablingCore {
-            core: self.core,
-            gate: core::marker::PhantomData,
-        }
+    ) -> DisablingView<'view, LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>, G>
+    {
+        self.owner
+            .disable_in_place(hardware, sink, GatePhase::<G>::MODE);
+        DisablingView::new(self.owner)
     }
-    /// Reserve the bank at this command's FIFO position. Only earlier attempts
-    /// of the requested interface delay it; the other role keeps its owners.
-    #[allow(clippy::result_large_err, reason = "refusal retains the entire bank")]
-    pub fn configure(self, config: CoreVif) -> Result<Configuring<Self>, ConfigureRefused<Self>> {
-        match receive_policy(&self.core.config, &config) {
-            Ok(policy) => Ok(Configuring {
-                core: self,
-                config,
-                policy,
-            }),
+
+    /// Reserve the bank at this command's FIFO position.
+    #[inline]
+    pub fn configure(
+        self,
+        config: CoreVif,
+    ) -> Result<ConfiguringView<Self>, ConfigureRefused<Self>> {
+        match self
+            .owner
+            .configure_in_place(config, true, GatePhase::<G>::MODE)
+        {
+            Ok(()) => Ok(ConfiguringView { core: self }),
             Err(reason) => Err(ConfigureRefused { core: self, reason }),
         }
     }
 }
+
 impl<
+    'view,
     'core,
     'slot,
     X: BackendTxProfile,
@@ -343,34 +385,36 @@ impl<
     Path: PoolPath,
     const TICKETS: usize,
     G: CoreGate,
-> DisablingCore<LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>, G>
+> DisablingView<'view, LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>, G>
 {
-    /// Finish after the final TX terminal. Returning disabled ownership emits
-    /// exactly one disabled terminal; a waiting or poisoned owner stays whole.
-    #[allow(
-        clippy::result_large_err,
-        reason = "a draining bank retains all owners"
-    )]
-    #[expect(
-        clippy::type_complexity,
-        reason = "the consuming transition preserves every concrete hardware owner and gate state"
-    )]
+    /// Reset this role's contention after the final exchange terminal.
+    #[inline]
+    pub fn reset_contention(&mut self, role: VifRole, category: WmmAccessCategory) {
+        self.deref_mut().reset_contention(role, category);
+    }
+
+    /// Emit one Disabled terminal once the entire prefix is retired.
+    #[inline]
     pub fn finish<K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>>(
         self,
         sink: &mut K,
     ) -> Result<
-        DisabledCore<LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>, G>,
+        DisabledView<'view, LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>, G>,
         Self,
     > {
-        if self.core.fault.is_some() || self.core.attempts().next().is_some() {
-            Err(self)
+        if self
+            .owner
+            .finish_disable_in_place(sink, GatePhase::<G>::MODE)
+        {
+            Ok(DisabledView::new(self.owner))
         } else {
-            sink.disabled();
-            Ok(DisabledCore::new(self.core))
+            Err(self)
         }
     }
 }
+
 impl<
+    'view,
     'core,
     'slot,
     X: BackendTxProfile,
@@ -380,17 +424,24 @@ impl<
     const BUFFER_SIZE: usize,
     Path: PoolPath,
     const TICKETS: usize,
-> EnabledCore<LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>, OpenGate>
+> EnabledView<'view, LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>, OpenGate>
 {
-    /// Stop new publications by transferring ownership to the closing state.
+    /// Hold new attempts while the published prefix drains.
+    #[inline]
     pub fn hold_new_attempts(
         self,
-    ) -> EnabledCore<LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>, ClosingGate>
-    {
-        EnabledCore::new(self.core)
+    ) -> EnabledView<
+        'view,
+        LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>,
+        ClosingGate,
+    > {
+        self.owner.phase = Phase::Closing;
+        EnabledView::new(self.owner)
     }
 }
+
 impl<
+    'view,
     'core,
     'slot,
     X: BackendTxProfile,
@@ -400,23 +451,38 @@ impl<
     const BUFFER_SIZE: usize,
     Path: PoolPath,
     const TICKETS: usize,
-> EnabledCore<LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>, ClosingGate>
+>
+    EnabledView<
+        'view,
+        LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>,
+        ClosingGate,
+    >
 {
-    /// Advance the barrier after a TX terminal. Hardware blocking can only be
-    /// reached with no published attempt and with new attempts already held.
+    /// Block hardware queues only after every published predecessor ended.
+    #[inline]
     pub fn close_gate<H: LowerMacHardware>(
         self,
         hardware: &mut H,
-    ) -> GateClosure<LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>> {
-        if self.core.fault.is_some() || !self.core.published_idle() {
+    ) -> GateClosure<
+        Self,
+        EnabledView<
+            'view,
+            LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>,
+            ClosedGate,
+        >,
+    > {
+        if self.fault.is_some() || !self.published_idle() {
             GateClosure::Closing(self)
         } else {
             hardware.set_power_save_tx_block(true);
-            GateClosure::Closed(EnabledCore::new(self.core))
+            self.owner.phase = Phase::Closed;
+            GateClosure::Closed(EnabledView::new(self.owner))
         }
     }
 }
+
 impl<
+    'view,
     'core,
     'slot,
     X: BackendTxProfile,
@@ -426,36 +492,38 @@ impl<
     const BUFFER_SIZE: usize,
     Path: PoolPath,
     const TICKETS: usize,
-> EnabledCore<LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>, ClosedGate>
+>
+    EnabledView<
+        'view,
+        LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>,
+        ClosedGate,
+    >
 {
-    /// Publish the held prefix. Failure returns every unpublished attempt and
-    /// retains the published prefix in an owner exposing only drain operations.
-    #[allow(clippy::result_large_err, reason = "failure retains the complete bank")]
-    #[expect(
-        clippy::type_complexity,
-        reason = "the consuming transition preserves every concrete hardware owner and gate state"
-    )]
+    /// Publish the held prefix, retaining published predecessors on failure.
+    #[inline]
     pub fn open_gate<H: LowerMacHardware, K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>>(
         mut self,
         hardware: &mut H,
         sink: &mut K,
     ) -> Result<
-        EnabledCore<LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>>,
-        GateOpenFailed<LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>>,
+        EnabledView<'view, LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>>,
+        FailedGateView<'view, LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>>,
     > {
-        match self.core.open_held_gate(hardware, sink) {
-            Ok(()) => Ok(EnabledCore::new(self.core)),
-            Err(fault) => Err(GateOpenFailed {
-                fault,
-                core: DisablingCore {
-                    core: self.core,
-                    gate: core::marker::PhantomData,
-                },
-            }),
+        match self.open_held_gate(hardware, sink) {
+            Ok(()) => {
+                self.owner.phase = Phase::Open;
+                Ok(EnabledView::new(self.owner))
+            }
+            Err(fault) => {
+                self.owner.phase = Phase::Failed { fault };
+                Err(FailedGateView { owner: self.owner })
+            }
         }
     }
 }
+
 impl<
+    'view,
     'core,
     'slot,
     X: BackendTxProfile,
@@ -465,14 +533,24 @@ impl<
     const BUFFER_SIZE: usize,
     Path: PoolPath,
     const TICKETS: usize,
-    C: DerefMut<Target = LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>>,
-> Configuring<C>
+    G: CoreGate,
+>
+    ConfiguringView<
+        DisabledView<'view, LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>, G>,
+    >
 {
-    /// A pending publication's deadline bounds this FIFO barrier.
+    /// The published prefix's next deadline.
+    #[inline]
     pub fn next_deadline(&self) -> Option<oer_time::Instant> {
         self.core.next_deadline()
     }
-    /// Service earlier publications without admitting any later command.
+    /// Reset contention when an earlier publication ends.
+    #[inline]
+    pub fn reset_contention(&mut self, role: VifRole, category: WmmAccessCategory) {
+        self.core.reset_contention(role, category);
+    }
+    /// Service predecessors without admitting any later command.
+    #[inline]
     pub fn service<
         H: HtAmpduHardware + CcmpKeyHardware,
         K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>,
@@ -484,16 +562,19 @@ impl<
     ) -> Result<(), LowerMacFault> {
         self.core.service(hardware, wake, sink)
     }
-    /// Withdraw the requested role's held attempts, then apply its policy once
-    /// that role's published attempts end. No configuration races a submission.
+    /// Apply the receive policy after the requested role's prefix ends.
+    #[inline]
     pub fn advance<H: LowerMacHardware, K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>>(
-        mut self,
+        self,
         hardware: &mut H,
         sink: &mut K,
-    ) -> ConfigurationProgress<C> {
+    ) -> ConfigurationProgress<
+        DisabledView<'view, LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>, G>,
+    > {
         if self
             .core
-            .advance_vif(hardware, sink, self.config, self.policy)
+            .owner
+            .advance_configuration_in_place(hardware, sink)
         {
             ConfigurationProgress::Configured(self.core)
         } else {
@@ -501,7 +582,9 @@ impl<
         }
     }
 }
+
 impl<
+    'view,
     'core,
     'slot,
     X: BackendTxProfile,
@@ -511,13 +594,24 @@ impl<
     const BUFFER_SIZE: usize,
     Path: PoolPath,
     const TICKETS: usize,
-> GateOpenFailed<LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>>
+    G: CoreGate,
+>
+    ConfiguringView<
+        EnabledView<'view, LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>, G>,
+    >
 {
-    /// The next deadline of the prefix published before the failure.
+    /// The published prefix's next deadline.
+    #[inline]
     pub fn next_deadline(&self) -> Option<oer_time::Instant> {
         self.core.next_deadline()
     }
-    /// Preserve each published attempt's own terminal outcome.
+    /// Reset contention when an earlier publication ends.
+    #[inline]
+    pub fn reset_contention(&mut self, role: VifRole, category: WmmAccessCategory) {
+        self.core.reset_contention(role, category);
+    }
+    /// Service predecessors without admitting any later command.
+    #[inline]
     pub fn service<
         H: HtAmpduHardware + CcmpKeyHardware,
         K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>,
@@ -529,28 +623,93 @@ impl<
     ) -> Result<(), LowerMacFault> {
         self.core.service(hardware, wake, sink)
     }
-    /// Recover disabled ownership only after all published attempts ended.
-    #[allow(clippy::result_large_err, reason = "failure retains the complete bank")]
-    #[expect(
-        clippy::type_complexity,
-        reason = "the consuming transition preserves every concrete hardware owner and gate state"
-    )]
+    /// Apply the receive policy after the requested role's prefix ends.
+    #[inline]
+    pub fn advance<H: LowerMacHardware, K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>>(
+        self,
+        hardware: &mut H,
+        sink: &mut K,
+    ) -> ConfigurationProgress<
+        EnabledView<'view, LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>, G>,
+    > {
+        if self
+            .core
+            .owner
+            .advance_configuration_in_place(hardware, sink)
+        {
+            ConfigurationProgress::Configured(self.core)
+        } else {
+            ConfigurationProgress::Waiting(self)
+        }
+    }
+
+    /// Receive with the original interface policy while its barrier drains.
+    #[inline]
+    pub fn received<'frame, H: StaNoiseFloorHardware>(
+        &self,
+        hardware: &H,
+        frame: &NormalizedRxFrame<'frame>,
+    ) -> Option<(&'frame [u8], Esp32s31RxMeta)> {
+        self.core.received(hardware, frame)
+    }
+}
+
+impl<
+    'view,
+    'core,
+    'slot,
+    X: BackendTxProfile,
+    P: WifiTxPowerProfile,
+    E: WifiTxEntropy,
+    T: oer_time::Timer,
+    const BUFFER_SIZE: usize,
+    Path: PoolPath,
+    const TICKETS: usize,
+> FailedGateView<'view, LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>>
+{
+    /// The publication failure that retained this prefix.
+    #[inline]
+    pub fn fault(&self) -> LowerMacFault {
+        match self.owner.phase {
+            Phase::Failed { fault } => fault,
+            _ => panic!("failed view retains its publication fault"),
+        }
+    }
+    /// The next deadline of the prefix published before failure.
+    #[inline]
+    pub fn next_deadline(&self) -> Option<oer_time::Instant> {
+        self.owner.stored().next_deadline()
+    }
+    /// Preserve each published predecessor's own terminal outcome.
+    #[inline]
+    pub fn service<
+        H: HtAmpduHardware + CcmpKeyHardware,
+        K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>,
+    >(
+        &mut self,
+        hardware: &mut H,
+        wake: WifiTxWake,
+        sink: &mut K,
+    ) -> Result<(), LowerMacFault> {
+        self.owner.stored_mut().service(hardware, wake, sink)
+    }
+    /// Recover disabled ownership only after every predecessor ended.
+    #[inline]
     pub fn finish<K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>>(
         self,
         sink: &mut K,
     ) -> Result<
-        DisabledCore<
+        DisabledView<
+            'view,
             LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>,
             ClosedGate,
         >,
         Self,
     > {
-        match self.core.finish(sink) {
-            Ok(core) => Ok(core),
-            Err(core) => Err(Self {
-                fault: self.fault,
-                core,
-            }),
+        if self.owner.finish_disable_in_place(sink, GateMode::Closed) {
+            Ok(DisabledView::new(self.owner))
+        } else {
+            Err(self)
         }
     }
 }
@@ -567,7 +726,8 @@ impl<
     const TICKETS: usize,
 > LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>
 {
-    // The typed owners and the retained P2 owner share these hardware steps.
+    // Every view transition uses these in-place hardware steps.
+    #[inline(never)]
     fn open_held_gate<H: LowerMacHardware, K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>>(
         &mut self,
         hardware: &mut H,
@@ -640,6 +800,7 @@ impl<
         }
         Ok(())
     }
+    #[inline(never)]
     fn advance_vif<H: LowerMacHardware, K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>>(
         &mut self,
         hardware: &mut H,

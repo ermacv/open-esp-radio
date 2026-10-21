@@ -32,23 +32,29 @@
 //!
 //! # Lifecycle and command barriers
 //!
-//! Construction returns [`DisabledCore`]. Enable consumes it, either returning
-//! [`EnabledCore`] or retaining the whole bank in [`RetuningCore`]. Disable
-//! consumes the enabled owner; [`DisablingCore::finish`] returns the disabled
-//! owner and emits its one terminal only after all publications ended. A
-//! poisoned bank retains its owners. Channel changes and dismantling exist
-//! only on the disabled type. The gate type survives disable and retune.
+//! Construction returns a [`CoreOwner`] holding the core and phase in place.
+//! [`CoreOwner::view`] lends the phase's view. Enable consumes a
+//! [`DisabledView`], returning an [`EnabledView`] or a [`RetuningView`].
+//! Disable consumes the enabled view; [`DisablingView::finish`] returns a
+//! disabled view and emits one terminal after all publications ended. A
+//! poisoned bank retains its owners. Only disabled views can select a
+//! channel or dismantle the bank. Gate types survive disable and retune.
 //!
-//! Closing first transfers the enabled bank to [`ClosingGate`], whose new
-//! attempts stay held. Only a drained published prefix constructs [`ClosedGate`]
-//! and blocks hardware queues. Opening consumes this evidence; publication
-//! failure returns every held owner and retains the published prefix.
+//! Closing consumes the enabled view and holds new attempts. A drained
+//! published prefix produces a [`ClosedGate`] view and blocks hardware
+//! queues. Opening consumes this evidence; publication failure returns every
+//! held owner and retains the published prefix in [`FailedGateView`].
 //!
-//! Receive configuration consumes either the disabled or enabled bank into
-//! [`Configuring`]. That owner withdraws its role's held frames and waits for
-//! that role's published frames, then returns the original lifecycle owner.
-//! No later FIFO command can publish through a configuration barrier. The
-//! other interface's outstanding frames keep their own completion path.
+//! Receive configuration consumes a disabled or enabled view into
+//! [`ConfiguringView`]. The barrier withdraws its role's held frames and
+//! waits for that role's publications, then returns the original phase's
+//! view. Later FIFO commands cannot publish through the barrier. The other
+//! interface's frames retain their own completion paths.
+//!
+//! Direct owners and the port use these same view methods. Borrow a fresh
+//! view after every asynchronous wait. [`CommandView`] projects an idle
+//! phase's shared non-lifecycle commands without exposing TX admission or a
+//! lifecycle transition.
 //!
 //! # Transmit buffers
 //!
@@ -179,11 +185,10 @@ mod resources;
 pub use resources::{CoreAuthority, CorePools, CoreResources, FreeQueue, TxTicket};
 mod lifecycle;
 pub use lifecycle::{
-    ClosedGate, ClosingGate, ConfigurationProgress, ConfigureRefused, Configuring, CoreGate,
-    DisabledCore, DisablingCore, EnabledCore, GateClosure, GateOpenFailed, LifecycleStart,
-    OpenGate, RetuningCore,
+    ClosedGate, ClosingGate, CommandView, ConfigurationProgress, ConfigureRefused, ConfiguringView,
+    CoreGate, CoreOwner, CoreView, DisabledView, DisablingView, EnabledView, FailedGateView,
+    GateClosure, LifecycleStart, OpenGate, RetuningView, VacantView,
 };
-pub(crate) use lifecycle::{CoreOwner, CoreOwnerFault};
 
 mod keys;
 pub use keys::{
@@ -669,7 +674,7 @@ pub struct LowerMacConfig {
 }
 
 /// The owners a disabled, idle [`LowerMacCore`] is built from, which
-/// [`DisabledCore::dismantle`] returns.
+/// [`DisabledView::dismantle`] returns.
 pub struct LowerMacCoreParts<
     'core,
     'slot,
@@ -901,8 +906,8 @@ where
         tx: OrdinaryTxIdleOwner<'slot, X, P, E, T, BUFFER_SIZE>,
         config: LowerMacConfig,
         coex: &'slot dyn RadioCoexPriorities,
-    ) -> DisabledCore<Self> {
-        DisabledCore::new(Self {
+    ) -> CoreOwner<Self> {
+        CoreOwner::prepared(Self {
             authority,
             tx: tx.owner,
             config,
@@ -928,7 +933,7 @@ where
     /// state of the core they came from is gone, as at a radio start.
     pub fn from_parts(
         parts: LowerMacCoreParts<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>,
-    ) -> DisabledCore<Self> {
+    ) -> CoreOwner<Self> {
         let LowerMacCoreParts {
             authority,
             tx,
@@ -937,7 +942,7 @@ where
             keys,
         } = parts;
         let mut core = Self::new(authority, tx, config, coex);
-        core.keys = keys;
+        core.core.as_mut().expect("new owner retains its core").keys = keys;
         core
     }
 
@@ -1021,6 +1026,7 @@ where
         crate::port::trace::contention(self.tx.policy(), role, access_category, backoff);
         backoff
     }
+    #[inline(never)]
     pub(crate) fn reset_contention(&mut self, role: VifRole, category: WmmAccessCategory) {
         self.tx
             .reset_terminal_exchange(role, LegacyTxQueue::from_access_category(category));
@@ -2401,7 +2407,7 @@ impl CheckedKeyScope {
 /// backoff and coexistence level within the capabilities, the length at
 /// least the header through Address 1 and at most the capabilities'
 /// `max_mpdu_length`, and `no_ack` only of an individual frame at a rate
-/// that sends one without an ACK ([`EnabledCore::submit_checked`]).
+/// that sends one without an ACK ([`EnabledView::submit_checked`]).
 pub struct MpduValues<'slot, const BUFFER_SIZE: usize> {
     role: VifRole,
     admitted_at: oer_time::Instant,
@@ -2592,7 +2598,7 @@ enum ReceivePolicy {
 }
 
 /// Map a receive filter onto the smallest S31 receive policy that passes a
-/// superset of it; [`EnabledCore::received`] narrows the superset.
+/// superset of it; [`EnabledView::received`] narrows the superset.
 fn receive_policy(config: &LowerMacConfig, vif: &CoreVif) -> Result<ReceivePolicy, UnsupportedVif> {
     let limits = esp32s31_lower_mac_capabilities(0).receive_filters(vif.role);
     if !limits.contains(vif.receive) {

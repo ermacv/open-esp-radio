@@ -1,0 +1,35 @@
+warning: variable does not need to be mutable
+  --> tests/ui/view_after_transition.rs:12:9
+   |
+12 |     let mut closing = enabled.hold_new_attempts();
+   |         ----^^^^^^^
+   |         |
+   |         help: remove this `mut`
+   |
+   = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+error[E0382]: borrow of moved value: `enabled`
+  --> tests/ui/view_after_transition.rs:14:19
+   |
+ 6 |     mut enabled: EnabledView<'_, LowerMacCore<'core, 'slot, oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile, P, ...
+   |     ----------- move occurs because `enabled` has type `oer_esp32s31_ieee80211_driver::lower_mac::EnabledView<'_, oer_esp32s31_ieee80211_driver::lower_mac::LowerMacCore<'_, '_, EspressifBackendTxProfile, P, E, T, 512, oer_radio_port::pool::path::Root<oer_radio_port::identity::LocalId<'_>>>>`, which does not implement the `Copy` trait
+...
+12 |     let mut closing = enabled.hold_new_attempts();
+   |                               ------------------- `enabled` moved due to this method call
+13 |     #[cfg(all())]
+14 |     let _result = enabled.submit_checked(hardware, queue, admission, values); // ui-error: E0382
+   |                   ^^^^^^^ value borrowed here after move
+   |
+note: `oer_esp32s31_ieee80211_driver::lower_mac::EnabledView::<'view, oer_esp32s31_ieee80211_driver::lower_mac::LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>>::hold_new_attempts` takes ownership of the receiver `self`, which moves `enabled`
+  --> src/lower_mac/lifecycle.rs
+   |
+   |         self,
+   |         ^^^^
+
+warning: unused variable: `closing`
+  --> tests/ui/view_after_transition.rs:12:9
+   |
+12 |     let mut closing = enabled.hold_new_attempts();
+   |         ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_closing`
+   |
+   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
