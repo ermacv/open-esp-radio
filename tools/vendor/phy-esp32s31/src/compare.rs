@@ -67,7 +67,8 @@ pub(crate) struct Tolerance {
     /// Per element, the bits the relation models; others are not compared.
     #[serde(default)]
     pub mask: Option<Vec<u64>>,
-    /// The field describes the environment rather than calibration.
+    /// Exclude the value from comparison. Registers still require a readable
+    /// production sample in every boot where the vendor can read them.
     #[serde(default)]
     pub excluded: bool,
     /// The only lifecycle point the review applies to; every point when
@@ -202,7 +203,8 @@ pub(crate) fn compare_registers<'a>(
     reviews: &BTreeMap<String, Tolerance>,
 ) -> RegisterSummary {
     let (vendor_values, unreadable) = register_values(vendor);
-    let (production_values, _) = register_values(production);
+    let production: Vec<_> = production.into_iter().collect();
+    let (production_values, _) = register_values(production.iter().copied());
     let range = |values: &[u32]| {
         values.iter().fold([u32::MAX, u32::MIN], |[low, high], &v| {
             [low.min(v), high.max(v)]
@@ -225,6 +227,17 @@ pub(crate) fn compare_registers<'a>(
         let Some(vendor) = vendor_values.get(&register.address) else {
             continue;
         };
+        let Some(values) = production_values.get(&register.address) else {
+            summary.not_read.push(register.name.clone());
+            continue;
+        };
+        if production.iter().any(|boot| {
+            !boot.values.contains_key(&register.address)
+                || boot.unreadable.contains(&register.address)
+        }) {
+            summary.not_read.push(register.name.clone());
+            continue;
+        }
         if let Some(review) = reviews.get(&register.name).filter(|r| r.excluded) {
             summary.excluded.push(ExcludedRegister {
                 name: register.name.clone(),
@@ -232,11 +245,7 @@ pub(crate) fn compare_registers<'a>(
             });
             continue;
         }
-        let Some(production) = production_values.get(&register.address) else {
-            summary.not_read.push(register.name.clone());
-            continue;
-        };
-        let (v, p) = (range(vendor), range(production));
+        let (v, p) = (range(vendor), range(values));
         let margin = u64::from(v[1] - v[0]);
         summary.compared += 1;
         if u64::from(v[0]) <= u64::from(p[0]) + margin
@@ -673,6 +682,82 @@ mod tests {
         assert_eq!(summary.excluded[0].name, "A.EXCLUDED");
         assert_eq!(summary.not_read, ["A.MISSED"]);
         assert_eq!(summary.verdict, Verdict::Diff);
+    }
+
+    fn excluded_register_summary(production: &[Readings]) -> RegisterSummary {
+        let image = [
+            Register {
+                name: "STABLE".into(),
+                address: 0x10,
+            },
+            Register {
+                name: "EXCLUDED".into(),
+                address: 0x14,
+            },
+        ];
+        let vendor = Readings {
+            values: [(0x10, 7), (0x14, 4)].into(),
+            unreadable: Default::default(),
+        };
+        let reviews = BTreeMap::from([(
+            "EXCLUDED".into(),
+            Tolerance {
+                excluded: true,
+                reason: "measurement result".into(),
+                ..Tolerance::default()
+            },
+        )]);
+        compare_registers(&image, [&vendor], production, &reviews)
+    }
+
+    #[test]
+    fn excluded_register_without_a_production_read_is_incomplete() {
+        let missing = Readings {
+            values: [(0x10, 7)].into(),
+            unreadable: Default::default(),
+        };
+        let read = Readings {
+            values: [(0x10, 7), (0x14, 4)].into(),
+            unreadable: Default::default(),
+        };
+        for boots in [vec![missing.clone()], vec![read, missing]] {
+            let summary = excluded_register_summary(&boots);
+            assert_eq!(summary.verdict, Verdict::Incomplete);
+            assert_eq!(summary.not_read, ["EXCLUDED"]);
+            assert!(summary.excluded.is_empty());
+        }
+    }
+
+    #[test]
+    fn excluded_unreadable_production_register_is_incomplete() {
+        let unreadable = Readings {
+            values: [(0x10, 7)].into(),
+            unreadable: [0x14].into(),
+        };
+        let read = Readings {
+            values: [(0x10, 7), (0x14, 4)].into(),
+            unreadable: Default::default(),
+        };
+        for boots in [vec![unreadable.clone()], vec![read, unreadable]] {
+            let summary = excluded_register_summary(&boots);
+            assert_eq!(summary.verdict, Verdict::Incomplete);
+            assert_eq!(summary.not_read, ["EXCLUDED"]);
+            assert!(summary.excluded.is_empty());
+        }
+    }
+
+    #[test]
+    fn excluded_readable_register_values_do_not_affect_match() {
+        let boots = [0, 4, u32::MAX].map(|value| Readings {
+            values: [(0x10, 7), (0x14, value)].into(),
+            unreadable: Default::default(),
+        });
+        let summary = excluded_register_summary(&boots);
+        assert_eq!(summary.verdict, Verdict::Match);
+        assert_eq!((summary.compared, summary.matched), (1, 1));
+        assert_eq!(summary.excluded[0].name, "EXCLUDED");
+        assert!(summary.not_read.is_empty());
+        assert!(summary.differing.is_empty());
     }
 
     #[test]

@@ -5,8 +5,9 @@
 # the widest range its vendor boots span in any one element; a production
 # element passes within its vendor range widened by that margin. `signed`
 # reads elements as two's-complement values, `mask` compares only the bits
-# the relation models per element, and `excluded` leaves a field that
-# describes the environment rather than calibration out of the comparison.
+# the relation models per element, and `excluded` skips only value comparison.
+# Every vendor-readable register, including an excluded one, must have a
+# readable production sample in every boot; otherwise the result is INCOMPLETE.
 # A field without an entry leaves the cross-check INCOMPLETE.
 schema = 2
 

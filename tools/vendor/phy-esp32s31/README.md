@@ -58,6 +58,9 @@ own range widened by that margin; registers/analog bytes use their own vendor
 range widened by their own spread. Unreviewed fields and missing readable
 registers yield INCOMPLETE; values outside the reviewed spread yield DIFF.
 The existing signedness, masks and lifecycle-specific exclusions apply.
+`excluded` skips only value comparison. Every vendor-readable register,
+including an excluded one, must be read in every production boot. A missing
+or unreadable production sample yields INCOMPLETE.
 
 Each run retains per-boot captures, console evidence, image digests, reference
 ESP-IDF revision, readable/unreadable registers and the complete comparison
