@@ -109,70 +109,54 @@ impl<'a> ColdI2c<'a> {
     }
 }
 
-/// One bus command, including its immediate readiness observations. Stop at
-/// the RMW read edge, preserving the typed transaction for the next poll.
-#[inline(never)]
-pub(super) fn command<C: Clock>(
-    io: &mut Io<'_, '_>,
-    clock: &C,
-    transaction: &mut PhyColdI2cTransaction,
-    kind: crate::tracking::observation::RfpllCommand,
-    observed: bool,
-) -> Result<crate::tracking::observation::RfpllCommandSample, Failure> {
-    use crate::tracking::observation::RfpllCommandSample;
-    let started = observed.then(|| clock.now());
-    let mut published_at = None;
-    let mut sample = RfpllCommandSample {
-        command: kind,
-        publication_micros: 0,
-        readiness_micros: 0,
-        invalid: false,
-    };
-    let complete = crate::executor::wait::poll::bounded(clock, || {
-        let start = matches!(
-            transaction.action(),
-            PhyColdI2cAction::StartRead { .. } | PhyColdI2cAction::StartWrite { .. }
-        );
-        let consumed = io.i2c(transaction, start)? == PhyColdI2cObservation::EdgeConsumed;
-        if start && consumed && observed {
-            sample = RfpllCommandSample::elapsed(kind, started, clock);
-            published_at = Some(clock.now());
-        }
-        Ok(consumed && !start)
-    })?;
-    if let Some(at) = published_at {
-        let readiness = RfpllCommandSample::elapsed(kind, Some(at), clock);
-        sample.readiness_micros = readiness.publication_micros;
-        sample.invalid |= readiness.invalid;
-    }
-    if !complete {
-        return Err(Failure::TimedOut);
-    }
-    Ok(sample)
-}
-
-/// Direct and cold callers share Io::i2c for command publication, status
-/// consumption, RMW advancement and errors; only their wait policies differ.
+/// One shared direct observation policy. Runtime helper commands stop at
+/// their completion edge; synchronous direct callers finish the transaction.
 #[inline(never)]
 pub(super) fn direct_i2c<C: Clock + ?Sized>(
     io: &mut Io<'_, '_>,
     clock: &C,
     transaction: &mut PhyColdI2cTransaction,
-) -> Result<(), Failure> {
-    let complete = crate::executor::wait::i2c::complete(
-        clock,
-        transaction,
-        PhyColdI2cTransaction::action,
-        |transaction, action| {
-            let start = matches!(
-                action,
-                PhyColdI2cAction::StartRead { .. } | PhyColdI2cAction::StartWrite { .. }
-            );
-            io.i2c(transaction, start).map(|_| ())
-        },
-    )?;
+    command: Option<crate::tracking::observation::RfpllCommand>,
+    observed: bool,
+) -> Result<crate::tracking::observation::RfpllCommandSample, Failure> {
+    use crate::tracking::observation::{RfpllCommand, RfpllCommandSample};
+    let kind = command.unwrap_or(RfpllCommand::InitialLow);
+    let started = if observed {
+        clock.now()
+    } else {
+        Instant::EPOCH
+    };
+    let mut published = started;
+    let complete = crate::executor::wait::poll::bounded(clock, || {
+        let next = transaction.action();
+        if matches!(next, PhyColdI2cAction::Complete(_)) {
+            return Ok(true);
+        }
+        let start = matches!(
+            next,
+            PhyColdI2cAction::StartRead { .. } | PhyColdI2cAction::StartWrite { .. }
+        );
+        let consumed = io.i2c(transaction, start)? == PhyColdI2cObservation::EdgeConsumed;
+        if consumed && start && observed {
+            published = clock.now();
+        }
+        Ok(if command.is_some() {
+            consumed && !start
+        } else {
+            matches!(transaction.action(), PhyColdI2cAction::Complete(_))
+        })
+    })?;
     if !complete {
         return Err(Failure::TimedOut);
     }
-    Ok(())
+    Ok(if observed {
+        RfpllCommandSample::intervals(kind, started, published, clock.now())
+    } else {
+        RfpllCommandSample {
+            command: kind,
+            publication_micros: 0,
+            readiness_micros: 0,
+            invalid: false,
+        }
+    })
 }

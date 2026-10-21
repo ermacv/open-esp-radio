@@ -1337,6 +1337,8 @@ fn cold_and_direct_rfpll_share_the_same_rmw_atoms_and_preserve_identity() {
         &mut super::io::Io::Test(&mut direct, core::marker::PhantomData),
         &clock,
         direct_binding.transaction_mut(),
+        None,
+        false,
     )
     .expect("direct command completes");
     let expected = direct_binding

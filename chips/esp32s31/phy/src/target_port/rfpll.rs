@@ -218,7 +218,9 @@ pub async fn program<D: PhyShortDelay>(
     >,
     PhyTargetPortError,
 > {
-    use crate::analog::rfpll::{RfpllFrequencyExternalBinding, RfpllFrequencyTransition};
+    use crate::analog::rfpll::{
+        RfpllFrequencyAction as I2cAction, RfpllFrequencyExternalBinding, RfpllFrequencyTransition,
+    };
     let mut transition = RfpllFrequencyTransition::new(request);
     loop {
         let action = transition.action();

@@ -96,7 +96,7 @@ impl Io<'_, '_> {
         };
         match binding {
             Binding::I2c(mut binding) => {
-                super::rfpll::direct_i2c(self, clock, binding.transaction_mut())?;
+                super::rfpll::direct_i2c(self, clock, binding.transaction_mut(), None, false)?;
                 binding.into_completion().map_err(|_| Failure::Binding)
             }
             Binding::Timer(binding) => {
@@ -213,7 +213,7 @@ impl Io<'_, '_> {
                 if let Self::Test(io, _) = self {
                     io.prepare_rfpll_command(kind);
                 }
-                sample = super::rfpll::command(self, clock, transaction, kind, observed)?;
+                sample = super::rfpll::direct_i2c(self, clock, transaction, Some(kind), observed)?;
                 let outcome = match transaction.action() {
                     I2c::Complete(outcome) => outcome,
                     // A masked read owns its captured byte until the next poll

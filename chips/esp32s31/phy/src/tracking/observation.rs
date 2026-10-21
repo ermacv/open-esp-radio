@@ -141,30 +141,45 @@ pub(crate) struct RfpllCommandSample {
     pub invalid: bool,
 }
 impl RfpllCommandSample {
+    #[inline(never)]
+    pub(crate) fn intervals(
+        command: RfpllCommand,
+        started: oer_time::Instant,
+        published: oer_time::Instant,
+        finished: oer_time::Instant,
+    ) -> Self {
+        let publication = published
+            .checked_duration_since(started)
+            .and_then(|d| u16::try_from(d.as_micros()).ok());
+        let readiness = finished
+            .checked_duration_since(published)
+            .and_then(|d| u16::try_from(d.as_micros()).ok());
+        Self {
+            command,
+            publication_micros: publication.unwrap_or(0),
+            readiness_micros: readiness.unwrap_or(0),
+            invalid: publication.is_none() || readiness.is_none(),
+        }
+    }
     pub(crate) fn elapsed<C: oer_time::Clock>(
         command: RfpllCommand,
         started: Option<oer_time::Instant>,
         clock: &C,
     ) -> Self {
-        let mut value = Self {
-            command,
-            publication_micros: 0,
-            readiness_micros: 0,
-            invalid: false,
-        };
         if let Some(at) = started {
-            match clock
-                .now()
-                .checked_duration_since(at)
-                .and_then(|d| u16::try_from(d.as_micros()).ok())
-            {
-                Some(micros) => value.publication_micros = micros,
-                None => value.invalid = true,
+            let finished = clock.now();
+            Self::intervals(command, at, finished, finished)
+        } else {
+            Self {
+                command,
+                publication_micros: 0,
+                readiness_micros: 0,
+                invalid: false,
             }
         }
-        value
     }
 }
+
 /// Correlated breakdown of the worst poll for one RFPLL command. The residual
 /// poll minus publication/readiness is engine/model/observer overhead.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
