@@ -66,20 +66,21 @@ struct Cut {
     stage: GroupRxStage,
 }
 impl Work for Cut {
-    async fn work<'p, 'id: 'p>(
+    async fn work<'p, 'id: 'p, Id: SlotIdentity + 'id>(
         self,
-        phase: &mut ModelPhase<'p, 'id>,
-        resources: ModelResources<'id>,
+        phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
+        resources: ModelResources<'id, ModelBackend<Id>>,
     ) {
-        let station_association = ModelKeys::<Station>::begin_association(
+        let station_association = ModelKeys::<ModelBackend<Id>, Station>::begin_association(
             resources.station_association,
             oer_ieee80211_wire::security::Spp::NotNegotiated,
         );
 
-        let access_point_association = ModelKeys::<AccessPoint>::begin_association(
-            resources.access_point_association,
-            oer_ieee80211_wire::security::Spp::NotNegotiated,
-        );
+        let access_point_association =
+            ModelKeys::<ModelBackend<Id>, AccessPoint>::begin_association(
+                resources.access_point_association,
+                oer_ieee80211_wire::security::Spp::NotNegotiated,
+            );
 
         let old = if matches!(self.change, Change::Select) {
             [2; 16]
@@ -261,14 +262,13 @@ fn ingress_at_a_delivery_wake_cannot_cross_a_group_key_terminal() {
             });
             let waker = Waker::from(std::sync::Arc::new(IngressWake));
             let mut cx = core::task::Context::from_waker(&waker);
-            let mut running = core::pin::pin!(run_port(
+            let mut running = core::pin::pin!(run_model(
                 backend,
                 Body(Cut {
                     role,
                     change,
                     stage
-                }),
-                oer_radio_port::LocalExecution
+                })
             ));
             let mut ended = false;
             for _ in 0..100 {

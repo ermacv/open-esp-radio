@@ -82,9 +82,9 @@ pub(super) async fn run_timed<F: Future>(
 fn admitted(slot: u8, permission: u8) -> Owners {
     Owners { slot, permission }
 }
-fn terminal<'id>(
-    event: LowerMacEvent<'id, ModelTypes>,
-    access: &mut oer_ieee80211_port::TerminalAccess<'id, ModelTickets, ModelPool<'id, 1>>,
+fn terminal<'id, Id: SlotIdentity + 'id>(
+    event: LowerMacEvent<'id, ModelTypes<ModelBackend<Id>>>,
+    access: &mut oer_ieee80211_port::TerminalAccess<'id, ModelTickets, ModelPool<Id, 1>>,
 ) -> Completion {
     let (mutation, owners) = match event {
         LowerMacEvent::Terminal(LowerMacTerminal::GroupKeyInstalled(InstalledGroup::Station {
@@ -126,8 +126,10 @@ fn terminal<'id>(
     };
     Completion::Group { mutation, owners }
 }
-fn retained(phase: &ModelPhase<'_, '_>) -> Vec<Owners> {
-    fn command(change: &GroupChange<'_, ()>) -> Owners {
+fn retained<Id: SlotIdentity>(
+    phase: &ModelPhase<'_, '_, ModelCaps, ModelBackend<Id>>,
+) -> Vec<Owners> {
+    fn command<Id: SlotIdentity>(change: &GroupChange<'_, ModelBackend<Id>>) -> Owners {
         match change {
             GroupChange::Install(GroupInstallationCommand::Station(pending)) => {
                 admitted(pending.slot.index(), pending.permission.index())
@@ -142,7 +144,7 @@ fn retained(phase: &ModelPhase<'_, '_>) -> Vec<Owners> {
                 permission,
             } => admitted(key.slot.index(), permission.index()),
             GroupChange::Remove {
-                removed: Removed::Station(RemovedKey::Group { slot, permission }),
+                removed: OwnedRemoved::Station(OwnedRemovedKey::Group { slot, permission }),
                 ..
             } => admitted(slot.index(), permission.index()),
             _ => panic!("expiry fixture submits station GTK commands"),
@@ -162,9 +164,9 @@ fn retained(phase: &ModelPhase<'_, '_>) -> Vec<Owners> {
             }),
     );
     owners.extend(phase.held.failed_group.items.borrow().iter().map(command));
-    for removal in &phase.held.driver_state.borrow().removing {
-        if let Removed::Station(RemovedKey::Group { slot, permission }) = &removal.removed {
-            owners.push(admitted(slot.index(), permission.index()));
+    for removal in phase.held.air.driver_observation().group_removals {
+        if removal.role == VifRole::Station {
+            owners.push(admitted(removal.slot, removal.permission));
         }
     }
     owners
@@ -199,17 +201,22 @@ impl Exercise<'_> {
         }));
     }
 }
-impl PortBody<ModelBackend> for Exercise<'_> {
+impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id>> for Exercise<'_> {
     type Output = ();
-    async fn run<'id>(
+    async fn run<'a, 'id>(
         self,
-        owner: Owner<'_, 'id, ModelBackend, Disabled>,
-        mut resources: ModelResources<'id>,
-    ) -> Ended<'id, ModelBackend, ()> {
+        owner: Owner<'a, 'id, Id, ModelBackend<Id>, Disabled>,
+        mut resources: ModelResources<'id, ModelBackend<Id>>,
+    ) -> Ended<Id, ModelBackend<Id>, ()>
+    where
+        ModelBackend<Id>: 'id,
+        Id: 'id,
+        'id: 'a,
+    {
         if self.case == ProgressCase::PublishedRemoval {
             return self.published_removal(owner, resources).await;
         }
-        let station_association = ModelKeys::<Station>::begin_association(
+        let station_association = ModelKeys::<ModelBackend<Id>, Station>::begin_association(
             resources.station_association,
             oer_ieee80211_wire::security::Spp::NotNegotiated,
         );
@@ -301,15 +308,16 @@ impl PortBody<ModelBackend> for Exercise<'_> {
 }
 
 impl Exercise<'_> {
-    async fn published_removal<'id>(
+    async fn published_removal<'id, Id: SlotIdentity + 'id>(
         self,
-        owner: Owner<'_, 'id, ModelBackend, Disabled>,
-        mut resources: ModelResources<'id>,
-    ) -> Ended<'id, ModelBackend, ()> {
-        let access_point_association = ModelKeys::<AccessPoint>::begin_association(
-            resources.access_point_association,
-            oer_ieee80211_wire::security::Spp::NotNegotiated,
-        );
+        owner: Owner<'_, 'id, Id, ModelBackend<Id>, Disabled>,
+        mut resources: ModelResources<'id, ModelBackend<Id>>,
+    ) -> Ended<Id, ModelBackend<Id>, ()> {
+        let access_point_association =
+            ModelKeys::<ModelBackend<Id>, AccessPoint>::begin_association(
+                resources.access_point_association,
+                oer_ieee80211_wire::security::Spp::NotNegotiated,
+            );
         use oer_ieee80211_port::{AttemptKey, GroupAddress};
         let mut owner = owner.enable().await.ok().unwrap();
         {
@@ -357,24 +365,25 @@ impl Exercise<'_> {
             })
             .ok()
             .unwrap();
-            let source =
-                <ModelTypes as TxBufferPool<ModelSmall>>::prepare::<AccessPoint, ModelCaps>(
-                    (TxSource::Fresh {
-                        buffer,
-                        frame,
-                        body: None,
-                        protection: TxProtection::Ccmp(oer_ieee80211_port::NumberedKey {
-                            key: AttemptKey::Group(&key),
-                            packet_number: oer_ieee80211_wire::ccmp::CcmpPacketNumber::new(1)
-                                .unwrap(),
-                        }),
-                    })
-                    .check()
-                    .ok()
-                    .unwrap(),
-                )
+            let source = <ModelTypes<ModelBackend<Id>> as TxBufferPool<ModelSmall>>::prepare::<
+                AccessPoint,
+                ModelCaps,
+            >(
+                (TxSource::Fresh {
+                    buffer,
+                    frame,
+                    body: None,
+                    protection: TxProtection::Ccmp(oer_ieee80211_port::NumberedKey {
+                        key: AttemptKey::Group(&key),
+                        packet_number: oer_ieee80211_wire::ccmp::CcmpPacketNumber::new(1).unwrap(),
+                    }),
+                })
+                .check()
                 .ok()
-                .unwrap();
+                .unwrap(),
+            )
+            .ok()
+            .unwrap();
             self.air
                 .hold_completion(WmmAccessCategory::BestEffort, true);
             phase
@@ -403,15 +412,10 @@ impl Exercise<'_> {
             for _ in 0..3 {
                 yield_now().await;
             }
+            let observed = self.air.driver_observation();
             let blocked = phase.held.events.is_empty()
-                && phase.held.driver_state.borrow().removing.len() == 1
-                && phase
-                    .held
-                    .driver_state
-                    .borrow()
-                    .queues
-                    .iter()
-                    .any(|q| q.air.is_some());
+                && observed.group_removals.len() == 1
+                && observed.publications != 0;
             // Keep the publication held: its own finite hardware bound must
             // return TX before the group-removal bound, without test release.
             let mut events = Vec::new();
@@ -443,7 +447,7 @@ pub(super) async fn exercise(
     let trace = RefCell::new(None);
     let probe = Probe::default();
     let _port_end = run_timed(
-        run_port(
+        run_model(
             backend,
             Exercise {
                 air: &air,
@@ -451,7 +455,6 @@ pub(super) async fn exercise(
                 probe: &probe,
                 trace: &trace,
             },
-            oer_radio_port::LocalExecution,
         ),
         &air,
         clock,

@@ -23,7 +23,9 @@ struct DuringPublication(
     Rc<oer_time_virtual::VirtualClock>,
 );
 
-fn held_snapshot(phase: &ModelPhase<'_, '_>) -> HeldSnapshot {
+fn held_snapshot<Id: SlotIdentity>(
+    phase: &ModelPhase<'_, '_, ModelCaps, ModelBackend<Id>>,
+) -> HeldSnapshot {
     HeldSnapshot {
         publications: phase.held.air.sent().len(),
         events: phase.held.events.items.borrow().len(),
@@ -31,12 +33,12 @@ fn held_snapshot(phase: &ModelPhase<'_, '_>) -> HeldSnapshot {
 }
 
 impl Work for DuringPublication {
-    async fn work<'p, 'id: 'p>(
+    async fn work<'p, 'id: 'p, Id: SlotIdentity + 'id>(
         self,
-        phase: &mut ModelPhase<'p, 'id>,
-        resources: ModelResources<'id>,
+        phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
+        resources: ModelResources<'id, ModelBackend<Id>>,
     ) {
-        let station_association = ModelKeys::<Station>::begin_association(
+        let station_association = ModelKeys::<ModelBackend<Id>, Station>::begin_association(
             resources.station_association,
             oer_ieee80211_wire::security::Spp::NotNegotiated,
         );
@@ -220,7 +222,7 @@ impl Work for DuringPublication {
                 let TxFrame::Individual { plan, .. } = data_frame(phase, true) else {
                     unreachable!()
                 };
-                submit_frame::<ModelSmall>(
+                submit_frame::<_, ModelSmall>(
                     phase,
                     ticket,
                     TxSource::Retransmission {
@@ -286,40 +288,36 @@ impl Work for DuringPublication {
 fn gate_waits_one_publication_and_returns_sent_for_retry_with_original_numbers() {
     let clock = Rc::new(oer_time_virtual::VirtualClock::<8>::new());
     let (backend, _) = backend_on(clock.clone());
-    let _port_end = block_on(run_port(
+    let _port_end = block_on(run_model(
         backend,
         Body(DuringPublication(Barrier::GateRetry, None, clock.clone())),
-        oer_radio_port::LocalExecution,
     ));
 }
 #[test]
 fn ack_wins_while_gate_closes_and_barrier_follows_the_result() {
     let clock = Rc::new(oer_time_virtual::VirtualClock::<8>::new());
     let (backend, _) = backend_on(clock.clone());
-    let _port_end = block_on(run_port(
+    let _port_end = block_on(run_model(
         backend,
         Body(DuringPublication(Barrier::GateAck, None, clock.clone())),
-        oer_radio_port::LocalExecution,
     ));
 }
 #[test]
 fn missing_result_ends_at_publication_bound_without_finishing_the_plan() {
     let clock = Rc::new(oer_time_virtual::VirtualClock::<8>::new());
     let (backend, _) = backend_on(clock.clone());
-    let _port_end = block_on(run_port(
+    let _port_end = block_on(run_model(
         backend,
         Body(DuringPublication(Barrier::GateTimeout, None, clock.clone())),
-        oer_radio_port::LocalExecution,
     ));
 }
 #[test]
 fn key_removal_waits_for_the_publication_then_returns_sent_without_retry() {
     let clock = Rc::new(oer_time_virtual::VirtualClock::<8>::new());
     let (backend, _) = backend_on(clock.clone());
-    let _port_end = block_on(run_port(
+    let _port_end = block_on(run_model(
         backend,
         Body(DuringPublication(Barrier::RemoveKey, None, clock.clone())),
-        oer_radio_port::LocalExecution,
     ));
 }
 
@@ -340,14 +338,13 @@ impl conformance::BarrierHarness for ModelBarrierHarness {
         let clock = Rc::new(oer_time_virtual::VirtualClock::<8>::new());
         let (backend, _) = backend_on(clock.clone());
         let recorded = Rc::new(RefCell::new(None));
-        let _port_end = run_port(
+        let _port_end = run_model(
             backend,
             Body(DuringPublication(
                 barrier,
                 Some(recorded.clone()),
                 clock.clone(),
             )),
-            oer_radio_port::LocalExecution,
         )
         .await;
         let trace = recorded.borrow_mut().take();

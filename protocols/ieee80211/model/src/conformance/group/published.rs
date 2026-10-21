@@ -5,12 +5,12 @@ pub(super) struct Exercise {
     pub air: Rc<ModelAir>,
     pub rate: LegacyRate,
 }
-async fn exchange<'p, 'id: 'p>(
-    phase: &mut ModelPhase<'p, 'id>,
-    resources: ModelResources<'id>,
+async fn exchange<'p, 'id: 'p, Id: SlotIdentity + 'id>(
+    phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
+    resources: ModelResources<'id, ModelBackend<Id>>,
     body: &Exercise,
 ) -> Result<GroupTrace, &'static str> {
-    let association = ModelKeys::<AccessPoint>::begin_association(
+    let association = ModelKeys::<ModelBackend<Id>, AccessPoint>::begin_association(
         resources.access_point_association,
         Spp::NotNegotiated,
     );
@@ -66,7 +66,10 @@ async fn exchange<'p, 'id: 'p>(
         rate,
     })
     .map_err(|_| "group class")?;
-    let source = <ModelTypes as TxBufferPool<ModelSmall>>::prepare::<AccessPoint, ModelCaps>(
+    let source = <ModelTypes<ModelBackend<Id>> as TxBufferPool<ModelSmall>>::prepare::<
+        AccessPoint,
+        ModelCaps,
+    >(
         TxSource::Fresh {
             buffer,
             frame,
@@ -148,13 +151,18 @@ async fn exchange<'p, 'id: 'p>(
         blocked_while_published,
     })
 }
-impl PortBody<ModelBackend> for Exercise {
+impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id>> for Exercise {
     type Output = Result<GroupTrace, &'static str>;
     async fn run<'p, 'id>(
         self,
-        owner: Owner<'p, 'id, ModelBackend, Disabled>,
-        resources: ModelResources<'id>,
-    ) -> Ended<'id, ModelBackend, Self::Output> {
+        owner: Owner<'p, 'id, Id, ModelBackend<Id>, Disabled>,
+        resources: ModelResources<'id, ModelBackend<Id>>,
+    ) -> Ended<Id, ModelBackend<Id>, Self::Output>
+    where
+        ModelBackend<Id>: 'id,
+        Id: 'id,
+        'id: 'p,
+    {
         let mut owner = match owner.enable().await {
             Ok(owner) => owner,
             Err(failed) => {

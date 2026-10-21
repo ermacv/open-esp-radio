@@ -8,6 +8,7 @@ impl<Id: SlotIdentity> SlotOwner<Id> for Owner {
     type Vacant = ();
     type Pools = ();
     type Queues = ();
+    const VACANT_QUEUES: Self::Queues = ();
     type Frontend<'s>
         = ()
     where
@@ -18,7 +19,11 @@ impl<Id: SlotIdentity> SlotOwner<Id> for Owner {
     where
         Self: 's,
         Id: 's;
-    fn queues(&mut self, mint: oer_radio_port::Mint<'static, (), Id>) {
+    fn prepare_queues(
+        &mut self,
+        _: &mut Self::Queues,
+        mint: oer_radio_port::Mint<'static, (), Id>,
+    ) {
         mint.into_pools();
     }
     fn split<'s>(_: &'s mut (), _: oer_radio_port::SlotWakes<'s, Id>) -> ((), ())
@@ -47,7 +52,12 @@ impl<Id: SlotIdentity> SlotOwner<Id> for Owner {
     {
         Abandon::Unconfirmed(request)
     }
-    fn finish(self) {}
+    fn finish<'s>(&mut self, _: &mut Self::Invocation<'s>)
+    where
+        Self: 's,
+        Id: 's,
+    {
+    }
 }
 
 // This crate expands its own placement macro; consumers do not need this

@@ -5,18 +5,21 @@ use oer_ieee80211_port::TxMpdu;
 use oer_ieee80211_model::{ModelMpdu, ModelSubframes};
 
 pub fn lend<'id, C, T>(
-    single: &mut InFlight<C, T, ModelMpdu<'id>>,
-    aggregate: &mut InFlight<C, T, ModelSubframes<'id>>,
+    single: &mut InFlight<C, T, ModelMpdu<'id, Composition>>,
+    aggregate: &mut InFlight<C, T, ModelSubframes<'id, Composition>>,
 ) {
     let mut single = single.execute();
     let mut aggregate = aggregate.execute();
     #[cfg(ui_reject)]
     {
-        let _: &mut ModelMpdu<'id> = &mut single; // ui-error: E0308
-        let _: &mut ModelSubframes<'id> = &mut aggregate; // ui-error: E0308
+        let _: &mut ModelMpdu<'id, Composition> = &mut single; // ui-error: E0308
+        let _: &mut ModelSubframes<'id, Composition> = &mut aggregate; // ui-error: E0308
         single.into_parts(); // ui-error: E0599
         aggregate.into_iter(); // ui-error: E0599
     }
     #[cfg(not(ui_reject))]
     core::hint::black_box((&mut single, &mut aggregate));
 }
+
+pub enum UiSlot {}
+type Composition = oer_ieee80211_model::ModelBackend<oer_radio_port::StaticId<UiSlot>>;

@@ -1,15 +1,21 @@
-error: lifetime may not live long enough
- --> tests/ui/foreign_fail_stop_request.rs:9:5
+error[E0308]: mismatched types
+ --> tests/ui/foreign_fail_stop_request.rs:5:22
   |
-5 | pub fn ended<'left, 'right, B: PortBackend>(proof: FailStopRequested<'left, B>) -> Ended<'right, B, ()>
-  |              -----  ------ lifetime `'right` defined here
+4 | pub fn ended<First: SlotIdentity, Second: SlotIdentity, B: PortBackend<First> + PortBackend<Second>>(proof: FailStopRequested<First...
+  |              -----                ------ expected type parameter
   |              |
-  |              lifetime `'left` defined here
-...
-9 |     Ended::fail_stop(proof, ()) // ui-error: lifetime may not live long enough
-  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^ function was supposed to return data with lifetime `'left` but it is returning data with lifetime `'right`
+  |              found type parameter
+5 |     Ended::fail_stop(proof, ()) // ui-error: E0308
+  |     ---------------- ^^^^^ expected `FailStopRequested<Second, B>`, found `FailStopRequested<First, B>`
+  |     |
+  |     arguments to this function are incorrect
   |
-  = help: consider adding the following bound: `'right: 'left`
-  = note: requirement occurs because of the type `oer_radio_port::Ended<'_, B, ()>`, which makes the generic argument `'_` invariant
-  = note: the struct `oer_radio_port::Ended<'id, B, Out>` is invariant over the parameter `'id`
-  = help: see <https://doc.rust-lang.org/nomicon/subtyping.html> for more information about variance
+  = note: expected struct `FailStopRequested<Second, B>`
+             found struct `FailStopRequested<First, B>`
+  = note: a type parameter was expected, but a different one was found; you might be missing a type parameter or trait bound
+  = note: for more information, visit https://doc.rust-lang.org/book/ch10-02-traits.html#traits-as-parameters
+note: associated function defined here
+ --> src/lifecycle.rs
+  |
+  |     pub fn fail_stop(request: FailStopRequested<Id, B>, output: Out) -> Self {
+  |            ^^^^^^^^^

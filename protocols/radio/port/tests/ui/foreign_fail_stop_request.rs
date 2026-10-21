@@ -1,14 +1,10 @@
 #![no_std]
-use oer_radio_port::{Ended, FailStopRequested, PortBackend};
-
+use oer_radio_port::{Ended, FailStopRequested, PortBackend, SlotIdentity};
 #[cfg(ui_reject)]
-pub fn ended<'left, 'right, B: PortBackend>(proof: FailStopRequested<'left, B>) -> Ended<'right, B, ()>
-where
-    'left: 'right,
-{
-    Ended::fail_stop(proof, ()) // ui-error: lifetime may not live long enough
+pub fn ended<First: SlotIdentity, Second: SlotIdentity, B: PortBackend<First> + PortBackend<Second>>(proof: FailStopRequested<First, B>) -> Ended<Second, B, ()> {
+    Ended::fail_stop(proof, ()) // ui-error: E0308
 }
 #[cfg(not(ui_reject))]
-pub fn ended<'id, B: PortBackend>(proof: FailStopRequested<'id, B>) -> Ended<'id, B, ()> {
+pub fn ended<Id: SlotIdentity, B: PortBackend<Id>>(proof: FailStopRequested<Id, B>) -> Ended<Id, B, ()> {
     Ended::fail_stop(proof, ())
 }

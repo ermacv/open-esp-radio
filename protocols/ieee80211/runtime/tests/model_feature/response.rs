@@ -126,7 +126,10 @@ fn header() -> HeaderSpec<IndividualAddress> {
     .unwrap()
 }
 
-fn frame<'p, 'id: 'p>(phase: &ModelPhase<'p, 'id>, kind: Frame) -> TxFrame<'p, 'id, ModelCaps> {
+fn frame<'p, 'id: 'p, Id: SlotIdentity + 'id>(
+    phase: &ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
+    kind: Frame,
+) -> TxFrame<'p, 'id, ModelCaps> {
     let rate = phase.rate(PhyRate::Legacy(LegacyRate::Ofdm6M)).unwrap();
     let plan = RetryPlan::new(RetryStage {
         rate,
@@ -185,14 +188,14 @@ fn frame<'p, 'id: 'p>(phase: &ModelPhase<'p, 'id>, kind: Frame) -> TxFrame<'p, '
 }
 
 impl Case {
-    fn check<'id>(
+    fn check<'id, Id: SlotIdentity + 'id>(
         &self,
-        event: LowerMacEvent<'id, ModelTypes>,
+        event: LowerMacEvent<'id, ModelTypes<ModelBackend<Id>>>,
         ticket_index: u8,
         terminal_access: &mut oer_ieee80211_port::TerminalAccess<
             'id,
-            <ModelTypes as PhaseTypes<'id>>::TicketKind,
-            <ModelTypes as PhaseTypes<'id>>::TicketPath,
+            <ModelTypes<ModelBackend<Id>> as PhaseTypes<'id>>::TicketKind,
+            <ModelTypes<ModelBackend<Id>> as PhaseTypes<'id>>::TicketPath,
         >,
     ) -> bool {
         let (ticket, payload, outcome) = match event {
@@ -267,13 +270,18 @@ impl Case {
     }
 }
 
-impl PortBody<ModelBackend> for Case {
+impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id>> for Case {
     type Output = ();
-    async fn run<'id>(
+    async fn run<'p, 'id>(
         self,
-        owner: Owner<'_, 'id, ModelBackend, Disabled>,
-        mut resources: ModelResources<'id>,
-    ) -> Ended<'id, ModelBackend, ()> {
+        owner: Owner<'p, 'id, Id, ModelBackend<Id>, Disabled>,
+        mut resources: ModelResources<'id, ModelBackend<Id>>,
+    ) -> Ended<Id, ModelBackend<Id>, ()>
+    where
+        ModelBackend<Id>: 'id,
+        Id: 'id,
+        'id: 'p,
+    {
         let mut owner = owner.enable().await.ok().unwrap();
         if let Some(answer) = self.answer {
             self.air.answer(answer);
@@ -315,7 +323,10 @@ impl PortBody<ModelBackend> for Case {
                     body: None,
                 };
                 let checked = CheckedAggregate::new(aggregate, source).ok().unwrap();
-                let aggregate = <ModelTypes as TxBufferPool<ModelSmall>>::push_aggregate(checked)
+                let aggregate =
+                    <ModelTypes<ModelBackend<Id>> as TxBufferPool<ModelSmall>>::push_aggregate(
+                        checked,
+                    )
                     .ok()
                     .unwrap();
                 station
@@ -338,9 +349,10 @@ impl PortBody<ModelBackend> for Case {
                     body: None,
                     protection: TxProtection::Open,
                 };
-                let source = <ModelTypes as TxBufferPool<ModelSmall>>::prepare::<Station, _>(
-                    source.check().ok().unwrap(),
-                )
+                let source = <ModelTypes<ModelBackend<Id>> as TxBufferPool<ModelSmall>>::prepare::<
+                    Station,
+                    _,
+                >(source.check().ok().unwrap())
                 .ok()
                 .unwrap();
                 phase
@@ -401,22 +413,14 @@ impl PortBody<ModelBackend> for Case {
 }
 
 fn exercise(frame: Frame, answer: Option<AirAnswer>, expected: Expected, barrier: Barrier) {
-    let (backend, air) = backend();
-    let result = run(run_port(
-        backend,
-        Case {
-            air,
-            frame,
-            answer,
-            expected,
-            barrier,
-        },
-        oer_radio_port::LocalExecution,
-    ));
-    assert_eq!(
-        matches!(result, oer_radio_port::PortEnd::FailStopped { .. }),
-        matches!(expected, Expected::Rejected)
-    );
+    let stopped = exercise_model(|air| Case {
+        air,
+        frame,
+        answer,
+        expected,
+        barrier,
+    });
+    assert_eq!(stopped, matches!(expected, Expected::Rejected));
 }
 
 #[test]

@@ -1,22 +1,23 @@
-error[E0277]: the trait bound `Owner<'_, 'id, B, Enabled>: UninstallOwner<'_, _>` is not satisfied
+error[E0277]: the trait bound `Owner<'_, 'id, Id, B, Enabled>: UninstallOwner<_, _>` is not satisfied
   --> tests/ui/enabled_uninstall.rs:11:22
    |
 11 |     Ended::uninstall(owner, control, ()) // ui-error: E0277
-   |     ---------------- ^^^^^ the trait `UninstallOwner<'_, _>` is not implemented for `Owner<'_, 'id, B, Enabled>`
+   |     ---------------- ^^^^^ the trait `UninstallOwner<_, _>` is not implemented for `Owner<'_, 'id, Id, B, Enabled>`
    |     |
    |     required by a bound introduced by this call
    |
-help: the trait `UninstallOwner<'_, _>` is not implemented for `Owner<'_, 'id, B, Enabled>`
-      but trait `UninstallOwner<'_, B>` is implemented for `Owner<'_, '_, B, oer_radio_port::Disabled>`
+help: the trait `UninstallOwner<_, _>` is not implemented for `Owner<'_, 'id, Id, B, Enabled>`
+      but trait `UninstallOwner<Id, B>` is implemented for `Owner<'_, '_, Id, B, oer_radio_port::Disabled>`
   --> src/lifecycle.rs
    |
-   | impl<'id, B: PortBackend> UninstallOwner<'id, B> for Owner<'_, 'id, B, Disabled> {}
-   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   | / impl<Id: SlotIdentity, B: PortBackend<Id>> UninstallOwner<Id, B>
+   | |     for Owner<'_, '_, Id, B, Disabled>
+   | |______________________________________^
    = help: for that trait implementation, expected `oer_radio_port::Disabled`, found `Enabled`
-note: required by a bound in `oer_radio_port::Ended::<'id, B, Out>::uninstall`
+note: required by a bound in `Ended::<Id, B, Out>::uninstall`
   --> src/lifecycle.rs
    |
    |     pub fn uninstall(
    |            --------- required by a bound in this associated function
-   |         owner: impl UninstallOwner<'id, B>,
-   |                     ^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `Ended::<'id, B, Out>::uninstall`
+   |         owner: impl UninstallOwner<Id, B>,
+   |                     ^^^^^^^^^^^^^^^^^^^^^ required by this bound in `Ended::<Id, B, Out>::uninstall`

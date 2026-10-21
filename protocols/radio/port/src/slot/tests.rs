@@ -18,6 +18,8 @@ struct Model {
     stop_loans: Cell<usize>,
     frontend_loans: Cell<usize>,
     starts: Cell<usize>,
+    run_address: Cell<*const Owner>,
+    finishing_address: Cell<*const Owner>,
     stall_stop: Cell<bool>,
     stopped: bool,
 }
@@ -36,6 +38,7 @@ impl<Id: SlotIdentity> SlotOwner<Id> for Owner {
     type Vacant = ();
     type Pools = ();
     type Queues = ();
+    const VACANT_QUEUES: Self::Queues = ();
     type Frontend<'s>
         = ()
     where
@@ -46,7 +49,7 @@ impl<Id: SlotIdentity> SlotOwner<Id> for Owner {
     where
         Self: 's,
         Id: 's;
-    fn queues(&mut self, mint: crate::Mint<'static, (), Id>) {
+    fn prepare_queues(&mut self, _: &mut Self::Queues, mint: crate::Mint<'static, (), Id>) {
         mint.into_pools();
     }
     fn split<'s>(_: &'s mut (), _: crate::SlotWakes<'s, Id>) -> ((), ())
@@ -68,6 +71,7 @@ impl<Id: SlotIdentity> SlotOwner<Id> for Owner {
     {
         assert_eq!(self.0.executor.get(), Executor::P2);
         self.0.starts.set(self.0.starts.get() + 1);
+        self.0.run_address.set(core::ptr::from_ref(self));
         async move {
             self.0.stop_loans.set(self.0.stop_loans.get() + 1);
             let _loan = StopLoan(self.0.clone());
@@ -102,8 +106,14 @@ impl<Id: SlotIdentity> SlotOwner<Id> for Owner {
         }
     }
 
-    fn finish(self) {
+    fn finish<'s>(&mut self, _: &mut Self::Invocation<'s>)
+    where
+        Self: 's,
+        Id: 's,
+    {
         assert_eq!(self.0.executor.get(), Executor::P2);
+        assert_eq!(self.0.run_address.get(), core::ptr::from_ref(self));
+        self.0.finishing_address.set(core::ptr::from_ref(self));
         self.0.finishes.set(self.0.finishes.get() + 1);
     }
 }
@@ -111,6 +121,14 @@ impl<Id: SlotIdentity> SlotOwner<Id> for Owner {
 impl Drop for Owner {
     fn drop(&mut self) {
         assert_eq!(self.0.executor.get(), Executor::P2);
+        let finishing = self.0.finishing_address.replace(core::ptr::null());
+        if !finishing.is_null() {
+            assert_eq!(
+                finishing,
+                core::ptr::from_ref(self),
+                "destroy S in its registered place"
+            );
+        }
         self.0.drops.set(self.0.drops.get() + 1);
     }
 }
@@ -139,6 +157,8 @@ fn model(stopped: bool) -> Rc<Model> {
         stop_loans: Cell::new(0),
         frontend_loans: Cell::new(0),
         starts: Cell::new(0),
+        run_address: Cell::new(core::ptr::null()),
+        finishing_address: Cell::new(core::ptr::null()),
         stall_stop: Cell::new(false),
         stopped,
     })
@@ -214,10 +234,11 @@ fn joined_retains_stopped_hardware_in_the_slot_until_p2_reinstallation_or_world_
             self.0.drops.set(self.0.drops.get() + 1);
         }
     }
-    struct HardwareOwner(Device);
+    struct HardwareOwner(Option<Device>);
     impl<Id: SlotIdentity> SlotOwner<Id> for HardwareOwner {
         type Pools = ();
         type Queues = ();
+        const VACANT_QUEUES: Self::Queues = ();
         type Vacant = Device;
         type Frontend<'s>
             = ()
@@ -229,7 +250,7 @@ fn joined_retains_stopped_hardware_in_the_slot_until_p2_reinstallation_or_world_
         where
             Self: 's,
             Id: 's;
-        fn queues(&mut self, mint: crate::Mint<'static, (), Id>) {
+        fn prepare_queues(&mut self, _: &mut Self::Queues, mint: crate::Mint<'static, (), Id>) {
             mint.into_pools();
         }
         fn split<'s>(_: &'s mut (), _: SlotWakes<'s, Id>) -> ((), ())
@@ -257,15 +278,30 @@ fn joined_retains_stopped_hardware_in_the_slot_until_p2_reinstallation_or_world_
         {
             Abandon::Unconfirmed(authority)
         }
-        fn finish(self) -> Device {
-            assert_eq!(self.0.0.executor.get(), Executor::P2);
-            self.0.0.finishes.set(self.0.0.finishes.get() + 1);
+        fn finish<'s>(&mut self, _: &mut Self::Invocation<'s>) -> Device
+        where
+            Self: 's,
+            Id: 's,
+        {
+            assert_eq!(
+                self.0.as_ref().expect("retained device").0.executor.get(),
+                Executor::P2
+            );
             self.0
+                .as_ref()
+                .expect("retained device")
+                .0
+                .finishes
+                .set(self.0.as_ref().expect("retained device").0.finishes.get() + 1);
+            self.0.take().expect("retained device")
         }
     }
     impl<Id: SlotIdentity> ModelSlotOwner<Id> for HardwareOwner {
         fn end_world(&mut self, _: Option<&mut ()>) {
-            assert_eq!(self.0.0.executor.get(), Executor::P2);
+            assert_eq!(
+                self.0.as_ref().expect("retained device").0.executor.get(),
+                Executor::P2
+            );
         }
         fn end_vacant_world(device: &mut Device) {
             assert_eq!(device.0.executor.get(), Executor::P2);
@@ -275,7 +311,7 @@ fn joined_retains_stopped_hardware_in_the_slot_until_p2_reinstallation_or_world_
     finish(with_local_slot(async |claim| {
         let mut slot = claim.place();
         let (frontend, p2) = slot
-            .register(HardwareOwner(Device(model.clone())))
+            .register(HardwareOwner(Some(Device(model.clone()))))
             .ok()
             .expect("fresh slot");
         let join = frontend.finish();
@@ -291,7 +327,7 @@ fn joined_retains_stopped_hardware_in_the_slot_until_p2_reinstallation_or_world_
         let (frontend, p2) = slot
             .reinstall(joined, |device| {
                 assert!(Rc::ptr_eq(&model, &device.0));
-                HardwareOwner(device)
+                HardwareOwner(Some(device))
             })
             .ok()
             .expect("same stopped device, fresh registration");
@@ -536,8 +572,12 @@ fn local_runner_joins_after_the_inner_frontend_future_is_cancelled() {
         let cancel = Cell::new(!poll_inner);
         finish(with_local_slot(async |claim| {
             let mut slot = claim.place();
-            let outer = crate::LocalExecution
-                .scope(&mut slot, Owner(model.clone()), async |frontend| {
+            let outer = crate::LocalExecution.scope(
+                (&mut slot)
+                    .register(Owner(model.clone()))
+                    .ok()
+                    .expect("fresh local registration"),
+                async |frontend| {
                     let mut inner = pin!(Some(async move {
                         let _frontend = frontend;
                         pending::<()>().await;
@@ -563,9 +603,8 @@ fn local_runner_joins_after_the_inner_frontend_future_is_cancelled() {
                         result
                     })
                     .await
-                })
-                .ok()
-                .expect("fresh local registration");
+                },
+            );
             let mut outer = Box::pin(outer);
             if poll_inner {
                 assert!(poll(outer.as_mut()).is_pending());
@@ -586,12 +625,13 @@ fn local_runner_publishes_join_only_after_p2_finishes() {
     let model = model(true);
     finish(with_local_slot(async |claim| {
         let mut slot = claim.place();
-        let scope = crate::LocalExecution
-            .scope(&mut slot, Owner(model.clone()), async |frontend| {
-                frontend.finish().wait().await.expect("ordinary P2 join")
-            })
-            .ok()
-            .expect("fresh registration");
+        let scope = crate::LocalExecution.scope(
+            (&mut slot)
+                .register(Owner(model.clone()))
+                .ok()
+                .expect("fresh registration"),
+            async |frontend| frontend.finish().wait().await.expect("ordinary P2 join"),
+        );
         let joined = finish(scope);
         assert_eq!(model.finishes.get(), 1);
         assert_eq!(model.drops.get(), 1);
@@ -620,14 +660,17 @@ fn dropping_outer_scope_ends_the_body_before_p2_cleanup_even_before_first_poll()
             let mut slot = claim.place();
             model.frontend_loans.set(1);
             let loan = FrontendLoan(model.clone());
-            let outer = crate::LocalExecution
-                .scope(&mut slot, Owner(model.clone()), async move |frontend| {
+            let outer = crate::LocalExecution.scope(
+                (&mut slot)
+                    .register(Owner(model.clone()))
+                    .ok()
+                    .expect("synchronous registration"),
+                async move |frontend| {
                     let _loan = loan;
                     let _frontend = frontend;
                     pending::<()>().await;
-                })
-                .ok()
-                .expect("synchronous registration");
+                },
+            );
             let mut outer = Box::pin(outer);
             if poll_outer {
                 assert!(poll(outer.as_mut()).is_pending());
@@ -647,12 +690,15 @@ fn returning_after_forgetting_the_frontend_cannot_leave_p2_registered() {
     let model = model(false);
     finish(with_local_slot(async |claim| {
         let mut slot = claim.place();
-        let scope = crate::LocalExecution
-            .scope(&mut slot, Owner(model.clone()), async |frontend| {
+        let scope = crate::LocalExecution.scope(
+            (&mut slot)
+                .register(Owner(model.clone()))
+                .ok()
+                .expect("fresh registration"),
+            async |frontend| {
                 core::mem::forget(frontend);
-            })
-            .ok()
-            .expect("fresh registration");
+            },
+        );
         scope.await;
         assert_eq!(model.abandons.get(), 1);
         assert_eq!(model.starts.get(), 0);
@@ -740,4 +786,24 @@ fn a_late_p2_answer_cannot_upgrade_the_supervisors_expired_result() {
         drop(join);
         assert!(slot.register(Owner(model.clone())).is_err());
     }));
+}
+
+#[test]
+fn a_claim_activates_preinitialized_backing_without_moving_its_owner() {
+    let model = model(true);
+    finish(with_local_slot(async |claim| {
+        let mut backing = VacantPortSlot::vacant();
+        let slot = claim.place_in(&mut backing);
+        let (frontend, p2) = slot
+            .register(Owner(model.clone()))
+            .ok()
+            .expect("fresh slot");
+        let join = frontend.finish();
+        run_p2(p2).await;
+        let joined = join.wait().await.expect("ordinary P2 completion");
+        assert_eq!(model.finishes.get(), 1);
+        assert_eq!(model.drops.get(), 1);
+        drop(joined);
+    }));
+    assert_eq!(Rc::strong_count(&model), 1);
 }

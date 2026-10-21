@@ -216,14 +216,17 @@ fn fresh_body_loan_returns_owned_payloads_without_leaving_a_body_reference_in_p2
             model: &model,
             returned: None,
         };
-        let outer = crate::LocalExecution
-            .scope(&mut slot, owner, async |mut frontend| {
+        let outer = crate::LocalExecution.scope(
+            (&mut slot)
+                .register(owner)
+                .ok()
+                .expect("fresh registration"),
+            async |mut frontend| {
                 let result = frontend.run_body(EchoBody(context.clone())).await;
                 assert!(frontend.finish().wait().await.is_ok());
                 result
-            })
-            .ok()
-            .expect("fresh registration");
+            },
+        );
         let mut outer = Box::pin(outer);
         assert!(poll(outer.as_mut()).is_pending());
         assert_eq!(poll(outer.as_mut()), Poll::Ready(Some(7)));
@@ -243,8 +246,12 @@ fn cancelling_a_borrowed_body_resource_only_queues_its_whole_owned_return_on_p1(
             model: &model,
             returned: None,
         };
-        let outer = crate::LocalExecution
-            .scope(&mut slot, owner, async |mut frontend| {
+        let outer = crate::LocalExecution.scope(
+            (&mut slot)
+                .register(owner)
+                .ok()
+                .expect("synchronous registration"),
+            async |mut frontend| {
                 model.executor.set(Executor::P1);
                 let mut body = Box::pin(frontend.run_body(HoldingBody(context.clone())));
                 assert!(poll(body.as_mut()).is_pending());
@@ -254,9 +261,8 @@ fn cancelling_a_borrowed_body_resource_only_queues_its_whole_owned_return_on_p1(
                 drop(frontend);
                 assert_eq!(model.drops.get(), 0);
                 model.executor.set(Executor::P2);
-            })
-            .ok()
-            .expect("synchronous registration");
+            },
+        );
         finish(outer);
         assert_eq!(model.starts.get(), 0);
         assert_eq!(model.abandons.get(), 1);
@@ -277,8 +283,12 @@ fn supervisor_cancels_an_unrelated_body_wait_but_keeps_a_returned_request() {
                 model: &model,
                 returned: None,
             };
-            let outer = crate::LocalExecution
-                .scope(&mut slot, owner, async |mut frontend| {
+            let outer = crate::LocalExecution.scope(
+                (&mut slot)
+                    .register(owner)
+                    .ok()
+                    .expect("registered P2 before body"),
+                async |mut frontend| {
                     model.executor.set(Executor::P1);
                     let result = frontend
                         .run_body(RequestBody {
@@ -291,9 +301,8 @@ fn supervisor_cancels_an_unrelated_body_wait_but_keeps_a_returned_request() {
                     drop(frontend);
                     model.executor.set(Executor::P2);
                     result
-                })
-                .ok()
-                .expect("registered P2 before body");
+                },
+            );
             let expected = returns.then_some("requested");
             assert_eq!(finish(outer), expected);
             assert_eq!(
@@ -315,6 +324,11 @@ impl<Id: SlotIdentity> SlotOwner<Id> for QueueOwner<'_, Id> {
     type Vacant = ();
     type Pools = Slots<Kind, 1>;
     type Queues = Queues<Id>;
+    const VACANT_QUEUES: Self::Queues = Queues {
+        commands: AffineSpscQueue::new(),
+        events: AffineSpscQueue::new(),
+        initial: None,
+    };
     type Frontend<'s>
         = Frontend<'s, Id>
     where
@@ -326,13 +340,9 @@ impl<Id: SlotIdentity> SlotOwner<Id> for QueueOwner<'_, Id> {
         Self: 's,
         Id: 's;
 
-    fn queues(&mut self, mint: Mint<'static, Self::Pools, Id>) -> Self::Queues {
+    fn prepare_queues(&mut self, queues: &mut Self::Queues, mint: Mint<'static, Self::Pools, Id>) {
         let [token] = mint.into_pools();
-        Queues {
-            commands: AffineSpscQueue::new(),
-            events: AffineSpscQueue::new(),
-            initial: Some(token),
-        }
+        queues.initial = Some(token);
     }
 
     fn split<'s>(
@@ -416,7 +426,11 @@ impl<Id: SlotIdentity> SlotOwner<Id> for QueueOwner<'_, Id> {
         Abandon::Unconfirmed(authority)
     }
 
-    fn finish(self) {
+    fn finish<'s>(&mut self, _: &mut Self::Invocation<'s>)
+    where
+        Self: 's,
+        Id: 's,
+    {
         assert_eq!(self.model.executor.get(), Executor::P2);
         assert_eq!(
             self.returned
@@ -469,8 +483,9 @@ fn separate_queue_backing_transfers_whole_owned_tokens_and_non_send_contexts() {
             model: &model,
             returned: None,
         };
-        let outer = crate::LocalExecution
-            .scope(&mut slot, owner, async |mut frontend| {
+        let outer = crate::LocalExecution.scope(
+            (&mut slot).register(owner).ok().expect("fresh slot"),
+            async |mut frontend| {
                 model.executor.set(Executor::P1);
                 {
                     let ports = frontend.ports();
@@ -509,9 +524,8 @@ fn separate_queue_backing_transfers_whole_owned_tokens_and_non_send_contexts() {
                 let join = frontend.finish();
                 model.executor.set(Executor::P2);
                 join.wait().await.is_ok()
-            })
-            .ok()
-            .expect("fresh slot");
+            },
+        );
         let mut outer = Box::pin(outer);
         assert!(poll(outer.as_mut()).is_pending());
         assert_eq!(poll(outer.as_mut()), Poll::Ready(true));
@@ -530,8 +544,12 @@ fn cancellation_before_first_driver_poll_preserves_queue_endpoints_for_p2_cleanu
             model: &model,
             returned: None,
         };
-        let outer = crate::LocalExecution
-            .scope(&mut slot, owner, async |mut frontend| {
+        let outer = crate::LocalExecution.scope(
+            (&mut slot)
+                .register(owner)
+                .ok()
+                .expect("registered before frontend construction"),
+            async |mut frontend| {
                 model.executor.set(Executor::P1);
                 let ports = frontend.ports();
                 let token = ports.token.take().expect("single capacity");
@@ -548,9 +566,8 @@ fn cancellation_before_first_driver_poll_preserves_queue_endpoints_for_p2_cleanu
                 assert_eq!(context.get(), 123);
                 assert_eq!(model.abandons.get(), 0);
                 model.executor.set(Executor::P2);
-            })
-            .ok()
-            .expect("registered before frontend construction");
+            },
+        );
         finish(outer);
         assert_eq!(model.starts.get(), 0);
         assert_eq!(model.abandons.get(), 1);
@@ -564,5 +581,43 @@ fn cancellation_before_first_driver_poll_preserves_queue_endpoints_for_p2_cleanu
         slot.end_model_world();
         assert_eq!(model.drops.get(), 1);
         assert_eq!(Rc::strong_count(&context), 1, "model world ended on P2");
+    }));
+}
+
+struct EmptyBody;
+impl<'m, Id: SlotIdentity> SlotBody<Id, QueueOwner<'m, Id>> for EmptyBody {
+    type Output = ();
+    async fn run<'p>(self, _: BodyViews<'p, Id, QueueOwner<'m, Id>>)
+    where
+        QueueOwner<'m, Id>: 'p,
+        Id: 'p,
+    {
+    }
+}
+
+#[test]
+fn a_registration_never_lends_its_initial_body_resources_twice() {
+    let model = model(true);
+    finish(with_local_slot(async |claim| {
+        let mut slot = claim.place();
+        let owner = QueueOwner {
+            model: &model,
+            returned: None,
+        };
+        let outer = crate::LocalExecution.scope(
+            (&mut slot)
+                .register(owner)
+                .ok()
+                .expect("fresh registration"),
+            async |mut frontend| {
+                assert_eq!(frontend.run_body(EmptyBody).await, Some(()));
+                assert_eq!(frontend.run_body(EmptyBody).await, None);
+                assert!(frontend.abandon().wait().await.is_err());
+            },
+        );
+        finish(outer);
+        assert_eq!(model.abandons.get(), 1);
+        assert_eq!(model.finishes.get(), 0);
+        slot.end_model_world();
     }));
 }

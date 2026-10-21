@@ -27,8 +27,8 @@ async fn with_retry_limit(
 ) -> Result<Trace, &'static str> {
     let station = IndividualAddress::new([2, 0, 0, 0, 0, 1]).ok_or("model station")?;
     let ap = IndividualAddress::new([2, 0, 0, 0, 0, 2]).ok_or("model AP")?;
-    let (backend, air) = ModelBackend::new(channel, [station, ap], clock);
-    match oer_radio_port::run_port(
+    let (backend, air) = Fixture::<ModelCaps>::new(channel, [station, ap], clock);
+    match run_model(
         backend,
         Body {
             case,
@@ -36,11 +36,10 @@ async fn with_retry_limit(
             air,
             retry_limit,
         },
-        oer_radio_port::LocalExecution,
     )
     .await
     {
-        PortEnd::Uninstalled { output, .. } => output,
+        Report::Joined(output) => output,
         _ => Err("model barrier uninstall"),
     }
 }
@@ -50,13 +49,18 @@ struct Body {
     air: Rc<ModelAir>,
     retry_limit: core::num::NonZeroU8,
 }
-impl PortBody<ModelBackend> for Body {
+impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id>> for Body {
     type Output = Result<Trace, &'static str>;
     async fn run<'p, 'id>(
         self,
-        owner: Owner<'p, 'id, ModelBackend, Disabled>,
-        resources: ModelResources<'id>,
-    ) -> Ended<'id, ModelBackend, Self::Output> {
+        owner: Owner<'p, 'id, Id, ModelBackend<Id>, Disabled>,
+        resources: ModelResources<'id, ModelBackend<Id>>,
+    ) -> Ended<Id, ModelBackend<Id>, Self::Output>
+    where
+        ModelBackend<Id>: 'id,
+        Id: 'id,
+        'id: 'p,
+    {
         let mut owner = match owner.enable().await {
             Ok(owner) => owner,
             Err(failed) => {
@@ -89,14 +93,16 @@ async fn yield_once() {
     })
     .await;
 }
-fn snapshot(phase: &ModelPhase<'_, '_>) -> HeldSnapshot {
+fn snapshot<Id: SlotIdentity>(
+    phase: &ModelPhase<'_, '_, ModelCaps, ModelBackend<Id>>,
+) -> HeldSnapshot {
     HeldSnapshot {
         publications: phase.held.air.sent().len(),
         events: phase.held.events.items.borrow().len(),
     }
 }
-fn frame<'p, 'id: 'p>(
-    phase: &ModelPhase<'p, 'id>,
+fn frame<'p, 'id: 'p, Id: SlotIdentity + 'id>(
+    phase: &ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
     rate: LegacyRate,
     transmissions: core::num::NonZeroU8,
 ) -> Result<TxFrame<'p, 'id, ModelCaps>, &'static str> {
@@ -127,16 +133,16 @@ fn frame<'p, 'id: 'p>(
         }),
     })
 }
-async fn exercise<'p, 'id: 'p>(
-    phase: &mut ModelPhase<'p, 'id>,
-    resources: ModelResources<'id>,
+async fn exercise<'p, 'id: 'p, Id: SlotIdentity + 'id>(
+    phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
+    resources: ModelResources<'id, ModelBackend<Id>>,
     body: Body,
 ) -> Result<Trace, &'static str> {
     if body.case == BarrierCase::GateTimeout {
         return Err("hardware barrier required");
     }
     let mut access = resources.terminal_access;
-    let association = ModelKeys::<Station>::begin_association(
+    let association = ModelKeys::<ModelBackend<Id>, Station>::begin_association(
         resources.station_association,
         oer_ieee80211_wire::security::Spp::NotNegotiated,
     );
@@ -283,12 +289,13 @@ async fn exercise<'p, 'id: 'p>(
         let TxFrame::Individual { plan, .. } = frame(phase, body.rate, body.retry_limit)? else {
             return Err("model retry frame");
         };
-        let source = <ModelTypes as TxBufferPool<ModelSmall>>::prepare::<Station, ModelCaps>(
-            CheckedTxSource::Retransmission {
-                mpdu,
-                plan: RetransmissionPlan::Individual(plan),
-            },
-        )
+        let source = <ModelTypes<ModelBackend<Id>> as TxBufferPool<ModelSmall>>::prepare::<
+            Station,
+            ModelCaps,
+        >(CheckedTxSource::Retransmission {
+            mpdu,
+            plan: RetransmissionPlan::Individual(plan),
+        })
         .map_err(|_| "model retry preparation")?;
         phase
             .station()

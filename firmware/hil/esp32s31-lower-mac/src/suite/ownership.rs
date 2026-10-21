@@ -117,8 +117,8 @@ impl TxBufferClass for Small {
 impl TxBufferClass for Large {
     const CAPACITY: usize = 256;
 }
-struct PoolBuffer<'id, const C: usize>(Buffer<'id, TX>);
-impl<const C: usize> TxBufferMemory for PoolBuffer<'_, C> {
+struct PoolBuffer<'id, Id: radio::SlotIdentity + 'id, const C: usize>(Buffer<'id, Id, Device, TX>);
+impl<Id: radio::SlotIdentity, const C: usize> TxBufferMemory for PoolBuffer<'_, Id, C> {
     fn bytes_mut(&mut self) -> &mut [u8] {
         self.0
             .bytes_mut()
@@ -140,9 +140,9 @@ fn class(index: u8) -> Class {
 }
 macro_rules! pool {
     ($class:ty, $capacity:literal, $parity:literal) => {
-        impl<'id> TxBufferPool<'id, $class> for Family {
-            type Buffer = PoolBuffer<'id, $capacity>;
-            type Sent = Sent<'id, Device, TX>;
+        impl<'id, Id: radio::SlotIdentity + 'id> TxBufferPool<'id, $class> for Family<Id> {
+            type Buffer = PoolBuffer<'id, Id, $capacity>;
+            type Sent = Sent<'id, Id, Device, TX>;
             fn prepare<'k, 'p, R: RoleKeys<'id, Self>, K: Ieee80211Capabilities>(
                 source: CheckedPoolSource<'k, 'p, 'id, Self, $class, K, R>,
             ) -> PoolPreparation<'k, 'p, 'id, Self, $class, K, R>
@@ -173,7 +173,7 @@ macro_rules! pool {
                     .check()
                     .ok()
                     .expect("unchanged checked subset layout");
-                <Family as TxBufferPool<BufferClass<TX>>>::prepare::<R, K>(checked).map_err(
+                <Family<Id> as TxBufferPool<BufferClass<TX>>>::prepare::<R, K>(checked).map_err(
                     |refused| {
                         let operation = match refused.operation {
                             TxSource::Fresh {
@@ -211,15 +211,15 @@ macro_rules! pool {
             {
                 unreachable!("S31 has no constructible aggregate owner")
             }
-            fn erase(buffer: Self::Buffer) -> AnyBuffer<'id, Device, TX> {
+            fn erase(buffer: Self::Buffer) -> AnyBuffer<'id, Id, Device, TX> {
                 AnyBuffer::Fresh(buffer.0)
             }
-            fn erase_sent(buffer: Self::Sent) -> AnyBuffer<'id, Device, TX> {
+            fn erase_sent(buffer: Self::Sent) -> AnyBuffer<'id, Id, Device, TX> {
                 AnyBuffer::Sent(buffer)
             }
             fn class(
-                buffer: AnyBuffer<'id, Device, TX>,
-            ) -> Result<Self::Buffer, AnyBuffer<'id, Device, TX>> {
+                buffer: AnyBuffer<'id, Id, Device, TX>,
+            ) -> Result<Self::Buffer, AnyBuffer<'id, Id, Device, TX>> {
                 match buffer {
                     AnyBuffer::Fresh(buffer) if buffer.index() % 2 == $parity => {
                         Ok(PoolBuffer(buffer))
@@ -228,15 +228,15 @@ macro_rules! pool {
                 }
             }
             fn sent(
-                buffer: AnyBuffer<'id, Device, TX>,
-            ) -> Result<Self::Sent, AnyBuffer<'id, Device, TX>> {
+                buffer: AnyBuffer<'id, Id, Device, TX>,
+            ) -> Result<Self::Sent, AnyBuffer<'id, Id, Device, TX>> {
                 match buffer {
                     AnyBuffer::Sent(sent) if sent.index() % 2 == $parity => Ok(sent),
                     other => Err(other),
                 }
             }
             fn renew(sent: Self::Sent) -> (Self::Buffer, Option<FixtureBody>) {
-                let (buffer, body) = <Family as TxBufferPool<BufferClass<TX>>>::renew(sent);
+                let (buffer, body) = <Family<Id> as TxBufferPool<BufferClass<TX>>>::renew(sent);
                 (PoolBuffer(buffer), body)
             }
         }
@@ -260,10 +260,10 @@ impl Returns {
         self.rows.len()
     }
 }
-fn observe<'id>(
+fn observe<'id, Id: radio::SlotIdentity + 'id>(
     context: Context,
-    ticket: radio::Slot<'id, Tickets, <Family as PhaseTypes<'id>>::TicketPath>,
-    buffer: AnyBuffer<'id, Device, TX>,
+    ticket: radio::Slot<'id, Tickets, <Family<Id> as PhaseTypes<'id>>::TicketPath>,
+    buffer: AnyBuffer<'id, Id, Device, TX>,
     body: Option<FixtureBody>,
     (end, evidence): (End, conformance::ReturnEvidence),
     seen: &mut Returns,
@@ -278,7 +278,7 @@ fn observe<'id>(
     };
     let (buffer, body) = match buffer {
         AnyBuffer::Fresh(buffer) => (buffer, body),
-        AnyBuffer::Sent(sent) => <Family as TxBufferPool<BufferClass<TX>>>::renew(sent),
+        AnyBuffer::Sent(sent) => <Family<Id> as TxBufferPool<BufferClass<TX>>>::renew(sent),
     };
     let body = body.ok_or("lost external body")?;
     if !body.bytes().iter().all(|byte| *byte == operation.id) {
@@ -301,13 +301,13 @@ fn observe<'id>(
         })
         .map_err(|_| "too many ownership returns")
 }
-pub(super) async fn run<'p, 'id>(
-    mut owner: Owner<'p, 'id, Backend, radio::Enabled>,
-    resources: <Backend as PortBackend>::Resources<'id>,
+pub(super) async fn run<'p, 'id, Id: radio::SlotIdentity + 'id>(
+    mut owner: Owner<'p, 'id, Id, Backend<Id>, radio::Enabled>,
+    resources: <Backend<Id> as PortBackend<Id>>::Resources<'id>,
     peer: Peer,
     scenario: Scenario,
     body_pool: &'static BodyPool,
-) -> Ended<'id, Backend, Result<Trace, &'static str>> {
+) -> Ended<Id, Backend<Id>, Result<Trace, &'static str>> {
     DROPS.store(0, Ordering::Relaxed);
     let mut access = resources.terminal_access;
     let mut seen = Returns::new();
@@ -364,17 +364,18 @@ pub(super) async fn run<'p, 'id>(
             macro_rules! source {
                 ($class:ty,$capacity:literal) => {{
                     let source = TxSource::Fresh {
-                        buffer: PoolBuffer::<'id, $capacity>(buffer),
+                        buffer: PoolBuffer::<'id, Id, $capacity>(buffer),
                         frame: ClassFrame::new(frame).map_err(|_| "ownership class")?,
                         body: Some(body),
                         protection: TxProtection::Open,
                     }
                     .check();
                     match source {
-                        Ok(source) => Ok(
-                            <Family as TxBufferPool<$class>>::prepare::<Station, Caps>(source)
-                                .map_err(|_| "ownership preparation")?,
-                        ),
+                        Ok(source) => Ok(<Family<Id> as TxBufferPool<$class>>::prepare::<
+                            Station,
+                            Caps,
+                        >(source)
+                        .map_err(|_| "ownership preparation")?),
                         Err(refused) => match refused.operation {
                             TxSource::Fresh { buffer, body, .. } => {
                                 Err((AnyBuffer::Fresh(buffer.0), body))
@@ -486,10 +487,10 @@ pub(super) async fn run<'p, 'id>(
     };
     Ended::uninstall(owner, (), output)
 }
-type Access<'id> = TerminalAccess<'id, Tickets, <Family as PhaseTypes<'id>>::TicketPath>;
-fn terminal_return<'id>(
-    terminal: LowerMacTerminal<'id, Family>,
-    access: &mut Access<'id>,
+type Access<'id, Id> = TerminalAccess<'id, Tickets, <Family<Id> as PhaseTypes<'id>>::TicketPath>;
+fn terminal_return<'id, Id: radio::SlotIdentity + 'id>(
+    terminal: LowerMacTerminal<'id, Family<Id>>,
+    access: &mut Access<'id, Id>,
     seen: &mut Returns,
 ) -> Result<(), &'static str> {
     match terminal {
@@ -519,9 +520,9 @@ fn terminal_return<'id>(
         _ => Err("ownership terminal kind"),
     }
 }
-async fn next<'p, 'id: 'p>(
-    phase: &mut Esp32s31Phase<'p, 'id, Device, TX>,
-    access: &mut Access<'id>,
+async fn next<'p, 'id: 'p, Id: radio::SlotIdentity + 'id>(
+    phase: &mut Esp32s31Phase<'p, 'id, Id, Device, TX>,
+    access: &mut Access<'id, Id>,
     seen: &mut Returns,
 ) -> Result<(), &'static str> {
     match phase

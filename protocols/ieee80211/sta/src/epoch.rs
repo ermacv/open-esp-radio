@@ -4,7 +4,70 @@
 
 use core::marker::PhantomData;
 use oer_ieee80211_port::ConnectionEpochKind;
+use oer_radio_port::{ContextLoan, ContextProjection, PortContext};
 use oer_radio_port::{PoolPath, Root, Slot};
+
+/// Queue representation of an epoch and its operation data. The epoch is
+/// private; public projections always restore the consumer's body loan.
+pub struct EpochContext<Path: PoolPath, D> {
+    sequence: u64,
+    data: D,
+    path: PhantomData<fn(Path) -> Path>,
+}
+
+impl<'p, Path: PoolPath> LinkEpoch<'p, Path> {
+    /// Enclose this epoch and its data for an opaque backend context.
+    pub fn context<D>(self, data: D) -> PortContext<'p, Path::Identity, EpochContext<Path, D>> {
+        PortContext::new(EpochContext {
+            sequence: self.sequence,
+            data,
+            path: PhantomData,
+        })
+    }
+}
+
+impl<Path: PoolPath, D> ContextProjection<Path::Identity> for EpochContext<Path, D> {
+    type View<'a, 'p>
+        = (LinkEpoch<'p, Path>, &'a D)
+    where
+        Self: 'p,
+        Path::Identity: 'p,
+        'p: 'a;
+    type Parts<'p>
+        = (LinkEpoch<'p, Path>, D)
+    where
+        Self: 'p,
+        Path::Identity: 'p;
+
+    fn view<'a, 'p>(&'a self, _: ContextLoan<'p, Path::Identity>) -> Self::View<'a, 'p>
+    where
+        Self: 'p,
+        Path::Identity: 'p,
+        'p: 'a,
+    {
+        (
+            LinkEpoch {
+                sequence: self.sequence,
+                brand: PhantomData,
+            },
+            &self.data,
+        )
+    }
+
+    fn into_parts<'p>(self, _: ContextLoan<'p, Path::Identity>) -> Self::Parts<'p>
+    where
+        Self: 'p,
+        Path::Identity: 'p,
+    {
+        (
+            LinkEpoch {
+                sequence: self.sequence,
+                brand: PhantomData,
+            },
+            self.data,
+        )
+    }
+}
 
 /// A connection identity, invariant in the installation's brand. Only the
 /// station's source issues one; neither callers nor Data reconstruct it.
@@ -77,6 +140,29 @@ impl<'id> LinkEpochSource<'id, Root<oer_radio_port::LocalId<'id>>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn opaque_epoch_context_preserves_a_non_send_owner_and_the_consumers_epoch_loan() {
+        use oer_radio_port::{ContextChoice, Root, StaticId};
+        use std::rc::Rc;
+        enum Declaration {}
+        type Path = Root<StaticId<Declaration>>;
+        let owner = Rc::new(42);
+        let address = Rc::as_ptr(&owner);
+        let epoch = LinkEpoch::<'_, Path>::for_test(123);
+        let context = epoch.context(owner).first::<()>();
+        let ContextChoice::First(context) = context.into_choice() else {
+            panic!("the context family is preserved");
+        };
+        let (borrowed, data) = context.view();
+        assert_eq!(borrowed.sequence, 123);
+        assert_eq!(Rc::strong_count(data), 1);
+        assert_eq!(Rc::as_ptr(data), address);
+        let (returned, owner) = context.into_parts();
+        assert_eq!(returned.sequence, epoch.sequence);
+        assert_eq!(Rc::as_ptr(&owner), address);
+        assert_eq!(Rc::strong_count(&owner), 1);
+    }
 
     #[test]
     fn adjacent_live_epochs_remain_distinct_across_wrap() {

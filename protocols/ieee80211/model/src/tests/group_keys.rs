@@ -13,9 +13,12 @@ fn meta() -> ModelRxMeta {
     ModelRxMeta::new(Channel::ghz2_4(6, ChannelWidth::Mhz20).unwrap(), -50, -90)
 }
 #[derive(Default)]
-struct CoreGroupNumbers(Vec<(KeyIdentity, TestPacketNumbers)>);
+struct CoreGroupNumbers(Vec<(RawKeyIdentity, TestPacketNumbers)>);
 impl CoreGroupNumbers {
-    fn counter(&mut self, key: &ModelGroupKey<'_, Station>) -> &TestPacketNumbers {
+    fn counter<Id: SlotIdentity>(
+        &mut self,
+        key: &ModelGroupKey<'_, ModelBackend<Id>, Station>,
+    ) -> &TestPacketNumbers {
         let i = if let Some(i) = self.0.iter().position(|(id, _)| *id == key.identity) {
             i
         } else {
@@ -27,7 +30,11 @@ impl CoreGroupNumbers {
         };
         &self.0[i].1
     }
-    fn set_last(&mut self, key: &ModelGroupKey<'_, Station>, last: u64) {
+    fn set_last<Id: SlotIdentity>(
+        &mut self,
+        key: &ModelGroupKey<'_, ModelBackend<Id>, Station>,
+        last: u64,
+    ) {
         let counter = TestPacketNumbers::continuing_after(
             oer_ieee80211_wire::ccmp::CcmpPacketNumberStep::ONE,
             oer_ieee80211_wire::ccmp::CcmpPacketNumber::new(last).unwrap(),
@@ -40,7 +47,10 @@ impl CoreGroupNumbers {
             .unwrap();
         self.0[i].1 = counter;
     }
-    fn snapshot(&mut self, key: &ModelGroupKey<'_, Station>) -> contract::Installation {
+    fn snapshot<Id: SlotIdentity>(
+        &mut self,
+        key: &ModelGroupKey<'_, ModelBackend<Id>, Station>,
+    ) -> contract::Installation {
         contract::Installation {
             identity: Rc::as_ptr(&key.identity.0).addr(),
             slot: key.slot.index(),
@@ -48,9 +58,12 @@ impl CoreGroupNumbers {
         }
     }
 }
-async fn installed<'p, 'id: 'p>(
-    phase: &mut ModelPhase<'p, 'id>,
-) -> (ModelGroupKey<'id, Station>, StationGroupPermission<'id>) {
+async fn installed<'p, 'id: 'p, Id: SlotIdentity + 'id>(
+    phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
+) -> (
+    ModelGroupKey<'id, ModelBackend<Id>, Station>,
+    StationGroupPermission<'id, ModelBackend<Id>>,
+) {
     match phase.next_event().await {
         Ok(Ok(LowerMacEvent::Terminal(LowerMacTerminal::GroupKeyInstalled(
             InstalledGroup::Station { key, permission },
@@ -58,7 +71,9 @@ async fn installed<'p, 'id: 'p>(
         _ => panic!("expected the real installation terminal"),
     }
 }
-async fn removed<'p, 'id: 'p>(phase: &mut ModelPhase<'p, 'id>) -> StationGroupPermission<'id> {
+async fn removed<'p, 'id: 'p, Id: SlotIdentity + 'id>(
+    phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
+) -> StationGroupPermission<'id, ModelBackend<Id>> {
     match phase.next_event().await {
         Ok(Ok(LowerMacEvent::Terminal(LowerMacTerminal::KeyRemoved(Removed::Station(
             RemovedKey::Group { permission, .. },
@@ -74,12 +89,12 @@ struct Boundary<'a> {
     clock: &'a VirtualClock,
 }
 impl Work for Boundary<'_> {
-    async fn work<'p, 'id: 'p>(
+    async fn work<'p, 'id: 'p, Id: SlotIdentity + 'id>(
         self,
-        phase: &mut ModelPhase<'p, 'id>,
-        resources: ModelResources<'id>,
+        phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
+        resources: ModelResources<'id, ModelBackend<Id>>,
     ) {
-        let station_association = ModelKeys::<Station>::begin_association(
+        let station_association = ModelKeys::<ModelBackend<Id>, Station>::begin_association(
             resources.station_association,
             oer_ieee80211_wire::security::Spp::NotNegotiated,
         );
@@ -163,14 +178,14 @@ impl Work for Boundary<'_> {
 }
 
 impl Boundary<'_> {
-    async fn finish<'p, 'id: 'p>(
+    async fn finish<'p, 'id: 'p, Id: SlotIdentity + 'id>(
         self,
-        phase: &mut ModelPhase<'p, 'id>,
+        phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
         (original, submitted_slot): (contract::Installation, u8),
         (writes, admitted_at): (usize, oer_time::Instant),
         old: [u8; 16],
         new: [u8; 16],
-        retained: Option<ModelGroupKey<'id, Station>>,
+        retained: Option<ModelGroupKey<'id, ModelBackend<Id>, Station>>,
         mut numbers: CoreGroupNumbers,
     ) {
         use contract::Event;
@@ -289,8 +304,7 @@ impl contract::Harness for Harness<'_> {
     type Events = Vec<contract::Event>;
     type Completions = Vec<contract::Completion>;
     type Retained = Vec<contract::Owners>;
-    const GROUP_COMMAND_BOUND: oer_time::Duration =
-        <ModelBackend as LowerMacBackend>::GROUP_COMMAND_BOUND;
+    const GROUP_COMMAND_BOUND: oer_time::Duration = MODEL_GROUP_COMMAND_BOUND;
     const SCENARIO_BOUND: oer_time::Duration = oer_time::Duration::from_millis(20);
     async fn exercise(&mut self, case: contract::Case) -> contract::Trace<Self::Events> {
         let (backend, air) = backend_on(self.0.clone());
@@ -301,13 +315,8 @@ impl contract::Harness for Harness<'_> {
             trace: &trace,
             clock: self.0,
         };
-        let _port_end = progress::run_timed(
-            run_port(backend, Body(boundary), oer_radio_port::LocalExecution),
-            &air,
-            self.0,
-            None,
-        )
-        .await;
+        let _port_end =
+            progress::run_timed(run_model(backend, Body(boundary)), &air, self.0, None).await;
         assert!(!air.failed());
         trace.into_inner().unwrap()
     }
@@ -343,7 +352,37 @@ impl Mutation {
     const ALL: [Self; 4] = [Self::Install, Self::Replace, Self::Select, Self::Remove];
 }
 
-fn terminal_slot(event: &LowerMacEvent<'_, ModelTypes>) -> Option<u8> {
+fn terminal_slot<Id: SlotIdentity>(
+    event: &OwnedLowerMacEvent<'static, ModelBackend<Id>>,
+) -> Option<u8> {
+    match event {
+        OwnedLowerMacEvent::Terminal(OwnedLowerMacTerminal::GroupKeyInstalled(
+            OwnedInstalledGroup::Station { key, permission },
+        ))
+        | OwnedLowerMacEvent::Terminal(OwnedLowerMacTerminal::GroupKeyReplaced {
+            key,
+            permission,
+        })
+        | OwnedLowerMacEvent::Terminal(OwnedLowerMacTerminal::GroupKeySelected {
+            key,
+            permission,
+        }) => {
+            assert_eq!(permission.index(), 0);
+            Some(key.slot.index())
+        }
+        OwnedLowerMacEvent::Terminal(OwnedLowerMacTerminal::KeyRemoved(OwnedRemoved::Station(
+            OwnedRemovedKey::Group { slot, permission },
+        ))) => {
+            assert_eq!(permission.index(), 0);
+            Some(slot.index())
+        }
+        _ => None,
+    }
+}
+
+fn body_terminal_slot<'id, Id: SlotIdentity + 'id>(
+    event: &LowerMacEvent<'id, ModelTypes<ModelBackend<Id>>>,
+) -> Option<u8> {
     match event {
         LowerMacEvent::Terminal(LowerMacTerminal::GroupKeyInstalled(InstalledGroup::Station {
             key,
@@ -363,7 +402,7 @@ fn terminal_slot(event: &LowerMacEvent<'_, ModelTypes>) -> Option<u8> {
         _ => None,
     }
 }
-fn change_slot(change: &GroupChange<'_, ()>) -> u8 {
+fn change_slot<Id: SlotIdentity>(change: &GroupChange<'_, ModelBackend<Id>>) -> u8 {
     match change {
         GroupChange::Install(GroupInstallationCommand::Station(pending)) => {
             assert_eq!(pending.permission.index(), 0);
@@ -382,7 +421,7 @@ fn change_slot(change: &GroupChange<'_, ()>) -> u8 {
             key.slot.index()
         }
         GroupChange::Remove {
-            removed: Removed::Station(RemovedKey::Group { slot, permission }),
+            removed: OwnedRemoved::Station(OwnedRemovedKey::Group { slot, permission }),
             ..
         } => {
             assert_eq!(permission.index(), 0);
@@ -391,7 +430,9 @@ fn change_slot(change: &GroupChange<'_, ()>) -> u8 {
         _ => panic!("station fixture returned another role"),
     }
 }
-fn held_slots(phase: &ModelPhase<'_, '_>) -> Vec<u8> {
+fn held_slots<Id: SlotIdentity>(
+    phase: &ModelPhase<'_, '_, ModelCaps, ModelBackend<Id>>,
+) -> Vec<u8> {
     let held = phase.held;
     let mut slots = Vec::new();
     for command in held.commands.items.borrow().iter() {
@@ -408,10 +449,10 @@ fn held_slots(phase: &ModelPhase<'_, '_>) -> Vec<u8> {
             .filter_map(terminal_slot),
     );
     slots.extend(held.events.items.borrow().iter().filter_map(terminal_slot));
-    for removal in &held.driver_state.borrow().removing {
-        if let Removed::Station(RemovedKey::Group { slot, permission }) = &removal.removed {
-            assert_eq!(permission.index(), 0);
-            slots.push(slot.index());
+    for removal in held.air.driver_observation().group_removals {
+        if removal.role == VifRole::Station {
+            assert_eq!(removal.permission, 0);
+            slots.push(removal.slot);
         }
     }
     slots
@@ -423,14 +464,19 @@ struct Interrupted<'a> {
     fault: Option<GroupFaultStage>,
     applied: bool,
 }
-impl PortBody<ModelBackend> for Interrupted<'_> {
+impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id>> for Interrupted<'_> {
     type Output = ();
-    async fn run<'id>(
+    async fn run<'a, 'id>(
         self,
-        owner: Owner<'_, 'id, ModelBackend, Disabled>,
-        resources: ModelResources<'id>,
-    ) -> Ended<'id, ModelBackend, ()> {
-        let station_association = ModelKeys::<Station>::begin_association(
+        owner: Owner<'a, 'id, Id, ModelBackend<Id>, Disabled>,
+        resources: ModelResources<'id, ModelBackend<Id>>,
+    ) -> Ended<Id, ModelBackend<Id>, ()>
+    where
+        ModelBackend<Id>: 'id,
+        Id: 'id,
+        'id: 'a,
+    {
+        let station_association = ModelKeys::<ModelBackend<Id>, Station>::begin_association(
             resources.station_association,
             oer_ieee80211_wire::security::Spp::NotNegotiated,
         );
@@ -506,7 +552,7 @@ impl PortBody<ModelBackend> for Interrupted<'_> {
                 panic!("disable completes the admitted mutation")
             };
             assert_eq!(terminals.len(), 1);
-            assert_eq!(terminal_slot(&terminals[0]), Some(expected_slot));
+            assert_eq!(body_terminal_slot(&terminals[0]), Some(expected_slot));
             drop(terminals);
             Ended::uninstall(disabled, (), ())
         }
@@ -522,7 +568,7 @@ fn fault_and_disable_keep_each_gtk_mutations_owner_and_permission() {
         ] {
             for applied in [false, true] {
                 let (backend, air) = backend();
-                let _port_end = block_on(run_port(
+                let _port_end = block_on(run_model(
                     backend,
                     Interrupted {
                         air: &air,
@@ -530,7 +576,6 @@ fn fault_and_disable_keep_each_gtk_mutations_owner_and_permission() {
                         fault,
                         applied,
                     },
-                    oer_radio_port::LocalExecution,
                 ));
                 assert!(
                     air.key_installations
@@ -545,12 +590,12 @@ fn fault_and_disable_keep_each_gtk_mutations_owner_and_permission() {
 
 struct Deadline<'a>(&'a ModelAir);
 impl Work for Deadline<'_> {
-    async fn work<'p, 'id: 'p>(
+    async fn work<'p, 'id: 'p, Id: SlotIdentity + 'id>(
         self,
-        phase: &mut ModelPhase<'p, 'id>,
-        resources: ModelResources<'id>,
+        phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
+        resources: ModelResources<'id, ModelBackend<Id>>,
     ) {
-        let station_association = ModelKeys::<Station>::begin_association(
+        let station_association = ModelKeys::<ModelBackend<Id>, Station>::begin_association(
             resources.station_association,
             oer_ieee80211_wire::security::Spp::NotNegotiated,
         );
@@ -594,11 +639,7 @@ fn a_stalled_group_command_has_a_deadline_wake_and_retains_resources_on_expiry()
     let wakes = Arc::new(Wakes(AtomicUsize::new(0)));
     let waker = Waker::from(wakes.clone());
     let mut cx = core::task::Context::from_waker(&waker);
-    let mut running = core::pin::pin!(run_port(
-        backend,
-        Body(Deadline(&air)),
-        oer_radio_port::LocalExecution
-    ));
+    let mut running = core::pin::pin!(run_model(backend, Body(Deadline(&air))));
     for _ in 0..5 {
         assert!(running.as_mut().poll(&mut cx).is_pending());
     }
@@ -615,12 +656,12 @@ fn a_stalled_group_command_has_a_deadline_wake_and_retains_resources_on_expiry()
 
 struct IndependentIds<'a>(&'a ModelAir);
 impl Work for IndependentIds<'_> {
-    async fn work<'p, 'id: 'p>(
+    async fn work<'p, 'id: 'p, Id: SlotIdentity + 'id>(
         self,
-        phase: &mut ModelPhase<'p, 'id>,
-        resources: ModelResources<'id>,
+        phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
+        resources: ModelResources<'id, ModelBackend<Id>>,
     ) {
-        let station_association = ModelKeys::<Station>::begin_association(
+        let station_association = ModelKeys::<ModelBackend<Id>, Station>::begin_association(
             resources.station_association,
             oer_ieee80211_wire::security::Spp::NotNegotiated,
         );
@@ -694,11 +735,7 @@ impl Work for IndependentIds<'_> {
 #[test]
 fn selection_and_removal_leave_other_wire_key_ids_active() {
     let (backend, air) = backend();
-    let _port_end = block_on(run_port(
-        backend,
-        Body(IndependentIds(&air)),
-        oer_radio_port::LocalExecution,
-    ));
+    let _port_end = block_on(run_model(backend, Body(IndependentIds(&air))));
     assert!(!air.failed());
 }
 
@@ -710,18 +747,23 @@ enum EndInstallation {
 }
 struct Teardown<'a> {
     air: &'a ModelAir,
-    identity: &'a RefCell<Option<KeyIdentity>>,
+    identity: &'a RefCell<Option<RawKeyIdentity>>,
     stage: GroupRxStage,
     end: EndInstallation,
 }
-impl PortBody<ModelBackend> for Teardown<'_> {
+impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id>> for Teardown<'_> {
     type Output = ();
-    async fn run<'id>(
+    async fn run<'a, 'id>(
         self,
-        owner: Owner<'_, 'id, ModelBackend, Disabled>,
-        resources: ModelResources<'id>,
-    ) -> Ended<'id, ModelBackend, ()> {
-        let station_association = ModelKeys::<Station>::begin_association(
+        owner: Owner<'a, 'id, Id, ModelBackend<Id>, Disabled>,
+        resources: ModelResources<'id, ModelBackend<Id>>,
+    ) -> Ended<Id, ModelBackend<Id>, ()>
+    where
+        ModelBackend<Id>: 'id,
+        Id: 'id,
+        'id: 'a,
+    {
+        let station_association = ModelKeys::<ModelBackend<Id>, Station>::begin_association(
             resources.station_association,
             oer_ieee80211_wire::security::Spp::NotNegotiated,
         );
@@ -790,7 +832,7 @@ fn teardown_ends_delayed_group_ingress_and_material_despite_external_identities(
         ] {
             let (backend, air) = backend();
             let identity = RefCell::new(None);
-            let _port_end = block_on(run_port(
+            let _port_end = block_on(run_model(
                 backend,
                 Teardown {
                     air: &air,
@@ -798,7 +840,6 @@ fn teardown_ends_delayed_group_ingress_and_material_despite_external_identities(
                     stage,
                     end,
                 },
-                oer_radio_port::LocalExecution,
             ));
             let identity = identity.into_inner().unwrap();
             assert!(!identity.0.active.get());
@@ -824,14 +865,19 @@ fn teardown_ends_delayed_group_ingress_and_material_despite_external_identities(
 }
 
 struct ReenableGroup<'a>(&'a ModelAir);
-impl PortBody<ModelBackend> for ReenableGroup<'_> {
+impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id>> for ReenableGroup<'_> {
     type Output = ();
-    async fn run<'id>(
+    async fn run<'a, 'id>(
         self,
-        owner: Owner<'_, 'id, ModelBackend, Disabled>,
-        resources: ModelResources<'id>,
-    ) -> Ended<'id, ModelBackend, ()> {
-        let station_association = ModelKeys::<Station>::begin_association(
+        owner: Owner<'a, 'id, Id, ModelBackend<Id>, Disabled>,
+        resources: ModelResources<'id, ModelBackend<Id>>,
+    ) -> Ended<Id, ModelBackend<Id>, ()>
+    where
+        ModelBackend<Id>: 'id,
+        Id: 'id,
+        'id: 'a,
+    {
+        let station_association = ModelKeys::<ModelBackend<Id>, Station>::begin_association(
             resources.station_association,
             oer_ieee80211_wire::security::Spp::NotNegotiated,
         );
@@ -893,22 +939,18 @@ impl PortBody<ModelBackend> for ReenableGroup<'_> {
 #[test]
 fn disable_and_reenable_preserve_the_same_group_installation_and_counter() {
     let (backend, air) = backend();
-    let _port_end = block_on(run_port(
-        backend,
-        ReenableGroup(&air),
-        oer_radio_port::LocalExecution,
-    ));
+    let _port_end = block_on(run_model(backend, ReenableGroup(&air)));
     assert!(!air.failed());
 }
 
 struct Admission<'a>(&'a ModelAir);
 impl Work for Admission<'_> {
-    async fn work<'p, 'id: 'p>(
+    async fn work<'p, 'id: 'p, Id: SlotIdentity + 'id>(
         self,
-        phase: &mut ModelPhase<'p, 'id>,
-        resources: ModelResources<'id>,
+        phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
+        resources: ModelResources<'id, ModelBackend<Id>>,
     ) {
-        let station_association = ModelKeys::<Station>::begin_association(
+        let station_association = ModelKeys::<ModelBackend<Id>, Station>::begin_association(
             resources.station_association,
             oer_ieee80211_wire::security::Spp::NotNegotiated,
         );
@@ -940,7 +982,7 @@ impl Work for Admission<'_> {
             assert_eq!(pending.key_id, id());
             assert_eq!(pending.key.as_bytes(), &[1; 16]);
         }
-        assert!(phase.held.driver_state.borrow().keys.is_empty());
+        assert_eq!(phase.held.air.driver_observation().installed_keys, 0);
         assert!(phase.held.events.is_empty());
         assert!(self.0.key_installations.borrow().is_empty());
         assert_eq!(self.0.group_writes(), 0);
@@ -964,10 +1006,6 @@ impl Work for Admission<'_> {
 #[test]
 fn pending_installation_owns_vacant_resources_without_an_installed_identity() {
     let (backend, air) = backend();
-    let _port_end = block_on(run_port(
-        backend,
-        Body(Admission(&air)),
-        oer_radio_port::LocalExecution,
-    ));
+    let _port_end = block_on(run_model(backend, Body(Admission(&air))));
     assert!(!air.failed());
 }

@@ -1,0 +1,5 @@
+error[E0616]: field `armed` of struct `SlotRegistration` is private
+ --> tests/ui/registration_guard_closed.rs:5:31
+  |
+5 |     let _armed = registration.armed; // ui-error: E0616
+  |                               ^^^^^ private field

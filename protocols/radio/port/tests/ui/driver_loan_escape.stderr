@@ -1,8 +1,0 @@
-error[E0515]: cannot return value referencing function parameter `driver`
- --> tests/ui/driver_loan_escape.rs:5:5
-  |
-5 |     &*driver // ui-error: E0515
-  |     ^^------
-  |     | |
-  |     | `driver` is borrowed here
-  |     returns a value referencing data owned by the current function

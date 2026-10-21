@@ -1,0 +1,5 @@
+error[E0616]: field `owner` of struct `SlotRegistration` is private
+ --> tests/ui/registration_owner_replace.rs:5:36
+  |
+5 |     let _owner = &mut registration.owner; // ui-error: E0616
+  |                                    ^^^^^ private field

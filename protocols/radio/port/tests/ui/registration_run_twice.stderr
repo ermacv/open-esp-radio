@@ -1,0 +1,16 @@
+error[E0382]: use of moved value: `registration`
+ --> tests/ui/registration_run_twice.rs:6:13
+  |
+3 | pub fn run<Id: SlotIdentity, S: SlotOwner<Id>>(registration: SlotRegistration<'_, Id, S>) {
+  |                                                ------------ move occurs because `registration` has type `SlotRegistration<'_, Id, S>`, which does not implement the `Copy` trait
+4 |     let running = registration.run();
+  |                                ----- `registration` moved due to this method call
+5 |     #[cfg(all())]
+6 |     let _ = registration.run(); // ui-error: E0382
+  |             ^^^^^^^^^^^^ value used here after move
+  |
+note: `SlotRegistration::<'s, Id, S>::run` takes ownership of the receiver `self`, which moves `registration`
+ --> src/slot.rs
+  |
+  |     pub async fn run(mut self) -> Option<SlotCompletion<'s, Id>> {
+  |                          ^^^^

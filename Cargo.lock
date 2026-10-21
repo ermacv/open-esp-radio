@@ -3711,6 +3711,7 @@ dependencies = [
  "oer-ieee80211-wire",
  "oer-radio-port",
  "oer-radio-regulatory",
+ "oer-test-ui-cases",
  "oer-time",
  "oer-time-virtual",
 ]
@@ -4073,6 +4074,7 @@ dependencies = [
  "oer-test-ui-cases",
  "oer-time",
  "oer-time-virtual",
+ "pin-project-lite",
  "scopeguard",
 ]
 

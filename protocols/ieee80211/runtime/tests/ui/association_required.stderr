@@ -2,7 +2,7 @@ error[E0061]: this method takes 4 arguments but 3 arguments were supplied
   --> tests/ui/association_required.rs:15:10
    |
 15 |         .install_pairwise_key(slot, peer, Ccmp128Key::new(&[1; 16])); // ui-error: E0061
-   |          ^^^^^^^^^^^^^^^^^^^^ ---- argument #1 of type `&ModelAssociation<'id, oer_ieee80211_port::Station>` is missing
+   |          ^^^^^^^^^^^^^^^^^^^^ ---- argument #1 of type `&ModelAssociation<'id, ModelBackend<StaticId<UiSlot>>, oer_ieee80211_port::Station>` is missing
    |
 note: method defined here
   --> $WORKSPACE/protocols/ieee80211/port/src/phase.rs
@@ -11,5 +11,5 @@ note: method defined here
    |        ^^^^^^^^^^^^^^^^^^^^
 help: provide the argument
    |
-15 |         .install_pairwise_key(/* &ModelAssociation<'id, oer_ieee80211_port::Station> */, slot, peer, Ccmp128Key::new(&[1; 16])); // ui-error: E0061
-   |                               ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+15 |         .install_pairwise_key(/* &ModelAssociation<'id, ModelBackend<StaticId<UiSlot>>, oer_ieee80211_port::Station> */, slot, peer, Ccmp128Key::new(&[1; 16])); // ui-error: E0061
+   |                               ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++

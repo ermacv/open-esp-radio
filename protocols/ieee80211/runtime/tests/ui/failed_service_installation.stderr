@@ -1,23 +1,5 @@
 error[E0599]: no method named `enable` found for struct `FailedInstallation<'p, 'id, B>` in the current scope
- --> tests/ui/failed_service_installation.rs:7:16
+ --> tests/ui/failed_service_installation.rs:6:16
   |
-7 |     drop(owner.enable()); // ui-error: E0599
-  |                ^^^^^^ this is an associated function, not a method
-  |
-  = note: found the following associated functions; to be used as methods, functions must have a `self` parameter
-note: the candidate is defined in the trait `PortBackend`
- --> $WORKSPACE/protocols/radio/port/src/lifecycle.rs
-  |
-  | /     fn enable<'a, 'id>(
-  | |         call: Call,
-  | |         held: &'a Self::Held<'id>,
-  | |         frontend: &'a mut Self::Frontend<'id>,
-  | |     ) -> impl Future<Output = EnableResult<Self::Refusal, Self::Fault>> + 'a
-  | |     where
-  | |         'id: 'a;
-  | |________________^
-help: use associated function syntax instead
-  |
-7 -     drop(owner.enable()); // ui-error: E0599
-7 +     drop(FailedInstallation<'p, 'id, B>::enable()); // ui-error: E0599
-  |
+6 |     drop(owner.enable()); // ui-error: E0599
+  |                ^^^^^^ method not found in `FailedInstallation<'p, 'id, B>`

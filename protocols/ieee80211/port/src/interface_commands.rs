@@ -12,6 +12,7 @@
 //! cannot be overwritten; consuming `into_parts` recovers both values.
 use crate::{AccessPoint, InterfaceRole, PhaseTypes, Station, VifRole};
 use core::marker::PhantomData;
+use oer_radio_port::{BodyLoan, LoanedContext, PortContext, SlotOwner};
 use oer_radio_port::{Child, PoolPath, PoolSet, Root, Slot, Slots};
 
 const CONFIGURE_PER_INTERFACE: usize = 1;
@@ -70,6 +71,38 @@ pub struct ConfigurePermission<
     slot: Slot<'id, ConfigureKind<R>, Child<Path, 0>>,
     context: C,
 }
+
+impl<'p, R: InterfaceRole, Path: PoolPath, C: LoanedContext<'p, Path::Identity>>
+    ConfigurePermission<'p, R, Path, C>
+{
+    /// Transfer the same permission and opaque context to owned queue custody.
+    pub fn into_owned<S: SlotOwner<Path::Identity>>(
+        self,
+        loan: &BodyLoan<'p, Path::Identity, S>,
+    ) -> ConfigurePermission<'static, R, Path, C::Owned> {
+        ConfigurePermission {
+            slot: loan.reclaim_slot(self.slot),
+            context: self.context.enclose().into_owned(loan),
+        }
+    }
+}
+
+impl<R: InterfaceRole, Path: PoolPath, C> ConfigurePermission<'static, R, Path, C> {
+    /// Return the complete permission with the consumer's context loan.
+    pub fn lend<
+        'p,
+        S: SlotOwner<Path::Identity>,
+        X: LoanedContext<'p, Path::Identity, Owned = C>,
+    >(
+        self,
+        loan: &BodyLoan<'p, Path::Identity, S>,
+    ) -> ConfigurePermission<'p, R, Path, X> {
+        ConfigurePermission {
+            slot: loan.lend_slot(self.slot),
+            context: X::restore(PortContext::from_owned(self.context, loan)),
+        }
+    }
+}
 impl<'id, R: InterfaceRole, Path: PoolPath> ConfigurePermission<'id, R, Path> {
     /// Bind an operation's context without creating or cloning a permission.
     pub fn with_context<C>(self, context: C) -> ConfigurePermission<'id, R, Path, C> {
@@ -105,6 +138,43 @@ impl<R: InterfaceRole, Path: PoolPath, C: core::fmt::Debug> core::fmt::Debug
 pub struct TsfPermission<'id, R: InterfaceRole, Path: PoolPath = Root<oer_radio_port::LocalId<'id>>>
 {
     slot: Slot<'id, TsfKind<R>, Child<Path, 1>>,
+}
+
+impl<'p, R: InterfaceRole, Path: PoolPath> TsfPermission<'p, R, Path> {
+    /// Transfer this unique permission into the backend's owned queue.
+    pub fn into_owned<S: SlotOwner<Path::Identity>>(
+        self,
+        loan: &BodyLoan<'p, Path::Identity, S>,
+    ) -> TsfPermission<'static, R, Path> {
+        TsfPermission {
+            slot: loan.reclaim_slot(self.slot),
+        }
+    }
+}
+
+impl<R: InterfaceRole, Path: PoolPath> TsfPermission<'static, R, Path> {
+    /// Return the same permission under the consumer's body loan.
+    pub fn lend<'p, S: SlotOwner<Path::Identity>>(
+        self,
+        loan: &BodyLoan<'p, Path::Identity, S>,
+    ) -> TsfPermission<'p, R, Path> {
+        TsfPermission {
+            slot: loan.lend_slot(self.slot),
+        }
+    }
+}
+
+impl<R: InterfaceRole, Path: PoolPath> InterfacePermissions<'static, R, Path> {
+    /// Lend both original permissions without minting replacements.
+    pub fn lend<'p, S: SlotOwner<Path::Identity>>(
+        self,
+        loan: &BodyLoan<'p, Path::Identity, S>,
+    ) -> InterfacePermissions<'p, R, Path> {
+        InterfacePermissions {
+            configure: self.configure.lend(loan),
+            tsf: self.tsf.lend(loan),
+        }
+    }
 }
 impl<R: InterfaceRole, Path: PoolPath> core::fmt::Debug for TsfPermission<'_, R, Path> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {

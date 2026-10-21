@@ -19,17 +19,17 @@ fn classify<E>(outcome: TxOutcome<E>, delivered: bool) -> End {
         _ => panic!("the age fixture expects a known terminal"),
     }
 }
-fn index(buffer: &ModelAnyBuffer<'_>) -> u8 {
+fn index<Id: SlotIdentity>(buffer: &ModelAnyBuffer<'_, ModelBackend<Id>>) -> u8 {
     match buffer {
         ModelAnyBuffer::Small(b) => b.slot.index(),
         ModelAnyBuffer::SmallSent(b) => b.buffer.slot.index(),
         _ => panic!("the age fixture uses the small pool"),
     }
 }
-fn send_aggregate<'k, 'p, 'id: 'k + 'p>(
-    phase: &mut ModelPhase<'p, 'id>,
-    ticket: Slot<'id, ModelTickets, ModelPool<'id, 1>>,
-    aggregate: ModelAggregate<'k, 'p, 'id, Station, ModelCaps, (), NonEmptyAggregate>,
+fn send_aggregate<'k, 'p, 'id: 'k + 'p, Id: SlotIdentity + 'id>(
+    phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
+    ticket: Slot<'id, ModelTickets, ModelPool<Id, 1>>,
+    aggregate: ModelAggregate<'k, 'p, 'id, Station, ModelCaps, ModelBackend<Id>, NonEmptyAggregate>,
 ) {
     phase
         .station()
@@ -46,12 +46,12 @@ fn send_aggregate<'k, 'p, 'id: 'k + 'p>(
         )
         .unwrap();
 }
-async fn returned_aggregate<'p, 'id: 'p>(
-    phase: &mut ModelPhase<'p, 'id>,
-    access: &mut oer_ieee80211_port::TerminalAccess<'id, ModelTickets, ModelPool<'id, 1>>,
+async fn returned_aggregate<'p, 'id: 'p, Id: SlotIdentity + 'id>(
+    phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
+    access: &mut oer_ieee80211_port::TerminalAccess<'id, ModelTickets, ModelPool<Id, 1>>,
 ) -> (
-    Slot<'id, ModelTickets, ModelPool<'id, 1>>,
-    ModelSubframes<'id>,
+    Slot<'id, ModelTickets, ModelPool<Id, 1>>,
+    ModelSubframes<'id, ModelBackend<Id>>,
     End,
     Option<oer_ieee80211_port::BlockAckReport>,
 ) {
@@ -116,10 +116,10 @@ fn active_originator(
     core
 }
 impl Work for Exercise {
-    async fn work<'p, 'id: 'p>(
+    async fn work<'p, 'id: 'p, Id: SlotIdentity + 'id>(
         self,
-        phase: &mut ModelPhase<'p, 'id>,
-        resources: ModelResources<'id>,
+        phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
+        resources: ModelResources<'id, ModelBackend<Id>>,
     ) {
         let ModelResources {
             mut tickets,
@@ -255,13 +255,14 @@ impl Work for Exercise {
             admitted[1] = second;
             let new = small.remove(0);
             owners[2] = new.slot.index();
-            let aggregate = <ModelTypes as TxBufferPool<ModelSmall>>::push_aggregate(
-                CheckedAggregate::new(empty!(), SubframeSource::Sent(old))
-                    .ok()
-                    .unwrap(),
-            )
-            .ok()
-            .unwrap();
+            let aggregate =
+                <ModelTypes<ModelBackend<Id>> as TxBufferPool<ModelSmall>>::push_aggregate(
+                    CheckedAggregate::new(empty!(), SubframeSource::Sent(old))
+                        .ok()
+                        .unwrap(),
+                )
+                .ok()
+                .unwrap();
             let aggregate = push_subframe(
                 aggregate,
                 oer_ieee80211_port::TxNumbering::Open,
@@ -388,14 +389,13 @@ impl contract::Harness for Harness {
         let clock = Rc::new(VirtualClock::<8>::new());
         let (backend, _) = backend_on(clock.clone());
         let trace = Rc::new(RefCell::new(None));
-        let _end = run_port(
+        let _end = run_model(
             backend,
             Body(Exercise {
                 case,
                 clock,
                 trace: trace.clone(),
             }),
-            oer_radio_port::LocalExecution,
         )
         .await;
         trace
@@ -451,13 +451,18 @@ fn model_time_uses_the_injected_clock_and_an_offset_affine_radio_relation() {
 #[test]
 fn port_now_projects_the_supplied_clock_and_renewal_starts_a_new_msdu() {
     struct Probe(Rc<VirtualClock>, Rc<ModelAir>);
-    impl PortBody<ModelBackend> for Probe {
+    impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id>> for Probe {
         type Output = ();
-        async fn run<'id>(
+        async fn run<'a, 'id>(
             self,
-            owner: Owner<'_, 'id, ModelBackend, Disabled>,
-            mut resources: ModelResources<'id>,
-        ) -> Ended<'id, ModelBackend, ()> {
+            owner: Owner<'a, 'id, Id, ModelBackend<Id>, Disabled>,
+            mut resources: ModelResources<'id, ModelBackend<Id>>,
+        ) -> Ended<Id, ModelBackend<Id>, ()>
+        where
+            ModelBackend<Id>: 'id,
+            Id: 'id,
+            'id: 'a,
+        {
             assert_eq!(
                 owner.now().await.unwrap().unwrap(),
                 self.1.radio_now().unwrap()
@@ -491,9 +496,5 @@ fn port_now_projects_the_supplied_clock_and_renewal_starts_a_new_msdu() {
     }
     let clock = Rc::new(VirtualClock::<8>::new());
     let (backend, air) = backend_on(clock.clone());
-    let _end = block_on(run_port(
-        backend,
-        Probe(clock, air),
-        oer_radio_port::LocalExecution,
-    ));
+    let _end = block_on(run_model(backend, Probe(clock, air)));
 }

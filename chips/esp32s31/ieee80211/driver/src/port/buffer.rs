@@ -1,4 +1,4 @@
-use super::keys::KeyIdentity;
+use super::keys::RawKeyIdentity;
 use super::*;
 
 pub struct BufferClass<const B: usize>;
@@ -7,13 +7,17 @@ impl<const B: usize> TxBufferClass for BufferClass<B> {
 }
 
 /// Affine memory owner. Only MPDU octets are lent to the portable core.
-pub struct Buffer<'id, const B: usize> {
-    pub(super) place: Slot<'id, Buffers, Part<'id, 3>>,
-    pub(super) memory: Option<TxSlotFree<'static, B>>,
+pub struct Buffer<'id, Id: SlotIdentity, D: Device<B>, const B: usize> {
+    pub(super) place: Slot<'id, Buffers, Part<Id, 3>>,
+    pub(super) dma: ReturnableBuffer<B>,
     pub(super) admission: Option<(Ieee80211Instant, Instant)>,
+    pub(super) loan: Option<BodyLoan<'id, Id, Esp32s31Backend<Id, D, B>>>,
+}
+pub(super) struct ReturnableBuffer<const B: usize> {
+    pub(super) memory: Option<TxSlotFree<'static, B>>,
     pub(super) returned: &'static RefCell<heapless::Deque<TxSlotFree<'static, B>, TX_TICKETS>>,
 }
-impl<const B: usize> Drop for Buffer<'_, B> {
+impl<const B: usize> Drop for ReturnableBuffer<B> {
     fn drop(&mut self) {
         if let Some(memory) = self.memory.take() {
             if self.returned.borrow_mut().push_back(memory).is_err() {
@@ -22,7 +26,7 @@ impl<const B: usize> Drop for Buffer<'_, B> {
         }
     }
 }
-impl<const B: usize> Buffer<'_, B> {
+impl<Id: SlotIdentity, D: Device<B>, const B: usize> Buffer<'_, Id, D, B> {
     pub fn index(&self) -> u8 {
         self.place.index()
     }
@@ -30,16 +34,18 @@ impl<const B: usize> Buffer<'_, B> {
         self.admission.map(|(at, _)| at)
     }
 }
-impl<const B: usize> TxBufferMemory for Buffer<'_, B> {
+impl<Id: SlotIdentity, D: Device<B>, const B: usize> TxBufferMemory for Buffer<'_, Id, D, B> {
     fn renew_msdu(&mut self) {
         self.admission = None;
-        self.memory
+        self.dma
+            .memory
             .as_mut()
             .expect("returned buffer owns free DMA")
             .reset_work();
     }
     fn bytes_mut(&mut self) -> &mut [u8] {
         let bytes = self
+            .dma
             .memory
             .as_mut()
             .expect("body owns free DMA")
@@ -48,10 +54,10 @@ impl<const B: usize> TxBufferMemory for Buffer<'_, B> {
     }
 }
 
-pub struct Sent<'id, D: Device<B>, const B: usize> {
-    pub(super) mpdu: Mpdu<'id, D, B>,
+pub struct Sent<'id, Id: SlotIdentity, D: Device<B>, const B: usize> {
+    pub(super) mpdu: Mpdu<'id, Id, D, B>,
 }
-impl<D: Device<B>, const B: usize> Sent<'_, D, B> {
+impl<Id: SlotIdentity, D: Device<B>, const B: usize> Sent<'_, Id, D, B> {
     pub fn index(&self) -> u8 {
         self.mpdu.buffer.index()
     }
@@ -62,35 +68,35 @@ impl<D: Device<B>, const B: usize> Sent<'_, D, B> {
         self.mpdu.body.as_ref()
     }
 }
-pub enum AnyBuffer<'id, D: Device<B>, const B: usize> {
-    Fresh(Buffer<'id, B>),
-    Sent(Sent<'id, D, B>),
+pub enum AnyBuffer<'id, Id: SlotIdentity, D: Device<B>, const B: usize> {
+    Fresh(Buffer<'id, Id, D, B>),
+    Sent(Sent<'id, Id, D, B>),
 }
 
-pub struct Mpdu<'id, D: Device<B>, const B: usize> {
-    pub(super) buffer: Buffer<'id, B>,
+pub struct Mpdu<'id, Id: SlotIdentity, D: Device<B>, const B: usize> {
+    pub(super) buffer: Buffer<'id, Id, D, B>,
     pub(super) layout: MpduLayout,
     pub(super) body: Option<D::Body>,
-    pub(super) key: Option<KeyIdentity>,
+    pub(super) key: Option<RawKeyIdentity>,
     pub(super) pn: Option<oer_ieee80211_wire::ccmp::CcmpPacketNumber>,
     pub(super) role: VifRole,
     pub(super) published: bool,
 }
 /// A view cannot move, replace or renew the admitted MPDU.
-pub struct MpduExecution<'a, 'id, D: Device<B>, const B: usize> {
-    pub(super) mpdu: &'a mut Mpdu<'id, D, B>,
+pub struct MpduExecution<'a, 'id, Id: SlotIdentity, D: Device<B>, const B: usize> {
+    pub(super) mpdu: &'a mut Mpdu<'id, Id, D, B>,
 }
-impl<'id, D: Device<B>, const B: usize> ExecutionPayload for Mpdu<'id, D, B> {
+impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> ExecutionPayload for Mpdu<'id, Id, D, B> {
     type Execution<'a>
-        = MpduExecution<'a, 'id, D, B>
+        = MpduExecution<'a, 'id, Id, D, B>
     where
         Self: 'a;
     fn execution(&mut self) -> Self::Execution<'_> {
         MpduExecution { mpdu: self }
     }
 }
-impl<'id, D: Device<B>, const B: usize> TxMpdu for Mpdu<'id, D, B> {
-    type Buffer = AnyBuffer<'id, D, B>;
+impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> TxMpdu for Mpdu<'id, Id, D, B> {
+    type Buffer = AnyBuffer<'id, Id, D, B>;
     type Body = D::Body;
     fn into_parts(self) -> (Self::Buffer, Option<Self::Body>) {
         if self.published {
@@ -101,23 +107,46 @@ impl<'id, D: Device<B>, const B: usize> TxMpdu for Mpdu<'id, D, B> {
     }
 }
 
-pub struct Prepared<'k, 'p, 'id, D: Device<B>, const B: usize, R, K> {
-    mpdu: Mpdu<'id, D, B>,
+pub struct Prepared<'k, 'p, 'id, Id: SlotIdentity, D: Device<B>, const B: usize, R, K> {
+    mpdu: Mpdu<'id, Id, D, B>,
     plan: RetryPlan<PhyRate>,
     proof: PhantomData<(&'k (), fn(&'p ()) -> (&'p (), R, K))>,
 }
 pub struct Execution {
     pub(super) plan: RetryPlan<PhyRate>,
 }
-impl<'id, D: Device<B>, const B: usize, R, K> PreparedTx<'id>
-    for Prepared<'_, '_, 'id, D, B, R, K>
+impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, R, K> PreparedTx<'id>
+    for Prepared<'_, '_, 'id, Id, D, B, R, K>
 {
-    type Types = Types<D, B>;
+    type Types = Types<Id, D, B>;
+    type Backend = Esp32s31Backend<Id, D, B>;
+    type OwnedContext = D::OwnedContext<Id>;
+    type OwnedPayload = Mpdu<'static, Id, D, B>;
     type Execution = Execution;
-    fn into_admission(self) -> (Mpdu<'id, D, B>, Execution) {
-        (self.mpdu, Execution { plan: self.plan })
+    fn into_admission(
+        self,
+        context: D::Context<'id, Id>,
+        ticket: Slot<'id, Tickets, Part<Id, 2>>,
+        _: Admission<Self>,
+    ) -> AdmissionOwners<
+        Self::OwnedContext,
+        Slot<'static, Tickets, Part<Id, 2>>,
+        Self::OwnedPayload,
+        Execution,
+    > {
+        let loan = self
+            .mpdu
+            .buffer
+            .loan
+            .expect("only lent buffers can enter frontend preparation");
+        AdmissionOwners {
+            context: context.enclose().into_owned(&loan),
+            ticket: loan.reclaim_slot(ticket),
+            payload: self.mpdu.into_owned(&loan),
+            execution: Execution { plan: self.plan },
+        }
     }
-    fn into_parts(self) -> (AnyBuffer<'id, D, B>, Option<D::Body>) {
+    fn into_parts(self) -> (AnyBuffer<'id, Id, D, B>, Option<D::Body>) {
         self.mpdu.into_parts()
     }
 }
@@ -138,9 +167,11 @@ fn stages<K>(frame: &TxFrame<'_, '_, K>) -> RetryPlan<PhyRate> {
     }
 }
 
-impl<'id, D: Device<B>, const B: usize> TxBufferPool<'id, BufferClass<B>> for Types<D, B> {
-    type Buffer = Buffer<'id, B>;
-    type Sent = Sent<'id, D, B>;
+impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize> TxBufferPool<'id, BufferClass<B>>
+    for Types<Id, D, B>
+{
+    type Buffer = Buffer<'id, Id, D, B>;
+    type Sent = Sent<'id, Id, D, B>;
     fn prepare<'k, 'p, R: RoleKeys<'id, Self>, K: Ieee80211Capabilities>(
         source: CheckedPoolSource<'k, 'p, 'id, Self, BufferClass<B>, K, R>,
     ) -> PoolPreparation<'k, 'p, 'id, Self, BufferClass<B>, K, R>
@@ -161,7 +192,7 @@ impl<'id, D: Device<B>, const B: usize> TxBufferPool<'id, BufferClass<B>> for Ty
                 let (key, pn) = match protection {
                     TxProtection::Open => (None, None),
                     TxProtection::Ccmp(numbered) => (
-                        Some(R::tx_identity(&numbered.key)),
+                        Some(R::tx_identity(&numbered.key).owned),
                         Some(numbered.packet_number),
                     ),
                 };
@@ -230,19 +261,19 @@ impl<'id, D: Device<B>, const B: usize> TxBufferPool<'id, BufferClass<B>> for Ty
     {
         match operation.into_parts().0.impossible {}
     }
-    fn erase(buffer: Self::Buffer) -> AnyBuffer<'id, D, B> {
+    fn erase(buffer: Self::Buffer) -> AnyBuffer<'id, Id, D, B> {
         AnyBuffer::Fresh(buffer)
     }
-    fn erase_sent(buffer: Self::Sent) -> AnyBuffer<'id, D, B> {
+    fn erase_sent(buffer: Self::Sent) -> AnyBuffer<'id, Id, D, B> {
         AnyBuffer::Sent(buffer)
     }
-    fn class(buffer: AnyBuffer<'id, D, B>) -> Result<Self::Buffer, AnyBuffer<'id, D, B>> {
+    fn class(buffer: AnyBuffer<'id, Id, D, B>) -> Result<Self::Buffer, AnyBuffer<'id, Id, D, B>> {
         match buffer {
             AnyBuffer::Fresh(buffer) => Ok(buffer),
             other => Err(other),
         }
     }
-    fn sent(buffer: AnyBuffer<'id, D, B>) -> Result<Self::Sent, AnyBuffer<'id, D, B>> {
+    fn sent(buffer: AnyBuffer<'id, Id, D, B>) -> Result<Self::Sent, AnyBuffer<'id, Id, D, B>> {
         match buffer {
             AnyBuffer::Sent(buffer) => Ok(buffer),
             other => Err(other),
@@ -257,22 +288,26 @@ impl<'id, D: Device<B>, const B: usize> TxBufferPool<'id, BufferClass<B>> for Ty
 
 /// This port exposes ordinary MPDUs. Aggregate ownership is uninhabited,
 /// and the optional `AmpduPhase` is not implemented.
-pub struct NoAggregate<'id, D, const B: usize, S> {
-    impossible: Infallible,
-    marker: PhantomData<fn(&'id ()) -> (D, S)>,
+pub struct NoAggregate<'id, Id: SlotIdentity, D, const B: usize, S> {
+    pub(super) impossible: Infallible,
+    marker: PhantomData<fn(&'id (), Id) -> (&'id (), Id, D, S)>,
 }
-pub struct NoAggregatePayload<'id, D, const B: usize> {
-    impossible: Infallible,
-    marker: PhantomData<fn(&'id ()) -> D>,
+pub struct NoAggregatePayload<'id, Id: SlotIdentity, D, const B: usize> {
+    pub(super) impossible: Infallible,
+    marker: PhantomData<fn(&'id (), Id) -> (&'id (), Id, D)>,
 }
-impl<'id, D: Device<B>, const B: usize> IntoIterator for NoAggregatePayload<'id, D, B> {
-    type Item = Mpdu<'id, D, B>;
+impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> IntoIterator
+    for NoAggregatePayload<'id, Id, D, B>
+{
+    type Item = Mpdu<'id, Id, D, B>;
     type IntoIter = core::iter::Empty<Self::Item>;
     fn into_iter(self) -> Self::IntoIter {
         match self.impossible {}
     }
 }
-impl<D: Device<B>, const B: usize> ExecutionPayload for NoAggregatePayload<'_, D, B> {
+impl<Id: SlotIdentity, D: Device<B>, const B: usize> ExecutionPayload
+    for NoAggregatePayload<'_, Id, D, B>
+{
     type Execution<'a>
         = Infallible
     where
@@ -281,14 +316,27 @@ impl<D: Device<B>, const B: usize> ExecutionPayload for NoAggregatePayload<'_, D
         match self.impossible {}
     }
 }
-impl<'id, D: Device<B>, const B: usize, S: AggregateState> PhaseAggregate<'id>
-    for NoAggregate<'id, D, B, S>
+impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, S: AggregateState>
+    PhaseAggregate<'id> for NoAggregate<'id, Id, D, B, S>
 {
-    type Types = Types<D, B>;
+    type Types = Types<Id, D, B>;
     type State = S;
+    type Backend = Esp32s31Backend<Id, D, B>;
+    type OwnedContext = D::OwnedContext<Id>;
+    type OwnedPayload = NoAggregatePayload<'static, Id, D, B>;
     type Execution = Infallible;
-    type Cancelled = NoAggregatePayload<'id, D, B>;
-    fn into_admission(self) -> (Self::Cancelled, Infallible)
+    type Cancelled = NoAggregatePayload<'id, Id, D, B>;
+    fn into_admission(
+        self,
+        _: D::Context<'id, Id>,
+        _: Slot<'id, Tickets, Part<Id, 2>>,
+        _: Admission<Self>,
+    ) -> AdmissionOwners<
+        Self::OwnedContext,
+        Slot<'static, Tickets, Part<Id, 2>>,
+        Self::OwnedPayload,
+        Infallible,
+    >
     where
         S: NonEmptyState,
     {
@@ -311,23 +359,25 @@ impl<'id, D: Device<B>, const B: usize, S: AggregateState> PhaseAggregate<'id>
     }
 }
 
-impl<'id, D: Device<B>, const B: usize> PhaseTypes<'id> for Types<D, B> {
+impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize> PhaseTypes<'id>
+    for Types<Id, D, B>
+{
     const COMMAND_CAPACITY: usize = COMMANDS;
     const TERMINAL_CAPACITY: usize = TERMINALS;
-    type StationCommandPath = Part<'id, 8>;
-    type AccessPointCommandPath = Part<'id, 9>;
-    type StationConfigureContext = D::ConfigureContext<'id>;
-    type AccessPointConfigureContext = D::ConfigureContext<'id>;
-    type EpochPath = Part<'id, 4>;
-    type GatePath = Part<'id, 1>;
-    type TicketPath = Part<'id, 2>;
-    type BlockAckPath = Part<'id, 7>;
+    type StationCommandPath = Part<Id, 8>;
+    type AccessPointCommandPath = Part<Id, 9>;
+    type StationConfigureContext = D::ConfigureContext<'id, Id>;
+    type AccessPointConfigureContext = D::ConfigureContext<'id, Id>;
+    type EpochPath = Part<Id, 4>;
+    type GatePath = Part<Id, 1>;
+    type TicketPath = Part<Id, 2>;
+    type BlockAckPath = Part<Id, 7>;
     type Fault = Fault;
-    type Context = D::Context<'id>;
-    type Prepared<'k, 'p, R, K: Ieee80211Capabilities> = Prepared<'k, 'p, 'id, D, B, R, K>;
-    type KeyIdentity = KeyIdentity;
+    type Context = D::Context<'id, Id>;
+    type Prepared<'k, 'p, R, K: Ieee80211Capabilities> = Prepared<'k, 'p, 'id, Id, D, B, R, K>;
+    type KeyIdentity = keys::KeyIdentity<'id, Id>;
     type Aggregate<'k, 'p, R, K, S>
-        = NoAggregate<'id, D, B, S>
+        = NoAggregate<'id, Id, D, B, S>
     where
         R: RoleKeys<'id, Self>,
         K: Ieee80211Capabilities,
@@ -338,18 +388,18 @@ impl<'id, D: Device<B>, const B: usize> PhaseTypes<'id> for Types<D, B> {
     type AckEvidence = Ack;
     type BlockAckEvidence = Ack;
     type AirDenied = Infallible;
-    type AnyTxBuffer = AnyBuffer<'id, D, B>;
-    type TxMpdu = Mpdu<'id, D, B>;
-    type TxAggregate = NoAggregatePayload<'id, D, B>;
-    type RxBuffer = ReceiveBuffer<D::Receive>;
+    type AnyTxBuffer = AnyBuffer<'id, Id, D, B>;
+    type TxMpdu = Mpdu<'id, Id, D, B>;
+    type TxAggregate = NoAggregatePayload<'id, Id, D, B>;
+    type RxBuffer = ReceiveBuffer<'id, Id, D::Receive>;
     type RxMeta = Esp32s31RxMeta;
-    type StationKeys = PortKeys<Station>;
-    type AccessPointKeys = PortKeys<AccessPoint>;
+    type StationKeys = PortKeys<Id, Station>;
+    type AccessPointKeys = PortKeys<Id, AccessPoint>;
     type BlockAckKind = BlockAcks;
     type BlockAckPool = association::BlockAckSlots<BlockAcks, 8>;
-    type BlockAck = ReceiveAgreement<'id>;
+    type BlockAck = ReceiveAgreement<'id, Id>;
 }
 
-pub struct ReceiveAgreement<'id> {
-    pub(super) slot: association::BlockAckSlot<'id, BlockAcks, 8, Part<'id, 7>>,
+pub struct ReceiveAgreement<'id, Id: SlotIdentity> {
+    pub(super) slot: association::BlockAckSlot<'id, BlockAcks, 8, Part<Id, 7>>,
 }

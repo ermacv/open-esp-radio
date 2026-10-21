@@ -758,6 +758,78 @@ pub struct WorkPermits<'id, K, P, Path: PoolPath = Root<oer_radio_port::LocalId<
 pub type OperationPermits<'id, P, Path = Root<oer_radio_port::LocalId<'id>>> =
     WorkPermits<'id, Operation, P, Path>;
 
+/// Body-loaned access to owned Id capacity retained in the caller slot.
+/// The conversion authority stays private; admitted permits contain no body loan.
+pub struct LentWorkPermits<'p, K, P, Path: PoolPath, S: oer_radio_port::SlotOwner<Path::Identity>> {
+    owned: &'p WorkPermits<'static, K, P, Path>,
+    loan: oer_radio_port::BodyLoan<'p, Path::Identity, S>,
+}
+
+impl<K, P, Path: PoolPath> WorkPermits<'static, K, P, Path> {
+    /// Lend accounting while keeping the pool and every admitted owner in its slot.
+    pub fn lend<'p, S: oer_radio_port::SlotOwner<Path::Identity>>(
+        &'p self,
+        loan: oer_radio_port::BodyLoan<'p, Path::Identity, S>,
+    ) -> LentWorkPermits<'p, K, P, Path, S> {
+        LentWorkPermits { owned: self, loan }
+    }
+}
+
+impl<
+    'p,
+    K,
+    Path: PoolPath,
+    P: PermitPool<'static, K, Path>,
+    S: oer_radio_port::SlotOwner<Path::Identity>,
+> LentWorkPermits<'p, K, P, Path, S>
+{
+    /// Guard body capacity; cancellation returns the same owned permit to its pool.
+    pub fn guard(&self, permit: Permit<'p, K, Path>) -> WorkPermit<'_, 'p, K, Path> {
+        WorkPermit {
+            held: scopeguard::guard(
+                HeldPermit {
+                    permit,
+                    permits: self,
+                },
+                release_held,
+            ),
+        }
+    }
+
+    /// Move the admitted permit into owned Id state, ending its frontend guard.
+    pub fn admit(&self, interface: Interface, id: RequestId, permit: WorkPermit<'_, 'p, K, Path>) {
+        let HeldPermit { permit, .. } = scopeguard::ScopeGuard::into_inner(permit.held);
+        *self.owned.in_flight.borrow_mut() = Some(InFlight {
+            interface,
+            id,
+            permit: self.loan.reclaim_permit(permit),
+        });
+    }
+
+    /// Return a terminal's retained capacity before delivering that terminal.
+    pub fn complete(&self, id: RequestId) -> Result<Completed, CompletionMismatch> {
+        self.owned.complete(id)
+    }
+
+    /// The current admitted identity, without borrowing its affine owner.
+    pub fn in_flight(&self) -> Option<(Interface, RequestId)> {
+        self.owned.in_flight()
+    }
+}
+
+impl<
+    'p,
+    K,
+    Path: PoolPath,
+    P: PermitPool<'static, K, Path>,
+    S: oer_radio_port::SlotOwner<Path::Identity>,
+> Release<'p, K, Path> for LentWorkPermits<'p, K, P, Path, S>
+{
+    fn release(&self, permit: Permit<'p, K, Path>) {
+        self.owned.pool.release(self.loan.reclaim_permit(permit));
+    }
+}
+
 impl<'id, K, Path: PoolPath, P: PermitPool<'id, K, Path>> WorkPermits<'id, K, P, Path> {
     /// Consume the installation's declared permit component: its one permit
     /// of kind `K`, handed to `pool` with the line of its `S` seats, and the
@@ -856,7 +928,7 @@ impl<'id, K, Path: PoolPath, P: PermitPool<'id, K, Path>> Release<'id, K, Path>
 /// permit ([`OperationPermits`]), and the body's resources give each
 /// interface's configuration and pending-table slots once
 /// ([`InterfaceResources`]).
-pub trait Ieee802154Backend: PortBackend {
+pub trait Ieee802154Backend<Id: oer_radio_port::SlotIdentity>: PortBackend<Id> {
     /// The backend's capabilities marker.
     type Caps: Ieee802154Caps;
 }

@@ -16,11 +16,12 @@ impl SlotOwner<Id> for Owner {
     type Vacant = ();
     type Pools = Slots<(), 1>;
     type Queues = Option<Token<'static>>;
+    const VACANT_QUEUES: Self::Queues = None;
     type Frontend<'s> = &'s mut Option<Token<'static>>;
     type Invocation<'s> = ();
-    fn queues(&mut self, mint: Mint<'static, Self::Pools, Id>) -> Self::Queues {
+    fn prepare_queues(&mut self, queues: &mut Self::Queues, mint: Mint<'static, Self::Pools, Id>) {
         let [token] = mint.into_pools();
-        Some(token)
+        *queues = Some(token);
     }
     fn split<'s>(queues: &'s mut Self::Queues, _: SlotWakes<'s, Id>) -> (Self::Frontend<'s>, ())
     where Self: 's, Id: 's {
@@ -34,7 +35,7 @@ impl SlotOwner<Id> for Owner {
     where Self: 's, Id: 's {
         Abandon::Unconfirmed(authority)
     }
-    fn finish(self) {}
+    fn finish<'s>(&mut self, _: &mut Self::Invocation<'s>)  where Self: 's, Id: 's {}
 }
 
 impl SlotBodyOwner<Id> for Owner {

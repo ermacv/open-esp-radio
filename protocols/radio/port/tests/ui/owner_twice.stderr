@@ -1,16 +1,16 @@
 error[E0382]: use of moved value: `owner`
  --> tests/ui/owner_twice.rs:6:13
   |
-3 | pub async fn consume<'p, 'id, B: PortBackend>(owner: Owner<'p, 'id, B, Disabled>) {
-  |                                               ----- move occurs because `owner` has type `Owner<'_, '_, B, oer_radio_port::Disabled>`, which does not implement the `Copy` trait
+3 | pub async fn consume<'p, 'id, Id: oer_radio_port::SlotIdentity, B: PortBackend<Id>>(owner: Owner<'p, 'id, Id, B, Disabled>) {
+  |                                                                                     ----- move occurs because `owner` has type `Owner<'_, '_, Id, B, oer_radio_port::Disabled>`, which does not implement the `Copy` trait
 4 |     let enabling = owner.enable();
   |                          -------- `owner` moved due to this method call
 5 |     #[cfg(all())]
 6 |     let _ = owner.enable(); // ui-error: E0382
   |             ^^^^^ value used here after move
   |
-note: `Owner::<'p, 'id, B, oer_radio_port::Disabled>::enable` takes ownership of the receiver `self`, which moves `owner`
+note: `Owner::<'a, 'p, Id, B, oer_radio_port::Disabled>::enable` takes ownership of the receiver `self`, which moves `owner`
  --> src/lifecycle.rs
   |
-  |     pub async fn enable(self) -> Result<Owner<'p, 'id, B, Enabled>, Failed<'p, 'id, B>> {
+  |     pub async fn enable(self) -> Result<Owner<'a, 'p, Id, B, Enabled>, Failed<'a, 'p, Id, B>> {
   |                         ^^^^

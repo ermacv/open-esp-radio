@@ -53,6 +53,46 @@ struct Observed {
     received: std::collections::VecDeque<TestReceive>,
 }
 struct Payload(Rc<Cell<usize>>);
+#[derive(Debug)]
+struct Tag(usize);
+impl PartialEq<usize> for Tag {
+    fn eq(&self, other: &usize) -> bool {
+        self.0 == *other
+    }
+}
+impl<Id: radio::SlotIdentity> radio::ContextProjection<Id> for Tag {
+    type View<'a, 'p>
+        = usize
+    where
+        Id: 'p,
+        'p: 'a;
+    type Parts<'p>
+        = usize
+    where
+        Id: 'p;
+    fn view<'a, 'p>(&'a self, _: radio::ContextLoan<'p, Id>) -> usize
+    where
+        Id: 'p,
+        'p: 'a,
+    {
+        self.0
+    }
+    fn into_parts<'p>(self, _: radio::ContextLoan<'p, Id>) -> usize
+    where
+        Id: 'p,
+    {
+        self.0
+    }
+}
+impl<'p, Id: radio::SlotIdentity + 'p> radio::LoanedContext<'p, Id> for Tag {
+    type Owned = Self;
+    fn enclose(self) -> radio::PortContext<'p, Id, Self> {
+        radio::PortContext::new(self)
+    }
+    fn restore(context: radio::PortContext<'p, Id, Self>) -> Self {
+        Self(context.into_parts())
+    }
+}
 impl TxBody for Payload {
     fn bytes(&self) -> &[u8] {
         b"payload"
@@ -100,8 +140,10 @@ impl Device<512> for TestDevice {
     type Hardware = Hardware;
     type Receive = TestReceive;
     type Body = Payload;
-    type Context<'id> = usize;
-    type ConfigureContext<'id> = usize;
+    type OwnedContext<Id: radio::SlotIdentity> = Tag;
+    type Context<'p, Id: radio::SlotIdentity + 'p> = Tag;
+    type OwnedConfigureContext<Id: radio::SlotIdentity> = Tag;
+    type ConfigureContext<'p, Id: radio::SlotIdentity + 'p> = Tag;
     fn hardware(&mut self) -> &mut Hardware {
         &mut self.hardware
     }
@@ -211,16 +253,16 @@ impl Device<512> for TestDevice {
         self.observed.borrow_mut().detached = true;
     }
 }
-type Backend = Esp32s31Backend<TestDevice, 512>;
+type Backend<Id> = Esp32s31Backend<Id, TestDevice, 512>;
 type Caps = Esp32s31Caps<512>;
-type Family = Types<TestDevice, 512>;
-type Res<'id> = <Backend as PortBackend>::Resources<'id>;
+type Family<Id> = Types<Id, TestDevice, 512>;
+type Res<'id, Id> = <Backend<Id> as PortBackend<Id>>::Resources<'id>;
 
 mod barriers;
 
 fn installed(
     statuses: Vec<(u8, u8)>,
-) -> (radio::Installed<Backend>, Rc<RefCell<Observed>>, TestTimer) {
+) -> (PortParts<TestDevice, 512>, Rc<RefCell<Observed>>, TestTimer) {
     let timer = TestTimer(Rc::new(oer_time_virtual::VirtualClock::new()));
     let observed = Rc::new(RefCell::new(Observed {
         statuses,
@@ -257,11 +299,7 @@ fn installed(
         access_point_address: IndividualAddress::new(ACCESS_POINT).expect("AP address"),
         coex: &RadioNine,
     };
-    (
-        Backend::new(parts).ok().expect("valid construction"),
-        observed,
-        timer,
-    )
+    (parts, observed, timer)
 }
 
 fn block_on<F: Future>(future: F) -> F::Output {
@@ -275,18 +313,53 @@ fn block_on<F: Future>(future: F) -> F::Output {
     panic!("port made no bounded progress")
 }
 
+enum Report<Out> {
+    Uninstalled { output: Out },
+    FailStopped { output: Out, stopped: bool },
+}
+
+fn run_body<B, Out>(parts: PortParts<TestDevice, 512>, body: B) -> impl Future<Output = Report<Out>>
+where
+    for<'scope> B: PortBody<radio::LocalId<'scope>, Backend<radio::LocalId<'scope>>, Output = Out>,
+{
+    radio::with_local_slot(async move |claim| {
+        let mut slot = claim.place();
+        let backend = Backend::new(parts).ok().expect("valid construction");
+        let registered = slot.register(backend).ok().expect("fresh local slot");
+        match radio::LocalExecution
+            .scope(registered, |frontend| radio::run_port(frontend, body))
+            .await
+        {
+            radio::PortEnd::Uninstalled { joined, output } => {
+                drop(joined);
+                Report::Uninstalled { output }
+            }
+            radio::PortEnd::FailStopped { outcome, output } => Report::FailStopped {
+                output,
+                stopped: matches!(outcome.outcome(), radio::Abandon::Stopped(_)),
+            },
+            radio::PortEnd::Abandoned { .. } => panic!("the test body returns its Ended result"),
+        }
+    })
+}
+
 struct Exchange {
     transmissions: u8,
     expected: usize,
     close: bool,
 }
-impl PortBody<Backend> for Exchange {
+impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for Exchange {
     type Output = Vec<SingleOutcome<Ack, Infallible>>;
     async fn run<'p, 'id>(
         self,
-        owner: radio::Owner<'p, 'id, Backend, radio::Disabled>,
-        resources: Res<'id>,
-    ) -> radio::Ended<'id, Backend, Self::Output> {
+        owner: radio::Owner<'p, 'id, Id, Backend<Id>, radio::Disabled>,
+        resources: Res<'id, Id>,
+    ) -> radio::Ended<Id, Backend<Id>, Self::Output>
+    where
+        Backend<Id>: 'id,
+        Id: 'id,
+        'id: 'p,
+    {
         let mut owner = match owner.enable().await {
             Ok(owner) => owner,
             Err(_) => panic!("enable"),
@@ -295,7 +368,7 @@ impl PortBody<Backend> for Exchange {
         let mut outcomes = Vec::new();
         {
             let mut phase = owner.phase();
-            let permission = resources.station_commands.configure.with_context(42);
+            let permission = resources.station_commands.configure.with_context(Tag(42));
             phase.station().configure(
                 permission,
                 StationReceive::Bss {
@@ -350,10 +423,12 @@ impl PortBody<Backend> for Exchange {
             .check()
             .ok()
             .expect("checked source");
-            let prepared =
-                <Family as TxBufferPool<'id, BufferClass<512>>>::prepare::<Station, Caps>(source)
-                    .ok()
-                    .expect("prepared source");
+            let prepared = <Family<Id> as TxBufferPool<'id, BufferClass<512>>>::prepare::<
+                Station,
+                Caps,
+            >(source)
+            .ok()
+            .expect("prepared source");
             if self.close {
                 phase.close_gate(resources.gate);
                 match phase.next_event().await {
@@ -367,7 +442,7 @@ impl PortBody<Backend> for Exchange {
                 .station()
                 .submit(
                     Attempt {
-                        context: 71,
+                        context: Tag(71),
                         ticket,
                         source: prepared,
                         access_category: oer_ieee80211_wire::qos::WmmAccessCategory::BestEffort,
@@ -391,7 +466,7 @@ impl PortBody<Backend> for Exchange {
                         panic!("published MPDU returns Sent")
                     };
                     let (mut buffer, body) =
-                        <Family as TxBufferPool<'id, BufferClass<512>>>::renew(sent);
+                        <Family<Id> as TxBufferPool<'id, BufferClass<512>>>::renew(sent);
                     assert!(body.is_none());
                     assert_eq!(&buffer.bytes_mut()[22..24], &0x1230_u16.to_le_bytes());
                     outcomes.push(returned.outcome);
@@ -414,16 +489,15 @@ impl PortBody<Backend> for Exchange {
 #[test]
 fn port_returns_actual_operation_after_ack_and_gate_cycle() {
     let (backend, observed, _) = installed(Vec::new());
-    let result = block_on(radio::run_port(
+    let result = block_on(run_body(
         backend,
         Exchange {
             transmissions: 1,
             expected: 1,
             close: true,
         },
-        oer_radio_port::LocalExecution,
     ));
-    let radio::PortEnd::Uninstalled { output, .. } = result else {
+    let Report::Uninstalled { output, .. } = result else {
         panic!("clean uninstall")
     };
     assert!(output[0].is_delivered());
@@ -438,16 +512,15 @@ fn port_returns_actual_operation_after_ack_and_gate_cycle() {
 #[test]
 fn port_exhausts_supplied_retry_plan_with_one_terminal() {
     let (backend, observed, _) = installed(std::vec![(5, 0); 3]);
-    let result = block_on(radio::run_port(
+    let result = block_on(run_body(
         backend,
         Exchange {
             transmissions: 3,
             expected: 1,
             close: false,
         },
-        oer_radio_port::LocalExecution,
     ));
-    let radio::PortEnd::Uninstalled { output, .. } = result else {
+    let Report::Uninstalled { output, .. } = result else {
         panic!("clean uninstall")
     };
     assert!(
@@ -459,21 +532,21 @@ fn port_exhausts_supplied_retry_plan_with_one_terminal() {
     assert_eq!(observed.borrow().backoffs, [8, 24, 56]);
 }
 
-fn submit_mpdu<'k, 'p, 'id: 'p + 'k>(
-    phase: &mut Esp32s31Phase<'p, 'id, TestDevice, 512>,
-    buffer: Buffer<'id, 512>,
-    ticket: radio::Slot<'id, Tickets, radio::Child<radio::Root<oer_radio_port::LocalId<'id>>, 2>>,
+fn submit_mpdu<'k, 'p, 'id: 'p + 'k, Id: radio::SlotIdentity + 'id>(
+    phase: &mut Esp32s31Phase<'p, 'id, Id, TestDevice, 512>,
+    buffer: Buffer<'id, Id, TestDevice, 512>,
+    ticket: radio::Slot<'id, Tickets, radio::Child<radio::Root<Id>, 2>>,
     body: Option<Payload>,
-    key: Option<&'k PairwiseKey<'id, Station>>,
+    key: Option<&'k PairwiseKey<'id, Id, Station>>,
 ) {
     submit_mpdu_budget(phase, buffer, ticket, body, key, 1);
 }
-fn submit_mpdu_budget<'k, 'p, 'id: 'p + 'k>(
-    phase: &mut Esp32s31Phase<'p, 'id, TestDevice, 512>,
-    buffer: Buffer<'id, 512>,
-    ticket: radio::Slot<'id, Tickets, radio::Child<radio::Root<oer_radio_port::LocalId<'id>>, 2>>,
+fn submit_mpdu_budget<'k, 'p, 'id: 'p + 'k, Id: radio::SlotIdentity + 'id>(
+    phase: &mut Esp32s31Phase<'p, 'id, Id, TestDevice, 512>,
+    buffer: Buffer<'id, Id, TestDevice, 512>,
+    ticket: radio::Slot<'id, Tickets, radio::Child<radio::Root<Id>, 2>>,
     body: Option<Payload>,
-    key: Option<&'k PairwiseKey<'id, Station>>,
+    key: Option<&'k PairwiseKey<'id, Id, Station>>,
     budget: u8,
 ) {
     let rate = phase
@@ -520,14 +593,15 @@ fn submit_mpdu_budget<'k, 'p, 'id: 'p + 'k>(
     .check()
     .ok()
     .expect("layout");
-    let source = <Family as TxBufferPool<'id, BufferClass<512>>>::prepare::<Station, Caps>(source)
-        .ok()
-        .expect("prepare");
+    let source =
+        <Family<Id> as TxBufferPool<'id, BufferClass<512>>>::prepare::<Station, Caps>(source)
+            .ok()
+            .expect("prepare");
     phase
         .station()
         .submit(
             Attempt {
-                context: 91,
+                context: Tag(91),
                 ticket,
                 source,
                 access_category: oer_ieee80211_wire::qos::WmmAccessCategory::BestEffort,
@@ -551,13 +625,18 @@ struct SuspendBody {
     at: Suspension,
     dropped: Rc<Cell<usize>>,
 }
-impl PortBody<Backend> for SuspendBody {
+impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for SuspendBody {
     type Output = ();
     async fn run<'p, 'id>(
         self,
-        owner: radio::Owner<'p, 'id, Backend, radio::Disabled>,
-        resources: Res<'id>,
-    ) -> radio::Ended<'id, Backend, ()> {
+        owner: radio::Owner<'p, 'id, Id, Backend<Id>, radio::Disabled>,
+        resources: Res<'id, Id>,
+    ) -> radio::Ended<Id, Backend<Id>, ()>
+    where
+        Backend<Id>: 'id,
+        Id: 'id,
+        'id: 'p,
+    {
         let mut owner = match owner.enable().await {
             Ok(owner) => owner,
             Err(_) => panic!("enable"),
@@ -622,13 +701,12 @@ fn cancelling_each_device_wait_quarantines_without_dropping_an_admitted_body() {
             }
         }
         let dropped = Rc::new(Cell::new(0));
-        let mut future = Box::pin(radio::run_port(
+        let mut future = Box::pin(run_body(
             backend,
             SuspendBody {
                 at,
                 dropped: dropped.clone(),
             },
-            oer_radio_port::LocalExecution,
         ));
         let mut cx = Context::from_waker(Waker::noop());
         for _ in 0..12 {
@@ -648,13 +726,18 @@ fn cancelling_each_device_wait_quarantines_without_dropping_an_admitted_body() {
 }
 
 struct GroupCycle;
-impl PortBody<Backend> for GroupCycle {
+impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for GroupCycle {
     type Output = ();
     async fn run<'p, 'id>(
         self,
-        owner: radio::Owner<'p, 'id, Backend, radio::Disabled>,
-        resources: Res<'id>,
-    ) -> radio::Ended<'id, Backend, ()> {
+        owner: radio::Owner<'p, 'id, Id, Backend<Id>, radio::Disabled>,
+        resources: Res<'id, Id>,
+    ) -> radio::Ended<Id, Backend<Id>, ()>
+    where
+        Backend<Id>: 'id,
+        Id: 'id,
+        'id: 'p,
+    {
         let mut owner = match owner.enable().await {
             Ok(owner) => owner,
             Err(_) => panic!("enable"),
@@ -722,12 +805,8 @@ impl PortBody<Backend> for GroupCycle {
 fn every_group_mutation_has_a_finite_rx_cut_and_returns_its_permission_once() {
     let (backend, observed, _) = installed(Vec::new());
     assert!(matches!(
-        block_on(radio::run_port(
-            backend,
-            GroupCycle,
-            oer_radio_port::LocalExecution
-        )),
-        radio::PortEnd::Uninstalled { .. }
+        block_on(run_body(backend, GroupCycle)),
+        Report::Uninstalled { .. }
     ));
     assert_eq!(observed.borrow().resumed_cuts, 4);
 }
@@ -735,13 +814,18 @@ fn every_group_mutation_has_a_finite_rx_cut_and_returns_its_permission_once() {
 struct Expire {
     clock: TestTimer,
 }
-impl PortBody<Backend> for Expire {
+impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for Expire {
     type Output = ();
     async fn run<'p, 'id>(
         self,
-        owner: radio::Owner<'p, 'id, Backend, radio::Disabled>,
-        mut resources: Res<'id>,
-    ) -> radio::Ended<'id, Backend, ()> {
+        owner: radio::Owner<'p, 'id, Id, Backend<Id>, radio::Disabled>,
+        mut resources: Res<'id, Id>,
+    ) -> radio::Ended<Id, Backend<Id>, ()>
+    where
+        Backend<Id>: 'id,
+        Id: 'id,
+        'id: 'p,
+    {
         let mut owner = match owner.enable().await {
             Ok(owner) => owner,
             Err(_) => panic!("enable"),
@@ -786,12 +870,8 @@ impl PortBody<Backend> for Expire {
 fn queued_msdu_expires_from_submit_without_publication_behind_a_closed_gate() {
     let (backend, observed, clock) = installed(Vec::new());
     assert!(matches!(
-        block_on(radio::run_port(
-            backend,
-            Expire { clock },
-            oer_radio_port::LocalExecution
-        )),
-        radio::PortEnd::Uninstalled { .. }
+        block_on(run_body(backend, Expire { clock })),
+        Report::Uninstalled { .. }
     ));
     assert_eq!(observed.borrow().publications, 0);
 }
@@ -801,13 +881,18 @@ struct ReceiveBody {
     released: Rc<Cell<usize>>,
     lose: bool,
 }
-impl PortBody<Backend> for ReceiveBody {
+impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for ReceiveBody {
     type Output = ();
     async fn run<'p, 'id>(
         self,
-        owner: radio::Owner<'p, 'id, Backend, radio::Disabled>,
-        resources: Res<'id>,
-    ) -> radio::Ended<'id, Backend, ()> {
+        owner: radio::Owner<'p, 'id, Id, Backend<Id>, radio::Disabled>,
+        resources: Res<'id, Id>,
+    ) -> radio::Ended<Id, Backend<Id>, ()>
+    where
+        Backend<Id>: 'id,
+        Id: 'id,
+        'id: 'p,
+    {
         let mut owner = match owner.enable().await {
             Ok(owner) => owner,
             Err(_) => panic!("enable"),
@@ -815,7 +900,7 @@ impl PortBody<Backend> for ReceiveBody {
         {
             let mut phase = owner.phase();
             phase.station().configure(
-                resources.station_commands.configure.with_context(7),
+                resources.station_commands.configure.with_context(Tag(7)),
                 StationReceive::Bss {
                     bssid: IndividualAddress::new(BSSID).expect("BSSID"),
                     filter: SupportedFilter::new(ReceiveFilter::BSS_MEMBER).expect("filter"),
@@ -868,16 +953,15 @@ fn received_bss_mpdu_keeps_its_original_owner_until_explicit_recycling() {
     let (backend, observed, _) = installed(Vec::new());
     let released = Rc::new(Cell::new(0));
     assert!(matches!(
-        block_on(radio::run_port(
+        block_on(run_body(
             backend,
             ReceiveBody {
                 observed,
                 released: released.clone(),
                 lose: false
-            },
-            oer_radio_port::LocalExecution
+            }
         )),
-        radio::PortEnd::Uninstalled { .. }
+        Report::Uninstalled { .. }
     ));
     assert_eq!(released.get(), 1);
 }
@@ -885,16 +969,21 @@ fn received_bss_mpdu_keeps_its_original_owner_until_explicit_recycling() {
 fn dropping_a_received_owner_quarantines_its_allocation_and_poison_is_permanent() {
     let (backend, observed, _) = installed(Vec::new());
     let released = Rc::new(Cell::new(0));
-    let result = block_on(radio::run_port(
+    let result = block_on(run_body(
         backend,
         ReceiveBody {
             observed: observed.clone(),
             released: released.clone(),
             lose: true,
         },
-        oer_radio_port::LocalExecution,
     ));
-    assert!(matches!(result, radio::PortEnd::FailStopped { .. }));
+    assert!(matches!(
+        result,
+        Report::FailStopped {
+            output: (),
+            stopped: false
+        }
+    ));
     drop(result);
     assert_eq!(released.get(), 0);
     assert!(observed.borrow().abandoned);
@@ -903,13 +992,18 @@ fn dropping_a_received_owner_quarantines_its_allocation_and_poison_is_permanent(
 struct Protected {
     dropped: Rc<Cell<usize>>,
 }
-impl PortBody<Backend> for Protected {
+impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for Protected {
     type Output = ();
     async fn run<'p, 'id>(
         self,
-        owner: radio::Owner<'p, 'id, Backend, radio::Disabled>,
-        mut resources: Res<'id>,
-    ) -> radio::Ended<'id, Backend, ()> {
+        owner: radio::Owner<'p, 'id, Id, Backend<Id>, radio::Disabled>,
+        mut resources: Res<'id, Id>,
+    ) -> radio::Ended<Id, Backend<Id>, ()>
+    where
+        Backend<Id>: 'id,
+        Id: 'id,
+        'id: 'p,
+    {
         let mut owner = match owner.enable().await {
             Ok(owner) => owner,
             Err(_) => panic!("enable"),
@@ -920,7 +1014,7 @@ impl PortBody<Backend> for Protected {
             let ([slot], _) = bank.into_parts();
             let association = start.begin(oer_ieee80211_wire::security::Spp::NotNegotiated);
             phase.station().configure(
-                resources.station_commands.configure.with_context(19),
+                resources.station_commands.configure.with_context(Tag(19)),
                 StationReceive::Bss {
                     bssid: IndividualAddress::new(BSSID).expect("BSSID"),
                     filter: SupportedFilter::new(ReceiveFilter::BSS_MEMBER).expect("filter"),
@@ -982,10 +1076,12 @@ impl PortBody<Backend> for Protected {
             .check()
             .ok()
             .expect("layout");
-            let refused =
-                <Family as TxBufferPool<'id, BufferClass<512>>>::prepare::<Station, Caps>(source)
-                    .err()
-                    .expect("retired key refused before admission");
+            let refused = <Family<Id> as TxBufferPool<'id, BufferClass<512>>>::prepare::<
+                Station,
+                Caps,
+            >(source)
+            .err()
+            .expect("retired key refused before admission");
             assert_eq!(refused.reason, PreparationError::RetransmissionKey);
             drop(refused);
             assert_eq!(self.dropped.get(), 1);
@@ -1005,14 +1101,13 @@ fn caller_pn_and_external_body_survive_tx_and_a_removed_key_refuses_retransmissi
     let (backend, observed, _) = installed(Vec::new());
     let dropped = Rc::new(Cell::new(0));
     assert!(matches!(
-        block_on(radio::run_port(
+        block_on(run_body(
             backend,
             Protected {
                 dropped: dropped.clone()
-            },
-            oer_radio_port::LocalExecution
+            }
         )),
-        radio::PortEnd::Uninstalled { .. }
+        Report::Uninstalled { .. }
     ));
     assert_eq!(dropped.get(), 1);
     assert_eq!(observed.borrow().publications, 1);
@@ -1057,42 +1152,19 @@ fn emergency_erasure_reaches_the_last_ap_peer_as_well_as_station_and_group_keys(
 
 #[test]
 fn clean_uninstall_returns_all_dma_and_core_owners_for_a_fresh_installation() {
-    let (backend, observed, _) = installed(Vec::new());
-    let first = block_on(radio::run_port(
-        backend,
+    let (parts, observed, _) = installed(Vec::new());
+    let _ = block_on(reinstalled(
+        parts,
         Exchange {
             transmissions: 1,
             expected: 1,
             close: true,
         },
-        oer_radio_port::LocalExecution,
-    ));
-    let radio::PortEnd::Uninstalled {
-        uninstalled: Uninstalled::Stopped(stopped),
-        ..
-    } = first
-    else {
-        panic!("stopped owners")
-    };
-    let second = stopped
-        .reinstall(18)
-        .ok()
-        .expect("all buffers and core returned");
-    let second = block_on(radio::run_port(
-        second,
         Exchange {
             transmissions: 1,
             expected: 1,
             close: false,
         },
-        oer_radio_port::LocalExecution,
-    ));
-    assert!(matches!(
-        second,
-        radio::PortEnd::Uninstalled {
-            uninstalled: Uninstalled::Stopped(_),
-            ..
-        }
     ));
     assert_eq!(observed.borrow().publications, 2);
     assert_eq!(observed.borrow().starts, 2);
@@ -1100,13 +1172,18 @@ fn clean_uninstall_returns_all_dma_and_core_owners_for_a_fresh_installation() {
 }
 
 struct Tune(Channel);
-impl PortBody<Backend> for Tune {
+impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for Tune {
     type Output = ();
     async fn run<'p, 'id>(
         self,
-        mut owner: radio::Owner<'p, 'id, Backend, radio::Disabled>,
-        _: Res<'id>,
-    ) -> radio::Ended<'id, Backend, ()> {
+        mut owner: radio::Owner<'p, 'id, Id, Backend<Id>, radio::Disabled>,
+        _: Res<'id, Id>,
+    ) -> radio::Ended<Id, Backend<Id>, ()>
+    where
+        Backend<Id>: 'id,
+        Id: 'id,
+        'id: 'p,
+    {
         owner.setup().set_channel(
             SupportedChannel::new(
                 oer_radio_regulatory::RegulatoryDomain::of(
@@ -1130,28 +1207,66 @@ impl PortBody<Backend> for Tune {
 
 #[test]
 fn frontend_channel_setting_survives_normal_stop_and_reinstall() {
-    let (backend, observed, _) = installed(Vec::new());
+    let (parts, observed, _) = installed(Vec::new());
     let tuned = Channel::from_wifi_channel(channel(11));
-    let first = block_on(radio::run_port(backend, Tune(tuned), radio::LocalExecution));
-    let radio::PortEnd::Uninstalled {
-        uninstalled: Uninstalled::Stopped(stopped),
-        ..
-    } = first
-    else {
-        panic!("the tuned installation stops normally");
-    };
-    let installed = stopped
-        .reinstall(18)
-        .ok()
-        .expect("the stopped owners reinstall");
-    let _ = block_on(radio::run_port(
-        installed,
+    let _ = block_on(reinstalled(
+        parts,
+        Tune(tuned),
         Exchange {
             transmissions: 1,
             expected: 1,
             close: false,
         },
-        radio::LocalExecution,
     ));
     assert_eq!(observed.borrow().start_channels, [channel(11), channel(11)]);
+}
+
+async fn reinstalled<First, Second, A, B>(
+    parts: PortParts<TestDevice, 512>,
+    first: First,
+    second: Second,
+) -> (A, B)
+where
+    for<'scope> First:
+        PortBody<radio::LocalId<'scope>, Backend<radio::LocalId<'scope>>, Output = A>,
+    for<'scope> Second:
+        PortBody<radio::LocalId<'scope>, Backend<radio::LocalId<'scope>>, Output = B>,
+{
+    radio::with_local_slot(async move |claim| {
+        let mut slot = claim.place();
+        let backend = Backend::new(parts).ok().expect("valid construction");
+        let registered = slot.register(backend).ok().expect("fresh local slot");
+        let first = radio::LocalExecution
+            .scope(registered, |frontend| radio::run_port(frontend, first))
+            .await;
+        let radio::PortEnd::Uninstalled {
+            joined,
+            output: first,
+        } = first
+        else {
+            panic!("first installation joins");
+        };
+        let registered = slot
+            .reinstall(joined, |stopped| {
+                stopped
+                    .reinstall(18)
+                    .ok()
+                    .expect("all buffers and core retained in the joined slot")
+            })
+            .ok()
+            .expect("one matching Joined authorizes reinstall");
+        let second = radio::LocalExecution
+            .scope(registered, |frontend| radio::run_port(frontend, second))
+            .await;
+        let radio::PortEnd::Uninstalled {
+            joined,
+            output: second,
+        } = second
+        else {
+            panic!("second installation joins");
+        };
+        drop(joined);
+        (first, second)
+    })
+    .await
 }

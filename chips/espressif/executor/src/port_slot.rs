@@ -44,20 +44,22 @@ macro_rules! declare_port_slot {
             pub type Id = $crate::port_slot::contract::StaticId<Declaration>;
 
             static STORAGE: $crate::port_slot::StaticCell<
-                $crate::port_slot::contract::PortSlot<Id, $state>,
+                $crate::port_slot::contract::VacantPortSlot<Id, $state>,
             > = $crate::port_slot::StaticCell::new();
 
             /// Take this declaration's backing once, with no reset operation.
+            #[inline(never)]
             pub fn take_static() -> Option<
                 &'static mut $crate::port_slot::contract::PortSlot<Id, $state>,
             > {
-                let place = STORAGE.try_uninit()?;
-                // SAFETY: this private declaration type has exactly this one
-                // issuer. StaticCell's successful irreversible claim precedes
-                // construction and can never succeed again. Its allocation is
-                // static, and no endpoint exists before initialization.
+                let backing = STORAGE.try_init_with(|| const {
+                    $crate::port_slot::contract::VacantPortSlot::<Id, $state>::vacant()
+                })?;
+                // SAFETY: StaticCell claimed this declaration's private
+                // allocation exactly once. Its initialized vacant backing is
+                // static and has not published any endpoints or capacity.
                 let claim = unsafe { $crate::port_slot::static_claim::<Declaration>() };
-                Some(place.write(claim.place()))
+                Some(claim.place_in(backing))
             }
         }
     };

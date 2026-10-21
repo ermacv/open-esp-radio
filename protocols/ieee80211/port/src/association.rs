@@ -17,6 +17,8 @@ use core::marker::PhantomData;
 use oer_ieee80211_wire::security::Spp;
 use oer_radio_port::{Child, PoolBuilder, PoolPath, PoolSet, Root, Slot, Slots};
 
+mod loan;
+
 /// Capacity of each PTK/GTK return collection retained by the portable station.
 /// Backend banks remain generic: this bounds station bookkeeping, not AP slots.
 pub const KEY_BANK_CAPACITY: usize = 8;

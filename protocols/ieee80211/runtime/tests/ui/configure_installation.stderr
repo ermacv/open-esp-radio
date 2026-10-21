@@ -1,29 +1,22 @@
-error: lifetime may not live long enough
-  --> tests/ui/configure_installation.rs:54:9
+error[E0308]: mismatched types
+  --> tests/ui/configure_installation.rs:49:24
    |
-38 |     async fn run<'p, 'id>(
-   |                      --- lifetime `'id` defined here
-39 |         self,
-   |         ---- has type `Inner<'1>`
+37 | impl<Id: SlotIdentity, OuterId: SlotIdentity> PortBody<Id, ModelBackend<Id>> for Inner<'_, OuterId> {
+   |      --                ------- found type parameter
+   |      |
+   |      expected type parameter
 ...
-54 |         Ended::fail_stop(owner.fail_stop(), ()) // ui-error: lifetime may not live long enough
-   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ method was supposed to return data with lifetime `'id` but it is returning data with lifetime `'1`
-
-error: lifetime may not live long enough
-  --> tests/ui/configure_installation.rs:54:9
+49 |             .configure(self.0, StationReceive::Off); // ui-error: E0308
+   |              --------- ^^^^^^ expected type parameter `Id`, found type parameter `OuterId`
+   |              |
+   |              arguments to this method are incorrect
    |
-38 |     async fn run<'p, 'id>(
-   |                      --- lifetime `'id` defined here
-39 |         self,
-   |         ---- has type `Inner<'1>`
-...
-54 |         Ended::fail_stop(owner.fail_stop(), ()) // ui-error: lifetime may not live long enough
-   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ method was supposed to return data with lifetime `'1` but it is returning data with lifetime `'id`
-
-warning: unused variable: `resources`
-  --> tests/ui/configure_installation.rs:41:9
+   = note: expected struct `ConfigurePermission<'_, oer_ieee80211_port::Station, oer_radio_port::Child<oer_radio_port::Child<Root<Id>, 9>, 1>>`
+              found struct `ConfigurePermission<'_, oer_ieee80211_port::Station, oer_radio_port::Child<oer_radio_port::Child<Root<OuterId>, 9>, 1>>`
+   = note: a type parameter was expected, but a different one was found; you might be missing a type parameter or trait bound
+   = note: for more information, visit https://doc.rust-lang.org/book/ch10-02-traits.html#traits-as-parameters
+note: method defined here
+  --> $WORKSPACE/protocols/ieee80211/port/src/phase.rs
    |
-41 |         resources: ModelResources<'id>,
-   |         ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_resources`
-   |
-   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+   |     fn configure(
+   |        ^^^^^^^^^

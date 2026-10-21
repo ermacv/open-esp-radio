@@ -22,11 +22,14 @@ impl Drop for Witness {
 struct Contexts;
 impl ModelContext for Contexts {
     type Body = ModelBody;
-    type Context<'id> = ();
-    type StationConfigureContext<'id> = Witness;
-    type AccessPointConfigureContext<'id> = Witness;
+    type OwnedContext<Id: SlotIdentity> = ();
+    type Context<'p, Id: SlotIdentity + 'p> = ();
+    type OwnedStationConfigureContext<Id: SlotIdentity> = Witness;
+    type StationConfigureContext<'p, Id: SlotIdentity + 'p> = Witness;
+    type OwnedAccessPointConfigureContext<Id: SlotIdentity> = Witness;
+    type AccessPointConfigureContext<'p, Id: SlotIdentity + 'p> = Witness;
 }
-type Backend = ModelBackend<ModelCaps, Contexts>;
+type Backend<Id> = ModelBackend<Id, ModelCaps, Contexts>;
 type Captured = Trace<Vec<Identity>>;
 
 /// Exercise both interfaces, returning and reusing the original permissions.
@@ -37,9 +40,9 @@ pub async fn configure(
 ) -> Result<Captured, &'static str> {
     let station = IndividualAddress::new([2, 0, 0, 0, 0, 1]).ok_or("station")?;
     let ap = IndividualAddress::new([2, 0, 0, 0, 0, 2]).ok_or("AP")?;
-    let (backend, _) = Backend::new(channel, [station, ap], clock);
-    match oer_radio_port::run_port(backend, Exercise(case), oer_radio_port::LocalExecution).await {
-        PortEnd::Uninstalled { output, .. } => output,
+    let (backend, _) = Fixture::<ModelCaps, Contexts>::new(channel, [station, ap], clock);
+    match run_model(backend, Exercise(case)).await {
+        Report::Joined(output) => output,
         _ => Err("configuration failed to uninstall"),
     }
 }
@@ -52,13 +55,18 @@ fn record<'id, R: InterfaceRole, P: oer_radio_port::PoolPath>(
     permission.with_context(witness)
 }
 struct Exercise(Case);
-impl PortBody<Backend> for Exercise {
+impl<Id: SlotIdentity> PortBody<Id, Backend<Id>> for Exercise {
     type Output = Result<Captured, &'static str>;
     async fn run<'p, 'id>(
         self,
-        owner: Owner<'p, 'id, Backend, Disabled>,
-        resources: ModelResources<'id>,
-    ) -> Ended<'id, Backend, Self::Output> {
+        owner: Owner<'p, 'id, Id, Backend<Id>, Disabled>,
+        resources: ModelResources<'id, Backend<Id>>,
+    ) -> Ended<Id, Backend<Id>, Self::Output>
+    where
+        Backend<Id>: 'id,
+        Id: 'id,
+        'id: 'p,
+    {
         let mut owner = match owner.enable().await {
             Ok(owner) => owner,
             Err(failed) => {
@@ -188,10 +196,10 @@ pub(super) async fn yield_once() {
     .await;
 }
 
-async fn stop<'p, 'id>(
-    owner: Owner<'p, 'id, Backend, oer_radio_port::Enabled>,
+async fn stop<'p, 'id, Id: SlotIdentity + 'id>(
+    owner: Owner<'p, 'id, Id, Backend<Id>, oer_radio_port::Enabled>,
     result: Result<Captured, &'static str>,
-) -> Ended<'id, Backend, Result<Captured, &'static str>> {
+) -> Ended<Id, Backend<Id>, Result<Captured, &'static str>> {
     match owner
         .disable(&mut |_| core::ops::ControlFlow::Continue(()))
         .await
@@ -200,3 +208,5 @@ async fn stop<'p, 'id>(
         Err(failed) => Ended::fail_stop(failed.fail_stop(), Err("configuration final disable")),
     }
 }
+
+plain_context!(Witness);

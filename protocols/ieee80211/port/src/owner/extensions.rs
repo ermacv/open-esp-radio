@@ -233,21 +233,42 @@ impl<'p, 'id, K> AmpduRate<'p, 'id, K> {
 ///     R: RoleKeys<'id, T>, K: Ieee80211Capabilities, S: AggregateState,
 /// { T::push_aggregate(CheckedAggregate::new(builder, source).ok().unwrap()) }
 /// ```
-pub trait PhaseAggregate<'id> {
+pub trait PhaseAggregate<'id>: Sized {
     /// The backend resource family.
     type Types: PhaseTypes<'id>;
+    /// Concrete owner whose private frontend loan consumes this admission.
+    type Backend: oer_radio_port::SlotOwner<
+            <<Self::Types as PhaseTypes<'id>>::TicketPath as PoolPath>::Identity,
+        >;
+    /// Opaque context selected independently of the body's loan.
+    type OwnedContext;
+    /// Complete owned aggregate stored by P2.
+    type OwnedPayload;
     /// Whether this builder owns any subframes.
     type State: AggregateState;
     /// Backend execution metadata, separate from the complete aggregate.
     type Execution;
-    /// Lower the nonempty builder before backend custody. Empty builders
-    /// have cancellation only and cannot invoke this operation.
+    /// Lower the nonempty builder before sealing backend custody. The
+    /// invariant admission authority is issued only by `AggregateAttempt`.
     fn into_admission(
         self,
-    ) -> (
-        <Self::Types as PhaseTypes<'id>>::TxAggregate,
+        context: <Self::Types as PhaseTypes<'id>>::Context,
+        ticket: Slot<
+            'id,
+            <Self::Types as PhaseTypes<'id>>::TicketKind,
+            <Self::Types as PhaseTypes<'id>>::TicketPath,
+        >,
+        admission: crate::Admission<Self>,
+    ) -> crate::AdmissionOwners<
+        Self::OwnedContext,
+        Slot<
+            'static,
+            <Self::Types as PhaseTypes<'id>>::TicketKind,
+            <Self::Types as PhaseTypes<'id>>::TicketPath,
+        >,
+        Self::OwnedPayload,
         Self::Execution,
-    )
+    >
     where
         Self::State: NonEmptyState;
     /// Cancellation releases each complete MPDU, including for an empty
@@ -304,7 +325,7 @@ pub struct AggregateAttempt<'id, T, A, K, X, Path: PoolPath = Root<oer_radio_por
 }
 
 /// A complete aggregate sealed before backend custody, retaining its original
-/// preparation's phase, installation and key borrow until submission.
+/// preparation's phase, body and key borrow until submission.
 pub struct AdmittedAggregate<
     'id,
     T,
@@ -313,32 +334,81 @@ pub struct AdmittedAggregate<
     X,
     Path: PoolPath = Root<oer_radio_port::LocalId<'id>>,
 > {
-    /// Indivisible owner of every submitted MPDU and body.
-    pub operation:
-        crate::InFlight<X, Slot<'id, T, Path>, <A::Types as PhaseTypes<'id>>::TxAggregate>,
-    /// Backend execution metadata, without owning subframes.
-    pub execution: A::Execution,
-    /// Protection selected by the caller.
-    pub protection: Protection,
-    /// Transmit power selected by the caller.
-    pub power: SupportedPower<K>,
-    /// Minimum MPDU start spacing of the recipient.
-    pub min_mpdu_start_spacing: MpduStartSpacing,
-    proof: core::marker::PhantomData<fn(A) -> A>,
+    parts: AdmittedAggregateParts<
+        A::OwnedContext,
+        Slot<'static, T, Path>,
+        A::OwnedPayload,
+        A::Execution,
+        K,
+    >,
+    proof: core::marker::PhantomData<fn(&'id (), A, X) -> (&'id (), A, X)>,
 }
 
-impl<'id, T, A: PhaseAggregate<'id, State = NonEmptyAggregate>, K, X, Path: PoolPath>
-    AggregateAttempt<'id, T, A, K, X, Path>
+/// Whole aggregate custody and its execution metadata after the frontend loan.
+pub struct AdmittedAggregateParts<C, T, M, E, K> {
+    /// Indivisible accepted aggregate.
+    pub operation: crate::InFlight<C, T, M>,
+    /// Metadata containing no independently replaceable subframes.
+    pub execution: E,
+    /// Selected protection.
+    pub protection: Protection,
+    /// Selected transmit power.
+    pub power: SupportedPower<K>,
+    /// Recipient's minimum MPDU start spacing.
+    pub min_mpdu_start_spacing: MpduStartSpacing,
+}
+
+impl<'id, T, A: PhaseAggregate<'id>, K, X, Path: PoolPath>
+    AdmittedAggregate<'id, T, A, K, X, Path>
 {
-    /// Seal every subframe together before passing the attempt to a backend.
+    /// Inspect the complete accepted aggregate without extracting any owner.
+    pub fn operation(
+        &self,
+    ) -> &crate::InFlight<A::OwnedContext, Slot<'static, T, Path>, A::OwnedPayload> {
+        &self.parts.operation
+    }
+
+    /// Transfer the whole aggregate through its backend's private frontend.
+    pub fn into_parts(
+        self,
+        _: &oer_radio_port::BodyLoan<'id, Path::Identity, A::Backend>,
+    ) -> AdmittedAggregateParts<
+        A::OwnedContext,
+        Slot<'static, T, Path>,
+        A::OwnedPayload,
+        A::Execution,
+        K,
+    >
+    where
+        A::Backend: oer_radio_port::SlotOwner<Path::Identity>,
+    {
+        self.parts
+    }
+}
+
+impl<'id, T, A, K, X, Path: PoolPath> AggregateAttempt<'id, T, A, K, X, Path>
+where
+    A: PhaseAggregate<'id, State = NonEmptyAggregate>,
+    A::Types: PhaseTypes<'id, TicketKind = T, TicketPath = Path, Context = X>,
+{
+    /// Lower every body loan before sealing the complete aggregate.
     pub fn admit(self) -> AdmittedAggregate<'id, T, A, K, X, Path> {
-        let (payload, execution) = self.aggregate.into_admission();
-        AdmittedAggregate {
-            operation: crate::InFlight::admit(self.context, self.ticket, payload),
+        let crate::AdmissionOwners {
+            context,
+            ticket,
+            payload,
             execution,
-            protection: self.protection,
-            power: self.power,
-            min_mpdu_start_spacing: self.min_mpdu_start_spacing,
+        } = self
+            .aggregate
+            .into_admission(self.context, self.ticket, crate::Admission::new());
+        AdmittedAggregate {
+            parts: AdmittedAggregateParts {
+                operation: crate::InFlight::admit(context, ticket, payload),
+                execution,
+                protection: self.protection,
+                power: self.power,
+                min_mpdu_start_spacing: self.min_mpdu_start_spacing,
+            },
             proof: core::marker::PhantomData,
         }
     }

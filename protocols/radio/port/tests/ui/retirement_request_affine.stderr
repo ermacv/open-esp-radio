@@ -1,0 +1,16 @@
+error[E0382]: use of moved value: `request`
+ --> tests/ui/retirement_request_affine.rs:6:13
+  |
+3 | pub async fn stop<Id: SlotIdentity, S: SlotOwner<Id>>(request: SlotRetire<'_, Id, S>) -> SlotStopped<Id, S> {
+  |                                                       ------- move occurs because `request` has type `SlotRetire<'_, Id, S>`, which does not implement the `Copy` trait
+4 |     let first = request.requested();
+  |                         ----------- `request` moved due to this method call
+5 |     #[cfg(all())]
+6 |     let _ = request.requested(); // ui-error: E0382
+  |             ^^^^^^^ value used here after move
+  |
+note: `SlotRetire::<'_, Id, S>::requested` takes ownership of the receiver `self`, which moves `request`
+ --> src/slot.rs
+  |
+  |     pub async fn requested(self) -> SlotStopped<Id, S> {
+  |                            ^^^^

@@ -6,13 +6,13 @@ use oer_ieee80211_port::conformance::{
     edca::{self as contract, Case, Scenario},
 };
 use oer_ieee80211_wire::qos::WmmAccessCategory;
-type Ticket<'id> = radio::Slot<'id, Tickets, <Family as PhaseTypes<'id>>::TicketPath>;
-fn submit<'p, 'id: 'p>(
-    phase: &mut Esp32s31Phase<'p, 'id, Device, TX>,
+type Ticket<'id, Id> = radio::Slot<'id, Tickets, <Family<Id> as PhaseTypes<'id>>::TicketPath>;
+fn submit<'p, 'id: 'p, Id: radio::SlotIdentity + 'id>(
+    phase: &mut Esp32s31Phase<'p, 'id, Id, Device, TX>,
     role: VifRole,
     category: WmmAccessCategory,
-    ticket: Ticket<'id>,
-    mut buffer: Buffer<'id, TX>,
+    ticket: Ticket<'id, Id>,
+    mut buffer: Buffer<'id, Id, Device, TX>,
     peer: Peer,
 ) -> Result<(), &'static str> {
     buffer.bytes_mut().fill(0);
@@ -46,7 +46,7 @@ fn submit<'p, 'id: 'p>(
     .map_err(|_| "EDCA class")?;
     macro_rules! submit {
         ($interface:ident,$role:ty) => {{
-            let source = <Family as TxBufferPool<BufferClass<TX>>>::prepare::<$role, Caps>(
+            let source = <Family<Id> as TxBufferPool<BufferClass<TX>>>::prepare::<$role, Caps>(
                 TxSource::Fresh {
                     buffer,
                     frame,
@@ -130,9 +130,9 @@ fn captured(admitted: [u8; 3], completed: [u8; 3]) -> Result<EdcaTrace, &'static
     }
     Ok(trace)
 }
-async fn exchange<'p, 'id: 'p>(
-    phase: &mut Esp32s31Phase<'p, 'id, Device, TX>,
-    resources: <Backend as PortBackend>::Resources<'id>,
+async fn exchange<'p, 'id: 'p, Id: radio::SlotIdentity + 'id>(
+    phase: &mut Esp32s31Phase<'p, 'id, Id, Device, TX>,
+    resources: <Backend<Id> as PortBackend<Id>>::Resources<'id>,
     peer: Peer,
     case: Case,
 ) -> Result<Trace, &'static str> {
@@ -184,12 +184,12 @@ async fn exchange<'p, 'id: 'p>(
     }
     captured(admitted, completed).map(Trace::Edca)
 }
-pub(super) async fn run<'p, 'id>(
-    mut owner: Owner<'p, 'id, Backend, radio::Enabled>,
-    resources: <Backend as PortBackend>::Resources<'id>,
+pub(super) async fn run<'p, 'id, Id: radio::SlotIdentity + 'id>(
+    mut owner: Owner<'p, 'id, Id, Backend<Id>, radio::Enabled>,
+    resources: <Backend<Id> as PortBackend<Id>>::Resources<'id>,
     peer: Peer,
     case: Case,
-) -> Ended<'id, Backend, Result<Trace, &'static str>> {
+) -> Ended<Id, Backend<Id>, Result<Trace, &'static str>> {
     let mut result = exchange(&mut owner.phase(), resources, peer, case).await;
     let disabled = owner
         .disable(&mut |_| {

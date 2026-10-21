@@ -17,15 +17,9 @@ pub async fn edca(
     }
     let station = IndividualAddress::new([2, 0, 0, 0, 0, 1]).ok_or("station")?;
     let ap = IndividualAddress::new([2, 0, 0, 0, 0, 2]).ok_or("AP")?;
-    let (backend, air) = ModelBackend::new(channel, [station, ap], clock);
-    match oer_radio_port::run_port(
-        backend,
-        Exercise { air, case, rate },
-        oer_radio_port::LocalExecution,
-    )
-    .await
-    {
-        PortEnd::Uninstalled { output, .. } => output,
+    let (backend, air) = Fixture::<ModelCaps>::new(channel, [station, ap], clock);
+    match run_model(backend, Exercise { air, case, rate }).await {
+        Report::Joined(output) => output,
         _ => Err("EDCA failed to uninstall"),
     }
 }
@@ -34,12 +28,12 @@ struct Exercise {
     case: Case,
     rate: LegacyRate,
 }
-fn submit<'p, 'id: 'p>(
-    phase: &mut ModelPhase<'p, 'id>,
+fn submit<'p, 'id: 'p, Id: SlotIdentity + 'id>(
+    phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
     role: VifRole,
     category: WmmAccessCategory,
-    ticket: Slot<'id, ModelTickets, ModelPool<'id, 1>>,
-    mut buffer: ModelBuffer<'id, ModelSmall>,
+    ticket: Slot<'id, ModelTickets, ModelPool<Id, 1>>,
+    mut buffer: ModelBuffer<'id, ModelBackend<Id>, ModelSmall>,
     legacy: LegacyRate,
 ) -> Result<(), &'static str> {
     buffer.bytes_mut().fill(0);
@@ -74,7 +68,10 @@ fn submit<'p, 'id: 'p>(
     .map_err(|_| "EDCA class")?;
     macro_rules! submit {
         ($interface:ident,$role:ty) => {{
-            let source = <ModelTypes as TxBufferPool<ModelSmall>>::prepare::<$role, ModelCaps>(
+            let source = <ModelTypes<ModelBackend<Id>> as TxBufferPool<ModelSmall>>::prepare::<
+                $role,
+                ModelCaps,
+            >(
                 TxSource::Fresh {
                     buffer,
                     frame,
@@ -108,9 +105,9 @@ fn submit<'p, 'id: 'p>(
     }
     Ok(())
 }
-async fn exchange<'p, 'id: 'p>(
-    phase: &mut ModelPhase<'p, 'id>,
-    resources: ModelResources<'id>,
+async fn exchange<'p, 'id: 'p, Id: SlotIdentity + 'id>(
+    phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
+    resources: ModelResources<'id, ModelBackend<Id>>,
     body: &Exercise,
 ) -> Result<EdcaTrace, &'static str> {
     body.air.set_backoff_entropy(u32::MAX);
@@ -179,13 +176,18 @@ async fn exchange<'p, 'id: 'p>(
         held_draws: None,
     })
 }
-impl PortBody<ModelBackend> for Exercise {
+impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id>> for Exercise {
     type Output = Result<EdcaTrace, &'static str>;
     async fn run<'p, 'id>(
         self,
-        owner: Owner<'p, 'id, ModelBackend, Disabled>,
-        resources: ModelResources<'id>,
-    ) -> Ended<'id, ModelBackend, Self::Output> {
+        owner: Owner<'p, 'id, Id, ModelBackend<Id>, Disabled>,
+        resources: ModelResources<'id, ModelBackend<Id>>,
+    ) -> Ended<Id, ModelBackend<Id>, Self::Output>
+    where
+        ModelBackend<Id>: 'id,
+        Id: 'id,
+        'id: 'p,
+    {
         let mut owner = match owner.enable().await {
             Ok(owner) => owner,
             Err(failed) => {

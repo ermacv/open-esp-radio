@@ -37,8 +37,12 @@ pub trait Composition: 'static {
     type Profile: backend::BackendTxProfile;
     type Entropy: WifiTxEntropy;
     type Body: TxBody + 'static;
-    type Context<'id>;
-    type ConfigureContext<'id>;
+    type OwnedContext<Id: SlotIdentity>;
+    type Context<'p, Id: SlotIdentity + 'p>: LoanedContext<'p, Id, Owned = Self::OwnedContext<Id>>
+        + 'p;
+    type OwnedConfigureContext<Id: SlotIdentity>;
+    type ConfigureContext<'p, Id: SlotIdentity + 'p>: LoanedContext<'p, Id, Owned = Self::OwnedConfigureContext<Id>>
+        + 'p;
 }
 
 pub type Power = crate::tx::CappedTxPowerProfile<oer_esp32s31_phy::PhyTxTargetPowerProfile>;
@@ -246,8 +250,10 @@ where
     type Hardware = RadioAccess;
     type Receive = StagedReceive<Q, RB>;
     type Body = C::Body;
-    type Context<'id> = C::Context<'id>;
-    type ConfigureContext<'id> = C::ConfigureContext<'id>;
+    type OwnedContext<Id: SlotIdentity> = C::OwnedContext<Id>;
+    type Context<'p, Id: SlotIdentity + 'p> = C::Context<'p, Id>;
+    type OwnedConfigureContext<Id: SlotIdentity> = C::OwnedConfigureContext<Id>;
+    type ConfigureContext<'p, Id: SlotIdentity + 'p> = C::ConfigureContext<'p, Id>;
     fn hardware(&mut self) -> &mut RadioAccess {
         &mut self
             .active

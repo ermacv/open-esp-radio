@@ -4,28 +4,31 @@ use oer_ieee80211_port::conformance::{
 };
 
 // A fixture-local installation brand; this harness never creates a core epoch.
-struct InstallBrand<'id>(PhantomData<fn(&'id ()) -> &'id ()>);
+struct InstallBrand<Id>(PhantomData<fn(Id) -> Id>);
 
 // Deliberately neither Copy nor Clone, and branded by the installation.
-struct Context<'id> {
-    epoch: Option<InstallBrand<'id>>,
+struct Context<Id> {
+    epoch: Option<InstallBrand<Id>>,
     operation: Operation,
     resources: Resources,
     dropped: Rc<Cell<usize>>,
 }
 struct Contexts;
 impl ModelContext for Contexts {
-    type StationConfigureContext<'id> = ();
-    type AccessPointConfigureContext<'id> = ();
+    type OwnedStationConfigureContext<Id: SlotIdentity> = ();
+    type StationConfigureContext<'p, Id: SlotIdentity + 'p> = ();
+    type OwnedAccessPointConfigureContext<Id: SlotIdentity> = ();
+    type AccessPointConfigureContext<'p, Id: SlotIdentity + 'p> = ();
     type Body = ModelBody;
-    type Context<'id> = Context<'id>;
+    type OwnedContext<Id: SlotIdentity> = Context<Id>;
+    type Context<'p, Id: SlotIdentity + 'p> = Context<Id>;
 }
-impl Drop for Context<'_> {
+impl<Id> Drop for Context<Id> {
     fn drop(&mut self) {
         self.dropped.set(self.dropped.get() + 1);
     }
 }
-type Backend = ModelBackend<ModelCaps, Contexts>;
+type Backend<Id> = ModelBackend<Id, ModelCaps, Contexts>;
 
 struct Operations {
     air: Rc<ModelAir>,
@@ -37,10 +40,10 @@ struct Operations {
     gate_closed_at: Rc<Cell<Option<usize>>>,
 }
 
-fn observe<'id>(
-    context: Context<'_>,
-    ticket: Slot<'id, ModelTickets, ModelPool<'id, 1>>,
-    buffer: ModelAnyBuffer<'_>,
+fn observe<'id, Id: SlotIdentity + 'id>(
+    context: Context<Id>,
+    ticket: Slot<'id, ModelTickets, ModelPool<Id, 1>>,
+    buffer: ModelAnyBuffer<'id, Backend<Id>>,
     body: Option<ModelBody>,
     end: End,
     seen: &RefCell<Vec<conformance::Returned>>,
@@ -51,12 +54,12 @@ fn observe<'id>(
         ModelAnyBuffer::Large(buffer) => (Class::Large, buffer.slot.index(), body),
         ModelAnyBuffer::SmallSent(mpdu) => {
             assert!(body.is_none());
-            let (buffer, body) = <ModelTypes<Contexts> as TxBufferPool<ModelSmall>>::renew(mpdu);
+            let (buffer, body) = <ModelTypes<Backend<Id>> as TxBufferPool<ModelSmall>>::renew(mpdu);
             (Class::Small, buffer.slot.index(), body)
         }
         ModelAnyBuffer::LargeSent(mpdu) => {
             assert!(body.is_none());
-            let (buffer, body) = <ModelTypes<Contexts> as TxBufferPool<ModelLarge>>::renew(mpdu);
+            let (buffer, body) = <ModelTypes<Backend<Id>> as TxBufferPool<ModelLarge>>::renew(mpdu);
             (Class::Large, buffer.slot.index(), body)
         }
     };
@@ -75,10 +78,10 @@ fn observe<'id>(
     });
 }
 
-fn returned<'id>(
-    event: LowerMacEvent<'id, ModelTypes<Contexts>>,
+fn returned<'id, Id: SlotIdentity + 'id>(
+    event: LowerMacEvent<'id, ModelTypes<Backend<Id>>>,
     seen: &RefCell<Vec<conformance::Returned>>,
-    terminal_access: &mut oer_ieee80211_port::TerminalAccess<'id, ModelTickets, ModelPool<'id, 1>>,
+    terminal_access: &mut oer_ieee80211_port::TerminalAccess<'id, ModelTickets, ModelPool<Id, 1>>,
     evidence: &RefCell<Vec<conformance::ReturnEvidence>>,
     gate_closed_at: &Cell<Option<usize>>,
     air: &ModelAir,
@@ -121,13 +124,18 @@ fn returned<'id>(
     }
 }
 
-impl PortBody<Backend> for Operations {
+impl<Id: SlotIdentity> PortBody<Id, Backend<Id>> for Operations {
     type Output = ();
-    async fn run<'id>(
+    async fn run<'a, 'id>(
         self,
-        owner: Owner<'_, 'id, Backend, Disabled>,
-        resources: ModelResources<'id>,
-    ) -> Ended<'id, Backend, ()> {
+        owner: Owner<'a, 'id, Id, Backend<Id>, Disabled>,
+        resources: ModelResources<'id, Backend<Id>>,
+    ) -> Ended<Id, Backend<Id>, ()>
+    where
+        Backend<Id>: 'id,
+        Id: 'id,
+        'id: 'a,
+    {
         let mut terminal_access = resources.terminal_access;
         let Ok(mut owner) = owner.enable().await else {
             panic!("model enables")
@@ -159,7 +167,7 @@ impl PortBody<Backend> for Operations {
                         }
                         .check()
                         .map(|source| {
-                            <ModelTypes<Contexts> as TxBufferPool<ModelSmall>>::prepare::<
+                            <ModelTypes<Backend<Id>> as TxBufferPool<ModelSmall>>::prepare::<
                                 Station,
                                 ModelCaps,
                             >(source)
@@ -185,7 +193,7 @@ impl PortBody<Backend> for Operations {
                         }
                         .check()
                         .map(|source| {
-                            <ModelTypes<Contexts> as TxBufferPool<ModelLarge>>::prepare::<
+                            <ModelTypes<Backend<Id>> as TxBufferPool<ModelLarge>>::prepare::<
                                 Station,
                                 ModelCaps,
                             >(source)
@@ -323,7 +331,7 @@ impl Harness for ModelHarness {
         &mut self,
         scenario: Scenario,
     ) -> Trace<Self::Returns, Self::Evidence, Self::Publications> {
-        let (backend, air) = Backend::new(
+        let (backend, air) = Fixture::<ModelCaps, Contexts>::new(
             Channel::ghz2_4(6, ChannelWidth::Mhz20).unwrap(),
             [
                 IndividualAddress::new(STATION).unwrap(),
@@ -336,7 +344,8 @@ impl Harness for ModelHarness {
         let seen = Rc::new(RefCell::new(Vec::new()));
         let evidence = Rc::new(RefCell::new(Vec::new()));
         let gate_closed_at = Rc::new(Cell::new(None));
-        let _port_end = run_port(
+        let after_receipt_dropped = Cell::new(usize::MAX);
+        let _port_end = fixture::inspect_model(
             backend,
             Operations {
                 air: air.clone(),
@@ -347,7 +356,7 @@ impl Harness for ModelHarness {
                 evidence: evidence.clone(),
                 gate_closed_at: gate_closed_at.clone(),
             },
-            oer_radio_port::LocalExecution,
+            |_| after_receipt_dropped.set(dropped.get()),
         )
         .await;
         let mut publication_events: Vec<_> = air
@@ -360,7 +369,7 @@ impl Harness for ModelHarness {
         }
         Trace {
             returned: core::mem::take(&mut *seen.borrow_mut()),
-            contexts_dropped: dropped.get(),
+            contexts_dropped: after_receipt_dropped.get(),
             before_teardown_dropped: before_teardown.get(),
             publications: air.sent().len(),
             terminal_evidence: core::mem::take(&mut *evidence.borrow_mut()),
@@ -386,10 +395,13 @@ struct AggregateContext {
 }
 
 impl ModelContext for AggregateContext {
-    type StationConfigureContext<'id> = ();
-    type AccessPointConfigureContext<'id> = ();
+    type OwnedStationConfigureContext<Id: SlotIdentity> = ();
+    type StationConfigureContext<'p, Id: SlotIdentity + 'p> = ();
+    type OwnedAccessPointConfigureContext<Id: SlotIdentity> = ();
+    type AccessPointConfigureContext<'p, Id: SlotIdentity + 'p> = ();
     type Body = ModelBody;
-    type Context<'id> = Self;
+    type OwnedContext<Id: SlotIdentity> = Self;
+    type Context<'p, Id: SlotIdentity + 'p> = Self;
 }
 
 impl Drop for AggregateContext {
@@ -405,13 +417,20 @@ struct AggregateOwners {
     initial_pn: u64,
 }
 
-impl PortBody<ModelBackend<ModelCaps, AggregateContext>> for AggregateOwners {
+impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps, AggregateContext>>
+    for AggregateOwners
+{
     type Output = ();
-    async fn run<'id>(
+    async fn run<'a, 'id>(
         self,
-        owner: Owner<'_, 'id, ModelBackend<ModelCaps, AggregateContext>, Disabled>,
-        resources: ModelResources<'id>,
-    ) -> Ended<'id, ModelBackend<ModelCaps, AggregateContext>, ()> {
+        owner: Owner<'a, 'id, Id, ModelBackend<Id, ModelCaps, AggregateContext>, Disabled>,
+        resources: ModelResources<'id, ModelBackend<Id, ModelCaps, AggregateContext>>,
+    ) -> Ended<Id, ModelBackend<Id, ModelCaps, AggregateContext>, ()>
+    where
+        ModelBackend<Id, ModelCaps, AggregateContext>: 'id,
+        Id: 'id,
+        'id: 'a,
+    {
         let mut terminal_access = resources.terminal_access;
         use oer_ieee80211_port::{AggregateAttempt, AmpduPhase, MpduStartSpacing, Tid};
         let Ok(mut owner) = owner.enable().await else {
@@ -434,7 +453,7 @@ impl PortBody<ModelBackend<ModelCaps, AggregateContext>> for AggregateOwners {
             .unwrap();
             let rate = phase.rate(PhyRate::Ht(ht)).unwrap();
             let mut station = phase.station();
-            let association = ModelKeys::<Station>::begin_association(
+            let association = ModelKeys::<ModelBackend<Id, ModelCaps, AggregateContext>, Station>::begin_association(
                 resources.station_association,
                 oer_ieee80211_wire::security::Spp::NotNegotiated,
             );
@@ -589,7 +608,7 @@ fn aggregate_terminal_returns_its_context_and_each_subframes_resources_on_air_or
         (true, 0),
         (false, oer_ieee80211_wire::ccmp::CCMP_PACKET_NUMBER_MAX - 3),
     ] {
-        let (backend, air) = ModelBackend::<ModelCaps, AggregateContext>::new(
+        let (backend, air) = Fixture::<ModelCaps, AggregateContext>::new(
             Channel::ghz2_4(6, ChannelWidth::Mhz20).unwrap(),
             [
                 IndividualAddress::new(STATION).unwrap(),
@@ -598,7 +617,7 @@ fn aggregate_terminal_returns_its_context_and_each_subframes_resources_on_air_or
             std::rc::Rc::new(oer_time_virtual::VirtualClock::<8>::new()),
         );
         let dropped = Rc::new(Cell::new(0));
-        let _port_end = block_on(run_port(
+        let _port_end = block_on(run_model(
             backend,
             AggregateOwners {
                 air,
@@ -606,7 +625,6 @@ fn aggregate_terminal_returns_its_context_and_each_subframes_resources_on_air_or
                 withdraw,
                 initial_pn,
             },
-            oer_radio_port::LocalExecution,
         ));
         assert_eq!(dropped.get(), 1);
     }
@@ -614,10 +632,13 @@ fn aggregate_terminal_returns_its_context_and_each_subframes_resources_on_air_or
 
 struct FaultContext(Rc<Cell<usize>>);
 impl ModelContext for FaultContext {
-    type StationConfigureContext<'id> = ();
-    type AccessPointConfigureContext<'id> = ();
+    type OwnedStationConfigureContext<Id: SlotIdentity> = ();
+    type StationConfigureContext<'p, Id: SlotIdentity + 'p> = ();
+    type OwnedAccessPointConfigureContext<Id: SlotIdentity> = ();
+    type AccessPointConfigureContext<'p, Id: SlotIdentity + 'p> = ();
     type Body = ModelBody;
-    type Context<'id> = Self;
+    type OwnedContext<Id: SlotIdentity> = Self;
+    type Context<'p, Id: SlotIdentity + 'p> = Self;
 }
 impl Drop for FaultContext {
     fn drop(&mut self) {
@@ -628,17 +649,25 @@ struct PublicationFault {
     aggregate: bool,
     dropped: Rc<Cell<usize>>,
 }
-impl PortBody<ModelBackend<ModelCaps, FaultContext>> for PublicationFault {
+impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps, FaultContext>>
+    for PublicationFault
+{
     type Output = ();
     async fn run<'p, 'id>(
         self,
-        owner: Owner<'p, 'id, ModelBackend<ModelCaps, FaultContext>, Disabled>,
-        resources: ModelResources<'id>,
-    ) -> Ended<'id, ModelBackend<ModelCaps, FaultContext>, ()> {
-        let station_association = ModelKeys::<Station>::begin_association(
-            resources.station_association,
-            oer_ieee80211_wire::security::Spp::NotNegotiated,
-        );
+        owner: Owner<'p, 'id, Id, ModelBackend<Id, ModelCaps, FaultContext>, Disabled>,
+        resources: ModelResources<'id, ModelBackend<Id, ModelCaps, FaultContext>>,
+    ) -> Ended<Id, ModelBackend<Id, ModelCaps, FaultContext>, ()>
+    where
+        ModelBackend<Id, ModelCaps, FaultContext>: 'id,
+        Id: 'id,
+        'id: 'p,
+    {
+        let station_association =
+            ModelKeys::<ModelBackend<Id, ModelCaps, FaultContext>, Station>::begin_association(
+                resources.station_association,
+                oer_ieee80211_wire::security::Spp::NotNegotiated,
+            );
 
         use oer_ieee80211_port::{AggregateAttempt, MpduStartSpacing};
         let mut owner = owner.enable().await.ok().unwrap();
@@ -718,12 +747,14 @@ impl PortBody<ModelBackend<ModelCaps, FaultContext>> for PublicationFault {
                     body: Some(body),
                     protection: TxProtection::Ccmp(key.numbered()),
                 };
-                let source = <ModelTypes<FaultContext> as TxBufferPool<ModelSmall>>::prepare::<
-                    Station,
-                    ModelCaps,
-                >(source.check().ok().unwrap())
-                .ok()
-                .unwrap();
+                let source =
+                    <ModelTypes<ModelBackend<Id, ModelCaps, FaultContext>> as TxBufferPool<
+                        ModelSmall,
+                    >>::prepare::<Station, ModelCaps>(
+                        source.check().ok().unwrap()
+                    )
+                    .ok()
+                    .unwrap();
                 phase.held.poison();
                 let submitted = phase.station().submit(
                     (oer_ieee80211_port::Attempt {
@@ -797,7 +828,7 @@ impl PortBody<ModelBackend<ModelCaps, FaultContext>> for PublicationFault {
 fn publication_fault_keeps_the_complete_single_or_aggregate_until_teardown() {
     for aggregate in [false, true] {
         let dropped = Rc::new(Cell::new(0));
-        let (backend, _) = ModelBackend::<ModelCaps, FaultContext>::new(
+        let (backend, _) = Fixture::<ModelCaps, FaultContext>::new(
             Channel::ghz2_4(6, ChannelWidth::Mhz20).unwrap(),
             [
                 IndividualAddress::new(STATION).unwrap(),
@@ -806,20 +837,68 @@ fn publication_fault_keeps_the_complete_single_or_aggregate_until_teardown() {
             std::rc::Rc::new(oer_time_virtual::VirtualClock::<8>::new()),
         );
         assert!(matches!(
-            block_on(run_port(
+            block_on(fixture::inspect_model(
                 backend,
                 PublicationFault {
                     aggregate,
                     dropped: dropped.clone()
                 },
-                oer_radio_port::LocalExecution
+                |report| {
+                    assert!(matches!(report, Report::Stopped(_)));
+                    assert_eq!(
+                        dropped.get(),
+                        0,
+                        "dropping the quarantine receipt retains the publication owner"
+                    );
+                },
             )),
-            oer_radio_port::PortEnd::FailStopped { .. }
+            Report::Stopped(_)
         ));
         assert_eq!(
             dropped.get(),
-            0,
-            "dropping the quarantine receipt retains the publication owner"
+            1,
+            "the entire model world ends only after P2 registration and all body loans"
         );
+    }
+}
+
+plain_context!(AggregateContext);
+plain_context!(FaultContext);
+
+impl<Id: SlotIdentity> oer_radio_port::ContextProjection<Id> for Context<Id> {
+    type View<'a, 'p>
+        = &'a Self
+    where
+        Self: 'p,
+        Id: 'p,
+        'p: 'a;
+    type Parts<'p>
+        = Self
+    where
+        Self: 'p,
+        Id: 'p;
+    fn view<'a, 'p>(&'a self, _: oer_radio_port::ContextLoan<'p, Id>) -> Self::View<'a, 'p>
+    where
+        Self: 'p,
+        Id: 'p,
+        'p: 'a,
+    {
+        self
+    }
+    fn into_parts<'p>(self, _: oer_radio_port::ContextLoan<'p, Id>) -> Self::Parts<'p>
+    where
+        Self: 'p,
+        Id: 'p,
+    {
+        self
+    }
+}
+impl<'p, Id: SlotIdentity + 'p> LoanedContext<'p, Id> for Context<Id> {
+    type Owned = Self;
+    fn enclose(self) -> oer_radio_port::PortContext<'p, Id, Self> {
+        oer_radio_port::PortContext::new(self)
+    }
+    fn restore(context: oer_radio_port::PortContext<'p, Id, Self>) -> Self {
+        context.into_parts()
     }
 }

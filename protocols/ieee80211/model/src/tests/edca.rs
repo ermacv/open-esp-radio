@@ -10,12 +10,12 @@ struct Exercise {
     trace: Recorded,
 }
 
-fn submit_role<'p, 'id: 'p>(
-    phase: &mut ModelPhase<'p, 'id>,
+fn submit_role<'p, 'id: 'p, Id: SlotIdentity + 'id>(
+    phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
     role: VifRole,
     category: WmmAccessCategory,
-    ticket: Slot<'id, ModelTickets, ModelPool<'id, 1>>,
-    buffer: ModelBuffer<'id, ModelSmall>,
+    ticket: Slot<'id, ModelTickets, ModelPool<Id, 1>>,
+    buffer: ModelBuffer<'id, ModelBackend<Id>, ModelSmall>,
 ) {
     let frame = ClassFrame::new(data_frame(phase, false)).ok().unwrap();
     macro_rules! submit {
@@ -57,10 +57,10 @@ fn submit_role<'p, 'id: 'p>(
 }
 
 impl Work for Exercise {
-    async fn work<'p, 'id: 'p>(
+    async fn work<'p, 'id: 'p, Id: SlotIdentity + 'id>(
         self,
-        phase: &mut ModelPhase<'p, 'id>,
-        resources: ModelResources<'id>,
+        phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
+        resources: ModelResources<'id, ModelBackend<Id>>,
     ) {
         let ModelResources {
             mut tickets,
@@ -147,16 +147,15 @@ impl contract::Harness for Harness {
         let recorded = Rc::new(RefCell::new(None));
         let (backend, _) = backend();
         assert!(matches!(
-            run_port(
+            run_model(
                 backend,
                 Body(Exercise {
                     case,
                     trace: recorded.clone()
-                }),
-                oer_radio_port::LocalExecution
+                })
             )
             .await,
-            oer_radio_port::PortEnd::Uninstalled { .. }
+            Report::Joined(_)
         ));
         recorded
             .take()

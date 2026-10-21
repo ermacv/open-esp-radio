@@ -44,11 +44,11 @@ fn record<'id, R: InterfaceRole, P: radio::PoolPath>(
         .expect("configuration capture capacity");
     permission.with_context(witness)
 }
-pub(super) async fn run<'p, 'id>(
-    mut owner: Owner<'p, 'id, Backend, radio::Enabled>,
-    resources: <Backend as PortBackend>::Resources<'id>,
+pub(super) async fn run<'p, 'id, Id: radio::SlotIdentity + 'id>(
+    mut owner: Owner<'p, 'id, Id, Backend<Id>, radio::Enabled>,
+    resources: <Backend<Id> as PortBackend<Id>>::Resources<'id>,
     case: Case,
-) -> Ended<'id, Backend, Result<Trace, &'static str>> {
+) -> Ended<Id, Backend<Id>, Result<Trace, &'static str>> {
     ownership::DROPS.store(0, Ordering::Relaxed);
     oer_trace::start(port::trace::Publication::CHANNEL.mask());
     let station = Witness::Station;

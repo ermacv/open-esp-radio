@@ -1,4 +1,4 @@
-error[E0609]: no field `backend` on type `&mut Owner<'_, 'id, B, oer_radio_port::Disabled>`
+error[E0609]: no field `backend` on type `&mut Owner<'_, 'id, Id, B, oer_radio_port::Disabled>`
  --> tests/ui/lifecycle_backend_field.rs:6:24
   |
 6 |     let _ = &mut owner.backend; // ui-error: E0609

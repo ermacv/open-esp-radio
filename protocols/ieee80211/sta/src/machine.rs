@@ -562,6 +562,26 @@ pub struct StaTxContext<'id, Path: PoolPath = Root<oer_radio_port::LocalId<'id>>
     purpose: TxPurpose,
 }
 
+/// Opaque purpose retained with a station operation's owned epoch context.
+pub struct StaTxPurpose(TxPurpose);
+
+impl<'p, Path: PoolPath + 'p> oer_radio_port::LoanedContext<'p, Path::Identity>
+    for StaTxContext<'p, Path>
+where
+    Path::Identity: 'p,
+{
+    type Owned = crate::epoch::EpochContext<Path, StaTxPurpose>;
+
+    fn enclose(self) -> oer_radio_port::PortContext<'p, Path::Identity, Self::Owned> {
+        self.epoch.context(StaTxPurpose(self.purpose))
+    }
+
+    fn restore(context: oer_radio_port::PortContext<'p, Path::Identity, Self::Owned>) -> Self {
+        let (epoch, StaTxPurpose(purpose)) = context.into_parts();
+        Self { epoch, purpose }
+    }
+}
+
 impl<Path: PoolPath> StaTxContext<'_, Path> {
     /// Whether this operation used the probe rate record.
     pub const fn is_probe(&self) -> bool {
@@ -1152,6 +1172,29 @@ pub struct PendingGroupRemoval<'id, Path: PoolPath = Root<oer_radio_port::LocalI
 #[derive(Debug)]
 pub struct StaConfigurationContext<'id, Path: PoolPath = Root<oer_radio_port::LocalId<'id>>> {
     epoch: Option<LinkEpoch<'id, Path>>,
+}
+
+impl<'p, Path: PoolPath + 'p> oer_radio_port::LoanedContext<'p, Path::Identity>
+    for StaConfigurationContext<'p, Path>
+where
+    Path::Identity: 'p,
+{
+    type Owned = oer_radio_port::ContextChoice<(), crate::epoch::EpochContext<Path, ()>>;
+
+    fn enclose(self) -> oer_radio_port::PortContext<'p, Path::Identity, Self::Owned> {
+        match self.epoch {
+            Some(epoch) => epoch.context(()).second(),
+            None => oer_radio_port::PortContext::new(()).first(),
+        }
+    }
+
+    fn restore(context: oer_radio_port::PortContext<'p, Path::Identity, Self::Owned>) -> Self {
+        let epoch = match context.into_choice() {
+            oer_radio_port::ContextChoice::First(_) => None,
+            oer_radio_port::ContextChoice::Second(context) => Some(context.into_parts().0),
+        };
+        Self { epoch }
+    }
 }
 
 /// The state of a key cell, independent of the protocol's current state.

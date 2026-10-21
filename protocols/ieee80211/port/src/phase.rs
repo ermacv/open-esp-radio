@@ -322,6 +322,62 @@ impl<'id, Path: PoolPath> GateIssuer<'id, Path> {
     }
 }
 
+impl<Path: PoolPath> GateOpen<'static, Path> {
+    /// Move the same gate state across its backend's private body boundary.
+    pub fn lend<'p, S: oer_radio_port::SlotOwner<Path::Identity>>(
+        self,
+        loan: &oer_radio_port::BodyLoan<'p, Path::Identity, S>,
+    ) -> GateOpen<'p, Path> {
+        GateOpen {
+            place: GatePlace {
+                slot: loan.lend_slot(self.place.slot),
+            },
+        }
+    }
+}
+
+impl<'p, Path: PoolPath> GateOpen<'p, Path> {
+    /// Move the same gate state across its backend's private body boundary.
+    pub fn into_owned<S: oer_radio_port::SlotOwner<Path::Identity>>(
+        self,
+        loan: &oer_radio_port::BodyLoan<'p, Path::Identity, S>,
+    ) -> GateOpen<'static, Path> {
+        GateOpen {
+            place: GatePlace {
+                slot: loan.reclaim_slot(self.place.slot),
+            },
+        }
+    }
+}
+
+impl<Path: PoolPath> GateClosed<'static, Path> {
+    /// Move the same gate state across its backend's private body boundary.
+    pub fn lend<'p, S: oer_radio_port::SlotOwner<Path::Identity>>(
+        self,
+        loan: &oer_radio_port::BodyLoan<'p, Path::Identity, S>,
+    ) -> GateClosed<'p, Path> {
+        GateClosed {
+            place: GatePlace {
+                slot: loan.lend_slot(self.place.slot),
+            },
+        }
+    }
+}
+
+impl<'p, Path: PoolPath> GateClosed<'p, Path> {
+    /// Move the same gate state across its backend's private body boundary.
+    pub fn into_owned<S: oer_radio_port::SlotOwner<Path::Identity>>(
+        self,
+        loan: &oer_radio_port::BodyLoan<'p, Path::Identity, S>,
+    ) -> GateClosed<'static, Path> {
+        GateClosed {
+            place: GatePlace {
+                slot: loan.reclaim_slot(self.place.slot),
+            },
+        }
+    }
+}
+
 /// An event of a running lower-MAC phase, in the order the events
 /// occurred; every token an operation took comes back in one.
 pub enum LowerMacEvent<'id, P: PhaseTypes<'id>> {
@@ -830,8 +886,8 @@ pub struct Attempt<'id, T, M, K, X, Path: PoolPath = Root<oer_radio_port::LocalI
     pub coex_operation: TxOperation,
 }
 
-/// An operation sealed before it crosses into backend custody. Execution
-/// metadata is separate; context, ticket and the complete MPDU remain together.
+/// A sealed operation retaining its body and preparation loans until submission.
+/// Only its concrete backend's private loan can release the complete owner.
 pub struct AdmittedAttempt<
     'id,
     T,
@@ -840,32 +896,71 @@ pub struct AdmittedAttempt<
     X,
     Path: PoolPath = Root<oer_radio_port::LocalId<'id>>,
 > {
-    /// Indivisible owner which the backend executes and completes.
-    pub operation: crate::InFlight<X, Slot<'id, T, Path>, <M::Types as PhaseTypes<'id>>::TxMpdu>,
-    /// Backend execution metadata, without independently owned MPDUs.
-    pub execution: M::Execution,
-    /// Access category selected by the caller.
-    pub access_category: oer_ieee80211_wire::qos::WmmAccessCategory,
-    /// Protection selected by the caller.
-    pub protection: Protection,
-    /// Transmit power selected by the caller.
-    pub power: SupportedPower<K>,
-    /// Operation selected by the caller.
-    pub coex_operation: TxOperation,
-    proof: core::marker::PhantomData<fn(M) -> M>,
+    parts:
+        AdmittedTxParts<M::OwnedContext, Slot<'static, T, Path>, M::OwnedPayload, M::Execution, K>,
+    proof: core::marker::PhantomData<fn(&'id (), M, X) -> (&'id (), M, X)>,
 }
 
-impl<'id, T, M: PreparedTx<'id>, K, X, Path: PoolPath> Attempt<'id, T, M, K, X, Path> {
-    /// Seal the whole prepared operation before passing it to the backend.
+/// Whole backend custody and its execution metadata after the frontend loan.
+pub struct AdmittedTxParts<C, T, M, E, K> {
+    /// Indivisible accepted operation.
+    pub operation: crate::InFlight<C, T, M>,
+    /// Metadata containing no independently replaceable MPDU.
+    pub execution: E,
+    /// Selected access category.
+    pub access_category: oer_ieee80211_wire::qos::WmmAccessCategory,
+    /// Selected protection.
+    pub protection: Protection,
+    /// Selected transmit power.
+    pub power: SupportedPower<K>,
+    /// Selected coexistence operation.
+    pub coex_operation: TxOperation,
+}
+
+impl<'id, T, M: PreparedTx<'id>, K, X, Path: PoolPath> AdmittedAttempt<'id, T, M, K, X, Path> {
+    /// Inspect the sealed owner without extracting or replacing any part.
+    pub fn operation(
+        &self,
+    ) -> &crate::InFlight<M::OwnedContext, Slot<'static, T, Path>, M::OwnedPayload> {
+        &self.parts.operation
+    }
+
+    /// Transfer the whole accepted owner through the backend's private frontend.
+    pub fn into_parts(
+        self,
+        _: &oer_radio_port::BodyLoan<'id, Path::Identity, M::Backend>,
+    ) -> AdmittedTxParts<M::OwnedContext, Slot<'static, T, Path>, M::OwnedPayload, M::Execution, K>
+    where
+        M::Backend: oer_radio_port::SlotOwner<Path::Identity>,
+    {
+        self.parts
+    }
+}
+
+impl<'id, T, M, K, X, Path: PoolPath> Attempt<'id, T, M, K, X, Path>
+where
+    M: PreparedTx<'id>,
+    M::Types: PhaseTypes<'id, TicketKind = T, TicketPath = Path, Context = X>,
+{
+    /// Lower the body loans before sealing the whole operation for backend custody.
     pub fn admit(self) -> AdmittedAttempt<'id, T, M, K, X, Path> {
-        let (payload, execution) = self.source.into_admission();
-        AdmittedAttempt {
-            operation: crate::InFlight::admit(self.context, self.ticket, payload),
+        let crate::AdmissionOwners {
+            context,
+            ticket,
+            payload,
             execution,
-            access_category: self.access_category,
-            protection: self.protection,
-            power: self.power,
-            coex_operation: self.coex_operation,
+        } = self
+            .source
+            .into_admission(self.context, self.ticket, crate::Admission::new());
+        AdmittedAttempt {
+            parts: AdmittedTxParts {
+                operation: crate::InFlight::admit(context, ticket, payload),
+                execution,
+                access_category: self.access_category,
+                protection: self.protection,
+                power: self.power,
+                coex_operation: self.coex_operation,
+            },
             proof: core::marker::PhantomData,
         }
     }
@@ -941,14 +1036,40 @@ pub type PoolMpdu<'id, T, C> =
 
 /// A backend's closed preparation proof. Cancellation recovers its owners
 /// without creating a TX terminal; submission consumes the proof itself.
-pub trait PreparedTx<'id> {
+pub trait PreparedTx<'id>: Sized {
     /// The backend's resource family.
     type Types: PhaseTypes<'id>;
+    /// Concrete owner whose frontend alone can consume this sealed admission.
+    type Backend: oer_radio_port::SlotOwner<
+            <<Self::Types as PhaseTypes<'id>>::TicketPath as PoolPath>::Identity,
+        >;
+    /// Opaque context selected independently of the body's loan.
+    type OwnedContext;
+    /// Complete owned payload stored by P2.
+    type OwnedPayload;
     /// Metadata needed by the backend to execute this MPDU.
     type Execution;
-    /// Lower preparation into the complete MPDU and execution metadata. Called
-    /// by `Attempt::admit`, before the backend receives any accepted owners.
-    fn into_admission(self) -> (<Self::Types as PhaseTypes<'id>>::TxMpdu, Self::Execution);
+    /// Lower body loans before the operation is sealed. The invariant
+    /// admission authority is constructed only by `Attempt::admit`.
+    fn into_admission(
+        self,
+        context: <Self::Types as PhaseTypes<'id>>::Context,
+        ticket: Slot<
+            'id,
+            <Self::Types as PhaseTypes<'id>>::TicketKind,
+            <Self::Types as PhaseTypes<'id>>::TicketPath,
+        >,
+        admission: crate::Admission<Self>,
+    ) -> crate::AdmissionOwners<
+        Self::OwnedContext,
+        Slot<
+            'static,
+            <Self::Types as PhaseTypes<'id>>::TicketKind,
+            <Self::Types as PhaseTypes<'id>>::TicketPath,
+        >,
+        Self::OwnedPayload,
+        Self::Execution,
+    >;
     /// Recover the buffer and any external body. A `Sent` MPDU keeps its
     /// body nested until renewal.
     fn into_parts(
@@ -1734,4 +1855,16 @@ impl oer_radio_port::PoolSet for ArbiterPool {
 #[must_use = "construct the arbiter exactly once with its initial gate"]
 pub struct ArbiterAuthority<'id, Path: PoolPath = Root<oer_radio_port::LocalId<'id>>> {
     brand: core::marker::PhantomData<fn(&'id (), Path) -> (&'id (), Path)>,
+}
+
+impl<Path: PoolPath> ArbiterAuthority<'static, Path> {
+    /// Lend the one construction authority without copying or reissuing it.
+    pub fn lend<'p, S: oer_radio_port::SlotOwner<Path::Identity>>(
+        self,
+        _: &oer_radio_port::BodyLoan<'p, Path::Identity, S>,
+    ) -> ArbiterAuthority<'p, Path> {
+        ArbiterAuthority {
+            brand: core::marker::PhantomData,
+        }
+    }
 }

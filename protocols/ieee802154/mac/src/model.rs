@@ -22,8 +22,9 @@ use core::{
 };
 
 use oer_radio_port::{
-    Call, CancelError, ClockError, Detached, DriverExit, EnableResult, InstallParts, Installed,
-    PhaseParts, PortBackend, PortPhase, RadioPortClient, RadioWork, Retire, Retired, Work,
+    BodyLoan, Call, CancelError, ClockError, EnableResult, InstallParts, ModelSlotOwner,
+    PhaseParts, PortBackend, PortPhase, RadioPortClient, RadioWork, SlotBodyOwner, SlotIdentity,
+    SlotOwner, SlotRetire, SlotStopped, SlotWakes, Work,
 };
 use oer_radio_port::{
     Child, EventsLost, Mint, Permit, PermitPool, PermitSupply, Poisoned, PoolPath, PortResult,
@@ -474,23 +475,29 @@ impl ModelHandle {
 }
 
 /// The model's IEEE 802.15.4 backend.
-pub struct OwnedModel {
+pub struct OwnedModel<Id: SlotIdentity> {
     shared: Shared,
+    identity: PhantomData<fn(Id) -> Id>,
 }
 
-impl OwnedModel {
-    /// A disabled, unconfigured backend and its world.
-    pub fn new() -> (Installed<Self>, ModelHandle) {
+impl<Id: SlotIdentity> OwnedModel<Id> {
+    /// A disabled, unconfigured P2 owner and its external model world.
+    pub fn new() -> (Self, ModelHandle) {
         let shared = Shared::default();
         (
-            Installed::new(
-                Self {
-                    shared: shared.clone(),
-                },
-                (),
-            ),
+            Self {
+                shared: shared.clone(),
+                identity: PhantomData,
+            },
             ModelHandle(shared),
         )
+    }
+    /// Resume stopped model hardware after its slot's ordinary join.
+    pub fn resume(hardware: ModelVacant) -> Self {
+        Self {
+            shared: hardware.shared,
+            identity: PhantomData,
+        }
     }
 }
 
@@ -549,6 +556,17 @@ impl<'id, Kind, Path: PoolPath> PermitPool<'id, Kind, Path> for ModelPermitPool<
         &'a self,
         _: &'a mut Seat<'id, Kind, Path>,
     ) -> impl Future<Output = Permit<'id, Kind, Path>> + 'a {
+        self.taking()
+    }
+
+    fn release(&self, permit: Permit<'id, Kind, Path>) {
+        self.free.borrow_mut().push(permit);
+        wake_head(&self.line);
+    }
+}
+
+impl<'id, Kind, Path: PoolPath> ModelPermitPool<'id, Kind, Path> {
+    fn taking(&self) -> impl Future<Output = Permit<'id, Kind, Path>> + '_ {
         let mut place = Place {
             line: &self.line,
             ticket: None,
@@ -594,42 +612,44 @@ impl<'id, Kind, Path: PoolPath> PermitPool<'id, Kind, Path> for ModelPermitPool<
             }
         })
     }
+}
 
-    fn release(&self, permit: Permit<'id, Kind, Path>) {
-        self.free.borrow_mut().push(permit);
-        wake_head(&self.line);
+impl<Kind, Path: PoolPath> ModelPermitPool<'static, Kind, Path> {
+    fn take_loaned<'a, 'p: 'a, S: SlotOwner<Path::Identity> + 'a>(
+        &'a self,
+        _: &'a mut Seat<'p, Kind, Path>,
+        loan: BodyLoan<'p, Path::Identity, S>,
+    ) -> impl Future<Output = Permit<'p, Kind, Path>> + 'a {
+        async move { loan.lend_permit(self.taking().await) }
     }
 }
 
 /// The model's held part of the install: the operation permit.
-pub struct ModelHeld<'id> {
+pub struct ModelHeld<Id: SlotIdentity> {
     permits: OperationPermits<
-        'id,
-        ModelPermitPool<'id, Operation, Child<Root<oer_radio_port::LocalId<'id>>, 2>>,
-        Child<Root<oer_radio_port::LocalId<'id>>, 2>,
+        'static,
+        ModelPermitPool<'static, Operation, Child<Root<Id>, 2>>,
+        Child<Root<Id>, 2>,
     >,
 }
 
+type LentPermits<'p, Id> = crate::owner::LentWorkPermits<
+    'p,
+    Operation,
+    ModelPermitPool<'static, Operation, Child<Root<Id>, 2>>,
+    Child<Root<Id>, 2>,
+    OwnedModel<Id>,
+>;
+
 /// The model's port-lifetime resources: each interface's slots, its seat
 /// in the operation's line and the recent-RSSI reader.
-pub struct ModelResources<'id> {
+pub struct ModelResources<'id, Id: SlotIdentity> {
     /// Each interface's seat in the operation's line, by interface.
-    pub operation:
-        [Seat<'id, Operation, Child<Root<oer_radio_port::LocalId<'id>>, 2>>; MODEL_INTERFACES],
+    pub operation: [Seat<'id, Operation, Child<Root<Id>, 2>>; MODEL_INTERFACES],
     /// Interface 0's slots.
-    pub interface0: InterfaceResources<
-        'id,
-        0,
-        MODEL_PENDING_SLOTS,
-        Child<Root<oer_radio_port::LocalId<'id>>, 0>,
-    >,
+    pub interface0: InterfaceResources<'id, 0, MODEL_PENDING_SLOTS, Child<Root<Id>, 0>>,
     /// Interface 1's slots.
-    pub interface1: InterfaceResources<
-        'id,
-        1,
-        MODEL_PENDING_SLOTS,
-        Child<Root<oer_radio_port::LocalId<'id>>, 1>,
-    >,
+    pub interface1: InterfaceResources<'id, 1, MODEL_PENDING_SLOTS, Child<Root<Id>, 1>>,
     /// The recent-RSSI reader.
     pub rssi: ModelRssi,
 }
@@ -644,22 +664,25 @@ impl RecentRssi for ModelRssi {
 }
 
 /// A configured interface `I` of the model; it holds the interface's slot.
-pub struct ModelConfigured<'id, const I: u8> {
-    slot: Slot<'id, InterfaceKind<I>, Child<Child<Root<oer_radio_port::LocalId<'id>>, I>, 0>>,
+pub struct ModelConfigured<'id, Id: SlotIdentity, const I: u8> {
+    slot: Slot<'id, InterfaceKind<I>, Child<Child<Root<Id>, I>, 0>>,
 }
 
-impl<'id, const I: u8> ConfiguredInterface<'id, I> for ModelConfigured<'id, I> {}
+impl<'id, Id: SlotIdentity, const I: u8> ConfiguredInterface<'id, I>
+    for ModelConfigured<'id, Id, I>
+{
+}
 
 /// The model's disabled owner's settings.
-pub struct ModelSetup<'a, 'id> {
+pub struct ModelSetup<'a, 'id, Id: SlotIdentity> {
     shared: &'a Shared,
-    brand: PhantomData<fn(&'id ()) -> &'id ()>,
+    brand: PhantomData<fn(&'id (), Id) -> (&'id (), Id)>,
 }
 
 /// The model's phase control.
-pub struct ModelControl<'a, 'id> {
+pub struct ModelControl<'a, 'id, Id: SlotIdentity> {
     shared: &'a Shared,
-    brand: PhantomData<fn(&'id ()) -> &'id ()>,
+    brand: PhantomData<fn(&'id (), Id) -> (&'id (), Id)>,
 }
 
 fn settings(shared: &Shared, change: impl FnOnce(&mut RadioWide)) {
@@ -668,7 +691,7 @@ fn settings(shared: &Shared, change: impl FnOnce(&mut RadioWide)) {
 
 macro_rules! radio_settings {
     ($type:ty) => {
-        impl RadioSettings for $type {
+        impl<Id: SlotIdentity> RadioSettings for $type {
             type Caps = ModelCaps;
 
             fn set_transmit_power(&mut self, power: SupportedPower<ModelCaps>) {
@@ -731,8 +754,8 @@ macro_rules! radio_settings {
     };
 }
 
-radio_settings!(ModelSetup<'_, '_>);
-radio_settings!(ModelControl<'_, '_>);
+radio_settings!(ModelSetup<'_, '_, Id>);
+radio_settings!(ModelControl<'_, '_, Id>);
 
 fn change_interface<const I: u8>(shared: &Shared, change: impl FnOnce(&mut InterfaceState)) {
     change(&mut shared.borrow_mut().interfaces[usize::from(I)]);
@@ -740,27 +763,22 @@ fn change_interface<const I: u8>(shared: &Shared, change: impl FnOnce(&mut Inter
 
 macro_rules! interfaces {
     ($type:ty) => {
-        impl<'id> Ieee802154Interfaces<'id> for $type {
-            type InterfacePath<const I: u8> = Child<Root<oer_radio_port::LocalId<'id>>, I>;
-            type Configured<const I: u8> = ModelConfigured<'id, I>;
+        impl<'id, Id: SlotIdentity> Ieee802154Interfaces<'id> for $type {
+            type InterfacePath<const I: u8> = Child<Root<Id>, I>;
+            type Configured<const I: u8> = ModelConfigured<'id, Id, I>;
 
             fn configure<const I: u8>(
                 &mut self,
-                slot: Slot<
-                    'id,
-                    InterfaceKind<I>,
-                    Child<Child<Root<oer_radio_port::LocalId<'id>>, I>, 0>,
-                >,
-            ) -> ModelConfigured<'id, I> {
+                slot: Slot<'id, InterfaceKind<I>, Child<Child<Root<Id>, I>, 0>>,
+            ) -> ModelConfigured<'id, Id, I> {
                 self.shared.borrow_mut().interfaces[usize::from(I)].configured = true;
                 ModelConfigured { slot }
             }
 
             fn remove<const I: u8>(
                 &mut self,
-                interface: ModelConfigured<'id, I>,
-            ) -> Slot<'id, InterfaceKind<I>, Child<Child<Root<oer_radio_port::LocalId<'id>>, I>, 0>>
-            {
+                interface: ModelConfigured<'id, Id, I>,
+            ) -> Slot<'id, InterfaceKind<I>, Child<Child<Root<Id>, I>, 0>> {
                 let mut state = self.shared.borrow_mut();
                 let index = usize::from(I);
                 // Its window and wish end; an operation it started keeps
@@ -780,21 +798,21 @@ macro_rules! interfaces {
     };
 }
 
-interfaces!(ModelSetup<'_, 'id>);
-interfaces!(ModelControl<'_, 'id>);
+interfaces!(ModelSetup<'_, 'id, Id>);
+interfaces!(ModelControl<'_, 'id, Id>);
 
-impl<'id> Ieee802154Setup<'id> for ModelSetup<'_, 'id> {}
+impl<'id, Id: SlotIdentity> Ieee802154Setup<'id> for ModelSetup<'_, 'id, Id> {}
 
-impl<'id> Ieee802154Control<'id> for ModelControl<'_, 'id> {}
+impl<'id, Id: SlotIdentity> Ieee802154Control<'id> for ModelControl<'_, 'id, Id> {}
 
 /// The model's one events consumer.
-pub struct ModelEvents<'a, 'id> {
+pub struct ModelEvents<'a, 'id, Id: SlotIdentity> {
     shared: &'a Shared,
-    held: &'a ModelHeld<'id>,
+    held: &'a LentPermits<'id, Id>,
     end: &'a mut Option<oer_radio_port::EventEnd<ModelFault>>,
 }
 
-impl PortPhase for ModelEvents<'_, '_> {
+impl<Id: SlotIdentity> PortPhase for ModelEvents<'_, '_, Id> {
     type Event = ModelEvent;
     type Fault = ModelFault;
 
@@ -820,7 +838,7 @@ impl PortPhase for ModelEvents<'_, '_> {
                 drop(state);
                 if let Some((_interface, id)) = event.ends() {
                     // The permit goes back before the terminal is handed out.
-                    if let Err(_mismatch) = self.held.permits.complete(id) {
+                    if let Err(_mismatch) = self.held.complete(id) {
                         let mut state = self.shared.borrow_mut();
                         state.events.push_front(event);
                         state.poisoned = Some(ModelFault);
@@ -842,7 +860,7 @@ impl PortPhase for ModelEvents<'_, '_> {
     }
 }
 
-impl Ieee802154Events for ModelEvents<'_, '_> {
+impl<Id: SlotIdentity> Ieee802154Events for ModelEvents<'_, '_, Id> {
     fn view(event: &ModelEvent) -> PhaseEvent<'_> {
         match event {
             ModelEvent::Received(frame, metadata) => PhaseEvent::Received(ReceivedFrame {
@@ -884,25 +902,29 @@ impl Ieee802154Events for ModelEvents<'_, '_> {
 }
 
 /// The model's clients: one per configured interface.
-pub struct ModelClients<'a, 'id> {
+pub struct ModelClients<'a, 'id, Id: SlotIdentity> {
     shared: &'a Shared,
-    held: &'a ModelHeld<'id>,
+    held: &'a LentPermits<'id, Id>,
+    pool: &'a ModelPermitPool<'static, Operation, Child<Root<Id>, 2>>,
+    loan: BodyLoan<'id, Id, OwnedModel<Id>>,
 }
 
-impl<'a, 'id> Ieee802154Clients<'id> for ModelClients<'a, 'id> {
-    type Configured<const I: u8> = ModelConfigured<'id, I>;
+impl<'a, 'id, Id: SlotIdentity> Ieee802154Clients<'id> for ModelClients<'a, 'id, Id> {
+    type Configured<const I: u8> = ModelConfigured<'id, Id, I>;
     type Client<'c, const I: u8>
-        = ModelClient<'c, 'id, I>
+        = ModelClient<'c, 'id, Id, I>
     where
         Self: 'c;
 
     fn client<'c, const I: u8>(
         &'c self,
-        _: &'c mut ModelConfigured<'id, I>,
-    ) -> ModelClient<'c, 'id, I> {
+        _: &'c mut ModelConfigured<'id, Id, I>,
+    ) -> ModelClient<'c, 'id, Id, I> {
         ModelClient {
             shared: self.shared,
             held: self.held,
+            pool: self.pool,
+            loan: self.loan,
         }
     }
 }
@@ -924,22 +946,24 @@ impl RadioWork for ModelToken {
 }
 
 /// An installed short-address pending entry of interface `I`.
-pub struct ModelShortEntry<'id, const I: u8> {
-    slot: Slot<'id, ShortPending<I>, Child<Child<Root<oer_radio_port::LocalId<'id>>, I>, 1>>,
+pub struct ModelShortEntry<'id, Id: SlotIdentity, const I: u8> {
+    slot: Slot<'id, ShortPending<I>, Child<Child<Root<Id>, I>, 1>>,
 }
 
 /// An installed extended-address pending entry of interface `I`.
-pub struct ModelExtendedEntry<'id, const I: u8> {
-    slot: Slot<'id, ExtendedPending<I>, Child<Child<Root<oer_radio_port::LocalId<'id>>, I>, 2>>,
+pub struct ModelExtendedEntry<'id, Id: SlotIdentity, const I: u8> {
+    slot: Slot<'id, ExtendedPending<I>, Child<Child<Root<Id>, I>, 2>>,
 }
 
 /// The client of the model's interface `I` in a running phase.
-pub struct ModelClient<'c, 'id, const I: u8> {
+pub struct ModelClient<'c, 'id, Id: SlotIdentity, const I: u8> {
     shared: &'c Shared,
-    held: &'c ModelHeld<'id>,
+    held: &'c LentPermits<'id, Id>,
+    pool: &'c ModelPermitPool<'static, Operation, Child<Root<Id>, 2>>,
+    loan: BodyLoan<'id, Id, OwnedModel<Id>>,
 }
 
-impl<const I: u8> ModelClient<'_, '_, I> {
+impl<'c, 'id, Id: SlotIdentity, const I: u8> ModelClient<'c, 'id, Id, I> {
     /// Set this interface's wish: end its window, set the wish and wake
     /// every waiting receive, whose condition may now hold.
     fn set_wish(&self, state: &mut State, wish: Wish) {
@@ -956,11 +980,10 @@ impl<const I: u8> ModelClient<'_, '_, I> {
         }
     }
 
-    fn admit<'c, 'id>(
-        &'c self,
-        permit: OperationPermit<'c, 'id, Child<Root<oer_radio_port::LocalId<'id>>, 2>>,
+    fn admit<'o>(
+        &'o self,
+        permit: OperationPermit<'o, 'id, Child<Root<Id>, 2>>,
         kind: Kind,
-        held: &'c ModelHeld<'id>,
     ) -> Result<ModelToken, Poisoned<ModelFault>> {
         self.poisoned()?;
         let interface = Interface::new(I);
@@ -970,12 +993,12 @@ impl<const I: u8> ModelClient<'_, '_, I> {
             state.operation = Some((interface, id, kind));
             id
         };
-        held.permits.admit(interface, id, permit);
+        self.held.admit(interface, id, permit);
         Ok(ModelToken { interface, id })
     }
 }
 
-impl<const I: u8> RadioPortClient for ModelClient<'_, '_, I> {
+impl<Id: SlotIdentity, const I: u8> RadioPortClient for ModelClient<'_, '_, Id, I> {
     type Token = ModelToken;
     type Domain = Ieee802154Radio;
     type Fault = ModelFault;
@@ -1008,13 +1031,15 @@ impl<const I: u8> RadioPortClient for ModelClient<'_, '_, I> {
     }
 }
 
-impl<'c, 'id, const I: u8> Ieee802154Client<'id, I> for ModelClient<'c, 'id, I> {
-    type OperationPath = Child<Root<oer_radio_port::LocalId<'id>>, 2>;
+impl<'c, 'id, Id: SlotIdentity, const I: u8> Ieee802154Client<'id, I>
+    for ModelClient<'c, 'id, Id, I>
+{
+    type OperationPath = Child<Root<Id>, 2>;
     type Caps = ModelCaps;
 
-    type InterfacePath = Child<Root<oer_radio_port::LocalId<'id>>, I>;
-    type ShortEntry = ModelShortEntry<'id, I>;
-    type ExtendedEntry = ModelExtendedEntry<'id, I>;
+    type InterfacePath = Child<Root<Id>, I>;
+    type ShortEntry = ModelShortEntry<'id, Id, I>;
+    type ExtendedEntry = ModelExtendedEntry<'id, Id, I>;
 
     fn set_pan_id(&self, pan_id: u16) {
         change_interface::<I>(self.shared, |interface| interface.pan_id = Some(pan_id));
@@ -1074,9 +1099,9 @@ impl<'c, 'id, const I: u8> Ieee802154Client<'id, I> for ModelClient<'c, 'id, I> 
 
     fn add_pending_short(
         &self,
-        slot: Slot<'id, ShortPending<I>, Child<Child<Root<oer_radio_port::LocalId<'id>>, I>, 1>>,
+        slot: Slot<'id, ShortPending<I>, Child<Child<Root<Id>, I>, 1>>,
         address: [u8; 2],
-    ) -> ModelShortEntry<'id, I> {
+    ) -> ModelShortEntry<'id, Id, I> {
         change_interface::<I>(self.shared, |interface| {
             interface.pending_short[usize::from(slot.index())] = Some(address);
         });
@@ -1085,9 +1110,9 @@ impl<'c, 'id, const I: u8> Ieee802154Client<'id, I> for ModelClient<'c, 'id, I> 
 
     fn add_pending_extended(
         &self,
-        slot: Slot<'id, ExtendedPending<I>, Child<Child<Root<oer_radio_port::LocalId<'id>>, I>, 2>>,
+        slot: Slot<'id, ExtendedPending<I>, Child<Child<Root<Id>, I>, 2>>,
         address: [u8; 8],
-    ) -> ModelExtendedEntry<'id, I> {
+    ) -> ModelExtendedEntry<'id, Id, I> {
         change_interface::<I>(self.shared, |interface| {
             interface.pending_extended[usize::from(slot.index())] = Some(address);
         });
@@ -1096,8 +1121,8 @@ impl<'c, 'id, const I: u8> Ieee802154Client<'id, I> for ModelClient<'c, 'id, I> 
 
     fn remove_pending_short(
         &self,
-        entry: ModelShortEntry<'id, I>,
-    ) -> Slot<'id, ShortPending<I>, Child<Child<Root<oer_radio_port::LocalId<'id>>, I>, 1>> {
+        entry: ModelShortEntry<'id, Id, I>,
+    ) -> Slot<'id, ShortPending<I>, Child<Child<Root<Id>, I>, 1>> {
         change_interface::<I>(self.shared, |interface| {
             interface.pending_short[usize::from(entry.slot.index())] = None;
         });
@@ -1106,8 +1131,8 @@ impl<'c, 'id, const I: u8> Ieee802154Client<'id, I> for ModelClient<'c, 'id, I> 
 
     fn remove_pending_extended(
         &self,
-        entry: ModelExtendedEntry<'id, I>,
-    ) -> Slot<'id, ExtendedPending<I>, Child<Child<Root<oer_radio_port::LocalId<'id>>, I>, 2>> {
+        entry: ModelExtendedEntry<'id, Id, I>,
+    ) -> Slot<'id, ExtendedPending<I>, Child<Child<Root<Id>, I>, 2>> {
         change_interface::<I>(self.shared, |interface| {
             interface.pending_extended[usize::from(entry.slot.index())] = None;
         });
@@ -1169,14 +1194,14 @@ impl<'c, 'id, const I: u8> Ieee802154Client<'id, I> for ModelClient<'c, 'id, I> 
 
     fn operation<'o, 's>(
         &'o self,
-        seat: &'s mut Seat<'id, Operation, Child<Root<oer_radio_port::LocalId<'id>>, 2>>,
-    ) -> impl Future<Output = OperationPermit<'o, 'id, Child<Root<oer_radio_port::LocalId<'id>>, 2>>> + 's
+        seat: &'s mut Seat<'id, Operation, Child<Root<Id>, 2>>,
+    ) -> impl Future<Output = OperationPermit<'o, 'id, Child<Root<Id>, 2>>> + 's
     where
         'id: 'o,
         'o: 's,
     {
-        let permits = &self.held.permits;
-        let mut taking = alloc::boxed::Box::pin(permits.pool().take(seat));
+        let permits = self.held;
+        let mut taking = alloc::boxed::Box::pin(self.pool.take_loaned(seat, self.loan));
         poll_fn(move |context| {
             taking
                 .as_mut()
@@ -1187,85 +1212,306 @@ impl<'c, 'id, const I: u8> Ieee802154Client<'id, I> for ModelClient<'c, 'id, I> 
 
     fn transmit<'o>(
         &'o self,
-        permit: OperationPermit<'o, 'id, Child<Root<oer_radio_port::LocalId<'id>>, 2>>,
+        permit: OperationPermit<'o, 'id, Child<Root<Id>, 2>>,
         transmission: SupportedTransmit<'_, ModelCaps>,
     ) -> Result<Work<'o, Self>, Poisoned<ModelFault>>
     where
         'id: 'o,
     {
-        let token = self.admit(permit, Kind::Transmit, self.held)?;
+        let token = self.admit(permit, Kind::Transmit)?;
         self.shared.borrow_mut().tx_security = Some(transmission.get().security);
         Ok(Work::new(self, token))
     }
 
     fn energy_scan<'o>(
         &'o self,
-        permit: OperationPermit<'o, 'id, Child<Root<oer_radio_port::LocalId<'id>>, 2>>,
+        permit: OperationPermit<'o, 'id, Child<Root<Id>, 2>>,
         _: SupportedEnergyScan<ModelCaps>,
     ) -> Result<Work<'o, Self>, Poisoned<ModelFault>>
     where
         'id: 'o,
     {
-        let token = self.admit(permit, Kind::EnergyScan, self.held)?;
+        let token = self.admit(permit, Kind::EnergyScan)?;
         Ok(Work::new(self, token))
     }
 
     fn clear_channel_assessment<'o>(
         &'o self,
-        permit: OperationPermit<'o, 'id, Child<Root<oer_radio_port::LocalId<'id>>, 2>>,
+        permit: OperationPermit<'o, 'id, Child<Root<Id>, 2>>,
         _: SupportedCca<ModelCaps>,
     ) -> Result<Work<'o, Self>, Poisoned<ModelFault>>
     where
         'id: 'o,
     {
-        let token = self.admit(permit, Kind::Cca, self.held)?;
+        let token = self.admit(permit, Kind::Cca)?;
         Ok(Work::new(self, token))
     }
 }
 
-/// Body-side model state, independent of the backend owner.
-pub struct ModelFrontend {
-    shared: Rc<RefCell<State>>,
+/// Stopped model hardware retained by the caller slot between installations.
+/// The observer handle cannot construct or clone this authority.
+pub struct ModelVacant {
+    shared: Shared,
+}
+
+/// Fixed local endpoint backing, including owned capacity and admitted permits.
+pub struct ModelQueues<Id: SlotIdentity> {
+    shared: Shared,
+    held: ModelHeld<Id>,
+    resources: Option<ModelResources<'static, Id>>,
+}
+
+/// Local frontend endpoints; no reference to the P2 backend owner.
+pub struct ModelFrontendRaw<'s, Id: SlotIdentity> {
+    shared: Shared,
+    held: &'s ModelHeld<Id>,
+    resources: &'s mut Option<ModelResources<'static, Id>>,
+}
+
+/// Body-loaned local model accounting. The owned map remains in slot backing.
+pub struct ModelFrontend<'p, Id: SlotIdentity> {
+    shared: Shared,
+    held: LentPermits<'p, Id>,
+    pool: &'p ModelPermitPool<'static, Operation, Child<Root<Id>, 2>>,
+    loan: BodyLoan<'p, Id, OwnedModel<Id>>,
     end: Option<oer_radio_port::EventEnd<ModelFault>>,
 }
 
-impl PortBackend for OwnedModel {
-    type Event<'id> = ModelEvent;
-    type Terminal<'id> = ModelEvent;
-    type Phase<'a, 'id>
-        = PhaseParts<ModelEvents<'a, 'id>, ModelControl<'a, 'id>, ModelClients<'a, 'id>>
-    where
-        Self: 'a,
-        'id: 'a;
-    type Frontend<'id> = ModelFrontend;
-    type Driver = ();
-    type Domain = Ieee802154Radio;
-    type Fault = ModelFault;
-    type Refusal = ModelRefusal;
-    type Setup<'a, 'id>
-        = ModelSetup<'a, 'id>
-    where
-        Self: 'a,
-        'id: 'a;
-
+impl<Id: SlotIdentity> SlotOwner<Id> for OwnedModel<Id> {
     type Pools = (
         crate::owner::InterfacePool<ModelCaps, 0, MODEL_PENDING_SLOTS>,
         crate::owner::InterfacePool<ModelCaps, 1, MODEL_PENDING_SLOTS>,
-        oer_radio_port::Permits<crate::owner::Operation, 1, MODEL_INTERFACES>,
+        oer_radio_port::Permits<Operation, 1, MODEL_INTERFACES>,
     );
-    type Resources<'id> = ModelResources<'id>;
-    type Held<'id> = ModelHeld<'id>;
-    type State = ();
-    type Uninstall = ();
-    type Uninstalled = ModelHandle;
+    type Queues = Option<ModelQueues<Id>>;
+    const VACANT_QUEUES: Self::Queues = None;
+    type Vacant = ModelVacant;
+    type Frontend<'s>
+        = ModelFrontendRaw<'s, Id>
+    where
+        Self: 's,
+        Id: 's;
+    type Invocation<'s>
+        = &'s ModelHeld<Id>
+    where
+        Self: 's,
+        Id: 's;
 
-    fn enable<'a, 'id>(
+    fn prepare_queues(&mut self, backing: &mut Self::Queues, mint: Mint<'static, Self::Pools, Id>) {
+        // Programmed settings belong to the ended installation. Physical
+        // world facts (clock, RSSI, injected refusal/fault) remain unchanged.
+        {
+            let mut state = self.shared.borrow_mut();
+            state.interfaces = core::array::from_fn(|_| InterfaceState::default());
+            state.radio = RadioWide::default();
+            state.events.clear();
+            state.received = 0;
+            state.lost = false;
+        }
+        let (interface0, interface1, work) = mint.into_pools();
+        let (permits, operation) =
+            OperationPermits::new(work, |supply, _| ModelPermitPool::new(supply));
+        *backing = Some(ModelQueues {
+            shared: self.shared.clone(),
+            held: ModelHeld { permits },
+            resources: Some(ModelResources {
+                operation,
+                interface0,
+                interface1,
+                rssi: ModelRssi(self.shared.clone()),
+            }),
+        });
+    }
+
+    fn split<'s>(
+        queues: &'s mut Self::Queues,
+        _: SlotWakes<'s, Id>,
+    ) -> (Self::Frontend<'s>, Self::Invocation<'s>)
+    where
+        Self: 's,
+        Id: 's,
+    {
+        let queues = queues.as_mut().expect("prepared model queues");
+        (
+            ModelFrontendRaw {
+                shared: queues.shared.clone(),
+                held: &queues.held,
+                resources: &mut queues.resources,
+            },
+            &queues.held,
+        )
+    }
+
+    async fn run<'s>(
+        &mut self,
+        held: &mut Self::Invocation<'s>,
+        retire: SlotRetire<'_, Id, Self>,
+    ) -> SlotStopped<Id, Self>
+    where
+        Self: 's,
+        Id: 's,
+    {
+        retire.wait().await;
+        if held.permits.in_flight().is_some() {
+            // An undelivered admitted owner cannot authorize a fresh mint.
+            retire.request_quarantine();
+            core::future::pending::<()>().await;
+        }
+        {
+            let mut state = self.shared.borrow_mut();
+            state.enabled = false;
+            state.operation = None;
+            state.consumer = None;
+            state.receivers.clear();
+        }
+        retire.requested().await
+    }
+
+    fn abandon<'s>(
+        &mut self,
+        _: Option<&mut Self::Invocation<'s>>,
+        authority: oer_radio_port::Quarantine,
+    ) -> oer_radio_port::Abandon
+    where
+        Self: 's,
+        Id: 's,
+    {
+        let mut state = self.shared.borrow_mut();
+        state.abandoned = true;
+        state.enabled = false;
+        state.poisoned = Some(ModelFault);
+        state.abort_operation();
+        state.wake_consumer();
+        state.consumer = None;
+        state.receivers.clear();
+        oer_radio_port::Abandon::Stopped(authority.stopped())
+    }
+
+    fn finish<'s>(&mut self, _: &mut Self::Invocation<'s>) -> ModelVacant
+    where
+        Self: 's,
+        Id: 's,
+    {
+        ModelVacant {
+            shared: self.shared.clone(),
+        }
+    }
+}
+
+impl<Id: SlotIdentity> ModelSlotOwner<Id> for OwnedModel<Id> {
+    fn end_world(&mut self, _: Option<&mut Self::Queues>) {
+        end_world(&self.shared);
+    }
+    fn end_vacant_world(hardware: &mut ModelVacant) {
+        end_world(&hardware.shared);
+    }
+}
+
+fn end_world(shared: &Shared) {
+    let mut state = shared.borrow_mut();
+    state.enabled = false;
+    state.operation = None;
+    state.consumer = None;
+    state.receivers.clear();
+}
+
+impl<Id: SlotIdentity> SlotBodyOwner<Id> for OwnedModel<Id> {
+    type Body<'p>
+        = InstallParts<'p, Id, Self>
+    where
+        Self: 'p,
+        Id: 'p;
+    fn lend<'p, 's>(raw: &'p mut Self::Frontend<'s>, loan: BodyLoan<'p, Id, Self>) -> Self::Body<'p>
+    where
+        Self: 's,
+        Id: 's,
+        's: 'p,
+    {
+        let resources = raw.resources.take().expect("one resource set per body");
+        let lend_interface =
+            |resources: InterfaceResources<'static, 0, MODEL_PENDING_SLOTS, Child<Root<Id>, 0>>| {
+                InterfaceResources {
+                    interface: loan.lend_slot(resources.interface),
+                    short: resources.short.map(|s| loan.lend_slot(s)),
+                    extended: resources.extended.map(|s| loan.lend_slot(s)),
+                }
+            };
+        InstallParts {
+            view: ModelFrontend {
+                shared: raw.shared.clone(),
+                held: raw.held.permits.lend(loan),
+                pool: raw.held.permits.pool(),
+                loan,
+                end: None,
+            },
+            resources: ModelResources {
+                operation: resources.operation.map(|s| loan.lend_seat(s)),
+                interface0: lend_interface(resources.interface0),
+                interface1: InterfaceResources {
+                    interface: loan.lend_slot(resources.interface1.interface),
+                    short: resources.interface1.short.map(|s| loan.lend_slot(s)),
+                    extended: resources.interface1.extended.map(|s| loan.lend_slot(s)),
+                },
+                rssi: resources.rssi,
+            },
+        }
+    }
+}
+
+impl<Id: SlotIdentity> PortBackend<Id> for OwnedModel<Id> {
+    type Event<'p>
+        = ModelEvent
+    where
+        Self: 'p,
+        Id: 'p;
+    type Terminal<'p>
+        = ModelEvent
+    where
+        Self: 'p,
+        Id: 'p;
+    type Domain = Ieee802154Radio;
+    type Fault = ModelFault;
+    type Refusal = ModelRefusal;
+    type View<'p>
+        = ModelFrontend<'p, Id>
+    where
+        Self: 'p,
+        Id: 'p;
+    type Resources<'p>
+        = ModelResources<'p, Id>
+    where
+        Self: 'p,
+        Id: 'p;
+    type Setup<'a, 'p>
+        = ModelSetup<'a, 'p, Id>
+    where
+        Self: 'p,
+        Id: 'p,
+        'p: 'a;
+    type Phase<'a, 'p>
+        = PhaseParts<ModelEvents<'a, 'p, Id>, ModelControl<'a, 'p, Id>, ModelClients<'a, 'p, Id>>
+    where
+        Self: 'p,
+        Id: 'p,
+        'p: 'a;
+    type Uninstall = ();
+
+    fn body_parts<'p>(body: Self::Body<'p>) -> InstallParts<'p, Id, Self>
+    where
+        Self: 'p,
+        Id: 'p,
+    {
+        body
+    }
+
+    fn enable<'a, 'p>(
         _: Call,
-        _: &'a Self::Held<'id>,
-        frontend: &'a mut Self::Frontend<'id>,
+        frontend: &'a mut Self::View<'p>,
     ) -> impl Future<Output = EnableResult<ModelRefusal, ModelFault>> + 'a
     where
-        'id: 'a,
+        Self: 'p,
+        Id: 'p,
+        'p: 'a,
     {
         let mut state = frontend.shared.borrow_mut();
         ready(match state.poisoned {
@@ -1278,14 +1524,15 @@ impl PortBackend for OwnedModel {
         })
     }
 
-    fn disable<'a, 'id>(
+    fn disable<'a, 'p>(
         _: Call,
-        held: &'a ModelHeld<'id>,
-        frontend: &'a mut Self::Frontend<'id>,
+        frontend: &'a mut Self::View<'p>,
         sink: &'a mut dyn FnMut(ModelEvent) -> core::ops::ControlFlow<ModelEvent>,
     ) -> impl Future<Output = Result<(), Poisoned<ModelFault>>> + 'a
     where
-        'id: 'a,
+        Self: 'p,
+        Id: 'p,
+        'p: 'a,
     {
         let result = {
             let mut state = frontend.shared.borrow_mut();
@@ -1303,7 +1550,7 @@ impl PortBackend for OwnedModel {
             // a loss marker are dropped with the phase.
             for event in core::iter::from_fn(|| frontend.shared.borrow_mut().events.pop_front()) {
                 if let Some((_interface, id)) = event.ends() {
-                    match held.permits.complete(id) {
+                    match frontend.held.complete(id) {
                         Ok(_completed) => {
                             if let core::ops::ControlFlow::Break(event) = sink(event) {
                                 let mut state = frontend.shared.borrow_mut();
@@ -1327,10 +1574,15 @@ impl PortBackend for OwnedModel {
         ready(result)
     }
 
-    fn now<'a, 'id: 'a>(
-        frontend: &'a Self::Frontend<'id>,
+    fn now<'a, 'p>(
         _: Call,
-    ) -> impl Future<Output = PortResult<Ieee802154Instant, ClockError, ModelFault>> + 'a {
+        frontend: &'a Self::View<'p>,
+    ) -> impl Future<Output = PortResult<Ieee802154Instant, ClockError, ModelFault>> + 'a
+    where
+        Self: 'p,
+        Id: 'p,
+        'p: 'a,
+    {
         let state = frontend.shared.borrow();
         ready(match state.poisoned {
             Some(cause) => Err(Poisoned { cause }),
@@ -1338,37 +1590,11 @@ impl PortBackend for OwnedModel {
         })
     }
 
-    fn resources<'id>(&mut self, mint: Mint<'id, Self::Pools>) -> InstallParts<'id, Self> {
-        let (interface0, interface1, work) = mint.into_pools();
-        // The model's line grows on the heap, so it holds a place for every
-        // seat without the line's size.
-        let (permits, operation) =
-            OperationPermits::new(work, |supply, _| ModelPermitPool::new(supply));
-        let held = ModelHeld { permits };
-        let resources = ModelResources {
-            operation,
-            interface0,
-            interface1,
-            rssi: ModelRssi(self.shared.clone()),
-        };
-        InstallParts {
-            held,
-            frontend: ModelFrontend {
-                shared: self.shared.clone(),
-                end: None,
-            },
-            resources,
-        }
-    }
-
-    fn setup<'a, 'id>(
-        _: Call,
-        _: &'a Self::Held<'id>,
-        frontend: &'a mut Self::Frontend<'id>,
-    ) -> Self::Setup<'a, 'id>
+    fn setup<'a, 'p>(_: Call, frontend: &'a mut Self::View<'p>) -> Self::Setup<'a, 'p>
     where
-        Self: 'a,
-        'id: 'a,
+        Self: 'p,
+        Id: 'p,
+        'p: 'a,
     {
         ModelSetup {
             shared: &frontend.shared,
@@ -1376,19 +1602,16 @@ impl PortBackend for OwnedModel {
         }
     }
 
-    fn phase<'a, 'id>(
-        _: Call,
-        held: &'a ModelHeld<'id>,
-        frontend: &'a mut Self::Frontend<'id>,
-    ) -> Self::Phase<'a, 'id>
+    fn phase<'a, 'p>(_: Call, frontend: &'a mut Self::View<'p>) -> Self::Phase<'a, 'p>
     where
-        Self: 'a,
-        'id: 'a,
+        Self: 'p,
+        Id: 'p,
+        'p: 'a,
     {
         PhaseParts {
             events: ModelEvents {
                 shared: &frontend.shared,
-                held,
+                held: &frontend.held,
                 end: &mut frontend.end,
             },
             control: ModelControl {
@@ -1397,47 +1620,30 @@ impl PortBackend for OwnedModel {
             },
             clients: ModelClients {
                 shared: &frontend.shared,
-                held,
+                held: &frontend.held,
+                pool: frontend.pool,
+                loan: frontend.loan,
             },
         }
     }
 
-    /// The model has nothing to drive: it waits for its retirement.
-    fn drive<'p, 'id>(
-        driver: oer_radio_port::DriverLoan<'p, Self::Driver>,
-        _: &'p Self::Held<'id>,
-        retire: Retire<'p>,
-    ) -> impl Future<Output = DriverExit<Self::State, Self::Fault>> + use<'p, 'id> {
-        retire.retired(driver, ())
+    fn request_uninstall<'s>(_: &mut Self::Frontend<'s>, (): ()) -> Result<(), Poisoned<ModelFault>>
+    where
+        Self: 's,
+        Id: 's,
+    {
+        Ok(())
     }
-
-    /// The model's driver retires at once, so its bound never passes.
-    fn shutdown_bound(&self, _: Call) -> impl Future<Output = ()> + use<> {
+    fn shutdown_bound<'s>(_: &Self::Frontend<'s>) -> impl Future<Output = ()> + use<'s, Id>
+    where
+        Self: 's,
+        Id: 's,
+    {
         core::future::pending()
-    }
-
-    /// The model has no interrupt entries.
-    fn detach<'id>(&mut self, _: oer_radio_port::Detach<'_>, _: &Self::Held<'id>) {}
-
-    fn uninstall<'id>(
-        self,
-        _: Self::Held<'id>,
-        _: Self::Frontend<'id>,
-        _: Retired<'id, (Self::Driver, Self::State)>,
-        _: Detached<'id>,
-        _: Self::Uninstall,
-    ) -> ModelHandle {
-        ModelHandle(self.shared)
-    }
-
-    fn abandon(&mut self, call: oer_radio_port::Quarantine) -> oer_radio_port::Abandon {
-        self.shared.borrow_mut().abandoned = true;
-
-        oer_radio_port::Abandon::Stopped(call.stopped())
     }
 }
 
-impl Ieee802154Backend for OwnedModel {
+impl<Id: SlotIdentity> Ieee802154Backend<Id> for OwnedModel<Id> {
     type Caps = ModelCaps;
 }
 

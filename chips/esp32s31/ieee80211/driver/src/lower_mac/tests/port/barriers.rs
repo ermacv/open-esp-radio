@@ -19,13 +19,18 @@ struct Barrier {
     configure: bool,
     observed: Rc<RefCell<Observed>>,
 }
-impl PortBody<Backend> for Barrier {
+impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for Barrier {
     type Output = ();
     async fn run<'p, 'id>(
         self,
-        owner: radio::Owner<'p, 'id, Backend, radio::Disabled>,
-        mut resources: Res<'id>,
-    ) -> radio::Ended<'id, Backend, ()> {
+        owner: radio::Owner<'p, 'id, Id, Backend<Id>, radio::Disabled>,
+        mut resources: Res<'id, Id>,
+    ) -> radio::Ended<Id, Backend<Id>, ()>
+    where
+        Backend<Id>: 'id,
+        Id: 'id,
+        'id: 'p,
+    {
         let mut owner = match owner.enable().await {
             Ok(owner) => owner,
             Err(_) => panic!("enable"),
@@ -49,7 +54,7 @@ impl PortBody<Backend> for Barrier {
             submit_mpdu(&mut phase, last, last_ticket, None, None);
             if self.configure {
                 phase.station().configure(
-                    resources.station_commands.configure.with_context(314),
+                    resources.station_commands.configure.with_context(Tag(314)),
                     StationReceive::Off,
                 );
             } else {
@@ -130,14 +135,13 @@ fn configure_returns_published_head_then_queued_tails_then_confirmation() {
 fn check(configure: bool) {
     let (backend, observed, _) = installed(Vec::new());
     assert!(matches!(
-        block_on(radio::run_port(
+        block_on(run_body(
             backend,
             Barrier {
                 configure,
                 observed
-            },
-            oer_radio_port::LocalExecution
+            }
         )),
-        radio::PortEnd::Uninstalled { .. }
+        Report::Uninstalled { .. }
     ));
 }

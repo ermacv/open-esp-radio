@@ -22,7 +22,7 @@ use oer_ieee80211_rsn::{Pmk, PtkContext, frames::RsnTxFrame};
 use oer_ieee80211_sta::machine::{GroupCapacity, StaConfig, StaSecurity, StationResources};
 use oer_ieee80211_upper_mac::rate_control::RateControl;
 use oer_ieee80211_wire::address::IndividualAddress;
-use oer_radio_port::{Ended, PortBody, run_port};
+use oer_radio_port::{Ended, LocalId, PortBody, SlotIdentity, run_port, with_local_slot};
 use oer_time::Duration;
 use oer_time_virtual::VirtualClock;
 use std::boxed::Box;
@@ -61,44 +61,83 @@ const RSN: [u8; 22] = [
 struct ServiceContexts;
 
 impl oer_ieee80211_model::ModelContext for ServiceContexts {
-    type StationConfigureContext<'id> = oer_ieee80211_sta::machine::StaConfigurationContext<
-        'id,
-        oer_ieee80211_model::ModelPool<'id, 4>,
-    >;
-    type AccessPointConfigureContext<'id> = ();
     type Body = core::convert::Infallible;
-    type Context<'id> =
-        TxContext<'id, ModelCaps24, ModelLarge, oer_ieee80211_model::ModelPool<'id, 4>>;
+    type OwnedContext<Id: SlotIdentity> =
+        TxOwnedContext<ModelCaps24, ModelLarge, oer_ieee80211_model::ModelPool<Id, 4>>;
+    type Context<'p, Id: SlotIdentity + 'p> =
+        TxContext<'p, ModelCaps24, ModelLarge, oer_ieee80211_model::ModelPool<Id, 4>>;
+    type OwnedStationConfigureContext<Id: SlotIdentity> = oer_radio_port::ContextChoice<
+        (),
+        oer_ieee80211_sta::epoch::EpochContext<oer_ieee80211_model::ModelPool<Id, 4>, ()>,
+    >;
+    type StationConfigureContext<'p, Id: SlotIdentity + 'p> =
+        oer_ieee80211_sta::machine::StaConfigurationContext<
+            'p,
+            oer_ieee80211_model::ModelPool<Id, 4>,
+        >;
+    type OwnedAccessPointConfigureContext<Id: SlotIdentity> = ();
+    type AccessPointConfigureContext<'p, Id: SlotIdentity + 'p> = ();
 }
 
-impl<'id> StationPort<'id> for ModelBackend<ModelCaps24, ServiceContexts> {
-    type Types = ModelTypes<ServiceContexts>;
+impl<Id: SlotIdentity> StationPort for ModelBackend<Id, ModelCaps24, ServiceContexts> {
+    type SlotId = Id;
+    type Types<'p>
+        = ModelTypes<Self>
+    where
+        Self: 'p,
+        Id: 'p;
     type TerminalStorage<T> = TestTerminalStorage<T>;
     type Small = ModelSmall;
     type Large = ModelLarge;
 
-    fn lend<'a, 'r>(
-        phase: &'r mut ModelPhase<'a, 'id, ModelCaps24, ServiceContexts>,
-    ) -> &'r mut impl LowerMacPhase<'a, 'id, Caps = ModelCaps24, Types = ModelTypes<ServiceContexts>>
+    fn lend_phase<'a, 'p, 'r>(
+        phase: &'r mut ModelPhase<'a, 'p, ModelCaps24, Self>,
+    ) -> &'r mut impl LowerMacPhase<'a, 'p, Caps = ModelCaps24, Types = ModelTypes<Self>>
     where
-        'id: 'a,
+        Self: 'p,
+        Id: 'p,
+        'p: 'a,
     {
         phase
     }
-
-    fn tune(setup: &mut ModelSetup<'_, ModelCaps24>, channel: SupportedChannel<ModelCaps24>) {
+    fn terminal<'p>(
+        terminal: LowerMacTerminal<'p, ModelTypes<Self>>,
+    ) -> LowerMacTerminal<'p, ModelTypes<Self>>
+    where
+        Self: 'p,
+        Id: 'p,
+    {
+        terminal
+    }
+    fn port_terminal<'p>(
+        terminal: LowerMacTerminal<'p, ModelTypes<Self>>,
+    ) -> LowerMacTerminal<'p, ModelTypes<Self>>
+    where
+        Self: 'p,
+        Id: 'p,
+    {
+        terminal
+    }
+    fn tune<'a, 'p>(setup: &mut ModelSetup<'a, ModelCaps24>, channel: SupportedChannel<ModelCaps24>)
+    where
+        Self: 'p,
+        Id: 'p,
+        'p: 'a,
+    {
         setup.set_channel(channel);
     }
-
-    fn event(
-        event: LowerMacEvent<'id, ModelTypes<ServiceContexts>>,
-    ) -> LowerMacEvent<'id, ModelTypes<ServiceContexts>> {
+    fn event<'p>(event: LowerMacEvent<'p, ModelTypes<Self>>) -> LowerMacEvent<'p, ModelTypes<Self>>
+    where
+        Self: 'p,
+        Id: 'p,
+    {
         event
     }
-
-    fn tx_buffer(
-        buffer: ModelAnyBuffer<'id, core::convert::Infallible>,
-    ) -> StationTxBuffer<'id, Self> {
+    fn tx_buffer<'p>(buffer: ModelAnyBuffer<'p, Self>) -> StationTxBuffer<'p, Self>
+    where
+        Self: 'p,
+        Id: 'p,
+    {
         match buffer {
             ModelAnyBuffer::Small(buffer) => StationTxBuffer::Small(ReturnedMpdu::Fresh(buffer)),
             ModelAnyBuffer::SmallSent(buffer) => StationTxBuffer::Small(ReturnedMpdu::Sent(buffer)),
@@ -348,6 +387,7 @@ struct World<'b> {
     refuse_rate: Cell<bool>,
     fail_submission: Cell<bool>,
     counters: Cell<Option<ServiceCounters>>,
+    disables_at_body_end: Cell<Option<u32>>,
     expect_queued_command_on_poison: Cell<bool>,
     expected_stream_end: Cell<Option<ExpectedStreamEnd>>,
     drop_stopped_service: Cell<bool>,
@@ -427,7 +467,7 @@ impl RateSelection<ModelRxMeta, ModelAck> for RecordingRates<'_> {
     }
 }
 
-type CommandPath<'id> = <ModelTypes<ServiceContexts> as PhaseTypes<'id>>::StationCommandPath;
+type CommandPath<Id> = oer_radio_port::Child<oer_ieee80211_model::ModelPool<Id, 9>, 1>;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct ObservedRequest {
@@ -435,7 +475,7 @@ struct ObservedRequest {
     command: StaCommand,
 }
 impl ObservedRequest {
-    fn of(request: &StaRequest<'_, CommandPath<'_>>) -> Self {
+    fn of<Id: SlotIdentity>(request: &StaRequest<'_, CommandPath<Id>>) -> Self {
         Self {
             correlation: request.correlation(),
             command: request.command(),
@@ -475,20 +515,20 @@ enum ObservedOutput {
     AccessPoint(AccessPointCommand<ModelCaps24>),
 }
 
-struct CommandCredits<'id> {
-    connect: Option<StaCommandCredit<'id, CommandPath<'id>, ConnectCommand>>,
-    scan: Option<StaCommandCredit<'id, CommandPath<'id>, ScanCommand>>,
-    disconnect: Option<StaCommandCredit<'id, CommandPath<'id>, DisconnectCommand>>,
+struct CommandCredits<'id, Id: SlotIdentity + 'id> {
+    connect: Option<StaCommandCredit<'id, CommandPath<Id>, ConnectCommand>>,
+    scan: Option<StaCommandCredit<'id, CommandPath<Id>, ScanCommand>>,
+    disconnect: Option<StaCommandCredit<'id, CommandPath<Id>, DisconnectCommand>>,
 }
-impl<'id> CommandCredits<'id> {
-    fn new(credits: StaCommandCredits<'id, CommandPath<'id>>) -> Self {
+impl<'id, Id: SlotIdentity + 'id> CommandCredits<'id, Id> {
+    fn new(credits: StaCommandCredits<'id, CommandPath<Id>>) -> Self {
         Self {
             connect: Some(credits.connect),
             scan: Some(credits.scan),
             disconnect: Some(credits.disconnect),
         }
     }
-    fn take(&mut self, kind: StaCommand) -> StaCommandPermission<'id, CommandPath<'id>> {
+    fn take(&mut self, kind: StaCommand) -> StaCommandPermission<'id, CommandPath<Id>> {
         match kind {
             StaCommand::Connect => self
                 .connect
@@ -507,7 +547,7 @@ impl<'id> CommandCredits<'id> {
                 .into(),
         }
     }
-    fn restore(&mut self, permission: StaCommandPermission<'id, CommandPath<'id>>) {
+    fn restore(&mut self, permission: StaCommandPermission<'id, CommandPath<Id>>) {
         match permission {
             StaCommandPermission::Connect(credit) => {
                 assert!(self.connect.replace(credit).is_none())
@@ -524,19 +564,19 @@ impl<'id> CommandCredits<'id> {
 
 /// Command transport and credits remain inside the installation which minted them.
 /// The outer world's observations own no command permission.
-struct Application<'a, 'b, 'id> {
+struct Application<'a, 'b, 'id, Id: SlotIdentity + 'id> {
     world: &'a World<'b>,
-    commands: Cell<Option<MsduSender<'a, ServiceCommand<'id, ModelCaps24, CommandPath<'id>>, 4>>>,
-    credits: RefCell<CommandCredits<'id>>,
+    commands: Cell<Option<MsduSender<'a, ServiceCommand<'id, ModelCaps24, CommandPath<Id>>, 4>>>,
+    credits: RefCell<CommandCredits<'id, Id>>,
 }
-impl<'b> core::ops::Deref for Application<'_, 'b, '_> {
+impl<'b, Id: SlotIdentity> core::ops::Deref for Application<'_, 'b, '_, Id> {
     type Target = World<'b>;
     fn deref(&self) -> &Self::Target {
         self.world
     }
 }
 
-impl<'id> Application<'_, '_, 'id> {
+impl<'id, Id: SlotIdentity + 'id> Application<'_, '_, 'id, Id> {
     async fn station_command(&self, correlation: u64, command: StaCommand) {
         let permission = self.credits.borrow_mut().take(command);
         self.command(ServiceCommand::Station(StaRequest::new(
@@ -545,7 +585,7 @@ impl<'id> Application<'_, '_, 'id> {
         )))
         .await;
     }
-    fn record_output(&self, output: ServiceOutput<'id, ModelCaps24, CommandPath<'id>>) {
+    fn record_output(&self, output: ServiceOutput<'id, ModelCaps24, CommandPath<Id>>) {
         let observed = match output {
             ServiceOutput::RxFrameDropped(error) => ObservedOutput::RxFrameDropped(error),
             ServiceOutput::MsduRefused { packet, reason } => {
@@ -669,7 +709,7 @@ impl<'id> Application<'_, '_, 'id> {
         ptk
     }
 
-    async fn command(&self, command: ServiceCommand<'id, ModelCaps24, CommandPath<'id>>) {
+    async fn command(&self, command: ServiceCommand<'id, ModelCaps24, CommandPath<Id>>) {
         let mut sender = self
             .commands
             .take()
@@ -745,17 +785,29 @@ struct Body<'w, 'b, S, const GROUPS: usize> {
 /// A test's script: the access point and the application, on the world.
 type Script<'w> = Pin<Box<dyn Future<Output = ()> + 'w>>;
 
-impl<'w, 'b, S, const GROUPS: usize> PortBody<ModelBackend<ModelCaps24, ServiceContexts>>
+impl<'scope, 'w, 'b, S, const GROUPS: usize>
+    PortBody<LocalId<'scope>, ModelBackend<LocalId<'scope>, ModelCaps24, ServiceContexts>>
     for Body<'w, 'b, S, GROUPS>
 where
-    S: for<'a, 'id> FnOnce(&'a Application<'a, 'b, 'id>) -> Script<'a>,
+    S: for<'a, 'id> FnOnce(&'a Application<'a, 'b, 'id, LocalId<'scope>>) -> Script<'a>,
 {
     type Output = ();
     async fn run<'p, 'id>(
         self,
-        owner: Owner<'p, 'id, ModelBackend<ModelCaps24, ServiceContexts>, Disabled>,
-        resources: ModelResources<'id>,
-    ) -> Ended<'id, ModelBackend<ModelCaps24, ServiceContexts>, ()> {
+        owner: Owner<
+            'p,
+            'id,
+            LocalId<'scope>,
+            ModelBackend<LocalId<'scope>, ModelCaps24, ServiceContexts>,
+            Disabled,
+        >,
+        resources: ModelResources<'id, ModelBackend<LocalId<'scope>, ModelCaps24, ServiceContexts>>,
+    ) -> Ended<LocalId<'scope>, ModelBackend<LocalId<'scope>, ModelCaps24, ServiceContexts>, ()>
+    where
+        ModelBackend<LocalId<'scope>, ModelCaps24, ServiceContexts>: 'id,
+        LocalId<'scope>: 'id,
+        'id: 'p,
+    {
         {
             let ModelResources {
                 connection_epoch,
@@ -785,9 +837,9 @@ where
             )
             .unwrap();
             let (arbiter, place, absence) =
-                PortArbiter::<ModelBackend<ModelCaps24, ServiceContexts>>::new(
+                PortArbiter::<ModelBackend<LocalId<'scope>, ModelCaps24, ServiceContexts>>::new(
                     ArbiterPolicy::DEFAULT.checked(
-                        <ModelBackend<ModelCaps24, ServiceContexts> as LowerMacBackend>::PUBLICATION_BOUND
+                        <ModelBackend<LocalId<'scope>, ModelCaps24, ServiceContexts> as LowerMacBackend<LocalId<'scope>>>::PUBLICATION_BOUND
                     ).unwrap(),
                     channel,
                     arbiter_authority,
@@ -839,8 +891,10 @@ where
                 },
                 terminal_access,
             );
-            let mut command_queue =
-                MsduQueue::<ServiceCommand<'id, ModelCaps24, CommandPath<'id>>, 4>::new();
+            let mut command_queue = MsduQueue::<
+                ServiceCommand<'id, ModelCaps24, CommandPath<LocalId<'scope>>>,
+                4,
+            >::new();
             let (application, commands) = command_queue.split();
             let application = Application {
                 world: self.world,
@@ -980,6 +1034,9 @@ where
                 ));
             }
             world.counters.set(Some(service.counters));
+            world
+                .disables_at_body_end
+                .set(Some(world.air.disable_calls()));
             assert_eq!(service.station.lost_tokens(), 0);
             assert_eq!(service.data.counters().lost_tokens, 0);
             if matches!(&end, ServiceEnd::Stopped(_) | ServiceEnd::Failed { .. }) {
@@ -1053,7 +1110,8 @@ where
 /// the access point by `script`.
 fn run<S>(security: StaSecurity, script: S)
 where
-    S: for<'w, 'b, 'id> FnOnce(&'w Application<'w, 'b, 'id>) -> Script<'w> + Send,
+    S: for<'w, 'b, 'id, 'scope> FnOnce(&'w Application<'w, 'b, 'id, LocalId<'scope>>) -> Script<'w>
+        + Send,
 {
     run_with(config(security), script);
 }
@@ -1061,14 +1119,16 @@ where
 /// Run the service on a 2.4 GHz model with `config`.
 fn run_with<S>(config: TestConfig, script: S) -> ServiceCounters
 where
-    S: for<'w, 'b, 'id> FnOnce(&'w Application<'w, 'b, 'id>) -> Script<'w> + Send,
+    S: for<'w, 'b, 'id, 'scope> FnOnce(&'w Application<'w, 'b, 'id, LocalId<'scope>>) -> Script<'w>
+        + Send,
 {
     run_with_groups::<S, 2>(config, script)
 }
 
 fn run_with_groups<S, const GROUPS: usize>(config: TestConfig, script: S) -> ServiceCounters
 where
-    S: for<'w, 'b, 'id> FnOnce(&'w Application<'w, 'b, 'id>) -> Script<'w> + Send,
+    S: for<'w, 'b, 'id, 'scope> FnOnce(&'w Application<'w, 'b, 'id, LocalId<'scope>>) -> Script<'w>
+        + Send,
 {
     run_case::<S, GROUPS>(config, script, false)
 }
@@ -1081,7 +1141,8 @@ fn run_case<S, const GROUPS: usize>(
     refuse_initial_enable: bool,
 ) -> ServiceCounters
 where
-    S: for<'w, 'b, 'id> FnOnce(&'w Application<'w, 'b, 'id>) -> Script<'w> + Send,
+    S: for<'w, 'b, 'id, 'scope> FnOnce(&'w Application<'w, 'b, 'id, LocalId<'scope>>) -> Script<'w>
+        + Send,
 {
     std::thread::scope(|scope| {
         std::thread::Builder::new()
@@ -1101,61 +1162,84 @@ fn run_case_on_this_thread<S, const GROUPS: usize>(
     refuse_initial_enable: bool,
 ) -> ServiceCounters
 where
-    S: for<'w, 'b, 'id> FnOnce(&'w Application<'w, 'b, 'id>) -> Script<'w> + Send,
+    S: for<'w, 'b, 'id, 'scope> FnOnce(&'w Application<'w, 'b, 'id, LocalId<'scope>>) -> Script<'w>
+        + Send,
 {
-    let clock = std::rc::Rc::new(VirtualClock::<8>::new());
-    let (backend, air) = ModelBackend::<ModelCaps24, ServiceContexts>::new(
-        channel6(),
-        [
-            IndividualAddress::new(LOCAL).unwrap(),
-            IndividualAddress::new(ACCESS_POINT_ADDRESS).unwrap(),
-        ],
-        clock.clone(),
-    );
-    let mut transmit = MsduQueue::<TxMsdu, 2>::new();
-    let mut receive = MsduQueue::<EthernetFrame, 2>::new();
-    let (stack, transmit) = transmit.split();
-    let (receive, delivered) = receive.split();
-    let world = World {
-        air,
-        clock,
-        outputs: RefCell::new(Vec::new()),
-        completions: RefCell::new(Vec::new()),
-        refuse_rate: Cell::new(false),
-        fail_submission: Cell::new(false),
-        counters: Cell::new(None),
-        expect_queued_command_on_poison: Cell::new(false),
-        expected_stream_end: Cell::new(None),
-        drop_stopped_service: Cell::new(false),
-        restart_stopped_service: Cell::new(None),
-        stack: RefCell::new(stack),
-        delivered: RefCell::new(delivered),
-    };
-    let uninstalled = block_on(run_port(
-        backend,
-        Body::<S, GROUPS> {
-            world: &world,
-            transmit,
-            receive,
-            config,
-            script,
-            refuse_initial_enable,
-        },
-        oer_radio_port::LocalExecution,
-    ));
-    match uninstalled {
-        oer_radio_port::PortEnd::Uninstalled { .. } => {}
-        oer_radio_port::PortEnd::FailStopped { outcome, .. } => {
-            assert!(matches!(outcome, oer_radio_port::Abandon::Stopped(_)));
-            assert_eq!(
-                world.air.disable_calls(),
-                0,
-                "quarantined stream never disables again"
-            );
+    block_on(with_local_slot(async |claim| {
+        let mut slot = claim.place();
+        let clock = std::rc::Rc::new(VirtualClock::<8>::new());
+        let (backend, air) = ModelBackend::<_, ModelCaps24, ServiceContexts>::new(
+            channel6(),
+            [
+                IndividualAddress::new(LOCAL).unwrap(),
+                IndividualAddress::new(ACCESS_POINT_ADDRESS).unwrap(),
+            ],
+            clock.clone(),
+        );
+        let mut transmit = MsduQueue::<TxMsdu, 2>::new();
+        let mut receive = MsduQueue::<EthernetFrame, 2>::new();
+        let (stack, transmit) = transmit.split();
+        let (receive, delivered) = receive.split();
+        let world = World {
+            air,
+            clock,
+            outputs: RefCell::new(Vec::new()),
+            completions: RefCell::new(Vec::new()),
+            refuse_rate: Cell::new(false),
+            fail_submission: Cell::new(false),
+            counters: Cell::new(None),
+            disables_at_body_end: Cell::new(None),
+            expect_queued_command_on_poison: Cell::new(false),
+            expected_stream_end: Cell::new(None),
+            drop_stopped_service: Cell::new(false),
+            restart_stopped_service: Cell::new(None),
+            stack: RefCell::new(stack),
+            delivered: RefCell::new(delivered),
+        };
+        let uninstalled = oer_radio_port::LocalExecution
+            .scope(
+                (&mut slot)
+                    .register(backend)
+                    .ok()
+                    .expect("fresh local model slot"),
+                async |frontend| {
+                    run_port(
+                        frontend,
+                        Body::<S, GROUPS> {
+                            world: &world,
+                            transmit,
+                            receive,
+                            config,
+                            script,
+                            refuse_initial_enable,
+                        },
+                    )
+                    .await
+                },
+            )
+            .await;
+        match uninstalled {
+            oer_radio_port::PortEnd::Uninstalled { .. } => {}
+            oer_radio_port::PortEnd::FailStopped { outcome, .. } => {
+                assert!(matches!(
+                    outcome.outcome(),
+                    oer_radio_port::Abandon::Stopped(_)
+                ));
+                assert_eq!(
+                    world.air.disable_calls(),
+                    world
+                        .disables_at_body_end
+                        .get()
+                        .expect("body recorded disable progress"),
+                    "P2 quarantine never starts another disable"
+                );
+            }
+            oer_radio_port::PortEnd::Abandoned { .. } => panic!("service must return its output"),
         }
-        oer_radio_port::PortEnd::Abandoned { .. } => panic!("service must return its output"),
-    }
-    world.counters.get().expect("service returned its counters")
+        let counters = world.counters.get().expect("service returned its counters");
+        slot.end_model_world();
+        counters
+    }))
 }
 
 fn dsss1() -> PhyRate {

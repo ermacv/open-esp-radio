@@ -1,12 +1,12 @@
 use super::*;
 use super::{
-    keys::{GroupCommand, Installation, Installed, KeyIdentity, Removal},
+    keys::{GroupCommand, Installation, Installed, RawKeyIdentity, Removal},
     lifecycle::CoreOwner,
 };
 use oer_ieee80211_wire::qos::WmmAccessCategory;
 
-pub(super) struct Pending<'id, D: Device<B>, const B: usize> {
-    pub operation: Single<'id, D, B>,
+pub(super) struct Pending<'id, Id: SlotIdentity, D: Device<B>, const B: usize> {
+    pub operation: Single<'id, Id, D, B>,
     pub plan: RetryPlan<PhyRate>,
     pub category: WmmAccessCategory,
     pub protection: Protection,
@@ -18,11 +18,11 @@ pub(super) struct Pending<'id, D: Device<B>, const B: usize> {
     pub publications: u16,
     pub air_rate: Option<PhyRate>,
 }
-impl<D: Device<B>, const B: usize> Pending<'_, D, B> {
+impl<Id: SlotIdentity, D: Device<B>, const B: usize> Pending<'_, Id, D, B> {
     fn role(&self) -> VifRole {
         self.operation.payload().role
     }
-    fn key(&self) -> Option<KeyIdentity> {
+    fn key(&self) -> Option<RawKeyIdentity> {
         self.operation.payload().key
     }
     fn air(&self) -> Option<Air> {
@@ -32,41 +32,41 @@ impl<D: Device<B>, const B: usize> Pending<'_, D, B> {
         })
     }
 }
-pub(super) enum Command<'id, D: Device<B>, const B: usize> {
-    Submit(Pending<'id, D, B>),
+pub(super) enum Command<'id, Id: SlotIdentity, D: Device<B>, const B: usize> {
+    Submit(Pending<'id, Id, D, B>),
     Configure {
-        permission: Configured<'id, Types<D, B>>,
+        permission: owned::OwnedConfigured<'id, Id, D, B>,
         config: CoreVif,
     },
-    CloseGate(GateOpen<'id, Part<'id, 1>>),
+    CloseGate(GateOpen<'id, Part<Id, 1>>),
     OpenGate,
     Install {
-        identity: KeyIdentity,
-        installation: Installation<'id>,
+        identity: RawKeyIdentity,
+        installation: Installation<'id, Id>,
         material: Ccmp128Key,
     },
     Remove {
-        identity: KeyIdentity,
-        removal: Removal<'id>,
+        identity: RawKeyIdentity,
+        removal: Removal<'id, Id>,
     },
     Group {
         at: Instant,
-        command: GroupCommand<'id>,
+        command: GroupCommand<'id, Id>,
     },
 }
-struct Completion<'id, const B: usize> {
-    queue: FreeQueue<'id, CorePath<'id>>,
-    ticket: TxTicket<'id, CorePath<'id>>,
+struct Completion<'id, Id: SlotIdentity, const B: usize> {
+    queue: FreeQueue<'id, CorePath<Id>>,
+    ticket: TxTicket<'id, CorePath<Id>>,
     slot: Pin<&'static mut TxSlot<B>>,
     end: PublicationEnd,
     rate: PhyRate,
 }
-pub(super) struct Sink<'id, const B: usize> {
-    completed: heapless::Vec<Completion<'id, B>, 4>,
-    removed: heapless::Vec<KeyRemoved<'id, CorePath<'id>>, 20>,
+pub(super) struct Sink<'id, Id: SlotIdentity, const B: usize> {
+    completed: heapless::Vec<Completion<'id, Id, B>, 4>,
+    removed: heapless::Vec<KeyRemoved<'id, CorePath<Id>>, 20>,
     tbtt: Option<TbttEvent>,
 }
-impl<const B: usize> Default for Sink<'_, B> {
+impl<Id: SlotIdentity, const B: usize> Default for Sink<'_, Id, B> {
     fn default() -> Self {
         Self {
             completed: heapless::Vec::new(),
@@ -75,11 +75,13 @@ impl<const B: usize> Default for Sink<'_, B> {
         }
     }
 }
-impl<'id, const B: usize> LowerMacSink<'id, 'static, B, CorePath<'id>> for Sink<'id, B> {
+impl<'id, Id: SlotIdentity, const B: usize> LowerMacSink<'id, 'static, B, CorePath<Id>>
+    for Sink<'id, Id, B>
+{
     fn tx_completed(
         &mut self,
-        queue: FreeQueue<'id, CorePath<'id>>,
-        ticket: TxTicket<'id, CorePath<'id>>,
+        queue: FreeQueue<'id, CorePath<Id>>,
+        ticket: TxTicket<'id, CorePath<Id>>,
         slot: Pin<&'static mut TxSlot<B>>,
         end: PublicationEnd,
         rate: PhyRate,
@@ -100,13 +102,13 @@ impl<'id, const B: usize> LowerMacSink<'id, 'static, B, CorePath<'id>> for Sink<
     }
     fn ampdu_completed(
         &mut self,
-        _: FreeQueue<'id, CorePath<'id>>,
-        _: TxTicket<'id, CorePath<'id>>,
+        _: FreeQueue<'id, CorePath<Id>>,
+        _: TxTicket<'id, CorePath<Id>>,
         _: PublicationEnd,
     ) {
         unreachable!("ordinary port never publishes an aggregate")
     }
-    fn key_removed(&mut self, removed: KeyRemoved<'id, CorePath<'id>>) {
+    fn key_removed(&mut self, removed: KeyRemoved<'id, CorePath<Id>>) {
         if self.removed.push(removed).is_err() {
             panic!("one removal per installed hardware key")
         }
@@ -117,53 +119,89 @@ impl<'id, const B: usize> LowerMacSink<'id, 'static, B, CorePath<'id>> for Sink<
     }
 }
 
-pub(super) struct Driver<'id, D: Device<B>, const B: usize> {
-    core: CoreOwner<'id, D, B>,
-    tickets: [Option<TxTicket<'id, CorePath<'id>>>; TX_TICKETS],
-    free: [Option<FreeQueue<'id, CorePath<'id>>>; 4],
-    queues: [heapless::Deque<Pending<'id, D, B>, TX_TICKETS>; 4],
-    running: [Option<Pending<'id, D, B>>; 4],
-    pending_command: Option<Command<'id, D, B>>,
-    configuring: Option<Configured<'id, Types<D, B>>>,
-    closing: Option<GateOpen<'id, Part<'id, 1>>>,
+pub(super) struct Driver<'id, Id: SlotIdentity, D: Device<B>, const B: usize> {
+    core: CoreOwner<'id, Id, D, B>,
+    tickets: [Option<TxTicket<'id, CorePath<Id>>>; TX_TICKETS],
+    free: [Option<FreeQueue<'id, CorePath<Id>>>; 4],
+    queues: [heapless::Deque<Pending<'id, Id, D, B>, TX_TICKETS>; 4],
+    running: [Option<Pending<'id, Id, D, B>>; 4],
+    pending_command: Option<Command<'id, Id, D, B>>,
+    configuring: Option<owned::OwnedConfigured<'id, Id, D, B>>,
+    closing: Option<GateOpen<'id, Part<Id, 1>>>,
     closed: bool,
-    keys: [Option<(KeyIdentity, Installed<'id>)>; 20],
+    keys: [Option<(RawKeyIdentity, Installed<'id, Id>)>; 20],
     applied_ba: [Option<RxBlockAckValues>; 8],
     transition: Option<Instant>,
     clock_deadline: Instant,
-    pub(super) poison: radio::PoisonState<Fault>,
 }
-impl<'id, D: Device<B>, const B: usize> Driver<'id, D, B> {
+impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Driver<'id, Id, D, B> {
     pub(super) fn take_transmitter(
         &mut self,
     ) -> OrdinaryTxIdleOwner<'static, D::Profile, D::Power, D::Entropy, D::Timer, B> {
         self.core.take_transmitter()
     }
-    #[inline(always)]
-    pub(super) fn new(
-        core: DisabledCore<Core<'id, D, B>>,
-        tickets: [TxTicket<'id, CorePath<'id>>; TX_TICKETS],
-        queues: [FreeQueue<'id, CorePath<'id>>; 4],
-        now: Instant,
-    ) -> Self {
+    pub(super) const fn vacant() -> Self {
         Self {
-            core: CoreOwner::new(core),
-            tickets: tickets.map(Some),
-            free: queues.map(Some),
-            queues: core::array::from_fn(|_| heapless::Deque::new()),
-            running: core::array::from_fn(|_| None),
+            core: CoreOwner::vacant(),
+            tickets: [const { None }; TX_TICKETS],
+            free: [const { None }; 4],
+            queues: [const { heapless::Deque::new() }; 4],
+            running: [const { None }; 4],
             pending_command: None,
             configuring: None,
             closing: None,
             closed: false,
-            keys: core::array::from_fn(|_| None),
+            keys: [const { None }; 20],
             applied_ba: [None; 8],
             transition: None,
-            clock_deadline: now.saturating_add(Duration::from_secs(60)),
-            poison: radio::PoisonState::new(),
+            clock_deadline: Instant::from_micros(0),
         }
     }
-    pub(super) fn deadline(&mut self, held: &Held<'id, D, B>) -> Instant {
+    #[inline(never)]
+    pub(super) fn prepare(
+        &mut self,
+        core: DisabledCore<Core<'id, Id, D, B>>,
+        tickets: [TxTicket<'id, CorePath<Id>>; TX_TICKETS],
+        queues: [FreeQueue<'id, CorePath<Id>>; 4],
+        now: Instant,
+    ) {
+        assert!(
+            self.queues.iter().all(|q| q.is_empty()) && self.running.iter().all(Option::is_none),
+            "retired driver has no admitted work"
+        );
+        self.core.prepare(core);
+        self.tickets = tickets.map(Some);
+        self.free = queues.map(Some);
+        self.clock_deadline = now.saturating_add(Duration::from_secs(60));
+    }
+    pub(super) fn retire(
+        &mut self,
+    ) -> OrdinaryTxIdleOwner<'static, D::Profile, D::Power, D::Entropy, D::Timer, B> {
+        let transmitter = self.take_transmitter();
+        for queue in &mut self.queues {
+            queue.clear();
+        }
+        for owner in &mut self.running {
+            drop(owner.take());
+        }
+        for ticket in &mut self.tickets {
+            drop(ticket.take());
+        }
+        for queue in &mut self.free {
+            drop(queue.take());
+        }
+        for key in &mut self.keys {
+            drop(key.take());
+        }
+        drop(self.pending_command.take());
+        drop(self.configuring.take());
+        drop(self.closing.take());
+        self.closed = false;
+        self.applied_ba = [None; 8];
+        self.transition = None;
+        transmitter
+    }
+    pub(super) fn deadline(&mut self, held: &Held<'id, Id, D, B>) -> Instant {
         let mut deadline = self
             .core
             .deadline()
@@ -192,8 +230,8 @@ impl<'id, D: Device<B>, const B: usize> Driver<'id, D, B> {
     }
     fn finish(
         &mut self,
-        held: &Held<'id, D, B>,
-        pending: Pending<'id, D, B>,
+        held: &Held<'id, Id, D, B>,
+        pending: Pending<'id, Id, D, B>,
         outcome: SingleOutcome<Ack, Infallible>,
     ) {
         if pending.publications != 0 {
@@ -207,13 +245,13 @@ impl<'id, D: Device<B>, const B: usize> Driver<'id, D, B> {
                     .saturating_add(msdus.count_ones()),
             );
         }
-        held.terminal(LowerMacTerminal::TxCompleted(TxCompleted::Single(
-            pending.operation.complete(outcome),
-        )));
+        held.terminal(owned::OwnedTerminal::TxCompleted(
+            owned::OwnedTxCompleted::Single(pending.operation.complete(outcome)),
+        ));
     }
     // The retained barrier is also the withdrawal marker; no owner or result
     // is moved out of its AC while an earlier owner can still complete.
-    fn withdrawal(&self, pending: &Pending<'id, D, B>) -> Option<WithdrawCause> {
+    fn withdrawal(&self, pending: &Pending<'id, Id, D, B>) -> Option<WithdrawCause> {
         if self
             .configuring
             .as_ref()
@@ -231,7 +269,7 @@ impl<'id, D: Device<B>, const B: usize> Driver<'id, D, B> {
         }
     }
     #[inline(never)]
-    fn withdraw(&mut self, held: &Held<'id, D, B>) -> bool {
+    fn withdraw(&mut self, held: &Held<'id, Id, D, B>) -> bool {
         let global = if !held.want_enabled.get() {
             Some(WithdrawCause::Disabled)
         } else if self.closing.is_some() {
@@ -263,7 +301,7 @@ impl<'id, D: Device<B>, const B: usize> Driver<'id, D, B> {
             .any(|pending| self.withdrawal(pending).is_some())
     }
     #[inline(always)]
-    fn blocked(&self, pending: &Pending<'id, D, B>) -> bool {
+    fn blocked(&self, pending: &Pending<'id, Id, D, B>) -> bool {
         self.withdrawal(pending).is_some()
             || match &self.pending_command {
                 Some(Command::Remove { .. })
@@ -275,7 +313,7 @@ impl<'id, D: Device<B>, const B: usize> Driver<'id, D, B> {
                 None => false,
             }
     }
-    fn expired(held: &Held<'id, D, B>, pending: &Pending<'id, D, B>, now: Instant) -> bool {
+    fn expired(held: &Held<'id, Id, D, B>, pending: &Pending<'id, Id, D, B>, now: Instant) -> bool {
         pending
             .operation
             .payload()
@@ -290,8 +328,8 @@ impl<'id, D: Device<B>, const B: usize> Driver<'id, D, B> {
     }
     fn collect(
         &mut self,
-        held: &Held<'id, D, B>,
-        mut sink: Sink<'id, B>,
+        held: &Held<'id, Id, D, B>,
+        mut sink: Sink<'id, Id, B>,
         stopping: bool,
     ) -> Result<(), Fault> {
         for completion in sink.completed.drain(..) {
@@ -306,7 +344,7 @@ impl<'id, D: Device<B>, const B: usize> Driver<'id, D, B> {
             let TxSlotAccess::Free(memory) = slot.access() else {
                 return Err(Fault::Capacity);
             };
-            pending.operation.execute().mpdu.buffer.memory = Some(memory);
+            pending.operation.execute().mpdu.buffer.dma.memory = Some(memory);
             let sent = matches!(
                 completion.end,
                 PublicationEnd::Completed {
@@ -386,7 +424,7 @@ impl<'id, D: Device<B>, const B: usize> Driver<'id, D, B> {
             }
         }
         if let Some(tbtt) = sink.tbtt {
-            if held.events.push(LowerMacEvent::Tbtt(tbtt)).is_err() {
+            if held.events.push(owned::OwnedEvent::Tbtt(tbtt)).is_err() {
                 held.loss.set(true);
             }
             held.storage.body.wake();
@@ -399,7 +437,7 @@ impl<'id, D: Device<B>, const B: usize> Driver<'id, D, B> {
     }
     fn receive(
         &mut self,
-        held: &Held<'id, D, B>,
+        held: &Held<'id, Id, D, B>,
         device: &mut D,
         unit: D::Receive,
     ) -> Result<(), Fault> {
@@ -431,8 +469,9 @@ impl<'id, D: Device<B>, const B: usize> Driver<'id, D, B> {
                 .filter(|end| *end <= unit.bytes().len())
                 .ok_or(Fault::Capacity)?;
             held.rx_out.set(held.rx_out.get() + 1);
-            if let Err(event) = held.events.push(LowerMacEvent::Received {
+            if let Err(event) = held.events.push(owned::OwnedEvent::Received {
                 frame: ReceiveBuffer {
+                    brand: PhantomData,
                     unit: Some(unit),
                     range: start..end,
                     poison: &held.storage.poisoned,
@@ -452,7 +491,7 @@ impl<'id, D: Device<B>, const B: usize> Driver<'id, D, B> {
     pub(super) fn poll(
         &mut self,
         cx: &mut Context<'_>,
-        held: &Held<'id, D, B>,
+        held: &Held<'id, Id, D, B>,
         device: &mut D,
     ) -> Result<(), Fault> {
         while let Some(mut frame) = held.recycled.pop() {
@@ -549,7 +588,7 @@ impl<'id, D: Device<B>, const B: usize> Driver<'id, D, B> {
                     .configuring
                     .take()
                     .expect("configuration retains its permission");
-                held.terminal(LowerMacTerminal::Configured(permission));
+                held.terminal(owned::OwnedTerminal::Configured(permission));
             }
         }
         if held.dirty_edca.replace(false) {
@@ -636,7 +675,7 @@ impl<'id, D: Device<B>, const B: usize> Driver<'id, D, B> {
                         break;
                     }
                     let removed = self.remove(device, identity)?;
-                    held.terminal(LowerMacTerminal::KeyRemoved(
+                    held.terminal(owned::OwnedTerminal::KeyRemoved(
                         self.removed_terminal(removal, removed)?,
                     ));
                 }
@@ -686,7 +725,7 @@ impl<'id, D: Device<B>, const B: usize> Driver<'id, D, B> {
                 .borrow_mut()
                 .close(self.closing.take().expect("closing owns gate"));
             self.closed = true;
-            held.terminal(LowerMacTerminal::GateClosed(gate));
+            held.terminal(owned::OwnedTerminal::GateClosed(gate));
         }
         for index in 0..4 {
             if self.running[index].is_some() {
@@ -747,10 +786,10 @@ impl<'id, D: Device<B>, const B: usize> Driver<'id, D, B> {
     }
     fn publish(
         &mut self,
-        held: &Held<'id, D, B>,
+        held: &Held<'id, Id, D, B>,
         device: &mut D,
         index: usize,
-        mut pending: Pending<'id, D, B>,
+        mut pending: Pending<'id, Id, D, B>,
     ) -> Result<(), Fault> {
         let stage = pending
             .plan
@@ -795,6 +834,7 @@ impl<'id, D: Device<B>, const B: usize> Driver<'id, D, B> {
         let mpdu = pending.operation.execute().mpdu;
         let mut memory = mpdu
             .buffer
+            .dma
             .memory
             .take()
             .expect("queued MPDU owns free DMA");
@@ -848,8 +888,8 @@ impl<'id, D: Device<B>, const B: usize> Driver<'id, D, B> {
     fn install(
         &mut self,
         device: &mut D,
-        identity: KeyIdentity,
-        installation: Installation<'id>,
+        identity: RawKeyIdentity,
+        installation: Installation<'id, Id>,
         material: &Ccmp128Key,
     ) -> Result<(), Fault> {
         let installed = match installation {
@@ -891,8 +931,8 @@ impl<'id, D: Device<B>, const B: usize> Driver<'id, D, B> {
     fn remove(
         &mut self,
         device: &mut D,
-        identity: KeyIdentity,
-    ) -> Result<KeyRemoved<'id, CorePath<'id>>, Fault> {
+        identity: RawKeyIdentity,
+    ) -> Result<KeyRemoved<'id, CorePath<Id>>, Fault> {
         let place = self
             .keys
             .iter_mut()
@@ -916,22 +956,25 @@ impl<'id, D: Device<B>, const B: usize> Driver<'id, D, B> {
     }
     fn removed_terminal(
         &self,
-        removal: Removal<'id>,
-        removed: KeyRemoved<'id, CorePath<'id>>,
-    ) -> Result<Removed<'id, Types<D, B>>, Fault> {
+        removal: Removal<'id, Id>,
+        removed: KeyRemoved<'id, CorePath<Id>>,
+    ) -> Result<owned::OwnedRemoved<'id, Id>, Fault> {
         use core_mac::association::VacantKeySlot as Slot;
         let removed = match (removal, removed.into_slot()) {
             (Removal::StationPairwise(association), Slot::StationPairwise(slot)) => {
-                Removed::Station(RemovedKey::Pairwise { slot, association })
+                owned::OwnedRemoved::Station(owned::RemovedOwners::Pairwise { slot, association })
             }
             (Removal::AccessPointPairwise(association), Slot::AccessPointPairwise(slot)) => {
-                Removed::AccessPoint(RemovedKey::Pairwise { slot, association })
+                owned::OwnedRemoved::AccessPoint(owned::RemovedOwners::Pairwise {
+                    slot,
+                    association,
+                })
             }
             (Removal::StationGroup(permission), Slot::StationGroup(slot)) => {
-                Removed::Station(RemovedKey::Group { slot, permission })
+                owned::OwnedRemoved::Station(owned::RemovedOwners::Group { slot, permission })
             }
             (Removal::AccessPointGroup(permission), Slot::AccessPointGroup(slot)) => {
-                Removed::AccessPoint(RemovedKey::Group { slot, permission })
+                owned::OwnedRemoved::AccessPoint(owned::RemovedOwners::Group { slot, permission })
             }
             _ => return Err(Fault::Capacity),
         };
@@ -939,10 +982,10 @@ impl<'id, D: Device<B>, const B: usize> Driver<'id, D, B> {
     }
     fn group(
         &mut self,
-        held: &Held<'id, D, B>,
+        held: &Held<'id, Id, D, B>,
         device: &mut D,
-        command: GroupCommand<'id>,
-    ) -> Result<Terminal<'id, D, B>, Fault> {
+        command: GroupCommand<'id, Id>,
+    ) -> Result<owned::OwnedTerminal<'id, Id, D, B>, Fault> {
         match command {
             GroupCommand::InstallStation {
                 spp,
@@ -951,7 +994,7 @@ impl<'id, D: Device<B>, const B: usize> Driver<'id, D, B> {
                 key_id,
                 material,
             } => {
-                let identity = KeyIdentity {
+                let identity = RawKeyIdentity {
                     role: VifRole::Station,
                     slot: slot.index(),
                     serial: held.serial(),
@@ -966,8 +1009,8 @@ impl<'id, D: Device<B>, const B: usize> Driver<'id, D, B> {
                     &material,
                 )?;
                 identity.activity.set(identity.serial);
-                return Ok(LowerMacTerminal::GroupKeyInstalled(
-                    InstalledGroup::Station {
+                return Ok(owned::OwnedTerminal::GroupKeyInstalled(
+                    owned::OwnedInstalledGroup::Station {
                         key: GroupKey {
                             identity,
                             brand: PhantomData,
@@ -983,7 +1026,7 @@ impl<'id, D: Device<B>, const B: usize> Driver<'id, D, B> {
                 key_id,
                 material,
             } => {
-                let identity = KeyIdentity {
+                let identity = RawKeyIdentity {
                     role: VifRole::AccessPoint,
                     slot: slot.index(),
                     serial: held.serial(),
@@ -1007,8 +1050,8 @@ impl<'id, D: Device<B>, const B: usize> Driver<'id, D, B> {
                     &material,
                 )?;
                 identity.activity.set(identity.serial);
-                return Ok(LowerMacTerminal::GroupKeyInstalled(
-                    InstalledGroup::AccessPoint {
+                return Ok(owned::OwnedTerminal::GroupKeyInstalled(
+                    owned::OwnedInstalledGroup::AccessPoint {
                         key: GroupKey {
                             identity,
                             brand: PhantomData,
@@ -1028,7 +1071,7 @@ impl<'id, D: Device<B>, const B: usize> Driver<'id, D, B> {
                 else {
                     return Err(Fault::Capacity);
                 };
-                let identity = KeyIdentity {
+                let identity = RawKeyIdentity {
                     serial: held.serial(),
                     key_id,
                     ..key.identity
@@ -1044,7 +1087,7 @@ impl<'id, D: Device<B>, const B: usize> Driver<'id, D, B> {
                     &material,
                 )?;
                 identity.activity.set(identity.serial);
-                return Ok(LowerMacTerminal::GroupKeyReplaced {
+                return Ok(owned::OwnedTerminal::GroupKeyReplaced {
                     key: GroupKey {
                         identity,
                         brand: PhantomData,
@@ -1061,11 +1104,11 @@ impl<'id, D: Device<B>, const B: usize> Driver<'id, D, B> {
                 {
                     return Err(Fault::Capacity);
                 }
-                return Ok(LowerMacTerminal::GroupKeySelected { key, permission });
+                return Ok(owned::OwnedTerminal::GroupKeySelected { key, permission });
             }
             GroupCommand::Remove { identity, removal } => {
                 let removed = self.remove(device, identity)?;
-                return Ok(LowerMacTerminal::KeyRemoved(
+                return Ok(owned::OwnedTerminal::KeyRemoved(
                     self.removed_terminal(removal, removed)?,
                 ));
             }
@@ -1078,8 +1121,8 @@ fn queue(category: WmmAccessCategory) -> usize {
 fn vif(role: VifRole) -> usize {
     if role == VifRole::Station { 0 } else { 1 }
 }
-impl GroupCommand<'_> {
-    fn uses(&self, key: Option<KeyIdentity>) -> bool {
+impl<Id: SlotIdentity> GroupCommand<'_, Id> {
+    fn uses(&self, key: Option<RawKeyIdentity>) -> bool {
         key.is_some_and(|key| match self {
             Self::Remove { identity, .. } => *identity == key,
             Self::Replace { key: installed, .. } | Self::Select { key: installed, .. } => {

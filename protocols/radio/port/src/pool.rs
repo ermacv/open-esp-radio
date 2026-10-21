@@ -192,7 +192,6 @@ type Brand<'id> = PhantomData<fn(&'id ()) -> &'id ()>;
 mod loan;
 mod mint;
 pub use loan::BodyLoan;
-pub(crate) use mint::prepare_brand;
 mod path;
 pub use mint::{
     Mint, PermitSupply, PermitTokens, Permits, PoolBuilder, PoolSet, Pools, Slots, branded,

@@ -1,21 +1,21 @@
 error: lifetime may not live long enough
-  --> tests/ui/installation_rate.rs:77:9
+  --> tests/ui/installation_rate.rs:51:32
    |
-54 |     async fn run<'p, 'id>(
-   |                      --- lifetime `'id` defined here
-55 |         self,
-   |         ---- has type `Target<'_, '_, '1>`
+46 |     async fn run<'p, 'id>(
+   |                  -- lifetime `'p` defined here
+47 |         self,
+   |         ---- has type `Target<'_, '_, '1, OuterId>`
 ...
-77 |         Ended::fail_stop(target.fail_stop(), ()) // ui-error: lifetime may not live long enough
-   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ method was supposed to return data with lifetime `'id` but it is returning data with lifetime `'1`
+51 |         let mut target = match owner.enable().await { // ui-error: lifetime may not live long enough
+   |                                ^^^^^^^^^^^^^^ argument requires that `'1` must outlive `'p`
 
 error: lifetime may not live long enough
-  --> tests/ui/installation_rate.rs:77:9
+  --> tests/ui/installation_rate.rs:56:26
    |
-54 |     async fn run<'p, 'id>(
+46 |     async fn run<'p, 'id>(
    |                      --- lifetime `'id` defined here
-55 |         self,
-   |         ---- has type `Target<'_, '_, '1>`
+47 |         self,
+   |         ---- has type `Target<'_, '_, '1, OuterId>`
 ...
-77 |         Ended::fail_stop(target.fail_stop(), ()) // ui-error: lifetime may not live long enough
-   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ method was supposed to return data with lifetime `'1` but it is returning data with lifetime `'id`
+56 |             let source = self.source.phase(); // ui-error: lifetime may not live long enough
+   |                          ^^^^^^^^^^^^^^^^^^^ argument requires that `'id` must outlive `'1`

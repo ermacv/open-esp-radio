@@ -9,13 +9,13 @@ use oer_ieee80211_wire::{
     security::Spp,
 };
 use oer_time::Clock as _;
-type Permission<'id> = <PortKeys<Station> as KeyTypes<'id>>::GroupPermission;
+type Permission<'id, Id> = <PortKeys<Id, Station> as KeyTypes<'id>>::GroupPermission;
 type Events = heapless::Vec<Completion, 4>;
 type Retained = heapless::Vec<Owners, 4>;
 mod published;
-async fn installed<'p, 'id: 'p>(
-    phase: &mut Esp32s31Phase<'p, 'id, Device, TX>,
-) -> Result<(GroupKey<'id, Station>, Permission<'id>), &'static str> {
+async fn installed<'p, 'id: 'p, Id: radio::SlotIdentity + 'id>(
+    phase: &mut Esp32s31Phase<'p, 'id, Id, Device, TX>,
+) -> Result<(GroupKey<'id, Id, Station>, Permission<'id, Id>), &'static str> {
     loop {
         match phase.next_event().await {
             Ok(Ok(LowerMacEvent::Terminal(LowerMacTerminal::GroupKeyInstalled(
@@ -27,21 +27,23 @@ async fn installed<'p, 'id: 'p>(
         }
     }
 }
-fn observed(terminal: LowerMacTerminal<'_, Family>) -> Result<Completion, &'static str> {
+fn observed<'id, Id: radio::SlotIdentity + 'id>(
+    terminal: LowerMacTerminal<'id, Family<Id>>,
+) -> Result<Completion, &'static str> {
     let (mutation, slot, permission) = match terminal {
         LowerMacTerminal::GroupKeyInstalled(InstalledGroup::Station { key, permission }) => (
             Mutation::Install,
-            PortKeys::<Station>::group_slot_identity(&key),
+            PortKeys::<Id, Station>::group_slot_identity(&key),
             permission.index(),
         ),
         LowerMacTerminal::GroupKeyReplaced { key, permission } => (
             Mutation::Replace,
-            PortKeys::<Station>::group_slot_identity(&key),
+            PortKeys::<Id, Station>::group_slot_identity(&key),
             permission.index(),
         ),
         LowerMacTerminal::GroupKeySelected { key, permission } => (
             Mutation::Select,
-            PortKeys::<Station>::group_slot_identity(&key),
+            PortKeys::<Id, Station>::group_slot_identity(&key),
             permission.index(),
         ),
         LowerMacTerminal::KeyRemoved(Removed::Station(RemovedKey::Group { slot, permission })) => {
@@ -58,9 +60,9 @@ fn observed(terminal: LowerMacTerminal<'_, Family>) -> Result<Completion, &'stat
         owners: Owners { slot, permission },
     })
 }
-async fn admit<'p, 'id: 'p>(
-    phase: &mut Esp32s31Phase<'p, 'id, Device, TX>,
-    resources: <Backend as PortBackend>::Resources<'id>,
+async fn admit<'p, 'id: 'p, Id: radio::SlotIdentity + 'id>(
+    phase: &mut Esp32s31Phase<'p, 'id, Id, Device, TX>,
+    resources: <Backend<Id> as PortBackend<Id>>::Resources<'id>,
     mutation: Mutation,
 ) -> Result<(Owners, Timing), &'static str> {
     let (start, bank) = resources.station_association.into_parts();
@@ -82,7 +84,7 @@ async fn admit<'p, 'id: 'p>(
     };
     let owners = Owners {
         slot: match &key {
-            Some(k) => PortKeys::<Station>::group_slot_identity(k),
+            Some(k) => PortKeys::<Id, Station>::group_slot_identity(k),
             None => vacant.as_ref().ok_or("vacant GTK")?.index(),
         },
         permission: permission.index(),
@@ -118,12 +120,12 @@ async fn admit<'p, 'id: 'p>(
         },
     ))
 }
-pub(super) async fn run<'p, 'id>(
-    mut owner: Owner<'p, 'id, Backend, radio::Enabled>,
-    resources: <Backend as PortBackend>::Resources<'id>,
+pub(super) async fn run<'p, 'id, Id: radio::SlotIdentity + 'id>(
+    mut owner: Owner<'p, 'id, Id, Backend<Id>, radio::Enabled>,
+    resources: <Backend<Id> as PortBackend<Id>>::Resources<'id>,
     case: ProgressCase,
     peer: Peer,
-) -> Ended<'id, Backend, Result<Trace, &'static str>> {
+) -> Ended<Id, Backend<Id>, Result<Trace, &'static str>> {
     if case == ProgressCase::PublishedRemoval {
         return published::run(owner, resources, peer).await;
     }
@@ -174,7 +176,7 @@ pub(super) async fn run<'p, 'id>(
             published: None,
             blocked_while_published: false,
         };
-        group_trace(&raw, Backend::GROUP_COMMAND_BOUND.as_micros())
+        group_trace(&raw, Backend::<Id>::GROUP_COMMAND_BOUND.as_micros())
             .map(Trace::Group)
             .ok_or("group trace extent")
     });

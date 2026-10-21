@@ -209,15 +209,6 @@ async fn dispatch(mut poster: Poster<Request, Answer>) {
 }
 #[embassy_executor::task]
 async fn serve_radio(boot: suite::Boot) {
-    let mut server = suite::Server::new(boot);
-    loop {
-        poll_fn(|cx| DOORBELL.poll_rung(cx)).await;
-        if let Some((request, response)) = SLOT.take_request() {
-            let answer = server
-                .request(request)
-                .await
-                .unwrap_or_else(Answer::Rejected);
-            response.answer(answer);
-        }
-    }
+    let slot = suite::Slot::take_static().expect("one static conformance slot");
+    suite::serve(boot, slot).await
 }

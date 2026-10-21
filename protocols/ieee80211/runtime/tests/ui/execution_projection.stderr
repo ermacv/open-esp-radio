@@ -1,46 +1,46 @@
 error[E0308]: mismatched types
-  --> tests/ui/execution_projection.rs:15:38
+  --> tests/ui/execution_projection.rs:15:51
    |
-15 |         let _: &mut ModelMpdu<'id> = &mut single; // ui-error: E0308
-   |                -------------------   ^^^^^^^^^^^ expected `&mut ModelMpdu<'_>`, found `&mut ModelMpduExecution<'_, '_>`
+15 |         let _: &mut ModelMpdu<'id, Composition> = &mut single; // ui-error: E0308
+   |                --------------------------------   ^^^^^^^^^^^ expected `&mut ModelMpdu<'_, ModelBackend<...>>`, found `&mut ModelMpduExecution<'_, '_, ...>`
    |                |
    |                expected due to this
    |
-   = note: expected mutable reference `&mut ModelMpdu<'id>`
-              found mutable reference `&mut ModelMpduExecution<'_, 'id>`
+   = note: expected mutable reference `&mut ModelMpdu<'id, ModelBackend<StaticId<UiSlot>>>`
+              found mutable reference `&mut ModelMpduExecution<'_, 'id, ModelBackend<StaticId<UiSlot>>>`
 
 error[E0308]: mismatched types
-  --> tests/ui/execution_projection.rs:16:43
+  --> tests/ui/execution_projection.rs:16:56
    |
-16 |         let _: &mut ModelSubframes<'id> = &mut aggregate; // ui-error: E0308
-   |                ------------------------   ^^^^^^^^^^^^^^ expected `&mut ModelSubframes<'_>`, found `&mut ModelSubframesExecution<'_, '_>`
+16 |         let _: &mut ModelSubframes<'id, Composition> = &mut aggregate; // ui-error: E0308
+   |                -------------------------------------   ^^^^^^^^^^^^^^ expected `&mut ModelSubframes<'_, ...>`, found `&mut ...`
    |                |
    |                expected due to this
    |
-   = note: expected mutable reference `&mut ModelSubframes<'id>`
-              found mutable reference `&mut ModelSubframesExecution<'_, 'id>`
+   = note: expected mutable reference `&mut ModelSubframes<'id, ModelBackend<StaticId<UiSlot>>>`
+              found mutable reference `&mut ModelSubframesExecution<'_, 'id, ModelBackend<StaticId<UiSlot>>>`
 
-error[E0599]: no method named `into_parts` found for struct `ModelMpduExecution<'a, 'id, D>` in the current scope
+error[E0599]: no method named `into_parts` found for struct `ModelMpduExecution<'a, 'id, B>` in the current scope
   --> tests/ui/execution_projection.rs:17:16
    |
 17 |         single.into_parts(); // ui-error: E0599
-   |                ^^^^^^^^^^ method not found in `ModelMpduExecution<'_, 'id>`
+   |                ^^^^^^^^^^ method not found in `ModelMpduExecution<'_, 'id, ModelBackend<StaticId<UiSlot>>>`
 
-error[E0599]: the method `into_iter` exists for struct `ModelSubframesExecution<'_, 'id>`, but its trait bounds were not satisfied
+error[E0599]: the method `into_iter` exists for struct `ModelSubframesExecution<'_, 'id, ModelBackend<StaticId<UiSlot>>>`, but its trait bounds were not satisfied
   --> tests/ui/execution_projection.rs:18:19
    |
 18 |         aggregate.into_iter(); // ui-error: E0599
-   |                   ^^^^^^^^^ method cannot be called on `ModelSubframesExecution<'_, 'id>` due to unsatisfied trait bounds
+   |                   ^^^^^^^^^ method cannot be called due to unsatisfied trait bounds
    |
   ::: $WORKSPACE/protocols/ieee80211/model/src/lib.rs
    |
-   | pub struct ModelSubframesExecution<'a, 'id, D = ModelBody> {
-   | ---------------------------------------------------------- doesn't satisfy `ModelSubframesExecution<'_, 'id>: IntoIterator` or `ModelSubframesExecution<'_, 'id>: Iterator`
+   | pub struct ModelSubframesExecution<'a, 'id, B: ModelComposition> {
+   | ---------------------------------------------------------------- doesn't satisfy `_: IntoIterator` or `_: Iterator`
    |
    = note: the following trait bounds were not satisfied:
-           `ModelSubframesExecution<'_, 'id>: Iterator`
-           which is required by `ModelSubframesExecution<'_, 'id>: IntoIterator`
-           `&ModelSubframesExecution<'_, 'id>: Iterator`
-           which is required by `&ModelSubframesExecution<'_, 'id>: IntoIterator`
-           `&mut ModelSubframesExecution<'_, 'id>: Iterator`
-           which is required by `&mut ModelSubframesExecution<'_, 'id>: IntoIterator`
+           `ModelSubframesExecution<'_, 'id, ModelBackend<StaticId<UiSlot>>>: Iterator`
+           which is required by `ModelSubframesExecution<'_, 'id, ModelBackend<StaticId<UiSlot>>>: IntoIterator`
+           `&ModelSubframesExecution<'_, 'id, ModelBackend<StaticId<UiSlot>>>: Iterator`
+           which is required by `&ModelSubframesExecution<'_, 'id, ModelBackend<StaticId<UiSlot>>>: IntoIterator`
+           `&mut ModelSubframesExecution<'_, 'id, ModelBackend<StaticId<UiSlot>>>: Iterator`
+           which is required by `&mut ModelSubframesExecution<'_, 'id, ModelBackend<StaticId<UiSlot>>>: IntoIterator`
