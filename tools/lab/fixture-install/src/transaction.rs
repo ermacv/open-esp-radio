@@ -1212,11 +1212,12 @@ mod linux {
 
     /// Every operation of the laptop network helper the operator runs
     /// without a password: each `case` of `hil/host/linux-net/open-radio-net`.
-    pub(crate) const LINUX_NET_OPERATIONS: [&str; 15] = [
+    pub(crate) const LINUX_NET_OPERATIONS: [&str; 16] = [
         "ap",
         "capabilities",
         "identity",
         "client",
+        "client-dhcp",
         "client-aqm",
         "observer",
         "monitor",

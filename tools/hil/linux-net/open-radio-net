@@ -19,7 +19,7 @@ AP_CONFIG="$STATE_DIR/hostapd.conf"
 WPA_CTRL=/run/open-radio-wpa-control
 
 usage() {
-    echo "usage: open-radio-net {capabilities|identity|ap|client|monitor|monitor-1|monitor-6|monitor-11|observer|managed|stop|status|usb-reset|kernel-log}" >&2
+    echo "usage: open-radio-net {capabilities|identity|ap|client|client-dhcp|client-aqm|monitor|monitor-1|monitor-6|monitor-11|observer|managed|stop|status|usb-reset|kernel-log}" >&2
     exit 64
 }
 
@@ -50,6 +50,9 @@ stop_pidfile() {
 }
 
 stop_radio_services() {
+    if test -f "$STATE_DIR/client-session.json" || test -f "$STATE_DIR/client-lease.json"; then
+        "$CLIENT_TOOL" stop-dhcp
+    fi
     stop_pidfile "$WPA_PID"
     stop_pidfile "$DNSMASQ_PID"
     stop_pidfile "$HOSTAPD_PID"
@@ -59,8 +62,13 @@ stop_radio_services() {
     /usr/bin/ip link set wlan0 down 2>/dev/null || true
     /usr/bin/ip address flush dev wlan0 2>/dev/null || true
     /bin/rm -f "$WPA_CONFIG" "$AP_CONFIG"
+    /bin/rm -f "$STATE_DIR/client-network.json"
     /bin/rm -f "$CTRL_DIR/hostapd.log"
     /bin/rm -rf "$WPA_CTRL"
+}
+
+discard_pending_client() {
+    /bin/rm -f "$STATE_DIR/client-pending.conf" "$STATE_DIR/client-pending.json"
 }
 
 NM_UNMANAGED_CONFIG=/run/NetworkManager/conf.d/90-open-radio-hil.conf
@@ -303,18 +311,16 @@ start_monitor() {
 }
 
 start_client() {
-    IFS= read -r ssid
-    IFS= read -r passphrase
-    IFS= read -r address
-    IFS= read -r frequency
-    IFS= read -r client_phy
-    test -n "$ssid"
-    test -n "$passphrase"
-    # `none` associates without an IPv4 address: a peer that only changes
-    # the BSS membership (for example a non-HT station) needs no traffic.
-    test "$address" = none || /usr/bin/printf '%s\n' "$address" | /usr/bin/grep -Eq '^[0-9.]+/[0-9]+$'
-    /usr/bin/printf '%s\n' "$frequency" | /usr/bin/grep -Eq '^24[0-9][0-9]$'
-    case "$client_phy" in ht|non-ht) ;; *) return 64;; esac
+    umask 077
+    /bin/mkdir -p "$STATE_DIR"
+    /bin/chmod 0700 "$STATE_DIR"
+    # Validate the complete typed request before changing the radio. Only the
+    # address mode and frequency leave the private profile renderer.
+    setup=$("$CLIENT_TOOL" profile)
+    IFS=' ' read -r address frequency extra <<EOF
+$setup
+EOF
+    test -z "$extra"
 
     take_network_manager_ownership
     remember_wifi_identity
@@ -328,58 +334,19 @@ start_client() {
     /bin/mkdir -m 0770 "$WPA_CTRL"
     /bin/chgrp network "$WPA_CTRL"
 
-    # Do not place the passphrase in argv: /proc would expose it to unrelated
-    # local processes. Arch's wpa_passphrase requires a terminal even when its
-    # input is piped, so write the already root-owned transient profile here.
-    # Rust validates both values as single-line strings before invoking us;
-    # escape the two characters with syntax inside wpa_supplicant quotes.
-    escaped_ssid=$(/usr/bin/printf '%s' "$ssid" | /usr/bin/sed 's/\\/\\\\/g; s/"/\\"/g')
-    escaped_passphrase=$(/usr/bin/printf '%s' "$passphrase" | /usr/bin/sed 's/\\/\\\\/g; s/"/\\"/g')
-    {
-        # The desktop NetworkManager owns a global wpa_supplicant instance in
-        # /run/wpa_supplicant. A private control directory prevents a fixture
-        # epoch from colliding with that daemon's wlan0 socket while keeping
-        # the system network service alive for the Ethernet uplink.
-        /usr/bin/printf 'ctrl_interface=DIR=%s GROUP=network\n' "$WPA_CTRL"
-        # The fixture owns exactly one managed STA. P2P creates a second wdev
-        # and a second nl80211 lifecycle on the same Intel PHY; repeated AP
-        # epochs then race that auxiliary interface during teardown. Keep the
-        # hardware address stable so every cycle qualifies the same AP peer
-        # identity instead of wpa_supplicant MAC randomization behavior.
-        /usr/bin/printf 'p2p_disabled=1\n'
-        /usr/bin/printf 'mac_addr=0\n'
-        /usr/bin/printf 'preassoc_mac_addr=0\n'
-        /usr/bin/printf 'network={\n    disabled=1\n'
-        /usr/bin/printf '    ssid="%s"\n' "$escaped_ssid"
-        /usr/bin/printf '    psk="%s"\n' "$escaped_passphrase"
-        /usr/bin/printf '    key_mgmt=WPA-PSK\n'
-        /usr/bin/printf '    proto=RSN\n'
-        /usr/bin/printf '    pairwise=CCMP\n'
-        # The target channel is part of the typed AP request. Restricting the
-        # controlled client to that exact frequency avoids unrelated channels
-        # without weakening AP discovery: the client
-        # must still receive a valid beacon or probe response before joining.
-        /usr/bin/printf '    scan_freq=%s\n' "$frequency"
-        if test "$client_phy" = non-ht; then
-            # A Clause 18 ERP-OFDM station: it advertises no HT, VHT or HE
-            # capability, so the AP must count it as a non-HT member.
-            /usr/bin/printf '    disable_ht=1\n    disable_vht=1\n    disable_he=1\n'
-        fi
-        /usr/bin/printf '}\n'
-    } >"$WPA_CONFIG"
-    /bin/chmod 0600 "$WPA_CONFIG"
-    (exec 9<&-; /usr/bin/wpa_supplicant -B -P "$WPA_PID" -i wlan0 -c "$WPA_CONFIG")
+    /bin/mv "$STATE_DIR/client-pending.conf" "$WPA_CONFIG"
+    /bin/mv "$STATE_DIR/client-pending.json" "$STATE_DIR/client-network.json"
+    (exec 9<&-; /usr/bin/wpa_supplicant -B -P "$WPA_PID" -i wlan0 -c "$WPA_CONFIG" >/dev/null 2>&1)
     # The Rust owner subscribes before ENABLE_NETWORK and waits on events.
     /usr/bin/iw dev wlan0 set power_save off
-    if test "$address" != none; then
-        /usr/bin/ip address add "$address" dev wlan0
-    fi
+    case "$address" in none|dhcp) ;; *) /usr/bin/ip address add "$address" dev wlan0;; esac
 }
 
 restore_managed() {
     take_network_manager_ownership
     remember_wifi_identity
     stop_radio_services
+    discard_pending_client
     restore_managed_interface
     release_network_manager_ownership
     restore_wifi_rfkill
@@ -407,12 +374,14 @@ if test "$1" != capabilities; then
         exit 75
     fi
     HOSTAPD="$BOUND_GENERATION_DIR/open-radio-hostapd"
+    CLIENT_TOOL="$BOUND_GENERATION_DIR/open-radio-net-client"
     test -x "$HOSTAPD"
+    test -x "$CLIENT_TOOL"
 fi
 
 case "$1" in
     capabilities)
-        /usr/bin/printf 'schema=15 station_ap=ht20,ht40,he20 legacy_ap=dsss client=ht,non-ht client_aqm=1 observer=20,40 managed=1 rfkill=restore\n'
+        /usr/bin/printf 'schema=16 station_ap=ht20,ht40,he20 legacy_ap=dsss client=ht,non-ht client_security=open,wpa2 client_ipv4=none,static,dhcp client_session=status,ping,disconnect client_ping=100x1s client_aqm=1 observer=20,40 managed=1 rfkill=restore\n'
         ;;
     identity)
         if test -e /sys/class/net/wlan0/phy80211; then
@@ -429,6 +398,9 @@ case "$1" in
         ;;
     client)
         start_client
+        ;;
+    client-dhcp)
+        exec "$CLIENT_TOOL" dhcp
         ;;
     client-aqm)
         # The mac80211 AQM counters of the client's one station, its AP:
@@ -471,6 +443,7 @@ case "$1" in
         ;;
     stop)
         stop_radio_services
+        discard_pending_client
         ;;
     status)
         /usr/bin/iw dev

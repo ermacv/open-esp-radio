@@ -26,6 +26,7 @@ pub(crate) fn run(
         // the installer takes terminal control for its narrow system writes.
         if provider == Provider::LinuxNet {
             oer_lab_router::hostapd::build(root)?;
+            oer_lab_router::udhcpc::build(root)?;
         }
 
         let provider_binaries: &[&str] = match provider {
@@ -33,6 +34,7 @@ pub(crate) fn run(
                 "open-radio-net-launcher",
                 "open-radio-probe-launcher",
                 "open-radio-probe",
+                "open-radio-net-client",
             ],
             Provider::LinuxBluetooth => &["open-radio-bluetooth-launcher", "open-radio-bluetooth"],
         };
@@ -41,7 +43,7 @@ pub(crate) fn run(
             "build",
             "--locked",
             "-p",
-            "oer-tool-fixture-install",
+            "oer-tool-lab-fixture-install",
             "-p",
             "oer-tool-hil-fixture",
         ]);

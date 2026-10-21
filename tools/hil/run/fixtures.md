@@ -34,7 +34,7 @@ session (`primary_client_link`, tagged by client), so a lost datagram names its
 side. The OpenWrt client reads its station counters and TID 0's AQM drops over
 SSH. The laptop client reads `iw dev wlan0 station dump` (`tx_failed`,
 `tx_retries`), `wlan0`'s `tx_dropped`, and, through the helper's `client-aqm`
-operation (schema 15), mac80211's TID 0 AQM drops and overlimits: its root
+operation (schema 16), mac80211's TID 0 AQM drops and overlimits: its root
 queueing discipline is `noqueue`, so a packet it drops before it becomes a
 frame shows there and leaves no gap in the AP's sequence.
 `fixture-applied.json` records actual settings without network credentials.
@@ -167,8 +167,12 @@ Cargo is the single installation entry point and runs as the unprivileged
 operator. Linux is required; installation is not supported on other hosts.
 
 Preparation runs as the operator. Network preparation retains the pinned
-hostapd build, patch and provenance plus the locked probe and fixed-launcher
-builds. Bluetooth preparation builds only its finite helper, fixed launcher and
+hostapd build, patch and provenance, the pinned single-applet udhcpc build
+and provenance, and the locked station/probe helpers and fixed launchers.
+The [schema-16 station contract](../linux-net/README.md#station-contract)
+supports open or WPA2 authentication, static/absent IPv4 or a maintained
+DHCP lease, and a bounded bidirectional echo workload without NetworkManager.
+Bluetooth preparation builds only its finite helper, fixed launcher and
 installer with the same locked root `target/debug` output; it does not
 build or download hostapd. The runner rejects an invocation already running as
 root before starting either build. It then transfers the foreground terminal

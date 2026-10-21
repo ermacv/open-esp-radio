@@ -102,6 +102,27 @@ fn artifact_declarations(provider: Provider, suffix: &str) -> Vec<(Artifact, Vec
     let entries: Vec<(ArtifactRole, &str, &str, u32, Vec<u8>)> = match provider {
         Provider::LinuxNet => vec![
             (
+                ArtifactRole::NetworkClient,
+                "open-radio-net-client",
+                "/usr/local/libexec/open-radio-net-client",
+                0o555,
+                format!("client-{suffix}").into_bytes(),
+            ),
+            (
+                ArtifactRole::Udhcpc,
+                "udhcpc",
+                "/usr/local/libexec/open-radio-udhcpc",
+                0o555,
+                format!("udhcpc-{suffix}").into_bytes(),
+            ),
+            (
+                ArtifactRole::UdhcpcProvenance,
+                "udhcpc-provenance.json",
+                "/usr/local/libexec/open-radio-udhcpc.json",
+                0o444,
+                format!("{{\"generation\":\"{suffix}\"}}\n").into_bytes(),
+            ),
+            (
                 ArtifactRole::NetworkLauncher,
                 "open-radio-net-launcher",
                 "/usr/local/libexec/open-radio-net-launcher",
@@ -1166,4 +1187,49 @@ fn policy_never_grants_installer_or_runner() {
     assert!(!policy.contains("fixture-install"));
     assert!(!policy.contains("cargo"));
     assert!(!policy.contains("hil-runner"));
+    assert!(policy.contains("/usr/local/sbin/open-radio-net client-dhcp\n"));
+    assert!(!policy.contains("/usr/local/libexec/open-radio-net-client"));
+    assert!(!policy.contains("/usr/local/libexec/open-radio-udhcpc"));
+}
+
+#[test]
+fn station_runtime_and_dhcp_provenance_are_admitted_by_their_generation_bytes() {
+    let _serial = serial();
+    let target = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../target")
+        .canonicalize()
+        .expect("valid station artifact fixture");
+    let root = tempfile::tempdir_in(target).expect("valid station artifact fixture");
+    let (bundle, _) = make_bundle(root.path(), Provider::LinuxNet, "station");
+    test_apply(
+        root.path(),
+        Provider::LinuxNet,
+        &bundle,
+        &mut TestEffects::passing(),
+    );
+    let lease = crate::admission::test_support::admit(root.path(), Provider::LinuxNet)
+        .expect("valid station artifact fixture");
+    for role in [
+        ArtifactRole::NetworkClient,
+        ArtifactRole::Udhcpc,
+        ArtifactRole::UdhcpcProvenance,
+    ] {
+        let path = lease
+            .artifact(role)
+            .expect("valid station artifact fixture");
+        let original = fs::read(&path).expect("valid station artifact fixture");
+        let mode = fs::metadata(&path)
+            .expect("valid station artifact fixture")
+            .permissions();
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o600))
+            .expect("valid station artifact fixture");
+        fs::write(&path, b"changed artifact").expect("valid station artifact fixture");
+        fs::set_permissions(&path, mode.clone()).expect("valid station artifact fixture");
+        assert!(lease.artifact(role).is_err());
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o600))
+            .expect("valid station artifact fixture");
+        fs::write(&path, original).expect("valid station artifact fixture");
+        fs::set_permissions(&path, mode).expect("valid station artifact fixture");
+        assert!(lease.artifact(role).is_ok());
+    }
 }
