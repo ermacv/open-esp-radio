@@ -110,8 +110,21 @@ platform-owned `MODEM_LPCON` registers remain in the upstream analysis catalog.
 See the [PAC provenance map](../pac/README.md).
 
 Source provenance catalogs retain their exact source IDs, revisions and hashes.
-Reserved fields remain absent. A register or field whose meaning is not
-established is named by its position alone (`WORD_<offset>_OPAQUE`,
+A bit is described when its meaning is known and cited, opaque when a cited
+source shows its use but its meaning is unknown, and absent when no use was
+observed in the examined corpus or a source marks it reserved. A use is a
+write different from reset, an explicit masked set in a read-modify-write,
+or a read whose value changes behaviour. Preserving bits through a
+read-modify-write and writing reset bits in a whole-word store are not uses.
+An opaque field requires evidence of use; a whole-word access alone is
+insufficient. Code preserves absent bits or writes their reset value; the
+PAC exposes no field accessor for them. A vendor-use check states its corpus
+and coverage limits and rejects a use of an absent bit. Layouts follow the
+same rule; CPU operations preserve the exact image of unassigned bits,
+including bits hardware writes.
+
+A register or field whose meaning is not established is named by its
+position alone (`WORD_<offset>_OPAQUE`,
 `BIT_<n>_OPAQUE`, `BITS_<low>_<high>_OPAQUE`) and reviewed with
 `naming = "opaque"`; see [name origin](../../../tools/registers/model/README.md). Neighboring-chip
 similarity is not sufficient evidence for an ESP32-S31 address or bit. Reviewed

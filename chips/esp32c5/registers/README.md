@@ -5,6 +5,19 @@ and its schema-2 peripheral fragments. It follows the layout of the
 [ESP32-S31 register project](../../esp32s31/registers/README.md); the generator is
 [`tools/registers/model`](../../../tools/registers/model/README.md).
 
+A bit is described when its meaning is known and cited, opaque when a cited
+source shows its use but its meaning is unknown, and absent when no use was
+observed in the examined corpus or a source marks it reserved. A use is a
+write different from reset, an explicit masked set in a read-modify-write,
+or a read whose value changes behaviour. Preserving bits through a
+read-modify-write and writing reset bits in a whole-word store are not uses.
+An opaque field requires evidence of use; a whole-word access alone is
+insufficient. Code preserves absent bits or writes their reset value; the
+PAC exposes no field accessor for them. A vendor-use check states its corpus
+and coverage limits and rejects a use of an absent bit. Layouts follow the
+same rule; CPU operations preserve the exact image of unassigned bits,
+including bits hardware writes.
+
 | Path | Owner and purpose |
 | --- | --- |
 | `model/device.toml`, `model/peripherals/` | Reviewed hardware register geometry and semantics |
