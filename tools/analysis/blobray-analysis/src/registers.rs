@@ -312,6 +312,32 @@ impl<'f, 'a, 'm> StoredBitsEvaluator<'f, 'a, 'm> {
             AbstractValue::Constant { value } | AbstractValue::ImageAddress { address: value } => {
                 constant_bits(*value)
             }
+            AbstractValue::Alternatives { values } => {
+                let shared =
+                    values
+                        .values()
+                        .iter()
+                        .try_fold((u32::MAX, 0), |(all, any), alternative| {
+                            let value = match alternative {
+                                ValueAlternative::Constant { value }
+                                | ValueAlternative::ImageAddress { address: value } => *value,
+                                _ => return None,
+                            };
+                            Some((all & value, any | value))
+                        });
+                match shared {
+                    Some((all, any)) => std::array::from_fn(|i| {
+                        if (all ^ any) >> i & 1 != 0 {
+                            Bit::Unknown
+                        } else if all >> i & 1 != 0 {
+                            Bit::One
+                        } else {
+                            Bit::Zero
+                        }
+                    }),
+                    None => [Bit::Unknown; 32],
+                }
+            }
             AbstractValue::Expression { id } if *id < node => {
                 self.memoized(*id).unwrap_or([Bit::Unknown; 32])
             }
@@ -2364,36 +2390,95 @@ mod tests {
     fn numeric_alternatives_keep_only_bits_shared_by_every_value() {
         let memory = WorkingMemory::new(65536).expect("working memory");
         let facts = Facts::new(&[], &memory, &mut || Ok(())).expect("facts");
-        let mut evaluator = StoredBitsEvaluator::new(&facts, &memory);
-        for values in [
-            vec![ValueAlternative::Constant { value: 0x80 }, ValueAlternative::Constant { value: 0xa0 }],
-            vec![ValueAlternative::ImageAddress { address: 0x80 }, ValueAlternative::ImageAddress { address: 0xa0 }],
-            vec![ValueAlternative::Constant { value: 0x80 }, ValueAlternative::ImageAddress { address: 0xa0 }],
+        for (values, varying) in [
+            (
+                vec![
+                    ValueAlternative::Constant { value: 0x80 },
+                    ValueAlternative::Constant { value: 0xa0 },
+                ],
+                0x20,
+            ),
+            (
+                vec![
+                    ValueAlternative::ImageAddress { address: 0x80 },
+                    ValueAlternative::ImageAddress { address: 0xa0 },
+                ],
+                0x20,
+            ),
+            (
+                vec![
+                    ValueAlternative::Constant { value: 0x80 },
+                    ValueAlternative::ImageAddress { address: 0xa0 },
+                ],
+                0x20,
+            ),
+            (
+                vec![
+                    ValueAlternative::Constant { value: 0x80 },
+                    ValueAlternative::Constant { value: 0xa0 },
+                    ValueAlternative::Constant { value: 0xc0 },
+                ],
+                0x60,
+            ),
+            (
+                (0..8)
+                    .map(|n| ValueAlternative::Constant {
+                        value: 0x80 | (n << 4),
+                    })
+                    .collect(),
+                0x70,
+            ),
         ] {
             let value = AbstractValue::Alternatives {
                 values: ValueAlternatives::new(values).expect("numeric alternatives"),
             };
+            let mut evaluator = StoredBitsEvaluator::new(&facts, &memory);
             let bits = evaluator.bits(&value, &mut || Ok(())).expect("stored bits");
             for (i, bit) in bits.into_iter().enumerate() {
-                assert_eq!(bit, match i { 5 => Bit::Unknown, 7 => Bit::One, _ => Bit::Zero });
+                assert_eq!(
+                    bit,
+                    match i {
+                        i if varying & (1 << i) != 0 => Bit::Unknown,
+                        7 => Bit::One,
+                        _ => Bit::Zero,
+                    }
+                );
             }
         }
         for address in [
-            ValueAlternative::Section { section: 1, offset: 0x80 },
+            ValueAlternative::Section {
+                section: 1,
+                offset: 0x80,
+            },
             ValueAlternative::EntryStack { offset: 0x80 },
-            ValueAlternative::Symbol { symbol: SymbolId {
-                object: ObjectId { artifact: ArtifactId::of_bytes(b"alternatives fixture"), location: ObjectLocation::Standalone },
-                table: SymbolTableKind::Static, table_section: 1, index: 2,
-            }, addend: 0x80 },
+            ValueAlternative::Symbol {
+                symbol: SymbolId {
+                    object: ObjectId {
+                        artifact: ArtifactId::of_bytes(b"alternatives fixture"),
+                        location: ObjectLocation::Standalone,
+                    },
+                    table: SymbolTableKind::Static,
+                    table_section: 1,
+                    index: 2,
+                },
+                addend: 0x80,
+            },
         ] {
             for values in [
                 vec![address.clone(), ValueAlternative::Constant { value: 0xa0 }],
-                vec![address.clone(), ValueAlternative::EntryStack { offset: 0xa0 }],
+                vec![
+                    address.clone(),
+                    ValueAlternative::EntryStack { offset: 0xa0 },
+                ],
             ] {
                 let value = AbstractValue::Alternatives {
                     values: ValueAlternatives::new(values).expect("relocatable alternatives"),
                 };
-                assert_eq!(evaluator.bits(&value, &mut || Ok(())).expect("stored bits"), [Bit::Unknown; 32]);
+                let mut evaluator = StoredBitsEvaluator::new(&facts, &memory);
+                assert_eq!(
+                    evaluator.bits(&value, &mut || Ok(())).expect("stored bits"),
+                    [Bit::Unknown; 32]
+                );
             }
         }
     }

@@ -107,6 +107,9 @@ A store observation also carries `stored`: the runs of the stored value,
 low bits first, each from a fixed value, bits of a register at the function's
 entry (an argument for `a0`..`a7`), bits of a loaded value (with `same_word`
 for the stored word itself, the bits a read-modify-write keeps) or unknown.
+For finite sets of constants or image addresses, bits shared by every value
+remain constant; only differing bits are unknown. Sets containing section,
+symbol or entry-stack addresses remain unknown.
 Each bit follows the analysis' expressions through bitwise logic, constant
 shifts and additions that cannot carry; anything else is unknown, never
 guessed. Each expression node is evaluated once per function, memoized
