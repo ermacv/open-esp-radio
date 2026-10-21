@@ -15,15 +15,18 @@ fn images() -> RegisterImages {
     RegisterImages {
         registers: vec![
             Register {
+                mask: u32::MAX,
                 name: "control".into(),
                 address: 4,
             },
             Register {
+                mask: u32::MAX,
                 name: "PHY_BB_RECOVERED_GAPS.CCA_COUNTER_RESULT_1".into(),
                 address: 8,
             },
         ],
         analog: vec![Register {
+            mask: u32::MAX,
             name: "analog".into(),
             address: 1,
         }],
@@ -402,4 +405,31 @@ fn out_of_width_external_bounds_are_incomplete_without_arithmetic_overflow() {
             .verdict,
         Verdict::Incomplete
     );
+}
+
+#[test]
+fn recorded_bounds_use_masked_samples_before_computing_spread() {
+    let mut images = images();
+    images.registers[0].mask = 0xf;
+    let boots = (0..10)
+        .map(|i| {
+            let mut boot = vendor(0, 4);
+            boot.registers
+                .values
+                .insert(4, if i % 2 == 0 { 0x8000_0009 } else { 0x4000_0009 });
+            boot
+        })
+        .collect::<Vec<_>>();
+    let reference = generate(
+        signature(),
+        vec![input("s31-a", boots.clone()), input("s31-b", boots.clone())],
+        &images,
+    )
+    .unwrap();
+    assert_eq!(reference.entries["control"].mask, Some(vec![0xf]));
+    assert_eq!(reference.entries["control"].shared, Some(9));
+    let mut primary = production(&boots[0]);
+    primary.registers.values.insert(4, 0x2000_0009);
+    let result = reference.check(&signature(), &images, "s31-a", 0, &identity(), &[primary]);
+    assert_eq!(result.verdict, Verdict::Match);
 }

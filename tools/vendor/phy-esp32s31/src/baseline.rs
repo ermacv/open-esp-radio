@@ -280,12 +280,16 @@ fn metadata(lifecycle: Lifecycle, images: &RegisterImages) -> Result<BTreeMap<St
                         count: 1,
                         address: Some(reg.address),
                         signed: false,
-                        mask: None,
-                        excluded: reviews
-                            .registers
-                            .get(&reg.name)
-                            .filter(|r| r.excluded)
-                            .map(|r| r.reason.clone()),
+                        mask: Some(vec![u64::from(reg.mask)]),
+                        excluded: if reg.mask == 0 {
+                            Some(compare::NO_MODELED_BITS.into())
+                        } else {
+                            reviews
+                                .registers
+                                .get(&reg.name)
+                                .filter(|r| r.excluded)
+                                .map(|r| r.reason.clone())
+                        },
                         shared: None,
                         boards: BTreeMap::new(),
                     },
@@ -419,6 +423,10 @@ pub fn generate(
                                 r.values
                                     .get(&address)
                                     .copied()
+                                    .map(|value| {
+                                        value
+                                            & entry.mask.as_ref().expect("register mask")[0] as u32
+                                    })
                                     .map(i64::from)
                                     .ok_or("missing primary register")
                             })

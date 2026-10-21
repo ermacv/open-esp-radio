@@ -33,6 +33,7 @@ pub use crate::committed::VENDOR_OBJECT;
 pub const SCHEMA: u16 = 5;
 /// Tolerance file format.
 const TOLERANCE_SCHEMA: u16 = 3;
+pub(crate) const NO_MODELED_BITS: &str = "the source model declares no compared bits";
 /// The reviewed tolerances, compiled in so a run binds the reviews it used.
 pub(crate) const TOLERANCES: &str = include_str!("tolerances.toml");
 
@@ -223,7 +224,8 @@ fn register_values<'a>(boots: impl IntoIterator<Item = &'a Readings>) -> Registe
 /// Compare the production register image with the vendor boots'. A
 /// register passes when every production value lies within the vendor
 /// range widened by the vendor range's own width, the fields' rule applied
-/// to whole registers.
+/// to the declared bits of each register. Mask every sample before deriving
+/// the range: unassigned variation must not widen the vendor margin.
 pub(crate) fn compare_registers<'a>(
     image: &[Register],
     vendor: impl IntoIterator<Item = &'a Readings>,
@@ -233,8 +235,9 @@ pub(crate) fn compare_registers<'a>(
     let (vendor_values, unreadable) = register_values(vendor);
     let production: Vec<_> = production.into_iter().collect();
     let (production_values, _) = register_values(production.iter().copied());
-    let range = |values: &[u32]| {
+    let range = |values: &[u32], mask: u32| {
         values.iter().fold([u32::MAX, u32::MIN], |[low, high], &v| {
+            let v = v & mask;
             [low.min(v), high.max(v)]
         })
     };
@@ -266,6 +269,13 @@ pub(crate) fn compare_registers<'a>(
             summary.not_read.push(register.name.clone());
             continue;
         }
+        if register.mask == 0 {
+            summary.excluded.push(ExcludedRegister {
+                name: register.name.clone(),
+                reason: NO_MODELED_BITS.into(),
+            });
+            continue;
+        }
         if let Some(review) = reviews.get(&register.name).filter(|r| r.excluded) {
             summary.excluded.push(ExcludedRegister {
                 name: register.name.clone(),
@@ -273,7 +283,7 @@ pub(crate) fn compare_registers<'a>(
             });
             continue;
         }
-        let (v, p) = (range(vendor), range(values));
+        let (v, p) = (range(vendor, register.mask), range(values, register.mask));
         let margin = u64::from(v[1] - v[0]);
         summary.compared += 1;
         if u64::from(v[0]) <= u64::from(p[0]) + margin
@@ -684,6 +694,7 @@ mod tests {
     #[test]
     fn registers_compare_within_their_own_vendor_spread() {
         let image = |name: &str, address| oer_vendor_phy::calibration_capture::space::Register {
+            mask: u32::MAX,
             name: name.into(),
             address,
         };
@@ -725,13 +736,61 @@ mod tests {
         assert_eq!(summary.verdict, Verdict::Diff);
     }
 
+    #[test]
+    fn unassigned_lanes_neither_differ_nor_widen_vendor_spread() {
+        let image = [Register {
+            name: "SPARSE".into(),
+            address: 4,
+            mask: 0x101,
+        }];
+        let readings = |value| Readings {
+            values: [(4, value)].into(),
+            unreadable: Default::default(),
+        };
+        let vendor = [readings(1), readings(0x8000_0001)];
+        let harmless = readings(0x4000_0001);
+        let changed = readings(0x101);
+        assert_eq!(
+            compare_registers(&image, &vendor, [&harmless], &BTreeMap::new()).verdict,
+            Verdict::Match
+        );
+        let diff = compare_registers(&image, &vendor, [&changed], &BTreeMap::new());
+        assert_eq!(diff.verdict, Verdict::Diff);
+        assert_eq!(diff.differing[0].vendor, [1, 1]);
+        assert_eq!(diff.differing[0].production, [0x101, 0x101]);
+    }
+
+    #[test]
+    fn zero_mask_is_explicitly_excluded_and_still_requires_a_read() {
+        let image = [Register {
+            name: "EMPTY".into(),
+            address: 4,
+            mask: 0,
+        }];
+        let readings = Readings {
+            values: [(4, 7)].into(),
+            unreadable: Default::default(),
+        };
+        let summary = compare_registers(&image, [&readings], [&readings], &BTreeMap::new());
+        assert_eq!(summary.compared, 0);
+        assert_eq!(summary.excluded[0].reason, NO_MODELED_BITS);
+        assert_eq!(summary.verdict, Verdict::Incomplete);
+        let missing = Readings::default();
+        assert_eq!(
+            compare_registers(&image, [&readings], [&missing], &BTreeMap::new()).not_read,
+            ["EMPTY"]
+        );
+    }
+
     fn excluded_register_summary(production: &[Readings]) -> RegisterSummary {
         let image = [
             Register {
+                mask: u32::MAX,
                 name: "STABLE".into(),
                 address: 0x10,
             },
             Register {
+                mask: u32::MAX,
                 name: "EXCLUDED".into(),
                 address: 0x14,
             },
@@ -804,6 +863,7 @@ mod tests {
     #[test]
     fn an_ieee802154_point_compares_register_state_only() {
         let image = [Register {
+            mask: u32::MAX,
             name: "A.X".into(),
             address: 0x10,
         }];
@@ -870,10 +930,12 @@ mod tests {
     fn sar2_mismatch_fails_restart_while_the_wifi_cold_point_remains_excluded() {
         let registers = [
             Register {
+                mask: u32::MAX,
                 name: "PhyI2cField.69.04".into(),
                 address: 0x10,
             },
             Register {
+                mask: u32::MAX,
                 name: "A.CONTROL".into(),
                 address: 0x14,
             },
