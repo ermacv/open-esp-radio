@@ -57,7 +57,6 @@ pub enum Completion {
     SoftwareControlSelected,
     Settled,
     BoundaryObserved,
-    Correction(super::Completion),
     HardwareControlRestored,
 }
 
@@ -111,6 +110,24 @@ impl Transition {
         }
     }
 
+    pub(crate) fn correction_mut(&mut self) -> Option<&mut Correction> {
+        match &mut self.step {
+            Step::Correct(correction) => Some(correction),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn finish_correction(&mut self) -> Result<(), Error> {
+        let Step::Correct(correction) = &self.step else {
+            return Err(Error::WrongCompletion);
+        };
+        let super::Action::Complete(outcome) = correction.action() else {
+            return Err(Error::WrongCompletion);
+        };
+        self.step = Step::Restore(outcome);
+        Ok(())
+    }
+
     #[inline(always)]
     pub fn advance(&mut self, completion: Completion) -> Result<(), Error> {
         match (&mut self.step, completion) {
@@ -121,12 +138,6 @@ impl Transition {
             (Step::Settle, Completion::Settled) => self.step = Step::Observe,
             (Step::Observe, Completion::BoundaryObserved) => {
                 self.step = Step::Correct(Correction::new(self.request.current_channel))
-            }
-            (Step::Correct(child), Completion::Correction(completion)) => {
-                child.advance(completion)?;
-                if let super::Action::Complete(outcome) = child.action() {
-                    self.step = Step::Restore(outcome);
-                }
             }
             (Step::Restore(correction), Completion::HardwareControlRestored) => {
                 self.step = Step::ReleaseGrant(*correction);

@@ -50,7 +50,16 @@ transaction uses the private P1 transport engine. Each complete candidate
 channel-index restoration have separate checkpoints. These voluntary yields
 construct no timer. Grant protection and software frequency control remain
 held across them; failure or cancellation cannot publish restoration.
-The finite edge limits do not establish a wall-clock bound. The caller must
+The finite edge limits do not establish a wall-clock bound.
+
+Cold/registration RFPLL I2C also enters the P1 Driver and the same outlined
+start/sample atom. Its first and repeated completion observations retain the
+one-microsecond wait and the original attempt budget. Direct admitted callers
+use that atom with immediate status polling inside their named twenty-
+microsecond settle. The two wait policies do not change each other's bounds.
+There is no separate native asynchronous RFPLL I2C executor. The thermal
+entry/restoration envelope is synchronous around the single correction await;
+semantic commit remains after hardware restoration and grant release. The caller must
 already hold exclusive physical PHY access. This child does not acquire a
 coexistence grant, disable hardware frequency updates, change thermal reference
 state, or authorize traffic to resume after failure; the thermal transition

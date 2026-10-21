@@ -294,9 +294,21 @@ fn thermal_correction_is_bracketed_by_grant_protection_only_when_due() {
             Thermal::SelectSoftwareControl => ThermalCompletion::SoftwareControlSelected,
             Thermal::Settle => ThermalCompletion::Settled,
             Thermal::ObserveBoundary => ThermalCompletion::BoundaryObserved,
-            Thermal::Correct(Action::Search(search)) => ThermalCompletion::Correction(
-                Completion::Search(complete_search_action(search, 100, Status::Other)),
-            ),
+            Thermal::Correct(Action::Search(search)) => {
+                transition
+                    .correction_mut()
+                    .expect("admitted correction")
+                    .advance(Completion::Search(complete_search_action(
+                        search,
+                        100,
+                        Status::Other,
+                    )))
+                    .unwrap();
+                if matches!(transition.action(), Thermal::Correct(Action::Complete(_))) {
+                    transition.finish_correction().expect("correction complete");
+                }
+                continue;
+            }
             Thermal::Correct(Action::Memory(_)) => panic!("an unchanged cap writes no memory"),
             Thermal::Correct(Action::Complete(_)) => panic!("a completed child is not an action"),
             Thermal::RestoreHardwareControl => ThermalCompletion::HardwareControlRestored,

@@ -13,6 +13,12 @@ pub(crate) trait Registers {
         clock: &C,
         now: Instant,
     ) -> Step;
+    #[cfg(target_arch = "riscv32")]
+    fn rfpll_atom<D: super::super::wait::PhyShortDelay, C: oer_time::Clock + ?Sized>(
+        &mut self,
+        clock: &C,
+        binding: crate::analog::rfpll::RfpllFrequencyExternalBinding,
+    ) -> Result<crate::analog::rfpll::RfpllFrequencyCompletion, Failure>;
     fn i2c_status(&mut self) -> u8;
 }
 pub(super) enum Io<'a, 'owner> {
@@ -43,6 +49,13 @@ impl Registers
     ) -> Step {
         job.advance_one::<D, _>(Io::Shared(self), clock, now)
     }
+    fn rfpll_atom<D: super::super::wait::PhyShortDelay, C: oer_time::Clock + ?Sized>(
+        &mut self,
+        clock: &C,
+        binding: crate::analog::rfpll::RfpllFrequencyExternalBinding,
+    ) -> Result<crate::analog::rfpll::RfpllFrequencyCompletion, Failure> {
+        Io::Shared(self).rfpll_frequency::<D, _>(clock, binding)
+    }
     fn i2c_status(&mut self) -> u8 {
         Io::Shared(self).i2c_status()
     }
@@ -57,12 +70,55 @@ impl Registers for oer_esp32s31_hal::owner::ValidationSharedPhy<'_> {
     ) -> Step {
         job.advance_one::<D, _>(Io::Validation(self), clock, now)
     }
+    fn rfpll_atom<D: super::super::wait::PhyShortDelay, C: oer_time::Clock + ?Sized>(
+        &mut self,
+        clock: &C,
+        binding: crate::analog::rfpll::RfpllFrequencyExternalBinding,
+    ) -> Result<crate::analog::rfpll::RfpllFrequencyCompletion, Failure> {
+        Io::Validation(self).rfpll_frequency::<D, _>(clock, binding)
+    }
     fn i2c_status(&mut self) -> u8 {
         Io::Validation(self).i2c_status()
     }
 }
 
 impl Io<'_, '_> {
+    #[cfg(target_arch = "riscv32")]
+    #[inline(never)]
+    fn rfpll_frequency<D: super::super::wait::PhyShortDelay, C: oer_time::Clock + ?Sized>(
+        &mut self,
+        clock: &C,
+        binding: crate::analog::rfpll::RfpllFrequencyExternalBinding,
+    ) -> Result<crate::analog::rfpll::RfpllFrequencyCompletion, Failure> {
+        use crate::analog::rfpll::{
+            RfpllFrequencyAction as Action, RfpllFrequencyCompletion as Completion,
+            RfpllFrequencyExternalBinding as Binding,
+        };
+        match binding {
+            Binding::I2c(binding) => super::rfpll::direct_i2c(self, clock, binding),
+            Binding::Timer(binding) => {
+                if !D::settle_micros(binding.micros()) {
+                    return Err(Failure::Target(
+                        crate::target_executor::PhyTargetPortError::HardwareCapabilityUnavailable,
+                    ));
+                }
+                Ok(binding.into_completion())
+            }
+            Binding::Mmio(binding) => {
+                if matches!(binding.action(), Action::ReadChannelReady { samples } if samples >= crate::target_port::CHANNEL_READY_SAMPLE_LIMIT)
+                {
+                    return Ok(Completion::ChannelReadyTimedOut);
+                }
+                Ok(match self {
+                    Self::Shared(registers) => binding.execute_target(*registers),
+                    #[cfg(oer_probe)]
+                    Self::Validation(registers) => binding.execute_target(*registers),
+                    #[cfg(test)]
+                    Self::Test(..) => return Err(Failure::Binding),
+                })
+            }
+        }
+    }
     pub(super) fn rfpll<D: super::super::wait::PhyShortDelay, C: oer_time::Clock>(
         &mut self,
         _clock: &C,

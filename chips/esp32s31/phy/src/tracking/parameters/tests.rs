@@ -316,7 +316,22 @@ fn measured_rfpll_reference_waits_for_restoration_and_parent_commit() {
                     search::Action::ReadStatus => search::Completion::Status(search::Status::Other),
                     _ => panic!("unexpected search terminal"),
                 };
-                thermal::Completion::Correction(rfpll::Completion::Search(completion))
+                child
+                    .transition_mut()
+                    .correction_mut()
+                    .expect("admitted correction")
+                    .advance(rfpll::Completion::Search(completion))
+                    .unwrap();
+                if matches!(
+                    child.action(),
+                    thermal::Action::Correct(rfpll::Action::Complete(_))
+                ) {
+                    child
+                        .transition_mut()
+                        .finish_correction()
+                        .expect("correction complete");
+                }
+                continue;
             }
             action => panic!("unexpected action {action:?}"),
         };

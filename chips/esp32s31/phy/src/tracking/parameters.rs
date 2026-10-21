@@ -577,6 +577,7 @@ impl<'state> PhyParamTrackingRfpllTransition<'state> {
         self.child.action()
     }
 
+    #[cfg(any(test, oer_probe))]
     #[inline(always)]
     pub fn advance(
         &mut self,

@@ -65,6 +65,7 @@ pub(crate) enum Step {
 
 enum Work<'a> {
     Rfpll(rfpll::Cursor<'a>),
+    RfpllColdI2c(rfpll::ColdI2c<'a>),
     I2c(&'a mut PhyColdI2cTransaction),
     Code(Option<u8>),
     Pbus(&'a mut PhyPbusHardwareBinding),
@@ -109,6 +110,20 @@ impl<'a> Job<'a> {
     }
     pub(crate) fn rfpll(cursor: rfpll::Cursor<'a>, now: Instant) -> Result<Self, Failure> {
         Self::new(Work::Rfpll(cursor), now, false)
+    }
+    pub(crate) fn rfpll_cold_i2c(
+        transaction: &'a mut PhyColdI2cTransaction,
+        now: Instant,
+    ) -> Result<Self, Failure> {
+        let mut job = Self::new(
+            Work::RfpllColdI2c(rfpll::ColdI2c::new(transaction)),
+            now,
+            false,
+        )?;
+        // Cold uses the existing attempt budget rather than an elapsed answer
+        // window; Driver must not clamp its real waits to a direct deadline.
+        job.deadline = Instant::from_micros(u64::MAX);
+        Ok(job)
     }
     pub(crate) fn code(now: Instant) -> Result<Self, Failure> {
         Self::new(Work::Code(None), now, false)
@@ -200,6 +215,7 @@ impl<'a> Job<'a> {
         self.first_wait = false;
         match &mut self.work {
             Work::Rfpll(cursor) => return cursor.advance_one::<D, _>(&mut io, clock),
+            Work::RfpllColdI2c(cursor) => return cursor.advance_one(&mut io, now),
             Work::Code(code) => {
                 if code.is_some() {
                     return Ok(Step::Complete);
@@ -469,7 +485,7 @@ impl<
                 _ => None,
             });
             let now = this.timer.now();
-            let mut step = this.registers.advance::<D, _>(this.job, this.timer, now);
+            let mut step = this.registers.advance::<D, _>(this.job, *this.timer, now);
             // A successful T7 publication establishes a fresh answer window
             // from its completion, including RMW's second command.
             if this.job.first_wait {

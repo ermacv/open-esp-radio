@@ -151,6 +151,14 @@ impl Search {
         }
     }
 
+    pub(crate) const fn checkpoint_len(&self) -> u8 {
+        match self.step {
+            Step::Complete => 0,
+            Step::WriteCandidate => 3,
+            _ => 1,
+        }
+    }
+
     pub fn advance(&mut self, completion: Completion) -> Result<(), Error> {
         self.step = match (self.step, completion) {
             (Step::ReadInitial, Completion::InitialCap(cap)) => {

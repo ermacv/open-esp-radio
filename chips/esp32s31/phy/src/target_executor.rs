@@ -16,7 +16,6 @@ use crate::{
         dcode::{PhyDcodeCompletion, PhyDcodeI2cBinding},
         i2c::MaskedI2cWriteBinding,
         pbus::PhyPbusHardwareObservation,
-        rfpll::{RfpllFrequencyCompletion, RfpllFrequencyI2cBinding},
         temperature::{PhyTemperatureCompletion, PhyTemperatureI2cBinding},
     },
     calibration::{
@@ -366,47 +365,6 @@ pub fn complete_rx_gain_i2c<C: oer_time::Clock + ?Sized>(
         .map_err(|_| PhyTargetPortError::UnexpectedBinding)
 }
 
-/// Complete an admitted RFPLL I2C command with the ROM's immediate status
-/// polling. Publication, retries and terminal recognition share the existing
-/// named 20 µs settle on the caller's clock. Bus status reads have no mandatory settling interval;
-/// analog settling remains an explicit responsibility of the caller.
-pub(crate) fn complete_rfpll_i2c_direct<C: oer_time::Clock + ?Sized>(
-    clock: &C,
-    mut binding: crate::analog::rfpll::RfpllFrequencyI2cBinding,
-    registers: &mut impl SharedPhyAccess,
-) -> Result<crate::analog::rfpll::RfpllFrequencyCompletion, PhyTargetPortError> {
-    use crate::calibration::cold::{PhyColdI2cAction, PhyColdI2cError};
-    let completed = crate::executor::wait::i2c::complete(
-        clock,
-        &mut binding,
-        RfpllFrequencyI2cBinding::action,
-        |binding, action| {
-            match action {
-                PhyColdI2cAction::StartRead { .. } | PhyColdI2cAction::StartWrite { .. } => {
-                    match binding.start_target(registers) {
-                        Ok(()) | Err(PhyColdI2cError::BusyAtStart) => {}
-                        Err(_) => return Err(PhyTargetPortError::UnexpectedBinding),
-                    }
-                }
-                PhyColdI2cAction::AwaitReadCompletionEdge { .. }
-                | PhyColdI2cAction::AwaitWriteCompletionEdge { .. } => {
-                    binding
-                        .observe_target_edge(registers)
-                        .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
-                }
-                PhyColdI2cAction::Complete(_) => {}
-            }
-            Ok(())
-        },
-    )?;
-    if !completed {
-        return Err(PhyTargetPortError::HardwareEdgeTimedOut);
-    }
-    binding
-        .into_completion()
-        .map_err(|_| PhyTargetPortError::UnexpectedBinding)
-}
-
 // These bindings model a PBus timeout as an ordinary completion consumed by
 // their parent transition. Keep the finite wait and the timeout conversion in
 // the driver: an application must not be able to silently select a different
@@ -479,11 +437,6 @@ macro_rules! define_direct_timeout_pbus_executor {
     };
 }
 
-define_i2c_executor!(
-    complete_rfpll_i2c,
-    RfpllFrequencyI2cBinding,
-    RfpllFrequencyCompletion
-);
 define_i2c_executor!(
     complete_masked_i2c,
     MaskedI2cWriteBinding,

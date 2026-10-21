@@ -885,8 +885,11 @@ fn rfpll_pending_failure_and_cancellation_keep_the_thermal_envelope_unrestored()
         let (waker, _) = context();
         let mut cx = Context::from_waker(&waker);
         let result = {
-            let mut job =
-                Job::rfpll(rfpll::Cursor::Thermal(&mut child), clock.now()).expect("deadline fits");
+            let mut job = Job::rfpll(
+                rfpll::Cursor::Correction(child.correction_mut().expect("correction admitted")),
+                clock.now(),
+            )
+            .expect("deadline fits");
             let mut driver = core::pin::pin!(drive::<TestDelay, _, _>(
                 &mut job, &mut io, &clock, None, None
             ));
@@ -901,6 +904,8 @@ fn rfpll_pending_failure_and_cancellation_keep_the_thermal_envelope_unrestored()
             assert!(matches!(child.action(), Thermal::Correct(_)));
         } else {
             assert_eq!(result, Ok(()));
+            assert!(matches!(child.action(), Thermal::Correct(_)));
+            child.finish_correction().expect("correction completed");
             assert_eq!(child.action(), Thermal::RestoreHardwareControl);
             child
                 .advance(Completion::HardwareControlRestored)
@@ -995,5 +1000,134 @@ fn rfpll_driver_wakes_once_per_checkpoint_without_a_timer_or_gap_timeout() {
     assert!(matches!(
         correction.action(),
         crate::tracking::rfpll::Action::Complete(_)
+    ));
+}
+
+#[test]
+fn cold_rfpll_keeps_the_first_sample_wait_and_the_native_attempt_budget() {
+    let clock = VirtualClock::<1>::new();
+    let mut io = Io {
+        byte: 15,
+        ..Io::default()
+    };
+    let atoms = io.atoms.clone();
+    let mut transaction = read();
+    let mut job = Job::rfpll_cold_i2c(&mut transaction, clock.now()).expect("deadline fits");
+    let (waker, _) = context();
+    let mut cx = Context::from_waker(&waker);
+    {
+        let mut driver = core::pin::pin!(drive::<TestDelay, _, _>(
+            &mut job, &mut io, &clock, None, None
+        ));
+        assert!(driver.as_mut().poll(&mut cx).is_pending()); // publish
+        assert_eq!(atoms.get(), 1);
+        assert!(driver.as_mut().poll(&mut cx).is_pending()); // register the first 1-us wait
+        assert_eq!(atoms.get(), 1);
+        assert!(driver.as_mut().poll(&mut cx).is_pending()); // no early observation
+        assert_eq!(atoms.get(), 1);
+        clock.advance(Duration::from_micros(1)).expect("time fits");
+        assert!(driver.as_mut().poll(&mut cx).is_pending()); // consume ready
+        assert_eq!(atoms.get(), 2);
+        assert_eq!(driver.as_mut().poll(&mut cx), Poll::Ready(Ok(())));
+    }
+    assert!(job.finished);
+    // The old for-loop needs a software terminal-recognition attempt after
+    // observing readiness; using that last attempt for hardware still fails.
+    let mut transaction = read();
+    let mut cursor = rfpll::ColdI2c::new(&mut transaction);
+    cursor.remaining = 2;
+    let mut hw = super::io::Io::Test(&mut io, core::marker::PhantomData);
+    assert_eq!(cursor.advance_one(&mut hw, clock.now()), Ok(Step::Runnable));
+    assert!(matches!(
+        cursor.advance_one(&mut hw, clock.now()),
+        Ok(Step::WaitAt(_))
+    ));
+    clock.advance(Duration::from_micros(1)).expect("time fits");
+    assert_eq!(cursor.advance_one(&mut hw, clock.now()), Ok(Step::Runnable));
+    assert_eq!(
+        cursor.advance_one(&mut hw, clock.now()),
+        Err(Failure::TimedOut)
+    );
+}
+
+#[test]
+fn cold_and_direct_rfpll_share_the_same_rmw_atoms_and_preserve_identity() {
+    use crate::analog::rfpll::{RfpllFrequencyAction, RfpllFrequencyI2cBinding};
+    let clock = VirtualClock::<1>::new();
+    let action = RfpllFrequencyAction::WriteMasked {
+        field: analog_registers::RFPLL_CAPACITOR_HIGH,
+        value: 1,
+    };
+    let mut direct = Io {
+        byte: 0xa5,
+        ..Io::default()
+    };
+    let mut cold = Io {
+        byte: 0xa5,
+        ..Io::default()
+    };
+    let expected = rfpll::direct_i2c(
+        &mut super::io::Io::Test(&mut direct, core::marker::PhantomData),
+        &clock,
+        RfpllFrequencyI2cBinding::new(action).expect("valid RFPLL write"),
+    )
+    .expect("direct command completes");
+    let mut binding = RfpllFrequencyI2cBinding::new(action).expect("valid RFPLL write");
+    let (waker, _) = context();
+    let mut cx = Context::from_waker(&waker);
+    {
+        let mut job =
+            Job::rfpll_cold_i2c(binding.transaction_mut(), clock.now()).expect("deadline fits");
+        let mut driver = core::pin::pin!(drive::<TestDelay, _, _>(
+            &mut job, &mut cold, &clock, None, None
+        ));
+        loop {
+            match driver.as_mut().poll(&mut cx) {
+                Poll::Ready(result) => {
+                    assert_eq!(result, Ok(()));
+                    break;
+                }
+                Poll::Pending => {
+                    clock.advance_to_next_deadline();
+                }
+            }
+        }
+    }
+    assert_eq!(
+        binding.into_completion().expect("cold command completes"),
+        expected
+    );
+    assert_eq!(cold.byte, direct.byte);
+    assert_eq!(cold.actions, direct.actions);
+}
+
+#[test]
+fn cold_rfpll_waits_between_busy_retries_and_fails_overflow_before_publishing() {
+    let clock = VirtualClock::<1>::new();
+    let mut io = Io::default();
+    io.busy.set(true);
+    let mut transaction = read();
+    let mut cursor = rfpll::ColdI2c::new(&mut transaction);
+    cursor.remaining = 2;
+    let mut hw = super::io::Io::Test(&mut io, core::marker::PhantomData);
+    for _ in 0..2 {
+        assert!(matches!(
+            cursor.advance_one(&mut hw, clock.now()),
+            Ok(Step::WaitAt(_))
+        ));
+        clock.advance(Duration::from_micros(1)).expect("time fits");
+    }
+    assert_eq!(
+        cursor.advance_one(&mut hw, clock.now()),
+        Err(Failure::TimedOut)
+    );
+    assert_eq!(io.actions.len(), 2);
+    assert!(matches!(
+        transaction.action(),
+        PhyColdI2cAction::StartRead { .. }
+    ));
+    assert!(matches!(
+        Job::rfpll_cold_i2c(&mut transaction, Instant::from_micros(u64::MAX)),
+        Err(Failure::DeadlineOverflow)
     ));
 }

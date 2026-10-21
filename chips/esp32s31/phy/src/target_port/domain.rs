@@ -168,7 +168,7 @@ pub(super) async fn execute_registration<P, R, D, O>(
     TargetRegistrationWitness,
 )
 where
-    R: PhyInitializationAccess,
+    R: PhyInitializationAccess + crate::executor::step::Registers,
     D: PhyShortDelay,
     O: PhyTargetObserver,
 {
@@ -200,6 +200,10 @@ impl PhyDomain {
         clippy::result_large_err,
         reason = "fail-stop error retains the allocation-free PHY transition"
     )]
+    #[allow(
+        private_bounds,
+        reason = "the sealed physical routes use the private shared engine"
+    )]
     pub fn register<'a, P, R, D, O>(
         timer: &'a impl oer_time::Timer,
         platform: &'a mut P,
@@ -208,7 +212,7 @@ impl PhyDomain {
         observer: O,
     ) -> impl core::future::Future<Output = Result<PhyDomainRegistered, PhyDomainRegisterFailure>> + 'a
     where
-        R: PhyInitializationAccess,
+        R: PhyInitializationAccess + crate::executor::step::Registers,
         D: PhyShortDelay + 'a,
         O: PhyTargetObserver + 'a,
     {

@@ -22,7 +22,7 @@ use crate::{
         dcode::{PhyDcodeCompletion, PhyDcodeExternalBinding},
         i2c::{PhyRfInitPrefixAction, PhyRfInitPrefixCompletion},
         pbus::PhyForceTxRxExternalBinding,
-        rfpll::{RfpllFrequencyAction, RfpllFrequencyCompletion, RfpllFrequencyExternalBinding},
+        rfpll::{RfpllFrequencyCompletion, RfpllFrequencyExternalBinding},
         temperature::{
             PhyTemperatureAction, PhyTemperatureCompletion, PhyTemperatureExternalBinding,
             PhyTemperatureTransition,
@@ -79,13 +79,13 @@ use crate::{
     target_executor::{
         PhyTargetPortError, complete_bluetooth_i2c, complete_bluetooth_pbus, complete_channel_i2c,
         complete_dcode_i2c, complete_final_i2c, complete_i2c_configuration, complete_masked_i2c,
-        complete_rfpll_i2c, complete_rx_dc_calibration_pbus, complete_rx_dco_pbus,
-        complete_rx_gain_dc_pbus, complete_rx_gain_i2c, complete_rx_gain_publish_pbus,
-        complete_rx_saturation_pbus, complete_rxiq_adjusted_tx_i2c, complete_rxiq_gain_i2c,
-        complete_rxiq_gain_pbus, complete_rxiq_init_i2c, complete_rxiq_init_pbus,
-        complete_temperature_i2c, complete_tx_calibration_environment_pbus, complete_tx_dc_pbus,
-        complete_tx_dc_pwdet_pbus, complete_tx_dc_pwdet_search_pbus, complete_tx_power_i2c,
-        complete_txiq_init_i2c, complete_txiq_pbus, write_i2c_direct,
+        complete_rx_dc_calibration_pbus, complete_rx_dco_pbus, complete_rx_gain_dc_pbus,
+        complete_rx_gain_i2c, complete_rx_gain_publish_pbus, complete_rx_saturation_pbus,
+        complete_rxiq_adjusted_tx_i2c, complete_rxiq_gain_i2c, complete_rxiq_gain_pbus,
+        complete_rxiq_init_i2c, complete_rxiq_init_pbus, complete_temperature_i2c,
+        complete_tx_calibration_environment_pbus, complete_tx_dc_pbus, complete_tx_dc_pwdet_pbus,
+        complete_tx_dc_pwdet_search_pbus, complete_tx_power_i2c, complete_txiq_init_i2c,
+        complete_txiq_pbus, write_i2c_direct,
     },
     tracking::{
         calibration::{
@@ -188,7 +188,7 @@ impl PhyGrantProtectPort for WeakPhyGrantProtect {
     }
 }
 
-const CHANNEL_READY_SAMPLE_LIMIT: u32 = 10_000;
+pub(crate) const CHANNEL_READY_SAMPLE_LIMIT: u32 = 10_000;
 const RF_OPERATION_LIMIT: u32 = 100_000;
 const MAC_CHANNEL_SETTLE_US: u64 = 20;
 const MAC_CHANNEL_IDLE_SETTLE_US: u64 = 5;
@@ -390,45 +390,28 @@ impl<'t, D, T> TargetCompleter<'t, D, T> {
 }
 
 impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
-    async fn complete_rfpll<P>(
+    async fn complete_rfpll(
         &self,
         binding: RfpllFrequencyExternalBinding,
-        platform: &mut P,
-        registers: &mut impl SharedPhyAccess,
-    ) -> Result<RfpllFrequencyCompletion, PhyTargetPortError> {
-        self.complete_rfpll_with(binding, platform, registers, |kind, micros| {
-            delay::<D, _>(self.timer, kind, micros)
-        })
-        .await
-    }
-
-    async fn complete_rfpll_with<P, F: core::future::Future<Output = ()>>(
-        &self,
-        binding: RfpllFrequencyExternalBinding,
-        _platform: &mut P,
-        registers: &mut impl SharedPhyAccess,
-        mut delay: impl FnMut(crate::executor::wait::Kind, u64) -> F,
+        registers: &mut (impl SharedPhyAccess + crate::executor::step::Registers),
     ) -> Result<RfpllFrequencyCompletion, PhyTargetPortError> {
         match binding {
-            RfpllFrequencyExternalBinding::Mmio(binding) => match binding.action() {
-                RfpllFrequencyAction::ReadChannelReady { samples }
-                    if samples >= CHANNEL_READY_SAMPLE_LIMIT =>
+            RfpllFrequencyExternalBinding::I2c(mut binding) => {
+                use crate::executor::step::{Job, drive};
                 {
-                    Ok(RfpllFrequencyCompletion::ChannelReadyTimedOut)
+                    let mut job = Job::rfpll_cold_i2c(binding.transaction_mut(), self.timer.now())
+                        .map_err(step::port_error)?;
+                    drive::<D, _, _>(&mut job, registers, self.timer, None, None)
+                        .await
+                        .map_err(step::port_error)?;
                 }
-                _ => Ok(binding.execute_target(registers)),
-            },
-            RfpllFrequencyExternalBinding::I2c(binding) => {
-                complete_rfpll_i2c(binding, registers, &mut delay).await
+                binding
+                    .into_completion()
+                    .map_err(|_| PhyTargetPortError::UnexpectedBinding)
             }
-            RfpllFrequencyExternalBinding::Timer(binding) => {
-                delay(
-                    crate::executor::wait::Kind::Settle,
-                    u64::from(binding.micros()),
-                )
-                .await;
-                Ok(binding.into_completion())
-            }
+            binding => registers
+                .rfpll_atom::<D, _>(self.timer, binding)
+                .map_err(step::port_error),
         }
     }
 
@@ -518,11 +501,10 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
         }
     }
 
-    async fn complete_tx_power<P>(
+    async fn complete_tx_power(
         &self,
         binding: PhyTxPowerExternalBinding,
-        platform: &mut P,
-        registers: &mut impl SharedPhyContext,
+        registers: &mut (impl SharedPhyContext + crate::executor::step::Registers),
     ) -> Result<PhyTxPowerCompletion, PhyTargetPortError> {
         match binding {
             PhyTxPowerExternalBinding::Environment(binding) => {
@@ -532,7 +514,7 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
                 ))
             }
             PhyTxPowerExternalBinding::Rfpll(binding) => Ok(PhyTxPowerCompletion::Rfpll(
-                self.complete_rfpll(binding, platform, registers).await?,
+                self.complete_rfpll(binding, registers).await?,
             )),
             PhyTxPowerExternalBinding::I2c(binding) => {
                 complete_tx_power_i2c(binding, registers, |kind, micros| {
@@ -552,11 +534,10 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
         }
     }
 
-    async fn complete_bluetooth_tx_power<P>(
+    async fn complete_bluetooth_tx_power(
         &self,
         binding: PhyBluetoothTxPowerExternalBinding,
-        platform: &mut P,
-        registers: &mut impl SharedPhyContext,
+        registers: &mut (impl SharedPhyContext + crate::executor::step::Registers),
     ) -> Result<PhyBluetoothTxPowerCompletion, PhyTargetPortError> {
         match binding {
             PhyBluetoothTxPowerExternalBinding::I2c(binding) => {
@@ -585,28 +566,27 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
             }
             PhyBluetoothTxPowerExternalBinding::Calibration(binding) => {
                 Ok(PhyBluetoothTxPowerCompletion::Calibration(
-                    self.complete_tx_power(binding, platform, registers).await?,
+                    self.complete_tx_power(binding, registers).await?,
                 ))
             }
         }
     }
 
-    async fn complete_bluetooth_tx_gain<P, O: PhyTargetObserver>(
+    async fn complete_bluetooth_tx_gain<O: PhyTargetObserver>(
         &self,
         binding: PhyBluetoothTxGainInitExternalBinding,
-        platform: &mut P,
-        registers: &mut impl SharedPhyContext,
+        registers: &mut (impl SharedPhyContext + crate::executor::step::Registers),
         observer: &mut O,
     ) -> Result<PhyBluetoothTxGainInitCompletion, PhyTargetPortError> {
         match binding {
             PhyBluetoothTxGainInitExternalBinding::Rfpll(binding) => {
                 Ok(PhyBluetoothTxGainInitCompletion::Rfpll(
-                    self.complete_rfpll(binding, platform, registers).await?,
+                    self.complete_rfpll(binding, registers).await?,
                 ))
             }
             PhyBluetoothTxGainInitExternalBinding::TxCap(binding) => {
                 Ok(PhyBluetoothTxGainInitCompletion::TxCap(
-                    self.complete_tx_power(binding, platform, registers).await?,
+                    self.complete_tx_power(binding, registers).await?,
                 ))
             }
             PhyBluetoothTxGainInitExternalBinding::TxDc(binding) => {
@@ -616,8 +596,7 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
             }
             PhyBluetoothTxGainInitExternalBinding::TxPower(binding) => {
                 Ok(PhyBluetoothTxGainInitCompletion::TxPower(
-                    self.complete_bluetooth_tx_power(binding, platform, registers)
-                        .await?,
+                    self.complete_bluetooth_tx_power(binding, registers).await?,
                 ))
             }
             PhyBluetoothTxGainInitExternalBinding::TxDcPwdet(binding) => {
@@ -660,7 +639,7 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
         &self,
         binding: PhyTxCapSearchExternalBinding,
         _platform: &mut P,
-        registers: &mut impl SharedPhyAccess,
+        registers: &mut (impl SharedPhyAccess + crate::executor::step::Registers),
     ) -> Result<PhyTxCapSearchCompletion, PhyTargetPortError> {
         match binding {
             PhyTxCapSearchExternalBinding::Mmio(binding) => Ok(binding.execute_target(registers)),
@@ -681,7 +660,7 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
         &self,
         binding: PhyTxCapExternalBinding,
         platform: &mut P,
-        registers: &mut impl SharedPhyContext,
+        registers: &mut (impl SharedPhyContext + crate::executor::step::Registers),
     ) -> Result<PhyTxCapCompletion, PhyTargetPortError> {
         match binding {
             PhyTxCapExternalBinding::Environment(binding) => Ok(PhyTxCapCompletion::Environment(
@@ -689,7 +668,7 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
                     .await?,
             )),
             PhyTxCapExternalBinding::Rfpll(binding) => Ok(PhyTxCapCompletion::Rfpll(
-                self.complete_rfpll(binding, platform, registers).await?,
+                self.complete_rfpll(binding, registers).await?,
             )),
             PhyTxCapExternalBinding::I2c(binding) => Ok(PhyTxCapCompletion::I2c(
                 complete_masked_i2c(binding, registers, |kind, micros| {
@@ -793,22 +772,16 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
         }
     }
 
-    async fn complete_dcode<P, F: core::future::Future<Output = ()>>(
+    async fn complete_dcode<F: core::future::Future<Output = ()>>(
         &self,
         binding: PhyDcodeExternalBinding,
-        platform: &mut P,
-        registers: &mut impl SharedPhyAccess,
+        registers: &mut (impl SharedPhyAccess + crate::executor::step::Registers),
         mut delay: impl FnMut(crate::executor::wait::Scope, crate::executor::wait::Kind, u64) -> F,
         mut observe: impl FnMut(bool),
     ) -> Result<PhyDcodeCompletion, PhyTargetPortError> {
         match binding {
             PhyDcodeExternalBinding::Rfpll(binding) => {
-                use crate::executor::wait::Scope;
-                let completion = self
-                    .complete_rfpll_with(binding, platform, registers, |kind, micros| {
-                        delay(Scope::Rfpll, kind, micros)
-                    })
-                    .await?;
+                let completion = self.complete_rfpll(binding, registers).await?;
                 if let RfpllFrequencyCompletion::MaskedRead {
                     field: crate::analog::i2c::analog_registers::RFPLL_LOCK_STATUS,
                     value,
@@ -877,7 +850,7 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
         &self,
         binding: PhyTxIqLoopbackExternalBinding,
         _platform: &mut P,
-        registers: &mut impl SharedPhyAccess,
+        registers: &mut (impl SharedPhyAccess + crate::executor::step::Registers),
     ) -> Result<PhyTxIqLoopbackCompletion, PhyTargetPortError> {
         match binding {
             PhyTxIqLoopbackExternalBinding::I2c(binding) => Ok(PhyTxIqLoopbackCompletion::I2c(
@@ -894,7 +867,7 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
         &self,
         binding: PhyTxIqCalibrationExternalBinding,
         platform: &mut P,
-        registers: &mut impl SharedPhyContext,
+        registers: &mut (impl SharedPhyContext + crate::executor::step::Registers),
     ) -> Result<PhyTxIqCalibrationCompletion, PhyTargetPortError> {
         match binding {
             PhyTxIqCalibrationExternalBinding::Mmio(binding) => binding
@@ -935,11 +908,11 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
         &self,
         binding: PhyTxIqInitExternalBinding,
         platform: &mut P,
-        registers: &mut impl SharedPhyContext,
+        registers: &mut (impl SharedPhyContext + crate::executor::step::Registers),
     ) -> Result<PhyTxIqInitCompletion, PhyTargetPortError> {
         match binding {
             PhyTxIqInitExternalBinding::Rfpll(binding) => Ok(PhyTxIqInitCompletion::Rfpll(
-                self.complete_rfpll(binding, platform, registers).await?,
+                self.complete_rfpll(binding, registers).await?,
             )),
             PhyTxIqInitExternalBinding::I2c(binding) => {
                 complete_txiq_init_i2c(binding, registers, |kind, micros| {
@@ -1078,7 +1051,7 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
         &self,
         binding: PhyRxIqGainExternalBinding,
         _platform: &mut P,
-        registers: &mut impl SharedPhyContext,
+        registers: &mut (impl SharedPhyContext + crate::executor::step::Registers),
     ) -> Result<PhyRxIqGainCompletion, PhyTargetPortError> {
         match binding {
             PhyRxIqGainExternalBinding::Pbus(binding) => {
@@ -1116,11 +1089,11 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
         &self,
         binding: PhyRxIqInitExternalBinding,
         platform: &mut P,
-        registers: &mut impl SharedPhyContext,
+        registers: &mut (impl SharedPhyContext + crate::executor::step::Registers),
     ) -> Result<PhyRxIqInitCompletion, PhyTargetPortError> {
         match binding {
             PhyRxIqInitExternalBinding::Rfpll(binding) => Ok(PhyRxIqInitCompletion::Rfpll(
-                self.complete_rfpll(binding, platform, registers).await?,
+                self.complete_rfpll(binding, registers).await?,
             )),
             PhyRxIqInitExternalBinding::I2c(binding) => {
                 complete_rxiq_init_i2c(binding, registers, |kind, micros| {
@@ -1209,16 +1182,15 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
         }
     }
 
-    async fn complete_rx_gain_dc<P>(
+    async fn complete_rx_gain_dc(
         &self,
         binding: PhyRxGainDcExternalBinding,
-        platform: &mut P,
-        registers: &mut impl SharedPhyContext,
+        registers: &mut (impl SharedPhyContext + crate::executor::step::Registers),
     ) -> Result<PhyRxGainDcCompletion, PhyTargetPortError> {
         match binding {
             PhyRxGainDcExternalBinding::Mmio(binding) => Ok(binding.execute_target(registers)),
             PhyRxGainDcExternalBinding::Rfpll(binding) => Ok(PhyRxGainDcCompletion::Rfpll(
-                self.complete_rfpll(binding, platform, registers).await?,
+                self.complete_rfpll(binding, registers).await?,
             )),
             PhyRxGainDcExternalBinding::Pbus(binding) => {
                 complete_rx_gain_dc_pbus(binding, registers, self.timer)
@@ -1255,19 +1227,17 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
         }
     }
 
-    async fn complete_rx_gain<P>(
+    async fn complete_rx_gain(
         &self,
         binding: PhyRxGainInitExternalBinding,
-        platform: &mut P,
-        registers: &mut impl SharedPhyContext,
+        registers: &mut (impl SharedPhyContext + crate::executor::step::Registers),
     ) -> Result<PhyRxGainInitCompletion, PhyTargetPortError> {
         match binding {
             PhyRxGainInitExternalBinding::Mmio(binding) => binding
                 .execute_target(registers)
                 .map_err(|_| PhyTargetPortError::HardwareInvariant),
             PhyRxGainInitExternalBinding::Dc(binding) => Ok(PhyRxGainInitCompletion::Dc(
-                self.complete_rx_gain_dc(binding, platform, registers)
-                    .await?,
+                self.complete_rx_gain_dc(binding, registers).await?,
             )),
             PhyRxGainInitExternalBinding::Publish(binding) => Ok(PhyRxGainInitCompletion::Publish(
                 self.complete_rx_gain_publish(binding, registers).await?,
@@ -1279,7 +1249,7 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
         &self,
         binding: PhyChipChannelExternalBinding,
         platform: &mut P,
-        registers: &mut impl SharedPhyAccess,
+        registers: &mut (impl SharedPhyAccess + crate::executor::step::Registers),
         observer: &mut O,
     ) -> Result<PhyChipChannelCompletion, PhyTargetPortError> {
         match binding {
@@ -1534,7 +1504,7 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
         &self,
         binding: PhyBbExternalBinding,
         platform: &mut P,
-        registers: &mut impl PhyInitializationAccess,
+        registers: &mut (impl PhyInitializationAccess + crate::executor::step::Registers),
         observer: &mut O,
     ) -> Result<PhyBbInitCompletion, PhyTargetPortError> {
         match binding {
@@ -1555,7 +1525,7 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
                     .await?,
             )),
             PhyBbExternalBinding::TxPower(binding) => Ok(PhyBbInitCompletion::TxPower(
-                self.complete_tx_power(binding, platform, registers).await?,
+                self.complete_tx_power(binding, registers).await?,
             )),
             PhyBbExternalBinding::TxDcPwdet(binding) => Ok(PhyBbInitCompletion::TxDcPwdet(
                 self.complete_tx_dc_pwdet(binding, registers).await?,
@@ -1563,7 +1533,6 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
             PhyBbExternalBinding::Dcode(binding) => Ok(PhyBbInitCompletion::Dcode(
                 self.complete_dcode(
                     binding,
-                    platform,
                     registers,
                     |_, kind, micros| delay::<D, _>(self.timer, kind, micros),
                     |_| {},
@@ -1578,7 +1547,7 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
             )),
             PhyBbExternalBinding::BluetoothTxGain(binding) => {
                 Ok(PhyBbInitCompletion::BluetoothTxGain(
-                    self.complete_bluetooth_tx_gain(binding, platform, registers, observer)
+                    self.complete_bluetooth_tx_gain(binding, registers, observer)
                         .await?,
                 ))
             }
@@ -1594,7 +1563,7 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
                 self.complete_rx_saturation(binding, registers).await?,
             )),
             PhyBbExternalBinding::RxGain(binding) => Ok(PhyBbInitCompletion::RxGain(
-                self.complete_rx_gain(binding, platform, registers).await?,
+                self.complete_rx_gain(binding, registers).await?,
             )),
             PhyBbExternalBinding::Channel(binding) => Ok(PhyBbInitCompletion::Channel(
                 self.complete_channel(binding, platform, registers, observer)
@@ -1606,7 +1575,7 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
     async fn complete_rf<O: PhyTargetObserver>(
         &self,
         binding: PhyColdExternalBinding,
-        registers: &mut impl SharedPhyContext,
+        registers: &mut (impl SharedPhyContext + crate::executor::step::Registers),
         observer: &mut O,
     ) -> Result<PhyRfInitPrefixCompletion, PhyTargetPortError> {
         match binding {
@@ -1748,7 +1717,7 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
     fn run_calibration_force_txrx(
         &self,
         mut child: PhyCalibrationForceTxRxTransition,
-        registers: &mut impl SharedPhyAccess,
+        registers: &mut (impl SharedPhyAccess + crate::executor::step::Registers),
     ) -> Result<PhyCalibrationTrackingCompletion, PhyTargetPortError> {
         for _ in 0..RF_OPERATION_LIMIT {
             child = match child.commit() {
@@ -1815,26 +1784,11 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
                     _ => None,
                 }
             });
-        for _ in 0..RF_OPERATION_LIMIT {
-            let action = child.action();
-            if let crate::tracking::rfpll::thermal::Action::Complete(outcome) = action {
-                let completion = child
-                    .commit()
-                    .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
-                observer.rfpll_completed(crate::tracking::rfpll::Observation {
-                    request,
-                    outcome,
-                    sample_age_micros,
-                });
-                if O::OBSERVE_ENGINE_POLLS {
-                    observer
-                        .engine_completed(crate::tracking::observation::Operation::Rfpll, timing);
-                }
-                return Ok(completion);
-            }
-            if matches!(action, crate::tracking::rfpll::thermal::Action::Correct(_)) {
+        rfpll::envelope::<D>(child.transition_mut(), registers, grant, observer)?;
+        if let Some(correction) = child.transition_mut().correction_mut() {
+            {
                 use crate::executor::step::{Job, drive, rfpll::Cursor};
-                let mut job = Job::rfpll(Cursor::Thermal(child.transition_mut()), self.timer.now())
+                let mut job = Job::rfpll(Cursor::Correction(correction), self.timer.now())
                     .map_err(step::port_error)?;
                 drive::<D, _, _>(
                     &mut job,
@@ -1845,26 +1799,35 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
                 )
                 .await
                 .map_err(step::port_error)?;
-                continue;
-            }
-            let completion =
-                rfpll::complete_thermal::<D, _>(self.timer, registers, grant, action).await?;
-            if let Some((operation, event)) = crate::tracking::observation::rfpll_hold_edge(action)
-            {
-                observer.tracking_operation(operation, event);
             }
             child
-                .advance(completion)
+                .transition_mut()
+                .finish_correction()
                 .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
+            rfpll::envelope::<D>(child.transition_mut(), registers, grant, observer)?;
         }
-        Err(PhyTargetPortError::RfOperationLimit)
+        let crate::tracking::rfpll::thermal::Action::Complete(outcome) = child.action() else {
+            return Err(PhyTargetPortError::UnexpectedBinding);
+        };
+        let completion = child
+            .commit()
+            .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
+        observer.rfpll_completed(crate::tracking::rfpll::Observation {
+            request,
+            outcome,
+            sample_age_micros,
+        });
+        if O::OBSERVE_ENGINE_POLLS {
+            observer.engine_completed(crate::tracking::observation::Operation::Rfpll, timing);
+        }
+        Ok(completion)
     }
 
     async fn run_param_tx_power<P>(
         &self,
         mut child: PhyParamTrackingTxPowerTransition<'_>,
         platform: &mut P,
-        registers: &mut impl SharedPhyAccess,
+        registers: &mut (impl SharedPhyAccess + crate::executor::step::Registers),
     ) -> Result<PhyParamTrackingCompletion, PhyTargetPortError> {
         for _ in 0..RF_OPERATION_LIMIT {
             child = match child.commit() {
@@ -1890,7 +1853,7 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
     async fn run_param_wifi_i2c(
         &self,
         mut child: PhyParamTrackingWifiI2cTransition<'_>,
-        registers: &mut impl SharedPhyAccess,
+        registers: &mut (impl SharedPhyAccess + crate::executor::step::Registers),
     ) -> Result<PhyParamTrackingCompletion, PhyTargetPortError> {
         for _ in 0..RF_OPERATION_LIMIT {
             child = match child.commit() {
@@ -1971,7 +1934,7 @@ impl<'a, P, R, G, D, T, O> TargetPhyParamTrackingPort<'a, P, R, G, D, T, O> {
 
 impl<
     P,
-    R: PhyInitializationAccess,
+    R: PhyInitializationAccess + crate::executor::step::Registers,
     G: PhyGrantProtectPort,
     D: PhyShortDelay,
     T: Timer,
@@ -2248,8 +2211,13 @@ impl<
     }
 }
 
-impl<P, R: PhyInitializationAccess, D: PhyShortDelay, T: Timer, O: PhyTargetObserver>
-    PhyRegisterPort for TargetPhyRegisterPort<'_, P, R, D, T, O>
+impl<
+    P,
+    R: PhyInitializationAccess + crate::executor::step::Registers,
+    D: PhyShortDelay,
+    T: Timer,
+    O: PhyTargetObserver,
+> PhyRegisterPort for TargetPhyRegisterPort<'_, P, R, D, T, O>
 {
     type Error = PhyTargetPortError;
 

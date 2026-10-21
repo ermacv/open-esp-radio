@@ -93,19 +93,7 @@ impl PhyTargetObserver for &mut Observer<'_> {
         operation: Operation,
         timing: oer_esp32s31_phy::tracking::observation::EngineTiming,
     ) {
-        oer_esp32s31_board::rom::print_fmt(format_args!(
-            "OPEN_RADIO_HIL engine family={:?} polls={} pending={} ready={} total-us={} max-us={} resumes={} late-total-us={} late-max-us={} invalid={}\n",
-            operation,
-            timing.polls,
-            timing.pending,
-            timing.polls.saturating_sub(timing.pending),
-            timing.total_micros,
-            timing.maximum_micros,
-            timing.resumes,
-            timing.lateness_micros,
-            timing.maximum_lateness_micros,
-            timing.invalid,
-        ));
+        report_engine(operation, &timing);
         self.2.merge(HoldPolls {
             polls: timing.polls,
             pending: timing.pending,
@@ -146,6 +134,39 @@ impl PhyTargetObserver for &mut Observer<'_> {
             _ => {}
         }
     }
+}
+
+/// Family formatting stays outside the observer and measured driver frames.
+#[inline(never)]
+fn report_engine(
+    operation: Operation,
+    timing: &oer_esp32s31_phy::tracking::observation::EngineTiming,
+) {
+    use oer_esp32s31_board::rom::print_fmt;
+    let family = match operation {
+        Operation::Rfpll => 1,
+        Operation::Temperature => 7,
+        _ => 0,
+    };
+    print_fmt(format_args!(
+        "OPEN_RADIO_HIL engine family={} polls={} pending={} ready={}\n",
+        family,
+        timing.polls,
+        timing.pending,
+        timing.polls.saturating_sub(timing.pending)
+    ));
+    print_fmt(format_args!(
+        "OPEN_RADIO_HIL engine family={} total-us={} max-us={}\n",
+        family, timing.total_micros, timing.maximum_micros
+    ));
+    print_fmt(format_args!(
+        "OPEN_RADIO_HIL engine family={} resumes={} late-total-us={}\n",
+        family, timing.resumes, timing.lateness_micros
+    ));
+    print_fmt(format_args!(
+        "OPEN_RADIO_HIL engine family={} late-max-us={} invalid={}\n",
+        family, timing.maximum_lateness_micros, timing.invalid
+    ));
 }
 
 /// Report preparation only after maintenance returns, including failures.
