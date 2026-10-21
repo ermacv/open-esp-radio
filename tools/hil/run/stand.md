@@ -73,7 +73,7 @@ cross-check, is one operation (`oer-hil-run`):
 1. **lease**: the board is claimed in the arbiter and, once granted, its
    lock file taken;
 2. **write**: the bundle's segments go through one espflash connection for
-   the chip its profile names (`platform/<chip>/chip.toml`), the OTA
+   the chip its profile names (`chips/<chip>/platform/chip.toml`), the OTA
    selection last, a segment whose flash already matches skipped after an
    MD5 comparison, a failed serial link retried up to three times; a board
    that is not on USB, because its image switched its USB Serial/JTAG off,
