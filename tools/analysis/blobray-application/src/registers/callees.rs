@@ -97,6 +97,31 @@ impl<'m> Callees<'m> {
         Ok(out)
     }
 
+    pub(super) fn owner(&self, id: usize) -> Result<(u64, &ObjectId)> {
+        let d = self.definitions.get(id).ok_or_else(integrity)?;
+        Ok((d.input, &d.symbol.object))
+    }
+
+    pub(super) fn len(&self) -> usize {
+        self.definitions.len()
+    }
+
+    pub(super) fn function_id(
+        &self,
+        function: &LibraryFunction,
+        c: &mut dyn RunControl,
+    ) -> Result<Option<usize>> {
+        c.checkpoint(lookup_work(self.definitions.len()))?;
+        let id = self
+            .definitions
+            .partition_point(|d| d.symbol < function.symbol);
+        Ok(self
+            .definitions
+            .get(id)
+            .filter(|d| d.input == function.input && d.symbol == function.symbol && d.function)
+            .map(|_| id))
+    }
+
     fn at_address(&self, address: u32, input: u64, c: &mut dyn RunControl) -> Result<CallTarget> {
         c.checkpoint(lookup_work(self.addresses.len()))?;
         let start = self.addresses.partition_point(|&id| {
@@ -366,6 +391,10 @@ impl<'f, 'a, 'm> CallSites<'f, 'a, 'm> {
             ready: false,
         }
     }
+    pub(super) fn records(&self) -> &'a [FunctionRecord] {
+        self.facts.records()
+    }
+
     pub fn at(
         &mut self,
         site: u64,

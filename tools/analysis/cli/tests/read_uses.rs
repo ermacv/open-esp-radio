@@ -310,7 +310,12 @@ fn loads_report_their_sinks_limits_preservation_and_unused_bits() {
         assert!(
             read(name).uses.iter().any(|usage| usage.bits == u32::MAX
                 && usage.sink == sink
-                && usage.precision == ReadPrecision::Exact),
+                && usage.precision
+                    == if name == "call_argument" {
+                        ReadPrecision::May
+                    } else {
+                        ReadPrecision::Exact
+                    }),
             "{name}: {:?}",
             read(name)
         );
@@ -516,7 +521,7 @@ fn a_named_callee_can_be_defined_by_another_analyzed_input() {
         Executable::new(fixture(include_str!("fixtures/read_uses.rs"))),
         Executable::new(fixture(
             r#"#![no_std]
-core::arch::global_asm!(".section .text.external,\"ax\",@progbits\n.globl external\n.type external,@function\nexternal: ret\n.size external, .-external");
+core::arch::global_asm!(".section .text.external,\"ax\",@progbits\n.globl external\n.type external,@function\nexternal: bnez a0, 2f\n2: ret\n.size external, .-external");
 "#,
         )),
     ];
@@ -553,29 +558,144 @@ core::arch::global_asm!(".section .text.external,\"ax\",@progbits\n.globl extern
 }
 
 #[test]
-fn a_complete_callee_does_not_consume_stale_argument_registers() {
-    let memory = WorkingMemory::new(64 << 20).expect("working memory");
-    let mut found = false;
-    register_accesses(
-        &[Executable::new(fixture(include_str!("fixtures/argument_summaries.rs")))],
-        Assumptions { abi: Some(CallAbi::RiscvInteger), ..Assumptions::default() },
-        &[ImageRegion { start: 0x2010_7000, length: 4 }],
-        &oer_analysis_riscv_lift::RiscvDecoder,
-        &memory,
-        &mut || Ok(()),
-        &mut |observation, _| {
-            if let RegisterAccess::Observation { function, reads: Some(reads), .. } = observation
-                && function.name.as_deref() == Some(b"stale_a3") {
-                found = true;
-                assert!(reads.uses.is_empty(), "{reads:?}");
-                assert!(reads.unknown.is_empty(), "{reads:?}");
-                assert_eq!(reads.unused, u32::MAX);
-            }
-            Ok(())
-        },
-    ).expect("argument summaries");
-    assert!(found);
-    assert_eq!(memory.used(), 0);
+fn argument_summaries_propagate_consumption_and_return_positions() {
+    for call_returns in [false, true] {
+        let memory = WorkingMemory::new(64 << 20).expect("working memory");
+        let mut found = BTreeMap::new();
+        register_accesses(
+            &[Executable::new(fixture(include_str!(
+                "fixtures/argument_summaries.rs"
+            )))],
+            Assumptions {
+                abi: Some(CallAbi::RiscvInteger),
+                call_returns,
+                ..Assumptions::default()
+            },
+            &[ImageRegion {
+                start: 0x2010_7000,
+                length: 4,
+            }],
+            &oer_analysis_riscv_lift::RiscvDecoder,
+            &memory,
+            &mut || Ok(()),
+            &mut |observation, _| {
+                if let RegisterAccess::Observation {
+                    function,
+                    fact,
+                    reads: Some(reads),
+                    ..
+                } = observation
+                    && matches!(
+                        fact.as_ref(),
+                        FunctionRecord::MemoryAccess {
+                            access: MemoryKind::Load,
+                            ..
+                        }
+                    )
+                {
+                    partition(reads, 4);
+                    found.insert(
+                        String::from_utf8(function.name.clone().expect("name")).expect("utf8"),
+                        reads.clone(),
+                    );
+                }
+                Ok(())
+            },
+        )
+        .expect("argument summaries");
+        for name in [
+            "stale_a3",
+            "a3_ignored",
+            "a5_overwritten",
+            "result_discarded",
+        ] {
+            let reads = &found[name];
+            assert!(
+                reads.uses.is_empty() && reads.unknown.is_empty(),
+                "{name}: {reads:?}"
+            );
+            assert_eq!(reads.unused, u32::MAX, "{name}");
+        }
+        for name in ["result_branch", "tail_result_branch", "high_result_branch"] {
+            let reads = &found[name];
+            assert_eq!(reads.unused, !16, "{name}: {reads:?}");
+            assert_eq!(reads.uses.len(), 1, "{name}: {reads:?}");
+            assert!(
+                reads.uses.iter().any(|usage| usage.bits == 16
+                    && usage.precision == ReadPrecision::Exact
+                    && matches!(usage.sink, ReadSink::Branch { .. })),
+                "{name}: {reads:?}"
+            );
+        }
+        for (name, bits) in [
+            ("a0_consumed", 16),
+            ("nested_consumption", 16),
+            ("stored_argument", 4),
+            ("address_argument", u32::MAX),
+        ] {
+            let reads = &found[name];
+            assert_eq!(reads.unused, !bits, "{name}: {reads:?}");
+            assert!(
+                reads.uses.iter().any(|usage| usage.bits == bits
+                    && usage.precision == ReadPrecision::Exact
+                    && matches!(usage.sink, ReadSink::CallArgument { register: 10, .. })),
+                "{name}: {reads:?}"
+            );
+        }
+        for name in [
+            "recursive_arguments",
+            "self_recursive_arguments",
+            "partial_arguments",
+            "external_arguments",
+            "indirect_arguments",
+            "tail_unknown_arguments",
+        ] {
+            let reads = &found[name];
+            assert_eq!(reads.unused, 0, "{name}: {reads:?}");
+            assert!(
+                reads.unknown.is_empty(),
+                "May remains use: {name}: {reads:?}"
+            );
+            assert!(
+                reads.uses.iter().any(|usage| usage.bits == u32::MAX
+                    && usage.precision == ReadPrecision::May
+                    && matches!(usage.sink, ReadSink::CallArgument { .. })),
+                "{name}: {reads:?}"
+            );
+        }
+        let may_return = &found["may_result_branch"];
+        assert_eq!(may_return.unused, !3, "{may_return:?}");
+        assert!(
+            may_return.uses.iter().any(|u| u.bits == 3
+                && u.precision == ReadPrecision::May
+                && matches!(u.sink, ReadSink::Branch { .. })),
+            "{may_return:?}"
+        );
+        for name in ["may_consumption", "may_caller_consumption"] {
+            let reads = &found[name];
+            assert!(
+                reads.uses.iter().all(|u| u.precision == ReadPrecision::May),
+                "{name}: {reads:?}"
+            );
+            assert!(!reads.uses.is_empty(), "{name}");
+        }
+        assert_eq!(found["identity_store"].preserved, u32::MAX);
+        assert!(found["identity_store"].uses.is_empty());
+        let inverted = &found["inverted_store"];
+        assert_eq!(inverted.preserved, 0);
+        assert!(
+            inverted.uses.iter().any(|usage| usage.bits == u32::MAX
+                && matches!(
+                    usage.sink,
+                    ReadSink::Store {
+                        same_word: true,
+                        ..
+                    }
+                )),
+            "{inverted:?}"
+        );
+        assert_eq!(memory.used(), 0);
+    }
 }
 
 #[test]

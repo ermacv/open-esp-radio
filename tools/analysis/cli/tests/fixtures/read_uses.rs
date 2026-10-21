@@ -100,7 +100,8 @@ end call_local_jal_argument
 .globl local_jal_callee
 .type local_jal_callee,@function
 local_jal_callee:
-    ret
+    bnez a0, 2f
+2:  ret
 .size local_jal_callee, .-local_jal_callee
 
 function tail_named_argument
@@ -128,7 +129,8 @@ function call_rom_argument
 end call_rom_argument
 
 function named_callee
-    ret
+    bnez a0, 2f
+2:  ret
 end named_callee
 
 function return_value

@@ -2,6 +2,8 @@
 use crate::navigation::Facts;
 use oer_analysis_blobray_domain::*;
 use oer_analysis_riscv_model::*;
+mod arguments;
+pub use arguments::{ArgumentProgram, ArgumentSummaries, ArgumentSummary};
 
 fn constant(v: &AbstractValue) -> Option<u32> {
     if let AbstractValue::Constant { value } = v {
@@ -346,19 +348,19 @@ impl<'f, 'a, 'm> StoredBitsEvaluator<'f, 'a, 'm> {
     }
 }
 
-/// One source load's bit dependencies in a register or a stack byte.
+/// One load or entry-register source's bit dependencies in a register or stack byte.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 struct ReadDependency {
-    load: usize,
+    source: usize,
     exact: [u32; 32],
     may: [u32; 32],
     inverted: u32,
 }
 
 impl ReadDependency {
-    fn empty(load: usize) -> Self {
+    fn empty(source: usize) -> Self {
         Self {
-            load,
+            source,
             exact: [0; 32],
             may: [0; 32],
             inverted: 0,
@@ -378,7 +380,7 @@ impl ReadDependency {
         self.exact.iter().chain(&self.may).any(|bits| *bits != 0)
     }
     fn wire(&self, mapping: impl Fn(usize) -> Option<usize>) -> Self {
-        let mut result = Self::empty(self.load);
+        let mut result = Self::empty(self.source);
         for (i, (exact, may)) in result.exact.iter_mut().zip(&mut result.may).enumerate() {
             if let Some(from) = mapping(i) {
                 *exact = self.exact.get(from).copied().unwrap_or(0);
@@ -394,7 +396,7 @@ impl ReadDependency {
         if self == other {
             return self;
         }
-        let mut result = Self::empty(self.load);
+        let mut result = Self::empty(self.source);
         for (i, ((exact, may), ((a, b), (x, y)))) in result
             .exact
             .iter_mut()
@@ -702,12 +704,13 @@ impl ReadState {
 #[derive(Clone, Copy)]
 struct ReadInstruction<'a> {
     site: u64,
-    bytes: &'a [u8],
+    opaque: u32,
     operation: SemanticOp,
     branch: Option<(BranchTest, Operand, Operand)>,
     flow: InstructionFlow,
     address: Option<&'a AbstractValue>,
-    value: Option<(u8, &'a AbstractValue)>,
+    value: Option<(u8, ReadAtom)>,
+    address_atom: ReadAtom,
     source: Option<usize>,
     arguments: bool,
     call: bool,
@@ -726,10 +729,16 @@ struct ReadEdge {
     target: Option<usize>,
     relation: EdgeKind,
 }
+enum ReadOrigin<'a> {
+    Load {
+        site: u64,
+        address: &'a AbstractValue,
+        width: u8,
+    },
+    Entry(u8),
+}
 struct ReadSource<'a> {
-    site: u64,
-    address: &'a AbstractValue,
-    width: u8,
+    origin: ReadOrigin<'a>,
     preserved: u32,
     limits: [u32; 4],
     event: usize,
@@ -799,6 +808,8 @@ pub struct ReadUsesEvaluator<'f, 'a, 'm> {
     queue: AdmittedVec<'m, usize>,
     ready: bool,
     work_limit: bool,
+    summary_mode: bool,
+    returned: AdmittedVec<'m, arguments::ReturnedArgument>,
 }
 impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
     pub fn new(facts: &'f Facts<'a, 'm>, memory: &'m WorkingMemory) -> Self {
@@ -814,6 +825,8 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
             queue: AdmittedVec::new(memory),
             ready: false,
             work_limit: false,
+            summary_mode: false,
+            returned: AdmittedVec::new(memory),
         }
     }
     pub fn analyze(
@@ -821,6 +834,7 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
         abi: Option<CallAbi>,
         decoder: &dyn FunctionSemantics,
         select: &mut SelectRead<'_>,
+        calls: &dyn ArgumentSummaries,
         c: &mut dyn RunControl,
     ) -> Result<()> {
         if self.ready {
@@ -839,7 +853,7 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
                 remaining: read_work_limit(instructions),
             };
             self.prepare(decoder, select, &mut work)?;
-            self.solve(abi, &mut work)
+            self.solve(abi, calls, &mut work)
         })();
         match result {
             Err(error)
@@ -864,7 +878,10 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
     }
     fn source_at(&self, site: u64) -> Option<usize> {
         self.sources
-            .binary_search_by_key(&site, |source| source.site)
+            .binary_search_by_key(&site, |source| match source.origin {
+                ReadOrigin::Load { site, .. } => site,
+                ReadOrigin::Entry(_) => u64::MAX,
+            })
             .ok()
     }
     fn prepare(
@@ -885,12 +902,13 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
                     ReadNode {
                         instruction: ReadInstruction {
                             site: *offset,
-                            bytes,
+                            opaque: opaque_read_registers(bytes, decoder.lift(bytes)),
                             operation: decoder.lift(bytes),
                             branch: decoder.branch(bytes),
                             flow: decoded.flow,
                             address: None,
                             value: None,
+                            address_atom: ReadAtom::Unknown,
                             source: None,
                             arguments: false,
                             call: false,
@@ -915,9 +933,11 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
                     ..
                 } if select(address, *width, c)? => self.sources.push(
                     ReadSource {
-                        site: *offset,
-                        address,
-                        width: *width,
+                        origin: ReadOrigin::Load {
+                            site: *offset,
+                            address,
+                            width: *width,
+                        },
                         preserved: 0,
                         limits: [0; 4],
                         event: 0,
@@ -932,7 +952,11 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
         )?;
         self.nodes
             .sort_unstable_by_key(|node| node.instruction.site);
-        self.sources.sort_unstable_by_key(|source| source.site);
+        self.sources
+            .sort_unstable_by_key(|source| match source.origin {
+                ReadOrigin::Load { site, .. } => site,
+                ReadOrigin::Entry(_) => u64::MAX,
+            });
         for record in records {
             c.checkpoint(1)?;
             match record {
@@ -943,6 +967,7 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
                         let source = self.source_at(*offset);
                         let instruction = &mut self.node_mut(id)?.instruction;
                         instruction.address = Some(address);
+                        instruction.address_atom = ReadAtom::from_fact(address);
                         instruction.source = source;
                     }
                 }
@@ -953,7 +978,8 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
                     ..
                 } => {
                     if let Some(id) = self.at(*offset) {
-                        self.node_mut(id)?.instruction.value = Some((*register, value));
+                        self.node_mut(id)?.instruction.value =
+                            Some((*register, ReadAtom::from_fact(value)));
                     }
                 }
                 FunctionRecord::CallInputs { offset, .. } => {
@@ -1048,14 +1074,14 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
             let a = self.flows.values(left)?.get(l).copied();
             let b = self.flows.values(right)?.get(r).copied();
             let load = match (a, b) {
-                (Some(a), Some(b)) => a.load.min(b.load),
-                (Some(a), _) => a.load,
-                (_, Some(b)) => b.load,
+                (Some(a), Some(b)) => a.source.min(b.source),
+                (Some(a), _) => a.source,
+                (_, Some(b)) => b.source,
                 _ => break,
             };
             c.checkpoint(1)?;
-            let a = a.filter(|a| a.load == load);
-            let b = b.filter(|b| b.load == load);
+            let a = a.filter(|a| a.source == load);
+            let b = b.filter(|b| b.source == load);
             if a.is_some() {
                 l += 1;
             }
@@ -1302,18 +1328,45 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
         node.queued = true;
         Ok(())
     }
-    fn solve(&mut self, abi: Option<CallAbi>, c: &mut dyn RunControl) -> Result<()> {
+    fn solve(
+        &mut self,
+        abi: Option<CallAbi>,
+        calls: &dyn ArgumentSummaries,
+        c: &mut dyn RunControl,
+    ) -> Result<()> {
         if self.nodes.is_empty() {
             return Ok(());
         }
-        self.merge(0, ReadState::entry(), c)?;
+        let mut entry = ReadState::entry();
+        if self.summary_mode {
+            for register in CallAbi::RiscvInteger.arguments() {
+                let source = self.sources.len();
+                self.sources.push(
+                    ReadSource {
+                        origin: ReadOrigin::Entry(register),
+                        preserved: 0,
+                        limits: [0; 4],
+                        event: 0,
+                    },
+                    c.position(),
+                )?;
+                entry.set(
+                    register,
+                    ReadCell {
+                        flow: self.seed(source, 4, false, c)?,
+                        ..ReadCell::default()
+                    },
+                );
+            }
+        }
+        self.merge(0, entry, c)?;
         let mut cursor = 0;
         while let Some(id) = self.queue.get(cursor).copied() {
             c.checkpoint(1)?;
             cursor += 1;
             self.node_mut(id)?.queued = false;
             let input = self.node(id)?.input.ok_or_else(read_integrity)?;
-            let output = self.execute(id, input, abi, false, c)?;
+            let output = self.execute(id, input, abi, calls, false, c)?;
             let instruction = self.node(id)?.instruction;
             for index in instruction.edge_start..instruction.edge_end {
                 let edge = self.edges.get(index).copied().ok_or_else(read_integrity)?;
@@ -1331,7 +1384,7 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
         for id in 0..self.nodes.len() {
             c.checkpoint(1)?;
             if let Some(input) = self.node(id)?.input {
-                self.execute(id, input, abi, true, c)?;
+                self.execute(id, input, abi, calls, true, c)?;
             }
         }
         Ok(())
@@ -1341,6 +1394,7 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
         id: usize,
         input: ReadState,
         abi: Option<CallAbi>,
+        calls: &dyn ArgumentSummaries,
         emit: bool,
         c: &mut dyn RunControl,
     ) -> Result<ReadState> {
@@ -1380,30 +1434,14 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
             if instruction.arguments {
                 self.limit_slots(input.slots, ReadLimitKind::StackSpill, c)?;
                 if let Some(abi) = abi {
-                    for register in abi.arguments() {
-                        self.sink(
-                            input.register(register).flow,
-                            u32::MAX,
-                            ReadSink::CallArgument {
-                                site: instruction.site,
-                                register,
-                                callee: None,
-                            },
-                            c,
-                        )?;
-                    }
+                    self.consume_arguments(input, instruction.site, abi, calls, c)?;
                 } else {
                     self.limit_state(input, ReadLimitKind::UnsupportedOperation, c)?;
                 }
             }
             if matches!(instruction.flow, InstructionFlow::Return { .. }) {
                 for register in CallAbi::RiscvInteger.results() {
-                    self.sink(
-                        input.register(register).flow,
-                        u32::MAX,
-                        ReadSink::Return { register },
-                        c,
-                    )?;
+                    self.return_value(input.register(register).flow, register, c)?;
                 }
                 self.limit_slots(input.slots, ReadLimitKind::StackSpill, c)?;
             }
@@ -1411,7 +1449,7 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
         // The integer model omits CSR inputs and moves into the FP file.
         // Their structural operands identify exactly which live dependencies
         // stop there; they never poison other loads in the function.
-        let opaque = opaque_read_registers(instruction.bytes, instruction.operation);
+        let opaque = instruction.opaque;
         if emit {
             for register in 1..32 {
                 if opaque & (1 << register) != 0 {
@@ -1482,11 +1520,7 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
                         c,
                     )?;
                 }
-                let stack = match instruction
-                    .address
-                    .map(ReadAtom::from_fact)
-                    .unwrap_or(address.atom)
-                {
+                let stack = match instruction.address_atom {
                     ReadAtom::Stack(offset) => Some(offset),
                     _ => {
                         if let ReadAtom::Stack(offset) = address.atom {
@@ -1614,7 +1648,7 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
         if let Some((register, fact)) = instruction.value
             && register != 0
         {
-            let known = ReadAtom::from_fact(fact);
+            let known = fact;
             if known != ReadAtom::Unknown {
                 let mut value = output.register(register);
                 value.atom = known;
@@ -1663,10 +1697,28 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
                 }
             }
         }
+        if instruction.arguments && !instruction.call && emit {
+            // A tail transfer returns the target's result directly to our caller.
+            if let Some(summary) = calls.summary(instruction.site) {
+                for register in CallAbi::RiscvInteger.results() {
+                    let flow = self.call_result(input, summary, register, c)?;
+                    self.return_value(flow, register, c)?;
+                }
+            }
+        }
         if instruction.call {
             if let Some(abi) = abi {
+                let mut results = [ReadCell::default(); 2];
+                if let Some(summary) = calls.summary(instruction.site) {
+                    for (cell, register) in results.iter_mut().zip(abi.results()) {
+                        cell.flow = self.call_result(input, summary, register, c)?;
+                    }
+                }
                 for register in abi.clobbered() {
                     output.set(register, ReadCell::default());
+                }
+                for (register, cell) in abi.results().into_iter().zip(results) {
+                    output.set(register, cell);
                 }
             } else {
                 if emit {
@@ -1698,11 +1750,18 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
                 .ok_or_else(read_integrity)?;
             let source = self
                 .sources
-                .get(dependency.load)
+                .get(dependency.source)
                 .ok_or_else(read_integrity)?;
             let same = instruction
                 .address
-                .is_some_and(|address| same_word(source.address, source.width, address, width));
+                .is_some_and(|address| match source.origin {
+                    ReadOrigin::Load {
+                        address: loaded,
+                        width: loaded_width,
+                        ..
+                    } => same_word(loaded, loaded_width, address, width),
+                    ReadOrigin::Entry(_) => false,
+                });
             let mut preserved = 0;
             if same && kind == MemoryKind::Store {
                 for (i, (&exact, &may)) in dependency.exact.iter().zip(&dependency.may).enumerate()
@@ -1713,7 +1772,7 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
                 }
             }
             self.sources
-                .get_mut(dependency.load)
+                .get_mut(dependency.source)
                 .ok_or_else(read_integrity)?
                 .preserved |= preserved;
             self.use_dependency(
@@ -1758,7 +1817,7 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
                 .copied()
                 .ok_or_else(read_integrity)?;
             let (a, b) = dependency.selected(u32::MAX);
-            self.source_limit(dependency.load, a | b, reason)?;
+            self.source_limit(dependency.source, a | b, reason)?;
         }
         Ok(())
     }
@@ -1825,7 +1884,7 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
             }
             let head = self
                 .sources
-                .get(dependency.load)
+                .get(dependency.source)
                 .ok_or_else(read_integrity)?
                 .event;
             let mut event = head;
@@ -1853,7 +1912,7 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
                     c.position(),
                 )?;
                 self.sources
-                    .get_mut(dependency.load)
+                    .get_mut(dependency.source)
                     .ok_or_else(read_integrity)?
                     .event = self.events.len();
             }
@@ -1951,7 +2010,7 @@ fn read_operation(
     l: ReadDependency,
     r: ReadDependency,
 ) -> ReadDependency {
-    let mut out = ReadDependency::empty(l.load);
+    let mut out = ReadDependency::empty(l.source);
     let right = b.constant_value();
     use IntegerOp::*;
     match op {

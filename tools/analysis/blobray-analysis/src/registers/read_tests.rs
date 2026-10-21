@@ -133,7 +133,7 @@ fn read_states_and_sink_storage_are_admitted_reused_and_released() {
         let mut reads = ReadUsesEvaluator::new(&facts, &memory);
         let mut steps = 0;
         reads
-            .analyze(None, &Decoder, &mut |_, _, _| Ok(true), &mut || {
+            .analyze(None, &Decoder, &mut |_, _, _| Ok(true), &(), &mut || {
                 steps += 1;
                 Ok(())
             })
@@ -145,7 +145,7 @@ fn read_states_and_sink_storage_are_admitted_reused_and_released() {
         );
         let mut repeated = 0;
         reads
-            .analyze(None, &Decoder, &mut |_, _, _| Ok(true), &mut || {
+            .analyze(None, &Decoder, &mut |_, _, _| Ok(true), &(), &mut || {
                 repeated += 1;
                 Ok(())
             })
@@ -178,7 +178,7 @@ fn interrupted_or_refused_state_storage_is_unknown_and_cancellation_propagates()
             let mut reads = ReadUsesEvaluator::new(&facts, &memory);
             let mut steps = 0;
             reads
-                .analyze(None, &Decoder, &mut |_, _, _| Ok(true), &mut || {
+                .analyze(None, &Decoder, &mut |_, _, _| Ok(true), &(), &mut || {
                     steps += 1;
                     if memory_limit > 4096 && steps > 16 {
                         Err(Error::new(
@@ -214,7 +214,7 @@ fn interrupted_or_refused_state_storage_is_unknown_and_cancellation_propagates()
     let mut reads = ReadUsesEvaluator::new(&facts, &memory);
     assert_eq!(
         reads
-            .analyze(None, &Decoder, &mut |_, _, _| Ok(true), &mut || Err(
+            .analyze(None, &Decoder, &mut |_, _, _| Ok(true), &(), &mut || Err(
                 Error::new(ErrorCode::Cancelled, "cancel fixture")
             ))
             .expect_err("cancellation")
@@ -268,6 +268,7 @@ fn a_large_straight_line_function_gets_a_size_proportional_budget() {
             None,
             &Decoder,
             &mut |_, _, _| Ok(true),
+            &(),
             &mut Count(&mut work),
         )
         .expect("large straight line");
@@ -328,7 +329,7 @@ fn a_function_work_limit_leaves_budget_for_the_next_function() {
         let facts = Facts::new(&records, &memory, &mut || Ok(())).expect("large facts");
         let mut reads = ReadUsesEvaluator::new(&facts, &memory);
         reads
-            .analyze(None, &Decoder, &mut |_, _, _| Ok(true), &mut budget)
+            .analyze(None, &Decoder, &mut |_, _, _| Ok(true), &(), &mut budget)
             .expect("per-function limit is reported");
         assert!(
             budget.0 >= local_limit,
@@ -351,7 +352,7 @@ fn a_function_work_limit_leaves_budget_for_the_next_function() {
         let facts = Facts::new(&records, &memory, &mut || Ok(())).expect("small facts");
         let mut reads = ReadUsesEvaluator::new(&facts, &memory);
         reads
-            .analyze(None, &Decoder, &mut |_, _, _| Ok(true), &mut budget)
+            .analyze(None, &Decoder, &mut |_, _, _| Ok(true), &(), &mut budget)
             .expect("next function still analyzed");
         let result = reads
             .reads(0, &number(0x20000), 4, MemoryKind::Load, &mut budget)

@@ -99,6 +99,26 @@ pub fn analyze_library(
     control: &mut dyn RunControl,
     visit: &mut Visit<'_>,
 ) -> Result<()> {
+    let (returns, _ledger) = prepare_library(inputs, assumptions, decoder, memory, control, None)?;
+    analyze_prepared_library(
+        inputs,
+        assumptions,
+        &returns,
+        decoder,
+        memory,
+        control,
+        visit,
+    )
+}
+
+fn prepare_library<'m>(
+    inputs: &[Executable],
+    assumptions: Assumptions<'_>,
+    decoder: &dyn FunctionSemantics,
+    memory: &'m WorkingMemory,
+    control: &mut dyn RunControl,
+    mut arguments: Option<&mut crate::registers::ArgumentCorpus<'_, 'm>>,
+) -> Result<(ReturnTable, Ledger<'m>)> {
     let Assumptions {
         abi,
         call_returns,
@@ -106,7 +126,8 @@ pub fn analyze_library(
     } = assumptions;
     let mut ledger = Ledger::new(memory, control)?;
     let mut table = ReturnTable::default();
-    for (index, executable) in inputs.iter().enumerate().filter(|_| call_returns) {
+    let first_pass = call_returns || arguments.is_some();
+    for (index, executable) in inputs.iter().enumerate().filter(|_| first_pass) {
         let input = index as u64;
         let mut position = RunPosition {
             input: Some(input),
@@ -118,21 +139,59 @@ pub fn analyze_library(
             table: &mut table,
             ledger: &mut ledger,
         };
-        visit_members(executable, memory, control, &mut |member, c| {
+        let container = visit_members(executable, memory, control, &mut |member, c| {
             analyze_object(
                 input,
                 member,
                 abi,
                 read_only,
                 &NoReturns,
-                Some(&mut collect),
+                if call_returns {
+                    Some(&mut collect)
+                } else {
+                    None
+                },
                 decoder,
                 memory,
                 c,
-                &mut |_, _| Ok(()),
+                &mut |outcome, c| {
+                    if let Some(arguments) = arguments.as_deref_mut() {
+                        arguments.capture(outcome, decoder, c)?;
+                    }
+                    Ok(())
+                },
             )
         })?;
+        if (container.framing.is_some() || container.kind == ContainerKind::Unsupported)
+            && let Some(arguments) = arguments.as_deref_mut()
+        {
+            arguments.capture(
+                LibraryOutcome::Gap {
+                    input,
+                    object: None,
+                    reason: "input enumeration incomplete",
+                },
+                decoder,
+                control,
+            )?;
+        }
     }
+    if let Some(arguments) = arguments {
+        arguments.solve(control)?;
+    }
+    Ok((table, ledger))
+}
+
+fn analyze_prepared_library(
+    inputs: &[Executable],
+    assumptions: Assumptions<'_>,
+    table: &ReturnTable,
+    decoder: &dyn FunctionSemantics,
+    memory: &WorkingMemory,
+    control: &mut dyn RunControl,
+    visit: &mut Visit<'_>,
+) -> Result<()> {
+    let Assumptions { abi, read_only, .. } = assumptions;
     for (index, executable) in inputs.iter().enumerate() {
         let input = index as u64;
         let mut position = RunPosition {
@@ -143,7 +202,7 @@ pub fn analyze_library(
         control.set_position(position);
         let container = visit_members(executable, memory, control, &mut |member, c| {
             analyze_object(
-                input, member, abi, read_only, &table, None, decoder, memory, c, visit,
+                input, member, abi, read_only, table, None, decoder, memory, c, visit,
             )
         })?;
         let gap = |reason: &str, visit: &mut Visit<'_>, c: &mut dyn RunControl| {
@@ -657,23 +716,23 @@ fn analyze_object(
                     &mut Records(&mut records),
                 );
                 match researched {
-                    Ok((summary, _)) if collect.is_some() => {
+                    Ok((summary, found)) => {
                         if let (Some(collect), Some(key)) = (collect.as_deref_mut(), key) {
                             let complete =
                                 summary.coverage.complete() && summary.semantics.complete;
                             collect.add(key, complete.then_some(&records[..]), c)?;
                         }
+                        visit(
+                            LibraryOutcome::Analyzed(AnalyzedFunction {
+                                function,
+                                records: &records,
+                                coverage: summary.coverage,
+                                semantics: summary.semantics,
+                                jump_tables: &found.tables,
+                            }),
+                            c,
+                        )?
                     }
-                    Ok((summary, found)) => visit(
-                        LibraryOutcome::Analyzed(AnalyzedFunction {
-                            function,
-                            records: &records,
-                            coverage: summary.coverage,
-                            semantics: summary.semantics,
-                            jump_tables: &found.tables,
-                        }),
-                        c,
-                    )?,
                     Err(error) if blocks_function(&error) => {
                         if let (Some(collect), Some(key)) = (collect.as_deref_mut(), key) {
                             collect.add(key, None, c)?;
@@ -723,6 +782,15 @@ pub fn register_accesses(
 ) -> Result<RegisterAccessSummary> {
     crate::registers::validate_ranges(ranges)?;
     let callees = crate::registers::Callees::capture(inputs, memory, control)?;
+    let mut arguments = crate::registers::ArgumentCorpus::new(&callees, memory, control)?;
+    let (returns, _ledger) = prepare_library(
+        inputs,
+        assumptions,
+        decoder,
+        memory,
+        control,
+        assumptions.abi.map(|_| &mut arguments),
+    )?;
     let mut summary = RegisterAccessSummary {
         schema: 3,
         ranges: ranges.to_vec(),
@@ -735,9 +803,10 @@ pub fn register_accesses(
         unresolved_addresses: 0,
         indexed_addresses: 0,
     };
-    analyze_library(
+    analyze_prepared_library(
         inputs,
         assumptions,
+        &returns,
         decoder,
         memory,
         control,
@@ -754,8 +823,8 @@ pub fn register_accesses(
                     decoder,
                     ranges,
                     assumptions.abi,
-                    &callees,
                     analyzed.function,
+                    &arguments,
                 );
                 crate::registers::observe(
                     analyzed.records,

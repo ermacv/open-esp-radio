@@ -148,6 +148,14 @@ mappings at a join become `may`; a source absent on another path is retained
 on its carrying paths. Only bits reaching a stopping point are unknown. It
 uses admitted state sets, caller work/deadline checks and a per-function
 dependency budget of `max(100000, 512 * instruction_count)` units.
+With an ABI, argument summaries use the same pass with entry-register sources.
+Consumed argument bits emit `call-argument` with the worse caller/callee
+precision; returned dependencies continue in `a0`/`a1`, including tail calls.
+Other argument bits have no call sink. Recursive components, unavailable or
+flow-incomplete callees and exhausted summaries consume all argument bits as
+`may`. Summaries use admitted working memory and are memoized in callee-first
+order. This is independent of `--call-returns`, which supplies constant values
+to value analysis. The register-access schema remains 9.
 See [loaded bit uses](../../../blobray-README.md#loaded-bit-uses).
 
 Human groups show the four classes, sinks, precision and reasons; observations

@@ -1,7 +1,9 @@
 //! Candidate memory addresses one analyzed function accesses.
 use crate::*;
 use oer_analysis_blobray_analysis::navigation::Facts;
+mod arguments;
 mod callees;
+pub(crate) use arguments::ArgumentCorpus;
 pub(crate) use callees::Callees;
 
 fn invalid(s: &str) -> Error {
@@ -30,6 +32,8 @@ pub(crate) struct ReadObservations<'f, 'a, 'm> {
     calls: callees::CallSites<'f, 'a, 'm>,
     callees: &'f Callees<'m>,
     function: &'f LibraryFunction,
+    arguments: &'f ArgumentCorpus<'f, 'm>,
+    summaries: Option<arguments::Calls<'f, 'm>>,
 }
 
 impl<'f, 'a, 'm> ReadObservations<'f, 'a, 'm> {
@@ -39,8 +43,8 @@ impl<'f, 'a, 'm> ReadObservations<'f, 'a, 'm> {
         decoder: &'f dyn FunctionSemantics,
         ranges: &'f [ImageRegion],
         abi: Option<CallAbi>,
-        callees: &'f Callees<'m>,
         function: &'f LibraryFunction,
+        arguments: &'f ArgumentCorpus<'f, 'm>,
     ) -> Self {
         Self {
             evaluator: oer_analysis_blobray_analysis::registers::ReadUsesEvaluator::new(
@@ -50,8 +54,10 @@ impl<'f, 'a, 'm> ReadObservations<'f, 'a, 'm> {
             ranges,
             abi,
             calls: callees::CallSites::new(facts, memory),
-            callees,
+            callees: arguments.catalog,
             function,
+            arguments,
+            summaries: None,
         }
     }
 
@@ -72,10 +78,16 @@ impl<'f, 'a, 'm> ReadObservations<'f, 'a, 'm> {
             ..
         } = fact
         {
+            if self.summaries.is_none() {
+                self.summaries = Some(self.arguments.calls(&mut self.calls, self.function, c)?);
+            }
             self.evaluator.analyze(
                 self.abi,
                 self.decoder,
                 &mut |address, width, c| selected_read(address, width, self.ranges, c),
+                self.summaries
+                    .as_ref()
+                    .ok_or_else(|| Error::new(ErrorCode::Integrity, "missing call summaries"))?,
                 c,
             )?;
             let mut reads = self.evaluator.reads(*offset, address, *width, *access, c)?;

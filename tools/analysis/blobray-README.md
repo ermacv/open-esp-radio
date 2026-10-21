@@ -56,11 +56,21 @@ with precedence `uses` > `unknown` > `preserved` > `unused`:
 Dependencies flow through instruction CFG edges to a fixed point, including
 loops. Joins union sources; an exact mapping remains exact when all paths
 carrying that source agree. Known stack offsets transfer byte dependencies
-through stores and reloads. Calls emit ABI argument sinks with the resolved
-callee's address, captured defining function and symbol name when known;
-unresolved indirect callees are `null`. Tail calls use the same sink. Blobray
-does not classify diagnostic functions. Calls clear clobbered
-registers and keep callee-saved register dependencies. The expression DAG
+through stores and reloads. With an ABI, the same pass seeds entry argument
+registers to compute memoized callee summaries, in callee-first order across
+the captured corpus. Only bits consumed inside a callee emit `CallArgument`;
+returned bits continue at their output positions in the caller's `a0`/`a1`.
+Ignored arguments become unused unless they reach another sink. Summaries
+include tail transfers and preserve the worse precision across the boundary.
+Recursive components, unresolved/external targets, flow-incomplete callees
+and exhausted summary budgets consume all argument bits with May precision.
+Opaque-call and value-alternative gaps alone do not hide instruction flow;
+other semantic gaps prevent narrowing through a summary. Summary stack or
+unsupported-flow limits remain May consumption.
+Argument sinks retain the resolved callee's address, captured defining function
+and symbol name; unresolved indirect callees are `null`. Blobray does not
+classify diagnostic functions. Calls clear clobbered registers and keep
+callee-saved register dependencies. The expression DAG
 continues to supply addresses and the selected load sites.
 
 State sets and the work queue use admitted working memory and the caller's
