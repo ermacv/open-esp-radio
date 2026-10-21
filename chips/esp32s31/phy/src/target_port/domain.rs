@@ -8,6 +8,27 @@
 use super::*;
 use crate::domain::PhyDomain;
 
+// The constructor writes its async block directly into the caller's future.
+// A fixed poll boundary keeps registration temporaries out of enclosing radio
+// polls without an allocation or another copy of the retained transition.
+pin_project_lite::pin_project! {
+    pub(super) struct RegisterFuture<F> {
+        #[pin]
+        pub(super) future: F,
+    }
+}
+impl<F: core::future::Future> core::future::Future for RegisterFuture<F> {
+    type Output = F::Output;
+
+    #[inline(never)]
+    fn poll(
+        self: core::pin::Pin<&mut Self>,
+        cx: &mut core::task::Context<'_>,
+    ) -> core::task::Poll<Self::Output> {
+        self.project().future.poll(cx)
+    }
+}
+
 /// Caller-owned inputs for one production common-PHY registration.
 ///
 /// A valid retained cache seeds cold partial calibration; the transition
@@ -33,6 +54,9 @@ impl PhyRegisterConfig {
         self
     }
 
+    // Keep construction in the caller's return place; inlining this large
+    // owner into the registration poll creates another temporary stack copy.
+    #[inline(never)]
     fn into_transition(self) -> PhyRegisterTransition {
         PhyRegisterTransition::with_production_config_and_calibration(
             self.calibration_identity,
@@ -176,49 +200,69 @@ impl PhyDomain {
         clippy::result_large_err,
         reason = "fail-stop error retains the allocation-free PHY transition"
     )]
-    pub async fn register<P, R, D, O>(
-        timer: &impl oer_time::Timer,
-        platform: &mut P,
-        registers: &mut R,
+    pub fn register<'a, P, R, D, O>(
+        timer: &'a impl oer_time::Timer,
+        platform: &'a mut P,
+        registers: &'a mut R,
         config: PhyRegisterConfig,
         observer: O,
-    ) -> Result<PhyDomainRegistered, PhyDomainRegisterFailure>
+    ) -> impl core::future::Future<Output = Result<PhyDomainRegistered, PhyDomainRegisterFailure>> + 'a
     where
         R: PhyInitializationAccess,
-        D: PhyShortDelay,
-        O: PhyTargetObserver,
+        D: PhyShortDelay + 'a,
+        O: PhyTargetObserver + 'a,
     {
-        let mut transition = config.into_transition();
-        let (result, counters, witness) = execute_registration::<P, R, D, O>(
-            timer,
-            &mut transition,
-            platform,
-            registers,
-            observer,
-        )
-        .await;
-        let outcome = match result {
-            Ok(outcome) => outcome,
-            Err(error) => {
-                return Err(PhyDomainRegisterFailure {
-                    transition,
-                    counters,
-                    error: TargetPhyRegisterError::Run(error),
-                });
-            }
-        };
-        match transition.into_model_parts() {
-            Ok((state, calibration_cache)) => Ok(PhyDomainRegistered {
-                domain: PhyDomain::from_target_completion(state, witness),
-                calibration_cache,
-                outcome,
-                counters,
-            }),
-            Err(transition) => Err(PhyDomainRegisterFailure {
+        RegisterFuture {
+            future: async move {
+                let mut transition = config.into_transition();
+                let (result, counters, witness) = execute_registration::<P, R, D, O>(
+                    timer,
+                    &mut transition,
+                    platform,
+                    registers,
+                    observer,
+                )
+                .await;
+                finish_registration(transition, result, counters, witness)
+            },
+        }
+    }
+}
+
+// Construct the large terminal result in the caller's return place. Keeping
+// the consumed transition here avoids a second owner copy in the poll frame.
+#[inline(never)]
+#[allow(
+    clippy::result_large_err,
+    reason = "failure retains the unique transition"
+)]
+fn finish_registration(
+    transition: PhyRegisterTransition,
+    result: Result<PhyRegisterOutcome, PhyRegisterRunError<PhyTargetPortError>>,
+    counters: PhyTargetPortCounters,
+    witness: TargetRegistrationWitness,
+) -> Result<PhyDomainRegistered, PhyDomainRegisterFailure> {
+    let outcome = match result {
+        Ok(outcome) => outcome,
+        Err(error) => {
+            return Err(PhyDomainRegisterFailure {
                 transition,
                 counters,
-                error: TargetPhyRegisterError::MissingCompletedModelOwner,
-            }),
+                error: TargetPhyRegisterError::Run(error),
+            });
         }
+    };
+    match transition.into_model_parts() {
+        Ok((state, calibration_cache)) => Ok(PhyDomainRegistered {
+            domain: PhyDomain::from_target_completion(state, witness),
+            calibration_cache,
+            outcome,
+            counters,
+        }),
+        Err(transition) => Err(PhyDomainRegisterFailure {
+            transition,
+            counters,
+            error: TargetPhyRegisterError::MissingCompletedModelOwner,
+        }),
     }
 }

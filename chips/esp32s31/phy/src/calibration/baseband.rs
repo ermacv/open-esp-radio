@@ -817,6 +817,9 @@ impl PhyBbInitTransition {
         Self::new_on_channel(state, 11)
     }
 
+    // Return-place construction avoids an 812-byte child temporary in the
+    // enclosing registration step.
+    #[inline(never)]
     pub const fn new_on_channel(state: crate::state::PhyState, channel_or_frequency: u16) -> Self {
         Self {
             state,
@@ -851,6 +854,8 @@ impl PhyBbInitTransition {
         )
     }
 
+    // Retain this child's temporary slots in its own bounded model step.
+    #[inline(never)]
     pub fn step_local(&mut self) -> Result<PhyBbInitLocalStep, PhyBbInitTransitionError> {
         let local = match self.step {
             PhyBbInitStep::TxDc(transition) => match transition.action() {
@@ -1095,6 +1100,7 @@ impl PhyBbInitTransition {
         Ok(local)
     }
 
+    #[inline(never)]
     pub fn advance_external(
         &mut self,
         completion: PhyBbInitCompletion,
