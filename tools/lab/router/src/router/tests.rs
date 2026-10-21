@@ -311,7 +311,7 @@ fn the_plan_lists_placeholders_only() {
 fn the_host_refuses_lines_outside_the_allowlist() {
     for line in [
         format!("wireless.lab_ap.key='{PASSPHRASE}'"),
-        "wireless.lab_ap.encryption='psk2'".to_owned(),
+        "wireless.lab_ap.auth_secret='made-up-secret'".to_owned(),
         "wireless.vlan1=wifi-vlan".to_owned(),
         "network.lan=interface".to_owned(),
         "garbage".to_owned(),
@@ -332,6 +332,38 @@ fn the_host_refuses_lines_outside_the_allowlist() {
     assert!(error.contains("outside the allowlist"), "{error}");
     let error = check_channel(&format!("{CHANNELS}Wiphy phy0\n"), 6, None).unwrap_err();
     assert!(error.contains("outside the allowlist"), "{error}");
+}
+
+#[test]
+fn w3_applies_and_verifies_open_security_and_disables_he() {
+    let p = Profile::w3("radio9", "lab_ap", INTERFACE, 6, SSID).unwrap();
+    let script = p.apply_script().unwrap();
+    assert!(script.contains("wireless.lab_ap.encryption=none"));
+    assert!(script.contains("wireless.radio9.ieee80211ax=0"));
+    assert!(script.contains("wireless.lab_ap.network=oer_w3"));
+    assert!(script.contains("wireless.lab_ap.isolate=1"));
+    assert!(script.contains("wifi down radio9"));
+    assert!(script.contains("wifi up radio9"));
+    assert!(!profile().apply_script().unwrap().contains("encryption"));
+    let configured = show_profiled().replace("encryption='psk2'", "encryption='none'")
+        + "wireless.radio9.ieee80211ax='0'\n";
+    assert!(
+        Wireless::parse(&configured, SSID)
+            .unwrap()
+            .check_after(&p)
+            .is_ok()
+    );
+    for broken in [
+        configured.replace("encryption='none'", "encryption='psk2'"),
+        configured.replace("ieee80211ax='0'", "ieee80211ax='1'"),
+    ] {
+        assert!(
+            Wireless::parse(&broken, SSID)
+                .unwrap()
+                .check_after(&p)
+                .is_err()
+        );
+    }
 }
 
 #[test]

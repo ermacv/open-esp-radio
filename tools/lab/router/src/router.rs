@@ -24,7 +24,8 @@
 //!    apart: an AP on the profile's channel, 20 MHz wide, with the stand's
 //!    SSID; its `addr` is the stand's BSSID.
 //!
-//! Encryption and keys are never set, and never leave the router: every
+//! W1 leaves encryption unchanged. W3 sets encryption to none and disables
+//! HE; keys are never set and never leave the router. Every
 //! read is filtered there by an allowlist, and the host refuses any line
 //! outside it. An SSID is kept only as whether it is the stand's. The SSH
 //! target, the interface, every SSID and the full BSSID appear in no
@@ -48,7 +49,7 @@ pub const SETTLE_PAUSE: Duration = Duration::from_secs(2);
 /// The options of the wireless configuration that leave the router; every
 /// other one (`key`, `sae_password`, `auth_secret`, `wpa_psk_file`, …) stays
 /// there.
-pub const ALLOWED_OPTIONS: [&str; 11] = [
+pub const ALLOWED_OPTIONS: [&str; 13] = [
     "device",
     "mode",
     "disabled",
@@ -60,6 +61,8 @@ pub const ALLOWED_OPTIONS: [&str; 11] = [
     "htmode",
     "beacon_int",
     "country",
+    "encryption",
+    "ieee80211ax",
 ];
 /// The section types whose lines leave the router.
 pub const ALLOWED_TYPES: [&str; 2] = ["wifi-device", "wifi-iface"];
@@ -101,6 +104,7 @@ pub struct Profile {
     interface: String,
     channel: u8,
     ssid: String,
+    open_station: bool,
 }
 
 impl fmt::Debug for Profile {
@@ -159,7 +163,22 @@ impl Profile {
             interface: interface.to_owned(),
             channel,
             ssid: ssid.to_owned(),
+            open_station: false,
         })
+    }
+
+    /// W3's open HT20 station profile. The selected AP is open and HE is
+    /// disabled; other AP sections and credentials are left untouched.
+    pub fn w3(
+        radio: &str,
+        ap_section: &str,
+        interface: &str,
+        channel: u8,
+        ssid: &str,
+    ) -> Result<Self> {
+        let mut profile = Self::new(radio, ap_section, interface, channel, ssid)?;
+        profile.open_station = true;
+        Ok(profile)
     }
 
     /// The one line that may be shown of the profile.
@@ -190,7 +209,7 @@ impl Profile {
                 quote(&format!("wireless.{section}.{option}={value}"))?
             ))
         };
-        Ok([
+        let mut steps = vec![
             set(&self.radio, "channel", &self.channel.to_string())?,
             set(&self.radio, "htmode", HTMODE)?,
             set(&self.radio, "beacon_int", &BEACON_INTERVAL_TU.to_string())?,
@@ -198,10 +217,23 @@ impl Profile {
             set(&self.ap_section, "ssid", &self.ssid)?,
             set(&self.ap_section, "disabled", "0")?,
             set(&self.ap_section, "hidden", "0")?,
-            "uci commit wireless".to_owned(),
-            "wifi reload".to_owned(),
-        ]
-        .join(" && "))
+        ];
+        if self.open_station {
+            steps.push(set(&self.ap_section, "encryption", "none")?);
+            steps.push(set(&self.radio, "ieee80211ax", "0")?);
+            steps.push(set(&self.ap_section, "network", crate::w3::network::NAME)?);
+            steps.push(set(&self.ap_section, "isolate", "1")?);
+        }
+        steps.push("uci commit wireless".to_owned());
+        if self.open_station {
+            // Recreate the selected AP: a hot reload can update the SSID while
+            // retaining the previous bridge membership of its live netdev.
+            steps.push(format!("wifi down {}", quote(&self.radio)?));
+            steps.push(format!("wifi up {}", quote(&self.radio)?));
+        } else {
+            steps.push("wifi reload".to_owned());
+        }
+        Ok(steps.join(" && "))
     }
 
     /// Step 6: the AP interface, filtered on the router to the lines read.
@@ -223,6 +255,7 @@ pub fn plan() -> Result<Vec<String>> {
         interface: "<wireless_interface>".to_owned(),
         channel: 0,
         ssid: "<ssid>".to_owned(),
+        open_station: false,
     };
     Ok(vec![
         CHANGES.to_owned(),
@@ -273,6 +306,15 @@ pub fn apply(remote: &mut dyn Remote, profile: &Profile) -> Result<Applied> {
         .run(&profile.channels_script()?)
         .map_err(step("reading the radio's channels"))?;
     check_channel(&channels, profile.channel, radio.option("country"))?;
+    let previous_network = if profile.open_station {
+        let fingerprint = crate::w3::network::prepare(remote)?;
+        remote
+            .run(&crate::w3::network::render()?)
+            .map_err(step("applying the W3 network"))?;
+        Some(fingerprint)
+    } else {
+        None
+    };
     remote
         .run(&profile.apply_script()?)
         .map_err(step("applying the profile"))?;
@@ -284,7 +326,11 @@ pub fn apply(remote: &mut dyn Remote, profile: &Profile) -> Result<Applied> {
     )?;
     after.check_after(profile)?;
     let country = country_of(after.sections(profile)?.0)?;
-    settle(remote, profile, country)
+    let applied = settle(remote, profile, country)?;
+    if let Some(before) = previous_network {
+        crate::w3::network::verify(remote, &profile.interface, &before)?;
+    }
+    Ok(applied)
 }
 
 /// The UCI `country` of the radio `radio`: the stand's regulatory domain.
@@ -645,6 +691,11 @@ impl Wireless {
                 "the committed {}.ssid is not the stand's SSID",
                 ap.name
             ));
+        }
+        if profile.open_station
+            && (ap.option("encryption") != Some("none") || radio.option("ieee80211ax") != Some("0"))
+        {
+            return Err("the committed W3 profile is not open with HE disabled".to_owned());
         }
         self.refuse_others(profile)
     }
