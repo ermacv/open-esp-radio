@@ -274,7 +274,7 @@ pub fn compare(
                 .collect::<Vec<_>>(),
             Assumptions {
                 abi: Some(CallAbi::RiscvInteger),
-                call_returns: false,
+                call_summaries: false,
                 read_only,
             },
             windows,

@@ -1,35 +1,15 @@
 //! Argument summaries use the load-use CFG engine, with entry-register sources.
 use super::*;
 
-#[derive(Clone, Copy, Default)]
-struct Consumed {
-    exact: u32,
-    may: u32,
-}
-
 #[derive(Clone, Copy)]
-pub(super) struct ReturnedArgument {
+pub(super) struct ReturnedDependency {
     register: u8,
     dependency: ReadDependency,
 }
 
-/// Internal bit-flow contract; no register-access wire schema is added.
-/// Return mappings retain output positions and inversion, so only pure wiring
-/// can subsequently prove same-word preservation in the caller.
-pub struct ArgumentSummary<'m> {
-    consumed: [Consumed; 8],
-    returned: AdmittedVec<'m, ReturnedArgument>,
-}
-
-/// A missing summary consumes every argument bit with May precision.
-pub trait ArgumentSummaries {
-    fn summary(&self, site: u64) -> Option<&ArgumentSummary<'_>>;
-}
-impl ArgumentSummaries for () {
-    fn summary(&self, _: u64) -> Option<&ArgumentSummary<'_>> {
-        None
-    }
-}
+/// Site resolution returns the shared model port's contract; this callback
+/// does not produce or own callee facts.
+pub type CallAt<'s> = dyn Fn(u64) -> Option<&'s CallSummary> + 's;
 
 /// A compact, owned recipe for the same CFG pass. Capture drops borrowed
 /// expression/address facts and keeps only lifted operations, stack/constant
@@ -68,19 +48,12 @@ impl<'m> ArgumentProgram<'m> {
         })
     }
 
-    pub fn calls(&self) -> impl Iterator<Item = u64> + '_ {
-        self.instructions
-            .iter()
-            .filter(|i| i.arguments)
-            .map(|i| i.site)
-    }
-
     pub fn summarize(
         self,
-        calls: &dyn ArgumentSummaries,
+        calls: &CallAt<'_>,
         memory: &'m WorkingMemory,
         c: &mut dyn RunControl,
-    ) -> Result<Option<ArgumentSummary<'m>>> {
+    ) -> Result<Option<(ArgumentSummary, MemoryReservation<'m>)>> {
         if self.instructions.is_empty() {
             return Ok(None);
         }
@@ -106,12 +79,12 @@ impl<'m> ArgumentProgram<'m> {
                 )?;
             }
             evaluator.solve(Some(CallAbi::RiscvInteger), calls, &mut work)?;
-            let mut consumed = [Consumed::default(); 8];
+            let mut consumed = [ArgumentConsumption::default(); 8];
             for source in evaluator.sources.iter() {
                 let ReadOrigin::Entry(register) = source.origin else {
                     return Err(read_integrity());
                 };
-                let mut value = Consumed::default();
+                let mut value = ArgumentConsumption::default();
                 let mut event = source.event;
                 while event != 0 {
                     work.checkpoint(1)?;
@@ -131,10 +104,27 @@ impl<'m> ArgumentProgram<'m> {
                     .get_mut(usize::from(register - 10))
                     .ok_or_else(read_integrity)? = value;
             }
-            Ok(ArgumentSummary {
-                consumed,
-                returned: evaluator.returned,
-            })
+            let mut ledger = Ledger::new(memory, &mut work)?;
+            let mut returned = Vec::new();
+            for item in evaluator.returned.iter() {
+                work.checkpoint(1)?;
+                ledger.push(
+                    &mut returned,
+                    ReturnedArgument {
+                        argument: 10 + item.dependency.source as u8,
+                        register: item.register,
+                        exact: item.dependency.exact,
+                        may: item.dependency.may,
+                        inverted: item.dependency.inverted,
+                    },
+                    &mut work,
+                )?;
+            }
+            returned.sort_unstable_by_key(|r| (r.argument, r.register));
+            Ok((
+                ArgumentSummary { consumed, returned },
+                ledger.into_reservation(),
+            ))
         })();
         match result {
             Ok(summary) => Ok(Some(summary)),
@@ -154,14 +144,14 @@ impl ReadUsesEvaluator<'_, '_, '_> {
         input: ReadState,
         site: u64,
         abi: CallAbi,
-        calls: &dyn ArgumentSummaries,
+        calls: &CallAt<'_>,
         c: &mut dyn RunControl,
     ) -> Result<()> {
         for register in abi.arguments() {
-            let consumed = calls
-                .summary(site)
+            let consumed = calls(site)
+                .map(|s| &s.arguments)
                 .and_then(|s| s.consumed.get(usize::from(register - 10)).copied())
-                .unwrap_or(Consumed {
+                .unwrap_or(ArgumentConsumption {
                     exact: 0,
                     may: u32::MAX,
                 });
@@ -215,7 +205,7 @@ impl ReadUsesEvaluator<'_, '_, '_> {
                 existing.dependency = existing.dependency.join(dependency);
             } else {
                 self.returned.push(
-                    ReturnedArgument {
+                    ReturnedDependency {
                         register,
                         dependency,
                     },
@@ -229,14 +219,14 @@ impl ReadUsesEvaluator<'_, '_, '_> {
     pub(super) fn call_result(
         &mut self,
         input: ReadState,
-        summary: &ArgumentSummary<'_>,
+        summary: &ArgumentSummary,
         register: u8,
         c: &mut dyn RunControl,
     ) -> Result<usize> {
         let mut result = 0;
         for returned in summary.returned.iter().filter(|r| r.register == register) {
-            let mapping = returned.dependency;
-            let argument = 10 + mapping.source as u8;
+            let mapping = returned;
+            let argument = returned.argument;
             let flow = input.register(argument).flow;
             let len = self.flows.values(flow)?.len();
             for index in 0..len {
@@ -312,22 +302,20 @@ mod tests {
     #[test]
     fn return_contract_keeps_positions_without_consuming_entry_bits() {
         let memory = WorkingMemory::new(1 << 20).expect("memory");
-        let summary = returning(&memory)
-            .summarize(&(), &memory, &mut || Ok(()))
+        let (summary, reservation) = returning(&memory)
+            .summarize(&|_| None, &memory, &mut || Ok(()))
             .expect("summary")
             .expect("complete");
         assert!(summary.consumed.iter().all(|c| c.exact == 0 && c.may == 0));
         assert_eq!(summary.returned.len(), 2);
         for returned in summary.returned.iter() {
-            assert_eq!(
-                returned.dependency.source,
-                usize::from(returned.register - 10)
-            );
-            assert_eq!(returned.dependency.exact, std::array::from_fn(|i| 1 << i));
-            assert_eq!(returned.dependency.may, [0; 32]);
+            assert_eq!(returned.argument, returned.register);
+            assert_eq!(returned.exact, std::array::from_fn(|i| 1 << i));
+            assert_eq!(returned.may, [0; 32]);
         }
         assert!(memory.used() > 0);
         drop(summary);
+        drop(reservation);
         assert_eq!(memory.used(), 0);
     }
 
@@ -343,7 +331,7 @@ mod tests {
             .expect("block remaining memory");
         assert!(
             program
-                .summarize(&(), &memory, &mut || Ok(()))
+                .summarize(&|_| None, &memory, &mut || Ok(()))
                 .expect("conservative summary")
                 .is_none()
         );
@@ -351,7 +339,7 @@ mod tests {
         assert_eq!(memory.used(), 0);
         let mut calls = 0;
         let result = returning(&memory)
-            .summarize(&(), &memory, &mut || {
+            .summarize(&|_| None, &memory, &mut || {
                 calls += 1;
                 if calls > 3 {
                     Err(Error::new(ErrorCode::ResourceLimited, "fixture work limit"))
@@ -363,7 +351,7 @@ mod tests {
         assert!(result.is_none());
         assert_eq!(memory.used(), 0);
         let error = returning(&memory)
-            .summarize(&(), &memory, &mut || {
+            .summarize(&|_| None, &memory, &mut || {
                 Err(Error::new(ErrorCode::Cancelled, "cancelled"))
             })
             .err()

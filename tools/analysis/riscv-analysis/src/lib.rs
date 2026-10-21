@@ -38,8 +38,8 @@ pub struct FunctionInput<'a> {
     /// Indirect jumps whose targets the caller knows from the build's facts.
     pub jumps: &'a [KnownJump],
     /// The constant results of the functions this one calls, which a call
-    /// takes for its result registers ([`CallReturns`]).
-    pub returns: &'a dyn CallReturns,
+    /// takes for its result registers ([`CallSummaries`]).
+    pub returns: &'a dyn CallSummaries,
     /// Explicit proofs of non-returning callees. Unknown behavior keeps
     /// the call's possible continuation; result values imply no behavior.
     pub call_behavior: &'a dyn CallBehavior,

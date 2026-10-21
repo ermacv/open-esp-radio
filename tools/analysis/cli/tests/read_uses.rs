@@ -70,6 +70,7 @@ fn loads_report_their_sinks_limits_preservation_and_unused_bits() {
         )))],
         Assumptions {
             abi: Some(CallAbi::RiscvInteger),
+            call_summaries: true,
             ..Assumptions::default()
         },
         &[ImageRegion {
@@ -559,7 +560,7 @@ core::arch::global_asm!(".section .text.external,\"ax\",@progbits\n.globl extern
 
 #[test]
 fn argument_summaries_propagate_consumption_and_return_positions() {
-    for call_returns in [false, true] {
+    for call_summaries in [false, true] {
         let memory = WorkingMemory::new(64 << 20).expect("working memory");
         let mut found = BTreeMap::new();
         register_accesses(
@@ -568,7 +569,7 @@ fn argument_summaries_propagate_consumption_and_return_positions() {
             )))],
             Assumptions {
                 abi: Some(CallAbi::RiscvInteger),
-                call_returns,
+                call_summaries,
                 ..Assumptions::default()
             },
             &[ImageRegion {
@@ -583,6 +584,7 @@ fn argument_summaries_propagate_consumption_and_return_positions() {
                     function,
                     fact,
                     reads: Some(reads),
+                    address: Some(0x2010_7000),
                     ..
                 } = observation
                     && matches!(
@@ -603,6 +605,15 @@ fn argument_summaries_propagate_consumption_and_return_positions() {
             },
         )
         .expect("argument summaries");
+        if !call_summaries {
+            let reads = &found["stale_a3"];
+            assert_eq!(reads.unused, 0);
+            assert!(reads.uses.iter().any(|u| u.bits == u32::MAX
+                && u.precision == ReadPrecision::May
+                && matches!(u.sink, ReadSink::CallArgument { .. })));
+            assert_eq!(memory.used(), 0);
+            continue;
+        }
         for name in [
             "stale_a3",
             "a3_ignored",
@@ -841,4 +852,168 @@ fn finite_rmw_fields_agree_with_read_flow_for_every_byte_and_clearing_form() {
             }
         }
     }
+}
+
+#[test]
+fn shared_port_propagates_constants_through_calls_and_rejects_conflicts() {
+    use oer_analysis_blobray_application::library::{LibraryOutcome, analyze_library};
+    let mut asm =
+        String::from("#![no_std]\ncore::arch::global_asm!(r#\"\n.option norvc\n.option norelax\n");
+    let function = |name: &str, body: &str| {
+        format!(
+            ".section .text.{name},\"ax\",@progbits\n.globl {name}\n.type {name},@function\n{name}:\n{body}\n.size {name}, .-{name}\n"
+        )
+    };
+    let returning_call = |target: &str| {
+        format!(
+            "addi sp, sp, -16\nsw ra, 12(sp)\ncall {target}\nlw ra, 12(sp)\naddi sp, sp, 16\nret"
+        )
+    };
+    asm.push_str(&function("leaf", "li a0, 37\nli a1, 0\nret"));
+    asm.push_str(&function("middle", &returning_call("leaf")));
+    asm.push_str(&function("root", &returning_call("middle")));
+    asm.push_str(&function("tail_constant", "tail leaf"));
+    asm.push_str(&function("tail_root", &returning_call("tail_constant")));
+    asm.push_str(&function(
+        "opaque_constant",
+        "call external\nli a0, 41\nli a1, 0\nret",
+    ));
+    asm.push_str(&function("opaque_root", &returning_call("opaque_constant")));
+    asm.push_str(&function(
+        "unsupported_constant",
+        "ecall\nli a0, 43\nli a1, 0\nret",
+    ));
+    asm.push_str(&function(
+        "unsupported_root",
+        &returning_call("unsupported_constant"),
+    ));
+    let mut limited = String::new();
+    for i in 0..8 {
+        limited.push_str(&format!("li t0, {i}\nbeq a2, t0, .Lcase{i}\n"));
+    }
+    limited.push_str("li a0, 8\nj .Ljoin\n");
+    for i in 0..8 {
+        limited.push_str(&format!(".Lcase{i}:\nli a0, {i}\nj .Ljoin\n"));
+    }
+    limited.push_str(".Ljoin:\nli a1, 0\nret");
+    asm.push_str(&function("limited", &limited));
+    asm.push_str(&function("limited_root", &returning_call("limited")));
+    asm.push_str("\"#);\n");
+    let inputs = [Executable::new(fixture(&asm))];
+    for call_summaries in [false, true] {
+        let memory = WorkingMemory::new(64 << 20).expect("memory");
+        let mut values = BTreeMap::new();
+        let mut gaps = BTreeMap::new();
+        analyze_library(
+            &inputs,
+            Assumptions {
+                abi: Some(CallAbi::RiscvInteger),
+                call_summaries,
+                ..Assumptions::default()
+            },
+            &oer_analysis_riscv_lift::RiscvDecoder,
+            &memory,
+            &mut || Ok(()),
+            &mut |outcome, _| {
+                if let LibraryOutcome::Analyzed(a) = outcome {
+                    let name =
+                        String::from_utf8(a.function.name.clone().expect("name")).expect("UTF-8");
+                    gaps.insert(
+                        name.clone(),
+                        a.records
+                            .iter()
+                            .filter_map(|r| {
+                                if let FunctionRecord::SemanticGap { reason, .. } = r {
+                                    Some(*reason)
+                                } else {
+                                    None
+                                }
+                            })
+                            .collect::<Vec<_>>(),
+                    );
+                    for record in a.records {
+                        if let FunctionRecord::ReturnValue { low, .. } = record {
+                            values.insert(name.clone(), low.clone());
+                        }
+                    }
+                }
+                Ok(())
+            },
+        )
+        .expect("two-pass library");
+        assert_eq!(values["leaf"], AbstractValue::Constant { value: 37 });
+        for (name, value) in [
+            ("middle", 37),
+            ("root", 37),
+            ("tail_root", 37),
+            ("opaque_root", 41),
+        ] {
+            if call_summaries {
+                assert_eq!(values[name], AbstractValue::Constant { value }, "{name}");
+            } else {
+                assert!(
+                    !matches!(values[name], AbstractValue::Constant { .. }),
+                    "{name}"
+                );
+            }
+        }
+        assert!(gaps["middle"].contains(&SemanticGapReason::OpaqueCall));
+        assert!(gaps["limited"].contains(&SemanticGapReason::AlternativeLimit));
+        for name in ["limited", "limited_root", "unsupported_root"] {
+            assert!(
+                !matches!(values[name], AbstractValue::Constant { .. }),
+                "{name}: {:?}",
+                values[name]
+            );
+        }
+        assert!(gaps["unsupported_constant"].contains(&SemanticGapReason::UnsupportedInstruction));
+        assert_eq!(memory.used(), 0);
+    }
+    // Identical result constants do not hide incompatible argument contracts.
+    let mut caller =
+        String::from("#![no_std]\ncore::arch::global_asm!(r#\"\n.option norvc\n.option norelax\n");
+    caller.push_str(&function(
+        "collision",
+        "bnez a0, 1f\n1: li a0, 37\nli a1, 0\nret",
+    ));
+    caller.push_str(&function("collision_root", &returning_call("collision")));
+    caller.push_str("\"#);\n");
+    let other = format!(
+        "#![no_std]\ncore::arch::global_asm!(r#\"\n{}\n\"#);",
+        function("collision", "bnez a3, 1f\n1: li a0, 37\nli a1, 0\nret")
+    );
+    let memory = WorkingMemory::new(64 << 20).expect("memory");
+    let mut result = None;
+    analyze_library(
+        &[
+            Executable::new(fixture(&caller)),
+            Executable::new(fixture(&other)),
+        ],
+        Assumptions {
+            abi: Some(CallAbi::RiscvInteger),
+            call_summaries: true,
+            ..Assumptions::default()
+        },
+        &oer_analysis_riscv_lift::RiscvDecoder,
+        &memory,
+        &mut || Ok(()),
+        &mut |outcome, _| {
+            if let LibraryOutcome::Analyzed(a) = outcome
+                && a.function.name.as_deref() == Some(b"collision_root")
+            {
+                for record in a.records {
+                    if let FunctionRecord::ReturnValue { low, .. } = record {
+                        result = Some(low.clone());
+                    }
+                }
+            }
+            Ok(())
+        },
+    )
+    .expect("conflicting definitions");
+    assert!(
+        !matches!(result, Some(AbstractValue::Constant { .. })),
+        "{result:?}"
+    );
+    assert_eq!(memory.used(), 0);
 }

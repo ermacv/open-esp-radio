@@ -1951,7 +1951,14 @@ fn evaluate(
         let callee = callee(op, node, input, &incoming);
         for r in CallAbi::RiscvInteger.results() {
             let returned = match callee {
-                Some(callee) => returned(input.returns.returns(callee, r), &mut symbols.sets, c)?,
+                Some(callee) => returned(
+                    input
+                        .returns
+                        .summary(callee)
+                        .and_then(|summary| summary.result(r)),
+                    &mut symbols.sets,
+                    c,
+                )?,
                 None => None,
             };
             state[usize::from(r)] = match returned {

@@ -2,7 +2,7 @@
 //!
 //! `cargo registers check inventory` runs Blobray on every pinned vendor
 //! binary in the publication's owned MMIO ranges, using `riscv-integer`
-//! and `--call-returns`. The schema-9 consumer in [`uses`] rejects uses of
+//! and `--call-summaries`. The schema-9 consumer in [`uses`] rejects uses of
 //! absent bits and reports unknown bits and coverage limits separately.
 //! This module supplies expanded geometry, inherited resets, and the same
 //! bounded/indexed candidate addresses used by the MMIO inventory.

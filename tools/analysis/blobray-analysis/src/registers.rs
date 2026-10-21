@@ -3,7 +3,7 @@ use crate::navigation::Facts;
 use oer_analysis_blobray_domain::*;
 use oer_analysis_riscv_model::*;
 mod arguments;
-pub use arguments::{ArgumentProgram, ArgumentSummaries, ArgumentSummary};
+pub use arguments::{ArgumentProgram, CallAt};
 
 fn constant(v: &AbstractValue) -> Option<u32> {
     if let AbstractValue::Constant { value } = v {
@@ -809,7 +809,7 @@ pub struct ReadUsesEvaluator<'f, 'a, 'm> {
     ready: bool,
     work_limit: bool,
     summary_mode: bool,
-    returned: AdmittedVec<'m, arguments::ReturnedArgument>,
+    returned: AdmittedVec<'m, arguments::ReturnedDependency>,
 }
 impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
     pub fn new(facts: &'f Facts<'a, 'm>, memory: &'m WorkingMemory) -> Self {
@@ -834,7 +834,7 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
         abi: Option<CallAbi>,
         decoder: &dyn FunctionSemantics,
         select: &mut SelectRead<'_>,
-        calls: &dyn ArgumentSummaries,
+        calls: &CallAt<'_>,
         c: &mut dyn RunControl,
     ) -> Result<()> {
         if self.ready {
@@ -1331,7 +1331,7 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
     fn solve(
         &mut self,
         abi: Option<CallAbi>,
-        calls: &dyn ArgumentSummaries,
+        calls: &CallAt<'_>,
         c: &mut dyn RunControl,
     ) -> Result<()> {
         if self.nodes.is_empty() {
@@ -1394,7 +1394,7 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
         id: usize,
         input: ReadState,
         abi: Option<CallAbi>,
-        calls: &dyn ArgumentSummaries,
+        calls: &CallAt<'_>,
         emit: bool,
         c: &mut dyn RunControl,
     ) -> Result<ReadState> {
@@ -1699,9 +1699,9 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
         }
         if instruction.arguments && !instruction.call && emit {
             // A tail transfer returns the target's result directly to our caller.
-            if let Some(summary) = calls.summary(instruction.site) {
+            if let Some(summary) = calls(instruction.site) {
                 for register in CallAbi::RiscvInteger.results() {
-                    let flow = self.call_result(input, summary, register, c)?;
+                    let flow = self.call_result(input, &summary.arguments, register, c)?;
                     self.return_value(flow, register, c)?;
                 }
             }
@@ -1709,9 +1709,9 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
         if instruction.call {
             if let Some(abi) = abi {
                 let mut results = [ReadCell::default(); 2];
-                if let Some(summary) = calls.summary(instruction.site) {
+                if let Some(summary) = calls(instruction.site) {
                     for (cell, register) in results.iter_mut().zip(abi.results()) {
-                        cell.flow = self.call_result(input, summary, register, c)?;
+                        cell.flow = self.call_result(input, &summary.arguments, register, c)?;
                     }
                 }
                 for register in abi.clobbered() {

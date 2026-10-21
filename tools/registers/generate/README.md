@@ -8,7 +8,7 @@ analysis project, vendor binary, device model or global provider registry.
 bits against the unchanged source model. It runs Blobray `register-accesses`
 over every function of every pinned vendor binary, excluding firmware outputs,
 inside the publication's owned MMIO ranges, with `--abi riscv-integer
---call-returns`. It requires schema 9 and a complete `reads: ReadUses`
+--call-summaries`. It requires schema 9 and a complete `reads: ReadUses`
 classification for each integer or floating load, using the shared
 `oer-analysis-blobray-domain` types. A `CallArgument` to an exact name in the
 checker's [chip-specific cited diagnostic lists](src/checks/inventory/uses/read_policy.rs)

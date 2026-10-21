@@ -35,11 +35,10 @@ struct Assumptions {
     /// an access through a preserved register loses its address.
     #[arg(long, value_enum)]
     abi: Option<AbiArg>,
-    /// Take the constants a called function returns at every call to it,
-    /// where its own analysis proves them; a first pass analyzes every
-    /// function to collect them, so the analysis takes about twice as long.
+    /// Compute shared result/argument summaries in two analyses, in
+    /// callee-first order; result constants propagate through acyclic calls.
     #[arg(long)]
-    call_returns: bool,
+    call_summaries: bool,
     /// START:LENGTH range read-only at run time whatever a linked image's
     /// section flags say, such as flash mapped for reading: constants are
     /// read from it. Take it from the chip's memory map; repeat for more.
@@ -51,7 +50,7 @@ impl Assumptions {
     fn analysis(&self) -> app::library::Assumptions<'_> {
         app::library::Assumptions {
             abi: self.abi.map(|AbiArg::RiscvInteger| CallAbi::RiscvInteger),
-            call_returns: self.call_returns,
+            call_summaries: self.call_summaries,
             read_only: &self.read_only,
         }
     }
@@ -455,7 +454,7 @@ fn field_accesses(
                     )
                     .collect(),
                 abi: assumptions.abi,
-                call_returns: assumptions.call_returns,
+                call_returns: assumptions.call_summaries,
                 read_only: assumptions.read_only.to_vec(),
                 offset,
                 width,
@@ -622,7 +621,7 @@ fn function_records(
                     )
                     .collect(),
                 abi: assumptions.abi,
-                call_returns: assumptions.call_returns,
+                call_returns: assumptions.call_summaries,
                 read_only: assumptions.read_only.to_vec(),
                 functions,
                 missing,
@@ -839,7 +838,7 @@ fn mmio_diff(
                 old: described(&old_inputs, &old),
                 new: described(&new_inputs, &new),
                 abi: assumptions.abi,
-                call_returns: assumptions.call_returns,
+                call_returns: assumptions.call_summaries,
                 read_only: assumptions.read_only.to_vec(),
                 diff,
             };
@@ -1218,7 +1217,7 @@ fn register_accesses(
             oer_tool_analysis_cli::wire::REGISTER_ACCESSES_SCHEMA,
             serde_json::to_string(&described).map_err(json_error)?,
             serde_json::to_string(&assumptions.abi).map_err(json_error)?,
-            assumptions.call_returns,
+            assumptions.call_summaries,
             serde_json::to_string(assumptions.read_only).map_err(json_error)?
         )
         .map_err(io_error)?;
@@ -1369,7 +1368,7 @@ fn call_arguments(
                     )
                     .collect(),
                 abi: assumptions.abi,
-                call_returns: assumptions.call_returns,
+                call_returns: assumptions.call_summaries,
                 read_only: assumptions.read_only.to_vec(),
                 symbols,
                 callers,
@@ -1516,7 +1515,7 @@ fn callers(
                     )
                     .collect(),
                 abi: assumptions.abi,
-                call_returns: assumptions.call_returns,
+                call_returns: assumptions.call_summaries,
                 read_only: assumptions.read_only.to_vec(),
                 symbols,
                 callers,

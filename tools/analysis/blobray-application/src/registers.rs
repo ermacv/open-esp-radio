@@ -3,7 +3,7 @@ use crate::*;
 use oer_analysis_blobray_analysis::navigation::Facts;
 mod arguments;
 mod callees;
-pub(crate) use arguments::ArgumentCorpus;
+pub(crate) use arguments::{CallKey, CallLinks};
 pub(crate) use callees::Callees;
 
 fn invalid(s: &str) -> Error {
@@ -26,38 +26,44 @@ pub(crate) struct Candidate<'a> {
 /// address and expression observations do not run it or change their results.
 pub(crate) struct ReadObservations<'f, 'a, 'm> {
     evaluator: oer_analysis_blobray_analysis::registers::ReadUsesEvaluator<'f, 'a, 'm>,
+    facts: &'f Facts<'a, 'm>,
+    memory: &'m WorkingMemory,
     decoder: &'f dyn FunctionSemantics,
     ranges: &'f [ImageRegion],
     abi: Option<CallAbi>,
     calls: callees::CallSites<'f, 'a, 'm>,
     callees: &'f Callees<'m>,
     function: &'f LibraryFunction,
-    arguments: &'f ArgumentCorpus<'f, 'm>,
-    summaries: Option<arguments::Calls<'f, 'm>>,
+    summaries: &'f dyn CallSummaries,
+    links: Option<CallLinks<'m>>,
 }
 
 impl<'f, 'a, 'm> ReadObservations<'f, 'a, 'm> {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         facts: &'f Facts<'a, 'm>,
         memory: &'m WorkingMemory,
         decoder: &'f dyn FunctionSemantics,
         ranges: &'f [ImageRegion],
         abi: Option<CallAbi>,
+        callees: &'f Callees<'m>,
         function: &'f LibraryFunction,
-        arguments: &'f ArgumentCorpus<'f, 'm>,
+        summaries: &'f dyn CallSummaries,
     ) -> Self {
         Self {
             evaluator: oer_analysis_blobray_analysis::registers::ReadUsesEvaluator::new(
                 facts, memory,
             ),
+            facts,
+            memory,
             decoder,
             ranges,
             abi,
             calls: callees::CallSites::new(facts, memory),
-            callees: arguments.catalog,
+            callees,
             function,
-            arguments,
-            summaries: None,
+            summaries,
+            links: None,
         }
     }
 
@@ -78,16 +84,29 @@ impl<'f, 'a, 'm> ReadObservations<'f, 'a, 'm> {
             ..
         } = fact
         {
-            if self.summaries.is_none() {
-                self.summaries = Some(self.arguments.calls(&mut self.calls, self.function, c)?);
+            if self.links.is_none() {
+                self.links = Some(CallLinks::new(
+                    self.facts,
+                    self.function,
+                    self.callees,
+                    self.memory,
+                    c,
+                )?);
             }
+            let links = self
+                .links
+                .as_ref()
+                .ok_or_else(|| Error::new(ErrorCode::Integrity, "missing call links"))?;
+            let summaries = self.summaries;
             self.evaluator.analyze(
                 self.abi,
                 self.decoder,
                 &mut |address, width, c| selected_read(address, width, self.ranges, c),
-                self.summaries
-                    .as_ref()
-                    .ok_or_else(|| Error::new(ErrorCode::Integrity, "missing call summaries"))?,
+                &|site| {
+                    links
+                        .callee(site)
+                        .and_then(|callee| summaries.summary(callee))
+                },
                 c,
             )?;
             let mut reads = self.evaluator.reads(*offset, address, *width, *access, c)?;
