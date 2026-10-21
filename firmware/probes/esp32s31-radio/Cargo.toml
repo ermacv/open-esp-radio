@@ -24,6 +24,7 @@ oer-ieee80211-wire = { path = "../../../protocols/ieee80211/wire" }
 oer-espressif-esp-hal-radio = { path = "../../../chips/espressif/esp-hal/radio", features = ["esp32s31"] }
 oer-ieee80211-port = { path = "../../../protocols/ieee80211/port" }
 oer-time = { path = "../../../portable/time" }
+oer-time-virtual = { path = "../../../portable/time-virtual" }
 
 [lib]
 crate-type = ["rlib", "staticlib"]

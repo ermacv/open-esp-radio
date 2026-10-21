@@ -523,12 +523,11 @@ impl Tracking {
                 SessionReset::Cold,
                 false,
             ),
-            case(
+            crate::harness::setup(
                 "install-captured-callbacks",
                 self.install_callbacks(INSTALLED_CALLBACK_SLOT)?,
-                Some(noop),
+                crate::phy::prepare_calibration(&self.image, profile.fill)?,
                 SessionReset::Warm,
-                false,
             ),
             tracked,
         ])
@@ -809,10 +808,19 @@ fn failed_tx(ctx: &mut Tracking) -> Result<()> {
             phase
                 .calls
                 .extend(delay_calls("tracking-short-delay", ctx.short_delay));
-            let mut row = case(profile.label(root), phase, None, SessionReset::Cold, false);
+            let mut row = case(profile.label(root), phase, None, SessionReset::Warm, false);
             row.relation = None;
             row.stack_fill = Some(fill);
-            rows.push(row);
+            let mut preparation = case(
+                "prepare-calibration-route",
+                crate::phy::prepare_calibration(&ctx.image, fill)?,
+                None,
+                SessionReset::Cold,
+                false,
+            );
+            preparation.relation = None;
+            preparation.stack_fill = Some(fill);
+            rows.extend([preparation, row]);
             let mut expected: Vec<u8> = profile.inputs(root)[..5]
                 .iter()
                 .flat_map(|w| w.to_le_bytes())
@@ -842,7 +850,12 @@ fn failed_tx(ctx: &mut Tracking) -> Result<()> {
         .records
         .clone();
     for (case, (label, expected)) in expectations.iter().enumerate() {
-        let case = case as u32;
+        let case = case as u32 * 2 + 1;
+        assert_eq!(
+            returned_low(&records, case - 1, false),
+            Some(0),
+            "{label}: preparation"
+        );
         assert_eq!(
             returned_low(&records, case, false),
             Some(FAILED_TRANSACTION),

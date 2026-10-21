@@ -3354,6 +3354,7 @@ dependencies = [
  "oer-probe-codegen",
  "oer-probe-macros",
  "oer-time",
+ "oer-time-virtual",
 ]
 
 [[package]]

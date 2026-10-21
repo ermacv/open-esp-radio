@@ -6,12 +6,12 @@
 //! tone-clear and settle paths. Both sides compare ordered effects and the
 //! measured DC rows; the vendor must keep the independent Wi-Fi gain
 //! adjustment. Production-only PBus and SAR faults must not publish
-//! calibration, and the SAR observation limit is a failure distinct from time
+//! calibration, and the SAR ready deadline is distinct from interpreter time
 //! or work limits. Synthetic measurements establish software effects, not RF
 //! accuracy.
 use crate::contracts::{OutputField, omitted_read, output_projection, phy_contract};
 use crate::evidence::{events, output, stop};
-use crate::harness::{Buffer, Result, case, known, selection, with_stack_fill};
+use crate::harness::{Buffer, Result, case, known, selection, setup, with_stack_fill};
 use crate::i2c::{all_complete, returned_low};
 use crate::layout::*;
 use crate::phy::delay_calls;
@@ -49,9 +49,9 @@ const WORK_MODE_SETTLE: u32 = 2;
 const PBUS_STUCK: u32 = 0x8000_0000;
 const DETECTOR_STUCK: u32 = 0;
 /// Production outcomes of a failed PBus transaction and of the SAR readiness
-/// observation limit.
+/// deadline (SOURCE: production_trace.rs maps ReadyDeadlineExceeded to 8).
 const FAILED_CALIBRATION: u32 = 4;
-const SAR_OBSERVATION_LIMIT: u32 = 5;
+const SAR_READY_DEADLINE: u32 = 8;
 /// Root arguments and the TX path value both sides select.
 const TX_PATH: u8 = 7;
 /// `phy_param` offsets: TX path, tone-clear flag, Wi-Fi gain adjustment and
@@ -426,12 +426,11 @@ impl TxDc {
                     SessionReset::Cold,
                     false,
                 ),
-                case(
+                setup(
                     "install-captured-callbacks",
                     self.install_callbacks(INSTALLED_CALLBACK_SLOT)?,
-                    Some(self.noop()),
+                    crate::phy::prepare_calibration(&self.image, profile.fill)?,
                     SessionReset::Warm,
-                    false,
                 ),
                 root,
             ],
@@ -491,7 +490,7 @@ fn faults(ctx: &mut TxDc) -> Result<()> {
             "detector-never-ready",
             PBUS_IDLE,
             DETECTOR_STUCK,
-            SAR_OBSERVATION_LIMIT,
+            SAR_READY_DEADLINE,
         ),
     ];
     let mut rows = vec![];
@@ -500,17 +499,30 @@ fn faults(ctx: &mut TxDc) -> Result<()> {
             name,
             ctx.production_phase(&profile, tx_models(&profile, status, detector))?,
             None,
-            SessionReset::Cold,
+            SessionReset::Warm,
             false,
         );
         row.relation = None;
-        rows.push(row);
+        let mut preparation = case(
+            "prepare-calibration-route",
+            crate::phy::prepare_calibration(&ctx.image, profile.fill)?,
+            None,
+            SessionReset::Cold,
+            false,
+        );
+        preparation.relation = None;
+        rows.extend([preparation, row]);
     }
     let production = ctx.production.clone();
     let request = request(&production, None, Some(profile.fill), rows, TXDC_EVENTS);
     let records = ctx.submit("txdc-faults", &request, None)?.records.clone();
     for (case, (name, _, _, outcome)) in faults.iter().enumerate() {
-        let case = case as u32;
+        let case = case as u32 * 2 + 1;
+        assert_eq!(
+            returned_low(&records, case - 1, false),
+            Some(0),
+            "{name}: preparation"
+        );
         assert_eq!(
             returned_low(&records, case, false),
             Some(*outcome),

@@ -73,7 +73,6 @@ const SKIPPED_DC_SUCCESSORS: [u32; 2] = [0x2010_088c, 0x2010_702c];
 const SKIPPED_DC_SNAPSHOTS: u32 = 1;
 /// Production RX entry compared with `phy_set_rx_gain_table`.
 const PRODUCTION_ENTRY: &str = "open_phy_calibration_trace_rx_gain";
-const ARBITER_INIT_ENTRY: &str = "open_phy_validation_arbiter_init";
 /// DC estimator readiness (bit 16), signed samples and activity.
 const ESTIMATOR_READY: u32 = 0x2010_047c;
 const ESTIMATOR_DONE: u32 = 0x10000;
@@ -714,14 +713,6 @@ impl RxGain {
         Ok(phase)
     }
 
-    /// Build the probe's session arbiter before the compared root.
-    fn arbiter_init(&self) -> Result<Invocation> {
-        let probe = self
-            .probes
-            .invoke(ARBITER_INIT_ENTRY, vec![], vec![], vec![])?;
-        Ok(self.enter_probe(probe))
-    }
-
     fn rows(&self, profile: &Profile) -> Result<Vec<ExecutionCase>> {
         let image = parameter_image(profile);
         let mut root = case(
@@ -756,7 +747,7 @@ impl RxGain {
                 setup(
                     "install-captured-callbacks",
                     self.install_callbacks(INSTALLED_CALLBACK_SLOT)?,
-                    self.arbiter_init()?,
+                    crate::phy::prepare_calibration(&self.image, profile.fill)?,
                     SessionReset::Warm,
                 ),
                 root,
@@ -903,12 +894,21 @@ fn containment(ctx: &mut RxGain) -> Result<()> {
                 format!("{}-fill{fill:x}", failure.label),
                 ctx.production_phase(&profile, failure.models.clone())?,
                 None,
-                SessionReset::Cold,
+                SessionReset::Warm,
                 false,
             );
             row.relation = None;
             row.stack_fill = Some(fill);
-            rows.push(row);
+            let mut preparation = case(
+                "prepare-calibration-route",
+                crate::phy::prepare_calibration(&ctx.image, fill)?,
+                None,
+                SessionReset::Cold,
+                false,
+            );
+            preparation.relation = None;
+            preparation.stack_fill = Some(fill);
+            rows.extend([preparation, row]);
         }
         parts.push((profile, failures));
     }
@@ -918,10 +918,15 @@ fn containment(ctx: &mut RxGain) -> Result<()> {
         .submit("rx-containment", &request, None)?
         .records
         .clone();
-    let mut case = 0u32;
+    let mut case = 1u32;
     for (profile, failures) in &parts {
         for failure in failures {
             let label = format!("rx-containment-fill{:x}-{}", profile.fill, failure.label);
+            assert_eq!(
+                returned_low(&records, case - 1, false),
+                Some(0),
+                "{label}: preparation"
+            );
             assert_eq!(
                 returned_low(&records, case, false),
                 Some(failure.outcome),
@@ -933,7 +938,7 @@ fn containment(ctx: &mut RxGain) -> Result<()> {
                 .filter(|e| matches!(e, PhyEffect::Read(ESTIMATOR_READY, ESTIMATOR_DONE)))
                 .count() as u32;
             assert!(failure.minima.contains(&minima), "{label}: {minima} minima");
-            case += 1;
+            case += 2;
         }
     }
     Ok(())
