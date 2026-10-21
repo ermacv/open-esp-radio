@@ -5,8 +5,8 @@
 use clap::{Parser, Subcommand, ValueEnum};
 use oer_analysis_blobray_application as app;
 use oer_analysis_riscv_model::{
-    CallAbi, DEFAULT_WORKING_BYTES, Error, ErrorCode, FunctionIndex,
-    ReadOnlyWindow, RecordPolicy, Result,
+    CallAbi, DEFAULT_WORKING_BYTES, Error, ErrorCode, FunctionIndex, ReadOnlyWindow, RecordPolicy,
+    Result,
 };
 use std::io::Write;
 use std::{ffi::OsString, path::PathBuf, process::ExitCode};
