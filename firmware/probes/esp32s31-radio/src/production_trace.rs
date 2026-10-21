@@ -6,77 +6,20 @@
 use crate::calibration_projection::{
     CALIBRATION_WORDS, PARENT_WORDS, snapshot_calibration, snapshot_committed, snapshot_parent,
 };
-use core::{
-    cell::Cell,
-    future::{Future, ready},
-};
-
-use oer_time::{Clock, Instant, Timer};
-
-/// Time for the compiled-production comparison: each wait hands its
-/// requested interval to the harness `deliver` edge at once, and time then
-/// stands at the deadline. Hardware time itself is outside this software
-/// comparison.
-pub(crate) struct TraceTimer {
-    now: Cell<Instant>,
-    deliver: fn(u32),
-    observation_tick: bool,
-}
+use crate::trace_timer::TraceTimer;
 
 impl TraceTimer {
-    /// Compiled comparisons have no advancing hardware timer. Direct readiness
-    /// samples advance this virtual observation clock by 1 µs so a stuck edge
-    /// exhausts its elapsed deadline while ordinary timer-delivered traces keep
-    /// their requested-time clock.
+    /// Direct observations advance by one microsecond to bound stuck hardware.
     pub(crate) fn observations() -> Self {
-        Self {
-            observation_tick: true,
-            ..Self::production()
-        }
+        Self::new(|micros| super::ets_delay_us(micros), true)
     }
 
-    /// Waits delivered through the plain harness delay edge.
     fn production() -> Self {
-        Self {
-            now: Cell::new(Instant::EPOCH),
-            observation_tick: false,
-            deliver: |micros| super::ets_delay_us(micros),
-        }
+        Self::new(|micros| super::ets_delay_us(micros), false)
     }
 
-    /// Waits delivered through the register-preserving harness delay, as for
-    /// RFPLL.
     fn register_preserving() -> Self {
-        Self {
-            now: Cell::new(Instant::EPOCH),
-            observation_tick: false,
-            deliver: |micros| super::preserving_delay(micros),
-        }
-    }
-}
-
-impl Clock for TraceTimer {
-    fn now(&self) -> Instant {
-        let now = self.now.get();
-        if self.observation_tick {
-            self.now.set(
-                now.checked_add(oer_time::Duration::from_micros(1))
-                    .expect("bounded trace time"),
-            );
-        }
-        now
-    }
-}
-
-impl Timer for TraceTimer {
-    fn wait_until(&self, deadline: Instant) -> impl Future<Output = ()> {
-        if let Some(interval) = deadline.checked_duration_since(self.now.get())
-            && interval != oer_time::Duration::ZERO
-        {
-            (self.deliver)(u32::try_from(interval.as_micros()).unwrap_or(u32::MAX));
-            self.now.set(deadline);
-        }
-        ready(())
+        Self::new(|micros| super::preserving_delay(micros), false)
     }
 }
 
@@ -103,10 +46,11 @@ oer_probe_macros::probe! {
         let mut radio = validation_radio();
         let lease = &mut radio;
         let mut phy = lease.phy_hal();
-        embassy_futures::block_on(oer_esp32s31_phy::target_port::rfpll::search::<
+        let timer = TraceTimer::observations();
+        timer.run(oer_esp32s31_phy::target_port::rfpll::search::<
             RfpllTraceDelay,
             _,
-        >(&TraceTimer::observations(), &mut phy))
+        >(&timer, &mut phy))
         .map_or(i32::MIN, |outcome| i32::from(outcome.delta()))
     }
 }
@@ -121,10 +65,11 @@ oer_probe_macros::probe! {
         let mut radio = validation_radio();
         let lease = &mut radio;
         let mut phy = lease.phy_hal();
-        match embassy_futures::block_on(oer_esp32s31_phy::target_port::rfpll::program::<
+        let timer = TraceTimer::register_preserving();
+        match timer.run(oer_esp32s31_phy::target_port::rfpll::program::<
             RfpllTraceDelay,
         >(
-            &TraceTimer::register_preserving(),
+            &timer,
             &mut phy,
             oer_esp32s31_phy::analog::rfpll::RfpllFrequencyRequest {
                 crystal_selector,
@@ -147,10 +92,11 @@ oer_probe_macros::probe! {
         let mut radio = validation_radio();
         let lease = &mut radio;
         let mut phy = lease.phy_hal();
-        embassy_futures::block_on(oer_esp32s31_phy::target_port::rfpll::maintain::<
+        let timer = TraceTimer::observations();
+        timer.run(oer_esp32s31_phy::target_port::rfpll::maintain::<
             RfpllTraceDelay,
             _,
-        >(&TraceTimer::observations(), &mut phy, channel))
+        >(&timer, &mut phy, channel))
         .map_or(i32::MIN, |outcome| i32::from(outcome.search.delta()))
     }
 }
@@ -180,10 +126,11 @@ oer_probe_macros::probe! {
             threshold_override,
             current_channel,
         };
-        embassy_futures::block_on(oer_esp32s31_phy::target_port::rfpll::track::<
+        let timer = TraceTimer::observations();
+        timer.run(oer_esp32s31_phy::target_port::rfpll::track::<
             RfpllTraceDelay,
             _,
-        >(&TraceTimer::observations(), &mut crate::shared_phy(registers), request))
+        >(&timer, &mut crate::shared_phy(registers), request))
         .map_or(i32::MIN, |outcome| {
             let performed = outcome.correction.is_some();
             *output = [
@@ -205,9 +152,10 @@ oer_probe_macros::probe! {
         let mut radio = validation_radio();
         let lease = &mut radio;
         let mut phy = lease.phy_hal();
-        match embassy_futures::block_on(oer_esp32s31_phy::target_port::temperature::sample::<
+        let timer = TraceTimer::production();
+        match timer.run(oer_esp32s31_phy::target_port::temperature::sample::<
             RfpllTraceDelay,
-        >(&TraceTimer::production(), &mut phy))
+        >(&timer, &mut phy))
         {
             Ok(Ok(outcome)) => {
                 output[0] = u16::from(outcome.sensor_index);
@@ -284,19 +232,21 @@ fn trace_channel(
     let mut state = oer_esp32s31_phy::PhyState::default();
     state.set_dot11p_configuration(dot11p_enabled, dot11p_configuration);
     let mut observer = oer_esp32s31_phy::target_port::NoopPhyTargetObserver;
-    embassy_futures::block_on(oer_esp32s31_phy::validation::select_channel::<
-        RfpllTraceDelay,
-        _,
-        _,
-    >(
-        &TraceTimer::production(),
-        &mut state,
-        channel_or_frequency as u16,
-        cbw as u8,
-        &mut channel,
-        &mut observer,
-    ))
-    .map_err(|_| ())?;
+    let timer = TraceTimer::production();
+    timer
+        .run(oer_esp32s31_phy::validation::select_channel::<
+            RfpllTraceDelay,
+            _,
+            _,
+        >(
+            &timer,
+            &mut state,
+            channel_or_frequency as u16,
+            cbw as u8,
+            &mut channel,
+            &mut observer,
+        ))
+        .map_err(|_| ())?;
     Ok(state)
 }
 
@@ -407,15 +357,15 @@ oer_probe_macros::probe! {
         } else {
             PhyTxDcPwdetTransition::new(parameters)
         };
-        let mut radio = validation_radio();
-        let lease = &mut radio;
+        let lease = session_radio();
         let mut phy = lease.phy_hal();
         let mut observer = NoopPhyTargetObserver;
-        match embassy_futures::block_on(calibration::tx_dc_pwdet_init::<oer_esp32s31_phy::RomShortDelay, _>(
+        let timer = TraceTimer::observations();
+        match timer.run(calibration::tx_dc_pwdet_init::<oer_esp32s31_phy::RomShortDelay, _>(
             &mut child,
             &mut phy,
             &core::cell::RefCell::new(&mut observer),
-            &TraceTimer::observations(),
+            &timer,
         )) {
             Ok(()) => {}
             Err(oer_esp32s31_phy::PhyTargetPortError::HardwareEdgeTimedOut) => return 2,
@@ -563,11 +513,16 @@ oer_probe_macros::probe! {
 }
 
 oer_probe_macros::probe! {
-    /// Build the session arbiter, as production builds its arbiter once at
-    /// boot, so a later compared entry does not count its construction.
+    /// Prepare the admitted calibration route before entering a retained leaf.
+    /// SOURCE: HAL phy/temperature.rs and phy/restore.rs require acquired
+    /// TSENS/SAR-I2C before calibration may own a restore slot (as at RF init).
     pub fn open_phy_validation_arbiter_init() -> i32 {
-        session_radio();
-        0
+        let lease = session_radio();
+        let mut phy = lease.phy_hal();
+        oer_esp32s31_hal::phy::temperature::acquire(&mut phy, || {
+            super::ets_delay_us(oer_esp32s31_hal::phy::temperature::SAR_I2C_RESET_SETTLE_MICROS);
+            true
+        }).map_or(1, |()| 0)
     }
 }
 
@@ -665,8 +620,7 @@ oer_probe_macros::probe! {
         });
         let [shared_last, wifi_last] = input[7].to_le_bytes();
         validation::seed_rx_table_last_indices(&mut state, shared_last, wifi_last);
-        let mut radio = validation_radio();
-        let lease = &mut radio;
+        let lease = session_radio();
         let mut phy = lease.phy_hal();
         let mut observer = oer_esp32s31_phy::NoopPhyTargetObserver;
         let mut platform = ();
@@ -688,7 +642,7 @@ oer_probe_macros::probe! {
                 &mut state,
                 PhyParamTrackRequest::new(wifi, bluetooth),
             );
-            if embassy_futures::block_on(oer_esp32s31_phy::executor::run_phy_calibration_tracking(
+            if timer.run(oer_esp32s31_phy::executor::run_phy_calibration_tracking(
                 &mut child, &mut port,
             ))
             .is_err()
@@ -794,8 +748,7 @@ oer_probe_macros::probe! {
                 calibration: input[14] != 0,
             },
         );
-        let mut radio = validation_radio();
-        let lease = &mut radio;
+        let lease = session_radio();
         let mut phy = lease.phy_hal();
         let mut platform = ();
         // The PHY archive is compared without the coexistence archive, so its
@@ -810,7 +763,7 @@ oer_probe_macros::probe! {
                 &timer,
                 oer_esp32s31_phy::NoopPhyTargetObserver,
             );
-        let run = embassy_futures::block_on(oer_esp32s31_phy::executor::run_phy_param_tracking(
+        let run = timer.run(oer_esp32s31_phy::executor::run_phy_param_tracking(
             &mut pending,
             &mut state,
             &mut port,

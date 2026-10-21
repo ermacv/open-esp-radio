@@ -22,10 +22,19 @@ serde = { version = "=1.0.229", features = ["derive"] }
 toml = "=1.1.4"
 
 [dev-dependencies]
+embassy-futures = "0.1.2"
+oer-time = { path = "../../../portable/time" }
+oer-time-virtual = { path = "../../../portable/time-virtual" }
 oer-tool-pins = { path = "../../pins" }
 oer-image-esp-idf = { path = "../../image/esp-idf" }
 oer-image-build = { path = "../../image/build" }
 
 [lints]
 workspace = true
+
+# Compile the architecture-independent probe timer on the host without the
+# RV32-only probe library, so its Pending/deadline/resume contract is tested.
+[[test]]
+name = "probe-trace-timer"
+path = "../../../firmware/probes/esp32s31-radio/src/trace_timer.rs"
 

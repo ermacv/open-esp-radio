@@ -4559,6 +4559,7 @@ name = "oer-vendor-scenarios-esp32s31"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "embassy-futures",
  "oer-analysis-blobray-application",
  "oer-analysis-blobray-domain",
  "oer-analysis-elf",
@@ -4568,6 +4569,8 @@ dependencies = [
  "oer-image-esp-idf",
  "oer-os-durable",
  "oer-os-process",
+ "oer-time",
+ "oer-time-virtual",
  "oer-tool-pins",
  "oer-vendor-scenario",
  "serde",

@@ -102,7 +102,7 @@ oer_probe_macros::probe! {
     /// Execute the complete production reset helper, including its bounded poll policy.
     pub fn open_phy_trace_i2c_reset() -> u32 {
         super::with_phy(
-            |registers| match oer_esp32s31_phy::validation::reset_i2c_master(&crate::production_trace::TraceTimer::observations(), &mut crate::shared_phy(registers)) {
+            |registers| match oer_esp32s31_phy::validation::reset_i2c_master(&crate::trace_timer::TraceTimer::observations(), &mut crate::shared_phy(registers)) {
                 Ok(()) => 0,
                 Err(oer_esp32s31_phy::PhyTargetPortError::HardwareEdgeTimedOut) => 0x10001,
                 Err(_) => 0x10002,
