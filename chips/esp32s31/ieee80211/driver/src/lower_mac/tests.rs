@@ -2460,10 +2460,7 @@ fn a_closed_gate_blocks_the_queues_and_holds_the_attempt_until_it_opens() {
                 oer_ieee80211_port::EdcaParameterSet::DEFAULT_MSDU_LIFETIME.as_micros()
             ))
         );
-        let mut core = core
-            .open_gate(&mut hardware)
-            .map_err(|refused| refused.fault)
-            .unwrap();
+        let mut core = core.open_gate(&mut hardware).unwrap();
         assert!(!hardware.tx_blocked);
         assert_eq!(hardware.publications(), 1);
         assert_eq!(
@@ -2621,10 +2618,7 @@ fn a_closed_gate_holds_every_queue_and_opening_it_publishes_them() {
             ))
         );
 
-        let core = core
-            .open_gate(&mut hardware)
-            .map_err(|refused| refused.fault)
-            .unwrap();
+        let core = core.open_gate(&mut hardware).unwrap();
         assert_eq!(hardware.legacy.len(), 2);
         assert!(!core.published_idle());
     });
@@ -3985,7 +3979,7 @@ fn maximum_ticket_pool_keeps_key_removal_until_all_256_rights_return() {
     };
     let mut future = core::pin::pin!(oer_radio_port::branded::<CorePools<256>, _>(async |mint| {
         let resources = mint.into_pools();
-        let mut core = LowerMacCore::new(
+        let mut owner = LowerMacCore::new(
             resources.authority,
             OrdinaryTxOwner::new(WifiTxResources {
                 slot: slot(),
@@ -4007,6 +4001,9 @@ fn maximum_ticket_pool_keeps_key_removal_until_all_256_rights_return() {
             },
             &RadioNine,
         );
+        let CoreView::Disabled(mut core) = owner.view() else {
+            panic!("fresh owner is disabled")
+        };
         let (start, bank) = resources.station_association.into_parts();
         let association = start.begin(oer_ieee80211_wire::security::Spp::NotNegotiated);
         let ([slot], [_group]) = bank.into_parts();

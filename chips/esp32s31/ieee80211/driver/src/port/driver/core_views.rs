@@ -173,7 +173,7 @@ pub(super) fn tune<'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
             match view.enable_checked() {
                 LifecycleStart::Enabled(_) => Ok(()),
                 LifecycleStart::Retune(_) => {
-                    unreachable!("radio start recorded the requested channel")
+                    panic!("radio start recorded the requested channel")
                 }
             }
         }
@@ -186,7 +186,7 @@ pub(super) fn tune<'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
             match view.enable_checked() {
                 LifecycleStart::Enabled(_) => Ok(()),
                 LifecycleStart::Retune(_) => {
-                    unreachable!("radio start recorded the requested channel")
+                    panic!("radio start recorded the requested channel")
                 }
             }
         }
@@ -199,7 +199,7 @@ pub(super) fn tune<'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
             match view.enable_checked() {
                 LifecycleStart::Enabled(_) => Ok(()),
                 LifecycleStart::Retune(_) => {
-                    unreachable!("radio start recorded the requested channel")
+                    panic!("radio start recorded the requested channel")
                 }
             }
         }

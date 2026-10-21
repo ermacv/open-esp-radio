@@ -32,23 +32,29 @@
 //!
 //! # Lifecycle and command barriers
 //!
-//! Construction returns [`DisabledView`]. Enable consumes it, either returning
-//! [`EnabledView`] or retaining the whole bank in [`RetuningView`]. Disable
-//! consumes the enabled owner; [`DisablingView::finish`] returns the disabled
-//! owner and emits its one terminal only after all publications ended. A
-//! poisoned bank retains its owners. Channel changes and dismantling exist
-//! only on the disabled type. The gate type survives disable and retune.
+//! Construction returns a [`CoreOwner`] holding the core and phase in place.
+//! [`CoreOwner::view`] lends the phase's view. Enable consumes a
+//! [`DisabledView`], returning an [`EnabledView`] or a [`RetuningView`].
+//! Disable consumes the enabled view; [`DisablingView::finish`] returns a
+//! disabled view and emits one terminal after all publications ended. A
+//! poisoned bank retains its owners. Only disabled views can select a
+//! channel or dismantle the bank. Gate types survive disable and retune.
 //!
-//! Closing first transfers the enabled bank to [`ClosingGate`], whose new
-//! attempts stay held. Only a drained published prefix constructs [`ClosedGate`]
-//! and blocks hardware queues. Opening consumes this evidence; publication
-//! failure returns every held owner and retains the published prefix.
+//! Closing consumes the enabled view and holds new attempts. A drained
+//! published prefix produces a [`ClosedGate`] view and blocks hardware
+//! queues. Opening consumes this evidence; publication failure returns every
+//! held owner and retains the published prefix in [`FailedGateView`].
 //!
-//! Receive configuration consumes either the disabled or enabled bank into
-//! [`ConfiguringView`]. That owner withdraws its role's held frames and waits for
-//! that role's published frames, then returns the original lifecycle owner.
-//! No later FIFO command can publish through a configuration barrier. The
-//! other interface's outstanding frames keep their own completion path.
+//! Receive configuration consumes a disabled or enabled view into
+//! [`ConfiguringView`]. The barrier withdraws its role's held frames and
+//! waits for that role's publications, then returns the original phase's
+//! view. Later FIFO commands cannot publish through the barrier. The other
+//! interface's frames retain their own completion paths.
+//!
+//! Direct owners and the port use these same view methods. Borrow a fresh
+//! view after every asynchronous wait. [`CommandView`] projects an idle
+//! phase's shared non-lifecycle commands without exposing TX admission or a
+//! lifecycle transition.
 //!
 //! # Transmit buffers
 //!

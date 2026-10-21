@@ -182,6 +182,12 @@ impl<
     G: CoreGate,
 > DisabledView<'view, LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>, G>
 {
+    /// Reset this role's contention after the final exchange terminal.
+    #[inline]
+    pub fn reset_contention(&mut self, role: VifRole, category: WmmAccessCategory) {
+        self.deref_mut().reset_contention(role, category);
+    }
+
     /// Recover construction resources after the final terminal.
     #[inline]
     pub fn dismantle(
@@ -262,6 +268,12 @@ impl<
     G: CoreGate,
 > RetuningView<'view, LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>, G>
 {
+    /// Reset this role's contention after the final exchange terminal.
+    #[inline]
+    pub fn reset_contention(&mut self, role: VifRole, category: WmmAccessCategory) {
+        self.deref_mut().reset_contention(role, category);
+    }
+
     /// The actual target of this enable's retune.
     #[inline]
     pub fn target_channel(&self) -> WifiChannel {
@@ -301,6 +313,12 @@ impl<
     G: CoreGate,
 > EnabledView<'view, LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>, G>
 {
+    /// Reset this role's contention after the final exchange terminal.
+    #[inline]
+    pub fn reset_contention(&mut self, role: VifRole, category: WmmAccessCategory) {
+        self.deref_mut().reset_contention(role, category);
+    }
+
     /// Admit an MPDU; only the gate's type selects publication.
     #[allow(
         clippy::result_large_err,
@@ -369,6 +387,12 @@ impl<
     G: CoreGate,
 > DisablingView<'view, LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>, G>
 {
+    /// Reset this role's contention after the final exchange terminal.
+    #[inline]
+    pub fn reset_contention(&mut self, role: VifRole, category: WmmAccessCategory) {
+        self.deref_mut().reset_contention(role, category);
+    }
+
     /// Emit one Disabled terminal once the entire prefix is retired.
     #[inline]
     pub fn finish<K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>>(
@@ -522,7 +546,7 @@ impl<
     }
     /// Reset contention when an earlier publication ends.
     #[inline]
-    pub(crate) fn reset_contention(&mut self, role: VifRole, category: WmmAccessCategory) {
+    pub fn reset_contention(&mut self, role: VifRole, category: WmmAccessCategory) {
         self.core.reset_contention(role, category);
     }
     /// Service predecessors without admitting any later command.
@@ -583,7 +607,7 @@ impl<
     }
     /// Reset contention when an earlier publication ends.
     #[inline]
-    pub(crate) fn reset_contention(&mut self, role: VifRole, category: WmmAccessCategory) {
+    pub fn reset_contention(&mut self, role: VifRole, category: WmmAccessCategory) {
         self.core.reset_contention(role, category);
     }
     /// Service predecessors without admitting any later command.
