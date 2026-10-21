@@ -1,0 +1,7 @@
+error[E0133]: dereference of raw pointer is unsafe and requires unsafe block
+ --> tests/ui/init_safe_fields.rs:8:61
+  |
+8 |     return oer_memory::init_in_place!(storage, One { value: *pointer }); // ui-error: E0133
+  |                                                             ^^^^^^^^ dereference of raw pointer
+  |
+  = note: raw pointers may be null, dangling or unaligned; they can violate aliasing rules and cause data races: all of these are undefined behavior

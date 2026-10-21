@@ -117,23 +117,22 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         hardware.split::<oer_espressif_esp_hal_radio::EspHal, _>(ConcurrentPhy::new());
     let mut rng = RngOwner::new(peripherals.RNG);
     let boot = (u64::from(rng.random()) << 32 | u64::from(rng.random())).max(1);
-    let radio = RADIO.init_with(|| {
-        radio::Radio::new(
-            domain,
-            partitions.wifi,
-            partitions.wifi_coex,
-            ieee802154::Rx::new(
-                partitions.ieee802154,
-                partitions.ieee802154_coex,
-                interrupts.mac,
-            ),
-            clocks,
-            identity,
-            station,
-            access_point,
-            rng,
-        )
-    });
+    let radio = radio::Radio::place(
+        RADIO.uninit(),
+        domain,
+        partitions.wifi,
+        partitions.wifi_coex,
+        ieee802154::Rx::new(
+            partitions.ieee802154,
+            partitions.ieee802154_coex,
+            interrupts.mac,
+        ),
+        clocks,
+        identity,
+        station,
+        access_point,
+        rng,
+    );
     oer_espressif_executor::init::<2, _>(peripherals.SYSTIMER, interrupts.radio_alarm);
     oer_espressif_executor::bind::<0, _>(interrupts.app_alarm);
     let radio_spawner = RADIO_EXECUTOR

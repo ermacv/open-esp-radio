@@ -1,0 +1,8 @@
+error: lifetime may not live long enough
+ --> tests/ui/init_retains_storage.rs:9:16
+  |
+6 | pub fn build(storage: &mut MaybeUninit<Pair>) -> &mut Pair {
+  |                       - let's call the lifetime of this reference `'1`
+...
+9 |     let value: &'static mut Pair = value; // ui-error: lifetime may not live long enough
+  |                ^^^^^^^^^^^^^^^^^ type annotation requires that `'1` must outlive `'static`

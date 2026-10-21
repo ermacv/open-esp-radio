@@ -135,6 +135,13 @@ completed-descriptor views borrow that ring mutably, and the ring is not
 `Sync`, so no CPU view of the bytes is live meanwhile.
 
 `oer-memory` holds the shared proofs for executor-crossing storage.
+Its `init_in_place!` macro writes a complete struct into exclusively borrowed
+`MaybeUninit` storage, one field at a time. An unused constructor checks field
+completeness, uniqueness and visibility. Cleanup guards retain initialized fields until
+the complete value is published; unaligned access also supports packed
+structs. The returned loan retains the storage lifetime. Caller expressions
+run outside the macro's unsafe context, and callers keep `forbid(unsafe_code)`.
+
 `AffineIndexedSpscQueue` lets an affine permission's place select its value
 cell while the audited SPSC ring stores only indices; available ring space
 follows from N distinct indices, without an occupancy check, a backend

@@ -46,7 +46,8 @@ pub struct Radio {
 
 impl Radio {
     #[allow(clippy::too_many_arguments)]
-    pub fn new(
+    pub fn place<'storage>(
+        storage: &'storage mut core::mem::MaybeUninit<Self>,
         domain: RadioDomain<oer_espressif_esp_hal_radio::EspHal, ConcurrentPhy>,
         wifi: WifiPartition,
         coex: CoexAbsent<WifiClient>,
@@ -56,28 +57,31 @@ impl Radio {
         station: [u8; 6],
         access_point: [u8; 6],
         rng: RngOwner<'static>,
-    ) -> Self {
-        Self {
-            ieee802154,
-            domain,
-            clocks,
-            cold: Some(WifiCold::from_partition(wifi)),
-            clocked: None,
-            absent: Some(coex),
-            coex: None,
-            power: None,
-            member: None,
-            identity,
-            station,
-            access_point,
-            rng,
-            ready: None,
-            projection: [0; projection::WORDS],
-            registered: false,
-            poisoned: false,
-            hold: None,
-            hold_id: 0,
-        }
+    ) -> &'storage mut Self {
+        oer_memory::init_in_place!(
+            storage,
+            Self {
+                ieee802154: ieee802154,
+                domain: domain,
+                clocks: clocks,
+                cold: Some(WifiCold::from_partition(wifi)),
+                clocked: None,
+                absent: Some(coex),
+                coex: None,
+                power: None,
+                member: None,
+                identity: identity,
+                station: station,
+                access_point: access_point,
+                rng: rng,
+                ready: None,
+                projection: [0; projection::WORDS],
+                registered: false,
+                poisoned: false,
+                hold: None,
+                hold_id: 0,
+            }
+        )
     }
 
     pub async fn request(&mut self, request: Request) -> Result<Answer> {
