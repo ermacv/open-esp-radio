@@ -188,18 +188,27 @@ fn report_engine(
 /// keeps the diagnostic frame/code inside the same application budgets.
 #[inline(never)]
 fn report_rfpll_commands(trace: &oer_esp32s31_phy::tracking::observation::RfpllEngineTrace) {
-    use oer_esp32s31_board::rom::print_fmt;
     for (command, row) in trace.commands.iter().enumerate() {
-        let packed = (u64::from(trace.invalid) << 63)
-            | ((command as u64) << 48)
-            | (u64::from(row.poll_micros) << 32)
-            | (u64::from(row.publication_micros) << 16)
-            | u64::from(row.readiness_micros);
-        print_fmt(format_args!(
-            "OPEN_RADIO_HIL rfpll-command-packed={}\n",
-            packed
-        ));
+        report_rfpll_command(command, row, trace.invalid);
     }
+}
+
+#[inline(never)]
+fn report_rfpll_command(
+    command: usize,
+    row: &oer_esp32s31_phy::tracking::observation::RfpllCommandMaximum,
+    invalid: bool,
+) {
+    use oer_esp32s31_board::rom::print_fmt;
+    let packed = (u64::from(invalid) << 63)
+        | ((command as u64) << 48)
+        | (u64::from(row.poll_micros) << 32)
+        | (u64::from(row.publication_micros) << 16)
+        | u64::from(row.readiness_micros);
+    print_fmt(format_args!(
+        "OPEN_RADIO_HIL rfpll-command-packed={}\n",
+        packed
+    ));
 }
 
 /// Report preparation only after maintenance returns, including failures.
