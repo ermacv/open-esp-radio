@@ -341,6 +341,7 @@ impl Radio {
             .map(|hold| hold.deadline)
     }
 
+    #[inline(never)]
     pub async fn service_hold(&mut self) {
         let Some(hold) = self.hold.as_mut().filter(|hold| hold.running) else {
             return;
@@ -396,14 +397,9 @@ impl Radio {
             hold.samples.len() + 1,
             observer.1,
         ));
-        let sample = observer.0.finish(committed, failed);
-        let parts = observer.4;
-        crate::hold::report_preparation(&trace, &hold.engine, &parts);
-        hold.invalid |= sample.invalid;
-        if hold.samples.push(sample).is_err() {
-            hold.invalid = true;
-        }
-        hold.running = !hold.invalid && hold.samples.len() < usize::from(hold.started.ticks);
+        let recorder = observer.0;
+        crate::hold::report_preparation(&trace, &hold.engine);
+        crate::hold::finish_sample(hold, recorder, committed, failed);
     }
 
     fn current(&self, epoch: u32) -> Result<CaptureReady> {

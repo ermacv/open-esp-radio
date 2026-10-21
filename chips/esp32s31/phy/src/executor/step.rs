@@ -380,7 +380,6 @@ pin_project_lite::pin_project! {
         wait: Option<F>,
         make_wait: M,
         wait_at: Instant,
-        previous_exit: Instant,
         gate: Gate,
     }
 }
@@ -518,16 +517,13 @@ impl<R: Registers, T: Timer, F: Future<Output = ()>, M: Fn(Instant) -> F> Future
             advanced = true;
         };
         if let (Some(stats), Some(started)) = (this.stats.as_deref_mut(), started) {
-            let finished = this.timer.now();
             stats.poll_finished(
+                this.timer,
                 started,
-                finished,
                 result.is_pending(),
                 resumed,
-                *this.previous_exit,
                 ready_elapsed,
             );
-            *this.previous_exit = finished;
         }
         result
     }
@@ -555,7 +551,6 @@ pub(crate) fn drive<'a, 'j, R: Registers, T: Timer>(
         wait: None,
         make_wait: move |at| timer.wait_until(at),
         wait_at: Instant::EPOCH,
-        previous_exit: Instant::EPOCH,
         gate: Gate::Idle,
     }
 }

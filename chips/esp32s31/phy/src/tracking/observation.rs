@@ -118,19 +118,9 @@ impl ReadinessTrace {
     }
 }
 
-/// Components of the same largest late WaitAt resume, never independent maxima.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct WaitParts {
-    pub late_micros: u32,
-    pub poll_tail_micros: u32,
-    pub executor_gap_micros: u32,
-    pub poll_prefix_micros: u32,
-}
-
 /// Clock-free aggregate of actual engine polls and timer resumes.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct EngineTiming {
-    pub wait_parts: WaitParts,
     pub polls: u16,
     pub pending: u16,
     pub total_micros: u32,
@@ -143,17 +133,17 @@ pub struct EngineTiming {
     pub invalid: bool,
 }
 impl EngineTiming {
-    /// Called once at the exit of the outlined poll, never from an observer.
+    /// Update the bounded event counters before taking the final poll stamp.
+    /// Only the final duration sum/max stores follow that stamp.
     #[inline(never)]
-    pub(crate) fn poll_finished(
+    pub(crate) fn poll_finished<C: oer_time::Clock>(
         &mut self,
+        clock: &C,
         started: oer_time::Instant,
-        finished: oer_time::Instant,
         pending: bool,
         resumed: Option<(oer_time::Instant, oer_time::Instant)>,
-        previous_exit: oer_time::Instant,
         ready_elapsed: Option<oer_time::Duration>,
-    ) {
+    ) -> oer_time::Instant {
         fn increment(total: &mut u16, invalid: &mut bool) {
             if let Some(next) = total.checked_add(1) {
                 *total = next;
@@ -168,61 +158,43 @@ impl EngineTiming {
                 *invalid = true;
             }
         }
-        let Some(elapsed) = finished
-            .checked_duration_since(started)
-            .and_then(|d| u32::try_from(d.as_micros()).ok())
-        else {
-            self.invalid = true;
-            return;
-        };
         increment(&mut self.polls, &mut self.invalid);
         if pending {
             increment(&mut self.pending, &mut self.invalid);
         }
-        add(&mut self.total_micros, elapsed, &mut self.invalid);
-        self.maximum_micros = self.maximum_micros.max(elapsed);
         if let Some((deadline, at)) = resumed {
-            let Some(late) = at
+            if let Some(late) = at
                 .checked_duration_since(deadline)
                 .and_then(|d| u32::try_from(d.as_micros()).ok())
-            else {
+            {
+                increment(&mut self.resumes, &mut self.invalid);
+                add(&mut self.lateness_micros, late, &mut self.invalid);
+                self.maximum_lateness_micros = self.maximum_lateness_micros.max(late);
+            } else {
                 self.invalid = true;
-                return;
-            };
-            increment(&mut self.resumes, &mut self.invalid);
-            add(&mut self.lateness_micros, late, &mut self.invalid);
-            if late >= self.maximum_lateness_micros {
-                self.wait_parts = WaitParts {
-                    late_micros: late,
-                    poll_tail_micros: u32::try_from(
-                        previous_exit
-                            .saturating_duration_since(deadline)
-                            .as_micros(),
-                    )
-                    .unwrap_or(u32::MAX),
-                    executor_gap_micros: u32::try_from(
-                        started
-                            .saturating_duration_since(previous_exit.max(deadline))
-                            .as_micros(),
-                    )
-                    .unwrap_or(u32::MAX),
-                    poll_prefix_micros: u32::try_from(
-                        at.saturating_duration_since(started.max(deadline))
-                            .as_micros(),
-                    )
-                    .unwrap_or(u32::MAX),
-                };
-                self.maximum_lateness_micros = late;
             }
         }
         if let Some(elapsed) = ready_elapsed {
-            let Some(elapsed) = u32::try_from(elapsed.as_micros()).ok() else {
+            if let Ok(elapsed) = u32::try_from(elapsed.as_micros()) {
+                increment(&mut self.ready_edges, &mut self.invalid);
+                self.maximum_ready_micros = self.maximum_ready_micros.max(elapsed);
+            } else {
                 self.invalid = true;
-                return;
-            };
-            increment(&mut self.ready_edges, &mut self.invalid);
-            self.maximum_ready_micros = self.maximum_ready_micros.max(elapsed);
+            }
         }
+        // Includes the event/overflow/ready accounting above. No observer,
+        // formatter or report runs inside this measured interval.
+        let finished = clock.now();
+        if let Some(elapsed) = finished
+            .checked_duration_since(started)
+            .and_then(|d| u32::try_from(d.as_micros()).ok())
+        {
+            add(&mut self.total_micros, elapsed, &mut self.invalid);
+            self.maximum_micros = self.maximum_micros.max(elapsed);
+        } else {
+            self.invalid = true;
+        }
+        finished
     }
 }
 

@@ -1,70 +1,40 @@
 use super::*;
 
 #[test]
-fn late_resume_parts_describe_one_event_and_ready_excludes_poll_tail() {
+fn poll_stamp_includes_the_completed_body_and_preserves_the_ready_endpoint() {
     use oer_time::{Clock, Duration};
     let clock = oer_time_virtual::VirtualClock::<1>::new();
-    let origin = clock.now();
-    let at = |micros| {
-        let elapsed = clock.now().saturating_duration_since(origin);
-        clock
-            .advance(Duration::from_micros(micros).saturating_sub(elapsed))
-            .expect("time fits");
-        clock.now()
-    };
-    let deadline = at(10);
-    let previous_exit = at(20);
-    let started = at(40);
-    let resumed = at(45);
-    let finished = at(80);
+    let started = clock.now();
+    clock.advance(Duration::from_micros(10)).expect("time fits");
+    let deadline = clock.now();
+    clock.advance(Duration::from_micros(35)).expect("time fits");
+    let resumed = clock.now();
+    // Work continues after readiness and until final counter accounting.
+    clock.advance(Duration::from_micros(35)).expect("time fits");
     let mut timing = EngineTiming::default();
-    timing.poll_finished(
+    let finished = timing.poll_finished(
+        &clock,
         started,
-        finished,
-        false,
+        true,
         Some((deadline, resumed)),
-        previous_exit,
         Some(Duration::from_micros(47)),
     );
-    let parts = timing.wait_parts;
+    assert_eq!(finished, clock.now());
     assert_eq!(
         (
-            parts.poll_tail_micros,
-            parts.executor_gap_micros,
-            parts.poll_prefix_micros
+            timing.polls,
+            timing.pending,
+            timing.resumes,
+            timing.ready_edges
         ),
-        (10, 20, 5)
+        (1, 1, 1, 1)
     );
-    assert_eq!(parts.late_micros, 35);
+    assert_eq!((timing.total_micros, timing.maximum_micros), (80, 80));
+    assert_eq!(
+        (timing.lateness_micros, timing.maximum_lateness_micros),
+        (35, 35)
+    );
     assert_eq!(timing.maximum_ready_micros, 47);
-
-    // A real future alarm excludes the time before its deadline. Its shorter
-    // lateness must not combine independent maxima with the previous event.
-    let deadline = at(100);
-    let started = at(105);
-    let resumed = at(108);
-    let finished = at(110);
-    timing.poll_finished(
-        started,
-        finished,
-        false,
-        Some((deadline, resumed)),
-        previous_exit,
-        None,
-    );
-    assert_eq!(timing.wait_parts, parts);
-    let mut timing = EngineTiming::default();
-    timing.poll_finished(
-        started,
-        finished,
-        false,
-        Some((deadline, resumed)),
-        previous_exit,
-        None,
-    );
-    assert_eq!(timing.wait_parts.poll_tail_micros, 0);
-    assert_eq!(timing.wait_parts.executor_gap_micros, 5);
-    assert_eq!(timing.wait_parts.poll_prefix_micros, 3);
     assert!(!timing.invalid);
 }
 

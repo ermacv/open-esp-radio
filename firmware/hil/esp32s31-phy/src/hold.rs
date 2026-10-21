@@ -49,12 +49,22 @@ impl Hold {
     }
 }
 
+/// Publish the completed observation after tracking, outside the task poll frame.
+#[inline(never)]
+pub fn finish_sample(hold: &mut Hold, recorder: recorder::Recorder, committed: u8, failed: bool) {
+    let sample = recorder.finish(committed, failed);
+    hold.invalid |= sample.invalid;
+    if hold.samples.push(sample).is_err() {
+        hold.invalid = true;
+    }
+    hold.running = !hold.invalid && hold.samples.len() < usize::from(hold.started.ticks);
+}
+
 pub struct Observer<'a>(
     pub recorder::Recorder,
     pub sar_tails::Tails,
     &'a mut HoldPolls,
     Option<&'a mut oer_esp32s31_phy::tracking::observation::ReadinessTrace>,
-    pub oer_esp32s31_phy::tracking::observation::WaitParts,
 );
 impl<'a> Observer<'a> {
     pub fn new(
@@ -67,7 +77,6 @@ impl<'a> Observer<'a> {
             sar_tails::Tails::default(),
             engine,
             trace,
-            Default::default(),
         )
     }
 }
@@ -78,8 +87,8 @@ impl PhyTargetObserver for &mut Observer<'_> {
     ) -> Option<&mut oer_esp32s31_phy::tracking::observation::ReadinessTrace> {
         self.3.as_deref_mut()
     }
+    #[inline(never)]
     fn engine_completed(&mut self, timing: oer_esp32s31_phy::tracking::observation::EngineTiming) {
-        self.4 = timing.wait_parts;
         self.2.merge(HoldPolls {
             polls: timing.polls,
             pending: timing.pending,
@@ -127,16 +136,8 @@ impl PhyTargetObserver for &mut Observer<'_> {
 pub fn report_preparation(
     trace: &oer_esp32s31_phy::tracking::observation::ReadinessTrace,
     polls: &HoldPolls,
-    parts: &oer_esp32s31_phy::tracking::observation::WaitParts,
 ) {
     use oer_esp32s31_board::rom::print_fmt;
-    print_fmt(format_args!(
-        "OPEN_RADIO_HIL t7-wait late-us={} tail-us={} gap-us={} prefix-us={}\n",
-        parts.late_micros,
-        parts.poll_tail_micros,
-        parts.executor_gap_micros,
-        parts.poll_prefix_micros
-    ));
     print_fmt(format_args!(
         "OPEN_RADIO_HIL t7-prepare polls={} max-poll-us={}\n",
         polls.polls, polls.maximum_micros

@@ -4,7 +4,7 @@ use oer_hil_protocol::phy::{HoldInterval, HoldOperation, HoldSample};
 pub struct Recorder {
     sample: HoldSample,
     active: [Option<u64>; 5],
-    last: Option<u64>,
+    last: u64,
 }
 impl Recorder {
     pub fn new(tick: u8) -> Self {
@@ -16,14 +16,16 @@ impl Recorder {
                 intervals: heapless::Vec::new(),
             },
             active: [None; 5],
-            last: None,
+            // Zero is the lower bound of every input timestamp, so the
+            // initial comparison accepts every first sample without an Option.
+            last: 0,
         }
     }
     pub fn observe(&mut self, operation: HoldOperation, started: bool, failed: bool, now: u64) {
-        if self.last.is_some_and(|last| now < last) {
+        if now < self.last {
             self.sample.invalid = true;
         }
-        self.last = Some(now);
+        self.last = now;
         let slot = &mut self.active[operation as usize];
         if started {
             if slot.is_some() {
