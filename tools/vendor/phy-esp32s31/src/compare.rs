@@ -10,6 +10,8 @@
 //! it describes the environment rather than calibration and is excluded. A
 //! field without a review leaves the comparison INCOMPLETE; reviews naming
 //! no compared field are rejected.
+//! Reviewed RX-DC gain pairs may also match their own boot's gain0 pair;
+//! every use of that rule is retained separately in the field summary.
 use crate::Result;
 use crate::committed::{
     CALIBRATION, CALIBRATION_BYTES, OutputField, PARENT, PARENT_BYTES, TRACKING_PROGRESS_FIELD,
@@ -22,12 +24,15 @@ use oer_vendor_phy::calibration_capture::space::Register;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
+mod initial_pair;
+pub use initial_pair::{InitialPairMatch, PairMatchReason};
+
 pub use crate::committed::VENDOR_OBJECT;
 
 /// Summary format.
-pub const SCHEMA: u16 = 4;
+pub const SCHEMA: u16 = 5;
 /// Tolerance file format.
-const TOLERANCE_SCHEMA: u16 = 2;
+const TOLERANCE_SCHEMA: u16 = 3;
 /// The reviewed tolerances, compiled in so a run binds the reviews it used.
 pub(crate) const TOLERANCES: &str = include_str!("tolerances.toml");
 
@@ -71,6 +76,9 @@ pub(crate) struct Tolerance {
     /// production sample in every boot where the vendor can read them.
     #[serde(default)]
     pub excluded: bool,
+    /// Accept a reviewed RX-DC gain pair equal to this boot's gain0 pair.
+    #[serde(default, rename = "initial-pair")]
+    initial_pair: Option<initial_pair::Rule>,
     /// The only lifecycle point the review applies to; every point when
     /// absent.
     #[serde(default)]
@@ -82,6 +90,9 @@ impl ReviewFile {
     /// The reviews that apply at `lifecycle`: a review without a point, or
     /// the one naming it. Two reviews of one name applying at one point fail.
     pub(crate) fn at(self, lifecycle: Lifecycle) -> Result<Tolerances> {
+        if self.schema != TOLERANCE_SCHEMA {
+            return Err(format!("unsupported tolerance schema {}", self.schema).into());
+        }
         let select = |reviews: BTreeMap<String, Reviews>| -> Result<BTreeMap<String, Tolerance>> {
             let mut applied = BTreeMap::new();
             for (name, reviews) in reviews {
@@ -103,10 +114,27 @@ impl ReviewFile {
             }
             Ok(applied)
         };
-        Ok(Tolerances {
+        let tolerances = Tolerances {
             fields: select(self.fields)?,
             registers: select(self.registers)?,
-        })
+        };
+        for (name, review) in &tolerances.fields {
+            if let Some(rule) = review.initial_pair {
+                let field = fields()
+                    .into_iter()
+                    .find(|f| f.name == name)
+                    .ok_or_else(|| format!("initial-pair rule names unknown field {name}"))?;
+                rule.gains(&field, review)?;
+            }
+        }
+        if tolerances
+            .registers
+            .values()
+            .any(|r| r.initial_pair.is_some())
+        {
+            return Err("initial-pair rules apply only to RX-DC fields".into());
+        }
+        Ok(tolerances)
     }
 }
 
@@ -291,6 +319,9 @@ pub struct FieldSummary {
     /// Per element, the vendor and production `[min, max]`.
     pub vendor: Vec<[i64; 2]>,
     pub production: Vec<[i64; 2]>,
+    /// Out-of-range gain pairs accepted by their same-boot initial pair.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub initial_pairs: Vec<InitialPairMatch>,
 }
 
 /// The fields the cross-check compares: the parent root's relation without
@@ -342,13 +373,22 @@ fn compare_field(
     production: &[Vec<u8>],
 ) -> Result<FieldSummary> {
     let vendor_ranges = field_ranges(field, tolerance, vendor, field.parameter)?;
+    compare_field_captures(field, tolerance, vendor_ranges, production)
+}
+
+/// Apply live or recorded vendor bounds to individual production boots.
+pub(crate) fn compare_field_captures(
+    field: &OutputField,
+    tolerance: Option<&Tolerance>,
+    vendor_ranges: Vec<[i64; 2]>,
+    production: &[Vec<u8>],
+) -> Result<FieldSummary> {
     let production_ranges = field_ranges(field, tolerance, production, field.output)?;
-    Ok(compare_field_ranges(
-        field.name,
-        tolerance,
-        vendor_ranges,
-        production_ranges,
-    ))
+    let mut summary = compare_field_ranges(field.name, tolerance, vendor_ranges, production_ranges);
+    if let Some(review) = tolerance.filter(|r| r.initial_pair.is_some()) {
+        initial_pair::compare(field, review, production, &mut summary)?;
+    }
+    Ok(summary)
 }
 
 pub(crate) fn field_ranges(
@@ -384,7 +424,7 @@ pub(crate) fn field_ranges(
     Ok(ranges)
 }
 
-pub(crate) fn compare_field_ranges(
+fn compare_field_ranges(
     name: &str,
     tolerance: Option<&Tolerance>,
     vendor_ranges: Vec<[i64; 2]>,
@@ -411,6 +451,7 @@ pub(crate) fn compare_field_ranges(
         reason: tolerance.map(|t| t.reason.clone()),
         vendor: vendor_ranges,
         production: production_ranges,
+        initial_pairs: vec![],
     }
 }
 
@@ -888,7 +929,7 @@ mod tests {
 
     #[test]
     fn a_review_scoped_to_a_lifecycle_point_applies_only_there() {
-        let text = "schema = 2\n\
+        let text = "schema = 3\n\
              [registers.A]\nexcluded = true\nlifecycle = \"cold\"\nreason = \"cold only\"\n\
              [registers.B]\nexcluded = true\nreason = \"always\"\n\
              [[registers.C]]\nexcluded = true\nlifecycle = \"cold\"\nreason = \"cold\"\n\
@@ -903,7 +944,7 @@ mod tests {
             "cold"
         );
         let ambiguous =
-            "schema = 2\n[[registers.D]]\nreason = \"a\"\n[[registers.D]]\nreason = \"b\"\n";
+            "schema = 3\n[[registers.D]]\nreason = \"a\"\n[[registers.D]]\nreason = \"b\"\n";
         assert!(
             toml::from_str::<ReviewFile>(ambiguous)
                 .unwrap()

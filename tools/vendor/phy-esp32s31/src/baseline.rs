@@ -120,6 +120,7 @@ impl Signature {
                     "tools/vendor/phy/src/calibration_capture/space.rs",
                     "tools/vendor/phy/src/workload/calibration.rs",
                     "tools/vendor/phy-esp32s31/src/compare.rs",
+                    "tools/vendor/phy-esp32s31/src/compare/initial_pair.rs",
                 ],
             )?,
         })
@@ -690,12 +691,12 @@ impl Reference {
             else {
                 return Err("unreadable calibration field".into());
             };
-            fields.push(compare::compare_field_ranges(
-                f.name,
+            fields.push(compare::compare_field_captures(
+                &f,
                 Some(r),
-                ranges.clone(),
-                compare::field_ranges(&f, Some(r), &objects, f.output)?,
-            ));
+                ranges,
+                &objects,
+            )?);
         }
         excluded.push(compare::Excluded {
             name: committed::TRACKING_PROGRESS_FIELD.into(),

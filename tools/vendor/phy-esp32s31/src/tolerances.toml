@@ -1,7 +1,7 @@
 # Reviews of the hardware calibration cross-check fields.
 #
 # One entry per field of the `phy_param` relation
-# (hil/phy/esp32s31/relation/src/committed.rs). A field's margin is
+# (chips/esp32s31/knowledge/src/phy_relation/committed.rs). A field's margin is
 # the widest range its vendor boots span in any one element; a production
 # element passes within its vendor range widened by that margin. `signed`
 # reads elements as two's-complement values, `mask` compares only the bits
@@ -9,7 +9,12 @@
 # Every vendor-readable register, including an excluded one, must have a
 # readable production sample in every boot; otherwise the result is INCOMPLETE.
 # A field without an entry leaves the cross-check INCOMPLETE.
-schema = 2
+# Schema 3 adds `initial-pair = "rx-dc-gain0"`: a later RX-DC gain pair
+# may also pass when BOTH codes equal gain0 of that same capture. Applies
+# only to shared gains 1..10 and Wi-Fi gains 1..7; gain0 and the five Wi-Fi
+# fine-calibration pairs retain the range rule. Each out-of-range acceptance
+# is reported as "initial pair, vendor-faithful" with capture/gain/pair.
+schema = 3
 
 # SOURCE: complete rev0 ROM phy_set_cca_cnt / phy_get_cca_cnt (#240), and
 # s31-b E1/E3/E4/E5 (#254); chips/esp32s31/notes/phy/cca-counter.md.
@@ -48,9 +53,19 @@ reason = "Wi-Fi TX DC calibration codes"
 reason = "Bluetooth TX DC calibration codes"
 
 [fields.wifi-rx-dc]
+# SOURCE: #297; vendor-010 in 1792622032981-000474e9 has gains1/4/5
+# equal to its gain0 (260,303). Only the first eight pairs are per-gain;
+# the remaining five are phy_rxdc_fine_cal, outside this rule.
+initial-pair = "rx-dc-gain0"
 reason = "Wi-Fi per-gain RX DC codes and the phy_rxdc_fine_cal pairs"
 
 [fields.shared-rx-dc]
+# SOURCE: https://github.com/ermacv/open-esp-radio/issues/297;
+# vendor-006 and production-004 in #305 cold1792622032981-000474e9,
+# production-003 in #305 restart1792623738264-0006c2cc, and
+# production-010 in #295 restart1792612465408-0039aa30: gain10 equals
+# that capture's gain0 initial pair (243,288). Convergence is not captured.
+initial-pair = "rx-dc-gain0"
 reason = "shared RX DC codes"
 
 [fields.power-temperature]

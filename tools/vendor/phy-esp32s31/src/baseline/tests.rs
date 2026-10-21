@@ -125,6 +125,50 @@ fn fixture() -> (Reference, Vec<VendorBoot>, Vec<VendorBoot>) {
     .unwrap();
     (reference, a, b)
 }
+
+#[test]
+fn recorded_and_live_bounds_accept_only_the_same_boot_whole_initial_pair() {
+    let fields = compare::fields();
+    let field = fields.iter().find(|f| f.name == "shared-rx-dc").unwrap();
+    let mut v = vendor(0, 4);
+    let object = v.calibration.as_mut().unwrap();
+    for gain in 0..field.count / 2 {
+        let pair: [u16; 2] = if gain == 0 { [243, 288] } else { [259, 303] };
+        for (i, value) in pair.into_iter().enumerate() {
+            let start = field.parameter as usize + gain as usize * 4 + i * 2;
+            object[start..start + 2].copy_from_slice(&value.to_le_bytes());
+        }
+    }
+    let boots = vec![v; 10];
+    let reference = generate(signature(), vec![input("s31-a", boots.clone())], &images()).unwrap();
+    for (pair, verdict) in [
+        ([243_u16, 288], Verdict::Match),
+        ([243, 303], Verdict::Diff),
+        ([259, 288], Verdict::Diff),
+        ([240, 280], Verdict::Diff),
+    ] {
+        let mut p = production(&boots[0]);
+        let output = p.calibration.as_mut().unwrap();
+        for (i, value) in pair.into_iter().enumerate() {
+            let start = field.output as usize + 10 * 4 + i * 2;
+            output[start..start + 2].copy_from_slice(&value.to_le_bytes());
+        }
+        let image = images();
+        let live = compare::compare(
+            Lifecycle::Cold,
+            &identity(),
+            &boots,
+            std::slice::from_ref(&p),
+            compare::ReviewFile::reviewed().unwrap(),
+            (&image.registers, &image.analog),
+        )
+        .unwrap();
+        let recorded = reference.check(&signature(), &image, "s31-a", 0, &identity(), &[p]);
+        assert_eq!(recorded.verdict, verdict);
+        assert_eq!(recorded.comparison.unwrap(), live);
+    }
+}
+
 #[test]
 fn frozen_bounds_preserve_live_comparison_including_signed_fields_and_counter_exclusion() {
     let (reference, a, b) = fixture();
