@@ -63,15 +63,15 @@ pub trait CallSummaries {
 
 /// No callee summary is known. This sentinel supplies neither result values
 /// nor argument narrowing, and does not prove that a function is noreturn.
-pub struct NoReturns;
-impl CallSummaries for NoReturns {
+pub struct NoSummaries;
+impl CallSummaries for NoSummaries {
     fn summary(&self, _: Callee<'_>) -> Option<&CallSummary> {
         None
     }
 }
 
 /// Proof of a callee's control-flow behavior, independent of the values
-/// it might return. Missing summaries ([`NoReturns`]) do not prove noreturn.
+/// it might return. Missing summaries ([`NoSummaries`]) do not prove noreturn.
 pub trait CallBehavior {
     /// True only when `callee` is proven never to return. Missing or
     /// ambiguous facts must answer false and retain the continuation.

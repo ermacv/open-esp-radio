@@ -2251,7 +2251,7 @@ mod tests {
             relocations: &PreparedReferences::empty(),
             data_ranges: &[],
             jumps: &[],
-            returns: &NoReturns,
+            returns: &NoSummaries,
             call_behavior: &UnknownCallBehavior,
         };
         let memory = WorkingMemory::new(1024 * 1024).unwrap();
@@ -2387,7 +2387,7 @@ mod tests {
             relocations: &PreparedReferences::empty(),
             data_ranges: &[],
             jumps: &[],
-            returns: &NoReturns,
+            returns: &NoSummaries,
             call_behavior: &UnknownCallBehavior,
         };
         let memory = WorkingMemory::new(1024 * 1024).unwrap();
@@ -2511,7 +2511,7 @@ mod tests {
                 relocations: &PreparedReferences::empty(),
                 data_ranges: &[],
                 jumps,
-                returns: &NoReturns,
+                returns: &NoSummaries,
                 call_behavior: &UnknownCallBehavior,
             };
             let memory = WorkingMemory::new(1024 * 1024).unwrap();
@@ -2618,7 +2618,7 @@ mod tests {
             relocations: &PreparedReferences::empty(),
             data_ranges: &[],
             jumps: &[],
-            returns: &NoReturns,
+            returns: &NoSummaries,
             call_behavior: &UnknownCallBehavior,
         };
         let node = Node {
@@ -2718,7 +2718,7 @@ mod tests {
             relocations: &PreparedReferences::empty(),
             data_ranges: &[],
             jumps: &[],
-            returns: &NoReturns,
+            returns: &NoSummaries,
             call_behavior: &UnknownCallBehavior,
         };
         let mut node = Node {
@@ -2789,7 +2789,7 @@ mod tests {
             relocations: &PreparedReferences::empty(),
             data_ranges: &[],
             jumps: &[],
-            returns: &NoReturns,
+            returns: &NoSummaries,
             call_behavior: &UnknownCallBehavior,
         };
         let nodes: Vec<_> = [0, 2]
@@ -2859,7 +2859,7 @@ mod tests {
             relocations: &PreparedReferences::empty(),
             data_ranges: &[],
             jumps: &[],
-            returns: &NoReturns,
+            returns: &NoSummaries,
             call_behavior: &UnknownCallBehavior,
         };
         let node = Node {
@@ -3040,7 +3040,7 @@ mod tests {
             relocations: &PreparedReferences::empty(),
             data_ranges: &[],
             jumps: &[],
-            returns: &NoReturns,
+            returns: &NoSummaries,
             call_behavior: &UnknownCallBehavior,
         };
         let memory = WorkingMemory::new(1024 * 1024).unwrap();

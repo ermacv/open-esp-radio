@@ -339,7 +339,7 @@ pub(super) fn analyze<'a>(
                     object_id,
                     &function,
                     assumptions,
-                    &NoReturns,
+                    &NoSummaries,
                     decoder,
                     memory,
                     c,

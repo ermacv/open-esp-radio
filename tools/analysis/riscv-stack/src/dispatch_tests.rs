@@ -280,7 +280,7 @@ fn recognized(elf: &[u8]) -> (Vec<FunctionRecord>, Vec<JumpDispatch>) {
         use oer_analysis_riscv_analysis::{
             FunctionInput, PreparedReferences, research_following_tables,
         };
-        use oer_analysis_riscv_model::NoReturns;
+        use oer_analysis_riscv_model::NoSummaries;
         let memory = WorkingMemory::new(TEST_MEMORY)?;
         let view = oer_analysis_riscv_program::ProgramView::new(
             facts.bytes(),
@@ -305,7 +305,7 @@ fn recognized(elf: &[u8]) -> (Vec<FunctionRecord>, Vec<JumpDispatch>) {
                 relocations: &references,
                 data_ranges: &[],
                 jumps: &[],
-                returns: &NoReturns,
+                returns: &NoSummaries,
                 call_behavior: &UnknownCallBehavior,
             },
             &RecognizedTables {

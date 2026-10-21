@@ -158,7 +158,7 @@ pub fn print(
             relocations: &references,
             data_ranges: &[],
             jumps: &jumps,
-            returns: &NoReturns,
+            returns: &NoSummaries,
             call_behavior,
         },
         &tables,

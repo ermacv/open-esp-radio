@@ -856,7 +856,7 @@ mod tests {
                 relocations: &PreparedReferences::empty(),
                 data_ranges: &[],
                 jumps,
-                returns: &NoReturns,
+                returns: &NoSummaries,
                 call_behavior: &UnknownCallBehavior,
             };
             let memory = WorkingMemory::new(1024 * 1024).unwrap();
@@ -900,7 +900,7 @@ mod tests {
             relocations: &PreparedReferences::empty(),
             data_ranges: &[],
             jumps: &jumps,
-            returns: &NoReturns,
+            returns: &NoSummaries,
             call_behavior: &UnknownCallBehavior,
         };
         struct Budget(u64);
@@ -946,7 +946,7 @@ mod tests {
             relocations: &PreparedReferences::empty(),
             data_ranges: &[],
             jumps: &jumps,
-            returns: &NoReturns,
+            returns: &NoSummaries,
             call_behavior: &UnknownCallBehavior,
         };
         // The graph's own capacity fits; the known jumps' edges do not.
@@ -1017,7 +1017,7 @@ mod tests {
             relocations: &PreparedReferences::empty(),
             data_ranges: &[],
             jumps: known,
-            returns: &NoReturns,
+            returns: &NoSummaries,
             call_behavior: &UnknownCallBehavior,
         };
         let memory = WorkingMemory::new(1024 * 1024).unwrap();

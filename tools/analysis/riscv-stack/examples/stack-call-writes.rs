@@ -279,7 +279,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
                     relocations: &PreparedReferences::empty(),
                     data_ranges: &[],
                     jumps: &[],
-                    returns: &NoReturns,
+                    returns: &NoSummaries,
                     call_behavior: &UnknownCallBehavior,
                 };
                 if let Some(query) = word_query {

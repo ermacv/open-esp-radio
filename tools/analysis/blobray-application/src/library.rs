@@ -139,7 +139,7 @@ fn analyze_without_summaries(
                 member,
                 assumptions.abi,
                 assumptions.read_only,
-                &NoReturns,
+                &NoSummaries,
                 decoder,
                 memory,
                 c,
@@ -733,7 +733,7 @@ mod tests {
                 ..SemanticSummary::default()
             },
             jump_tables: &[],
-            summaries: &NoReturns,
+            summaries: &NoSummaries,
         }
         .partial_causes(c)
     }

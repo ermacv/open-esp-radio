@@ -521,7 +521,7 @@ fn inspect_function_as(
     use oer_analysis_riscv_analysis::{
         FunctionInput, PreparedReferences, research_following_tables_with_options,
     };
-    use oer_analysis_riscv_model::NoReturns;
+    use oer_analysis_riscv_model::NoSummaries;
     use oer_analysis_riscv_program::ProgramView;
     let mut work = Ledger::new(memory, control)?;
     let swept = sweep::transfers(image, function, &mut work, control)?;
@@ -550,7 +550,7 @@ fn inspect_function_as(
             relocations: &references,
             data_ranges: &[],
             jumps: &jumps,
-            returns: &NoReturns,
+            returns: &NoSummaries,
             call_behavior,
         },
         &DispatchTables {
