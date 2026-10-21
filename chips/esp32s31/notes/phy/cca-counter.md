@@ -1,83 +1,74 @@
-# PHY CCA counter: measurement-window ownership
+# PHY CCA counter
 
-The verdict for `PHY_BB_RECOVERED_GAPS.WORD_0060_OPAQUE`
-(`0x20107c60`) is **not established because Blobray's static coverage is incomplete**.
-The word remains in the vendor comparison without an exclusion.
-Neither a missing vendor-only service nor a production CCA defect is proved.
+`PHY_BB_RECOVERED_GAPS.CCA_COUNTER_RESULT_0` and
+`CCA_COUNTER_RESULT_1` are hardware measurement results over a window,
+not calibration settings. The vendor leaves these results unconsumed.
+The vendor comparison checks that both words are readable in every
+production capture and excludes their values. Missing or unreadable
+production samples yield INCOMPLETE. `CCA_COUNTER_CONTROL`, including the
+window and control bits, remains compared by value.
 
-## Register facts
+## Register semantics
 
-SOURCE: pinned ESP32-S31 rev0 ROM ELF, SHA-256
+SOURCE: complete ESP32-S31 rev0 ROM ELF, SHA-256
 `a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87`;
-complete `phy_set_cca_cnt` at `0x2f8256cc`, size `0x2e`, and
-`phy_get_cca_cnt` at `0x2f8256fa`, size `0x24`.
+`phy_set_cca_cnt` at `0x2f8256cc`, size `0x2e`, and
+`phy_get_cca_cnt` at `0x2f8256fa`, size `0x24` ([#240](https://github.com/ermacv/open-esp-radio/pull/240)).
 
-| Address | Function | Effect |
+| Register | Address | Fields and ROM use |
 | --- | --- | --- |
-| `0x20107c58` | `phy_set_cca_cnt` | Replaces bits 26:0 from arg0 (`0x07ffffff`), preserving bits 31:27; nonzero arg1 additionally sets bits 28:27 (`0x18000000`) in a fresh read-modify-write. |
-| `0x20107c5c` | `phy_get_cca_cnt` | Copies bits 26:0 to out[0] and returns bit 27 as 0/1. |
-| `0x20107c60` | `phy_get_cca_cnt` | Copies bits 26:0 to out[1]. |
+| `CCA_COUNTER_CONTROL` | `0x20107c58` | `WINDOW` (26:0) is replaced from arg0, preserving bits 31:27. Nonzero arg1 additionally sets `CONTROL` (28:27) in a fresh read-modify-write. |
+| `CCA_COUNTER_RESULT_0` | `0x20107c5c` | `RESULT` (26:0) is copied to out[0]; `FLAG` (27) is returned as 0/1. |
+| `CCA_COUNTER_RESULT_1` | `0x20107c60` | `RESULT` (26:0) is copied to out[1]. |
 
-These leaves do not establish the hardware meanings of the control bits,
-who starts or finishes a window, the result consumer, its subsystem or its
-invocation period. Production PHY/HAL/driver source has no explicit
-counter-window arm operation or call of the ROM setter. The diagnostic
-`cca_checkpoint.rs::observe_running` only reads the selected words through
-`RadioDomain::phy_register_image`. An undocumented hardware trigger is not
-excluded by this source finding.
+The control bits' individual roles, the flag's physical meaning and the
+window's physical units are not established by these ROM leaves.
 
-SOURCE: s31-b captures `1792535094189-0008ca74` and
-`1792535695644-000980e7`, channel 1 with router beacons. The diagnostic received
-56 and 63 parsed same-channel beacons respectively, but all five open-RX
-samples per capture read zero at `+0x60`; the paired vendor captures read 4.
-Both sides read `+0x58=0x80010000` and `+0x5c=0x08010000`. Reception alone
-therefore does not resolve the window-ownership question.
+SOURCE: s31-b vendor and diagnostic captures in
+[#254](https://github.com/ermacv/open-esp-radio/pull/254), E1/E3.
+The vendor result is 4 across five reads without growth. Explicit diagnostic
+windows of `0x100000` produce `0x3c6ce` and `0x25130` on two boots;
+`0x10000` produces zero. The result depends on the measurement window
+rather than a retained calibration value.
 
-## Analysis coverage
+## Window trigger and receive sequence
 
-SOURCE: the 15 S31 archives of IDF
-`4d59230ddff16327812782151ef0afef202dc6d7`, the ROM above, and the built
-vendor-calibration ELF, SHA-256
+SOURCE: s31-b hardware watchpoints and call bisection in #254, E4/E5;
+HIL runs `1792554053095-001588f7` and `1792570921393-0017a8df`.
+The pinned IDF revision is `4d59230ddff16327812782151ef0afef202dc6d7`,
+vendor application SHA-256
+`e7c115dedfdb1fbf65372ef18655855b2f7d5b415f00de5a2d8347fc0940272a`,
+vendor ELF SHA-256
 `7e609cb94b84527a5ed4f12adee77a0321ef297b4799b4da5f590ffb75eb6078`;
-application SHA-256
-`e7c115dedfdb1fbf65372ef18655855b2f7d5b415f00de5a2d8347fc0940272a`.
-Blobray register-access schema 8 with the integer ABI, call-return constants
-and the explicit flash read-only window reports exact numeric target accesses
-only in the two ROM leaves. This is not proof that no other access exists:
-13,801 functions were analyzed, 10,434 were partial and four had unknown
-extents. There were 236,644 nonnumeric-address observations, including
-ordinary stack and buffer accesses.
+the complete ROM ELF is identified above.
 
-SOURCE: ROM `phy_spur_reg_write_one_tone` at `0x2f829a5e`, size `0x25e`.
-Its unresolved indexed addresses include `0x20107c14 + 4*arg0`, which could
-reach the counter words at indices 17/18/19. The observed call in
-`librftest.a[wifi.o]::set_spur_reg` and two resolved ROM calls from
-`phy_spur_coef_cfg` pass index 0; they do not establish counter access.
+Releasing `MODEM_SYSCON_RADIO.MODEM_RST_CONF.RST_WIFIBB` restarts the
+window. On the vendor PM wake path reached from
+`esp_wifi_set_promiscuous(true)`, `pm_wake_up` calls
+`pm_disconnected_wake`, then `wifi_rf_phy_enable`, the Wi-Fi clock wrapper
+and `modem_clock_module_enable`. Its leaf
+`modem_clock_wifi_bb_configure(true)` asserts and releases `RST_WIFIBB`
+before enabling baseband clocks. The reset word is `0x100`, then zero,
+at `0x20109c10`. DWARF identifies `modem_syscon_ll_reset_wifibb` in
+`components/hal/esp32s31/include/hal/modem_syscon_ll.h:283–284`, inlined
+into `components/esp_hw_support/modem/port/esp32s31/modem_clock_impl.c:70`.
 
-SOURCE: Blobray at `a19eaad5` (including the caller changes in `f0553471`),
-`tools/analysis/cli/src/main.rs::callers` and
-`references.rs::{Targets::capture, call_sites, StoredScan}`. Schema-4
-`callers` selects relocation references and resolved call/tail-transfer
-records, and scans captured data words and exact materialized target addresses.
-It reports both ROM calls from `phy_spur_coef_cfg`, agreeing with schema-5
-`call-arguments`, as well as the archive call above. Those three sites pass
-index 0. The resolved-ROM-transfer omission is absent from this implementation.
+Immediately after reset release, two probes read `+0x5c=0x0000000b`,
+followed by `0x08010000`; `+0x58` stays `0x80010000`. No processor store
+to `+0x58` or autonomous result read occurs during the observed vendor
+boot with verified watchpoints on both harts. In an uninterrupted capture,
+`+0x60` changes from zero after `esp_wifi_start()` to 4 after
+`esp_wifi_set_promiscuous(true)` and remains unchanged in later reads.
 
-SOURCE: the same vendor-calibration ELF's absolute `phy_get_cca_cnt` and
-`phy_set_cca_cnt` symbols are `0x2f8015bc` and `0x2f801658`, the ROM export
-trampolines. The target lookup accepts these absolute symbols as well as the
-ROM's sized function bodies. The query includes both counter names, their
-`__call_` export names and the spur-function names. It reports no selected
-counter caller and no stored-word or materialized-pointer candidate. The scan
-covers seven file-backed sections and 51,482 aligned words, with zero
-incomplete inventories; 23 NOBITS sections have no captured contents.
-
-The 10,434 partial functions and four unknown extents still limit absence
-claims. Captured pointer candidates would not prove execution, and the
-analysis does not expand callees or reconstruct runtime-populated callback
-contents. No captured counter-pointer slot was identified whose readers
-could establish the next owner. Unknown NOBITS contents are a coverage limit,
-not evidence that a callback or the measurement window uses them. Synthetic
-linking and ROM address companions do not provide those runtime contents.
-The start/finish owner, consumer, subsystem and cadence remain unknown;
-neither a vendor-only missing function nor a production defect is established.
+SOURCE: typed PAC calls in `chips/esp32s31/pac/src/modem/clock_device.rs`,
+`chips/esp32s31/hal/src/power.rs`,
+`chips/esp32s31/ieee80211/mac/src/init.rs`,
+`chips/esp32s31/pac/src/wifi/mac/sniffer.rs`,
+`chips/esp32s31/pac/src/wifi/mac/rx/dma.rs` and
+`firmware/hil/esp32s31-phy/src/cca_rx.rs`.
+Production pulses the Wi-Fi baseband reset at client entry. Its later
+`activate_promiscuous_receive` and RX-ring startup configure MAC filters,
+enable the RX walker and resume MAC runtime without another baseband
+reset. The measurement window starts at a different point in the two
+receive sequences. Diagnostic receive leaves the counter configuration
+unchanged.

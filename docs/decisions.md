@@ -360,6 +360,9 @@ bounds) live in the code that applies them.
   throughput blocks the change.
 - **PHY calibration** matches the vendor when each field's difference stays
   within the vendor's own spread for that field.
+  Hardware measurement results that the vendor leaves unconsumed (the PHY
+  CCA counter result words, whose window restarts at each Wi-Fi baseband
+  reset release) are checked for readability, not compared by value.
 - **Bisect** on the stand is a manual tool: each step builds its revision from
   a git worktree, runs one scenario and answers pass or fail to
   `git bisect run`.

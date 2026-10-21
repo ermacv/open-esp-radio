@@ -2,6 +2,10 @@
 schema = 1
 
 [[sources]]
+id = "ROM_REV0_PHY_CCA_COUNTER"
+description = "SOURCE: complete ESP32-S31 rev0 ROM ELF sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87; phy_set_cca_cnt at 0x2f8256cc size 0x2e and phy_get_cca_cnt at 0x2f8256fa size 0x24. The setter replaces +0x58 bits 26:0 from arg0 and, for nonzero arg1, sets bits 28:27 in a fresh RMW. The getter copies +0x5c bits 26:0 to out[0], +0x60 bits 26:0 to out[1], and returns +0x5c bit 27 as 0/1. These are descriptive names for window, control, results and flag; individual control-bit roles, flag meaning and physical window units are unknown."
+
+[[sources]]
 id = "ROM_REV0_HAL_GET_STA_TSF"
 description = "_oracles/esp32s31_rev0_rom.elf sha256 d01bde81d9b3806e37ef1d9ac3b58af4f5b3d91eeef4f44d20e79d6a9f227542; complete rom[]::hal_get_sta_tsf at 0x2f82c15c, size 0x36. The function snapshots the station TSF through CONTROL bit zero, conditionally reads the low and high words, then clears the snapshot request."
 

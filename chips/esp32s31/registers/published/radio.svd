@@ -24783,23 +24783,59 @@ Bluetooth or assign a wider ZBBB protocol meaning.</description>
           </fields>
         </register>
         <register>
-          <name>WORD_0058_OPAQUE</name>
-          <description>Opaque: meaning not established. Complete phy_set_cca_cnt read-modify-writes this word; individual fields remain unnamed.</description>
+          <name>CCA_COUNTER_CONTROL</name>
+          <description>Project-assigned name. CCA measurement window and control. SOURCE: complete rev0 ROM phy_set_cca_cnt replaces the low 27 bits and optionally sets bits 28:27.</description>
           <addressOffset>0x58</addressOffset>
           <size>0x20</size>
           <access>read-write</access>
+          <fields>
+            <field>
+              <name>WINDOW</name>
+              <description>Project-assigned name. Measurement window length; physical units unknown. SOURCE: complete rev0 ROM phy_set_cca_cnt arg0.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>27</bitWidth>
+            </field>
+            <field>
+              <name>CONTROL</name>
+              <description>Project-assigned name. Counter control; individual bit roles unknown. SOURCE: complete rev0 ROM phy_set_cca_cnt sets both bits when arg1 is nonzero.</description>
+              <bitOffset>27</bitOffset>
+              <bitWidth>2</bitWidth>
+            </field>
+          </fields>
         </register>
         <register>
-          <name>WORD_005C_OPAQUE</name>
-          <description>Opaque: meaning not established. Complete phy_get_cca_cnt reads this word; hardware access semantics remain unknown.</description>
+          <name>CCA_COUNTER_RESULT_0</name>
+          <description>Project-assigned name. First CCA window result and flag. SOURCE: complete rev0 ROM phy_get_cca_cnt copies bits 26:0 to out[0] and returns bit 27.</description>
           <addressOffset>0x5C</addressOffset>
           <size>0x20</size>
+          <fields>
+            <field>
+              <name>RESULT</name>
+              <description>Project-assigned name. First window measurement result. SOURCE: complete rev0 ROM phy_get_cca_cnt out[0].</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>27</bitWidth>
+            </field>
+            <field>
+              <name>FLAG</name>
+              <description>Project-assigned name. Counter flag returned as 0/1; physical meaning unknown. SOURCE: complete rev0 ROM phy_get_cca_cnt return value.</description>
+              <bitOffset>27</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
         </register>
         <register>
-          <name>WORD_0060_OPAQUE</name>
-          <description>Opaque: meaning not established. Complete phy_get_cca_cnt reads this word; hardware access semantics remain unknown.</description>
+          <name>CCA_COUNTER_RESULT_1</name>
+          <description>Project-assigned name. Second CCA window result. SOURCE: complete rev0 ROM phy_get_cca_cnt copies bits 26:0 to out[1].</description>
           <addressOffset>0x60</addressOffset>
           <size>0x20</size>
+          <fields>
+            <field>
+              <name>RESULT</name>
+              <description>Project-assigned name. Second window measurement result. SOURCE: complete rev0 ROM phy_get_cca_cnt out[1].</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>27</bitWidth>
+            </field>
+          </fields>
         </register>
         <register>
           <name>WORD_00E8_OPAQUE</name>
