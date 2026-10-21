@@ -40,7 +40,7 @@ impl Capture {
             return Err("unusable capture address".to_owned());
         }
         let script = format!(
-            "exec timeout 240 tcpdump -n -tt -l -i {} {}",
+            "exec timeout 240 tcpdump -n -tt -l -c 400 -i {} {}",
             quote(interface)?,
             quote(&format!("icmp and host {address}"))?
         );
@@ -81,14 +81,13 @@ impl Capture {
     }
 
     pub fn finish(mut self) -> Result<(Vec<super::Echo>, bool)> {
-        let ended = self
+        // Let tcpdump deliver its final buffered packet batch and statistics.
+        // Killing SSH as soon as ping reports completion can truncate seq 100.
+        // Incomplete/failed captures remain failures after this bounded drain.
+        let exited = self
             .child
-            .try_wait()
-            .map_err(|_| "cannot read capture process status")?
-            .is_some();
-        self.child
-            .kill()
-            .map_err(|_| "cannot stop router capture")?;
+            .wait_timeout(Some(Duration::from_secs(10)))
+            .is_ok_and(|status| status.success());
         let text = self
             .output
             .take()
@@ -101,8 +100,18 @@ impl Capture {
             .ok_or("missing capture status reader")?
             .join()
             .map_err(|_| "capture status reader panicked")??;
-        Ok((super::parse_echoes(&text)?, complete && !ended))
+        completed_observation(&text, exited, complete)
     }
+}
+
+fn completed_observation(
+    text: &str,
+    exited: bool,
+    healthy: bool,
+) -> Result<(Vec<super::Echo>, bool)> {
+    let echoes = super::parse_echoes(text)?;
+    let complete = exited && healthy && echoes.len() == 400;
+    Ok((echoes, complete))
 }
 
 /// AP-STA-DISCONNECTED events after subscription only. Historical log records
@@ -161,5 +170,36 @@ impl Departure {
             return Err("invalid departure observation".to_owned());
         }
         Ok(!ended && text.lines().count() == 1)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn natural_completion_retains_the_last_echo_pair_and_requires_all_400_rows() {
+        let text = (1..=100).flat_map(|sequence| {
+            [false, true].into_iter().flat_map(move |reverse| {
+                [false, true].map(move |reply| {
+                    let (source, destination) = if reverse ^ reply { ("192.0.2.1", "192.0.2.8") }
+                        else { ("192.0.2.8", "192.0.2.1") };
+                    format!("{}.{:06} IP {source} > {destination}: ICMP echo {}, id {}, seq {sequence}, length 64\n",
+                        1792590000_u64 + sequence, u32::from(reply) * 1000,
+                        if reply { "reply" } else { "request" }, if reverse { 26 } else { 25 })
+                })
+            })
+        }).collect::<String>();
+        let (rows, complete) = completed_observation(&text, true, true).unwrap();
+        assert!(complete);
+        assert_eq!(rows.len(), 400);
+        let station = "192.0.2.8".parse().unwrap();
+        let router = "192.0.2.1".parse().unwrap();
+        assert!(crate::w3::echo_gate(&rows, station, router));
+        assert!(crate::w3::echo_gate(&rows, router, station));
+        let truncated = text.lines().take(398).collect::<Vec<_>>().join("\n");
+        assert!(!completed_observation(&truncated, true, true).unwrap().1);
+        assert!(!completed_observation(&text, false, true).unwrap().1);
+        assert!(!completed_observation(&text, true, false).unwrap().1);
+        assert!(completed_observation(&format!("{text}truncated"), true, true).is_err());
     }
 }

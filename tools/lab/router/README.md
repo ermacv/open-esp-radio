@@ -225,7 +225,11 @@ open authentication, WPA off, HT on, no HT40 capability and HE off.
 presence/authentication/association/authorization flags. `w3::lease` selects
 only that MAC from `/tmp/oer-w3.leases`, returning IPv4 and lifetime without
 hostnames or client identifiers. The bounded in-memory ICMP observer and
-router `ping` establish both 100-echo directions. A fresh hostapd disconnect
+router `ping` establish both 100-echo directions.
+The capture ends naturally after all 400 ICMP rows, with up to ten seconds to
+drain the final buffered batch and require a successful process exit and clean
+capture statistics. A partial capture cannot establish either echo gate.
+A fresh hostapd disconnect
 event and the final station snapshot establish departure. Every process is
 owned by the command and remote observers have a 240-second limit.
 
