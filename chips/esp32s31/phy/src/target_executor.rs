@@ -226,6 +226,7 @@ pub enum PhyTargetPortError {
     /// A registration held apart from its hardware no longer describes the
     /// borrowed PHY partition; the operation touched no hardware.
     RegistrationEpochMismatch,
+    DeadlineOverflow,
 }
 
 /// Complete the registration tail's bounded read-only PHY-I2C transaction.

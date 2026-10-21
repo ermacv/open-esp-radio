@@ -213,7 +213,6 @@ impl Default for PhyPbusClearTransition {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-#[cfg(any(test, oer_probe))]
 pub enum PhyPbusHardwareAction {
     Start(PhyPbusForceTest),
     AwaitCompletionEdge(PhyPbusForceTest),
@@ -260,7 +259,6 @@ impl PhyPbusHardwareBinding {
         }
     }
 
-    #[cfg(any(test, oer_probe))]
     pub const fn action(&self) -> PhyPbusHardwareAction {
         match self.phase {
             PhyPbusHardwarePhase::Start => PhyPbusHardwareAction::Start(self.transaction),

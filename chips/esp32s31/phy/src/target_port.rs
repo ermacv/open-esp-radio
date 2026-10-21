@@ -14,6 +14,7 @@ use core::marker::PhantomData;
 
 pub mod calibration;
 pub mod rfpll;
+mod step;
 
 use crate::{
     HARDWARE_EDGE_LIMIT, PhyParamTrackingRunError, PhyRegisterRunError,
@@ -96,8 +97,7 @@ use crate::{
         parameters::{
             PhyParamTrackingAction, PhyParamTrackingCalibrationTransition,
             PhyParamTrackingCompletion, PhyParamTrackingOutcome, PhyParamTrackingRfpllTransition,
-            PhyParamTrackingTemperatureTransition, PhyParamTrackingTxPowerTransition,
-            PhyParamTrackingWifiI2cTransition,
+            PhyParamTrackingTxPowerTransition, PhyParamTrackingWifiI2cTransition,
         },
     },
     tx::{
@@ -213,6 +213,11 @@ pub enum PhyRfBoundary {
 /// code can implement this trait to compare a completed Rust result with ROM or to
 /// capture diagnostic MMIO without placing either dependency in this crate.
 pub trait PhyTargetObserver {
+    fn readiness_trace(&mut self) -> Option<&mut crate::tracking::observation::ReadinessTrace> {
+        None
+    }
+    const OBSERVE_ENGINE_POLLS: bool = false;
+    fn engine_completed(&mut self, _timing: crate::tracking::observation::EngineTiming) {}
     const OBSERVE_DELAYS: bool = false;
     /// Include sensor age at RFPLL entry; disabled observers add no clock read.
     const OBSERVE_RFPLL_AGE: bool = false;
@@ -1880,37 +1885,6 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
         }
         Err(PhyTargetPortError::RfOperationLimit)
     }
-
-    async fn run_param_temperature<P, O: PhyTargetObserver>(
-        &self,
-        mut child: PhyParamTrackingTemperatureTransition<'_>,
-        platform: &mut P,
-        registers: &mut impl SharedPhyAccess,
-        observer: &mut O,
-    ) -> Result<PhyParamTrackingCompletion, PhyTargetPortError> {
-        let started = Some(self.timer.now().as_micros());
-        for _ in 0..RF_OPERATION_LIMIT {
-            if let crate::analog::temperature::PhyTemperatureAction::Complete(outcome) =
-                child.action()
-            {
-                let completion = child
-                    .commit_observed(started, Some(self.timer.now().as_micros()))
-                    .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
-                observer.temperature_completed(outcome);
-                return Ok(completion);
-            }
-            let binding = child
-                .lower_external()
-                .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
-            let completion = self
-                .complete_temperature(binding, platform, registers)
-                .await?;
-            child
-                .advance(completion)
-                .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
-        }
-        Err(PhyTargetPortError::RfOperationLimit)
-    }
 }
 
 impl<'a, P, R, D, T, O> TargetPhyRegisterPort<'a, P, R, D, T, O> {
@@ -2141,7 +2115,7 @@ impl<
 
 impl<
     P,
-    R: PhyInitializationAccess,
+    R: PhyInitializationAccess + crate::executor::step::Registers,
     G: PhyGrantProtectPort,
     D: PhyShortDelay,
     T: Timer,
@@ -2220,16 +2194,22 @@ impl<
                     .await?
             }
             PhyParamTrackingAction::TemperatureRead => {
-                TargetCompleter::<D, T>::new(self.timer)
-                    .run_param_temperature(
-                        pending
-                            .begin_temperature_read(state)
-                            .map_err(|_| PhyTargetPortError::UnexpectedBinding)?,
-                        self.platform,
-                        self.registers,
-                        &mut self.observer,
-                    )
-                    .await?
+                let (result, timing) = step::temperature(
+                    self.timer,
+                    pending
+                        .begin_temperature_read(state)
+                        .map_err(|_| PhyTargetPortError::UnexpectedBinding)?,
+                    self.registers,
+                    O::OBSERVE_ENGINE_POLLS,
+                    self.observer.readiness_trace(),
+                )
+                .await;
+                if O::OBSERVE_ENGINE_POLLS {
+                    self.observer.engine_completed(timing);
+                }
+                let (completion, outcome) = result?;
+                self.observer.temperature_completed(outcome);
+                completion
             }
             PhyParamTrackingAction::Complete(_) => {
                 return Err(PhyTargetPortError::UnexpectedBinding);

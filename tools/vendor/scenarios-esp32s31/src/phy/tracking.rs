@@ -384,7 +384,7 @@ impl std::ops::DerefMut for Tracking {
 }
 
 impl Tracking {
-    pub fn new(options: &Options, phy_sdk: &Path) -> Result<Self> {
+    pub fn new(options: &Options, phy_sdk: &Path, temperature_parent: bool) -> Result<Self> {
         let session = start_session(
             options,
             &[phy_sdk_input(phy_sdk)?],
@@ -424,7 +424,13 @@ impl Tracking {
                 &root.fields(),
                 applicability,
             );
-            let contract = phy_contract(vendor, production, tracking_rules(), applicability);
+            let mut rules = tracking_rules();
+            if root == Root::Parent && temperature_parent {
+                // These cases perform no SAR conversion. Remove the unused
+                // omissions, so an unexpected SAR read would compare strictly.
+                rules.retain(|rule| !rule.name.starts_with("sar-unused-"));
+            }
+            let contract = phy_contract(vendor, production, rules, applicability);
             let name = format!("{root:?}").to_lowercase();
             let effects = image.review_effects(
                 &format!("{name}-effects"),
@@ -707,6 +713,34 @@ pub fn exercise(ctx: &mut Tracking) -> Result<()> {
     failed_tx(ctx)?;
     crate::tracking_graph::exercise(ctx)?;
     negative(ctx)
+}
+
+/// Existing parent cases whose real graph reaches T7 without the unrelated
+/// RX/TX calibration families. Inputs, children and comparison rules are the
+/// same as the complete suite; this selector does not waive its failures.
+pub fn exercise_temperature_parent(ctx: &mut Tracking) -> Result<()> {
+    for rfpll in [None, Some(0), Some(5), Some(-5)] {
+        let cases = cases(Root::Parent, rfpll)
+            .into_iter()
+            .filter(temperature_parent_case);
+        let mut parts = Vec::new();
+        for case in cases {
+            parts.push((case.fill, ctx.rows(Root::Parent, &case)?, case));
+        }
+        let label = format!("parent-rfpll{rfpll:?}").to_lowercase();
+        let executed = ctx
+            .image
+            .compare_fills_without_events(&label, parts, TRACKING_EVENTS)?;
+        for (case, records) in executed.parts {
+            check(Root::Parent, &case, &records);
+        }
+    }
+    Ok(())
+}
+fn temperature_parent_case(case: &Case) -> bool {
+    !case.inhibited
+        && (!case.calibration_tracking
+            || (!case.rx && case.temperatures[0] == case.temperatures[2]))
 }
 
 /// Production calibrating only the Wi-Fi client is a DIFF, omitted callback

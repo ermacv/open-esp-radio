@@ -1,0 +1,12 @@
+schema = 5
+id = "phy-vendor-calibration-ieee802154-restart-vendor-spread"
+description = "Capture forty pinned vendor IEEE 802.15.4 restart boots as a reusable reference"
+role = "investigation"
+repetitions = 1
+tags = ["phy", "calibration", "air-strict"]
+
+[phy]
+kind = "vendor-calibration"
+lifecycle = "ieee802154-restart"
+boots = 40
+vendor_only = true

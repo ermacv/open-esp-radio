@@ -17,6 +17,7 @@ pub struct Hold {
     pub running: bool,
     pub deadline: Instant,
     pub saved_debug: [u8; 2],
+    pub engine: HoldPolls,
 }
 impl Hold {
     pub fn new(started: HoldStarted, saved_debug: [u8; 2]) -> Self {
@@ -29,6 +30,7 @@ impl Hold {
                 .now()
                 .saturating_add(Duration::from_micros(DEFAULT_PLL_TRACK_PERIOD_MICROS)),
             saved_debug,
+            engine: HoldPolls::default(),
         }
     }
     pub fn page(&self, request: GetTrackingHold) -> Result<TrackingHold, RejectReason> {
@@ -36,6 +38,7 @@ impl Hold {
             return Err(RejectReason::InvalidState);
         }
         Ok(TrackingHold {
+            engine: self.engine,
             id: request.id,
             first: request.first,
             available: self.samples.len() as u8,
@@ -46,13 +49,60 @@ impl Hold {
     }
 }
 
-pub struct Observer(pub recorder::Recorder, pub sar_tails::Tails);
-impl Observer {
-    pub fn new(tick: u8) -> Self {
-        Self(recorder::Recorder::new(tick), sar_tails::Tails::default())
+/// Publish the completed observation after tracking, outside the task poll frame.
+#[inline(never)]
+pub fn finish_sample(hold: &mut Hold, recorder: recorder::Recorder, committed: u8, failed: bool) {
+    let sample = recorder.finish(committed, failed);
+    hold.invalid |= sample.invalid;
+    if hold.samples.push(sample).is_err() {
+        hold.invalid = true;
+    }
+    hold.running = !hold.invalid && hold.samples.len() < usize::from(hold.started.ticks);
+}
+
+pub struct Observer<'a>(
+    pub recorder::Recorder,
+    pub sar_tails::Tails,
+    &'a mut HoldPolls,
+    Option<&'a mut oer_esp32s31_phy::tracking::observation::ReadinessTrace>,
+);
+impl<'a> Observer<'a> {
+    pub fn new(
+        tick: u8,
+        engine: &'a mut HoldPolls,
+        trace: Option<&'a mut oer_esp32s31_phy::tracking::observation::ReadinessTrace>,
+    ) -> Self {
+        Self(
+            recorder::Recorder::new(tick),
+            sar_tails::Tails::default(),
+            engine,
+            trace,
+        )
     }
 }
-impl PhyTargetObserver for &mut Observer {
+impl PhyTargetObserver for &mut Observer<'_> {
+    const OBSERVE_ENGINE_POLLS: bool = true;
+    fn readiness_trace(
+        &mut self,
+    ) -> Option<&mut oer_esp32s31_phy::tracking::observation::ReadinessTrace> {
+        self.3.as_deref_mut()
+    }
+    #[inline(never)]
+    fn engine_completed(&mut self, timing: oer_esp32s31_phy::tracking::observation::EngineTiming) {
+        self.2.merge(HoldPolls {
+            polls: timing.polls,
+            pending: timing.pending,
+            total_micros: timing.total_micros,
+            maximum_micros: timing.maximum_micros,
+            resumes: timing.resumes,
+            lateness_micros: timing.lateness_micros,
+            maximum_lateness_micros: timing.maximum_lateness_micros,
+            ready_edges: timing.ready_edges,
+            maximum_ready_micros: timing.maximum_ready_micros,
+            invalid: timing.invalid,
+        });
+    }
+
     fn tx_sar_wait(&mut self, elapsed: u64, observations: u16, ready: bool) {
         self.1.observe(elapsed, observations, ready);
     }
@@ -79,4 +129,76 @@ impl PhyTargetObserver for &mut Observer {
             _ => {}
         }
     }
+}
+
+/// Report preparation only after maintenance returns, including failures.
+#[inline(never)]
+pub fn report_preparation(
+    trace: &oer_esp32s31_phy::tracking::observation::ReadinessTrace,
+    polls: &HoldPolls,
+) {
+    use oer_esp32s31_board::rom::print_fmt;
+    print_fmt(format_args!(
+        "OPEN_RADIO_HIL t7-prepare polls={} max-poll-us={}\n",
+        polls.polls, polls.maximum_micros
+    ));
+    print_fmt(format_args!(
+        "OPEN_RADIO_HIL t7-prepare resume-count={} late-max-us={} late-total-us={}\n",
+        polls.resumes, polls.maximum_lateness_micros, polls.lateness_micros
+    ));
+    print_fmt(format_args!(
+        "OPEN_RADIO_HIL t7-prepare ready-count={} ready-max-us={}\n",
+        polls.ready_edges, polls.maximum_ready_micros
+    ));
+    print_fmt(format_args!(
+        "OPEN_RADIO_HIL t7-prepare commands={} first-check-max-us={}\n",
+        trace.commands, trace.maximum_first_check_micros
+    ));
+    print_fmt(format_args!(
+        "OPEN_RADIO_HIL t7-prepare yield-count={} yield-total-us={} yield-max-us={}\n",
+        trace.yields, trace.yield_total_micros, trace.yield_maximum_micros
+    ));
+    print_fmt(format_args!(
+        "OPEN_RADIO_HIL t7-prepare failure-elapsed-us={} failure-late-us={}\n",
+        trace.failure_elapsed_micros, trace.failure_lateness_micros
+    ));
+    print_fmt(format_args!(
+        "OPEN_RADIO_HIL t7-prepare failure-busy={:?} complete={}\n",
+        trace.failure_busy,
+        trace.complete()
+    ));
+    for sample in trace.not_ready_samples() {
+        print_fmt(format_args!(
+            "OPEN_RADIO_HIL t7-prepare not-ready command={} elapsed-us={}\n",
+            sample.command, sample.elapsed_micros
+        ));
+    }
+}
+
+#[cfg(oer_profile)]
+#[inline(never)]
+pub fn report_timer(window: Option<oer_espressif_executor::timer_observation::Window>) {
+    let Some(window) = window else {
+        return;
+    };
+    let r = window.finish();
+    use oer_esp32s31_board::rom::print_fmt;
+    print_fmt(format_args!(
+        "OPEN_RADIO_HIL t7-timer registrations={} due-at-register={} irqs={}\n",
+        r.registrations, r.due_at_registration, r.interrupts
+    ));
+    print_fmt(format_args!(
+        "OPEN_RADIO_HIL t7-timer program-max-us={} dispatch-max-us={} invalid={}\n",
+        r.programming.maximum_micros, r.dispatch.maximum_micros, r.invalid
+    ));
+    print_fmt(format_args!(
+        "OPEN_RADIO_HIL t7-timer alarm-to-irq-max-us={} irq-late-max-us={} irq-to-dispatch-max-us={}\n",
+        r.alarm_to_irq.maximum_micros,
+        r.deadline_lateness.maximum_micros,
+        r.irq_to_dispatch.maximum_micros
+    ));
+    print_fmt(format_args!(
+        "OPEN_RADIO_HIL t7-timer unmatched-irqs={} unmatched-dispatch={} armed={}\n",
+        r.unmatched_interrupts, r.unmatched_dispatches, r.armed_at_end
+    ));
 }

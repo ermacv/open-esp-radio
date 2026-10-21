@@ -1,6 +1,44 @@
 use super::*;
 
 #[test]
+fn poll_stamp_includes_the_completed_body_and_preserves_the_ready_endpoint() {
+    use oer_time::{Clock, Duration};
+    let clock = oer_time_virtual::VirtualClock::<1>::new();
+    let started = clock.now();
+    clock.advance(Duration::from_micros(10)).expect("time fits");
+    let deadline = clock.now();
+    clock.advance(Duration::from_micros(35)).expect("time fits");
+    let resumed = clock.now();
+    // Work continues after readiness and until final counter accounting.
+    clock.advance(Duration::from_micros(35)).expect("time fits");
+    let mut timing = EngineTiming::default();
+    let finished = timing.poll_finished(
+        &clock,
+        started,
+        true,
+        Some((deadline, resumed)),
+        Some(Duration::from_micros(47)),
+    );
+    assert_eq!(finished, clock.now());
+    assert_eq!(
+        (
+            timing.polls,
+            timing.pending,
+            timing.resumes,
+            timing.ready_edges
+        ),
+        (1, 1, 1, 1)
+    );
+    assert_eq!((timing.total_micros, timing.maximum_micros), (80, 80));
+    assert_eq!(
+        (timing.lateness_micros, timing.maximum_lateness_micros),
+        (35, 35)
+    );
+    assert_eq!(timing.maximum_ready_micros, 47);
+    assert!(!timing.invalid);
+}
+
+#[test]
 fn coarse_rx_observation_contains_only_phase_boundaries() {
     for operation in [
         Operation::RxGainControlPhase,
@@ -437,4 +475,24 @@ fn a_release_without_a_set_invalidates_the_report() {
     let mut recorder = Recorder::default();
     recorder.observe(Operation::GrantProtectCommon, Event::Completed, 10);
     assert!(recorder.report().invalid);
+}
+
+#[test]
+fn preparation_trace_reports_truncation_without_losing_the_failure() {
+    use oer_time::Clock;
+    let clock = oer_time_virtual::VirtualClock::<1>::new();
+    let mut trace = ReadinessTrace::default();
+    trace.command_started(clock.now());
+    for index in 0..21 {
+        clock
+            .advance(oer_time::Duration::from_micros(1))
+            .expect("time fits");
+        trace.checked(clock.now(), index == 0, true, None);
+    }
+    trace.checked(clock.now(), false, false, Some((0, 19)));
+    assert_eq!(trace.not_ready_samples().len(), 16);
+    assert!(!trace.complete());
+    assert_eq!(trace.failure_busy, Some(0));
+    assert_eq!(trace.failure_elapsed_micros, 21);
+    assert_eq!(trace.failure_lateness_micros, 19);
 }

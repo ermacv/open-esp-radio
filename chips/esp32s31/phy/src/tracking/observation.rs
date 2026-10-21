@@ -7,6 +7,197 @@
 
 use crate::executor::wait;
 
+/// One not-ready status observation, timed from its command publication.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct NotReadySample {
+    pub command: u8,
+    pub elapsed_micros: u8,
+}
+
+/// Bounded preparation evidence, borrowed only by the diagnostic caller.
+/// Overflow is explicit: `complete()` is false if any sample did not fit.
+/// This does not consume a late result or change its deadline.
+pub struct ReadinessTrace {
+    command_at: oer_time::Instant,
+    not_ready: [NotReadySample; 16],
+    pub maximum_first_check_micros: u32,
+    pub failure_elapsed_micros: u32,
+    pub failure_lateness_micros: u32,
+    pub yield_total_micros: u32,
+    pub yield_maximum_micros: u16,
+    pub yields: u16,
+    pub commands: u8,
+    not_ready_count: u8,
+    /// Both host busy bits, sampled without reading the result at failure.
+    pub failure_busy: Option<u8>,
+}
+impl Default for ReadinessTrace {
+    fn default() -> Self {
+        Self {
+            command_at: oer_time::Instant::EPOCH,
+            not_ready: [NotReadySample::default(); 16],
+            maximum_first_check_micros: 0,
+            failure_elapsed_micros: 0,
+            failure_lateness_micros: 0,
+            yield_total_micros: 0,
+            yield_maximum_micros: 0,
+            yields: 0,
+            commands: 0,
+            not_ready_count: 0,
+            failure_busy: None,
+        }
+    }
+}
+impl ReadinessTrace {
+    pub fn not_ready_samples(&self) -> &[NotReadySample] {
+        &self.not_ready[..usize::from(self.not_ready_count).min(self.not_ready.len())]
+    }
+    pub fn complete(&self) -> bool {
+        self.commands < u8::MAX && usize::from(self.not_ready_count) <= self.not_ready.len()
+    }
+    #[cfg(any(target_arch = "riscv32", test))]
+    #[inline(never)]
+    pub(crate) fn yield_resumed(&mut self, elapsed: u64) {
+        if let (Ok(elapsed), Some(count), Some(total)) = (
+            u16::try_from(elapsed),
+            self.yields.checked_add(1),
+            u32::try_from(elapsed)
+                .ok()
+                .and_then(|elapsed| self.yield_total_micros.checked_add(elapsed)),
+        ) {
+            self.yields = count;
+            self.yield_total_micros = total;
+            self.yield_maximum_micros = self.yield_maximum_micros.max(elapsed);
+        } else {
+            self.not_ready_count = u8::MAX;
+        }
+    }
+    #[cfg(any(target_arch = "riscv32", test))]
+    pub(crate) fn command_started(&mut self, at: oer_time::Instant) {
+        self.commands = self.commands.saturating_add(1);
+        self.command_at = at;
+    }
+    #[cfg(any(target_arch = "riscv32", test))]
+    #[inline(never)]
+    pub(crate) fn checked(
+        &mut self,
+        at: oer_time::Instant,
+        first: bool,
+        not_ready: bool,
+        failure: Option<(u8, u64)>,
+    ) {
+        let Some(elapsed) = at
+            .checked_duration_since(self.command_at)
+            .and_then(|d| u32::try_from(d.as_micros()).ok())
+        else {
+            self.not_ready_count = u8::MAX;
+            return;
+        };
+        if first {
+            self.maximum_first_check_micros = self.maximum_first_check_micros.max(elapsed);
+        }
+        if not_ready {
+            if let (Some(slot), Ok(elapsed_micros)) = (
+                self.not_ready.get_mut(usize::from(self.not_ready_count)),
+                u8::try_from(elapsed),
+            ) {
+                *slot = NotReadySample {
+                    command: self.commands,
+                    elapsed_micros,
+                };
+            } else {
+                self.not_ready_count = u8::MAX;
+            }
+            self.not_ready_count = self.not_ready_count.saturating_add(1);
+        }
+        if let Some((busy, late)) = failure {
+            self.failure_elapsed_micros = elapsed;
+            self.failure_lateness_micros = u32::try_from(late).unwrap_or(u32::MAX);
+            self.failure_busy = Some(busy);
+        }
+    }
+}
+
+/// Clock-free aggregate of actual engine polls and timer resumes.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct EngineTiming {
+    pub polls: u16,
+    pub pending: u16,
+    pub total_micros: u32,
+    pub maximum_micros: u32,
+    pub resumes: u16,
+    pub lateness_micros: u32,
+    pub maximum_lateness_micros: u32,
+    pub ready_edges: u16,
+    pub maximum_ready_micros: u32,
+    pub invalid: bool,
+}
+impl EngineTiming {
+    /// Update the bounded event counters before taking the final poll stamp.
+    /// Only the final duration sum/max stores follow that stamp.
+    #[inline(never)]
+    pub(crate) fn poll_finished<C: oer_time::Clock>(
+        &mut self,
+        clock: &C,
+        started: oer_time::Instant,
+        pending: bool,
+        resumed: Option<(oer_time::Instant, oer_time::Instant)>,
+        ready_elapsed: Option<oer_time::Duration>,
+    ) -> oer_time::Instant {
+        fn increment(total: &mut u16, invalid: &mut bool) {
+            if let Some(next) = total.checked_add(1) {
+                *total = next;
+            } else {
+                *invalid = true;
+            }
+        }
+        fn add(total: &mut u32, amount: u32, invalid: &mut bool) {
+            if let Some(next) = total.checked_add(amount) {
+                *total = next;
+            } else {
+                *invalid = true;
+            }
+        }
+        increment(&mut self.polls, &mut self.invalid);
+        if pending {
+            increment(&mut self.pending, &mut self.invalid);
+        }
+        if let Some((deadline, at)) = resumed {
+            if let Some(late) = at
+                .checked_duration_since(deadline)
+                .and_then(|d| u32::try_from(d.as_micros()).ok())
+            {
+                increment(&mut self.resumes, &mut self.invalid);
+                add(&mut self.lateness_micros, late, &mut self.invalid);
+                self.maximum_lateness_micros = self.maximum_lateness_micros.max(late);
+            } else {
+                self.invalid = true;
+            }
+        }
+        if let Some(elapsed) = ready_elapsed {
+            if let Ok(elapsed) = u32::try_from(elapsed.as_micros()) {
+                increment(&mut self.ready_edges, &mut self.invalid);
+                self.maximum_ready_micros = self.maximum_ready_micros.max(elapsed);
+            } else {
+                self.invalid = true;
+            }
+        }
+        // Includes the event/overflow/ready accounting above. No observer,
+        // formatter or report runs inside this measured interval.
+        let finished = clock.now();
+        if let Some(elapsed) = finished
+            .checked_duration_since(started)
+            .and_then(|d| u32::try_from(d.as_micros()).ok())
+        {
+            add(&mut self.total_micros, elapsed, &mut self.invalid);
+            self.maximum_micros = self.maximum_micros.max(elapsed);
+        } else {
+            self.invalid = true;
+        }
+        finished
+    }
+}
+
 use super::{
     calibration::PhyCalibrationTrackingAction as Calibration,
     parameters::PhyParamTrackingAction as Parameter,
@@ -214,6 +405,7 @@ pub struct RxGainExecution {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Report {
+    pub engine: EngineTiming,
     pub rfpll: Option<super::rfpll::Observation>,
     pub temperature: Option<crate::analog::temperature::PhyTemperatureOutcome>,
     pub timings: [Timing; OPERATION_COUNT],
@@ -228,6 +420,7 @@ pub struct Report {
 impl Default for Report {
     fn default() -> Self {
         Self {
+            engine: EngineTiming::default(),
             rfpll: None,
             temperature: None,
             timings: [Timing::default(); OPERATION_COUNT],
@@ -256,6 +449,7 @@ impl Report {
 /// One serialized tracking invocation; different operation kinds may nest.
 /// The caller owns the monotonic clock and decides where this storage lives.
 pub struct Recorder {
+    engine: EngineTiming,
     rfpll: Option<super::rfpll::Observation>,
     temperature: Option<crate::analog::temperature::PhyTemperatureOutcome>,
     timings: [Timing; OPERATION_COUNT],
@@ -274,6 +468,7 @@ pub struct Recorder {
 impl Default for Recorder {
     fn default() -> Self {
         Self {
+            engine: EngineTiming::default(),
             rfpll: None,
             temperature: None,
             timings: [Timing::default(); OPERATION_COUNT],
@@ -292,6 +487,9 @@ impl Default for Recorder {
 }
 
 impl Recorder {
+    pub fn observe_engine(&mut self, timing: EngineTiming) {
+        self.engine = timing;
+    }
     pub fn observe_temperature(
         &mut self,
         outcome: crate::analog::temperature::PhyTemperatureOutcome,
@@ -490,12 +688,16 @@ impl Recorder {
         Report {
             rfpll: self.rfpll,
             temperature: self.temperature,
+            engine: self.engine,
             timings: self.timings,
             polls: self.polls,
             rx_gain_execution: self.rx_gain_execution,
             dcode_waits: self.wait.report(),
             tx_waits: self.tx_wait.report(),
-            invalid: self.invalid || !self.wait.is_complete() || !self.tx_wait.is_complete(),
+            invalid: self.invalid
+                || self.engine.invalid
+                || !self.wait.is_complete()
+                || !self.tx_wait.is_complete(),
         }
     }
 }

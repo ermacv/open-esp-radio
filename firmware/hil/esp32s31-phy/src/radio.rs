@@ -271,6 +271,7 @@ impl Radio {
                     Ok(())
                 };
                 let closed = self.exit_capture(current.radio).await;
+                report_capture_stop(&observed, &closed, self.domain.attachment().rf_closed());
                 closed?;
                 observed?;
                 Ok(Answer::Stopped(CaptureStopped {
@@ -340,6 +341,7 @@ impl Radio {
             .map(|hold| hold.deadline)
     }
 
+    #[inline(never)]
     pub async fn service_hold(&mut self) {
         let Some(hold) = self.hold.as_mut().filter(|hold| hold.running) else {
             return;
@@ -352,7 +354,12 @@ impl Radio {
             .saturating_add(oer_time::Duration::from_micros(
                 oer_esp32s31_phy::state::client::DEFAULT_PLL_TRACK_PERIOD_MICROS,
             ));
-        let mut observer = crate::hold::Observer::new(hold.samples.len() as u8 + 1);
+        let mut trace = oer_esp32s31_phy::tracking::observation::ReadinessTrace::default();
+        let mut observer = crate::hold::Observer::new(
+            hold.samples.len() as u8 + 1,
+            &mut hold.engine,
+            Some(&mut trace),
+        );
         let tracked = track_concurrent_phy::<_, (), RomShortDelay, _>(
             &mut self.domain,
             &mut (),
@@ -390,12 +397,9 @@ impl Radio {
             hold.samples.len() + 1,
             observer.1,
         ));
-        let sample = observer.0.finish(committed, failed);
-        hold.invalid |= sample.invalid;
-        if hold.samples.push(sample).is_err() {
-            hold.invalid = true;
-        }
-        hold.running = !hold.invalid && hold.samples.len() < usize::from(hold.started.ticks);
+        let recorder = observer.0;
+        crate::hold::report_preparation(&trace, &hold.engine);
+        crate::hold::finish_sample(hold, recorder, committed, failed);
     }
 
     fn current(&self, epoch: u32) -> Result<CaptureReady> {
@@ -617,6 +621,13 @@ impl Radio {
         }
         Err(RejectReason::Internal)
     }
+}
+
+#[inline(never)]
+fn report_capture_stop(observed: &Result<()>, closed: &Result<()>, rf_closed: bool) {
+    oer_esp32s31_board::rom::print_fmt(format_args!(
+        "OPEN_RADIO_HIL capture-stop observation={observed:?} close={closed:?} rf-closed={rf_closed}\n"
+    ));
 }
 
 struct Sources<'a> {

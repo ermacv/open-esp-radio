@@ -349,13 +349,12 @@ where
 {
     admit_maintenance(radio).map_err(ConcurrentPhyTrackingError::Rejected)?;
 
-    let (mut registered, pending) = match core::mem::take(radio.attachment_mut().slot_mut()) {
+    let (mut registered, pending) = match radio.attachment_mut().take_tracking() {
         Slot::Pending {
             registered,
             pending,
         } => (registered, pending),
         other => {
-            // Admission accepted only a pending slot.
             *radio.attachment_mut().slot_mut() = other;
             return Err(ConcurrentPhyTrackingError::Rejected(
                 ConcurrentPhyError::NoTrackingPending,

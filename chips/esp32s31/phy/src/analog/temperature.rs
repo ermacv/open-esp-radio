@@ -293,6 +293,12 @@ pub struct PhyTemperatureI2cBinding {
 }
 
 impl PhyTemperatureI2cBinding {
+    pub(crate) fn transaction_mut(
+        &mut self,
+    ) -> &mut crate::calibration::cold::PhyColdI2cTransaction {
+        &mut self.transaction
+    }
+
     pub fn new(action: PhyTemperatureAction) -> Result<Self, PhyTemperatureBindingError> {
         let request = match action {
             PhyTemperatureAction::ReadMasked { field } => Some(

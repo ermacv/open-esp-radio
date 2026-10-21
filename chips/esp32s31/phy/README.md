@@ -267,10 +267,10 @@ compensation classes are not qualified execution modes.
 The production RX-gain and TXDC/PWDET paths execute as direct blocking
 transactions on the already-borrowed radio domain. Required 1–20 us
 hardware settles use the ESP32-S31 ROM `ets_delay_us` primitive used by the
-recovered vendor graph; bounded PBus, I2C, DC/IQ and SAR readiness reads poll
-directly. Interrupts remain enabled and the physical owner remains held until
-terminal restoration. The complete common/Wi-Fi runtime calibration graph
-runs in one caller poll without a timer suspension. Longer registration,
+recovered vendor graph; bounded PBus, I2C and DC/IQ readiness reads poll
+directly. Runtime TXDC/PWDET SAR readiness uses its timer-backed 40 µs deadline. Interrupts remain enabled and the physical owner remains held until
+terminal restoration. The common RX-gain branch still runs direct hardware searches inside its
+caller polls. Longer registration,
 tracking and lifecycle operations wait on the caller's `oer_time::Timer`
 through `executor::wait::delay` and its `executor::wait::Kind`.
 
@@ -280,6 +280,33 @@ calibration, RFPLL tracking and retained RF wake; the longest direct edge
 was 2,976 cycles at 160 MHz (18.6 µs). Timeout remains a typed failure.
 The retained-wake frequency-ready edge already belongs to an asynchronous
 transaction and retries through the timer in 10 µs steps.
+
+The final temperature child of parameter tracking uses the private
+[`executor::step`](src/executor/step.rs) transport driver. Its read, masked
+read/modify/write and sensor-code atoms each return `Pending` before another
+atom can run, including when the timer is immediately ready. The first bus
+completion sample retains its 1 µs minimum; not-ready retries use the caller's
+timer. T7's named answer boundary is 100 µs from completed command publication:
+20 µs hardware boundary, 66 µs observed resume lateness and 14 µs margin.
+A ready result at the deadline is accepted; a later result is not consumed.
+The existing temperature graph owns conversion, range writes and dated commit.
+Cancellation leaves the admitted PHY poisoned until reset.
+`Runnable` wakes its waker and returns `Pending` without creating a timer.
+Only a future `WaitAt` constructs and polls the timer; an already reached
+`WaitAt` still yields once. The gap between RMW commands has no command in
+flight; its first busy-at-start attempt establishes that phase's bound.
+
+The diagnostic hold reports aggregate engine poll count/total/maximum, timer
+resume lateness, and maximum command-to-ready time. Counters are fixed local
+fields; reporting follows T7 and performs no UART work inside a poll. Count
+or duration overflow invalidates the evidence. These observations cover this
+transport path; the remaining tracking families retain their existing execution.
+The initial IEEE 802.15.4 maintenance also retains a bounded local trace of
+command-to-first-check time, each not-ready check, resume lateness and elapsed
+time at failure, plus count/total/maximum of voluntary yields without a timer.
+On a late failure it samples both host busy bits without
+consuming the rejected result. The diagnostic reports this trace after
+maintenance returns; an unobserved ready edge has only a time interval.
 
 The execution limits have different scopes:
 

@@ -84,6 +84,8 @@ pub(crate) fn run(ticks: u8, output: &Path, context: &Context<'_>) -> Result<()>
                     return Err("INCOMPLETE: missing published hold sample".into());
                 }
                 if page.terminal && first == page.available {
+                    context.results.observe("hold-engine-polls", &page.engine);
+                    validate_engine(&page.engine, ticks)?;
                     if first != ticks {
                         return Err("INCOMPLETE: hold terminated before all ticks".into());
                     }
@@ -142,6 +144,23 @@ pub(crate) fn run(ticks: u8, output: &Path, context: &Context<'_>) -> Result<()>
         );
         Ok(())
     })
+}
+
+fn validate_engine(engine: &HoldPolls, ticks: u8) -> Result<()> {
+    if engine.invalid
+        || engine.polls <= engine.pending
+        || engine.pending == 0
+        || engine.resumes == 0
+        || engine.ready_edges < u16::from(ticks)
+        || engine.total_micros < engine.maximum_micros
+        || engine.lateness_micros < engine.maximum_lateness_micros
+    {
+        return Err("INCOMPLETE: missing or invalid engine poll observations".into());
+    }
+    if engine.maximum_micros > 50 {
+        return Err("P1 engine poll exceeded 50 microseconds".into());
+    }
+    Ok(())
 }
 
 fn validate_sample(sample: &HoldSample, tick: u8) -> Result<()> {
