@@ -104,6 +104,9 @@ The layout is [docs/repository-layout.md](docs/repository-layout.md).
   warm one (`cp -a --reflink=auto <warm>/target <new>/`); never share
   `CARGO_TARGET_DIR` between checkouts. Remove a worktree with `git worktree
   remove` (never `--force`) once its branch is merged.
+- Scratch checkouts, target directories and builds stay under the clone's
+  `target/`, never in `/tmp`: it is a small tmpfs shared by every session,
+  and a full one fails other sessions' builds.
 - Preserve unrelated changes in a dirty tree. Conventional Commit subjects
   (`fix(esp32s31): …`).
 - For what you changed: `cargo test -p <pkg>`, `cargo clippy -p <pkg>
