@@ -229,6 +229,8 @@ async fn dispatch(mut poster: Poster<Request, Answer>) {
 
 #[embassy_executor::task]
 async fn serve_radio(radio: &'static mut radio::Radio) {
+    // RX ring authority is core-local and is created only after the P2 spawn.
+    let mut capture_rx = None;
     loop {
         if let Some(deadline) = radio.hold_deadline() {
             use core::future::Future;
@@ -249,7 +251,7 @@ async fn serve_radio(radio: &'static mut radio::Radio) {
         radio.service_hold().await;
         if let Some((request, response)) = SLOT.take_request() {
             let answer = radio
-                .request(request)
+                .request(request, &mut capture_rx)
                 .await
                 .unwrap_or_else(Answer::Rejected);
             response.answer(answer);

@@ -1,0 +1,15 @@
+error[E0308]: mismatched types
+  --> tests/ui/mac_reopen_needs_stopped_ring.rs:13:25
+   |
+13 |     mac.reopen_mac_core(live); // ui-error: E0308
+   |         --------------- ^^^^ expected `&RxRingStopped<'_, _>`, found `&RxRingLive<'_, 2>`
+   |         |
+   |         arguments to this method are incorrect
+   |
+   = note: expected reference `&RxRingStopped<'_, _>`
+              found reference `&RxRingLive<'_, 2>`
+note: method defined here
+  --> src/ieee80211/mac.rs
+   |
+   |     pub fn reopen_mac_core<const COUNT: usize>(
+   |            ^^^^^^^^^^^^^^^

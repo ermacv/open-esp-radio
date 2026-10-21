@@ -29,7 +29,12 @@ the capture epoch. The frozen cold-calibration projection remains immutable.
 Stop closes RF; a stopped, stale or failed epoch cannot serve pages. A failed
 hardware operation poisons the diagnostic service until reset.
 
-The compared Wi-Fi capture keeps the MAC RX gate closed after cold MAC init.
+The compared Wi-Fi capture prepares descriptor memory, opens the common MAC
+core and publishes BASE after cold MAC init, with the walker and MAC runtime
+still stopped. Its stopped ring remains owned across capture pages and RF
+restart; after the next MAC reset that owner authorizes reopening the core
+before the ring is rebuilt and republished. This matches the reference's
+core-enabled PHY state without writing noise-floor control or starting RX.
 For Wi-Fi, StopCapture first runs a separate CCA experiment after the host's
 calibration, MMIO and analog reads. Four placed RX descriptors with 1664-byte
 buffers use the same promiscuous activation, walker-enable settle and MAC
@@ -43,7 +48,7 @@ rebuilding the halted ring to reclaim all buffers, then closes RF through the
 existing capture teardown. An observation failure still runs cleanup; an idle
 timeout quarantines the arena until RF teardown/reset. These later samples are
 console evidence only; they do not enter the vendor comparison.
-Only this post-capture experiment also reads the existing MAC CCA force
+Core preparation and the post-capture experiment also read the existing MAC CCA force
 projection, PHY clock-force control, CCA selection and threshold alongside the
 counter controls. These are observations, with no counter rearm or enable write.
 

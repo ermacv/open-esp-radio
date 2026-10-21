@@ -1,4 +1,4 @@
-//! Bounded, polled RX experiment after the host has read the calibration image.
+//! Prepared capture ownership and the later bounded, polled RX experiment.
 use crate::cca_checkpoint::{Point, observe_enables, observe_running};
 use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_hal::{
@@ -6,7 +6,7 @@ use oer_esp32s31_hal::{
     ieee80211::{
         client::WifiClocked,
         dma::{
-            rx_ring::{RxRingError, RxRingLive},
+            rx_ring::{RxRingError, RxRingLive, RxRingStopped},
             rx_storage::RxDmaStorage,
         },
     },
@@ -41,6 +41,12 @@ oer_esp32s31_hal::dma_static! {
 
 type Result<T> = core::result::Result<T, RejectReason>;
 
+/// Retained across capture pages and RF restart; DMA has not been started.
+pub struct Prepared {
+    storage: &'static Storage,
+    stopped: RxRingStopped<'static, COUNT>,
+}
+
 fn failure(step: &str, error: RxRingError) -> RejectReason {
     oer_esp32s31_board::rom::print_fmt(format_args!(
         "OPEN_RADIO_HIL phy=cca-rx FAIL step={step} error={error:?}\n"
@@ -48,17 +54,64 @@ fn failure(step: &str, error: RxRingError) -> RejectReason {
     RejectReason::Internal
 }
 
+/// Complete the common MAC core edge before observing PHY state, as the
+/// reference's esp_wifi_start does. The walker and MAC runtime stay stopped.
+pub fn prepare<B: PlatformClockBackend, T>(
+    domain: &RadioDomain<B, T>,
+    wifi: WifiClocked,
+    previous: Option<Prepared>,
+) -> (WifiClocked, Result<Prepared>) {
+    let (mut runtime, interrupts, clocks) = wifi.into_running();
+    let result = prepare_inner(domain, &mut runtime, previous);
+    (
+        WifiClocked::from_running(runtime, interrupts, clocks),
+        result,
+    )
+}
+
+fn prepare_inner<B: PlatformClockBackend, T>(
+    domain: &RadioDomain<B, T>,
+    runtime: &mut RadioAccess,
+    previous: Option<Prepared>,
+) -> Result<Prepared> {
+    let prepared = if let Some(Prepared { storage, stopped }) = previous {
+        // Cold MAC initialization reset the common gates, but the retained
+        // stopped owner still proves prepared descriptor memory and binding.
+        runtime.wifi_mac_hal().reopen_mac_core(&stopped);
+        let stopped = storage
+            .prepare_halted(stopped.into_halted(), runtime.rx_dma())
+            .map_err(|(_, error)| failure("reprepare", error))?;
+        Prepared { storage, stopped }
+    } else {
+        let placed = Storage::place(STORAGE.take().ok_or(RejectReason::Internal)?)
+            .map_err(|_| RejectReason::Internal)?;
+        let storage = placed.storage();
+        let memory = placed
+            .prepare_ring(runtime.rx_dma())
+            .map_err(|error| failure("prepare", error))?;
+        let stopped = runtime
+            .prepare_mac_runtime(memory)
+            .publish(runtime.rx_dma())
+            .map_err(|error| failure("publish", error))?;
+        Prepared { storage, stopped }
+    };
+    observe_running(domain, runtime, Point::CapturePrepared)?;
+    observe_enables(domain, runtime, Point::CapturePrepared)?;
+    Ok(prepared)
+}
+
 /// Always return the Wi-Fi owner so the caller can close RF even on failure.
 pub async fn run<B: PlatformClockBackend, T>(
     domain: &RadioDomain<B, T>,
     wifi: WifiClocked,
     channel: u8,
+    prepared: Prepared,
 ) -> (WifiClocked, Result<()>) {
     let (mut runtime, interrupts, clocks) = wifi.into_running();
     oer_esp32s31_board::rom::print_fmt(format_args!(
         "OPEN_RADIO_HIL phy=cca-rx begin channel={channel} descriptors={COUNT} capacity={CAPACITY}\n"
     ));
-    let result = experiment(domain, &mut runtime, channel).await;
+    let result = experiment(domain, &mut runtime, channel, prepared).await;
     (
         WifiClocked::from_running(runtime, interrupts, clocks),
         result,
@@ -69,21 +122,13 @@ async fn experiment<B: PlatformClockBackend, T>(
     domain: &RadioDomain<B, T>,
     runtime: &mut RadioAccess,
     channel: u8,
+    prepared: Prepared,
 ) -> Result<()> {
     observe_running(domain, runtime, Point::BeforeRing)?;
     observe_enables(domain, runtime, Point::BeforeRing)?;
-    let placed = Storage::place(STORAGE.take().ok_or(RejectReason::Internal)?)
-        .map_err(|_| RejectReason::Internal)?;
-    let storage = placed.storage();
-    let prepared = placed
-        .prepare_ring(runtime.rx_dma())
-        .map_err(|error| failure("prepare", error))?;
-    let stopped = runtime
-        .prepare_mac_runtime(prepared)
-        .publish(runtime.rx_dma())
-        .map_err(|error| failure("publish", error))?;
-    // Common gates opened with stop held before the sole BASE. Policy
-    // preserves that stop until the walker supplies the live proof.
+    let Prepared { storage, stopped } = prepared;
+    // The capture prepared common gates and BASE with runtime stop held.
+    // Policy preserves that stop until the walker supplies the live proof.
     activate_promiscuous_receive(runtime);
     walker_enable_settle(&EmbassyClock).await;
     let mut ring = match stopped.try_start(runtime.rx_dma()) {

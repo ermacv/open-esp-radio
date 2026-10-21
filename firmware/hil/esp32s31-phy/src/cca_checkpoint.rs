@@ -18,6 +18,7 @@ pub enum Point {
     BeforeMac,
     AfterMac,
     Settled(u8),
+    CapturePrepared,
     BeforeRing,
     RingOpen,
     RingSample(u8),
@@ -67,7 +68,7 @@ pub fn observe_running<B: PlatformClockBackend, T>(
     Ok(())
 }
 
-/// Extra enable reads belong only to the post-capture RX experiment.
+/// Read-only core preparation and post-capture RX observations.
 pub fn observe_enables<B: PlatformClockBackend, T>(
     domain: &RadioDomain<B, T>,
     runtime: &mut oer_esp32s31_hal::owner::RadioAccess,

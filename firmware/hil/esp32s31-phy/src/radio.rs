@@ -84,11 +84,15 @@ impl Radio {
         )
     }
 
-    pub async fn request(&mut self, request: Request) -> Result<Answer> {
+    pub async fn request(
+        &mut self,
+        request: Request,
+        capture_rx: &mut Option<crate::cca_rx::Prepared>,
+    ) -> Result<Answer> {
         if self.poisoned && !matches!(request, Request::HoldGet(_) | Request::HoldStop(_)) {
             return Err(RejectReason::InvalidState);
         }
-        let result = self.execute(request).await;
+        let result = self.execute(request, capture_rx).await;
         if matches!(result, Err(RejectReason::Internal)) {
             self.poisoned = true;
             self.ready = None;
@@ -96,7 +100,11 @@ impl Radio {
         result
     }
 
-    async fn execute(&mut self, request: Request) -> Result<Answer> {
+    async fn execute(
+        &mut self,
+        request: Request,
+        capture_rx: &mut Option<crate::cca_rx::Prepared>,
+    ) -> Result<Answer> {
         if self.hold.is_some() && !matches!(request, Request::HoldGet(_) | Request::HoldStop(_)) {
             return Err(RejectReason::InvalidState);
         }
@@ -216,7 +224,7 @@ impl Radio {
                 oer_esp32s31_board::rom::print_fmt(format_args!(
                     "OPEN_RADIO_HIL phy=enter config={config:?}\n"
                 ));
-                self.enter_capture(config).await?;
+                self.enter_capture(config, capture_rx).await?;
                 let lifecycle = match config.radio {
                     CaptureRadio::Wifi => CaptureLifecycle::Cold,
                     CaptureRadio::Ieee802154 { .. } => CaptureLifecycle::Ieee802154,
@@ -248,7 +256,7 @@ impl Radio {
                     channel: current.channel,
                     radio: current.radio,
                 };
-                self.enter_capture(config).await?;
+                self.enter_capture(config, capture_rx).await?;
                 let lifecycle = match config.radio {
                     CaptureRadio::Wifi => CaptureLifecycle::Restart,
                     CaptureRadio::Ieee802154 { .. } => CaptureLifecycle::Ieee802154Restart,
@@ -267,8 +275,9 @@ impl Radio {
                 // pages. This separate RX experiment cannot affect them.
                 let observed = if current.radio == CaptureRadio::Wifi {
                     let wifi = self.clocked.take().ok_or(RejectReason::Internal)?;
+                    let prepared = capture_rx.take().ok_or(RejectReason::Internal)?;
                     let (wifi, result) =
-                        crate::cca_rx::run(&self.domain, wifi, current.channel).await;
+                        crate::cca_rx::run(&self.domain, wifi, current.channel, prepared).await;
                     self.clocked = Some(wifi);
                     result
                 } else {
@@ -440,9 +449,13 @@ impl Radio {
         Ok(ready)
     }
 
-    async fn enter_capture(&mut self, config: PrepareCapture) -> Result<()> {
+    async fn enter_capture(
+        &mut self,
+        config: PrepareCapture,
+        capture_rx: &mut Option<crate::cca_rx::Prepared>,
+    ) -> Result<()> {
         match config.radio {
-            CaptureRadio::Wifi => self.enter(config.channel).await,
+            CaptureRadio::Wifi => self.enter(config.channel, capture_rx).await,
             CaptureRadio::Ieee802154 { power_dbm } => {
                 self.ieee802154
                     .enter(&mut self.domain, &self.clocks, config.channel, power_dbm)
@@ -458,7 +471,11 @@ impl Radio {
         }
     }
 
-    async fn enter(&mut self, channel: u8) -> Result<()> {
+    async fn enter(
+        &mut self,
+        channel: u8,
+        capture_rx: &mut Option<crate::cca_rx::Prepared>,
+    ) -> Result<()> {
         let absent = self.absent.take().ok_or(RejectReason::Internal)?;
         let (coex, _) = self.domain.enter_coex(absent);
         self.coex = Some(coex);
@@ -551,6 +568,10 @@ impl Radio {
         )
         .await
         .map_err(|_| RejectReason::Internal)?;
+        let (prepared_wifi, prepared_rx) =
+            crate::cca_rx::prepare(&self.domain, wifi, capture_rx.take());
+        wifi = prepared_wifi;
+        *capture_rx = Some(prepared_rx?);
         wifi = observe(&self.domain, wifi, Point::AfterMac)?;
         // Diagnostic observation window only: allow live CCA state time to
         // evolve without changing the radio, MAC, calibration or DMA setup.
