@@ -27,8 +27,9 @@ recorded boot of every board agrees. Other entries retain each board's own
 min/max arrays and margin, or explicit unreadability. A field margin is its
 widest element range; a register margin is its own range width. The same
 comparison functions apply those bounds to production. No board envelopes are
-merged. WORD_0060 remains included, with its measured vendor bounds and the
-existing spread rule.
+merged. CCA counter result words retain their measured bounds and a reviewed
+value exclusion: every production capture must still read them. The CCA
+window/control word remains subject to the vendor-spread value comparison.
 
 The document binds the IDF revision, vendor application SHA-256, scenario,
 register model, relation, reviews and capture/comparison recipe digests.

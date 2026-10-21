@@ -19,7 +19,7 @@ fn images() -> RegisterImages {
                 address: 4,
             },
             Register {
-                name: "PHY_BB_RECOVERED_GAPS.WORD_0060_OPAQUE".into(),
+                name: "PHY_BB_RECOVERED_GAPS.CCA_COUNTER_RESULT_1".into(),
                 address: 8,
             },
         ],
@@ -126,20 +126,23 @@ fn fixture() -> (Reference, Vec<VendorBoot>, Vec<VendorBoot>) {
     (reference, a, b)
 }
 #[test]
-fn frozen_bounds_preserve_live_comparison_including_signed_fields_and_counter_spread() {
+fn frozen_bounds_preserve_live_comparison_including_signed_fields_and_counter_exclusion() {
     let (reference, a, b) = fixture();
     reference
         .validate(&signature(), &images(), "s31-a", 0)
         .unwrap();
     assert_eq!(reference.entries["control"].shared, Some(9));
     assert_eq!(reference.entries["common-reference"].shared, None);
-    let cca = &reference.entries["PHY_BB_RECOVERED_GAPS.WORD_0060_OPAQUE"];
-    assert_eq!(cca.excluded, None);
+    let cca = &reference.entries["PHY_BB_RECOVERED_GAPS.CCA_COUNTER_RESULT_1"];
+    assert_eq!(
+        cca.excluded.as_deref(),
+        Some("hardware measurement result over a window, not calibration")
+    );
     assert_eq!(cca.shared, None);
     for (board, boots) in [("s31-a", &a), ("s31-b", &b)] {
         for value in [-9, -3, 0, 2, 7, 14, 20, 25, 30, 31] {
             let mut p = production(&vendor(value, 0));
-            for counter in [0, 4, 20, 36, 37] {
+            for counter in [0, 4, 20, 36, 37, u32::MAX] {
                 p.registers.values.insert(8, counter);
                 let live = compare::compare(
                     Lifecycle::Cold,
@@ -253,6 +256,24 @@ fn stale_or_missing_coverage_is_incomplete_even_when_another_value_differs() {
             .verdict,
         Verdict::Incomplete
     );
+}
+
+#[test]
+fn excluded_counter_still_requires_readable_recorded_production_coverage() {
+    let (reference, a, _) = fixture();
+    for unreadable in [false, true] {
+        let mut p = production(&a[0]);
+        p.registers.values.remove(&8);
+        if unreadable {
+            p.registers.unreadable.insert(8);
+        }
+        assert_eq!(
+            reference
+                .check(&signature(), &images(), "s31-a", 0, &identity(), &[p])
+                .verdict,
+            Verdict::Incomplete
+        );
+    }
 }
 #[test]
 fn inconsistent_shared_values_and_vendor_discovery_gaps_cannot_be_published() {

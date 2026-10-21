@@ -40677,37 +40677,69 @@ access = "read-write"
 address = 537951320
 width = 32
 access = "read-write"
-identity = "PHY_BB_RECOVERED_GAPS.WORD_0058_OPAQUE"
+identity = "PHY_BB_RECOVERED_GAPS.CCA_COUNTER_CONTROL"
 peripheral = "PHY_BB_RECOVERED_GAPS"
 peripheral-type = "PhyBbRecoveredGaps"
 peripheral-module = "phy_bb_recovered_gaps"
 scope = []
-register-method = "word_0058_opaque"
-fields = []
+register-method = "cca_counter_control"
+
+[[registers.fields]]
+svd-name = "WINDOW"
+method = "window"
+bit-offset = 0
+bit-width = 27
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "CONTROL"
+method = "control"
+bit-offset = 27
+bit-width = 2
+access = "read-write"
 
 [[registers]]
 address = 537951324
 width = 32
 access = "unspecified"
-identity = "PHY_BB_RECOVERED_GAPS.WORD_005C_OPAQUE"
+identity = "PHY_BB_RECOVERED_GAPS.CCA_COUNTER_RESULT_0"
 peripheral = "PHY_BB_RECOVERED_GAPS"
 peripheral-type = "PhyBbRecoveredGaps"
 peripheral-module = "phy_bb_recovered_gaps"
 scope = []
-register-method = "word_005c_opaque"
-fields = []
+register-method = "cca_counter_result_0"
+
+[[registers.fields]]
+svd-name = "RESULT"
+method = "result"
+bit-offset = 0
+bit-width = 27
+access = "unspecified"
+
+[[registers.fields]]
+svd-name = "FLAG"
+method = "flag"
+bit-offset = 27
+bit-width = 1
+access = "unspecified"
 
 [[registers]]
 address = 537951328
 width = 32
 access = "unspecified"
-identity = "PHY_BB_RECOVERED_GAPS.WORD_0060_OPAQUE"
+identity = "PHY_BB_RECOVERED_GAPS.CCA_COUNTER_RESULT_1"
 peripheral = "PHY_BB_RECOVERED_GAPS"
 peripheral-type = "PhyBbRecoveredGaps"
 peripheral-module = "phy_bb_recovered_gaps"
 scope = []
-register-method = "word_0060_opaque"
-fields = []
+register-method = "cca_counter_result_1"
+
+[[registers.fields]]
+svd-name = "RESULT"
+method = "result"
+bit-offset = 0
+bit-width = 27
+access = "unspecified"
 
 [[registers]]
 address = 537951340

@@ -54,9 +54,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ),
     )?;
     let observed = [
-        ("PHY_BB_RECOVERED_GAPS", "WORD_0058_OPAQUE"),
-        ("PHY_BB_RECOVERED_GAPS", "WORD_005C_OPAQUE"),
-        ("PHY_BB_RECOVERED_GAPS", "WORD_0060_OPAQUE"),
+        ("PHY_BB_RECOVERED_GAPS", "CCA_COUNTER_CONTROL"),
+        ("PHY_BB_RECOVERED_GAPS", "CCA_COUNTER_RESULT_0"),
+        ("PHY_BB_RECOVERED_GAPS", "CCA_COUNTER_RESULT_1"),
         ("MODEM_SYSCON_RADIO", "WIFI_BB_CFG"),
         ("MODEM_SYSCON_RADIO", "CLK_CONF"),
         ("MODEM_SYSCON_RADIO", "CLK_CONF1"),

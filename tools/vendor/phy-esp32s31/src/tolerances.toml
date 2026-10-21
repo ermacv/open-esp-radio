@@ -11,6 +11,18 @@
 # A field without an entry leaves the cross-check INCOMPLETE.
 schema = 2
 
+# SOURCE: complete rev0 ROM phy_set_cca_cnt / phy_get_cca_cnt (#240), and
+# s31-b E1/E3/E4/E5 (#254); chips/esp32s31/notes/phy/cca-counter.md.
+# A Wi-Fi baseband reset release restarts the measurement window. The vendor
+# leaves both result words unconsumed; window/control remains compared by value.
+[registers."PHY_BB_RECOVERED_GAPS.CCA_COUNTER_RESULT_0"]
+excluded = true
+reason = "hardware measurement result over a window, not calibration"
+
+[registers."PHY_BB_RECOVERED_GAPS.CCA_COUNTER_RESULT_1"]
+excluded = true
+reason = "hardware measurement result over a window, not calibration"
+
 [fields.current-temperature]
 excluded = true
 reason = "the latest sensor sample follows the board temperature at each boot, not a calibration result"

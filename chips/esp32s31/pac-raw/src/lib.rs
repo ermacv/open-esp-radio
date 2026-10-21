@@ -54623,9 +54623,9 @@ pub mod phy_bb_recovered_gaps {
         _reserved0: [u8; 0x14],
         word_0014_opaque: Word0014Opaque,
         _reserved1: [u8; 0x40],
-        word_0058_opaque: Word0058Opaque,
-        word_005c_opaque: Word005cOpaque,
-        word_0060_opaque: Word0060Opaque,
+        cca_counter_control: CcaCounterControl,
+        cca_counter_result_0: CcaCounterResult0,
+        cca_counter_result_1: CcaCounterResult1,
         _reserved4: [u8; 0x84],
         word_00e8_opaque: Word00e8Opaque,
         word_00ec_opaque: Word00ecOpaque,
@@ -54636,20 +54636,20 @@ pub mod phy_bb_recovered_gaps {
         pub const fn word_0014_opaque(&self) -> &Word0014Opaque {
             &self.word_0014_opaque
         }
-        #[doc = "0x58 - Opaque: meaning not established. Complete phy_set_cca_cnt read-modify-writes this word; individual fields remain unnamed."]
+        #[doc = "0x58 - Project-assigned name. CCA measurement window and control. SOURCE: complete rev0 ROM phy_set_cca_cnt replaces the low 27 bits and optionally sets bits 28:27."]
         #[inline(always)]
-        pub const fn word_0058_opaque(&self) -> &Word0058Opaque {
-            &self.word_0058_opaque
+        pub const fn cca_counter_control(&self) -> &CcaCounterControl {
+            &self.cca_counter_control
         }
-        #[doc = "0x5c - Opaque: meaning not established. Complete phy_get_cca_cnt reads this word; hardware access semantics remain unknown."]
+        #[doc = "0x5c - Project-assigned name. First CCA window result and flag. SOURCE: complete rev0 ROM phy_get_cca_cnt copies bits 26:0 to out\\[0\\] and returns bit 27."]
         #[inline(always)]
-        pub const fn word_005c_opaque(&self) -> &Word005cOpaque {
-            &self.word_005c_opaque
+        pub const fn cca_counter_result_0(&self) -> &CcaCounterResult0 {
+            &self.cca_counter_result_0
         }
-        #[doc = "0x60 - Opaque: meaning not established. Complete phy_get_cca_cnt reads this word; hardware access semantics remain unknown."]
+        #[doc = "0x60 - Project-assigned name. Second CCA window result. SOURCE: complete rev0 ROM phy_get_cca_cnt copies bits 26:0 to out\\[1\\]."]
         #[inline(always)]
-        pub const fn word_0060_opaque(&self) -> &Word0060Opaque {
-            &self.word_0060_opaque
+        pub const fn cca_counter_result_1(&self) -> &CcaCounterResult1 {
+            &self.cca_counter_result_1
         }
         #[doc = "0xe8 - Opaque: meaning not established. Complete phy_bb_cfo_cfg reads and replaces this word; individual hardware fields remain unnamed."]
         #[inline(always)]
@@ -54701,84 +54701,148 @@ pub mod phy_bb_recovered_gaps {
             type Safety = crate::Unsafe;
         }
     }
-    #[doc = "WORD_0058_OPAQUE (rw) register accessor: Opaque: meaning not established. Complete phy_set_cca_cnt read-modify-writes this word; individual fields remain unnamed.\n\nYou can [`read`](crate::Reg::read) this register and get [`word_0058_opaque::R`]. You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`word_0058_opaque::W`]. You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api).\n\nFor information about available fields see [`mod@word_0058_opaque`] module"]
-    #[doc(alias = "WORD_0058_OPAQUE")]
-    pub type Word0058Opaque = crate::Reg<word_0058_opaque::Word0058OpaqueSpec>;
-    #[doc = "Opaque: meaning not established. Complete phy_set_cca_cnt read-modify-writes this word; individual fields remain unnamed."]
-    pub mod word_0058_opaque {
-        #[doc = "Register `WORD_0058_OPAQUE` reader"]
-        pub type R = crate::R<Word0058OpaqueSpec>;
-        #[doc = "Register `WORD_0058_OPAQUE` writer"]
-        pub type W = crate::W<Word0058OpaqueSpec>;
-        impl core::fmt::Debug for R {
-            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-                write!(f, "{}", self.bits())
+    #[doc = "CCA_COUNTER_CONTROL (rw) register accessor: Project-assigned name. CCA measurement window and control. SOURCE: complete rev0 ROM phy_set_cca_cnt replaces the low 27 bits and optionally sets bits 28:27.\n\nYou can [`read`](crate::Reg::read) this register and get [`cca_counter_control::R`]. You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`cca_counter_control::W`]. You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api).\n\nFor information about available fields see [`mod@cca_counter_control`] module"]
+    #[doc(alias = "CCA_COUNTER_CONTROL")]
+    pub type CcaCounterControl = crate::Reg<cca_counter_control::CcaCounterControlSpec>;
+    #[doc = "Project-assigned name. CCA measurement window and control. SOURCE: complete rev0 ROM phy_set_cca_cnt replaces the low 27 bits and optionally sets bits 28:27."]
+    pub mod cca_counter_control {
+        #[doc = "Register `CCA_COUNTER_CONTROL` reader"]
+        pub type R = crate::R<CcaCounterControlSpec>;
+        #[doc = "Register `CCA_COUNTER_CONTROL` writer"]
+        pub type W = crate::W<CcaCounterControlSpec>;
+        #[doc = "Field `WINDOW` reader - Project-assigned name. Measurement window length; physical units unknown. SOURCE: complete rev0 ROM phy_set_cca_cnt arg0."]
+        pub type WindowR = crate::FieldReader<u32>;
+        #[doc = "Field `WINDOW` writer - Project-assigned name. Measurement window length; physical units unknown. SOURCE: complete rev0 ROM phy_set_cca_cnt arg0."]
+        pub type WindowW<'a, REG> = crate::FieldWriter<'a, REG, 27, u32>;
+        #[doc = "Field `CONTROL` reader - Project-assigned name. Counter control; individual bit roles unknown. SOURCE: complete rev0 ROM phy_set_cca_cnt sets both bits when arg1 is nonzero."]
+        pub type ControlR = crate::FieldReader;
+        #[doc = "Field `CONTROL` writer - Project-assigned name. Counter control; individual bit roles unknown. SOURCE: complete rev0 ROM phy_set_cca_cnt sets both bits when arg1 is nonzero."]
+        pub type ControlW<'a, REG> = crate::FieldWriter<'a, REG, 2>;
+        impl R {
+            #[doc = "Bits 0:26 - Project-assigned name. Measurement window length; physical units unknown. SOURCE: complete rev0 ROM phy_set_cca_cnt arg0."]
+            #[inline(always)]
+            pub fn window(&self) -> WindowR {
+                WindowR::new(self.bits & 0x07ff_ffff)
+            }
+            #[doc = "Bits 27:28 - Project-assigned name. Counter control; individual bit roles unknown. SOURCE: complete rev0 ROM phy_set_cca_cnt sets both bits when arg1 is nonzero."]
+            #[inline(always)]
+            pub fn control(&self) -> ControlR {
+                ControlR::new(((self.bits >> 27) & 3) as u8)
             }
         }
-        impl W {}
-        #[doc = "Opaque: meaning not established. Complete phy_set_cca_cnt read-modify-writes this word; individual fields remain unnamed.\n\nYou can [`read`](crate::Reg::read) this register and get [`word_0058_opaque::R`](R). You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`word_0058_opaque::W`](W). You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api)."]
-        pub struct Word0058OpaqueSpec;
-        impl crate::RegisterSpec for Word0058OpaqueSpec {
+        impl W {
+            #[doc = "Bits 0:26 - Project-assigned name. Measurement window length; physical units unknown. SOURCE: complete rev0 ROM phy_set_cca_cnt arg0."]
+            #[inline(always)]
+            pub fn window(&mut self) -> WindowW<'_, CcaCounterControlSpec> {
+                WindowW::new(self, 0)
+            }
+            #[doc = "Bits 27:28 - Project-assigned name. Counter control; individual bit roles unknown. SOURCE: complete rev0 ROM phy_set_cca_cnt sets both bits when arg1 is nonzero."]
+            #[inline(always)]
+            pub fn control(&mut self) -> ControlW<'_, CcaCounterControlSpec> {
+                ControlW::new(self, 27)
+            }
+        }
+        #[doc = "Project-assigned name. CCA measurement window and control. SOURCE: complete rev0 ROM phy_set_cca_cnt replaces the low 27 bits and optionally sets bits 28:27.\n\nYou can [`read`](crate::Reg::read) this register and get [`cca_counter_control::R`](R). You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`cca_counter_control::W`](W). You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api)."]
+        pub struct CcaCounterControlSpec;
+        impl crate::RegisterSpec for CcaCounterControlSpec {
             type Ux = u32;
         }
-        #[doc = "`read()` method returns [`word_0058_opaque::R`](R) reader structure"]
-        impl crate::Readable for Word0058OpaqueSpec {}
-        #[doc = "`write(|w| ..)` method takes [`word_0058_opaque::W`](W) writer structure"]
-        impl crate::Writable for Word0058OpaqueSpec {
+        #[doc = "`read()` method returns [`cca_counter_control::R`](R) reader structure"]
+        impl crate::Readable for CcaCounterControlSpec {}
+        #[doc = "`write(|w| ..)` method takes [`cca_counter_control::W`](W) writer structure"]
+        impl crate::Writable for CcaCounterControlSpec {
             type Safety = crate::Unsafe;
         }
     }
-    #[doc = "WORD_005C_OPAQUE (rw) register accessor: Opaque: meaning not established. Complete phy_get_cca_cnt reads this word; hardware access semantics remain unknown.\n\nYou can [`read`](crate::Reg::read) this register and get [`word_005c_opaque::R`]. You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`word_005c_opaque::W`]. You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api).\n\nFor information about available fields see [`mod@word_005c_opaque`] module"]
-    #[doc(alias = "WORD_005C_OPAQUE")]
-    pub type Word005cOpaque = crate::Reg<word_005c_opaque::Word005cOpaqueSpec>;
-    #[doc = "Opaque: meaning not established. Complete phy_get_cca_cnt reads this word; hardware access semantics remain unknown."]
-    pub mod word_005c_opaque {
-        #[doc = "Register `WORD_005C_OPAQUE` reader"]
-        pub type R = crate::R<Word005cOpaqueSpec>;
-        #[doc = "Register `WORD_005C_OPAQUE` writer"]
-        pub type W = crate::W<Word005cOpaqueSpec>;
-        impl core::fmt::Debug for R {
-            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-                write!(f, "{}", self.bits())
+    #[doc = "CCA_COUNTER_RESULT_0 (rw) register accessor: Project-assigned name. First CCA window result and flag. SOURCE: complete rev0 ROM phy_get_cca_cnt copies bits 26:0 to out\\[0\\] and returns bit 27.\n\nYou can [`read`](crate::Reg::read) this register and get [`cca_counter_result_0::R`]. You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`cca_counter_result_0::W`]. You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api).\n\nFor information about available fields see [`mod@cca_counter_result_0`] module"]
+    #[doc(alias = "CCA_COUNTER_RESULT_0")]
+    pub type CcaCounterResult0 = crate::Reg<cca_counter_result_0::CcaCounterResult0Spec>;
+    #[doc = "Project-assigned name. First CCA window result and flag. SOURCE: complete rev0 ROM phy_get_cca_cnt copies bits 26:0 to out\\[0\\] and returns bit 27."]
+    pub mod cca_counter_result_0 {
+        #[doc = "Register `CCA_COUNTER_RESULT_0` reader"]
+        pub type R = crate::R<CcaCounterResult0Spec>;
+        #[doc = "Register `CCA_COUNTER_RESULT_0` writer"]
+        pub type W = crate::W<CcaCounterResult0Spec>;
+        #[doc = "Field `RESULT` reader - Project-assigned name. First window measurement result. SOURCE: complete rev0 ROM phy_get_cca_cnt out\\[0\\]."]
+        pub type ResultR = crate::FieldReader<u32>;
+        #[doc = "Field `RESULT` writer - Project-assigned name. First window measurement result. SOURCE: complete rev0 ROM phy_get_cca_cnt out\\[0\\]."]
+        pub type ResultW<'a, REG> = crate::FieldWriter<'a, REG, 27, u32>;
+        #[doc = "Field `FLAG` reader - Project-assigned name. Counter flag returned as 0/1; physical meaning unknown. SOURCE: complete rev0 ROM phy_get_cca_cnt return value."]
+        pub type FlagR = crate::BitReader;
+        #[doc = "Field `FLAG` writer - Project-assigned name. Counter flag returned as 0/1; physical meaning unknown. SOURCE: complete rev0 ROM phy_get_cca_cnt return value."]
+        pub type FlagW<'a, REG> = crate::BitWriter<'a, REG>;
+        impl R {
+            #[doc = "Bits 0:26 - Project-assigned name. First window measurement result. SOURCE: complete rev0 ROM phy_get_cca_cnt out\\[0\\]."]
+            #[inline(always)]
+            pub fn result(&self) -> ResultR {
+                ResultR::new(self.bits & 0x07ff_ffff)
+            }
+            #[doc = "Bit 27 - Project-assigned name. Counter flag returned as 0/1; physical meaning unknown. SOURCE: complete rev0 ROM phy_get_cca_cnt return value."]
+            #[inline(always)]
+            pub fn flag(&self) -> FlagR {
+                FlagR::new(((self.bits >> 27) & 1) != 0)
             }
         }
-        impl W {}
-        #[doc = "Opaque: meaning not established. Complete phy_get_cca_cnt reads this word; hardware access semantics remain unknown.\n\nYou can [`read`](crate::Reg::read) this register and get [`word_005c_opaque::R`](R). You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`word_005c_opaque::W`](W). You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api)."]
-        pub struct Word005cOpaqueSpec;
-        impl crate::RegisterSpec for Word005cOpaqueSpec {
+        impl W {
+            #[doc = "Bits 0:26 - Project-assigned name. First window measurement result. SOURCE: complete rev0 ROM phy_get_cca_cnt out\\[0\\]."]
+            #[inline(always)]
+            pub fn result(&mut self) -> ResultW<'_, CcaCounterResult0Spec> {
+                ResultW::new(self, 0)
+            }
+            #[doc = "Bit 27 - Project-assigned name. Counter flag returned as 0/1; physical meaning unknown. SOURCE: complete rev0 ROM phy_get_cca_cnt return value."]
+            #[inline(always)]
+            pub fn flag(&mut self) -> FlagW<'_, CcaCounterResult0Spec> {
+                FlagW::new(self, 27)
+            }
+        }
+        #[doc = "Project-assigned name. First CCA window result and flag. SOURCE: complete rev0 ROM phy_get_cca_cnt copies bits 26:0 to out\\[0\\] and returns bit 27.\n\nYou can [`read`](crate::Reg::read) this register and get [`cca_counter_result_0::R`](R). You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`cca_counter_result_0::W`](W). You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api)."]
+        pub struct CcaCounterResult0Spec;
+        impl crate::RegisterSpec for CcaCounterResult0Spec {
             type Ux = u32;
         }
-        #[doc = "`read()` method returns [`word_005c_opaque::R`](R) reader structure"]
-        impl crate::Readable for Word005cOpaqueSpec {}
-        #[doc = "`write(|w| ..)` method takes [`word_005c_opaque::W`](W) writer structure"]
-        impl crate::Writable for Word005cOpaqueSpec {
+        #[doc = "`read()` method returns [`cca_counter_result_0::R`](R) reader structure"]
+        impl crate::Readable for CcaCounterResult0Spec {}
+        #[doc = "`write(|w| ..)` method takes [`cca_counter_result_0::W`](W) writer structure"]
+        impl crate::Writable for CcaCounterResult0Spec {
             type Safety = crate::Unsafe;
         }
     }
-    #[doc = "WORD_0060_OPAQUE (rw) register accessor: Opaque: meaning not established. Complete phy_get_cca_cnt reads this word; hardware access semantics remain unknown.\n\nYou can [`read`](crate::Reg::read) this register and get [`word_0060_opaque::R`]. You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`word_0060_opaque::W`]. You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api).\n\nFor information about available fields see [`mod@word_0060_opaque`] module"]
-    #[doc(alias = "WORD_0060_OPAQUE")]
-    pub type Word0060Opaque = crate::Reg<word_0060_opaque::Word0060OpaqueSpec>;
-    #[doc = "Opaque: meaning not established. Complete phy_get_cca_cnt reads this word; hardware access semantics remain unknown."]
-    pub mod word_0060_opaque {
-        #[doc = "Register `WORD_0060_OPAQUE` reader"]
-        pub type R = crate::R<Word0060OpaqueSpec>;
-        #[doc = "Register `WORD_0060_OPAQUE` writer"]
-        pub type W = crate::W<Word0060OpaqueSpec>;
-        impl core::fmt::Debug for R {
-            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-                write!(f, "{}", self.bits())
+    #[doc = "CCA_COUNTER_RESULT_1 (rw) register accessor: Project-assigned name. Second CCA window result. SOURCE: complete rev0 ROM phy_get_cca_cnt copies bits 26:0 to out\\[1\\].\n\nYou can [`read`](crate::Reg::read) this register and get [`cca_counter_result_1::R`]. You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`cca_counter_result_1::W`]. You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api).\n\nFor information about available fields see [`mod@cca_counter_result_1`] module"]
+    #[doc(alias = "CCA_COUNTER_RESULT_1")]
+    pub type CcaCounterResult1 = crate::Reg<cca_counter_result_1::CcaCounterResult1Spec>;
+    #[doc = "Project-assigned name. Second CCA window result. SOURCE: complete rev0 ROM phy_get_cca_cnt copies bits 26:0 to out\\[1\\]."]
+    pub mod cca_counter_result_1 {
+        #[doc = "Register `CCA_COUNTER_RESULT_1` reader"]
+        pub type R = crate::R<CcaCounterResult1Spec>;
+        #[doc = "Register `CCA_COUNTER_RESULT_1` writer"]
+        pub type W = crate::W<CcaCounterResult1Spec>;
+        #[doc = "Field `RESULT` reader - Project-assigned name. Second window measurement result. SOURCE: complete rev0 ROM phy_get_cca_cnt out\\[1\\]."]
+        pub type ResultR = crate::FieldReader<u32>;
+        #[doc = "Field `RESULT` writer - Project-assigned name. Second window measurement result. SOURCE: complete rev0 ROM phy_get_cca_cnt out\\[1\\]."]
+        pub type ResultW<'a, REG> = crate::FieldWriter<'a, REG, 27, u32>;
+        impl R {
+            #[doc = "Bits 0:26 - Project-assigned name. Second window measurement result. SOURCE: complete rev0 ROM phy_get_cca_cnt out\\[1\\]."]
+            #[inline(always)]
+            pub fn result(&self) -> ResultR {
+                ResultR::new(self.bits & 0x07ff_ffff)
             }
         }
-        impl W {}
-        #[doc = "Opaque: meaning not established. Complete phy_get_cca_cnt reads this word; hardware access semantics remain unknown.\n\nYou can [`read`](crate::Reg::read) this register and get [`word_0060_opaque::R`](R). You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`word_0060_opaque::W`](W). You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api)."]
-        pub struct Word0060OpaqueSpec;
-        impl crate::RegisterSpec for Word0060OpaqueSpec {
+        impl W {
+            #[doc = "Bits 0:26 - Project-assigned name. Second window measurement result. SOURCE: complete rev0 ROM phy_get_cca_cnt out\\[1\\]."]
+            #[inline(always)]
+            pub fn result(&mut self) -> ResultW<'_, CcaCounterResult1Spec> {
+                ResultW::new(self, 0)
+            }
+        }
+        #[doc = "Project-assigned name. Second CCA window result. SOURCE: complete rev0 ROM phy_get_cca_cnt copies bits 26:0 to out\\[1\\].\n\nYou can [`read`](crate::Reg::read) this register and get [`cca_counter_result_1::R`](R). You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`cca_counter_result_1::W`](W). You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api)."]
+        pub struct CcaCounterResult1Spec;
+        impl crate::RegisterSpec for CcaCounterResult1Spec {
             type Ux = u32;
         }
-        #[doc = "`read()` method returns [`word_0060_opaque::R`](R) reader structure"]
-        impl crate::Readable for Word0060OpaqueSpec {}
-        #[doc = "`write(|w| ..)` method takes [`word_0060_opaque::W`](W) writer structure"]
-        impl crate::Writable for Word0060OpaqueSpec {
+        #[doc = "`read()` method returns [`cca_counter_result_1::R`](R) reader structure"]
+        impl crate::Readable for CcaCounterResult1Spec {}
+        #[doc = "`write(|w| ..)` method takes [`cca_counter_result_1::W`](W) writer structure"]
+        impl crate::Writable for CcaCounterResult1Spec {
             type Safety = crate::Unsafe;
         }
     }
@@ -64855,17 +64919,17 @@ pub mod partition_image_read {
                 .bits(),
             168 => registers
                 .phy_bb_recovered_gaps
-                .word_0058_opaque()
+                .cca_counter_control()
                 .read()
                 .bits(),
             169 => registers
                 .phy_bb_recovered_gaps
-                .word_005c_opaque()
+                .cca_counter_result_0()
                 .read()
                 .bits(),
             170 => registers
                 .phy_bb_recovered_gaps
-                .word_0060_opaque()
+                .cca_counter_result_1()
                 .read()
                 .bits(),
             171 => registers
