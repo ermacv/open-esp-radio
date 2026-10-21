@@ -1,7 +1,7 @@
 //! The inventory's JSON boundary. Read classes follow the ReadUses contract
-//! in #266/#277; the checker does not compute dataflow or infer sinks.
+//! from blobray-domain; the checker does not compute dataflow or infer sinks.
 use crate::Result;
-use oer_analysis_blobray_domain::{RegisterMask, StoredBits};
+use oer_analysis_blobray_domain::{ReadUses, RegisterMask, StoredBits};
 use serde::{Deserialize, Serialize};
 
 pub(super) struct Document {
@@ -138,73 +138,4 @@ pub(super) struct Observation {
     pub mask: Option<RegisterMask>,
     pub stored: Option<Vec<StoredBits>>,
     pub reads: Option<ReadUses>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub(super) struct ReadUses {
-    pub uses: Vec<ReadUse>,
-    pub unknown: Vec<ReadLimit>,
-    pub preserved: u32,
-    pub unused: u32,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub(super) struct ReadUse {
-    pub bits: u32,
-    pub sink: ReadSink,
-    pub precision: ReadPrecision,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
-pub(super) enum ReadSink {
-    Branch {
-        site: u64,
-    },
-    Dispatch {
-        site: u64,
-    },
-    IndirectTarget {
-        site: u64,
-    },
-    Address {
-        site: u64,
-    },
-    Return {
-        register: u8,
-    },
-    Store {
-        site: u64,
-        address: Option<u32>,
-        same_word: bool,
-    },
-    CallArgument {
-        site: u64,
-        register: u8,
-    },
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub(super) enum ReadPrecision {
-    Exact,
-    May,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub(super) struct ReadLimit {
-    pub bits: u32,
-    pub limit: ReadLimitKind,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub(super) enum ReadLimitKind {
-    PartialFunction,
-    StackSpill,
-    UnsupportedOperation,
-    WorkLimit,
 }

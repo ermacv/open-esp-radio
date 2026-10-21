@@ -9,8 +9,13 @@ bits against the unchanged source model. It runs Blobray `register-accesses`
 over every function of every pinned vendor binary, excluding firmware outputs,
 inside the publication's owned MMIO ranges, with `--abi riscv-integer
 --call-returns`. It requires schema 9 and a complete `reads: ReadUses`
-classification for each load. Every sink in `uses` counts, with both `Exact`
-and `May` precision; `read-selection` expressions do not establish use.
+classification for each integer or floating load, using the shared
+`oer-analysis-blobray-domain` types. A `CallArgument` to an exact name in the
+checker's [cited diagnostic list](src/checks/inventory/uses/read_policy.rs)
+does not count as use. Other sinks, including unresolved calls and behavior
+parameters such as `ets_delay_us`, count with both `Exact` and `May` precision;
+`read-selection` expressions do not establish use. Diagnostic evidence is
+retained, and never hides another use or an unknown observation of the same bit.
 
 Stores count explicit `write-replacement` bits and constant bits that differ
 from the inherited known reset. Same-position same-word preservation and
@@ -18,8 +23,14 @@ whole-word reset writes are not uses. Unknown reset or stored value remains
 unknown unless an explicit replacement mask establishes use.
 
 The check writes `target/register-inventory/<chip>/report.txt` and `report.json`
-before failing on used bits without fields. Unknown bits are listed separately
-by word, with their reasons and source symbols, and do not create opaque fields
+before failing on used bits without fields. `may_only_bits` lists each word's
+uses supported only by `May`, excluding any exact read or proven write use.
+Read accounting ranks callees by source bits, retaining targets and diagnostic
+SOURCE citations, and reports diagnostic-call and diagnostic-only shares.
+Each load's source bits are unioned across sites/arguments before indexed
+address expansion; callee groups can overlap. Resolved/indexed MMIO and all
+observations including unresolved addresses have separate totals. Unknown bits
+are listed separately by word, with their reasons and source symbols, and do not create opaque fields
 or establish absence. The reports retain input hashes, assumptions, ranges,
 partial/blocked/gap counts and causes, and unresolved/indexed address limits.
 Access counts and the provenance registry's cited-function priority are retained;

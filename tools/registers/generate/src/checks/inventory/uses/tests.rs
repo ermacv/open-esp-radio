@@ -150,6 +150,135 @@ fn every_read_sink_and_both_precisions_are_use() {
     }
 }
 
+fn call(
+    bits: u32,
+    name: Option<&str>,
+    precision: ReadPrecision,
+) -> oer_analysis_blobray_domain::ReadUse {
+    use oer_analysis_blobray_domain::{CallTarget, ReadSink, ReadUse};
+    ReadUse {
+        bits,
+        precision,
+        sink: ReadSink::CallArgument {
+            site: 20,
+            register: 10,
+            callee: name.map(|name| CallTarget {
+                address: None,
+                function: None,
+                name: Some(name.into()),
+            }),
+        },
+    }
+}
+
+#[test]
+fn shared_read_types_roundtrip_and_only_cited_diagnostic_names_are_ignored() {
+    for (name, expected_use) in [
+        (Some("wifi_log"), false),
+        (Some("phy_printf"), false),
+        (Some("wr_btdm_compressed_assert_x2"), false),
+        (Some("r_ble_log_internal_x2"), false),
+        (Some("ets_delay_us"), true),
+        (Some("wifi_log_set_level"), true),
+        (Some("unknown_printf_wrapper"), true),
+        (None, true),
+    ] {
+        let typed = ReadUses {
+            uses: vec![call(1, name, ReadPrecision::May)],
+            unknown: vec![],
+            preserved: 0,
+            unused: !1,
+        };
+        let mut record = observation("load", json!(0x1000), 4);
+        record["reads"] =
+            serde_json::to_value(&typed).expect("serialize producer's shared ReadUses");
+        let report = run(vec![record], None, 0);
+        assert_eq!(report.words[0].used_bits != 0, expected_use, "{name:?}");
+        assert_eq!(report.words[0].diagnostic_bits, u32::from(!expected_use));
+        assert_eq!(report.words[0].inactive_bits & 1 != 0, !expected_use);
+        assert_eq!(
+            report.all_reads.diagnostic_only_bits,
+            u64::from(!expected_use)
+        );
+    }
+}
+
+#[test]
+fn diagnostic_calls_do_not_hide_behavior_unknown_or_exact_evidence() {
+    let diagnostic = call(7, Some("wifi_log"), ReadPrecision::Exact);
+    let may = call(3, Some("ets_delay_us"), ReadPrecision::May);
+    let exact = json!({"bits":2,"sink":{"kind":"branch","site":24},"precision":"exact"});
+    let loaded = read(json!([diagnostic, may, exact]), json!([]), 0, !7);
+    let unknown = read(json!([]), json!([{"bits":4,"limit":"work-limit"}]), 0, !4);
+    let report = run(vec![loaded.clone(), unknown], Some(0), 0);
+    let word = &report.words[0];
+    assert_eq!(word.used_bits, 3);
+    assert_eq!(word.violation_bits, 3);
+    assert_eq!(word.may_only_bits, 1);
+    assert_eq!(word.unknown_bits, 4);
+    assert_eq!(word.inactive_bits, !7);
+    assert!(!word.diagnostics.is_empty());
+    assert!(report.render("fixture").contains("MAY ONLY 0x00001000"));
+    let report = run(vec![loaded, constant(1)], Some(0), 0);
+    assert_eq!(
+        report.words[0].may_only_bits, 0,
+        "a proven nonreset write is exact use"
+    );
+}
+
+#[test]
+fn call_accounting_unions_sites_and_arguments_before_address_expansion() {
+    let mut record = read(
+        json!([
+            call(3, Some("wifi_log"), ReadPrecision::Exact),
+            call(1, Some("wifi_log"), ReadPrecision::Exact),
+            call(2, None, ReadPrecision::May)
+        ]),
+        json!([]),
+        0,
+        !3,
+    );
+    let report = run(vec![record.clone()], None, 0);
+    let accounting = &report.resolved_indexed_reads;
+    assert_eq!(accounting.call_bits, 2);
+    assert_eq!(accounting.diagnostic_call_bits, 2);
+    assert_eq!(accounting.diagnostic_only_bits, 1);
+    let logger = accounting
+        .callees
+        .iter()
+        .find(|c| c.diagnostic_source.is_some())
+        .expect("logger group");
+    assert_eq!((logger.bits, logger.exclusive_bits), (2, 1));
+    record["address"] = Value::Null;
+    record["indexed"] = json!({"base":0x1000,"stride":4,"count":2});
+    let report = run(vec![record.clone()], None, 0);
+    assert_eq!(report.words.len(), 2);
+    assert_eq!(report.resolved_indexed_reads.call_bits, 2);
+    assert_eq!(report.resolved_indexed_reads.load_bits, 32);
+    record["indexed"] = Value::Null;
+    let report = run(vec![record], None, 0);
+    assert_eq!(report.resolved_indexed_reads.loads, 0);
+    assert_eq!(report.all_reads.diagnostic_only_bits, 1);
+    assert_eq!(report.all_reads.load_bits, 32);
+}
+
+#[test]
+fn floating_memory_accesses_keep_the_producer_classification_and_unknown_store() {
+    let mut loaded = read(
+        json!([]),
+        json!([{"bits":u32::MAX,"limit":"unsupported-operation"}]),
+        0,
+        0,
+    );
+    loaded["fact"]["access"] = json!("float-load");
+    let mut stored = observation("float-store", json!(0x1000), 4);
+    stored["stored"] = Value::Null;
+    let report = run(vec![loaded, stored], None, 0);
+    assert_eq!((report.words[0].loads, report.words[0].stores), (1, 1));
+    assert_eq!(report.words[0].unknown_bits, u32::MAX);
+    assert_eq!(report.violations(), 0);
+}
+
 #[test]
 fn unused_reads_do_not_establish_use_and_unknown_stays_separate_across_observations() {
     let unused = read(json!([]), json!([]), 0, u32::MAX);

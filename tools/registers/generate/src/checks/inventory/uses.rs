@@ -2,15 +2,18 @@
 //! masks are deliberately not evidence of read use.
 use super::{DeclaredWord, Function, Region, Target, region_of};
 use crate::Result;
-use oer_analysis_blobray_domain::{RegisterMask, RegisterMaskKind, StoredBits, StoredBitsSource};
+use oer_analysis_blobray_domain::{
+    ReadPrecision, ReadUses, RegisterMask, RegisterMaskKind, StoredBits, StoredBitsSource,
+};
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
 
+mod read_policy;
 #[cfg(test)]
 mod tests;
 mod wire;
 
-use wire::{Document, ReadUses};
+use wire::Document;
 
 /// Evidence retained for one access at one candidate address. Masks here
 /// refer to bit positions in the containing MMIO word.
@@ -41,13 +44,18 @@ pub struct Word {
     pub cited: bool,
     pub observed_bits: u32,
     pub used_bits: u32,
+    pub exact_bits: u32,
+    pub may_bits: u32,
+    pub may_only_bits: u32,
+    pub diagnostic_bits: u32,
     pub violation_bits: u32,
     pub unknown_bits: u32,
-    /// Observed only as preserved, unused or equal to known reset. These
-    /// are relative to this corpus; coverage gaps still apply.
+    /// Observed only as preserved, unused, diagnostic or equal to known reset.
+    /// These are relative to this corpus; coverage gaps still apply.
     pub inactive_bits: u32,
     pub uses: Vec<Evidence>,
     pub unknown: Vec<Evidence>,
+    pub diagnostics: Vec<Evidence>,
 }
 
 /// An address the corpus cannot place, or cannot enumerate completely.
@@ -69,6 +77,8 @@ pub struct Report {
     pub words: Vec<Word>,
     pub address_limits: Vec<AddressLimit>,
     pub coverage_gaps: Vec<serde_json::Value>,
+    pub resolved_indexed_reads: read_policy::Accounting,
+    pub all_reads: read_policy::Accounting,
 }
 
 impl Report {
@@ -119,7 +129,11 @@ impl Report {
             self.corpus.abi,
             self.corpus.call_returns,
         );
-        text.push_str("  Corpus: every function of the listed pinned vendor binaries; static may-accesses in owned MMIO ranges.\n  Excludes firmware outputs, non-binary sources, accesses outside these ranges, and RAM layouts.\n  Blocked/gap code and unresolved addresses cannot establish absence; large/unbounded indexed accesses compare only declared arrays/runs.\n  All read sinks and Exact/May count as use; read-selection does not. Unknown is neither use nor absence.\n");
+        text.push_str("  Corpus: every function of the listed pinned vendor binaries; static may-accesses in owned MMIO ranges.\n  Excludes firmware outputs, non-binary sources, accesses outside these ranges, and RAM layouts.\n  Blocked/gap code and unresolved addresses cannot establish absence; large/unbounded indexed accesses compare only declared arrays/runs.\n  Named diagnostic calls in the cited fixed list do not count as use; all other sinks and Exact/May do. Read-selection does not. Unknown is neither use nor absence.\n");
+        self.resolved_indexed_reads
+            .render(&mut text, "resolved/indexed MMIO");
+        self.all_reads
+            .render(&mut text, "all observations including unresolved");
         for input in &self.corpus.inputs {
             text.push_str(&format!("  input {} sha256 {}\n", input.role, input.sha256));
         }
@@ -140,6 +154,15 @@ impl Report {
             {
                 render_evidence(&mut text, evidence);
             }
+        }
+        for word in self.words.iter().filter(|word| word.may_only_bits != 0) {
+            text.push_str(&format!(
+                "\nMAY ONLY 0x{:08x} {} [{}] bits 0x{:08x}\n",
+                word.address,
+                word.region,
+                word.registers.join(", "),
+                word.may_only_bits
+            ));
         }
         for word in self.words.iter().filter(|word| word.unknown_bits != 0) {
             text.push_str(&format!(
@@ -197,6 +220,8 @@ pub fn check(
     let mut words = BTreeMap::<u32, Word>::new();
     let mut address_limits = Vec::new();
     let mut coverage_gaps = Vec::new();
+    let mut all_reads = read_policy::Accounting::default();
+    let mut resolved_indexed_reads = read_policy::Accounting::default();
     for raw in document.records {
         if raw.get("kind").and_then(|kind| kind.as_str()) != Some("observation") {
             coverage_gaps.push(raw);
@@ -212,13 +237,20 @@ pub fn check(
         let function = access.function.resolve(inputs)?;
         let width = access.fact.width.ok_or("MMIO access without width")?;
         let full = width_mask(width)?;
-        match access.fact.access.as_deref() {
-            Some("load") => validate_reads(
-                access.reads.as_ref().ok_or("schema-9 load without reads")?,
-                full,
-            )?,
-            Some("store") => validate_stored(access.stored.as_deref(), full)?,
+        let load = match access.fact.access.as_deref() {
+            Some("load" | "float-load") => true,
+            Some("store" | "float-store") => false,
             _ => return Err("MMIO access without load/store kind".into()),
+        };
+        if load {
+            let reads = access.reads.as_ref().ok_or("schema-9 load without reads")?;
+            validate_reads(reads, full)?;
+            all_reads.observe(reads, full);
+            if access.address.is_some() || access.indexed.is_some() {
+                resolved_indexed_reads.observe(reads, full);
+            }
+        } else {
+            validate_stored(access.stored.as_deref(), full)?;
         }
         if let Some(mask) = access.mask
             && mask.bits & !full != 0
@@ -252,12 +284,10 @@ pub fn check(
                 return Err("MMIO access wraps address space".into());
             }
             let (reset, known) = access_reset(address, full, declared);
-            let evidence = match access.fact.access.as_deref() {
-                Some("load") => read_evidence(access.reads.as_ref().ok_or("load without reads")?),
-                Some("store") => {
-                    store_evidence(access.stored.as_deref(), access.mask, full, reset, known)
-                }
-                _ => return Err("MMIO access without load/store kind".into()),
+            let evidence = if load {
+                read_evidence(access.reads.as_ref().ok_or("load without reads")?)
+            } else {
+                store_evidence(access.stored.as_deref(), access.mask, full, reset, known)
             };
             let mut previous_word = None;
             for byte in 0..u32::from(width) {
@@ -281,23 +311,28 @@ pub fn check(
                     cited: false,
                     observed_bits: 0,
                     used_bits: 0,
+                    exact_bits: 0,
+                    may_bits: 0,
+                    may_only_bits: 0,
+                    diagnostic_bits: 0,
                     violation_bits: 0,
                     unknown_bits: 0,
                     inactive_bits: 0,
                     uses: Vec::new(),
                     unknown: Vec::new(),
+                    diagnostics: Vec::new(),
                 });
                 let lane = (byte_address & 3) * 8;
                 if previous_word.replace(word_address) != Some(word_address) {
-                    word.loads += usize::from(access.fact.access.as_deref() == Some("load"));
-                    word.stores += usize::from(access.fact.access.as_deref() == Some("store"));
+                    word.loads += usize::from(load);
+                    word.stores += usize::from(!load);
                     word.indexed += usize::from(matches!(target, Some(Target::Indexed(_))));
                 }
                 word.whole_word |= width == 4 && address & 3 == 0;
                 word.functions.insert(function.clone());
                 let project = |bits: u32| ((bits >> (byte * 8)) & 0xff) << lane;
                 word.observed_bits |= project(full);
-                for (bits, reason, unknown) in &evidence {
+                for (bits, reason, kind) in &evidence {
                     let bits = project(*bits);
                     if bits == 0 {
                         continue;
@@ -313,29 +348,47 @@ pub fn check(
                         bits,
                         reason: reason.clone(),
                     };
-                    if *unknown {
-                        word.unknown_bits |= bits;
-                        word.unknown.push(entry);
-                    } else {
-                        word.used_bits |= bits;
-                        word.uses.push(entry);
+                    match kind {
+                        EvidenceKind::Unknown => {
+                            word.unknown_bits |= bits;
+                            word.unknown.push(entry);
+                        }
+                        EvidenceKind::Diagnostic => {
+                            word.diagnostic_bits |= bits;
+                            word.diagnostics.push(entry);
+                        }
+                        EvidenceKind::Exact | EvidenceKind::May => {
+                            word.used_bits |= bits;
+                            if matches!(kind, EvidenceKind::Exact) {
+                                word.exact_bits |= bits;
+                            } else {
+                                word.may_bits |= bits;
+                            }
+                            word.uses.push(entry);
+                        }
                     }
                 }
             }
         }
     }
     for word in words.values_mut() {
+        word.may_only_bits = word.may_bits & !word.exact_bits;
+        merge_evidence(&mut word.diagnostics);
         word.violation_bits = word.used_bits & !word.declared_bits;
         word.inactive_bits = word.observed_bits & !(word.used_bits | word.unknown_bits);
         merge_evidence(&mut word.uses);
         merge_evidence(&mut word.unknown);
     }
+    all_reads.finish();
+    resolved_indexed_reads.finish();
     Ok(Report {
         schema: document.schema,
         corpus: document.corpus,
         words: words.into_values().collect(),
         address_limits,
         coverage_gaps,
+        all_reads,
+        resolved_indexed_reads,
     })
 }
 
@@ -453,8 +506,15 @@ fn validate_stored(stored: Option<&[StoredBits]>, full: u32) -> Result<()> {
     Ok(())
 }
 
-/// (bits in the accessed value, reason, unknown).
-type BitEvidence = (u32, String, bool);
+#[derive(Clone, Copy)]
+enum EvidenceKind {
+    Exact,
+    May,
+    Diagnostic,
+    Unknown,
+}
+/// Bits in the accessed value, their source reason and policy classification.
+type BitEvidence = (u32, String, EvidenceKind);
 
 fn read_evidence(reads: &ReadUses) -> Vec<BitEvidence> {
     reads
@@ -464,15 +524,22 @@ fn read_evidence(reads: &ReadUses) -> Vec<BitEvidence> {
             (
                 used.bits,
                 format!("read {:?} {:?}", used.precision, used.sink),
-                false,
+                if read_policy::diagnostic(&used.sink) {
+                    EvidenceKind::Diagnostic
+                } else if used.precision == ReadPrecision::May {
+                    EvidenceKind::May
+                } else {
+                    EvidenceKind::Exact
+                },
             )
         })
-        .chain(
-            reads
-                .unknown
-                .iter()
-                .map(|unknown| (unknown.bits, format!("read {:?}", unknown.limit), true)),
-        )
+        .chain(reads.unknown.iter().map(|unknown| {
+            (
+                unknown.bits,
+                format!("read {:?}", unknown.limit),
+                EvidenceKind::Unknown,
+            )
+        }))
         .collect()
 }
 
@@ -486,12 +553,16 @@ fn store_evidence(
     let explicit = mask
         .filter(|mask| mask.kind == RegisterMaskKind::WriteReplacement)
         .map_or(0, |mask| mask.bits);
-    let mut evidence = vec![(explicit, "explicit write-replacement".into(), false)];
+    let mut evidence = vec![(
+        explicit,
+        "explicit write-replacement".into(),
+        EvidenceKind::Exact,
+    )];
     let Some(stored) = stored else {
         evidence.push((
             full & !explicit,
             "store without stored-bit provenance".into(),
-            true,
+            EvidenceKind::Unknown,
         ));
         return evidence;
     };
@@ -502,9 +573,9 @@ fn store_evidence(
                 evidence.push((
                     bits & known & ((value << run.low) ^ reset),
                     "write differs from known reset".into(),
-                    false,
+                    EvidenceKind::Exact,
                 ));
-                evidence.push((bits & !known, "unknown reset".into(), true));
+                evidence.push((bits & !known, "unknown reset".into(), EvidenceKind::Unknown));
             }
             StoredBitsSource::Load {
                 same_word: true,
@@ -512,7 +583,11 @@ fn store_evidence(
                 width,
                 ..
             } if low == run.low && width_mask(width).ok() == Some(full) => {}
-            _ => evidence.push((bits, "unresolved stored value".into(), true)),
+            _ => evidence.push((
+                bits,
+                "unresolved stored value".into(),
+                EvidenceKind::Unknown,
+            )),
         }
     }
     evidence
