@@ -105,6 +105,7 @@ pub fn run(ctx: &Checkout, chip: &str, output: Option<PathBuf>) -> Result<()> {
     let accesses = accesses(ctx, &directory, &host, chip, &inputs, &regions)?;
     let ids: Vec<String> = inputs.iter().map(|input| input.id.clone()).collect();
     let mut report = inventory::uses::check(
+        chip,
         &fs::read_to_string(&accesses)?,
         &ids,
         &regions,

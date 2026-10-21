@@ -59,6 +59,8 @@ provenance. Incomplete metadata remains a navigation hint and cannot close a
 publication gate. Array coverage is resolved from the structural SVD template,
 not by wildcard-matching expanded names.
 
+## Register bit states
+
 Each register or memory-layout bit has one of three states:
 
 | State | Meaning | Evidence |
@@ -79,6 +81,8 @@ must accompany a vendor-use check. A use of an absent bit is an error.
 Code preserves absent bits or writes their reset value, and the PAC exposes
 no field accessor for them. Layouts follow the same rule: CPU operations
 preserve the exact image of unassigned bits, including bits hardware writes.
+
+## Name origin
 
 A register or field review also records where its name comes from with
 `naming`:

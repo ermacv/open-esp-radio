@@ -3,10 +3,11 @@ use oer_analysis_blobray_domain::{CallTarget, ReadSink, ReadUses};
 use serde::Serialize;
 use std::collections::BTreeMap;
 
-/// Exact names only. Each SOURCE is a symbol or call in the pinned S31
-/// binaries (chips/esp32s31/vendor/artifacts.toml), inspected with Blobray.
+/// Exact names only, with chip-local pinned symbols/calls inspected by Blobray.
 /// Name-only external callees are intentional; unnamed calls remain uses.
-pub const DIAGNOSTICS: &[(&str, &str)] = &[
+type Diagnostics = &'static [(&'static str, &'static str)];
+
+const S31_DIAGNOSTICS: Diagnostics = &[
     // SOURCE: pin:esp32s31/rom::ets_printf, ets_vprintf.
     ("ets_printf", "pin:esp32s31/rom::ets_printf"),
     ("ets_vprintf", "pin:esp32s31/rom::ets_vprintf"),
@@ -78,15 +79,60 @@ pub const DIAGNOSTICS: &[(&str, &str)] = &[
     ),
 ];
 
-pub fn diagnostic_source(target: Option<&CallTarget>) -> Option<&'static str> {
-    let name = target?.name.as_deref()?;
-    DIAGNOSTICS
-        .iter()
-        .find_map(|(n, source)| (*n == name).then_some(*source))
-}
+// SOURCE: ESP32-C5's own pins (chips/esp32c5/vendor/artifacts.toml).
+const C5_DIAGNOSTICS: Diagnostics = &[
+    ("ets_printf", "pin:esp32c5/rom-rev100::ets_printf"),
+    ("ets_vprintf", "pin:esp32c5/rom-rev100::ets_vprintf"),
+    ("phy_printf", "pin:esp32c5/libphy::phy_i2c_correct+288"),
+    ("pp_printf", "pin:esp32c5/libpp::dbg_dump_rx_links+138"),
+    (
+        "wifi_log",
+        "pin:esp32c5/libnet80211[ieee80211_debug.o]::wifi_log",
+    ),
+    (
+        "r_ble_log_internal_x0",
+        "pin:esp32c5/libble_app[ble_log.c.o]::r_ble_log_internal_x0",
+    ),
+    (
+        "r_ble_log_internal_x1",
+        "pin:esp32c5/libble_app[ble_log.c.o]::r_ble_log_internal_x1",
+    ),
+    (
+        "r_ble_log_internal_x2",
+        "pin:esp32c5/libble_app[ble_log.c.o]::r_ble_log_internal_x2",
+    ),
+    (
+        "r_ble_log_internal_x3",
+        "pin:esp32c5/libble_app[ble_log.c.o]::r_ble_log_internal_x3",
+    ),
+    (
+        "r_ble_log_internal_hex",
+        "pin:esp32c5/libble_app[ble_log.c.o]::r_ble_log_internal_hex",
+    ),
+];
 
-pub fn diagnostic(sink: &ReadSink) -> bool {
-    matches!(sink, ReadSink::CallArgument { callee, .. } if diagnostic_source(callee.as_ref()).is_some())
+/// Selection happens once at the checker boundary; unsupported chips fail.
+pub struct Policy {
+    diagnostics: Diagnostics,
+}
+impl Policy {
+    pub fn for_chip(chip: &str) -> crate::Result<Self> {
+        let diagnostics = match chip {
+            "esp32s31" => S31_DIAGNOSTICS,
+            "esp32c5" => C5_DIAGNOSTICS,
+            _ => return Err("no diagnostic policy for this chip".into()),
+        };
+        Ok(Self { diagnostics })
+    }
+    pub fn source(&self, target: Option<&CallTarget>) -> Option<&'static str> {
+        let name = target?.name.as_deref()?;
+        self.diagnostics
+            .iter()
+            .find_map(|(n, source)| (*n == name).then_some(*source))
+    }
+    pub fn diagnostic(&self, sink: &ReadSink) -> bool {
+        matches!(sink, ReadSink::CallArgument { callee, .. } if self.source(callee.as_ref()).is_some())
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -114,14 +160,14 @@ pub struct Accounting {
 }
 
 impl Accounting {
-    pub fn observe(&mut self, reads: &ReadUses, full: u32) {
+    pub fn observe(&mut self, reads: &ReadUses, full: u32, policy: &Policy) {
         self.loads += 1;
         self.load_bits += u64::from(full.count_ones());
         let (mut used, mut behavior, mut diagnostics, mut noncall) = (0, 0, 0, 0);
         let mut calls = BTreeMap::<Option<CallTarget>, u32>::new();
         for item in &reads.uses {
             used |= item.bits;
-            if diagnostic(&item.sink) {
+            if policy.diagnostic(&item.sink) {
                 diagnostics |= item.bits;
             } else {
                 behavior |= item.bits;
@@ -150,11 +196,11 @@ impl Accounting {
         }
     }
 
-    pub fn finish(&mut self) {
+    pub fn finish(&mut self, policy: &Policy) {
         self.callees = std::mem::take(&mut self.grouped)
             .into_iter()
             .map(|(target, (bits, exclusive_bits))| Callee {
-                diagnostic_source: diagnostic_source(target.as_ref()),
+                diagnostic_source: policy.source(target.as_ref()),
                 target,
                 bits,
                 exclusive_bits,

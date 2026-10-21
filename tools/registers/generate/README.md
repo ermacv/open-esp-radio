@@ -11,7 +11,7 @@ inside the publication's owned MMIO ranges, with `--abi riscv-integer
 --call-returns`. It requires schema 9 and a complete `reads: ReadUses`
 classification for each integer or floating load, using the shared
 `oer-analysis-blobray-domain` types. A `CallArgument` to an exact name in the
-checker's [cited diagnostic list](src/checks/inventory/uses/read_policy.rs)
+checker's [chip-specific cited diagnostic lists](src/checks/inventory/uses/read_policy.rs)
 does not count as use. Other sinks, including unresolved calls and behavior
 parameters such as `ets_delay_us`, count with both `Exact` and `May` precision;
 `read-selection` expressions do not establish use. Diagnostic evidence is

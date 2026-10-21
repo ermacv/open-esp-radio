@@ -65,6 +65,7 @@ fn document(records: Vec<Value>) -> Value {
 
 fn check_document(document: Value, declared: &BTreeMap<u32, DeclaredWord>) -> Result<Report> {
     check(
+        "esp32s31",
         &document.to_string(),
         &["fixture".into()],
         &[Region {
@@ -200,6 +201,49 @@ fn shared_read_types_roundtrip_and_only_cited_diagnostic_names_are_ignored() {
             report.all_reads.diagnostic_only_bits,
             u64::from(!expected_use)
         );
+    }
+}
+
+#[test]
+fn diagnostics_require_evidence_from_the_selected_chip() {
+    let regions = [Region {
+        name: "synthetic".into(),
+        start: 0x1000,
+        end: 0x1100,
+    }];
+    let inputs = ["fixture".into()];
+    let declared = declaration(None, 0);
+    for (chip, name, expected_use) in [
+        ("esp32s31", "phy_log", false),
+        ("esp32c5", "phy_log", true),
+        ("esp32s31", "wifi_log", false),
+        ("esp32c5", "wifi_log", false),
+    ] {
+        let data = document(vec![read(
+            json!([call(1, Some(name), ReadPrecision::Exact)]),
+            json!([]),
+            0,
+            !1,
+        )])
+        .to_string();
+        let report = check(chip, &data, &inputs, &regions, &declared, &[])
+            .expect("chip-local synthetic observation");
+        assert_eq!(
+            report.words[0].used_bits != 0,
+            expected_use,
+            "{chip} {name}"
+        );
+        let source = report.all_reads.callees[0].diagnostic_source;
+        if expected_use {
+            assert!(source.is_none());
+        } else {
+            assert!(
+                source
+                    .expect("cited diagnostic")
+                    .starts_with(&format!("pin:{chip}/"))
+            );
+        }
+        assert!(check("another-chip", &data, &inputs, &regions, &declared, &[]).is_err());
     }
 }
 

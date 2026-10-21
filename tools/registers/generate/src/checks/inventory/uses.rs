@@ -210,12 +210,14 @@ fn render_evidence(text: &mut String, evidence: &Evidence) {
 /// Compare a complete schema-9 document with the unchanged source model.
 /// A missing load classification is a contract error, never an unused read.
 pub fn check(
+    chip: &str,
     accesses: &str,
     inputs: &[String],
     regions: &[Region],
     declared: &BTreeMap<u32, DeclaredWord>,
     arrays: &[Vec<u32>],
 ) -> Result<Report> {
+    let policy = read_policy::Policy::for_chip(chip)?;
     let document = Document::parse(accesses, inputs)?;
     let mut words = BTreeMap::<u32, Word>::new();
     let mut address_limits = Vec::new();
@@ -245,9 +247,9 @@ pub fn check(
         if load {
             let reads = access.reads.as_ref().ok_or("schema-9 load without reads")?;
             validate_reads(reads, full)?;
-            all_reads.observe(reads, full);
+            all_reads.observe(reads, full, &policy);
             if access.address.is_some() || access.indexed.is_some() {
-                resolved_indexed_reads.observe(reads, full);
+                resolved_indexed_reads.observe(reads, full, &policy);
             }
         } else {
             validate_stored(access.stored.as_deref(), full)?;
@@ -285,7 +287,7 @@ pub fn check(
             }
             let (reset, known) = access_reset(address, full, declared);
             let evidence = if load {
-                read_evidence(access.reads.as_ref().ok_or("load without reads")?)
+                read_evidence(access.reads.as_ref().ok_or("load without reads")?, &policy)
             } else {
                 store_evidence(access.stored.as_deref(), access.mask, full, reset, known)
             };
@@ -379,8 +381,8 @@ pub fn check(
         merge_evidence(&mut word.uses);
         merge_evidence(&mut word.unknown);
     }
-    all_reads.finish();
-    resolved_indexed_reads.finish();
+    all_reads.finish(&policy);
+    resolved_indexed_reads.finish(&policy);
     Ok(Report {
         schema: document.schema,
         corpus: document.corpus,
@@ -516,7 +518,7 @@ enum EvidenceKind {
 /// Bits in the accessed value, their source reason and policy classification.
 type BitEvidence = (u32, String, EvidenceKind);
 
-fn read_evidence(reads: &ReadUses) -> Vec<BitEvidence> {
+fn read_evidence(reads: &ReadUses, policy: &read_policy::Policy) -> Vec<BitEvidence> {
     reads
         .uses
         .iter()
@@ -524,7 +526,7 @@ fn read_evidence(reads: &ReadUses) -> Vec<BitEvidence> {
             (
                 used.bits,
                 format!("read {:?} {:?}", used.precision, used.sink),
-                if read_policy::diagnostic(&used.sink) {
+                if policy.diagnostic(&used.sink) {
                     EvidenceKind::Diagnostic
                 } else if used.precision == ReadPrecision::May {
                     EvidenceKind::May
