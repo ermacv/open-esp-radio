@@ -378,6 +378,16 @@ impl Radio {
             hold.running = false;
             return;
         }
+        if self
+            .domain
+            .attachment_mut()
+            .force_power_tracking_debug(hold.started.radio == CaptureRadio::Wifi)
+            .is_err()
+        {
+            hold.invalid = true;
+            hold.running = false;
+            return;
+        }
         let mut trace = oer_esp32s31_phy::tracking::observation::ReadinessTrace::default();
         let mut observer = crate::hold::Observer::new(
             hold.samples.len() as u8 + 1,

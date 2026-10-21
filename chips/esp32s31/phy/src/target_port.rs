@@ -96,7 +96,6 @@ use crate::{
         parameters::{
             PhyParamTrackingAction, PhyParamTrackingCalibrationTransition,
             PhyParamTrackingCompletion, PhyParamTrackingOutcome, PhyParamTrackingRfpllTransition,
-            PhyParamTrackingTxPowerTransition,
         },
     },
     tx::{
@@ -1833,33 +1832,6 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
             Ok(completion)
         }
     }
-
-    async fn run_param_tx_power<P>(
-        &self,
-        mut child: PhyParamTrackingTxPowerTransition<'_>,
-        platform: &mut P,
-        registers: &mut (impl SharedPhyAccess + crate::executor::step::Registers),
-    ) -> Result<PhyParamTrackingCompletion, PhyTargetPortError> {
-        for _ in 0..RF_OPERATION_LIMIT {
-            child = match child.commit() {
-                Ok(completion) => return Ok(completion),
-                Err(child) => child,
-            };
-            let binding = child
-                .lower_external()
-                .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
-            if let Some(micros) = binding.delay_micros()
-                && !D::settle_micros(micros)
-            {
-                return Err(PhyTargetPortError::HardwareCapabilityUnavailable);
-            }
-            let completion = binding.execute_target(platform, registers);
-            child
-                .advance(completion)
-                .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
-        }
-        Err(PhyTargetPortError::RfOperationLimit)
-    }
 }
 
 impl<'a, P, R, D, T, O> TargetPhyRegisterPort<'a, P, R, D, T, O> {
@@ -2130,15 +2102,22 @@ impl<
             }
             PhyParamTrackingAction::BluetoothIeee802154TxPowerTrack { .. }
             | PhyParamTrackingAction::WifiTxPowerTrack { .. } => {
-                TargetCompleter::<D, T>::new(self.timer)
-                    .run_param_tx_power(
-                        pending
-                            .begin_tx_power_tracking(state)
-                            .map_err(|_| PhyTargetPortError::UnexpectedBinding)?,
-                        self.platform,
-                        self.registers,
-                    )
-                    .await?
+                let operation =
+                    crate::tracking::observation::Operation::parameter(pending.action())
+                        .ok_or(PhyTargetPortError::UnexpectedBinding)?;
+                let (result, timing) = crate::executor::step::power::run_param_tx_power::<D, _, _>(
+                    self.timer,
+                    pending
+                        .begin_tx_power_tracking(state)
+                        .map_err(|_| PhyTargetPortError::UnexpectedBinding)?,
+                    self.registers,
+                    O::OBSERVE_ENGINE_POLLS,
+                )
+                .await;
+                if O::OBSERVE_ENGINE_POLLS {
+                    self.observer.engine_completed(operation, timing);
+                }
+                result.map_err(step::port_error)?
             }
             PhyParamTrackingAction::CalibrationTrack { .. } => {
                 let mut child = pending

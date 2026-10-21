@@ -83,6 +83,20 @@ impl Registers for oer_esp32s31_hal::owner::ValidationSharedPhy<'_> {
 }
 
 impl Io<'_, '_> {
+    pub(super) fn power(
+        &mut self,
+        binding: crate::tracking::power::PhyTxPowerTrackingExternalBinding,
+    ) -> Result<crate::tracking::power::PhyTxPowerTrackingCompletion, Failure> {
+        match self {
+            #[cfg(target_arch = "riscv32")]
+            Self::Shared(registers) => Ok(binding.execute_target(&mut (), *registers)),
+            #[cfg(all(target_arch = "riscv32", oer_probe))]
+            Self::Validation(registers) => Ok(binding.execute_target(&mut (), *registers)),
+            #[cfg(test)]
+            Self::Test(io, _) => io.power(binding),
+        }
+    }
+
     #[cfg(target_arch = "riscv32")]
     #[inline(always)]
     fn rfpll_frequency<D: super::super::wait::PhyShortDelay, C: oer_time::Clock + ?Sized>(

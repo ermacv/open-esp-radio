@@ -63,6 +63,16 @@ the outer owner's lease.
 | [Common calibration](calibration.rs) | A temperature threshold selects DCODE, RX-gain calibration and channel restoration. | The branch restores MAC baseband and TX gain compensation before committing the common reference or entering class calibration. |
 | [Shared TX calibration](calibration.rs) | A shared TX threshold selects software frequency control, forced gain/TX-RX state, TXDC/PWDET and class gain publication. | The graph restores its baseband/control and gain-compensation state. This is not proof that every protocol's MAC, key, TSF or DMA context is unchanged. No selected branch means no hardware actions in this child. |
 
+T2/T4 power tracking uses one job in the shared P1 driver. A poll executes
+one BBPLL edge, one complete force/write plus its 1-µs settle, or the complete
+gain-image generation and publication. Runnable checkpoints wake the caller
+without a timer; the RF/state borrow remains held. The gain image stays local
+to its publication poll. The terminal poll commits the semantic result only
+after BBPLL-off. In power-family engine observations, `ready_edges` and
+`maximum_ready_micros` count and time the gain-image/publication atom, while
+`maximum_micros` includes the complete driver poll. Diagnostic holds force the
+selected class's gain update and report family 2 (BT/154) or 4 (Wi-Fi).
+
 Full cold registration and cache replay belong to
 [calibration/registration](../calibration/registration.rs), not the periodic
 scheduler. A serializable calibration snapshot does not certify hardware

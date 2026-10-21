@@ -81,6 +81,13 @@ impl PhyDomain {
         });
     }
 
+    #[cfg(all(oer_debug_control, target_arch = "riscv32"))]
+    pub(crate) fn force_power_tracking_debug(&mut self, wifi: bool) {
+        self.registered
+            .target_state_mut()
+            .force_power_tracking_debug(wifi);
+    }
+
     /// Inspect the shared client set without exposing its raw mask.
     pub const fn client_snapshot(&self) -> PhyClientSnapshot {
         self.clients.snapshot()

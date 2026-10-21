@@ -1,6 +1,7 @@
 //! Private PHY transport jobs. Hardware ownership stays with the caller.
 mod i2c;
 mod io;
+pub(crate) mod power;
 pub(crate) mod rfpll;
 pub(crate) mod temperature;
 pub(crate) mod wifi_i2c;
@@ -67,6 +68,10 @@ pub(crate) enum Step {
 }
 
 enum Work<'a> {
+    Power {
+        transition: &'a mut crate::tracking::power::PhyTxPowerTrackingTransition,
+        state: &'a crate::state::PhyState,
+    },
     Rfpll(rfpll::Run<'a>),
     CountedI2c(i2c::Counted<'a>),
     I2c(&'a mut PhyColdI2cTransaction),
@@ -86,6 +91,7 @@ pub(crate) struct Job<'a> {
     temperature: bool,
     rfpll_observed: bool,
     first_wait: bool,
+    measured: bool,
     finished: bool,
     start_pending: bool,
     /// One completed edge, consumed by the poll recorder at its exit.
@@ -99,6 +105,7 @@ impl<'a> Job<'a> {
             temperature,
             rfpll_observed: false,
             first_wait: false,
+            measured: false,
             finished: false,
             start_pending: temperature,
             ready_started: None,
@@ -127,6 +134,12 @@ impl<'a> Job<'a> {
         // window; Driver must not clamp its real waits to a direct deadline.
         job.deadline = Instant::from_micros(u64::MAX);
         Ok(job)
+    }
+    pub(crate) fn power(
+        transition: &'a mut crate::tracking::power::PhyTxPowerTrackingTransition,
+        state: &'a crate::state::PhyState,
+    ) -> Result<Self, Failure> {
+        Self::new(Work::Power { transition, state }, Instant::EPOCH, false)
     }
     pub(crate) fn code(now: Instant) -> Result<Self, Failure> {
         Self::new(Work::Code(None), now, false)
@@ -221,6 +234,21 @@ impl<'a> Job<'a> {
         self.ready_started = None;
         self.first_wait = false;
         match &mut self.work {
+            Work::Power { transition, state } => {
+                use crate::tracking::power::PhyTxPowerTrackingAction as Action;
+                // In power families the existing ready-edge metric measures the
+                // complete gain-image generation/publication atom only.
+                if self.measured
+                    && matches!(
+                        transition.action(),
+                        Action::RegenerateWifiGain { .. }
+                            | Action::RegenerateBluetoothIeee802154Gain { .. }
+                    )
+                {
+                    self.ready_started = Some(rfpll::clock_now(clock));
+                }
+                return power::advance::<D>(&mut io, transition, state);
+            }
             Work::Rfpll(run) => {
                 return io.advance_rfpll::<D, _>(
                     clock,
@@ -631,6 +659,7 @@ pub(crate) fn drive<'a, 'j, D: super::wait::PhyShortDelay + 'a, R: Registers, T:
     rfpll: Option<&'a mut crate::tracking::observation::RfpllEngineTrace>,
 ) -> impl Future<Output = Result<(), Failure>> + 'a {
     job.rfpll_observed = rfpll.is_some();
+    job.measured = stats.is_some();
     Driver {
         delay: core::marker::PhantomData::<D>,
         job,

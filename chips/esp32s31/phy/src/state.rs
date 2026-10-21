@@ -1230,6 +1230,34 @@ impl PhyState {
         }
     }
 
+    /// Force the next diagnostic power child to regenerate its real gain bank.
+    #[cfg(all(oer_debug_control, target_arch = "riscv32"))]
+    pub(crate) fn force_power_tracking_debug(&mut self, wifi: bool) {
+        use crate::tracking::{
+            parameters::PhyCalibrationTrackClass as Class,
+            power::{PhyTxPowerTrackingRequest, decide_tx_power_tracking},
+        };
+        let class = if wifi {
+            Class::Wifi
+        } else {
+            Class::BluetoothIeee802154
+        };
+        let gain = decide_tx_power_tracking(
+            PhyTxPowerTrackingRequest {
+                class,
+                enabled: true,
+                wifi_channel: self.current_wifi_channel(),
+            },
+            self.tx_power_tracking_parameters(self.tx_power_tracking_slow() != 0),
+        )
+        .gain_base;
+        if wifi {
+            self.wifi.tracking_gain_base = (gain as u8).wrapping_add(1);
+        } else {
+            self.bluetooth.tracking_gain_base = (gain as u8).wrapping_add(1);
+        }
+    }
+
     /// Commit a completed tracking transaction to the live radio owner.
     pub fn apply_tx_power_tracking_outcome(&mut self, outcome: PhyTxPowerTrackingOutcome) {
         if !outcome.gain_updated {

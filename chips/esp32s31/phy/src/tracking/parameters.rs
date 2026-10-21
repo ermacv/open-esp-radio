@@ -839,6 +839,16 @@ impl<'state> PhyParamTrackingTxPowerTransition<'state> {
         self.parent_action
     }
 
+    #[cfg(any(target_arch = "riscv32", test))]
+    pub(crate) fn parts(
+        &mut self,
+    ) -> (
+        &mut crate::tracking::power::PhyTxPowerTrackingTransition,
+        &crate::state::PhyState,
+    ) {
+        (&mut self.child, self.state)
+    }
+
     pub const fn action(&self) -> crate::tracking::power::PhyTxPowerTrackingAction {
         self.child.action()
     }

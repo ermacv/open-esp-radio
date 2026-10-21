@@ -159,7 +159,9 @@ fn report_engine(
     use oer_esp32s31_board::rom::print_fmt;
     let family = match operation {
         Operation::Rfpll => 1,
+        Operation::BluetoothIeee802154Power => 2,
         Operation::WifiI2c => 3,
+        Operation::WifiPower => 4,
         Operation::Temperature => 7,
         _ => 0,
     };
@@ -182,6 +184,15 @@ fn report_engine(
         "OPEN_RADIO_HIL engine family={} late-max-us={} invalid={}\n",
         family, timing.maximum_lateness_micros, timing.invalid
     ));
+    if matches!(
+        operation,
+        Operation::WifiPower | Operation::BluetoothIeee802154Power
+    ) {
+        print_fmt(format_args!(
+            "OPEN_RADIO_HIL power-gain family={} count={} max-us={}\n",
+            family, timing.ready_edges, timing.maximum_ready_micros
+        ));
+    }
 }
 
 /// Lossless UART quartet: invalid bit 63, command bits 48..62, then
