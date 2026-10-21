@@ -50,8 +50,8 @@ and reject `--analysis`. These bundles live separately in
 `target/fw/<image>-analysis/` and record `purpose: Analysis` in `bundle.json`.
 They cannot be flashed: the shared flash snapshot reader refuses them for
 `flash`, `run` and HIL. Machine code may differ from the stand build only
-because of the configuration constants. The same stack and placement gates
-run as reports, without enforcing their results.
+because of the configuration constants. It enforces the same interrupt-stack
+check as an ordinary `build`.
 
 Every image builds with the compiler's frame records (`-Z emit-stack-sizes`),
 moves above the stack policy's `max_move_bytes` warned (`-W
@@ -61,9 +61,20 @@ the boot zeroes. The stack checks then bound the runtime's task and
 interrupt stacks and the bootstrap's stack under
 `chips/esp32s31/platform/stack.toml` (`runtime-stack.txt`,
 `interrupt-stack.txt`, `bootstrap-stack.txt`), and the placement check holds
-the runtime to the chip's `[placement]` contract (`placement.txt`). `cargo
-fw` reports and does not fail the build yet (`Gates::enforced` is off): a
-check that does not pass prints as a warning.
+the runtime to the chip's `[placement]` contract (`placement.txt`).
+
+| Mode | Required checks | Reported checks |
+| --- | --- | --- |
+| `build`, including `--analysis` | Interrupt stacks (`Enforced::Only({Interrupts})`) | Task stacks, bootstrap stack and placement |
+| `run` | None (`Enforced::Reported`) | All requested checks |
+| `flash` | Uses the existing bundle without rerunning checks | Uses its recorded results |
+
+An interrupt stack without a proven bound (`partial + ?`), above its budget,
+or dependent on an assumption outside `ADMITTED` fails `build`, and so CI.
+A bound conditional only on the admitted executor invariant passes with a
+warning. A reported check that does not pass prints as a warning containing
+`reported only`. Stand `run` builds report every check; `flash` writes an
+already built bundle.
 
 ## Boards
 

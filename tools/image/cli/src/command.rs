@@ -14,7 +14,7 @@ use oer_lab_board::lock::{DeviceAccess, DeviceId};
 use oer_lab_board::stand::{LeasedBoard, Via};
 
 use crate::{image, w1, w2};
-use oer_image_build::Result;
+use oer_image_build::{Check, Enforced, Result};
 
 /// The chips whose boards this tool resets and writes. Another chip's board
 /// is only listed: its reset lines may mean something else (an ESP32-C5's
@@ -279,7 +279,7 @@ pub fn run(root: &Path, image: &str, selector: &str, timeout: Duration) -> Resul
         Some(image::Stand::W2(config)) => Some(config.clone()),
         _ => None,
     };
-    image::build(root, image, built.as_ref(), false)?;
+    image::build(root, image, built.as_ref(), false, Enforced::Reported)?;
     let leased = leased(root, &stand, &board)?;
     write_image(root, image, &board.id, &leased)?;
     let run = root
@@ -447,7 +447,13 @@ pub fn power_cycle(root: &Path, selector: &str) -> Result<()> {
 
 /// `cargo fw build IMAGE [--analysis]`.
 pub fn build(root: &Path, image_name: &str, analysis: bool) -> Result<()> {
-    let bundle = image::build(root, image_name, None, analysis)?;
+    let bundle = image::build(
+        root,
+        image_name,
+        None,
+        analysis,
+        Enforced::Only([Check::Interrupts].into()),
+    )?;
     for segment in bundle.segments() {
         eprintln!(
             "fw:   {:<16} {:#08x} {}",

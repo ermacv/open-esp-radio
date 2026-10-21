@@ -18,8 +18,25 @@ extra policy files, the bundle directory (every build compiles in the checkout's
 `compile_cache()` of its instrumentation classes) and the checks (`Gates` of `oer-image-checks`): which
 run, what the interrupt-stack check requires (`Required::Proven`, or
 `Partial` for diagnostic images), an optional audit of the runtime ELF (HIL's
-observer placement), and whether a check that does not pass fails the build
-(`enforced`: HIL) or is reported (`cargo fw`).
+observer placement), and which requested checks must pass (`Enforced`).
+`Enforced::All` enforces every requested check, including the caller's audit;
+`Only(BTreeSet<Check>)` enforces only the named built-in checks;
+`Reported` turns failures into warnings containing `reported only`.
+`Gates::all` and `Gates::of` select `All`; a default `Gates` selects `Reported`
+and requests no checks.
+
+| Caller | Enforcement | Required checks |
+| --- | --- | --- |
+| `cargo fw build`, including `--analysis` | `Only({Interrupts})` | Interrupt stacks |
+| `cargo fw run` | `Reported` | None |
+| HIL image builds | `All` | Every requested check and audit |
+
+App builds still report task stacks, the bootstrap stack and placement.
+`cargo fw flash` uses an existing bundle without rerunning its checks.
+For app `build`, a `partial + ?` interrupt stack, an exceeded budget or an
+unadmitted assumption fails the build and CI; a bound conditional only on
+the admitted executor invariant passes with a warning. HIL retains its
+`Proven`/`Partial` interrupt policy according to image class.
 
 The chip profile's boot kind selects the pipeline:
 

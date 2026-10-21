@@ -14,7 +14,7 @@ use oer_image_build::{
     Application, Gates, ImageSpec, Result,
     bundle::{ImageBundle, Purpose},
 };
-use oer_image_checks::interrupts::Required;
+use oer_image_checks::{Enforced, interrupts::Required};
 
 /// The chip every image of `firmware/apps` is built for.
 pub const CHIP: &str = "esp32s31";
@@ -114,9 +114,15 @@ pub fn run_timeout(image: &str) -> std::time::Duration {
     }
 }
 
-/// The pipeline's spec of `image`, with the stand's parameters:
-/// every check, reported and never failing the build.
-pub fn spec(root: &Path, image: &str, stand: Option<&Stand>, analysis: bool) -> Result<ImageSpec> {
+/// The pipeline's spec of `image`, with the stand's parameters and the
+/// caller's enforcement policy. Every check runs.
+pub fn spec(
+    root: &Path,
+    image: &str,
+    stand: Option<&Stand>,
+    analysis: bool,
+    enforced: Enforced,
+) -> Result<ImageSpec> {
     let stand = if analysis {
         Some(analysis_stand(image)?)
     } else {
@@ -147,7 +153,7 @@ pub fn spec(root: &Path, image: &str, stand: Option<&Stand>, analysis: bool) -> 
             output(root, image)
         },
         checks: Some(Gates {
-            enforced: false,
+            enforced,
             ..Gates::all(Required::Proven)
         }),
     })
@@ -159,8 +165,9 @@ pub fn build(
     image: &str,
     stand: Option<&Stand>,
     analysis: bool,
+    enforced: Enforced,
 ) -> Result<ImageBundle> {
-    let bundle = oer_image_build::build(&spec(root, image, stand, analysis)?)?;
+    let bundle = oer_image_build::build(&spec(root, image, stand, analysis, enforced)?)?;
     for warning in &bundle.warnings {
         eprintln!("warning: {warning}");
     }
@@ -183,6 +190,7 @@ pub fn bundle(root: &Path, image: &str) -> Result<ImageBundle> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use oer_image_checks::Check;
 
     fn repository() -> tempfile::TempDir {
         let directory = tempfile::tempdir().unwrap();
@@ -217,7 +225,14 @@ mod tests {
             ("w1", &*ANALYSIS_W1),
             ("w2", &*ANALYSIS_W2),
         ] {
-            let spec = spec(directory.path(), image, None, true).unwrap();
+            let spec = spec(
+                directory.path(),
+                image,
+                None,
+                true,
+                Enforced::Only([Check::Interrupts].into()),
+            )
+            .unwrap();
             assert_eq!(spec.runtime_environment, runtime_env(image, Some(stand)));
         }
     }
@@ -242,11 +257,12 @@ mod tests {
     }
 
     #[test]
-    fn analysis_has_a_separate_output_and_keeps_every_gate_report_only() {
+    fn build_and_analysis_enforce_interrupts_with_separate_outputs() {
         let directory = repository();
         for image in ["w0", "w1", "w2"] {
             for analysis in [false, true] {
-                let spec = spec(directory.path(), image, None, analysis).unwrap();
+                let enforced = Enforced::Only([Check::Interrupts].into());
+                let spec = spec(directory.path(), image, None, analysis, enforced.clone()).unwrap();
                 assert_eq!(
                     spec.output,
                     directory.path().join("target/fw").join(if analysis {
@@ -264,7 +280,7 @@ mod tests {
                     }
                 );
                 let gates = spec.checks.unwrap();
-                assert!(!gates.enforced);
+                assert_eq!(gates.enforced, enforced);
                 assert!(gates.stack && gates.placement);
                 assert_eq!(gates.interrupts, Some(Required::Proven));
                 if !analysis {
@@ -275,17 +291,73 @@ mod tests {
     }
 
     #[test]
+    fn stand_builds_report_every_check() {
+        let directory = repository();
+        for (image, stand) in [
+            ("boot-smoke", None),
+            ("w0", Some(&ANALYSIS_W0)),
+            ("w1", Some(&*ANALYSIS_W1)),
+            ("w2", Some(&*ANALYSIS_W2)),
+        ] {
+            let spec = spec(directory.path(), image, stand, false, Enforced::Reported).unwrap();
+            let gates = spec.checks.unwrap();
+            assert_eq!(gates.enforced, Enforced::Reported);
+            assert!(gates.stack && gates.placement);
+            assert_eq!(gates.interrupts, Some(Required::Proven));
+            assert_eq!(spec.runtime_environment, runtime_env(image, stand));
+        }
+    }
+
+    #[test]
     fn images_without_a_stand_refuse_analysis() {
         let directory = repository();
-        assert!(spec(directory.path(), "boot-smoke", None, false).is_ok());
-        let error = spec(directory.path(), "boot-smoke", None, true)
-            .err()
-            .unwrap()
-            .to_string();
+        assert!(
+            spec(
+                directory.path(),
+                "boot-smoke",
+                None,
+                false,
+                Enforced::Only([Check::Interrupts].into())
+            )
+            .is_ok()
+        );
+        let error = spec(
+            directory.path(),
+            "boot-smoke",
+            None,
+            true,
+            Enforced::Only([Check::Interrupts].into()),
+        )
+        .err()
+        .unwrap()
+        .to_string();
         assert!(
             error.contains("image `boot-smoke` has no stand configuration"),
             "{error}"
         );
+    }
+
+    #[test]
+    fn flash_loads_reported_failures_without_enforcing_checks() {
+        let directory = repository();
+        let root = directory.path();
+        let profile = oer_chip_profile::Profile::load(root, CHIP).unwrap();
+        let output = output(root, "w0");
+        let staging = oer_image_build::bundle::staging_directory(&output).unwrap();
+        std::fs::create_dir_all(&staging).unwrap();
+        let mut built = ImageBundle::new(&staging, &profile, profile.flash.clone().unwrap());
+        for segment in built.segments() {
+            std::fs::write(segment.file, b"fixture").unwrap();
+        }
+        built.checks.push(oer_image_checks::CheckRecord {
+            elf: oer_image_checks::CheckedElf::Runtime,
+            check: "interrupts".into(),
+            result: oer_image_checks::CheckResult::Failed("no bound".into()),
+        });
+        let published = built.publish(&output).unwrap();
+        let loaded = bundle(root, "w0").unwrap();
+        assert_eq!(loaded.checks, published.checks);
+        assert!(loaded.snapshot().is_ok());
     }
 
     #[test]

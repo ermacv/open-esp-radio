@@ -24,8 +24,9 @@ with a fixed fictitious identity: channel 1, locally administered BSSID
 cap. The bundle lives in `target/fw/w2-analysis/`; its `bundle.json` records
 `purpose: Analysis`, which the shared flash snapshot reader refuses for
 `flash`, `run` and HIL. It cannot be flashed. Machine code may differ from
-the stand build only because of the configuration constants. The stack and
-placement gates remain reports, without enforced checks.
+the stand build only because of the configuration constants. The interrupt-stack
+check is required for both ordinary and analysis builds; task and bootstrap
+stacks and placement remain reports.
 
 For every permitted channel 1–13, Allowed channels get one broadcast probe
 at the band's derived management rate followed by a 150 ms dwell; NO_IR
