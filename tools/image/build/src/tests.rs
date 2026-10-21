@@ -64,7 +64,7 @@ fn requested(placement: bool) -> Gates {
         enforced: Enforced::All,
         stack: true,
         placement,
-        interrupts: Some(oer_image_checks::interrupts::Required::Proven),
+        interrupts: Some(oer_image_checks::interrupts::Required::Product),
         audit: None,
     }
 }

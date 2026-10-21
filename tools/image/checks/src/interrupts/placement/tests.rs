@@ -406,9 +406,9 @@ fn summaries_and_full_report_headings_are_stable() {
     assert!(report.contains("\tbeta\tstrict\n"));
     // The measurements add no policy: the same check still gives exactly
     // the same result and warnings after rendering either report.
-    let before = stacks.check(super::super::Required::Partial).unwrap();
+    let before = stacks.check(super::super::Required::Diagnostic).unwrap();
     assert_eq!(
-        stacks.check(super::super::Required::Partial).unwrap(),
+        stacks.check(super::super::Required::Diagnostic).unwrap(),
         before
     );
 }

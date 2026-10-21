@@ -154,7 +154,7 @@ pub fn spec(
         },
         checks: Some(Gates {
             enforced,
-            ..Gates::all(Required::Proven)
+            ..Gates::all(Required::Product)
         }),
     })
 }
@@ -282,7 +282,7 @@ mod tests {
                 let gates = spec.checks.unwrap();
                 assert_eq!(gates.enforced, enforced);
                 assert!(gates.stack && gates.placement);
-                assert_eq!(gates.interrupts, Some(Required::Proven));
+                assert_eq!(gates.interrupts, Some(Required::Product));
                 if !analysis {
                     assert_eq!(spec.runtime_environment, runtime_env(image, None));
                 }
@@ -303,7 +303,7 @@ mod tests {
             let gates = spec.checks.unwrap();
             assert_eq!(gates.enforced, Enforced::Reported);
             assert!(gates.stack && gates.placement);
-            assert_eq!(gates.interrupts, Some(Required::Proven));
+            assert_eq!(gates.interrupts, Some(Required::Product));
             assert_eq!(spec.runtime_environment, runtime_env(image, stand));
         }
     }

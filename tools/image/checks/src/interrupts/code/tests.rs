@@ -107,11 +107,25 @@ fn a_shared_executor_and_task_function_stays_strict_and_psram_fails() {
     assert!(context.tasks.contains(&task));
     assert_eq!(stacks.code_placement.functions[&shared].role, Role::Strict);
     assert_eq!(context.task_roots, BTreeSet::from([task]));
-    for policy in [Required::Proven, Required::Partial] {
-        let error = stacks.check(policy).unwrap_err().to_string();
-        assert!(error.contains("interrupt handler code runs sample::shared from cached memory, reached from hart 0 P2"), "{error}");
-        assert!(error.contains("strict handler code in cached memory: 1 functions, 16 bytes"));
-    }
+    let error = stacks.check(Required::Product).unwrap_err().to_string();
+    assert!(
+        error.contains(
+            "interrupt handler code runs sample::shared from cached memory, reached from hart 0 P2"
+        ),
+        "{error}"
+    );
+    assert!(error.contains("strict handler code in cached memory: 1 functions, 16 bytes"));
+    let warnings = stacks.check(Required::Diagnostic).unwrap();
+    let placement: Vec<_> = warnings
+        .iter()
+        .filter(|w| w.contains("reported only"))
+        .collect();
+    assert_eq!(
+        placement,
+        [
+            "hart 0 P2: 1 strict functions, 16 bytes in cached memory (diagnostic image, reported only); see interrupt-placement.txt"
+        ]
+    );
 }
 
 #[test]
@@ -120,7 +134,7 @@ fn p2_task_psram_and_strict_rom_are_allowed_but_task_flash_is_not() {
         let (stacks, shared, task) = fixture(strict, Location::Psram, 2);
         assert_eq!(stacks.code_placement.functions[&shared].location, strict);
         assert_eq!(stacks.code_placement.functions[&task].role, Role::Task);
-        let warnings = stacks.check(Required::Proven).unwrap();
+        let warnings = stacks.check(Required::Product).unwrap();
         assert_eq!(warnings.len(), 1);
         assert!(warnings[0].contains("executor invariant"));
         let report = stacks.render();
@@ -130,10 +144,12 @@ fn p2_task_psram_and_strict_rom_are_allowed_but_task_flash_is_not() {
         );
     }
     let (stacks, _, _) = fixture(Location::Sram, Location::Flash, 2);
-    let error = stacks.check(Required::Proven).unwrap_err().to_string();
+    let error = stacks.check(Required::Product).unwrap_err().to_string();
     assert!(
         error.contains("P2 task code runs sample::task from cached flash, reached from hart 0 P2")
     );
+    let warnings = stacks.check(Required::Diagnostic).unwrap();
+    assert!(warnings.iter().any(|w| w == "hart 0 P2: 1 P2 task functions, 32 bytes in cached flash (diagnostic image, reported only); see interrupt-placement.txt"), "{warnings:?}");
 }
 
 #[test]
@@ -143,7 +159,7 @@ fn another_priority_cannot_borrow_p2s_psram_permission() {
     assert!(stacks.code_placement.contexts[0].tasks.is_empty());
     assert!(
         stacks
-            .check(Required::Proven)
+            .check(Required::Product)
             .unwrap_err()
             .to_string()
             .contains("reached from hart 0 P1")
@@ -155,17 +171,63 @@ fn unknown_image_memory_is_not_rom_or_an_admitted_task_region() {
     let (stacks, _, _) = fixture(Location::Other, Location::Psram, 2);
     assert!(
         stacks
-            .check(Required::Proven)
+            .check(Required::Product)
             .unwrap_err()
             .to_string()
             .contains("outside SRAM/ROM")
     );
+    let warnings = stacks.check(Required::Diagnostic).unwrap();
+    assert!(warnings.iter().any(|w| w.contains("hart 0 P2: 1 strict functions, 16 bytes outside SRAM/ROM (diagnostic image, reported only); see interrupt-placement.txt")), "{warnings:?}");
     let (stacks, _, _) = fixture(Location::Sram, Location::Other, 2);
     assert!(
         stacks
-            .check(Required::Proven)
+            .check(Required::Product)
             .unwrap_err()
             .to_string()
             .contains("outside SRAM/ROM/PSRAM")
+    );
+    let warnings = stacks.check(Required::Diagnostic).unwrap();
+    assert!(warnings.iter().any(|w| w.contains("hart 0 P2: 1 P2 task functions, 32 bytes outside SRAM/ROM/PSRAM (diagnostic image, reported only); see interrupt-placement.txt")), "{warnings:?}");
+}
+
+#[test]
+fn diagnostic_warnings_group_functions_by_violation_and_context() {
+    let (mut stacks, shared, _) = fixture(Location::Psram, Location::Flash, 2);
+    stacks.code_placement.functions.insert(
+        shared + 0x40,
+        PlacedFunction {
+            size: 24,
+            role: Role::Strict,
+            location: Location::Flash,
+        },
+    );
+    stacks.code_placement.contexts[0]
+        .strict
+        .insert(shared + 0x40);
+    let mut other_context = ContextCode {
+        hart: 1,
+        level: 1,
+        strict: BTreeSet::from([shared]),
+        tasks: BTreeSet::new(),
+        task_roots: BTreeSet::new(),
+        cached_paths: BTreeMap::new(),
+    };
+    // A duplicate function in a context contributes once; the same function
+    // reached from another context belongs in that context's warning too.
+    other_context.strict.insert(shared);
+    stacks.code_placement.contexts.push(other_context);
+    let warnings = stacks.check(Required::Diagnostic).unwrap();
+    let placement: Vec<_> = warnings
+        .iter()
+        .filter(|w| w.contains("reported only"))
+        .map(String::as_str)
+        .collect();
+    assert_eq!(
+        placement,
+        [
+            "hart 0 P2: 2 strict functions, 40 bytes in cached memory (diagnostic image, reported only); see interrupt-placement.txt",
+            "hart 0 P2: 1 P2 task functions, 32 bytes in cached flash (diagnostic image, reported only); see interrupt-placement.txt",
+            "hart 1 P1: 1 strict functions, 16 bytes in cached memory (diagnostic image, reported only); see interrupt-placement.txt",
+        ]
     );
 }
