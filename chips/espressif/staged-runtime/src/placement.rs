@@ -1,6 +1,7 @@
 //! Statics and functions in the sections the runtime linker script places:
 //! SRAM data that interrupt handlers reach without a PSRAM access, SRAM
-//! text for fatal paths that run with caches unavailable, and records in
+//! text for interrupt handlers, the executor code they run and fatal paths,
+//! and records in
 //! reset-retained RTC fast memory. Each macro names only sections the script
 //! maps, so placing an item needs no unsafe code in the image.
 
@@ -36,9 +37,9 @@ macro_rules! placed_static {
     };
 }
 
-/// A function in SRAM text: `rwtext` (`.rwtext.<name>`) or `critical_text`
-/// (`.flash.critical.text.<name>`, which the script keeps), for a fatal path
-/// that runs with caches unavailable.
+/// SRAM text for interrupt handlers, the executor code they run and fatal paths.
+/// Use `rwtext` (`.rwtext.<name>`) or `critical_text`
+/// (`.flash.critical.text.<name>`, which the script keeps).
 ///
 /// ```ignore
 /// oer_espressif_staged_runtime::sram_fn! {
@@ -48,15 +49,15 @@ macro_rules! placed_static {
 /// ```
 #[macro_export]
 macro_rules! sram_fn {
-    (in rwtext $section:literal; $(#[$attribute:meta])* $vis:vis fn $($item:tt)*) => {
+    (in rwtext $section:literal; $(#[$attribute:meta])* $vis:vis $(extern $abi:literal)? fn $($item:tt)*) => {
         $(#[$attribute])*
         #[unsafe(link_section = concat!(".rwtext.", $section))]
-        $vis fn $($item)*
+        $vis $(extern $abi)? fn $($item)*
     };
-    (in critical_text $section:literal; $(#[$attribute:meta])* $vis:vis fn $($item:tt)*) => {
+    (in critical_text $section:literal; $(#[$attribute:meta])* $vis:vis $(extern $abi:literal)? fn $($item:tt)*) => {
         $(#[$attribute])*
         #[unsafe(link_section = concat!(".flash.critical.text.", $section))]
-        $vis fn $($item)*
+        $vis $(extern $abi)? fn $($item)*
     };
 }
 

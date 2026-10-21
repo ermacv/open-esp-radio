@@ -39,6 +39,10 @@ mod executor;
 #[cfg(any(feature = "chip", test))]
 mod level;
 #[cfg(feature = "chip")]
+pub mod systimer;
+#[cfg(any(feature = "chip", test))]
+mod systimer_ack;
+#[cfg(feature = "chip")]
 mod time_driver;
 #[cfg(any(feature = "chip", test))]
 mod timer_queue;

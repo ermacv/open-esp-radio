@@ -2,7 +2,6 @@
 use esp_hal::{
     interrupt::{InterruptRoutes, software::SoftwareInterrupt},
     peripherals::{PSRAM, RNG, SYSTIMER},
-    timer::systimer::AlarmBank,
     usb::usb_serial_jtag::UsbPadControl,
 };
 use oer_espressif_esp_hal_soc::{
@@ -10,6 +9,7 @@ use oer_espressif_esp_hal_soc::{
     watchdog::{DeadlineBudget, DeadlineWatchdog},
 };
 use oer_espressif_executor::{DoorbellAcknowledger, Executor};
+use oer_espressif_executor::systimer::{Comparator, ComparatorWriter};
 
 pub fn executor(line: SoftwareInterrupt<'static, 2>) {
     let _first = Executor::<2>::new(line);
@@ -26,14 +26,14 @@ pub fn no_free_acknowledgement() {
     oer_espressif_executor::acknowledge::<3>(); // ui-error: E0425
 }
 pub fn timer(timer: SYSTIMER<'static>) {
-    let (mut bank, mut zero, mut one, mut two) = AlarmBank::adopt(timer);
+    let (mut bank, mut zero, mut one, mut two) = ComparatorWriter::adopt(timer);
     bank.bind(&mut zero);
     bank.bind(&mut one);
     bank.bind(&mut two);
-    bank.program(0, Some(100));
+    bank.program(Comparator::Zero, Some(100));
     zero.acknowledge();
     #[cfg(ui_reject)]
-    let _second = AlarmBank::adopt(timer); // ui-error: E0382
+    let _second = ComparatorWriter::adopt(timer); // ui-error: E0382
 }
 pub fn entropy(rng: RNG<'static>) {
     let mut owner = Entropy::new(rng);

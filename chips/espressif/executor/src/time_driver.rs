@@ -1,5 +1,5 @@
 //! The Embassy time driver: one timer queue and one SYSTIMER comparator per
-//! executor, and one writer of the SYSTIMER registers.
+//! executor, and our own sole writer of the SYSTIMER comparator registers.
 //!
 //! - Each executor bound with [`bind`] owns a queue that only its own context
 //!   touches: a timer is registered while the executor polls the task, and
@@ -19,9 +19,10 @@
 //!   programs that executor's comparator. A torn read is skipped: the
 //!   publisher pends the writer again after every write.
 //!
-//! [`init`] consumes the SYSTIMER singleton. After it, esp-hal writes only
-//! `UNIT0_OP` (the counter latch of `Instant::now`), which no comparator
-//! shares.
+//! [`init`] consumes esp-hal's SYSTIMER singleton through [`ComparatorWriter`].
+//! Comparator programming and W1C acknowledgement belong to this executor.
+//! `Instant::now()` and `SystemTimer::ticks_per_second()` stay with esp-hal:
+//! its `UNIT0_OP` counter latch shares no word with the comparators.
 
 use core::{cell::UnsafeCell, task::Waker};
 
@@ -31,7 +32,7 @@ use esp_hal::{
     peripherals::{Interrupt, SYSTIMER},
     system::Cpu,
     time::Instant,
-    timer::systimer::{AlarmAcknowledger, AlarmBank, SystemTimer},
+    timer::systimer::SystemTimer,
 };
 use oer_interrupt_table::Entry;
 use portable_atomic::{AtomicBool, AtomicU8, AtomicU32, Ordering};
@@ -39,16 +40,17 @@ use portable_atomic::{AtomicBool, AtomicU8, AtomicU32, Ordering};
 use crate::{
     deadline_cell::DeadlineCell,
     executor::{NO_EXECUTOR, SOFTWARE_INTERRUPT_COUNT, executor_of, pend, running},
+    systimer::{Comparator, ComparatorAcknowledger, ComparatorWriter},
     timer_queue::WakeQueue,
 };
 
 enum Acknowledger {
-    Zero(AlarmAcknowledger<'static, 0>),
-    One(AlarmAcknowledger<'static, 1>),
-    Two(AlarmAcknowledger<'static, 2>),
+    Zero(ComparatorAcknowledger<0>),
+    One(ComparatorAcknowledger<1>),
+    Two(ComparatorAcknowledger<2>),
 }
 impl Acknowledger {
-    fn bind(&mut self, bank: &mut AlarmBank<'static>) {
+    fn bind(&mut self, bank: &mut ComparatorWriter) {
         match self {
             Self::Zero(ack) => bank.bind(ack),
             Self::One(ack) => bank.bind(ack),
@@ -67,8 +69,8 @@ impl Acknowledger {
 
 // The boot context hands the bank to its one writer executor. Alarm ISRs
 // receive independent W1C owners and never borrow BANK.
-static BANK_STORAGE: static_cell::StaticCell<AlarmBank<'static>> = static_cell::StaticCell::new();
-static BANK: oer_memory::HandlerCell<AlarmBank<'static>> = oer_memory::HandlerCell::new();
+static BANK_STORAGE: static_cell::StaticCell<ComparatorWriter> = static_cell::StaticCell::new();
+static BANK: oer_memory::HandlerCell<ComparatorWriter> = oer_memory::HandlerCell::new();
 static ACK_STORAGE: [static_cell::StaticCell<Acknowledger>; COMPARATOR_COUNT] =
     [const { static_cell::StaticCell::new() }; COMPARATOR_COUNT];
 static ACKNOWLEDGERS: [oer_memory::HandlerCell<Acknowledger>; COMPARATOR_COUNT] =
@@ -183,7 +185,7 @@ pub fn init<const WRITER_SWI: u8, A>(systimer: SYSTIMER<'static>, alarm: A)
 where
     A: Entry<Source = Interrupt, Level = Priority, Core = Cpu>,
 {
-    let (bank, zero, one, two) = AlarmBank::adopt(systimer);
+    let (bank, zero, one, two) = ComparatorWriter::adopt(systimer);
     assert!(
         BANK.install(BANK_STORAGE.init(bank)).is_ok(),
         "the SYSTIMER bank owner is already installed"
@@ -280,7 +282,7 @@ where
 /// context only. A deadline already past fires at once: the S31 comparator
 /// raises its interrupt when enabled with a target behind the counter
 /// (ESP-IDF `SYSTIMER_LL_ALARM_MISS_COMPENSATE`).
-fn program(comparator: u8, deadline: u64) {
+fn program(comparator: Comparator, deadline: u64) {
     let ticks = (deadline != u64::MAX).then(|| {
         deadline
             .saturating_mul(u64::from(TICKS_PER_MICROSECOND.load(Ordering::Relaxed)))
@@ -292,16 +294,16 @@ fn program(comparator: u8, deadline: u64) {
     );
 }
 
+oer_espressif_staged_runtime::sram_fn! {
+    in rwtext "time_driver.rearm";
 /// After `slot`'s queue changed: program its comparator (the writer) or
 /// publish its next deadline to the writer.
-#[esp_hal::ram]
-fn rearm(swi: u8, slot: &mut Slot, now: u64) {
+fn rearm(swi: u8, comparator: Comparator, slot: &mut Slot, now: u64) {
     let next = slot.queue.next_deadline();
     if next == slot.armed {
         return;
     }
     slot.armed = next;
-    let comparator = COMPARATOR_OF[swi as usize].load(Ordering::Relaxed);
     let writer = WRITER.load(Ordering::Relaxed);
     #[cfg(oer_profile)]
     let start = now;
@@ -319,20 +321,21 @@ fn rearm(swi: u8, slot: &mut Slot, now: u64) {
     }
     let _ = now;
 }
+}
 
+oer_espressif_staged_runtime::sram_fn! {
+    in rwtext "time_driver.service";
 /// Serve executor `swi`'s timers, in its context before it polls: dispatch
 /// its expired timers and rearm; the writer also programs the comparators
 /// whose executors published a new deadline.
-#[esp_hal::ram]
 pub(crate) fn service(swi: u8) {
-    if COMPARATOR_OF
+    let Some(comparator) = COMPARATOR_OF
         .get(swi as usize)
-        .is_none_or(|comparator| comparator.load(Ordering::Acquire) == NO_COMPARATOR)
-    {
+        .and_then(|assignment| Comparator::from_index(assignment.load(Ordering::Acquire)))
+    else {
         return;
-    }
+    };
     let _ = with_slot(swi, |slot| {
-        let comparator = COMPARATOR_OF[swi as usize].load(Ordering::Relaxed);
         let fired = ALARM_FIRED[comparator as usize].swap(false, Ordering::AcqRel);
         let start = now();
         #[cfg(oer_profile)]
@@ -349,11 +352,12 @@ pub(crate) fn service(swi: u8) {
         slot.observation.dispatch(start, now());
         // A dispatched alarm leaves the comparator idle: arm it again.
         slot.armed = u64::MAX - 1;
-        rearm(swi, slot, start);
+        rearm(swi, comparator, slot, start);
         if swi == WRITER.load(Ordering::Relaxed) {
             program_published(slot);
         }
     });
+}
 }
 
 /// The writer programs every other executor's comparator whose published
@@ -361,8 +365,11 @@ pub(crate) fn service(swi: u8) {
 /// pass, which the publisher's pend brings.
 fn program_published(writer: &mut Slot) {
     for (swi, cell) in PUBLISHED.iter().enumerate() {
-        let comparator = COMPARATOR_OF[swi].load(Ordering::Acquire);
-        if comparator == NO_COMPARATOR || swi as u8 == WRITER.load(Ordering::Relaxed) {
+        let Some(comparator) = Comparator::from_index(COMPARATOR_OF[swi].load(Ordering::Acquire))
+        else {
+            continue;
+        };
+        if swi as u8 == WRITER.load(Ordering::Relaxed) {
             continue;
         }
         let Some(published) = cell.read() else {
@@ -376,10 +383,11 @@ fn program_published(writer: &mut Slot) {
     }
 }
 
+oer_espressif_staged_runtime::sram_fn! {
+    in rwtext "time_driver.alarm_interrupt";
 /// The interrupt-table handler of comparator `COMPARATOR`'s alarm
 /// (`SYSTIMER_TARGET<COMPARATOR>`): it acknowledges the alarm and pends the
 /// comparator's executor. It writes no other register and touches no queue.
-#[esp_hal::ram]
 pub fn alarm_interrupt<const COMPARATOR: u8>() {
     #[cfg(oer_profile)]
     let entered = now();
@@ -401,6 +409,7 @@ pub fn alarm_interrupt<const COMPARATOR: u8>() {
     if executor != NO_EXECUTOR {
         pend(executor);
     }
+}
 }
 
 struct EmbassyTimeDriver;
@@ -449,15 +458,16 @@ impl Driver for EmbassyTimeDriver {
             waker.wake_by_ref();
             return;
         };
-        assert!(
-            COMPARATOR_OF[swi as usize].load(Ordering::Acquire) != NO_COMPARATOR,
-            "executor {swi} has no timer comparator"
-        );
+        let Some(comparator) =
+            Comparator::from_index(COMPARATOR_OF[swi as usize].load(Ordering::Acquire))
+        else {
+            panic!("executor {swi} has no timer comparator");
+        };
         let registered = with_slot(swi, |slot| {
             #[cfg(oer_profile)]
             slot.observation.registration(at, now());
             if let Some(now) = slot.queue.schedule_wake(at, waker, now) {
-                rearm(swi, slot, now);
+                rearm(swi, comparator, slot, now);
             }
         });
         if registered.is_none() {
