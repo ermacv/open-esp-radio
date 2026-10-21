@@ -271,6 +271,7 @@ impl Radio {
                     Ok(())
                 };
                 let closed = self.exit_capture(current.radio).await;
+                report_capture_stop(&observed, &closed, self.domain.attachment().rf_closed());
                 closed?;
                 observed?;
                 Ok(Answer::Stopped(CaptureStopped {
@@ -624,6 +625,13 @@ impl Radio {
         }
         Err(RejectReason::Internal)
     }
+}
+
+#[inline(never)]
+fn report_capture_stop(observed: &Result<()>, closed: &Result<()>, rf_closed: bool) {
+    oer_esp32s31_board::rom::print_fmt(format_args!(
+        "OPEN_RADIO_HIL capture-stop observation={observed:?} close={closed:?} rf-closed={rf_closed}\n"
+    ));
 }
 
 struct Sources<'a> {
