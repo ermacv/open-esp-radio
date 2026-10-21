@@ -123,13 +123,17 @@ impl<const N: usize, const B: usize, const S: usize, const Q: usize, X: SignalEx
         routes: &mut impl WifiIrqRoutes,
     ) -> Result<(), WifiRxCause> {
         let (mut mac, dma) = registers.split_rx_dma();
+        self.frontier
+            .prepare_with_storage(dma, self.rx)
+            .map_err(WifiRxCause::Start)?;
+        mac.prepare_mac_runtime(self.frontier.prepared().map_err(WifiRxCause::Start)?);
         activate_promiscuous_receive(&mut mac);
         routes.enable();
+        super::storage::walker_enable_settle(timer).await;
         self.frontier
-            .start_with_storage(timer, dma, self.rx)
-            .await
+            .start_prepared(dma)
             .map_err(WifiRxCause::Start)?;
-        mac.resume_mac_runtime();
+        mac.start_mac_runtime(self.frontier.live_mut().map_err(WifiRxCause::Start)?);
         Ok(())
     }
 
@@ -270,6 +274,7 @@ impl<const N: usize, const B: usize, const S: usize, const Q: usize, X: SignalEx
                 self.frontier
                     .prepare_with_storage(dma, self.rx)
                     .map_err(WifiRxCause::Start)?;
+                mac.prepare_mac_runtime(self.frontier.prepared().map_err(WifiRxCause::Start)?);
                 activate_promiscuous_receive(&mut mac);
                 routes.enable();
                 let deadline = timer
@@ -291,7 +296,7 @@ impl<const N: usize, const B: usize, const S: usize, const Q: usize, X: SignalEx
         self.frontier
             .start_prepared(dma)
             .map_err(WifiRxCause::Start)?;
-        mac.resume_mac_runtime();
+        mac.start_mac_runtime(self.frontier.live_mut().map_err(WifiRxCause::Start)?);
         self.port_settle = None;
         Poll::Ready(Ok(()))
     }

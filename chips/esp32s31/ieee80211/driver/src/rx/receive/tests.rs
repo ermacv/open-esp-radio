@@ -94,6 +94,8 @@ struct Host<X: SignalExecutor = oer_interrupt_table::signal::host::Host> {
     /// The doorbell rings but its handler never runs.
     deaf: Cell<bool>,
     runtime_active: Cell<u8>,
+    mac_started: Cell<bool>,
+    core_prepared: Cell<bool>,
     cell: HandlerCell<HostLine<X>>,
 }
 
@@ -112,6 +114,8 @@ impl<X: SignalExecutor> Host<X> {
             routed: Cell::new(false),
             deaf: Cell::new(false),
             runtime_active: Cell::new(0),
+            mac_started: Cell::new(false),
+            core_prepared: Cell::new(false),
             cell: HandlerCell::new(),
         }
     }
@@ -177,6 +181,12 @@ impl<X: SignalExecutor> RxBufferFullCounter for HostRadio<X> {
 /// events.
 impl<X: SignalExecutor> RxWalkerJournal for Host<X> {
     fn record(&self, operation: RxWalkerOperation) {
+        if operation == RxWalkerOperation::Enable {
+            assert!(
+                self.core_prepared.get(),
+                "the walker needs the prepared core clocked"
+            );
+        }
         if operation == RxWalkerOperation::Stop {
             Host::record(self, Event::WalkerStop);
         }
@@ -203,7 +213,28 @@ impl<X: SignalExecutor> MacRuntimeStopHardware for HostRadio<X> {
     }
 
     fn resume_mac_runtime(&mut self) {
+        self.host.mac_started.set(self.host.core_prepared.get());
         self.host.record(Event::RuntimeResume);
+    }
+}
+
+impl<X: SignalExecutor> MacRuntimeStartHardware for HostRadio<X> {
+    fn prepare_mac_runtime<const N: usize>(
+        &mut self,
+        ring: &oer_esp32s31_hal::ieee80211::dma::rx_ring::RxRingStopped<'_, N>,
+    ) {
+        assert!(!self.host.walker.borrow().walker_enabled);
+        assert!(ring.topology_snapshot().valid);
+        self.host.core_prepared.set(true);
+    }
+
+    fn start_mac_runtime<const N: usize>(
+        &mut self,
+        _ring: &oer_esp32s31_hal::ieee80211::dma::rx_ring::RxRingLive<'_, N>,
+    ) {
+        assert!(self.host.walker.borrow().walker_enabled);
+        assert!(self.host.core_prepared.get());
+        self.resume_mac_runtime();
     }
 }
 
@@ -475,6 +506,44 @@ impl<X: SignalExecutor> Harness<X> {
         self.host.walker.borrow_mut().clear_operations();
         self
     }
+}
+
+#[test]
+fn cold_start_clocks_the_prepared_core_but_holds_rx_until_walker_is_live() {
+    let mut harness = harness();
+    harness.poll_once();
+    assert_eq!(harness.rx.lifecycle_state(), RxDmaArenaState::Prepared);
+    assert!(!harness.host.walker.borrow().walker_enabled);
+    assert!(!harness.host.mac_started.get());
+    assert!(harness.host.core_prepared.get());
+    assert!(!harness.host.take_log().contains(&Event::RuntimeResume));
+
+    harness.settle();
+    assert_eq!(harness.rx.lifecycle_state(), RxDmaArenaState::Live);
+    assert!(harness.host.mac_started.get());
+    assert_eq!(
+        harness
+            .host
+            .walker
+            .borrow()
+            .operation_count(RxWalkerOperation::Enable),
+        1
+    );
+    assert_eq!(harness.host.take_log(), [Event::RuntimeResume]);
+    assert!(harness.stop.try_exit().is_none());
+}
+
+#[test]
+fn cold_start_never_opens_mac_when_walker_enable_is_unconfirmed() {
+    let mut harness = harness();
+    harness.poll_once();
+    // The walker no longer agrees with the stopped capability: the enable
+    // model refuses a second enable, so no live-ring proof is returned.
+    harness.host.walker.borrow_mut().walker_enabled = true;
+    harness.settle();
+    assert!(!harness.host.mac_started.get());
+    assert_eq!(harness.rx.lifecycle_state(), RxDmaArenaState::ResetRequired);
+    assert!(!harness.host.take_log().contains(&Event::RuntimeResume));
 }
 
 #[test]
@@ -930,7 +999,7 @@ fn a_mask_never_confirmed_quarantines_without_a_stop() {
 }
 
 #[test]
-fn an_occupied_cell_refuses_the_epoch_before_any_route() {
+fn cold_start_refuses_an_occupied_cell_without_opening_mac() {
     let mut first = harness().started();
     // A second epoch on the same cell: its line is refused and masked by
     // the executor itself, and its routes are never enabled.
@@ -978,6 +1047,7 @@ fn an_occupied_cell_refuses_the_epoch_before_any_route() {
         host.take_log(),
         [Event::PromiscuousOn, Event::PromiscuousOff]
     );
+    assert!(!host.mac_started.get());
     // The first epoch still runs.
     first.frame(50);
     first.settle();

@@ -15,7 +15,7 @@ the survey (`oer-ieee80211-runtime::survey`).
 
 | Phase | What happens |
 | --- | --- |
-| bring-up | join, track, MAC cold start; the runner binds and starts |
+| bring-up | join, track, MAC preparation; the runner binds the ring and starts the MAC with its DMA proof |
 | first frame | at most 5 s for the first staged frame |
 | window | 10 s from the first frame: every frame to the survey |
 | stress | 5 s: a P2 timer every 37 µs, a P1 timer every 113 µs |

@@ -164,6 +164,14 @@ buffer. The cold publication is the epoch's only BASE write: BASE = R,
 accepted tail and rings the doorbell, whose resumption of an exhausted
 walker H1 shows.
 
+Cold MAC preparation holds both the common core gates and runtime stop.
+After BASE, the role owner supplies `RxRingStopped` to clock the core while
+retaining runtime stop. It opens the walker, then supplies `RxRingLive` to
+release MAC RX. Both types contain the private DMA binding. Promiscuous
+policy leaves MAC_CONTROL and its stop request intact. This orders first
+BASE before MAC RX without a new readiness wait. W0 verifies only MAC
+prepared: its gates stay closed and it publishes no ring.
+
 - **Why R.** H2 shows that a bare BASE write also works, but BASE is
   then a second publication path whose ordering against the doorbell and
   the walker's own fetches is unknown, and the vendor's reload suffix writes

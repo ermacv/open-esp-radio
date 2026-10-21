@@ -478,9 +478,9 @@ pub fn materialize_esp32s31_wifi_role<W, L>(
 /// Close the cold polling phase and enter the reusable stopped-runtime state.
 ///
 /// This is the only normal conversion from the tracked client with its MAC
-/// up. It masks and acknowledges cold interrupt state before exposing the
-/// setup token used by a finite task-owned interrupt epoch. It touches Wi-Fi
-/// MAC registers only.
+/// prepared and common gates closed. It masks and acknowledges cold interrupt
+/// state before exposing the setup token used by a finite task-owned interrupt
+/// epoch. It touches Wi-Fi MAC registers only.
 pub(crate) fn enter_esp32s31_wifi_runtime<W>(
     mut clocked: WifiClocked,
     member: Member<Wifi, Tracked>,
@@ -499,7 +499,7 @@ pub(crate) fn enter_esp32s31_wifi_runtime<W>(
         disable_all_role_receive_registers(&mut mac);
         // Complete the role-neutral half of the vendor no-power-save lifecycle.
         // The first role arms its replacement RX ring while this request remains
-        // asserted and resumes the frontend only after those credits are live.
+        // asserted, then supplies its live DMA proof to open the prepared MAC.
         mac.request_channel_stop();
     }
     WifiStopped {

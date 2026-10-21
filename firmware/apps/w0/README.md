@@ -12,14 +12,17 @@ system timer, and `LEVELS` checks the level order when the image compiles.
    `FullForCache`; the cache is not kept) and the backend powers, clocks and
    enters Wi-Fi.
 2. `track`: the initial tracking, the Wi-Fi RX enable, channel 6 (20 MHz) and
-   the MAC cold start.
+   cold MAC preparation: handshake, configuration and IRQ policy, with every
+   common MAC gate held closed. W0 checks those gates before release; it
+   publishes no BASE and does not call runtime MAC start without a ring.
 3. `leave`: the client leaves and the actor closes RF.
 
 The log prints the calibration identity, the calibration path and the
 registration's duration, the longest not-ready runs of the TX DC and PWDET
 SAR readiness waits against their bound, the RF calibration diagnostics, the
 initial tracking's duration, the PHY temperature (sensor units) and the MAC
-handshake samples, then `OER-RESULT: pass w0`.
+handshake samples with `mac_prepared=true`, then `OER-RESULT: pass w0`.
+Runtime MAC up is exercised by W1/W2/R1 with an RX-ring proof.
 
 ```sh
 cargo fw run w0 --board s31-a

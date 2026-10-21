@@ -26,7 +26,8 @@ pub(super) enum Operation {
     InitializeTxRxSuffix,
     InitializeColdReceivePolicy,
     DisablePhyLowRate,
-    EnableMacInterrupts(MacInterruptMask),
+    HoldMacRuntime,
+    PrepareMacInterrupts(MacInterruptMask),
     ProgramInterfaceAddress(MacInterface, [u8; 6]),
     ApplyStaLinkPolicy([u8; 6]),
     InstallCcmp(MacInterface, u8, MacCcmpKeyIdentity),
@@ -58,6 +59,8 @@ pub(super) struct MockMmio {
     pub(super) cold_handshake_ready_after: Option<u32>,
     pub(super) cold_handshake_samples: u32,
     pub(super) cold_start_clock_trace: Option<ColdStartClockTrace>,
+    pub(super) mac_gates_closed: bool,
+    pub(super) runtime_stop_held: bool,
     pub(super) tx_completions: [Option<MacTxCompletionObservation>; 4],
     pub(super) tx_timeout_pending: [bool; 4],
     pub(super) tx_collision_pending: [bool; 4],
@@ -441,10 +444,21 @@ impl MacColdHeHardware for MockMmio {
     }
 }
 
-impl MacColdEnableHardware for MockMmio {
-    fn enable_mac_interrupts(&mut self, event_mask: MacInterruptMask) {
+impl MacColdPrepareHardware for MockMmio {
+    fn hold_mac_runtime(&mut self) {
+        self.mac_gates_closed = true;
+        self.runtime_stop_held = true;
+        self.operations.push(Operation::HoldMacRuntime);
+    }
+
+    fn prepare_mac_interrupts(&mut self, event_mask: MacInterruptMask) {
+        assert!(
+            self.mac_gates_closed,
+            "cold IRQ setup must leave the core gated"
+        );
+        assert!(self.runtime_stop_held);
         self.operations
-            .push(Operation::EnableMacInterrupts(event_mask));
+            .push(Operation::PrepareMacInterrupts(event_mask));
     }
 }
 

@@ -3,11 +3,12 @@
 #![forbid(unsafe_code)]
 
 //! W0: the radio system's first run on the chip. The actor registers the PHY
-//! domain for Wi-Fi's `join`, tracks it, brings the MAC up for `track` and
+//! domain for Wi-Fi's `join`, tracks it, prepares the MAC for `track` and
 //! closes RF after `leave`; the image logs the calibration path, the
 //! registration and tracking durations, the temperature and the longest
 //! not-ready runs of the bounded readiness waits, then prints
-//! `OER-RESULT: pass w0`. Nothing is transmitted.
+//! `OER-RESULT: pass w0`. MAC gates stay closed; no BASE or runtime start is
+//! published without a ring. Nothing is transmitted.
 //!
 //! eFuse is only read: the base MAC and its extension word for the
 //! calibration identity, and the interface addresses esp-hal derives from
@@ -262,7 +263,7 @@ async fn run(
         config,
     )
     .await;
-    let stopped = match started {
+    let mut stopped = match started {
         Ok(stopped) => stopped,
         Err(RadioStartFailure::Join { failed, .. }) => {
             let _ = write!(console, "OER w0 join failed cause={:?}\r\n", failed.cause);
@@ -273,6 +274,9 @@ async fn run(
             return Err("track");
         }
     };
+    if !stopped.radio_mut().0.mac_core_gates_closed() {
+        return Err("mac-gates-open");
+    }
     let report = stopped.start_report();
     match report.phy {
         PhyPreparation::Registered {
@@ -304,7 +308,7 @@ async fn run(
     }
     let _ = write!(
         console,
-        "OER w0 track tracking_us={:?} temperature={:?} mac_handshake_samples={} mac_handshake_observations={}\r\n",
+        "OER w0 track mac_prepared=true tracking_us={:?} temperature={:?} mac_handshake_samples={} mac_handshake_observations={}\r\n",
         report.track.tracking_micros,
         report.track.temperature,
         report.track.mac.handshake_samples,

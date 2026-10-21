@@ -478,6 +478,8 @@ where
         };
         let mac_outcome = {
             let mut hal = wifi.cold_mac_hal(&mut self.radio);
+            // Track prepares MAC configuration and IRQs with its common gates
+            // held. Only the later runtime owner can supply an RX-ring proof.
             initialize_wifi_mac(&mut sources, &mut hal, &self.timer, mac).await
         };
         match mac_outcome {

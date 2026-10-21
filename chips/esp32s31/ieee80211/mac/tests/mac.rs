@@ -23,8 +23,8 @@ use {
         ieee80211::init::{
             MAC_COLD_HANDSHAKE_DEADLINE, MacCoexEvent, MacCoexPti, MacCoexPtiSource,
             MacColdAntennaHardware, MacColdCoexHardware, MacColdCoexPti, MacColdCryptoHardware,
-            MacColdEnableHardware, MacColdHalTailHardware, MacColdHandshakeHardware,
-            MacColdHeHardware, MacColdLastRxBufferHardware, MacColdRxBufferHardware,
+            MacColdHalTailHardware, MacColdHandshakeHardware, MacColdHeHardware,
+            MacColdLastRxBufferHardware, MacColdPrepareHardware, MacColdRxBufferHardware,
             MacColdRxPolicyHardware, MacColdStartConfig, MacColdStartError, MacColdTxRxHardware,
             MacDelayEntropy, MacLowRateHardware, MacResetHardware, MacSlowClockCalibration,
             MacSlowClockCalibrationSource, MacTxPowerSource, initialize_wifi_mac,

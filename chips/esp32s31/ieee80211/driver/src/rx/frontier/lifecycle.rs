@@ -200,6 +200,13 @@ impl<'storage, const COUNT: usize, const DMA_BUFFER_SIZE: usize>
         }
     }
 
+    pub(crate) fn prepared(&self) -> Result<&RxRingStopped<'storage, COUNT>, RxFrontierError> {
+        match &self.state {
+            RxFrontierState::Prepared(ring) => Ok(ring),
+            _ => Err(RxFrontierError::OwnerUnavailable),
+        }
+    }
+
     /// Read one descriptor image in any owned, non-vacant RX phase.
     ///
     /// This is observation only: callers receive no descriptor mutation or

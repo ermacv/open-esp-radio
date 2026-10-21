@@ -11,10 +11,8 @@ impl WifiRadioRegisters {
     /// `BLOB_LIBPP_HAL_SNIFFER_ENABLE`, and the register identity independently
     /// confirmed by `BLOB_LIBPP_HAL_SNIFFER_MISC`.
     pub fn configure_open_mac_promiscuous_receive(&mut self) {
-        crate::svd::zero_register_write::open_mac_control_cold(
-            &self.peripherals.wifi_mac.wifi_mac_control,
-        );
-
+        // Keep MAC_CONTROL intact: its stop request belongs to the runtime
+        // lifecycle and is released only with a prepared, live walker.
         let filter = &self.peripherals.wifi_mac.wifi_mac_rx_filter;
         let control = filter.policy(3);
         // Every line below is a separate fresh-read RMW in the complete

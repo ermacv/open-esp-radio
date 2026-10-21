@@ -4,8 +4,8 @@
 //! The Wi-Fi bring-up and common MAC startup happen once per Wi-Fi epoch,
 //! through the client's membership cell: `join` powers and clocks the
 //! client and enters it into the shared PHY domain, and `track` runs the
-//! initial tracking, the RX enable, the initial channel and the MAC cold
-//! start; the actor does the shared steps of both. Station, access-point,
+//! initial tracking, the RX enable, the initial channel and cold MAC
+//! preparation; the actor does the shared steps of both. Station, access-point,
 //! scan and monitor owners are materialized later from the returned stopped
 //! frontier; startup therefore cannot accidentally lock the radio into the
 //! first role an application happens to use.
@@ -119,7 +119,7 @@ pub struct WifiStartReport {
     pub epoch: RfEpoch,
     /// How the join prepared the PHY domain.
     pub phy: PhyPreparation,
-    /// The initial tracking, TX power profile and MAC cold start.
+    /// The initial tracking, TX power profile and cold MAC preparation.
     pub track: TrackReport,
 }
 

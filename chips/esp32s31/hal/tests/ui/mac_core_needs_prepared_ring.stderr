@@ -1,0 +1,15 @@
+error[E0308]: mismatched types
+  --> tests/ui/mac_core_needs_prepared_ring.rs:13:29
+   |
+13 |     mac.prepare_mac_runtime(storage); // ui-error: E0308
+   |         ------------------- ^^^^^^^ expected `&RxRingStopped<'_, _>`, found `&RxDmaStorage<2, 16, 20>`
+   |         |
+   |         arguments to this method are incorrect
+   |
+   = note: expected reference `&RxRingStopped<'_, _>`
+              found reference `&RxDmaStorage<2, 16, 20>`
+note: method defined here
+  --> src/ieee80211/mac.rs
+   |
+   |     pub fn prepare_mac_runtime<const COUNT: usize>(
+   |            ^^^^^^^^^^^^^^^^^^^

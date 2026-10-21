@@ -6,7 +6,7 @@
 //! - **Bring-up.** Prepare the ring, open promiscuous receive, activate the
 //!   interrupt epoch (routes still silent), install the interrupt line
 //!   (which clears a stale request), enable the routes, start the walker
-//!   after its settle, resume the MAC runtime.
+//!   after its settle, start the prepared MAC with that live ring's DMA proof.
 //! - **Receive.** Wait for an interrupt fact or the stop request, then run
 //!   [`service`] until the frontier drained and every buffer the sink
 //!   released in the pass has had one more pass to be rearmed; only then ask
@@ -49,8 +49,8 @@ use oer_esp32s31_hal::ieee80211::dma::{
 use oer_esp32s31_hal::settle::{Settle, SettleLimit};
 use oer_esp32s31_ieee80211_mac::{
     init::{
-        MacRuntimeStopHardware, MacSnifferHardware, activate_promiscuous_receive,
-        deactivate_promiscuous_receive,
+        MacRuntimeStartHardware, MacRuntimeStopHardware, MacSnifferHardware,
+        activate_promiscuous_receive, deactivate_promiscuous_receive,
     },
     irq::{
         MacInterrupt, MacPowerInterrupt,
@@ -153,7 +153,7 @@ pub async fn receive<
     admission: &M,
 ) -> Infallible
 where
-    H: MacSnifferHardware + MacRuntimeStopHardware + RxBufferFullCounter,
+    H: MacSnifferHardware + MacRuntimeStartHardware + MacRuntimeStopHardware + RxBufferFullCounter,
     W: RxDma,
     I: MacInterrupt,
     P: MacPowerInterrupt,
@@ -227,17 +227,23 @@ where
     };
     receiver.routes.enable();
 
-    let cause = match frontier
-        .start_with_storage(receiver.timer, receiver.rx_dma, receiver.rx)
-        .await
-    {
+    let prepared = frontier
+        .prepared()
+        .map(|ring| receiver.hardware.prepare_mac_runtime(ring));
+    let cause = match prepared {
         Err(error) => WifiRxCause::Start(error),
-        Ok(()) => match frontier.live_mut() {
+        Ok(()) => match frontier
+            .start_with_storage(receiver.timer, receiver.rx_dma, receiver.rx)
+            .await
+        {
             Err(error) => WifiRxCause::Start(error),
-            Ok(ring) => {
-                receiver.hardware.resume_mac_runtime();
-                receiver.run(ring).await
-            }
+            Ok(()) => match frontier.live_mut() {
+                Err(error) => WifiRxCause::Start(error),
+                Ok(ring) => {
+                    receiver.hardware.start_mac_runtime(ring);
+                    receiver.run(ring).await
+                }
+            },
         },
     };
     let exit = receiver.teardown(&mut frontier, cause).await;

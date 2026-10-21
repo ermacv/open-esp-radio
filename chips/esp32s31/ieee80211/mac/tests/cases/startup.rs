@@ -18,7 +18,7 @@ fn unavailable_calibration_preserves_provenance_even_when_the_field_is_zero() {
 }
 
 #[test]
-fn cold_mac_init_orders_semantic_hardware_transactions() {
+fn cold_start_prepares_mac_without_opening_its_core() {
     let clock_trace = Rc::new(RefCell::new(Vec::new()));
     let mut platform = MockPlatform::default();
     let mut mmio = MockMmio {
@@ -49,6 +49,8 @@ fn cold_mac_init_orders_semantic_hardware_transactions() {
         Some(&Operation::ConfigureOpenPromiscuousReceive)
     );
     activate_promiscuous_receive(&mut mmio);
+    assert!(mmio.mac_gates_closed);
+    assert!(mmio.runtime_stop_held);
 
     assert_eq!(outcome.handshake_samples, 0);
     assert_eq!(outcome.handshake_observations, 1);
@@ -70,8 +72,9 @@ fn cold_mac_init_orders_semantic_hardware_transactions() {
         ]
     );
     assert_eq!(
-        &mmio.operations()[5..11],
+        &mmio.operations()[5..12],
         [
+            Operation::HoldMacRuntime,
             Operation::InitializeTxRxPrefix,
             Operation::InitializeTxRxCallbacks(MacDelaySlot::from_random(7)),
             Operation::InitializeTxRxSuffix,
@@ -81,11 +84,11 @@ fn cold_mac_init_orders_semantic_hardware_transactions() {
         ]
     );
     assert!(matches!(
-        mmio.operations()[11],
+        mmio.operations()[12],
         Operation::InitializeTxPower(_)
     ));
     assert_eq!(
-        &mmio.operations()[12..18],
+        &mmio.operations()[13..19],
         [
             Operation::InitializeHeSuffix,
             Operation::InitializeLastRxBufferTable,
@@ -99,13 +102,13 @@ fn cold_mac_init_orders_semantic_hardware_transactions() {
         ]
     );
     assert!(matches!(
-        mmio.operations()[18],
+        mmio.operations()[19],
         Operation::InitializeColdCoex(_)
     ));
     assert_eq!(
-        &mmio.operations()[19..],
+        &mmio.operations()[20..],
         [
-            Operation::EnableMacInterrupts(MacInterruptMask::STATION),
+            Operation::PrepareMacInterrupts(MacInterruptMask::STATION),
             Operation::ProgramInterfaceAddress(MacInterface::Station, station),
             Operation::ProgramInterfaceAddress(MacInterface::AccessPoint, access_point),
             Operation::ConfigureOpenPromiscuousReceive,
