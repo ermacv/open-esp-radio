@@ -1,0 +1,8 @@
+error: lifetime may not live long enough
+  --> tests/ui/slot_body_static_any_escape.rs:55:16
+   |
+52 |     async fn run<'p>(self, resource: Token<'p>) -> Self::Output
+   |                  -- lifetime `'p` defined here
+...
+55 |         return Box::new(resource); // ui-error: lifetime may not live long enough
+   |                ^^^^^^^^^^^^^^^^^^ coercion requires that `'p` must outlive `'static`

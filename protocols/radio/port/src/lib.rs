@@ -32,14 +32,15 @@ pub use execution::{LocalExecution, PortDriver, PortExecution};
 pub use identity::{LocalId, SlotIdentity, StaticId};
 pub use lifecycle::*;
 pub use slot::{
-    Joined, PortSlot, SlotClaim, SlotCompletion, SlotFrontend, SlotJoin, SlotOwner,
-    SlotQuarantined, SlotRegistration, SlotRetire, SlotStopped, SlotWakes, with_local_slot,
+    Joined, ModelSlotOwner, PortSlot, SlotBody, SlotBodyOwner, SlotClaim, SlotCompletion,
+    SlotFrontend, SlotJoin, SlotOwner, SlotQuarantined, SlotRegistration, SlotRetire, SlotStopped,
+    SlotWakes, with_local_slot,
 };
 pub use work::*;
 
 pub use pool::{
-    Child, Line, Mint, Permit, PermitPool, PermitSupply, PermitTokens, Permits, PoolBuilder,
-    PoolPath, PoolSet, Pools, Root, Seat, Slot, Slots, branded,
+    BodyLoan, Child, Line, Mint, Permit, PermitPool, PermitSupply, PermitTokens, Permits,
+    PoolBuilder, PoolPath, PoolSet, Pools, Root, Seat, Slot, Slots, branded,
 };
 pub use relation::{
     ClockInfo, ClockRelation, ClockSample, Generation, GenerationSource, Projected,

@@ -5,7 +5,7 @@ pub fn reinstall<Id: SlotIdentity, S: SlotOwner<Id>>(
     slot: &mut PortSlot<Id, S>, joined: Joined<Id>, quarantined: SlotQuarantined<Id>, owner: S,
 ) {
     #[cfg(ui_reject)]
-    let _ = slot.reinstall(quarantined, owner); // ui-error: E0308
+    let _ = slot.reinstall(quarantined, |_| owner); // ui-error: E0308
     #[cfg(not(ui_reject))]
-    let _ = slot.reinstall(joined, owner);
+    let _ = slot.reinstall(joined, |_| owner);
 }

@@ -6,6 +6,7 @@ use oer_radio_port::{
 
 pub struct Owner;
 impl<Id: SlotIdentity> SlotOwner<Id> for Owner {
+    type Vacant = ();
     type Pools = ();
     type Queues = ();
     type Frontend<'s> = () where Self: 's, Id: 's;

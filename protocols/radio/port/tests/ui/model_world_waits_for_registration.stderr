@@ -1,0 +1,12 @@
+error[E0505]: cannot move out of `slot` because it is borrowed
+ --> tests/ui/model_world_waits_for_registration.rs:7:5
+  |
+4 | pub fn end<'scope, S: ModelSlotOwner<LocalId<'scope>>>(mut slot: PortSlot<LocalId<'scope>, S>, owner: S) {
+  |                                                        -------- binding `slot` declared here
+5 |     let (frontend, registration) = slot.register(owner).ok().expect("fresh slot");
+  |                                    ---- borrow of `slot` occurs here
+6 |     #[cfg(all())]
+7 |     slot.end_model_world(); // ui-error: E0505
+  |     ^^^^ move out of `slot` occurs here
+8 |     drop(frontend);
+  |          -------- borrow later used here

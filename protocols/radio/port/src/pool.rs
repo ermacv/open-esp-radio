@@ -43,11 +43,10 @@
 //! backend minted its pool with, so taking a slot synchronously is an
 //! invariant of that count (popping the array it holds), never a refusal.
 //!
-//! The clients of one install share a pool only inside the body's task. A
-//! token is branded, so it never enters `'static` storage such as an
-//! interrupt handler's: a backend keeps the tokens on the task side, keyed
-//! by their [`index`](Permit::index), and its interrupt carries only the
-//! index.
+//! Body-facing tokens retain an invariant body loan. A backend can privately
+//! convert only capacity tokens between that loan and owned Id state through
+//! [`BodyLoan`]; the owned state carries no P1 reference. Their component
+//! paths and [`index`](Permit::index) remain unchanged through that handoff.
 //!
 //! This package owns no state and never waits: it states the tokens and the
 //! rules. A pool's free list, its waiters and their wake-ups belong to a
@@ -190,7 +189,9 @@ use core::{future::Future, marker::PhantomData};
 /// The brand of one install.
 type Brand<'id> = PhantomData<fn(&'id ()) -> &'id ()>;
 
+mod loan;
 mod mint;
+pub use loan::BodyLoan;
 pub(crate) use mint::prepare_brand;
 mod path;
 pub use mint::{

@@ -42,7 +42,7 @@ pub use request_slot::{Awaiting, Doorbell, Poster, RequestSlot, Responder};
 pub use affine_spsc::{
     AffineIndexedSpscQueue, AffineIndexedSpscReceiver, AffineIndexedSpscSender, AffineSpscQueue,
     AffineSpscReceiver, AffineSpscSendPermit, AffineSpscSender, AffineSpscTryReceiveError,
-    AffineSpscTrySendError, UniqueQueueIndex,
+    AffineSpscTrySendError, LocalSpscReceiver, LocalSpscSender, UniqueQueueIndex,
 };
 pub use dma_bytes::DmaBytes;
 pub use handler_cell::{HandlerCell, Installed};

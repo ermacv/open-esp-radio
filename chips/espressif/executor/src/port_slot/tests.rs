@@ -5,6 +5,7 @@ use oer_radio_port::{Abandon, Quarantine, SlotIdentity, SlotOwner, SlotRetire, S
 struct Owner;
 
 impl<Id: SlotIdentity> SlotOwner<Id> for Owner {
+    type Vacant = ();
     type Pools = ();
     type Queues = ();
     type Frontend<'s>
@@ -89,7 +90,7 @@ fn each_nominal_static_declaration_can_be_taken_exactly_once() {
     drop(join);
     assert!(declarations::second::take_static().is_none());
     let (frontend, registration) = second
-        .reinstall(joined, Owner)
+        .reinstall(joined, |()| Owner)
         .ok()
         .expect("Joined permits reuse of the same backing");
     drop(frontend);

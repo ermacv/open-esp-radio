@@ -1,0 +1,63 @@
+#![no_std]
+extern crate alloc;
+use alloc::boxed::Box;
+use core::any::Any;
+use oer_radio_port::{
+    Abandon, BodyLoan, Mint, Quarantine, Root, Slot, SlotBody, SlotBodyOwner,
+    SlotFrontend, SlotOwner, SlotRetire, SlotStopped, SlotWakes, Slots, StaticId,
+};
+
+pub enum Declaration {}
+pub type Id = StaticId<Declaration>;
+pub struct Owner;
+type Token<'p> = Slot<'p, (), Root<Id>>;
+
+impl SlotOwner<Id> for Owner {
+    type Vacant = ();
+    type Pools = Slots<(), 1>;
+    type Queues = Option<Token<'static>>;
+    type Frontend<'s> = &'s mut Option<Token<'static>>;
+    type Invocation<'s> = ();
+    fn queues(&mut self, mint: Mint<'static, Self::Pools, Id>) -> Self::Queues {
+        let [token] = mint.into_pools();
+        Some(token)
+    }
+    fn split<'s>(queues: &'s mut Self::Queues, _: SlotWakes<'s, Id>) -> (Self::Frontend<'s>, ())
+    where Self: 's, Id: 's {
+        (queues, ())
+    }
+    async fn run<'s>(&mut self, _: &mut (), retire: SlotRetire<'_, Id, Self>) -> SlotStopped<Id, Self>
+    where Self: 's, Id: 's {
+        retire.requested().await
+    }
+    fn abandon<'s>(&mut self, _: Option<&mut ()>, authority: Quarantine) -> Abandon
+    where Self: 's, Id: 's {
+        Abandon::Unconfirmed(authority)
+    }
+    fn finish(self) {}
+}
+
+impl SlotBodyOwner<Id> for Owner {
+    type Body<'p> = Token<'p>;
+    fn lend<'p, 's>(
+        frontend: &'p mut Self::Frontend<'s>, loan: BodyLoan<'p, Id, Self>,
+    ) -> Self::Body<'p> where Self: 's, Id: 's, 's: 'p {
+        loan.lend_slot(frontend.take().expect("one body resource"))
+    }
+}
+
+pub struct Body;
+impl SlotBody<Id, Owner> for Body {
+    type Output = Box<dyn Any>;
+    async fn run<'p>(self, resource: Token<'p>) -> Self::Output
+    where Owner: 'p, Id: 'p {
+        #[cfg(ui_reject)]
+        return Box::new(resource); // ui-error: lifetime may not live long enough
+        #[cfg(not(ui_reject))]
+        Box::new(resource.index())
+    }
+}
+
+pub async fn body(frontend: &mut SlotFrontend<'_, Id, Owner>) -> Option<Box<dyn Any>> {
+    frontend.run_body(Body).await
+}

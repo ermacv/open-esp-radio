@@ -6,6 +6,39 @@ use std::sync::{Arc, atomic::AtomicUsize};
 type Queue = AffineSpscQueue<u8, 3>;
 
 #[test]
+fn local_producer_copies_publish_whole_non_clone_values_in_fifo_order() {
+    struct Payload(std::boxed::Box<u8>);
+    let mut queue = AffineSpscQueue::<Payload, 2>::new();
+    let (mut producer, mut consumer) = queue.split();
+    {
+        let first = producer.borrow_local();
+        let second = first;
+        let receiver = consumer.borrow_local();
+        assert!(first.try_send(Payload(std::boxed::Box::new(1))).is_ok());
+        assert!(second.try_send(Payload(std::boxed::Box::new(2))).is_ok());
+        let refused = first
+            .try_send(Payload(std::boxed::Box::new(3)))
+            .err()
+            .expect("full")
+            .0;
+        assert_eq!(*refused.0, 3);
+        assert_eq!(*receiver.try_receive().ok().expect("first owner").0, 1);
+        assert!(second.try_send(refused).is_ok());
+        assert_eq!(*receiver.try_receive().ok().expect("second owner").0, 2);
+    }
+    assert_eq!(*consumer.try_receive().ok().expect("third owner").0, 3);
+    assert!(producer.try_send(Payload(std::boxed::Box::new(4))).is_ok());
+    assert_eq!(
+        *consumer
+            .try_receive()
+            .ok()
+            .expect("original endpoint again")
+            .0,
+        4
+    );
+}
+
+#[test]
 fn cursor_domain_wraps_without_changing_fifo_distance() {
     assert_eq!(Queue::cursor_distance(0, 3), 3);
     assert_eq!(Queue::advance(5), 0);

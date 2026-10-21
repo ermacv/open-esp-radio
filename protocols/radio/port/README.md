@@ -68,6 +68,21 @@ The separate P2 registration drives, abandons and destroys the owner. An
 ordinary stop proof is consumed before P2 destruction. Removing the completed
 P2 future and its registration then publishes `Joined`;
 only that affine authority permits reinstall. Quarantine has no exit.
+Stopped hardware stays in the slot's vacant state; a P2 reinstall consumes
+that state after `Joined`. The frontend result contains no hardware owner.
+
+`SlotBodyOwner` lends public views through `SlotBody::run`. Its output is fixed
+before the invariant body loan is introduced. Backend views privately retain
+`BodyLoan`, which consumes capacity tokens when moving them between their
+owned Id representation and the body loan. Identity, component path, kind and
+index are preserved; no reference or payload lifetime is converted. Even a
+static Id cannot let a body return a resource through `Box<dyn Any>`.
+
+Local models may explicitly end their entire hardware world on P2 through
+`ModelSlotOwner`. `end_model_world` consumes the local slot after all endpoint
+and P2-registration loans have ended. It removes modeled reachability before
+dropping retained owners and queues; it returns no owner or reuse authority.
+Static slots have no such operation, and ending a world never reissues its Id.
 
 `LocalExecution::scope` owns the P2 registration outside the inner frontend
 future, including before that future's first poll. The outer scope waits for

@@ -1,0 +1,24 @@
+error[E0277]: `*const ()` cannot be shared between threads safely
+ --> tests/ui/local_spsc_sender_sync.rs:9:10
+  |
+9 |     sync(&sender.borrow_local()); // ui-error: E0277
+  |     ---- ^^^^^^^^^^^^^^^^^^^^^^ `*const ()` cannot be shared between threads safely
+  |     |
+  |     required by a bound introduced by this call
+  |
+  = help: within `LocalSpscSender<'_, u8, 2>`, the trait `Sync` is not implemented for `*const ()`
+note: required because it appears within the type `PhantomData<*const ()>`
+ --> $RUST/core/src/marker.rs
+  |
+  | pub struct PhantomData<T: PointeeSized>;
+  |            ^^^^^^^^^^^
+note: required because it appears within the type `LocalSpscSender<'_, u8, 2>`
+ --> src/affine_spsc/local.rs
+  |
+  | pub struct LocalSpscSender<'p, T, const DEPTH: usize> {
+  |            ^^^^^^^^^^^^^^^
+note: required by a bound in `sync`
+ --> tests/ui/local_spsc_sender_sync.rs:4:12
+  |
+4 | fn sync<T: Sync>(_: &T) {}
+  |            ^^^^ required by this bound in `sync`

@@ -61,7 +61,7 @@ impl LocalExecution {
         self,
         slot: &'s mut crate::PortSlot<Id, S>,
         owner: S,
-        body: impl AsyncFnOnce(crate::SlotFrontend<'s, Id, S::Frontend<'s>>) -> R,
+        body: impl AsyncFnOnce(crate::SlotFrontend<'s, Id, S>) -> R,
     ) -> Result<impl Future<Output = R>, S> {
         crate::slot::run_local(slot, owner, body)
     }

@@ -1,7 +1,7 @@
 error[E0308]: mismatched types
  --> tests/ui/quarantined_slot_no_reuse.rs:8:28
   |
-8 |     let _ = slot.reinstall(quarantined, owner); // ui-error: E0308
+8 |     let _ = slot.reinstall(quarantined, |_| owner); // ui-error: E0308
   |                  --------- ^^^^^^^^^^^ expected `Joined<Id>`, found `SlotQuarantined<Id>`
   |                  |
   |                  arguments to this method are incorrect
@@ -11,5 +11,5 @@ error[E0308]: mismatched types
 note: method defined here
  --> src/slot.rs
   |
-  |     pub fn reinstall<'s>(
+  |     pub fn reinstall<'s, Resume: FnOnce(S::Vacant) -> S>(
   |            ^^^^^^^^^

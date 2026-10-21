@@ -144,6 +144,11 @@ run outside the macro's unsafe context, and callers keep `forbid(unsafe_code)`.
 The macro resolves storage and pointer operations through its defining crate,
 so a caller cannot replace them by shadowing `core`.
 
+`AffineSpscQueue` lends short local endpoints without new unsafe operations.
+The original endpoint remains exclusively borrowed. A local producer loan can
+be copied within its one context, supports only synchronous publication and
+has no reservation; both local endpoints are neither Send nor Sync. The
+underlying Release/Acquire transfer still moves each complete owner once.
 `AffineIndexedSpscQueue` lets an affine permission's place select its value
 cell while the audited SPSC ring stores only indices; available ring space
 follows from N distinct indices, without an occupancy check, a backend

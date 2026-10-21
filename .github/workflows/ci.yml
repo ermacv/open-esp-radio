@@ -65,6 +65,8 @@ jobs:
           cargo test --locked -p oer-esp32s31-ieee80211-mac
           cargo test --locked -p oer-time --features serde
           cargo test --locked -p oer-time --features schema
+          cargo test --locked -p oer-espressif-executor --features port-slots --lib --test slots
+          cargo clippy --locked -p oer-espressif-executor --features port-slots --all-targets
       - name: Tests under each instrumentation cfg
         # The default members whose sources hold code under an
         # instrumentation class's cfg, tested once with it, each cfg in a

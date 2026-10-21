@@ -21,6 +21,9 @@ pub trait SlotOwner<Id: SlotIdentity>: Sized {
     /// Fixed queue backing, retained with the slot on every abnormal path.
     /// Normal retirement drains all payload owners before returning its proof.
     type Queues;
+    /// Stopped hardware owners retained on P2 between joined installations.
+    /// These never travel through the frontend result or join authority.
+    type Vacant;
     /// Affine P1 queue endpoints; these cannot borrow the P2 owner.
     type Frontend<'s>
     where
@@ -69,8 +72,52 @@ pub trait SlotOwner<Id: SlotIdentity>: Sized {
         Self: 's,
         Id: 's;
 
-    /// Complete ordinary destruction on P2 before the join is published.
-    fn finish(self);
+    /// Complete ordinary destruction on P2, retaining stopped hardware there.
+    fn finish(self) -> Self::Vacant;
+}
+
+/// Backend construction of public views under a fresh frontend loan.
+/// The body never receives the loan-conversion authority itself.
+pub trait SlotBodyOwner<Id: SlotIdentity>: SlotOwner<Id> {
+    /// Body resources and queue views, invariant in their separate loan.
+    type Body<'p>
+    where
+        Self: 'p,
+        Id: 'p;
+
+    /// Lend public resources while retaining conversion authority privately.
+    /// Only owned Id payloads may be published to the P2 queues.
+    fn lend<'p, 's>(
+        frontend: &'p mut Self::Frontend<'s>,
+        loan: crate::BodyLoan<'p, Id, Self>,
+    ) -> Self::Body<'p>
+    where
+        Self: 's,
+        Id: 's,
+        's: 'p;
+}
+
+/// One body whose output is fixed before its frontend loan is introduced.
+pub trait SlotBody<Id: SlotIdentity, S: SlotBodyOwner<Id>> {
+    /// Result independent of the body's loan, including for a static Id.
+    type Output;
+
+    /// Consume the public views; their fresh loan cannot escape in Output.
+    fn run<'p>(self, views: S::Body<'p>) -> impl Future<Output = Self::Output>
+    where
+        S: 'p,
+        Id: 'p;
+}
+
+/// A local model whose entire asynchronous hardware world can be ended.
+/// Physical hardware backends do not implement this trait.
+pub trait ModelSlotOwner<Id: SlotIdentity>: SlotOwner<Id> {
+    /// Remove every modeled asynchronous reachability before destroying a
+    /// retained owner or queue. Called on P2 after its registration ended.
+    fn end_world(&mut self, queues: Option<&mut Self::Queues>);
+
+    /// End a world whose ordinary stop retained only its vacant hardware.
+    fn end_vacant_world(vacant: &mut Self::Vacant);
 }
 
 /// P2's affine authority for stopping and detaching this registration.
@@ -247,13 +294,27 @@ impl<Id: SlotIdentity> SlotWakes<'_, Id> {
 /// Only a construction claim creates a slot. A registration lends its P2
 /// owner independently of the frontend; only ordinary join permits reinstall.
 /// Dropping the slot never runs a retained P2 owner's destructor. A local
-/// runner ends all modeled reachability before its enclosing scope ends;
-/// hardware adapters instead retain the allocation until reset.
+/// model ends all asynchronous reachability through `end_model_world` after
+/// its runner ends; hardware adapters retain quarantined backing until reset.
 pub struct PortSlot<Id: SlotIdentity, S: SlotOwner<Id>> {
-    owner: Option<ManuallyDrop<S>>,
+    owner: Option<ManuallyDrop<Stored<Id, S>>>,
     queues: Option<ManuallyDrop<S::Queues>>,
     signals: Signals,
     identity: PhantomData<fn(Id) -> Id>,
+}
+
+enum Stored<Id: SlotIdentity, S: SlotOwner<Id>> {
+    Registered(S),
+    Vacant(<S as SlotOwner<Id>>::Vacant),
+}
+
+fn registered_owner<Id: SlotIdentity, S: SlotOwner<Id>>(
+    storage: &mut Option<ManuallyDrop<Stored<Id, S>>>,
+) -> &mut S {
+    match &mut **storage.as_mut().expect("registration retains its P2 owner") {
+        Stored::Registered(owner) => owner,
+        Stored::Vacant(_) => unreachable!("a registration owns active state"),
+    }
 }
 
 impl<Id: SlotIdentity, S: SlotOwner<Id>> PortSlot<Id, S> {
@@ -262,13 +323,7 @@ impl<Id: SlotIdentity, S: SlotOwner<Id>> PortSlot<Id, S> {
     pub fn register<'s>(
         &'s mut self,
         owner: S,
-    ) -> Result<
-        (
-            SlotFrontend<'s, Id, S::Frontend<'s>>,
-            SlotRegistration<'s, Id, S>,
-        ),
-        S,
-    >
+    ) -> Result<(SlotFrontend<'s, Id, S>, SlotRegistration<'s, Id, S>), S>
     where
         S: 's,
         Id: 's,
@@ -280,40 +335,39 @@ impl<Id: SlotIdentity, S: SlotOwner<Id>> PortSlot<Id, S> {
     }
 
     /// Reinstall only with this slot's ordinary, consuming join authority.
-    pub fn reinstall<'s>(
+    pub fn reinstall<'s, Resume: FnOnce(S::Vacant) -> S>(
         &'s mut self,
         joined: Joined<Id>,
-        owner: S,
-    ) -> Result<
-        (
-            SlotFrontend<'s, Id, S::Frontend<'s>>,
-            SlotRegistration<'s, Id, S>,
-        ),
-        S,
-    >
+        resume: Resume,
+    ) -> Result<(SlotFrontend<'s, Id, S>, SlotRegistration<'s, Id, S>), Resume>
     where
         S: 's,
         Id: 's,
     {
         let Joined { identity: _ } = joined;
         if self.signals.state.load(Ordering::Acquire) != JOINED {
-            return Err(owner);
+            return Err(resume);
         }
+        let Stored::Vacant(vacant) = ManuallyDrop::into_inner(
+            self.owner
+                .take()
+                .expect("join retains its stopped hardware"),
+        ) else {
+            unreachable!("ordinary join retains vacant state");
+        };
+        // Every payload was drained before the stop proof. Old backing is
+        // destroyed on P2 after all old endpoint loans have ended.
+        drop(self.queues.take().map(ManuallyDrop::into_inner));
+        let owner = resume(vacant);
         Ok(self.install(owner))
     }
 
-    fn install<'s>(
-        &'s mut self,
-        owner: S,
-    ) -> (
-        SlotFrontend<'s, Id, S::Frontend<'s>>,
-        SlotRegistration<'s, Id, S>,
-    )
+    fn install<'s>(&'s mut self, owner: S) -> (SlotFrontend<'s, Id, S>, SlotRegistration<'s, Id, S>)
     where
         S: 's,
         Id: 's,
     {
-        self.owner = Some(ManuallyDrop::new(owner));
+        self.owner = Some(ManuallyDrop::new(Stored::Registered(owner)));
         self.signals.answer.store(NO_ANSWER, Ordering::Relaxed);
         self.signals.state.store(RUNNING, Ordering::Release);
         // Arm before invoking backend initialization or splitting its queues.
@@ -324,11 +378,9 @@ impl<Id: SlotIdentity, S: SlotOwner<Id>> PortSlot<Id, S> {
             armed: true,
             identity: PhantomData,
         };
-        let queues = registration
-            .owner
-            .as_mut()
-            .expect("initialization retains its P2 owner")
-            .queues(crate::Mint::<'static, S::Pools, Id>::new());
+        let queues =
+            registered_owner(registration.owner)
+                .queues(crate::Mint::<'static, S::Pools, Id>::new());
         self.queues = Some(ManuallyDrop::new(queues));
         let queues = self
             .queues
@@ -354,21 +406,69 @@ impl<Id: SlotIdentity, S: SlotOwner<Id>> PortSlot<Id, S> {
     }
 }
 
+impl<'scope, S: ModelSlotOwner<LocalId<'scope>>> PortSlot<LocalId<'scope>, S> {
+    /// End the entire local model world on P2 after every endpoint and P2
+    /// registration loan has ended. Consumes the slot and its identity domain:
+    /// no vacant authority, owner or reset identity is returned to the caller.
+    /// Dropping a frontend alone never invokes this operation.
+    pub fn end_model_world(self) {
+        let mut queues = self.queues.map(ManuallyDrop::into_inner);
+        if let Some(owner) = self.owner.map(ManuallyDrop::into_inner) {
+            match owner {
+                Stored::Registered(mut owner) => owner.end_world(queues.as_mut()),
+                Stored::Vacant(mut vacant) => S::end_vacant_world(&mut vacant),
+            }
+        }
+        drop(queues);
+    }
+}
+
 /// P1's lifecycle endpoints. This value has no reference to the P2 owner.
 #[must_use = "finish the frontend or request its abandonment"]
-pub struct SlotFrontend<'s, Id: SlotIdentity, F = ()> {
-    ports: Option<F>,
+pub struct SlotFrontend<'s, Id: SlotIdentity + 's, S: SlotOwner<Id> + 's> {
+    ports: Option<S::Frontend<'s>>,
     signals: &'s Signals,
     armed: bool,
     identity: PhantomData<fn(Id) -> Id>,
 }
 
-impl<'s, Id: SlotIdentity, F> SlotFrontend<'s, Id, F> {
+impl<'s, Id: SlotIdentity + 's, S: SlotOwner<Id> + 's> SlotFrontend<'s, Id, S> {
     /// Borrow only the affine queue endpoints, never the backend or held state.
-    pub fn ports(&mut self) -> &mut F {
+    pub fn ports(&mut self) -> &mut S::Frontend<'s> {
         self.ports
             .as_mut()
             .expect("the live frontend retains its endpoints")
+    }
+
+    /// Run public body views under a fresh invariant loan. Only the backend's
+    /// constructor receives the authority to move tokens to/from owned queues.
+    /// A previously observed abandonment cancels a pending body, including
+    /// one awaiting an unrelated future. A body returning in the poll that
+    /// published its request still forwards its typed result to the supervisor.
+    pub async fn run_body<P: SlotBody<Id, S>>(&mut self, body: P) -> Option<P::Output>
+    where
+        S: SlotBodyOwner<Id>,
+    {
+        let signals = self.signals;
+        if signals.state.load(Ordering::Acquire) == QUARANTINED {
+            return None;
+        }
+        let views = S::lend(self.ports(), crate::BodyLoan::new());
+        let mut body = pin!(body.run(views));
+        poll_fn(|cx| {
+            signals.join.register(cx.waker());
+            if signals.state.load(Ordering::Acquire) == QUARANTINED {
+                return Poll::Ready(None);
+            }
+            match body.as_mut().poll(cx) {
+                Poll::Ready(output) => Poll::Ready(Some(output)),
+                Poll::Pending if signals.state.load(Ordering::Acquire) == QUARANTINED => {
+                    Poll::Ready(None)
+                }
+                Poll::Pending => Poll::Pending,
+            }
+        })
+        .await
     }
 
     /// Publish abandonment immediately, without invoking any P2 operation.
@@ -402,7 +502,7 @@ impl<'s, Id: SlotIdentity, F> SlotFrontend<'s, Id, F> {
     }
 }
 
-impl<Id: SlotIdentity, F> Drop for SlotFrontend<'_, Id, F> {
+impl<Id: SlotIdentity, S: SlotOwner<Id>> Drop for SlotFrontend<'_, Id, S> {
     fn drop(&mut self) {
         if self.armed {
             self.signals.quarantine();
@@ -512,7 +612,7 @@ impl<Id: SlotIdentity> Drop for SlotJoin<'_, Id> {
 #[must_use = "retain on P2 until normal finish or quarantine cleanup"]
 pub struct SlotRegistration<'s, Id: SlotIdentity + 's, S: SlotOwner<Id> + 's> {
     invocation: Option<S::Invocation<'s>>,
-    owner: &'s mut Option<ManuallyDrop<S>>,
+    owner: &'s mut Option<ManuallyDrop<Stored<Id, S>>>,
     signals: &'s Signals,
     armed: bool,
     identity: PhantomData<fn(Id) -> Id>,
@@ -540,11 +640,8 @@ impl<'s, Id: SlotIdentity + 's, S: SlotOwner<Id> + 's> SlotRegistration<'s, Id, 
             return false;
         }
         self.armed = false;
-        let outcome = self
-            .owner
-            .as_mut()
-            .expect("registration retains its P2 owner")
-            .abandon(self.invocation.as_mut(), Quarantine::new());
+        let outcome =
+            registered_owner(self.owner).abandon(self.invocation.as_mut(), Quarantine::new());
         self.signals.publish_answer(outcome);
         true
     }
@@ -562,19 +659,14 @@ impl<'s, Id: SlotIdentity + 's, S: SlotOwner<Id> + 's> SlotRegistration<'s, Id, 
             .expect("registration has one P2 invocation");
         let stopped = {
             let signals = self.signals;
-            let mut stopping = pin!(
-                self.owner
-                    .as_mut()
-                    .expect("retirement retains its P2 owner")
-                    .run(
-                        invocation,
-                        SlotRetire {
-                            signals,
-                            owner: PhantomData,
-                            identity: PhantomData
-                        }
-                    )
-            );
+            let mut stopping = pin!(registered_owner(self.owner).run(
+                invocation,
+                SlotRetire {
+                    signals,
+                    owner: PhantomData,
+                    identity: PhantomData
+                }
+            ));
             poll_fn(|cx| {
                 signals.p2.register(cx.waker());
                 if signals.state.load(Ordering::Acquire) == QUARANTINED {
@@ -602,18 +694,21 @@ impl<'s, Id: SlotIdentity + 's, S: SlotOwner<Id> + 's> SlotRegistration<'s, Id, 
             owner: _,
         } = stopped;
         self.armed = false;
-        drop(self.invocation.take());
-        let owner = ManuallyDrop::into_inner(
-            self.owner
-                .take()
-                .expect("ordinary join retains its P2 owner"),
-        );
-        owner.finish();
-        Some(SlotCompletion {
+        let completion = SlotCompletion {
             signals: self.signals,
             armed: true,
             identity: PhantomData,
-        })
+        };
+        drop(self.invocation.take());
+        let Stored::Registered(owner) = ManuallyDrop::into_inner(
+            self.owner
+                .take()
+                .expect("ordinary join retains its P2 owner"),
+        ) else {
+            unreachable!("ordinary retirement owns active state");
+        };
+        *self.owner = Some(ManuallyDrop::new(Stored::Vacant(owner.finish())));
+        Some(completion)
     }
 }
 
@@ -664,7 +759,7 @@ impl<Id: SlotIdentity> Drop for SlotCompletion<'_, Id> {
 pub(crate) fn run_local<'s, Id: SlotIdentity + 's, S: SlotOwner<Id> + 's, R>(
     slot: &'s mut PortSlot<Id, S>,
     owner: S,
-    body: impl AsyncFnOnce(SlotFrontend<'s, Id, S::Frontend<'s>>) -> R,
+    body: impl AsyncFnOnce(SlotFrontend<'s, Id, S>) -> R,
 ) -> Result<impl Future<Output = R>, S> {
     // Synchronous registration precedes even construction of the P1 future.
     // The resulting outer future belongs to the local P2 runner.

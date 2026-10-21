@@ -33,6 +33,7 @@ impl Drop for StopLoan {
 }
 
 impl<Id: SlotIdentity> SlotOwner<Id> for Owner {
+    type Vacant = ();
     type Pools = ();
     type Queues = ();
     type Frontend<'s>
@@ -114,6 +115,15 @@ impl Drop for Owner {
     }
 }
 
+impl<Id: SlotIdentity> ModelSlotOwner<Id> for Owner {
+    fn end_world(&mut self, _: Option<&mut ()>) {
+        assert_eq!(self.0.executor.get(), Executor::P2);
+        assert_eq!(self.0.stop_loans.get(), 0);
+        assert_eq!(self.0.frontend_loans.get(), 0);
+    }
+    fn end_vacant_world(_: &mut ()) {}
+}
+
 async fn run_p2<'s, Id: SlotIdentity + 's, S: SlotOwner<Id> + 's>(p2: SlotRegistration<'s, Id, S>) {
     if let Some(completion) = p2.run().await {
         completion.unregistered();
@@ -144,6 +154,156 @@ fn finish<F: Future>(future: F) -> F::Output {
         Poll::Ready(result) => result,
         Poll::Pending => panic!("model scope finishes without a timed wait"),
     }
+}
+
+#[test]
+fn body_loan_preserves_all_capacity_indices_paths_and_waiter_domains() {
+    enum Kind {}
+    fn check<Id: SlotIdentity>(_: SlotClaim<Id>) {
+        let loan = crate::BodyLoan::<'_, Id, Owner>::new();
+        assert_eq!(core::mem::size_of_val(&loan), 0);
+        let (slots, tokens) =
+            crate::Mint::<'static, (crate::Slots<Kind, 2>, crate::Permits<Kind, 2, 2>), Id>::new()
+                .into_pools();
+        let slots = slots.map(|token| loan.reclaim_slot(loan.lend_slot(token)));
+        assert_eq!(slots.map(|token| token.index()), [0, 1]);
+        let permits = tokens
+            .supply
+            .into_permits()
+            .map(|token| loan.reclaim_permit(loan.lend_permit(token)));
+        assert_eq!(permits.map(|token| token.index()), [0, 1]);
+        let seats = tokens
+            .seats
+            .map(|token| loan.reclaim_seat(loan.lend_seat(token)));
+        assert_eq!(seats.map(|token| token.index()), [0, 1]);
+        let line = loan.reclaim_line(loan.lend_line(tokens.line));
+        assert_eq!(line.places(), 2);
+    }
+    finish(with_local_slot(async |claim| check(claim)));
+}
+
+#[test]
+fn ending_a_quarantined_model_world_consumes_its_slot_without_reissuing_identity() {
+    let model = model(false);
+    finish(with_local_slot(async |claim| {
+        let mut slot = claim.place();
+        let (frontend, registration) = slot
+            .register(Owner(model.clone()))
+            .ok()
+            .expect("fresh slot");
+        model.executor.set(Executor::P1);
+        drop(frontend);
+        assert_eq!(model.abandons.get(), 0);
+        model.executor.set(Executor::P2);
+        drop(registration);
+        assert_eq!(model.abandons.get(), 1);
+        assert_eq!(model.drops.get(), 0);
+        slot.end_model_world();
+        assert_eq!(model.abandons.get(), 1);
+        assert_eq!(model.drops.get(), 1);
+    }));
+    assert_eq!(Rc::strong_count(&model), 1);
+}
+
+#[test]
+fn joined_retains_stopped_hardware_in_the_slot_until_p2_reinstallation_or_world_end() {
+    struct Device(Rc<Model>);
+    impl Drop for Device {
+        fn drop(&mut self) {
+            assert_eq!(self.0.executor.get(), Executor::P2);
+            self.0.drops.set(self.0.drops.get() + 1);
+        }
+    }
+    struct HardwareOwner(Device);
+    impl<Id: SlotIdentity> SlotOwner<Id> for HardwareOwner {
+        type Pools = ();
+        type Queues = ();
+        type Vacant = Device;
+        type Frontend<'s>
+            = ()
+        where
+            Self: 's,
+            Id: 's;
+        type Invocation<'s>
+            = ()
+        where
+            Self: 's,
+            Id: 's;
+        fn queues(&mut self, mint: crate::Mint<'static, (), Id>) {
+            mint.into_pools();
+        }
+        fn split<'s>(_: &'s mut (), _: SlotWakes<'s, Id>) -> ((), ())
+        where
+            Self: 's,
+            Id: 's,
+        {
+            ((), ())
+        }
+        async fn run<'s>(
+            &mut self,
+            _: &mut (),
+            retire: SlotRetire<'_, Id, Self>,
+        ) -> SlotStopped<Id, Self>
+        where
+            Self: 's,
+            Id: 's,
+        {
+            retire.requested().await
+        }
+        fn abandon<'s>(&mut self, _: Option<&mut ()>, authority: Quarantine) -> Abandon
+        where
+            Self: 's,
+            Id: 's,
+        {
+            Abandon::Unconfirmed(authority)
+        }
+        fn finish(self) -> Device {
+            assert_eq!(self.0.0.executor.get(), Executor::P2);
+            self.0.0.finishes.set(self.0.0.finishes.get() + 1);
+            self.0
+        }
+    }
+    impl<Id: SlotIdentity> ModelSlotOwner<Id> for HardwareOwner {
+        fn end_world(&mut self, _: Option<&mut ()>) {
+            assert_eq!(self.0.0.executor.get(), Executor::P2);
+        }
+        fn end_vacant_world(device: &mut Device) {
+            assert_eq!(device.0.executor.get(), Executor::P2);
+        }
+    }
+    let model = model(true);
+    finish(with_local_slot(async |claim| {
+        let mut slot = claim.place();
+        let (frontend, p2) = slot
+            .register(HardwareOwner(Device(model.clone())))
+            .ok()
+            .expect("fresh slot");
+        let join = frontend.finish();
+        run_p2(p2).await;
+        model.executor.set(Executor::P1);
+        let joined = join
+            .wait()
+            .await
+            .expect("notification without hardware owners");
+        assert_eq!(model.finishes.get(), 1);
+        assert_eq!(model.drops.get(), 0, "stopped device stays in its P2 slot");
+        model.executor.set(Executor::P2);
+        let (frontend, p2) = slot
+            .reinstall(joined, |device| {
+                assert!(Rc::ptr_eq(&model, &device.0));
+                HardwareOwner(device)
+            })
+            .ok()
+            .expect("same stopped device, fresh registration");
+        let join = frontend.finish();
+        run_p2(p2).await;
+        assert!(join.wait().await.is_ok());
+        assert_eq!(model.finishes.get(), 2);
+        assert_eq!(model.drops.get(), 0);
+        slot.end_model_world();
+        assert_eq!(model.drops.get(), 1);
+    }));
+    assert_eq!(Rc::strong_count(&model), 1);
 }
 
 #[test]
@@ -240,7 +400,7 @@ fn ordinary_join_follows_p2_destruction_and_is_the_only_reinstall_authority() {
         drop(join);
         assert!(slot.register(Owner(model.clone())).is_err());
         let (frontend, p2) = slot
-            .reinstall(joined, Owner(model.clone()))
+            .reinstall(joined, |()| Owner(model.clone()))
             .ok()
             .expect("matching joined slot");
         let join = frontend.finish();
@@ -436,7 +596,7 @@ fn local_runner_publishes_join_only_after_p2_finishes() {
         assert_eq!(model.finishes.get(), 1);
         assert_eq!(model.drops.get(), 1);
         let (frontend, p2) = slot
-            .reinstall(joined, Owner(model.clone()))
+            .reinstall(joined, |()| Owner(model.clone()))
             .ok()
             .expect("joined slot");
         let join = frontend.finish();

@@ -1,11 +1,11 @@
 error[E0382]: borrow of moved value: `first`
-  --> tests/ui/static_slot_duplicated.rs:34:13
+  --> tests/ui/static_slot_duplicated.rs:35:13
    |
-29 |     let first = first::take_static().expect("one take");
+30 |     let first = first::take_static().expect("one take");
    |         ----- move occurs because `first` has type `&mut PortSlot<StaticId<first::Declaration>, Owner>`, which does not implement the `Copy` trait
-30 |     #[cfg(all())]
-31 |     let second = first;
+31 |     #[cfg(all())]
+32 |     let second = first;
    |                  ----- value moved here
 ...
-34 |     let _ = first.register(Owner); // ui-error: E0382
+35 |     let _ = first.register(Owner); // ui-error: E0382
    |             ^^^^^ value borrowed here after move
