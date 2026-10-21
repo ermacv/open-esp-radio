@@ -94,7 +94,8 @@ pub enum ReadLimitKind {
 pub enum RegisterMaskKind {
     /// Bits retained by a saved load-and-constant expression.
     ReadSelection,
-    /// Bits not preserved in `(load & preserve) | replacement`.
+    /// Stored bits not copied identically from the same word, in a write
+    /// that preserves at least one bit of that word at its original position.
     /// This is an expression observation, not a claim of hardware RMW safety.
     WriteReplacement,
 }

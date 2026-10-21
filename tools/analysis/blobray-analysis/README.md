@@ -5,12 +5,18 @@ Blobray's analyses over the bounded CFG and value analysis of
 recognition, final-image target audits, code-coverage closures and record
 navigation. They have no filesystem authority.
 
-`registers` recognizes bounded load/mask/store expression shapes using
-the shared borrowed fact index. It reports bit-selection observations with their
-original physical load width; application owns address scope.
+`registers` recognizes load masks and evaluates stored bit provenance using
+the shared borrowed fact index. A read-modify-write's replacement mask covers
+the stored bits not copied identically from the same word and position;
+writes with no preserved bits carry no replacement mask. It reports
+bit-selection observations with their original physical load width;
+application owns address scope.
 Its independent read-use pass propagates load-site dependencies over the
 instruction CFG to a fixed point, with union at joins, explicit limits and
-byte-level stack transfers. Interned state sets and the queue have working
+byte-level stack transfers. Values also carry known-zero and known-one masks;
+joins retain only bits known equally on every path. Neutral bitwise operands
+pass dependencies exactly; inverted bits remain uses, never preservation.
+Interned state sets and the queue have working
 memory admission; each function's pass also has a
 `max(100000, 512 * instruction_count)` work-unit cap. Application resolves
 call-argument callees against captured input and ROM symbols.

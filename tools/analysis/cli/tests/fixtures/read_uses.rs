@@ -321,4 +321,111 @@ end dispatch_index
 read_table:
     .word 2b, 3b, 4b, 5b
 .size read_table, .-read_table
+
+function rmw_variable
+    lui t0, 0x20107
+    lw t1, 0(t0)
+    andi t1, t1, -993
+    slli t2, a0, 5
+    andi t2, t2, 0x3e0
+    or t1, t1, t2
+    sw t1, 0(t0)
+    ret
+end rmw_variable
+
+function rmw_clear
+    lui t0, 0x20107
+    lw t1, 0(t0)
+    andi t1, t1, -993
+    sw t1, 0(t0)
+    ret
+end rmw_clear
+
+function rmw_constant
+    lui t0, 0x20107
+    lw t1, 0(t0)
+    andi t1, t1, -993
+    ori t1, t1, 0x140
+    sw t1, 0(t0)
+    ret
+end rmw_constant
+
+function rmw_set
+    lui t0, 0x20107
+    lw t1, 0(t0)
+    ori t1, t1, 32
+    sw t1, 0(t0)
+    ret
+end rmw_set
+
+function rmw_sparse
+    lui t0, 0x20107
+    lw t1, 0(t0)
+    andi t1, t1, -928
+    slli t2, a0, 2
+    andi t2, t2, 0x39f
+    or t1, t1, t2
+    sw t1, 0(t0)
+    ret
+end rmw_sparse
+
+function rmw_join
+    lui t0, 0x20107
+    lw t1, 0(t0)
+    beqz a0, 2f
+    li t2, 1
+    j 3f
+2:  li t2, 0
+3:  or t1, t1, t2
+    sw t1, 0(t0)
+    ret
+end rmw_join
+
+function rmw_xor
+    lui t0, 0x20107
+    lw t1, 0(t0)
+    andi t2, a0, 0
+    ori t2, t2, 1
+    xor t1, t1, t2
+    sw t1, 0(t0)
+    ret
+end rmw_xor
+
+function rmw_right_shift
+    lui t0, 0x20107
+    lw t1, 0(t0)
+    andi t1, t1, -32
+    srli t2, a0, 27
+    or t1, t1, t2
+    sw t1, 0(t0)
+    ret
+end rmw_right_shift
+
+function rmw_variable_spilled
+    addi sp, sp, -16
+    lui t0, 0x20107
+    lw t1, 0(t0)
+    andi t1, t1, -993
+    slli t2, a0, 5
+    andi t2, t2, 0x3e0
+    sw t2, 0(sp)
+    lw t2, 0(sp)
+    or t1, t1, t2
+    sw t1, 0(t0)
+    addi sp, sp, 16
+    ret
+end rmw_variable_spilled
+
+function rmw_two_loads
+    lui t0, 0x20107
+    lw t1, 0(t0)
+    lw t2, 0(t0)
+    slli t1, t1, 18
+    srli t1, t1, 4
+    li t3, 0xf0003fff
+    and t2, t2, t3
+    or t2, t2, t1
+    sw t2, 0(t0)
+    ret
+end rmw_two_loads
 "#);

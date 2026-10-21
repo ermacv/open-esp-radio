@@ -118,6 +118,13 @@ evaluation. The human groups print them high bits first, for example
 their load width (`load 1B 0xa[7:0]`); entries with different sources stay
 apart, keyed by the sources themselves.
 
+When at least one stored bit is copied from the same word at the same
+position, `write-replacement` covers every other bit of the write. This
+includes explicit AND-clears and OR-sets, even when the replacement equals
+the hardware reset value. A write without identically preserved bits has no
+replacement mask; its `stored` runs still describe the whole write. These
+observations establish no hardware RMW safety or register-field meaning.
+
 A load observation carries `reads`: `uses` (`bits`, a tagged `sink`, and
 `precision` `exact` or `may`), `unknown` (`bits`, `limit`), `preserved`, and
 `unused`. These masks partition the load width with precedence used, unknown,
