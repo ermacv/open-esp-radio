@@ -4,6 +4,31 @@
 SVD, raw PAC, restricted PAC API and the binding index. It does not load a binary
 analysis project, vendor binary, device model or global provider registry.
 
+`cargo registers check inventory --chip <chip>` checks vendor uses of register
+bits against the unchanged source model. It runs Blobray `register-accesses`
+over every function of every pinned vendor binary, excluding firmware outputs,
+inside the publication's owned MMIO ranges, with `--abi riscv-integer
+--call-returns`. It requires schema 9 and a complete `reads: ReadUses`
+classification for each load. Every sink in `uses` counts, with both `Exact`
+and `May` precision; `read-selection` expressions do not establish use.
+
+Stores count explicit `write-replacement` bits and constant bits that differ
+from the inherited known reset. Same-position same-word preservation and
+whole-word reset writes are not uses. Unknown reset or stored value remains
+unknown unless an explicit replacement mask establishes use.
+
+The check writes `target/register-inventory/<chip>/report.txt` and `report.json`
+before failing on used bits without fields. Unknown bits are listed separately
+by word, with their reasons and source symbols, and do not create opaque fields
+or establish absence. The reports retain input hashes, assumptions, ranges,
+partial/blocked/gap counts and causes, and unresolved/indexed address limits.
+Access counts and the provenance registry's cited-function priority are retained;
+a citation alone is not evidence that any particular bit is used.
+Small bounded indices compare every candidate; larger or unbounded progressions
+compare declared arrays and runs and retain a coverage limit. Filtered or
+incomplete record lists are rejected when they disagree with the summary.
+The MMIO corpus does not cover RAM layouts. No model is edited by this check.
+
 `cargo registers init-model --request geometry.toml --directory new-model`
 creates an editable native model from an explicit schema-1 TOML request:
 
