@@ -308,6 +308,15 @@ A bound also lists every function its root reaches over what is resolved
 floating-point CSR accesses (`FunctionFacts::float_sites`): what checks of a
 context's code, such as the firmware gate's interrupt-context checks, read.
 
+`Analysis::reached_cut(root, resolutions, cut)` uses the same walk as
+`Bound::reached`, stopping at transfers whose instruction sites are in `cut`.
+The function owning a cut site remains reached. `task_poll_sites` obtains the
+dequeue call sites from `Fact::TaskPolls` and `Fact::NoTasks` in `Resolutions`,
+without name or address rules; their resolved targets are task roots. The
+image gate uses each hart/level's own `Stacks::resolutions_for`, including
+its interrupt routes, for both the bound and the cut. A function reachable
+without crossing a task poll remains strict even if a task also calls it.
+
 The nesting rule's other half, each source at its table level for good, is
 the image's configuration. `Dwarf::instances` finds every copy of a function in the
 DWARF, out of line or inlined; the firmware gate requires each copy of the

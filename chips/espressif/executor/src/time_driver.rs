@@ -294,6 +294,7 @@ fn program(comparator: u8, deadline: u64) {
 
 /// After `slot`'s queue changed: program its comparator (the writer) or
 /// publish its next deadline to the writer.
+#[esp_hal::ram]
 fn rearm(swi: u8, slot: &mut Slot, now: u64) {
     let next = slot.queue.next_deadline();
     if next == slot.armed {
@@ -322,6 +323,7 @@ fn rearm(swi: u8, slot: &mut Slot, now: u64) {
 /// Serve executor `swi`'s timers, in its context before it polls: dispatch
 /// its expired timers and rearm; the writer also programs the comparators
 /// whose executors published a new deadline.
+#[esp_hal::ram]
 pub(crate) fn service(swi: u8) {
     if COMPARATOR_OF
         .get(swi as usize)

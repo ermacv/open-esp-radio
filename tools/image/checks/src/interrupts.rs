@@ -21,6 +21,8 @@ use oer_analysis_riscv_program::facts::ImageFacts;
 
 mod placement;
 pub use placement::{INTERRUPT_PLACEMENT_REPORT, InterruptPlacement};
+mod code;
+pub use code::CodePlacement;
 
 /// The interrupt stacks' report in an image build's output directory.
 pub const INTERRUPT_REPORT: &str = "interrupt-stack.txt";
@@ -45,6 +47,8 @@ pub struct InterruptStacks {
     /// What the interrupt handlers' code does that interrupt context should
     /// not, over what is resolved.
     pub handler_code: HandlerCode,
+    /// Strict executor/handler paths and P2 task paths, separated by facts.
+    pub code_placement: CodePlacement,
     /// Compiler panic entries, the platform handler, the optional image hook
     /// and all their resolved callees. This path must survive cache loss even
     /// when the image has no interrupt that deliberately panics.
@@ -146,6 +150,58 @@ impl InterruptStacks {
                     self.name(*outside)
                 )
                 .into());
+            }
+        }
+        for context in &self.code_placement.contexts {
+            for address in &context.strict {
+                if self
+                    .code_placement
+                    .functions
+                    .get(address)
+                    .is_some_and(|function| function.location.cached())
+                {
+                    return Err(format!(
+                        "interrupt handler code runs {} from cached memory, reached from {context}:\n{}",
+                        self.name(*address), self.render()
+                    ).into());
+                }
+                if self
+                    .code_placement
+                    .functions
+                    .get(address)
+                    .is_some_and(|function| function.location == code::Location::Other)
+                {
+                    return Err(format!(
+                        "interrupt handler code runs {} from outside SRAM/ROM, reached from {context}:\n{}",
+                        self.name(*address), self.render()
+                    ).into());
+                }
+            }
+            for address in &context.tasks {
+                if self
+                    .code_placement
+                    .functions
+                    .get(address)
+                    .is_some_and(|function| function.location == code::Location::Flash)
+                {
+                    return Err(format!(
+                        "P2 task code runs {} from cached flash, reached from {context}:\n{}",
+                        self.name(*address),
+                        self.render()
+                    )
+                    .into());
+                }
+                if self
+                    .code_placement
+                    .functions
+                    .get(address)
+                    .is_some_and(|function| function.location == code::Location::Other)
+                {
+                    return Err(format!(
+                        "P2 task code runs {} from outside SRAM/ROM/PSRAM, reached from {context}:\n{}",
+                        self.name(*address), self.render()
+                    ).into());
+                }
             }
         }
         let mut warnings = Vec::new();
@@ -267,6 +323,8 @@ impl InterruptStacks {
         );
         if let Some(placement) = placement {
             out.push_str(&placement.summary());
+        } else {
+            out.push_str(&self.code_placement.summary(name));
         }
         for (function, site) in code.float.iter().take(SHOWN) {
             let _ = writeln!(
@@ -280,6 +338,14 @@ impl InterruptStacks {
         }
         for function in code.cached.iter().take(SHOWN) {
             let _ = writeln!(out, "  in cached memory: {}", name(*function));
+        }
+        if self
+            .code_placement
+            .contexts
+            .iter()
+            .any(|context| !context.cached_paths.is_empty())
+        {
+            out.push_str(&self.code_placement.render_paths(name));
         }
         let _ = writeln!(
             out,
@@ -464,18 +530,16 @@ pub fn interrupt_stacks_of(image: &Image) -> Result<InterruptStacks> {
     let level_writers = level_writers(dwarf, interrupts)?;
 
     let sources = source_table(elf, &interrupts.source_table_symbol)?;
-    let harts = oer_analysis_riscv_stack::interrupt_stacks(
-        analysis,
-        &Stacks {
-            table: &table,
-            cores: &interrupts.harts,
-            always: &interrupts.always_levels,
-            vectors: &vectors,
-            exception,
-            sources,
-            resolutions,
-        },
-    )?;
+    let inputs = Stacks {
+        table: &table,
+        cores: &interrupts.harts,
+        always: &interrupts.always_levels,
+        vectors: &vectors,
+        exception,
+        sources,
+        resolutions,
+    };
+    let harts = oer_analysis_riscv_stack::interrupt_stacks(analysis, &inputs)?;
     let reached: BTreeSet<u32> = harts
         .iter()
         .flat_map(|hart| hart.levels.iter())
@@ -483,6 +547,14 @@ pub fn interrupt_stacks_of(image: &Image) -> Result<InterruptStacks> {
         .collect();
     let interrupt_code = handler_code(analysis, &reached, names, &contract.memory);
     let panic_code = panic_path_code(analysis, names, resolutions, &contract.memory)?;
+    let code_placement = CodePlacement::of(
+        analysis,
+        functions,
+        &harts,
+        &inputs,
+        panic_reached(analysis, names, resolutions)?,
+        &contract.memory,
+    )?;
     let hook = names
         .iter()
         .find(|(_, name)| *name == "oer_platform_panic_hook");
@@ -503,6 +575,7 @@ pub fn interrupt_stacks_of(image: &Image) -> Result<InterruptStacks> {
         names: names.clone(),
         level_writers,
         handler_code: interrupt_code,
+        code_placement,
         panic_code,
         panic_hook_data,
         contract: contract.clone(),
@@ -562,11 +635,24 @@ fn panic_path_code(
     resolutions: &oer_analysis_riscv_stack::Resolutions,
     memory: &oer_chip_profile::Memory,
 ) -> Result<HandlerCode> {
+    Ok(handler_code(
+        analysis,
+        &panic_reached(analysis, names, resolutions)?,
+        names,
+        memory,
+    ))
+}
+
+fn panic_reached(
+    analysis: &Analysis,
+    names: &BTreeMap<u32, String>,
+    resolutions: &oer_analysis_riscv_stack::Resolutions,
+) -> Result<BTreeSet<u32>> {
     let mut reached = BTreeSet::new();
     for (&address, _) in names.iter().filter(|(_, name)| panic_entry(name)) {
         reached.extend(analysis.bound_with(address, resolutions)?.reached);
     }
-    Ok(handler_code(analysis, &reached, names, memory))
+    Ok(reached)
 }
 
 /// Demangled compiler entry points in the pinned toolchain, plus the image
@@ -697,6 +783,7 @@ mod tests {
             names: BTreeMap::from([(timer(), "TIMER".to_owned())]),
             level_writers: Vec::new(),
             handler_code: HandlerCode::default(),
+            code_placement: CodePlacement::default(),
             panic_code: HandlerCode::default(),
             panic_hook_data: Vec::new(),
             contract: contract(),
@@ -735,6 +822,7 @@ mod tests {
             names: BTreeMap::new(),
             level_writers: Vec::new(),
             handler_code: HandlerCode::default(),
+            code_placement: CodePlacement::default(),
             panic_code: HandlerCode::default(),
             panic_hook_data: Vec::new(),
             contract: contract(),

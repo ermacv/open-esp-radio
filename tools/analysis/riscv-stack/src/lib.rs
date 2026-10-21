@@ -65,7 +65,9 @@ use oer_analysis_riscv_analysis::{JumpTableSource, KnownJump, ProvenTables, Reco
 use oer_analysis_riscv_program::tables::ImageTables;
 pub use producers::{BaseBarrier, LoadBase, RegisterWitness};
 pub use relocations::taken_addresses;
-pub use resolutions::{Assumption, Fact, Resolution, Resolutions, ipc_resolutions};
+pub use resolutions::{
+    Assumption, Fact, Resolution, Resolutions, ipc_resolutions, task_poll_sites,
+};
 pub use summaries::{Summary, parse as parse_summaries};
 pub use sweep::{LevelDrop, Load, TableBase, TargetSource, Transfer, TransferKind};
 pub use tasks::task_poll_resolutions;
@@ -815,6 +817,27 @@ impl Analysis {
     /// [`Self::bound`] with `resolutions` for the indirect sites the
     /// analysis left unresolved: such a site reaches each of its targets.
     pub fn bound_with(&self, root: u32, resolutions: &Resolutions) -> Result<Bound> {
+        self.bound_cut(root, resolutions, None)
+    }
+
+    /// Reachability under the same rules as [`Bound::reached`], without
+    /// following transfers at `cut` sites. Their owning functions remain
+    /// reached. An empty cut gives exactly [`Self::bound_with`]'s inventory.
+    pub fn reached_cut(
+        &self,
+        root: u32,
+        resolutions: &Resolutions,
+        cut: &BTreeSet<u32>,
+    ) -> Result<BTreeSet<u32>> {
+        Ok(self.bound_cut(root, resolutions, Some(cut))?.reached)
+    }
+
+    fn bound_cut(
+        &self,
+        root: u32,
+        resolutions: &Resolutions,
+        cut: Option<&BTreeSet<u32>>,
+    ) -> Result<Bound> {
         if !self.functions.contains_key(&root) {
             return Err(Error::new(
                 ErrorCode::NotFound,
@@ -824,6 +847,7 @@ impl Analysis {
         let mut walk = Walk {
             analysis: self,
             resolutions,
+            cut,
             memo: BTreeMap::new(),
             stack: Vec::new(),
             unresolved: BTreeSet::new(),
@@ -891,6 +915,7 @@ type DepthPath = (u64, Vec<(u32, u64)>);
 struct Walk<'a> {
     analysis: &'a Analysis,
     resolutions: &'a Resolutions,
+    cut: Option<&'a BTreeSet<u32>>,
     // A terminal recursive callee still has its full frame and nonrecursive
     // callees, but its direct self-edges are infeasible. Never reuse that
     // summary for an ordinary invocation of the same address.
@@ -929,6 +954,9 @@ impl Walk<'_> {
         // The deepest point of this function alone is its frame.
         let mut deepest = (frame, Vec::new());
         for transfer in &facts.transfers {
+            if self.cut.is_some_and(|cut| cut.contains(&transfer.site)) {
+                continue;
+            }
             let direct_self = transfer.kind == TransferKind::Call
                 && transfer.target == Some(address)
                 && facts.terminal_recursive_callees;

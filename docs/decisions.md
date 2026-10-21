@@ -113,8 +113,12 @@ bounds) live in the code that applies them.
   handshake, a ring poll) is a timer-woken step with a deadline.
 - **Interrupt handlers** reach tasks through static typed signals, never
   through an executor's waker vtable.
-- **Interrupt code placement.** Code reachable from interrupts runs from SRAM
-  or ROM only, checked by an image check.
+- **Interrupt code placement.** Interrupt handlers and the executor code they
+  run (entries, signal service and pend, the panic path) run from SRAM or ROM
+  only. The tasks the P2 radio executor polls, and what they call, may run from
+  PSRAM: the S31 reaches flash and PSRAM through separate MSPI controllers, so
+  a flash operation never disables the PSRAM cache. Neither runs from cached
+  flash. An image check enforces both.
 - **Stack bounds.** Interrupt stacks need a proven bound; task stacks accept
   any result with a warning; an observed depth above a bound fails the run;
   there is no baseline of accepted holes. A function leaves a call site's

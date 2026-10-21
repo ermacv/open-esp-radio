@@ -1,7 +1,7 @@
 //! Measurements only: the existing handler inventory and bounds keep their
 //! meaning, and none of these totals participates in a gate's verdict.
 
-use super::{InterruptStacks, Result, cached_hook_references};
+use super::{InterruptStacks, Result, cached_hook_references, code::Role};
 use crate::stack::Image;
 use oer_analysis_elf::{Elf, SymbolKind};
 use oer_analysis_riscv_stack::{Analysis, HartStack};
@@ -42,6 +42,7 @@ struct CachedFunction {
     name: String,
     krate: String,
     levels: Vec<Level>,
+    role: Role,
 }
 
 #[derive(Clone, Debug)]
@@ -150,15 +151,17 @@ fn union_bytes(region: Region, ranges: &[SramRange]) -> u64 {
 }
 
 /// The placement measurements, kept separate from [`super::HandlerCode`]
-/// and [`InterruptStacks::check`]. Only resolved handler reachability counts;
-/// exception membership is an intersection with the existing cached inventory.
+/// and [`InterruptStacks::check`]. Counts use the resolved strict/task
+/// partition, including exceptions and the independent panic path.
 #[derive(Debug)]
 pub struct InterruptPlacement {
     functions: Vec<CachedFunction>,
-    levels: BTreeMap<Level, Total>,
     references: Vec<DataReference>,
     objects: BTreeMap<(u64, u64), DataObject>,
     sram: Sram,
+    code_summary: String,
+    strict_totals: String,
+    strict_paths: String,
 }
 
 impl InterruptPlacement {
@@ -166,7 +169,7 @@ impl InterruptPlacement {
     /// symbols and section/range addresses; do not read an ELF from disk.
     pub fn of(image: &Image, stacks: &InterruptStacks, profile: &Profile) -> Result<Self> {
         let elf = Elf::parse(&image.elf)?;
-        let (functions, levels) = cached_functions(&image.analysis, stacks);
+        let (functions, _) = cached_functions(&image.analysis, stacks);
         let reached = stacks
             .harts
             .iter()
@@ -178,42 +181,28 @@ impl InterruptPlacement {
         let (references, objects) = cached_data(&elf, &references, stacks);
         Ok(Self {
             functions,
-            levels,
             references,
             objects,
             sram: Sram::of(&elf, profile, stacks.contract.memory.sram),
+            code_summary: stacks
+                .code_placement
+                .summary(|address| stacks.name(address)),
+            strict_totals: stacks.code_placement.totals(),
+            strict_paths: stacks
+                .code_placement
+                .render_paths(|address| stacks.name(address)),
         })
-    }
-
-    fn code_bytes(&self) -> u64 {
-        self.functions
-            .iter()
-            .map(|function| u64::from(function.size))
-            .sum()
     }
 
     fn data_bytes(&self) -> u64 {
         self.objects.values().map(|object| object.size).sum()
     }
 
-    /// The three summary lines that follow `handler code:`.
+    /// The code partition, data and SRAM lines following `handler code:`.
     pub fn summary(&self) -> String {
-        let levels = self
-            .levels
-            .iter()
-            .map(|(level, total)| {
-                format!(
-                    "{level}: {} functions, {} bytes",
-                    total.functions, total.bytes
-                )
-            })
-            .collect::<Vec<_>>()
-            .join("; ");
         format!(
-            "cached handler code: {} functions, {} bytes; by level: {}\ncached handler data: {} references to {} objects, {} bytes\nSRAM: usable {}, placed {}, free {} bytes\n",
-            self.functions.len(),
-            self.code_bytes(),
-            levels,
+            "{}cached handler data: {} references to {} objects, {} bytes\nSRAM: usable {}, placed {}, free {} bytes\n",
+            self.code_summary,
             self.references.len(),
             self.objects.len(),
             self.data_bytes(),
@@ -227,7 +216,7 @@ impl InterruptPlacement {
     pub fn render(&self) -> String {
         let mut out = self.summary();
         out.push_str(
-            "\nCached handler functions (size descending)\nname\taddress\tsize\tlevels\tcrate\n",
+            "\nCached handler functions (size descending)\nname\taddress\tsize\tlevels\tcrate\tclass\n",
         );
         let mut crates: BTreeMap<&str, Total> = BTreeMap::new();
         for function in &self.functions {
@@ -239,8 +228,13 @@ impl InterruptPlacement {
                 .join(", ");
             let _ = writeln!(
                 out,
-                "{}\t{:#010x}\t{}\t{}\t{}",
-                function.name, function.address, function.size, levels, function.krate
+                "{}\t{:#010x}\t{}\t{}\t{}\t{}",
+                function.name,
+                function.address,
+                function.size,
+                levels,
+                function.krate,
+                function.role
             );
             let total = crates.entry(&function.krate).or_default();
             total.functions += 1;
@@ -252,6 +246,10 @@ impl InterruptPlacement {
         for (krate, total) in crates {
             let _ = writeln!(out, "{krate}\t{}\t{}", total.functions, total.bytes);
         }
+        out.push('\n');
+        out.push_str(&self.strict_totals);
+        out.push('\n');
+        out.push_str(&self.strict_paths);
         out.push_str("\nCached handler data references\nfunction\tfunction address\tsite\ttarget\tobject address\tobject size\tobject names\n");
         for reference in &self.references {
             let _ = write!(
@@ -337,10 +335,22 @@ fn cached_functions(
         .map(|&level| (level, Total::default()))
         .collect();
     let mut functions = Vec::new();
-    // HandlerCode obtained these addresses from this same analysis.
-    for facts in stacks
+    let cached: BTreeSet<_> = stacks
         .handler_code
         .cached
+        .iter()
+        .copied()
+        .chain(
+            stacks
+                .code_placement
+                .functions
+                .iter()
+                .filter(|(_, function)| function.location.cached())
+                .map(|(&address, _)| address),
+        )
+        .collect();
+    // Both inventories obtained these addresses from this same analysis.
+    for facts in cached
         .iter()
         .filter_map(|address| analysis.functions.get(address))
     {
@@ -367,6 +377,11 @@ fn cached_functions(
             name,
             krate,
             levels: membership,
+            role: stacks
+                .code_placement
+                .functions
+                .get(&address)
+                .map_or(Role::Strict, |function| function.role),
         });
     }
     functions.sort_by(|a, b| b.size.cmp(&a.size).then(a.address.cmp(&b.address)));
@@ -429,4 +444,4 @@ fn cached_data(
 }
 
 #[cfg(test)]
-mod tests;
+pub(super) mod tests;

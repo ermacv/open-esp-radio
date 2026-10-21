@@ -4,7 +4,7 @@ use object::write::{Object, Relocation, StandardSection, Symbol, SymbolSection};
 use object::{Architecture, BinaryFormat, Endianness, RelocationFlags, SymbolFlags, SymbolScope};
 use oer_analysis_riscv_stack::{Function, FunctionFacts};
 
-fn facts(address: u32, size: u32) -> FunctionFacts {
+pub(in crate::interrupts) fn facts(address: u32, size: u32) -> FunctionFacts {
     FunctionFacts {
         function: Function {
             address,
@@ -346,10 +346,12 @@ fn sram_inventory_reads_placement_symbols_sections_and_the_boundary_source() {
 #[test]
 fn summaries_and_full_report_headings_are_stable() {
     let (stacks, analysis) = inventory();
-    let (functions, levels) = cached_functions(&analysis, &stacks);
+    let (functions, _) = cached_functions(&analysis, &stacks);
+    let code_summary = stacks
+        .code_placement
+        .summary(|address| stacks.name(address));
     let placement = InterruptPlacement {
         functions,
-        levels,
         references: Vec::new(),
         objects: BTreeMap::new(),
         sram: Sram {
@@ -361,12 +363,17 @@ fn summaries_and_full_report_headings_are_stable() {
             ranges: Vec::new(),
             placed: 1024,
         },
+        code_summary: code_summary.clone(),
+        strict_totals: stacks.code_placement.totals(),
+        strict_paths: stacks
+            .code_placement
+            .render_paths(|address| stacks.name(address)),
     };
-    let expected = "cached handler code: 2 functions, 40 bytes; by level: hart 0 exception: 1 functions, 28 bytes; hart 0 P1: 2 functions, 40 bytes; hart 0 P2: 1 functions, 12 bytes; hart 1 exception: 0 functions, 0 bytes; hart 1 P1: 1 functions, 12 bytes\ncached handler data: 0 references to 0 objects, 0 bytes\nSRAM: usable 2048, placed 1024, free 1024 bytes\n";
+    let expected = "strict handler code in cached memory: 0 functions, 0 bytes; by level: none\nP2 task code in PSRAM: 0 functions, 0 bytes; tasks: none\ncached handler data: 0 references to 0 objects, 0 bytes\nSRAM: usable 2048, placed 1024, free 1024 bytes\n";
     assert_eq!(placement.summary(), expected);
     let full = stacks.render_with_placement(&placement);
     let original = stacks.render();
-    assert_eq!(full.replacen(expected, "", 1), original);
+    assert_eq!(full.replacen(expected, &code_summary, 1), original);
     let after = full
         .split_once("handler code: ")
         .unwrap()
@@ -386,6 +393,8 @@ fn summaries_and_full_report_headings_are_stable() {
         [
             "Cached handler functions (size descending)",
             "Cached handler code by crate",
+            "Strict handler code by region",
+            "Strict cached handler paths",
             "Cached handler data references",
             "Cached handler data objects",
             "Data accounting: 0 references without a sized data symbol; object bytes cover sized objects only. Code targets are excluded. Aliases of the same address and size count once; interior addresses count the whole object. Only static references from resolved handler code are measured.",
@@ -393,6 +402,8 @@ fn summaries_and_full_report_headings_are_stable() {
         ]
     );
     assert!(report.contains("beta\t1\t28\nalpha\t1\t12\n"));
+    assert!(report.contains("name\taddress\tsize\tlevels\tcrate\tclass\n"));
+    assert!(report.contains("\tbeta\tstrict\n"));
     // The measurements add no policy: the same check still gives exactly
     // the same result and warnings after rendering either report.
     let before = stacks.check(super::super::Required::Partial).unwrap();
