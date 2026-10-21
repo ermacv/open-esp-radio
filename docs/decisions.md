@@ -119,7 +119,8 @@ bounds) live in the code that applies them.
   PSRAM: the S31 reaches flash and PSRAM through separate MSPI controllers, so
   a flash operation never disables the PSRAM cache. Neither runs from cached
   flash. An image check enforces both; a diagnostic HIL image reports a violation
-  instead of failing.
+  instead of failing. The image linker places the strict code the analysis finds
+  in cached memory into SRAM and links again; the image check verifies the result.
 - **Stack bounds.** Interrupt stacks need a proven bound; task stacks accept
   any result with a warning; an observed depth above a bound fails the run;
   there is no baseline of accepted holes. A function leaves a call site's
