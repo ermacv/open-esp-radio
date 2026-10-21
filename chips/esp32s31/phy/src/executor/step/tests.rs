@@ -40,6 +40,9 @@ impl Wake for WakeCount {
 pub(crate) struct Io {
     actions: Vec<PhyColdI2cAction>,
     rfpll_actions: Vec<crate::tracking::rfpll::Action>,
+    rfpll_clock: Option<Rc<VirtualClock<1>>>,
+    rfpll_times: Vec<Instant>,
+    rfpll_write_micros: u64,
     rfpll_initial: u16,
     rfpll_statuses: Vec<crate::tracking::rfpll::search::Status>,
     rfpll_samples: usize,
@@ -63,16 +66,31 @@ impl Io {
             return Err(Failure::Binding);
         }
         self.rfpll_actions.push(action);
+        if let Some(clock) = &self.rfpll_clock {
+            self.rfpll_times.push(clock.now());
+        }
         Ok(match action {
             Action::Search(action) => Completion::Search(match action {
                 search::Action::ReadInitialCap => {
                     search::Completion::InitialCap(self.rfpll_initial)
                 }
                 search::Action::EnableSearch => search::Completion::SearchEnabled,
-                search::Action::WriteCap(cap) => search::Completion::CapWritten(cap),
+                search::Action::WriteCap(cap) => {
+                    if let Some(clock) = &self.rfpll_clock {
+                        clock
+                            .advance(Duration::from_micros(self.rfpll_write_micros))
+                            .expect("write duration fits");
+                    }
+                    search::Completion::CapWritten(cap)
+                }
                 search::Action::DelayMicros(micros) => {
                     if !D::settle_micros(micros) {
                         return Err(Failure::Binding);
+                    }
+                    if let Some(clock) = &self.rfpll_clock {
+                        clock
+                            .advance(Duration::from_micros(u64::from(micros)))
+                            .expect("settle fits");
                     }
                     search::Completion::DelayElapsed(micros)
                 }
@@ -812,18 +830,11 @@ fn rfpll_preserves_signed_search_and_all_memory_effects_at_bounded_checkpoints()
                     assert_eq!(result, Step::Runnable);
                     assert!(!actions.is_empty());
                     match actions[0] {
-                        Action::Search(crate::tracking::rfpll::search::Action::WriteCap(_))
-                            if actions.len() > 1 =>
-                        {
+                        Action::Search(crate::tracking::rfpll::search::Action::DelayMicros(_)) => {
                             assert!(matches!(
                                 actions,
                                 [
-                                    Action::Search(
-                                        crate::tracking::rfpll::search::Action::WriteCap(_)
-                                    ),
-                                    Action::Search(
-                                        crate::tracking::rfpll::search::Action::DelayMicros(5)
-                                    ),
+                                    _,
                                     Action::Search(
                                         crate::tracking::rfpll::search::Action::ReadStatus
                                     )
@@ -842,7 +853,23 @@ fn rfpll_preserves_signed_search_and_all_memory_effects_at_bounded_checkpoints()
                         .expect("time fits");
                 }
             }
-            assert_eq!(io.rfpll_actions, old.rfpll_actions);
+            // Scheduler gaps supply the minimum settle in the sliced path;
+            // every hardware write/read and its order still matches native.
+            let effects = |actions: Vec<Action>| {
+                actions
+                    .into_iter()
+                    .filter(|a| {
+                        !matches!(
+                            a,
+                            Action::Search(crate::tracking::rfpll::search::Action::DelayMicros(_))
+                        )
+                    })
+                    .collect::<Vec<_>>()
+            };
+            assert_eq!(
+                effects(io.rfpll_actions.clone()),
+                effects(old.rfpll_actions)
+            );
             assert_eq!(correction.action(), Action::Complete(expected));
             assert_eq!(
                 io.rfpll_actions
@@ -853,6 +880,102 @@ fn rfpll_preserves_signed_search_and_all_memory_effects_at_bounded_checkpoints()
             );
         }
     }
+}
+
+#[test]
+fn rfpll_status_waits_from_the_completed_write_and_only_settles_the_remainder() {
+    use crate::tracking::rfpll::{Action, search};
+    for gap in [0, 2, 5, 500] {
+        let clock = Rc::new(VirtualClock::<1>::new());
+        let started_at = clock.now();
+        let mut io = Io {
+            rfpll_clock: Some(clock.clone()),
+            rfpll_write_micros: 7,
+            rfpll_initial: 100,
+            ..Io::default()
+        };
+        let mut search = search::Search::new();
+        let mut job =
+            Job::rfpll(rfpll::Cursor::Search(&mut search), clock.now()).expect("deadline fits");
+        // Initial read, enable and the complete write each yield separately.
+        for _ in 0..3 {
+            assert_eq!(
+                io.advance::<TestDelay, _>(&mut job, &*clock, clock.now()),
+                Step::Runnable
+            );
+        }
+        assert!(matches!(
+            io.rfpll_actions.as_slice(),
+            [
+                Action::Search(search::Action::ReadInitialCap),
+                Action::Search(search::Action::EnableSearch),
+                Action::Search(search::Action::WriteCap(_))
+            ]
+        ));
+        let written_at = clock.now();
+        assert_eq!(
+            written_at,
+            started_at
+                .checked_add(Duration::from_micros(7))
+                .expect("write fits")
+        );
+        clock.advance(Duration::from_micros(gap)).expect("gap fits");
+        assert_eq!(
+            io.advance::<TestDelay, _>(&mut job, &*clock, clock.now()),
+            Step::Runnable
+        );
+        let remainder = 5_u64.saturating_sub(gap);
+        let after_write = &io.rfpll_actions[3..];
+        if remainder == 0 {
+            assert_eq!(after_write, [Action::Search(search::Action::ReadStatus)]);
+        } else {
+            assert_eq!(
+                after_write,
+                [
+                    Action::Search(search::Action::DelayMicros(remainder as u32)),
+                    Action::Search(search::Action::ReadStatus)
+                ]
+            );
+        }
+        assert_eq!(
+            io.rfpll_times.last().copied().expect("status was sampled"),
+            written_at
+                .checked_add(Duration::from_micros(gap.max(5)))
+                .expect("time fits")
+        );
+    }
+}
+
+#[test]
+fn rfpll_settle_deadline_overflow_cannot_read_status() {
+    use crate::tracking::rfpll::{Action, search};
+    let clock = VirtualClock::<1>::new();
+    let mut io = Io::default();
+    let mut search = search::Search::new();
+    {
+        let mut job = Job::rfpll(rfpll::Cursor::Search(&mut search), clock.now())
+            .expect("initial deadline fits");
+        for _ in 0..2 {
+            assert_eq!(
+                io.advance::<TestDelay, _>(&mut job, &clock, clock.now()),
+                Step::Runnable
+            );
+        }
+        clock
+            .advance(Duration::from_micros(
+                u64::MAX - clock.now().as_micros() - 2,
+            ))
+            .expect("time fits");
+        assert_eq!(
+            io.advance::<TestDelay, _>(&mut job, &clock, clock.now()),
+            Step::Failure(Failure::DeadlineOverflow)
+        );
+    }
+    assert_eq!(search.action(), search::Action::DelayMicros(5));
+    assert!(
+        !io.rfpll_actions
+            .contains(&Action::Search(search::Action::ReadStatus))
+    );
 }
 
 #[test]
@@ -929,9 +1052,17 @@ fn rfpll_pending_failure_and_cancellation_keep_the_thermal_envelope_unrestored()
         let mut driver = core::pin::pin!(drive::<TestDelay, _, _>(
             &mut job, &mut io, &clock, None, None
         ));
-        assert!(driver.as_mut().poll(&mut cx).is_pending());
+        for _ in 0..3 {
+            assert!(driver.as_mut().poll(&mut cx).is_pending());
+        }
     }
-    assert!(!matches!(correction.action(), Action::Complete(_)));
+    assert_eq!(
+        correction.action(),
+        Action::Search(crate::tracking::rfpll::search::Action::DelayMicros(5))
+    );
+    assert!(!io.rfpll_actions.contains(&Action::Search(
+        crate::tracking::rfpll::search::Action::ReadStatus
+    )));
 }
 
 #[test]
@@ -991,7 +1122,7 @@ fn rfpll_driver_wakes_once_per_checkpoint_without_a_timer_or_gap_timeout() {
         }
     }
     assert_eq!(timer.constructed.get(), 0);
-    assert_eq!(pending, 63); // Initial, enable, 60 candidates, final write.
+    assert_eq!(pending, 123); // Initial, enable, two polls per candidate, final write.
     assert_eq!(wakes.0.load(std::sync::atomic::Ordering::Relaxed), pending);
     assert_eq!(
         (stats.pending as usize, stats.polls as usize, stats.resumes),

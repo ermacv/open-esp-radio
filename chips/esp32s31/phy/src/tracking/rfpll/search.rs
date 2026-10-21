@@ -154,7 +154,7 @@ impl Search {
     pub(crate) const fn checkpoint_len(&self) -> u8 {
         match self.step {
             Step::Complete => 0,
-            Step::WriteCandidate => 3,
+            Step::Settle => 2,
             _ => 1,
         }
     }

@@ -4,9 +4,10 @@
 //! radio traffic, acquire a coex grant, or commit a tracking temperature.
 //! `maintain` includes the current frequency-control entry and restoration;
 //! `search` and `correct` are children requiring that boundary from the caller.
-//! Runtime execution polls I2C directly and retains the required 2/5-us ROM
-//! settles. The P1 engine yields between complete candidates and memory entries;
-//! each direct I2C completion keeps its named 20 µs settle.
+//! Runtime execution polls I2C directly. The P1 engine yields after a complete
+//! capacitor write and measures the required 5-us minimum before status; the ROM
+//! supplies only any remaining settle. Memory entries yield after read/write.
+//! The entry settle remains 2 µs; direct I2C keeps its named 20-µs settle.
 
 #![allow(
     private_bounds,

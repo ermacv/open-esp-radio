@@ -77,6 +77,8 @@ enum Work<'a> {
 
 pub(crate) struct Job<'a> {
     work: Work<'a>,
+    // Transport answer deadline, or RFPLL's earliest status time after a
+    // completed capacitor write. RFPLL never arms a timer from this field.
     deadline: Instant,
     temperature: bool,
     first_wait: bool,
@@ -186,7 +188,8 @@ impl<'a> Job<'a> {
     }
 
     /// One admitted hardware checkpoint, or terminal software-only recognition.
-    /// RFPLL retains complete candidates and memory entries inside a checkpoint;
+    /// RFPLL splits capacitor writes from settled status reads and retains
+    /// complete memory entries inside a checkpoint;
     /// temperature conversion, state publication and observers are outside it.
     #[inline(never)]
     fn advance_one<D: super::wait::PhyShortDelay, C: oer_time::Clock>(
@@ -214,7 +217,9 @@ impl<'a> Job<'a> {
         self.ready_started = None;
         self.first_wait = false;
         match &mut self.work {
-            Work::Rfpll(cursor) => return cursor.advance_one::<D, _>(&mut io, clock),
+            Work::Rfpll(cursor) => {
+                return cursor.advance_one::<D, _>(&mut io, clock, &mut self.deadline);
+            }
             Work::RfpllColdI2c(cursor) => return cursor.advance_one(&mut io, now),
             Work::Code(code) => {
                 if code.is_some() {

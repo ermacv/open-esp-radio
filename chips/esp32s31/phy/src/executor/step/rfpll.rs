@@ -20,6 +20,7 @@ impl Cursor<'_> {
         &mut self,
         io: &mut Io<'_, '_>,
         clock: &C,
+        settle_at: &mut Instant,
     ) -> Result<Step, Failure> {
         let count = match self {
             #[cfg(any(test, oer_probe))]
@@ -30,7 +31,7 @@ impl Cursor<'_> {
             return Ok(Step::Complete);
         }
         for _ in 0..count {
-            io.advance_rfpll::<D, _>(clock, self)?;
+            io.advance_rfpll::<D, _>(clock, self, settle_at)?;
         }
         Ok(Step::Runnable)
     }

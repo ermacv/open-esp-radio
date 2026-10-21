@@ -127,25 +127,65 @@ impl Io<'_, '_> {
     #[inline(never)]
     pub(super) fn advance_rfpll<D: super::super::wait::PhyShortDelay, C: oer_time::Clock>(
         &mut self,
-        _clock: &C,
+        clock: &C,
         cursor: &mut super::rfpll::Cursor<'_>,
+        settle_at: &mut Instant,
     ) -> Result<(), Failure> {
-        let action = cursor.action();
-        let completion = match self {
-            #[cfg(target_arch = "riscv32")]
-            Self::Shared(registers) => {
-                crate::target_port::rfpll::complete_correction::<D, _>(_clock, *registers, action)
-                    .map_err(Failure::Target)
+        use crate::tracking::rfpll::{Action, Completion, search};
+        let mut action = cursor.action();
+        let settle = if let Action::Search(search::Action::DelayMicros(micros)) = action {
+            let remaining = settle_at.saturating_duration_since(clock.now()).as_micros();
+            if remaining > u64::from(micros) {
+                return Err(Failure::Binding);
             }
-            #[cfg(all(target_arch = "riscv32", oer_probe))]
-            Self::Validation(registers) => {
-                crate::target_port::rfpll::complete_correction::<D, _>(_clock, *registers, action)
+            action = Action::Search(search::Action::DelayMicros(remaining as u32));
+            Some((micros, remaining))
+        } else {
+            None
+        };
+        let completion = if let Some((micros, 0)) = settle {
+            // Runnable's scheduler gap already supplied the full minimum.
+            Completion::Search(search::Completion::DelayElapsed(micros))
+        } else {
+            let completion = match self {
+                #[cfg(target_arch = "riscv32")]
+                Self::Shared(registers) => crate::target_port::rfpll::complete_correction::<D, _>(
+                    clock, *registers, action,
+                )
+                .map_err(Failure::Target),
+                #[cfg(all(target_arch = "riscv32", oer_probe))]
+                Self::Validation(registers) => {
+                    crate::target_port::rfpll::complete_correction::<D, _>(
+                        clock, *registers, action,
+                    )
                     .map_err(Failure::Target)
+                }
+                #[cfg(test)]
+                Self::Test(io, _) => io.rfpll::<D>(action),
+            }?;
+            if let Some((micros, remaining)) = settle {
+                if completion
+                    != Completion::Search(search::Completion::DelayElapsed(remaining as u32))
+                {
+                    return Err(Failure::Binding);
+                }
+                Completion::Search(search::Completion::DelayElapsed(micros))
+            } else {
+                completion
             }
-            #[cfg(test)]
-            Self::Test(io, _) => io.rfpll::<D>(action),
-        }?;
-        cursor.advance(completion)
+        };
+        // Stamp the completed physical write before advancing the model.
+        let written_at =
+            matches!(action, Action::Search(search::Action::WriteCap(_))).then(|| clock.now());
+        cursor.advance(completion)?;
+        if let (Some(at), Action::Search(search::Action::DelayMicros(micros))) =
+            (written_at, cursor.action())
+        {
+            *settle_at = at
+                .checked_add(oer_time::Duration::from_micros(u64::from(micros)))
+                .ok_or(Failure::DeadlineOverflow)?;
+        }
+        Ok(())
     }
 
     fn i2c_status(&mut self) -> u8 {
