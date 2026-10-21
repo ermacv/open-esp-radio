@@ -651,12 +651,16 @@ description = "Full CPU address of the software buffer-header anchor; not a comp
 points-to = "BLE_BUFFER_HEADER"
 
 [[layout.words]]
-fields = []
-name = "WORD_007C_OPAQUE"
-opaque = true
+name = "RX_QUEUE_CONFIGURATION"
 offset = 0x7c
 access = "shared"
-description = "Observed word position; unassigned bits retain their exact image."
+description = "CPU pointer to the receive-queue configuration supplied to link-state allocation; it is not a compressed hardware link."
+
+[[layout.words.fields]]
+name = "ADDRESS"
+bits = "31:0"
+writer = "cpu"
+description = "Full CPU address of the software receive-queue configuration. The memory manager dereferences its enable and queue-index bytes before refreshing the link-state RX anchors. The pointed-to object has no published layout."
 
 [[layout.words]]
 fields = []

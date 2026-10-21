@@ -12917,7 +12917,7 @@ pub mod pmu_radio {
         pub const fn hp_active_icg_modem(&self) -> &HpActiveIcgModem {
             &self.hp_active_icg_modem
         }
-        #[doc = "0x1c - Active-state high-power clock and analog-I2C power control reached by the complete front-end/baseband clock body."]
+        #[doc = "0x1c - Active-state high-power clock and analog-I2C power control. The public struct calls low4 reserved, but the pinned complete ROM clock leaf explicitly sets them; its direct use overrides that reserved claim on low4 only."]
         #[inline(always)]
         pub const fn hp_active_hp_ck_power(&self) -> &HpActiveHpCkPower {
             &self.hp_active_hp_ck_power
@@ -13035,10 +13035,10 @@ pub mod pmu_radio {
         #[doc = "`reset()` method sets HP_ACTIVE_ICG_MODEM to value 0"]
         impl crate::Resettable for HpActiveIcgModemSpec {}
     }
-    #[doc = "HP_ACTIVE_HP_CK_POWER (rw) register accessor: Active-state high-power clock and analog-I2C power control reached by the complete front-end/baseband clock body.\n\nYou can [`read`](crate::Reg::read) this register and get [`hp_active_hp_ck_power::R`]. You can [`reset`](crate::Reg::reset), [`write`](crate::Reg::write), [`write_with_zero`](crate::Reg::write_with_zero) this register using [`hp_active_hp_ck_power::W`]. You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api).\n\nFor information about available fields see [`mod@hp_active_hp_ck_power`] module"]
+    #[doc = "HP_ACTIVE_HP_CK_POWER (rw) register accessor: Active-state high-power clock and analog-I2C power control. The public struct calls low4 reserved, but the pinned complete ROM clock leaf explicitly sets them; its direct use overrides that reserved claim on low4 only.\n\nYou can [`read`](crate::Reg::read) this register and get [`hp_active_hp_ck_power::R`]. You can [`reset`](crate::Reg::reset), [`write`](crate::Reg::write), [`write_with_zero`](crate::Reg::write_with_zero) this register using [`hp_active_hp_ck_power::W`]. You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api).\n\nFor information about available fields see [`mod@hp_active_hp_ck_power`] module"]
     #[doc(alias = "HP_ACTIVE_HP_CK_POWER")]
     pub type HpActiveHpCkPower = crate::Reg<hp_active_hp_ck_power::HpActiveHpCkPowerSpec>;
-    #[doc = "Active-state high-power clock and analog-I2C power control reached by the complete front-end/baseband clock body."]
+    #[doc = "Active-state high-power clock and analog-I2C power control. The public struct calls low4 reserved, but the pinned complete ROM clock leaf explicitly sets them; its direct use overrides that reserved claim on low4 only."]
     pub mod hp_active_hp_ck_power {
         #[doc = "Register `HP_ACTIVE_HP_CK_POWER` reader"]
         pub type R = crate::R<HpActiveHpCkPowerSpec>;
@@ -13120,7 +13120,7 @@ pub mod pmu_radio {
                 HpActiveXpdBbI2cW::new(self, 22)
             }
         }
-        #[doc = "Active-state high-power clock and analog-I2C power control reached by the complete front-end/baseband clock body.\n\nYou can [`read`](crate::Reg::read) this register and get [`hp_active_hp_ck_power::R`](R). You can [`reset`](crate::Reg::reset), [`write`](crate::Reg::write), [`write_with_zero`](crate::Reg::write_with_zero) this register using [`hp_active_hp_ck_power::W`](W). You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api)."]
+        #[doc = "Active-state high-power clock and analog-I2C power control. The public struct calls low4 reserved, but the pinned complete ROM clock leaf explicitly sets them; its direct use overrides that reserved claim on low4 only.\n\nYou can [`read`](crate::Reg::read) this register and get [`hp_active_hp_ck_power::R`](R). You can [`reset`](crate::Reg::reset), [`write`](crate::Reg::write), [`write_with_zero`](crate::Reg::write_with_zero) this register using [`hp_active_hp_ck_power::W`](W). You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api)."]
         pub struct HpActiveHpCkPowerSpec;
         impl crate::RegisterSpec for HpActiveHpCkPowerSpec {
             type Ux = u32;
@@ -15518,7 +15518,7 @@ pub mod lp_tsens {
         pub const fn ctrl(&self) -> &Ctrl {
             &self.ctrl
         }
-        #[doc = "0x18 - Temperature-sensor register-bank and PHY read-path control."]
+        #[doc = "0x18 - Temperature-sensor register-bank and PHY read-path control. The public struct calls bits9/23 reserved, but pinned phy_tsens_read_init explicitly sets both; those observed bits remain opaque and override the reserved claim."]
         #[inline(always)]
         pub const fn clk_conf(&self) -> &ClkConf {
             &self.clk_conf
@@ -15665,10 +15665,10 @@ pub mod lp_tsens {
             const RESET_VALUE: u32 = 0x0001_9400;
         }
     }
-    #[doc = "CLK_CONF (rw) register accessor: Temperature-sensor register-bank and PHY read-path control.\n\nYou can [`read`](crate::Reg::read) this register and get [`clk_conf::R`]. You can [`reset`](crate::Reg::reset), [`write`](crate::Reg::write), [`write_with_zero`](crate::Reg::write_with_zero) this register using [`clk_conf::W`]. You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api).\n\nFor information about available fields see [`mod@clk_conf`] module"]
+    #[doc = "CLK_CONF (rw) register accessor: Temperature-sensor register-bank and PHY read-path control. The public struct calls bits9/23 reserved, but pinned phy_tsens_read_init explicitly sets both; those observed bits remain opaque and override the reserved claim.\n\nYou can [`read`](crate::Reg::read) this register and get [`clk_conf::R`]. You can [`reset`](crate::Reg::reset), [`write`](crate::Reg::write), [`write_with_zero`](crate::Reg::write_with_zero) this register using [`clk_conf::W`]. You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api).\n\nFor information about available fields see [`mod@clk_conf`] module"]
     #[doc(alias = "CLK_CONF")]
     pub type ClkConf = crate::Reg<clk_conf::ClkConfSpec>;
-    #[doc = "Temperature-sensor register-bank and PHY read-path control."]
+    #[doc = "Temperature-sensor register-bank and PHY read-path control. The public struct calls bits9/23 reserved, but pinned phy_tsens_read_init explicitly sets both; those observed bits remain opaque and override the reserved claim."]
     pub mod clk_conf {
         #[doc = "Register `CLK_CONF` reader"]
         pub type R = crate::R<ClkConfSpec>;
@@ -15720,7 +15720,7 @@ pub mod lp_tsens {
                 Bit23OpaqueW::new(self, 23)
             }
         }
-        #[doc = "Temperature-sensor register-bank and PHY read-path control.\n\nYou can [`read`](crate::Reg::read) this register and get [`clk_conf::R`](R). You can [`reset`](crate::Reg::reset), [`write`](crate::Reg::write), [`write_with_zero`](crate::Reg::write_with_zero) this register using [`clk_conf::W`](W). You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api)."]
+        #[doc = "Temperature-sensor register-bank and PHY read-path control. The public struct calls bits9/23 reserved, but pinned phy_tsens_read_init explicitly sets both; those observed bits remain opaque and override the reserved claim.\n\nYou can [`read`](crate::Reg::read) this register and get [`clk_conf::R`](R). You can [`reset`](crate::Reg::reset), [`write`](crate::Reg::write), [`write_with_zero`](crate::Reg::write_with_zero) this register using [`clk_conf::W`](W). You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api)."]
         pub struct ClkConfSpec;
         impl crate::RegisterSpec for ClkConfSpec {
             type Ux = u32;

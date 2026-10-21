@@ -179,13 +179,6 @@ bits = "14:8"
 writer = "cpu"
 description = "Controller frequency image, relative to the BLE channel mapping."
 
-[[layout.words.fields]]
-name = "BITS_15_31_OPAQUE"
-opaque = true
-bits = "31:15"
-writer = "cpu"
-description = "Observed position; the physical meaning is not established."
-
 [[layout.words]]
 name = "WORD_001C_OPAQUE"
 opaque = true

@@ -5726,7 +5726,7 @@
         </register>
         <register>
           <name>HP_ACTIVE_HP_CK_POWER</name>
-          <description>Active-state high-power clock and analog-I2C power control reached by the complete front-end/baseband clock body.</description>
+          <description>Active-state high-power clock and analog-I2C power control. The public struct calls low4 reserved, but the pinned complete ROM clock leaf explicitly sets them; its direct use overrides that reserved claim on low4 only.</description>
           <addressOffset>0x1C</addressOffset>
           <size>0x20</size>
           <access>read-write</access>
@@ -6727,7 +6727,7 @@
         </register>
         <register>
           <name>CLK_CONF</name>
-          <description>Temperature-sensor register-bank and PHY read-path control.</description>
+          <description>Temperature-sensor register-bank and PHY read-path control. The public struct calls bits9/23 reserved, but pinned phy_tsens_read_init explicitly sets both; those observed bits remain opaque and override the reserved claim.</description>
           <addressOffset>0x18</addressOffset>
           <size>0x20</size>
           <access>read-write</access>

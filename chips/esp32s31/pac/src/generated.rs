@@ -13812,24 +13812,6 @@ pub mod layouts {
                 Some(Self((self.0 & 0xffff80ff) | (value as u32) << 8))
             }
         }
-
-        /// Opaque: meaning not established. Observed position; the physical meaning is not established.
-        ///
-        /// `BITS_15_31_OPAQUE`, bits 31:15; written by the CPU.
-        /// SOURCE: BLOB_LIBBLE_MEMORY_SCHEDULER_ITEM.
-        pub const fn bits_15_31_opaque(self) -> u32 {
-            self.0 >> 15
-        }
-
-        /// This value with `BITS_15_31_OPAQUE` set to `value`, or `None` when `value` does not
-        /// fit its 17 bits.
-        pub const fn with_bits_15_31_opaque(self, value: u32) -> Option<Self> {
-            if value > 0x1ffff {
-                None
-            } else {
-                Some(Self((self.0 & 0x7fff) | (value) << 15))
-            }
-        }
     }
 
     /// The `BLE_SCHEDULER_ITEM.WORD_001C_OPAQUE` word as the hardware may change it: volatile access only.
@@ -14985,7 +14967,7 @@ pub mod layouts {
         rx_tail: BleLinkStateRxTailCell,
         tx_tail: BleLinkStateTxTailCell,
         rx_reserve: BleLinkStateRxReserveCell,
-        word_007c_opaque: BleLinkStateWord007cOpaqueCell,
+        rx_queue_configuration: BleLinkStateRxQueueConfigurationCell,
         word_0080_opaque: BleLinkStateWord0080OpaqueCell,
     }
 
@@ -15046,7 +15028,9 @@ pub mod layouts {
                 rx_tail: BleLinkStateRxTailCell(vcell::VolatileCell::new(0)),
                 tx_tail: BleLinkStateTxTailCell(vcell::VolatileCell::new(0)),
                 rx_reserve: BleLinkStateRxReserveCell(vcell::VolatileCell::new(0)),
-                word_007c_opaque: BleLinkStateWord007cOpaqueCell(vcell::VolatileCell::new(0)),
+                rx_queue_configuration: BleLinkStateRxQueueConfigurationCell(
+                    vcell::VolatileCell::new(0),
+                ),
                 word_0080_opaque: BleLinkStateWord0080OpaqueCell(vcell::VolatileCell::new(0)),
             }
         }
@@ -15206,9 +15190,9 @@ pub mod layouts {
             &self.rx_reserve
         }
 
-        /// The `WORD_007C_OPAQUE` word at offset 0x7c.
-        pub const fn word_007c_opaque(&self) -> &BleLinkStateWord007cOpaqueCell {
-            &self.word_007c_opaque
+        /// The `RX_QUEUE_CONFIGURATION` word at offset 0x7c.
+        pub const fn rx_queue_configuration(&self) -> &BleLinkStateRxQueueConfigurationCell {
+            &self.rx_queue_configuration
         }
 
         /// The `WORD_0080_OPAQUE` word at offset 0x80.
@@ -17555,31 +17539,31 @@ pub mod layouts {
         }
     }
 
-    /// The `BLE_LINK_STATE.WORD_007C_OPAQUE` word as the hardware may change it: volatile access only.
-    pub struct BleLinkStateWord007cOpaqueCell(vcell::VolatileCell<u32>);
+    /// The `BLE_LINK_STATE.RX_QUEUE_CONFIGURATION` word as the hardware may change it: volatile access only.
+    pub struct BleLinkStateRxQueueConfigurationCell(vcell::VolatileCell<u32>);
 
-    impl BleLinkStateWord007cOpaqueCell {
+    impl BleLinkStateRxQueueConfigurationCell {
         /// One volatile read of the word.
         #[inline]
-        pub fn read(&self) -> BleLinkStateWord007cOpaque {
-            BleLinkStateWord007cOpaque(self.0.get())
+        pub fn read(&self) -> BleLinkStateRxQueueConfiguration {
+            BleLinkStateRxQueueConfiguration(self.0.get())
         }
 
         /// One volatile write of the whole word.
         #[inline]
-        pub fn write(&self, value: BleLinkStateWord007cOpaque) {
+        pub fn write(&self, value: BleLinkStateRxQueueConfiguration) {
             self.0.set(value.0);
         }
     }
 
-    /// Opaque: meaning not established. Observed word position; unassigned bits retain their exact image.
+    /// Project-assigned name. CPU pointer to the receive-queue configuration supplied to link-state allocation; it is not a compressed hardware link.
     ///
-    /// A value of the `BLE_LINK_STATE.WORD_007C_OPAQUE` word.
+    /// A value of the `BLE_LINK_STATE.RX_QUEUE_CONFIGURATION` word.
     /// SOURCE: BLOB_LIBBLE_MEMORY_LINK_STATE.
     #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
-    pub struct BleLinkStateWord007cOpaque(u32);
+    pub struct BleLinkStateRxQueueConfiguration(u32);
 
-    impl BleLinkStateWord007cOpaque {
+    impl BleLinkStateRxQueueConfiguration {
         /// The all-zero word.
         pub const ZERO: Self = Self(0);
 
@@ -17591,6 +17575,19 @@ pub mod layouts {
         /// The word image.
         pub const fn bits(self) -> u32 {
             self.0
+        }
+
+        /// Project-assigned name. Full CPU address of the software receive-queue configuration. The memory manager dereferences its enable and queue-index bytes before refreshing the link-state RX anchors. The pointed-to object has no published layout.
+        ///
+        /// `ADDRESS`, bits 31:0; written by the CPU.
+        /// SOURCE: BLOB_LIBBLE_MEMORY_LINK_STATE.
+        pub const fn address(self) -> u32 {
+            self.0
+        }
+
+        /// This value with `ADDRESS` set to `value`.
+        pub const fn with_address(self, value: u32) -> Self {
+            Self(value)
         }
     }
 

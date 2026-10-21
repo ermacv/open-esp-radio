@@ -1,6 +1,7 @@
 use super::{
-    DtmLinkStateReviewedWords, DtmReceiverEventPhase, DtmRole, DtmSchedulerItemEventType,
-    DtmSchedulerItemReviewedWords, DtmSchedulerReceiverPhy, DtmSchedulerTransmitterPhy, LeTxPower,
+    DtmLinkStateReviewedWords, DtmReceiverEventPhase, DtmRole, DtmSchedulerFrequency,
+    DtmSchedulerItemEventType, DtmSchedulerItemReviewedWords, DtmSchedulerReceiverPhy,
+    DtmSchedulerTransmitterPhy, LeTxPower,
 };
 use crate::le_phy_packet::{LeAccessAddress, LeCrcInit};
 use oer_esp32s31_hal::layouts::*;
@@ -44,7 +45,7 @@ fn only_a_recurring_event_copies_the_reset_power_into_the_item() {
     assert_eq!(link.power_index(), power(9).index());
 
     let initial = item().apply_event(
-        2,
+        DtmSchedulerFrequency::from_controller_image(2).unwrap(),
         DtmSchedulerItemEventType::Transmitter(DtmSchedulerTransmitterPhy::Le1M),
         10,
         20,
@@ -68,7 +69,7 @@ fn a_receiver_reset_stores_the_zero_tick_difference() {
 fn the_sequence_start_is_stored_as_given() {
     let event = item()
         .apply_event(
-            4,
+            DtmSchedulerFrequency::from_controller_image(4).unwrap(),
             DtmSchedulerItemEventType::Receiver {
                 phase: DtmReceiverEventPhase::Initial,
                 phy: DtmSchedulerReceiverPhy::Le1M,
@@ -79,4 +80,45 @@ fn the_sequence_start_is_stored_as_given() {
         .apply_sequence_start(101);
     assert_eq!(event.word_0c.value(), 101);
     assert_eq!(event.word_44.value(), 100);
+}
+
+#[test]
+fn frequency_domain_accepts_127_and_rejects_128() {
+    assert!(DtmSchedulerFrequency::from_controller_image(127).is_some());
+    assert_eq!(DtmSchedulerFrequency::from_controller_image(128), None);
+    assert_eq!(DtmSchedulerFrequency::from_controller_image(255), None);
+}
+
+#[test]
+fn frequency_updates_match_the_vendor_mask_and_preserve_all_high_17_bits() {
+    // SOURCE: dtm_4.o sym_dtm_2zeOUjc7g55zkDNQuZkg +0x6e..+0x80
+    // and sym_dtm_C15YAGhOCEEdWMnhjaY3.part.1 +0x74..+0x8a:
+    // fresh load, AND 0xffff80ff, OR the frequency shifted by eight.
+    for seed in [0, u32::MAX, 0xaaaa_aaf5, 0x5555_55fa] {
+        for image in 0..=127 {
+            let frequency = DtmSchedulerFrequency::from_controller_image(image).unwrap();
+            for event_type in [
+                DtmSchedulerItemEventType::Transmitter(DtmSchedulerTransmitterPhy::Le1M),
+                DtmSchedulerItemEventType::Receiver {
+                    phase: DtmReceiverEventPhase::Initial,
+                    phy: DtmSchedulerReceiverPhy::Le1M,
+                },
+                DtmSchedulerItemEventType::Receiver {
+                    phase: DtmReceiverEventPhase::Recurring,
+                    phy: DtmSchedulerReceiverPhy::LeCoded,
+                },
+            ] {
+                let mut input = item();
+                input.word_18 = BleSchedulerItemChannelAndPriority::from_bits(seed);
+                let actual = input
+                    .apply_event(frequency, event_type, 10, 20)
+                    .word_18
+                    .bits();
+                let priority_image = (seed & !0xf) | 3;
+                let vendor = (priority_image & 0xffff_80ff) | (u32::from(image) << 8);
+                assert_eq!(actual, vendor, "seed={seed:#010x}, frequency={image}");
+                assert_eq!(actual & 0xffff_8000, seed & 0xffff_8000);
+            }
+        }
+    }
 }

@@ -8431,7 +8431,7 @@ pub mod pcr_radio {
         pub const fn tsens_clk_conf(&self) -> &TsensClkConf {
             &self.tsens_clk_conf
         }
-        #[doc = "0x14c - Opaque: meaning not established. Word between PCR_SAR_CLK_DIV and PCR_BS_CONF that the public header does not describe; phy_rf_init replaces its low byte with 0x0A."]
+        #[doc = "0x14c - Opaque: meaning not established. The public struct reserves the whole word between PCR_SAR_CLK_DIV and PCR_BS_CONF, but pinned phy_rf_init and phy_wakeup_init explicitly replace its low byte with 0x0A; that direct use overrides the reserved claim on low8 only."]
         #[inline(always)]
         pub const fn word_014c_opaque(&self) -> &Word014cOpaque {
             &self.word_014c_opaque
@@ -8563,10 +8563,10 @@ pub mod pcr_radio {
         #[doc = "`reset()` method sets TSENS_CLK_CONF to value 0"]
         impl crate::Resettable for TsensClkConfSpec {}
     }
-    #[doc = "WORD_014C_OPAQUE (rw) register accessor: Opaque: meaning not established. Word between PCR_SAR_CLK_DIV and PCR_BS_CONF that the public header does not describe; phy_rf_init replaces its low byte with 0x0A.\n\nYou can [`read`](crate::Reg::read) this register and get [`word_014c_opaque::R`]. You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`word_014c_opaque::W`]. You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api).\n\nFor information about available fields see [`mod@word_014c_opaque`] module"]
+    #[doc = "WORD_014C_OPAQUE (rw) register accessor: Opaque: meaning not established. The public struct reserves the whole word between PCR_SAR_CLK_DIV and PCR_BS_CONF, but pinned phy_rf_init and phy_wakeup_init explicitly replace its low byte with 0x0A; that direct use overrides the reserved claim on low8 only.\n\nYou can [`read`](crate::Reg::read) this register and get [`word_014c_opaque::R`]. You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`word_014c_opaque::W`]. You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api).\n\nFor information about available fields see [`mod@word_014c_opaque`] module"]
     #[doc(alias = "WORD_014C_OPAQUE")]
     pub type Word014cOpaque = crate::Reg<word_014c_opaque::Word014cOpaqueSpec>;
-    #[doc = "Opaque: meaning not established. Word between PCR_SAR_CLK_DIV and PCR_BS_CONF that the public header does not describe; phy_rf_init replaces its low byte with 0x0A."]
+    #[doc = "Opaque: meaning not established. The public struct reserves the whole word between PCR_SAR_CLK_DIV and PCR_BS_CONF, but pinned phy_rf_init and phy_wakeup_init explicitly replace its low byte with 0x0A; that direct use overrides the reserved claim on low8 only."]
     pub mod word_014c_opaque {
         #[doc = "Register `WORD_014C_OPAQUE` reader"]
         pub type R = crate::R<Word014cOpaqueSpec>;
@@ -8590,7 +8590,7 @@ pub mod pcr_radio {
                 Bits0_7OpaqueW::new(self, 0)
             }
         }
-        #[doc = "Opaque: meaning not established. Word between PCR_SAR_CLK_DIV and PCR_BS_CONF that the public header does not describe; phy_rf_init replaces its low byte with 0x0A.\n\nYou can [`read`](crate::Reg::read) this register and get [`word_014c_opaque::R`](R). You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`word_014c_opaque::W`](W). You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api)."]
+        #[doc = "Opaque: meaning not established. The public struct reserves the whole word between PCR_SAR_CLK_DIV and PCR_BS_CONF, but pinned phy_rf_init and phy_wakeup_init explicitly replace its low byte with 0x0A; that direct use overrides the reserved claim on low8 only.\n\nYou can [`read`](crate::Reg::read) this register and get [`word_014c_opaque::R`](R). You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`word_014c_opaque::W`](W). You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api)."]
         pub struct Word014cOpaqueSpec;
         impl crate::RegisterSpec for Word014cOpaqueSpec {
             type Ux = u32;

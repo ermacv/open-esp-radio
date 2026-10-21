@@ -78,6 +78,27 @@ pub enum DtmReceiverEventPhase {
     Recurring,
 }
 
+/// A seven-bit controller frequency image for a DTM scheduler item.
+///
+/// SOURCE: pinned initial and recurring DTM event bodies preserve bits
+/// 31:15 of item word `+0x18` while replacing bits 14:8. This type checks
+/// that boundary before an event transform can change the word.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct DtmSchedulerFrequency(u8);
+
+impl DtmSchedulerFrequency {
+    /// Accept a controller image in `0..=127`, or reject it without masking.
+    /// This checks the field domain; DTM channel validation belongs to the
+    /// command owner.
+    pub const fn from_controller_image(image: u8) -> Option<Self> {
+        if image <= 127 {
+            Some(Self(image))
+        } else {
+            None
+        }
+    }
+}
+
 /// PHY choice admitted by a transmitter DTM scheduler item.
 ///
 /// These variants retain the role-specific meaning established by the DTM
@@ -357,13 +378,13 @@ impl DtmSchedulerItemReviewedWords {
 
     /// Apply every complete reviewed DTM event transform before insertion.
     ///
-    /// `frequency` and `rate` are already validated controller images;
+    /// `frequency` carries a validated seven-bit controller image;
     /// `event_type` carries the role and the receiver's initial/recurring
     /// configuration choice; scheduler times are raw values derived from the
     /// owned epoch.
     pub const fn apply_event(
         self,
-        frequency: u8,
+        frequency: DtmSchedulerFrequency,
         event_type: DtmSchedulerItemEventType,
         scheduler_start: u32,
         scheduler_end: u32,
@@ -392,10 +413,8 @@ impl DtmSchedulerItemReviewedWords {
                 .expect("validated PHY fits"),
             word_18: self
                 .word_18
-                .with_frequency(frequency % 128)
-                .expect("projected frequency fits")
-                .with_bits_15_31_opaque(self.word_18.bits_15_31_opaque() | (frequency / 128) as u32)
-                .expect("retained prefix fits")
+                .with_frequency(frequency.0)
+                .expect("validated frequency fits")
                 .with_arbitration_priority(3)
                 .expect("reviewed priority fits"),
             word_2c: match event_type {

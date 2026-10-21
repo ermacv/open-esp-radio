@@ -73,11 +73,12 @@ bitWidth = 1
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "CLK_CONF"
-description = "Temperature-sensor register-bank and PHY read-path control."
+description = "Temperature-sensor register-bank and PHY read-path control. The public struct calls bits9/23 reserved, but pinned phy_tsens_read_init explicitly sets both; those observed bits remain opaque and override the reserved claim."
 addressOffset = 0x18
 size = 32
 access = "read-write"
 resetValue = 0
+reserved = { mask = 0xff7ffdfe, sources = ["ESP_IDF_4D59230D_S31_TSENS_STRUCT"] }
 
 [[peripherals.registers.register.fields]]
 name = "CLK_EN"
@@ -135,6 +136,22 @@ completeness = "complete"
 entity = "LP_TSENS.CLK_CONF"
 naming = "vendor"
 sources = ["S31_ESP_PACS_SVD", "BLOB_LIBPHY_PHY_TSENS_READ_INIT"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "LP_TSENS.CLK_CONF.BIT_9_OPAQUE"
+sources = ["ESP_IDF_4D59230D_S31_TSENS_STRUCT", "BLOB_LIBPHY_PHY_TSENS_READ_INIT"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "LP_TSENS.CLK_CONF.BIT_23_OPAQUE"
+sources = ["ESP_IDF_4D59230D_S31_TSENS_STRUCT", "BLOB_LIBPHY_PHY_TSENS_READ_INIT"]
+naming = "opaque"
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"

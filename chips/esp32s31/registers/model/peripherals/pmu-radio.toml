@@ -35,11 +35,12 @@ value = 2
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "HP_ACTIVE_HP_CK_POWER"
-description = "Active-state high-power clock and analog-I2C power control reached by the complete front-end/baseband clock body."
+description = "Active-state high-power clock and analog-I2C power control. The public struct calls low4 reserved, but the pinned complete ROM clock leaf explicitly sets them; its direct use overrides that reserved claim on low4 only."
 addressOffset = 0x1C
 size = 32
 access = "read-write"
 resetValue = 0
+reserved = { mask = 0x8007fff0, sources = ["S31_PMU_HEADERS"] }
 
 [[peripherals.registers.register.fields]]
 name = "BITS_0_3_OPAQUE"
@@ -215,6 +216,14 @@ sources = ["S31_ESP_PACS_SVD", "S31_PMU_HEADERS", "ROM_REV0_PHY_OPEN_FE_BB_CLK"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
+
+[[review]]
+entity = "PMU_RADIO.HP_ACTIVE_HP_CK_POWER.BITS_0_3_OPAQUE"
+sources = ["S31_PMU_HEADERS", "ROM_REV0_PHY_OPEN_FE_BB_CLK"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
 
 [[review]]
 entity = "PMU_RADIO.HP_ACTIVE_HP_CK_POWER.HP_ACTIVE_XPD_BB_I2C"
