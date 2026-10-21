@@ -6,15 +6,16 @@ contracts; details live with their owners.
 ## Regions
 
 The [shared layout](../chips/espressif/staged-layout/README.md) defines the
-regions; the [S31 board map](../chips/esp32s31/layout/src/lib.rs) supplies
-their addresses and sizes.
+regions; the [S31 board map](../chips/esp32s31/layout/src/lib.rs) and
+[C5 board map](../chips/esp32c5/layout/src/lib.rs) supply their addresses
+and sizes.
 
 | Region | Current use and source |
 | --- | --- |
 | SRAM | Strict and hot code, interrupt stacks, critical state and DMA storage: [runtime sections](../chips/espressif/staged-layout/linker/runtime/sections.x). |
 | PSRAM | Ordinary runtime code, data and the CPU0 task stack: [runtime sections](../chips/espressif/staged-layout/linker/runtime/sections.x). |
 | Flash XIP | The bootstrap's ordinary code and constants: [bootstrap sections](../chips/espressif/staged-layout/linker/bootstrap/sections.x). |
-| ROM | Chip routines available to the images: [S31 ROM symbols](../chips/esp32s31/layout/linker/rom/esp32s31-eco0.x). |
+| ROM | Chip routines available to the images: [S31 ROM symbols](../chips/esp32s31/layout/linker/rom/esp32s31-eco0.x) and [C5 ROM symbols](../chips/esp32c5/layout/linker/rom/esp32c5-eco2.x). |
 | RTC retained | Reset-retained records in `.rtc_fast.persistent`, below the reserved tail: [runtime sections](../chips/espressif/staged-layout/linker/runtime/sections.x). |
 
 ## Code placement
