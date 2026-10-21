@@ -273,7 +273,7 @@ fn cancelling_the_transport_after_a_write_leaves_the_phy_poisoned() {
             let mut job =
                 Job::i2c(&mut transaction, clock.now(), I2cTiming::Direct).expect("deadline fits");
             drive::<crate::executor::step::tests::TestDelay, _, _>(
-                &mut job, &mut io, &clock, None, None,
+                &mut job, &mut io, &clock, None, None, None,
             )
             .await
         };

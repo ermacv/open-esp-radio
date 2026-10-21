@@ -122,70 +122,209 @@ impl Io<'_, '_> {
             }
         }
     }
-    /// Keep aggregate model actions/results in the synchronous atom adapter,
-    /// rather than retaining their stack slots throughout a checkpoint loop.
+    /// Execute at most one bus command, retaining partial helper/transaction
+    /// state across the waker checkpoint. Memory entries remain whole.
     #[inline(never)]
     pub(super) fn advance_rfpll<D: super::super::wait::PhyShortDelay, C: oer_time::Clock>(
         &mut self,
         clock: &C,
-        cursor: &mut super::rfpll::Cursor<'_>,
+        run: &mut super::rfpll::Run<'_>,
         settle_at: &mut Instant,
-    ) -> Result<(), Failure> {
-        use crate::tracking::rfpll::{Action, Completion, search};
-        let mut action = cursor.action();
-        let settle = if let Action::Search(search::Action::DelayMicros(micros)) = action {
+        observed: bool,
+    ) -> Result<Step, Failure> {
+        use crate::{
+            analog::{
+                frequency::PhyFrequencyCapMemoryAction as Memory, i2c::analog_registers as reg,
+                rfpll::RfpllCapacitorCode,
+            },
+            calibration::cold::{
+                PhyColdI2cAction as I2c, PhyColdI2cOutcome as Done, PhyColdI2cRequest as Request,
+            },
+            tracking::{
+                observation::{RfpllCommand as Kind, RfpllCommandSample},
+                rfpll::{Action, Completion, search},
+            },
+        };
+        let mut action = run.cursor.action();
+        if let Action::Search(search::Action::DelayMicros(micros)) = action {
             let remaining = settle_at.saturating_duration_since(clock.now()).as_micros();
             if remaining > u64::from(micros) {
                 return Err(Failure::Binding);
             }
-            action = Action::Search(search::Action::DelayMicros(remaining as u32));
-            Some((micros, remaining))
-        } else {
-            None
-        };
-        let completion = if let Some((micros, 0)) = settle {
-            // Runnable's scheduler gap already supplied the full minimum.
-            Completion::Search(search::Completion::DelayElapsed(micros))
-        } else {
-            let completion = match self {
-                #[cfg(target_arch = "riscv32")]
-                Self::Shared(registers) => crate::target_port::rfpll::complete_correction::<D, _>(
-                    clock, *registers, action,
-                )
-                .map_err(Failure::Target),
-                #[cfg(all(target_arch = "riscv32", oer_probe))]
-                Self::Validation(registers) => {
-                    crate::target_port::rfpll::complete_correction::<D, _>(
-                        clock, *registers, action,
-                    )
-                    .map_err(Failure::Target)
-                }
-                #[cfg(test)]
-                Self::Test(io, _) => io.rfpll::<D>(action),
-            }?;
-            if let Some((micros, remaining)) = settle {
-                if completion
-                    != Completion::Search(search::Completion::DelayElapsed(remaining as u32))
-                {
+            if remaining != 0 {
+                if !D::settle_micros(remaining as u32) {
                     return Err(Failure::Binding);
                 }
-                Completion::Search(search::Completion::DelayElapsed(micros))
-            } else {
-                completion
+                #[cfg(test)]
+                if let Self::Test(io, _) = self {
+                    io.rfpll::<D>(Action::Search(search::Action::DelayMicros(
+                        remaining as u32,
+                    )))?;
+                }
             }
+            run.cursor
+                .advance(Completion::Search(search::Completion::DelayElapsed(micros)))?;
+            action = run.cursor.action();
+        }
+        let sample;
+        let completion = match action {
+            Action::Search(search_action) => {
+                if run.transaction.is_none() {
+                    let request = match search_action {
+                        search::Action::ReadInitialCap if run.phase == 0 => {
+                            Request::read_byte(reg::RFPLL_CALIBRATED_CAPACITOR_LOW)
+                        }
+                        search::Action::ReadInitialCap => {
+                            Request::read_field(reg::RFPLL_CALIBRATED_CAPACITOR_HIGH)
+                        }
+                        search::Action::EnableSearch => {
+                            Request::write_field(reg::RFPLL_CAPACITOR_SEARCH_ENABLE, 1)
+                        }
+                        search::Action::WriteCap(requested) => {
+                            let code = RfpllCapacitorCode::from_request(requested)
+                                .ok_or(Failure::Binding)?;
+                            if run.phase == 0 {
+                                Request::write_byte(reg::RFPLL_CAPACITOR_LOW, code.low_byte())
+                            } else {
+                                Request::write_field(reg::RFPLL_CAPACITOR_HIGH, code.high_bit())
+                            }
+                        }
+                        search::Action::ReadStatus => {
+                            Request::read_field(reg::RFPLL_CAPACITOR_SEARCH_STATUS)
+                        }
+                        _ => return Err(Failure::Binding),
+                    };
+                    run.transaction = Some(PhyColdI2cTransaction::new(request));
+                }
+                let transaction = run.transaction.as_mut().ok_or(Failure::Binding)?;
+                let writing = matches!(transaction.action(), I2c::StartWrite { .. });
+                let kind = match search_action {
+                    search::Action::ReadInitialCap if run.phase == 0 => Kind::InitialLow,
+                    search::Action::ReadInitialCap => Kind::InitialHigh,
+                    search::Action::EnableSearch if writing => Kind::EnableWrite,
+                    search::Action::EnableSearch => Kind::EnableRead,
+                    search::Action::WriteCap(_) if run.phase == 0 => Kind::CapLow,
+                    search::Action::WriteCap(_) if writing => Kind::CapHighWrite,
+                    search::Action::WriteCap(_) => Kind::CapHighRead,
+                    search::Action::ReadStatus => Kind::Status,
+                    _ => return Err(Failure::Binding),
+                };
+                #[cfg(test)]
+                if let Self::Test(io, _) = self {
+                    io.prepare_rfpll_command(kind);
+                }
+                sample = super::rfpll::command(self, clock, transaction, kind, observed)?;
+                let outcome = match transaction.action() {
+                    I2c::Complete(outcome) => outcome,
+                    // A masked read owns its captured byte until the next poll
+                    // publishes the write through this same typed transaction.
+                    I2c::StartWrite { .. } => return Ok(Step::Rfpll(sample)),
+                    _ => return Err(Failure::Binding),
+                };
+                run.transaction = None;
+                let done = match (search_action, outcome) {
+                    (search::Action::ReadInitialCap, Done::Read { value, .. })
+                        if run.phase == 0 =>
+                    {
+                        run.low = value;
+                        run.phase = 1;
+                        return Ok(Step::Rfpll(sample));
+                    }
+                    (search::Action::ReadInitialCap, Done::Read { value, .. }) => {
+                        search::Completion::InitialCap(u16::from(run.low) | (u16::from(value) << 8))
+                    }
+                    (search::Action::EnableSearch, Done::Written { .. }) => {
+                        search::Completion::SearchEnabled
+                    }
+                    (search::Action::WriteCap(_), Done::Written { .. }) if run.phase == 0 => {
+                        run.phase = 1;
+                        return Ok(Step::Rfpll(sample));
+                    }
+                    (search::Action::WriteCap(requested), Done::Written { .. }) => {
+                        search::Completion::CapWritten(requested)
+                    }
+                    (search::Action::ReadStatus, Done::Read { value, .. }) => {
+                        search::Completion::Status(match value {
+                            0 => search::Status::Accepted,
+                            1 => search::Status::Increase,
+                            2 => search::Status::Decrease,
+                            3 => search::Status::Other,
+                            _ => return Err(Failure::Binding),
+                        })
+                    }
+                    _ => return Err(Failure::Binding),
+                };
+                #[cfg(test)]
+                if let Self::Test(io, _) = self {
+                    io.rfpll::<D>(action)?;
+                }
+                Completion::Search(done)
+            }
+            Action::Memory(memory) => {
+                let kind = if matches!(memory, Memory::RestoreChannelIndex { .. }) {
+                    Kind::Restore
+                } else {
+                    Kind::Memory
+                };
+                let started = observed.then(|| clock.now());
+                let mut done = self.rfpll_memory(memory)?;
+                run.cursor.advance(Completion::Memory(done))?;
+                if matches!(memory, Memory::ReadMemory { .. }) {
+                    let Action::Memory(next @ Memory::WriteMemory { .. }) = run.cursor.action()
+                    else {
+                        return Err(Failure::Binding);
+                    };
+                    done = self.rfpll_memory(next)?;
+                    run.cursor.advance(Completion::Memory(done))?;
+                }
+                return Ok(Step::Rfpll(RfpllCommandSample::elapsed(
+                    kind, started, clock,
+                )));
+            }
+            Action::Complete(_) => return Ok(Step::Complete),
         };
-        // Stamp the completed physical write before advancing the model.
+        // The minimum starts only after all writes and their completion edges.
         let written_at =
             matches!(action, Action::Search(search::Action::WriteCap(_))).then(|| clock.now());
-        cursor.advance(completion)?;
+        run.cursor.advance(completion)?;
+        run.phase = 0;
         if let (Some(at), Action::Search(search::Action::DelayMicros(micros))) =
-            (written_at, cursor.action())
+            (written_at, run.cursor.action())
         {
             *settle_at = at
                 .checked_add(oer_time::Duration::from_micros(u64::from(micros)))
                 .ok_or(Failure::DeadlineOverflow)?;
         }
-        Ok(())
+        Ok(Step::Rfpll(sample))
+    }
+
+    fn rfpll_memory(
+        &mut self,
+        action: crate::analog::frequency::PhyFrequencyCapMemoryAction,
+    ) -> Result<crate::analog::frequency::PhyFrequencyCapMemoryCompletion, Failure> {
+        match self {
+            #[cfg(target_arch = "riscv32")]
+            Self::Shared(registers) => {
+                crate::target_port::rfpll::complete_memory(*registers, action)
+                    .map_err(Failure::Target)
+            }
+            #[cfg(all(target_arch = "riscv32", oer_probe))]
+            Self::Validation(registers) => {
+                crate::target_port::rfpll::complete_memory(*registers, action)
+                    .map_err(Failure::Target)
+            }
+            #[cfg(test)]
+            Self::Test(io, _) => {
+                let crate::tracking::rfpll::Completion::Memory(done) = io
+                    .rfpll::<super::tests::TestDelay>(crate::tracking::rfpll::Action::Memory(
+                        action,
+                    ))?
+                else {
+                    return Err(Failure::Binding);
+                };
+                Ok(done)
+            }
+        }
     }
 
     fn i2c_status(&mut self) -> u8 {

@@ -55,6 +55,7 @@ pub(crate) fn sample<'a, D: crate::executor::wait::PhyShortDelay + 'a, R: Regist
                             timer,
                             timing.as_deref_mut(),
                             trace.as_deref_mut(),
+                            None,
                         )
                         .await?;
                         binding.into_completion().map_err(|_| Failure::Binding)?
@@ -67,6 +68,7 @@ pub(crate) fn sample<'a, D: crate::executor::wait::PhyShortDelay + 'a, R: Regist
                             timer,
                             timing.as_deref_mut(),
                             trace.as_deref_mut(),
+                            None,
                         )
                         .await?;
                         let value = job.code_value()?;

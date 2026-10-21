@@ -91,18 +91,6 @@ impl Correction {
         }
     }
 
-    pub(crate) const fn checkpoint_len(&self) -> u8 {
-        match &self.step {
-            Step::Search(search) => search.checkpoint_len(),
-            Step::Memory { transition, .. } => match transition.action() {
-                PhyFrequencyCapMemoryAction::ReadMemory { .. } => 2,
-                _ => 1,
-            },
-            Step::Complete(_) => 0,
-        }
-    }
-
-    #[inline(never)]
     pub fn advance(&mut self, completion: Completion) -> Result<(), Error> {
         match (&mut self.step, completion) {
             (Step::Search(search), Completion::Search(completion)) => {

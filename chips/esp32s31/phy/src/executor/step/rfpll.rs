@@ -13,29 +13,6 @@ pub(crate) enum Cursor<'a> {
     Correction(&'a mut Correction),
 }
 impl Cursor<'_> {
-    /// One counted group, with one hardware dispatch and one model advance
-    /// site; LLVM must not expand it into a branch per completed checkpoint.
-    #[inline(never)]
-    pub(super) fn advance_one<D: PhyShortDelay, C: Clock>(
-        &mut self,
-        io: &mut Io<'_, '_>,
-        clock: &C,
-        settle_at: &mut Instant,
-    ) -> Result<Step, Failure> {
-        let count = match self {
-            #[cfg(any(test, oer_probe))]
-            Self::Search(search) => search.checkpoint_len(),
-            Self::Correction(correction) => correction.checkpoint_len(),
-        };
-        if count == 0 {
-            return Ok(Step::Complete);
-        }
-        for _ in 0..count {
-            io.advance_rfpll::<D, _>(clock, self, settle_at)?;
-        }
-        Ok(Step::Runnable)
-    }
-
     #[inline(always)]
     pub(super) fn action(&self) -> crate::tracking::rfpll::Action {
         match self {
@@ -61,6 +38,25 @@ impl Cursor<'_> {
             Self::Correction(correction) => {
                 correction.advance(completion).map_err(|_| Failure::Binding)
             }
+        }
+    }
+}
+
+/// Partial helper data and the identity-bound masked transaction survive
+/// command checkpoints under the caller's exclusive analog owner.
+pub(super) struct Run<'a> {
+    pub(super) cursor: Cursor<'a>,
+    pub(super) transaction: Option<PhyColdI2cTransaction>,
+    pub(super) phase: u8,
+    pub(super) low: u8,
+}
+impl<'a> Run<'a> {
+    pub(super) fn new(cursor: Cursor<'a>) -> Self {
+        Self {
+            cursor,
+            transaction: None,
+            phase: 0,
+            low: 0,
         }
     }
 }
@@ -111,6 +107,48 @@ impl<'a> ColdI2c<'a> {
                 .ok_or(Failure::DeadlineOverflow)?,
         ))
     }
+}
+
+/// One bus command, including its immediate readiness observations. Stop at
+/// the RMW read edge, preserving the typed transaction for the next poll.
+#[inline(never)]
+pub(super) fn command<C: Clock>(
+    io: &mut Io<'_, '_>,
+    clock: &C,
+    transaction: &mut PhyColdI2cTransaction,
+    kind: crate::tracking::observation::RfpllCommand,
+    observed: bool,
+) -> Result<crate::tracking::observation::RfpllCommandSample, Failure> {
+    use crate::tracking::observation::RfpllCommandSample;
+    let started = observed.then(|| clock.now());
+    let mut published_at = None;
+    let mut sample = RfpllCommandSample {
+        command: kind,
+        publication_micros: 0,
+        readiness_micros: 0,
+        invalid: false,
+    };
+    let complete = crate::executor::wait::poll::bounded(clock, || {
+        let start = matches!(
+            transaction.action(),
+            PhyColdI2cAction::StartRead { .. } | PhyColdI2cAction::StartWrite { .. }
+        );
+        let consumed = io.i2c(transaction, start)? == PhyColdI2cObservation::EdgeConsumed;
+        if start && consumed && observed {
+            sample = RfpllCommandSample::elapsed(kind, started, clock);
+            published_at = Some(clock.now());
+        }
+        Ok(consumed && !start)
+    })?;
+    if let Some(at) = published_at {
+        let readiness = RfpllCommandSample::elapsed(kind, Some(at), clock);
+        sample.readiness_micros = readiness.publication_micros;
+        sample.invalid |= readiness.invalid;
+    }
+    if !complete {
+        return Err(Failure::TimedOut);
+    }
+    Ok(sample)
 }
 
 /// Direct and cold callers share Io::i2c for command publication, status

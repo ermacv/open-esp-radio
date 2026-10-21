@@ -58,13 +58,14 @@ pub(crate) enum Outcome {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum Step {
     Runnable,
+    Rfpll(crate::tracking::observation::RfpllCommandSample),
     WaitAt(Instant),
     Complete,
     Failure(Failure),
 }
 
 enum Work<'a> {
-    Rfpll(rfpll::Cursor<'a>),
+    Rfpll(rfpll::Run<'a>),
     RfpllColdI2c(rfpll::ColdI2c<'a>),
     I2c(&'a mut PhyColdI2cTransaction),
     Code(Option<u8>),
@@ -81,6 +82,7 @@ pub(crate) struct Job<'a> {
     // completed capacitor write. RFPLL never arms a timer from this field.
     deadline: Instant,
     temperature: bool,
+    rfpll_observed: bool,
     first_wait: bool,
     finished: bool,
     start_pending: bool,
@@ -93,6 +95,7 @@ impl<'a> Job<'a> {
             work,
             deadline: deadline(now)?,
             temperature,
+            rfpll_observed: false,
             first_wait: false,
             finished: false,
             start_pending: temperature,
@@ -111,7 +114,7 @@ impl<'a> Job<'a> {
         )
     }
     pub(crate) fn rfpll(cursor: rfpll::Cursor<'a>, now: Instant) -> Result<Self, Failure> {
-        Self::new(Work::Rfpll(cursor), now, false)
+        Self::new(Work::Rfpll(rfpll::Run::new(cursor)), now, false)
     }
     pub(crate) fn rfpll_cold_i2c(
         transaction: &'a mut PhyColdI2cTransaction,
@@ -188,8 +191,8 @@ impl<'a> Job<'a> {
     }
 
     /// One admitted hardware checkpoint, or terminal software-only recognition.
-    /// RFPLL splits capacitor writes from settled status reads and retains
-    /// complete memory entries inside a checkpoint;
+    /// RFPLL retains partial helpers across complete bus-command checkpoints
+    /// and keeps complete memory entries inside a checkpoint;
     /// temperature conversion, state publication and observers are outside it.
     #[inline(never)]
     fn advance_one<D: super::wait::PhyShortDelay, C: oer_time::Clock>(
@@ -199,7 +202,10 @@ impl<'a> Job<'a> {
         now: Instant,
     ) -> Step {
         match self.advance::<D, _>(io, clock, now) {
-            Ok(step) => {
+            Ok(mut step) => {
+                if matches!(step, Step::Rfpll(_)) && !self.rfpll_observed {
+                    step = Step::Runnable;
+                }
                 if matches!(step, Step::Complete) {
                     self.finished = true;
                 }
@@ -217,8 +223,13 @@ impl<'a> Job<'a> {
         self.ready_started = None;
         self.first_wait = false;
         match &mut self.work {
-            Work::Rfpll(cursor) => {
-                return cursor.advance_one::<D, _>(&mut io, clock, &mut self.deadline);
+            Work::Rfpll(run) => {
+                return io.advance_rfpll::<D, _>(
+                    clock,
+                    run,
+                    &mut self.deadline,
+                    self.rfpll_observed,
+                );
             }
             Work::RfpllColdI2c(cursor) => return cursor.advance_one(&mut io, now),
             Work::Code(code) => {
@@ -416,6 +427,7 @@ pin_project_lite::pin_project! {
         registers: &'a mut R,
         timer: &'a T,
         stats: Option<&'a mut EngineTiming>,
+        rfpll: Option<&'a mut crate::tracking::observation::RfpllEngineTrace>,
         trace: Option<&'a mut ReadinessTrace>,
         #[pin]
         wait: Option<F>,
@@ -441,6 +453,7 @@ impl<
         let mut resumed = None;
         let mut advanced = false;
         let mut ready_elapsed = None;
+        let mut rfpll_sample = None;
         let result = loop {
             if *this.gate == Gate::Yield {
                 if let Some(trace) = this.trace.as_deref_mut() {
@@ -516,6 +529,13 @@ impl<
             let at = match step {
                 Step::Complete => break Poll::Ready(Ok(())),
                 Step::Failure(error) => break Poll::Ready(Err(error)),
+                Step::Rfpll(sample) => {
+                    rfpll_sample = Some(sample);
+                    *this.gate = Gate::Yield;
+                    context.waker().wake_by_ref();
+                    *this.wait_at = this.timer.now();
+                    break Poll::Pending;
+                }
                 Step::Runnable => {
                     *this.gate = Gate::Yield;
                     context.waker().wake_by_ref();
@@ -552,6 +572,7 @@ impl<
                 result.is_pending(),
                 resumed,
                 ready_elapsed,
+                this.rfpll.as_deref_mut().zip(rfpll_sample),
             );
         }
         result
@@ -598,13 +619,16 @@ pub(crate) fn drive<'a, 'j, D: super::wait::PhyShortDelay + 'a, R: Registers, T:
     timer: &'a T,
     stats: Option<&'a mut EngineTiming>,
     trace: Option<&'a mut ReadinessTrace>,
+    rfpll: Option<&'a mut crate::tracking::observation::RfpllEngineTrace>,
 ) -> impl Future<Output = Result<(), Failure>> + 'a {
+    job.rfpll_observed = rfpll.is_some();
     Driver {
         delay: core::marker::PhantomData::<D>,
         job,
         registers,
         timer,
         stats,
+        rfpll,
         trace,
         wait: None,
         make_wait: move |at| timer.wait_until(at),

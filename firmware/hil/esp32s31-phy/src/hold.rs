@@ -65,6 +65,7 @@ pub struct Observer<'a>(
     pub sar_tails::Tails,
     &'a mut HoldPolls,
     Option<&'a mut oer_esp32s31_phy::tracking::observation::ReadinessTrace>,
+    oer_esp32s31_phy::tracking::observation::RfpllEngineTrace,
 );
 impl<'a> Observer<'a> {
     pub fn new(
@@ -77,11 +78,18 @@ impl<'a> Observer<'a> {
             sar_tails::Tails::default(),
             engine,
             trace,
+            oer_esp32s31_phy::tracking::observation::RfpllEngineTrace::default(),
         )
     }
 }
 impl PhyTargetObserver for &mut Observer<'_> {
     const OBSERVE_ENGINE_POLLS: bool = true;
+    fn rfpll_engine_trace(
+        &mut self,
+    ) -> Option<&mut oer_esp32s31_phy::tracking::observation::RfpllEngineTrace> {
+        self.4 = Default::default();
+        Some(&mut self.4)
+    }
     fn readiness_trace(
         &mut self,
     ) -> Option<&mut oer_esp32s31_phy::tracking::observation::ReadinessTrace> {
@@ -91,9 +99,15 @@ impl PhyTargetObserver for &mut Observer<'_> {
     fn engine_completed(
         &mut self,
         operation: Operation,
-        timing: oer_esp32s31_phy::tracking::observation::EngineTiming,
+        mut timing: oer_esp32s31_phy::tracking::observation::EngineTiming,
     ) {
+        if operation == Operation::Rfpll {
+            timing.invalid |= self.4.invalid;
+        }
         report_engine(operation, &timing);
+        if operation == Operation::Rfpll {
+            report_rfpll_commands(&self.4);
+        }
         self.2.merge(HoldPolls {
             polls: timing.polls,
             pending: timing.pending,
@@ -166,6 +180,21 @@ fn report_engine(
     print_fmt(format_args!(
         "OPEN_RADIO_HIL engine family={} late-max-us={} invalid={}\n",
         family, timing.maximum_lateness_micros, timing.invalid
+    ));
+}
+
+#[inline(never)]
+fn report_rfpll_commands(trace: &oer_esp32s31_phy::tracking::observation::RfpllEngineTrace) {
+    use oer_esp32s31_board::rom::print_fmt;
+    for (command, row) in trace.commands.iter().enumerate() {
+        print_fmt(format_args!(
+            "OPEN_RADIO_HIL rfpll-command={} max-us={} publication-us={} readiness-us={}\n",
+            command, row.poll_micros, row.publication_micros, row.readiness_micros
+        ));
+    }
+    print_fmt(format_args!(
+        "OPEN_RADIO_HIL rfpll-commands invalid={}\n",
+        trace.invalid
     ));
 }
 

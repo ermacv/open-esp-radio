@@ -44,8 +44,11 @@ that behavior does not qualify an out-of-range correction on physical RF.
 `target_port::rfpll::{search, correct}` uses the existing typed I2C bindings,
 direct bounded status polling and frequency-memory operations. Required 2-us
 entry settle uses the short ROM delay backend. The admitted transaction uses
-the private P1 transport engine. A complete capacitor write returns `Pending`
-through the waker before status is read. An `Instant` stamped after the write
+the private P1 transport engine. Each complete I2C bus command returns `Pending`
+through the waker: the two initial reads, low-byte write and both commands of
+masked high-bit writes are separate checkpoints. Partial reads and the typed
+masked transaction remain retained under the exclusive analog owner. An
+`Instant` stamped after the last write
 measures the five-microsecond minimum: the next poll reads status immediately
 if it has elapsed, otherwise the short ROM delay supplies only the remainder.
 Each complete memory entry (read and write), setup operation, final write and
@@ -158,7 +161,10 @@ check that a bounded I2C timeout returns without restoring hardware control.
 
 RFPLL's compiled requested-time environment assigns zero time to ready polls,
 so it compares the complete five-microsecond delay. A finite clock-query prefix
-still lets a stuck synchronous observation reach its timeout. Other observation
+still lets a stuck synchronous observation reach its timeout. Diagnostic
+command maxima retain the publication/readiness breakdown of the same worst
+poll; the remaining time includes engine/model/observer accounting. Formatting
+runs after the Driver await. Other observation
 probes retain their one-microsecond ticks. Virtual-clock unit tests separately
 exercise early and late RFPLL resumes; physical hold measures actual poll cost.
 The comparison preserves every requested delay, including any unexpected

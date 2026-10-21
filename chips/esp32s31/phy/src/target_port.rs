@@ -216,6 +216,11 @@ pub trait PhyTargetObserver {
     fn readiness_trace(&mut self) -> Option<&mut crate::tracking::observation::ReadinessTrace> {
         None
     }
+    fn rfpll_engine_trace(
+        &mut self,
+    ) -> Option<&mut crate::tracking::observation::RfpllEngineTrace> {
+        None
+    }
     const OBSERVE_ENGINE_POLLS: bool = false;
     fn engine_completed(
         &mut self,
@@ -404,7 +409,7 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
                         let mut job =
                             Job::rfpll_cold_i2c(binding.transaction_mut(), self.timer.now())
                                 .map_err(step::port_error)?;
-                        drive::<D, _, _>(&mut job, registers, self.timer, None, None)
+                        drive::<D, _, _>(&mut job, registers, self.timer, None, None, None)
                             .await
                             .map_err(step::port_error)?;
                     }
@@ -1802,6 +1807,7 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
                         self.timer,
                         O::OBSERVE_ENGINE_POLLS.then_some(&mut timing),
                         None,
+                        observer.rfpll_engine_trace(),
                     )
                     .await
                     .map_err(step::port_error)?;

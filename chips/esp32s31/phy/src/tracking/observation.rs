@@ -118,6 +118,85 @@ impl ReadinessTrace {
     }
 }
 
+/// RFPLL helper command whose complete publication/readiness fits one poll.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(u8)]
+pub enum RfpllCommand {
+    InitialLow,
+    InitialHigh,
+    EnableRead,
+    EnableWrite,
+    CapLow,
+    CapHighRead,
+    CapHighWrite,
+    Status,
+    Memory,
+    Restore,
+}
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct RfpllCommandSample {
+    pub command: RfpllCommand,
+    pub publication_micros: u16,
+    pub readiness_micros: u16,
+    pub invalid: bool,
+}
+impl RfpllCommandSample {
+    pub(crate) fn elapsed<C: oer_time::Clock>(
+        command: RfpllCommand,
+        started: Option<oer_time::Instant>,
+        clock: &C,
+    ) -> Self {
+        let mut value = Self {
+            command,
+            publication_micros: 0,
+            readiness_micros: 0,
+            invalid: false,
+        };
+        if let Some(at) = started {
+            match clock
+                .now()
+                .checked_duration_since(at)
+                .and_then(|d| u16::try_from(d.as_micros()).ok())
+            {
+                Some(micros) => value.publication_micros = micros,
+                None => value.invalid = true,
+            }
+        }
+        value
+    }
+}
+/// Correlated breakdown of the worst poll for one RFPLL command. The residual
+/// poll minus publication/readiness is engine/model/observer overhead.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct RfpllCommandMaximum {
+    pub poll_micros: u16,
+    pub publication_micros: u16,
+    pub readiness_micros: u16,
+}
+/// Observer-owned bounded diagnostics; the admitted future borrows this store.
+#[derive(Debug, Default)]
+pub struct RfpllEngineTrace {
+    pub commands: [RfpllCommandMaximum; 10],
+    pub invalid: bool,
+}
+impl RfpllEngineTrace {
+    fn prepare(&mut self, sample: RfpllCommandSample) -> &mut RfpllCommandMaximum {
+        self.invalid |= sample.invalid;
+        &mut self.commands[sample.command as usize]
+    }
+}
+impl RfpllCommandMaximum {
+    fn record(&mut self, sample: RfpllCommandSample, elapsed: u16) {
+        if elapsed >= self.poll_micros {
+            *self = Self {
+                poll_micros: elapsed,
+                publication_micros: sample.publication_micros,
+                readiness_micros: sample.readiness_micros,
+            };
+        }
+    }
+}
+
 /// Clock-free aggregate of actual engine polls and timer resumes.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct EngineTiming {
@@ -143,6 +222,7 @@ impl EngineTiming {
         pending: bool,
         resumed: Option<(oer_time::Instant, oer_time::Instant)>,
         ready_elapsed: Option<oer_time::Duration>,
+        rfpll: Option<(&mut RfpllEngineTrace, RfpllCommandSample)>,
     ) -> oer_time::Instant {
         fn increment(total: &mut u16, invalid: &mut bool) {
             if let Some(next) = total.checked_add(1) {
@@ -182,7 +262,8 @@ impl EngineTiming {
                 self.invalid = true;
             }
         }
-        // Includes the event/overflow/ready accounting above. No observer,
+        let command = rfpll.map(|(trace, sample)| (trace.prepare(sample), sample));
+        // Includes the event/overflow/ready/command accounting above. No observer,
         // formatter or report runs inside this measured interval.
         let finished = clock.now();
         if let Some(elapsed) = finished
@@ -191,6 +272,13 @@ impl EngineTiming {
         {
             add(&mut self.total_micros, elapsed, &mut self.invalid);
             self.maximum_micros = self.maximum_micros.max(elapsed);
+            if let Some((row, sample)) = command {
+                if let Ok(elapsed) = u16::try_from(elapsed) {
+                    row.record(sample, elapsed);
+                } else {
+                    self.invalid = true;
+                }
+            }
         } else {
             self.invalid = true;
         }

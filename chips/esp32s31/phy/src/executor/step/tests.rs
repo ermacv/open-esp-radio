@@ -53,6 +53,37 @@ pub(crate) struct Io {
     pub(crate) atoms: Rc<Cell<usize>>,
 }
 impl Io {
+    pub(super) fn prepare_rfpll_command(
+        &mut self,
+        kind: crate::tracking::observation::RfpllCommand,
+    ) {
+        use crate::{
+            analog::i2c::analog_registers as reg, tracking::observation::RfpllCommand as Kind,
+        };
+        self.byte = match kind {
+            Kind::InitialLow => self.rfpll_initial as u8,
+            Kind::InitialHigh => {
+                reg::RFPLL_CALIBRATED_CAPACITOR_HIGH.replace(0, (self.rfpll_initial >> 8) as u8)
+            }
+            Kind::EnableRead | Kind::CapHighRead => 0xa5,
+            Kind::Status => {
+                use crate::tracking::rfpll::search::Status;
+                let value = match self
+                    .rfpll_statuses
+                    .get(self.rfpll_samples)
+                    .copied()
+                    .unwrap_or(Status::Other)
+                {
+                    Status::Accepted => 0,
+                    Status::Increase => 1,
+                    Status::Decrease => 2,
+                    Status::Other => 3,
+                };
+                reg::RFPLL_CAPACITOR_SEARCH_STATUS.replace(0, value)
+            }
+            _ => self.byte,
+        };
+    }
     pub(super) fn rfpll<D: crate::executor::wait::PhyShortDelay>(
         &mut self,
         action: crate::tracking::rfpll::Action,
@@ -254,6 +285,7 @@ fn every_hardware_atom_yields_even_when_the_timer_is_already_ready() {
             &mut io,
             &clock,
             Some(&mut stats),
+            None,
             None
         ));
         for _ in 0..4 {
@@ -289,6 +321,7 @@ fn timer_wait_does_no_atoms_until_the_deadline_and_records_resume_lateness() {
             &mut io,
             &clock,
             Some(&mut stats),
+            None,
             None
         ));
         assert!(future.as_mut().poll(&mut cx).is_pending());
@@ -496,7 +529,7 @@ fn an_immediately_ready_async_timer_is_not_polled_after_completion() {
     let (waker, _) = context();
     let mut cx = Context::from_waker(&waker);
     let mut future = core::pin::pin!(drive::<TestDelay, _, _>(
-        &mut job, &mut io, &clock, None, None
+        &mut job, &mut io, &clock, None, None, None
     ));
     assert!(future.as_mut().poll(&mut cx).is_pending());
     assert_eq!(atoms.get(), 1);
@@ -525,7 +558,8 @@ fn preparation_trace_survives_a_late_failure_without_consuming_the_result() {
                 &mut io,
                 &clock,
                 Some(&mut stats),
-                Some(&mut trace)
+                Some(&mut trace),
+                None
             ));
             assert!(future.as_mut().poll(&mut cx).is_pending());
             if not_ready_checks {
@@ -615,7 +649,8 @@ fn runnable_yields_without_constructing_or_polling_a_timer() {
             &mut io,
             &timer,
             None,
-            Some(&mut trace)
+            Some(&mut trace),
+            None
         ));
         assert!(future.as_mut().poll(&mut cx).is_pending());
         clock.advance(Duration::from_micros(3)).expect("time fits");
@@ -676,6 +711,7 @@ fn t7_answer_window_starts_after_publication_and_accepts_its_exact_boundary() {
                 &mut registers,
                 &clock,
                 None,
+                None,
                 None
             ));
             assert!(future.as_mut().poll(&mut cx).is_pending());
@@ -713,6 +749,7 @@ fn overflow_after_publication_is_typed_and_does_not_sample_the_bus() {
             &mut registers,
             &clock,
             None,
+            None,
             None
         ));
         assert_eq!(
@@ -738,7 +775,7 @@ fn a_voluntary_yield_between_rmw_commands_is_not_a_hardware_timeout() {
     let mut cx = Context::from_waker(&waker);
     {
         let mut future = core::pin::pin!(drive::<TestDelay, _, _>(
-            &mut job, &mut io, &clock, None, None
+            &mut job, &mut io, &clock, None, None, None
         ));
         for _ in 0..4 {
             let before = atoms.get();
@@ -821,6 +858,7 @@ fn rfpll_preserves_signed_search_and_all_memory_effects_at_bounded_checkpoints()
                     .expect("deadline fits");
                 loop {
                     let before = io.rfpll_actions.len();
+                    let bus_before = io.actions.len();
                     let result = io.advance::<TestDelay, _>(&mut job, &clock, clock.now());
                     let actions = &io.rfpll_actions[before..];
                     if result == Step::Complete {
@@ -828,7 +866,24 @@ fn rfpll_preserves_signed_search_and_all_memory_effects_at_bounded_checkpoints()
                         break;
                     }
                     assert_eq!(result, Step::Runnable);
-                    assert!(!actions.is_empty());
+                    let bus = &io.actions[bus_before..];
+                    assert!(
+                        bus.iter()
+                            .filter(|a| matches!(
+                                a,
+                                PhyColdI2cAction::StartRead { .. }
+                                    | PhyColdI2cAction::StartWrite { .. }
+                            ))
+                            .count()
+                            <= 1
+                    );
+                    if actions.is_empty() {
+                        assert!(!bus.is_empty());
+                        clock
+                            .advance(Duration::from_micros(500))
+                            .expect("time fits");
+                        continue;
+                    }
                     match actions[0] {
                         Action::Search(crate::tracking::rfpll::search::Action::DelayMicros(_)) => {
                             assert!(matches!(
@@ -897,8 +952,8 @@ fn rfpll_status_waits_from_the_completed_write_and_only_settles_the_remainder() 
         let mut search = search::Search::new();
         let mut job =
             Job::rfpll(rfpll::Cursor::Search(&mut search), clock.now()).expect("deadline fits");
-        // Initial read, enable and the complete write each yield separately.
-        for _ in 0..3 {
+        // Two initial reads, two enable RMW commands and three cap writes.
+        for _ in 0..7 {
             assert_eq!(
                 io.advance::<TestDelay, _>(&mut job, &*clock, clock.now()),
                 Step::Runnable
@@ -955,7 +1010,7 @@ fn rfpll_settle_deadline_overflow_cannot_read_status() {
     {
         let mut job = Job::rfpll(rfpll::Cursor::Search(&mut search), clock.now())
             .expect("initial deadline fits");
-        for _ in 0..2 {
+        for _ in 0..6 {
             assert_eq!(
                 io.advance::<TestDelay, _>(&mut job, &clock, clock.now()),
                 Step::Runnable
@@ -976,6 +1031,85 @@ fn rfpll_settle_deadline_overflow_cannot_read_status() {
         !io.rfpll_actions
             .contains(&Action::Search(search::Action::ReadStatus))
     );
+}
+
+#[test]
+fn rfpll_rmw_keeps_the_captured_byte_and_model_owner_across_the_checkpoint() {
+    use crate::tracking::rfpll::{Action, search};
+    let clock = VirtualClock::<1>::new();
+    let mut io = Io {
+        rfpll_initial: 100,
+        ..Io::default()
+    };
+    let mut search = search::Search::new();
+    {
+        let mut job =
+            Job::rfpll(rfpll::Cursor::Search(&mut search), clock.now()).expect("deadline fits");
+        for _ in 0..3 {
+            assert_eq!(
+                io.advance::<TestDelay, _>(&mut job, &clock, clock.now()),
+                Step::Runnable
+            );
+        }
+        // Only the initial read has completed at the pure model boundary.
+        assert_eq!(
+            io.rfpll_actions,
+            [Action::Search(search::Action::ReadInitialCap)]
+        );
+        let captured = analog_registers::RFPLL_CAPACITOR_SEARCH_ENABLE.replace(0xa5, 1);
+        io.byte = 0;
+        let before = io.actions.len();
+        assert_eq!(
+            io.advance::<TestDelay, _>(&mut job, &clock, clock.now()),
+            Step::Runnable
+        );
+        assert!(
+            matches!(io.actions[before..], [PhyColdI2cAction::StartWrite { value, .. }, PhyColdI2cAction::AwaitWriteCompletionEdge { .. }] if value == captured)
+        );
+        assert_eq!(
+            io.rfpll_actions.last(),
+            Some(&Action::Search(search::Action::EnableSearch))
+        );
+        for _ in 0..2 {
+            assert_eq!(
+                io.advance::<TestDelay, _>(&mut job, &clock, clock.now()),
+                Step::Runnable
+            );
+        }
+        // Cancel after the high-bit read: no CapWritten, settle or status.
+    }
+    assert!(matches!(search.action(), search::Action::WriteCap(_)));
+    assert_eq!(io.rfpll_actions.len(), 2);
+}
+
+#[test]
+fn rfpll_busy_command_times_out_without_consuming_a_partial_helper() {
+    struct Progress<'a>(&'a VirtualClock<1>);
+    impl Clock for Progress<'_> {
+        fn now(&self) -> Instant {
+            let now = self.0.now();
+            self.0.advance(Duration::from_micros(1)).expect("time fits");
+            now
+        }
+    }
+    let source = VirtualClock::<1>::new();
+    let clock = Progress(&source);
+    let mut io = Io::default();
+    io.busy.set(true);
+    let mut search = crate::tracking::rfpll::search::Search::new();
+    {
+        let mut job =
+            Job::rfpll(rfpll::Cursor::Search(&mut search), clock.now()).expect("deadline fits");
+        assert_eq!(
+            io.advance::<TestDelay, _>(&mut job, &clock, clock.now()),
+            Step::Failure(Failure::TimedOut)
+        );
+    }
+    assert_eq!(
+        search.action(),
+        crate::tracking::rfpll::search::Action::ReadInitialCap
+    );
+    assert!(io.rfpll_actions.is_empty());
 }
 
 #[test]
@@ -1014,7 +1148,7 @@ fn rfpll_pending_failure_and_cancellation_keep_the_thermal_envelope_unrestored()
             )
             .expect("deadline fits");
             let mut driver = core::pin::pin!(drive::<TestDelay, _, _>(
-                &mut job, &mut io, &clock, None, None
+                &mut job, &mut io, &clock, None, None, None
             ));
             loop {
                 if let Poll::Ready(result) = driver.as_mut().poll(&mut cx) {
@@ -1050,9 +1184,9 @@ fn rfpll_pending_failure_and_cancellation_keep_the_thermal_envelope_unrestored()
         let mut job = Job::rfpll(rfpll::Cursor::Correction(&mut correction), clock.now())
             .expect("deadline fits");
         let mut driver = core::pin::pin!(drive::<TestDelay, _, _>(
-            &mut job, &mut io, &clock, None, None
+            &mut job, &mut io, &clock, None, None, None
         ));
-        for _ in 0..3 {
+        for _ in 0..7 {
             assert!(driver.as_mut().poll(&mut cx).is_pending());
         }
     }
@@ -1104,6 +1238,7 @@ fn rfpll_driver_wakes_once_per_checkpoint_without_a_timer_or_gap_timeout() {
             &mut io,
             &timer,
             Some(&mut stats),
+            None,
             None
         ));
         loop {
@@ -1122,7 +1257,7 @@ fn rfpll_driver_wakes_once_per_checkpoint_without_a_timer_or_gap_timeout() {
         }
     }
     assert_eq!(timer.constructed.get(), 0);
-    assert_eq!(pending, 123); // Initial, enable, two polls per candidate, final write.
+    assert_eq!(pending, 247); // Initial/enable commands, four polls per candidate, final write.
     assert_eq!(wakes.0.load(std::sync::atomic::Ordering::Relaxed), pending);
     assert_eq!(
         (stats.pending as usize, stats.polls as usize, stats.resumes),
@@ -1148,7 +1283,7 @@ fn cold_rfpll_keeps_the_first_sample_wait_and_the_native_attempt_budget() {
     let mut cx = Context::from_waker(&waker);
     {
         let mut driver = core::pin::pin!(drive::<TestDelay, _, _>(
-            &mut job, &mut io, &clock, None, None
+            &mut job, &mut io, &clock, None, None, None
         ));
         assert!(driver.as_mut().poll(&mut cx).is_pending()); // publish
         assert_eq!(atoms.get(), 1);
@@ -1214,7 +1349,7 @@ fn cold_and_direct_rfpll_share_the_same_rmw_atoms_and_preserve_identity() {
         let mut job =
             Job::rfpll_cold_i2c(binding.transaction_mut(), clock.now()).expect("deadline fits");
         let mut driver = core::pin::pin!(drive::<TestDelay, _, _>(
-            &mut job, &mut cold, &clock, None, None
+            &mut job, &mut cold, &clock, None, None, None
         ));
         loop {
             match driver.as_mut().poll(&mut cx) {
