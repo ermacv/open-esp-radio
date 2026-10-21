@@ -114,9 +114,6 @@ impl Radio {
                     return Err(RejectReason::InvalidConfiguration);
                 }
                 let current = self.current(config.epoch)?;
-                if !matches!(current.radio, CaptureRadio::Ieee802154 { .. }) {
-                    return Err(RejectReason::InvalidConfiguration);
-                }
                 let saved = self
                     .domain
                     .attachment()
@@ -370,6 +367,17 @@ impl Radio {
             .saturating_add(oer_time::Duration::from_micros(
                 oer_esp32s31_phy::state::client::DEFAULT_PLL_TRACK_PERIOD_MICROS,
             ));
+        if hold.started.radio == CaptureRadio::Wifi
+            && self
+                .domain
+                .attachment_mut()
+                .force_wifi_i2c_tracking_debug()
+                .is_err()
+        {
+            hold.invalid = true;
+            hold.running = false;
+            return;
+        }
         let mut trace = oer_esp32s31_phy::tracking::observation::ReadinessTrace::default();
         let mut observer = crate::hold::Observer::new(
             hold.samples.len() as u8 + 1,
@@ -392,8 +400,9 @@ impl Radio {
                 (
                     committed,
                     outcome.tracking_inhibited
-                        || outcome.clients.wifi()
-                        || !outcome.clients.bluetooth_ieee802154()
+                        || outcome.clients.wifi() != (hold.started.radio == CaptureRadio::Wifi)
+                        || outcome.clients.bluetooth_ieee802154()
+                            != (hold.started.radio != CaptureRadio::Wifi)
                         || committed != 7,
                 )
             }

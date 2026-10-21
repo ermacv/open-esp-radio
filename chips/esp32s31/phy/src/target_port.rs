@@ -93,7 +93,6 @@ use crate::{
             PhyCalibrationTrackingCompletion, PhyCalibrationTrackingExternalBinding,
             PhyCalibrationTxDcPwdetTransition,
         },
-        i2c::PhyWifiI2cTrackingCompletion,
         parameters::{
             PhyParamTrackingAction, PhyParamTrackingCalibrationTransition,
             PhyParamTrackingCompletion, PhyParamTrackingOutcome, PhyParamTrackingRfpllTransition,
@@ -406,9 +405,8 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
                 RfpllFrequencyExternalBinding::I2c(mut binding) => {
                     use crate::executor::step::{Job, drive};
                     {
-                        let mut job =
-                            Job::rfpll_cold_i2c(binding.transaction_mut(), self.timer.now())
-                                .map_err(step::port_error)?;
+                        let mut job = Job::counted_i2c(binding.transaction_mut(), self.timer.now())
+                            .map_err(step::port_error)?;
                         drive::<D, _, _>(&mut job, registers, self.timer, None, None, None)
                             .await
                             .map_err(step::port_error)?;
@@ -1863,28 +1861,30 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
         Err(PhyTargetPortError::RfOperationLimit)
     }
 
-    async fn run_param_wifi_i2c(
+    async fn run_param_wifi_i2c<O: PhyTargetObserver>(
         &self,
         mut child: PhyParamTrackingWifiI2cTransition<'_>,
         registers: &mut (impl SharedPhyAccess + crate::executor::step::Registers),
+        observer: &mut O,
     ) -> Result<PhyParamTrackingCompletion, PhyTargetPortError> {
-        for _ in 0..RF_OPERATION_LIMIT {
-            child = match child.commit() {
-                Ok(completion) => return Ok(completion),
-                Err(child) => child,
-            };
-            let binding = child
-                .lower_external()
-                .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
-            let completion = complete_masked_i2c(binding, registers, |kind, micros| {
-                delay::<D, _>(self.timer, kind, micros)
-            })
-            .await?;
+        let mut timing = crate::tracking::observation::EngineTiming::default();
+        let result = crate::executor::step::wifi_i2c::track::<D, _, _>(
+            child.transition_mut(),
+            registers,
+            self.timer,
+            O::OBSERVE_ENGINE_POLLS.then_some(&mut timing),
+        )
+        .await
+        .map_err(step::port_error)
+        .and_then(|_| {
             child
-                .advance(PhyWifiI2cTrackingCompletion::MaskedWrite(completion))
-                .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
+                .commit()
+                .map_err(|_| PhyTargetPortError::UnexpectedBinding)
+        });
+        if O::OBSERVE_ENGINE_POLLS {
+            observer.engine_completed(crate::tracking::observation::Operation::WifiI2c, timing);
         }
-        Err(PhyTargetPortError::RfOperationLimit)
+        result
     }
 }
 
@@ -2191,6 +2191,7 @@ impl<
                             .begin_wifi_i2c_tracking(state)
                             .map_err(|_| PhyTargetPortError::UnexpectedBinding)?,
                         self.registers,
+                        &mut self.observer,
                     )
                     .await?
             }

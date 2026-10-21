@@ -90,8 +90,12 @@ returns through the registered foundation before leaving the last PHY client.
 Rejoin rebinds the same placed storage. The assembly defines no 802.15.4 block
 runtime contract. The generic detach/rebind API has no diagnostic-specific shape.
 
-The manual `phy-tracking-hold-ieee802154-idle` investigation runs three boots,
-with five due tracking ticks per boot while channel 15 RX remains active.
+The manual `phy-tracking-hold-ieee802154-idle` and
+`phy-tracking-hold-wifi-idle` investigations run three boots, with five due
+tracking ticks per boot while channel 15 IEEE 802.15.4 RX or channel 1 Wi-Fi
+remains active. Wi-Fi marks the retained temperature band stale before each
+tick; the ordinary T3 child then performs both masked writes and commits the
+actual band. Engine reports use family 3 for this child, alongside T1 and T7.
 `StartTrackingHold` saves the registered debug policy and selects `(3, 0)`;
 the unchanged production scheduler period and concurrent tracking path run the
 RFPLL, common and transmit branches. The image timestamps only Tracking,
@@ -104,4 +108,4 @@ Stop retires the hold id and restores the saved policy; StopCapture then closes
 RF. Overflow, reversed time, failed/missing/duplicate edges, incomplete branches,
 cancellation or missing cleanup invalidate evidence. Parent and child intervals
 are nested and cannot be summed. Grant-request duration is not proof of RF
-exclusion. This image serves only 154 idle hold; associated Wi-Fi hold is absent.
+exclusion. Associated Wi-Fi traffic is a separate workload.

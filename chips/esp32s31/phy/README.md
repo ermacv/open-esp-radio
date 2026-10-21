@@ -296,6 +296,14 @@ Only a future `WaitAt` constructs and polls the timer; an already reached
 `WaitAt` still yields once. The gap between RMW commands has no command in
 flight; its first busy-at-start attempt establishes that phase's bound.
 
+Wi-Fi temperature-band tracking (T3) uses the same P1 driver and counted I2C
+cursor as cold RFPLL. The two masked writes retain their order, sampled bytes
+and exclusive analog owner across `Pending`; only completion of both writes
+allows the retained band to commit. These counted commands keep their original
+`HARDWARE_EDGE_LIMIT` and first/repeated 1 µs observations. Their scheduler
+pauses are not charged against a direct-path elapsed settle. The diagnostic
+hold reports T3's engine polls as family 3 after the child returns.
+
 The diagnostic hold reports aggregate engine poll count/total/maximum, timer
 resume lateness, and maximum command-to-ready time. Counters are fixed local
 fields; reporting follows T7 and performs no UART work inside a poll. Count
