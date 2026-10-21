@@ -66,6 +66,20 @@ impl Ssh {
     /// status: what a caller that reads the status or the error output
     /// itself takes.
     pub fn output(&self, script: &str, timeout: Duration) -> Result<std::process::Output> {
+        self.start(script)?
+            .wait_with_output_timeout(Some(timeout))
+            .map_err(|error| {
+                if error.to_string().contains("deadline") {
+                    format!("no answer within {} s", timeout.as_secs())
+                } else {
+                    format!("ssh failed: {error}")
+                }
+            })
+    }
+
+    /// Start a script with piped output, owned by the caller until stopped.
+    /// Streaming observers consume and filter both streams in memory.
+    pub fn start(&self, script: &str) -> Result<oer_os_process::owned::Child> {
         let mut child = oer_os_process::owned::Child::spawn(&mut self.command())
             .map_err(|error| format!("cannot run ssh: {error}"))?;
         // A script far below the pipe's capacity: the write never waits for
@@ -76,15 +90,7 @@ impl Ssh {
             .ok_or("ssh has no stdin")?
             .write_all(script.as_bytes())
             .map_err(|error| format!("cannot hand ssh the script: {error}"))?;
-        child
-            .wait_with_output_timeout(Some(timeout))
-            .map_err(|error| {
-                if error.to_string().contains("deadline") {
-                    format!("no answer within {} s", timeout.as_secs())
-                } else {
-                    format!("ssh failed: {error}")
-                }
-            })
+        Ok(child)
     }
 }
 

@@ -127,14 +127,15 @@ and the host refuses any line outside the allowlist. In order:
 
 2. The wireless configuration: only `wifi-device` and `wifi-iface` section
    lines and the options `device`, `mode`, `disabled`, `hidden`, `ssid`,
-   `band`, `hwmode`, `channel`, `htmode`, `beacon_int`, `country`. `<radio>`
+   `band`, `hwmode`, `channel`, `htmode`, `beacon_int`, `country`, `encryption`,
+   `ieee80211ax`. `<radio>`
    must be a 2.4 GHz `wifi-device` (`band='2g'`, or `hwmode` `11b`/`11g`),
    `<ap_section>` a `wifi-iface` of it in mode `ap`, and no other enabled
    `wifi-iface` of the radio may carry the stand's SSID (the refusal names
    those sections only).
 
    ```sh
-   config=$(uci show wireless) && printf '%s\n' "$config" | grep -E '^wireless\.[^.=]+=(wifi-device|wifi-iface)$|^wireless\.[^.=]+\.(device|mode|disabled|hidden|ssid|band|hwmode|channel|htmode|beacon_int|country)='
+   config=$(uci show wireless) && printf '%s\n' "$config" | grep -E '^wireless\.[^.=]+=(wifi-device|wifi-iface)$|^wireless\.[^.=]+\.(device|mode|disabled|hidden|ssid|band|hwmode|channel|htmode|beacon_int|country|encryption|ieee80211ax)='
    ```
 
 3. The radio's channels in its regulatory domain: the profile's channel
@@ -157,7 +158,7 @@ and the host refuses any line outside the allowlist. In order:
    `wifi-iface` of the radio.
 
    ```sh
-   config=$(uci show wireless) && printf '%s\n' "$config" | grep -E '^wireless\.[^.=]+=(wifi-device|wifi-iface)$|^wireless\.[^.=]+\.(device|mode|disabled|hidden|ssid|band|hwmode|channel|htmode|beacon_int|country)='
+   config=$(uci show wireless) && printf '%s\n' "$config" | grep -E '^wireless\.[^.=]+=(wifi-device|wifi-iface)$|^wireless\.[^.=]+\.(device|mode|disabled|hidden|ssid|band|hwmode|channel|htmode|beacon_int|country|encryption|ieee80211ax)='
    ```
 
 6. The AP interface, up to 16 times 2 s apart (30 s), until it is an AP on
@@ -176,6 +177,27 @@ One process at a time drives the router: `cargo fw` holds an exclusive lock
 `run w1` or `router`, and a second holder is refused, naming the first.
 
 ## Stand notes
+
+### W3 open station
+
+`router::Profile::w3` also sets the selected AP's `encryption=none` and the
+radio's `ieee80211ax=0`. The channel is the stand's 2.4 GHz channel, with
+HT20 and a generated run SSID. The profile is committed without restoration.
+`w3::verify_open_ht20` checks the filtered runtime hostapd configuration:
+open authentication, WPA off, HT on, no HT40 capability and HE off.
+
+`w3::station` selects only the target's MAC in `iw station dump` and returns
+presence/authentication/association/authorization flags. `w3::lease` selects
+only that MAC from dnsmasq leases, returning IPv4 and lifetime without
+hostnames or client identifiers. The bounded in-memory ICMP observer and
+router `ping` establish both 100-echo directions. A fresh hostapd disconnect
+event and the final station snapshot establish departure. Every process is
+owned by the command and remote observers have a 240-second limit.
+
+`cargo fw w3 laptop` holds exclusive air, router and physical-radio ownership
+and checks the same path with the laptop station and DHCP. Its temporary
+NetworkManager profile stays in memory. The strict firmware contract and
+offline checker are documented in [w3](../../../firmware/apps/w3/README.md).
 
 Facts of the stand's Linux hosts, from stand use 2026-09 to 2026-10 (records
 outside this repository). `oer-lab-router` does not use them.

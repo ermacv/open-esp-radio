@@ -12,6 +12,7 @@ mod command;
 mod image;
 mod w1;
 mod w2;
+mod w3;
 
 use oer_image_build::probe;
 
@@ -24,6 +25,11 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
+    /// W3 host observations and strict report checking, independent of firmware.
+    W3 {
+        #[command(subcommand)]
+        command: W3Command,
+    },
     /// Build an image of firmware/apps into target/fw/<image>/.
     ///
     /// Without --analysis the image is unconfigured; `run` builds it for
@@ -81,6 +87,19 @@ enum Command {
     },
 }
 
+#[derive(Subcommand)]
+enum W3Command {
+    /// Apply the W3 router profile and verify it with the laptop AX211 station.
+    Laptop,
+    /// Recompute a-d and f from a firmware console and router observations.
+    Check {
+        #[arg(long)]
+        console: std::path::PathBuf,
+        #[arg(long)]
+        observations: std::path::PathBuf,
+    },
+}
+
 /// `30s`, `2m` or a number of seconds.
 fn parse_duration(text: &str) -> std::result::Result<Duration, String> {
     let (number, unit) = match text.strip_suffix('s') {
@@ -108,6 +127,16 @@ fn main() -> ExitCode {
     let result = (|| -> oer_image_build::Result<ExitCode> {
         let root = command::root()?;
         match cli.command {
+            Command::W3 {
+                command: W3Command::Laptop,
+            } => return w3::laptop(&root),
+            Command::W3 {
+                command:
+                    W3Command::Check {
+                        console,
+                        observations,
+                    },
+            } => return w3::check_files(&console, &observations),
             Command::Build { image, analysis } => command::build(&root, &image, analysis)?,
             Command::Probe { package, jobs } => {
                 println!("{}", probe::build(&root, &package, jobs)?.display());
