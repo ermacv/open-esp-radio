@@ -60,7 +60,8 @@ through stores and reloads. With an ABI and `--call-summaries`, the same pass
 seeds entry argument registers to compute memoized callee contracts through
 `riscv-model::calls::CallSummaries`. A first analysis records the direct/tail-call
 graph without contracts. The second analyzes functions in callee-first SCC
-order and supplies final records, result constants and argument dependencies. Only bits consumed inside a callee emit `CallArgument`;
+order and supplies final records, result constants and argument dependencies.
+Only bits consumed inside a callee emit `CallArgument`;
 returned bits continue at their output positions in the caller's `a0`/`a1`.
 Ignored arguments become unused unless they reach another sink. Summaries
 include tail transfers and preserve the worse precision across the boundary.

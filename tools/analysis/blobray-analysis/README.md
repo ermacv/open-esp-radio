@@ -21,8 +21,11 @@ memory admission; each function's pass also has a
 `max(100000, 512 * instruction_count)` work-unit cap. Application resolves
 call-argument callees against captured input and ROM symbols. The same engine
 also seeds entry registers for argument summaries: consumed bits and returned
-bit mappings, including inversion. Application admits compact CFG recipes in
-the existing first library pass and solves them once, in callee-first SCC order.
+bit mappings, including inversion, through the shared
+`riscv-model::calls::CallSummaries` port. Application computes the call graph
+without summaries, then analyzes functions in callee-first SCC order with
+completed callee contracts. Compact argument CFG recipes come from final
+records in this second analysis and are released after solving.
 Recursive components and unavailable or flow-incomplete callees retain May
 argument consumption. Returned dependencies continue in the caller's results;
 summary work and storage use the operation's existing limits.
