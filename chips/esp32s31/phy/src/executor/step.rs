@@ -1,30 +1,28 @@
-//! Private, single-atom PHY jobs. The physical borrow outlives every checkpoint.
+//! Private PHY transport jobs. Hardware ownership stays with the caller.
+mod io;
+pub(crate) mod temperature;
+pub(crate) use io::Registers;
 
 use crate::{
-    analog::{
-        pbus::{
-            PhyPbusClearAction, PhyPbusClearCompletion, PhyPbusClearOutcome,
-            PhyPbusClearTransition, PhyPbusForceTest, PhyPbusHardwareBinding,
-            PhyPbusHardwareObservation,
-        },
-        temperature::{
-            PhyTemperatureAction, PhyTemperatureCompletion, PhyTemperatureI2cBinding,
-            PhyTemperatureOutcome, PhyTemperatureTransition,
-        },
+    analog::pbus::{
+        PhyPbusClearAction, PhyPbusClearCompletion, PhyPbusClearOutcome, PhyPbusClearTransition,
+        PhyPbusForceTest, PhyPbusHardwareAction, PhyPbusHardwareBinding,
+        PhyPbusHardwareObservation,
     },
-    calibration::cold::{PhyColdI2cAction, PhyColdI2cObservation, PhyColdI2cTransaction},
-    tracking::observation::EngineEvent,
+    calibration::cold::{
+        PhyColdI2cAction, PhyColdI2cObservation, PhyColdI2cOutcome, PhyColdI2cTransaction,
+    },
+    tracking::observation::EngineTiming,
 };
 use core::{
-    cell::RefCell,
-    future::{Future, poll_fn},
-    pin::pin,
-    task::Poll,
+    future::Future,
+    pin::Pin,
+    task::{Context, Poll},
 };
+use io::Io;
 use oer_time::{Duration, Instant, Timer};
 
-/// The direct tier's existing named observation protection (wait::poll).
-const EDGE_MICROS: u64 = 20;
+const EDGE_MICROS: u64 = super::wait::poll::OBSERVATION_MICROS;
 const RETRY: Duration = Duration::from_micros(1);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -33,147 +31,212 @@ pub(crate) enum Failure {
     TimedOut,
     Binding,
 }
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum Outcome {
-    Temperature(PhyTemperatureOutcome),
-    I2c(crate::calibration::cold::PhyColdI2cOutcome),
+    I2c(PhyColdI2cOutcome),
+    Code(u8),
     Pbus {
         transaction: PhyPbusForceTest,
         completed: bool,
     },
     PbusClear(PhyPbusClearOutcome),
 }
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum Step {
     Runnable,
     WaitAt(Instant),
-    Complete(Outcome),
+    Complete,
     Failure(Failure),
 }
 
-/// Only synchronous hardware edges cross this object-safe boundary. No
-/// algorithm, timer future or observer type is monomorphized into the job.
-pub(crate) trait StepIo {
-    fn start_i2c(&mut self, transaction: &mut PhyColdI2cTransaction) -> Result<bool, Failure>;
-    fn sample_i2c(
-        &mut self,
-        transaction: &mut PhyColdI2cTransaction,
-    ) -> Result<PhyColdI2cObservation, Failure>;
-    fn start_pbus(&mut self, binding: &mut PhyPbusHardwareBinding) -> Result<(), Failure>;
-    fn sample_pbus(
-        &mut self,
-        binding: &mut PhyPbusHardwareBinding,
-    ) -> Result<PhyPbusHardwareObservation, Failure>;
-    fn temperature_code(&mut self) -> u8;
-    /// Work-mode's 1-us settle and pulse/set/2-us/clear remain adjacent.
-    fn clear_pbus_control(&mut self, work_mode: bool) -> Result<bool, Failure>;
-}
-
-pub(crate) trait Sink {
-    fn enabled(&self) -> bool;
-    fn observe(&mut self, event: EngineEvent);
-}
-
 enum Work<'a> {
-    Temperature(&'a mut PhyTemperatureTransition),
-    I2c,
-    Pbus,
-    PbusClear(&'a mut PhyPbusClearTransition),
-}
-
-enum Command {
-    I2c(PhyColdI2cTransaction),
-    Temperature(PhyTemperatureI2cBinding),
-    Pbus(PhyPbusHardwareBinding),
-}
-
-struct Edge {
-    command: Command,
-    deadline: Instant,
-    /// Cold/temperature first observations retain their 1-us delay. Direct
-    /// callers use a Runnable boundary before the first immediate sample.
-    delayed: bool,
+    I2c(&'a mut PhyColdI2cTransaction),
+    Code(Option<u8>),
+    Pbus(&'a mut PhyPbusHardwareBinding),
+    PbusClear {
+        transition: &'a mut PhyPbusClearTransition,
+        command: Option<PhyPbusHardwareBinding>,
+    },
 }
 
 pub(crate) struct Job<'a> {
     work: Work<'a>,
-    edge: Option<Edge>,
+    deadline: Instant,
+    delayed: bool,
+    first_wait: bool,
+    finished: bool,
+    /// One completed edge, consumed by the poll recorder at its exit.
+    ready_started: Option<Instant>,
 }
-
 impl<'a> Job<'a> {
-    pub(crate) fn temperature(transition: &'a mut PhyTemperatureTransition) -> Self {
-        Self {
-            work: Work::Temperature(transition),
-            edge: None,
-        }
+    fn new(work: Work<'a>, now: Instant, delayed: bool) -> Result<Self, Failure> {
+        Ok(Self {
+            work,
+            deadline: deadline(now)?,
+            delayed,
+            first_wait: false,
+            finished: false,
+            ready_started: None,
+        })
+    }
+    pub(crate) fn i2c(
+        transaction: &'a mut PhyColdI2cTransaction,
+        now: Instant,
+        delayed: bool,
+    ) -> Result<Self, Failure> {
+        Self::new(Work::I2c(transaction), now, delayed)
+    }
+    pub(crate) fn code(now: Instant) -> Result<Self, Failure> {
+        Self::new(Work::Code(None), now, false)
+    }
+    pub(crate) fn pbus(
+        binding: &'a mut PhyPbusHardwareBinding,
+        now: Instant,
+    ) -> Result<Self, Failure> {
+        Self::new(Work::Pbus(binding), now, false)
+    }
+    pub(crate) fn clear_pbus(
+        transition: &'a mut PhyPbusClearTransition,
+        now: Instant,
+    ) -> Result<Self, Failure> {
+        Self::new(
+            Work::PbusClear {
+                transition,
+                command: None,
+            },
+            now,
+            false,
+        )
     }
 
-    pub(crate) fn i2c(transaction: PhyColdI2cTransaction, now: Instant) -> Result<Self, Failure> {
-        Ok(Self {
-            work: Work::I2c,
-            edge: Some(Edge::new(Command::I2c(transaction), now, false)?),
+    pub(crate) fn code_value(&self) -> Result<u8, Failure> {
+        if let Work::Code(Some(value)) = self.work {
+            if self.finished {
+                return Ok(value);
+            }
+        }
+        Err(Failure::Binding)
+    }
+    pub(crate) fn outcome(&self) -> Option<Outcome> {
+        if !self.finished {
+            return None;
+        }
+        Some(match &self.work {
+            Work::I2c(transaction) => match transaction.action() {
+                PhyColdI2cAction::Complete(outcome) => Outcome::I2c(outcome),
+                _ => return None,
+            },
+            Work::Code(Some(value)) => Outcome::Code(*value),
+            Work::Pbus(binding) => match binding.action() {
+                PhyPbusHardwareAction::Complete(transaction) => Outcome::Pbus {
+                    transaction,
+                    completed: true,
+                },
+                PhyPbusHardwareAction::Start(transaction)
+                | PhyPbusHardwareAction::AwaitCompletionEdge(transaction) => Outcome::Pbus {
+                    transaction,
+                    completed: false,
+                },
+            },
+            Work::PbusClear { transition, .. } => match transition.action() {
+                PhyPbusClearAction::Complete(outcome) => Outcome::PbusClear(outcome),
+                _ => return None,
+            },
+            _ => return None,
         })
     }
 
-    pub(crate) fn pbus(transaction: PhyPbusForceTest, now: Instant) -> Result<Self, Failure> {
-        Ok(Self {
-            work: Work::Pbus,
-            edge: Some(Edge::new(
-                Command::Pbus(PhyPbusHardwareBinding::new(transaction)),
-                now,
-                false,
-            )?),
-        })
-    }
-
-    pub(crate) fn clear_pbus(transition: &'a mut PhyPbusClearTransition) -> Self {
-        Self {
-            work: Work::PbusClear(transition),
-            edge: None,
-        }
-    }
-
-    /// A single shared dispatcher, including terminal and source-owned timeout
-    /// commits. In particular it never starts the next bus operation after a
-    /// ready read in the same call.
+    /// Exactly one hardware atom, or a terminal software-only recognition.
+    /// Temperature conversion, state publication and observers are outside it.
     #[inline(never)]
-    pub(crate) fn advance_one(&mut self, io: &mut dyn StepIo, now: Instant) -> Step {
+    fn advance_one(&mut self, io: Io<'_, '_>, now: Instant) -> Step {
         match self.advance(io, now) {
-            Ok(step) => step,
+            Ok(step) => {
+                if matches!(step, Step::Complete) {
+                    self.finished = true;
+                }
+                step
+            }
             Err(error) => Step::Failure(error),
         }
     }
-
-    fn advance(&mut self, io: &mut dyn StepIo, now: Instant) -> Result<Step, Failure> {
-        if let Some(edge) = &mut self.edge {
-            let result = edge.advance(io, now)?;
-            if let EdgeStep::Checkpoint(step) = result {
-                return Ok(step);
+    fn advance(&mut self, mut io: Io<'_, '_>, now: Instant) -> Result<Step, Failure> {
+        self.ready_started = None;
+        self.first_wait = false;
+        match &mut self.work {
+            Work::Code(code) => {
+                if code.is_some() {
+                    return Ok(Step::Complete);
+                }
+                *code = Some(io.temperature_code());
+                return Ok(Step::Runnable);
             }
-            let completed = matches!(result, EdgeStep::Complete);
-            let edge = self.edge.take().ok_or(Failure::Binding)?;
-            return match (edge.command, &mut self.work) {
-                (Command::Temperature(binding), Work::Temperature(transition)) if completed => {
-                    transition
-                        .advance(binding.into_completion().map_err(|_| Failure::Binding)?)
-                        .map_err(|_| Failure::Binding)?;
-                    Ok(Step::Runnable)
+            Work::I2c(transaction) => {
+                if matches!(transaction.action(), PhyColdI2cAction::Complete(_)) {
+                    return Ok(Step::Complete);
                 }
-                (Command::I2c(transaction), Work::I2c) if completed => {
-                    let PhyColdI2cAction::Complete(outcome) = transaction.action() else {
-                        return Err(Failure::Binding);
-                    };
-                    Ok(Step::Complete(Outcome::I2c(outcome)))
+                if now > self.deadline {
+                    return Err(Failure::TimedOut);
                 }
-                (Command::Pbus(binding), work) => {
-                    let transaction = if completed {
-                        binding.into_transaction().map_err(|_| Failure::Binding)?
-                    } else {
-                        binding.into_timeout_transaction()
+                match transaction.action() {
+                    PhyColdI2cAction::StartRead { .. } | PhyColdI2cAction::StartWrite { .. } => {
+                        if io.i2c(transaction, true)? == PhyColdI2cObservation::EdgeConsumed {
+                            self.deadline = deadline(now)?;
+                            if !self.delayed {
+                                return Ok(Step::Runnable);
+                            }
+                            self.first_wait = true;
+                        }
+                    }
+                    _ => {
+                        if io.i2c(transaction, false)? == PhyColdI2cObservation::EdgeConsumed {
+                            // Every deadline was checked as start + EDGE_MICROS, so this cannot underflow.
+                            self.ready_started = Some(Instant::from_micros(
+                                self.deadline.as_micros().wrapping_sub(EDGE_MICROS),
+                            ));
+                            if !matches!(transaction.action(), PhyColdI2cAction::Complete(_)) {
+                                self.deadline = deadline(now)?;
+                            }
+                            return Ok(Step::Runnable);
+                        }
+                    }
+                }
+            }
+            Work::Pbus(binding) => {
+                if matches!(binding.action(), PhyPbusHardwareAction::Complete(_)) {
+                    return Ok(Step::Complete);
+                }
+                if now > self.deadline {
+                    return Ok(Step::Complete);
+                }
+                if matches!(binding.action(), PhyPbusHardwareAction::Start(_)) {
+                    io.pbus(binding, true)?;
+                    self.deadline = deadline(now)?;
+                    return Ok(Step::Runnable);
+                }
+                if io.pbus(binding, false)? == PhyPbusHardwareObservation::EdgeConsumed {
+                    // Every deadline was checked as start + EDGE_MICROS, so this cannot underflow.
+                    self.ready_started = Some(Instant::from_micros(
+                        self.deadline.as_micros().wrapping_sub(EDGE_MICROS),
+                    ));
+                    return Ok(Step::Runnable);
+                }
+                if now == self.deadline {
+                    return Ok(Step::Complete);
+                }
+            }
+            Work::PbusClear {
+                transition,
+                command,
+            } => {
+                if let Some(binding) = command {
+                    let transaction = match binding.action() {
+                        PhyPbusHardwareAction::Start(t)
+                        | PhyPbusHardwareAction::AwaitCompletionEdge(t)
+                        | PhyPbusHardwareAction::Complete(t) => t,
                     };
-                    if let Work::PbusClear(transition) = work {
+                    let completed = matches!(binding.action(), PhyPbusHardwareAction::Complete(_));
+                    if completed || now > self.deadline {
                         transition
                             .advance(if completed {
                                 PhyPbusClearCompletion::ForceTestCompleted(transaction)
@@ -181,246 +244,197 @@ impl<'a> Job<'a> {
                                 PhyPbusClearCompletion::ForceTestTimedOut(transaction)
                             })
                             .map_err(|_| Failure::Binding)?;
-                        Ok(Step::Runnable)
-                    } else {
-                        Ok(Step::Complete(Outcome::Pbus {
-                            transaction,
-                            completed,
-                        }))
-                    }
-                }
-                _ => Err(Failure::TimedOut),
-            };
-        }
-        match &mut self.work {
-            Work::Temperature(transition) => match transition.action() {
-                PhyTemperatureAction::Complete(outcome) => {
-                    Ok(Step::Complete(Outcome::Temperature(outcome)))
-                }
-                PhyTemperatureAction::Failed(_) => Err(Failure::Binding),
-                PhyTemperatureAction::SampleCode => {
-                    transition
-                        .advance(PhyTemperatureCompletion::CodeSampled {
-                            value: io.temperature_code(),
-                        })
-                        .map_err(|_| Failure::Binding)?;
-                    Ok(Step::Runnable)
-                }
-                action => {
-                    let binding =
-                        PhyTemperatureI2cBinding::new(action).map_err(|_| Failure::Binding)?;
-                    self.edge = Some(Edge::new(Command::Temperature(binding), now, true)?);
-                    Ok(Step::Runnable)
-                }
-            },
-            Work::PbusClear(transition) => {
-                let completion = match transition.action() {
-                    PhyPbusClearAction::Complete(outcome) => {
-                        return Ok(Step::Complete(Outcome::PbusClear(outcome)));
-                    }
-                    PhyPbusClearAction::ConfigureDebugMode => {
-                        io.clear_pbus_control(false)?;
-                        PhyPbusClearCompletion::DebugModeConfigured
-                    }
-                    PhyPbusClearAction::ForceTest(transaction) => {
-                        self.edge = Some(Edge::new(
-                            Command::Pbus(PhyPbusHardwareBinding::new(transaction)),
-                            now,
-                            false,
-                        )?);
+                        *command = None;
                         return Ok(Step::Runnable);
                     }
-                    PhyPbusClearAction::ConfigureWorkMode => {
-                        let settled = io.clear_pbus_control(true)?;
-                        // The complete conditional settle/pulse tail is one
-                        // atom; consume its model steps without another I/O.
+                    if matches!(binding.action(), PhyPbusHardwareAction::Start(_)) {
+                        io.pbus(binding, true)?;
+                        self.deadline = deadline(now)?;
+                        return Ok(Step::Runnable);
+                    }
+                    if io.pbus(binding, false)? == PhyPbusHardwareObservation::EdgeConsumed {
+                        self.ready_started = Some(Instant::from_micros(
+                            self.deadline.as_micros().wrapping_sub(EDGE_MICROS),
+                        ));
+                        return Ok(Step::Runnable);
+                    }
+                    if now == self.deadline {
                         transition
-                            .advance(PhyPbusClearCompletion::WorkModeConfigured {
-                                settle_required: settled,
-                            })
+                            .advance(PhyPbusClearCompletion::ForceTestTimedOut(transaction))
                             .map_err(|_| Failure::Binding)?;
-                        if settled {
-                            for completion in [
-                                PhyPbusClearCompletion::DelayElapsed,
-                                PhyPbusClearCompletion::WorkModePulseConfigured,
-                                PhyPbusClearCompletion::DelayElapsed,
-                                PhyPbusClearCompletion::WorkModePulseCleared,
-                            ] {
-                                transition
-                                    .advance(completion)
-                                    .map_err(|_| Failure::Binding)?;
-                            }
-                        }
+                        *command = None;
                         return Ok(Step::Runnable);
                     }
-                    _ => return Err(Failure::Binding),
-                };
-                transition
-                    .advance(completion)
-                    .map_err(|_| Failure::Binding)?;
-                Ok(Step::Runnable)
-            }
-            _ => Err(Failure::Binding),
-        }
-    }
-}
-
-enum EdgeStep {
-    Checkpoint(Step),
-    Complete,
-    Timeout,
-}
-
-impl Edge {
-    fn new(command: Command, now: Instant, delayed: bool) -> Result<Self, Failure> {
-        Ok(Self {
-            command,
-            deadline: deadline(now, EDGE_MICROS)?,
-            delayed,
-        })
-    }
-
-    fn advance(&mut self, io: &mut dyn StepIo, now: Instant) -> Result<EdgeStep, Failure> {
-        let transaction = match &mut self.command {
-            Command::I2c(transaction) => Some(transaction),
-            Command::Temperature(binding) => Some(binding.transaction_mut()),
-            Command::Pbus(_) => None,
-        };
-        if let Some(transaction) = transaction {
-            if matches!(transaction.action(), PhyColdI2cAction::Complete(_)) {
-                return Ok(EdgeStep::Complete);
-            }
-            // Terminal recognition must not lose a previously accepted read
-            // to the scheduler delay after its forced Pending boundary.
-            if now > self.deadline {
-                return Ok(EdgeStep::Timeout);
-            }
-            match transaction.action() {
-                PhyColdI2cAction::StartRead { .. } | PhyColdI2cAction::StartWrite { .. } => {
-                    if io.start_i2c(transaction)? {
-                        self.deadline = deadline(now, EDGE_MICROS)?;
-                        return if self.delayed {
-                            self.wait(now)
-                        } else {
-                            Ok(EdgeStep::Checkpoint(Step::Runnable))
-                        };
-                    }
-                }
-                PhyColdI2cAction::AwaitReadCompletionEdge { .. }
-                | PhyColdI2cAction::AwaitWriteCompletionEdge { .. } => {
-                    if io.sample_i2c(transaction)? == PhyColdI2cObservation::EdgeConsumed {
-                        if !matches!(transaction.action(), PhyColdI2cAction::Complete(_)) {
-                            self.deadline = deadline(now, EDGE_MICROS)?;
+                } else {
+                    let completion = match transition.action() {
+                        PhyPbusClearAction::Complete(_) => {
+                            return Ok(Step::Complete);
                         }
-                        return Ok(EdgeStep::Checkpoint(Step::Runnable));
-                    }
-                }
-                PhyColdI2cAction::Complete(_) => return Ok(EdgeStep::Complete),
-            }
-        } else if let Command::Pbus(binding) = &mut self.command {
-            if matches!(
-                binding.action(),
-                crate::analog::pbus::PhyPbusHardwareAction::Complete(_)
-            ) {
-                return Ok(EdgeStep::Complete);
-            }
-            if now > self.deadline {
-                return Ok(EdgeStep::Timeout);
-            }
-            match binding.action() {
-                crate::analog::pbus::PhyPbusHardwareAction::Start(_) => {
-                    io.start_pbus(binding)?;
-                    self.deadline = deadline(now, EDGE_MICROS)?;
-                    return Ok(EdgeStep::Checkpoint(Step::Runnable));
-                }
-                crate::analog::pbus::PhyPbusHardwareAction::AwaitCompletionEdge(_) => {
-                    if io.sample_pbus(binding)? == PhyPbusHardwareObservation::EdgeConsumed {
-                        return Ok(EdgeStep::Checkpoint(Step::Runnable));
-                    }
-                }
-                crate::analog::pbus::PhyPbusHardwareAction::Complete(_) => {
-                    return Ok(EdgeStep::Complete);
+                        PhyPbusClearAction::ForceTest(transaction) => {
+                            *command = Some(PhyPbusHardwareBinding::new(transaction));
+                            self.deadline = deadline(now)?;
+                            return Ok(Step::Runnable);
+                        }
+                        PhyPbusClearAction::ConfigureDebugMode => {
+                            io.pbus_control(false)?;
+                            PhyPbusClearCompletion::DebugModeConfigured
+                        }
+                        PhyPbusClearAction::ConfigureWorkMode => {
+                            let settled = io.pbus_control(true)?;
+                            transition
+                                .advance(PhyPbusClearCompletion::WorkModeConfigured {
+                                    settle_required: settled,
+                                })
+                                .map_err(|_| Failure::Binding)?;
+                            if settled {
+                                for completion in [
+                                    PhyPbusClearCompletion::DelayElapsed,
+                                    PhyPbusClearCompletion::WorkModePulseConfigured,
+                                    PhyPbusClearCompletion::DelayElapsed,
+                                    PhyPbusClearCompletion::WorkModePulseCleared,
+                                ] {
+                                    transition
+                                        .advance(completion)
+                                        .map_err(|_| Failure::Binding)?;
+                                }
+                            }
+                            return Ok(Step::Runnable);
+                        }
+                        _ => return Err(Failure::Binding),
+                    };
+                    transition
+                        .advance(completion)
+                        .map_err(|_| Failure::Binding)?;
+                    return Ok(Step::Runnable);
                 }
             }
         }
-        self.wait(now)
-    }
-
-    fn wait(&self, now: Instant) -> Result<EdgeStep, Failure> {
         if now == self.deadline {
-            return Ok(EdgeStep::Timeout);
+            return Err(Failure::TimedOut);
         }
-        Ok(EdgeStep::Checkpoint(Step::WaitAt(
+        Ok(Step::WaitAt(
             now.checked_add(RETRY)
                 .ok_or(Failure::DeadlineOverflow)?
                 .min(self.deadline),
-        )))
+        ))
     }
 }
-
-fn deadline(now: Instant, micros: u64) -> Result<Instant, Failure> {
-    now.checked_add(Duration::from_micros(micros))
+fn deadline(now: Instant) -> Result<Instant, Failure> {
+    now.checked_add(Duration::from_micros(EDGE_MICROS))
         .ok_or(Failure::DeadlineOverflow)
 }
 
-/// One wait position for both voluntary boundaries and not-ready backoff.
-/// Even a timer ready on its first poll must schedule another executor poll.
-async fn gate<T: Timer + ?Sized>(timer: &T, at: Instant, sink: &RefCell<&mut dyn Sink>) {
-    let mut wait = pin!(timer.wait_until(at));
-    let mut first = true;
-    poll_fn(|context| {
-        let result = wait.as_mut().poll(context);
-        if first {
-            first = false;
-            if result.is_ready() {
-                context.waker().wake_by_ref();
-            }
-            return Poll::Pending;
-        }
-        if result.is_ready() && sink.borrow().enabled() {
-            sink.borrow_mut().observe(EngineEvent::TimerResumed {
-                deadline: at.as_micros(),
-                resumed: timer.now().as_micros(),
-            });
-        }
-        result
-    })
-    .await
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum Gate {
+    Idle,
+    Waiting,
+    Ready,
 }
 
-pub(crate) async fn drive<T: Timer + ?Sized>(
-    job: &mut Job<'_>,
-    io: &mut dyn StepIo,
-    timer: &T,
-    sink: &mut dyn Sink,
-) -> Result<Outcome, Failure> {
-    let sink = RefCell::new(sink);
-    let mut future = pin!(async {
-        loop {
-            let at = match job.advance_one(io, timer.now()) {
-                Step::Runnable => timer.now(),
-                Step::WaitAt(at) => at,
-                Step::Complete(outcome) => return Ok(outcome),
-                Step::Failure(error) => return Err(error),
+pin_project_lite::pin_project! {
+    struct Driver<'a, 'j, R, T, F, M> {
+        job: &'a mut Job<'j>,
+        registers: &'a mut R,
+        timer: &'a T,
+        stats: Option<&'a mut EngineTiming>,
+        #[pin]
+        wait: F,
+        make_wait: M,
+        wait_at: Instant,
+        gate: Gate,
+    }
+}
+impl<R: Registers, T: Timer, F: Future<Output = ()>, M: Fn(Instant) -> F> Future
+    for Driver<'_, '_, R, T, F, M>
+{
+    type Output = Result<(), Failure>;
+    /// A single emitted poll per timer/register type, independent of observer.
+    #[inline(never)]
+    fn poll(self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<Self::Output> {
+        let mut this = self.project();
+        let started = this.stats.as_ref().map(|_| this.timer.now());
+        let mut resumed = None;
+        let mut advanced = false;
+        let result = loop {
+            if *this.gate != Gate::Idle {
+                let at = *this.wait_at;
+                // One timer-poll site. A ready future is never polled again.
+                let ready =
+                    *this.gate == Gate::Ready || poll_timer(this.wait.as_mut(), context).is_ready();
+                if advanced {
+                    *this.gate = if ready { Gate::Ready } else { Gate::Waiting };
+                    if ready {
+                        context.waker().wake_by_ref();
+                    }
+                    break Poll::Pending;
+                }
+                if !ready {
+                    break Poll::Pending;
+                }
+                resumed = Some((at, this.timer.now()));
+                *this.gate = Gate::Idle;
+            }
+            let now = this.timer.now();
+            let at = match this.registers.advance(this.job, now) {
+                Step::Complete => break Poll::Ready(Ok(())),
+                Step::Failure(error) => break Poll::Ready(Err(error)),
+                Step::Runnable => now,
+                Step::WaitAt(at) => {
+                    // Backoff starts after the status/command atom. The first
+                    // temperature observation keeps its full 1-us minimum.
+                    let completed = this.timer.now();
+                    let Some(at) = completed.checked_add(at.saturating_duration_since(now)) else {
+                        break Poll::Ready(Err(Failure::DeadlineOverflow));
+                    };
+                    if this.job.first_wait {
+                        at
+                    } else {
+                        at.min(this.job.deadline)
+                    }
+                }
             };
-            gate(timer, at, &sink).await;
-        }
-    });
-    poll_fn(|context| {
-        let enabled = sink.borrow().enabled();
-        let started = enabled.then(|| timer.now().as_micros());
-        let result = future.as_mut().poll(context);
-        if let Some(started) = started {
-            sink.borrow_mut().observe(EngineEvent::Poll {
+            this.wait.as_mut().set((this.make_wait)(at));
+            *this.wait_at = at;
+            *this.gate = Gate::Waiting;
+            advanced = true;
+        };
+        if let (Some(stats), Some(started)) = (this.stats.as_deref_mut(), started) {
+            let finished = this.timer.now();
+            stats.poll_finished(
                 started,
-                finished: timer.now().as_micros(),
-                ready: result.is_ready(),
-            });
+                finished,
+                result.is_pending(),
+                resumed,
+                this.job.ready_started.take(),
+            );
         }
         result
-    })
-    .await
+    }
+}
+// Outline the concrete timer's own state machine once, so LLVM cannot
+// duplicate it around the voluntary and readiness branches of Driver::poll.
+#[inline(never)]
+fn poll_timer<F: Future<Output = ()>>(wait: Pin<&mut F>, context: &mut Context<'_>) -> Poll<()> {
+    wait.poll(context)
+}
+
+pub(crate) fn drive<'a, 'j, R: Registers, T: Timer>(
+    job: &'a mut Job<'j>,
+    registers: &'a mut R,
+    timer: &'a T,
+    stats: Option<&'a mut EngineTiming>,
+) -> impl Future<Output = Result<(), Failure>> + 'a {
+    Driver {
+        job,
+        registers,
+        timer,
+        stats,
+        wait: timer.wait_until(Instant::EPOCH),
+        make_wait: move |at| timer.wait_until(at),
+        wait_at: Instant::EPOCH,
+        gate: Gate::Idle,
+    }
 }
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;

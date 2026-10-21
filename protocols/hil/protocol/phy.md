@@ -36,9 +36,14 @@ capture, saves debug policy and forces `(3, 0)`. Its reply binds a nonzero hold
 id to the capture epoch, radio, channel, tick count and registered period.
 Other capture operations reject until `StopTrackingHold` retires that hold.
 `GetTrackingHold { id, first }` returns at most one complete sample with the
-available count and terminal/invalid status; an unavailable sample remains
+available count, terminal/invalid status and cumulative engine-poll counters; an unavailable sample remains
 absent. Each sample retains up to eight raw coarse intervals and the committed
 RFPLL/common/transmit bits. Failed, unpaired or overflowing intervals are invalid.
+The cumulative counters retain count/total/max poll wall time, timer resume
+lateness and maximum time from command start to an accepted ready edge.
+Counts use checked 16-bit fields and microsecond totals/maxima use checked
+32-bit fields; overflow invalidates the evidence. They include partial failed
+ticks; poll callbacks send no telemetry.
 `StopTrackingHold` reports sample completeness and policy restoration; RF closure
 is reported separately by `StopCapture`. A stale id never accesses a new hold.
 The host binds these messages to the boot identity of the existing transport.

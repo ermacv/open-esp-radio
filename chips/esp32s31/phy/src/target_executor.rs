@@ -218,7 +218,6 @@ impl PhyShortDelay for oer_esp32s31_hal::phy::delay::RomShortDelay {
 /// Failure while completing a finite target PHY hardware operation.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyTargetPortError {
-    DeadlineOverflow,
     HardwareEdgeTimedOut,
     HardwareCapabilityUnavailable,
     HardwareInvariant,
@@ -227,6 +226,7 @@ pub enum PhyTargetPortError {
     /// A registration held apart from its hardware no longer describes the
     /// borrowed PHY partition; the operation touched no hardware.
     RegistrationEpochMismatch,
+    DeadlineOverflow,
 }
 
 /// Complete the registration tail's bounded read-only PHY-I2C transaction.

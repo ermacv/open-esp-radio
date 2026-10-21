@@ -7,75 +7,81 @@
 
 use crate::executor::wait;
 
-/// Actual engine poll boundaries and requested timer deadlines. These events
-/// carry no UART work and borrow no hardware state.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum EngineEvent {
-    Poll {
-        started: u64,
-        finished: u64,
-        ready: bool,
-    },
-    TimerResumed {
-        deadline: u64,
-        resumed: u64,
-    },
-}
-
+/// Clock-free aggregate of actual engine polls and timer resumes.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct EngineTiming {
-    pub polls: u32,
-    pub pending: u32,
+    pub polls: u16,
+    pub pending: u16,
     pub total_micros: u32,
     pub maximum_micros: u32,
-    pub resumes: u32,
+    pub resumes: u16,
     pub lateness_micros: u32,
     pub maximum_lateness_micros: u32,
+    pub ready_edges: u16,
+    pub maximum_ready_micros: u32,
     pub invalid: bool,
 }
-
 impl EngineTiming {
-    pub fn observe(&mut self, event: EngineEvent) {
-        let (start, end) = match event {
-            EngineEvent::Poll {
-                started, finished, ..
-            } => (started, finished),
-            EngineEvent::TimerResumed { deadline, resumed } => (deadline, resumed),
-        };
-        let Some(elapsed) = end.checked_sub(start).and_then(|v| u32::try_from(v).ok()) else {
-            self.invalid = true;
-            return;
-        };
-        let (count, total, maximum) = match event {
-            EngineEvent::Poll { ready, .. } => {
-                if !ready {
-                    let Some(pending) = self.pending.checked_add(1) else {
-                        self.invalid = true;
-                        return;
-                    };
-                    self.pending = pending;
-                }
-                (
-                    &mut self.polls,
-                    &mut self.total_micros,
-                    &mut self.maximum_micros,
-                )
+    /// Called once at the exit of the outlined poll, never from an observer.
+    #[inline(never)]
+    pub(crate) fn poll_finished(
+        &mut self,
+        started: oer_time::Instant,
+        finished: oer_time::Instant,
+        pending: bool,
+        resumed: Option<(oer_time::Instant, oer_time::Instant)>,
+        ready_started: Option<oer_time::Instant>,
+    ) {
+        fn increment(total: &mut u16, invalid: &mut bool) {
+            if let Some(next) = total.checked_add(1) {
+                *total = next;
+            } else {
+                *invalid = true;
             }
-            EngineEvent::TimerResumed { .. } => (
-                &mut self.resumes,
-                &mut self.lateness_micros,
-                &mut self.maximum_lateness_micros,
-            ),
-        };
-        let (Some(next_count), Some(next_total)) =
-            (count.checked_add(1), total.checked_add(elapsed))
+        }
+        fn add(total: &mut u32, amount: u32, invalid: &mut bool) {
+            if let Some(next) = total.checked_add(amount) {
+                *total = next;
+            } else {
+                *invalid = true;
+            }
+        }
+        let Some(elapsed) = finished
+            .checked_duration_since(started)
+            .and_then(|d| u32::try_from(d.as_micros()).ok())
         else {
             self.invalid = true;
             return;
         };
-        *count = next_count;
-        *total = next_total;
-        *maximum = (*maximum).max(elapsed);
+        increment(&mut self.polls, &mut self.invalid);
+        if pending {
+            increment(&mut self.pending, &mut self.invalid);
+        }
+        add(&mut self.total_micros, elapsed, &mut self.invalid);
+        self.maximum_micros = self.maximum_micros.max(elapsed);
+        if let Some((deadline, at)) = resumed {
+            let Some(late) = at
+                .checked_duration_since(deadline)
+                .and_then(|d| u32::try_from(d.as_micros()).ok())
+            else {
+                self.invalid = true;
+                return;
+            };
+            increment(&mut self.resumes, &mut self.invalid);
+            add(&mut self.lateness_micros, late, &mut self.invalid);
+            self.maximum_lateness_micros = self.maximum_lateness_micros.max(late);
+        }
+        if let Some(started) = ready_started {
+            let Some(elapsed) = finished
+                .checked_duration_since(started)
+                .and_then(|d| u32::try_from(d.as_micros()).ok())
+            else {
+                self.invalid = true;
+                return;
+            };
+            increment(&mut self.ready_edges, &mut self.invalid);
+            self.maximum_ready_micros = self.maximum_ready_micros.max(elapsed);
+        }
     }
 }
 
@@ -368,8 +374,8 @@ impl Default for Recorder {
 }
 
 impl Recorder {
-    pub fn observe_engine(&mut self, event: EngineEvent) {
-        self.engine.observe(event);
+    pub fn observe_engine(&mut self, timing: EngineTiming) {
+        self.engine = timing;
     }
     pub fn observe_temperature(
         &mut self,

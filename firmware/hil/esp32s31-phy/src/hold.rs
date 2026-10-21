@@ -17,6 +17,7 @@ pub struct Hold {
     pub running: bool,
     pub deadline: Instant,
     pub saved_debug: [u8; 2],
+    pub engine: HoldPolls,
 }
 impl Hold {
     pub fn new(started: HoldStarted, saved_debug: [u8; 2]) -> Self {
@@ -29,6 +30,7 @@ impl Hold {
                 .now()
                 .saturating_add(Duration::from_micros(DEFAULT_PLL_TRACK_PERIOD_MICROS)),
             saved_debug,
+            engine: HoldPolls::default(),
         }
     }
     pub fn page(&self, request: GetTrackingHold) -> Result<TrackingHold, RejectReason> {
@@ -36,6 +38,7 @@ impl Hold {
             return Err(RejectReason::InvalidState);
         }
         Ok(TrackingHold {
+            engine: self.engine,
             id: request.id,
             first: request.first,
             available: self.samples.len() as u8,
@@ -46,13 +49,37 @@ impl Hold {
     }
 }
 
-pub struct Observer(pub recorder::Recorder, pub sar_tails::Tails);
-impl Observer {
-    pub fn new(tick: u8) -> Self {
-        Self(recorder::Recorder::new(tick), sar_tails::Tails::default())
+pub struct Observer<'a>(
+    pub recorder::Recorder,
+    pub sar_tails::Tails,
+    &'a mut HoldPolls,
+);
+impl<'a> Observer<'a> {
+    pub fn new(tick: u8, engine: &'a mut HoldPolls) -> Self {
+        Self(
+            recorder::Recorder::new(tick),
+            sar_tails::Tails::default(),
+            engine,
+        )
     }
 }
-impl PhyTargetObserver for &mut Observer {
+impl PhyTargetObserver for &mut Observer<'_> {
+    const OBSERVE_ENGINE_POLLS: bool = true;
+    fn engine_completed(&mut self, timing: oer_esp32s31_phy::tracking::observation::EngineTiming) {
+        self.2.merge(HoldPolls {
+            polls: timing.polls,
+            pending: timing.pending,
+            total_micros: timing.total_micros,
+            maximum_micros: timing.maximum_micros,
+            resumes: timing.resumes,
+            lateness_micros: timing.lateness_micros,
+            maximum_lateness_micros: timing.maximum_lateness_micros,
+            ready_edges: timing.ready_edges,
+            maximum_ready_micros: timing.maximum_ready_micros,
+            invalid: timing.invalid,
+        });
+    }
+
     fn tx_sar_wait(&mut self, elapsed: u64, observations: u16, ready: bool) {
         self.1.observe(elapsed, observations, ready);
     }

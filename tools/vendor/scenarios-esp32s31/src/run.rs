@@ -129,6 +129,10 @@ pub enum Scenario {
         /// Authenticated SDK firmware supplying the never-executed diagnostics symbol.
         #[arg(long, default_value_os_t = crate::artifacts::default_path("phy-sdk"))]
         phy_sdk: PathBuf,
+        /// Existing parent cases that reach final temperature without RX/TX
+        /// recalibration. The default still runs the complete tracking suite.
+        #[arg(long)]
+        temperature_parent: bool,
     },
     /// PHY I2C command memory and transport, harness call edges, calibration
     /// leaves and PBus/DCODE prefix (`--sdk`) and RFPLL (`--phy-sdk`).
@@ -594,16 +598,36 @@ fn tx_dc(common: Common, phy_sdk: PathBuf, report: &dyn RunReport) -> Result<Out
     ))
 }
 
-fn tracking(common: Common, phy_sdk: PathBuf, report: &dyn RunReport) -> Result<Outcome> {
-    let mut ctx = tracking::Tracking::new(&common.phy(), &phy_sdk)?;
-    tracking::exercise(&mut ctx)?;
-    let claims = ctx
-        .session
-        .claims("tracking", &ctx.roots, &TRACKING_CLAIMS, report)?;
+fn tracking(
+    common: Common,
+    phy_sdk: PathBuf,
+    temperature_parent: bool,
+    report: &dyn RunReport,
+) -> Result<Outcome> {
+    let mut ctx = tracking::Tracking::new(&common.phy(), &phy_sdk, temperature_parent)?;
+    if temperature_parent {
+        tracking::exercise_temperature_parent(&mut ctx)?;
+    } else {
+        tracking::exercise(&mut ctx)?;
+    }
+    let claims = ctx.session.claims(
+        "tracking",
+        &ctx.roots,
+        if temperature_parent {
+            &TRACKING_CLAIMS[1..]
+        } else {
+            &TRACKING_CLAIMS
+        },
+        report,
+    )?;
     Ok((
         finish(
             &[],
-            "authenticated tracking parents, failed-TX containment passed",
+            if temperature_parent {
+                "authenticated temperature-reaching parent cases passed"
+            } else {
+                "authenticated tracking parents, failed-TX containment passed"
+            },
             &ctx.run,
         ),
         claims,
@@ -664,7 +688,7 @@ fn all(common: Common, inputs: AllInputs, report: &dyn RunReport) -> Result<Exit
         ),
         (
             "tracking",
-            Box::new(|| tracking(within("tracking"), phy_sdk.clone(), report)),
+            Box::new(|| tracking(within("tracking"), phy_sdk.clone(), false, report)),
         ),
         (
             "wifi-mac",
@@ -849,7 +873,11 @@ pub fn run(scenario: Scenario, report: &dyn RunReport) -> ExitCode {
         Scenario::Coex { common, libcoexist } => single(coex(common, libcoexist, report)),
         Scenario::RxGain { common, phy_sdk } => single(rx_gain(common, phy_sdk, report)),
         Scenario::TxDc { common, phy_sdk } => single(tx_dc(common, phy_sdk, report)),
-        Scenario::Tracking { common, phy_sdk } => single(tracking(common, phy_sdk, report)),
+        Scenario::Tracking {
+            common,
+            phy_sdk,
+            temperature_parent,
+        } => single(tracking(common, phy_sdk, temperature_parent, report)),
         Scenario::WifiMac {
             common,
             libpp,

@@ -1,13 +1,21 @@
 use super::*;
 use crate::{
-    analog::i2c::{PhyI2cError, analog_registers},
+    analog::{
+        i2c::{PhyI2cError, analog_registers},
+        temperature::{
+            PhyTemperatureAction, PhyTemperatureCompletion, PhyTemperatureI2cBinding,
+            PhyTemperatureOutcome, PhyTemperatureTransition,
+        },
+    },
     calibration::cold::PhyColdI2cRequest,
 };
-use oer_time::Clock;
+use oer_time::{Clock, Duration};
 use oer_time_virtual::VirtualClock;
 use std::{
+    cell::Cell,
+    rc::Rc,
     sync::Arc,
-    task::{Context, Wake, Waker},
+    task::{Wake, Waker},
     vec::Vec,
 };
 
@@ -20,20 +28,25 @@ impl Wake for WakeCount {
         self.0.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
 }
-
 #[derive(Default)]
-struct Io {
+pub(crate) struct Io {
     actions: Vec<PhyColdI2cAction>,
     code: u8,
     byte: u8,
-    busy: bool,
-    atoms: usize,
+    busy: Rc<Cell<bool>>,
+    pub(crate) atoms: Rc<Cell<usize>>,
 }
-impl StepIo for Io {
-    fn start_i2c(&mut self, transaction: &mut PhyColdI2cTransaction) -> Result<bool, Failure> {
-        self.atoms += 1;
+impl Io {
+    fn atom(&self) {
+        self.atoms.set(self.atoms.get() + 1);
+    }
+    pub(super) fn start_i2c(
+        &mut self,
+        transaction: &mut PhyColdI2cTransaction,
+    ) -> Result<bool, Failure> {
+        self.atom();
         self.actions.push(transaction.action());
-        if self.busy {
+        if self.busy.get() {
             return Ok(false);
         }
         match transaction.action() {
@@ -47,22 +60,22 @@ impl StepIo for Io {
         .map_err(|_| Failure::Binding)?;
         Ok(true)
     }
-    fn sample_i2c(
+    pub(super) fn sample_i2c(
         &mut self,
         transaction: &mut PhyColdI2cTransaction,
     ) -> Result<PhyColdI2cObservation, Failure> {
-        self.atoms += 1;
+        self.atom();
         self.actions.push(transaction.action());
         match transaction.action() {
             PhyColdI2cAction::AwaitReadCompletionEdge { .. } => {
-                transaction.observe_read_result(if self.busy {
+                transaction.observe_read_result(if self.busy.get() {
                     Err(PhyI2cError::Busy)
                 } else {
                     Ok(self.byte)
                 })
             }
             PhyColdI2cAction::AwaitWriteCompletionEdge { .. } => {
-                transaction.observe_write_result(if self.busy {
+                transaction.observe_write_result(if self.busy.get() {
                     Err(PhyI2cError::Busy)
                 } else {
                     Ok(())
@@ -72,162 +85,179 @@ impl StepIo for Io {
         }
         .map_err(|_| Failure::Binding)
     }
-    fn start_pbus(&mut self, binding: &mut PhyPbusHardwareBinding) -> Result<(), Failure> {
-        self.atoms += 1;
+    pub(super) fn start_pbus(
+        &mut self,
+        binding: &mut PhyPbusHardwareBinding,
+    ) -> Result<(), Failure> {
+        self.atom();
         binding.started().map_err(|_| Failure::Binding)
     }
-    fn sample_pbus(
+    pub(super) fn sample_pbus(
         &mut self,
         binding: &mut PhyPbusHardwareBinding,
     ) -> Result<PhyPbusHardwareObservation, Failure> {
-        self.atoms += 1;
+        self.atom();
         binding
-            .observe_completed(!self.busy)
+            .observe_completed(!self.busy.get())
             .map_err(|_| Failure::Binding)
     }
-    fn temperature_code(&mut self) -> u8 {
-        self.atoms += 1;
+    pub(super) fn temperature_code(&mut self) -> u8 {
+        self.atom();
         self.code
     }
-    fn clear_pbus_control(&mut self, _: bool) -> Result<bool, Failure> {
-        self.atoms += 1;
+    pub(super) fn clear_pbus_control(&mut self, _: bool) -> Result<bool, Failure> {
+        self.atom();
         Ok(true)
     }
 }
-
-#[derive(Default)]
-struct Stats(crate::tracking::observation::EngineTiming);
-impl Sink for Stats {
-    fn enabled(&self) -> bool {
-        true
-    }
-    fn observe(&mut self, event: EngineEvent) {
-        self.0.observe(event);
+impl Registers for Io {
+    fn advance(&mut self, job: &mut Job<'_>, now: Instant) -> Step {
+        job.advance_one(super::io::Io::Test(self, core::marker::PhantomData), now)
     }
 }
-
 fn context() -> (Waker, Arc<WakeCount>) {
     let wakes = Arc::new(WakeCount(std::sync::atomic::AtomicUsize::new(0)));
     (Waker::from(wakes.clone()), wakes)
 }
-
+fn read() -> PhyColdI2cTransaction {
+    PhyColdI2cTransaction::new(PhyColdI2cRequest::read_field(
+        analog_registers::TEMPERATURE_SENSOR_DAC_STATUS,
+    ))
+}
 #[test]
 fn every_hardware_atom_yields_even_when_the_timer_is_already_ready() {
-    let clock = VirtualClock::<1>::default();
+    let clock = VirtualClock::<1>::new();
     let mut io = Io::default();
-    let request = PhyColdI2cRequest::write_field(analog_registers::TEMPERATURE_SENSOR_DAC, 15);
-    let mut job =
-        Job::i2c(PhyColdI2cTransaction::new(request), clock.now()).expect("deadline fits");
-    let mut stats = Stats::default();
+    let atoms = io.atoms.clone();
+    let mut transaction = PhyColdI2cTransaction::new(PhyColdI2cRequest::write_field(
+        analog_registers::TEMPERATURE_SENSOR_DAC,
+        15,
+    ));
+    let mut job = Job::i2c(&mut transaction, clock.now(), false).expect("deadline fits");
+    let mut stats = EngineTiming::default();
     let (waker, wakes) = context();
     let mut cx = Context::from_waker(&waker);
     {
-        let mut future = pin!(drive(&mut job, &mut io, &clock, &mut stats));
-        // RMW: read start, read completion, write start, write completion.
+        let mut future = core::pin::pin!(drive(&mut job, &mut io, &clock, Some(&mut stats)));
         for _ in 0..4 {
+            let before = atoms.get();
             assert!(future.as_mut().poll(&mut cx).is_pending());
+            assert_eq!(atoms.get() - before, 1);
         }
-        assert!(matches!(
-            future.as_mut().poll(&mut cx),
-            Poll::Ready(Ok(Outcome::I2c(_)))
-        ));
+        assert!(matches!(future.as_mut().poll(&mut cx), Poll::Ready(Ok(()))));
     }
-    assert_eq!(io.atoms, 4);
+    assert_eq!(atoms.get(), 4);
     assert_eq!(wakes.0.load(std::sync::atomic::Ordering::Relaxed), 4);
-    assert_eq!((stats.0.polls, stats.0.pending, stats.0.resumes), (5, 4, 4));
-    assert!(!stats.0.invalid);
+    assert_eq!(
+        (stats.polls, stats.pending, stats.resumes, stats.ready_edges),
+        (5, 4, 4, 2)
+    );
+    assert!(!stats.invalid);
 }
-
+#[test]
+fn timer_wait_does_no_atoms_until_the_deadline_and_records_resume_lateness() {
+    let clock = VirtualClock::<1>::new();
+    let mut io = Io::default();
+    let busy = io.busy.clone();
+    let atoms = io.atoms.clone();
+    let mut transaction = read();
+    let mut job = Job::i2c(&mut transaction, clock.now(), true).expect("deadline fits");
+    let mut stats = EngineTiming::default();
+    let (waker, _) = context();
+    let mut cx = Context::from_waker(&waker);
+    {
+        let mut future = core::pin::pin!(drive(&mut job, &mut io, &clock, Some(&mut stats)));
+        assert!(future.as_mut().poll(&mut cx).is_pending());
+        assert_eq!(atoms.get(), 1);
+        assert!(future.as_mut().poll(&mut cx).is_pending());
+        assert_eq!(atoms.get(), 1);
+        busy.set(true);
+        clock.advance(Duration::from_micros(1)).expect("time fits");
+        assert!(future.as_mut().poll(&mut cx).is_pending());
+        assert_eq!(atoms.get(), 2);
+        assert!(future.as_mut().poll(&mut cx).is_pending());
+        assert_eq!(atoms.get(), 2);
+        busy.set(false);
+        clock.advance(Duration::from_micros(3)).expect("time fits");
+        assert!(future.as_mut().poll(&mut cx).is_pending());
+        assert_eq!(atoms.get(), 3);
+        assert!(future.as_mut().poll(&mut cx).is_ready());
+    }
+    assert_eq!(stats.maximum_ready_micros, 4);
+    assert_eq!(stats.maximum_lateness_micros, 2);
+    assert_eq!((stats.polls, stats.pending, stats.ready_edges), (6, 5, 1));
+}
 #[test]
 fn ready_at_deadline_is_accepted_but_a_late_read_is_never_consumed() {
     for late in [false, true] {
-        let clock = VirtualClock::<1>::default();
-        let mut job = Job::i2c(
-            PhyColdI2cTransaction::new(PhyColdI2cRequest::read_field(
-                analog_registers::TEMPERATURE_SENSOR_DAC_STATUS,
-            )),
-            clock.now(),
-        )
-        .expect("deadline fits");
+        let clock = VirtualClock::<1>::new();
         let mut io = Io::default();
-        assert_eq!(job.advance_one(&mut io, clock.now()), Step::Runnable);
+        let mut transaction = read();
+        let mut job = Job::i2c(&mut transaction, clock.now(), false).expect("deadline fits");
+        assert_eq!(io.advance(&mut job, clock.now()), Step::Runnable);
         clock
             .advance(Duration::from_micros(if late { 21 } else { 20 }))
-            .expect("test time fits");
-        let next = job.advance_one(&mut io, clock.now());
+            .expect("time fits");
+        let next = io.advance(&mut job, clock.now());
         if late {
             assert_eq!(next, Step::Failure(Failure::TimedOut));
-            assert_eq!(io.atoms, 1);
+            assert_eq!(io.atoms.get(), 1);
         } else {
             assert_eq!(next, Step::Runnable);
             clock
                 .advance(Duration::from_micros(100))
-                .expect("test time fits");
-            assert!(matches!(
-                job.advance_one(&mut io, clock.now()),
-                Step::Complete(Outcome::I2c(_))
-            ));
-            assert_eq!(io.atoms, 2);
+                .expect("time fits");
+            assert!(matches!(io.advance(&mut job, clock.now()), Step::Complete));
+            assert_eq!(io.atoms.get(), 2);
         }
     }
 }
-
 #[test]
-fn not_ready_uses_a_timer_and_a_deadline_without_another_atom() {
-    let clock = VirtualClock::<1>::default();
-    let mut job = Job::pbus(PhyPbusForceTest::new(1, 2, 3), clock.now()).expect("deadline fits");
-    let mut io = Io {
-        busy: true,
-        ..Io::default()
-    };
-    assert_eq!(job.advance_one(&mut io, clock.now()), Step::Runnable);
+fn pbus_timeout_keeps_its_source_completion_and_never_consumes_a_late_result() {
+    let clock = VirtualClock::<1>::new();
+    let mut binding = PhyPbusHardwareBinding::new(PhyPbusForceTest::new(1, 2, 3));
+    let mut job = Job::pbus(&mut binding, clock.now()).expect("deadline fits");
+    let mut io = Io::default();
+    io.busy.set(true);
+    assert_eq!(io.advance(&mut job, clock.now()), Step::Runnable);
     assert_eq!(
-        job.advance_one(&mut io, clock.now()),
+        io.advance(&mut job, clock.now()),
         Step::WaitAt(clock.now().checked_add(RETRY).expect("time fits"))
     );
-    assert_eq!(io.atoms, 2);
     clock.advance(Duration::from_micros(21)).expect("time fits");
-    assert!(matches!(
-        job.advance_one(&mut io, clock.now()),
-        Step::Complete(Outcome::Pbus {
-            completed: false,
-            ..
-        })
-    ));
-    assert_eq!(io.atoms, 2);
+    assert!(matches!(io.advance(&mut job, clock.now()), Step::Complete));
+    assert_eq!(io.atoms.get(), 2);
 }
-
 #[test]
 fn overflowing_deadlines_are_typed_failures_before_publication() {
     let clock = VirtualClock::<1>::starting_at(Instant::from_micros(u64::MAX - 10));
+    let mut transaction = read();
     assert!(matches!(
-        Job::pbus(PhyPbusForceTest::new(0, 0, 0), clock.now()),
+        Job::i2c(&mut transaction, clock.now(), false),
         Err(Failure::DeadlineOverflow)
     ));
 }
-
-fn old_temperature(io: &mut Io) -> (PhyTemperatureOutcome, Vec<PhyColdI2cAction>) {
+fn old_temperature(io: &mut Io) -> PhyTemperatureOutcome {
     let mut transition = PhyTemperatureTransition::new();
     loop {
         match transition.action() {
-            PhyTemperatureAction::Complete(outcome) => return (outcome, io.actions.clone()),
+            PhyTemperatureAction::Complete(outcome) => return outcome,
             PhyTemperatureAction::SampleCode => transition
                 .advance(PhyTemperatureCompletion::CodeSampled {
                     value: io.temperature_code(),
                 })
                 .expect("sample matches"),
             action => {
-                let mut binding =
-                    PhyTemperatureI2cBinding::new(action).expect("valid temperature action");
+                let mut binding = PhyTemperatureI2cBinding::new(action).expect("valid action");
                 while !matches!(binding.action(), PhyColdI2cAction::Complete(_)) {
-                    let transaction = binding.transaction_mut();
-                    match transaction.action() {
+                    let t = binding.transaction_mut();
+                    match t.action() {
                         PhyColdI2cAction::StartRead { .. }
                         | PhyColdI2cAction::StartWrite { .. } => {
-                            io.start_i2c(transaction).expect("start succeeds");
+                            io.start_i2c(t).expect("start succeeds");
                         }
                         _ => {
-                            io.sample_i2c(transaction).expect("completion succeeds");
+                            io.sample_i2c(t).expect("completion succeeds");
                         }
                     }
                 }
@@ -238,9 +268,11 @@ fn old_temperature(io: &mut Io) -> (PhyTemperatureOutcome, Vec<PhyColdI2cAction>
         }
     }
 }
-
+// The complete T7 orchestration is tested below through the production helper.
 #[test]
-fn sliced_temperature_keeps_the_old_writes_and_results_for_all_sensor_codes() {
+fn sliced_t7_matches_the_old_action_write_and_result_sequence_for_all_sensor_codes() {
+    let (waker, _) = context();
+    let mut cx = Context::from_waker(&waker);
     for dac in [0, 5, 7, 15, 11, 10] {
         for code in 0..=u8::MAX {
             let clock = VirtualClock::<1>::new();
@@ -255,22 +287,80 @@ fn sliced_temperature_keeps_the_old_writes_and_results_for_all_sensor_codes() {
                 code,
                 ..Io::default()
             };
+            let atoms = io.atoms.clone();
             let mut transition = PhyTemperatureTransition::new();
-            let mut job = Job::temperature(&mut transition);
-            loop {
-                let before = io.atoms;
-                let next = job.advance_one(&mut io, clock.now());
-                assert!(io.atoms - before <= 1);
-                match next {
-                    Step::Runnable => {}
-                    Step::WaitAt(at) => clock.advance_to(at),
-                    Step::Complete(Outcome::Temperature(outcome)) => {
-                        assert_eq!((outcome, io.actions.clone()), expected);
-                        break;
+            let actual = {
+                let mut future = core::pin::pin!(super::temperature::sample(
+                    &mut transition,
+                    &mut io,
+                    &clock,
+                    None
+                ));
+                loop {
+                    let before = atoms.get();
+                    let next = future.as_mut().poll(&mut cx);
+                    assert!(atoms.get() - before <= 1, "one atom per enclosing T7 poll");
+                    if let Poll::Ready(outcome) = next {
+                        break outcome.expect("T7 completes");
                     }
-                    _ => panic!("temperature completes"),
+                    clock.advance_to_next_deadline();
                 }
-            }
+            };
+            assert_eq!(actual, expected);
+            assert_eq!(io.actions, old.actions);
         }
     }
+}
+#[test]
+fn pbus_clear_preserves_all_commands_and_the_conditional_settle_tail() {
+    let clock = VirtualClock::<1>::new();
+    let mut transition = PhyPbusClearTransition::new();
+    let mut job = Job::clear_pbus(&mut transition, clock.now()).expect("deadline fits");
+    let mut io = Io::default();
+    for _ in 0..100 {
+        let before = io.atoms.get();
+        let step = io.advance(&mut job, clock.now());
+        assert!(io.atoms.get() - before <= 1);
+        if step == Step::Complete {
+            assert_eq!(
+                job.outcome(),
+                Some(Outcome::PbusClear(PhyPbusClearOutcome::Cleared))
+            );
+            assert_eq!(io.atoms.get(), 26);
+            return;
+        }
+        if let Step::WaitAt(at) = step {
+            clock.advance_to(at);
+        }
+    }
+    panic!("PBus clear completes within its finite command count");
+}
+
+#[test]
+fn an_immediately_ready_async_timer_is_not_polled_after_completion() {
+    struct AsyncTimer(VirtualClock<1>);
+    impl Clock for AsyncTimer {
+        fn now(&self) -> Instant {
+            self.0.now()
+        }
+    }
+    impl Timer for AsyncTimer {
+        async fn wait_until(&self, at: Instant) {
+            self.0.wait_until(at).await;
+        }
+    }
+    let clock = AsyncTimer(VirtualClock::<1>::new());
+    let mut io = Io::default();
+    let atoms = io.atoms.clone();
+    let mut transaction = read();
+    let mut job = Job::i2c(&mut transaction, clock.now(), false).expect("deadline fits");
+    let (waker, _) = context();
+    let mut cx = Context::from_waker(&waker);
+    let mut future = core::pin::pin!(drive(&mut job, &mut io, &clock, None));
+    assert!(future.as_mut().poll(&mut cx).is_pending());
+    assert_eq!(atoms.get(), 1);
+    assert!(future.as_mut().poll(&mut cx).is_pending());
+    assert_eq!(atoms.get(), 2);
+    assert!(future.as_mut().poll(&mut cx).is_ready());
+    assert_eq!(atoms.get(), 2);
 }

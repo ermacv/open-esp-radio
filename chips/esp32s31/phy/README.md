@@ -267,10 +267,10 @@ compensation classes are not qualified execution modes.
 The production RX-gain and TXDC/PWDET paths execute as direct blocking
 transactions on the already-borrowed radio domain. Required 1–20 us
 hardware settles use the ESP32-S31 ROM `ets_delay_us` primitive used by the
-recovered vendor graph; bounded PBus, I2C, DC/IQ and SAR readiness reads poll
-directly. Interrupts remain enabled and the physical owner remains held until
-terminal restoration. The complete common/Wi-Fi runtime calibration graph
-runs in one caller poll without a timer suspension. Longer registration,
+recovered vendor graph; bounded PBus, I2C and DC/IQ readiness reads poll
+directly. Runtime TXDC/PWDET SAR readiness uses its timer-backed 40 µs deadline. Interrupts remain enabled and the physical owner remains held until
+terminal restoration. The common RX-gain branch still runs direct hardware searches inside its
+caller polls. Longer registration,
 tracking and lifecycle operations wait on the caller's `oer_time::Timer`
 through `executor::wait::delay` and its `executor::wait::Kind`.
 
@@ -280,6 +280,22 @@ calibration, RFPLL tracking and retained RF wake; the longest direct edge
 was 2,976 cycles at 160 MHz (18.6 µs). Timeout remains a typed failure.
 The retained-wake frequency-ready edge already belongs to an asynchronous
 transaction and retries through the timer in 10 µs steps.
+
+The final temperature child of parameter tracking uses the private
+[`executor::step`](src/executor/step.rs) transport driver. Its read, masked
+read/modify/write and sensor-code atoms each return `Pending` before another
+atom can run, including when the timer is immediately ready. The first bus
+completion sample retains its 1 µs minimum; not-ready retries use the caller's
+timer and the same named 20 µs observation boundary as the direct tier.
+A ready result at the deadline is accepted; a later result is not consumed.
+The existing temperature graph owns conversion, range writes and dated commit.
+Cancellation leaves the admitted PHY poisoned until reset.
+
+The diagnostic hold reports aggregate engine poll count/total/maximum, timer
+resume lateness, and maximum command-to-ready time. Counters are fixed local
+fields; reporting follows T7 and performs no UART work inside a poll. Count
+or duration overflow invalidates the evidence. These observations cover this
+transport path; the remaining tracking families retain their existing execution.
 
 The execution limits have different scopes:
 

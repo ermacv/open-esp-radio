@@ -7,10 +7,12 @@ use oer_time::{Clock, Duration};
 /// The longest a direct observation of a measured site may wait: the worst
 /// measured direct wait was 87 reads, 2976 cycles (18.6 µs at 160 MHz)
 /// in the W2 calibration/wake measurements on s31-a.
-const OBSERVATION_SETTLE_LIMIT: SettleLimit = match SettleLimit::new(Duration::from_micros(20)) {
-    Some(limit) => limit,
-    None => panic!("the observation settle limit is within the settle bound"),
-};
+pub(crate) const OBSERVATION_MICROS: u64 = 20;
+const OBSERVATION_SETTLE_LIMIT: SettleLimit =
+    match SettleLimit::new(Duration::from_micros(OBSERVATION_MICROS)) {
+        Some(limit) => limit,
+        None => panic!("the observation settle limit is within the settle bound"),
+    };
 
 /// Observe until `attempt` yields a value or [`OBSERVATION_SETTLE_LIMIT`] has
 /// passed on `clock`; the first observation always runs.

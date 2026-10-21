@@ -236,3 +236,52 @@ fn release_for_test(
     let key = radio.attachment().permission_key();
     release_client(radio, client, key)
 }
+
+#[test]
+fn cancelling_the_transport_after_a_write_leaves_the_phy_poisoned() {
+    use crate::{
+        analog::i2c::analog_registers,
+        calibration::cold::{PhyColdI2cRequest, PhyColdI2cTransaction},
+        executor::step::{Job, drive, tests::Io},
+    };
+    use core::{
+        future::Future,
+        task::{Context, Waker},
+    };
+    use oer_time::Clock;
+    let clock = VirtualClock::<1>::new();
+    let mut radio = registered_domain();
+    assert_eq!(
+        enter_client(&mut radio, RadioClient::Wifi, &clock),
+        Ok(ConcurrentAcquire::TrackingDue)
+    );
+    let mut io = Io::default();
+    let writes = io.atoms.clone();
+    let mut transaction = PhyColdI2cTransaction::new(PhyColdI2cRequest::write_byte(
+        analog_registers::TEMPERATURE_SENSOR_DAC.address(),
+        15,
+    ));
+    {
+        let future = async {
+            let (_registered, _pending) = radio
+                .attachment_mut()
+                .take_tracking()
+                .expect("tracking was admitted");
+            let mut job = Job::i2c(&mut transaction, clock.now(), false).expect("deadline fits");
+            drive(&mut job, &mut io, &clock, None).await
+        };
+        let mut future = core::pin::pin!(future);
+        assert!(
+            future
+                .as_mut()
+                .poll(&mut Context::from_waker(Waker::noop()))
+                .is_pending()
+        );
+        assert_eq!(writes.get(), 1, "the command write precedes cancellation");
+    }
+    assert!(matches!(radio.attachment().slot, Slot::Poisoned));
+    assert_eq!(
+        admit_maintenance(&mut radio),
+        Err(ConcurrentPhyError::Poisoned)
+    );
+}
