@@ -92,6 +92,7 @@ fn a_chain_longer_than_the_length_field_is_a_counted_oversized_drop() {
     let mut hardware = RxWalkerModel::new();
     let mut ring = placed
         .prepare_ring(&mut hardware)
+        .and_then(|ring| ring.core_ready_for_test().publish(&mut hardware))
         .unwrap()
         .try_start(&mut hardware)
         .map_err(|(_, error)| error)
@@ -221,6 +222,7 @@ fn a_staged_frame_is_published_only_after_its_descriptor_owner_bit_is_clear() {
     let mut hardware = RxWalkerModel::new();
     let mut ring = placed
         .prepare_ring(&mut hardware)
+        .and_then(|ring| ring.core_ready_for_test().publish(&mut hardware))
         .unwrap()
         .try_start(&mut hardware)
         .map_err(|(_, error)| error)

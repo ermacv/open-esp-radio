@@ -1,10 +1,11 @@
-//! Finite cold-start of the ESP32-S31 Wi-Fi MAC receive path.
+//! Finite cold preparation of the ESP32-S31 Wi-Fi MAC.
 //!
 //! The register sequence is recovered from `libpp.a[hal_mac.o]::hal_init`,
 //! `mac_txrx_init`, `mac_rxbuf_init`, and `mac_last_rxbuf_init`. It deliberately
 //! stops before publishing an RX descriptor base: ownership of the DMA ring
-//! remains with the DMA storage, whose `RxDmaStorage::prepare_ring` publishes
-//! the cold ring.
+//! remains with the DMA storage, whose prepared/core-ready DMA proofs publish
+//! the cold ring. The MAC core stays gated until runtime receives that
+//! prepared memory/binding proof; RX stays stopped until the walker is live.
 
 mod cold;
 mod interface_address;
@@ -19,7 +20,6 @@ pub use self::{
         antenna::MacColdAntennaHardware,
         coex::{MacCoexEvent, MacCoexPti, MacCoexPtiSource, MacColdCoexHardware, MacColdCoexPti},
         crypto::MacColdCryptoHardware,
-        enable::MacColdEnableHardware,
         hal_tail::{MacColdHalTailHardware, MacSlowClockCalibration},
         handshake::{
             MAC_COLD_HANDSHAKE_DEADLINE, MAC_COLD_HANDSHAKE_RESAMPLE, MacColdHandshakeHardware,
@@ -30,6 +30,7 @@ pub use self::{
             run_tx_power_diagnostic_queries,
         },
         last_rx_buffer::MacColdLastRxBufferHardware,
+        prepare::MacColdPrepareHardware,
         rx_buffer::MacColdRxBufferHardware,
         rx_policy::MacColdRxPolicyHardware,
         txrx::MacColdTxRxHardware,
@@ -97,14 +98,16 @@ pub struct MacColdStartConfig {
 /// ordered MAC writes come from the complete pinned `libpp.a` bodies named in
 /// this module's documentation.
 ///
-/// This function owns no descriptor storage, enables neither the RX walker nor
-/// a CPU interrupt route, and does not select a station/AP/monitor receive
-/// policy. A role builder must apply that policy before publishing its ring.
+/// This function owns no descriptor storage and leaves all common MAC gates
+/// closed. It prepares IRQ policy without routing a CPU interrupt or opening
+/// the RX walker. The runtime owner selects its role policy, prepares the ring
+/// and supplies its memory/binding and live proofs to `WifiMacHal::prepare_mac_runtime` and
+/// `WifiMacHal::start_mac_runtime`.
 pub async fn initialize_wifi_mac<
     M: MacColdAntennaHardware
         + MacColdCoexHardware
         + MacColdCryptoHardware
-        + MacColdEnableHardware
+        + MacColdPrepareHardware
         + MacColdHalTailHardware
         + MacColdHeHardware
         + MacColdHandshakeHardware
@@ -133,6 +136,9 @@ pub async fn initialize_wifi_mac<
     mmio.set_wifi_mac_reset(false);
 
     let outcome = run_cold_handshake(mmio, timer, config.handshake_deadline).await?;
+    // The handshake is complete, but no receive addresses or ring exist yet.
+    // Keep the core held throughout configuration and the first BASE write.
+    mmio.hold_mac_runtime();
 
     // Direct prefix, all three exact on-chip HE callback paths, then suffix.
     mmio.initialize_txrx_prefix();
@@ -182,10 +188,9 @@ pub async fn initialize_wifi_mac<
     let coex_pti = MacColdCoexPti::query(platform);
     mmio.initialize_cold_coex(coex_pti);
 
-    // Complete `hal_enable_mac`: clear the four common disable gates, then
-    // publish the interrupt mask. This does not route the peripheral interrupt
-    // to a CPU; the platform interrupt owner still installs that route and ISR.
-    mmio.enable_mac_interrupts(MAC_STATION_INTERRUPT_MASK);
+    // Prepare only the IRQ suffix of `hal_enable_mac`. The core-enable edge
+    // belongs to the runtime owner before its first BASE publication.
+    mmio.prepare_mac_interrupts(MAC_STATION_INTERRUPT_MASK);
 
     // `wifi_set_rx_policy(0)` publishes both valid interface addresses after
     // `hal_init`; the address-valid bits are part of the S31 RX start gate even

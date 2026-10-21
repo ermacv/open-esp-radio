@@ -14,13 +14,17 @@ impl<'storage, const COUNT: usize, const DMA_BUFFER_SIZE: usize>
     ReceiveFrontier<'storage, COUNT, DMA_BUFFER_SIZE>
 {
     pub fn prepare_initial<M: RxDma, const DMA_STORAGE_SIZE: usize, S: DmaSpace>(
+        mac: &mut impl oer_esp32s31_ieee80211_mac::init::MacRuntimeStartHardware,
         hardware: &mut M,
         storage: PlacedRxDma<COUNT, DMA_BUFFER_SIZE, DMA_STORAGE_SIZE, S>,
     ) -> Result<Self, RxRingError> {
         if DMA_BUFFER_SIZE > u32::MAX as usize {
             return Err(RxRingError::Size);
         }
-        storage.prepare_ring(hardware).map(Self::from_prepared)
+        let prepared = storage.prepare_ring(hardware)?;
+        mac.prepare_mac_runtime(prepared)
+            .publish(hardware)
+            .map(Self::from_prepared)
     }
 
     pub const fn from_halted(ring: RxRingHalted<'storage, COUNT>) -> Self {

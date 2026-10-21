@@ -9,6 +9,42 @@ pub use crate::{
     },
 };
 
+/// Open common gates before BASE with a prepared memory/binding proof,
+/// then release MAC RX only after the published ring's walker is live.
+pub trait MacRuntimeStartHardware {
+    fn prepare_mac_runtime<'a, const COUNT: usize>(
+        &mut self,
+        ring: oer_esp32s31_hal::ieee80211::dma::rx_ring::RxRingPrepared<'a, COUNT>,
+    ) -> oer_esp32s31_hal::ieee80211::dma::rx_ring::RxRingCoreReady<'a, COUNT>;
+    fn start_mac_runtime<const COUNT: usize>(&mut self, ring: &crate::rx::RxRingLive<'_, COUNT>);
+}
+
+impl MacRuntimeStartHardware for oer_esp32s31_hal::ieee80211::mac::WifiMacHal<'_> {
+    fn prepare_mac_runtime<'a, const COUNT: usize>(
+        &mut self,
+        ring: oer_esp32s31_hal::ieee80211::dma::rx_ring::RxRingPrepared<'a, COUNT>,
+    ) -> oer_esp32s31_hal::ieee80211::dma::rx_ring::RxRingCoreReady<'a, COUNT> {
+        Self::prepare_mac_runtime(self, ring)
+    }
+
+    fn start_mac_runtime<const COUNT: usize>(&mut self, ring: &crate::rx::RxRingLive<'_, COUNT>) {
+        Self::start_mac_runtime(self, ring);
+    }
+}
+
+impl MacRuntimeStartHardware for oer_esp32s31_hal::owner::RadioAccess {
+    fn prepare_mac_runtime<'a, const COUNT: usize>(
+        &mut self,
+        ring: oer_esp32s31_hal::ieee80211::dma::rx_ring::RxRingPrepared<'a, COUNT>,
+    ) -> oer_esp32s31_hal::ieee80211::dma::rx_ring::RxRingCoreReady<'a, COUNT> {
+        self.wifi_mac_hal().prepare_mac_runtime(ring)
+    }
+
+    fn start_mac_runtime<const COUNT: usize>(&mut self, ring: &crate::rx::RxRingLive<'_, COUNT>) {
+        self.wifi_mac_hal().start_mac_runtime(ring);
+    }
+}
+
 /// Vendor-proven outer MAC quiescence used while no RX descriptor epoch is
 /// allowed to exist.
 ///
@@ -56,7 +92,7 @@ impl MacRuntimeStopHardware for oer_esp32s31_hal::owner::RadioAccess {
 ///
 /// The ownership-bound transaction keeps the hardware-qualified open policy,
 /// complete vendor sniffer leaf, misc-class update and device fence together.
-/// It deliberately leaves queue 0..2 defaults intact.
+/// It leaves queue 0..2 defaults and the MAC runtime stop request intact.
 pub fn activate_promiscuous_receive<M: MacSnifferHardware>(mmio: &mut M) {
     mmio.configure_open_promiscuous_receive();
 }

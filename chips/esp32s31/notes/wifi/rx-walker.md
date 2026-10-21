@@ -18,6 +18,10 @@ Sources:
   `target/fw/runs/` directories.
 - `HIL_OPEN_RX_LIVE_APPEND_2026_07_27`: a 32-entry rotating ring, more than
   7000 receives on the open driver.
+- `HIL_S31_RX_COLD_MAC_IDLE_2026_10_21`: R1 cold, s31-a, channel 1,
+  four RX descriptors plus R. Read-only run `1792578472936-001ec02a`
+  and MAC stop/resume experiment `1792579848142-001f8abc`; the latter's
+  diagnostic image is excluded from the production driver.
 - Vendor: `BLOB_LIBPP_MAC_RXBUF_INIT_PREFIX`, `ROM_REV0_WDEV_APPEND_RX_BLOCKS`
   (`rom[]::wDev_AppendRxBlocks`), `ROM_REV0_HAL_MAC_RX_LAST_DESCRIPTOR`
   (`rom[]::hal_mac_rx_get_last_dscr`), `BLOB_LIBPP_HAL_INIT_TAIL`, and the
@@ -43,6 +47,16 @@ doorbell; the walker fetched the new head. Runs 4 and 6 (reverse full
 cycles): `exhausted_republications=1 republications_accepted=1`. SOURCE:
 HIL_W1_RX_WALKER_2026_10_18 (`w1.reload`).
 
+**H3: cold BASE acceptance can wait for MAC idle.** In a zero-RX cold
+boot, BASE named R and the walker gate was open, but NEXT = LAST = 0
+through all five sample windows. Every descriptor retained its hardware
+owner bit and was incomplete; MAC MPDU and buffer-full counters advanced
+together. After MAC stop and confirmed idle, with the walker gate still
+open, NEXT became BASE and LAST stayed zero. In the causal experiment,
+resuming only the MAC then advanced LAST to the ring's final descriptor.
+No BASE write, walker-gate cycle or PHY restart intervened. SOURCE:
+HIL_S31_RX_COLD_MAC_IDLE_2026_10_21.
+
 **No foreign write into held buffers.** In 10 full hold cycles no lease the
 application held changed while held, during the dwell or before its drop
 (`w1.own hold_mismatch=0 dwell_mismatch=0 release_mismatch=0`). SOURCE:
@@ -61,6 +75,16 @@ than 7000 frames. SOURCE: HIL_OPEN_RX_LIVE_APPEND_2026_07_27.
 
 ## Vendor behaviour
 
+- `hal_init` calls `mac_rxbuf_init` at offset `0x94`; that leaf's final
+  write publishes BASE. `hal_enable_mac` independently clears the four
+  common disable bits at `0x20104c00` before writing its IRQ mask. Blobray
+  found no caller or stored reference to `hal_enable_mac` in pinned libpp,
+  libnet80211, libcore and rev0 ROM. Its position relative to
+  `mac_rxbuf_init` is therefore **not established**; the runtime order below
+  is not claimed as a recovered complete vendor lifecycle. SOURCE:
+  BLOB_LIBPP_HAL_ENABLE_MAC, BLOB_LIBPP_MAC_RXBUF_INIT_PREFIX;
+  `vendor/artifacts.toml` pins libpp `0c791ee1…`, net `23de6b00…`, core
+  `7199d31d…` and ROM `a52ad751…`.
 - BASE is written in three places: the cold `mac_rxbuf_init`
   (SOURCE: BLOB_LIBPP_MAC_RXBUF_INIT_PREFIX); the empty-software-list branch
   of `rom[]::wDev_AppendRxBlocks`, which publishes the returned chain's head; and
@@ -149,6 +173,16 @@ buffer. The cold publication is the epoch's only BASE write: BASE = R,
 `R.next` = the ring head, R armed. Every later publication links the
 accepted tail and rings the doorbell, whose resumption of an exhausted
 walker H1 shows.
+
+Cold MAC preparation holds both the common gates and runtime stop.
+`prepare_ring` validates and arms descriptor memory without writing BASE.
+The role owner consumes `RxRingPrepared` to open common gates with runtime
+stop held; the returned `RxRingCoreReady` alone can publish the sole BASE.
+`RxRingStopped` then opens the walker and `RxRingLive` permits MAC RX resume.
+All stages retain the private DMA binding without another state field or
+wait. A halted ring retains its earlier core proof for warm rebuilds.
+Promiscuous policy preserves the stop request. W0 checks MAC prepared:
+its gates stay closed and it publishes no ring.
 
 - **Why R.** H2 shows that a bare BASE write also works, but BASE is
   then a second publication path whose ordering against the doorbell and

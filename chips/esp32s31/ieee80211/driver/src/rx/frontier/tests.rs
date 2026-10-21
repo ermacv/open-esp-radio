@@ -30,7 +30,11 @@ fn halted_ring(
     hardware: &mut RxWalkerModel,
     storage: PlacedRxDma<COUNT, BUFFER_SIZE, STORAGE_SIZE, HostDma>,
 ) -> RxRingHalted<'static, COUNT> {
-    storage.prepare_ring(hardware).unwrap().into_halted()
+    storage
+        .prepare_ring(hardware)
+        .and_then(|ring| ring.core_ready_for_test().publish(hardware))
+        .unwrap()
+        .into_halted()
 }
 
 #[test]
@@ -38,7 +42,10 @@ fn exhausted_terminal_writeback_without_a_fresh_irq_retains_task_continuation() 
     let placed = leaked::<COUNT, STORAGE_SIZE>();
     let storage = placed.storage();
     let mut hardware = RxWalkerModel::default();
-    let prepared = placed.prepare_ring(&mut hardware).unwrap();
+    let prepared = placed
+        .prepare_ring(&mut hardware)
+        .and_then(|ring| ring.core_ready_for_test().publish(&mut hardware))
+        .unwrap();
     let mut rx = ReceiveFrontier::<COUNT, BUFFER_SIZE>::from_prepared(prepared);
     block_on(rx.start_with_storage(&oer_time_virtual::SkipClock::new(), &mut hardware, storage))
         .unwrap();

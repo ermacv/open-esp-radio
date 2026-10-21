@@ -20,7 +20,10 @@ use oer_esp32s31_ieee80211_driver::rx::{
     upper::W1_INGRESS,
 };
 use oer_esp32s31_ieee80211_mac::{
-    init::{MacRuntimeStopHardware, activate_promiscuous_receive, deactivate_promiscuous_receive},
+    init::{
+        MacRuntimeStartHardware, MacRuntimeStopHardware, activate_promiscuous_receive,
+        deactivate_promiscuous_receive,
+    },
     rx::{RxSegment, view_normalized_rx_frame},
 };
 use oer_hil_protocol::base::RejectReason;
@@ -72,11 +75,15 @@ async fn experiment<B: PlatformClockBackend, T>(
     let placed = Storage::place(STORAGE.take().ok_or(RejectReason::Internal)?)
         .map_err(|_| RejectReason::Internal)?;
     let storage = placed.storage();
-    let stopped = placed
+    let prepared = placed
         .prepare_ring(runtime.rx_dma())
         .map_err(|error| failure("prepare", error))?;
-    // Same hardware edges as W1's receive() and W2's Rx::start(). Opening
-    // only the DMA gate leaves the post-cold-init MAC receive path stopped.
+    let stopped = runtime
+        .prepare_mac_runtime(prepared)
+        .publish(runtime.rx_dma())
+        .map_err(|error| failure("publish", error))?;
+    // Common gates opened with stop held before the sole BASE. Policy
+    // preserves that stop until the walker supplies the live proof.
     activate_promiscuous_receive(runtime);
     walker_enable_settle(&EmbassyClock).await;
     let mut ring = match stopped.try_start(runtime.rx_dma()) {
@@ -86,7 +93,7 @@ async fn experiment<B: PlatformClockBackend, T>(
             return Err(failure("start", error));
         }
     };
-    runtime.resume_mac_runtime();
+    runtime.start_mac_runtime(&ring);
 
     // No CPU interrupt route, station role, upper buffer leases or TX. Keep
     // the finite ring supplied while the hardware receives the router's air.

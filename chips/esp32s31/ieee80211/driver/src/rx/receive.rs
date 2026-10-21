@@ -6,7 +6,7 @@
 //! - **Bring-up.** Prepare the ring, open promiscuous receive, activate the
 //!   interrupt epoch (routes still silent), install the interrupt line
 //!   (which clears a stale request), enable the routes, start the walker
-//!   after its settle, resume the MAC runtime.
+//!   after its settle, start the prepared MAC with that live ring's DMA proof.
 //! - **Receive.** Wait for an interrupt fact or the stop request, then run
 //!   [`service`] until the frontier drained and every buffer the sink
 //!   released in the pass has had one more pass to be rearmed; only then ask
@@ -49,8 +49,8 @@ use oer_esp32s31_hal::ieee80211::dma::{
 use oer_esp32s31_hal::settle::{Settle, SettleLimit};
 use oer_esp32s31_ieee80211_mac::{
     init::{
-        MacRuntimeStopHardware, MacSnifferHardware, activate_promiscuous_receive,
-        deactivate_promiscuous_receive,
+        MacRuntimeStartHardware, MacRuntimeStopHardware, MacSnifferHardware,
+        activate_promiscuous_receive, deactivate_promiscuous_receive,
     },
     irq::{
         MacInterrupt, MacPowerInterrupt,
@@ -153,7 +153,7 @@ pub async fn receive<
     admission: &M,
 ) -> Infallible
 where
-    H: MacSnifferHardware + MacRuntimeStopHardware + RxBufferFullCounter,
+    H: MacSnifferHardware + MacRuntimeStartHardware + MacRuntimeStopHardware + RxBufferFullCounter,
     W: RxDma,
     I: MacInterrupt,
     P: MacPowerInterrupt,
@@ -197,8 +197,11 @@ where
         full_since: &mut full_since,
     };
 
-    let mut frontier = match ReceiveFrontier::<COUNT, BUFFER>::prepare_initial(receiver.rx_dma, rx)
-    {
+    let mut frontier = match ReceiveFrontier::<COUNT, BUFFER>::prepare_initial(
+        receiver.hardware,
+        receiver.rx_dma,
+        rx,
+    ) {
         Ok(frontier) => frontier,
         Err(error) => {
             return receiver
@@ -235,7 +238,7 @@ where
         Ok(()) => match frontier.live_mut() {
             Err(error) => WifiRxCause::Start(error),
             Ok(ring) => {
-                receiver.hardware.resume_mac_runtime();
+                receiver.hardware.start_mac_runtime(ring);
                 receiver.run(ring).await
             }
         },

@@ -605,7 +605,42 @@ pub(crate) trait RxReservedBuffer {
     fn restore_guards(&self) -> Result<(), RxRingError>;
 }
 
-/// Prepared zero-terminated RX ring while the hardware walker is stopped.
+/// Validated descriptor memory and private DMA binding, before BASE.
+/// Only the MAC HAL can promote this capability after opening common gates.
+pub struct RxRingPrepared<'a, const COUNT: usize> {
+    ring: RxRingStopped<'a, COUNT>,
+}
+
+/// Common MAC gates are open with runtime stop held; BASE is unpublished.
+/// Consuming this capability publishes the epoch's sole BASE.
+pub struct RxRingCoreReady<'a, const COUNT: usize> {
+    ring: RxRingStopped<'a, COUNT>,
+}
+
+impl<'a, const COUNT: usize> RxRingPrepared<'a, COUNT> {
+    pub fn topology_snapshot(&self) -> RxRingTopologySnapshot {
+        self.ring.topology_snapshot()
+    }
+
+    pub(crate) fn core_ready(self) -> RxRingCoreReady<'a, COUNT> {
+        RxRingCoreReady { ring: self.ring }
+    }
+
+    /// Synthetic MAC core edge for host DMA and driver models only.
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn core_ready_for_test(self) -> RxRingCoreReady<'a, COUNT> {
+        self.core_ready()
+    }
+}
+
+impl<'a, const COUNT: usize> RxRingCoreReady<'a, COUNT> {
+    pub fn publish<M: RxDma>(self, mmio: &mut M) -> Result<RxRingStopped<'a, COUNT>, RxRingError> {
+        publish_cold_ring_inner(mmio, &self.ring.binding, self.ring.arena)?;
+        Ok(self.ring)
+    }
+}
+
+/// Published zero-terminated RX ring while the hardware walker is stopped.
 ///
 /// This type owns the right to start the descriptor walker. Consuming
 /// [`try_start`](Self::try_start) transfers that authority into [`RxRingLive`].
@@ -743,7 +778,12 @@ impl<'a, const COUNT: usize> RxRingHalted<'a, COUNT> {
             prepare_reserved_buffer,
             self.arena,
         ) {
-            Ok(stopped) => Ok(stopped),
+            // A halted ring retains the common-core proof established before
+            // its first BASE. Warm rebuilds keep that core open and RX stopped.
+            Ok(prepared) => prepared
+                .core_ready()
+                .publish(mmio)
+                .map_err(|error| (self, error)),
             Err(error) => {
                 if mmio.walker_enabled() {
                     // Preparation failed without proving that the walker is
@@ -778,7 +818,7 @@ impl<'a, const COUNT: usize> RxRingStopped<'a, COUNT> {
         }
     }
 
-    /// Stops the walker, prepares all buffers and publishes one physical-order
+    /// Stops the walker and prepares all buffers for one physical-order
     /// cold list beginning at the retained hardware cursor, or descriptor zero
     /// when the preceding list was exhausted, behind the reserved descriptor.
     ///
@@ -788,7 +828,7 @@ impl<'a, const COUNT: usize> RxRingStopped<'a, COUNT> {
     /// buffer at `reserved_buffer_address`. Both are invoked only while the
     /// walker is confirmed stopped.
     ///
-    /// The publication is the epoch's only `RX_DESCRIPTOR_BASE` write:
+    /// The later core-ready publication is the epoch's only `RX_DESCRIPTOR_BASE` write:
     /// BASE = R, `R.next` = the ring head, R armed with its own buffer. A
     /// frame the walker writes into R is dropped uncopied; the first ring
     /// take clears `R.next` ([`RxRingLive`]).
@@ -817,7 +857,7 @@ impl<'a, const COUNT: usize> RxRingStopped<'a, COUNT> {
         mut prepare_buffer: F,
         prepare_reserved_buffer: R,
         arena: &'a RxArenaWords,
-    ) -> Result<Self, RxRingError>
+    ) -> Result<RxRingPrepared<'a, COUNT>, RxRingError>
     where
         M: RxDma,
         F: FnMut(usize) -> Result<(), RxRingError>,
@@ -890,21 +930,22 @@ impl<'a, const COUNT: usize> RxRingStopped<'a, COUNT> {
         table
             .reserved()
             .publish_owned(armed_word, reserved_buffer, head);
-        publish_cold_ring_inner(mmio, &binding, arena)?;
 
-        Ok(Self {
-            descriptors,
-            table,
-            reserved_buffer_address,
-            descriptor_base,
-            buffer_addresses,
-            buffer_size: buffer_size_u16,
-            initial_start,
-            accepted_tail: initial_start.previous(),
-            retained_next_low,
-            retained_last_low,
-            binding,
-            arena,
+        Ok(RxRingPrepared {
+            ring: Self {
+                descriptors,
+                table,
+                reserved_buffer_address,
+                descriptor_base,
+                buffer_addresses,
+                buffer_size: buffer_size_u16,
+                initial_start,
+                accepted_tail: initial_start.previous(),
+                retained_next_low,
+                retained_last_low,
+                binding,
+                arena,
+            },
         })
     }
 

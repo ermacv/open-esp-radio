@@ -512,6 +512,7 @@ mod tests {
         let mut walker = RxWalkerModel::new();
         let live = placed
             .prepare_ring(&mut walker)
+            .and_then(|ring| ring.core_ready_for_test().publish(&mut walker))
             .unwrap()
             .try_start(&mut walker)
             .map_err(|(_, error)| error)

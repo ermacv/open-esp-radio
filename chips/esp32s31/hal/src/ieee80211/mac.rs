@@ -128,9 +128,13 @@ impl<'registers> WifiMacColdHal<'registers> {
         self.mac().initialize_mac_crypto_bypass();
     }
 
-    pub fn enable_interrupts(&mut self, event_mask: crate::types::MacInterruptMask) {
+    pub fn hold_mac_runtime(&mut self) {
+        self.mac().hold_mac_runtime();
+    }
+
+    pub fn prepare_interrupts(&mut self, event_mask: crate::types::MacInterruptMask) {
         let (mac, _, interrupts) = self.registers.parts();
-        mac.enable_mac_with_interrupt_mask(interrupts, event_mask);
+        mac.prepare_mac_interrupts(interrupts, event_mask);
     }
 
     pub fn initialize_hal_tail(
@@ -265,6 +269,30 @@ impl<'registers> WifiMacHal<'registers> {
 
     fn pac_mut(&mut self) -> &mut WifiRadioRegisters {
         &mut self.registers
+    }
+
+    /// Open common gates with runtime stop held, after descriptor memory and
+    /// its private binding are prepared, but before the sole BASE publication.
+    pub fn prepare_mac_runtime<'a, const COUNT: usize>(
+        &mut self,
+        ring: crate::ieee80211::dma::rx_ring::RxRingPrepared<'a, COUNT>,
+    ) -> crate::ieee80211::dma::rx_ring::RxRingCoreReady<'a, COUNT> {
+        self.pac_mut().prepare_mac_runtime();
+        ring.core_ready()
+    }
+
+    /// Release MAC RX only with a live walker carrying its private DMA
+    /// binding. A register owner cannot manufacture either ring proof.
+    pub fn start_mac_runtime<const COUNT: usize>(
+        &mut self,
+        _ring: &crate::ieee80211::dma::rx_ring::RxRingLive<'_, COUNT>,
+    ) {
+        let _ = self.restart_after_channel_switch();
+    }
+
+    /// Read back the common gates held by cold MAC preparation.
+    pub fn mac_core_gates_closed(&self) -> bool {
+        self.pac().mac_core_gates_closed()
     }
 
     pub fn configure_open_promiscuous_receive(&mut self) {

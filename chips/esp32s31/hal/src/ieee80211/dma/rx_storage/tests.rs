@@ -242,7 +242,10 @@ fn a_placed_storage_publishes_its_own_addresses() {
     }
 
     let mut mmio = MockRxDma::default();
-    let stopped = placed.prepare_ring(&mut mmio).unwrap();
+    let stopped = placed
+        .prepare_ring(&mut mmio)
+        .and_then(|ring| ring.core_ready_for_test().publish(&mut mmio))
+        .unwrap();
     for (descriptor, &address) in storage.descriptors().iter().zip(storage.buffer_addresses()) {
         assert_eq!(descriptor.buffer_address(), address);
     }
@@ -272,6 +275,7 @@ fn accepted_list_pressure_projects_next_to_the_current_tail() {
     let mut mmio = MockRxDma::default();
     let prepared = placed
         .prepare_ring(&mut mmio)
+        .and_then(|ring| ring.core_ready_for_test().publish(&mut mmio))
         .expect("prepared pressure model");
     let live = prepared
         .try_start(&mut mmio)
@@ -335,6 +339,7 @@ fn completed_ownership_follows_a_permuted_descriptor_buffer_binding() {
     let mut mmio = MockRxDma::default();
     let prepared = placed
         .prepare_ring(&mut mmio)
+        .and_then(|ring| ring.core_ready_for_test().publish(&mut mmio))
         .expect("prepared rotated owner");
     let mut live = prepared
         .try_start(&mut mmio)
@@ -385,7 +390,10 @@ fn detached_buffer_cannot_rearm_until_the_network_lease_returns() {
     let storage = placed.storage();
     let base = placed.descriptor_base();
     let mut mmio = MockRxDma::default();
-    let prepared = placed.prepare_ring(&mut mmio).expect("prepared owner");
+    let prepared = placed
+        .prepare_ring(&mut mmio)
+        .and_then(|ring| ring.core_ready_for_test().publish(&mut mmio))
+        .expect("prepared owner");
     let mut live = prepared
         .try_start(&mut mmio)
         .map_err(|(_, error)| error)
@@ -444,7 +452,10 @@ fn role_neutral_prefix_recycle_normalizes_a_returned_staged_buffer() {
     let storage = placed.storage();
     let base = placed.descriptor_base();
     let mut mmio = MockRxDma::default();
-    let prepared = placed.prepare_ring(&mut mmio).expect("prepared owner");
+    let prepared = placed
+        .prepare_ring(&mut mmio)
+        .and_then(|ring| ring.core_ready_for_test().publish(&mut mmio))
+        .expect("prepared owner");
     let mut live = prepared
         .try_start(&mut mmio)
         .map_err(|(_, error)| error)
@@ -495,7 +506,10 @@ fn released_dma_buffers_rearm_only_as_a_contiguous_ring_prefix() {
     let storage = placed.storage();
     let base = placed.descriptor_base();
     let mut mmio = MockRxDma::default();
-    let prepared = placed.prepare_ring(&mut mmio).expect("prepared owner");
+    let prepared = placed
+        .prepare_ring(&mut mmio)
+        .and_then(|ring| ring.core_ready_for_test().publish(&mut mmio))
+        .expect("prepared owner");
     let mut live = prepared
         .try_start(&mut mmio)
         .map_err(|(_, error)| error)
@@ -568,7 +582,10 @@ fn the_consumed_placement_moves_through_one_prepared_live_halted_graph() {
     )));
     let storage = placed.storage();
     let mut mmio = MockRxDma::default();
-    let prepared = placed.prepare_ring(&mut mmio).expect("initial root owner");
+    let prepared = placed
+        .prepare_ring(&mut mmio)
+        .and_then(|ring| ring.core_ready_for_test().publish(&mut mmio))
+        .expect("initial root owner");
     assert_eq!(storage.lifecycle_state(), RxDmaArenaState::Prepared);
     let live = prepared
         .try_start(&mut mmio)
@@ -593,6 +610,7 @@ fn live_binding_rejects_a_foreign_storage_arena() {
     let mut mmio = MockRxDma::default();
     let mut live = placed
         .prepare_ring(&mut mmio)
+        .and_then(|ring| ring.core_ready_for_test().publish(&mut mmio))
         .expect("prepared owner")
         .try_start(&mut mmio)
         .map_err(|(_, error)| error)
@@ -618,7 +636,10 @@ fn first_frontier_returns_one_unit_from_a_terminal_burst() {
     let storage = placed.storage();
     let base = placed.descriptor_base();
     let mut mmio = MockRxDma::default();
-    let prepared = placed.prepare_ring(&mut mmio).expect("prepared owner");
+    let prepared = placed
+        .prepare_ring(&mut mmio)
+        .and_then(|ring| ring.core_ready_for_test().publish(&mut mmio))
+        .expect("prepared owner");
     let mut live = prepared
         .try_start(&mut mmio)
         .map_err(|(_, error)| error)
@@ -661,7 +682,9 @@ fn failed_root_prepare_quarantines_the_arena_when_walker_stop_is_unproved() {
     };
 
     assert!(matches!(
-        placed.prepare_ring(&mut mmio),
+        placed
+            .prepare_ring(&mut mmio)
+            .and_then(|ring| ring.core_ready_for_test().publish(&mut mmio)),
         Err(RxRingError::WalkerStopUnconfirmed)
     ));
     assert_eq!(storage.lifecycle_state(), RxDmaArenaState::ResetRequired);
@@ -674,7 +697,10 @@ fn failed_halted_prepare_quarantines_the_arena_when_walker_stop_is_unproved() {
     let placed = place(storage);
     let storage = placed.storage();
     let mut mmio = MockRxDma::default();
-    let prepared = placed.prepare_ring(&mut mmio).expect("prepared owner");
+    let prepared = placed
+        .prepare_ring(&mut mmio)
+        .and_then(|ring| ring.core_ready_for_test().publish(&mut mmio))
+        .expect("prepared owner");
     let live = prepared
         .try_start(&mut mmio)
         .map_err(|(_, error)| error)
@@ -707,7 +733,10 @@ fn partial_live_buffer_rearm_quarantines_the_arena() {
     let storage = placed.storage();
     let base = placed.descriptor_base();
     let mut mmio = MockRxDma::default();
-    let prepared = placed.prepare_ring(&mut mmio).expect("prepared owner");
+    let prepared = placed
+        .prepare_ring(&mut mmio)
+        .and_then(|ring| ring.core_ready_for_test().publish(&mut mmio))
+        .expect("prepared owner");
     let mut live = prepared
         .try_start(&mut mmio)
         .map_err(|(_, error)| error)
@@ -760,7 +789,10 @@ fn completed_descriptor_metadata_is_validated_before_payload_transfer() {
         let base = placed.descriptor_base();
         let buffers = *storage.buffer_addresses();
         let mut mmio = MockRxDma::default();
-        let prepared = placed.prepare_ring(&mut mmio).expect("prepared owner");
+        let prepared = placed
+            .prepare_ring(&mut mmio)
+            .and_then(|ring| ring.core_ready_for_test().publish(&mut mmio))
+            .expect("prepared owner");
         let mut live = prepared
             .try_start(&mut mmio)
             .map_err(|(_, error)| error)
@@ -799,7 +831,10 @@ fn impossible_reload_frontier_quarantines_the_static_arena() {
     let storage = placed.storage();
     let base = placed.descriptor_base();
     let mut mmio = MockRxDma::default();
-    let prepared = placed.prepare_ring(&mut mmio).expect("prepared owner");
+    let prepared = placed
+        .prepare_ring(&mut mmio)
+        .and_then(|ring| ring.core_ready_for_test().publish(&mut mmio))
+        .expect("prepared owner");
     let mut live = prepared
         .try_start(&mut mmio)
         .map_err(|(_, error)| error)
@@ -859,7 +894,10 @@ fn in_arena_intermediate_last_rerings_the_doorbell() {
     let storage = placed.storage();
     let base = placed.descriptor_base();
     let mut mmio = MockRxDma::default();
-    let prepared = placed.prepare_ring(&mut mmio).expect("prepared owner");
+    let prepared = placed
+        .prepare_ring(&mut mmio)
+        .and_then(|ring| ring.core_ready_for_test().publish(&mut mmio))
+        .expect("prepared owner");
     let mut live = prepared
         .try_start(&mut mmio)
         .map_err(|(_, error)| error)
@@ -947,7 +985,10 @@ fn ring_after_exhausted_reload_rering() -> (
     let storage = placed.storage();
     let base = placed.descriptor_base();
     let mut mmio = crate::ieee80211::dma::rx_dma::model::RxWalkerModel::new();
-    let prepared = placed.prepare_ring(&mut mmio).expect("prepared owner");
+    let prepared = placed
+        .prepare_ring(&mut mmio)
+        .and_then(|ring| ring.core_ready_for_test().publish(&mut mmio))
+        .expect("prepared owner");
     let mut live = prepared
         .try_start(&mut mmio)
         .map_err(|(_, error)| error)
@@ -1041,7 +1082,10 @@ fn exhausted_list_reclaims_untouched_prefix_before_terminal_payload() {
     let storage = placed.storage();
     let base = placed.descriptor_base();
     let mut mmio = RxWalkerModel::new();
-    let prepared = placed.prepare_ring(&mut mmio).expect("prepared owner");
+    let prepared = placed
+        .prepare_ring(&mut mmio)
+        .and_then(|ring| ring.core_ready_for_test().publish(&mut mmio))
+        .expect("prepared owner");
     let mut live = prepared
         .try_start(&mut mmio)
         .map_err(|(_, error)| error)
@@ -1125,7 +1169,10 @@ fn dropping_a_taken_completed_unit_requires_radio_reset() {
     let storage = placed.storage();
     let base = placed.descriptor_base();
     let mut mmio = MockRxDma::default();
-    let prepared = placed.prepare_ring(&mut mmio).expect("prepared owner");
+    let prepared = placed
+        .prepare_ring(&mut mmio)
+        .and_then(|ring| ring.core_ready_for_test().publish(&mut mmio))
+        .expect("prepared owner");
     let mut live = prepared
         .try_start(&mut mmio)
         .map_err(|(_, error)| error)
@@ -1158,7 +1205,10 @@ fn frozen_last_releases_the_descriptor_equal_to_last() {
     let storage = placed.storage();
     let base = placed.descriptor_base();
     let mut mmio = MockRxDma::default();
-    let prepared = placed.prepare_ring(&mut mmio).expect("prepared owner");
+    let prepared = placed
+        .prepare_ring(&mut mmio)
+        .and_then(|ring| ring.core_ready_for_test().publish(&mut mmio))
+        .expect("prepared owner");
     let mut live = prepared
         .try_start(&mut mmio)
         .map_err(|(_, error)| error)
@@ -1210,6 +1260,7 @@ fn two_completed_frames_last_on_the_first() -> (
     let mut mmio = MockRxDma::default();
     let live = placed
         .prepare_ring(&mut mmio)
+        .and_then(|ring| ring.core_ready_for_test().publish(&mut mmio))
         .expect("prepared owner")
         .try_start(&mut mmio)
         .map_err(|(_, error)| error)
@@ -1412,7 +1463,10 @@ fn frozen_last_unit_reclaim_returns_only_one_vendor_chain() {
     let storage = placed.storage();
     let base = placed.descriptor_base();
     let mut mmio = MockRxDma::default();
-    let prepared = placed.prepare_ring(&mut mmio).expect("prepared owner");
+    let prepared = placed
+        .prepare_ring(&mut mmio)
+        .and_then(|ring| ring.core_ready_for_test().publish(&mut mmio))
+        .expect("prepared owner");
     let mut live = prepared
         .try_start(&mut mmio)
         .map_err(|(_, error)| error)
@@ -1505,7 +1559,10 @@ fn ambiguous_start_quarantines_the_arena_when_walker_is_observed_live() {
         ambiguous_enable: true,
         ..MockRxDma::default()
     };
-    let prepared = placed.prepare_ring(&mut mmio).expect("prepared owner");
+    let prepared = placed
+        .prepare_ring(&mut mmio)
+        .and_then(|ring| ring.core_ready_for_test().publish(&mut mmio))
+        .expect("prepared owner");
 
     let (_prepared, error) = match prepared.try_start(&mut mmio) {
         Ok(_) => panic!("ambiguous enable is not a live capability"),
@@ -1554,6 +1611,7 @@ fn live_host_arena<const COUNT: usize>() -> (
     let mut mmio = MockRxDma::default();
     let live = placed
         .prepare_ring(&mut mmio)
+        .and_then(|ring| ring.core_ready_for_test().publish(&mut mmio))
         .expect("prepared owner")
         .try_start(&mut mmio)
         .map_err(|(_, error)| error)
@@ -1778,6 +1836,7 @@ fn a_stop_proof_for_another_arena_poisons_the_live_arena() {
     let mut mmio = ForeignStopProof::new();
     let live = placed
         .prepare_ring(&mut mmio)
+        .and_then(|ring| ring.core_ready_for_test().publish(&mut mmio))
         .unwrap()
         .try_start(&mut mmio)
         .map_err(|(_, error)| error)
@@ -1800,6 +1859,7 @@ fn a_halted_rebuild_refuses_a_stop_proof_for_another_arena() {
     let mut model = crate::ieee80211::dma::rx_dma::model::RxWalkerModel::new();
     let halted = placed
         .prepare_ring(&mut model)
+        .and_then(|ring| ring.core_ready_for_test().publish(&mut model))
         .unwrap()
         .try_start(&mut model)
         .map_err(|(_, error)| error)
@@ -1829,6 +1889,7 @@ fn a_walker_that_does_not_stop_returns_the_live_owner_unconfirmed() {
     let mut mmio = RxWalkerModel::new();
     let live = placed
         .prepare_ring(&mut mmio)
+        .and_then(|ring| ring.core_ready_for_test().publish(&mut mmio))
         .unwrap()
         .try_start(&mut mmio)
         .map_err(|(_, error)| error)
@@ -1862,6 +1923,7 @@ fn a_chain_longer_than_the_length_field_is_owned_and_recycled() {
     let mut mmio = RxWalkerModel::new();
     let mut live = placed
         .prepare_ring(&mut mmio)
+        .and_then(|ring| ring.core_ready_for_test().publish(&mut mmio))
         .unwrap()
         .try_start(&mut mmio)
         .map_err(|(_, error)| error)
@@ -1948,6 +2010,7 @@ fn ring_with_pending_reload(
     let base = placed.descriptor_base();
     let mut live = placed
         .prepare_ring(mmio)
+        .and_then(|ring| ring.core_ready_for_test().publish(mmio))
         .unwrap()
         .try_start(mmio)
         .map_err(|(_, error)| error)
@@ -2099,6 +2162,7 @@ impl<const COUNT: usize> Walked<COUNT> {
         let mut walker = crate::ieee80211::dma::rx_dma::model::RxWalkerModel::new();
         let live = placed
             .prepare_ring(&mut walker)
+            .and_then(|ring| ring.core_ready_for_test().publish(&mut walker))
             .unwrap()
             .try_start(&mut walker)
             .map_err(|(_, error)| error)
@@ -2841,4 +2905,28 @@ fn walker_on_detached_cannot_fire_on_a_detached_last_at_exhaustion() {
     assert_eq!(ring.live.reload_evidence().walker_on_detached, 0);
     assert_eq!(ring.storage.lifecycle_state(), RxDmaArenaState::Live);
     assert!(ring.live.try_stop(&mut ring.walker).is_ok());
+}
+
+#[test]
+fn cold_ring_memory_and_core_proofs_precede_the_only_base_publication() {
+    let placed = place(Box::leak(Box::new(
+        RxDmaStorage::<4, 16, 20, HostDma>::new(),
+    )));
+    let mut mmio = MockRxDma::default();
+    let memory = placed.prepare_ring(&mut mmio).expect("memory prepared");
+    assert!(memory.topology_snapshot().valid);
+    assert_eq!(mmio.publications, 0);
+    assert!(!mmio.walker);
+    let core = memory.core_ready_for_test();
+    assert_eq!(mmio.publications, 0);
+    let published = core.publish(&mut mmio).expect("BASE published");
+    assert_eq!(mmio.publications, 1);
+    assert!(!mmio.walker);
+    let live = published
+        .try_start(&mut mmio)
+        .map_err(|(_, e)| e)
+        .expect("walker live");
+    assert_eq!(mmio.publications, 1);
+    assert!(mmio.walker);
+    assert!(live.try_stop(&mut mmio).is_ok());
 }

@@ -22,7 +22,7 @@ use crate::ieee80211::dma::{
         RX_BUFFER_SENTINEL, RxArenaWords, RxCompletedDescriptor, RxCompletedUnit,
         RxCompletedUnitFrontier, RxDescriptorTable, RxDmaArenaState, RxDmaBufferAddresses,
         RxFrozenCursor, RxLiveAppend, RxReservedBuffer, RxRingError, RxRingHalted, RxRingLive,
-        RxRingStopped, RxSegment, prepare_recycled_buffer,
+        RxRingPrepared, RxRingStopped, RxSegment, prepare_recycled_buffer,
     },
     space::{ChipDma, DmaSpace},
 };
@@ -600,7 +600,9 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
         self.descriptor_base
     }
 
-    /// Prepare the first stopped ring of the storage.
+    /// Prepare the first ring in memory without publishing BASE.
+    /// The returned proof must pass through MAC core preparation and BASE
+    /// publication before a walker can be started.
     ///
     /// The storage is `'static`: safe code may forget a live ring, so the
     /// DMA-visible descriptors and buffers stay allocated even when the
@@ -621,7 +623,7 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
     pub fn prepare_ring<M: RxDma>(
         self,
         mmio: &mut M,
-    ) -> Result<RxRingStopped<'static, COUNT>, RxRingError> {
+    ) -> Result<RxRingPrepared<'static, COUNT>, RxRingError> {
         self.storage.prepare_ring_bound(mmio, self.descriptor_base)
     }
 }
@@ -825,7 +827,7 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
         &'storage self,
         mmio: &mut M,
         descriptor_base: u32,
-    ) -> Result<RxRingStopped<'storage, COUNT>, RxRingError> {
+    ) -> Result<RxRingPrepared<'storage, COUNT>, RxRingError> {
         let buffer_addresses = &self.buffer_addresses;
         match self.lifecycle_state() {
             RxDmaArenaState::Reusable => {}

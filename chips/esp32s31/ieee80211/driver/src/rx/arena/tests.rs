@@ -65,8 +65,19 @@ fn the_zero_bytes_bind_with_the_storage_placed_inside_the_static() {
     // The zeroed descriptors and addresses make a ring.
     let mut walker = RxWalkerModel::new();
     let rx_storage = parts.rx();
-    let frontier = ReceiveFrontier::<32, 1_664>::prepare_initial(&mut walker, parts.rx);
-    assert!(frontier.is_ok());
+    let frontier = ReceiveFrontier::<32, 1_664>::from_prepared(
+        parts
+            .rx
+            .prepare_ring(&mut walker)
+            .unwrap()
+            .core_ready_for_test()
+            .publish(&mut walker)
+            .unwrap(),
+    );
+    assert_eq!(
+        frontier.phase(),
+        crate::rx::frontier::RxFrontierPhase::Prepared
+    );
     assert_eq!(rx_storage.lifecycle_state(), RxDmaArenaState::Prepared);
 
     stop.request_stop();
