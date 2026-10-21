@@ -3,7 +3,8 @@
 
 //! The ESP32-S31 radio system: one actor that owns the shared RF front-end.
 //!
-//! [`RadioSystem`] is one future, tied to no executor. It owns the PHY domain,
+//! [`RadioSystem`] owns the PHY domain; its run future borrows the actor and
+//! is tied to no executor. The actor owns
 //! the shared radio registers, common radio power, the modem clocks and
 //! coexistence, through its [`ClientBackend`], and serves its clients'
 //! cells (`oer-esp32s31-radio-client`) one request at a time. It takes no lock
