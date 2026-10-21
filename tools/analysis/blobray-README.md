@@ -26,7 +26,6 @@ Real input needs your own identified vendor artifacts.
 | Check what a change does to the hardware | `blobray mmio-diff` | [MMIO difference between builds](cli/reference/registers-data/README.md#mmio-difference-between-builds) |
 | Recover tables and coefficients | `oer_analysis_blobray_application::data::export` | [Tables and coefficients](cli/reference/registers-data/README.md#captured-data-tables-and-coefficients) |
 | Link an image | `oer_analysis_blobray_application::linking::{link, propose_companions}` | [Linked images](cli/reference/inventory-linking/README.md#synthetic-linked-images), [ROM companions](cli/reference/analysis/README.md#explicit-rom-companions) |
-| Audit a final image | `blobray audit-targets` | [Target audit](cli/reference/analysis/README.md#final-image-target-audit) |
 | Execute and compare | `oer_analysis_blobray_application::in_process::verify` | [Execution and comparison](cli/reference/execution/README.md#concrete-execution-and-comparison), [effect contracts](cli/reference/comparison/README.md#reviewed-effect-comparison) |
 
 | Question | Required input | Inspect in the result | Next action |
@@ -94,10 +93,10 @@ top-level command and subcommands. Blobray has no TUI or code generation.
 
 ## Start an investigation
 
-Blobray and the typed vendor scenarios form the separate `tools/analysis/cli` Cargo
-workspace, with its own `Cargo.lock` and `tools/analysis/cli/target` directory, so
-Blobray dependencies never change the radio workspace. From the repository
-root, `cargo blobray` and `--manifest-path tools/analysis/cli/Cargo.toml` select it.
+The Blobray CLI and typed vendor scenarios are members of the repository's root
+Cargo workspace. They share its `Cargo.lock` and `target` directory. From the
+repository root, `cargo blobray` runs `oer-tool-analysis-cli` with the `tools`
+profile.
 
 The Linux linker adapter uses the shared process foundation's `command`
 factory to clear unrelated operation context. Linker ownership and resource
@@ -105,9 +104,8 @@ limits remain the adapter's policy; the analysis core does not depend on
 subprocess mechanisms. The crate boundary test enforces that split.
 
 ```console
-cargo build --manifest-path tools/analysis/cli/Cargo.toml --profile blobray -p oer-tool-analysis-cli --bin blobray
+cargo build --profile tools -p oer-tool-analysis-cli --bin blobray
 cargo blobray --format json register-accesses --input vendor=/path/to/lib.a --range 0x60000000:0x100000
-cargo blobray --format json audit-targets --artifact firmware.elf --forbid rom=0x40000000..0x40100000
 ```
 
 `--working-memory-mib`, `--timeout-secs` and `--max-work-units` bound each

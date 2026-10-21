@@ -55,8 +55,7 @@ accept a broader instruction set but explicitly abandon the proof on
 
 [Image values](src/image.rs) record the ELF floating-point calling
 convention (`RiscvAbi`) separately from the RV32 integer-analysis target,
-load segments (`ImageSegment`), borrowed executable sections with their
-validated data intervals (`ExecutableSectionView`) and the windows a caller
+load segments (`ImageSegment`) and the windows a caller
 asserts read-only at run time whatever an image's section flags say
 (`ReadOnlyWindow`). The
 [byte-source port](src/source.rs) `ByteSource` gives stable positional,

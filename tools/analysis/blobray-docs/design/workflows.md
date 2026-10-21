@@ -11,7 +11,6 @@ cache, provider registry, or correspondence between library versions. The
 | Whole-library function analysis | Implemented in process; blocked functions and gaps are outcomes |
 | Library register accesses → review → source-model publication | Implemented; Blobray observations and source-owned hardware acceptance remain separate |
 | Link a PHY entry with explicit ROM companions → analysis | Limited RV32 integer static profile, unsupported semantics remain gaps |
-| Final-image target audit | Implemented for resolved static transfers |
 | Execute / compare implementations in process | Limited explicit integer scenario profile, scoped MATCH/DIFF/INCOMPLETE |
 | Captured PHY I2C → compiled-production comparison | [Native real scenario](../../../hil/acceptance/esp32s31/README.md#captured-i2c-command-memory-comparison); 45 command-memory writes, descriptor/no-op leaves and both-host byte/field/reset transport under explicit bounded peripheral responses; independent MATCH/DIFF/INCOMPLETE expectations, no physical timing or RF claim |
 | Current PHY calibration leaves → compiled-production comparison | [Finite native matrix](../../../hil/acceptance/esp32s31/README.md#current-calibration-leaves); TX-gain restore, forced gain, temperature conversion and post-init AGC with explicit domains and independent writes/returns; enclosing calibration remains outside this profile |

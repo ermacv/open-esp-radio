@@ -2,7 +2,7 @@
 
 Blobray's analyses over the bounded CFG and value analysis of
 [`oer-analysis-riscv-analysis`](../riscv-analysis/README.md): register-access
-recognition, final-image target audits, code-coverage closures and record
+recognition, code-coverage closures and record
 navigation. They have no filesystem authority.
 
 `registers` recognizes load masks and evaluates stored bit provenance using
@@ -21,10 +21,6 @@ memory admission; each function's pass also has a
 `max(100000, 512 * instruction_count)` work-unit cap. Application resolves
 call-argument callees against captured input and ROM symbols.
 It never infers register geometry, hardware field meaning or safe RMW semantics.
-
-The `audit` module scans all supplied executable ranges linearly for direct and
-locally resolved transfers. It shares the ISA port and `fold_integer` with value
-analysis; it does not obtain filesystem access or claim dynamic-target completeness.
 
 `closure::code_closure` walks the code statically reachable from root entries
 by recursive descent: direct branches, jumps and calls, `auipc`/`lui` plus

@@ -59,7 +59,7 @@ ELF ILP32/ILP32F/ILP32D ABI is recorded independently of ISA semantic coverage.
 Static relocation metadata is retained without reapplying edits to linked bytes.
 
 
-Static RV32 image views, `execution_segments`, `executable_sections`, code
+Static RV32 image views, `execution_segments`, code
 symbols and the `$d`/`$x` mapping-symbol validation belong to
 [`oer-analysis-riscv-program`](../riscv-program/README.md); function views and
 image validation use them.

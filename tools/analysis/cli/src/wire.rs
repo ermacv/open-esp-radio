@@ -2,33 +2,11 @@
 //!
 //! The renderer emits these shapes and typed clients decode them; payloads are
 //! the application/domain records themselves, not copies of their schemas.
-use oer_analysis_blobray_domain::{
-    CheckVerdict, ForbiddenTargetRange, LibraryFunction, RegisterAccess, RegisterAccessSummary,
-    TargetAuditRecord, TargetAuditSummary,
-};
+use oer_analysis_blobray_domain::{LibraryFunction, RegisterAccess, RegisterAccessSummary};
 use oer_analysis_riscv_model::{
     ArtifactId, CallAbi, Error, FunctionCoverage, FunctionRecord, ReadOnlyWindow, SemanticSummary,
 };
 use serde::{Deserialize, Serialize};
-
-/// Schema of the `audit-targets` document.
-pub const TARGET_AUDIT_SCHEMA: u32 = 1;
-
-/// Every finding of one final-image audit and its verdict: `pass` only
-/// without a forbidden target or a coverage gap.
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct TargetAuditDocument {
-    pub schema: u32,
-    /// SHA-256 of the audited image.
-    pub artifact: ArtifactId,
-    pub decoder: String,
-    pub semantics: String,
-    pub ranges: Vec<ForbiddenTargetRange>,
-    pub records: Vec<TargetAuditRecord>,
-    pub summary: TargetAuditSummary,
-    pub verdict: CheckVerdict,
-}
 
 /// Schema of the `register-accesses` document
 /// (`{"schema":9,"inputs":[...],"abi":...,"call_returns":...,"read_only":[...],"records":[...],"groups":[...],"summary":{...}}`;

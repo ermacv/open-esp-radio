@@ -4,10 +4,9 @@
 
 use clap::{Parser, Subcommand, ValueEnum};
 use oer_analysis_blobray_application as app;
-use oer_analysis_blobray_domain::CheckVerdict;
 use oer_analysis_riscv_model::{
-    CallAbi, DEFAULT_WORKING_BYTES, Error, ErrorCode, FunctionDecoder, FunctionIndex,
-    FunctionSemantics, ReadOnlyWindow, RecordPolicy, Result,
+    CallAbi, DEFAULT_WORKING_BYTES, Error, ErrorCode, FunctionIndex, ReadOnlyWindow, RecordPolicy,
+    Result,
 };
 use std::io::Write;
 use std::{ffi::OsString, path::PathBuf, process::ExitCode};
@@ -61,7 +60,7 @@ impl Assumptions {
 #[derive(Parser)]
 #[command(
     name = "blobray",
-    about = "Captured binary research inside this process: final-image target audits, library register accesses and function records"
+    about = "Captured binary research inside this process: library register accesses and function records"
 )]
 struct Cli {
     #[arg(long, global = true, value_enum, default_value = "human")]
@@ -72,16 +71,6 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Audit all executable ELF sections for statically resolved forbidden transfers.
-    AuditTargets {
-        #[arg(long)]
-        artifact: PathBuf,
-        /// NAME=START..END (half-open RV32 address range).
-        #[arg(long, required=true, value_parser=parse_forbidden)]
-        forbid: Vec<oer_analysis_blobray_domain::ForbiddenTargetRange>,
-        #[command(flatten)]
-        limits: InProcessOptions,
-    },
     /// Analyze every function of captured libraries in this process and report
     /// the memory addresses they access, with blocked functions and gaps.
     RegisterAccesses {
@@ -307,11 +296,6 @@ fn parse_error_json(args: &[OsString], error: &clap::Error) -> Option<String> {
 
 fn run(command: Command, format: Format) -> Result<ExitCode> {
     match command {
-        Command::AuditTargets {
-            artifact,
-            forbid,
-            limits,
-        } => audit_targets(artifact, forbid, limits, format),
         Command::RegisterAccesses {
             inputs,
             ranges,
@@ -1161,20 +1145,6 @@ fn parse_number(v: &str) -> std::result::Result<u64, String> {
     .map_err(|e| e.to_string())
 }
 
-fn parse_forbidden(
-    value: &str,
-) -> std::result::Result<oer_analysis_blobray_domain::ForbiddenTargetRange, String> {
-    let (name, bounds) = value.split_once('=').ok_or("expected NAME=START..END")?;
-    let (start, end) = bounds.split_once("..").ok_or("expected START..END")?;
-    let range = oer_analysis_blobray_domain::ForbiddenTargetRange {
-        name: name.into(),
-        start: u32::try_from(parse_number(start)?).map_err(|e| e.to_string())?,
-        end: parse_number(end)?,
-    };
-    range.validate().map_err(|e| e.message)?;
-    Ok(range)
-}
-
 fn parse_range(
     text: &str,
 ) -> std::result::Result<oer_analysis_blobray_domain::ImageRegion, String> {
@@ -1200,82 +1170,6 @@ fn json_error(e: serde_json::Error) -> Error {
     invalid(&e.to_string())
 }
 
-/// Audit the final image at `artifact` in this process. Only a clean audit,
-/// with no forbidden target and no coverage gap, succeeds.
-fn audit_targets(
-    artifact: PathBuf,
-    ranges: Vec<oer_analysis_blobray_domain::ForbiddenTargetRange>,
-    limits: InProcessOptions,
-    format: Format,
-) -> Result<ExitCode> {
-    let executable = app::in_process::Executable::new(std::fs::read(&artifact).map_err(io_error)?);
-    let memory = limits.memory()?;
-    let mut control = limits.control();
-    let decoder = oer_analysis_riscv_lift::RiscvDecoder;
-    let mut records = Vec::new();
-    let summary = app::audit::audit_targets(
-        &executable,
-        &ranges,
-        &decoder,
-        &memory,
-        &mut control,
-        &mut |record, _| {
-            records.push(record.clone());
-            Ok(())
-        },
-    )?;
-    let verdict = if summary.forbidden_targets != 0 {
-        CheckVerdict::Fail
-    } else if summary.coverage_gaps != 0 {
-        CheckVerdict::Inconclusive
-    } else {
-        CheckVerdict::Pass
-    };
-    let mut out = std::io::stdout().lock();
-    match format {
-        Format::Json => {
-            serde_json::to_writer(
-                &mut out,
-                &oer_tool_analysis_cli::wire::TargetAuditDocument {
-                    schema: oer_tool_analysis_cli::wire::TARGET_AUDIT_SCHEMA,
-                    artifact: executable.id().clone(),
-                    decoder: decoder.identity().into(),
-                    semantics: decoder.semantic_identity().into(),
-                    ranges,
-                    records,
-                    summary,
-                    verdict,
-                },
-            )
-            .map_err(json_error)?;
-            writeln!(out).map_err(io_error)?;
-        }
-        Format::Human => {
-            writeln!(
-                out,
-                "Target audit of {}: {verdict:?}\n  {} sections, {} instructions, {} forbidden targets, {} coverage gaps, {} unresolved indirect transfers",
-                executable.id(),
-                summary.sections,
-                summary.instructions,
-                summary.forbidden_targets,
-                summary.coverage_gaps,
-                summary.unresolved_indirect
-            )
-            .map_err(io_error)?;
-            for record in &records {
-                writeln!(out, "  {record:?}").map_err(io_error)?;
-            }
-        }
-    }
-    Ok(if verdict == CheckVerdict::Pass {
-        ExitCode::SUCCESS
-    } else {
-        ExitCode::FAILURE
-    })
-}
-
-/// Analyze the libraries `inputs` name in this process and print their
-/// register accesses, streaming the JSON records as they are found.
 fn register_accesses(
     inputs: Vec<OsString>,
     ranges: Vec<oer_analysis_blobray_domain::ImageRegion>,
@@ -1750,11 +1644,9 @@ mod cli_tests {
         let cli = Cli::try_parse_from([
             "blobray",
             "--format=json",
-            "audit-targets",
-            "--artifact",
-            "a.elf",
-            "--forbid",
-            "flash=0x40000000..0x50000000",
+            "register-accesses",
+            "--input",
+            "library=a.elf",
         ])
         .unwrap();
         assert!(matches!(cli.format, Format::Json));
@@ -1765,8 +1657,8 @@ mod cli_tests {
         for args in [
             vec!["blobray", "unknown", "--format=json"],
             vec!["blobray", "--format=json", "unknown"],
-            vec!["blobray", "audit-targets", "--bad", "--format=json"],
-            vec!["blobray", "audit-targets", "--format=json", "--bad"],
+            vec!["blobray", "register-accesses", "--bad", "--format=json"],
+            vec!["blobray", "register-accesses", "--format=json", "--bad"],
             vec!["blobray", "unknown", "--format", "json"],
         ] {
             let args: Vec<OsString> = args.into_iter().map(Into::into).collect();

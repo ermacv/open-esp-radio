@@ -8,7 +8,6 @@
       "blobray"
     ],
     "subcommands": [
-      "audit-targets",
       "register-accesses",
       "function-records",
       "field-accesses",
@@ -18,21 +17,6 @@
       "strings",
       "call-arguments"
     ]
-  },
-  {
-    "flags": [
-      "--artifact",
-      "--forbid",
-      "--working-memory-mib",
-      "--timeout-secs",
-      "--max-work-units"
-    ],
-    "forwards": false,
-    "path": [
-      "blobray",
-      "audit-targets"
-    ],
-    "subcommands": []
   },
   {
     "flags": [

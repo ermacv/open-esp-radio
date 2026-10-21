@@ -142,9 +142,6 @@ pub struct RelocationRecord {
     pub addend: Option<i64>,
 }
 
-mod audit;
-pub use audit::*;
-
 mod device;
 pub use device::*;
 

@@ -1,6 +1,5 @@
 //! Static RV32 image values: the ELF ABI, load segments and executable
-//! section views. No loading or relocation.
-use crate::*;
+//! mappings. No loading or relocation.
 use serde::{Deserialize, Serialize};
 
 /// ELF-declared floating-point calling convention, separate from instruction
@@ -21,15 +20,6 @@ pub struct ImageSegment {
     pub file_size: u64,
     pub memory_size: u64,
     pub flags: u32,
-}
-
-/// Borrowed executable section with structurally validated ELF data intervals.
-/// Consumers must reset instruction state across each data interval.
-pub struct ExecutableSectionView<'a> {
-    pub section: u32,
-    pub address: u32,
-    pub bytes: &'a [u8],
-    pub data_ranges: &'a [CodeRange],
 }
 
 /// An address range the caller asserts is read-only at run time whatever the

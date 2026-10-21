@@ -67,15 +67,15 @@ mod tests {
                 .unwrap()
                 .contains(&serde_json::json!("--format"))
         );
-        let audit = nodes
+        let registers = nodes
             .iter()
-            .find(|node| node["path"] == serde_json::json!(["blobray", "audit-targets"]))
+            .find(|node| node["path"] == serde_json::json!(["blobray", "register-accesses"]))
             .unwrap();
         assert!(
-            audit["flags"]
+            registers["flags"]
                 .as_array()
                 .unwrap()
-                .contains(&serde_json::json!("--forbid"))
+                .contains(&serde_json::json!("--input"))
         );
         assert!(nodes.iter().all(|node| node["forwards"] == false));
     }
