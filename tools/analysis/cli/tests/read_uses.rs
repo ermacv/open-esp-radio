@@ -553,6 +553,32 @@ core::arch::global_asm!(".section .text.external,\"ax\",@progbits\n.globl extern
 }
 
 #[test]
+fn a_complete_callee_does_not_consume_stale_argument_registers() {
+    let memory = WorkingMemory::new(64 << 20).expect("working memory");
+    let mut found = false;
+    register_accesses(
+        &[Executable::new(fixture(include_str!("fixtures/argument_summaries.rs")))],
+        Assumptions { abi: Some(CallAbi::RiscvInteger), ..Assumptions::default() },
+        &[ImageRegion { start: 0x2010_7000, length: 4 }],
+        &oer_analysis_riscv_lift::RiscvDecoder,
+        &memory,
+        &mut || Ok(()),
+        &mut |observation, _| {
+            if let RegisterAccess::Observation { function, reads: Some(reads), .. } = observation
+                && function.name.as_deref() == Some(b"stale_a3") {
+                found = true;
+                assert!(reads.uses.is_empty(), "{reads:?}");
+                assert!(reads.unknown.is_empty(), "{reads:?}");
+                assert_eq!(reads.unused, u32::MAX);
+            }
+            Ok(())
+        },
+    ).expect("argument summaries");
+    assert!(found);
+    assert_eq!(memory.used(), 0);
+}
+
+#[test]
 fn finite_rmw_fields_agree_with_read_flow_for_every_byte_and_clearing_form() {
     let mut source =
         String::from("#![no_std]\ncore::arch::global_asm!(r#\"\n.option norvc\n.option norelax\n");
