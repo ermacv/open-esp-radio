@@ -1,17 +1,8 @@
 use super::*;
 use radio::{EnableResult, PortBackend, SlotRetire, SlotStopped, SlotWakes};
 
-pub(super) type CoreOwner<'id, Id, D, const B: usize> =
+pub(super) type PortCoreOwner<'id, Id, D, const B: usize> =
     crate::lower_mac::CoreOwner<Core<'id, Id, D, B>>;
-
-impl From<crate::lower_mac::CoreOwnerFault> for Fault {
-    fn from(value: crate::lower_mac::CoreOwnerFault) -> Self {
-        match value {
-            crate::lower_mac::CoreOwnerFault::Capacity => Self::Capacity,
-            crate::lower_mac::CoreOwnerFault::Core(fault) => Self::Core(fault),
-        }
-    }
-}
 
 pub struct Resources<'p, Id: SlotIdentity, D: Device<B>, const B: usize> {
     pub tickets: [Slot<'p, Tickets, Part<Id, 2>>; TX_TICKETS],

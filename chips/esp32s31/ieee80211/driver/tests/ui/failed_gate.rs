@@ -1,12 +1,12 @@
 #![no_std]
 use oer_esp32s31_ieee80211_driver::{
-    lower_mac::{FreeQueue, GateOpenFailed, LowerMacCore, LowerMacHardware, MpduValues, TxAdmission},
+    lower_mac::{FreeQueue, FailedGateView, LowerMacCore, LowerMacHardware, MpduValues, TxAdmission},
     ordinary_tx::{WifiTxEntropy, WifiTxPowerProfile},
 };
 use oer_time::Timer;
 
 pub fn submit<'core, 'slot, P: WifiTxPowerProfile, E: WifiTxEntropy, T: Timer, H: LowerMacHardware>(
-    failed: &mut GateOpenFailed<LowerMacCore<'core, 'slot, oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile, P, E, T, 512>>,
+    failed: &mut FailedGateView<'_, LowerMacCore<'core, 'slot, oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile, P, E, T, 512>>,
     hardware: &mut H,
     queue: FreeQueue<'core>,
     admission: TxAdmission<'core>,

@@ -32,9 +32,9 @@
 //!
 //! # Lifecycle and command barriers
 //!
-//! Construction returns [`DisabledCore`]. Enable consumes it, either returning
-//! [`EnabledCore`] or retaining the whole bank in [`RetuningCore`]. Disable
-//! consumes the enabled owner; [`DisablingCore::finish`] returns the disabled
+//! Construction returns [`DisabledView`]. Enable consumes it, either returning
+//! [`EnabledView`] or retaining the whole bank in [`RetuningView`]. Disable
+//! consumes the enabled owner; [`DisablingView::finish`] returns the disabled
 //! owner and emits its one terminal only after all publications ended. A
 //! poisoned bank retains its owners. Channel changes and dismantling exist
 //! only on the disabled type. The gate type survives disable and retune.
@@ -45,7 +45,7 @@
 //! failure returns every held owner and retains the published prefix.
 //!
 //! Receive configuration consumes either the disabled or enabled bank into
-//! [`Configuring`]. That owner withdraws its role's held frames and waits for
+//! [`ConfiguringView`]. That owner withdraws its role's held frames and waits for
 //! that role's published frames, then returns the original lifecycle owner.
 //! No later FIFO command can publish through a configuration barrier. The
 //! other interface's outstanding frames keep their own completion path.
@@ -179,11 +179,10 @@ mod resources;
 pub use resources::{CoreAuthority, CorePools, CoreResources, FreeQueue, TxTicket};
 mod lifecycle;
 pub use lifecycle::{
-    ClosedGate, ClosingGate, ConfigurationProgress, ConfigureRefused, Configuring, CoreGate,
-    DisabledCore, DisablingCore, EnabledCore, GateClosure, GateOpenFailed, LifecycleStart,
-    OpenGate, RetuningCore,
+    ClosedGate, ClosingGate, ConfigurationProgress, ConfigureRefused, ConfiguringView, CoreGate,
+    CoreOwner, CoreView, DisabledView, DisablingView, EnabledView, FailedGateView, GateClosure,
+    LifecycleStart, OpenGate, RetuningView, VacantView,
 };
-pub(crate) use lifecycle::{CoreOwner, CoreOwnerFault};
 
 mod keys;
 pub use keys::{
@@ -669,7 +668,7 @@ pub struct LowerMacConfig {
 }
 
 /// The owners a disabled, idle [`LowerMacCore`] is built from, which
-/// [`DisabledCore::dismantle`] returns.
+/// [`DisabledView::dismantle`] returns.
 pub struct LowerMacCoreParts<
     'core,
     'slot,
@@ -901,8 +900,8 @@ where
         tx: OrdinaryTxIdleOwner<'slot, X, P, E, T, BUFFER_SIZE>,
         config: LowerMacConfig,
         coex: &'slot dyn RadioCoexPriorities,
-    ) -> DisabledCore<Self> {
-        DisabledCore::new(Self {
+    ) -> CoreOwner<Self> {
+        CoreOwner::prepared(Self {
             authority,
             tx: tx.owner,
             config,
@@ -928,7 +927,7 @@ where
     /// state of the core they came from is gone, as at a radio start.
     pub fn from_parts(
         parts: LowerMacCoreParts<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>,
-    ) -> DisabledCore<Self> {
+    ) -> CoreOwner<Self> {
         let LowerMacCoreParts {
             authority,
             tx,
@@ -937,7 +936,7 @@ where
             keys,
         } = parts;
         let mut core = Self::new(authority, tx, config, coex);
-        core.keys = keys;
+        core.core.as_mut().expect("new owner retains its core").keys = keys;
         core
     }
 
@@ -2401,7 +2400,7 @@ impl CheckedKeyScope {
 /// backoff and coexistence level within the capabilities, the length at
 /// least the header through Address 1 and at most the capabilities'
 /// `max_mpdu_length`, and `no_ack` only of an individual frame at a rate
-/// that sends one without an ACK ([`EnabledCore::submit_checked`]).
+/// that sends one without an ACK ([`EnabledView::submit_checked`]).
 pub struct MpduValues<'slot, const BUFFER_SIZE: usize> {
     role: VifRole,
     admitted_at: oer_time::Instant,
@@ -2592,7 +2591,7 @@ enum ReceivePolicy {
 }
 
 /// Map a receive filter onto the smallest S31 receive policy that passes a
-/// superset of it; [`EnabledCore::received`] narrows the superset.
+/// superset of it; [`EnabledView::received`] narrows the superset.
 fn receive_policy(config: &LowerMacConfig, vif: &CoreVif) -> Result<ReceivePolicy, UnsupportedVif> {
     let limits = esp32s31_lower_mac_capabilities(0).receive_filters(vif.role);
     if !limits.contains(vif.receive) {

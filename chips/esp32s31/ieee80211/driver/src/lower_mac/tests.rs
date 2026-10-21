@@ -719,19 +719,14 @@ impl<'core> Core<'core> {
 
     #[expect(
         clippy::result_large_err,
-        reason = "exercise the production transition with its complete owner"
+        reason = "the fixture retains its complete owner"
     )]
-    fn open_gate(self, hardware: &mut Hardware) -> Result<Self, GateOpenFailed<DeviceCore<'core>>> {
-        let mut events = Events::default();
-        match self.inner.open_gate(hardware, &mut events) {
-            Ok(inner) => Ok(Self {
-                inner,
-                associations: self.associations,
-                free: self.free,
-                tickets: self.tickets,
-            }),
-            Err(failure) => Err(failure),
-        }
+    fn open_gate(mut self, hardware: &mut Hardware) -> Result<Self, LowerMacFault> {
+        self.inner
+            .open_gate(hardware, &mut Events::default())
+            .map(|_| ())
+            .map_err(|failed| failed.fault())?;
+        Ok(self)
     }
 
     #[expect(
@@ -3421,7 +3416,7 @@ fn a_failed_gate_open_returns_every_unpublished_owner_then_drains_the_prefix() {
                 panic!("the injected publication refusal must fail the transition");
             };
             assert_eq!(
-                failure.fault,
+                failure.fault(),
                 LowerMacFault::Tx(OrdinaryTxError::Tx(TxError::Invalid))
             );
             assert_eq!(hardware.publications(), fail_at);
@@ -3433,7 +3428,10 @@ fn a_failed_gate_open_returns_every_unpublished_owner_then_drains_the_prefix() {
             assert_eq!(events.disabled, 0);
             assert!(
                 failure
+                    .owner
                     .core
+                    .as_ref()
+                    .unwrap()
                     .queues
                     .iter()
                     .flatten()
