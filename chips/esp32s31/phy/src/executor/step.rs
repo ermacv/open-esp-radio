@@ -1,7 +1,9 @@
 //! Private PHY transport jobs. Hardware ownership stays with the caller.
+mod i2c;
 mod io;
 pub(crate) mod rfpll;
 pub(crate) mod temperature;
+pub(crate) mod wifi_i2c;
 pub(crate) use io::Registers;
 
 use crate::{
@@ -66,7 +68,7 @@ pub(crate) enum Step {
 
 enum Work<'a> {
     Rfpll(rfpll::Run<'a>),
-    RfpllColdI2c(rfpll::ColdI2c<'a>),
+    CountedI2c(i2c::Counted<'a>),
     I2c(&'a mut PhyColdI2cTransaction),
     Code(Option<u8>),
     Pbus(&'a mut PhyPbusHardwareBinding),
@@ -116,16 +118,12 @@ impl<'a> Job<'a> {
     pub(crate) fn rfpll(cursor: rfpll::Cursor<'a>, now: Instant) -> Result<Self, Failure> {
         Self::new(Work::Rfpll(rfpll::Run::new(cursor)), now, false)
     }
-    pub(crate) fn rfpll_cold_i2c(
+    pub(crate) fn counted_i2c(
         transaction: &'a mut PhyColdI2cTransaction,
         now: Instant,
     ) -> Result<Self, Failure> {
-        let mut job = Self::new(
-            Work::RfpllColdI2c(rfpll::ColdI2c::new(transaction)),
-            now,
-            false,
-        )?;
-        // Cold uses the existing attempt budget rather than an elapsed answer
+        let mut job = Self::new(Work::CountedI2c(i2c::Counted::new(transaction)), now, false)?;
+        // Counted paths use the existing attempt budget rather than an elapsed answer
         // window; Driver must not clamp its real waits to a direct deadline.
         job.deadline = Instant::from_micros(u64::MAX);
         Ok(job)
@@ -231,7 +229,7 @@ impl<'a> Job<'a> {
                     self.rfpll_observed,
                 );
             }
-            Work::RfpllColdI2c(cursor) => return cursor.advance_one(&mut io, now),
+            Work::CountedI2c(cursor) => return cursor.advance_one(&mut io, now),
             Work::Code(code) => {
                 if code.is_some() {
                     return Ok(Step::Complete);

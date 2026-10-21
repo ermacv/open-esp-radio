@@ -929,7 +929,6 @@ impl<'state> PhyParamTrackingWifiI2cTransition<'state> {
         })
     }
 
-    #[cfg(any(test, oer_probe))]
     pub const fn action(&self) -> crate::tracking::i2c::PhyWifiI2cTrackingAction {
         self.child.action()
     }

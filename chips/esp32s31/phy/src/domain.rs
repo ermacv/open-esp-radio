@@ -66,6 +66,21 @@ impl PhyDomain {
             .set_temperature_tracking_debug(first, second);
     }
 
+    #[cfg(all(oer_debug_control, target_arch = "riscv32"))]
+    pub(crate) fn force_wifi_i2c_tracking_debug(&mut self) {
+        use crate::tracking::i2c::{PhyWifiI2cTrackingBand as Band, PhyWifiI2cTrackingOutcome};
+        let state = self.registered.target_state_mut();
+        let band = if state.wifi_i2c_tracking_parameters().target_band() == Band::Nominal {
+            Band::Cold
+        } else {
+            Band::Nominal
+        };
+        state.apply_wifi_i2c_tracking_outcome(PhyWifiI2cTrackingOutcome {
+            band,
+            changed: true,
+        });
+    }
+
     /// Inspect the shared client set without exposing its raw mask.
     pub const fn client_snapshot(&self) -> PhyClientSnapshot {
         self.clients.snapshot()

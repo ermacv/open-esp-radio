@@ -408,6 +408,12 @@ pub struct MaskedI2cWriteBinding {
 }
 
 impl MaskedI2cWriteBinding {
+    pub(crate) fn transaction_mut(
+        &mut self,
+    ) -> &mut crate::calibration::cold::PhyColdI2cTransaction {
+        &mut self.transaction
+    }
+
     pub fn new(
         action: oer_espressif_analog::Action<crate::analog::i2c::PhyI2cAddress, ()>,
     ) -> Result<Self, MaskedI2cWriteBindingError> {

@@ -208,6 +208,14 @@ impl ConcurrentPhy {
         Ok(())
     }
 
+    /// Make the next diagnostic Wi-Fi tick exercise both band writes.
+    /// The ordinary tracking child still performs and commits the update.
+    #[cfg(all(oer_debug_control, target_arch = "riscv32"))]
+    pub fn force_wifi_i2c_tracking_debug(&mut self) -> Result<(), ConcurrentPhyError> {
+        self.settled_mut()?.force_wifi_i2c_tracking_debug();
+        Ok(())
+    }
+
     /// Borrow the registered domain when every active client is settled.
     pub(crate) fn settled(&self) -> Result<&PhyDomain, ConcurrentPhyError> {
         match &self.slot {

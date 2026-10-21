@@ -159,6 +159,7 @@ fn report_engine(
     use oer_esp32s31_board::rom::print_fmt;
     let family = match operation {
         Operation::Rfpll => 1,
+        Operation::WifiI2c => 3,
         Operation::Temperature => 7,
         _ => 0,
     };

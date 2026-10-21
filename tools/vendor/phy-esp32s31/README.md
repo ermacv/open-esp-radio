@@ -73,8 +73,12 @@ uses three repetitions of five forced due ticks on the diagnostic image, with
 branch completion, per-repetition maxima (microseconds in Tracking, RFPLL,
 common, transmit, baseband-off order), debug restoration and final RF closure.
 Incomplete evidence fails. These are observed request intervals, not a measured
-RF exclusion guarantee; nested intervals are not additive. No Wi-Fi hold workload
-is exposed by this family.
+RF exclusion guarantee; nested intervals are not additive.
+`phy-tracking-hold-wifi-idle` runs the same three-by-five idle investigation with
+Wi-Fi active. Before each tick it makes the retained I2C band stale, so ordinary
+T3 tracking executes and commits both masked writes. Family 3 UART observations
+retain its P1 poll counts, maxima and timer lateness separately from T1 and T7.
+Associated Wi-Fi traffic is a separate workload.
 
 The [recorded vendor reference](../../../chips/esp32s31/vendor/phy-baselines/README.md)
 provides generated Wi-Fi cold bounds for labeled boards.

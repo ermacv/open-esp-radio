@@ -27,6 +27,9 @@ pub enum PhyScenario<C: Comparison> {
     TrackingHold {
         ticks: u8,
     },
+    TrackingHoldWifi {
+        ticks: u8,
+    },
     RecordedCalibration {
         lifecycle: Lifecycle,
         boots: u16,
@@ -54,7 +57,7 @@ impl<C: Comparison> ScenarioFamily for PhyScenario<C> {
                     Err("recorded calibration requires Wi-Fi cold and 1..=255 boots".into())
                 };
             }
-            Self::TrackingHold { ticks } => {
+            Self::TrackingHold { ticks } | Self::TrackingHoldWifi { ticks } => {
                 return if (1..=oer_hil_protocol::phy::HOLD_TICKS as u8).contains(ticks) {
                     Ok(())
                 } else {
@@ -90,7 +93,10 @@ impl<C: Comparison> ScenarioFamily for PhyScenario<C> {
         Plan::target_only(ImageClass::DiagnosticPhy)
     }
     fn served_by(&self, keys: &oer_hil_protocol::DeviceImageKeys) -> bool {
-        if matches!(self, Self::TrackingHold { .. }) {
+        if matches!(
+            self,
+            Self::TrackingHold { .. } | Self::TrackingHoldWifi { .. }
+        ) {
             return keys.has::<oer_hil_protocol::phy::StartTrackingHold>()
                 && keys.has::<oer_hil_protocol::phy::GetTrackingHold>()
                 && keys.has::<oer_hil_protocol::phy::StopTrackingHold>();
@@ -117,7 +123,10 @@ impl<C: Comparison> Workload for PhyScenario<C> {
                 );
             }
             Self::TrackingHold { ticks } => {
-                return crate::workload::hold::run(*ticks, output, context);
+                return crate::workload::hold::run(*ticks, Lifecycle::Ieee802154, output, context);
+            }
+            Self::TrackingHoldWifi { ticks } => {
+                return crate::workload::hold::run(*ticks, Lifecycle::Cold, output, context);
             }
             Self::VendorCalibration {
                 lifecycle,
@@ -189,20 +198,26 @@ mod tests {
         Ok(toml::from_str(text)?)
     }
     #[test]
-    fn hold_counts_are_bounded_and_wifi_workloads_are_not_exposed() {
-        parse("kind='tracking-hold'\nticks=5")
-            .unwrap()
-            .validate()
-            .unwrap();
-        for count in [0, 17, 255] {
-            assert!(
-                parse(&format!("kind='tracking-hold'\nticks={count}"))
-                    .unwrap()
-                    .validate()
-                    .is_err()
-            );
+    fn hold_counts_and_radio_points_are_explicit_and_bounded() {
+        for kind in ["tracking-hold", "tracking-hold-wifi"] {
+            parse(&format!("kind='{kind}'\nticks=5"))
+                .unwrap()
+                .validate()
+                .unwrap();
+            for count in [0, 17, 255] {
+                assert!(
+                    parse(&format!("kind='{kind}'\nticks={count}"))
+                        .unwrap()
+                        .validate()
+                        .is_err()
+                );
+            }
+            assert!(parse(&format!("kind='{kind}'\nticks=5\nwidth='ht40'")).is_err());
         }
-        assert!(parse("kind='tracking-hold'\nticks=5\nwidth='ht40'").is_err());
+        let legacy = parse("kind='tracking-hold'\nticks=5").unwrap();
+        let wifi = parse("kind='tracking-hold-wifi'\nticks=5").unwrap();
+        assert!(matches!(legacy, PhyScenario::TrackingHold { .. }));
+        assert!(matches!(wifi, PhyScenario::TrackingHoldWifi { .. }));
     }
     #[test]
     fn investigations_use_the_diagnostic_image_and_validate_counts() {

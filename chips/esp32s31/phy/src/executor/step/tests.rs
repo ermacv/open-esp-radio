@@ -1,4 +1,5 @@
 use super::*;
+mod wifi_i2c;
 pub(crate) struct TestDelay;
 impl crate::executor::wait::PhyShortDelay for TestDelay {
     const MAX_MICROS: u32 = 20;
@@ -1319,7 +1320,7 @@ fn cold_rfpll_keeps_the_first_sample_wait_and_the_native_attempt_budget() {
     };
     let atoms = io.atoms.clone();
     let mut transaction = read();
-    let mut job = Job::rfpll_cold_i2c(&mut transaction, clock.now()).expect("deadline fits");
+    let mut job = Job::counted_i2c(&mut transaction, clock.now()).expect("deadline fits");
     let (waker, _) = context();
     let mut cx = Context::from_waker(&waker);
     {
@@ -1341,7 +1342,7 @@ fn cold_rfpll_keeps_the_first_sample_wait_and_the_native_attempt_budget() {
     // The old for-loop needs a software terminal-recognition attempt after
     // observing readiness; using that last attempt for hardware still fails.
     let mut transaction = read();
-    let mut cursor = rfpll::ColdI2c::new(&mut transaction);
+    let mut cursor = i2c::Counted::new(&mut transaction);
     cursor.remaining = 2;
     let mut hw = super::io::Io::Test(&mut io, core::marker::PhantomData);
     assert_eq!(cursor.advance_one(&mut hw, clock.now()), Ok(Step::Runnable));
@@ -1390,7 +1391,7 @@ fn cold_and_direct_rfpll_share_the_same_rmw_atoms_and_preserve_identity() {
     let mut cx = Context::from_waker(&waker);
     {
         let mut job =
-            Job::rfpll_cold_i2c(binding.transaction_mut(), clock.now()).expect("deadline fits");
+            Job::counted_i2c(binding.transaction_mut(), clock.now()).expect("deadline fits");
         let mut driver = core::pin::pin!(drive::<TestDelay, _, _>(
             &mut job, &mut cold, &clock, None, None, None
         ));
@@ -1420,7 +1421,7 @@ fn cold_rfpll_waits_between_busy_retries_and_fails_overflow_before_publishing() 
     let mut io = Io::default();
     io.busy.set(true);
     let mut transaction = read();
-    let mut cursor = rfpll::ColdI2c::new(&mut transaction);
+    let mut cursor = i2c::Counted::new(&mut transaction);
     cursor.remaining = 2;
     let mut hw = super::io::Io::Test(&mut io, core::marker::PhantomData);
     for _ in 0..2 {
@@ -1440,7 +1441,7 @@ fn cold_rfpll_waits_between_busy_retries_and_fails_overflow_before_publishing() 
         PhyColdI2cAction::StartRead { .. }
     ));
     assert!(matches!(
-        Job::rfpll_cold_i2c(&mut transaction, Instant::from_micros(u64::MAX)),
+        Job::counted_i2c(&mut transaction, Instant::from_micros(u64::MAX)),
         Err(Failure::DeadlineOverflow)
     ));
 }

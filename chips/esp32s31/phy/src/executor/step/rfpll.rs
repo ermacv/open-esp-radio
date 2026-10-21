@@ -1,11 +1,10 @@
 //! RFPLL checkpoints retain the physical envelope owned by the caller.
-use super::{Failure, Step, io::Io};
+use super::{Failure, io::Io};
 use crate::{
     calibration::cold::{PhyColdI2cAction, PhyColdI2cObservation, PhyColdI2cTransaction},
-    executor::wait::PhyShortDelay,
     tracking::rfpll::Correction,
 };
-use oer_time::{Clock, Duration, Instant};
+use oer_time::{Clock, Instant};
 
 /// Outline the platform clock conversion once without changing its identity,
 /// read count or time semantics in the direct observation loop.
@@ -72,54 +71,6 @@ impl<'a> Run<'a> {
             phase: 0,
             low: 0,
         }
-    }
-}
-
-/// Cold RFPLL retains its count limit and first/repeated one-microsecond
-/// observations. It uses the same start/sample atom as T7 and direct RFPLL;
-/// scheduler pauses are not charged to the direct path's twenty-us settle.
-pub(super) struct ColdI2c<'a> {
-    transaction: &'a mut PhyColdI2cTransaction,
-    pub(super) remaining: u16,
-    waited: bool,
-}
-impl<'a> ColdI2c<'a> {
-    pub(super) fn new(transaction: &'a mut PhyColdI2cTransaction) -> Self {
-        Self {
-            transaction,
-            remaining: crate::HARDWARE_EDGE_LIMIT,
-            waited: false,
-        }
-    }
-    #[inline(never)]
-    pub(super) fn advance_one(
-        &mut self,
-        io: &mut Io<'_, '_>,
-        now: Instant,
-    ) -> Result<Step, Failure> {
-        if self.remaining == 0 {
-            return Err(Failure::TimedOut);
-        }
-        let action = self.transaction.action();
-        let start = match action {
-            PhyColdI2cAction::Complete(_) => return Ok(Step::Complete),
-            PhyColdI2cAction::StartRead { .. } | PhyColdI2cAction::StartWrite { .. } => true,
-            _ => false,
-        };
-        if !start && !self.waited {
-            self.waited = true;
-        } else {
-            self.remaining -= 1;
-            self.waited = false;
-            if io.i2c(self.transaction, start)? == PhyColdI2cObservation::EdgeConsumed {
-                return Ok(Step::Runnable);
-            }
-            self.waited = true;
-        }
-        Ok(Step::WaitAt(
-            now.checked_add(Duration::from_micros(1))
-                .ok_or(Failure::DeadlineOverflow)?,
-        ))
     }
 }
 

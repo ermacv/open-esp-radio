@@ -1,4 +1,4 @@
-//! Manually selected 154 idle hold; never stands in for associated Wi-Fi traffic.
+//! Manually selected idle hold; associated Wi-Fi traffic is a separate workload.
 use crate::Result;
 use oer_hil_protocol::phy::*;
 use oer_hil_scenario::workload::context::Context;
@@ -7,15 +7,33 @@ use std::{
     time::{Duration, Instant},
 };
 
-pub(crate) fn run(ticks: u8, output: &Path, context: &Context<'_>) -> Result<()> {
+fn configuration(
+    lifecycle: crate::calibration_capture::boots::Lifecycle,
+) -> Result<(u8, CaptureRadio, CaptureLifecycle)> {
+    use crate::calibration_capture::boots::Lifecycle;
+    match lifecycle {
+        Lifecycle::Cold => Ok((1, CaptureRadio::Wifi, CaptureLifecycle::Cold)),
+        Lifecycle::Ieee802154 => Ok((
+            15,
+            CaptureRadio::Ieee802154 { power_dbm: 21 },
+            CaptureLifecycle::Ieee802154,
+        )),
+        _ => Err("hold needs a cold receiving radio".into()),
+    }
+}
+
+pub(crate) fn run(
+    ticks: u8,
+    lifecycle: crate::calibration_capture::boots::Lifecycle,
+    output: &Path,
+    context: &Context<'_>,
+) -> Result<()> {
+    let (channel, radio, point) = configuration(lifecycle)?;
     context.with_capture(&output.join("hold"), |capture| {
         capture.discover(Duration::from_secs(15))?;
         let ready = capture.request(
             0,
-            PrepareCapture {
-                channel: 15,
-                radio: CaptureRadio::Ieee802154 { power_dbm: 21 },
-            },
+            PrepareCapture { channel, radio },
             Duration::from_secs(120),
         )?;
         context.results.observe("capture-ready", &ready);
@@ -23,9 +41,9 @@ pub(crate) fn run(ticks: u8, output: &Path, context: &Context<'_>) -> Result<()>
         let measured: Result<()> = (|| {
             if ready.epoch == 0
                 || !ready.full_calibration_performed
-                || ready.lifecycle != CaptureLifecycle::Ieee802154
-                || ready.channel != 15
-                || ready.radio != (CaptureRadio::Ieee802154 { power_dbm: 21 })
+                || ready.lifecycle != point
+                || ready.channel != channel
+                || ready.radio != radio
             {
                 return Err("INCOMPLETE: requested RX capture was not established".into());
             }
@@ -42,12 +60,12 @@ pub(crate) fn run(ticks: u8, output: &Path, context: &Context<'_>) -> Result<()>
             if started.id == 0
                 || started.epoch != ready.epoch
                 || started.ticks != ticks
-                || started.channel != 15
+                || started.channel != channel
                 || started.radio != ready.radio
                 || started.force != [3, 0]
                 || started.period_micros != 1_000_000
             {
-                return Err("hold did not establish the requested 154 idle forced policy".into());
+                return Err("hold did not establish the requested idle forced policy".into());
             }
             let deadline = Instant::now() + Duration::from_secs(u64::from(ticks) * 3 + 10);
             let mut first = 0;
@@ -139,8 +157,12 @@ pub(crate) fn run(ticks: u8, output: &Path, context: &Context<'_>) -> Result<()>
             return Err("INCOMPLETE: final RF closure".into());
         }
         context.results.claim(
-            "forced 154 idle tracking intervals captured",
-            &["RF exclusion", "Wi-Fi hold", "guaranteed maximum"],
+            "forced idle tracking intervals captured",
+            &[
+                "RF exclusion",
+                "associated Wi-Fi traffic",
+                "guaranteed maximum",
+            ],
         );
         Ok(())
     })
@@ -196,6 +218,24 @@ fn validate_sample(sample: &HoldSample, tick: u8) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn idle_radio_selection_retains_its_point_and_rejects_restart_aliases() {
+        use crate::calibration_capture::boots::Lifecycle;
+        assert_eq!(
+            configuration(Lifecycle::Cold).unwrap(),
+            (1, CaptureRadio::Wifi, CaptureLifecycle::Cold)
+        );
+        assert_eq!(
+            configuration(Lifecycle::Ieee802154).unwrap(),
+            (
+                15,
+                CaptureRadio::Ieee802154 { power_dbm: 21 },
+                CaptureLifecycle::Ieee802154
+            )
+        );
+        assert!(configuration(Lifecycle::Restart).is_err());
+        assert!(configuration(Lifecycle::Ieee802154Restart).is_err());
+    }
     pub(super) fn sample() -> HoldSample {
         HoldSample {
             tick: 1,
