@@ -159,9 +159,10 @@ impl<const B: usize> Ieee80211Capabilities for Esp32s31Caps<B> {
     const CAPS: LowerMacCapabilities = esp32s31_lower_mac_capabilities(B);
 }
 
-/// Static task-only backing. Its `RefCell` is never shared with an ISR.
-pub struct PortStorage<D, const B: usize> {
-    device: RefCell<D>,
+/// Static task-only backing borrowing a separately retained device.
+/// Its `RefCell` is never shared with an ISR.
+pub struct PortStorage<D: 'static, const B: usize> {
+    device: RefCell<&'static mut D>,
     poisoned: Cell<Option<Fault>>,
     driver: AtomicWaker,
     body: AtomicWaker,
@@ -171,9 +172,9 @@ pub struct PortStorage<D, const B: usize> {
     expired: Cell<u32>,
 }
 impl<D: Device<B>, const B: usize> PortStorage<D, B> {
-    // Keep the device transfer separate from the install future's poll frame.
+    // Keep storage construction outside the install future's poll frame.
     #[inline(never)]
-    pub const fn new(device: D) -> Self {
+    pub const fn new(device: &'static mut D) -> Self {
         Self {
             device: RefCell::new(device),
             poisoned: Cell::new(None),

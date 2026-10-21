@@ -118,6 +118,7 @@ impl Drop for PendingTrace<'_> {
 type Family<Id> = Types<Id, Device, TX>;
 type Caps = Esp32s31Caps<TX>;
 static STORAGE: StaticCell<PortStorage<Device, TX>> = StaticCell::new();
+static DEVICE: StaticCell<Device> = StaticCell::new();
 static RETAINED: oer_trace::Retained<256, 4, 33> = oer_trace::Retained::new();
 static TRACE: oer_trace::Trace = oer_trace::Trace::new(&RETAINED);
 oer_trace::clock!(oer_embassy_time::now_micros);
@@ -243,72 +244,77 @@ impl<'s, Id: radio::SlotIdentity + 's> Server<'s, Id> {
     }
     pub async fn request(&mut self, request: Request) -> Result<Answer, RejectReason> {
         match request {
-            Request::Prepare(config) => {
-                let boot = self.boot.take().ok_or(RejectReason::InvalidState)?;
-                let station = boot.station;
-                let parts = install_future(boot, config)
-                    .await
-                    .map_err(|_| RejectReason::Internal)?;
-                let backend = Backend::<Id>::new(parts).map_err(|_| RejectReason::Internal)?;
-                let registered = self
-                    .slot
-                    .register(backend)
-                    .map_err(|_| RejectReason::Internal)?;
-                let result = radio::LocalExecution
-                    .scope(registered, |frontend| {
-                        radio::run_port(frontend, Discover { config, station })
-                    })
-                    .await;
-                let radio::PortEnd::Uninstalled { output, joined, .. } = result else {
-                    return Err(RejectReason::Internal);
-                };
-                self.joined = Some(joined);
-                let (peer, prepared) = output.map_err(|_| RejectReason::Internal)?;
-                self.peer = Some(peer);
-                Ok(Answer::Prepared(prepared))
-            }
-            Request::Run(key) => {
-                let case = key.case().ok_or(RejectReason::InvalidConfiguration)?;
-                if case.extension().is_some() {
-                    return Err(RejectReason::Unsupported);
-                }
-                let peer = self.peer.ok_or(RejectReason::InvalidState)?;
-                let joined = self.joined.take().ok_or(RejectReason::InvalidState)?;
-                self.epoch = self.epoch.checked_add(1).ok_or(RejectReason::Internal)?;
-                let epoch = self.epoch;
-                let bodies = self.bodies;
-                let output = &mut *self.output;
-                let registered = self
-                    .slot
-                    .reinstall(joined, |stopped| {
-                        stopped
-                            .reinstall(epoch)
-                            .ok()
-                            .expect("Joined retains stopped DMA owners and a distinct epoch")
-                    })
-                    .map_err(|_| RejectReason::Internal)?;
-                let result = radio::LocalExecution
-                    .scope(registered, move |frontend| {
-                        let scratch = output;
-                        radio::run_port(
-                            frontend,
-                            Exchange {
-                                peer,
-                                case,
-                                bodies,
-                                output: scratch,
-                            },
-                        )
-                    })
-                    .await;
-                let radio::PortEnd::Uninstalled { output, joined, .. } = result else {
-                    return Err(RejectReason::Internal);
-                };
-                self.joined = Some(joined);
-                let trace = output.map_err(|_| RejectReason::Internal)?;
-                Ok(Answer::Trace(CaseTrace { case: key, trace }))
-            }
+            Request::Prepare(config) => run_request(pin!(self.prepare(config))).await,
+            Request::Run(key) => run_request(pin!(self.exchange(key))).await,
         }
+    }
+    async fn prepare(&mut self, config: Prepare) -> Result<Answer, RejectReason> {
+        let boot = self.boot.take().ok_or(RejectReason::InvalidState)?;
+        let station = boot.station;
+        let parts = install_future(boot, config)
+            .await
+            .map_err(|_| RejectReason::Internal)?;
+        let backend = Backend::<Id>::new(parts).map_err(|_| RejectReason::Internal)?;
+        let registered = self
+            .slot
+            .register(backend)
+            .map_err(|_| RejectReason::Internal)?;
+        let result = radio::LocalExecution
+            .scope(registered, |frontend| {
+                radio::run_port(frontend, Discover { config, station })
+            })
+            .await;
+        let radio::PortEnd::Uninstalled { output, joined, .. } = result else {
+            return Err(RejectReason::Internal);
+        };
+        self.joined = Some(joined);
+        let (peer, prepared) = output.map_err(|_| RejectReason::Internal)?;
+        self.peer = Some(peer);
+        Ok(Answer::Prepared(prepared))
+    }
+    async fn exchange(
+        &mut self,
+        key: oer_hil_protocol::lower_mac::RunCase,
+    ) -> Result<Answer, RejectReason> {
+        let case = key.case().ok_or(RejectReason::InvalidConfiguration)?;
+        if case.extension().is_some() {
+            return Err(RejectReason::Unsupported);
+        }
+        let peer = self.peer.ok_or(RejectReason::InvalidState)?;
+        let joined = self.joined.take().ok_or(RejectReason::InvalidState)?;
+        self.epoch = self.epoch.checked_add(1).ok_or(RejectReason::Internal)?;
+        let epoch = self.epoch;
+        let bodies = self.bodies;
+        let output = &mut *self.output;
+        let registered = self
+            .slot
+            .reinstall(joined, |stopped| {
+                stopped
+                    .reinstall(epoch)
+                    .ok()
+                    .expect("Joined retains stopped DMA owners and a distinct epoch")
+            })
+            .map_err(|_| RejectReason::Internal)?;
+        let result = radio::LocalExecution
+            .scope(registered, move |frontend| {
+                let scratch = output;
+                radio::run_port(
+                    frontend,
+                    Exchange {
+                        peer,
+                        case,
+                        bodies,
+                        output: scratch,
+                    },
+                )
+            })
+            .await;
+        let radio::PortEnd::Uninstalled { output, joined, .. } = result else {
+            return Err(RejectReason::Internal);
+        };
+        self.joined = Some(joined);
+        let trace = output.map_err(|_| RejectReason::Internal)?;
+        Ok(Answer::Trace(CaseTrace { case: key, trace }))
     }
 }
 async fn install(boot: Boot, config: Prepare) -> Result<PortParts<Device, TX>, &'static str> {
@@ -352,16 +358,18 @@ async fn install(boot: Boot, config: Prepare) -> Result<PortParts<Device, TX>, &
         },
     )
     .map_err(|_| "RX bind")?;
-    let device = RadioDevice::new(RadioParts {
-        wifi: stopped,
-        rx,
-        interrupt_cell: &irq::LINE,
-        actor: cell,
-        timer: EmbassyClock,
-        routes: boot.routes,
-        doorbell: boot.bell,
-        domain,
-        power_limits: limits,
+    let device = DEVICE.init_with(|| {
+        RadioDevice::new(RadioParts {
+            wifi: stopped,
+            rx,
+            interrupt_cell: &irq::LINE,
+            actor: cell,
+            timer: EmbassyClock,
+            routes: boot.routes,
+            doorbell: boot.bell,
+            domain,
+            power_limits: limits,
+        })
     });
     macro_rules! slot {
         ($dma:ident, $slot:ident) => {{
@@ -774,4 +782,12 @@ pub async fn serve(boot: Boot, slot: Slot) {
             response.answer(answer);
         }
     }
+}
+
+fn run_request<F: Future>(mut future: Pin<&mut F>) -> impl Future<Output = F::Output> + '_ {
+    poll_fn(move |cx| poll_request(future.as_mut(), cx))
+}
+#[inline(never)]
+fn poll_request<F: Future>(future: Pin<&mut F>, cx: &mut PollContext<'_>) -> Poll<F::Output> {
+    future.poll(cx)
 }
