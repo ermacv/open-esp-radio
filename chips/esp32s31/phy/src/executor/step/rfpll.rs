@@ -27,7 +27,7 @@ pub(crate) enum Cursor<'a> {
     Correction(&'a mut Correction),
 }
 impl Cursor<'_> {
-    #[inline(always)]
+    #[inline(never)]
     pub(super) fn action(&self) -> crate::tracking::rfpll::Action {
         match self {
             #[cfg(any(test, oer_probe))]
