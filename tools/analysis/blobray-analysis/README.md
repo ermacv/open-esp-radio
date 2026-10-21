@@ -20,9 +20,19 @@ instruction CFG to a fixed point, with union at joins, explicit limits and
 byte-level stack transfers. Values also carry known-zero and known-one masks;
 joins retain only bits known equally on every path. Neutral bitwise operands
 pass dependencies exactly; inverted bits remain uses, never preservation.
+Provenance-only loads and entry registers keep only non-inverted exact wiring;
+May dependencies, inversion and competing sources become unknown provenance.
+Selected read sources retain their full dependency matrices. Cells with more
+than eight sources widen selected dependencies to May at every output and drop
+provenance-only sources, retaining known bits. Argument-summary entry sources
+retain consumption and inverted-return dependencies because caller read uses
+require both.
 Interned state sets and the queue have working
 memory admission; each function's pass also has a
-`max(100000, 512 * instruction_count)` work-unit cap. Application resolves
+`max(100000, 512 * instruction_count)` work-unit cap. On exhaustion,
+queued/active transfers invalidate only their forward CFG closure; other input
+cells remain proved. Literal numeric value facts remain usable at any store.
+Completed solving also keeps stored cells when observation emission is limited. Application resolves
 call-argument callees against captured input and ROM symbols. The same engine
 also seeds entry registers for argument summaries: consumed bits and returned
 bit mappings, including inversion, through the shared

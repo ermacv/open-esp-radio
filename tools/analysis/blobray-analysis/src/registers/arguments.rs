@@ -75,6 +75,7 @@ impl<'m> ArgumentProgram<'m> {
                         instruction,
                         input: None,
                         queued: false,
+                        unsettled: false,
                     },
                     work.position(),
                 )?;
@@ -157,6 +158,9 @@ impl ReadUsesEvaluator<'_, '_, '_> {
                     may: u32::MAX,
                 });
             let flow = input.register(register).flow;
+            if !self.flows.observed(flow)? {
+                continue;
+            }
             let sink = ReadSink::CallArgument {
                 site,
                 register,
@@ -166,7 +170,7 @@ impl ReadUsesEvaluator<'_, '_, '_> {
             let len = self.flows.values(flow)?.len();
             for index in 0..len {
                 c.checkpoint(1)?;
-                let mut dependency = *self
+                let mut dependency = self
                     .flows
                     .values(flow)?
                     .get(index)
@@ -193,7 +197,7 @@ impl ReadUsesEvaluator<'_, '_, '_> {
         let len = self.flows.values(flow)?.len();
         for index in 0..len {
             c.checkpoint(1)?;
-            let dependency = *self
+            let dependency = self
                 .flows
                 .values(flow)?
                 .get(index)
@@ -231,7 +235,7 @@ impl ReadUsesEvaluator<'_, '_, '_> {
             let flow = input.register(argument).flow;
             let len = self.flows.values(flow)?.len();
             for index in 0..len {
-                let incoming = *self
+                let incoming = self
                     .flows
                     .values(flow)?
                     .get(index)
@@ -249,6 +253,9 @@ impl ReadUsesEvaluator<'_, '_, '_> {
                     let (a, b) = incoming.selected(map_may);
                     *may = m | a | b;
                     *exact = e & !*may;
+                    if incoming.provenance & (map_exact | map_may) != 0 {
+                        dependency.provenance |= 1 << output;
+                    }
                     if map_exact.count_ones() == 1 && map_may == 0 {
                         let bit = map_exact.trailing_zeros();
                         let inverted = (incoming.inverted >> bit) ^ (mapping.inverted >> output);
@@ -259,7 +266,7 @@ impl ReadUsesEvaluator<'_, '_, '_> {
                     self.flows.scratch.push(dependency, c.position())?;
                 }
             }
-            let composed = self.flows.intern(c)?;
+            let composed = self.flows.intern(&self.sources, c)?;
             result = self.binary_flow(result, composed, ReadFlowOp::Assemble, c)?;
         }
         Ok(result)

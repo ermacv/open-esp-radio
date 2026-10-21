@@ -132,11 +132,18 @@ impl<'f, 'a, 'm> ReadObservations<'f, 'a, 'm> {
             access: MemoryKind::Store,
             address,
             width,
+            value,
             ..
         } = fact
         {
             self.analyze(c)?;
-            Ok(Some(self.evaluator.stored(*offset, address, *width, c)?))
+            Ok(Some(self.evaluator.stored(
+                *offset,
+                address,
+                *width,
+                value.as_ref(),
+                c,
+            )?))
         } else {
             Ok(None)
         }

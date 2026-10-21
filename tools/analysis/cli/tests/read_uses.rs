@@ -120,6 +120,7 @@ fn loads_report_their_sinks_limits_preservation_and_unused_bits() {
         },
     )
     .expect("register-accesses");
+    stored_property::assert_preserved_stores(&observations);
     assert_eq!(summary.blocked_functions, 0);
     assert_eq!(memory.used(), 0, "all evaluator admission is released");
     let read = |name: &str| &by_name.get(name.as_bytes()).expect("fixture load")[0].1;
@@ -555,6 +556,7 @@ fn argument_summaries_propagate_consumption_and_return_positions() {
     for call_summaries in [false, true] {
         let memory = WorkingMemory::new(64 << 20).expect("working memory");
         let mut found = BTreeMap::new();
+        let mut observations = Vec::new();
         register_accesses(
             &[Executable::new(fixture(include_str!(
                 "fixtures/argument_summaries.rs"
@@ -572,6 +574,7 @@ fn argument_summaries_propagate_consumption_and_return_positions() {
             &memory,
             &mut || Ok(()),
             &mut |observation, _| {
+                observations.push(observation.clone());
                 if let RegisterAccess::Observation {
                     function,
                     fact,
@@ -597,6 +600,7 @@ fn argument_summaries_propagate_consumption_and_return_positions() {
             },
         )
         .expect("argument summaries");
+        stored_property::assert_preserved_stores(&observations);
         if !call_summaries {
             let reads = &found["stale_a3"];
             assert_eq!(reads.unused, 0);
@@ -776,6 +780,7 @@ fn finite_rmw_fields_agree_with_read_flow_for_every_byte_and_clearing_form() {
         },
     )
     .expect("finite RMW analysis");
+    stored_property::assert_preserved_stores(&observations);
     assert_eq!(summary.blocked_functions, 0);
     assert_eq!(summary.partial_functions, 0);
     for (name, (a, b, replacement)) in expected {
@@ -1056,6 +1061,7 @@ fn stored_provenance_follows_joins_stack_arguments_returns_and_unselected_loads(
         },
     )
     .expect("stored flow analysis");
+    stored_property::assert_preserved_stores(&observations);
     for name in [
         "joined", "stacked", "argument", "returned", "inverted", "ram",
     ] {

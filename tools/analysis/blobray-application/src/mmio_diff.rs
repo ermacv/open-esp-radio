@@ -259,7 +259,13 @@ fn collect<'m>(
                     ranges,
                     c,
                     &mut |mut o, c| {
-                        let stored = flow.stored(o.fact, c)?;
+                        // Unlocated candidates only contribute to the unresolved
+                        // count. Their provenance never enters a comparison.
+                        let stored = if o.address.is_some() || o.indexed.is_some() {
+                            flow.stored(o.fact, c)?
+                        } else {
+                            None
+                        };
                         if let FunctionRecord::MemoryAccess { width, .. } = o.fact {
                             o.mask = o.mask.or_else(|| {
                                 stored.as_deref().and_then(|stored| {

@@ -251,7 +251,27 @@ fn conflicting_mappings_demote_but_a_missing_source_does_not_demote() {
     let facts = Facts::new(&[], &memory, &mut || Ok(())).expect("facts");
     let mut reads = ReadUsesEvaluator::new(&facts, &memory);
     let mut c = || Ok(());
-    let original = reads.seed(0, 4, false, &mut c).expect("load seed");
+    let address = number(0x20000);
+    reads
+        .sources
+        .push(
+            ReadSource {
+                origin: ReadOrigin::Load {
+                    site: 0,
+                    address: &address,
+                    width: 4,
+                },
+                observed: true,
+                preserved: 0,
+                limits: [0; 4],
+                event: 0,
+            },
+            c.position(),
+        )
+        .expect("source");
+    let original = reads
+        .seed(0, 4, false, u32::MAX, &mut c)
+        .expect("load seed");
     assert_eq!(
         reads.join_flow(original, 0, &mut c).expect("join absent"),
         original
@@ -266,7 +286,7 @@ fn conflicting_mappings_demote_but_a_missing_source_does_not_demote() {
         .flows
         .values(join)
         .expect("flow")
-        .first()
+        .get(0)
         .expect("source");
     assert_eq!(dependency.selected(u32::MAX), (0, u32::MAX));
 }
