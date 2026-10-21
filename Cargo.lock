@@ -4100,6 +4100,7 @@ name = "oer-registers-generate"
 version = "0.1.0"
 dependencies = [
  "cargo_metadata",
+ "oer-analysis-blobray-domain",
  "oer-analysis-elf",
  "oer-os-durable",
  "oer-os-process",

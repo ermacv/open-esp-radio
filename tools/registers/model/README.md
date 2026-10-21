@@ -59,6 +59,31 @@ provenance. Incomplete metadata remains a navigation hint and cannot close a
 publication gate. Array coverage is resolved from the structural SVD template,
 not by wildcard-matching expanded names.
 
+## Register bit states
+
+Each register or memory-layout bit has one of three states:
+
+| State | Meaning | Evidence |
+| --- | --- | --- |
+| Described | Its meaning is known | A cited source establishes the meaning |
+| Opaque | Its meaning is unknown, but a use is observed | A cited source establishes the use |
+| Absent | No use is observed in the examined corpus, or a source marks it reserved | No field is published |
+
+A use is a write of a value different from reset, an explicit masked set in
+a read-modify-write, or a read whose value changes behaviour. Carrying bits
+unchanged through a read-modify-write is not a use; neither is writing their
+reset value as part of a whole-word store. A whole-word access alone does not
+justify an opaque field. Both described and opaque fields require source
+evidence (`SOURCE` in the implementation, `sources` in the reviewed model).
+Absence is relative to the examined corpus, whose inputs and coverage limits
+must accompany a vendor-use check. A use of an absent bit is an error.
+
+Code preserves absent bits or writes their reset value, and the PAC exposes
+no field accessor for them. Layouts follow the same rule: CPU operations
+preserve the exact image of unassigned bits, including bits hardware writes.
+
+## Name origin
+
 A register or field review also records where its name comes from with
 `naming`:
 

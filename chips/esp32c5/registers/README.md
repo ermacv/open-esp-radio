@@ -5,6 +5,9 @@ and its schema-2 peripheral fragments. It follows the layout of the
 [ESP32-S31 register project](../../esp32s31/registers/README.md); the generator is
 [`tools/registers/model`](../../../tools/registers/model/README.md).
 
+Register and layout bits follow the [shared bit-state rule](../../../tools/registers/model/README.md#register-bit-states)
+and the [Register bits decision](../../../docs/decisions.md#code).
+
 | Path | Owner and purpose |
 | --- | --- |
 | `model/device.toml`, `model/peripherals/` | Reviewed hardware register geometry and semantics |
