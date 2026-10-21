@@ -82,8 +82,9 @@ impl<const N: usize, const B: usize, const S: usize, const Q: usize, X: SignalEx
             returns: _,
         } = parts;
         let storage = rx.storage();
-        let (_, dma) = registers.split_rx_dma();
-        let frontier = ReceiveFrontier::prepare_initial(dma, rx).map_err(WifiRxCause::Prepare)?;
+        let (mut mac, dma) = registers.split_rx_dma();
+        let frontier =
+            ReceiveFrontier::prepare_initial(&mut mac, dma, rx).map_err(WifiRxCause::Prepare)?;
         if let Err(refused) = line.install(
             InactiveEpoch::new(setup).activate_rx_moderated(MAC_STATION_INTERRUPT_MASK),
             cell,
@@ -126,7 +127,6 @@ impl<const N: usize, const B: usize, const S: usize, const Q: usize, X: SignalEx
         self.frontier
             .prepare_with_storage(dma, self.rx)
             .map_err(WifiRxCause::Start)?;
-        mac.prepare_mac_runtime(self.frontier.prepared().map_err(WifiRxCause::Start)?);
         activate_promiscuous_receive(&mut mac);
         routes.enable();
         super::storage::walker_enable_settle(timer).await;
@@ -274,7 +274,6 @@ impl<const N: usize, const B: usize, const S: usize, const Q: usize, X: SignalEx
                 self.frontier
                     .prepare_with_storage(dma, self.rx)
                     .map_err(WifiRxCause::Start)?;
-                mac.prepare_mac_runtime(self.frontier.prepared().map_err(WifiRxCause::Start)?);
                 activate_promiscuous_receive(&mut mac);
                 routes.enable();
                 let deadline = timer

@@ -33,8 +33,8 @@ impl WifiRadioRegisters {
     }
 
     /// Clock the prepared MAC core without releasing its runtime stop.
-    /// SOURCE: BLOB_LIBPP_HAL_ENABLE_MAC. The DMA walker needs this core edge
-    /// before its own enable; MAC RX remains held until the later resume.
+    /// SOURCE: BLOB_LIBPP_HAL_ENABLE_MAC. Runtime orders this edge before
+    /// BASE while MAC RX remains held until the later live-walker resume.
     pub fn prepare_mac_runtime(&mut self) {
         crate::generated::enable_wifi_mac_core(&self.peripherals.wifi_mac.wifi_mac_core_enable);
         device_fence();

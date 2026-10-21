@@ -1,0 +1,5 @@
+error[E0599]: no method named `publish` found for struct `RxRingPrepared<'a, COUNT>` in the current scope
+ --> tests/ui/base_needs_mac_core.rs:5:20
+  |
+5 |     let _ = memory.publish(dma); // ui-error: E0599
+  |                    ^^^^^^^ method not found in `RxRingPrepared<'_, 2>`

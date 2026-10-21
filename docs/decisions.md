@@ -226,7 +226,10 @@ bounds) live in the code that applies them.
 
 - **MAC preparation and start.** Cold Wi-Fi HAL prepares configuration and
   IRQs with common MAC gates closed; runtime start requires the prepared RX
-  ring's affine DMA proof. Promiscuous policy does not release MAC stop.
+  ring's affine DMA proof. Descriptor memory/binding preparation precedes
+  common gates opening with MAC stop held, the sole BASE publication,
+  walker enable and RX resume; each step requires its predecessor's proof.
+  Promiscuous policy does not release MAC stop.
   W0 checks PHY up and MAC prepared with closed gates and no BASE; runtime
   MAC up belongs to W1/W2/R1.
 - **Hardware lower-MAC conformance.** Run every Hardware case supported by

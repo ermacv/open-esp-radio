@@ -1,0 +1,5 @@
+error[E0599]: no method named `try_start` found for struct `RxRingCoreReady<'a, COUNT>` in the current scope
+ --> tests/ui/walker_needs_published_base.rs:5:18
+  |
+5 |     let _ = core.try_start(dma); // ui-error: E0599
+  |                  ^^^^^^^^^ method not found in `RxRingCoreReady<'_, 2>`

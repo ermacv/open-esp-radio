@@ -9,22 +9,22 @@ pub use crate::{
     },
 };
 
-/// Clock the prepared core after BASE, then release MAC RX after walker
-/// enable. Both edges require the corresponding affine DMA-ring proof.
+/// Open common gates before BASE with a prepared memory/binding proof,
+/// then release MAC RX only after the published ring's walker is live.
 pub trait MacRuntimeStartHardware {
-    fn prepare_mac_runtime<const COUNT: usize>(
+    fn prepare_mac_runtime<'a, const COUNT: usize>(
         &mut self,
-        ring: &crate::rx::RxRingStopped<'_, COUNT>,
-    );
+        ring: oer_esp32s31_hal::ieee80211::dma::rx_ring::RxRingPrepared<'a, COUNT>,
+    ) -> oer_esp32s31_hal::ieee80211::dma::rx_ring::RxRingCoreReady<'a, COUNT>;
     fn start_mac_runtime<const COUNT: usize>(&mut self, ring: &crate::rx::RxRingLive<'_, COUNT>);
 }
 
 impl MacRuntimeStartHardware for oer_esp32s31_hal::ieee80211::mac::WifiMacHal<'_> {
-    fn prepare_mac_runtime<const COUNT: usize>(
+    fn prepare_mac_runtime<'a, const COUNT: usize>(
         &mut self,
-        ring: &crate::rx::RxRingStopped<'_, COUNT>,
-    ) {
-        Self::prepare_mac_runtime(self, ring);
+        ring: oer_esp32s31_hal::ieee80211::dma::rx_ring::RxRingPrepared<'a, COUNT>,
+    ) -> oer_esp32s31_hal::ieee80211::dma::rx_ring::RxRingCoreReady<'a, COUNT> {
+        Self::prepare_mac_runtime(self, ring)
     }
 
     fn start_mac_runtime<const COUNT: usize>(&mut self, ring: &crate::rx::RxRingLive<'_, COUNT>) {
@@ -33,11 +33,11 @@ impl MacRuntimeStartHardware for oer_esp32s31_hal::ieee80211::mac::WifiMacHal<'_
 }
 
 impl MacRuntimeStartHardware for oer_esp32s31_hal::owner::RadioAccess {
-    fn prepare_mac_runtime<const COUNT: usize>(
+    fn prepare_mac_runtime<'a, const COUNT: usize>(
         &mut self,
-        ring: &crate::rx::RxRingStopped<'_, COUNT>,
-    ) {
-        self.wifi_mac_hal().prepare_mac_runtime(ring);
+        ring: oer_esp32s31_hal::ieee80211::dma::rx_ring::RxRingPrepared<'a, COUNT>,
+    ) -> oer_esp32s31_hal::ieee80211::dma::rx_ring::RxRingCoreReady<'a, COUNT> {
+        self.wifi_mac_hal().prepare_mac_runtime(ring)
     }
 
     fn start_mac_runtime<const COUNT: usize>(&mut self, ring: &crate::rx::RxRingLive<'_, COUNT>) {

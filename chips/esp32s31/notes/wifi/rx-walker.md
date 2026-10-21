@@ -75,6 +75,16 @@ than 7000 frames. SOURCE: HIL_OPEN_RX_LIVE_APPEND_2026_07_27.
 
 ## Vendor behaviour
 
+- `hal_init` calls `mac_rxbuf_init` at offset `0x94`; that leaf's final
+  write publishes BASE. `hal_enable_mac` independently clears the four
+  common disable bits at `0x20104c00` before writing its IRQ mask. Blobray
+  found no caller or stored reference to `hal_enable_mac` in pinned libpp,
+  libnet80211, libcore and rev0 ROM. Its position relative to
+  `mac_rxbuf_init` is therefore **not established**; the runtime order below
+  is not claimed as a recovered complete vendor lifecycle. SOURCE:
+  BLOB_LIBPP_HAL_ENABLE_MAC, BLOB_LIBPP_MAC_RXBUF_INIT_PREFIX;
+  `vendor/artifacts.toml` pins libpp `0c791ee1…`, net `23de6b00…`, core
+  `7199d31d…` and ROM `a52ad751…`.
 - BASE is written in three places: the cold `mac_rxbuf_init`
   (SOURCE: BLOB_LIBPP_MAC_RXBUF_INIT_PREFIX); the empty-software-list branch
   of `rom[]::wDev_AppendRxBlocks`, which publishes the returned chain's head; and
@@ -164,13 +174,15 @@ buffer. The cold publication is the epoch's only BASE write: BASE = R,
 accepted tail and rings the doorbell, whose resumption of an exhausted
 walker H1 shows.
 
-Cold MAC preparation holds both the common core gates and runtime stop.
-After BASE, the role owner supplies `RxRingStopped` to clock the core while
-retaining runtime stop. It opens the walker, then supplies `RxRingLive` to
-release MAC RX. Both types contain the private DMA binding. Promiscuous
-policy leaves MAC_CONTROL and its stop request intact. This orders first
-BASE before MAC RX without a new readiness wait. W0 verifies only MAC
-prepared: its gates stay closed and it publishes no ring.
+Cold MAC preparation holds both the common gates and runtime stop.
+`prepare_ring` validates and arms descriptor memory without writing BASE.
+The role owner consumes `RxRingPrepared` to open common gates with runtime
+stop held; the returned `RxRingCoreReady` alone can publish the sole BASE.
+`RxRingStopped` then opens the walker and `RxRingLive` permits MAC RX resume.
+All stages retain the private DMA binding without another state field or
+wait. A halted ring retains its earlier core proof for warm rebuilds.
+Promiscuous policy preserves the stop request. W0 checks MAC prepared:
+its gates stay closed and it publishes no ring.
 
 - **Why R.** H2 shows that a bare BASE write also works, but BASE is
   then a second publication path whose ordering against the doorbell and

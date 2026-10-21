@@ -181,6 +181,9 @@ impl<X: SignalExecutor> RxBufferFullCounter for HostRadio<X> {
 /// events.
 impl<X: SignalExecutor> RxWalkerJournal for Host<X> {
     fn record(&self, operation: RxWalkerOperation) {
+        if matches!(operation, RxWalkerOperation::WriteDescriptorBase(_)) {
+            assert!(self.core_prepared.get(), "BASE requires the MAC core edge");
+        }
         if operation == RxWalkerOperation::Enable {
             assert!(
                 self.core_prepared.get(),
@@ -219,13 +222,14 @@ impl<X: SignalExecutor> MacRuntimeStopHardware for HostRadio<X> {
 }
 
 impl<X: SignalExecutor> MacRuntimeStartHardware for HostRadio<X> {
-    fn prepare_mac_runtime<const N: usize>(
+    fn prepare_mac_runtime<'a, const N: usize>(
         &mut self,
-        ring: &oer_esp32s31_hal::ieee80211::dma::rx_ring::RxRingStopped<'_, N>,
-    ) {
+        ring: oer_esp32s31_hal::ieee80211::dma::rx_ring::RxRingPrepared<'a, N>,
+    ) -> oer_esp32s31_hal::ieee80211::dma::rx_ring::RxRingCoreReady<'a, N> {
         assert!(!self.host.walker.borrow().walker_enabled);
         assert!(ring.topology_snapshot().valid);
         self.host.core_prepared.set(true);
+        ring.core_ready_for_test()
     }
 
     fn start_mac_runtime<const N: usize>(

@@ -498,8 +498,9 @@ pub(crate) fn enter_esp32s31_wifi_runtime<W>(
         let mut mac = registers.wifi_mac_hal();
         disable_all_role_receive_registers(&mut mac);
         // Complete the role-neutral half of the vendor no-power-save lifecycle.
-        // The first role arms its replacement RX ring while this request remains
-        // asserted, then supplies its live DMA proof to open the prepared MAC.
+        // The first role prepares descriptor memory, opens common gates and
+        // publishes BASE while this request remains asserted. Only its live
+        // walker proof can then release MAC RX.
         mac.request_channel_stop();
     }
     WifiStopped {

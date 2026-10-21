@@ -271,13 +271,14 @@ impl<'registers> WifiMacHal<'registers> {
         &mut self.registers
     }
 
-    /// Clock the core only after the stopped ring's sole BASE publication.
-    /// The cold runtime stop stays asserted while the walker is opened.
-    pub fn prepare_mac_runtime<const COUNT: usize>(
+    /// Open common gates with runtime stop held, after descriptor memory and
+    /// its private binding are prepared, but before the sole BASE publication.
+    pub fn prepare_mac_runtime<'a, const COUNT: usize>(
         &mut self,
-        _ring: &crate::ieee80211::dma::rx_ring::RxRingStopped<'_, COUNT>,
-    ) {
+        ring: crate::ieee80211::dma::rx_ring::RxRingPrepared<'a, COUNT>,
+    ) -> crate::ieee80211::dma::rx_ring::RxRingCoreReady<'a, COUNT> {
         self.pac_mut().prepare_mac_runtime();
+        ring.core_ready()
     }
 
     /// Release MAC RX only with a live walker carrying its private DMA

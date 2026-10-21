@@ -233,6 +233,7 @@ impl<const COUNT: usize, const BUFFER: usize, const STORAGE: usize>
             .take()
             .expect("fixture consumes the initial placement once")
             .prepare_ring(mmio)
+            .and_then(|ring| ring.core_ready_for_test().publish(mmio))
     }
 
     pub(super) fn start(&self, mmio: &mut RxWalkerModel) -> RxRingLive<'static, COUNT> {

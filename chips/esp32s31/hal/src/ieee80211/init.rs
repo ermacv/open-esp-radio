@@ -3,9 +3,9 @@
 //! The register sequence is recovered from `libpp.a[hal_mac.o]::hal_init`,
 //! `mac_txrx_init`, `mac_rxbuf_init`, and `mac_last_rxbuf_init`. It deliberately
 //! stops before publishing an RX descriptor base: ownership of the DMA ring
-//! remains with the DMA storage, whose `RxDmaStorage::prepare_ring` publishes
+//! remains with the DMA storage, whose prepared/core-ready DMA proofs publish
 //! the cold ring. The MAC core stays gated until runtime receives that
-//! stopped ring's DMA binding; RX stays stopped until the walker is live.
+//! prepared memory/binding proof; RX stays stopped until the walker is live.
 
 mod cold;
 mod interface_address;
@@ -101,7 +101,7 @@ pub struct MacColdStartConfig {
 /// This function owns no descriptor storage and leaves all common MAC gates
 /// closed. It prepares IRQ policy without routing a CPU interrupt or opening
 /// the RX walker. The runtime owner selects its role policy, prepares the ring
-/// and supplies its DMA proofs to `WifiMacHal::prepare_mac_runtime` and
+/// and supplies its memory/binding and live proofs to `WifiMacHal::prepare_mac_runtime` and
 /// `WifiMacHal::start_mac_runtime`.
 pub async fn initialize_wifi_mac<
     M: MacColdAntennaHardware
@@ -189,7 +189,7 @@ pub async fn initialize_wifi_mac<
     mmio.initialize_cold_coex(coex_pti);
 
     // Prepare only the IRQ suffix of `hal_enable_mac`. The core-enable edge
-    // belongs to the runtime owner after its first ring publication.
+    // belongs to the runtime owner before its first BASE publication.
     mmio.prepare_mac_interrupts(MAC_STATION_INTERRUPT_MASK);
 
     // `wifi_set_rx_policy(0)` publishes both valid interface addresses after

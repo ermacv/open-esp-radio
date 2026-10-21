@@ -1,0 +1,5 @@
+error[E0599]: no method named `prepare_ring` found for reference `&RxDmaStorage<2, 16, 20>` in the current scope
+ --> tests/ui/ring_memory_needs_placement.rs:5:21
+  |
+5 |     let _ = storage.prepare_ring(dma); // ui-error: E0599
+  |                     ^^^^^^^^^^^^ method not found in `&RxDmaStorage<2, 16, 20>`

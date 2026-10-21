@@ -197,8 +197,11 @@ where
         full_since: &mut full_since,
     };
 
-    let mut frontier = match ReceiveFrontier::<COUNT, BUFFER>::prepare_initial(receiver.rx_dma, rx)
-    {
+    let mut frontier = match ReceiveFrontier::<COUNT, BUFFER>::prepare_initial(
+        receiver.hardware,
+        receiver.rx_dma,
+        rx,
+    ) {
         Ok(frontier) => frontier,
         Err(error) => {
             return receiver
@@ -227,23 +230,17 @@ where
     };
     receiver.routes.enable();
 
-    let prepared = frontier
-        .prepared()
-        .map(|ring| receiver.hardware.prepare_mac_runtime(ring));
-    let cause = match prepared {
+    let cause = match frontier
+        .start_with_storage(receiver.timer, receiver.rx_dma, receiver.rx)
+        .await
+    {
         Err(error) => WifiRxCause::Start(error),
-        Ok(()) => match frontier
-            .start_with_storage(receiver.timer, receiver.rx_dma, receiver.rx)
-            .await
-        {
+        Ok(()) => match frontier.live_mut() {
             Err(error) => WifiRxCause::Start(error),
-            Ok(()) => match frontier.live_mut() {
-                Err(error) => WifiRxCause::Start(error),
-                Ok(ring) => {
-                    receiver.hardware.start_mac_runtime(ring);
-                    receiver.run(ring).await
-                }
-            },
+            Ok(ring) => {
+                receiver.hardware.start_mac_runtime(ring);
+                receiver.run(ring).await
+            }
         },
     };
     let exit = receiver.teardown(&mut frontier, cause).await;

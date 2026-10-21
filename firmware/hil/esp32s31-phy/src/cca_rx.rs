@@ -75,12 +75,15 @@ async fn experiment<B: PlatformClockBackend, T>(
     let placed = Storage::place(STORAGE.take().ok_or(RejectReason::Internal)?)
         .map_err(|_| RejectReason::Internal)?;
     let storage = placed.storage();
-    let stopped = placed
+    let prepared = placed
         .prepare_ring(runtime.rx_dma())
         .map_err(|error| failure("prepare", error))?;
-    runtime.prepare_mac_runtime(&stopped);
-    // The stopped-ring proof clocks the core without releasing RX stop.
-    // Policy preserves that stop until the walker supplies the live proof.
+    let stopped = runtime
+        .prepare_mac_runtime(prepared)
+        .publish(runtime.rx_dma())
+        .map_err(|error| failure("publish", error))?;
+    // Common gates opened with stop held before the sole BASE. Policy
+    // preserves that stop until the walker supplies the live proof.
     activate_promiscuous_receive(runtime);
     walker_enable_settle(&EmbassyClock).await;
     let mut ring = match stopped.try_start(runtime.rx_dma()) {
