@@ -135,8 +135,6 @@ impl PhyDomainRegisterFailure {
 ///
 /// A fresh registration epoch begins on `registers` before the first edge;
 /// the returned epoch is the one the completed state must describe.
-// A separate poll keeps nested binding temporaries out of the owner's frame.
-#[inline(never)]
 pub(super) async fn execute_registration<P, R, D, O>(
     timer: &impl oer_time::Timer,
     transition: &mut PhyRegisterTransition,
@@ -202,28 +200,44 @@ impl PhyDomain {
             observer,
         )
         .await;
-        let outcome = match result {
-            Ok(outcome) => outcome,
-            Err(error) => {
-                return Err(PhyDomainRegisterFailure {
-                    transition,
-                    counters,
-                    error: TargetPhyRegisterError::Run(error),
-                });
-            }
-        };
-        match transition.into_model_parts() {
-            Ok((state, calibration_cache)) => Ok(PhyDomainRegistered {
-                domain: PhyDomain::from_target_completion(state, witness),
-                calibration_cache,
-                outcome,
-                counters,
-            }),
-            Err(transition) => Err(PhyDomainRegisterFailure {
+        finish_registration(transition, result, counters, witness)
+    }
+}
+
+// Construct the large terminal result in the caller's return place. Keeping
+// the consumed transition here avoids a second owner copy in the poll frame.
+#[inline(never)]
+#[allow(
+    clippy::result_large_err,
+    reason = "failure retains the unique transition"
+)]
+fn finish_registration(
+    transition: PhyRegisterTransition,
+    result: Result<PhyRegisterOutcome, PhyRegisterRunError<PhyTargetPortError>>,
+    counters: PhyTargetPortCounters,
+    witness: TargetRegistrationWitness,
+) -> Result<PhyDomainRegistered, PhyDomainRegisterFailure> {
+    let outcome = match result {
+        Ok(outcome) => outcome,
+        Err(error) => {
+            return Err(PhyDomainRegisterFailure {
                 transition,
                 counters,
-                error: TargetPhyRegisterError::MissingCompletedModelOwner,
-            }),
+                error: TargetPhyRegisterError::Run(error),
+            });
         }
+    };
+    match transition.into_model_parts() {
+        Ok((state, calibration_cache)) => Ok(PhyDomainRegistered {
+            domain: PhyDomain::from_target_completion(state, witness),
+            calibration_cache,
+            outcome,
+            counters,
+        }),
+        Err(transition) => Err(PhyDomainRegisterFailure {
+            transition,
+            counters,
+            error: TargetPhyRegisterError::MissingCompletedModelOwner,
+        }),
     }
 }

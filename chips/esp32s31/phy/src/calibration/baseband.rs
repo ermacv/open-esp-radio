@@ -817,6 +817,9 @@ impl PhyBbInitTransition {
         Self::new_on_channel(state, 11)
     }
 
+    // Return-place construction avoids an 812-byte child temporary in the
+    // enclosing registration step.
+    #[inline(never)]
     pub const fn new_on_channel(state: crate::state::PhyState, channel_or_frequency: u16) -> Self {
         Self {
             state,
