@@ -1776,7 +1776,6 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
     ) -> impl core::future::Future<Output = Result<PhyParamTrackingCompletion, PhyTargetPortError>> + 'a
     {
         async move {
-            let request = child.request();
             let mut timing = crate::tracking::observation::EngineTiming::default();
             let sample_age_micros = O::OBSERVE_RFPLL_AGE
                 .then(|| self.timer.now().as_micros())
@@ -1818,6 +1817,7 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
             let crate::tracking::rfpll::thermal::Action::Complete(outcome) = child.action() else {
                 return Err(PhyTargetPortError::UnexpectedBinding);
             };
+            let request = child.request();
             let completion = child
                 .commit()
                 .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;

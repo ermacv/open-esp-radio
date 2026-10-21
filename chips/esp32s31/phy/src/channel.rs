@@ -1032,7 +1032,7 @@ impl PhyChipChannelMmioBinding {
                 PhyChipChannelCompletion::RxCompensationConfigured
             }
             PhyChipChannelAction::PublishTxGain(image) => {
-                crate::hardware::publish_phy_tx_gain_memory(registers, false, image);
+                crate::hardware::publish_phy_tx_gain_memory(registers, false, &image);
                 PhyChipChannelCompletion::TxGainPublished
             }
             PhyChipChannelAction::PublishTxCapCommandMemory { value } => {

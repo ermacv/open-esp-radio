@@ -63,7 +63,9 @@ the outer owner's lease.
 | [Common calibration](calibration.rs) | A temperature threshold selects DCODE, RX-gain calibration and channel restoration. | The branch restores MAC baseband and TX gain compensation before committing the common reference or entering class calibration. |
 | [Shared TX calibration](calibration.rs) | A shared TX threshold selects software frequency control, forced gain/TX-RX state, TXDC/PWDET and class gain publication. | The graph restores its baseband/control and gain-compensation state. This is not proof that every protocol's MAC, key, TSF or DMA context is unchanged. No selected branch means no hardware actions in this child. |
 
-T2/T4 power tracking uses one job in the shared P1 driver. A poll executes
+T2/T4 power tracking owns its child and `EngineTiming` inside the shared P1
+driver. A safe enum separates timer/borrowed-transport storage from the
+power route; power has no outer async layer or separate job. A poll executes
 one BBPLL edge, one complete force/write plus its 1-µs settle, or the complete
 gain-image generation and publication. Runnable checkpoints wake the caller
 without a timer; the RF/state borrow remains held. The gain image stays local

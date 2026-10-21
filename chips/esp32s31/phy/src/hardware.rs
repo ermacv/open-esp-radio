@@ -419,7 +419,7 @@ impl<P> PhyGainMemory for RadioChannelHal<'_, P> {
 fn publish_phy_tx_gain_memory_to(
     registers: &mut impl PhyGainMemory,
     bank: bool,
-    image: crate::channel::PhyWifiTxGainImage,
+    image: &crate::channel::PhyWifiTxGainImage,
 ) {
     let hardware_base = registers.table_memory_base_index();
     let memory_base = hardware_base.wrapping_add(if bank { 32 } else { 0 });
@@ -436,10 +436,10 @@ fn publish_phy_tx_gain_memory_to(
             gain_64,
             gain_32,
             [
-                tx_gain_seed_halfword(&image, seed_index),
-                tx_gain_seed_halfword(&image, seed_index + 1),
-                tx_gain_seed_halfword(&image, seed_index + 2),
-                tx_gain_seed_halfword(&image, seed_index + 3),
+                tx_gain_seed_halfword(image, seed_index),
+                tx_gain_seed_halfword(image, seed_index + 1),
+                tx_gain_seed_halfword(image, seed_index + 2),
+                tx_gain_seed_halfword(image, seed_index + 3),
             ],
             image.config,
         );
@@ -453,7 +453,7 @@ fn publish_phy_tx_gain_memory_to(
 pub(crate) fn publish_phy_tx_gain_memory(
     registers: &mut impl SharedPhyAccess,
     bank: bool,
-    image: crate::channel::PhyWifiTxGainImage,
+    image: &crate::channel::PhyWifiTxGainImage,
 ) {
     publish_phy_tx_gain_memory_to(&mut SharedPhyGainMemory { registers }, bank, image);
 }
@@ -464,7 +464,7 @@ pub(crate) fn publish_phy_tx_gain_memory_channel<P>(
     bank: bool,
     image: crate::channel::PhyWifiTxGainImage,
 ) {
-    publish_phy_tx_gain_memory_to(channel, bank, image);
+    publish_phy_tx_gain_memory_to(channel, bank, &image);
 }
 
 /// Publish the 16-entry Bluetooth bank produced by
@@ -474,7 +474,7 @@ pub(crate) fn publish_phy_tx_gain_memory_channel<P>(
 #[cfg(target_arch = "riscv32")]
 pub(crate) fn publish_bluetooth_tx_gain_memory(
     registers: &mut impl SharedPhyAccess,
-    image: crate::calibration::bluetooth::PhyBluetoothTxGainImage,
+    image: &crate::calibration::bluetooth::PhyBluetoothTxGainImage,
 ) {
     let hardware_base = oer_esp32s31_hal::phy::memory::read_table_memory_base_index(registers);
     let memory_base = hardware_base.wrapping_add(32);
@@ -491,10 +491,10 @@ pub(crate) fn publish_bluetooth_tx_gain_memory(
             gain_64,
             gain_32,
             [
-                bluetooth_tx_gain_seed_halfword(&image, seed_index),
-                bluetooth_tx_gain_seed_halfword(&image, seed_index + 1),
-                bluetooth_tx_gain_seed_halfword(&image, seed_index + 2),
-                bluetooth_tx_gain_seed_halfword(&image, seed_index + 3),
+                bluetooth_tx_gain_seed_halfword(image, seed_index),
+                bluetooth_tx_gain_seed_halfword(image, seed_index + 1),
+                bluetooth_tx_gain_seed_halfword(image, seed_index + 2),
+                bluetooth_tx_gain_seed_halfword(image, seed_index + 3),
             ],
             image.config,
         );

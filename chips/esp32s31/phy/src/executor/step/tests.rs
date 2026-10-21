@@ -255,6 +255,16 @@ impl Registers for Io {
             now,
         )
     }
+    fn advance_power<D: crate::executor::wait::PhyShortDelay>(
+        &mut self,
+        child: &mut crate::tracking::parameters::PhyParamTrackingTxPowerTransition<'_>,
+    ) -> Step {
+        super::power::advance::<D>(
+            &mut super::io::Io::Test(self, core::marker::PhantomData),
+            child,
+        )
+        .unwrap_or_else(Step::Failure)
+    }
     fn i2c_status(&mut self) -> u8 {
         self.atom();
         u8::from(self.busy.get())

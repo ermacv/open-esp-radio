@@ -981,7 +981,7 @@ impl PhyCalibrationTxGainBinding {
         let completion = match self.publication {
             PhyCalibrationTxGainPublication::Wifi { channel, image } => {
                 if let Some(image) = image {
-                    crate::hardware::publish_phy_tx_gain_memory(registers, false, image);
+                    crate::hardware::publish_phy_tx_gain_memory(registers, false, &image);
                 }
                 PhyCalibrationTxGainCompletion {
                     class: PhyCalibrationTrackClass::Wifi,
@@ -990,7 +990,7 @@ impl PhyCalibrationTxGainBinding {
                 }
             }
             PhyCalibrationTxGainPublication::BluetoothIeee802154 { image } => {
-                crate::hardware::publish_bluetooth_tx_gain_memory(registers, image);
+                crate::hardware::publish_bluetooth_tx_gain_memory(registers, &image);
                 PhyCalibrationTxGainCompletion {
                     class: PhyCalibrationTrackClass::BluetoothIeee802154,
                     channel: None,

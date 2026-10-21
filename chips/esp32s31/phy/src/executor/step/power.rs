@@ -1,5 +1,5 @@
-//! T2/T4 share one P1 job and keep gain publication inside its own poll.
-use super::{Failure, Io, Job, Registers, Step, drive};
+//! T2/T4 own their state in the shared P1 driver; gain publication has its own poll.
+use super::{Failure, Io, Registers, Step};
 use crate::{
     analog::pbus::PhyForceTxRxAction,
     state::PhyState,
@@ -11,36 +11,47 @@ use crate::{
 };
 use oer_time::Timer;
 
-pub(crate) async fn run_param_tx_power<
-    D: crate::executor::wait::PhyShortDelay,
+pin_project_lite::pin_project! {
+    struct Power<F> { #[pin] inner: F }
+}
+impl<F: super::Engine> core::future::Future for Power<F> {
+    type Output = (Result<PhyParamTrackingCompletion, Failure>, EngineTiming);
+    #[inline(never)]
+    fn poll(
+        self: core::pin::Pin<&mut Self>,
+        cx: &mut core::task::Context<'_>,
+    ) -> core::task::Poll<Self::Output> {
+        let mut this = self.project();
+        match this.inner.as_mut().poll(cx) {
+            core::task::Poll::Pending => core::task::Poll::Pending,
+            core::task::Poll::Ready(result) => {
+                core::task::Poll::Ready(this.inner.finish_power(result))
+            }
+        }
+    }
+}
+
+pub(crate) fn run_param_tx_power<
+    'a,
+    D: crate::executor::wait::PhyShortDelay + 'a,
     R: Registers,
     T: Timer,
 >(
-    timer: &T,
-    mut child: PhyParamTrackingTxPowerTransition<'_>,
-    registers: &mut R,
+    timer: &'a T,
+    child: PhyParamTrackingTxPowerTransition<'a>,
+    registers: &'a mut R,
     measured: bool,
-) -> (Result<PhyParamTrackingCompletion, Failure>, EngineTiming) {
-    let mut timing = EngineTiming::default();
-    let result = {
-        let (transition, state) = child.parts();
-        match Job::power(transition, state) {
-            Err(error) => Err(error),
-            Ok(mut job) => {
-                drive::<D, _, _>(
-                    &mut job,
-                    registers,
-                    timer,
-                    measured.then_some(&mut timing),
-                    None,
-                    None,
-                )
-                .await
-            }
-        }
-    };
-    let result = result.and_then(|()| child.commit().map_err(|_| Failure::Binding));
-    (result, timing)
+) -> impl core::future::Future<Output = (Result<PhyParamTrackingCompletion, Failure>, EngineTiming)> + 'a
+{
+    Power {
+        inner: super::driver::<D, _, _>(
+            super::Input::Power { child, measured },
+            registers,
+            timer,
+            None,
+            None,
+        ),
+    }
 }
 
 /// Exactly one BBPLL edge, full force/settle pair, or full gain image/publish.
@@ -48,9 +59,9 @@ pub(crate) async fn run_param_tx_power<
 #[inline(never)]
 pub(super) fn advance<D: crate::executor::wait::PhyShortDelay>(
     io: &mut Io<'_, '_>,
-    transition: &mut PhyTxPowerTrackingTransition,
-    state: &PhyState,
+    child: &mut PhyParamTrackingTxPowerTransition<'_>,
 ) -> Result<Step, Failure> {
+    let (transition, state) = child.parts();
     if matches!(transition.action(), Action::Complete(_)) {
         return Ok(Step::Complete);
     }

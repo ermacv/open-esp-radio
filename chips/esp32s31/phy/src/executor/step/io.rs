@@ -13,6 +13,12 @@ pub(crate) trait Registers {
         clock: &C,
         now: Instant,
     ) -> Step;
+    fn advance_power<D: super::super::wait::PhyShortDelay>(
+        &mut self,
+        _child: &mut crate::tracking::parameters::PhyParamTrackingTxPowerTransition<'_>,
+    ) -> Step {
+        Step::Failure(Failure::Binding)
+    }
     #[cfg(target_arch = "riscv32")]
     fn rfpll_atom<D: super::super::wait::PhyShortDelay, C: oer_time::Clock + ?Sized>(
         &mut self,
@@ -49,6 +55,12 @@ impl Registers
     ) -> Step {
         job.advance_one::<D, _>(Io::Shared(self), clock, now)
     }
+    fn advance_power<D: super::super::wait::PhyShortDelay>(
+        &mut self,
+        child: &mut crate::tracking::parameters::PhyParamTrackingTxPowerTransition<'_>,
+    ) -> Step {
+        super::power::advance::<D>(&mut Io::Shared(self), child).unwrap_or_else(Step::Failure)
+    }
     fn rfpll_atom<D: super::super::wait::PhyShortDelay, C: oer_time::Clock + ?Sized>(
         &mut self,
         clock: &C,
@@ -69,6 +81,12 @@ impl Registers for oer_esp32s31_hal::owner::ValidationSharedPhy<'_> {
         now: Instant,
     ) -> Step {
         job.advance_one::<D, _>(Io::Validation(self), clock, now)
+    }
+    fn advance_power<D: super::super::wait::PhyShortDelay>(
+        &mut self,
+        child: &mut crate::tracking::parameters::PhyParamTrackingTxPowerTransition<'_>,
+    ) -> Step {
+        super::power::advance::<D>(&mut Io::Validation(self), child).unwrap_or_else(Step::Failure)
     }
     fn rfpll_atom<D: super::super::wait::PhyShortDelay, C: oer_time::Clock + ?Sized>(
         &mut self,
