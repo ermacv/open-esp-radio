@@ -135,6 +135,8 @@ impl PhyDomainRegisterFailure {
 ///
 /// A fresh registration epoch begins on `registers` before the first edge;
 /// the returned epoch is the one the completed state must describe.
+// A separate poll keeps nested binding temporaries out of the owner's frame.
+#[inline(never)]
 pub(super) async fn execute_registration<P, R, D, O>(
     timer: &impl oer_time::Timer,
     transition: &mut PhyRegisterTransition,

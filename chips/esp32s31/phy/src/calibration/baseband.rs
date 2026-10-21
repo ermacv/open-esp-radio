@@ -851,6 +851,8 @@ impl PhyBbInitTransition {
         )
     }
 
+    // Retain this child's temporary slots in its own bounded model step.
+    #[inline(never)]
     pub fn step_local(&mut self) -> Result<PhyBbInitLocalStep, PhyBbInitTransitionError> {
         let local = match self.step {
             PhyBbInitStep::TxDc(transition) => match transition.action() {
@@ -1095,6 +1097,7 @@ impl PhyBbInitTransition {
         Ok(local)
     }
 
+    #[inline(never)]
     pub fn advance_external(
         &mut self,
         completion: PhyBbInitCompletion,
