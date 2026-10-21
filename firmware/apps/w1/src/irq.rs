@@ -259,5 +259,10 @@ pub async fn rx_task(
         &publisher,
         &admission,
     );
-    match measure::timed(receiving, &measure::RECEIVE, measure::take_mac_latch).await {}
+    match measure::timed(
+        core::pin::pin!(receiving),
+        &measure::RECEIVE,
+        measure::take_mac_latch,
+    )
+    .await {}
 }

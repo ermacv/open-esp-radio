@@ -48,6 +48,8 @@ static EXECUTOR: StaticCell<Executor<0>> = StaticCell::new();
 static RADIO: StaticCell<InterruptExecutor<2>> = StaticCell::new();
 static REPORT: StaticCell<AffineSpscQueue<report::Report, 1>> = StaticCell::new();
 const LEVELS: LevelOrder<WifiMacToken, RadioToken, WakeToken> = LevelOrder::new();
+static ACTOR: StaticCell<Actor> = StaticCell::new();
+
 type Actor = RadioSystem<
     oer_esp32s31_radio_client::wifi::Wifi,
     RcSlow,
@@ -115,7 +117,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         NoopPhyTargetObserver,
         PhyRegisterConfig::new(identity),
     );
-    let actor = RadioSystem::new(end, backend, EmbassyClock, lp);
+    let actor = ACTOR.init_with(|| RadioSystem::new(end, backend, EmbassyClock, lp));
     oer_espressif_executor::init::<2, _>(peripherals.SYSTIMER, interrupts.radio_alarm);
     oer_espressif_executor::bind::<0, _>(interrupts.app_alarm);
     let bell = irq::ImageDoorbell::new(
@@ -159,7 +161,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
 }
 
 #[embassy_executor::task]
-async fn radio_actor(actor: Actor) {
+async fn radio_actor(actor: &'static mut Actor) {
     match actor.run().await {}
 }
 #[embassy_executor::task]

@@ -144,8 +144,8 @@ impl<S: LpSource, B: ClientBackend<Wifi, S>, T: oer_time::Timer> RadioSystem<Wif
 }
 
 impl<K: Client, S: LpSource, B: ClientBackend<K, S>, T: oer_time::Timer> RadioSystem<K, S, B, T> {
-    /// Serve the cells for the rest of the program.
-    pub async fn run(mut self) -> Infallible {
+    /// Serve the cells for the rest of the program, borrowing the actor's storage.
+    pub async fn run(&mut self) -> Infallible {
         loop {
             while let Some((request, responder)) = self.inbox.take() {
                 let answer = self.serve(request).await;

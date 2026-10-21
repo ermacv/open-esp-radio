@@ -70,6 +70,8 @@ type Console = UsbSerialJtag<'static, Blocking>;
 static EXECUTOR: StaticCell<Executor<0>> = StaticCell::new();
 static RADIO_EXECUTOR: StaticCell<InterruptExecutor<2>> = StaticCell::new();
 
+static ACTOR: StaticCell<Actor> = StaticCell::new();
+
 type Actor = RadioSystem<
     oer_esp32s31_radio_client::wifi::Wifi,
     RcSlow,
@@ -158,7 +160,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         NoopPhyTargetObserver,
         PhyRegisterConfig::new(identity),
     );
-    let actor = RadioSystem::new(end, backend, EmbassyClock, lp);
+    let actor = ACTOR.init_with(|| RadioSystem::new(end, backend, EmbassyClock, lp));
 
     // The radio executor writes the system timer; the application executor
     // publishes its deadlines to it.
@@ -196,7 +198,7 @@ include!(concat!(env!("OUT_DIR"), "/w0_config.rs"));
 
 /// The radio system's actor, on the radio executor (P2).
 #[embassy_executor::task]
-async fn radio_actor(actor: Actor) {
+async fn radio_actor(actor: &'static mut Actor) {
     match actor.run().await {}
 }
 
