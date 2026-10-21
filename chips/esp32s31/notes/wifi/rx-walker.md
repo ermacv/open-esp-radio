@@ -18,6 +18,10 @@ Sources:
   `target/fw/runs/` directories.
 - `HIL_OPEN_RX_LIVE_APPEND_2026_07_27`: a 32-entry rotating ring, more than
   7000 receives on the open driver.
+- `HIL_S31_RX_COLD_MAC_IDLE_2026_10_21`: R1 cold, s31-a, channel 1,
+  four RX descriptors plus R. Read-only run `1792578472936-001ec02a`
+  and MAC stop/resume experiment `1792579848142-001f8abc`; the latter's
+  diagnostic image is excluded from the production driver.
 - Vendor: `BLOB_LIBPP_MAC_RXBUF_INIT_PREFIX`, `ROM_REV0_WDEV_APPEND_RX_BLOCKS`
   (`rom[]::wDev_AppendRxBlocks`), `ROM_REV0_HAL_MAC_RX_LAST_DESCRIPTOR`
   (`rom[]::hal_mac_rx_get_last_dscr`), `BLOB_LIBPP_HAL_INIT_TAIL`, and the
@@ -42,6 +46,16 @@ published the whole returned list by writing BASE directly, with no
 doorbell; the walker fetched the new head. Runs 4 and 6 (reverse full
 cycles): `exhausted_republications=1 republications_accepted=1`. SOURCE:
 HIL_W1_RX_WALKER_2026_10_18 (`w1.reload`).
+
+**H3: cold BASE acceptance can wait for MAC idle.** In a zero-RX cold
+boot, BASE named R and the walker gate was open, but NEXT = LAST = 0
+through all five sample windows. Every descriptor retained its hardware
+owner bit and was incomplete; MAC MPDU and buffer-full counters advanced
+together. After MAC stop and confirmed idle, with the walker gate still
+open, NEXT became BASE and LAST stayed zero. In the causal experiment,
+resuming only the MAC then advanced LAST to the ring's final descriptor.
+No BASE write, walker-gate cycle or PHY restart intervened. SOURCE:
+HIL_S31_RX_COLD_MAC_IDLE_2026_10_21.
 
 **No foreign write into held buffers.** In 10 full hold cycles no lease the
 application held changed while held, during the dwell or before its drop
