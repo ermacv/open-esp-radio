@@ -53,18 +53,29 @@ pub struct Observer<'a>(
     pub recorder::Recorder,
     pub sar_tails::Tails,
     &'a mut HoldPolls,
+    Option<&'a mut oer_esp32s31_phy::tracking::observation::ReadinessTrace>,
 );
 impl<'a> Observer<'a> {
-    pub fn new(tick: u8, engine: &'a mut HoldPolls) -> Self {
+    pub fn new(
+        tick: u8,
+        engine: &'a mut HoldPolls,
+        trace: Option<&'a mut oer_esp32s31_phy::tracking::observation::ReadinessTrace>,
+    ) -> Self {
         Self(
             recorder::Recorder::new(tick),
             sar_tails::Tails::default(),
             engine,
+            trace,
         )
     }
 }
 impl PhyTargetObserver for &mut Observer<'_> {
     const OBSERVE_ENGINE_POLLS: bool = true;
+    fn readiness_trace(
+        &mut self,
+    ) -> Option<&mut oer_esp32s31_phy::tracking::observation::ReadinessTrace> {
+        self.3.as_deref_mut()
+    }
     fn engine_completed(&mut self, timing: oer_esp32s31_phy::tracking::observation::EngineTiming) {
         self.2.merge(HoldPolls {
             polls: timing.polls,
@@ -105,5 +116,45 @@ impl PhyTargetObserver for &mut Observer<'_> {
             ),
             _ => {}
         }
+    }
+}
+
+/// Report preparation only after maintenance returns, including failures.
+#[inline(never)]
+pub fn report_preparation(
+    trace: &oer_esp32s31_phy::tracking::observation::ReadinessTrace,
+    polls: &HoldPolls,
+) {
+    use oer_esp32s31_board::rom::print_fmt;
+    print_fmt(format_args!(
+        "OPEN_RADIO_HIL t7-prepare polls={} max-poll-us={}\n",
+        polls.polls, polls.maximum_micros
+    ));
+    print_fmt(format_args!(
+        "OPEN_RADIO_HIL t7-prepare resume-count={} late-max-us={} late-total-us={}\n",
+        polls.resumes, polls.maximum_lateness_micros, polls.lateness_micros
+    ));
+    print_fmt(format_args!(
+        "OPEN_RADIO_HIL t7-prepare ready-count={} ready-max-us={}\n",
+        polls.ready_edges, polls.maximum_ready_micros
+    ));
+    print_fmt(format_args!(
+        "OPEN_RADIO_HIL t7-prepare commands={} first-check-max-us={}\n",
+        trace.commands, trace.maximum_first_check_micros
+    ));
+    print_fmt(format_args!(
+        "OPEN_RADIO_HIL t7-prepare failure-elapsed-us={} failure-late-us={}\n",
+        trace.failure_elapsed_micros, trace.failure_lateness_micros
+    ));
+    print_fmt(format_args!(
+        "OPEN_RADIO_HIL t7-prepare failure-busy={:?} complete={}\n",
+        trace.failure_busy,
+        trace.complete()
+    ));
+    for sample in trace.not_ready_samples() {
+        print_fmt(format_args!(
+            "OPEN_RADIO_HIL t7-prepare not-ready command={} elapsed-us={}\n",
+            sample.command, sample.elapsed_micros
+        ));
     }
 }

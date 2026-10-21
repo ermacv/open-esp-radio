@@ -8,6 +8,7 @@ use oer_time::Instant;
 
 pub(crate) trait Registers {
     fn advance(&mut self, job: &mut Job<'_>, now: Instant) -> Step;
+    fn i2c_status(&mut self) -> u8;
 }
 pub(super) enum Io<'a, 'owner> {
     #[cfg(target_arch = "riscv32")]
@@ -32,15 +33,37 @@ impl Registers
     fn advance(&mut self, job: &mut Job<'_>, now: Instant) -> Step {
         job.advance_one(Io::Shared(self), now)
     }
+    fn i2c_status(&mut self) -> u8 {
+        Io::Shared(self).i2c_status()
+    }
 }
 #[cfg(all(target_arch = "riscv32", oer_probe))]
 impl Registers for oer_esp32s31_hal::owner::ValidationSharedPhy<'_> {
     fn advance(&mut self, job: &mut Job<'_>, now: Instant) -> Step {
         job.advance_one(Io::Validation(self), now)
     }
+    fn i2c_status(&mut self) -> u8 {
+        Io::Validation(self).i2c_status()
+    }
 }
 
 impl Io<'_, '_> {
+    fn i2c_status(&mut self) -> u8 {
+        #[cfg(target_arch = "riscv32")]
+        fn sample(registers: &impl oer_esp32s31_hal::owner::SharedPhyAccess) -> u8 {
+            use oer_esp32s31_hal::phy::i2c::{PhyI2cHost, sample_master_reset_busy};
+            u8::from(sample_master_reset_busy(registers, PhyI2cHost::Host0))
+                | (u8::from(sample_master_reset_busy(registers, PhyI2cHost::Host1)) << 1)
+        }
+        match self {
+            #[cfg(target_arch = "riscv32")]
+            Self::Shared(registers) => sample(*registers),
+            #[cfg(all(target_arch = "riscv32", oer_probe))]
+            Self::Validation(registers) => sample(*registers),
+            #[cfg(test)]
+            Self::Test(io, _) => Registers::i2c_status(*io),
+        }
+    }
     #[inline(never)]
     pub(super) fn i2c(
         &mut self,

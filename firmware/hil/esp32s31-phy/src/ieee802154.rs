@@ -153,14 +153,18 @@ impl Rx {
         let due = joined.acquired == ConcurrentAcquire::TrackingDue;
         let member = joined.membership;
         if due {
-            maintain_concurrent_phy::<_, (), RomShortDelay, _>(
+            let mut trace = oer_esp32s31_phy::tracking::observation::ReadinessTrace::default();
+            let mut polls = oer_hil_protocol::phy::HoldPolls::default();
+            let mut observer = crate::hold::Observer::new(0, &mut polls, Some(&mut trace));
+            let result = maintain_concurrent_phy::<_, (), RomShortDelay, _>(
                 &EmbassyClock,
                 domain,
                 &mut (),
-                NoopPhyTargetObserver,
+                &mut observer,
             )
-            .await
-            .map_err(|error| {
+            .await;
+            crate::hold::report_preparation(&trace, &polls);
+            result.map_err(|error| {
                 oer_esp32s31_board::rom::print_fmt(format_args!(
                     "OPEN_RADIO_HIL phy=FAIL step=154-maintain error={error:?}\n"
                 ));

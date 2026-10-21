@@ -232,19 +232,8 @@ impl ConcurrentPhy {
     }
 
     /// Retain fail-stop state while the admitted physical transaction is in flight.
-    pub(crate) fn take_tracking(
-        &mut self,
-    ) -> Result<(RegisteredPhyState, PhyPendingTrack), ConcurrentPhyError> {
-        match core::mem::replace(&mut self.slot, Slot::Poisoned) {
-            Slot::Pending {
-                registered,
-                pending,
-            } => Ok((registered, pending)),
-            other => {
-                self.slot = other;
-                Err(ConcurrentPhyError::NoTrackingPending)
-            }
-        }
+    pub(crate) fn take_tracking(&mut self) -> Slot {
+        core::mem::replace(&mut self.slot, Slot::Poisoned)
     }
 
     pub(crate) fn slot_mut(&mut self) -> &mut Slot {

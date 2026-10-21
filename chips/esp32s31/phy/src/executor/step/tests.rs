@@ -114,6 +114,10 @@ impl Registers for Io {
     fn advance(&mut self, job: &mut Job<'_>, now: Instant) -> Step {
         job.advance_one(super::io::Io::Test(self, core::marker::PhantomData), now)
     }
+    fn i2c_status(&mut self) -> u8 {
+        self.atom();
+        u8::from(self.busy.get())
+    }
 }
 fn context() -> (Waker, Arc<WakeCount>) {
     let wakes = Arc::new(WakeCount(std::sync::atomic::AtomicUsize::new(0)));
@@ -138,7 +142,7 @@ fn every_hardware_atom_yields_even_when_the_timer_is_already_ready() {
     let (waker, wakes) = context();
     let mut cx = Context::from_waker(&waker);
     {
-        let mut future = core::pin::pin!(drive(&mut job, &mut io, &clock, Some(&mut stats)));
+        let mut future = core::pin::pin!(drive(&mut job, &mut io, &clock, Some(&mut stats), None));
         for _ in 0..4 {
             let before = atoms.get();
             assert!(future.as_mut().poll(&mut cx).is_pending());
@@ -166,7 +170,7 @@ fn timer_wait_does_no_atoms_until_the_deadline_and_records_resume_lateness() {
     let (waker, _) = context();
     let mut cx = Context::from_waker(&waker);
     {
-        let mut future = core::pin::pin!(drive(&mut job, &mut io, &clock, Some(&mut stats)));
+        let mut future = core::pin::pin!(drive(&mut job, &mut io, &clock, Some(&mut stats), None));
         assert!(future.as_mut().poll(&mut cx).is_pending());
         assert_eq!(atoms.get(), 1);
         assert!(future.as_mut().poll(&mut cx).is_pending());
@@ -294,6 +298,7 @@ fn sliced_t7_matches_the_old_action_write_and_result_sequence_for_all_sensor_cod
                     &mut transition,
                     &mut io,
                     &clock,
+                    None,
                     None
                 ));
                 loop {
@@ -356,11 +361,79 @@ fn an_immediately_ready_async_timer_is_not_polled_after_completion() {
     let mut job = Job::i2c(&mut transaction, clock.now(), false).expect("deadline fits");
     let (waker, _) = context();
     let mut cx = Context::from_waker(&waker);
-    let mut future = core::pin::pin!(drive(&mut job, &mut io, &clock, None));
+    let mut future = core::pin::pin!(drive(&mut job, &mut io, &clock, None, None));
     assert!(future.as_mut().poll(&mut cx).is_pending());
     assert_eq!(atoms.get(), 1);
     assert!(future.as_mut().poll(&mut cx).is_pending());
     assert_eq!(atoms.get(), 2);
     assert!(future.as_mut().poll(&mut cx).is_ready());
     assert_eq!(atoms.get(), 2);
+}
+
+#[test]
+fn preparation_trace_survives_a_late_failure_without_consuming_the_result() {
+    for not_ready_checks in [false, true] {
+        let clock = VirtualClock::<1>::new();
+        let mut io = Io::default();
+        let busy = io.busy.clone();
+        let mut transaction = read();
+        let mut job = Job::i2c(&mut transaction, clock.now(), true).expect("deadline fits");
+        let mut stats = EngineTiming::default();
+        let mut trace = ReadinessTrace::default();
+        let (waker, _) = context();
+        let mut cx = Context::from_waker(&waker);
+        {
+            let mut future = core::pin::pin!(drive(
+                &mut job,
+                &mut io,
+                &clock,
+                Some(&mut stats),
+                Some(&mut trace)
+            ));
+            assert!(future.as_mut().poll(&mut cx).is_pending());
+            if not_ready_checks {
+                busy.set(true);
+                clock.advance(Duration::from_micros(1)).expect("time fits");
+                assert!(future.as_mut().poll(&mut cx).is_pending());
+                clock.advance(Duration::from_micros(2)).expect("time fits");
+                assert!(future.as_mut().poll(&mut cx).is_pending());
+                busy.set(false);
+            }
+            clock.advance(Duration::from_micros(30)).expect("time fits");
+            assert_eq!(
+                future.as_mut().poll(&mut cx),
+                Poll::Ready(Err(Failure::TimedOut))
+            );
+        }
+        assert_eq!(trace.commands, 1);
+        assert_eq!(trace.failure_busy, Some(0));
+        assert_eq!(
+            trace.maximum_first_check_micros,
+            if not_ready_checks { 1 } else { 30 }
+        );
+        assert_eq!(
+            trace.failure_elapsed_micros,
+            if not_ready_checks { 33 } else { 30 }
+        );
+        assert_eq!(trace.failure_lateness_micros, 29);
+        assert_eq!(stats.maximum_lateness_micros, 29);
+        assert_eq!(
+            trace
+                .not_ready_samples()
+                .iter()
+                .map(|s| s.elapsed_micros)
+                .collect::<Vec<_>>(),
+            if not_ready_checks {
+                std::vec![1, 3]
+            } else {
+                std::vec![]
+            }
+        );
+        assert!(trace.complete());
+        assert_eq!(io.actions.len(), if not_ready_checks { 3 } else { 1 });
+        assert!(matches!(
+            transaction.action(),
+            PhyColdI2cAction::AwaitReadCompletionEdge { .. }
+        ));
+    }
 }

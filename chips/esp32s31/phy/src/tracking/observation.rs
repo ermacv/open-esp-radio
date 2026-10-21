@@ -7,6 +7,94 @@
 
 use crate::executor::wait;
 
+/// One not-ready status observation, timed from its command publication.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct NotReadySample {
+    pub command: u8,
+    pub elapsed_micros: u8,
+}
+
+/// Bounded preparation evidence, borrowed only by the diagnostic caller.
+/// Overflow is explicit: `complete()` is false if any sample did not fit.
+/// This does not consume a late result or change its deadline.
+pub struct ReadinessTrace {
+    command_at: oer_time::Instant,
+    not_ready: [NotReadySample; 20],
+    pub maximum_first_check_micros: u32,
+    pub failure_elapsed_micros: u32,
+    pub failure_lateness_micros: u32,
+    pub commands: u8,
+    not_ready_count: u8,
+    /// Both host busy bits, sampled without reading the result at failure.
+    pub failure_busy: Option<u8>,
+}
+impl Default for ReadinessTrace {
+    fn default() -> Self {
+        Self {
+            command_at: oer_time::Instant::EPOCH,
+            not_ready: [NotReadySample::default(); 20],
+            maximum_first_check_micros: 0,
+            failure_elapsed_micros: 0,
+            failure_lateness_micros: 0,
+            commands: 0,
+            not_ready_count: 0,
+            failure_busy: None,
+        }
+    }
+}
+impl ReadinessTrace {
+    pub fn not_ready_samples(&self) -> &[NotReadySample] {
+        &self.not_ready[..usize::from(self.not_ready_count).min(self.not_ready.len())]
+    }
+    pub fn complete(&self) -> bool {
+        self.commands < u8::MAX && usize::from(self.not_ready_count) <= self.not_ready.len()
+    }
+    #[cfg(any(target_arch = "riscv32", test))]
+    pub(crate) fn command_started(&mut self, at: oer_time::Instant) {
+        self.commands = self.commands.saturating_add(1);
+        self.command_at = at;
+    }
+    #[cfg(any(target_arch = "riscv32", test))]
+    #[inline(never)]
+    pub(crate) fn checked(
+        &mut self,
+        at: oer_time::Instant,
+        first: bool,
+        not_ready: bool,
+        failure: Option<(u8, u64)>,
+    ) {
+        let Some(elapsed) = at
+            .checked_duration_since(self.command_at)
+            .and_then(|d| u32::try_from(d.as_micros()).ok())
+        else {
+            self.not_ready_count = u8::MAX;
+            return;
+        };
+        if first {
+            self.maximum_first_check_micros = self.maximum_first_check_micros.max(elapsed);
+        }
+        if not_ready {
+            if let (Some(slot), Ok(elapsed_micros)) = (
+                self.not_ready.get_mut(usize::from(self.not_ready_count)),
+                u8::try_from(elapsed),
+            ) {
+                *slot = NotReadySample {
+                    command: self.commands,
+                    elapsed_micros,
+                };
+            } else {
+                self.not_ready_count = u8::MAX;
+            }
+            self.not_ready_count = self.not_ready_count.saturating_add(1);
+        }
+        if let Some((busy, late)) = failure {
+            self.failure_elapsed_micros = elapsed;
+            self.failure_lateness_micros = u32::try_from(late).unwrap_or(u32::MAX);
+            self.failure_busy = Some(busy);
+        }
+    }
+}
+
 /// Clock-free aggregate of actual engine polls and timer resumes.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct EngineTiming {

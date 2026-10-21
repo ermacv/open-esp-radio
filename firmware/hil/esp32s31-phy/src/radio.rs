@@ -353,7 +353,7 @@ impl Radio {
                 oer_esp32s31_phy::state::client::DEFAULT_PLL_TRACK_PERIOD_MICROS,
             ));
         let mut observer =
-            crate::hold::Observer::new(hold.samples.len() as u8 + 1, &mut hold.engine);
+            crate::hold::Observer::new(hold.samples.len() as u8 + 1, &mut hold.engine, None);
         let tracked = track_concurrent_phy::<_, (), RomShortDelay, _>(
             &mut self.domain,
             &mut (),

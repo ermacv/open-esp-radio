@@ -4,7 +4,7 @@ use crate::{
     executor::step::{self, Failure, Registers},
     target_executor::PhyTargetPortError,
     tracking::{
-        observation::EngineTiming,
+        observation::{EngineTiming, ReadinessTrace},
         parameters::{PhyParamTrackingCompletion, PhyParamTrackingTemperatureTransition},
     },
 };
@@ -17,6 +17,7 @@ pub(super) async fn temperature<R: Registers, T: Timer>(
     mut child: PhyParamTrackingTemperatureTransition<'_>,
     registers: &mut R,
     measured: bool,
+    trace: Option<&mut ReadinessTrace>,
 ) -> (Result, EngineTiming) {
     let started = Some(timer.now().as_micros());
     let mut timing = EngineTiming::default();
@@ -25,6 +26,7 @@ pub(super) async fn temperature<R: Registers, T: Timer>(
         registers,
         timer,
         measured.then_some(&mut timing),
+        trace,
     )
     .await
     {

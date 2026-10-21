@@ -438,3 +438,23 @@ fn a_release_without_a_set_invalidates_the_report() {
     recorder.observe(Operation::GrantProtectCommon, Event::Completed, 10);
     assert!(recorder.report().invalid);
 }
+
+#[test]
+fn preparation_trace_reports_truncation_without_losing_the_failure() {
+    use oer_time::Clock;
+    let clock = oer_time_virtual::VirtualClock::<1>::new();
+    let mut trace = ReadinessTrace::default();
+    trace.command_started(clock.now());
+    for index in 0..21 {
+        clock
+            .advance(oer_time::Duration::from_micros(1))
+            .expect("time fits");
+        trace.checked(clock.now(), index == 0, true, None);
+    }
+    trace.checked(clock.now(), false, false, Some((0, 19)));
+    assert_eq!(trace.not_ready_samples().len(), 20);
+    assert!(!trace.complete());
+    assert_eq!(trace.failure_busy, Some(0));
+    assert_eq!(trace.failure_elapsed_micros, 21);
+    assert_eq!(trace.failure_lateness_micros, 19);
+}

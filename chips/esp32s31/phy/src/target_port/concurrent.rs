@@ -349,10 +349,18 @@ where
 {
     admit_maintenance(radio).map_err(ConcurrentPhyTrackingError::Rejected)?;
 
-    let (mut registered, pending) = radio
-        .attachment_mut()
-        .take_tracking()
-        .map_err(ConcurrentPhyTrackingError::Rejected)?;
+    let (mut registered, pending) = match radio.attachment_mut().take_tracking() {
+        Slot::Pending {
+            registered,
+            pending,
+        } => (registered, pending),
+        other => {
+            *radio.attachment_mut().slot_mut() = other;
+            return Err(ConcurrentPhyTrackingError::Rejected(
+                ConcurrentPhyError::NoTrackingPending,
+            ));
+        }
+    };
     let mut tracking = pending.begin_tracking(registered.tracking_policy());
 
     let (mut registers, phy, mut grant) = radio.phy_hal_with_attachment_and_grant();

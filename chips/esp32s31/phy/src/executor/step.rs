@@ -12,7 +12,7 @@ use crate::{
     calibration::cold::{
         PhyColdI2cAction, PhyColdI2cObservation, PhyColdI2cOutcome, PhyColdI2cTransaction,
     },
-    tracking::observation::EngineTiming,
+    tracking::observation::{EngineTiming, ReadinessTrace},
 };
 use core::{
     future::Future,
@@ -337,6 +337,7 @@ pin_project_lite::pin_project! {
         registers: &'a mut R,
         timer: &'a T,
         stats: Option<&'a mut EngineTiming>,
+        trace: Option<&'a mut ReadinessTrace>,
         #[pin]
         wait: F,
         make_wait: M,
@@ -374,8 +375,46 @@ impl<R: Registers, T: Timer, F: Future<Output = ()>, M: Fn(Instant) -> F> Future
                 resumed = Some((at, this.timer.now()));
                 *this.gate = Gate::Idle;
             }
+            let sample = this.trace.as_ref().and_then(|_| match &this.job.work {
+                Work::I2c(t) => match t.action() {
+                    PhyColdI2cAction::StartRead { .. } | PhyColdI2cAction::StartWrite { .. } => {
+                        Some(None)
+                    }
+                    PhyColdI2cAction::AwaitReadCompletionEdge { .. }
+                    | PhyColdI2cAction::AwaitWriteCompletionEdge { .. } => {
+                        Some(Some(this.job.first_wait))
+                    }
+                    _ => None,
+                },
+                _ => None,
+            });
             let now = this.timer.now();
-            let at = match this.registers.advance(this.job, now) {
+            let step = this.registers.advance(this.job, now);
+            if let (Some(trace), Some(sample)) = (this.trace.as_deref_mut(), sample) {
+                if let Some(first) = sample {
+                    let failure = if step == Step::Failure(Failure::TimedOut) {
+                        // Status only: the rejected result remains unconsumed.
+                        Some((
+                            this.registers.i2c_status(),
+                            resumed.map_or(0, |(at, now)| {
+                                now.saturating_duration_since(at).as_micros()
+                            }),
+                        ))
+                    } else {
+                        None
+                    };
+                    trace.checked(
+                        now,
+                        first,
+                        matches!(step, Step::WaitAt(_))
+                            || failure.is_some_and(|(busy, _)| busy != 0),
+                        failure,
+                    );
+                } else if this.job.first_wait {
+                    trace.command_started(this.timer.now());
+                }
+            }
+            let at = match step {
                 Step::Complete => break Poll::Ready(Ok(())),
                 Step::Failure(error) => break Poll::Ready(Err(error)),
                 Step::Runnable => now,
@@ -423,12 +462,14 @@ pub(crate) fn drive<'a, 'j, R: Registers, T: Timer>(
     registers: &'a mut R,
     timer: &'a T,
     stats: Option<&'a mut EngineTiming>,
+    trace: Option<&'a mut ReadinessTrace>,
 ) -> impl Future<Output = Result<(), Failure>> + 'a {
     Driver {
         job,
         registers,
         timer,
         stats,
+        trace,
         wait: timer.wait_until(Instant::EPOCH),
         make_wait: move |at| timer.wait_until(at),
         wait_at: Instant::EPOCH,

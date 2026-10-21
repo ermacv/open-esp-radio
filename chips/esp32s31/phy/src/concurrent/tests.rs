@@ -263,12 +263,15 @@ fn cancelling_the_transport_after_a_write_leaves_the_phy_poisoned() {
     ));
     {
         let future = async {
-            let (_registered, _pending) = radio
-                .attachment_mut()
-                .take_tracking()
-                .expect("tracking was admitted");
+            let Slot::Pending {
+                registered: _registered,
+                pending: _pending,
+            } = radio.attachment_mut().take_tracking()
+            else {
+                panic!("tracking was admitted");
+            };
             let mut job = Job::i2c(&mut transaction, clock.now(), false).expect("deadline fits");
-            drive(&mut job, &mut io, &clock, None).await
+            drive(&mut job, &mut io, &clock, None, None).await
         };
         let mut future = core::pin::pin!(future);
         assert!(

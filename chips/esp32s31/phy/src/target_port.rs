@@ -213,6 +213,9 @@ pub enum PhyRfBoundary {
 /// code can implement this trait to compare a completed Rust result with ROM or to
 /// capture diagnostic MMIO without placing either dependency in this crate.
 pub trait PhyTargetObserver {
+    fn readiness_trace(&mut self) -> Option<&mut crate::tracking::observation::ReadinessTrace> {
+        None
+    }
     const OBSERVE_ENGINE_POLLS: bool = false;
     fn engine_completed(&mut self, _timing: crate::tracking::observation::EngineTiming) {}
     const OBSERVE_DELAYS: bool = false;
@@ -2198,6 +2201,7 @@ impl<
                         .map_err(|_| PhyTargetPortError::UnexpectedBinding)?,
                     self.registers,
                     O::OBSERVE_ENGINE_POLLS,
+                    self.observer.readiness_trace(),
                 )
                 .await;
                 if O::OBSERVE_ENGINE_POLLS {

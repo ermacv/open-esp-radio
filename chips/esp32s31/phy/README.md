@@ -296,6 +296,11 @@ resume lateness, and maximum command-to-ready time. Counters are fixed local
 fields; reporting follows T7 and performs no UART work inside a poll. Count
 or duration overflow invalidates the evidence. These observations cover this
 transport path; the remaining tracking families retain their existing execution.
+The initial IEEE 802.15.4 maintenance also retains a bounded local trace of
+command-to-first-check time, each not-ready check, resume lateness and elapsed
+time at failure. On a late failure it samples both host busy bits without
+consuming the rejected result. The diagnostic reports this trace after
+maintenance returns; an unobserved ready edge has only a time interval.
 
 The execution limits have different scopes:
 
