@@ -6,6 +6,8 @@ use oer_analysis_blobray_application::{
 use oer_analysis_blobray_domain::*;
 use oer_analysis_riscv_model::*;
 use std::{collections::BTreeMap, path::Path, process::Command};
+#[path = "support/stored_property.rs"]
+mod stored_property;
 
 fn partition(reads: &ReadUses, width: u8) {
     let used = reads.uses.iter().fold(0, |bits, usage| bits | usage.bits);
@@ -237,11 +239,7 @@ fn loads_report_their_sinks_limits_preservation_and_unused_bits() {
         if loads != 1 {
             continue;
         }
-        let preserved = stored.iter().fold(0, |bits, run| {
-            if matches!(run.source, StoredBitsSource::Load { same_word: true, low, .. } if low == run.low) {
-                bits | (u32::MAX >> (32 - u32::from(run.width))) << run.low
-            } else { bits }
-        });
+        let preserved = stored_property::identity_bits(stored);
         for read_observation in &observations {
             if let RegisterAccess::Observation {
                 function: loaded_function,
@@ -552,4 +550,149 @@ core::arch::global_asm!(".section .text.external,\"ax\",@progbits\n.globl extern
     }).expect("cross-input callee");
     assert!(found);
     assert_eq!(memory.used(), 0, "symbol indexes release their admission");
+}
+
+#[test]
+fn finite_rmw_fields_agree_with_read_flow_for_every_byte_and_clearing_form() {
+    let mut source =
+        String::from("#![no_std]\ncore::arch::global_asm!(r#\"\n.option norvc\n.option norelax\n");
+    let mut expected = BTreeMap::new();
+    for (a, b) in [(0x80u32, 0xa0u32), (1, 5), (0, 0x55), (0x7f, 0xff)] {
+        for byte in 0..4 {
+            for reversed in [false, true] {
+                for shifts in [false, true] {
+                    if shifts && byte != 3 {
+                        continue;
+                    }
+                    let name = format!("finite_{a}_{b}_{byte}_{reversed}_{shifts}");
+                    let shift = byte * 8;
+                    let mask = 0xffu32 << shift;
+                    let clear = if shifts {
+                        "slli a4, a4, 8\nsrli a4, a4, 8".to_owned()
+                    } else if byte == 0 {
+                        "andi a4, a4, -256".to_owned()
+                    } else {
+                        format!("li t1, {}\nand a4, a4, t1", !mask as i32)
+                    };
+                    let or = if reversed {
+                        "or a4, a3, a4"
+                    } else {
+                        "or a4, a4, a3"
+                    };
+                    source.push_str(&format!(
+                        r#"
+.section .text.{name},"ax",@progbits
+.globl {name}
+.type {name},@function
+{name}:
+    beqz a0, 2f
+    li a3, {a}
+    j 3f
+2:  li a3, {b}
+3:  lui a5, 0x20107
+    lw a4, 0(a5)
+    {clear}
+    {or}
+    sw a4, 0(a5)
+    ret
+.size {name}, .-{name}
+"#,
+                        a = (a << shift) as i32,
+                        b = (b << shift) as i32,
+                    ));
+                    expected.insert(name.into_bytes(), (a << shift, b << shift, mask));
+                }
+            }
+        }
+    }
+    source.push_str("\"#);\n");
+    let mut observations = Vec::new();
+    let memory = WorkingMemory::new(64 * 1024 * 1024).expect("working memory");
+    let summary = register_accesses(
+        &[Executable::new(fixture(&source))],
+        Assumptions {
+            abi: Some(CallAbi::RiscvInteger),
+            ..Assumptions::default()
+        },
+        &[ImageRegion {
+            start: 0x2010_7000,
+            length: 4,
+        }],
+        &oer_analysis_riscv_lift::RiscvDecoder,
+        &memory,
+        &mut || Ok(()),
+        &mut |observation, _| {
+            observations.push(observation.clone());
+            Ok(())
+        },
+    )
+    .expect("finite RMW analysis");
+    assert_eq!(summary.blocked_functions, 0);
+    assert_eq!(summary.partial_functions, 0);
+    for (name, (a, b, replacement)) in expected {
+        let mut load = None;
+        let mut store = None;
+        for observation in &observations {
+            if let RegisterAccess::Observation {
+                function,
+                reads,
+                stored,
+                mask,
+                ..
+            } = observation
+                && function.name.as_ref() == Some(&name)
+            {
+                if let Some(reads) = reads {
+                    assert!(load.replace(reads).is_none());
+                }
+                if let Some(stored) = stored {
+                    assert!(store.replace((stored, mask)).is_none());
+                }
+            }
+        }
+        let reads = load.expect("one source load");
+        let (stored, mask) = store.expect("one sink store");
+        partition(reads, 4);
+        assert!(
+            reads.uses.is_empty() && reads.unknown.is_empty(),
+            "{name:?}: {reads:?}"
+        );
+        assert_eq!(reads.preserved, !replacement, "{name:?}");
+        assert_eq!(reads.unused, replacement, "{name:?}");
+        assert_eq!(
+            stored_property::missing_preserved_bits(reads, stored),
+            0,
+            "{name:?}: {stored:?}"
+        );
+        assert_eq!(
+            *mask,
+            Some(RegisterMask {
+                kind: RegisterMaskKind::WriteReplacement,
+                bits: replacement
+            }),
+            "{name:?}"
+        );
+        for bit in 0..32 {
+            let run = stored
+                .iter()
+                .find(|run| bit >= run.low && bit < run.low + run.width)
+                .expect("covered bit");
+            if replacement & (1 << bit) == 0 {
+                assert!(
+                    matches!(run.source, StoredBitsSource::Load { same_word: true, low, .. } if low + bit - run.low == bit)
+                );
+            } else if (a ^ b) & (1 << bit) != 0 {
+                assert_eq!(run.source, StoredBitsSource::Unknown, "{name:?}: bit {bit}");
+            } else {
+                let StoredBitsSource::Constant { value } = run.source else {
+                    panic!("{name:?}: bit {bit}: {run:?}")
+                };
+                assert_eq!(
+                    (value >> (bit - run.low)) & 1,
+                    (a >> bit) & 1,
+                    "{name:?}: bit {bit}"
+                );
+            }
+        }
+    }
 }
