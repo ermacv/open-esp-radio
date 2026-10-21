@@ -17048,17 +17048,11 @@
         </register>
         <register>
           <name>WORD_0040_OPAQUE</name>
-          <description>Opaque: meaning not established. Complete phy_fe_txrx_reset performs a read-modify-write; individual fields remain unnamed.</description>
+          <description>Opaque: meaning not established. Complete phy_fe_txrx_reset clears then asserts bits 25 and 26 through two fresh-read RMWs. Bits 12:24 are preserved by both edges and have no field. SOURCE: ROM_REV0_PHY_BLOBRAY_GAPS.</description>
           <addressOffset>0x40</addressOffset>
           <size>0x20</size>
           <access>read-write</access>
           <fields>
-            <field>
-              <name>BITS_12_24_OPAQUE</name>
-              <description>Opaque: meaning not established. Thirteen-bit low reset group cleared by complete phy_fe_txrx_reset.</description>
-              <bitOffset>12</bitOffset>
-              <bitWidth>13</bitWidth>
-            </field>
             <field>
               <name>TX_RX_RESET_BIT_25</name>
               <description>Project-assigned name. First upper reset bit asserted by complete phy_fe_txrx_reset.</description>

@@ -885,13 +885,6 @@ scope = []
 register-method = "word_0040_opaque"
 
 [[registers.fields]]
-svd-name = "BITS_12_24_OPAQUE"
-method = "bits_12_24_opaque"
-bit-offset = 12
-bit-width = 13
-access = "read-write"
-
-[[registers.fields]]
 svd-name = "TX_RX_RESET_BIT_25"
 method = "tx_rx_reset_bit_25"
 bit-offset = 25

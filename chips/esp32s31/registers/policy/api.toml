@@ -10748,8 +10748,8 @@ name = "clear_phy_frontend_txrx_reset_state"
 peripheral = "PHY_FEDATA_RECOVERED"
 register = "WORD_0040_OPAQUE"
 fields = [
-    { field = "BITS_12_24_OPAQUE", source-bit-offset = 0 },
-    { field = "TX_RX_RESET_BIT_26", source-bit-offset = 13 },
+    { field = "TX_RX_RESET_BIT_25", source-bit-offset = 0 },
+    { field = "TX_RX_RESET_BIT_26", source-bit-offset = 1 },
 ]
 value = 0
 exposure = "facade"
