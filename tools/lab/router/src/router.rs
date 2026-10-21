@@ -221,6 +221,8 @@ impl Profile {
         if self.open_station {
             steps.push(set(&self.ap_section, "encryption", "none")?);
             steps.push(set(&self.radio, "ieee80211ax", "0")?);
+            steps.push(set(&self.ap_section, "network", crate::w3::network::NAME)?);
+            steps.push(set(&self.ap_section, "isolate", "1")?);
         }
         steps.extend(["uci commit wireless".to_owned(), "wifi reload".to_owned()]);
         Ok(steps.join(" && "))
@@ -296,6 +298,15 @@ pub fn apply(remote: &mut dyn Remote, profile: &Profile) -> Result<Applied> {
         .run(&profile.channels_script()?)
         .map_err(step("reading the radio's channels"))?;
     check_channel(&channels, profile.channel, radio.option("country"))?;
+    let previous_network = if profile.open_station {
+        let fingerprint = crate::w3::network::prepare(remote)?;
+        remote
+            .run(&crate::w3::network::render()?)
+            .map_err(step("applying the W3 network"))?;
+        Some(fingerprint)
+    } else {
+        None
+    };
     remote
         .run(&profile.apply_script()?)
         .map_err(step("applying the profile"))?;
@@ -307,7 +318,11 @@ pub fn apply(remote: &mut dyn Remote, profile: &Profile) -> Result<Applied> {
     )?;
     after.check_after(profile)?;
     let country = country_of(after.sections(profile)?.0)?;
-    settle(remote, profile, country)
+    let applied = settle(remote, profile, country)?;
+    if let Some(before) = previous_network {
+        crate::w3::network::verify(remote, &profile.interface, &before)?;
+    }
+    Ok(applied)
 }
 
 /// The UCI `country` of the radio `radio`: the stand's regulatory domain.

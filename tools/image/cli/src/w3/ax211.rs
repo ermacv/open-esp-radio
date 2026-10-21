@@ -213,6 +213,8 @@ struct Report {
     source_commit: String,
     source_dirty: bool,
     fixture_generation: String,
+    router_profile_changes: Vec<w3::network::Setting>,
+    router_service_actions: [&'static str; 4],
     phase: &'static str,
     observations: Option<Evidence>,
     station_lease: Option<Lease>,
@@ -229,7 +231,8 @@ fn checks(e: &Evidence, lease: Lease, ping: network_client::Ping) -> [bool; 5] {
     let leased = e
         .lease
         .is_some_and(|l| l.address == lease.address && l.remaining_seconds > 0)
-        && lease.router == e.router_address;
+        && lease.router == e.router_address
+        && lease.server == e.router_address;
     [
         profile && e.joined.joined(),
         profile && leased,
@@ -326,6 +329,17 @@ pub fn run(root: &Path) -> Result<ExitCode> {
             .ok_or("missing generation identity")?
             .to_string_lossy()
             .into_owned(),
+        router_profile_changes: w3::network::changes(
+            config.radio,
+            config.ap_section,
+            config.channel,
+        ),
+        router_service_actions: [
+            "firewall reload",
+            "network reload; ifup W3",
+            "wireless commit; wifi reload",
+            "dnsmasq reload",
+        ],
         phase: "profile",
         observations: None,
         station_lease: None,
@@ -522,6 +536,9 @@ mod tests {
             interval_ms: 1000,
         };
         assert_eq!(checks(&e, lease, ping), [true; 5]);
+        let mut external = lease;
+        external.server = "192.0.2.2".parse().unwrap();
+        assert!(!checks(&e, external, ping)[1]);
         e.echoes.remove(0);
         assert!(!checks(&e, lease, ping)[2]);
         e.disconnect_event = false;

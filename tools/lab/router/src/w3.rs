@@ -11,6 +11,7 @@ use crate::{
     ssh::{Remote, Result, Ssh},
 };
 
+pub mod network;
 pub mod stream;
 
 pub const ECHO_COUNT: u32 = 100;
@@ -148,8 +149,9 @@ pub fn lease(remote: &mut dyn Remote, target: Mac) -> Result<Option<Lease>> {
     let script = format!(
         "set -e\nnow=$(date +%s)\nawk -v target={} -v now=\"$now\" \
          'tolower($2)==target {{ if(NF!=5 || $1 !~ /^[0-9]+$/) {{print \"invalid\"; next}}; \
-         if($1==0) print $3, 4294967295; else print $3, ($1>now ? $1-now : 0) }}' /tmp/dhcp.leases",
-        quote(&mac_text(target))?
+         if($1==0) print $3, 4294967295; else print $3, ($1>now ? $1-now : 0) }}' {}",
+        quote(&mac_text(target))?,
+        quote(network::LEASE_FILE)?
     );
     parse_lease(&remote.run(&script)?)
 }

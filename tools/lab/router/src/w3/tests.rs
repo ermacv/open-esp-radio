@@ -179,4 +179,5 @@ fn remote_scripts_filter_full_identities_before_returning_and_quote_inputs() {
             .all(|s| !s.contains("cat /tmp/dhcp.leases"))
     );
     assert!(fake.scripts[0].contains(&quote("made-up'iface").unwrap()));
+    assert!(fake.scripts[1].contains(network::LEASE_FILE));
 }

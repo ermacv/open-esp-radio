@@ -4,6 +4,11 @@ W3 joins the laboratory router's open 2.4 GHz HT20 BSS, obtains an IPv4
 lease by DHCP, and exchanges 100 ICMP echo requests in each direction at
 one-second intervals. Every echo must receive a reply. The router profile
 disables HE and uses a generated SSID for each run.
+Its dedicated W3 bridge has no LAN/WAN ports or forwarding. OpenWrt serves DHCP
+on `10.231.0.0/24`, and both ping directions use its `10.231.0.1` address.
+The [profile settings](../../../tools/lab/router/README.md#w3-open-station)
+enumerate the network, DHCP, firewall and wireless changes, applied without
+restoration. The LAN interface and management address are preserved.
 
 The host observes the target's association, DHCP lease, ICMP traffic and
 departure independently on the router. The final firmware report supplies
