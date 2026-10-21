@@ -118,7 +118,33 @@ evaluation. The human groups print them high bits first, for example
 their load width (`load 1B 0xa[7:0]`); entries with different sources stay
 apart, keyed by the sources themselves.
 
-The JSON document streams `{"schema":8,"inputs":[...],"abi":...,"call_returns":...,"read_only":[...],"records":[...],"groups":[...],"summary":{...}}`;
+A load observation carries `reads`: `uses` (`bits`, a tagged `sink`, and
+`precision` `exact` or `may`), `unknown` (`bits`, `limit`), `preserved`, and
+`unused`. These masks partition the load width with precedence used, unknown,
+preserved, unused. Sink sites are instruction offsets in the function's code
+address space; `return` instead names a physical result register. Sink tags
+are `branch`, `dispatch`, `indirect-target`, `address`, `return`, `store` (with
+`address` and `same_word`) and `call-argument` (with `register` and `callee`).
+The callee is `null` for an unresolved indirect call; otherwise it contains
+`address`, the captured defining `function`, and the symbol `name`, each
+nullable when unknown. Relocatable section offsets are not image addresses.
+Tail calls use the same sink. Diagnostic-function policy belongs to the checker.
+Limit tags
+are `partial-function`, `stack-spill`, `unsupported-operation` and `work-limit`.
+
+The read pass follows instruction CFG edges, preserving sources across joins,
+known stack stores/reloads and ABI-preserved registers at calls. Differing
+mappings at a join become `may`; a source absent on another path is retained
+on its carrying paths. Only bits reaching a stopping point are unknown. It
+uses admitted state sets, caller work/deadline checks and a per-function
+dependency budget of `max(100000, 512 * instruction_count)` units.
+See [loaded bit uses](../../../blobray-README.md#loaded-bit-uses).
+
+Human groups show the four classes, sinks, precision and reasons; observations
+with different `reads` remain separate entries. Selection masks retain their
+expression meaning and do not by themselves indicate a read use.
+
+The JSON document streams `{"schema":9,"inputs":[...],"abi":...,"call_returns":...,"read_only":[...],"records":[...],"groups":[...],"summary":{...}}`;
 `records` holds the selected records and `groups` appears only with
 `--group-by`.
 `inputs` lists each input's role and SHA-256. A record is an `observation` (the
@@ -131,7 +157,7 @@ archive member, a malformed container or an ELF diagnostic. The summary counts
 analyzed, partial and blocked functions, gaps, observations, unresolved and
 indexed addresses, and breaks the
 partial functions down by cause (`partial_causes`, see
-[interfaces and formats](../interfaces-formats/README.md)). `cargo registers
+[interfaces and formats](../interfaces-formats/README.md)). `cargo registers check
 inventory` runs it with `--abi riscv-integer --call-returns` and compares these accesses,
 indexed progressions included, with the register model.
 

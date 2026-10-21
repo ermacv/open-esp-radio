@@ -9,6 +9,7 @@ publish = false
 description = "Bounded function control-flow analysis"
 
 [dependencies]
+oer-analysis-riscv-decode = { path = "../riscv-decode" }
 oer-analysis-blobray-domain = { path = "../blobray-domain" }
 oer-analysis-riscv-analysis = { path = "../riscv-analysis" }
 oer-analysis-riscv-model = { path = "../riscv-model" }

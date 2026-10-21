@@ -1,6 +1,8 @@
 //! Candidate memory addresses one analyzed function accesses.
 use crate::*;
 use oer_analysis_blobray_analysis::navigation::Facts;
+mod callees;
+pub(crate) use callees::Callees;
 
 fn invalid(s: &str) -> Error {
     Error::new(ErrorCode::InvalidRequest, s)
@@ -16,6 +18,98 @@ pub(crate) struct Candidate<'a> {
     pub mask: Option<RegisterMask>,
     /// The sources of a store's bits.
     pub stored: Option<Vec<StoredBits>>,
+}
+
+/// Load-use analysis belongs only to register-accesses. Other consumers of
+/// address and expression observations do not run it or change their results.
+pub(crate) struct ReadObservations<'f, 'a, 'm> {
+    evaluator: oer_analysis_blobray_analysis::registers::ReadUsesEvaluator<'f, 'a, 'm>,
+    decoder: &'f dyn FunctionSemantics,
+    ranges: &'f [ImageRegion],
+    abi: Option<CallAbi>,
+    calls: callees::CallSites<'f, 'a, 'm>,
+    callees: &'f Callees<'m>,
+    function: &'f LibraryFunction,
+}
+
+impl<'f, 'a, 'm> ReadObservations<'f, 'a, 'm> {
+    pub fn new(
+        facts: &'f Facts<'a, 'm>,
+        memory: &'m WorkingMemory,
+        decoder: &'f dyn FunctionSemantics,
+        ranges: &'f [ImageRegion],
+        abi: Option<CallAbi>,
+        callees: &'f Callees<'m>,
+        function: &'f LibraryFunction,
+    ) -> Self {
+        Self {
+            evaluator: oer_analysis_blobray_analysis::registers::ReadUsesEvaluator::new(
+                facts, memory,
+            ),
+            decoder,
+            ranges,
+            abi,
+            calls: callees::CallSites::new(facts, memory),
+            callees,
+            function,
+        }
+    }
+
+    pub fn reads(
+        &mut self,
+        fact: &FunctionRecord,
+        c: &mut dyn RunControl,
+    ) -> Result<Option<ReadUses>> {
+        if let FunctionRecord::MemoryAccess {
+            offset,
+            access:
+                access @ (MemoryKind::Load
+                | MemoryKind::LoadReserved
+                | MemoryKind::FloatLoad
+                | MemoryKind::Atomic),
+            address,
+            width,
+            ..
+        } = fact
+        {
+            self.evaluator.analyze(
+                self.abi,
+                self.decoder,
+                &mut |address, width, c| selected_read(address, width, self.ranges, c),
+                c,
+            )?;
+            let mut reads = self.evaluator.reads(*offset, address, *width, *access, c)?;
+            for usage in &mut reads.uses {
+                if let ReadSink::CallArgument { site, callee, .. } = &mut usage.sink {
+                    *callee = self.calls.at(*site, self.function, self.callees, c)?;
+                }
+            }
+            Ok(Some(reads))
+        } else {
+            Ok(None)
+        }
+    }
+}
+
+fn selected_read(
+    address: &AbstractValue,
+    width: u8,
+    ranges: &[ImageRegion],
+    c: &mut dyn RunControl,
+) -> Result<bool> {
+    let mut selected = false;
+    candidates(address, c, &mut |address, _, c| {
+        c.checkpoint(ranges.len() as u64 + 1)?;
+        selected |= address.is_none_or(|address| {
+            ranges.is_empty()
+                || ranges.iter().any(|range| {
+                    u64::from(address) < range.end().unwrap_or(0)
+                        && u64::from(range.start) < u64::from(address) + u64::from(width)
+                })
+        });
+        Ok(())
+    })?;
+    Ok(selected)
 }
 
 type Observer<'a> = dyn FnMut(Candidate<'_>, &mut dyn RunControl) -> Result<()> + 'a;
