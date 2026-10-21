@@ -2361,6 +2361,43 @@ mod tests {
             .collect()
     }
     #[test]
+    fn numeric_alternatives_keep_only_bits_shared_by_every_value() {
+        let memory = WorkingMemory::new(65536).expect("working memory");
+        let facts = Facts::new(&[], &memory, &mut || Ok(())).expect("facts");
+        let mut evaluator = StoredBitsEvaluator::new(&facts, &memory);
+        for values in [
+            vec![ValueAlternative::Constant { value: 0x80 }, ValueAlternative::Constant { value: 0xa0 }],
+            vec![ValueAlternative::ImageAddress { address: 0x80 }, ValueAlternative::ImageAddress { address: 0xa0 }],
+            vec![ValueAlternative::Constant { value: 0x80 }, ValueAlternative::ImageAddress { address: 0xa0 }],
+        ] {
+            let value = AbstractValue::Alternatives {
+                values: ValueAlternatives::new(values).expect("numeric alternatives"),
+            };
+            let bits = evaluator.bits(&value, &mut || Ok(())).expect("stored bits");
+            for (i, bit) in bits.into_iter().enumerate() {
+                assert_eq!(bit, match i { 5 => Bit::Unknown, 7 => Bit::One, _ => Bit::Zero });
+            }
+        }
+        for address in [
+            ValueAlternative::Section { section: 1, offset: 0x80 },
+            ValueAlternative::EntryStack { offset: 0x80 },
+            ValueAlternative::Symbol { symbol: SymbolId {
+                object: ObjectId { artifact: ArtifactId::of_bytes(b"alternatives fixture"), location: ObjectLocation::Standalone },
+                table: SymbolTableKind::Static, table_section: 1, index: 2,
+            }, addend: 0x80 },
+        ] {
+            for values in [
+                vec![address.clone(), ValueAlternative::Constant { value: 0xa0 }],
+                vec![address.clone(), ValueAlternative::EntryStack { offset: 0xa0 }],
+            ] {
+                let value = AbstractValue::Alternatives {
+                    values: ValueAlternatives::new(values).expect("relocatable alternatives"),
+                };
+                assert_eq!(evaluator.bits(&value, &mut || Ok(())).expect("stored bits"), [Bit::Unknown; 32]);
+            }
+        }
+    }
+    #[test]
     fn masks_preserve_source_positions_and_require_proven_preservation() {
         let memory = WorkingMemory::new(65536).unwrap();
         let records = records(vec![
