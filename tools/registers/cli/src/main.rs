@@ -58,9 +58,9 @@ enum Check {
         #[arg(long)]
         pac_src: PathBuf,
     },
-    /// The vendor's statically resolved MMIO accesses in every pinned vendor
-    /// binary against the register model, the provenance registry's cited
-    /// functions first: `target/register-inventory/<chip>/report.txt`.
+    /// Reject vendor uses of absent register bits in every pinned vendor
+    /// binary; report violations, unknown bits and corpus limits in
+    /// `target/register-inventory/<chip>/report.txt`. Requires Blobray schema 9.
     Inventory {
         #[arg(long)]
         chip: String,

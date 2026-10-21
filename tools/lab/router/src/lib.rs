@@ -18,6 +18,7 @@ pub mod lock;
 pub mod mac;
 pub mod router;
 pub mod ssh;
+pub mod udhcpc;
 pub mod w3;
 
 pub type Error = Box<dyn std::error::Error + Send + Sync>;

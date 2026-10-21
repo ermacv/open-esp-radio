@@ -31,6 +31,9 @@ mod linux {
             let expected_name = match role {
                 ArtifactRole::NetworkLauncher => "open-radio-net-launcher",
                 ArtifactRole::NetworkHelper => "open-radio-net",
+                ArtifactRole::NetworkClient => "open-radio-net-client",
+                ArtifactRole::Udhcpc => "udhcpc",
+                ArtifactRole::UdhcpcProvenance => "udhcpc-provenance.json",
                 ArtifactRole::ProbeLauncher => "open-radio-probe-launcher",
                 ArtifactRole::ProbeHelper => "open-radio-probe",
                 ArtifactRole::Hostapd => "open-radio-hostapd",
@@ -44,7 +47,10 @@ mod linux {
                 )
                 .into());
             }
-            let expected_mode = if role == ArtifactRole::HostapdProvenance {
+            let expected_mode = if matches!(
+                role,
+                ArtifactRole::HostapdProvenance | ArtifactRole::UdhcpcProvenance
+            ) {
                 0o444
             } else {
                 0o555

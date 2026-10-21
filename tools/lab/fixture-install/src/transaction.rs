@@ -3,6 +3,13 @@ use std::path::Path;
 use super::{InstallResult, Provider};
 use crate::Result;
 
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ExistingInstallation {
+    Fresh,
+    Versioned(String),
+}
+
 // Installation uses one persisted journal and immutable, root-owned generations.
 // Publishing `current` is the commit point. Stable operational entry points
 // trampoline through fixed launchers, which select `current` only after shared
@@ -27,7 +34,7 @@ mod linux {
     use serde::{Deserialize, Serialize};
     use sha2::{Digest as _, Sha256};
 
-    use super::{InstallResult, Provider, Result};
+    use super::{ExistingInstallation, InstallResult, Provider, Result};
     use crate::{
         Artifact, BUNDLE_SCHEMA, Bundle, InstallState, RECEIPT_SCHEMA, model::validate_adapters,
         prepare::validate_operator,
@@ -738,7 +745,7 @@ mod linux {
     ) -> Result<PathBuf> {
         let final_path = layout.generations().join(&bundle.generation);
         if final_path.exists() {
-            verify_generation(layout, &final_path, bundle)?;
+            verify_generation(layout, &final_path, &bundle.artifacts)?;
             require_secure_file(layout, &final_path.join("sudoers.policy"), 0o440)?;
             if fs::read(final_path.join("sudoers.policy"))? != policy {
                 return Err("installed generation policy identity mismatch".into());
@@ -810,14 +817,14 @@ mod linux {
         fs::rename(&staging, &final_path)?;
         fs::set_permissions(&final_path, permissions(0o555))?;
         sync_parent(&final_path)?;
-        verify_generation(layout, &final_path, bundle)?;
+        verify_generation(layout, &final_path, &bundle.artifacts)?;
         require_secure_file(layout, &final_path.join("sudoers.policy"), 0o440)?;
         Ok(final_path)
     }
 
-    fn verify_generation(layout: &Layout, generation: &Path, bundle: &Bundle) -> Result<()> {
+    fn verify_generation(layout: &Layout, generation: &Path, artifacts: &[Artifact]) -> Result<()> {
         require_secure_directory(layout, generation, 0o555)?;
-        for artifact in &bundle.artifacts {
+        for artifact in artifacts {
             let path = generation.join(&artifact.file_name);
             require_secure_file(layout, &path, artifact.mode)?;
             let bytes = fs::read(&path)?;
@@ -832,89 +839,174 @@ mod linux {
         Ok(())
     }
 
-    #[derive(Clone, Debug, Eq, PartialEq)]
-    enum ExistingInstallation {
-        Fresh,
-        Versioned(String),
-    }
-
-    fn classify_existing(layout: &Layout, provider: Provider) -> Result<ExistingInstallation> {
+    /// Classify the receipt-selected artifacts without accessing sudoers. Its
+    /// directory may be unsearchable by the operator (normally mode 0750).
+    pub(crate) fn inspect_existing(
+        layout: &Layout,
+        provider: Provider,
+    ) -> Result<ExistingInstallation> {
+        for directory in [&layout.state_root, &layout.generations()] {
+            match fs::symlink_metadata(directory) {
+                Ok(_) => {
+                    require_existing_secure_parent(layout, directory)?;
+                    require_secure_directory(layout, directory, 0o755)?;
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => return Err(error.into()),
+            }
+        }
+        match fs::symlink_metadata(layout.journal()) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.into()),
+            Ok(_) => {
+                return Err("unfinished fixture transaction requires installer recovery".into());
+            }
+        }
         let current = read_current(layout)?;
+        let receipt = current
+            .as_deref()
+            .map(|generation| installed_receipt(layout, provider, generation))
+            .transpose()?;
         let specs = provider.artifact_specs();
-        let mut launcher_absent = 0;
-        let mut launcher_regular = 0;
-        let mut payload_absent = 0;
-        let mut payload_links = 0;
         for spec in specs {
             let target = layout.map_absolute(Path::new(spec.target));
-            match fs::symlink_metadata(&target) {
+            let parent = target.parent().ok_or("stable target has no parent")?;
+            match fs::symlink_metadata(parent) {
+                Ok(_) => require_existing_secure_parent(layout, parent)?,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => return Err(error.into()),
+            }
+            let installed = receipt.as_ref().and_then(|receipt| {
+                receipt
+                    .artifacts
+                    .iter()
+                    .find(|artifact| artifact.role == spec.role)
+            });
+            let metadata = match fs::symlink_metadata(&target) {
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                    if spec.role.is_launcher() {
-                        launcher_absent += 1;
-                    } else {
-                        payload_absent += 1;
+                    if installed.is_some() {
+                        return Err(format!(
+                            "partial or inconsistent fixture installation: installed artifact is missing: {}",
+                            target.display()
+                        ).into());
                     }
+                    continue;
                 }
                 Err(error) => return Err(error.into()),
-                Ok(metadata) if metadata.file_type().is_file() => {
-                    if spec.role.is_launcher() {
-                        launcher_regular += 1;
-                    } else {
-                        return Err(format!(
-                            "unmanaged fixture file requires explicit recovery: {}",
-                            target.display()
-                        )
-                        .into());
-                    }
-                }
-                Ok(metadata) if metadata.file_type().is_symlink() => {
-                    if !spec.role.is_launcher()
-                        && fs::read_link(&target)? == layout.current().join(spec.name)
-                    {
-                        payload_links += 1;
-                    } else {
-                        return Err(format!(
-                            "fixture stable path has an unexpected symlink target: {}",
-                            target.display()
-                        )
-                        .into());
-                    }
-                }
-                Ok(_) => {
+                Ok(metadata) => metadata,
+            };
+            let Some(installed) = installed else {
+                return Err(format!(
+                    "unmanaged fixture file requires explicit recovery: {}",
+                    target.display()
+                )
+                .into());
+            };
+            if spec.role.is_launcher() {
+                require_secure_file(layout, &target, spec.mode)?;
+                if oer_os_durable::sha256_bytes(&fs::read(&target)?) != installed.sha256 {
                     return Err(format!(
-                        "fixture stable path is not regular or a controlled symlink: {}",
+                        "installed launcher identity mismatch: {}",
                         target.display()
                     )
                     .into());
                 }
+            } else if !metadata.file_type().is_symlink()
+                || fs::read_link(&target)? != layout.current().join(spec.name)
+            {
+                return Err(format!(
+                    "fixture stable path does not select the installed generation: {}",
+                    target.display()
+                )
+                .into());
             }
         }
-        let policy_exists = match fs::symlink_metadata(layout.policy(provider)) {
+        Ok(match current {
+            Some(generation) => ExistingInstallation::Versioned(generation),
+            None => ExistingInstallation::Fresh,
+        })
+    }
+
+    fn classify_existing(layout: &Layout, provider: Provider) -> Result<ExistingInstallation> {
+        let existing = inspect_existing(layout, provider)?;
+        let policy = layout.policy(provider);
+        require_existing_secure_parent(
+            layout,
+            policy.parent().ok_or("policy target has no parent")?,
+        )?;
+        let policy_exists = match fs::symlink_metadata(&policy) {
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
             Err(error) => return Err(error.into()),
-            Ok(metadata) if metadata.file_type().is_file() => true,
+            Ok(metadata) if metadata.file_type().is_file() => {
+                require_secure_file(layout, &layout.policy(provider), 0o440)?;
+                true
+            }
             Ok(_) => return Err("fixture sudoers policy is not a regular file".into()),
         };
-        let launcher_count = specs.iter().filter(|spec| spec.role.is_launcher()).count();
-        let payload_count = specs.len() - launcher_count;
-        match current {
-            Some(generation)
-                if payload_links == payload_count
-                    && launcher_regular == launcher_count
-                    && policy_exists =>
-            {
-                Ok(ExistingInstallation::Versioned(generation))
-            }
-            None if payload_absent == payload_count
-                && launcher_absent == launcher_count
-                && !policy_exists =>
-            {
-                Ok(ExistingInstallation::Fresh)
+        match (&existing, policy_exists) {
+            (ExistingInstallation::Versioned(_), true) | (ExistingInstallation::Fresh, false) => {
+                Ok(existing)
             }
             _ => {
                 Err("partial or inconsistent fixture installation requires manual recovery".into())
             }
         }
+    }
+
+    fn installed_receipt(
+        layout: &Layout,
+        provider: Provider,
+        generation: &str,
+    ) -> Result<InstallResult> {
+        let path = layout.state_root.join("receipt.json");
+        require_secure_file(layout, &path, 0o444)?;
+        if fs::metadata(&path)?.len() > MAX_MANIFEST_BYTES {
+            return Err("installed fixture receipt is too large".into());
+        }
+        let receipt: InstallResult = serde_json::from_slice(&fs::read(path)?)?;
+        if receipt.schema != RECEIPT_SCHEMA
+            || receipt.provider != provider
+            || receipt.generation != generation
+            || receipt.state != InstallState::SoftwareVerified
+            || !receipt.activation_committed
+            || !receipt.software_verified
+            || receipt.primary_error.is_some()
+            || receipt.recovery_error.is_some()
+            || receipt.artifacts.is_empty()
+        {
+            return Err(
+                "installed receipt does not prove the selected committed generation".into(),
+            );
+        }
+        for (index, artifact) in receipt.artifacts.iter().enumerate() {
+            let spec = provider
+                .artifact_specs()
+                .iter()
+                .find(|spec| spec.role == artifact.role)
+                .ok_or("installed receipt has an unknown artifact role")?;
+            if artifact.file_name != spec.name
+                || artifact.target != Path::new(spec.target)
+                || artifact.mode != spec.mode
+                || artifact.sha256.len() != 64
+                || !artifact
+                    .sha256
+                    .bytes()
+                    .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+                || receipt
+                    .artifacts
+                    .iter()
+                    .take(index)
+                    .any(|previous| previous.role == artifact.role)
+            {
+                return Err("installed receipt has an invalid artifact declaration".into());
+            }
+        }
+        verify_generation(
+            layout,
+            &layout.generations().join(generation),
+            &receipt.artifacts,
+        )?;
+        Ok(receipt)
     }
 
     fn backup_stable_targets(
@@ -1041,7 +1133,7 @@ mod linux {
             return Err("active generation changed during verification".into());
         }
         let generation = layout.generations().join(&bundle.generation);
-        verify_generation(layout, &generation, bundle)?;
+        verify_generation(layout, &generation, &bundle.artifacts)?;
         for artifact in &bundle.artifacts {
             let target = layout.stable_target(artifact);
             let metadata = fs::symlink_metadata(&target)?;
@@ -1212,11 +1304,12 @@ mod linux {
 
     /// Every operation of the laptop network helper the operator runs
     /// without a password: each `case` of `hil/host/linux-net/open-radio-net`.
-    pub(crate) const LINUX_NET_OPERATIONS: [&str; 15] = [
+    pub(crate) const LINUX_NET_OPERATIONS: [&str; 16] = [
         "ap",
         "capabilities",
         "identity",
         "client",
+        "client-dhcp",
         "client-aqm",
         "observer",
         "monitor",
@@ -1546,14 +1639,32 @@ mod linux {
         )
     }
 
+    pub(super) fn system_inspect(provider: Provider) -> Result<ExistingInstallation> {
+        inspect_existing(&Layout::system(provider)?, provider)
+    }
+
     #[cfg(test)]
     pub(crate) mod test_support {
-        pub(crate) use super::{Effects, Layout, Stage, apply, policy_bytes};
+        pub(crate) use super::{Effects, Layout, Stage, apply, inspect_existing, policy_bytes};
     }
 }
 
 #[cfg(all(test, target_os = "linux"))]
 pub(crate) use linux::test_support;
+
+/// Unprivileged, read-only artifact classification. Apply repeats it under its
+/// locks and additionally requires the matching root-owned sudoers policy.
+pub fn inspect_system(provider: Provider) -> Result<ExistingInstallation> {
+    #[cfg(target_os = "linux")]
+    {
+        linux::system_inspect(provider)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = provider;
+        Err("fixture installation requires Linux".into())
+    }
+}
 
 #[cfg(target_os = "linux")]
 pub fn apply_system(provider: Provider, bundle: &Path, operator: &str) -> Result<InstallResult> {

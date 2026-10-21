@@ -110,8 +110,11 @@ platform-owned `MODEM_LPCON` registers remain in the upstream analysis catalog.
 See the [PAC provenance map](../pac/README.md).
 
 Source provenance catalogs retain their exact source IDs, revisions and hashes.
-Reserved fields remain absent. A register or field whose meaning is not
-established is named by its position alone (`WORD_<offset>_OPAQUE`,
+Register and layout bits follow the [shared bit-state rule](../../../tools/registers/model/README.md#register-bit-states)
+and the [Register bits decision](../../../docs/decisions.md#code).
+
+A register or field whose meaning is not established is named by its
+position alone (`WORD_<offset>_OPAQUE`,
 `BIT_<n>_OPAQUE`, `BITS_<low>_<high>_OPAQUE`) and reviewed with
 `naming = "opaque"`; see [name origin](../../../tools/registers/model/README.md). Neighboring-chip
 similarity is not sufficient evidence for an ESP32-S31 address or bit. Reviewed

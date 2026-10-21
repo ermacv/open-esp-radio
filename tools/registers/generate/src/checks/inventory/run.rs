@@ -1,9 +1,9 @@
-//! The inventory run behind `cargo registers inventory`: Blobray's
+//! The inventory run behind `cargo registers check inventory`: Blobray's
 //! `register-accesses`, under the RISC-V integer calling convention and
 //! with the constants callees return taken at their calls, over
 //! every pinned vendor binary inside the publication's owned MMIO ranges,
-//! compared with the register model ([`super`]), with the provenance
-//! registry's cited functions ranked first.
+//! compared with the register model ([`super`]). Reports are written before
+//! returning an error for used absent bits; unknown bits remain separate.
 use super::{self as inventory, Region};
 use crate::Result;
 use oer_os_process::Checkout;
@@ -104,33 +104,42 @@ pub fn run(ctx: &Checkout, chip: &str, output: Option<PathBuf>) -> Result<()> {
     let host = oer_os_toolchain::workspace::blobray_host(&ctx.root)?;
     let accesses = accesses(ctx, &directory, &host, chip, &inputs, &regions)?;
     let ids: Vec<String> = inputs.iter().map(|input| input.id.clone()).collect();
-    let observations = inventory::observations(&fs::read_to_string(&accesses)?, &ids)?;
-    let cited: BTreeSet<inventory::Function> =
-        oer_tool_pins::provenance::registered(&ctx.root, chip)?
-            .into_iter()
-            .map(|e| (e.artifact, e.symbol))
-            .collect();
-    let mut words = inventory::classify(
+    let mut report = inventory::uses::check(
+        chip,
+        &fs::read_to_string(&accesses)?,
+        &ids,
         &regions,
         &inventory::declared_words(&registers),
         &inventory::arrays(&registers),
-        &observations,
-        &cited,
-    );
-    inventory::rank(&mut words);
+    )?;
+    if !report
+        .corpus
+        .inputs
+        .iter()
+        .zip(&inputs)
+        .all(|(actual, expected)| actual.sha256 == expected.sha256)
+    {
+        return Err("register-accesses input hashes differ from pinned binaries".into());
+    }
+    let cited: BTreeSet<inventory::Function> =
+        oer_tool_pins::provenance::registered(&ctx.root, chip)?
+            .into_iter()
+            .map(|entry| (entry.artifact, entry.symbol))
+            .collect();
+    report.prioritize(&cited);
+    write_report(&directory, chip, &report)
+}
 
-    let text = inventory::render(chip, &words);
+pub(super) fn write_report(
+    directory: &Path,
+    chip: &str,
+    report: &inventory::uses::Report,
+) -> Result<()> {
+    let text = report.render(chip);
     fs::write(directory.join("report.txt"), &text)?;
     fs::write(
         directory.join("report.json"),
-        serde_json::to_string_pretty(&inventory::Report {
-            chip,
-            inputs: inputs
-                .iter()
-                .map(|i| (i.id.as_str(), i.sha256.as_str()))
-                .collect(),
-            words: &words,
-        })?,
+        serde_json::to_string_pretty(&serde_json::json!({"chip": chip, "check": report}))?,
     )?;
     print!(
         "{}",
@@ -140,5 +149,13 @@ pub fn run(ctx: &Checkout, chip: &str, output: Option<PathBuf>) -> Result<()> {
             .collect::<String>()
     );
     println!("report: {}", directory.join("report.txt").display());
+    if report.violations() != 0 {
+        return Err(format!(
+            "vendor uses absent bits in {} MMIO words; see {}",
+            report.violations(),
+            directory.join("report.txt").display()
+        )
+        .into());
+    }
     Ok(())
 }

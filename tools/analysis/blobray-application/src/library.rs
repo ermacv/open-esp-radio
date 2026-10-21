@@ -722,6 +722,7 @@ pub fn register_accesses(
     emit: &mut dyn FnMut(&RegisterAccess, &mut dyn RunControl) -> Result<()>,
 ) -> Result<RegisterAccessSummary> {
     crate::registers::validate_ranges(ranges)?;
+    let callees = crate::registers::Callees::capture(inputs, memory, control)?;
     let mut summary = RegisterAccessSummary {
         schema: 3,
         ranges: ranges.to_vec(),
@@ -747,6 +748,15 @@ pub fn register_accesses(
                 summary.partial_causes.add(analyzed.partial_causes(c)?);
                 c.phase(RunPhase::AnalyzeValues)?;
                 let facts = Facts::new(analyzed.records, memory, c)?;
+                let mut reads = crate::registers::ReadObservations::new(
+                    &facts,
+                    memory,
+                    decoder,
+                    ranges,
+                    assumptions.abi,
+                    &callees,
+                    analyzed.function,
+                );
                 crate::registers::observe(
                     analyzed.records,
                     &facts,
@@ -767,6 +777,7 @@ pub fn register_accesses(
                                 indexed: o.indexed,
                                 mask: o.mask,
                                 stored: o.stored,
+                                reads: reads.reads(o.fact, c)?,
                             },
                             c,
                         )

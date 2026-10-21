@@ -9,10 +9,11 @@ use sha2::{Digest as _, Sha256};
 use super::*;
 use crate::{
     model::validate_adapters,
-    transaction::test_support::{Effects, Layout, Stage, apply, policy_bytes},
+    transaction::test_support::{Effects, Layout, Stage, apply, inspect_existing, policy_bytes},
 };
 
 const OPERATOR: &str = "fixture_test";
+const SCHEMA_15_NETWORK_CONTRACT: &str = "schema=15 station_ap=ht20,ht40,he20 legacy_ap=dsss client=ht,non-ht client_aqm=1 observer=20,40 managed=1 rfkill=restore";
 
 /// Serializes tests that hold installation locks or write executables while
 /// other tests spawn processes. A concurrent fork inherits every open
@@ -93,7 +94,11 @@ impl Effects for TestEffects {
 fn artifact_declarations(provider: Provider, suffix: &str) -> Vec<(Artifact, Vec<u8>)> {
     let network = format!(
         "#!/bin/sh\ntest \"$1\" = capabilities && printf '%s\\n' '{}'\n# {suffix}\n",
-        Provider::LinuxNet.runtime_contract()
+        if suffix == "schema-15" {
+            SCHEMA_15_NETWORK_CONTRACT
+        } else {
+            Provider::LinuxNet.runtime_contract()
+        }
     );
     let bluetooth = format!(
         "#!/bin/sh\ntest \"$1\" = capabilities && printf '%s\\n' '{}'\n# {suffix}\n",
@@ -101,6 +106,27 @@ fn artifact_declarations(provider: Provider, suffix: &str) -> Vec<(Artifact, Vec
     );
     let entries: Vec<(ArtifactRole, &str, &str, u32, Vec<u8>)> = match provider {
         Provider::LinuxNet => vec![
+            (
+                ArtifactRole::NetworkClient,
+                "open-radio-net-client",
+                "/usr/local/libexec/open-radio-net-client",
+                0o555,
+                format!("client-{suffix}").into_bytes(),
+            ),
+            (
+                ArtifactRole::Udhcpc,
+                "udhcpc",
+                "/usr/local/libexec/open-radio-udhcpc",
+                0o555,
+                format!("udhcpc-{suffix}").into_bytes(),
+            ),
+            (
+                ArtifactRole::UdhcpcProvenance,
+                "udhcpc-provenance.json",
+                "/usr/local/libexec/open-radio-udhcpc.json",
+                0o444,
+                format!("{{\"generation\":\"{suffix}\"}}\n").into_bytes(),
+            ),
             (
                 ArtifactRole::NetworkLauncher,
                 "open-radio-net-launcher",
@@ -241,6 +267,349 @@ fn test_apply(
         effects,
     )
     .unwrap()
+}
+
+// Model a committed schema-15 install directly: the new installer must not be
+// used to admit or construct the old, smaller artifact contract.
+fn six_artifact_installation() -> (tempfile::TempDir, Layout, Bundle) {
+    let target = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../target")
+        .canonicalize()
+        .expect("fixture target directory");
+    let root = tempfile::tempdir_in(target).expect("fixture directory below target");
+    let layout = Layout::test(root.path(), Provider::LinuxNet).unwrap();
+    let (_, mut old) = make_bundle(root.path(), Provider::LinuxNet, "schema-15");
+    old.runtime_contract = SCHEMA_15_NETWORK_CONTRACT.into();
+    old.artifacts.retain(|artifact| {
+        !matches!(
+            artifact.role,
+            ArtifactRole::NetworkClient | ArtifactRole::Udhcpc | ArtifactRole::UdhcpcProvenance
+        )
+    });
+    old.generation = bundle_hash(&old);
+    assert_eq!(old.artifacts.len(), 6);
+    let state = root.path().join("var/lib/open-radio/fixture/linux-net");
+    let generation = state.join("generations").join(&old.generation);
+    fs::create_dir_all(&generation).unwrap();
+    for (artifact, bytes) in artifact_declarations(Provider::LinuxNet, "schema-15") {
+        if !old
+            .artifacts
+            .iter()
+            .any(|installed| installed.role == artifact.role)
+        {
+            continue;
+        }
+        let payload = generation.join(&artifact.file_name);
+        fs::write(&payload, &bytes).unwrap();
+        fs::set_permissions(&payload, fs::Permissions::from_mode(artifact.mode)).unwrap();
+        let stable = root.path().join(artifact.target.strip_prefix("/").unwrap());
+        if artifact.role.is_launcher() {
+            fs::copy(&payload, stable).unwrap();
+        } else {
+            std::os::unix::fs::symlink(state.join("current").join(&artifact.file_name), stable)
+                .unwrap();
+        }
+    }
+    fs::set_permissions(&generation, fs::Permissions::from_mode(0o555)).unwrap();
+    std::os::unix::fs::symlink(
+        Path::new("generations").join(&old.generation),
+        state.join("current"),
+    )
+    .unwrap();
+    let policy = root.path().join("etc/sudoers.d/open-radio-net");
+    fs::write(&policy, b"# installed schema-15 policy\n").unwrap();
+    fs::set_permissions(&policy, fs::Permissions::from_mode(0o440)).unwrap();
+    let receipt = InstallResult {
+        schema: RECEIPT_SCHEMA,
+        provider: old.provider,
+        transaction: "previous-install".into(),
+        generation: old.generation.clone(),
+        source: old.source.clone(),
+        artifacts: old.artifacts.clone(),
+        runtime_contract: old.runtime_contract.clone(),
+        policy_sha256: oer_os_durable::sha256_bytes(&fs::read(policy).unwrap()),
+        previous_generation: None,
+        checks: vec![],
+        state: InstallState::SoftwareVerified,
+        changed: true,
+        activation_committed: true,
+        software_verified: true,
+        hardware_acceptance_performed: false,
+        primary_error: None,
+        recovery_error: None,
+    };
+    let receipt_path = state.join("receipt.json");
+    fs::write(&receipt_path, serde_json::to_vec_pretty(&receipt).unwrap()).unwrap();
+    fs::set_permissions(receipt_path, fs::Permissions::from_mode(0o444)).unwrap();
+    (root, layout, old)
+}
+
+#[test]
+fn six_artifact_generation_is_classified_readonly_and_upgrades_to_nine() {
+    let _serial = serial();
+    let (root, layout, old) = six_artifact_installation();
+    let state = root.path().join("var/lib/open-radio/fixture/linux-net");
+    let receipt_before = fs::read(state.join("receipt.json")).unwrap();
+    assert_eq!(
+        inspect_existing(&layout, Provider::LinuxNet).unwrap(),
+        ExistingInstallation::Versioned(old.generation.clone())
+    );
+    assert_eq!(
+        fs::read(state.join("receipt.json")).unwrap(),
+        receipt_before
+    );
+    for absent in [
+        "session.lock",
+        "transactions",
+        "transaction.json",
+        "receipts",
+    ] {
+        assert!(fs::symlink_metadata(state.join(absent)).is_err());
+    }
+    for spec in Provider::LinuxNet.artifact_specs() {
+        if !old
+            .artifacts
+            .iter()
+            .any(|artifact| artifact.role == spec.role)
+        {
+            assert!(
+                fs::symlink_metadata(root.path().join(spec.target.strip_prefix('/').unwrap()))
+                    .is_err()
+            );
+        }
+    }
+    let (bundle, new) = make_bundle(root.path(), Provider::LinuxNet, "nine");
+    let result = test_apply(
+        root.path(),
+        Provider::LinuxNet,
+        &bundle,
+        &mut TestEffects::passing(),
+    );
+    assert_eq!(
+        result.state,
+        InstallState::SoftwareVerified,
+        "{:?}",
+        result.primary_error
+    );
+    assert_eq!(
+        result.previous_generation.as_deref(),
+        Some(old.generation.as_str())
+    );
+    assert_eq!(result.artifacts.len(), 9);
+    assert_eq!(
+        inspect_existing(&layout, Provider::LinuxNet).unwrap(),
+        ExistingInstallation::Versioned(new.generation)
+    );
+    for spec in Provider::LinuxNet.artifact_specs() {
+        assert!(
+            root.path()
+                .join(spec.target.strip_prefix('/').unwrap())
+                .is_file()
+        );
+    }
+}
+
+#[test]
+fn failed_six_to_nine_upgrade_restores_six_and_removes_added_paths() {
+    let _serial = serial();
+    for stage in [
+        Stage::Imported,
+        Stage::LinksPrepared,
+        Stage::PolicyPublished,
+        Stage::Activated,
+        Stage::SoftwareVerified,
+    ] {
+        let (root, layout, old) = six_artifact_installation();
+        let state = root.path().join("var/lib/open-radio/fixture/linux-net");
+        let receipt_before = fs::read(state.join("receipt.json")).unwrap();
+        let policy = root.path().join("etc/sudoers.d/open-radio-net");
+        let policy_before = fs::read(&policy).unwrap();
+        let (bundle, _) = make_bundle(root.path(), Provider::LinuxNet, "nine");
+        let mut effects = TestEffects::passing();
+        effects.fail = Some(stage);
+        let result = test_apply(root.path(), Provider::LinuxNet, &bundle, &mut effects);
+        assert_eq!(
+            result.state,
+            InstallState::RolledBack,
+            "{stage:?}: {:?}",
+            result.primary_error
+        );
+        assert_eq!(
+            fs::read(state.join("receipt.json")).unwrap(),
+            receipt_before
+        );
+        assert_eq!(fs::read(&policy).unwrap(), policy_before);
+        assert_eq!(
+            inspect_existing(&layout, Provider::LinuxNet).unwrap(),
+            ExistingInstallation::Versioned(old.generation)
+        );
+        assert!(fs::symlink_metadata(state.join("transaction.json")).is_err());
+        for role in [
+            ArtifactRole::NetworkClient,
+            ArtifactRole::Udhcpc,
+            ArtifactRole::UdhcpcProvenance,
+        ] {
+            let spec = Provider::LinuxNet
+                .artifact_specs()
+                .iter()
+                .find(|spec| spec.role == role)
+                .unwrap();
+            assert!(
+                fs::symlink_metadata(root.path().join(spec.target.strip_prefix('/').unwrap()))
+                    .is_err()
+            );
+        }
+    }
+}
+
+#[test]
+fn preview_defers_sudoers_but_apply_still_requires_an_intact_policy() {
+    let _serial = serial();
+    for mode in [None, Some(0o644), Some(0o777)] {
+        let (root, layout, old) = six_artifact_installation();
+        let policy = root.path().join("etc/sudoers.d/open-radio-net");
+        match mode {
+            None => fs::remove_file(&policy).unwrap(),
+            Some(mode) => fs::set_permissions(&policy, fs::Permissions::from_mode(mode)).unwrap(),
+        }
+        assert_eq!(
+            inspect_existing(&layout, Provider::LinuxNet).unwrap(),
+            ExistingInstallation::Versioned(old.generation.clone())
+        );
+        let (bundle, _) = make_bundle(root.path(), Provider::LinuxNet, "nine");
+        assert!(
+            apply(
+                &layout,
+                Provider::LinuxNet,
+                &bundle,
+                OPERATOR,
+                rustix::process::geteuid().as_raw(),
+                &mut TestEffects::passing()
+            )
+            .is_err()
+        );
+        assert_eq!(
+            fs::read_link(
+                root.path()
+                    .join("var/lib/open-radio/fixture/linux-net/current")
+            )
+            .unwrap(),
+            Path::new("generations").join(&old.generation)
+        );
+    }
+}
+
+#[test]
+fn missing_artifact_from_installed_six_is_rejected_by_preview_and_apply() {
+    let _serial = serial();
+    for generation_file in [false, true] {
+        for role in [
+            ArtifactRole::NetworkLauncher,
+            ArtifactRole::NetworkHelper,
+            ArtifactRole::HostapdProvenance,
+        ] {
+            let (root, layout, old) = six_artifact_installation();
+            let artifact = old
+                .artifacts
+                .iter()
+                .find(|artifact| artifact.role == role)
+                .unwrap();
+            let missing = if generation_file {
+                let generation = root
+                    .path()
+                    .join("var/lib/open-radio/fixture/linux-net/generations")
+                    .join(&old.generation);
+                fs::set_permissions(&generation, fs::Permissions::from_mode(0o755)).unwrap();
+                let missing = generation.join(&artifact.file_name);
+                fs::remove_file(&missing).unwrap();
+                fs::set_permissions(&generation, fs::Permissions::from_mode(0o555)).unwrap();
+                missing
+            } else {
+                let missing = root.path().join(artifact.target.strip_prefix("/").unwrap());
+                fs::remove_file(&missing).unwrap();
+                missing
+            };
+            let preview_error = inspect_existing(&layout, Provider::LinuxNet)
+                .unwrap_err()
+                .to_string();
+            let (bundle, _) = make_bundle(root.path(), Provider::LinuxNet, "nine");
+            let apply_error = apply(
+                &layout,
+                Provider::LinuxNet,
+                &bundle,
+                OPERATOR,
+                rustix::process::geteuid().as_raw(),
+                &mut TestEffects::passing(),
+            )
+            .unwrap_err()
+            .to_string();
+            assert_eq!(apply_error, preview_error);
+            assert!(fs::symlink_metadata(missing).is_err());
+        }
+    }
+}
+
+#[test]
+fn unowned_new_paths_and_unexpected_existing_symlinks_are_never_overwritten() {
+    let _serial = serial();
+    for (role, symlink) in [
+        (ArtifactRole::NetworkClient, false),
+        (ArtifactRole::NetworkClient, true),
+        (ArtifactRole::NetworkHelper, true),
+    ] {
+        let (root, layout, _) = six_artifact_installation();
+        let spec = Provider::LinuxNet
+            .artifact_specs()
+            .iter()
+            .find(|spec| spec.role == role)
+            .unwrap();
+        let path = root.path().join(spec.target.strip_prefix('/').unwrap());
+        if role == ArtifactRole::NetworkHelper {
+            fs::remove_file(&path).unwrap();
+        }
+        if symlink {
+            // Even a controlled-looking symlink is foreign for a new role.
+            std::os::unix::fs::symlink(
+                root.path()
+                    .join("var/lib/open-radio/fixture/linux-net/current")
+                    .join(if role == ArtifactRole::NetworkClient {
+                        spec.name
+                    } else {
+                        "wrong-artifact"
+                    }),
+                &path,
+            )
+            .unwrap();
+        } else {
+            fs::write(&path, b"unmanaged").unwrap();
+        }
+        let preview_error = inspect_existing(&layout, Provider::LinuxNet)
+            .unwrap_err()
+            .to_string();
+        let (bundle, _) = make_bundle(root.path(), Provider::LinuxNet, "nine");
+        let apply_error = apply(
+            &layout,
+            Provider::LinuxNet,
+            &bundle,
+            OPERATOR,
+            rustix::process::geteuid().as_raw(),
+            &mut TestEffects::passing(),
+        )
+        .unwrap_err()
+        .to_string();
+        assert_eq!(apply_error, preview_error);
+        if symlink {
+            assert!(fs::read_link(path).unwrap().ends_with(
+                if role == ArtifactRole::NetworkClient {
+                    spec.name
+                } else {
+                    "wrong-artifact"
+                }
+            ));
+        } else {
+            assert_eq!(fs::read(path).unwrap(), b"unmanaged");
+        }
+    }
 }
 
 #[test]
@@ -1166,4 +1535,49 @@ fn policy_never_grants_installer_or_runner() {
     assert!(!policy.contains("fixture-install"));
     assert!(!policy.contains("cargo"));
     assert!(!policy.contains("hil-runner"));
+    assert!(policy.contains("/usr/local/sbin/open-radio-net client-dhcp\n"));
+    assert!(!policy.contains("/usr/local/libexec/open-radio-net-client"));
+    assert!(!policy.contains("/usr/local/libexec/open-radio-udhcpc"));
+}
+
+#[test]
+fn station_runtime_and_dhcp_provenance_are_admitted_by_their_generation_bytes() {
+    let _serial = serial();
+    let target = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../target")
+        .canonicalize()
+        .expect("valid station artifact fixture");
+    let root = tempfile::tempdir_in(target).expect("valid station artifact fixture");
+    let (bundle, _) = make_bundle(root.path(), Provider::LinuxNet, "station");
+    test_apply(
+        root.path(),
+        Provider::LinuxNet,
+        &bundle,
+        &mut TestEffects::passing(),
+    );
+    let lease = crate::admission::test_support::admit(root.path(), Provider::LinuxNet)
+        .expect("valid station artifact fixture");
+    for role in [
+        ArtifactRole::NetworkClient,
+        ArtifactRole::Udhcpc,
+        ArtifactRole::UdhcpcProvenance,
+    ] {
+        let path = lease
+            .artifact(role)
+            .expect("valid station artifact fixture");
+        let original = fs::read(&path).expect("valid station artifact fixture");
+        let mode = fs::metadata(&path)
+            .expect("valid station artifact fixture")
+            .permissions();
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o600))
+            .expect("valid station artifact fixture");
+        fs::write(&path, b"changed artifact").expect("valid station artifact fixture");
+        fs::set_permissions(&path, mode.clone()).expect("valid station artifact fixture");
+        assert!(lease.artifact(role).is_err());
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o600))
+            .expect("valid station artifact fixture");
+        fs::write(&path, original).expect("valid station artifact fixture");
+        fs::set_permissions(&path, mode).expect("valid station artifact fixture");
+        assert!(lease.artifact(role).is_ok());
+    }
 }

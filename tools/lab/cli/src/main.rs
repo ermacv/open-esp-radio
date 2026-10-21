@@ -62,7 +62,7 @@ enum StandCommand {
     CommandTree,
 }
 
-/// `cargo stand fixture install|build-hostapd`.
+/// `cargo stand fixture install|build-hostapd|build-udhcpc`.
 #[derive(clap::Parser)]
 #[command(name = "cargo stand fixture", no_binary_name = true)]
 enum FixtureCli {
@@ -80,6 +80,8 @@ enum FixtureCli {
     },
     /// Build the pinned hostapd with explicit HIL coexistence policy support.
     BuildHostapd,
+    /// Build the pinned DHCP client without root or radio access.
+    BuildUdhcpc,
 }
 
 /// `cargo stand __command-tree`: every `cargo stand` command path with its
@@ -136,6 +138,10 @@ fn run() -> Result<ExitCode> {
         }
         Some(StandCommand::Fixture(FixtureCli::BuildHostapd)) => {
             oer_lab_router::hostapd::build(&ctx.root)?;
+            Ok(ExitCode::SUCCESS)
+        }
+        Some(StandCommand::Fixture(FixtureCli::BuildUdhcpc)) => {
+            oer_lab_router::udhcpc::build(&ctx.root)?;
             Ok(ExitCode::SUCCESS)
         }
         Some(StandCommand::CommandTree) => {

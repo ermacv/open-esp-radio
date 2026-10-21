@@ -36,10 +36,11 @@ pub fn build_plan(root: &Path, provider: Provider, adapters: &[String]) -> Resul
     let build_steps = match provider {
         Provider::LinuxNet => vec![
             "cargo stand fixture build-hostapd".to_owned(),
-            "cargo build --locked -p oer-tool-fixture-install -p oer-tool-hil-fixture --bin open-radio-net-launcher --bin open-radio-probe-launcher --bin open-radio-probe --bin open-radio-fixture-install".to_owned(),
+            "cargo stand fixture build-udhcpc".to_owned(),
+            "cargo build --locked -p oer-tool-lab-fixture-install -p oer-tool-hil-fixture --bin open-radio-net-launcher --bin open-radio-net-client --bin open-radio-probe-launcher --bin open-radio-probe --bin open-radio-fixture-install".to_owned(),
         ],
         Provider::LinuxBluetooth => vec![
-            "cargo build --locked -p oer-tool-fixture-install -p oer-tool-hil-fixture --bin open-radio-bluetooth-launcher --bin open-radio-bluetooth --bin open-radio-fixture-install".to_owned(),
+            "cargo build --locked -p oer-tool-lab-fixture-install -p oer-tool-hil-fixture --bin open-radio-bluetooth-launcher --bin open-radio-bluetooth --bin open-radio-fixture-install".to_owned(),
         ],
     };
     Ok(InstallPlan {
@@ -154,6 +155,26 @@ fn validate_prepared_contract(
             {
                 return Err("hostapd provenance does not identify the prepared binary".into());
             }
+            let dhcp = artifacts
+                .iter()
+                .find(|a| a.role == ArtifactRole::Udhcpc)
+                .ok_or("udhcpc artifact missing")?;
+            let provenance: serde_json::Value =
+                serde_json::from_slice(&fs::read(directory.join("udhcpc-provenance.json"))?)?;
+            if provenance
+                .get("binary_sha256")
+                .and_then(serde_json::Value::as_str)
+                != Some(dhcp.sha256.as_str())
+                || provenance.get("applets") != Some(&serde_json::json!(["udhcpc"]))
+            {
+                return Err(
+                    "udhcpc provenance does not identify the finite prepared applet".into(),
+                );
+            }
+            require_capabilities(
+                &directory.join("open-radio-net-client"),
+                provider.runtime_contract(),
+            )?;
             require_capabilities(
                 &directory.join("open-radio-net"),
                 provider.runtime_contract(),

@@ -1,6 +1,94 @@
 //! Register-access observations are separate from physical hardware declarations.
 use crate::*;
 
+/// For a load: what happens to each bit of the loaded value inside the function.
+/// Every bit of the access width is in exactly one class:
+/// used > unknown > preserved > unused.
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ReadUses {
+    /// Bits that reach at least one sink.
+    pub uses: Vec<ReadUse>,
+    /// Bits not followed to the end, with the reason.
+    pub unknown: Vec<ReadLimit>,
+    /// Only back into the same word at the same position (RMW keeps them).
+    pub preserved: u32,
+    /// Proven to reach no sink.
+    pub unused: u32,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ReadUse {
+    pub bits: u32,
+    pub sink: ReadSink,
+    pub precision: ReadPrecision,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
+pub enum ReadSink {
+    /// Condition operand.
+    Branch { site: u64 },
+    /// Jump-table index.
+    Dispatch { site: u64 },
+    /// Indirect call or jump target.
+    IndirectTarget { site: u64 },
+    /// Address of another memory access.
+    Address { site: u64 },
+    /// Value at return.
+    Return { register: u8 },
+    /// Another word, or the same word at another position / after a
+    /// non-identity transformation.
+    Store {
+        site: u64,
+        address: Option<u32>,
+        same_word: bool,
+    },
+    CallArgument {
+        site: u64,
+        register: u8,
+        callee: Option<CallTarget>,
+    },
+}
+
+/// The callee of a call or tail call, as far as the analysis resolves it.
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CallTarget {
+    /// The target address when the transfer resolves to one (ROM included).
+    pub address: Option<u32>,
+    /// The defining function among the analyzed inputs, when it is one.
+    pub function: Option<LibraryFunction>,
+    /// The symbol at the target (an input's or the ROM's), when one names it.
+    pub name: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ReadPrecision {
+    /// Bit-for-bit flow: moves, and/or/xor with constants, shifts by a constant.
+    Exact,
+    /// Through arithmetic or comparison.
+    May,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ReadLimit {
+    pub bits: u32,
+    pub limit: ReadLimitKind,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ReadLimitKind {
+    PartialFunction,
+    StackSpill,
+    UnsupportedOperation,
+    WorkLimit,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum RegisterMaskKind {
@@ -115,7 +203,7 @@ fn inverse(value: u32) -> u32 {
 }
 
 /// A function one captured library input defines.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct LibraryFunction {
     /// Position of the defining input among the analyzed inputs.
@@ -147,6 +235,9 @@ pub enum RegisterAccess {
         /// first, covering the access width. Absent for loads.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         stored: Option<Vec<StoredBits>>,
+        /// For a load: uses, limits, RMW preservation and unused bits.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        reads: Option<ReadUses>,
     },
     /// A function that cannot be analyzed; its accesses are unknown.
     Blocked {

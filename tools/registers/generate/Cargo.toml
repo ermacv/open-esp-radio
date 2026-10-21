@@ -16,6 +16,7 @@ oer-os-process = { path = "../../os/process" }
 oer-os-durable = { path = "../../os/durable" }
 oer-os-toolchain = { path = "../../os/toolchain" }
 oer-analysis-elf = { path = "../../analysis/elf" }
+oer-analysis-blobray-domain = { path = "../../analysis/blobray-domain" }
 oer-tool-pins = { path = "../../pins" }
 roxmltree = "=0.20.0"
 serde = { version = "=1.0.229", features = ["derive"] }

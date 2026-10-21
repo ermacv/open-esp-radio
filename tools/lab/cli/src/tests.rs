@@ -38,6 +38,7 @@ fn the_complete_tree_parses_existing_forms_and_an_opaque_lease_command() {
         vec!["fixtures"],
         vec!["fixture", "install", "--provider", "linux-net", "--dry-run"],
         vec!["fixture", "build-hostapd"],
+        vec!["fixture", "build-udhcpc"],
         vec!["--root=/c", "queue"],
         vec!["queue", "--root", "/c"],
     ] {

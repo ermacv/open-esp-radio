@@ -4,7 +4,9 @@
 
 use std::path::Path;
 
-use oer_tool_lab_fixture_install::{INSTALLER_BINARY, Provider, build_plan, prepare};
+use oer_tool_lab_fixture_install::{
+    INSTALLER_BINARY, Provider, build_plan, inspect_system, prepare,
+};
 
 use crate::Result;
 
@@ -16,7 +18,22 @@ pub(crate) fn run(
 ) -> Result<()> {
     let plan = build_plan(root, provider, adapters)?;
     if dry_run {
-        println!("{}", serde_json::to_string_pretty(&plan)?);
+        let mut preview = serde_json::to_value(&plan)?;
+        let fields = preview
+            .as_object_mut()
+            .ok_or("fixture plan must be an object")?;
+        fields.insert(
+            "existing_installation".into(),
+            serde_json::to_value(inspect_system(provider)?)?,
+        );
+        fields.insert(
+            "pending_privileged_checks".into(),
+            serde_json::json!([
+                "existing sudoers policy presence, ownership and mode",
+                "candidate and effective sudoers policy validation"
+            ]),
+        );
+        println!("{}", serde_json::to_string_pretty(&preview)?);
         return Ok(());
     }
     #[cfg(target_os = "linux")]
@@ -26,6 +43,7 @@ pub(crate) fn run(
         // the installer takes terminal control for its narrow system writes.
         if provider == Provider::LinuxNet {
             oer_lab_router::hostapd::build(root)?;
+            oer_lab_router::udhcpc::build(root)?;
         }
 
         let provider_binaries: &[&str] = match provider {
@@ -33,6 +51,7 @@ pub(crate) fn run(
                 "open-radio-net-launcher",
                 "open-radio-probe-launcher",
                 "open-radio-probe",
+                "open-radio-net-client",
             ],
             Provider::LinuxBluetooth => &["open-radio-bluetooth-launcher", "open-radio-bluetooth"],
         };
@@ -41,7 +60,7 @@ pub(crate) fn run(
             "build",
             "--locked",
             "-p",
-            "oer-tool-fixture-install",
+            "oer-tool-lab-fixture-install",
             "-p",
             "oer-tool-hil-fixture",
         ]);

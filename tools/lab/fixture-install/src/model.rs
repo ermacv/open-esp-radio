@@ -19,9 +19,7 @@ impl Provider {
 
     pub(crate) fn runtime_contract(self) -> &'static str {
         match self {
-            Self::LinuxNet => {
-                "schema=15 station_ap=ht20,ht40,he20 legacy_ap=dsss client=ht,non-ht client_aqm=1 observer=20,40 managed=1 rfkill=restore"
-            }
+            Self::LinuxNet => crate::network_client::CONTRACT,
             Self::LinuxBluetooth => crate::bluetooth_contract::HELPER_CAPABILITIES,
         }
     }
@@ -71,6 +69,9 @@ impl FromStr for Provider {
 pub enum ArtifactRole {
     NetworkLauncher,
     NetworkHelper,
+    NetworkClient,
+    Udhcpc,
+    UdhcpcProvenance,
     ProbeLauncher,
     ProbeHelper,
     Hostapd,
@@ -97,7 +98,28 @@ pub(crate) struct ArtifactSpec {
     pub(crate) mode: u32,
 }
 
-const LINUX_NET_ARTIFACTS: [ArtifactSpec; 6] = [
+const LINUX_NET_ARTIFACTS: [ArtifactSpec; 9] = [
+    ArtifactSpec {
+        role: ArtifactRole::NetworkClient,
+        source: "target/debug/open-radio-net-client",
+        name: "open-radio-net-client",
+        target: "/usr/local/libexec/open-radio-net-client",
+        mode: 0o555,
+    },
+    ArtifactSpec {
+        role: ArtifactRole::Udhcpc,
+        source: "target/hil/udhcpc/busybox",
+        name: "udhcpc",
+        target: "/usr/local/libexec/open-radio-udhcpc",
+        mode: 0o555,
+    },
+    ArtifactSpec {
+        role: ArtifactRole::UdhcpcProvenance,
+        source: "target/hil/udhcpc/provenance.json",
+        name: "udhcpc-provenance.json",
+        target: "/usr/local/libexec/open-radio-udhcpc.json",
+        mode: 0o444,
+    },
     ArtifactSpec {
         role: ArtifactRole::NetworkLauncher,
         source: "target/debug/open-radio-net-launcher",

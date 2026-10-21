@@ -2454,6 +2454,7 @@ version = "0.1.0"
 dependencies = [
  "oer-analysis-blobray-domain",
  "oer-analysis-riscv-analysis",
+ "oer-analysis-riscv-decode",
  "oer-analysis-riscv-model",
 ]
 
@@ -4099,6 +4100,7 @@ name = "oer-registers-generate"
 version = "0.1.0"
 dependencies = [
  "cargo_metadata",
+ "oer-analysis-blobray-domain",
  "oer-analysis-elf",
  "oer-os-durable",
  "oer-os-process",
@@ -4330,6 +4332,8 @@ dependencies = [
  "libc",
  "oer-os-durable",
  "oer-os-process",
+ "oer-time",
+ "oer-time-virtual",
  "rustix",
  "serde",
  "serde_json",
