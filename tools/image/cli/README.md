@@ -10,6 +10,7 @@ cargo fw flash <image> --board <id|MAC>
 cargo fw run <image> --board <id|MAC> [--timeout <duration>]
 cargo fw monitor --board <id|MAC>
 cargo fw router
+cargo fw w3 ax211
 cargo fw w3 check --console <console.txt> --observations <router.json>
 cargo fw boards
 cargo fw power-cycle --board <id|MAC>

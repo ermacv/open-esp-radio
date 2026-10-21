@@ -89,6 +89,9 @@ enum Command {
 
 #[derive(Subcommand)]
 enum W3Command {
+    /// Verify the W3 host path using the installed AX211 station fixture.
+    #[cfg(target_os = "linux")]
+    Ax211,
     /// Recompute a-d and f from a firmware console and router observations.
     Check {
         #[arg(long)]
@@ -125,6 +128,10 @@ fn main() -> ExitCode {
     let result = (|| -> oer_image_build::Result<ExitCode> {
         let root = command::root()?;
         match cli.command {
+            #[cfg(target_os = "linux")]
+            Command::W3 {
+                command: W3Command::Ax211,
+            } => return w3::ax211::run(&root),
             Command::W3 {
                 command:
                     W3Command::Check {

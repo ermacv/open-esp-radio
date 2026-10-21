@@ -18,7 +18,7 @@ w3.gate id=f pass=1\n\
 OER-W3-END lines=12\n\
 OER-RESULT: pass w3\n";
 
-fn evidence() -> Evidence {
+pub(super) fn evidence() -> Evidence {
     let address = Ipv4Addr::new(192, 0, 2, 8);
     let router = Ipv4Addr::new(192, 0, 2, 1);
     let echoes = (1..=100)

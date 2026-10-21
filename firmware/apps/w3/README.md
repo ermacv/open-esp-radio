@@ -100,9 +100,20 @@ only numeric timestamps, IPv4 endpoints, echo kind, identifier and sequence.
 AX211 station verification uses the installed `linux-net` fixture through
 its launcher and finite sudo policy, under router, physical-radio and
 exclusive air ownership. NetworkManager's unmanaged rule stays enabled.
-The fixture must support open authentication, a station DHCP client with
-lease readback, and a bounded 100-echo ping workload with decoded counts.
-Schema 15 provides a WPA-PSK client with a static address or no address;
-it has no open-client, station DHCP or ping operation. It cannot execute
-the W3 station verification. See [fixture installation and
-ownership](../../../tools/hil/run/fixtures.md).
+The installed fixture must provide schema 16: open authentication, a station
+DHCP client with lease readback and a bounded 100-echo workload with decoded
+counts. Run the host acceptance with:
+
+```sh
+cargo fw w3 ax211
+```
+
+The command waits for the router, physical-radio, fixture-software and
+exclusive-air leases. It applies the profile, observes association and DHCP,
+captures both 100-echo exchanges on the router and observes final departure.
+It saves a decoded `report.json` under `target/fw/w3-ax211/<run-id>/`, including
+source and installed-generation identities and separate workload/cleanup errors.
+Its five checks are association, lease, station ping, router ping and departure.
+Firmware TX counters and IRQ stack measurements require the image run; the
+AX211 report has the distinct scope `linux-net-host-acceptance`.
+See [fixture installation and ownership](../../../tools/hil/run/fixtures.md).

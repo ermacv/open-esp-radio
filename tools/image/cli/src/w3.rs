@@ -5,6 +5,9 @@ use std::{collections::BTreeMap, io::Read as _, net::Ipv4Addr};
 
 use oer_lab_router::w3::{Evidence, Ping, echo_gate, usable_address};
 
+#[cfg(target_os = "linux")]
+pub mod ax211;
+
 type Result<T> = std::result::Result<T, String>;
 type Fields<'a> = BTreeMap<&'a str, &'a str>;
 
