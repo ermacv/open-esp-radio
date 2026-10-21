@@ -22,8 +22,8 @@ pub fn command() -> Command {
         command.env_remove(variable);
     }
     command.env_remove(LAYOUT_SEED_ENV);
-    // Only the runtime build explicitly selects an interrupt-analysis spec;
-    // bootstrap, probes and host tools must not inherit one.
+    // Runtime and probe builds explicitly select an interrupt-analysis spec;
+    // no build may inherit one from its caller.
     command.env_remove(oer_image_checks::linker::strict::SPEC_ENV);
     command
 }

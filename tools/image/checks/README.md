@@ -31,8 +31,16 @@ riscv-rt and esp-hal section conventions still place their code in SRAM;
 `.hot.text` selects code for performance. The post-build interrupt check
 verifies the final ELF.
 
-The runtime build supplies `OER_IMAGE_INTERRUPTS`, the path to `image-linker.toml`
-in its output directory. It names the repository, chip contract and stack policy;
+Analysis runs if and only if the link uses the staged runtime script
+(`-Truntime/link.x`, supplied by `configure_runtime`). Such a link requires
+`OER_IMAGE_INTERRUPTS`, the path to `image-linker.toml` in its output directory.
+Without it the linker fails before invoking LLD, naming the bin and directing
+the caller to `cargo fw build`, `cargo fw probe` or `cargo hil`.
+A link using another script ignores the specification even when it is present:
+the other bin of a probe package and the bootstrap link normally, without
+analysis or generated placement files.
+
+The specification names the repository, chip contract and stack policy;
 the analysis loads that chip's pinned ROM and summaries exactly as the check does.
 The linker compares whole selected sections with the same free-SRAM measurement
 before its second invocation. An analysis error, an unrepresentable script name

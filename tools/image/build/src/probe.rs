@@ -8,12 +8,13 @@
 //! the cfg.
 
 use std::{
+    cell::RefCell,
     ffi::OsString,
     path::{Path, PathBuf},
-    process::Command,
+    process::{Command, Stdio},
 };
 
-use crate::Result;
+use crate::{Result, strict};
 
 /// The cfg the probe hooks are compiled under.
 pub const PROBE_CFG: &str = "oer_probe";
@@ -119,8 +120,12 @@ pub fn build(root: &Path, package: &str, jobs: Option<usize>) -> Result<PathBuf>
     let profile = oer_chip_profile::Profile::load(root, chip)?;
     let policy = oer_chip_profile::policy::StackPolicy::load(&root.join(profile.stack_policy()))?;
     let target = profile.rust_target.as_str();
+    let cache = target_dir(root);
+    let _cache = crate::compiler::lock_compile_cache(&cache)?;
+    let output = root.join("target/fw/probes").join(package);
+    std::fs::create_dir_all(&output)?;
     // The image compiler of the chip, as every image build of it applies it.
-    let mut cargo = Command::new(std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into()));
+    let mut cargo = crate::cargo::command();
     crate::compiler::configure(
         &mut cargo,
         &crate::compiler::ImageCompiler {
@@ -134,13 +139,102 @@ pub fn build(root: &Path, package: &str, jobs: Option<usize>) -> Result<PathBuf>
         },
     )?;
     cargo.env(crate::compiler::ZEROED_INPUTS_ENV, profile.zeroed_inputs());
-    let status = command(cargo, root, package, target, jobs)
-        .status()
-        .map_err(|error| format!("run cargo: {error}"))?;
-    if !status.success() {
-        return Err(format!("cargo build -p {package} failed ({status})").into());
-    }
+    let analysis = oer_image_checks::linker::strict::Spec {
+        root: root.to_owned(),
+        chip: chip.to_owned(),
+        stack_policy: profile.stack_policy(),
+    };
+    let specification = strict::configure(&mut cargo, &analysis, &output, true)?;
+    let mut cargo = command(cargo, root, package, target, jobs);
+    cargo
+        .arg("--message-format=json-render-diagnostics")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::inherit());
+    let images = RefCell::new(Vec::new());
+    strict::build_with_retry(
+        |invalidate| {
+            if invalidate {
+                let status = crate::cargo::command()
+                    .current_dir(root)
+                    .args([
+                        "clean",
+                        "--locked",
+                        "--profile",
+                        PROFILE,
+                        "--target",
+                        target,
+                        "-p",
+                        package,
+                    ])
+                    .env("CARGO_TARGET_DIR", &cache)
+                    .status()?;
+                if !status.success() {
+                    return Err(
+                        format!("invalidate probe link -p {package} failed ({status})").into(),
+                    );
+                }
+            }
+            let built = cargo
+                .output()
+                .map_err(|error| format!("run cargo: {error}"))?;
+            if !built.status.success() {
+                return Err(format!("cargo build -p {package} failed ({})", built.status).into());
+            }
+            *images.borrow_mut() = linked_images(&built.stdout)?;
+            Ok(())
+        },
+        || {
+            runtime_links_match(
+                &images.borrow(),
+                &output,
+                &specification,
+                &crate::compiler::linker_target(root).join("debug/oer-image-linker"),
+            )
+        },
+    )?;
     Ok(image(root, package, target))
+}
+
+/// Cargo reports executables for both newly linked and Fresh binaries.
+fn linked_images(messages: &[u8]) -> Result<Vec<PathBuf>> {
+    let mut images = Vec::new();
+    for line in messages
+        .split(|byte| *byte == b'\n')
+        .filter(|line| !line.is_empty())
+    {
+        let message: serde_json::Value = serde_json::from_slice(line)?;
+        if message.get("reason").and_then(serde_json::Value::as_str) == Some("compiler-artifact")
+            && let Some(path) = message
+                .get("executable")
+                .and_then(serde_json::Value::as_str)
+        {
+            images.push(path.into());
+        }
+    }
+    if images.is_empty() {
+        return Err("cargo reported no linked probe images".into());
+    }
+    Ok(images)
+}
+
+fn runtime_links_match(
+    images: &[PathBuf],
+    output: &Path,
+    specification: &Path,
+    linker: &Path,
+) -> Result<bool> {
+    for image in images {
+        let bytes = std::fs::read(image)?;
+        let elf = oer_analysis_elf::Elf::parse(&bytes)?;
+        // The runtime script defines this boundary. The package's other
+        // binary uses a standalone script and writes no placement record.
+        if elf.symbol("__runtime_image_start").is_some()
+            && !strict::restore_if_matching(output, output, image, specification, linker)?
+        {
+            return Ok(false);
+        }
+    }
+    Ok(true)
 }
 
 #[cfg(test)]
@@ -195,5 +289,94 @@ mod tests {
             rustflags(Some("-C x".into())),
             OsString::from("-C x --cfg oer_probe")
         );
+    }
+
+    #[test]
+    fn both_fresh_and_rebuilt_executables_are_validated_in_a_mixed_probe_package() {
+        use object::{
+            Architecture, BinaryFormat, Endianness, SectionKind, SymbolFlags, SymbolKind,
+            SymbolScope,
+            write::{Object, Symbol, SymbolSection},
+        };
+        use oer_image_checks::linker::strict::{FRAGMENT, Fingerprint, PLACEMENT, Placement};
+
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path();
+        let ordinary = root.join("probe");
+        let runtime = root.join("probe-dma");
+        let make_elf = |symbol: &str, value: u8| {
+            let mut object =
+                Object::new(BinaryFormat::Elf, Architecture::Riscv32, Endianness::Little);
+            let section = object.add_section(Vec::new(), b".text".to_vec(), SectionKind::Text);
+            object.append_section_data(section, &[value; 4], 4);
+            object.add_symbol(Symbol {
+                name: symbol.as_bytes().to_vec(),
+                value: 0,
+                size: 4,
+                kind: SymbolKind::Text,
+                scope: SymbolScope::Linkage,
+                weak: false,
+                section: SymbolSection::Section(section),
+                flags: SymbolFlags::None,
+            });
+            object.write().unwrap()
+        };
+        std::fs::write(&ordinary, make_elf("ordinary_entry", 0)).unwrap();
+        std::fs::write(&runtime, make_elf("__runtime_image_start", 0)).unwrap();
+        let specification = root.join("image-linker.toml");
+        let linker = root.join("linker");
+        for path in [&specification, &linker] {
+            std::fs::write(path, b"analysis").unwrap();
+        }
+        // A standalone bin needs no record, but a reused runtime without
+        // one must invalidate the package instead of passing unexamined.
+        assert!(
+            runtime_links_match(
+                std::slice::from_ref(&ordinary),
+                root,
+                &specification,
+                &linker
+            )
+            .unwrap()
+        );
+        assert!(
+            !runtime_links_match(
+                std::slice::from_ref(&runtime),
+                root,
+                &specification,
+                &linker
+            )
+            .unwrap()
+        );
+        let placement = Placement {
+            fingerprint: Some(Fingerprint {
+                elf_sha256: oer_os_durable::sha256_file(&runtime).unwrap(),
+                linker_sha256: oer_os_durable::sha256_file(&linker).unwrap(),
+                inputs: [(
+                    specification.clone(),
+                    oer_os_durable::sha256_file(&specification).unwrap(),
+                )]
+                .into(),
+            }),
+            ..Placement::default()
+        };
+        std::fs::write(root.join(PLACEMENT), toml::to_string(&placement).unwrap()).unwrap();
+        std::fs::write(root.join(FRAGMENT), placement.fragment()).unwrap();
+        for fresh in [false, true] {
+            let messages = [
+                serde_json::json!({"reason":"compiler-artifact", "executable":null}),
+                serde_json::json!({"reason":"compiler-artifact", "executable":ordinary, "fresh":fresh}),
+                serde_json::json!({"reason":"compiler-artifact", "executable":runtime, "fresh":fresh}),
+                serde_json::json!({"reason":"build-finished", "success":true}),
+            ].map(|message| message.to_string()).join("\n");
+            let images = linked_images(messages.as_bytes()).unwrap();
+            assert_eq!(images, [ordinary.clone(), runtime.clone()]);
+            assert!(runtime_links_match(&images, root, &specification, &linker).unwrap());
+            std::fs::write(&runtime, make_elf("__runtime_image_start", 1)).unwrap();
+            assert!(!runtime_links_match(&images, root, &specification, &linker).unwrap());
+            std::fs::write(&runtime, make_elf("__runtime_image_start", 0)).unwrap();
+        }
+        assert!(linked_images(b"{\"reason\":\"build-finished\"}\n").is_err());
+        assert!(linked_images(b"invalid JSON\n").is_err());
     }
 }

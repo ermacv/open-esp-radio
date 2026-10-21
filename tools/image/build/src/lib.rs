@@ -28,6 +28,7 @@ pub mod exclusion;
 pub mod instrumentation;
 pub mod probe;
 pub mod staged;
+mod strict;
 mod test_support;
 
 use std::{

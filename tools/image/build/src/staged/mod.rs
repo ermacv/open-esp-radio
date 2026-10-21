@@ -18,11 +18,10 @@ use oer_chip_profile::policy::StackPolicy;
 
 use crate::{
     ImageSpec, Result, build_log::BuildLog, exclusion::Staging, instrumentation::Instrumentation,
+    strict,
 };
 
 use crate::encode::stage_two::pack_runtime;
-
-mod strict;
 
 /// The staged images' MMU page: the bootstrap keeps its text on 64-KiB
 /// pages and stage two starts on one.
@@ -60,7 +59,12 @@ pub(crate) fn build(
         let mut runtime = crate::runtime_command(spec, profile, "build", &policy, instrumentation)?;
         runtime.env("CARGO_TARGET_DIR", &cache);
         let strict = profile.memory.is_some() && profile.interrupts.is_some();
-        let specification = strict::configure(&mut runtime, spec, &output, strict)?;
+        let analysis = oer_image_checks::linker::strict::Spec {
+            root: spec.root.clone(),
+            chip: spec.chip.clone(),
+            stack_policy: spec.stack_policy.clone(),
+        };
+        let specification = strict::configure(&mut runtime, &analysis, &output, strict)?;
         crate::cargo::ensure_fetched(root)?;
         let mut build = |invalidate| -> Result<()> {
             if invalidate {

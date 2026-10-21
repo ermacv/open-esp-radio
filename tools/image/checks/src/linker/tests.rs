@@ -230,3 +230,109 @@ fn zeroed() -> Vec<String> {
     .map(String::from)
     .to_vec()
 }
+
+#[test]
+fn a_runtime_link_without_a_specification_fails_naming_the_bin() {
+    let temporary = tempdir();
+    let output = temporary.path().join("probe-dma");
+    for script in [
+        vec!["-Truntime/link.x"],
+        vec!["-T", "runtime/link.x"],
+        vec!["--script=runtime/link.x"],
+        vec!["--script", "/checkout/linker/runtime/link.x"],
+    ] {
+        let response = temporary.path().join("link.rsp");
+        fs::write(&response, script.join(" ")).unwrap();
+        let mut arguments = expand_response_files(vec![
+            format!("@{}", response.display()).into(),
+            "-o".into(),
+            output.clone().into(),
+        ])
+        .unwrap();
+        let error = link(&mut arguments, &[], None, |_| {
+            panic!("a runtime without a specification must never reach LLD")
+        })
+        .unwrap_err()
+        .to_string();
+        for required in [
+            "probe-dma",
+            strict::SPEC_ENV,
+            "cargo fw build",
+            "cargo fw probe",
+            "cargo hil",
+        ] {
+            assert!(error.contains(required), "{error}");
+        }
+    }
+    assert!(!output.exists());
+    assert!(!temporary.path().join(strict::FRAGMENT).exists());
+}
+
+#[test]
+fn a_nonruntime_link_ignores_the_specification_and_writes_no_fragment() {
+    let temporary = tempdir();
+    let directory = temporary.path();
+    let input = directory.join("ordinary.o");
+    let mut object = WriteObject::new(BinaryFormat::Elf, Architecture::Riscv32, Endianness::Little);
+    let text = object.add_section(Vec::new(), b".text".to_vec(), SectionKind::Text);
+    object.append_section_data(text, &0x00008067_u32.to_le_bytes(), 4); // ret
+    object.add_symbol(Symbol {
+        name: b"_start".to_vec(),
+        value: 0,
+        size: 4,
+        kind: SymbolKind::Text,
+        scope: SymbolScope::Linkage,
+        weak: false,
+        section: SymbolSection::Section(text),
+        flags: SymbolFlags::None,
+    });
+    fs::write(&input, object.write().unwrap()).unwrap();
+    fs::create_dir(directory.join("bootstrap")).unwrap();
+    let script = directory.join("bootstrap/link.x");
+    fs::write(
+        &script,
+        "ENTRY(_start)\nSECTIONS { .text 0x20000000 : { *(.text) } }\n",
+    )
+    .unwrap();
+    let output = directory.join("ordinary.elf");
+    let specification = directory.join(strict::SPEC_FILE);
+    // Even an unreadable/malformed specification must be ignored for the
+    // second bin of a package or a bootstrap using a different script.
+    for contents in [None, Some("not an analysis specification")] {
+        if let Some(contents) = contents {
+            fs::write(&specification, contents).unwrap();
+        }
+        let mut arguments = vec![
+            input.clone().into(),
+            "-T".into(),
+            script.clone().into(),
+            "-o".into(),
+            output.clone().into(),
+        ];
+        let original = arguments.clone();
+        let status = link(&mut arguments, &[], Some(&specification), |arguments| {
+            let result = std::process::Command::new(oer_os_toolchain::lld().unwrap())
+                .args(arguments)
+                .output()
+                .unwrap();
+            assert!(
+                result.status.success(),
+                "{}",
+                String::from_utf8_lossy(&result.stderr)
+            );
+            result.status.code().unwrap()
+        })
+        .unwrap();
+        assert_eq!(status, 0);
+        assert_eq!(arguments, original);
+        let bytes = fs::read(&output).unwrap();
+        assert_eq!(
+            oer_analysis_elf::Elf::parse(&bytes)
+                .unwrap()
+                .address("_start"),
+            Some(0x20000000)
+        );
+        assert!(!directory.join(strict::FRAGMENT).exists());
+        assert!(!directory.join(strict::PLACEMENT).exists());
+    }
+}

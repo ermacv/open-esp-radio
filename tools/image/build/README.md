@@ -73,18 +73,35 @@ An `ImageBundle` is one directory with a `bundle.json`:
 | `build.log` | Every step's standard error |
 
 The manifest uses schema 7 and records `purpose: Flash` or `Analysis`.
-Runtime links with an interrupt contract run the final check's analysis after
-the first link and may link once more to place strict cached code in SRAM.
+Every link using the staged runtime script (`-Truntime/link.x` from
+`configure_runtime`) requires an `OER_IMAGE_INTERRUPTS` specification and
+runs the final check's analysis after the first link. It may link once more
+to place strict cached code in SRAM. Without the specification the linker
+fails with the bin name and instructions to use `cargo fw build`,
+`cargo fw probe` or `cargo hil`. Links using another script ignore a supplied
+specification and produce no analysis fragment or placement record.
 `strict-text.x` is included inside `.isr.text`; an empty fragment preserves the
-first image. The runtime package is invalidated through Cargo before its build
-so the linker reads the current specification even when Cargo would consider
-the executable fresh; dependencies remain cached. The bootstrap has no such
-invalidation or analysis. The existing interrupt check remains final.
+first image. A cached runtime link is reused only when its recorded fingerprint
+matches the final ELF, image linker, specification and analysis inputs, and its
+fragment matches the placement record. A mismatch invalidates the runtime
+package through Cargo and rebuilds it once; dependencies remain cached. A
+second mismatch fails the build. The bootstrap has no such invalidation or
+analysis. The existing interrupt check remains final.
 Older schemas must be rebuilt; a missing purpose never defaults to `Flash`.
 `ImageBundle::load` verifies files for either purpose. The shared flash
 snapshot reader refuses `Analysis` before supplying bytes to any USB or
 JTAG writer, including `cargo fw` and HIL. Copies made with
 `with_application` retain the original purpose.
+
+`cargo fw probe <package>` supplies the same specification and uses the same
+fingerprint check and single rebuild. It keeps `image-linker.toml`,
+`strict-text.x` and `strict-placement.toml` in
+`target/fw/probes/<package>/`; compilation stays in the separate
+`target/fw-probe/` cache with `cfg(oer_probe)`. Cargo's executable artifacts,
+including Fresh binaries, identify which linked ELFs carry the runtime
+script's `__runtime_image_start` boundary and need fingerprint validation.
+Standalone probe bins in the same package do not run the analysis or overwrite
+the runtime's fragment and placement record.
 
 `ImageBundle::segments` is what a flash writes: bootloader, partition table
 and application at the flash map's offsets, the OTA selection last. Board
