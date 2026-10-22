@@ -36,3 +36,5 @@ pub mod symbols;
 
 pub use execution::EXECUTION_ENVIRONMENT;
 pub use oer_analysis_blobray_verification::VERIFIER as EXECUTION_VERIFIER;
+
+pub mod signatures;

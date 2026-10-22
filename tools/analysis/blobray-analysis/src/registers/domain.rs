@@ -145,6 +145,15 @@ pub(super) trait Domain<'m>: Sized {
     ) -> Result<()> {
         Ok(())
     }
+    fn narrow(
+        _e: &mut FlowEngine<'_, '_, 'm, Self>,
+        _flow: Self::Flow,
+        _outputs: u32,
+        _from_may: bool,
+        _c: &mut dyn RunControl,
+    ) -> Result<()> {
+        Ok(())
+    }
     fn return_value(
         _e: &mut FlowEngine<'_, '_, 'm, Self>,
         _flow: Self::Flow,
@@ -277,6 +286,31 @@ impl<'m> Domain<'m> for Reads<'m> {
         c: &mut dyn RunControl,
     ) -> Result<()> {
         e.read_consume_argument(flow, consumed, site, register, c)
+    }
+    fn narrow(
+        e: &mut FlowEngine<'_, '_, 'm, Self>,
+        flow: usize,
+        outputs: u32,
+        from_may: bool,
+        c: &mut dyn RunControl,
+    ) -> Result<()> {
+        let len = e.domain.flows.values(flow)?.len();
+        for index in 0..len {
+            c.checkpoint(1)?;
+            let dependency = *e
+                .domain
+                .flows
+                .values(flow)?
+                .get(index)
+                .ok_or_else(read_integrity)?;
+            let (exact, may) = dependency.selected(outputs);
+            let bits = exact | may;
+            e.sources
+                .get_mut(dependency.source)
+                .ok_or_else(read_integrity)?
+                .narrowed[usize::from(from_may)] |= bits;
+        }
+        Ok(())
     }
     fn return_value(
         e: &mut FlowEngine<'_, '_, 'm, Self>,
@@ -440,7 +474,7 @@ impl<'f, 'a, 'm> FlowEngine<'f, 'a, 'm, Reads<'m>> {
                         width: loaded_width,
                         ..
                     } => same_word(loaded, loaded_width, address, width),
-                    ReadOrigin::Entry(_) => false,
+                    ReadOrigin::Entry(_) | ReadOrigin::MissingResult { .. } => false,
                 });
             let mut preserved = 0;
             if same && kind == MemoryKind::Store {

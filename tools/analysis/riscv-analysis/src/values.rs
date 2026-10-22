@@ -1950,6 +1950,13 @@ fn evaluate(
         // proved every value they hold when it returns.
         let callee = callee(op, node, input, &incoming);
         for r in CallAbi::RiscvInteger.results() {
+            if callee
+                .and_then(|callee| input.returns.summary(callee))
+                .is_some_and(|s| !s.returns(r))
+            {
+                state[usize::from(r)] = Value::Unknown;
+                continue;
+            }
             let returned = match callee {
                 Some(callee) => returned(
                     input

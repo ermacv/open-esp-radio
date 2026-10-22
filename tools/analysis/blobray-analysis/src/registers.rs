@@ -6,7 +6,7 @@ mod arguments;
 mod domain;
 mod provenance;
 use arguments::ReturnedDependency;
-pub use arguments::{ArgumentProgram, CallAt};
+pub use arguments::{ArgumentProgram, ArgumentSource, CallAt};
 use domain::{Domain, FlowValue, Reads};
 pub use provenance::StoredProvenanceEvaluator;
 
@@ -175,6 +175,7 @@ struct ReadSet {
 /// Immutable, interned sets. Every backing allocation is admitted before
 /// growth; ids, not cloned maps, are kept in the CFG states.
 struct ReadSets<'m, T> {
+    memory: &'m WorkingMemory,
     entries: AdmittedVec<'m, T>,
     sets: AdmittedVec<'m, ReadSet>,
     buckets: AdmittedVec<'m, usize>,
@@ -188,6 +189,7 @@ fn read_integrity() -> Error {
 impl<'m, T: Copy + Eq + std::hash::Hash> ReadSets<'m, T> {
     fn new(memory: &'m WorkingMemory) -> Self {
         Self {
+            memory,
             entries: AdmittedVec::new(memory),
             sets: AdmittedVec::new(memory),
             buckets: AdmittedVec::new(memory),
@@ -509,10 +511,15 @@ enum ReadOrigin<'a> {
         width: u8,
     },
     Entry(u8),
+    MissingResult {
+        site: u64,
+        register: u8,
+    },
 }
 struct ReadSource<'a> {
     origin: ReadOrigin<'a>,
     preserved: u32,
+    narrowed: [u32; 2],
     limits: [u32; 4],
     event: usize,
 }
@@ -593,6 +600,10 @@ struct FlowEngine<'f, 'a, 'm, D: Domain<'m>> {
     ready: bool,
     work_limit: bool,
     summary_mode: bool,
+    audit_results: bool,
+    entry_registers: u32,
+    result_sources: AdmittedVec<'m, (u64, u8, usize)>,
+    audit_stack_gc_at: usize,
     prepared: bool,
     converged: bool,
     pending: Option<usize>,
@@ -611,6 +622,10 @@ impl<'f, 'a, 'm, D: Domain<'m>> FlowEngine<'f, 'a, 'm, D> {
             ready: false,
             work_limit: false,
             summary_mode: false,
+            audit_results: false,
+            entry_registers: u32::MAX,
+            result_sources: AdmittedVec::new(memory),
+            audit_stack_gc_at: 131_072,
             prepared: false,
             converged: false,
             pending: None,
@@ -621,7 +636,7 @@ impl<'f, 'a, 'm, D: Domain<'m>> FlowEngine<'f, 'a, 'm, D> {
         abi: Option<CallAbi>,
         decoder: &dyn FunctionSemantics,
         select: &mut SelectRead<'_>,
-        calls: &CallAt<'_>,
+        calls: &dyn CallAt<'_>,
         c: &mut dyn RunControl,
     ) -> Result<()> {
         if self.ready {
@@ -714,7 +729,7 @@ impl<'f, 'a, 'm, D: Domain<'m>> FlowEngine<'f, 'a, 'm, D> {
         self.sources
             .binary_search_by_key(&site, |source| match source.origin {
                 ReadOrigin::Load { site, .. } => site,
-                ReadOrigin::Entry(_) => u64::MAX,
+                ReadOrigin::Entry(_) | ReadOrigin::MissingResult { .. } => u64::MAX,
             })
             .ok()
     }
@@ -774,6 +789,7 @@ impl<'f, 'a, 'm, D: Domain<'m>> FlowEngine<'f, 'a, 'm, D> {
                             width: *width,
                         },
                         preserved: 0,
+                        narrowed: [0; 2],
                         limits: [0; 4],
                         event: 0,
                     },
@@ -790,7 +806,7 @@ impl<'f, 'a, 'm, D: Domain<'m>> FlowEngine<'f, 'a, 'm, D> {
         self.sources
             .sort_unstable_by_key(|source| match source.origin {
                 ReadOrigin::Load { site, .. } => site,
-                ReadOrigin::Entry(_) => u64::MAX,
+                ReadOrigin::Entry(_) | ReadOrigin::MissingResult { .. } => u64::MAX,
             });
         D::prepare_sources(self, c)?;
         for record in records {
@@ -970,6 +986,12 @@ impl<'f, 'a, 'm, D: Domain<'m>> FlowEngine<'f, 'a, 'm, D> {
                 D::unpack(y.map(|y| y.cell).unwrap_or_default()),
                 c,
             )?;
+            // In an audit there are no selected load sources. An absent stack
+            // byte and a wholly unknown, untracked byte are identical. Keep
+            // the ordinary summary/load interpreter's representation unchanged.
+            if self.audit_results && D::pack(cell) == D::Byte::default() {
+                continue;
+            }
             self.stacks.scratch.push(
                 ReadSlot {
                     offset,
@@ -988,6 +1010,7 @@ impl<'f, 'a, 'm, D: Domain<'m>> FlowEngine<'f, 'a, 'm, D> {
         c: &mut dyn RunControl,
     ) -> Result<usize> {
         let len = self.stacks.values(stack)?.len();
+        let keep = !self.audit_results || cell != D::Byte::default();
         let mut inserted = false;
         for index in 0..len {
             c.checkpoint(1)?;
@@ -998,21 +1021,54 @@ impl<'f, 'a, 'm, D: Domain<'m>> FlowEngine<'f, 'a, 'm, D> {
                 .copied()
                 .ok_or_else(read_integrity)?;
             if !inserted && slot.offset >= offset {
-                self.stacks
-                    .scratch
-                    .push(ReadSlot { offset, cell }, c.position())?;
+                if keep {
+                    self.stacks
+                        .scratch
+                        .push(ReadSlot { offset, cell }, c.position())?;
+                }
                 inserted = true;
             }
             if slot.offset != offset {
                 self.stacks.scratch.push(slot, c.position())?;
             }
         }
-        if !inserted {
+        if !inserted && keep {
             self.stacks
                 .scratch
                 .push(ReadSlot { offset, cell }, c.position())?;
         }
         self.stacks.intern(c)
+    }
+    /// Audit queries retain only the immutable stack maps referenced by live
+    /// CFG inputs. This runs between transfers, when no temporary state exists;
+    /// rebasing ids preserves every byte and the fixed point. Ordinary #317
+    /// summaries and selected-load analyses never take this path.
+    fn compact_audit_stacks(&mut self, c: &mut dyn RunControl) -> Result<()> {
+        if !self.audit_results || self.stacks.entries.len() < self.audit_stack_gc_at {
+            return Ok(());
+        }
+        let memory = self.stacks.memory;
+        let old = std::mem::replace(&mut self.stacks, ReadSets::new(memory));
+        let mut rebased = AdmittedVec::new(memory);
+        for _ in 0..=old.sets.len() {
+            rebased.push(0usize, c.position())?;
+        }
+        for node in self.nodes.iter_mut() {
+            c.checkpoint(1)?;
+            let Some(state) = node.input.as_mut().filter(|s| s.slots != 0) else {
+                continue;
+            };
+            let slot = rebased.get_mut(state.slots).ok_or_else(read_integrity)?;
+            if *slot == 0 {
+                for byte in old.values(state.slots)?.iter().copied() {
+                    self.stacks.scratch.push(byte, c.position())?;
+                }
+                *slot = self.stacks.intern(c)?;
+            }
+            state.slots = *slot;
+        }
+        self.audit_stack_gc_at = 131_072.max(self.stacks.entries.len().saturating_mul(2));
+        Ok(())
     }
     fn merge(
         &mut self,
@@ -1054,7 +1110,7 @@ impl<'f, 'a, 'm, D: Domain<'m>> FlowEngine<'f, 'a, 'm, D> {
     fn solve(
         &mut self,
         abi: Option<CallAbi>,
-        calls: &CallAt<'_>,
+        calls: &dyn CallAt<'_>,
         c: &mut ReadWork<'_>,
     ) -> Result<()> {
         if self.nodes.is_empty() {
@@ -1063,7 +1119,9 @@ impl<'f, 'a, 'm, D: Domain<'m>> FlowEngine<'f, 'a, 'm, D> {
         let mut entry = ReadState::entry();
         {
             for register in 1..32 {
-                if !D::entry_source(register, self.summary_mode) {
+                if !D::entry_source(register, self.summary_mode)
+                    || self.entry_registers & (1 << register) == 0
+                {
                     continue;
                 }
                 let source = self.sources.len();
@@ -1071,6 +1129,7 @@ impl<'f, 'a, 'm, D: Domain<'m>> FlowEngine<'f, 'a, 'm, D> {
                     ReadSource {
                         origin: ReadOrigin::Entry(register),
                         preserved: 0,
+                        narrowed: [0; 2],
                         limits: [0; 4],
                         event: 0,
                     },
@@ -1085,10 +1144,41 @@ impl<'f, 'a, 'm, D: Domain<'m>> FlowEngine<'f, 'a, 'm, D> {
                 );
             }
         }
+        if self.audit_results {
+            for id in 0..self.nodes.len() {
+                let instruction = self.node(id)?.instruction;
+                if instruction.call {
+                    for register in [10, 11] {
+                        if calls
+                            .summary(instruction.site)
+                            .is_some_and(|s| !s.returns(register))
+                        {
+                            let source = self.sources.len();
+                            self.sources.push(
+                                ReadSource {
+                                    origin: ReadOrigin::MissingResult {
+                                        site: instruction.site,
+                                        register,
+                                    },
+                                    preserved: 0,
+                                    narrowed: [0; 2],
+                                    limits: [0; 4],
+                                    event: 0,
+                                },
+                                c.position(),
+                            )?;
+                            self.result_sources
+                                .push((instruction.site, register, source), c.position())?;
+                        }
+                    }
+                }
+            }
+        }
         self.merge(0, entry, c)?;
         let mut cursor = 0;
         while let Some(id) = self.queue.get(cursor).copied() {
             c.visit()?;
+            self.compact_audit_stacks(c)?;
             cursor += 1;
             self.pending = Some(id);
             self.node_mut(id)?.queued = false;
@@ -1115,6 +1205,7 @@ impl<'f, 'a, 'm, D: Domain<'m>> FlowEngine<'f, 'a, 'm, D> {
         // later join which demotes the same path to May.
         for id in 0..self.nodes.len() {
             c.visit()?;
+            self.compact_audit_stacks(c)?;
             if let Some(input) = self.node(id)?.input {
                 self.execute(id, input, abi, calls, true, c)?;
             }
@@ -1126,7 +1217,7 @@ impl<'f, 'a, 'm, D: Domain<'m>> FlowEngine<'f, 'a, 'm, D> {
         id: usize,
         input: ReadState<D::Flow>,
         abi: Option<CallAbi>,
-        calls: &CallAt<'_>,
+        calls: &dyn CallAt<'_>,
         emit: bool,
         c: &mut dyn RunControl,
     ) -> Result<ReadState<D::Flow>> {
@@ -1175,7 +1266,11 @@ impl<'f, 'a, 'm, D: Domain<'m>> FlowEngine<'f, 'a, 'm, D> {
             }
             if matches!(instruction.flow, InstructionFlow::Return { .. }) {
                 for register in CallAbi::RiscvInteger.results() {
-                    D::return_value(self, input.register(register).flow, register, c)?;
+                    if calls.current().is_none_or(|s| s.returns(register)) {
+                        D::return_value(self, input.register(register).flow, register, c)?;
+                    } else {
+                        D::narrow(self, input.register(register).flow, u32::MAX, false, c)?;
+                    }
                 }
                 self.limit_slots(input.slots, ReadLimitKind::StackSpill, c)?;
             }
@@ -1447,26 +1542,42 @@ impl<'f, 'a, 'm, D: Domain<'m>> FlowEngine<'f, 'a, 'm, D> {
         }
         if instruction.arguments && !instruction.call && emit {
             // A tail transfer returns the target's result directly to our caller.
-            if let Some(summary) = calls(instruction.site) {
+            if let Some(summary) = calls.summary(instruction.site) {
                 for register in CallAbi::RiscvInteger.results() {
-                    let flow = self.call_result(input, &summary.arguments, register, c)?;
-                    D::return_value(self, flow, register, c)?;
+                    if summary.returns(register)
+                        && calls.current().is_none_or(|s| s.returns(register))
+                    {
+                        let flow = self.call_result(input, &summary.arguments, register, c)?;
+                        D::return_value(self, flow, register, c)?;
+                    }
                 }
             }
         }
         if instruction.call {
             if let Some(abi) = abi {
                 let mut results = [ReadCell::default(); 2];
-                if let Some(summary) = calls(instruction.site) {
+                if let Some(summary) = calls.summary(instruction.site) {
                     for (cell, register) in results.iter_mut().zip(abi.results()) {
-                        cell.flow = self.call_result(input, &summary.arguments, register, c)?;
-                        D::call_constants(cell, summary, register);
+                        if summary.returns(register) {
+                            cell.flow = self.call_result(input, &summary.arguments, register, c)?;
+                            D::call_constants(cell, summary, register);
+                        }
                     }
                 }
                 for register in abi.clobbered() {
                     output.set(register, ReadCell::default());
                 }
                 for (register, cell) in abi.results().into_iter().zip(results) {
+                    let mut cell = cell;
+                    if self.audit_results
+                        && let Ok(id) = self.result_sources.binary_search_by_key(
+                            &(instruction.site, register),
+                            |&(site, register, _)| (site, register),
+                        )
+                    {
+                        let source = self.result_sources.get(id).ok_or_else(read_integrity)?.2;
+                        cell.flow = D::seed(self, source, 4, false, u32::MAX, c)?;
+                    }
                     output.set(register, cell);
                 }
             } else {
@@ -1513,17 +1624,33 @@ impl<'f, 'a, 'm, D: Domain<'m>> FlowEngine<'f, 'a, 'm, D> {
         input: ReadState<D::Flow>,
         site: u64,
         abi: CallAbi,
-        calls: &CallAt<'_>,
+        calls: &dyn CallAt<'_>,
         c: &mut dyn RunControl,
     ) -> Result<()> {
         for register in abi.arguments() {
-            let consumed = calls(site)
+            let consumed = calls
+                .summary(site)
                 .map(|s| &s.arguments)
                 .and_then(|s| s.consumed.get(usize::from(register - 10)).copied())
                 .unwrap_or(ArgumentConsumption {
                     exact: 0,
                     may: u32::MAX,
                 });
+            if calls.summary(site).is_some_and(|s| {
+                s.contract_only
+                    && s.contract
+                        .is_some_and(|shape| register >= 10 + shape.arguments)
+            }) {
+                D::narrow(self, input.register(register).flow, u32::MAX, false, c)?;
+            }
+            if let Some(bits) = calls
+                .summary(site)
+                .and_then(|s| s.narrowed_may.get(usize::from(register - 10)))
+                .copied()
+                .filter(|bits| *bits != 0)
+            {
+                D::narrow(self, input.register(register).flow, bits, true, c)?;
+            }
             D::consume_argument(
                 self,
                 input.register(register).flow,
@@ -1573,10 +1700,19 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
         abi: Option<CallAbi>,
         decoder: &dyn FunctionSemantics,
         select: &mut SelectRead<'_>,
-        calls: &CallAt<'_>,
+        calls: &dyn CallAt<'_>,
         c: &mut dyn RunControl,
     ) -> Result<()> {
         self.engine.analyze(abi, decoder, select, calls, c)
+    }
+    pub fn contract_narrowed_bits(&self) -> [u64; 2] {
+        let mut counts = [0; 2];
+        for source in self.engine.sources.iter() {
+            for (count, bits) in counts.iter_mut().zip(source.narrowed) {
+                *count += u64::from(bits.count_ones());
+            }
+        }
+        counts
     }
     pub fn reads(
         &self,

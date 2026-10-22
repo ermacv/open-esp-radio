@@ -9,9 +9,9 @@ use oer_analysis_riscv_model::{
 use serde::{Deserialize, Serialize};
 
 /// Schema of the `register-accesses` document
-/// (`{"schema":9,"inputs":[...],"abi":...,"call_returns":...,"read_only":[...],"records":[...],"groups":[...],"summary":{...}}`;
+/// (`{"schema":10,"inputs":[...],"abi":...,"call_returns":...,"read_only":[...],"records":[...],"groups":[...],"summary":{...}}`;
 /// `groups` only with `--group-by`).
-pub const REGISTER_ACCESSES_SCHEMA: u32 = 9;
+pub const REGISTER_ACCESSES_SCHEMA: u32 = 10;
 
 /// One analyzed input of a `register-accesses` document, by position.
 #[derive(Clone, Debug, Serialize, Deserialize)]

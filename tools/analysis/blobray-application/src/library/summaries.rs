@@ -1,7 +1,7 @@
 //! One corpus producer for the shared result/argument port, in two analyses.
 use super::*;
-use crate::registers::{CallKey, CallLinks, Callees};
-use oer_analysis_blobray_analysis::registers::ArgumentProgram;
+use crate::registers::{CallKey, CallLinks, CallSites, Callees, Calls};
+use oer_analysis_blobray_analysis::registers::{ArgumentProgram, ArgumentSource};
 use oer_analysis_blobray_artifacts::{MemberIndex, PreparedObject, prepare_captured};
 use oer_analysis_elf::classify as elf;
 use oer_analysis_riscv_analysis::{AnalysisSummary, PreparedReferences, ProvenTables};
@@ -11,8 +11,18 @@ use oer_analysis_riscv_program::{
 };
 use std::collections::BTreeMap;
 
+#[derive(Clone)]
+struct RawConflict {
+    origin: ArgumentSource,
+    usage: ReadUse,
+}
+struct RawSummary<'m> {
+    value: CallSummary,
+    _memory: MemoryReservation<'m>,
+}
 struct OwnedSummary<'m> {
     value: CallSummary,
+    raw: Option<Box<RawSummary<'m>>>,
     _arguments: MemoryReservation<'m>,
     _results: MemoryReservation<'m>,
 }
@@ -32,7 +42,29 @@ struct Group {
     representative: Option<usize>,
     conflict: bool,
 }
+struct Scoped<'s> {
+    table: &'s dyn CallSummaries,
+    current: Option<CallSummary>,
+}
+/// Preserve the original physical return wiring while producing a summary.
+/// The current function's header projection is added only after its audit.
+struct UnshapedCurrent<'s>(&'s dyn CallSummaries);
+impl CallSummaries for UnshapedCurrent<'_> {
+    fn summary(&self, callee: Callee<'_>) -> Option<&CallSummary> {
+        self.0.summary(callee)
+    }
+}
+impl CallSummaries for Scoped<'_> {
+    fn summary(&self, callee: Callee<'_>) -> Option<&CallSummary> {
+        self.table.summary(callee)
+    }
+    fn current(&self) -> Option<&CallSummary> {
+        self.current.as_ref()
+    }
+}
 struct Summaries<'m> {
+    contracts: BTreeMap<Vec<u8>, CallSummary>,
+    contract_addresses: BTreeMap<u32, Option<Vec<u8>>>,
     entries: AdmittedVec<'m, Entry<'m>>,
     groups: Groups,
     ledger: Ledger<'m>,
@@ -76,37 +108,93 @@ impl Groups {
         }
     }
 }
-impl CallSummaries for Summaries<'_> {
-    fn summary(&self, callee: Callee<'_>) -> Option<&CallSummary> {
+impl Summaries<'_> {
+    fn computed(&self, callee: Callee<'_>) -> Option<&OwnedSummary<'_>> {
         let group = self.groups.callee(callee)?;
         if group.remaining != 0 || group.conflict {
             return None;
         }
-        self.entries
-            .get(group.representative?)?
-            .summary
-            .as_ref()
-            .map(|s| &s.value)
+        self.entries.get(group.representative?)?.summary.as_ref()
     }
 }
+impl CallSummaries for Summaries<'_> {
+    fn summary(&self, callee: Callee<'_>) -> Option<&CallSummary> {
+        self.computed(callee)
+            .map(|s| &s.value)
+            .or_else(|| match callee {
+                Callee::Symbol(name) => self.contracts.get(name),
+                Callee::Address(address) => self
+                    .contract_addresses
+                    .get(&address)
+                    .and_then(|n| n.as_deref())
+                    .and_then(|n| self.contracts.get(n)),
+            })
+    }
+}
+/// The existing computed port without any signature fallback or projection.
+struct Computed<'s, 'm>(&'s Summaries<'m>);
+impl CallSummaries for Computed<'_, '_> {
+    fn summary(&self, callee: Callee<'_>) -> Option<&CallSummary> {
+        self.0
+            .computed(callee)
+            .map(|s| s.raw.as_ref().map_or(&s.value, |r| &r.value))
+    }
+}
+
 fn integrity() -> Error {
     Error::new(ErrorCode::Integrity, "invalid corpus summary graph")
 }
 impl<'m> Summaries<'m> {
     fn new(
         catalog: &Callees<'m>,
+        signatures: Option<&crate::signatures::Signatures>,
         memory: &'m WorkingMemory,
         c: &mut dyn RunControl,
     ) -> Result<Self> {
         let mut out = Self {
+            contracts: BTreeMap::new(),
+            contract_addresses: BTreeMap::new(),
             entries: AdmittedVec::new(memory),
             groups: Groups::default(),
             ledger: Ledger::new(memory, c)?,
         };
+        if let Some(signatures) = signatures {
+            for signature in signatures.functions() {
+                c.checkpoint(1)?;
+                let name = signature.name.as_bytes().to_vec();
+                out.ledger.admit(name.capacity(), c)?;
+                *out.ledger
+                    .entry(&mut out.contracts, name, || signature.summary(), c)? =
+                    signature.summary();
+            }
+            for (address, name) in catalog.named_addresses() {
+                c.checkpoint(1)?;
+                let slot = out.ledger.entry(
+                    &mut out.contract_addresses,
+                    address,
+                    || Some(name.to_vec()),
+                    c,
+                )?;
+                if slot.as_deref().is_some_and(|n| n != name) {
+                    *slot = None;
+                }
+                out.ledger.admit(name.len(), c)?;
+            }
+        }
         for id in 0..catalog.len() {
             c.checkpoint(1)?;
             let definition = catalog.definition(id);
             let (function, key) = definition.map_or((None, None), |(f, k)| (Some(f), k));
+            // Only ET_EXEC definitions have address keys. A captured linked body
+            // must never acquire a header fallback, including through a name or alias.
+            if let Some(CallKey::Address(address)) = &key {
+                if let Some(name) = function.as_ref().and_then(|f| f.name.as_deref()) {
+                    out.contracts.remove(name);
+                }
+                if let Some(name) = out.contract_addresses.get_mut(address) {
+                    *name = None;
+                }
+            }
             if let Some(f) = &function {
                 out.ledger.admit(
                     f.symbol.object.artifact.allocated_bytes() as usize
@@ -135,6 +223,14 @@ impl<'m> Summaries<'m> {
                 },
                 c.position(),
             )?;
+        }
+        // Absolute aliases at a captured body's address follow the same rule
+        // when the value consumer names the symbol rather than its address.
+        for (address, name) in catalog.named_addresses() {
+            c.checkpoint(1)?;
+            if out.groups.addresses.contains_key(&address) {
+                out.contracts.remove(name);
+            }
         }
         Ok(out)
     }
@@ -184,6 +280,7 @@ struct Object<'a> {
     payload: ArtifactId,
     input: u64,
     safe: bool,
+    linked: bool,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -196,7 +293,7 @@ pub(super) fn analyze<'a>(
     c: &mut dyn RunControl,
     visit: &mut Visit<'_>,
 ) -> Result<()> {
-    let mut table = Summaries::new(catalog, memory, c)?;
+    let mut table = Summaries::new(catalog, assumptions.signatures, memory, c)?;
     let mut objects = AdmittedVec::new(memory);
     // Preparation is structural; each function is analyzed exactly once here
     // without summaries, and once below with its completed callee contracts.
@@ -329,6 +426,9 @@ pub(super) fn analyze<'a>(
                     payload,
                     input,
                     safe,
+                    linked: elf.as_ref().is_some_and(|e| {
+                        elf::object_kind(e.object_type) == elf::ObjectKind::Executable
+                    }),
                 },
                 c.position(),
             )?;
@@ -461,49 +561,300 @@ pub(super) fn analyze<'a>(
             for member in component.iter().copied() {
                 let object = table.entry(member)?.object;
                 let mut contract = None;
+                let mut disable_contract = false;
                 if let (Some(object), Some(function)) =
                     (object, table.entry(member)?.function.as_ref())
                 {
+                    let signature = assumptions
+                        .signatures
+                        .and_then(|s| function.name.as_deref().and_then(|n| s.get(n)));
+                    let linked = objects.get(object).ok_or_else(integrity)?.linked;
+                    let applied_signature = signature.filter(|_| !linked);
+                    let rom_signature = signature.filter(|_| linked);
+                    let computed = Computed(&table);
+                    let mut scoped = Scoped {
+                        table: &table,
+                        current: applied_signature.map(|s| s.summary()),
+                    };
                     match research(
                         &mut objects,
                         object,
                         function,
                         assumptions,
-                        &table,
+                        &scoped,
                         decoder,
                         memory,
                         c,
                     ) {
-                        Ok((records, summary, found)) => {
+                        Ok((mut records, mut summary, mut found)) => {
+                            let mut conflicts = AdmittedVec::new(memory);
+                            let mut rom_diagnostics = AdmittedVec::new(memory);
+                            let mut conflict_names = Ledger::new(memory, c)?;
+                            let mut raw_conflicts = AdmittedVec::new(memory);
+                            let mut audit_complete = None;
+                            let mut applied_audit = false;
+                            let mut audit_failure = None;
+                            let mut entry_complete = None;
+                            let publish = !recursive
+                                && objects.get(object).ok_or_else(integrity)?.safe
+                                && eligible(summary.coverage, summary.semantics, &records, c)?;
+                            if publish || assumptions.signatures.is_some() {
+                                let facts = Facts::new(&records, memory, c)?;
+                                let links = CallLinks::new(&facts, function, catalog, memory, c)?;
+                                let entry_required =
+                                    applied_signature.is_some_and(|s| s.arguments < 8);
+                                let results_required = needs_result_audit(&scoped, &links);
+                                applied_audit = entry_required || results_required;
+                                contract = if publish {
+                                    produce(
+                                        &facts,
+                                        &records,
+                                        &scoped,
+                                        rom_signature,
+                                        &links,
+                                        decoder,
+                                        memory,
+                                        &mut raw_conflicts,
+                                        &mut entry_complete,
+                                        c,
+                                    )?
+                                } else if entry_required || rom_signature.is_some() {
+                                    let _ = argument_summary(
+                                        &facts,
+                                        &scoped,
+                                        rom_signature,
+                                        &links,
+                                        decoder,
+                                        memory,
+                                        &mut raw_conflicts,
+                                        &mut entry_complete,
+                                        c,
+                                    )?;
+                                    None
+                                } else {
+                                    None
+                                };
+                                let audit_entries = entry_required && entry_complete != Some(true);
+                                if results_required || audit_entries {
+                                    let entries = if audit_entries {
+                                        (0x3fc00u32)
+                                            & (u32::MAX
+                                                << (10
+                                                    + applied_signature.map_or(8, |s| s.arguments)))
+                                    } else {
+                                        0
+                                    };
+                                    match audit(
+                                        &facts,
+                                        &scoped,
+                                        &links,
+                                        entries,
+                                        decoder,
+                                        memory,
+                                        &mut raw_conflicts,
+                                        c,
+                                    ) {
+                                        Ok(()) => audit_complete = Some(true),
+                                        Err(e)
+                                            if matches!(
+                                                e.code,
+                                                ErrorCode::ResourceLimited | ErrorCode::TimedOut
+                                            ) =>
+                                        {
+                                            audit_complete = Some(false);
+                                            audit_failure = Some(e);
+                                        }
+                                        Err(e) => return Err(e),
+                                    }
+                                } else if entry_required {
+                                    audit_complete = entry_complete;
+                                }
+                            }
+                            // A failed function cannot publish or observe a signature projection.
+                            // All audit recipes and states above have been dropped before this retry.
+                            if audit_complete == Some(false) {
+                                disable_contract = true;
+                                contract = None;
+                                scoped.current = None;
+                                scoped.table = &computed;
+                                drop(records);
+                                (records, summary, found) = research(
+                                    &mut objects,
+                                    object,
+                                    function,
+                                    assumptions,
+                                    &scoped,
+                                    decoder,
+                                    memory,
+                                    c,
+                                )?;
+                                if publish {
+                                    let facts = Facts::new(&records, memory, c)?;
+                                    let links =
+                                        CallLinks::new(&facts, function, catalog, memory, c)?;
+                                    contract = produce(
+                                        &facts,
+                                        &records,
+                                        &scoped,
+                                        None,
+                                        &links,
+                                        decoder,
+                                        memory,
+                                        &mut raw_conflicts,
+                                        &mut None,
+                                        c,
+                                    )?;
+                                }
+                            }
+                            {
+                                let facts = Facts::new(&records, memory, c)?;
+                                let mut sites = CallSites::new(&facts, memory);
+                                for raw in raw_conflicts.iter() {
+                                    c.checkpoint(1)?;
+                                    let (origin, target) = match raw.origin {
+                                        ArgumentSource::Entry(register) => {
+                                            (SignatureOrigin::Argument { register }, None)
+                                        }
+                                        ArgumentSource::MissingResult { site, register } => {
+                                            let target = sites.at(site, function, catalog, c)?;
+                                            (
+                                                SignatureOrigin::Result {
+                                                    site,
+                                                    register,
+                                                    callee: target.clone(),
+                                                },
+                                                target,
+                                            )
+                                        }
+                                    };
+                                    let selected = match &origin {
+                                        SignatureOrigin::Argument { .. } => signature,
+                                        SignatureOrigin::Result { .. } => target
+                                            .as_ref()
+                                            .and_then(|t| t.name.as_deref())
+                                            .and_then(|name| {
+                                                assumptions
+                                                    .signatures
+                                                    .and_then(|s| s.get(name.as_bytes()))
+                                            }),
+                                    };
+                                    let mut usage = raw.usage.clone();
+                                    if let ReadSink::CallArgument { site, callee, .. } =
+                                        &mut usage.sink
+                                    {
+                                        *callee = sites.at(*site, function, catalog, c)?;
+                                    }
+                                    if let (
+                                        Some(signature),
+                                        SignatureOrigin::Argument { register },
+                                    ) = (rom_signature, &origin)
+                                    {
+                                        let diagnostic = RomSignatureDiagnostic {
+                                            function: function.clone(),
+                                            signature: signature.name.clone(),
+                                            declaration: signature.source.clone(),
+                                            register: *register,
+                                            usage,
+                                        };
+                                        conflict_names.admit(
+                                            serde_json::to_vec(&diagnostic)
+                                                .map_err(|e| {
+                                                    Error::new(ErrorCode::Integrity, e.to_string())
+                                                })?
+                                                .len(),
+                                            c,
+                                        )?;
+                                        rom_diagnostics.push(diagnostic, c.position())?;
+                                        continue;
+                                    }
+                                    let conflict = SignatureConflict {
+                                        function: function.clone(),
+                                        signature: selected
+                                            .map(|s| s.name.clone())
+                                            .or_else(|| {
+                                                target.as_ref().and_then(|t| t.name.clone())
+                                            })
+                                            .unwrap_or_else(|| "unresolved signature".into()),
+                                        declaration: selected.map(|s| s.source.clone()),
+                                        origin,
+                                        usage,
+                                    };
+                                    // Output ownership is separate; retain admitted copies through this visit.
+                                    conflict_names.admit(
+                                        serde_json::to_vec(&conflict)
+                                            .map_err(|e| {
+                                                Error::new(ErrorCode::Integrity, e.to_string())
+                                            })?
+                                            .len(),
+                                        c,
+                                    )?;
+                                    conflicts.push(conflict, c.position())?;
+                                }
+                            }
+                            if let (Some(signature), Some(summary)) = (
+                                applied_signature.filter(|_| audit_complete != Some(false)),
+                                contract.as_mut(),
+                            ) {
+                                let bytes = summary.value.arguments.returned.capacity()
+                                    * std::mem::size_of::<ReturnedArgument>()
+                                    + summary
+                                        .value
+                                        .results
+                                        .iter()
+                                        .flatten()
+                                        .map(|v| v.capacity() * std::mem::size_of::<u32>())
+                                        .sum::<usize>();
+                                summary.raw = Some(Box::new(RawSummary {
+                                    _memory: memory.reserve(
+                                        (bytes + std::mem::size_of::<RawSummary<'_>>()) as u64,
+                                        c.position(),
+                                    )?,
+                                    value: summary.value.clone(),
+                                }));
+                                for (word, consumed) in summary
+                                    .value
+                                    .arguments
+                                    .consumed
+                                    .iter_mut()
+                                    .enumerate()
+                                    .skip(usize::from(signature.arguments))
+                                {
+                                    if let Some(bits) = summary.value.narrowed_may.get_mut(word) {
+                                        *bits = consumed.may;
+                                    }
+                                    consumed.may = 0;
+                                }
+                                let shape = signature.summary().contract;
+                                summary.value.contract = shape;
+                                for register in [10, 11] {
+                                    if !summary.value.returns(register)
+                                        && let Some(result) = summary
+                                            .value
+                                            .results
+                                            .get_mut(usize::from(register - 10))
+                                    {
+                                        *result = None;
+                                    }
+                                }
+                                summary.value.arguments.returned.retain(|r| {
+                                    shape.is_none_or(|s| {
+                                        r.register < 10 + s.results && r.argument < 10 + s.arguments
+                                    })
+                                });
+                            }
                             let analyzed = AnalyzedFunction {
                                 function,
                                 records: &records,
                                 coverage: summary.coverage,
                                 semantics: summary.semantics,
                                 jump_tables: &found.tables,
-                                summaries: &table,
+                                summaries: &scoped,
+                                conflicts: &conflicts,
+                                rom_signature_diagnostics: &rom_diagnostics,
+                                signature_audit_complete: audit_complete.filter(|_| applied_audit),
+                                rom_signature_summary_complete: rom_signature.and(entry_complete),
+                                signature_audit_failure: audit_failure.as_ref(),
                             };
-                            if !recursive
-                                && objects.get(object).ok_or_else(integrity)?.safe
-                                && eligible(
-                                    analyzed.coverage,
-                                    analyzed.semantics,
-                                    analyzed.records,
-                                    c,
-                                )?
-                            {
-                                let facts = Facts::new(&records, memory, c)?;
-                                let links = CallLinks::new(&facts, function, catalog, memory, c)?;
-                                contract = produce(
-                                    &facts,
-                                    analyzed.records,
-                                    &table,
-                                    &links,
-                                    decoder,
-                                    memory,
-                                    c,
-                                )?;
-                            }
                             visit(LibraryOutcome::Analyzed(analyzed), c)?;
                         }
                         Err(e) if blocks_function(&e) => visit(
@@ -515,6 +866,16 @@ pub(super) fn analyze<'a>(
                         )?,
                         Err(e) => return Err(e),
                     }
+                }
+                if disable_contract
+                    && let Some(name) = table
+                        .entry(member)?
+                        .function
+                        .as_ref()
+                        .and_then(|f| f.name.as_deref())
+                {
+                    let name = name.to_vec();
+                    table.contracts.remove(name.as_slice());
                 }
                 table.finish(member, contract)?;
             }
@@ -595,12 +956,26 @@ fn produce<'a>(
     facts: &Facts<'_, 'a>,
     records: &[FunctionRecord],
     summaries: &dyn CallSummaries,
+    rom_signature: Option<&crate::signatures::FunctionSignature>,
     links: &CallLinks<'_>,
     decoder: &dyn FunctionSemantics,
     memory: &'a WorkingMemory,
+    conflicts: &mut AdmittedVec<'a, RawConflict>,
+    audit_complete: &mut Option<bool>,
     c: &mut dyn RunControl,
 ) -> Result<Option<OwnedSummary<'a>>> {
-    match try_produce(facts, records, summaries, links, decoder, memory, c) {
+    match try_produce(
+        facts,
+        records,
+        summaries,
+        rom_signature,
+        links,
+        decoder,
+        memory,
+        conflicts,
+        audit_complete,
+        c,
+    ) {
         Err(error) if matches!(error.code, ErrorCode::ResourceLimited | ErrorCode::TimedOut) => {
             Ok(None)
         }
@@ -613,19 +988,23 @@ fn try_produce<'a>(
     facts: &Facts<'_, 'a>,
     records: &[FunctionRecord],
     summaries: &dyn CallSummaries,
+    rom_signature: Option<&crate::signatures::FunctionSignature>,
     links: &CallLinks<'_>,
     decoder: &dyn FunctionSemantics,
     memory: &'a WorkingMemory,
+    conflicts: &mut AdmittedVec<'a, RawConflict>,
+    audit_complete: &mut Option<bool>,
     c: &mut dyn RunControl,
 ) -> Result<Option<OwnedSummary<'a>>> {
-    let program = ArgumentProgram::capture(facts, decoder, memory, c)?;
-    let Some((arguments, argument_memory)) = program.summarize(
-        &|site| {
-            links
-                .callee(site)
-                .and_then(|callee| summaries.summary(callee))
-        },
+    let Some((arguments, argument_memory)) = argument_summary(
+        facts,
+        summaries,
+        rom_signature,
+        links,
+        decoder,
         memory,
+        conflicts,
+        audit_complete,
         c,
     )?
     else {
@@ -645,10 +1024,121 @@ fn try_produce<'a>(
         }
     }
     Ok(Some(OwnedSummary {
-        value: CallSummary { results, arguments },
+        value: CallSummary {
+            results,
+            arguments,
+            ..CallSummary::default()
+        },
+        raw: None,
         _arguments: argument_memory,
         _results: ledger.into_reservation(),
     }))
+}
+
+/// Audit uses the summary interpreter's fixed-point events. It never promotes
+/// May to Exact, and stack spill/reload keeps its normal non-sink semantics.
+#[allow(clippy::too_many_arguments)] // One audit of the shared summary interpreter.
+fn argument_summary<'a>(
+    facts: &Facts<'_, 'a>,
+    summaries: &dyn CallSummaries,
+    rom_signature: Option<&crate::signatures::FunctionSignature>,
+    links: &CallLinks<'_>,
+    decoder: &dyn FunctionSemantics,
+    memory: &'a WorkingMemory,
+    conflicts: &mut AdmittedVec<'a, RawConflict>,
+    audit_complete: &mut Option<bool>,
+    c: &mut dyn RunControl,
+) -> Result<Option<(ArgumentSummary, MemoryReservation<'a>)>> {
+    let audit = rom_signature.is_some()
+        || summaries
+            .current()
+            .and_then(|s| s.contract)
+            .is_some_and(|s| s.arguments < 8);
+    if audit {
+        *audit_complete = Some(false);
+    }
+    let program = ArgumentProgram::capture(facts, decoder, memory, c)?;
+    let unshaped = UnshapedCurrent(summaries);
+    let calls = Calls {
+        links,
+        summaries: &unshaped,
+    };
+    if !audit {
+        return program.summarize(&calls, memory, c);
+    }
+    let mut observe = |origin, usage: &ReadUse, c: &mut dyn RunControl| {
+        let conflict = match origin {
+            ArgumentSource::Entry(register) => {
+                rom_signature.is_some_and(|s| register >= 10 + s.arguments)
+                    || usage.precision == ReadPrecision::Exact
+                        && summaries
+                            .current()
+                            .and_then(|s| s.contract)
+                            .is_some_and(|s| register >= 10 + s.arguments)
+            }
+            ArgumentSource::MissingResult { .. } => usage.precision == ReadPrecision::Exact,
+        };
+        if conflict {
+            record_conflict(conflicts, origin, usage, c)?;
+        }
+        Ok(())
+    };
+    let result = program.summarize_observed(&calls, memory, c, &mut observe)?;
+    *audit_complete = Some(result.is_some());
+    Ok(result)
+}
+#[allow(clippy::too_many_arguments)]
+fn audit<'a>(
+    facts: &Facts<'_, 'a>,
+    summaries: &dyn CallSummaries,
+    links: &CallLinks<'_>,
+    entries: u32,
+    decoder: &dyn FunctionSemantics,
+    memory: &'a WorkingMemory,
+    conflicts: &mut AdmittedVec<'a, RawConflict>,
+    c: &mut dyn RunControl,
+) -> Result<()> {
+    let program = ArgumentProgram::capture(facts, decoder, memory, c)?;
+    let calls = Calls { links, summaries };
+    let mut observe = |origin, usage: &ReadUse, c: &mut dyn RunControl| {
+        if usage.precision == ReadPrecision::Exact {
+            record_conflict(conflicts, origin, usage, c)?;
+        }
+        Ok(())
+    };
+    program
+        .audit(&calls, memory, c, &mut observe, entries)?
+        .ok_or_else(|| Error::new(ErrorCode::Unavailable, "audit has no fixed point"))?;
+    Ok(())
+}
+fn record_conflict(
+    conflicts: &mut AdmittedVec<'_, RawConflict>,
+    origin: ArgumentSource,
+    usage: &ReadUse,
+    c: &mut dyn RunControl,
+) -> Result<()> {
+    if !conflicts
+        .iter()
+        .any(|r| r.origin == origin && r.usage == *usage)
+    {
+        conflicts.push(
+            RawConflict {
+                origin,
+                usage: usage.clone(),
+            },
+            c.position(),
+        )?;
+    }
+    Ok(())
+}
+
+fn needs_result_audit(summaries: &dyn CallSummaries, links: &CallLinks<'_>) -> bool {
+    links.keys().any(|key| {
+        summaries
+            .summary(key.borrowed())
+            .and_then(|s| s.contract)
+            .is_some_and(|s| s.results < 2)
+    })
 }
 
 #[cfg(test)]

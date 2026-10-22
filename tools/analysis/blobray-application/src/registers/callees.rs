@@ -101,6 +101,11 @@ impl<'m> Callees<'m> {
         Ok(out)
     }
 
+    pub(crate) fn named_addresses(&self) -> impl Iterator<Item = (u32, &[u8])> {
+        self.definitions
+            .iter()
+            .filter_map(|d| Some((d.address?, d.name.as_deref()?)))
+    }
     pub(crate) fn len(&self) -> usize {
         self.definitions.len()
     }
@@ -396,7 +401,7 @@ fn integrity() -> Error {
 
 /// Per-function relocation sites point at the transfer (the second instruction
 /// of an AUIPC/JALR call pair), including tail-call pairs.
-pub(super) struct CallSites<'f, 'a, 'm> {
+pub(crate) struct CallSites<'f, 'a, 'm> {
     facts: &'f Facts<'a, 'm>,
     relocations: AdmittedVec<'m, (u64, &'a ReferenceTarget, i64)>,
     indirect: AdmittedVec<'m, (u64, u8, i32)>,

@@ -159,14 +159,76 @@ flow-incomplete callees and exhausted summaries consume all argument bits as
 `may`. Summaries use admitted working memory and are memoized in callee-first
 order in the second function analysis. The same callee port supplies result
 constants to value analysis. Without the flag, no summary narrows argument uses.
-The register-access schema remains 9.
+`--signatures FILE` reads the generated `[[function]]` TOML contracts. It requires
+`--call-summaries`. `arguments` counts occupied RV32 a0–a7 words (at most eight),
+and `result` is `void`, `u32` or `u64`. Unknown results and duplicate names are
+errors. Application owns this parser; the register checker uses it too.
+
+Contracts apply to functions without a captured body and to bodies in ELF
+relocatable objects (`e_type = ET_REL`), including archive members. A body in a
+linked executable (`ET_EXEC`, including every ROM revision) receives no header
+contract: its computed summary remains authoritative, and calls to it from
+libraries use that summary too. An unavailable, recursive or ambiguous linked
+summary never falls back to the header, even when the call names an alias.
+The distinction comes from ELF type, with no additional flag or role convention.
+
+Applicable contracts enter through `CallSummaries`: a callee without a computed summary
+consumes only its declared argument words with May precision. Absent result
+words carry neither dependencies nor constants. A computed summary remains
+in force and is checked against the contract; declared absent return words
+are excluded from Return sinks. Missing signatures retain the usual behavior.
+Exact consumption beyond the declared inputs, or Exact flow from an absent
+call result to a proved sink, becomes an entry in `summary.signature_conflicts`.
+Every entry names the function, signature declaration, argument or call-result
+origin, Exact bit mask and sink (including the resolved callee of CallArgument).
+All functions and observations are processed before the CLI closes the full JSON
+report and returns a nonzero exit code. The inventory checker writes both reports
+before failing. Conflicting results remain diagnostic; acceptance cannot rely on
+the narrowed verdicts until the contracts agree. Computed Exact consumption is
+retained alongside its conflict, rather than silently dropped.
+`summary.signature_audit_incomplete` lists functions whose audit did not reach a
+fixed point within the existing resource bounds. Its contract is disabled locally:
+records and a computed summary are produced without header projections or external
+signature fallbacks for that function. Other functions continue normally. The CLI
+still closes the full report before returning nonzero for incomplete applicable
+audits. Entry checks share the original summary pass; a separate query tracks
+only unverified entry words and absent call results. It has one fixed work
+allowance (16 times the summary allowance), charged to the unchanged global
+work cap. There are no escalating retries. Audit-only stack storage discards
+wholly unknown untracked bytes and periodically releases historical maps while
+retaining every live CFG state. Every audit allocation is function-local.
+Both CLI and inventory use `DEFAULT_WORKING_BYTES` (256 MiB); the checker has
+no increased memory limit.
+Audit observes fixed-point sink events before
+aggregation, so a separate May use cannot hide Exact evidence. A stack spill and
+reload alone is not a sink; dead arithmetic and May flow are not conflicts.
+May consumption beyond the declared inputs is removed by the ABI contract.
+`summary.contract_narrowed_bits` counts distinct source bits per selected load
+whose CallArgument or Return sink a fallback signature or result contract removes.
+`summary.contract_may_narrowed_bits` separately counts bits whose computed May
+argument consumption the contract removes. Each category counts a bit once per
+load even if several sinks were removed or another sink still consumes it.
+`summary.rom_signature_diagnostics` lists linked-body entry-register uses beyond
+the header's argument count, with the function identity, signature, declaration,
+register, bit mask, sink and Exact or May precision. These are observations of
+the unmodified computed flow, never errors or reasons to narrow it.
+`summary.rom_signature_diagnostic_count` counts those source-register/sink events;
+two precisions at a sink count separately. They appear in both inventory reports
+and do not change the exit status. ROM diagnostics reuse the ordinary computed
+summary pass; there is no additional ROM audit. Original summaries unavailable
+within their normal budget appear in `summary.rom_signature_summary_unavailable`
+with a reason and are nonfatal. Applicable contract audits remain distinct.
+No `noreturn` facts are inferred or added.
+The typed summary schema is 4.
+
+The register-access schema is 10.
 See [loaded bit uses](../../../blobray-README.md#loaded-bit-uses).
 
 Human groups show the four classes, sinks, precision and reasons; observations
 with different `reads` remain separate entries. Selection masks retain their
 expression meaning and do not by themselves indicate a read use.
 
-The JSON document streams `{"schema":9,"inputs":[...],"abi":...,"call_returns":...,"read_only":[...],"records":[...],"groups":[...],"summary":{...}}`;
+The JSON document streams `{"schema":10,"inputs":[...],"abi":...,"call_returns":...,"read_only":[...],"records":[...],"groups":[...],"summary":{...}}`;
 `records` holds the selected records and `groups` appears only with
 `--group-by`.
 `inputs` lists each input's role and SHA-256. A record is an `observation` (the

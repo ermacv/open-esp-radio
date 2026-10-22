@@ -22,6 +22,11 @@ pub struct AnalyzedFunction<'a> {
     pub jump_tables: &'a [JumpDispatch],
     /// The shared callee port used for these final records.
     pub summaries: &'a dyn CallSummaries,
+    pub conflicts: &'a [SignatureConflict],
+    pub rom_signature_diagnostics: &'a [RomSignatureDiagnostic],
+    pub signature_audit_complete: Option<bool>,
+    pub rom_signature_summary_complete: Option<bool>,
+    pub signature_audit_failure: Option<&'a Error>,
 }
 impl AnalyzedFunction<'_> {
     /// Coverage and value semantics are complete.
@@ -107,8 +112,11 @@ pub fn analyze_library(
     control: &mut dyn RunControl,
     visit: &mut Visit<'_>,
 ) -> Result<()> {
+    assumptions.validate()?;
     if assumptions.call_summaries {
         let catalog = crate::registers::Callees::capture(inputs, memory, control)?;
+        let mut conflict_count = 0;
+        let mut first_conflict = None;
         summaries::analyze(
             inputs,
             assumptions,
@@ -116,8 +124,26 @@ pub fn analyze_library(
             decoder,
             memory,
             control,
-            visit,
-        )
+            &mut |outcome, c| {
+                if let LibraryOutcome::Analyzed(a) = &outcome {
+                    conflict_count += a.conflicts.len();
+                    if first_conflict.is_none() {
+                        first_conflict = a.conflicts.first().map(SignatureConflict::description);
+                    }
+                }
+                visit(outcome, c)
+            },
+        )?;
+        if conflict_count != 0 {
+            return Err(Error::new(
+                ErrorCode::Conflict,
+                format!(
+                    "{conflict_count} signature conflicts; {}",
+                    first_conflict.unwrap_or_default()
+                ),
+            ));
+        }
+        Ok(())
     } else {
         analyze_without_summaries(inputs, assumptions, decoder, memory, control, visit)
     }
@@ -279,10 +305,23 @@ pub struct Assumptions<'a> {
     /// function in callee-first order with shared result/argument contracts.
     /// Constants propagate through any acyclic call depth in two analyses.
     pub call_summaries: bool,
+    pub signatures: Option<&'a crate::signatures::Signatures>,
     /// Address ranges read-only at run time whatever a linked image's
     /// section flags say, such as flash mapped for reading: constants are
     /// read from the file-backed bytes inside them.
     pub read_only: &'a [ReadOnlyWindow],
+}
+
+impl Assumptions<'_> {
+    fn validate(self) -> Result<()> {
+        if self.signatures.is_some() && !self.call_summaries {
+            return Err(Error::new(
+                ErrorCode::InvalidRequest,
+                "signatures require call summaries",
+            ));
+        }
+        Ok(())
+    }
 }
 
 /// The sections and function symbols of one object.
@@ -567,6 +606,11 @@ fn analyze_object(
                             semantics: summary.semantics,
                             jump_tables: &found.tables,
                             summaries: returns,
+                            conflicts: &[],
+                            rom_signature_diagnostics: &[],
+                            rom_signature_summary_complete: None,
+                            signature_audit_complete: None,
+                            signature_audit_failure: None,
                         }),
                         c,
                     )?,
@@ -614,7 +658,14 @@ pub fn register_accesses(
     crate::registers::validate_ranges(ranges)?;
     let callees = crate::registers::Callees::capture(inputs, memory, control)?;
     let mut summary = RegisterAccessSummary {
-        schema: 3,
+        schema: 4,
+        contract_narrowed_bits: 0,
+        contract_may_narrowed_bits: 0,
+        signature_conflicts: Vec::new(),
+        rom_signature_diagnostics: Vec::new(),
+        rom_signature_diagnostic_count: 0,
+        rom_signature_summary_unavailable: Vec::new(),
+        signature_audit_incomplete: Vec::new(),
         ranges: ranges.to_vec(),
         functions: 0,
         partial_functions: 0,
@@ -625,8 +676,62 @@ pub fn register_accesses(
         unresolved_addresses: 0,
         indexed_addresses: 0,
     };
+    let mut conflict_memory = Ledger::new(memory, control)?;
     let mut visit = |outcome: LibraryOutcome<'_>, c: &mut dyn RunControl| match outcome {
         LibraryOutcome::Analyzed(analyzed) => {
+            for (complete, failures, reason) in [
+                (
+                    analyzed.signature_audit_complete,
+                    &mut summary.signature_audit_incomplete,
+                    "signature audit did not finish within its per-function budget",
+                ),
+                (
+                    analyzed.rom_signature_summary_complete,
+                    &mut summary.rom_signature_summary_unavailable,
+                    "computed ROM summary unavailable within the original per-function budget",
+                ),
+            ] {
+                if complete != Some(false) {
+                    continue;
+                }
+                let failure = SignatureAuditIncomplete {
+                    function: analyzed.function.clone(),
+                    reason: analyzed
+                        .signature_audit_failure
+                        .cloned()
+                        .unwrap_or_else(|| Error::new(ErrorCode::Unavailable, reason)),
+                };
+                conflict_memory.admit(
+                    serde_json::to_vec(&failure)
+                        .map_err(|e| Error::new(ErrorCode::Integrity, e.to_string()))?
+                        .len(),
+                    c,
+                )?;
+                conflict_memory.push(failures, failure, c)?;
+            }
+            for conflict in analyzed.conflicts {
+                conflict_memory.admit(
+                    serde_json::to_vec(conflict)
+                        .map_err(|e| Error::new(ErrorCode::Integrity, e.to_string()))?
+                        .len(),
+                    c,
+                )?;
+                conflict_memory.push(&mut summary.signature_conflicts, conflict.clone(), c)?;
+            }
+            for diagnostic in analyzed.rom_signature_diagnostics {
+                conflict_memory.admit(
+                    serde_json::to_vec(diagnostic)
+                        .map_err(|e| Error::new(ErrorCode::Integrity, e.to_string()))?
+                        .len(),
+                    c,
+                )?;
+                conflict_memory.push(
+                    &mut summary.rom_signature_diagnostics,
+                    diagnostic.clone(),
+                    c,
+                )?;
+                summary.rom_signature_diagnostic_count += 1;
+            }
             summary.functions += 1;
             summary.partial_functions += u64::from(!analyzed.complete());
             summary.partial_causes.add(analyzed.partial_causes(c)?);
@@ -669,7 +774,11 @@ pub fn register_accesses(
                     },
                     c,
                 )
-            })
+            })?;
+            let [direct, may] = reads.contract_narrowed_bits();
+            summary.contract_narrowed_bits += direct;
+            summary.contract_may_narrowed_bits += may;
+            Ok(())
         }
         LibraryOutcome::Blocked { function, error } => {
             summary.blocked_functions += 1;
@@ -697,6 +806,7 @@ pub fn register_accesses(
             )
         }
     };
+    assumptions.validate()?;
     if assumptions.call_summaries {
         summaries::analyze(
             inputs,
@@ -750,6 +860,11 @@ mod tests {
             },
             jump_tables: &[],
             summaries: &NoSummaries,
+            conflicts: &[],
+            rom_signature_diagnostics: &[],
+            rom_signature_summary_complete: None,
+            signature_audit_complete: None,
+            signature_audit_failure: None,
         }
         .partial_causes(c)
     }

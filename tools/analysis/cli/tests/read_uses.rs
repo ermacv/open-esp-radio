@@ -498,7 +498,7 @@ fn loads_report_their_sinks_limits_preservation_and_unused_bits() {
             .all(|usage| !matches!(usage.sink, ReadSink::Return { .. })),
         "call results carry no dependency on the previous argument"
     );
-    assert_eq!(oer_tool_analysis_cli::wire::REGISTER_ACCESSES_SCHEMA, 9);
+    assert_eq!(oer_tool_analysis_cli::wire::REGISTER_ACCESSES_SCHEMA, 10);
     assert!(
         oer_tool_analysis_cli::mmio::reads(read("call_named_argument")).contains("named_callee")
     );
@@ -1382,4 +1382,820 @@ ret
         }
     }
     assert_eq!(memory.used(), 0);
+}
+
+#[test]
+fn idf_contracts_narrow_external_arguments_returns_and_reject_conflicts() {
+    use oer_analysis_blobray_application::{
+        library::{LibraryOutcome, analyze_library},
+        signatures::Signatures,
+    };
+    let sig = |name: &str, arguments: u8, result: &str| {
+        format!(
+            "[[function]]\nname='{name}'\narguments={arguments}\nresult='{result}'\nsource='synthetic.h:1'\n"
+        )
+    };
+    let code = |body: &str| {
+        fixture(&format!(
+            r##"#![no_std]
+core::arch::global_asm!(r#"
+.option norvc
+.option norelax
+.section .text.caller,"ax",@progbits
+.globl caller
+.type caller,@function
+caller:
+{body}
+.size caller, .-caller
+"#);
+"##
+        ))
+    };
+    for argument in 0..8 {
+        let inputs = [Executable::new(code(&format!(
+            "lui t0, 0x20107\nlw a{argument}, 0(t0)\ncall external\nret"
+        )))];
+        for signatures in [
+            None,
+            Some(Signatures::parse(&sig("external", 1, "void")).unwrap()),
+        ] {
+            let memory = WorkingMemory::new(64 << 20).unwrap();
+            let mut found = None;
+            let summary = register_accesses(
+                &inputs,
+                Assumptions {
+                    abi: Some(CallAbi::RiscvInteger),
+                    call_summaries: true,
+                    signatures: signatures.as_ref(),
+                    ..Default::default()
+                },
+                &[],
+                &oer_analysis_riscv_lift::RiscvDecoder,
+                &memory,
+                &mut || Ok(()),
+                &mut |record, _| {
+                    if let RegisterAccess::Observation {
+                        reads: Some(reads), ..
+                    } = record
+                    {
+                        found = Some(reads.clone());
+                    }
+                    Ok(())
+                },
+            )
+            .unwrap();
+            let reads = found.unwrap();
+            if signatures.is_some() && argument >= 1 {
+                assert!(reads.uses.is_empty(), "a{argument}: {reads:?}");
+                assert_eq!(reads.unused, u32::MAX);
+                assert_eq!(summary.contract_narrowed_bits, 32);
+            } else {
+                assert!(reads.uses.iter().any(|u| u.precision == ReadPrecision::May && matches!(u.sink, ReadSink::CallArgument { register, .. } if register == 10 + argument)));
+                assert_eq!(summary.contract_narrowed_bits, 0);
+            }
+            assert_eq!(memory.used(), 0);
+        }
+    }
+    for result in ["void", "u32", "u64"] {
+        let signatures = Signatures::parse(&sig("external", 0, result)).unwrap();
+        let memory = WorkingMemory::new(64 << 20).unwrap();
+        let mut returned = None;
+        analyze_library(
+            &[Executable::new(code("call external\nret"))],
+            Assumptions {
+                abi: Some(CallAbi::RiscvInteger),
+                call_summaries: true,
+                signatures: Some(&signatures),
+                ..Default::default()
+            },
+            &oer_analysis_riscv_lift::RiscvDecoder,
+            &memory,
+            &mut || Ok(()),
+            &mut |outcome, _| {
+                if let LibraryOutcome::Analyzed(a) = outcome {
+                    for record in a.records {
+                        if let FunctionRecord::ReturnValue { low, high, .. } = record {
+                            returned = Some((low.clone(), high.clone()));
+                        }
+                    }
+                }
+                Ok(())
+            },
+        )
+        .unwrap();
+        let (low, high) = returned.unwrap();
+        assert_eq!(low == AbstractValue::Unknown, result == "void");
+        assert_eq!(high == AbstractValue::Unknown, result != "u64");
+    }
+    // A captured void function no longer consumes MMIO bits at ret.
+    let signatures = Signatures::parse(&sig("caller", 0, "void")).unwrap();
+    let memory = WorkingMemory::new(64 << 20).unwrap();
+    let mut found = None;
+    let summary = register_accesses(
+        &[Executable::new(code("lui t0, 0x20107\nlw a0, 0(t0)\nret"))],
+        Assumptions {
+            abi: Some(CallAbi::RiscvInteger),
+            call_summaries: true,
+            signatures: Some(&signatures),
+            ..Default::default()
+        },
+        &[],
+        &oer_analysis_riscv_lift::RiscvDecoder,
+        &memory,
+        &mut || Ok(()),
+        &mut |record, _| {
+            if let RegisterAccess::Observation {
+                reads: Some(reads), ..
+            } = record
+            {
+                found = Some(reads.clone());
+            }
+            Ok(())
+        },
+    )
+    .unwrap();
+    assert!(found.unwrap().uses.is_empty());
+    assert_eq!(summary.contract_narrowed_bits, 32);
+    for (body, signature, expected) in [
+        ("bnez a2, 1f\n1: ret", sig("caller", 2, "void"), "entry a2"),
+        (
+            "call external\nbnez a0, 1f\n1: ret",
+            sig("external", 0, "void"),
+            "absent result a0 of call +0x4",
+        ),
+        (
+            "call external\nbnez a1, 1f\n1: ret",
+            sig("external", 0, "u32"),
+            "absent result a1",
+        ),
+    ] {
+        let signatures = Signatures::parse(&signature).unwrap();
+        let error = analyze_library(
+            &[Executable::new(code(body))],
+            Assumptions {
+                abi: Some(CallAbi::RiscvInteger),
+                call_summaries: true,
+                signatures: Some(&signatures),
+                ..Default::default()
+            },
+            &oer_analysis_riscv_lift::RiscvDecoder,
+            &memory,
+            &mut || Ok(()),
+            &mut |_, _| Ok(()),
+        )
+        .unwrap_err();
+        assert_eq!(error.code, ErrorCode::Conflict);
+        assert!(error.message.contains(expected), "{}", error.message);
+        assert!(error.message.contains("caller"));
+    }
+    let error = analyze_library(
+        &[],
+        Assumptions {
+            signatures: Some(&signatures),
+            ..Default::default()
+        },
+        &oer_analysis_riscv_lift::RiscvDecoder,
+        &memory,
+        &mut || Ok(()),
+        &mut |_, _| Ok(()),
+    )
+    .unwrap_err();
+    assert_eq!(error.code, ErrorCode::InvalidRequest);
+}
+
+#[test]
+fn contracts_distinguish_exact_sinks_from_may_dead_values_and_spills() {
+    use oer_analysis_blobray_application::{library::analyze_library, signatures::Signatures};
+    let code = |body: &str| {
+        fixture(&format!(
+            r##"#![no_std]
+core::arch::global_asm!(r#"
+.option norvc
+.option norelax
+.section .text.caller,"ax",@progbits
+.globl caller
+.type caller,@function
+caller:
+{body}
+.size caller, .-caller
+"#);
+"##
+        ))
+    };
+    let signatures = Signatures::parse(
+        "[[function]]\nname='external'\narguments=0\nresult='void'\nsource='synthetic.h:1'\n",
+    )
+    .unwrap();
+    let memory = WorkingMemory::new(64 << 20).unwrap();
+    for (body, conflict) in [
+        ("call external\naddi t0, a0, 1\nret", false), // Dead arithmetic is no sink.
+        ("call external\naddi t0, a0, 1\nbnez t0, 1f\n1: ret", false), // May flow.
+        ("call external\ncall opaque\nret", false),    // Opaque argument consumption is May.
+        ("call external\nli a0, 0\nbnez a0, 1f\n1: ret", false),
+        (
+            "call external\naddi sp, sp, -16\nsw a0, 0(sp)\nlw t0, 0(sp)\naddi sp, sp, 16\nret",
+            false,
+        ),
+        (
+            "call external\naddi sp, sp, -16\nsw a0, 0(sp)\nlw t0, 0(sp)\naddi sp, sp, 16\nbnez t0, 1f\n1: ret",
+            true,
+        ),
+        (
+            "call external\naddi sp,sp,-16\nsw a0,0(sp)\nlw t0,0(s0)\nsw t0,0(sp)\nlw t1,0(sp)\naddi sp,sp,16\nbnez t1,1f\n1: ret",
+            false, // An unknown untracked overwrite erases the old stack source.
+        ),
+        (
+            "call external\naddi sp,sp,-16\nsw a0,0(sp)\nsw zero,0(sp)\nlw t1,0(sp)\naddi sp,sp,16\nbnez t1,1f\n1: ret",
+            false, // Constants remain tracked by the compact audit stack.
+        ),
+        ("call external\nsw a0, 0(s0)\nret", true),
+    ] {
+        let result = analyze_library(
+            &[Executable::new(code(body))],
+            Assumptions {
+                abi: Some(CallAbi::RiscvInteger),
+                call_summaries: true,
+                signatures: Some(&signatures),
+                ..Default::default()
+            },
+            &oer_analysis_riscv_lift::RiscvDecoder,
+            &memory,
+            &mut || Ok(()),
+            &mut |_, _| Ok(()),
+        );
+        assert_eq!(result.is_err(), conflict, "{body}: {result:?}");
+        if let Err(error) = result {
+            assert_eq!(error.code, ErrorCode::Conflict);
+        }
+        assert_eq!(memory.used(), 0);
+    }
+    // Exact evidence must survive a separate May sink of the very same bit.
+    let signature = Signatures::parse(
+        "[[function]]\nname='caller'\narguments=2\nresult='void'\nsource='synthetic.h:2'\n",
+    )
+    .unwrap();
+    let error = analyze_library(
+        &[Executable::new(code("bnez a2, 1f\n1: call opaque\nret"))],
+        Assumptions {
+            abi: Some(CallAbi::RiscvInteger),
+            call_summaries: true,
+            signatures: Some(&signature),
+            ..Default::default()
+        },
+        &oer_analysis_riscv_lift::RiscvDecoder,
+        &memory,
+        &mut || Ok(()),
+        &mut |_, _| Ok(()),
+    )
+    .unwrap_err();
+    assert_eq!(error.code, ErrorCode::Conflict);
+    assert!(error.message.contains("Branch"));
+    // An analyzed callee's opaque May consumption is removed and counted separately.
+    let signature = Signatures::parse(
+        "[[function]]\nname='shaped'\narguments=0\nresult='void'\nsource='synthetic.h:3'\n",
+    )
+    .unwrap();
+    let object = fixture(
+        r##"#![no_std]
+core::arch::global_asm!(r#"
+.option norvc
+.option norelax
+.section .text.shaped,"ax",@progbits
+.globl shaped
+.type shaped,@function
+shaped: call opaque
+ret
+.size shaped, .-shaped
+.section .text.root,"ax",@progbits
+.globl root
+.type root,@function
+root: lui t0, 0x20107
+lw a1, 0(t0)
+call shaped
+ret
+.size root, .-root
+"#);
+"##,
+    );
+    let mut load = None;
+    let summary = register_accesses(
+        &[Executable::new(object)],
+        Assumptions {
+            abi: Some(CallAbi::RiscvInteger),
+            call_summaries: true,
+            signatures: Some(&signature),
+            ..Default::default()
+        },
+        &[],
+        &oer_analysis_riscv_lift::RiscvDecoder,
+        &memory,
+        &mut || Ok(()),
+        &mut |record, _| {
+            if let RegisterAccess::Observation {
+                reads: Some(reads), ..
+            } = record
+            {
+                load = Some(reads.clone());
+            }
+            Ok(())
+        },
+    )
+    .unwrap();
+    assert!(load.unwrap().uses.is_empty());
+    assert_eq!(summary.contract_narrowed_bits, 0);
+    assert_eq!(summary.contract_may_narrowed_bits, 32);
+    assert_eq!(memory.used(), 0);
+}
+
+#[test]
+fn all_contract_conflicts_are_retained_before_the_cli_reports_failure() {
+    use oer_analysis_blobray_application::signatures::Signatures;
+    let object = fixture(
+        r##"#![no_std]
+core::arch::global_asm!(r#"
+.option norvc
+.option norelax
+.section .text.first_bad,"ax",@progbits
+.globl first_bad
+.type first_bad,@function
+first_bad: beq a0, a1, 1f
+1: ret
+.size first_bad, .-first_bad
+.section .text.second_bad,"ax",@progbits
+.globl second_bad
+.type second_bad,@function
+second_bad: lui t0, 0x20107
+sw a2, 0(t0)
+ret
+.size second_bad, .-second_bad
+.section .text.last_good,"ax",@progbits
+.globl last_good
+.type last_good,@function
+last_good: lui t0, 0x20107
+lw t1, 0(t0)
+ret
+.size last_good, .-last_good
+"#);
+"##,
+    );
+    let text = ["first_bad", "second_bad"]
+        .map(|name| {
+            format!(
+                "[[function]]\nname='{name}'\narguments=0\nresult='void'\nsource='synthetic.h:1'\n"
+            )
+        })
+        .join("\n");
+    let signatures = Signatures::parse(&text).unwrap();
+    let memory = WorkingMemory::new(64 << 20).unwrap();
+    let mut observations = Vec::new();
+    let summary = register_accesses(
+        &[Executable::new(object.clone())],
+        Assumptions {
+            abi: Some(CallAbi::RiscvInteger),
+            call_summaries: true,
+            signatures: Some(&signatures),
+            ..Default::default()
+        },
+        &[],
+        &oer_analysis_riscv_lift::RiscvDecoder,
+        &memory,
+        &mut || Ok(()),
+        &mut |record, _| {
+            observations.push(record.clone());
+            Ok(())
+        },
+    )
+    .unwrap();
+    assert_eq!(summary.functions, 3);
+    assert_eq!(summary.signature_conflicts.len(), 3);
+    assert!(observations.iter().any(|r| matches!(r, RegisterAccess::Observation { function, .. } if function.name.as_deref() == Some(b"last_good"))));
+    assert!(
+        summary
+            .signature_conflicts
+            .iter()
+            .all(|c| c.usage.precision == ReadPrecision::Exact)
+    );
+    assert!(
+        summary
+            .signature_conflicts
+            .iter()
+            .all(|c| c.declaration.as_deref() == Some("synthetic.h:1"))
+    );
+    let temp = tempfile::tempdir().unwrap();
+    let binary = temp.path().join("fixture.o");
+    let contracts = temp.path().join("signatures.toml");
+    std::fs::write(&binary, &object).unwrap();
+    std::fs::write(&contracts, &text).unwrap();
+    let output = Command::new(env!("CARGO_BIN_EXE_blobray"))
+        .args([
+            "--format",
+            "json",
+            "register-accesses",
+            "--abi",
+            "riscv-integer",
+            "--call-summaries",
+            "--input",
+        ])
+        .arg(format!("fixture={}", binary.display()))
+        .arg("--signatures")
+        .arg(&contracts)
+        .output()
+        .unwrap();
+    assert_eq!(
+        output.status.code(),
+        Some(1),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let document: oer_tool_analysis_cli::wire::RegisterAccessDocument =
+        serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(document.summary.functions, 3);
+    assert_eq!(
+        document.summary.signature_conflicts,
+        summary.signature_conflicts
+    );
+    assert_eq!(document.records, observations);
+    assert_eq!(memory.used(), 0);
+}
+
+#[test]
+fn linked_bodies_keep_computed_summaries_and_report_header_diagnostics() {
+    use oer_analysis_blobray_application::{
+        library::{LibraryOutcome, analyze_library},
+        signatures::Signatures,
+    };
+    let temp = tempfile::tempdir().unwrap();
+    let source = temp.path().join("rom.rs");
+    let image = temp.path().join("rom.elf");
+    std::fs::write(
+        &source,
+        r##"#![no_std]
+#![no_main]
+#[panic_handler] fn panic(_: &core::panic::PanicInfo<'_>) -> ! { loop {} }
+core::arch::global_asm!(r#"
+.option norvc
+.option norelax
+.macro function name
+.section .text.\name,"ax",@progbits
+.globl \name
+.type \name,@function
+\name:
+.endm
+.macro end name
+.size \name, .-\name
+.endm
+function rom_body
+bnez a2, 1f
+1: li a0, 37
+li a1, 5
+ret
+end rom_body
+function rom_may
+add t0, a2, a3
+bnez t0, 1f
+1: li a0, 0
+li a1, 0
+ret
+end rom_may
+function rom_partial
+jr a2
+end rom_partial
+function rom_recursive
+call rom_recursive
+ret
+end rom_recursive
+function rom_return
+lui t0, 0x20107
+lw a0, 0(t0)
+ret
+end rom_return
+"#);
+"##,
+    )
+    .unwrap();
+    let compiled = Command::new("rustc")
+        .args([
+            "--target",
+            "riscv32imac-unknown-none-elf",
+            "--crate-type",
+            "bin",
+            "--edition=2024",
+            "-C",
+            "panic=abort",
+            "-C",
+            "link-arg=--entry=rom_body",
+            "-C",
+            "link-arg=--no-gc-sections",
+            "-C",
+            "link-arg=-Ttext=0x40000000",
+        ])
+        .arg(&source)
+        .arg("-o")
+        .arg(&image)
+        .output()
+        .unwrap();
+    assert!(
+        compiled.status.success(),
+        "{}",
+        String::from_utf8_lossy(&compiled.stderr)
+    );
+    let rom = std::fs::read(&image).unwrap();
+    let caller = fixture(
+        r##"#![no_std]
+core::arch::global_asm!(r#"
+.option norvc
+.option norelax
+.macro function name
+.section .text.\name,"ax",@progbits
+.globl \name
+.type \name,@function
+\name:
+.endm
+.macro end name
+.size \name, .-\name
+.endm
+function caller
+lui t0, 0x20107
+lw a2, 0(t0)
+call rom_body
+ret
+end caller
+function partial_caller
+call rom_partial
+bnez a0, 1f
+1: ret
+end partial_caller
+function recursive_caller
+call rom_recursive
+bnez a0, 1f
+1: ret
+end recursive_caller
+"#);
+"##,
+    );
+    let signatures = Signatures::parse(
+        &[
+            "rom_body",
+            "rom_may",
+            "rom_partial",
+            "rom_recursive",
+            "rom_return",
+            "rom_alias",
+        ]
+        .map(|name| {
+            format!(
+                "[[function]]\nname='{name}'\narguments=0\nresult='void'\nsource='synthetic.h:1'\n"
+            )
+        })
+        .join("\n"),
+    )
+    .unwrap();
+    use object::{Object, ObjectSymbol};
+    let file = object::File::parse(rom.as_slice()).unwrap();
+    let address = file
+        .symbols()
+        .find(|s| s.name().ok() == Some("rom_body"))
+        .unwrap()
+        .address() as u32;
+    let alias_caller = fixture(&format!(
+        r##"#![no_std]
+core::arch::global_asm!(r#"
+.option norvc
+.option norelax
+.globl rom_alias
+.set rom_alias, {address}
+.section .text.alias_caller,"ax",@progbits
+.globl alias_caller
+.type alias_caller,@function
+alias_caller:
+call rom_alias
+bnez a0, 1f
+1: ret
+.size alias_caller, .-alias_caller
+"#);
+"##
+    ));
+    let inputs = [
+        Executable::new(caller),
+        Executable::new(rom),
+        Executable::new(alias_caller),
+    ];
+    let memory = WorkingMemory::new(64 << 20).unwrap();
+    let mut before = None;
+    let mut before_returned = None;
+    for signatures in [None, Some(&signatures)] {
+        let assumptions = Assumptions {
+            abi: Some(CallAbi::RiscvInteger),
+            call_summaries: true,
+            signatures,
+            ..Default::default()
+        };
+        let mut observations = Vec::new();
+        let summary = register_accesses(
+            &inputs,
+            assumptions,
+            &[],
+            &oer_analysis_riscv_lift::RiscvDecoder,
+            &memory,
+            &mut || Ok(()),
+            &mut |r, _| {
+                observations.push(r.clone());
+                Ok(())
+            },
+        )
+        .unwrap();
+        assert!(summary.signature_conflicts.is_empty());
+        assert!(summary.signature_audit_incomplete.is_empty());
+        assert_eq!(summary.contract_narrowed_bits, 0);
+        assert_eq!(summary.contract_may_narrowed_bits, 0);
+        assert_eq!(
+            summary.rom_signature_diagnostic_count as usize,
+            summary.rom_signature_diagnostics.len()
+        );
+        if signatures.is_none() {
+            before = Some(observations);
+            assert!(summary.rom_signature_diagnostics.is_empty());
+        } else {
+            assert_eq!(
+                observations,
+                before.clone().unwrap(),
+                "header must not change linked body or its callers"
+            );
+            for (name, precision) in [
+                (b"rom_body".as_slice(), ReadPrecision::Exact),
+                (b"rom_may".as_slice(), ReadPrecision::May),
+            ] {
+                assert!(
+                    summary
+                        .rom_signature_diagnostics
+                        .iter()
+                        .any(|d| d.function.name.as_deref() == Some(name)
+                            && d.register == 12
+                            && d.usage.precision == precision),
+                    "{summary:?}"
+                );
+            }
+        }
+        let mut returned = None;
+        analyze_library(
+            &inputs,
+            assumptions,
+            &oer_analysis_riscv_lift::RiscvDecoder,
+            &memory,
+            &mut || Ok(()),
+            &mut |outcome, _| {
+                if let LibraryOutcome::Analyzed(a) = outcome
+                    && a.function.name.as_deref() == Some(b"caller")
+                {
+                    let computed = a.summaries.summary(Callee::Address(address)).unwrap();
+                    assert_eq!(computed.contract, None);
+                    assert_eq!(computed.results, [Some(vec![37]), Some(vec![5])]);
+                    returned = a.records.iter().find_map(|r| {
+                        if let FunctionRecord::ReturnValue { low, high, .. } = r {
+                            Some((low.clone(), high.clone()))
+                        } else {
+                            None
+                        }
+                    });
+                }
+                Ok(())
+            },
+        )
+        .unwrap();
+        if signatures.is_none() {
+            before_returned = returned;
+        } else {
+            assert_eq!(returned, before_returned);
+        }
+        assert_eq!(memory.used(), 0);
+    }
+}
+
+#[test]
+fn an_exhausted_audit_disables_only_that_functions_contract() {
+    use oer_analysis_blobray_application::signatures::Signatures;
+    let calls = (0..100)
+        .map(|i| format!("call external\nsw a0, {}(sp)\n", i * 4))
+        .collect::<String>();
+    let source = format!(
+        r##"#![no_std]
+core::arch::global_asm!(r#"
+.option norvc
+.option norelax
+.section .text.limited,"ax",@progbits
+.globl limited
+.type limited,@function
+limited:
+addi sp,sp,-512
+sw ra,508(sp)
+{calls}
+lui t0,0x20107
+lw a0,0(t0)
+call identity
+lw ra,508(sp)
+addi sp,sp,512
+ret
+.size limited,.-limited
+.section .text.healthy,"ax",@progbits
+.globl healthy
+.type healthy,@function
+healthy:
+lui t0,0x20107
+lw a0,4(t0)
+ret
+.size healthy,.-healthy
+.section .text.identity,"ax",@progbits
+.globl identity
+.type identity,@function
+identity: ret
+.size identity,.-identity
+"#);
+"##
+    );
+    let inputs = [Executable::new(fixture(&source))];
+    let mut text = ["limited", "healthy", "external"]
+        .map(|name| {
+            format!(
+                "[[function]]\nname='{name}'\narguments=0\nresult='void'\nsource='synthetic.h:1'\n"
+            )
+        })
+        .join("\n");
+    text.push_str(
+        "\n[[function]]\nname='identity'\narguments=1\nresult='void'\nsource='synthetic.h:1'\n",
+    );
+    let signatures = Signatures::parse(&text).unwrap();
+    let mut verified = false;
+    for mib in [1, 2, 4, 8, 16, 32, 64] {
+        let memory = WorkingMemory::new(mib << 20).unwrap();
+        let mut reads = BTreeMap::new();
+        let result = register_accesses(
+            &inputs,
+            Assumptions {
+                abi: Some(CallAbi::RiscvInteger),
+                call_summaries: true,
+                signatures: Some(&signatures),
+                ..Default::default()
+            },
+            &[],
+            &oer_analysis_riscv_lift::RiscvDecoder,
+            &memory,
+            &mut || Ok(()),
+            &mut |r, _| {
+                if let RegisterAccess::Observation {
+                    function,
+                    reads: Some(uses),
+                    ..
+                } = r
+                {
+                    reads.insert(function.name.clone().unwrap(), uses.clone());
+                }
+                Ok(())
+            },
+        );
+        assert_eq!(
+            memory.used(),
+            0,
+            "all function-local state must be released"
+        );
+        let Ok(summary) = result else { continue };
+        if summary.signature_audit_incomplete.is_empty() {
+            continue;
+        }
+        assert_eq!(summary.signature_audit_incomplete.len(), 1);
+        assert_eq!(
+            summary.signature_audit_incomplete[0]
+                .function
+                .name
+                .as_deref(),
+            Some(b"limited".as_slice())
+        );
+        assert_eq!(
+            summary.signature_audit_incomplete[0].reason.code,
+            ErrorCode::ResourceLimited
+        );
+        assert!(summary.signature_conflicts.is_empty());
+        assert_eq!(summary.functions, 3);
+        assert_eq!(summary.blocked_functions, 0);
+        assert_eq!(summary.gaps, 0);
+        let limited = &reads[b"limited".as_slice()];
+        assert_eq!(limited.unused, 0);
+        assert_eq!(limited.preserved, 0);
+        assert_eq!(
+            limited.uses.iter().fold(0, |m, u| m | u.bits)
+                | limited.unknown.iter().fold(0, |m, u| m | u.bits),
+            u32::MAX,
+            "the unaudited function must retain use or explicit uncertainty"
+        );
+        assert!(reads[b"healthy".as_slice()].uses.is_empty());
+        assert_eq!(
+            summary.contract_narrowed_bits, 32,
+            "only the healthy function narrows its return"
+        );
+        verified = true;
+        break;
+    }
+    assert!(
+        verified,
+        "fixture must exhaust one bounded audit while retaining both functions"
+    );
 }

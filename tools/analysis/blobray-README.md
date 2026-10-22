@@ -37,7 +37,7 @@ Real input needs your own identified vendor artifacts.
 
 ## Loaded bit uses
 
-`register-accesses` schema 9 adds `reads` to each load observation. Source bit
+`register-accesses` schema 10 includes signature narrowing counts and `reads` to each load observation. Source bit
 positions belong to that load's access width. Each bit is in exactly one class,
 with precedence `uses` > `unknown` > `preserved` > `unused`:
 

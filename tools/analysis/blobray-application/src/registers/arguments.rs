@@ -70,3 +70,19 @@ impl<'m> CallLinks<'m> {
         self.links.iter().map(|l| &l.1)
     }
 }
+
+/// Resolve both call sites and the scoped function through CallSummaries.
+pub(crate) struct Calls<'s, 'm> {
+    pub links: &'s CallLinks<'m>,
+    pub summaries: &'s dyn CallSummaries,
+}
+impl<'s> oer_analysis_blobray_analysis::registers::CallAt<'s> for Calls<'s, '_> {
+    fn summary(&self, site: u64) -> Option<&'s CallSummary> {
+        self.links
+            .callee(site)
+            .and_then(|callee| self.summaries.summary(callee))
+    }
+    fn current(&self) -> Option<&'s CallSummary> {
+        self.summaries.current()
+    }
+}

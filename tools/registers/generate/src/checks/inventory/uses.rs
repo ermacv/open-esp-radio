@@ -149,6 +149,55 @@ impl Report {
             self.corpus.call_summaries,
         );
         text.push_str(&format!(
+            "  signature-narrowed {} bits; computed-May-narrowed {} bits\n",
+            summary.contract_narrowed_bits, summary.contract_may_narrowed_bits
+        ));
+        text.push_str(&format!(
+            "  signature conflicts {} (analysis completed; conflicting results are diagnostic)\n",
+            summary.signature_conflicts.len()
+        ));
+        text.push_str(&format!(
+            "  incomplete signature audits {}\n",
+            summary.signature_audit_incomplete.len()
+        ));
+        text.push_str(&format!(
+            "  ROM/header diagnostics {} (contracts do not apply to linked bodies; {} unavailable computed ROM summaries)\n",
+            summary.rom_signature_diagnostic_count,
+            summary.rom_signature_summary_unavailable.len()
+        ));
+        for failure in &summary.rom_signature_summary_unavailable {
+            text.push_str(&format!(
+                "  UNAVAILABLE ROM SUMMARY {}: {}\n",
+                String::from_utf8_lossy(failure.function.name.as_deref().unwrap_or(b"?")),
+                failure.reason
+            ));
+        }
+        for diagnostic in &summary.rom_signature_diagnostics {
+            text.push_str(&format!(
+                "  ROM/HEADER {}: signature {} ({}), a{} -> {:?}, bits {:#010x}, {:?}\n",
+                String::from_utf8_lossy(diagnostic.function.name.as_deref().unwrap_or(b"?")),
+                diagnostic.signature,
+                diagnostic.declaration,
+                diagnostic.register.saturating_sub(10),
+                diagnostic.usage.sink,
+                diagnostic.usage.bits,
+                diagnostic.usage.precision
+            ));
+        }
+        for failure in &summary.signature_audit_incomplete {
+            text.push_str(&format!(
+                "  INCOMPLETE SIGNATURE AUDIT {}: {}\n",
+                String::from_utf8_lossy(failure.function.name.as_deref().unwrap_or(b"?")),
+                failure.reason
+            ));
+        }
+        for conflict in &summary.signature_conflicts {
+            text.push_str(&format!(
+                "  SIGNATURE CONFLICT {}\n",
+                conflict.description()
+            ));
+        }
+        text.push_str(&format!(
             "  reserved-used {} words / {} bits; absent-used {} words / {} bits\n",
             self.words
                 .iter()

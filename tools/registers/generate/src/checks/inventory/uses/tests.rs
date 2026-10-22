@@ -135,6 +135,7 @@ fn assumptions() -> Assumptions<'static> {
     Assumptions {
         abi: Some(CallAbi::RiscvInteger),
         call_summaries: true,
+        signatures: None,
         read_only: &[],
     }
 }
@@ -149,7 +150,14 @@ fn regions() -> [Region; 1] {
 
 fn summary(records: &[RegisterAccess]) -> RegisterAccessSummary {
     let mut summary = RegisterAccessSummary {
-        schema: 3,
+        schema: 4,
+        contract_narrowed_bits: 0,
+        contract_may_narrowed_bits: 0,
+        signature_conflicts: Vec::new(),
+        rom_signature_diagnostics: Vec::new(),
+        rom_signature_diagnostic_count: 0,
+        rom_signature_summary_unavailable: Vec::new(),
+        signature_audit_incomplete: Vec::new(),
         functions: 1,
         partial_functions: 0,
         partial_causes: PartialCauses::default(),
@@ -855,4 +863,103 @@ fn records_received_one_at_a_time_match_the_same_ordered_list() {
     assert_eq!(streamed.corpus.inputs[1].role, "second");
     assert_eq!(streamed.address_limits[0].function.0, "fixture");
     assert_eq!(streamed.all_reads.loads, 1);
+}
+
+#[test]
+fn signature_conflicts_fail_only_after_complete_reports_are_written() {
+    use oer_analysis_blobray_domain::{SignatureConflict, SignatureOrigin};
+    let mut report = run(vec![constant(0)], None, 0);
+    assert_eq!(report.violations(), 0);
+    report.corpus.summary.signature_conflicts = [10, 11]
+        .map(|register| SignatureConflict {
+            function: LibraryFunction {
+                input: 0,
+                symbol: symbol(b"fixture"),
+                name: Some(b"synthetic".to_vec()),
+            },
+            signature: "synthetic".into(),
+            declaration: Some("synthetic.h:1".into()),
+            origin: SignatureOrigin::Argument { register },
+            usage: ReadUse {
+                bits: 1,
+                precision: ReadPrecision::Exact,
+                sink: ReadSink::Branch { site: 16 },
+            },
+        })
+        .to_vec();
+    let directory = tempfile::tempdir().unwrap();
+    let error = crate::checks::inventory::run::write_report(directory.path(), "fixture", &report)
+        .unwrap_err();
+    assert!(error.to_string().contains("2 signature conflicts"));
+    let json: Value =
+        serde_json::from_slice(&std::fs::read(directory.path().join("report.json")).unwrap())
+            .unwrap();
+    assert_eq!(
+        json["check"]["corpus"]["summary"]["signature_conflicts"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+    let text = std::fs::read_to_string(directory.path().join("report.txt")).unwrap();
+    assert!(text.contains("SIGNATURE CONFLICT function synthetic"));
+    assert!(text.contains("entry a0") && text.contains("entry a1"));
+}
+
+#[test]
+fn rom_header_diagnostics_do_not_fail_the_inventory() {
+    use oer_analysis_blobray_domain::RomSignatureDiagnostic;
+    let mut report = run(vec![constant(0)], None, 0);
+    report.corpus.summary.rom_signature_diagnostic_count = 1;
+    report
+        .corpus
+        .summary
+        .rom_signature_diagnostics
+        .push(RomSignatureDiagnostic {
+            function: LibraryFunction {
+                input: 0,
+                symbol: symbol(b"fixture"),
+                name: Some(b"synthetic_rom".to_vec()),
+            },
+            signature: "synthetic_rom".into(),
+            declaration: "synthetic.h:1".into(),
+            register: 12,
+            usage: ReadUse {
+                bits: 1,
+                precision: ReadPrecision::Exact,
+                sink: ReadSink::Branch { site: 16 },
+            },
+        });
+    report
+        .corpus
+        .summary
+        .rom_signature_summary_unavailable
+        .push(oer_analysis_blobray_domain::SignatureAuditIncomplete {
+            function: LibraryFunction {
+                input: 0,
+                symbol: symbol(b"fixture"),
+                name: Some(b"large_synthetic_rom".to_vec()),
+            },
+            reason: oer_analysis_riscv_model::Error::new(
+                oer_analysis_riscv_model::ErrorCode::ResourceLimited,
+                "synthetic ROM diagnostic limit",
+            ),
+        });
+    let directory = tempfile::tempdir().unwrap();
+    crate::checks::inventory::run::write_report(directory.path(), "fixture", &report).unwrap();
+    let json: Value =
+        serde_json::from_slice(&std::fs::read(directory.path().join("report.json")).unwrap())
+            .unwrap();
+    assert_eq!(
+        json["check"]["corpus"]["summary"]["rom_signature_diagnostic_count"],
+        1
+    );
+    assert_eq!(
+        json["check"]["corpus"]["summary"]["rom_signature_diagnostics"][0]["register"],
+        12
+    );
+    let text = std::fs::read_to_string(directory.path().join("report.txt")).unwrap();
+    assert!(text.contains("ROM/HEADER synthetic_rom"));
+    assert!(text.contains("Exact"));
+    assert!(text.contains("UNAVAILABLE ROM SUMMARY large_synthetic_rom"));
 }
