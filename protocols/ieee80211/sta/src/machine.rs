@@ -3397,11 +3397,14 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities> TransitionContext<'s, 'id,
         state: &mut State<T, K>,
         answer: AbsenceAnswer<'id, K, T::GatePath>,
     ) {
-        let State::Connected(connected) = &mut *state else {
-            if let AbsenceAnswer::Refused(_, place) = answer {
-                (*self.absence_place) = Some(place);
+        let connected = match state {
+            State::Connected(connected) if connected.confirmation.is_none() => connected,
+            _ => {
+                if let AbsenceAnswer::Refused(_, place) = answer {
+                    *self.absence_place = Some(place);
+                }
+                return;
             }
-            return;
         };
         let Some(background) = &mut connected.background else {
             return;
@@ -3429,8 +3432,9 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities> TransitionContext<'s, 'id,
     fn absence_over(&mut self, state: &mut State<T, K>, cancelled: bool) {
         (*self.absence) = None;
         let limit = self.config.skipped_absences;
-        let State::Connected(connected) = &mut *state else {
-            return;
+        let connected = match state {
+            State::Connected(connected) if connected.confirmation.is_none() => connected,
+            _ => return,
         };
         let connected = &mut **connected;
         let Some(background) = &mut connected.background else {
@@ -3742,7 +3746,9 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities> TransitionContext<'s, 'id,
             (State::Scan(_), TxPurpose::Probe) => {
                 leave_unkeyed(StaDisconnectReason::TransmitRefused(reason))
             }
-            (State::Connected(connected), purpose @ TxPurpose::Connected(_)) => {
+            (State::Connected(connected), purpose @ TxPurpose::Connected(_))
+                if connected.confirmation.is_none() =>
+            {
                 self.connected_step(connected, now, Done::Unsent { purpose, reason })
             }
             (State::Leave(leave), TxPurpose::Deauthentication) => {

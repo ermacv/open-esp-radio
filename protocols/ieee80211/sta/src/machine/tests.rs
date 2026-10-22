@@ -4624,3 +4624,32 @@ fn data_receive_requires_the_live_connection_epoch() {
         assert_eq!(delivered, 2);
     });
 }
+
+#[test]
+fn confirming_returns_a_refused_absence_place_without_opening_the_link() {
+    installed(|mint| {
+        let (mut world, ptk) = wpa2_associated::<2>(mint);
+        world.hold_transmissions = true;
+        world.receive(at(33), &retry_message3(&ptk, 2, 0x99));
+        assert!(!world.station.is_connected());
+        assert!(!world.submitted.is_empty());
+        let place = world
+            .station
+            .absence_place
+            .take()
+            .expect("station holds its absence place");
+        world.station.input(
+            at(34),
+            StaInput::AbsenceAnswer(AbsenceAnswer::Refused(
+                oer_ieee80211_arbiter::AbsenceRefusal::NotConnected,
+                place,
+            )),
+        );
+        assert!(world.station.absence_place.is_some());
+        assert!(!world.station.is_connected());
+        world.hold_transmissions = false;
+        world.end_transmissions(at(35));
+        world.run(at(35));
+        assert!(world.station.is_connected());
+    });
+}
