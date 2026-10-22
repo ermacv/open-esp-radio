@@ -22,18 +22,18 @@ Paths in the table are relative to the repository root. P1 includes the
 station service, network stack and applications; the word “radio” in a type
 name does not establish that its task runs on P2.
 
-| Place | Producer → waiter | Mechanism and progress |
+| Place | Producer → waiter | Risk, mechanism and progress |
 | --- | --- | --- |
-| `chips/esp32s31/ieee80211/driver/src/port.rs`: driver notification, RX/TX returns | Station P1 and driver P2 → driver P2 | `PriorityWaker`. P2 can preempt a P1 notification; the notification keeps its original slot until it returns. |
+| `chips/esp32s31/ieee80211/driver/src/port.rs`: driver notification, RX/TX returns | Station P1 and driver P2 → driver P2 | Upward wake, protected by `PriorityWaker`. P2 can preempt a P1 notification; the notification keeps its original slot until it returns. |
 | Same file: body notification | Driver P2 → station P1 | Ordinary `atomic_waker::AtomicWaker`. P1 cannot preempt P2; P2 may interrupt registration, which completes on resumption. |
-| `chips/esp32s31/ieee80211/driver/src/rx/control.rs`: runner | Stop handle P1 → receive runner P2 | `PriorityWaker`; repeated stop requests publish the same atomic flag. |
+| `chips/esp32s31/ieee80211/driver/src/rx/control.rs`: runner | Stop handle P1 → receive runner P2 | Upward wake, protected by `PriorityWaker`; repeated stop requests publish the same atomic flag. |
 | Same file: reporter | Receive runner P2 → application P1 | Ordinary AtomicWaker, descending priority. |
 | `chips/esp32s31/ieee80211/driver/src/rx/upper.rs`: frame queue | Receive runner P2 → frame consumer P1 | Ordinary AtomicWaker, descending priority. Returning a held frame takes the separate typed-signal path below. |
-| `portable/memory/src/request_slot.rs`: Doorbell | Wi-Fi/BLE clients P1 or P2 → radio-system actor P2; W3 ready exchange | `PriorityWaker`; clients OR durable request bits before waking the actor. |
+| `portable/memory/src/request_slot.rs`: Doorbell | Wi-Fi/BLE clients P1 or P2 → radio-system actor P2; W3 ready exchange | Upward wake, protected by `PriorityWaker`; clients OR durable request bits before waking the actor. |
 | Same file: answer | Radio-system actor P2 → requesting client P1/P2; W3 ready reply P2 → P1 | `PriorityWaker` also supports a higher-priority client without changing the request-slot contract. |
-| `protocols/radio/port/src/slot.rs`: p2 | Frontend/body P1, registration teardown P2 → registered owner P2 | `PriorityWaker`; commands, returns, retirement and quarantine publish their state before notification. |
+| `protocols/radio/port/src/slot.rs`: p2 | Frontend/body P1, registration teardown P2 → registered owner P2 | Upward wake, protected by `PriorityWaker`; commands, returns, retirement and quarantine publish their state before notification. |
 | Same file: join | Registered owner P2 → frontend P1 | Ordinary AtomicWaker, descending priority. |
-| `firmware/apps/w1/src/measure.rs`: PHASE_WAKER | Phase writer P1 → timer observer P2 | `PriorityWaker`; the phase is an atomic level checked after registration. |
+| `firmware/apps/w1/src/measure.rs`: PHASE_WAKER | Phase writer P1 → timer observer P2 | Upward wake, protected by `PriorityWaker`; the phase is an atomic level checked after registration. |
 | `portable/embassy/net/src/owned.rs`: radio_waker, network_waker | W3 station/network tasks P1 ↔ P1 | Embassy `GenericAtomicWaker<NoopRawMutex>`. No preemption between these users. This implementation locks a `Cell<Option<Waker>>`, invokes the callback while locked and restores its registration; it has no WAKING state. |
 | Same file: tx_published and RX Channel; `owned/tx_queue.rs`, `owned/tx_budget.rs` | W3 network producer, station consumer and packet return P1 ↔ P1 | Embassy Signal/Channel and WakerRegistration under `NoopRawMutex`, same executor. Signal publishes Signaled before its callback; WakerRegistration takes its registration before waking. These mutex-backed paths are not admitted for upward notifications. |
 | Xarxa's pinned `PacketPoolWaiter`, through `owned.rs` | W3 packet destruction P1 → RX publisher P1 | Dependency's ordinary AtomicWaker, same executor. Moving the publisher to P2 would require reviewing this path too. |

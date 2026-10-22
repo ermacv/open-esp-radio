@@ -122,8 +122,8 @@ bounds) live in the code that applies them.
   known length up to 20 µs may busy-wait, and it counts against the step
   bound of its context. A wait for an event of unknown duration (a
   handshake, a ring poll) is a timer-woken step with a deadline.
-- **Task notifications across priorities.** A lower-priority task directly wakes a
-  higher-priority task only through `oer_sync::PriorityWaker`, never through
+- **Task notifications across priorities.** A lower-priority task directly
+  wakes a higher-priority task only through `oer_sync::PriorityWaker`, never through
   an AtomicWaker, Embassy Signal or another mutex-backed waker cell. Its
   consumer is serialized on one hart; it registers before checking the
   published input. See the [notification audit](execution-wakes.md).
