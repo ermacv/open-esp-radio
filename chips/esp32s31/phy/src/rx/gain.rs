@@ -820,6 +820,33 @@ impl PhyRxGainInitTransition {
         }
     }
 
+    #[cfg(any(target_arch = "riscv32", test))]
+    #[inline]
+    pub(crate) fn calibration_action(
+        &self,
+    ) -> Option<crate::rx::gain_calibration::PhyRxDcCalibrationAction> {
+        match &self.step {
+            InitStep::Dc(transition) => transition.calibration_action(),
+            _ => None,
+        }
+    }
+
+    /// A calibration child can advance to another gain or DC cleanup, but only
+    /// the ordinary DC tail can finish the root and publish its coefficients.
+    #[cfg(any(target_arch = "riscv32", test))]
+    #[inline]
+    pub(crate) fn advance_calibration(
+        &mut self,
+        completion: crate::rx::gain_calibration::PhyRxDcCalibrationCompletion,
+    ) -> Result<(), PhyRxGainInitTransitionError> {
+        match &mut self.step {
+            InitStep::Dc(transition) => transition
+                .advance_calibration(completion)
+                .map_err(|_| PhyRxGainInitTransitionError::WrongCompletion),
+            _ => Err(PhyRxGainInitTransitionError::WrongCompletion),
+        }
+    }
+
     #[cfg(test)]
     pub(crate) fn minimum_mut(
         &mut self,

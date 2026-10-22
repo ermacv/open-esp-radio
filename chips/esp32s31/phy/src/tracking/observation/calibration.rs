@@ -52,24 +52,7 @@ pub(crate) fn rx(action: &Init) -> u8 {
             Dc::DelayMicros { .. } => 13,
             Dc::ConfigurePbusWorkModePulse => 14,
             Dc::ClearPbusWorkModePulse => 15,
-            Dc::Calibration(action) => match action {
-                Calibration::PrepareControlRestore => 16,
-                Calibration::ReadPbus { .. } => 17,
-                Calibration::ForcePbus(_) => 18,
-                Calibration::DelayMicros { .. } => 19,
-                Calibration::RestoreControl => 20,
-                Calibration::Minimum(Minimum::DcIq(action)) => match action {
-                    Iq::Configure(_) => 21,
-                    Iq::SetEnable { .. } => 22,
-                    Iq::DelayMicros { .. } => 23,
-                    Iq::AwaitReadinessEdge { .. } => 24,
-                    Iq::ReadAccumulators(_) => 25,
-                    Iq::Complete(_) | Iq::Failed(_) => 0,
-                },
-                Calibration::Complete(_)
-                | Calibration::Failed(_)
-                | Calibration::Minimum(Minimum::Complete(_) | Minimum::Failed(_)) => 0,
-            },
+            Dc::Calibration(action) => rx_calibration(action),
             Dc::Complete | Dc::Failed(_) => 0,
         },
         Init::Publish(action) => match action {
@@ -84,6 +67,27 @@ pub(crate) fn rx(action: &Init) -> u8 {
             Publish::Complete(_) | Publish::Failed(_) => 0,
         },
         Init::Complete | Init::Failed(_) => 0,
+    }
+}
+
+pub(crate) fn rx_calibration(action: &Calibration) -> u8 {
+    match action {
+        Calibration::PrepareControlRestore => 16,
+        Calibration::ReadPbus { .. } => 17,
+        Calibration::ForcePbus(_) => 18,
+        Calibration::DelayMicros { .. } => 19,
+        Calibration::RestoreControl => 20,
+        Calibration::Minimum(Minimum::DcIq(action)) => match action {
+            Iq::Configure(_) => 21,
+            Iq::SetEnable { .. } => 22,
+            Iq::DelayMicros { .. } => 23,
+            Iq::AwaitReadinessEdge { .. } => 24,
+            Iq::ReadAccumulators(_) => 25,
+            Iq::Complete(_) | Iq::Failed(_) => 0,
+        },
+        Calibration::Complete(_)
+        | Calibration::Failed(_)
+        | Calibration::Minimum(Minimum::Complete(_) | Minimum::Failed(_)) => 0,
     }
 }
 

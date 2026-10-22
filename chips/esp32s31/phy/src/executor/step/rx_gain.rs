@@ -15,15 +15,22 @@ use crate::{
 use oer_time::{Clock, Instant};
 
 pub(super) fn waiting(completion: PhyRxGainInitCompletion) -> bool {
+    match completion {
+        PhyRxGainInitCompletion::Dc(PhyRxGainDcCompletion::Calibration(completion)) => {
+            calibration_waiting(completion)
+        }
+        _ => false,
+    }
+}
+
+fn calibration_waiting(completion: PhyRxDcCalibrationCompletion) -> bool {
     matches!(
         completion,
-        PhyRxGainInitCompletion::Dc(PhyRxGainDcCompletion::Calibration(
-            PhyRxDcCalibrationCompletion::Minimum(PhyRxDcMinimumCompletion::DcIq(
-                PhyDcIqCompletion::ReadinessObserved {
-                    snapshot: PhyDcIqReadinessSnapshot { ready: false, .. },
-                    ..
-                } | PhyDcIqCompletion::CapturePending { .. }
-            ))
+        PhyRxDcCalibrationCompletion::Minimum(PhyRxDcMinimumCompletion::DcIq(
+            PhyDcIqCompletion::ReadinessObserved {
+                snapshot: PhyDcIqReadinessSnapshot { ready: false, .. },
+                ..
+            } | PhyDcIqCompletion::CapturePending { .. }
         ))
     )
 }
@@ -200,6 +207,11 @@ impl Run<'_> {
             self.scratch.part_times[0] = stamp.now().as_micros();
         }
         let prepared = self.scratch.binding.is_some();
+        if !prepared {
+            if let Some(action) = self.transition.calibration_action() {
+                return self.advance_calibration::<D, _>(io, clock, now, action);
+            }
+        }
         let mut tag = 0;
         if !prepared {
             self.scratch.lowering = Some(self.transition.action());
@@ -268,21 +280,10 @@ impl Run<'_> {
         if self.measured {
             self.scratch.part_times[2] = stamp.now().as_micros();
         }
-        if let PhyRxGainInitCompletion::Dc(PhyRxGainDcCompletion::Calibration(
-            PhyRxDcCalibrationCompletion::Minimum(PhyRxDcMinimumCompletion::DcIq(completion)),
-        )) = completion
+        if let PhyRxGainInitCompletion::Dc(PhyRxGainDcCompletion::Calibration(completion)) =
+            completion
         {
-            match completion {
-                PhyDcIqCompletion::CaptureFinished { accumulators, .. } => {
-                    self.execution.minimum_operations += 3 + u32::from(accumulators.is_some()) * 2;
-                    self.execution.settle_1us += 1;
-                }
-                PhyDcIqCompletion::ReadinessObserved { .. }
-                | PhyDcIqCompletion::CapturePending { .. } => {
-                    self.execution.minimum_operations += 1
-                }
-                _ => {}
-            }
+            Self::observe_completion(self.execution, completion);
         }
         self.transition
             .advance(completion)
@@ -298,6 +299,87 @@ impl Run<'_> {
             ))
         } else {
             Ok(Step::Runnable)
+        }
+    }
+
+    /// The root keeps its child and coefficient bank in place. Only the live
+    /// calibration command crosses this typed adapter; validation and terminal
+    /// handoff still use the same child transition and DC publication routine.
+    #[inline(always)]
+    fn advance_calibration<D: crate::executor::wait::PhyShortDelay, C: Clock>(
+        &mut self,
+        io: &mut Io<'_, '_>,
+        clock: &C,
+        now: Instant,
+        action: PhyRxDcCalibrationAction,
+    ) -> Result<Step, Failure> {
+        if matches!(
+            action,
+            PhyRxDcCalibrationAction::Minimum(PhyRxDcMinimumAction::DcIq(
+                PhyDcIqAction::Configure(_)
+            ))
+        ) && self.execution.minimum_operations
+            > 100_000 - u32::from(crate::HARDWARE_EDGE_LIMIT) - 8
+        {
+            #[cfg(target_arch = "riscv32")]
+            return Err(Failure::Target(
+                crate::target_executor::PhyTargetPortError::RfOperationLimit,
+            ));
+            #[cfg(not(target_arch = "riscv32"))]
+            return Err(Failure::Binding);
+        }
+        let tag = if self.measured {
+            self.scratch
+                .observe_action(crate::tracking::observation::calibration::rx_calibration(
+                    &action,
+                ))
+        } else {
+            0
+        };
+        Self::observe_calibration(self.execution, &action);
+        let binding = crate::rx::gain_calibration::PhyRxDcCalibrationExternalBinding::lower(action)
+            .map_err(|_| Failure::Binding)?;
+        let stamp = super::rfpll::OutlinedClock(clock);
+        if self.measured {
+            self.scratch.part_times[1] = stamp.now().as_micros();
+        }
+        let completion = io.rx_calibration::<D, _>(clock, binding)?;
+        if self.measured {
+            self.scratch.part_times[2] = stamp.now().as_micros();
+        }
+        Self::observe_completion(self.execution, completion);
+        self.transition
+            .advance_calibration(completion)
+            .map_err(|_| Failure::Binding)?;
+        if self.measured {
+            self.scratch.record_parts(self.execution, tag, stamp.now());
+        }
+        if calibration_waiting(completion) {
+            Ok(Step::WaitAt(
+                now.checked_add(super::RETRY)
+                    .ok_or(Failure::DeadlineOverflow)?,
+            ))
+        } else {
+            Ok(Step::Runnable)
+        }
+    }
+
+    fn observe_completion(
+        execution: &mut RxGainExecution,
+        completion: PhyRxDcCalibrationCompletion,
+    ) {
+        if let PhyRxDcCalibrationCompletion::Minimum(PhyRxDcMinimumCompletion::DcIq(completion)) =
+            completion
+        {
+            match completion {
+                PhyDcIqCompletion::CaptureFinished { accumulators, .. } => {
+                    execution.minimum_operations += 3 + u32::from(accumulators.is_some()) * 2;
+                    execution.settle_1us += 1;
+                }
+                PhyDcIqCompletion::ReadinessObserved { .. }
+                | PhyDcIqCompletion::CapturePending { .. } => execution.minimum_operations += 1,
+                _ => {}
+            }
         }
     }
 
@@ -321,22 +403,24 @@ impl Run<'_> {
 
     fn observe(execution: &mut RxGainExecution, action: &PhyRxGainInitAction) {
         if let PhyRxGainInitAction::Dc(PhyRxGainDcAction::Calibration(action)) = action {
-            match action {
-                PhyRxDcCalibrationAction::PrepareControlRestore => execution.outer_operations += 1,
-                PhyRxDcCalibrationAction::DelayMicros { micros: 10, .. } => {
-                    execution.settle_10us += 1
-                }
-                PhyRxDcCalibrationAction::Minimum(PhyRxDcMinimumAction::DcIq(action)) => {
-                    if let PhyDcIqAction::Configure(request) = action {
-                        execution.minimum_operations += 4;
-                        execution.settle_1us += 1;
-                        if request.iteration == 0 {
-                            execution.minimum_searches += 1;
-                        }
+            Self::observe_calibration(execution, action);
+        }
+    }
+
+    fn observe_calibration(execution: &mut RxGainExecution, action: &PhyRxDcCalibrationAction) {
+        match action {
+            PhyRxDcCalibrationAction::PrepareControlRestore => execution.outer_operations += 1,
+            PhyRxDcCalibrationAction::DelayMicros { micros: 10, .. } => execution.settle_10us += 1,
+            PhyRxDcCalibrationAction::Minimum(PhyRxDcMinimumAction::DcIq(action)) => {
+                if let PhyDcIqAction::Configure(request) = action {
+                    execution.minimum_operations += 4;
+                    execution.settle_1us += 1;
+                    if request.iteration == 0 {
+                        execution.minimum_searches += 1;
                     }
                 }
-                _ => {}
             }
+            _ => {}
         }
     }
 }
@@ -420,7 +504,7 @@ fn dc<D: crate::executor::wait::PhyShortDelay, C: Clock>(
 
 #[cfg(target_arch = "riscv32")]
 #[inline(always)]
-fn calibration<D: crate::executor::wait::PhyShortDelay, C: Clock>(
+pub(super) fn calibration<D: crate::executor::wait::PhyShortDelay, C: Clock>(
     clock: &C,
     registers: &mut impl oer_esp32s31_hal::owner::SharedPhyContext,
     binding: crate::rx::gain_calibration::PhyRxDcCalibrationExternalBinding,

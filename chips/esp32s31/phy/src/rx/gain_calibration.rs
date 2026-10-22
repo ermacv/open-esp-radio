@@ -1143,6 +1143,37 @@ pub struct PhyRxGainDcTransition {
 }
 
 impl PhyRxGainDcTransition {
+    /// Project the live calibration cursor without packing the outer DC action.
+    #[cfg(any(target_arch = "riscv32", test))]
+    #[inline]
+    pub(crate) fn calibration_action(&self) -> Option<PhyRxDcCalibrationAction> {
+        match &self.step {
+            DcStep::FineCalibration { transition, .. }
+            | DcStep::CalibrateBaseband { transition, .. } => Some(transition.action()),
+            _ => None,
+        }
+    }
+
+    #[cfg(any(target_arch = "riscv32", test))]
+    #[inline]
+    pub(crate) fn advance_calibration(
+        &mut self,
+        completion: PhyRxDcCalibrationCompletion,
+    ) -> Result<(), PhyRxGainDcTransitionError> {
+        let transition = match &mut self.step {
+            DcStep::FineCalibration { transition, .. }
+            | DcStep::CalibrateBaseband { transition, .. } => transition,
+            _ => return Err(PhyRxGainDcTransitionError::WrongCompletion),
+        };
+        transition
+            .advance(completion)
+            .map_err(|_| PhyRxGainDcTransitionError::WrongCompletion)?;
+        if transition.terminal().is_some() {
+            self.finish_calibration()?;
+        }
+        Ok(())
+    }
+
     pub(crate) fn finish_calibration(&mut self) -> Result<(), PhyRxGainDcTransitionError> {
         enum Finished {
             Fine(
