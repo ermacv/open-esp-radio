@@ -1,4 +1,4 @@
-error[E0599]: no method named `try_reserve` found for struct `LocalSpscSender<'p, T, DEPTH>` in the current scope
+error[E0599]: no method named `try_reserve` found for struct `LocalSpscSender<'p, T, DEPTH, C>` in the current scope
  --> tests/ui/local_spsc_no_reservation.rs:9:19
   |
 9 |     let _ = local.try_reserve(); // ui-error: E0599
