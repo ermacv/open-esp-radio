@@ -161,3 +161,43 @@ fn sees_a_capped_foreign_generic_instantiated_by_a_workspace_crate() {
         "{report:#}"
     );
 }
+
+#[test]
+fn imported_constructor_arguments_and_returns_need_no_exported_mir_body() {
+    let directory = tempfile::tempdir().expect("constructor fixture");
+    compile(
+        directory.path(),
+        "#![no_std]\npub enum Envelope<T> { Item(T) }",
+        "foreign",
+        &["--cap-lints=allow"],
+    );
+    let external = format!(
+        "foreign={}",
+        directory.path().join("libforeign.rlib").display()
+    );
+    let report = compile(
+        directory.path(),
+        "#![no_std]\n#[inline(never)] pub fn constructor() -> fn([u8;8192])->foreign::Envelope<[u8;8192]> { foreign::Envelope::Item }",
+        "consumer",
+        &["--extern", &external],
+    );
+    assert_eq!(report["errors"], serde_json::json!([]));
+    assert!(
+        !report["bodies_unavailable"]
+            .as_array()
+            .expect("signature-only instances")
+            .is_empty()
+    );
+    let records = report["records"].as_array().expect("records");
+    for role in ["argument", "return"] {
+        assert!(
+            records.iter().any(|record| record["role"] == role
+                && record["bytes"] == 8192
+                && record["instance"]
+                    .as_str()
+                    .expect("instance")
+                    .contains("foreign::Envelope::<[u8; 8192]>::Item")),
+            "{report:#}"
+        );
+    }
+}

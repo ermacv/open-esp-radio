@@ -2,6 +2,7 @@
 use std::{collections::HashMap, ffi::OsString, path::PathBuf};
 
 use rustc_public::{
+    CrateDef,
     mir::{Operand, TerminatorKind, mono::Instance},
     ty::{Span, Ty},
 };
@@ -120,10 +121,6 @@ pub fn collect(
     for instance in instances {
         let mut operand_errors = Vec::new();
         let name = instance.name();
-        let Some(body) = instance.body() else {
-            report.bodies_unavailable.push(name);
-            continue;
-        };
         let mut record = |ty: Ty, role: &str, place: String, span: Span| {
             let size = sizes.entry(ty).or_insert_with(|| {
                 ty.layout()
@@ -142,6 +139,27 @@ pub fn collect(
                 Err(error) => report.errors.push(format!("{name} {place} {ty}: {error}")),
                 _ => {}
             }
+        };
+        let Some(body) = instance.body() else {
+            // Imported constructors can be synthesized without exported MIR.
+            // Their concrete argument/return types are public ABI facts.
+            match instance.fn_abi() {
+                Ok(abi) => {
+                    let span = instance.def.span();
+                    record(abi.ret.ty, "return", "signature.return".into(), span);
+                    for (index, argument) in abi.args.iter().enumerate() {
+                        record(
+                            argument.ty,
+                            "argument",
+                            format!("signature.arg{index}"),
+                            span,
+                        );
+                    }
+                }
+                Err(error) => report.errors.push(format!("{name} signature: {error:?}")),
+            }
+            report.bodies_unavailable.push(name);
+            continue;
         };
         for (index, declaration) in body.locals().iter().enumerate() {
             let role = if index == 0 {

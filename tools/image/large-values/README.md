@@ -24,8 +24,10 @@ storage is still a local and is reported.
 
 MIR bodies and layouts use `rustc_public`. `src/bridge.rs` alone imports
 private compiler crates: session startup, codegen enumeration and macro
-call sites, which the public Span API on the pin cannot supply. Missing
-bodies and inspection errors are explicit in the report. The crate forbids
+call sites, which the public Span API on the pin cannot supply. Imported constructors without exported MIR use the public
+`Instance::fn_abi` for concrete argument/return types, still measured with
+`Ty::layout`. `bodies_unavailable` identifies these signature-only instances;
+inspection errors are explicit in the report. The crate forbids
 unsafe code. The root Cargo configuration enables compiler imports for this
 host crate alone; images retain their existing bootstrap setting and flags.
 

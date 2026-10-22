@@ -158,7 +158,7 @@ impl Report {
             if let Some(facts) = &coverage.facts {
                 writeln!(
                     text,
-                    "  {} instances; {} without a MIR body",
+                    "  {} instances; {} with signature inspection only (no exported MIR body)",
                     facts["instances"],
                     facts["bodies_unavailable"].as_array().map_or(0, Vec::len)
                 )?;
