@@ -109,6 +109,7 @@ impl<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> QuarantinedTerminals<
 impl<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> From<ContractFault<'id, B>>
     for TerminalCustody<'id, B>
 {
+    #[inline(never)]
     fn from(fault: ContractFault<'id, B>) -> Self {
         Self::Quarantined(QuarantinedTerminals {
             violation: fault.reason,
@@ -140,10 +141,14 @@ impl<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> From<ContractFault<'i
 }
 
 impl<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> StepFailure<'id, B> {
-    pub(super) fn into_custody(self) -> (ServiceFault<B>, TerminalCustody<'id, B>) {
+    pub(super) fn retain_in(self, custody: &mut TerminalCustody<'id, B>) -> ServiceFault<B> {
         match self {
-            Self::Port(fault) => (fault, TerminalCustody::Clear),
-            Self::Contract(fault) => (ServiceFault::Contract(fault.reason), fault.into()),
+            Self::Port(fault) => fault,
+            Self::Contract(fault) => {
+                let reason = fault.reason;
+                *custody = fault.into();
+                ServiceFault::Contract(reason)
+            }
         }
     }
 }

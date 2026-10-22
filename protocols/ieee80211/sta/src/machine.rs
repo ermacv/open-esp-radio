@@ -1633,11 +1633,12 @@ struct ConnectedRsn {
 }
 
 impl ConnectedRsn {
+    #[inline(never)]
     fn receive(
-        mut self,
+        &mut self,
         eapol: OwnedEapolFrame<DEFAULT_EAPOL_FRAME_CAPACITY>,
         protection: EapolProtection,
-    ) -> (Self, Result<(), StaRxError>) {
+    ) -> Result<(), StaRxError> {
         use oer_ieee80211_rsn::EapolKeyMessage;
         let message = eapol.key_frame().message();
         let action = match (message, protection) {
@@ -1690,12 +1691,15 @@ impl ConnectedRsn {
                     Err(RsnConnectedSupplicantError::StaleReplayCounter)
                 } else {
                     let (deferred, result) = if message == EapolKeyMessage::PairwiseMessage3 {
-                        self.deferred.message3(PendingM3 {
-                            request,
-                            protection,
-                        })
+                        core::mem::replace(&mut self.deferred, DeferredEapol::Empty).message3(
+                            PendingM3 {
+                                request,
+                                protection,
+                            },
+                        )
                     } else {
-                        self.deferred.group(PendingGroupM1 { request })
+                        core::mem::replace(&mut self.deferred, DeferredEapol::Empty)
+                            .group(PendingGroupM1 { request })
                     };
                     self.deferred = deferred;
                     if result.is_ok()
@@ -1712,48 +1716,51 @@ impl ConnectedRsn {
         if result.is_err() {
             self.dropped.increment();
         }
-        (self.advance_deferred(), result.map_err(Into::into))
+        self.advance_deferred();
+        result.map_err(Into::into)
     }
 
     /// Consume the smallest verified replay counter into installation work.
     /// M3 and GM1 advance the same frontier; their kind grants no priority.
     /// Invalid key data remains a counted protocol drop, not a local failure.
-    fn advance_deferred(mut self) -> Self {
+    #[inline(never)]
+    fn advance_deferred(&mut self) {
         if !matches!(self.rekey, Rekey::None)
             || matches!(self.message4, DuplicateMessage4::AwaitSent)
         {
-            return self;
+            return;
         }
         loop {
-            let (request, protection, rest) = match self.deferred {
-                DeferredEapol::Empty => {
-                    self.deferred = DeferredEapol::Empty;
-                    return self;
-                }
-                DeferredEapol::Message3(PendingM3 {
-                    request,
-                    protection,
-                }) => (request, protection, DeferredEapol::Empty),
-                DeferredEapol::Both {
-                    message3,
-                    group: PendingGroupM1 { request },
-                } if request.replay_counter() < message3.replay_counter() => (
-                    request,
-                    EapolProtection::Pairwise,
-                    DeferredEapol::Message3(message3),
-                ),
-                DeferredEapol::Both {
-                    message3:
-                        PendingM3 {
-                            request,
-                            protection,
-                        },
-                    group,
-                } => (request, protection, DeferredEapol::GroupMessage1(group)),
-                DeferredEapol::GroupMessage1(PendingGroupM1 { request }) => {
-                    (request, EapolProtection::Pairwise, DeferredEapol::Empty)
-                }
-            };
+            let (request, protection, rest) =
+                match core::mem::replace(&mut self.deferred, DeferredEapol::Empty) {
+                    DeferredEapol::Empty => {
+                        self.deferred = DeferredEapol::Empty;
+                        return;
+                    }
+                    DeferredEapol::Message3(PendingM3 {
+                        request,
+                        protection,
+                    }) => (request, protection, DeferredEapol::Empty),
+                    DeferredEapol::Both {
+                        message3,
+                        group: PendingGroupM1 { request },
+                    } if request.replay_counter() < message3.replay_counter() => (
+                        request,
+                        EapolProtection::Pairwise,
+                        DeferredEapol::Message3(message3),
+                    ),
+                    DeferredEapol::Both {
+                        message3:
+                            PendingM3 {
+                                request,
+                                protection,
+                            },
+                        group,
+                    } => (request, protection, DeferredEapol::GroupMessage1(group)),
+                    DeferredEapol::GroupMessage1(PendingGroupM1 { request }) => {
+                        (request, EapolProtection::Pairwise, DeferredEapol::Empty)
+                    }
+                };
             self.deferred = rest;
             let unwrapped = software_aes128_key_unwrap(request.kek(), request.wrapped_key_data());
             match self
@@ -1762,7 +1769,7 @@ impl ConnectedRsn {
             {
                 Ok(install) => {
                     self.rekey = Rekey::Install(install, protection);
-                    return self;
+                    return;
                 }
                 Err(_) => self.dropped.increment(),
             }
@@ -2193,7 +2200,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
         let (
             config,
             security,
-            state,
+            mut state,
             keys,
             configuration,
             tickets,
@@ -2231,15 +2238,18 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
             }
         );
         drop((lease, absence, scan, epoch));
-        let deferred = match state.read() {
-            State::Leave(Leave { deferred, .. }) => deferred,
+        let deferred = match &mut *state {
+            State::Leave(Leave { deferred, .. }) => {
+                core::mem::replace(deferred, DeferredEapol::Empty)
+            }
             State::Connected(Connected { rsn: Some(rsn), .. })
             | State::Confirming(Confirming {
                 connected: Connected { rsn: Some(rsn), .. },
                 ..
-            }) => rsn.deferred,
+            }) => core::mem::replace(&mut rsn.deferred, DeferredEapol::Empty),
             _ => DeferredEapol::Empty,
         };
+        drop(state);
         let retired = oer_memory::Placed::init(destination, |place| {
             oer_memory::init_in_place!(
                 place,
@@ -2765,6 +2775,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
     }
 
     /// The arbiter's answer.
+    #[inline(never)]
     fn answered(&mut self, answer: Answer<'id, K, T::GatePath>) {
         let state = self.take_state();
         self.state = match answer {
@@ -2870,6 +2881,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
     }
 
     /// The arbiter's answer to the station's absence.
+    #[inline(never)]
     fn absence_answered(&mut self, answer: AbsenceAnswer<'id, K, T::GatePath>) {
         let State::Connected(connected) = &mut self.state else {
             if let AbsenceAnswer::Refused(_, place) = answer {
@@ -2933,6 +2945,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
     }
 
     /// A notice of the arbiter.
+    #[inline(never)]
     fn noticed(&mut self, notice: StationNotice<'id, K, T::GatePath>) {
         match notice {
             StationNotice::AbsenceStarted(id) => {
@@ -3193,6 +3206,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
 
     /// Refusal is a protocol input of its own. In particular, refusing M4
     /// never executes the transition for an accepted TX completion.
+    #[inline(never)]
     fn unsent(
         &mut self,
         state: State<T, K>,
@@ -3243,6 +3257,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
     }
 
     /// The installed-key phase still waiting for D4's delivered M4 terminal.
+    #[inline(never)]
     fn confirming_step(
         &mut self,
         confirming: Confirming<T, K>,
@@ -3311,6 +3326,17 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
         ) {
             return leave_disabled(connected);
         }
+        self.update_connected(&mut connected, now, done);
+        State::Connected(connected)
+    }
+
+    #[inline(never)]
+    fn update_connected(
+        &mut self,
+        connected: &mut Connected<T, K>,
+        now: Instant,
+        done: StaDone<T>,
+    ) {
         let sent = match done {
             Done::Tx {
                 purpose: TxPurpose::Connected(sending),
@@ -3359,14 +3385,14 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
                     }
                 }
                 Sending::GroupResponse | Sending::DuplicateMessage4 => {
-                    if let Some(mut rsn) = connected.rsn {
+                    if let Some(rsn) = &mut connected.rsn {
                         if matches!(rsn.rekey, Rekey::AwaitSent) {
                             rsn.rekey = Rekey::None;
                         }
                         if matches!(rsn.message4, DuplicateMessage4::AwaitSent) {
                             rsn.message4 = DuplicateMessage4::None;
                         }
-                        connected.rsn = Some(rsn.advance_deferred());
+                        rsn.advance_deferred();
                     }
                 }
                 Sending::Probe | Sending::SaQuery => {}
@@ -3383,7 +3409,8 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
                     },
                 );
             }
-            return self.background_done(connected);
+            self.background_done(connected);
+            return;
         }
         let dwell = self.config.dwell;
         if let Some(background) = &mut connected.background {
@@ -3406,7 +3433,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
                             interrupted: Some(reason),
                         },
                     );
-                    return State::Connected(connected);
+                    return;
                 }
                 (BackgroundStep::AwaitNarrowed(None), Done::Configured) => {
                     self.next_visit(background);
@@ -3430,7 +3457,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
     }
 
     /// End a background scan that ran out of channels or of tries.
-    fn background_done(&mut self, mut connected: Connected<T, K>) -> State<T, K> {
+    fn background_done(&mut self, connected: &mut Connected<T, K>) {
         if let Some(background) = &connected.background
             && background.step == BackgroundStep::NeedAbsence
         {
@@ -3450,7 +3477,6 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
                 );
             }
         }
-        State::Connected(connected)
     }
 
     /// The scan's visit of the channel at `visit`, or its end.
@@ -3833,6 +3859,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
     }
 
     /// Take a received frame.
+    #[inline(never)]
     fn received_management(&mut self, now: Instant, management: Management<'_>, meta: T::RxMeta) {
         let frame = management.frame();
         let state = self.take_state();
@@ -4053,19 +4080,19 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
 
     /// A checked peer-input drop is reported at RX; it is not a lifecycle
     /// refusal and does not discard a previously authenticated successor.
+    #[inline(never)]
     fn connected_eapol(
         mut connected: Connected<T, K>,
         eapol: OwnedEapolFrame<DEFAULT_EAPOL_FRAME_CAPACITY>,
         protection: EapolProtection,
     ) -> (State<T, K>, Result<(), StaRxError>) {
-        let Some(rsn) = connected.rsn else {
+        let Some(rsn) = &mut connected.rsn else {
             return (
                 State::Connected(connected),
                 Err(oer_ieee80211_upper_mac::receive::RxDropReason::Protection.into()),
             );
         };
-        let (rsn, result) = rsn.receive(eapol, protection);
-        connected.rsn = Some(rsn);
+        let result = rsn.receive(eapol, protection);
         (State::Connected(connected), result)
     }
 
@@ -5840,6 +5867,7 @@ fn leave_connected<T: StaTokens, K>(
     })
 }
 
+#[inline(never)]
 fn leave_disabled<T: StaTokens, K>(connected: Connected<T, K>) -> State<T, K> {
     State::Leave(Leave {
         reason: StaDisconnectReason::TransmitRefused(TxRefusal::LinkChanged),
