@@ -8,7 +8,7 @@ repository.workspace = true
 description = "Chip-neutral non-blocking analog register bus contract and field transactions of the Espressif PHY"
 
 [features]
-# Native model preview; production enables it with the stage3 caller migration.
+# Native analog-I2C vocabulary for the PAC host tests.
 model = []
 
 [lints]

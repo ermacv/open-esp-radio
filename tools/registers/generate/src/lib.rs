@@ -46,8 +46,7 @@ struct Context {
 struct Outputs {
     svd: PathBuf,
     bindings: PathBuf,
-    /// Native indirect vocabulary, compiled with the PAC's host tests before
-    /// the separate all-callers migration activates it in production.
+    /// Native indirect vocabulary, compiled for the PAC's host tests.
     analog: Option<PathBuf>,
     /// The PAC a publication generates; a publication read only through its
     /// SVD and binding index, such as a chip's platform registers, has none.

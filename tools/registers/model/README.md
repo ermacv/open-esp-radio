@@ -52,16 +52,10 @@ and a separately qualified `READ_SAFE` list. Shared value types live in
 `chips/espressif/analog::model`. Sampled values preserve all other bits and
 reject another register's field or a value exceeding its width. Unknown or
 partial reset never creates a whole-byte reset image. These are pure values;
-no analog bus transaction is generated here. Stage2 compiles this file with
-the PAC's host tests; it adds no production dependency or bus entry point.
-The shared crate's `model` feature is selected only by those dev-dependencies;
-stage3 enables it for production with the complete caller migration.
-
-This is #294 stage2. Stage3 removes the old policy field domain and manual
-map while migrating all callers of both chips in one PR. It adds no aliases
-from the old types to the new vocabulary. Stage4 adds vendor-use adapters;
-call-result-dependent reads remain explicit unknown until the producer can
-prove their use. No checker or radio behavior changes in stage2.
+no analog bus transaction is generated here. The PAC's host tests compile
+this file and compare its routes with the bus transport. The shared crate's
+`model` feature is selected only by those dev-dependencies. Production bus
+callers use the policy field domain and manual map.
 
 ## Direct register model
 

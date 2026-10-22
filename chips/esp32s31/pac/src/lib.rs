@@ -287,6 +287,6 @@ pub(crate) mod modem;
 pub mod validation;
 pub(crate) mod wifi;
 
-// Stage2 validates the native model API before stage3 migrates every bus caller.
+// Generated analog-I2C vocabulary, checked against the bus transport by host tests.
 #[cfg(test)]
 include!("analog_generated.rs");

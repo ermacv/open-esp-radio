@@ -71,6 +71,6 @@ pub use phy::i2c::{
 };
 pub use phy::radio::PhyRadioRegisters;
 
-// Stage2 validates the native model API before stage3 migrates every bus caller.
+// Generated analog-I2C vocabulary, checked against the bus transport by host tests.
 #[cfg(test)]
 include!("analog_generated.rs");
