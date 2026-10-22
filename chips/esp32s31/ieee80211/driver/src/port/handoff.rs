@@ -238,14 +238,12 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> FrontHeld<'_, Id, D, B> {
         if self.clock_use.get() != ClockUse::Idle {
             return Ok(Err(ClockError::Unavailable));
         }
+        let deadline = self.timer.now().saturating_add(CLOCK_BOUND);
         self.clock_use.set(ClockUse::Waiting);
         let _guard = ClockGuard(self.clock_use);
         self.clock_requested.set(true);
         self.storage.driver.wake();
-        let mut bound = core::pin::pin!(
-            self.timer
-                .wait_until(self.timer.now().saturating_add(CLOCK_BOUND))
-        );
+        let mut bound = core::pin::pin!(self.timer.wait_until(deadline));
         poll_fn(|cx| {
             self.storage.body.register(cx.waker());
             self.storage.check()?;
