@@ -210,6 +210,43 @@ impl Io<'_, '_> {
         *completion = Some(result);
         Ok(waiting)
     }
+    #[inline(never)]
+    pub(super) fn rx_calibration<D: super::super::wait::PhyShortDelay, C: oer_time::Clock>(
+        &mut self,
+        clock: &C,
+        binding: crate::rx::gain_calibration::PhyRxDcCalibrationExternalBinding,
+    ) -> Result<crate::rx::gain_calibration::PhyRxDcCalibrationCompletion, Failure> {
+        #[cfg(not(target_arch = "riscv32"))]
+        let _ = clock;
+        match self {
+            #[cfg(target_arch = "riscv32")]
+            Self::Shared(registers) => {
+                super::rx_gain::calibration::<D, _>(clock, *registers, binding)
+                    .map_err(Failure::Target)
+            }
+            #[cfg(all(target_arch = "riscv32", oer_probe))]
+            Self::Validation(registers) => {
+                super::rx_gain::calibration::<D, _>(clock, *registers, binding)
+                    .map_err(Failure::Target)
+            }
+            #[cfg(test)]
+            Self::Test(io, _) => {
+                use crate::rx::{
+                    gain::{
+                        PhyRxGainInitCompletion as Done, PhyRxGainInitExternalBinding as Binding,
+                    },
+                    gain_calibration::{
+                        PhyRxGainDcCompletion as Dc, PhyRxGainDcExternalBinding as DcBinding,
+                    },
+                };
+                match io.rx_gain::<D>(Binding::Dc(DcBinding::Calibration(binding)))? {
+                    Done::Dc(Dc::Calibration(completion)) => Ok(completion),
+                    _ => Err(Failure::Binding),
+                }
+            }
+        }
+    }
+
     pub(super) fn frequency<D: super::super::wait::PhyShortDelay, C: oer_time::Clock>(
         &mut self,
         clock: &C,

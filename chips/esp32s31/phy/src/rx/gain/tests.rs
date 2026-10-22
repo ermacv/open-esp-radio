@@ -533,6 +533,126 @@ fn root_at_minimum() -> PhyRxGainInitTransition {
 }
 
 #[test]
+fn projected_calibration_preserves_rejection_readiness_and_parent_handoff() {
+    use crate::{
+        calibration::estimator::{
+            PhyDcIqAccumulatorSnapshot, PhyDcIqAction as Iq, PhyDcIqCompletion as Done,
+            PhyDcIqReadinessSnapshot,
+        },
+        rx::{
+            dc_offset::{PhyRxDcMinimumAction as Minimum, PhyRxDcMinimumCompletion as MinimumDone},
+            gain_calibration::{
+                PhyRxDcCalibrationAction as Calibration,
+                PhyRxDcCalibrationCompletion as CalibrationDone,
+            },
+        },
+    };
+    for timeout in [false, true] {
+        let mut full = root_at_minimum();
+        let mut projected = full;
+        let mut observed_false = false;
+        for _ in 0..1000 {
+            let Some(action) = projected.calibration_action() else {
+                break;
+            };
+            assert_eq!(
+                full.action(),
+                PhyRxGainInitAction::Dc(PhyRxGainDcAction::Calibration(action))
+            );
+            let before = projected;
+            assert!(
+                projected
+                    .advance_calibration(CalibrationDone::ControlRestorePrepared)
+                    .is_err()
+            );
+            assert_eq!(
+                projected, before,
+                "rejection preserves cursor and coefficients"
+            );
+            let completion = match action {
+                Calibration::Minimum(Minimum::DcIq(action)) => {
+                    CalibrationDone::Minimum(MinimumDone::DcIq(match action {
+                        Iq::Configure(request) => Done::Configured(request),
+                        Iq::SetEnable {
+                            request,
+                            phase,
+                            enabled,
+                        } => Done::EnableSet {
+                            request,
+                            phase,
+                            enabled,
+                        },
+                        Iq::DelayMicros {
+                            request,
+                            phase,
+                            micros,
+                        } => Done::DelayElapsed {
+                            request,
+                            phase,
+                            micros,
+                        },
+                        Iq::AwaitReadinessEdge { request, .. } if timeout => {
+                            Done::ReadinessTimedOut(request)
+                        }
+                        Iq::AwaitReadinessEdge { request, .. } => {
+                            let ready = observed_false;
+                            observed_false = true;
+                            Done::ReadinessObserved {
+                                request,
+                                snapshot: PhyDcIqReadinessSnapshot {
+                                    ready,
+                                    activity: !ready,
+                                },
+                            }
+                        }
+                        Iq::ReadAccumulators(request) => Done::AccumulatorsRead {
+                            request,
+                            snapshot: PhyDcIqAccumulatorSnapshot {
+                                i: 0,
+                                q: 0,
+                                power: 0,
+                            },
+                        },
+                        other => panic!("unexpected estimator action {other:?}"),
+                    }))
+                }
+                action => complete_calibration(action),
+            };
+            full.advance(PhyRxGainInitCompletion::Dc(
+                PhyRxGainDcCompletion::Calibration(completion),
+            ))
+            .unwrap();
+            projected.advance_calibration(completion).unwrap();
+            assert_eq!(
+                projected, full,
+                "same child validation and coefficient handoff"
+            );
+            assert!(
+                projected.dc_outcome.is_none(),
+                "root publication waits for the DC tail"
+            );
+        }
+        assert!(
+            projected.calibration_action().is_none(),
+            "bounded child finishes"
+        );
+        assert_eq!(
+            projected.phase(),
+            Some(Phase::Dc),
+            "cleanup or next gain remains owned"
+        );
+        assert!(timeout || observed_false);
+        let before = projected;
+        assert!(
+            projected
+                .advance_calibration(CalibrationDone::ControlRestored)
+                .is_err()
+        );
+        assert_eq!(projected, before);
+    }
+}
+
+#[test]
 fn root_borrowed_minimum_commits_only_terminal_results_and_preserves_failure_cleanup() {
     use crate::{
         calibration::estimator::{
