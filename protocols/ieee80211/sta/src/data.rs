@@ -545,6 +545,7 @@ impl<'id, D: StaDataTokens, K: oer_ieee80211_port::Ieee80211Capabilities, const 
 {
     /// Retire the machine into caller-owned storage without copying its
     /// queued-work banks through the CPU stack.
+    #[cfg(feature = "placement")]
     pub fn finish_placed<'a, 'b>(
         mut machine: oer_memory::Placed<'a, Self>,
         destination: &'b mut core::mem::MaybeUninit<RetiredData<'id, D, K, CAP>>,
@@ -639,14 +640,35 @@ impl<'id, D: StaDataTokens, K: oer_ieee80211_port::Ieee80211Capabilities, const 
         buffers: [D::Buffer; BUFFERS],
         depth: core::num::NonZeroU8,
     ) -> Self {
-        let mut storage = core::mem::MaybeUninit::uninit();
-        oer_memory::Placed::init(&mut storage, |place| {
-            Self::init_in_place(place, tickets, buffers, depth)
-        })
-        .read()
+        const {
+            #[cfg_attr(not(test), expect(clippy::panic, reason = "evaluated at build"))]
+            const fn checked<const TICKETS: usize, const CAP: usize>() {
+                if TICKETS > CAP {
+                    panic!(
+                        "each MPDU a data queue holds takes a ticket: the queues hold every ticket"
+                    );
+                }
+            }
+            checked::<TICKETS, CAP>();
+        };
+        Self {
+            tickets: Pool::new(tickets),
+            buffers: Pool::new(buffers),
+            owed: [const { Fifo::new() }; 8],
+            admission: Admissions::new(depth, TICKETS),
+            next_order: 0,
+            link: None,
+            preparation_refused: Counter::ZERO,
+            indeterminate: Counter::ZERO,
+            expired: Counter::ZERO,
+            contention_limited: Counter::ZERO,
+            overflows: Counter::ZERO,
+            left_behind: Counter::ZERO,
+        }
     }
 
     /// Initialize a data bank in place; futures retain its borrowed owner.
+    #[cfg(feature = "placement")]
     pub fn init_in_place<const TICKETS: usize, const BUFFERS: usize>(
         storage: &mut core::mem::MaybeUninit<Self>,
         tickets: [D::Ticket; TICKETS],

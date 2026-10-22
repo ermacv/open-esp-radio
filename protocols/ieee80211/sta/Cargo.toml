@@ -9,11 +9,13 @@ description = "Executor- and chip-independent Wi-Fi station MLME and policy"
 
 [features]
 default = []
+# Caller-owned construction and retirement without whole-value moves.
+placement = ["dep:oer-memory"]
 # Resource accounting visible to host compositions that test retirement.
 test-support = []
 
 [dependencies]
-oer-memory = { path = "../../../portable/memory" }
+oer-memory = { path = "../../../portable/memory", optional = true }
 oer-ieee80211-cipher = { path = "../cipher" }
 heapless = "0.9.3"
 oer-ieee80211-arbiter = { path = "../arbiter" }

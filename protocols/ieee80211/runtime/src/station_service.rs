@@ -1058,6 +1058,7 @@ impl<
     /// Construct both machines directly in the caller's backing. The returned
     /// loan owns the service; running it consumes that ownership as usual.
     #[allow(clippy::too_many_arguments)]
+    #[cfg(feature = "placement")]
     pub fn init_in_place<'s>(
         storage: &'s mut core::mem::MaybeUninit<Self>,
         station: impl for<'a> FnOnce(
@@ -1104,6 +1105,7 @@ impl<
 
     /// Consume a placed run right and retire into caller-owned storage. Both
     /// success and fault paths retain the same banks as the owned run API.
+    #[cfg(feature = "placement")]
     pub async fn run_placed<
         's,
         'out,

@@ -67,10 +67,6 @@ macro_rules! init_in_place {
 pub struct __InitField<T>(*mut T);
 
 impl<T> __InitField<T> {
-    /// The complete initializer must construct the destination's exact type.
-    #[inline(always)]
-    pub fn check<A>(_: &core::mem::MaybeUninit<T>, _: impl FnOnce(A) -> T) {}
-
     // Infer a closure against the higher-ranked signature before moving it
     // into the macro's unsafe field-projection block.
     #[inline(always)]
@@ -368,4 +364,10 @@ mod tests {
         }));
         assert!(result.is_err());
     }
+}
+
+impl<T> __InitField<T> {
+    /// The complete initializer must construct the destination's exact type.
+    #[inline(always)]
+    pub fn check<A>(_: &core::mem::MaybeUninit<T>, _: impl FnOnce(A) -> T) {}
 }

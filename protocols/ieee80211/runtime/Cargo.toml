@@ -7,6 +7,10 @@ license.workspace = true
 repository.workspace = true
 description = "Portable Wi-Fi execution primitives: monitor handoffs, task shutdown, station network ownership and poll boundaries"
 
+[features]
+# Placed station construction, polling and retirement for firmware tasks.
+placement = ["oer-ieee80211-sta/placement"]
+
 [dependencies]
 atomic-waker = "1.1.2"
 heapless = "0.9.3"

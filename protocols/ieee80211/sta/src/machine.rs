@@ -2180,6 +2180,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
 
     /// Finalize a placed station without moving the complete machine or its
     /// scan table through a temporary. The returned owner has only terminal APIs.
+    #[cfg(feature = "placement")]
     pub fn finish_placed<'a, 'b>(
         mut machine: oer_memory::Placed<'a, Self>,
         destination: &'b mut core::mem::MaybeUninit<RetiredStation<'id, T, K>>,
@@ -2265,6 +2266,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
     }
 
     /// Construct the open machine directly in caller-provided storage.
+    #[cfg(feature = "placement")]
     pub fn init_open<'a, const TICKETS: usize, const BUFFERS: usize, const GROUPS: usize>(
         storage: &'a mut core::mem::MaybeUninit<Self>,
         config: StaConfig<K>,
@@ -2298,21 +2300,58 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
         security: StaSecurity,
         resources: StationResources<'id, T, TICKETS, BUFFERS, GROUPS>,
     ) -> (Self, StaCommandCredits<'id, T::ConfigurationPath>) {
-        let mut storage = core::mem::MaybeUninit::uninit();
-        let mut credits = None;
-        let station = oer_memory::Placed::init(&mut storage, |place| {
-            let (station, granted) = Self::from_config_in_place(place, config, security, resources);
-            credits = Some(granted);
-            station
-        });
-        #[expect(
-            clippy::expect_used,
-            reason = "Placed::init calls its initializer exactly once before returning"
-        )]
-        let credits = credits.expect("construction grants command credits");
-        (station.read(), credits)
+        const {
+            #[cfg_attr(not(test), expect(clippy::panic, reason = "evaluated at build"))]
+            const fn check(tickets: usize, buffers: usize) {
+                if tickets < 1 {
+                    panic!("a station needs at least one TX ticket");
+                }
+                if buffers < 1 {
+                    panic!("a station needs at least one small buffer");
+                }
+            }
+            check(TICKETS, BUFFERS);
+            let _: (
+                SupportedFilter<K, StationRole>,
+                SupportedFilter<K, StationRole>,
+            ) = (Rules::<K>::MEMBER, Rules::<K>::WIDENED);
+        }
+        let StationResources {
+            epochs,
+            configure,
+            tickets,
+            buffers,
+            place,
+            absence_place,
+            keys,
+            group_permission,
+        } = resources;
+        let (commands, credits) = Commands::new();
+        (
+            Self {
+                config,
+                security,
+                state: State::Idle,
+                keys: Keys::new::<GROUPS>(keys, group_permission),
+                configuration: Some(configure),
+                tickets: Pool::new(tickets),
+                buffers: Pool::new(buffers),
+                place: Some(place),
+                lease: Held::None,
+                absence_place: Some(absence_place),
+                absence: None,
+                commands,
+                sequence: StaSequenceCounter::new(SequenceNumber::ZERO),
+                scan: ScanTable::new(),
+                pmksa: StaPmksaCache::new(),
+                epoch: None,
+                epochs,
+            },
+            credits,
+        )
     }
 
+    #[cfg(feature = "placement")]
     fn from_config_in_place<'a, const TICKETS: usize, const BUFFERS: usize, const GROUPS: usize>(
         storage: &'a mut core::mem::MaybeUninit<Self>,
         config: StaConfig<K>,

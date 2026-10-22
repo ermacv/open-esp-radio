@@ -921,27 +921,32 @@ where
                 script(world).await;
                 world.command(ServiceCommand::Stop).await;
             };
-            let completed = if self.placed {
-                let mut service_storage = core::mem::MaybeUninit::uninit();
-                let service =
-                    oer_memory::Placed::init(&mut service_storage, |place| place.write(service));
-                let mut completed_storage = core::mem::MaybeUninit::uninit();
-                let (completed, ()) = join(
-                    StationService::run_placed(
-                        service,
-                        &mut completed_storage,
-                        owner,
-                        &mut io,
-                        &*world.clock,
-                    ),
-                    script,
-                )
-                .await;
-                completed.read()
-            } else {
-                join(service.run(owner, &mut io, &*world.clock), script)
-                    .await
-                    .0
+            let completed = match self.placed {
+                #[cfg(feature = "placement")]
+                true => {
+                    let mut service_storage = core::mem::MaybeUninit::uninit();
+                    let service = oer_memory::Placed::init(&mut service_storage, |place| {
+                        place.write(service)
+                    });
+                    let mut completed_storage = core::mem::MaybeUninit::uninit();
+                    let (completed, ()) = join(
+                        StationService::run_placed(
+                            service,
+                            &mut completed_storage,
+                            owner,
+                            &mut io,
+                            &*world.clock,
+                        ),
+                        script,
+                    )
+                    .await;
+                    completed.read()
+                }
+                _ => {
+                    join(service.run(owner, &mut io, &*world.clock), script)
+                        .await
+                        .0
+                }
             };
             let completed = if let Some(protected) = world.restart_stopped_service.get() {
                 let stopped = completed.into_stopped().ok().expect("ordinary Stop");
@@ -2698,6 +2703,7 @@ fn stopped_service_reconnects_and_sends_data_on_the_same_installation() {
 }
 
 #[test]
+#[cfg(feature = "placement")]
 fn placed_service_retires_its_banks_on_stop_drained_and_quarantined_ports() {
     for end in [
         None,
