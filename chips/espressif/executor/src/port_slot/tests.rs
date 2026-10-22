@@ -81,7 +81,9 @@ fn each_nominal_static_declaration_can_be_taken_exactly_once() {
     drop(frontend);
     drop(registration);
     assert!(declarations::first::take_static().is_none());
+    let mut second = super::StaticPortSlot::new(second);
     let (frontend, registration) = second.register(Owner).ok().expect("fresh backing");
+    assert!(second.register(Owner).is_err());
     let join = frontend.finish();
     let mut registration = std::boxed::Box::pin(registration.run());
     let mut cx = core::task::Context::from_waker(core::task::Waker::noop());

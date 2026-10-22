@@ -28,9 +28,11 @@ mod dma_bytes;
 mod handler_cell;
 mod indexed_custody;
 mod init_in_place;
+mod once_value;
 mod pinned_tx;
 mod request_slot;
 pub mod retained;
+mod return_bank;
 mod rx_external_handoff;
 mod rx_handoff;
 mod static_ref;
@@ -42,18 +44,21 @@ pub use request_slot::{Awaiting, Doorbell, Poster, RequestSlot, Responder};
 pub use affine_spsc::{
     AffineIndexedSpscQueue, AffineIndexedSpscReceiver, AffineIndexedSpscSender, AffineSpscQueue,
     AffineSpscReceiver, AffineSpscSendPermit, AffineSpscSender, AffineSpscTryReceiveError,
-    AffineSpscTrySendError, LocalSpscReceiver, LocalSpscSender, UniqueQueueIndex,
+    AffineSpscTrySendError, CachedSpscCursor, CompactSpscCursor, LocalSpscReceiver,
+    LocalSpscSender, SpscCursor, UniqueQueueIndex,
 };
 pub use dma_bytes::DmaBytes;
 pub use handler_cell::{HandlerCell, Installed};
 pub use indexed_custody::{CustodyDomain, Drained, IndexedCustody, Quarantine, RetainedName};
 #[doc(hidden)]
 pub use init_in_place::__InitField;
+pub use once_value::OnceValue;
 pub use pinned_tx::{
     DmaIndexReturn, IndexedStableDmaLease, PinnedDmaTxNetworkLease, PinnedDmaTxPool,
     PinnedDmaTxPoolHandle, PinnedDmaTxRadioLease, ReturningStableDmaBacking,
     TaggedStableDmaBacking,
 };
+pub use return_bank::{ReturnBank, ReturnToken};
 pub use rx_external_handoff::{
     ExternalRxAdoption, ExternalRxBuffer, ExternalRxHandoffPool, ExternalRxNetworkLease,
     ExternalRxRadioLease, ExternalRxReturn, ExternalRxReturnState,

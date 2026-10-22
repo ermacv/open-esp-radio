@@ -295,6 +295,8 @@ pub struct GateClosed<'id, Path: PoolPath = Root<oer_radio_port::LocalId<'id>>> 
 /// One issuer is retained by the backend per install and never reaches the
 /// body. Closing is allowed only after the current publication's result and
 /// the withdrawal of queued attempts. Opening consumes that very evidence.
+/// Backend endpoints may share this stateless authority immutably: each
+/// transition still consumes the installation's one affine gate place.
 ///
 /// ```compile_fail,E0382
 /// # use oer_ieee80211_port::{GateClosed, GateIssuer, GateOpen};
@@ -312,12 +314,12 @@ pub struct GateIssuer<'id, Path: PoolPath = Root<oer_radio_port::LocalId<'id>>> 
 
 impl<'id, Path: PoolPath> GateIssuer<'id, Path> {
     /// Attest the completed hardware barrier, retaining the same place.
-    pub fn close(&mut self, gate: GateOpen<'id, Path>) -> GateClosed<'id, Path> {
+    pub fn close(&self, gate: GateOpen<'id, Path>) -> GateClosed<'id, Path> {
         GateClosed { place: gate.place }
     }
 
     /// Consume the closed evidence to open the same gate.
-    pub fn open(&mut self, gate: GateClosed<'id, Path>) -> GateOpen<'id, Path> {
+    pub fn open(&self, gate: GateClosed<'id, Path>) -> GateOpen<'id, Path> {
         GateOpen { place: gate.place }
     }
 }

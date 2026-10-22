@@ -76,6 +76,16 @@ pub struct ReceiveControl {
 }
 
 impl ReceiveControl {
+    /// Initialize the control words and cached exit queue in caller storage.
+    pub fn init_in_place(storage: &mut core::mem::MaybeUninit<Self>) -> &mut Self {
+        oer_memory::init_in_place!(storage, Self {
+            stop: AtomicBool::new(false),
+            runner: AtomicWaker::new(),
+            exit => AffineSpscQueue::init_in_place,
+            reporter: AtomicWaker::new(),
+        })
+    }
+
     pub const fn new() -> Self {
         Self {
             stop: AtomicBool::new(false),

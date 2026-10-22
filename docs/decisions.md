@@ -291,7 +291,8 @@ bounds) live in the code that applies them.
   age through A-MPDU formation and retry; removing an aged head under an
   active Block Ack agreement sends a BlockAckReq from the port core. The
   backend reports expiry and never sends that request itself. Admission
-  samples the backend's radio clock at submit. The VIF's per-AC lifetime
+  samples the image's monotonic clock at submit; a backend that needs a radio
+  coordinate projects it through its `ClockRelation`. The VIF's per-AC lifetime
   defaults to 500 TU and is a typed duration; TU conversion is at the record
   boundary. Age is checked before publication and every retry or re-formation;
   an attempt owned by hardware is never aborted for age. Expired MSDUs have

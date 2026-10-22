@@ -1,9 +1,6 @@
 //! Small runtime attachments to the permanently placed queue and driver state.
 
-use core::{
-    cell::Cell,
-    ops::{Deref, DerefMut},
-};
+use core::ops::{Deref, DerefMut};
 
 pub(super) struct Prepared<T>(Option<T>);
 impl<T> Prepared<T> {
@@ -27,18 +24,5 @@ impl<T> DerefMut for Prepared<T> {
         self.0
             .as_mut()
             .expect("registered slot retains its attachment")
-    }
-}
-
-pub(super) struct PreparedCell<T: Copy>(Cell<Option<T>>);
-impl<T: Copy> PreparedCell<T> {
-    pub(super) const fn vacant() -> Self {
-        Self(Cell::new(None))
-    }
-    pub(super) fn get(&self) -> T {
-        self.0.get().expect("registered slot retains its settings")
-    }
-    pub(super) fn set(&self, value: T) {
-        self.0.set(Some(value));
     }
 }

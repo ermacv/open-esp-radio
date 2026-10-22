@@ -1,11 +1,84 @@
 //! Nominal, irreversible static placement of port backing.
 
+use core::{marker::PhantomData, ptr::NonNull};
+use oer_radio_port::{Joined, PortSlot, SlotFrontend, SlotIdentity, SlotOwner, SlotRegistration};
 use oer_radio_port::{SlotClaim, StaticId};
 
 #[doc(hidden)]
 pub use oer_radio_port as contract;
 #[doc(hidden)]
 pub use static_cell::StaticCell;
+
+/// Permanent slot retained by its one driver task across joined installations.
+///
+/// The task registers and destroys the P2 guard in its own context, and sends
+/// only `SlotFrontend` to P1. Endpoints can outlive any frontend future; losing
+/// join authority permanently prevents another borrow of the backing.
+pub struct StaticPortSlot<Id: SlotIdentity + 'static, S: SlotOwner<Id> + 'static> {
+    slot: NonNull<PortSlot<Id, S>>,
+    installed: bool,
+    local: PhantomData<*mut PortSlot<Id, S>>,
+}
+
+impl<Id: SlotIdentity + 'static, S: SlotOwner<Id> + 'static> StaticPortSlot<Id, S> {
+    /// Transfer the permanently located allocation to its driver task.
+    pub fn new(slot: &'static mut PortSlot<Id, S>) -> Self {
+        Self {
+            slot: NonNull::from(slot),
+            installed: false,
+            local: PhantomData,
+        }
+    }
+
+    /// Register once, retaining the guard on P2 before publishing its frontend.
+    pub fn register(
+        &mut self,
+        owner: S,
+    ) -> Result<
+        (
+            SlotFrontend<'static, Id, S>,
+            SlotRegistration<'static, Id, S>,
+        ),
+        S,
+    > {
+        if self.installed {
+            return Err(owner);
+        }
+        self.installed = true;
+        #[allow(
+            unsafe_code,
+            reason = "the first registration exclusively borrows the retained static allocation"
+        )]
+        // SAFETY: new consumed the only static mutable reference. No endpoint
+        // has been issued, and installed prohibits any repeated initial borrow.
+        let slot = unsafe { &mut *self.slot.as_ptr() };
+        slot.register(owner)
+    }
+
+    /// Borrow the same backing again only after its ordinary join proof.
+    pub fn reinstall<Resume: FnOnce(S::Vacant) -> S>(
+        &mut self,
+        joined: Joined<Id>,
+        resume: Resume,
+    ) -> Result<
+        (
+            SlotFrontend<'static, Id, S>,
+            SlotRegistration<'static, Id, S>,
+        ),
+        Resume,
+    > {
+        #[allow(
+            unsafe_code,
+            reason = "the consumed Joined proof ends the previous endpoint epoch"
+        )]
+        // SAFETY: this nominal Id has one allocation. Joined is issued only
+        // after the frontend ended its endpoint loans and the P2 registration
+        // finished, destroyed its owner and invocation, and unregistered.
+        // Quarantine issues no Joined, so it cannot permit this reborrow.
+        let slot = unsafe { &mut *self.slot.as_ptr() };
+        slot.reinstall(joined, resume)
+    }
+}
 
 /// Construct the static declaration's affine placement authority.
 ///

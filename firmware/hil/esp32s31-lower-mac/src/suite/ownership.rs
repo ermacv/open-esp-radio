@@ -6,59 +6,66 @@ use oer_ieee80211_port::conformance::{self, Class, End, Operation, Resources, Sc
 use oer_ieee80211_wire::qos::WmmAccessCategory;
 
 pub(super) static DROPS: AtomicU32 = AtomicU32::new(0);
-use conformance::allocations::{Allocation, Ids};
-use core::cell::RefCell;
 static BODY_BYTES: StaticCell<[[u8; 17]; 4]> = StaticCell::new();
 static BODY_POOL: StaticCell<BodyPool> = StaticCell::new();
 pub(super) struct BodyPool {
-    ids: Ids<4>,
-    slots: RefCell<[Option<&'static mut [u8; 17]>; 4]>,
+    slots: oer_memory::ReturnBank<&'static mut [u8; 17], 4>,
 }
 impl BodyPool {
     pub(super) fn new() -> &'static Self {
-        let mut slots = BODY_BYTES.init([[0; 17]; 4]).iter_mut();
-        BODY_POOL.init(Self {
-            ids: Ids::new(),
-            slots: RefCell::new(core::array::from_fn(|_| slots.next())),
+        let bytes = BODY_BYTES.init([[0; 17]; 4]);
+        BODY_POOL.init_with(|| {
+            let mut slots = oer_memory::ReturnBank::new();
+            for (index, bytes) in bytes.iter_mut().enumerate() {
+                assert!(
+                    slots.seed(index, bytes).is_ok(),
+                    "one body allocation per place"
+                );
+            }
+            Self { slots }
         })
     }
     fn allocate(&'static self, value: u8, len: usize) -> Result<FixtureBody, &'static str> {
         if len > 17 {
             return Err("body allocation extent");
         }
-        let allocation = Allocation::new(&self.ids).ok_or("body allocation slots exhausted")?;
-        let bytes = self
-            .slots
-            .borrow_mut()
-            .get_mut(usize::from(allocation.id()))
-            .and_then(Option::take)
-            .ok_or("body slot owner missing")?;
+        let (index, bytes, returned) = (0..4)
+            .find_map(|index| {
+                self.slots
+                    .take(index)
+                    .map(|(bytes, returned)| (index, bytes, returned))
+            })
+            .ok_or("body allocation slots exhausted")?;
         bytes.fill(value);
         Ok(FixtureBody {
-            pool: self,
             bytes: Some(bytes),
             len,
-            allocation,
+            allocation: BodyAllocation { index: index as u8 },
+            returned: Some(returned),
         })
     }
 }
+struct BodyAllocation {
+    index: u8,
+}
+impl BodyAllocation {
+    fn id(&self) -> u8 {
+        self.index
+    }
+}
 pub(super) struct FixtureBody {
-    pool: &'static BodyPool,
     bytes: Option<&'static mut [u8; 17]>,
     len: usize,
-    allocation: Allocation<&'static Ids<4>, 4>,
+    allocation: BodyAllocation,
+    returned: Option<oer_memory::ReturnToken<'static, &'static mut [u8; 17]>>,
 }
 impl Drop for FixtureBody {
     fn drop(&mut self) {
         if let Some(bytes) = self.bytes.take() {
-            let old = self
-                .pool
-                .slots
-                .borrow_mut()
-                .get_mut(usize::from(self.allocation.id()))
-                .expect("allocation number names its static body slot")
-                .replace(bytes);
-            assert!(old.is_none(), "body allocation is returned once");
+            self.returned
+                .take()
+                .expect("body retains its sole return right")
+                .return_value(bytes);
         }
     }
 }

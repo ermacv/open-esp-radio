@@ -199,8 +199,8 @@ impl<Id: SlotIdentity, C: Ieee80211Capabilities, X: ModelContext> SlotOwner<Id>
                     slot,
                     loan: None,
                     memory: ModelMemory::Small(Box::new([0; ModelSmall::CAPACITY])),
-                    admitted_at: RadioInstant::from_micros(0),
-                    admitted: false,
+                    admitted_at: None,
+                    admitted: None,
                 })
                 .collect(),
             large: large
@@ -209,8 +209,8 @@ impl<Id: SlotIdentity, C: Ieee80211Capabilities, X: ModelContext> SlotOwner<Id>
                     slot,
                     loan: None,
                     memory: ModelMemory::Large(Box::new([0; ModelLarge::CAPACITY])),
-                    admitted_at: RadioInstant::from_micros(0),
-                    admitted: false,
+                    admitted_at: None,
+                    admitted: None,
                 })
                 .collect(),
             station_pairwise,

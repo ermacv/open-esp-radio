@@ -1,6 +1,7 @@
 //! The S31 lower-MAC port. Only the driver loan executes hardware operations.
 //!
-//! The image polls `run_port` on P2. P3 owns the interrupt epoch and posts
+//! The image polls `run_port` on P1 and retains its driver registration on
+//! P2. P3 owns the interrupt epoch and posts
 //! static typed signals through [`crate::irq`]; it never accesses this state.
 //! All DMA allocations and the device remain in static storage through an
 //! abnormal exit. Neither a dropped future nor a forgotten port frees them.
@@ -33,6 +34,8 @@ use oer_radio_port::{self as radio, Child, Root, Slot};
 use oer_radio_port::{BodyLoan, ClockError, LoanedContext, SlotBodyOwner, SlotIdentity, SlotOwner};
 use oer_time::{Clock, Duration, Instant, Timer};
 
+mod atomic_words;
+use atomic_words::KeyActivity;
 mod buffer;
 #[cfg(target_arch = "riscv32")]
 pub mod device;
@@ -41,7 +44,8 @@ mod keys;
 mod lifecycle;
 mod phase;
 mod placement;
-use placement::{Prepared, PreparedCell};
+mod settings;
+use placement::Prepared;
 #[cfg(all(oer_trace, oer_debug_control))]
 pub mod trace;
 pub use buffer::*;
@@ -64,6 +68,9 @@ pub const COMMAND_BOUND: Duration = Duration::from_millis(400);
 /// Response/retirement containment budget. It covers one P2 cleanup step and
 /// ready P2 work within the existing command bound; a later answer fails closed.
 pub const SHUTDOWN_BOUND: Duration = COMMAND_BOUND;
+/// Fresh-clock response budget, independent of the command FIFO. It covers
+/// one P2 reading and its ready peer tasks; expiry is transient Unavailable.
+const CLOCK_BOUND: Duration = COMMAND_BOUND;
 type Part<Id, const I: u8> = Child<Root<Id>, I>;
 type CorePath<Id: SlotIdentity> = Part<Id, 0>;
 type Core<'id, Id: SlotIdentity, D, const B: usize> = LowerMacCore<
@@ -159,37 +166,58 @@ impl<const B: usize> Ieee80211Capabilities for Esp32s31Caps<B> {
     const CAPS: LowerMacCapabilities = esp32s31_lower_mac_capabilities(B);
 }
 
-/// Static task-only backing borrowing a separately retained device.
-/// Its `RefCell` is never shared with an ISR.
+/// P2-only backing borrowing the retained device and cross-context storage.
+/// Only the P2 registration can reach its device `RefCell`.
 pub struct PortStorage<D: 'static, const B: usize> {
     device: RefCell<&'static mut D>,
-    poisoned: Cell<Option<Fault>>,
+    shared: &'static mut PortSharedStorage<B>,
+    identity: Cell<u64>,
+    expired: Cell<u32>,
+}
+
+/// Caller-placed cross-context state, with no device, Cell, RefCell or shared
+/// producer. Place once before constructing `PortStorage`; quarantine keeps
+/// its DMA return places and key activity unavailable for reuse.
+pub struct PortSharedStorage<const B: usize> {
+    poisoned: oer_memory::OnceValue<Fault>,
     driver: AtomicWaker,
     body: AtomicWaker,
-    key_live: [Cell<u64>; 20],
-    identity: Cell<u64>,
-    returned: RefCell<heapless::Deque<TxSlotFree<'static, B>, TX_TICKETS>>,
-    expired: Cell<u32>,
+    key_live: [KeyActivity; 20],
+    returned: oer_memory::ReturnBank<TxSlotFree<'static, B>, TX_TICKETS>,
+    settings: settings::Settings,
 }
 impl<D: Device<B>, const B: usize> PortStorage<D, B> {
     // Keep storage construction outside the install future's poll frame.
     #[inline(never)]
-    pub const fn new(device: &'static mut D) -> Self {
+    pub const fn new(device: &'static mut D, shared: &'static mut PortSharedStorage<B>) -> Self {
         Self {
             device: RefCell::new(device),
-            poisoned: Cell::new(None),
-            driver: AtomicWaker::new(),
-            body: AtomicWaker::new(),
-            key_live: [const { Cell::new(0) }; 20],
+            shared,
             identity: Cell::new(1),
-            returned: RefCell::new(heapless::Deque::new()),
             expired: Cell::new(0),
         }
     }
     fn poison(&self, cause: Fault) {
-        if self.poisoned.get().is_none() {
-            self.poisoned.set(Some(cause));
+        self.shared.poison(cause);
+    }
+    fn check(&self) -> Result<(), radio::Poisoned<Fault>> {
+        self.shared.check()
+    }
+}
+impl<const B: usize> PortSharedStorage<B> {
+    /// Vacant cross-context backing, placed separately from the P2-only device.
+    pub const fn new() -> Self {
+        Self {
+            poisoned: oer_memory::OnceValue::new(),
+            driver: AtomicWaker::new(),
+            body: AtomicWaker::new(),
+            key_live: [const { KeyActivity::new() }; 20],
+            returned: oer_memory::ReturnBank::new(),
+            settings: settings::Settings::new(),
         }
+    }
+    fn poison(&self, cause: Fault) {
+        let _ = self.poisoned.set(cause);
         self.driver.wake();
         self.body.wake();
     }
@@ -197,6 +225,12 @@ impl<D: Device<B>, const B: usize> PortStorage<D, B> {
         self.poisoned
             .get()
             .map_or(Ok(()), |cause| Err(radio::Poisoned { cause }))
+    }
+}
+
+impl<const B: usize> Default for PortSharedStorage<B> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -222,7 +256,6 @@ pub struct Esp32s31Backend<Id: SlotIdentity, D: Device<B>, const B: usize> {
 }
 struct Initial<D: Device<B>, const B: usize> {
     transmitter: OrdinaryTxIdleOwner<'static, D::Profile, D::Power, D::Entropy, D::Timer, B>,
-    buffers: [Pin<&'static mut TxSlot<B>>; TX_TICKETS],
     config: LowerMacConfig,
     coex: &'static dyn RadioCoexPriorities,
 }
@@ -253,7 +286,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> Esp32s31Backend<Id, D, B> {
                 .buffers
                 .iter()
                 .any(|slot| slot.state() != oer_esp32s31_ieee80211_mac::tx::TxDmaState::Free)
-            || parts.storage.poisoned.get().is_some()
+            || parts.storage.shared.poisoned.get().is_some()
         {
             return Err(parts);
         }
@@ -266,12 +299,19 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> Esp32s31Backend<Id, D, B> {
             access_point_address,
             coex,
         } = parts;
+        for (index, slot) in buffers.into_iter().enumerate() {
+            let TxSlotAccess::Free(memory) = slot.access() else {
+                panic!("installation takes only idle TX allocations")
+            };
+            if storage.shared.returned.seed(index, memory).is_err() {
+                panic!("initial installation seeds each return place once");
+            }
+        }
         let channel = Channel::from_wifi_channel(config.channel);
         Ok(Self {
             storage,
             state: BackendState::Initial(Some(Initial {
                 transmitter,
-                buffers,
                 config,
                 coex,
             })),
@@ -309,21 +349,13 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> StoppedPort<Id, D, B> {
     /// their allocations, so the previous stopped owner returns on refusal.
     #[inline(never)]
     pub fn reinstall(mut self, tsf_epoch: u32) -> Result<Esp32s31Backend<Id, D, B>, Self> {
-        if self.storage.poisoned.get().is_some()
-            || self.storage.returned.borrow().len() != TX_TICKETS
+        if self.storage.shared.poisoned.get().is_some()
+            || !self.storage.shared.returned.all_returned()
             || self.transmitter.is_none()
             || tsf_epoch == self.config.tsf_epoch
         {
             return Err(self);
         }
-        let buffers = core::array::from_fn(|_| {
-            self.storage
-                .returned
-                .borrow_mut()
-                .pop_front()
-                .expect("all minted buffers returned")
-                .into_slot()
-        });
         let transmitter = self
             .transmitter
             .take()
@@ -335,7 +367,6 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> StoppedPort<Id, D, B> {
             storage: self.storage,
             state: BackendState::Initial(Some(Initial {
                 transmitter,
-                buffers,
                 config: self.config,
                 coex: self.coex,
             })),
@@ -363,129 +394,14 @@ type Single<'id, Id: SlotIdentity, D, const B: usize> = InFlight<
 type Event<'id, Id, D, const B: usize> = LowerMacEvent<'id, Types<Id, D, B>>;
 type Terminal<'id, Id: SlotIdentity, D, const B: usize> = LowerMacTerminal<'id, Types<Id, D, B>>;
 
-struct Queue<T, const N: usize>(RefCell<heapless::Deque<T, N>>);
-impl<T, const N: usize> Queue<T, N> {
-    const fn new() -> Self {
-        Self(RefCell::new(heapless::Deque::new()))
-    }
-    fn push(&self, value: T) -> Result<(), T> {
-        self.0.borrow_mut().push_back(value)
-    }
-    fn pop(&self) -> Option<T> {
-        self.0.borrow_mut().pop_front()
-    }
-    fn empty(&self) -> bool {
-        self.0.borrow().is_empty()
-    }
-}
-
-pub struct Held<'id, Id: SlotIdentity, D: Device<B>, const B: usize> {
-    storage: Prepared<&'static PortStorage<D, B>>,
-    commands: Queue<driver::Command<'id, Id, D, B>, COMMANDS>,
-    events: Queue<owned::OwnedEvent<'id, Id, D, B>, { TERMINALS + TX_TICKETS }>,
-    rx_out: Cell<usize>,
-    recycled: Queue<ReceiveBuffer<'id, Id, D::Receive>, TX_TICKETS>,
-    failed_command: RefCell<Option<driver::Command<'id, Id, D, B>>>,
-    failed_terminal: RefCell<Option<owned::OwnedTerminal<'id, Id, D, B>>>,
-    gate: RefCell<Prepared<GateIssuer<'id, Part<Id, 1>>>>,
-    enabled: Cell<bool>,
-    want_enabled: Cell<bool>,
-    channel: PreparedCell<Channel>,
-    edca: PreparedCell<[EdcaParameterSet; 2]>,
-    dirty_edca: Cell<bool>,
-    block_acks: RefCell<[Option<core_mac::RxBlockAckValues>; 8]>,
-    dirty_ba: Cell<bool>,
-    color: Cell<Option<BssColor>>,
-    loss: Cell<bool>,
-    #[cfg(oer_debug_control)]
-    publication_hold: Cell<u8>,
-    #[cfg(oer_debug_control)]
-    completion_hold: Cell<bool>,
-}
-impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Held<'id, Id, D, B> {
-    const fn vacant() -> Self {
-        Self {
-            storage: Prepared::vacant(),
-            commands: Queue::new(),
-            events: Queue::new(),
-            recycled: Queue::new(),
-            rx_out: Cell::new(0),
-            failed_command: RefCell::new(None),
-            failed_terminal: RefCell::new(None),
-            gate: RefCell::new(Prepared::vacant()),
-            enabled: Cell::new(false),
-            want_enabled: Cell::new(false),
-            channel: PreparedCell::vacant(),
-            edca: PreparedCell::vacant(),
-            dirty_edca: Cell::new(false),
-            block_acks: RefCell::new([None; 8]),
-            dirty_ba: Cell::new(false),
-            color: Cell::new(None),
-            loss: Cell::new(false),
-            #[cfg(oer_debug_control)]
-            publication_hold: Cell::new(0),
-            #[cfg(oer_debug_control)]
-            completion_hold: Cell::new(false),
-        }
-    }
-    fn prepare(
-        &mut self,
-        storage: &'static PortStorage<D, B>,
-        issuer: GateIssuer<'id, Part<Id, 1>>,
-        channel: Channel,
-    ) {
-        assert!(
-            self.commands.empty() && self.events.empty() && self.recycled.empty(),
-            "joined installation drained its rings"
-        );
-        assert!(
-            self.failed_command.get_mut().is_none() && self.failed_terminal.get_mut().is_none(),
-            "joined installation returned failed owners"
-        );
-        self.storage.prepare(storage);
-        self.gate.get_mut().prepare(issuer);
-        self.enabled.set(false);
-        self.want_enabled.set(false);
-        self.rx_out.set(0);
-        self.channel.set(channel);
-        self.edca.set([EdcaParameterSet::STANDARD_DEFAULT; 2]);
-        self.dirty_edca.set(true);
-        *self.block_acks.get_mut() = [None; 8];
-        self.dirty_ba.set(false);
-        self.color.set(None);
-        self.loss.set(false);
-        #[cfg(oer_debug_control)]
-        {
-            self.publication_hold.set(0);
-            self.completion_hold.set(false);
-        }
-    }
-    fn command(&self, command: driver::Command<'id, Id, D, B>) {
-        if let Err(command) = self.commands.push(command) {
-            *self.failed_command.borrow_mut() = Some(command);
-            self.storage.poison(Fault::Capacity);
-        }
-        self.storage.driver.wake();
-    }
-    fn terminal(&self, terminal: owned::OwnedTerminal<'id, Id, D, B>) {
-        if let Err(event) = self.events.push(owned::OwnedEvent::Terminal(terminal)) {
-            if let owned::OwnedEvent::Terminal(terminal) = event {
-                *self.failed_terminal.borrow_mut() = Some(terminal);
-            }
-            self.storage.poison(Fault::Capacity);
-        } else {
-            #[cfg(all(oer_trace, oer_debug_control))]
-            oer_trace::emit(&trace::TerminalPosted);
-        }
-        self.storage.body.wake();
-    }
-}
+mod handoff;
+use handoff::{FrontHeld, Held, HeldBacking, Incoming, Outgoing};
 
 pub struct ReceiveBuffer<'id, Id: SlotIdentity, R> {
     brand: PhantomData<fn(&'id (), Id) -> (&'id (), Id)>,
     unit: Option<R>,
     range: core::ops::Range<usize>,
-    poison: &'static Cell<Option<Fault>>,
+    poison: &'static oer_memory::OnceValue<Fault>,
     driver: &'static AtomicWaker,
 }
 impl<Id: SlotIdentity, R: ReceiveUnit> RxBuffer for ReceiveBuffer<'_, Id, R> {
@@ -503,9 +419,7 @@ impl<Id: SlotIdentity, R> Drop for ReceiveBuffer<'_, Id, R> {
             // Losing an affine receive owner quarantines its original DMA
             // lease; Drop cannot authorize rearming that allocation.
             core::mem::forget(unit);
-            if self.poison.get().is_none() {
-                self.poison.set(Some(Fault::Abandoned));
-            }
+            let _ = self.poison.set(Fault::Abandoned);
             self.driver.wake();
         }
     }

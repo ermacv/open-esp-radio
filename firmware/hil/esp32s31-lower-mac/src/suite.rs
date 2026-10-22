@@ -91,17 +91,12 @@ type Backend<Id> = Esp32s31Backend<Id, Device, TX>;
 oer_espressif_executor::declare_port_slot!(slot: super::Backend<Id>);
 
 /// The unique static backing lent to the conformance task.
-pub struct Slot(
-    &'static mut radio::PortSlot<slot::Id, Backend<slot::Id>>,
-    &'static mut TraceScratch,
-);
+pub struct Slot(&'static mut radio::PortSlot<slot::Id, Backend<slot::Id>>);
 impl Slot {
     /// Claim before starting P2; every later claim refuses permanently.
     #[inline(never)]
     pub fn take_static() -> Option<Self> {
-        let port = slot::take_static()?;
-        static OUTPUT: StaticCell<TraceScratch> = StaticCell::new();
-        Some(Self(port, OUTPUT.init_with(|| TraceScratch(None))))
+        Some(Self(slot::take_static()?))
     }
 }
 
@@ -117,6 +112,7 @@ impl Drop for PendingTrace<'_> {
 
 type Family<Id> = Types<Id, Device, TX>;
 type Caps = Esp32s31Caps<TX>;
+static SHARED: StaticCell<PortSharedStorage<TX>> = StaticCell::new();
 static STORAGE: StaticCell<PortStorage<Device, TX>> = StaticCell::new();
 static DEVICE: StaticCell<Device> = StaticCell::new();
 static RETAINED: oer_trace::Retained<256, 4, 33> = oer_trace::Retained::new();
@@ -217,53 +213,72 @@ mod futures {
     }
 }
 use futures::install_future;
-pub struct Server<'s, Id: radio::SlotIdentity> {
-    slot: &'s mut radio::PortSlot<Id, Backend<Id>>,
-    boot: Option<Boot>,
-    joined: Option<radio::Joined<Id>>,
+type Front = radio::SlotFrontend<'static, slot::Id, Backend<slot::Id>>;
+enum DriverRequest {
+    Initial(Prepare),
+    Resume {
+        joined: radio::Joined<slot::Id>,
+        epoch: u32,
+    },
+}
+static DRIVER_DOORBELL: oer_memory::Doorbell = oer_memory::Doorbell::new();
+type DriverSlot = oer_memory::RequestSlot<DriverRequest, Result<Front, RejectReason>>;
+pub struct DriverChannel(&'static DriverSlot);
+pub struct FrontendChannel(oer_memory::Poster<DriverRequest, Result<Front, RejectReason>>);
+/// Place both channel endpoints before either executor starts polling them.
+pub fn channels() -> (DriverChannel, FrontendChannel) {
+    static REQUEST: StaticCell<DriverSlot> = StaticCell::new();
+    let request = REQUEST.init_with(|| oer_memory::RequestSlot::new(&DRIVER_DOORBELL, 1));
+    let poster = request.claim().expect("one P1 port requester");
+    (DriverChannel(request), FrontendChannel(poster))
+}
+
+/// P1 owns portable work and the plain HIL result; no driver owner crosses here.
+struct Server {
+    driver: Option<oer_memory::Poster<DriverRequest, Result<Front, RejectReason>>>,
+    started: bool,
+    joined: Option<radio::Joined<slot::Id>>,
     peer: Option<Peer>,
     epoch: u32,
     bodies: &'static ownership::BodyPool,
-    output: &'s mut TraceScratch,
+    output: &'static mut TraceScratch,
 }
-impl<'s, Id: radio::SlotIdentity + 's> Server<'s, Id> {
-    fn new(
-        boot: Boot,
-        slot: &'s mut radio::PortSlot<Id, Backend<Id>>,
-        output: &'s mut TraceScratch,
-    ) -> Self {
+impl Server {
+    fn new(channel: FrontendChannel) -> Self {
+        static OUTPUT: StaticCell<TraceScratch> = StaticCell::new();
         Self {
-            boot: Some(boot),
+            driver: Some(channel.0),
+            started: false,
             joined: None,
-            slot,
             peer: None,
             epoch: 1,
             bodies: ownership::BodyPool::new(),
-            output,
+            output: OUTPUT.init_with(|| TraceScratch(None)),
         }
     }
-    pub async fn request(&mut self, request: Request) -> Result<Answer, RejectReason> {
+    async fn frontend(&mut self, request: DriverRequest) -> Result<Front, RejectReason> {
+        let mut pending = self
+            .driver
+            .take()
+            .expect("P1 serializes driver requests")
+            .post(request);
+        let (poster, frontend) = poll_fn(|cx| pending.poll_answer(cx)).await;
+        self.driver = Some(poster);
+        frontend
+    }
+    async fn request(&mut self, request: Request) -> Result<Answer, RejectReason> {
         match request {
             Request::Prepare(config) => run_request(pin!(self.prepare(config))).await,
             Request::Run(key) => run_request(pin!(self.exchange(key))).await,
         }
     }
     async fn prepare(&mut self, config: Prepare) -> Result<Answer, RejectReason> {
-        let boot = self.boot.take().ok_or(RejectReason::InvalidState)?;
-        let station = boot.station;
-        let parts = install_future(boot, config)
-            .await
-            .map_err(|_| RejectReason::Internal)?;
-        let backend = Backend::<Id>::new(parts).map_err(|_| RejectReason::Internal)?;
-        let registered = self
-            .slot
-            .register(backend)
-            .map_err(|_| RejectReason::Internal)?;
-        let result = radio::LocalExecution
-            .scope(registered, |frontend| {
-                radio::run_port(frontend, Discover { config, station })
-            })
-            .await;
+        if self.started {
+            return Err(RejectReason::InvalidState);
+        }
+        self.started = true;
+        let frontend = self.frontend(DriverRequest::Initial(config)).await?;
+        let result = radio::run_port(frontend, Discover { config }).await;
         let radio::PortEnd::Uninstalled { output, joined, .. } = result else {
             return Err(RejectReason::Internal);
         };
@@ -283,32 +298,22 @@ impl<'s, Id: radio::SlotIdentity + 's> Server<'s, Id> {
         let peer = self.peer.ok_or(RejectReason::InvalidState)?;
         let joined = self.joined.take().ok_or(RejectReason::InvalidState)?;
         self.epoch = self.epoch.checked_add(1).ok_or(RejectReason::Internal)?;
-        let epoch = self.epoch;
-        let bodies = self.bodies;
-        let output = &mut *self.output;
-        let registered = self
-            .slot
-            .reinstall(joined, |stopped| {
-                stopped
-                    .reinstall(epoch)
-                    .ok()
-                    .expect("Joined retains stopped DMA owners and a distinct epoch")
+        let frontend = self
+            .frontend(DriverRequest::Resume {
+                joined,
+                epoch: self.epoch,
             })
-            .map_err(|_| RejectReason::Internal)?;
-        let result = radio::LocalExecution
-            .scope(registered, move |frontend| {
-                let scratch = output;
-                radio::run_port(
-                    frontend,
-                    Exchange {
-                        peer,
-                        case,
-                        bodies,
-                        output: scratch,
-                    },
-                )
-            })
-            .await;
+            .await?;
+        let result = radio::run_port(
+            frontend,
+            Exchange {
+                peer,
+                case,
+                bodies: self.bodies,
+                output: self.output,
+            },
+        )
+        .await;
         let radio::PortEnd::Uninstalled { output, joined, .. } = result else {
             return Err(RejectReason::Internal);
         };
@@ -317,6 +322,57 @@ impl<'s, Id: radio::SlotIdentity + 's> Server<'s, Id> {
         Ok(Answer::Trace(CaseTrace { case: key, trace }))
     }
 }
+
+/// The permanent P2 task owns registration, ordinary finish, and every Drop.
+/// P1 receives only Front; neither the manager nor a cleanup guard is sent.
+/// Answer publication cannot poll P1 while this higher-priority task runs.
+/// The completed registration future ends before unregistered publishes join.
+pub async fn drive(boot: Boot, slot: Slot, channel: DriverChannel) {
+    let mut slot = oer_espressif_executor::port_slot::StaticPortSlot::new(slot.0);
+    let mut boot = Some(boot);
+    loop {
+        poll_fn(|cx| DRIVER_DOORBELL.poll_rung(cx)).await;
+        let Some((request, response)) = channel.0.take_request() else {
+            continue;
+        };
+        let registered = match request {
+            DriverRequest::Initial(config) => {
+                let Some(boot) = boot.take() else {
+                    response.answer(Err(RejectReason::InvalidState));
+                    continue;
+                };
+                let Ok(parts) = install_future(boot, config).await else {
+                    response.answer(Err(RejectReason::Internal));
+                    continue;
+                };
+                let backend = Esp32s31Backend::new(parts)
+                    .ok()
+                    .expect("validated conformance port parts");
+                slot.register(backend)
+                    .ok()
+                    .expect("one initial registration")
+            }
+            DriverRequest::Resume { joined, epoch } => slot
+                .reinstall(joined, |stopped| {
+                    stopped
+                        .reinstall(epoch)
+                        .ok()
+                        .expect("Joined retains stopped DMA and a distinct epoch")
+                })
+                .ok()
+                .expect("Joined grants the next endpoint epoch"),
+        };
+        let (frontend, registration) = registered;
+        response.answer(Ok(frontend));
+        // The guard was armed before answering. Its only owner is this P2
+        // frame, including cancellation before the driver's first poll.
+        let completion = { registration.run().await };
+        if let Some(completion) = completion {
+            completion.unregistered();
+        }
+    }
+}
+
 async fn install(boot: Boot, config: Prepare) -> Result<PortParts<Device, TX>, &'static str> {
     let domain = RegulatoryDomain::of(Country::new(config.country).map_err(|_| "country")?)
         .ok_or("domain")?;
@@ -390,7 +446,8 @@ async fn install(boot: Boot, config: Prepare) -> Result<PortParts<Device, TX>, &
     .into_idle()
     .map_err(|_| "TX idle")?;
     let parts = PortParts {
-        storage: STORAGE.init_with(|| PortStorage::new(device)),
+        storage: STORAGE
+            .init_with(|| PortStorage::new(device, SHARED.init_with(PortSharedStorage::new))),
         transmitter,
         buffers: [
             slot!(TX1, SLOT1),
@@ -416,7 +473,6 @@ async fn install(boot: Boot, config: Prepare) -> Result<PortParts<Device, TX>, &
 }
 struct Discover {
     config: Prepare,
-    station: [u8; 6],
 }
 impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for Discover {
     type Output = Result<(Peer, Prepared), &'static str>;
@@ -443,8 +499,9 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for Discover {
                     .with_context(configure::Witness::Discovery),
                 StationReceive::OtherBssManagement,
             );
+            let station = phase.station().address().get();
             match select(
-                discover(&mut phase, self.config, self.station),
+                discover(&mut phase, self.config, station),
                 EmbassyClock.wait_for(Duration::from_secs(10)),
             )
             .await
@@ -770,8 +827,8 @@ macro_rules! plain_context {
 plain_context!(Context);
 plain_context!(configure::Witness);
 
-pub async fn serve(boot: Boot, slot: Slot) {
-    let mut server = Server::new(boot, slot.0, slot.1);
+pub async fn serve(channel: FrontendChannel) {
+    let mut server = Server::new(channel);
     loop {
         core::future::poll_fn(|cx| crate::DOORBELL.poll_rung(cx)).await;
         if let Some((request, response)) = crate::SLOT.take_request() {

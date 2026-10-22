@@ -124,20 +124,24 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         .start(interrupts.radio, LEVELS);
     let mut rng = RngOwner::new(peripherals.RNG);
     let boot = (u64::from(rng.random()) << 32 | u64::from(rng.random())).max(1);
+    let (driver_channel, frontend_channel) = suite::channels();
     radio.spawn(radio_actor(actor).expect("radio actor task"));
     radio.spawn(
-        serve_radio(suite::Boot {
-            cell: cells.wifi,
-            wifi: partitions.wifi,
-            rng,
-            station,
-            ap,
-            routes: irq::ImageRoutes {
-                mac: interrupts.wifi_mac,
-                power: interrupts.wifi_pwr,
+        serve_driver(
+            suite::Boot {
+                cell: cells.wifi,
+                wifi: partitions.wifi,
+                rng,
+                station,
+                ap,
+                routes: irq::ImageRoutes {
+                    mac: interrupts.wifi_mac,
+                    power: interrupts.wifi_pwr,
+                },
+                bell,
             },
-            bell,
-        })
+            driver_channel,
+        )
         .expect("conformance task"),
     );
     let poster = SLOT.claim().expect("one diagnostic requester");
@@ -151,6 +155,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         .run(interrupts.wake, move |spawner| {
             spawner.spawn(console(usb, boot).expect("diagnostic console task"));
             spawner.spawn(dispatch(poster).expect("diagnostic dispatch task"));
+            spawner.spawn(serve_port(frontend_channel).expect("P1 conformance body task"));
         });
 }
 #[embassy_executor::task]
@@ -208,7 +213,11 @@ async fn dispatch(mut poster: Poster<Request, Answer>) {
     }
 }
 #[embassy_executor::task]
-async fn serve_radio(boot: suite::Boot) {
+async fn serve_driver(boot: suite::Boot, channel: suite::DriverChannel) {
     let slot = suite::Slot::take_static().expect("one static conformance slot");
-    suite::serve(boot, slot).await
+    suite::drive(boot, slot, channel).await
+}
+#[embassy_executor::task]
+async fn serve_port(channel: suite::FrontendChannel) {
+    suite::serve(channel).await
 }

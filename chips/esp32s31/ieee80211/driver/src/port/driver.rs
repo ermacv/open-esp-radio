@@ -216,7 +216,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Driver<'id, Id, D, B> 
         self.transition = None;
         transmitter
     }
-    pub(super) fn deadline(&mut self, held: &Held<'id, Id, D, B>) -> Instant {
+    pub(super) fn deadline(&mut self, held: &Held<'_, 'id, Id, D, B>) -> Instant {
         let mut deadline = core_views::deadline::<Id, D, B>(self.core.view())
             .unwrap_or(self.clock_deadline)
             .min(self.clock_deadline);
@@ -231,10 +231,8 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Driver<'id, Id, D, B> 
         }
         if !core_views::configuring::<Id, D, B>(self.core.view()) {
             for pending in self.queues.iter().flat_map(|q| q.iter()) {
-                if let Some((_, at)) = pending.operation.payload().buffer.admission {
-                    let lifetime = held.edca.get()[vif(pending.role())]
-                        .access_category(pending.category)
-                        .msdu_lifetime;
+                if let Some(at) = pending.operation.payload().buffer.admission {
+                    let lifetime = held.edca.lifetime(vif(pending.role()), pending.category);
                     deadline = deadline.min(at.saturating_add(lifetime));
                 }
             }
@@ -243,7 +241,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Driver<'id, Id, D, B> 
     }
     fn finish(
         &mut self,
-        held: &Held<'id, Id, D, B>,
+        held: &Held<'_, 'id, Id, D, B>,
         pending: Pending<'id, Id, D, B>,
         outcome: SingleOutcome<Ack, Infallible>,
     ) {
@@ -286,7 +284,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Driver<'id, Id, D, B> 
         }
     }
     #[inline(never)]
-    fn withdraw(&mut self, held: &Held<'id, Id, D, B>) -> bool {
+    fn withdraw(&mut self, held: &Held<'_, 'id, Id, D, B>) -> bool {
         let global = if !held.want_enabled.get() {
             Some(WithdrawCause::Disabled)
         } else if self.closing.is_some() {
@@ -330,22 +328,24 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Driver<'id, Id, D, B> 
                 None => false,
             }
     }
-    fn expired(held: &Held<'id, Id, D, B>, pending: &Pending<'id, Id, D, B>, now: Instant) -> bool {
+    fn expired(
+        held: &Held<'_, 'id, Id, D, B>,
+        pending: &Pending<'id, Id, D, B>,
+        now: Instant,
+    ) -> bool {
         pending
             .operation
             .payload()
             .buffer
             .admission
-            .is_some_and(|(_, at)| {
+            .is_some_and(|at| {
                 now.saturating_duration_since(at)
-                    >= held.edca.get()[vif(pending.role())]
-                        .access_category(pending.category)
-                        .msdu_lifetime
+                    >= held.edca.lifetime(vif(pending.role()), pending.category)
             })
     }
     fn collect(
         &mut self,
-        held: &Held<'id, Id, D, B>,
+        held: &Held<'_, 'id, Id, D, B>,
         mut sink: Sink<'id, Id, B>,
         stopping: bool,
     ) -> Result<(), Fault> {
@@ -444,7 +444,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Driver<'id, Id, D, B> 
             if held.events.push(owned::OwnedEvent::Tbtt(tbtt)).is_err() {
                 held.loss.set(true);
             }
-            held.storage.body.wake();
+            held.storage.shared.body.wake();
         }
         if !sink.removed.is_empty() {
             return Err(Fault::Capacity);
@@ -454,7 +454,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Driver<'id, Id, D, B> 
     }
     fn receive(
         &mut self,
-        held: &Held<'id, Id, D, B>,
+        held: &Held<'_, 'id, Id, D, B>,
         device: &mut D,
         unit: D::Receive,
     ) -> Result<(), Fault> {
@@ -491,15 +491,15 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Driver<'id, Id, D, B> 
                     brand: PhantomData,
                     unit: Some(unit),
                     range: start..end,
-                    poison: &held.storage.poisoned,
-                    driver: &held.storage.driver,
+                    poison: &held.storage.shared.poisoned,
+                    driver: &held.storage.shared.driver,
                 },
                 meta,
             }) {
                 core::mem::forget(event);
                 return Err(Fault::Capacity);
             }
-            held.storage.body.wake();
+            held.storage.shared.body.wake();
         } else {
             device.recycle(unit);
         }
@@ -508,7 +508,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Driver<'id, Id, D, B> 
     pub(super) fn poll(
         &mut self,
         cx: &mut Context<'_>,
-        held: &Held<'id, Id, D, B>,
+        held: &Held<'_, 'id, Id, D, B>,
         device: &mut D,
     ) -> Result<(), Fault> {
         while let Some(mut frame) = held.recycled.pop() {
@@ -546,7 +546,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Driver<'id, Id, D, B> 
                     )?;
                     held.enabled.set(true);
                     self.transition = None;
-                    held.storage.body.wake();
+                    held.storage.shared.body.wake();
                 }
             }
         }
@@ -628,7 +628,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Driver<'id, Id, D, B> 
             for role in [VifRole::Station, VifRole::AccessPoint] {
                 idle_command!(self.core, |view| view.set_checked_edca(
                     role,
-                    SupportedEdca::<Esp32s31Caps<B>>::new(held.edca.get()[vif(role)])
+                    SupportedEdca::<Esp32s31Caps<B>>::new(held.edca.get(vif(role)))
                         .ok_or(Fault::Capacity)?,
                 ))
                 .map_err(|_| Fault::Capacity)?;
@@ -638,8 +638,8 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Driver<'id, Id, D, B> 
             idle_command!(self.core, |view| view.set_checked_he_bss_color(color));
         }
         if held.dirty_ba.replace(false) {
-            let desired = *held.block_acks.borrow();
-            for (old, wanted) in self.applied_ba.iter_mut().zip(desired) {
+            for (index, old) in self.applied_ba.iter_mut().enumerate() {
+                let wanted = held.block_acks.get(index);
                 if *old == wanted {
                     continue;
                 }
@@ -736,7 +736,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Driver<'id, Id, D, B> 
                         Poll::Ready(Ok(None)) => {
                             let terminal = self.group(held, device, command)?;
                             if let Err(cause) = device.finish_rx_cut() {
-                                *held.failed_terminal.borrow_mut() = Some(terminal);
+                                handoff::retain_terminal(held.failed_terminal, terminal);
                                 return Err(cause);
                             }
                             held.terminal(terminal);
@@ -754,7 +754,6 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Driver<'id, Id, D, B> 
             // retain their tails in order until those heads are terminal.
             let gate = held
                 .gate
-                .borrow_mut()
                 .close(self.closing.take().expect("closing owns gate"));
             self.closed = true;
             held.terminal(owned::OwnedTerminal::GateClosed(gate));
@@ -807,7 +806,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Driver<'id, Id, D, B> 
                     Poll::Ready(Ok(())) => {
                         held.enabled.set(false);
                         self.transition = None;
-                        held.storage.body.wake();
+                        held.storage.shared.body.wake();
                     }
                     Poll::Ready(Err(cause)) => return Err(cause),
                     Poll::Pending => {}
@@ -818,7 +817,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Driver<'id, Id, D, B> 
     }
     fn publish(
         &mut self,
-        held: &Held<'id, Id, D, B>,
+        held: &Held<'_, 'id, Id, D, B>,
         device: &mut D,
         index: usize,
         mut pending: Pending<'id, Id, D, B>,
@@ -882,7 +881,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Driver<'id, Id, D, B> 
             memory,
             core_mac::MpduParameters {
                 role,
-                admitted_at: mpdu.buffer.admission.ok_or(Fault::Clock)?.1,
+                admitted_at: mpdu.buffer.admission.ok_or(Fault::Clock)?,
                 len: mpdu.layout.mpdu_len(),
                 rate,
                 protection,
@@ -1019,7 +1018,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Driver<'id, Id, D, B> 
     }
     fn group(
         &mut self,
-        held: &Held<'id, Id, D, B>,
+        held: &Held<'_, 'id, Id, D, B>,
         device: &mut D,
         command: GroupCommand<'id, Id>,
     ) -> Result<owned::OwnedTerminal<'id, Id, D, B>, Fault> {
@@ -1037,7 +1036,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Driver<'id, Id, D, B> 
                     serial: held.serial(),
                     spp,
                     key_id,
-                    activity: &held.storage.key_live[1],
+                    activity: &held.storage.shared.key_live[1],
                 };
                 self.install(
                     device,
@@ -1069,7 +1068,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Driver<'id, Id, D, B> 
                     serial: held.serial(),
                     spp,
                     key_id,
-                    activity: &held.storage.key_live[17 + usize::from(slot.index())],
+                    activity: &held.storage.shared.key_live[17 + usize::from(slot.index())],
                 };
                 let Some(key_id) =
                     oer_esp32s31_ieee80211_mac::crypto::ApGroupKeyId::new(key_id.get())

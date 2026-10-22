@@ -7,8 +7,13 @@ type Queue = AffineSpscQueue<u8, 3>;
 
 #[test]
 fn local_producer_copies_publish_whole_non_clone_values_in_fifo_order() {
+    local_producer_copies_publish_whole_non_clone_values_in_fifo_order_with::<CachedSpscCursor>();
+    local_producer_copies_publish_whole_non_clone_values_in_fifo_order_with::<CompactSpscCursor>();
+}
+
+fn local_producer_copies_publish_whole_non_clone_values_in_fifo_order_with<C: SpscCursor>() {
     struct Payload(std::boxed::Box<u8>);
-    let mut queue = AffineSpscQueue::<Payload, 2>::new();
+    let mut queue = AffineSpscQueue::<Payload, 2, C>::new();
     let (mut producer, mut consumer) = queue.split();
     {
         let first = producer.borrow_local();
@@ -110,8 +115,13 @@ impl Drop for Owner {
 
 #[test]
 fn nonempty_resplit_preserves_owned_values_and_fifo_across_cursor_wrap() {
+    nonempty_resplit_preserves_owned_values_and_fifo_across_cursor_wrap_with::<CachedSpscCursor>();
+    nonempty_resplit_preserves_owned_values_and_fifo_across_cursor_wrap_with::<CompactSpscCursor>();
+}
+
+fn nonempty_resplit_preserves_owned_values_and_fifo_across_cursor_wrap_with<C: SpscCursor>() {
     let drops = Arc::new(AtomicUsize::new(0));
-    let mut queue = AffineSpscQueue::<Owner, 3>::new();
+    let mut queue = AffineSpscQueue::<Owner, 3, C>::new();
     for epoch in 0..12 {
         {
             let (sender, _receiver) = queue.split();
@@ -156,7 +166,12 @@ fn queue_drop_releases_each_leftover_owner_once() {
 
 #[test]
 fn endpoint_transfer_between_threads_preserves_fifo() {
-    let mut queue = Queue::new();
+    endpoint_transfer_between_threads_preserves_fifo_with::<CachedSpscCursor>();
+    endpoint_transfer_between_threads_preserves_fifo_with::<CompactSpscCursor>();
+}
+
+fn endpoint_transfer_between_threads_preserves_fifo_with<C: SpscCursor>() {
+    let mut queue = AffineSpscQueue::<u8, 3, C>::new();
     let (sender, receiver) = queue.split();
     std::thread::scope(|scope| {
         scope.spawn(move || {
@@ -204,4 +219,50 @@ fn dropping_a_vacant_permit_preserves_credit_and_refusal_returns_the_sender() {
         returned_sender.try_reserve().ok().unwrap().send(value + 1);
         assert_eq!(receiver.try_receive(), Ok(value + 1));
     }
+}
+
+#[test]
+#[allow(
+    unsafe_code,
+    reason = "destroy the one complete queue placed in test-owned storage"
+)]
+fn cached_placement_transfers_received_owners_and_drops_only_the_queued_owner() {
+    struct Payload {
+        id: usize,
+        dropped: Arc<[AtomicUsize; 2]>,
+    }
+    impl Drop for Payload {
+        fn drop(&mut self) {
+            self.dropped[self.id].fetch_add(1, Ordering::SeqCst);
+        }
+    }
+    let dropped = Arc::new([const { AtomicUsize::new(0) }; 2]);
+    let mut storage = MaybeUninit::<AffineSpscQueue<Payload, 2>>::uninit();
+    let destination = storage.as_mut_ptr();
+    let queue = AffineSpscQueue::init_in_place(&mut storage);
+    assert!(core::ptr::eq(queue, destination));
+    {
+        let (sender, receiver) = queue.split();
+        assert!(receiver.is_empty());
+        for id in 0..2 {
+            assert!(
+                sender
+                    .try_send(Payload {
+                        id,
+                        dropped: dropped.clone()
+                    })
+                    .is_ok()
+            );
+        }
+        let first = receiver.try_receive().ok().expect("first affine owner");
+        assert_eq!(first.id, 0);
+        drop(first);
+        assert_eq!(dropped[0].load(Ordering::SeqCst), 1);
+        assert_eq!(dropped[1].load(Ordering::SeqCst), 0);
+    }
+    // SAFETY: placement returned the complete queue at this address, every
+    // endpoint loan ended, and this scope owns its sole destruction right.
+    unsafe { storage.assume_init_drop() };
+    assert_eq!(dropped[0].load(Ordering::SeqCst), 1);
+    assert_eq!(dropped[1].load(Ordering::SeqCst), 1);
 }

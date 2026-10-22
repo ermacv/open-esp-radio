@@ -180,9 +180,9 @@ impl<
         let (irq_publisher, irq) = irq.write(IrqStorage::new(signals.mac)).split();
         let irq_publisher: &'static IrqPublisher<'static, X> = publisher_slot.write(irq_publisher);
         let (power_publisher, power) = power.write(PowerIrqStorage::new(signals.power)).split();
-        let (control, stop) = control.write(ReceiveControl::new()).split();
+        let (control, stop) = ReceiveControl::init_in_place(control).split();
         let returns = RxReturnNotifier::new(irq_publisher);
-        let frames = frames.write(RxFrameQueue::new()).split(counters, returns);
+        let frames = RxFrameQueue::init_in_place(frames).split(counters, returns);
         Ok((
             WifiRxParts {
                 rx,

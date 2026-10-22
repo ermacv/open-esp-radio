@@ -15,7 +15,7 @@ note: required because it appears within the type `PhantomData<*const ()>`
 note: required because it appears within the type `LocalSpscSender<'_, u8, 2>`
  --> src/affine_spsc/local.rs
   |
-  | pub struct LocalSpscSender<'p, T, const DEPTH: usize> {
+  | pub struct LocalSpscSender<'p, T, const DEPTH: usize, C: SpscCursor = CachedSpscCursor> {
   |            ^^^^^^^^^^^^^^^
 note: required by a bound in `send`
  --> tests/ui/local_spsc_sender_send.rs:4:12

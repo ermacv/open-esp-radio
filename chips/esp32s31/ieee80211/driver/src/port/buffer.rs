@@ -10,28 +10,26 @@ impl<const B: usize> TxBufferClass for BufferClass<B> {
 pub struct Buffer<'id, Id: SlotIdentity, D: Device<B>, const B: usize> {
     pub(super) place: Slot<'id, Buffers, Part<Id, 3>>,
     pub(super) dma: ReturnableBuffer<B>,
-    pub(super) admission: Option<(Ieee80211Instant, Instant)>,
+    pub(super) admission: Option<Instant>,
     pub(super) loan: Option<BodyLoan<'id, Id, Esp32s31Backend<Id, D, B>>>,
 }
 pub(super) struct ReturnableBuffer<const B: usize> {
     pub(super) memory: Option<TxSlotFree<'static, B>>,
-    pub(super) returned: &'static RefCell<heapless::Deque<TxSlotFree<'static, B>, TX_TICKETS>>,
+    pub(super) returned: Option<oer_memory::ReturnToken<'static, TxSlotFree<'static, B>>>,
 }
 impl<const B: usize> Drop for ReturnableBuffer<B> {
     fn drop(&mut self) {
         if let Some(memory) = self.memory.take() {
-            if self.returned.borrow_mut().push_back(memory).is_err() {
-                panic!("one returned allocation per minted buffer place");
-            }
+            self.returned
+                .take()
+                .expect("buffer retains its sole return right")
+                .return_value(memory);
         }
     }
 }
 impl<Id: SlotIdentity, D: Device<B>, const B: usize> Buffer<'_, Id, D, B> {
     pub fn index(&self) -> u8 {
         self.place.index()
-    }
-    pub fn admitted_at(&self) -> Option<Ieee80211Instant> {
-        self.admission.map(|(at, _)| at)
     }
 }
 impl<Id: SlotIdentity, D: Device<B>, const B: usize> TxBufferMemory for Buffer<'_, Id, D, B> {
