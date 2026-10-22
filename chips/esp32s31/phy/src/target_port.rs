@@ -78,7 +78,7 @@ use crate::{
     state::{PhyCalibrationCache, PhyState, client::PhyPendingTracking},
     target_executor::{
         PhyTargetPortError, complete_bluetooth_i2c, complete_bluetooth_pbus, complete_channel_i2c,
-        complete_final_i2c, complete_i2c_configuration, complete_masked_i2c,
+        complete_dcode_i2c, complete_final_i2c, complete_i2c_configuration, complete_masked_i2c,
         complete_rx_dc_calibration_pbus, complete_rx_dco_pbus, complete_rx_gain_dc_pbus,
         complete_rx_gain_i2c, complete_rx_gain_publish_pbus, complete_rx_saturation_pbus,
         complete_rxiq_adjusted_tx_i2c, complete_rxiq_gain_i2c, complete_rxiq_gain_pbus,
@@ -784,16 +784,32 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
         }
     }
 
-    async fn complete_dcode(
+    async fn complete_dcode<F: core::future::Future<Output = ()>>(
         &self,
         binding: PhyDcodeExternalBinding,
         registers: &mut (impl SharedPhyAccess + crate::executor::step::Registers),
+        mut delay: impl FnMut(crate::executor::wait::Scope, crate::executor::wait::Kind, u64) -> F,
+        mut observe: impl FnMut(bool),
     ) -> Result<PhyDcodeCompletion, PhyTargetPortError> {
-        crate::executor::step::dcode::complete::<D, _, _>(
-            binding, registers, self.timer, false, None,
-        )
-        .await
-        .map_err(step::port_error)
+        match binding {
+            PhyDcodeExternalBinding::Rfpll(binding) => {
+                let completion = self.complete_rfpll(binding, registers).await?;
+                if let RfpllFrequencyCompletion::MaskedRead {
+                    field: crate::analog::i2c::analog_registers::RFPLL_LOCK_STATUS,
+                    value,
+                } = completion
+                {
+                    observe(value != 0);
+                }
+                Ok(PhyDcodeCompletion::Rfpll(completion))
+            }
+            PhyDcodeExternalBinding::I2c(binding) => {
+                complete_dcode_i2c(binding, registers, |kind, micros| {
+                    delay(crate::executor::wait::Scope::Dcode, kind, micros)
+                })
+                .await
+            }
+        }
     }
 
     async fn complete_txiq_linear_power(
@@ -1527,7 +1543,13 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
                 self.complete_tx_dc_pwdet(binding, registers).await?,
             )),
             PhyBbExternalBinding::Dcode(binding) => Ok(PhyBbInitCompletion::Dcode(
-                self.complete_dcode(binding, registers).await?,
+                self.complete_dcode(
+                    binding,
+                    registers,
+                    |_, kind, micros| delay::<D, _>(self.timer, kind, micros),
+                    |_| {},
+                )
+                .await?,
             )),
             PhyBbExternalBinding::TxIq(binding) => Ok(PhyBbInitCompletion::TxIq(
                 self.complete_txiq(binding, platform, registers).await?,

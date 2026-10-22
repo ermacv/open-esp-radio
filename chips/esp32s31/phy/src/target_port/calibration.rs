@@ -82,43 +82,33 @@ pub async fn dcode<D: PhyShortDelay, P, T: oer_time::Timer>(
     mut observe: impl FnMut(bool),
     mut timing: Option<&mut crate::tracking::observation::EngineTiming>,
 ) -> Result<PhyCalibrationTrackingCompletion, PhyTargetPortError> {
-    use crate::analog::dcode::{PhyDcodeAction, PhyDcodeExternalBinding};
-
+    use crate::executor::step::{Job, drive};
     for _ in 0..RF_OPERATION_LIMIT {
-        // Consume ownership only at the terminal boundary; moving the whole
-        // nested PLL state through a failed commit is unnecessary per action.
-        let action = child.action();
         if matches!(
-            action,
-            PhyDcodeAction::Complete(_) | PhyDcodeAction::Failed(_)
+            child.action(),
+            crate::analog::dcode::PhyDcodeAction::Complete(_)
+                | crate::analog::dcode::PhyDcodeAction::Failed(_)
         ) {
             return child
                 .commit()
                 .map_err(|_| PhyTargetPortError::UnexpectedBinding);
         }
-        let binding = PhyDcodeExternalBinding::lower(action)
-            .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
-        let completion = crate::executor::step::dcode::complete::<D, _, _>(
-            binding,
+        let mut lock = None;
+        let mut job = Job::dcode(child.transition_mut(), &mut lock, clock.now())
+            .map_err(super::step::port_error)?;
+        drive::<D, _, _>(
+            &mut job,
             registers,
             clock,
-            true,
             timing.as_deref_mut(),
+            None,
+            None,
         )
         .await
         .map_err(super::step::port_error)?;
-        if let crate::analog::dcode::PhyDcodeCompletion::Rfpll(
-            crate::analog::rfpll::RfpllFrequencyCompletion::MaskedRead {
-                field: crate::analog::i2c::analog_registers::RFPLL_LOCK_STATUS,
-                value,
-            },
-        ) = completion
-        {
-            observe(value != 0);
+        if let Some(locked) = lock {
+            observe(locked);
         }
-        child
-            .advance(completion)
-            .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
     }
     Err(PhyTargetPortError::RfOperationLimit)
 }
