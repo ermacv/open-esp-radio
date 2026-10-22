@@ -48,6 +48,7 @@ pub(crate) fn build(
     // in its own cache.
     let cache = crate::compile_cache(root, instrumentation);
     let policy = StackPolicy::load(&root.join(&spec.stack_policy))?;
+    let mut values = crate::large_values::Report::new(policy.max_move_bytes);
     crate::test_support::refuse(root, &spec.application.package, target)?;
 
     // Every image uplifts into the same `<target>/firmware` of the
@@ -88,7 +89,17 @@ pub(crate) fn build(
                 )?;
             }
             let _slot = crate::exclusion::slot(&crate::host_build_root()?.join("tokens"))?;
-            log.run(&mut runtime, "build the stage-two runtime")
+            values = crate::large_values::build(
+                &mut runtime,
+                &log,
+                root,
+                &cache,
+                target,
+                crate::FIRMWARE_PROFILE,
+                "runtime",
+                &output,
+            )?;
+            Ok(())
         };
         if strict {
             strict::build_with_retry(&mut build, || {
@@ -175,13 +186,30 @@ pub(crate) fn build(
             target,
         ),
     )?;
-    log.run(&mut bootstrap, "build the Flash/SRAM bootstrap")?;
+    values.append(crate::large_values::build(
+        &mut bootstrap,
+        &log,
+        root,
+        &cache,
+        target,
+        crate::FIRMWARE_PROFILE,
+        "bootstrap",
+        &output,
+    )?);
     let bootstrap_elf = crate::snapshot(
         &release.join(&bootstrap_package),
         &output,
         files::BOOTSTRAP_ELF,
     )?;
     drop(bootstrap_cache);
+    match values.publish(&output) {
+        Ok(()) => bundle
+            .reports
+            .extend(["large-values.json".into(), "large-values.txt".into()]),
+        Err(error) => bundle
+            .warnings
+            .push(format!("large-values report: {error}")),
+    }
     if let Some(checks) = &spec.checks {
         let outcome = checks
             .bootstrap(&crate::CheckInput {

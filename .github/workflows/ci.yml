@@ -184,9 +184,11 @@ jobs:
           cargo fw build w0
           cargo fw build w1
           cargo fw build w2
+          cargo fw build w3
           cargo fw build w0 --analysis
           cargo fw build w1 --analysis
           cargo fw build w2 --analysis
+          cargo fw build w3 --analysis
       - name: HIL image builds
         # Every class on both chips, with the linked image's checks.
         run: cargo hil images check --all

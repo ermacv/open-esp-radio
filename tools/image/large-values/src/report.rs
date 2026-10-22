@@ -1,34 +1,58 @@
 //! All MIR inspection and layouts use rustc_public.
-use std::{
-    collections::HashMap,
-    ffi::OsString,
-    path::{Path, PathBuf},
-};
+use std::{collections::HashMap, ffi::OsString, path::PathBuf};
 
 use rustc_public::{
     mir::{Operand, TerminatorKind, mono::Instance},
     ty::{Span, Ty},
 };
 use serde::Serialize;
+use sha2::{Digest, Sha256};
 
 pub struct Configuration {
     pub limit: u64,
     pub output: PathBuf,
+    pub manifest: PathBuf,
+    pub metadata_hash: String,
+    pub driver_id: String,
+    pub binary: Option<PathBuf>,
 }
 
 impl Configuration {
     pub fn from_arguments(arguments: &[OsString]) -> Option<Self> {
+        let manifest = PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR")?)
+            .join("Cargo.toml")
+            .canonicalize()
+            .ok()?;
+        let workspace: Vec<PathBuf> =
+            serde_json::from_str(&std::env::var("OER_LARGE_VALUES_WORKSPACE").ok()?).ok()?;
         let target = std::env::var("OER_LARGE_VALUES_TARGET").ok()?;
-        if super::argument(arguments, "--target")? != target
+        let kind = super::argument(arguments, "--crate-type")?;
+        if !workspace.contains(&manifest)
+            || kind.split(',').any(|kind| kind == "proc-macro")
+            || super::argument(arguments, "--target")? != target
             || !super::argument(arguments, "--emit")?
                 .split(',')
                 .any(|emit| emit == "link" || emit == "obj")
         {
             return None;
         }
+        let output = super::output_path(arguments)?;
+        let binary = kind.split(',').any(|kind| kind == "bin").then(|| {
+            output.with_file_name(
+                output
+                    .file_name()
+                    .expect("the report has a file name")
+                    .to_string_lossy()
+                    .trim_end_matches(".large-values.json"),
+            )
+        });
         Some(Self {
             limit: std::env::var("OER_LARGE_VALUES_LIMIT").ok()?.parse().ok()?,
-            output: super::output_path(arguments)?,
+            output,
+            manifest,
+            metadata_hash: super::codegen_argument(arguments, "metadata").unwrap_or_default(),
+            driver_id: std::env::var("OER_LARGE_VALUES_DRIVER_ID").ok()?,
+            binary,
         })
     }
 }
@@ -36,6 +60,10 @@ impl Configuration {
 #[derive(Serialize)]
 pub struct CrateReport {
     schema: u32,
+    manifest: PathBuf,
+    metadata_hash: String,
+    driver_id: String,
+    binary_sha256: Option<String>,
     crate_name: String,
     max_move_bytes: u64,
     instances: usize,
@@ -55,21 +83,34 @@ struct Record {
 }
 
 impl CrateReport {
-    pub fn write(&self, path: &Path) -> Result<(), Box<dyn std::error::Error>> {
-        std::fs::write(path, serde_json::to_vec(self)?)?;
+    pub fn write(
+        &mut self,
+        configuration: &Configuration,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        if let Some(binary) = &configuration.binary {
+            let mut file = std::fs::File::open(binary)?;
+            let mut digest = Sha256::new();
+            std::io::copy(&mut file, &mut digest)?;
+            self.binary_sha256 = Some(format!("{:x}", digest.finalize()));
+        }
+        std::fs::write(&configuration.output, serde_json::to_vec(self)?)?;
         Ok(())
     }
 }
 
 pub fn collect(
     instances: &[Instance],
-    limit: u64,
+    configuration: &Configuration,
     source_span: &dyn Fn(Span) -> String,
 ) -> CrateReport {
     let mut report = CrateReport {
-        schema: 1,
+        schema: 2,
+        manifest: configuration.manifest.clone(),
+        metadata_hash: configuration.metadata_hash.clone(),
+        driver_id: configuration.driver_id.clone(),
+        binary_sha256: None,
         crate_name: rustc_public::local_crate().name,
-        max_move_bytes: limit,
+        max_move_bytes: configuration.limit,
         instances: instances.len(),
         bodies_unavailable: Vec::new(),
         errors: Vec::new(),
@@ -77,6 +118,7 @@ pub fn collect(
     };
     let mut sizes = HashMap::new();
     for instance in instances {
+        let mut operand_errors = Vec::new();
         let name = instance.name();
         let Some(body) = instance.body() else {
             report.bodies_unavailable.push(name);
@@ -89,7 +131,7 @@ pub fn collect(
                     .map_err(|error| format!("{error:?}"))
             });
             match size {
-                Ok(bytes) if *bytes > limit => report.records.push(Record {
+                Ok(bytes) if *bytes > configuration.limit => report.records.push(Record {
                     instance: name.clone(),
                     role: role.into(),
                     place,
@@ -125,17 +167,21 @@ pub fn collect(
                         Operand::Move(_) => "call-move",
                         _ => "call-constant",
                     };
-                    if let Ok(ty) = argument.ty(body.locals()) {
-                        record(
+                    match argument.ty(body.locals()) {
+                        Ok(ty) => record(
                             ty,
                             role,
                             format!("bb{block}.arg{index}"),
                             data.terminator.span,
-                        );
+                        ),
+                        Err(error) => {
+                            operand_errors.push(format!("{name} bb{block}.arg{index}: {error:?}"))
+                        }
                     }
                 }
             }
         }
+        report.errors.extend(operand_errors);
     }
     report
         .records

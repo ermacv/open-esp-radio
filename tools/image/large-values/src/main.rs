@@ -18,7 +18,7 @@ fn main() -> ExitCode {
     };
     let arguments: Vec<OsString> = arguments.collect();
     let configuration = report::Configuration::from_arguments(&arguments);
-    // Cargo also invokes workspace wrappers for host build scripts, macros,
+    // Cargo also invokes wrappers for dependencies, host build scripts, macros,
     // compiler probes and type checks: those run the original compiler.
     let Some(configuration) = configuration else {
         return match std::process::Command::new(rustc).args(arguments).status() {
@@ -37,12 +37,18 @@ fn main() -> ExitCode {
         eprintln!("the pinned compiler driver requires UTF-8 arguments");
         return ExitCode::FAILURE;
     };
-    bridge::run(&arguments, |instances, source_span| {
-        let report = report::collect(instances, configuration.limit, source_span);
-        if let Err(error) = report.write(&configuration.output) {
+    let mut collected = None;
+    let status = bridge::run(&arguments, |instances, source_span| {
+        collected = Some(report::collect(instances, &configuration, source_span));
+    });
+    if status == ExitCode::SUCCESS
+        && let Some(mut report) = collected
+    {
+        if let Err(error) = report.write(&configuration) {
             eprintln!("warning: large-values report: {error}");
         }
-    })
+    }
+    status
 }
 
 fn argument(arguments: &[OsString], name: &str) -> Option<String> {
@@ -61,25 +67,17 @@ fn argument(arguments: &[OsString], name: &str) -> Option<String> {
 fn output_path(arguments: &[OsString]) -> Option<PathBuf> {
     let directory = PathBuf::from(argument(arguments, "--out-dir")?);
     let name = argument(arguments, "--crate-name")?;
-    if argument(arguments, "--crate-type")?
-        .split(',')
-        .any(|kind| kind == "bin")
-    {
-        // Cargo uplifts executables without their hash. Keep the sidecar at
-        // the same level; library sidecars retain their artifact hash.
-        return Some(
-            directory
-                .parent()?
-                .join(format!("{name}.large-values.json")),
-        );
-    }
-    let extra = arguments
+    let extra = codegen_argument(arguments, "extra-filename").unwrap_or_default();
+    Some(directory.join(format!("{name}{extra}.large-values.json")))
+}
+
+fn codegen_argument(arguments: &[OsString], name: &str) -> Option<String> {
+    arguments
         .iter()
         .filter_map(|argument| argument.to_str())
         .find_map(|text| {
-            text.strip_prefix("extra-filename=")
-                .or_else(|| text.strip_prefix("-Cextra-filename="))
+            text.strip_prefix(&format!("{name}="))
+                .or_else(|| text.strip_prefix(&format!("-C{name}=")))
+                .map(str::to_owned)
         })
-        .unwrap_or_default();
-    Some(directory.join(format!("{name}{extra}.large-values.json")))
 }

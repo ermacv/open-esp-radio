@@ -8,6 +8,8 @@ const DRIVER: &str = env!("CARGO_BIN_EXE_oer-tool-image-large-values");
 
 fn compile(directory: &Path, source: &str, name: &str, extra: &[&str]) -> Value {
     let source_path = directory.join(format!("{name}.rs"));
+    let manifest = directory.join("Cargo.toml");
+    std::fs::write(&manifest, "[package]\nname='fixture'\nversion='0.1.0'\n").unwrap();
     std::fs::write(&source_path, source).unwrap();
     let output = Command::new(DRIVER)
         .arg("rustc")
@@ -24,6 +26,12 @@ fn compile(directory: &Path, source: &str, name: &str, extra: &[&str]) -> Value 
         .args(extra)
         .env("OER_LARGE_VALUES_TARGET", TARGET)
         .env("OER_LARGE_VALUES_LIMIT", "4096")
+        .env("CARGO_MANIFEST_DIR", directory)
+        .env(
+            "OER_LARGE_VALUES_WORKSPACE",
+            serde_json::to_string(&[manifest]).unwrap(),
+        )
+        .env("OER_LARGE_VALUES_DRIVER_ID", "fixture")
         .output()
         .unwrap();
     assert!(
