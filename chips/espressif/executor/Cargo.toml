@@ -9,6 +9,8 @@ description = "Scheduler-free Embassy executor and time driver for Espressif sta
 
 [features]
 default = []
+# Raw executor lifecycle proofs; run as an isolated `cargo test --lib`.
+trace-tests = ["embassy-executor/trace"]
 # Nominal static radio-slot declarations. Images without a port slot retain
 # their dependency graph and linked bytes.
 port-slots = ["dep:oer-radio-port"]
@@ -26,6 +28,7 @@ esp32c5 = [
 # The executor and time driver, which a chip feature selects.
 chip = [
     "dep:embassy-executor",
+    "embassy-executor/trace",
     "dep:embassy-time-driver",
     "dep:embassy-time-queue-utils",
     "dep:esp-hal",
