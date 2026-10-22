@@ -342,7 +342,7 @@ impl Run<'_> {
 }
 
 #[cfg(target_arch = "riscv32")]
-#[inline(never)]
+#[inline(always)]
 pub(super) fn execute<D: crate::executor::wait::PhyShortDelay, C: Clock>(
     clock: &C,
     registers: &mut (impl oer_esp32s31_hal::owner::SharedPhyContext + super::Registers),
@@ -382,6 +382,7 @@ pub(super) fn execute<D: crate::executor::wait::PhyShortDelay, C: Clock>(
 }
 
 #[cfg(target_arch = "riscv32")]
+#[inline(always)]
 fn dc<D: crate::executor::wait::PhyShortDelay, C: Clock>(
     clock: &C,
     registers: &mut (impl oer_esp32s31_hal::owner::SharedPhyContext + super::Registers),
@@ -418,6 +419,7 @@ fn dc<D: crate::executor::wait::PhyShortDelay, C: Clock>(
 }
 
 #[cfg(target_arch = "riscv32")]
+#[inline(always)]
 fn calibration<D: crate::executor::wait::PhyShortDelay, C: Clock>(
     clock: &C,
     registers: &mut impl oer_esp32s31_hal::owner::SharedPhyContext,
