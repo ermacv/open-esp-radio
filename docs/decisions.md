@@ -28,10 +28,7 @@ bounds) live in the code that applies them.
   license only facts. The exception is the Bluetooth LE hardware engine (the
   S31 driver, the HAL's controller-memory engine, the PAC's Bluetooth
   initialization and the HAL's scheduler locks), which keeps what it takes
-  from `esp32s31-bt-lib`. Inside it the engine lends the interrupt
-  owner to a task, serialized with the interrupt service: a known exception
-  to the shared-lock rule until the Bluetooth LE block splits the engine into
-  interrupt and task halves that meet through static typed signals.
+  from `esp32s31-bt-lib`.
 - **Vendor libraries in local and CI work.** Pinned vendor static libraries
   and ROMs, licensed or not, may be used in any form locally and in CI:
   analysed, executed in emulation, linked into comparison images. They are

@@ -9,15 +9,20 @@
 //! the request is not ready, and until the settle signal differs from 9. A
 //! marked attempt clears START and starts over. The vendor runs the attempts
 //! in one critical section with polling loops; here every step is finite,
-//! serialized with interrupt service, and the caller owns the deadline.
+//! sequenced through durable P3 replies, and the caller owns the deadline.
 
 use oer_esp32s31_pac::{
-    BluetoothInterruptRegisters, BluetoothSchedulerExecutionModifyDisposition,
-    BluetoothSchedulerExecutionModifyPublished, BluetoothSchedulerHardwareListIndex,
-    BluetoothSchedulerInsertionCommand, BluetoothTaskRegisters,
+    BluetoothSchedulerExecutionModifyDisposition, BluetoothSchedulerExecutionModifyPublished,
+    BluetoothSchedulerHardwareListIndex, BluetoothSchedulerInsertionCommand,
+    BluetoothTaskRegisters,
 };
 
-use crate::settle::{self, Settle, Unsettled};
+#[cfg(feature = "bluetooth-engine")]
+use super::engine::scheduler::interrupt::{
+    SchedulerDoorbell, SchedulerInterruptError, SchedulerTaskHalf,
+};
+#[cfg(test)]
+use crate::settle::Unsettled;
 
 #[derive(Debug)]
 enum Phase {
@@ -63,21 +68,22 @@ impl BluetoothSchedulerExecutionModify {
 }
 
 trait Control {
+    type Error;
     type Published;
 
-    fn busy(&mut self) -> Result<bool, Unsettled>;
+    async fn busy(&mut self) -> Result<bool, Self::Error>;
     /// Command-zero status 26 then, only if set, command-one status 18.
     fn engines_idle(&mut self) -> bool;
-    fn select_progress(&mut self);
+    async fn select_progress(&mut self) -> Result<(), Self::Error>;
     fn publish(
         &mut self,
         index: BluetoothSchedulerHardwareListIndex,
         list_deletion: bool,
     ) -> Self::Published;
-    fn repeats(&mut self) -> Result<bool, Unsettled>;
+    async fn repeats(&mut self) -> Result<bool, Self::Error>;
     fn ready(&mut self) -> bool;
-    fn select_settle(&mut self);
-    fn settled(&mut self) -> Result<bool, Unsettled>;
+    async fn select_settle(&mut self) -> Result<(), Self::Error>;
+    async fn settled(&mut self) -> Result<bool, Self::Error>;
     fn clear_start(&mut self, published: Self::Published);
     fn rejected(&mut self) -> bool;
 }
@@ -90,26 +96,26 @@ struct State<'a, P> {
     published: &'a mut Option<P>,
 }
 
-fn step<C: Control>(
+async fn step<C: Control>(
     state: State<'_, C::Published>,
     hw: &mut C,
-) -> Result<BluetoothSchedulerExecutionModifyDisposition, Unsettled> {
+) -> Result<BluetoothSchedulerExecutionModifyDisposition, C::Error> {
     use BluetoothSchedulerExecutionModifyDisposition::{HardwareRejected, Pending, Ready};
     loop {
         match *state.phase {
             Phase::Preamble => {
-                if hw.busy()? && !hw.engines_idle() {
+                if hw.busy().await? && !hw.engines_idle() {
                     return Ok(Pending);
                 }
-                hw.select_progress();
+                hw.select_progress().await?;
                 *state.published = Some(hw.publish(state.index, state.list_deletion));
                 *state.phase = Phase::Progress { selected: true };
             }
             Phase::Progress { selected } => {
                 if !selected {
-                    hw.select_progress();
+                    hw.select_progress().await?;
                 }
-                if hw.repeats()? {
+                if hw.repeats().await? {
                     *state.repeat = true;
                     *state.phase = Phase::Progress { selected: false };
                     return Ok(Pending);
@@ -117,16 +123,16 @@ fn step<C: Control>(
                 *state.phase = Phase::Completion;
             }
             Phase::Completion => {
-                if hw.busy()? && !hw.ready() {
+                if hw.busy().await? && !hw.ready() {
                     return Ok(Pending);
                 }
                 *state.phase = Phase::Settle { selected: false };
             }
             Phase::Settle { selected } => {
                 if !selected {
-                    hw.select_settle();
+                    hw.select_settle().await?;
                 }
-                if !hw.settled()? {
+                if !hw.settled().await? {
                     *state.phase = Phase::Settle { selected: false };
                     return Ok(Pending);
                 }
@@ -149,29 +155,33 @@ fn step<C: Control>(
     }
 }
 
-struct Hardware<'a, C: oer_time::Clock + ?Sized> {
+#[cfg(feature = "bluetooth-engine")]
+struct Hardware<'a, D> {
     task: &'a mut BluetoothTaskRegisters,
-    interrupts: &'a mut BluetoothInterruptRegisters,
-    settle: Settle<'a, C>,
+    interrupts: &'a mut SchedulerTaskHalf,
+    bell: &'a D,
 }
 
 #[allow(
     unsafe_code,
     reason = "the admitted request carries the caller's list ownership and serialization"
 )]
-impl<C: oer_time::Clock + ?Sized> Control for Hardware<'_, C> {
+#[cfg(feature = "bluetooth-engine")]
+impl<D: SchedulerDoorbell> Control for Hardware<'_, D> {
+    type Error = SchedulerInterruptError;
     type Published = BluetoothSchedulerExecutionModifyPublished;
 
-    fn busy(&mut self) -> Result<bool, Unsettled> {
-        settle::settle(self.settle, || self.interrupts.capture_scheduler_busy())
+    async fn busy(&mut self) -> Result<bool, SchedulerInterruptError> {
+        self.interrupts
+            .busy(self.bell)
+            .await
             .map(|busy| busy.is_busy())
     }
     fn engines_idle(&mut self) -> bool {
         self.task.scheduler_stop_commands_ready()
     }
-    fn select_progress(&mut self) {
-        self.task
-            .select_scheduler_execution_modify_progress(self.interrupts);
+    async fn select_progress(&mut self) -> Result<(), Self::Error> {
+        self.interrupts.select_progress(self.bell).await
     }
     fn publish(
         &mut self,
@@ -189,24 +199,17 @@ impl<C: oer_time::Clock + ?Sized> Control for Hardware<'_, C> {
             }
         }
     }
-    fn repeats(&mut self) -> Result<bool, Unsettled> {
-        settle::settle(self.settle, || {
-            self.task
-                .scheduler_execution_modify_repeats(self.interrupts)
-        })
+    async fn repeats(&mut self) -> Result<bool, SchedulerInterruptError> {
+        self.interrupts.progress(self.bell).await
     }
     fn ready(&mut self) -> bool {
         self.task.scheduler_execution_modify_ready()
     }
-    fn select_settle(&mut self) {
-        self.task
-            .select_scheduler_execution_modify_settle(self.interrupts);
+    async fn select_settle(&mut self) -> Result<(), Self::Error> {
+        self.interrupts.select_settle(self.bell).await
     }
-    fn settled(&mut self) -> Result<bool, Unsettled> {
-        settle::settle(self.settle, || {
-            self.task
-                .scheduler_execution_modify_settled(self.interrupts)
-        })
+    async fn settled(&mut self) -> Result<bool, SchedulerInterruptError> {
+        self.interrupts.settled(self.bell).await
     }
     fn clear_start(&mut self, _published: BluetoothSchedulerExecutionModifyPublished) {
         // SAFETY: the consumed proof is the command this clear ends.
@@ -220,14 +223,14 @@ impl<C: oer_time::Clock + ?Sized> Control for Hardware<'_, C> {
     }
 }
 
-/// Advance one finite execution-modify step while both register owners are
-/// held.
-pub(crate) fn step_hardware<C: oer_time::Clock + ?Sized>(
+/// Advance one finite execution-modify step through the unique task request endpoint.
+#[cfg(feature = "bluetooth-engine")]
+pub(crate) async fn step_hardware<D: SchedulerDoorbell>(
     task: &mut BluetoothTaskRegisters,
-    interrupts: &mut BluetoothInterruptRegisters,
+    interrupts: &mut SchedulerTaskHalf,
     modify: &mut BluetoothSchedulerExecutionModify,
-    settle: Settle<'_, C>,
-) -> Result<BluetoothSchedulerExecutionModifyDisposition, Unsettled> {
+    bell: &D,
+) -> Result<BluetoothSchedulerExecutionModifyDisposition, SchedulerInterruptError> {
     step(
         State {
             index: modify.index,
@@ -239,9 +242,10 @@ pub(crate) fn step_hardware<C: oer_time::Clock + ?Sized>(
         &mut Hardware {
             task,
             interrupts,
-            settle,
+            bell,
         },
     )
+    .await
 }
 
 #[cfg(test)]

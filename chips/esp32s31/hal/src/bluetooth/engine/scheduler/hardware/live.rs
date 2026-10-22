@@ -1,6 +1,6 @@
-//! List-zero publications through the task HAL owner and the stable
-//! interrupt owner.
+//! List-zero publications through the task HAL owner and the typed P3 replies.
 
+use super::super::interrupt::{SchedulerDoorbell, SchedulerInterruptError, SchedulerTaskHalf};
 use crate::bluetooth::engine::ControllerSramLinkAddress;
 use crate::bluetooth::{
     BluetoothSchedulerCancellationIndexed, BluetoothSchedulerCancellationRequested,
@@ -11,22 +11,21 @@ use crate::bluetooth::{
     BluetoothSchedulerLockModifyRequest, BluetoothSchedulerSkipPublished,
     BluetoothSchedulerSkipRequest, ControllerHal,
 };
-use crate::settle::Settle;
 
 use super::{
     SchedulerHardware, SchedulerHardwareBackend, SchedulerHardwareError, SchedulerStartError,
 };
 use crate::bluetooth::engine::SchedulerItemSpace;
 use crate::bluetooth::engine::scheduler::{
-    SchedulerAction, SchedulerIdleInsertion, SchedulerObservation, SchedulerRunInterruptStorage,
-    SchedulerStep, SchedulerTransactionFault, SchedulerWait,
+    SchedulerAction, SchedulerIdleInsertion, SchedulerObservation, SchedulerStep,
+    SchedulerTransactionFault, SchedulerWait,
 };
 
 const LIST: BluetoothSchedulerHardwareListIndex = BluetoothSchedulerHardwareListIndex::ZERO;
 
 use super::HalPublications;
 
-/// The task HAL owner and the interrupt-owner storage for one call.
+/// The task HAL owner and the typed P3 reply channel for one call.
 ///
 /// Every address it publishes was resolved against the scheduler item space
 /// by the powered task runtime: it names a submitted item of a pool whose
@@ -34,15 +33,16 @@ use super::HalPublications;
 struct LiveSchedulerBackend<'call, 'registers, S> {
     controller: &'call mut ControllerHal<'registers>,
     storage: &'call S,
+    interrupts: &'call mut SchedulerTaskHalf,
 }
 
 #[allow(
     unsafe_code,
     reason = "the powered task runtime resolved every address to 'static pool storage and serializes list zero"
 )]
-impl<S: SchedulerRunInterruptStorage> SchedulerHardwareBackend for LiveSchedulerBackend<'_, '_, S> {
+impl<S: SchedulerDoorbell> SchedulerHardwareBackend for LiveSchedulerBackend<'_, '_, S> {
     type Publications = HalPublications;
-    type StartError = S::Error;
+    type StartError = SchedulerInterruptError;
 
     fn publish_execution_lock(
         &mut self,
@@ -121,15 +121,20 @@ impl<S: SchedulerRunInterruptStorage> SchedulerHardwareBackend for LiveScheduler
         unsafe { self.controller.index_scheduler_cancellation(LIST) }
     }
 
-    fn acknowledge_cancellation_source(
+    async fn acknowledge_cancellation_source(
         &mut self,
-        indexed: &BluetoothSchedulerCancellationIndexed,
-    ) -> Result<BluetoothSchedulerCancellationSourceAcknowledged, SchedulerHardwareError> {
-        self.storage
-            .with_interrupt_registers(indexed, |interrupts, indexed| {
-                interrupts.acknowledge_scheduler_cancellation_source(indexed)
-            })
-            .map_err(|_| SchedulerHardwareError::InterruptOwnerUnavailable)
+        indexed: BluetoothSchedulerCancellationIndexed,
+    ) -> Result<
+        (
+            BluetoothSchedulerCancellationIndexed,
+            BluetoothSchedulerCancellationSourceAcknowledged,
+        ),
+        SchedulerHardwareError,
+    > {
+        self.interrupts
+            .acknowledge_cancellation(self.storage, indexed)
+            .await
+            .map_err(SchedulerHardwareError::Interrupt)
     }
 
     fn request_cancellation(
@@ -163,63 +168,48 @@ impl<S: SchedulerRunInterruptStorage> SchedulerHardwareBackend for LiveScheduler
         let _cleared = self.controller.clear_scheduler_skip(skip);
     }
 
-    fn observe<C: oer_time::Clock + ?Sized>(
+    async fn observe(
         &mut self,
         wait: SchedulerWait,
-        settle: Settle<'_, C>,
         lock: Option<&mut BluetoothSchedulerExecutionLock>,
         modify: Option<&mut BluetoothSchedulerExecutionModify>,
         cancellation: Option<&mut BluetoothSchedulerCancellationRequested>,
         skip: Option<&BluetoothSchedulerSkipPublished>,
     ) -> Result<SchedulerObservation, SchedulerHardwareError> {
         if wait == SchedulerWait::ExecutionLock {
-            // The request runs the engine-idle preamble, publishes command
-            // zero and samples BUSY itself, in the vendor order.
             let lock = lock.ok_or(SchedulerHardwareError::NotAwaiting(wait))?;
-            let controller = &mut *self.controller;
-            let disposition = self
-                .storage
-                .with_interrupt_registers(lock, |interrupts, lock| {
-                    controller.step_scheduler_execution_lock(interrupts, lock, settle)
-                })
-                .map_err(|_| SchedulerHardwareError::InterruptOwnerUnavailable)?
-                .map_err(|_| SchedulerHardwareError::DiagnosticUnsettled)?;
-            return Ok(SchedulerObservation::ExecutionLock(disposition));
+            return self
+                .controller
+                .step_scheduler_execution_lock(self.interrupts, lock, self.storage)
+                .await
+                .map(SchedulerObservation::ExecutionLock)
+                .map_err(SchedulerHardwareError::Interrupt);
         }
         if wait == SchedulerWait::ExecutionModify {
-            // The request samples BUSY and the diagnostic pair itself, in
-            // the vendor order of its current phase.
             let modify = modify.ok_or(SchedulerHardwareError::NotAwaiting(wait))?;
-            let controller = &mut *self.controller;
-            let disposition = self
-                .storage
-                .with_interrupt_registers(modify, |interrupts, modify| {
-                    controller.step_scheduler_execution_modify(interrupts, modify, settle)
-                })
-                .map_err(|_| SchedulerHardwareError::InterruptOwnerUnavailable)?
-                .map_err(|_| SchedulerHardwareError::DiagnosticUnsettled)?;
-            return Ok(SchedulerObservation::ExecutionModify(disposition));
+            return self
+                .controller
+                .step_scheduler_execution_modify(self.interrupts, modify, self.storage)
+                .await
+                .map(SchedulerObservation::ExecutionModify)
+                .map_err(SchedulerHardwareError::Interrupt);
         }
         if wait == SchedulerWait::LockModify {
             let interrupt = self
-                .storage
-                .with_interrupt_registers((), |interrupts, ()| {
-                    interrupts.capture_scheduler_lock_modify_interrupt(settle)
-                })
-                .map_err(|()| SchedulerHardwareError::InterruptOwnerUnavailable)?
-                .map_err(|_| SchedulerHardwareError::DiagnosticUnsettled)?;
+                .interrupts
+                .lock_modify(self.storage)
+                .await
+                .map_err(SchedulerHardwareError::Interrupt)?;
             let task = self.controller.capture_scheduler_lock_modify_task();
             return Ok(SchedulerObservation::LockModify(
                 BluetoothSchedulerLockModifyObservation::from_split(interrupt, task),
             ));
         }
         let busy = self
-            .storage
-            .with_interrupt_registers((), |interrupts, ()| {
-                interrupts.capture_scheduler_busy(settle)
-            })
-            .map_err(|()| SchedulerHardwareError::InterruptOwnerUnavailable)?
-            .map_err(|_| SchedulerHardwareError::DiagnosticUnsettled)?;
+            .interrupts
+            .busy(self.storage)
+            .await
+            .map_err(SchedulerHardwareError::Interrupt)?;
         Ok(match (wait, cancellation, skip) {
             (SchedulerWait::Cancellation, Some(requested), _) => {
                 SchedulerObservation::Cancellation(
@@ -234,10 +224,13 @@ impl<S: SchedulerRunInterruptStorage> SchedulerHardwareBackend for LiveScheduler
         })
     }
 
-    fn start(
+    async fn start(
         &mut self,
         at: ControllerSramLinkAddress,
-    ) -> Result<BluetoothSchedulerHardwareRunCommandPublished, SchedulerStartError<S::Error>> {
+    ) -> Result<
+        BluetoothSchedulerHardwareRunCommandPublished,
+        SchedulerStartError<SchedulerInterruptError>,
+    > {
         // SAFETY: the executor linked every listed item before returning the
         // head; each lives in 'static pool storage, and the scheduler is idle.
         let published = unsafe {
@@ -251,8 +244,9 @@ impl<S: SchedulerRunInterruptStorage> SchedulerHardwareBackend for LiveScheduler
             )
         };
         let interrupts = self
-            .storage
-            .prepare_scheduler_run_interrupts()
+            .interrupts
+            .prepare_run(self.storage)
+            .await
             .map_err(SchedulerStartError::Interrupts)?;
         let event = self
             .controller
@@ -266,41 +260,37 @@ impl<S: SchedulerRunInterruptStorage> SchedulerHardwareBackend for LiveScheduler
 /// The live list-zero operations: each resolves every address a step names
 /// to a submitted item of `items`, whose pools bind their storage for
 /// `'static`, before any register changes, then performs it through the task
-/// HAL owner and the interrupt-owner storage.
+/// HAL owner and the typed P3 reply channel.
 impl SchedulerHardware<HalPublications> {
-    /// Perform one common stop step while the lending exception remains in HAL.
-    pub fn step_stop_live<C: oer_time::Clock + ?Sized>(
+    /// Perform one common stop step through typed P3 acknowledgements.
+    pub async fn step_stop_live(
         &mut self,
         controller: &mut ControllerHal<'_>,
-        storage: &impl SchedulerRunInterruptStorage,
+        interrupts: &mut SchedulerTaskHalf,
+        storage: &impl SchedulerDoorbell,
         stop: crate::bluetooth::BluetoothSchedulerStop,
-        settle: Settle<'_, C>,
     ) -> Result<crate::bluetooth::BluetoothSchedulerStopStep, super::SchedulerStopError> {
-        storage
-            .with_interrupt_registers(stop, |interrupts, stop| {
-                controller.step_scheduler_stop(interrupts, stop, settle)
-            })
-            .map_err(|_| super::SchedulerStopError::InterruptOwnerUnavailable)?
-            .map_err(|_| super::SchedulerStopError::DiagnosticUnsettled)
+        controller
+            .step_scheduler_stop(interrupts, stop, storage)
+            .await
+            .map_err(super::SchedulerStopError::Interrupt)
     }
 
     /// Resolve a fresh hardware head inside the retained item space.
-    pub fn snapshot_live<C: oer_time::Clock + ?Sized>(
+    pub async fn snapshot_live(
         &mut self,
         controller: &mut ControllerHal<'_>,
-        storage: &impl SchedulerRunInterruptStorage,
+        interrupts: &mut SchedulerTaskHalf,
+        storage: &impl SchedulerDoorbell,
         items: &SchedulerItemSpace<'_>,
-        settle: Settle<'_, C>,
     ) -> Result<
         crate::bluetooth::engine::scheduler::SchedulerHardwareSnapshot,
         SchedulerHardwareError,
     > {
-        let busy = storage
-            .with_interrupt_registers((), |interrupts, ()| {
-                interrupts.capture_scheduler_busy(settle)
-            })
-            .map_err(|()| SchedulerHardwareError::InterruptOwnerUnavailable)?
-            .map_err(|_| SchedulerHardwareError::DiagnosticUnsettled)?;
+        let busy = interrupts
+            .busy(storage)
+            .await
+            .map_err(SchedulerHardwareError::Interrupt)?;
         let raw = controller.observe_scheduler_hardware_list_head(LIST);
         let head = match raw.address() {
             None => None,
@@ -321,10 +311,11 @@ impl SchedulerHardware<HalPublications> {
     ///
     /// Every named item must be submitted in `items`; otherwise nothing is
     /// performed.
-    pub fn perform_live<I: Copy, const CAPACITY: usize>(
+    pub async fn perform_live<I: Copy, const CAPACITY: usize>(
         &mut self,
         controller: &mut ControllerHal<'_>,
-        storage: &impl SchedulerRunInterruptStorage,
+        interrupts: &mut SchedulerTaskHalf,
+        storage: &impl SchedulerDoorbell,
         items: &SchedulerItemSpace<'_>,
         step: &SchedulerStep<I, CAPACITY>,
     ) -> Result<(), SchedulerHardwareError> {
@@ -343,55 +334,61 @@ impl SchedulerHardware<HalPublications> {
         let mut backend = LiveSchedulerBackend {
             controller,
             storage,
+            interrupts,
         };
-        self.perform(&mut backend, step)
+        self.perform(&mut backend, step).await
     }
 
     /// Take one fresh observation of the awaited publication; each
-    /// diagnostic sample settles within `settle`.
-    pub fn observe_live<C: oer_time::Clock + ?Sized>(
+    /// diagnostic sample settles within the named P3 diagnostic budget.
+    pub async fn observe_live(
         &mut self,
         controller: &mut ControllerHal<'_>,
-        storage: &impl SchedulerRunInterruptStorage,
+        interrupts: &mut SchedulerTaskHalf,
+        storage: &impl SchedulerDoorbell,
         wait: SchedulerWait,
-        settle: Settle<'_, C>,
     ) -> Result<SchedulerObservation, SchedulerHardwareError> {
         let mut backend = LiveSchedulerBackend {
             controller,
             storage,
+            interrupts,
         };
-        self.observe(&mut backend, wait, settle)
+        self.observe(&mut backend, wait).await
     }
 
     /// Clear what a faulted list transaction left published.
     pub fn recover_live(
         &mut self,
         controller: &mut ControllerHal<'_>,
-        storage: &impl SchedulerRunInterruptStorage,
+        interrupts: &mut SchedulerTaskHalf,
+        storage: &impl SchedulerDoorbell,
         fault: SchedulerTransactionFault,
     ) {
         let mut backend = LiveSchedulerBackend {
             controller,
             storage,
+            interrupts,
         };
         self.recover(&mut backend, fault);
     }
 
     /// Publish the idle insertion's head and start the scheduler with RUN.
-    pub fn start_live<S: SchedulerRunInterruptStorage>(
+    pub async fn start_live<S: SchedulerDoorbell>(
         &mut self,
         controller: &mut ControllerHal<'_>,
+        interrupts: &mut SchedulerTaskHalf,
         storage: &S,
         items: &SchedulerItemSpace<'_>,
         insertion: SchedulerIdleInsertion,
-    ) -> Result<(), SchedulerStartError<S::Error>> {
+    ) -> Result<(), SchedulerStartError<SchedulerInterruptError>> {
         if items.listed_item(insertion.head).is_none() {
             return Err(SchedulerStartError::ForeignItem);
         }
         let mut backend = LiveSchedulerBackend {
             controller,
             storage,
+            interrupts,
         };
-        self.start(&mut backend, insertion)
+        self.start(&mut backend, insertion).await
     }
 }

@@ -59,9 +59,22 @@ clocked client; constructor refusal returns its untouched inputs. Terminal
 failures retain every hardware partition and the arena in absorbing
 quarantine. There is no reset-failure extraction or late-stop recovery.
 
-The scheduler still lends the stable interrupt owner inside HAL, under the
-Sources exception. Its execution lock is the hardware protocol lock. The
-scheduler and modem-timer wake cells retain their `IrqSignal` handoff.
+One `ControllerInterruptHalf` holds the IRQ register owner and the HAL's
+request endpoint in stable P3 storage. Primary, NRT and shared radio doorbell
+entries service that same half. The owning task engine at P2 retains the arena
+and every scheduler transaction; it has no access to the IRQ register owner.
+`Engine::install_scheduler_interrupts` binds a static single-request channel
+to its installation epoch. `SchedulerDoorbell` rings the image's shared
+`FROM_CPU` line 3 and waits on a dedicated P2 `IrqSignal`. The shared handler
+acknowledges the software interrupt before visiting the radio halves.
+
+IRQ-bank changes and fresh diagnostic samples return durable, affine replies.
+The installation epoch and a command number that never wraps or resets reject
+stale replies. A dropped pending exchange retains its seat and prevents
+retirement. Stop and route removal return the P3 endpoint; both quiet halves
+reunite before reset and channel reuse. Scheduler hardware locks retain their
+protocol meaning. Scheduler and modem-timer wake cells keep their independent
+`IrqSignal` handoffs.
 
 ## Controller time
 
@@ -97,8 +110,8 @@ Start, while retaining the shared radio-domain owner:
    the public address;
 4. enable coexistence for Bluetooth, as `esp_bt_controller_enable` does; a
    later start failure is fail-stop and keeps it enabled;
-5. publish the interrupt owners and the timer into stable
-   storage, then bind the CPU routes.
+5. bind the engine's request channel, publish its P3 half and the timer into
+   stable storage, then bind the CPU routes.
 
 The interrupt sources are `MODEM_BT_MAC` (source 124), `MODEM_LP_TIMER`
 (source 127) and `MODEM_BT_MAC_INT1` (source 133), bound as one same-core set
@@ -116,8 +129,10 @@ another radio shares the antenna, which selects the coexistence priorities
 
 Stop reverses it:
 
-1. settle the modem timer, disable the three routes and clear the
-   dispatcher, then retire the timer and the interrupt register owners;
+1. stop the physical scheduler through P3 while the shared doorbell remains
+   live, drain its finished lists and settle the modem timer; then disable
+   the three BLE routes and remove BLE dispatch, retire the timer and P3
+   half, and reunite both quiet request-channel endpoints;
 2. clear every Bluetooth LE coexistence status bit, retire
    the epoch (Controller output, PHY and BTBB exit), then disable
    coexistence, as `coex_disable` after the stack is disabled; close the PHY

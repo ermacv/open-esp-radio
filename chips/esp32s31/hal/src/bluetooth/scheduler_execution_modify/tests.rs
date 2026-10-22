@@ -5,7 +5,7 @@ use oer_esp32s31_pac::{
     BluetoothSchedulerHardwareListIndex,
 };
 
-use super::{Control, Phase, State, Unsettled, step};
+use super::{Control, Phase, State, Unsettled};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Op {
@@ -32,9 +32,23 @@ struct Model {
     /// Every diagnostic sample exhausts its attempt budget.
     unsettled: bool,
     rejected: bool,
+    defer_samples: bool,
 }
 
 impl Model {
+    async fn before_reply(&self) {
+        if self.defer_samples {
+            let mut yielded = false;
+            core::future::poll_fn(|_| {
+                if core::mem::replace(&mut yielded, true) {
+                    core::task::Poll::Ready(())
+                } else {
+                    core::task::Poll::Pending
+                }
+            })
+            .await;
+        }
+    }
     fn sample(&mut self, value: impl FnOnce(&mut Self) -> bool) -> Result<bool, Unsettled> {
         if self.unsettled {
             Err(Unsettled)
@@ -46,8 +60,10 @@ impl Model {
 
 impl Control for Model {
     type Published = ();
+    type Error = Unsettled;
 
-    fn busy(&mut self) -> Result<bool, Unsettled> {
+    async fn busy(&mut self) -> Result<bool, Unsettled> {
+        self.before_reply().await;
         self.ops.push(Op::Busy);
         self.sample(|model| model.busy.pop_front().unwrap_or(false))
     }
@@ -55,13 +71,16 @@ impl Control for Model {
         self.ops.push(Op::EnginesIdle);
         self.engines_idle.pop_front().unwrap_or(true)
     }
-    fn select_progress(&mut self) {
+    async fn select_progress(&mut self) -> Result<(), Unsettled> {
+        self.before_reply().await;
         self.ops.push(Op::SelectProgress);
+        Ok(())
     }
     fn publish(&mut self, _: BluetoothSchedulerHardwareListIndex, list_deletion: bool) {
         self.ops.push(Op::Publish(list_deletion));
     }
-    fn repeats(&mut self) -> Result<bool, Unsettled> {
+    async fn repeats(&mut self) -> Result<bool, Unsettled> {
+        self.before_reply().await;
         self.ops.push(Op::Repeats);
         self.sample(|model| model.repeats.pop_front().unwrap_or(false))
     }
@@ -69,10 +88,13 @@ impl Control for Model {
         self.ops.push(Op::Ready);
         self.ready.pop_front().unwrap_or(true)
     }
-    fn select_settle(&mut self) {
+    async fn select_settle(&mut self) -> Result<(), Unsettled> {
+        self.before_reply().await;
         self.ops.push(Op::SelectSettle);
+        Ok(())
     }
-    fn settled(&mut self) -> Result<bool, Unsettled> {
+    async fn settled(&mut self) -> Result<bool, Unsettled> {
+        self.before_reply().await;
         self.ops.push(Op::Settled);
         self.sample(|model| model.settled.pop_front().unwrap_or(true))
     }
@@ -109,7 +131,7 @@ impl Request {
         model: &mut Model,
         list_deletion: bool,
     ) -> Result<Disposition, Unsettled> {
-        step(
+        crate::bluetooth::test_ready(super::step(
             State {
                 index: BluetoothSchedulerHardwareListIndex::ZERO,
                 list_deletion,
@@ -118,7 +140,7 @@ impl Request {
                 published: &mut self.published,
             },
             model,
-        )
+        ))
     }
 }
 
@@ -141,6 +163,53 @@ fn an_idle_scheduler_publishes_and_settles_in_the_vendor_order() {
         ]
     );
     assert!(request.published.is_some(), "the owner clears START");
+}
+
+#[test]
+fn delayed_p3_replies_preserve_publication_order_without_repeating_writes() {
+    use core::{
+        future::Future,
+        task::{Context, Poll, Waker},
+    };
+    let mut model = Model {
+        defer_samples: true,
+        ..Model::default()
+    };
+    let mut request = Request::new();
+    {
+        let mut future = core::pin::pin!(super::step(
+            State {
+                index: BluetoothSchedulerHardwareListIndex::ZERO,
+                list_deletion: true,
+                phase: &mut request.phase,
+                repeat: &mut request.repeat,
+                published: &mut request.published,
+            },
+            &mut model
+        ));
+        let mut cx = Context::from_waker(Waker::noop());
+        for _ in 0..6 {
+            assert!(future.as_mut().poll(&mut cx).is_pending());
+        }
+        assert_eq!(
+            future.as_mut().poll(&mut cx),
+            Poll::Ready(Ok(Disposition::Ready))
+        );
+    }
+    assert_eq!(
+        model.ops,
+        [
+            Op::Busy,
+            Op::SelectProgress,
+            Op::Publish(true),
+            Op::Repeats,
+            Op::Busy,
+            Op::SelectSettle,
+            Op::Settled,
+            Op::Rejected
+        ]
+    );
+    assert!(request.published.is_some());
 }
 
 #[test]

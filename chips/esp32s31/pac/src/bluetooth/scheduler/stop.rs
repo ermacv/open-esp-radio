@@ -97,16 +97,9 @@ fn retire_head(
 }
 
 impl BluetoothTaskRegisters {
-    /// Mask both dynamic scheduler run-interrupt banks, disable the RUN event
-    /// source, then fence.
+    /// Disable the RUN event source after P3 acknowledged both bank masks.
     #[doc(hidden)]
-    pub fn publish_scheduler_stop_preamble(
-        &mut self,
-        interrupts: &mut BluetoothInterruptRegisters,
-    ) {
-        let bank = &interrupts.peripherals.bluetooth_interrupt_bank;
-        crate::generated::mask_bluetooth_scheduler_run_interrupts_bank_0(bank);
-        crate::generated::mask_bluetooth_scheduler_run_interrupts_bank_1(bank);
+    pub fn disable_scheduler_run_event(&mut self) {
         crate::generated::disable_ble_scheduler_run_event_source(
             &self.bluetooth.btmac_ble_phy_init,
         );
@@ -166,6 +159,17 @@ impl BluetoothTaskRegisters {
             Disposition::UnexpectedHeadChanged => BluetoothSchedulerStoppedHeadRetirement::Rejected(
                 crate::BluetoothSchedulerHardwareListHeadRetirementObservation::UnexpectedHeadChanged { run, observed }),
         }
+    }
+}
+
+impl BluetoothInterruptRegisters {
+    /// Mask the two dynamic scheduler banks before task-side RUN disable.
+    #[doc(hidden)]
+    pub fn mask_scheduler_run_interrupts(&mut self) {
+        let bank = &self.peripherals.bluetooth_interrupt_bank;
+        crate::generated::mask_bluetooth_scheduler_run_interrupts_bank_0(bank);
+        crate::generated::mask_bluetooth_scheduler_run_interrupts_bank_1(bank);
+        device_fence();
     }
 }
 

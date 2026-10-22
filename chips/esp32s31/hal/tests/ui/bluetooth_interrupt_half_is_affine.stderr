@@ -1,0 +1,10 @@
+error[E0382]: use of moved value: `half`
+ --> tests/ui/bluetooth_interrupt_half_is_affine.rs:9:48
+  |
+6 | pub fn retire<M: ControllerMemory>(engine: &mut Engine<M>, half: SchedulerInterruptHalf) {
+  |                                                            ---- move occurs because `half` has type `SchedulerInterruptHalf`, which does not implement the `Copy` trait
+7 |     let _ = engine.retire_scheduler_interrupts(half);
+  |                                                ---- value moved here
+8 |     #[cfg(all())]
+9 |     let _ = engine.retire_scheduler_interrupts(half); // ui-error: E0382
+  |                                                ^^^^ value used here after move

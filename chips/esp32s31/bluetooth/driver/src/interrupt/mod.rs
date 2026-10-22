@@ -1,6 +1,7 @@
 //! CPU route policy, interrupt classification and deferred publication.
 
 pub(crate) mod classifier;
+mod halves;
 pub(crate) mod nrt;
 #[cfg(target_arch = "riscv32")]
 mod ports;
@@ -15,11 +16,12 @@ pub use classifier::{
     SchedulerWorkerWakeClass,
 };
 
-pub use nrt::{NrtDefaultInterruptEpoch, step_nrt_default_interrupt};
+pub use halves::{ControllerInterruptHalf, RadioDoorbell, SchedulerDoorbell};
+pub use nrt::NrtDefaultInterruptEpoch;
 
 pub use primary::{
     PrimaryInterruptStep, PrimaryNoSchedulerWork, PrimaryPublishedInterruptStep,
-    PrimarySchedulerEvent, step_primary_interrupt,
+    PrimarySchedulerEvent,
 };
 
 #[cfg(target_arch = "riscv32")]

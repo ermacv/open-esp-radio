@@ -331,8 +331,13 @@ pin contracts and zero-initializing its backing in place. Any unconfirmed
 stop or failed reset keeps the entire arena quarantined with its registers.
 The asynchronous scope helpers
 retain these brands across task suspension without allocation. Physical
-scheduler transactions and interrupt-owner lending remain in HAL under the
-Sources exception.
+scheduler transactions remain in the P2 engine. The stable P3 half alone
+accesses IRQ registers. Bank changes and fresh diagnostic samples cross a
+static HAL request/reply slot through the shared radio doorbell. Each reply
+carries the installation epoch and a non-repeating command number, and only
+its readiness notification coalesces. An abandoned exchange keeps its seat
+and prevents arena retirement. Both quiet endpoints reunite after stop and
+route removal before reset and channel reuse.
 
 ## Where registers, layouts and the protocol meet
 

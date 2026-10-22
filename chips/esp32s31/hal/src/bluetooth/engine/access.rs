@@ -14,7 +14,7 @@ impl<
 > Engine<ArenaMemory<'pool, 'epoch, A, C, N, R, O, Q>>
 {
     pub fn dtm(&mut self) -> Result<&mut DtmPool<'pool, 'epoch, 1>, EngineFault> {
-        if self.faulted {
+        if self.is_quarantined() {
             return Err(EngineFault);
         }
         Ok(&mut self.memory.dtm)
@@ -22,7 +22,7 @@ impl<
     pub fn advertising(
         &mut self,
     ) -> Result<&mut LegacyAdvertisingPool<'pool, 'epoch, A>, EngineFault> {
-        if self.faulted {
+        if self.is_quarantined() {
             return Err(EngineFault);
         }
         Ok(&mut self.memory.advertising)
@@ -30,13 +30,13 @@ impl<
     pub fn connectable_advertising(
         &mut self,
     ) -> Result<&mut LegacyConnectableAdvertisingPool<'pool, 'epoch, C>, EngineFault> {
-        if self.faulted {
+        if self.is_quarantined() {
             return Err(EngineFault);
         }
         Ok(&mut self.memory.connectable)
     }
     pub fn scanning(&mut self) -> Result<&mut LegacyScanPool<'pool, 'epoch, 1>, EngineFault> {
-        if self.faulted {
+        if self.is_quarantined() {
             return Err(EngineFault);
         }
         Ok(&mut self.memory.scanning)
@@ -44,13 +44,13 @@ impl<
     pub fn connections(
         &mut self,
     ) -> Result<&mut PeripheralConnectionPool<'pool, 'epoch, N>, EngineFault> {
-        if self.faulted {
+        if self.is_quarantined() {
             return Err(EngineFault);
         }
         Ok(&mut self.memory.connections)
     }
     pub fn devices(&mut self) -> Result<&mut LeDeviceTable, EngineFault> {
-        if self.faulted {
+        if self.is_quarantined() {
             return Err(EngineFault);
         }
         Ok(&mut self.memory.devices)
@@ -59,7 +59,7 @@ impl<
         &mut self,
         source: LeRxSource,
     ) -> Result<Option<LeRxOutcome>, EngineReceiveError> {
-        if self.faulted {
+        if self.is_quarantined() {
             return Err(EngineReceiveError::Quarantined);
         }
         match source.class() {
@@ -73,7 +73,7 @@ impl<
         lease: &SchedulerRoleInstance<'pool, 'epoch>,
         image: ScanResetImage,
     ) -> Result<(), EnginePrepareError<LegacyScanError>> {
-        if self.faulted {
+        if self.is_quarantined() {
             return Err(EnginePrepareError::Quarantined);
         }
         self.memory
@@ -88,7 +88,7 @@ impl<
         power: LeTxPower,
         priority: SchedulerEventPriority,
     ) -> Result<(), EnginePrepareError<LegacyConnectableAdvertisingError>> {
-        if self.faulted {
+        if self.is_quarantined() {
             return Err(EnginePrepareError::Quarantined);
         }
         self.memory
@@ -101,7 +101,7 @@ impl<
         lease: &SchedulerRoleInstance<'pool, 'epoch>,
         event: PeripheralConnectionFirstEvent,
     ) -> Result<PeripheralConnectionEvent, EnginePrepareError<PeripheralConnectionError>> {
-        if self.faulted {
+        if self.is_quarantined() {
             return Err(EnginePrepareError::Quarantined);
         }
         let workspace = self.direction_finding_link();
@@ -112,7 +112,7 @@ impl<
     }
     pub fn publish_device_table(&mut self) -> Result<(), EngineFault> {
         use crate::bluetooth::ControllerHalBorrow;
-        if self.faulted {
+        if self.is_quarantined() {
             return Err(EngineFault);
         }
         self.memory
@@ -147,7 +147,7 @@ impl<
         &mut self,
         observed: EngineFinishedHardwareListObserved,
     ) -> Result<super::scheduler::SchedulerCompletion<SchedulerItemId, Q>, CompletionError> {
-        if self.faulted {
+        if self.is_quarantined() {
             return Err(CompletionError::Quarantined(observed));
         }
         if observed.epoch != self.epoch {

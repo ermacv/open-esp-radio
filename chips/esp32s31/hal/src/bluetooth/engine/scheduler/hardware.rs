@@ -8,12 +8,10 @@
 //! closed before any register changes.
 //!
 //! A wait observation joins a fresh task-side read with a fresh scheduler
-//! state read from the stable interrupt owner. The scheduler wake only tells
+//! state reply from the stable P3 half. The scheduler wake only tells
 //! the caller when to observe again; it never carries the observed value.
 
 #![deny(unsafe_code)]
-
-use crate::settle::Settle;
 
 use crate::bluetooth::engine::ControllerSramLinkAddress;
 
@@ -48,7 +46,7 @@ type Run<B> = <<B as SchedulerHardwareBackend>::Publications as SchedulerPublica
 
 /// Register operations of list zero for the duration of one call.
 ///
-/// The live backend joins the task HAL owner with the stable interrupt owner.
+/// The live backend joins task publications with durable typed P3 replies.
 pub(crate) trait SchedulerHardwareBackend {
     type Publications: SchedulerPublications;
     type StartError;
@@ -60,10 +58,10 @@ pub(crate) trait SchedulerHardwareBackend {
     fn publish_lock_modify(&mut self, at: ControllerSramLinkAddress) -> LockModify<Self>;
     fn publish_head(&mut self, head: Option<ControllerSramLinkAddress>);
     fn index_cancellation(&mut self) -> Indexed<Self>;
-    fn acknowledge_cancellation_source(
+    async fn acknowledge_cancellation_source(
         &mut self,
-        indexed: &Indexed<Self>,
-    ) -> Result<Acknowledged<Self>, SchedulerHardwareError>;
+        indexed: Indexed<Self>,
+    ) -> Result<(Indexed<Self>, Acknowledged<Self>), SchedulerHardwareError>;
     fn request_cancellation(
         &mut self,
         indexed: Indexed<Self>,
@@ -73,17 +71,16 @@ pub(crate) trait SchedulerHardwareBackend {
     fn publish_skip(&mut self, at: ControllerSramLinkAddress) -> Skip<Self>;
     fn clear_skip(&mut self, skip: Skip<Self>);
 
-    fn observe<C: oer_time::Clock + ?Sized>(
+    async fn observe(
         &mut self,
         wait: SchedulerWait,
-        settle: Settle<'_, C>,
         lock: Option<&mut Lock<Self>>,
         modify: Option<&mut Modify<Self>>,
         cancellation: Option<&mut Cancellation<Self>>,
         skip: Option<&Skip<Self>>,
     ) -> Result<SchedulerObservation, SchedulerHardwareError>;
 
-    fn start(
+    async fn start(
         &mut self,
         head: ControllerSramLinkAddress,
     ) -> Result<Run<Self>, SchedulerStartError<Self::StartError>>;
@@ -97,25 +94,19 @@ pub enum SchedulerHardwareError {
     OutOfOrder,
     /// The awaited publication is not in progress.
     NotAwaiting(SchedulerWait),
-    /// Platform storage does not hold the stable interrupt owner.
-    InterruptOwnerUnavailable,
+    /// The typed P3 request failed; the retained epoch cannot publish again.
+    Interrupt(super::interrupt::SchedulerInterruptError),
     /// An action names a link that is no submitted item of the item space.
     ForeignItem,
     /// The hardware head does not decode to a controller link.
     ForeignHead,
-    /// A scheduler diagnostic sample never settled within
-    /// [`DIAGNOSTIC_SETTLE`](super::DIAGNOSTIC_SETTLE).
-    DiagnosticUnsettled,
 }
 
 /// Why the scheduler stop sequence ended before the scheduler stopped.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SchedulerStopError {
-    /// Platform storage does not hold the stable interrupt owner.
-    InterruptOwnerUnavailable,
-    /// A BUSY sample never settled within
-    /// [`DIAGNOSTIC_SETTLE`](super::DIAGNOSTIC_SETTLE).
-    DiagnosticUnsettled,
+    /// The typed P3 request failed; the retained epoch cannot publish again.
+    Interrupt(super::interrupt::SchedulerInterruptError),
 }
 
 /// Why an idle scheduler was not started.
@@ -132,6 +123,7 @@ pub enum SchedulerStartError<E> {
 
 /// Publications of the list transaction in progress and the latest RUN.
 pub struct SchedulerHardware<P: SchedulerPublications> {
+    faulted: bool,
     lock: Option<P::Lock>,
     modify: Option<P::Modify>,
     lock_modify: Option<P::LockModify>,
@@ -151,6 +143,7 @@ impl<P: SchedulerPublications> Default for SchedulerHardware<P> {
 impl<P: SchedulerPublications> SchedulerHardware<P> {
     pub const fn new() -> Self {
         Self {
+            faulted: false,
             lock: None,
             modify: None,
             lock_modify: None,
@@ -164,7 +157,8 @@ impl<P: SchedulerPublications> SchedulerHardware<P> {
 
     /// Whether no list transaction holds a publication.
     pub const fn is_quiet(&self) -> bool {
-        self.lock.is_none()
+        !self.faulted
+            && self.lock.is_none()
             && self.modify.is_none()
             && self.lock_modify.is_none()
             && self.indexed.is_none()
@@ -185,7 +179,7 @@ impl<P: SchedulerPublications> SchedulerHardware<P> {
     /// step after the actions already performed; the epoch is then faulted,
     /// because storage holds that owner for as long as the scheduler runs.
     #[cfg(target_arch = "riscv32")]
-    pub(crate) fn perform<
+    pub(crate) async fn perform<
         I: Copy,
         const CAPACITY: usize,
         B: SchedulerHardwareBackend<Publications = P>,
@@ -194,17 +188,20 @@ impl<P: SchedulerPublications> SchedulerHardware<P> {
         backend: &mut B,
         step: &crate::bluetooth::engine::scheduler::SchedulerStep<I, CAPACITY>,
     ) -> Result<(), SchedulerHardwareError> {
-        self.perform_actions(backend, step.actions())
+        self.perform_actions(backend, step.actions()).await
     }
 
-    fn perform_actions<B: SchedulerHardwareBackend<Publications = P>>(
+    async fn perform_actions<B: SchedulerHardwareBackend<Publications = P>>(
         &mut self,
         backend: &mut B,
         actions: impl Iterator<Item = SchedulerAction> + Clone,
     ) -> Result<(), SchedulerHardwareError> {
         self.admit(actions.clone())?;
         for action in actions {
-            self.run_action(backend, action)?;
+            if let Err(error) = self.run_action(backend, action).await {
+                self.faulted = true;
+                return Err(error);
+            }
         }
         Ok(())
     }
@@ -241,15 +238,11 @@ impl<P: SchedulerPublications> SchedulerHardware<P> {
     }
 
     /// Take one fresh observation of the awaited publication; each
-    /// diagnostic sample settles within `settle`.
-    pub(crate) fn observe<
-        B: SchedulerHardwareBackend<Publications = P>,
-        C: oer_time::Clock + ?Sized,
-    >(
+    /// diagnostic sample settles within the named P3 diagnostic budget.
+    pub(crate) async fn observe<B: SchedulerHardwareBackend<Publications = P>>(
         &mut self,
         backend: &mut B,
         wait: SchedulerWait,
-        settle: Settle<'_, C>,
     ) -> Result<SchedulerObservation, SchedulerHardwareError> {
         let awaiting = match wait {
             SchedulerWait::ExecutionLock => self.lock.is_some(),
@@ -263,14 +256,15 @@ impl<P: SchedulerPublications> SchedulerHardware<P> {
         if !awaiting {
             return Err(SchedulerHardwareError::NotAwaiting(wait));
         }
-        let observation = backend.observe(
-            wait,
-            settle,
-            self.lock.as_mut(),
-            self.modify.as_mut(),
-            self.cancellation.as_mut(),
-            self.skip.as_ref(),
-        )?;
+        let observation = backend
+            .observe(
+                wait,
+                self.lock.as_mut(),
+                self.modify.as_mut(),
+                self.cancellation.as_mut(),
+                self.skip.as_ref(),
+            )
+            .await?;
         if let SchedulerObservation::LockModify(observed) = observation
             && !observed.wait_active()
         {
@@ -281,7 +275,7 @@ impl<P: SchedulerPublications> SchedulerHardware<P> {
     }
 
     /// Publish `insertion`'s head and start the idle scheduler with RUN.
-    pub(crate) fn start<B: SchedulerHardwareBackend<Publications = P>>(
+    pub(crate) async fn start<B: SchedulerHardwareBackend<Publications = P>>(
         &mut self,
         backend: &mut B,
         insertion: SchedulerIdleInsertion,
@@ -289,7 +283,7 @@ impl<P: SchedulerPublications> SchedulerHardware<P> {
         if !self.is_quiet() {
             return Err(SchedulerStartError::TransactionActive);
         }
-        self.run = Some(backend.start(insertion.head)?);
+        self.run = Some(backend.start(insertion.head).await?);
         Ok(())
     }
 
@@ -297,6 +291,9 @@ impl<P: SchedulerPublications> SchedulerHardware<P> {
         &self,
         actions: impl Iterator<Item = SchedulerAction>,
     ) -> Result<(), SchedulerHardwareError> {
+        if self.faulted {
+            return Err(SchedulerHardwareError::OutOfOrder);
+        }
         let mut state = Admission {
             lock: self.lock.is_some(),
             modify: self.modify.is_some(),
@@ -314,7 +311,7 @@ impl<P: SchedulerPublications> SchedulerHardware<P> {
         Ok(())
     }
 
-    fn run_action<B: SchedulerHardwareBackend<Publications = P>>(
+    async fn run_action<B: SchedulerHardwareBackend<Publications = P>>(
         &mut self,
         backend: &mut B,
         action: SchedulerAction,
@@ -343,8 +340,11 @@ impl<P: SchedulerPublications> SchedulerHardware<P> {
                 self.indexed = Some(backend.index_cancellation());
             }
             SchedulerAction::AcknowledgeCancellationSource => {
-                let indexed = self.indexed.as_ref().expect("admitted");
-                self.acknowledged = Some(backend.acknowledge_cancellation_source(indexed)?);
+                let indexed = self.indexed.take().expect("admitted");
+                let (indexed, acknowledged) =
+                    backend.acknowledge_cancellation_source(indexed).await?;
+                self.indexed = Some(indexed);
+                self.acknowledged = Some(acknowledged);
             }
             SchedulerAction::RequestCancellation => {
                 let indexed = self.indexed.take().expect("admitted");

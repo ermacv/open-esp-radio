@@ -948,6 +948,8 @@ impl InterruptOutputPreparedOwner {
     pub fn stage_for_cpu_routes(self) -> InterruptRegistersOwner {
         InterruptRegistersOwner {
             registers: self.registers.stage_for_cpu_routes(),
+            #[cfg(feature = "bluetooth-engine")]
+            diagnostic_selection: DiagnosticSelection::None,
         }
     }
 
@@ -970,6 +972,15 @@ impl InterruptOutputPreparedOwner {
 #[must_use = "the staged Bluetooth interrupt owner must be deactivated"]
 pub struct InterruptRegistersOwner {
     registers: BluetoothInterruptRegisters,
+    #[cfg(feature = "bluetooth-engine")]
+    diagnostic_selection: DiagnosticSelection,
+}
+
+#[cfg(feature = "bluetooth-engine")]
+enum DiagnosticSelection {
+    None,
+    Progress,
+    Settle,
 }
 
 impl InterruptRegistersOwner {
@@ -998,7 +1009,10 @@ impl InterruptRegistersOwner {
         &mut self,
         settle: Settle<'_, C>,
     ) -> Result<BluetoothSchedulerReferenceGateObservation, Unsettled> {
-        settle::settle(settle, || self.registers.capture_scheduler_reference_gate())
+        let result = settle::settle(settle, || self.registers.capture_scheduler_reference_gate());
+        #[cfg(feature = "bluetooth-engine")]
+        self.restore_diagnostic_selection();
+        result
     }
 
     /// Clear the scheduler reference selected by the source-124 gate.
@@ -1022,7 +1036,10 @@ impl InterruptRegistersOwner {
         &mut self,
         settle: Settle<'_, C>,
     ) -> Result<BluetoothSchedulerBusyObservation, Unsettled> {
-        settle::settle(settle, || self.registers.capture_scheduler_busy())
+        let result = settle::settle(settle, || self.registers.capture_scheduler_busy());
+        #[cfg(feature = "bluetooth-engine")]
+        self.restore_diagnostic_selection();
+        result
     }
 
     /// Acknowledge interrupt source 7 for one indexed scheduler
@@ -1042,9 +1059,62 @@ impl InterruptRegistersOwner {
         &mut self,
         settle: Settle<'_, C>,
     ) -> Result<BluetoothSchedulerLockModifyInterruptObservation, Unsettled> {
-        settle::settle(settle, || {
+        let result = settle::settle(settle, || {
             self.registers.capture_scheduler_lock_modify_interrupt()
-        })
+        });
+        #[cfg(feature = "bluetooth-engine")]
+        self.restore_diagnostic_selection();
+        result
+    }
+
+    #[cfg(feature = "bluetooth-engine")]
+    fn restore_diagnostic_selection(&mut self) {
+        match self.diagnostic_selection {
+            DiagnosticSelection::None => {}
+            DiagnosticSelection::Progress => {
+                self.registers.select_scheduler_execution_modify_progress()
+            }
+            DiagnosticSelection::Settle => {
+                self.registers.select_scheduler_execution_modify_settle()
+            }
+        }
+    }
+
+    #[cfg(feature = "bluetooth-engine")]
+    pub(crate) fn mask_scheduler_run_interrupts(&mut self) {
+        self.registers.mask_scheduler_run_interrupts();
+    }
+    #[cfg(feature = "bluetooth-engine")]
+    pub(crate) fn select_scheduler_execution_modify_progress(&mut self) {
+        self.diagnostic_selection = DiagnosticSelection::Progress;
+        self.restore_diagnostic_selection();
+    }
+    #[cfg(feature = "bluetooth-engine")]
+    pub(crate) fn select_scheduler_execution_modify_settle(&mut self) {
+        self.diagnostic_selection = DiagnosticSelection::Settle;
+        self.restore_diagnostic_selection();
+    }
+    #[cfg(feature = "bluetooth-engine")]
+    pub(crate) fn scheduler_execution_modify_repeats<C: oer_time::Clock + ?Sized>(
+        &mut self,
+        budget: Settle<'_, C>,
+    ) -> Result<bool, Unsettled> {
+        let result = settle::settle(budget, || {
+            self.registers.scheduler_execution_modify_repeats()
+        });
+        self.diagnostic_selection = DiagnosticSelection::None;
+        result
+    }
+    #[cfg(feature = "bluetooth-engine")]
+    pub(crate) fn scheduler_execution_modify_settled<C: oer_time::Clock + ?Sized>(
+        &mut self,
+        budget: Settle<'_, C>,
+    ) -> Result<bool, Unsettled> {
+        let result = settle::settle(budget, || {
+            self.registers.scheduler_execution_modify_settled()
+        });
+        self.diagnostic_selection = DiagnosticSelection::None;
+        result
     }
 
     /// Return the register partition to output-prepared ownership after both
@@ -1105,6 +1175,8 @@ impl InterruptOutputAfterRoutesOwner {
         }
         Ok(InterruptRegistersOwner {
             registers: self._registers.stage_for_cpu_routes(),
+            #[cfg(feature = "bluetooth-engine")]
+            diagnostic_selection: DiagnosticSelection::None,
         })
     }
 
@@ -1766,18 +1838,19 @@ impl ControllerHal<'_> {
     /// the engine-idle preamble, publication of command zero and one
     /// observation of it. Pending retains the request; the caller owns its
     /// deadline. Each BUSY sample settles within `settle`.
-    pub(crate) fn step_scheduler_execution_lock<C: oer_time::Clock + ?Sized>(
+    #[cfg(feature = "bluetooth-engine")]
+    pub(crate) async fn step_scheduler_execution_lock<
+        D: engine::scheduler::interrupt::SchedulerDoorbell,
+    >(
         &mut self,
-        interrupts: &mut InterruptRegistersOwner,
+        interrupts: &mut engine::scheduler::interrupt::SchedulerTaskHalf,
         lock: &mut BluetoothSchedulerExecutionLock,
-        settle: Settle<'_, C>,
-    ) -> Result<BluetoothSchedulerExecutionLockDisposition, Unsettled> {
-        scheduler_execution_lock::step_hardware(
-            self.registers,
-            &mut interrupts.registers,
-            lock,
-            settle,
-        )
+        bell: &D,
+    ) -> Result<
+        BluetoothSchedulerExecutionLockDisposition,
+        engine::scheduler::interrupt::SchedulerInterruptError,
+    > {
+        scheduler_execution_lock::step_hardware(self.registers, interrupts, lock, bell).await
     }
 
     /// Clear command-zero START of a finished execution lock.
@@ -1814,18 +1887,19 @@ impl ControllerHal<'_> {
     /// and completion waits, the settle wait and a repeated request after a
     /// conflict. Pending retains the request; the caller owns its deadline.
     /// Each diagnostic sample settles within `settle`.
-    pub(crate) fn step_scheduler_execution_modify<C: oer_time::Clock + ?Sized>(
+    #[cfg(feature = "bluetooth-engine")]
+    pub(crate) async fn step_scheduler_execution_modify<
+        D: engine::scheduler::interrupt::SchedulerDoorbell,
+    >(
         &mut self,
-        interrupts: &mut InterruptRegistersOwner,
+        interrupts: &mut engine::scheduler::interrupt::SchedulerTaskHalf,
         modify: &mut BluetoothSchedulerExecutionModify,
-        settle: Settle<'_, C>,
-    ) -> Result<BluetoothSchedulerExecutionModifyDisposition, Unsettled> {
-        scheduler_execution_modify::step_hardware(
-            self.registers,
-            &mut interrupts.registers,
-            modify,
-            settle,
-        )
+        bell: &D,
+    ) -> Result<
+        BluetoothSchedulerExecutionModifyDisposition,
+        engine::scheduler::interrupt::SchedulerInterruptError,
+    > {
+        scheduler_execution_modify::step_hardware(self.registers, interrupts, modify, bell).await
     }
 
     /// Clear command-one START of a finished execution modify.
@@ -1976,13 +2050,15 @@ impl ControllerHal<'_> {
     /// Advance the common stop preamble/request/idle sequence under interrupt
     /// serialization. Pending retains the request; the caller owns its deadline.
     /// Each BUSY sample settles within `settle`.
-    pub fn step_scheduler_stop<C: oer_time::Clock + ?Sized>(
+    #[cfg(feature = "bluetooth-engine")]
+    pub(crate) async fn step_scheduler_stop<D: engine::scheduler::interrupt::SchedulerDoorbell>(
         &mut self,
-        interrupts: &mut InterruptRegistersOwner,
+        interrupts: &mut engine::scheduler::interrupt::SchedulerTaskHalf,
         stop: BluetoothSchedulerStop,
-        settle: Settle<'_, C>,
-    ) -> Result<BluetoothSchedulerStopStep, Unsettled> {
-        scheduler_stop::step_hardware(self.registers, &mut interrupts.registers, stop, settle)
+        bell: &D,
+    ) -> Result<BluetoothSchedulerStopStep, engine::scheduler::interrupt::SchedulerInterruptError>
+    {
+        scheduler_stop::step_hardware(self.registers, interrupts, stop, bell).await
     }
 
     /// Retire the exact stopped RUN head without clearing a foreign item.
@@ -2126,3 +2202,13 @@ mod tests;
 /// Controller-memory ownership and scheduler protocol.
 #[cfg(feature = "bluetooth-engine")]
 pub mod engine;
+
+#[cfg(test)]
+fn test_ready<F: core::future::Future>(future: F) -> F::Output {
+    match core::pin::pin!(future).poll(&mut core::task::Context::from_waker(
+        core::task::Waker::noop(),
+    )) {
+        core::task::Poll::Ready(value) => value,
+        core::task::Poll::Pending => panic!("the policy model completes every request immediately"),
+    }
+}

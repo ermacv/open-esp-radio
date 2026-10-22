@@ -35,6 +35,88 @@ fn model() -> (
     };
     (engine, output, timer)
 }
+
+#[test]
+fn reset_waits_for_both_quiet_interrupt_halves_and_the_channel_serves_the_next_epoch() {
+    let (mut engine, output, timer) = model();
+    let channel = Box::leak(Box::new(
+        scheduler::interrupt::SchedulerInterruptChannel::new(),
+    ));
+    let half = engine
+        .install_scheduler_interrupts(channel)
+        .expect("fresh channel");
+    let epoch = engine.epoch;
+    let half = match engine.retire_scheduler_interrupts(half) {
+        Err((scheduler::interrupt::SchedulerInterruptError::NotStopped, half)) => half,
+        _ => panic!("a running scheduler retains both halves"),
+    };
+    engine.stopped_for_host_test();
+    assert!(!engine.retirement_ready());
+    assert!(engine.retire_scheduler_interrupts(half).is_ok());
+    assert!(engine.retirement_ready());
+    let returned = engine
+        .shut_down_with(output, timer, reset)
+        .expect("quiet reset");
+    let (mut next, _) = Engine::<Memory>::for_host_test::<HostDma<0x2f00_1000>>(
+        returned.clocked,
+        returned.arena,
+        config(),
+    )
+    .ok()
+    .expect("reinstall returned allocation");
+    assert_ne!(next.epoch, epoch);
+    assert!(next.install_scheduler_interrupts(channel).is_ok());
+}
+
+#[test]
+fn abandoning_an_exchange_quarantines_every_graph_publication() {
+    use core::{
+        future::Future,
+        task::{Context, Poll, Waker},
+    };
+    use scheduler::interrupt::{
+        SchedulerDoorbell, SchedulerInterruptChannel, SchedulerInterruptError,
+    };
+    struct Bell;
+    impl SchedulerDoorbell for Bell {
+        fn ring(&self) {}
+        fn poll_reply(&self, _: &mut Context<'_>) -> Poll<Result<(), SchedulerInterruptError>> {
+            Poll::Pending
+        }
+    }
+    let (mut engine, _, _) = model();
+    let channel = Box::leak(Box::new(SchedulerInterruptChannel::new()));
+    let half = engine
+        .install_scheduler_interrupts(channel)
+        .expect("fresh channel");
+    {
+        let task = engine
+            .scheduler_interrupts
+            .as_mut()
+            .expect("installed task half");
+        let mut future = core::pin::pin!(task.select_progress(&Bell));
+        assert!(
+            future
+                .as_mut()
+                .poll(&mut Context::from_waker(Waker::noop()))
+                .is_pending()
+        );
+    }
+    assert!(engine.is_quarantined());
+    assert!(engine.dtm().is_err());
+    assert!(engine.devices().is_err());
+    assert_eq!(engine.publish_device_table(), Err(EngineFault));
+    engine.stopped_for_host_test();
+    assert!(!engine.retirement_ready());
+    assert!(matches!(
+        engine.retire_scheduler_interrupts(half),
+        Err((SchedulerInterruptError::Quarantined, _))
+    ));
+    assert!(matches!(
+        channel.install(engine.epoch.0),
+        Err(SchedulerInterruptError::Occupied)
+    ));
+}
 fn reset(
     task: bluetooth::TaskOwner,
     output: bluetooth::InterruptOutputReleasedOwner,

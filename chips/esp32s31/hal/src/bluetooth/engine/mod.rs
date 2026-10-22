@@ -11,8 +11,9 @@
 //! The owning engine moves through init, activation, workers, stop and reset.
 //! Only verified reset returns the whole allocation; terminal failures retain
 //! the registers and arena together in absorbing quarantine. The scheduler's
-//! physical protocol and vendor transaction order live here; stable
-//! interrupt-owner lending is internal to HAL under the Sources exception.
+//! physical protocol and vendor transaction order live here. The P2 task
+//! half requests fresh samples and IRQ-bank changes from the stable P3 half
+//! through an epoch-scoped static request/reply channel and radio doorbell.
 
 #![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
 #![allow(

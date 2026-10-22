@@ -183,7 +183,7 @@ fn execute_primary_interrupt_step(
 /// [`DIAGNOSTIC_SETTLE`](oer_esp32s31_hal::bluetooth::engine::scheduler::DIAGNOSTIC_SETTLE)
 /// on `clock`, and one later work read. It never invokes a callback, waits
 /// for hardware beyond that settle, allocates or wakes an executor.
-pub fn step_primary_interrupt(
+pub(crate) fn step_primary_interrupt(
     interrupts: &mut InterruptRegistersOwner,
     clock: &dyn oer_time::Clock,
 ) -> PrimaryInterruptStep {

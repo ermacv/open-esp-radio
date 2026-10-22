@@ -58,6 +58,58 @@ pub struct EngineShutDown<M: ControllerMemory> {
 }
 
 impl<M: ControllerMemory> Engine<M> {
+    /// Bind the unique task request endpoint to this engine's installation.
+    /// The returned P3 half lives beside the stable interrupt register owner.
+    pub fn install_scheduler_interrupts(
+        &mut self,
+        channel: &'static super::scheduler::interrupt::SchedulerInterruptChannel,
+    ) -> Result<
+        super::scheduler::interrupt::SchedulerInterruptHalf,
+        super::scheduler::interrupt::SchedulerInterruptError,
+    > {
+        use super::scheduler::interrupt::SchedulerInterruptError;
+        if self.is_quarantined() {
+            return Err(SchedulerInterruptError::Quarantined);
+        }
+        if self.scheduler_interrupts.is_some() {
+            return Err(SchedulerInterruptError::Occupied);
+        }
+        let (task, interrupts) = channel.install(self.epoch.0)?;
+        self.scheduler_interrupts = Some(task);
+        Ok(interrupts)
+    }
+
+    /// After stop and route removal, reunite both endpoints before reset.
+    /// Pending or abandoned work keeps the channel and whole arena reserved.
+    pub fn retire_scheduler_interrupts(
+        &mut self,
+        interrupts: super::scheduler::interrupt::SchedulerInterruptHalf,
+    ) -> Result<
+        (),
+        (
+            super::scheduler::interrupt::SchedulerInterruptError,
+            super::scheduler::interrupt::SchedulerInterruptHalf,
+        ),
+    > {
+        use super::scheduler::interrupt::SchedulerInterruptError;
+        if self.is_quarantined() {
+            return Err((SchedulerInterruptError::Quarantined, interrupts));
+        }
+        if !self.memory.scheduler_stopped() {
+            return Err((SchedulerInterruptError::NotStopped, interrupts));
+        }
+        let Some(task) = self.scheduler_interrupts.take() else {
+            return Err((SchedulerInterruptError::NotInstalled, interrupts));
+        };
+        match task.retire(interrupts) {
+            Ok(()) => Ok(()),
+            Err((error, task, interrupts)) => {
+                self.scheduler_interrupts = Some(task);
+                Err((error, interrupts))
+            }
+        }
+    }
+
     /// Borrow register authority for shared PHY membership, without extraction.
     pub const fn task_owner(&self) -> &bluetooth::TaskOwner {
         &self.registers
@@ -82,7 +134,7 @@ impl<M: ControllerMemory> Engine<M> {
         config: bluetooth::BluetoothControllerHalInitConfig,
         initialize: impl FnOnce(&mut bluetooth::TaskOwner, bluetooth::BluetoothControllerHalInitConfig),
     ) -> Result<(), EngineInitError> {
-        if self.faulted {
+        if self.is_quarantined() {
             return Err(EngineInitError::Quarantined);
         }
         if self.initialized {
@@ -135,7 +187,7 @@ impl<M: ControllerMemory> Engine<M> {
             &M,
         ) -> bluetooth::DirectionFindingDisabledBaselineOwner,
     ) -> Result<(), EngineInitError> {
-        if self.faulted {
+        if self.is_quarantined() {
             return Err(EngineInitError::Quarantined);
         }
         if !self.initialized {
@@ -158,6 +210,10 @@ impl<M: ControllerMemory> Engine<M> {
 
     pub const fn is_quarantined(&self) -> bool {
         self.faulted
+            || match &self.scheduler_interrupts {
+                Some(task) => !task.is_quiet(),
+                None => false,
+            }
     }
 
     pub fn begin_controller_time_latch(
@@ -186,7 +242,7 @@ impl<M: ControllerMemory> Engine<M> {
         &mut self,
         address: bluetooth::ControllerRandomAddress,
     ) -> Result<(), super::EngineFault> {
-        if self.faulted {
+        if self.is_quarantined() {
             return Err(super::EngineFault);
         }
         self.controller().program_random_device_address(address);
@@ -194,13 +250,13 @@ impl<M: ControllerMemory> Engine<M> {
     }
 
     pub fn retirement_ready(&self) -> bool {
-        !self.faulted && self.memory.retirement_ready()
+        !self.faulted && self.scheduler_interrupts.is_none() && self.memory.retirement_ready()
     }
 
     /// The stop receipt remains inside the owning engine while a task drains
     /// its final finished lists.
     pub fn scheduler_is_stopped(&self) -> bool {
-        !self.faulted && self.memory.scheduler_stopped()
+        !self.is_quarantined() && self.memory.scheduler_stopped()
     }
 
     pub fn release_controller_output(
@@ -257,6 +313,7 @@ impl<M: ControllerMemory> Engine<M> {
             registers,
             memory,
             epoch: _,
+            scheduler_interrupts: _,
             direction_finding_publication,
             faulted: _,
             initialized: _,

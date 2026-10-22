@@ -5,7 +5,7 @@ use oer_esp32s31_pac::{
     BluetoothSchedulerExecutionLockRequest, BluetoothSchedulerHardwareListIndex,
 };
 
-use super::{Control, Unsettled, step};
+use super::{Control, Unsettled};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Op {
@@ -26,8 +26,9 @@ struct Model {
 
 impl Control for Model {
     type Published = ();
+    type Error = Unsettled;
 
-    fn busy(&mut self) -> Result<bool, Unsettled> {
+    async fn busy(&mut self) -> Result<bool, Unsettled> {
         self.ops.push(Op::Busy);
         self.busy
             .pop_front()
@@ -41,7 +42,7 @@ impl Control for Model {
     fn publish(&mut self, _: BluetoothSchedulerExecutionLockRequest) {
         self.ops.push(Op::Publish);
     }
-    fn observe(&mut self) -> Result<Disposition, Unsettled> {
+    async fn observe(&mut self) -> Result<Disposition, Unsettled> {
         self.ops.push(Op::Observe);
         Ok(self
             .observations
@@ -62,7 +63,7 @@ fn an_idle_scheduler_publishes_at_once_and_observes() {
     let mut model = Model::default();
     let mut published = None;
     assert_eq!(
-        step(request(), &mut published, &mut model).unwrap(),
+        crate::bluetooth::test_ready(super::step(request(), &mut published, &mut model)).unwrap(),
         Disposition::ExecutionLockRetained
     );
     assert_eq!(model.ops, [Op::Busy, Op::Publish, Op::Observe]);
@@ -77,14 +78,14 @@ fn a_busy_scheduler_waits_for_idle_engines_before_publishing() {
     };
     let mut published = None;
     assert_eq!(
-        step(request(), &mut published, &mut model).unwrap(),
+        crate::bluetooth::test_ready(super::step(request(), &mut published, &mut model)).unwrap(),
         Disposition::Pending
     );
     assert_eq!(model.ops, [Op::Busy, Op::EnginesIdle]);
     assert!(published.is_none());
     model.ops.clear();
     assert_eq!(
-        step(request(), &mut published, &mut model).unwrap(),
+        crate::bluetooth::test_ready(super::step(request(), &mut published, &mut model)).unwrap(),
         Disposition::ExecutionLockRetained
     );
     assert_eq!(
@@ -101,12 +102,12 @@ fn a_published_lock_only_observes_on_later_steps() {
     };
     let mut published = None;
     assert_eq!(
-        step(request(), &mut published, &mut model).unwrap(),
+        crate::bluetooth::test_ready(super::step(request(), &mut published, &mut model)).unwrap(),
         Disposition::Pending
     );
     model.ops.clear();
     assert_eq!(
-        step(request(), &mut published, &mut model).unwrap(),
+        crate::bluetooth::test_ready(super::step(request(), &mut published, &mut model)).unwrap(),
         Disposition::ReconcileCurrentHead
     );
     assert_eq!(model.ops, [Op::Observe]);
@@ -119,7 +120,10 @@ fn an_unsettled_busy_sample_fails_the_step_without_publishing() {
         ..Model::default()
     };
     let mut published = None;
-    assert_eq!(step(request(), &mut published, &mut model), Err(Unsettled));
+    assert_eq!(
+        crate::bluetooth::test_ready(super::step(request(), &mut published, &mut model)),
+        Err(Unsettled)
+    );
     assert_eq!(model.ops, [Op::Busy]);
     assert!(published.is_none());
 }
