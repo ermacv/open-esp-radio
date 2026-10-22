@@ -146,9 +146,13 @@ bounds) live in the code that applies them.
   interrupt stack's guard, so an overflow the guard catches is recorded.
   The guard is per hart in the chip contract: 4096 bytes on S31 hart 0 and
   C5, 1024 bytes on S31 hart 1. Product images reject a guard violation.
+  Every function's frame in an image is at most the move limit (4 KiB). App
+  images fail and diagnostic images warn. An exception names the function, its
+  reason and a ceiling it may not exceed.
 - **Large state.** A value larger than the move limit (4 KiB) lives in placed
   static storage; futures and task arguments hold a reference to it. The image
-  build denies a larger implicit move.
+  build denies a larger implicit move. A compiler check reports every value
+  above the move limit that is not in static storage, with its source location.
 - **Staged boot.** Code and stacks run from PSRAM after the staged bootstrap.
 
 ## Hardware ownership
