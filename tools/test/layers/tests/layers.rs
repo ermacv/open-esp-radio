@@ -27,9 +27,44 @@ fn the_name_follows_the_path() {
         ("firmware/apps/w1", true, "oer-firmware-apps-w1"),
         ("tools/image/build", false, "oer-image-build"),
         ("tools/image/cli", true, "oer-tool-image-cli"),
+        (
+            "tools/image/large-values",
+            true,
+            "oer-tool-image-large-values",
+        ),
     ] {
         assert_eq!(expected_name(path, executable), name);
     }
+}
+
+#[test]
+fn compiler_imports_stay_in_the_reporter_and_its_private_bridge() {
+    let manifest: toml::Value =
+        toml::from_str(include_str!("../../../image/large-values/Cargo.toml"))
+            .expect("the compiler reporter has a manifest");
+    assert_eq!(
+        manifest["package"]["name"].as_str(),
+        Some(expected_name("tools/image/large-values", true).as_str())
+    );
+    let main = include_str!("../../../image/large-values/src/main.rs");
+    assert!(main.contains("#![forbid(unsafe_code)]"));
+    assert!(main.contains("#![feature(rustc_private)]"));
+    for source in [
+        main,
+        include_str!("../../../image/large-values/src/report.rs"),
+        include_str!("../../../image/large-values/build.rs"),
+    ] {
+        assert!(!source.contains("rustc_internal::"));
+        for line in source
+            .lines()
+            .filter(|line| line.starts_with("extern crate rustc_"))
+        {
+            assert_eq!(line, "extern crate rustc_public;");
+        }
+    }
+    let bridge = include_str!("../../../image/large-values/src/bridge.rs");
+    assert!(bridge.contains("extern crate rustc_driver;"));
+    assert!(!bridge.contains(".layout()") && !bridge.contains("instance_mir"));
 }
 
 /// The packages below the unsafe boundary (`docs/unsafe.md`), by directory

@@ -4352,6 +4352,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-tool-image-large-values"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
 name = "oer-tool-image-linker"
 version = "0.1.0"
 dependencies = [

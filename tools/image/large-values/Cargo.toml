@@ -1,0 +1,19 @@
+[package]
+name = "oer-tool-image-large-values"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Reports large monomorphized MIR values through the pinned compiler's public API"
+
+[dependencies]
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "1.0"
+
+[dev-dependencies]
+tempfile = "=3.27.0"
+
+[lints]
+workspace = true
