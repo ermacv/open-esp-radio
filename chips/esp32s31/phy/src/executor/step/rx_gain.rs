@@ -88,6 +88,7 @@ pub(crate) struct Scratch {
     lowering: Option<PhyRxGainInitAction>,
     poll_total_micros: u32,
     poll_sample: u8,
+    part_times: [u64; 3],
 }
 
 impl Scratch {
@@ -147,6 +148,31 @@ impl Scratch {
             execution.i2c_samples[repeat] += 1;
         }
     }
+
+    #[inline(never)]
+    fn record_parts(&self, execution: &mut RxGainExecution, tag: u8, finished: Instant) {
+        Run::record_part(
+            execution,
+            0,
+            tag,
+            Instant::from_micros(self.part_times[0]),
+            Instant::from_micros(self.part_times[1]),
+        );
+        Run::record_part(
+            execution,
+            1,
+            tag,
+            Instant::from_micros(self.part_times[1]),
+            Instant::from_micros(self.part_times[2]),
+        );
+        Run::record_part(
+            execution,
+            2,
+            tag,
+            Instant::from_micros(self.part_times[2]),
+            finished,
+        );
+    }
 }
 
 pub(super) struct Run<'a> {
@@ -170,11 +196,9 @@ impl Run<'_> {
             return Ok(Step::Complete);
         }
         let stamp = super::rfpll::OutlinedClock(clock);
-        let started = if self.measured {
-            stamp.now()
-        } else {
-            Instant::EPOCH
-        };
+        if self.measured {
+            self.scratch.part_times[0] = stamp.now().as_micros();
+        }
         let prepared = self.scratch.binding.is_some();
         let mut tag = 0;
         if !prepared {
@@ -216,7 +240,13 @@ impl Run<'_> {
                     tag = 34 | (tag & 0x80);
                     self.scratch.set_action(tag);
                     self.scratch.poll_sample = tag;
-                    Self::record_part(self.execution, 0, tag, started, stamp.now());
+                    Self::record_part(
+                        self.execution,
+                        0,
+                        tag,
+                        Instant::from_micros(self.scratch.part_times[0]),
+                        stamp.now(),
+                    );
                 }
                 return Ok(Step::Runnable);
             }
@@ -225,22 +255,18 @@ impl Run<'_> {
             self.scratch.set_action(tag);
             self.scratch.poll_sample = tag;
         }
-        let lowered = if self.measured {
-            stamp.now()
-        } else {
-            Instant::EPOCH
-        };
+        if self.measured {
+            self.scratch.part_times[1] = stamp.now().as_micros();
+        }
         let waiting = io.rx_gain::<D, _>(
             clock,
             &mut self.scratch.binding,
             &mut self.scratch.completion,
         )?;
         let completion = self.scratch.completion.take().ok_or(Failure::Binding)?;
-        let completed = if self.measured {
-            stamp.now()
-        } else {
-            Instant::EPOCH
-        };
+        if self.measured {
+            self.scratch.part_times[2] = stamp.now().as_micros();
+        }
         if let PhyRxGainInitCompletion::Dc(PhyRxGainDcCompletion::Calibration(
             PhyRxDcCalibrationCompletion::Minimum(PhyRxDcMinimumCompletion::DcIq(completion)),
         )) = completion
@@ -262,9 +288,7 @@ impl Run<'_> {
             .map_err(|_| Failure::Binding)?;
         if self.measured {
             let finished = stamp.now();
-            Self::record_part(self.execution, 0, tag, started, lowered);
-            Self::record_part(self.execution, 1, tag, lowered, completed);
-            Self::record_part(self.execution, 2, tag, completed, finished);
+            self.scratch.record_parts(self.execution, tag, finished);
         }
         if waiting {
             Ok(Step::WaitAt(
