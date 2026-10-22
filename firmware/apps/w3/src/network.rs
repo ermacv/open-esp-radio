@@ -53,64 +53,101 @@ static RX_STORAGE: ConstStaticCell<PacketPoolStorage<8>> =
 static RX_POOL: StaticCell<PacketPool<8>> = StaticCell::new();
 
 #[allow(clippy::too_many_arguments)]
-pub async fn workload<'id, Path: PoolPath>(
+pub fn workload<'a, 'id: 'a, Path: PoolPath + 'a>(
     config: W3Config,
     address: [u8; 6],
     seed: u64,
     credits: StaCommandCredits<'id, Path>,
-    mut commands: MsduSender<'_, ServiceCommand<'id, crate::radio::Caps, Path>, 2>,
-    tx: MsduSender<'_, TxMsdu, 2>,
-    rx: MsduReceiver<'_, EthernetFrame, RX>,
-    link: &Cell<bool>,
-    disconnected: &Cell<bool>,
-    failed: &Cell<bool>,
-) -> Report {
-    let general = GENERAL_POOL
-        .init_with(|| PacketPool::new(GENERAL_STORAGE.take()))
-        .allocator();
-    let receive = RX_POOL
-        .init_with(|| PacketPool::new(RX_STORAGE.take()))
-        .allocator();
-    let (device, radio) =
-        ENDPOINT
-            .init_with(Endpoint::new)
-            .split(NetworkInterfaceId::new(0), address, receive);
-    let (stack, mut runner) = Stack::new(STACK.init_with(StackStorage::new), seed, general);
-    runner.set_poll_budget(owned_embassy_net::PollBudget::new(4, 8));
-    let iface = stack
-        .add_iface_borrowed(DEVICE.init(device))
-        .expect("one station IP interface");
-    iface
-        .set_dhcpv4(Some(DhcpConfig::default()))
-        .expect("Ethernet DHCP");
-    let socket = RawSocket::new(stack, Some(IpVersion::V4), Some(IpProtocol::Icmp))
-        .expect("one W3 ICMP socket");
-    let identifier = seed as u16;
-    let observations = RefCell::new(Observations::new(identifier));
-    let application = application(
-        config,
-        address,
-        credits,
-        &mut commands,
-        iface,
-        &socket,
-        &observations,
-        link,
-        disconnected,
-        failed,
-    );
-    match select(
-        application,
-        join3(
-            bridge(radio, tx, rx, &observations, link),
-            runner.run(),
-            drain(&socket),
-        ),
-    )
-    .await
-    {
-        Either::First(report) => report,
-        Either::Second(_) => unreachable!("permanent network runners do not return"),
+    commands: MsduSender<'a, ServiceCommand<'id, crate::radio::Caps, Path>, 2>,
+    tx: MsduSender<'a, TxMsdu, 2>,
+    rx: MsduReceiver<'a, EthernetFrame, RX>,
+    link: &'a Cell<bool>,
+    disconnected: &'a Cell<bool>,
+    failed: &'a Cell<bool>,
+) -> impl core::future::Future<Output = Report> + 'a {
+    WORKLOAD.take().future(|| {
+        workload_future(
+            config,
+            address,
+            seed,
+            credits,
+            commands,
+            tx,
+            rx,
+            link,
+            disconnected,
+            failed,
+        )
+    })
+}
+
+type Workload<'a, 'id: 'a, Path: PoolPath + 'a> = impl core::future::Future<Output = Report>;
+type CommandPath = oer_radio_port::Child<oer_radio_port::Root<crate::radio::slot::Id>, 8>;
+static WORKLOAD: ConstStaticCell<oer_memory::StaticPlace<Workload<'static, 'static, CommandPath>>> =
+    ConstStaticCell::new(oer_memory::StaticPlace::new());
+
+#[allow(clippy::too_many_arguments)]
+#[define_opaque(Workload)]
+fn workload_future<'a, 'id: 'a, Path: PoolPath + 'a>(
+    config: W3Config,
+    address: [u8; 6],
+    seed: u64,
+    credits: StaCommandCredits<'id, Path>,
+    mut commands: MsduSender<'a, ServiceCommand<'id, crate::radio::Caps, Path>, 2>,
+    tx: MsduSender<'a, TxMsdu, 2>,
+    rx: MsduReceiver<'a, EthernetFrame, RX>,
+    link: &'a Cell<bool>,
+    disconnected: &'a Cell<bool>,
+    failed: &'a Cell<bool>,
+) -> Workload<'a, 'id, Path> {
+    async move {
+        let general = GENERAL_POOL
+            .init_with(|| PacketPool::new(GENERAL_STORAGE.take()))
+            .allocator();
+        let receive = RX_POOL
+            .init_with(|| PacketPool::new(RX_STORAGE.take()))
+            .allocator();
+        let (device, radio) =
+            ENDPOINT
+                .init_with(Endpoint::new)
+                .split(NetworkInterfaceId::new(0), address, receive);
+        let (stack, mut runner) = Stack::new(STACK.init_with(StackStorage::new), seed, general);
+        runner.set_poll_budget(owned_embassy_net::PollBudget::new(4, 8));
+        let iface = stack
+            .add_iface_borrowed(DEVICE.init(device))
+            .expect("one station IP interface");
+        iface
+            .set_dhcpv4(Some(DhcpConfig::default()))
+            .expect("Ethernet DHCP");
+        let socket = RawSocket::new(stack, Some(IpVersion::V4), Some(IpProtocol::Icmp))
+            .expect("one W3 ICMP socket");
+        let identifier = seed as u16;
+        let observations = RefCell::new(Observations::new(identifier));
+        let application = application(
+            config,
+            address,
+            credits,
+            &mut commands,
+            iface,
+            &socket,
+            &observations,
+            link,
+            disconnected,
+            failed,
+        );
+        match select(
+            application,
+            join3(
+                bridge(radio, tx, rx, &observations, link),
+                runner.run(),
+                drain(&socket),
+            ),
+        )
+        .await
+        {
+            Either::First(report) => report,
+            Either::Second(_) => unreachable!("permanent network runners do not return"),
+        }
     }
 }
 async fn drain(socket: &RawSocket<'_>) -> ! {

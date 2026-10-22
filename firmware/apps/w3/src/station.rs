@@ -6,7 +6,9 @@ use crate::{
 };
 use core::{
     convert::Infallible,
+    future::Future,
     marker::PhantomData,
+    mem::MaybeUninit,
     sync::atomic::{AtomicBool, Ordering},
 };
 use embassy_futures::join::join;
@@ -29,6 +31,7 @@ use oer_ieee80211_wire::{
     ht::{HtLocalCapabilities, ht_capability_ie},
     station::AssociationCapabilities,
 };
+use oer_memory::{Placed, PlacedFuture, StaticPlace};
 use oer_radio_port::{self as rp, Child, PortBackend, Root, SlotIdentity};
 use oer_time::{Clock, Duration, Instant};
 use static_cell::ConstStaticCell;
@@ -242,6 +245,54 @@ pub struct Body {
     pub address: [u8; 6],
     pub seed: u64,
 }
+
+type Service<'id, Id> = StationService<'id, StationComposition<Id>, Rates, 1>;
+type Completed<'p, 'id, Id> = ServiceCompleted<'p, 'id, StationComposition<Id>, Rates, 1>;
+type Io<'c, 'id, Id> = ServiceIo<'c, 'id, Caps, 2, 8, 2, Child<Root<Id>, 8>>;
+type Running<'s, 'c: 's, 'p: 's, 'id: 'p, Id: SlotIdentity + 'id> =
+    impl Future<Output = Placed<'s, Completed<'p, 'id, Id>>>;
+
+// These layouts name static body loans only to size uninitialized backing.
+// StaticPlace lends each allocation with the actual body/input lifetimes.
+static SERVICE: ConstStaticCell<StaticPlace<Service<'static, radio::slot::Id>>> =
+    ConstStaticCell::new(StaticPlace::new());
+static COMPLETED: ConstStaticCell<StaticPlace<Completed<'static, 'static, radio::slot::Id>>> =
+    ConstStaticCell::new(StaticPlace::new());
+static RUNNING: ConstStaticCell<
+    StaticPlace<Running<'static, 'static, 'static, 'static, radio::slot::Id>>,
+> = ConstStaticCell::new(StaticPlace::new());
+
+#[define_opaque(Running)]
+fn running_future<'s, 'c, 'p, 'id, Id: SlotIdentity + 'id>(
+    service: Placed<'s, Service<'id, Id>>,
+    output: &'s mut MaybeUninit<Completed<'p, 'id, Id>>,
+    owner: rp::Owner<'p, 'id, Id, Backend<Id>, rp::Disabled>,
+    io: &'s mut Io<'c, 'id, Id>,
+) -> Running<'s, 'c, 'p, 'id, Id>
+where
+    'id: 'p,
+    'p: 's,
+    'c: 's,
+{
+    StationService::run_placed(service, output, owner, io, &EmbassyClock)
+}
+
+fn running<'s, 'c, 'p, 'id, Id: SlotIdentity + 'id>(
+    service: Placed<'s, Service<'id, Id>>,
+    output: &'s mut MaybeUninit<Completed<'p, 'id, Id>>,
+    owner: rp::Owner<'p, 'id, Id, Backend<Id>, rp::Disabled>,
+    io: &'s mut Io<'c, 'id, Id>,
+) -> PlacedFuture<'s, Running<'s, 'c, 'p, 'id, Id>>
+where
+    'id: 'p,
+    'p: 's,
+    'c: 's,
+{
+    RUNNING
+        .take()
+        .future(|| running_future(service, output, owner, io))
+}
+
 impl<Id: SlotIdentity> rp::PortBody<Id, Backend<Id>> for Body {
     type Output = oer_firmware_apps_w3::report::Report;
     async fn run<'p, 'id>(
@@ -280,10 +331,10 @@ impl<Id: SlotIdentity> rp::PortBody<Id, Backend<Id>> for Body {
         );
         let [t0, t1, t2, t3, t4, t5, t6, t7] = resources.tickets;
         let [b0, b1, b2, b3, b4, b5, b6, b7] = resources.buffers;
-        let mut service_storage = core::mem::MaybeUninit::uninit();
+        let service_storage = SERVICE.take().uninit();
         let credits = core::cell::Cell::new(None);
         let service = StationService::<StationComposition<Id>, _, 1>::init_in_place(
-            &mut service_storage,
+            service_storage,
             |station_storage| {
                 let (station, granted) = Station::init_open(
                     station_storage,
@@ -365,14 +416,8 @@ impl<Id: SlotIdentity> rp::PortBody<Id, Backend<Id>> for Body {
             receive: rx_send,
             output: &mut output,
         };
-        let mut completed_storage = core::mem::MaybeUninit::uninit();
-        let mut running = core::pin::pin!(StationService::run_placed(
-            service,
-            &mut completed_storage,
-            owner,
-            &mut io,
-            &EmbassyClock,
-        ));
+        let completed_storage = COMPLETED.take().uninit();
+        let mut running = core::pin::pin!(running(service, completed_storage, owner, &mut io,));
         let mut workload = core::pin::pin!(crate::network::workload(
             self.config,
             self.address,
