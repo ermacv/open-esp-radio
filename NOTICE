@@ -42,6 +42,17 @@ chips/{esp32s31,esp32c5}/registers/model/analog/phy.toml, from the pinned
 identifiers (Apache-2.0). The evidence catalogs cite exact paths and hashes;
 no source code is copied. Generated PAC vocabulary retains those SOURCE IDs.
 
+Generated function ABI facts (Apache-2.0), from open ESP-IDF headers at
+4d59230ddff16327812782151ef0afef202dc6d7; no implementation code copied:
+
+- chips/esp32s31/vendor/facts/idf-function-signatures.toml
+- chips/esp32s31/vendor/facts/idf-function-signatures.provenance.toml
+- chips/esp32c5/vendor/facts/idf-function-signatures.toml
+- chips/esp32c5/vendor/facts/idf-function-signatures.provenance.toml
+
+Each function cites its header and line, with the header's SHA-256. The
+companion file records the configuration hash and binary corpus hashes.
+
 
 2. ESP32-S31 SVD (esp-pacs)
 ---------------------------

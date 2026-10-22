@@ -42,6 +42,23 @@ enum Command {
         #[arg(long)]
         manifest: PathBuf,
     },
+    /// Generate Blobray ABI contracts from pinned ESP-IDF headers.
+    Signatures {
+        #[arg(long)]
+        chip: String,
+        #[arg(long)]
+        idf: PathBuf,
+        #[arg(long)]
+        sdkconfig: PathBuf,
+        #[arg(long)]
+        libc_include: Option<PathBuf>,
+        #[arg(long, default_value = "clang")]
+        clang: std::ffi::OsString,
+        #[arg(long)]
+        check: bool,
+        #[arg(long)]
+        output: Option<PathBuf>,
+    },
     /// The register checks.
     #[command(subcommand)]
     Check(Check),
@@ -109,6 +126,28 @@ fn run() -> oer_registers_generate::Result<()> {
                 "{:#}",
                 oer_registers_generate::Publication::load(&manifest)?.analog_inventory()?
             );
+        }
+        Command::Signatures {
+            chip,
+            idf,
+            sdkconfig,
+            libc_include,
+            clang,
+            check,
+            output,
+        } => {
+            oer_registers_generate::signatures::run(
+                &ctx,
+                oer_registers_generate::signatures::Options {
+                    chip,
+                    idf,
+                    sdkconfig,
+                    libc_include,
+                    clang,
+                    check,
+                    output,
+                },
+            )?;
         }
         Command::Check(Check::PacTransactions { directory }) => {
             let listed = oer_os_process::capture(
