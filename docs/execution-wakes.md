@@ -2,8 +2,8 @@
 
 The execution levels are in [decisions](decisions.md#execution). Task
 notifications that travel upwards use `oer_sync::PriorityWaker`. It has one
-serialized consumer on one hart, at the same or a higher priority than its
-producers. Producers publish input before notifying; the consumer registers
+serialized consumer on one hart. A higher-priority producer completes before
+interrupted registration resumes; a lower-priority producer may remain suspended. Producers publish input before notifying; the consumer registers
 before its Acquire check of that input. Notifications can coalesce and do
 not store payloads. The two slots keep registration away from a suspended
 producer's `AtomicWaker` operation; a nesting count retains each slot until
@@ -62,6 +62,6 @@ production source under `chips/`, `portable/`, `protocols/` and `firmware/`.
 Only reviewed files with their recorded occurrence counts are admitted; new
 files or additional uses require review. The upward fields are separately
 checked for `PriorityWaker`. This is a grep gate, not priority inference:
-a change of executor placement or a renamed dependency still needs the
+a change of executor placement, a type alias or a renamed dependency needs the
 composition review described above. It does not infer priorities from a
 Rust type name or audit the source of external dependencies.

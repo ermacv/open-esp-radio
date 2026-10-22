@@ -184,3 +184,49 @@ fn repeated_replacement_releases_every_obsolete_registration() {
     drop(signal);
     assert_eq!(Arc::strong_count(&second), 2);
 }
+
+#[test]
+fn a_higher_priority_notification_interrupting_registration_can_finish() {
+    struct OnDrop {
+        signal: std::sync::Weak<PriorityWaker>,
+        input: Arc<AtomicBool>,
+        invoked: Arc<Count>,
+    }
+    impl Wake for OnDrop {
+        fn wake(self: Arc<Self>) {
+            self.invoked.0.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+    impl Drop for OnDrop {
+        fn drop(&mut self) {
+            // AtomicWaker holds REGISTERING while replacing the old waker.
+            // Model a higher-priority producer at precisely that callback.
+            self.input.store(true, Ordering::Release);
+            self.signal
+                .upgrade()
+                .expect("consumer retains its cell")
+                .wake();
+        }
+    }
+    let signal = Arc::new(PriorityWaker::new());
+    let input = Arc::new(AtomicBool::new(false));
+    let invoked = Arc::new(Count::default());
+    let old = Waker::from(Arc::new(OnDrop {
+        signal: Arc::downgrade(&signal),
+        input: input.clone(),
+        invoked: invoked.clone(),
+    }));
+    signal.register(&old);
+    drop(old);
+    let (new, waker) = task();
+    signal.register(&waker);
+    assert!(input.load(Ordering::Acquire));
+    assert_eq!(count(&invoked), 0);
+    assert_eq!(count(&new), 1);
+    for _ in 0..32 {
+        signal.register(&waker);
+    }
+    assert_eq!(count(&new), 1);
+    signal.wake();
+    assert_eq!(count(&new), 2);
+}

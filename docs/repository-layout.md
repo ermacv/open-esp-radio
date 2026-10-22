@@ -110,8 +110,8 @@ with underscores. A program called by name (the image linker, a privileged
 helper) sets that name with `[[bin]] name`.
 
 `cargo test -p oer-test-layers` checks the names, the unsafe boundary
-([unsafe](unsafe.md)) the Wi-Fi chip backends' production dependencies and the reviewed raw-waker
-inventory ([notifications](execution-wakes.md)).
+([unsafe](unsafe.md)), the Wi-Fi chip backends' production dependencies and
+the reviewed raw-waker inventory ([notifications](execution-wakes.md)).
 
 ## One workspace
 

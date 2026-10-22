@@ -1,14 +1,12 @@
 //! Grep gate for the notification audit in docs/execution-wakes.md.
 use std::{collections::BTreeMap, path::Path};
 
-fn visit(directory: &Path, files: &mut Vec<std::path::PathBuf>) {
-    for entry in std::fs::read_dir(directory).expect("source directory is readable") {
-        let path = entry.expect("source entry is readable").path();
-        let name = path
-            .file_name()
-            .expect("a source path has a name")
-            .to_str()
-            .expect("UTF-8 source name");
+fn visit(directory: &Path, files: &mut Vec<std::path::PathBuf>) -> std::io::Result<()> {
+    for entry in std::fs::read_dir(directory)? {
+        let entry = entry?;
+        let path = entry.path();
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
         if path.is_dir() {
             if ![
                 "target",
@@ -18,9 +16,9 @@ fn visit(directory: &Path, files: &mut Vec<std::path::PathBuf>) {
                 "registers",
                 "pac-raw",
             ]
-            .contains(&name)
+            .contains(&name.as_ref())
             {
-                visit(&path, files);
+                visit(&path, files)?;
             }
         } else if path.extension().is_some_and(|extension| extension == "rs")
             && name != "generated.rs"
@@ -29,6 +27,7 @@ fn visit(directory: &Path, files: &mut Vec<std::path::PathBuf>) {
             files.push(path);
         }
     }
+    Ok(())
 }
 
 #[test]
@@ -36,7 +35,7 @@ fn raw_atomic_wakers_stay_within_the_reviewed_inventory() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
     let mut files = Vec::new();
     for directory in ["chips", "portable", "protocols", "firmware"] {
-        visit(&root.join(directory), &mut files);
+        visit(&root.join(directory), &mut files).expect("source inventory is readable");
     }
     let actual = files
         .into_iter()

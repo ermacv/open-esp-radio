@@ -37,8 +37,9 @@ impl Slot {
 
 /// Notification for one serialized consumer that may preempt its producers.
 ///
-/// On one hart, the consumer may run at the same or a higher priority than
-/// every producer. Registration must not run concurrently with itself. Nested
+/// All participants run on one hart. Registration must not run concurrently
+/// with itself. The consumer may preempt a lower-priority producer; a higher-
+/// priority producer completes before interrupted registration resumes. Nested
 /// notifications are supported. Cross-core access remains memory safe, but
 /// the no-self-scheduling progress guarantee requires this single-hart ordering.
 /// This is not an IRQ-to-task interface: handlers use typed interrupt signals.
@@ -75,8 +76,9 @@ impl PriorityWaker {
         if self.slot(selected).waking.load(Ordering::Acquire) != 0 {
             selected = !selected;
         }
-        // One serialized consumer preempts the producers; at most one slot
-        // can be held by a suspended producer here. Registering in its peer
+        // At most one slot can be held by suspended lower-priority producers
+        // here. Higher-priority producers finish before registration resumes.
+        // Registering in its peer
         // cannot observe AtomicWaker's WAKING state and enqueue the consumer.
         self.slot(selected).waker.register(waker);
         self.active.store(selected, Ordering::Release);
