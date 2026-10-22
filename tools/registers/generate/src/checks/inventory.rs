@@ -2,12 +2,12 @@
 //!
 //! `cargo registers check inventory` runs Blobray on every pinned vendor
 //! binary in the publication's owned MMIO ranges, using `riscv-integer`
-//! and `--call-summaries`. The schema-9 consumer in [`uses`] rejects uses of
+//! and call summaries. The typed consumer in [`uses`] rejects uses of
 //! absent bits and reports unknown bits and coverage limits separately.
 //! This module supplies expanded geometry, inherited resets, and the same
 //! bounded/indexed candidate addresses used by the MMIO inventory.
 use crate::Result;
-use serde::{Deserialize, Serialize};
+use oer_analysis_blobray_domain::IndexedAddress;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
@@ -144,17 +144,7 @@ pub type Function = (String, String);
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Target {
     Address(u32),
-    Indexed(Indexed),
-}
-
-/// `base + stride * index` modulo 2^32, the index below `count` when Blobray
-/// proves a bound.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct Indexed {
-    pub base: u32,
-    pub stride: i32,
-    pub count: Option<u32>,
+    Indexed(IndexedAddress),
 }
 
 /// Index values of a bounded progression enumerated word by word. A bound
@@ -164,49 +154,59 @@ pub struct Indexed {
 /// declared arrays like an unbounded index.
 const MAX_ENUMERATED_INDICES: u32 = 64;
 
-impl Indexed {
-    /// The addresses the progression touches: each index of a bound up to
-    /// [`MAX_ENUMERATED_INDICES`]; otherwise, inside the bound when there is
-    /// one, the elements of each declared array whose stride is the
-    /// progression's and that has its base as an element, and the run of
-    /// declared words the progression meets from its base on until the first
-    /// word no register declares (per-queue registers declared one by one).
-    fn addresses(&self, arrays: &[Vec<u32>], declared: &BTreeMap<u32, DeclaredWord>) -> Vec<u32> {
-        let stride = i64::from(self.stride);
-        let at = |index: i64| (i64::from(self.base) + stride * index) as u32;
-        if let Some(count) = self.count.filter(|count| *count <= MAX_ENUMERATED_INDICES) {
-            return (0..i64::from(count)).map(at).collect();
-        }
-        let inside = |index: i64| {
-            self.count
-                .is_none_or(|count| (0..i64::from(count)).contains(&index))
-        };
-        let mut addresses: Vec<u32> = arrays
-            .iter()
-            .filter(|array| {
-                i64::from(array[1] - array[0]) == stride.abs() && array.contains(&self.base)
-            })
-            .flatten()
-            .copied()
-            .filter(|element| inside((i64::from(*element) - i64::from(self.base)) / stride))
-            .collect();
-        let is_declared = |address: u32| declared.contains_key(&(address - address % WORD_BYTES));
-        // An unbounded index may be negative: the run extends both ways.
-        let directions: &[i64] = if self.count.is_none() { &[1, -1] } else { &[1] };
-        if is_declared(self.base) {
-            addresses.push(self.base);
-            for direction in directions {
-                let mut index = *direction;
-                while inside(index) && index.abs() <= i64::from(MAX_RUN) && is_declared(at(index)) {
-                    addresses.push(at(index));
-                    index += direction;
-                }
+/// The addresses the progression touches: each index of a bound up to
+/// [`MAX_ENUMERATED_INDICES`]; otherwise, inside the bound when there is
+/// one, the elements of each declared array whose stride is the
+/// progression's and that has its base as an element, and the run of
+/// declared words the progression meets from its base on until the first
+/// word no register declares (per-queue registers declared one by one).
+fn addresses(
+    indexed: IndexedAddress,
+    arrays: &[Vec<u32>],
+    declared: &BTreeMap<u32, DeclaredWord>,
+) -> Vec<u32> {
+    let stride = i64::from(indexed.stride);
+    let at = |index: i64| (i64::from(indexed.base) + stride * index) as u32;
+    if let Some(count) = indexed
+        .count
+        .filter(|count| *count <= MAX_ENUMERATED_INDICES)
+    {
+        return (0..i64::from(count)).map(at).collect();
+    }
+    let inside = |index: i64| {
+        indexed
+            .count
+            .is_none_or(|count| (0..i64::from(count)).contains(&index))
+    };
+    let mut addresses: Vec<u32> = arrays
+        .iter()
+        .filter(|array| {
+            i64::from(array[1] - array[0]) == stride.abs() && array.contains(&indexed.base)
+        })
+        .flatten()
+        .copied()
+        .filter(|element| inside((i64::from(*element) - i64::from(indexed.base)) / stride))
+        .collect();
+    let is_declared = |address: u32| declared.contains_key(&(address - address % WORD_BYTES));
+    // An unbounded index may be negative: the run extends both ways.
+    let directions: &[i64] = if indexed.count.is_none() {
+        &[1, -1]
+    } else {
+        &[1]
+    };
+    if is_declared(indexed.base) {
+        addresses.push(indexed.base);
+        for direction in directions {
+            let mut index = *direction;
+            while inside(index) && index.abs() <= i64::from(MAX_RUN) && is_declared(at(index)) {
+                addresses.push(at(index));
+                index += direction;
             }
         }
-        addresses.sort_unstable();
-        addresses.dedup();
-        addresses
     }
+    addresses.sort_unstable();
+    addresses.dedup();
+    addresses
 }
 
 /// Elements of a declared run followed from a progression's base, each way.

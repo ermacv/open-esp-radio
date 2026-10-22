@@ -17,6 +17,9 @@ oer-os-durable = { path = "../../os/durable" }
 oer-os-toolchain = { path = "../../os/toolchain" }
 oer-analysis-elf = { path = "../../analysis/elf" }
 oer-analysis-blobray-domain = { path = "../../analysis/blobray-domain" }
+oer-analysis-blobray-application = { path = "../../analysis/blobray-application" }
+oer-analysis-riscv-lift = { path = "../../analysis/riscv-lift" }
+oer-analysis-riscv-model = { path = "../../analysis/riscv-model" }
 oer-tool-pins = { path = "../../pins" }
 roxmltree = "=0.20.0"
 serde = { version = "=1.0.229", features = ["derive"] }

@@ -1,6 +1,5 @@
 //! The host tools other tools build and run from the repository's single
-//! workspace: Blobray, which the register inventory runs over the pinned
-//! vendor binaries.
+//! workspace.
 
 use std::path::{Path, PathBuf};
 
@@ -25,11 +24,6 @@ pub fn build(root: &Path, package: &str, name: &str) -> crate::Result<PathBuf> {
         name,
     ]))?;
     Ok(binary(root, name))
-}
-
-/// Build the `blobray` host and return its path.
-pub fn blobray_host(root: &Path) -> crate::Result<PathBuf> {
-    build(root, "oer-tool-analysis-cli", "blobray")
 }
 
 #[cfg(test)]

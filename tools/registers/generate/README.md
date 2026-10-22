@@ -1,14 +1,15 @@
 # Reviewed register publication
 
 `oer-registers-generate` validates source-owned hardware descriptions and generates
-SVD, raw PAC, restricted PAC API and the binding index. It does not load a binary
-analysis project, vendor binary, device model or global provider registry.
+SVD, raw PAC, restricted PAC API and the binding index.
 
 `cargo registers check inventory --chip <chip>` checks vendor uses of register
-bits against the source model. It runs Blobray `register-accesses`
+bits against the source model. It calls Blobray's `library::register_accesses`
 over every function of every pinned vendor binary, excluding firmware outputs,
 inside the publication's owned MMIO ranges, with `--abi riscv-integer
---call-summaries`. It requires schema 9 and a complete `reads: ReadUses`
+--call-summaries`. Each typed record is folded into compared words as it
+arrives, without a child process or a `registers.json` corpus. It requires a
+complete `reads: ReadUses`
 classification for each integer or floating load, using the shared
 `oer-analysis-blobray-domain` types. A `CallArgument` to an exact name in the
 checker's [chip-specific cited diagnostic lists](src/checks/inventory/uses/read_policy.rs)
@@ -41,8 +42,9 @@ partial/blocked/gap counts and causes, and unresolved/indexed address limits.
 Access counts and the provenance registry's cited-function priority are retained;
 a citation alone is not evidence that any particular bit is used.
 Small bounded indices compare every candidate; larger or unbounded progressions
-compare declared arrays and runs and retain a coverage limit. Filtered or
-incomplete record lists are rejected when they disagree with the summary.
+compare declared arrays and runs and retain a coverage limit. The report
+retains the summary returned by the same analysis and a `cargo blobray`
+command that reproduces its corpus as JSON for manual inspection.
 The MMIO corpus does not cover RAM layouts. No model is edited by this check.
 
 `cargo registers init-model --request geometry.toml --directory new-model`

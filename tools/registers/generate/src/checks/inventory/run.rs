@@ -6,26 +6,32 @@
 //! returning an error for used reserved or absent bits; unknown bits remain separate.
 use super::{self as inventory, Region};
 use crate::Result;
+use oer_analysis_blobray_application::{
+    in_process::{Executable, Limits},
+    library::{self, Assumptions},
+};
+use oer_analysis_blobray_domain::ImageRegion;
+use oer_analysis_riscv_lift::RiscvDecoder;
+use oer_analysis_riscv_model::{
+    CallAbi, DEFAULT_WORK_UNITS, DEFAULT_WORKING_BYTES, Error, ErrorCode, WorkingMemory,
+};
 use oer_os_process::Checkout;
-use std::collections::BTreeSet;
-use std::fs;
-use std::path::{Path, PathBuf};
+use std::{
+    collections::BTreeSet,
+    fs,
+    path::{Path, PathBuf},
+    time::Duration,
+};
 
 /// Wall-clock budget of one Blobray operation. Analyzing every pinned
 /// binary takes most of it; the host's default budget is shorter.
 const OPERATION_TIMEOUT_SECS: u64 = 3600;
 
-/// One Blobray input: a pinned vendor binary, which Blobray reads by its
-/// pin.
-struct Input {
-    id: String,
-    sha256: String,
-}
-
 /// Every pinned vendor binary of `chip`, in pin order. Firmware outputs are
 /// applications linked from these binaries, and sources are not code.
-fn inputs(ctx: &Checkout, chip: &str) -> Result<Vec<Input>> {
-    let mut inputs = vec![];
+fn inputs(ctx: &Checkout, chip: &str) -> Result<(Vec<inventory::uses::Input>, Vec<Executable>)> {
+    let mut inputs = Vec::new();
+    let mut executables = Vec::new();
     for pinned in oer_tool_pins::artifacts::pinned(&ctx.root, chip)? {
         if pinned.firmware {
             continue;
@@ -34,63 +40,67 @@ fn inputs(ctx: &Checkout, chip: &str) -> Result<Vec<Input>> {
         if !oer_analysis_elf::is_binary(&bytes) {
             continue;
         }
-        inputs.push(Input {
-            id: pinned.id,
-            sha256: oer_os_durable::sha256_bytes(&bytes),
+        let executable = Executable::new(bytes);
+        inputs.push(inventory::uses::Input {
+            role: pinned.id,
+            sha256: executable.id().clone(),
         });
+        executables.push(executable);
     }
     if inputs.is_empty() {
         return Err(format!("no pinned vendor binary for {chip}").into());
     }
-    Ok(inputs)
+    Ok((inputs, executables))
 }
 
-/// Blobray's register accesses of every function of `inputs` inside
-/// `regions`, written to `registers.json` in `directory`.
+/// Analyze typed accesses and fold them into words as each record arrives.
 fn accesses(
-    ctx: &Checkout,
-    directory: &Path,
-    host: &Path,
     chip: &str,
-    inputs: &[Input],
+    inputs: &[inventory::uses::Input],
+    executables: &[Executable],
     regions: &[Region],
-) -> Result<PathBuf> {
-    let accesses = directory.join("registers.json");
+    declared: &std::collections::BTreeMap<u32, inventory::DeclaredWord>,
+    arrays: &[Vec<u32>],
+) -> Result<inventory::uses::Report> {
     eprintln!(
         "register-inventory: analyzing every function of {} vendor binaries",
         inputs.len()
     );
-    let mut command = ctx.command(host);
-    command
-        .args(["--format", "json", "register-accesses"])
-        // A base address the vendor keeps in a callee-saved register across
-        // a call stays known: without the assumption every register is
-        // unknown after each call.
-        .args(["--abi", "riscv-integer", "--call-summaries"])
-        .args(["--timeout-secs", &OPERATION_TIMEOUT_SECS.to_string()]);
-    for input in inputs {
-        command
-            .arg("--input")
-            .arg(format!("{}=pin:{chip}/{}", input.id, input.id));
-    }
-    for region in regions {
-        command.args([
-            "--range",
-            &format!("{:#x}:{:#x}", region.start, region.end - region.start),
-        ]);
-    }
-    // The document is complete only once renamed into place.
-    let partial = directory.join("registers.json.partial");
-    let status = command.stdout(fs::File::create(&partial)?).status()?;
-    if !status.success() {
-        return Err(format!(
-            "blobray register-accesses failed; its partial output is {}",
-            partial.display()
-        )
-        .into());
-    }
-    fs::rename(&partial, &accesses)?;
-    Ok(accesses)
+    // The same assumptions and resource defaults as the CLI invocation:
+    // --abi riscv-integer --call-summaries --timeout-secs 3600.
+    let assumptions = Assumptions {
+        abi: Some(CallAbi::RiscvInteger),
+        call_summaries: true,
+        read_only: &[],
+    };
+    let ranges: Vec<_> = regions
+        .iter()
+        .map(|r| ImageRegion {
+            start: r.start,
+            length: u64::from(r.end - r.start),
+        })
+        .collect();
+    let memory = WorkingMemory::new(DEFAULT_WORKING_BYTES)?;
+    let mut control = Limits::new(
+        DEFAULT_WORK_UNITS,
+        Duration::from_secs(OPERATION_TIMEOUT_SECS),
+    );
+    let mut check =
+        inventory::uses::Accumulator::new(chip, inputs, assumptions, regions, declared, arrays)?;
+    let summary = library::register_accesses(
+        executables,
+        assumptions,
+        &ranges,
+        &RiscvDecoder,
+        &memory,
+        &mut control,
+        &mut |record, _| {
+            check
+                .observe(record)
+                .map_err(|error| Error::new(ErrorCode::InvalidRequest, error.to_string()))
+        },
+    )?;
+    Ok(check.finish(summary))
 }
 
 /// Build the inventory of `chip` into `output`, by default
@@ -99,28 +109,16 @@ pub fn run(ctx: &Checkout, chip: &str, output: Option<PathBuf>) -> Result<()> {
     oer_tool_pins::artifacts::project::Project::new(&ctx.root, chip)?;
     let directory = output.unwrap_or_else(|| ctx.root.join("target/register-inventory").join(chip));
     fs::create_dir_all(&directory)?;
-    let inputs = inputs(ctx, chip)?;
+    let (inputs, executables) = inputs(ctx, chip)?;
     let (registers, regions) = inventory::model(&ctx.root, chip)?;
-    let host = oer_os_toolchain::workspace::blobray_host(&ctx.root)?;
-    let accesses = accesses(ctx, &directory, &host, chip, &inputs, &regions)?;
-    let ids: Vec<String> = inputs.iter().map(|input| input.id.clone()).collect();
-    let mut report = inventory::uses::check(
+    let mut report = accesses(
         chip,
-        &fs::read_to_string(&accesses)?,
-        &ids,
+        &inputs,
+        &executables,
         &regions,
         &inventory::declared_words(&registers),
         &inventory::arrays(&registers),
     )?;
-    if !report
-        .corpus
-        .inputs
-        .iter()
-        .zip(&inputs)
-        .all(|(actual, expected)| actual.sha256 == expected.sha256)
-    {
-        return Err("register-accesses input hashes differ from pinned binaries".into());
-    }
     let cited: BTreeSet<inventory::Function> =
         oer_tool_pins::provenance::registered(&ctx.root, chip)?
             .into_iter()
