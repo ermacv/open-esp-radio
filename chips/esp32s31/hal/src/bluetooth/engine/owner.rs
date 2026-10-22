@@ -197,6 +197,12 @@ impl<M: ControllerMemory> Engine<M> {
         !self.faulted && self.memory.retirement_ready()
     }
 
+    /// The stop receipt remains inside the owning engine while a task drains
+    /// its final finished lists.
+    pub fn scheduler_is_stopped(&self) -> bool {
+        !self.faulted && self.memory.scheduler_stopped()
+    }
+
     pub fn release_controller_output(
         &mut self,
         output: bluetooth::InterruptOutputAfterRoutesOwner,

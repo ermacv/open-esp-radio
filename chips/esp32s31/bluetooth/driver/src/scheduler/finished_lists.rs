@@ -6,7 +6,6 @@
 
 use crate::interrupt::SchedulerWakeBatch;
 
-use oer_esp32s31_hal::bluetooth::BluetoothSchedulerStopped;
 use oer_esp32s31_hal::bluetooth::engine::{EngineFinishedListObservation, EngineFinishedListPop};
 
 pub use oer_esp32s31_hal::bluetooth::BluetoothSchedulerHardwareListIndex;
@@ -29,6 +28,8 @@ impl<M: oer_esp32s31_hal::bluetooth::engine::ControllerMemory> SchedulerFinished
 pub enum SchedulerFinishedListCaptureError {
     /// A previous captured observation still contains unconsumed list work.
     DrainAlreadyActive,
+    /// The owning engine has no confirmed stop receipt.
+    SchedulerNotStopped,
 }
 
 /// Result of one bounded finished-list worker step.
@@ -76,8 +77,10 @@ impl SchedulerFinishedListWorker {
     pub fn capture_stopped<M: oer_esp32s31_hal::bluetooth::engine::ControllerMemory>(
         &mut self,
         controller: &mut oer_esp32s31_hal::bluetooth::engine::Engine<M>,
-        _stopped: &BluetoothSchedulerStopped,
     ) -> Result<(), SchedulerFinishedListCaptureError> {
+        if !controller.scheduler_is_stopped() {
+            return Err(SchedulerFinishedListCaptureError::SchedulerNotStopped);
+        }
         self.transfer(controller)
     }
 
@@ -104,8 +107,8 @@ impl SchedulerFinishedListWorker {
     ///
     /// A finished list is not an item-completion proof. This worker therefore does
     /// not accept a software queue, select a descriptor or change ownership.
-    /// The future completed-list owner must match `observed` to an affine
-    /// hardware item and inspect the post-fence status before returning it.
+    /// The owning engine checks this receipt's installation epoch and the
+    /// submitted items' post-fence statuses before returning CPU custody.
     pub fn step(&mut self) -> SchedulerFinishedListWorkerStep {
         let Some(observation) = self.observation.take() else {
             return SchedulerFinishedListWorkerStep::Idle;

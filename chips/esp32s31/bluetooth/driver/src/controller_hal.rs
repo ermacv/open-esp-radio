@@ -68,7 +68,7 @@ impl<M: ControllerMemory> ControllerHalInitialized<M> {
     /// Execute the complete reviewed standalone controller HAL component on
     /// the clocked Bluetooth client.
     ///
-    /// This consumes the clocked client and arms fail-stop ownership before
+    /// This consumes the arena's owning engine and inactive IRQ bank before
     /// the first controller write. The result must continue through
     /// scheduler and interrupt initialization before it can run radio work.
     ///

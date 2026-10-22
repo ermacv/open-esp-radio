@@ -1,11 +1,9 @@
 //! Task and interrupt owners of one powered Controller epoch.
 //!
-//! The epoch starts from the HAL's clocked Bluetooth client, which proves
-//! common radio power, the Bluetooth module clocks, the released controller
-//! resets and the low-power timer clock. `separate_interrupt_owner` splits
-//! it into the task-side [`TaskResources`] and the inactive
-//! `InterruptBankOwner`; `TaskResources::shut_down` resets the stopped
-//! Controller and returns the clocked client.
+//! The HAL Engine consumes the clocked Bluetooth client and the placed arena,
+//! retaining the register token through reset. TaskResources joins that engine
+//! to the durable controller-time worker; the inactive IRQ bank follows the
+//! same lifecycle before stable interrupt publication.
 
 #[cfg(any(target_arch = "riscv32", test))]
 use oer_esp32s31_hal::bluetooth::engine::ControllerMemory;
@@ -62,10 +60,7 @@ pub(crate) fn separate_interrupt_owner<M: ControllerMemory>(
     )
 }
 
-/// Ordinary task-side owner of the Bluetooth controller region.
-///
-/// No MMIO operation is exposed until its finite lifecycle transaction has
-/// independent vendor evidence.
+/// Task-side custody of the owning HAL engine and its durable time worker.
 #[must_use = "the Bluetooth task owner must return to the clocked client"]
 #[cfg(any(target_arch = "riscv32", test))]
 pub struct TaskResources<M: ControllerMemory> {

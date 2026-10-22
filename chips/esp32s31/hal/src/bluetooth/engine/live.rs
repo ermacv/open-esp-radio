@@ -401,10 +401,6 @@ impl<
         }
     }
 
-    pub fn stopped(&self) -> Option<&crate::bluetooth::BluetoothSchedulerStopped> {
-        self.memory.scheduler.stopped()
-    }
-
     pub fn restart_if_idle<S: SchedulerRunInterruptStorage>(
         &mut self,
         storage: &S,

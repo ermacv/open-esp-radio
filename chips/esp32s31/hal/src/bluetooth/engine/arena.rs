@@ -74,6 +74,7 @@ pub(super) mod sealed {
         fn phy(&self) -> &BlePhyEngineCpuOwned;
         fn direction_finding(&self) -> &DirectionFindingWorkspaceCpuOwned;
         fn retirement_ready(&self) -> bool;
+        fn scheduler_stopped(&self) -> bool;
         fn reclaim(
             self,
             reset: &crate::bluetooth::BluetoothControllerReset,
@@ -312,6 +313,9 @@ impl<
             return false;
         }
         self.scheduler.retirement_ready()
+    }
+    fn scheduler_stopped(&self) -> bool {
+        self.scheduler.stopped().is_some()
     }
     #[allow(
         unsafe_code,
