@@ -6,23 +6,20 @@
 
 use crate::interrupt::SchedulerWakeBatch;
 
-use oer_esp32s31_hal::bluetooth::{
-    BluetoothSchedulerFinishedListObservation, BluetoothSchedulerFinishedListPop,
-    BluetoothSchedulerStopped,
-};
+use oer_esp32s31_hal::bluetooth::BluetoothSchedulerStopped;
+use oer_esp32s31_hal::bluetooth::engine::{EngineFinishedListObservation, EngineFinishedListPop};
 
-pub use oer_esp32s31_hal::bluetooth::{
-    BluetoothSchedulerFinishedHardwareListObserved, BluetoothSchedulerHardwareListIndex,
-};
+pub use oer_esp32s31_hal::bluetooth::BluetoothSchedulerHardwareListIndex;
+pub use oer_esp32s31_hal::bluetooth::engine::EngineFinishedHardwareListObserved;
 
 trait SchedulerFinishedListBackend {
-    fn transfer_scheduler_finished_lists(&mut self) -> BluetoothSchedulerFinishedListObservation;
+    fn transfer_scheduler_finished_lists(&mut self) -> EngineFinishedListObservation;
 }
 
 impl<M: oer_esp32s31_hal::bluetooth::engine::ControllerMemory> SchedulerFinishedListBackend
     for oer_esp32s31_hal::bluetooth::engine::Engine<M>
 {
-    fn transfer_scheduler_finished_lists(&mut self) -> BluetoothSchedulerFinishedListObservation {
+    fn transfer_scheduler_finished_lists(&mut self) -> EngineFinishedListObservation {
         Self::transfer_scheduler_finished_lists(self)
     }
 }
@@ -45,7 +42,7 @@ pub enum SchedulerFinishedListWorkerStep {
     /// One hardware list requires a separately proven item-selection step.
     List {
         /// Affine proof for one list from the fenced transfer.
-        observed: BluetoothSchedulerFinishedHardwareListObserved,
+        observed: EngineFinishedHardwareListObserved,
         /// Whether another captured list requires a later bounded step.
         more: bool,
     },
@@ -56,7 +53,7 @@ pub enum SchedulerFinishedListWorkerStep {
 /// Capture performs exactly one finite PAC/HAL transfer. Every subsequent
 /// [`Self::step`] consumes at most one list and returns to the executor.
 pub struct SchedulerFinishedListWorker {
-    observation: Option<BluetoothSchedulerFinishedListObservation>,
+    observation: Option<EngineFinishedListObservation>,
 }
 
 impl SchedulerFinishedListWorker {
@@ -114,10 +111,8 @@ impl SchedulerFinishedListWorker {
             return SchedulerFinishedListWorkerStep::Idle;
         };
         match observation.pop_lowest() {
-            BluetoothSchedulerFinishedListPop::Complete => {
-                SchedulerFinishedListWorkerStep::Complete
-            }
-            BluetoothSchedulerFinishedListPop::List {
+            EngineFinishedListPop::Complete => SchedulerFinishedListWorkerStep::Complete,
+            EngineFinishedListPop::List {
                 observed,
                 remaining,
             } => {

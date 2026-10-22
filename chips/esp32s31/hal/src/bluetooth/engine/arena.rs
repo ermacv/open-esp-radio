@@ -1,5 +1,10 @@
 //! One register owner and one placed controller graph for an entire epoch.
 
+#![allow(
+    private_interfaces,
+    reason = "the sealed memory trait never exposes its private component owners"
+)]
+
 use super::{le_rx_chain::RxPlan, scheduler_pool::PoolPlan, *};
 use crate::{bluetooth::TaskOwner, dma_static::Placed};
 
@@ -39,6 +44,23 @@ pub enum ArenaError {
     AllocationNumbers,
     Pool(SchedulerPoolPlaceError),
     Receive(LeRxChainPlaceError),
+    SchedulerCapacity,
+    EpochExhausted,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) struct EngineEpoch(pub(super) u32);
+
+impl EngineEpoch {
+    pub(super) fn allocate(counter: &core::sync::atomic::AtomicU32) -> Option<Self> {
+        use core::sync::atomic::Ordering;
+        counter
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |epoch| {
+                epoch.checked_add(1)
+            })
+            .ok()
+            .map(Self)
+    }
 }
 
 /// Hardware reachability became uncertain; the arena remains quarantined.
@@ -97,11 +119,14 @@ pub struct ArenaMemory<
 /// There is no extraction of registers or individual PHY/DF owners.
 #[must_use = "the engine owns the controller and arena until verified reset"]
 pub struct Engine<M: ControllerMemory> {
+    pub(super) epoch: EngineEpoch,
     pub(super) registers: TaskOwner,
     pub(super) memory: M,
     pub(super) direction_finding_publication:
         Option<crate::bluetooth::DirectionFindingDisabledBaselineOwner>,
     pub(super) faulted: bool,
+    pub(super) initialized: bool,
+    pub(super) phy_initialized: bool,
 }
 
 impl<
@@ -158,6 +183,9 @@ impl<
         ),
     > {
         let prepare = || {
+            if Q == 0 {
+                return Err(ArenaError::SchedulerCapacity);
+            }
             let a = u16::try_from(A).map_err(|_| ArenaError::AllocationNumbers)?;
             let c = u16::try_from(C).map_err(|_| ArenaError::AllocationNumbers)?;
             let adv = config
@@ -185,19 +213,33 @@ impl<
                 Ok(plans) => plans,
                 Err(error) => return Err((error, clocked, placed)),
             };
+        static EPOCHS: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+        let Some(installation) = EngineEpoch::allocate(&EPOCHS) else {
+            return Err((ArenaError::EpochExhausted, clocked, placed));
+        };
         let (registers, interrupts) = clocked.separate_interrupt_owner();
-        let epoch = registers.epoch.0;
+        let epoch = installation.0;
         let (storage, placement) = Placement::<D>::take(placed);
-        let root = core::ptr::NonNull::from(&mut *storage);
+        let root = core::ptr::NonNull::from(storage);
+        #[allow(
+            unsafe_code,
+            reason = "all field borrows descend from the retained allocation pointer"
+        )]
+        // SAFETY: root consumes the allocation's only mutable reference. It
+        // is retained without dereferencing until these field owners end.
+        let storage = unsafe { &mut *root.as_ptr() };
         let (
             (phy, (df, devices)),
             ((dtm, advertising), ((connectable, scanning), (connections, (scanning_rx, other_rx)))),
         ) = storage;
         Ok((
             Self {
+                epoch: installation,
                 registers,
                 direction_finding_publication: None,
                 faulted: false,
+                initialized: false,
+                phy_initialized: false,
                 memory: ArenaMemory {
                     root,
                     dtm: SchedulerRolePool::from_parts(dtm, &placement, dtm_plan, epoch),
@@ -273,6 +315,7 @@ impl<
     }
     #[allow(
         unsafe_code,
+        clippy::drop_non_drop,
         reason = "rejoin the unique allocation only after controller reset"
     )]
     fn reclaim(self, _reset: &crate::bluetooth::BluetoothControllerReset) -> Placed<Self::Storage> {
@@ -280,9 +323,15 @@ impl<
         drop(self);
         // SAFETY: root came from the consumed Placed. All field owners and
         // their borrows have ended above; no layout reference escapes them.
-        // Verified reset ends every hardware reader. The allocation has never
-        // moved, and its original placement proof covers the reunited tuple.
-        let storage = unsafe { &mut *root.as_ptr() };
+        // Verified reset ends every hardware reader. Drop the pinned backing
+        // in place before releasing its pin contract, then initialize a new
+        // zeroed value in the same allocation. Every arena field is Zeroable.
+        // The original placement proof still covers the reunited tuple.
+        let storage = unsafe {
+            core::ptr::drop_in_place(root.as_ptr());
+            core::ptr::write_bytes(root.as_ptr(), 0, 1);
+            &mut *root.as_ptr()
+        };
         Placed::returned(storage)
     }
 }
@@ -297,4 +346,21 @@ impl<
     const Q: usize,
 > ControllerMemory for ArenaMemory<'pool, 'epoch, A, C, N, R, O, Q>
 {
+}
+
+#[cfg(test)]
+impl<
+    'pool,
+    'epoch,
+    const A: usize,
+    const C: usize,
+    const N: usize,
+    const R: usize,
+    const O: usize,
+    const Q: usize,
+> ArenaMemory<'pool, 'epoch, A, C, N, R, O, Q>
+{
+    pub(super) fn root_address_for_test(&self) -> usize {
+        self.root.as_ptr().addr()
+    }
 }

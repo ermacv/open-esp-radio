@@ -1,13 +1,16 @@
 //! Controller-SRAM codecs and the CPU/controller handover protocol.
 //!
-//! Each placed component retains its static graph and private bindings.
+//! One Engine retains the register token and complete placed arena; private
+//! components bind the static graphs within it.
 //! The driver selects role profiles, phases, channels and timing as detached
 //! values; HAL alone encodes fields and checks graph binding anchors.
 //! Generative pool/epoch scopes bind affine leases; logical item identities
 //! distinguish repeated acquisitions of a slot. Address publication goes
 //! through the graph owner and never exports a controller address.
 //!
-//! The driver lifecycle retains separate PHY and DF owners. The scheduler's
+//! The owning engine moves through init, activation, workers, stop and reset.
+//! Only verified reset returns the whole allocation; terminal failures retain
+//! the registers and arena together in absorbing quarantine. The scheduler's
 //! physical protocol and vendor transaction order live here; stable
 //! interrupt-owner lending is internal to HAL under the Sources exception.
 
@@ -18,6 +21,11 @@
 )]
 
 mod access;
+mod finished;
+pub use finished::{
+    CompletionError, EngineFinishedHardwareListObserved, EngineFinishedListObservation,
+    EngineFinishedListPop,
+};
 mod arena;
 mod ble_phy_engine;
 pub use access::{EnginePrepareError, EngineReceiveError};
@@ -26,10 +34,8 @@ mod live;
 mod owner;
 pub use arena::{ArenaError, ArenaMemory, BluetoothArena, ControllerMemory, Engine, EngineFault};
 #[cfg(target_arch = "riscv32")]
-pub use live::{
-    CompletionError, EngineScheduleError, EngineStopError, EngineStopStep, ReceivePublicationError,
-};
-pub use owner::{EngineShutDown, EngineShutdownError, EngineShutdownFailure};
+pub use live::{EngineScheduleError, EngineStopError, EngineStopStep, ReceivePublicationError};
+pub use owner::{EngineInitError, EngineShutDown, EngineShutdownError, EngineShutdownFailure};
 mod coexistence;
 mod connectable_advertising;
 mod direction_finding_workspace;
@@ -90,7 +96,7 @@ pub use connectable_advertising::{
     LegacyConnectableAdvertisingStorage, LegacyConnectableScanResponsePacketInput,
 };
 
-pub use direction_finding_workspace::DirectionFindingWorkspaceLink;
+pub(crate) use direction_finding_workspace::DirectionFindingWorkspaceLink;
 pub(crate) use direction_finding_workspace::{
     DirectionFindingWorkspaceCpuOwned, DirectionFindingWorkspaceStorage,
 };

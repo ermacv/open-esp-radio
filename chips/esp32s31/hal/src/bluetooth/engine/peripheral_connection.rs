@@ -616,7 +616,7 @@ impl<'pool, 'epoch, const N: usize> PeripheralConnectionPool<'pool, 'epoch, N> {
 
     /// Lower the first event, join the global direction-finding workspace
     /// and take the event item from the free chain.
-    pub fn prepare_first_event(
+    pub(crate) fn prepare_first_event(
         &mut self,
         instance: &SchedulerRoleInstance<'pool, 'epoch>,
         event: PeripheralConnectionFirstEvent,

@@ -4,6 +4,13 @@ use super::{ControllerMemory, Engine};
 use crate::bluetooth::{self, ControllerHalBorrow};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum EngineInitError {
+    AlreadyInitialized,
+    HalNotInitialized,
+    Quarantined,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum EngineShutdownError {
     NotStopped,
     Reset(bluetooth::BluetoothShutdownError),
@@ -64,8 +71,35 @@ impl<M: ControllerMemory> Engine<M> {
     pub fn initialize_controller_hal(
         &mut self,
         config: bluetooth::BluetoothControllerHalInitConfig,
-    ) {
-        self.registers.initialize_controller_hal_transaction(config);
+    ) -> Result<(), EngineInitError> {
+        self.initialize_controller_hal_with(config, |task, config| {
+            task.initialize_controller_hal_transaction(config)
+        })
+    }
+
+    fn initialize_controller_hal_with(
+        &mut self,
+        config: bluetooth::BluetoothControllerHalInitConfig,
+        initialize: impl FnOnce(&mut bluetooth::TaskOwner, bluetooth::BluetoothControllerHalInitConfig),
+    ) -> Result<(), EngineInitError> {
+        if self.faulted {
+            return Err(EngineInitError::Quarantined);
+        }
+        if self.initialized {
+            return Err(EngineInitError::AlreadyInitialized);
+        }
+        self.initialized = true;
+        initialize(&mut self.registers, config);
+        Ok(())
+    }
+
+    #[cfg(any(test, feature = "test-support"))]
+    #[doc(hidden)]
+    pub fn initialize_hal_for_host_test(
+        &mut self,
+        config: bluetooth::BluetoothControllerHalInitConfig,
+    ) -> Result<(), EngineInitError> {
+        self.initialize_controller_hal_with(config, |_, _| {})
     }
 
     pub fn initialize_modem_lp_timer_hardware(
@@ -83,23 +117,42 @@ impl<M: ControllerMemory> Engine<M> {
         &mut self,
         radio: &mut crate::domain::RadioDomain<B, T>,
         address: bluetooth::ControllerPublicAddress,
-    ) {
-        self.memory
-            .phy()
-            .initialize_registers(&mut self.registers, radio);
-        let mut controller = self.registers.borrow_bluetooth_controller();
-        controller.program_public_device_address(address);
-        self.direction_finding_publication = Some(
-            self.memory
+    ) -> Result<(), EngineInitError> {
+        self.initialize_phy_with(|registers, memory| {
+            memory.phy().initialize_registers(registers, radio);
+            let mut controller = registers.borrow_bluetooth_controller();
+            controller.program_public_device_address(address);
+            memory
                 .direction_finding()
-                .publish_disabled_baseline(&mut controller),
-        );
+                .publish_disabled_baseline(&mut controller)
+        })
+    }
+
+    fn initialize_phy_with(
+        &mut self,
+        initialize: impl FnOnce(
+            &mut bluetooth::TaskOwner,
+            &M,
+        ) -> bluetooth::DirectionFindingDisabledBaselineOwner,
+    ) -> Result<(), EngineInitError> {
+        if self.faulted {
+            return Err(EngineInitError::Quarantined);
+        }
+        if !self.initialized {
+            return Err(EngineInitError::HalNotInitialized);
+        }
+        if self.phy_initialized {
+            return Err(EngineInitError::AlreadyInitialized);
+        }
+        self.phy_initialized = true;
+        self.direction_finding_publication = Some(initialize(&mut self.registers, &self.memory));
+        Ok(())
     }
 
     pub fn le_1m_packet_start_calibration(&self) -> super::BlePhyLe1MPacketStartCalibration {
         self.memory.phy().le_1m_packet_start_calibration()
     }
-    pub fn direction_finding_link(&self) -> super::DirectionFindingWorkspaceLink {
+    pub(crate) fn direction_finding_link(&self) -> super::DirectionFindingWorkspaceLink {
         self.memory.direction_finding().link()
     }
 
@@ -125,10 +178,9 @@ impl<M: ControllerMemory> Engine<M> {
     ) -> bluetooth::BluetoothSchedulerHardwareListsCleared {
         self.controller().clear_scheduler_hardware_list_heads()
     }
-    pub fn transfer_scheduler_finished_lists(
-        &mut self,
-    ) -> bluetooth::BluetoothSchedulerFinishedListObservation {
-        self.controller().transfer_scheduler_finished_lists()
+    pub fn transfer_scheduler_finished_lists(&mut self) -> super::EngineFinishedListObservation {
+        let observed = self.controller().transfer_scheduler_finished_lists();
+        super::EngineFinishedListObservation::new(observed, self.epoch)
     }
     pub fn program_random_device_address_while_idle(
         &mut self,
@@ -166,6 +218,25 @@ impl<M: ControllerMemory> Engine<M> {
         output: bluetooth::InterruptOutputReleasedOwner,
         timer: bluetooth::ModemLpTimerInterruptReadyOwner,
     ) -> Result<EngineShutDown<M>, EngineShutdownFailure<M>> {
+        self.shut_down_with(output, timer, |registers, output, timer| {
+            registers.shut_down(radio, output, timer)
+        })
+    }
+
+    #[allow(clippy::result_large_err)]
+    fn shut_down_with(
+        self,
+        output: bluetooth::InterruptOutputReleasedOwner,
+        timer: bluetooth::ModemLpTimerInterruptReadyOwner,
+        reset_registers: impl FnOnce(
+            bluetooth::TaskOwner,
+            bluetooth::InterruptOutputReleasedOwner,
+            bluetooth::ModemLpTimerInterruptReadyOwner,
+        ) -> Result<
+            (bluetooth::ClockedOwner, bluetooth::BluetoothControllerReset),
+            bluetooth::BluetoothShutdownFailure,
+        >,
+    ) -> Result<EngineShutDown<M>, EngineShutdownFailure<M>> {
         if !self.retirement_ready() {
             return Err(EngineShutdownFailure {
                 error: EngineShutdownError::NotStopped,
@@ -179,10 +250,13 @@ impl<M: ControllerMemory> Engine<M> {
         let Self {
             registers,
             memory,
+            epoch: _,
             direction_finding_publication,
             faulted: _,
+            initialized: _,
+            phy_initialized: _,
         } = self;
-        match registers.shut_down(radio, output, timer) {
+        match reset_registers(registers, output, timer) {
             Ok((clocked, reset)) => Ok(EngineShutDown {
                 clocked,
                 arena: memory.reclaim(&reset),
@@ -199,3 +273,6 @@ impl<M: ControllerMemory> Engine<M> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;

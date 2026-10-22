@@ -12,6 +12,7 @@ use crate::settle::Settle;
 #[derive(Debug)]
 pub enum EngineScheduleError<E> {
     Quarantined,
+    NotInitialized,
     Pool(SchedulerPoolError),
     Submit(SchedulerSubmitError<SchedulerItemId>),
     Cancel(SchedulerCancelError<SchedulerItemId>),
@@ -24,17 +25,10 @@ pub enum EngineScheduleError<E> {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ReceivePublicationError {
     Quarantined,
+    NotInitialized,
     SchedulerStarted,
     NotPublished,
     Scan(crate::bluetooth::ScanStartError),
-}
-
-#[derive(Debug)]
-pub enum CompletionError {
-    Quarantined(crate::bluetooth::BluetoothSchedulerFinishedHardwareListObserved),
-    WrongList(crate::bluetooth::BluetoothSchedulerFinishedHardwareListObserved),
-    TransactionActive(crate::bluetooth::BluetoothSchedulerFinishedHardwareListObserved),
-    Pool(SchedulerPoolError),
 }
 
 impl<
@@ -51,6 +45,9 @@ impl<
     pub fn publish_receive_chains(&mut self) -> Result<(), ReceivePublicationError> {
         if self.faulted {
             return Err(ReceivePublicationError::Quarantined);
+        }
+        if !self.phy_initialized {
+            return Err(ReceivePublicationError::NotInitialized);
         }
         if self.memory.hardware.has_run() {
             return Err(ReceivePublicationError::SchedulerStarted);
@@ -103,16 +100,6 @@ impl<
         }
     }
 
-    fn return_item(&mut self, id: SchedulerItemId) -> Result<(), SchedulerPoolError> {
-        match id.kind() {
-            SchedulerRoleKind::DirectTestMode => self.memory.dtm.retire(id),
-            SchedulerRoleKind::LegacyAdvertising => self.memory.advertising.retire(id),
-            SchedulerRoleKind::ConnectableAdvertising => self.memory.connectable.retire(id),
-            SchedulerRoleKind::LegacyScanning => self.memory.scanning.retire(id),
-            SchedulerRoleKind::PeripheralConnection => self.memory.connections.retire(id),
-        }
-    }
-
     fn perform<E>(
         &mut self,
         storage: &impl SchedulerRunInterruptStorage,
@@ -152,6 +139,9 @@ impl<
     ) -> Result<(SchedulerItemId, SchedulerNext), EngineScheduleError<S::Error>> {
         if self.faulted {
             return Err(EngineScheduleError::Quarantined);
+        }
+        if !self.phy_initialized {
+            return Err(EngineScheduleError::NotInitialized);
         }
         let window = match instance.kind() {
             SchedulerRoleKind::DirectTestMode => self.memory.dtm.prepared_window(instance, item),
@@ -337,33 +327,6 @@ impl<
             .begin_cancel(&mut items, &snapshot.busy, snapshot.head, ids)
             .map_err(EngineScheduleError::Cancel)?;
         self.perform(storage, &step)
-    }
-
-    /// Return CPU custody after a fenced list observation and bounded scan.
-    pub fn complete(
-        &mut self,
-        observed: crate::bluetooth::BluetoothSchedulerFinishedHardwareListObserved,
-    ) -> Result<super::scheduler::SchedulerCompletion<SchedulerItemId, Q>, CompletionError> {
-        if self.faulted {
-            return Err(CompletionError::Quarantined(observed));
-        }
-        if observed.index() != crate::bluetooth::BluetoothSchedulerHardwareListIndex::ZERO {
-            return Err(CompletionError::WrongList(observed));
-        }
-        let mut items = SchedulerItemSpace::new()
-            .with(&self.memory.dtm)
-            .with(&self.memory.advertising)
-            .with(&self.memory.connectable)
-            .with(&self.memory.scanning)
-            .with(&self.memory.connections);
-        let completion = match self.memory.scheduler.take_completed(&mut items) {
-            Ok(completion) => completion,
-            Err(_) => return Err(CompletionError::TransactionActive(observed)),
-        };
-        for (id, _) in completion.iter() {
-            self.return_item(id).map_err(CompletionError::Pool)?;
-        }
-        Ok(completion)
     }
 
     pub fn flush<S: SchedulerRunInterruptStorage>(

@@ -1,6 +1,6 @@
 use crate::interrupt::{SchedulerWakeCell, SchedulerWorkerWakeClass};
 
-use oer_esp32s31_hal::bluetooth::BluetoothSchedulerFinishedListObservation;
+use oer_esp32s31_hal::bluetooth::engine::EngineFinishedListObservation;
 
 use super::{
     SchedulerFinishedListBackend, SchedulerFinishedListCaptureError, SchedulerFinishedListWorker,
@@ -8,11 +8,11 @@ use super::{
 };
 
 struct Backend {
-    observation: Option<BluetoothSchedulerFinishedListObservation>,
+    observation: Option<EngineFinishedListObservation>,
 }
 
 impl SchedulerFinishedListBackend for Backend {
-    fn transfer_scheduler_finished_lists(&mut self) -> BluetoothSchedulerFinishedListObservation {
+    fn transfer_scheduler_finished_lists(&mut self) -> EngineFinishedListObservation {
         self.observation.take().expect("one scripted transfer")
     }
 }
@@ -20,7 +20,7 @@ impl SchedulerFinishedListBackend for Backend {
 fn backend(lists: &[u8]) -> Backend {
     Backend {
         observation: Some(
-            BluetoothSchedulerFinishedListObservation::from_lists_for_host_test(lists)
+            EngineFinishedListObservation::from_lists_for_host_test(lists)
                 .expect("semantic list set is valid"),
         ),
     }

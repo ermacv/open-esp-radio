@@ -176,7 +176,8 @@ pub enum ControllerTimeAccess<'owner, 'cells, X: SignalExecutor, M: ControllerMe
 /// # #[panic_handler]
 /// # fn panic(_: &core::panic::PanicInfo) -> ! { loop {} }
 /// use oer_esp32s31_bluetooth_driver::scheduler::ControllerTimeReady;
-/// fn duplicate<X: oer_interrupt_table::signal::SignalExecutor>(ready: ControllerTimeReady<'_, '_, X, M>) {
+/// use oer_esp32s31_hal::bluetooth::engine::ControllerMemory;
+/// fn duplicate<X: oer_interrupt_table::signal::SignalExecutor, M: ControllerMemory>(ready: ControllerTimeReady<'_, '_, X, M>) {
 ///     let first = ready.request();
 ///     let duplicate = ready.request();
 /// }

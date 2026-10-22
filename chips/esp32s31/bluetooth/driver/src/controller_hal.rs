@@ -79,7 +79,7 @@ impl<M: ControllerMemory> ControllerHalInitialized<M> {
     pub fn initialize(
         engine: oer_esp32s31_hal::bluetooth::engine::Engine<M>,
         interrupts: InterruptSetupOwner,
-    ) -> Self {
+    ) -> Result<Self, ControllerHalInitializationFailure<M>> {
         Self::initialize_with(engine, interrupts, |task, config| {
             task.initialize_controller_hal(config)
         })
@@ -91,24 +91,48 @@ impl<M: ControllerMemory> ControllerHalInitialized<M> {
         interrupts: InterruptSetupOwner,
         initialize: impl FnOnce(&mut TaskResources<M>, BluetoothControllerHalInitConfig),
     ) -> Self {
-        Self::initialize_with(engine, interrupts, initialize)
+        Self::initialize_with(engine, interrupts, |task, config| {
+            task.engine().initialize_hal_for_host_test(config)?;
+            initialize(task, config);
+            Ok(())
+        })
+        .ok()
+        .expect("validation starts with a fresh model engine")
     }
 
     fn initialize_with(
         engine: oer_esp32s31_hal::bluetooth::engine::Engine<M>,
         interrupts: InterruptSetupOwner,
-        initialize: impl FnOnce(&mut TaskResources<M>, BluetoothControllerHalInitConfig),
-    ) -> Self {
+        initialize: impl FnOnce(
+            &mut TaskResources<M>,
+            BluetoothControllerHalInitConfig,
+        )
+            -> Result<(), oer_esp32s31_hal::bluetooth::engine::EngineInitError>,
+    ) -> Result<Self, ControllerHalInitializationFailure<M>> {
         let config = BluetoothControllerHalInitConfig::reviewed_standalone();
         let standalone_dtm_profile = StandaloneAlwaysAwakeDtmProfile::mint();
         let time_scale = config.controller_time_scale();
         let (mut task, interrupts) = separate_interrupt_owner(engine, interrupts);
-        initialize(&mut task, config);
-        Self {
+        if let Err(error) = initialize(&mut task, config) {
+            return Err(ControllerHalInitializationFailure {
+                error,
+                _task: task,
+                _interrupts: interrupts,
+            });
+        }
+        Ok(Self {
             task,
             interrupts,
             time_scale,
             standalone_dtm_profile,
-        }
+        })
     }
+}
+
+/// Rejected HAL initialization retains the complete owning engine and IRQ bank.
+#[must_use]
+pub struct ControllerHalInitializationFailure<M: ControllerMemory> {
+    pub error: oer_esp32s31_hal::bluetooth::engine::EngineInitError,
+    _task: TaskResources<M>,
+    _interrupts: InterruptBankOwner,
 }

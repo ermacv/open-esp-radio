@@ -539,7 +539,7 @@ pub enum LegacyConnectableAdvertisingError {
 impl<'pool, 'epoch, const N: usize> LegacyConnectableAdvertisingPool<'pool, 'epoch, N> {
     /// Install both PDUs and the restricted reset, and join the non-scanning
     /// receive chain.
-    pub fn prepare<const PACKETS: usize>(
+    pub(crate) fn prepare<const PACKETS: usize>(
         &mut self,
         instance: &SchedulerRoleInstance<'pool, 'epoch>,
         input: LegacyConnectableAdvertisingMemoryInput<'_>,

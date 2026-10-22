@@ -132,6 +132,46 @@ impl<
             .enter_stopped(crate::bluetooth::BluetoothSchedulerStopped::for_host_test());
     }
 
+    pub(super) fn return_item(&mut self, id: SchedulerItemId) -> Result<(), SchedulerPoolError> {
+        match id.kind() {
+            SchedulerRoleKind::DirectTestMode => self.memory.dtm.retire(id),
+            SchedulerRoleKind::LegacyAdvertising => self.memory.advertising.retire(id),
+            SchedulerRoleKind::ConnectableAdvertising => self.memory.connectable.retire(id),
+            SchedulerRoleKind::LegacyScanning => self.memory.scanning.retire(id),
+            SchedulerRoleKind::PeripheralConnection => self.memory.connections.retire(id),
+        }
+    }
+
+    /// Return CPU custody after a fenced list observation and bounded scan.
+    pub fn complete(
+        &mut self,
+        observed: EngineFinishedHardwareListObserved,
+    ) -> Result<super::scheduler::SchedulerCompletion<SchedulerItemId, Q>, CompletionError> {
+        if self.faulted {
+            return Err(CompletionError::Quarantined(observed));
+        }
+        if observed.epoch != self.epoch {
+            return Err(CompletionError::ForeignEpoch(observed));
+        }
+        if observed.index() != crate::bluetooth::BluetoothSchedulerHardwareListIndex::ZERO {
+            return Err(CompletionError::WrongList(observed));
+        }
+        let mut items = SchedulerItemSpace::new()
+            .with(&self.memory.dtm)
+            .with(&self.memory.advertising)
+            .with(&self.memory.connectable)
+            .with(&self.memory.scanning)
+            .with(&self.memory.connections);
+        let completion = match self.memory.scheduler.take_completed(&mut items) {
+            Ok(completion) => completion,
+            Err(_) => return Err(CompletionError::TransactionActive(observed)),
+        };
+        for (id, _) in completion.iter() {
+            self.return_item(id).map_err(CompletionError::Pool)?;
+        }
+        Ok(completion)
+    }
+
     pub fn scheduled_count(&self) -> usize {
         self.memory.scheduler.list().len()
     }

@@ -42,8 +42,8 @@ use crate::{low_power::ControllerLowPowerHardwareInitialized, resources::TaskRes
 /// # }
 /// use oer_esp32s31_bluetooth_driver::phy::ControllerPhyJoined;
 /// use oer_esp32s31_hal::power::PlatformClockBackend;
-/// fn engine<B: PlatformClockBackend, X: oer_interrupt_table::signal::SignalExecutor>() {
-///     let _engine = ControllerPhyJoined::<'static, 4, X>::initialize_ble_phy_engine::<B, ()>;
+/// fn engine<B: PlatformClockBackend, X: oer_interrupt_table::signal::SignalExecutor, M: oer_esp32s31_hal::bluetooth::engine::ControllerMemory>() {
+///     let _engine = ControllerPhyJoined::<'static, 4, X, M>::initialize_ble_phy_engine::<B, ()>;
 /// }
 /// ```
 ///
@@ -56,9 +56,9 @@ use crate::{low_power::ControllerLowPowerHardwareInitialized, resources::TaskRes
 /// #     loop {}
 /// # }
 /// use oer_esp32s31_bluetooth_driver::low_power::ControllerLowPowerHardwareInitialized;
-/// fn engine<X: oer_interrupt_table::signal::SignalExecutor>() {
+/// fn engine<X: oer_interrupt_table::signal::SignalExecutor, M: oer_esp32s31_hal::bluetooth::engine::ControllerMemory>() {
 /// let _engine =
-///     ControllerLowPowerHardwareInitialized::<'static, 4, X>::initialize_ble_phy_engine::<()>;
+///     ControllerLowPowerHardwareInitialized::<'static, 4, X, M>::initialize_ble_phy_engine::<()>;
 /// }
 /// ```
 ///
@@ -74,7 +74,7 @@ use crate::{low_power::ControllerLowPowerHardwareInitialized, resources::TaskRes
 /// #     loop {}
 /// # }
 /// use oer_esp32s31_bluetooth_driver::phy::ControllerPhyJoined;
-/// fn keep<X: oer_interrupt_table::signal::SignalExecutor>(joined: ControllerPhyJoined<'static, 4, X, M>) -> ControllerPhyJoined<'static, 4, X, M> {
+/// fn keep<X: oer_interrupt_table::signal::SignalExecutor, M: oer_esp32s31_hal::bluetooth::engine::ControllerMemory>(joined: ControllerPhyJoined<'static, 4, X, M>) -> ControllerPhyJoined<'static, 4, X, M> {
 ///     joined
 /// }
 /// ```
@@ -89,7 +89,7 @@ use crate::{low_power::ControllerLowPowerHardwareInitialized, resources::TaskRes
 /// # }
 /// use oer_esp32s31_bluetooth_driver::phy::ControllerPhyJoined;
 /// use oer_esp32s31_phy::bluetooth_client::BluetoothPhyMembership;
-/// fn leave_early<X: oer_interrupt_table::signal::SignalExecutor>(joined: ControllerPhyJoined<'static, 4, X, M>) -> BluetoothPhyMembership {
+/// fn leave_early<X: oer_interrupt_table::signal::SignalExecutor, M: oer_esp32s31_hal::bluetooth::engine::ControllerMemory>(joined: ControllerPhyJoined<'static, 4, X, M>) -> BluetoothPhyMembership {
 ///     joined.membership
 /// }
 /// ```

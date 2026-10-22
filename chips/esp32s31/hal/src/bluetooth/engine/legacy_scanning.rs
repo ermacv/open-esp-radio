@@ -371,7 +371,7 @@ impl LegacyScanEvent {
 impl<'pool, 'epoch, const N: usize> LegacyScanPool<'pool, 'epoch, N> {
     /// Apply the restricted LE 1M reset, join the scanning chain and, for an
     /// active scanner, queue the `SCAN_REQ` transmit node.
-    pub fn reset<const PACKETS: usize>(
+    pub(crate) fn reset<const PACKETS: usize>(
         &mut self,
         instance: &SchedulerRoleInstance<'pool, 'epoch>,
         chain: &LeRxChain<PACKETS>,

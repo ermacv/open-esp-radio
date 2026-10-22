@@ -7,6 +7,7 @@
 //! `InterruptBankOwner`; `TaskResources::shut_down` resets the stopped
 //! Controller and returns the clocked client.
 
+#[cfg(any(target_arch = "riscv32", test))]
 use oer_esp32s31_hal::bluetooth::engine::ControllerMemory;
 
 #[cfg(target_arch = "riscv32")]
@@ -17,11 +18,10 @@ use oer_esp32s31_hal::bluetooth::BluetoothSchedulerHardwareListsCleared;
 
 #[cfg(target_arch = "riscv32")]
 use oer_esp32s31_hal::bluetooth::BluetoothControllerHalInitConfig;
-#[cfg(target_arch = "riscv32")]
 #[cfg(any(target_arch = "riscv32", test))]
-use oer_esp32s31_hal::bluetooth::{
-    InterruptSetupOwner as HalBluetoothInterruptSetupOwner, TaskOwner as HalBluetoothTaskOwner,
-};
+use oer_esp32s31_hal::bluetooth::InterruptSetupOwner as HalBluetoothInterruptSetupOwner;
+#[cfg(target_arch = "riscv32")]
+use oer_esp32s31_hal::bluetooth::TaskOwner as HalBluetoothTaskOwner;
 #[cfg(target_arch = "riscv32")]
 use {
     oer_esp32s31_hal::bluetooth::BluetoothModemLpTimerOwnerError,
@@ -244,8 +244,11 @@ impl<M: ControllerMemory> TaskResources<M> {
         dead_code,
         reason = "only the target lifecycle and isolated validation probes invoke this component"
     )]
-    pub(crate) fn initialize_controller_hal(&mut self, config: BluetoothControllerHalInitConfig) {
-        self.engine.initialize_controller_hal(config);
+    pub(crate) fn initialize_controller_hal(
+        &mut self,
+        config: BluetoothControllerHalInitConfig,
+    ) -> Result<(), oer_esp32s31_hal::bluetooth::engine::EngineInitError> {
+        self.engine.initialize_controller_hal(config)
     }
 
     /// The one engine holding this task's register token and complete arena.

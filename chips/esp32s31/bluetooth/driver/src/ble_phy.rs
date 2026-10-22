@@ -1,5 +1,6 @@
 //! Owned BLE PHY engine activation after common PHY and BTBB initialization.
 
+#[cfg(target_arch = "riscv32")]
 use oer_esp32s31_hal::bluetooth::engine::ControllerMemory;
 
 #[cfg(target_arch = "riscv32")]
@@ -9,9 +10,9 @@ use oer_interrupt_table::signal::SignalExecutor;
 
 #[cfg(target_arch = "riscv32")]
 use crate::{phy::ControllerPhyJoined, resources::InterruptBankOwner};
-#[cfg(any(target_arch = "riscv32", test))]
+#[cfg(target_arch = "riscv32")]
 use oer_bluetooth_hci::BluetoothPublicDeviceAddress;
-#[cfg(any(target_arch = "riscv32", test))]
+#[cfg(target_arch = "riscv32")]
 use oer_esp32s31_hal::bluetooth::ControllerPublicAddress;
 #[cfg(target_arch = "riscv32")]
 use oer_esp32s31_hal::bluetooth::ModemLpTimerLowPowerHardwareInitializedOwner;
@@ -116,9 +117,9 @@ impl BlePhyTimingAuthority {
 
 /// Powered Controller after BLE PHY init and public-address publication.
 ///
-/// The address-bound environment, resolving-list storage and the PHY
-/// membership stay together in [`BlePhyRetainedOwners`] for the whole
-/// hardware epoch, with the affine standalone always-awake profile selection.
+/// The task's owning HAL engine retains the complete address-bound arena;
+/// this state also retains the shared PHY membership for the whole hardware
+/// epoch, with the affine standalone always-awake profile selection.
 /// That selection performs no RF MMIO and is not an RF-ready or
 /// completed-time proof. This state does not claim that an interrupt route,
 /// packet engine, Link Layer role, advertising set, scanner, connection, or
@@ -218,22 +219,42 @@ impl<'cells, const MODEM_TIMER_CAPACITY: usize, X: SignalExecutor, M: Controller
         mut self,
         radio: &mut oer_esp32s31_hal::domain::RadioDomain<B, T>,
         public_address: BluetoothPublicDeviceAddress,
-    ) -> ControllerBlePhyEngineInitialized<'cells, MODEM_TIMER_CAPACITY, X, M> {
-        self.controller.task_mut().engine().initialize_ble_phy(
+    ) -> Result<
+        ControllerBlePhyEngineInitialized<'cells, MODEM_TIMER_CAPACITY, X, M>,
+        ControllerBlePhyInitializationFailure<'cells, MODEM_TIMER_CAPACITY, X, M>,
+    > {
+        if let Err(error) = self.controller.task_mut().engine().initialize_ble_phy(
             radio,
             ControllerPublicAddress::from_canonical_bytes(public_address.canonical_bytes()),
-        );
+        ) {
+            return Err(ControllerBlePhyInitializationFailure {
+                error,
+                _controller: self,
+            });
+        }
         let ControllerPhyJoined {
             controller,
             membership,
         } = self;
-        ControllerBlePhyEngineInitialized {
+        Ok(ControllerBlePhyEngineInitialized {
             controller,
             membership,
             report: BlePhyInitializationReport,
-        }
+        })
     }
 }
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(target_arch = "riscv32")]
+#[must_use]
+pub struct ControllerBlePhyInitializationFailure<
+    'cells,
+    const MT: usize,
+    X: SignalExecutor,
+    M: ControllerMemory,
+> {
+    pub error: oer_esp32s31_hal::bluetooth::engine::EngineInitError,
+    _controller: ControllerPhyJoined<'cells, MT, X, M>,
+}

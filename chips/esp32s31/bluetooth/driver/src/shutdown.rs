@@ -9,7 +9,7 @@
 //! `esp_phy_disable(PHY_MODEM_BT)` before its deinit; the shared radio's owner
 //! then closes RF if Bluetooth was the last client.
 //! [`ControllerRetired::shut_down`](crate::shutdown::ControllerRetired::shut_down) finally resets the Controller domains and
-//! returns the clocked client with the BLE PHY allocations, which no hardware
+//! returns the clocked client with the complete controller arena, which no hardware
 //! references after the reset.
 
 use oer_esp32s31_hal::bluetooth::engine::ControllerMemory;
@@ -191,7 +191,7 @@ pub fn retire<X: SignalExecutor, B: PlatformClockBackend, M: ControllerMemory>(
 
 impl<M: ControllerMemory> ControllerRetired<M> {
     /// Reset the Controller domains, reunite the drained timer and return
-    /// the clocked client with the BLE PHY allocations.
+    /// the clocked client with the complete controller arena.
     ///
     /// `cells` are the event cells of the retired epoch; their stale
     /// notifications are discarded so the next epoch starts quiet. Only

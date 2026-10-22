@@ -104,7 +104,7 @@ impl DirectionFindingWorkspaceBinding {
 
 /// Unique CPU owner of one initialized, address-bound DF workspace.
 #[must_use = "the direction-finding workspace must be retained or published"]
-pub struct DirectionFindingWorkspaceCpuOwned {
+pub(crate) struct DirectionFindingWorkspaceCpuOwned {
     storage: Pin<&'static mut DirectionFindingWorkspaceStorage>,
     binding: DirectionFindingWorkspaceBinding,
 }
@@ -178,7 +178,9 @@ impl DirectionFindingWorkspaceStorage {
     }
 
     /// Claim the linker-proven workspace and install its disabled-CTE baseline.
-    pub fn place<S: ControllerDmaSpace>(placed: Placed<Self>) -> DirectionFindingWorkspaceCpuOwned {
+    pub(crate) fn place<S: ControllerDmaSpace>(
+        placed: Placed<Self>,
+    ) -> DirectionFindingWorkspaceCpuOwned {
         let (storage, placement) = Placement::<S>::take(placed);
         Self::from_parts::<S>(storage, &placement)
     }
