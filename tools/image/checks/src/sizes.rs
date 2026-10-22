@@ -84,13 +84,22 @@ impl Measurements {
             .memory
             .as_ref()
             .ok_or("sizes: chip has no memory map")?;
+        // Retained SRAM is outside the placement gate's application SRAM
+        // range; take it from the chip's canonical staged layout.
+        let retained = match profile.id.as_str() {
+            "esp32s31" => oer_esp32s31_layout::LAYOUT.retained,
+            "esp32c5" => oer_esp32c5_layout::LAYOUT.retained,
+            _ => return Err(format!("sizes: no retained memory layout for {}", profile.id).into()),
+        };
         let mut out = Self::default();
         for section in file.sections().filter(|section| section.allocated) {
             let end = section
                 .address
                 .checked_add(section.size)
                 .ok_or("section address overflow")?;
-            let kind = if memory.sram.contains_range(section.address, end) {
+            let kind = if memory.sram.contains_range(section.address, end)
+                || retained.contains_range(section.address, end)
+            {
                 "sram"
             } else if memory
                 .psram

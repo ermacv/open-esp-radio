@@ -40,13 +40,33 @@ pub(super) fn read(file: &Elf<'_>) -> Result<BTreeMap<String, u64>> {
             else {
                 return Err("sizes: unsupported type-unit DWARF".into());
             };
+            let tag = entry.tag();
+            if !matches!(
+                tag,
+                gimli::DW_TAG_namespace
+                    | gimli::DW_TAG_subprogram
+                    | gimli::DW_TAG_structure_type
+                    | gimli::DW_TAG_union_type
+                    | gimli::DW_TAG_enumeration_type
+                    | gimli::DW_TAG_class_type
+                    | gimli::DW_TAG_array_type
+                    | gimli::DW_TAG_base_type
+                    | gimli::DW_TAG_pointer_type
+                    | gimli::DW_TAG_reference_type
+                    | gimli::DW_TAG_rvalue_reference_type
+                    | gimli::DW_TAG_typedef
+                    | gimli::DW_TAG_const_type
+                    | gimli::DW_TAG_volatile_type
+                    | gimli::DW_TAG_subrange_type
+            ) {
+                continue;
+            }
             let name = entry
                 .attr_value(gimli::DW_AT_name)
                 .map(|v| dwarf.attr_string(&unit, v))
                 .transpose()?
                 .map(|r| r.to_string().map(|s| s.to_owned()))
                 .transpose()?;
-            let tag = entry.tag();
             let composite = matches!(
                 tag,
                 gimli::DW_TAG_structure_type
@@ -129,15 +149,13 @@ pub(super) fn read(file: &Elf<'_>) -> Result<BTreeMap<String, u64>> {
         }
         if let Some((name, size)) = layout(offset, &types, &mut BTreeSet::new())?
             && size >= TYPE_MIN_BYTES
+            && let Some(previous) = out.insert(name.clone(), size)
+            && previous != size
         {
-            if let Some(previous) = out.insert(name.clone(), size)
-                && previous != size
-            {
-                return Err(format!(
-                    "sizes: unstable DWARF type key `{name}`: {previous} and {size} bytes"
-                )
-                .into());
-            }
+            return Err(format!(
+                "sizes: unstable DWARF type key `{name}`: {previous} and {size} bytes"
+            )
+            .into());
         }
     }
     Ok(out)

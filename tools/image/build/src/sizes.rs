@@ -92,11 +92,18 @@ impl Summary {
         }
         let manifest: toml::Table =
             toml::from_str(&std::fs::read_to_string(spec.root.join("Cargo.toml"))?)?;
-        let profile_settings = manifest
-            .get("profile")
-            .and_then(|p| p.get(crate::FIRMWARE_PROFILE))
-            .ok_or("missing firmware profile")?
-            .to_string();
+        let profiles = manifest.get("profile").ok_or("missing Cargo profiles")?;
+        let firmware = profiles
+            .get(crate::FIRMWARE_PROFILE)
+            .ok_or("missing firmware profile")?;
+        let parent = firmware
+            .get("inherits")
+            .and_then(toml::Value::as_str)
+            .ok_or("firmware profile has no parent")?;
+        let profile_settings = format!(
+            "{firmware}\n{parent}: {}",
+            profiles.get(parent).ok_or("missing parent profile")?
+        );
         let mut features = spec.application.features.clone();
         features.sort();
         features.dedup();

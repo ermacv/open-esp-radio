@@ -118,7 +118,30 @@ fn compatible(a: &Provenance, b: &Provenance) -> bool {
         && a.configuration_sha256 == b.configuration_sha256
         && a.rustc == b.rustc
         && a.stack_policy == b.stack_policy
-        && a.flags == b.flags
+        && compiler_flags(&a.flags) == compiler_flags(&b.flags)
+}
+
+fn compiler_flags(
+    flags: &BTreeMap<String, BTreeMap<String, String>>,
+) -> BTreeMap<&str, BTreeMap<&str, &str>> {
+    flags
+        .iter()
+        .map(|(elf, values)| {
+            (
+                elf.as_str(),
+                values
+                    .iter()
+                    .filter(|(key, _)| {
+                        !matches!(
+                            key.as_str(),
+                            "OPEN_RADIO_CPU0_TASK_STACK_BYTES" | "OPEN_RADIO_IRQ_STACK_BYTES"
+                        )
+                    })
+                    .map(|(key, value)| (key.as_str(), value.as_str()))
+                    .collect(),
+            )
+        })
+        .collect()
 }
 
 fn compare(a: &Summary, b: &Summary) -> Result<(Verdict, u64, String)> {
