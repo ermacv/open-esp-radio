@@ -1,0 +1,16 @@
+error[E0382]: use of moved value: `ready`
+ --> tests/ui/bluetooth_rf_ready_is_affine.rs:8:13
+  |
+5 | pub fn consume<B: PlatformClockBackend>(ready: BluetoothRfReady<'_, B>) {
+  |                                         ----- move occurs because `ready` has type `BluetoothRfReady<'_, B>`, which does not implement the `Copy` trait
+6 |     let _ = ready.into_radio();
+  |                   ------------ `ready` moved due to this method call
+7 |     #[cfg(all())]
+8 |     let _ = ready.into_radio(); // ui-error: E0382
+  |             ^^^^^ value used here after move
+  |
+note: `BluetoothRfReady::<'r, B>::into_radio` takes ownership of the receiver `self`, which moves `ready`
+ --> $WORKSPACE/chips/esp32s31/phy/src/bluetooth_client.rs
+  |
+  |     pub fn into_radio(self) -> &'r mut RadioDomain<B, ConcurrentPhy> {
+  |                       ^^^^

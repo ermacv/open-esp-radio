@@ -51,7 +51,7 @@ pub mod modem_timer;
 #[cfg(any(target_arch = "riscv32", test))]
 pub mod modem_timer_retirement;
 #[cfg(target_arch = "riscv32")]
-pub mod phy;
+pub mod radio;
 pub mod resources;
 pub mod roles;
 pub mod runtime_resources;

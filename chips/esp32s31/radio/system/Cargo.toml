@@ -7,7 +7,11 @@ license.workspace = true
 repository.workspace = true
 description = "The ESP32-S31 radio system: one actor that owns the shared RF front-end"
 
+[features]
+bluetooth = ["dep:oer-esp32s31-bluetooth-driver", "oer-esp32s31-radio-client/bluetooth"]
+
 [dependencies]
+oer-esp32s31-bluetooth-driver = { path = "../../bluetooth/driver", optional = true }
 oer-espressif-coex = { path = "../../../espressif/coex" }
 oer-ieee80211-port = { path = "../../../../protocols/ieee80211/port" }
 embassy-futures = "0.1.2"
@@ -19,6 +23,7 @@ oer-esp32s31-radio-client = { path = "../client" }
 oer-ieee80211-wire = { path = "../../../../protocols/ieee80211/wire" }
 
 [dev-dependencies]
+oer-bluetooth-le-radio = { path = "../../../../protocols/bluetooth/le/radio" }
 oer-radio-regulatory = { path = "../../../../protocols/radio/regulatory", features = ["test-support"] }
 oer-esp32s31-radio-client = { path = "../client", features = ["test-support"] }
 oer-esp32s31-hal = { path = "../../hal", features = ["test-support"] }

@@ -21,15 +21,15 @@ limitations.
 | --- | --- |
 | `controller_hal` | Controller HAL component initialization on the HAL's clocked Bluetooth client of the shared radio |
 | `controller_time` | Event-driven Controller-time latch and scheduler-epoch projection |
-| `ble_phy` | BLE PHY engine initialization, activation into the runtime owners and the retained shared PHY membership |
-| `phy` | Entry into and exit from the shared PHY domain and BTBB |
+| `ble_phy` | BLE PHY engine initialization from a settled Bluetooth membership and activation into runtime owners |
+| `radio` | Controller lifecycle parked in the shared radio backend; matching-installation runtime handover and retirement |
 | `interrupt` | Chip interrupt state and hardware handling |
 | `modem_timer` | Controller modem low-power timer task over the published timer owner |
 | `scheduler` | The scheduler core over controller time and the finished-list worker; the physical list protocol and publications belong to the HAL Bluetooth engine |
 | `timed_preparation` | Controller-time preparation shared by timed scheduler admissions |
 | `resources` | Task and inactive interrupt owners split from the clocked client |
 | `runtime_resources` | Interrupt-shared event cells reused by every epoch, and the task and timer workers of one powered epoch; the HAL owns physical list publications and receive-chain graphs |
-| `shutdown` | Retirement of a stopped epoch (Controller output, PHY and BTBB exit) and the Controller reset that returns the clocked client and the complete arena |
+| `shutdown` | Retirement of a drained epoch and Controller output, followed by the actor-ordered Controller reset that returns the clocked client and the complete arena |
 | `roles` | Detached value builders for DTM, advertising, scanning and connection events, and role-to-list selection |
 | `coexistence` | The vendor's per-lane PTI coexistence priorities of advertising, passive scan and connection events (`coexAdv`, `coexScan`, `coexConn`) |
 | `coex_status` | The vendor's Bluetooth LE coexistence schedule status bits (`coexHook`) and the change between two activities |
@@ -100,18 +100,25 @@ A composition runs the typed primitives of this crate in the vendor order of
 and
 [`Kconfig.mac`](https://github.com/espressif/esp-idf/blob//components/esp_hw_support/port/esp32s31/Kconfig.mac).
 
-Start, while retaining the shared radio-domain owner:
+The `bluetooth` feature of `oer-esp32s31-radio-system` composes this
+lifecycle into its single P2 actor. `WithBluetooth` holds common power,
+coexistence and `BluetoothPhyMembership`; `ControllerLifecycle` holds the
+branded Engine and its initialization states. The membership cell carries
+only configuration and installation identities.
 
-1. power up the Bluetooth partition, then enable its clocks;
-2. initialize the Controller HAL, the scheduler over the epoch's runtime
-   cells, then the modem low-power timer hardware;
-3. prepare the shared PHY, join it (tracking the concurrent PHY when the
-   join reports it due), then initialize and activate the BLE PHY engine with
-   the public address;
-4. enable coexistence for Bluetooth, as `esp_bt_controller_enable` does; a
-   later start failure is fail-stop and keeps it enabled;
-5. bind the engine's request channel, publish its P3 half and the timer into
-   stable storage, then bind the CPU routes.
+Start:
+
+1. validate the permitted LE band and common conducted-power policy; the
+   first client registers/calibrates the PHY, later clients retain its RF epoch;
+2. settle due shared tracking, enter Bluetooth common power without Wi-Fi
+   reset, then enable the Bluetooth clocks;
+3. bind the arena through the scoped factory, initialize Controller HAL,
+   scheduler and modem low-power hardware, and enter Bluetooth coexistence;
+4. join BTBB and the PHY client set, finish initial/due tracking, then consume
+   `BluetoothRfReady` to initialize the BLE PHY and public address;
+5. after the actor answers tracked readiness, take the runtime once, bind its
+   request channel, publish the P3 half and timer in stable storage, then bind
+   the CPU routes.
 
 The interrupt sources are `MODEM_BT_MAC` (source 124), `MODEM_LP_TIMER`
 (source 127) and `MODEM_BT_MAC_INT1` (source 133), bound as one same-core set
@@ -127,15 +134,20 @@ coexistence status bits ([`coex_status`](src/coex_status.rs)), and
 another radio shares the antenna, which selects the coexistence priorities
 ([`coexistence`](src/coexistence.rs)).
 
-Stop reverses it:
+Stop:
 
 1. stop the physical scheduler through P3 while the shared doorbell remains
-   live, drain its finished lists and settle the modem timer; then disable
-   the three BLE routes and remove BLE dispatch, retire the timer and P3
+   live, drain events, RX/TX and finished lists, and settle the modem timer;
+2. disable the BLE routes, remove dispatch, retire the drained timer and P3
    half, and reunite both quiet request-channel endpoints;
-2. clear every Bluetooth LE coexistence status bit, retire
-   the epoch (Controller output, PHY and BTBB exit), then disable
-   coexistence, as `coex_disable` after the stack is disabled; close the PHY
-   when Bluetooth was its last client;
-3. shut down the Controller (reset returning the clocked client and the
-   complete arena), disable the clocks and power the partition down.
+3. `shutdown::retire` checks worker/engine retirement and releases Controller
+   output. Return that affine owner to `ControllerLifecycle`; only the exact
+   running installation is accepted;
+4. the actor leaves BTBB/PHY, resets the Controller, releases Bluetooth clocks,
+   coexistence and common power, and closes RF only for the last member.
+
+The reset returns the complete arena. `into_reset` and `WithBluetooth::into_stopped`
+allow a fresh scoped installation while `RadioSystem::map_backend` retains the
+same shared actor state and Wi-Fi membership. A started RF failure poisons the
+shared domain; a local Controller reset cannot clear it. A late retirement
+returns its complete old graph and never satisfies a newer installation's leave.

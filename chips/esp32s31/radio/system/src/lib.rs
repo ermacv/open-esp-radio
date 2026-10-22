@@ -26,8 +26,8 @@
 //!
 //! A hardware failure poisons the domain: the request that saw it and every
 //! later one are answered [`Failure::Poisoned`], handing back what they lent.
-//! The actor is generic over its client `K`; this repository instantiates it
-//! for Wi-Fi.
+//! The primary client is `K`; Wi-Fi-only compositions contain no extra inbox.
+//! The `bluetooth` feature adds its cell to the same run future and shared state.
 
 use core::{convert::Infallible, future::poll_fn};
 
@@ -89,6 +89,10 @@ pub trait PhyDomain {
     reason = "the actor polls its backend on one executor; no Send bound is wanted"
 )]
 pub trait ClientBackend<K: Client, S: LpSource>: PhyDomain {
+    /// Reject an unavailable installation before any shared RF work.
+    fn admits(&self, _join: &K::Join) -> bool {
+        true
+    }
     /// Enter `K` into the prepared domain, coexistence included.
     async fn enter(
         &mut self,
@@ -113,7 +117,8 @@ struct State {
 }
 
 /// The radio system's actor for the client `K`.
-pub struct RadioSystem<K: Client, S: LpSource, B, T> {
+pub struct RadioSystem<K: Client, S: LpSource, B, T, E = ()> {
+    extra: E,
     backend: B,
     timer: T,
     lp: LpClock<S>,
@@ -137,6 +142,7 @@ impl<S: LpSource, B: ClientBackend<Wifi, S>, T: oer_time::Timer> RadioSystem<Wif
             lp,
             doorbell,
             inbox: wifi,
+            extra: (),
             mint,
             state: State::default(),
         }
@@ -169,6 +175,28 @@ impl<K: Client, S: LpSource, B: ClientBackend<K, S>, T: oer_time::Timer> RadioSy
             }
         }
     }
+}
+
+impl<K: Client, S: LpSource, B: PhyDomain, T: oer_time::Timer, E> RadioSystem<K, S, B, T, E> {
+    /// Access backend-local runtime ownership between separate borrows of run.
+    /// The mutable borrow prevents the actor from running concurrently.
+    pub fn backend_mut(&mut self) -> &mut B {
+        &mut self.backend
+    }
+
+    /// Change a composition's backend while preserving the one actor's RF state.
+    pub fn map_backend<N: PhyDomain>(self, map: impl FnOnce(B) -> N) -> RadioSystem<K, S, N, T, E> {
+        RadioSystem {
+            backend: map(self.backend),
+            timer: self.timer,
+            lp: self.lp,
+            doorbell: self.doorbell,
+            inbox: self.inbox,
+            mint: self.mint,
+            state: self.state,
+            extra: self.extra,
+        }
+    }
 
     async fn tick(&mut self) {
         if self.backend.track_tick().await.is_err() {
@@ -176,13 +204,16 @@ impl<K: Client, S: LpSource, B: ClientBackend<K, S>, T: oer_time::Timer> RadioSy
         }
     }
 
-    async fn serve(&mut self, request: Request<K>) -> Answer<K> {
+    async fn serve<Q: Client>(&mut self, request: Request<Q>) -> Answer<Q>
+    where
+        B: ClientBackend<Q, S>,
+    {
         match request {
-            Request::Join(join) => Answer::Join(self.join(join).await),
+            Request::Join(join) => Answer::Join(self.join::<Q>(join).await),
             Request::Track(member, track) => {
                 if self.state.poisoned {
                     return Answer::Track(Err(Failed {
-                        returned: (member, K::track_returned(track)),
+                        returned: (member, Q::track_returned(track)),
                         cause: Failure::Poisoned,
                     }));
                 }
@@ -208,7 +239,7 @@ impl<K: Client, S: LpSource, B: ClientBackend<K, S>, T: oer_time::Timer> RadioSy
             Request::Retune(member, retune) => {
                 if self.state.poisoned {
                     return Answer::Retune(Err(Failed {
-                        returned: (member, K::retune_returned(retune)),
+                        returned: (member, Q::retune_returned(retune)),
                         cause: Failure::Poisoned,
                     }));
                 }
@@ -225,15 +256,24 @@ impl<K: Client, S: LpSource, B: ClientBackend<K, S>, T: oer_time::Timer> RadioSy
                     }
                 })
             }
-            Request::Leave(member, leave) => Answer::Leave(self.leave(member, leave).await),
+            Request::Leave(member, leave) => Answer::Leave(self.leave::<Q>(member, leave).await),
         }
     }
 
-    async fn join(&mut self, join: K::Join) -> oer_esp32s31_radio_client::JoinAnswer<K> {
+    async fn join<Q: Client>(&mut self, join: Q::Join) -> oer_esp32s31_radio_client::JoinAnswer<Q>
+    where
+        B: ClientBackend<Q, S>,
+    {
         if self.state.poisoned {
             return Err(Failed {
-                returned: K::join_returned(join),
+                returned: Q::join_returned(join),
                 cause: Failure::Poisoned,
+            });
+        }
+        if !self.backend.admits(&join) {
+            return Err(Failed {
+                returned: Q::join_returned(join),
+                cause: Failure::Refused,
             });
         }
         let phy = match self.backend.prepare().await {
@@ -241,7 +281,7 @@ impl<K: Client, S: LpSource, B: ClientBackend<K, S>, T: oer_time::Timer> RadioSy
             Err(Fault) => {
                 self.state.poisoned = true;
                 return Err(Failed {
-                    returned: K::join_returned(join),
+                    returned: Q::join_returned(join),
                     cause: Failure::Poisoned,
                 });
             }
@@ -281,7 +321,10 @@ impl<K: Client, S: LpSource, B: ClientBackend<K, S>, T: oer_time::Timer> RadioSy
         }
     }
 
-    async fn leave(&mut self, member: Leaving<K>, leave: K::Leave) -> Left<K> {
+    async fn leave<Q: Client>(&mut self, member: Leaving<Q>, leave: Q::Leave) -> Left<Q>
+    where
+        B: ClientBackend<Q, S>,
+    {
         if let Leaving::Tracked(_) = member {
             self.state.tracked = self.state.tracked.saturating_sub(1);
         }
@@ -326,3 +369,9 @@ mod tests;
 
 #[cfg(test)]
 mod test_clocks;
+
+#[cfg(feature = "bluetooth")]
+mod bluetooth;
+
+#[cfg(all(target_arch = "riscv32", feature = "bluetooth"))]
+pub use esp32s31::WithBluetooth;
