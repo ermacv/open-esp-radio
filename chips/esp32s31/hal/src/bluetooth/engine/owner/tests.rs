@@ -262,3 +262,35 @@ fn detached_completion_epochs_never_wrap_into_an_old_installation() {
     assert_eq!(super::super::arena::EngineEpoch::allocate(&counter), None);
     assert_eq!(super::super::arena::EngineEpoch::allocate(&counter), None);
 }
+
+#[test]
+fn reset_returns_storage_outside_its_scoped_pool_and_epoch_brands() {
+    let (clocked, arena) = with_pool(|pool| {
+        with_epoch(|epoch| {
+            let (mut engine, interrupts) = Engine::<ArenaMemory<'_, '_, 0, 1, 2, 4, 4, 8>>::new::<
+                HostDma<0x2f00_1000>,
+            >(clocked(), placed(), pool, epoch, config())
+            .ok()
+            .unwrap();
+            let timer = bluetooth::ModemLpTimerInterruptReadyOwner {
+                timer: engine.registers.modem_lp_timer.take().unwrap(),
+            };
+            let output = bluetooth::InterruptOutputReleasedOwner {
+                registers: interrupts.registers,
+            };
+            engine.stopped_for_host_test();
+            let returned = engine.shut_down_with(output, timer, reset).unwrap();
+            (returned.clocked, returned.arena)
+        })
+    });
+    with_pool(|pool| {
+        with_epoch(|epoch| {
+            let (mut engine, _) = Engine::<ArenaMemory<'_, '_, 0, 1, 2, 4, 4, 8>>::new::<
+                HostDma<0x2f00_1000>,
+            >(clocked, arena, pool, epoch, config())
+            .ok()
+            .unwrap();
+            assert!(engine.dtm().unwrap().acquire().is_some());
+        })
+    });
+}
