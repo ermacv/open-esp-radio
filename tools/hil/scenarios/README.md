@@ -38,7 +38,7 @@ kind = "boot-smoke"
 The family owns every executable value:
 
 - `[system]` is a tagged workload whose kind implies the firmware image.
-- `[phy]` runs the vendor calibration cross-check or the 154 idle tracking-hold
+- `[phy]` runs the vendor calibration cross-check or the quiet Wi-Fi/154 idle tracking-hold
   investigation on `diagnostic-phy`.
 Every table rejects unknown fields. Relations that remain between the image,
 the data path and the workload are validated by the family.

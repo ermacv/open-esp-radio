@@ -1,12 +1,11 @@
 //! Forced due tracking in the diagnostic image only, with bounded coarse edges.
+pub mod metrics;
+mod observer;
 mod recorder;
+pub use observer::Observer;
 mod sar_tails;
 use oer_embassy_time::EmbassyClock;
-use oer_esp32s31_phy::{
-    PhyTargetObserver,
-    state::client::DEFAULT_PLL_TRACK_PERIOD_MICROS,
-    tracking::observation::{Event, Operation},
-};
+use oer_esp32s31_phy::state::client::DEFAULT_PLL_TRACK_PERIOD_MICROS;
 use oer_hil_protocol::{base::RejectReason, phy::*};
 use oer_time::{Clock, Duration, Instant};
 
@@ -58,191 +57,6 @@ pub fn finish_sample(hold: &mut Hold, recorder: recorder::Recorder, committed: u
         hold.invalid = true;
     }
     hold.running = !hold.invalid && hold.samples.len() < usize::from(hold.started.ticks);
-}
-
-pub struct Observer<'a>(
-    pub recorder::Recorder,
-    pub sar_tails::Tails,
-    &'a mut HoldPolls,
-    Option<&'a mut oer_esp32s31_phy::tracking::observation::ReadinessTrace>,
-    oer_esp32s31_phy::tracking::observation::RfpllEngineTrace,
-);
-impl<'a> Observer<'a> {
-    pub fn new(
-        tick: u8,
-        engine: &'a mut HoldPolls,
-        trace: Option<&'a mut oer_esp32s31_phy::tracking::observation::ReadinessTrace>,
-    ) -> Self {
-        Self(
-            recorder::Recorder::new(tick),
-            sar_tails::Tails::default(),
-            engine,
-            trace,
-            oer_esp32s31_phy::tracking::observation::RfpllEngineTrace::default(),
-        )
-    }
-}
-impl PhyTargetObserver for &mut Observer<'_> {
-    const OBSERVE_ENGINE_POLLS: bool = true;
-    fn rfpll_engine_trace(
-        &mut self,
-    ) -> Option<&mut oer_esp32s31_phy::tracking::observation::RfpllEngineTrace> {
-        self.4 = Default::default();
-        Some(&mut self.4)
-    }
-    fn power_gain_completed(
-        &mut self,
-        operation: Operation,
-        timing: oer_esp32s31_phy::tracking::observation::GainTiming,
-    ) {
-        let family = if operation == Operation::WifiPower {
-            4
-        } else {
-            2
-        };
-        oer_esp32s31_board::rom::print_fmt(format_args!(
-            "OPEN_RADIO_HIL gain-parts family={} lower-us={} arithmetic-us={} publication-us={}\n",
-            family, timing.lower_micros, timing.arithmetic_micros, timing.publication_micros,
-        ));
-    }
-    fn readiness_trace(
-        &mut self,
-    ) -> Option<&mut oer_esp32s31_phy::tracking::observation::ReadinessTrace> {
-        self.3.as_deref_mut()
-    }
-    #[inline(never)]
-    fn engine_completed(
-        &mut self,
-        operation: Operation,
-        mut timing: oer_esp32s31_phy::tracking::observation::EngineTiming,
-    ) {
-        if operation == Operation::Rfpll {
-            timing.invalid |= self.4.invalid;
-        }
-        report_engine(operation, &timing);
-        if operation == Operation::Rfpll {
-            report_rfpll_commands(&self.4);
-        }
-        self.2.merge(HoldPolls {
-            polls: timing.polls,
-            pending: timing.pending,
-            total_micros: timing.total_micros,
-            maximum_micros: timing.maximum_micros,
-            resumes: timing.resumes,
-            lateness_micros: timing.lateness_micros,
-            maximum_lateness_micros: timing.maximum_lateness_micros,
-            ready_edges: timing.ready_edges,
-            maximum_ready_micros: timing.maximum_ready_micros,
-            invalid: timing.invalid,
-        });
-    }
-
-    fn tx_sar_wait(&mut self, elapsed: u64, observations: u16, ready: bool) {
-        self.1.observe(elapsed, observations, ready);
-    }
-    fn tracking_operation(&mut self, operation: Operation, event: Event) {
-        let operation = match operation {
-            Operation::Tracking => HoldOperation::Tracking,
-            Operation::GrantProtectRfpll => HoldOperation::Rfpll,
-            Operation::GrantProtectCommon => HoldOperation::Common,
-            Operation::GrantProtectTransmit => HoldOperation::Transmit,
-            Operation::WifiBasebandOff => HoldOperation::WifiBasebandOff,
-            _ => return,
-        };
-        match event {
-            Event::Started => {
-                self.0
-                    .observe(operation, true, false, EmbassyClock.now().as_micros())
-            }
-            Event::Completed | Event::Failed => self.0.observe(
-                operation,
-                false,
-                event == Event::Failed,
-                EmbassyClock.now().as_micros(),
-            ),
-            _ => {}
-        }
-    }
-}
-
-/// Family formatting stays outside the observer and measured driver frames.
-#[inline(never)]
-fn report_engine(
-    operation: Operation,
-    timing: &oer_esp32s31_phy::tracking::observation::EngineTiming,
-) {
-    use oer_esp32s31_board::rom::print_fmt;
-    let family = match operation {
-        Operation::Rfpll => 1,
-        Operation::BluetoothIeee802154Power => 2,
-        Operation::WifiI2c => 3,
-        Operation::WifiPower => 4,
-        Operation::Dcode => 5,
-        Operation::Temperature => 7,
-        _ => 0,
-    };
-    print_fmt(format_args!(
-        "OPEN_RADIO_HIL engine family={} polls={} pending={} ready={}\n",
-        family,
-        timing.polls,
-        timing.pending,
-        timing.polls.saturating_sub(timing.pending)
-    ));
-    print_fmt(format_args!(
-        "OPEN_RADIO_HIL engine family={} total-us={} max-us={}\n",
-        family, timing.total_micros, timing.maximum_micros
-    ));
-    print_fmt(format_args!(
-        "OPEN_RADIO_HIL engine family={} resumes={} late-total-us={}\n",
-        family, timing.resumes, timing.lateness_micros
-    ));
-    print_fmt(format_args!(
-        "OPEN_RADIO_HIL engine family={} late-max-us={} invalid={}\n",
-        family, timing.maximum_lateness_micros, timing.invalid
-    ));
-    if matches!(
-        operation,
-        Operation::WifiPower | Operation::BluetoothIeee802154Power
-    ) {
-        print_fmt(format_args!(
-            "OPEN_RADIO_HIL power-gain family={} count={} max-us={}\n",
-            family, timing.ready_edges, timing.maximum_ready_micros
-        ));
-    }
-    if operation == Operation::Dcode {
-        print_fmt(format_args!(
-            "OPEN_RADIO_HIL dcode-atom count={} max-us={}\n",
-            timing.ready_edges, timing.maximum_ready_micros
-        ));
-    }
-}
-
-/// Lossless UART quartet: invalid bit 63, command bits 48..62, then
-/// poll/publication/readiness as three u16 values. One formatter argument
-/// keeps the diagnostic frame/code inside the same application budgets.
-#[inline(never)]
-fn report_rfpll_commands(trace: &oer_esp32s31_phy::tracking::observation::RfpllEngineTrace) {
-    for (command, row) in trace.commands.iter().enumerate() {
-        report_rfpll_command(command, row, trace.invalid);
-    }
-}
-
-#[inline(never)]
-fn report_rfpll_command(
-    command: usize,
-    row: &oer_esp32s31_phy::tracking::observation::RfpllCommandMaximum,
-    invalid: bool,
-) {
-    use oer_esp32s31_board::rom::print_fmt;
-    let packed = (u64::from(invalid) << 63)
-        | ((command as u64) << 48)
-        | (u64::from(row.poll_micros) << 32)
-        | (u64::from(row.publication_micros) << 16)
-        | u64::from(row.readiness_micros);
-    print_fmt(format_args!(
-        "OPEN_RADIO_HIL rfpll-command-packed={}\n",
-        packed
-    ));
 }
 
 /// Report preparation only after maintenance returns, including failures.
@@ -315,4 +129,57 @@ pub fn report_timer(window: Option<oer_espressif_executor::timer_observation::Wi
         "OPEN_RADIO_HIL t7-timer unmatched-irqs={} unmatched-dispatch={} armed={}\n",
         r.unmatched_interrupts, r.unmatched_dispatches, r.armed_at_end
     ));
+}
+
+/// The diagnostic image's UART sink; observer tests inject their own writer.
+pub struct Uart;
+impl core::fmt::Write for Uart {
+    fn write_str(&mut self, value: &str) -> core::fmt::Result {
+        oer_esp32s31_board::rom::print_fmt(format_args!("{}", value));
+        Ok(())
+    }
+    fn write_fmt(&mut self, args: core::fmt::Arguments<'_>) -> core::fmt::Result {
+        oer_esp32s31_board::rom::print_fmt(args);
+        Ok(())
+    }
+}
+
+impl<C: Clock, W: core::fmt::Write> oer_esp32s31_phy::PhyTargetObserver
+    for &mut Observer<'_, C, W>
+{
+    const OBSERVE_ENGINE_POLLS: bool = true;
+    fn rfpll_engine_trace(
+        &mut self,
+    ) -> Option<&mut oer_esp32s31_phy::tracking::observation::RfpllEngineTrace> {
+        Observer::rfpll_engine_trace(self)
+    }
+    fn power_gain_completed(
+        &mut self,
+        operation: oer_esp32s31_phy::tracking::observation::Operation,
+        timing: oer_esp32s31_phy::tracking::observation::GainTiming,
+    ) {
+        Observer::power_gain_completed(self, operation, timing);
+    }
+    fn readiness_trace(
+        &mut self,
+    ) -> Option<&mut oer_esp32s31_phy::tracking::observation::ReadinessTrace> {
+        Observer::readiness_trace(self)
+    }
+    fn engine_completed(
+        &mut self,
+        operation: oer_esp32s31_phy::tracking::observation::Operation,
+        timing: oer_esp32s31_phy::tracking::observation::EngineTiming,
+    ) {
+        Observer::engine_completed(self, operation, timing);
+    }
+    fn tx_sar_wait(&mut self, elapsed: u64, observations: u16, ready: bool) {
+        Observer::tx_sar_wait(self, elapsed, observations, ready);
+    }
+    fn tracking_operation(
+        &mut self,
+        operation: oer_esp32s31_phy::tracking::observation::Operation,
+        event: oer_esp32s31_phy::tracking::observation::Event,
+    ) {
+        Observer::tracking_operation(self, operation, event);
+    }
 }
