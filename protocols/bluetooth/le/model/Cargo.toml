@@ -1,0 +1,32 @@
+[package]
+name = "oer-bluetooth-le-model"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Deterministic Bluetooth LE DTM reference model"
+
+[features]
+test-support = ["oer-bluetooth-le-port/test-support"]
+
+[dependencies]
+oer-bluetooth-le-radio = { path = "../radio" }
+oer-radio-port = { path = "../../../radio/port" }
+oer-time = { path = "../../../../portable/time" }
+oer-bluetooth-le-port = { path = "../port" }
+oer-radio-permit-pool = { path = "../../../radio/permit-pool" }
+oer-time-virtual = { path = "../../../../portable/time-virtual" }
+
+[dev-dependencies]
+oer-test-ui-cases = { path = "../../../../tools/test/ui-cases" }
+oer-radio-port = { path = "../../../radio/port", features = ["test-support"] }
+oer-bluetooth-le-port = { path = "../port", features = ["test-support"] }
+
+[lints]
+workspace = true
+
+[package.metadata.open-radio]
+layer = "protocol"
+platform = "portable"
+test-feature-sets = ["test-support"]

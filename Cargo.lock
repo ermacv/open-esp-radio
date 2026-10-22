@@ -2630,6 +2630,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-bluetooth-le-model"
+version = "0.1.0"
+dependencies = [
+ "oer-bluetooth-le-port",
+ "oer-bluetooth-le-radio",
+ "oer-radio-permit-pool",
+ "oer-radio-port",
+ "oer-test-ui-cases",
+ "oer-time",
+ "oer-time-virtual",
+]
+
+[[package]]
+name = "oer-bluetooth-le-port"
+version = "0.1.0"
+dependencies = [
+ "oer-bluetooth-le-radio",
+ "oer-radio-port",
+ "oer-test-ui-cases",
+ "oer-time",
+]
+
+[[package]]
 name = "oer-bluetooth-le-radio"
 version = "0.1.0"
 dependencies = [
