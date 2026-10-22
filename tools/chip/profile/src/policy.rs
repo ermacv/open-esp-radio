@@ -27,7 +27,8 @@ pub struct StackPolicy {
     #[serde(default)]
     pub coverage_policy: Option<PathBuf>,
     /// The largest implicit copy or move the compiler admits
-    /// (`-Z move-size-limit` with `-D large-assignments`).
+    /// (`-Z move-size-limit` with `-D large-assignments`). Larger values live
+    /// in placed static storage; futures and task arguments borrow them.
     pub max_move_bytes: u64,
     /// The runtime's primary task stack.
     #[serde(default)]

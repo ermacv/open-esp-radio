@@ -61,7 +61,7 @@ because of the configuration constants. It enforces the same interrupt-stack
 check as an ordinary `build`.
 
 Every image builds with the compiler's frame records (`-Z emit-stack-sizes`),
-moves above the stack policy's `max_move_bytes` warned (`-W
+implicit moves above the stack policy's `max_move_bytes` rejected (`-D
 large-assignments`), and through the image linker
 (`oer-image-linker` of `tools/image/linker`), which refuses bytes in an input section
 the boot zeroes. The stack checks then bound the runtime's task and

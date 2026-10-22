@@ -248,7 +248,7 @@ fn rustflags(
     for required in [
         "-Z emit-stack-sizes".to_owned(),
         format!("-Z move-size-limit={max_move_bytes}"),
-        "-W large-assignments".to_owned(),
+        "-D large-assignments".to_owned(),
         "-Z share-generics=y".to_owned(),
         format!("-C linker={linker}"),
         "-C linker-flavor=ld.lld".to_owned(),
@@ -299,7 +299,7 @@ mod tests {
             )
             .unwrap(),
             "-C debuginfo=1 -Z emit-stack-sizes -Z move-size-limit=4096 \
-             -W large-assignments -Z share-generics=y \
+             -D large-assignments -Z share-generics=y \
              -C linker=/repo/target/image-linker/debug/oer-image-linker -C linker-flavor=ld.lld"
         );
         // A path RUSTFLAGS would split is refused.
@@ -315,12 +315,70 @@ mod tests {
     }
 
     #[test]
+    fn image_moves_at_the_policy_limit_compile_but_larger_moves_fail() {
+        let directory = tempfile::tempdir().unwrap();
+        let source = directory.path().join("move_limit.rs");
+        let rustc = oer_os_toolchain::program(oer_os_toolchain::Tool::Rustc).unwrap();
+        for limit in [64, 4096] {
+            let flags = rustflags(
+                Some("-A large-assignments".into()),
+                limit,
+                Path::new("/unused-image-linker"),
+                &Instrumentation::default(),
+            )
+            .unwrap();
+            for bytes in [limit, limit + 1] {
+                std::fs::write(
+                    &source,
+                    format!(
+                        "#![no_std]\n\
+                         #[unsafe(no_mangle)]\n\
+                         pub fn move_value(value: &[u8; {bytes}]) -> u8 {{\n\
+                             let copied = core::hint::black_box(*value);\n\
+                             copied[core::hint::black_box(1)]\n\
+                         }}\n"
+                    ),
+                )
+                .unwrap();
+                // Object emission runs code generation's move lint without
+                // invoking the image linker or depending on a chip's inputs.
+                let output = oer_os_process::command(&rustc)
+                    .env("RUSTC_BOOTSTRAP", "1")
+                    .args(["--edition=2024", "--crate-type=lib", "--emit=obj"])
+                    .args(["-C", "opt-level=3"])
+                    .args(flags.split_whitespace())
+                    .arg(&source)
+                    .arg("--out-dir")
+                    .arg(directory.path())
+                    .output()
+                    .unwrap();
+                let diagnostics = String::from_utf8_lossy(&output.stderr);
+                assert_eq!(
+                    output.status.success(),
+                    bytes == limit,
+                    "{bytes}-byte move with limit {limit}: {diagnostics}"
+                );
+                if bytes > limit {
+                    assert!(
+                        diagnostics.contains(&format!("error: moving {bytes} bytes")),
+                        "{diagnostics}"
+                    );
+                    assert!(
+                        diagnostics.contains(&format!("current maximum size is {limit}")),
+                        "{diagnostics}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
     fn an_instrumented_image_compiles_its_cfgs_in_a_cache_of_its_own() {
         use crate::instrumentation::Class;
         let instrumentation: Instrumentation = [Class::Profile, Class::Trace].into_iter().collect();
         assert_eq!(
             rustflags(None, 4096, Path::new("/linker"), &instrumentation).unwrap(),
-            "-Z emit-stack-sizes -Z move-size-limit=4096 -W large-assignments \
+            "-Z emit-stack-sizes -Z move-size-limit=4096 -D large-assignments \
              -Z share-generics=y -C linker=/linker -C linker-flavor=ld.lld \
              --cfg oer_trace --cfg oer_profile"
         );
