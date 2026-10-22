@@ -7,7 +7,7 @@ use oer_analysis_riscv_model::{
     SymbolDefinition, SymbolId, SymbolTableKind, ValueAlternative, ValueAlternatives,
 };
 
-use super::{ImageSymbols, is_executable_image, listing};
+use super::{ImageSymbols, listing};
 
 fn reference(offset: u64, name: &str, addend: i64, kind: ReferenceKind) -> FunctionRecord {
     let target = Arc::new(ReferenceTarget {
@@ -310,23 +310,6 @@ fn image_transfers_and_branches_are_named_from_the_function_symbols() {
         ],
         "without an image the relocations remain the only names"
     );
-}
-
-#[test]
-fn only_a_little_endian_executable_header_is_an_image() {
-    let mut header = vec![0x7f, b'E', b'L', b'F', 1, 1, 1, 0];
-    header.resize(16, 0);
-    let image = [header.clone(), vec![2, 0]].concat();
-    assert!(is_executable_image(&image));
-    assert!(
-        !is_executable_image(&[header.clone(), vec![1, 0]].concat()),
-        "ET_REL"
-    );
-    let mut big = image.clone();
-    big[5] = 2;
-    assert!(!is_executable_image(&big), "big-endian");
-    assert!(!is_executable_image(b"!<arch>\n"), "an archive");
-    assert!(!is_executable_image(&header), "a truncated header");
 }
 
 #[test]

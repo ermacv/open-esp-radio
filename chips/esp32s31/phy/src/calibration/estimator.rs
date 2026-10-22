@@ -147,6 +147,17 @@ pub enum PhyDcIqAction {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyDcIqCompletion {
+    /// Setup and the first false-ready observation, with measurement still on.
+    CapturePending {
+        request: PhyDcIqEstimateRequest,
+        snapshot: PhyDcIqReadinessSnapshot,
+    },
+    /// The ready/accumulator/disable atom has completed under the same owner.
+    /// No accumulators means the observation limit was reached before a read.
+    CaptureFinished {
+        request: PhyDcIqEstimateRequest,
+        accumulators: Option<PhyDcIqAccumulatorSnapshot>,
+    },
     Configured(PhyDcIqEstimateRequest),
     EnableSet {
         request: PhyDcIqEstimateRequest,
@@ -447,6 +458,33 @@ impl PhyDcIqEstimateTransition {
 
     pub fn advance(&mut self, completion: PhyDcIqCompletion) -> Result<(), PhyDcIqTransitionError> {
         self.step = match (self.step, completion) {
+            (
+                PhyDcIqStep::Configure | PhyDcIqStep::AwaitReadiness,
+                PhyDcIqCompletion::CaptureFinished {
+                    request,
+                    accumulators,
+                },
+            ) if request == self.request => match accumulators {
+                Some(snapshot) => {
+                    self.readiness_samples = self.readiness_samples.saturating_add(1);
+                    PhyDcIqStep::Complete(PhyDcIqEstimateOutcome {
+                        request,
+                        estimate: calculate_dc_iq_estimate(request, snapshot),
+                        readiness_activity_edges: self.readiness_activity_edges,
+                    })
+                }
+                None => PhyDcIqStep::Failed(PhyDcIqFailure::ReadinessTimedOut {
+                    request,
+                    readiness_activity_edges: self.readiness_activity_edges,
+                }),
+            },
+            (PhyDcIqStep::Configure, PhyDcIqCompletion::CapturePending { request, snapshot })
+                if request == self.request && !snapshot.ready =>
+            {
+                self.readiness_samples = 1;
+                self.readiness_activity_edges = u16::from(snapshot.activity);
+                PhyDcIqStep::AwaitReadiness
+            }
             (PhyDcIqStep::Configure, PhyDcIqCompletion::Configured(request))
                 if request == self.request =>
             {
@@ -579,9 +617,72 @@ impl PhyDcIqMmioBinding {
         }
     }
 
-    #[cfg(any(test, oer_probe))]
     pub const fn action(&self) -> PhyDcIqAction {
         self.action
+    }
+
+    /// Start and observe the first edge without yielding inside the enable sequence.
+    #[cfg(any(target_arch = "riscv32", test))]
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn capture_with<C, E>(
+        self,
+        context: &mut C,
+        configure: impl FnOnce(&mut C, u16),
+        mut enable: impl FnMut(&mut C, PhyDcIqEnablePhase, bool),
+        mut settle: impl FnMut(&mut C, u32) -> Result<(), E>,
+        read: impl FnOnce(&mut C) -> PhyDcIqReadinessSnapshot,
+        accumulators: impl FnOnce(&mut C) -> PhyDcIqAccumulatorSnapshot,
+    ) -> Result<PhyDcIqCompletion, E> {
+        let PhyDcIqAction::Configure(request) = self.action else {
+            unreachable!("capture starts only from estimator configuration");
+        };
+        configure(context, request.control);
+        enable(context, PhyDcIqEnablePhase::Start, true);
+        settle(context, 1)?;
+        enable(context, PhyDcIqEnablePhase::Measurement, true);
+        let binding = PhyDcIqReadinessBinding {
+            action: PhyDcIqAction::AwaitReadinessEdge {
+                request,
+                readiness_activity_edges: 0,
+                readiness_samples: 0,
+            },
+        };
+        let completion = binding.capture_with(
+            crate::HARDWARE_EDGE_LIMIT,
+            context,
+            read,
+            accumulators,
+            enable,
+            settle,
+        )?;
+        Ok(match completion {
+            PhyDcIqCompletion::ReadinessObserved { request, snapshot } => {
+                PhyDcIqCompletion::CapturePending { request, snapshot }
+            }
+            completion => completion,
+        })
+    }
+
+    #[cfg(target_arch = "riscv32")]
+    pub(crate) fn capture_target<D: crate::executor::wait::PhyShortDelay>(
+        self,
+        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+    ) -> Result<PhyDcIqCompletion, crate::target_executor::PhyTargetPortError> {
+        if !matches!(self.action, PhyDcIqAction::Configure(_)) {
+            return Ok(self.execute_target(registers));
+        }
+        self.capture_with(
+            registers,
+            configure_target,
+            set_enable_target,
+            |_, micros| {
+                D::settle_micros(micros).then_some(()).ok_or(
+                    crate::target_executor::PhyTargetPortError::HardwareCapabilityUnavailable,
+                )
+            },
+            sample_readiness_target,
+            read_accumulators_target,
+        )
     }
 
     #[cfg(target_arch = "riscv32")]
@@ -622,6 +723,56 @@ pub struct PhyDcIqReadinessBinding {
 }
 
 impl PhyDcIqReadinessBinding {
+    #[cfg(target_arch = "riscv32")]
+    pub(crate) fn capture_target<D: crate::executor::wait::PhyShortDelay>(
+        self,
+        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+    ) -> Result<PhyDcIqCompletion, crate::target_executor::PhyTargetPortError> {
+        self.capture_with(
+            crate::HARDWARE_EDGE_LIMIT,
+            registers,
+            sample_readiness_target,
+            read_accumulators_target,
+            set_enable_target,
+            |_, micros| {
+                D::settle_micros(micros).then_some(()).ok_or(
+                    crate::target_executor::PhyTargetPortError::HardwareCapabilityUnavailable,
+                )
+            },
+        )
+    }
+    /// Keep ready, all three reads and the disable tail in one hardware atom.
+    /// A false-ready result leaves the measurement enabled for a timer retry.
+    #[cfg(any(target_arch = "riscv32", test))]
+    pub(crate) fn capture_with<C, E>(
+        self,
+        maximum_samples: u16,
+        context: &mut C,
+        read: impl FnOnce(&mut C) -> PhyDcIqReadinessSnapshot,
+        accumulators: impl FnOnce(&mut C) -> PhyDcIqAccumulatorSnapshot,
+        mut enable: impl FnMut(&mut C, PhyDcIqEnablePhase, bool),
+        settle: impl FnOnce(&mut C, u32) -> Result<(), E>,
+    ) -> Result<PhyDcIqCompletion, E> {
+        let PhyDcIqAction::AwaitReadinessEdge { request, .. } = self.action else {
+            unreachable!("readiness binding contains a readiness action");
+        };
+        let accumulators = if self.samples() >= maximum_samples {
+            None
+        } else {
+            let snapshot = read(context);
+            if !snapshot.ready {
+                return Ok(PhyDcIqCompletion::ReadinessObserved { request, snapshot });
+            }
+            Some(accumulators(context))
+        };
+        enable(context, PhyDcIqEnablePhase::Measurement, false);
+        settle(context, 1)?;
+        enable(context, PhyDcIqEnablePhase::Start, false);
+        Ok(PhyDcIqCompletion::CaptureFinished {
+            request,
+            accumulators,
+        })
+    }
     pub fn new(action: PhyDcIqAction) -> Result<Self, PhyDcIqBindingError> {
         match action {
             PhyDcIqAction::AwaitReadinessEdge { .. } => Ok(Self { action }),

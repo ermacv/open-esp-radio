@@ -4,10 +4,20 @@ use serde::{Deserialize, Serialize};
 pub const HOLD_TICKS: usize = 16;
 pub const HOLD_INTERVALS: usize = 8;
 
+/// Diagnostic branch selection; natural policy does not force debug or retained state.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
+#[serde(rename_all = "kebab-case")]
+pub enum HoldPolicy {
+    #[default]
+    Forced,
+    Natural,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub struct StartTrackingHold {
     pub epoch: u32,
     pub ticks: u8,
+    pub policy: HoldPolicy,
 }
 impl StartTrackingHold {
     pub const fn valid(self) -> bool {
@@ -20,6 +30,7 @@ pub struct HoldStarted {
     pub id: u32,
     pub epoch: u32,
     pub ticks: u8,
+    pub policy: HoldPolicy,
     pub channel: u8,
     pub radio: super::CaptureRadio,
     pub force: [u8; 2],
@@ -135,13 +146,28 @@ mod tests {
     #[test]
     fn hold_configuration_is_bounded_and_pages_fit_the_wire() {
         for ticks in [0, 17, 255] {
-            assert!(!StartTrackingHold { epoch: 1, ticks }.valid());
+            assert!(
+                !StartTrackingHold {
+                    epoch: 1,
+                    ticks,
+                    policy: HoldPolicy::Forced
+                }
+                .valid()
+            );
         }
-        assert!(!StartTrackingHold { epoch: 0, ticks: 1 }.valid());
+        assert!(
+            !StartTrackingHold {
+                epoch: 0,
+                ticks: 1,
+                policy: HoldPolicy::Natural
+            }
+            .valid()
+        );
         assert!(
             StartTrackingHold {
                 epoch: 1,
-                ticks: 16
+                ticks: 16,
+                policy: HoldPolicy::Natural,
             }
             .valid()
         );

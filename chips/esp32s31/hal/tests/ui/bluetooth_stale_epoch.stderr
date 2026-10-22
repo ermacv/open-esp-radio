@@ -1,0 +1,30 @@
+error[E0521]: borrowed data escapes outside of closure
+  --> tests/ui/bluetooth_stale_epoch.rs:21:21
+   |
+15 |         let old = pool.acquire().unwrap();
+   |             --- `old` declared here, outside of the closure body
+...
+18 |         with_epoch(|epoch| {
+   |                     ----- `epoch` is a reference that is only valid in the closure body
+...
+21 |             let _ = pool.release(old); // ui-error: E0521
+   |                     ^^^^^^^^^^^^^^^^^ `epoch` escapes the closure body here
+   |
+   = note: requirement occurs because of the type `SchedulerRoleInstance<'_, '_>`, which makes the generic argument `'_` invariant
+   = note: the struct `SchedulerRoleInstance<'pool, 'epoch>` is invariant over the parameter `'pool`
+   = help: see <https://doc.rust-lang.org/nomicon/subtyping.html> for more information about variance
+
+error[E0521]: borrowed data escapes outside of closure
+  --> tests/ui/bluetooth_stale_epoch.rs:19:28
+   |
+13 |     with_pool(|scope| with_epoch(|epoch| {
+   |                                   -----
+   |                                   |
+   |                                   `epoch` is a reference that is only valid in the closure body
+   |                                   has type `EpochScope<'1>`
+...
+19 |             let mut pool = pool.reset_after_controller_reset(reset, epoch).ok().unwrap();
+   |                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |                            |
+   |                            `epoch` escapes the closure body here
+   |                            argument requires that `'1` must outlive `'static`

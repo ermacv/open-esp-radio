@@ -603,6 +603,10 @@ impl PhyChipChannelTransition {
         }
     }
 
+    pub(crate) const fn is_terminal(&self) -> bool {
+        matches!(&self.step, Step::Complete(_) | Step::Failed(_))
+    }
+
     pub const fn action(self) -> PhyChipChannelAction {
         match self.step {
             Step::DisableAgc => PhyChipChannelAction::SetAgc { enabled: false },
@@ -897,6 +901,13 @@ pub struct PhyChipChannelMmioBinding {
 }
 
 impl PhyChipChannelMmioBinding {
+    #[cfg(any(target_arch = "riscv32", test))]
+    pub(crate) fn tx_gain_image(&self) -> Option<&PhyWifiTxGainImage> {
+        match &self.action {
+            PhyChipChannelAction::PublishTxGain(image) => Some(image),
+            _ => None,
+        }
+    }
     pub fn new(action: PhyChipChannelAction) -> Result<Self, PhyChipChannelBindingError> {
         match action {
             PhyChipChannelAction::SetAgc { .. }
@@ -1042,8 +1053,8 @@ impl PhyChipChannelMmioBinding {
                 oer_esp32s31_hal::phy::agc::configure_rx_compensation(registers);
                 PhyChipChannelCompletion::RxCompensationConfigured
             }
-            PhyChipChannelAction::PublishTxGain(image) => {
-                crate::hardware::publish_phy_tx_gain_memory(registers, false, &image);
+            PhyChipChannelAction::PublishTxGain(ref image) => {
+                crate::hardware::publish_phy_tx_gain_memory(registers, false, image);
                 PhyChipChannelCompletion::TxGainPublished
             }
             PhyChipChannelAction::PublishTxCapCommandMemory { value } => {

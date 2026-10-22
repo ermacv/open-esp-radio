@@ -17,6 +17,7 @@ use object::{
 use std::collections::BTreeMap;
 use std::fmt;
 
+pub mod classify;
 pub mod dwarf;
 pub mod rv32;
 
@@ -109,6 +110,22 @@ pub enum SymbolKind {
     File,
     Tls,
     Unknown,
+}
+
+impl SymbolKind {
+    /// Classify the type nibble of `st_info`, with the same interpretation as
+    /// the ELF reader: common objects are data and GNU indirect functions text.
+    pub fn of_type(st_type: u8) -> Self {
+        use object::elf::*;
+        match st_type {
+            STT_FUNC | STT_GNU_IFUNC => Self::Text,
+            STT_OBJECT | STT_COMMON => Self::Data,
+            STT_SECTION => Self::Section,
+            STT_FILE => Self::File,
+            STT_TLS => Self::Tls,
+            _ => Self::Unknown,
+        }
+    }
 }
 
 /// One entry of the static symbol table.
@@ -207,7 +224,8 @@ pub enum SectionKind {
 }
 
 impl SectionKind {
-    fn of(sh_type: u32) -> Self {
+    /// Classify the raw section-header `sh_type`.
+    pub fn of(sh_type: u32) -> Self {
         use object::elf::*;
         match sh_type {
             SHT_PROGBITS => Self::Program,
@@ -815,20 +833,16 @@ fn raw_symbol<'data>(entry: object::Symbol<'data, '_>) -> RawSymbol<'data> {
         name: entry.name_bytes().ok(),
         address: entry.address(),
         size: entry.size(),
-        kind: symbol_kind(entry.kind()),
+        kind: symbol_kind(&entry),
         defined: !entry.is_undefined() && !entry.is_common(),
         global: entry.is_global(),
         section: entry.section_index().map(|index| index.0),
     }
 }
 
-fn symbol_kind(kind: object::SymbolKind) -> SymbolKind {
-    match kind {
-        object::SymbolKind::Text => SymbolKind::Text,
-        object::SymbolKind::Data => SymbolKind::Data,
-        object::SymbolKind::Section => SymbolKind::Section,
-        object::SymbolKind::File => SymbolKind::File,
-        object::SymbolKind::Tls => SymbolKind::Tls,
+fn symbol_kind(entry: &object::Symbol<'_, '_>) -> SymbolKind {
+    match entry.flags() {
+        object::SymbolFlags::Elf { st_info, .. } => SymbolKind::of_type(st_info & 0xf),
         _ => SymbolKind::Unknown,
     }
 }
@@ -840,7 +854,7 @@ fn symbol<'data>(entry: object::Symbol<'data, '_>) -> Option<Symbol<'data>> {
         name,
         address: entry.address(),
         size: entry.size(),
-        kind: symbol_kind(entry.kind()),
+        kind: symbol_kind(&entry),
         defined: !entry.is_undefined() && !entry.is_common(),
         global: entry.is_global(),
         section: entry.section_index().map(|index| index.0),
@@ -851,10 +865,10 @@ fn section<'data>(
     file: &object::File<'data>,
     header: &object::Section<'data, '_>,
 ) -> Section<'data> {
-    let flags = match header.flags() {
+    let flags = classify::SectionFlags(match header.flags() {
         object::SectionFlags::Elf { sh_flags } => sh_flags,
         _ => 0,
-    };
+    });
     // Only `SHT_NOBITS` (and the null section) occupy no file bytes.
     let file_range = header.file_range();
     let nobits = file_range.is_none();
@@ -865,10 +879,10 @@ fn section<'data>(
         name: header.name().unwrap_or_default(),
         address: header.address(),
         size: header.size(),
-        allocated: flags & u64::from(object::elf::SHF_ALLOC) != 0,
-        writable: flags & u64::from(object::elf::SHF_WRITE) != 0,
-        executable: flags & u64::from(object::elf::SHF_EXECINSTR) != 0,
-        tls: flags & u64::from(object::elf::SHF_TLS) != 0,
+        allocated: flags.allocated(),
+        writable: flags.writable(),
+        executable: flags.executable(),
+        tls: flags.tls(),
         nobits,
         kind,
         relocates: matches!(kind, SectionKind::Rel | SectionKind::Rela).then_some(sh_info as usize),

@@ -386,6 +386,8 @@ pub trait RxBeaconPriorityHardware {
 
 /// The coexistence priorities of the shared radio the core shares its RF
 /// with, as it last published them.
+/// The core retains a concrete `C: RadioCoexPriorities` chosen by its image;
+/// this policy is statically dispatched, including on the P2 publication path.
 pub trait RadioCoexPriorities {
     /// The priority of the beacon-window event (`coex_pti_get(0)`), which
     /// beacon reception asks for the air with.
@@ -682,6 +684,7 @@ pub struct LowerMacCoreParts<
     P,
     E,
     T,
+    C: RadioCoexPriorities,
     const BUFFER_SIZE: usize,
     Path: PoolPath = Root<oer_radio_port::LocalId<'core>>,
     const TICKETS: usize = 4,
@@ -689,7 +692,7 @@ pub struct LowerMacCoreParts<
     authority: CoreAuthority<'core, Path, TICKETS>,
     tx: OrdinaryTxIdleOwner<'slot, X, P, E, T, BUFFER_SIZE>,
     config: LowerMacConfig,
-    coex: &'slot dyn RadioCoexPriorities,
+    coex: &'slot C,
     keys: KeyBank<'core, Path, TICKETS>,
 }
 
@@ -707,10 +710,11 @@ impl<
     P,
     E,
     T,
+    C: RadioCoexPriorities,
     const BUFFER_SIZE: usize,
     Path: PoolPath,
     const TICKETS: usize,
-> LowerMacCoreParts<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>
+> LowerMacCoreParts<'core, 'slot, X, P, E, T, C, BUFFER_SIZE, Path, TICKETS>
 {
     pub(crate) fn into_transmitter(self) -> OrdinaryTxIdleOwner<'slot, X, P, E, T, BUFFER_SIZE> {
         self.tx
@@ -823,8 +827,8 @@ impl StationTbtt {
 /// # fn panic(_: &core::panic::PanicInfo) -> ! { loop {} }
 /// use oer_esp32s31_ieee80211_driver::lower_mac::LowerMacCore;
 /// use oer_esp32s31_ieee80211_driver::ordinary_tx::{WifiTxEntropy, WifiTxPowerProfile};
-/// fn borrow_tx<P: WifiTxPowerProfile, E: WifiTxEntropy, T: oer_time::Timer, const N: usize>(
-///     core: &LowerMacCore<'_, '_, X, P, E, T, N>,
+/// fn borrow_tx<X: oer_ieee80211_port::backend::BackendTxProfile, P: WifiTxPowerProfile, E: WifiTxEntropy, T: oer_time::Timer, C: oer_esp32s31_ieee80211_driver::lower_mac::RadioCoexPriorities, const N: usize>(
+///     core: &LowerMacCore<'_, '_, X, P, E, T, C, N>,
 /// ) {
 ///     core.tx();
 /// }
@@ -838,8 +842,8 @@ impl StationTbtt {
 /// # fn panic(_: &core::panic::PanicInfo) -> ! { loop {} }
 /// use oer_esp32s31_ieee80211_driver::lower_mac::LowerMacCore;
 /// use oer_esp32s31_ieee80211_driver::ordinary_tx::{WifiTxEntropy, WifiTxPowerProfile};
-/// fn deadline<X: oer_ieee80211_port::backend::BackendTxProfile, P: WifiTxPowerProfile, E: WifiTxEntropy, T: oer_time::Timer, const N: usize>(
-///     core: &LowerMacCore<'_, '_, X, P, E, T, N>,
+/// fn deadline<X: oer_ieee80211_port::backend::BackendTxProfile, P: WifiTxPowerProfile, E: WifiTxEntropy, T: oer_time::Timer, C: oer_esp32s31_ieee80211_driver::lower_mac::RadioCoexPriorities, const N: usize>(
+///     core: &LowerMacCore<'_, '_, X, P, E, T, C, N>,
 /// ) -> Option<oer_time::Instant> {
 ///     core.next_deadline()
 /// }
@@ -851,6 +855,7 @@ pub struct LowerMacCore<
     P,
     E,
     T,
+    C: RadioCoexPriorities,
     const BUFFER_SIZE: usize,
     Path: PoolPath = Root<oer_radio_port::LocalId<'core>>,
     const TICKETS: usize = 4,
@@ -879,7 +884,7 @@ pub struct LowerMacCore<
     queues: [Option<Attempt<'core, 'slot, X, BUFFER_SIZE, Path>>; LOWER_MAC_TX_QUEUES],
     /// The coexistence priorities the shared radio's owner sets: the beacon
     /// window's and a connection frame's.
-    coex: &'slot dyn RadioCoexPriorities,
+    coex: &'slot C,
 }
 
 impl<
@@ -889,10 +894,11 @@ impl<
     P,
     E,
     T,
+    C: RadioCoexPriorities,
     const BUFFER_SIZE: usize,
     Path: PoolPath,
     const TICKETS: usize,
-> LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>
+> LowerMacCore<'core, 'slot, X, P, E, T, C, BUFFER_SIZE, Path, TICKETS>
 where
     P: WifiTxPowerProfile,
     E: WifiTxEntropy,
@@ -905,7 +911,7 @@ where
         authority: CoreAuthority<'core, Path, TICKETS>,
         tx: OrdinaryTxIdleOwner<'slot, X, P, E, T, BUFFER_SIZE>,
         config: LowerMacConfig,
-        coex: &'slot dyn RadioCoexPriorities,
+        coex: &'slot C,
     ) -> CoreOwner<Self> {
         CoreOwner::prepared(Self {
             authority,
@@ -932,7 +938,7 @@ where
     /// A disabled core over the owners a dismantled core returned: the
     /// state of the core they came from is gone, as at a radio start.
     pub fn from_parts(
-        parts: LowerMacCoreParts<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>,
+        parts: LowerMacCoreParts<'core, 'slot, X, P, E, T, C, BUFFER_SIZE, Path, TICKETS>,
     ) -> CoreOwner<Self> {
         let LowerMacCoreParts {
             authority,

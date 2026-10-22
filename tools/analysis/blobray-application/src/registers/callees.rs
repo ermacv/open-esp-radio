@@ -2,6 +2,7 @@
 use super::*;
 use crate::captured::visit_members;
 use crate::in_process::Executable;
+use oer_analysis_elf::{SymbolKind, classify as elf};
 
 struct Definition {
     input: u64,
@@ -54,15 +55,18 @@ impl<'m> Callees<'m> {
                 };
                 let (_, elf) = inspect_source(bytes, &member.id, memory, c, &mut symbols)?;
                 if !elf.as_ref().is_some_and(|elf| {
-                    elf.bits == 32
-                        && elf.little_endian
-                        && elf.machine == 243
-                        && matches!(elf.object_type, 1 | 2)
+                    elf::is_riscv32_little_endian(elf.bits, elf.little_endian, elf.machine)
+                        && matches!(
+                            elf::object_kind(elf.object_type),
+                            elf::ObjectKind::Relocatable | elf::ObjectKind::Executable
+                        )
                 }) {
                     out.definitions.truncate(start);
                     return Ok(());
                 }
-                if elf.is_some_and(|elf| elf.object_type == 2) {
+                if elf.is_some_and(|elf| {
+                    elf::object_kind(elf.object_type) == elf::ObjectKind::Executable
+                }) {
                     for definition in out.definitions.get_mut(start..).ok_or_else(integrity)? {
                         definition.address = u32::try_from(definition.offset).ok();
                     }
@@ -345,20 +349,18 @@ struct Symbols<'c, 'm> {
 }
 impl ElfSink for Symbols<'_, '_> {
     fn section(&mut self, r: &SectionRecord, c: &mut dyn RunControl) -> Result<()> {
-        if r.flags & 4 != 0 && r.size != 0 {
+        if elf::SectionFlags(r.flags).executable() && r.size != 0 {
             self.executable.push(r.index, c.position())?;
         }
         Ok(())
     }
     fn symbol(&mut self, r: &SymbolRecord, c: &mut dyn RunControl) -> Result<()> {
         c.checkpoint(1)?;
-        let section = match r.raw_section {
-            0xffff => r.extended_section,
-            1..0xff00 => Some(u32::from(r.raw_section)),
-            _ => None,
-        };
-        let function = r.symbol_type == 2 && section.is_some_and(|s| self.executable.contains(&s));
-        let absolute = r.raw_section == 0xfff1;
+        let section = elf::symbol_section(r.raw_section, r.extended_section).index();
+        let function = SymbolKind::of_type(r.symbol_type) == SymbolKind::Text
+            && section.is_some_and(|s| self.executable.contains(&s));
+        let absolute =
+            elf::symbol_section(r.raw_section, r.extended_section) == elf::SymbolSection::Absolute;
         if !function && !absolute {
             return Ok(());
         }

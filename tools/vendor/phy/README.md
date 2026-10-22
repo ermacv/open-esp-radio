@@ -26,12 +26,20 @@ production comparison.
 cargo test -p oer-vendor-phy
 ```
 
-The `tracking-hold` kind requests 1–16 forced due ticks of an active diagnostic
-154 RX session. `phy-tracking-hold-ieee802154-idle` uses five ticks per boot and
-three repetitions. It preserves coarse raw intervals, validates committed
-branches, reports per-repetition maxima and requires policy restoration plus
-RF closure. Invalid pages or failed cleanup remain INCOMPLETE; no Wi-Fi traffic
-or idle hold is served by this workload.
+The `tracking-hold` and `tracking-hold-wifi` kinds request 1–16 due ticks per
+batch of an active diagnostic 154 or Wi-Fi RX session. `policy = "forced"`
+(the default) selects debug `(3, 0)` and forces the retained power/Wi-Fi I2C
+state before every tick; `policy = "natural"` leaves that state and the debug
+policy unchanged. `batches` is 1–20 (default 1) under one RF registration.
+The two `phy-tracking-hold-*-idle` scenarios use three boots of five forced
+ticks. `phy-tracking-hold-wifi-ordinary` uses 20 batches of 16 natural ticks.
+
+The same observer records coarse raw intervals, actual committed branches,
+root polls/suspensions and engine counters in both modes. All UART reports
+follow the root future's return. Each batch requires completion and debug
+policy restoration/checking; final cleanup requires RF closure even on error.
+Invalid pages or failed cleanup remain INCOMPLETE. Associated traffic and
+continuous RF exclusion are separate measurements.
 
 Reference readability is discovered in a separate capture before the alternating
 series. Discovery retains reset/hang evidence and its image identity, and does

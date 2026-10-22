@@ -69,7 +69,7 @@ mod worker {
 
     use oer_esp32s31_hal::bluetooth::{
         BluetoothControllerTimeLatchBeginError, BluetoothControllerTimeLatchStep,
-        BluetoothControllerTimeLatchStepError, ControllerHal,
+        BluetoothControllerTimeLatchStepError,
     };
 
     use super::ControllerTimeSample;
@@ -91,18 +91,20 @@ mod worker {
         ) -> Result<BluetoothControllerTimeLatchStep, BluetoothControllerTimeLatchStepError>;
     }
 
-    impl ControllerTimeHardware for ControllerHal<'_> {
+    impl<M: oer_esp32s31_hal::bluetooth::engine::ControllerMemory> ControllerTimeHardware
+        for oer_esp32s31_hal::bluetooth::engine::Engine<M>
+    {
         fn begin_controller_time_latch(
             &mut self,
         ) -> Result<(), BluetoothControllerTimeLatchBeginError> {
-            ControllerHal::begin_controller_time_latch(self)
+            Self::begin_controller_time_latch(self)
         }
 
         fn step_controller_time_latch(
             &mut self,
         ) -> Result<BluetoothControllerTimeLatchStep, BluetoothControllerTimeLatchStepError>
         {
-            ControllerHal::step_controller_time_latch(self)
+            Self::step_controller_time_latch(self)
         }
     }
 
@@ -140,6 +142,8 @@ mod worker {
     /// Why a fresh logical controller-time request was not published.
     #[derive(Clone, Copy, Debug, Eq, PartialEq)]
     pub enum ControllerTimeRequestError {
+        /// The arena entered absorbing quarantine before this request.
+        Faulted,
         /// The lower owner already held a request although the durable worker was
         /// idle. The worker entered fail-stop instead of stealing that request.
         OwnershipCollision,
@@ -645,7 +649,7 @@ impl ControllerSchedulerEpoch {
     #[cfg(target_arch = "riscv32")]
     pub(crate) const fn project_le_packet_capture(
         self,
-        captured: oer_esp32s31_bluetooth_memory::LePacketCapturedTime,
+        captured: oer_esp32s31_hal::bluetooth::engine::LePacketCapturedTime,
     ) -> u32 {
         self.project_raw_ticks(captured.wrapping_controller_ticks())
     }
@@ -657,7 +661,7 @@ impl ControllerSchedulerEpoch {
     #[cfg(target_arch = "riscv32")]
     pub(crate) const fn project_peripheral_connection_capture(
         self,
-        captured: oer_esp32s31_bluetooth_memory::PeripheralConnectionCapturedAnchorTime,
+        captured: oer_esp32s31_hal::bluetooth::engine::PeripheralConnectionCapturedAnchorTime,
     ) -> u32 {
         self.project_raw_ticks(captured.wrapping_controller_ticks())
     }
@@ -665,7 +669,7 @@ impl ControllerSchedulerEpoch {
     #[cfg(any(target_arch = "riscv32", test))]
     pub const fn project_peripheral_event_start(
         self,
-        window: oer_esp32s31_bluetooth_memory::scheduler::SchedulerRawWindow,
+        window: oer_esp32s31_hal::bluetooth::engine::scheduler::SchedulerRawWindow,
     ) -> u32 {
         self.project_raw_ticks(window.start())
     }
@@ -673,7 +677,7 @@ impl ControllerSchedulerEpoch {
     #[cfg(any(target_arch = "riscv32", test))]
     pub const fn project_peripheral_event_end(
         self,
-        window: oer_esp32s31_bluetooth_memory::scheduler::SchedulerRawWindow,
+        window: oer_esp32s31_hal::bluetooth::engine::scheduler::SchedulerRawWindow,
     ) -> u32 {
         self.project_raw_ticks(window.end())
     }
@@ -681,7 +685,7 @@ impl ControllerSchedulerEpoch {
     #[cfg(any(target_arch = "riscv32", test))]
     pub const fn project_peripheral_receive_time(
         self,
-        time: oer_esp32s31_bluetooth_memory::PeripheralConnectionReceiveTime,
+        time: oer_esp32s31_hal::bluetooth::engine::PeripheralConnectionReceiveTime,
     ) -> u32 {
         self.project_raw_ticks(time.wrapping_controller_ticks())
     }

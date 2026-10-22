@@ -329,3 +329,85 @@ fn a_relocatable_object_names_its_symbol_table_section() {
     assert!(elf.program_headers().is_empty());
     assert_eq!(rv32::header_flags(0).float_abi, rv32::FloatAbi::Soft);
 }
+
+#[test]
+fn section_views_share_raw_flags_including_tls() {
+    let mut writer = Writer::new(BinaryFormat::Elf, Architecture::Riscv32, Endianness::Little);
+    let text = writer.section_id(StandardSection::Text);
+    writer.append_section_data(text, &[0; 4], 4);
+    let data = writer.section_id(StandardSection::Tls);
+    writer.append_section_data(data, &[0; 4], 4);
+    let bytes = writer.write().unwrap();
+    let elf = Elf::parse(&bytes).unwrap();
+    let text = elf.section_by_name(".text").unwrap();
+    assert!(text.allocated && text.executable && !text.writable && !text.tls);
+    let data = elf.section_by_name(".tdata").unwrap();
+    assert!(data.allocated && data.writable && data.tls && !data.executable);
+    assert_eq!(data.kind, SectionKind::Program);
+}
+
+#[test]
+fn every_symbol_type_matches_the_object_reader_and_both_symbol_views() {
+    let expected = [
+        SymbolKind::Unknown,
+        SymbolKind::Data,
+        SymbolKind::Text,
+        SymbolKind::Section,
+        SymbolKind::File,
+        SymbolKind::Data,
+        SymbolKind::Tls,
+        SymbolKind::Unknown,
+        SymbolKind::Unknown,
+        SymbolKind::Unknown,
+        SymbolKind::Text,
+        SymbolKind::Unknown,
+        SymbolKind::Unknown,
+        SymbolKind::Unknown,
+        SymbolKind::Unknown,
+        SymbolKind::Unknown,
+    ];
+    let mut writer = Writer::new(BinaryFormat::Elf, Architecture::Riscv32, Endianness::Little);
+    let text = writer.section_id(StandardSection::Text);
+    writer.append_section_data(text, &[0; 4], 4);
+    for st_type in 0..=15 {
+        writer.add_symbol(WriteSymbol {
+            name: format!("type_{st_type}").into_bytes(),
+            value: 0,
+            size: 4,
+            kind: object::SymbolKind::Text,
+            scope: SymbolScope::Linkage,
+            weak: false,
+            section: SymbolSection::Section(text),
+            flags: SymbolFlags::Elf {
+                st_info: (object::elf::STB_GLOBAL << 4) | st_type,
+                st_other: object::elf::STV_DEFAULT,
+            },
+        });
+    }
+    let bytes = writer.write().unwrap();
+    let file = object::File::parse(bytes.as_slice()).unwrap();
+    let elf = Elf::parse(&bytes).unwrap();
+    for (st_type, expected) in expected.into_iter().enumerate() {
+        let name = format!("type_{st_type}");
+        assert_eq!(SymbolKind::of_type(st_type as u8), expected, "{name}");
+        let parsed = file.symbols().find(|s| s.name() == Ok(&*name)).unwrap();
+        let from_object = match parsed.kind() {
+            object::SymbolKind::Text => SymbolKind::Text,
+            object::SymbolKind::Data => SymbolKind::Data,
+            object::SymbolKind::Section => SymbolKind::Section,
+            object::SymbolKind::File => SymbolKind::File,
+            object::SymbolKind::Tls => SymbolKind::Tls,
+            _ => SymbolKind::Unknown,
+        };
+        assert_eq!(expected, from_object, "object reader: {name}");
+        assert_eq!(elf.symbol(&name).unwrap().kind, expected, "symbol: {name}");
+        assert_eq!(
+            elf.raw_symbols()
+                .find(|s| s.name == Some(name.as_bytes()))
+                .unwrap()
+                .kind,
+            expected,
+            "raw symbol: {name}",
+        );
+    }
+}

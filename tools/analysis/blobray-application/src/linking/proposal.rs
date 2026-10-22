@@ -1,5 +1,6 @@
 //! Trial links propose companions; they never select or keep an image.
 use super::*;
+use oer_analysis_elf::{SymbolKind, classify as elf};
 
 /// Defined functions and data objects of one candidate executable, by name:
 /// (name index, local binding, symbol).
@@ -10,9 +11,11 @@ struct Definitions<'a> {
 impl ElfSink for Definitions<'_> {
     fn symbol(&mut self, r: &SymbolRecord, c: &mut dyn RunControl) -> Result<()> {
         c.checkpoint(1)?;
-        // STT_OBJECT or STT_FUNC in a static table.
-        if !matches!(r.symbol_type, 1 | 2)
-            || r.raw_section == 0
+        // Data or text in a static table.
+        if !matches!(
+            SymbolKind::of_type(r.symbol_type),
+            SymbolKind::Data | SymbolKind::Text
+        ) || !elf::symbol_section(r.raw_section, r.extended_section).is_defined()
             || r.id.table != SymbolTableKind::Static
         {
             return Ok(());
@@ -96,7 +99,8 @@ pub fn propose_companions(
         let bytes: &[u8] = executable.bytes();
         let (_, header) = inspect_source(&bytes, &object, memory, control, &mut scan)?;
         if header.is_some_and(|e| {
-            e.object_type == 2 && e.bits == 32 && e.machine == 243 && e.little_endian
+            elf::object_kind(e.object_type) == elf::ObjectKind::Executable
+                && elf::is_riscv32_little_endian(e.bits, e.little_endian, e.machine)
         }) {
             found.extend(
                 scan.found

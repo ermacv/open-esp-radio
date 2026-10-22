@@ -67,6 +67,12 @@ pub struct Placed<T: 'static> {
 }
 
 impl<T: 'static> Placed<T> {
+    /// Reunite an allocation whose HAL owner retained its original placement.
+    #[cfg(feature = "bluetooth-engine")]
+    pub(crate) fn returned(value: &'static mut T) -> Self {
+        Self { value }
+    }
+
     /// Retain the allocation and its complete DMA range in space `S`.
     #[allow(unsafe_code, reason = "the consumed Placed proves static DMA storage")]
     pub(crate) fn into_dma_parts<S: crate::ieee80211::dma::space::DmaSpace>(

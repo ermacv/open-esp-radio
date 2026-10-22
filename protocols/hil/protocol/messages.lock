@@ -87,8 +87,8 @@ phy/capture/stop e6c7bef66d566ea9 endpoint
 phy/capture/stopped 59d750279ee5996a topic
 phy/hold/get 33acac6117f7ad0b endpoint
 phy/hold/samples 46e294bd3b284a92 topic
-phy/hold/start 2bc1856e438edf8f endpoint
-phy/hold/started 696df738e0e5a761 topic
+phy/hold/start 94c64378f7be62cc endpoint
+phy/hold/started 74936cb235e4a50e topic
 phy/hold/stop 545074692870df14 endpoint
 phy/hold/stopped 76c5b6b89328ab1a topic
 system/panic/inject 4a8069a58696abc1 endpoint

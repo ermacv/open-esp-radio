@@ -978,19 +978,19 @@ impl PhyCalibrationTxGainBinding {
         self,
         registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
     ) -> PhyCalibrationTrackingCompletion {
-        let completion = match self.publication {
+        let completion = match &self.publication {
             PhyCalibrationTxGainPublication::Wifi { channel, image } => {
                 if let Some(image) = image {
-                    crate::hardware::publish_phy_tx_gain_memory(registers, false, &image);
+                    crate::hardware::publish_phy_tx_gain_memory(registers, false, image);
                 }
                 PhyCalibrationTxGainCompletion {
                     class: PhyCalibrationTrackClass::Wifi,
-                    channel: Some(channel),
+                    channel: Some(*channel),
                     published: image.is_some(),
                 }
             }
             PhyCalibrationTxGainPublication::BluetoothIeee802154 { image } => {
-                crate::hardware::publish_bluetooth_tx_gain_memory(registers, &image);
+                crate::hardware::publish_bluetooth_tx_gain_memory(registers, image);
                 PhyCalibrationTxGainCompletion {
                     class: PhyCalibrationTrackClass::BluetoothIeee802154,
                     channel: None,
@@ -1085,6 +1085,10 @@ impl PhyCalibrationTxDcPwdetTransition {
 }
 
 impl PhyCalibrationChannelTransition {
+    pub(crate) const fn is_terminal(&self) -> bool {
+        self.child.is_terminal()
+    }
+
     fn lower(
         parent_action: PhyCalibrationTrackingAction,
         parameters: crate::channel::PhyChipChannelParameters,

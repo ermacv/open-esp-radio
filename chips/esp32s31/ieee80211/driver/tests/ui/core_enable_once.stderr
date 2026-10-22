@@ -1,32 +1,32 @@
 error[E0382]: use of moved value: `core`
  --> tests/ui/core_enable_once.rs:7:19
   |
-4 | ...core, 'slot, P: WifiTxPowerProfile, E: WifiTxEntropy, T: Timer, H: LowerMacHardware, K: LowerMacSink<'core, 'slot, 512>>(core: D...
-  |                                                                                                                             ---- move occurs because `core` has type `oer_esp32s31_ieee80211_driver::lower_mac::DisabledView<'_, oer_esp32s31_ieee80211_driver::lower_mac::LowerMacCore<'_, '_, EspressifBackendTxProfile, P, E, T, 512, oer_radio_port::pool::path::Root<oer_radio_port::identity::LocalId<'_>>>>`, which does not implement the `Copy` trait
+4 | ...core, 'slot, P: WifiTxPowerProfile, E: WifiTxEntropy, T: Timer, C: oer_esp32s31_ieee80211_driver::lower_mac::RadioCoexPriorities, H: LowerMacHardware, K: LowerMacSink<'core, 'slot, 512>>(core: D...
+  |                                                                                                                                                                                               ---- move occurs because `core` has type `oer_esp32s31_ieee80211_driver::lower_mac::DisabledView<'_, oer_esp32s31_ieee80211_driver::lower_mac::LowerMacCore<'_, '_, EspressifBackendTxProfile, P, E, T, C, 512, oer_radio_port::pool::path::Root<oer_radio_port::identity::LocalId<'_>>>>`, which does not implement the `Copy` trait
 5 | ... core.enable_checked();
   |          ---------------- `core` moved due to this method call
 6 | ...)]
 7 | ... = core.enable_checked(); // ui-error: E0382
   |       ^^^^ value used here after move
   |
-note: `oer_esp32s31_ieee80211_driver::lower_mac::DisabledView::<'view, oer_esp32s31_ieee80211_driver::lower_mac::LowerMacCore<'core, 'slot, X, P, E, T, BUFFER_SIZE, Path, TICKETS>, G>::enable_checked` takes ownership of the receiver `self`, which moves `core`
+note: `oer_esp32s31_ieee80211_driver::lower_mac::DisabledView::<'view, oer_esp32s31_ieee80211_driver::lower_mac::LowerMacCore<'core, 'slot, X, P, E, T, C, BUFFER_SIZE, Path, TICKETS>, G>::enable_checked` takes ownership of the receiver `self`, which moves `core`
  --> src/lower_mac/lifecycle.rs
   |
   |         self,
   |         ^^^^
 
 warning: unused variable: `hardware`
- --> tests/ui/core_enable_once.rs:4:271
+ --> tests/ui/core_enable_once.rs:4:340
   |
-4 | ...Profile, P, E, T, 512>>, hardware: &mut H, sink: &mut K) {
+4 | ...file, P, E, T, C, 512>>, hardware: &mut H, sink: &mut K) {
   |                             ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_hardware`
   |
   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
 
 warning: unused variable: `sink`
- --> tests/ui/core_enable_once.rs:4:289
+ --> tests/ui/core_enable_once.rs:4:358
   |
-4 | ... T, 512>>, hardware: &mut H, sink: &mut K) {
+4 | ... C, 512>>, hardware: &mut H, sink: &mut K) {
   |                                 ^^^^ help: if this is intentional, prefix it with an underscore: `_sink`
 
 warning: unused variable: `first`

@@ -263,11 +263,11 @@ ring, and the TX storages pin only placed storage (`TxDmaStorage::pin`,
 firmware placement warning's DMA rules are gone: the link proves what they
 checked. `cargo fw` refuses an image that enables `test-support`.
 
-BLE owners consume `Placed` in `place::<ChipDma>` as well. An application
-places its selected PHY storage, device table, DF workspace, role pools and
-RX chains together in one `.dma.bss.bluetooth` static; `Placed::split`
-divides its nested pairs once. Pool and chain capacities remain const
-generics. Claiming initializes every graph from zero, including the PHY
+The BLE `Engine::new::<ChipDma>` consumes the clocked register owner and
+one `Placed<BluetoothArena>` from `.dma.bss.bluetooth`. Its nested pairs
+hold PHY storage, device table, DF workspace, role pools and RX chains;
+only the engine splits their ownership. Pool, chain and scheduler capacities
+remain const generics. Claiming initializes every graph from zero, including the PHY
 lookup buffers, before any publication. The owner derives typed addresses
 from its actual fields; checks concern allocation membership and compressed
 encoding. Physical placement is proved by the same linker assertions. Native
@@ -298,6 +298,41 @@ buffers in the DMA window; the A-MPDU retention takes only `PlacedBacking`s and
 publishes their addresses without a window check. A buffer lent from outside
 placed storage has no source yet; it returns as a loan type, checked once where
 the loan is made, with the first such buffer.
+
+## Bluetooth controller memory
+
+`oer_esp32s31_hal::bluetooth::engine` retains the component codecs and
+CPU/controller ownership protocol. The BLE driver enables the HAL's
+`bluetooth-engine` feature; Wi-Fi images retain their dependency graph.
+One engine retains the register token and the entire placed arena through
+HAL initialization, PHY activation, runtime workers, stop and reset. Private
+components bind PHY, DF, device table, role pools and receive chains inside
+that same allocation; no standalone PHY/DF runtime owner is exported.
+The driver carries the arena's capacity and lease brands as a generic memory
+type through every lifecycle and terminal failure state.
+
+Driver role builders select profiles, phases, channels and event windows.
+Their detached values contain no layout reference or inspectable pointer.
+HAL encodes physical fields and checks binding anchors before committing a
+value. Raw binding constructors, layout projections and address publication
+primitives are private; PHY/DF, table and RX publication goes through the
+owning engine. Debug output of opaque projections and
+scheduler steps does not reveal address-bearing words.
+
+Generative pool and epoch scopes bind affine leases to one pool installation;
+release consumes the lease. Hardware heads resolve against submitted items
+inside HAL and return logical identities. An acquisition generation prevents
+an old identity from naming a reused slot. Finished-list fences also carry
+the capturing engine installation epoch, allocated without wrap; an old fence is rejected before any completion
+read or CPU return. Retirement requires a stopped, empty scheduler, no
+physical transaction and idle controller-time and finished-list workers.
+Reset returns the same complete `Placed` allocation after ending the old
+pin contracts and zero-initializing its backing in place. Any unconfirmed
+stop or failed reset keeps the entire arena quarantined with its registers.
+The asynchronous scope helpers
+retain these brands across task suspension without allocation. Physical
+scheduler transactions and interrupt-owner lending remain in HAL under the
+Sources exception.
 
 ## Where registers, layouts and the protocol meet
 

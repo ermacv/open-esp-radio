@@ -1,0 +1,41 @@
+error: lifetime may not live long enough
+  --> tests/ui/bluetooth_foreign_pool.rs:12:13
+   |
+ 6 | pub fn release<'a, 'b, 'epoch>(
+   |                --  -- lifetime `'b` defined here
+   |                |
+   |                lifetime `'a` defined here
+...
+12 |     let _ = b.release(lease); // ui-error: lifetime may not live long enough
+   |             ^^^^^^^^^^^^^^^^ argument requires that `'a` must outlive `'b`
+   |
+   = help: consider adding the following bound: `'a: 'b`
+   = note: requirement occurs because of a mutable reference to `SchedulerRolePool<'_, '_, DtmStorage, 1>`
+   = note: mutable references are invariant over their type parameter
+   = help: see <https://doc.rust-lang.org/nomicon/subtyping.html> for more information about variance
+
+error: lifetime may not live long enough
+  --> tests/ui/bluetooth_foreign_pool.rs:12:13
+   |
+ 6 | pub fn release<'a, 'b, 'epoch>(
+   |                --  -- lifetime `'b` defined here
+   |                |
+   |                lifetime `'a` defined here
+...
+12 |     let _ = b.release(lease); // ui-error: lifetime may not live long enough
+   |             ^^^^^^^^^^^^^^^^ argument requires that `'b` must outlive `'a`
+   |
+   = help: consider adding the following bound: `'b: 'a`
+   = note: requirement occurs because of the type `SchedulerRoleInstance<'_, '_>`, which makes the generic argument `'_` invariant
+   = note: the struct `SchedulerRoleInstance<'pool, 'epoch>` is invariant over the parameter `'pool`
+   = help: see <https://doc.rust-lang.org/nomicon/subtyping.html> for more information about variance
+
+help: `'a` and `'b` must be the same: replace one with the other
+
+warning: unused variable: `a`
+ --> tests/ui/bluetooth_foreign_pool.rs:7:5
+  |
+7 |     a: &mut DtmPool<'a, 'epoch, 1>,
+  |     ^ help: if this is intentional, prefix it with an underscore: `_a`
+  |
+  = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default

@@ -9,7 +9,7 @@
 //! module names (`notes/bluetooth/le-coexistence-priorities.md`).
 
 use oer_bluetooth_le_radio::{AdvertisingEventKind, ConnectionEventKind};
-use oer_esp32s31_bluetooth_memory::{
+use oer_esp32s31_hal::bluetooth::engine::{
     AdvertisingCoexistencePriorities, ConnectionCoexistencePriorities,
     LegacyScanCoexistencePriorities, PeripheralConnectionCoexistenceProtection,
     SchedulerItemCoexistencePriority,

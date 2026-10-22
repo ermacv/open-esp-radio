@@ -1,8 +1,10 @@
 //! Private PHY transport jobs. Hardware ownership stays with the caller.
+mod channel_gain;
 mod i2c;
 mod io;
 pub(crate) mod power;
 pub(crate) mod rfpll;
+pub(crate) mod rx_gain;
 pub(crate) mod temperature;
 pub(crate) mod wifi_i2c;
 pub(crate) use io::Registers;
@@ -68,6 +70,16 @@ pub(crate) enum Step {
 }
 
 enum Work<'a> {
+    Channel {
+        binding: &'a mut Option<crate::channel::PhyChipChannelExternalBinding>,
+        completion: &'a mut Option<crate::channel::PhyChipChannelCompletion>,
+        gain: channel_gain::Cursor,
+    },
+    RxGainAtom {
+        binding: &'a mut Option<crate::rx::gain::PhyRxGainInitExternalBinding>,
+        completion: &'a mut Option<crate::rx::gain::PhyRxGainInitCompletion>,
+    },
+    RxGain(rx_gain::Run<'a>),
     Dcode {
         transition: &'a mut crate::analog::dcode::PhyDcodeTransition,
         lock: &'a mut Option<bool>,
@@ -151,6 +163,68 @@ impl<'a> Job<'a> {
             now,
             false,
         )
+    }
+    pub(crate) fn channel(
+        binding: &'a mut Option<crate::channel::PhyChipChannelExternalBinding>,
+        completion: &'a mut Option<crate::channel::PhyChipChannelCompletion>,
+        now: Instant,
+    ) -> Result<Self, Failure> {
+        let mut job = Self::new(
+            Work::Channel {
+                binding,
+                completion,
+                gain: channel_gain::Cursor::default(),
+            },
+            now,
+            false,
+        )?;
+        job.deadline = Instant::from_micros(u64::MAX);
+        Ok(job)
+    }
+    pub(crate) fn rx_gain(
+        transition: &'a mut crate::rx::gain::PhyRxGainInitTransition,
+        scratch: &'a mut rx_gain::Scratch,
+        execution: &'a mut crate::tracking::observation::RxGainExecution,
+        now: Instant,
+        measured: bool,
+    ) -> Result<Self, Failure> {
+        let phase = transition.phase().ok_or(Failure::Binding)?;
+        let mut job = Self::new(
+            Work::RxGain(rx_gain::Run {
+                transition,
+                scratch,
+                execution,
+                phase,
+                measured,
+            }),
+            now,
+            false,
+        )?;
+        job.deadline = Instant::from_micros(u64::MAX);
+        Ok(job)
+    }
+
+    pub(crate) fn channel_maximum_entries(&self) -> [u8; 2] {
+        match &self.work {
+            Work::Channel { gain, .. } => gain.maximum_entries(),
+            _ => [0; 2],
+        }
+    }
+    pub(super) fn rx_gain_atom(
+        binding: &'a mut Option<crate::rx::gain::PhyRxGainInitExternalBinding>,
+        completion: &'a mut Option<crate::rx::gain::PhyRxGainInitCompletion>,
+        now: Instant,
+    ) -> Result<Self, Failure> {
+        let mut job = Self::new(
+            Work::RxGainAtom {
+                binding,
+                completion,
+            },
+            now,
+            false,
+        )?;
+        job.deadline = Instant::from_micros(u64::MAX);
+        Ok(job)
     }
     pub(crate) fn pbus(
         binding: &'a mut PhyPbusHardwareBinding,
@@ -242,6 +316,43 @@ impl<'a> Job<'a> {
         self.ready_started = None;
         self.first_wait = false;
         match &mut self.work {
+            Work::Channel {
+                binding,
+                completion,
+                gain,
+            } => {
+                if binding.is_none() {
+                    return Ok(Step::Complete);
+                }
+                self.ready_started = Some(clock.now());
+                return if io.channel::<D, _>(clock, binding, completion, gain)? {
+                    Ok(Step::WaitAt(
+                        now.checked_add(RETRY).ok_or(Failure::DeadlineOverflow)?,
+                    ))
+                } else {
+                    Ok(Step::Runnable)
+                };
+            }
+            Work::RxGainAtom {
+                binding,
+                completion,
+            } => {
+                if binding.is_none() {
+                    return Ok(Step::Complete);
+                }
+                self.ready_started = Some(clock.now());
+                return if io.rx_gain::<D, _>(clock, binding, completion)? {
+                    Ok(Step::WaitAt(
+                        now.checked_add(RETRY).ok_or(Failure::DeadlineOverflow)?,
+                    ))
+                } else {
+                    Ok(Step::Runnable)
+                };
+            }
+            Work::RxGain(run) => {
+                self.ready_started = Some(clock.now());
+                return run.advance::<D, _>(&mut io, clock, now);
+            }
             Work::Dcode {
                 transition,
                 lock,
@@ -533,6 +644,7 @@ pin_project_lite::pin_project! {
 /// The power adapter only converts the shared engine's terminal result.
 /// Its owner and observations live inside Driver, never in an outer async frame.
 trait Engine: Future<Output = Result<(), Failure>> {
+    fn observe_calibration(self: Pin<&mut Self>);
     fn finish_power(
         self: Pin<&mut Self>,
         result: Result<(), Failure>,
@@ -551,6 +663,24 @@ impl<
     D: super::wait::PhyShortDelay,
 > Engine for Driver<'a, '_, R, T, F, M, D>
 {
+    fn observe_calibration(self: Pin<&mut Self>) {
+        if let RouteProj::Transport {
+            job,
+            stats: Some(timing),
+            ..
+        } = self.project().route.project()
+        {
+            let terminal = job.finished;
+            match &mut job.work {
+                Work::RxGain(run) => {
+                    run.execution.observe_engine(timing, run.scratch.action());
+                    run.scratch.observe_poll(run.execution, timing);
+                }
+                Work::Channel { gain, .. } => gain.observe(timing, terminal),
+                _ => {}
+            }
+        }
+    }
     fn finish_power(
         self: Pin<&mut Self>,
         result: Result<(), Failure>,
@@ -810,6 +940,46 @@ pub(crate) fn drive<'a, 'j, D: super::wait::PhyShortDelay + 'a, R: Registers, T:
         trace,
         rfpll,
     )
+}
+
+pin_project_lite::pin_project! {
+    struct CalibrationTrace<F> { #[pin] inner: F }
+}
+impl<F: Engine> Future for CalibrationTrace<F> {
+    type Output = Result<(), Failure>;
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let mut this = self.project();
+        let result = this.inner.as_mut().poll(cx);
+        this.inner.observe_calibration();
+        result
+    }
+}
+
+pub(crate) fn drive_calibration<
+    'a,
+    'j,
+    D: super::wait::PhyShortDelay + 'a,
+    R: Registers,
+    T: Timer,
+>(
+    job: &'a mut Job<'j>,
+    registers: &'a mut R,
+    timer: &'a T,
+    stats: Option<&'a mut EngineTiming>,
+) -> impl Future<Output = Result<(), Failure>> + 'a {
+    if let Work::RxGain(run) = &mut job.work {
+        run.scratch
+            .start_poll_timing(stats.as_ref().map_or(0, |timing| timing.total_micros));
+    }
+    CalibrationTrace {
+        inner: driver::<D, _, _>(
+            Input::Transport { job, stats },
+            registers,
+            timer,
+            None,
+            None,
+        ),
+    }
 }
 
 #[cfg(test)]

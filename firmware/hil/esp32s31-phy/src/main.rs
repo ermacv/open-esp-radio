@@ -248,7 +248,10 @@ async fn serve_radio(radio: &'static mut radio::Radio) {
             poll_fn(|cx| DOORBELL.poll_rung(cx)).await;
         }
         // A started PHY future always reaches its terminal result before a command.
-        radio.service_hold().await;
+        {
+            let mut hold = core::pin::pin!(radio.service_hold());
+            hold.as_mut().await;
+        }
         if let Some((request, response)) = SLOT.take_request() {
             let result = radio.request(request, &mut capture_rx).await;
             radio.request_finished(&result);

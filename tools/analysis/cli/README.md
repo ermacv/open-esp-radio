@@ -8,6 +8,15 @@ content: inventory, whole-library analysis and register accesses, synthetic
 linking with explicit ROM companions, exact data export, final-image target
 audits and in-process execution and comparison. Nothing is imported, stored or
 published. `cargo blobray` runs this CLI.
+
+The CLI owns arguments, file reads, JSON envelopes and human rendering.
+Whole-library field, call-argument and reference queries, inventory symbol
+and string queries, and register-access filtering/grouping belong to
+[`blobray-application`](../blobray-application/README.md). Their result types
+are serialized directly inside the CLI envelopes. Raw ELF classification
+belongs to [`oer-analysis-elf::classify`](../elf/src/classify.rs); listing
+rendering stays here.
+
 The [architecture](../blobray-docs/design/architecture.md) owns module authority;
 [contracts](../blobray-docs/design/contracts.md) owns identities, assessment and
 resource rules; [workflows](../blobray-docs/design/workflows.md) lists the supported

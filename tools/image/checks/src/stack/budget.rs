@@ -2,10 +2,8 @@
 //! the work units it may charge and the time it may take. Running out of
 //! any fails the analysis with `ResourceLimited` instead of running on.
 //!
-//! The limits come from the measured analysis of every image class. Working
-//! memory is 512 MiB with the whole analysis accounted: about twice the
-//! largest accounted peak, 240 MB for a Wi-Fi, BLE and coexistence runtime
-//! image (record outside this repository).
+//! Working memory is capped at 1 GiB for the full station/IP image together
+//! with the pinned ROM, typed debug facts and interrupt analysis.
 //! The work budget is the primary bound: it does not depend on the
 //! machine's load. The deadline is a backstop. Working memory covers the
 //! image's and the ROM's bytes, their facts, the value analysis, and every
@@ -20,7 +18,9 @@ use oer_analysis_riscv_model::{Error, ErrorCode, Result, RunControl, RunPosition
 use std::time::{Duration, Instant};
 
 /// Working memory one image analysis may reserve.
-pub const MEMORY_LIMIT: u64 = 512 << 20;
+// The complete station + owned IP stack needs room beside the pinned ROM
+// analysis; this caps host working memory, independently of image RAM.
+pub const MEMORY_LIMIT: u64 = 1024 << 20;
 /// Work units one image analysis may charge.
 pub const WORK_UNITS: u64 = 1_000_000_000;
 /// Wall-clock time one image analysis may take.

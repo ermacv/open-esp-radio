@@ -43,7 +43,7 @@ Below it are, by directory (`/` ends a domain):
 | Generated register access | `chips/esp32c5/pac-raw`, `chips/esp32s31/pac-raw`, `chips/espressif/ieee80211-pac-raw` |
 | Semantic PACs and the HAL | `chips/esp32c5/pac`, `chips/esp32s31/pac`, `chips/esp32c5/hal`, `chips/esp32s31/hal` |
 | Platform, executor and framework bindings | `chips/esp32c5/board`, `chips/esp32s31/board`, `chips/espressif/staged-bootstrap`, `chips/espressif/staged-runtime`, `chips/espressif/executor`, `chips/espressif/esp-hal-irq`, `chips/espressif/esp-hal/`, `chips/esp32c5/esp-hal-soc`, `portable/embassy/` |
-| Cores of memory the hardware shares | `portable/memory`, `portable/interrupt-table`, `chips/espressif/staged-layout`, `chips/esp32s31/bluetooth/memory` |
+| Cores of memory the hardware shares | `portable/memory`, `portable/interrupt-table`, `chips/espressif/staged-layout` |
 | The host's operating-system bindings | `tools/os/process`, `tools/os/serial` |
 | The C-driver stand | `tools/vendor/ieee802154-esp32s31` |
 | Bootstrap and probe images | `firmware/bootstrap/`, `firmware/probes/` |
@@ -80,10 +80,20 @@ radio must first claim the slot the release freed. Preserve the proof at the
 smallest operation; a safe state machine in a crate below the boundary
 remains safe.
 
-`esp32s31-bluetooth-memory` is the core of the controller-SRAM protocol:
-the controller walks and writes that memory, so, like the HAL's DMA modules,
-the crate whose codecs and scheduler lists encode every address the
-controller follows holds the narrow unsafe code that publishes them.
+`oer_esp32s31_hal::bluetooth::engine` owns the controller-SRAM protocol.
+One `Engine` owns the register token and the complete `Placed<BluetoothArena>`;
+its private components retain graph bindings. The codecs
+and scheduler lists encode the addresses the controller follows and hold the
+narrow unsafe publication boundary. Driver role builders select detached
+values, never layout references; HAL checks their binding anchors before
+writing them. Pool and epoch brands bind each affine lease to its owner;
+logical item identities also carry an acquisition generation.
+The same engine moves through initialization, activation, scheduler workers,
+stop and reset. PHY/DF owners cannot be detached. Address publication and
+completion return go through the engine; raw proofs and address getters stay
+private. Finished-list receipts carry the capturing engine installation epoch, so a
+fence from before reset cannot authorize a later installation's completion. Opaque
+projections and public scheduler Debug output do not expose physical links.
 `scheduler::hardware::live` publishes list-zero items only after resolving
 each address to a submitted item of the `'static` scheduler pools, in the
 executor's order. The BLE PHY engine, the direction-finding workspace, the
@@ -92,7 +102,17 @@ the storage the hardware is pointed at (`BlePhyHardwareObjects`,
 `DirectionFindingDescriptor`, `DeviceTablePublication`, `RxChainHead`),
 whose constructor is unsafe; the HAL publications that take them are safe.
 The private placement adapter consumes `Placed`, projects fields within its
-allocation and calls the HAL's typed-address constructors. Its range metadata
+allocation and calls the HAL's typed-address constructors. `engine::arena`
+retains the root pointer, then derives every field borrow from that pointer.
+After a verified reset, consuming all graph owners ends their borrows; the
+backing is dropped in place to end its pin contract and zero-initialized in
+place before returning the original `Placed` allocation. No field reference
+escapes this return. Constructor refusal returns both original inputs before
+mutation. Unconfirmed stop and reset failure retain the whole graph with its
+register partitions in absorbing quarantine; Drop never returns a placement.
+The adjacent `engine::owner::tests` cover exact-allocation retry, completion,
+stop, reset, stale epochs and both terminal failure paths; paired UI cases
+cover moved inputs, private custody and stale leases. Its range metadata
 holds no reference that could alias the retained owner. The RX byte storage's
 `Zeroable` implementation only permits zero initialization of transparent
 volatile byte cells; it grants no concurrent access.
@@ -149,6 +169,17 @@ the destination address before a cleanup guard or the whole struct is exposed.
 Thus a callback cannot substitute another allocation for an unwritten field.
 Cached SPSC placement initializes its cursor words directly and composes with
 this nested form in the Wi-Fi RX arena; compact P1/P2 queues retain their layout.
+
+`StaticPlace` permanently claims an exclusive static allocation, then lends
+uninitialized storage with the actual value's shorter lifetime. Its layout
+type supplies only size and alignment, checked at monomorphization; no
+initialized value or reference is reinterpreted and no loan is extended.
+Unclaimed backing is `Send` regardless of its layout type: it contains no
+initialized layout value, and its permanent static loan prevents moving it
+after initialization. The initialized handle keeps its own thread restrictions.
+`PlacedFuture` owns one future constructed in that allocation, pins it once,
+and polls and drops it in place. Only the handle can move. Forgetting it
+permanently retains the backing; no safe reset or reuse path exists.
 
 `AffineSpscQueue` lends short local endpoints without new unsafe operations.
 The original endpoint remains exclusively borrowed. A local producer loan can

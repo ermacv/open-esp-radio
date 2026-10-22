@@ -26,9 +26,9 @@ bounds) live in the code that applies them.
   coexistence) records facts, not a port, and stays MIT OR Apache-2.0.
 - **Sources** ([source policy](source-policy.md)). From a source without a
   license only facts. The exception is the Bluetooth LE hardware engine (the
-  S31 driver, the controller memory and its HAL engine, the PAC's Bluetooth
+  S31 driver, the HAL's controller-memory engine, the PAC's Bluetooth
   initialization and the HAL's scheduler locks), which keeps what it takes
-  from `esp32s31-bt-lib`. Inside it the controller memory lends the interrupt
+  from `esp32s31-bt-lib`. Inside it the engine lends the interrupt
   owner to a task, serialized with the interrupt service: a known exception
   to the shared-lock rule until the Bluetooth LE block splits the engine into
   interrupt and task halves that meet through static typed signals.
@@ -219,6 +219,9 @@ bounds) live in the code that applies them.
   A type-level mechanism must name the bug it prevents. The Bluetooth LE port
   takes the same form as the Wi-Fi lower-MAC port. No radio-system token
   crosses the lower-MAC port; PHY membership stays inside the backend.
+- **Station composition.** `StationPort` maps an image-owned composition to
+  its concrete `Backend`, `SlotId` and `Caps`. The service retains the backend's
+  lifecycle and body-loan identity; the mapping does not wrap or replace it.
 - **Reference models.** Every port has a reference model that keeps its
   contract; doubles that break the contract stay out of the conformance
   suite. A port's reference model is its own host crate,

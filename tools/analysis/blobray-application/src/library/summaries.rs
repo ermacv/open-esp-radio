@@ -3,6 +3,7 @@ use super::*;
 use crate::registers::{CallKey, CallLinks, CallSites, Callees, Calls};
 use oer_analysis_blobray_analysis::registers::{ArgumentProgram, ArgumentSource};
 use oer_analysis_blobray_artifacts::{MemberIndex, PreparedObject, prepare_captured};
+use oer_analysis_elf::classify as elf;
 use oer_analysis_riscv_analysis::{AnalysisSummary, PreparedReferences, ProvenTables};
 use oer_analysis_riscv_program::{
     facts::ImageFacts,
@@ -333,10 +334,11 @@ pub(super) fn analyze<'a>(
                 gap("object payload unavailable", c)?;
             }
             if !elf.as_ref().is_some_and(|e| {
-                e.bits == 32
-                    && e.little_endian
-                    && e.machine == 243
-                    && matches!(e.object_type, 1 | 2)
+                elf::is_riscv32_little_endian(e.bits, e.little_endian, e.machine)
+                    && matches!(
+                        elf::object_kind(e.object_type),
+                        elf::ObjectKind::Relocatable | elf::ObjectKind::Executable
+                    )
             }) {
                 gap(
                     "object is not a supported ELF32 little-endian RISC-V relocatable or executable",
@@ -348,7 +350,9 @@ pub(super) fn analyze<'a>(
             }
             if selection.functions.is_empty()
                 && (!selection.executable.is_empty()
-                    || elf.as_ref().is_some_and(|e| e.object_type == 2))
+                    || elf.as_ref().is_some_and(|e| {
+                        elf::object_kind(e.object_type) == elf::ObjectKind::Executable
+                    }))
             {
                 gap("executable sections have no selected function symbols", c)?;
             }
@@ -396,10 +400,14 @@ pub(super) fn analyze<'a>(
             };
             let mut object_tables = None;
             let mut image_facts = None;
-            let facts_result = match elf.as_ref().map(|e| e.object_type) {
-                Some(1) => ObjectTables::new(bytes, memory, c).map(|t| object_tables = Some(t)),
-                Some(2) => ImageFacts::new(bytes, assumptions.read_only, memory, c)
-                    .map(|t| image_facts = Some(t)),
+            let facts_result = match elf.as_ref().map(|e| elf::object_kind(e.object_type)) {
+                Some(elf::ObjectKind::Relocatable) => {
+                    ObjectTables::new(bytes, memory, c).map(|t| object_tables = Some(t))
+                }
+                Some(elf::ObjectKind::Executable) => {
+                    ImageFacts::new(bytes, assumptions.read_only, memory, c)
+                        .map(|t| image_facts = Some(t))
+                }
                 _ => Ok(()),
             };
             if let Err(e) = facts_result {

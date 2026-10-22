@@ -9,7 +9,7 @@ use std::{
 
 use serde::Deserialize;
 
-use crate::{w1, w2};
+use crate::{w1, w2, w3};
 use oer_image_build::{
     Application, Gates, ImageSpec, Result,
     bundle::{ImageBundle, Purpose},
@@ -54,11 +54,14 @@ pub enum Stand {
     W1(w1::Config),
     /// Image `w2`: the stand identity with the explicit W2 laboratory cap.
     W2(w1::Config),
+    /// Image w3: the open HT20 station stand.
+    W3(w1::Config),
 }
 
 /// Fixed fictitious stand identities for analysis, independent of the lab.
 const ANALYSIS_W0: Stand = Stand::W0 { country: *b"DE" };
 static ANALYSIS_W1: LazyLock<Stand> = LazyLock::new(|| Stand::W1(analysis_config()));
+static ANALYSIS_W3: LazyLock<Stand> = LazyLock::new(|| Stand::W3(analysis_config()));
 static ANALYSIS_W2: LazyLock<Stand> = LazyLock::new(|| Stand::W2(analysis_config()));
 
 fn analysis_config() -> w1::Config {
@@ -75,6 +78,7 @@ fn analysis_stand(image: &str) -> Result<&'static Stand> {
         "w0" => Ok(&ANALYSIS_W0),
         w1::IMAGE => Ok(&ANALYSIS_W1),
         w2::IMAGE => Ok(&ANALYSIS_W2),
+        w3::IMAGE => Ok(&ANALYSIS_W3),
         _ => Err(format!("image `{image}` has no stand configuration for --analysis").into()),
     }
 }
@@ -86,6 +90,7 @@ fn analysis_stand(image: &str) -> Result<&'static Stand> {
 pub fn runtime_env(image: &str, stand: Option<&Stand>) -> Vec<(String, Option<String>)> {
     match (image, stand) {
         (w2::IMAGE, Some(Stand::W2(config))) => w2::runtime_env(config),
+        (w3::IMAGE, Some(Stand::W3(config))) => w3::runtime_env(config),
         (w1::IMAGE, Some(Stand::W1(config))) => config
             .runtime_env()
             .into_iter()
@@ -97,6 +102,7 @@ pub fn runtime_env(image: &str, stand: Option<&Stand>) -> Vec<(String, Option<St
         _ => w1::ENV
             .into_iter()
             .chain(w2::ENV)
+            .chain(w3::ENV)
             .chain([ENV_W0_COUNTRY])
             .map(|name| (name.to_owned(), None))
             .collect(),
@@ -104,10 +110,12 @@ pub fn runtime_env(image: &str, stand: Option<&Stand>) -> Vec<(String, Option<St
 }
 
 /// How long `cargo fw run` waits for `image`'s result without `--timeout`:
-/// w1's hold cycles and report take up to two minutes, any other image
-/// reports within 30 s.
+/// W3's bidirectional echo workload takes up to four minutes, W1's hold
+/// cycles up to two minutes, and other images report within 30 s.
 pub fn run_timeout(image: &str) -> std::time::Duration {
-    if image == w1::IMAGE {
+    if image == w3::IMAGE {
+        std::time::Duration::from_secs(240)
+    } else if image == w1::IMAGE {
         std::time::Duration::from_secs(120)
     } else {
         std::time::Duration::from_secs(30)
@@ -144,7 +152,11 @@ pub fn spec(
             features: Vec::new(),
             default_features: true,
         },
-        stack_policy: profile.stack_policy(),
+        stack_policy: if image == w3::IMAGE {
+            Path::new("firmware/apps/w3/stack.toml").to_owned()
+        } else {
+            profile.stack_policy()
+        },
         layout_seed: None,
         runtime_environment: runtime_env(image, stand),
         output: if analysis {
@@ -201,7 +213,7 @@ mod tests {
             include_str!("../../../../chips/esp32s31/platform/chip.toml"),
         )
         .unwrap();
-        for image in ["w0", "w1", "w2", "boot-smoke"] {
+        for image in ["w0", "w1", "w2", "w3", "boot-smoke"] {
             let manifest = directory
                 .path()
                 .join("firmware/apps")
@@ -224,6 +236,7 @@ mod tests {
             ("w0", &ANALYSIS_W0),
             ("w1", &*ANALYSIS_W1),
             ("w2", &*ANALYSIS_W2),
+            ("w3", &*ANALYSIS_W3),
         ] {
             let spec = spec(
                 directory.path(),
@@ -240,9 +253,9 @@ mod tests {
     #[test]
     fn analysis_configuration_is_fictitious_and_keeps_the_lab_power_cap() {
         assert_eq!(ANALYSIS_W0, Stand::W0 { country: *b"DE" });
-        for stand in [&*ANALYSIS_W1, &*ANALYSIS_W2] {
+        for stand in [&*ANALYSIS_W1, &*ANALYSIS_W2, &*ANALYSIS_W3] {
             let config = match stand {
-                Stand::W1(config) | Stand::W2(config) => config,
+                Stand::W1(config) | Stand::W2(config) | Stand::W3(config) => config,
                 _ => unreachable!(),
             };
             assert_eq!(config.channel, 1);
@@ -259,7 +272,7 @@ mod tests {
     #[test]
     fn build_and_analysis_enforce_interrupts_with_separate_outputs() {
         let directory = repository();
-        for image in ["w0", "w1", "w2"] {
+        for image in ["w0", "w1", "w2", "w3"] {
             for analysis in [false, true] {
                 let enforced = Enforced::Only([Check::Interrupts].into());
                 let spec = spec(directory.path(), image, None, analysis, enforced.clone()).unwrap();
@@ -298,6 +311,7 @@ mod tests {
             ("w0", Some(&ANALYSIS_W0)),
             ("w1", Some(&*ANALYSIS_W1)),
             ("w2", Some(&*ANALYSIS_W2)),
+            ("w3", Some(&*ANALYSIS_W3)),
         ] {
             let spec = spec(directory.path(), image, stand, false, Enforced::Reported).unwrap();
             let gates = spec.checks.unwrap();
@@ -425,6 +439,7 @@ mod tests {
         ]
         .into_iter()
         .chain(w2::ENV)
+        .chain(w3::ENV)
         .chain([ENV_W0_COUNTRY])
         .map(|name| (name.to_owned(), None))
         .collect::<Vec<_>>();

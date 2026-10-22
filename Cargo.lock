@@ -2462,11 +2462,14 @@ dependencies = [
 name = "oer-analysis-blobray-application"
 version = "0.1.0"
 dependencies = [
+ "object 0.39.1",
  "oer-analysis-blobray-analysis",
  "oer-analysis-blobray-artifacts",
  "oer-analysis-blobray-domain",
  "oer-analysis-blobray-verification",
+ "oer-analysis-elf",
  "oer-analysis-riscv-analysis",
+ "oer-analysis-riscv-lift",
  "oer-analysis-riscv-model",
  "oer-analysis-riscv-program",
  "rustc-demangle",
@@ -2728,26 +2731,15 @@ dependencies = [
 name = "oer-esp32s31-bluetooth-driver"
 version = "0.1.0"
 dependencies = [
+ "bytemuck",
  "critical-section",
  "oer-bluetooth-hci",
  "oer-bluetooth-le-radio",
- "oer-esp32s31-bluetooth-memory",
  "oer-esp32s31-hal",
  "oer-esp32s31-phy",
  "oer-interrupt-table",
+ "oer-test-ui-cases",
  "oer-time",
-]
-
-[[package]]
-name = "oer-esp32s31-bluetooth-memory"
-version = "0.1.0"
-dependencies = [
- "bytemuck",
- "oer-esp32s31-hal",
- "oer-esp32s31-knowledge",
- "oer-time",
- "pin-project",
- "vcell",
 ]
 
 [[package]]
@@ -2766,6 +2758,7 @@ version = "0.1.0"
 dependencies = [
  "bytemuck",
  "critical-section",
+ "oer-esp32s31-knowledge",
  "oer-esp32s31-pac",
  "oer-espressif-analog",
  "oer-espressif-coex",
@@ -3160,6 +3153,49 @@ dependencies = [
  "oer-radio-regulatory",
  "oer-time",
  "static_cell",
+]
+
+[[package]]
+name = "oer-firmware-apps-w3"
+version = "0.1.0"
+dependencies = [
+ "critical-section",
+ "embassy-executor",
+ "embassy-futures",
+ "embassy-net",
+ "embassy-sync 0.8.0",
+ "esp-hal",
+ "heapless 0.9.3",
+ "oer-embassy-net",
+ "oer-embassy-time",
+ "oer-esp32s31-board",
+ "oer-esp32s31-hal",
+ "oer-esp32s31-ieee80211-driver",
+ "oer-esp32s31-ieee80211-mac",
+ "oer-esp32s31-layout",
+ "oer-esp32s31-phy",
+ "oer-esp32s31-radio-client",
+ "oer-esp32s31-radio-coex",
+ "oer-esp32s31-radio-system",
+ "oer-espressif-esp-hal-irq",
+ "oer-espressif-esp-hal-radio",
+ "oer-espressif-executor",
+ "oer-espressif-ieee80211-policy",
+ "oer-espressif-staged-runtime",
+ "oer-ieee80211-arbiter",
+ "oer-ieee80211-port",
+ "oer-ieee80211-runtime",
+ "oer-ieee80211-sta",
+ "oer-ieee80211-upper-mac",
+ "oer-ieee80211-wire",
+ "oer-interrupt-table",
+ "oer-memory",
+ "oer-radio-port",
+ "oer-radio-regulatory",
+ "oer-time",
+ "oer-time-virtual",
+ "static_cell",
+ "xarxa-driver",
 ]
 
 [[package]]
@@ -3802,6 +3838,7 @@ dependencies = [
  "oer-ieee80211-rsn",
  "oer-ieee80211-upper-mac",
  "oer-ieee80211-wire",
+ "oer-memory",
  "oer-radio-port",
  "oer-radio-regulatory",
  "oer-test-ui-cases",
@@ -4291,6 +4328,7 @@ dependencies = [
  "hex",
  "jiff",
  "oer-chip-profile",
+ "oer-firmware-apps-w3",
  "oer-hil-lab",
  "oer-ieee80211-port",
  "oer-ieee80211-upper-mac",
@@ -4485,6 +4523,7 @@ dependencies = [
  "heapless 0.9.3",
  "hex",
  "oer-analysis-elf",
+ "oer-esp32s31-phy",
  "oer-hil-lab",
  "oer-hil-link",
  "oer-hil-model",

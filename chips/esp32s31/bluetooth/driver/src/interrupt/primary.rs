@@ -28,7 +28,7 @@ pub enum PrimaryInterruptStep {
     /// A reviewed baseline fault preempted ordinary scheduler work.
     Fault(PrimaryControllerFault),
     /// The reference-gate BUSY sample never settled within
-    /// [`DIAGNOSTIC_SETTLE`](oer_esp32s31_bluetooth_memory::scheduler::DIAGNOSTIC_SETTLE).
+    /// [`DIAGNOSTIC_SETTLE`](oer_esp32s31_hal::bluetooth::engine::scheduler::DIAGNOSTIC_SETTLE).
     /// The reference is preserved and no work is published.
     DiagnosticUnsettled(PrimaryInterruptClassification),
     /// The epoch contained no reviewed dynamic scheduler source.
@@ -180,7 +180,7 @@ fn execute_primary_interrupt_step(
 ///
 /// This function is finite. It performs at most the PAC acknowledgement
 /// transaction, one reference-gate sample that settles within
-/// [`DIAGNOSTIC_SETTLE`](oer_esp32s31_bluetooth_memory::scheduler::DIAGNOSTIC_SETTLE)
+/// [`DIAGNOSTIC_SETTLE`](oer_esp32s31_hal::bluetooth::engine::scheduler::DIAGNOSTIC_SETTLE)
 /// on `clock`, and one later work read. It never invokes a callback, waits
 /// for hardware beyond that settle, allocates or wakes an executor.
 pub fn step_primary_interrupt(

@@ -415,6 +415,33 @@ impl<P> PhyGainMemory for RadioChannelHal<'_, P> {
     }
 }
 
+/// Encode one complete entry using the same cold/channel publication arithmetic.
+#[cfg(any(target_arch = "riscv32", test))]
+pub(crate) fn tx_gain_memory_entry(
+    image: &crate::channel::PhyWifiTxGainImage,
+    memory_base: u8,
+    entry: u8,
+) -> oer_esp32s31_hal::types::PhyGainMemoryEntry {
+    let entry_index = usize::from(entry);
+    let gain_72 = packed_halfword(&image.output_72, entry_index);
+    let gain_64 = packed_halfword(&image.output_64, entry_index);
+    let gain_32 = packed_byte(&image.output_32, entry_index);
+    let seed_index = tx_baseband_gain_index(gain_64) * 4;
+    oer_esp32s31_hal::types::PhyGainMemoryEntry::transmit(
+        memory_base.wrapping_add(entry),
+        gain_72,
+        gain_64,
+        gain_32,
+        [
+            tx_gain_seed_halfword(image, seed_index),
+            tx_gain_seed_halfword(image, seed_index + 1),
+            tx_gain_seed_halfword(image, seed_index + 2),
+            tx_gain_seed_halfword(image, seed_index + 3),
+        ],
+        image.config,
+    )
+}
+
 #[cfg(target_arch = "riscv32")]
 fn publish_phy_tx_gain_memory_to(
     registers: &mut impl PhyGainMemory,
@@ -425,26 +452,7 @@ fn publish_phy_tx_gain_memory_to(
     let memory_base = hardware_base.wrapping_add(if bank { 32 } else { 0 });
     let mut entry = 0_u8;
     while entry != 32 {
-        let entry_index = usize::from(entry);
-        let gain_72 = packed_halfword(&image.output_72, entry_index);
-        let gain_64 = packed_halfword(&image.output_64, entry_index);
-        let gain_32 = packed_byte(&image.output_32, entry_index);
-        let seed_index = tx_baseband_gain_index(gain_64) * 4;
-        let memory_entry = oer_esp32s31_hal::types::PhyGainMemoryEntry::transmit(
-            memory_base.wrapping_add(entry),
-            gain_72,
-            gain_64,
-            gain_32,
-            [
-                tx_gain_seed_halfword(image, seed_index),
-                tx_gain_seed_halfword(image, seed_index + 1),
-                tx_gain_seed_halfword(image, seed_index + 2),
-                tx_gain_seed_halfword(image, seed_index + 3),
-            ],
-            image.config,
-        );
-
-        registers.program_gain_memory_entry(memory_entry);
+        registers.program_gain_memory_entry(tx_gain_memory_entry(image, memory_base, entry));
         entry += 1;
     }
 }

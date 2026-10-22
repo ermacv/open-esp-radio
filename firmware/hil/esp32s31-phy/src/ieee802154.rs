@@ -155,7 +155,14 @@ impl Rx {
         if due {
             let mut trace = oer_esp32s31_phy::tracking::observation::ReadinessTrace::default();
             let mut polls = oer_hil_protocol::phy::HoldPolls::default();
-            let mut observer = crate::hold::Observer::new(0, &mut polls, Some(&mut trace));
+            let mut uart = crate::hold::Uart;
+            let mut observer = crate::hold::Observer::new(
+                0,
+                &mut polls,
+                Some(&mut trace),
+                &EmbassyClock,
+                &mut uart,
+            );
             #[cfg(oer_profile)]
             let timer_window = oer_espressif_executor::timer_observation::Window::begin();
             let result = maintain_concurrent_phy::<_, (), RomShortDelay, _>(
@@ -165,6 +172,7 @@ impl Rx {
                 &mut observer,
             )
             .await;
+            observer.report(0);
             #[cfg(oer_profile)]
             crate::hold::report_timer(timer_window);
             crate::hold::report_preparation(&trace, &polls);

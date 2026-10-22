@@ -1,7 +1,6 @@
 [workspace]
 members = [
     "chips/esp32s31/bluetooth/driver",
-    "chips/esp32s31/bluetooth/memory",
     "chips/esp32s31/knowledge",
     "tools/vendor/phy-esp32s31",
     "firmware/probes/esp32s31-register",
@@ -158,11 +157,11 @@ members = [
     "firmware/apps/w0",
     "firmware/apps/w1",
     "firmware/apps/w2",
+    "firmware/apps/w3",
 ]
 # Host builds and tests: every member but the chip-only firmware packages.
 default-members = [
     "chips/esp32s31/bluetooth/driver",
-    "chips/esp32s31/bluetooth/memory",
     "chips/esp32s31/knowledge",
     "tools/vendor/phy-esp32s31",
     "tools/vendor/scenarios-esp32c5-cli",

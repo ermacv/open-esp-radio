@@ -1,0 +1,13 @@
+error[E0624]: method `cpu` is private
+  --> tests/ui/bluetooth_role_values_are_not_layout_views.rs:10:18
+   |
+10 |       let _ = pool.cpu(&lease); // ui-error: E0624
+   |                    ^^^ private method
+   |
+  ::: src/bluetooth/engine/scheduler_pool.rs
+   |
+   | /     pub(crate) fn cpu(
+   | |         &mut self,
+   | |         instance: &SchedulerRoleInstance<'pool, 'epoch>,
+   | |     ) -> Result<SchedulerRoleCpu<'_, S>, SchedulerPoolError> {
+   | |____________________________________________________________- private method defined here

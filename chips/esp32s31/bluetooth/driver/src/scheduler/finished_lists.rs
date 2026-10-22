@@ -6,22 +6,20 @@
 
 use crate::interrupt::SchedulerWakeBatch;
 
-use oer_esp32s31_hal::bluetooth::{
-    BluetoothSchedulerFinishedListObservation, BluetoothSchedulerFinishedListPop,
-    BluetoothSchedulerStopped, ControllerHal,
-};
+use oer_esp32s31_hal::bluetooth::engine::{EngineFinishedListObservation, EngineFinishedListPop};
 
-pub use oer_esp32s31_hal::bluetooth::{
-    BluetoothSchedulerFinishedHardwareListObserved, BluetoothSchedulerHardwareListIndex,
-};
+pub use oer_esp32s31_hal::bluetooth::BluetoothSchedulerHardwareListIndex;
+pub use oer_esp32s31_hal::bluetooth::engine::EngineFinishedHardwareListObserved;
 
 trait SchedulerFinishedListBackend {
-    fn transfer_scheduler_finished_lists(&mut self) -> BluetoothSchedulerFinishedListObservation;
+    fn transfer_scheduler_finished_lists(&mut self) -> EngineFinishedListObservation;
 }
 
-impl SchedulerFinishedListBackend for ControllerHal<'_> {
-    fn transfer_scheduler_finished_lists(&mut self) -> BluetoothSchedulerFinishedListObservation {
-        ControllerHal::transfer_scheduler_finished_lists(self)
+impl<M: oer_esp32s31_hal::bluetooth::engine::ControllerMemory> SchedulerFinishedListBackend
+    for oer_esp32s31_hal::bluetooth::engine::Engine<M>
+{
+    fn transfer_scheduler_finished_lists(&mut self) -> EngineFinishedListObservation {
+        Self::transfer_scheduler_finished_lists(self)
     }
 }
 
@@ -30,6 +28,8 @@ impl SchedulerFinishedListBackend for ControllerHal<'_> {
 pub enum SchedulerFinishedListCaptureError {
     /// A previous captured observation still contains unconsumed list work.
     DrainAlreadyActive,
+    /// The owning engine has no confirmed stop receipt.
+    SchedulerNotStopped,
 }
 
 /// Result of one bounded finished-list worker step.
@@ -43,7 +43,7 @@ pub enum SchedulerFinishedListWorkerStep {
     /// One hardware list requires a separately proven item-selection step.
     List {
         /// Affine proof for one list from the fenced transfer.
-        observed: BluetoothSchedulerFinishedHardwareListObserved,
+        observed: EngineFinishedHardwareListObserved,
         /// Whether another captured list requires a later bounded step.
         more: bool,
     },
@@ -54,7 +54,7 @@ pub enum SchedulerFinishedListWorkerStep {
 /// Capture performs exactly one finite PAC/HAL transfer. Every subsequent
 /// [`Self::step`] consumes at most one list and returns to the executor.
 pub struct SchedulerFinishedListWorker {
-    observation: Option<BluetoothSchedulerFinishedListObservation>,
+    observation: Option<EngineFinishedListObservation>,
 }
 
 impl SchedulerFinishedListWorker {
@@ -64,9 +64,9 @@ impl SchedulerFinishedListWorker {
     }
 
     /// Capture one fresh hardware observation through the unique task-side HAL owner.
-    pub fn capture(
+    pub fn capture<M: oer_esp32s31_hal::bluetooth::engine::ControllerMemory>(
         &mut self,
-        controller: &mut ControllerHal<'_>,
+        controller: &mut oer_esp32s31_hal::bluetooth::engine::Engine<M>,
         wake: SchedulerWakeBatch,
     ) -> Result<(), SchedulerFinishedListCaptureError> {
         self.capture_with(controller, wake)
@@ -74,11 +74,13 @@ impl SchedulerFinishedListWorker {
 
     /// Capture the finished lists of a stopped scheduler, which raises no
     /// further wake.
-    pub fn capture_stopped(
+    pub fn capture_stopped<M: oer_esp32s31_hal::bluetooth::engine::ControllerMemory>(
         &mut self,
-        controller: &mut ControllerHal<'_>,
-        _stopped: &BluetoothSchedulerStopped,
+        controller: &mut oer_esp32s31_hal::bluetooth::engine::Engine<M>,
     ) -> Result<(), SchedulerFinishedListCaptureError> {
+        if !controller.scheduler_is_stopped() {
+            return Err(SchedulerFinishedListCaptureError::SchedulerNotStopped);
+        }
         self.transfer(controller)
     }
 
@@ -105,17 +107,15 @@ impl SchedulerFinishedListWorker {
     ///
     /// A finished list is not an item-completion proof. This worker therefore does
     /// not accept a software queue, select a descriptor or change ownership.
-    /// The future completed-list owner must match `observed` to an affine
-    /// hardware item and inspect the post-fence status before returning it.
+    /// The owning engine checks this receipt's installation epoch and the
+    /// submitted items' post-fence statuses before returning CPU custody.
     pub fn step(&mut self) -> SchedulerFinishedListWorkerStep {
         let Some(observation) = self.observation.take() else {
             return SchedulerFinishedListWorkerStep::Idle;
         };
         match observation.pop_lowest() {
-            BluetoothSchedulerFinishedListPop::Complete => {
-                SchedulerFinishedListWorkerStep::Complete
-            }
-            BluetoothSchedulerFinishedListPop::List {
+            EngineFinishedListPop::Complete => SchedulerFinishedListWorkerStep::Complete,
+            EngineFinishedListPop::List {
                 observed,
                 remaining,
             } => {

@@ -290,6 +290,7 @@ impl<'id> TestDriver<'id> {
             Power,
             fn() -> u32,
             Timer,
+            RadioNine,
             512,
         >,
         Self,

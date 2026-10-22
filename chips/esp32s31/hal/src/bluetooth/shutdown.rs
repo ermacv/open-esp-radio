@@ -180,3 +180,18 @@ pub(super) fn shut_down<B: PlatformClockBackend, T>(
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+pub(super) fn failure_for_host_test(
+    task: TaskOwner,
+    output: BluetoothInterruptSetup,
+    timer: BluetoothModemLpTimerRegisters,
+    error: BluetoothShutdownError,
+) -> BluetoothShutdownFailure {
+    BluetoothShutdownFailure {
+        error,
+        _task: task,
+        _output: output,
+        _timer: timer,
+    }
+}

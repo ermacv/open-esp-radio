@@ -1,0 +1,12 @@
+schema = 5
+id = "phy-tracking-hold-wifi-ordinary"
+description = "Quiet natural-policy Wi-Fi idle tracking, 20 bounded batches under one RF registration"
+role = "investigation"
+repetitions = 3
+tags = ["phy", "tracking-hold", "air-strict"]
+
+[phy]
+kind = "tracking-hold-wifi"
+policy = "natural"
+ticks = 16
+batches = 20
