@@ -211,6 +211,10 @@ and P2 tasks, must fit that hart's `irq-stack-guard-bytes` in the chip's
 `chip.toml`: S31 hart 0 has 4096 bytes and hart 1 has 1024; C5 has 4096.
 The image linker exports `__runtime_cpu{hart}_irq_stack_guard_bytes` from
 this contract; the runtime reads that absolute symbol to program its trigger.
+The IRQ stacks occupy a separate NOLOAD section at the start of internal
+SRAM, before ISR code. Linker assertions require each stack bottom to align
+to its guard; the runtime also rejects misalignment and programs the guard
+at that exact bottom.
 There is no shared guard-size constant. Allocated stacks keep their sizes;
 the usable budget is the allocation minus that hart's guard.
 The debug trigger

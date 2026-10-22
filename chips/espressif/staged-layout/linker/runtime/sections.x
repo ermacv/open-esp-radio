@@ -64,7 +64,21 @@ SECTIONS
     LONG(0);                       /* host packer writes payload CRC-32 */
   } > PSRAM_RUNTIME
 
-  .isr.text ORIGIN(INTERNAL_LOW) :
+  /* SRAM starts on a 4-KiB boundary on both chips. Keep the exact stack
+     allocations first so each guard starts at its hart's stack bottom;
+     aligning a hardware guard upwards would reduce the usable stack. The
+     runtime paints these NOLOAD stacks before admitting interrupts. */
+  .irq_stacks ORIGIN(INTERNAL_LOW) (NOLOAD) :
+  {
+    __runtime_cpu0_irq_stack_bottom = ABSOLUTE(.);
+    . = . + IRQ_STACK_BYTES;
+    __runtime_cpu0_irq_stack_top = ABSOLUTE(.);
+    __runtime_cpu1_irq_stack_bottom = ABSOLUTE(.);
+    . = . + (HART_COUNT > 1 ? IRQ_STACK_BYTES : 0);
+    __runtime_cpu1_irq_stack_top = ABSOLUTE(.);
+  } > INTERNAL_LOW
+
+  .isr.text ALIGN(ADDR(.irq_stacks) + SIZEOF(.irq_stacks), 64) :
     AT(ALIGN(LOADADDR(.runtime.header) + SIZEOF(.runtime.header), 64))
   {
     __runtime_isr_start = ABSOLUTE(.);
@@ -116,16 +130,6 @@ SECTIONS
     AT(ALIGN(ADDR(.critical.data) + SIZEOF(.critical.data), 64))
   {
     __runtime_critical_bss_start = ABSOLUTE(.);
-    /* Each hart's interrupt stack: the layout's bytes, a second only on a
-       two-hart chip. */
-    . = ALIGN(16);
-    __runtime_cpu0_irq_stack_bottom = ABSOLUTE(.);
-    . = . + IRQ_STACK_BYTES;
-    __runtime_cpu0_irq_stack_top = ABSOLUTE(.);
-    . = ALIGN(16);
-    __runtime_cpu1_irq_stack_bottom = ABSOLUTE(.);
-    . = . + (HART_COUNT > 1 ? IRQ_STACK_BYTES : 0);
-    __runtime_cpu1_irq_stack_top = ABSOLUTE(.);
     KEEP(*(.critical.bss .critical.bss.*));
     KEEP(*(.flash.critical.bss .flash.critical.bss.*));
     . = ALIGN(64);
@@ -212,8 +216,8 @@ SECTIONS
     __runtime_psram_noinit_end = ABSOLUTE(.);
   } > PSRAM_RUNTIME
 
-  /* Thread-mode stacks. Interrupt and trap stacks remain in the critical SRAM
-     range above; these bytes are never DMA-visible and need no bootstrap
+  /* Thread-mode stacks. Interrupt and trap stacks remain in the dedicated SRAM
+     section above; these bytes are never DMA-visible and need no bootstrap
      initialization. */
   .psram.task_stacks ALIGN(__runtime_psram_noinit_end, 64) (NOLOAD) :
   {
@@ -362,6 +366,11 @@ ASSERT(__runtime_cpu0_irq_stack_top - __runtime_cpu0_irq_stack_bottom == IRQ_STA
        __runtime_cpu1_irq_stack_top - __runtime_cpu1_irq_stack_bottom ==
            (HART_COUNT > 1 ? IRQ_STACK_BYTES : 0),
        "runtime requires one exact SRAM IRQ stack per hart");
+ASSERT(__runtime_cpu0_irq_stack_bottom % __runtime_cpu0_irq_stack_guard_bytes == 0,
+       "hart 0 IRQ stack bottom must be guard aligned");
+ASSERT(HART_COUNT > 1 ?
+       __runtime_cpu1_irq_stack_bottom % __runtime_cpu1_irq_stack_guard_bytes == 0 : 1,
+       "hart 1 IRQ stack bottom must be guard aligned");
 ASSERT(__runtime_cpu0_task_stack_top - __runtime_cpu0_task_stack_bottom == CPU0_PSRAM_TASK_STACK_BYTES,
        "runtime requires one exact CPU0 PSRAM task stack");
 ASSERT(SIZEOF(.runtime.header) == STAGE_TWO_HEADER_BYTES,

@@ -27,6 +27,7 @@ use core::{
     sync::atomic::{AtomicBool, Ordering},
 };
 
+mod guard;
 mod watermark;
 
 /// The harts with an interrupt stack.
@@ -205,13 +206,6 @@ fn foreign_vector(active: &[u32; 48], source: &[u32; 48]) -> Option<usize> {
     (1..source.len()).find(|&slot| active[slot] != source[slot])
 }
 
-/// NAPOT `tdata2` watching `bytes` (a power of two) aligned at or above
-/// `bottom`: the aligned start with the low bits encoding the length.
-const fn napot_guard(bottom: usize, bytes: usize) -> usize {
-    let start = (bottom + bytes - 1) & !(bytes - 1);
-    start | (bytes / 2 - 1)
-}
-
 /// Make every store into the aligned guard of this hart's interrupt
 /// stack raise a breakpoint exception. The exception entry clears
 /// `tcontrol.mte`, so its own frame below the guard does not retrigger.
@@ -221,6 +215,7 @@ const fn napot_guard(bottom: usize, bytes: usize) -> usize {
 /// Interrupts must be disabled on the calling hart, and no other code may own
 /// debug trigger [`IRQ_STACK_GUARD_TRIGGER`].
 unsafe fn guard_interrupt_stack(bottom: usize, bytes: usize) {
+    let data2 = guard::napot_guard(bottom, bytes);
     // A connected debugger owns the triggers, as for ESP-HAL's stack guard.
     if esp_hal::debugger::debugger_connected() {
         return;
@@ -240,7 +235,7 @@ unsafe fn guard_interrupt_stack(bottom: usize, bytes: usize) {
             select = in(reg) IRQ_STACK_GUARD_TRIGGER,
             control = in(reg) TCONTROL_MTE,
             data1 = in(reg) TDATA1_M_STORE_NAPOT,
-            data2 = in(reg) napot_guard(bottom, bytes),
+            data2 = in(reg) data2,
             options(nostack),
         )
     };

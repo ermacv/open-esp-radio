@@ -145,8 +145,7 @@ bounds) live in the code that applies them.
   Each hart's exception path plus the largest frame on that hart fits the
   interrupt stack's guard, so an overflow the guard catches is recorded.
   The guard is per hart in the chip contract: 4096 bytes on S31 hart 0 and
-  C5, 1024 bytes on S31 hart 1. Product images reject a guard violation;
-  diagnostic images report it as a warning.
+  C5, 1024 bytes on S31 hart 1. Product images reject a guard violation.
 - **Staged boot.** Code and stacks run from PSRAM after the staged bootstrap.
 
 ## Hardware ownership
