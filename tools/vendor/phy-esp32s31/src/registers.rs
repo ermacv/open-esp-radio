@@ -6,10 +6,9 @@
 //! the order the production PAC reads it by index
 //! (`RadioPhyRegisters::register_image`). The cross-check therefore names
 //! each index exactly as production reads it, and holds no register list of
-//! its own. The analog image is likewise the model's `register-image` of
-//! the reviewed `PhyI2cField` domain: every analog-I2C register a reviewed
-//! field occupies, in the order the production PAC reads it
-//! (`PhyI2cAddress::image`).
+//! its own. The analog image comes from the native model's finite R1
+//! read-safety qualification and explicit comparison masks. Open header
+//! geometry alone never admits an additional read.
 use crate::Result;
 use oer_vendor_phy::calibration_capture::space::{Register, analog_address};
 use std::path::Path;
@@ -19,8 +18,7 @@ const SVD: &str = "chips/esp32s31/registers/published/radio.svd";
 const API_POLICY: &str = "chips/esp32s31/registers/policy/api.toml";
 /// The ownership partition of the role-neutral RF and PHY registers.
 pub const PARTITION: &str = "RadioPhyPeripherals";
-/// The indirect-register domain of the reviewed analog-I2C fields.
-pub const ANALOG_DOMAIN: &str = "PhyI2cField";
+const ANALOG_MODEL: &str = "chips/esp32s31/registers/model/analog/phy.toml";
 
 /// The image of `partition`, in production's index order.
 pub fn partition(root: &Path, partition: &str) -> Result<Vec<Register>> {
@@ -44,28 +42,23 @@ pub fn partition(root: &Path, partition: &str) -> Result<Vec<Register>> {
         .collect())
 }
 
-/// The analog image of the indirect-register `domain`, in production's
-/// index order.
-pub fn analog(root: &Path, domain: &str) -> Result<Vec<Register>> {
-    let policy = oer_registers_model::PacApiPack::load(&root.join(API_POLICY))?;
-    let domain = policy
-        .indirect_register_field_domains
-        .iter()
-        .find(|candidate| candidate.name == domain && candidate.register_image)
-        .ok_or_else(|| format!("no indirect-register domain {domain} with a register image"))?;
-    Ok(domain
-        .image_registers()
+/// The finite R1 analog image, in the production capture order.
+pub fn analog(root: &Path) -> Result<Vec<Register>> {
+    let space = oer_registers_model::analog::AnalogSpace::load(&root.join(ANALOG_MODEL))?;
+    Ok(space
+        .geometry("esp32s31")?
         .into_iter()
-        .map(|(block, register)| Register {
-            name: format!("{}.{block:02x}.{register:02x}", domain.name),
-            address: analog_address(block, register),
-            mask: domain
-                .fields
-                .iter()
-                .filter(|field| field.bank == block && field.register == register)
-                .fold(0, |mask, field| {
-                    mask | (((1u32 << field.bit_width) - 1) << field.bit_offset)
-                }),
+        .filter_map(|register| {
+            let mask = register.comparison_mask?;
+            register.read_safe_epoch?;
+            Some(Register {
+                name: format!(
+                    "analog-i2c.{:02x}.{:02x}",
+                    register.address.block, register.address.index
+                ),
+                address: analog_address(register.address.block, register.address.index),
+                mask: u32::from(mask),
+            })
         })
         .collect())
 }
@@ -84,7 +77,7 @@ mod tests {
     #[test]
     fn analog_replies_round_trip_through_their_space() {
         use oer_vendor_phy::calibration_capture::space::Space;
-        let image = analog(repository().path(), ANALOG_DOMAIN).unwrap();
+        let image = analog(repository().path()).unwrap();
         assert!(image.windows(2).all(|w| w[0].address < w[1].address));
         let register = &image[0];
         let line = Space::Analog.line(register.address, 0xa5);
@@ -108,6 +101,10 @@ pub(crate) fn repository() -> tempfile::TempDir {
         (
             "chips/esp32s31/registers/policy/api.toml",
             include_str!("../../../../chips/esp32s31/registers/policy/api.toml"),
+        ),
+        (
+            ANALOG_MODEL,
+            include_str!("../../../../chips/esp32s31/registers/model/analog/phy.toml"),
         ),
     ] {
         let path = root.join(path);

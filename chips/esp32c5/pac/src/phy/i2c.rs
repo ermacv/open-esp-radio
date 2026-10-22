@@ -13,132 +13,30 @@
 #![forbid(unsafe_code)]
 
 #[cfg(any(test, feature = "test-support", oer_probe))]
-use crate::generated::{PhyI2cField, PhyI2cReadMask, phy_i2c_fields as fields};
+use crate::analog_i2c::{Address, Field, Host, Request, Route, fields, registers};
 use crate::svd;
-
-/// One of the two analog-register command hosts.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-#[cfg(any(test, feature = "test-support", oer_probe))]
-pub enum PhyI2cHost {
-    Host0,
-    Host1,
-}
-
-/// Validated identity of one analog block the libphy leaves accept.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-#[cfg(any(test, feature = "test-support", oer_probe))]
-pub struct PhyI2cBlock {
-    code: u8,
-}
-
-/// First and last block with a read-mask entry in `phy_get_i2c_read_mask_`.
-#[cfg(any(test, feature = "test-support", oer_probe))]
-const FIRST_BLOCK: u8 = 0x61;
-#[cfg(any(test, feature = "test-support", oer_probe))]
-const LAST_BLOCK: u8 = 0x6f;
-
-/// Blocks 0x63 to 0x6E that `phy_get_i2c_hostid_` assigns to host 1, as bit
-/// `block - 0x63`.
-#[cfg(any(test, feature = "test-support", oer_probe))]
-const HOST1_BLOCKS: u16 = 0x09ad;
-
-#[cfg(any(test, feature = "test-support", oer_probe))]
-impl PhyI2cBlock {
-    /// Convert the raw block byte of the vendor ABI.
-    pub const fn from_vendor_abi(code: u8) -> Option<Self> {
-        if code >= FIRST_BLOCK && code <= LAST_BLOCK {
-            Some(Self { code })
-        } else {
-            None
-        }
-    }
-
-    pub const fn code(self) -> u8 {
-        self.code
-    }
-
-    /// The host `phy_get_i2c_hostid_` selects for the block as called.
-    pub const fn host(self) -> PhyI2cHost {
-        let offset = self.code.wrapping_sub(0x63);
-        if offset <= 11 && HOST1_BLOCKS & (1 << offset) != 0 {
-            PhyI2cHost::Host1
-        } else {
-            PhyI2cHost::Host0
-        }
-    }
-
-    /// The complemented one-hot read mask `phy_chip_i2c_readReg_org`
-    /// publishes for the block as called.
-    pub const fn read_mask(self) -> PhyI2cReadMask {
-        match self.code {
-            0x61 => PhyI2cReadMask::Block61,
-            0x63 => PhyI2cReadMask::Block63,
-            0x65 => PhyI2cReadMask::Block65,
-            0x66 => PhyI2cReadMask::Block66,
-            0x67 => PhyI2cReadMask::Block67,
-            0x68 => PhyI2cReadMask::Block68,
-            0x69 => PhyI2cReadMask::Block69,
-            0x6a => PhyI2cReadMask::Block6A,
-            0x6b => PhyI2cReadMask::Block6B,
-            0x6c => PhyI2cReadMask::Block6C,
-            0x6d => PhyI2cReadMask::Block6D,
-            0x6e => PhyI2cReadMask::Block6E,
-            0x6f => PhyI2cReadMask::Block6F,
-            _ => PhyI2cReadMask::Unselected,
-        }
-    }
-
-    /// The block code the command carries: both leaves address block 0x65
-    /// when called with block 0x62, after choosing its host and read mask.
-    pub const fn command_code(self) -> u8 {
-        if self.code == 0x62 { 0x65 } else { self.code }
-    }
-}
-
-/// Validated address of one analog byte register.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-#[cfg(any(test, feature = "test-support", oer_probe))]
-pub struct PhyI2cAddress {
-    block: PhyI2cBlock,
-    register: u8,
-}
-
-#[cfg(any(test, feature = "test-support", oer_probe))]
-impl PhyI2cAddress {
-    pub const fn new(block: PhyI2cBlock, register: u8) -> Self {
-        Self { block, register }
-    }
-
-    pub const fn block(self) -> PhyI2cBlock {
-        self.block
-    }
-
-    pub const fn register(self) -> u8 {
-        self.register
-    }
-}
 
 /// One command of each host in a parallel write, as `phy_i2c_paral_write`
 /// publishes them: host 0 first, then host 1, without the start bit.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[cfg(any(test, feature = "test-support", oer_probe))]
 pub struct PhyI2cParallelWrite {
-    first: (u8, u8, u8),
-    second: (u8, u8, u8),
+    first: (Address, u8),
+    second: (Address, u8),
 }
 
 #[cfg(any(test, feature = "test-support", oer_probe))]
 impl PhyI2cParallelWrite {
     /// The (block, register, data) commands of host 0 and host 1.
-    pub const fn new(first: (u8, u8, u8), second: (u8, u8, u8)) -> Self {
+    pub const fn new(first: (Address, u8), second: (Address, u8)) -> Self {
         Self { first, second }
     }
 
-    pub const fn first(self) -> (u8, u8, u8) {
+    pub const fn first(self) -> (Address, u8) {
         self.first
     }
 
-    pub const fn second(self) -> (u8, u8, u8) {
+    pub const fn second(self) -> (Address, u8) {
         self.second
     }
 }
@@ -186,26 +84,64 @@ impl PhyI2cInitializationInputs {
     /// SOURCE: reviewed evidence `C5_BLOB_LIBPHY_PHY_I2C_INIT1`.
     pub const fn pair(self, index: usize) -> Option<PhyI2cParallelWrite> {
         let (first, second) = match index {
-            0 => ((0x6b, 0x2, 0x72), (0x6a, 0x0, 0xff)),
-            1 => ((0x6b, 0x3, 0xaa), (0x6a, 0x1, 0x7f)),
-            2 => ((0x6b, 0xe, 0x55), (0x67, 0x3, 0x44)),
-            3 => ((0x6b, 0x7, 0xff), (0x67, 0x3, 0x44)),
-            4 => ((0x6b, 0xa, 0x8), (0x67, 0x2, 0x3)),
-            5 => ((0x6b, 0xc, 0x55), (0x67, 0x1, 0x6f)),
-            6 => ((0x6b, 0xf, 0x81), (0x67, 0x5, 0x6b)),
-            7 => ((0x6b, 0x9, 0x0), (0x67, 0x1d, 0xc2)),
-            8 => ((0x6b, 0x5, 0x33), (0x67, 0x6, self.parameter_f5)),
-            9 => (
-                (0x6b, 0x6, 0x30),
-                (0x67, 0x8, clamp(self.parameter_f7, 10, 50)),
+            0 => (
+                (registers::TXRF_BYTE_02_OPAQUE, 0x72),
+                (registers::BIAS_BYTE_00_OPAQUE, 0xff),
             ),
-            10 => ((0x6b, 0xd, 0x57), (0x67, 0xa, self.parameter_f5)),
-            11 => ((0x6b, 0x8, 0xfd), (0x67, 0xc, self.parameter_f7)),
-            12 => ((0x6b, 0x4, 0xac), (0x67, 0x7, self.parameter_f6)),
+            1 => (
+                (registers::TXRF_BYTE_03_OPAQUE, 0xaa),
+                (registers::BIAS_BYTE_01_OPAQUE, 0x7f),
+            ),
+            2 => (
+                (registers::TXRF_BYTE_0E_OPAQUE, 0x55),
+                (registers::BBTOP_BYTE_03_OPAQUE, 0x44),
+            ),
+            3 => (
+                (registers::TXRF_BYTE_07_OPAQUE, 0xff),
+                (registers::BBTOP_BYTE_03_OPAQUE, 0x44),
+            ),
+            4 => (
+                (registers::TXRF_BYTE_0A_OPAQUE, 0x8),
+                (registers::BBTOP_BYTE_02_OPAQUE, 0x3),
+            ),
+            5 => (
+                (registers::TXRF_BYTE_0C_OPAQUE, 0x55),
+                (registers::BBTOP_BYTE_01_OPAQUE, 0x6f),
+            ),
+            6 => (
+                (registers::TXRF_RC_CALIBRATION_SECOND, 0x81),
+                (registers::BBTOP_BYTE_05_OPAQUE, 0x6b),
+            ),
+            7 => (
+                (registers::TXRF_BYTE_09_OPAQUE, 0x0),
+                (registers::BBTOP_BYTE_1D_OPAQUE, 0xc2),
+            ),
+            8 => (
+                (registers::TXRF_BYTE_05_OPAQUE, 0x33),
+                (registers::BBTOP_BYTE_06_OPAQUE, self.parameter_f5),
+            ),
+            9 => (
+                (registers::TXRF_BYTE_06_OPAQUE, 0x30),
+                (
+                    registers::BBTOP_BYTE_08_OPAQUE,
+                    clamp(self.parameter_f7, 10, 50),
+                ),
+            ),
+            10 => (
+                (registers::TXRF_BYTE_0D_OPAQUE, 0x57),
+                (registers::BBTOP_BYTE_0A_OPAQUE, self.parameter_f5),
+            ),
+            11 => (
+                (registers::TXRF_BYTE_08_OPAQUE, 0xfd),
+                (registers::BBTOP_BYTE_0C_OPAQUE, self.parameter_f7),
+            ),
+            12 => (
+                (registers::TXRF_BYTE_04_OPAQUE, 0xac),
+                (registers::BBTOP_BYTE_07_OPAQUE, self.parameter_f6),
+            ),
             13 => (
                 (
-                    0x6e,
-                    0x5,
+                    registers::TXTOP_BYTE_05_OPAQUE,
                     crate::generated::layouts::PhyI2cCommandWord::from_bits(
                         crate::generated::PhyI2cInitializationHighCommand::compose(
                             self.parameter_416,
@@ -214,20 +150,46 @@ impl PhyI2cInitializationInputs {
                     )
                     .data(),
                 ),
-                (0x67, 0x9, clamp(self.parameter_f8, 10, 60)),
+                (
+                    registers::BBTOP_BYTE_09_OPAQUE,
+                    clamp(self.parameter_f8, 10, 60),
+                ),
             ),
-            14 => ((0x6e, 0x7, 0x63), (0x67, 0xb, self.parameter_f6)),
-            15 => ((0x6e, 0x8, 0x73), (0x67, 0xd, self.parameter_f8)),
-            16 => ((0x6e, 0x9, 0xc), (0x67, 0xe, self.parameter_fb)),
-            17 => ((0x6e, 0xd, 0x22), (0x67, 0x10, self.parameter_fb)),
-            18 => ((0x6e, 0x1, 0x71), (0x67, 0x12, self.parameter_f9)),
-            19 => ((0x6e, 0x10, 0x63), (0x67, 0x14, self.parameter_f9)),
-            20 => ((0x6e, 0x11, 0x73), (0x67, 0xf, self.parameter_fc)),
-            21 => ((0x6e, 0x4, 0x47), (0x67, 0x11, self.parameter_fc)),
+            14 => (
+                (registers::TXTOP_BYTE_07_OPAQUE, 0x63),
+                (registers::BBTOP_BYTE_0B_OPAQUE, self.parameter_f6),
+            ),
+            15 => (
+                (registers::TXTOP_BYTE_08_OPAQUE, 0x73),
+                (registers::BBTOP_BYTE_0D_OPAQUE, self.parameter_f8),
+            ),
+            16 => (
+                (registers::TXTOP_BYTE_09_OPAQUE, 0xc),
+                (registers::BBTOP_BYTE_0E_OPAQUE, self.parameter_fb),
+            ),
+            17 => (
+                (registers::TXTOP_BYTE_0D_OPAQUE, 0x22),
+                (registers::BBTOP_BYTE_10_OPAQUE, self.parameter_fb),
+            ),
+            18 => (
+                (registers::TXTOP_BYTE_01_OPAQUE, 0x71),
+                (registers::BBTOP_BYTE_12_OPAQUE, self.parameter_f9),
+            ),
+            19 => (
+                (registers::TXTOP_BYTE_10_OPAQUE, 0x63),
+                (registers::BBTOP_BYTE_14_OPAQUE, self.parameter_f9),
+            ),
+            20 => (
+                (registers::TXTOP_BYTE_11_OPAQUE, 0x73),
+                (registers::BBTOP_BYTE_0F_OPAQUE, self.parameter_fc),
+            ),
+            21 => (
+                (registers::TXTOP_BYTE_04_OPAQUE, 0x47),
+                (registers::BBTOP_BYTE_11_OPAQUE, self.parameter_fc),
+            ),
             22 => (
                 (
-                    0x6e,
-                    0xc,
+                    registers::TXTOP_BYTE_0C_OPAQUE,
                     crate::generated::layouts::PhyI2cCommandWord::from_bits(
                         crate::generated::PhyI2cInitializationLowCommand::compose(
                             self.parameter_416,
@@ -236,29 +198,92 @@ impl PhyI2cInitializationInputs {
                     )
                     .data(),
                 ),
-                (0x67, 0x13, self.parameter_fa),
+                (registers::BBTOP_BYTE_13_OPAQUE, self.parameter_fa),
             ),
-            23 => ((0x6e, 0xf, 0x47), (0x67, 0x15, self.parameter_fa)),
-            24 => ((0x6e, 0x12, 0x44), (0x6a, 0x3, 0xf)),
-            25 => ((0x6e, 0x13, 0x63), (0x67, 0x3, 0x44)),
-            26 => ((0x6e, 0x14, 0x73), (0x67, 0x3, 0x44)),
-            27 => ((0x63, 0xf, 0x3f), (0x67, 0x3, 0x44)),
-            28 => ((0x63, 0x1, 0xab), (0x67, 0x3, 0x44)),
-            29 => ((0x63, 0x13, 0x90), (0x67, 0x3, 0x44)),
-            30 => ((0x63, 0x6, 0xe0), (0x67, 0x3, 0x44)),
-            31 => ((0x63, 0x15, 0x98), (0x67, 0x3, 0x44)),
-            32 => ((0x63, 0x11, 0xc), (0x67, 0x3, 0x44)),
-            33 => ((0x63, 0x14, 0xa), (0x67, 0x3, 0x44)),
-            34 => ((0x63, 0x0, 0xdb), (0x67, 0x3, 0x44)),
-            35 => ((0x63, 0xe, 0x0), (0x67, 0x3, 0x44)),
-            36 => ((0x63, 0x8, 0x61), (0x67, 0x3, 0x44)),
-            37 => ((0x63, 0x7, 0x0), (0x67, 0x3, 0x44)),
-            38 => ((0x6e, 0xa, self.parameter_410), (0x67, 0x3, 0x44)),
-            39 => ((0x6e, 0xb, self.parameter_412), (0x67, 0x3, 0x44)),
-            40 => ((0x63, 0x1a, 0x11), (0x67, 0x3, 0x44)),
-            41 => ((0x63, 0x19, 0x48), (0x67, 0x3, 0x44)),
-            42 => ((0x63, 0x12, 0x0), (0x67, 0x3, 0x44)),
-            43 => ((0x63, 0x18, 0xdd), (0x67, 0x3, 0x44)),
+            23 => (
+                (registers::TXTOP_BYTE_0F_OPAQUE, 0x47),
+                (registers::BBTOP_BYTE_15_OPAQUE, self.parameter_fa),
+            ),
+            24 => (
+                (registers::TXTOP_BYTE_12_OPAQUE, 0x44),
+                (registers::BIAS_BYTE_03_OPAQUE, 0xf),
+            ),
+            25 => (
+                (registers::TXTOP_BYTE_13_OPAQUE, 0x63),
+                (registers::BBTOP_BYTE_03_OPAQUE, 0x44),
+            ),
+            26 => (
+                (registers::TXTOP_BYTE_14_OPAQUE, 0x73),
+                (registers::BBTOP_BYTE_03_OPAQUE, 0x44),
+            ),
+            27 => (
+                (registers::SDM_BYTE_0F_OPAQUE, 0x3f),
+                (registers::BBTOP_BYTE_03_OPAQUE, 0x44),
+            ),
+            28 => (
+                (registers::SDM_BYTE_01_OPAQUE, 0xab),
+                (registers::BBTOP_BYTE_03_OPAQUE, 0x44),
+            ),
+            29 => (
+                (registers::SDM_BYTE_13_OPAQUE, 0x90),
+                (registers::BBTOP_BYTE_03_OPAQUE, 0x44),
+            ),
+            30 => (
+                (registers::SDM_BYTE_06_OPAQUE, 0xe0),
+                (registers::BBTOP_BYTE_03_OPAQUE, 0x44),
+            ),
+            31 => (
+                (registers::SDM_BYTE_15_OPAQUE, 0x98),
+                (registers::BBTOP_BYTE_03_OPAQUE, 0x44),
+            ),
+            32 => (
+                (registers::SDM_BYTE_11_OPAQUE, 0xc),
+                (registers::BBTOP_BYTE_03_OPAQUE, 0x44),
+            ),
+            33 => (
+                (registers::SDM_BYTE_14_OPAQUE, 0xa),
+                (registers::BBTOP_BYTE_03_OPAQUE, 0x44),
+            ),
+            34 => (
+                (registers::SDM_BYTE_00_OPAQUE, 0xdb),
+                (registers::BBTOP_BYTE_03_OPAQUE, 0x44),
+            ),
+            35 => (
+                (registers::SDM_BYTE_0E_OPAQUE, 0x0),
+                (registers::BBTOP_BYTE_03_OPAQUE, 0x44),
+            ),
+            36 => (
+                (registers::SDM_BYTE_08_OPAQUE, 0x61),
+                (registers::BBTOP_BYTE_03_OPAQUE, 0x44),
+            ),
+            37 => (
+                (registers::SDM_BYTE_07_OPAQUE, 0x0),
+                (registers::BBTOP_BYTE_03_OPAQUE, 0x44),
+            ),
+            38 => (
+                (registers::TXTOP_BYTE_0A_OPAQUE, self.parameter_410),
+                (registers::BBTOP_BYTE_03_OPAQUE, 0x44),
+            ),
+            39 => (
+                (registers::TXTOP_BYTE_0B_OPAQUE, self.parameter_412),
+                (registers::BBTOP_BYTE_03_OPAQUE, 0x44),
+            ),
+            40 => (
+                (registers::SDM_BYTE_1A_OPAQUE, 0x11),
+                (registers::BBTOP_BYTE_03_OPAQUE, 0x44),
+            ),
+            41 => (
+                (registers::SDM_BYTE_19_OPAQUE, 0x48),
+                (registers::BBTOP_BYTE_03_OPAQUE, 0x44),
+            ),
+            42 => (
+                (registers::SDM_BYTE_12_OPAQUE, 0x0),
+                (registers::BBTOP_BYTE_03_OPAQUE, 0x44),
+            ),
+            43 => (
+                (registers::SDM_BYTE_18_OPAQUE, 0xdd),
+                (registers::BBTOP_BYTE_03_OPAQUE, 0x44),
+            ),
             _ => return None,
         };
         Some(PhyI2cParallelWrite::new(first, second))
@@ -269,15 +294,8 @@ impl PhyI2cInitializationInputs {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[cfg(any(test, feature = "test-support", oer_probe))]
 pub enum PhyI2cConfigurationCommand {
-    /// `phy_i2c_writeReg`: write a whole byte.
-    Write(PhyI2cAddress, u8),
-    /// `phy_i2c_writeReg_Mask(block, host, reg, msb, lsb, value)`.
-    Modify {
-        address: PhyI2cAddress,
-        msb: u8,
-        lsb: u8,
-        value: u8,
-    },
+    Write(Address, u8),
+    Modify { field: Field, value: u8 },
 }
 
 /// The analog configuration leaves of `phy_rf_init` that only write
@@ -356,73 +374,72 @@ impl PhyI2cSar2Code {
 impl PhyI2cConfiguration {
     /// Command `index`, or `None` after the last.
     pub const fn command(self, index: usize) -> Option<PhyI2cConfigurationCommand> {
-        const fn modify(field: PhyI2cField, value: u8) -> PhyI2cConfigurationCommand {
-            let mask = field.replace(0, u8::MAX);
-            PhyI2cConfigurationCommand::Modify {
-                address: PhyI2cAddress::new(PhyI2cBlock { code: field.bank() }, field.register()),
-                msb: 7 - mask.leading_zeros() as u8,
-                lsb: mask.trailing_zeros() as u8,
-                value,
-            }
+        const fn modify(field: Field, value: u8) -> PhyI2cConfigurationCommand {
+            PhyI2cConfigurationCommand::Modify { field, value }
         }
         Some(match (self, index) {
-            (Self::Band, 0) => PhyI2cConfigurationCommand::Write(
-                PhyI2cAddress::new(PhyI2cBlock { code: 0x6a }, 1),
-                0x7f,
-            ),
-            (Self::CrystalRegisters, 0) => modify(fields::XTAL_REGISTER_8_CONTROL, 0),
-            (Self::CrystalRegisters, 1) => modify(fields::XTAL_REGISTER_7_CONTROL, 1),
-            (Self::DacRate, 0) => modify(fields::DAC_RATE, 0),
-            (Self::AdcRate(rate), 0) => modify(fields::ADC_RATE, if rate { 0 } else { 1 }),
-            (Self::BiasRegisters, 0) => modify(fields::BIAS_REGISTER_0_LOW, 0xf),
-            (Self::BiasRegisters, 1) => modify(fields::BIAS_REGISTER_1_HIGH, 7),
-            (Self::BiasRegisters, 2) => modify(fields::BIAS_REGISTER_0_HIGH, 9),
-            (Self::BiasRegisters, 3) => modify(fields::BIAS_REGISTER_1_LOW, 0xf),
+            (Self::Band, 0) => {
+                PhyI2cConfigurationCommand::Write(registers::BIAS_BYTE_01_OPAQUE, 0x7f)
+            }
+            (Self::CrystalRegisters, 0) => modify(fields::ULP_BOD_BYTE_08_OPAQUE_BIT_4_OPAQUE, 0),
+            (Self::CrystalRegisters, 1) => modify(fields::ULP_BOD_BYTE_07_OPAQUE_BIT_5_OPAQUE, 1),
+            (Self::DacRate, 0) => modify(fields::BBPLL_I2C_BBPLL_DIV_DAC, 0),
+            (Self::AdcRate(rate), 0) => modify(fields::BBPLL_ADC_RATE, if rate { 0 } else { 1 }),
+            (Self::BiasRegisters, 0) => modify(fields::BIAS_BYTE_00_OPAQUE_BITS_0_3_OPAQUE, 0xf),
+            (Self::BiasRegisters, 1) => modify(fields::BIAS_BYTE_01_OPAQUE_BITS_4_7_OPAQUE, 7),
+            (Self::BiasRegisters, 2) => modify(fields::BIAS_BYTE_00_OPAQUE_BITS_4_7_OPAQUE, 9),
+            (Self::BiasRegisters, 3) => modify(fields::BIAS_BYTE_01_OPAQUE_BITS_0_3_OPAQUE, 0xf),
             (Self::RcCalibration(arguments), 0) => {
-                modify(fields::RC_CALIBRATION_FIRST, arguments.first)
+                modify(fields::TXRF_RC_CALIBRATION_FIRST, arguments.first)
             }
             (Self::RcCalibration(arguments), 1) => {
-                modify(fields::RC_CALIBRATION_SECOND, arguments.second)
+                modify(fields::TXRF_RC_CALIBRATION_SECOND, arguments.second)
             }
             (Self::RcCalibration(arguments), 2) => {
-                modify(fields::RC_CALIBRATION_THIRD, arguments.third)
+                modify(fields::TXRF_RC_CALIBRATION_THIRD, arguments.third)
             }
-            (Self::FilterCapacitors(_), 0) => modify(fields::FILTER_REGISTER_1D_CONTROL, 0),
-            (Self::FilterCapacitors(_), 1) => modify(fields::FILTER_REGISTER_5_BIT_6, 1),
-            (Self::FilterCapacitors(_), 2) => modify(fields::FILTER_REGISTER_5_BIT_3, 1),
-            (Self::FilterCapacitors(_), 3) => modify(fields::FILTER_REGISTER_5_BIT_5, 1),
+            (Self::FilterCapacitors(_), 0) => {
+                modify(fields::BBTOP_BYTE_1D_OPAQUE_BITS_2_3_OPAQUE, 0)
+            }
+            (Self::FilterCapacitors(_), 1) => modify(fields::BBTOP_BYTE_05_OPAQUE_BIT_6_OPAQUE, 1),
+            (Self::FilterCapacitors(_), 2) => modify(fields::BBTOP_BYTE_05_OPAQUE_BIT_3_OPAQUE, 1),
+            (Self::FilterCapacitors(_), 3) => modify(fields::BBTOP_BYTE_05_OPAQUE_BIT_5_OPAQUE, 1),
             (Self::FilterCapacitors(inputs), 4..=19) => {
-                let (register, value) = match index {
-                    4 => (6, inputs.parameter_f5),
-                    5 => (8, clamp(inputs.parameter_f7, 10, 50)),
-                    6 => (0xa, inputs.parameter_f5),
-                    7 => (0xc, inputs.parameter_f7),
-                    8 => (7, inputs.parameter_f6),
-                    9 => (9, clamp(inputs.parameter_f8, 10, 60)),
-                    10 => (0xb, inputs.parameter_f6),
-                    11 => (0xd, inputs.parameter_f8),
-                    12 => (0xe, inputs.parameter_fb),
-                    13 => (0x10, inputs.parameter_fb),
-                    14 => (0x12, inputs.parameter_f9),
-                    15 => (0x14, inputs.parameter_f9),
-                    16 => (0xf, inputs.parameter_fc),
-                    17 => (0x11, inputs.parameter_fc),
-                    18 => (0x13, inputs.parameter_fa),
-                    _ => (0x15, inputs.parameter_fa),
+                let (address, value) = match index {
+                    4 => (registers::BBTOP_BYTE_06_OPAQUE, inputs.parameter_f5),
+                    5 => (
+                        registers::BBTOP_BYTE_08_OPAQUE,
+                        clamp(inputs.parameter_f7, 10, 50),
+                    ),
+                    6 => (registers::BBTOP_BYTE_0A_OPAQUE, inputs.parameter_f5),
+                    7 => (registers::BBTOP_BYTE_0C_OPAQUE, inputs.parameter_f7),
+                    8 => (registers::BBTOP_BYTE_07_OPAQUE, inputs.parameter_f6),
+                    9 => (
+                        registers::BBTOP_BYTE_09_OPAQUE,
+                        clamp(inputs.parameter_f8, 10, 60),
+                    ),
+                    10 => (registers::BBTOP_BYTE_0B_OPAQUE, inputs.parameter_f6),
+                    11 => (registers::BBTOP_BYTE_0D_OPAQUE, inputs.parameter_f8),
+                    12 => (registers::BBTOP_BYTE_0E_OPAQUE, inputs.parameter_fb),
+                    13 => (registers::BBTOP_BYTE_10_OPAQUE, inputs.parameter_fb),
+                    14 => (registers::BBTOP_BYTE_12_OPAQUE, inputs.parameter_f9),
+                    15 => (registers::BBTOP_BYTE_14_OPAQUE, inputs.parameter_f9),
+                    16 => (registers::BBTOP_BYTE_0F_OPAQUE, inputs.parameter_fc),
+                    17 => (registers::BBTOP_BYTE_11_OPAQUE, inputs.parameter_fc),
+                    18 => (registers::BBTOP_BYTE_13_OPAQUE, inputs.parameter_fa),
+                    _ => (registers::BBTOP_BYTE_15_OPAQUE, inputs.parameter_fa),
                 };
-                PhyI2cConfigurationCommand::Write(
-                    PhyI2cAddress::new(PhyI2cBlock { code: 0x67 }, register),
-                    value,
-                )
+                PhyI2cConfigurationCommand::Write(address, value)
             }
-            (Self::PeakDetector, 0) => modify(fields::PEAK_DETECTOR_ENABLE, 1),
-            (Self::PeakDetector, 1) => modify(fields::PEAK_DETECTOR_REFERENCE, 4),
-            (Self::PeakDetector, 2) => modify(fields::PEAK_DETECTOR_REGISTER_3_CONTROL, 4),
-            (Self::Sar2InitializationCode(code), 0) => {
-                modify(fields::SAR2_CODE_HIGH, code.0.to_le_bytes()[1])
-            }
+            (Self::PeakDetector, 0) => modify(fields::BBTOP_BYTE_1D_OPAQUE_BIT_7_OPAQUE, 1),
+            (Self::PeakDetector, 1) => modify(fields::BBTOP_BYTE_1D_OPAQUE_BITS_4_6_OPAQUE, 4),
+            (Self::PeakDetector, 2) => modify(fields::BBTOP_BYTE_03_OPAQUE_BITS_4_6_OPAQUE, 4),
+            (Self::Sar2InitializationCode(code), 0) => modify(
+                fields::SARADC_ADC_SAR2_INITIAL_CODE_HIGH_ADDR,
+                code.0.to_le_bytes()[1],
+            ),
             (Self::Sar2InitializationCode(code), 1) => PhyI2cConfigurationCommand::Write(
-                PhyI2cAddress::new(PhyI2cBlock { code: 0x69 }, 3),
+                registers::SARADC_ADC_SAR2_INITIAL_CODE_LOW_ADDR,
                 code.0 as u8,
             ),
             _ => return None,
@@ -483,9 +500,9 @@ impl PhyI2cRegisters {
 #[cfg(any(test, feature = "test-support", oer_probe))]
 impl PhyI2cRegisters {
     /// Rewrite the host map once per command and return the block's host.
-    fn select_host_once(&mut self, block: PhyI2cBlock) -> PhyI2cHost {
+    fn select_host_once(&mut self, block: Route) -> Host {
         if self.host_map_pending {
-            block.host()
+            block.host
         } else {
             self.host_map_pending = true;
             self.configure_and_select_host(block)
@@ -498,9 +515,9 @@ impl PhyI2cRegisters {
 
     /// Replace the host-selection field and return the block's host, as
     /// `phy_get_i2c_hostid_` does on every access.
-    pub fn configure_and_select_host(&mut self, block: PhyI2cBlock) -> PhyI2cHost {
+    pub fn configure_and_select_host(&mut self, block: Route) -> Host {
         crate::generated::configure_phy_i2c_host_map(self.master());
-        block.host()
+        block.host
     }
 
     /// Install the host map of the parallel initialization sequence.
@@ -516,20 +533,20 @@ impl PhyI2cRegisters {
     /// Publish both commands of a parallel write, host 0 first, without
     /// waiting for either host.
     pub fn start_parallel_pair(&mut self, pair: PhyI2cParallelWrite) {
-        let (block, register, value) = pair.first;
+        let (address, value) = pair.first;
         svd::zero_based_field_write::publish_phy_i2c_host0_command(
             self.master(),
-            block,
-            register,
+            address.block(),
+            address.index(),
             value,
             true,
             false,
         );
-        let (block, register, value) = pair.second;
+        let (address, value) = pair.second;
         svd::zero_based_field_write::publish_phy_i2c_host1_command(
             self.master(),
-            block,
-            register,
+            address.block(),
+            address.index(),
             value,
             true,
             false,
@@ -588,29 +605,29 @@ impl PhyI2cRegisters {
     }
 
     /// Whether a host is executing a command.
-    pub fn is_busy(&self, host: PhyI2cHost) -> bool {
+    pub fn is_busy(&self, host: Host) -> bool {
         match host {
-            PhyI2cHost::Host0 => svd::field_read::observe_phy_i2c_host0_busy(self.master()),
-            PhyI2cHost::Host1 => svd::field_read::observe_phy_i2c_host1_busy(self.master()),
+            Host::Host0 => svd::field_read::observe_phy_i2c_host0_busy(self.master()),
+            Host::Host1 => svd::field_read::observe_phy_i2c_host1_busy(self.master()),
         }
     }
 
-    fn publish(&mut self, host: PhyI2cHost, address: PhyI2cAddress, value: u8, write: bool) {
+    fn publish(&mut self, host: Host, address: Request, value: u8, write: bool) {
         self.host_map_pending = false;
-        let code = address.block.command_code();
+        let code = address.route().command_code;
         match host {
-            PhyI2cHost::Host0 => svd::zero_based_field_write::publish_phy_i2c_host0_command(
+            Host::Host0 => svd::zero_based_field_write::publish_phy_i2c_host0_command(
                 self.master(),
                 code,
-                address.register,
+                address.index(),
                 value,
                 write,
                 true,
             ),
-            PhyI2cHost::Host1 => svd::zero_based_field_write::publish_phy_i2c_host1_command(
+            Host::Host1 => svd::zero_based_field_write::publish_phy_i2c_host1_command(
                 self.master(),
                 code,
-                address.register,
+                address.index(),
                 value,
                 write,
                 true,
@@ -625,12 +642,15 @@ impl PhyI2cRegisters {
     ///
     /// The block's host is busy; the host map has been rewritten once for
     /// this command, and a retry only polls the host.
-    pub fn try_start_read(&mut self, address: PhyI2cAddress) -> Result<(), PhyI2cAccessError> {
-        let host = self.select_host_once(address.block);
+    pub fn try_start_read(&mut self, address: Request) -> Result<(), PhyI2cAccessError> {
+        let host = self.select_host_once(address.route());
         if self.is_busy(host) {
             return Err(PhyI2cAccessError::Busy);
         }
-        crate::generated::publish_phy_i2c_read_mask(self.master(), address.block.read_mask());
+        svd::zero_based_field_write::publish_phy_i2c_read_mask(
+            self.master(),
+            address.route().complemented_read_select(),
+        );
         self.publish(host, address, 0, false);
         Ok(())
     }
@@ -640,14 +660,14 @@ impl PhyI2cRegisters {
     /// # Errors
     ///
     /// The host is still busy.
-    pub fn try_finish_read(&self, address: PhyI2cAddress) -> Result<u8, PhyI2cAccessError> {
-        let host = address.block.host();
+    pub fn try_finish_read(&self, address: Request) -> Result<u8, PhyI2cAccessError> {
+        let host = address.route().host;
         if self.is_busy(host) {
             return Err(PhyI2cAccessError::Busy);
         }
         Ok(match host {
-            PhyI2cHost::Host0 => svd::field_read::observe_phy_i2c_host0_data(self.master()),
-            PhyI2cHost::Host1 => svd::field_read::observe_phy_i2c_host1_data(self.master()),
+            Host::Host0 => svd::field_read::observe_phy_i2c_host0_data(self.master()),
+            Host::Host1 => svd::field_read::observe_phy_i2c_host1_data(self.master()),
         })
     }
 
@@ -659,10 +679,10 @@ impl PhyI2cRegisters {
     /// this command, and a retry only polls the host.
     pub fn try_start_write(
         &mut self,
-        address: PhyI2cAddress,
+        address: Request,
         value: u8,
     ) -> Result<(), PhyI2cAccessError> {
-        let host = self.select_host_once(address.block);
+        let host = self.select_host_once(address.route());
         if self.is_busy(host) {
             return Err(PhyI2cAccessError::Busy);
         }
@@ -675,8 +695,8 @@ impl PhyI2cRegisters {
     /// # Errors
     ///
     /// The host is still busy.
-    pub fn try_finish_write(&self, address: PhyI2cAddress) -> Result<(), PhyI2cAccessError> {
-        if self.is_busy(address.block.host()) {
+    pub fn try_finish_write(&self, address: Request) -> Result<(), PhyI2cAccessError> {
+        if self.is_busy(address.route().host) {
             Err(PhyI2cAccessError::Busy)
         } else {
             Ok(())
@@ -689,32 +709,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn generated_routes_preserve_the_request_host_mask_and_command_alias() {
-        use crate::analog_i2c::{self, Host, Profile};
-        for code in FIRST_BLOCK..=LAST_BLOCK {
-            let previous = PhyI2cBlock::from_vendor_abi(code).unwrap();
-            let route = analog_i2c::route(Profile::LibphyNormal, code).unwrap();
-            let host = match previous.host() {
-                PhyI2cHost::Host0 => Host::Host0,
-                PhyI2cHost::Host1 => Host::Host1,
-            };
-            assert_eq!(route.host, host);
-            assert_eq!(route.command_code, previous.command_code());
-            assert_eq!(
-                route.complemented_read_select(),
-                previous.read_mask() as u32
-            );
-        }
-        let alias = analog_i2c::route(Profile::LibphyNormal, 0x62).unwrap();
-        let direct = analog_i2c::route(Profile::LibphyNormal, 0x65).unwrap();
-        assert_eq!(alias.address(3), direct.address(3));
-        assert_ne!(alias.host, direct.host);
-        assert_ne!(alias.read_select, direct.read_select);
-        assert!(analog_i2c::READ_SAFE.is_empty());
-        assert!(analog_i2c::REGISTERS.iter().all(|r| r.reset.is_none()));
-    }
-
-    #[test]
     fn modeled_initialization_payloads_match_the_old_packing() {
         for parameter in 0..=u16::MAX {
             let inputs = PhyI2cInitializationInputs {
@@ -722,12 +716,12 @@ mod tests {
                 ..Default::default()
             };
             assert_eq!(
-                inputs.pair(13).expect("pair").first(),
-                (0x6e, 5, ((parameter >> 2) as u8) | 0x40)
+                inputs.pair(13).expect("pair").first().1,
+                ((parameter >> 2) as u8) | 0x40
             );
             assert_eq!(
-                inputs.pair(22).expect("pair").first(),
-                (0x6e, 12, ((parameter << 4) as u8) & 0x30)
+                inputs.pair(22).expect("pair").first().1,
+                ((parameter << 4) as u8) & 0x30
             );
         }
         for raw in 0..=0xfff {
@@ -737,54 +731,6 @@ mod tests {
                 Some(PhyI2cConfigurationCommand::Modify { value, .. }) if value == (raw >> 8) as u8)
             );
         }
-    }
-
-    /// The blocks ESP-IDF's `regi2c_impl.c` names agree with the libphy
-    /// tables: the same one-hot read-mask bit and the same host.
-    #[test]
-    fn the_public_regi2c_blocks_agree_with_the_libphy_tables() {
-        // (block, ANA_CONF1 read-mask bit, host 0 selected)
-        for (code, mask_bit, selects_host0) in [
-            (0x6a, 6, false),
-            (0x66, 7, false),
-            (0x61, 8, true),
-            (0x69, 9, true),
-            (0x6d, 10, true),
-        ] {
-            let block = PhyI2cBlock::from_vendor_abi(code).expect("reviewed block");
-            assert_eq!(block.read_mask() as u32, !(1_u32 << mask_bit), "{code:#x}");
-            let host = if selects_host0 {
-                PhyI2cHost::Host0
-            } else {
-                PhyI2cHost::Host1
-            };
-            assert_eq!(block.host(), host, "{code:#x}");
-        }
-    }
-
-    #[test]
-    fn block_0x62_is_addressed_as_0x65_with_its_own_host_and_mask() {
-        let block = PhyI2cBlock::from_vendor_abi(0x62).expect("block");
-        assert_eq!(block.command_code(), 0x65);
-        assert_eq!(block.host(), PhyI2cHost::Host0);
-        assert_eq!(block.read_mask(), PhyI2cReadMask::Unselected);
-        let target = PhyI2cBlock::from_vendor_abi(0x65).expect("block");
-        assert_eq!(target.command_code(), 0x65);
-        assert_eq!(target.host(), PhyI2cHost::Host1);
-    }
-
-    #[test]
-    fn blocks_outside_the_mask_table_are_rejected() {
-        assert!(PhyI2cBlock::from_vendor_abi(0x60).is_none());
-        assert!(PhyI2cBlock::from_vendor_abi(0x70).is_none());
-        assert_eq!(
-            PhyI2cBlock::from_vendor_abi(0x6e).map(PhyI2cBlock::host),
-            Some(PhyI2cHost::Host1)
-        );
-        assert_eq!(
-            PhyI2cBlock::from_vendor_abi(0x6f).map(PhyI2cBlock::host),
-            Some(PhyI2cHost::Host0)
-        );
     }
 
     #[test]
@@ -815,7 +761,7 @@ mod tests {
         let saturated = |inputs: PhyI2cInitializationInputs| {
             (0..PHY_I2C_INITIALIZATION_PAIR_COUNT)
                 .filter_map(|index| inputs.pair(index))
-                .map(|pair| pair.second().2)
+                .map(|pair| pair.second().1)
                 .collect::<std::vec::Vec<_>>()
         };
         let low = saturated(PhyI2cInitializationInputs {

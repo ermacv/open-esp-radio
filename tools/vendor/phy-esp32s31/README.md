@@ -34,7 +34,7 @@ RX experiment runs after the host has read all capture pages.
 Capture uses public PHY snapshots/getters, without verification hooks.
 
 `registers.rs` derives both images from the published model: the readable
-RadioPhyPeripherals partition and the PhyI2cField analog image. Production reads
+RadioPhyPeripherals partition and the native analog-I2C capture image. Production reads
 only vendor-readable MMIO indices, and each published analog byte once.
 Resetting reads remain recorded as unreadable; missing vendor-readable
 production data never counts as a match.

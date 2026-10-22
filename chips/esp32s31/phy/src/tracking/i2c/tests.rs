@@ -1,5 +1,5 @@
 use super::*;
-use crate::analog::i2c::PhyI2cAddress;
+use crate::analog::i2c::Address;
 
 #[test]
 fn temperature_partition_matches_all_reviewed_boundaries() {
@@ -52,13 +52,13 @@ fn hot_transition_owns_both_masked_writes_before_commit() {
     });
     complete_write(
         &mut transition,
-        analog_registers::WIFI_TX_TEMPERATURE_TRACKING_0.address(),
+        fields::TXRF_WIFI_TX_TEMPERATURE_TRACKING_0.address(),
         0xa0,
         0xa6,
     );
     complete_write(
         &mut transition,
-        analog_registers::WIFI_TX_TEMPERATURE_TRACKING_1.address(),
+        fields::TXRF_WIFI_TX_TEMPERATURE_TRACKING_1.address(),
         0x40,
         0x4f,
     );
@@ -73,7 +73,7 @@ fn hot_transition_owns_both_masked_writes_before_commit() {
 
 fn complete_write(
     transition: &mut PhyWifiI2cTrackingTransition,
-    address: PhyI2cAddress,
+    address: Address,
     read_value: u8,
     written_value: u8,
 ) {

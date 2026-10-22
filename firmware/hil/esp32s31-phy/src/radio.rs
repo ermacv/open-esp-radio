@@ -7,7 +7,7 @@ use oer_esp32s31_hal::{
         client::{WifiClocked, WifiCold},
         init::*,
     },
-    phy::i2c::{self, PhyI2cAddress},
+    phy::i2c::{self, Address},
     root::WifiPartition,
     types::MacTxPowerPair,
 };
@@ -329,7 +329,10 @@ impl Radio {
                     .ok_or(RejectReason::InvalidConfiguration)?;
                 let mut values = heapless::Vec::new();
                 for index in range {
-                    let address = PhyI2cAddress::image(index).ok_or(RejectReason::Internal)?;
+                    let address = oer_esp32s31_hal::phy::i2c::CAPTURE
+                        .get(index)
+                        .map(|entry| entry.address)
+                        .ok_or(RejectReason::Internal)?;
                     let value = self.read_analog(address).await?;
                     values.push(value).map_err(|_| RejectReason::Internal)?;
                 }
@@ -457,7 +460,8 @@ impl Radio {
                 .phy_register_image_len()
                 .try_into()
                 .map_err(|_| RejectReason::Internal)?,
-            analog_bytes: PhyI2cAddress::IMAGE_LEN
+            analog_bytes: oer_esp32s31_hal::phy::i2c::CAPTURE
+                .len()
                 .try_into()
                 .map_err(|_| RejectReason::Internal)?,
             channel: config.channel,
@@ -641,7 +645,7 @@ impl Radio {
         Ok(())
     }
 
-    async fn read_analog(&mut self, address: PhyI2cAddress) -> Result<u8> {
+    async fn read_analog(&mut self, address: Address) -> Result<u8> {
         let mut registers = self.domain.phy_hal();
         let mut started = false;
         for _ in 0..HARDWARE_EDGE_LIMIT {

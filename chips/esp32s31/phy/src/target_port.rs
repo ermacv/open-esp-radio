@@ -795,7 +795,7 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
             PhyDcodeExternalBinding::Rfpll(binding) => {
                 let completion = self.complete_rfpll(binding, registers).await?;
                 if let RfpllFrequencyCompletion::MaskedRead {
-                    field: crate::analog::i2c::analog_registers::RFPLL_LOCK_STATUS,
+                    field: crate::analog::i2c::fields::RFPLL_LOCK_STATUS,
                     value,
                 } = completion
                 {

@@ -16,7 +16,7 @@
 //! and the parent commits only after accepting the terminal child completion.
 
 use crate::analog::{
-    i2c::{PhyI2cField, analog_registers},
+    i2c::{Field, fields},
     rfpll::{
         RfpllFrequencyAction, RfpllFrequencyCompletion, RfpllFrequencyFailure,
         RfpllFrequencyRequest, RfpllFrequencyTransition,
@@ -25,11 +25,11 @@ use crate::analog::{
 
 const CHANNELS: [u8; 4] = [1, 5, 10, 14];
 
-const CKGEN_WRITES: [(PhyI2cField, u8); 4] = [
-    (analog_registers::RFPLL_DCODE_0_SOURCE_SELECT, 0),
-    (analog_registers::RFPLL_DCODE_1_SOURCE_SELECT, 0),
-    (analog_registers::RFPLL_DCODE_CKGEN_RESET, 0),
-    (analog_registers::RFPLL_DCODE_CKGEN_RESET, 1),
+const CKGEN_WRITES: [(Field, u8); 4] = [
+    (fields::RFPLL_DCODE_0_SOURCE_SELECT, 0),
+    (fields::RFPLL_DCODE_1_SOURCE_SELECT, 0),
+    (fields::RFPLL_DCODE_CKGEN_RESET, 0),
+    (fields::RFPLL_DCODE_CKGEN_RESET, 1),
 ];
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -53,8 +53,8 @@ pub enum PhyDcodeFailure {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyDcodeAction {
     Rfpll(RfpllFrequencyAction),
-    WriteMasked { field: PhyI2cField, value: u8 },
-    ReadMasked { field: PhyI2cField },
+    WriteMasked { field: Field, value: u8 },
+    ReadMasked { field: Field },
     Complete(PhyDcodeOutcome),
     Failed(PhyDcodeFailure),
 }
@@ -62,8 +62,8 @@ pub enum PhyDcodeAction {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyDcodeCompletion {
     Rfpll(RfpllFrequencyCompletion),
-    MaskedWrite { field: PhyI2cField, value: u8 },
-    MaskedRead { field: PhyI2cField, value: u8 },
+    MaskedWrite { field: Field, value: u8 },
+    MaskedRead { field: Field, value: u8 },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -127,10 +127,10 @@ impl PhyDcodeTransition {
                 PhyDcodeAction::WriteMasked { field, value }
             }
             PhyDcodeStep::ReadLow { .. } => PhyDcodeAction::ReadMasked {
-                field: analog_registers::RFPLL_INTERNAL_DCODE_0,
+                field: fields::RFPLL_INTERNAL_DCODE_0,
             },
             PhyDcodeStep::ReadHigh { .. } => PhyDcodeAction::ReadMasked {
-                field: analog_registers::RFPLL_INTERNAL_DCODE_1,
+                field: fields::RFPLL_INTERNAL_DCODE_1,
             },
             PhyDcodeStep::Complete(outcome) => PhyDcodeAction::Complete(*outcome),
             PhyDcodeStep::Failed(failure) => PhyDcodeAction::Failed(*failure),
@@ -192,7 +192,7 @@ impl PhyDcodeTransition {
             (
                 PhyDcodeStep::ReadLow { calibration_index },
                 PhyDcodeCompletion::MaskedRead {
-                    field: analog_registers::RFPLL_INTERNAL_DCODE_0,
+                    field: fields::RFPLL_INTERNAL_DCODE_0,
                     value,
                 },
             ) if value <= 0x3f => {
@@ -204,7 +204,7 @@ impl PhyDcodeTransition {
             (
                 PhyDcodeStep::ReadHigh { calibration_index },
                 PhyDcodeCompletion::MaskedRead {
-                    field: analog_registers::RFPLL_INTERNAL_DCODE_1,
+                    field: fields::RFPLL_INTERNAL_DCODE_1,
                     value,
                 },
             ) if value <= 0x3f => {

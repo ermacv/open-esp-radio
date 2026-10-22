@@ -240,7 +240,7 @@ fn release_for_test(
 #[test]
 fn cancelling_the_transport_after_a_write_leaves_the_phy_poisoned() {
     use crate::{
-        analog::i2c::analog_registers,
+        analog::i2c::{fields, registers},
         calibration::cold::{PhyColdI2cRequest, PhyColdI2cTransaction},
         executor::step::{I2cTiming, Job, drive, tests::Io},
     };
@@ -258,7 +258,7 @@ fn cancelling_the_transport_after_a_write_leaves_the_phy_poisoned() {
     let mut io = Io::default();
     let writes = io.atoms.clone();
     let mut transaction = PhyColdI2cTransaction::new(PhyColdI2cRequest::write_byte(
-        analog_registers::TEMPERATURE_SENSOR_DAC.address(),
+        fields::SARADC_I2C_SARADC_TSENS_DAC.address(),
         15,
     ));
     {

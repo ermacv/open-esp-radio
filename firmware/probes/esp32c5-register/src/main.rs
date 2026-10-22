@@ -26,10 +26,11 @@ use esp_backtrace as _;
 use esp_hal::main;
 use esp_println::println;
 use oer_esp32c5_hal::analog::AnalogI2c;
-use oer_esp32c5_pac::{
-    ModemClockDevice, ModemClockRegisters, PhyI2cAddress, PhyI2cBlock, PhyI2cHost, PhyI2cRegisters,
-    RadioPartitions,
-};
+use oer_esp32c5_pac::analog_i2c::{self, Host, Profile, Request};
+fn normal_route(code: u8) -> Option<analog_i2c::Route> {
+    analog_i2c::route(Profile::LibphyNormal, code)
+}
+use oer_esp32c5_pac::{ModemClockDevice, ModemClockRegisters, PhyI2cRegisters, RadioPartitions};
 use oer_esp32c5_pac_raw::Ieee802154Mac;
 use oer_espressif_analog::{AnalogField, FieldRead, FieldWrite, Step};
 
@@ -164,7 +165,7 @@ const I2C_REGISTERS: u8 = 16;
 /// Busy polls before a read is reported incomplete.
 const I2C_POLLS: u32 = 100_000;
 
-fn pac_read(i2c: &mut PhyI2cRegisters, address: PhyI2cAddress) -> Option<u8> {
+fn pac_read(i2c: &mut PhyI2cRegisters, address: Request) -> Option<u8> {
     for _ in 0..I2C_POLLS {
         if i2c.try_start_read(address).is_ok() {
             for _ in 0..I2C_POLLS {
@@ -178,14 +179,14 @@ fn pac_read(i2c: &mut PhyI2cRegisters, address: PhyI2cAddress) -> Option<u8> {
     None
 }
 
-fn rom_read(address: PhyI2cAddress) -> u8 {
-    let block = address.block();
+fn rom_read(address: Request) -> u8 {
+    let block = address.route();
     // Preserve this ROM ABI's old argument: complement the low 24 bits of
     // the register image, leaving the argument's high byte set.
-    let mask = !(block.read_mask().bits() & 0x00ff_ffff);
-    let host = match block.host() {
-        PhyI2cHost::Host0 => 0,
-        PhyI2cHost::Host1 => 1,
+    let mask = !(block.complemented_read_select() & 0x00ff_ffff);
+    let host = match block.host {
+        Host::Host0 => 0,
+        Host::Host1 => 1,
     };
     // SAFETY: the address is the ESP32-C5 rev 1.0 ROM leaf of this ABI; it
     // touches only the analog I2C master, which the probe owns, and the PAC
@@ -193,20 +194,21 @@ fn rom_read(address: PhyI2cAddress) -> u8 {
     let leaf: extern "C" fn(u32, u32, u32, u32) -> u32 =
         unsafe { core::mem::transmute(ROM_PHY_CHIP_I2C_READREG_ORG) };
     leaf(
-        u32::from(block.code()),
+        u32::from(block.request_code),
         mask,
         host,
-        u32::from(address.register()),
+        u32::from(address.index()),
     ) as u8
 }
 
 fn probe_phy_i2c(i2c: &mut PhyI2cRegisters, failures: &mut u32) {
     for code in I2C_BLOCKS {
-        let block = PhyI2cBlock::from_vendor_abi(code).expect("reviewed block");
+        let block = normal_route(code).expect("reviewed block");
         let mut differences = 0;
         let mut incomplete = false;
         for register in 0..I2C_REGISTERS {
-            let address = PhyI2cAddress::new(block, register);
+            let address = Request::new(Profile::LibphyNormal, block.request_code, register)
+                .expect("validated request");
             let Some(ours) = pac_read(i2c, address) else {
                 incomplete = true;
                 break;
@@ -242,11 +244,12 @@ fn drive<T>(mut poll: impl FnMut() -> Step<T>) -> Option<T> {
 }
 
 fn probe_analog_bus(bus: &mut AnalogI2c, failures: &mut u32) {
-    let bbpll = PhyI2cBlock::from_vendor_abi(0x66).expect("BBPLL");
+    let bbpll = normal_route(0x66).expect("BBPLL");
     let mut differences = 0;
     let mut incomplete = false;
     for register in 0..I2C_REGISTERS {
-        let address = PhyI2cAddress::new(bbpll, register);
+        let address = Request::new(Profile::LibphyNormal, bbpll.request_code, register)
+            .expect("validated request");
         let field = AnalogField::new(address, 7, 0).expect("whole byte");
         let mut read = FieldRead::new(bus, field);
         let Some(ours) = drive(|| read.poll()) else {
@@ -267,10 +270,11 @@ fn probe_analog_bus(bus: &mut AnalogI2c, failures: &mut u32) {
     }
     println!("PROBE {verdict} HAL field reads of block 0x66 against the ROM leaf");
 
-    let ulp_cal = PhyI2cBlock::from_vendor_abi(0x61).expect("ULP_CAL");
+    let ulp_cal = normal_route(0x61).expect("ULP_CAL");
     let mut unchanged = true;
     for register in 0..4 {
-        let address = PhyI2cAddress::new(ulp_cal, register);
+        let address = Request::new(Profile::LibphyNormal, ulp_cal.request_code, register)
+            .expect("validated request");
         let field = AnalogField::new(address, 7, 0).expect("whole byte");
         let before = rom_read(address);
         let mut write = FieldWrite::new(bus, field, before).expect("byte fits");

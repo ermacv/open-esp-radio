@@ -931,7 +931,7 @@ mod tests {
         let registers = [
             Register {
                 mask: u32::MAX,
-                name: "PhyI2cField.69.04".into(),
+                name: "analog-i2c.69.04".into(),
                 address: 0x10,
             },
             Register {
@@ -951,7 +951,7 @@ mod tests {
             let summary = compare_registers(&registers, &vendor, [&mismatch], &reviews.registers);
             assert_eq!(summary.verdict, Verdict::Diff);
             assert_eq!((summary.compared, summary.matched), (2, 1));
-            assert_eq!(summary.differing[0].name, "PhyI2cField.69.04");
+            assert_eq!(summary.differing[0].name, "analog-i2c.69.04");
             assert!(summary.excluded.is_empty());
 
             let matching = readings(0x60);
@@ -970,7 +970,7 @@ mod tests {
         );
         assert_eq!(summary.verdict, Verdict::Match);
         assert_eq!((summary.compared, summary.matched), (1, 1));
-        assert_eq!(summary.excluded[0].name, "PhyI2cField.69.04");
+        assert_eq!(summary.excluded[0].name, "analog-i2c.69.04");
     }
 
     #[test]

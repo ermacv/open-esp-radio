@@ -13,7 +13,7 @@
 
 use crate::{
     analog::{
-        i2c::{PhyI2cAddress, PhyI2cField, analog_registers},
+        i2c::{Address, Field, fields, registers},
         pbus::PhyPbusForceTest,
         rfpll::{
             RfpllFrequencyAction, RfpllFrequencyCompletion, RfpllFrequencyFailure,
@@ -30,8 +30,8 @@ use crate::{
     },
 };
 
-const EXTERNAL_DCODE_0: PhyI2cAddress = analog_registers::RFPLL_EXTERNAL_DCODE_0.address();
-const EXTERNAL_DCODE_1: PhyI2cAddress = analog_registers::RFPLL_EXTERNAL_DCODE_1.address();
+const EXTERNAL_DCODE_0: Address = fields::RFPLL_EXTERNAL_DCODE_0.address();
+const EXTERNAL_DCODE_1: Address = fields::RFPLL_EXTERNAL_DCODE_1.address();
 
 const fn channel_to_frequency(channel: u16) -> u16 {
     if channel > 14 {
@@ -422,13 +422,13 @@ pub struct PhyRxIqAdjustedTxOutcome {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyRxIqAdjustedTxAction {
-    ReadI2cMasked { field: PhyI2cField },
+    ReadI2cMasked { field: Field },
     Complete(PhyRxIqAdjustedTxOutcome),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyRxIqAdjustedTxCompletion {
-    I2cMaskedRead { field: PhyI2cField, value: u8 },
+    I2cMaskedRead { field: Field, value: u8 },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -526,19 +526,19 @@ impl PhyRxIqAdjustedTxTransition {
         }
     }
 
-    const fn field(external: bool, second: bool) -> PhyI2cField {
+    const fn field(external: bool, second: bool) -> Field {
         match (external, second) {
-            (false, false) => analog_registers::RFPLL_INTERNAL_DCODE_0,
-            (false, true) => analog_registers::RFPLL_INTERNAL_DCODE_1,
-            (true, false) => analog_registers::RFPLL_EXTERNAL_DCODE_0,
-            (true, true) => analog_registers::RFPLL_EXTERNAL_DCODE_1,
+            (false, false) => fields::RFPLL_INTERNAL_DCODE_0,
+            (false, true) => fields::RFPLL_INTERNAL_DCODE_1,
+            (true, false) => fields::RFPLL_EXTERNAL_DCODE_0,
+            (true, true) => fields::RFPLL_EXTERNAL_DCODE_1,
         }
     }
 
     pub fn action(self) -> PhyRxIqAdjustedTxAction {
         match self.step {
             AdjustedTxStep::ReadMode => PhyRxIqAdjustedTxAction::ReadI2cMasked {
-                field: analog_registers::RFPLL_DCODE_0_SOURCE_SELECT,
+                field: fields::RFPLL_DCODE_0_SOURCE_SELECT,
             },
             AdjustedTxStep::ReadFirst { external } => PhyRxIqAdjustedTxAction::ReadI2cMasked {
                 field: Self::field(external, false),
@@ -564,7 +564,7 @@ impl PhyRxIqAdjustedTxTransition {
             (
                 AdjustedTxStep::ReadMode,
                 PhyRxIqAdjustedTxCompletion::I2cMaskedRead {
-                    field: analog_registers::RFPLL_DCODE_0_SOURCE_SELECT,
+                    field: fields::RFPLL_DCODE_0_SOURCE_SELECT,
                     value,
                 },
             ) => {
@@ -1209,7 +1209,7 @@ pub enum PhyRxIqGainAction {
         transaction: PhyPbusForceTest,
     },
     WriteI2c {
-        address: PhyI2cAddress,
+        address: Address,
         value: u8,
     },
     AdjustTx(PhyRxIqAdjustedTxAction),
@@ -1240,7 +1240,7 @@ pub enum PhyRxIqGainCompletion {
         transaction: PhyPbusForceTest,
     },
     I2cWritten {
-        address: PhyI2cAddress,
+        address: Address,
         value: u8,
     },
     AdjustTx(PhyRxIqAdjustedTxCompletion),
@@ -1704,7 +1704,7 @@ pub enum PhyRxIqWorkModeDelayPhase {
 pub enum PhyRxIqInitAction {
     Rfpll(RfpllFrequencyAction),
     WriteTxCap {
-        address: PhyI2cAddress,
+        address: Address,
         value: u8,
     },
     ConfigureRootStatus,
@@ -1730,7 +1730,7 @@ pub enum PhyRxIqInitAction {
 pub enum PhyRxIqInitCompletion {
     Rfpll(RfpllFrequencyCompletion),
     TxCapWritten {
-        address: PhyI2cAddress,
+        address: Address,
         value: u8,
     },
     RootStatusConfigured,
@@ -1795,7 +1795,7 @@ enum InitStep {
     Failed(PhyRxIqInitFailure),
 }
 
-const RXIQ_TX_CAP_ADDRESS: PhyI2cAddress = analog_registers::TX_CAPACITOR_BANKS;
+const RXIQ_TX_CAP_ADDRESS: Address = registers::TXRF_TX_CAPACITOR_LOW;
 
 const fn root_rx_on(index: u8, pbus_rx_path_value: u8) -> PhyPbusForceTest {
     match index {
@@ -2476,7 +2476,7 @@ pub enum PhyRxIqExternalBindingError {
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct PhyRxIqAdjustedTxI2cBinding {
-    field: PhyI2cField,
+    field: Field,
     transaction: crate::calibration::cold::PhyColdI2cTransaction,
 }
 
@@ -2695,7 +2695,7 @@ impl PhyRxIqGainPbusBinding {
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct PhyRxIqGainI2cBinding {
-    address: PhyI2cAddress,
+    address: Address,
     value: u8,
     transaction: crate::calibration::cold::PhyColdI2cTransaction,
 }
@@ -2883,7 +2883,7 @@ impl PhyRxIqInitPbusBinding {
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct PhyRxIqInitI2cBinding {
-    address: PhyI2cAddress,
+    address: Address,
     value: u8,
     transaction: crate::calibration::cold::PhyColdI2cTransaction,
 }

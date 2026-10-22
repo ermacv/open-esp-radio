@@ -23,7 +23,7 @@ I2C entry is named `open_phy_i2c_trace_<vendor function>` and takes that
 | Entry | Production path |
 | --- | --- |
 | `phy_get_i2c_hostid_(block)` | `PhyI2cRegisters::configure_and_select_host` |
-| `phy_get_i2c_read_mask_(block)` | `PhyI2cBlock::read_mask_complement_low` |
+| `phy_get_i2c_read_mask_(block)` | `analog_i2c::Route::complemented_read_select` |
 | `phy_chip_i2c_readReg(block, host_id, reg_add)` | `AnalogI2c` start and completion of a read |
 | `phy_chip_i2c_writeReg(block, host_id, reg_add, data)` | `AnalogI2c` start and completion of a write |
 | `phy_i2c_readReg_Mask(block, host_id, reg_add, msb, lsb)` | `oer_espressif_analog::FieldRead` over `AnalogI2c` |

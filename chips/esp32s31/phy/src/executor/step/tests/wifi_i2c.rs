@@ -80,8 +80,8 @@ fn both_masked_writes_keep_order_and_unrelated_bits_across_real_pending_edges() 
         })
         .copied()
         .collect();
-    let first = analog_registers::WIFI_TX_TEMPERATURE_TRACKING_0;
-    let second = analog_registers::WIFI_TX_TEMPERATURE_TRACKING_1;
+    let first = fields::TXRF_WIFI_TX_TEMPERATURE_TRACKING_0;
+    let second = fields::TXRF_WIFI_TX_TEMPERATURE_TRACKING_1;
     assert_eq!(
         commands,
         std::vec![
@@ -90,14 +90,14 @@ fn both_masked_writes_keep_order_and_unrelated_bits_across_real_pending_edges() 
             },
             PhyColdI2cAction::StartWrite {
                 address: first.address(),
-                value: first.replace(0xa5, 6)
+                value: first.insert(0xa5, 6).unwrap()
             },
             PhyColdI2cAction::StartRead {
                 address: second.address()
             },
             PhyColdI2cAction::StartWrite {
                 address: second.address(),
-                value: second.replace(first.replace(0xa5, 6), 15)
+                value: second.insert(first.insert(0xa5, 6).unwrap(), 15).unwrap()
             },
         ]
     );

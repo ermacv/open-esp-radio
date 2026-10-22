@@ -1,5 +1,5 @@
 use super::*;
-use crate::analog::i2c::analog_registers;
+use crate::analog::i2c::fields;
 use crate::calibration::cold::{PhyColdI2cAction, PhyColdI2cObservation, PhyColdI2cOutcome};
 
 #[test]
@@ -9,7 +9,7 @@ fn i2c_binding_preserves_read_identity_through_completion() {
     assert_eq!(
         binding.action(),
         PhyColdI2cAction::StartRead {
-            address: analog_registers::TEMPERATURE_SENSOR_DAC_STATUS.address(),
+            address: fields::SARADC_I2C_SARADC_TSENS_DAC.address(),
         }
     );
     binding.read_started().unwrap();
@@ -20,14 +20,14 @@ fn i2c_binding_preserves_read_identity_through_completion() {
     assert_eq!(
         binding.action(),
         PhyColdI2cAction::Complete(PhyColdI2cOutcome::Read {
-            address: analog_registers::TEMPERATURE_SENSOR_DAC_STATUS.address(),
+            address: fields::SARADC_I2C_SARADC_TSENS_DAC.address(),
             value: 15,
         })
     );
     assert_eq!(
         binding.into_completion().unwrap(),
         PhyTemperatureCompletion::MaskedRead {
-            field: analog_registers::TEMPERATURE_SENSOR_DAC_STATUS,
+            field: fields::SARADC_I2C_SARADC_TSENS_DAC,
             value: 15,
         }
     );

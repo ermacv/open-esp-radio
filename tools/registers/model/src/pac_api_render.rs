@@ -163,7 +163,6 @@ impl PacApiPack {
                 domain.name, domain.name,
             ));
         }
-        output.push_str(&self.render_indirect_register_field_domains());
         let flag_or_enum_domains = self
             .flag_domains
             .iter()
@@ -431,95 +430,6 @@ impl PacApiPack {
         }
         output.push_str(&self.render_partition_image_bridges());
         Ok(output)
-    }
-
-    fn render_indirect_register_field_domains(&self) -> String {
-        let mut output = String::new();
-        for domain in &self.indirect_register_field_domains {
-            let value_type = match domain.value_bits {
-                8 => "u8",
-                16 => "u16",
-                32 => "u32",
-                _ => unreachable!("validated indirect-register value width"),
-            };
-            push_doc(&mut output, &domain.description, "");
-            output.push_str(&format!(
-                "#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]\n\
-                 pub struct {} {{\n\
-                     bank: u8,\n\
-                     register: u8,\n\
-                     mask: {},\n\
-                     bit_offset: u8,\n\
-                 }}\n\n\
-                 impl {} {{\n\
-                     const fn generated(bank: u8, register: u8, mask: {}, bit_offset: u8) -> Self {{\n\
-                         Self {{ bank, register, mask, bit_offset }}\n\
-                     }}\n\n\
-                     pub(crate) const fn bank(self) -> u8 {{ self.bank }}\n\n\
-                     pub(crate) const fn register(self) -> u8 {{ self.register }}\n\n\
-                     /// Extract the named field from one sampled indirect-register value.\n\
-                     pub const fn extract(self, register_value: {}) -> {} {{\n\
-                         (register_value & self.mask) >> self.bit_offset\n\
-                     }}\n\n\
-                     /// Replace the named field while preserving every other register bit.\n\
-                     pub const fn replace(self, register_value: {}, field_value: {}) -> {} {{\n\
-                         (register_value & !self.mask) | ((field_value << self.bit_offset) & self.mask)\n\
-                     }}\n\
-                 }}\n\n",
-                domain.name,
-                value_type,
-                domain.name,
-                value_type,
-                value_type,
-                value_type,
-                value_type,
-                value_type,
-                value_type,
-            ));
-            output.push_str(&format!(
-                "/// Reviewed named fields in the `{}` indirect-register space.\n\
-                 pub mod {} {{\n\
-                     use super::{};\n\n",
-                domain.name, domain.module, domain.name,
-            ));
-            for field in &domain.fields {
-                push_doc(&mut output, &field.description, "    ");
-                let low_mask = if field.bit_width == 32 {
-                    u32::MAX
-                } else {
-                    (1_u32 << field.bit_width) - 1
-                };
-                let mask = low_mask << field.bit_offset;
-                output.push_str(&format!(
-                    "    pub const {}: {} = {}::generated(0x{:02x}, 0x{:02x}, 0x{:0width$x}, {});\n",
-                    field.name,
-                    domain.name,
-                    domain.name,
-                    field.bank,
-                    field.register,
-                    mask,
-                    field.bit_offset,
-                    width = usize::from(domain.value_bits / 4),
-                ));
-            }
-            output.push_str("}\n\n");
-            if domain.register_image {
-                let registers = domain.image_registers();
-                output.push_str(&format!(
-                    "/// Distinct registers of the `{}` domain, ascending by bank and\n\
-                     /// register: the order of its register image.\n\
-                     pub(crate) const {}_IMAGE: [(u8, u8); {}] = [\n",
-                    domain.name,
-                    domain.module.to_uppercase(),
-                    registers.len(),
-                ));
-                for (bank, register) in registers {
-                    output.push_str(&format!("    (0x{bank:02x}, 0x{register:02x}),\n"));
-                }
-                output.push_str("];\n\n");
-            }
-        }
-        output
     }
 
     /// Render helper modules to append to the svd2rust crate root.

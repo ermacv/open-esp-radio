@@ -196,9 +196,8 @@ pub use phy::{
     agc::runtime::ForcedRxGain,
     i2c::{
         BluetoothTxPowerControlRegister, PhyAdcRate, PhyFilterDcapInputs, PhyI2cAccessError,
-        PhyI2cAddress, PhyI2cBlock, PhyI2cCommandMemoryInputs, PhyI2cConfigurationCommand,
-        PhyI2cConfigurationOperation, PhyI2cField, PhyI2cHost, PhyI2cInitializationStageOneInputs,
-        PhyI2cParallelWrite, analog_registers,
+        PhyI2cCommandMemoryInputs, PhyI2cConfigurationCommand, PhyI2cConfigurationOperation,
+        PhyI2cInitializationStageOneInputs, PhyI2cParallelWrite,
     },
 };
 
@@ -287,6 +286,5 @@ pub(crate) mod modem;
 pub mod validation;
 pub(crate) mod wifi;
 
-// Generated analog-I2C vocabulary, checked against the bus transport by host tests.
-#[cfg(test)]
+// Generated analog-I2C identities, fields and transport routes.
 include!("analog_generated.rs");

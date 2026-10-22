@@ -1,4 +1,5 @@
 use super::*;
+use crate::analog::i2c::registers;
 
 fn tone_sar_completion(action: PhyToneSarAction, value: u16) -> PhyToneSarCompletion {
     match action {
@@ -314,7 +315,7 @@ fn tone_sar_observation_budget_restarts_for_each_conversion() {
 
 #[test]
 fn tx_cap_lowering_covers_every_nested_operation_class() {
-    let i2c = analog_registers::RFPLL_CAPACITOR_LOW;
+    let i2c = registers::RFPLL_CAPACITOR_LOW;
     assert!(matches!(
         PhyTxCapExternalBinding::lower(PhyTxCapAction::Environment(
             PhyTxCalibrationEnvironmentAction::ConfigurePbusDebugMode

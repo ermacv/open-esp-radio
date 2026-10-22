@@ -94,6 +94,7 @@ impl Signature {
                 &[
                     "chips/esp32s31/registers/published/radio.svd",
                     "chips/esp32s31/registers/policy/api.toml",
+                    "chips/esp32s31/registers/model/analog/phy.toml",
                 ],
             )?,
             relation_sha256: digest(

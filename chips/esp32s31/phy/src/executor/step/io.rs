@@ -248,7 +248,8 @@ impl Io<'_, '_> {
     ) -> Result<Step, Failure> {
         use crate::{
             analog::{
-                frequency::PhyFrequencyCapMemoryAction as Memory, i2c::analog_registers as reg,
+                frequency::PhyFrequencyCapMemoryAction as Memory,
+                i2c::{fields, registers},
                 rfpll::RfpllCapacitorCode,
             },
             calibration::cold::{
@@ -291,25 +292,25 @@ impl Io<'_, '_> {
                 if run.transaction.is_none() {
                     let request = match search_action {
                         search::Action::ReadInitialCap if run.phase == 0 => {
-                            Request::read_byte(reg::RFPLL_CALIBRATED_CAPACITOR_LOW)
+                            Request::read_byte(registers::RFPLL_CALIBRATED_CAPACITOR_LOW)
                         }
                         search::Action::ReadInitialCap => {
-                            Request::read_field(reg::RFPLL_CALIBRATED_CAPACITOR_HIGH)
+                            Request::read_field(fields::RFPLL_CALIBRATED_CAPACITOR_HIGH)
                         }
                         search::Action::EnableSearch => {
-                            Request::write_field(reg::RFPLL_CAPACITOR_SEARCH_ENABLE, 1)
+                            Request::write_field(fields::RFPLL_CAPACITOR_SEARCH_ENABLE, 1)
                         }
                         search::Action::WriteCap(requested) => {
                             let code = RfpllCapacitorCode::from_request(requested)
                                 .ok_or(Failure::Binding)?;
                             if run.phase == 0 {
-                                Request::write_byte(reg::RFPLL_CAPACITOR_LOW, code.low_byte())
+                                Request::write_byte(registers::RFPLL_CAPACITOR_LOW, code.low_byte())
                             } else {
-                                Request::write_field(reg::RFPLL_CAPACITOR_HIGH, code.high_bit())
+                                Request::write_field(fields::RFPLL_CAPACITOR_HIGH, code.high_bit())
                             }
                         }
                         search::Action::ReadStatus => {
-                            Request::read_field(reg::RFPLL_CAPACITOR_SEARCH_STATUS)
+                            Request::read_field(fields::RFPLL_CAPACITOR_SEARCH_STATUS)
                         }
                         _ => return Err(Failure::Binding),
                     };
@@ -451,9 +452,9 @@ impl Io<'_, '_> {
     fn i2c_status(&mut self) -> u8 {
         #[cfg(target_arch = "riscv32")]
         fn sample(registers: &impl oer_esp32s31_hal::owner::SharedPhyAccess) -> u8 {
-            use oer_esp32s31_hal::phy::i2c::{PhyI2cHost, sample_master_reset_busy};
-            u8::from(sample_master_reset_busy(registers, PhyI2cHost::Host0))
-                | (u8::from(sample_master_reset_busy(registers, PhyI2cHost::Host1)) << 1)
+            use oer_esp32s31_hal::phy::i2c::{Host, sample_master_reset_busy};
+            u8::from(sample_master_reset_busy(registers, Host::Host0))
+                | (u8::from(sample_master_reset_busy(registers, Host::Host1)) << 1)
         }
         match self {
             #[cfg(target_arch = "riscv32")]

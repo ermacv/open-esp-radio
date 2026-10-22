@@ -5,16 +5,16 @@ use std::{
 };
 
 use super::{
-    BluetoothTxPowerControlAction, BluetoothTxPowerControlCompletion, BluetoothTxPowerControlError,
-    BluetoothTxPowerControlI2cAccess, BluetoothTxPowerControlObservation,
-    BluetoothTxPowerControlOperation, BluetoothTxPowerControlPrepareError,
-    BluetoothTxPowerControlRegister, BluetoothTxPowerControlRestoreError,
-    BluetoothTxPowerControlTransaction, PhyAdcRate, PhyFilterDcapInputs, PhyI2cAddress,
-    PhyI2cCommandMemoryInputs, PhyI2cConfigurationAction, PhyI2cConfigurationCommand,
-    PhyI2cConfigurationError, PhyI2cConfigurationObservation, PhyI2cConfigurationOperation,
-    PhyI2cConfigurationTransaction, PhyI2cHost, PhyI2cInitializationStageOneInputs,
-    PhyI2cInitializationStageTwoError, PhyI2cParallelAccess, PhyI2cParallelWrite,
-    configure_initialization_stage_two_with,
+    Address, BluetoothTxPowerControlAction, BluetoothTxPowerControlCompletion,
+    BluetoothTxPowerControlError, BluetoothTxPowerControlI2cAccess,
+    BluetoothTxPowerControlObservation, BluetoothTxPowerControlOperation,
+    BluetoothTxPowerControlPrepareError, BluetoothTxPowerControlRegister,
+    BluetoothTxPowerControlRestoreError, BluetoothTxPowerControlTransaction, Host, PhyAdcRate,
+    PhyFilterDcapInputs, PhyI2cCommandMemoryInputs, PhyI2cConfigurationAction,
+    PhyI2cConfigurationCommand, PhyI2cConfigurationError, PhyI2cConfigurationObservation,
+    PhyI2cConfigurationOperation, PhyI2cConfigurationTransaction,
+    PhyI2cInitializationStageOneInputs, PhyI2cInitializationStageTwoError, PhyI2cParallelAccess,
+    PhyI2cParallelWrite, configure_initialization_stage_two_with,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -27,8 +27,8 @@ enum ParallelEvent {
 #[derive(Default)]
 struct FakeParallelI2c {
     events: Vec<ParallelEvent>,
-    initially_busy_host: Option<PhyI2cHost>,
-    busy_after_start_host: Option<PhyI2cHost>,
+    initially_busy_host: Option<Host>,
+    busy_after_start_host: Option<Host>,
     started: Cell<bool>,
 }
 
@@ -41,7 +41,7 @@ impl PhyI2cParallelAccess for FakeParallelI2c {
         self.events.push(ParallelEvent::RestoreRadioMap);
     }
 
-    fn is_busy(&self, host: PhyI2cHost) -> bool {
+    fn is_busy(&self, host: Host) -> bool {
         if self.started.get() {
             self.busy_after_start_host == Some(host)
         } else {
@@ -81,7 +81,7 @@ fn retained_wake_i2c_stage_two_pairs_both_hosts_and_restores_the_radio_map() {
 #[test]
 fn retained_wake_i2c_stage_two_restores_the_radio_map_on_busy_entry() {
     let mut access = FakeParallelI2c {
-        initially_busy_host: Some(PhyI2cHost::Host1),
+        initially_busy_host: Some(Host::Host1),
         ..FakeParallelI2c::default()
     };
     assert_eq!(
@@ -90,9 +90,7 @@ fn retained_wake_i2c_stage_two_restores_the_radio_map_on_busy_entry() {
             PhyI2cCommandMemoryInputs::new(1, 2, 3, 4, 5, 6),
             10,
         ),
-        Err(PhyI2cInitializationStageTwoError::BusyAtStart {
-            host: PhyI2cHost::Host1,
-        })
+        Err(PhyI2cInitializationStageTwoError::BusyAtStart { host: Host::Host1 })
     );
     assert_eq!(
         access.events,
@@ -106,7 +104,7 @@ fn retained_wake_i2c_stage_two_restores_the_radio_map_on_busy_entry() {
 #[test]
 fn retained_wake_i2c_stage_two_bounds_completion_and_restores_the_radio_map() {
     let mut access = FakeParallelI2c {
-        busy_after_start_host: Some(PhyI2cHost::Host0),
+        busy_after_start_host: Some(Host::Host0),
         ..FakeParallelI2c::default()
     };
     assert_eq!(
@@ -116,7 +114,7 @@ fn retained_wake_i2c_stage_two_bounds_completion_and_restores_the_radio_map() {
             2,
         ),
         Err(PhyI2cInitializationStageTwoError::CompletionTimeout {
-            host: PhyI2cHost::Host0,
+            host: Host::Host0,
             pair: 0,
         })
     );
@@ -225,15 +223,15 @@ struct FakeConfigurationI2c {
     pending_observations: u8,
     /// The address of the command in flight; completion edges must observe
     /// the same block's host.
-    started: core::cell::Cell<Option<PhyI2cAddress>>,
+    started: core::cell::Cell<Option<Address>>,
     /// Every observed address, in order.
-    observed: core::cell::RefCell<std::vec::Vec<PhyI2cAddress>>,
+    observed: core::cell::RefCell<std::vec::Vec<Address>>,
 }
 
 impl oer_espressif_analog::AnalogRegisterBus for FakeConfigurationI2c {
-    type Address = PhyI2cAddress;
+    type Address = Address;
 
-    fn try_start_read(&mut self, address: PhyI2cAddress) -> Result<(), oer_espressif_analog::Busy> {
+    fn try_start_read(&mut self, address: Address) -> Result<(), oer_espressif_analog::Busy> {
         if self.busy_starts != 0 {
             self.busy_starts -= 1;
             return Err(oer_espressif_analog::Busy);
@@ -245,7 +243,7 @@ impl oer_espressif_analog::AnalogRegisterBus for FakeConfigurationI2c {
 
     fn try_start_write(
         &mut self,
-        address: PhyI2cAddress,
+        address: Address,
         _value: u8,
     ) -> Result<(), oer_espressif_analog::Busy> {
         if self.busy_starts != 0 {
@@ -257,7 +255,7 @@ impl oer_espressif_analog::AnalogRegisterBus for FakeConfigurationI2c {
         Ok(())
     }
 
-    fn try_finish_read(&self, address: PhyI2cAddress) -> Result<u8, oer_espressif_analog::Busy> {
+    fn try_finish_read(&self, address: Address) -> Result<u8, oer_espressif_analog::Busy> {
         assert_eq!(self.started.get(), Some(address));
         self.observed.borrow_mut().push(address);
         if self.pending_observations == 0 {
@@ -267,7 +265,7 @@ impl oer_espressif_analog::AnalogRegisterBus for FakeConfigurationI2c {
         }
     }
 
-    fn try_finish_write(&self, address: PhyI2cAddress) -> Result<(), oer_espressif_analog::Busy> {
+    fn try_finish_write(&self, address: Address) -> Result<(), oer_espressif_analog::Busy> {
         assert_eq!(self.started.get(), Some(address));
         self.observed.borrow_mut().push(address);
         if self.pending_observations == 0 {

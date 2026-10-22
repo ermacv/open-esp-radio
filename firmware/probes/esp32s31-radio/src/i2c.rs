@@ -50,10 +50,10 @@ oer_probe_macros::probe! {
     /// denotes start failure, 0x10001 an exhausted action schedule, 0x10002 an invalid
     /// transition and 0x10003 an unknown profile. This scheduling is not hardware time.
     pub fn open_phy_trace_i2c_transfer(profile: u32, value: u32, maximum_actions: u32) -> u32 {
-        use oer_esp32s31_hal::phy::i2c::analog_registers::{ADC_RATE_CONFIGURATION, TX_CAPACITOR_HIGH};
+        use oer_esp32s31_hal::phy::i2c::fields;
         let field = match profile {
-            0..=3 => ADC_RATE_CONFIGURATION,
-            4..=7 => TX_CAPACITOR_HIGH,
+            0..=3 => fields::BBPLL_ADC_RATE_CONFIGURATION,
+            4..=7 => fields::TXRF_TX_CAPACITOR_HIGH,
             _ => return 0x10003,
         };
         let request = match profile % 4 {

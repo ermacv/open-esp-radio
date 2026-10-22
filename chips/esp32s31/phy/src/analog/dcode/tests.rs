@@ -17,7 +17,7 @@ fn channel_visits_update_nrx_once_before_each_measured_pair() {
         ) {
             let wrong = if matches!(action, PhyDcodeAction::Rfpll(_)) {
                 PhyDcodeCompletion::Rfpll(RfpllFrequencyCompletion::MaskedRead {
-                    field: analog_registers::RFPLL_LOCK_STATUS,
+                    field: fields::RFPLL_LOCK_STATUS,
                     value: 0,
                 })
             } else {
@@ -178,14 +178,14 @@ fn external_lowering_covers_every_dcode_operation_class() {
     ));
     assert!(matches!(
         PhyDcodeExternalBinding::lower(PhyDcodeAction::WriteMasked {
-            field: analog_registers::RFPLL_DCODE_0_SOURCE_SELECT,
+            field: fields::RFPLL_DCODE_0_SOURCE_SELECT,
             value: 0,
         }),
         Ok(PhyDcodeExternalBinding::I2c(_))
     ));
     assert!(matches!(
         PhyDcodeExternalBinding::lower(PhyDcodeAction::ReadMasked {
-            field: analog_registers::RFPLL_INTERNAL_DCODE_0,
+            field: fields::RFPLL_INTERNAL_DCODE_0,
         }),
         Ok(PhyDcodeExternalBinding::I2c(_))
     ));

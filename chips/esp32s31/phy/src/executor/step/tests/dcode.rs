@@ -96,8 +96,8 @@ fn cold_and_runtime_keep_channel_capture_order_and_checkpoint_every_transaction(
             .iter()
             .filter_map(|action| match action {
                 PhyColdI2cAction::StartRead { address }
-                    if *address == analog_registers::RFPLL_INTERNAL_DCODE_0.address()
-                        || *address == analog_registers::RFPLL_INTERNAL_DCODE_1.address() =>
+                    if *address == fields::RFPLL_INTERNAL_DCODE_0.address()
+                        || *address == fields::RFPLL_INTERNAL_DCODE_1.address() =>
                 {
                     Some(*address)
                 }
@@ -107,8 +107,8 @@ fn cold_and_runtime_keep_channel_capture_order_and_checkpoint_every_transaction(
         assert_eq!(
             captures,
             [
-                analog_registers::RFPLL_INTERNAL_DCODE_0.address(),
-                analog_registers::RFPLL_INTERNAL_DCODE_1.address()
+                fields::RFPLL_INTERNAL_DCODE_0.address(),
+                fields::RFPLL_INTERNAL_DCODE_1.address()
             ]
             .repeat(4)
         );

@@ -48,6 +48,10 @@ pub struct ReadSafety {
     /// A finite lifecycle qualification; access=readable alone is insufficient.
     pub epoch: String,
     pub sources: Vec<String>,
+    /// Explicit lanes consumed by the qualified diagnostic comparison.
+    /// This does not declare the meaning or reset state of those lanes.
+    #[serde(default)]
+    pub comparison_mask: Option<u8>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -75,6 +79,19 @@ pub struct AnalogRegister {
     /// access, constraints and read/write side effects.
     #[serde(default, deserialize_with = "field_declarations")]
     pub fields: Vec<FieldInfo>,
+    /// A sourced access to a strict subrange of one declared hardware field.
+    #[serde(default)]
+    pub views: Vec<AnalogFieldView>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct AnalogFieldView {
+    pub name: String,
+    pub field: String,
+    pub bit_offset: u8,
+    pub bit_width: u8,
+    pub sources: Vec<String>,
 }
 
 fn field_declarations<'de, D: serde::Deserializer<'de>>(
@@ -131,7 +148,9 @@ pub struct AnalogGeometry {
     pub reset_value: Option<u8>,
     pub reset_known_mask: Option<u8>,
     pub read_safe_epoch: Option<String>,
+    pub comparison_mask: Option<u8>,
     pub fields: Vec<AnalogFieldGeometry>,
+    pub views: Vec<AnalogFieldView>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -184,13 +203,13 @@ impl AnalogRegister {
             )
             .read_action(self.read_action)
             .modified_write_values(self.modified_write_values)
-            .fields(Some(
+            .fields((!self.fields.is_empty()).then(|| {
                 self.fields
                     .iter()
                     .cloned()
                     .map(svd_rs::MaybeArray::Single)
-                    .collect(),
-            ))
+                    .collect()
+            }))
             .build(ValidateLevel::Strict)
             .map_err(Error::from)
     }
@@ -294,9 +313,31 @@ impl AnalogSpace {
                     }
                 }
                 register.bit_states()?;
+                for view in &register.views {
+                    component(&view.name)?;
+                    source_ids("analog field view", &view.sources)?;
+                    let parent = register
+                        .fields
+                        .iter()
+                        .find(|f| f.name == view.field)
+                        .ok_or_else(|| {
+                            Error::message("analog field view requires a declared parent")
+                        })?;
+                    let end = u32::from(view.bit_offset) + u32::from(view.bit_width);
+                    if view.bit_width == 0
+                        || u32::from(view.bit_offset) < parent.bit_offset()
+                        || end > parent.bit_offset() + parent.bit_width()
+                        || u32::from(view.bit_width) == parent.bit_width()
+                    {
+                        return Err(Error::message(
+                            "analog field view must be a strict subrange of its parent",
+                        ));
+                    }
+                }
                 if let Some(safe) = &register.read_safe {
                     source_ids("analog read safety", &safe.sources)?;
                     if safe.epoch.trim().is_empty()
+                        || safe.comparison_mask == Some(0)
                         || !matches!(
                             register.access,
                             Some(Access::ReadOnly | Access::ReadWrite | Access::ReadWriteOnce)
@@ -333,6 +374,24 @@ impl AnalogSpace {
                         ),
                     );
                     entities.insert(entity.clone(), field.name.ends_with(crate::OPAQUE_SUFFIX));
+                    defaults.insert(entity, block.review.clone());
+                }
+                for view in &register.views {
+                    let entity = format!("{}.{}.{}", block.name, register.name, view.name);
+                    if entities.contains_key(&entity) {
+                        return Err(Error::message("duplicate analog field view"));
+                    }
+                    positions.insert(
+                        entity.clone(),
+                        crate::opaque_position_name(
+                            crate::Position::Field {
+                                offset: u32::from(view.bit_offset),
+                                width: u32::from(view.bit_width),
+                            },
+                            false,
+                        ),
+                    );
+                    entities.insert(entity.clone(), view.name.ends_with(crate::OPAQUE_SUFFIX));
                     defaults.insert(entity, block.review.clone());
                 }
             }
@@ -390,6 +449,7 @@ impl AnalogSpace {
                             .iter()
                             .flat_map(|v| &v.sources)
                             .chain(r.read_safe.iter().flat_map(|v| &v.sources))
+                            .chain(r.views.iter().flat_map(|v| &v.sources))
                     }))
             })
             .chain(self.review.iter().flat_map(|r| &r.sources))
@@ -437,7 +497,9 @@ impl AnalogSpace {
                     reset_value: register.reset_value,
                     reset_known_mask: register.reset_known_mask,
                     read_safe_epoch: register.read_safe.as_ref().map(|r| r.epoch.clone()),
+                    comparison_mask: register.read_safe.as_ref().and_then(|r| r.comparison_mask),
                     fields,
+                    views: register.views.clone(),
                 });
             }
         }

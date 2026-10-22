@@ -12,7 +12,7 @@ pub use quality::PhyRxGainDcQuality;
 
 use crate::{
     analog::{
-        i2c::analog_registers,
+        i2c::fields,
         pbus::PhyPbusForceTest,
         rfpll::{
             RfpllFrequencyAction, RfpllFrequencyCompletion, RfpllFrequencyFailure,
@@ -893,7 +893,7 @@ pub enum PhyRxGainDcAction {
         selector: u8,
         path: u8,
     },
-    I2c(oer_espressif_analog::Action<crate::analog::i2c::PhyI2cAddress, ()>),
+    I2c(oer_espressif_analog::Action<crate::analog::i2c::Address, ()>),
     Calibration(PhyRxDcCalibrationAction),
     ConfigurePbusWorkMode,
     DelayMicros {
@@ -930,7 +930,7 @@ pub enum PhyRxGainDcCompletion {
         path: u8,
         value: u32,
     },
-    I2c(oer_espressif_analog::Completion<crate::analog::i2c::PhyI2cAddress>),
+    I2c(oer_espressif_analog::Completion<crate::analog::i2c::Address>),
     Calibration(PhyRxDcCalibrationCompletion),
     PbusWorkModeConfigured {
         settle_required: bool,
@@ -975,7 +975,7 @@ enum DcStep {
     SharedForcePbus {
         value: u16,
     },
-    SharedI2c(oer_espressif_analog::FieldWriteTransition<crate::analog::i2c::PhyI2cAddress>),
+    SharedI2c(oer_espressif_analog::FieldWriteTransition<crate::analog::i2c::Address>),
     FineCode {
         index: u8,
     },
@@ -1015,7 +1015,7 @@ enum DcStep {
         index: u8,
         transition: PhyRxDcCalibrationTransition,
     },
-    SharedRestoreI2c(oer_espressif_analog::FieldWriteTransition<crate::analog::i2c::PhyI2cAddress>),
+    SharedRestoreI2c(oer_espressif_analog::FieldWriteTransition<crate::analog::i2c::Address>),
     WifiRxOn {
         index: u8,
     },
@@ -1430,7 +1430,7 @@ impl PhyRxGainDcTransition {
             };
         } else if bank == PhyRxGainDcBank::Shared {
             self.step = DcStep::SharedRestoreI2c(crate::analog::i2c::field_write(
-                analog_registers::SHARED_RX_GAIN_CALIBRATION_ENABLE,
+                fields::BBTOP_SHARED_RX_GAIN_CALIBRATION_ENABLE,
                 1,
             ));
         } else {
@@ -1596,7 +1596,7 @@ impl PhyRxGainDcTransition {
                 },
             ) if transaction == PhyPbusForceTest::new(1, 1, value) => {
                 self.step = DcStep::SharedI2c(crate::analog::i2c::field_write(
-                    analog_registers::SHARED_RX_GAIN_CALIBRATION_ENABLE,
+                    fields::BBTOP_SHARED_RX_GAIN_CALIBRATION_ENABLE,
                     0,
                 ));
             }

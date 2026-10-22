@@ -15,10 +15,15 @@ physical 0x65 bytes while retaining different host and selection facts.
 A byte register has `name`, `index`, optional `description`, `access`,
 `read-action`, `modified-write-values`, `reset-value`/`reset-known-mask`,
 `reserved = { mask, sources }`, `read-safe = { epoch, sources }` and fields.
+The optional `read-safe.comparison-mask` selects lanes for the qualified
+capture without declaring their meaning or reset state.
 Fields use the same `FieldInfo` declarations as MMIO (`name`, `bitOffset`,
 `bitWidth`, access, enumerations, read/write actions and constraints).
 Inheritance and arrays require explicit expanded field geometry in this
 first transport model; unsupported extension keys are errors.
+Sourced `views` select strict subranges of a declared parent field using
+`name`, `field`, `bit-offset`, `bit-width` and `sources`; they do not duplicate
+the parent's hardware declaration or change bit states.
 
 `[blocks.review]` supplies a whole-record review default. `[[review]]`
 records replace it for a fully qualified `BLOCK.REGISTER.FIELD` or
@@ -34,7 +39,9 @@ of both reset properties; a partial reset supplies only its nonempty known
 mask, with zeroes outside that mask carrying no knowledge. Readable access
 does not qualify a dump: `read-safe` additionally needs a finite epoch and
 sources, and rejects destructive/modified reads. The current real models
-claim neither known reset nor a read-safe epoch.
+claim no known reset. The S31 model qualifies only the existing 40-byte R1
+image in its calibrated-radio epoch, with explicit comparison masks. These
+masks do not promote unknown data lanes to described or OPAQUE.
 
 `AnalogAddress { block, index }` is a separate host type. Semantic IDs retain
 the existing grammar: `register:<chip>/analog-i2c/0xBBII/8`, where BB/II encode
@@ -52,10 +59,14 @@ and a separately qualified `READ_SAFE` list. Shared value types live in
 `chips/espressif/analog::model`. Sampled values preserve all other bits and
 reject another register's field or a value exceeding its width. Unknown or
 partial reset never creates a whole-byte reset image. These are pure values;
-no analog bus transaction is generated here. The PAC's host tests compile
-this file and compare its routes with the bus transport. The shared crate's
-`model` feature is selected only by those dev-dependencies. Production bus
-callers use the policy field domain and manual map.
+no analog bus transaction is generated here. Both production PACs compile
+this vocabulary; PAC/HAL/PHY and probes consume its fields, physical byte
+identities and routes. `Request` retains an original request code separately
+from its physical address, preserving C5 alias routing. Configuration payloads
+remain algorithms in PAC code and do not assert a hardware reset. Sourced
+`views` select strict subranges of declared hardware fields without overlapping
+field declarations or changing their bit states. `CAPTURE` contains only
+read-safe bytes with an explicit comparison mask, in physical address order.
 
 ## Direct register model
 

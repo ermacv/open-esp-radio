@@ -1,8 +1,8 @@
 /// Native analog-I2C knowledge; these values perform no hardware access.
 pub mod analog_i2c {
     pub use oer_espressif_analog::model::{
-        BlockCode as Block, ByteAddress as Address, Host, KnownReset, RegisterFacts, Route,
-        SampledByte,
+        BlockCode as Block, ByteAddress as Address, CaptureRegister, Host, KnownReset,
+        RegisterFacts, Route, SampledByte,
     };
     pub type Field = oer_espressif_analog::AnalogField<Address>;
     pub mod blocks {
@@ -166,6 +166,47 @@ pub mod analog_i2c {
             _ => None,
         }
     }
+
+    /// A validated transport request. Its original code is retained independently
+    /// of the physical byte identity, including aliases with another host.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub struct Request {
+        profile: Profile,
+        code: u8,
+        index: u8,
+    }
+    impl Request {
+        pub const fn new(profile: Profile, code: u8, index: u8) -> Option<Self> {
+            match route(profile, code) {
+                Some(_) => Some(Self {
+                    profile,
+                    code,
+                    index,
+                }),
+                None => None,
+            }
+        }
+        pub const fn from_address(profile: Profile, address: Address) -> Option<Self> {
+            match route(profile, address.block()) {
+                Some(r) if r.command_code == address.block() => {
+                    Self::new(profile, address.block(), address.index())
+                }
+                _ => None,
+            }
+        }
+        pub const fn route(self) -> Route {
+            match route(self.profile, self.code) {
+                Some(route) => route,
+                None => panic!("validated analog request"),
+            }
+        }
+        pub const fn address(self) -> Address {
+            self.route().address(self.index)
+        }
+        pub const fn index(self) -> u8 {
+            self.index
+        }
+    }
     pub mod registers {
         use super::Address;
         /// SOURCE: ESP_IDF_4D59230D_C5_REGI2C_BROWNOUT, ESP_IDF_4D59230D_C5_REGI2C_LP_BIAS
@@ -178,6 +219,40 @@ pub mod analog_i2c {
         pub const ULP_BOD_I2C_BOD_THRESHOLD: Address = Address::new(0x61, 0x5);
         /// SOURCE: ESP_IDF_4D59230D_C5_REGI2C_BROWNOUT, ESP_IDF_4D59230D_C5_REGI2C_LP_BIAS
         pub const ULP_BOD_I2C_ULP_EXT_CODE: Address = Address::new(0x61, 0x6);
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES
+        pub const ULP_BOD_BYTE_07_OPAQUE: Address = Address::new(0x61, 0x7);
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES
+        pub const ULP_BOD_BYTE_08_OPAQUE: Address = Address::new(0x61, 0x8);
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
+        pub const SDM_BYTE_00_OPAQUE: Address = Address::new(0x63, 0x0);
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
+        pub const SDM_BYTE_01_OPAQUE: Address = Address::new(0x63, 0x1);
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
+        pub const SDM_BYTE_06_OPAQUE: Address = Address::new(0x63, 0x6);
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
+        pub const SDM_BYTE_07_OPAQUE: Address = Address::new(0x63, 0x7);
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
+        pub const SDM_BYTE_08_OPAQUE: Address = Address::new(0x63, 0x8);
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
+        pub const SDM_BYTE_0E_OPAQUE: Address = Address::new(0x63, 0xe);
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
+        pub const SDM_BYTE_0F_OPAQUE: Address = Address::new(0x63, 0xf);
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
+        pub const SDM_BYTE_11_OPAQUE: Address = Address::new(0x63, 0x11);
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
+        pub const SDM_BYTE_12_OPAQUE: Address = Address::new(0x63, 0x12);
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
+        pub const SDM_BYTE_13_OPAQUE: Address = Address::new(0x63, 0x13);
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
+        pub const SDM_BYTE_14_OPAQUE: Address = Address::new(0x63, 0x14);
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
+        pub const SDM_BYTE_15_OPAQUE: Address = Address::new(0x63, 0x15);
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
+        pub const SDM_BYTE_18_OPAQUE: Address = Address::new(0x63, 0x18);
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
+        pub const SDM_BYTE_19_OPAQUE: Address = Address::new(0x63, 0x19);
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
+        pub const SDM_BYTE_1A_OPAQUE: Address = Address::new(0x63, 0x1a);
         /// SOURCE: ESP_IDF_4D59230D_C5_REGI2C_BBPLL
         pub const BBPLL_I2C_BBPLL_IR_CAL_DELAY: Address = Address::new(0x66, 0x0);
         /// SOURCE: ESP_IDF_4D59230D_C5_REGI2C_BBPLL
@@ -198,6 +273,48 @@ pub mod analog_i2c {
         pub const BBPLL_I2C_BBPLL_OC_VCO_DBIAS: Address = Address::new(0x66, 0x9);
         /// SOURCE: ESP_IDF_4D59230D_C5_REGI2C_BBPLL
         pub const BBPLL_I2C_BBPLL_BBADC_DCUR: Address = Address::new(0x66, 0xa);
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_3
+        pub const BBTOP_BYTE_03_OPAQUE: Address = Address::new(0x67, 0x3);
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_3
+        pub const BBTOP_BYTE_05_OPAQUE: Address = Address::new(0x67, 0x5);
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_3
+        pub const BBTOP_BYTE_1D_OPAQUE: Address = Address::new(0x67, 0x1d);
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
+        pub const BBTOP_BYTE_01_OPAQUE: Address = Address::new(0x67, 0x1);
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
+        pub const BBTOP_BYTE_02_OPAQUE: Address = Address::new(0x67, 0x2);
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
+        pub const BBTOP_BYTE_06_OPAQUE: Address = Address::new(0x67, 0x6);
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
+        pub const BBTOP_BYTE_07_OPAQUE: Address = Address::new(0x67, 0x7);
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
+        pub const BBTOP_BYTE_08_OPAQUE: Address = Address::new(0x67, 0x8);
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
+        pub const BBTOP_BYTE_09_OPAQUE: Address = Address::new(0x67, 0x9);
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
+        pub const BBTOP_BYTE_0A_OPAQUE: Address = Address::new(0x67, 0xa);
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
+        pub const BBTOP_BYTE_0B_OPAQUE: Address = Address::new(0x67, 0xb);
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
+        pub const BBTOP_BYTE_0C_OPAQUE: Address = Address::new(0x67, 0xc);
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
+        pub const BBTOP_BYTE_0D_OPAQUE: Address = Address::new(0x67, 0xd);
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
+        pub const BBTOP_BYTE_0E_OPAQUE: Address = Address::new(0x67, 0xe);
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
+        pub const BBTOP_BYTE_0F_OPAQUE: Address = Address::new(0x67, 0xf);
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
+        pub const BBTOP_BYTE_10_OPAQUE: Address = Address::new(0x67, 0x10);
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
+        pub const BBTOP_BYTE_11_OPAQUE: Address = Address::new(0x67, 0x11);
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
+        pub const BBTOP_BYTE_12_OPAQUE: Address = Address::new(0x67, 0x12);
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
+        pub const BBTOP_BYTE_13_OPAQUE: Address = Address::new(0x67, 0x13);
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
+        pub const BBTOP_BYTE_14_OPAQUE: Address = Address::new(0x67, 0x14);
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
+        pub const BBTOP_BYTE_15_OPAQUE: Address = Address::new(0x67, 0x15);
         /// SOURCE: ESP_IDF_4D59230D_C5_REGI2C_SARADC
         pub const SARADC_ADC_SAR1_INITIAL_CODE_LOW_ADDR: Address = Address::new(0x69, 0x0);
         /// SOURCE: ESP_IDF_4D59230D_C5_REGI2C_SARADC
@@ -222,6 +339,42 @@ pub mod analog_i2c {
         pub const SARADC_POWER_GLITCH_DREF_VDET_PERIF: Address = Address::new(0x69, 0xb);
         /// SOURCE: ESP_IDF_4D59230D_C5_REGI2C_SARADC
         pub const SARADC_POWER_GLITCH_DREF_VDET_XTAL: Address = Address::new(0x69, 0xc);
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES
+        pub const BIAS_BYTE_00_OPAQUE: Address = Address::new(0x6a, 0x0);
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES
+        pub const BIAS_BYTE_01_OPAQUE: Address = Address::new(0x6a, 0x1);
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
+        pub const BIAS_BYTE_03_OPAQUE: Address = Address::new(0x6a, 0x3);
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_3
+        pub const TXRF_RC_CALIBRATION_SECOND: Address = Address::new(0x6b, 0xf);
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_3
+        pub const TXRF_RC_CALIBRATION_FIRST: Address = Address::new(0x6b, 0x11);
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_3
+        pub const TXRF_RC_CALIBRATION_THIRD: Address = Address::new(0x6b, 0x13);
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
+        pub const TXRF_BYTE_02_OPAQUE: Address = Address::new(0x6b, 0x2);
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
+        pub const TXRF_BYTE_03_OPAQUE: Address = Address::new(0x6b, 0x3);
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
+        pub const TXRF_BYTE_04_OPAQUE: Address = Address::new(0x6b, 0x4);
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
+        pub const TXRF_BYTE_05_OPAQUE: Address = Address::new(0x6b, 0x5);
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
+        pub const TXRF_BYTE_06_OPAQUE: Address = Address::new(0x6b, 0x6);
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
+        pub const TXRF_BYTE_07_OPAQUE: Address = Address::new(0x6b, 0x7);
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
+        pub const TXRF_BYTE_08_OPAQUE: Address = Address::new(0x6b, 0x8);
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
+        pub const TXRF_BYTE_09_OPAQUE: Address = Address::new(0x6b, 0x9);
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
+        pub const TXRF_BYTE_0A_OPAQUE: Address = Address::new(0x6b, 0xa);
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
+        pub const TXRF_BYTE_0C_OPAQUE: Address = Address::new(0x6b, 0xc);
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
+        pub const TXRF_BYTE_0D_OPAQUE: Address = Address::new(0x6b, 0xd);
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
+        pub const TXRF_BYTE_0E_OPAQUE: Address = Address::new(0x6b, 0xe);
         /// SOURCE: ESP_IDF_4D59230D_C5_REGI2C_DIG_REG
         pub const DIG_REG_I2C_DIG_REG_EXT_RTC_DREG: Address = Address::new(0x6d, 0x4);
         /// SOURCE: ESP_IDF_4D59230D_C5_REGI2C_DIG_REG
@@ -236,6 +389,38 @@ pub mod analog_i2c {
         pub const DIG_REG_I2C_DIG_REG_XPD_RTC_REG: Address = Address::new(0x6d, 0xd);
         /// SOURCE: ESP_IDF_4D59230D_C5_REGI2C_DIG_REG
         pub const DIG_REG_I2C_DIG_REG_SCK_DCAP: Address = Address::new(0x6d, 0xe);
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
+        pub const TXTOP_BYTE_01_OPAQUE: Address = Address::new(0x6e, 0x1);
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
+        pub const TXTOP_BYTE_04_OPAQUE: Address = Address::new(0x6e, 0x4);
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
+        pub const TXTOP_BYTE_05_OPAQUE: Address = Address::new(0x6e, 0x5);
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
+        pub const TXTOP_BYTE_07_OPAQUE: Address = Address::new(0x6e, 0x7);
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
+        pub const TXTOP_BYTE_08_OPAQUE: Address = Address::new(0x6e, 0x8);
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
+        pub const TXTOP_BYTE_09_OPAQUE: Address = Address::new(0x6e, 0x9);
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
+        pub const TXTOP_BYTE_0A_OPAQUE: Address = Address::new(0x6e, 0xa);
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
+        pub const TXTOP_BYTE_0B_OPAQUE: Address = Address::new(0x6e, 0xb);
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
+        pub const TXTOP_BYTE_0C_OPAQUE: Address = Address::new(0x6e, 0xc);
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
+        pub const TXTOP_BYTE_0D_OPAQUE: Address = Address::new(0x6e, 0xd);
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
+        pub const TXTOP_BYTE_0F_OPAQUE: Address = Address::new(0x6e, 0xf);
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
+        pub const TXTOP_BYTE_10_OPAQUE: Address = Address::new(0x6e, 0x10);
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
+        pub const TXTOP_BYTE_11_OPAQUE: Address = Address::new(0x6e, 0x11);
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
+        pub const TXTOP_BYTE_12_OPAQUE: Address = Address::new(0x6e, 0x12);
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
+        pub const TXTOP_BYTE_13_OPAQUE: Address = Address::new(0x6e, 0x13);
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
+        pub const TXTOP_BYTE_14_OPAQUE: Address = Address::new(0x6e, 0x14);
     }
     pub mod fields {
         use super::{Address, Field};
@@ -298,6 +483,18 @@ pub mod analog_i2c {
             Some(field) => field,
             None => panic!("validated analog field"),
         };
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES
+        pub const ULP_BOD_BYTE_07_OPAQUE_BIT_5_OPAQUE: Field =
+            match Field::new(Address::new(0x61, 0x7), 5, 5) {
+                Some(field) => field,
+                None => panic!("validated analog field"),
+            };
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES
+        pub const ULP_BOD_BYTE_08_OPAQUE_BIT_4_OPAQUE: Field =
+            match Field::new(Address::new(0x61, 0x8), 4, 4) {
+                Some(field) => field,
+                None => panic!("validated analog field"),
+            };
         /// SOURCE: ESP_IDF_4D59230D_C5_REGI2C_BBPLL
         pub const BBPLL_I2C_BBPLL_IR_CAL_DELAY: Field =
             match Field::new(Address::new(0x66, 0x0), 3, 0) {
@@ -401,6 +598,11 @@ pub mod analog_i2c {
         {
             Some(field) => field,
             None => panic!("validated analog field"),
+        };
+        /// Subrange of I2C_BBPLL_DIV_ADC; SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES
+        pub const BBPLL_ADC_RATE: Field = match Field::new(Address::new(0x66, 0x4), 2, 2) {
+            Some(field) => field,
+            None => panic!("validated analog field view"),
         };
         /// SOURCE: ESP_IDF_4D59230D_C5_REGI2C_BBPLL
         pub const BBPLL_I2C_BBPLL_OC_DR1: Field = match Field::new(Address::new(0x66, 0x5), 2, 0) {
@@ -519,6 +721,48 @@ pub mod analog_i2c {
             Some(field) => field,
             None => panic!("validated analog field"),
         };
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_3
+        pub const BBTOP_BYTE_03_OPAQUE_BITS_4_6_OPAQUE: Field =
+            match Field::new(Address::new(0x67, 0x3), 6, 4) {
+                Some(field) => field,
+                None => panic!("validated analog field"),
+            };
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_3
+        pub const BBTOP_BYTE_05_OPAQUE_BIT_6_OPAQUE: Field =
+            match Field::new(Address::new(0x67, 0x5), 6, 6) {
+                Some(field) => field,
+                None => panic!("validated analog field"),
+            };
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_3
+        pub const BBTOP_BYTE_05_OPAQUE_BIT_3_OPAQUE: Field =
+            match Field::new(Address::new(0x67, 0x5), 3, 3) {
+                Some(field) => field,
+                None => panic!("validated analog field"),
+            };
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_3
+        pub const BBTOP_BYTE_05_OPAQUE_BIT_5_OPAQUE: Field =
+            match Field::new(Address::new(0x67, 0x5), 5, 5) {
+                Some(field) => field,
+                None => panic!("validated analog field"),
+            };
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_3
+        pub const BBTOP_BYTE_1D_OPAQUE_BITS_2_3_OPAQUE: Field =
+            match Field::new(Address::new(0x67, 0x1d), 3, 2) {
+                Some(field) => field,
+                None => panic!("validated analog field"),
+            };
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_3
+        pub const BBTOP_BYTE_1D_OPAQUE_BIT_7_OPAQUE: Field =
+            match Field::new(Address::new(0x67, 0x1d), 7, 7) {
+                Some(field) => field,
+                None => panic!("validated analog field"),
+            };
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_3
+        pub const BBTOP_BYTE_1D_OPAQUE_BITS_4_6_OPAQUE: Field =
+            match Field::new(Address::new(0x67, 0x1d), 6, 4) {
+                Some(field) => field,
+                None => panic!("validated analog field"),
+            };
         /// SOURCE: ESP_IDF_4D59230D_C5_REGI2C_SARADC
         pub const SARADC_ADC_SAR1_INITIAL_CODE_LOW_ADDR: Field =
             match Field::new(Address::new(0x69, 0x0), 7, 0) {
@@ -675,6 +919,48 @@ pub mod analog_i2c {
                 Some(field) => field,
                 None => panic!("validated analog field"),
             };
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES
+        pub const BIAS_BYTE_00_OPAQUE_BITS_0_3_OPAQUE: Field =
+            match Field::new(Address::new(0x6a, 0x0), 3, 0) {
+                Some(field) => field,
+                None => panic!("validated analog field"),
+            };
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES
+        pub const BIAS_BYTE_00_OPAQUE_BITS_4_7_OPAQUE: Field =
+            match Field::new(Address::new(0x6a, 0x0), 7, 4) {
+                Some(field) => field,
+                None => panic!("validated analog field"),
+            };
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES
+        pub const BIAS_BYTE_01_OPAQUE_BITS_4_7_OPAQUE: Field =
+            match Field::new(Address::new(0x6a, 0x1), 7, 4) {
+                Some(field) => field,
+                None => panic!("validated analog field"),
+            };
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES
+        pub const BIAS_BYTE_01_OPAQUE_BITS_0_3_OPAQUE: Field =
+            match Field::new(Address::new(0x6a, 0x1), 3, 0) {
+                Some(field) => field,
+                None => panic!("validated analog field"),
+            };
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_3
+        pub const TXRF_RC_CALIBRATION_SECOND: Field =
+            match Field::new(Address::new(0x6b, 0xf), 7, 3) {
+                Some(field) => field,
+                None => panic!("validated analog field"),
+            };
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_3
+        pub const TXRF_RC_CALIBRATION_FIRST: Field =
+            match Field::new(Address::new(0x6b, 0x11), 5, 4) {
+                Some(field) => field,
+                None => panic!("validated analog field"),
+            };
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_3
+        pub const TXRF_RC_CALIBRATION_THIRD: Field =
+            match Field::new(Address::new(0x6b, 0x13), 5, 2) {
+                Some(field) => field,
+                None => panic!("validated analog field"),
+            };
         /// SOURCE: ESP_IDF_4D59230D_C5_REGI2C_DIG_REG
         pub const DIG_REG_I2C_DIG_REG_EXT_RTC_DREG: Field =
             match Field::new(Address::new(0x6d, 0x4), 4, 0) {
@@ -748,7 +1034,7 @@ pub mod analog_i2c {
                 None => panic!("validated analog field"),
             };
     }
-    pub const REGISTERS: [RegisterFacts; 34] = [
+    pub const REGISTERS: [RegisterFacts; 106] = [
         RegisterFacts {
             address: Address::new(0x61, 0x0),
             described: 0x55,
@@ -784,6 +1070,142 @@ pub mod analog_i2c {
         RegisterFacts {
             address: Address::new(0x61, 0x6),
             described: 0xff,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x61, 0x7),
+            described: 0x0,
+            opaque: 0x20,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x61, 0x8),
+            described: 0x0,
+            opaque: 0x10,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x63, 0x0),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x63, 0x1),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x63, 0x6),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x63, 0x7),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x63, 0x8),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x63, 0xe),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x63, 0xf),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x63, 0x11),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x63, 0x12),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x63, 0x13),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x63, 0x14),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x63, 0x15),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x63, 0x18),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x63, 0x19),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x63, 0x1a),
+            described: 0x0,
             opaque: 0x0,
             reserved: 0x0,
             reset: None,
@@ -865,6 +1287,174 @@ pub mod analog_i2c {
             address: Address::new(0x66, 0xa),
             described: 0xff,
             opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x67, 0x1),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x67, 0x2),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x67, 0x3),
+            described: 0x0,
+            opaque: 0x70,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x67, 0x5),
+            described: 0x0,
+            opaque: 0x68,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x67, 0x6),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x67, 0x7),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x67, 0x8),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x67, 0x9),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x67, 0xa),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x67, 0xb),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x67, 0xc),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x67, 0xd),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x67, 0xe),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x67, 0xf),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x67, 0x10),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x67, 0x11),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x67, 0x12),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x67, 0x13),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x67, 0x14),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x67, 0x15),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x67, 0x1d),
+            described: 0x0,
+            opaque: 0xfc,
             reserved: 0x0,
             reset: None,
             read_safe_epoch: None,
@@ -966,6 +1556,150 @@ pub mod analog_i2c {
             read_safe_epoch: None,
         },
         RegisterFacts {
+            address: Address::new(0x6a, 0x0),
+            described: 0x0,
+            opaque: 0xff,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x6a, 0x1),
+            described: 0x0,
+            opaque: 0xff,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x6a, 0x3),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x6b, 0x2),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x6b, 0x3),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x6b, 0x4),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x6b, 0x5),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x6b, 0x6),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x6b, 0x7),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x6b, 0x8),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x6b, 0x9),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x6b, 0xa),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x6b, 0xc),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x6b, 0xd),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x6b, 0xe),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x6b, 0xf),
+            described: 0xf8,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x6b, 0x11),
+            described: 0x30,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x6b, 0x13),
+            described: 0x3c,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
             address: Address::new(0x6d, 0x4),
             described: 0x9f,
             opaque: 0x0,
@@ -1021,7 +1755,137 @@ pub mod analog_i2c {
             reset: None,
             read_safe_epoch: None,
         },
+        RegisterFacts {
+            address: Address::new(0x6e, 0x1),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x6e, 0x4),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x6e, 0x5),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x6e, 0x7),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x6e, 0x8),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x6e, 0x9),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x6e, 0xa),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x6e, 0xb),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x6e, 0xc),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x6e, 0xd),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x6e, 0xf),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x6e, 0x10),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x6e, 0x11),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x6e, 0x12),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x6e, 0x13),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x6e, 0x14),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
     ];
     /// Registers with an independently reviewed finite read-safe epoch.
     pub const READ_SAFE: &[(Address, &str)] = &[];
+    /// The qualified comparison image, ordered by physical transport identity.
+    pub const CAPTURE: &[CaptureRegister] = &[];
 }

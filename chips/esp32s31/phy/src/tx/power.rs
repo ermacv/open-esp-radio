@@ -10,7 +10,7 @@
 
 use crate::{
     analog::{
-        i2c::{PhyI2cAddress, analog_registers},
+        i2c::{Address, registers},
         rfpll::{
             RfpllFrequencyAction, RfpllFrequencyCompletion, RfpllFrequencyFailure,
             RfpllFrequencyRequest, RfpllFrequencyTransition,
@@ -130,7 +130,7 @@ const fn rate_to_target_index(rate: u8) -> Option<usize> {
     Some(index)
 }
 
-const TX_CAP_ADDRESS: PhyI2cAddress = analog_registers::TX_CAPACITOR_BANKS;
+const TX_CAP_ADDRESS: Address = registers::TXRF_TX_CAPACITOR_LOW;
 const CHANNEL_CODES: [u16; 3] = [1, 6, 11];
 const POWER_CONTROL_MAX_ITERATIONS: u8 = 10;
 
@@ -459,7 +459,7 @@ pub enum PhyTxPowerAction {
     Environment(PhyTxCalibrationEnvironmentAction),
     Rfpll(RfpllFrequencyAction),
     WriteI2c {
-        address: PhyI2cAddress,
+        address: Address,
         value: u8,
     },
     ConfigureTone {
@@ -481,7 +481,7 @@ pub enum PhyTxPowerCompletion {
     Environment(PhyTxCalibrationEnvironmentCompletion),
     Rfpll(RfpllFrequencyCompletion),
     I2cWritten {
-        address: PhyI2cAddress,
+        address: Address,
         value: u8,
     },
     ToneConfigured {
@@ -1045,7 +1045,7 @@ impl PhyPowerControlPointExternalBinding {
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct PhyTxPowerI2cBinding {
-    address: PhyI2cAddress,
+    address: Address,
     value: u8,
     transaction: crate::calibration::cold::PhyColdI2cTransaction,
 }

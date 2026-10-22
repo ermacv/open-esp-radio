@@ -26514,19 +26514,6 @@ pub mod full_register_write {
                 .write_with_zero(|writer| writer.threshold().set(value));
         }
     }
-
-    /// Write every bit of `I2C_ANA_MST`.`ANA_CONF1` through its full-width field.
-    #[inline]
-    pub fn publish_phy_i2c_read_mask(registers: &crate::I2cAnaMst, value: u32) {
-        // SAFETY: generator validation proves that this is the only field,
-        // it covers all 32 bits and accepts every `u32`; no zero-filled
-        // reserved or partially described bits remain.
-        unsafe {
-            registers
-                .ana_conf1()
-                .write_with_zero(|writer| writer.read_mask_complement().set(value));
-        }
-    }
 }
 
 /// Safe, SVD-declared observations which cover a complete register.
@@ -27047,6 +27034,19 @@ pub mod zero_based_field_write {
             registers
                 .security_key(index)
                 .write_with_zero(|writer| writer.key_word().set(value));
+        }
+    }
+
+    /// Write `READ_MASK_COMPLEMENT` in `I2C_ANA_MST`.`ANA_CONF1` while publishing zero to every other register bit.
+    #[inline]
+    pub fn publish_phy_i2c_read_mask(registers: &crate::I2cAnaMst, value: u32) {
+        // SAFETY: the SVD extension explicitly qualifies the zero-based
+        // transaction, and generator validation proves every selected field
+        // accepts every value representable by its public argument type.
+        unsafe {
+            registers
+                .ana_conf1()
+                .write_with_zero(|writer| writer.read_mask_complement().set(value));
         }
     }
 

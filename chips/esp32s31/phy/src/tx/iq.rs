@@ -13,7 +13,7 @@
 
 use crate::{
     analog::{
-        i2c::{PhyI2cAddress, PhyI2cField, analog_registers},
+        i2c::{Address, Field, fields, registers},
         pbus::PhyPbusForceTest,
         rfpll::{
             RfpllFrequencyAction, RfpllFrequencyCompletion, RfpllFrequencyFailure,
@@ -37,9 +37,9 @@ use crate::{
     },
 };
 
-const TX_CAP_ADDRESS: PhyI2cAddress = analog_registers::TX_CAPACITOR_BANKS;
-const D_CODE_0_ADDRESS: PhyI2cAddress = analog_registers::RFPLL_EXTERNAL_DCODE_0.address();
-const D_CODE_1_ADDRESS: PhyI2cAddress = analog_registers::RFPLL_EXTERNAL_DCODE_1.address();
+const TX_CAP_ADDRESS: Address = registers::TXRF_TX_CAPACITOR_LOW;
+const D_CODE_0_ADDRESS: Address = fields::RFPLL_EXTERNAL_DCODE_0.address();
+const D_CODE_1_ADDRESS: Address = fields::RFPLL_EXTERNAL_DCODE_1.address();
 const TXIQ_COVER_ITERATIONS: u8 = 7;
 
 const fn txiq_coefficient(value: i16, kind: PhyTxIqCoefficientKind) -> i8 {
@@ -698,7 +698,7 @@ impl PhyTxIqCoverTransition {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyTxIqLoopbackAction {
-    I2c(oer_espressif_analog::Action<crate::analog::i2c::PhyI2cAddress, ()>),
+    I2c(oer_espressif_analog::Action<crate::analog::i2c::Address, ()>),
     ConfigureTxClock { enabled: bool },
     ConfigureRxClock { enabled: bool },
     Complete { enabled: bool },
@@ -706,7 +706,7 @@ pub enum PhyTxIqLoopbackAction {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyTxIqLoopbackCompletion {
-    I2c(oer_espressif_analog::Completion<crate::analog::i2c::PhyI2cAddress>),
+    I2c(oer_espressif_analog::Completion<crate::analog::i2c::Address>),
     TxClockConfigured { enabled: bool },
     RxClockConfigured { enabled: bool },
 }
@@ -719,7 +719,7 @@ pub enum PhyTxIqLoopbackTransitionError {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum LoopbackStep {
-    I2c(oer_espressif_analog::FieldWriteTransition<crate::analog::i2c::PhyI2cAddress>),
+    I2c(oer_espressif_analog::FieldWriteTransition<crate::analog::i2c::Address>),
     TxClock,
     RxClock,
     Complete,
@@ -735,7 +735,7 @@ pub struct PhyTxIqLoopbackTransition {
 impl PhyTxIqLoopbackTransition {
     pub fn new(enabled: bool) -> Self {
         let transition =
-            crate::analog::i2c::field_write(analog_registers::TX_IQ_LOOPBACK_ENABLE, enabled as u8);
+            crate::analog::i2c::field_write(fields::BBTOP_TX_IQ_LOOPBACK_ENABLE, enabled as u8);
         Self {
             enabled,
             step: LoopbackStep::I2c(transition),
@@ -1258,8 +1258,8 @@ pub enum PhyTxIqInitFailure {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyTxIqInitAction {
     Rfpll(RfpllFrequencyAction),
-    WriteI2c { address: PhyI2cAddress, value: u8 },
-    ReadI2cMasked { field: PhyI2cField },
+    WriteI2c { address: Address, value: u8 },
+    ReadI2cMasked { field: Field },
     Calibration(PhyTxIqCalibrationAction),
     Temperature(PhyTemperatureAction),
     Complete(PhyTxIqInitOutcome),
@@ -1269,8 +1269,8 @@ pub enum PhyTxIqInitAction {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyTxIqInitCompletion {
     Rfpll(RfpllFrequencyCompletion),
-    I2cWritten { address: PhyI2cAddress, value: u8 },
-    I2cMaskedRead { field: PhyI2cField, value: u8 },
+    I2cWritten { address: Address, value: u8 },
+    I2cMaskedRead { field: Field, value: u8 },
     Calibration(PhyTxIqCalibrationCompletion),
     Temperature(PhyTemperatureCompletion),
 }
@@ -1386,20 +1386,20 @@ impl PhyTxIqInitTransition {
                 value: (self.parameters.channel_6_dcode[1] & 0x3f) | 0x40,
             },
             InitStep::ReadDcodeMode => PhyTxIqInitAction::ReadI2cMasked {
-                field: analog_registers::RFPLL_DCODE_0_SOURCE_SELECT,
+                field: fields::RFPLL_DCODE_0_SOURCE_SELECT,
             },
             InitStep::ReadDcode0 { external } => PhyTxIqInitAction::ReadI2cMasked {
                 field: if external {
-                    analog_registers::RFPLL_EXTERNAL_DCODE_0
+                    fields::RFPLL_EXTERNAL_DCODE_0
                 } else {
-                    analog_registers::RFPLL_INTERNAL_DCODE_0
+                    fields::RFPLL_INTERNAL_DCODE_0
                 },
             },
             InitStep::ReadDcode1 { external } => PhyTxIqInitAction::ReadI2cMasked {
                 field: if external {
-                    analog_registers::RFPLL_EXTERNAL_DCODE_1
+                    fields::RFPLL_EXTERNAL_DCODE_1
                 } else {
-                    analog_registers::RFPLL_INTERNAL_DCODE_1
+                    fields::RFPLL_INTERNAL_DCODE_1
                 },
             },
             InitStep::Calibration { transition, .. } => {
@@ -1466,7 +1466,7 @@ impl PhyTxIqInitTransition {
             (
                 InitStep::ReadDcodeMode,
                 PhyTxIqInitCompletion::I2cMaskedRead {
-                    field: analog_registers::RFPLL_DCODE_0_SOURCE_SELECT,
+                    field: fields::RFPLL_DCODE_0_SOURCE_SELECT,
                     value,
                 },
             ) => {
@@ -1479,9 +1479,9 @@ impl PhyTxIqInitTransition {
                 PhyTxIqInitCompletion::I2cMaskedRead { field, value },
             ) if field
                 == if external {
-                    analog_registers::RFPLL_EXTERNAL_DCODE_0
+                    fields::RFPLL_EXTERNAL_DCODE_0
                 } else {
-                    analog_registers::RFPLL_INTERNAL_DCODE_0
+                    fields::RFPLL_INTERNAL_DCODE_0
                 } =>
             {
                 self.external_dcode[0] = value & 0x3f;
@@ -1492,9 +1492,9 @@ impl PhyTxIqInitTransition {
                 PhyTxIqInitCompletion::I2cMaskedRead { field, value },
             ) if field
                 == if external {
-                    analog_registers::RFPLL_EXTERNAL_DCODE_1
+                    fields::RFPLL_EXTERNAL_DCODE_1
                 } else {
-                    analog_registers::RFPLL_INTERNAL_DCODE_1
+                    fields::RFPLL_INTERNAL_DCODE_1
                 } =>
             {
                 self.external_dcode[1] = value & 0x3f;

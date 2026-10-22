@@ -23,7 +23,7 @@ impl Comparison for Esp32s31 {
     fn images(root: &Path) -> Result<RegisterImages> {
         Ok(RegisterImages {
             registers: registers::partition(root, registers::PARTITION)?,
-            analog: registers::analog(root, registers::ANALOG_DOMAIN)?,
+            analog: registers::analog(root)?,
         })
     }
 

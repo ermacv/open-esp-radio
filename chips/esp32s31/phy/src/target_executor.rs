@@ -92,7 +92,7 @@ pub(crate) fn force_pbus_direct<C: oer_time::Clock + ?Sized>(
 pub(crate) fn read_i2c_direct<C: oer_time::Clock + ?Sized>(
     clock: &C,
     registers: &mut impl SharedPhyAccess,
-    address: oer_esp32s31_hal::phy::i2c::PhyI2cAddress,
+    address: oer_esp32s31_hal::phy::i2c::Address,
 ) -> Result<u8, PhyTargetPortError> {
     let started =
         crate::executor::wait::poll::bounded::<core::convert::Infallible, _>(clock, || {
@@ -115,7 +115,7 @@ pub(crate) fn read_i2c_direct<C: oer_time::Clock + ?Sized>(
 pub(crate) fn write_i2c_direct<C: oer_time::Clock + ?Sized>(
     clock: &C,
     registers: &mut impl SharedPhyAccess,
-    address: oer_esp32s31_hal::phy::i2c::PhyI2cAddress,
+    address: oer_esp32s31_hal::phy::i2c::Address,
     value: u8,
 ) -> Result<(), PhyTargetPortError> {
     let started =
@@ -145,7 +145,7 @@ pub(crate) fn write_i2c_direct<C: oer_time::Clock + ?Sized>(
 pub(crate) fn write_i2c_field_direct<C: oer_time::Clock + ?Sized>(
     clock: &C,
     registers: &mut impl SharedPhyAccess,
-    field: oer_esp32s31_hal::phy::i2c::PhyI2cField,
+    field: oer_esp32s31_hal::phy::i2c::Field,
     value: u8,
 ) -> Result<(), PhyTargetPortError> {
     let current = read_i2c_direct(clock, registers, field.address())?;
@@ -153,7 +153,7 @@ pub(crate) fn write_i2c_field_direct<C: oer_time::Clock + ?Sized>(
         clock,
         registers,
         field.address(),
-        field.replace(current, value),
+        field.insert_truncated(current, value),
     )
 }
 
@@ -164,13 +164,13 @@ pub(crate) fn reset_clock_generator_direct<C: oer_time::Clock + ?Sized>(
     clock: &C,
     registers: &mut impl SharedPhyAccess,
 ) -> Result<(), PhyTargetPortError> {
-    use oer_esp32s31_hal::phy::i2c::analog_registers;
+    use oer_esp32s31_hal::phy::i2c::fields;
 
     for (field, value) in [
-        (analog_registers::RFPLL_DCODE_0_SOURCE_SELECT, 0),
-        (analog_registers::RFPLL_DCODE_1_SOURCE_SELECT, 0),
-        (analog_registers::RFPLL_DCODE_CKGEN_RESET, 0),
-        (analog_registers::RFPLL_DCODE_CKGEN_RESET, 1),
+        (fields::RFPLL_DCODE_0_SOURCE_SELECT, 0),
+        (fields::RFPLL_DCODE_1_SOURCE_SELECT, 0),
+        (fields::RFPLL_DCODE_CKGEN_RESET, 0),
+        (fields::RFPLL_DCODE_CKGEN_RESET, 1),
     ] {
         write_i2c_field_direct(clock, registers, field, value)?;
     }
@@ -332,8 +332,7 @@ pub fn complete_rx_gain_i2c<C: oer_time::Clock + ?Sized>(
     mut binding: MaskedI2cWriteBinding,
     registers: &mut impl SharedPhyAccess,
     clock: &C,
-) -> Result<oer_espressif_analog::Completion<crate::analog::i2c::PhyI2cAddress>, PhyTargetPortError>
-{
+) -> Result<oer_espressif_analog::Completion<crate::analog::i2c::Address>, PhyTargetPortError> {
     let completed = crate::executor::wait::i2c::complete(
         clock,
         &mut binding,
@@ -440,7 +439,7 @@ macro_rules! define_direct_timeout_pbus_executor {
 define_i2c_executor!(
     complete_masked_i2c,
     MaskedI2cWriteBinding,
-    oer_espressif_analog::Completion<crate::analog::i2c::PhyI2cAddress>
+    oer_espressif_analog::Completion<crate::analog::i2c::Address>
 );
 define_i2c_executor!(
     complete_temperature_i2c,

@@ -33,3 +33,7 @@ description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7, components/soc/
 [[sources]]
 id = "ESP_IDF_4D59230D_S31_ANALOG_SLAVE_SELECTION"
 description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7, components/soc/esp32s31/include/modem/i2c_ana_mst_reg.h, sha256 5e280fafac6ac82f241d7f2a22f04f06ae539e245d11fe6f9db9620c6ee99808. Also components/esp_hal_regi2c/esp32s31/regi2c_impl.c, sha256 d464d70912329429bfacdc6b354c609d55e959f4b50eb03d711a07371c5394a0, lines20..25 and59..75: the implementation names CPLL 0x0a, MPLL 0x0b, APLL 0x0c, SAR master 0x10 and SAR slave 0x11. Geometry knowledge only; no libphy-normal production routes to these codes."
+
+[[sources]]
+id = "HIL_S31_R1_ANALOG_CAPTURE"
+description = "Existing finite R1 calibrated-radio diagnostic capture at main 496e0be7: 40 bytes enumerated by the reviewed analog policy image. Primary cold vendor runs 1792529533499-003d8f91, 1792540281270-00109bfe and 1792540684054-0010eb5c are recorded in the pinned wifi-cold baseline. The production radio diagnostic admits this image only within its owned calibrated-radio epoch. Qualification and comparison masks are carried over exactly; no adjacent bytes, universal read safety, reset image or data-bit meaning is asserted."

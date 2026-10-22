@@ -5,7 +5,7 @@
 //! `phy_printf` branches are dead and are intentionally absent here.
 
 use crate::{
-    analog::i2c::PhyI2cAddress,
+    analog::i2c::Address,
     analog::pbus::PhyPbusForceTest,
     analog::rfpll::{
         RfpllFrequencyAction, RfpllFrequencyCompletion, RfpllFrequencyFailure,
@@ -34,14 +34,8 @@ pub enum XtalDutySampleKind {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum XtalDutySearchAction {
-    WriteCandidate {
-        address: PhyI2cAddress,
-        candidate: u8,
-    },
-    DelayMicros {
-        candidate: u8,
-        micros: u32,
-    },
+    WriteCandidate { address: Address, candidate: u8 },
+    DelayMicros { candidate: u8, micros: u32 },
     SignalPower(PhySignalPowerAction),
     Complete(XtalDutySearchOutcome),
     Failed(PhySignalPowerFailure),
@@ -49,13 +43,8 @@ pub enum XtalDutySearchAction {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum XtalDutySearchCompletion {
-    CandidateWritten {
-        address: PhyI2cAddress,
-        candidate: u8,
-    },
-    DelayElapsed {
-        candidate: u8,
-    },
+    CandidateWritten { address: Address, candidate: u8 },
+    DelayElapsed { candidate: u8 },
     SignalPower(PhySignalPowerCompletion),
 }
 
@@ -129,7 +118,7 @@ pub struct XtalDutySearchTransition {
 }
 
 impl XtalDutySearchTransition {
-    const DUTY_ADDRESS: PhyI2cAddress = crate::analog::i2c::analog_registers::XTAL_DUTY_CANDIDATE;
+    const DUTY_ADDRESS: Address = crate::analog::i2c::registers::ULP_BOD_XTAL_DUTY_CANDIDATE;
 
     pub const fn new() -> Self {
         Self::from_initial_duty(44)
@@ -910,11 +899,11 @@ pub enum XtalDutyFailure {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum XtalDutyPassAction {
     WriteMasked {
-        field: crate::analog::i2c::PhyI2cField,
+        field: crate::analog::i2c::Field,
         value: u8,
     },
     WriteByte {
-        address: PhyI2cAddress,
+        address: Address,
         value: u8,
     },
     Prepare(XtalDutyPrepareAction),
@@ -926,12 +915,8 @@ pub enum XtalDutyPassAction {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum XtalDutyPassCompletion {
-    MaskedWrite {
-        field: crate::analog::i2c::PhyI2cField,
-    },
-    ByteWrite {
-        address: PhyI2cAddress,
-    },
+    MaskedWrite { field: crate::analog::i2c::Field },
+    ByteWrite { address: Address },
     Prepare(XtalDutyPrepareCompletion),
     Search(XtalDutySearchCompletion),
     Restore(XtalDutyRestoreCompletion),
@@ -967,7 +952,7 @@ pub struct XtalDutyPassTransition {
 }
 
 impl XtalDutyPassTransition {
-    const DUTY_ADDRESS: PhyI2cAddress = crate::analog::i2c::analog_registers::XTAL_DUTY_CANDIDATE;
+    const DUTY_ADDRESS: Address = crate::analog::i2c::registers::ULP_BOD_XTAL_DUTY_CANDIDATE;
 
     pub const fn new(
         frequency_code: u16,
@@ -985,7 +970,7 @@ impl XtalDutyPassTransition {
     pub const fn action(self) -> XtalDutyPassAction {
         match self.step {
             XtalDutyPassStep::DisablePath => XtalDutyPassAction::WriteMasked {
-                field: crate::analog::i2c::analog_registers::XTAL_DUTY_CALIBRATION_PATH_ENABLE,
+                field: crate::analog::i2c::fields::ULP_BOD_XTAL_DUTY_CALIBRATION_PATH_ENABLE,
                 value: 0,
             },
             XtalDutyPassStep::WriteInitialDuty => XtalDutyPassAction::WriteByte {
@@ -1016,7 +1001,7 @@ impl XtalDutyPassTransition {
             (
                 XtalDutyPassStep::DisablePath,
                 XtalDutyPassCompletion::MaskedWrite {
-                    field: crate::analog::i2c::analog_registers::XTAL_DUTY_CALIBRATION_PATH_ENABLE,
+                    field: crate::analog::i2c::fields::ULP_BOD_XTAL_DUTY_CALIBRATION_PATH_ENABLE,
                 },
             ) => XtalDutyPassStep::WriteInitialDuty,
             (XtalDutyPassStep::WriteInitialDuty, XtalDutyPassCompletion::ByteWrite { address })
@@ -1111,10 +1096,10 @@ pub struct XtalDutyCalibrationOutcome {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum XtalDutyCalibrationAction {
     ReadInitialDuty {
-        field: crate::analog::i2c::PhyI2cField,
+        field: crate::analog::i2c::Field,
     },
     DisableCalibrationPath {
-        field: crate::analog::i2c::PhyI2cField,
+        field: crate::analog::i2c::Field,
         value: u8,
     },
     Pass(XtalDutyPassAction),
@@ -1125,11 +1110,11 @@ pub enum XtalDutyCalibrationAction {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum XtalDutyCalibrationCompletion {
     InitialDutyRead {
-        field: crate::analog::i2c::PhyI2cField,
+        field: crate::analog::i2c::Field,
         value: u8,
     },
     CalibrationPathDisabled {
-        field: crate::analog::i2c::PhyI2cField,
+        field: crate::analog::i2c::Field,
     },
     Pass(XtalDutyPassCompletion),
 }
@@ -1175,12 +1160,12 @@ impl XtalDutyCalibrationTransition {
         match self.step {
             XtalDutyCalibrationStep::ReadInitialDuty => {
                 XtalDutyCalibrationAction::ReadInitialDuty {
-                    field: crate::analog::i2c::analog_registers::XTAL_DUTY_INITIAL,
+                    field: crate::analog::i2c::fields::ULP_BOD_XTAL_DUTY_INITIAL,
                 }
             }
             XtalDutyCalibrationStep::DisableCalibrationPath { .. } => {
                 XtalDutyCalibrationAction::DisableCalibrationPath {
-                    field: crate::analog::i2c::analog_registers::XTAL_DUTY_CALIBRATION_PATH_ENABLE,
+                    field: crate::analog::i2c::fields::ULP_BOD_XTAL_DUTY_CALIBRATION_PATH_ENABLE,
                     value: 0,
                 }
             }
@@ -1203,7 +1188,7 @@ impl XtalDutyCalibrationTransition {
             (
                 XtalDutyCalibrationStep::ReadInitialDuty,
                 XtalDutyCalibrationCompletion::InitialDutyRead {
-                    field: crate::analog::i2c::analog_registers::XTAL_DUTY_INITIAL,
+                    field: crate::analog::i2c::fields::ULP_BOD_XTAL_DUTY_INITIAL,
                     value,
                 },
             ) => XtalDutyCalibrationStep::DisableCalibrationPath {
@@ -1212,7 +1197,7 @@ impl XtalDutyCalibrationTransition {
             (
                 XtalDutyCalibrationStep::DisableCalibrationPath { initial_duty },
                 XtalDutyCalibrationCompletion::CalibrationPathDisabled {
-                    field: crate::analog::i2c::analog_registers::XTAL_DUTY_CALIBRATION_PATH_ENABLE,
+                    field: crate::analog::i2c::fields::ULP_BOD_XTAL_DUTY_CALIBRATION_PATH_ENABLE,
                 },
             ) => XtalDutyCalibrationStep::LowFrequencyPass(XtalDutyPassTransition::new(
                 0x988,
