@@ -161,6 +161,28 @@ impl Report {
             summary.signature_audit_incomplete.len()
         ));
         text.push_str(&format!(
+            "  local flow budget functions {}; summaries: available {}, no proof {}, local budget {}\n",
+            summary.flow_local_budget_functions,
+            summary.summary_outcomes.available,
+            summary.summary_outcomes.no_proof,
+            summary.summary_outcomes.local_budget,
+        ));
+        for (name, counts) in [
+            (
+                "unavailable ROM summaries",
+                summary.rom_signature_summary_unavailable_reasons,
+            ),
+            (
+                "incomplete signature audits",
+                summary.signature_audit_incomplete_reasons,
+            ),
+        ] {
+            text.push_str(&format!(
+                "  {name}: no proof {}; local budget {}\n",
+                counts.no_proof, counts.local_budget
+            ));
+        }
+        text.push_str(&format!(
             "  ROM/header diagnostics {} (contracts do not apply to linked bodies; {} unavailable computed ROM summaries)\n",
             summary.rom_signature_diagnostic_count,
             summary.rom_signature_summary_unavailable.len()

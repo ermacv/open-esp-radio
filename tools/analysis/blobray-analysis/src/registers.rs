@@ -551,16 +551,19 @@ fn read_work_limit(instructions: usize) -> u64 {
 struct ReadWork<'c> {
     caller: &'c mut dyn RunControl,
     remaining: u64,
+    budget: LocalBudgetExceeded,
     instruction_only: bool,
 }
 impl ReadWork<'_> {
     fn charge(&mut self, units: u64) -> Result<()> {
-        self.remaining = self.remaining.checked_sub(units).ok_or_else(|| {
-            Error::new(
-                ErrorCode::ResourceLimited,
+        let Some(remaining) = self.remaining.checked_sub(units) else {
+            self.caller.checkpoint(0)?;
+            return Err(Error::new(
+                ErrorCode::LocalBudgetExceeded(self.budget),
                 "read-use function work budget exhausted",
-            )
-        })?;
+            ));
+        };
+        self.remaining = remaining;
         self.caller.checkpoint(units)
     }
     fn visit(&mut self) -> Result<()> {
@@ -657,26 +660,20 @@ impl<'f, 'a, 'm, D: Domain<'m>> FlowEngine<'f, 'a, 'm, D> {
             let mut work = ReadWork {
                 caller: c,
                 remaining: read_work_limit(instructions),
+                budget: LocalBudgetExceeded {
+                    limit: read_work_limit(instructions),
+                    scope: LocalBudgetScope::ReadFlow,
+                },
                 instruction_only: D::INSTRUCTION_WORK,
             };
             self.prepare(decoder, select, &mut work)?;
             self.solve(abi, calls, &mut work)
         })();
         match result {
-            Err(error)
-                if matches!(error.code, ErrorCode::ResourceLimited | ErrorCode::TimedOut) =>
-            {
+            Err(error) if matches!(error.code, ErrorCode::LocalBudgetExceeded(_)) => {
                 self.work_limit = true;
-                if D::RECOVER
-                    && !self.converged
-                    && let Err(error) = self.invalidate_pending(c)
-                {
-                    if !matches!(error.code, ErrorCode::ResourceLimited | ErrorCode::TimedOut) {
-                        return Err(error);
-                    }
-                    for node in self.nodes.iter_mut() {
-                        node.unsettled = true;
-                    }
+                if D::RECOVER && !self.converged {
+                    self.invalidate_pending(c)?;
                 }
                 Ok(())
             }
@@ -1704,6 +1701,9 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
         c: &mut dyn RunControl,
     ) -> Result<()> {
         self.engine.analyze(abi, decoder, select, calls, c)
+    }
+    pub fn work_limited(&self) -> bool {
+        self.engine.work_limit
     }
     pub fn contract_narrowed_bits(&self) -> [u64; 2] {
         let mut counts = [0; 2];

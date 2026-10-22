@@ -11,6 +11,16 @@ records which module owns each analysis question and the current overlapping
 paths. New analyses extend that owner; duplicate implementations need a reason
 in the map.
 
+Limits distinguish input validation, resource budgets and precision bounds.
+Validation rejects invalid input; precision bounds leave explicit unknown
+evidence. Work budgets belong to a function or query: local exhaustion degrades
+that result with a typed reason and a report count. The operation-wide work,
+deadline, cancellation and admitted-memory limits are safeguards whose original
+errors terminate the operation. Summary catalogs retain proved, no-proof and
+local-budget outcomes; register reports count these functions and the reasons for
+unavailable ROM summaries and incomplete signature audits. See the
+[limit contract](blobray-docs/design/architecture.md#question-owners).
+
 | Package | Owns |
 | --- | --- |
 | [`oer-analysis-riscv-model`](riscv-model/README.md) | Identities, errors, run control, working memory and the function-record vocabulary every layer shares |

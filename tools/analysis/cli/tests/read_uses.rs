@@ -2072,7 +2072,7 @@ bnez a0, 1f
 }
 
 #[test]
-fn an_exhausted_audit_disables_only_that_functions_contract() {
+fn refused_audit_memory_fails_the_operation_and_releases_state() {
     use oer_analysis_blobray_application::signatures::Signatures;
     let calls = (0..100)
         .map(|i| format!("call external\nsw a0, {}(sp)\n", i * 4))
@@ -2124,7 +2124,8 @@ identity: ret
         "\n[[function]]\nname='identity'\narguments=1\nresult='void'\nsource='synthetic.h:1'\n",
     );
     let signatures = Signatures::parse(&text).unwrap();
-    let mut verified = false;
+    let mut rejected = false;
+    let mut completed = false;
     for mib in [1, 2, 4, 8, 16, 32, 64] {
         let memory = WorkingMemory::new(mib << 20).unwrap();
         let mut reads = BTreeMap::new();
@@ -2157,45 +2158,28 @@ identity: ret
             0,
             "all function-local state must be released"
         );
-        let Ok(summary) = result else { continue };
-        if summary.signature_audit_incomplete.is_empty() {
-            continue;
+        match result {
+            Err(error) => {
+                assert_eq!(error.code, ErrorCode::ResourceLimited);
+                assert!(error.memory.is_some(), "{error:?}");
+                rejected = true;
+            }
+            Ok(summary) => {
+                assert!(summary.signature_audit_incomplete.is_empty());
+                assert_eq!(summary.signature_audit_incomplete_reasons.local_budget, 0);
+                let counts = summary.summary_outcomes;
+                assert_eq!(
+                    counts.available + counts.no_proof + counts.local_budget,
+                    summary.functions
+                );
+                assert_eq!(summary.functions, 3);
+                completed = true;
+            }
         }
-        assert_eq!(summary.signature_audit_incomplete.len(), 1);
-        assert_eq!(
-            summary.signature_audit_incomplete[0]
-                .function
-                .name
-                .as_deref(),
-            Some(b"limited".as_slice())
-        );
-        assert_eq!(
-            summary.signature_audit_incomplete[0].reason.code,
-            ErrorCode::ResourceLimited
-        );
-        assert!(summary.signature_conflicts.is_empty());
-        assert_eq!(summary.functions, 3);
-        assert_eq!(summary.blocked_functions, 0);
-        assert_eq!(summary.gaps, 0);
-        let limited = &reads[b"limited".as_slice()];
-        assert_eq!(limited.unused, 0);
-        assert_eq!(limited.preserved, 0);
-        assert_eq!(
-            limited.uses.iter().fold(0, |m, u| m | u.bits)
-                | limited.unknown.iter().fold(0, |m, u| m | u.bits),
-            u32::MAX,
-            "the unaudited function must retain use or explicit uncertainty"
-        );
-        assert!(reads[b"healthy".as_slice()].uses.is_empty());
-        assert_eq!(
-            summary.contract_narrowed_bits, 32,
-            "only the healthy function narrows its return"
-        );
-        verified = true;
-        break;
     }
+    assert!(rejected, "the fixture must refuse audit memory");
     assert!(
-        verified,
-        "fixture must exhaust one bounded audit while retaining both functions"
+        completed,
+        "sufficient memory must complete the same operation"
     );
 }

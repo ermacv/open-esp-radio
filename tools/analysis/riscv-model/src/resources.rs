@@ -5,6 +5,23 @@ pub const DEFAULT_WORK_UNITS: u64 = 1_000_000_000;
 pub const WORK_BLOCK: usize = 4096;
 /// Wall-clock deadline of one operation.
 pub const DEFAULT_TIMEOUT_MS: u64 = 900_000;
+
+/// The local question whose budget ran out; never an operation failure.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum LocalBudgetScope {
+    ReadFlow,
+    ArgumentSummary,
+    SignatureAudit,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LocalBudgetExceeded {
+    pub limit: u64,
+    pub scope: LocalBudgetScope,
+}
+
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum RunPhase {
@@ -96,6 +113,19 @@ pub fn storage_io(error: std::io::Error) -> Error {
 #[cfg(test)]
 mod library_tests {
     use super::*;
+
+    #[test]
+    fn local_budget_transport_keeps_scope_and_limit_without_parsing_prose() {
+        let budget = LocalBudgetExceeded {
+            limit: 100_000,
+            scope: LocalBudgetScope::ArgumentSummary,
+        };
+        let error = Error::new(ErrorCode::LocalBudgetExceeded(budget), "arbitrary prose");
+        let bytes = serde_json::to_vec(&error).expect("serialize local error");
+        let recovered: Error = serde_json::from_slice(&bytes).expect("deserialize local error");
+        assert_eq!(recovered, error);
+        assert_eq!(recovered.code, ErrorCode::LocalBudgetExceeded(budget));
+    }
 
     #[test]
     fn artifact_positions_keep_the_validated_digest_bytes() {

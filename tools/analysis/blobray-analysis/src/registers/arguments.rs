@@ -72,8 +72,9 @@ impl<'m> ArgumentProgram<'m> {
         calls: &dyn CallAt<'_>,
         memory: &'m WorkingMemory,
         c: &mut dyn RunControl,
-    ) -> Result<Option<(ArgumentSummary, MemoryReservation<'m>)>> {
-        self.summarize_inner(calls, memory, c, None, false, u32::MAX)
+    ) -> Result<SummaryOutcome<(ArgumentSummary, MemoryReservation<'m>)>> {
+        let mut work = self.work(c, false);
+        self.summarize_inner(calls, memory, &mut work, None, false, u32::MAX)
     }
 
     pub fn summarize_observed(
@@ -82,8 +83,9 @@ impl<'m> ArgumentProgram<'m> {
         memory: &'m WorkingMemory,
         c: &mut dyn RunControl,
         observe: &mut ObserveArgument<'_>,
-    ) -> Result<Option<(ArgumentSummary, MemoryReservation<'m>)>> {
-        self.summarize_inner(calls, memory, c, Some(observe), false, u32::MAX)
+    ) -> Result<SummaryOutcome<(ArgumentSummary, MemoryReservation<'m>)>> {
+        let mut work = self.work(c, false);
+        self.summarize_inner(calls, memory, &mut work, Some(observe), false, u32::MAX)
     }
 
     /// A separate bounded audit tracks only the invalid entry words and absent
@@ -95,39 +97,57 @@ impl<'m> ArgumentProgram<'m> {
         c: &mut dyn RunControl,
         observe: &mut ObserveArgument<'_>,
         entry_registers: u32,
-    ) -> Result<Option<(ArgumentSummary, MemoryReservation<'m>)>> {
-        self.summarize_inner(calls, memory, c, Some(observe), true, entry_registers)
+    ) -> Result<SummaryOutcome<(ArgumentSummary, MemoryReservation<'m>)>> {
+        let mut work = self.work(c, true);
+        self.summarize_inner(
+            calls,
+            memory,
+            &mut work,
+            Some(observe),
+            true,
+            entry_registers,
+        )
+    }
+
+    fn work<'c>(&self, c: &'c mut dyn RunControl, audit: bool) -> ReadWork<'c> {
+        // Audits have a separate 16x function allowance; all work still charges the operation.
+        let limit =
+            read_work_limit(self.instructions.len()).saturating_mul(if audit { 16 } else { 1 });
+        ReadWork {
+            caller: c,
+            remaining: limit,
+            budget: LocalBudgetExceeded {
+                limit,
+                scope: if audit {
+                    LocalBudgetScope::SignatureAudit
+                } else {
+                    LocalBudgetScope::ArgumentSummary
+                },
+            },
+            instruction_only: false,
+        }
     }
 
     fn summarize_inner(
         self,
         calls: &dyn CallAt<'_>,
         memory: &'m WorkingMemory,
-        c: &mut dyn RunControl,
+        work: &mut ReadWork<'_>,
         mut observe: Option<&mut ObserveArgument<'_>>,
         audit_results: bool,
         entry_registers: u32,
-    ) -> Result<Option<(ArgumentSummary, MemoryReservation<'m>)>> {
+    ) -> Result<SummaryOutcome<(ArgumentSummary, MemoryReservation<'m>)>> {
         if self.instructions.is_empty() {
-            return Ok(None);
+            return Ok(SummaryOutcome::NoProof);
         }
-        let facts = Facts::new(&[], memory, c)?;
+        let facts = Facts::new(&[], memory, work.caller)?;
         let mut evaluator = FlowEngine::<Reads>::new(&facts, memory);
         evaluator.summary_mode = true;
         evaluator.audit_results = audit_results;
         evaluator.entry_registers = entry_registers;
         evaluator.edges = self.edges;
         evaluator.dispatches = self.dispatches;
-        let mut work =
-            ReadWork {
-                caller: c,
-                // One bounded query replaces the old escalating 16x/256x retries.
-                // Summary production keeps its original allowance. Every audit
-                // operation is still charged to the caller's unchanged global cap.
-                remaining: read_work_limit(self.instructions.len())
-                    .saturating_mul(if audit_results { 16 } else { 1 }),
-                instruction_only: false,
-            };
+
         let result = (|| {
             for instruction in self.instructions.iter().copied() {
                 work.checkpoint(1)?;
@@ -141,7 +161,7 @@ impl<'m> ArgumentProgram<'m> {
                     work.position(),
                 )?;
             }
-            evaluator.solve(Some(CallAbi::RiscvInteger), calls, &mut work)?;
+            evaluator.solve(Some(CallAbi::RiscvInteger), calls, work)?;
             let mut consumed = [ArgumentConsumption::default(); 8];
             for source in evaluator.sources.iter() {
                 let origin = match source.origin {
@@ -161,7 +181,7 @@ impl<'m> ArgumentProgram<'m> {
                         .get(event - 1)
                         .ok_or_else(read_integrity)?;
                     if let Some(observe) = observe.as_deref_mut() {
-                        observe(origin, &entry.usage, &mut work)?;
+                        observe(origin, &entry.usage, work)?;
                     }
                     match entry.usage.precision {
                         ReadPrecision::Exact => value.exact |= entry.usage.bits,
@@ -180,7 +200,7 @@ impl<'m> ArgumentProgram<'m> {
                         .ok_or_else(read_integrity)? = value;
                 }
             }
-            let mut ledger = Ledger::new(memory, &mut work)?;
+            let mut ledger = Ledger::new(memory, work)?;
             let mut returned = Vec::new();
             for item in evaluator.domain.returned.iter() {
                 work.checkpoint(1)?;
@@ -201,7 +221,7 @@ impl<'m> ArgumentProgram<'m> {
                         may: item.dependency.may,
                         inverted: item.dependency.inverted,
                     },
-                    &mut work,
+                    work,
                 )?;
             }
             returned.sort_unstable_by_key(|r| (r.argument, r.register));
@@ -211,13 +231,11 @@ impl<'m> ArgumentProgram<'m> {
             ))
         })();
         match result {
-            Ok(summary) => Ok(Some(summary)),
-            Err(error)
-                if !audit_results
-                    && matches!(error.code, ErrorCode::ResourceLimited | ErrorCode::TimedOut) =>
-            {
-                Ok(None)
-            }
+            Ok(summary) => Ok(SummaryOutcome::Available(summary)),
+            Err(Error {
+                code: ErrorCode::LocalBudgetExceeded(reason),
+                ..
+            }) => Ok(SummaryOutcome::LocalBudgetExceeded(reason)),
             Err(error) => Err(error),
         }
     }
@@ -260,10 +278,12 @@ mod tests {
     #[test]
     fn return_contract_keeps_positions_without_consuming_entry_bits() {
         let memory = WorkingMemory::new(1 << 20).expect("memory");
-        let (summary, reservation) = returning(&memory)
+        let SummaryOutcome::Available((summary, reservation)) = returning(&memory)
             .summarize(&|_| None, &memory, &mut || Ok(()))
             .expect("summary")
-            .expect("complete");
+        else {
+            panic!("complete summary")
+        };
         assert!(summary.consumed.iter().all(|c| c.exact == 0 && c.may == 0));
         assert_eq!(summary.returned.len(), 2);
         for returned in summary.returned.iter() {
@@ -290,8 +310,9 @@ mod tests {
         assert!(
             program
                 .summarize(&|_| None, &memory, &mut || Ok(()))
-                .expect("conservative summary")
-                .is_none()
+                .is_err_and(
+                    |error| error.code == ErrorCode::ResourceLimited && error.memory.is_some()
+                )
         );
         drop(blocker);
         assert_eq!(memory.used(), 0);
@@ -305,8 +326,12 @@ mod tests {
                     Ok(())
                 }
             })
-            .expect("bounded summary");
-        assert!(result.is_none());
+            .err()
+            .expect("operation failure");
+        assert_eq!(
+            result,
+            Error::new(ErrorCode::ResourceLimited, "fixture work limit")
+        );
         assert_eq!(memory.used(), 0);
         let error = returning(&memory)
             .summarize(&|_| None, &memory, &mut || {
@@ -316,5 +341,101 @@ mod tests {
             .expect("cancellation propagates");
         assert_eq!(error.code, ErrorCode::Cancelled);
         assert_eq!(memory.used(), 0);
+    }
+    #[test]
+    fn local_summary_and_audit_exhaustion_are_distinct_from_no_proof() {
+        let memory = WorkingMemory::new(1 << 20).expect("memory");
+        for audit in [false, true] {
+            let program = returning(&memory);
+            let mut caller = || Ok(());
+            let mut work = program.work(&mut caller, audit);
+            work.remaining = 1;
+            let reason = work.budget;
+            let outcome = program
+                .summarize_inner(&|_| None, &memory, &mut work, None, audit, u32::MAX)
+                .expect("local degradation");
+            assert_eq!(
+                outcome.status(),
+                SummaryOutcome::LocalBudgetExceeded(reason)
+            );
+            drop(outcome);
+            assert_eq!(memory.used(), 0);
+            assert!(matches!(
+                returning(&memory)
+                    .summarize(&|_| None, &memory, &mut caller)
+                    .expect("next function"),
+                SummaryOutcome::Available(_)
+            ));
+        }
+        let empty = ArgumentProgram {
+            instructions: AdmittedVec::new(&memory),
+            edges: AdmittedVec::new(&memory),
+            dispatches: AdmittedVec::new(&memory),
+        };
+        assert_eq!(
+            empty
+                .summarize(&|_| None, &memory, &mut || Ok(()))
+                .expect("empty recipe")
+                .status(),
+            SummaryOutcome::NoProof
+        );
+        assert_eq!(memory.used(), 0);
+    }
+
+    #[test]
+    fn parent_failures_inside_summary_and_audit_are_unchanged() {
+        for expected in [
+            Error::new(ErrorCode::ResourceLimited, "work units exhausted"),
+            Error::new(ErrorCode::ResourceLimited, "deadline exceeded"),
+            Error::new(ErrorCode::TimedOut, "deadline fixture"),
+            Error::new(ErrorCode::Cancelled, "cancel fixture"),
+        ] {
+            for audit in [false, true] {
+                let memory = WorkingMemory::new(1 << 20).expect("memory");
+                let mut checkpoints = 0;
+                let mut c = || {
+                    checkpoints += 1;
+                    if checkpoints > 3 {
+                        Err(expected.clone())
+                    } else {
+                        Ok(())
+                    }
+                };
+                let program = returning(&memory);
+                let result = if audit {
+                    program.audit(&|_| None, &memory, &mut c, &mut |_, _, _| Ok(()), u32::MAX)
+                } else {
+                    program.summarize(&|_| None, &memory, &mut c)
+                };
+                assert_eq!(result.err().expect("parent failure"), expected);
+                assert_eq!(memory.used(), 0);
+            }
+        }
+        for audit in [false, true] {
+            let memory = WorkingMemory::new(1 << 20).expect("memory");
+            let program = returning(&memory);
+            let blocker = memory
+                .reserve(
+                    memory.observation().limit_bytes - memory.used(),
+                    RunPosition::default(),
+                )
+                .expect("block memory");
+            let result = if audit {
+                program.audit(
+                    &|_| None,
+                    &memory,
+                    &mut || Ok(()),
+                    &mut |_, _, _| Ok(()),
+                    u32::MAX,
+                )
+            } else {
+                program.summarize(&|_| None, &memory, &mut || Ok(()))
+            };
+            let error = result.err().expect("memory failure");
+            assert_eq!(error.code, ErrorCode::ResourceLimited);
+            assert!(error.memory.is_some());
+            drop(blocker);
+            assert_eq!(memory.used(), 0);
+        }
     }
 }

@@ -59,6 +59,7 @@ pub enum ErrorCode {
     Cancelled,
     TimedOut,
     ResourceLimited,
+    LocalBudgetExceeded(LocalBudgetExceeded),
     RecoveryRequired,
     LinkBlocked,
     LinkFailed,
