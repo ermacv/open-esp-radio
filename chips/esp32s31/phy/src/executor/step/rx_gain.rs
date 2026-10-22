@@ -129,7 +129,8 @@ impl Run<'_> {
         if self.transition.phase() != Some(self.phase) {
             return Ok(Step::Complete);
         }
-        let started = self.measured.then(|| clock.now());
+        let stamp = super::rfpll::OutlinedClock(clock);
+        let started = self.measured.then(|| stamp.now());
         let action = self.transition.action();
         let mut tag = 0;
         if self.measured {
@@ -159,14 +160,14 @@ impl Run<'_> {
             crate::rx::gain::PhyRxGainInitExternalBinding::lower(action)
                 .map_err(|_| Failure::Binding)?,
         );
-        let lowered = self.measured.then(|| clock.now());
+        let lowered = self.measured.then(|| stamp.now());
         let waiting = io.rx_gain::<D, _>(
             clock,
             &mut self.scratch.binding,
             &mut self.scratch.completion,
         )?;
         let completion = self.scratch.completion.take().ok_or(Failure::Binding)?;
-        let completed = self.measured.then(|| clock.now());
+        let completed = self.measured.then(|| stamp.now());
         if let PhyRxGainInitCompletion::Dc(PhyRxGainDcCompletion::Calibration(
             PhyRxDcCalibrationCompletion::Minimum(PhyRxDcMinimumCompletion::DcIq(completion)),
         )) = completion
@@ -190,7 +191,7 @@ impl Run<'_> {
             for (index, (from, to)) in [
                 (started, lowered),
                 (lowered, completed),
-                (completed, clock.now()),
+                (completed, stamp.now()),
             ]
             .into_iter()
             .enumerate()
