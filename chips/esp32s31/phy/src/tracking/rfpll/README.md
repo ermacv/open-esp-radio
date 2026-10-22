@@ -44,15 +44,18 @@ that behavior does not qualify an out-of-range correction on physical RF.
 The target adapter uses the existing typed I2C bindings, direct bounded status
 polling and frequency-memory operations. Required 2-us
 entry settle uses the short ROM delay backend. The admitted transaction uses
-the private P1 transport engine. Each complete I2C bus command returns `Pending`
-through the waker: the two initial reads, low-byte write and both commands of
-masked high-bit writes are separate checkpoints. Partial reads and the typed
+the private P1 transport engine. Complete I2C bus commands are checkpoints:
+the two initial reads, low-byte write and both commands of masked high-bit
+writes can retain their partial helper state. The quiet route batches at most
+four checkpoints, admitting another only before twenty microseconds of the
+poll have elapsed. Per-command tracing retains an individual poll for each
+sample. Partial reads and the typed
 masked transaction remain retained under the exclusive analog owner. An
 `Instant` stamped after the last write
 measures the five-microsecond minimum: the next poll reads status immediately
 if it has elapsed, otherwise the short ROM delay supplies only the remainder.
 Each complete memory entry (read and write), setup operation, final write and
-channel-index restoration also has a checkpoint. These voluntary yields
+channel-index restoration also has a checkpoint under the same batch budget. These voluntary yields
 construct no timer. Grant protection and software frequency control remain
 held across them; failure or cancellation cannot publish restoration.
 The Driver shares its outlined clock conversion with the command adapter.
